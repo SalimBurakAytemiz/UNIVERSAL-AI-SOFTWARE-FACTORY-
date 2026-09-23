@@ -1,0 +1,54 @@
+{
+  "//TR": "Paste 4D audit/status/release/artifact truth taramasının bounded checkpoint kaydıdır; final source closure, final release veya target-machine PASS iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "scope": "PASTE_4D_AUDIT_STATUS_RELEASE_ARTIFACT_TRUTH",
+  "verifiedThroughParentCommit": "3a2f5bc2bec9bded368d777e3495b05093d50add",
+  "status": "COMPLETE_SOURCE",
+  "findings": {
+    "P0": 0,
+    "P1": 5,
+    "P2": 4,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "fixed": [
+    "stale root SHA256SUMS moved to historical evidence until final packaging",
+    "stale V2/V3/V4 audit and closure authority moved to audit/history",
+    "current .ai master/test/milestone/phase/next-action state aligned to V6 audit truth",
+    "stale runtime ARTIFACT_VERIFY PASS removed",
+    "fresh V6 CURRENT-AUDIT-STATE created without premature zero-blocker or closure claim",
+    "ALL-FINDINGS index current authority moved to V6 progress/status",
+    "PowerShell artifact verifier now requires package-lock.json membership",
+    "release authenticity remains NOT_DONE without persisted detached signature evidence",
+    "trust-root remains fail-closed STALE_PENDING_FINAL_RESEAL"
+  ],
+  "regression": {
+    "paste4dReleaseTruth": "PASS 50/50",
+    "paste4cDocTruth": "PASS 85/85",
+    "paste4b": "PASS 968",
+    "paste4a": "PASS 26/26",
+    "phaseContracts": "PASS 149",
+    "schemaCatalog": "PASS 152/152",
+    "schemaStrictness": "PASS",
+    "paste2Closure": "PASS 34/34",
+    "paste3Closure": "PASS 15/15",
+    "mechanicalClosure": "PASS",
+    "mechanicalKernel": "PASS",
+    "bootstrapKernel": "PASS",
+    "supervisorState": "PASS",
+    "trValidation": "PASS",
+    "gitDiffCheck": "PASS",
+    "trustRootVerify": "EXPECTED_FAIL_CLOSED_UNTIL_FINAL_RESEAL"
+  },
+  "truth": {
+    "paste4": "COMPLETE_SOURCE",
+    "sourceLevelClosure": false,
+    "overallRemainingP0P1P2": "UNKNOWN_PENDING_CONFIG_RUNTIME_SWEEP_AND_FULL_REGRESSION",
+    "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL",
+    "finalSha256Sums": "NOT_DONE",
+    "finalReleaseAuthenticity": "NOT_DONE",
+    "finalZip": "NOT_DONE",
+    "targetMachinePhase0": "PENDING"
+  },
+  "nextScope": "REPO_WIDE_CONFIG_RUNTIME_ENFORCEMENT_SWEEP"
+}

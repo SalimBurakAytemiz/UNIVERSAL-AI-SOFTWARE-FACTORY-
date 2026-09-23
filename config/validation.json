@@ -123,6 +123,14 @@
       "parallelGroup": "static-3"
     },
     {
+      "id": "paste4d-release-truth",
+      "command": [
+        "node",
+        "scripts/validate-paste4d-release-truth.mjs"
+      ],
+      "parallelGroup": "static-3"
+    },
+    {
       "id": "review-graph",
       "command": [
         "node",

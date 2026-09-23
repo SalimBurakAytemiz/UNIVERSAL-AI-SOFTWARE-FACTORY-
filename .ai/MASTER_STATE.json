@@ -1,21 +1,26 @@
 {
-  "//TR": "Bu dosya fresh Software Company OS reposunun canonical build durumunu tutar ve yeni AI session'larının sohbet geçmişi olmadan kaldığı yerden devam etmesini sağlar.",
-  "schemaVersion": "1.1.0",
+  "//TR": "Bu dosya V6 recovery replay sırasında canonical source/audit ilerlemesini tutar; final release, installation-ready veya target-machine PASS iddiası değildir.",
+  "schemaVersion": "1.2.0",
   "system": "UNIVERSAL-AI-SOFTWARE-COMPANY-OS",
-  "state": "MECHANICALLY_CLOSED_V2_INSTALLATION_CANDIDATE_READY_FOR_TARGET_PHASE0",
+  "state": "V6_AUDIT_REMEDIATION_IN_PROGRESS",
   "currentPhase": 0,
-  "currentPhaseName": "Target-machine Phase-0 installation and acceptance",
-  "currentMilestone": "BOOTSTRAP-TRUST-KERNEL",
-  "currentMilestoneName": "Install, validate providers/Git/Control Tower, produce CLEAN Phase0 acceptance",
-  "lastCompletedMilestone": null,
-  "lastVerifiedCommit": null,
+  "currentPhaseName": "Source audit/remediation before final seal and target-machine Phase0",
+  "currentMilestone": "V6-FINAL-ENFORCEMENT-SWEEP",
+  "currentMilestoneName": "Repo-wide config-to-runtime enforcement sweep and full source regression",
+  "lastCompletedMilestone": "V6-PASTE-4D",
+  "lastVerifiedCommit": "3a2f5bc2bec9bded368d777e3495b05093d50add",
   "knownBlockers": [
-    "TARGET_MACHINE_RUNTIME_VALIDATION_PENDING",
-    "PACKAGE_LOCK_GENERATION_PENDING_TARGET_NPM_REGISTRY"
+    "FINAL_TRUST_ROOT_RESEAL_PENDING",
+    "FINAL_SHA256SUMS_PENDING",
+    "FINAL_RELEASE_AUTHENTICITY_PENDING",
+    "DEPENDENCY_AWARE_VALIDATION_PENDING",
+    "TARGET_MACHINE_PHASE0_PENDING"
   ],
-  "nextAction": "On target Windows machine run .\\scripts\\install.ps1, inspect PHASE0_ACCEPTANCE.json, and do not start full-auto unless CLEAN/CLEAN_LOCAL_ONLY.",
-  "sourceOfTruth": "repository+git+.ai+phase-contracts+review-packages",
+  "nextAction": "Run repo-wide config/runtime enforcement sweep, then full source regression; remediate remaining P0/P1/P2 before final reseal.",
+  "sourceOfTruth": "repository+git+audit/V6-FULL-SCAN-PROGRESS.json+CANONICAL-STATUS.md+PACK.json",
   "architectureDiscovery": "FROZEN_BY_EXTENSION_MODEL",
-  "lastStaticClosureAudit": "PASS",
-  "targetPhase0Required": true
+  "lastStaticClosureAudit": "NOT_FINAL",
+  "sourceLevelClosure": false,
+  "targetPhase0Required": true,
+  "targetMachinePhase0": "PENDING"
 }

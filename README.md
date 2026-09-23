@@ -60,3 +60,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 ```
 
 Mevcut audit worktree'sinde dependency-aware ve target-machine doğrulamalarını çalışmadan PASS kabul etme.
+
+## Current V6 audit route
+
+Paste 1, Paste 2, Paste 3 ve Paste 4A/4B/4C/4D source replay/audit segmentleri tamamlandı. Sıradaki kapı repo-geneli `config -> runtime enforcement` sweep ve full source regression'dır. Bu tamamlanmadan `SOURCE_LEVEL_CLOSURE` true yapılamaz.

@@ -1,9 +1,7 @@
-<!-- //TR: Bu dosya final starter ilk milestone'unda registry/schema/competency validation ve target-machine tool health doğrulamasını zorunlu kılar. -->
+<!-- //TR: Bu dosya Paste 4 source audit tamamlandıktan sonraki current bounded milestone'u gösterir; final release veya target-machine milestone değildir. -->
 # Current Milestone
-## 0.1 — Validate final canonical starter and local tool health
-- dependency install
-- all registry/organization/competency/schema/TR/typecheck/test validation
-- local doctor
-- Claude/Codex auth/command health
-- OmniRoute discovery or explicit blocker
-- no later capability may be marked implemented without evidence
+## V6 Final Enforcement Sweep
+- config says true -> runtime consumer/enforcement var mı doğrula
+- dekoratif veya uygulanmayan claim'i PLANNED / NOT_RUNTIME_ENFORCED olarak işaretle
+- full dependency-free source regression çalıştır
+- kalan P0/P1/P2 varsa final seal öncesi kapat

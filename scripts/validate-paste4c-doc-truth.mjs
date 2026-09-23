@@ -79,7 +79,7 @@ must(pack.name === "UNIVERSAL-AI-SOFTWARE-COMPANY-OS-V6-AUDIT-REMEDIATION-CANDID
 must(pack.status === "V6_AUDIT_REMEDIATION_IN_PROGRESS", "pack-status-not-in-progress");
 must(pack.sourceStaticClosure === false, "pack-source-closure-must-be-false");
 must(pack.mechanicalClosure === "IN_PROGRESS_NOT_FINAL", "pack-mechanical-closure-overclaim");
-must(pack.staticClosureAudit === "NOT_FINAL_PASTE4_IN_PROGRESS", "pack-static-audit-overclaim");
+must(["NOT_FINAL_PASTE4_IN_PROGRESS","PASTE4_SOURCE_COMPLETE_FINAL_SWEEP_PENDING"].includes(pack.staticClosureAudit), "pack-static-audit-overclaim");
 must(pack.targetMachinePhase0 === "PENDING", "pack-target-phase0-overclaim");
 must(pack.finalTrustRootSeal === "STALE_PENDING_FINAL_RESEAL", "pack-final-seal-overclaim");
 must(pack.finalZip === "NOT_DONE", "pack-final-zip-overclaim");
@@ -131,7 +131,7 @@ must(progress.truth?.FINAL_TRUST_ROOT_SEAL === "STALE_PENDING_FINAL_RESEAL", "pr
 must(progress.paste4?.segments?.["4A"] === "COMPLETE_SOURCE", "progress-4a-not-complete");
 must(progress.paste4?.segments?.["4B"] === "COMPLETE_SOURCE", "progress-4b-not-complete");
 must(["NEXT","IN_PROGRESS","COMPLETE_SOURCE"].includes(progress.paste4?.segments?.["4C"]), "progress-4c-invalid-state");
-must(["PENDING","NEXT","IN_PROGRESS"].includes(progress.paste4?.segments?.["4D"]), "progress-4d-invalid-state");
+must(["PENDING","NEXT","IN_PROGRESS","COMPLETE_SOURCE"].includes(progress.paste4?.segments?.["4D"]), "progress-4d-invalid-state");
 
 if (errors.length) {
   console.error(`PASTE4C_DOC_TRUTH_VALIDATION: FAIL checks=${checks} errors=${errors.length}`);

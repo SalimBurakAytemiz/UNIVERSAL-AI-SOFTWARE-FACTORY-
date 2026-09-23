@@ -1,25 +1,17 @@
-<!-- //TR: Bu index projenin aylar boyunca yapılan bütün önemli audit/closure dosyalarını tek yerde listeler; current open status için V4-CURRENT-OPEN-FINDINGS.md esas alınır. -->
+<!-- //TR: Bu index current V6 audit authority ile historical audit zincirini ayırır; eski V2/V3/V4 finding dosyaları current açık bulgu authority değildir. -->
 # All Findings Index
 
-## Current
+## Current authority
 
-1. `audit/V4-CURRENT-OPEN-FINDINGS.md` — bugün yeniden doğrulanan açıklar; en güncel durum.
-2. `audit/DEPENDENCY-FREE-RECHECK.log` — mevcut source üzerinde tekrar çalıştırılan validator sonuçları.
-3. `audit/KNOWN-TARGET-MACHINE-PENDING.md` — yalnız Windows/real providers/remote üzerinde kapanabilecek kontroller.
+1. `audit/V6-FULL-SCAN-PROGRESS.json` — bounded V6 replay/audit ilerlemesi ve current truth.
+2. `CANONICAL-STATUS.md` — human-readable current source/release/runtime durumu.
+3. `PACK.json` — machine-readable current source kapsamı ve pending gates.
+4. `audit/KNOWN-TARGET-MACHINE-PENDING.md` — yalnız gerçek target/runtime ortamında kapanabilecek kontroller.
 
-## Historical / closure chain
+Current source-level açık P0/P1/P2 ancak current V6 checkpoint/validator evidence ile belirlenir. Historical audit dosyaları current blocker listesi olarak kullanılamaz.
 
-`audit/history/` altında konuşma boyunca oluşturulan audit ve closure dosyalarının tamamı korunur. Bunlar current açıkların hepsinin hâlâ var olduğu anlamına gelmez; tarihsel bulgu zinciridir.
+## Historical / audit chain
 
-Önemli tarihsel sıralama:
+`audit/history/` altındaki V2/V3/V4 closure, static-audit, SHA manifest ve finding dosyaları provenance/history amacıyla korunur. Bunlar current PASS/CLEAN/closure, final SHA veya release authenticity kanıtı değildir.
 
-- `UASCO-ULTIMATE-ARCHITECTURE-CLOSURE-SPEC-TR.md`
-- `UASCO-TECHNICAL-COMPETENCY-CLOSURE-AUDIT-TR.md`
-- `UASCO-ALL-AGENT-TECHNICAL-DEPTH-REAUDIT-TR.md`
-- `UASCO-FULL-RED-TEAM-GAP-AUDIT-TR.md`
-- `UASCO-MECHANICAL-CLOSURE-RED-TEAM-AUDIT-TR.md`
-- `UASCO-V2-RE-AUDIT-NEW-GAPS-TR.md`
-- `UASCO-V3-RE-AUDIT-RESULTS-TR.md`
-- `UASCO-FINAL-COMPLETENESS-AUDIT.md`
-
-Historical audit sonucu ile current source çelişirse **current source + V4 current findings** esas alınır.
+Historical audit sonucu ile current source çelişirse **current source + `audit/V6-FULL-SCAN-PROGRESS.json`** esas alınır.

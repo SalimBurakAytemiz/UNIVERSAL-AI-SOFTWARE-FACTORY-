@@ -1,101 +1,30 @@
 {
-  "//TR": "Bu JSON current audit snapshot içindeki açık bulgu kimliklerini ve dependency-free recheck command sonuçlarını machine-readable olarak taşır.",
-  "schemaVersion": "1.0.0",
-  "generatedAt": "2026-09-21T05:05:46.717138+00:00",
-  "artifactBase": "MECHANICALLY-CLOSED-V3",
-  "status": "AUDIT_SNAPSHOT_NOT_INSTALLATION_GO",
-  "openFindings": [
-    "P0-01",
-    "P0-02",
-    "P0-03",
-    "P0-04",
-    "P0-05",
-    "P1-01",
-    "P1-02",
-    "P1-03",
-    "P1-04",
-    "P1-05"
+  "//TR": "Bu JSON V6 recovery replay worktree'sinin current audit durumunu machine-readable tutar; tarihsel V2/V3/V4 finding dosyaları current authority değildir.",
+  "schemaVersion": "2.0.0",
+  "status": "V6_AUDIT_REMEDIATION_IN_PROGRESS",
+  "verifiedThroughParentCommit": "3a2f5bc2bec9bded368d777e3495b05093d50add",
+  "completedSourceScopes": [
+    "PASTE_1",
+    "PASTE_2",
+    "PASTE_3",
+    "PASTE_4A",
+    "PASTE_4B",
+    "PASTE_4C",
+    "PASTE_4D"
   ],
-  "checks": [
-    {
-      "command": "node scripts/validate-registries.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/validate-architecture.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/validate-tr-comments.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/validate-agent-competencies.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/validate-organization.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/validate-schema-catalog.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/validate-technology-graph.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/validate-domain-packs.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/validate-agent-semantic.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/validate-phase-contracts.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/validate-review-graph-v2.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/validate-schema-strictness.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/validate-woven-model.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/validate-mechanical-closure.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/mechanical-kernel-selftest.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/supervisor-state-machine-selftest.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/verify-trust-root.mjs",
-      "rc": 0
-    },
-    {
-      "command": "node scripts/bootstrap-kernel-selftest.mjs",
-      "rc": 1
-    },
-    {
-      "command": "node scripts/secret-sanity.mjs",
-      "rc": 1
-    },
-    {
-      "command": "node scripts/dependency-supply-chain.mjs",
-      "rc": 1
-    }
+  "activeScope": "REPO_WIDE_CONFIG_RUNTIME_ENFORCEMENT_SWEEP",
+  "boundedScopeOpenP0P1P2": 0,
+  "overallRemainingP0P1P2": "UNKNOWN_PENDING_CONFIG_RUNTIME_SWEEP_AND_FULL_REGRESSION",
+  "sourceLevelClosure": false,
+  "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL",
+  "finalSha256Sums": "NOT_DONE",
+  "finalReleaseAuthenticity": "NOT_DONE",
+  "finalZip": "NOT_DONE",
+  "targetMachinePhase0": "PENDING",
+  "pendingEnvironmentGates": [
+    "runtime-schema-conformance:PENDING_DEPENDENCIES",
+    "release-supply-chain:PENDING_REVIEWED_DEPENDENCIES_AND_SBOM",
+    "live-provider-smoke:PENDING_TARGET_RUNTIME_PROVIDER_ENVIRONMENT",
+    "typecheck-vitest:PENDING_DEPENDENCIES"
   ]
 }
