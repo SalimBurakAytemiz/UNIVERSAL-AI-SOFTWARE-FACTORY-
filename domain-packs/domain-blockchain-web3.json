@@ -52,5 +52,107 @@
     "DOMAIN_LABEL_IS_NOT_EXPERTISE",
     "MODEL_MEMORY_IS_NOT_CURRENT_REGULATION"
   ],
-  "freshness": "MISSION_TIME_REVALIDATION_REQUIRED"
+  "freshness": "MISSION_TIME_REVALIDATION_REQUIRED",
+  "domainSpecificSeeds": {
+    "stateMachineSeeds": [
+      {
+        "id": "domain-blockchain-web3-state-seed-01",
+        "focusTerms": [
+          "wallet",
+          "transaction",
+          "contract"
+        ],
+        "discoveryRule": "MISSION_TIME_PRIMARY_SOURCE_STATE_DISCOVERY_REQUIRED",
+        "seedContract": "Blockchain & Web3 için wallet, transaction, contract yaşam döngüsü/geçişleri mission-time primary source ve gerçek requirement üzerinden keşfedilmeli; bu seed transition gerçeği iddia etmez."
+      }
+    ],
+    "referenceArchitectureSeeds": [
+      {
+        "id": "domain-blockchain-web3-architecture-seed-01",
+        "focusTerms": [
+          "wallet",
+          "transaction",
+          "contract",
+          "block"
+        ],
+        "invariantAnchors": [
+          "deterministic state transition",
+          "key custody"
+        ],
+        "discoveryRule": "MISSION_TIME_ARCHITECTURE_COMPARE_AND_VALIDATE_REQUIRED",
+        "seedContract": "Blockchain & Web3 çözüm sınırları wallet, transaction, contract ve mevcut business invariantlar etrafında keşfedilip alternatiflerle karşılaştırılmalı."
+      }
+    ],
+    "qaSeeds": [
+      {
+        "id": "domain-blockchain-web3-qa-seed-01",
+        "invariant": "deterministic state transition",
+        "heuristics": [
+          "state-transition",
+          "negative-boundary",
+          "concurrency",
+          "reconciliation",
+          "recovery"
+        ],
+        "evidenceRequired": true
+      },
+      {
+        "id": "domain-blockchain-web3-qa-seed-02",
+        "invariant": "key custody",
+        "heuristics": [
+          "state-transition",
+          "negative-boundary",
+          "concurrency",
+          "reconciliation",
+          "recovery"
+        ],
+        "evidenceRequired": true
+      },
+      {
+        "id": "domain-blockchain-web3-qa-seed-03",
+        "invariant": "replay prevention",
+        "heuristics": [
+          "state-transition",
+          "negative-boundary",
+          "concurrency",
+          "reconciliation",
+          "recovery"
+        ],
+        "evidenceRequired": true
+      }
+    ],
+    "securityPrivacySeeds": [
+      {
+        "id": "domain-blockchain-web3-security-privacy-seed-01",
+        "focusTerms": [
+          "wallet",
+          "transaction",
+          "contract"
+        ],
+        "discoveryRule": "DISCOVER_DATA_CLASS_ACTORS_JURISDICTION_AND_EFFECTIVE_OFFICIAL_REQUIREMENTS_AT_MISSION_TIME",
+        "seedContract": "Blockchain & Web3 için security/privacy obligation model hafızasından değil gerçek data class, actor, jurisdiction ve effective official source üzerinden çıkarılmalı."
+      }
+    ],
+    "failureSeeds": [
+      {
+        "id": "domain-blockchain-web3-failure-seed-01",
+        "invariant": "deterministic state transition",
+        "failureClass": "DOMAIN_INVARIANT_BREACH"
+      },
+      {
+        "id": "domain-blockchain-web3-failure-seed-02",
+        "invariant": "key custody",
+        "failureClass": "DOMAIN_INVARIANT_BREACH"
+      },
+      {
+        "id": "domain-blockchain-web3-failure-seed-03",
+        "invariant": "replay prevention",
+        "failureClass": "DOMAIN_INVARIANT_BREACH"
+      }
+    ],
+    "forbiddenAssumptionSeeds": [
+      "SEED_PROFILE_IS_NOT_CERTIFIED_EXPERTISE:domain-blockchain-web3",
+      "NO_UNVERIFIED_DOMAIN_RULE_INFERENCE:domain-blockchain-web3"
+    ]
+  }
 }

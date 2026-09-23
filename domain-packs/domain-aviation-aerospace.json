@@ -52,5 +52,107 @@
     "DOMAIN_LABEL_IS_NOT_EXPERTISE",
     "MODEL_MEMORY_IS_NOT_CURRENT_REGULATION"
   ],
-  "freshness": "MISSION_TIME_REVALIDATION_REQUIRED"
+  "freshness": "MISSION_TIME_REVALIDATION_REQUIRED",
+  "domainSpecificSeeds": {
+    "stateMachineSeeds": [
+      {
+        "id": "domain-aviation-aerospace-state-seed-01",
+        "focusTerms": [
+          "flight",
+          "aircraft",
+          "maintenance"
+        ],
+        "discoveryRule": "MISSION_TIME_PRIMARY_SOURCE_STATE_DISCOVERY_REQUIRED",
+        "seedContract": "Aviation & Aerospace için flight, aircraft, maintenance yaşam döngüsü/geçişleri mission-time primary source ve gerçek requirement üzerinden keşfedilmeli; bu seed transition gerçeği iddia etmez."
+      }
+    ],
+    "referenceArchitectureSeeds": [
+      {
+        "id": "domain-aviation-aerospace-architecture-seed-01",
+        "focusTerms": [
+          "flight",
+          "aircraft",
+          "maintenance",
+          "dispatch"
+        ],
+        "invariantAnchors": [
+          "safety-critical traceability",
+          "configuration control"
+        ],
+        "discoveryRule": "MISSION_TIME_ARCHITECTURE_COMPARE_AND_VALIDATE_REQUIRED",
+        "seedContract": "Aviation & Aerospace çözüm sınırları flight, aircraft, maintenance ve mevcut business invariantlar etrafında keşfedilip alternatiflerle karşılaştırılmalı."
+      }
+    ],
+    "qaSeeds": [
+      {
+        "id": "domain-aviation-aerospace-qa-seed-01",
+        "invariant": "safety-critical traceability",
+        "heuristics": [
+          "state-transition",
+          "negative-boundary",
+          "concurrency",
+          "reconciliation",
+          "recovery"
+        ],
+        "evidenceRequired": true
+      },
+      {
+        "id": "domain-aviation-aerospace-qa-seed-02",
+        "invariant": "configuration control",
+        "heuristics": [
+          "state-transition",
+          "negative-boundary",
+          "concurrency",
+          "reconciliation",
+          "recovery"
+        ],
+        "evidenceRequired": true
+      },
+      {
+        "id": "domain-aviation-aerospace-qa-seed-03",
+        "invariant": "fail-safe behavior",
+        "heuristics": [
+          "state-transition",
+          "negative-boundary",
+          "concurrency",
+          "reconciliation",
+          "recovery"
+        ],
+        "evidenceRequired": true
+      }
+    ],
+    "securityPrivacySeeds": [
+      {
+        "id": "domain-aviation-aerospace-security-privacy-seed-01",
+        "focusTerms": [
+          "flight",
+          "aircraft",
+          "maintenance"
+        ],
+        "discoveryRule": "DISCOVER_DATA_CLASS_ACTORS_JURISDICTION_AND_EFFECTIVE_OFFICIAL_REQUIREMENTS_AT_MISSION_TIME",
+        "seedContract": "Aviation & Aerospace için security/privacy obligation model hafızasından değil gerçek data class, actor, jurisdiction ve effective official source üzerinden çıkarılmalı."
+      }
+    ],
+    "failureSeeds": [
+      {
+        "id": "domain-aviation-aerospace-failure-seed-01",
+        "invariant": "safety-critical traceability",
+        "failureClass": "DOMAIN_INVARIANT_BREACH"
+      },
+      {
+        "id": "domain-aviation-aerospace-failure-seed-02",
+        "invariant": "configuration control",
+        "failureClass": "DOMAIN_INVARIANT_BREACH"
+      },
+      {
+        "id": "domain-aviation-aerospace-failure-seed-03",
+        "invariant": "fail-safe behavior",
+        "failureClass": "DOMAIN_INVARIANT_BREACH"
+      }
+    ],
+    "forbiddenAssumptionSeeds": [
+      "SEED_PROFILE_IS_NOT_CERTIFIED_EXPERTISE:domain-aviation-aerospace",
+      "NO_UNVERIFIED_DOMAIN_RULE_INFERENCE:domain-aviation-aerospace"
+    ]
+  }
 }

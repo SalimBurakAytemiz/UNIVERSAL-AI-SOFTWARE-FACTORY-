@@ -1,6 +1,6 @@
 {
   "//TR": "Bu protected config package.json scriptlerine güvenmeden canonical deterministic validation adımlarını sabitler; mechanical closure + dependency-free kernel self-test typecheck/test öncesinde çalışır ve builder normal milestone sırasında bu listeyi değiştiremez.",
-  "schemaVersion": "1.9.0",
+  "schemaVersion": "2.0.0",
   "steps": [
     {
       "id": "registries",
@@ -59,6 +59,14 @@
       "parallelGroup": "static-2"
     },
     {
+      "id": "paste3-technology-domain-registry",
+      "command": [
+        "node",
+        "scripts/validate-paste3-technology-domain-registry.mjs"
+      ],
+      "parallelGroup": "static-2"
+    },
+    {
       "id": "domain-packs",
       "command": [
         "node",
@@ -111,6 +119,14 @@
       "command": [
         "node",
         "scripts/validate-woven-model.mjs"
+      ],
+      "parallelGroup": "static-4"
+    },
+    {
+      "id": "paste3-source-closure",
+      "command": [
+        "node",
+        "scripts/validate-paste3-closure.mjs"
       ],
       "parallelGroup": "static-4"
     },

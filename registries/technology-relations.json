@@ -1,7 +1,7 @@
 {
   "//TR": "Bu dosya framework/library/runtime/protocol'lar arasındaki built-on, alternative-family ve yakın ilişki graph'ını technology selection, migration ve agent comparison için tanımlar.",
   "schemaVersion": "2.0.0",
-  "count": 192,
+  "count": 117,
   "relations": [
     {
       "from": "TECH-NEXTJS",
@@ -262,20 +262,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-ANGULAR",
-      "to": "TECH-REACT",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-REACT",
       "to": "TECH-VUE",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-VUE",
-      "to": "TECH-REACT",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -286,20 +274,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-SVELTE",
-      "to": "TECH-REACT",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-REACT",
       "to": "TECH-SOLID",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-SOLID",
-      "to": "TECH-REACT",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -310,20 +286,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-QWIK",
-      "to": "TECH-REACT",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-ANGULAR",
       "to": "TECH-VUE",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-VUE",
-      "to": "TECH-ANGULAR",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -334,20 +298,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-SVELTE",
-      "to": "TECH-ANGULAR",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-ANGULAR",
       "to": "TECH-SOLID",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-SOLID",
-      "to": "TECH-ANGULAR",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -358,20 +310,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-QWIK",
-      "to": "TECH-ANGULAR",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-VUE",
       "to": "TECH-SVELTE",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-SVELTE",
-      "to": "TECH-VUE",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -382,32 +322,14 @@
       "notes": ""
     },
     {
-      "from": "TECH-SOLID",
-      "to": "TECH-VUE",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-VUE",
       "to": "TECH-QWIK",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
     {
-      "from": "TECH-QWIK",
-      "to": "TECH-VUE",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-SVELTE",
       "to": "TECH-SOLID",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-SOLID",
-      "to": "TECH-SVELTE",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -418,32 +340,14 @@
       "notes": ""
     },
     {
-      "from": "TECH-QWIK",
-      "to": "TECH-SVELTE",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-SOLID",
       "to": "TECH-QWIK",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
     {
-      "from": "TECH-QWIK",
-      "to": "TECH-SOLID",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-FLUTTER",
       "to": "TECH-REACT-NATIVE",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-REACT-NATIVE",
-      "to": "TECH-FLUTTER",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -454,20 +358,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-KOTLIN-MULTIPLATFORM",
-      "to": "TECH-FLUTTER",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-FLUTTER",
       "to": "TECH-DOTNET-MAUI",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-DOTNET-MAUI",
-      "to": "TECH-FLUTTER",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -478,20 +370,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-IONIC",
-      "to": "TECH-FLUTTER",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-REACT-NATIVE",
       "to": "TECH-KOTLIN-MULTIPLATFORM",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-KOTLIN-MULTIPLATFORM",
-      "to": "TECH-REACT-NATIVE",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -502,32 +382,14 @@
       "notes": ""
     },
     {
-      "from": "TECH-DOTNET-MAUI",
-      "to": "TECH-REACT-NATIVE",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-REACT-NATIVE",
       "to": "TECH-IONIC",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
     {
-      "from": "TECH-IONIC",
-      "to": "TECH-REACT-NATIVE",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-KOTLIN-MULTIPLATFORM",
       "to": "TECH-DOTNET-MAUI",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-DOTNET-MAUI",
-      "to": "TECH-KOTLIN-MULTIPLATFORM",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -538,32 +400,14 @@
       "notes": ""
     },
     {
-      "from": "TECH-IONIC",
-      "to": "TECH-KOTLIN-MULTIPLATFORM",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-DOTNET-MAUI",
       "to": "TECH-IONIC",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
     {
-      "from": "TECH-IONIC",
-      "to": "TECH-DOTNET-MAUI",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-EXPRESS",
       "to": "TECH-FASTIFY",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-FASTIFY",
-      "to": "TECH-EXPRESS",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -574,20 +418,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-NESTJS",
-      "to": "TECH-EXPRESS",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-EXPRESS",
       "to": "TECH-HONO",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-HONO",
-      "to": "TECH-EXPRESS",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -598,20 +430,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-KOA",
-      "to": "TECH-EXPRESS",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-FASTIFY",
       "to": "TECH-NESTJS",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-NESTJS",
-      "to": "TECH-FASTIFY",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -622,32 +442,14 @@
       "notes": ""
     },
     {
-      "from": "TECH-HONO",
-      "to": "TECH-FASTIFY",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-FASTIFY",
       "to": "TECH-KOA",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
     {
-      "from": "TECH-KOA",
-      "to": "TECH-FASTIFY",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-NESTJS",
       "to": "TECH-HONO",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-HONO",
-      "to": "TECH-NESTJS",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -658,20 +460,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-KOA",
-      "to": "TECH-NESTJS",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-HONO",
       "to": "TECH-KOA",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-KOA",
-      "to": "TECH-HONO",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -682,20 +472,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-QUARKUS",
-      "to": "TECH-SPRING-BOOT",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-SPRING-BOOT",
       "to": "TECH-MICRONAUT",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-MICRONAUT",
-      "to": "TECH-SPRING-BOOT",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -706,20 +484,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-KTOR",
-      "to": "TECH-SPRING-BOOT",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-QUARKUS",
       "to": "TECH-MICRONAUT",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-MICRONAUT",
-      "to": "TECH-QUARKUS",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -730,20 +496,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-KTOR",
-      "to": "TECH-QUARKUS",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-MICRONAUT",
       "to": "TECH-KTOR",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-KTOR",
-      "to": "TECH-MICRONAUT",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -754,44 +508,20 @@
       "notes": ""
     },
     {
-      "from": "TECH-DJANGO",
-      "to": "TECH-FASTAPI",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-FASTAPI",
       "to": "TECH-FLASK",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
     {
-      "from": "TECH-FLASK",
-      "to": "TECH-FASTAPI",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-DJANGO",
       "to": "TECH-FLASK",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
     {
-      "from": "TECH-FLASK",
-      "to": "TECH-DJANGO",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-POSTGRESQL",
       "to": "TECH-MYSQL",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-MYSQL",
-      "to": "TECH-POSTGRESQL",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -802,20 +532,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-SQL-SERVER",
-      "to": "TECH-POSTGRESQL",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-POSTGRESQL",
       "to": "TECH-ORACLE-DB",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-ORACLE-DB",
-      "to": "TECH-POSTGRESQL",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -826,20 +544,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-COCKROACHDB",
-      "to": "TECH-POSTGRESQL",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-MYSQL",
       "to": "TECH-SQL-SERVER",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-SQL-SERVER",
-      "to": "TECH-MYSQL",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -850,32 +556,14 @@
       "notes": ""
     },
     {
-      "from": "TECH-ORACLE-DB",
-      "to": "TECH-MYSQL",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-MYSQL",
       "to": "TECH-COCKROACHDB",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
     {
-      "from": "TECH-COCKROACHDB",
-      "to": "TECH-MYSQL",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-SQL-SERVER",
       "to": "TECH-ORACLE-DB",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-ORACLE-DB",
-      "to": "TECH-SQL-SERVER",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -886,20 +574,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-COCKROACHDB",
-      "to": "TECH-SQL-SERVER",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-ORACLE-DB",
       "to": "TECH-COCKROACHDB",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-COCKROACHDB",
-      "to": "TECH-ORACLE-DB",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -910,20 +586,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-PULSAR",
-      "to": "TECH-KAFKA",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-KAFKA",
       "to": "TECH-RABBITMQ",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-RABBITMQ",
-      "to": "TECH-KAFKA",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -934,20 +598,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-NATS",
-      "to": "TECH-KAFKA",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-PULSAR",
       "to": "TECH-RABBITMQ",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-RABBITMQ",
-      "to": "TECH-PULSAR",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -958,32 +610,14 @@
       "notes": ""
     },
     {
-      "from": "TECH-NATS",
-      "to": "TECH-PULSAR",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-RABBITMQ",
       "to": "TECH-NATS",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
     {
-      "from": "TECH-NATS",
-      "to": "TECH-RABBITMQ",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-PLAYWRIGHT",
       "to": "TECH-CYPRESS",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-CYPRESS",
-      "to": "TECH-PLAYWRIGHT",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -994,32 +628,14 @@
       "notes": ""
     },
     {
-      "from": "TECH-SELENIUM",
-      "to": "TECH-PLAYWRIGHT",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-PLAYWRIGHT",
       "to": "TECH-WEBDRIVERIO",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
     {
-      "from": "TECH-WEBDRIVERIO",
-      "to": "TECH-PLAYWRIGHT",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-CYPRESS",
       "to": "TECH-SELENIUM",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-SELENIUM",
-      "to": "TECH-CYPRESS",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -1030,32 +646,14 @@
       "notes": ""
     },
     {
-      "from": "TECH-WEBDRIVERIO",
-      "to": "TECH-CYPRESS",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-SELENIUM",
       "to": "TECH-WEBDRIVERIO",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
     {
-      "from": "TECH-WEBDRIVERIO",
-      "to": "TECH-SELENIUM",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-K6",
       "to": "TECH-JMETER",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-JMETER",
-      "to": "TECH-K6",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -1066,32 +664,14 @@
       "notes": ""
     },
     {
-      "from": "TECH-LOCUST",
-      "to": "TECH-K6",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-K6",
       "to": "TECH-GATLING",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
     {
-      "from": "TECH-GATLING",
-      "to": "TECH-K6",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-JMETER",
       "to": "TECH-LOCUST",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-LOCUST",
-      "to": "TECH-JMETER",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -1102,20 +682,8 @@
       "notes": ""
     },
     {
-      "from": "TECH-GATLING",
-      "to": "TECH-JMETER",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-LOCUST",
       "to": "TECH-GATLING",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
-      "from": "TECH-GATLING",
-      "to": "TECH-LOCUST",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
@@ -1126,34 +694,2509 @@
       "notes": ""
     },
     {
-      "from": "TECH-UNREAL-ENGINE",
-      "to": "TECH-UNITY",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-UNITY",
       "to": "TECH-GODOT",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
     },
     {
-      "from": "TECH-GODOT",
-      "to": "TECH-UNITY",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
-    },
-    {
       "from": "TECH-UNREAL-ENGINE",
       "to": "TECH-GODOT",
       "kind": "ALTERNATIVE_FAMILY",
       "notes": ""
+    }
+  ],
+  "structuralRelationCount": 415,
+  "structuralRelations": [
+    {
+      "technologyId": "TECH-JAVASCRIPT",
+      "groupId": "WEB_LANGUAGE_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
     },
     {
-      "from": "TECH-GODOT",
-      "to": "TECH-UNREAL-ENGINE",
-      "kind": "ALTERNATIVE_FAMILY",
-      "notes": ""
+      "technologyId": "TECH-TYPESCRIPT",
+      "groupId": "WEB_LANGUAGE_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HTML",
+      "groupId": "WEB_LANGUAGE_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CSS",
+      "groupId": "WEB_LANGUAGE_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WEB-COMPONENTS",
+      "groupId": "WEB_LANGUAGE_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WEBASSEMBLY",
+      "groupId": "WEB_LANGUAGE_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WEBGPU",
+      "groupId": "WEB_LANGUAGE_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-NODEJS",
+      "groupId": "WEB_LANGUAGE_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-BUN",
+      "groupId": "WEB_LANGUAGE_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DENO",
+      "groupId": "WEB_LANGUAGE_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-REACT",
+      "groupId": "WEB_FRAMEWORK",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-NEXTJS",
+      "groupId": "WEB_FRAMEWORK",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ANGULAR",
+      "groupId": "WEB_FRAMEWORK",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-VUE",
+      "groupId": "WEB_FRAMEWORK",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-NUXT",
+      "groupId": "WEB_FRAMEWORK",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SVELTE",
+      "groupId": "WEB_FRAMEWORK",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SVELTEKIT",
+      "groupId": "WEB_FRAMEWORK",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ASTRO",
+      "groupId": "WEB_FRAMEWORK",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-REMIX",
+      "groupId": "WEB_FRAMEWORK",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SOLID",
+      "groupId": "WEB_FRAMEWORK",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-QWIK",
+      "groupId": "WEB_FRAMEWORK",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HTMX",
+      "groupId": "WEB_FRAMEWORK",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-LIT",
+      "groupId": "WEB_FRAMEWORK",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-VITE",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WEBPACK",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-RSPACK",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ROLLUP",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ESBUILD",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SWC",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TAILWINDCSS",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-BOOTSTRAP",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MUI",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ANT-DESIGN",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CHAKRA-UI",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SHADCN-UI",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-REDUX-TOOLKIT",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ZUSTAND",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-RXJS",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TANSTACK-QUERY",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-APOLLO-CLIENT",
+      "groupId": "WEB_BUILD_UI",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KOTLIN",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-JAVA",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ANDROID-SDK",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ANDROID-GRADLE-PLUGIN",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GRADLE",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-JETPACK",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-JETPACK-COMPOSE",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KOTLIN-COROUTINES",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KOTLIN-FLOW",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ROOM",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DATASTORE",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WORKMANAGER",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-RETROFIT",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OKHTTP",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KOTLINX-SERIALIZATION",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HILT",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DAGGER",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KOIN",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ESPRESSO",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-COMPOSE-UI-TEST",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-UIAUTOMATOR",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ROBOLECTRIC",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MACROBENCHMARK",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-BASELINE-PROFILES",
+      "groupId": "MOBILE_ANDROID",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SWIFT",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OBJECTIVE-C",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SWIFTUI",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-UIKIT",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FOUNDATION-APPLE",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SWIFT-CONCURRENCY",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-COMBINE",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-URLSESSION",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SWIFTDATA",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CORE-DATA",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KEYCHAIN",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-XCTEST",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-XCUITEST",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-INSTRUMENTS",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SWIFT-PACKAGE-MANAGER",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-COCOAPODS",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FASTLANE",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TESTFLIGHT",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-STOREKIT",
+      "groupId": "MOBILE_IOS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DART",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FLUTTER",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-REACT-NATIVE",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-EXPO",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HERMES",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-REACT-NATIVE-JSI",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-REACT-NATIVE-FABRIC",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-REACT-NATIVE-TURBOMODULES",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KOTLIN-MULTIPLATFORM",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-COMPOSE-MULTIPLATFORM",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DOTNET-MAUI",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-IONIC",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CAPACITOR",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CORDOVA",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-XAMARIN",
+      "groupId": "MOBILE_CROSS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-APPIUM",
+      "groupId": "MOBILE_TEST_CLOUD",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MAESTRO",
+      "groupId": "MOBILE_TEST_CLOUD",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DETOX",
+      "groupId": "MOBILE_TEST_CLOUD",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-BROWSERSTACK",
+      "groupId": "MOBILE_TEST_CLOUD",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SAUCE-LABS",
+      "groupId": "MOBILE_TEST_CLOUD",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-LAMBDATEST",
+      "groupId": "MOBILE_TEST_CLOUD",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FIREBASE-TEST-LAB",
+      "groupId": "MOBILE_TEST_CLOUD",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-AWS-DEVICE-FARM",
+      "groupId": "MOBILE_TEST_CLOUD",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KOBITON",
+      "groupId": "MOBILE_TEST_CLOUD",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PERFECTO",
+      "groupId": "MOBILE_TEST_CLOUD",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-EXPRESS",
+      "groupId": "BACKEND_NODE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FASTIFY",
+      "groupId": "BACKEND_NODE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-NESTJS",
+      "groupId": "BACKEND_NODE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HONO",
+      "groupId": "BACKEND_NODE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KOA",
+      "groupId": "BACKEND_NODE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SPRING-BOOT",
+      "groupId": "BACKEND_JVM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SPRING-SECURITY",
+      "groupId": "BACKEND_JVM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SPRING-DATA",
+      "groupId": "BACKEND_JVM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HIBERNATE",
+      "groupId": "BACKEND_JVM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-QUARKUS",
+      "groupId": "BACKEND_JVM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MICRONAUT",
+      "groupId": "BACKEND_JVM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KTOR",
+      "groupId": "BACKEND_JVM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-VERTX",
+      "groupId": "BACKEND_JVM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DOTNET",
+      "groupId": "BACKEND_DOTNET",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ASPNET-CORE",
+      "groupId": "BACKEND_DOTNET",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-EF-CORE",
+      "groupId": "BACKEND_DOTNET",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SIGNALR",
+      "groupId": "BACKEND_DOTNET",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PYTHON",
+      "groupId": "BACKEND_PYTHON",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FASTAPI",
+      "groupId": "BACKEND_PYTHON",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DJANGO",
+      "groupId": "BACKEND_PYTHON",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FLASK",
+      "groupId": "BACKEND_PYTHON",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-STARLETTE",
+      "groupId": "BACKEND_PYTHON",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PYDANTIC",
+      "groupId": "BACKEND_PYTHON",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SQLALCHEMY",
+      "groupId": "BACKEND_PYTHON",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CELERY",
+      "groupId": "BACKEND_PYTHON",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GO",
+      "groupId": "BACKEND_GO_RUST",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GIN",
+      "groupId": "BACKEND_GO_RUST",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FIBER-GO",
+      "groupId": "BACKEND_GO_RUST",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ECHO-GO",
+      "groupId": "BACKEND_GO_RUST",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GRPC-GO",
+      "groupId": "BACKEND_GO_RUST",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-RUST",
+      "groupId": "BACKEND_GO_RUST",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TOKIO",
+      "groupId": "BACKEND_GO_RUST",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-AXUM",
+      "groupId": "BACKEND_GO_RUST",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ACTIX-WEB",
+      "groupId": "BACKEND_GO_RUST",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ROCKET-RS",
+      "groupId": "BACKEND_GO_RUST",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PHP",
+      "groupId": "BACKEND_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-LARAVEL",
+      "groupId": "BACKEND_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SYMFONY",
+      "groupId": "BACKEND_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-RUBY",
+      "groupId": "BACKEND_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-RAILS",
+      "groupId": "BACKEND_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ELIXIR",
+      "groupId": "BACKEND_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ERLANG",
+      "groupId": "BACKEND_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PHOENIX",
+      "groupId": "BACKEND_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ECTO",
+      "groupId": "BACKEND_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SCALA",
+      "groupId": "BACKEND_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PEKKO",
+      "groupId": "BACKEND_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HTTP1",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HTTP2",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HTTP3",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-REST",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OPENAPI",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-JSON-SCHEMA",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GRAPHQL",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-APOLLO-GRAPHQL",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GRPC",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PROTOBUF",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WEBSOCKET",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SOCKETIO",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SSE",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WEBRTC",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SOAP",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-XML-XSD",
+      "groupId": "API_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KAFKA",
+      "groupId": "MESSAGING_STREAM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-RABBITMQ",
+      "groupId": "MESSAGING_STREAM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-NATS",
+      "groupId": "MESSAGING_STREAM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PULSAR",
+      "groupId": "MESSAGING_STREAM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-REDIS-STREAMS",
+      "groupId": "MESSAGING_STREAM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MQTT",
+      "groupId": "MESSAGING_STREAM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-AMQP",
+      "groupId": "MESSAGING_STREAM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-AWS-SQS",
+      "groupId": "MESSAGING_STREAM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-AWS-SNS",
+      "groupId": "MESSAGING_STREAM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-EVENTBRIDGE",
+      "groupId": "MESSAGING_STREAM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-POSTGRESQL",
+      "groupId": "DATABASE_RELATIONAL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MYSQL",
+      "groupId": "DATABASE_RELATIONAL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MARIADB",
+      "groupId": "DATABASE_RELATIONAL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SQL-SERVER",
+      "groupId": "DATABASE_RELATIONAL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ORACLE-DB",
+      "groupId": "DATABASE_RELATIONAL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SQLITE",
+      "groupId": "DATABASE_RELATIONAL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-COCKROACHDB",
+      "groupId": "DATABASE_RELATIONAL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MONGODB",
+      "groupId": "DATABASE_NOSQL_SEARCH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CASSANDRA",
+      "groupId": "DATABASE_NOSQL_SEARCH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SCYLLADB",
+      "groupId": "DATABASE_NOSQL_SEARCH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-COUCHBASE",
+      "groupId": "DATABASE_NOSQL_SEARCH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DYNAMODB",
+      "groupId": "DATABASE_NOSQL_SEARCH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-COSMOSDB",
+      "groupId": "DATABASE_NOSQL_SEARCH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-REDIS",
+      "groupId": "DATABASE_NOSQL_SEARCH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MEMCACHED",
+      "groupId": "DATABASE_NOSQL_SEARCH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ELASTICSEARCH",
+      "groupId": "DATABASE_NOSQL_SEARCH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OPENSEARCH",
+      "groupId": "DATABASE_NOSQL_SEARCH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SOLR",
+      "groupId": "DATABASE_NOSQL_SEARCH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-NEO4J",
+      "groupId": "DATABASE_NOSQL_SEARCH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TIMESCALEDB",
+      "groupId": "DATABASE_ANALYTICS_VECTOR",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-INFLUXDB",
+      "groupId": "DATABASE_ANALYTICS_VECTOR",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CLICKHOUSE",
+      "groupId": "DATABASE_ANALYTICS_VECTOR",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DUCKDB",
+      "groupId": "DATABASE_ANALYTICS_VECTOR",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-BIGQUERY",
+      "groupId": "DATABASE_ANALYTICS_VECTOR",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SNOWFLAKE",
+      "groupId": "DATABASE_ANALYTICS_VECTOR",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-REDSHIFT",
+      "groupId": "DATABASE_ANALYTICS_VECTOR",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PGVECTOR",
+      "groupId": "DATABASE_ANALYTICS_VECTOR",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-QDRANT",
+      "groupId": "DATABASE_ANALYTICS_VECTOR",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MILVUS",
+      "groupId": "DATABASE_ANALYTICS_VECTOR",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WEAVIATE",
+      "groupId": "DATABASE_ANALYTICS_VECTOR",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PRISMA",
+      "groupId": "DATA_ACCESS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DRIZZLE",
+      "groupId": "DATA_ACCESS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TYPEORM",
+      "groupId": "DATA_ACCESS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SEQUELIZE",
+      "groupId": "DATA_ACCESS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GORM",
+      "groupId": "DATA_ACCESS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-JOOQ",
+      "groupId": "DATA_ACCESS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-EXPOSED",
+      "groupId": "DATA_ACCESS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SPARK",
+      "groupId": "DATA_ENGINEERING",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FLINK",
+      "groupId": "DATA_ENGINEERING",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-BEAM",
+      "groupId": "DATA_ENGINEERING",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-AIRFLOW",
+      "groupId": "DATA_ENGINEERING",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DAGSTER",
+      "groupId": "DATA_ENGINEERING",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PREFECT",
+      "groupId": "DATA_ENGINEERING",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DBT",
+      "groupId": "DATA_ENGINEERING",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DEBEZIUM",
+      "groupId": "DATA_ENGINEERING",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KAFKA-CONNECT",
+      "groupId": "DATA_ENGINEERING",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DELTA-LAKE",
+      "groupId": "DATA_ENGINEERING",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-APACHE-ICEBERG",
+      "groupId": "DATA_ENGINEERING",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-APACHE-HUDI",
+      "groupId": "DATA_ENGINEERING",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-AWS",
+      "groupId": "CLOUD_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-AZURE",
+      "groupId": "CLOUD_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GCP",
+      "groupId": "CLOUD_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DOCKER",
+      "groupId": "CLOUD_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DOCKER-COMPOSE",
+      "groupId": "CLOUD_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KUBERNETES",
+      "groupId": "CLOUD_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HELM",
+      "groupId": "CLOUD_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TERRAFORM",
+      "groupId": "CLOUD_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OPENTOFU",
+      "groupId": "CLOUD_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PULUMI",
+      "groupId": "CLOUD_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ANSIBLE",
+      "groupId": "CLOUD_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ARGOCD",
+      "groupId": "CLOUD_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FLUXCD",
+      "groupId": "CLOUD_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ENVOY",
+      "groupId": "CLOUD_NETWORK_MESH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ISTIO",
+      "groupId": "CLOUD_NETWORK_MESH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-LINKERD",
+      "groupId": "CLOUD_NETWORK_MESH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-NGINX",
+      "groupId": "CLOUD_NETWORK_MESH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HAPROXY",
+      "groupId": "CLOUD_NETWORK_MESH",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GITHUB-ACTIONS",
+      "groupId": "CI_SCM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GITLAB-CI",
+      "groupId": "CI_SCM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-JENKINS",
+      "groupId": "CI_SCM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-AZURE-DEVOPS",
+      "groupId": "CI_SCM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CIRCLECI",
+      "groupId": "CI_SCM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TEAMCITY",
+      "groupId": "CI_SCM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GITHUB",
+      "groupId": "CI_SCM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GITLAB",
+      "groupId": "CI_SCM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-BITBUCKET",
+      "groupId": "CI_SCM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OPENTELEMETRY",
+      "groupId": "OBSERVABILITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PROMETHEUS",
+      "groupId": "OBSERVABILITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GRAFANA",
+      "groupId": "OBSERVABILITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-LOKI",
+      "groupId": "OBSERVABILITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TEMPO",
+      "groupId": "OBSERVABILITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-JAEGER",
+      "groupId": "OBSERVABILITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SENTRY",
+      "groupId": "OBSERVABILITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DATADOG",
+      "groupId": "OBSERVABILITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-NEW-RELIC",
+      "groupId": "OBSERVABILITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SPLUNK",
+      "groupId": "OBSERVABILITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-POSTMAN",
+      "groupId": "QA_API",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-NEWMAN",
+      "groupId": "QA_API",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-AJV",
+      "groupId": "QA_API",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-REST-ASSURED",
+      "groupId": "QA_API",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SUPERTEST",
+      "groupId": "QA_API",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PYTEST-HTTPX",
+      "groupId": "QA_API",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KARATE",
+      "groupId": "QA_API",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PACT",
+      "groupId": "QA_API",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WIREMOCK",
+      "groupId": "QA_API",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MOCKSERVER",
+      "groupId": "QA_API",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PLAYWRIGHT",
+      "groupId": "QA_WEB",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CYPRESS",
+      "groupId": "QA_WEB",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SELENIUM",
+      "groupId": "QA_WEB",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WEBDRIVERIO",
+      "groupId": "QA_WEB",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-VITEST",
+      "groupId": "QA_WEB",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-JEST",
+      "groupId": "QA_WEB",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MOCHA",
+      "groupId": "QA_WEB",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TESTING-LIBRARY",
+      "groupId": "QA_WEB",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-STORYBOOK",
+      "groupId": "QA_WEB",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-LIGHTHOUSE",
+      "groupId": "QA_WEB",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-AXE-CORE",
+      "groupId": "QA_WEB",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-JUNIT",
+      "groupId": "QA_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TESTNG",
+      "groupId": "QA_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MOCKITO",
+      "groupId": "QA_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MOCKK",
+      "groupId": "QA_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-XUNIT-DOTNET",
+      "groupId": "QA_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-NUNIT",
+      "groupId": "QA_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PYTEST",
+      "groupId": "QA_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HYPOTHESIS",
+      "groupId": "QA_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CUCUMBER",
+      "groupId": "QA_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-K6",
+      "groupId": "QA_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-JMETER",
+      "groupId": "QA_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-LOCUST",
+      "groupId": "QA_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GATLING",
+      "groupId": "QA_OTHER",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OWASP-ASVS",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OWASP-WSTG",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OWASP-API",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OWASP-MASVS",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CWE",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CVSS",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SEMGREP",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OWASP-ZAP",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-BURP-SUITE",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SONARQUBE",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SNYK",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TRIVY",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SYFT",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GRYPE",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GITLEAKS",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-NUCLEI",
+      "groupId": "SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-NUMPY",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PANDAS",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SCIKIT-LEARN",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PYTORCH",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TENSORFLOW",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HUGGINGFACE",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ONNX",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-LANGCHAIN",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-LANGGRAPH",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-LLAMAINDEX",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SEMANTIC-KERNEL",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DSPY",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OLLAMA",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-VLLM",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-LLAMA-CPP",
+      "groupId": "AI_ML",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-UNITY",
+      "groupId": "GAME_ENGINE_GRAPHICS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-UNREAL-ENGINE",
+      "groupId": "GAME_ENGINE_GRAPHICS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GODOT",
+      "groupId": "GAME_ENGINE_GRAPHICS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DIRECTX",
+      "groupId": "GAME_ENGINE_GRAPHICS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-VULKAN",
+      "groupId": "GAME_ENGINE_GRAPHICS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-METAL",
+      "groupId": "GAME_ENGINE_GRAPHICS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OPENGL",
+      "groupId": "GAME_ENGINE_GRAPHICS",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-STEAMWORKS",
+      "groupId": "GAME_SERVICE_ART",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-EPIC-ONLINE-SERVICES",
+      "groupId": "GAME_SERVICE_ART",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PHOTON",
+      "groupId": "GAME_SERVICE_ART",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-BLENDER",
+      "groupId": "GAME_SERVICE_ART",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MAYA",
+      "groupId": "GAME_SERVICE_ART",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-3DS-MAX",
+      "groupId": "GAME_SERVICE_ART",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SUBSTANCE",
+      "groupId": "GAME_SERVICE_ART",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ELECTRON",
+      "groupId": "DESKTOP",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TAURI",
+      "groupId": "DESKTOP",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WPF",
+      "groupId": "DESKTOP",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WINUI",
+      "groupId": "DESKTOP",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-QT",
+      "groupId": "DESKTOP",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PYSIDE",
+      "groupId": "DESKTOP",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-APPKIT",
+      "groupId": "DESKTOP",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CPP",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-RUST-EMBEDDED",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FREERTOS",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ZEPHYR",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ESP-IDF",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-STM32",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ARDUINO",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PLATFORMIO",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-UART",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-USB",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-BLE",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-CANBUS",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MODBUS",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ROS2",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-JTAG-SWD",
+      "groupId": "IOT_EMBEDDED",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OAUTH2",
+      "groupId": "IDENTITY_ENTERPRISE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OPENID-CONNECT",
+      "groupId": "IDENTITY_ENTERPRISE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SAML",
+      "groupId": "IDENTITY_ENTERPRISE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SCIM",
+      "groupId": "IDENTITY_ENTERPRISE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WEBAUTHN",
+      "groupId": "IDENTITY_ENTERPRISE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-LDAP",
+      "groupId": "IDENTITY_ENTERPRISE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-KEYCLOAK",
+      "groupId": "IDENTITY_ENTERPRISE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-AUTH0",
+      "groupId": "IDENTITY_ENTERPRISE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-OKTA",
+      "groupId": "IDENTITY_ENTERPRISE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-COGNITO",
+      "groupId": "IDENTITY_ENTERPRISE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ENTRA-ID",
+      "groupId": "IDENTITY_ENTERPRISE",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SALESFORCE",
+      "groupId": "BUSINESS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SAP",
+      "groupId": "BUSINESS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DYNAMICS365",
+      "groupId": "BUSINESS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SERVICENOW",
+      "groupId": "BUSINESS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SHOPIFY",
+      "groupId": "BUSINESS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WOOCOMMERCE",
+      "groupId": "BUSINESS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MAGENTO",
+      "groupId": "BUSINESS_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-JIRA",
+      "groupId": "COLLAB_PM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-LINEAR",
+      "groupId": "COLLAB_PM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-TRELLO",
+      "groupId": "COLLAB_PM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-YOUTRACK",
+      "groupId": "COLLAB_PM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SLACK",
+      "groupId": "COLLAB_PM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MICROSOFT-TEAMS",
+      "groupId": "COLLAB_PM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GOOGLE-WORKSPACE",
+      "groupId": "COLLAB_PM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MICROSOFT-365",
+      "groupId": "COLLAB_PM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FIGMA",
+      "groupId": "DESIGN_TOOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FIX-PROTOCOL",
+      "groupId": "DOMAIN_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ISO-8583",
+      "groupId": "DOMAIN_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ISO-20022",
+      "groupId": "DOMAIN_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SWIFT-FINANCIAL",
+      "groupId": "DOMAIN_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HLS",
+      "groupId": "MEDIA_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-MPEG-DASH",
+      "groupId": "MEDIA_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-WIDEVINE",
+      "groupId": "MEDIA_SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FAIRPLAY",
+      "groupId": "MEDIA_SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-PLAYREADY",
+      "groupId": "MEDIA_SECURITY",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-FFMPEG",
+      "groupId": "MEDIA_TOOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-HL7-FHIR",
+      "groupId": "HEALTH_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-DICOM",
+      "groupId": "HEALTH_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SIP",
+      "groupId": "TELECOM_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-RTP",
+      "groupId": "TELECOM_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-AUTOSAR",
+      "groupId": "AUTOMOTIVE_PLATFORM",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-SOLIDITY",
+      "groupId": "BLOCKCHAIN",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ETHEREUM",
+      "groupId": "BLOCKCHAIN",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-GS1",
+      "groupId": "DOMAIN_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-EDI",
+      "groupId": "DOMAIN_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ARINC-429",
+      "groupId": "AVIATION_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
+    },
+    {
+      "technologyId": "TECH-ARINC-664",
+      "groupId": "AVIATION_PROTOCOL",
+      "kind": "GROUP_MEMBERSHIP",
+      "coverageLevel": "SEED_STRUCTURAL_DISCOVERY"
     }
   ]
 }

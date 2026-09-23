@@ -2,7 +2,7 @@
   "//TR": "V6 recovery replay için canonical bounded-scan ilerleme kaydıdır. Bu dosya final source closure veya target-machine PASS iddiası değildir.",
   "schemaVersion": "1.0.0",
   "status": "IN_PROGRESS",
-  "verifiedThroughParentCommit": "65ad8c59cec0bbf2df5be82e00477dd47b34a2df",
+  "verifiedThroughParentCommit": "c692a4fee9f1ba4fa11d3206bbaa7e88f1abb08b",
   "paste1": {
     "status": "COMPLETE_SOURCE",
     "checkpointCommit": "99105cf8c6a8a60954c8aa936a4d0ebd4253c15f"
@@ -30,15 +30,18 @@
     ]
   },
   "paste3": {
-    "status": "PASTE3A_COMPLETE_PASTE3B_PENDING",
+    "status": "COMPLETE_SOURCE",
+    "controlsVerified": 15,
+    "controlsTotal": 15,
     "segments": {
       "3A": "COMPLETE",
-      "3B": "PENDING"
+      "3B": "COMPLETE"
     },
-    "sourceLevelOpenP0P1P2In3A": 0
+    "sourceLevelOpenP0P1P2": 0,
+    "runtimeCertificationClaim": false
   },
   "paste4": {
-    "status": "NOT_YET_RESUMED_IN_CURRENT_PHYSICAL_WORKTREE"
+    "status": "NEXT_PASTE4A"
   },
   "truth": {
     "SOURCE_LEVEL_CLOSURE": false,
@@ -46,5 +49,5 @@
     "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
     "FINAL_ZIP": "NOT_DONE"
   },
-  "nextScope": "PASTE_3B_TECHNOLOGY_DOMAIN_REGISTRY_COHERENCE"
+  "nextScope": "PASTE_4A_PHASE_PACKAGE_DAG_SCHEDULER"
 }

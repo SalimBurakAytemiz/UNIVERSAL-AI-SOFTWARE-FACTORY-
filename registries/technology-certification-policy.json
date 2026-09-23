@@ -1,0 +1,17 @@
+{
+  "//TR": "Bir teknoloji SEED_PROFILE durumundan CERTIFIED durumuna ancak official source, pinned version, freshness, license, security, comparison ve test kanıtlarının tamamı persist edilirse geçebilir; bu policy seed registryyi certified gibi göstermez.",
+  "schemaVersion": "1.0.0",
+  "seedState": "SEED_PROFILE",
+  "certifiedState": "CERTIFIED",
+  "requiredCertificationEvidence": [
+    "officialSourceRefs",
+    "pinnedVersion",
+    "freshnessValidatedAt",
+    "licenseEvidence",
+    "securityEvidence",
+    "comparisonEvidence",
+    "testEvidence"
+  ],
+  "orphanRule": "CERTIFIED_TECHNOLOGY_MUST_HAVE_STRUCTURAL_AND_SEMANTIC_RELATION_EVIDENCE",
+  "seedOrphanPolicy": "STRUCTURAL_GROUP_MEMBERSHIP_IS_SUFFICIENT_FOR_DISCOVERY_ONLY"
+}

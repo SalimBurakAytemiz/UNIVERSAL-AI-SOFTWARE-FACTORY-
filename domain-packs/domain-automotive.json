@@ -52,5 +52,107 @@
     "DOMAIN_LABEL_IS_NOT_EXPERTISE",
     "MODEL_MEMORY_IS_NOT_CURRENT_REGULATION"
   ],
-  "freshness": "MISSION_TIME_REVALIDATION_REQUIRED"
+  "freshness": "MISSION_TIME_REVALIDATION_REQUIRED",
+  "domainSpecificSeeds": {
+    "stateMachineSeeds": [
+      {
+        "id": "domain-automotive-state-seed-01",
+        "focusTerms": [
+          "vehicle",
+          "ECU",
+          "CAN"
+        ],
+        "discoveryRule": "MISSION_TIME_PRIMARY_SOURCE_STATE_DISCOVERY_REQUIRED",
+        "seedContract": "Automotive için vehicle, ECU, CAN yaşam döngüsü/geçişleri mission-time primary source ve gerçek requirement üzerinden keşfedilmeli; bu seed transition gerçeği iddia etmez."
+      }
+    ],
+    "referenceArchitectureSeeds": [
+      {
+        "id": "domain-automotive-architecture-seed-01",
+        "focusTerms": [
+          "vehicle",
+          "ECU",
+          "CAN",
+          "diagnostic"
+        ],
+        "invariantAnchors": [
+          "safety partitioning",
+          "firmware provenance"
+        ],
+        "discoveryRule": "MISSION_TIME_ARCHITECTURE_COMPARE_AND_VALIDATE_REQUIRED",
+        "seedContract": "Automotive çözüm sınırları vehicle, ECU, CAN ve mevcut business invariantlar etrafında keşfedilip alternatiflerle karşılaştırılmalı."
+      }
+    ],
+    "qaSeeds": [
+      {
+        "id": "domain-automotive-qa-seed-01",
+        "invariant": "safety partitioning",
+        "heuristics": [
+          "state-transition",
+          "negative-boundary",
+          "concurrency",
+          "reconciliation",
+          "recovery"
+        ],
+        "evidenceRequired": true
+      },
+      {
+        "id": "domain-automotive-qa-seed-02",
+        "invariant": "firmware provenance",
+        "heuristics": [
+          "state-transition",
+          "negative-boundary",
+          "concurrency",
+          "reconciliation",
+          "recovery"
+        ],
+        "evidenceRequired": true
+      },
+      {
+        "id": "domain-automotive-qa-seed-03",
+        "invariant": "rollback",
+        "heuristics": [
+          "state-transition",
+          "negative-boundary",
+          "concurrency",
+          "reconciliation",
+          "recovery"
+        ],
+        "evidenceRequired": true
+      }
+    ],
+    "securityPrivacySeeds": [
+      {
+        "id": "domain-automotive-security-privacy-seed-01",
+        "focusTerms": [
+          "vehicle",
+          "ECU",
+          "CAN"
+        ],
+        "discoveryRule": "DISCOVER_DATA_CLASS_ACTORS_JURISDICTION_AND_EFFECTIVE_OFFICIAL_REQUIREMENTS_AT_MISSION_TIME",
+        "seedContract": "Automotive için security/privacy obligation model hafızasından değil gerçek data class, actor, jurisdiction ve effective official source üzerinden çıkarılmalı."
+      }
+    ],
+    "failureSeeds": [
+      {
+        "id": "domain-automotive-failure-seed-01",
+        "invariant": "safety partitioning",
+        "failureClass": "DOMAIN_INVARIANT_BREACH"
+      },
+      {
+        "id": "domain-automotive-failure-seed-02",
+        "invariant": "firmware provenance",
+        "failureClass": "DOMAIN_INVARIANT_BREACH"
+      },
+      {
+        "id": "domain-automotive-failure-seed-03",
+        "invariant": "rollback",
+        "failureClass": "DOMAIN_INVARIANT_BREACH"
+      }
+    ],
+    "forbiddenAssumptionSeeds": [
+      "SEED_PROFILE_IS_NOT_CERTIFIED_EXPERTISE:domain-automotive",
+      "NO_UNVERIFIED_DOMAIN_RULE_INFERENCE:domain-automotive"
+    ]
+  }
 }

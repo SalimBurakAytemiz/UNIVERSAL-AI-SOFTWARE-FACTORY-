@@ -1,0 +1,19 @@
+{
+  "//TR": "Canonical registry ownership ve reference domainlerini machine-readable olarak ayırır; legacy framework skill referansları runtime SK2 authority değildir.",
+  "schemaVersion": "2.0.0",
+  "authorities": {
+    "agents": "registries/agents.json",
+    "runtimeSkills": "registries/skills-v2.json",
+    "legacySkills": "registries/skills.json",
+    "technologies": "registries/technologies.json",
+    "toolAdapters": "registries/tool-adapters.json",
+    "capabilities": "registries/capabilities.json",
+    "executionFabrics": "registries/execution-fabrics.json",
+    "executionBinders": "registries/execution-binders.json",
+    "frameworkPacks": "registries/framework-packs.json",
+    "domains": "registries/domain-packs.json"
+  },
+  "runtimeSkillPrefix": "SK2-",
+  "legacyReferenceSkillPrefix": "SKILL-",
+  "frameworkPackSkillAuthority": "LEGACY_REFERENCE_ONLY"
+}

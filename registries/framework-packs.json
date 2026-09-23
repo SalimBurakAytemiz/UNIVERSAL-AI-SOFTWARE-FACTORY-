@@ -564,5 +564,7 @@
       "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
       "status": "REGISTERED"
     }
-  ]
+  ],
+  "skillAuthority": "LEGACY_REFERENCE_ONLY",
+  "runtimeSkillAuthority": false
 }

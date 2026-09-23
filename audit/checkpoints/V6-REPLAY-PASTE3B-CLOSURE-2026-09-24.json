@@ -1,0 +1,39 @@
+{
+  "//TR": "Bu checkpoint Paste 3B technology/domain/registry coherence ve Paste 3 15/15 source closure turunun exact durumunu kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_REPLAY_PASTE3B_AND_CLOSURE",
+  "date": "2026-09-24",
+  "baseCommit": "c692a4fee9f1ba4fa11d3206bbaa7e88f1abb08b",
+  "status": "COMPLETE_SOURCE",
+  "scope": [
+    "415/415 technology structural discovery relation coverage",
+    "symmetric alternative-family relation de-duplication",
+    "certified technology evidence fail-closed policy",
+    "22/22 domain-specific seed state/architecture/QA/security/failure contracts",
+    "SEED_DOMAIN_PROFILE honesty",
+    "registry authority and dangling/duplicate semantic reference validation",
+    "Paste 3 15/15 recovery checklist closure"
+  ],
+  "findings": {"P0": 0, "P1": 3, "P2": 3, "P3": 0},
+  "fixed": {"P0": 0, "P1": 3, "P2": 3, "P3": 0},
+  "openInScope": {"P0": 0, "P1": 0, "P2": 0, "P3": 0},
+  "regression": [
+    "PASTE3_AGENT_SPECIALIZATION_VALIDATION PASS adversarial=6",
+    "PASTE3_TECH_DOMAIN_REGISTRY_VALIDATION PASS technologies=415 structural=415 domains=22 adversarial=7",
+    "PASTE3_SOURCE_CLOSURE PASS controls=15/15",
+    "TECHNOLOGY_GRAPH_VALIDATION PASS technologies=415 structural=415 pairwise=117",
+    "DOMAIN_PACK_VALIDATION PASS domains=22 specialized=22 seedOnly=true",
+    "WOVEN_MODEL_VALIDATION PASS technologies=415 skills=425 tools=194 agents=363 phaseContracts=149",
+    "PASTE2_SOURCE_CLOSURE PASS controls=34/34",
+    "MECHANICAL_CLOSURE PASS",
+    "TR_VALIDATION PASS",
+    "SOURCE_SYNTAX PASS",
+    "git diff --check PASS"
+  ],
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL"
+  },
+  "nextScope": "PASTE_4A_PHASE_PACKAGE_DAG_SCHEDULER"
+}
