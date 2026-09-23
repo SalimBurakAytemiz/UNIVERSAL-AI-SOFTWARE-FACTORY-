@@ -24,6 +24,15 @@ for(const x of indexed){
   if(JSON.stringify([...(c.dependsOn??[])].sort((a,b)=>a-b))!==JSON.stringify([...(g?.dependsOn??[])].sort((a,b)=>a-b))) errors.push(`phase-${x.phase}:dependency-mismatch`);
   const mins={entryCriteria:4,requiredDeliverables:5,requiredValidation:6,evidence:7,review:2,exitCriteria:6,requirements:3,invariants:5,phaseSpecificAcceptance:4,mandatoryFailureCases:2,requiredArtifacts:2,allowedPathPrefixes:1,prohibited:4};
   for(const [k,min] of Object.entries(mins)) if(!Array.isArray(c[k])||c[k].length<min) errors.push(`phase-${x.phase}:${k}<${min}`);
+  if(!Array.isArray(c.unsupportedCases)) errors.push(`phase-${x.phase}:unsupportedCases-not-array`);
+  const specialized=(c.phaseSpecificAcceptance??[]).slice(3);if(!specialized.length)errors.push(`phase-${x.phase}:specialized-acceptance-missing`);
+  const normalized=v=>String(v).normalize("NFKC").trim().replace(/\s+/g," ").toLowerCase();
+  for(const k of ["requirements","phaseSpecificAcceptance","mandatoryFailureCases","requiredArtifacts"]){const vals=(c[k]??[]).map(normalized);if(new Set(vals).size!==vals.length)errors.push(`phase-${x.phase}:${k}-duplicate`)}
+  if((c.requiredArtifacts??[]).some(v=>normalized(v)==="review result"))errors.push(`phase-${x.phase}:generic-review-result-artifact`);
+  if(!(c.requiredArtifacts??[]).some(v=>!/^phase-\d{3}-review-attestation\.json$/i.test(String(v))))errors.push(`phase-${x.phase}:phase-evidence-artifact-missing`);
+  const expectedFail=`Phase ${x.phase} mandatory failure-case validation: ${(c.mandatoryFailureCases??[]).join(", ")}`;if(!(c.requiredValidation??[]).includes(expectedFail))errors.push(`phase-${x.phase}:failure-validation-desync`);
+  const expectedAcceptance=`Acceptance assertions: ${(c.phaseSpecificAcceptance??[]).join(" | ")}`;if(!(c.requiredValidation??[]).includes(expectedAcceptance))errors.push(`phase-${x.phase}:acceptance-validation-desync`);
+  const expectedArtifact=`Phase-specific artifact evidence: ${(c.requiredArtifacts??[]).join(", ")}`;if(!(c.evidence??[]).includes(expectedArtifact))errors.push(`phase-${x.phase}:artifact-evidence-desync`);
   for(const b of ["allowPaidApi","allowProduction","allowRisk5","allowExistingTestAssertionReduction","requiresFrozenMilestoneContract"]) if(typeof c[b]!=="boolean") errors.push(`phase-${x.phase}:${b}-not-boolean`);
   if(c.requiresFrozenMilestoneContract!==true) errors.push(`phase-${x.phase}:frozen-contract-not-required`);
   if(!Number.isInteger(c.riskLevel)||c.riskLevel<0||c.riskLevel>5) errors.push(`phase-${x.phase}:risk-invalid`);

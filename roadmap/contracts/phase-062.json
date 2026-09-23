@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 62 objective `Compatibility planner and impact selection` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Compatibility planner and impact selection` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 62 objective `Compatibility planner and impact selection` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Compatibility planner and impact selection` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Compatibility planner derives impacted browser/device/runtime/database/tool combinations from change scope instead of running a blind full matrix."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: compatibility-impact-plan.json, review result",
+    "Phase-specific artifact evidence: compatibility-impact-plan.json, phase-062-evidence.json",
     "Phase 62 review attestation or package-bound attestation"
   ],
   "review": [
@@ -93,7 +93,7 @@
   ],
   "requiredArtifacts": [
     "compatibility-impact-plan.json",
-    "review result"
+    "phase-062-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

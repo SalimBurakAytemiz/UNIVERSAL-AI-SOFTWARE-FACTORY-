@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 7 objective `Event/audit/trusted time/state migrations` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Event/audit/trusted time/state migrations` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 7 objective `Event/audit/trusted time/state migrations` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Event/audit/trusted time/state migrations` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Audit events are append-oriented, correlated, time semantics are explicit, and migration/replay behavior is tested. | Backup is not PASS until restore/reconciliation proves recovery; migration rollback/irreversibility is explicit."
   ],
   "evidence": [
     "reviewed commit SHA",

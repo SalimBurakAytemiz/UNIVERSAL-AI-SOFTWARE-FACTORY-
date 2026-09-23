@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 22 objective `Requirement/decision/design/code traceability` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Requirement/decision/design/code traceability` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 22 objective `Requirement/decision/design/code traceability` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Requirement/decision/design/code traceability` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | At least one end-to-end trace Requirement -> Decision -> Design -> Code -> Test -> Evidence -> Release is machine-verifiable and stale links are detected."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: traceability-graph-evidence.json, review result",
+    "Phase-specific artifact evidence: traceability-graph-evidence.json, phase-022-evidence.json",
     "Phase 22 review attestation or package-bound attestation"
   ],
   "review": [
@@ -90,7 +90,7 @@
   ],
   "requiredArtifacts": [
     "traceability-graph-evidence.json",
-    "review result"
+    "phase-022-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

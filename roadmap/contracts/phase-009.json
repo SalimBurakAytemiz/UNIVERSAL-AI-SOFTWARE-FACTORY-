@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 9 objective `40 departments and leadership overlays` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `40 departments and leadership overlays` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 9 objective `40 departments and leadership overlays` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `40 departments and leadership overlays` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Department/member/head/principal mappings cover all 363 stable agents exactly once where required and no self-review cycle exists."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: organization-coverage-report.json, review result",
+    "Phase-specific artifact evidence: organization-coverage-report.json, phase-009-evidence.json",
     "Phase 9 review attestation or package-bound attestation"
   ],
   "review": [
@@ -91,7 +91,7 @@
   ],
   "requiredArtifacts": [
     "organization-coverage-report.json",
-    "review result"
+    "phase-009-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/competency/",

@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 81 objective `Mobile/browser/desktop` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Mobile/browser/desktop` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 81 objective `Mobile/browser/desktop` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Mobile/browser/desktop` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Client assurance covers lifecycle/background/offline/reconnect/update and platform-specific failure paths for mobile/browser/desktop."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: client-platform-assurance.json, review result",
+    "Phase-specific artifact evidence: client-platform-assurance.json, phase-081-evidence.json",
     "Phase 81 review attestation or package-bound attestation"
   ],
   "review": [
@@ -94,7 +94,7 @@
   ],
   "requiredArtifacts": [
     "client-platform-assurance.json",
-    "review result"
+    "phase-081-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

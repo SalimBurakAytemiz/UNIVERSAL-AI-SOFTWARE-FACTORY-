@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 37 objective `Recertification/revocation` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Recertification/revocation` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 37 objective `Recertification/revocation` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Recertification/revocation` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Recertification and revocation propagate to dependent agent/capability/tool use so revoked knowledge is not still routable."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: recertification-revocation-evidence.json, review result",
+    "Phase-specific artifact evidence: recertification-revocation-evidence.json, phase-037-evidence.json",
     "Phase 37 review attestation or package-bound attestation"
   ],
   "review": [
@@ -90,7 +90,7 @@
   ],
   "requiredArtifacts": [
     "recertification-revocation-evidence.json",
-    "review result"
+    "phase-037-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

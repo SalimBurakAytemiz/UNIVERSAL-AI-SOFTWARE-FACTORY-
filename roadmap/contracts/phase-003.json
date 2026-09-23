@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 3 objective `Approval/non-repudiation/break-glass` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Approval/non-repudiation/break-glass` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 3 objective `Approval/non-repudiation/break-glass` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Approval/non-repudiation/break-glass` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Approval is bound to exact actor/action/target/digest/expiry and stale approval cannot authorize changed work."
   ],
   "evidence": [
     "reviewed commit SHA",

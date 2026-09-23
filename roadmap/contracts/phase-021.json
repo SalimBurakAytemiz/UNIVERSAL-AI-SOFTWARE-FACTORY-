@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 21 objective `Project/System Genome` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Project/System Genome` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 21 objective `Project/System Genome` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Project/System Genome` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Project/System Genome captures product, architecture, data, security, deployment, observability and unknown surfaces with traceable source refs."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: project-system-genome.json, review result",
+    "Phase-specific artifact evidence: project-system-genome.json, phase-021-evidence.json",
     "Phase 21 review attestation or package-bound attestation"
   ],
   "review": [
@@ -90,7 +90,7 @@
   ],
   "requiredArtifacts": [
     "project-system-genome.json",
-    "review result"
+    "phase-021-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

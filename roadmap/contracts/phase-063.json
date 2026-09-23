@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 63 objective `HTTP/REST/OpenAPI strict contract lab` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `HTTP/REST/OpenAPI strict contract lab` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 63 objective `HTTP/REST/OpenAPI strict contract lab` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `HTTP/REST/OpenAPI strict contract lab` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | HTTP/REST/OpenAPI lab validates status, headers, content-type, strict body schema, null/empty policy, auth, idempotency and contract drift."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: strict-api-contract-report.json, review result",
+    "Phase-specific artifact evidence: strict-api-contract-report.json, phase-063-evidence.json",
     "Phase 63 review attestation or package-bound attestation"
   ],
   "review": [
@@ -91,7 +91,7 @@
   ],
   "requiredArtifacts": [
     "strict-api-contract-report.json",
-    "review result"
+    "phase-063-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

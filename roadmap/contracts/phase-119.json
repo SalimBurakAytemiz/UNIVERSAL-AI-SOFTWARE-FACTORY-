@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 119 objective `Game execution/server/device` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Game execution/server/device` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 119 objective `Game execution/server/device` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Game execution/server/device` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Game execution validates build deployment, server/device lifecycle, logs/crashes, save/update compatibility and cleanup."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: game-execution-evidence.json, review result",
+    "Phase-specific artifact evidence: game-execution-evidence.json, phase-119-evidence.json",
     "Phase 119 review attestation or package-bound attestation"
   ],
   "review": [
@@ -93,7 +93,7 @@
   ],
   "requiredArtifacts": [
     "game-execution-evidence.json",
-    "review result"
+    "phase-119-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 0 objective `Private repo and toolchain baseline` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Private repo and toolchain baseline` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 0 objective `Private repo and toolchain baseline` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Private repo and toolchain baseline` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Exact Node/npm/Git versions captured; package-lock exists; canonical validators and unit tests run. | Claude/Codex command+auth state and local-only/private-remote state are explicit. | Phase0 acceptance report is CLEAN/CLEAN_LOCAL_ONLY before autonomous scheduler starts."
   ],
   "evidence": [
     "reviewed commit SHA",

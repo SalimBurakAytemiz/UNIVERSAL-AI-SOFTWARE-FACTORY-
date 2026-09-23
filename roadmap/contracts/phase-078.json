@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 78 objective `Strict API Ajv/Postman/Newman` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Strict API Ajv/Postman/Newman` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 78 objective `Strict API Ajv/Postman/Newman` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Strict API Ajv/Postman/Newman` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | OpenAPI/declared contract is authoritative; Ajv schema validation checks required/type/null/empty/additional properties and Postman/Newman execution produces evidence. | Sample-derived schemas remain candidate-only until contract-confirmed."
   ],
   "evidence": [
     "reviewed commit SHA",

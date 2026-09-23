@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 137 objective `Representative web project` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Representative web project` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 137 objective `Representative web project` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Representative web project` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Representative web project is built from Founder intent through design/build/QA/security/performance/release evidence using the factory itself."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: representative-web-project-evidence.json, review result",
+    "Phase-specific artifact evidence: representative-web-project-evidence.json, phase-137-evidence.json",
     "Phase 137 review attestation or package-bound attestation"
   ],
   "review": [
@@ -104,7 +104,7 @@
   ],
   "requiredArtifacts": [
     "representative-web-project-evidence.json",
-    "review result"
+    "phase-137-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

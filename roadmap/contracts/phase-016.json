@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 16 objective `Information compression pyramid` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Information compression pyramid` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 16 objective `Information compression pyramid` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Information compression pyramid` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Raw specialist evidence is compressed upward without dropping blocker severity, uncertainty, provenance or Founder-decision context."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: information-compression-trace.json, review result",
+    "Phase-specific artifact evidence: information-compression-trace.json, phase-016-evidence.json",
     "Phase 16 review attestation or package-bound attestation"
   ],
   "review": [
@@ -90,7 +90,7 @@
   ],
   "requiredArtifacts": [
     "information-compression-trace.json",
-    "review result"
+    "phase-016-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/competency/",

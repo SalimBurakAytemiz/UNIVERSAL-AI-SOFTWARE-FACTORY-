@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 134 objective `Authority/customer isolation/DLP acceptance` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Authority/customer isolation/DLP acceptance` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 134 objective `Authority/customer isolation/DLP acceptance` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Authority/customer isolation/DLP acceptance` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Model/report/log/export egress passes classification/redaction policy with negative leakage tests. | Customer boundaries, retention/legal hold and offboarding export/delete paths are tested. | Cross-customer/authority/DLP adversarial acceptance suite passes with fail-closed behavior."
   ],
   "evidence": [
     "reviewed commit SHA",

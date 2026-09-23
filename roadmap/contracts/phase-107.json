@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 107 objective `Commerce/Marketplace` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Commerce/Marketplace` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 107 objective `Commerce/Marketplace` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Commerce/Marketplace` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Commerce pack validates inventory, pricing, coupon, order/payment/refund concurrency and reconciliation invariants."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: commerce-domain-evidence.json, review result",
+    "Phase-specific artifact evidence: commerce-domain-evidence.json, phase-107-evidence.json",
     "Phase 107 review attestation or package-bound attestation"
   ],
   "review": [
@@ -99,7 +99,7 @@
   ],
   "requiredArtifacts": [
     "commerce-domain-evidence.json",
-    "review result"
+    "phase-107-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

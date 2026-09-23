@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 69 objective `Service virtualization/mocking/fault injection` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Service virtualization/mocking/fault injection` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 69 objective `Service virtualization/mocking/fault injection` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Service virtualization/mocking/fault injection` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Service virtualization can model dependency success/failure/latency/corruption deterministically and reset state between tests."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: service-virtualization-evidence.json, review result",
+    "Phase-specific artifact evidence: service-virtualization-evidence.json, phase-069-evidence.json",
     "Phase 69 review attestation or package-bound attestation"
   ],
   "review": [
@@ -90,7 +90,7 @@
   ],
   "requiredArtifacts": [
     "service-virtualization-evidence.json",
-    "review result"
+    "phase-069-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

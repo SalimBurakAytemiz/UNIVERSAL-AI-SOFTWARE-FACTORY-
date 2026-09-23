@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 93 objective `SBOM/provenance/license/IP` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `SBOM/provenance/license/IP` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 93 objective `SBOM/provenance/license/IP` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `SBOM/provenance/license/IP` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Dependencies/assets carry SBOM/license/provenance and disallowed/unknown rights block release according to policy."
   ],
   "evidence": [
     "reviewed commit SHA",

@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 1 objective `Canonical primitive and schema registry` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Canonical primitive and schema registry` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 1 objective `Canonical primitive and schema registry` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Canonical primitive and schema registry` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Canonical primitive IDs, schema versions and registry references are cross-validated with no dangling reference."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: primitive-schema-registry-audit.json, review result",
+    "Phase-specific artifact evidence: primitive-schema-registry-audit.json, phase-001-evidence.json",
     "Phase 1 review attestation or package-bound attestation"
   ],
   "review": [
@@ -90,7 +90,7 @@
   ],
   "requiredArtifacts": [
     "primitive-schema-registry-audit.json",
-    "review result"
+    "phase-001-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

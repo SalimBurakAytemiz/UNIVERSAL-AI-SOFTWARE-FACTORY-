@@ -23,12 +23,12 @@
   ],
   "requiredValidation": [
     "Phase 20 targeted success-path validation",
-    "Phase 20 mandatory failure-case validation: restore exceeds RTO, missing backup",
+    "Phase 20 mandatory failure-case validation: required preflight dependency unavailable, dry-run causes prohibited side effect",
     "Type/lint/build checks applicable to changed languages/toolchains",
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 20 objective `Preflight/dry-run` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Preflight/dry-run` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 20 objective `Preflight/dry-run` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Preflight/dry-run` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Preflight/dry-run validates required tools, dependencies, permissions, resources, environment and provider readiness without performing prohibited side effects; blockers remain explicit."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: DR drill, phase-020-review-attestation.json",
+    "Phase-specific artifact evidence: preflight-evidence.json, phase-020-review-attestation.json",
     "Phase 20 review attestation or package-bound attestation"
   ],
   "review": [
@@ -83,14 +83,14 @@
     "Phase 20 objective `Preflight/dry-run` is implemented as executable/runtime behavior where applicable, not only as files or registry rows.",
     "Tests and evidence directly exercise the `Preflight/dry-run` behavior and its declared failure paths.",
     "No required acceptance item remains UNKNOWN without explicit environment gap or known limitation.",
-    "RPO/RTO are measured by restore drill, not documentation; immutable/offline recovery paths are considered."
+    "Preflight/dry-run validates required tools, dependencies, permissions, resources, environment and provider readiness without performing prohibited side effects; blockers remain explicit."
   ],
   "mandatoryFailureCases": [
-    "restore exceeds RTO",
-    "missing backup"
+    "required preflight dependency unavailable",
+    "dry-run causes prohibited side effect"
   ],
   "requiredArtifacts": [
-    "DR drill",
+    "preflight-evidence.json",
     "phase-020-review-attestation.json"
   ],
   "allowedPathPrefixes": [

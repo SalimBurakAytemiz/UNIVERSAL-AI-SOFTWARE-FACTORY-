@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 56 objective `Cloud browser adapters` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Cloud browser adapters` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 56 objective `Cloud browser adapters` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Cloud browser adapters` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Adapter/plugin permissions, provenance, dependency risk, sandbox/health/certification and revocation are enforced. | Cloud browser provider entitlement/health/session/cleanup/evidence and fallback behavior are validated."
   ],
   "evidence": [
     "reviewed commit SHA",

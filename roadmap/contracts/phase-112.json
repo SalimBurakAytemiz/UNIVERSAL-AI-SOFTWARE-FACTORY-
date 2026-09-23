@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 112 objective `Analytics/Experimentation` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Analytics/Experimentation` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 112 objective `Analytics/Experimentation` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Analytics/Experimentation` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Analytics/experiment pack validates event semantics, assignment consistency, metric definition, sample-ratio mismatch and privacy boundaries."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: analytics-experiment-evidence.json, review result",
+    "Phase-specific artifact evidence: analytics-experiment-evidence.json, phase-112-evidence.json",
     "Phase 112 review attestation or package-bound attestation"
   ],
   "review": [
@@ -93,7 +93,7 @@
   ],
   "requiredArtifacts": [
     "analytics-experiment-evidence.json",
-    "review result"
+    "phase-112-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

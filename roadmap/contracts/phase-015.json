@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 15 objective `Skill gap acquisition` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Skill gap acquisition` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 15 objective `Skill gap acquisition` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Skill gap acquisition` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Unknown technology acquisition proves official-source provenance, sandbox execution, hidden holdout and certification before mission activation."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: skill-gap-acquisition-evidence.json, review result",
+    "Phase-specific artifact evidence: skill-gap-acquisition-evidence.json, phase-015-evidence.json",
     "Phase 15 review attestation or package-bound attestation"
   ],
   "review": [
@@ -91,7 +91,7 @@
   ],
   "requiredArtifacts": [
     "skill-gap-acquisition-evidence.json",
-    "review result"
+    "phase-015-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/competency/",

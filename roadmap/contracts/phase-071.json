@@ -23,12 +23,12 @@
   ],
   "requiredValidation": [
     "Phase 71 targeted success-path validation",
-    "Phase 71 mandatory failure-case validation: corrupt backup, partial migration, reconciliation mismatch, duplicate payment, rounding",
+    "Phase 71 mandatory failure-case validation: corrupt backup, partial migration, reconciliation mismatch",
     "Type/lint/build checks applicable to changed languages/toolchains",
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 71 objective `Migration/backup/restore/reconciliation` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Migration/backup/restore/reconciliation` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 71 objective `Migration/backup/restore/reconciliation` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Migration/backup/restore/reconciliation` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Backup is not PASS until restore/reconciliation proves recovery; migration rollback/irreversibility is explicit."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: restore evidence, financial evidence",
+    "Phase-specific artifact evidence: restore evidence, phase-071-review-attestation.json",
     "Phase 71 review attestation or package-bound attestation"
   ],
   "review": [
@@ -83,19 +83,16 @@
     "Phase 71 objective `Migration/backup/restore/reconciliation` is implemented as executable/runtime behavior where applicable, not only as files or registry rows.",
     "Tests and evidence directly exercise the `Migration/backup/restore/reconciliation` behavior and its declared failure paths.",
     "No required acceptance item remains UNKNOWN without explicit environment gap or known limitation.",
-    "Backup is not PASS until restore/reconciliation proves recovery; migration rollback/irreversibility is explicit.",
-    "Invoice/payment/reconciliation states and precision/idempotency/audit boundaries are verified."
+    "Backup is not PASS until restore/reconciliation proves recovery; migration rollback/irreversibility is explicit."
   ],
   "mandatoryFailureCases": [
     "corrupt backup",
     "partial migration",
-    "reconciliation mismatch",
-    "duplicate payment",
-    "rounding"
+    "reconciliation mismatch"
   ],
   "requiredArtifacts": [
     "restore evidence",
-    "financial evidence"
+    "phase-071-review-attestation.json"
   ],
   "allowedPathPrefixes": [
     "core/",

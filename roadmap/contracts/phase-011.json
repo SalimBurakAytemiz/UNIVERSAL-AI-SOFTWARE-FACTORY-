@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 11 objective `Skill/competency pack registry` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Skill/competency pack registry` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 11 objective `Skill/competency pack registry` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Skill/competency pack registry` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Skill and competency pack inheritance resolves deterministically and no role receives contradictory primary competency assignments."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: skill-competency-resolution-report.json, review result",
+    "Phase-specific artifact evidence: skill-competency-resolution-report.json, phase-011-evidence.json",
     "Phase 11 review attestation or package-bound attestation"
   ],
   "review": [
@@ -89,7 +89,7 @@
   ],
   "requiredArtifacts": [
     "skill-competency-resolution-report.json",
-    "review result"
+    "phase-011-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/competency/",

@@ -29,7 +29,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 89 objective `Secrets/PKI` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Secrets/PKI` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 89 objective `Secrets/PKI` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Secrets/PKI` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Secret/PKI controls prove no secret leakage, key/cert rotation, expiry/revocation and least-privilege access paths."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -39,7 +39,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: secret-pki-evidence.json, review result",
+    "Phase-specific artifact evidence: secret-pki-evidence.json, phase-089-evidence.json",
     "Phase 89 review attestation or package-bound attestation"
   ],
   "review": [
@@ -93,7 +93,7 @@
   ],
   "requiredArtifacts": [
     "secret-pki-evidence.json",
-    "review result"
+    "phase-089-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

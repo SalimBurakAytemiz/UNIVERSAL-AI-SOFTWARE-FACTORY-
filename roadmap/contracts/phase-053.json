@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 53 objective `AI/Data Studio` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `AI/Data Studio` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 53 objective `AI/Data Studio` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `AI/Data Studio` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | AI/Data Studio separates dataset/model/prompt/retrieval provenance and evaluates quality, safety, latency and cost before release."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: ai-data-studio-evidence.json, review result",
+    "Phase-specific artifact evidence: ai-data-studio-evidence.json, phase-053-evidence.json",
     "Phase 53 review attestation or package-bound attestation"
   ],
   "review": [
@@ -94,7 +94,7 @@
   ],
   "requiredArtifacts": [
     "ai-data-studio-evidence.json",
-    "review result"
+    "phase-053-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

@@ -107,6 +107,14 @@
       "parallelGroup": "static-3"
     },
     {
+      "id": "paste4b-traceability",
+      "command": [
+        "node",
+        "scripts/validate-paste4b.mjs"
+      ],
+      "parallelGroup": "static-3"
+    },
+    {
       "id": "review-graph",
       "command": [
         "node",

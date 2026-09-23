@@ -23,12 +23,12 @@
   ],
   "requiredValidation": [
     "Phase 60 targeted success-path validation",
-    "Phase 60 mandatory failure-case validation: unsigned/untrusted plugin, permission escalation",
+    "Phase 60 mandatory failure-case validation: unsigned/untrusted plugin, permission escalation, device-farm entitlement/quota unavailable, device reservation/session leak",
     "Type/lint/build checks applicable to changed languages/toolchains",
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 60 objective `Cloud device farm adapters` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Cloud device farm adapters` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 60 objective `Cloud device farm adapters` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Cloud device farm adapters` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Adapter/plugin permissions, provenance, dependency risk, sandbox/health/certification and revocation are enforced. | Cloud device-farm entitlement, device reservation, session lifecycle, cleanup, evidence capture and fallback behavior are validated."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: adapter certification, phase-060-review-attestation.json",
+    "Phase-specific artifact evidence: adapter certification, cloud-device-farm-evidence.json",
     "Phase 60 review attestation or package-bound attestation"
   ],
   "review": [
@@ -84,15 +84,18 @@
     "Phase 60 objective `Cloud device farm adapters` is implemented as executable/runtime behavior where applicable, not only as files or registry rows.",
     "Tests and evidence directly exercise the `Cloud device farm adapters` behavior and its declared failure paths.",
     "No required acceptance item remains UNKNOWN without explicit environment gap or known limitation.",
-    "Adapter/plugin permissions, provenance, dependency risk, sandbox/health/certification and revocation are enforced."
+    "Adapter/plugin permissions, provenance, dependency risk, sandbox/health/certification and revocation are enforced.",
+    "Cloud device-farm entitlement, device reservation, session lifecycle, cleanup, evidence capture and fallback behavior are validated."
   ],
   "mandatoryFailureCases": [
     "unsigned/untrusted plugin",
-    "permission escalation"
+    "permission escalation",
+    "device-farm entitlement/quota unavailable",
+    "device reservation/session leak"
   ],
   "requiredArtifacts": [
     "adapter certification",
-    "phase-060-review-attestation.json"
+    "cloud-device-farm-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

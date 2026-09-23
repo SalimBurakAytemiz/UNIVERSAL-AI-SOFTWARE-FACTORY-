@@ -23,12 +23,12 @@
   ],
   "requiredValidation": [
     "Phase 94 targeted success-path validation",
-    "Phase 94 mandatory failure-case validation: stream interruption, schema mismatch, auth expiry, out-of-scope target, destructive proof",
+    "Phase 94 mandatory failure-case validation: out-of-scope target, destructive proof, authorization expired or revoked",
     "Type/lint/build checks applicable to changed languages/toolchains",
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 94 objective `Authorized assessment/remediation/retest` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Authorized assessment/remediation/retest` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 94 objective `Authorized assessment/remediation/retest` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Authorized assessment/remediation/retest` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Active assessment cannot run without exact authorization/target/technique/time/data/rate/destructive scope and stop conditions."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: protocol evidence, authorization evidence",
+    "Phase-specific artifact evidence: authorization evidence, phase-094-review-attestation.json",
     "Phase 94 review attestation or package-bound attestation"
   ],
   "review": [
@@ -90,19 +90,16 @@
     "Phase 94 objective `Authorized assessment/remediation/retest` is implemented as executable/runtime behavior where applicable, not only as files or registry rows.",
     "Tests and evidence directly exercise the `Authorized assessment/remediation/retest` behavior and its declared failure paths.",
     "No required acceptance item remains UNKNOWN without explicit environment gap or known limitation.",
-    "Protocol-specific schema/stream/subscription/reconnect/auth/error semantics are tested.",
     "Active assessment cannot run without exact authorization/target/technique/time/data/rate/destructive scope and stop conditions."
   ],
   "mandatoryFailureCases": [
-    "stream interruption",
-    "schema mismatch",
-    "auth expiry",
     "out-of-scope target",
-    "destructive proof"
+    "destructive proof",
+    "authorization expired or revoked"
   ],
   "requiredArtifacts": [
-    "protocol evidence",
-    "authorization evidence"
+    "authorization evidence",
+    "phase-094-review-attestation.json"
   ],
   "allowedPathPrefixes": [
     "core/",

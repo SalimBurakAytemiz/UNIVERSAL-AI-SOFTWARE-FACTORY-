@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 96 objective `Browser/mobile/game profiling` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Browser/mobile/game profiling` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 96 objective `Browser/mobile/game profiling` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Browser/mobile/game profiling` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Profiling correlates browser/mobile/game CPU, memory, frame/startup/network metrics to exact build/device/run and detects regression against baseline."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: cross-platform-profiling-evidence.json, review result",
+    "Phase-specific artifact evidence: cross-platform-profiling-evidence.json, phase-096-evidence.json",
     "Phase 96 review attestation or package-bound attestation"
   ],
   "review": [
@@ -94,7 +94,7 @@
   ],
   "requiredArtifacts": [
     "cross-platform-profiling-evidence.json",
-    "review result"
+    "phase-096-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

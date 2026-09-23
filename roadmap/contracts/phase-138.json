@@ -28,7 +28,7 @@
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 138 objective `Representative physical-device mobile project` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Representative physical-device mobile project` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 138 objective `Representative physical-device mobile project` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Representative physical-device mobile project` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Representative mobile project runs on at least one real physical device path with install/reset/log/video/network/test evidence."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: representative-mobile-device-evidence.json, review result",
+    "Phase-specific artifact evidence: representative-mobile-device-evidence.json, phase-138-evidence.json",
     "Phase 138 review attestation or package-bound attestation"
   ],
   "review": [
@@ -107,7 +107,7 @@
   ],
   "requiredArtifacts": [
     "representative-mobile-device-evidence.json",
-    "review result"
+    "phase-138-evidence.json"
   ],
   "allowedPathPrefixes": [
     "core/",

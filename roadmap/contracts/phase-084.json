@@ -23,12 +23,12 @@
   ],
   "requiredValidation": [
     "Phase 84 targeted success-path validation",
-    "Phase 84 mandatory failure-case validation: DST boundary, RTL overflow, cross-customer TM leak, mistranslation critical",
+    "Phase 84 mandatory failure-case validation: DST boundary, RTL overflow",
     "Type/lint/build checks applicable to changed languages/toolchains",
     "Schema/registry/TR canonical validation",
     "Secret/security/trust-root/change-scope gates",
     "Regression selection for directly impacted dependencies",
-    "Acceptance assertions: Phase 84 objective `Localization/timezone` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Localization/timezone` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+    "Acceptance assertions: Phase 84 objective `Localization/timezone` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Localization/timezone` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation. | Locale/RTL/text expansion/timezone/DST/formatting paths are tested."
   ],
   "evidence": [
     "reviewed commit SHA",
@@ -38,7 +38,7 @@
     "test/validation results",
     "artifact digests",
     "unknown/not-tested surfaces",
-    "Phase-specific artifact evidence: localization evidence, communication evidence",
+    "Phase-specific artifact evidence: localization evidence, phase-084-review-attestation.json",
     "Phase 84 review attestation or package-bound attestation"
   ],
   "review": [
@@ -88,18 +88,15 @@
     "Phase 84 objective `Localization/timezone` is implemented as executable/runtime behavior where applicable, not only as files or registry rows.",
     "Tests and evidence directly exercise the `Localization/timezone` behavior and its declared failure paths.",
     "No required acceptance item remains UNKNOWN without explicit environment gap or known limitation.",
-    "Locale/RTL/text expansion/timezone/DST/formatting paths are tested.",
-    "Language routing, glossary/TM/customer isolation, QA and professional escalation states are explicit."
+    "Locale/RTL/text expansion/timezone/DST/formatting paths are tested."
   ],
   "mandatoryFailureCases": [
     "DST boundary",
-    "RTL overflow",
-    "cross-customer TM leak",
-    "mistranslation critical"
+    "RTL overflow"
   ],
   "requiredArtifacts": [
     "localization evidence",
-    "communication evidence"
+    "phase-084-review-attestation.json"
   ],
   "allowedPathPrefixes": [
     "core/",
