@@ -1,0 +1,35 @@
+{
+  "//TR": "V6 recovery replay için canonical bounded-scan ilerleme kaydıdır. Bu dosya final source closure veya target-machine PASS iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "status": "IN_PROGRESS",
+  "verifiedThroughParentCommit": "d13ec0671674c1e937fbee7a97e907162d580f2c",
+  "paste1": {
+    "status": "COMPLETE_SOURCE",
+    "checkpointCommit": "99105cf8c6a8a60954c8aa936a4d0ebd4253c15f"
+  },
+  "paste2": {
+    "status": "COMPLETE_SOURCE_ENVIRONMENT_GATES_PENDING",
+    "controlsVerified": 34,
+    "controlsTotal": 34,
+    "segments": ["2A","2B","2C","2D","2E","2F","2G","2H","2I"],
+    "pendingEnvironmentGates": [
+      "runtime-schema-conformance: PENDING_DEPENDENCIES",
+      "release-supply-chain: PENDING_REVIEWED_DEPENDENCIES_AND_SBOM",
+      "live-provider-smoke: PENDING_TARGET_RUNTIME_PROVIDER_ENVIRONMENT",
+      "typecheck-vitest: PENDING_DEPENDENCIES"
+    ]
+  },
+  "paste3": {
+    "status": "NOT_YET_REPLAYED_IN_CURRENT_PHYSICAL_WORKTREE"
+  },
+  "paste4": {
+    "status": "NOT_YET_RESUMED_IN_CURRENT_PHYSICAL_WORKTREE"
+  },
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_ZIP": "NOT_DONE"
+  },
+  "nextScope": "PASTE_3_TARGETED_REPLAY_AND_REGRESSION"
+}
