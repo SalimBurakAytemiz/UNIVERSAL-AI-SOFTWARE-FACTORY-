@@ -1,0 +1,214 @@
+{
+  "//TR": "Bu dosya semantic validator'ın yalnız ID varlığı değil rol ailesinin teknik breadth/depth beklentilerini doğrulaması için minimum domain ve technology group beklentilerini tanımlar.",
+  "schemaVersion": "2.0.0",
+  "families": [
+    {
+      "id": "FAMILY-WEB",
+      "name": "Web Engineering",
+      "categories": [
+        "04 Web Engineering"
+      ],
+      "requiredCompetencyFamilies": [
+        "WEB",
+        "ACCESSIBILITY",
+        "WEB_PERFORMANCE"
+      ],
+      "requiredTechnologyGroups": [
+        "WEB_LANGUAGE_PLATFORM",
+        "WEB_FRAMEWORK",
+        "WEB_BUILD_UI",
+        "QA_WEB",
+        "API_PROTOCOL"
+      ]
+    },
+    {
+      "id": "FAMILY-BACKEND",
+      "name": "Backend & API",
+      "categories": [
+        "05 Backend & API Engineering"
+      ],
+      "requiredCompetencyFamilies": [
+        "BACKEND",
+        "API",
+        "DISTRIBUTED_SYSTEMS"
+      ],
+      "requiredTechnologyGroups": [
+        "BACKEND_NODE",
+        "BACKEND_JVM",
+        "BACKEND_DOTNET",
+        "BACKEND_PYTHON",
+        "BACKEND_GO_RUST",
+        "BACKEND_OTHER",
+        "API_PROTOCOL",
+        "MESSAGING_STREAM"
+      ]
+    },
+    {
+      "id": "FAMILY-DATA",
+      "name": "Data & Database",
+      "categories": [
+        "06 Data & Database"
+      ],
+      "requiredCompetencyFamilies": [
+        "DATABASE",
+        "DATA_ENGINEERING",
+        "SEARCH"
+      ],
+      "requiredTechnologyGroups": [
+        "DATABASE_RELATIONAL",
+        "DATABASE_NOSQL_SEARCH",
+        "DATABASE_ANALYTICS_VECTOR",
+        "DATA_ACCESS",
+        "DATA_ENGINEERING"
+      ]
+    },
+    {
+      "id": "FAMILY-MOBILE",
+      "name": "Mobile Engineering",
+      "categories": [
+        "07 Mobile Engineering"
+      ],
+      "requiredCompetencyFamilies": [
+        "MOBILE",
+        "ANDROID",
+        "IOS",
+        "CROSS_PLATFORM_MOBILE"
+      ],
+      "requiredTechnologyGroups": [
+        "MOBILE_ANDROID",
+        "MOBILE_IOS",
+        "MOBILE_CROSS_PLATFORM",
+        "MOBILE_TEST_CLOUD"
+      ]
+    },
+    {
+      "id": "FAMILY-DESKTOP",
+      "name": "Desktop",
+      "categories": [
+        "08 Desktop Engineering"
+      ],
+      "requiredCompetencyFamilies": [
+        "DESKTOP",
+        "OS_INTEGRATION"
+      ],
+      "requiredTechnologyGroups": [
+        "DESKTOP",
+        "CI_SCM",
+        "OBSERVABILITY"
+      ]
+    },
+    {
+      "id": "FAMILY-QA",
+      "name": "Quality Engineering",
+      "categories": [
+        "10 Quality Engineering Factory"
+      ],
+      "requiredCompetencyFamilies": [
+        "QUALITY",
+        "API_QA",
+        "WEB_QA",
+        "MOBILE_QA",
+        "AUTOMATION"
+      ],
+      "requiredTechnologyGroups": [
+        "QA_API",
+        "QA_WEB",
+        "QA_OTHER",
+        "MOBILE_TEST_CLOUD",
+        "API_PROTOCOL"
+      ]
+    },
+    {
+      "id": "FAMILY-SECURITY",
+      "name": "Cybersecurity",
+      "categories": [
+        "11 Cybersecurity"
+      ],
+      "requiredCompetencyFamilies": [
+        "SECURITY",
+        "APPSEC",
+        "CLOUD_SECURITY",
+        "IDENTITY"
+      ],
+      "requiredTechnologyGroups": [
+        "SECURITY",
+        "IDENTITY_ENTERPRISE",
+        "CLOUD_PLATFORM",
+        "API_PROTOCOL"
+      ]
+    },
+    {
+      "id": "FAMILY-PLATFORM",
+      "name": "Platform/SRE",
+      "categories": [
+        "12 Platform / DevOps / SRE"
+      ],
+      "requiredCompetencyFamilies": [
+        "PLATFORM",
+        "CLOUD",
+        "SRE",
+        "OBSERVABILITY"
+      ],
+      "requiredTechnologyGroups": [
+        "CLOUD_PLATFORM",
+        "CLOUD_NETWORK_MESH",
+        "CI_SCM",
+        "OBSERVABILITY"
+      ]
+    },
+    {
+      "id": "FAMILY-AI",
+      "name": "AI/ML",
+      "categories": [
+        "13 AI / Model Operations"
+      ],
+      "requiredCompetencyFamilies": [
+        "AI_ML",
+        "MODEL_OPS",
+        "AI_EVAL"
+      ],
+      "requiredTechnologyGroups": [
+        "AI_ML",
+        "DATA_ENGINEERING",
+        "DATABASE_ANALYTICS_VECTOR",
+        "CLOUD_PLATFORM",
+        "OBSERVABILITY"
+      ]
+    },
+    {
+      "id": "FAMILY-GAME",
+      "name": "Game",
+      "categories": [
+        "22 Game Development Studio"
+      ],
+      "requiredCompetencyFamilies": [
+        "GAME",
+        "GAME_NETWORKING",
+        "GAME_PERFORMANCE"
+      ],
+      "requiredTechnologyGroups": [
+        "GAME_ENGINE_GRAPHICS",
+        "GAME_SERVICE_ART",
+        "CLOUD_PLATFORM",
+        "OBSERVABILITY"
+      ]
+    },
+    {
+      "id": "FAMILY-HARDWARE",
+      "name": "Embedded/IoT/XR",
+      "categories": [
+        "24 Embedded / IoT / Robotics / XR"
+      ],
+      "requiredCompetencyFamilies": [
+        "EMBEDDED_IOT",
+        "HARDWARE",
+        "ROBOTICS"
+      ],
+      "requiredTechnologyGroups": [
+        "IOT_EMBEDDED",
+        "MESSAGING_STREAM",
+        "CLOUD_PLATFORM"
+      ]
+    }
+  ]
+}

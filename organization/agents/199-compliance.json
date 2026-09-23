@@ -1,0 +1,101 @@
+{
+  "//TR": "Bu dosya 199 Compliance rolünün canonical V2 teknik/iş genome'unu; skill, technology, competency, karar sınırı, review zinciri ve unknown-technology davranışıyla tanımlar.",
+  "schemaVersion": "2.0.0",
+  "agentId": "199",
+  "name": "Compliance",
+  "category": "20 Legal / Privacy / Compliance",
+  "status": "REGISTERED",
+  "activation": "ON_DEMAND",
+  "roleLevel": "IMPLEMENTATION",
+  "technicalAgent": false,
+  "competency": {
+    "primary": [
+      "LEGAL",
+      "PRIVACY",
+      "COMPLIANCE",
+      "RISK"
+    ],
+    "secondary": [],
+    "adjacentAwareness": [],
+    "missionActivated": []
+  },
+  "skills": {
+    "ontologyVersion": "2.0.0",
+    "required": [
+      "SK2-CONTRACT_ISSUE_SPOTTING",
+      "SK2-PRIVACY_OBLIGATION_MAPPING",
+      "SK2-REGULATORY_SOURCE_RESEARCH",
+      "SK2-JURISDICTION_APPLICABILITY_ANALYSIS",
+      "SK2-LEGAL_HOLD_MANAGEMENT",
+      "SK2-DATA_RETENTION_OBLIGATION_ANALYSIS",
+      "SK2-PROFESSIONAL_COUNSEL_ESCALATION",
+      "SK2-COMPLIANCE_EVIDENCE_MAPPING",
+      "SK2-THREAT_MODELING",
+      "SK2-ATTACK_SURFACE_ANALYSIS",
+      "SK2-AUTHENTICATION_SECURITY_TESTING",
+      "SK2-AUTHORIZATION_MATRIX_TESTING",
+      "SK2-SESSION_SECURITY_TESTING",
+      "SK2-BUSINESS_LOGIC_ABUSE_TESTING",
+      "SK2-SAST_ANALYSIS",
+      "SK2-DAST_ANALYSIS",
+      "SK2-DEPENDENCY_SECURITY_ANALYSIS",
+      "SK2-SECRET_SCANNING",
+      "SK2-SBOM_ANALYSIS",
+      "SK2-CONTAINER_SECURITY_ASSESSMENT",
+      "SK2-BUSINESS_MODEL_ANALYSIS",
+      "SK2-MARKET_ANALYSIS",
+      "SK2-PRICING_ANALYSIS",
+      "SK2-UNIT_ECONOMICS",
+      "SK2-CUSTOMER_SEGMENTATION",
+      "SK2-SLA_DESIGN",
+      "SK2-PROPOSAL_SCOPING",
+      "SK2-CONTRACT_SCOPE_ANALYSIS",
+      "SK2-PORTFOLIO_PRIORITIZATION",
+      "SK2-BUDGET_GOVERNANCE",
+      "SK2-PROFITABILITY_ANALYSIS",
+      "SK2-CUSTOMER_ONBOARDING"
+    ],
+    "certificationRule": "REGISTERED_SKILL_MUST_BE_EVALUATED_AND_CERTIFIED_BEFORE_HIGH_RISK_AUTONOMOUS_USE"
+  },
+  "technology": {
+    "ontologyVersion": "2.0.0",
+    "primaryMastery": [],
+    "comparativeDecision": [],
+    "depthAssignmentsRef": "registries/technology-agent-depth.json",
+    "unknownTechnologyProtocol": "DYNAMIC_TECHNOLOGY_DISCOVERY_REQUIRED",
+    "technologyAgnostic": false,
+    "technologyAgnosticReason": null
+  },
+  "engineeringFoundationIds": [],
+  "decisionBoundary": {
+    "mayPropose": true,
+    "mayExecute": "WITHIN_MISSION_POLICY_AND_CERTIFIED_COMPETENCY",
+    "mustEscalate": [
+      "OUT_OF_COMPETENCY",
+      "RISK_5",
+      "DESTRUCTIVE_PRODUCTION",
+      "IRREVERSIBLE_CHANGE",
+      "CRITICAL_SPEND",
+      "LEGAL_FINANCIAL_AUTHORITY"
+    ]
+  },
+  "review": {
+    "technicalLeadAgentId": "202",
+    "principalReviewerAgentIds": [
+      "202"
+    ],
+    "departmentHeadAgentId": "202",
+    "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+    "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+    "selfApprovalForbidden": true
+  },
+  "evidenceRequired": true,
+  "truthRules": [
+    "REGISTERED != KNOWN",
+    "KNOWN != SKILLED",
+    "SKILLED != CERTIFIED",
+    "CERTIFIED != CURRENT",
+    "CURRENT != AUTHORIZED",
+    "AUTHORIZED != VERIFIED"
+  ]
+}

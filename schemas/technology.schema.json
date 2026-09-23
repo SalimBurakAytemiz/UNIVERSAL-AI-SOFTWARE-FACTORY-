@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "//TR: Technology Knowledge Graph kayıtlarının kimlik, grup, tip, ecosystem, source/version/freshness politikalarını doğrular.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ecosystem",
+    "freshnessPolicy",
+    "group",
+    "id",
+    "knowledgeFacets",
+    "knowledgeState",
+    "name",
+    "officialSourcePolicy",
+    "slug",
+    "status",
+    "type",
+    "versionPolicy"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^TECH-"
+    },
+    "slug": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "group": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ecosystem": {
+      "type": "string",
+      "minLength": 1
+    },
+    "aliases": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "enum": [
+        "REGISTERED",
+        "ACTIVE",
+        "STALE",
+        "QUARANTINED",
+        "RETIRED"
+      ]
+    },
+    "knowledgeState": {
+      "enum": [
+        "SEED_PROFILE",
+        "RESEARCHED",
+        "EVALUATED",
+        "CERTIFIED",
+        "STALE"
+      ]
+    },
+    "implementationState": {
+      "type": "string"
+    },
+    "officialSourcePolicy": {
+      "type": "string"
+    },
+    "versionPolicy": {
+      "type": "string"
+    },
+    "freshnessPolicy": {
+      "type": "string"
+    },
+    "knowledgeFacets": {
+      "type": "array",
+      "minItems": 10,
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

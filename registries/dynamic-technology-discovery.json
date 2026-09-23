@@ -1,0 +1,39 @@
+{
+  "//TR": "Bu dosya registry'de bulunmayan framework/library/protocol/tool tespit edildiğinde agent'ın bildiğini varsaymak yerine resmi kaynak, sandbox, eval ve review ile öğrenmesini zorunlu kılar.",
+  "schemaVersion": "2.0.0",
+  "lifecycle": [
+    "DETECTED",
+    "IDENTIFIED",
+    "SOURCE_PINNED",
+    "RESEARCHED",
+    "SANDBOXED",
+    "KNOWLEDGE_MODELED",
+    "EVALUATED",
+    "INDEPENDENTLY_REVIEWED",
+    "CERTIFIED",
+    "REGISTERED",
+    "ACTIVE"
+  ],
+  "requiredChecks": [
+    "identity-and-alias-resolution",
+    "official-source-provenance",
+    "license-terms",
+    "version-support-eol",
+    "security-advisories",
+    "build-install",
+    "minimal-implementation",
+    "debugging-failure-case",
+    "testability",
+    "performance-observability",
+    "interoperability",
+    "upgrade-migration",
+    "golden-eval",
+    "hidden-holdout",
+    "independent-review"
+  ],
+  "forbidden": [
+    "ASSUME_MODEL_MEMORY_IS_CURRENT",
+    "ACTIVATE_BEFORE_CERTIFICATION",
+    "COPY_UNLICENSED_EXTERNAL_SOURCE"
+  ]
+}

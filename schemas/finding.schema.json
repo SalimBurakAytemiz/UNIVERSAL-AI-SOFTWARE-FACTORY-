@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/finding.schema.json",
+  "$comment": "//TR: Bu schema genel UASCO finding'in lifecycle/severity/category/subject/evidence/reproduction/remediation bilgilerini zorunlu tutar; bağımsız Codex finding'i için daha sıkı review-finding schema kullanılır.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schemaVersion",
+    "status",
+    "createdAt",
+    "severity",
+    "category",
+    "subjectRef",
+    "evidenceRefs",
+    "summary"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "status": {
+      "enum": [
+        "CANDIDATE",
+        "REPRODUCED",
+        "CONFIRMED",
+        "TRIAGED",
+        "REMEDIATING",
+        "RETESTING",
+        "VERIFIED_FIXED",
+        "CLOSED",
+        "FALSE_POSITIVE",
+        "ACCEPTED_RISK",
+        "DEFERRED",
+        "DUPLICATE"
+      ]
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "severity": {
+      "enum": [
+        "P0",
+        "P1",
+        "P2",
+        "P3",
+        "INFO"
+      ]
+    },
+    "category": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subjectRef": {
+      "type": "string",
+      "minLength": 1
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reproduction": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "expected": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "observed": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "remediation": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "retestEvidenceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "metadata": {
+      "type": "object"
+    }
+  }
+}

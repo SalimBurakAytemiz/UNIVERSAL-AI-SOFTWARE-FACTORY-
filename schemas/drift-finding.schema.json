@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/drift-finding.schema.json",
+  "$comment": "//TR: Bu schema drift-finding primitive/contract kaydının canonical minimum yapısını doğrulamak için final architecture closure kapsamında oluşturulmuştur.",
+  "title": "drift-finding",
+  "type": "object",
+  "required": [
+    "createdAt",
+    "environmentId",
+    "evidenceRefs",
+    "id",
+    "result",
+    "schemaVersion",
+    "status",
+    "timestamp"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "result": {
+      "type": "string"
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "environmentId": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

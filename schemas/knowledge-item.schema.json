@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/knowledge-item.schema.json",
+  "$comment": "//TR: Bu schema knowledge-item primitive/contract kaydının canonical minimum yapısını doğrulamak için final architecture closure kapsamında oluşturulmuştur.",
+  "title": "knowledge-item",
+  "type": "object",
+  "required": [
+    "createdAt",
+    "evidenceRefs",
+    "freshness",
+    "id",
+    "schemaVersion",
+    "sourceRefs",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "sourceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "freshness": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

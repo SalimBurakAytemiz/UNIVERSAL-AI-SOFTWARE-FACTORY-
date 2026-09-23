@@ -1,0 +1,122 @@
+{
+  "//TR": "Bu dosya Roadmap Phase 13 — Framework/toolchain packs için giriş koşulları, teslimatlar, test/evidence ve bağımsız review kapanışını machine-readable olarak tanımlar.",
+  "schemaVersion": "3.0.0",
+  "phase": 13,
+  "title": "Framework/toolchain packs",
+  "domain": "ORGANIZATION_COMPETENCY",
+  "state": "PLANNED",
+  "entryCriteria": [
+    "previous-required-phase-contracts-closed-or-explicitly-waived",
+    "requirements-and-invariants-loaded",
+    "affected-customer-data-security-cost-policies-resolved",
+    "required-skills-tools-resources-health-checked",
+    "Phase dependency closure verified for: 11, 12",
+    "Frozen milestone/package contract generated for Phase 13"
+  ],
+  "requiredDeliverables": [
+    "Executable or explicitly justified non-runtime implementation for Phase 13: Framework/toolchain packs",
+    "Tests that exercise declared success and failure paths for Phase 13",
+    "Phase-specific artifacts: PHASE0_ACCEPTANCE.json, LOCAL_TOOL_HEALTH.json",
+    "Documentation and registry/schema updates required by the implementation",
+    "Control Tower visibility when the phase creates founder-visible operational state",
+    "Atomic checkpoint/evidence linkage for Phase 13"
+  ],
+  "requiredValidation": [
+    "Phase 13 targeted success-path validation",
+    "Phase 13 mandatory failure-case validation: missing dependency, wrong Node major, provider auth missing, dirty repo, checksum mismatch",
+    "Type/lint/build checks applicable to changed languages/toolchains",
+    "Schema/registry/TR canonical validation",
+    "Secret/security/trust-root/change-scope gates",
+    "Regression selection for directly impacted dependencies",
+    "Acceptance assertions: Phase 13 objective `Framework/toolchain packs` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Framework/toolchain packs` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+  ],
+  "evidence": [
+    "reviewed commit SHA",
+    "run ID",
+    "exact tool/runtime versions",
+    "environment/resource identity",
+    "test/validation results",
+    "artifact digests",
+    "unknown/not-tested surfaces",
+    "Phase-specific artifact evidence: PHASE0_ACCEPTANCE.json, LOCAL_TOOL_HEALTH.json",
+    "Phase 13 review attestation or package-bound attestation"
+  ],
+  "review": [
+    "technical lead or principal review",
+    "independent Codex package review at the coherent review boundary"
+  ],
+  "exitCriteria": [
+    "No unresolved admissible blocker in the frozen review scope",
+    "Phase 13 runtime/non-runtime deliverable is proven by evidence rather than registry/file existence alone",
+    "Mandatory failure cases are exercised or explicitly environment-blocked: missing dependency, wrong Node major, provider auth missing, dirty repo, checksum mismatch",
+    "Required artifacts exist and are evidence-linked: PHASE0_ACCEPTANCE.json, LOCAL_TOOL_HEALTH.json",
+    "Dependency phases are closed and consistent: 11, 12",
+    "State/checkpoint is durable and crash-resume safe where applicable",
+    "Independent review result is valid, commit-bound and not stale"
+  ],
+  "rollbackOrRecovery": "REQUIRED_FOR_STATEFUL_OR_EXTERNAL_SIDE_EFFECT_CHANGES",
+  "prohibited": [
+    "FOLDER_THEATRE",
+    "FAKE_PASS",
+    "SELF_CERTIFICATION",
+    "SILENT_SCOPE_REDUCTION"
+  ],
+  "dependsOn": [
+    11,
+    12
+  ],
+  "objective": "Implement, integrate and prove Roadmap Phase 13: Framework/toolchain packs.",
+  "requirements": [
+    "Phase 13 `Framework/toolchain packs` capability must be represented by real runtime or an explicitly justified non-runtime artifact.",
+    "All applicable Architecture Constitution, customer/data/authority and evidence invariants remain enforced.",
+    "Unknown/unverified/environment-blocked surfaces stay explicit."
+  ],
+  "invariants": [
+    "NO_FAKE_SUCCESS",
+    "NO_WEAKENED_CONTROLS",
+    "NO_SILENT_SCOPE_EXPANSION",
+    "NO_SELF_CERTIFICATION",
+    "EVIDENCE_REQUIRED"
+  ],
+  "phaseSpecificAcceptance": [
+    "Phase 13 objective `Framework/toolchain packs` is implemented as executable/runtime behavior where applicable, not only as files or registry rows.",
+    "Tests and evidence directly exercise the `Framework/toolchain packs` behavior and its declared failure paths.",
+    "No required acceptance item remains UNKNOWN without explicit environment gap or known limitation.",
+    "Exact Node/npm/Git versions captured; package-lock exists; canonical validators and unit tests run.",
+    "Claude/Codex command+auth state and local-only/private-remote state are explicit.",
+    "Phase0 acceptance report is CLEAN/CLEAN_LOCAL_ONLY before autonomous scheduler starts."
+  ],
+  "mandatoryFailureCases": [
+    "missing dependency",
+    "wrong Node major",
+    "provider auth missing",
+    "dirty repo",
+    "checksum mismatch"
+  ],
+  "requiredArtifacts": [
+    "PHASE0_ACCEPTANCE.json",
+    "LOCAL_TOOL_HEALTH.json"
+  ],
+  "allowedPathPrefixes": [
+    "core/competency/",
+    "organization/",
+    "evaluations/",
+    "knowledge/",
+    "tests/",
+    "docs/",
+    "registries/",
+    "schemas/",
+    "standards/",
+    "playbooks/"
+  ],
+  "reviewProfile": "STANDARD",
+  "riskLevel": 2,
+  "allowPaidApi": false,
+  "allowProduction": false,
+  "allowRisk5": false,
+  "unsupportedCases": [],
+  "maxFilesChanged": 220,
+  "allowExistingTestAssertionReduction": false,
+  "requiresFrozenMilestoneContract": true,
+  "allowDependencyChanges": false
+}

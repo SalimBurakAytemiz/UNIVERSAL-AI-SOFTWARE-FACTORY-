@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/agent-run.schema.json",
+  "$comment": "//TR: Bu schema agent-run primitive/contract kaydının canonical minimum yapısını doğrulamak için final architecture closure kapsamında oluşturulmuştur.",
+  "title": "agent-run",
+  "type": "object",
+  "required": [
+    "agentId",
+    "capabilities",
+    "certificationState",
+    "createdAt",
+    "evidenceRefs",
+    "id",
+    "missionId",
+    "name",
+    "schemaVersion",
+    "startedAt",
+    "status",
+    "taskId"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "name": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "certificationState": {
+      "type": "string"
+    },
+    "agentId": {
+      "type": "string",
+      "pattern": "^\\d{3}$"
+    },
+    "missionId": {
+      "type": "string"
+    },
+    "taskId": {
+      "type": "string"
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finishedAt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "result": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

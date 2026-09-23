@@ -1,0 +1,157 @@
+{
+  "//TR": "Bu dosya architect/principal agentların teknoloji seçimini marka sevgisiyle değil project genome ve kanıtlanabilir trade-off kriterleriyle yapmasını sağlar.",
+  "schemaVersion": "1.0.0",
+  "count": 25,
+  "criteria": [
+    {
+      "id": "business-fit",
+      "name": "Business fit",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "functional-fit",
+      "name": "Functional fit",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "performance",
+      "name": "Performance",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "scalability",
+      "name": "Scalability",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "security",
+      "name": "Security",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "reliability",
+      "name": "Reliability",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "ecosystem-maturity",
+      "name": "Ecosystem maturity",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "maintainability",
+      "name": "Maintainability",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "testability",
+      "name": "Testability",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "observability",
+      "name": "Observability",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "developer-tooling",
+      "name": "Developer tooling",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "delivery-speed",
+      "name": "Delivery speed",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "total-cost",
+      "name": "Total cost of ownership",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "vendor-lockin",
+      "name": "Vendor lock-in",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "license-ip",
+      "name": "License/IP",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "team-competency",
+      "name": "Available certified competency",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "longevity",
+      "name": "Longevity/EOL",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "integration-fit",
+      "name": "Integration fit",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "deployment-operations",
+      "name": "Deployment/operations",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "migration-exit",
+      "name": "Migration/exit cost",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "regulatory-fit",
+      "name": "Regulatory/domain fit",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "data-residency",
+      "name": "Data/residency fit",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "offline-degraded",
+      "name": "Offline/degraded requirements",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "accessibility-localization",
+      "name": "Accessibility/localization",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    },
+    {
+      "id": "energy-resource",
+      "name": "Resource/energy footprint",
+      "defaultWeight": 1,
+      "weightMustBeMissionSpecific": true
+    }
+  ]
+}

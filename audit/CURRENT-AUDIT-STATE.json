@@ -1,0 +1,101 @@
+{
+  "//TR": "Bu JSON current audit snapshot içindeki açık bulgu kimliklerini ve dependency-free recheck command sonuçlarını machine-readable olarak taşır.",
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-09-21T05:05:46.717138+00:00",
+  "artifactBase": "MECHANICALLY-CLOSED-V3",
+  "status": "AUDIT_SNAPSHOT_NOT_INSTALLATION_GO",
+  "openFindings": [
+    "P0-01",
+    "P0-02",
+    "P0-03",
+    "P0-04",
+    "P0-05",
+    "P1-01",
+    "P1-02",
+    "P1-03",
+    "P1-04",
+    "P1-05"
+  ],
+  "checks": [
+    {
+      "command": "node scripts/validate-registries.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/validate-architecture.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/validate-tr-comments.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/validate-agent-competencies.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/validate-organization.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/validate-schema-catalog.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/validate-technology-graph.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/validate-domain-packs.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/validate-agent-semantic.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/validate-phase-contracts.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/validate-review-graph-v2.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/validate-schema-strictness.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/validate-woven-model.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/validate-mechanical-closure.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/mechanical-kernel-selftest.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/supervisor-state-machine-selftest.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/verify-trust-root.mjs",
+      "rc": 0
+    },
+    {
+      "command": "node scripts/bootstrap-kernel-selftest.mjs",
+      "rc": 1
+    },
+    {
+      "command": "node scripts/secret-sanity.mjs",
+      "rc": 1
+    },
+    {
+      "command": "node scripts/dependency-supply-chain.mjs",
+      "rc": 1
+    }
+  ]
+}

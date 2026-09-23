@@ -1,0 +1,56 @@
+{
+  "//TR": "Bu domain pack Aviation & Aerospace için mission-time official-source research ile doldurulacak terminology, business invariant, state-machine, risk, QA ve evidence bilgi iskeletini first-class yapar.",
+  "schemaVersion": "1.0.0",
+  "id": "domain-aviation-aerospace",
+  "name": "Aviation & Aerospace",
+  "status": "SEED_DOMAIN_PROFILE",
+  "activation": "ON_DEMAND",
+  "terminology": [
+    "flight",
+    "aircraft",
+    "maintenance",
+    "dispatch",
+    "telemetry"
+  ],
+  "businessInvariants": [
+    "safety-critical traceability",
+    "configuration control",
+    "fail-safe behavior"
+  ],
+  "stateMachines": [
+    "DISCOVER_FROM_MISSION_AND_DOMAIN_PRIMARY_SOURCES"
+  ],
+  "knownFailureFamilies": [
+    "CONCURRENCY",
+    "AUTHORIZATION",
+    "DATA_INTEGRITY",
+    "RECOVERY",
+    "INTEGRATION_DRIFT"
+  ],
+  "referenceArchitecturePatterns": [
+    "DISCOVER_AND_COMPARE_AT_MISSION_TIME"
+  ],
+  "regulatorySourcePolicy": "OFFICIAL_PRIMARY_SOURCE_BY_JURISDICTION_AND_EFFECTIVE_DATE",
+  "qaHeuristics": [
+    "state-transition",
+    "negative-boundary",
+    "authorization",
+    "concurrency",
+    "reconciliation",
+    "recovery"
+  ],
+  "securityPrivacyObligations": [
+    "DISCOVER_BY_DATA_CLASS_AND_JURISDICTION"
+  ],
+  "evidenceExpectations": [
+    "requirements-trace",
+    "test-evidence",
+    "security-evidence",
+    "unknowns"
+  ],
+  "prohibitedAssumptions": [
+    "DOMAIN_LABEL_IS_NOT_EXPERTISE",
+    "MODEL_MEMORY_IS_NOT_CURRENT_REGULATION"
+  ],
+  "freshness": "MISSION_TIME_REVALIDATION_REQUIRED"
+}

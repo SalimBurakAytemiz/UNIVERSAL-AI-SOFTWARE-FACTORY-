@@ -1,0 +1,56 @@
+{
+  "//TR": "Bu dosya 28 Intelligence / Autonomous Learning departmanının head/principal/member yapısını, ortak competency alanlarını ve takım başının hangi teknik breadth'i gözetmesi gerektiğini tanımlar.",
+  "schemaVersion": "2.0.0",
+  "departmentId": "DEPT-28",
+  "name": "28 Intelligence / Autonomous Learning",
+  "headAgentId": "253",
+  "principalReviewerAgentIds": [
+    "253",
+    "269"
+  ],
+  "memberAgentIds": [
+    "253",
+    "254",
+    "255",
+    "256",
+    "257",
+    "258",
+    "259",
+    "260",
+    "261",
+    "262",
+    "263",
+    "264",
+    "265",
+    "266",
+    "267",
+    "268",
+    "269",
+    "270"
+  ],
+  "competencyCoverage": [
+    "LEARNING",
+    "RESEARCH",
+    "EVALUATION",
+    "KNOWLEDGE",
+    "DATA",
+    "DATABASE",
+    "AI_ML",
+    "MODEL_OPS"
+  ],
+  "primaryTechnologyCoverage": [
+    "TECH-GITHUB",
+    "TECH-OPENAPI",
+    "TECH-JSON-SCHEMA"
+  ],
+  "comparativeTechnologyCoverage": [],
+  "headResponsibilities": [
+    "mission workload and specialist assignment",
+    "technical quality aggregation",
+    "cross-specialist conflict resolution",
+    "unknown/gap escalation",
+    "evidence-based department signoff",
+    "briefing compression to council/founder"
+  ],
+  "truthRule": "DEPARTMENT_HEAD_SIGNOFF_DOES_NOT_REPLACE_INDEPENDENT_EVIDENCE_OR_REVIEW"
+}

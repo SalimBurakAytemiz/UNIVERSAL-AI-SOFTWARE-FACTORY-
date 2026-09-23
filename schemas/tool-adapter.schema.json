@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "//TR: Bu schema yeni test/build/cloud/provider araçlarının core'u değiştirmeden adapter registry'ye eklenebilmesi için minimum adapter metadata sözleşmesini tanımlar.",
+  "type": "object",
+  "required": [
+    "category",
+    "id",
+    "implementation",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "implementation": {
+      "type": "string"
+    },
+    "requiresCertification": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,176 @@
+{
+  "//TR": "Bu dosya disiplinler arası teknik kararların tek agentın tercihiyle değil ilgili principal/head uzmanların kanıtlı değerlendirmesiyle sentezlenmesini sağlar.",
+  "schemaVersion": "1.0.0",
+  "count": 10,
+  "councils": [
+    {
+      "id": "COUNCIL-EXEC",
+      "name": "Executive Intelligence Council",
+      "members": [
+        "001",
+        "008",
+        "018",
+        "067",
+        "132",
+        "142",
+        "153",
+        "165",
+        "191",
+        "202",
+        "203",
+        "253"
+      ],
+      "purpose": "Company-wide synthesis; Founder decision packages.",
+      "founderFinalAuthorityForCriticalDecisions": true
+    },
+    {
+      "id": "COUNCIL-TECH",
+      "name": "Technology & Architecture Council",
+      "members": [
+        "018",
+        "019",
+        "022",
+        "023",
+        "030",
+        "035",
+        "043",
+        "050",
+        "057",
+        "132",
+        "148",
+        "203"
+      ],
+      "purpose": "Technology selection, architecture trade-offs and ADRs.",
+      "founderFinalAuthorityForCriticalDecisions": true
+    },
+    {
+      "id": "COUNCIL-QUALITY",
+      "name": "Quality & Release Council",
+      "members": [
+        "067",
+        "096",
+        "108",
+        "118",
+        "128",
+        "132",
+        "148",
+        "236"
+      ],
+      "purpose": "Release readiness, coverage, blockers, residual risk.",
+      "founderFinalAuthorityForCriticalDecisions": true
+    },
+    {
+      "id": "COUNCIL-SEC",
+      "name": "Security & Risk Council",
+      "members": [
+        "007",
+        "132",
+        "133",
+        "134",
+        "135",
+        "136",
+        "139",
+        "141",
+        "202"
+      ],
+      "purpose": "Security scope, risk, critical findings and approval escalation.",
+      "founderFinalAuthorityForCriticalDecisions": true
+    },
+    {
+      "id": "COUNCIL-DATA",
+      "name": "Data, Privacy & Governance Council",
+      "members": [
+        "043",
+        "049",
+        "135",
+        "198",
+        "200",
+        "361"
+      ],
+      "purpose": "Data models, privacy, residency, retention, integrity and access.",
+      "founderFinalAuthorityForCriticalDecisions": true
+    },
+    {
+      "id": "COUNCIL-AI",
+      "name": "AI & Knowledge Council",
+      "members": [
+        "152",
+        "154",
+        "155",
+        "156",
+        "157",
+        "253",
+        "259",
+        "262",
+        "270"
+      ],
+      "purpose": "Model quality, research, skill learning, eval and knowledge certification.",
+      "founderFinalAuthorityForCriticalDecisions": true
+    },
+    {
+      "id": "COUNCIL-PRODUCT",
+      "name": "Product & Business Council",
+      "members": [
+        "008",
+        "009",
+        "010",
+        "012",
+        "016",
+        "017",
+        "319",
+        "320",
+        "323",
+        "326"
+      ],
+      "purpose": "Product fit, business value, pricing and market decisions.",
+      "founderFinalAuthorityForCriticalDecisions": true
+    },
+    {
+      "id": "COUNCIL-INCIDENT",
+      "name": "Incident & Recovery Council",
+      "members": [
+        "141",
+        "148",
+        "149",
+        "151",
+        "235",
+        "238",
+        "247"
+      ],
+      "purpose": "Major incident response, recovery and postmortem.",
+      "founderFinalAuthorityForCriticalDecisions": true
+    },
+    {
+      "id": "COUNCIL-DESIGN",
+      "name": "Design & Accessibility Council",
+      "members": [
+        "060",
+        "061",
+        "062",
+        "064",
+        "066",
+        "078",
+        "085",
+        "086"
+      ],
+      "purpose": "UX, design system, accessibility and localization decisions.",
+      "founderFinalAuthorityForCriticalDecisions": true
+    },
+    {
+      "id": "COUNCIL-GAME-HW",
+      "name": "Game, Media & Hardware Council",
+      "members": [
+        "208",
+        "213",
+        "217",
+        "220",
+        "227",
+        "232",
+        "233",
+        "234"
+      ],
+      "purpose": "Game/XR/embedded cross-functional architecture and quality.",
+      "founderFinalAuthorityForCriticalDecisions": true
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "//TR": "Bu dosya 02 Product & Discovery departmanının head/principal/member yapısını, ortak competency alanlarını ve takım başının hangi teknik breadth'i gözetmesi gerektiğini tanımlar.",
+  "schemaVersion": "2.0.0",
+  "departmentId": "DEPT-02",
+  "name": "02 Product & Discovery",
+  "headAgentId": "008",
+  "principalReviewerAgentIds": [
+    "008",
+    "011",
+    "017"
+  ],
+  "memberAgentIds": [
+    "008",
+    "009",
+    "010",
+    "011",
+    "012",
+    "013",
+    "014",
+    "015",
+    "016",
+    "017"
+  ],
+  "competencyCoverage": [
+    "PRODUCT",
+    "BUSINESS_ANALYSIS",
+    "RESEARCH",
+    "DATA",
+    "DATABASE"
+  ],
+  "primaryTechnologyCoverage": [],
+  "comparativeTechnologyCoverage": [],
+  "headResponsibilities": [
+    "mission workload and specialist assignment",
+    "technical quality aggregation",
+    "cross-specialist conflict resolution",
+    "unknown/gap escalation",
+    "evidence-based department signoff",
+    "briefing compression to council/founder"
+  ],
+  "truthRule": "DEPARTMENT_HEAD_SIGNOFF_DOES_NOT_REPLACE_INDEPENDENT_EVIDENCE_OR_REVIEW"
+}

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/reviewer-independence.schema.json",
+  "$comment": "//TR: Bu schema reviewer-independence primitive/contract kaydının canonical minimum yapısını doğrulamak için final architecture closure kapsamında oluşturulmuştur.",
+  "title": "reviewer-independence",
+  "type": "object",
+  "required": [
+    "createdAt",
+    "dataPolicy",
+    "evidenceRefs",
+    "id",
+    "modelId",
+    "provenance",
+    "providerId",
+    "result",
+    "schemaVersion",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "providerId": {
+      "type": "string"
+    },
+    "modelId": {
+      "type": "string"
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "dataPolicy": {
+      "type": "object"
+    },
+    "result": {
+      "type": "string"
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

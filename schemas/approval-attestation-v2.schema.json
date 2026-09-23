@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "//TR: Approval'u actor/action/target digest ve expiry/revocation ile non-repudiable bağlama için minimum strict sözleşmeyi tanımlar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "actionDigest",
+    "approverIdentityId",
+    "expiresAt",
+    "grantedAt",
+    "id",
+    "targetDigest"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "approverIdentityId": {
+      "type": "string"
+    },
+    "actionDigest": {
+      "type": "string",
+      "minLength": 16
+    },
+    "targetDigest": {
+      "type": "string",
+      "minLength": 16
+    },
+    "grantedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "revokedAt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  }
+}

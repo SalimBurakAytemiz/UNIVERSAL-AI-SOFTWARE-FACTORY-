@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "//TR: Agent'ın çoklu competency pack, engineering foundation, technology mastery, decision boundary ve review chain profilini doğrular.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "adjacentAwarenessPacks",
+    "agentId",
+    "category",
+    "decisionBoundary",
+    "evidenceRequired",
+    "name",
+    "primaryCompetencyPacks",
+    "primaryTechnologyIds",
+    "reviewChainAgentIds",
+    "roleLevel",
+    "secondaryCompetencyPacks",
+    "technicalAgent",
+    "unknownTechnologyProtocol"
+  ],
+  "properties": {
+    "agentId": {
+      "type": "string",
+      "pattern": "^\\d{3}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 2
+    },
+    "category": {
+      "type": "string",
+      "minLength": 2
+    },
+    "roleLevel": {
+      "enum": [
+        "IMPLEMENTATION",
+        "ADVANCED_ENGINEERING",
+        "PRINCIPAL_REVIEW"
+      ]
+    },
+    "technicalAgent": {
+      "type": "boolean"
+    },
+    "universalCompanyLiteracy": {
+      "type": "boolean"
+    },
+    "universalEngineeringFoundationIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "primaryCompetencyPacks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "secondaryCompetencyPacks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "adjacentAwarenessPacks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "missionActivatedPacks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "primaryTechnologyIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^TECH-"
+      }
+    },
+    "technologyDepthProfiles": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "comparisonTechnologyIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^TECH-"
+      }
+    },
+    "unknownTechnologyProtocol": {
+      "const": "DYNAMIC_TECHNOLOGY_DISCOVERY_REQUIRED"
+    },
+    "decisionBoundary": {
+      "type": "object"
+    },
+    "evidenceRequired": {
+      "const": true
+    },
+    "reviewChainAgentIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\d{3}$"
+      }
+    }
+  }
+}

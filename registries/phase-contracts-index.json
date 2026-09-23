@@ -1,0 +1,752 @@
+{
+  "//TR": "Bu dosya ROADMAP'teki her phase'in artık yalnız bir başlık değil entry/deliverable/test/evidence/review/exit sözleşmesine sahip olduğunu doğrulamak için index'tir.",
+  "schemaVersion": "2.0.0",
+  "count": 149,
+  "contracts": [
+    {
+      "phase": 0,
+      "title": "Private repo and toolchain baseline",
+      "path": "roadmap/contracts/phase-000.json"
+    },
+    {
+      "phase": 1,
+      "title": "Canonical primitive and schema registry",
+      "path": "roadmap/contracts/phase-001.json"
+    },
+    {
+      "phase": 2,
+      "title": "Identity/RBAC/service/worker identities",
+      "path": "roadmap/contracts/phase-002.json"
+    },
+    {
+      "phase": 3,
+      "title": "Approval/non-repudiation/break-glass",
+      "path": "roadmap/contracts/phase-003.json"
+    },
+    {
+      "phase": 4,
+      "title": "Action Gateway and side-effect ledger",
+      "path": "roadmap/contracts/phase-004.json"
+    },
+    {
+      "phase": 5,
+      "title": "Encrypted vault/key lifecycle",
+      "path": "roadmap/contracts/phase-005.json"
+    },
+    {
+      "phase": 6,
+      "title": "Universal DLP/egress controls",
+      "path": "roadmap/contracts/phase-006.json"
+    },
+    {
+      "phase": 7,
+      "title": "Event/audit/trusted time/state migrations",
+      "path": "roadmap/contracts/phase-007.json"
+    },
+    {
+      "phase": 8,
+      "title": "Customer isolation/retention/offboarding",
+      "path": "roadmap/contracts/phase-008.json"
+    },
+    {
+      "phase": 9,
+      "title": "40 departments and leadership overlays",
+      "path": "roadmap/contracts/phase-009.json"
+    },
+    {
+      "phase": 10,
+      "title": "363 Agent Technical Genome runtime",
+      "path": "roadmap/contracts/phase-010.json"
+    },
+    {
+      "phase": 11,
+      "title": "Skill/competency pack registry",
+      "path": "roadmap/contracts/phase-011.json"
+    },
+    {
+      "phase": 12,
+      "title": "Technical standards/playbooks",
+      "path": "roadmap/contracts/phase-012.json"
+    },
+    {
+      "phase": 13,
+      "title": "Framework/toolchain packs",
+      "path": "roadmap/contracts/phase-013.json"
+    },
+    {
+      "phase": 14,
+      "title": "Skill certification/golden/holdout",
+      "path": "roadmap/contracts/phase-014.json"
+    },
+    {
+      "phase": 15,
+      "title": "Skill gap acquisition",
+      "path": "roadmap/contracts/phase-015.json"
+    },
+    {
+      "phase": 16,
+      "title": "Information compression pyramid",
+      "path": "roadmap/contracts/phase-016.json"
+    },
+    {
+      "phase": 17,
+      "title": "Cross-functional councils",
+      "path": "roadmap/contracts/phase-017.json"
+    },
+    {
+      "phase": 18,
+      "title": "Reviewer independence/common-mode risk",
+      "path": "roadmap/contracts/phase-018.json"
+    },
+    {
+      "phase": 19,
+      "title": "Mission OS",
+      "path": "roadmap/contracts/phase-019.json"
+    },
+    {
+      "phase": 20,
+      "title": "Preflight/dry-run",
+      "path": "roadmap/contracts/phase-020.json"
+    },
+    {
+      "phase": 21,
+      "title": "Project/System Genome",
+      "path": "roadmap/contracts/phase-021.json"
+    },
+    {
+      "phase": 22,
+      "title": "Requirement/decision/design/code traceability",
+      "path": "roadmap/contracts/phase-022.json"
+    },
+    {
+      "phase": 23,
+      "title": "Technology Decision Engine",
+      "path": "roadmap/contracts/phase-023.json"
+    },
+    {
+      "phase": 24,
+      "title": "ADR and dissent ledger",
+      "path": "roadmap/contracts/phase-024.json"
+    },
+    {
+      "phase": 25,
+      "title": "Portfolio scheduler/SLA/budget priority",
+      "path": "roadmap/contracts/phase-025.json"
+    },
+    {
+      "phase": 26,
+      "title": "Pause/resume/abort/global kill",
+      "path": "roadmap/contracts/phase-026.json"
+    },
+    {
+      "phase": 27,
+      "title": "Durable workflow/queue/retry/DLQ",
+      "path": "roadmap/contracts/phase-027.json"
+    },
+    {
+      "phase": 28,
+      "title": "Provider entitlement/ToS registry",
+      "path": "roadmap/contracts/phase-028.json"
+    },
+    {
+      "phase": 29,
+      "title": "Model gateway/data routing",
+      "path": "roadmap/contracts/phase-029.json"
+    },
+    {
+      "phase": 30,
+      "title": "OmniRoute runtime discovery",
+      "path": "roadmap/contracts/phase-030.json"
+    },
+    {
+      "phase": 31,
+      "title": "Prompt/model/context provenance",
+      "path": "roadmap/contracts/phase-031.json"
+    },
+    {
+      "phase": 32,
+      "title": "Repository Intelligence/context compiler",
+      "path": "roadmap/contracts/phase-032.json"
+    },
+    {
+      "phase": 33,
+      "title": "Research clean-room/source authority",
+      "path": "roadmap/contracts/phase-033.json"
+    },
+    {
+      "phase": 34,
+      "title": "Knowledge graph/freshness",
+      "path": "roadmap/contracts/phase-034.json"
+    },
+    {
+      "phase": 35,
+      "title": "Learning poisoning defense",
+      "path": "roadmap/contracts/phase-035.json"
+    },
+    {
+      "phase": 36,
+      "title": "Certification dependency/invalidation",
+      "path": "roadmap/contracts/phase-036.json"
+    },
+    {
+      "phase": 37,
+      "title": "Recertification/revocation",
+      "path": "roadmap/contracts/phase-037.json"
+    },
+    {
+      "phase": 38,
+      "title": "Universal Resource Registry",
+      "path": "roadmap/contracts/phase-038.json"
+    },
+    {
+      "phase": 39,
+      "title": "Lease/scheduler/quarantine",
+      "path": "roadmap/contracts/phase-039.json"
+    },
+    {
+      "phase": 40,
+      "title": "Local/remote worker zero trust",
+      "path": "roadmap/contracts/phase-040.json"
+    },
+    {
+      "phase": 41,
+      "title": "Tool installer/version manager",
+      "path": "roadmap/contracts/phase-041.json"
+    },
+    {
+      "phase": 42,
+      "title": "Adapter/Plugin SDK and supply-chain trust",
+      "path": "roadmap/contracts/phase-042.json"
+    },
+    {
+      "phase": 43,
+      "title": "Lab health center",
+      "path": "roadmap/contracts/phase-043.json"
+    },
+    {
+      "phase": 44,
+      "title": "Environment/sandbox/digital twin",
+      "path": "roadmap/contracts/phase-044.json"
+    },
+    {
+      "phase": 45,
+      "title": "Capture/Evidence Bus",
+      "path": "roadmap/contracts/phase-045.json"
+    },
+    {
+      "phase": 46,
+      "title": "Report/export/chain-of-custody",
+      "path": "roadmap/contracts/phase-046.json"
+    },
+    {
+      "phase": 47,
+      "title": "Design Studio",
+      "path": "roadmap/contracts/phase-047.json"
+    },
+    {
+      "phase": 48,
+      "title": "Web Studio",
+      "path": "roadmap/contracts/phase-048.json"
+    },
+    {
+      "phase": 49,
+      "title": "Backend/API Studio",
+      "path": "roadmap/contracts/phase-049.json"
+    },
+    {
+      "phase": 50,
+      "title": "Data/Database Studio",
+      "path": "roadmap/contracts/phase-050.json"
+    },
+    {
+      "phase": 51,
+      "title": "Android/iOS/Cross-platform Mobile Studio",
+      "path": "roadmap/contracts/phase-051.json"
+    },
+    {
+      "phase": 52,
+      "title": "Desktop Studio",
+      "path": "roadmap/contracts/phase-052.json"
+    },
+    {
+      "phase": 53,
+      "title": "AI/Data Studio",
+      "path": "roadmap/contracts/phase-053.json"
+    },
+    {
+      "phase": 54,
+      "title": "Document/Media Studio",
+      "path": "roadmap/contracts/phase-054.json"
+    },
+    {
+      "phase": 55,
+      "title": "Playwright/Selenium/browser matrix",
+      "path": "roadmap/contracts/phase-055.json"
+    },
+    {
+      "phase": 56,
+      "title": "Cloud browser adapters",
+      "path": "roadmap/contracts/phase-056.json"
+    },
+    {
+      "phase": 57,
+      "title": "Local Android ADB/Appium/UiAutomator2",
+      "path": "roadmap/contracts/phase-057.json"
+    },
+    {
+      "phase": 58,
+      "title": "Android Espresso/Compose test path",
+      "path": "roadmap/contracts/phase-058.json"
+    },
+    {
+      "phase": 59,
+      "title": "iOS macOS/XCUITest/Appium path",
+      "path": "roadmap/contracts/phase-059.json"
+    },
+    {
+      "phase": 60,
+      "title": "Cloud device farm adapters",
+      "path": "roadmap/contracts/phase-060.json"
+    },
+    {
+      "phase": 61,
+      "title": "Desktop Windows/macOS/Linux execution",
+      "path": "roadmap/contracts/phase-061.json"
+    },
+    {
+      "phase": 62,
+      "title": "Compatibility planner and impact selection",
+      "path": "roadmap/contracts/phase-062.json"
+    },
+    {
+      "phase": 63,
+      "title": "HTTP/REST/OpenAPI strict contract lab",
+      "path": "roadmap/contracts/phase-063.json"
+    },
+    {
+      "phase": 64,
+      "title": "GraphQL/gRPC/WebSocket/SSE",
+      "path": "roadmap/contracts/phase-064.json"
+    },
+    {
+      "phase": 65,
+      "title": "TCP/UDP/QUIC/WebRTC/MQTT/AMQP/Kafka",
+      "path": "roadmap/contracts/phase-065.json"
+    },
+    {
+      "phase": 66,
+      "title": "OAuth/OIDC/SAML/SCIM/WebAuthn",
+      "path": "roadmap/contracts/phase-066.json"
+    },
+    {
+      "phase": 67,
+      "title": "Email/SMS/Push/Webhook",
+      "path": "roadmap/contracts/phase-067.json"
+    },
+    {
+      "phase": 68,
+      "title": "Files/PDF/Office/OCR/Media",
+      "path": "roadmap/contracts/phase-068.json"
+    },
+    {
+      "phase": 69,
+      "title": "Service virtualization/mocking/fault injection",
+      "path": "roadmap/contracts/phase-069.json"
+    },
+    {
+      "phase": 70,
+      "title": "SQL/NoSQL/cache/search",
+      "path": "roadmap/contracts/phase-070.json"
+    },
+    {
+      "phase": 71,
+      "title": "Migration/backup/restore/reconciliation",
+      "path": "roadmap/contracts/phase-071.json"
+    },
+    {
+      "phase": 72,
+      "title": "ETL/ELT/lineage/quality",
+      "path": "roadmap/contracts/phase-072.json"
+    },
+    {
+      "phase": 73,
+      "title": "Docker/Kubernetes/Helm/IaC",
+      "path": "roadmap/contracts/phase-073.json"
+    },
+    {
+      "phase": 74,
+      "title": "AWS/Azure/GCP",
+      "path": "roadmap/contracts/phase-074.json"
+    },
+    {
+      "phase": 75,
+      "title": "Distributed failure/chaos",
+      "path": "roadmap/contracts/phase-075.json"
+    },
+    {
+      "phase": 76,
+      "title": "Air-gapped/on-prem/VPC",
+      "path": "roadmap/contracts/phase-076.json"
+    },
+    {
+      "phase": 77,
+      "title": "Functional/journey/exploratory",
+      "path": "roadmap/contracts/phase-077.json"
+    },
+    {
+      "phase": 78,
+      "title": "Strict API Ajv/Postman/Newman",
+      "path": "roadmap/contracts/phase-078.json"
+    },
+    {
+      "phase": 79,
+      "title": "Backend/integration/contract",
+      "path": "roadmap/contracts/phase-079.json"
+    },
+    {
+      "phase": 80,
+      "title": "DB/data integrity",
+      "path": "roadmap/contracts/phase-080.json"
+    },
+    {
+      "phase": 81,
+      "title": "Mobile/browser/desktop",
+      "path": "roadmap/contracts/phase-081.json"
+    },
+    {
+      "phase": 82,
+      "title": "Visual/pixel-perfect",
+      "path": "roadmap/contracts/phase-082.json"
+    },
+    {
+      "phase": 83,
+      "title": "Accessibility/screen readers",
+      "path": "roadmap/contracts/phase-083.json"
+    },
+    {
+      "phase": 84,
+      "title": "Localization/timezone",
+      "path": "roadmap/contracts/phase-084.json"
+    },
+    {
+      "phase": 85,
+      "title": "Automation/SDET/flaky health",
+      "path": "roadmap/contracts/phase-085.json"
+    },
+    {
+      "phase": 86,
+      "title": "Coverage truth/unknown detector",
+      "path": "roadmap/contracts/phase-086.json"
+    },
+    {
+      "phase": 87,
+      "title": "Threat modeling/attack surface",
+      "path": "roadmap/contracts/phase-087.json"
+    },
+    {
+      "phase": 88,
+      "title": "SAST/DAST/SCA",
+      "path": "roadmap/contracts/phase-088.json"
+    },
+    {
+      "phase": 89,
+      "title": "Secrets/PKI",
+      "path": "roadmap/contracts/phase-089.json"
+    },
+    {
+      "phase": 90,
+      "title": "Container/IaC/cloud",
+      "path": "roadmap/contracts/phase-090.json"
+    },
+    {
+      "phase": 91,
+      "title": "API/mobile/desktop security",
+      "path": "roadmap/contracts/phase-091.json"
+    },
+    {
+      "phase": 92,
+      "title": "Fuzz/property/mutation",
+      "path": "roadmap/contracts/phase-092.json"
+    },
+    {
+      "phase": 93,
+      "title": "SBOM/provenance/license/IP",
+      "path": "roadmap/contracts/phase-093.json"
+    },
+    {
+      "phase": 94,
+      "title": "Authorized assessment/remediation/retest",
+      "path": "roadmap/contracts/phase-094.json"
+    },
+    {
+      "phase": 95,
+      "title": "Load/stress/spike/soak",
+      "path": "roadmap/contracts/phase-095.json"
+    },
+    {
+      "phase": 96,
+      "title": "Browser/mobile/game profiling",
+      "path": "roadmap/contracts/phase-096.json"
+    },
+    {
+      "phase": 97,
+      "title": "Resource/leak/capacity",
+      "path": "roadmap/contracts/phase-097.json"
+    },
+    {
+      "phase": 98,
+      "title": "OpenTelemetry/logs/metrics/traces",
+      "path": "roadmap/contracts/phase-098.json"
+    },
+    {
+      "phase": 99,
+      "title": "Crash dumps/symbolication",
+      "path": "roadmap/contracts/phase-099.json"
+    },
+    {
+      "phase": 100,
+      "title": "SLO/error budgets/synthetic monitoring",
+      "path": "roadmap/contracts/phase-100.json"
+    },
+    {
+      "phase": 101,
+      "title": "Incident/postmortem/runbooks",
+      "path": "roadmap/contracts/phase-101.json"
+    },
+    {
+      "phase": 102,
+      "title": "Release/canary/rollback",
+      "path": "roadmap/contracts/phase-102.json"
+    },
+    {
+      "phase": 103,
+      "title": "DR/RPO/RTO drills",
+      "path": "roadmap/contracts/phase-103.json"
+    },
+    {
+      "phase": 104,
+      "title": "Self-update signed channels/drift detection",
+      "path": "roadmap/contracts/phase-104.json"
+    },
+    {
+      "phase": 105,
+      "title": "Payments/FinTech",
+      "path": "roadmap/contracts/phase-105.json"
+    },
+    {
+      "phase": 106,
+      "title": "Capital Markets",
+      "path": "roadmap/contracts/phase-106.json"
+    },
+    {
+      "phase": 107,
+      "title": "Commerce/Marketplace",
+      "path": "roadmap/contracts/phase-107.json"
+    },
+    {
+      "phase": 108,
+      "title": "SaaS/Enterprise",
+      "path": "roadmap/contracts/phase-108.json"
+    },
+    {
+      "phase": 109,
+      "title": "Streaming/Media",
+      "path": "roadmap/contracts/phase-109.json"
+    },
+    {
+      "phase": 110,
+      "title": "AI/LLM Assurance",
+      "path": "roadmap/contracts/phase-110.json"
+    },
+    {
+      "phase": 111,
+      "title": "Search/Ranking/Recommendation",
+      "path": "roadmap/contracts/phase-111.json"
+    },
+    {
+      "phase": 112,
+      "title": "Analytics/Experimentation",
+      "path": "roadmap/contracts/phase-112.json"
+    },
+    {
+      "phase": 113,
+      "title": "Scientific/Numeric",
+      "path": "roadmap/contracts/phase-113.json"
+    },
+    {
+      "phase": 114,
+      "title": "Safety-critical/Formal",
+      "path": "roadmap/contracts/phase-114.json"
+    },
+    {
+      "phase": 115,
+      "title": "GIS/Location",
+      "path": "roadmap/contracts/phase-115.json"
+    },
+    {
+      "phase": 116,
+      "title": "Game Studio",
+      "path": "roadmap/contracts/phase-116.json"
+    },
+    {
+      "phase": 117,
+      "title": "Unity/Unreal/Godot packs",
+      "path": "roadmap/contracts/phase-117.json"
+    },
+    {
+      "phase": 118,
+      "title": "Game multiplayer/backend/economy",
+      "path": "roadmap/contracts/phase-118.json"
+    },
+    {
+      "phase": 119,
+      "title": "Game execution/server/device",
+      "path": "roadmap/contracts/phase-119.json"
+    },
+    {
+      "phase": 120,
+      "title": "Game intelligence/authorized reverse engineering",
+      "path": "roadmap/contracts/phase-120.json"
+    },
+    {
+      "phase": 121,
+      "title": "XR/3D/Media",
+      "path": "roadmap/contracts/phase-121.json"
+    },
+    {
+      "phase": 122,
+      "title": "Embedded/IoT/HIL",
+      "path": "roadmap/contracts/phase-122.json"
+    },
+    {
+      "phase": 123,
+      "title": "Blockchain/Smart Contract",
+      "path": "roadmap/contracts/phase-123.json"
+    },
+    {
+      "phase": 124,
+      "title": "CRM/Sales/Proposal",
+      "path": "roadmap/contracts/phase-124.json"
+    },
+    {
+      "phase": 125,
+      "title": "Contract/Engagement/Onboarding",
+      "path": "roadmap/contracts/phase-125.json"
+    },
+    {
+      "phase": 126,
+      "title": "Business systems/ERP/OMS/WMS/PIM/CMS",
+      "path": "roadmap/contracts/phase-126.json"
+    },
+    {
+      "phase": 127,
+      "title": "Billing/Accounting/Reconciliation",
+      "path": "roadmap/contracts/phase-127.json"
+    },
+    {
+      "phase": 128,
+      "title": "Finance/FinOps/Profitability",
+      "path": "roadmap/contracts/phase-128.json"
+    },
+    {
+      "phase": 129,
+      "title": "Support/Success/Renewal",
+      "path": "roadmap/contracts/phase-129.json"
+    },
+    {
+      "phase": 130,
+      "title": "Vendor/Procurement/SLA/BCP",
+      "path": "roadmap/contracts/phase-130.json"
+    },
+    {
+      "phase": 131,
+      "title": "Global communications/localization",
+      "path": "roadmap/contracts/phase-131.json"
+    },
+    {
+      "phase": 132,
+      "title": "Customer secure portal/RPA/meeting transcription",
+      "path": "roadmap/contracts/phase-132.json"
+    },
+    {
+      "phase": 133,
+      "title": "Policy regression suite",
+      "path": "roadmap/contracts/phase-133.json"
+    },
+    {
+      "phase": 134,
+      "title": "Authority/customer isolation/DLP acceptance",
+      "path": "roadmap/contracts/phase-134.json"
+    },
+    {
+      "phase": 135,
+      "title": "Agent competency certification acceptance",
+      "path": "roadmap/contracts/phase-135.json"
+    },
+    {
+      "phase": 136,
+      "title": "Golden + private holdout suites",
+      "path": "roadmap/contracts/phase-136.json"
+    },
+    {
+      "phase": 137,
+      "title": "Representative web project",
+      "path": "roadmap/contracts/phase-137.json"
+    },
+    {
+      "phase": 138,
+      "title": "Representative physical-device mobile project",
+      "path": "roadmap/contracts/phase-138.json"
+    },
+    {
+      "phase": 139,
+      "title": "Representative desktop project",
+      "path": "roadmap/contracts/phase-139.json"
+    },
+    {
+      "phase": 140,
+      "title": "Representative API/data project",
+      "path": "roadmap/contracts/phase-140.json"
+    },
+    {
+      "phase": 141,
+      "title": "Representative game project",
+      "path": "roadmap/contracts/phase-141.json"
+    },
+    {
+      "phase": 142,
+      "title": "Representative IoT project",
+      "path": "roadmap/contracts/phase-142.json"
+    },
+    {
+      "phase": 143,
+      "title": "Authorized security mission",
+      "path": "roadmap/contracts/phase-143.json"
+    },
+    {
+      "phase": 144,
+      "title": "Performance/load mission",
+      "path": "roadmap/contracts/phase-144.json"
+    },
+    {
+      "phase": 145,
+      "title": "Incident/recovery drill",
+      "path": "roadmap/contracts/phase-145.json"
+    },
+    {
+      "phase": 146,
+      "title": "Factory dogfooding/self-upgrade",
+      "path": "roadmap/contracts/phase-146.json"
+    },
+    {
+      "phase": 147,
+      "title": "Comprehensive Codex independent review",
+      "path": "roadmap/contracts/phase-147.json"
+    },
+    {
+      "phase": 148,
+      "title": "Private production release",
+      "path": "roadmap/contracts/phase-148.json"
+    }
+  ]
+}

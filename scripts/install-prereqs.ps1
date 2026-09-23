@@ -1,0 +1,15 @@
+# //TR: Bu guided prerequisite installer Windows'ta winget/npm mevcutsa Git, Node LTS, Claude Code ve Codex CLI'yi resmi paket adlarıyla kurmayı dener; login/OAuth insan adımı olarak ayrıca doğrulanır.
+param([switch]$InstallAiCli)
+$ErrorActionPreference="Stop"
+function Has($x){return [bool](Get-Command $x -ErrorAction SilentlyContinue)}
+if(-not (Has "winget")){throw "winget missing. Install/update App Installer first."}
+if(-not (Has "git")){winget install --id Git.Git -e --accept-source-agreements --accept-package-agreements;if($LASTEXITCODE -ne 0){throw "Git install failed"}}
+if(-not (Has "node")){winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements;if($LASTEXITCODE -ne 0){throw "Node install failed"}}
+$nodeCmd=Get-Command node -ErrorAction SilentlyContinue;if(-not $nodeCmd -and (Test-Path "C:\Program Files\nodejs\node.exe")){$env:Path="C:\Program Files\nodejs;$env:Path";$nodeCmd=Get-Command node -ErrorAction SilentlyContinue}
+if(-not $nodeCmd){throw "Node installed but not available in current process. Reopen PowerShell and rerun."}
+$major=[int]((& node --version).Trim().TrimStart('v').Split('.')[0]);if($major -lt 24){throw "Node >=24 required; found $(& node --version)"}
+if($InstallAiCli){
+  if(-not (Has "claude")){npm install -g @anthropic-ai/claude-code;if($LASTEXITCODE -ne 0){throw "Claude Code install failed"}}
+  if(-not (Has "codex")){npm install -g @openai/codex;if($LASTEXITCODE -ne 0){throw "Codex CLI install failed"}}
+}
+Write-Host "PREREQUISITES_INSTALL: PASS (authentication still requires user login where applicable)"

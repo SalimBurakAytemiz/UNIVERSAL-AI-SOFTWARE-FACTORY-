@@ -1,0 +1,30 @@
+{
+  "//TR": "Bu dosya farklı runtime/framework/tool sürümlerinin görev bazında compatibility doğrulamasına girmesi gerektiğini tanımlar; sürümler hard-code edilmez, mission sırasında çözülür.",
+  "schemaVersion": "2.0.0",
+  "rules": [
+    {
+      "id": "COMPAT-001",
+      "rule": "MISSION_STACK_VERSION_SET_MUST_BE_EXPLICIT"
+    },
+    {
+      "id": "COMPAT-002",
+      "rule": "BUILD_TOOL_RUNTIME_FRAMEWORK_MATRIX_MUST_BE_VALIDATED"
+    },
+    {
+      "id": "COMPAT-003",
+      "rule": "DEVICE_OS_APP_SDK_MATRIX_MUST_BE_VALIDATED"
+    },
+    {
+      "id": "COMPAT-004",
+      "rule": "CLIENT_SERVER_PROTOCOL_VERSION_COMPATIBILITY_MUST_BE_TESTED"
+    },
+    {
+      "id": "COMPAT-005",
+      "rule": "DATABASE_DRIVER_SERVER_VERSION_COMPATIBILITY_MUST_BE_TESTED"
+    },
+    {
+      "id": "COMPAT-006",
+      "rule": "UNKNOWN_COMBINATION_REQUIRES_SANDBOX_PROOF"
+    }
+  ]
+}

@@ -1,0 +1,273 @@
+{
+  "//TR": "Bu dosya skill bilgisini gerçek işe çeviren repeatable ve evidence-driven çalışma playbooklarını register eder.",
+  "schemaVersion": "1.0.0",
+  "count": 12,
+  "playbooks": [
+    {
+      "id": "PB-API-STRICT-SCHEMA",
+      "name": "Strict API Schema Validation",
+      "missionType": "QA_EXISTING",
+      "requiredSkills": [
+        "SKILL-API_TESTING",
+        "SKILL-OPENAPI",
+        "SKILL-JSON_SCHEMA",
+        "SKILL-AJV",
+        "SKILL-POSTMAN",
+        "SKILL-NEWMAN"
+      ],
+      "steps": [
+        "discover contract",
+        "validate required headers/status",
+        "select contract source",
+        "infer candidate only when no contract and mark inferred",
+        "generate strict schema",
+        "compile Ajv",
+        "recursive null/empty validation",
+        "business assertions",
+        "negative matrix",
+        "run Newman/CLI",
+        "capture redacted evidence"
+      ],
+      "evidenceRequired": true,
+      "status": "REGISTERED"
+    },
+    {
+      "id": "PB-TECH-SELECT",
+      "name": "Technology Selection",
+      "missionType": "BUILD_NEW",
+      "requiredSkills": [
+        "SKILL-TECHNOLOGY_SELECTION",
+        "SKILL-TRADEOFF_ANALYSIS"
+      ],
+      "steps": [
+        "build project genome",
+        "derive NFRs/constraints",
+        "discover candidates",
+        "gather official-source evidence",
+        "evaluate criteria",
+        "benchmark if needed",
+        "security/QA/SRE/business review",
+        "record dissent",
+        "write ADR",
+        "Founder gate only if critical"
+      ],
+      "evidenceRequired": true,
+      "status": "REGISTERED"
+    },
+    {
+      "id": "PB-SKILL-ACQUIRE",
+      "name": "Missing Skill Acquisition",
+      "missionType": "RESEARCH",
+      "requiredSkills": [
+        "SKILL-OFFICIAL_SOURCE_RESEARCH"
+      ],
+      "steps": [
+        "declare skill gap",
+        "official-source research",
+        "sandbox implementation",
+        "failure-mode research",
+        "golden task",
+        "hidden holdout",
+        "independent review",
+        "certify or reject",
+        "register freshness/recertification"
+      ],
+      "evidenceRequired": true,
+      "status": "REGISTERED"
+    },
+    {
+      "id": "PB-ANDROID-BUILD",
+      "name": "Android Native Build",
+      "missionType": "MOBILE_BUILD",
+      "requiredSkills": [
+        "SKILL-KOTLIN",
+        "SKILL-JETPACK_COMPOSE",
+        "SKILL-KOTLIN_COROUTINES_FLOW"
+      ],
+      "steps": [
+        "project genome",
+        "architecture choice",
+        "Gradle/modules",
+        "Compose/UI",
+        "network/data",
+        "permissions/security",
+        "unit/UI tests",
+        "lint/static checks",
+        "benchmark",
+        "device matrix",
+        "sign/release evidence"
+      ],
+      "evidenceRequired": true,
+      "status": "REGISTERED"
+    },
+    {
+      "id": "PB-MOBILE-QA",
+      "name": "Physical/Cloud Mobile QA",
+      "missionType": "QA_EXISTING",
+      "requiredSkills": [
+        "SKILL-MOBILE_TESTING",
+        "SKILL-APPIUM"
+      ],
+      "steps": [
+        "device discovery",
+        "health/lease",
+        "install build",
+        "functional flows",
+        "permissions/lifecycle",
+        "network/offline",
+        "crash/ANR",
+        "performance",
+        "accessibility",
+        "artifacts",
+        "retest/report"
+      ],
+      "evidenceRequired": true,
+      "status": "REGISTERED"
+    },
+    {
+      "id": "PB-ARCH-REVIEW",
+      "name": "Architecture Review",
+      "missionType": "AUDIT_EXISTING",
+      "requiredSkills": [
+        "SKILL-SYSTEM_DESIGN",
+        "SKILL-ARCHITECTURE_TRADEOFFS"
+      ],
+      "steps": [
+        "system genome",
+        "requirements/NFRs",
+        "dependency/trust graph",
+        "fitness functions",
+        "failure modes",
+        "trade-offs",
+        "technical debt",
+        "decision package"
+      ],
+      "evidenceRequired": true,
+      "status": "REGISTERED"
+    },
+    {
+      "id": "PB-SEC-ASSESS",
+      "name": "Authorized Security Assessment",
+      "missionType": "SECURITY_ASSESSMENT",
+      "requiredSkills": [
+        "SKILL-SECURITY_ARCHITECTURE",
+        "SKILL-THREAT_MODELING"
+      ],
+      "steps": [
+        "verify authorization",
+        "scope lock",
+        "threat model",
+        "safe tests",
+        "evidence",
+        "triage",
+        "remediation guidance",
+        "retest"
+      ],
+      "evidenceRequired": true,
+      "status": "REGISTERED"
+    },
+    {
+      "id": "PB-PERF",
+      "name": "Performance Assessment",
+      "missionType": "PERFORMANCE_ASSESSMENT",
+      "requiredSkills": [
+        "SKILL-PERFORMANCE_TESTING"
+      ],
+      "steps": [
+        "workload model",
+        "baseline",
+        "load/stress/soak",
+        "abort guards",
+        "resource correlation",
+        "bottleneck analysis",
+        "capacity/recommendation",
+        "evidence"
+      ],
+      "evidenceRequired": true,
+      "status": "REGISTERED"
+    },
+    {
+      "id": "PB-INCIDENT",
+      "name": "Incident Analysis & Recovery",
+      "missionType": "INCIDENT_ANALYSIS",
+      "requiredSkills": [
+        "SKILL-INCIDENT_MANAGEMENT"
+      ],
+      "steps": [
+        "detect/triage",
+        "contain",
+        "timeline/evidence",
+        "stabilize",
+        "root cause",
+        "remediation",
+        "recovery",
+        "postmortem",
+        "lesson certification"
+      ],
+      "evidenceRequired": true,
+      "status": "REGISTERED"
+    },
+    {
+      "id": "PB-RELEASE",
+      "name": "Release Readiness",
+      "missionType": "OPERATE",
+      "requiredSkills": [
+        "SKILL-RELEASE_MANAGEMENT"
+      ],
+      "steps": [
+        "build provenance",
+        "tests/evidence",
+        "security/performance gates",
+        "migration/backup",
+        "canary/staged rollout",
+        "verify",
+        "rollback if needed",
+        "release attestation"
+      ],
+      "evidenceRequired": true,
+      "status": "REGISTERED"
+    },
+    {
+      "id": "PB-LEARNING",
+      "name": "Evidence-Based Learning",
+      "missionType": "RESEARCH",
+      "requiredSkills": [
+        "SKILL-EXPERIENCE_LEARNING",
+        "SKILL-KNOWLEDGE_VALIDATION"
+      ],
+      "steps": [
+        "collect evidence",
+        "normalize/dedupe",
+        "conflict check",
+        "sanitize customer data",
+        "validate",
+        "independent review",
+        "certify",
+        "register",
+        "monitor freshness",
+        "revoke if invalid"
+      ],
+      "evidenceRequired": true,
+      "status": "REGISTERED"
+    },
+    {
+      "id": "PB-CUSTOMER-OFFBOARD",
+      "name": "Customer Offboarding",
+      "missionType": "OPERATE",
+      "requiredSkills": [
+        "SKILL-BUSINESS_OPERATIONS"
+      ],
+      "steps": [
+        "stop missions",
+        "revoke access/secrets",
+        "export requested evidence",
+        "retention/legal hold check",
+        "delete/crypto-erase eligible data",
+        "archive mandatory records",
+        "completion receipt"
+      ],
+      "evidenceRequired": true,
+      "status": "REGISTERED"
+    }
+  ]
+}

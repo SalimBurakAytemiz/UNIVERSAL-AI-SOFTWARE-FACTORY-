@@ -1,0 +1,127 @@
+{
+  "//TR": "Bu dosya 110 capability'nin tek işletim sistemi olarak birlikte çalışmasını sağlayan 20 meta/core sistemi register eder.",
+  "schemaVersion": "1.0.0",
+  "count": 20,
+  "systems": [
+    {
+      "id": "UASCO-META-001",
+      "name": "Universal Mission Contract",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-002",
+      "name": "Capability Dependency Graph",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-003",
+      "name": "Policy-as-Code Kernel",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-004",
+      "name": "Universal Evidence Fabric",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-005",
+      "name": "Universal Artifact Fabric",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-006",
+      "name": "Execution Simulation",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-007",
+      "name": "Capability Certification",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-008",
+      "name": "Factory Capability Gap Detector",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-009",
+      "name": "Schema & Protocol Versioning",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-010",
+      "name": "Control Plane / Execution Plane Separation",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-011",
+      "name": "Immutable Audit Ledger",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-012",
+      "name": "Factory Release Channels",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-013",
+      "name": "Plugin/Capability SDK",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-014",
+      "name": "Safe Capability Marketplace/Registry",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-015",
+      "name": "Operational Autonomy Levels",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-016",
+      "name": "Customer Boundary Engine",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-017",
+      "name": "Evidence-Based Confidence",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-018",
+      "name": "Full Factory Acceptance Suite",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-019",
+      "name": "Kill/Pause/Recover Architecture",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-META-020",
+      "name": "Canonical Taxonomy",
+      "required": true,
+      "implementation": "NOT_IMPLEMENTED"
+    }
+  ]
+}

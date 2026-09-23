@@ -1,0 +1,13 @@
+{
+  "//TR": "Bu dosya belirli teknoloji isimlerini sonsuza kadar doğru kabul etmek yerine per-project ASSESS/TRIAL/ADOPT/HOLD/REJECT kararlarının evidence ve ADR ile tutulacağı başlangıç radarını tanımlar.",
+  "schemaVersion": "1.0.0",
+  "entries": [],
+  "rings": [
+    "ASSESS",
+    "TRIAL",
+    "ADOPT",
+    "HOLD",
+    "REJECT"
+  ],
+  "decisionIsProjectSpecific": true
+}

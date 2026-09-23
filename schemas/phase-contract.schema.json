@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "//TR: Her roadmap phase'inin gerçek exit koşulu olması için entry, deliverable, validation, evidence, review ve rollback sözleşmesini doğrular.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "domain",
+    "entryCriteria",
+    "evidence",
+    "exitCriteria",
+    "phase",
+    "prohibited",
+    "requiredDeliverables",
+    "requiredValidation",
+    "review",
+    "rollbackOrRecovery",
+    "schemaVersion",
+    "state",
+    "title"
+  ],
+  "properties": {
+    "//TR": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "string"
+    },
+    "phase": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "title": {
+      "type": "string",
+      "minLength": 3
+    },
+    "domain": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string"
+    },
+    "entryCriteria": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "requiredDeliverables": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "requiredValidation": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "string"
+      }
+    },
+    "review": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "exitCriteria": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "string"
+      }
+    },
+    "rollbackOrRecovery": {
+      "type": "string"
+    },
+    "prohibited": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

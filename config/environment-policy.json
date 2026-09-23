@@ -1,0 +1,46 @@
+{
+  "//TR": "Bu policy child process environmentını explicit allowlist + dar provider prefixleriyle sınırlar; NODE_/NPM_/Git shell injection değişkenlerini özellikle aktarmaz.",
+  "schemaVersion": "2.0.0",
+  "alwaysAllow": [
+    "PATH",
+    "Path",
+    "HOME",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "TEMP",
+    "TMP",
+    "SystemRoot",
+    "ComSpec",
+    "PATHEXT",
+    "OS",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE"
+  ],
+  "allowPrefixes": [
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "SSL_CERT_"
+  ],
+  "denyNamePatterns": [
+    "PASSWORD",
+    "SECRET",
+    "TOKEN",
+    "KEY",
+    "CREDENTIAL"
+  ],
+  "exceptionPrefixes": [],
+  "note": "Common proxy/certificate env only; Claude/Codex credential prefixes are selected provider-specifically at runtime by env-policy helper.",
+  "explicitDeny": [
+    "NODE_OPTIONS",
+    "NPM_CONFIG_USERCONFIG",
+    "NPM_CONFIG_PREFIX",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_SYSTEM",
+    "GIT_SSH_COMMAND",
+    "BASH_ENV",
+    "ENV",
+    "PROMPT_COMMAND"
+  ]
+}

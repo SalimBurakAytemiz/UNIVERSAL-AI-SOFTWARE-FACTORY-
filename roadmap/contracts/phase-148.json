@@ -1,0 +1,130 @@
+{
+  "//TR": "Bu dosya Roadmap Phase 148 — Private production release için giriş koşulları, teslimatlar, test/evidence ve bağımsız review kapanışını machine-readable olarak tanımlar.",
+  "schemaVersion": "3.0.0",
+  "phase": 148,
+  "title": "Private production release",
+  "domain": "FINAL_RELEASE",
+  "state": "PLANNED",
+  "entryCriteria": [
+    "previous-required-phase-contracts-closed-or-explicitly-waived",
+    "requirements-and-invariants-loaded",
+    "affected-customer-data-security-cost-policies-resolved",
+    "required-skills-tools-resources-health-checked",
+    "founder-risk5-production-release-approval-bound-to-exact-release-digest",
+    "private-remote-and-release-provenance-verified",
+    "Phase dependency closure verified for: 147",
+    "Frozen milestone/package contract generated for Phase 148"
+  ],
+  "requiredDeliverables": [
+    "Executable or explicitly justified non-runtime implementation for Phase 148: Private production release",
+    "Tests that exercise declared success and failure paths for Phase 148",
+    "Phase-specific artifacts: lease ledger, release evidence, release manifest",
+    "Documentation and registry/schema updates required by the implementation",
+    "Control Tower visibility when the phase creates founder-visible operational state",
+    "Atomic checkpoint/evidence linkage for Phase 148"
+  ],
+  "requiredValidation": [
+    "Phase 148 targeted success-path validation",
+    "Phase 148 mandatory failure-case validation: double lease, orphan lease, rollback failure, health regression, unreviewed diff, remote mismatch, rollback unavailable",
+    "Type/lint/build checks applicable to changed languages/toolchains",
+    "Schema/registry/TR canonical validation",
+    "Secret/security/trust-root/change-scope gates",
+    "Regression selection for directly impacted dependencies",
+    "Acceptance assertions: Phase 148 objective `Private production release` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Private production release` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+  ],
+  "evidence": [
+    "reviewed commit SHA",
+    "run ID",
+    "exact tool/runtime versions",
+    "environment/resource identity",
+    "test/validation results",
+    "artifact digests",
+    "unknown/not-tested surfaces",
+    "Phase-specific artifact evidence: lease ledger, release evidence, release manifest",
+    "Phase 148 review attestation or package-bound attestation"
+  ],
+  "review": [
+    "technical lead or principal review",
+    "independent Codex package review at the coherent review boundary",
+    "department head/cross-functional trust review",
+    "Founder-bound approval for exact high-risk/release digest when required"
+  ],
+  "exitCriteria": [
+    "No unresolved admissible blocker in the frozen review scope",
+    "Phase 148 runtime/non-runtime deliverable is proven by evidence rather than registry/file existence alone",
+    "Mandatory failure cases are exercised or explicitly environment-blocked: double lease, orphan lease, rollback failure, health regression, unreviewed diff, remote mismatch, rollback unavailable",
+    "Required artifacts exist and are evidence-linked: lease ledger, release evidence, release manifest",
+    "Dependency phases are closed and consistent: 147",
+    "State/checkpoint is durable and crash-resume safe where applicable",
+    "Independent review result is valid, commit-bound and not stale"
+  ],
+  "rollbackOrRecovery": "REQUIRED_FOR_STATEFUL_OR_EXTERNAL_SIDE_EFFECT_CHANGES",
+  "prohibited": [
+    "FOLDER_THEATRE",
+    "FAKE_PASS",
+    "SELF_CERTIFICATION",
+    "SILENT_SCOPE_REDUCTION"
+  ],
+  "dependsOn": [
+    147
+  ],
+  "objective": "Implement, integrate and prove Roadmap Phase 148: Private production release.",
+  "requirements": [
+    "Phase 148 `Private production release` capability must be represented by real runtime or an explicitly justified non-runtime artifact.",
+    "All applicable Architecture Constitution, customer/data/authority and evidence invariants remain enforced.",
+    "Unknown/unverified/environment-blocked surfaces stay explicit."
+  ],
+  "invariants": [
+    "NO_FAKE_SUCCESS",
+    "NO_WEAKENED_CONTROLS",
+    "NO_SILENT_SCOPE_EXPANSION",
+    "NO_SELF_CERTIFICATION",
+    "EVIDENCE_REQUIRED"
+  ],
+  "phaseSpecificAcceptance": [
+    "Phase 148 objective `Private production release` is implemented as executable/runtime behavior where applicable, not only as files or registry rows.",
+    "Tests and evidence directly exercise the `Private production release` behavior and its declared failure paths.",
+    "No required acceptance item remains UNKNOWN without explicit environment gap or known limitation.",
+    "Exclusive resources cannot double-lease; stale leases recover and unhealthy resources quarantine.",
+    "Release manifest/health/canary/rollback are executable and failed rollout returns to known-good state.",
+    "Release occurs only after final reviewed commit, signed/provenance manifest, rollback/recovery readiness and private remote/release controls."
+  ],
+  "mandatoryFailureCases": [
+    "double lease",
+    "orphan lease",
+    "rollback failure",
+    "health regression",
+    "unreviewed diff",
+    "remote mismatch",
+    "rollback unavailable"
+  ],
+  "requiredArtifacts": [
+    "lease ledger",
+    "release evidence",
+    "release manifest"
+  ],
+  "allowedPathPrefixes": [
+    "core/",
+    "apps/",
+    "tests/",
+    "docs/",
+    "registries/",
+    "schemas/",
+    "evaluations/",
+    "golden/",
+    "holdout/",
+    "reports/",
+    "evidence/",
+    "domain-packs/"
+  ],
+  "reviewProfile": "RELEASE_CRITICAL",
+  "riskLevel": 5,
+  "allowPaidApi": false,
+  "allowProduction": true,
+  "allowRisk5": true,
+  "unsupportedCases": [],
+  "maxFilesChanged": 120,
+  "allowExistingTestAssertionReduction": false,
+  "requiresFrozenMilestoneContract": true,
+  "allowDependencyChanges": false
+}

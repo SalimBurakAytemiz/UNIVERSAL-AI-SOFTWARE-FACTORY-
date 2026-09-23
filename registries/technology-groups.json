@@ -1,0 +1,651 @@
+{
+  "//TR": "Bu dosya technology graph kayıtlarını ecosystem/aile bazında agent breadth inheritance ve architecture comparison için gruplar.",
+  "schemaVersion": "2.1.0",
+  "groups": [
+    {
+      "id": "AI_ML",
+      "technologyIds": [
+        "TECH-NUMPY",
+        "TECH-PANDAS",
+        "TECH-SCIKIT-LEARN",
+        "TECH-PYTORCH",
+        "TECH-TENSORFLOW",
+        "TECH-HUGGINGFACE",
+        "TECH-ONNX",
+        "TECH-LANGCHAIN",
+        "TECH-LANGGRAPH",
+        "TECH-LLAMAINDEX",
+        "TECH-SEMANTIC-KERNEL",
+        "TECH-DSPY",
+        "TECH-OLLAMA",
+        "TECH-VLLM",
+        "TECH-LLAMA-CPP"
+      ]
+    },
+    {
+      "id": "API_PROTOCOL",
+      "technologyIds": [
+        "TECH-HTTP1",
+        "TECH-HTTP2",
+        "TECH-HTTP3",
+        "TECH-REST",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA",
+        "TECH-GRAPHQL",
+        "TECH-APOLLO-GRAPHQL",
+        "TECH-GRPC",
+        "TECH-PROTOBUF",
+        "TECH-WEBSOCKET",
+        "TECH-SOCKETIO",
+        "TECH-SSE",
+        "TECH-WEBRTC",
+        "TECH-SOAP",
+        "TECH-XML-XSD"
+      ]
+    },
+    {
+      "id": "AUTOMOTIVE_PLATFORM",
+      "technologyIds": [
+        "TECH-AUTOSAR"
+      ]
+    },
+    {
+      "id": "AVIATION_PROTOCOL",
+      "technologyIds": [
+        "TECH-ARINC-429",
+        "TECH-ARINC-664"
+      ]
+    },
+    {
+      "id": "BACKEND_DOTNET",
+      "technologyIds": [
+        "TECH-DOTNET",
+        "TECH-ASPNET-CORE",
+        "TECH-EF-CORE",
+        "TECH-SIGNALR"
+      ]
+    },
+    {
+      "id": "BACKEND_GO_RUST",
+      "technologyIds": [
+        "TECH-GO",
+        "TECH-GIN",
+        "TECH-FIBER-GO",
+        "TECH-ECHO-GO",
+        "TECH-GRPC-GO",
+        "TECH-RUST",
+        "TECH-TOKIO",
+        "TECH-AXUM",
+        "TECH-ACTIX-WEB",
+        "TECH-ROCKET-RS"
+      ]
+    },
+    {
+      "id": "BACKEND_JVM",
+      "technologyIds": [
+        "TECH-SPRING-BOOT",
+        "TECH-SPRING-SECURITY",
+        "TECH-SPRING-DATA",
+        "TECH-HIBERNATE",
+        "TECH-QUARKUS",
+        "TECH-MICRONAUT",
+        "TECH-KTOR",
+        "TECH-VERTX"
+      ]
+    },
+    {
+      "id": "BACKEND_NODE",
+      "technologyIds": [
+        "TECH-EXPRESS",
+        "TECH-FASTIFY",
+        "TECH-NESTJS",
+        "TECH-HONO",
+        "TECH-KOA"
+      ]
+    },
+    {
+      "id": "BACKEND_OTHER",
+      "technologyIds": [
+        "TECH-PHP",
+        "TECH-LARAVEL",
+        "TECH-SYMFONY",
+        "TECH-RUBY",
+        "TECH-RAILS",
+        "TECH-ELIXIR",
+        "TECH-ERLANG",
+        "TECH-PHOENIX",
+        "TECH-ECTO",
+        "TECH-SCALA",
+        "TECH-PEKKO"
+      ]
+    },
+    {
+      "id": "BACKEND_PYTHON",
+      "technologyIds": [
+        "TECH-PYTHON",
+        "TECH-FASTAPI",
+        "TECH-DJANGO",
+        "TECH-FLASK",
+        "TECH-STARLETTE",
+        "TECH-PYDANTIC",
+        "TECH-SQLALCHEMY",
+        "TECH-CELERY"
+      ]
+    },
+    {
+      "id": "BLOCKCHAIN",
+      "technologyIds": [
+        "TECH-SOLIDITY",
+        "TECH-ETHEREUM"
+      ]
+    },
+    {
+      "id": "BUSINESS_PLATFORM",
+      "technologyIds": [
+        "TECH-SALESFORCE",
+        "TECH-SAP",
+        "TECH-DYNAMICS365",
+        "TECH-SERVICENOW",
+        "TECH-SHOPIFY",
+        "TECH-WOOCOMMERCE",
+        "TECH-MAGENTO"
+      ]
+    },
+    {
+      "id": "CI_SCM",
+      "technologyIds": [
+        "TECH-GITHUB-ACTIONS",
+        "TECH-GITLAB-CI",
+        "TECH-JENKINS",
+        "TECH-AZURE-DEVOPS",
+        "TECH-CIRCLECI",
+        "TECH-TEAMCITY",
+        "TECH-GITHUB",
+        "TECH-GITLAB",
+        "TECH-BITBUCKET"
+      ]
+    },
+    {
+      "id": "CLOUD_NETWORK_MESH",
+      "technologyIds": [
+        "TECH-ENVOY",
+        "TECH-ISTIO",
+        "TECH-LINKERD",
+        "TECH-NGINX",
+        "TECH-HAPROXY"
+      ]
+    },
+    {
+      "id": "CLOUD_PLATFORM",
+      "technologyIds": [
+        "TECH-AWS",
+        "TECH-AZURE",
+        "TECH-GCP",
+        "TECH-DOCKER",
+        "TECH-DOCKER-COMPOSE",
+        "TECH-KUBERNETES",
+        "TECH-HELM",
+        "TECH-TERRAFORM",
+        "TECH-OPENTOFU",
+        "TECH-PULUMI",
+        "TECH-ANSIBLE",
+        "TECH-ARGOCD",
+        "TECH-FLUXCD"
+      ]
+    },
+    {
+      "id": "COLLAB_PM",
+      "technologyIds": [
+        "TECH-JIRA",
+        "TECH-LINEAR",
+        "TECH-TRELLO",
+        "TECH-YOUTRACK",
+        "TECH-SLACK",
+        "TECH-MICROSOFT-TEAMS",
+        "TECH-GOOGLE-WORKSPACE",
+        "TECH-MICROSOFT-365"
+      ]
+    },
+    {
+      "id": "DATABASE_ANALYTICS_VECTOR",
+      "technologyIds": [
+        "TECH-TIMESCALEDB",
+        "TECH-INFLUXDB",
+        "TECH-CLICKHOUSE",
+        "TECH-DUCKDB",
+        "TECH-BIGQUERY",
+        "TECH-SNOWFLAKE",
+        "TECH-REDSHIFT",
+        "TECH-PGVECTOR",
+        "TECH-QDRANT",
+        "TECH-MILVUS",
+        "TECH-WEAVIATE"
+      ]
+    },
+    {
+      "id": "DATABASE_NOSQL_SEARCH",
+      "technologyIds": [
+        "TECH-MONGODB",
+        "TECH-CASSANDRA",
+        "TECH-SCYLLADB",
+        "TECH-COUCHBASE",
+        "TECH-DYNAMODB",
+        "TECH-COSMOSDB",
+        "TECH-REDIS",
+        "TECH-MEMCACHED",
+        "TECH-ELASTICSEARCH",
+        "TECH-OPENSEARCH",
+        "TECH-SOLR",
+        "TECH-NEO4J"
+      ]
+    },
+    {
+      "id": "DATABASE_RELATIONAL",
+      "technologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-MYSQL",
+        "TECH-MARIADB",
+        "TECH-SQL-SERVER",
+        "TECH-ORACLE-DB",
+        "TECH-SQLITE",
+        "TECH-COCKROACHDB"
+      ]
+    },
+    {
+      "id": "DATA_ACCESS",
+      "technologyIds": [
+        "TECH-PRISMA",
+        "TECH-DRIZZLE",
+        "TECH-TYPEORM",
+        "TECH-SEQUELIZE",
+        "TECH-GORM",
+        "TECH-JOOQ",
+        "TECH-EXPOSED"
+      ]
+    },
+    {
+      "id": "DATA_ENGINEERING",
+      "technologyIds": [
+        "TECH-SPARK",
+        "TECH-FLINK",
+        "TECH-BEAM",
+        "TECH-AIRFLOW",
+        "TECH-DAGSTER",
+        "TECH-PREFECT",
+        "TECH-DBT",
+        "TECH-DEBEZIUM",
+        "TECH-KAFKA-CONNECT",
+        "TECH-DELTA-LAKE",
+        "TECH-APACHE-ICEBERG",
+        "TECH-APACHE-HUDI"
+      ]
+    },
+    {
+      "id": "DESIGN_TOOL",
+      "technologyIds": [
+        "TECH-FIGMA"
+      ]
+    },
+    {
+      "id": "DESKTOP",
+      "technologyIds": [
+        "TECH-ELECTRON",
+        "TECH-TAURI",
+        "TECH-WPF",
+        "TECH-WINUI",
+        "TECH-QT",
+        "TECH-PYSIDE",
+        "TECH-APPKIT"
+      ]
+    },
+    {
+      "id": "DOMAIN_PROTOCOL",
+      "technologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-SWIFT-FINANCIAL",
+        "TECH-GS1",
+        "TECH-EDI"
+      ]
+    },
+    {
+      "id": "GAME_ENGINE_GRAPHICS",
+      "technologyIds": [
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE",
+        "TECH-GODOT",
+        "TECH-DIRECTX",
+        "TECH-VULKAN",
+        "TECH-METAL",
+        "TECH-OPENGL"
+      ]
+    },
+    {
+      "id": "GAME_SERVICE_ART",
+      "technologyIds": [
+        "TECH-STEAMWORKS",
+        "TECH-EPIC-ONLINE-SERVICES",
+        "TECH-PHOTON",
+        "TECH-BLENDER",
+        "TECH-MAYA",
+        "TECH-3DS-MAX",
+        "TECH-SUBSTANCE"
+      ]
+    },
+    {
+      "id": "HEALTH_PROTOCOL",
+      "technologyIds": [
+        "TECH-HL7-FHIR",
+        "TECH-DICOM"
+      ]
+    },
+    {
+      "id": "IDENTITY_ENTERPRISE",
+      "technologyIds": [
+        "TECH-OAUTH2",
+        "TECH-OPENID-CONNECT",
+        "TECH-SAML",
+        "TECH-SCIM",
+        "TECH-WEBAUTHN",
+        "TECH-LDAP",
+        "TECH-KEYCLOAK",
+        "TECH-AUTH0",
+        "TECH-OKTA",
+        "TECH-COGNITO",
+        "TECH-ENTRA-ID"
+      ]
+    },
+    {
+      "id": "IOT_EMBEDDED",
+      "technologyIds": [
+        "TECH-CPP",
+        "TECH-RUST-EMBEDDED",
+        "TECH-FREERTOS",
+        "TECH-ZEPHYR",
+        "TECH-ESP-IDF",
+        "TECH-STM32",
+        "TECH-ARDUINO",
+        "TECH-PLATFORMIO",
+        "TECH-UART",
+        "TECH-USB",
+        "TECH-BLE",
+        "TECH-CANBUS",
+        "TECH-MODBUS",
+        "TECH-ROS2",
+        "TECH-JTAG-SWD"
+      ]
+    },
+    {
+      "id": "MEDIA_PROTOCOL",
+      "technologyIds": [
+        "TECH-HLS",
+        "TECH-MPEG-DASH"
+      ]
+    },
+    {
+      "id": "MEDIA_SECURITY",
+      "technologyIds": [
+        "TECH-WIDEVINE",
+        "TECH-FAIRPLAY",
+        "TECH-PLAYREADY"
+      ]
+    },
+    {
+      "id": "MEDIA_TOOL",
+      "technologyIds": [
+        "TECH-FFMPEG"
+      ]
+    },
+    {
+      "id": "MESSAGING_STREAM",
+      "technologyIds": [
+        "TECH-KAFKA",
+        "TECH-RABBITMQ",
+        "TECH-NATS",
+        "TECH-PULSAR",
+        "TECH-REDIS-STREAMS",
+        "TECH-MQTT",
+        "TECH-AMQP",
+        "TECH-AWS-SQS",
+        "TECH-AWS-SNS",
+        "TECH-EVENTBRIDGE"
+      ]
+    },
+    {
+      "id": "MOBILE_ANDROID",
+      "technologyIds": [
+        "TECH-KOTLIN",
+        "TECH-JAVA",
+        "TECH-ANDROID-SDK",
+        "TECH-ANDROID-GRADLE-PLUGIN",
+        "TECH-GRADLE",
+        "TECH-JETPACK",
+        "TECH-JETPACK-COMPOSE",
+        "TECH-KOTLIN-COROUTINES",
+        "TECH-KOTLIN-FLOW",
+        "TECH-ROOM",
+        "TECH-DATASTORE",
+        "TECH-WORKMANAGER",
+        "TECH-RETROFIT",
+        "TECH-OKHTTP",
+        "TECH-KOTLINX-SERIALIZATION",
+        "TECH-HILT",
+        "TECH-DAGGER",
+        "TECH-KOIN",
+        "TECH-ESPRESSO",
+        "TECH-COMPOSE-UI-TEST",
+        "TECH-UIAUTOMATOR",
+        "TECH-ROBOLECTRIC",
+        "TECH-MACROBENCHMARK",
+        "TECH-BASELINE-PROFILES"
+      ]
+    },
+    {
+      "id": "MOBILE_CROSS_PLATFORM",
+      "technologyIds": [
+        "TECH-DART",
+        "TECH-FLUTTER",
+        "TECH-REACT-NATIVE",
+        "TECH-EXPO",
+        "TECH-HERMES",
+        "TECH-REACT-NATIVE-JSI",
+        "TECH-REACT-NATIVE-FABRIC",
+        "TECH-REACT-NATIVE-TURBOMODULES",
+        "TECH-KOTLIN-MULTIPLATFORM",
+        "TECH-COMPOSE-MULTIPLATFORM",
+        "TECH-DOTNET-MAUI",
+        "TECH-IONIC",
+        "TECH-CAPACITOR",
+        "TECH-CORDOVA",
+        "TECH-XAMARIN"
+      ]
+    },
+    {
+      "id": "MOBILE_IOS",
+      "technologyIds": [
+        "TECH-SWIFT",
+        "TECH-OBJECTIVE-C",
+        "TECH-SWIFTUI",
+        "TECH-UIKIT",
+        "TECH-FOUNDATION-APPLE",
+        "TECH-SWIFT-CONCURRENCY",
+        "TECH-COMBINE",
+        "TECH-URLSESSION",
+        "TECH-SWIFTDATA",
+        "TECH-CORE-DATA",
+        "TECH-KEYCHAIN",
+        "TECH-XCTEST",
+        "TECH-XCUITEST",
+        "TECH-INSTRUMENTS",
+        "TECH-SWIFT-PACKAGE-MANAGER",
+        "TECH-COCOAPODS",
+        "TECH-FASTLANE",
+        "TECH-TESTFLIGHT",
+        "TECH-STOREKIT"
+      ]
+    },
+    {
+      "id": "MOBILE_TEST_CLOUD",
+      "technologyIds": [
+        "TECH-APPIUM",
+        "TECH-MAESTRO",
+        "TECH-DETOX",
+        "TECH-BROWSERSTACK",
+        "TECH-SAUCE-LABS",
+        "TECH-LAMBDATEST",
+        "TECH-FIREBASE-TEST-LAB",
+        "TECH-AWS-DEVICE-FARM",
+        "TECH-KOBITON",
+        "TECH-PERFECTO"
+      ]
+    },
+    {
+      "id": "OBSERVABILITY",
+      "technologyIds": [
+        "TECH-OPENTELEMETRY",
+        "TECH-PROMETHEUS",
+        "TECH-GRAFANA",
+        "TECH-LOKI",
+        "TECH-TEMPO",
+        "TECH-JAEGER",
+        "TECH-SENTRY",
+        "TECH-DATADOG",
+        "TECH-NEW-RELIC",
+        "TECH-SPLUNK"
+      ]
+    },
+    {
+      "id": "QA_API",
+      "technologyIds": [
+        "TECH-POSTMAN",
+        "TECH-NEWMAN",
+        "TECH-AJV",
+        "TECH-REST-ASSURED",
+        "TECH-SUPERTEST",
+        "TECH-PYTEST-HTTPX",
+        "TECH-KARATE",
+        "TECH-PACT",
+        "TECH-WIREMOCK",
+        "TECH-MOCKSERVER"
+      ]
+    },
+    {
+      "id": "QA_OTHER",
+      "technologyIds": [
+        "TECH-JUNIT",
+        "TECH-TESTNG",
+        "TECH-MOCKITO",
+        "TECH-MOCKK",
+        "TECH-XUNIT-DOTNET",
+        "TECH-NUNIT",
+        "TECH-PYTEST",
+        "TECH-HYPOTHESIS",
+        "TECH-CUCUMBER",
+        "TECH-K6",
+        "TECH-JMETER",
+        "TECH-LOCUST",
+        "TECH-GATLING"
+      ]
+    },
+    {
+      "id": "QA_WEB",
+      "technologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-CYPRESS",
+        "TECH-SELENIUM",
+        "TECH-WEBDRIVERIO",
+        "TECH-VITEST",
+        "TECH-JEST",
+        "TECH-MOCHA",
+        "TECH-TESTING-LIBRARY",
+        "TECH-STORYBOOK",
+        "TECH-LIGHTHOUSE",
+        "TECH-AXE-CORE"
+      ]
+    },
+    {
+      "id": "SECURITY",
+      "technologyIds": [
+        "TECH-OWASP-ASVS",
+        "TECH-OWASP-WSTG",
+        "TECH-OWASP-API",
+        "TECH-OWASP-MASVS",
+        "TECH-CWE",
+        "TECH-CVSS",
+        "TECH-SEMGREP",
+        "TECH-OWASP-ZAP",
+        "TECH-BURP-SUITE",
+        "TECH-SONARQUBE",
+        "TECH-SNYK",
+        "TECH-TRIVY",
+        "TECH-SYFT",
+        "TECH-GRYPE",
+        "TECH-GITLEAKS",
+        "TECH-NUCLEI"
+      ]
+    },
+    {
+      "id": "TELECOM_PROTOCOL",
+      "technologyIds": [
+        "TECH-SIP",
+        "TECH-RTP"
+      ]
+    },
+    {
+      "id": "WEB_BUILD_UI",
+      "technologyIds": [
+        "TECH-VITE",
+        "TECH-WEBPACK",
+        "TECH-RSPACK",
+        "TECH-ROLLUP",
+        "TECH-ESBUILD",
+        "TECH-SWC",
+        "TECH-TAILWINDCSS",
+        "TECH-BOOTSTRAP",
+        "TECH-MUI",
+        "TECH-ANT-DESIGN",
+        "TECH-CHAKRA-UI",
+        "TECH-SHADCN-UI",
+        "TECH-REDUX-TOOLKIT",
+        "TECH-ZUSTAND",
+        "TECH-RXJS",
+        "TECH-TANSTACK-QUERY",
+        "TECH-APOLLO-CLIENT"
+      ]
+    },
+    {
+      "id": "WEB_FRAMEWORK",
+      "technologyIds": [
+        "TECH-REACT",
+        "TECH-NEXTJS",
+        "TECH-ANGULAR",
+        "TECH-VUE",
+        "TECH-NUXT",
+        "TECH-SVELTE",
+        "TECH-SVELTEKIT",
+        "TECH-ASTRO",
+        "TECH-REMIX",
+        "TECH-SOLID",
+        "TECH-QWIK",
+        "TECH-HTMX",
+        "TECH-LIT"
+      ]
+    },
+    {
+      "id": "WEB_LANGUAGE_PLATFORM",
+      "technologyIds": [
+        "TECH-JAVASCRIPT",
+        "TECH-TYPESCRIPT",
+        "TECH-HTML",
+        "TECH-CSS",
+        "TECH-WEB-COMPONENTS",
+        "TECH-WEBASSEMBLY",
+        "TECH-WEBGPU",
+        "TECH-NODEJS",
+        "TECH-BUN",
+        "TECH-DENO"
+      ]
+    }
+  ]
+}

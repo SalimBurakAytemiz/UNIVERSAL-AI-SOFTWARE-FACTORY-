@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/checkpoint.schema.json",
+  "$comment": "//TR: Bu schema supervisor crash/quota/restart durumunda atomic generation/digest zinciriyle kaldığı yerden devam edebilmesi için runtime checkpoint contract'ını tanımlar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "digest",
+    "generation",
+    "previousDigest",
+    "schemaVersion",
+    "state",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "state": {
+      "type": "object"
+    },
+    "previousDigest": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

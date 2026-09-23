@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/state-migration.schema.json",
+  "$comment": "//TR: Bu schema state-migration primitive/contract kaydının canonical minimum yapısını doğrulamak için final architecture closure kapsamında oluşturulmuştur.",
+  "title": "state-migration",
+  "type": "object",
+  "required": [
+    "createdAt",
+    "digest",
+    "environmentId",
+    "evidenceRefs",
+    "id",
+    "schemaVersion",
+    "sourceRefs",
+    "status",
+    "timestamp",
+    "version"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "environmentId": {
+      "type": "string"
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "version": {
+      "type": "string"
+    },
+    "digest": {
+      "type": "string"
+    },
+    "sourceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,158 @@
+{
+  "//TR": "Bu dosya systemin 'her türlü yazılım' hedefi için desteklemesi gereken programlama dili/build/test ekosistemlerini adapter/toolchain seviyesinde register eder.",
+  "schemaVersion": "1.0.0",
+  "count": 16,
+  "toolchains": [
+    {
+      "id": "javascript-typescript",
+      "tools": [
+        "node",
+        "npm",
+        "pnpm",
+        "yarn",
+        "typescript",
+        "eslint",
+        "vitest",
+        "jest"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "python",
+      "tools": [
+        "python",
+        "uv",
+        "pip",
+        "poetry",
+        "ruff",
+        "mypy",
+        "pytest"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "java-kotlin",
+      "tools": [
+        "java",
+        "maven",
+        "gradle",
+        "junit"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "dotnet-csharp",
+      "tools": [
+        "dotnet",
+        "nuget"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "go",
+      "tools": [
+        "go",
+        "go-test"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "rust",
+      "tools": [
+        "rustc",
+        "cargo",
+        "clippy"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "c-cpp",
+      "tools": [
+        "clang",
+        "gcc",
+        "cmake",
+        "ninja"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "swift-objective-c",
+      "tools": [
+        "xcodebuild",
+        "swift"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "dart-flutter",
+      "tools": [
+        "dart",
+        "flutter"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "php",
+      "tools": [
+        "php",
+        "composer",
+        "phpunit"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "ruby",
+      "tools": [
+        "ruby",
+        "bundler",
+        "rspec"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "scala",
+      "tools": [
+        "scala",
+        "sbt"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "elixir-erlang",
+      "tools": [
+        "elixir",
+        "mix",
+        "erlang"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "shell-powershell",
+      "tools": [
+        "bash",
+        "powershell"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "sql",
+      "tools": [
+        "psql",
+        "mysql",
+        "sqlcmd",
+        "sqlite3"
+      ],
+      "status": "REGISTERED"
+    },
+    {
+      "id": "mobile-native",
+      "tools": [
+        "android-sdk",
+        "adb",
+        "xcode",
+        "simctl"
+      ],
+      "status": "REGISTERED"
+    }
+  ]
+}

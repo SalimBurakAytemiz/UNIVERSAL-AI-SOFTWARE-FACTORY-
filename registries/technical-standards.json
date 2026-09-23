@@ -1,0 +1,168 @@
+{
+  "//TR": "Bu dosya agent/model değişse bile şirketin mühendislik ve karar kalitesinin sabit kalması için merkezi teknik standartları register eder.",
+  "schemaVersion": "1.0.0",
+  "count": 23,
+  "standards": [
+    {
+      "id": "STD-API-CONTRACT",
+      "name": "API Contract Standard",
+      "summary": "OpenAPI/JSON Schema/source-of-truth, versioning, compatibility, auth, errors, idempotency and evidence.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-API-STRICT-JSON",
+      "name": "Strict JSON Response Validation Standard",
+      "summary": "Ajv/Postman/Newman, required/type/null/empty/additionalProperties/header/business assertion and redaction rules.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-ANDROID",
+      "name": "Android Engineering Standard",
+      "summary": "Kotlin/Java, Compose, architecture, coroutines, storage, networking, testing, performance, security and release.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-IOS",
+      "name": "iOS Engineering Standard",
+      "summary": "Swift/SwiftUI/UIKit, concurrency, persistence, testing, instruments, signing and release.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-WEB",
+      "name": "Web Engineering Standard",
+      "summary": "Web platform, TypeScript/frameworks, accessibility, performance, security, testing and observability.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-BACKEND",
+      "name": "Backend Engineering Standard",
+      "summary": "Contracts, validation, auth, transactions, concurrency, resilience, background work, observability and shutdown.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-DATABASE",
+      "name": "Database Engineering Standard",
+      "summary": "Modeling, constraints, transactions, indexing, migrations, backup/restore, performance and data integrity.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-QA",
+      "name": "Universal Quality Engineering Standard",
+      "summary": "Risk-based cross-layer coverage, negative/state/concurrency, evidence and explicit unknowns.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-AUTOMATION",
+      "name": "Test Automation Framework Standard",
+      "summary": "Deterministic locators/clients, fixtures, parallelism, flake control, evidence, retries and reporting.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-SECURITY",
+      "name": "Authorized Security Assessment Standard",
+      "summary": "Explicit authorization, scope, safe proof, OWASP mapping, evidence, remediation and retest.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-PERFORMANCE",
+      "name": "Performance Engineering Standard",
+      "summary": "Workload model, percentiles, saturation, abort guards, stress/soak and correlated telemetry.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-OBSERVABILITY",
+      "name": "Observability Standard",
+      "summary": "Structured logs, metrics, traces, context propagation, SLOs and diagnostic evidence.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-ACCESSIBILITY",
+      "name": "Accessibility Standard",
+      "summary": "WCAG, keyboard/focus, semantics, screen readers, contrast, reflow and mobile/desktop coverage.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-LOCALIZATION",
+      "name": "Localization Standard",
+      "summary": "Unicode, RTL, text expansion, locale/timezone/currency/pluralization and pseudo-localization.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-AI",
+      "name": "AI/LLM Engineering & Assurance Standard",
+      "summary": "Prompt/model provenance, evals, RAG, injection defense, leakage, cost/latency and holdout integrity.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-GAME",
+      "name": "Game Engineering Standard",
+      "summary": "Engine architecture, determinism/networking, economy invariants, performance, builds and authorized analysis.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-IOT",
+      "name": "Embedded/IoT Standard",
+      "summary": "Firmware lifecycle, OTA, device identity, HIL, protocols, safety boundaries and evidence.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-TECH-DECISION",
+      "name": "Technology Decision Standard",
+      "summary": "Project genome, alternatives, fit criteria, evidence, trade-offs, exit strategy and ADR.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-DEPENDENCY",
+      "name": "Dependency & Supply Chain Standard",
+      "summary": "Provenance, license, SBOM, vulnerabilities, version policy, updates and reproducibility.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-CODE-REVIEW",
+      "name": "Code Review Standard",
+      "summary": "Correctness, design, testability, security, performance, maintainability, evidence and scope.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-EVIDENCE",
+      "name": "Evidence & Attestation Standard",
+      "summary": "Run/commit/env/tool/resource/time hashes, DLP, provenance, stale/invalidation semantics.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-RESEARCH",
+      "name": "Technical Research Standard",
+      "summary": "Official-source hierarchy, freshness, conflict tracking, clean-room boundaries and citations.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    },
+    {
+      "id": "STD-LEADERSHIP-REVIEW",
+      "name": "Technical Leadership Review Standard",
+      "summary": "Specialist→Lead→Head→Council compression, dissent capture, escalation and decision provenance.",
+      "status": "REGISTERED",
+      "version": "1.0.0"
+    }
+  ]
+}

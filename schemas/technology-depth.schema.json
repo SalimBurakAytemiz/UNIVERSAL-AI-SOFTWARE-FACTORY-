@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "//TR: Agent-technology derinliğinin farklı mühendislik eksenlerinde 0-7 arasında ayrı ayrı değerlendirilmesini doğrular.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agentId",
+    "depth",
+    "relationship",
+    "technologyId"
+  ],
+  "properties": {
+    "agentId": {
+      "type": "string",
+      "pattern": "^\\d{3}$"
+    },
+    "technologyId": {
+      "type": "string",
+      "pattern": "^TECH-"
+    },
+    "relationship": {
+      "enum": [
+        "PRIMARY_MASTERY",
+        "COMPARATIVE_DECISION",
+        "ADJACENT_AWARENESS"
+      ]
+    },
+    "depth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fundamentals",
+        "implementation",
+        "debugging",
+        "testing",
+        "architecture",
+        "interoperability",
+        "security",
+        "performance",
+        "operations",
+        "migrationUpgrade",
+        "review",
+        "technologySelection"
+      ],
+      "properties": {
+        "fundamentals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "implementation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "debugging": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "testing": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "architecture": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "interoperability": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "security": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "performance": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "operations": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "migrationUpgrade": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "review": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "technologySelection": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        }
+      }
+    }
+  }
+}

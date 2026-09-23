@@ -1,0 +1,2549 @@
+{
+  "//TR": "Bu dosya canonical 363 general AI rolünü yeni fresh repo içinde stable ID'lerle register eder; registered olmak aktif çalışmak anlamına gelmez.",
+  "schemaVersion": "1.0.0",
+  "principle": "REGISTER EVERYTHING. ACTIVATE ONLY WHAT THE MISSION NEEDS.",
+  "count": 363,
+  "agents": [
+    {
+      "id": "001",
+      "name": "Executive Operations",
+      "category": "01 Executive & Governance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "002",
+      "name": "Founder Decision Coordinator",
+      "category": "01 Executive & Governance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "003",
+      "name": "AI Workflow Coordinator",
+      "category": "01 Executive & Governance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "004",
+      "name": "Portfolio Management",
+      "category": "01 Executive & Governance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "005",
+      "name": "Program & Milestone Governance",
+      "category": "01 Executive & Governance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "006",
+      "name": "Decision Ledger",
+      "category": "01 Executive & Governance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "007",
+      "name": "Risk & Approval Coordinator",
+      "category": "01 Executive & Governance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "008",
+      "name": "Product Strategy",
+      "category": "02 Product & Discovery",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "009",
+      "name": "Product Manager",
+      "category": "02 Product & Discovery",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "010",
+      "name": "Business Analyst",
+      "category": "02 Product & Discovery",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "011",
+      "name": "Requirements Engineering",
+      "category": "02 Product & Discovery",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "012",
+      "name": "Market Research",
+      "category": "02 Product & Discovery",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "013",
+      "name": "Competitive Intelligence",
+      "category": "02 Product & Discovery",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "014",
+      "name": "Problem Validation",
+      "category": "02 Product & Discovery",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "015",
+      "name": "User Research",
+      "category": "02 Product & Discovery",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "016",
+      "name": "Product Analytics",
+      "category": "02 Product & Discovery",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "017",
+      "name": "Pricing Strategy",
+      "category": "02 Product & Discovery",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "018",
+      "name": "Solution Architect",
+      "category": "03 Architecture & Core Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "019",
+      "name": "Software Architect",
+      "category": "03 Architecture & Core Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "020",
+      "name": "Domain Architect",
+      "category": "03 Architecture & Core Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "021",
+      "name": "Core Platform Engineer",
+      "category": "03 Architecture & Core Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "022",
+      "name": "Distributed Systems Engineer",
+      "category": "03 Architecture & Core Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "023",
+      "name": "API Contract Architect",
+      "category": "03 Architecture & Core Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "024",
+      "name": "Realtime Systems Engineer",
+      "category": "03 Architecture & Core Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "025",
+      "name": "Async & Queue Systems Engineer",
+      "category": "03 Architecture & Core Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "026",
+      "name": "Identity & Access Architecture",
+      "category": "03 Architecture & Core Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "027",
+      "name": "Multi-Tenancy Architecture",
+      "category": "03 Architecture & Core Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "028",
+      "name": "Migration & Modernization",
+      "category": "03 Architecture & Core Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "029",
+      "name": "Senior Code Review",
+      "category": "03 Architecture & Core Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "030",
+      "name": "Web Frontend Engineer",
+      "category": "04 Web Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "031",
+      "name": "React & Next.js Engineer",
+      "category": "04 Web Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "032",
+      "name": "Frontend Design System Engineer",
+      "category": "04 Web Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "033",
+      "name": "Web Performance Engineer",
+      "category": "04 Web Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "034",
+      "name": "Web Accessibility Engineer",
+      "category": "04 Web Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "035",
+      "name": "Backend Service Engineer",
+      "category": "05 Backend & API Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "036",
+      "name": "REST API Engineer",
+      "category": "05 Backend & API Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "037",
+      "name": "GraphQL Engineer",
+      "category": "05 Backend & API Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "038",
+      "name": "Event-Driven Backend Engineer",
+      "category": "05 Backend & API Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "039",
+      "name": "Workflow Engine Engineer",
+      "category": "05 Backend & API Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "040",
+      "name": "Notification Service Engineer",
+      "category": "05 Backend & API Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "041",
+      "name": "File & Object Storage Engineer",
+      "category": "05 Backend & API Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "042",
+      "name": "Background Jobs & Scheduler Engineer",
+      "category": "05 Backend & API Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "043",
+      "name": "Database Architect",
+      "category": "06 Data & Database",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "044",
+      "name": "SQL & Data Modeling",
+      "category": "06 Data & Database",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "045",
+      "name": "Data Engineer",
+      "category": "06 Data & Database",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "046",
+      "name": "Analytics Engineer",
+      "category": "06 Data & Database",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "047",
+      "name": "ETL/ELT Pipeline",
+      "category": "06 Data & Database",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "048",
+      "name": "Search Index & Data",
+      "category": "06 Data & Database",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "049",
+      "name": "Data Quality & Governance",
+      "category": "06 Data & Database",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "050",
+      "name": "Mobile Architect",
+      "category": "07 Mobile Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "051",
+      "name": "Android Engineer",
+      "category": "07 Mobile Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "052",
+      "name": "iOS Engineer",
+      "category": "07 Mobile Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "053",
+      "name": "Flutter Engineer",
+      "category": "07 Mobile Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "054",
+      "name": "React Native Engineer",
+      "category": "07 Mobile Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "055",
+      "name": "Firebase & Mobile Integration",
+      "category": "07 Mobile Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "056",
+      "name": "Mobile Release & Store",
+      "category": "07 Mobile Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "057",
+      "name": "Desktop Application Architect",
+      "category": "08 Desktop Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "058",
+      "name": "Electron & Tauri Engineer",
+      "category": "08 Desktop Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "059",
+      "name": "Native Desktop Integration",
+      "category": "08 Desktop Engineering",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "060",
+      "name": "UX Architect",
+      "category": "09 UX/UI & Design",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "061",
+      "name": "UI Designer",
+      "category": "09 UX/UI & Design",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "062",
+      "name": "Design System",
+      "category": "09 UX/UI & Design",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "063",
+      "name": "UX Research",
+      "category": "09 UX/UI & Design",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "064",
+      "name": "Accessibility Design",
+      "category": "09 UX/UI & Design",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "065",
+      "name": "Content Design",
+      "category": "09 UX/UI & Design",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "066",
+      "name": "Localization & Internationalization",
+      "category": "09 UX/UI & Design",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "067",
+      "name": "Test Planning",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "068",
+      "name": "Happy Path Test Case",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "069",
+      "name": "Edge & Negative Case",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "070",
+      "name": "Regression Coverage",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "071",
+      "name": "Test Documentation & Checklist",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "072",
+      "name": "Exploratory QA",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "073",
+      "name": "Product Flow Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "074",
+      "name": "Feature Validation",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "075",
+      "name": "CMS & Content Administration Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "076",
+      "name": "Admin Panel Process Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "077",
+      "name": "Cross-Platform Synchronization",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "078",
+      "name": "Usability & Heuristic Review",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "079",
+      "name": "Localization & Internationalization QA",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "080",
+      "name": "Web Design & Pixel-Perfect",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "081",
+      "name": "Mobile & Responsive Design",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "082",
+      "name": "iOS UI Design Review",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "083",
+      "name": "Android UI Design Review",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "084",
+      "name": "Visual Regression",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "085",
+      "name": "Accessibility Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "086",
+      "name": "Advanced Accessibility & Assistive Tech",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "087",
+      "name": "Browser / Device / OS Compatibility",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "088",
+      "name": "Web Functional Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "089",
+      "name": "iOS Mobile App Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "090",
+      "name": "Android Mobile App Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "091",
+      "name": "Notification & Messaging Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "092",
+      "name": "Firebase Event & Analytics Validation",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "093",
+      "name": "Offline / Low Network / Recovery QA",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "094",
+      "name": "Feature Flag & Experiment QA",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "095",
+      "name": "Data Pipeline / BI / Reporting Validation",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "096",
+      "name": "API Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "097",
+      "name": "Backend Integration Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "098",
+      "name": "Socket & Realtime Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "099",
+      "name": "Database Validation & Data Integrity",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "100",
+      "name": "Test Data Management",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "101",
+      "name": "Test Environment & System Health",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "102",
+      "name": "Log Monitoring & Root Cause Analysis",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "103",
+      "name": "Background Jobs / Queue / Scheduler QA",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "104",
+      "name": "Third-Party Integration & Contract QA",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "105",
+      "name": "Migration & Backward Compatibility",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "106",
+      "name": "Security & Vulnerability Scanning",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "107",
+      "name": "Role / Permission / Session Security",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "108",
+      "name": "Performance & Load Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "109",
+      "name": "Privacy / Consent / Compliance QA",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "110",
+      "name": "Frontend Performance & Core Web Vitals",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "111",
+      "name": "Chaos / Resilience / Failure Injection",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "112",
+      "name": "Web Automation",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "113",
+      "name": "Mobile Automation",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "114",
+      "name": "Backend Developer in Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "115",
+      "name": "Android Development in Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "116",
+      "name": "iOS Development in Test",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "117",
+      "name": "Testability & Code Review",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "118",
+      "name": "Test Automation Framework Architect",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "119",
+      "name": "CI/CD Quality Gate",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "120",
+      "name": "Flaky Test Detection & Stabilization",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "121",
+      "name": "Service Virtualization & Mocking",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "122",
+      "name": "Automation Observability & Suite Health",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "123",
+      "name": "Defect Triage",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "124",
+      "name": "Jira / Trello Work Tracking",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "125",
+      "name": "Daily Quality Report",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "126",
+      "name": "Weekly Quality Summary",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "127",
+      "name": "Monthly Quality Risk Trend",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "128",
+      "name": "Release Readiness",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "129",
+      "name": "Test Coverage Gap & Risk Analysis",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "130",
+      "name": "Production Smoke & Canary Verification",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "131",
+      "name": "Synthetic Monitoring & Live Journey",
+      "category": "10 Quality Engineering Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "132",
+      "name": "Security Architect",
+      "category": "11 Cybersecurity",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "133",
+      "name": "Application Security",
+      "category": "11 Cybersecurity",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "134",
+      "name": "Cloud Security",
+      "category": "11 Cybersecurity",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "135",
+      "name": "Identity Security",
+      "category": "11 Cybersecurity",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "136",
+      "name": "Secrets & Key Management",
+      "category": "11 Cybersecurity",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "137",
+      "name": "Software Supply Chain Security",
+      "category": "11 Cybersecurity",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "138",
+      "name": "Dependency & SBOM Security",
+      "category": "11 Cybersecurity",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "139",
+      "name": "Threat Modeling",
+      "category": "11 Cybersecurity",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "140",
+      "name": "AI Red Team",
+      "category": "11 Cybersecurity",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "141",
+      "name": "SecOps & Security Incident",
+      "category": "11 Cybersecurity",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "142",
+      "name": "Platform Engineering",
+      "category": "12 Platform / DevOps / SRE",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "143",
+      "name": "DevOps",
+      "category": "12 Platform / DevOps / SRE",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "144",
+      "name": "Cloud Infrastructure",
+      "category": "12 Platform / DevOps / SRE",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "145",
+      "name": "Infrastructure as Code",
+      "category": "12 Platform / DevOps / SRE",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "146",
+      "name": "Container & Kubernetes",
+      "category": "12 Platform / DevOps / SRE",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "147",
+      "name": "CI/CD Engineering",
+      "category": "12 Platform / DevOps / SRE",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "148",
+      "name": "SRE",
+      "category": "12 Platform / DevOps / SRE",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "149",
+      "name": "Observability",
+      "category": "12 Platform / DevOps / SRE",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "150",
+      "name": "Capacity Planning",
+      "category": "12 Platform / DevOps / SRE",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "151",
+      "name": "Backup & Disaster Recovery",
+      "category": "12 Platform / DevOps / SRE",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "152",
+      "name": "Model Router",
+      "category": "13 AI / Model Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "153",
+      "name": "Model Operations",
+      "category": "13 AI / Model Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "154",
+      "name": "Model Benchmark",
+      "category": "13 AI / Model Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "155",
+      "name": "Model Quality Evaluation",
+      "category": "13 AI / Model Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "156",
+      "name": "Prompt Engineering",
+      "category": "13 AI / Model Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "157",
+      "name": "Prompt Evaluation",
+      "category": "13 AI / Model Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "158",
+      "name": "Model Cost Optimization",
+      "category": "13 AI / Model Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "159",
+      "name": "Model Availability & Fallback",
+      "category": "13 AI / Model Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "160",
+      "name": "Integration Architect",
+      "category": "14 Integration Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "161",
+      "name": "Connector & Adapter Engineer",
+      "category": "14 Integration Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "162",
+      "name": "Webhook & Contract Integration",
+      "category": "14 Integration Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "163",
+      "name": "BaaS Integration",
+      "category": "14 Integration Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "164",
+      "name": "External API Drift Monitoring",
+      "category": "14 Integration Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "165",
+      "name": "CRM Systems",
+      "category": "15 Business Systems",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "166",
+      "name": "ERP Systems",
+      "category": "15 Business Systems",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "167",
+      "name": "Order Management Systems",
+      "category": "15 Business Systems",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "168",
+      "name": "Warehouse & Inventory Systems",
+      "category": "15 Business Systems",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "169",
+      "name": "PIM & Catalog Systems",
+      "category": "15 Business Systems",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "170",
+      "name": "CMS & DAM Systems",
+      "category": "15 Business Systems",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "171",
+      "name": "Payments & Billing Systems",
+      "category": "15 Business Systems",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "172",
+      "name": "Accounting & Reconciliation Systems",
+      "category": "15 Business Systems",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "173",
+      "name": "Lead Generation",
+      "category": "16 Sales & CRM",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "174",
+      "name": "Lead Qualification",
+      "category": "16 Sales & CRM",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "175",
+      "name": "Sales",
+      "category": "16 Sales & CRM",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "176",
+      "name": "Proposal & Quotation",
+      "category": "16 Sales & CRM",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "177",
+      "name": "CRM Operations",
+      "category": "16 Sales & CRM",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "178",
+      "name": "Customer Onboarding",
+      "category": "16 Sales & CRM",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "179",
+      "name": "Growth Strategy",
+      "category": "17 Marketing & Growth",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "180",
+      "name": "Performance Marketing",
+      "category": "17 Marketing & Growth",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "181",
+      "name": "SEO",
+      "category": "17 Marketing & Growth",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "182",
+      "name": "Content Marketing",
+      "category": "17 Marketing & Growth",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "183",
+      "name": "Social Media",
+      "category": "17 Marketing & Growth",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "184",
+      "name": "Email & Lifecycle Marketing",
+      "category": "17 Marketing & Growth",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "185",
+      "name": "Campaign / Experiment Analytics",
+      "category": "17 Marketing & Growth",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "186",
+      "name": "Customer Support",
+      "category": "18 Support & Success",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "187",
+      "name": "Ticket Triage",
+      "category": "18 Support & Success",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "188",
+      "name": "Support Routing",
+      "category": "18 Support & Success",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "189",
+      "name": "Knowledge Base",
+      "category": "18 Support & Success",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "190",
+      "name": "Customer Success & Renewal",
+      "category": "18 Support & Success",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "191",
+      "name": "Finance Operations",
+      "category": "19 Finance & FinOps",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "192",
+      "name": "Accounting",
+      "category": "19 Finance & FinOps",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "193",
+      "name": "FinOps",
+      "category": "19 Finance & FinOps",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "194",
+      "name": "Budget Guard",
+      "category": "19 Finance & FinOps",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "195",
+      "name": "Cost Controller",
+      "category": "19 Finance & FinOps",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "196",
+      "name": "Cash Flow Forecasting",
+      "category": "19 Finance & FinOps",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "197",
+      "name": "ROI & Profitability",
+      "category": "19 Finance & FinOps",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "198",
+      "name": "Privacy / KVKK / GDPR",
+      "category": "20 Legal / Privacy / Compliance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "199",
+      "name": "Compliance",
+      "category": "20 Legal / Privacy / Compliance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "200",
+      "name": "Consent & Data Retention",
+      "category": "20 Legal / Privacy / Compliance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "201",
+      "name": "License & Intellectual Property",
+      "category": "20 Legal / Privacy / Compliance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "202",
+      "name": "Contract & Regulatory Risk",
+      "category": "20 Legal / Privacy / Compliance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "203",
+      "name": "Technical Research",
+      "category": "21 Research / Knowledge / Documentation",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "204",
+      "name": "Documentation Engineer",
+      "category": "21 Research / Knowledge / Documentation",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "205",
+      "name": "Knowledge Management",
+      "category": "21 Research / Knowledge / Documentation",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "206",
+      "name": "Architecture Decision / ADR",
+      "category": "21 Research / Knowledge / Documentation",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "207",
+      "name": "Repository & Tool Evaluation",
+      "category": "21 Research / Knowledge / Documentation",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "208",
+      "name": "Game Systems Architect",
+      "category": "22 Game Development Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "209",
+      "name": "Gameplay Engineer",
+      "category": "22 Game Development Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "210",
+      "name": "Unreal Engine",
+      "category": "22 Game Development Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "211",
+      "name": "Unity Engine",
+      "category": "22 Game Development Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "212",
+      "name": "Godot Engine",
+      "category": "22 Game Development Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "213",
+      "name": "Multiplayer & Network",
+      "category": "22 Game Development Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "214",
+      "name": "Game Backend",
+      "category": "22 Game Development Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "215",
+      "name": "Game Economy",
+      "category": "22 Game Development Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "216",
+      "name": "LiveOps",
+      "category": "22 Game Development Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "217",
+      "name": "Anti-Cheat",
+      "category": "22 Game Development Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "218",
+      "name": "Game Trust & Safety",
+      "category": "22 Game Development Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "219",
+      "name": "Game Build / Patcher / Release",
+      "category": "22 Game Development Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "220",
+      "name": "3D Technical Art",
+      "category": "23 3D / Media / Asset Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "221",
+      "name": "3D Modeling",
+      "category": "23 3D / Media / Asset Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "222",
+      "name": "Texture & Material",
+      "category": "23 3D / Media / Asset Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "223",
+      "name": "Rigging & Animation",
+      "category": "23 3D / Media / Asset Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "224",
+      "name": "VFX",
+      "category": "23 3D / Media / Asset Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "225",
+      "name": "Audio Production",
+      "category": "23 3D / Media / Asset Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "226",
+      "name": "Asset Pipeline & Provenance",
+      "category": "23 3D / Media / Asset Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "227",
+      "name": "Embedded Systems",
+      "category": "24 Embedded / IoT / Robotics / XR",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "228",
+      "name": "Firmware Engineer",
+      "category": "24 Embedded / IoT / Robotics / XR",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "229",
+      "name": "IoT Platform",
+      "category": "24 Embedded / IoT / Robotics / XR",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "230",
+      "name": "OTA & Device Management",
+      "category": "24 Embedded / IoT / Robotics / XR",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "231",
+      "name": "Edge AI",
+      "category": "24 Embedded / IoT / Robotics / XR",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "232",
+      "name": "Robotics Engineer",
+      "category": "24 Embedded / IoT / Robotics / XR",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "233",
+      "name": "XR / AR / VR",
+      "category": "24 Embedded / IoT / Robotics / XR",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "234",
+      "name": "Hardware-in-the-Loop Integration",
+      "category": "24 Embedded / IoT / Robotics / XR",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "235",
+      "name": "Incident Management",
+      "category": "25 Operations / Release / LiveOps",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "236",
+      "name": "Release Manager",
+      "category": "25 Operations / Release / LiveOps",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "237",
+      "name": "Environment Management",
+      "category": "25 Operations / Release / LiveOps",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "238",
+      "name": "Runbook Operations",
+      "category": "25 Operations / Release / LiveOps",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "239",
+      "name": "Business Process Operations",
+      "category": "25 Operations / Release / LiveOps",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "240",
+      "name": "LiveOps / GameOps Coordinator",
+      "category": "25 Operations / Release / LiveOps",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "241",
+      "name": "Control Tower",
+      "category": "26 Control Tower",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "242",
+      "name": "Approval Center",
+      "category": "26 Control Tower",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "243",
+      "name": "Global Kill Switch Controller",
+      "category": "26 Control Tower",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "244",
+      "name": "Portfolio Health",
+      "category": "26 Control Tower",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "245",
+      "name": "Cost & Revenue Monitoring",
+      "category": "26 Control Tower",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "246",
+      "name": "Agent Activity Monitoring",
+      "category": "26 Control Tower",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "247",
+      "name": "Security & Incident Monitoring",
+      "category": "26 Control Tower",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "248",
+      "name": "Company Event Bus",
+      "category": "27 Shared Company Platform",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "249",
+      "name": "Notification Orchestration",
+      "category": "27 Shared Company Platform",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "250",
+      "name": "Automation & Workflow",
+      "category": "27 Shared Company Platform",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "251",
+      "name": "Internal Marketplace & Capability Registry",
+      "category": "27 Shared Company Platform",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "252",
+      "name": "Template & Industry Pack Manager",
+      "category": "27 Shared Company Platform",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "253",
+      "name": "Chief Knowledge Architect",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "254",
+      "name": "Knowledge Gap Detection",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "255",
+      "name": "Autonomous Research Planner",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "256",
+      "name": "Official Source Research",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "257",
+      "name": "Technical Literature Research",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "258",
+      "name": "Open Source Intelligence",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "259",
+      "name": "Source Reliability",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "260",
+      "name": "Knowledge Extraction",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "261",
+      "name": "Knowledge Conflict Detection",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "262",
+      "name": "Knowledge Validation",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "263",
+      "name": "Domain Discovery",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "264",
+      "name": "Capability Discovery",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "265",
+      "name": "Domain Pack Builder",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "266",
+      "name": "Skill Overlay Builder",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "267",
+      "name": "Knowledge Freshness",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "268",
+      "name": "Experience Learning",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "269",
+      "name": "Architecture Outcome Learning",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "270",
+      "name": "Self-Improvement Evaluation",
+      "category": "28 Intelligence / Autonomous Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "271",
+      "name": "FinTech Domain Architect",
+      "category": "29 FinTech Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "272",
+      "name": "Financial Ledger Specialist",
+      "category": "29 FinTech Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "273",
+      "name": "Payments Architecture Specialist",
+      "category": "29 FinTech Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "274",
+      "name": "Wallet & Transaction Specialist",
+      "category": "29 FinTech Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "275",
+      "name": "Settlement Specialist",
+      "category": "29 FinTech Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "276",
+      "name": "Reconciliation Specialist",
+      "category": "29 FinTech Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "277",
+      "name": "KYC/KYB Specialist",
+      "category": "29 FinTech Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "278",
+      "name": "AML/Sanctions Specialist",
+      "category": "29 FinTech Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "279",
+      "name": "Financial Fraud & Risk",
+      "category": "29 FinTech Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "280",
+      "name": "Financial Precision & Accounting Integrity",
+      "category": "29 FinTech Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "281",
+      "name": "FinTech Regulatory Intelligence",
+      "category": "29 FinTech Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "282",
+      "name": "FinTech QA & Failure Mode Specialist",
+      "category": "29 FinTech Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "283",
+      "name": "Capital Markets Domain Architect",
+      "category": "30 Capital Markets Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "284",
+      "name": "Market Data Specialist",
+      "category": "30 Capital Markets Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "285",
+      "name": "Instrument & Reference Data Specialist",
+      "category": "30 Capital Markets Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "286",
+      "name": "Trading OMS Specialist",
+      "category": "30 Capital Markets Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "287",
+      "name": "Execution Management Specialist",
+      "category": "30 Capital Markets Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "288",
+      "name": "Portfolio & Position Specialist",
+      "category": "30 Capital Markets Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "289",
+      "name": "Pre-Trade Risk Specialist",
+      "category": "30 Capital Markets Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "290",
+      "name": "Post-Trade Risk Specialist",
+      "category": "30 Capital Markets Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "291",
+      "name": "Pricing & P&L Specialist",
+      "category": "30 Capital Markets Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "292",
+      "name": "FIX Protocol & Trading Integration",
+      "category": "30 Capital Markets Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "293",
+      "name": "Market Surveillance Specialist",
+      "category": "30 Capital Markets Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "294",
+      "name": "Clearing & Settlement Specialist",
+      "category": "30 Capital Markets Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "295",
+      "name": "Streaming Platform Architect",
+      "category": "31 Streaming / Media Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "296",
+      "name": "Media Ingest Specialist",
+      "category": "31 Streaming / Media Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "297",
+      "name": "Video Encoding / Transcoding Specialist",
+      "category": "31 Streaming / Media Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "298",
+      "name": "Adaptive Streaming Specialist",
+      "category": "31 Streaming / Media Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "299",
+      "name": "CDN Architecture Specialist",
+      "category": "31 Streaming / Media Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "300",
+      "name": "Playback Engineering Specialist",
+      "category": "31 Streaming / Media Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "301",
+      "name": "DRM & Content Protection",
+      "category": "31 Streaming / Media Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "302",
+      "name": "Live Streaming Specialist",
+      "category": "31 Streaming / Media Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "303",
+      "name": "Content Rights & Entitlement",
+      "category": "31 Streaming / Media Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "304",
+      "name": "Streaming QoE Specialist",
+      "category": "31 Streaming / Media Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "305",
+      "name": "Commerce Domain Architect",
+      "category": "32 Commerce / Marketplace Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "306",
+      "name": "Catalog & Product Commerce Specialist",
+      "category": "32 Commerce / Marketplace Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "307",
+      "name": "Commerce OMS Specialist",
+      "category": "32 Commerce / Marketplace Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "308",
+      "name": "Inventory & Fulfillment Specialist",
+      "category": "32 Commerce / Marketplace Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "309",
+      "name": "Marketplace Architecture Specialist",
+      "category": "32 Commerce / Marketplace Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "310",
+      "name": "Seller & Commission Specialist",
+      "category": "32 Commerce / Marketplace Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "311",
+      "name": "Promotion & Pricing Specialist",
+      "category": "32 Commerce / Marketplace Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "312",
+      "name": "Commerce Fraud & Dispute Specialist",
+      "category": "32 Commerce / Marketplace Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "313",
+      "name": "SaaS Domain Architect",
+      "category": "33 SaaS / Enterprise Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "314",
+      "name": "Multi-Tenant SaaS Specialist",
+      "category": "33 SaaS / Enterprise Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "315",
+      "name": "Subscription Lifecycle Specialist",
+      "category": "33 SaaS / Enterprise Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "316",
+      "name": "Enterprise Identity / SSO Specialist",
+      "category": "33 SaaS / Enterprise Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "317",
+      "name": "SaaS Metering & Billing Specialist",
+      "category": "33 SaaS / Enterprise Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "318",
+      "name": "Enterprise Integration Specialist",
+      "category": "33 SaaS / Enterprise Expert Guild",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "319",
+      "name": "Corporate Strategy",
+      "category": "34 Business Strategy & Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "320",
+      "name": "Business Model Architect",
+      "category": "34 Business Strategy & Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "321",
+      "name": "Business Opportunity Discovery",
+      "category": "34 Business Strategy & Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "322",
+      "name": "Industry Intelligence",
+      "category": "34 Business Strategy & Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "323",
+      "name": "Business Intelligence",
+      "category": "34 Business Strategy & Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "324",
+      "name": "Competitive Strategy",
+      "category": "34 Business Strategy & Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "325",
+      "name": "Business Scenario Planning",
+      "category": "34 Business Strategy & Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "326",
+      "name": "Business Performance",
+      "category": "34 Business Strategy & Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "327",
+      "name": "Revenue Strategy",
+      "category": "35 Revenue & Monetization",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "328",
+      "name": "Monetization Optimization",
+      "category": "35 Revenue & Monetization",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "329",
+      "name": "Unit Economics",
+      "category": "35 Revenue & Monetization",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "330",
+      "name": "Pricing Intelligence",
+      "category": "35 Revenue & Monetization",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "331",
+      "name": "Revenue Forecasting",
+      "category": "35 Revenue & Monetization",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "332",
+      "name": "Revenue Leakage Detection",
+      "category": "35 Revenue & Monetization",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "333",
+      "name": "Enterprise Sales Strategy",
+      "category": "36 Sales & Partnerships",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "334",
+      "name": "Partnership Development",
+      "category": "36 Sales & Partnerships",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "335",
+      "name": "Channel Partnership",
+      "category": "36 Sales & Partnerships",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "336",
+      "name": "Strategic Account",
+      "category": "36 Sales & Partnerships",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "337",
+      "name": "Sales Operations",
+      "category": "36 Sales & Partnerships",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "338",
+      "name": "Deal Desk",
+      "category": "36 Sales & Partnerships",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "339",
+      "name": "Partnership Integration",
+      "category": "36 Sales & Partnerships",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "340",
+      "name": "Voice of Customer",
+      "category": "37 Customer & Market Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "341",
+      "name": "Customer Segmentation",
+      "category": "37 Customer & Market Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "342",
+      "name": "Churn Intelligence",
+      "category": "37 Customer & Market Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "343",
+      "name": "Customer Lifetime Value",
+      "category": "37 Customer & Market Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "344",
+      "name": "Customer Experience Strategy",
+      "category": "37 Customer & Market Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "345",
+      "name": "Business Process Architect",
+      "category": "38 Business Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "346",
+      "name": "Operational Excellence",
+      "category": "38 Business Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "347",
+      "name": "Process Mining",
+      "category": "38 Business Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "348",
+      "name": "Vendor Management",
+      "category": "38 Business Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "349",
+      "name": "Procurement Intelligence",
+      "category": "38 Business Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "350",
+      "name": "SLA Management",
+      "category": "38 Business Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "351",
+      "name": "Business Continuity",
+      "category": "38 Business Operations",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "352",
+      "name": "Financial Planning & Analysis",
+      "category": "39 Finance & Corporate Control",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "353",
+      "name": "Treasury Management",
+      "category": "39 Finance & Corporate Control",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "354",
+      "name": "Financial Risk",
+      "category": "39 Finance & Corporate Control",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "355",
+      "name": "Management Reporting",
+      "category": "39 Finance & Corporate Control",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "356",
+      "name": "Cost Allocation",
+      "category": "39 Finance & Corporate Control",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "357",
+      "name": "Investment Evaluation",
+      "category": "39 Finance & Corporate Control",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "358",
+      "name": "Financial Scenario Modeling",
+      "category": "39 Finance & Corporate Control",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "359",
+      "name": "Regulatory Intelligence",
+      "category": "40 Legal & Regulatory Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "360",
+      "name": "Contract Intelligence",
+      "category": "40 Legal & Regulatory Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "361",
+      "name": "Data Governance Legal",
+      "category": "40 Legal & Regulatory Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "362",
+      "name": "Digital Commerce Legal",
+      "category": "40 Legal & Regulatory Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    },
+    {
+      "id": "363",
+      "name": "Regulatory Change Impact",
+      "category": "40 Legal & Regulatory Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND"
+    }
+  ]
+}

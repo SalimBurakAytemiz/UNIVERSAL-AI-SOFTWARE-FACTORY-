@@ -1,0 +1,1365 @@
+{
+  "//TR": "Bu dosya browser/mobile/API/security/platform/data/game/embedded/build tool entegrasyonlarını adapter olarak register eder; REGISTERED olmak kurulu, sertifikalı veya çalışır olduğu anlamına gelmez.",
+  "schemaVersion": "1.1.0",
+  "count": 194,
+  "adapters": [
+    {
+      "id": "playwright",
+      "category": "BROWSER",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "selenium-webdriver",
+      "category": "BROWSER",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "browserstack",
+      "category": "CLOUD_BROWSER",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "sauce-labs",
+      "category": "CLOUD_BROWSER",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "lambdatest",
+      "category": "CLOUD_BROWSER_DEVICE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "appium",
+      "category": "MOBILE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "adb",
+      "category": "ANDROID",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "uiautomator2",
+      "category": "ANDROID",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "xctest-xcuitest",
+      "category": "IOS",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "firebase-test-lab",
+      "category": "CLOUD_DEVICE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "aws-device-farm",
+      "category": "CLOUD_DEVICE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "kobiton",
+      "category": "CLOUD_DEVICE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "perfecto",
+      "category": "CLOUD_DEVICE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "android-emulator",
+      "category": "ANDROID",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "scrcpy",
+      "category": "ANDROID_CAPTURE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "k6",
+      "category": "PERFORMANCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "jmeter",
+      "category": "PERFORMANCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "locust",
+      "category": "PERFORMANCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "postman-newman",
+      "category": "API",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "mitmproxy",
+      "category": "NETWORK",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "wireshark-tshark",
+      "category": "NETWORK",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "owasp-zap",
+      "category": "SECURITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "semgrep",
+      "category": "SAST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "trivy",
+      "category": "SUPPLY_CHAIN",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "gitleaks",
+      "category": "SECRETS",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "nuclei-authorized",
+      "category": "SECURITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "syft",
+      "category": "SBOM",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "grype",
+      "category": "SCA",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "docker",
+      "category": "CONTAINER",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "kubernetes-kubectl",
+      "category": "KUBERNETES",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "helm",
+      "category": "KUBERNETES",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "opentofu",
+      "category": "IAC",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "aws-cli",
+      "category": "CLOUD",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "azure-cli",
+      "category": "CLOUD",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "gcloud",
+      "category": "CLOUD",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "opentelemetry",
+      "category": "OBSERVABILITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "ffmpeg",
+      "category": "MEDIA",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "renderdoc",
+      "category": "GRAPHICS",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "axe-core",
+      "category": "ACCESSIBILITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "nvda",
+      "category": "ACCESSIBILITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "voiceover",
+      "category": "ACCESSIBILITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "talkback",
+      "category": "ACCESSIBILITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "github",
+      "category": "SCM",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "gitlab",
+      "category": "SCM",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "bitbucket",
+      "category": "SCM",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "azure-devops",
+      "category": "SCM_CI",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "jenkins",
+      "category": "CI",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "jira",
+      "category": "WORK_MANAGEMENT",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "linear",
+      "category": "WORK_MANAGEMENT",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "trello",
+      "category": "WORK_MANAGEMENT",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "youtrack",
+      "category": "WORK_MANAGEMENT",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "slack",
+      "category": "COLLAB",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "microsoft-teams",
+      "category": "COLLAB",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "google-workspace",
+      "category": "COLLAB",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "microsoft-365",
+      "category": "COLLAB",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "figma",
+      "category": "DESIGN",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "storybook",
+      "category": "DESIGN_DEV",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "ollama",
+      "category": "LOCAL_MODEL",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "vllm",
+      "category": "LOCAL_MODEL",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "llama-cpp",
+      "category": "LOCAL_MODEL",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "omniroute",
+      "category": "MODEL_GATEWAY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "unity-cli",
+      "category": "GAME",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "unreal-automation-tool",
+      "category": "GAME",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "godot-cli",
+      "category": "GAME",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "mailhog-test-mailbox",
+      "category": "MESSAGING",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "wiremock",
+      "category": "SERVICE_VIRTUALIZATION",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "toxiproxy",
+      "category": "RESILIENCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "ajv",
+      "category": "API_SCHEMA",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "ajv-formats",
+      "category": "API_SCHEMA",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "spectral",
+      "category": "API_CONTRACT",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "openapi-generator",
+      "category": "API_CONTRACT",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "schemathesis",
+      "category": "API_PROPERTY_TEST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "pact",
+      "category": "CONTRACT_TEST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "rest-assured",
+      "category": "API_TEST_JVM",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "supertest",
+      "category": "API_TEST_NODE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "pytest-httpx",
+      "category": "API_TEST_PYTHON",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "karate",
+      "category": "API_TEST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "cypress",
+      "category": "WEB_TEST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "webdriverio",
+      "category": "WEB_TEST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "lighthouse",
+      "category": "WEB_PERFORMANCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "espresso",
+      "category": "ANDROID_TEST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "compose-ui-test",
+      "category": "ANDROID_TEST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "robolectric",
+      "category": "ANDROID_TEST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "mockk",
+      "category": "ANDROID_TEST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "detekt",
+      "category": "ANDROID_QUALITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "ktlint",
+      "category": "ANDROID_QUALITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "android-lint",
+      "category": "ANDROID_QUALITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "macrobenchmark",
+      "category": "ANDROID_PERFORMANCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "gradle",
+      "category": "BUILD",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "xctest",
+      "category": "IOS_TEST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "xcuitest",
+      "category": "IOS_TEST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "swiftlint",
+      "category": "IOS_QUALITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "swiftformat",
+      "category": "IOS_QUALITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "fastlane",
+      "category": "MOBILE_RELEASE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "xcodebuild",
+      "category": "IOS_BUILD",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "instruments",
+      "category": "IOS_PERFORMANCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "testcontainers",
+      "category": "INTEGRATION_TEST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "gatling",
+      "category": "PERFORMANCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "codeql",
+      "category": "SAST",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "bandit",
+      "category": "SAST_PYTHON",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "dependency-check",
+      "category": "SCA",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "osv-scanner",
+      "category": "SCA",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "cosign",
+      "category": "SIGNING_PROVENANCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "slsa-verifier",
+      "category": "PROVENANCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "prometheus",
+      "category": "OBSERVABILITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "grafana",
+      "category": "OBSERVABILITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "loki",
+      "category": "LOGGING",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "tempo",
+      "category": "TRACING",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "jaeger",
+      "category": "TRACING",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "sentry",
+      "category": "ERROR_TRACKING",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "ansible",
+      "category": "CONFIGURATION",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "packer",
+      "category": "IMAGE_BUILD",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "vault",
+      "category": "SECRET_MANAGEMENT",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "postgresql-psql",
+      "category": "DATABASE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "mysql-cli",
+      "category": "DATABASE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "sqlcmd",
+      "category": "DATABASE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "sqlite3",
+      "category": "DATABASE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "mongodb-tools",
+      "category": "DATABASE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "redis-cli",
+      "category": "CACHE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "opensearch-cli",
+      "category": "SEARCH",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "kafka-cli",
+      "category": "EVENT_STREAM",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "rabbitmq",
+      "category": "MESSAGE_QUEUE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "spark",
+      "category": "DATA_ENGINEERING",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "flink",
+      "category": "DATA_ENGINEERING",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "airflow",
+      "category": "DATA_ORCHESTRATION",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "dbt",
+      "category": "ANALYTICS_ENGINEERING",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "pytorch",
+      "category": "AI_ML",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "tensorflow",
+      "category": "AI_ML",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "huggingface",
+      "category": "AI_ML",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "onnx",
+      "category": "AI_ML",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "platformio",
+      "category": "EMBEDDED",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "esp-idf",
+      "category": "EMBEDDED",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "stm32cubecli",
+      "category": "EMBEDDED",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "zephyr-west",
+      "category": "EMBEDDED",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "openocd",
+      "category": "EMBEDDED_DEBUG",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "sonarqube",
+      "category": "CODE_QUALITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "eslint",
+      "category": "CODE_QUALITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "ruff",
+      "category": "CODE_QUALITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "mypy",
+      "category": "CODE_QUALITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "clippy",
+      "category": "CODE_QUALITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "maestro",
+      "category": "MOBILE_QA",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "detox",
+      "category": "MOBILE_QA",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "maven",
+      "category": "JVM_BUILD",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "dotnet-cli",
+      "category": "DOTNET_BUILD",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "flutter-cli",
+      "category": "FLUTTER_BUILD",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "dart-cli",
+      "category": "DART",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "swift-cli",
+      "category": "SWIFT",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "cargo",
+      "category": "RUST_BUILD",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "go-cli",
+      "category": "GO_BUILD",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "python-cli",
+      "category": "PYTHON",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "php-cli",
+      "category": "PHP",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "composer",
+      "category": "PHP_PACKAGE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "ruby-cli",
+      "category": "RUBY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "bundler",
+      "category": "RUBY_PACKAGE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "grpcurl",
+      "category": "GRPC_QA",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "websocat",
+      "category": "REALTIME_QA",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "kcat",
+      "category": "KAFKA",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "nats-cli",
+      "category": "NATS",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "mosquitto",
+      "category": "MQTT",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "psql",
+      "category": "POSTGRESQL",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "mysql-client",
+      "category": "MYSQL",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "mongosh",
+      "category": "MONGODB",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "pulumi",
+      "category": "IAC",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "argocd",
+      "category": "GITOPS",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "flux-cli",
+      "category": "GITOPS",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "burp-suite",
+      "category": "SECURITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "snyk",
+      "category": "SECURITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "checkov",
+      "category": "IAC_SECURITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "tfsec",
+      "category": "IAC_SECURITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "trufflehog",
+      "category": "SECRET_SCAN",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "slsa-provenance",
+      "category": "PROVENANCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "cyclonedx",
+      "category": "SBOM",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "promtool",
+      "category": "PROMETHEUS",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "grafana-cli",
+      "category": "OBSERVABILITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "otel-collector",
+      "category": "OBSERVABILITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "sentry-cli",
+      "category": "ERROR_TRACKING",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "datadog-cli",
+      "category": "OBSERVABILITY",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "blender-cli",
+      "category": "GAME_ASSET",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "esptool",
+      "category": "EMBEDDED_FLASH",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "west-zephyr",
+      "category": "EMBEDDED",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "ros2-cli",
+      "category": "ROBOTICS",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "adb-logcat",
+      "category": "ANDROID_DIAGNOSTICS",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "simctl",
+      "category": "IOS_SIMULATOR",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "instruments-cli",
+      "category": "IOS_PERFORMANCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "firebase-cli",
+      "category": "FIREBASE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "play-console-adapter",
+      "category": "ANDROID_RELEASE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "app-store-connect-adapter",
+      "category": "IOS_RELEASE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "storycap-visual",
+      "category": "VISUAL_REGRESSION",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "chromatic",
+      "category": "VISUAL_REGRESSION",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "mockserver",
+      "category": "SERVICE_VIRTUALIZATION",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "chaos-mesh",
+      "category": "CHAOS",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "litmuschaos",
+      "category": "CHAOS",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "vegeta",
+      "category": "PERFORMANCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    },
+    {
+      "id": "artillery",
+      "category": "PERFORMANCE",
+      "status": "REGISTERED",
+      "implementation": "NOT_IMPLEMENTED",
+      "requiresCertification": true
+    }
+  ]
+}

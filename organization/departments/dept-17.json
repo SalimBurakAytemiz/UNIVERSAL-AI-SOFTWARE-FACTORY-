@@ -1,0 +1,41 @@
+{
+  "//TR": "Bu dosya 17 Marketing & Growth departmanının head/principal/member yapısını, ortak competency alanlarını ve takım başının hangi teknik breadth'i gözetmesi gerektiğini tanımlar.",
+  "schemaVersion": "2.0.0",
+  "departmentId": "DEPT-17",
+  "name": "17 Marketing & Growth",
+  "headAgentId": "179",
+  "principalReviewerAgentIds": [
+    "179"
+  ],
+  "memberAgentIds": [
+    "179",
+    "180",
+    "181",
+    "182",
+    "183",
+    "184",
+    "185"
+  ],
+  "competencyCoverage": [
+    "MARKETING",
+    "ANALYTICS",
+    "COMMUNICATION",
+    "PERFORMANCE",
+    "OBSERVABILITY",
+    "AI_ML",
+    "MODEL_OPS",
+    "DATA",
+    "DATABASE"
+  ],
+  "primaryTechnologyCoverage": [],
+  "comparativeTechnologyCoverage": [],
+  "headResponsibilities": [
+    "mission workload and specialist assignment",
+    "technical quality aggregation",
+    "cross-specialist conflict resolution",
+    "unknown/gap escalation",
+    "evidence-based department signoff",
+    "briefing compression to council/founder"
+  ],
+  "truthRule": "DEPARTMENT_HEAD_SIGNOFF_DOES_NOT_REPLACE_INDEPENDENT_EVIDENCE_OR_REVIEW"
+}

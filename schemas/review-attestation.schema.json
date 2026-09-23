@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "//TR: CLEAN attestation exact commits/contracts/bundle/validation/raw+effective governance digests/provider provenance/signature alanlarını zorunlu tutar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runId",
+    "packageId",
+    "phaseIds",
+    "reviewedCommit",
+    "baseCommit",
+    "milestoneDigest",
+    "reviewBundleDigest",
+    "validationDigest",
+    "rawReviewDigest",
+    "effectiveReviewDigest",
+    "governedFindingsDigest",
+    "blockerLedgerDigest",
+    "reviewerProvenance",
+    "result",
+    "createdAt",
+    "signature"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "2.0.0"
+    },
+    "runId": {
+      "type": "string"
+    },
+    "packageId": {
+      "type": "string"
+    },
+    "phaseIds": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "integer"
+      }
+    },
+    "reviewedCommit": {
+      "type": "string"
+    },
+    "baseCommit": {
+      "type": "string"
+    },
+    "milestoneDigest": {
+      "type": "string"
+    },
+    "reviewBundleDigest": {
+      "type": "string"
+    },
+    "validationDigest": {
+      "type": "string"
+    },
+    "rawReviewDigest": {
+      "type": "string"
+    },
+    "effectiveReviewDigest": {
+      "type": "string"
+    },
+    "governedFindingsDigest": {
+      "type": "string"
+    },
+    "blockerLedgerDigest": {
+      "type": "string"
+    },
+    "reviewerProvenance": {
+      "type": "object"
+    },
+    "result": {
+      "const": "CLEAN"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 20
+    }
+  }
+}

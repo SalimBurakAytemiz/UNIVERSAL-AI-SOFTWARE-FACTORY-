@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/run-manifest.schema.json",
+  "$comment": "//TR: Bu schema bir autonomous run'ın repo/base/phase/milestone/tool provenance ve artifact/evidence bağlantılarını merkezi manifestte tutar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifacts",
+    "baseCommit",
+    "milestoneId",
+    "phase",
+    "repoRoot",
+    "runId",
+    "schemaVersion",
+    "startedAt",
+    "status"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^RUN-"
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finishedAt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "repoRoot": {
+      "type": "string"
+    },
+    "baseCommit": {
+      "type": "string"
+    },
+    "phase": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "milestoneId": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "builder": {
+      "type": "object"
+    },
+    "reviewer": {
+      "type": "object"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "summary": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  }
+}

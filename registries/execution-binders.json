@@ -1,0 +1,87 @@
+{
+  "//TR": "Bu dosya browser/device/VM/cloud/tool gibi execution fabric'leri ortak resource, scheduler, evidence, adapter ve recovery altyapısıyla birbirine bağlayan sistemleri register eder.",
+  "schemaVersion": "1.0.0",
+  "count": 16,
+  "binders": [
+    {
+      "id": "UASCO-BINDER-001",
+      "name": "Universal Resource Registry",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-002",
+      "name": "Resource Scheduler & Lease System",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-003",
+      "name": "Capability-to-Tool Resolver",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-004",
+      "name": "Tool Installer & Version Manager",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-005",
+      "name": "Lab Health Center",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-006",
+      "name": "Test Credential & Fixture Broker",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-007",
+      "name": "Capture & Evidence Bus",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-008",
+      "name": "HTML & Customer Report Engine",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-009",
+      "name": "Tool & Provider Adapter SDK",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-010",
+      "name": "Compatibility Matrix Planner",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-011",
+      "name": "Test Selection & Impact Engine",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-012",
+      "name": "Automation Recovery & Quarantine",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-013",
+      "name": "Human-Required Interaction Boundary",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-014",
+      "name": "Universal Secret & Credential Broker",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-015",
+      "name": "Environment Reservation & Cleanup Manager",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-BINDER-016",
+      "name": "Source/Artifact Provenance Registry",
+      "implementation": "NOT_IMPLEMENTED"
+    }
+  ]
+}

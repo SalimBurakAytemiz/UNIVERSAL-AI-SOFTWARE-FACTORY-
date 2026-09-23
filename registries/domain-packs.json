@@ -1,0 +1,205 @@
+{
+  "//TR": "Bu dosya sektör bilgisini core runtime'a gömmek yerine gerektiğinde aktive edilen domain pack'ler olarak register eder; compliance/certification iddiaları kanıt olmadan verilmez.",
+  "schemaVersion": "2.0.0",
+  "count": 22,
+  "domains": [
+    {
+      "id": "domain-saas-enterprise",
+      "name": "SaaS & Enterprise",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-saas-enterprise.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-commerce-marketplace",
+      "name": "Commerce & Marketplace",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-commerce-marketplace.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-fintech-banking",
+      "name": "FinTech & Banking",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-fintech-banking.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-capital-markets",
+      "name": "Capital Markets",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-capital-markets.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-insurance",
+      "name": "Insurance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-insurance.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-aviation-aerospace",
+      "name": "Aviation & Aerospace",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-aviation-aerospace.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-automotive",
+      "name": "Automotive",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-automotive.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-healthcare-medical-software",
+      "name": "Healthcare & Medical Software",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-healthcare-medical-software.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-telecom",
+      "name": "Telecom",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-telecom.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-public-sector",
+      "name": "Public Sector",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-public-sector.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-streaming-media",
+      "name": "Streaming & Media",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-streaming-media.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-industrial-manufacturing",
+      "name": "Industrial & Manufacturing",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-industrial-manufacturing.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-iot-embedded",
+      "name": "IoT & Embedded",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-iot-embedded.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-gaming-mmorpg",
+      "name": "Gaming & MMORPG",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-gaming-mmorpg.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-blockchain-web3",
+      "name": "Blockchain & Web3",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-blockchain-web3.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-education",
+      "name": "Education",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-education.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-logistics-supply-chain",
+      "name": "Logistics & Supply Chain",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-logistics-supply-chain.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-energy-utilities",
+      "name": "Energy & Utilities",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-energy-utilities.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-travel-hospitality",
+      "name": "Travel & Hospitality",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-travel-hospitality.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-proptech-real-estate",
+      "name": "PropTech & Real Estate",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-proptech-real-estate.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-legaltech",
+      "name": "LegalTech",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-legaltech.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    },
+    {
+      "id": "domain-hrtech-workforce",
+      "name": "HRTech & Workforce",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "profilePath": "domain-packs/domain-hrtech-workforce.json",
+      "knowledgeState": "SEED_DOMAIN_PROFILE",
+      "freshnessPolicy": "MISSION_TIME_REVALIDATION_REQUIRED"
+    }
+  ]
+}

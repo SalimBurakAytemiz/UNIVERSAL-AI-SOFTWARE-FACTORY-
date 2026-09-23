@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/review-bundle.schema.json",
+  "$comment": "//TR: Bu schema frozen Codex review bundle kimliği, scope, basis ve validation/diff evidence catalog alanlarını strict doğrular.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "baseCommit",
+    "bundleDigest",
+    "changedFiles",
+    "cycle",
+    "diffStat",
+    "knownLimitations",
+    "milestoneContract",
+    "phase",
+    "previousFindingLedger",
+    "reviewRules",
+    "reviewedCommit",
+    "runId",
+    "schemaVersion",
+    "unsupportedCases",
+    "validation",
+    "reviewBasis",
+    "changeGuard",
+    "phaseIds",
+    "acceptedDebt",
+    "waivers",
+    "evidenceCatalog"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.3.0"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^RUN-"
+    },
+    "cycle": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3
+    },
+    "phase": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "baseCommit": {
+      "type": "string",
+      "minLength": 7
+    },
+    "reviewedCommit": {
+      "type": "string",
+      "minLength": 7
+    },
+    "milestoneContract": {
+      "type": "object"
+    },
+    "changedFiles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "diffStat": {
+      "type": "string"
+    },
+    "validation": {
+      "type": "object"
+    },
+    "knownLimitations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "unsupportedCases": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "previousFindingLedger": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "reviewRules": {
+      "type": "object"
+    },
+    "bundleDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "reviewBasis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirements",
+        "invariants",
+        "acceptanceCriteria",
+        "mandatoryValidation",
+        "risk",
+        "mandatoryFailureCases",
+        "requiredArtifacts"
+      ],
+      "properties": {
+        "requirements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "text"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 2
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "invariants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "text"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 2
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "acceptanceCriteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "text"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 2
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "mandatoryValidation": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "text"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 2
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "risk": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "text"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 2
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "mandatoryFailureCases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "text"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 2
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "requiredArtifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "text"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 2
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "changeGuard": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "phaseIds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "acceptedDebt": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "waivers": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "evidenceCatalog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "id",
+          "kind"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 3
+          }
+        }
+      }
+    }
+  }
+}

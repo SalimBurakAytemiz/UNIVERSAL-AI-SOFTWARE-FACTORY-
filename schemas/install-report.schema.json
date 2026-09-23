@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/install-report.schema.json",
+  "$comment": "//TR: Bu schema one-click installer alt rapor correlation özetinin kimlik, component status ve Phase0 final alanlarını doğrular.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "installId",
+    "components",
+    "phase0Final",
+    "digest"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "installId": {
+      "type": "string",
+      "pattern": "^INSTALL-"
+    },
+    "components": {
+      "type": "object",
+      "minProperties": 5,
+      "additionalProperties": {
+        "type": "object"
+      }
+    },
+    "phase0Final": {
+      "enum": [
+        "CLEAN",
+        "CLEAN_LOCAL_ONLY",
+        "BLOCKED",
+        "PENDING"
+      ]
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

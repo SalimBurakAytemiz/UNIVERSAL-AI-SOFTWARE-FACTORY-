@@ -1,0 +1,18 @@
+{
+  "//TR": "Bu protected policy supervisor/model/git external side-effectlerini Action Broker üzerinden sınıflandırır; model egress, merge ve remote push açık policy olmadan gerçekleşmez.",
+  "schemaVersion": "1.0.0",
+  "defaultDeny": true,
+  "allowedSelfBuildActions": [
+    "MODEL_EGRESS_APPROVED_PROVIDER",
+    "LOCAL_GIT_COMMIT",
+    "LOCAL_FAST_FORWARD_MERGE"
+  ],
+  "remotePushRequires": [
+    "review-clean",
+    "remote-policy-allowed",
+    "remote-protection-or-explicit-local-only"
+  ],
+  "productionActionsAllowed": false,
+  "spendAllowed": false,
+  "risk5Allowed": false
+}

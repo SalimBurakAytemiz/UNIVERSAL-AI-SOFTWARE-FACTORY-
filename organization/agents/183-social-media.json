@@ -1,0 +1,101 @@
+{
+  "//TR": "Bu dosya 183 Social Media rolünün canonical V2 teknik/iş genome'unu; skill, technology, competency, karar sınırı, review zinciri ve unknown-technology davranışıyla tanımlar.",
+  "schemaVersion": "2.0.0",
+  "agentId": "183",
+  "name": "Social Media",
+  "category": "17 Marketing & Growth",
+  "status": "REGISTERED",
+  "activation": "ON_DEMAND",
+  "roleLevel": "IMPLEMENTATION",
+  "technicalAgent": false,
+  "competency": {
+    "primary": [
+      "MARKETING",
+      "ANALYTICS",
+      "COMMUNICATION"
+    ],
+    "secondary": [],
+    "adjacentAwareness": [],
+    "missionActivated": []
+  },
+  "skills": {
+    "ontologyVersion": "2.0.0",
+    "required": [
+      "SK2-BUSINESS_MODEL_ANALYSIS",
+      "SK2-MARKET_ANALYSIS",
+      "SK2-PRICING_ANALYSIS",
+      "SK2-UNIT_ECONOMICS",
+      "SK2-CUSTOMER_SEGMENTATION",
+      "SK2-SLA_DESIGN",
+      "SK2-PROPOSAL_SCOPING",
+      "SK2-CONTRACT_SCOPE_ANALYSIS",
+      "SK2-PORTFOLIO_PRIORITIZATION",
+      "SK2-BUDGET_GOVERNANCE",
+      "SK2-PROFITABILITY_ANALYSIS",
+      "SK2-CUSTOMER_ONBOARDING",
+      "SK2-EXECUTIVE_BRIEFING",
+      "SK2-TECHNICAL_BRIEFING",
+      "SK2-CUSTOMER_COMMUNICATION",
+      "SK2-LOCALIZATION_COMMUNICATION",
+      "SK2-TERMINOLOGY_MANAGEMENT",
+      "SK2-TRANSLATION_QA",
+      "SK2-MEETING_SYNTHESIS",
+      "SK2-ACTION_ITEM_EXTRACTION",
+      "SK2-INCIDENT_COMMUNICATION",
+      "SK2-RELATIONAL_DATA_MODELING",
+      "SK2-NOSQL_DATA_MODELING",
+      "SK2-SCHEMA_EVOLUTION",
+      "SK2-INDEX_DESIGN",
+      "SK2-QUERY_PLAN_ANALYSIS",
+      "SK2-TRANSACTION_ISOLATION_ANALYSIS",
+      "SK2-LOCK_DEADLOCK_DIAGNOSIS",
+      "SK2-PARTITION_SHARDING_DESIGN",
+      "SK2-REPLICATION_FAILOVER_DESIGN",
+      "SK2-CDC_DESIGN",
+      "SK2-BACKUP_RESTORE_DESIGN",
+      "SK2-DATA_RECONCILIATION"
+    ],
+    "certificationRule": "REGISTERED_SKILL_MUST_BE_EVALUATED_AND_CERTIFIED_BEFORE_HIGH_RISK_AUTONOMOUS_USE"
+  },
+  "technology": {
+    "ontologyVersion": "2.0.0",
+    "primaryMastery": [],
+    "comparativeDecision": [],
+    "depthAssignmentsRef": "registries/technology-agent-depth.json",
+    "unknownTechnologyProtocol": "DYNAMIC_TECHNOLOGY_DISCOVERY_REQUIRED",
+    "technologyAgnostic": false,
+    "technologyAgnosticReason": null
+  },
+  "engineeringFoundationIds": [],
+  "decisionBoundary": {
+    "mayPropose": true,
+    "mayExecute": "WITHIN_MISSION_POLICY_AND_CERTIFIED_COMPETENCY",
+    "mustEscalate": [
+      "OUT_OF_COMPETENCY",
+      "RISK_5",
+      "DESTRUCTIVE_PRODUCTION",
+      "IRREVERSIBLE_CHANGE",
+      "CRITICAL_SPEND",
+      "LEGAL_FINANCIAL_AUTHORITY"
+    ]
+  },
+  "review": {
+    "technicalLeadAgentId": "179",
+    "principalReviewerAgentIds": [
+      "179"
+    ],
+    "departmentHeadAgentId": "179",
+    "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+    "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+    "selfApprovalForbidden": true
+  },
+  "evidenceRequired": true,
+  "truthRules": [
+    "REGISTERED != KNOWN",
+    "KNOWN != SKILLED",
+    "SKILLED != CERTIFIED",
+    "CERTIFIED != CURRENT",
+    "CURRENT != AUTHORIZED",
+    "AUTHORIZED != VERIFIED"
+  ]
+}

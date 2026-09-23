@@ -1,0 +1,127 @@
+{
+  "//TR": "Bu dosya scheduler'ın yönetebileceği browser, telefon, VM, cloud, GPU, game server, test identity ve benzeri execution resource türlerini tanımlar.",
+  "schemaVersion": "1.0.0",
+  "count": 30,
+  "resourceKinds": [
+    {
+      "id": "LOCAL_BROWSER",
+      "leaseable": true
+    },
+    {
+      "id": "REMOTE_BROWSER",
+      "leaseable": true
+    },
+    {
+      "id": "CLOUD_BROWSER",
+      "leaseable": true
+    },
+    {
+      "id": "LOCAL_ANDROID_DEVICE",
+      "leaseable": true
+    },
+    {
+      "id": "REMOTE_ANDROID_DEVICE",
+      "leaseable": true
+    },
+    {
+      "id": "ANDROID_EMULATOR",
+      "leaseable": true
+    },
+    {
+      "id": "LOCAL_IOS_DEVICE",
+      "leaseable": true
+    },
+    {
+      "id": "REMOTE_IOS_DEVICE",
+      "leaseable": true
+    },
+    {
+      "id": "IOS_SIMULATOR",
+      "leaseable": true
+    },
+    {
+      "id": "WINDOWS_WORKER",
+      "leaseable": true
+    },
+    {
+      "id": "LINUX_WORKER",
+      "leaseable": true
+    },
+    {
+      "id": "MACOS_WORKER",
+      "leaseable": true
+    },
+    {
+      "id": "CONTAINER",
+      "leaseable": true
+    },
+    {
+      "id": "VIRTUAL_MACHINE",
+      "leaseable": true
+    },
+    {
+      "id": "KUBERNETES_CLUSTER",
+      "leaseable": true
+    },
+    {
+      "id": "CLOUD_ACCOUNT",
+      "leaseable": true
+    },
+    {
+      "id": "GPU_WORKER",
+      "leaseable": true
+    },
+    {
+      "id": "HIGH_MEMORY_WORKER",
+      "leaseable": true
+    },
+    {
+      "id": "GAME_CLIENT_WORKER",
+      "leaseable": true
+    },
+    {
+      "id": "GAME_SERVER_WORKER",
+      "leaseable": true
+    },
+    {
+      "id": "HIL_DEVICE",
+      "leaseable": true
+    },
+    {
+      "id": "IOT_DEVICE",
+      "leaseable": true
+    },
+    {
+      "id": "XR_DEVICE",
+      "leaseable": true
+    },
+    {
+      "id": "TEST_DATABASE",
+      "leaseable": true
+    },
+    {
+      "id": "TEST_IDENTITY_PROVIDER",
+      "leaseable": true
+    },
+    {
+      "id": "TEST_MAILBOX",
+      "leaseable": true
+    },
+    {
+      "id": "TEST_SMS_SINK",
+      "leaseable": true
+    },
+    {
+      "id": "PAYMENT_SANDBOX",
+      "leaseable": true
+    },
+    {
+      "id": "OBJECT_STORAGE",
+      "leaseable": true
+    },
+    {
+      "id": "NETWORK_LAB",
+      "leaseable": true
+    }
+  ]
+}

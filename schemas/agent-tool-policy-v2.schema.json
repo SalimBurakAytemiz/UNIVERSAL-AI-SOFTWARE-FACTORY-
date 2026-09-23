@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "//TR: Agent tool erişiminin deny-by-default, category/adapters ve activation gates ile sınırlandırılmasını doğrular.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "activationRequires",
+    "agentId",
+    "allowedToolCategories",
+    "candidateToolAdapterIds",
+    "mode",
+    "productionMutation"
+  ],
+  "properties": {
+    "agentId": {
+      "type": "string",
+      "pattern": "^\\d{3}$"
+    },
+    "mode": {
+      "const": "DENY_BY_DEFAULT"
+    },
+    "allowedToolCategories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "candidateToolAdapterIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "activationRequires": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "productionMutation": {
+      "const": "ACTION_GATEWAY_REQUIRED"
+    }
+  }
+}

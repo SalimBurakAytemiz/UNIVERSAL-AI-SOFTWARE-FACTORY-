@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/run-event.schema.json",
+  "$comment": "//TR: Bu schema bütün bootstrap/build/validation/review/git/scheduler olaylarını tek runId zincirinde structured log olarak kaydetmek için minimum event contract'ını tanımlar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event",
+    "runId",
+    "schemaVersion",
+    "sequence",
+    "severity",
+    "stage",
+    "timestamp"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^RUN-"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "phase": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "milestoneId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "stage": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event": {
+      "type": "string",
+      "minLength": 1
+    },
+    "severity": {
+      "enum": [
+        "DEBUG",
+        "INFO",
+        "WARN",
+        "ERROR",
+        "CRITICAL"
+      ]
+    },
+    "durationMs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "exitCode": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "details": {
+      "type": "object"
+    },
+    "artifactRefs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

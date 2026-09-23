@@ -1,0 +1,117 @@
+{
+  "//TR": "Bu dosya Roadmap Phase 17 — Cross-functional councils için giriş koşulları, teslimatlar, test/evidence ve bağımsız review kapanışını machine-readable olarak tanımlar.",
+  "schemaVersion": "3.0.0",
+  "phase": 17,
+  "title": "Cross-functional councils",
+  "domain": "ORGANIZATION_COMPETENCY",
+  "state": "PLANNED",
+  "entryCriteria": [
+    "previous-required-phase-contracts-closed-or-explicitly-waived",
+    "requirements-and-invariants-loaded",
+    "affected-customer-data-security-cost-policies-resolved",
+    "required-skills-tools-resources-health-checked",
+    "Phase dependency closure verified for: 9, 16",
+    "Frozen milestone/package contract generated for Phase 17"
+  ],
+  "requiredDeliverables": [
+    "Executable or explicitly justified non-runtime implementation for Phase 17: Cross-functional councils",
+    "Tests that exercise declared success and failure paths for Phase 17",
+    "Phase-specific artifacts: journey evidence, phase-017-review-attestation.json",
+    "Documentation and registry/schema updates required by the implementation",
+    "Control Tower visibility when the phase creates founder-visible operational state",
+    "Atomic checkpoint/evidence linkage for Phase 17"
+  ],
+  "requiredValidation": [
+    "Phase 17 targeted success-path validation",
+    "Phase 17 mandatory failure-case validation: state edge, offline/error",
+    "Type/lint/build checks applicable to changed languages/toolchains",
+    "Schema/registry/TR canonical validation",
+    "Secret/security/trust-root/change-scope gates",
+    "Regression selection for directly impacted dependencies",
+    "Acceptance assertions: Phase 17 objective `Cross-functional councils` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Cross-functional councils` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+  ],
+  "evidence": [
+    "reviewed commit SHA",
+    "run ID",
+    "exact tool/runtime versions",
+    "environment/resource identity",
+    "test/validation results",
+    "artifact digests",
+    "unknown/not-tested surfaces",
+    "Phase-specific artifact evidence: journey evidence, phase-017-review-attestation.json",
+    "Phase 17 review attestation or package-bound attestation"
+  ],
+  "review": [
+    "technical lead or principal review",
+    "independent Codex package review at the coherent review boundary"
+  ],
+  "exitCriteria": [
+    "No unresolved admissible blocker in the frozen review scope",
+    "Phase 17 runtime/non-runtime deliverable is proven by evidence rather than registry/file existence alone",
+    "Mandatory failure cases are exercised or explicitly environment-blocked: state edge, offline/error",
+    "Required artifacts exist and are evidence-linked: journey evidence, phase-017-review-attestation.json",
+    "Dependency phases are closed and consistent: 9, 16",
+    "State/checkpoint is durable and crash-resume safe where applicable",
+    "Independent review result is valid, commit-bound and not stale"
+  ],
+  "rollbackOrRecovery": "REQUIRED_FOR_STATEFUL_OR_EXTERNAL_SIDE_EFFECT_CHANGES",
+  "prohibited": [
+    "FOLDER_THEATRE",
+    "FAKE_PASS",
+    "SELF_CERTIFICATION",
+    "SILENT_SCOPE_REDUCTION"
+  ],
+  "dependsOn": [
+    9,
+    16
+  ],
+  "objective": "Implement, integrate and prove Roadmap Phase 17: Cross-functional councils.",
+  "requirements": [
+    "Phase 17 `Cross-functional councils` capability must be represented by real runtime or an explicitly justified non-runtime artifact.",
+    "All applicable Architecture Constitution, customer/data/authority and evidence invariants remain enforced.",
+    "Unknown/unverified/environment-blocked surfaces stay explicit."
+  ],
+  "invariants": [
+    "NO_FAKE_SUCCESS",
+    "NO_WEAKENED_CONTROLS",
+    "NO_SILENT_SCOPE_EXPANSION",
+    "NO_SELF_CERTIFICATION",
+    "EVIDENCE_REQUIRED"
+  ],
+  "phaseSpecificAcceptance": [
+    "Phase 17 objective `Cross-functional councils` is implemented as executable/runtime behavior where applicable, not only as files or registry rows.",
+    "Tests and evidence directly exercise the `Cross-functional councils` behavior and its declared failure paths.",
+    "No required acceptance item remains UNKNOWN without explicit environment gap or known limitation.",
+    "Critical user journeys/state transitions/negative paths are mapped to requirements and evidence."
+  ],
+  "mandatoryFailureCases": [
+    "state edge",
+    "offline/error"
+  ],
+  "requiredArtifacts": [
+    "journey evidence",
+    "phase-017-review-attestation.json"
+  ],
+  "allowedPathPrefixes": [
+    "core/competency/",
+    "organization/",
+    "evaluations/",
+    "knowledge/",
+    "tests/",
+    "docs/",
+    "registries/",
+    "schemas/",
+    "standards/",
+    "playbooks/"
+  ],
+  "reviewProfile": "STANDARD",
+  "riskLevel": 2,
+  "allowPaidApi": false,
+  "allowProduction": false,
+  "allowRisk5": false,
+  "unsupportedCases": [],
+  "maxFilesChanged": 120,
+  "allowExistingTestAssertionReduction": false,
+  "requiresFrozenMilestoneContract": true,
+  "allowDependencyChanges": false
+}

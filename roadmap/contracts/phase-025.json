@@ -1,0 +1,122 @@
+{
+  "//TR": "Bu dosya Roadmap Phase 25 — Portfolio scheduler/SLA/budget priority için giriş koşulları, teslimatlar, test/evidence ve bağımsız review kapanışını machine-readable olarak tanımlar.",
+  "schemaVersion": "3.0.0",
+  "phase": 25,
+  "title": "Portfolio scheduler/SLA/budget priority",
+  "domain": "MISSION_INTELLIGENCE_AI",
+  "state": "PLANNED",
+  "entryCriteria": [
+    "previous-required-phase-contracts-closed-or-explicitly-waived",
+    "requirements-and-invariants-loaded",
+    "affected-customer-data-security-cost-policies-resolved",
+    "required-skills-tools-resources-health-checked",
+    "Phase dependency closure verified for: 7, 8, 19",
+    "Frozen milestone/package contract generated for Phase 25"
+  ],
+  "requiredDeliverables": [
+    "Executable or explicitly justified non-runtime implementation for Phase 25: Portfolio scheduler/SLA/budget priority",
+    "Tests that exercise declared success and failure paths for Phase 25",
+    "Phase-specific artifacts: scheduler decision log, lease ledger",
+    "Documentation and registry/schema updates required by the implementation",
+    "Control Tower visibility when the phase creates founder-visible operational state",
+    "Atomic checkpoint/evidence linkage for Phase 25"
+  ],
+  "requiredValidation": [
+    "Phase 25 targeted success-path validation",
+    "Phase 25 mandatory failure-case validation: dependency not complete, quota exhaustion, starvation, double lease, orphan lease",
+    "Type/lint/build checks applicable to changed languages/toolchains",
+    "Schema/registry/TR canonical validation",
+    "Secret/security/trust-root/change-scope gates",
+    "Regression selection for directly impacted dependencies",
+    "Acceptance assertions: Phase 25 objective `Portfolio scheduler/SLA/budget priority` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Portfolio scheduler/SLA/budget priority` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+  ],
+  "evidence": [
+    "reviewed commit SHA",
+    "run ID",
+    "exact tool/runtime versions",
+    "environment/resource identity",
+    "test/validation results",
+    "artifact digests",
+    "unknown/not-tested surfaces",
+    "Phase-specific artifact evidence: scheduler decision log, lease ledger",
+    "Phase 25 review attestation or package-bound attestation"
+  ],
+  "review": [
+    "technical lead or principal review",
+    "independent Codex package review at the coherent review boundary"
+  ],
+  "exitCriteria": [
+    "No unresolved admissible blocker in the frozen review scope",
+    "Phase 25 runtime/non-runtime deliverable is proven by evidence rather than registry/file existence alone",
+    "Mandatory failure cases are exercised or explicitly environment-blocked: dependency not complete, quota exhaustion, starvation, double lease, orphan lease",
+    "Required artifacts exist and are evidence-linked: scheduler decision log, lease ledger",
+    "Dependency phases are closed and consistent: 7, 8, 19",
+    "State/checkpoint is durable and crash-resume safe where applicable",
+    "Independent review result is valid, commit-bound and not stale"
+  ],
+  "rollbackOrRecovery": "REQUIRED_FOR_STATEFUL_OR_EXTERNAL_SIDE_EFFECT_CHANGES",
+  "prohibited": [
+    "FOLDER_THEATRE",
+    "FAKE_PASS",
+    "SELF_CERTIFICATION",
+    "SILENT_SCOPE_REDUCTION"
+  ],
+  "dependsOn": [
+    7,
+    8,
+    19
+  ],
+  "objective": "Implement, integrate and prove Roadmap Phase 25: Portfolio scheduler/SLA/budget priority.",
+  "requirements": [
+    "Phase 25 `Portfolio scheduler/SLA/budget priority` capability must be represented by real runtime or an explicitly justified non-runtime artifact.",
+    "All applicable Architecture Constitution, customer/data/authority and evidence invariants remain enforced.",
+    "Unknown/unverified/environment-blocked surfaces stay explicit."
+  ],
+  "invariants": [
+    "NO_FAKE_SUCCESS",
+    "NO_WEAKENED_CONTROLS",
+    "NO_SILENT_SCOPE_EXPANSION",
+    "NO_SELF_CERTIFICATION",
+    "EVIDENCE_REQUIRED"
+  ],
+  "phaseSpecificAcceptance": [
+    "Phase 25 objective `Portfolio scheduler/SLA/budget priority` is implemented as executable/runtime behavior where applicable, not only as files or registry rows.",
+    "Tests and evidence directly exercise the `Portfolio scheduler/SLA/budget priority` behavior and its declared failure paths.",
+    "No required acceptance item remains UNKNOWN without explicit environment gap or known limitation.",
+    "Runnable work respects dependency/SLA/priority/quota/resource constraints and avoids starvation.",
+    "Exclusive resources cannot double-lease; stale leases recover and unhealthy resources quarantine."
+  ],
+  "mandatoryFailureCases": [
+    "dependency not complete",
+    "quota exhaustion",
+    "starvation",
+    "double lease",
+    "orphan lease"
+  ],
+  "requiredArtifacts": [
+    "scheduler decision log",
+    "lease ledger"
+  ],
+  "allowedPathPrefixes": [
+    "core/",
+    "models/",
+    "tests/",
+    "docs/",
+    "registries/",
+    "schemas/",
+    "knowledge/",
+    "evaluations/",
+    "package.json",
+    "package-lock.json"
+  ],
+  "reviewProfile": "STANDARD",
+  "riskLevel": 2,
+  "allowPaidApi": false,
+  "allowProduction": false,
+  "allowRisk5": false,
+  "unsupportedCases": [],
+  "maxFilesChanged": 120,
+  "allowExistingTestAssertionReduction": false,
+  "requiresFrozenMilestoneContract": true,
+  "allowDependencyChanges": true
+}

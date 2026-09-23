@@ -1,0 +1,57 @@
+{
+  "//TR": "Bu protected policy package.json lifecycle/script/workspace/override alanlarının normal milestone tarafından validation veya install side-effect bypassı için değiştirilmesini engeller.",
+  "schemaVersion": "1.1.0",
+  "normalMilestoneMayChangeScripts": false,
+  "protectedFields": [
+    "scripts",
+    "engines",
+    "packageManager",
+    "workspaces",
+    "overrides",
+    "resolutions",
+    "publishConfig",
+    "os",
+    "cpu",
+    "peerDependenciesMeta",
+    "bundledDependencies",
+    "bundleDependencies"
+  ],
+  "dangerousLifecycleScripts": [
+    "preinstall",
+    "install",
+    "postinstall",
+    "prepare",
+    "prepack",
+    "prepublish",
+    "prepublishOnly",
+    "pretest",
+    "posttest",
+    "pretypecheck",
+    "posttypecheck",
+    "prevalidate",
+    "postvalidate"
+  ],
+  "dependencyFields": [
+    "dependencies",
+    "devDependencies",
+    "optionalDependencies",
+    "peerDependencies"
+  ],
+  "requireExactDirectVersions": true,
+  "forbidDependencyProtocols": [
+    "git+",
+    "git:",
+    "http:",
+    "https:",
+    "file:",
+    "link:",
+    "workspace:*"
+  ],
+  "dependencyChangesRequireExplicitMilestone": true,
+  "dependencySections": [
+    "dependencies",
+    "devDependencies",
+    "optionalDependencies",
+    "peerDependencies"
+  ]
+}

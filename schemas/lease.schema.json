@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/lease.schema.json",
+  "$comment": "//TR: Bu schema lease primitive/contract kaydının canonical minimum yapısını doğrulamak için final architecture closure kapsamında oluşturulmuştur.",
+  "title": "lease",
+  "type": "object",
+  "required": [
+    "acquiredAt",
+    "capabilities",
+    "certificationState",
+    "createdAt",
+    "expiresAt",
+    "id",
+    "missionId",
+    "name",
+    "resourceId",
+    "schemaVersion",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "name": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "certificationState": {
+      "type": "string"
+    },
+    "resourceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "missionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "acquiredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/review.schema.json",
+  "$comment": "//TR: Bu schema canonical independent review result'i strict commit/bundle provenance ve blocker/advisory ayrımıyla tanımlar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runId",
+    "cycle",
+    "baseCommit",
+    "reviewedCommit",
+    "reviewBundleDigest",
+    "result",
+    "reviewer",
+    "findings",
+    "advisories",
+    "environmentGaps",
+    "summary",
+    "startedAt",
+    "finishedAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^RUN-"
+    },
+    "cycle": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3
+    },
+    "baseCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,64}$"
+    },
+    "reviewedCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,64}$"
+    },
+    "reviewBundleDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "result": {
+      "enum": [
+        "CLEAN",
+        "BLOCKED",
+        "ENVIRONMENT_BLOCKED",
+        "REVIEW_INPUT_INVALID",
+        "INDEPENDENCE_INSUFFICIENT",
+        "FOUNDER_DECISION_REQUIRED"
+      ]
+    },
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "tool",
+        "modelId",
+        "independenceStatus"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toolVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "independenceStatus": {
+          "enum": [
+            "SUFFICIENT",
+            "PROVIDER_SEPARATED_MODEL_UNKNOWN",
+            "INSUFFICIENT",
+            "UNKNOWN"
+          ]
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "review-finding.schema.json"
+      }
+    },
+    "advisories": {
+      "type": "array",
+      "items": {
+        "$ref": "review-finding.schema.json"
+      }
+    },
+    "environmentGaps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finishedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "CLEAN"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "findings": {
+            "maxItems": 0
+          },
+          "environmentGaps": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "BLOCKED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "findings": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "ENVIRONMENT_BLOCKED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "environmentGaps": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

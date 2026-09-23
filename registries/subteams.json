@@ -1,0 +1,240 @@
+{
+  "//TR": "Bu dosya özellikle QA/Security/Mobile/Architecture/Platform/AI gibi geniş departmanları gerçek lead review zincirlerine böler.",
+  "schemaVersion": "1.0.0",
+  "count": 18,
+  "subteams": [
+    {
+      "id": "QA-STRATEGY",
+      "department": "DEPT-10",
+      "leadAgentId": "067",
+      "members": [
+        "067",
+        "068",
+        "069",
+        "070",
+        "071",
+        "072",
+        "073",
+        "074",
+        "129"
+      ]
+    },
+    {
+      "id": "QA-UX-VISUAL-A11Y",
+      "department": "DEPT-10",
+      "leadAgentId": "078",
+      "members": [
+        "078",
+        "079",
+        "080",
+        "081",
+        "082",
+        "083",
+        "084",
+        "085",
+        "086",
+        "087"
+      ]
+    },
+    {
+      "id": "QA-WEB-MOBILE",
+      "department": "DEPT-10",
+      "leadAgentId": "088",
+      "members": [
+        "088",
+        "089",
+        "090",
+        "091",
+        "092",
+        "093",
+        "094"
+      ]
+    },
+    {
+      "id": "QA-API-BACKEND-DATA",
+      "department": "DEPT-10",
+      "leadAgentId": "096",
+      "members": [
+        "095",
+        "096",
+        "097",
+        "098",
+        "099",
+        "100",
+        "103",
+        "104",
+        "105"
+      ]
+    },
+    {
+      "id": "QA-SEC-PERF-RESILIENCE",
+      "department": "DEPT-10",
+      "leadAgentId": "108",
+      "members": [
+        "106",
+        "107",
+        "108",
+        "109",
+        "110",
+        "111"
+      ]
+    },
+    {
+      "id": "QA-AUTOMATION-SDET",
+      "department": "DEPT-10",
+      "leadAgentId": "118",
+      "members": [
+        "112",
+        "113",
+        "114",
+        "115",
+        "116",
+        "117",
+        "118",
+        "119",
+        "120",
+        "121",
+        "122"
+      ]
+    },
+    {
+      "id": "QA-TRIAGE-REPORT-RELEASE",
+      "department": "DEPT-10",
+      "leadAgentId": "128",
+      "members": [
+        "123",
+        "124",
+        "125",
+        "126",
+        "127",
+        "128",
+        "130",
+        "131"
+      ]
+    },
+    {
+      "id": "SEC-APP-IDENTITY",
+      "department": "DEPT-11",
+      "leadAgentId": "132",
+      "members": [
+        "132",
+        "133",
+        "135",
+        "139"
+      ]
+    },
+    {
+      "id": "SEC-CLOUD-SUPPLY",
+      "department": "DEPT-11",
+      "leadAgentId": "134",
+      "members": [
+        "134",
+        "136",
+        "137",
+        "138"
+      ]
+    },
+    {
+      "id": "SEC-AI-INCIDENT",
+      "department": "DEPT-11",
+      "leadAgentId": "141",
+      "members": [
+        "140",
+        "141"
+      ]
+    },
+    {
+      "id": "MOBILE-NATIVE",
+      "department": "DEPT-07",
+      "leadAgentId": "050",
+      "members": [
+        "050",
+        "051",
+        "052",
+        "055",
+        "056"
+      ]
+    },
+    {
+      "id": "MOBILE-CROSSPLATFORM",
+      "department": "DEPT-07",
+      "leadAgentId": "053",
+      "members": [
+        "053",
+        "054"
+      ]
+    },
+    {
+      "id": "ARCH-DISTRIBUTED",
+      "department": "DEPT-03",
+      "leadAgentId": "018",
+      "members": [
+        "018",
+        "019",
+        "020",
+        "021",
+        "022",
+        "024",
+        "025",
+        "027"
+      ]
+    },
+    {
+      "id": "ARCH-CONTRACT-IDENTITY-MIGRATION",
+      "department": "DEPT-03",
+      "leadAgentId": "023",
+      "members": [
+        "023",
+        "026",
+        "028",
+        "029"
+      ]
+    },
+    {
+      "id": "PLATFORM-DELIVERY",
+      "department": "DEPT-12",
+      "leadAgentId": "142",
+      "members": [
+        "142",
+        "143",
+        "144",
+        "145",
+        "146",
+        "147"
+      ]
+    },
+    {
+      "id": "PLATFORM-RELIABILITY",
+      "department": "DEPT-12",
+      "leadAgentId": "148",
+      "members": [
+        "148",
+        "149",
+        "150",
+        "151"
+      ]
+    },
+    {
+      "id": "AI-ROUTING-OPS",
+      "department": "DEPT-13",
+      "leadAgentId": "153",
+      "members": [
+        "152",
+        "153",
+        "158",
+        "159"
+      ]
+    },
+    {
+      "id": "AI-EVAL-PROMPT",
+      "department": "DEPT-13",
+      "leadAgentId": "154",
+      "members": [
+        "154",
+        "155",
+        "156",
+        "157"
+      ]
+    }
+  ]
+}

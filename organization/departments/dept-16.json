@@ -1,0 +1,35 @@
+{
+  "//TR": "Bu dosya 16 Sales & CRM departmanının head/principal/member yapısını, ortak competency alanlarını ve takım başının hangi teknik breadth'i gözetmesi gerektiğini tanımlar.",
+  "schemaVersion": "2.0.0",
+  "departmentId": "DEPT-16",
+  "name": "16 Sales & CRM",
+  "headAgentId": "175",
+  "principalReviewerAgentIds": [
+    "175",
+    "177"
+  ],
+  "memberAgentIds": [
+    "173",
+    "174",
+    "175",
+    "176",
+    "177",
+    "178"
+  ],
+  "competencyCoverage": [
+    "SALES",
+    "CRM",
+    "COMMUNICATION"
+  ],
+  "primaryTechnologyCoverage": [],
+  "comparativeTechnologyCoverage": [],
+  "headResponsibilities": [
+    "mission workload and specialist assignment",
+    "technical quality aggregation",
+    "cross-specialist conflict resolution",
+    "unknown/gap escalation",
+    "evidence-based department signoff",
+    "briefing compression to council/founder"
+  ],
+  "truthRule": "DEPARTMENT_HEAD_SIGNOFF_DOES_NOT_REPLACE_INDEPENDENT_EVIDENCE_OR_REVIEW"
+}

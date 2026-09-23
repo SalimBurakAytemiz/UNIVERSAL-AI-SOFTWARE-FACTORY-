@@ -1,0 +1,35 @@
+{
+  "//TR": "Bu dosya 19 Finance & FinOps departmanının head/principal/member yapısını, ortak competency alanlarını ve takım başının hangi teknik breadth'i gözetmesi gerektiğini tanımlar.",
+  "schemaVersion": "2.0.0",
+  "departmentId": "DEPT-19",
+  "name": "19 Finance & FinOps",
+  "headAgentId": "191",
+  "principalReviewerAgentIds": [
+    "191"
+  ],
+  "memberAgentIds": [
+    "191",
+    "192",
+    "193",
+    "194",
+    "195",
+    "196",
+    "197"
+  ],
+  "competencyCoverage": [
+    "FINANCE",
+    "FINOPS",
+    "BUSINESS_OPERATIONS"
+  ],
+  "primaryTechnologyCoverage": [],
+  "comparativeTechnologyCoverage": [],
+  "headResponsibilities": [
+    "mission workload and specialist assignment",
+    "technical quality aggregation",
+    "cross-specialist conflict resolution",
+    "unknown/gap escalation",
+    "evidence-based department signoff",
+    "briefing compression to council/founder"
+  ],
+  "truthRule": "DEPARTMENT_HEAD_SIGNOFF_DOES_NOT_REPLACE_INDEPENDENT_EVIDENCE_OR_REVIEW"
+}

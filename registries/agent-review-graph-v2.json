@@ -1,0 +1,4510 @@
+{
+  "//TR": "Bu dosya Specialist -> Tech Lead -> Principal -> Department Head -> cross-functional council -> independent assurance review modelinin 363 rol için machine-readable karşılığını tanımlar.",
+  "schemaVersion": "2.0.0",
+  "count": 363,
+  "reviews": [
+    {
+      "agentId": "001",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "004"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "002",
+      "technicalLeadAgentId": "001",
+      "principalReviewerAgentIds": [
+        "001",
+        "004"
+      ],
+      "departmentHeadAgentId": "001",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "003",
+      "technicalLeadAgentId": "001",
+      "principalReviewerAgentIds": [
+        "001",
+        "004"
+      ],
+      "departmentHeadAgentId": "001",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "004",
+      "technicalLeadAgentId": "001",
+      "principalReviewerAgentIds": [
+        "001"
+      ],
+      "departmentHeadAgentId": "001",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "005",
+      "technicalLeadAgentId": "001",
+      "principalReviewerAgentIds": [
+        "001",
+        "004"
+      ],
+      "departmentHeadAgentId": "001",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "006",
+      "technicalLeadAgentId": "001",
+      "principalReviewerAgentIds": [
+        "001",
+        "004"
+      ],
+      "departmentHeadAgentId": "001",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "007",
+      "technicalLeadAgentId": "001",
+      "principalReviewerAgentIds": [
+        "001",
+        "004"
+      ],
+      "departmentHeadAgentId": "001",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "008",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "011",
+        "017"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "009",
+      "technicalLeadAgentId": "008",
+      "principalReviewerAgentIds": [
+        "008",
+        "011",
+        "017"
+      ],
+      "departmentHeadAgentId": "008",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "010",
+      "technicalLeadAgentId": "008",
+      "principalReviewerAgentIds": [
+        "008",
+        "011",
+        "017"
+      ],
+      "departmentHeadAgentId": "008",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "011",
+      "technicalLeadAgentId": "008",
+      "principalReviewerAgentIds": [
+        "008",
+        "017"
+      ],
+      "departmentHeadAgentId": "008",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "012",
+      "technicalLeadAgentId": "008",
+      "principalReviewerAgentIds": [
+        "008",
+        "011",
+        "017"
+      ],
+      "departmentHeadAgentId": "008",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "013",
+      "technicalLeadAgentId": "008",
+      "principalReviewerAgentIds": [
+        "008",
+        "011",
+        "017"
+      ],
+      "departmentHeadAgentId": "008",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "014",
+      "technicalLeadAgentId": "008",
+      "principalReviewerAgentIds": [
+        "008",
+        "011",
+        "017"
+      ],
+      "departmentHeadAgentId": "008",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "015",
+      "technicalLeadAgentId": "008",
+      "principalReviewerAgentIds": [
+        "008",
+        "011",
+        "017"
+      ],
+      "departmentHeadAgentId": "008",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "016",
+      "technicalLeadAgentId": "008",
+      "principalReviewerAgentIds": [
+        "008",
+        "011",
+        "017"
+      ],
+      "departmentHeadAgentId": "008",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "017",
+      "technicalLeadAgentId": "008",
+      "principalReviewerAgentIds": [
+        "008",
+        "011"
+      ],
+      "departmentHeadAgentId": "008",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "018",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "019",
+        "020",
+        "023",
+        "026"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "019",
+      "technicalLeadAgentId": "018",
+      "principalReviewerAgentIds": [
+        "018",
+        "020",
+        "023",
+        "026"
+      ],
+      "departmentHeadAgentId": "018",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "020",
+      "technicalLeadAgentId": "018",
+      "principalReviewerAgentIds": [
+        "018",
+        "019",
+        "023",
+        "026"
+      ],
+      "departmentHeadAgentId": "018",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "021",
+      "technicalLeadAgentId": "018",
+      "principalReviewerAgentIds": [
+        "018",
+        "019",
+        "020",
+        "023",
+        "026"
+      ],
+      "departmentHeadAgentId": "018",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "022",
+      "technicalLeadAgentId": "018",
+      "principalReviewerAgentIds": [
+        "018",
+        "019",
+        "020",
+        "023",
+        "026"
+      ],
+      "departmentHeadAgentId": "018",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "023",
+      "technicalLeadAgentId": "018",
+      "principalReviewerAgentIds": [
+        "018",
+        "019",
+        "020",
+        "026"
+      ],
+      "departmentHeadAgentId": "018",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "024",
+      "technicalLeadAgentId": "018",
+      "principalReviewerAgentIds": [
+        "018",
+        "019",
+        "020",
+        "023",
+        "026"
+      ],
+      "departmentHeadAgentId": "018",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "025",
+      "technicalLeadAgentId": "018",
+      "principalReviewerAgentIds": [
+        "018",
+        "019",
+        "020",
+        "023",
+        "026"
+      ],
+      "departmentHeadAgentId": "018",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "026",
+      "technicalLeadAgentId": "018",
+      "principalReviewerAgentIds": [
+        "018",
+        "019",
+        "020",
+        "023"
+      ],
+      "departmentHeadAgentId": "018",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "027",
+      "technicalLeadAgentId": "018",
+      "principalReviewerAgentIds": [
+        "018",
+        "019",
+        "020",
+        "023",
+        "026"
+      ],
+      "departmentHeadAgentId": "018",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "028",
+      "technicalLeadAgentId": "018",
+      "principalReviewerAgentIds": [
+        "018",
+        "019",
+        "020",
+        "023",
+        "026"
+      ],
+      "departmentHeadAgentId": "018",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "029",
+      "technicalLeadAgentId": "018",
+      "principalReviewerAgentIds": [
+        "018",
+        "019",
+        "020",
+        "023",
+        "026"
+      ],
+      "departmentHeadAgentId": "018",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "030",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "018",
+        "001"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "031",
+      "technicalLeadAgentId": "030",
+      "principalReviewerAgentIds": [
+        "030"
+      ],
+      "departmentHeadAgentId": "030",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "032",
+      "technicalLeadAgentId": "030",
+      "principalReviewerAgentIds": [
+        "030"
+      ],
+      "departmentHeadAgentId": "030",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "033",
+      "technicalLeadAgentId": "030",
+      "principalReviewerAgentIds": [
+        "030"
+      ],
+      "departmentHeadAgentId": "030",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "034",
+      "technicalLeadAgentId": "030",
+      "principalReviewerAgentIds": [
+        "030"
+      ],
+      "departmentHeadAgentId": "030",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "035",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "018",
+        "001"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "036",
+      "technicalLeadAgentId": "035",
+      "principalReviewerAgentIds": [
+        "035"
+      ],
+      "departmentHeadAgentId": "035",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "037",
+      "technicalLeadAgentId": "035",
+      "principalReviewerAgentIds": [
+        "035"
+      ],
+      "departmentHeadAgentId": "035",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "038",
+      "technicalLeadAgentId": "035",
+      "principalReviewerAgentIds": [
+        "035"
+      ],
+      "departmentHeadAgentId": "035",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "039",
+      "technicalLeadAgentId": "035",
+      "principalReviewerAgentIds": [
+        "035"
+      ],
+      "departmentHeadAgentId": "035",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "040",
+      "technicalLeadAgentId": "035",
+      "principalReviewerAgentIds": [
+        "035"
+      ],
+      "departmentHeadAgentId": "035",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "041",
+      "technicalLeadAgentId": "035",
+      "principalReviewerAgentIds": [
+        "035"
+      ],
+      "departmentHeadAgentId": "035",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "042",
+      "technicalLeadAgentId": "035",
+      "principalReviewerAgentIds": [
+        "035"
+      ],
+      "departmentHeadAgentId": "035",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "043",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "018",
+        "001"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "044",
+      "technicalLeadAgentId": "043",
+      "principalReviewerAgentIds": [
+        "043"
+      ],
+      "departmentHeadAgentId": "043",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "045",
+      "technicalLeadAgentId": "043",
+      "principalReviewerAgentIds": [
+        "043"
+      ],
+      "departmentHeadAgentId": "043",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "046",
+      "technicalLeadAgentId": "043",
+      "principalReviewerAgentIds": [
+        "043"
+      ],
+      "departmentHeadAgentId": "043",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "047",
+      "technicalLeadAgentId": "043",
+      "principalReviewerAgentIds": [
+        "043"
+      ],
+      "departmentHeadAgentId": "043",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "048",
+      "technicalLeadAgentId": "043",
+      "principalReviewerAgentIds": [
+        "043"
+      ],
+      "departmentHeadAgentId": "043",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "049",
+      "technicalLeadAgentId": "043",
+      "principalReviewerAgentIds": [
+        "043"
+      ],
+      "departmentHeadAgentId": "043",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "050",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "018",
+        "001"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "051",
+      "technicalLeadAgentId": "050",
+      "principalReviewerAgentIds": [
+        "050"
+      ],
+      "departmentHeadAgentId": "050",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "052",
+      "technicalLeadAgentId": "050",
+      "principalReviewerAgentIds": [
+        "050"
+      ],
+      "departmentHeadAgentId": "050",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "053",
+      "technicalLeadAgentId": "050",
+      "principalReviewerAgentIds": [
+        "050"
+      ],
+      "departmentHeadAgentId": "050",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "054",
+      "technicalLeadAgentId": "050",
+      "principalReviewerAgentIds": [
+        "050"
+      ],
+      "departmentHeadAgentId": "050",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "055",
+      "technicalLeadAgentId": "050",
+      "principalReviewerAgentIds": [
+        "050"
+      ],
+      "departmentHeadAgentId": "050",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "056",
+      "technicalLeadAgentId": "050",
+      "principalReviewerAgentIds": [
+        "050"
+      ],
+      "departmentHeadAgentId": "050",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "057",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "018",
+        "001"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "058",
+      "technicalLeadAgentId": "057",
+      "principalReviewerAgentIds": [
+        "057"
+      ],
+      "departmentHeadAgentId": "057",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "059",
+      "technicalLeadAgentId": "057",
+      "principalReviewerAgentIds": [
+        "057"
+      ],
+      "departmentHeadAgentId": "057",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "060",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "018",
+        "001"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "061",
+      "technicalLeadAgentId": "060",
+      "principalReviewerAgentIds": [
+        "060"
+      ],
+      "departmentHeadAgentId": "060",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "062",
+      "technicalLeadAgentId": "060",
+      "principalReviewerAgentIds": [
+        "060"
+      ],
+      "departmentHeadAgentId": "060",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "063",
+      "technicalLeadAgentId": "060",
+      "principalReviewerAgentIds": [
+        "060"
+      ],
+      "departmentHeadAgentId": "060",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "064",
+      "technicalLeadAgentId": "060",
+      "principalReviewerAgentIds": [
+        "060"
+      ],
+      "departmentHeadAgentId": "060",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "065",
+      "technicalLeadAgentId": "060",
+      "principalReviewerAgentIds": [
+        "060"
+      ],
+      "departmentHeadAgentId": "060",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "066",
+      "technicalLeadAgentId": "060",
+      "principalReviewerAgentIds": [
+        "060"
+      ],
+      "departmentHeadAgentId": "060",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "067",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "068",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "069",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "070",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "071",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "072",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "073",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "074",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "075",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "076",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "077",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "078",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "079",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "080",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "081",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "082",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "083",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "084",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "085",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "086",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "087",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "088",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "089",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "090",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "091",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "092",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "093",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "094",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "095",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "096",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "097",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "098",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "099",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "100",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "101",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "102",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "103",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "104",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "105",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "106",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "107",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "108",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "109",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "110",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "111",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "112",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "113",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "114",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "115",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "116",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "117",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "118",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "119",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "120",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "121",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "122",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "123",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "124",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "125",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "126",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "127",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "128",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "129",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "130",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "131",
+      "technicalLeadAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "departmentHeadAgentId": "067",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "132",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "136"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "133",
+      "technicalLeadAgentId": "132",
+      "principalReviewerAgentIds": [
+        "132",
+        "136"
+      ],
+      "departmentHeadAgentId": "132",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "134",
+      "technicalLeadAgentId": "132",
+      "principalReviewerAgentIds": [
+        "132",
+        "136"
+      ],
+      "departmentHeadAgentId": "132",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "135",
+      "technicalLeadAgentId": "132",
+      "principalReviewerAgentIds": [
+        "132",
+        "136"
+      ],
+      "departmentHeadAgentId": "132",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "136",
+      "technicalLeadAgentId": "132",
+      "principalReviewerAgentIds": [
+        "132"
+      ],
+      "departmentHeadAgentId": "132",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "137",
+      "technicalLeadAgentId": "132",
+      "principalReviewerAgentIds": [
+        "132",
+        "136"
+      ],
+      "departmentHeadAgentId": "132",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "138",
+      "technicalLeadAgentId": "132",
+      "principalReviewerAgentIds": [
+        "132",
+        "136"
+      ],
+      "departmentHeadAgentId": "132",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "139",
+      "technicalLeadAgentId": "132",
+      "principalReviewerAgentIds": [
+        "132",
+        "136"
+      ],
+      "departmentHeadAgentId": "132",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "140",
+      "technicalLeadAgentId": "132",
+      "principalReviewerAgentIds": [
+        "132",
+        "136"
+      ],
+      "departmentHeadAgentId": "132",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "141",
+      "technicalLeadAgentId": "132",
+      "principalReviewerAgentIds": [
+        "132",
+        "136"
+      ],
+      "departmentHeadAgentId": "132",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "142",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "147",
+        "150"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "143",
+      "technicalLeadAgentId": "142",
+      "principalReviewerAgentIds": [
+        "142",
+        "147",
+        "150"
+      ],
+      "departmentHeadAgentId": "142",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "144",
+      "technicalLeadAgentId": "142",
+      "principalReviewerAgentIds": [
+        "142",
+        "147",
+        "150"
+      ],
+      "departmentHeadAgentId": "142",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "145",
+      "technicalLeadAgentId": "142",
+      "principalReviewerAgentIds": [
+        "142",
+        "147",
+        "150"
+      ],
+      "departmentHeadAgentId": "142",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "146",
+      "technicalLeadAgentId": "142",
+      "principalReviewerAgentIds": [
+        "142",
+        "147",
+        "150"
+      ],
+      "departmentHeadAgentId": "142",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "147",
+      "technicalLeadAgentId": "142",
+      "principalReviewerAgentIds": [
+        "142",
+        "150"
+      ],
+      "departmentHeadAgentId": "142",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "148",
+      "technicalLeadAgentId": "142",
+      "principalReviewerAgentIds": [
+        "142",
+        "147",
+        "150"
+      ],
+      "departmentHeadAgentId": "142",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "149",
+      "technicalLeadAgentId": "142",
+      "principalReviewerAgentIds": [
+        "142",
+        "147",
+        "150"
+      ],
+      "departmentHeadAgentId": "142",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "150",
+      "technicalLeadAgentId": "142",
+      "principalReviewerAgentIds": [
+        "142",
+        "147"
+      ],
+      "departmentHeadAgentId": "142",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "151",
+      "technicalLeadAgentId": "142",
+      "principalReviewerAgentIds": [
+        "142",
+        "147",
+        "150"
+      ],
+      "departmentHeadAgentId": "142",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "152",
+      "technicalLeadAgentId": "153",
+      "principalReviewerAgentIds": [
+        "153",
+        "156"
+      ],
+      "departmentHeadAgentId": "153",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "153",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "156"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "154",
+      "technicalLeadAgentId": "153",
+      "principalReviewerAgentIds": [
+        "153",
+        "156"
+      ],
+      "departmentHeadAgentId": "153",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "155",
+      "technicalLeadAgentId": "153",
+      "principalReviewerAgentIds": [
+        "153",
+        "156"
+      ],
+      "departmentHeadAgentId": "153",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "156",
+      "technicalLeadAgentId": "153",
+      "principalReviewerAgentIds": [
+        "153"
+      ],
+      "departmentHeadAgentId": "153",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "157",
+      "technicalLeadAgentId": "153",
+      "principalReviewerAgentIds": [
+        "153",
+        "156"
+      ],
+      "departmentHeadAgentId": "153",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "158",
+      "technicalLeadAgentId": "153",
+      "principalReviewerAgentIds": [
+        "153",
+        "156"
+      ],
+      "departmentHeadAgentId": "153",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "159",
+      "technicalLeadAgentId": "153",
+      "principalReviewerAgentIds": [
+        "153",
+        "156"
+      ],
+      "departmentHeadAgentId": "153",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "160",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "018",
+        "001"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "161",
+      "technicalLeadAgentId": "160",
+      "principalReviewerAgentIds": [
+        "160"
+      ],
+      "departmentHeadAgentId": "160",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "162",
+      "technicalLeadAgentId": "160",
+      "principalReviewerAgentIds": [
+        "160"
+      ],
+      "departmentHeadAgentId": "160",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "163",
+      "technicalLeadAgentId": "160",
+      "principalReviewerAgentIds": [
+        "160"
+      ],
+      "departmentHeadAgentId": "160",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "164",
+      "technicalLeadAgentId": "160",
+      "principalReviewerAgentIds": [
+        "160"
+      ],
+      "departmentHeadAgentId": "160",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "165",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "167"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "166",
+      "technicalLeadAgentId": "165",
+      "principalReviewerAgentIds": [
+        "165",
+        "167"
+      ],
+      "departmentHeadAgentId": "165",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "167",
+      "technicalLeadAgentId": "165",
+      "principalReviewerAgentIds": [
+        "165"
+      ],
+      "departmentHeadAgentId": "165",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "168",
+      "technicalLeadAgentId": "165",
+      "principalReviewerAgentIds": [
+        "165",
+        "167"
+      ],
+      "departmentHeadAgentId": "165",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "169",
+      "technicalLeadAgentId": "165",
+      "principalReviewerAgentIds": [
+        "165",
+        "167"
+      ],
+      "departmentHeadAgentId": "165",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "170",
+      "technicalLeadAgentId": "165",
+      "principalReviewerAgentIds": [
+        "165",
+        "167"
+      ],
+      "departmentHeadAgentId": "165",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "171",
+      "technicalLeadAgentId": "165",
+      "principalReviewerAgentIds": [
+        "165",
+        "167"
+      ],
+      "departmentHeadAgentId": "165",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "172",
+      "technicalLeadAgentId": "165",
+      "principalReviewerAgentIds": [
+        "165",
+        "167"
+      ],
+      "departmentHeadAgentId": "165",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "173",
+      "technicalLeadAgentId": "175",
+      "principalReviewerAgentIds": [
+        "175",
+        "177"
+      ],
+      "departmentHeadAgentId": "175",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "174",
+      "technicalLeadAgentId": "175",
+      "principalReviewerAgentIds": [
+        "175",
+        "177"
+      ],
+      "departmentHeadAgentId": "175",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "175",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "177"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "176",
+      "technicalLeadAgentId": "175",
+      "principalReviewerAgentIds": [
+        "175",
+        "177"
+      ],
+      "departmentHeadAgentId": "175",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "177",
+      "technicalLeadAgentId": "175",
+      "principalReviewerAgentIds": [
+        "175"
+      ],
+      "departmentHeadAgentId": "175",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "178",
+      "technicalLeadAgentId": "175",
+      "principalReviewerAgentIds": [
+        "175",
+        "177"
+      ],
+      "departmentHeadAgentId": "175",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "179",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "001",
+        "008"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "180",
+      "technicalLeadAgentId": "179",
+      "principalReviewerAgentIds": [
+        "179"
+      ],
+      "departmentHeadAgentId": "179",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "181",
+      "technicalLeadAgentId": "179",
+      "principalReviewerAgentIds": [
+        "179"
+      ],
+      "departmentHeadAgentId": "179",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "182",
+      "technicalLeadAgentId": "179",
+      "principalReviewerAgentIds": [
+        "179"
+      ],
+      "departmentHeadAgentId": "179",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "183",
+      "technicalLeadAgentId": "179",
+      "principalReviewerAgentIds": [
+        "179"
+      ],
+      "departmentHeadAgentId": "179",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "184",
+      "technicalLeadAgentId": "179",
+      "principalReviewerAgentIds": [
+        "179"
+      ],
+      "departmentHeadAgentId": "179",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "185",
+      "technicalLeadAgentId": "179",
+      "principalReviewerAgentIds": [
+        "179"
+      ],
+      "departmentHeadAgentId": "179",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "186",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "001",
+        "008"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "187",
+      "technicalLeadAgentId": "186",
+      "principalReviewerAgentIds": [
+        "186"
+      ],
+      "departmentHeadAgentId": "186",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "188",
+      "technicalLeadAgentId": "186",
+      "principalReviewerAgentIds": [
+        "186"
+      ],
+      "departmentHeadAgentId": "186",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "189",
+      "technicalLeadAgentId": "186",
+      "principalReviewerAgentIds": [
+        "186"
+      ],
+      "departmentHeadAgentId": "186",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "190",
+      "technicalLeadAgentId": "186",
+      "principalReviewerAgentIds": [
+        "186"
+      ],
+      "departmentHeadAgentId": "186",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "191",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "001",
+        "008"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "192",
+      "technicalLeadAgentId": "191",
+      "principalReviewerAgentIds": [
+        "191"
+      ],
+      "departmentHeadAgentId": "191",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "193",
+      "technicalLeadAgentId": "191",
+      "principalReviewerAgentIds": [
+        "191"
+      ],
+      "departmentHeadAgentId": "191",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "194",
+      "technicalLeadAgentId": "191",
+      "principalReviewerAgentIds": [
+        "191"
+      ],
+      "departmentHeadAgentId": "191",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "195",
+      "technicalLeadAgentId": "191",
+      "principalReviewerAgentIds": [
+        "191"
+      ],
+      "departmentHeadAgentId": "191",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "196",
+      "technicalLeadAgentId": "191",
+      "principalReviewerAgentIds": [
+        "191"
+      ],
+      "departmentHeadAgentId": "191",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "197",
+      "technicalLeadAgentId": "191",
+      "principalReviewerAgentIds": [
+        "191"
+      ],
+      "departmentHeadAgentId": "191",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "198",
+      "technicalLeadAgentId": "202",
+      "principalReviewerAgentIds": [
+        "202"
+      ],
+      "departmentHeadAgentId": "202",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "199",
+      "technicalLeadAgentId": "202",
+      "principalReviewerAgentIds": [
+        "202"
+      ],
+      "departmentHeadAgentId": "202",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "200",
+      "technicalLeadAgentId": "202",
+      "principalReviewerAgentIds": [
+        "202"
+      ],
+      "departmentHeadAgentId": "202",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "201",
+      "technicalLeadAgentId": "202",
+      "principalReviewerAgentIds": [
+        "202"
+      ],
+      "departmentHeadAgentId": "202",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "202",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "001",
+        "008"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "203",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "205",
+        "206"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "204",
+      "technicalLeadAgentId": "203",
+      "principalReviewerAgentIds": [
+        "203",
+        "205",
+        "206"
+      ],
+      "departmentHeadAgentId": "203",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "205",
+      "technicalLeadAgentId": "203",
+      "principalReviewerAgentIds": [
+        "203",
+        "206"
+      ],
+      "departmentHeadAgentId": "203",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "206",
+      "technicalLeadAgentId": "203",
+      "principalReviewerAgentIds": [
+        "203",
+        "205"
+      ],
+      "departmentHeadAgentId": "203",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "207",
+      "technicalLeadAgentId": "203",
+      "principalReviewerAgentIds": [
+        "203",
+        "205",
+        "206"
+      ],
+      "departmentHeadAgentId": "203",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "208",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "018",
+        "001"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "209",
+      "technicalLeadAgentId": "208",
+      "principalReviewerAgentIds": [
+        "208"
+      ],
+      "departmentHeadAgentId": "208",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "210",
+      "technicalLeadAgentId": "208",
+      "principalReviewerAgentIds": [
+        "208"
+      ],
+      "departmentHeadAgentId": "208",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "211",
+      "technicalLeadAgentId": "208",
+      "principalReviewerAgentIds": [
+        "208"
+      ],
+      "departmentHeadAgentId": "208",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "212",
+      "technicalLeadAgentId": "208",
+      "principalReviewerAgentIds": [
+        "208"
+      ],
+      "departmentHeadAgentId": "208",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "213",
+      "technicalLeadAgentId": "208",
+      "principalReviewerAgentIds": [
+        "208"
+      ],
+      "departmentHeadAgentId": "208",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "214",
+      "technicalLeadAgentId": "208",
+      "principalReviewerAgentIds": [
+        "208"
+      ],
+      "departmentHeadAgentId": "208",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "215",
+      "technicalLeadAgentId": "208",
+      "principalReviewerAgentIds": [
+        "208"
+      ],
+      "departmentHeadAgentId": "208",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "216",
+      "technicalLeadAgentId": "208",
+      "principalReviewerAgentIds": [
+        "208"
+      ],
+      "departmentHeadAgentId": "208",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "217",
+      "technicalLeadAgentId": "208",
+      "principalReviewerAgentIds": [
+        "208"
+      ],
+      "departmentHeadAgentId": "208",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "218",
+      "technicalLeadAgentId": "208",
+      "principalReviewerAgentIds": [
+        "208"
+      ],
+      "departmentHeadAgentId": "208",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "219",
+      "technicalLeadAgentId": "208",
+      "principalReviewerAgentIds": [
+        "208"
+      ],
+      "departmentHeadAgentId": "208",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "220",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "018",
+        "001"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "221",
+      "technicalLeadAgentId": "220",
+      "principalReviewerAgentIds": [
+        "220"
+      ],
+      "departmentHeadAgentId": "220",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "222",
+      "technicalLeadAgentId": "220",
+      "principalReviewerAgentIds": [
+        "220"
+      ],
+      "departmentHeadAgentId": "220",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "223",
+      "technicalLeadAgentId": "220",
+      "principalReviewerAgentIds": [
+        "220"
+      ],
+      "departmentHeadAgentId": "220",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "224",
+      "technicalLeadAgentId": "220",
+      "principalReviewerAgentIds": [
+        "220"
+      ],
+      "departmentHeadAgentId": "220",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "225",
+      "technicalLeadAgentId": "220",
+      "principalReviewerAgentIds": [
+        "220"
+      ],
+      "departmentHeadAgentId": "220",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "226",
+      "technicalLeadAgentId": "220",
+      "principalReviewerAgentIds": [
+        "220"
+      ],
+      "departmentHeadAgentId": "220",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "227",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "230"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "228",
+      "technicalLeadAgentId": "227",
+      "principalReviewerAgentIds": [
+        "227",
+        "230"
+      ],
+      "departmentHeadAgentId": "227",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "229",
+      "technicalLeadAgentId": "227",
+      "principalReviewerAgentIds": [
+        "227",
+        "230"
+      ],
+      "departmentHeadAgentId": "227",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "230",
+      "technicalLeadAgentId": "227",
+      "principalReviewerAgentIds": [
+        "227"
+      ],
+      "departmentHeadAgentId": "227",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "231",
+      "technicalLeadAgentId": "227",
+      "principalReviewerAgentIds": [
+        "227",
+        "230"
+      ],
+      "departmentHeadAgentId": "227",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "232",
+      "technicalLeadAgentId": "227",
+      "principalReviewerAgentIds": [
+        "227",
+        "230"
+      ],
+      "departmentHeadAgentId": "227",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "233",
+      "technicalLeadAgentId": "227",
+      "principalReviewerAgentIds": [
+        "227",
+        "230"
+      ],
+      "departmentHeadAgentId": "227",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "234",
+      "technicalLeadAgentId": "227",
+      "principalReviewerAgentIds": [
+        "227",
+        "230"
+      ],
+      "departmentHeadAgentId": "227",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "235",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "237",
+        "238",
+        "239"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "236",
+      "technicalLeadAgentId": "235",
+      "principalReviewerAgentIds": [
+        "235",
+        "237",
+        "238",
+        "239"
+      ],
+      "departmentHeadAgentId": "235",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "237",
+      "technicalLeadAgentId": "235",
+      "principalReviewerAgentIds": [
+        "235",
+        "238",
+        "239"
+      ],
+      "departmentHeadAgentId": "235",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "238",
+      "technicalLeadAgentId": "235",
+      "principalReviewerAgentIds": [
+        "235",
+        "237",
+        "239"
+      ],
+      "departmentHeadAgentId": "235",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "239",
+      "technicalLeadAgentId": "235",
+      "principalReviewerAgentIds": [
+        "235",
+        "237",
+        "238"
+      ],
+      "departmentHeadAgentId": "235",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "240",
+      "technicalLeadAgentId": "235",
+      "principalReviewerAgentIds": [
+        "235",
+        "237",
+        "238",
+        "239"
+      ],
+      "departmentHeadAgentId": "235",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "241",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "018",
+        "001"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "242",
+      "technicalLeadAgentId": "241",
+      "principalReviewerAgentIds": [
+        "241"
+      ],
+      "departmentHeadAgentId": "241",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "243",
+      "technicalLeadAgentId": "241",
+      "principalReviewerAgentIds": [
+        "241"
+      ],
+      "departmentHeadAgentId": "241",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "244",
+      "technicalLeadAgentId": "241",
+      "principalReviewerAgentIds": [
+        "241"
+      ],
+      "departmentHeadAgentId": "241",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "245",
+      "technicalLeadAgentId": "241",
+      "principalReviewerAgentIds": [
+        "241"
+      ],
+      "departmentHeadAgentId": "241",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "246",
+      "technicalLeadAgentId": "241",
+      "principalReviewerAgentIds": [
+        "241"
+      ],
+      "departmentHeadAgentId": "241",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "247",
+      "technicalLeadAgentId": "241",
+      "principalReviewerAgentIds": [
+        "241"
+      ],
+      "departmentHeadAgentId": "241",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "248",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "018",
+        "001"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "249",
+      "technicalLeadAgentId": "248",
+      "principalReviewerAgentIds": [
+        "248"
+      ],
+      "departmentHeadAgentId": "248",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "250",
+      "technicalLeadAgentId": "248",
+      "principalReviewerAgentIds": [
+        "248"
+      ],
+      "departmentHeadAgentId": "248",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "251",
+      "technicalLeadAgentId": "248",
+      "principalReviewerAgentIds": [
+        "248"
+      ],
+      "departmentHeadAgentId": "248",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "252",
+      "technicalLeadAgentId": "248",
+      "principalReviewerAgentIds": [
+        "248"
+      ],
+      "departmentHeadAgentId": "248",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "253",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "269"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "254",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "255",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "256",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "257",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "258",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "259",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "260",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "261",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "262",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "263",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "264",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "265",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "266",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "267",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "268",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "269",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "270",
+      "technicalLeadAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "departmentHeadAgentId": "253",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "271",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "272",
+        "273",
+        "274",
+        "275"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "272",
+      "technicalLeadAgentId": "271",
+      "principalReviewerAgentIds": [
+        "271",
+        "273",
+        "274",
+        "275"
+      ],
+      "departmentHeadAgentId": "271",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "273",
+      "technicalLeadAgentId": "271",
+      "principalReviewerAgentIds": [
+        "271",
+        "272",
+        "274",
+        "275"
+      ],
+      "departmentHeadAgentId": "271",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "274",
+      "technicalLeadAgentId": "271",
+      "principalReviewerAgentIds": [
+        "271",
+        "272",
+        "273",
+        "275"
+      ],
+      "departmentHeadAgentId": "271",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "275",
+      "technicalLeadAgentId": "271",
+      "principalReviewerAgentIds": [
+        "271",
+        "272",
+        "273",
+        "274"
+      ],
+      "departmentHeadAgentId": "271",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "276",
+      "technicalLeadAgentId": "271",
+      "principalReviewerAgentIds": [
+        "271",
+        "272",
+        "273",
+        "274",
+        "275"
+      ],
+      "departmentHeadAgentId": "271",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "277",
+      "technicalLeadAgentId": "271",
+      "principalReviewerAgentIds": [
+        "271",
+        "272",
+        "273",
+        "274",
+        "275"
+      ],
+      "departmentHeadAgentId": "271",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "278",
+      "technicalLeadAgentId": "271",
+      "principalReviewerAgentIds": [
+        "271",
+        "272",
+        "273",
+        "274",
+        "275"
+      ],
+      "departmentHeadAgentId": "271",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "279",
+      "technicalLeadAgentId": "271",
+      "principalReviewerAgentIds": [
+        "271",
+        "272",
+        "273",
+        "274",
+        "275"
+      ],
+      "departmentHeadAgentId": "271",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "280",
+      "technicalLeadAgentId": "271",
+      "principalReviewerAgentIds": [
+        "271",
+        "272",
+        "273",
+        "274",
+        "275"
+      ],
+      "departmentHeadAgentId": "271",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "281",
+      "technicalLeadAgentId": "271",
+      "principalReviewerAgentIds": [
+        "271",
+        "272",
+        "273",
+        "274",
+        "275"
+      ],
+      "departmentHeadAgentId": "271",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "282",
+      "technicalLeadAgentId": "271",
+      "principalReviewerAgentIds": [
+        "271",
+        "272",
+        "273",
+        "274",
+        "275"
+      ],
+      "departmentHeadAgentId": "271",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "283",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "284",
+        "285",
+        "286",
+        "287"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "284",
+      "technicalLeadAgentId": "283",
+      "principalReviewerAgentIds": [
+        "283",
+        "285",
+        "286",
+        "287"
+      ],
+      "departmentHeadAgentId": "283",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "285",
+      "technicalLeadAgentId": "283",
+      "principalReviewerAgentIds": [
+        "283",
+        "284",
+        "286",
+        "287"
+      ],
+      "departmentHeadAgentId": "283",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "286",
+      "technicalLeadAgentId": "283",
+      "principalReviewerAgentIds": [
+        "283",
+        "284",
+        "285",
+        "287"
+      ],
+      "departmentHeadAgentId": "283",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "287",
+      "technicalLeadAgentId": "283",
+      "principalReviewerAgentIds": [
+        "283",
+        "284",
+        "285",
+        "286"
+      ],
+      "departmentHeadAgentId": "283",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "288",
+      "technicalLeadAgentId": "283",
+      "principalReviewerAgentIds": [
+        "283",
+        "284",
+        "285",
+        "286",
+        "287"
+      ],
+      "departmentHeadAgentId": "283",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "289",
+      "technicalLeadAgentId": "283",
+      "principalReviewerAgentIds": [
+        "283",
+        "284",
+        "285",
+        "286",
+        "287"
+      ],
+      "departmentHeadAgentId": "283",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "290",
+      "technicalLeadAgentId": "283",
+      "principalReviewerAgentIds": [
+        "283",
+        "284",
+        "285",
+        "286",
+        "287"
+      ],
+      "departmentHeadAgentId": "283",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "291",
+      "technicalLeadAgentId": "283",
+      "principalReviewerAgentIds": [
+        "283",
+        "284",
+        "285",
+        "286",
+        "287"
+      ],
+      "departmentHeadAgentId": "283",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "292",
+      "technicalLeadAgentId": "283",
+      "principalReviewerAgentIds": [
+        "283",
+        "284",
+        "285",
+        "286",
+        "287"
+      ],
+      "departmentHeadAgentId": "283",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "293",
+      "technicalLeadAgentId": "283",
+      "principalReviewerAgentIds": [
+        "283",
+        "284",
+        "285",
+        "286",
+        "287"
+      ],
+      "departmentHeadAgentId": "283",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "294",
+      "technicalLeadAgentId": "283",
+      "principalReviewerAgentIds": [
+        "283",
+        "284",
+        "285",
+        "286",
+        "287"
+      ],
+      "departmentHeadAgentId": "283",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "295",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "296",
+        "297",
+        "298",
+        "299"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "296",
+      "technicalLeadAgentId": "295",
+      "principalReviewerAgentIds": [
+        "295",
+        "297",
+        "298",
+        "299"
+      ],
+      "departmentHeadAgentId": "295",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "297",
+      "technicalLeadAgentId": "295",
+      "principalReviewerAgentIds": [
+        "295",
+        "296",
+        "298",
+        "299"
+      ],
+      "departmentHeadAgentId": "295",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "298",
+      "technicalLeadAgentId": "295",
+      "principalReviewerAgentIds": [
+        "295",
+        "296",
+        "297",
+        "299"
+      ],
+      "departmentHeadAgentId": "295",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "299",
+      "technicalLeadAgentId": "295",
+      "principalReviewerAgentIds": [
+        "295",
+        "296",
+        "297",
+        "298"
+      ],
+      "departmentHeadAgentId": "295",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "300",
+      "technicalLeadAgentId": "295",
+      "principalReviewerAgentIds": [
+        "295",
+        "296",
+        "297",
+        "298",
+        "299"
+      ],
+      "departmentHeadAgentId": "295",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "301",
+      "technicalLeadAgentId": "295",
+      "principalReviewerAgentIds": [
+        "295",
+        "296",
+        "297",
+        "298",
+        "299"
+      ],
+      "departmentHeadAgentId": "295",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "302",
+      "technicalLeadAgentId": "295",
+      "principalReviewerAgentIds": [
+        "295",
+        "296",
+        "297",
+        "298",
+        "299"
+      ],
+      "departmentHeadAgentId": "295",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "303",
+      "technicalLeadAgentId": "295",
+      "principalReviewerAgentIds": [
+        "295",
+        "296",
+        "297",
+        "298",
+        "299"
+      ],
+      "departmentHeadAgentId": "295",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "304",
+      "technicalLeadAgentId": "295",
+      "principalReviewerAgentIds": [
+        "295",
+        "296",
+        "297",
+        "298",
+        "299"
+      ],
+      "departmentHeadAgentId": "295",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "305",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "306",
+        "307",
+        "308",
+        "309"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "306",
+      "technicalLeadAgentId": "305",
+      "principalReviewerAgentIds": [
+        "305",
+        "307",
+        "308",
+        "309"
+      ],
+      "departmentHeadAgentId": "305",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "307",
+      "technicalLeadAgentId": "305",
+      "principalReviewerAgentIds": [
+        "305",
+        "306",
+        "308",
+        "309"
+      ],
+      "departmentHeadAgentId": "305",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "308",
+      "technicalLeadAgentId": "305",
+      "principalReviewerAgentIds": [
+        "305",
+        "306",
+        "307",
+        "309"
+      ],
+      "departmentHeadAgentId": "305",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "309",
+      "technicalLeadAgentId": "305",
+      "principalReviewerAgentIds": [
+        "305",
+        "306",
+        "307",
+        "308"
+      ],
+      "departmentHeadAgentId": "305",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "310",
+      "technicalLeadAgentId": "305",
+      "principalReviewerAgentIds": [
+        "305",
+        "306",
+        "307",
+        "308",
+        "309"
+      ],
+      "departmentHeadAgentId": "305",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "311",
+      "technicalLeadAgentId": "305",
+      "principalReviewerAgentIds": [
+        "305",
+        "306",
+        "307",
+        "308",
+        "309"
+      ],
+      "departmentHeadAgentId": "305",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "312",
+      "technicalLeadAgentId": "305",
+      "principalReviewerAgentIds": [
+        "305",
+        "306",
+        "307",
+        "308",
+        "309"
+      ],
+      "departmentHeadAgentId": "305",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "313",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "314",
+        "315",
+        "316",
+        "317"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "314",
+      "technicalLeadAgentId": "313",
+      "principalReviewerAgentIds": [
+        "313",
+        "315",
+        "316",
+        "317"
+      ],
+      "departmentHeadAgentId": "313",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "315",
+      "technicalLeadAgentId": "313",
+      "principalReviewerAgentIds": [
+        "313",
+        "314",
+        "316",
+        "317"
+      ],
+      "departmentHeadAgentId": "313",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "316",
+      "technicalLeadAgentId": "313",
+      "principalReviewerAgentIds": [
+        "313",
+        "314",
+        "315",
+        "317"
+      ],
+      "departmentHeadAgentId": "313",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "317",
+      "technicalLeadAgentId": "313",
+      "principalReviewerAgentIds": [
+        "313",
+        "314",
+        "315",
+        "316"
+      ],
+      "departmentHeadAgentId": "313",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "318",
+      "technicalLeadAgentId": "313",
+      "principalReviewerAgentIds": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317"
+      ],
+      "departmentHeadAgentId": "313",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "319",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "320",
+        "324",
+        "325"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "320",
+      "technicalLeadAgentId": "319",
+      "principalReviewerAgentIds": [
+        "319",
+        "324",
+        "325"
+      ],
+      "departmentHeadAgentId": "319",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "321",
+      "technicalLeadAgentId": "319",
+      "principalReviewerAgentIds": [
+        "319",
+        "320",
+        "324",
+        "325"
+      ],
+      "departmentHeadAgentId": "319",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "322",
+      "technicalLeadAgentId": "319",
+      "principalReviewerAgentIds": [
+        "319",
+        "320",
+        "324",
+        "325"
+      ],
+      "departmentHeadAgentId": "319",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "323",
+      "technicalLeadAgentId": "319",
+      "principalReviewerAgentIds": [
+        "319",
+        "320",
+        "324",
+        "325"
+      ],
+      "departmentHeadAgentId": "319",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "324",
+      "technicalLeadAgentId": "319",
+      "principalReviewerAgentIds": [
+        "319",
+        "320",
+        "325"
+      ],
+      "departmentHeadAgentId": "319",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "325",
+      "technicalLeadAgentId": "319",
+      "principalReviewerAgentIds": [
+        "319",
+        "320",
+        "324"
+      ],
+      "departmentHeadAgentId": "319",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "326",
+      "technicalLeadAgentId": "319",
+      "principalReviewerAgentIds": [
+        "319",
+        "320",
+        "324",
+        "325"
+      ],
+      "departmentHeadAgentId": "319",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "327",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "001",
+        "008"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "328",
+      "technicalLeadAgentId": "327",
+      "principalReviewerAgentIds": [
+        "327"
+      ],
+      "departmentHeadAgentId": "327",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "329",
+      "technicalLeadAgentId": "327",
+      "principalReviewerAgentIds": [
+        "327"
+      ],
+      "departmentHeadAgentId": "327",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "330",
+      "technicalLeadAgentId": "327",
+      "principalReviewerAgentIds": [
+        "327"
+      ],
+      "departmentHeadAgentId": "327",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "331",
+      "technicalLeadAgentId": "327",
+      "principalReviewerAgentIds": [
+        "327"
+      ],
+      "departmentHeadAgentId": "327",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "332",
+      "technicalLeadAgentId": "327",
+      "principalReviewerAgentIds": [
+        "327"
+      ],
+      "departmentHeadAgentId": "327",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "333",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "337"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "334",
+      "technicalLeadAgentId": "333",
+      "principalReviewerAgentIds": [
+        "333",
+        "337"
+      ],
+      "departmentHeadAgentId": "333",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "335",
+      "technicalLeadAgentId": "333",
+      "principalReviewerAgentIds": [
+        "333",
+        "337"
+      ],
+      "departmentHeadAgentId": "333",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "336",
+      "technicalLeadAgentId": "333",
+      "principalReviewerAgentIds": [
+        "333",
+        "337"
+      ],
+      "departmentHeadAgentId": "333",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "337",
+      "technicalLeadAgentId": "333",
+      "principalReviewerAgentIds": [
+        "333"
+      ],
+      "departmentHeadAgentId": "333",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "338",
+      "technicalLeadAgentId": "333",
+      "principalReviewerAgentIds": [
+        "333",
+        "337"
+      ],
+      "departmentHeadAgentId": "333",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "339",
+      "technicalLeadAgentId": "333",
+      "principalReviewerAgentIds": [
+        "333",
+        "337"
+      ],
+      "departmentHeadAgentId": "333",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "340",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "344"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "341",
+      "technicalLeadAgentId": "340",
+      "principalReviewerAgentIds": [
+        "340",
+        "344"
+      ],
+      "departmentHeadAgentId": "340",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "342",
+      "technicalLeadAgentId": "340",
+      "principalReviewerAgentIds": [
+        "340",
+        "344"
+      ],
+      "departmentHeadAgentId": "340",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "343",
+      "technicalLeadAgentId": "340",
+      "principalReviewerAgentIds": [
+        "340",
+        "344"
+      ],
+      "departmentHeadAgentId": "340",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "344",
+      "technicalLeadAgentId": "340",
+      "principalReviewerAgentIds": [
+        "340"
+      ],
+      "departmentHeadAgentId": "340",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "345",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "348",
+        "350"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "346",
+      "technicalLeadAgentId": "345",
+      "principalReviewerAgentIds": [
+        "345",
+        "348",
+        "350"
+      ],
+      "departmentHeadAgentId": "345",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "347",
+      "technicalLeadAgentId": "345",
+      "principalReviewerAgentIds": [
+        "345",
+        "348",
+        "350"
+      ],
+      "departmentHeadAgentId": "345",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "348",
+      "technicalLeadAgentId": "345",
+      "principalReviewerAgentIds": [
+        "345",
+        "350"
+      ],
+      "departmentHeadAgentId": "345",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "349",
+      "technicalLeadAgentId": "345",
+      "principalReviewerAgentIds": [
+        "345",
+        "348",
+        "350"
+      ],
+      "departmentHeadAgentId": "345",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "350",
+      "technicalLeadAgentId": "345",
+      "principalReviewerAgentIds": [
+        "345",
+        "348"
+      ],
+      "departmentHeadAgentId": "345",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "351",
+      "technicalLeadAgentId": "345",
+      "principalReviewerAgentIds": [
+        "345",
+        "348",
+        "350"
+      ],
+      "departmentHeadAgentId": "345",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "352",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "353",
+        "355"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "353",
+      "technicalLeadAgentId": "352",
+      "principalReviewerAgentIds": [
+        "352",
+        "355"
+      ],
+      "departmentHeadAgentId": "352",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "354",
+      "technicalLeadAgentId": "352",
+      "principalReviewerAgentIds": [
+        "352",
+        "353",
+        "355"
+      ],
+      "departmentHeadAgentId": "352",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "355",
+      "technicalLeadAgentId": "352",
+      "principalReviewerAgentIds": [
+        "352",
+        "353"
+      ],
+      "departmentHeadAgentId": "352",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "356",
+      "technicalLeadAgentId": "352",
+      "principalReviewerAgentIds": [
+        "352",
+        "353",
+        "355"
+      ],
+      "departmentHeadAgentId": "352",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "357",
+      "technicalLeadAgentId": "352",
+      "principalReviewerAgentIds": [
+        "352",
+        "353",
+        "355"
+      ],
+      "departmentHeadAgentId": "352",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "358",
+      "technicalLeadAgentId": "352",
+      "principalReviewerAgentIds": [
+        "352",
+        "353",
+        "355"
+      ],
+      "departmentHeadAgentId": "352",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "359",
+      "technicalLeadAgentId": null,
+      "principalReviewerAgentIds": [
+        "001",
+        "008"
+      ],
+      "departmentHeadAgentId": null,
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "360",
+      "technicalLeadAgentId": "359",
+      "principalReviewerAgentIds": [
+        "359"
+      ],
+      "departmentHeadAgentId": "359",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "361",
+      "technicalLeadAgentId": "359",
+      "principalReviewerAgentIds": [
+        "359"
+      ],
+      "departmentHeadAgentId": "359",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "362",
+      "technicalLeadAgentId": "359",
+      "principalReviewerAgentIds": [
+        "359"
+      ],
+      "departmentHeadAgentId": "359",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    },
+    {
+      "agentId": "363",
+      "technicalLeadAgentId": "359",
+      "principalReviewerAgentIds": [
+        "359"
+      ],
+      "departmentHeadAgentId": "359",
+      "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+      "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true
+    }
+  ]
+}

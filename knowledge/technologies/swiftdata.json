@@ -1,0 +1,119 @@
+{
+  "//TR": "Bu dosya SwiftData teknolojisinin hangi bilgi facet'lerinin resmi kaynaklardan öğrenilip version/freshness/evidence ile certify edilmesi gerektiğini tanımlar; model hafızası tek başına bilgi kanıtı değildir.",
+  "schemaVersion": "2.0.0",
+  "technologyId": "TECH-SWIFTDATA",
+  "name": "SwiftData",
+  "group": "MOBILE_IOS",
+  "ecosystem": "Apple",
+  "sourcePolicy": "DISCOVER_AND_PIN_OFFICIAL_PRIMARY_SOURCE",
+  "versionPolicy": "RUNTIME_DISCOVERY_WITH_PINNED_MISSION_VERSION",
+  "freshnessPolicy": "REVALIDATE_ON_MAJOR_RELEASE_OR_ADVISORY",
+  "knowledgeUnits": [
+    {
+      "facet": "fundamentals",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "implementation",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "configuration",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "build-package",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "architecture",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "interoperability",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "failure-modes",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "debugging",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "testing",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "security",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "performance",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "observability",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "deployment-operations",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "upgrade-migration",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    },
+    {
+      "facet": "selection-criteria",
+      "state": "NOT_RESEARCHED",
+      "sourceRefs": [],
+      "lastValidatedAt": null,
+      "certification": "NOT_CERTIFIED"
+    }
+  ],
+  "activationRule": "HIGH_RISK_OR_PRIMARY_MASTERY_REQUIRES_RESEARCHED_AND_CERTIFIED_RELEVANT_FACETS"
+}

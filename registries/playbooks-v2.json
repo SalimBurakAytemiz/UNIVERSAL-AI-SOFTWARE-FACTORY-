@@ -1,0 +1,322 @@
+{
+  "//TR": "Bu dosya agentların framework adı bilmekle kalmayıp gerçek işleri tekrar edilebilir quality/evidence sırasıyla yürütmesini sağlayan genişletilmiş canonical playbook kataloğunu tanımlar.",
+  "schemaVersion": "2.0.0",
+  "count": 18,
+  "playbooks": [
+    {
+      "id": "PB-API-STRICT-CONTRACT",
+      "name": "Strict API Contract Validation",
+      "competency": "API_QA",
+      "steps": [
+        "OpenAPI/JSON Schema source resolution",
+        "status/header/content-type validation",
+        "schema compile/validate",
+        "null-empty policy",
+        "negative matrix",
+        "contract drift",
+        "evidence"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-API-REALTIME",
+      "name": "Realtime/Socket Validation",
+      "competency": "QUALITY",
+      "steps": [
+        "handshake/auth",
+        "ordering/duplication/loss",
+        "heartbeat/reconnect",
+        "backpressure/slow consumer",
+        "partition/outage",
+        "load/network impairment",
+        "evidence"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-ANDROID-BUILD",
+      "name": "Android Build & Review",
+      "competency": "ANDROID",
+      "steps": [
+        "requirements",
+        "architecture",
+        "Gradle/build variants",
+        "Compose/View",
+        "network/data/background",
+        "tests",
+        "performance",
+        "security",
+        "release"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-IOS-BUILD",
+      "name": "iOS Build & Review",
+      "competency": "IOS",
+      "steps": [
+        "requirements",
+        "architecture",
+        "SwiftUI/UIKit",
+        "network/storage/background",
+        "tests",
+        "Instruments",
+        "signing",
+        "TestFlight"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-FLUTTER-BUILD",
+      "name": "Flutter Build & Review",
+      "competency": "CROSS_PLATFORM_MOBILE",
+      "steps": [
+        "Dart",
+        "widget/render/lifecycle",
+        "state/navigation",
+        "native bridge",
+        "testing",
+        "profiling",
+        "signing",
+        "release"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-REACT-NATIVE-BUILD",
+      "name": "React Native Build & Review",
+      "competency": "CROSS_PLATFORM_MOBILE",
+      "steps": [
+        "React/TS",
+        "Hermes/JSI/Fabric/TurboModules",
+        "native modules",
+        "navigation",
+        "Detox",
+        "profiling",
+        "build/release"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-WEB-BUILD",
+      "name": "Web Product Build",
+      "competency": "WEB",
+      "steps": [
+        "requirements",
+        "framework decision",
+        "SSR/CSR/SSG",
+        "state/data",
+        "accessibility",
+        "security",
+        "performance",
+        "tests",
+        "observability",
+        "release"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-BACKEND-BUILD",
+      "name": "Backend Service Build",
+      "competency": "BACKEND",
+      "steps": [
+        "service boundary",
+        "framework decision",
+        "API/validation",
+        "transaction/idempotency",
+        "cache/queue",
+        "security",
+        "tests",
+        "observability",
+        "deploy"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-DATABASE-DESIGN",
+      "name": "Database Design & Review",
+      "competency": "DATABASE",
+      "steps": [
+        "workload",
+        "data model",
+        "constraints",
+        "indexes",
+        "transactions",
+        "query plan",
+        "HA/backup",
+        "migration",
+        "security",
+        "tests"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-PERFORMANCE",
+      "name": "Performance Mission",
+      "competency": "PERFORMANCE",
+      "steps": [
+        "workload model",
+        "baseline",
+        "guardrails",
+        "load/spike/soak",
+        "telemetry",
+        "bottleneck correlation",
+        "capacity",
+        "regression"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-SECURITY",
+      "name": "Authorized Security Assessment",
+      "competency": "SECURITY",
+      "steps": [
+        "authorization",
+        "scope lock",
+        "threat model",
+        "safe test plan",
+        "tool execution",
+        "proof",
+        "severity",
+        "remediation",
+        "retest"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-CLOUD-PLATFORM",
+      "name": "Cloud Platform Build",
+      "competency": "PLATFORM",
+      "steps": [
+        "requirements",
+        "IaC",
+        "network/IAM",
+        "compute/data",
+        "observability",
+        "security",
+        "cost",
+        "DR",
+        "release"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-INCIDENT",
+      "name": "Incident Analysis",
+      "competency": "SRE",
+      "steps": [
+        "detect",
+        "triage",
+        "stabilize",
+        "timeline",
+        "evidence",
+        "root cause",
+        "remediate",
+        "verify",
+        "postmortem"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-GAME-BUILD",
+      "name": "Game Build",
+      "competency": "GAME",
+      "steps": [
+        "engine decision",
+        "gameplay architecture",
+        "asset pipeline",
+        "network/backend",
+        "performance",
+        "save/update",
+        "QA",
+        "release"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-IOT-BUILD",
+      "name": "IoT/Embedded Build",
+      "competency": "EMBEDDED_IOT",
+      "steps": [
+        "hardware profile",
+        "RTOS/toolchain",
+        "protocols",
+        "firmware",
+        "security",
+        "HIL",
+        "OTA",
+        "recovery"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-AI-BUILD",
+      "name": "AI/ML System Build",
+      "competency": "AI_ML",
+      "steps": [
+        "problem/eval definition",
+        "data provenance",
+        "model/retrieval choice",
+        "implementation",
+        "evals",
+        "security",
+        "cost/latency",
+        "monitoring",
+        "release"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-TECH-DISCOVERY",
+      "name": "Unknown Technology Acquisition",
+      "competency": "RESEARCH",
+      "steps": [
+        "detect",
+        "identify",
+        "official sources",
+        "license/security",
+        "sandbox",
+        "implementation",
+        "debug",
+        "eval",
+        "holdout",
+        "review",
+        "certify"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    },
+    {
+      "id": "PB-TECH-DECISION",
+      "name": "Technology Selection",
+      "competency": "ARCHITECTURE",
+      "steps": [
+        "project genome",
+        "constraints",
+        "candidates",
+        "fit matrix",
+        "prototype/benchmark",
+        "security/QA/SRE/cost review",
+        "ADR"
+      ],
+      "requiresEvidence": true,
+      "requiresIndependentReview": true
+    }
+  ]
+}

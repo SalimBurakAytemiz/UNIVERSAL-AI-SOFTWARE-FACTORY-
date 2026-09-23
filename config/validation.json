@@ -1,0 +1,165 @@
+{
+  "//TR": "Bu protected config package.json scriptlerine güvenmeden canonical deterministic validation adımlarını sabitler; mechanical closure + dependency-free kernel self-test typecheck/test öncesinde çalışır ve builder normal milestone sırasında bu listeyi değiştiremez.",
+  "schemaVersion": "1.4.0",
+  "steps": [
+    {
+      "id": "registries",
+      "command": [
+        "node",
+        "scripts/validate-registries.mjs"
+      ],
+      "parallelGroup": "static-1"
+    },
+    {
+      "id": "architecture",
+      "command": [
+        "node",
+        "scripts/validate-architecture.mjs"
+      ],
+      "parallelGroup": "static-1"
+    },
+    {
+      "id": "tr",
+      "command": [
+        "node",
+        "scripts/validate-tr-comments.mjs"
+      ],
+      "parallelGroup": "static-1"
+    },
+    {
+      "id": "competencies",
+      "command": [
+        "node",
+        "scripts/validate-agent-competencies.mjs"
+      ],
+      "parallelGroup": "static-1"
+    },
+    {
+      "id": "organization",
+      "command": [
+        "node",
+        "scripts/validate-organization.mjs"
+      ],
+      "parallelGroup": "static-2"
+    },
+    {
+      "id": "schemas",
+      "command": [
+        "node",
+        "scripts/validate-schema-catalog.mjs"
+      ],
+      "parallelGroup": "static-2"
+    },
+    {
+      "id": "technology",
+      "command": [
+        "node",
+        "scripts/validate-technology-graph.mjs"
+      ],
+      "parallelGroup": "static-2"
+    },
+    {
+      "id": "domain-packs",
+      "command": [
+        "node",
+        "scripts/validate-domain-packs.mjs"
+      ],
+      "parallelGroup": "static-2"
+    },
+    {
+      "id": "agent-semantic",
+      "command": [
+        "node",
+        "scripts/validate-agent-semantic.mjs"
+      ],
+      "parallelGroup": "static-3"
+    },
+    {
+      "id": "phase-contracts",
+      "command": [
+        "node",
+        "scripts/validate-phase-contracts.mjs"
+      ],
+      "parallelGroup": "static-3"
+    },
+    {
+      "id": "review-graph",
+      "command": [
+        "node",
+        "scripts/validate-review-graph-v2.mjs"
+      ],
+      "parallelGroup": "static-3"
+    },
+    {
+      "id": "schema-strict",
+      "command": [
+        "node",
+        "scripts/validate-schema-strictness.mjs"
+      ],
+      "parallelGroup": "static-3"
+    },
+    {
+      "id": "woven",
+      "command": [
+        "node",
+        "scripts/validate-woven-model.mjs"
+      ],
+      "parallelGroup": "static-4"
+    },
+    {
+      "id": "mechanical",
+      "command": [
+        "node",
+        "scripts/validate-mechanical-closure.mjs"
+      ],
+      "parallelGroup": "static-4"
+    },
+    {
+      "id": "mechanical-selftest",
+      "command": [
+        "node",
+        "scripts/mechanical-kernel-selftest.mjs"
+      ]
+    },
+    {
+      "id": "state-selftest",
+      "command": [
+        "node",
+        "scripts/supervisor-state-machine-selftest.mjs"
+      ]
+    },
+    {
+      "id": "secret-sanity",
+      "command": [
+        "node",
+        "scripts/secret-sanity.mjs"
+      ]
+    },
+    {
+      "id": "dependency-supply-chain",
+      "command": [
+        "node",
+        "scripts/dependency-supply-chain.mjs"
+      ],
+      "requiresDependencies": false
+    },
+    {
+      "id": "typecheck",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "--noEmit"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run"
+      ],
+      "requiresDependencies": true
+    }
+  ]
+}

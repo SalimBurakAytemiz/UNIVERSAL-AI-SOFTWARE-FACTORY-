@@ -1,0 +1,26 @@
+{
+  "//TR": "Bu dosya teknologi bilgisinin version drift, LTS/EOL ve major release değişimlerinde stale/recertification davranışını tanımlar.",
+  "schemaVersion": "2.0.0",
+  "rules": [
+    {
+      "trigger": "MAJOR_VERSION_CHANGE",
+      "action": "MARK_RELEVANT_KNOWLEDGE_STALE_AND_RECERTIFY"
+    },
+    {
+      "trigger": "SECURITY_ADVISORY",
+      "action": "TARGETED_RISK_REVIEW_AND_RECERTIFY"
+    },
+    {
+      "trigger": "EOL",
+      "action": "BLOCK_NEW_SELECTION_UNLESS_EXPLICIT_LEGACY_DECISION"
+    },
+    {
+      "trigger": "MISSION_PIN_DIFFERS_FROM_CERTIFIED_VERSION",
+      "action": "SANDBOX_COMPATIBILITY_EVAL"
+    },
+    {
+      "trigger": "OFFICIAL_DEPRECATION",
+      "action": "CREATE_MIGRATION_DECISION"
+    }
+  ]
+}

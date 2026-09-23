@@ -1,0 +1,322 @@
+{
+  "//TR": "Bu dosya gerçek dünyada yazılımı build/test/understand/operate etmek için gereken 45 execution lab/fabric'i first-class olarak register eder.",
+  "schemaVersion": "1.0.0",
+  "count": 45,
+  "fabrics": [
+    {
+      "id": "UASCO-FAB-001",
+      "name": "Repository Intelligence & Context Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-002",
+      "name": "Polyglot Language & Build Toolchain Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-003",
+      "name": "Source Control & Workspace Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-004",
+      "name": "Browser & Web Execution Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-005",
+      "name": "Mobile Device Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-006",
+      "name": "Desktop & OS Application Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-007",
+      "name": "Universal Test Environment & Sandbox Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-008",
+      "name": "Network & Protocol Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-009",
+      "name": "Identity & Access Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-010",
+      "name": "Messaging & Notification Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-011",
+      "name": "Data, Database & Storage Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-012",
+      "name": "Cloud & Infrastructure Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-013",
+      "name": "Security Engineering Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-014",
+      "name": "Performance, Profiling & Resource Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-015",
+      "name": "Observability, Diagnostics & Forensics Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-016",
+      "name": "File, Document & Content Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-017",
+      "name": "Accessibility & Human Interaction Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-018",
+      "name": "Localization & Globalization Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-019",
+      "name": "Payment & FinTech Transaction Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-020",
+      "name": "AI, ML & LLM Assurance Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-021",
+      "name": "CI/CD, SCM & Work-Management Integration Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-022",
+      "name": "Release, Distribution & Store Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-023",
+      "name": "Legacy & Enterprise Systems Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-024",
+      "name": "Embedded, IoT & Hardware Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-025",
+      "name": "XR, 3D & Media Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-026",
+      "name": "Game Execution & Device Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-027",
+      "name": "Blockchain & Smart-Contract Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-028",
+      "name": "GIS, Location & Mapping Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-029",
+      "name": "Safety-Critical & Formal Verification Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-030",
+      "name": "Scientific & Numeric Correctness Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-031",
+      "name": "Service Virtualization & Mocking Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-032",
+      "name": "Package, Dependency & Artifact Ecosystem Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-033",
+      "name": "PKI, Certificate & Key Lifecycle Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-034",
+      "name": "Untrusted Artifact Quarantine Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-035",
+      "name": "Product Analytics & Experimentation Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-036",
+      "name": "Search, Ranking & Recommendation Quality Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-037",
+      "name": "Collaboration & Workspace Communications Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-038",
+      "name": "Customer Secure Intake & Portal Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-039",
+      "name": "RPA & External Business Operations Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-040",
+      "name": "Voice, Meeting & Transcription Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-041",
+      "name": "Air-Gapped, On-Prem & VPC Deployment Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-042",
+      "name": "Durable Workflow, Queue & Backpressure Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-043",
+      "name": "Symbol, Sourcemap & Crash Symbolication Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-044",
+      "name": "Reproducible Build & Artifact Cache Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-FAB-045",
+      "name": "Trusted Time & Chain-of-Custody Fabric",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    }
+  ]
+}

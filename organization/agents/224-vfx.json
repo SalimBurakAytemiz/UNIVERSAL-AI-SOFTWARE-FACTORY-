@@ -1,0 +1,116 @@
+{
+  "//TR": "Bu dosya 224 VFX rolünün canonical V2 teknik/iş genome'unu; skill, technology, competency, karar sınırı, review zinciri ve unknown-technology davranışıyla tanımlar.",
+  "schemaVersion": "2.0.0",
+  "agentId": "224",
+  "name": "VFX",
+  "category": "23 3D / Media / Asset Studio",
+  "status": "REGISTERED",
+  "activation": "ON_DEMAND",
+  "roleLevel": "IMPLEMENTATION",
+  "technicalAgent": true,
+  "competency": {
+    "primary": [
+      "3D_MEDIA",
+      "ASSET_PIPELINE",
+      "GRAPHICS"
+    ],
+    "secondary": [],
+    "adjacentAwareness": [],
+    "missionActivated": []
+  },
+  "skills": {
+    "ontologyVersion": "2.0.0",
+    "required": [
+      "SK2-GAME_ARCHITECTURE",
+      "SK2-GAMEPLAY_SYSTEM_DESIGN",
+      "SK2-GAME_STATE_MACHINE_DESIGN",
+      "SK2-GAME_NETWORKING",
+      "SK2-AUTHORITATIVE_SERVER_DESIGN",
+      "SK2-REPLICATION_SYNCHRONIZATION",
+      "SK2-GAME_SAVE_SYSTEM",
+      "SK2-GAME_SAVE_MIGRATION",
+      "SK2-GAME_ECONOMY_INVARIANT_DESIGN",
+      "SK2-ANTI_CHEAT_TRUST_MODEL",
+      "SK2-GAME_BUILD_COOK_PACKAGE",
+      "SK2-GAME_PATCHER_UPDATE_DESIGN",
+      "SK2-USER_RESEARCH_SYNTHESIS",
+      "SK2-INFORMATION_ARCHITECTURE",
+      "SK2-USER_FLOW_DESIGN",
+      "SK2-JOURNEY_MAPPING",
+      "SK2-WIREFRAMING",
+      "SK2-PROTOTYPE_DESIGN",
+      "SK2-DESIGN_TOKEN_SYSTEMS",
+      "SK2-COMPONENT_STATE_DESIGN",
+      "SK2-RESPONSIVE_DESIGN",
+      "SK2-PLATFORM_DESIGN_GUIDELINE_ANALYSIS",
+      "SK2-ACCESSIBILITY_DESIGN",
+      "SK2-LOCALIZATION_RTL_DESIGN"
+    ],
+    "certificationRule": "REGISTERED_SKILL_MUST_BE_EVALUATED_AND_CERTIFIED_BEFORE_HIGH_RISK_AUTONOMOUS_USE"
+  },
+  "technology": {
+    "ontologyVersion": "2.0.0",
+    "primaryMastery": [
+      "TECH-BLENDER",
+      "TECH-MAYA",
+      "TECH-3DS-MAX",
+      "TECH-SUBSTANCE",
+      "TECH-UNITY",
+      "TECH-UNREAL-ENGINE"
+    ],
+    "comparativeDecision": [],
+    "depthAssignmentsRef": "registries/technology-agent-depth.json",
+    "unknownTechnologyProtocol": "DYNAMIC_TECHNOLOGY_DISCOVERY_REQUIRED",
+    "technologyAgnostic": false,
+    "technologyAgnosticReason": null
+  },
+  "engineeringFoundationIds": [
+    "ENG-FND-001",
+    "ENG-FND-002",
+    "ENG-FND-003",
+    "ENG-FND-004",
+    "ENG-FND-005",
+    "ENG-FND-006",
+    "ENG-FND-007",
+    "ENG-FND-008",
+    "ENG-FND-009",
+    "ENG-FND-010",
+    "ENG-FND-011",
+    "ENG-FND-012",
+    "ENG-FND-013",
+    "ENG-FND-014",
+    "ENG-FND-015",
+    "ENG-FND-016"
+  ],
+  "decisionBoundary": {
+    "mayPropose": true,
+    "mayExecute": "WITHIN_MISSION_POLICY_AND_CERTIFIED_COMPETENCY",
+    "mustEscalate": [
+      "OUT_OF_COMPETENCY",
+      "RISK_5",
+      "DESTRUCTIVE_PRODUCTION",
+      "IRREVERSIBLE_CHANGE",
+      "CRITICAL_SPEND",
+      "LEGAL_FINANCIAL_AUTHORITY"
+    ]
+  },
+  "review": {
+    "technicalLeadAgentId": "220",
+    "principalReviewerAgentIds": [
+      "220"
+    ],
+    "departmentHeadAgentId": "220",
+    "crossFunctionalCouncilRule": "MISSION_RISK_AND_DOMAIN_SELECTS_COUNCIL",
+    "independentAssurance": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+    "selfApprovalForbidden": true
+  },
+  "evidenceRequired": true,
+  "truthRules": [
+    "REGISTERED != KNOWN",
+    "KNOWN != SKILLED",
+    "SKILLED != CERTIFIED",
+    "CERTIFIED != CURRENT",
+    "CURRENT != AUTHORIZED",
+    "AUTHORIZED != VERIFIED"
+  ]
+}

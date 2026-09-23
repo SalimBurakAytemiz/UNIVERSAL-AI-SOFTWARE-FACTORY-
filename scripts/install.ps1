@@ -1,0 +1,22 @@
+# //TR: Bu full installer artifact integrity -> preflight -> deterministic bootstrap -> Git/private remote -> provider provenance/auth -> builder boundary -> evidence signing -> Control Tower -> Phase0 sırasını kilitler; bütün adımlar tek installId ile ledger'a yazılır.
+param([string]$RemoteUrl="",[switch]$InstallPrereqs,[switch]$InstallAiCli,[switch]$SkipOmniRoute,[switch]$SkipProviderSmoke,[switch]$SkipDesktopSmoke,[switch]$SkipAutoStart,[switch]$AllowUnverifiedRemote)
+$ErrorActionPreference="Stop";Set-Location (Split-Path -Parent $PSScriptRoot);[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false);New-Item -ItemType Directory -Force ".ai\runtime"|Out-Null
+$script:steps=[System.Collections.Generic.List[object]]::new();$script:installId="INSTALL-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())";$env:UASCO_INSTALL_ID=$script:installId
+function Save-Steps{$doc=@{"//TR"="Bu runtime report one-click install adımlarının tek installId altındaki sıra/durum/süre bilgisini taşır.";schemaVersion="1.1.0";installId=$script:installId;updatedAt=(Get-Date).ToString("o");steps=$script:steps};$doc|ConvertTo-Json -Depth 10|Set-Content -Encoding UTF8 ".ai\runtime\INSTALL_STEPS.json"}
+function Run-Step([string]$Name,[scriptblock]$Action){$started=Get-Date;try{& $Action;$script:steps.Add(@{name=$Name;status="PASS";startedAt=$started.ToString("o");finishedAt=(Get-Date).ToString("o");durationMs=[int]((Get-Date)-$started).TotalMilliseconds});Save-Steps}catch{$script:steps.Add(@{name=$Name;status="FAIL";startedAt=$started.ToString("o");finishedAt=(Get-Date).ToString("o");durationMs=[int]((Get-Date)-$started).TotalMilliseconds;error=$_.Exception.Message});Save-Steps;try{node ".\scripts\install-report.mjs"|Out-Null}catch{};throw}}
+Run-Step "artifact-integrity-powershell" {& ".\scripts\verify-artifact.ps1"}
+if($InstallPrereqs){Run-Step "install-prerequisites" {& ".\scripts\install-prereqs.ps1" -InstallAiCli:$InstallAiCli}}
+Run-Step "artifact-integrity-node" {node ".\scripts\verify-artifact.mjs";if($LASTEXITCODE -ne 0){throw "Artifact integrity verification failed"}}
+Run-Step "bootstrap-core" {& ".\scripts\bootstrap.ps1" -SkipOmniRoute:$SkipOmniRoute}
+Run-Step "git-baseline" {& ".\scripts\init-private-git.ps1" -RemoteUrl $RemoteUrl -AllowUnverifiedRemote:$AllowUnverifiedRemote}
+Run-Step "provider-provenance" {node ".\scripts\capture-provider-provenance.mjs";if($LASTEXITCODE -ne 0){throw "Provider provenance failed"}}
+if(-not $SkipProviderSmoke){Run-Step "provider-auth-smoke" {node ".\scripts\provider-smoke.mjs";if($LASTEXITCODE -ne 0){throw "Claude/Codex provider smoke failed"}}}else{$script:steps.Add(@{name="provider-auth-smoke";status="SKIPPED";startedAt=(Get-Date).ToString("o");finishedAt=(Get-Date).ToString("o");durationMs=0});Save-Steps}
+Run-Step "builder-boundary-smoke" {node ".\scripts\builder-boundary-smoke.mjs";if($LASTEXITCODE -ne 0){throw "Builder boundary smoke failed"}}
+Run-Step "evidence-signing" {node ".\scripts\init-evidence-signing.mjs";if($LASTEXITCODE -ne 0){throw "Evidence signing init failed"}}
+Run-Step "evidence-key-protection" {& ".\scripts\harden-evidence-key.ps1"}
+Run-Step "remote-protection" {node ".\scripts\verify-remote-protection.mjs";if($LASTEXITCODE -ne 0){throw "Remote protection check failed"}}
+Run-Step "supervisor-state-selftest" {node ".\scripts\supervisor-state-machine-selftest.mjs";if($LASTEXITCODE -ne 0){throw "Supervisor state-machine selftest failed"}}
+Run-Step "control-api-smoke" {node ".\scripts\smoke-control-api.mjs";if($LASTEXITCODE -ne 0){throw "Control API smoke failed"}}
+if(-not $SkipDesktopSmoke){Run-Step "control-tower-smoke" {node ".\scripts\smoke-control-tower.mjs";if($LASTEXITCODE -ne 0){throw "Control Tower smoke failed"}}}else{$script:steps.Add(@{name="control-tower-smoke";status="SKIPPED";startedAt=(Get-Date).ToString("o");finishedAt=(Get-Date).ToString("o");durationMs=0});Save-Steps}
+Run-Step "phase0-acceptance" {node ".\scripts\phase0-acceptance.mjs";if($LASTEXITCODE -ne 0){throw "Phase0 acceptance BLOCKED"}}
+node ".\scripts\install-report.mjs";$phase0=Get-Content ".ai\runtime\PHASE0_ACCEPTANCE.json" -Raw|ConvertFrom-Json;if(-not $SkipAutoStart -and ($phase0.final -eq "CLEAN" -or $phase0.final -eq "CLEAN_LOCAL_ONLY")){Run-Step "autostart" {& ".\scripts\register-autostart.ps1"}};Write-Host "INSTALL_RESULT: $($phase0.final)"

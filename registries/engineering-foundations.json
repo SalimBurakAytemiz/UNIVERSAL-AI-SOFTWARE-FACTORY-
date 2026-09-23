@@ -1,0 +1,103 @@
+{
+  "//TR": "Bu dosya kod yazan, test eden, inceleyen veya teknik karar veren tüm agentların ortak mühendislik dilini tanımlar; rol uzmanlığının yerine geçmez.",
+  "schemaVersion": "2.0.0",
+  "count": 16,
+  "foundations": [
+    {
+      "id": "ENG-FND-001",
+      "name": "Software Construction",
+      "scope": "modularity, error handling, maintainability, API boundaries, configuration",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-002",
+      "name": "Algorithms & Data Structures",
+      "scope": "complexity, collections, queues, trees, hashing, trade-offs",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-003",
+      "name": "Programming Paradigms",
+      "scope": "OOP, functional, procedural, event-driven, data-oriented trade-offs",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-004",
+      "name": "Git & Source Control",
+      "scope": "branching, merge, rebase, bisect, revert, tags, worktrees, PR/MR",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-005",
+      "name": "Operating Systems",
+      "scope": "processes, threads, filesystems, permissions, services, signals, IPC",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-006",
+      "name": "Networking",
+      "scope": "DNS, TCP, UDP, TLS, HTTP, proxy, NAT, latency, loss, timeouts",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-007",
+      "name": "Security Literacy",
+      "scope": "authn, authz, secrets, injection, least privilege, threat awareness",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-008",
+      "name": "Testing Literacy",
+      "scope": "unit, integration, contract, E2E, negative, property, fuzz, regression",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-009",
+      "name": "Observability",
+      "scope": "logs, metrics, traces, profiling, health, readiness, correlation",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-010",
+      "name": "Data Literacy",
+      "scope": "SQL, transactions, consistency, serialization, caching, schema evolution",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-011",
+      "name": "Distributed Systems",
+      "scope": "idempotency, retries, ordering, partitions, consensus awareness, clocks",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-012",
+      "name": "Performance",
+      "scope": "latency, throughput, saturation, CPU, memory, IO, profiling, capacity",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-013",
+      "name": "Delivery & Operations",
+      "scope": "CI/CD, deploy, rollback, backup, restore, incident fundamentals",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-014",
+      "name": "Dependency & Supply Chain",
+      "scope": "package managers, SBOM, provenance, licensing, update risk",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-015",
+      "name": "Architecture Decision Making",
+      "scope": "requirements, NFRs, trade-offs, ADRs, reversibility, cost",
+      "requiredForTechnicalAgents": true
+    },
+    {
+      "id": "ENG-FND-016",
+      "name": "Technical Communication",
+      "scope": "evidence, assumptions, unknowns, concise escalation, design review",
+      "requiredForTechnicalAgents": true
+    }
+  ]
+}

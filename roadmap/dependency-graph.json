@@ -1,0 +1,1725 @@
+{
+  "//TR": "Bu dosya 149 acceptance phase'in numara sırasına körlemesine bağlanmak yerine gerçek dependency DAG üzerinden runnable/parallel work hesaplanmasını sağlar.",
+  "schemaVersion": "1.0.0",
+  "nodeCount": 149,
+  "nodes": [
+    {
+      "phase": 0,
+      "title": "Private repo and toolchain baseline",
+      "dependsOn": [],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 1,
+      "title": "Canonical primitive and schema registry",
+      "dependsOn": [
+        0
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 2,
+      "title": "Identity/RBAC/service/worker identities",
+      "dependsOn": [
+        1
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 3,
+      "title": "Approval/non-repudiation/break-glass",
+      "dependsOn": [
+        2
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 4,
+      "title": "Action Gateway and side-effect ledger",
+      "dependsOn": [
+        3
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 5,
+      "title": "Encrypted vault/key lifecycle",
+      "dependsOn": [
+        2,
+        3
+      ],
+      "priority": "HIGH"
+    },
+    {
+      "phase": 6,
+      "title": "Universal DLP/egress controls",
+      "dependsOn": [
+        2,
+        5
+      ],
+      "priority": "HIGH"
+    },
+    {
+      "phase": 7,
+      "title": "Event/audit/trusted time/state migrations",
+      "dependsOn": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 8,
+      "title": "Customer isolation/retention/offboarding",
+      "dependsOn": [
+        2,
+        6,
+        7
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 9,
+      "title": "40 departments and leadership overlays",
+      "dependsOn": [
+        1,
+        2,
+        8
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 10,
+      "title": "363 Agent Technical Genome runtime",
+      "dependsOn": [
+        9
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 11,
+      "title": "Skill/competency pack registry",
+      "dependsOn": [
+        10
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 12,
+      "title": "Technical standards/playbooks",
+      "dependsOn": [
+        11
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 13,
+      "title": "Framework/toolchain packs",
+      "dependsOn": [
+        11,
+        12
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 14,
+      "title": "Skill certification/golden/holdout",
+      "dependsOn": [
+        10,
+        11,
+        12,
+        13
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 15,
+      "title": "Skill gap acquisition",
+      "dependsOn": [
+        14,
+        33,
+        34
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 16,
+      "title": "Information compression pyramid",
+      "dependsOn": [
+        9,
+        10
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 17,
+      "title": "Cross-functional councils",
+      "dependsOn": [
+        9,
+        16
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 18,
+      "title": "Reviewer independence/common-mode risk",
+      "dependsOn": [
+        3,
+        10,
+        17
+      ],
+      "priority": "HIGH"
+    },
+    {
+      "phase": 19,
+      "title": "Mission OS",
+      "dependsOn": [
+        2,
+        3,
+        4,
+        7,
+        8,
+        10
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 20,
+      "title": "Preflight/dry-run",
+      "dependsOn": [
+        4,
+        6,
+        19
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 21,
+      "title": "Project/System Genome",
+      "dependsOn": [
+        19,
+        20
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 22,
+      "title": "Requirement/decision/design/code traceability",
+      "dependsOn": [
+        7,
+        21
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 23,
+      "title": "Technology Decision Engine",
+      "dependsOn": [
+        13,
+        21,
+        22
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 24,
+      "title": "ADR and dissent ledger",
+      "dependsOn": [
+        22,
+        23
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 25,
+      "title": "Portfolio scheduler/SLA/budget priority",
+      "dependsOn": [
+        7,
+        8,
+        19
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 26,
+      "title": "Pause/resume/abort/global kill",
+      "dependsOn": [
+        4,
+        7,
+        25
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 27,
+      "title": "Durable workflow/queue/retry/DLQ",
+      "dependsOn": [
+        7,
+        25,
+        26
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 28,
+      "title": "Provider entitlement/ToS registry",
+      "dependsOn": [
+        2,
+        6,
+        7
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 29,
+      "title": "Model gateway/data routing",
+      "dependsOn": [
+        6,
+        28
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 30,
+      "title": "OmniRoute runtime discovery",
+      "dependsOn": [
+        29
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 31,
+      "title": "Prompt/model/context provenance",
+      "dependsOn": [
+        7,
+        29,
+        30
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 32,
+      "title": "Repository Intelligence/context compiler",
+      "dependsOn": [
+        10,
+        22,
+        31
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 33,
+      "title": "Research clean-room/source authority",
+      "dependsOn": [
+        6,
+        32
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 34,
+      "title": "Knowledge graph/freshness",
+      "dependsOn": [
+        33
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 35,
+      "title": "Learning poisoning defense",
+      "dependsOn": [
+        6,
+        34
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 36,
+      "title": "Certification dependency/invalidation",
+      "dependsOn": [
+        14,
+        34
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 37,
+      "title": "Recertification/revocation",
+      "dependsOn": [
+        36
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 38,
+      "title": "Universal Resource Registry",
+      "dependsOn": [
+        2,
+        7,
+        19
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 39,
+      "title": "Lease/scheduler/quarantine",
+      "dependsOn": [
+        27,
+        38
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 40,
+      "title": "Local/remote worker zero trust",
+      "dependsOn": [
+        2,
+        38,
+        39
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 41,
+      "title": "Tool installer/version manager",
+      "dependsOn": [
+        4,
+        38
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 42,
+      "title": "Adapter/Plugin SDK and supply-chain trust",
+      "dependsOn": [
+        5,
+        6,
+        41
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 43,
+      "title": "Lab health center",
+      "dependsOn": [
+        38,
+        42
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 44,
+      "title": "Environment/sandbox/digital twin",
+      "dependsOn": [
+        20,
+        40,
+        43
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 45,
+      "title": "Capture/Evidence Bus",
+      "dependsOn": [
+        7,
+        44
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 46,
+      "title": "Report/export/chain-of-custody",
+      "dependsOn": [
+        6,
+        45
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 47,
+      "title": "Design Studio",
+      "dependsOn": [
+        21,
+        22,
+        23,
+        45
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 48,
+      "title": "Web Studio",
+      "dependsOn": [
+        21,
+        22,
+        23,
+        42,
+        45,
+        47
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 49,
+      "title": "Backend/API Studio",
+      "dependsOn": [
+        21,
+        22,
+        23,
+        42,
+        45
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 50,
+      "title": "Data/Database Studio",
+      "dependsOn": [
+        21,
+        22,
+        23,
+        42,
+        45
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 51,
+      "title": "Android/iOS/Cross-platform Mobile Studio",
+      "dependsOn": [
+        21,
+        22,
+        23,
+        42,
+        45,
+        47
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 52,
+      "title": "Desktop Studio",
+      "dependsOn": [
+        21,
+        22,
+        23,
+        42,
+        45,
+        47
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 53,
+      "title": "AI/Data Studio",
+      "dependsOn": [
+        21,
+        22,
+        23,
+        29,
+        42,
+        45
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 54,
+      "title": "Document/Media Studio",
+      "dependsOn": [
+        21,
+        22,
+        42,
+        45,
+        47
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 55,
+      "title": "Playwright/Selenium/browser matrix",
+      "dependsOn": [
+        43,
+        44,
+        48
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 56,
+      "title": "Cloud browser adapters",
+      "dependsOn": [
+        42,
+        43,
+        55
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 57,
+      "title": "Local Android ADB/Appium/UiAutomator2",
+      "dependsOn": [
+        43,
+        44,
+        51
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 58,
+      "title": "Android Espresso/Compose test path",
+      "dependsOn": [
+        57
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 59,
+      "title": "iOS macOS/XCUITest/Appium path",
+      "dependsOn": [
+        43,
+        44,
+        51
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 60,
+      "title": "Cloud device farm adapters",
+      "dependsOn": [
+        42,
+        43,
+        57,
+        59
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 61,
+      "title": "Desktop Windows/macOS/Linux execution",
+      "dependsOn": [
+        43,
+        44,
+        52
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 62,
+      "title": "Compatibility planner and impact selection",
+      "dependsOn": [
+        23,
+        55,
+        57,
+        59,
+        61
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 63,
+      "title": "HTTP/REST/OpenAPI strict contract lab",
+      "dependsOn": [
+        42,
+        44,
+        49
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 64,
+      "title": "GraphQL/gRPC/WebSocket/SSE",
+      "dependsOn": [
+        49,
+        63
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 65,
+      "title": "TCP/UDP/QUIC/WebRTC/MQTT/AMQP/Kafka",
+      "dependsOn": [
+        43,
+        49,
+        64
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 66,
+      "title": "OAuth/OIDC/SAML/SCIM/WebAuthn",
+      "dependsOn": [
+        2,
+        49,
+        63
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 67,
+      "title": "Email/SMS/Push/Webhook",
+      "dependsOn": [
+        49,
+        63
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 68,
+      "title": "Files/PDF/Office/OCR/Media",
+      "dependsOn": [
+        44,
+        54
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 69,
+      "title": "Service virtualization/mocking/fault injection",
+      "dependsOn": [
+        44,
+        49
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 70,
+      "title": "SQL/NoSQL/cache/search",
+      "dependsOn": [
+        44,
+        50
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 71,
+      "title": "Migration/backup/restore/reconciliation",
+      "dependsOn": [
+        7,
+        50,
+        70
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 72,
+      "title": "ETL/ELT/lineage/quality",
+      "dependsOn": [
+        50,
+        70
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 73,
+      "title": "Docker/Kubernetes/Helm/IaC",
+      "dependsOn": [
+        42,
+        44,
+        49,
+        50
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 74,
+      "title": "AWS/Azure/GCP",
+      "dependsOn": [
+        28,
+        73
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 75,
+      "title": "Distributed failure/chaos",
+      "dependsOn": [
+        69,
+        73,
+        98,
+        101
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 76,
+      "title": "Air-gapped/on-prem/VPC",
+      "dependsOn": [
+        40,
+        42,
+        73
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 77,
+      "title": "Functional/journey/exploratory",
+      "dependsOn": [
+        48,
+        49,
+        50,
+        51,
+        52,
+        55,
+        57,
+        59,
+        61
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 78,
+      "title": "Strict API Ajv/Postman/Newman",
+      "dependsOn": [
+        63,
+        77
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 79,
+      "title": "Backend/integration/contract",
+      "dependsOn": [
+        49,
+        63,
+        69,
+        77
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 80,
+      "title": "DB/data integrity",
+      "dependsOn": [
+        50,
+        70,
+        71,
+        77
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 81,
+      "title": "Mobile/browser/desktop",
+      "dependsOn": [
+        55,
+        57,
+        59,
+        61,
+        62,
+        77
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 82,
+      "title": "Visual/pixel-perfect",
+      "dependsOn": [
+        47,
+        48,
+        51,
+        52,
+        55,
+        57,
+        59,
+        61
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 83,
+      "title": "Accessibility/screen readers",
+      "dependsOn": [
+        47,
+        48,
+        51,
+        52,
+        55,
+        57,
+        59,
+        61
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 84,
+      "title": "Localization/timezone",
+      "dependsOn": [
+        47,
+        48,
+        51,
+        52,
+        55,
+        57,
+        59,
+        61
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 85,
+      "title": "Automation/SDET/flaky health",
+      "dependsOn": [
+        55,
+        57,
+        59,
+        61,
+        63,
+        77
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 86,
+      "title": "Coverage truth/unknown detector",
+      "dependsOn": [
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 87,
+      "title": "Threat modeling/attack surface",
+      "dependsOn": [
+        4,
+        6,
+        21,
+        22,
+        23
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 88,
+      "title": "SAST/DAST/SCA",
+      "dependsOn": [
+        42,
+        48,
+        49,
+        51,
+        52,
+        73,
+        87
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 89,
+      "title": "Secrets/PKI",
+      "dependsOn": [
+        5,
+        42,
+        87
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 90,
+      "title": "Container/IaC/cloud",
+      "dependsOn": [
+        73,
+        74,
+        87,
+        88
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 91,
+      "title": "API/mobile/desktop security",
+      "dependsOn": [
+        57,
+        59,
+        61,
+        63,
+        66,
+        87,
+        88
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 92,
+      "title": "Fuzz/property/mutation",
+      "dependsOn": [
+        63,
+        69,
+        77,
+        88
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 93,
+      "title": "SBOM/provenance/license/IP",
+      "dependsOn": [
+        42,
+        88
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 94,
+      "title": "Authorized assessment/remediation/retest",
+      "dependsOn": [
+        20,
+        45,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 95,
+      "title": "Load/stress/spike/soak",
+      "dependsOn": [
+        63,
+        73,
+        98
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 96,
+      "title": "Browser/mobile/game profiling",
+      "dependsOn": [
+        55,
+        57,
+        59,
+        61,
+        98,
+        116
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 97,
+      "title": "Resource/leak/capacity",
+      "dependsOn": [
+        70,
+        73,
+        95,
+        98
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 98,
+      "title": "OpenTelemetry/logs/metrics/traces",
+      "dependsOn": [
+        45,
+        49,
+        50,
+        51,
+        52,
+        73
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 99,
+      "title": "Crash dumps/symbolication",
+      "dependsOn": [
+        61,
+        98
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 100,
+      "title": "SLO/error budgets/synthetic monitoring",
+      "dependsOn": [
+        95,
+        98
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 101,
+      "title": "Incident/postmortem/runbooks",
+      "dependsOn": [
+        7,
+        98,
+        100
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 102,
+      "title": "Release/canary/rollback",
+      "dependsOn": [
+        26,
+        45,
+        73,
+        98,
+        101
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 103,
+      "title": "DR/RPO/RTO drills",
+      "dependsOn": [
+        71,
+        73,
+        101,
+        102
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 104,
+      "title": "Self-update signed channels/drift detection",
+      "dependsOn": [
+        7,
+        42,
+        102,
+        103
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 105,
+      "title": "Payments/FinTech",
+      "dependsOn": [
+        23,
+        46,
+        78,
+        80,
+        87,
+        91,
+        95,
+        98,
+        102
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 106,
+      "title": "Capital Markets",
+      "dependsOn": [
+        23,
+        46,
+        80,
+        87,
+        95,
+        98,
+        102
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 107,
+      "title": "Commerce/Marketplace",
+      "dependsOn": [
+        23,
+        46,
+        48,
+        49,
+        50,
+        77,
+        78,
+        80,
+        87,
+        95,
+        102
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 108,
+      "title": "SaaS/Enterprise",
+      "dependsOn": [
+        23,
+        46,
+        48,
+        49,
+        50,
+        66,
+        77,
+        87,
+        98,
+        102
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 109,
+      "title": "Streaming/Media",
+      "dependsOn": [
+        23,
+        46,
+        48,
+        49,
+        54,
+        64,
+        65,
+        95,
+        98,
+        102
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 110,
+      "title": "AI/LLM Assurance",
+      "dependsOn": [
+        53,
+        77,
+        86,
+        87,
+        92,
+        98
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 111,
+      "title": "Search/Ranking/Recommendation",
+      "dependsOn": [
+        50,
+        53,
+        72,
+        77,
+        95,
+        98
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 112,
+      "title": "Analytics/Experimentation",
+      "dependsOn": [
+        50,
+        53,
+        72,
+        77,
+        98
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 113,
+      "title": "Scientific/Numeric",
+      "dependsOn": [
+        53,
+        77,
+        92
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 114,
+      "title": "Safety-critical/Formal",
+      "dependsOn": [
+        22,
+        77,
+        86,
+        87,
+        92,
+        93
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 115,
+      "title": "GIS/Location",
+      "dependsOn": [
+        48,
+        49,
+        50,
+        51,
+        77
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 116,
+      "title": "Game Studio",
+      "dependsOn": [
+        21,
+        22,
+        23,
+        42,
+        45,
+        47,
+        49,
+        50,
+        52
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 117,
+      "title": "Unity/Unreal/Godot packs",
+      "dependsOn": [
+        116
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 118,
+      "title": "Game multiplayer/backend/economy",
+      "dependsOn": [
+        49,
+        50,
+        64,
+        65,
+        116
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 119,
+      "title": "Game execution/server/device",
+      "dependsOn": [
+        43,
+        44,
+        116,
+        117,
+        118
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 120,
+      "title": "Game intelligence/authorized reverse engineering",
+      "dependsOn": [
+        20,
+        33,
+        45,
+        116,
+        119
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 121,
+      "title": "XR/3D/Media",
+      "dependsOn": [
+        47,
+        52,
+        54,
+        116,
+        117
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 122,
+      "title": "Embedded/IoT/HIL",
+      "dependsOn": [
+        21,
+        22,
+        23,
+        42,
+        43,
+        44,
+        65
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 123,
+      "title": "Blockchain/Smart Contract",
+      "dependsOn": [
+        21,
+        22,
+        23,
+        49,
+        63,
+        87,
+        92
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 124,
+      "title": "CRM/Sales/Proposal",
+      "dependsOn": [
+        8,
+        19,
+        22,
+        46
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 125,
+      "title": "Contract/Engagement/Onboarding",
+      "dependsOn": [
+        8,
+        19,
+        124
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 126,
+      "title": "Business systems/ERP/OMS/WMS/PIM/CMS",
+      "dependsOn": [
+        49,
+        50,
+        124,
+        125
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 127,
+      "title": "Billing/Accounting/Reconciliation",
+      "dependsOn": [
+        49,
+        50,
+        125,
+        126
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 128,
+      "title": "Finance/FinOps/Profitability",
+      "dependsOn": [
+        25,
+        74,
+        127
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 129,
+      "title": "Support/Success/Renewal",
+      "dependsOn": [
+        46,
+        124,
+        125
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 130,
+      "title": "Vendor/Procurement/SLA/BCP",
+      "dependsOn": [
+        25,
+        103,
+        125,
+        128
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 131,
+      "title": "Global communications/localization",
+      "dependsOn": [
+        8,
+        46,
+        84,
+        124
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 132,
+      "title": "Customer secure portal/RPA/meeting transcription",
+      "dependsOn": [
+        48,
+        49,
+        67,
+        124,
+        131
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 133,
+      "title": "Policy regression suite",
+      "dependsOn": [
+        4,
+        6,
+        7,
+        18,
+        88,
+        92
+      ],
+      "priority": "HIGH"
+    },
+    {
+      "phase": 134,
+      "title": "Authority/customer isolation/DLP acceptance",
+      "dependsOn": [
+        2,
+        3,
+        4,
+        6,
+        8,
+        133
+      ],
+      "priority": "HIGH"
+    },
+    {
+      "phase": 135,
+      "title": "Agent competency certification acceptance",
+      "dependsOn": [
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        18,
+        36,
+        37
+      ],
+      "priority": "HIGH"
+    },
+    {
+      "phase": 136,
+      "title": "Golden + private holdout suites",
+      "dependsOn": [
+        14,
+        35,
+        36,
+        37,
+        86,
+        110
+      ],
+      "priority": "HIGH"
+    },
+    {
+      "phase": 137,
+      "title": "Representative web project",
+      "dependsOn": [
+        48,
+        55,
+        56,
+        77,
+        82,
+        83,
+        84,
+        87,
+        88,
+        95,
+        98,
+        102,
+        133,
+        134,
+        135,
+        136
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 138,
+      "title": "Representative physical-device mobile project",
+      "dependsOn": [
+        51,
+        57,
+        58,
+        59,
+        60,
+        77,
+        81,
+        82,
+        83,
+        84,
+        87,
+        91,
+        96,
+        98,
+        102,
+        133,
+        134,
+        135,
+        136
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 139,
+      "title": "Representative desktop project",
+      "dependsOn": [
+        52,
+        61,
+        77,
+        81,
+        82,
+        83,
+        87,
+        91,
+        96,
+        98,
+        102,
+        133,
+        134,
+        135,
+        136
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 140,
+      "title": "Representative API/data project",
+      "dependsOn": [
+        49,
+        50,
+        63,
+        64,
+        70,
+        71,
+        72,
+        78,
+        79,
+        80,
+        87,
+        91,
+        95,
+        98,
+        102,
+        133,
+        134,
+        135,
+        136
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 141,
+      "title": "Representative game project",
+      "dependsOn": [
+        96,
+        98,
+        102,
+        116,
+        117,
+        118,
+        119,
+        120,
+        133,
+        134,
+        135,
+        136
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 142,
+      "title": "Representative IoT project",
+      "dependsOn": [
+        65,
+        75,
+        87,
+        93,
+        95,
+        98,
+        102,
+        122,
+        133,
+        134,
+        135,
+        136
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 143,
+      "title": "Authorized security mission",
+      "dependsOn": [
+        94,
+        133,
+        134,
+        135,
+        136
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 144,
+      "title": "Performance/load mission",
+      "dependsOn": [
+        95,
+        96,
+        97,
+        100,
+        133,
+        134,
+        135,
+        136
+      ],
+      "priority": "NORMAL"
+    },
+    {
+      "phase": 145,
+      "title": "Incident/recovery drill",
+      "dependsOn": [
+        101,
+        103,
+        104,
+        133,
+        134,
+        135,
+        136
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 146,
+      "title": "Factory dogfooding/self-upgrade",
+      "dependsOn": [
+        104,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        145
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 147,
+      "title": "Comprehensive Codex independent review",
+      "dependsOn": [
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        145,
+        146
+      ],
+      "priority": "CRITICAL_PATH"
+    },
+    {
+      "phase": 148,
+      "title": "Private production release",
+      "dependsOn": [
+        147
+      ],
+      "priority": "CRITICAL_PATH"
+    }
+  ]
+}

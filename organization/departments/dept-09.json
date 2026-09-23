@@ -1,0 +1,46 @@
+{
+  "//TR": "Bu dosya 09 UX/UI & Design departmanının head/principal/member yapısını, ortak competency alanlarını ve takım başının hangi teknik breadth'i gözetmesi gerektiğini tanımlar.",
+  "schemaVersion": "2.0.0",
+  "departmentId": "DEPT-09",
+  "name": "09 UX/UI & Design",
+  "headAgentId": "060",
+  "principalReviewerAgentIds": [
+    "060"
+  ],
+  "memberAgentIds": [
+    "060",
+    "061",
+    "062",
+    "063",
+    "064",
+    "065",
+    "066"
+  ],
+  "competencyCoverage": [
+    "DESIGN",
+    "ACCESSIBILITY",
+    "LOCALIZATION",
+    "USER_RESEARCH",
+    "DATA",
+    "DATABASE"
+  ],
+  "primaryTechnologyCoverage": [
+    "TECH-FIGMA",
+    "TECH-STORYBOOK",
+    "TECH-AXE-CORE",
+    "TECH-REACT",
+    "TECH-FLUTTER",
+    "TECH-SWIFTUI",
+    "TECH-JETPACK-COMPOSE"
+  ],
+  "comparativeTechnologyCoverage": [],
+  "headResponsibilities": [
+    "mission workload and specialist assignment",
+    "technical quality aggregation",
+    "cross-specialist conflict resolution",
+    "unknown/gap escalation",
+    "evidence-based department signoff",
+    "briefing compression to council/founder"
+  ],
+  "truthRule": "DEPARTMENT_HEAD_SIGNOFF_DOES_NOT_REPLACE_INDEPENDENT_EVIDENCE_OR_REVIEW"
+}

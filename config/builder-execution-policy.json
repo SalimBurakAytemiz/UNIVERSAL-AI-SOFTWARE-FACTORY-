@@ -1,0 +1,31 @@
+{
+  "//TR": "Bu protected policy autonomous builder için shell/web/MCP araçlarını varsayılan olarak kapatır; yalnız repo-local read/edit/write/search araçlarıyla worktree içinde değişiklik üretimine izin verir ve Phase0 boundary smoke geçmeden full build başlatılmaz.",
+  "schemaVersion": "1.1.0",
+  "mode": "CLAUDE_TOOL_POLICY_SANDBOX",
+  "requireBoundarySmoke": true,
+  "allowedTools": [
+    "Read",
+    "Edit",
+    "Write",
+    "Glob",
+    "Grep"
+  ],
+  "disallowedTools": [
+    "Bash",
+    "WebFetch",
+    "WebSearch",
+    "NotebookEdit",
+    "Agent",
+    "Skill"
+  ],
+  "denyExternalSideEffects": true,
+  "denyHostShell": true,
+  "denyMcpByDefault": true,
+  "highRiskRequiresOsSandbox": true,
+  "note": "Self-build local source generation tool-policy sandbox kullanır; production/Risk5/customer-secret mission gerçek OS/container sandbox yoksa fail-closed olur.",
+  "toolSetRestrictionFlag": "--tools",
+  "permissionMode": "dontAsk",
+  "disallowedToolPatterns": [
+    "mcp__*"
+  ]
+}

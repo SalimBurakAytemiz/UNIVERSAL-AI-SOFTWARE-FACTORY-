@@ -1,0 +1,9 @@
+{
+  "//TR": "Bu protected policy run eventlerinin hash-chain, durable review attestationlarının Ed25519 signature ve verification report ile tamper-evident tutulmasını zorunlu kılar.",
+  "schemaVersion": "1.0.0",
+  "eventHashChain": true,
+  "attestationSignature": "ED25519",
+  "keyLocation": ".ai/runtime/keys/evidence-ed25519-private.pem",
+  "publicKeyLocation": ".ai/runtime/keys/evidence-ed25519-public.pem",
+  "verifyBeforeCompletion": true
+}

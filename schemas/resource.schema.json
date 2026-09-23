@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "//TR: Bu schema browser, fiziksel telefon, VM, cloud slot ve diğer execution resource kayıtlarının kind, health, capability ve lease durumlarını doğrulamak için yazılmıştır.",
+  "type": "object",
+  "required": [
+    "capabilities",
+    "health",
+    "id",
+    "kind"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "health": {
+      "enum": [
+        "UNKNOWN",
+        "READY",
+        "DEGRADED",
+        "QUARANTINED",
+        "OFFLINE",
+        "MISSING_TOOL",
+        "NO_CREDENTIAL"
+      ]
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "lease": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

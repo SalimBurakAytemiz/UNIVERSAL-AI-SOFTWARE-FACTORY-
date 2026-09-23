@@ -1,0 +1,712 @@
+{
+  "//TR": "Bu dosya 148 post-Phase0 acceptance phase'i yaklaşık otuz coherent review package'ına bağlayarak Claude/Codex token tüketimini azaltır; her phase acceptance ayrı kalır, Codex review package boundary'de yapılır.",
+  "schemaVersion": "1.0.0",
+  "packageCount": 34,
+  "phaseCount": 148,
+  "packages": [
+    {
+      "id": "PKG-001",
+      "title": "Trust primitives, identity, approval, action",
+      "phaseIds": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "dependsOnPackages": [],
+      "reviewProfile": "TRUST_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-002",
+      "title": "Vault, DLP, audit and customer boundary",
+      "phaseIds": [
+        5,
+        6,
+        7,
+        8
+      ],
+      "dependsOnPackages": [
+        "PKG-001"
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-003",
+      "title": "Organization, agent genome and skills",
+      "phaseIds": [
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "dependsOnPackages": [
+        "PKG-001",
+        "PKG-002"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-004",
+      "title": "Leadership councils and reviewer independence",
+      "phaseIds": [
+        16,
+        17,
+        18
+      ],
+      "dependsOnPackages": [
+        "PKG-001",
+        "PKG-003"
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-005",
+      "title": "Mission, preflight, project genome and traceability",
+      "phaseIds": [
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "dependsOnPackages": [
+        "PKG-001",
+        "PKG-002",
+        "PKG-003"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-006",
+      "title": "Portfolio, lifecycle, durable workflow and model gateway",
+      "phaseIds": [
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ],
+      "dependsOnPackages": [
+        "PKG-001",
+        "PKG-002",
+        "PKG-005"
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-007",
+      "title": "Repository intelligence, research, skill gap and learning trust",
+      "phaseIds": [
+        32,
+        33,
+        34,
+        15,
+        35,
+        36,
+        37
+      ],
+      "dependsOnPackages": [
+        "PKG-002",
+        "PKG-003",
+        "PKG-005",
+        "PKG-006"
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-008",
+      "title": "Resources, leases, workers, adapters and sandbox",
+      "phaseIds": [
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44
+      ],
+      "dependsOnPackages": [
+        "PKG-001",
+        "PKG-002",
+        "PKG-005",
+        "PKG-006"
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-009",
+      "title": "Evidence capture and customer report export",
+      "phaseIds": [
+        45,
+        46
+      ],
+      "dependsOnPackages": [
+        "PKG-002",
+        "PKG-008"
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-010",
+      "title": "Design, Web, Backend and Data studios",
+      "phaseIds": [
+        47,
+        48,
+        49,
+        50
+      ],
+      "dependsOnPackages": [
+        "PKG-005",
+        "PKG-008",
+        "PKG-009"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-011",
+      "title": "Mobile, Desktop, AI/Data and Document studios",
+      "phaseIds": [
+        51,
+        52,
+        53,
+        54
+      ],
+      "dependsOnPackages": [
+        "PKG-005",
+        "PKG-006",
+        "PKG-008",
+        "PKG-009",
+        "PKG-010"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-012",
+      "title": "Browser execution and extension lab",
+      "phaseIds": [
+        55,
+        56,
+        57,
+        58
+      ],
+      "dependsOnPackages": [
+        "PKG-008",
+        "PKG-010",
+        "PKG-011"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-013",
+      "title": "Mobile local/cloud device execution",
+      "phaseIds": [
+        59,
+        60,
+        61,
+        62
+      ],
+      "dependsOnPackages": [
+        "PKG-005",
+        "PKG-008",
+        "PKG-011",
+        "PKG-012"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-014",
+      "title": "HTTP/API/GraphQL/gRPC/Realtime contracts",
+      "phaseIds": [
+        63,
+        64,
+        65,
+        66
+      ],
+      "dependsOnPackages": [
+        "PKG-001",
+        "PKG-008",
+        "PKG-010"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-015",
+      "title": "Notification, identity and service virtualization",
+      "phaseIds": [
+        67,
+        68,
+        69
+      ],
+      "dependsOnPackages": [
+        "PKG-008",
+        "PKG-010",
+        "PKG-011",
+        "PKG-014"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-016",
+      "title": "Data/storage/cloud/airgap execution",
+      "phaseIds": [
+        70,
+        71,
+        72,
+        73,
+        74,
+        76
+      ],
+      "dependsOnPackages": [
+        "PKG-002",
+        "PKG-006",
+        "PKG-008",
+        "PKG-010"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-017",
+      "title": "Functional through client lifecycle assurance",
+      "phaseIds": [
+        77,
+        78,
+        79,
+        80,
+        81
+      ],
+      "dependsOnPackages": [
+        "PKG-010",
+        "PKG-011",
+        "PKG-012",
+        "PKG-013",
+        "PKG-014",
+        "PKG-015",
+        "PKG-016"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-018",
+      "title": "Visual, accessibility, localization, automation and coverage",
+      "phaseIds": [
+        82,
+        83,
+        84,
+        85,
+        86
+      ],
+      "dependsOnPackages": [
+        "PKG-010",
+        "PKG-011",
+        "PKG-012",
+        "PKG-013",
+        "PKG-014",
+        "PKG-017"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-019",
+      "title": "Threat model through application security",
+      "phaseIds": [
+        87,
+        88,
+        89,
+        90,
+        91
+      ],
+      "dependsOnPackages": [
+        "PKG-001",
+        "PKG-002",
+        "PKG-005",
+        "PKG-008",
+        "PKG-010",
+        "PKG-011",
+        "PKG-012",
+        "PKG-013",
+        "PKG-014",
+        "PKG-016"
+      ],
+      "reviewProfile": "SECURITY_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-020",
+      "title": "Fuzzing, supply-chain and remaining security assurance",
+      "phaseIds": [
+        92,
+        93,
+        94
+      ],
+      "dependsOnPackages": [
+        "PKG-005",
+        "PKG-008",
+        "PKG-009",
+        "PKG-014",
+        "PKG-015",
+        "PKG-017",
+        "PKG-019"
+      ],
+      "reviewProfile": "SECURITY_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-021",
+      "title": "Observability, crash symbolication, load and capacity",
+      "phaseIds": [
+        98,
+        99,
+        95,
+        97,
+        100
+      ],
+      "dependsOnPackages": [
+        "PKG-009",
+        "PKG-010",
+        "PKG-011",
+        "PKG-013",
+        "PKG-014",
+        "PKG-016"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-022",
+      "title": "Incident, chaos, release, DR and self-update",
+      "phaseIds": [
+        101,
+        75,
+        102,
+        103,
+        104
+      ],
+      "dependsOnPackages": [
+        "PKG-002",
+        "PKG-006",
+        "PKG-008",
+        "PKG-009",
+        "PKG-015",
+        "PKG-016",
+        "PKG-021"
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-023",
+      "title": "SaaS/Commerce/FinTech/Markets/Insurance/Aviation packs",
+      "phaseIds": [
+        105,
+        106,
+        107,
+        108,
+        109,
+        110
+      ],
+      "dependsOnPackages": [
+        "PKG-005",
+        "PKG-009",
+        "PKG-010",
+        "PKG-011",
+        "PKG-014",
+        "PKG-017",
+        "PKG-018",
+        "PKG-019",
+        "PKG-020",
+        "PKG-021",
+        "PKG-022"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-024",
+      "title": "Search and regulated/industrial domain packs",
+      "phaseIds": [
+        111,
+        112,
+        113,
+        114,
+        115
+      ],
+      "dependsOnPackages": [
+        "PKG-005",
+        "PKG-010",
+        "PKG-011",
+        "PKG-016",
+        "PKG-017",
+        "PKG-018",
+        "PKG-019",
+        "PKG-020",
+        "PKG-021"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-025",
+      "title": "Game Studio, profiling, multiplayer and LiveOps",
+      "phaseIds": [
+        116,
+        96,
+        117,
+        118,
+        119,
+        120,
+        121
+      ],
+      "dependsOnPackages": [
+        "PKG-005",
+        "PKG-007",
+        "PKG-008",
+        "PKG-009",
+        "PKG-010",
+        "PKG-011",
+        "PKG-012",
+        "PKG-013",
+        "PKG-014",
+        "PKG-021"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-026",
+      "title": "Embedded/IoT and Blockchain/Web3",
+      "phaseIds": [
+        122,
+        123
+      ],
+      "dependsOnPackages": [
+        "PKG-005",
+        "PKG-008",
+        "PKG-010",
+        "PKG-014",
+        "PKG-019",
+        "PKG-020"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-027",
+      "title": "CRM, proposals, contracts, business systems and billing",
+      "phaseIds": [
+        124,
+        125,
+        126,
+        127,
+        128
+      ],
+      "dependsOnPackages": [
+        "PKG-002",
+        "PKG-005",
+        "PKG-006",
+        "PKG-009",
+        "PKG-010",
+        "PKG-016"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-028",
+      "title": "Finance, support, vendors and global communications",
+      "phaseIds": [
+        129,
+        130,
+        131,
+        132
+      ],
+      "dependsOnPackages": [
+        "PKG-002",
+        "PKG-006",
+        "PKG-009",
+        "PKG-010",
+        "PKG-015",
+        "PKG-018",
+        "PKG-022",
+        "PKG-027"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-029",
+      "title": "Policy, customer isolation, competency and golden acceptance",
+      "phaseIds": [
+        133,
+        134,
+        135,
+        136
+      ],
+      "dependsOnPackages": [
+        "PKG-001",
+        "PKG-002",
+        "PKG-003",
+        "PKG-004",
+        "PKG-007",
+        "PKG-018",
+        "PKG-019",
+        "PKG-020",
+        "PKG-023"
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-030",
+      "title": "Representative Web/API/Mobile/Desktop projects",
+      "phaseIds": [
+        137,
+        138,
+        139,
+        140
+      ],
+      "dependsOnPackages": [
+        "PKG-010",
+        "PKG-011",
+        "PKG-012",
+        "PKG-013",
+        "PKG-014",
+        "PKG-016",
+        "PKG-017",
+        "PKG-018",
+        "PKG-019",
+        "PKG-021",
+        "PKG-022",
+        "PKG-025",
+        "PKG-029"
+      ],
+      "reviewProfile": "STANDARD",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-031",
+      "title": "Representative Game/IoT and security assessment",
+      "phaseIds": [
+        141,
+        142,
+        143
+      ],
+      "dependsOnPackages": [
+        "PKG-014",
+        "PKG-019",
+        "PKG-020",
+        "PKG-021",
+        "PKG-022",
+        "PKG-025",
+        "PKG-026",
+        "PKG-029"
+      ],
+      "reviewProfile": "SECURITY_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-032",
+      "title": "Performance, recovery and dogfooding",
+      "phaseIds": [
+        144,
+        145,
+        146
+      ],
+      "dependsOnPackages": [
+        "PKG-021",
+        "PKG-022",
+        "PKG-025",
+        "PKG-029",
+        "PKG-030",
+        "PKG-031"
+      ],
+      "reviewProfile": "RELEASE_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-033",
+      "title": "Comprehensive independent final review",
+      "phaseIds": [
+        147
+      ],
+      "dependsOnPackages": [
+        "PKG-029",
+        "PKG-030",
+        "PKG-031",
+        "PKG-032"
+      ],
+      "reviewProfile": "RELEASE_CRITICAL",
+      "state": "PLANNED"
+    },
+    {
+      "id": "PKG-034",
+      "title": "Private production release",
+      "phaseIds": [
+        148
+      ],
+      "dependsOnPackages": [
+        "PKG-033"
+      ],
+      "reviewProfile": "RELEASE_CRITICAL",
+      "state": "PLANNED"
+    }
+  ],
+  "topologicalOrder": [
+    "PKG-001",
+    "PKG-002",
+    "PKG-003",
+    "PKG-004",
+    "PKG-005",
+    "PKG-006",
+    "PKG-007",
+    "PKG-008",
+    "PKG-009",
+    "PKG-010",
+    "PKG-011",
+    "PKG-014",
+    "PKG-016",
+    "PKG-012",
+    "PKG-015",
+    "PKG-027",
+    "PKG-013",
+    "PKG-017",
+    "PKG-019",
+    "PKG-021",
+    "PKG-018",
+    "PKG-020",
+    "PKG-022",
+    "PKG-025",
+    "PKG-024",
+    "PKG-026",
+    "PKG-023",
+    "PKG-028",
+    "PKG-029",
+    "PKG-030",
+    "PKG-031",
+    "PKG-032",
+    "PKG-033",
+    "PKG-034"
+  ]
+}

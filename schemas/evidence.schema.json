@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "//TR: Bu schema PASS/FAIL/finding iddialarını run, commit, tool, resource, artifact ve digest provenance ile bağlamak için yazılmıştır.",
+  "type": "object",
+  "required": [
+    "createdAt",
+    "id",
+    "kind",
+    "result",
+    "runId"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "runId": {
+      "type": "string"
+    },
+    "commit": {
+      "type": "string"
+    },
+    "tool": {
+      "type": "string"
+    },
+    "resource": {
+      "type": "string"
+    },
+    "result": {
+      "type": "string"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "digest": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

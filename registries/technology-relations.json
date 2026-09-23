@@ -1,0 +1,1159 @@
+{
+  "//TR": "Bu dosya framework/library/runtime/protocol'lar arasındaki built-on, alternative-family ve yakın ilişki graph'ını technology selection, migration ve agent comparison için tanımlar.",
+  "schemaVersion": "2.0.0",
+  "count": 192,
+  "relations": [
+    {
+      "from": "TECH-NEXTJS",
+      "to": "TECH-REACT",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-NUXT",
+      "to": "TECH-VUE",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SVELTEKIT",
+      "to": "TECH-SVELTE",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FLUTTER",
+      "to": "TECH-DART",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-JETPACK-COMPOSE",
+      "to": "TECH-KOTLIN",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KOTLIN-COROUTINES",
+      "to": "TECH-KOTLIN",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KOTLIN-FLOW",
+      "to": "TECH-KOTLIN",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ROOM",
+      "to": "TECH-ANDROID-SDK",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-RETROFIT",
+      "to": "TECH-OKHTTP",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-REACT-NATIVE",
+      "to": "TECH-REACT",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-EXPO",
+      "to": "TECH-REACT-NATIVE",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-HERMES",
+      "to": "TECH-REACT-NATIVE",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-REACT-NATIVE-JSI",
+      "to": "TECH-REACT-NATIVE",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SPRING-BOOT",
+      "to": "TECH-JAVA",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SPRING-SECURITY",
+      "to": "TECH-SPRING-BOOT",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-HIBERNATE",
+      "to": "TECH-JAVA",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KTOR",
+      "to": "TECH-KOTLIN",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ASPNET-CORE",
+      "to": "TECH-DOTNET",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-EF-CORE",
+      "to": "TECH-DOTNET",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SIGNALR",
+      "to": "TECH-DOTNET",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FASTAPI",
+      "to": "TECH-PYTHON",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-DJANGO",
+      "to": "TECH-PYTHON",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FLASK",
+      "to": "TECH-PYTHON",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SQLALCHEMY",
+      "to": "TECH-PYTHON",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-AXUM",
+      "to": "TECH-RUST",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ACTIX-WEB",
+      "to": "TECH-RUST",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-TOKIO",
+      "to": "TECH-RUST",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-LARAVEL",
+      "to": "TECH-PHP",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SYMFONY",
+      "to": "TECH-PHP",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-RAILS",
+      "to": "TECH-RUBY",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-PHOENIX",
+      "to": "TECH-ELIXIR",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-APOLLO-GRAPHQL",
+      "to": "TECH-GRAPHQL",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-GRPC",
+      "to": "TECH-PROTOBUF",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SOCKETIO",
+      "to": "TECH-WEBSOCKET",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-COMPOSE-MULTIPLATFORM",
+      "to": "TECH-KOTLIN-MULTIPLATFORM",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KUBERNETES",
+      "to": "TECH-DOCKER",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-HELM",
+      "to": "TECH-KUBERNETES",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ARGOCD",
+      "to": "TECH-KUBERNETES",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FLUXCD",
+      "to": "TECH-KUBERNETES",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ISTIO",
+      "to": "TECH-ENVOY",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-LANGGRAPH",
+      "to": "TECH-LANGCHAIN",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-PGVECTOR",
+      "to": "TECH-POSTGRESQL",
+      "kind": "BUILT_ON_OR_STRONGLY_RELATED",
+      "notes": ""
+    },
+    {
+      "from": "TECH-REACT",
+      "to": "TECH-ANGULAR",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ANGULAR",
+      "to": "TECH-REACT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-REACT",
+      "to": "TECH-VUE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-VUE",
+      "to": "TECH-REACT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-REACT",
+      "to": "TECH-SVELTE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SVELTE",
+      "to": "TECH-REACT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-REACT",
+      "to": "TECH-SOLID",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SOLID",
+      "to": "TECH-REACT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-REACT",
+      "to": "TECH-QWIK",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-QWIK",
+      "to": "TECH-REACT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ANGULAR",
+      "to": "TECH-VUE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-VUE",
+      "to": "TECH-ANGULAR",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ANGULAR",
+      "to": "TECH-SVELTE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SVELTE",
+      "to": "TECH-ANGULAR",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ANGULAR",
+      "to": "TECH-SOLID",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SOLID",
+      "to": "TECH-ANGULAR",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ANGULAR",
+      "to": "TECH-QWIK",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-QWIK",
+      "to": "TECH-ANGULAR",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-VUE",
+      "to": "TECH-SVELTE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SVELTE",
+      "to": "TECH-VUE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-VUE",
+      "to": "TECH-SOLID",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SOLID",
+      "to": "TECH-VUE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-VUE",
+      "to": "TECH-QWIK",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-QWIK",
+      "to": "TECH-VUE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SVELTE",
+      "to": "TECH-SOLID",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SOLID",
+      "to": "TECH-SVELTE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SVELTE",
+      "to": "TECH-QWIK",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-QWIK",
+      "to": "TECH-SVELTE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SOLID",
+      "to": "TECH-QWIK",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-QWIK",
+      "to": "TECH-SOLID",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FLUTTER",
+      "to": "TECH-REACT-NATIVE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-REACT-NATIVE",
+      "to": "TECH-FLUTTER",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FLUTTER",
+      "to": "TECH-KOTLIN-MULTIPLATFORM",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KOTLIN-MULTIPLATFORM",
+      "to": "TECH-FLUTTER",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FLUTTER",
+      "to": "TECH-DOTNET-MAUI",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-DOTNET-MAUI",
+      "to": "TECH-FLUTTER",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FLUTTER",
+      "to": "TECH-IONIC",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-IONIC",
+      "to": "TECH-FLUTTER",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-REACT-NATIVE",
+      "to": "TECH-KOTLIN-MULTIPLATFORM",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KOTLIN-MULTIPLATFORM",
+      "to": "TECH-REACT-NATIVE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-REACT-NATIVE",
+      "to": "TECH-DOTNET-MAUI",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-DOTNET-MAUI",
+      "to": "TECH-REACT-NATIVE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-REACT-NATIVE",
+      "to": "TECH-IONIC",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-IONIC",
+      "to": "TECH-REACT-NATIVE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KOTLIN-MULTIPLATFORM",
+      "to": "TECH-DOTNET-MAUI",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-DOTNET-MAUI",
+      "to": "TECH-KOTLIN-MULTIPLATFORM",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KOTLIN-MULTIPLATFORM",
+      "to": "TECH-IONIC",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-IONIC",
+      "to": "TECH-KOTLIN-MULTIPLATFORM",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-DOTNET-MAUI",
+      "to": "TECH-IONIC",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-IONIC",
+      "to": "TECH-DOTNET-MAUI",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-EXPRESS",
+      "to": "TECH-FASTIFY",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FASTIFY",
+      "to": "TECH-EXPRESS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-EXPRESS",
+      "to": "TECH-NESTJS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-NESTJS",
+      "to": "TECH-EXPRESS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-EXPRESS",
+      "to": "TECH-HONO",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-HONO",
+      "to": "TECH-EXPRESS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-EXPRESS",
+      "to": "TECH-KOA",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KOA",
+      "to": "TECH-EXPRESS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FASTIFY",
+      "to": "TECH-NESTJS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-NESTJS",
+      "to": "TECH-FASTIFY",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FASTIFY",
+      "to": "TECH-HONO",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-HONO",
+      "to": "TECH-FASTIFY",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FASTIFY",
+      "to": "TECH-KOA",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KOA",
+      "to": "TECH-FASTIFY",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-NESTJS",
+      "to": "TECH-HONO",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-HONO",
+      "to": "TECH-NESTJS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-NESTJS",
+      "to": "TECH-KOA",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KOA",
+      "to": "TECH-NESTJS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-HONO",
+      "to": "TECH-KOA",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KOA",
+      "to": "TECH-HONO",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SPRING-BOOT",
+      "to": "TECH-QUARKUS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-QUARKUS",
+      "to": "TECH-SPRING-BOOT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SPRING-BOOT",
+      "to": "TECH-MICRONAUT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-MICRONAUT",
+      "to": "TECH-SPRING-BOOT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SPRING-BOOT",
+      "to": "TECH-KTOR",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KTOR",
+      "to": "TECH-SPRING-BOOT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-QUARKUS",
+      "to": "TECH-MICRONAUT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-MICRONAUT",
+      "to": "TECH-QUARKUS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-QUARKUS",
+      "to": "TECH-KTOR",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KTOR",
+      "to": "TECH-QUARKUS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-MICRONAUT",
+      "to": "TECH-KTOR",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KTOR",
+      "to": "TECH-MICRONAUT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FASTAPI",
+      "to": "TECH-DJANGO",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-DJANGO",
+      "to": "TECH-FASTAPI",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FASTAPI",
+      "to": "TECH-FLASK",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FLASK",
+      "to": "TECH-FASTAPI",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-DJANGO",
+      "to": "TECH-FLASK",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-FLASK",
+      "to": "TECH-DJANGO",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-POSTGRESQL",
+      "to": "TECH-MYSQL",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-MYSQL",
+      "to": "TECH-POSTGRESQL",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-POSTGRESQL",
+      "to": "TECH-SQL-SERVER",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SQL-SERVER",
+      "to": "TECH-POSTGRESQL",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-POSTGRESQL",
+      "to": "TECH-ORACLE-DB",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ORACLE-DB",
+      "to": "TECH-POSTGRESQL",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-POSTGRESQL",
+      "to": "TECH-COCKROACHDB",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-COCKROACHDB",
+      "to": "TECH-POSTGRESQL",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-MYSQL",
+      "to": "TECH-SQL-SERVER",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SQL-SERVER",
+      "to": "TECH-MYSQL",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-MYSQL",
+      "to": "TECH-ORACLE-DB",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ORACLE-DB",
+      "to": "TECH-MYSQL",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-MYSQL",
+      "to": "TECH-COCKROACHDB",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-COCKROACHDB",
+      "to": "TECH-MYSQL",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SQL-SERVER",
+      "to": "TECH-ORACLE-DB",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ORACLE-DB",
+      "to": "TECH-SQL-SERVER",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SQL-SERVER",
+      "to": "TECH-COCKROACHDB",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-COCKROACHDB",
+      "to": "TECH-SQL-SERVER",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-ORACLE-DB",
+      "to": "TECH-COCKROACHDB",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-COCKROACHDB",
+      "to": "TECH-ORACLE-DB",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KAFKA",
+      "to": "TECH-PULSAR",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-PULSAR",
+      "to": "TECH-KAFKA",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KAFKA",
+      "to": "TECH-RABBITMQ",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-RABBITMQ",
+      "to": "TECH-KAFKA",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-KAFKA",
+      "to": "TECH-NATS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-NATS",
+      "to": "TECH-KAFKA",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-PULSAR",
+      "to": "TECH-RABBITMQ",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-RABBITMQ",
+      "to": "TECH-PULSAR",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-PULSAR",
+      "to": "TECH-NATS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-NATS",
+      "to": "TECH-PULSAR",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-RABBITMQ",
+      "to": "TECH-NATS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-NATS",
+      "to": "TECH-RABBITMQ",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-PLAYWRIGHT",
+      "to": "TECH-CYPRESS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-CYPRESS",
+      "to": "TECH-PLAYWRIGHT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-PLAYWRIGHT",
+      "to": "TECH-SELENIUM",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SELENIUM",
+      "to": "TECH-PLAYWRIGHT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-PLAYWRIGHT",
+      "to": "TECH-WEBDRIVERIO",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-WEBDRIVERIO",
+      "to": "TECH-PLAYWRIGHT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-CYPRESS",
+      "to": "TECH-SELENIUM",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SELENIUM",
+      "to": "TECH-CYPRESS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-CYPRESS",
+      "to": "TECH-WEBDRIVERIO",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-WEBDRIVERIO",
+      "to": "TECH-CYPRESS",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-SELENIUM",
+      "to": "TECH-WEBDRIVERIO",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-WEBDRIVERIO",
+      "to": "TECH-SELENIUM",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-K6",
+      "to": "TECH-JMETER",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-JMETER",
+      "to": "TECH-K6",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-K6",
+      "to": "TECH-LOCUST",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-LOCUST",
+      "to": "TECH-K6",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-K6",
+      "to": "TECH-GATLING",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-GATLING",
+      "to": "TECH-K6",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-JMETER",
+      "to": "TECH-LOCUST",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-LOCUST",
+      "to": "TECH-JMETER",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-JMETER",
+      "to": "TECH-GATLING",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-GATLING",
+      "to": "TECH-JMETER",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-LOCUST",
+      "to": "TECH-GATLING",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-GATLING",
+      "to": "TECH-LOCUST",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-UNITY",
+      "to": "TECH-UNREAL-ENGINE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-UNREAL-ENGINE",
+      "to": "TECH-UNITY",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-UNITY",
+      "to": "TECH-GODOT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-GODOT",
+      "to": "TECH-UNITY",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-UNREAL-ENGINE",
+      "to": "TECH-GODOT",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    },
+    {
+      "from": "TECH-GODOT",
+      "to": "TECH-UNREAL-ENGINE",
+      "kind": "ALTERNATIVE_FAMILY",
+      "notes": ""
+    }
+  ]
+}

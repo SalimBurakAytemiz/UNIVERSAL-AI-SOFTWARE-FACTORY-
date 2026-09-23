@@ -1,0 +1,4149 @@
+{
+  "//TR": "Bu registry 363 rolün semantic validator için exact primary technology veya explicit technology-agnostic gerekçesini tanımlar; birkaç örnek agent kontrolüyle yetinilmez.",
+  "schemaVersion": "1.0.0",
+  "count": 363,
+  "requirements": [
+    {
+      "agentId": "001",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "002",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "003",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "004",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "005",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "006",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "007",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "008",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "009",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "010",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "011",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "012",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "013",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "014",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "015",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "016",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "017",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "018",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-TYPESCRIPT",
+        "TECH-JAVA",
+        "TECH-PYTHON",
+        "TECH-GO",
+        "TECH-RUST",
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-KUBERNETES"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "019",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-TYPESCRIPT",
+        "TECH-JAVA",
+        "TECH-PYTHON",
+        "TECH-GO",
+        "TECH-RUST",
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-KUBERNETES"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "020",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-TYPESCRIPT",
+        "TECH-JAVA",
+        "TECH-PYTHON",
+        "TECH-GO",
+        "TECH-RUST",
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-KUBERNETES"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "021",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-TYPESCRIPT",
+        "TECH-JAVA",
+        "TECH-PYTHON",
+        "TECH-GO",
+        "TECH-RUST",
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-KUBERNETES"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "022",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-TYPESCRIPT",
+        "TECH-JAVA",
+        "TECH-PYTHON",
+        "TECH-GO",
+        "TECH-RUST",
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-KUBERNETES"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "023",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA",
+        "TECH-REST",
+        "TECH-GRAPHQL",
+        "TECH-GRPC",
+        "TECH-PROTOBUF"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "024",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-WEBSOCKET",
+        "TECH-SOCKETIO",
+        "TECH-SIGNALR",
+        "TECH-GRPC",
+        "TECH-MQTT",
+        "TECH-NATS",
+        "TECH-KAFKA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "025",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-KAFKA",
+        "TECH-RABBITMQ",
+        "TECH-NATS",
+        "TECH-PULSAR",
+        "TECH-REDIS-STREAMS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "026",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OAUTH2",
+        "TECH-OPENID-CONNECT",
+        "TECH-SAML",
+        "TECH-SCIM",
+        "TECH-WEBAUTHN",
+        "TECH-KEYCLOAK",
+        "TECH-ENTRA-ID"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "027",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KUBERNETES",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "028",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-DOCKER",
+        "TECH-KUBERNETES",
+        "TECH-GITHUB-ACTIONS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "029",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-TYPESCRIPT",
+        "TECH-JAVA",
+        "TECH-PYTHON",
+        "TECH-GO",
+        "TECH-RUST",
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-KUBERNETES"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "030",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-TYPESCRIPT",
+        "TECH-JAVASCRIPT",
+        "TECH-REACT",
+        "TECH-NEXTJS",
+        "TECH-HTML",
+        "TECH-CSS",
+        "TECH-VITE",
+        "TECH-PLAYWRIGHT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "031",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-TYPESCRIPT",
+        "TECH-JAVASCRIPT",
+        "TECH-REACT",
+        "TECH-NEXTJS",
+        "TECH-VITE",
+        "TECH-TANSTACK-QUERY",
+        "TECH-PLAYWRIGHT",
+        "TECH-VITEST"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "032",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-TYPESCRIPT",
+        "TECH-REACT",
+        "TECH-STORYBOOK",
+        "TECH-TAILWINDCSS",
+        "TECH-MUI",
+        "TECH-AXE-CORE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "033",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-JAVASCRIPT",
+        "TECH-TYPESCRIPT",
+        "TECH-LIGHTHOUSE",
+        "TECH-OPENTELEMETRY",
+        "TECH-PLAYWRIGHT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "034",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-HTML",
+        "TECH-CSS",
+        "TECH-AXE-CORE",
+        "TECH-PLAYWRIGHT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "035",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-TYPESCRIPT",
+        "TECH-FASTIFY",
+        "TECH-NESTJS",
+        "TECH-OPENAPI",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "036",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-REST",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA",
+        "TECH-OAUTH2",
+        "TECH-OPENID-CONNECT",
+        "TECH-POSTMAN",
+        "TECH-NEWMAN",
+        "TECH-AJV"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "037",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GRAPHQL",
+        "TECH-APOLLO-GRAPHQL",
+        "TECH-TYPESCRIPT",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "038",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-KAFKA",
+        "TECH-RABBITMQ",
+        "TECH-NATS",
+        "TECH-PULSAR",
+        "TECH-REDIS-STREAMS",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "039",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-KAFKA",
+        "TECH-RABBITMQ",
+        "TECH-REDIS",
+        "TECH-POSTGRESQL",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "040",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-HTTP1",
+        "TECH-RABBITMQ",
+        "TECH-FIREBASE-TEST-LAB"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "041",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-AWS",
+        "TECH-AZURE",
+        "TECH-GCP"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "042",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-RABBITMQ",
+        "TECH-REDIS",
+        "TECH-KAFKA",
+        "TECH-CELERY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "043",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-MYSQL",
+        "TECH-SQL-SERVER",
+        "TECH-ORACLE-DB",
+        "TECH-MONGODB",
+        "TECH-REDIS",
+        "TECH-ELASTICSEARCH",
+        "TECH-CLICKHOUSE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "044",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-MYSQL",
+        "TECH-SQL-SERVER",
+        "TECH-ORACLE-DB",
+        "TECH-SQLITE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "045",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-KAFKA",
+        "TECH-SPARK",
+        "TECH-FLINK",
+        "TECH-AIRFLOW",
+        "TECH-DBT",
+        "TECH-DEBEZIUM"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "046",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-CLICKHOUSE",
+        "TECH-BIGQUERY",
+        "TECH-SNOWFLAKE",
+        "TECH-DBT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "047",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-AIRFLOW",
+        "TECH-DAGSTER",
+        "TECH-SPARK",
+        "TECH-FLINK",
+        "TECH-DBT",
+        "TECH-DEBEZIUM"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "048",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-ELASTICSEARCH",
+        "TECH-OPENSEARCH",
+        "TECH-SOLR",
+        "TECH-NEO4J",
+        "TECH-PGVECTOR"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "049",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-DBT",
+        "TECH-POSTGRESQL",
+        "TECH-BIGQUERY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "050",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-KOTLIN",
+        "TECH-SWIFT",
+        "TECH-FLUTTER",
+        "TECH-REACT-NATIVE",
+        "TECH-KOTLIN-MULTIPLATFORM",
+        "TECH-COMPOSE-MULTIPLATFORM",
+        "TECH-DOTNET-MAUI",
+        "TECH-IONIC"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "051",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-KOTLIN",
+        "TECH-JAVA",
+        "TECH-ANDROID-SDK",
+        "TECH-GRADLE",
+        "TECH-ANDROID-GRADLE-PLUGIN",
+        "TECH-JETPACK-COMPOSE",
+        "TECH-KOTLIN-COROUTINES",
+        "TECH-KOTLIN-FLOW",
+        "TECH-ROOM",
+        "TECH-RETROFIT",
+        "TECH-OKHTTP",
+        "TECH-HILT",
+        "TECH-ESPRESSO",
+        "TECH-COMPOSE-UI-TEST"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "052",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-SWIFT",
+        "TECH-OBJECTIVE-C",
+        "TECH-SWIFTUI",
+        "TECH-UIKIT",
+        "TECH-SWIFT-CONCURRENCY",
+        "TECH-URLSESSION",
+        "TECH-SWIFTDATA",
+        "TECH-CORE-DATA",
+        "TECH-XCTEST",
+        "TECH-XCUITEST",
+        "TECH-INSTRUMENTS",
+        "TECH-SWIFT-PACKAGE-MANAGER"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "053",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-DART",
+        "TECH-FLUTTER",
+        "TECH-APPIUM",
+        "TECH-MAESTRO",
+        "TECH-FIREBASE-TEST-LAB"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "054",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-JAVASCRIPT",
+        "TECH-TYPESCRIPT",
+        "TECH-REACT",
+        "TECH-REACT-NATIVE",
+        "TECH-EXPO",
+        "TECH-HERMES",
+        "TECH-REACT-NATIVE-JSI",
+        "TECH-REACT-NATIVE-FABRIC",
+        "TECH-REACT-NATIVE-TURBOMODULES",
+        "TECH-DETOX"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "055",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIREBASE-TEST-LAB",
+        "TECH-ANDROID-SDK",
+        "TECH-SWIFT",
+        "TECH-REACT-NATIVE",
+        "TECH-FLUTTER"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "056",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-ANDROID-SDK",
+        "TECH-GRADLE",
+        "TECH-TESTFLIGHT",
+        "TECH-FASTLANE",
+        "TECH-SWIFT-PACKAGE-MANAGER"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "057",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-ELECTRON",
+        "TECH-TAURI",
+        "TECH-WPF",
+        "TECH-WINUI",
+        "TECH-QT",
+        "TECH-APPKIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "058",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-ELECTRON",
+        "TECH-TAURI",
+        "TECH-TYPESCRIPT",
+        "TECH-RUST",
+        "TECH-PLAYWRIGHT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "059",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-WPF",
+        "TECH-WINUI",
+        "TECH-QT",
+        "TECH-APPKIT",
+        "TECH-CPP",
+        "TECH-SWIFT",
+        "TECH-DOTNET"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "060",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIGMA",
+        "TECH-STORYBOOK",
+        "TECH-AXE-CORE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "061",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIGMA",
+        "TECH-STORYBOOK",
+        "TECH-AXE-CORE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "062",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIGMA",
+        "TECH-STORYBOOK",
+        "TECH-AXE-CORE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "063",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIGMA",
+        "TECH-STORYBOOK",
+        "TECH-AXE-CORE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "064",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIGMA",
+        "TECH-STORYBOOK",
+        "TECH-AXE-CORE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "065",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIGMA",
+        "TECH-STORYBOOK",
+        "TECH-AXE-CORE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "066",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIGMA",
+        "TECH-REACT",
+        "TECH-FLUTTER",
+        "TECH-SWIFTUI",
+        "TECH-JETPACK-COMPOSE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "067",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "068",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "069",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "070",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "071",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "072",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "073",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "074",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "075",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "076",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "077",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "078",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "079",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIGMA",
+        "TECH-REACT",
+        "TECH-FLUTTER",
+        "TECH-SWIFTUI",
+        "TECH-JETPACK-COMPOSE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "080",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-STORYBOOK",
+        "TECH-FIGMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "081",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "082",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "083",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "084",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-STORYBOOK",
+        "TECH-FIGMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "085",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-AXE-CORE",
+        "TECH-PLAYWRIGHT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "086",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-AXE-CORE",
+        "TECH-PLAYWRIGHT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "087",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-SELENIUM",
+        "TECH-BROWSERSTACK",
+        "TECH-SAUCE-LABS",
+        "TECH-LAMBDATEST"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "088",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-CYPRESS",
+        "TECH-SELENIUM",
+        "TECH-WEBDRIVERIO",
+        "TECH-JAVASCRIPT",
+        "TECH-TYPESCRIPT",
+        "TECH-HTTP1",
+        "TECH-WEBSOCKET"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "089",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-SWIFT",
+        "TECH-SWIFTUI",
+        "TECH-UIKIT",
+        "TECH-XCTEST",
+        "TECH-XCUITEST",
+        "TECH-INSTRUMENTS",
+        "TECH-APPIUM",
+        "TECH-BROWSERSTACK"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "090",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-KOTLIN",
+        "TECH-JAVA",
+        "TECH-ANDROID-SDK",
+        "TECH-JETPACK-COMPOSE",
+        "TECH-ESPRESSO",
+        "TECH-COMPOSE-UI-TEST",
+        "TECH-UIAUTOMATOR",
+        "TECH-APPIUM",
+        "TECH-BROWSERSTACK"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "091",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "092",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIREBASE-TEST-LAB",
+        "TECH-ANDROID-SDK",
+        "TECH-SWIFT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "093",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-APPIUM",
+        "TECH-PLAYWRIGHT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "094",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-REACT",
+        "TECH-ANDROID-SDK",
+        "TECH-SWIFT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "095",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-KAFKA",
+        "TECH-DBT",
+        "TECH-BIGQUERY",
+        "TECH-CLICKHOUSE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "096",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-HTTP1",
+        "TECH-HTTP2",
+        "TECH-REST",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA",
+        "TECH-POSTMAN",
+        "TECH-NEWMAN",
+        "TECH-AJV",
+        "TECH-REST-ASSURED",
+        "TECH-SUPERTEST",
+        "TECH-PYTEST-HTTPX",
+        "TECH-PACT",
+        "TECH-OAUTH2",
+        "TECH-OPENID-CONNECT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "097",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KAFKA",
+        "TECH-RABBITMQ",
+        "TECH-OPENAPI",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "098",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-WEBSOCKET",
+        "TECH-SOCKETIO",
+        "TECH-SIGNALR",
+        "TECH-SSE",
+        "TECH-GRPC",
+        "TECH-MQTT",
+        "TECH-KAFKA",
+        "TECH-RABBITMQ",
+        "TECH-NATS",
+        "TECH-PULSAR",
+        "TECH-REDIS-STREAMS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "099",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-MYSQL",
+        "TECH-SQL-SERVER",
+        "TECH-ORACLE-DB",
+        "TECH-MONGODB",
+        "TECH-REDIS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "100",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-MONGODB",
+        "TECH-REDIS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "101",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-DOCKER",
+        "TECH-KUBERNETES",
+        "TECH-GITHUB-ACTIONS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "102",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OPENTELEMETRY",
+        "TECH-PROMETHEUS",
+        "TECH-GRAFANA",
+        "TECH-LOKI"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "103",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-KAFKA",
+        "TECH-RABBITMQ",
+        "TECH-NATS",
+        "TECH-PULSAR",
+        "TECH-REDIS-STREAMS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "104",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTMAN",
+        "TECH-PACT",
+        "TECH-WIREMOCK",
+        "TECH-OPENAPI"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "105",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-DOCKER",
+        "TECH-KUBERNETES",
+        "TECH-GITHUB-ACTIONS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "106",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OWASP-ZAP",
+        "TECH-SEMGREP",
+        "TECH-TRIVY",
+        "TECH-GITLEAKS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "107",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OAUTH2",
+        "TECH-OPENID-CONNECT",
+        "TECH-KEYCLOAK"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "108",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-K6",
+        "TECH-JMETER",
+        "TECH-LOCUST",
+        "TECH-GATLING",
+        "TECH-OPENTELEMETRY",
+        "TECH-PROMETHEUS",
+        "TECH-GRAFANA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "109",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OWASP-ASVS",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "110",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-LIGHTHOUSE",
+        "TECH-PLAYWRIGHT",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "111",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-KUBERNETES"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "112",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-SELENIUM",
+        "TECH-CYPRESS",
+        "TECH-WEBDRIVERIO",
+        "TECH-GITHUB-ACTIONS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "113",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-APPIUM",
+        "TECH-MAESTRO",
+        "TECH-DETOX",
+        "TECH-ESPRESSO",
+        "TECH-XCUITEST",
+        "TECH-UIAUTOMATOR",
+        "TECH-BROWSERSTACK",
+        "TECH-FIREBASE-TEST-LAB",
+        "TECH-AWS-DEVICE-FARM"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "114",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-REST-ASSURED",
+        "TECH-SUPERTEST",
+        "TECH-PYTEST-HTTPX",
+        "TECH-POSTGRESQL"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "115",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-KOTLIN",
+        "TECH-ANDROID-SDK",
+        "TECH-JETPACK-COMPOSE",
+        "TECH-ESPRESSO",
+        "TECH-COMPOSE-UI-TEST",
+        "TECH-UIAUTOMATOR",
+        "TECH-APPIUM",
+        "TECH-ROBOLECTRIC"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "116",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-SWIFT",
+        "TECH-SWIFTUI",
+        "TECH-UIKIT",
+        "TECH-XCTEST",
+        "TECH-XCUITEST",
+        "TECH-INSTRUMENTS",
+        "TECH-APPIUM"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "117",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "118",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-APPIUM",
+        "TECH-POSTMAN",
+        "TECH-NEWMAN",
+        "TECH-REST-ASSURED",
+        "TECH-K6",
+        "TECH-CUCUMBER"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "119",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB-ACTIONS",
+        "TECH-GITLAB-CI",
+        "TECH-JENKINS",
+        "TECH-DOCKER"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "120",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-APPIUM",
+        "TECH-VITEST",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "121",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-WIREMOCK",
+        "TECH-MOCKSERVER",
+        "TECH-DOCKER"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "122",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-APPIUM",
+        "TECH-VITEST",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "123",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "124",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "125",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "126",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "127",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "128",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "129",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-POSTMAN",
+        "TECH-APPIUM",
+        "TECH-PYTEST",
+        "TECH-JUNIT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "130",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-K6",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "131",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLAYWRIGHT",
+        "TECH-K6",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "132",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OWASP-ASVS",
+        "TECH-OWASP-WSTG",
+        "TECH-OWASP-API",
+        "TECH-OWASP-MASVS",
+        "TECH-CWE",
+        "TECH-CVSS",
+        "TECH-SEMGREP",
+        "TECH-OWASP-ZAP",
+        "TECH-BURP-SUITE",
+        "TECH-TRIVY",
+        "TECH-GITLEAKS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "133",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OWASP-ASVS",
+        "TECH-OWASP-WSTG",
+        "TECH-OWASP-API",
+        "TECH-SEMGREP",
+        "TECH-OWASP-ZAP",
+        "TECH-BURP-SUITE",
+        "TECH-CWE",
+        "TECH-CVSS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "134",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-AWS",
+        "TECH-AZURE",
+        "TECH-GCP",
+        "TECH-KUBERNETES",
+        "TECH-TERRAFORM",
+        "TECH-TRIVY",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "135",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OAUTH2",
+        "TECH-OPENID-CONNECT",
+        "TECH-SAML",
+        "TECH-SCIM",
+        "TECH-WEBAUTHN",
+        "TECH-KEYCLOAK",
+        "TECH-ENTRA-ID"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "136",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITLEAKS",
+        "TECH-TRIVY",
+        "TECH-KUBERNETES"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "137",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-SYFT",
+        "TECH-GRYPE",
+        "TECH-TRIVY",
+        "TECH-GITLEAKS",
+        "TECH-GITHUB-ACTIONS",
+        "TECH-DOCKER"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "138",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-SYFT",
+        "TECH-GRYPE",
+        "TECH-TRIVY",
+        "TECH-SNYK"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "139",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-BLENDER",
+        "TECH-MAYA",
+        "TECH-3DS-MAX",
+        "TECH-SUBSTANCE",
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "140",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-LANGCHAIN",
+        "TECH-PYTORCH",
+        "TECH-OWASP-ASVS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "141",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OPENTELEMETRY",
+        "TECH-SPLUNK",
+        "TECH-SENTRY",
+        "TECH-TRIVY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "142",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-DOCKER",
+        "TECH-KUBERNETES",
+        "TECH-HELM",
+        "TECH-TERRAFORM",
+        "TECH-OPENTOFU",
+        "TECH-ANSIBLE",
+        "TECH-ARGOCD",
+        "TECH-GITHUB-ACTIONS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "143",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-DOCKER",
+        "TECH-KUBERNETES",
+        "TECH-GITHUB-ACTIONS",
+        "TECH-GITLAB-CI",
+        "TECH-JENKINS",
+        "TECH-TERRAFORM"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "144",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-AWS",
+        "TECH-AZURE",
+        "TECH-GCP",
+        "TECH-TERRAFORM",
+        "TECH-KUBERNETES",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "145",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-TERRAFORM",
+        "TECH-OPENTOFU",
+        "TECH-PULUMI",
+        "TECH-AWS",
+        "TECH-AZURE",
+        "TECH-GCP"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "146",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-DOCKER",
+        "TECH-KUBERNETES",
+        "TECH-HELM",
+        "TECH-ARGOCD",
+        "TECH-ISTIO",
+        "TECH-ENVOY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "147",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB-ACTIONS",
+        "TECH-GITLAB-CI",
+        "TECH-JENKINS",
+        "TECH-AZURE-DEVOPS",
+        "TECH-CIRCLECI"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "148",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OPENTELEMETRY",
+        "TECH-PROMETHEUS",
+        "TECH-GRAFANA",
+        "TECH-LOKI",
+        "TECH-TEMPO",
+        "TECH-JAEGER",
+        "TECH-KUBERNETES"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "149",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OPENTELEMETRY",
+        "TECH-PROMETHEUS",
+        "TECH-GRAFANA",
+        "TECH-LOKI",
+        "TECH-TEMPO",
+        "TECH-JAEGER",
+        "TECH-SENTRY",
+        "TECH-DATADOG"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "150",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PROMETHEUS",
+        "TECH-GRAFANA",
+        "TECH-KUBERNETES",
+        "TECH-K6"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "151",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-AWS",
+        "TECH-AZURE",
+        "TECH-GCP",
+        "TECH-KUBERNETES"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "152",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OLLAMA",
+        "TECH-VLLM",
+        "TECH-LLAMA-CPP",
+        "TECH-LANGCHAIN",
+        "TECH-LANGGRAPH",
+        "TECH-SEMANTIC-KERNEL"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "153",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PYTORCH",
+        "TECH-HUGGINGFACE",
+        "TECH-ONNX",
+        "TECH-VLLM",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "154",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PYTORCH",
+        "TECH-HUGGINGFACE",
+        "TECH-OLLAMA",
+        "TECH-VLLM",
+        "TECH-LANGCHAIN"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "155",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PYTORCH",
+        "TECH-HUGGINGFACE",
+        "TECH-OLLAMA",
+        "TECH-VLLM",
+        "TECH-LANGCHAIN"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "156",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PYTORCH",
+        "TECH-HUGGINGFACE",
+        "TECH-OLLAMA",
+        "TECH-VLLM",
+        "TECH-LANGCHAIN"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "157",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PYTORCH",
+        "TECH-HUGGINGFACE",
+        "TECH-OLLAMA",
+        "TECH-VLLM",
+        "TECH-LANGCHAIN"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "158",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PYTORCH",
+        "TECH-HUGGINGFACE",
+        "TECH-OLLAMA",
+        "TECH-VLLM",
+        "TECH-LANGCHAIN"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "159",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PYTORCH",
+        "TECH-HUGGINGFACE",
+        "TECH-OLLAMA",
+        "TECH-VLLM",
+        "TECH-LANGCHAIN"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "160",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-REST",
+        "TECH-OPENAPI",
+        "TECH-GRAPHQL",
+        "TECH-GRPC",
+        "TECH-WEBSOCKET",
+        "TECH-KAFKA",
+        "TECH-RABBITMQ",
+        "TECH-OAUTH2",
+        "TECH-SAML",
+        "TECH-SCIM"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "161",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-REST",
+        "TECH-GRAPHQL",
+        "TECH-GRPC",
+        "TECH-WEBSOCKET",
+        "TECH-KAFKA",
+        "TECH-RABBITMQ",
+        "TECH-SALESFORCE",
+        "TECH-SAP",
+        "TECH-SERVICENOW"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "162",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OPENAPI",
+        "TECH-REST",
+        "TECH-PACT",
+        "TECH-WIREMOCK"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "163",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIREBASE-TEST-LAB",
+        "TECH-POSTGRESQL"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "164",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OPENAPI",
+        "TECH-POSTMAN",
+        "TECH-PACT"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "165",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "166",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "167",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "168",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "169",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "170",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "171",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "172",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "173",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "174",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "175",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "176",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "177",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "178",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "179",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "180",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "181",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "182",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "183",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "184",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "185",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "186",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "187",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "188",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "189",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "190",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "191",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "192",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "193",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "194",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "195",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "196",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "197",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "198",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "199",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "200",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "201",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "202",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "203",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "204",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "205",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "206",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "207",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "208",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE",
+        "TECH-GODOT",
+        "TECH-STEAMWORKS",
+        "TECH-EPIC-ONLINE-SERVICES",
+        "TECH-KAFKA",
+        "TECH-REDIS",
+        "TECH-POSTGRESQL"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "209",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE",
+        "TECH-GODOT",
+        "TECH-STEAMWORKS",
+        "TECH-EPIC-ONLINE-SERVICES",
+        "TECH-KAFKA",
+        "TECH-REDIS",
+        "TECH-POSTGRESQL"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "210",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-UNREAL-ENGINE",
+        "TECH-CPP",
+        "TECH-DIRECTX",
+        "TECH-VULKAN"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "211",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-UNITY",
+        "TECH-DOTNET",
+        "TECH-BLENDER"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "212",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GODOT",
+        "TECH-CPP",
+        "TECH-BLENDER"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "213",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE",
+        "TECH-GODOT",
+        "TECH-STEAMWORKS",
+        "TECH-EPIC-ONLINE-SERVICES",
+        "TECH-KAFKA",
+        "TECH-REDIS",
+        "TECH-POSTGRESQL"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "214",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE",
+        "TECH-GODOT",
+        "TECH-STEAMWORKS",
+        "TECH-EPIC-ONLINE-SERVICES",
+        "TECH-KAFKA",
+        "TECH-REDIS",
+        "TECH-POSTGRESQL"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "215",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE",
+        "TECH-GODOT",
+        "TECH-STEAMWORKS",
+        "TECH-EPIC-ONLINE-SERVICES",
+        "TECH-KAFKA",
+        "TECH-REDIS",
+        "TECH-POSTGRESQL"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "216",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE",
+        "TECH-GODOT",
+        "TECH-STEAMWORKS",
+        "TECH-EPIC-ONLINE-SERVICES",
+        "TECH-KAFKA",
+        "TECH-REDIS",
+        "TECH-POSTGRESQL"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "217",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE",
+        "TECH-GODOT",
+        "TECH-STEAMWORKS",
+        "TECH-EPIC-ONLINE-SERVICES",
+        "TECH-KAFKA",
+        "TECH-REDIS",
+        "TECH-POSTGRESQL"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "218",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE",
+        "TECH-GODOT",
+        "TECH-STEAMWORKS",
+        "TECH-EPIC-ONLINE-SERVICES",
+        "TECH-KAFKA",
+        "TECH-REDIS",
+        "TECH-POSTGRESQL"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "219",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE",
+        "TECH-GODOT",
+        "TECH-STEAMWORKS",
+        "TECH-EPIC-ONLINE-SERVICES",
+        "TECH-KAFKA",
+        "TECH-REDIS",
+        "TECH-POSTGRESQL"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "220",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-BLENDER",
+        "TECH-MAYA",
+        "TECH-3DS-MAX",
+        "TECH-SUBSTANCE",
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "221",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-BLENDER",
+        "TECH-MAYA",
+        "TECH-3DS-MAX",
+        "TECH-SUBSTANCE",
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "222",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-BLENDER",
+        "TECH-MAYA",
+        "TECH-3DS-MAX",
+        "TECH-SUBSTANCE",
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "223",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-BLENDER",
+        "TECH-MAYA",
+        "TECH-3DS-MAX",
+        "TECH-SUBSTANCE",
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "224",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-BLENDER",
+        "TECH-MAYA",
+        "TECH-3DS-MAX",
+        "TECH-SUBSTANCE",
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "225",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FFMPEG",
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "226",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-BLENDER",
+        "TECH-MAYA",
+        "TECH-3DS-MAX",
+        "TECH-SUBSTANCE",
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "227",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-CPP",
+        "TECH-RUST-EMBEDDED",
+        "TECH-FREERTOS",
+        "TECH-ZEPHYR",
+        "TECH-STM32",
+        "TECH-ESP-IDF",
+        "TECH-PLATFORMIO",
+        "TECH-JTAG-SWD"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "228",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-CPP",
+        "TECH-RUST-EMBEDDED",
+        "TECH-FREERTOS",
+        "TECH-ZEPHYR",
+        "TECH-STM32",
+        "TECH-ESP-IDF",
+        "TECH-PLATFORMIO",
+        "TECH-JTAG-SWD"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "229",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-MQTT",
+        "TECH-ESP-IDF",
+        "TECH-ZEPHYR",
+        "TECH-AWS",
+        "TECH-AZURE",
+        "TECH-GCP",
+        "TECH-KAFKA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "230",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-MQTT",
+        "TECH-ESP-IDF",
+        "TECH-ZEPHYR",
+        "TECH-AWS",
+        "TECH-AZURE",
+        "TECH-GCP",
+        "TECH-KAFKA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "231",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PYTORCH",
+        "TECH-ONNX",
+        "TECH-CPP",
+        "TECH-PYTHON"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "232",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-ROS2",
+        "TECH-CPP",
+        "TECH-PYTHON",
+        "TECH-MQTT",
+        "TECH-JTAG-SWD"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "233",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE",
+        "TECH-WEBGPU",
+        "TECH-VULKAN"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "234",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-PLATFORMIO",
+        "TECH-JTAG-SWD",
+        "TECH-UART",
+        "TECH-CANBUS",
+        "TECH-MODBUS",
+        "TECH-PYTHON"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "235",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OPENTELEMETRY",
+        "TECH-PROMETHEUS",
+        "TECH-GRAFANA",
+        "TECH-SENTRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "236",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB-ACTIONS",
+        "TECH-DOCKER",
+        "TECH-KUBERNETES",
+        "TECH-HELM"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "237",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB-ACTIONS",
+        "TECH-DOCKER",
+        "TECH-KUBERNETES",
+        "TECH-HELM"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "238",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OPENTELEMETRY",
+        "TECH-PROMETHEUS",
+        "TECH-GRAFANA",
+        "TECH-SENTRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "239",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OPENTELEMETRY",
+        "TECH-KUBERNETES",
+        "TECH-GITHUB-ACTIONS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "240",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-UNITY",
+        "TECH-UNREAL-ENGINE",
+        "TECH-GODOT",
+        "TECH-STEAMWORKS",
+        "TECH-EPIC-ONLINE-SERVICES",
+        "TECH-KAFKA",
+        "TECH-REDIS",
+        "TECH-POSTGRESQL"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "241",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-ELECTRON",
+        "TECH-FASTIFY",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "242",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-ELECTRON",
+        "TECH-FASTIFY",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "243",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-ELECTRON",
+        "TECH-FASTIFY",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "244",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-ISO-20022"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "245",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-AWS",
+        "TECH-AZURE",
+        "TECH-GCP"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "246",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-ELECTRON",
+        "TECH-FASTIFY",
+        "TECH-OPENTELEMETRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "247",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OPENTELEMETRY",
+        "TECH-PROMETHEUS",
+        "TECH-GRAFANA",
+        "TECH-SENTRY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "248",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-KAFKA",
+        "TECH-NATS",
+        "TECH-RABBITMQ"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "249",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-RABBITMQ",
+        "TECH-KAFKA",
+        "TECH-FIREBASE-TEST-LAB"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "250",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB-ACTIONS",
+        "TECH-KUBERNETES",
+        "TECH-KAFKA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "251",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-OPENAPI",
+        "TECH-DOCKER"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "252",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "253",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "254",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "255",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "256",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "257",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "258",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "259",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "260",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "261",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "262",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "263",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "264",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "265",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "266",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "267",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "268",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "269",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "270",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "271",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "272",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "273",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "274",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "275",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "276",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "277",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "278",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "279",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "280",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "281",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "282",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "283",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-ISO-20022"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "284",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-ISO-20022"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "285",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-ISO-20022"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "286",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-ISO-20022"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "287",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-ISO-20022"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "288",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-ISO-20022"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "289",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-ISO-20022"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "290",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-ISO-20022"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "291",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-ISO-20022"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "292",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-ISO-20022"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "293",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-ISO-20022"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "294",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-KAFKA",
+        "TECH-ISO-8583",
+        "TECH-ISO-20022",
+        "TECH-OAUTH2"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "295",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FFMPEG",
+        "TECH-HLS",
+        "TECH-MPEG-DASH",
+        "TECH-WIDEVINE",
+        "TECH-FAIRPLAY",
+        "TECH-AWS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "296",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FFMPEG",
+        "TECH-HLS",
+        "TECH-MPEG-DASH",
+        "TECH-WIDEVINE",
+        "TECH-FAIRPLAY",
+        "TECH-AWS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "297",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FFMPEG",
+        "TECH-HLS",
+        "TECH-MPEG-DASH",
+        "TECH-WIDEVINE",
+        "TECH-FAIRPLAY",
+        "TECH-AWS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "298",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FFMPEG",
+        "TECH-HLS",
+        "TECH-MPEG-DASH",
+        "TECH-WIDEVINE",
+        "TECH-FAIRPLAY",
+        "TECH-AWS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "299",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FFMPEG",
+        "TECH-HLS",
+        "TECH-MPEG-DASH",
+        "TECH-WIDEVINE",
+        "TECH-FAIRPLAY",
+        "TECH-AWS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "300",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FFMPEG",
+        "TECH-HLS",
+        "TECH-MPEG-DASH",
+        "TECH-WIDEVINE",
+        "TECH-FAIRPLAY",
+        "TECH-AWS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "301",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FFMPEG",
+        "TECH-HLS",
+        "TECH-MPEG-DASH",
+        "TECH-WIDEVINE",
+        "TECH-FAIRPLAY",
+        "TECH-AWS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "302",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FFMPEG",
+        "TECH-HLS",
+        "TECH-MPEG-DASH",
+        "TECH-WIDEVINE",
+        "TECH-FAIRPLAY",
+        "TECH-AWS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "303",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FFMPEG",
+        "TECH-HLS",
+        "TECH-MPEG-DASH",
+        "TECH-WIDEVINE",
+        "TECH-FAIRPLAY",
+        "TECH-AWS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "304",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FFMPEG",
+        "TECH-HLS",
+        "TECH-MPEG-DASH",
+        "TECH-WIDEVINE",
+        "TECH-FAIRPLAY",
+        "TECH-AWS"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "305",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KAFKA",
+        "TECH-SHOPIFY",
+        "TECH-MAGENTO"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "306",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KAFKA",
+        "TECH-SHOPIFY",
+        "TECH-MAGENTO"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "307",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KAFKA",
+        "TECH-SHOPIFY",
+        "TECH-MAGENTO"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "308",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KAFKA",
+        "TECH-SHOPIFY",
+        "TECH-MAGENTO"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "309",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KAFKA",
+        "TECH-SHOPIFY",
+        "TECH-MAGENTO"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "310",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KAFKA",
+        "TECH-SHOPIFY",
+        "TECH-MAGENTO"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "311",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-ISO-20022"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "312",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KAFKA",
+        "TECH-SHOPIFY",
+        "TECH-MAGENTO"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "313",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KUBERNETES",
+        "TECH-OPENID-CONNECT",
+        "TECH-SAML",
+        "TECH-SHOPIFY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "314",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KUBERNETES",
+        "TECH-OPENID-CONNECT",
+        "TECH-SAML",
+        "TECH-SHOPIFY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "315",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KUBERNETES",
+        "TECH-OPENID-CONNECT",
+        "TECH-SAML",
+        "TECH-SHOPIFY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "316",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-OAUTH2",
+        "TECH-OPENID-CONNECT",
+        "TECH-SAML",
+        "TECH-SCIM",
+        "TECH-WEBAUTHN",
+        "TECH-KEYCLOAK",
+        "TECH-ENTRA-ID"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "317",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KUBERNETES",
+        "TECH-OPENID-CONNECT",
+        "TECH-SAML",
+        "TECH-SHOPIFY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "318",
+      "technicalAgent": true,
+      "requiredPrimaryTechnologyIds": [
+        "TECH-POSTGRESQL",
+        "TECH-REDIS",
+        "TECH-KUBERNETES",
+        "TECH-OPENID-CONNECT",
+        "TECH-SAML",
+        "TECH-SHOPIFY"
+      ],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 1
+    },
+    {
+      "agentId": "319",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "320",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "321",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "322",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "323",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "324",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "325",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "326",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "327",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "328",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "329",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "330",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "331",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "332",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "333",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "334",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "335",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "336",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "337",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "338",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "339",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "340",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "341",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "342",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "343",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "344",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "345",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "346",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "347",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "348",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "349",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "350",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "351",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "352",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "353",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "354",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "355",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "356",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "357",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "358",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "359",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "360",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "361",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "362",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    },
+    {
+      "agentId": "363",
+      "technicalAgent": false,
+      "requiredPrimaryTechnologyIds": [],
+      "technologyAgnosticAllowed": false,
+      "minimumPrimaryTechnologyCount": 0
+    }
+  ]
+}

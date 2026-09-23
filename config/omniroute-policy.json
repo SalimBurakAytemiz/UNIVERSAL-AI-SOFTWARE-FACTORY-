@@ -1,0 +1,15 @@
+{
+  "//TR": "Bu dosya OmniRoute'u 'latest'i körlemesine kurmak yerine npm metadata identity/license/integrity kontrolünden sonra exact discovered version pinleyerek install etmeyi tanımlar.",
+  "schemaVersion": "1.0.0",
+  "packageName": "omniroute",
+  "expectedRepositorySubstrings": [
+    "diegosouzapw/OmniRoute",
+    "diegosouzapw/omniroute"
+  ],
+  "allowedLicenses": [
+    "MIT"
+  ],
+  "endpoint": "http://127.0.0.1:20128/v1",
+  "installScope": "global",
+  "autoApproveWhenIdentityAndLicenseMatch": true
+}

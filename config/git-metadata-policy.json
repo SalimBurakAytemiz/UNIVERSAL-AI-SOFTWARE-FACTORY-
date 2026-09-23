@@ -1,0 +1,15 @@
+{
+  "//TR": "Bu protected policy builder çalışırken common Git metadata, remote/config/hooks/submodule/filter durumunun source diff dışında değiştirilmesini yasaklar.",
+  "schemaVersion": "1.0.0",
+  "guardBeforeAndAfterBuilder": true,
+  "protectedMetadata": [
+    "local-config",
+    "remotes",
+    "hooks",
+    "submodules",
+    "attributes",
+    "config-include-paths"
+  ],
+  "allowedRefChangesDuringBuilder": false,
+  "supervisorOwnsCommitAndRefs": true
+}

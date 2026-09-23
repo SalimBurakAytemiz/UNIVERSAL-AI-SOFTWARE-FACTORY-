@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "//TR: Bu schema her Mission'ın amaç, scope, authorization, environment, data classification, budget ve stop-condition alanlarını doğrulamak için yazılmıştır.",
+  "type": "object",
+  "required": [
+    "authorization",
+    "dataClassification",
+    "environment",
+    "id",
+    "objective",
+    "scope",
+    "status",
+    "type"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope": {
+      "type": "object"
+    },
+    "environment": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dataClassification": {
+      "enum": [
+        "PUBLIC",
+        "INTERNAL",
+        "CONFIDENTIAL",
+        "RESTRICTED",
+        "PII",
+        "FINANCIAL",
+        "SECRET"
+      ]
+    },
+    "authorization": {
+      "type": "object"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "budget": {
+      "type": "object"
+    },
+    "stopConditions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

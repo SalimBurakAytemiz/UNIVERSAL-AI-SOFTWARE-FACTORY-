@@ -1,0 +1,126 @@
+{
+  "//TR": "Bu dosya Roadmap Phase 102 — Release/canary/rollback için giriş koşulları, teslimatlar, test/evidence ve bağımsız review kapanışını machine-readable olarak tanımlar.",
+  "schemaVersion": "3.0.0",
+  "phase": 102,
+  "title": "Release/canary/rollback",
+  "domain": "PERFORMANCE_SRE_RELEASE",
+  "state": "PLANNED",
+  "entryCriteria": [
+    "previous-required-phase-contracts-closed-or-explicitly-waived",
+    "requirements-and-invariants-loaded",
+    "affected-customer-data-security-cost-policies-resolved",
+    "required-skills-tools-resources-health-checked",
+    "Phase dependency closure verified for: 26, 45, 73, 98, 101",
+    "Frozen milestone/package contract generated for Phase 102"
+  ],
+  "requiredDeliverables": [
+    "Executable or explicitly justified non-runtime implementation for Phase 102: Release/canary/rollback",
+    "Tests that exercise declared success and failure paths for Phase 102",
+    "Phase-specific artifacts: lease ledger, release evidence",
+    "Documentation and registry/schema updates required by the implementation",
+    "Control Tower visibility when the phase creates founder-visible operational state",
+    "Atomic checkpoint/evidence linkage for Phase 102"
+  ],
+  "requiredValidation": [
+    "Phase 102 targeted success-path validation",
+    "Phase 102 mandatory failure-case validation: double lease, orphan lease, rollback failure, health regression",
+    "Type/lint/build checks applicable to changed languages/toolchains",
+    "Schema/registry/TR canonical validation",
+    "Secret/security/trust-root/change-scope gates",
+    "Regression selection for directly impacted dependencies",
+    "Acceptance assertions: Phase 102 objective `Release/canary/rollback` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Release/canary/rollback` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+  ],
+  "evidence": [
+    "reviewed commit SHA",
+    "run ID",
+    "exact tool/runtime versions",
+    "environment/resource identity",
+    "test/validation results",
+    "artifact digests",
+    "unknown/not-tested surfaces",
+    "Phase-specific artifact evidence: lease ledger, release evidence",
+    "Phase 102 review attestation or package-bound attestation"
+  ],
+  "review": [
+    "technical lead or principal review",
+    "independent Codex package review at the coherent review boundary",
+    "department head/cross-functional trust review"
+  ],
+  "exitCriteria": [
+    "No unresolved admissible blocker in the frozen review scope",
+    "Phase 102 runtime/non-runtime deliverable is proven by evidence rather than registry/file existence alone",
+    "Mandatory failure cases are exercised or explicitly environment-blocked: double lease, orphan lease, rollback failure, health regression",
+    "Required artifacts exist and are evidence-linked: lease ledger, release evidence",
+    "Dependency phases are closed and consistent: 26, 45, 73, 98, 101",
+    "State/checkpoint is durable and crash-resume safe where applicable",
+    "Independent review result is valid, commit-bound and not stale"
+  ],
+  "rollbackOrRecovery": "REQUIRED_FOR_STATEFUL_OR_EXTERNAL_SIDE_EFFECT_CHANGES",
+  "prohibited": [
+    "FOLDER_THEATRE",
+    "FAKE_PASS",
+    "SELF_CERTIFICATION",
+    "SILENT_SCOPE_REDUCTION"
+  ],
+  "dependsOn": [
+    26,
+    45,
+    73,
+    98,
+    101
+  ],
+  "objective": "Implement, integrate and prove Roadmap Phase 102: Release/canary/rollback.",
+  "requirements": [
+    "Phase 102 `Release/canary/rollback` capability must be represented by real runtime or an explicitly justified non-runtime artifact.",
+    "All applicable Architecture Constitution, customer/data/authority and evidence invariants remain enforced.",
+    "Unknown/unverified/environment-blocked surfaces stay explicit."
+  ],
+  "invariants": [
+    "NO_FAKE_SUCCESS",
+    "NO_WEAKENED_CONTROLS",
+    "NO_SILENT_SCOPE_EXPANSION",
+    "NO_SELF_CERTIFICATION",
+    "EVIDENCE_REQUIRED"
+  ],
+  "phaseSpecificAcceptance": [
+    "Phase 102 objective `Release/canary/rollback` is implemented as executable/runtime behavior where applicable, not only as files or registry rows.",
+    "Tests and evidence directly exercise the `Release/canary/rollback` behavior and its declared failure paths.",
+    "No required acceptance item remains UNKNOWN without explicit environment gap or known limitation.",
+    "Exclusive resources cannot double-lease; stale leases recover and unhealthy resources quarantine.",
+    "Release manifest/health/canary/rollback are executable and failed rollout returns to known-good state."
+  ],
+  "mandatoryFailureCases": [
+    "double lease",
+    "orphan lease",
+    "rollback failure",
+    "health regression"
+  ],
+  "requiredArtifacts": [
+    "lease ledger",
+    "release evidence"
+  ],
+  "allowedPathPrefixes": [
+    "core/",
+    "adapters/",
+    "labs/",
+    "tests/",
+    "docs/",
+    "registries/",
+    "schemas/",
+    "apps/",
+    "evidence/",
+    "reports/",
+    "package.json",
+    "package-lock.json"
+  ],
+  "reviewProfile": "RELEASE_CRITICAL",
+  "riskLevel": 3,
+  "allowPaidApi": false,
+  "allowProduction": false,
+  "allowRisk5": false,
+  "unsupportedCases": [],
+  "maxFilesChanged": 120,
+  "allowExistingTestAssertionReduction": false,
+  "requiresFrozenMilestoneContract": true,
+  "allowDependencyChanges": true
+}

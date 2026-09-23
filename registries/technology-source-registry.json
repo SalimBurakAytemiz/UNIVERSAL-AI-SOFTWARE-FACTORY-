@@ -1,0 +1,52 @@
+{
+  "//TR": "Bu dosya teknoloji bilgisinin model hafızasından değil öncelikle resmi/primary kaynaklardan version+freshness provenance ile öğrenilmesini zorunlu kılan kaynak politikasını tanımlar.",
+  "schemaVersion": "2.0.0",
+  "sourceClasses": [
+    {
+      "priority": 1,
+      "class": "OFFICIAL_DOCUMENTATION",
+      "allowedForCertification": true
+    },
+    {
+      "priority": 2,
+      "class": "OFFICIAL_SPEC_STANDARD",
+      "allowedForCertification": true
+    },
+    {
+      "priority": 3,
+      "class": "OFFICIAL_RELEASE_NOTES",
+      "allowedForCertification": true
+    },
+    {
+      "priority": 4,
+      "class": "OFFICIAL_SECURITY_ADVISORY",
+      "allowedForCertification": true
+    },
+    {
+      "priority": 5,
+      "class": "AUTHORITATIVE_VENDOR_GUIDE",
+      "allowedForCertification": true
+    },
+    {
+      "priority": 6,
+      "class": "REPUTABLE_SECONDARY",
+      "allowedForCertification": false,
+      "requiresCorroboration": true
+    },
+    {
+      "priority": 99,
+      "class": "UNVERIFIED_COMMUNITY",
+      "allowedForCertification": false,
+      "requiresCorroboration": true
+    }
+  ],
+  "requiredProvenance": [
+    "sourceId",
+    "uriOrLocator",
+    "sourceClass",
+    "effectiveVersion",
+    "fetchedAt",
+    "digestOrRevision",
+    "supersedes"
+  ]
+}

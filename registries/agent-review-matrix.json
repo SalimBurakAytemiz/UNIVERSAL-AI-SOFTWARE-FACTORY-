@@ -1,0 +1,3194 @@
+{
+  "//TR": "Bu dosya hiçbir specialistın kendi işini nihai olarak onaylamaması için 363 agentın teknik head ve independent review zincirini tanımlar.",
+  "schemaVersion": "1.0.0",
+  "count": 363,
+  "reviews": [
+    {
+      "agentId": "001",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "002",
+      "technicalReviewers": [
+        "001"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "003",
+      "technicalReviewers": [
+        "001"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "004",
+      "technicalReviewers": [
+        "001"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "005",
+      "technicalReviewers": [
+        "001"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "006",
+      "technicalReviewers": [
+        "001"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "007",
+      "technicalReviewers": [
+        "001"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "008",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "009",
+      "technicalReviewers": [
+        "008"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "010",
+      "technicalReviewers": [
+        "008"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "011",
+      "technicalReviewers": [
+        "008"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "012",
+      "technicalReviewers": [
+        "008"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "013",
+      "technicalReviewers": [
+        "008"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "014",
+      "technicalReviewers": [
+        "008"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "015",
+      "technicalReviewers": [
+        "008"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "016",
+      "technicalReviewers": [
+        "008"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "017",
+      "technicalReviewers": [
+        "008"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "018",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "019",
+      "technicalReviewers": [
+        "018"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "020",
+      "technicalReviewers": [
+        "018"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "021",
+      "technicalReviewers": [
+        "018"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "022",
+      "technicalReviewers": [
+        "018"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "023",
+      "technicalReviewers": [
+        "018"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "024",
+      "technicalReviewers": [
+        "018"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "025",
+      "technicalReviewers": [
+        "018"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "026",
+      "technicalReviewers": [
+        "018"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "027",
+      "technicalReviewers": [
+        "018"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "028",
+      "technicalReviewers": [
+        "018"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "029",
+      "technicalReviewers": [
+        "018"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "030",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "031",
+      "technicalReviewers": [
+        "030"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "032",
+      "technicalReviewers": [
+        "030"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "033",
+      "technicalReviewers": [
+        "030"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "034",
+      "technicalReviewers": [
+        "030"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "035",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "036",
+      "technicalReviewers": [
+        "035"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "037",
+      "technicalReviewers": [
+        "035"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "038",
+      "technicalReviewers": [
+        "035"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "039",
+      "technicalReviewers": [
+        "035"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "040",
+      "technicalReviewers": [
+        "035"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "041",
+      "technicalReviewers": [
+        "035"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "042",
+      "technicalReviewers": [
+        "035"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "043",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "044",
+      "technicalReviewers": [
+        "043"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "045",
+      "technicalReviewers": [
+        "043"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "046",
+      "technicalReviewers": [
+        "043"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "047",
+      "technicalReviewers": [
+        "043"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "048",
+      "technicalReviewers": [
+        "043"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "049",
+      "technicalReviewers": [
+        "043"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "050",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "051",
+      "technicalReviewers": [
+        "050"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "052",
+      "technicalReviewers": [
+        "050"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "053",
+      "technicalReviewers": [
+        "050"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "054",
+      "technicalReviewers": [
+        "050"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "055",
+      "technicalReviewers": [
+        "050"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "056",
+      "technicalReviewers": [
+        "050"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "057",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "058",
+      "technicalReviewers": [
+        "057"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "059",
+      "technicalReviewers": [
+        "057"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "060",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "061",
+      "technicalReviewers": [
+        "060"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "062",
+      "technicalReviewers": [
+        "060"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "063",
+      "technicalReviewers": [
+        "060"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "064",
+      "technicalReviewers": [
+        "060"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "065",
+      "technicalReviewers": [
+        "060"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "066",
+      "technicalReviewers": [
+        "060"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "067",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "068",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "069",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "070",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "071",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "072",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "073",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "074",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "075",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "076",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "077",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "078",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "079",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "080",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "081",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "082",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "083",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "084",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "085",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "086",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "087",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "088",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "089",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "090",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "091",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "092",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "093",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "094",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "095",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "096",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "097",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "098",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "099",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "100",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "101",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "102",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "103",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "104",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "105",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "106",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "107",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "108",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "109",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "110",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "111",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "112",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "113",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "114",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "115",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "116",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "117",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "118",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "119",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "120",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "121",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "122",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "123",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "124",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "125",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "126",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "127",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "128",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "129",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "130",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "131",
+      "technicalReviewers": [
+        "067"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "132",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "133",
+      "technicalReviewers": [
+        "132"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "134",
+      "technicalReviewers": [
+        "132"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "135",
+      "technicalReviewers": [
+        "132"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "136",
+      "technicalReviewers": [
+        "132"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "137",
+      "technicalReviewers": [
+        "132"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "138",
+      "technicalReviewers": [
+        "132"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "139",
+      "technicalReviewers": [
+        "132"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "140",
+      "technicalReviewers": [
+        "132"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "141",
+      "technicalReviewers": [
+        "132"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "142",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "143",
+      "technicalReviewers": [
+        "142"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "144",
+      "technicalReviewers": [
+        "142"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "145",
+      "technicalReviewers": [
+        "142"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "146",
+      "technicalReviewers": [
+        "142"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "147",
+      "technicalReviewers": [
+        "142"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "148",
+      "technicalReviewers": [
+        "142"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "149",
+      "technicalReviewers": [
+        "142"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "150",
+      "technicalReviewers": [
+        "142"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "151",
+      "technicalReviewers": [
+        "142"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "152",
+      "technicalReviewers": [
+        "153"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "153",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "154",
+      "technicalReviewers": [
+        "153"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "155",
+      "technicalReviewers": [
+        "153"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "156",
+      "technicalReviewers": [
+        "153"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "157",
+      "technicalReviewers": [
+        "153"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "158",
+      "technicalReviewers": [
+        "153"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "159",
+      "technicalReviewers": [
+        "153"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "160",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "161",
+      "technicalReviewers": [
+        "160"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "162",
+      "technicalReviewers": [
+        "160"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "163",
+      "technicalReviewers": [
+        "160"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "164",
+      "technicalReviewers": [
+        "160"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "165",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "166",
+      "technicalReviewers": [
+        "165"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "167",
+      "technicalReviewers": [
+        "165"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "168",
+      "technicalReviewers": [
+        "165"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "169",
+      "technicalReviewers": [
+        "165"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "170",
+      "technicalReviewers": [
+        "165"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "171",
+      "technicalReviewers": [
+        "165"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "172",
+      "technicalReviewers": [
+        "165"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "173",
+      "technicalReviewers": [
+        "175"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "174",
+      "technicalReviewers": [
+        "175"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "175",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "176",
+      "technicalReviewers": [
+        "175"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "177",
+      "technicalReviewers": [
+        "175"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "178",
+      "technicalReviewers": [
+        "175"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "179",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "180",
+      "technicalReviewers": [
+        "179"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "181",
+      "technicalReviewers": [
+        "179"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "182",
+      "technicalReviewers": [
+        "179"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "183",
+      "technicalReviewers": [
+        "179"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "184",
+      "technicalReviewers": [
+        "179"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "185",
+      "technicalReviewers": [
+        "179"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "186",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "187",
+      "technicalReviewers": [
+        "186"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "188",
+      "technicalReviewers": [
+        "186"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "189",
+      "technicalReviewers": [
+        "186"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "190",
+      "technicalReviewers": [
+        "186"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "191",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "192",
+      "technicalReviewers": [
+        "191"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "193",
+      "technicalReviewers": [
+        "191"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "194",
+      "technicalReviewers": [
+        "191"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "195",
+      "technicalReviewers": [
+        "191"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "196",
+      "technicalReviewers": [
+        "191"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "197",
+      "technicalReviewers": [
+        "191"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "198",
+      "technicalReviewers": [
+        "202"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "199",
+      "technicalReviewers": [
+        "202"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "200",
+      "technicalReviewers": [
+        "202"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "201",
+      "technicalReviewers": [
+        "202"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "202",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "203",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "204",
+      "technicalReviewers": [
+        "203"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "205",
+      "technicalReviewers": [
+        "203"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "206",
+      "technicalReviewers": [
+        "203"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "207",
+      "technicalReviewers": [
+        "203"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "208",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "209",
+      "technicalReviewers": [
+        "208"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "210",
+      "technicalReviewers": [
+        "208"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "211",
+      "technicalReviewers": [
+        "208"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "212",
+      "technicalReviewers": [
+        "208"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "213",
+      "technicalReviewers": [
+        "208"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "214",
+      "technicalReviewers": [
+        "208"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "215",
+      "technicalReviewers": [
+        "208"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "216",
+      "technicalReviewers": [
+        "208"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "217",
+      "technicalReviewers": [
+        "208"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "218",
+      "technicalReviewers": [
+        "208"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "219",
+      "technicalReviewers": [
+        "208"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "220",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "221",
+      "technicalReviewers": [
+        "220"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "222",
+      "technicalReviewers": [
+        "220"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "223",
+      "technicalReviewers": [
+        "220"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "224",
+      "technicalReviewers": [
+        "220"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "225",
+      "technicalReviewers": [
+        "220"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "226",
+      "technicalReviewers": [
+        "220"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "227",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "228",
+      "technicalReviewers": [
+        "227"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "229",
+      "technicalReviewers": [
+        "227"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "230",
+      "technicalReviewers": [
+        "227"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "231",
+      "technicalReviewers": [
+        "227"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "232",
+      "technicalReviewers": [
+        "227"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "233",
+      "technicalReviewers": [
+        "227"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "234",
+      "technicalReviewers": [
+        "227"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "235",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "236",
+      "technicalReviewers": [
+        "235"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "237",
+      "technicalReviewers": [
+        "235"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "238",
+      "technicalReviewers": [
+        "235"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "239",
+      "technicalReviewers": [
+        "235"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "240",
+      "technicalReviewers": [
+        "235"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "241",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "242",
+      "technicalReviewers": [
+        "241"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "243",
+      "technicalReviewers": [
+        "241"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "244",
+      "technicalReviewers": [
+        "241"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "245",
+      "technicalReviewers": [
+        "241"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "246",
+      "technicalReviewers": [
+        "241"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "247",
+      "technicalReviewers": [
+        "241"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "248",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "249",
+      "technicalReviewers": [
+        "248"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "250",
+      "technicalReviewers": [
+        "248"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "251",
+      "technicalReviewers": [
+        "248"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "252",
+      "technicalReviewers": [
+        "248"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "253",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "254",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "255",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "256",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "257",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "258",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "259",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "260",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "261",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "262",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "263",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "264",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "265",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "266",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "267",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "268",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "269",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "270",
+      "technicalReviewers": [
+        "253"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "271",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "272",
+      "technicalReviewers": [
+        "271"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "273",
+      "technicalReviewers": [
+        "271"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "274",
+      "technicalReviewers": [
+        "271"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "275",
+      "technicalReviewers": [
+        "271"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "276",
+      "technicalReviewers": [
+        "271"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "277",
+      "technicalReviewers": [
+        "271"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "278",
+      "technicalReviewers": [
+        "271"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "279",
+      "technicalReviewers": [
+        "271"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "280",
+      "technicalReviewers": [
+        "271"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "281",
+      "technicalReviewers": [
+        "271"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "282",
+      "technicalReviewers": [
+        "271"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "283",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "284",
+      "technicalReviewers": [
+        "283"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "285",
+      "technicalReviewers": [
+        "283"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "286",
+      "technicalReviewers": [
+        "283"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "287",
+      "technicalReviewers": [
+        "283"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "288",
+      "technicalReviewers": [
+        "283"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "289",
+      "technicalReviewers": [
+        "283"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "290",
+      "technicalReviewers": [
+        "283"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "291",
+      "technicalReviewers": [
+        "283"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "292",
+      "technicalReviewers": [
+        "283"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "293",
+      "technicalReviewers": [
+        "283"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "294",
+      "technicalReviewers": [
+        "283"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "295",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "296",
+      "technicalReviewers": [
+        "295"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "297",
+      "technicalReviewers": [
+        "295"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "298",
+      "technicalReviewers": [
+        "295"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "299",
+      "technicalReviewers": [
+        "295"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "300",
+      "technicalReviewers": [
+        "295"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "301",
+      "technicalReviewers": [
+        "295"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "302",
+      "technicalReviewers": [
+        "295"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "303",
+      "technicalReviewers": [
+        "295"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "304",
+      "technicalReviewers": [
+        "295"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "305",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "306",
+      "technicalReviewers": [
+        "305"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "307",
+      "technicalReviewers": [
+        "305"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "308",
+      "technicalReviewers": [
+        "305"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "309",
+      "technicalReviewers": [
+        "305"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "310",
+      "technicalReviewers": [
+        "305"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "311",
+      "technicalReviewers": [
+        "305"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "312",
+      "technicalReviewers": [
+        "305"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "313",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "314",
+      "technicalReviewers": [
+        "313"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "315",
+      "technicalReviewers": [
+        "313"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "316",
+      "technicalReviewers": [
+        "313"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "317",
+      "technicalReviewers": [
+        "313"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "318",
+      "technicalReviewers": [
+        "313"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "319",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "320",
+      "technicalReviewers": [
+        "319"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "321",
+      "technicalReviewers": [
+        "319"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "322",
+      "technicalReviewers": [
+        "319"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "323",
+      "technicalReviewers": [
+        "319"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "324",
+      "technicalReviewers": [
+        "319"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "325",
+      "technicalReviewers": [
+        "319"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "326",
+      "technicalReviewers": [
+        "319"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "327",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "328",
+      "technicalReviewers": [
+        "327"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "329",
+      "technicalReviewers": [
+        "327"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "330",
+      "technicalReviewers": [
+        "327"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "331",
+      "technicalReviewers": [
+        "327"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "332",
+      "technicalReviewers": [
+        "327"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "333",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "334",
+      "technicalReviewers": [
+        "333"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "335",
+      "technicalReviewers": [
+        "333"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "336",
+      "technicalReviewers": [
+        "333"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "337",
+      "technicalReviewers": [
+        "333"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "338",
+      "technicalReviewers": [
+        "333"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "339",
+      "technicalReviewers": [
+        "333"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "340",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "341",
+      "technicalReviewers": [
+        "340"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "342",
+      "technicalReviewers": [
+        "340"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "343",
+      "technicalReviewers": [
+        "340"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "344",
+      "technicalReviewers": [
+        "340"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "345",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "346",
+      "technicalReviewers": [
+        "345"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "347",
+      "technicalReviewers": [
+        "345"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "348",
+      "technicalReviewers": [
+        "345"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "349",
+      "technicalReviewers": [
+        "345"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "350",
+      "technicalReviewers": [
+        "345"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "351",
+      "technicalReviewers": [
+        "345"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "352",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "353",
+      "technicalReviewers": [
+        "352"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "354",
+      "technicalReviewers": [
+        "352"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "355",
+      "technicalReviewers": [
+        "352"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "356",
+      "technicalReviewers": [
+        "352"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "357",
+      "technicalReviewers": [
+        "352"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "358",
+      "technicalReviewers": [
+        "352"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "359",
+      "technicalReviewers": [],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "360",
+      "technicalReviewers": [
+        "359"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "361",
+      "technicalReviewers": [
+        "359"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "362",
+      "technicalReviewers": [
+        "359"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    },
+    {
+      "agentId": "363",
+      "technicalReviewers": [
+        "359"
+      ],
+      "independentReview": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
+      "selfApprovalForbidden": true,
+      "evidenceRequired": true
+    }
+  ]
+}

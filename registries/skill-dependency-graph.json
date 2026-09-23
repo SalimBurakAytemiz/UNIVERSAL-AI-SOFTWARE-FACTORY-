@@ -1,0 +1,63 @@
+{
+  "//TR": "Bu dosya bir foundational skill stale olduğunda ona bağlı skill/certificationların targeted recertification alabilmesi için dependency graph başlangıcını tanımlar.",
+  "schemaVersion": "1.0.0",
+  "dependencies": [
+    {
+      "skillId": "SKILL-API_TESTING",
+      "dependsOn": [
+        "SKILL-HTTP_SEMANTICS",
+        "SKILL-JSON_SCHEMA",
+        "SKILL-OPENAPI"
+      ]
+    },
+    {
+      "skillId": "SKILL-AJV",
+      "dependsOn": [
+        "SKILL-JSON_SCHEMA"
+      ]
+    },
+    {
+      "skillId": "SKILL-POSTMAN",
+      "dependsOn": [
+        "SKILL-HTTP_SEMANTICS"
+      ]
+    },
+    {
+      "skillId": "SKILL-JETPACK_COMPOSE",
+      "dependsOn": [
+        "SKILL-KOTLIN",
+        "SKILL-ANDROID_PLATFORM"
+      ]
+    },
+    {
+      "skillId": "SKILL-KOTLIN_COROUTINES_FLOW",
+      "dependsOn": [
+        "SKILL-KOTLIN"
+      ]
+    },
+    {
+      "skillId": "SKILL-ANDROID_TESTING",
+      "dependsOn": [
+        "SKILL-ANDROID_PLATFORM"
+      ]
+    },
+    {
+      "skillId": "SKILL-APPIUM",
+      "dependsOn": [
+        "SKILL-MOBILE_TESTING"
+      ]
+    },
+    {
+      "skillId": "SKILL-SECURITY_ARCHITECTURE",
+      "dependsOn": [
+        "SKILL-THREAT_MODELING"
+      ]
+    },
+    {
+      "skillId": "SKILL-TECHNOLOGY_SELECTION",
+      "dependsOn": [
+        "SKILL-TRADEOFF_ANALYSIS"
+      ]
+    }
+  ]
+}

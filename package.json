@@ -1,0 +1,48 @@
+{
+  "//TR": "Bu dosya mechanically-closed V3 starter için Node>=24, exact direct deps ve trust/supply-chain/domain/semantic validation zincirini tanımlar.",
+  "name": "universal-ai-software-company-os",
+  "version": "0.0.0-mechanically-closed-v3",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "validate:registries": "node scripts/validate-registries.mjs",
+    "validate:architecture": "node scripts/validate-architecture.mjs",
+    "validate:tr": "node scripts/validate-tr-comments.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "validate": "npm run validate:registries && npm run validate:architecture && npm run validate:tr && npm run validate:competencies && npm run validate:organization && npm run validate:schemas && npm run validate:technology && npm run validate:domains && npm run validate:agent-semantic && npm run validate:phase-contracts && npm run validate:review-v2 && npm run validate:schema-strict && npm run validate:woven && npm run validate:mechanical && npm run selftest:mechanical && npm run selftest:state && node scripts/secret-sanity.mjs && node scripts/dependency-supply-chain.mjs && npm run typecheck && npm test",
+    "control-api": "tsx apps/control-api/src/server.ts",
+    "desktop": "electron apps/desktop/main.mjs",
+    "dev": "concurrently -k \"npm:control-api\" \"npm:desktop\"",
+    "validate:competencies": "node scripts/validate-agent-competencies.mjs",
+    "validate:schemas": "node scripts/validate-schema-catalog.mjs",
+    "validate:organization": "node scripts/validate-organization.mjs",
+    "validate:technology": "node scripts/validate-technology-graph.mjs",
+    "validate:agent-semantic": "node scripts/validate-agent-semantic.mjs",
+    "validate:phase-contracts": "node scripts/validate-phase-contracts.mjs",
+    "validate:review-v2": "node scripts/validate-review-graph-v2.mjs",
+    "validate:schema-strict": "node scripts/validate-schema-strictness.mjs",
+    "validate:woven": "node scripts/validate-woven-model.mjs",
+    "validate:mechanical": "node scripts/validate-mechanical-closure.mjs",
+    "selftest:mechanical": "node scripts/mechanical-kernel-selftest.mjs",
+    "validate:domains": "node scripts/validate-domain-packs.mjs",
+    "selftest:state": "node scripts/supervisor-state-machine-selftest.mjs"
+  },
+  "dependencies": {
+    "fastify": "5.6.0",
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.0.0",
+    "concurrently": "9.2.0",
+    "electron": "38.0.0",
+    "tsx": "4.20.0",
+    "typescript": "5.9.0",
+    "vitest": "3.2.0"
+  }
+}

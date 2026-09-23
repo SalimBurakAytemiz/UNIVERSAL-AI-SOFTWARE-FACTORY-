@@ -1,0 +1,860 @@
+{
+  "//TR": "Bu dosya 363 stable agentı departman başları ve principal review zincirleri altında organize eder; Founder agent değildir ve yalnız kritik nihai otoritedir.",
+  "schemaVersion": "1.0.0",
+  "departments": [
+    {
+      "id": "DEPT-01",
+      "name": "01 Executive & Governance",
+      "headAgentId": "001",
+      "principalReviewerAgentIds": [
+        "001",
+        "004"
+      ],
+      "members": [
+        "001",
+        "002",
+        "003",
+        "004",
+        "005",
+        "006",
+        "007"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-02",
+      "name": "02 Product & Discovery",
+      "headAgentId": "008",
+      "principalReviewerAgentIds": [
+        "008",
+        "011",
+        "017"
+      ],
+      "members": [
+        "008",
+        "009",
+        "010",
+        "011",
+        "012",
+        "013",
+        "014",
+        "015",
+        "016",
+        "017"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-03",
+      "name": "03 Architecture & Core Engineering",
+      "headAgentId": "018",
+      "principalReviewerAgentIds": [
+        "018",
+        "019",
+        "020",
+        "023",
+        "026"
+      ],
+      "members": [
+        "018",
+        "019",
+        "020",
+        "021",
+        "022",
+        "023",
+        "024",
+        "025",
+        "026",
+        "027",
+        "028",
+        "029"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-04",
+      "name": "04 Web Engineering",
+      "headAgentId": "030",
+      "principalReviewerAgentIds": [
+        "030"
+      ],
+      "members": [
+        "030",
+        "031",
+        "032",
+        "033",
+        "034"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-05",
+      "name": "05 Backend & API Engineering",
+      "headAgentId": "035",
+      "principalReviewerAgentIds": [
+        "035"
+      ],
+      "members": [
+        "035",
+        "036",
+        "037",
+        "038",
+        "039",
+        "040",
+        "041",
+        "042"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-06",
+      "name": "06 Data & Database",
+      "headAgentId": "043",
+      "principalReviewerAgentIds": [
+        "043"
+      ],
+      "members": [
+        "043",
+        "044",
+        "045",
+        "046",
+        "047",
+        "048",
+        "049"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-07",
+      "name": "07 Mobile Engineering",
+      "headAgentId": "050",
+      "principalReviewerAgentIds": [
+        "050"
+      ],
+      "members": [
+        "050",
+        "051",
+        "052",
+        "053",
+        "054",
+        "055",
+        "056"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-08",
+      "name": "08 Desktop Engineering",
+      "headAgentId": "057",
+      "principalReviewerAgentIds": [
+        "057"
+      ],
+      "members": [
+        "057",
+        "058",
+        "059"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-09",
+      "name": "09 UX/UI & Design",
+      "headAgentId": "060",
+      "principalReviewerAgentIds": [
+        "060"
+      ],
+      "members": [
+        "060",
+        "061",
+        "062",
+        "063",
+        "064",
+        "065",
+        "066"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-10",
+      "name": "10 Quality Engineering Factory",
+      "headAgentId": "067",
+      "principalReviewerAgentIds": [
+        "067",
+        "100",
+        "118"
+      ],
+      "members": [
+        "067",
+        "068",
+        "069",
+        "070",
+        "071",
+        "072",
+        "073",
+        "074",
+        "075",
+        "076",
+        "077",
+        "078",
+        "079",
+        "080",
+        "081",
+        "082",
+        "083",
+        "084",
+        "085",
+        "086",
+        "087",
+        "088",
+        "089",
+        "090",
+        "091",
+        "092",
+        "093",
+        "094",
+        "095",
+        "096",
+        "097",
+        "098",
+        "099",
+        "100",
+        "101",
+        "102",
+        "103",
+        "104",
+        "105",
+        "106",
+        "107",
+        "108",
+        "109",
+        "110",
+        "111",
+        "112",
+        "113",
+        "114",
+        "115",
+        "116",
+        "117",
+        "118",
+        "119",
+        "120",
+        "121",
+        "122",
+        "123",
+        "124",
+        "125",
+        "126",
+        "127",
+        "128",
+        "129",
+        "130",
+        "131"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-11",
+      "name": "11 Cybersecurity",
+      "headAgentId": "132",
+      "principalReviewerAgentIds": [
+        "132",
+        "136"
+      ],
+      "members": [
+        "132",
+        "133",
+        "134",
+        "135",
+        "136",
+        "137",
+        "138",
+        "139",
+        "140",
+        "141"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-12",
+      "name": "12 Platform / DevOps / SRE",
+      "headAgentId": "142",
+      "principalReviewerAgentIds": [
+        "142",
+        "147",
+        "150"
+      ],
+      "members": [
+        "142",
+        "143",
+        "144",
+        "145",
+        "146",
+        "147",
+        "148",
+        "149",
+        "150",
+        "151"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-13",
+      "name": "13 AI / Model Operations",
+      "headAgentId": "153",
+      "principalReviewerAgentIds": [
+        "153",
+        "156"
+      ],
+      "members": [
+        "152",
+        "153",
+        "154",
+        "155",
+        "156",
+        "157",
+        "158",
+        "159"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-14",
+      "name": "14 Integration Factory",
+      "headAgentId": "160",
+      "principalReviewerAgentIds": [
+        "160"
+      ],
+      "members": [
+        "160",
+        "161",
+        "162",
+        "163",
+        "164"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-15",
+      "name": "15 Business Systems",
+      "headAgentId": "165",
+      "principalReviewerAgentIds": [
+        "165",
+        "167"
+      ],
+      "members": [
+        "165",
+        "166",
+        "167",
+        "168",
+        "169",
+        "170",
+        "171",
+        "172"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-16",
+      "name": "16 Sales & CRM",
+      "headAgentId": "175",
+      "principalReviewerAgentIds": [
+        "175",
+        "177"
+      ],
+      "members": [
+        "173",
+        "174",
+        "175",
+        "176",
+        "177",
+        "178"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-17",
+      "name": "17 Marketing & Growth",
+      "headAgentId": "179",
+      "principalReviewerAgentIds": [
+        "179"
+      ],
+      "members": [
+        "179",
+        "180",
+        "181",
+        "182",
+        "183",
+        "184",
+        "185"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-18",
+      "name": "18 Support & Success",
+      "headAgentId": "186",
+      "principalReviewerAgentIds": [
+        "186"
+      ],
+      "members": [
+        "186",
+        "187",
+        "188",
+        "189",
+        "190"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-19",
+      "name": "19 Finance & FinOps",
+      "headAgentId": "191",
+      "principalReviewerAgentIds": [
+        "191"
+      ],
+      "members": [
+        "191",
+        "192",
+        "193",
+        "194",
+        "195",
+        "196",
+        "197"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-20",
+      "name": "20 Legal / Privacy / Compliance",
+      "headAgentId": "202",
+      "principalReviewerAgentIds": [
+        "202"
+      ],
+      "members": [
+        "198",
+        "199",
+        "200",
+        "201",
+        "202"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-21",
+      "name": "21 Research / Knowledge / Documentation",
+      "headAgentId": "203",
+      "principalReviewerAgentIds": [
+        "203",
+        "205",
+        "206"
+      ],
+      "members": [
+        "203",
+        "204",
+        "205",
+        "206",
+        "207"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-22",
+      "name": "22 Game Development Studio",
+      "headAgentId": "208",
+      "principalReviewerAgentIds": [
+        "208"
+      ],
+      "members": [
+        "208",
+        "209",
+        "210",
+        "211",
+        "212",
+        "213",
+        "214",
+        "215",
+        "216",
+        "217",
+        "218",
+        "219"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-23",
+      "name": "23 3D / Media / Asset Studio",
+      "headAgentId": "220",
+      "principalReviewerAgentIds": [
+        "220"
+      ],
+      "members": [
+        "220",
+        "221",
+        "222",
+        "223",
+        "224",
+        "225",
+        "226"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-24",
+      "name": "24 Embedded / IoT / Robotics / XR",
+      "headAgentId": "227",
+      "principalReviewerAgentIds": [
+        "227",
+        "230"
+      ],
+      "members": [
+        "227",
+        "228",
+        "229",
+        "230",
+        "231",
+        "232",
+        "233",
+        "234"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-25",
+      "name": "25 Operations / Release / LiveOps",
+      "headAgentId": "235",
+      "principalReviewerAgentIds": [
+        "235",
+        "237",
+        "238",
+        "239"
+      ],
+      "members": [
+        "235",
+        "236",
+        "237",
+        "238",
+        "239",
+        "240"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-26",
+      "name": "26 Control Tower",
+      "headAgentId": "241",
+      "principalReviewerAgentIds": [
+        "241"
+      ],
+      "members": [
+        "241",
+        "242",
+        "243",
+        "244",
+        "245",
+        "246",
+        "247"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-27",
+      "name": "27 Shared Company Platform",
+      "headAgentId": "248",
+      "principalReviewerAgentIds": [
+        "248"
+      ],
+      "members": [
+        "248",
+        "249",
+        "250",
+        "251",
+        "252"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-28",
+      "name": "28 Intelligence / Autonomous Learning",
+      "headAgentId": "253",
+      "principalReviewerAgentIds": [
+        "253",
+        "269"
+      ],
+      "members": [
+        "253",
+        "254",
+        "255",
+        "256",
+        "257",
+        "258",
+        "259",
+        "260",
+        "261",
+        "262",
+        "263",
+        "264",
+        "265",
+        "266",
+        "267",
+        "268",
+        "269",
+        "270"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-29",
+      "name": "29 FinTech Expert Guild",
+      "headAgentId": "271",
+      "principalReviewerAgentIds": [
+        "271",
+        "272",
+        "273",
+        "274",
+        "275"
+      ],
+      "members": [
+        "271",
+        "272",
+        "273",
+        "274",
+        "275",
+        "276",
+        "277",
+        "278",
+        "279",
+        "280",
+        "281",
+        "282"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-30",
+      "name": "30 Capital Markets Expert Guild",
+      "headAgentId": "283",
+      "principalReviewerAgentIds": [
+        "283",
+        "284",
+        "285",
+        "286",
+        "287"
+      ],
+      "members": [
+        "283",
+        "284",
+        "285",
+        "286",
+        "287",
+        "288",
+        "289",
+        "290",
+        "291",
+        "292",
+        "293",
+        "294"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-31",
+      "name": "31 Streaming / Media Expert Guild",
+      "headAgentId": "295",
+      "principalReviewerAgentIds": [
+        "295",
+        "296",
+        "297",
+        "298",
+        "299"
+      ],
+      "members": [
+        "295",
+        "296",
+        "297",
+        "298",
+        "299",
+        "300",
+        "301",
+        "302",
+        "303",
+        "304"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-32",
+      "name": "32 Commerce / Marketplace Expert Guild",
+      "headAgentId": "305",
+      "principalReviewerAgentIds": [
+        "305",
+        "306",
+        "307",
+        "308",
+        "309"
+      ],
+      "members": [
+        "305",
+        "306",
+        "307",
+        "308",
+        "309",
+        "310",
+        "311",
+        "312"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-33",
+      "name": "33 SaaS / Enterprise Expert Guild",
+      "headAgentId": "313",
+      "principalReviewerAgentIds": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317"
+      ],
+      "members": [
+        "313",
+        "314",
+        "315",
+        "316",
+        "317",
+        "318"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-34",
+      "name": "34 Business Strategy & Intelligence",
+      "headAgentId": "319",
+      "principalReviewerAgentIds": [
+        "319",
+        "320",
+        "324",
+        "325"
+      ],
+      "members": [
+        "319",
+        "320",
+        "321",
+        "322",
+        "323",
+        "324",
+        "325",
+        "326"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-35",
+      "name": "35 Revenue & Monetization",
+      "headAgentId": "327",
+      "principalReviewerAgentIds": [
+        "327"
+      ],
+      "members": [
+        "327",
+        "328",
+        "329",
+        "330",
+        "331",
+        "332"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-36",
+      "name": "36 Sales & Partnerships",
+      "headAgentId": "333",
+      "principalReviewerAgentIds": [
+        "333",
+        "337"
+      ],
+      "members": [
+        "333",
+        "334",
+        "335",
+        "336",
+        "337",
+        "338",
+        "339"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-37",
+      "name": "37 Customer & Market Intelligence",
+      "headAgentId": "340",
+      "principalReviewerAgentIds": [
+        "340",
+        "344"
+      ],
+      "members": [
+        "340",
+        "341",
+        "342",
+        "343",
+        "344"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-38",
+      "name": "38 Business Operations",
+      "headAgentId": "345",
+      "principalReviewerAgentIds": [
+        "345",
+        "348",
+        "350"
+      ],
+      "members": [
+        "345",
+        "346",
+        "347",
+        "348",
+        "349",
+        "350",
+        "351"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-39",
+      "name": "39 Finance & Corporate Control",
+      "headAgentId": "352",
+      "principalReviewerAgentIds": [
+        "352",
+        "353",
+        "355"
+      ],
+      "members": [
+        "352",
+        "353",
+        "354",
+        "355",
+        "356",
+        "357",
+        "358"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    },
+    {
+      "id": "DEPT-40",
+      "name": "40 Legal & Regulatory Intelligence",
+      "headAgentId": "359",
+      "principalReviewerAgentIds": [
+        "359"
+      ],
+      "members": [
+        "359",
+        "360",
+        "361",
+        "362",
+        "363"
+      ],
+      "reviewModel": "SPECIALIST_TO_LEAD_TO_HEAD_TO_COUNCIL"
+    }
+  ]
+}

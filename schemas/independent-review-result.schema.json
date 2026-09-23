@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/independent-review-result.schema.json",
+  "$comment": "//TR: Bu schema Codex review sonucunu exact commit/bundle digest/reviewer provenance ve finding sınıflarıyla strict JSON'a bağlar; string aramayla sahte CLEAN algısını engeller.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "advisories",
+    "baseCommit",
+    "cycle",
+    "environmentGaps",
+    "findings",
+    "finishedAt",
+    "result",
+    "reviewBundleDigest",
+    "reviewedCommit",
+    "reviewer",
+    "runId",
+    "schemaVersion",
+    "startedAt",
+    "summary",
+    "priorBlockerDispositions"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.1.0"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^RUN-"
+    },
+    "cycle": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3
+    },
+    "baseCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,64}$"
+    },
+    "reviewedCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,64}$"
+    },
+    "reviewBundleDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "result": {
+      "enum": [
+        "CLEAN",
+        "BLOCKED",
+        "ENVIRONMENT_BLOCKED",
+        "REVIEW_INPUT_INVALID",
+        "INDEPENDENCE_INSUFFICIENT",
+        "FOUNDER_DECISION_REQUIRED"
+      ]
+    },
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "tool",
+        "modelId",
+        "independenceStatus"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toolVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "independenceStatus": {
+          "enum": [
+            "SUFFICIENT",
+            "PROVIDER_SEPARATED_MODEL_UNKNOWN",
+            "INSUFFICIENT",
+            "UNKNOWN"
+          ]
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "review-finding.schema.json"
+      }
+    },
+    "advisories": {
+      "type": "array",
+      "items": {
+        "$ref": "review-finding.schema.json"
+      }
+    },
+    "environmentGaps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finishedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "priorBlockerDispositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "findingId",
+          "disposition"
+        ],
+        "properties": {
+          "findingId": {
+            "type": "string"
+          },
+          "disposition": {
+            "enum": [
+              "OPEN",
+              "RESOLVED",
+              "DUPLICATE",
+              "DOWNGRADED"
+            ]
+          },
+          "retestEvidenceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "CLEAN"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "findings": {
+            "maxItems": 0
+          },
+          "environmentGaps": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "BLOCKED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "findings": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "ENVIRONMENT_BLOCKED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "environmentGaps": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ],
+  "schemaVersion": null
+}

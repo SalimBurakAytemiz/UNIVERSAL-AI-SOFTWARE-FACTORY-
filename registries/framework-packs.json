@@ -1,0 +1,568 @@
+{
+  "//TR": "Bu dosya belirli framework/stack bilgisini core agent unvanına gömmek yerine versioned ve certifiable framework paketleri olarak register eder.",
+  "schemaVersion": "1.0.0",
+  "count": 41,
+  "frameworkPacks": [
+    {
+      "id": "FW-001-ANDROID-NATIVE",
+      "name": "android-native",
+      "skills": [
+        "SKILL-KOTLIN",
+        "SKILL-JAVA_ANDROID",
+        "SKILL-GRADLE_ANDROID",
+        "SKILL-ANDROID_PLATFORM",
+        "SKILL-JETPACK",
+        "SKILL-JETPACK_COMPOSE",
+        "SKILL-KOTLIN_COROUTINES_FLOW",
+        "SKILL-ROOM",
+        "SKILL-DATASTORE",
+        "SKILL-WORKMANAGER",
+        "SKILL-RETROFIT_OKHTTP",
+        "SKILL-HILT_DAGGER",
+        "SKILL-ANDROID_TESTING"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-002-IOS-NATIVE",
+      "name": "ios-native",
+      "skills": [
+        "SKILL-SWIFT",
+        "SKILL-SWIFTUI",
+        "SKILL-UIKIT",
+        "SKILL-SWIFT_CONCURRENCY",
+        "SKILL-URLSESSION",
+        "SKILL-KEYCHAIN",
+        "SKILL-SWIFTDATA_COREDATA",
+        "SKILL-IOS_TESTING"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-003-FLUTTER",
+      "name": "flutter",
+      "skills": [
+        "SKILL-DART",
+        "SKILL-FLUTTER",
+        "SKILL-MOBILE_ARCHITECTURE",
+        "SKILL-MOBILE_TESTING"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-004-REACT-NATIVE",
+      "name": "react-native",
+      "skills": [
+        "SKILL-REACT_NATIVE",
+        "SKILL-TYPESCRIPT",
+        "SKILL-MOBILE_ARCHITECTURE",
+        "SKILL-MOBILE_TESTING"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-005-REACT-NEXT",
+      "name": "react-next",
+      "skills": [
+        "SKILL-REACT",
+        "SKILL-NEXTJS",
+        "SKILL-TYPESCRIPT",
+        "SKILL-WEB_PLATFORM_APIS",
+        "SKILL-FRONTEND_TESTING"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-006-ANGULAR",
+      "name": "angular",
+      "skills": [
+        "SKILL-ANGULAR",
+        "SKILL-TYPESCRIPT",
+        "SKILL-WEB_PLATFORM_APIS",
+        "SKILL-FRONTEND_TESTING"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-007-VUE-NUXT",
+      "name": "vue-nuxt",
+      "skills": [
+        "SKILL-VUE_NUXT",
+        "SKILL-TYPESCRIPT",
+        "SKILL-WEB_PLATFORM_APIS",
+        "SKILL-FRONTEND_TESTING"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-008-SVELTE",
+      "name": "svelte",
+      "skills": [
+        "SKILL-SVELTE_SVELTEKIT",
+        "SKILL-TYPESCRIPT",
+        "SKILL-WEB_PLATFORM_APIS",
+        "SKILL-FRONTEND_TESTING"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-009-NODE-FASTIFY",
+      "name": "node-fastify",
+      "skills": [
+        "SKILL-FASTIFY",
+        "SKILL-TYPESCRIPT",
+        "SKILL-REST_API_DESIGN",
+        "SKILL-BACKEND_VALIDATION",
+        "SKILL-SERVICE_OBSERVABILITY"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-010-NODE-NEST",
+      "name": "node-nest",
+      "skills": [
+        "SKILL-NESTJS",
+        "SKILL-TYPESCRIPT",
+        "SKILL-REST_API_DESIGN",
+        "SKILL-BACKEND_VALIDATION",
+        "SKILL-DEPENDENCY_INJECTION"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-011-JAVA-SPRING",
+      "name": "java-spring",
+      "skills": [
+        "SKILL-SPRING_BOOT",
+        "SKILL-JAVA",
+        "SKILL-REST_API_DESIGN",
+        "SKILL-TRANSACTIONS",
+        "SKILL-JUNIT_TESTING"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-012-DOTNET-ASPNET",
+      "name": "dotnet-aspnet",
+      "skills": [
+        "SKILL-ASPNET_CORE",
+        "SKILL-CSHARP",
+        "SKILL-REST_API_DESIGN",
+        "SKILL-TRANSACTIONS",
+        "SKILL-DOTNET_TESTING"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-013-PYTHON-FASTAPI",
+      "name": "python-fastapi",
+      "skills": [
+        "SKILL-FASTAPI",
+        "SKILL-PYTHON",
+        "SKILL-REST_API_DESIGN",
+        "SKILL-PYDANTIC_VALIDATION",
+        "SKILL-PYTEST_HTTPX"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-014-PYTHON-DJANGO",
+      "name": "python-django",
+      "skills": [
+        "SKILL-DJANGO",
+        "SKILL-PYTHON",
+        "SKILL-WEB_BACKEND",
+        "SKILL-ORM_MIGRATIONS",
+        "SKILL-PYTEST"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-015-GO-BACKEND",
+      "name": "go-backend",
+      "skills": [
+        "SKILL-GO_HTTP_FRAMEWORKS",
+        "SKILL-GO",
+        "SKILL-REST_API_DESIGN",
+        "SKILL-CONCURRENCY_CONTROL"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-016-RUST-BACKEND",
+      "name": "rust-backend",
+      "skills": [
+        "SKILL-RUST_WEB_FRAMEWORKS",
+        "SKILL-RUST",
+        "SKILL-REST_API_DESIGN",
+        "SKILL-MEMORY_SAFETY"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-017-PHP-LARAVEL",
+      "name": "php-laravel",
+      "skills": [
+        "SKILL-LARAVEL",
+        "SKILL-PHP",
+        "SKILL-REST_API_DESIGN",
+        "SKILL-ORM_MIGRATIONS"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-018-RUBY-RAILS",
+      "name": "ruby-rails",
+      "skills": [
+        "SKILL-RAILS",
+        "SKILL-RUBY",
+        "SKILL-REST_API_DESIGN",
+        "SKILL-ORM_MIGRATIONS"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-019-POSTGRESQL",
+      "name": "postgresql",
+      "skills": [
+        "SKILL-POSTGRESQL",
+        "SKILL-SQL",
+        "SKILL-INDEXES_QUERY_PLANS",
+        "SKILL-TRANSACTIONS_ISOLATION_LOCKING",
+        "SKILL-BACKUP_RESTORE"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-020-MYSQL",
+      "name": "mysql",
+      "skills": [
+        "SKILL-MYSQL_MARIADB",
+        "SKILL-SQL",
+        "SKILL-INDEXES_QUERY_PLANS",
+        "SKILL-TRANSACTIONS_ISOLATION_LOCKING",
+        "SKILL-BACKUP_RESTORE"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-021-SQL-SERVER",
+      "name": "sql-server",
+      "skills": [
+        "SKILL-SQL_SERVER",
+        "SKILL-SQL",
+        "SKILL-INDEXES_QUERY_PLANS",
+        "SKILL-TRANSACTIONS_ISOLATION_LOCKING",
+        "SKILL-BACKUP_RESTORE"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-022-ORACLE",
+      "name": "oracle",
+      "skills": [
+        "SKILL-ORACLE_DATABASE",
+        "SKILL-SQL",
+        "SKILL-INDEXES_QUERY_PLANS",
+        "SKILL-TRANSACTIONS_ISOLATION_LOCKING",
+        "SKILL-BACKUP_RESTORE"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-023-MONGODB",
+      "name": "mongodb",
+      "skills": [
+        "SKILL-MONGODB",
+        "SKILL-DATA_MODELING",
+        "SKILL-INDEXES_QUERY_PLANS",
+        "SKILL-REPLICATION_FAILOVER"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-024-REDIS",
+      "name": "redis",
+      "skills": [
+        "SKILL-REDIS",
+        "SKILL-CACHING",
+        "SKILL-DISTRIBUTED_LOCKING",
+        "SKILL-PERSISTENCE_FAILOVER"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-025-OPENSEARCH",
+      "name": "opensearch",
+      "skills": [
+        "SKILL-ELASTICSEARCH_OPENSEARCH",
+        "SKILL-SEARCH_RELEVANCE",
+        "SKILL-INDEX_DESIGN"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-026-KAFKA",
+      "name": "kafka",
+      "skills": [
+        "SKILL-KAFKA",
+        "SKILL-EVENT_DRIVEN_ARCHITECTURE",
+        "SKILL-MESSAGE_ORDERING",
+        "SKILL-SCHEMA_EVOLUTION"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-027-DATA-MODERN",
+      "name": "data-modern",
+      "skills": [
+        "SKILL-SPARK",
+        "SKILL-FLINK",
+        "SKILL-AIRFLOW",
+        "SKILL-DBT",
+        "SKILL-DATA_LINEAGE",
+        "SKILL-DATA_QUALITY"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-028-CLOUD-NATIVE",
+      "name": "cloud-native",
+      "skills": [
+        "SKILL-DOCKER",
+        "SKILL-KUBERNETES",
+        "SKILL-HELM",
+        "SKILL-TERRAFORM_OPENTOFU",
+        "SKILL-OPENTELEMETRY"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-029-AWS",
+      "name": "aws",
+      "skills": [
+        "SKILL-CLOUD_AWS",
+        "SKILL-IAM_CLOUD",
+        "SKILL-NETWORKING_DNS_TLS",
+        "SKILL-FINOPS_BASICS"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-030-AZURE",
+      "name": "azure",
+      "skills": [
+        "SKILL-CLOUD_AZURE",
+        "SKILL-IAM_CLOUD",
+        "SKILL-NETWORKING_DNS_TLS",
+        "SKILL-FINOPS_BASICS"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-031-GCP",
+      "name": "gcp",
+      "skills": [
+        "SKILL-CLOUD_GCP",
+        "SKILL-IAM_CLOUD",
+        "SKILL-NETWORKING_DNS_TLS",
+        "SKILL-FINOPS_BASICS"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-032-UNITY",
+      "name": "unity",
+      "skills": [
+        "SKILL-UNITY_CSHARP",
+        "SKILL-GAME_ARCHITECTURE",
+        "SKILL-GAME_NETWORKING",
+        "SKILL-GAME_PERFORMANCE"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-033-UNREAL",
+      "name": "unreal",
+      "skills": [
+        "SKILL-UNREAL_CPP_BLUEPRINT",
+        "SKILL-GAME_ARCHITECTURE",
+        "SKILL-GAME_NETWORKING",
+        "SKILL-GAME_PERFORMANCE"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-034-GODOT",
+      "name": "godot",
+      "skills": [
+        "SKILL-GODOT",
+        "SKILL-GAME_ARCHITECTURE",
+        "SKILL-GAME_NETWORKING",
+        "SKILL-GAME_PERFORMANCE"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-035-ESP-IDF",
+      "name": "esp-idf",
+      "skills": [
+        "SKILL-ESP_IDF",
+        "SKILL-EMBEDDED_C_CPP",
+        "SKILL-RTOS",
+        "SKILL-MQTT",
+        "SKILL-OTA_FIRMWARE"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-036-STM32",
+      "name": "stm32",
+      "skills": [
+        "SKILL-STM32_TOOLCHAIN",
+        "SKILL-EMBEDDED_C_CPP",
+        "SKILL-RTOS",
+        "SKILL-HARDWARE_IN_LOOP"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-037-ZEPHYR",
+      "name": "zephyr",
+      "skills": [
+        "SKILL-ZEPHYR",
+        "SKILL-EMBEDDED_C_CPP",
+        "SKILL-RTOS",
+        "SKILL-DEVICE_PROVISIONING"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-038-AI-PYTORCH",
+      "name": "ai-pytorch",
+      "skills": [
+        "SKILL-PYTORCH",
+        "SKILL-PYTHON",
+        "SKILL-DATASET_PROVENANCE",
+        "SKILL-MODEL_EVALUATION"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-039-AI-TENSORFLOW",
+      "name": "ai-tensorflow",
+      "skills": [
+        "SKILL-TENSORFLOW",
+        "SKILL-PYTHON",
+        "SKILL-DATASET_PROVENANCE",
+        "SKILL-MODEL_EVALUATION"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-040-LLM-RAG",
+      "name": "llm-rag",
+      "skills": [
+        "SKILL-RAG",
+        "SKILL-RETRIEVAL_EVALUATION",
+        "SKILL-EMBEDDING_VECTOR_SEARCH",
+        "SKILL-PROMPT_INJECTION_DEFENSE",
+        "SKILL-MODEL_EVALUATION"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    },
+    {
+      "id": "FW-041-OBSERVABILITY",
+      "name": "observability",
+      "skills": [
+        "SKILL-OPENTELEMETRY",
+        "SKILL-PROMETHEUS_GRAFANA",
+        "SKILL-LOGGING_TRACING",
+        "SKILL-SLI_SLO_ERROR_BUDGET"
+      ],
+      "sourcePolicy": "OFFICIAL_FIRST",
+      "versionPolicy": "RUNTIME_DISCOVER_AND_PIN_PER_PROJECT",
+      "status": "REGISTERED"
+    }
+  ]
+}

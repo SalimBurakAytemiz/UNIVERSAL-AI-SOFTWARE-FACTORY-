@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "//TR: Versioned technology bilgi facet'lerinin source/freshness/certification durumunu doğrular.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "certification",
+    "facet",
+    "sourceRefs",
+    "state"
+  ],
+  "properties": {
+    "facet": {
+      "type": "string",
+      "minLength": 2
+    },
+    "state": {
+      "enum": [
+        "NOT_RESEARCHED",
+        "RESEARCHED",
+        "EVALUATED",
+        "CERTIFIED",
+        "STALE",
+        "REVOKED"
+      ]
+    },
+    "sourceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "lastValidatedAt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "certification": {
+      "type": "string"
+    }
+  }
+}

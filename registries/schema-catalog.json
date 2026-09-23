@@ -1,0 +1,919 @@
+{
+  "//TR": "Bu dosya bütün canonical JSON Schema dosyalarını physical exact-set, strict object ve required count ile indexler.",
+  "schemaVersion": "2.1.0",
+  "count": 152,
+  "schemas": [
+    {
+      "id": "action-request",
+      "file": "schemas/action-request.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "action-result",
+      "file": "schemas/action-result.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "adr",
+      "file": "schemas/adr.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "agent-competency-v2",
+      "file": "schemas/agent-competency-v2.schema.json",
+      "strictObject": true,
+      "requiredCount": 13
+    },
+    {
+      "id": "agent-contract",
+      "file": "schemas/agent-contract.schema.json",
+      "strictObject": true,
+      "requiredCount": 20
+    },
+    {
+      "id": "agent-review",
+      "file": "schemas/agent-review.schema.json",
+      "strictObject": true,
+      "requiredCount": 12
+    },
+    {
+      "id": "agent-role",
+      "file": "schemas/agent-role.schema.json",
+      "strictObject": true,
+      "requiredCount": 13
+    },
+    {
+      "id": "agent-run",
+      "file": "schemas/agent-run.schema.json",
+      "strictObject": true,
+      "requiredCount": 12
+    },
+    {
+      "id": "agent-skill-profile",
+      "file": "schemas/agent-skill-profile.schema.json",
+      "strictObject": true,
+      "requiredCount": 10
+    },
+    {
+      "id": "agent-tool-policy-v2",
+      "file": "schemas/agent-tool-policy-v2.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "approval-attestation-v2",
+      "file": "schemas/approval-attestation-v2.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "approval-attestation",
+      "file": "schemas/approval-attestation.schema.json",
+      "strictObject": true,
+      "requiredCount": 9
+    },
+    {
+      "id": "approval-request",
+      "file": "schemas/approval-request.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "artifact",
+      "file": "schemas/artifact.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "asset-rights",
+      "file": "schemas/asset-rights.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "assumption",
+      "file": "schemas/assumption.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "attestation",
+      "file": "schemas/attestation.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "audit-event",
+      "file": "schemas/audit-event.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "auth-session",
+      "file": "schemas/auth-session.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "authorization-scope",
+      "file": "schemas/authorization-scope.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "backup",
+      "file": "schemas/backup.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "benchmark-case",
+      "file": "schemas/benchmark-case.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "break-glass",
+      "file": "schemas/break-glass.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "briefing",
+      "file": "schemas/briefing.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "budget",
+      "file": "schemas/budget.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "capability",
+      "file": "schemas/capability.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "certificate",
+      "file": "schemas/certificate.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "certification",
+      "file": "schemas/certification.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "chain-of-custody",
+      "file": "schemas/chain-of-custody.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "checkpoint",
+      "file": "schemas/checkpoint.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "compatibility-contract",
+      "file": "schemas/compatibility-contract.schema.json",
+      "strictObject": true,
+      "requiredCount": 10
+    },
+    {
+      "id": "compensation",
+      "file": "schemas/compensation.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "competency-evaluation",
+      "file": "schemas/competency-evaluation.schema.json",
+      "strictObject": true,
+      "requiredCount": 10
+    },
+    {
+      "id": "competency-pack",
+      "file": "schemas/competency-pack.schema.json",
+      "strictObject": true,
+      "requiredCount": 9
+    },
+    {
+      "id": "conflict",
+      "file": "schemas/conflict.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "context-bundle",
+      "file": "schemas/context-bundle.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "contract-scope",
+      "file": "schemas/contract-scope.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "cost-event",
+      "file": "schemas/cost-event.schema.json",
+      "strictObject": true,
+      "requiredCount": 10
+    },
+    {
+      "id": "council-decision",
+      "file": "schemas/council-decision.schema.json",
+      "strictObject": true,
+      "requiredCount": 9
+    },
+    {
+      "id": "coverage-statement",
+      "file": "schemas/coverage-statement.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "customer-offboarding",
+      "file": "schemas/customer-offboarding.schema.json",
+      "strictObject": true,
+      "requiredCount": 9
+    },
+    {
+      "id": "customer",
+      "file": "schemas/customer.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "data-classification",
+      "file": "schemas/data-classification.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "data-routing",
+      "file": "schemas/data-routing.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "dependency",
+      "file": "schemas/dependency.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "deployment",
+      "file": "schemas/deployment.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "deprecation",
+      "file": "schemas/deprecation.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "design-artifact",
+      "file": "schemas/design-artifact.schema.json",
+      "strictObject": true,
+      "requiredCount": 9
+    },
+    {
+      "id": "dlp-event",
+      "file": "schemas/dlp-event.schema.json",
+      "strictObject": true,
+      "requiredCount": 10
+    },
+    {
+      "id": "domain-pack",
+      "file": "schemas/domain-pack.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "drift-finding",
+      "file": "schemas/drift-finding.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "engagement",
+      "file": "schemas/engagement.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "environment",
+      "file": "schemas/environment.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "erasure-request",
+      "file": "schemas/erasure-request.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "escalation",
+      "file": "schemas/escalation.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "event",
+      "file": "schemas/event.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "evidence-export",
+      "file": "schemas/evidence-export.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "evidence",
+      "file": "schemas/evidence.schema.json",
+      "strictObject": true,
+      "requiredCount": 5
+    },
+    {
+      "id": "failure-classification",
+      "file": "schemas/failure-classification.schema.json",
+      "strictObject": true,
+      "requiredCount": 4
+    },
+    {
+      "id": "finding",
+      "file": "schemas/finding.schema.json",
+      "strictObject": true,
+      "requiredCount": 9
+    },
+    {
+      "id": "framework-pack",
+      "file": "schemas/framework-pack.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "freshness",
+      "file": "schemas/freshness.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "health",
+      "file": "schemas/health.schema.json",
+      "strictObject": true,
+      "requiredCount": 10
+    },
+    {
+      "id": "holdout-suite",
+      "file": "schemas/holdout-suite.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "human-identity",
+      "file": "schemas/human-identity.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "incident",
+      "file": "schemas/incident.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "independent-review-result",
+      "file": "schemas/independent-review-result.schema.json",
+      "strictObject": true,
+      "requiredCount": 15
+    },
+    {
+      "id": "install-report",
+      "file": "schemas/install-report.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "invariant",
+      "file": "schemas/invariant.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "invoice",
+      "file": "schemas/invoice.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "key-metadata",
+      "file": "schemas/key-metadata.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "knowledge-item",
+      "file": "schemas/knowledge-item.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "knowledge-unit",
+      "file": "schemas/knowledge-unit.schema.json",
+      "strictObject": true,
+      "requiredCount": 4
+    },
+    {
+      "id": "lead",
+      "file": "schemas/lead.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "lease",
+      "file": "schemas/lease.schema.json",
+      "strictObject": true,
+      "requiredCount": 11
+    },
+    {
+      "id": "legal-hold",
+      "file": "schemas/legal-hold.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "lesson",
+      "file": "schemas/lesson.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "license-decision",
+      "file": "schemas/license-decision.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "migration",
+      "file": "schemas/migration.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "milestone-contract",
+      "file": "schemas/milestone-contract.schema.json",
+      "strictObject": true,
+      "requiredCount": 24
+    },
+    {
+      "id": "mission-blueprint",
+      "file": "schemas/mission-blueprint.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "mission-plan",
+      "file": "schemas/mission-plan.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "mission",
+      "file": "schemas/mission.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "model-call",
+      "file": "schemas/model-call.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "model-evaluation",
+      "file": "schemas/model-evaluation.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "model-routing-policy",
+      "file": "schemas/model-routing-policy.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "model",
+      "file": "schemas/model.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "notification",
+      "file": "schemas/notification.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "payment-reconciliation",
+      "file": "schemas/payment-reconciliation.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "permission",
+      "file": "schemas/permission.schema.json",
+      "strictObject": true,
+      "requiredCount": 10
+    },
+    {
+      "id": "phase-contract",
+      "file": "schemas/phase-contract.schema.json",
+      "strictObject": true,
+      "requiredCount": 13
+    },
+    {
+      "id": "phase0-acceptance",
+      "file": "schemas/phase0-acceptance.schema.json",
+      "strictObject": true,
+      "requiredCount": 4
+    },
+    {
+      "id": "playbook",
+      "file": "schemas/playbook.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "plugin-manifest",
+      "file": "schemas/plugin-manifest.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "portfolio-priority",
+      "file": "schemas/portfolio-priority.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "problem",
+      "file": "schemas/problem.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "project-genome",
+      "file": "schemas/project-genome.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "project",
+      "file": "schemas/project.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "prompt-version",
+      "file": "schemas/prompt-version.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "proposal",
+      "file": "schemas/proposal.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "provenance",
+      "file": "schemas/provenance.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "provider-entitlement",
+      "file": "schemas/provider-entitlement.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "provider",
+      "file": "schemas/provider.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "quota",
+      "file": "schemas/quota.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "recertification-trigger",
+      "file": "schemas/recertification-trigger.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "recovery-objective",
+      "file": "schemas/recovery-objective.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "release",
+      "file": "schemas/release.schema.json",
+      "strictObject": true,
+      "requiredCount": 10
+    },
+    {
+      "id": "report-manifest",
+      "file": "schemas/report-manifest.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "requirement",
+      "file": "schemas/requirement.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "residency-rule",
+      "file": "schemas/residency-rule.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "resource",
+      "file": "schemas/resource.schema.json",
+      "strictObject": true,
+      "requiredCount": 4
+    },
+    {
+      "id": "restore",
+      "file": "schemas/restore.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "retention-rule",
+      "file": "schemas/retention-rule.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "review-attestation",
+      "file": "schemas/review-attestation.schema.json",
+      "strictObject": true,
+      "requiredCount": 17
+    },
+    {
+      "id": "review-bundle",
+      "file": "schemas/review-bundle.schema.json",
+      "strictObject": true,
+      "requiredCount": 20
+    },
+    {
+      "id": "review-finding",
+      "file": "schemas/review-finding.schema.json",
+      "strictObject": true,
+      "requiredCount": 13
+    },
+    {
+      "id": "review",
+      "file": "schemas/review.schema.json",
+      "strictObject": true,
+      "requiredCount": 14
+    },
+    {
+      "id": "reviewer-independence",
+      "file": "schemas/reviewer-independence.schema.json",
+      "strictObject": true,
+      "requiredCount": 10
+    },
+    {
+      "id": "revocation",
+      "file": "schemas/revocation.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "role",
+      "file": "schemas/role.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "run-event",
+      "file": "schemas/run-event.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "run-manifest",
+      "file": "schemas/run-manifest.schema.json",
+      "strictObject": true,
+      "requiredCount": 9
+    },
+    {
+      "id": "runbook",
+      "file": "schemas/runbook.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "sbom-component",
+      "file": "schemas/sbom-component.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "schedule",
+      "file": "schemas/schedule.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "schema-version",
+      "file": "schemas/schema-version.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "secret-metadata",
+      "file": "schemas/secret-metadata.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "security-assessment-contract",
+      "file": "schemas/security-assessment-contract.schema.json",
+      "strictObject": true,
+      "requiredCount": 9
+    },
+    {
+      "id": "service-identity",
+      "file": "schemas/service-identity.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "side-effect",
+      "file": "schemas/side-effect.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "skill",
+      "file": "schemas/skill.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "sla",
+      "file": "schemas/sla.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "source-authority",
+      "file": "schemas/source-authority.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "source-provenance",
+      "file": "schemas/source-provenance.schema.json",
+      "strictObject": true,
+      "requiredCount": 9
+    },
+    {
+      "id": "state-migration",
+      "file": "schemas/state-migration.schema.json",
+      "strictObject": true,
+      "requiredCount": 10
+    },
+    {
+      "id": "support-ticket",
+      "file": "schemas/support-ticket.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "target",
+      "file": "schemas/target.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "task",
+      "file": "schemas/task.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "technical-standard",
+      "file": "schemas/technical-standard.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "technology-candidate",
+      "file": "schemas/technology-candidate.schema.json",
+      "strictObject": true,
+      "requiredCount": 9
+    },
+    {
+      "id": "technology-decision",
+      "file": "schemas/technology-decision.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "technology-depth",
+      "file": "schemas/technology-depth.schema.json",
+      "strictObject": true,
+      "requiredCount": 4
+    },
+    {
+      "id": "technology",
+      "file": "schemas/technology.schema.json",
+      "strictObject": true,
+      "requiredCount": 12
+    },
+    {
+      "id": "test-run",
+      "file": "schemas/test-run.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "tool-adapter",
+      "file": "schemas/tool-adapter.schema.json",
+      "strictObject": true,
+      "requiredCount": 4
+    },
+    {
+      "id": "tool",
+      "file": "schemas/tool.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "trace-link",
+      "file": "schemas/trace-link.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "unknown-surface",
+      "file": "schemas/unknown-surface.schema.json",
+      "strictObject": true,
+      "requiredCount": 6
+    },
+    {
+      "id": "worker-identity",
+      "file": "schemas/worker-identity.schema.json",
+      "strictObject": true,
+      "requiredCount": 10
+    },
+    {
+      "id": "worker",
+      "file": "schemas/worker.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    },
+    {
+      "id": "workflow",
+      "file": "schemas/workflow.schema.json",
+      "strictObject": true,
+      "requiredCount": 8
+    },
+    {
+      "id": "workspace",
+      "file": "schemas/workspace.schema.json",
+      "strictObject": true,
+      "requiredCount": 7
+    }
+  ]
+}

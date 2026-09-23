@@ -1,0 +1,97 @@
+{
+  "//TR": "Bu dosya eski kısa standard kayıtlarını tamamlayan, role/technology/roadmap semantic doğrulamasında kullanılacak canonical v2 teknik standard listesini tanımlar.",
+  "schemaVersion": "2.0.0",
+  "count": 18,
+  "standards": [
+    {
+      "id": "STD-TECH-KNOWLEDGE",
+      "name": "Technology Knowledge Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-AGENT-COMPETENCY",
+      "name": "Agent Competency & Depth Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-ROLE-SEMANTIC",
+      "name": "Role Semantic Coverage Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-API-CONTRACT-V2",
+      "name": "Strict API Contract & Schema Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-REALTIME",
+      "name": "Realtime/Socket Engineering Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-WEB-V2",
+      "name": "Web Engineering Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-ANDROID-V2",
+      "name": "Android Engineering Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-IOS-V2",
+      "name": "iOS Engineering Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-FLUTTER",
+      "name": "Flutter Engineering Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-REACT-NATIVE",
+      "name": "React Native Engineering Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-BACKEND-V2",
+      "name": "Backend Engineering Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-DATABASE-V2",
+      "name": "Database Engineering Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-AI-ML",
+      "name": "AI/ML Engineering Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-GAME-V2",
+      "name": "Game Engineering Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-IOT-V2",
+      "name": "Embedded/IoT Engineering Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-PHASE-CONTRACT",
+      "name": "Roadmap Phase Contract Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-UNKNOWN-TECH",
+      "name": "Unknown Technology Acquisition Standard",
+      "status": "CANONICAL"
+    },
+    {
+      "id": "STD-REVIEW-GRAPH",
+      "name": "Technical Review Graph Standard",
+      "status": "CANONICAL"
+    }
+  ]
+}

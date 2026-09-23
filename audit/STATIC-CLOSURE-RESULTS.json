@@ -1,0 +1,49 @@
+{
+  "//TR": "Bu dosya artifact creation sırasında dependency gerektirmeyen static/canonical/mekanik closure kontrollerinin sonuçlarını kaydeder; target-machine npm/typecheck/Vitest/provider/Electron doğrulaması değildir.",
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-09-19T23:50:20.320951+00:00",
+  "artifact": "MECHANICALLY-CLOSED-V2-CANONICAL-STARTER",
+  "checks": {
+    "jsonParseAll": "PASS",
+    "mjsSyntaxAll": "PASS",
+    "registryValidation": "PASS",
+    "architectureValidation": "PASS",
+    "trValidation": "PASS",
+    "competencyV2Validation": "PASS",
+    "organizationValidation": "PASS",
+    "schemaCatalogValidation": "PASS",
+    "technologyGraphValidation": "PASS",
+    "agentSemanticValidation": "PASS",
+    "phaseContractValidation": "PASS",
+    "reviewGraphValidation": "PASS",
+    "schemaStrictnessValidation": "PASS",
+    "wovenModelValidation": "PASS",
+    "mechanicalClosureValidation": "PASS",
+    "mechanicalKernelSelftest": "PASS",
+    "trustRootVerify": "PASS"
+  },
+  "counts": {
+    "agents": 363,
+    "skillsV2": 425,
+    "technologies": 393,
+    "toolAdapters": 194,
+    "schemas": 151,
+    "phases": 149,
+    "reviewPackages": 34,
+    "trustRootFiles": 225
+  },
+  "targetMachinePending": [
+    "Node>=24",
+    "npm registry/package-lock generation",
+    "npm ci",
+    "TypeScript typecheck",
+    "Vitest",
+    "Claude auth/network smoke",
+    "Codex auth/network smoke",
+    "Control API/Electron Windows smoke",
+    "Task Scheduler autostart",
+    "optional OmniRoute compatibility",
+    "private remote/branch protection when configured"
+  ],
+  "verdict": "SOURCE_STATIC_MECHANICAL_CLOSURE_PASS_TARGET_PHASE0_REQUIRED"
+}

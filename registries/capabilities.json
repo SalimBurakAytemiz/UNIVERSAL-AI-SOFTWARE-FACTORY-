@@ -1,0 +1,777 @@
+{
+  "//TR": "Bu dosya önceki auditlerde belirlenen 110 software capability'yi register eder; runtime+test+evidence olmadan hiçbir kayıt IMPLEMENTED sayılmaz.",
+  "schemaVersion": "1.0.0",
+  "count": 110,
+  "capabilities": [
+    {
+      "id": "UASCO-CAP-001",
+      "name": "Mission OS",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-002",
+      "name": "Existing System Intake Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-003",
+      "name": "Software Intelligence Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-004",
+      "name": "System Dependency Graph",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-005",
+      "name": "Evidence Graph",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-006",
+      "name": "Environment Manager",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-007",
+      "name": "Environment Safety Guard",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-008",
+      "name": "Design Studio",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-009",
+      "name": "Design-to-Code Verification",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-010",
+      "name": "Mission Blueprint Registry",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-011",
+      "name": "Golden Project Benchmark Suite",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-012",
+      "name": "Agent/Model Performance Registry",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-013",
+      "name": "Unknown-Unknown Detector",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-014",
+      "name": "Coverage Truth Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-015",
+      "name": "State Machine Discovery & Testing",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-016",
+      "name": "Business Logic Abuse Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-017",
+      "name": "Cross-Layer Test Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-018",
+      "name": "User Journey Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-019",
+      "name": "Adversarial Test Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-020",
+      "name": "Authorization Matrix Generator",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-021",
+      "name": "API Lifecycle Management",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-022",
+      "name": "Contract Compatibility Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-023",
+      "name": "Configuration Management",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-024",
+      "name": "Feature Flag & Experimentation Platform",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-025",
+      "name": "Release Strategy Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-026",
+      "name": "Change Impact Analysis",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-027",
+      "name": "Regression Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-028",
+      "name": "Mission Replay",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-029",
+      "name": "Defect Memory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-030",
+      "name": "Test Data Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-031",
+      "name": "Data Masking & Pseudonymization",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-032",
+      "name": "Data Routing Policy",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-033",
+      "name": "Privacy Operations Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-034",
+      "name": "Data Contract & Schema Evolution",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-035",
+      "name": "Migration Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-036",
+      "name": "Synthetic Monitoring",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-037",
+      "name": "SLO/SLI/Error Budget Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-038",
+      "name": "Capacity Planning Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-039",
+      "name": "Chaos/Resilience Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-040",
+      "name": "Performance Regression Memory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-041",
+      "name": "Service Catalog",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-042",
+      "name": "Runtime Ownership Graph",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-043",
+      "name": "Incident/Postmortem Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-044",
+      "name": "Runbook Automation",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-045",
+      "name": "Customer Workspace Isolation",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-046",
+      "name": "Customer Authorization Registry",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-047",
+      "name": "Engagement/Contract Scope Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-048",
+      "name": "Client Report Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-049",
+      "name": "Report Integrity/Signing",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-050",
+      "name": "Artifact Lifecycle Manager",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-051",
+      "name": "Game Intelligence Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-052",
+      "name": "Game Reverse Engineering Lab",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-053",
+      "name": "Unknown File/Format Learning",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-054",
+      "name": "Parser Registry",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-055",
+      "name": "Game Version Diff Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-056",
+      "name": "Asset Provenance",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-057",
+      "name": "Protocol Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-058",
+      "name": "Binary/Runtime Behavior Mapper",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-059",
+      "name": "Software Behavior Traceability",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-060",
+      "name": "Observability Injection System",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-061",
+      "name": "Developer Documentation Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-062",
+      "name": "End-User Documentation Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-063",
+      "name": "Developer Experience/Local Environment Factory",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-064",
+      "name": "Package/Artifact Publishing Lifecycle",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-065",
+      "name": "Internal Component Certification Registry",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-066",
+      "name": "Dependency Lifecycle Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-067",
+      "name": "Secret Lifecycle Management",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-068",
+      "name": "Identity Federation/Enterprise Auth",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-069",
+      "name": "Offline/Degraded Mode Design",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-070",
+      "name": "Provider Outage & Quota Strategy",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-071",
+      "name": "Model/Data Residency Policy",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-072",
+      "name": "Cost Attribution per Customer/Mission",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-073",
+      "name": "Profitability Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-074",
+      "name": "SLA Management",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-075",
+      "name": "Quality Risk Model",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-076",
+      "name": "Criticality Classification",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-077",
+      "name": "Multi-Agent Disagreement Resolver",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-078",
+      "name": "False Positive/False Negative Tracking",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-079",
+      "name": "Finding Deduplication & Correlation",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-080",
+      "name": "Root Cause Graph",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-081",
+      "name": "Automatic Remediation Verification",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-082",
+      "name": "Change Approval Matrix",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-083",
+      "name": "Generated Product License Decision Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-084",
+      "name": "IP/Asset Rights Registry",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-085",
+      "name": "Accessibility Certification Flow",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-086",
+      "name": "Localization Engineering Pipeline",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-087",
+      "name": "SEO/Discoverability Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-088",
+      "name": "Email Deliverability/Communication Quality",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-089",
+      "name": "Notification Reliability Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-090",
+      "name": "Search Quality Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-091",
+      "name": "Time/Timezone/Clock Testing",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-092",
+      "name": "Concurrency & Distributed Failure Library",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-093",
+      "name": "Resource Leak Detection",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-094",
+      "name": "Compatibility Matrix Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-095",
+      "name": "Upgrade/Downgrade Testing",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-096",
+      "name": "Data Reconciliation Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-097",
+      "name": "Audit Trail Integrity Tester",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-098",
+      "name": "Architecture Fitness Functions",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-099",
+      "name": "Technical Debt Registry",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-100",
+      "name": "Product Analytics/Usage Intelligence",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-101",
+      "name": "Feedback-to-Requirement Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-102",
+      "name": "Deprecation/End-of-Life Engine",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-103",
+      "name": "Factory Self-Test/Dogfooding Suite",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-104",
+      "name": "Factory Upgrade Compatibility",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-105",
+      "name": "Factory Disaster Recovery Drill",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-106",
+      "name": "Complete Mission Audit Trail",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-107",
+      "name": "Human Override/Pause/Resume/Abort",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-108",
+      "name": "Mission Simulation/Dry Run",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-109",
+      "name": "Office/Organization Visualization",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    },
+    {
+      "id": "UASCO-CAP-110",
+      "name": "Universal Plugin/Tool Capability Registry",
+      "status": "REGISTERED",
+      "activation": "ON_DEMAND",
+      "implementation": "NOT_IMPLEMENTED"
+    }
+  ]
+}

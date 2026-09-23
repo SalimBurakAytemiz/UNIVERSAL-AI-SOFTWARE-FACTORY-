@@ -1,0 +1,14 @@
+# //TR: Bu dosya secret, local runtime state, dependency klasörleri, build çıktıları ve çalışma artifact'larının Git geçmişine yanlışlıkla girmesini engeller.
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*
+!.env.example
+.ai/runtime/
+.ai/automation/
+artifacts/runtime/
+reports/runtime/
+*.log
+.DS_Store

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/failure-classification.schema.json",
+  "$comment": "//TR: Bu schema builder/reviewer/validation failure'ın code defect ile quota/auth/network/tool/environment durumlarını ayırmasını ve review cycle'ı yanlış tüketmemesini sağlar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "class",
+    "consumeReviewCycle",
+    "retryable",
+    "summary"
+  ],
+  "properties": {
+    "class": {
+      "enum": [
+        "CODE_FAILURE",
+        "VALIDATION_FAILURE",
+        "QUOTA_OR_RATE_LIMIT",
+        "AUTH_REQUIRED",
+        "NETWORK_FAILURE",
+        "TIMEOUT",
+        "TOOL_MISSING",
+        "TOOL_FAILURE",
+        "ENVIRONMENT_BLOCKED",
+        "GLOBAL_STOP",
+        "UNKNOWN_INFRASTRUCTURE_FAILURE"
+      ]
+    },
+    "retryable": {
+      "type": "boolean"
+    },
+    "consumeReviewCycle": {
+      "type": "boolean"
+    },
+    "retryAfterSeconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "summary": {
+      "type": "string"
+    }
+  }
+}

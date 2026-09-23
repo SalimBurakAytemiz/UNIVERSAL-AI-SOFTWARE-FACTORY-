@@ -1,0 +1,138 @@
+{
+  "//TR": "Bu dosya Roadmap Phase 140 — Representative API/data project için giriş koşulları, teslimatlar, test/evidence ve bağımsız review kapanışını machine-readable olarak tanımlar.",
+  "schemaVersion": "3.0.0",
+  "phase": 140,
+  "title": "Representative API/data project",
+  "domain": "ACCEPTANCE",
+  "state": "PLANNED",
+  "entryCriteria": [
+    "previous-required-phase-contracts-closed-or-explicitly-waived",
+    "requirements-and-invariants-loaded",
+    "affected-customer-data-security-cost-policies-resolved",
+    "required-skills-tools-resources-health-checked",
+    "Phase dependency closure verified for: 49, 50, 63, 64, 70, 71, 72, 78, 79, 80, 87, 91, 95, 98, 102, 133, 134, 135, 136",
+    "Frozen milestone/package contract generated for Phase 140"
+  ],
+  "requiredDeliverables": [
+    "Executable or explicitly justified non-runtime implementation for Phase 140: Representative API/data project",
+    "Tests that exercise declared success and failure paths for Phase 140",
+    "Phase-specific artifacts: representative-api-data-evidence.json, review result",
+    "Documentation and registry/schema updates required by the implementation",
+    "Control Tower visibility when the phase creates founder-visible operational state",
+    "Atomic checkpoint/evidence linkage for Phase 140"
+  ],
+  "requiredValidation": [
+    "Phase 140 targeted success-path validation",
+    "Phase 140 mandatory failure-case validation: schema contract drift, transaction/data reconciliation failure",
+    "Type/lint/build checks applicable to changed languages/toolchains",
+    "Schema/registry/TR canonical validation",
+    "Secret/security/trust-root/change-scope gates",
+    "Regression selection for directly impacted dependencies",
+    "Acceptance assertions: Phase 140 objective `Representative API/data project` is implemented as executable/runtime behavior where applicable, not only as files or registry rows. | Tests and evidence directly exercise the `Representative API/data project` behavior and its declared failure paths. | No required acceptance item remains UNKNOWN without explicit environment gap or known limitation."
+  ],
+  "evidence": [
+    "reviewed commit SHA",
+    "run ID",
+    "exact tool/runtime versions",
+    "environment/resource identity",
+    "test/validation results",
+    "artifact digests",
+    "unknown/not-tested surfaces",
+    "Phase-specific artifact evidence: representative-api-data-evidence.json, review result",
+    "Phase 140 review attestation or package-bound attestation"
+  ],
+  "review": [
+    "technical lead or principal review",
+    "independent Codex package review at the coherent review boundary"
+  ],
+  "exitCriteria": [
+    "No unresolved admissible blocker in the frozen review scope",
+    "Phase 140 runtime/non-runtime deliverable is proven by evidence rather than registry/file existence alone",
+    "Mandatory failure cases are exercised or explicitly environment-blocked: schema contract drift, transaction/data reconciliation failure",
+    "Required artifacts exist and are evidence-linked: representative-api-data-evidence.json, review result",
+    "Dependency phases are closed and consistent: 49, 50, 63, 64, 70, 71, 72, 78, 79, 80, 87, 91, 95, 98, 102, 133, 134, 135, 136",
+    "State/checkpoint is durable and crash-resume safe where applicable",
+    "Independent review result is valid, commit-bound and not stale"
+  ],
+  "rollbackOrRecovery": "REQUIRED_FOR_STATEFUL_OR_EXTERNAL_SIDE_EFFECT_CHANGES",
+  "prohibited": [
+    "FOLDER_THEATRE",
+    "FAKE_PASS",
+    "SELF_CERTIFICATION",
+    "SILENT_SCOPE_REDUCTION"
+  ],
+  "dependsOn": [
+    49,
+    50,
+    63,
+    64,
+    70,
+    71,
+    72,
+    78,
+    79,
+    80,
+    87,
+    91,
+    95,
+    98,
+    102,
+    133,
+    134,
+    135,
+    136
+  ],
+  "objective": "Implement, integrate and prove Roadmap Phase 140: Representative API/data project.",
+  "requirements": [
+    "Phase 140 `Representative API/data project` capability must be represented by real runtime or an explicitly justified non-runtime artifact.",
+    "All applicable Architecture Constitution, customer/data/authority and evidence invariants remain enforced.",
+    "Unknown/unverified/environment-blocked surfaces stay explicit."
+  ],
+  "invariants": [
+    "NO_FAKE_SUCCESS",
+    "NO_WEAKENED_CONTROLS",
+    "NO_SILENT_SCOPE_EXPANSION",
+    "NO_SELF_CERTIFICATION",
+    "EVIDENCE_REQUIRED"
+  ],
+  "phaseSpecificAcceptance": [
+    "Phase 140 objective `Representative API/data project` is implemented as executable/runtime behavior where applicable, not only as files or registry rows.",
+    "Tests and evidence directly exercise the `Representative API/data project` behavior and its declared failure paths.",
+    "No required acceptance item remains UNKNOWN without explicit environment gap or known limitation.",
+    "Representative API/data project proves strict contracts, DB integrity, async/concurrency and observability with end-to-end evidence."
+  ],
+  "mandatoryFailureCases": [
+    "schema contract drift",
+    "transaction/data reconciliation failure"
+  ],
+  "requiredArtifacts": [
+    "representative-api-data-evidence.json",
+    "review result"
+  ],
+  "allowedPathPrefixes": [
+    "core/",
+    "apps/",
+    "tests/",
+    "docs/",
+    "registries/",
+    "schemas/",
+    "evaluations/",
+    "golden/",
+    "holdout/",
+    "reports/",
+    "evidence/",
+    "domain-packs/",
+    "package.json",
+    "package-lock.json"
+  ],
+  "reviewProfile": "STANDARD",
+  "riskLevel": 2,
+  "allowPaidApi": false,
+  "allowProduction": false,
+  "allowRisk5": false,
+  "unsupportedCases": [],
+  "maxFilesChanged": 220,
+  "allowExistingTestAssertionReduction": false,
+  "requiresFrozenMilestoneContract": true,
+  "allowDependencyChanges": true
+}

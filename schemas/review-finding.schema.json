@@ -1,0 +1,285 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uasco.local/schemas/review-finding.schema.json",
+  "$comment": "//TR: Bu schema blocker/advisory finding kimliği, causality proof, prior blocker disposition, retest evidence ve remediation acceptance ile Codex moving-goalpost/omission davranışını fail-closed sınırlar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "basisRefs",
+    "category",
+    "classification",
+    "confidence",
+    "currentDiffCausality",
+    "evidenceRefs",
+    "expected",
+    "firstSeenCycle",
+    "id",
+    "observed",
+    "scopeStatus",
+    "severity",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^F-[A-Za-z0-9._-]+$"
+    },
+    "fingerprint": {
+      "type": "string",
+      "minLength": 16
+    },
+    "classification": {
+      "enum": [
+        "BLOCKER",
+        "ADVISORY",
+        "KNOWN_LIMITATION",
+        "ENVIRONMENT_GAP"
+      ]
+    },
+    "severity": {
+      "enum": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ]
+    },
+    "category": {
+      "type": "string",
+      "minLength": 2
+    },
+    "basisRefs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "currentDiffCausality": {
+      "enum": [
+        "CURRENT_DIFF",
+        "REMEDIATION_REGRESSION",
+        "PREVIOUSLY_MASKED",
+        "CRITICAL_NEW_EVIDENCE",
+        "PREEXISTING",
+        "OUT_OF_SCOPE"
+      ]
+    },
+    "causedByFindingId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "scopeStatus": {
+      "enum": [
+        "IN_SCOPE",
+        "CAUSAL_EXPANSION",
+        "OUT_OF_SCOPE"
+      ]
+    },
+    "scopeExpansionReason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "file": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "symbol": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "line": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "reproduction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "steps"
+      ]
+    },
+    "expected": {
+      "type": "string",
+      "minLength": 1
+    },
+    "observed": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "blockerReason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "remediationAcceptance": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "firstSeenCycle": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3
+    },
+    "status": {
+      "enum": [
+        "OPEN",
+        "RESOLVED",
+        "DOWNGRADED",
+        "DUPLICATE"
+      ]
+    },
+    "governanceDisposition": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "causalEvidenceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "retestEvidenceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "resolvedInCycle": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 3
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "classification": {
+            "const": "BLOCKER"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "blockerReason",
+          "remediationAcceptance",
+          "reproduction"
+        ],
+        "properties": {
+          "blockerReason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "remediationAcceptance": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "RESOLVED"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "retestEvidenceRefs",
+          "resolvedInCycle"
+        ],
+        "properties": {
+          "retestEvidenceRefs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "currentDiffCausality": {
+            "enum": [
+              "REMEDIATION_REGRESSION",
+              "PREVIOUSLY_MASKED",
+              "CRITICAL_NEW_EVIDENCE"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "causalEvidenceRefs"
+        ],
+        "properties": {
+          "causalEvidenceRefs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    }
+  ]
+}

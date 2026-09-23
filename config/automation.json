@@ -1,0 +1,120 @@
+{
+  "//TR": "Bu dosya Pre-Phase-0 mekanik güvenlik kapanışından sonra autonomous supervisor'ın review-before-merge, process-lock, trust-root, logging, quota/resume, scheduler ve paid/production/risk sınırlarını fail-closed biçimde tanımlar.",
+  "schemaVersion": "3.1.0",
+  "mode": "AUTOMATIC",
+  "maxReviewCycles": 3,
+  "maxMilestonesPerRun": 4,
+  "maxParallelLanes": 1,
+  "timeoutMs": 900000,
+  "validationCommand": [
+    "node",
+    "scripts/run-validation.mjs"
+  ],
+  "allowPaidApi": false,
+  "allowProduction": false,
+  "allowRisk5": false,
+  "allowLocalOnlyAutonomy": true,
+  "builder": {
+    "command": "node",
+    "args": [
+      "scripts/claude-builder-broker.mjs"
+    ],
+    "provider": "ANTHROPIC",
+    "modelId": "ACCOUNT_DEFAULT_OR_CLI_CONFIG",
+    "environmentPolicy": "MINIMAL_SAFE_ENV",
+    "underlyingTool": "claude",
+    "sandboxPolicy": "config/builder-execution-policy.json"
+  },
+  "reviewer": {
+    "command": "node",
+    "args": [
+      "scripts/codex-reviewer-broker.mjs"
+    ],
+    "provider": "OPENAI",
+    "modelId": "ACCOUNT_DEFAULT_OR_CLI_CONFIG",
+    "environmentPolicy": "MINIMAL_SAFE_ENV",
+    "formatRetryLimit": 1,
+    "underlyingTool": "codex",
+    "provenanceRequired": true
+  },
+  "git": {
+    "requireRepository": true,
+    "requireCleanControlTree": true,
+    "reviewBeforeMerge": true,
+    "pushBeforeReview": false,
+    "defaultBranch": "main",
+    "runBranchPrefix": "uasco/run/",
+    "mergeStrategy": "LOCAL_FF_THEN_PUSH_IF_REMOTE",
+    "verifyRemoteShaAfterPush": true,
+    "requirePrivateRemoteForProductionRelease": true
+  },
+  "review": {
+    "resultSchema": "schemas/independent-review-result.schema.json",
+    "findingSchema": "schemas/review-finding.schema.json",
+    "bundleSchema": "schemas/review-bundle.schema.json",
+    "movingGoalpostPolicy": "FREEZE_CYCLE1_BLOCKERS",
+    "newBlockersAfterCycle1": [
+      "REMEDIATION_REGRESSION",
+      "PREVIOUSLY_MASKED",
+      "CRITICAL_NEW_EVIDENCE"
+    ],
+    "repoContentIsUntrustedData": true,
+    "fullRepoScanDefault": false,
+    "requirePriorBlockerDisposition": true,
+    "requireGovernedDigestInAttestation": true,
+    "acceptedDebtLedger": "governance/accepted-debt.json",
+    "waiverLedger": "governance/waivers.json",
+    "knownLimitationsLedger": "governance/known-limitations.json"
+  },
+  "logging": {
+    "root": ".ai/runtime/runs",
+    "maxLogBytesPerFile": 10485760,
+    "retentionDays": 30,
+    "maxRuns": 500,
+    "redactionRequired": true
+  },
+  "quota": {
+    "defaultRetrySeconds": 900,
+    "maxRetrySeconds": 7200,
+    "exponentialBackoff": true,
+    "infrastructureFailureDoesNotConsumeReviewCycle": true
+  },
+  "scheduler": {
+    "dependencyGraph": "roadmap/dependency-graph.json",
+    "buildWaves": "roadmap/build-waves.json",
+    "parallelLanes": "roadmap/parallel-lanes.json",
+    "statePath": ".ai/runtime/scheduler-state.json",
+    "phase0AcceptancePath": ".ai/runtime/PHASE0_ACCEPTANCE.json",
+    "reviewPackages": "roadmap/review-packages.json",
+    "executionUnit": "COHERENT_REVIEW_PACKAGE",
+    "adaptivePackageSplitRequired": true
+  },
+  "trustRoot": {
+    "manifest": "config/trust-root-manifest.json",
+    "protectedPaths": "config/protected-paths.json",
+    "governanceChangeRequiresFounder": true,
+    "changeScopeGuardRequired": true,
+    "existingTestWeakeningGuardRequired": true
+  },
+  "globalStop": {
+    "path": ".ai/runtime/GLOBAL_STOP.json",
+    "checkDuringLongRunningCommands": true
+  },
+  "maxBuilderValidationCycles": 3,
+  "budgets": {
+    "maxChangedFiles": 240,
+    "maxDiffLines": 6000,
+    "maxReviewBundleBytes": 900000,
+    "maxPromptBytes": 1200000,
+    "approxTokenCharsPerToken": 4,
+    "perPackageApproxTokenWarning": 150000
+  },
+  "sandbox": {
+    "builderBoundarySmoke": ".ai/runtime/BUILDER_BOUNDARY_SMOKE.json",
+    "productionRequiresOsSandbox": true
+  },
+  "evidence": {
+    "signingRequired": true,
+    "eventHashChain": true
+  }
+}

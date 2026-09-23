@@ -1,0 +1,60 @@
+{
+  "//TR": "Bu dosya 23 3D / Media / Asset Studio departmanının head/principal/member yapısını, ortak competency alanlarını ve takım başının hangi teknik breadth'i gözetmesi gerektiğini tanımlar.",
+  "schemaVersion": "2.0.0",
+  "departmentId": "DEPT-23",
+  "name": "23 3D / Media / Asset Studio",
+  "headAgentId": "220",
+  "principalReviewerAgentIds": [
+    "220"
+  ],
+  "memberAgentIds": [
+    "220",
+    "221",
+    "222",
+    "223",
+    "224",
+    "225",
+    "226"
+  ],
+  "competencyCoverage": [
+    "3D_MEDIA",
+    "ASSET_PIPELINE",
+    "GRAPHICS",
+    "AI_ML",
+    "MODEL_OPS"
+  ],
+  "primaryTechnologyCoverage": [
+    "TECH-BLENDER",
+    "TECH-MAYA",
+    "TECH-3DS-MAX",
+    "TECH-SUBSTANCE",
+    "TECH-UNITY",
+    "TECH-UNREAL-ENGINE",
+    "TECH-FFMPEG"
+  ],
+  "comparativeTechnologyCoverage": [
+    "TECH-STEAMWORKS",
+    "TECH-EPIC-ONLINE-SERVICES",
+    "TECH-PHOTON",
+    "TECH-BLENDER",
+    "TECH-MAYA",
+    "TECH-3DS-MAX",
+    "TECH-SUBSTANCE",
+    "TECH-UNITY",
+    "TECH-UNREAL-ENGINE",
+    "TECH-GODOT",
+    "TECH-DIRECTX",
+    "TECH-VULKAN",
+    "TECH-METAL",
+    "TECH-OPENGL"
+  ],
+  "headResponsibilities": [
+    "mission workload and specialist assignment",
+    "technical quality aggregation",
+    "cross-specialist conflict resolution",
+    "unknown/gap escalation",
+    "evidence-based department signoff",
+    "briefing compression to council/founder"
+  ],
+  "truthRule": "DEPARTMENT_HEAD_SIGNOFF_DOES_NOT_REPLACE_INDEPENDENT_EVIDENCE_OR_REVIEW"
+}

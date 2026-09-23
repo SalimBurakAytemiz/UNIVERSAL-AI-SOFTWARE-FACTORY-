@@ -1,0 +1,21 @@
+{
+  "//TR": "Bu dosya fresh Software Company OS reposunun canonical build durumunu tutar ve yeni AI session'larının sohbet geçmişi olmadan kaldığı yerden devam etmesini sağlar.",
+  "schemaVersion": "1.1.0",
+  "system": "UNIVERSAL-AI-SOFTWARE-COMPANY-OS",
+  "state": "MECHANICALLY_CLOSED_V2_INSTALLATION_CANDIDATE_READY_FOR_TARGET_PHASE0",
+  "currentPhase": 0,
+  "currentPhaseName": "Target-machine Phase-0 installation and acceptance",
+  "currentMilestone": "BOOTSTRAP-TRUST-KERNEL",
+  "currentMilestoneName": "Install, validate providers/Git/Control Tower, produce CLEAN Phase0 acceptance",
+  "lastCompletedMilestone": null,
+  "lastVerifiedCommit": null,
+  "knownBlockers": [
+    "TARGET_MACHINE_RUNTIME_VALIDATION_PENDING",
+    "PACKAGE_LOCK_GENERATION_PENDING_TARGET_NPM_REGISTRY"
+  ],
+  "nextAction": "On target Windows machine run .\\scripts\\install.ps1, inspect PHASE0_ACCEPTANCE.json, and do not start full-auto unless CLEAN/CLEAN_LOCAL_ONLY.",
+  "sourceOfTruth": "repository+git+.ai+phase-contracts+review-packages",
+  "architectureDiscovery": "FROZEN_BY_EXTENSION_MODEL",
+  "lastStaticClosureAudit": "PASS",
+  "targetPhase0Required": true
+}
