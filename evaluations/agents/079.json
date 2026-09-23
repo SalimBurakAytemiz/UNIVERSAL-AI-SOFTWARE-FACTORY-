@@ -118,9 +118,48 @@
     "unknowns",
     "source-provenance"
   ],
-  "goldenTasks": "GENERATE_FROM_ROLE_AND_MISSION",
-  "hiddenHoldoutTasks": "REQUIRED_BEFORE_CERTIFIED",
+  "goldenTasks": [
+    {
+      "id": "079-GOLDEN-ROLE-CONTRACT",
+      "objective": "Localization & Internationalization QA rolü için QUALITY, API_QA, WEB_QA, MOBILE_QA odağında gerçek bir görev girdisini analiz et, uygulanabilir artifact üret, doğrulama/test kanıtı ekle ve unknown varsayımları açıkça işaretle.",
+      "requiredSkillIds": [
+        "SK2-TEST_STRATEGY",
+        "SK2-RISK_BASED_TESTING",
+        "SK2-REQUIREMENTS_TESTABILITY",
+        "SK2-EXPLORATORY_TESTING",
+        "SK2-STATE_TRANSITION_TESTING",
+        "SK2-DECISION_TABLE_TESTING"
+      ],
+      "requiredTechnologyIds": [
+        "TECH-FIGMA",
+        "TECH-REACT",
+        "TECH-FLUTTER",
+        "TECH-SWIFTUI"
+      ],
+      "requiredEvidence": [
+        "task-input",
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "source-provenance"
+      ]
+    }
+  ],
+  "hiddenHoldoutTasks": [
+    {
+      "id": "079-HOLDOUT-ROLE-CONTRACT",
+      "objective": "Localization & Internationalization QA rolünde daha önce görülmemiş bir QUALITY, API_QA, WEB_QA, MOBILE_QA senaryosunu mevcut competency sınırlarında çöz; kapsam dışı bilgi veya teknoloji gerekiyorsa UNKNOWN/escalation üret.",
+      "mustDifferFromGolden": true,
+      "requiredEvidence": [
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "unknowns"
+      ]
+    }
+  ],
   "independentReviewer": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
   "passRule": "ALL_CRITICAL_AXES_PASS_AND_NO_UNRESOLVED_CRITICAL_HOLDOUT_FAILURE",
-  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json"
+  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json",
+  "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-079"
 }

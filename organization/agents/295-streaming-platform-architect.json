@@ -202,7 +202,6 @@
       "TECH-DATADOG",
       "TECH-NEW-RELIC",
       "TECH-SPLUNK",
-      "TECH-AWS",
       "TECH-AZURE",
       "TECH-GCP",
       "TECH-DOCKER",
@@ -318,5 +317,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-295"
 }

@@ -74,7 +74,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-001"
     },
     {
       "agentId": "002",
@@ -148,7 +149,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-002"
     },
     {
       "agentId": "003",
@@ -253,7 +255,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-003"
     },
     {
       "agentId": "004",
@@ -326,7 +329,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-004"
     },
     {
       "agentId": "005",
@@ -400,7 +404,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-005"
     },
     {
       "agentId": "006",
@@ -474,7 +479,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-006"
     },
     {
       "agentId": "007",
@@ -548,7 +554,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-007"
     },
     {
       "agentId": "008",
@@ -629,7 +636,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-008"
     },
     {
       "agentId": "009",
@@ -711,7 +719,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-009"
     },
     {
       "agentId": "010",
@@ -793,7 +802,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-010"
     },
     {
       "agentId": "011",
@@ -874,7 +884,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-011"
     },
     {
       "agentId": "012",
@@ -974,7 +985,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-012"
     },
     {
       "agentId": "013",
@@ -1056,7 +1068,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-013"
     },
     {
       "agentId": "014",
@@ -1138,7 +1151,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-014"
     },
     {
       "agentId": "015",
@@ -1238,7 +1252,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-015"
     },
     {
       "agentId": "016",
@@ -1338,7 +1353,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-016"
     },
     {
       "agentId": "017",
@@ -1419,7 +1435,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-017"
     },
     {
       "agentId": "018",
@@ -1613,7 +1630,6 @@
       ],
       "comparisonTechnologyIds": [
         "TECH-JAVASCRIPT",
-        "TECH-TYPESCRIPT",
         "TECH-HTML",
         "TECH-CSS",
         "TECH-WEB-COMPONENTS",
@@ -1635,7 +1651,6 @@
         "TECH-QWIK",
         "TECH-HTMX",
         "TECH-KOTLIN",
-        "TECH-JAVA",
         "TECH-ANDROID-SDK",
         "TECH-ANDROID-GRADLE-PLUGIN",
         "TECH-GRADLE",
@@ -1687,7 +1702,6 @@
         "TECH-ASPNET-CORE",
         "TECH-EF-CORE",
         "TECH-SIGNALR",
-        "TECH-PYTHON",
         "TECH-FASTAPI",
         "TECH-DJANGO",
         "TECH-FLASK",
@@ -1695,12 +1709,10 @@
         "TECH-PYDANTIC",
         "TECH-SQLALCHEMY",
         "TECH-CELERY",
-        "TECH-GO",
         "TECH-GIN",
         "TECH-FIBER-GO",
         "TECH-ECHO-GO",
         "TECH-GRPC-GO",
-        "TECH-RUST",
         "TECH-TOKIO",
         "TECH-AXUM",
         "TECH-ACTIX-WEB",
@@ -1728,7 +1740,6 @@
         "TECH-PROTOBUF",
         "TECH-WEBSOCKET",
         "TECH-SOCKETIO",
-        "TECH-KAFKA",
         "TECH-RABBITMQ",
         "TECH-NATS",
         "TECH-PULSAR",
@@ -1738,7 +1749,6 @@
         "TECH-AWS-SQS",
         "TECH-AWS-SNS",
         "TECH-EVENTBRIDGE",
-        "TECH-POSTGRESQL",
         "TECH-MYSQL",
         "TECH-MARIADB",
         "TECH-SQL-SERVER",
@@ -1773,7 +1783,6 @@
         "TECH-GCP",
         "TECH-DOCKER",
         "TECH-DOCKER-COMPOSE",
-        "TECH-KUBERNETES",
         "TECH-HELM",
         "TECH-TERRAFORM",
         "TECH-OPENTOFU",
@@ -2010,7 +2019,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-018"
     },
     {
       "agentId": "019",
@@ -2204,7 +2214,6 @@
       ],
       "comparisonTechnologyIds": [
         "TECH-JAVASCRIPT",
-        "TECH-TYPESCRIPT",
         "TECH-HTML",
         "TECH-CSS",
         "TECH-WEB-COMPONENTS",
@@ -2226,7 +2235,6 @@
         "TECH-QWIK",
         "TECH-HTMX",
         "TECH-KOTLIN",
-        "TECH-JAVA",
         "TECH-ANDROID-SDK",
         "TECH-ANDROID-GRADLE-PLUGIN",
         "TECH-GRADLE",
@@ -2278,7 +2286,6 @@
         "TECH-ASPNET-CORE",
         "TECH-EF-CORE",
         "TECH-SIGNALR",
-        "TECH-PYTHON",
         "TECH-FASTAPI",
         "TECH-DJANGO",
         "TECH-FLASK",
@@ -2286,12 +2293,10 @@
         "TECH-PYDANTIC",
         "TECH-SQLALCHEMY",
         "TECH-CELERY",
-        "TECH-GO",
         "TECH-GIN",
         "TECH-FIBER-GO",
         "TECH-ECHO-GO",
         "TECH-GRPC-GO",
-        "TECH-RUST",
         "TECH-TOKIO",
         "TECH-AXUM",
         "TECH-ACTIX-WEB",
@@ -2319,7 +2324,6 @@
         "TECH-PROTOBUF",
         "TECH-WEBSOCKET",
         "TECH-SOCKETIO",
-        "TECH-KAFKA",
         "TECH-RABBITMQ",
         "TECH-NATS",
         "TECH-PULSAR",
@@ -2329,7 +2333,6 @@
         "TECH-AWS-SQS",
         "TECH-AWS-SNS",
         "TECH-EVENTBRIDGE",
-        "TECH-POSTGRESQL",
         "TECH-MYSQL",
         "TECH-MARIADB",
         "TECH-SQL-SERVER",
@@ -2364,7 +2367,6 @@
         "TECH-GCP",
         "TECH-DOCKER",
         "TECH-DOCKER-COMPOSE",
-        "TECH-KUBERNETES",
         "TECH-HELM",
         "TECH-TERRAFORM",
         "TECH-OPENTOFU",
@@ -2517,7 +2519,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-019"
     },
     {
       "agentId": "020",
@@ -2716,7 +2719,6 @@
       ],
       "comparisonTechnologyIds": [
         "TECH-JAVASCRIPT",
-        "TECH-TYPESCRIPT",
         "TECH-HTML",
         "TECH-CSS",
         "TECH-WEB-COMPONENTS",
@@ -2738,7 +2740,6 @@
         "TECH-QWIK",
         "TECH-HTMX",
         "TECH-KOTLIN",
-        "TECH-JAVA",
         "TECH-ANDROID-SDK",
         "TECH-ANDROID-GRADLE-PLUGIN",
         "TECH-GRADLE",
@@ -2790,7 +2791,6 @@
         "TECH-ASPNET-CORE",
         "TECH-EF-CORE",
         "TECH-SIGNALR",
-        "TECH-PYTHON",
         "TECH-FASTAPI",
         "TECH-DJANGO",
         "TECH-FLASK",
@@ -2798,12 +2798,10 @@
         "TECH-PYDANTIC",
         "TECH-SQLALCHEMY",
         "TECH-CELERY",
-        "TECH-GO",
         "TECH-GIN",
         "TECH-FIBER-GO",
         "TECH-ECHO-GO",
         "TECH-GRPC-GO",
-        "TECH-RUST",
         "TECH-TOKIO",
         "TECH-AXUM",
         "TECH-ACTIX-WEB",
@@ -2831,7 +2829,6 @@
         "TECH-PROTOBUF",
         "TECH-WEBSOCKET",
         "TECH-SOCKETIO",
-        "TECH-KAFKA",
         "TECH-RABBITMQ",
         "TECH-NATS",
         "TECH-PULSAR",
@@ -2841,7 +2838,6 @@
         "TECH-AWS-SQS",
         "TECH-AWS-SNS",
         "TECH-EVENTBRIDGE",
-        "TECH-POSTGRESQL",
         "TECH-MYSQL",
         "TECH-MARIADB",
         "TECH-SQL-SERVER",
@@ -2876,7 +2872,6 @@
         "TECH-GCP",
         "TECH-DOCKER",
         "TECH-DOCKER-COMPOSE",
-        "TECH-KUBERNETES",
         "TECH-HELM",
         "TECH-TERRAFORM",
         "TECH-OPENTOFU",
@@ -3065,7 +3060,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-020"
     },
     {
       "agentId": "021",
@@ -3362,7 +3358,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-021"
     },
     {
       "agentId": "022",
@@ -3654,7 +3651,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-022"
     },
     {
       "agentId": "023",
@@ -3922,13 +3920,7 @@
         "TECH-HTTP1",
         "TECH-HTTP2",
         "TECH-HTTP3",
-        "TECH-REST",
-        "TECH-OPENAPI",
-        "TECH-JSON-SCHEMA",
-        "TECH-GRAPHQL",
         "TECH-APOLLO-GRAPHQL",
-        "TECH-GRPC",
-        "TECH-PROTOBUF",
         "TECH-WEBSOCKET",
         "TECH-SOCKETIO",
         "TECH-KAFKA",
@@ -4151,7 +4143,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-023"
     },
     {
       "agentId": "024",
@@ -4424,7 +4417,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-024"
     },
     {
       "agentId": "025",
@@ -4659,7 +4653,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-025"
     },
     {
       "agentId": "026",
@@ -5028,17 +5023,10 @@
         "TECH-SONARQUBE",
         "TECH-SNYK",
         "TECH-TRIVY",
-        "TECH-OAUTH2",
-        "TECH-OPENID-CONNECT",
-        "TECH-SAML",
-        "TECH-SCIM",
-        "TECH-WEBAUTHN",
         "TECH-LDAP",
-        "TECH-KEYCLOAK",
         "TECH-AUTH0",
         "TECH-OKTA",
         "TECH-COGNITO",
-        "TECH-ENTRA-ID",
         "TECH-GITHUB-ACTIONS",
         "TECH-GITLAB-CI",
         "TECH-JENKINS",
@@ -5147,7 +5135,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-026"
     },
     {
       "agentId": "027",
@@ -5390,7 +5379,6 @@
         "TECH-AWS-SQS",
         "TECH-AWS-SNS",
         "TECH-EVENTBRIDGE",
-        "TECH-POSTGRESQL",
         "TECH-MYSQL",
         "TECH-MARIADB",
         "TECH-SQL-SERVER",
@@ -5403,7 +5391,6 @@
         "TECH-COUCHBASE",
         "TECH-DYNAMODB",
         "TECH-COSMOSDB",
-        "TECH-REDIS",
         "TECH-MEMCACHED",
         "TECH-ELASTICSEARCH",
         "TECH-OPENSEARCH",
@@ -5425,7 +5412,6 @@
         "TECH-GCP",
         "TECH-DOCKER",
         "TECH-DOCKER-COMPOSE",
-        "TECH-KUBERNETES",
         "TECH-HELM",
         "TECH-TERRAFORM",
         "TECH-OPENTOFU",
@@ -5459,7 +5445,6 @@
         "TECH-SONARQUBE",
         "TECH-SNYK",
         "TECH-TRIVY",
-        "TECH-OAUTH2",
         "TECH-OPENID-CONNECT",
         "TECH-SAML",
         "TECH-SCIM",
@@ -5579,7 +5564,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-027"
     },
     {
       "agentId": "028",
@@ -5795,7 +5781,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-028"
     },
     {
       "agentId": "029",
@@ -6087,7 +6074,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-029"
     },
     {
       "agentId": "030",
@@ -6280,18 +6268,12 @@
         }
       ],
       "comparisonTechnologyIds": [
-        "TECH-JAVASCRIPT",
-        "TECH-TYPESCRIPT",
-        "TECH-HTML",
-        "TECH-CSS",
         "TECH-WEB-COMPONENTS",
         "TECH-WEBASSEMBLY",
         "TECH-WEBGPU",
         "TECH-NODEJS",
         "TECH-BUN",
         "TECH-DENO",
-        "TECH-REACT",
-        "TECH-NEXTJS",
         "TECH-ANGULAR",
         "TECH-VUE",
         "TECH-NUXT",
@@ -6302,7 +6284,6 @@
         "TECH-SOLID",
         "TECH-QWIK",
         "TECH-HTMX",
-        "TECH-VITE",
         "TECH-WEBPACK",
         "TECH-RSPACK",
         "TECH-ROLLUP",
@@ -6314,7 +6295,6 @@
         "TECH-ANT-DESIGN",
         "TECH-CHAKRA-UI",
         "TECH-SHADCN-UI",
-        "TECH-PLAYWRIGHT",
         "TECH-CYPRESS",
         "TECH-SELENIUM",
         "TECH-WEBDRIVERIO",
@@ -6422,7 +6402,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-030"
     },
     {
       "agentId": "031",
@@ -6698,7 +6679,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-031"
     },
     {
       "agentId": "032",
@@ -6936,7 +6918,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-032"
     },
     {
       "agentId": "033",
@@ -7173,7 +7156,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-033"
     },
     {
       "agentId": "034",
@@ -7373,7 +7357,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-034"
     },
     {
       "agentId": "035",
@@ -7551,8 +7536,6 @@
       ],
       "comparisonTechnologyIds": [
         "TECH-EXPRESS",
-        "TECH-FASTIFY",
-        "TECH-NESTJS",
         "TECH-HONO",
         "TECH-KOA",
         "TECH-SPRING-BOOT",
@@ -7600,7 +7583,6 @@
         "TECH-HTTP2",
         "TECH-HTTP3",
         "TECH-REST",
-        "TECH-OPENAPI",
         "TECH-JSON-SCHEMA",
         "TECH-GRAPHQL",
         "TECH-APOLLO-GRAPHQL",
@@ -7639,7 +7621,6 @@
         "TECH-OKTA",
         "TECH-COGNITO",
         "TECH-ENTRA-ID",
-        "TECH-POSTGRESQL",
         "TECH-MYSQL",
         "TECH-MARIADB",
         "TECH-SQL-SERVER",
@@ -7652,7 +7633,6 @@
         "TECH-COUCHBASE",
         "TECH-DYNAMODB",
         "TECH-COSMOSDB",
-        "TECH-REDIS",
         "TECH-MEMCACHED",
         "TECH-ELASTICSEARCH",
         "TECH-OPENSEARCH",
@@ -7663,7 +7643,6 @@
         "TECH-LINKERD",
         "TECH-NGINX",
         "TECH-HAPROXY",
-        "TECH-OPENTELEMETRY",
         "TECH-PROMETHEUS",
         "TECH-GRAFANA",
         "TECH-LOKI",
@@ -7821,7 +7800,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-035"
     },
     {
       "agentId": "036",
@@ -8112,7 +8092,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-036"
     },
     {
       "agentId": "037",
@@ -8344,7 +8325,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-037"
     },
     {
       "agentId": "038",
@@ -8597,7 +8579,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-038"
     },
     {
       "agentId": "039",
@@ -8829,7 +8812,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-039"
     },
     {
       "agentId": "040",
@@ -9023,7 +9007,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-040"
     },
     {
       "agentId": "041",
@@ -9217,7 +9202,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-041"
     },
     {
       "agentId": "042",
@@ -9430,7 +9416,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-042"
     },
     {
       "agentId": "043",
@@ -9628,28 +9615,20 @@
         }
       ],
       "comparisonTechnologyIds": [
-        "TECH-POSTGRESQL",
-        "TECH-MYSQL",
         "TECH-MARIADB",
-        "TECH-SQL-SERVER",
-        "TECH-ORACLE-DB",
         "TECH-SQLITE",
         "TECH-COCKROACHDB",
-        "TECH-MONGODB",
         "TECH-CASSANDRA",
         "TECH-SCYLLADB",
         "TECH-COUCHBASE",
         "TECH-DYNAMODB",
         "TECH-COSMOSDB",
-        "TECH-REDIS",
         "TECH-MEMCACHED",
-        "TECH-ELASTICSEARCH",
         "TECH-OPENSEARCH",
         "TECH-SOLR",
         "TECH-NEO4J",
         "TECH-TIMESCALEDB",
         "TECH-INFLUXDB",
-        "TECH-CLICKHOUSE",
         "TECH-DUCKDB",
         "TECH-BIGQUERY",
         "TECH-SNOWFLAKE",
@@ -9732,7 +9711,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-043"
     },
     {
       "agentId": "044",
@@ -9943,7 +9923,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-044"
     },
     {
       "agentId": "045",
@@ -10146,7 +10127,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-045"
     },
     {
       "agentId": "046",
@@ -10311,7 +10293,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-046"
     },
     {
       "agentId": "047",
@@ -10514,7 +10497,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-047"
     },
     {
       "agentId": "048",
@@ -10698,7 +10682,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-048"
     },
     {
       "agentId": "049",
@@ -10801,7 +10786,6 @@
         }
       ],
       "comparisonTechnologyIds": [
-        "TECH-POSTGRESQL",
         "TECH-MYSQL",
         "TECH-MARIADB",
         "TECH-SQL-SERVER",
@@ -10824,7 +10808,6 @@
         "TECH-INFLUXDB",
         "TECH-CLICKHOUSE",
         "TECH-DUCKDB",
-        "TECH-BIGQUERY",
         "TECH-SNOWFLAKE",
         "TECH-REDSHIFT",
         "TECH-PGVECTOR",
@@ -10844,7 +10827,6 @@
         "TECH-AIRFLOW",
         "TECH-DAGSTER",
         "TECH-PREFECT",
-        "TECH-DBT",
         "TECH-DEBEZIUM",
         "TECH-KAFKA-CONNECT",
         "TECH-DELTA-LAKE",
@@ -10904,7 +10886,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-049"
     },
     {
       "agentId": "050",
@@ -11104,7 +11087,6 @@
         }
       ],
       "comparisonTechnologyIds": [
-        "TECH-KOTLIN",
         "TECH-JAVA",
         "TECH-ANDROID-SDK",
         "TECH-ANDROID-GRADLE-PLUGIN",
@@ -11116,7 +11098,6 @@
         "TECH-ROOM",
         "TECH-DATASTORE",
         "TECH-WORKMANAGER",
-        "TECH-SWIFT",
         "TECH-OBJECTIVE-C",
         "TECH-SWIFTUI",
         "TECH-UIKIT",
@@ -11129,17 +11110,11 @@
         "TECH-KEYCHAIN",
         "TECH-XCTEST",
         "TECH-DART",
-        "TECH-FLUTTER",
-        "TECH-REACT-NATIVE",
         "TECH-EXPO",
         "TECH-HERMES",
         "TECH-REACT-NATIVE-JSI",
         "TECH-REACT-NATIVE-FABRIC",
         "TECH-REACT-NATIVE-TURBOMODULES",
-        "TECH-KOTLIN-MULTIPLATFORM",
-        "TECH-COMPOSE-MULTIPLATFORM",
-        "TECH-DOTNET-MAUI",
-        "TECH-IONIC",
         "TECH-APPIUM",
         "TECH-MAESTRO",
         "TECH-DETOX",
@@ -11399,7 +11374,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-050"
     },
     {
       "agentId": "051",
@@ -11854,7 +11830,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-051"
     },
     {
       "agentId": "052",
@@ -12270,7 +12247,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-052"
     },
     {
       "agentId": "053",
@@ -12554,7 +12532,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-053"
     },
     {
       "agentId": "054",
@@ -12929,7 +12908,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-054"
     },
     {
       "agentId": "055",
@@ -13179,7 +13159,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-055"
     },
     {
       "agentId": "056",
@@ -13429,7 +13410,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-056"
     },
     {
       "agentId": "057",
@@ -13583,13 +13565,7 @@
         }
       ],
       "comparisonTechnologyIds": [
-        "TECH-ELECTRON",
-        "TECH-TAURI",
-        "TECH-WPF",
-        "TECH-WINUI",
-        "TECH-QT",
         "TECH-PYSIDE",
-        "TECH-APPKIT",
         "TECH-GITHUB-ACTIONS",
         "TECH-GITLAB-CI",
         "TECH-JENKINS",
@@ -13718,7 +13694,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-057"
     },
     {
       "agentId": "058",
@@ -13924,7 +13901,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-058"
     },
     {
       "agentId": "059",
@@ -14168,7 +14146,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-059"
     },
     {
       "agentId": "060",
@@ -14335,7 +14314,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-060"
     },
     {
       "agentId": "061",
@@ -14501,7 +14481,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-061"
     },
     {
       "agentId": "062",
@@ -14667,7 +14648,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-062"
     },
     {
       "agentId": "063",
@@ -14851,7 +14833,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-063"
     },
     {
       "agentId": "064",
@@ -15017,7 +15000,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-064"
     },
     {
       "agentId": "065",
@@ -15183,7 +15167,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-065"
     },
     {
       "agentId": "066",
@@ -15387,7 +15372,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-066"
     },
     {
       "agentId": "067",
@@ -15526,7 +15512,6 @@
         }
       ],
       "comparisonTechnologyIds": [
-        "TECH-POSTMAN",
         "TECH-NEWMAN",
         "TECH-AJV",
         "TECH-REST-ASSURED",
@@ -15536,7 +15521,6 @@
         "TECH-PACT",
         "TECH-WIREMOCK",
         "TECH-MOCKSERVER",
-        "TECH-PLAYWRIGHT",
         "TECH-CYPRESS",
         "TECH-SELENIUM",
         "TECH-WEBDRIVERIO",
@@ -15547,19 +15531,16 @@
         "TECH-STORYBOOK",
         "TECH-LIGHTHOUSE",
         "TECH-AXE-CORE",
-        "TECH-JUNIT",
         "TECH-TESTNG",
         "TECH-MOCKITO",
         "TECH-MOCKK",
         "TECH-XUNIT-DOTNET",
         "TECH-NUNIT",
-        "TECH-PYTEST",
         "TECH-HYPOTHESIS",
         "TECH-CUCUMBER",
         "TECH-K6",
         "TECH-JMETER",
         "TECH-LOCUST",
-        "TECH-APPIUM",
         "TECH-MAESTRO",
         "TECH-DETOX",
         "TECH-BROWSERSTACK",
@@ -15807,7 +15788,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-067"
     },
     {
       "agentId": "068",
@@ -16055,7 +16037,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-068"
     },
     {
       "agentId": "069",
@@ -16303,7 +16286,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-069"
     },
     {
       "agentId": "070",
@@ -16551,7 +16535,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-070"
     },
     {
       "agentId": "071",
@@ -16799,7 +16784,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-071"
     },
     {
       "agentId": "072",
@@ -17047,7 +17033,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-072"
     },
     {
       "agentId": "073",
@@ -17295,7 +17282,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-073"
     },
     {
       "agentId": "074",
@@ -17543,7 +17531,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-074"
     },
     {
       "agentId": "075",
@@ -17791,7 +17780,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-075"
     },
     {
       "agentId": "076",
@@ -18039,7 +18029,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-076"
     },
     {
       "agentId": "077",
@@ -18318,7 +18309,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-077"
     },
     {
       "agentId": "078",
@@ -18566,7 +18558,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-078"
     },
     {
       "agentId": "079",
@@ -18814,7 +18807,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-079"
     },
     {
       "agentId": "080",
@@ -19024,7 +19018,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-080"
     },
     {
       "agentId": "081",
@@ -19278,7 +19273,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-081"
     },
     {
       "agentId": "082",
@@ -19532,7 +19528,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-082"
     },
     {
       "agentId": "083",
@@ -19786,7 +19783,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-083"
     },
     {
       "agentId": "084",
@@ -19996,7 +19994,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-084"
     },
     {
       "agentId": "085",
@@ -20187,7 +20186,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-085"
     },
     {
       "agentId": "086",
@@ -20378,7 +20378,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-086"
     },
     {
       "agentId": "087",
@@ -20626,7 +20627,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-087"
     },
     {
       "agentId": "088",
@@ -20931,7 +20933,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-088"
     },
     {
       "agentId": "089",
@@ -21242,7 +21245,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-089"
     },
     {
       "agentId": "090",
@@ -21572,7 +21576,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-090"
     },
     {
       "agentId": "091",
@@ -21820,7 +21825,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-091"
     },
     {
       "agentId": "092",
@@ -22048,7 +22054,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-092"
     },
     {
       "agentId": "093",
@@ -22239,7 +22246,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-093"
     },
     {
       "agentId": "094",
@@ -22449,7 +22457,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-094"
     },
     {
       "agentId": "095",
@@ -22696,7 +22705,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-095"
     },
     {
       "agentId": "096",
@@ -23175,7 +23185,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-096"
     },
     {
       "agentId": "097",
@@ -23461,7 +23472,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-097"
     },
     {
       "agentId": "098",
@@ -23876,7 +23888,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-098"
     },
     {
       "agentId": "099",
@@ -24161,7 +24174,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-099"
     },
     {
       "agentId": "100",
@@ -24388,7 +24402,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-100"
     },
     {
       "agentId": "101",
@@ -24598,7 +24613,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-101"
     },
     {
       "agentId": "102",
@@ -24827,7 +24843,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-102"
     },
     {
       "agentId": "103",
@@ -25075,7 +25092,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-103"
     },
     {
       "agentId": "104",
@@ -25323,7 +25341,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-104"
     },
     {
       "agentId": "105",
@@ -25552,7 +25571,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-105"
     },
     {
       "agentId": "106",
@@ -25812,7 +25832,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-106"
     },
     {
       "agentId": "107",
@@ -26053,7 +26074,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-107"
     },
     {
       "agentId": "108",
@@ -26375,7 +26397,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-108"
     },
     {
       "agentId": "109",
@@ -26566,7 +26589,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-109"
     },
     {
       "agentId": "110",
@@ -26793,7 +26817,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-110"
     },
     {
       "agentId": "111",
@@ -26996,7 +27021,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-111"
     },
     {
       "agentId": "112",
@@ -27244,7 +27270,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-112"
     },
     {
       "agentId": "113",
@@ -27574,7 +27601,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-113"
     },
     {
       "agentId": "114",
@@ -27822,7 +27850,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-114"
     },
     {
       "agentId": "115",
@@ -28133,7 +28162,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-115"
     },
     {
       "agentId": "116",
@@ -28425,7 +28455,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-116"
     },
     {
       "agentId": "117",
@@ -28673,7 +28704,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-117"
     },
     {
       "agentId": "118",
@@ -28850,17 +28882,13 @@
         }
       ],
       "comparisonTechnologyIds": [
-        "TECH-POSTMAN",
-        "TECH-NEWMAN",
         "TECH-AJV",
-        "TECH-REST-ASSURED",
         "TECH-SUPERTEST",
         "TECH-PYTEST-HTTPX",
         "TECH-KARATE",
         "TECH-PACT",
         "TECH-WIREMOCK",
         "TECH-MOCKSERVER",
-        "TECH-PLAYWRIGHT",
         "TECH-CYPRESS",
         "TECH-SELENIUM",
         "TECH-WEBDRIVERIO",
@@ -28879,11 +28907,8 @@
         "TECH-NUNIT",
         "TECH-PYTEST",
         "TECH-HYPOTHESIS",
-        "TECH-CUCUMBER",
-        "TECH-K6",
         "TECH-JMETER",
         "TECH-LOCUST",
-        "TECH-APPIUM",
         "TECH-MAESTRO",
         "TECH-DETOX",
         "TECH-BROWSERSTACK",
@@ -29131,7 +29156,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-118"
     },
     {
       "agentId": "119",
@@ -29360,7 +29386,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-119"
     },
     {
       "agentId": "120",
@@ -29589,7 +29616,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-120"
     },
     {
       "agentId": "121",
@@ -29799,7 +29827,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-121"
     },
     {
       "agentId": "122",
@@ -30059,7 +30088,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-122"
     },
     {
       "agentId": "123",
@@ -30307,7 +30337,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-123"
     },
     {
       "agentId": "124",
@@ -30555,7 +30586,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-124"
     },
     {
       "agentId": "125",
@@ -30834,7 +30866,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-125"
     },
     {
       "agentId": "126",
@@ -31082,7 +31115,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-126"
     },
     {
       "agentId": "127",
@@ -31330,7 +31364,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-127"
     },
     {
       "agentId": "128",
@@ -31578,7 +31613,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-128"
     },
     {
       "agentId": "129",
@@ -31826,7 +31862,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-129"
     },
     {
       "agentId": "130",
@@ -32036,7 +32073,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-130"
     },
     {
       "agentId": "131",
@@ -32246,7 +32284,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-131"
     },
     {
       "agentId": "132",
@@ -32503,18 +32542,8 @@
         }
       ],
       "comparisonTechnologyIds": [
-        "TECH-OWASP-ASVS",
-        "TECH-OWASP-WSTG",
-        "TECH-OWASP-API",
-        "TECH-OWASP-MASVS",
-        "TECH-CWE",
-        "TECH-CVSS",
-        "TECH-SEMGREP",
-        "TECH-OWASP-ZAP",
-        "TECH-BURP-SUITE",
         "TECH-SONARQUBE",
         "TECH-SNYK",
-        "TECH-TRIVY",
         "TECH-OAUTH2",
         "TECH-OPENID-CONNECT",
         "TECH-SAML",
@@ -32680,7 +32709,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-132"
     },
     {
       "agentId": "133",
@@ -32952,7 +32982,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-133"
     },
     {
       "agentId": "134",
@@ -33207,7 +33238,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-134"
     },
     {
       "agentId": "135",
@@ -33460,7 +33492,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-135"
     },
     {
       "agentId": "136",
@@ -33618,7 +33651,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-136"
     },
     {
       "agentId": "137",
@@ -33865,7 +33899,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-137"
     },
     {
       "agentId": "138",
@@ -34061,7 +34096,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-138"
     },
     {
       "agentId": "139",
@@ -34308,7 +34344,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-139"
     },
     {
       "agentId": "140",
@@ -34497,7 +34534,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-140"
     },
     {
       "agentId": "141",
@@ -34693,7 +34731,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-141"
     },
     {
       "agentId": "142",
@@ -34894,21 +34933,13 @@
         "TECH-AWS",
         "TECH-AZURE",
         "TECH-GCP",
-        "TECH-DOCKER",
         "TECH-DOCKER-COMPOSE",
-        "TECH-KUBERNETES",
-        "TECH-HELM",
-        "TECH-TERRAFORM",
-        "TECH-OPENTOFU",
         "TECH-PULUMI",
-        "TECH-ANSIBLE",
-        "TECH-ARGOCD",
         "TECH-ENVOY",
         "TECH-ISTIO",
         "TECH-LINKERD",
         "TECH-NGINX",
         "TECH-HAPROXY",
-        "TECH-GITHUB-ACTIONS",
         "TECH-GITLAB-CI",
         "TECH-JENKINS",
         "TECH-AZURE-DEVOPS",
@@ -35052,7 +35083,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-142"
     },
     {
       "agentId": "143",
@@ -35285,7 +35317,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-143"
     },
     {
       "agentId": "144",
@@ -35518,7 +35551,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-144"
     },
     {
       "agentId": "145",
@@ -35748,7 +35782,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-145"
     },
     {
       "agentId": "146",
@@ -35996,7 +36031,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-146"
     },
     {
       "agentId": "147",
@@ -36206,7 +36242,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-147"
     },
     {
       "agentId": "148",
@@ -36477,7 +36514,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-148"
     },
     {
       "agentId": "149",
@@ -36748,7 +36786,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-149"
     },
     {
       "agentId": "150",
@@ -36955,7 +36994,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-150"
     },
     {
       "agentId": "151",
@@ -37166,7 +37206,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-151"
     },
     {
       "agentId": "152",
@@ -37444,7 +37485,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-152"
     },
     {
       "agentId": "153",
@@ -37587,10 +37629,7 @@
         "TECH-NUMPY",
         "TECH-PANDAS",
         "TECH-SCIKIT-LEARN",
-        "TECH-PYTORCH",
         "TECH-TENSORFLOW",
-        "TECH-HUGGINGFACE",
-        "TECH-ONNX",
         "TECH-LANGCHAIN",
         "TECH-LANGGRAPH",
         "TECH-LLAMAINDEX",
@@ -37631,7 +37670,6 @@
         "TECH-PULUMI",
         "TECH-ANSIBLE",
         "TECH-ARGOCD",
-        "TECH-OPENTELEMETRY",
         "TECH-PROMETHEUS",
         "TECH-GRAFANA",
         "TECH-LOKI",
@@ -37751,7 +37789,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-153"
     },
     {
       "agentId": "154",
@@ -37975,7 +38014,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-154"
     },
     {
       "agentId": "155",
@@ -38199,7 +38239,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-155"
     },
     {
       "agentId": "156",
@@ -38422,7 +38463,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-156"
     },
     {
       "agentId": "157",
@@ -38646,7 +38688,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-157"
     },
     {
       "agentId": "158",
@@ -38870,7 +38913,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-158"
     },
     {
       "agentId": "159",
@@ -39094,7 +39138,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-159"
     },
     {
       "agentId": "160",
@@ -39328,17 +39373,10 @@
         "TECH-HTTP1",
         "TECH-HTTP2",
         "TECH-HTTP3",
-        "TECH-REST",
-        "TECH-OPENAPI",
         "TECH-JSON-SCHEMA",
-        "TECH-GRAPHQL",
         "TECH-APOLLO-GRAPHQL",
-        "TECH-GRPC",
         "TECH-PROTOBUF",
-        "TECH-WEBSOCKET",
         "TECH-SOCKETIO",
-        "TECH-KAFKA",
-        "TECH-RABBITMQ",
         "TECH-NATS",
         "TECH-PULSAR",
         "TECH-REDIS-STREAMS",
@@ -39347,10 +39385,7 @@
         "TECH-AWS-SQS",
         "TECH-AWS-SNS",
         "TECH-EVENTBRIDGE",
-        "TECH-OAUTH2",
         "TECH-OPENID-CONNECT",
-        "TECH-SAML",
-        "TECH-SCIM",
         "TECH-WEBAUTHN",
         "TECH-LDAP",
         "TECH-KEYCLOAK",
@@ -39436,7 +39471,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-160"
     },
     {
       "agentId": "161",
@@ -39707,7 +39743,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-161"
     },
     {
       "agentId": "162",
@@ -39901,7 +39938,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-162"
     },
     {
       "agentId": "163",
@@ -40039,7 +40077,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-163"
     },
     {
       "agentId": "164",
@@ -40214,7 +40253,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-164"
     },
     {
       "agentId": "165",
@@ -40362,7 +40402,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-165"
     },
     {
       "agentId": "166",
@@ -40443,7 +40484,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-166"
     },
     {
       "agentId": "167",
@@ -40523,7 +40565,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-167"
     },
     {
       "agentId": "168",
@@ -40604,7 +40647,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-168"
     },
     {
       "agentId": "169",
@@ -40685,7 +40729,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-169"
     },
     {
       "agentId": "170",
@@ -40766,7 +40811,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-170"
     },
     {
       "agentId": "171",
@@ -40847,7 +40893,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-171"
     },
     {
       "agentId": "172",
@@ -40928,7 +40975,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-172"
     },
     {
       "agentId": "173",
@@ -40994,7 +41042,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-173"
     },
     {
       "agentId": "174",
@@ -41060,7 +41109,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-174"
     },
     {
       "agentId": "175",
@@ -41125,7 +41175,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-175"
     },
     {
       "agentId": "176",
@@ -41191,7 +41242,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-176"
     },
     {
       "agentId": "177",
@@ -41256,7 +41308,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-177"
     },
     {
       "agentId": "178",
@@ -41322,7 +41375,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-178"
     },
     {
       "agentId": "179",
@@ -41400,7 +41454,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-179"
     },
     {
       "agentId": "180",
@@ -41507,7 +41562,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-180"
     },
     {
       "agentId": "181",
@@ -41584,7 +41640,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-181"
     },
     {
       "agentId": "182",
@@ -41661,7 +41718,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-182"
     },
     {
       "agentId": "183",
@@ -41738,7 +41796,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-183"
     },
     {
       "agentId": "184",
@@ -41846,7 +41905,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-184"
     },
     {
       "agentId": "185",
@@ -41956,7 +42016,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-185"
     },
     {
       "agentId": "186",
@@ -42034,7 +42095,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-186"
     },
     {
       "agentId": "187",
@@ -42111,7 +42173,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-187"
     },
     {
       "agentId": "188",
@@ -42188,7 +42251,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-188"
     },
     {
       "agentId": "189",
@@ -42265,7 +42329,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-189"
     },
     {
       "agentId": "190",
@@ -42342,7 +42407,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-190"
     },
     {
       "agentId": "191",
@@ -42420,7 +42486,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-191"
     },
     {
       "agentId": "192",
@@ -42497,7 +42564,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-192"
     },
     {
       "agentId": "193",
@@ -42574,7 +42642,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-193"
     },
     {
       "agentId": "194",
@@ -42651,7 +42720,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-194"
     },
     {
       "agentId": "195",
@@ -42728,7 +42798,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-195"
     },
     {
       "agentId": "196",
@@ -42805,7 +42876,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-196"
     },
     {
       "agentId": "197",
@@ -42882,7 +42954,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-197"
     },
     {
       "agentId": "198",
@@ -42959,7 +43032,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-198"
     },
     {
       "agentId": "199",
@@ -43036,7 +43110,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-199"
     },
     {
       "agentId": "200",
@@ -43131,7 +43206,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-200"
     },
     {
       "agentId": "201",
@@ -43208,7 +43284,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-201"
     },
     {
       "agentId": "202",
@@ -43440,7 +43517,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-202"
     },
     {
       "agentId": "203",
@@ -43562,7 +43640,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-203"
     },
     {
       "agentId": "204",
@@ -43629,7 +43708,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-204"
     },
     {
       "agentId": "205",
@@ -43695,7 +43775,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-205"
     },
     {
       "agentId": "206",
@@ -43761,7 +43842,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-206"
     },
     {
       "agentId": "207",
@@ -43828,7 +43910,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-207"
     },
     {
       "agentId": "208",
@@ -44027,15 +44110,10 @@
         }
       ],
       "comparisonTechnologyIds": [
-        "TECH-UNITY",
-        "TECH-UNREAL-ENGINE",
-        "TECH-GODOT",
         "TECH-DIRECTX",
         "TECH-VULKAN",
         "TECH-METAL",
         "TECH-OPENGL",
-        "TECH-STEAMWORKS",
-        "TECH-EPIC-ONLINE-SERVICES",
         "TECH-PHOTON",
         "TECH-BLENDER",
         "TECH-MAYA",
@@ -44075,7 +44153,6 @@
         "TECH-PROTOBUF",
         "TECH-WEBSOCKET",
         "TECH-SOCKETIO",
-        "TECH-KAFKA",
         "TECH-RABBITMQ",
         "TECH-NATS",
         "TECH-PULSAR",
@@ -44097,7 +44174,6 @@
         "TECH-PULUMI",
         "TECH-ANSIBLE",
         "TECH-ARGOCD",
-        "TECH-POSTGRESQL",
         "TECH-MYSQL",
         "TECH-MARIADB",
         "TECH-SQL-SERVER",
@@ -44165,7 +44241,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-208"
     },
     {
       "agentId": "209",
@@ -44423,7 +44500,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-209"
     },
     {
       "agentId": "210",
@@ -44605,7 +44683,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-210"
     },
     {
       "agentId": "211",
@@ -44768,7 +44847,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-211"
     },
     {
       "agentId": "212",
@@ -44931,7 +45011,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-212"
     },
     {
       "agentId": "213",
@@ -45189,7 +45270,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-213"
     },
     {
       "agentId": "214",
@@ -45474,7 +45556,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-214"
     },
     {
       "agentId": "215",
@@ -45732,7 +45815,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-215"
     },
     {
       "agentId": "216",
@@ -45990,7 +46074,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-216"
     },
     {
       "agentId": "217",
@@ -46248,7 +46333,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-217"
     },
     {
       "agentId": "218",
@@ -46506,7 +46592,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-218"
     },
     {
       "agentId": "219",
@@ -46764,7 +46851,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-219"
     },
     {
       "agentId": "220",
@@ -46921,12 +47009,6 @@
         "TECH-STEAMWORKS",
         "TECH-EPIC-ONLINE-SERVICES",
         "TECH-PHOTON",
-        "TECH-BLENDER",
-        "TECH-MAYA",
-        "TECH-3DS-MAX",
-        "TECH-SUBSTANCE",
-        "TECH-UNITY",
-        "TECH-UNREAL-ENGINE",
         "TECH-GODOT",
         "TECH-DIRECTX",
         "TECH-VULKAN",
@@ -46981,7 +47063,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-220"
     },
     {
       "agentId": "221",
@@ -47213,7 +47296,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-221"
     },
     {
       "agentId": "222",
@@ -47414,7 +47498,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-222"
     },
     {
       "agentId": "223",
@@ -47615,7 +47700,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-223"
     },
     {
       "agentId": "224",
@@ -47816,7 +47902,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-224"
     },
     {
       "agentId": "225",
@@ -47960,7 +48047,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-225"
     },
     {
       "agentId": "226",
@@ -48161,7 +48249,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-226"
     },
     {
       "agentId": "227",
@@ -48354,14 +48443,7 @@
         }
       ],
       "comparisonTechnologyIds": [
-        "TECH-CPP",
-        "TECH-RUST-EMBEDDED",
-        "TECH-FREERTOS",
-        "TECH-ZEPHYR",
-        "TECH-ESP-IDF",
-        "TECH-STM32",
         "TECH-ARDUINO",
-        "TECH-PLATFORMIO",
         "TECH-UART",
         "TECH-USB",
         "TECH-BLE",
@@ -48436,7 +48518,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-227"
     },
     {
       "agentId": "228",
@@ -48677,7 +48760,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-228"
     },
     {
       "agentId": "229",
@@ -48942,7 +49026,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-229"
     },
     {
       "agentId": "230",
@@ -49163,7 +49248,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-230"
     },
     {
       "agentId": "231",
@@ -49359,7 +49445,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-231"
     },
     {
       "agentId": "232",
@@ -49543,7 +49630,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-232"
     },
     {
       "agentId": "233",
@@ -49708,7 +49796,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-233"
     },
     {
       "agentId": "234",
@@ -49911,7 +50000,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-234"
     },
     {
       "agentId": "235",
@@ -50142,7 +50232,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-235"
     },
     {
       "agentId": "236",
@@ -50321,7 +50412,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-236"
     },
     {
       "agentId": "237",
@@ -50499,7 +50591,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-237"
     },
     {
       "agentId": "238",
@@ -50677,7 +50770,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-238"
     },
     {
       "agentId": "239",
@@ -50836,7 +50930,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-239"
     },
     {
       "agentId": "240",
@@ -51123,7 +51218,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-240"
     },
     {
       "agentId": "241",
@@ -51242,14 +51338,12 @@
         "TECH-SOLID",
         "TECH-QWIK",
         "TECH-HTMX",
-        "TECH-ELECTRON",
         "TECH-TAURI",
         "TECH-WPF",
         "TECH-WINUI",
         "TECH-QT",
         "TECH-PYSIDE",
         "TECH-APPKIT",
-        "TECH-OPENTELEMETRY",
         "TECH-PROMETHEUS",
         "TECH-GRAFANA",
         "TECH-LOKI",
@@ -51356,7 +51450,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-241"
     },
     {
       "agentId": "242",
@@ -51548,7 +51643,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-242"
     },
     {
       "agentId": "243",
@@ -51740,7 +51836,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-243"
     },
     {
       "agentId": "244",
@@ -51970,7 +52067,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-244"
     },
     {
       "agentId": "245",
@@ -52162,7 +52260,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-245"
     },
     {
       "agentId": "246",
@@ -52354,7 +52453,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-246"
     },
     {
       "agentId": "247",
@@ -52596,7 +52696,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-247"
     },
     {
       "agentId": "248",
@@ -52836,7 +52937,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-248"
     },
     {
       "agentId": "249",
@@ -53014,7 +53116,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-249"
     },
     {
       "agentId": "250",
@@ -53192,7 +53295,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-250"
     },
     {
       "agentId": "251",
@@ -53370,7 +53474,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-251"
     },
     {
       "agentId": "252",
@@ -53529,7 +53634,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-252"
     },
     {
       "agentId": "253",
@@ -53683,7 +53789,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-253"
     },
     {
       "agentId": "254",
@@ -53838,7 +53945,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-254"
     },
     {
       "agentId": "255",
@@ -54011,7 +54119,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-255"
     },
     {
       "agentId": "256",
@@ -54184,7 +54293,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-256"
     },
     {
       "agentId": "257",
@@ -54357,7 +54467,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-257"
     },
     {
       "agentId": "258",
@@ -54512,7 +54623,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-258"
     },
     {
       "agentId": "259",
@@ -54667,7 +54779,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-259"
     },
     {
       "agentId": "260",
@@ -54822,7 +54935,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-260"
     },
     {
       "agentId": "261",
@@ -54977,7 +55091,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-261"
     },
     {
       "agentId": "262",
@@ -55132,7 +55247,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-262"
     },
     {
       "agentId": "263",
@@ -55318,7 +55434,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-263"
     },
     {
       "agentId": "264",
@@ -55473,7 +55590,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-264"
     },
     {
       "agentId": "265",
@@ -55659,7 +55777,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-265"
     },
     {
       "agentId": "266",
@@ -55814,7 +55933,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-266"
     },
     {
       "agentId": "267",
@@ -55969,7 +56089,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-267"
     },
     {
       "agentId": "268",
@@ -56124,7 +56245,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-268"
     },
     {
       "agentId": "269",
@@ -56278,7 +56400,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-269"
     },
     {
       "agentId": "270",
@@ -56433,7 +56556,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-270"
     },
     {
       "agentId": "271",
@@ -56595,7 +56719,6 @@
         "TECH-PROTOBUF",
         "TECH-WEBSOCKET",
         "TECH-SOCKETIO",
-        "TECH-POSTGRESQL",
         "TECH-MYSQL",
         "TECH-MARIADB",
         "TECH-SQL-SERVER",
@@ -56797,7 +56920,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-271"
     },
     {
       "agentId": "272",
@@ -57003,7 +57127,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-272"
     },
     {
       "agentId": "273",
@@ -57158,7 +57283,6 @@
         "TECH-PROTOBUF",
         "TECH-WEBSOCKET",
         "TECH-SOCKETIO",
-        "TECH-POSTGRESQL",
         "TECH-MYSQL",
         "TECH-MARIADB",
         "TECH-SQL-SERVER",
@@ -57289,7 +57413,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-273"
     },
     {
       "agentId": "274",
@@ -57495,7 +57620,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-274"
     },
     {
       "agentId": "275",
@@ -57701,7 +57827,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-275"
     },
     {
       "agentId": "276",
@@ -57908,7 +58035,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-276"
     },
     {
       "agentId": "277",
@@ -58115,7 +58243,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-277"
     },
     {
       "agentId": "278",
@@ -58322,7 +58451,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-278"
     },
     {
       "agentId": "279",
@@ -58529,7 +58659,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-279"
     },
     {
       "agentId": "280",
@@ -58736,7 +58867,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-280"
     },
     {
       "agentId": "281",
@@ -58943,7 +59075,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-281"
     },
     {
       "agentId": "282",
@@ -59181,7 +59314,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-282"
     },
     {
       "agentId": "283",
@@ -59346,7 +59480,6 @@
         "TECH-PROTOBUF",
         "TECH-WEBSOCKET",
         "TECH-SOCKETIO",
-        "TECH-POSTGRESQL",
         "TECH-MYSQL",
         "TECH-MARIADB",
         "TECH-SQL-SERVER",
@@ -59463,7 +59596,6 @@
         "TECH-ECTO",
         "TECH-SCALA",
         "TECH-PEKKO",
-        "TECH-KAFKA",
         "TECH-RABBITMQ",
         "TECH-NATS",
         "TECH-PULSAR",
@@ -59672,7 +59804,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-283"
     },
     {
       "agentId": "284",
@@ -59896,7 +60029,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-284"
     },
     {
       "agentId": "285",
@@ -60120,7 +60254,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-285"
     },
     {
       "agentId": "286",
@@ -60326,7 +60461,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-286"
     },
     {
       "agentId": "287",
@@ -60532,7 +60668,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-287"
     },
     {
       "agentId": "288",
@@ -60739,7 +60876,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-288"
     },
     {
       "agentId": "289",
@@ -60946,7 +61084,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-289"
     },
     {
       "agentId": "290",
@@ -61153,7 +61292,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-290"
     },
     {
       "agentId": "291",
@@ -61360,7 +61500,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-291"
     },
     {
       "agentId": "292",
@@ -61567,7 +61708,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-292"
     },
     {
       "agentId": "293",
@@ -61774,7 +61916,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-293"
     },
     {
       "agentId": "294",
@@ -61981,7 +62124,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-294"
     },
     {
       "agentId": "295",
@@ -62222,7 +62366,6 @@
         "TECH-DATADOG",
         "TECH-NEW-RELIC",
         "TECH-SPLUNK",
-        "TECH-AWS",
         "TECH-AZURE",
         "TECH-GCP",
         "TECH-DOCKER",
@@ -62388,7 +62531,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-295"
     },
     {
       "agentId": "296",
@@ -62613,7 +62757,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-296"
     },
     {
       "agentId": "297",
@@ -62838,7 +62983,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-297"
     },
     {
       "agentId": "298",
@@ -63063,7 +63209,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-298"
     },
     {
       "agentId": "299",
@@ -63368,7 +63515,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-299"
     },
     {
       "agentId": "300",
@@ -63594,7 +63742,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-300"
     },
     {
       "agentId": "301",
@@ -63820,7 +63969,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-301"
     },
     {
       "agentId": "302",
@@ -64046,7 +64196,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-302"
     },
     {
       "agentId": "303",
@@ -64272,7 +64423,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-303"
     },
     {
       "agentId": "304",
@@ -64498,7 +64650,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-304"
     },
     {
       "agentId": "305",
@@ -64645,9 +64798,7 @@
         "TECH-SAP",
         "TECH-DYNAMICS365",
         "TECH-SERVICENOW",
-        "TECH-SHOPIFY",
         "TECH-WOOCOMMERCE",
-        "TECH-MAGENTO",
         "TECH-HTTP1",
         "TECH-HTTP2",
         "TECH-HTTP3",
@@ -64660,7 +64811,6 @@
         "TECH-PROTOBUF",
         "TECH-WEBSOCKET",
         "TECH-SOCKETIO",
-        "TECH-POSTGRESQL",
         "TECH-MYSQL",
         "TECH-MARIADB",
         "TECH-SQL-SERVER",
@@ -64862,7 +65012,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-305"
     },
     {
       "agentId": "306",
@@ -65068,7 +65219,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-306"
     },
     {
       "agentId": "307",
@@ -65274,7 +65426,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-307"
     },
     {
       "agentId": "308",
@@ -65480,7 +65633,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-308"
     },
     {
       "agentId": "309",
@@ -65620,9 +65774,7 @@
         "TECH-SAP",
         "TECH-DYNAMICS365",
         "TECH-SERVICENOW",
-        "TECH-SHOPIFY",
         "TECH-WOOCOMMERCE",
-        "TECH-MAGENTO",
         "TECH-HTTP1",
         "TECH-HTTP2",
         "TECH-HTTP3",
@@ -65635,7 +65787,6 @@
         "TECH-PROTOBUF",
         "TECH-WEBSOCKET",
         "TECH-SOCKETIO",
-        "TECH-POSTGRESQL",
         "TECH-MYSQL",
         "TECH-MARIADB",
         "TECH-SQL-SERVER",
@@ -65766,7 +65917,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-309"
     },
     {
       "agentId": "310",
@@ -65973,7 +66125,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-310"
     },
     {
       "agentId": "311",
@@ -66180,7 +66333,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-311"
     },
     {
       "agentId": "312",
@@ -66387,7 +66541,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-312"
     },
     {
       "agentId": "313",
@@ -66553,7 +66708,6 @@
         "TECH-SAP",
         "TECH-DYNAMICS365",
         "TECH-SERVICENOW",
-        "TECH-SHOPIFY",
         "TECH-WOOCOMMERCE",
         "TECH-MAGENTO",
         "TECH-HTTP1",
@@ -66568,7 +66722,6 @@
         "TECH-PROTOBUF",
         "TECH-WEBSOCKET",
         "TECH-SOCKETIO",
-        "TECH-POSTGRESQL",
         "TECH-MYSQL",
         "TECH-MARIADB",
         "TECH-SQL-SERVER",
@@ -66668,7 +66821,6 @@
         "TECH-GCP",
         "TECH-DOCKER",
         "TECH-DOCKER-COMPOSE",
-        "TECH-KUBERNETES",
         "TECH-HELM",
         "TECH-TERRAFORM",
         "TECH-OPENTOFU",
@@ -66770,7 +66922,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-313"
     },
     {
       "agentId": "314",
@@ -66995,7 +67148,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-314"
     },
     {
       "agentId": "315",
@@ -67220,7 +67374,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-315"
     },
     {
       "agentId": "316",
@@ -67464,7 +67619,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-316"
     },
     {
       "agentId": "317",
@@ -67689,7 +67845,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-317"
     },
     {
       "agentId": "318",
@@ -67915,7 +68072,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-318"
     },
     {
       "agentId": "319",
@@ -68086,7 +68244,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-319"
     },
     {
       "agentId": "320",
@@ -68335,7 +68494,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-320"
     },
     {
       "agentId": "321",
@@ -68427,7 +68587,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-321"
     },
     {
       "agentId": "322",
@@ -68519,7 +68680,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-322"
     },
     {
       "agentId": "323",
@@ -68611,7 +68773,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-323"
     },
     {
       "agentId": "324",
@@ -68782,7 +68945,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-324"
     },
     {
       "agentId": "325",
@@ -68873,7 +69037,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-325"
     },
     {
       "agentId": "326",
@@ -68995,7 +69160,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-326"
     },
     {
       "agentId": "327",
@@ -69165,7 +69331,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-327"
     },
     {
       "agentId": "328",
@@ -69254,7 +69421,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-328"
     },
     {
       "agentId": "329",
@@ -69343,7 +69511,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-329"
     },
     {
       "agentId": "330",
@@ -69432,7 +69601,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-330"
     },
     {
       "agentId": "331",
@@ -69521,7 +69691,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-331"
     },
     {
       "agentId": "332",
@@ -69610,7 +69781,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-332"
     },
     {
       "agentId": "333",
@@ -69779,7 +69951,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-333"
     },
     {
       "agentId": "334",
@@ -69869,7 +70042,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-334"
     },
     {
       "agentId": "335",
@@ -69959,7 +70133,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-335"
     },
     {
       "agentId": "336",
@@ -70049,7 +70224,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-336"
     },
     {
       "agentId": "337",
@@ -70138,7 +70314,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-337"
     },
     {
       "agentId": "338",
@@ -70228,7 +70405,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-338"
     },
     {
       "agentId": "339",
@@ -70318,7 +70496,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-339"
     },
     {
       "agentId": "340",
@@ -70487,7 +70666,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-340"
     },
     {
       "agentId": "341",
@@ -70577,7 +70757,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-341"
     },
     {
       "agentId": "342",
@@ -70667,7 +70848,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-342"
     },
     {
       "agentId": "343",
@@ -70757,7 +70939,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-343"
     },
     {
       "agentId": "344",
@@ -70926,7 +71109,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-344"
     },
     {
       "agentId": "345",
@@ -71096,7 +71280,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-345"
     },
     {
       "agentId": "346",
@@ -71187,7 +71372,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-346"
     },
     {
       "agentId": "347",
@@ -71278,7 +71464,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-347"
     },
     {
       "agentId": "348",
@@ -71368,7 +71555,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-348"
     },
     {
       "agentId": "349",
@@ -71459,7 +71647,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-349"
     },
     {
       "agentId": "350",
@@ -71549,7 +71738,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-350"
     },
     {
       "agentId": "351",
@@ -71640,7 +71830,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-351"
     },
     {
       "agentId": "352",
@@ -71810,7 +72001,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-352"
     },
     {
       "agentId": "353",
@@ -71900,7 +72092,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-353"
     },
     {
       "agentId": "354",
@@ -71991,7 +72184,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-354"
     },
     {
       "agentId": "355",
@@ -72081,7 +72275,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-355"
     },
     {
       "agentId": "356",
@@ -72172,7 +72367,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-356"
     },
     {
       "agentId": "357",
@@ -72263,7 +72459,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-357"
     },
     {
       "agentId": "358",
@@ -72385,7 +72582,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-358"
     },
     {
       "agentId": "359",
@@ -72555,7 +72753,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-359"
     },
     {
       "agentId": "360",
@@ -72687,7 +72886,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-360"
     },
     {
       "agentId": "361",
@@ -72904,7 +73104,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-361"
     },
     {
       "agentId": "362",
@@ -72993,7 +73194,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-362"
     },
     {
       "agentId": "363",
@@ -73082,7 +73284,8 @@
       "technologyOntologyVersion": "2.0.0",
       "legacySkillFieldsDeprecated": true,
       "technologyAgnostic": false,
-      "technologyAgnosticReason": null
+      "technologyAgnosticReason": null,
+      "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-363"
     }
   ]
 }

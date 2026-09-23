@@ -102,10 +102,7 @@
       "TECH-NUMPY",
       "TECH-PANDAS",
       "TECH-SCIKIT-LEARN",
-      "TECH-PYTORCH",
       "TECH-TENSORFLOW",
-      "TECH-HUGGINGFACE",
-      "TECH-ONNX",
       "TECH-LANGCHAIN",
       "TECH-LANGGRAPH",
       "TECH-LLAMAINDEX",
@@ -146,7 +143,6 @@
       "TECH-PULUMI",
       "TECH-ANSIBLE",
       "TECH-ARGOCD",
-      "TECH-OPENTELEMETRY",
       "TECH-PROMETHEUS",
       "TECH-GRAFANA",
       "TECH-LOKI",
@@ -236,5 +232,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-153"
 }

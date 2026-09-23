@@ -98,18 +98,12 @@
       "TECH-PLAYWRIGHT"
     ],
     "comparativeDecision": [
-      "TECH-JAVASCRIPT",
-      "TECH-TYPESCRIPT",
-      "TECH-HTML",
-      "TECH-CSS",
       "TECH-WEB-COMPONENTS",
       "TECH-WEBASSEMBLY",
       "TECH-WEBGPU",
       "TECH-NODEJS",
       "TECH-BUN",
       "TECH-DENO",
-      "TECH-REACT",
-      "TECH-NEXTJS",
       "TECH-ANGULAR",
       "TECH-VUE",
       "TECH-NUXT",
@@ -120,7 +114,6 @@
       "TECH-SOLID",
       "TECH-QWIK",
       "TECH-HTMX",
-      "TECH-VITE",
       "TECH-WEBPACK",
       "TECH-RSPACK",
       "TECH-ROLLUP",
@@ -132,7 +125,6 @@
       "TECH-ANT-DESIGN",
       "TECH-CHAKRA-UI",
       "TECH-SHADCN-UI",
-      "TECH-PLAYWRIGHT",
       "TECH-CYPRESS",
       "TECH-SELENIUM",
       "TECH-WEBDRIVERIO",
@@ -210,5 +202,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-030"
 }

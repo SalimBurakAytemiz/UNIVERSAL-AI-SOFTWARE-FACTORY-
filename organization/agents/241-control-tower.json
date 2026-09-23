@@ -126,14 +126,12 @@
       "TECH-SOLID",
       "TECH-QWIK",
       "TECH-HTMX",
-      "TECH-ELECTRON",
       "TECH-TAURI",
       "TECH-WPF",
       "TECH-WINUI",
       "TECH-QT",
       "TECH-PYSIDE",
       "TECH-APPKIT",
-      "TECH-OPENTELEMETRY",
       "TECH-PROMETHEUS",
       "TECH-GRAFANA",
       "TECH-LOKI",
@@ -198,5 +196,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-241"
 }

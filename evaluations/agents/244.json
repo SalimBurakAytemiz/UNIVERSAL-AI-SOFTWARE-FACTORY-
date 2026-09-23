@@ -106,9 +106,48 @@
     "unknowns",
     "source-provenance"
   ],
-  "goldenTasks": "GENERATE_FROM_ROLE_AND_MISSION",
-  "hiddenHoldoutTasks": "REQUIRED_BEFORE_CERTIFIED",
+  "goldenTasks": [
+    {
+      "id": "244-GOLDEN-ROLE-CONTRACT",
+      "objective": "Portfolio Health rolü için CONTROL_TOWER, PRODUCT, OBSERVABILITY odağında gerçek bir görev girdisini analiz et, uygulanabilir artifact üret, doğrulama/test kanıtı ekle ve unknown varsayımları açıkça işaretle.",
+      "requiredSkillIds": [
+        "SK2-BROWSER_RENDERING_MODEL",
+        "SK2-JAVASCRIPT_EVENT_LOOP_REASONING",
+        "SK2-SSR_CSR_SSG_ISR_SELECTION",
+        "SK2-HYDRATION_DEBUGGING",
+        "SK2-FRONTEND_STATE_ARCHITECTURE",
+        "SK2-FRONTEND_DATA_FETCHING_CACHE_STRATEGY"
+      ],
+      "requiredTechnologyIds": [
+        "TECH-FIX-PROTOCOL",
+        "TECH-KAFKA",
+        "TECH-POSTGRESQL",
+        "TECH-REDIS"
+      ],
+      "requiredEvidence": [
+        "task-input",
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "source-provenance"
+      ]
+    }
+  ],
+  "hiddenHoldoutTasks": [
+    {
+      "id": "244-HOLDOUT-ROLE-CONTRACT",
+      "objective": "Portfolio Health rolünde daha önce görülmemiş bir CONTROL_TOWER, PRODUCT, OBSERVABILITY senaryosunu mevcut competency sınırlarında çöz; kapsam dışı bilgi veya teknoloji gerekiyorsa UNKNOWN/escalation üret.",
+      "mustDifferFromGolden": true,
+      "requiredEvidence": [
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "unknowns"
+      ]
+    }
+  ],
   "independentReviewer": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
   "passRule": "ALL_CRITICAL_AXES_PASS_AND_NO_UNRESOLVED_CRITICAL_HOLDOUT_FAILURE",
-  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json"
+  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json",
+  "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-244"
 }

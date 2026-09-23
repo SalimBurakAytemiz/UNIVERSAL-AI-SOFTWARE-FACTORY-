@@ -98,7 +98,6 @@
       "TECH-PROTOBUF",
       "TECH-WEBSOCKET",
       "TECH-SOCKETIO",
-      "TECH-POSTGRESQL",
       "TECH-MYSQL",
       "TECH-MARIADB",
       "TECH-SQL-SERVER",
@@ -215,5 +214,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-273"
 }

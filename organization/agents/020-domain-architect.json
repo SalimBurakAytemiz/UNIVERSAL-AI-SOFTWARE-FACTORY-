@@ -128,7 +128,6 @@
     ],
     "comparativeDecision": [
       "TECH-JAVASCRIPT",
-      "TECH-TYPESCRIPT",
       "TECH-HTML",
       "TECH-CSS",
       "TECH-WEB-COMPONENTS",
@@ -150,7 +149,6 @@
       "TECH-QWIK",
       "TECH-HTMX",
       "TECH-KOTLIN",
-      "TECH-JAVA",
       "TECH-ANDROID-SDK",
       "TECH-ANDROID-GRADLE-PLUGIN",
       "TECH-GRADLE",
@@ -202,7 +200,6 @@
       "TECH-ASPNET-CORE",
       "TECH-EF-CORE",
       "TECH-SIGNALR",
-      "TECH-PYTHON",
       "TECH-FASTAPI",
       "TECH-DJANGO",
       "TECH-FLASK",
@@ -210,12 +207,10 @@
       "TECH-PYDANTIC",
       "TECH-SQLALCHEMY",
       "TECH-CELERY",
-      "TECH-GO",
       "TECH-GIN",
       "TECH-FIBER-GO",
       "TECH-ECHO-GO",
       "TECH-GRPC-GO",
-      "TECH-RUST",
       "TECH-TOKIO",
       "TECH-AXUM",
       "TECH-ACTIX-WEB",
@@ -243,7 +238,6 @@
       "TECH-PROTOBUF",
       "TECH-WEBSOCKET",
       "TECH-SOCKETIO",
-      "TECH-KAFKA",
       "TECH-RABBITMQ",
       "TECH-NATS",
       "TECH-PULSAR",
@@ -253,7 +247,6 @@
       "TECH-AWS-SQS",
       "TECH-AWS-SNS",
       "TECH-EVENTBRIDGE",
-      "TECH-POSTGRESQL",
       "TECH-MYSQL",
       "TECH-MARIADB",
       "TECH-SQL-SERVER",
@@ -288,7 +281,6 @@
       "TECH-GCP",
       "TECH-DOCKER",
       "TECH-DOCKER-COMPOSE",
-      "TECH-KUBERNETES",
       "TECH-HELM",
       "TECH-TERRAFORM",
       "TECH-OPENTOFU",
@@ -423,5 +415,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-020"
 }

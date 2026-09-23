@@ -232,7 +232,6 @@
       "TECH-AWS-SQS",
       "TECH-AWS-SNS",
       "TECH-EVENTBRIDGE",
-      "TECH-POSTGRESQL",
       "TECH-MYSQL",
       "TECH-MARIADB",
       "TECH-SQL-SERVER",
@@ -245,7 +244,6 @@
       "TECH-COUCHBASE",
       "TECH-DYNAMODB",
       "TECH-COSMOSDB",
-      "TECH-REDIS",
       "TECH-MEMCACHED",
       "TECH-ELASTICSEARCH",
       "TECH-OPENSEARCH",
@@ -267,7 +265,6 @@
       "TECH-GCP",
       "TECH-DOCKER",
       "TECH-DOCKER-COMPOSE",
-      "TECH-KUBERNETES",
       "TECH-HELM",
       "TECH-TERRAFORM",
       "TECH-OPENTOFU",
@@ -301,7 +298,6 @@
       "TECH-SONARQUBE",
       "TECH-SNYK",
       "TECH-TRIVY",
-      "TECH-OAUTH2",
       "TECH-OPENID-CONNECT",
       "TECH-SAML",
       "TECH-SCIM",
@@ -379,5 +375,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-027"
 }

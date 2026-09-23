@@ -124,17 +124,13 @@
       "TECH-CUCUMBER"
     ],
     "comparativeDecision": [
-      "TECH-POSTMAN",
-      "TECH-NEWMAN",
       "TECH-AJV",
-      "TECH-REST-ASSURED",
       "TECH-SUPERTEST",
       "TECH-PYTEST-HTTPX",
       "TECH-KARATE",
       "TECH-PACT",
       "TECH-WIREMOCK",
       "TECH-MOCKSERVER",
-      "TECH-PLAYWRIGHT",
       "TECH-CYPRESS",
       "TECH-SELENIUM",
       "TECH-WEBDRIVERIO",
@@ -153,11 +149,8 @@
       "TECH-NUNIT",
       "TECH-PYTEST",
       "TECH-HYPOTHESIS",
-      "TECH-CUCUMBER",
-      "TECH-K6",
       "TECH-JMETER",
       "TECH-LOCUST",
-      "TECH-APPIUM",
       "TECH-MAESTRO",
       "TECH-DETOX",
       "TECH-BROWSERSTACK",
@@ -351,5 +344,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-118"
 }

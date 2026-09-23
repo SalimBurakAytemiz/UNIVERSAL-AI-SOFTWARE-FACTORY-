@@ -58,7 +58,6 @@
       "TECH-BIGQUERY"
     ],
     "comparativeDecision": [
-      "TECH-POSTGRESQL",
       "TECH-MYSQL",
       "TECH-MARIADB",
       "TECH-SQL-SERVER",
@@ -81,7 +80,6 @@
       "TECH-INFLUXDB",
       "TECH-CLICKHOUSE",
       "TECH-DUCKDB",
-      "TECH-BIGQUERY",
       "TECH-SNOWFLAKE",
       "TECH-REDSHIFT",
       "TECH-PGVECTOR",
@@ -101,7 +99,6 @@
       "TECH-AIRFLOW",
       "TECH-DAGSTER",
       "TECH-PREFECT",
-      "TECH-DBT",
       "TECH-DEBEZIUM",
       "TECH-KAFKA-CONNECT",
       "TECH-DELTA-LAKE",
@@ -171,5 +168,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-049"
 }

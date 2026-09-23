@@ -94,21 +94,13 @@
       "TECH-AWS",
       "TECH-AZURE",
       "TECH-GCP",
-      "TECH-DOCKER",
       "TECH-DOCKER-COMPOSE",
-      "TECH-KUBERNETES",
-      "TECH-HELM",
-      "TECH-TERRAFORM",
-      "TECH-OPENTOFU",
       "TECH-PULUMI",
-      "TECH-ANSIBLE",
-      "TECH-ARGOCD",
       "TECH-ENVOY",
       "TECH-ISTIO",
       "TECH-LINKERD",
       "TECH-NGINX",
       "TECH-HAPROXY",
-      "TECH-GITHUB-ACTIONS",
       "TECH-GITLAB-CI",
       "TECH-JENKINS",
       "TECH-AZURE-DEVOPS",
@@ -234,5 +226,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-142"
 }

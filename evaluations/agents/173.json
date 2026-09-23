@@ -49,9 +49,43 @@
     "unknowns",
     "source-provenance"
   ],
-  "goldenTasks": "GENERATE_FROM_ROLE_AND_MISSION",
-  "hiddenHoldoutTasks": "REQUIRED_BEFORE_CERTIFIED",
+  "goldenTasks": [
+    {
+      "id": "173-GOLDEN-ROLE-CONTRACT",
+      "objective": "Lead Generation rolü için SALES, CRM, COMMUNICATION odağında gerçek bir görev girdisini analiz et, uygulanabilir artifact üret, doğrulama/test kanıtı ekle ve unknown varsayımları açıkça işaretle.",
+      "requiredSkillIds": [
+        "SK2-BUSINESS_MODEL_ANALYSIS",
+        "SK2-MARKET_ANALYSIS",
+        "SK2-PRICING_ANALYSIS",
+        "SK2-UNIT_ECONOMICS",
+        "SK2-CUSTOMER_SEGMENTATION",
+        "SK2-SLA_DESIGN"
+      ],
+      "requiredTechnologyIds": [],
+      "requiredEvidence": [
+        "task-input",
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "source-provenance"
+      ]
+    }
+  ],
+  "hiddenHoldoutTasks": [
+    {
+      "id": "173-HOLDOUT-ROLE-CONTRACT",
+      "objective": "Lead Generation rolünde daha önce görülmemiş bir SALES, CRM, COMMUNICATION senaryosunu mevcut competency sınırlarında çöz; kapsam dışı bilgi veya teknoloji gerekiyorsa UNKNOWN/escalation üret.",
+      "mustDifferFromGolden": true,
+      "requiredEvidence": [
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "unknowns"
+      ]
+    }
+  ],
   "independentReviewer": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
   "passRule": "ALL_CRITICAL_AXES_PASS_AND_NO_UNRESOLVED_CRITICAL_HOLDOUT_FAILURE",
-  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json"
+  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json",
+  "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-173"
 }

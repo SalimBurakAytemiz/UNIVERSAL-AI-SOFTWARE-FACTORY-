@@ -58,9 +58,48 @@
     "unknowns",
     "source-provenance"
   ],
-  "goldenTasks": "GENERATE_FROM_ROLE_AND_MISSION",
-  "hiddenHoldoutTasks": "REQUIRED_BEFORE_CERTIFIED",
+  "goldenTasks": [
+    {
+      "id": "232-GOLDEN-ROLE-CONTRACT",
+      "objective": "Robotics Engineer rolü için EMBEDDED_IOT, HARDWARE, XR, ROBOTICS odağında gerçek bir görev girdisini analiz et, uygulanabilir artifact üret, doğrulama/test kanıtı ekle ve unknown varsayımları açıkça işaretle.",
+      "requiredSkillIds": [
+        "SK2-EMBEDDED_C_C_ENGINEERING",
+        "SK2-EMBEDDED_RUST_ENGINEERING",
+        "SK2-RTOS_SCHEDULING",
+        "SK2-FIRMWARE_BUILD_FLASHING",
+        "SK2-BOOTLOADER_ENGINEERING",
+        "SK2-SECURE_BOOT_SIGNING"
+      ],
+      "requiredTechnologyIds": [
+        "TECH-ROS2",
+        "TECH-CPP",
+        "TECH-PYTHON",
+        "TECH-MQTT"
+      ],
+      "requiredEvidence": [
+        "task-input",
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "source-provenance"
+      ]
+    }
+  ],
+  "hiddenHoldoutTasks": [
+    {
+      "id": "232-HOLDOUT-ROLE-CONTRACT",
+      "objective": "Robotics Engineer rolünde daha önce görülmemiş bir EMBEDDED_IOT, HARDWARE, XR, ROBOTICS senaryosunu mevcut competency sınırlarında çöz; kapsam dışı bilgi veya teknoloji gerekiyorsa UNKNOWN/escalation üret.",
+      "mustDifferFromGolden": true,
+      "requiredEvidence": [
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "unknowns"
+      ]
+    }
+  ],
   "independentReviewer": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
   "passRule": "ALL_CRITICAL_AXES_PASS_AND_NO_UNRESOLVED_CRITICAL_HOLDOUT_FAILURE",
-  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json"
+  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json",
+  "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-232"
 }

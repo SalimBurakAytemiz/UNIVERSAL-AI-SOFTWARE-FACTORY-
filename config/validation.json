@@ -1,6 +1,6 @@
 {
   "//TR": "Bu protected config package.json scriptlerine güvenmeden canonical deterministic validation adımlarını sabitler; mechanical closure + dependency-free kernel self-test typecheck/test öncesinde çalışır ve builder normal milestone sırasında bu listeyi değiştiremez.",
-  "schemaVersion": "1.8.0",
+  "schemaVersion": "1.9.0",
   "steps": [
     {
       "id": "registries",
@@ -71,6 +71,14 @@
       "command": [
         "node",
         "scripts/validate-agent-semantic.mjs"
+      ],
+      "parallelGroup": "static-3"
+    },
+    {
+      "id": "paste3-agent-specialization",
+      "command": [
+        "node",
+        "scripts/validate-paste3-agent-specialization.mjs"
       ],
       "parallelGroup": "static-3"
     },

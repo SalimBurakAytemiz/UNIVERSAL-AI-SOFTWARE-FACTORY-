@@ -79,17 +79,10 @@
       "TECH-HTTP1",
       "TECH-HTTP2",
       "TECH-HTTP3",
-      "TECH-REST",
-      "TECH-OPENAPI",
       "TECH-JSON-SCHEMA",
-      "TECH-GRAPHQL",
       "TECH-APOLLO-GRAPHQL",
-      "TECH-GRPC",
       "TECH-PROTOBUF",
-      "TECH-WEBSOCKET",
       "TECH-SOCKETIO",
-      "TECH-KAFKA",
-      "TECH-RABBITMQ",
       "TECH-NATS",
       "TECH-PULSAR",
       "TECH-REDIS-STREAMS",
@@ -98,10 +91,7 @@
       "TECH-AWS-SQS",
       "TECH-AWS-SNS",
       "TECH-EVENTBRIDGE",
-      "TECH-OAUTH2",
       "TECH-OPENID-CONNECT",
-      "TECH-SAML",
-      "TECH-SCIM",
       "TECH-WEBAUTHN",
       "TECH-LDAP",
       "TECH-KEYCLOAK",
@@ -181,5 +171,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-160"
 }

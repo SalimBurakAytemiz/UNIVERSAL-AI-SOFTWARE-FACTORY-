@@ -304,17 +304,10 @@
       "TECH-SONARQUBE",
       "TECH-SNYK",
       "TECH-TRIVY",
-      "TECH-OAUTH2",
-      "TECH-OPENID-CONNECT",
-      "TECH-SAML",
-      "TECH-SCIM",
-      "TECH-WEBAUTHN",
       "TECH-LDAP",
-      "TECH-KEYCLOAK",
       "TECH-AUTH0",
       "TECH-OKTA",
       "TECH-COGNITO",
-      "TECH-ENTRA-ID",
       "TECH-GITHUB-ACTIONS",
       "TECH-GITLAB-CI",
       "TECH-JENKINS",
@@ -381,5 +374,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-026"
 }

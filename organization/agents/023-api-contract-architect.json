@@ -233,13 +233,7 @@
       "TECH-HTTP1",
       "TECH-HTTP2",
       "TECH-HTTP3",
-      "TECH-REST",
-      "TECH-OPENAPI",
-      "TECH-JSON-SCHEMA",
-      "TECH-GRAPHQL",
       "TECH-APOLLO-GRAPHQL",
-      "TECH-GRPC",
-      "TECH-PROTOBUF",
       "TECH-WEBSOCKET",
       "TECH-SOCKETIO",
       "TECH-KAFKA",
@@ -408,5 +402,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-023"
 }

@@ -83,9 +83,7 @@
       "TECH-SAP",
       "TECH-DYNAMICS365",
       "TECH-SERVICENOW",
-      "TECH-SHOPIFY",
       "TECH-WOOCOMMERCE",
-      "TECH-MAGENTO",
       "TECH-HTTP1",
       "TECH-HTTP2",
       "TECH-HTTP3",
@@ -98,7 +96,6 @@
       "TECH-PROTOBUF",
       "TECH-WEBSOCKET",
       "TECH-SOCKETIO",
-      "TECH-POSTGRESQL",
       "TECH-MYSQL",
       "TECH-MARIADB",
       "TECH-SQL-SERVER",
@@ -215,5 +212,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-309"
 }

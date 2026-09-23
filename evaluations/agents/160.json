@@ -75,9 +75,48 @@
     "unknowns",
     "source-provenance"
   ],
-  "goldenTasks": "GENERATE_FROM_ROLE_AND_MISSION",
-  "hiddenHoldoutTasks": "REQUIRED_BEFORE_CERTIFIED",
+  "goldenTasks": [
+    {
+      "id": "160-GOLDEN-ROLE-CONTRACT",
+      "objective": "Integration Architect rolü için INTEGRATION, API, ENTERPRISE, MESSAGING odağında gerçek bir görev girdisini analiz et, uygulanabilir artifact üret, doğrulama/test kanıtı ekle ve unknown varsayımları açıkça işaretle.",
+      "requiredSkillIds": [
+        "SK2-SERVICE_BOUNDARY_DESIGN",
+        "SK2-API_DESIGN",
+        "SK2-INPUT_VALIDATION_ARCHITECTURE",
+        "SK2-SERIALIZATION_CONTRACT_DESIGN",
+        "SK2-TRANSACTION_DESIGN",
+        "SK2-IDEMPOTENCY_DESIGN"
+      ],
+      "requiredTechnologyIds": [
+        "TECH-REST",
+        "TECH-OPENAPI",
+        "TECH-GRAPHQL",
+        "TECH-GRPC"
+      ],
+      "requiredEvidence": [
+        "task-input",
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "source-provenance"
+      ]
+    }
+  ],
+  "hiddenHoldoutTasks": [
+    {
+      "id": "160-HOLDOUT-ROLE-CONTRACT",
+      "objective": "Integration Architect rolünde daha önce görülmemiş bir INTEGRATION, API, ENTERPRISE, MESSAGING senaryosunu mevcut competency sınırlarında çöz; kapsam dışı bilgi veya teknoloji gerekiyorsa UNKNOWN/escalation üret.",
+      "mustDifferFromGolden": true,
+      "requiredEvidence": [
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "unknowns"
+      ]
+    }
+  ],
   "independentReviewer": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
   "passRule": "ALL_CRITICAL_AXES_PASS_AND_NO_UNRESOLVED_CRITICAL_HOLDOUT_FAILURE",
-  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json"
+  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json",
+  "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-160"
 }

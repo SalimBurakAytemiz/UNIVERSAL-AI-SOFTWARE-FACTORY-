@@ -63,28 +63,20 @@
       "TECH-CLICKHOUSE"
     ],
     "comparativeDecision": [
-      "TECH-POSTGRESQL",
-      "TECH-MYSQL",
       "TECH-MARIADB",
-      "TECH-SQL-SERVER",
-      "TECH-ORACLE-DB",
       "TECH-SQLITE",
       "TECH-COCKROACHDB",
-      "TECH-MONGODB",
       "TECH-CASSANDRA",
       "TECH-SCYLLADB",
       "TECH-COUCHBASE",
       "TECH-DYNAMODB",
       "TECH-COSMOSDB",
-      "TECH-REDIS",
       "TECH-MEMCACHED",
-      "TECH-ELASTICSEARCH",
       "TECH-OPENSEARCH",
       "TECH-SOLR",
       "TECH-NEO4J",
       "TECH-TIMESCALEDB",
       "TECH-INFLUXDB",
-      "TECH-CLICKHOUSE",
       "TECH-DUCKDB",
       "TECH-BIGQUERY",
       "TECH-SNOWFLAKE",
@@ -177,5 +169,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-043"
 }

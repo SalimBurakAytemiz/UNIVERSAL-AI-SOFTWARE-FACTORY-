@@ -122,7 +122,6 @@
       "TECH-JUNIT"
     ],
     "comparativeDecision": [
-      "TECH-POSTMAN",
       "TECH-NEWMAN",
       "TECH-AJV",
       "TECH-REST-ASSURED",
@@ -132,7 +131,6 @@
       "TECH-PACT",
       "TECH-WIREMOCK",
       "TECH-MOCKSERVER",
-      "TECH-PLAYWRIGHT",
       "TECH-CYPRESS",
       "TECH-SELENIUM",
       "TECH-WEBDRIVERIO",
@@ -143,19 +141,16 @@
       "TECH-STORYBOOK",
       "TECH-LIGHTHOUSE",
       "TECH-AXE-CORE",
-      "TECH-JUNIT",
       "TECH-TESTNG",
       "TECH-MOCKITO",
       "TECH-MOCKK",
       "TECH-XUNIT-DOTNET",
       "TECH-NUNIT",
-      "TECH-PYTEST",
       "TECH-HYPOTHESIS",
       "TECH-CUCUMBER",
       "TECH-K6",
       "TECH-JMETER",
       "TECH-LOCUST",
-      "TECH-APPIUM",
       "TECH-MAESTRO",
       "TECH-DETOX",
       "TECH-BROWSERSTACK",
@@ -349,5 +344,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-067"
 }

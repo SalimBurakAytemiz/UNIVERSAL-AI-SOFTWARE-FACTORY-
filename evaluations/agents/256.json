@@ -77,9 +77,47 @@
     "unknowns",
     "source-provenance"
   ],
-  "goldenTasks": "GENERATE_FROM_ROLE_AND_MISSION",
-  "hiddenHoldoutTasks": "REQUIRED_BEFORE_CERTIFIED",
+  "goldenTasks": [
+    {
+      "id": "256-GOLDEN-ROLE-CONTRACT",
+      "objective": "Official Source Research rolü için LEARNING, RESEARCH, EVALUATION, KNOWLEDGE odağında gerçek bir görev girdisini analiz et, uygulanabilir artifact üret, doğrulama/test kanıtı ekle ve unknown varsayımları açıkça işaretle.",
+      "requiredSkillIds": [
+        "SK2-OFFICIAL_SOURCE_RESEARCH",
+        "SK2-SOURCE_AUTHORITY_RANKING",
+        "SK2-SOURCE_CONFLICT_ANALYSIS",
+        "SK2-CLEAN_ROOM_RESEARCH",
+        "SK2-TECHNOLOGY_FRESHNESS_ANALYSIS",
+        "SK2-TECHNOLOGY_LICENSE_ANALYSIS"
+      ],
+      "requiredTechnologyIds": [
+        "TECH-GITHUB",
+        "TECH-OPENAPI",
+        "TECH-JSON-SCHEMA"
+      ],
+      "requiredEvidence": [
+        "task-input",
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "source-provenance"
+      ]
+    }
+  ],
+  "hiddenHoldoutTasks": [
+    {
+      "id": "256-HOLDOUT-ROLE-CONTRACT",
+      "objective": "Official Source Research rolünde daha önce görülmemiş bir LEARNING, RESEARCH, EVALUATION, KNOWLEDGE senaryosunu mevcut competency sınırlarında çöz; kapsam dışı bilgi veya teknoloji gerekiyorsa UNKNOWN/escalation üret.",
+      "mustDifferFromGolden": true,
+      "requiredEvidence": [
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "unknowns"
+      ]
+    }
+  ],
   "independentReviewer": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
   "passRule": "ALL_CRITICAL_AXES_PASS_AND_NO_UNRESOLVED_CRITICAL_HOLDOUT_FAILURE",
-  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json"
+  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json",
+  "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-256"
 }

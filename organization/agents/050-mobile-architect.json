@@ -170,7 +170,6 @@
       "TECH-IONIC"
     ],
     "comparativeDecision": [
-      "TECH-KOTLIN",
       "TECH-JAVA",
       "TECH-ANDROID-SDK",
       "TECH-ANDROID-GRADLE-PLUGIN",
@@ -182,7 +181,6 @@
       "TECH-ROOM",
       "TECH-DATASTORE",
       "TECH-WORKMANAGER",
-      "TECH-SWIFT",
       "TECH-OBJECTIVE-C",
       "TECH-SWIFTUI",
       "TECH-UIKIT",
@@ -195,17 +193,11 @@
       "TECH-KEYCHAIN",
       "TECH-XCTEST",
       "TECH-DART",
-      "TECH-FLUTTER",
-      "TECH-REACT-NATIVE",
       "TECH-EXPO",
       "TECH-HERMES",
       "TECH-REACT-NATIVE-JSI",
       "TECH-REACT-NATIVE-FABRIC",
       "TECH-REACT-NATIVE-TURBOMODULES",
-      "TECH-KOTLIN-MULTIPLATFORM",
-      "TECH-COMPOSE-MULTIPLATFORM",
-      "TECH-DOTNET-MAUI",
-      "TECH-IONIC",
       "TECH-APPIUM",
       "TECH-MAESTRO",
       "TECH-DETOX",
@@ -370,5 +362,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-050"
 }

@@ -62,12 +62,6 @@
       "TECH-STEAMWORKS",
       "TECH-EPIC-ONLINE-SERVICES",
       "TECH-PHOTON",
-      "TECH-BLENDER",
-      "TECH-MAYA",
-      "TECH-3DS-MAX",
-      "TECH-SUBSTANCE",
-      "TECH-UNITY",
-      "TECH-UNREAL-ENGINE",
       "TECH-GODOT",
       "TECH-DIRECTX",
       "TECH-VULKAN",
@@ -128,5 +122,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-220"
 }

@@ -10,6 +10,10 @@ const pm=new Map(profiles.map(x=>[x.agentId,x]));
 const depth=new Map(depthRows.map(x=>[`${x.agentId}|${x.technologyId}`,x]));
 for(const q of requirements){
   const a=pm.get(q.agentId); if(!a) throw new Error(`Missing profile ${q.agentId}`);
+  for(const requiredId of q.requiredPrimaryTechnologyIds??[]){
+    if(!technologies.has(requiredId)) throw new Error(`Unknown required technology ${requiredId} for ${q.agentId}`);
+    if(!(a.primaryTechnologyIds??[]).includes(requiredId)) throw new Error(`Agent ${q.agentId} missing required primary technology ${requiredId}`);
+  }
   for(const id of a.primaryTechnologyIds??[]){
     if(!technologies.has(id)) throw new Error(`Unknown technology ${id} for ${q.agentId}`);
     const d=depth.get(`${q.agentId}|${id}`);

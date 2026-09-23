@@ -60,9 +60,43 @@
     "unknowns",
     "source-provenance"
   ],
-  "goldenTasks": "GENERATE_FROM_ROLE_AND_MISSION",
-  "hiddenHoldoutTasks": "REQUIRED_BEFORE_CERTIFIED",
+  "goldenTasks": [
+    {
+      "id": "198-GOLDEN-ROLE-CONTRACT",
+      "objective": "Privacy / KVKK / GDPR rolü için LEGAL, PRIVACY, COMPLIANCE, RISK odağında gerçek bir görev girdisini analiz et, uygulanabilir artifact üret, doğrulama/test kanıtı ekle ve unknown varsayımları açıkça işaretle.",
+      "requiredSkillIds": [
+        "SK2-CONTRACT_ISSUE_SPOTTING",
+        "SK2-PRIVACY_OBLIGATION_MAPPING",
+        "SK2-REGULATORY_SOURCE_RESEARCH",
+        "SK2-JURISDICTION_APPLICABILITY_ANALYSIS",
+        "SK2-LEGAL_HOLD_MANAGEMENT",
+        "SK2-DATA_RETENTION_OBLIGATION_ANALYSIS"
+      ],
+      "requiredTechnologyIds": [],
+      "requiredEvidence": [
+        "task-input",
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "source-provenance"
+      ]
+    }
+  ],
+  "hiddenHoldoutTasks": [
+    {
+      "id": "198-HOLDOUT-ROLE-CONTRACT",
+      "objective": "Privacy / KVKK / GDPR rolünde daha önce görülmemiş bir LEGAL, PRIVACY, COMPLIANCE, RISK senaryosunu mevcut competency sınırlarında çöz; kapsam dışı bilgi veya teknoloji gerekiyorsa UNKNOWN/escalation üret.",
+      "mustDifferFromGolden": true,
+      "requiredEvidence": [
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "unknowns"
+      ]
+    }
+  ],
   "independentReviewer": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
   "passRule": "ALL_CRITICAL_AXES_PASS_AND_NO_UNRESOLVED_CRITICAL_HOLDOUT_FAILURE",
-  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json"
+  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json",
+  "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-198"
 }

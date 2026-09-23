@@ -62,14 +62,7 @@
       "TECH-JTAG-SWD"
     ],
     "comparativeDecision": [
-      "TECH-CPP",
-      "TECH-RUST-EMBEDDED",
-      "TECH-FREERTOS",
-      "TECH-ZEPHYR",
-      "TECH-ESP-IDF",
-      "TECH-STM32",
       "TECH-ARDUINO",
-      "TECH-PLATFORMIO",
       "TECH-UART",
       "TECH-USB",
       "TECH-BLE",
@@ -150,5 +143,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-227"
 }

@@ -1,0 +1,21 @@
+{
+  "//TR": "Runtime skill authority yalnız V2 SK2-* ontologydir. V1 SKILL-* registry geçmiş/reference uyumluluğu için tutulur ve runtime agent/evaluation authority olarak kullanılamaz.",
+  "schemaVersion": "1.0.0",
+  "canonicalRuntime": {
+    "registry": "registries/skills-v2.json",
+    "prefix": "SK2-",
+    "version": "2.0.0"
+  },
+  "legacyReferenceOnly": {
+    "registry": "registries/skills.json",
+    "prefix": "SKILL-",
+    "version": "1.0.0"
+  },
+  "runtimeSurfaces": [
+    "registries/agent-competency-v2.json",
+    "registries/agent-skill-matrix.json",
+    "organization/agents",
+    "evaluations/agents",
+    "registries/agent-role-overlays.json"
+  ]
+}

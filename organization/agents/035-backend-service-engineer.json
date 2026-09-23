@@ -113,8 +113,6 @@
     ],
     "comparativeDecision": [
       "TECH-EXPRESS",
-      "TECH-FASTIFY",
-      "TECH-NESTJS",
       "TECH-HONO",
       "TECH-KOA",
       "TECH-SPRING-BOOT",
@@ -162,7 +160,6 @@
       "TECH-HTTP2",
       "TECH-HTTP3",
       "TECH-REST",
-      "TECH-OPENAPI",
       "TECH-JSON-SCHEMA",
       "TECH-GRAPHQL",
       "TECH-APOLLO-GRAPHQL",
@@ -201,7 +198,6 @@
       "TECH-OKTA",
       "TECH-COGNITO",
       "TECH-ENTRA-ID",
-      "TECH-POSTGRESQL",
       "TECH-MYSQL",
       "TECH-MARIADB",
       "TECH-SQL-SERVER",
@@ -214,7 +210,6 @@
       "TECH-COUCHBASE",
       "TECH-DYNAMODB",
       "TECH-COSMOSDB",
-      "TECH-REDIS",
       "TECH-MEMCACHED",
       "TECH-ELASTICSEARCH",
       "TECH-OPENSEARCH",
@@ -225,7 +220,6 @@
       "TECH-LINKERD",
       "TECH-NGINX",
       "TECH-HAPROXY",
-      "TECH-OPENTELEMETRY",
       "TECH-PROMETHEUS",
       "TECH-GRAFANA",
       "TECH-LOKI",
@@ -341,5 +335,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-035"
 }

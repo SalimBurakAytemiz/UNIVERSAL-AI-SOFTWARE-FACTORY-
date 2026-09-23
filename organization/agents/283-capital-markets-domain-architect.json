@@ -168,7 +168,6 @@
       "TECH-PROTOBUF",
       "TECH-WEBSOCKET",
       "TECH-SOCKETIO",
-      "TECH-POSTGRESQL",
       "TECH-MYSQL",
       "TECH-MARIADB",
       "TECH-SQL-SERVER",
@@ -285,7 +284,6 @@
       "TECH-ECTO",
       "TECH-SCALA",
       "TECH-PEKKO",
-      "TECH-KAFKA",
       "TECH-RABBITMQ",
       "TECH-NATS",
       "TECH-PULSAR",
@@ -420,5 +418,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-283"
 }

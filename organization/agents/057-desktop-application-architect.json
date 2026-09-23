@@ -83,13 +83,7 @@
       "TECH-APPKIT"
     ],
     "comparativeDecision": [
-      "TECH-ELECTRON",
-      "TECH-TAURI",
-      "TECH-WPF",
-      "TECH-WINUI",
-      "TECH-QT",
       "TECH-PYSIDE",
-      "TECH-APPKIT",
       "TECH-GITHUB-ACTIONS",
       "TECH-GITLAB-CI",
       "TECH-JENKINS",
@@ -200,5 +194,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-057"
 }

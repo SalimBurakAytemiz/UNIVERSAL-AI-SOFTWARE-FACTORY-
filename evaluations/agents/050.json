@@ -162,9 +162,48 @@
     "unknowns",
     "source-provenance"
   ],
-  "goldenTasks": "GENERATE_FROM_ROLE_AND_MISSION",
-  "hiddenHoldoutTasks": "REQUIRED_BEFORE_CERTIFIED",
+  "goldenTasks": [
+    {
+      "id": "050-GOLDEN-ROLE-CONTRACT",
+      "objective": "Mobile Architect rolü için MOBILE, ANDROID, IOS, CROSS_PLATFORM_MOBILE odağında gerçek bir görev girdisini analiz et, uygulanabilir artifact üret, doğrulama/test kanıtı ekle ve unknown varsayımları açıkça işaretle.",
+      "requiredSkillIds": [
+        "SK2-MOBILE_ARCHITECTURE_SELECTION",
+        "SK2-ANDROID_LIFECYCLE_ENGINEERING",
+        "SK2-IOS_LIFECYCLE_ENGINEERING",
+        "SK2-CROSS_PLATFORM_MOBILE_TRADE_OFF_ANALYSIS",
+        "SK2-MOBILE_STATE_MANAGEMENT",
+        "SK2-MOBILE_NAVIGATION"
+      ],
+      "requiredTechnologyIds": [
+        "TECH-KOTLIN",
+        "TECH-SWIFT",
+        "TECH-FLUTTER",
+        "TECH-REACT-NATIVE"
+      ],
+      "requiredEvidence": [
+        "task-input",
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "source-provenance"
+      ]
+    }
+  ],
+  "hiddenHoldoutTasks": [
+    {
+      "id": "050-HOLDOUT-ROLE-CONTRACT",
+      "objective": "Mobile Architect rolünde daha önce görülmemiş bir MOBILE, ANDROID, IOS, CROSS_PLATFORM_MOBILE senaryosunu mevcut competency sınırlarında çöz; kapsam dışı bilgi veya teknoloji gerekiyorsa UNKNOWN/escalation üret.",
+      "mustDifferFromGolden": true,
+      "requiredEvidence": [
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "unknowns"
+      ]
+    }
+  ],
   "independentReviewer": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
   "passRule": "ALL_CRITICAL_AXES_PASS_AND_NO_UNRESOLVED_CRITICAL_HOLDOUT_FAILURE",
-  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json"
+  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json",
+  "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-050"
 }

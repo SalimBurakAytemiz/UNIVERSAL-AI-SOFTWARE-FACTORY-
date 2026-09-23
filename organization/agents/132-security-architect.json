@@ -130,18 +130,8 @@
       "TECH-GITLEAKS"
     ],
     "comparativeDecision": [
-      "TECH-OWASP-ASVS",
-      "TECH-OWASP-WSTG",
-      "TECH-OWASP-API",
-      "TECH-OWASP-MASVS",
-      "TECH-CWE",
-      "TECH-CVSS",
-      "TECH-SEMGREP",
-      "TECH-OWASP-ZAP",
-      "TECH-BURP-SUITE",
       "TECH-SONARQUBE",
       "TECH-SNYK",
-      "TECH-TRIVY",
       "TECH-OAUTH2",
       "TECH-OPENID-CONNECT",
       "TECH-SAML",
@@ -255,5 +245,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-132"
 }

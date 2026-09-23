@@ -1,0 +1,38 @@
+{
+  "//TR": "Bu checkpoint Paste 3A agent genome/specialization/evaluation/skill-authority/context-index replay turunun exact source durumunu kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_REPLAY_PASTE3A",
+  "date": "2026-09-24",
+  "baseCommit": "65ad8c59cec0bbf2df5be82e00477dd47b34a2df",
+  "status": "COMPLETE",
+  "scope": [
+    "363 canonical V2 genomes cross-file identity",
+    "363 role-overlay specialization references",
+    "role-specific structured evaluation contracts",
+    "semantic requiredPrimaryTechnologyIds enforcement",
+    "primary/comparison technology de-duplication",
+    "V1 SKILL legacy-reference-only vs V2 SK2 canonical-runtime authority",
+    "compact bounded 363-agent context index",
+    "no rarity-inferred skill assignment"
+  ],
+  "findings": {"P0": 0, "P1": 2, "P2": 4, "P3": 0},
+  "fixed": {"P0": 0, "P1": 2, "P2": 4, "P3": 0},
+  "openInScope": {"P0": 0, "P1": 0, "P2": 0, "P3": 0},
+  "regression": [
+    "PASTE3_AGENT_SPECIALIZATION_VALIDATION PASS agents=363 overlays=363 evaluations=363 context=363 adversarial=6",
+    "AGENT_SEMANTIC_VALIDATION PASS agents=363",
+    "COMPETENCY_V2_VALIDATION PASS agents=363 skills=425 technologies=415",
+    "ORGANIZATION_VALIDATION PASS departments=40 agents=363",
+    "REVIEW_GRAPH_V2_VALIDATION PASS",
+    "WOVEN_MODEL_VALIDATION PASS technologies=415 skills=425 tools=194 agents=363 phaseContracts=149",
+    "TR_VALIDATION PASS",
+    "SOURCE_SYNTAX PASS",
+    "git diff --check PASS"
+  ],
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL"
+  },
+  "nextScope": "PASTE_3B_TECHNOLOGY_DOMAIN_REGISTRY_COHERENCE"
+}

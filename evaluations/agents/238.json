@@ -69,9 +69,48 @@
     "unknowns",
     "source-provenance"
   ],
-  "goldenTasks": "GENERATE_FROM_ROLE_AND_MISSION",
-  "hiddenHoldoutTasks": "REQUIRED_BEFORE_CERTIFIED",
+  "goldenTasks": [
+    {
+      "id": "238-GOLDEN-ROLE-CONTRACT",
+      "objective": "Runbook Operations rolü için OPERATIONS, RELEASE, INCIDENT, LIVEOPS odağında gerçek bir görev girdisini analiz et, uygulanabilir artifact üret, doğrulama/test kanıtı ekle ve unknown varsayımları açıkça işaretle.",
+      "requiredSkillIds": [
+        "SK2-SLI_SLO_DESIGN",
+        "SK2-ERROR_BUDGET_MANAGEMENT",
+        "SK2-ALERT_ENGINEERING",
+        "SK2-ON_CALL_ESCALATION_DESIGN",
+        "SK2-INCIDENT_COMMAND",
+        "SK2-INCIDENT_TIMELINE_RECONSTRUCTION"
+      ],
+      "requiredTechnologyIds": [
+        "TECH-OPENTELEMETRY",
+        "TECH-PROMETHEUS",
+        "TECH-GRAFANA",
+        "TECH-SENTRY"
+      ],
+      "requiredEvidence": [
+        "task-input",
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "source-provenance"
+      ]
+    }
+  ],
+  "hiddenHoldoutTasks": [
+    {
+      "id": "238-HOLDOUT-ROLE-CONTRACT",
+      "objective": "Runbook Operations rolünde daha önce görülmemiş bir OPERATIONS, RELEASE, INCIDENT, LIVEOPS senaryosunu mevcut competency sınırlarında çöz; kapsam dışı bilgi veya teknoloji gerekiyorsa UNKNOWN/escalation üret.",
+      "mustDifferFromGolden": true,
+      "requiredEvidence": [
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "unknowns"
+      ]
+    }
+  ],
   "independentReviewer": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
   "passRule": "ALL_CRITICAL_AXES_PASS_AND_NO_UNRESOLVED_CRITICAL_HOLDOUT_FAILURE",
-  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json"
+  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json",
+  "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-238"
 }

@@ -46309,5 +46309,7 @@
       ],
       "freshnessPolicy": "REVALIDATE_ON_MAJOR_CHANGE_OR_SOURCE_CHANGE"
     }
-  ]
+  ],
+  "authority": "LEGACY_REFERENCE_ONLY",
+  "idPrefix": "SKILL-"
 }

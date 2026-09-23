@@ -80,15 +80,10 @@
       "TECH-POSTGRESQL"
     ],
     "comparativeDecision": [
-      "TECH-UNITY",
-      "TECH-UNREAL-ENGINE",
-      "TECH-GODOT",
       "TECH-DIRECTX",
       "TECH-VULKAN",
       "TECH-METAL",
       "TECH-OPENGL",
-      "TECH-STEAMWORKS",
-      "TECH-EPIC-ONLINE-SERVICES",
       "TECH-PHOTON",
       "TECH-BLENDER",
       "TECH-MAYA",
@@ -128,7 +123,6 @@
       "TECH-PROTOBUF",
       "TECH-WEBSOCKET",
       "TECH-SOCKETIO",
-      "TECH-KAFKA",
       "TECH-RABBITMQ",
       "TECH-NATS",
       "TECH-PULSAR",
@@ -150,7 +144,6 @@
       "TECH-PULUMI",
       "TECH-ANSIBLE",
       "TECH-ARGOCD",
-      "TECH-POSTGRESQL",
       "TECH-MYSQL",
       "TECH-MARIADB",
       "TECH-SQL-SERVER",
@@ -212,5 +205,6 @@
     "CERTIFIED != CURRENT",
     "CURRENT != AUTHORIZED",
     "AUTHORIZED != VERIFIED"
-  ]
+  ],
+  "specializationRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-208"
 }

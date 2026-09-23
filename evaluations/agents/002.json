@@ -57,9 +57,43 @@
     "unknowns",
     "source-provenance"
   ],
-  "goldenTasks": "GENERATE_FROM_ROLE_AND_MISSION",
-  "hiddenHoldoutTasks": "REQUIRED_BEFORE_CERTIFIED",
+  "goldenTasks": [
+    {
+      "id": "002-GOLDEN-ROLE-CONTRACT",
+      "objective": "Founder Decision Coordinator rolü için GOVERNANCE, RISK, PORTFOLIO odağında gerçek bir görev girdisini analiz et, uygulanabilir artifact üret, doğrulama/test kanıtı ekle ve unknown varsayımları açıkça işaretle.",
+      "requiredSkillIds": [
+        "SK2-BUSINESS_MODEL_ANALYSIS",
+        "SK2-MARKET_ANALYSIS",
+        "SK2-PRICING_ANALYSIS",
+        "SK2-UNIT_ECONOMICS",
+        "SK2-CUSTOMER_SEGMENTATION",
+        "SK2-SLA_DESIGN"
+      ],
+      "requiredTechnologyIds": [],
+      "requiredEvidence": [
+        "task-input",
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "source-provenance"
+      ]
+    }
+  ],
+  "hiddenHoldoutTasks": [
+    {
+      "id": "002-HOLDOUT-ROLE-CONTRACT",
+      "objective": "Founder Decision Coordinator rolünde daha önce görülmemiş bir GOVERNANCE, RISK, PORTFOLIO senaryosunu mevcut competency sınırlarında çöz; kapsam dışı bilgi veya teknoloji gerekiyorsa UNKNOWN/escalation üret.",
+      "mustDifferFromGolden": true,
+      "requiredEvidence": [
+        "produced-artifact",
+        "test-results",
+        "review-result",
+        "unknowns"
+      ]
+    }
+  ],
   "independentReviewer": "CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER",
   "passRule": "ALL_CRITICAL_AXES_PASS_AND_NO_UNRESOLVED_CRITICAL_HOLDOUT_FAILURE",
-  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json"
+  "technologyDepthAssignmentsRef": "registries/technology-agent-depth.json",
+  "roleOverlayRef": "registries/agent-role-overlays.json#ROLE-OVERLAY-002"
 }
