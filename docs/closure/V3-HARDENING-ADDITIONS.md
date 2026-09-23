@@ -1,4 +1,5 @@
 <!-- //TR: Bu closure notu V2 re-audit fixlerinden sonra yapılan ikinci hardening turunda dependency-scope, Git refs, filesystem symlink boundary, provider credential separation, reviewer evidence/finding identity ve signing-key ACL açıklarının nasıl kapatıldığını kaydeder. -->
+> **HISTORICAL_HARDENING_NOTE_NOT_CURRENT_AUTHORITY** — //TR: Bu belge geçmiş audit/specification bağlamını korur; current PASS/CLEAN/closure/release authority değildir. Current truth için `CANONICAL-STATUS.md` ve `audit/V6-FULL-SCAN-PROGRESS.json` kullanılır.
 # V3 Hardening Additions
 
 - package dependency section/scope changes are tracked; lifecycle/workspace/override metadata protected.

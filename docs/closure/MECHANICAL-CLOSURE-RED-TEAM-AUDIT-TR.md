@@ -1,4 +1,5 @@
 <!-- //TR: Bu audit UNIVERSAL-AI-SOFTWARE-COMPANY-OS-FULL-WOVEN-CANONICAL-STARTER'ın gerçek dosyaları üzerinden, özellikle hızlı kurulum, autonomous build, Claude->Codex review convergence, Git güvenliği, logging/evidence, quota/resume, roadmap scheduling ve bootstrap trust root açısından adversarial biçimde yapılmıştır. -->
+> **HISTORICAL_AUDIT_NOT_CURRENT_AUTHORITY** — //TR: Bu belge geçmiş audit/specification bağlamını korur; current PASS/CLEAN/closure/release authority değildir. Current truth için `CANONICAL-STATUS.md` ve `audit/V6-FULL-SCAN-PROGRESS.json` kullanılır.
 # UASCO — Mechanical Closure Red-Team Audit
 
 ## 0. Kısa hüküm

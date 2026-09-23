@@ -1,4 +1,5 @@
 <!-- //TR: Bu dosya UNIVERSAL-AI-SOFTWARE-COMPANY-OS için mimari keşif aşamasını kapatmak üzere bütün temel primitive'leri, açıkları, kuralları, lifecycle'ları, schema kataloğunu, acceptance suite'lerini ve extension modelini tek canonical kapanış spesifikasyonunda toplar. -->
+> **REFERENCE_SPECIFICATION_NOT_CURRENT_STATUS_EVIDENCE** — //TR: Bu belge geçmiş audit/specification bağlamını korur; current PASS/CLEAN/closure/release authority değildir. Current truth için `CANONICAL-STATUS.md` ve `audit/V6-FULL-SCAN-PROGRESS.json` kullanılır.
 # UASCO — Ultimate Architecture Closure Specification
 
 **Amaç:** Mimari keşif döngüsünü kapatmak.  

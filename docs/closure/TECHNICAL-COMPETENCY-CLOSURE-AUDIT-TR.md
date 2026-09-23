@@ -1,4 +1,5 @@
 <!-- //TR: Bu dosya UASCO fresh canonical starter ve Ultimate Architecture Closure Spec içinde agent rollerinin isim olarak kayıtlı olmasına rağmen teknik bilgi/skill/playbook seviyesinde eksik kalan ayrıntıları kapatmak için hazırlanmıştır. -->
+> **HISTORICAL_AUDIT_NOT_CURRENT_AUTHORITY** — //TR: Bu belge geçmiş audit/specification bağlamını korur; current PASS/CLEAN/closure/release authority değildir. Current truth için `CANONICAL-STATUS.md` ve `audit/V6-FULL-SCAN-PROGRESS.json` kullanılır.
 # UASCO — Technical Competency Closure Audit
 
 ## 1. Denetim sonucu

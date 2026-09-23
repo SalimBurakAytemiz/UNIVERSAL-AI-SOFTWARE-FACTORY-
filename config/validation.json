@@ -115,6 +115,14 @@
       "parallelGroup": "static-3"
     },
     {
+      "id": "paste4c-doc-truth",
+      "command": [
+        "node",
+        "scripts/validate-paste4c-doc-truth.mjs"
+      ],
+      "parallelGroup": "static-3"
+    },
+    {
       "id": "review-graph",
       "command": [
         "node",

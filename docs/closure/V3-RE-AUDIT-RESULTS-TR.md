@@ -1,4 +1,5 @@
 <!-- //TR: Bu audit V3 worktree üzerinde V2 re-audit bulgularının gerçekten kapatılıp kapatılmadığını, yeni source-level P0 mekanik bypass bulunup bulunmadığını ve target-machine'e bırakılan dürüst runtime sınırlarını kaydeder. -->
+> **HISTORICAL_AUDIT_NOT_CURRENT_AUTHORITY** — //TR: Bu belge geçmiş audit/specification bağlamını korur; current PASS/CLEAN/closure/release authority değildir. Current truth için `CANONICAL-STATUS.md` ve `audit/V6-FULL-SCAN-PROGRESS.json` kullanılır.
 # UASCO V3 Re-Audit Results
 
 ## Hüküm

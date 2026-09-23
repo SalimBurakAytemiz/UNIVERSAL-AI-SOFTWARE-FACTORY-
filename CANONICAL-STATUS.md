@@ -1,11 +1,11 @@
-<!-- //TR: Bu dosya recovery baseline üzerinde yeniden kurulan V6 canonical candidate'ın gerçek kapanış durumunu; final seal ve target-machine doğrulamasından ayrı olarak sabitler. -->
+<!-- //TR: Bu dosya recovery baseline üzerinde yeniden kurulan V6 canonical candidate'ın gerçek source/audit durumunu final seal ve target-machine doğrulamasından ayrı olarak sabitler. -->
 # Canonical Status — V6 Audit/Remediation Candidate
 
 ## Current authority
 
-Bu çalışma ağacı doğrulanmış V4 baseline üzerinde `V6-FIX-REPLAY-CHECKLIST.md` maddelerinin fiziksel olarak yeniden uygulanıp regression ile kanıtlandığı **V6 construction/control repository candidate** durumundadır.
+Bu çalışma ağacı doğrulanmış recovery baseline üzerinde V6 düzeltmelerinin fiziksel olarak yeniden uygulanıp bounded regression/checkpoint'lerle kanıtlandığı **construction/control repository candidate** durumundadır.
 
-Bu dosya `IMPLEMENTED`, `CERTIFIED`, runtime-ready veya production-ready anlamına gelmez. Canonical ayrım değişmez:
+Bu dosya `IMPLEMENTED`, `CERTIFIED`, installation-ready, runtime-ready veya production-ready anlamına gelmez.
 
 `SPECIFICATION != IMPLEMENTATION != TEST != EVIDENCE != RUNTIME_VERIFICATION != PRODUCTION_VERIFICATION`
 
@@ -13,12 +13,24 @@ Bu dosya `IMPLEMENTED`, `CERTIFIED`, runtime-ready veya production-ready anlamı
 
 ## Current source facts
 
-- 149 phase contract dosyası vardır: Phase 0 + Phase 1..148.
-- 34 coherent review package Phase 1..148'i kapsar; Phase 0 ayrı kabul kapısıdır.
-- Paste 1 physical replay: `COMPLETE_REGRESSION_VERIFIED`.
-- Paste 2 physical replay: `PENDING`.
-- Paste 3 physical replay: `PENDING`.
-- Paste 4 continuation/deep audit: `PENDING_AFTER_REPLAY`.
+- Phase contract: 149 (`Phase 0 + Phase 1..148`).
+- Coherent review package: 34 (`Phase 1..148`); Phase 0 ayrı bootstrap/trust gate.
+- Delivery tiers: 14 CORE / 2 HIGH / 18 MEDIUM.
+- Paste 1: `COMPLETE_SOURCE`.
+- Paste 2: `COMPLETE_SOURCE_ENVIRONMENT_GATES_PENDING` (34/34 source control).
+- Paste 3: `COMPLETE_SOURCE` (15/15 source control).
+- Paste 4A: `COMPLETE_SOURCE`.
+- Paste 4B: `COMPLETE_SOURCE`.
+- Paste 4C: `COMPLETE_SOURCE`.
+- Paste 4D: `NEXT`.
+
+## Environment/runtime gates still pending
+
+- runtime schema conformance: `PENDING_DEPENDENCIES`
+- release supply-chain: `PENDING_REVIEWED_DEPENDENCIES_AND_SBOM`
+- live provider smoke: `PENDING_TARGET_RUNTIME_PROVIDER_ENVIRONMENT`
+- TypeScript/Vitest dependency-aware validation: `PENDING_DEPENDENCIES`
+- target Windows Phase0: `PENDING`
 
 ## Closure truth
 
@@ -34,4 +46,4 @@ Bu dosya `IMPLEMENTED`, `CERTIFIED`, runtime-ready veya production-ready anlamı
 
 `TARGET_MACHINE_PHASE0 = PENDING`
 
-Target-machine Node/npm/install/typecheck/Vitest/Windows/desktop/runtime sonuçları gerçek target evidence olmadan PASS sayılamaz.
+Source/static PASS yalnız ilgili bounded validator'ın kanıtıdır; target-machine veya production verification yerine geçmez.

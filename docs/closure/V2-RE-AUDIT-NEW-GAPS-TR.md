@@ -1,4 +1,5 @@
 <!-- //TR: Bu dosya V2 üzerinde temiz extraction ile bulunan güncel P0/P1 boşluklarını ve V3 fix baselineını tarihsel kanıt olarak korur. -->
+> **HISTORICAL_AUDIT_NOT_CURRENT_AUTHORITY** — //TR: Bu belge geçmiş audit/specification bağlamını korur; current PASS/CLEAN/closure/release authority değildir. Current truth için `CANONICAL-STATUS.md` ve `audit/V6-FULL-SCAN-PROGRESS.json` kullanılır.
 <!-- //TR: Bu audit MECHANICALLY-CLOSED-V2 canonical starter ZIP'inin tekrar temiz klasöre çıkarılmış gerçek içeriği üzerinde yapılmıştır. Önceki audit bulgularını körlemesine tekrar etmez; kapanmış maddeleri ayırır ve yalnız güncel kalan/yeni bulunan mekanik, teknik ve operasyonel açıkları kaydeder. -->
 # UASCO — Mechanically Closed V2 Re-Audit / New Gaps
 

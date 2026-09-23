@@ -17,7 +17,7 @@ const requiredFiles=[
  "automation/lib/release-supply-chain.mjs",
  "config/preflight-policy.json",
  "config/evidence-retention-policy.json",
- "scripts/validate-runtime-resilience.mjs","scripts/validate-paste2-closure.mjs","scripts/validate-paste4a.mjs","scripts/validate-paste4b.mjs","scripts/validate-paste3-agent-specialization.mjs","scripts/validate-paste3-technology-domain-registry.mjs","scripts/validate-paste3-closure.mjs",
+ "scripts/validate-runtime-resilience.mjs","scripts/validate-paste2-closure.mjs","scripts/validate-paste4a.mjs","scripts/validate-paste4b.mjs","scripts/validate-paste4c-doc-truth.mjs","scripts/validate-paste3-agent-specialization.mjs","scripts/validate-paste3-technology-domain-registry.mjs","scripts/validate-paste3-closure.mjs",
  "scripts/validate-paste2h-runtime-release.mjs",
  "scripts/runtime-schema-conformance-selftest.mjs",
  "scripts/validate-release-supply-chain.mjs",
@@ -89,6 +89,7 @@ if(!validation.steps?.some(x=>x.id==="runtime-resilience"&&x.command?.includes("
 const reviewPackagesSource=text("automation/lib/review-packages.mjs"),reviewBundleSource=text("automation/lib/review-bundle.mjs"),reviewGovernanceSource=text("automation/lib/review-governance.mjs"),reviewPackagesDoc=read("roadmap/review-packages.json");
 if(!validation.steps?.some(x=>x.id==="paste4a-construction-graph"&&x.command?.includes("scripts/validate-paste4a.mjs")))errors.push("paste4a-validation-not-wired");
 if(!validation.steps?.some(x=>x.id==="paste4b-traceability"&&x.command?.includes("scripts/validate-paste4b.mjs")))errors.push("paste4b-validation-not-wired");
+if(!validation.steps?.some(x=>x.id==="paste4c-doc-truth"&&x.command?.includes("scripts/validate-paste4c-doc-truth.mjs")))errors.push("paste4c-doc-truth-validation-not-wired");
 if(!reviewPackagesSource.includes("deliveryRank={CORE:0,HIGH:1,MEDIUM:2}")||!reviewPackagesSource.includes("dependsOnPackages"))errors.push("delivery-tier-scheduler-not-enforced");
 if(!reviewBundleSource.includes("stableReviewBasisId")||!reviewGovernanceSource.includes("REVIEW_FINDING_BASIS_FORMAT_INVALID"))errors.push("stable-review-basis-not-enforced");
 const tierCounts=(reviewPackagesDoc.packages??[]).reduce((a,x)=>(a[x.deliveryTier]=(a[x.deliveryTier]??0)+1,a),{});if(tierCounts.CORE!==14||tierCounts.HIGH!==2||tierCounts.MEDIUM!==18)errors.push("delivery-tier-counts-invalid");

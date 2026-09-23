@@ -1,4 +1,5 @@
 <!-- //TR: Bu ledger son mekanik red-team audit bulgularının V2 artifact içinde hangi dosya/mekanizma ile kapatıldığını ve target-machine doğrulaması gereken maddeleri görünür kılar. -->
+> **HISTORICAL_FIX_LEDGER_NOT_CURRENT_AUTHORITY** — //TR: Bu belge geçmiş audit/specification bağlamını korur; current PASS/CLEAN/closure/release authority değildir. Current truth için `CANONICAL-STATUS.md` ve `audit/V6-FULL-SCAN-PROGRESS.json` kullanılır.
 # Mechanical Closure Fix Ledger
 
 ## CLOSED IN SOURCE / STATICALLY VERIFIED

@@ -1,4 +1,5 @@
 <!-- //TR: Bu tarihsel red-team audit dosyası önceki FINAL starter'da bulunan gerçek boşlukları kaydeder; aşağıdaki bulgular bu WOVEN starter'ın tasarım girdisidir. -->
+> **HISTORICAL_AUDIT_NOT_CURRENT_AUTHORITY** — //TR: Bu belge geçmiş audit/specification bağlamını korur; current PASS/CLEAN/closure/release authority değildir. Current truth için `CANONICAL-STATUS.md` ve `audit/V6-FULL-SCAN-PROGRESS.json` kullanılır.
 <!-- //TR: Bu dosya UNIVERSAL-AI-SOFTWARE-COMPANY-OS-FINAL-CANONICAL-STARTER ZIP'inin gerçek dosyaları/registries/runtime kodu/validator'ları üzerinden yapılan adversarial gap audit sonucudur. Amaç, bir sonraki ZIP'ten önce "adı var ama içi yok", yanlış inheritance, sahte PASS, permissive schema ve eksik runtime sınıflarını görünür kılmaktır. -->
 # UASCO — Full Red-Team Gap Audit
 

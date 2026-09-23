@@ -1,7 +1,7 @@
 {
-  "//TR": "Bu dosya ZIP'in eski repoya patch değil fresh PRIVATE starter olduğunu, registry sayılarını ve artifact'in full runtime completion iddiası taşımadığını makine-okunur şekilde belirtir.",
-  "name": "UNIVERSAL-AI-SOFTWARE-COMPANY-OS-MECHANICALLY-CLOSED-V3-CANONICAL-STARTER",
-  "version": "2026.09.20.4",
+  "//TR": "Bu dosya V6 audit/remediation candidate için machine-readable current source kapsamını ve henüz kapanmamış release/runtime kapılarını bildirir; final release veya runtime completion iddiası taşımaz.",
+  "name": "UNIVERSAL-AI-SOFTWARE-COMPANY-OS-V6-AUDIT-REMEDIATION-CANDIDATE",
+  "version": "2026.09.24-audit-candidate",
   "freshRepo": true,
   "recommendedVisibility": "PRIVATE",
   "agents": 363,
@@ -13,7 +13,7 @@
   "toolAdapters": 194,
   "polyglotToolchains": 16,
   "roadmapPhases": 149,
-  "status": "MECHANICALLY_CLOSED_V3_SOURCE_AUDITED_TARGET_PHASE0_PENDING",
+  "status": "V6_AUDIT_REMEDIATION_IN_PROGRESS",
   "agentTechnicalGenomes": 363,
   "competencyPacks": 40,
   "frameworkPacks": 41,
@@ -22,7 +22,7 @@
   "councils": 10,
   "architectureDiscovery": "FROZEN_BY_EXTENSION_MODEL",
   "technologies": 415,
-  "technologyRelations": 192,
+  "technologyRelations": 117,
   "agentCompetencyV2": 363,
   "technologyDepthAssignments": 6114,
   "phaseContracts": 149,
@@ -34,17 +34,31 @@
   "departmentCharters": 40,
   "technologyKnowledgeUnitFiles": 415,
   "roadmapReviewPackages": 34,
-  "mechanicalClosure": "SOURCE_STATIC_CLOSED_TARGET_RUNTIME_PENDING",
+  "mechanicalClosure": "IN_PROGRESS_NOT_FINAL",
   "targetRuntimeValidation": "PENDING_WINDOWS_NODE24_NPM_CLAUDE_CODEX_ELECTRON",
-  "trustRootFiles": 250,
-  "staticClosureAudit": "PASS",
+  "staticClosureAudit": "NOT_FINAL_PASTE4_IN_PROGRESS",
   "targetPhase0Required": true,
-  "sourceAudit": "audit/V3-RE-AUDIT-RESULTS.md",
+  "sourceAudit": "audit/V6-FULL-SCAN-PROGRESS.json",
   "targetMachinePhase0": "PENDING",
   "legacySkillRegistryCount": 1186,
-  "sourceStaticClosure": "PASS_AFTER_V3_REAUDIT",
-  "newV3ReauditFixes": [
-    "CURRENT_BLOCKER_STATUS_BYPASS_CLOSED",
-    "TRUST_ROOT_SELF_HASH_CIRCULARITY_CLOSED"
-  ]
+  "sourceStaticClosure": false,
+  "technologyStructuralRelations": 415,
+  "deliveryTiers": {
+    "CORE": 14,
+    "HIGH": 2,
+    "MEDIUM": 18
+  },
+  "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL",
+  "finalSha256Sums": "NOT_DONE",
+  "finalReleaseAuthenticity": "NOT_DONE",
+  "finalZip": "NOT_DONE",
+  "pasteStatus": {
+    "paste1": "COMPLETE_SOURCE",
+    "paste2": "COMPLETE_SOURCE_ENVIRONMENT_GATES_PENDING",
+    "paste3": "COMPLETE_SOURCE",
+    "paste4A": "COMPLETE_SOURCE",
+    "paste4B": "COMPLETE_SOURCE",
+    "paste4C": "COMPLETE_SOURCE",
+    "paste4D": "NEXT"
+  }
 }

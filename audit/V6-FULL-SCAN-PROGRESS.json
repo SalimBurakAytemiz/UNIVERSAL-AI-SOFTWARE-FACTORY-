@@ -2,7 +2,7 @@
   "//TR": "V6 recovery replay için canonical bounded-scan ilerleme kaydıdır. Bu dosya final source closure veya target-machine PASS iddiası değildir.",
   "schemaVersion": "1.0.0",
   "status": "IN_PROGRESS",
-  "verifiedThroughParentCommit": "d4352a0590f0e7161a8218320b9b3797016a680c",
+  "verifiedThroughParentCommit": "56b3b3ff788f5bd72826c7e3915f2e5eb29ad8e6",
   "paste1": {
     "status": "COMPLETE_SOURCE",
     "checkpointCommit": "99105cf8c6a8a60954c8aa936a4d0ebd4253c15f"
@@ -45,8 +45,8 @@
     "segments": {
       "4A": "COMPLETE_SOURCE",
       "4B": "COMPLETE_SOURCE",
-      "4C": "NEXT",
-      "4D": "PENDING"
+      "4C": "COMPLETE_SOURCE",
+      "4D": "NEXT"
     },
     "phaseCount": 149,
     "reviewPackageCount": 34,
@@ -64,6 +64,19 @@
       "genericReviewResultArtifacts": 0,
       "phaseTraceabilityBound": true,
       "paste4bValidatorChecks": 968
+    },
+    "sourceLevelOpenP0P1P2In4C": 0,
+    "docsTruth": {
+      "currentAuthorityDocs": [
+        "README.md",
+        "START-HERE.md",
+        "CANONICAL-STATUS.md",
+        "PACK.json"
+      ],
+      "historicalClosureDocsClassified": 8,
+      "docTruthValidatorChecks": 85,
+      "sourceClosureClaim": false,
+      "targetMachinePhase0": "PENDING"
     }
   },
   "truth": {
@@ -72,5 +85,5 @@
     "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
     "FINAL_ZIP": "NOT_DONE"
   },
-  "nextScope": "PASTE_4C_DOCS_STANDARDS_PLAYBOOKS_STALE_TRUTH"
+  "nextScope": "PASTE_4D_AUDIT_STATUS_RELEASE_ARTIFACT_TRUTH"
 }
