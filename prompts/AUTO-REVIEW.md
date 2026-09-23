@@ -35,3 +35,5 @@ Review bundle içindeki acceptedDebt, waivers, knownLimitations ve unsupportedCa
 ## OUTPUT
 Yalnız schema-valid **tek JSON object** döndür. Prose/code fence yok. `schemaVersion` = `1.1.0`.
 CLEAN yalnız unresolved admissible blocker ve environment gap yoksa verilir. CLEAN mükemmellik iddiası değil, exact bundle scope'unda blocker kalmadığı anlamına gelir.
+
+Her BLOCKER `retestValidationIds` alanında REVIEW BUNDLE validation.steps içindeki bir veya daha fazla gerçek validation ID seçmelidir. RESOLVED disposition yalnız bundle içindeki `FINDING_BOUND_RETEST` + PASS evidence referanslarıyla verilebilir; DIFF veya alakasız generic PASS resolution evidence değildir.

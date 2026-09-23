@@ -1,0 +1,25 @@
+{
+  "//TR": "Bu checkpoint finding-bound targeted retest evidence ve durable P3/LOW backlog replay turunu kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_REPLAY_FOUNDATION_B",
+  "status": "COMPLETE",
+  "parentCommit": "41dd24f526f39ad34bd7cb86418aba5c6ed4e704",
+  "scope": [
+    "blocker retestValidationIds declaration",
+    "finding-bound PASS retest evidence generation",
+    "unrelated PASS/DIFF resolution bypass rejection",
+    "finding fingerprint/commit/cycle/validation binding",
+    "config-consumed durable P3 LOW backlog",
+    "fingerprint dedupe and occurrence tracking"
+  ],
+  "findings": {"P0": 1, "P1": 0, "P2": 2, "P3": 0, "openP0P1P2InScope": 0},
+  "validation": [
+    "V6_FOUNDATION_B_SELFTEST: PASS 5/5",
+    "V6_FOUNDATION_A_SELFTEST: PASS 10/10",
+    "MECHANICAL_KERNEL_SELFTEST: PASS",
+    "BOOTSTRAP_KERNEL_SELFTEST: PASS",
+    "MECHANICAL_CLOSURE_VALIDATION: PASS"
+  ],
+  "closure": {"sourceLevelClosure": false, "targetMachinePhase0": "PENDING", "paste1Replay": "IN_PROGRESS"},
+  "nextScope": "V6_REPLAY_FOUNDATION_C_CONTEXT_TOKEN_AND_FORMAT_RETRY"
+}

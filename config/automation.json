@@ -64,7 +64,8 @@
     "requireGovernedDigestInAttestation": true,
     "acceptedDebtLedger": "governance/accepted-debt.json",
     "waiverLedger": "governance/waivers.json",
-    "knownLimitationsLedger": "governance/known-limitations.json"
+    "knownLimitationsLedger": "governance/known-limitations.json",
+    "lowBacklogPath": ".ai/runtime/low-backlog.json"
   },
   "logging": {
     "root": ".ai/runtime/runs",
