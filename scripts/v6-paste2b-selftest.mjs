@@ -21,5 +21,5 @@ const resourceSchema=json("schemas/resource.schema.json");ok("resource-schema-id
 const g={allowPaidApi:true,allowRisk5:false,allowProduction:false,allowLocalOnlyAutonomy:true};
 ok("negative-spend-runtime-denied",authorizeAutomationAction({action:"SPEND",globalConfig:g,estimatedCost:-1}).allowed===false);
 ok("nan-spend-runtime-denied",authorizeAutomationAction({action:"SPEND",globalConfig:g,estimatedCost:Number.NaN}).allowed===false);
-ok("finite-spend-runtime-allowed",authorizeAutomationAction({action:"SPEND",globalConfig:g,estimatedCost:1}).allowed===true);
+ok("finite-spend-runtime-policy-denied",authorizeAutomationAction({action:"SPEND",globalConfig:g,estimatedCost:1}).allowed===false);
 console.log(`V6_PASTE2B_SELFTEST: PASS ${checks.length}/${checks.length}`);

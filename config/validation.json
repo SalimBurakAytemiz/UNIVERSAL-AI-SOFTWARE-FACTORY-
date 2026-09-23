@@ -163,6 +163,14 @@
       "parallelGroup": "static-4"
     },
     {
+      "id": "config-runtime-enforcement",
+      "command": [
+        "node",
+        "scripts/validate-config-runtime-enforcement.mjs"
+      ],
+      "parallelGroup": "static-4"
+    },
+    {
       "id": "mechanical",
       "command": [
         "node",

@@ -1,0 +1,40 @@
+{
+  "//TR": "Repo-geneli config -> runtime enforcement sweep checkpoint. Bu checkpoint final source closure veya target-machine PASS iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "scope": "REPO_WIDE_CONFIG_RUNTIME_ENFORCEMENT_SWEEP",
+  "status": "COMPLETE_SOURCE",
+  "baseCommit": "41772c12ec944cfd105dd1ff71ec4ce56c294c82",
+  "findings": {
+    "P0": 0,
+    "P1": 3,
+    "P2": 2,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "fixed": [
+    "action-policy remote/spend/risk flags are runtime-consumed",
+    "production/Risk5 OS sandbox requirement is explicit fail-closed until independent runtime attestation exists",
+    "run summary verifyBeforeCompletion performs Ed25519 self-verification before persistence",
+    "maxParallelLanes is explicitly enforced as serial-only=1",
+    "reviewer provenanceRequired is a startup-enforced contract"
+  ],
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL"
+  },
+  "regression": {
+    "configRuntimeEnforcement": "PASS 25/25",
+    "paste4D": "PASS",
+    "paste4C": "PASS",
+    "paste4B": "PASS 968",
+    "paste4A": "PASS 26",
+    "paste2Closure": "PASS 34/34",
+    "paste3Closure": "PASS 15/15",
+    "mechanicalClosure": "PASS",
+    "kernelState": "PASS",
+    "trValidation": "PASS",
+    "sourceSyntax": "PASS"
+  },
+  "nextScope": "FULL_DEPENDENCY_FREE_SOURCE_REGRESSION"
+}

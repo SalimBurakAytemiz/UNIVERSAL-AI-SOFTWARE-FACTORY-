@@ -7,6 +7,7 @@
     "LOCAL_GIT_COMMIT",
     "LOCAL_FAST_FORWARD_MERGE"
   ],
+  "remotePushAllowed": true,
   "remotePushRequires": [
     "review-clean",
     "remote-policy-allowed",

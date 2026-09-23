@@ -1,5 +1,5 @@
 {
-  "//TR": "Bu dosya dependency'leri tamamlanan phase'lerin domain bazında hangi paralel lane'de çalışabileceğini tanımlar; maxParallelLanes config ve resource/quota kapasitesi gerçek eşzamanlılığı sınırlar.",
+  "//TR": "Bu dosya dependency'leri tamamlanan phase'lerin domain lane sınıflamasını tanımlar; current canonical runtime maxParallelLanes=1 ile seri çalışır ve paralel execution henüz runtime-enforced değildir.",
   "schemaVersion": "1.0.0",
   "lanes": [
     {
@@ -223,5 +223,6 @@
       ],
       "defaultConcurrency": 1
     }
-  ]
+  ],
+  "runtimeStatus": "SERIAL_ONLY_MAX_PARALLEL_LANES_1"
 }

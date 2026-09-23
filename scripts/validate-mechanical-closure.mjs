@@ -17,7 +17,7 @@ const requiredFiles=[
  "automation/lib/release-supply-chain.mjs",
  "config/preflight-policy.json",
  "config/evidence-retention-policy.json",
- "scripts/validate-runtime-resilience.mjs","scripts/validate-paste2-closure.mjs","scripts/validate-paste4a.mjs","scripts/validate-paste4b.mjs","scripts/validate-paste4c-doc-truth.mjs","scripts/validate-paste4d-release-truth.mjs","scripts/validate-paste3-agent-specialization.mjs","scripts/validate-paste3-technology-domain-registry.mjs","scripts/validate-paste3-closure.mjs",
+ "scripts/validate-runtime-resilience.mjs","scripts/validate-config-runtime-enforcement.mjs","scripts/validate-paste2-closure.mjs","scripts/validate-paste4a.mjs","scripts/validate-paste4b.mjs","scripts/validate-paste4c-doc-truth.mjs","scripts/validate-paste4d-release-truth.mjs","scripts/validate-paste3-agent-specialization.mjs","scripts/validate-paste3-technology-domain-registry.mjs","scripts/validate-paste3-closure.mjs",
  "scripts/validate-paste2h-runtime-release.mjs",
  "scripts/runtime-schema-conformance-selftest.mjs",
  "scripts/validate-release-supply-chain.mjs",
@@ -96,4 +96,12 @@ if(!reviewBundleSource.includes("stableReviewBasisId")||!reviewGovernanceSource.
 const tierCounts=(reviewPackagesDoc.packages??[]).reduce((a,x)=>(a[x.deliveryTier]=(a[x.deliveryTier]??0)+1,a),{});if(tierCounts.CORE!==14||tierCounts.HIGH!==2||tierCounts.MEDIUM!==18)errors.push("delivery-tier-counts-invalid");
 
 const runtimeSchemaSelftest=text("scripts/runtime-schema-conformance-selftest.mjs");if(!runtimeSchemaSelftest.includes('Ajv2020 from "ajv/dist/2020.js"')||!runtimeSchemaSelftest.includes("RUNTIME_SCHEMA_CONFORMANCE_SELFTEST: PASS")||!validation.steps?.some(x=>x.id==="runtime-schema-conformance"&&x.requiresDependencies===true))errors.push("runtime-schema-ajv2020-conformance-not-wired");if(!text("automation/factory-supervisor.mjs").includes('Ajv2020 from "ajv/dist/2020.js"'))errors.push("supervisor-not-using-ajv2020");
+
+const runtimePolicySource=text("automation/lib/runtime-policy-enforcement.mjs"),actionBrokerSource=text("automation/lib/action-broker.mjs");
+if(!validation.steps?.some(x=>x.id==="config-runtime-enforcement"&&x.command?.includes("scripts/validate-config-runtime-enforcement.mjs")))errors.push("config-runtime-enforcement-validation-not-wired");
+for(const x of ["PARALLEL_RUNTIME_ONLY_SUPPORTS_ONE_LANE","REVIEWER_PROVENANCE_MUST_BE_REQUIRED","EVIDENCE_COMPLETION_POLICY_INVALID","OS_SANDBOX_NOT_RUNTIME_ENFORCED"])if(!runtimePolicySource.includes(x))errors.push(`runtime-policy-enforcement-missing:${x}`);
+if(!actionBrokerSource.includes("remotePushRequires")||!actionBrokerSource.includes("remotePushAllowed")||!actionBrokerSource.includes("reviewClean"))errors.push("action-policy-runtime-consumer-missing");
+if(!runLedger.includes("RUN_SUMMARY_SIGNATURE_SELF_VERIFY_FAILED")||!runLedger.includes("verifyBeforeCompletion"))errors.push("run-summary-self-verification-not-wired");
+if(cfg.maxParallelLanes!==1||read("roadmap/parallel-lanes.json").runtimeStatus!=="SERIAL_ONLY_MAX_PARALLEL_LANES_1")errors.push("parallel-runtime-truth-invalid");
+
 if(errors.length){console.error(errors.join("\n"));process.exit(1)}console.log(`MECHANICAL_CLOSURE_VALIDATION: PASS files=${requiredFiles.length} reviewCycles=${cfg.maxReviewCycles} maxMilestonesPerRun=${cfg.maxMilestonesPerRun} technologiesMapped=${profiles.filter(x=>x.technicalAgent).length}`);

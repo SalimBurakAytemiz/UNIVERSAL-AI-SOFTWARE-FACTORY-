@@ -2,7 +2,7 @@
   "//TR": "V6 recovery replay için canonical bounded-scan ilerleme kaydıdır. Bu dosya final source closure veya target-machine PASS iddiası değildir.",
   "schemaVersion": "1.0.0",
   "status": "IN_PROGRESS",
-  "verifiedThroughParentCommit": "3a2f5bc2bec9bded368d777e3495b05093d50add",
+  "verifiedThroughParentCommit": "41772c12ec944cfd105dd1ff71ec4ce56c294c82",
   "paste1": {
     "status": "COMPLETE_SOURCE",
     "checkpointCommit": "99105cf8c6a8a60954c8aa936a4d0ebd4253c15f"
@@ -95,5 +95,15 @@
     "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
     "FINAL_ZIP": "NOT_DONE"
   },
-  "nextScope": "REPO_WIDE_CONFIG_RUNTIME_ENFORCEMENT_SWEEP"
+  "nextScope": "FULL_DEPENDENCY_FREE_SOURCE_REGRESSION",
+  "postPasteSweeps": {
+    "configRuntimeEnforcement": {
+      "status": "COMPLETE_SOURCE",
+      "validator": "scripts/validate-config-runtime-enforcement.mjs",
+      "checks": 25,
+      "openP0P1P2": 0,
+      "productionSandboxTruth": "PLANNED_NOT_RUNTIME_VERIFIABLE_FAIL_CLOSED",
+      "parallelExecutionTruth": "SERIAL_ONLY_MAX_PARALLEL_LANES_1"
+    }
+  }
 }

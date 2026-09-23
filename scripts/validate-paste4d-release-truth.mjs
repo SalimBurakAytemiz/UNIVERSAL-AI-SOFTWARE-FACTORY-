@@ -50,7 +50,7 @@ must(testStatus.includes("TARGET_MACHINE_PHASE0 = PENDING"),"test-status-target-
 
 must(auditState.status==="V6_AUDIT_REMEDIATION_IN_PROGRESS","current-audit-state-stale");
 must(auditState.sourceLevelClosure===false,"current-audit-source-closure-overclaim");
-must(auditState.overallRemainingP0P1P2==="UNKNOWN_PENDING_CONFIG_RUNTIME_SWEEP_AND_FULL_REGRESSION","current-audit-premature-zero-blocker-claim");
+must(["UNKNOWN_PENDING_CONFIG_RUNTIME_SWEEP_AND_FULL_REGRESSION","UNKNOWN_PENDING_FULL_SOURCE_REGRESSION"].includes(auditState.overallRemainingP0P1P2),"current-audit-premature-zero-blocker-claim");
 must(auditState.finalTrustRootSeal==="STALE_PENDING_FINAL_RESEAL","current-audit-trust-overclaim");
 must(auditState.finalSha256Sums==="NOT_DONE","current-audit-final-sha-overclaim");
 must(auditState.finalReleaseAuthenticity==="NOT_DONE","current-audit-release-auth-overclaim");

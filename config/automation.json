@@ -122,7 +122,13 @@
   },
   "sandbox": {
     "builderBoundarySmoke": ".ai/runtime/BUILDER_BOUNDARY_SMOKE.json",
-    "productionRequiresOsSandbox": true
+    "productionRequiresOsSandbox": true,
+    "osSandboxRuntimeAttestation": {
+      "status": "PLANNED_NOT_RUNTIME_VERIFIABLE",
+      "requiredForProduction": true,
+      "requiredForRisk5": true,
+      "note": "Gerçek OS/container sandbox attestation verifier uygulanana kadar production ve Risk5 milestone fail-closed kalır."
+    }
   },
   "evidence": {
     "signingRequired": true,

@@ -7,6 +7,7 @@ import addFormats from "ajv-formats";
 import {createRunId,RunLedger,cleanupOldRuns} from "./lib/run-ledger.mjs";
 import {acquireProcessLock} from "./lib/process-lock.mjs";
 import {assertNotStopped,globalStopState} from "./lib/global-stop.mjs";
+import {assertRuntimePolicyConfig,sandboxPolicyViolation} from "./lib/runtime-policy-enforcement.mjs";
 import {safeChildEnv} from "./lib/env-policy.mjs";
 import {runCommand} from "./lib/command-runner.mjs";
 import {classifyFailure} from "./lib/failure-classifier.mjs";
@@ -41,6 +42,11 @@ import {
 const repoRoot=process.cwd();
 const cfg=JSON.parse(fs.readFileSync("config/automation.json","utf8"));
 const protectedPolicy=JSON.parse(fs.readFileSync("config/protected-paths.json","utf8"));
+const builderExecutionPolicy=JSON.parse(fs.readFileSync("config/builder-execution-policy.json","utf8"));
+const actionPolicy=JSON.parse(fs.readFileSync("config/action-policy.json","utf8"));
+const evidenceLedgerPolicy=JSON.parse(fs.readFileSync("config/evidence-ledger-policy.json","utf8"));
+const parallelLanesPolicy=JSON.parse(fs.readFileSync("roadmap/parallel-lanes.json","utf8"));
+assertRuntimePolicyConfig({automation:cfg,builderPolicy:builderExecutionPolicy,evidencePolicy:evidenceLedgerPolicy,actionPolicy,parallelLanes:parallelLanesPolicy});
 const runtime=path.join(repoRoot,".ai","runtime");
 const runsRoot=path.join(repoRoot,cfg.logging.root);
 const schedulerFile=path.join(repoRoot,cfg.scheduler.statePath);
@@ -77,6 +83,7 @@ function policyViolation(m){
   if(m.allowPaidApi&&!cfg.allowPaidApi)return "PAID_API_FORBIDDEN_BY_GLOBAL_POLICY";
   if(m.allowProduction&&!cfg.allowProduction)return "PRODUCTION_FORBIDDEN_BY_GLOBAL_POLICY";
   if((m.riskLevel??0)>=5&&!cfg.allowRisk5)return "RISK5_FORBIDDEN_BY_GLOBAL_POLICY";
+  const sandboxViolation=sandboxPolicyViolation({milestone:m,automation:cfg,builderPolicy:builderExecutionPolicy});if(sandboxViolation)return sandboxViolation;
   return null;
 }
 function packageAttemptCount(state,pkg){return Math.max(1,...pkg.phaseIds.map(p=>state.phases.find(x=>x.phase===p)?.attempts??1))}
@@ -100,7 +107,7 @@ function refreshRemoteProtection(){
 }
 function providerProvenance(){const p=readJsonIfExists(providerProvenanceFile,null);if(!p||p.final!=="PASS")throw new Error("PROVIDER_PROVENANCE_NOT_READY");return p}
 function ensureProviderSeparation(review){
-  const prov=providerProvenance();
+  if(cfg.reviewer.provenanceRequired!==true)throw new Error("REVIEWER_PROVENANCE_CONFIG_NOT_REQUIRED");const prov=providerProvenance();
   if(String(cfg.builder.provider).toUpperCase()===String(cfg.reviewer.provider).toUpperCase()) return {ok:false,reason:"BUILDER_AND_REVIEWER_PROVIDER_SAME"};
   if(String(review.reviewer.provider).toUpperCase()!==String(cfg.reviewer.provider).toUpperCase()) return {ok:false,reason:"REVIEWER_PROVIDER_PROVENANCE_MISMATCH"};
   if(!["SUFFICIENT","PROVIDER_SEPARATED_MODEL_UNKNOWN"].includes(review.reviewer.independenceStatus)) return {ok:false,reason:"REVIEWER_INDEPENDENCE_NOT_SUFFICIENT"};
@@ -208,7 +215,7 @@ async function main(){
   const runId=createRunId();let releaseLock;
   try{releaseLock=acquireProcessLock(lockFile,runId)}catch(e){console.error(String(e.message??e));return 40}
   cleanupOldRuns(runsRoot,cfg.logging.retentionDays,cfg.logging.maxRuns,{policy:evidenceRetentionPolicy,exportRoot:evidenceExportRoot,publicKeyFile:evidencePublicKey});
-  const ledger=new RunLedger(runsRoot,runId,{maxLogBytes:cfg.logging.maxLogBytesPerFile,signingKeyFile:evidencePrivateKey});
+  const ledger=new RunLedger(runsRoot,runId,{maxLogBytes:cfg.logging.maxLogBytesPerFile,signingKeyFile:evidencePrivateKey,verifyBeforeCompletion:evidenceLedgerPolicy.verifyBeforeCompletion===true});
   let processed=0;
   try{
     const graph=loadGraph(graphFile),packages=loadReviewPackages(packagesFile);let scheduler=loadSchedulerState(schedulerFile);assertSchedulerGitConsistency(scheduler);promoteDueRetries(scheduler);saveSchedulerState(schedulerFile,scheduler);
@@ -252,7 +259,7 @@ async function main(){
         if(head===baseCommit){assertAutomationAction({action:"LOCAL_FAST_FORWARD_MERGE",milestone,globalConfig:cfg});mergeReviewedFastForward(repoRoot,baseCommit,reviewedCommit,stage.branch);ledger.event("git","MERGED_AFTER_CLEAN_RESUME",{commit:reviewedCommit},"INFO",{phase:leadPhase,milestoneId:pkg.id,actor:"SUPERVISOR"})}
         else if(head!==reviewedCommit)throw new Error(`POST_CLEAN_CONTROL_HEAD_CONFLICT expected=${baseCommit}|${reviewedCommit} actual=${head}`);
         saveStage({...stage,stage:"PUSH"});
-        try{const remoteProtection=refreshRemoteProtection();const auth=authorizeAutomationAction({action:"REMOTE_PUSH",milestone,globalConfig:cfg,remoteProtection});const push=auth.allowed?pushMainAndVerify(repoRoot,cfg.git.defaultBranch):{pushed:false,reason:auth.reason};ledger.event("git","PUSH_AFTER_CLEAN",push,"INFO",{phase:leadPhase,milestoneId:pkg.id,actor:"SUPERVISOR"})}
+        try{const remoteProtection=refreshRemoteProtection();const auth=authorizeAutomationAction({action:"REMOTE_PUSH",milestone,globalConfig:cfg,remoteProtection,reviewClean:true});const push=auth.allowed?pushMainAndVerify(repoRoot,cfg.git.defaultBranch):{pushed:false,reason:auth.reason};ledger.event("git","PUSH_AFTER_CLEAN",push,"INFO",{phase:leadPhase,milestoneId:pkg.id,actor:"SUPERVISOR"})}
         catch(e){const sec=nextRetrySeconds(scheduler,pkg,300),retryAt=isoAfter(sec);markPackageStateRetry(scheduler,pkg,String(e.message),retryAt);saveSchedulerState(schedulerFile,scheduler);saveStage({...stage,stage:"PUSH",lastFailure:String(e.message)});writeRetry(sec,pkg,String(e.message));return summaryAndExit(ledger,"RETRY_WAIT",{packageId:pkg.id,reason:String(e.message)},30)}
         markPackageCompleted(scheduler,pkg,reviewedCommit,stage.evidenceRefs??[]);saveSchedulerState(schedulerFile,scheduler);clearStage();if(stage.worktreeDir&&stage.branch){removeRunWorktree(repoRoot,stage.worktreeDir,stage.branch)}processed++;continue;
       }
@@ -326,7 +333,7 @@ async function main(){
           const cleanEvidence={attestationPath:path.relative(repoRoot,signedAtt.file).replaceAll("\\","/"),reviewBundlePath:path.relative(repoRoot,durableBundle).replaceAll("\\","/"),reviewProofPath:path.relative(repoRoot,durableProof).replaceAll("\\","/"),validationPath:path.relative(repoRoot,durableValidation).replaceAll("\\","/")};stage={...stage,stage:"CLEAN_READY",cycle,reviewedCommit,validation,findingLedger,evidenceRefs,reviewDigest:effectiveDigest,cleanEvidence};saveStage(stage);verifyCleanReadyResume({repoRoot,stage,milestone,packageDef:pkg,publicKeyFile:evidencePublicKey});
           const controlHead=gitHead(repoRoot);if(controlHead===baseCommit){assertAutomationAction({action:"LOCAL_FAST_FORWARD_MERGE",milestone,globalConfig:cfg});mergeReviewedFastForward(repoRoot,baseCommit,reviewedCommit,workspace.branch)} else if(controlHead!==reviewedCommit)throw new Error(`CONTROL_HEAD_CHANGED_BEFORE_CLEAN_MERGE actual=${controlHead}`);ledger.event("git","MERGED_AFTER_CLEAN",{commit:reviewedCommit},"INFO",{phase:leadPhase,milestoneId:pkg.id,actor:"SUPERVISOR"});
           stage={...stage,stage:"PUSH"};saveStage(stage);
-          try{const remoteProtection=refreshRemoteProtection();const auth=authorizeAutomationAction({action:"REMOTE_PUSH",milestone,globalConfig:cfg,remoteProtection});const push=auth.allowed?pushMainAndVerify(repoRoot,cfg.git.defaultBranch):{pushed:false,reason:auth.reason};ledger.event("git","PUSH_AFTER_CLEAN",push,"INFO",{phase:leadPhase,milestoneId:pkg.id,actor:"SUPERVISOR"})}
+          try{const remoteProtection=refreshRemoteProtection();const auth=authorizeAutomationAction({action:"REMOTE_PUSH",milestone,globalConfig:cfg,remoteProtection,reviewClean:true});const push=auth.allowed?pushMainAndVerify(repoRoot,cfg.git.defaultBranch):{pushed:false,reason:auth.reason};ledger.event("git","PUSH_AFTER_CLEAN",push,"INFO",{phase:leadPhase,milestoneId:pkg.id,actor:"SUPERVISOR"})}
           catch(e){const sec=nextRetrySeconds(scheduler,pkg,300),retryAt=isoAfter(sec);markPackageStateRetry(scheduler,pkg,String(e.message),retryAt);saveSchedulerState(schedulerFile,scheduler);writeRetry(sec,pkg,String(e.message));return summaryAndExit(ledger,"RETRY_WAIT",{packageId:pkg.id,reason:String(e.message)},30)}
           markPackageCompleted(scheduler,pkg,reviewedCommit,evidenceRefs);saveSchedulerState(schedulerFile,scheduler);clearStage();removeRunWorktree(repoRoot,workspace.dir,workspace.branch);ledger.event("scheduler","PACKAGE_COMPLETED",{commit:reviewedCommit,phaseIds},"INFO",{phase:leadPhase,milestoneId:pkg.id,actor:"SUPERVISOR"});processed++;break;
         }
