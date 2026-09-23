@@ -2,7 +2,7 @@
   "//TR": "V6 recovery replay için canonical bounded-scan ilerleme kaydıdır. Bu dosya final source closure veya target-machine PASS iddiası değildir.",
   "schemaVersion": "1.0.0",
   "status": "IN_PROGRESS",
-  "verifiedThroughParentCommit": "41772c12ec944cfd105dd1ff71ec4ce56c294c82",
+  "verifiedThroughParentCommit": "707c2aab617ea53d97bd172cc749c22fd6b9292c",
   "paste1": {
     "status": "COMPLETE_SOURCE",
     "checkpointCommit": "99105cf8c6a8a60954c8aa936a4d0ebd4253c15f"
@@ -95,7 +95,7 @@
     "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
     "FINAL_ZIP": "NOT_DONE"
   },
-  "nextScope": "FULL_DEPENDENCY_FREE_SOURCE_REGRESSION",
+  "nextScope": "DEPENDENCY_REVIEWED_LOCK",
   "postPasteSweeps": {
     "configRuntimeEnforcement": {
       "status": "COMPLETE_SOURCE",
@@ -104,6 +104,17 @@
       "openP0P1P2": 0,
       "productionSandboxTruth": "PLANNED_NOT_RUNTIME_VERIFIABLE_FAIL_CLOSED",
       "parallelExecutionTruth": "SERIAL_ONLY_MAX_PARALLEL_LANES_1"
+    },
+    "fullDependencyFreeSourceRegression": {
+      "status": "COMPLETE_SOURCE",
+      "canonicalStepsPass": 29,
+      "canonicalStepsPendingDependencies": 1,
+      "canonicalStepsFail": 0,
+      "sourceSyntaxFilesChecked": 107,
+      "jsonFilesParsed": 1608,
+      "secretSanity": "PASS",
+      "dependencySupplyChainGate": "BLOCKED_SOURCE_REVIEWED_PACKAGE_LOCK_REQUIRED",
+      "dependencyFreeOpenP0P1P2": 0
     }
   }
 }

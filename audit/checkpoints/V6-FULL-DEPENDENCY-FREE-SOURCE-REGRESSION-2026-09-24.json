@@ -1,0 +1,36 @@
+{
+  "//TR": "Full dependency-free source regression için bounded V6 checkpoint kaydıdır; dependency-aware veya target-machine PASS iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "scope": "FULL_DEPENDENCY_FREE_SOURCE_REGRESSION",
+  "verifiedThroughParentCommit": "707c2aab617ea53d97bd172cc749c22fd6b9292c",
+  "status": "COMPLETE_SOURCE",
+  "findings": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 1,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "fixes": [
+    "secret-sanity generic assignment scanner no longer treats process.env/randomBytes expressions as literal credentials; synthetic DLP/redaction fixtures no longer embed contiguous secret-like literals"
+  ],
+  "regression": {
+    "canonicalPass": 29,
+    "canonicalPendingDependencies": 1,
+    "canonicalFail": 0,
+    "sourceSyntax": "107/107 PASS",
+    "jsonParse": "1608/1608 PASS",
+    "secretSanity": "PASS",
+    "dependencySupplyChain": "BLOCKED_SOURCE_REVIEWED_PACKAGE_LOCK_REQUIRED",
+    "trustRoot": "EXPECTED_FAIL_CLOSED_STALE_PENDING_FINAL_RESEAL"
+  },
+  "truth": {
+    "dependencyFreeSourceOpenP0P1P2": 0,
+    "dependencyAwareValidation": "PENDING",
+    "sourceLevelClosure": false,
+    "targetMachinePhase0": "PENDING",
+    "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL",
+    "finalZip": "NOT_DONE"
+  },
+  "nextScope": "DEPENDENCY_REVIEWED_LOCK"
+}

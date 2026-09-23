@@ -23,9 +23,14 @@ Bu dosya `IMPLEMENTED`, `CERTIFIED`, installation-ready, runtime-ready veya prod
 - Paste 4B: `COMPLETE_SOURCE`.
 - Paste 4C: `COMPLETE_SOURCE`.
 - Paste 4D: `COMPLETE_SOURCE`.
-- Paste 4 overall: `COMPLETE_SOURCE`; repo-wide final enforcement sweep/regression henüz pending.
+- Paste 4 overall: `COMPLETE_SOURCE`.
+- Repo-wide config/runtime enforcement sweep: `COMPLETE_SOURCE`.
+- Full dependency-free source regression: `PASS` (29 canonical PASS, 1 dependency-required gate pending, 0 dependency-free FAIL).
+- Dependency-free source P0/P1/P2: `0`; dependency-aware blocker set henüz `NOT_RUN/UNKNOWN`.
 
 ## Environment/runtime gates still pending
+
+Sıradaki source gate: `DEPENDENCY_REVIEWED_LOCK`.
 
 - runtime schema conformance: `PENDING_DEPENDENCIES`
 - release supply-chain: `PENDING_REVIEWED_DEPENDENCIES_AND_SBOM`

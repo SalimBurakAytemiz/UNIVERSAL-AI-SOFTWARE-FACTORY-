@@ -8,7 +8,7 @@ const patterns=[
   ["ANTHROPIC_KEY",/\bsk-ant-[A-Za-z0-9_-]{16,}\b/],
   ["OPENAI_STYLE_KEY",/\bsk-[A-Za-z0-9_-]{20,}\b/],
   ["BEARER_TOKEN",/\bBearer\s+[A-Za-z0-9._~+\/=-]{20,}\b/],
-  ["GENERIC_SECRET_ASSIGNMENT",/\b(?:password|secret|api[_-]?key|token)\s*[:=]\s*["\']?[A-Za-z0-9._~+\/=-]{16,}/i]
+  ["GENERIC_SECRET_ASSIGNMENT",/\b(?:password|secret|api[_-]?key|token)\s*[:=]\s*["\'][A-Za-z0-9._~+\/=-]{16,}["\']/i]
 ];
 const ignorePrefixes=[".git/","node_modules/",".ai/runtime/",".ai/automation/"];
 const ignoreNames=new Set(["package-lock.json"]);

@@ -79,7 +79,7 @@ must(pack.name === "UNIVERSAL-AI-SOFTWARE-COMPANY-OS-V6-AUDIT-REMEDIATION-CANDID
 must(pack.status === "V6_AUDIT_REMEDIATION_IN_PROGRESS", "pack-status-not-in-progress");
 must(pack.sourceStaticClosure === false, "pack-source-closure-must-be-false");
 must(pack.mechanicalClosure === "IN_PROGRESS_NOT_FINAL", "pack-mechanical-closure-overclaim");
-must(["NOT_FINAL_PASTE4_IN_PROGRESS","PASTE4_SOURCE_COMPLETE_FINAL_SWEEP_PENDING"].includes(pack.staticClosureAudit), "pack-static-audit-overclaim");
+must(["NOT_FINAL_PASTE4_IN_PROGRESS","PASTE4_SOURCE_COMPLETE_FINAL_SWEEP_PENDING","DEPENDENCY_FREE_SOURCE_REGRESSION_COMPLETE_DEPENDENCY_GATES_PENDING"].includes(pack.staticClosureAudit), "pack-static-audit-overclaim");
 must(pack.targetMachinePhase0 === "PENDING", "pack-target-phase0-overclaim");
 must(pack.finalTrustRootSeal === "STALE_PENDING_FINAL_RESEAL", "pack-final-seal-overclaim");
 must(pack.finalZip === "NOT_DONE", "pack-final-zip-overclaim");

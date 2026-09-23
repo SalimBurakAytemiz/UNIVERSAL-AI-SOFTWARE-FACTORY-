@@ -5,10 +5,10 @@
   "state": "V6_AUDIT_REMEDIATION_IN_PROGRESS",
   "currentPhase": 0,
   "currentPhaseName": "Source audit/remediation before final seal and target-machine Phase0",
-  "currentMilestone": "V6-FINAL-ENFORCEMENT-SWEEP",
-  "currentMilestoneName": "Repo-wide config-to-runtime enforcement sweep and full source regression",
-  "lastCompletedMilestone": "V6-PASTE-4D",
-  "lastVerifiedCommit": "3a2f5bc2bec9bded368d777e3495b05093d50add",
+  "currentMilestone": "V6-DEPENDENCY-REVIEWED-LOCK",
+  "currentMilestoneName": "Reviewed source package-lock and dependency-aware validation gate",
+  "lastCompletedMilestone": "V6-FULL-DEPENDENCY-FREE-SOURCE-REGRESSION",
+  "lastVerifiedCommit": "707c2aab617ea53d97bd172cc749c22fd6b9292c",
   "knownBlockers": [
     "FINAL_TRUST_ROOT_RESEAL_PENDING",
     "FINAL_SHA256SUMS_PENDING",
@@ -16,7 +16,7 @@
     "DEPENDENCY_AWARE_VALIDATION_PENDING",
     "TARGET_MACHINE_PHASE0_PENDING"
   ],
-  "nextAction": "Run repo-wide config/runtime enforcement sweep, then full source regression; remediate remaining P0/P1/P2 before final reseal.",
+  "nextAction": "Generate/review the source package-lock in a Node 24/npm 11 network-capable environment, then run dependency-aware schema conformance, supply-chain, typecheck and Vitest gates.",
   "sourceOfTruth": "repository+git+audit/V6-FULL-SCAN-PROGRESS.json+CANONICAL-STATUS.md+PACK.json",
   "architectureDiscovery": "FROZEN_BY_EXTENSION_MODEL",
   "lastStaticClosureAudit": "NOT_FINAL",

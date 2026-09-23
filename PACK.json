@@ -36,7 +36,7 @@
   "roadmapReviewPackages": 34,
   "mechanicalClosure": "IN_PROGRESS_NOT_FINAL",
   "targetRuntimeValidation": "PENDING_WINDOWS_NODE24_NPM_CLAUDE_CODEX_ELECTRON",
-  "staticClosureAudit": "PASTE4_SOURCE_COMPLETE_FINAL_SWEEP_PENDING",
+  "staticClosureAudit": "DEPENDENCY_FREE_SOURCE_REGRESSION_COMPLETE_DEPENDENCY_GATES_PENDING",
   "targetPhase0Required": true,
   "sourceAudit": "audit/V6-FULL-SCAN-PROGRESS.json",
   "targetMachinePhase0": "PENDING",
@@ -62,5 +62,11 @@
     "paste4D": "COMPLETE_SOURCE",
     "paste4": "COMPLETE_SOURCE"
   },
-  "nextScope": "REPO_WIDE_CONFIG_RUNTIME_ENFORCEMENT_SWEEP"
+  "nextScope": "DEPENDENCY_REVIEWED_LOCK",
+  "dependencyFreeSourceRegression": {
+    "status": "PASS",
+    "canonicalStepsPass": 29,
+    "pendingDependencies": 1,
+    "fail": 0
+  }
 }

@@ -63,4 +63,4 @@ Mevcut audit worktree'sinde dependency-aware ve target-machine doğrulamaların�
 
 ## Current V6 audit route
 
-Paste 1, Paste 2, Paste 3 ve Paste 4A/4B/4C/4D source replay/audit segmentleri tamamlandı. Sıradaki kapı repo-geneli `config -> runtime enforcement` sweep ve full source regression'dır. Bu tamamlanmadan `SOURCE_LEVEL_CLOSURE` true yapılamaz.
+Paste 1, Paste 2, Paste 3 ve Paste 4A/4B/4C/4D source replay/audit segmentleri ile repo-geneli `config -> runtime enforcement` sweep ve full dependency-free source regression tamamlandı. Dependency-free source tarafında açık P0/P1/P2 yoktur; sıradaki kapı reviewed `package-lock.json` ve dependency-aware validation'dır. Bu kapılar tamamlanmadan `SOURCE_LEVEL_CLOSURE` true yapılamaz.
