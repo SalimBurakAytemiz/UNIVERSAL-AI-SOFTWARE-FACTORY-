@@ -16,6 +16,8 @@ const requiredFiles=[
  "automation/lib/preflight-policy.mjs",
  "automation/lib/release-supply-chain.mjs",
  "config/preflight-policy.json",
+ "config/evidence-retention-policy.json",
+ "scripts/validate-runtime-resilience.mjs",
  "scripts/validate-paste2h-runtime-release.mjs",
  "scripts/runtime-schema-conformance-selftest.mjs",
  "scripts/validate-release-supply-chain.mjs",
@@ -76,6 +78,14 @@ if(reviewAttestationSchema.properties?.reviewerProvenance?.additionalProperties!
 for(const x of ["runEvent","runManifest","reviewAttestation","installReport","preflight"])if(!runtimeContracts.includes(x))errors.push(`runtime-contract-version-missing:${x}`);
 for(const x of ["SBOM_LOCK_DIGEST_MISMATCH","RELEASE_COMPONENT_LICENSE_MISSING","RELEASE_COMPONENT_PROVENANCE_MISSING","THIRD_PARTY_NOTICE_GOVERNANCE_MARKER_MISSING"])if(!releaseSupply.includes(x))errors.push(`release-supply-chain-gate-missing:${x}`);if(!thirdParty.includes("GENERATED_DEPENDENCY_NOTICES_REQUIRED"))errors.push("third-party-generated-notice-policy-missing");
 if(!validation.steps?.some(x=>x.id==="runtime-release-contracts"&&x.command?.includes("scripts/validate-paste2h-runtime-release.mjs")))errors.push("paste2h-validation-not-wired");if(!validation.steps?.some(x=>x.id==="release-supply-chain"&&x.requiresDependencies===true&&x.command?.includes("scripts/validate-release-supply-chain.mjs")))errors.push("release-supply-chain-validation-not-wired");
+const commandRunnerSource=text("automation/lib/command-runner.mjs"),schedulerSource=text("automation/lib/scheduler.mjs"),retentionPolicy=read("config/evidence-retention-policy.json");
+for(const x of ["PROCESS_GRACEFUL_STOP_REQUESTED","PROCESS_HARD_KILL_FALLBACK","taskkill",'"/F"'])if(!commandRunnerSource.includes(x))errors.push(`global-stop-graceful-fallback-missing:${x}`);
+if(!Number.isInteger(cfg.globalStop?.gracefulTimeoutMs)||cfg.globalStop.gracefulTimeoutMs<=0)errors.push("global-stop-grace-timeout-invalid");
+for(const x of ["SCHEDULER_STATE_UNRECOVERABLE","validateSchedulerState",".prev","restoreRecoveredMain"])if(!schedulerSource.includes(x))errors.push(`scheduler-recovery-missing:${x}`);
+if(retentionPolicy.deleteCriticalAfterExport!==false||retentionPolicy.autoExportCritical!==true||!(retentionPolicy.criticalSummaryStatuses??[]).includes("COMPLETE"))errors.push("evidence-retention-policy-incomplete");
+for(const x of ["exportRunEvidence","requireSignedSummaryForAutomaticHold","manualHoldMarker"])if(!runLedger.includes(x))errors.push(`evidence-retention-runtime-missing:${x}`);
+if(cfg.evidence?.retentionPolicy!=="config/evidence-retention-policy.json"||cfg.evidence?.exportRoot!==retentionPolicy.exportRoot)errors.push("evidence-retention-runtime-not-wired");
+if(!validation.steps?.some(x=>x.id==="runtime-resilience"&&x.command?.includes("scripts/validate-runtime-resilience.mjs")))errors.push("runtime-resilience-validation-not-wired");
 
 const runtimeSchemaSelftest=text("scripts/runtime-schema-conformance-selftest.mjs");if(!runtimeSchemaSelftest.includes('Ajv2020 from "ajv/dist/2020.js"')||!runtimeSchemaSelftest.includes("RUNTIME_SCHEMA_CONFORMANCE_SELFTEST: PASS")||!validation.steps?.some(x=>x.id==="runtime-schema-conformance"&&x.requiresDependencies===true))errors.push("runtime-schema-ajv2020-conformance-not-wired");if(!text("automation/factory-supervisor.mjs").includes('Ajv2020 from "ajv/dist/2020.js"'))errors.push("supervisor-not-using-ajv2020");
 if(errors.length){console.error(errors.join("\n"));process.exit(1)}console.log(`MECHANICAL_CLOSURE_VALIDATION: PASS files=${requiredFiles.length} reviewCycles=${cfg.maxReviewCycles} maxMilestonesPerRun=${cfg.maxMilestonesPerRun} technologiesMapped=${profiles.filter(x=>x.technicalAgent).length}`);

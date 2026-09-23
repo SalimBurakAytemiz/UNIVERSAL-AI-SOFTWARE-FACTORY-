@@ -53,6 +53,8 @@ const lockFile=path.join(runtime,"supervisor.lock");
 const evidenceLedgerRoot=path.join(runtime,"evidence-ledger","packages");
 const evidencePrivateKey=path.join(runtime,"keys","evidence-ed25519-private.pem");
 const evidencePublicKey=path.join(runtime,"keys","evidence-ed25519-public.pem");
+const evidenceRetentionPolicy=JSON.parse(fs.readFileSync(path.join(repoRoot,cfg.evidence.retentionPolicy),"utf8"));
+const evidenceExportRoot=path.join(repoRoot,cfg.evidence.exportRoot);
 const providerProvenanceFile=path.join(runtime,"PROVIDER_PROVENANCE.json");
 const remoteProtectionFile=path.join(runtime,"REMOTE_PROTECTION.json");
 const acceptedDebtFile=path.join(repoRoot,cfg.review.acceptedDebtLedger);
@@ -137,7 +139,7 @@ async function executeModel({kind,providerCfg,prompt,worktree,ledger,leadPhase,m
   const {promptBytes,promptApproxTokens}=assertPromptBudget(prompt,cfg.budgets??{});
   const logFile=ledger.logPath(`${attemptName}.log`);const gitBefore=kind==="builder"?captureGitMetadata(worktree):null;
   const r=await runCommand({cmd:providerCfg.command==="node"?process.execPath:providerCfg.command,args:providerCfg.args,cwd:worktree,input:prompt,timeoutMs:cfg.timeoutMs,
-    env:{...buildChildEnv(milestone,providerCfg),UASCO_CONTROL_ROOT:repoRoot},logFile,maxLogBytes:cfg.logging.maxLogBytesPerFile,globalStopFile,
+    env:{...buildChildEnv(milestone,providerCfg),UASCO_CONTROL_ROOT:repoRoot},logFile,maxLogBytes:cfg.logging.maxLogBytesPerFile,globalStopFile,globalStopGraceMs:cfg.globalStop.gracefulTimeoutMs,
     onEvent:(event,details)=>ledger.event(kind,event,details,"INFO",{phase:leadPhase,milestoneId,actor:kind.toUpperCase()})});
   if(kind==="builder")assertGitMetadataUnchanged(gitBefore,captureGitMetadata(worktree));
   const {outputBytes,outputApproxTokens}=assertOutputBudget(r.stdout,r.stderr,cfg.budgets??{}),approxTokens=promptApproxTokens+outputApproxTokens;
@@ -175,7 +177,7 @@ async function runValidationWithFixes({pkg,milestone,worktree,ledger,scheduler,c
   for(let cycle=1;cycle<=cfg.maxBuilderValidationCycles;cycle++){
     assertNotStopped(globalStopFile);saveStage({...checkpointState,stage:"VALIDATE",validationCycle:cycle});
     const r=await runCommand({cmd:cfg.validationCommand[0],args:cfg.validationCommand.slice(1),cwd:worktree,timeoutMs:cfg.timeoutMs,
-      env:{...buildChildEnv(milestone,{provider:"DETERMINISTIC"}),UASCO_CONTROL_ROOT:repoRoot},logFile:ledger.logPath(`${labelPrefix}-validation-${cycle}.log`),maxLogBytes:cfg.logging.maxLogBytesPerFile,globalStopFile,
+      env:{...buildChildEnv(milestone,{provider:"DETERMINISTIC"}),UASCO_CONTROL_ROOT:repoRoot},logFile:ledger.logPath(`${labelPrefix}-validation-${cycle}.log`),maxLogBytes:cfg.logging.maxLogBytesPerFile,globalStopFile,globalStopGraceMs:cfg.globalStop.gracefulTimeoutMs,
       onEvent:(event,details)=>ledger.event("validation",event,details,"INFO",{phase:leadPhase,milestoneId:pkg.id,actor:"VALIDATOR"})});
     const report=currentValidationReport(worktree);ledger.writeJson(`evidence/${labelPrefix}-validation-${cycle}.json`,report??{status:"MISSING_REPORT"});
     if(r.status===0&&report?.status==="PASS") return {ok:true,report,cycle};
@@ -205,7 +207,7 @@ async function main(){
 
   const runId=createRunId();let releaseLock;
   try{releaseLock=acquireProcessLock(lockFile,runId)}catch(e){console.error(String(e.message??e));return 40}
-  cleanupOldRuns(runsRoot,cfg.logging.retentionDays,cfg.logging.maxRuns);
+  cleanupOldRuns(runsRoot,cfg.logging.retentionDays,cfg.logging.maxRuns,{policy:evidenceRetentionPolicy,exportRoot:evidenceExportRoot,publicKeyFile:evidencePublicKey});
   const ledger=new RunLedger(runsRoot,runId,{maxLogBytes:cfg.logging.maxLogBytesPerFile,signingKeyFile:evidencePrivateKey});
   let processed=0;
   try{

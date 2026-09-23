@@ -103,7 +103,8 @@
   },
   "globalStop": {
     "path": ".ai/runtime/GLOBAL_STOP.json",
-    "checkDuringLongRunningCommands": true
+    "checkDuringLongRunningCommands": true,
+    "gracefulTimeoutMs": 5000
   },
   "maxBuilderValidationCycles": 3,
   "budgets": {
@@ -125,6 +126,8 @@
   },
   "evidence": {
     "signingRequired": true,
-    "eventHashChain": true
+    "eventHashChain": true,
+    "retentionPolicy": "config/evidence-retention-policy.json",
+    "exportRoot": ".ai/runtime/evidence-exports"
   }
 }

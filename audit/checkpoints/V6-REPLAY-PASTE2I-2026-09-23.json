@@ -1,0 +1,43 @@
+{
+  "//TR": "Bu checkpoint Paste 2I Global Stop graceful fallback, scheduler .prev recovery ve release-critical evidence retention/export hardening turunun exact durumunu kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_REPLAY_PASTE2I",
+  "date": "2026-09-23",
+  "baseCommit": "a142b475927130302fa61a7c30ea11c013730de4",
+  "status": "COMPLETE",
+  "scope": [
+    "Global Stop graceful termination with bounded hard-kill fallback",
+    "scheduler current-state corruption recovery from validated .prev",
+    "double-corruption fail-closed behavior",
+    "signed release-critical evidence retention hold",
+    "evidence export before retention pruning",
+    "canonical runtime-resilience validation wiring"
+  ],
+  "findings": {"P0": 0, "P1": 3, "P2": 1, "P3": 0},
+  "fixed": {"P0": 0, "P1": 3, "P2": 1, "P3": 0},
+  "openInScope": {"P0": 0, "P1": 0, "P2": 0, "P3": 0},
+  "regression": [
+    "RUNTIME_RESILIENCE_VALIDATION PASS 21/21",
+    "MECHANICAL_CLOSURE PASS",
+    "V6_PASTE2H_SELFTEST PASS 24/24",
+    "RUNTIME_CONTRACT_VALIDATION PASS 15/15",
+    "PASTE2F->2A regression PASS",
+    "FOUNDATION_F->A regression PASS",
+    "MECHANICAL_KERNEL PASS",
+    "BOOTSTRAP_KERNEL PASS",
+    "SUPERVISOR_STATE PASS",
+    "TR_VALIDATION PASS",
+    "SOURCE_SYNTAX PASS",
+    "git diff --check PASS"
+  ],
+  "pendingEnvironmentGates": [
+    "runtime-schema-conformance: PENDING_DEPENDENCIES",
+    "release-supply-chain: PENDING_REVIEWED_DEPENDENCIES_AND_SBOM"
+  ],
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL"
+  },
+  "nextScope": "PASTE_2_FINAL_CLOSURE_CHECK"
+}

@@ -1,0 +1,12 @@
+{
+  "//TR": "Bu protected policy retention/pruning sırasında closure ve release-critical kanıtların kaybolmasını önler; kritik run'lar export edilir ve otomatik silinmez.",
+  "schemaVersion": "1.0.0",
+  "criticalSummaryStatuses": [
+    "COMPLETE"
+  ],
+  "manualHoldMarker": ".release-evidence-hold.json",
+  "autoExportCritical": true,
+  "deleteCriticalAfterExport": false,
+  "exportRoot": ".ai/runtime/evidence-exports",
+  "requireSignedSummaryForAutomaticHold": true
+}
