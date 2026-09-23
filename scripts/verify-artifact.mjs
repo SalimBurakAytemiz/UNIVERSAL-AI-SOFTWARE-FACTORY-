@@ -17,7 +17,8 @@ for(const line of lines){
   if(actual!==expected)failures.push({path:rel,reason:"HASH_MISMATCH",expected,actual});
 }
 function walk(dir,out=[]){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,e.name);const rel=path.relative(".",p).replaceAll("\\","/");if(rel===".git"||rel.startsWith(".git/")||rel==="node_modules"||rel.startsWith("node_modules/")||rel===".ai/runtime"||rel.startsWith(".ai/runtime/")||rel===".ai/automation"||rel.startsWith(".ai/automation/"))continue;if(e.isDirectory())walk(p,out);else out.push(rel)}return out}
-const actualSource=new Set(walk(".").filter(x=>x!==manifestFile&&x!=="package-lock.json"));
+const actualSource=new Set(walk(".").filter(x=>x!==manifestFile));
+if(!expectedFiles.has("package-lock.json"))failures.push({path:"package-lock.json",reason:"LOCKFILE_NOT_IN_ARTIFACT_MANIFEST"});
 for(const rel of actualSource) if(!expectedFiles.has(rel)) failures.push({path:rel,reason:"UNLISTED_SOURCE_FILE"});
 for(const rel of expectedFiles) if(!actualSource.has(rel)) failures.push({path:rel,reason:"MANIFEST_FILE_NOT_IN_SOURCE_SET"});
 fs.mkdirSync(".ai/runtime",{recursive:true});

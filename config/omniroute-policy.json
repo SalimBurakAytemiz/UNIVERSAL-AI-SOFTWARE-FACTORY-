@@ -11,5 +11,12 @@
   ],
   "endpoint": "http://127.0.0.1:20128/v1",
   "installScope": "global",
-  "autoApproveWhenIdentityAndLicenseMatch": true
+  "autoApproveWhenIdentityAndLicenseMatch": true,
+  "allowedGatewayHosts": [
+    "127.0.0.1",
+    "localhost",
+    "::1"
+  ],
+  "redirectPolicy": "ERROR",
+  "requestTimeoutMs": 10000
 }

@@ -1,0 +1,30 @@
+{
+  "//TR": "V6 fiziksel replay Paste 2D checkpoint; OmniRoute/provider/evidence/artifact authenticity remediation durumunu kaydeder.",
+  "checkpoint": "V6_REPLAY_PASTE2D_COMPLETE",
+  "date": "2026-09-23",
+  "baseCommit": "665339374fb465bc81dcdc2885d539bf4f63df1b",
+  "scope": [
+    "OmniRoute loopback/approved-gateway credential boundary",
+    "provider broker minimal environment isolation",
+    "provider smoke through production brokers",
+    "launcher and package provenance",
+    "evidence signing key loss/recovery fail-closed lifecycle",
+    "Windows evidence-key ACL final readback",
+    "signed run artifact digest inventory",
+    "package-lock artifact authenticity inclusion"
+  ],
+  "findings": {"P0": 1, "P1": 4, "P2": 3, "P3": 0, "openP0P1P2": 0},
+  "verification": {
+    "v6Paste2dSelftest": "PASS_23_OF_23",
+    "trValidation": "PASS",
+    "mechanicalClosure": "PASS",
+    "paste2cTo2aRegression": "PASS",
+    "foundationFtoARegression": "PASS",
+    "kernelAndStateRegression": "PASS",
+    "omnirouteNodeExperimentalTsSyntaxParse": "PASS_NOT_TSC",
+    "providerLiveSmoke": "NOT_RUN_PROVIDER_CLIS_UNAVAILABLE_IN_AUDIT_ENVIRONMENT",
+    "dependencyAwareTypecheckAndVitest": "NOT_RUN_DEPENDENCY_LOCK_NOT_ESTABLISHED"
+  },
+  "truth": {"sourceLevelClosure": false, "targetMachinePhase0": "PENDING", "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL"},
+  "nextScope": "V6_REPLAY_PASTE2E"
+}
