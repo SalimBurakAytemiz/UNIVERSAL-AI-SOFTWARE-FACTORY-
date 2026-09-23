@@ -39,13 +39,17 @@
   ],
   "requireExactDirectVersions": true,
   "forbidDependencyProtocols": [
+    "npm:",
     "git+",
     "git:",
     "http:",
     "https:",
     "file:",
     "link:",
-    "workspace:*"
+    "workspace:",
+    "patch:",
+    "portal:",
+    "catalog:"
   ],
   "dependencyChangesRequireExplicitMilestone": true,
   "dependencySections": [

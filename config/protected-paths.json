@@ -34,7 +34,6 @@
     "governance/accepted-debt.json",
     "governance/known-limitations.json",
     "governance/waivers.json",
-    "package.json",
     "prompts/AUTO-BUILDER.md",
     "prompts/AUTO-REMEDIATION.md",
     "prompts/AUTO-REVIEW.md",

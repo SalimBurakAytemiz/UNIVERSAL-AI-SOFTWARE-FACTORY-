@@ -1,0 +1,29 @@
+{
+  "//TR": "Bu checkpoint trust-root filename-prefix/manifest coverage ve package field-level governance replay turunu kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_REPLAY_FOUNDATION_D",
+  "status": "COMPLETE",
+  "parentCommit": "bc2e51c73785b2406c6fcb7e4f2eb719be595f94",
+  "scope": [
+    "protected filename-prefix bypass closure",
+    "expected protected file manifest coverage fail-closed",
+    "package.json whole-file protection removal in favor of field-level policy",
+    "all direct dependency sections",
+    "exact semver enforcement",
+    "npm/git/http/file/link/workspace/patch/portal/catalog protocol rejection",
+    "trust manifest explicit STALE_PENDING_FINAL_RESEAL state"
+  ],
+  "findings": {"P0": 0, "P1": 3, "P2": 2, "P3": 0, "openP0P1P2InScope": 0},
+  "validation": [
+    "V6_FOUNDATION_D_SELFTEST: PASS 9/9",
+    "V6_FOUNDATION_C_SELFTEST: PASS 8/8",
+    "V6_FOUNDATION_B_SELFTEST: PASS 5/5",
+    "V6_FOUNDATION_A_SELFTEST: PASS 10/10",
+    "MECHANICAL_KERNEL_SELFTEST: PASS",
+    "BOOTSTRAP_KERNEL_SELFTEST: PASS",
+    "MECHANICAL_CLOSURE_VALIDATION: PASS",
+    "TRUST_ROOT_VERIFY: EXPECTED FAIL-CLOSED UNTIL FINAL RESEAL"
+  ],
+  "closure": {"sourceLevelClosure": false, "trustRootSeal": "STALE_PENDING_FINAL_RESEAL", "targetMachinePhase0": "PENDING", "paste1Replay": "IN_PROGRESS"},
+  "nextScope": "V6_REPLAY_FOUNDATION_E_GIT_WORKTREE_ENVIRONMENT_ISOLATION"
+}

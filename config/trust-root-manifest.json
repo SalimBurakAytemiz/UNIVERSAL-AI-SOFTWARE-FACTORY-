@@ -200,10 +200,6 @@
       "sha256": "5d8a6802cf6d98aa5419f59022030ad6c269a1bf78604db02873a1073fae25c6"
     },
     {
-      "path": "package.json",
-      "sha256": "cdc5961c73a6fb0be4a8e15a78862f43d5b56d1bdf992860acae47acbc31f3eb"
-    },
-    {
       "path": "prompts/AUTO-BUILDER.md",
       "sha256": "a04608feddbce3942c7a449802da7574dcd63fae385dd34cb4aa404f6c1731d6"
     },
@@ -1003,5 +999,6 @@
       "path": "tsconfig.json",
       "sha256": "d3a774755b1ac22855ff033eafa43684d9c7ba20d17f28833ad4412aa38acdba"
     }
-  ]
+  ],
+  "sealStatus": "STALE_PENDING_FINAL_RESEAL"
 }
