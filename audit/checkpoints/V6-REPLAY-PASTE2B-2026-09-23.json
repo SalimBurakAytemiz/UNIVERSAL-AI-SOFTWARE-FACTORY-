@@ -1,0 +1,33 @@
+{
+  "//TR": "V6 fiziksel replay Paste 2B checkpoint; certification/action-authority/numeric/spend source-level remediation durumunu kaydeder.",
+  "checkpoint": "V6_REPLAY_PASTE2B_COMPLETE",
+  "date": "2026-09-23",
+  "baseCommit": "f6639aad23e63cb9ed39a20db6a04b46dd861cbd",
+  "scope": [
+    "canonical certification lifecycle vocabulary",
+    "Action Gateway bound approval attestation",
+    "resource lease/registry numeric and identity validation",
+    "technology decision numeric and identity validation",
+    "model router numeric and identity validation",
+    "negative/non-finite spend fail-closed"
+  ],
+  "findings": {"P0": 1, "P1": 2, "P2": 3, "P3": 0, "openP0P1P2": 0},
+  "verification": {
+    "v6Paste2bSelftest": "PASS_21_OF_21",
+    "schemaCatalog": "PASS_152_OF_152",
+    "schemaStrictness": "PASS",
+    "mechanicalClosure": "PASS",
+    "paste2aRegression": "PASS_15_OF_15",
+    "foundationFtoARegression": "PASS",
+    "kernelAndStateRegression": "PASS",
+    "nodeExperimentalTsSyntaxParse": "PASS_NOT_TSC",
+    "dependencyAwareTypecheck": "NOT_RUN_DEPENDENCY_LOCK_NOT_ESTABLISHED",
+    "vitest": "NOT_RUN_DEPENDENCY_LOCK_NOT_ESTABLISHED"
+  },
+  "truth": {
+    "sourceLevelClosure": false,
+    "targetMachinePhase0": "PENDING",
+    "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL"
+  },
+  "nextScope": "V6_REPLAY_PASTE2C"
+}

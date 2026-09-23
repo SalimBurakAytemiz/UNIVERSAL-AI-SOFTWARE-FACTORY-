@@ -1,7 +1,7 @@
 // //TR: Bu dosya agent/skill/technology bilgisinin REGISTERED'dan CERTIFIED'a kanıtsız atlamasını engelleyen certification lifecycle ve high-risk readiness kontrollerini sağlar.
-export type CertificationState =
-  | "REGISTERED" | "TRAINING" | "EVALUATING" | "CERTIFIED"
-  | "ACTIVE" | "STALE" | "RECERTIFICATION" | "REVOKED" | "RETIRED";
+import {CERTIFICATION_STATES,type CertificationState} from "./types.js";
+export {CERTIFICATION_STATES};
+export type {CertificationState};
 
 const transitions: Record<CertificationState, CertificationState[]> = {
   REGISTERED:["TRAINING","EVALUATING","RETIRED"],

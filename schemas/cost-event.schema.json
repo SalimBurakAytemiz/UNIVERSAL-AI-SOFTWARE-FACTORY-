@@ -53,7 +53,8 @@
       }
     },
     "amount": {
-      "type": "number"
+      "type": "number",
+      "minimum": 0
     },
     "currency": {
       "type": "string"

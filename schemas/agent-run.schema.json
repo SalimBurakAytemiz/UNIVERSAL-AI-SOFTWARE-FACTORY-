@@ -52,7 +52,17 @@
       }
     },
     "certificationState": {
-      "type": "string"
+      "enum": [
+        "REGISTERED",
+        "TRAINING",
+        "EVALUATING",
+        "CERTIFIED",
+        "ACTIVE",
+        "STALE",
+        "RECERTIFICATION",
+        "REVOKED",
+        "RETIRED"
+      ]
     },
     "agentId": {
       "type": "string",

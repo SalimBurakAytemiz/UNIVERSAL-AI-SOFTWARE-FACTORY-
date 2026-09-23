@@ -1,4 +1,5 @@
 // //TR: Bu dosya dış dünyada yan etki oluşturan agent işlemlerini sınıflandıran Action Gateway request/result ve risk sınıflarını tanımlar.
+import type {ApprovalAttestation} from "../authority/approval.js";
 export type ActionClass =
   | "READ_ONLY" | "MUTATION" | "EXTERNAL_COMMUNICATION" | "SPEND"
   | "PRODUCTION_CHANGE" | "DESTRUCTIVE" | "IRREVERSIBLE" | "LEGAL_FINANCIAL_AUTHORITY";
@@ -23,5 +24,6 @@ export interface ActionPolicyContext {
   dataPolicyAllowed: boolean;
   budgetAllowed: boolean;
   adapterCertified: boolean;
-  approvalValid: boolean;
+  approval?: ApprovalAttestation;
+  now?: Date;
 }

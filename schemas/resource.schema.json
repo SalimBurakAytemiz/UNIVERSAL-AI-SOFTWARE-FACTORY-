@@ -10,10 +10,12 @@
   ],
   "properties": {
     "id": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "kind": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "health": {
       "enum": [
@@ -29,8 +31,10 @@
     "capabilities": {
       "type": "array",
       "items": {
-        "type": "string"
-      }
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
     },
     "lease": {
       "type": [
