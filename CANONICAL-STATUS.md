@@ -1,38 +1,37 @@
-<!-- //TR: Bu dosya V3 canonical starter'ın aktif source-of-truth sırasını, source-level audit durumunu ve target-machine Phase0 sınırını açıkça sabitler. -->
-# Canonical Status — V3
+<!-- //TR: Bu dosya recovery baseline üzerinde yeniden kurulan V6 canonical candidate'ın gerçek kapanış durumunu; final seal ve target-machine doğrulamasından ayrı olarak sabitler. -->
+# Canonical Status — V6 Audit/Remediation Candidate
 
-## Artifact
+## Current authority
 
-`UNIVERSAL-AI-SOFTWARE-COMPANY-OS-MECHANICALLY-CLOSED-V3-CANONICAL-STARTER`
+Bu çalışma ağacı doğrulanmış V4 baseline üzerinde `V6-FIX-REPLAY-CHECKLIST.md` maddelerinin fiziksel olarak yeniden uygulanıp regression ile kanıtlandığı **V6 construction/control repository candidate** durumundadır.
 
-- 363 stable agent
-- 425 V2 engineering/business skill
-- 415 seed technology profile
-- 6114 agent↔technology depth assignment
-- 194 tool/provider adapter
-- 152 canonical schema
-- 149 roadmap phase contract
-- 22 physical domain-pack seed profile
-- 34 coherent review package
+Bu dosya `IMPLEMENTED`, `CERTIFIED`, runtime-ready veya production-ready anlamına gelmez. Canonical ayrım değişmez:
 
-## Canonical read order
+`SPECIFICATION != IMPLEMENTATION != TEST != EVIDENCE != RUNTIME_VERIFICATION != PRODUCTION_VERIFICATION`
 
-1. `ARCHITECTURE-CONSTITUTION.md`
-2. `CANONICAL-STATUS.md`
-3. `ARCHITECTURE-FREEZE.md`
-4. `FULL-REPO-CONSTRUCTION-CONTRACT.md`
-5. `docs/architecture/AGENT-COMPETENCY-MODEL-V2.md`
-6. `docs/architecture/TECHNOLOGY-KNOWLEDGE-GRAPH.md`
-7. `CODEX.md`
-8. `CLAUDE.md`
-9. `ROADMAP.md`
-10. `audit/V3-RE-AUDIT-RESULTS.md`
-11. `.ai/MASTER_STATE.json`
+`REGISTERED != KNOWN != SKILLED != CERTIFIED != CURRENT != AUTHORIZED != VERIFIED`
 
-## Truth
+## Current source facts
 
-Source-level mechanical/static audit bu artifact üzerinde yeniden çalıştırılır. Target Windows runtime doğrulaması bu ortamda sahte PASS yapılamaz.
+- 149 phase contract dosyası vardır: Phase 0 + Phase 1..148.
+- 34 coherent review package Phase 1..148'i kapsar; Phase 0 ayrı kabul kapısıdır.
+- Paste 1 physical replay: `COMPLETE_REGRESSION_VERIFIED`.
+- Paste 2 physical replay: `PENDING`.
+- Paste 3 physical replay: `PENDING`.
+- Paste 4 continuation/deep audit: `PENDING_AFTER_REPLAY`.
 
-`REGISTERED != KNOWN != SKILLED != CERTIFIED != CURRENT != AUTHORIZED != VERIFIED`.
+## Closure truth
 
-Autonomous build yalnız target-machine `PHASE0_ACCEPTANCE.json` kabul kapısından sonra başlar.
+`SOURCE_LEVEL_CLOSURE = FALSE`
+
+`FINAL_TRUST_ROOT_SEAL = STALE_PENDING_FINAL_RESEAL`
+
+`FINAL_SHA256SUMS = NOT_DONE`
+
+`FINAL_RELEASE_AUTHENTICITY = NOT_DONE`
+
+`FINAL_ZIP = NOT_DONE`
+
+`TARGET_MACHINE_PHASE0 = PENDING`
+
+Target-machine Node/npm/install/typecheck/Vitest/Windows/desktop/runtime sonuçları gerçek target evidence olmadan PASS sayılamaz.

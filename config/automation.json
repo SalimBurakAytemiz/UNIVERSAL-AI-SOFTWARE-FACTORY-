@@ -88,7 +88,11 @@
     "phase0AcceptancePath": ".ai/runtime/PHASE0_ACCEPTANCE.json",
     "reviewPackages": "roadmap/review-packages.json",
     "executionUnit": "COHERENT_REVIEW_PACKAGE",
-    "adaptivePackageSplitRequired": true
+    "adaptivePackageSplit": {
+      "status": "PLANNED_NOT_RUNTIME_ENFORCED",
+      "requiredForCurrentConstruction": false,
+      "note": "Current canonical scheduler executes fixed coherent review packages; adaptive splitting is a later optimization and must not be treated as enforced."
+    }
   },
   "trustRoot": {
     "manifest": "config/trust-root-manifest.json",
