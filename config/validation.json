@@ -115,6 +115,13 @@
       "parallelGroup": "static-4"
     },
     {
+      "id": "runtime-contracts",
+      "command": [
+        "node",
+        "scripts/validate-runtime-contracts.mjs"
+      ]
+    },
+    {
       "id": "mechanical-selftest",
       "command": [
         "node",

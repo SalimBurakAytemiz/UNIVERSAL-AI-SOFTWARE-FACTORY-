@@ -30,6 +30,7 @@ import {authorizeAutomationAction,assertAutomationAction} from "./lib/action-bro
 import {sensitiveTypes} from "./lib/redaction.mjs";
 import {signEvidence,verifyEvidence} from "./lib/evidence-signing.mjs";
 import {assertFrozenContract,verifyCleanReadyResume} from "./lib/resume-trust.mjs";
+import {verifyPhase0Acceptance} from "./lib/phase0-contract.mjs";
 import {loadGraph,loadSchedulerState,saveSchedulerState,promoteDueRetries,allComplete} from "./lib/scheduler.mjs";
 import {
   loadReviewPackages,runnablePackages,packagePendingPhases,packageStatus,
@@ -121,7 +122,7 @@ function allPackagePhasesCompleted(pkg,state){return packageStatus(pkg,state)===
 
 const ajv=new Ajv({allErrors:true,strict:false});addFormats(ajv);
 const findingSchema=readJson(path.join(repoRoot,"schemas/review-finding.schema.json"));ajv.addSchema(findingSchema);const milestoneSchema=readJson(path.join(repoRoot,"schemas/milestone-contract.schema.json"));ajv.addSchema(milestoneSchema);
-const reviewSchema=readJson(path.join(repoRoot,"schemas/independent-review-result.schema.json"));const validateReviewSchema=ajv.compile(reviewSchema);const reviewBundleSchema=readJson(path.join(repoRoot,"schemas/review-bundle.schema.json"));const validateReviewBundleSchema=ajv.compile(reviewBundleSchema);
+const reviewSchema=readJson(path.join(repoRoot,"schemas/independent-review-result.schema.json"));const validateReviewSchema=ajv.compile(reviewSchema);const reviewBundleSchema=readJson(path.join(repoRoot,"schemas/review-bundle.schema.json"));const validateReviewBundleSchema=ajv.compile(reviewBundleSchema);const phase0Schema=readJson(path.join(repoRoot,"schemas/phase0-acceptance.schema.json"));const validatePhase0Schema=ajv.compile(phase0Schema);
 function parseGovernedReview(stdout,expected){
   const parsed=parseStrictReviewJson(stdout);
   if(!validateReviewSchema(parsed)) throw new Error(`REVIEW_SCHEMA_VALIDATION_FAILED: ${ajv.errorsText(validateReviewSchema.errors,{separator:" | "})}`);
@@ -195,7 +196,7 @@ function writeDurableAttestation(pkg,reviewedCommit,attestation){
 
 async function main(){
   if(cfg.mode!=="AUTOMATIC") throw new Error(`AUTOMATION_MODE_NOT_AUTOMATIC: ${cfg.mode}`);
-  const phase0=readJsonIfExists(path.join(runtime,"PHASE0_ACCEPTANCE.json"),null);if(!phase0||!["CLEAN","CLEAN_LOCAL_ONLY"].includes(phase0.final)) throw new Error("PHASE0_NOT_CLEAN");if(readJsonIfExists(path.join(runtime,"BUILDER_BOUNDARY_SMOKE.json"),null)?.status!=="PASS")throw new Error("BUILDER_BOUNDARY_NOT_VERIFIED");if(!fs.existsSync(evidencePrivateKey))throw new Error("EVIDENCE_SIGNING_NOT_READY");providerProvenance();
+  const phase0=readJsonIfExists(path.join(runtime,"PHASE0_ACCEPTANCE.json"),null);if(!phase0||!["CLEAN","CLEAN_LOCAL_ONLY"].includes(phase0.final)) throw new Error("PHASE0_NOT_CLEAN");if(!validatePhase0Schema(phase0))throw new Error(`PHASE0_SCHEMA_INVALID: ${ajv.errorsText(validatePhase0Schema.errors,{separator:" | "})}`);const phase0Verification=verifyPhase0Acceptance({repoRoot,report:phase0,publicKeyFile:evidencePublicKey});if(!phase0Verification.ok)throw new Error(`PHASE0_BINDING_INVALID: ${phase0Verification.errors.join(",")}`);if(readJsonIfExists(path.join(runtime,"BUILDER_BOUNDARY_SMOKE.json"),null)?.status!=="PASS")throw new Error("BUILDER_BOUNDARY_NOT_VERIFIED");if(!fs.existsSync(evidencePrivateKey))throw new Error("EVIDENCE_SIGNING_NOT_READY");providerProvenance();
   ensureGitRepository(repoRoot);assertClean(repoRoot);assertNotStopped(globalStopFile);
   const tr=verifyTrustRoot(repoRoot);if(!tr.ok)throw new Error(`TRUST_ROOT_MISMATCH: ${JSON.stringify(tr.mismatches)}`);
   if(!fs.existsSync(schedulerFile))throw new Error("SCHEDULER_STATE_MISSING; rerun phase0 acceptance");

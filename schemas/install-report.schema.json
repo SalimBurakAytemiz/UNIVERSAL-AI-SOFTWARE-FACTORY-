@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://uasco.local/schemas/install-report.schema.json",
-  "$comment": "//TR: Bu schema one-click installer alt rapor correlation özetinin kimlik, component status ve Phase0 final alanlarını doğrular.",
+  "$comment": "//TR: Bu schema one-click installer özetini exact installId, component status+SHA digestleri ve Phase0 binding kimliğiyle doğrular.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,11 +10,13 @@
     "installId",
     "components",
     "phase0Final",
+    "phase0SourceCommit",
+    "phase0SealSignature",
     "digest"
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.1.0"
+      "const": "1.2.0"
     },
     "generatedAt": {
       "type": "string",
@@ -33,7 +35,8 @@
         "required": [
           "present",
           "file",
-          "status"
+          "status",
+          "sha256"
         ],
         "properties": {
           "present": {
@@ -46,6 +49,17 @@
           "status": {
             "type": "string",
             "minLength": 1
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       }
@@ -61,6 +75,28 @@
     "digest": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "phase0SourceCommit": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40,64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "phase0SealSignature": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 40
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   }
 }

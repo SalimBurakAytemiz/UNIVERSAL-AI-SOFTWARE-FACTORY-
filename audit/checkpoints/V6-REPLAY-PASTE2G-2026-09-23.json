@@ -1,0 +1,50 @@
+{
+  "//TR": "Bu checkpoint Paste 2G runtime producer/schema/Phase0/preflight hardening turunun exact source ve regression durumunu kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_REPLAY_PASTE2G",
+  "date": "2026-09-23",
+  "baseCommit": "7b63127c4961ea32b4653e065990e77dc639df45",
+  "status": "COMPLETE",
+  "scope": [
+    "runtime producer-schema consistency",
+    "signed Phase0 binding",
+    "stale runtime status prevention",
+    "reviewed dependency-state verification",
+    "preflight repo/lock/filesystem boundary hardening",
+    "install report component digest correlation"
+  ],
+  "findings": {
+    "P0": 1,
+    "P1": 2,
+    "P2": 2,
+    "P3": 0
+  },
+  "fixed": {
+    "P0": 1,
+    "P1": 2,
+    "P2": 2,
+    "P3": 0
+  },
+  "openInScope": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 0,
+    "P3": 0
+  },
+  "regression": [
+    "RUNTIME_CONTRACT_VALIDATION PASS 15/15",
+    "PASTE2F regression PASS 18/18",
+    "SCHEMA_CATALOG PASS 152/152",
+    "SCHEMA_STRICTNESS PASS",
+    "MECHANICAL_CLOSURE PASS",
+    "TR_VALIDATION PASS",
+    "SOURCE_SYNTAX PASS",
+    "git diff --check PASS"
+  ],
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL"
+  },
+  "nextScope": "PASTE_2H_REMAINING_RUNTIME_TEST_PRECHECK"
+}

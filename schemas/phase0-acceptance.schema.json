@@ -1,22 +1,139 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://uasco.local/schemas/phase0-acceptance.schema.json",
-  "$comment": "//TR: Bu schema autonomous full build başlamadan önce artifact/env/git/provider/trust/logging/review/scheduler/smoke kontrollerinin PASS/BLOCKED/PENDING durumunu tek Phase-0 raporunda zorunlu kılar.",
+  "$comment": "//TR: Bu schema autonomous full build başlamadan önce Phase0 sonucunu exact install/source/trust-root/runtime input digest seti ve Ed25519 mühürü ile zorunlu kılar.",
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "schemaVersion",
+    "generatedAt",
+    "installId",
+    "sourceCommit",
+    "trustRootManifestSha256",
+    "inputDigests",
     "checks",
     "final",
-    "generatedAt",
-    "schemaVersion"
+    "sealAlgorithm",
+    "sealSignature"
   ],
+  "$defs": {
+    "inputDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "present",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  },
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.2.0"
     },
     "generatedAt": {
       "type": "string",
       "format": "date-time"
+    },
+    "installId": {
+      "type": "string",
+      "pattern": "^INSTALL-[A-Za-z0-9._:-]+$"
+    },
+    "sourceCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40,64}$"
+    },
+    "trustRootManifestSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "inputDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactIntegrity",
+        "preflight",
+        "validation",
+        "dependencyState",
+        "providerProvenance",
+        "providerAuth",
+        "builderBoundary",
+        "evidenceSigning",
+        "evidenceKeyProtection",
+        "supervisorStateSelftest",
+        "bootstrapKernel",
+        "localToolHealth",
+        "controlApiSmoke",
+        "controlTowerSmoke",
+        "remoteProtection"
+      ],
+      "properties": {
+        "artifactIntegrity": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "preflight": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "validation": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "dependencyState": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "providerProvenance": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "providerAuth": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "builderBoundary": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "evidenceSigning": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "evidenceKeyProtection": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "supervisorStateSelftest": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "bootstrapKernel": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "localToolHealth": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "controlApiSmoke": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "controlTowerSmoke": {
+          "$ref": "#/$defs/inputDigest"
+        },
+        "remoteProtection": {
+          "$ref": "#/$defs/inputDigest"
+        }
+      }
     },
     "checks": {
       "type": "object",
@@ -51,6 +168,13 @@
         "BLOCKED",
         "PENDING"
       ]
+    },
+    "sealAlgorithm": {
+      "const": "Ed25519"
+    },
+    "sealSignature": {
+      "type": "string",
+      "minLength": 40
     }
   }
 }

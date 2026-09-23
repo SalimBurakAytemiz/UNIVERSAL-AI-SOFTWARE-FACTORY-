@@ -17,6 +17,12 @@ export function dependencyState(root){
  for(const section of sections)if(!sameMap(pkg[section]??{},rootEntry[section]??{}))throw new Error(`PACKAGE_LOCK_ROOT_MISMATCH:${section}`);
  return {lockSha256:sha256(lockBytes),packageSha256:sha256(pkgBytes)};
 }
+export function assertInstalledDependencyState(root){
+ root=path.resolve(root);const state=dependencyState(root),marker=path.join(root,"node_modules",".uasco-dependency-state.json");
+ if(!fs.existsSync(marker))throw new Error("DEPENDENCY_STATE_MARKER_MISSING");let prior;try{prior=readJson(marker)}catch{throw new Error("DEPENDENCY_STATE_MARKER_INVALID")}
+ if(prior.lockSha256!==state.lockSha256||prior.packageSha256!==state.packageSha256)throw new Error("DEPENDENCY_STATE_DIGEST_MISMATCH");
+ return state;
+}
 export function ensureDependencies(root,{npmCommand=process.platform==="win32"?"npm.cmd":"npm",cacheDir=null,preferOffline=false,spawnSync=cp.spawnSync}={}){
  root=path.resolve(root);const state=dependencyState(root),modules=path.join(root,"node_modules"),marker=path.join(modules,".uasco-dependency-state.json");
  try{const prior=readJson(marker);if(prior.lockSha256===state.lockSha256&&prior.packageSha256===state.packageSha256)return {mode:"EXISTING_REVIEWED_LOCK",...state}}
