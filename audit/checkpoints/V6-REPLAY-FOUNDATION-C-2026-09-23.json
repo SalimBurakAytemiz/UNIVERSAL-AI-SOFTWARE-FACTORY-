@@ -1,0 +1,26 @@
+{
+  "//TR": "Bu checkpoint context/token hard-limit, compact validation evidence ve bounded format-retry replay turunu kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_REPLAY_FOUNDATION_C",
+  "status": "COMPLETE",
+  "parentCommit": "d0904f98eb701ab7c985d06c4b44b756fe94c00c",
+  "scope": [
+    "pre-call prompt byte + approximate token hard limits",
+    "post-call output byte + approximate token hard limits",
+    "PASS validation stdout/stderr removal from review bundle",
+    "bounded UTF-8 safe failure slices",
+    "format retry without resending full review bundle",
+    "bounded malformed output + schema + identity correction context"
+  ],
+  "findings": {"P0": 0, "P1": 2, "P2": 2, "P3": 0, "openP0P1P2InScope": 0},
+  "validation": [
+    "V6_FOUNDATION_C_SELFTEST: PASS 8/8",
+    "V6_FOUNDATION_B_SELFTEST: PASS 5/5",
+    "V6_FOUNDATION_A_SELFTEST: PASS 10/10",
+    "MECHANICAL_KERNEL_SELFTEST: PASS",
+    "BOOTSTRAP_KERNEL_SELFTEST: PASS",
+    "MECHANICAL_CLOSURE_VALIDATION: PASS"
+  ],
+  "closure": {"sourceLevelClosure": false, "targetMachinePhase0": "PENDING", "paste1Replay": "IN_PROGRESS"},
+  "nextScope": "V6_REPLAY_FOUNDATION_D_TRUST_ROOT_AND_PACKAGE_GOVERNANCE"
+}

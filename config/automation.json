@@ -108,7 +108,12 @@
     "maxReviewBundleBytes": 900000,
     "maxPromptBytes": 1200000,
     "approxTokenCharsPerToken": 4,
-    "perPackageApproxTokenWarning": 150000
+    "perPackageApproxTokenWarning": 150000,
+    "maxPromptApproxTokens": 300000,
+    "maxModelOutputBytes": 400000,
+    "maxModelOutputApproxTokens": 100000,
+    "maxFailureSliceBytes": 6000,
+    "maxFormatCorrectionOutputBytes": 24000
   },
   "sandbox": {
     "builderBoundarySmoke": ".ai/runtime/BUILDER_BOUNDARY_SMOKE.json",

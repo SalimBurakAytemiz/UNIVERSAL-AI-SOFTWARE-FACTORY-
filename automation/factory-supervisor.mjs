@@ -16,6 +16,7 @@ import {freezeMilestonePackage} from "./lib/milestone-contract.mjs";
 import {buildReviewBundle} from "./lib/review-bundle.mjs";
 import {parseStrictReviewJson,validateReviewResult,governConvergence,finalGovernedResult,effectiveReviewDigest} from "./lib/review-governance.mjs";
 import {persistLowBacklog} from "./lib/low-backlog.mjs";
+import {assertPromptBudget,assertOutputBudget,utf8Tail} from "./lib/context-budget.mjs";
 import {loadCheckpoint,saveCheckpoint} from "./lib/checkpoint.mjs";
 import {readJsonIfExists,writeJsonAtomic,sha256,stableStringify} from "./lib/atomic-json.mjs";
 import {
@@ -130,14 +131,14 @@ async function executeModel({kind,providerCfg,prompt,worktree,ledger,leadPhase,m
   const dlpSignals=sensitiveTypes(prompt);
   assertAutomationAction({action:"MODEL_EGRESS_APPROVED_PROVIDER",milestone,globalConfig:cfg,providerApproved:["ANTHROPIC","OPENAI"].includes(String(providerCfg.provider??"").toUpperCase()),dataEgressSafe:dlpSignals.length===0});
   if(dlpSignals.length) throw new Error(`MODEL_EGRESS_DLP_BLOCKED types=${dlpSignals.join(",")}`);
-  const promptBytes=Buffer.byteLength(prompt,"utf8");if(promptBytes>(cfg.budgets?.maxPromptBytes??2_000_000))throw new Error(`MODEL_PROMPT_BUDGET_EXCEEDED bytes=${promptBytes}`);
+  const {promptBytes,promptApproxTokens}=assertPromptBudget(prompt,cfg.budgets??{});
   const logFile=ledger.logPath(`${attemptName}.log`);const gitBefore=kind==="builder"?captureGitMetadata(worktree):null;
   const r=await runCommand({cmd:providerCfg.command==="node"?process.execPath:providerCfg.command,args:providerCfg.args,cwd:worktree,input:prompt,timeoutMs:cfg.timeoutMs,
     env:{...buildChildEnv(milestone,providerCfg),UASCO_CONTROL_ROOT:repoRoot},logFile,maxLogBytes:cfg.logging.maxLogBytesPerFile,globalStopFile,
     onEvent:(event,details)=>ledger.event(kind,event,details,"INFO",{phase:leadPhase,milestoneId,actor:kind.toUpperCase()})});
   if(kind==="builder")assertGitMetadataUnchanged(gitBefore,captureGitMetadata(worktree));
-  const outputBytes=Buffer.byteLength(String(r.stdout??""),"utf8")+Buffer.byteLength(String(r.stderr??""),"utf8"),approxTokens=Math.ceil((promptBytes+outputBytes)/(cfg.budgets?.approxTokenCharsPerToken??4));
-  ledger.usage({kind,phase:leadPhase,milestoneId,promptBytes,outputBytes,approxTokens,durationMs:r.durationMs,status:r.status});
+  const {outputBytes,outputApproxTokens}=assertOutputBudget(r.stdout,r.stderr,cfg.budgets??{}),approxTokens=promptApproxTokens+outputApproxTokens;
+  ledger.usage({kind,phase:leadPhase,milestoneId,promptBytes,promptApproxTokens,outputBytes,outputApproxTokens,approxTokens,durationMs:r.durationMs,status:r.status});
   if(approxTokens>(cfg.budgets?.perPackageApproxTokenWarning??250000))ledger.event("budget","APPROX_TOKEN_WARNING",{kind,approxTokens,threshold:cfg.budgets?.perPackageApproxTokenWarning},"WARN",{phase:leadPhase,milestoneId,actor:"SUPERVISOR"});
   ledger.event(kind,"PROCESS_FINISHED",{status:r.status,timedOut:r.timedOut,globalStopped:r.globalStopped,promptBytes,outputBytes,approxTokens},r.status===0?"INFO":"ERROR",{phase:leadPhase,milestoneId,actor:kind.toUpperCase(),durationMs:r.durationMs,exitCode:r.status});
   return r;
@@ -297,14 +298,16 @@ async function main(){
         if(stage.stage!=="REVIEW")throw new Error(`UNEXPECTED_PACKAGE_STAGE ${stage.stage}`);
         if(cycle>cfg.maxReviewCycles){markPackageStateBlocked(scheduler,pkg,"REVIEW_DID_NOT_CONVERGE","REVIEW_NON_CONVERGENCE");saveSchedulerState(schedulerFile,scheduler);return summaryAndExit(ledger,"FOUNDER_ATTENTION_REQUIRED",{packageId:pkg.id,findings:findingLedger},40)}
         assertNotStopped(globalStopFile);const committedChanged=showChangedCommitted(workspace.dir,baseCommit,reviewedCommit);const committedGuard=evaluateChangeSet({repoRoot,worktree:workspace.dir,baseCommit,changedFiles:committedChanged,milestone,protectedPolicy,governanceAuthorized:false});if(!committedGuard.ok){markPackageStateBlocked(scheduler,pkg,"COMMITTED_CHANGE_GUARD_VIOLATION","TRUST_ROOT");saveSchedulerState(schedulerFile,scheduler);return summaryAndExit(ledger,"FOUNDER_ATTENTION_REQUIRED",{packageId:pkg.id,committedGuard},40)}
-        const bundle=buildReviewBundle({runId,cycle,phase:leadPhase,baseCommit,reviewedCommit,milestoneContract:milestone,changedFiles:committedChanged,changeGuard:committedGuard,diffStat:diffStat(workspace.dir,baseCommit,reviewedCommit),validation,knownLimitations:readJson(knownLimitationsFile).entries??[],acceptedDebt:readJson(acceptedDebtFile).entries??[],waivers:readJson(waiversFile).entries??[],previousFindingLedger:findingLedger});if(!validateReviewBundleSchema(bundle))throw new Error(`REVIEW_BUNDLE_SCHEMA_INVALID: ${ajv.errorsText(validateReviewBundleSchema.errors,{separator:" | "})}`);if(Buffer.byteLength(JSON.stringify(bundle),"utf8")>(cfg.budgets?.maxReviewBundleBytes??1_500_000))throw new Error("REVIEW_BUNDLE_BYTE_BUDGET_EXCEEDED");ledger.writeJson(`review/${pkg.id}-cycle-${cycle}-bundle.json`,bundle);
+        const bundle=buildReviewBundle({runId,cycle,phase:leadPhase,baseCommit,reviewedCommit,milestoneContract:milestone,changedFiles:committedChanged,changeGuard:committedGuard,diffStat:diffStat(workspace.dir,baseCommit,reviewedCommit),validation,knownLimitations:readJson(knownLimitationsFile).entries??[],acceptedDebt:readJson(acceptedDebtFile).entries??[],waivers:readJson(waiversFile).entries??[],previousFindingLedger:findingLedger,budgets:cfg.budgets});if(!validateReviewBundleSchema(bundle))throw new Error(`REVIEW_BUNDLE_SCHEMA_INVALID: ${ajv.errorsText(validateReviewBundleSchema.errors,{separator:" | "})}`);if(Buffer.byteLength(JSON.stringify(bundle),"utf8")>(cfg.budgets?.maxReviewBundleBytes??1_500_000))throw new Error("REVIEW_BUNDLE_BYTE_BUDGET_EXCEEDED");ledger.writeJson(`review/${pkg.id}-cycle-${cycle}-bundle.json`,bundle);
         const reviewPrompt=fs.readFileSync(path.join(repoRoot,"prompts/AUTO-REVIEW.md"),"utf8")+`\nREVIEW BUNDLE:\n${JSON.stringify(bundle,null,2)}`;
-        let review=null,lastFormatError=null;
+        const resultSchemaText=fs.readFileSync(path.join(repoRoot,cfg.review.resultSchema),"utf8");
+        const reviewIdentity={runId,cycle,baseCommit,reviewedCommit,reviewBundleDigest:bundle.bundleDigest};
+        let review=null,lastFormatError=null,lastMalformedOutput="";
         for(let formatTry=0;formatTry<=cfg.reviewer.formatRetryLimit;formatTry++){
-          const prompt=formatTry===0?reviewPrompt:reviewPrompt+`\nFORMAT CORRECTION ONLY: prior output was rejected: ${lastFormatError}. Return one schema-valid JSON object; do not widen analysis scope.`;
+          const prompt=formatTry===0?reviewPrompt:`FORMAT CORRECTION ONLY. Do not re-review and do not widen scope.\nIDENTITY:\n${JSON.stringify(reviewIdentity)}\nRESULT SCHEMA:\n${resultSchemaText}\nREJECTION:\n${lastFormatError}\nMALFORMED OUTPUT:\n${utf8Tail(lastMalformedOutput,cfg.budgets?.maxFormatCorrectionOutputBytes??24000)}\nReturn exactly one schema-valid JSON object preserving the prior analysis.`;
           const rp=await executeModel({kind:"reviewer",providerCfg:cfg.reviewer,prompt,worktree:workspace.dir,ledger,leadPhase,milestoneId:pkg.id,attemptName:`${pkg.id}-review-${cycle}-format-${formatTry}`,milestone});
           if(rp.status!==0||rp.error){const h=await handleInfrastructureFailure({result:rp,stage:"review",pkg,scheduler,ledger,checkpointState:{...stage,stage:"REVIEW",cycle,reviewedCommit,validation,findingLedger},worktree:workspace.dir});return h.code}
-          try{review=parseGovernedReview(rp.stdout,{runId,cycle,baseCommit,reviewedCommit,reviewBundleDigest:bundle.bundleDigest,allowedBasisRefs:Object.values(bundle.reviewBasis).flat().map(x=>x.id),allowedEvidenceRefs:(bundle.evidenceCatalog??[]).map(x=>x.id),allowedValidationIds:(bundle.validation?.steps??[]).map(x=>String(x.id)),evidenceCatalog:bundle.evidenceCatalog??[],previousFindingLedger:bundle.previousFindingLedger??[],changedFiles:bundle.changedFiles});break}catch(e){lastFormatError=e.message;ledger.event("reviewer","FORMAT_REJECTED",{error:e.message},"WARN",{phase:leadPhase,milestoneId:pkg.id,actor:"CODEX"})}
+          try{review=parseGovernedReview(rp.stdout,{runId,cycle,baseCommit,reviewedCommit,reviewBundleDigest:bundle.bundleDigest,allowedBasisRefs:Object.values(bundle.reviewBasis).flat().map(x=>x.id),allowedEvidenceRefs:(bundle.evidenceCatalog??[]).map(x=>x.id),allowedValidationIds:(bundle.validation?.steps??[]).map(x=>String(x.id)),evidenceCatalog:bundle.evidenceCatalog??[],previousFindingLedger:bundle.previousFindingLedger??[],changedFiles:bundle.changedFiles});break}catch(e){lastFormatError=e.message;lastMalformedOutput=String(rp.stdout??"");ledger.event("reviewer","FORMAT_REJECTED",{error:e.message},"WARN",{phase:leadPhase,milestoneId:pkg.id,actor:"CODEX"})}
         }
         if(!review){markPackageStateBlocked(scheduler,pkg,`REVIEW_OUTPUT_INVALID: ${lastFormatError}`,"REVIEW_INPUT_INVALID");saveSchedulerState(schedulerFile,scheduler);return summaryAndExit(ledger,"FOUNDER_ATTENTION_REQUIRED",{packageId:pkg.id,reason:lastFormatError},40)}
         const independence=ensureProviderSeparation(review);if(!independence.ok){markPackageStateBlocked(scheduler,pkg,independence.reason,"INDEPENDENCE_INSUFFICIENT");saveSchedulerState(schedulerFile,scheduler);return summaryAndExit(ledger,"FOUNDER_ATTENTION_REQUIRED",{packageId:pkg.id,independence},40)}
