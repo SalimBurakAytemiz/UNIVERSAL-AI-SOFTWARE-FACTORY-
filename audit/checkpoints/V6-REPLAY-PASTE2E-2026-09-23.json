@@ -1,0 +1,30 @@
+{
+  "//TR": "V6 fiziksel replay Paste 2E checkpoint; npm policy, supply-chain lock/registry/integrity/installed metadata ve audit severity governance durumunu kaydeder.",
+  "checkpoint": "V6_REPLAY_PASTE2E_COMPLETE",
+  "date": "2026-09-23",
+  "baseCommit": "dfb41419c332bb5f75cede7677d30c8f4b5a16ce",
+  "scope": [
+    "canonical .npmrc policy",
+    "reviewed root dependency/lock synchronization",
+    "allowed official registry host and HTTPS",
+    "transitive integrity requirements",
+    "installed package identity/version/license metadata",
+    "npm audit moderate/high/critical blockers",
+    "npm audit low durable P3 backlog",
+    "unknown/malformed audit fail-closed"
+  ],
+  "findings": {"P0": 0, "P1": 4, "P2": 2, "P3": 0, "openP0P1P2": 0},
+  "verification": {
+    "v6Paste2eSelftest": "PASS_16_OF_16",
+    "trValidation": "PASS",
+    "mechanicalClosure": "PASS",
+    "paste2dTo2aRegression": "PASS",
+    "foundationFtoARegression": "PASS",
+    "kernelAndStateRegression": "PASS",
+    "gitDiffCheck": "PASS",
+    "liveNpmAudit": "NOT_RUN_SOURCE_REVIEWED_LOCK_AND_DEPENDENCIES_NOT_YET_ESTABLISHED",
+    "dependencyAwareTypecheckAndVitest": "NOT_RUN_DEPENDENCY_LOCK_NOT_ESTABLISHED"
+  },
+  "truth": {"sourceLevelClosure": false, "targetMachinePhase0": "PENDING", "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL"},
+  "nextScope": "V6_REPLAY_PASTE2F_SCHEMA_AND_GOVERNANCE"
+}

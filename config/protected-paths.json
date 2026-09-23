@@ -6,6 +6,7 @@
     ".github/workflows/ci.yml",
     ".gitignore",
     ".gitmodules",
+    ".npmrc",
     "AGENTS.md",
     "ARCHITECTURE-CONSTITUTION.md",
     "ARCHITECTURE-FREEZE.md",
@@ -18,6 +19,7 @@
     "INSTALLATION-GO-CHECKLIST.md",
     "automation/factory-supervisor.mjs",
     "automation/lib/evidence-signing.mjs",
+    "automation/lib/filesystem-boundary.mjs",
     "automation/lib/redaction.mjs",
     "config/action-policy.json",
     "config/automation.json",
@@ -28,6 +30,7 @@
     "config/omniroute-policy.json",
     "config/package-policy.json",
     "config/protected-paths.json",
+    "config/supply-chain-policy.json",
     "config/trust-root-manifest.json",
     "config/validation.json",
     "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
@@ -55,6 +58,7 @@
     "scripts/codex-reviewer-broker.mjs",
     "scripts/dependency-supply-chain.mjs",
     "scripts/generate-trust-root.mjs",
+    "scripts/harden-evidence-key.ps1",
     "scripts/init-evidence-signing.mjs",
     "scripts/init-private-git.ps1",
     "scripts/install-report.mjs",
@@ -75,9 +79,7 @@
     "scripts/verify-evidence-ledger.mjs",
     "scripts/verify-remote-protection.mjs",
     "scripts/verify-trust-root.mjs",
-    "tsconfig.json",
-    "automation/lib/filesystem-boundary.mjs",
-    "scripts/harden-evidence-key.ps1"
+    "tsconfig.json"
   ],
   "protectedPrefixes": [
     "automation/lib/",

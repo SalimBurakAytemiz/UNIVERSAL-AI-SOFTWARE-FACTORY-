@@ -1,0 +1,11 @@
+{
+  "//TR": "Bu policy npm lock/install/audit doğrulamasında resmi registry, integrity, installed identity/version/license ve vulnerability severity kurallarını fail-closed sabitler.",
+  "schemaVersion": "1.0.0",
+  "allowedRegistryHosts": ["registry.npmjs.org"],
+  "requireHttpsRegistry": true,
+  "requireTransitiveIntegrity": true,
+  "requireInstalledPackageIdentity": true,
+  "requireInstalledLicenseMetadata": true,
+  "blockingAuditSeverities": ["moderate", "high", "critical"],
+  "lowSeverityDisposition": "P3_DURABLE_BACKLOG"
+}
