@@ -54,7 +54,7 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "minLength": 1
+        "pattern": "^P[0-9]{3}-(REQ|INV|AC|VAL|FAIL|ART|RISK)-[0-9a-f]{16}$"
       }
     },
     "currentDiffCausality": {

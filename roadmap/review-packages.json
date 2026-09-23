@@ -1,6 +1,6 @@
 {
-  "//TR": "Bu dosya 148 post-Phase0 acceptance phase'i yaklaşık otuz coherent review package'ına bağlayarak Claude/Codex token tüketimini azaltır; her phase acceptance ayrı kalır, Codex review package boundary'de yapılır.",
-  "schemaVersion": "1.0.0",
+  "//TR": "Bu dosya Phase 1-148 post-Phase0 acceptance phase'lerini 34 coherent review package'ına bağlar; deliveryTier dependency-graph priority bilgisinden türetilen construction önceliğidir, reviewProfile yalnız review derinliğidir. Phase 0 ayrı bootstrap/trust gate'tir.",
+  "schemaVersion": "1.1.0",
   "packageCount": 34,
   "phaseCount": 148,
   "packages": [
@@ -15,7 +15,8 @@
       ],
       "dependsOnPackages": [],
       "reviewProfile": "TRUST_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     },
     {
       "id": "PKG-002",
@@ -30,7 +31,8 @@
         "PKG-001"
       ],
       "reviewProfile": "TRUST_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     },
     {
       "id": "PKG-003",
@@ -48,7 +50,8 @@
         "PKG-002"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     },
     {
       "id": "PKG-004",
@@ -63,7 +66,8 @@
         "PKG-003"
       ],
       "reviewProfile": "TRUST_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "HIGH"
     },
     {
       "id": "PKG-005",
@@ -82,7 +86,8 @@
         "PKG-003"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     },
     {
       "id": "PKG-006",
@@ -102,7 +107,8 @@
         "PKG-005"
       ],
       "reviewProfile": "TRUST_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     },
     {
       "id": "PKG-007",
@@ -123,7 +129,8 @@
         "PKG-006"
       ],
       "reviewProfile": "TRUST_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-008",
@@ -144,7 +151,8 @@
         "PKG-006"
       ],
       "reviewProfile": "TRUST_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     },
     {
       "id": "PKG-009",
@@ -158,7 +166,8 @@
         "PKG-008"
       ],
       "reviewProfile": "TRUST_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     },
     {
       "id": "PKG-010",
@@ -175,7 +184,8 @@
         "PKG-009"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     },
     {
       "id": "PKG-011",
@@ -194,7 +204,8 @@
         "PKG-010"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     },
     {
       "id": "PKG-012",
@@ -211,7 +222,8 @@
         "PKG-011"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-013",
@@ -229,7 +241,8 @@
         "PKG-012"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-014",
@@ -246,7 +259,8 @@
         "PKG-010"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-015",
@@ -263,7 +277,8 @@
         "PKG-014"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-016",
@@ -283,7 +298,8 @@
         "PKG-010"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-017",
@@ -305,7 +321,8 @@
         "PKG-016"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-018",
@@ -326,7 +343,8 @@
         "PKG-017"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-019",
@@ -351,7 +369,8 @@
         "PKG-016"
       ],
       "reviewProfile": "SECURITY_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-020",
@@ -371,7 +390,8 @@
         "PKG-019"
       ],
       "reviewProfile": "SECURITY_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-021",
@@ -392,7 +412,8 @@
         "PKG-016"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     },
     {
       "id": "PKG-022",
@@ -414,7 +435,8 @@
         "PKG-021"
       ],
       "reviewProfile": "TRUST_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     },
     {
       "id": "PKG-023",
@@ -441,7 +463,8 @@
         "PKG-022"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-024",
@@ -465,7 +488,8 @@
         "PKG-021"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-025",
@@ -492,7 +516,8 @@
         "PKG-021"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-026",
@@ -510,7 +535,8 @@
         "PKG-020"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-027",
@@ -531,7 +557,8 @@
         "PKG-016"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-028",
@@ -553,7 +580,8 @@
         "PKG-027"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-029",
@@ -576,7 +604,8 @@
         "PKG-023"
       ],
       "reviewProfile": "TRUST_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "HIGH"
     },
     {
       "id": "PKG-030",
@@ -603,7 +632,8 @@
         "PKG-029"
       ],
       "reviewProfile": "STANDARD",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-031",
@@ -624,7 +654,8 @@
         "PKG-029"
       ],
       "reviewProfile": "SECURITY_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "MEDIUM"
     },
     {
       "id": "PKG-032",
@@ -643,7 +674,8 @@
         "PKG-031"
       ],
       "reviewProfile": "RELEASE_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     },
     {
       "id": "PKG-033",
@@ -658,7 +690,8 @@
         "PKG-032"
       ],
       "reviewProfile": "RELEASE_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     },
     {
       "id": "PKG-034",
@@ -670,7 +703,8 @@
         "PKG-033"
       ],
       "reviewProfile": "RELEASE_CRITICAL",
-      "state": "PLANNED"
+      "state": "PLANNED",
+      "deliveryTier": "CORE"
     }
   ],
   "topologicalOrder": [

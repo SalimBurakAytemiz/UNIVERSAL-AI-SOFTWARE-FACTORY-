@@ -1,0 +1,53 @@
+{
+  "//TR": "Bu checkpoint Paste 4A phase/package DAG, deliveryTier scheduler ve content-bound stable review-basis ID turunun exact source durumunu kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_REPLAY_PASTE4A",
+  "date": "2026-09-24",
+  "baseCommit": "99fa6d2245b202f7424c2c06084052d70e1fb125",
+  "status": "COMPLETE_SOURCE",
+  "scope": [
+    "149 canonical phase contracts and acyclic phase dependency DAG",
+    "Phase0 separate bootstrap/trust gate",
+    "34 coherent review packages covering Phase 1-148 exactly once",
+    "acyclic package dependency DAG and declared dependency runtime readiness",
+    "deliveryTier derived from phase construction priority: CORE/HIGH/MEDIUM",
+    "reviewProfile restricted to review-depth tie-breaker semantics",
+    "stable review basis IDs bound to phase + criterion type + normalized content SHA-256 prefix",
+    "legacy sequence review basis IDs rejected"
+  ],
+  "metrics": {
+    "phases": 149,
+    "reviewPackages": 34,
+    "postPhase0PackagedPhases": 148,
+    "phaseDagCycles": 0,
+    "packageDagCycles": 0,
+    "deliveryTierCounts": {"CORE": 14, "HIGH": 2, "MEDIUM": 18},
+    "paste4aChecks": 26
+  },
+  "findings": {"P0": 0, "P1": 3, "P2": 1, "P3": 0},
+  "fixed": {"P0": 0, "P1": 3, "P2": 1, "P3": 0},
+  "openInScope": {"P0": 0, "P1": 0, "P2": 0, "P3": 0},
+  "regression": [
+    "PASTE4A_VALIDATION PASS checks=26 phases=149 packages=34 tiers=14/2/18",
+    "PHASE_CONTRACT_VALIDATION PASS count=149",
+    "SCHEMA_CATALOG_VALIDATION PASS exact-count=152",
+    "SCHEMA_STRICTNESS_VALIDATION PASS",
+    "MECHANICAL_CLOSURE_VALIDATION PASS",
+    "V6_FOUNDATION_A_SELFTEST PASS 10/10",
+    "V6_FOUNDATION_B_SELFTEST PASS 5/5",
+    "MECHANICAL_KERNEL_SELFTEST PASS",
+    "BOOTSTRAP_KERNEL_SELFTEST PASS",
+    "SUPERVISOR_STATE_SELFTEST PASS",
+    "PASTE2_SOURCE_CLOSURE PASS controls=34/34",
+    "PASTE3_SOURCE_CLOSURE PASS controls=15/15",
+    "TR_VALIDATION PASS",
+    "SOURCE_SYNTAX PASS",
+    "git diff --check PASS"
+  ],
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL"
+  },
+  "nextScope": "PASTE_4B_ACCEPTANCE_REQUIREMENT_FAILURE_ARTIFACT_TRACEABILITY"
+}

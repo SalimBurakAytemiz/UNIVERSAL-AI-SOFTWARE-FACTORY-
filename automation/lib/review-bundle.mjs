@@ -6,6 +6,10 @@ const safeId=x=>String(x).toUpperCase().replace(/[^A-Z0-9._-]+/g,"-");
 const sha=x=>crypto.createHash("sha256").update(stableStringify(x)).digest("hex");
 const allowedGovernanceStatuses=new Set(["ACTIVE","RESOLVED","REVOKED","EXPIRED"]);
 const sortedNums=x=>[...(x??[])].map(Number).sort((a,b)=>a-b);
+const normalizeBasisText=value=>String(value??"").normalize("NFKC").trim().replace(/\s+/g," ");
+function basisPhaseAndContent(text,fallbackPhase){const normalized=normalizeBasisText(text),m=normalized.match(/^\[P(\d{3})\]\s*(.*)$/s);return {phase:m?Number(m[1]):Number(fallbackPhase),content:normalizeBasisText(m?m[2]:normalized)}}
+export function stableReviewBasisId({text,type,fallbackPhase}){const {phase,content}=basisPhaseAndContent(text,fallbackPhase);if(!Number.isInteger(phase)||phase<0||phase>999)throw new Error(`REVIEW_BASIS_PHASE_INVALID:${phase}`);if(!content)throw new Error(`REVIEW_BASIS_CONTENT_EMPTY:${type}`);const digest=crypto.createHash("sha256").update(content,"utf8").digest("hex").slice(0,16);return `P${String(phase).padStart(3,"0")}-${type}-${digest}`}
+function stableBasisRows(values,type,fallbackPhase){const rows=(values??[]).map(text=>({id:stableReviewBasisId({text,type,fallbackPhase}),text}));const ids=new Set();for(const row of rows){if(ids.has(row.id))throw new Error(`REVIEW_BASIS_DUPLICATE_STABLE_ID:${row.id}`);ids.add(row.id)}return rows}
 const sameNums=(a,b)=>JSON.stringify(sortedNums(a))===JSON.stringify(sortedNums(b));
 function assertIsoDate(value,label){if(typeof value!=="string"||!Number.isFinite(Date.parse(value)))throw new Error(`GOVERNANCE_LEDGER_DATE_INVALID:${label}`)}
 function scopeGovernanceEntries(entries,kind,{milestoneContract,reviewedCommit}){
@@ -43,7 +47,7 @@ export function scopeReviewGovernanceLedgers({acceptedDebt=[],waivers=[],knownLi
 }
 export function buildReviewBundle(input){
  const compactValidation=compactValidationForReview(input.validation,input.budgets??{});
- const mc=input.milestoneContract,rb={requirements:(mc.requirements??[]).map((text,i)=>({id:`REQ-${i+1}`,text})),invariants:(mc.invariants??[]).map((text,i)=>({id:`INV-${i+1}`,text})),acceptanceCriteria:(mc.acceptanceCriteria??[]).map((text,i)=>({id:`AC-${i+1}`,text})),mandatoryValidation:(mc.mandatoryValidation??[]).map((text,i)=>({id:`VAL-${i+1}`,text})),mandatoryFailureCases:(mc.mandatoryFailureCases??[]).map((text,i)=>({id:`FAIL-${i+1}`,text})),requiredArtifacts:(mc.requiredArtifacts??[]).map((text,i)=>({id:`ART-${i+1}`,text})),risk:[{id:"RISK-PROFILE",text:`riskLevel=${mc.riskLevel}; reviewProfile=${mc.reviewProfile}`}]};
+ const mc=input.milestoneContract,fallbackPhase=mc.phase??input.phase,rb={requirements:stableBasisRows(mc.requirements,"REQ",fallbackPhase),invariants:stableBasisRows(mc.invariants,"INV",fallbackPhase),acceptanceCriteria:stableBasisRows(mc.acceptanceCriteria,"AC",fallbackPhase),mandatoryValidation:stableBasisRows(mc.mandatoryValidation,"VAL",fallbackPhase),mandatoryFailureCases:stableBasisRows(mc.mandatoryFailureCases,"FAIL",fallbackPhase),requiredArtifacts:stableBasisRows(mc.requiredArtifacts,"ART",fallbackPhase),risk:stableBasisRows([`riskLevel=${mc.riskLevel}; reviewProfile=${mc.reviewProfile}`],"RISK",fallbackPhase)};
  const evidenceCatalog=[];
  const validationById=new Map();
  for(const x of compactValidation?.steps??[]){

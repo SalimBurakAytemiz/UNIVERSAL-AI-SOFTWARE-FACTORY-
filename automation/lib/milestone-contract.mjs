@@ -40,7 +40,7 @@ export function freezeMilestonePackage({packageDef,phaseContracts,protectedPolic
     riskLevel:Math.max(...phaseContracts.map(c=>c.riskLevel??2)),
     allowPaidApi:phaseContracts.some(c=>c.allowPaidApi===true),allowProduction:phaseContracts.some(c=>c.allowProduction===true),allowRisk5:phaseContracts.some(c=>c.allowRisk5===true),
     allowDependencyChanges:phaseContracts.some(c=>c.allowDependencyChanges===true),
-    unsupportedCases:phaseContracts.flatMap(c=>(c.unsupportedCases??[]).map(x=>prefix(c,x))),reviewProfile:strongest,
+    unsupportedCases:phaseContracts.flatMap(c=>(c.unsupportedCases??[]).map(x=>prefix(c,x))),reviewProfile:strongest,deliveryTier:packageDef.deliveryTier,
     maxFilesChanged:Math.min(240,Math.max(120,phaseContracts.reduce((n,c)=>n+(c.maxFilesChanged??120),0))),
     maxDiffLines:Math.min(6000,Math.max(2500,phaseContracts.reduce((n,c)=>n+(c.maxDiffLines??1500),0))),
     allowExistingTestAssertionReduction:phaseContracts.every(c=>c.allowExistingTestAssertionReduction===true)

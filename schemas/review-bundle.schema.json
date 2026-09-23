@@ -312,7 +312,7 @@
             "properties": {
               "id": {
                 "type": "string",
-                "minLength": 2
+                "pattern": "^P[0-9]{3}-REQ-[0-9a-f]{16}$"
               },
               "text": {
                 "type": "string",
@@ -333,7 +333,7 @@
             "properties": {
               "id": {
                 "type": "string",
-                "minLength": 2
+                "pattern": "^P[0-9]{3}-INV-[0-9a-f]{16}$"
               },
               "text": {
                 "type": "string",
@@ -354,7 +354,7 @@
             "properties": {
               "id": {
                 "type": "string",
-                "minLength": 2
+                "pattern": "^P[0-9]{3}-AC-[0-9a-f]{16}$"
               },
               "text": {
                 "type": "string",
@@ -375,7 +375,7 @@
             "properties": {
               "id": {
                 "type": "string",
-                "minLength": 2
+                "pattern": "^P[0-9]{3}-VAL-[0-9a-f]{16}$"
               },
               "text": {
                 "type": "string",
@@ -396,7 +396,7 @@
             "properties": {
               "id": {
                 "type": "string",
-                "minLength": 2
+                "pattern": "^P[0-9]{3}-RISK-[0-9a-f]{16}$"
               },
               "text": {
                 "type": "string",
@@ -417,7 +417,7 @@
             "properties": {
               "id": {
                 "type": "string",
-                "minLength": 2
+                "pattern": "^P[0-9]{3}-FAIL-[0-9a-f]{16}$"
               },
               "text": {
                 "type": "string",
@@ -438,7 +438,7 @@
             "properties": {
               "id": {
                 "type": "string",
-                "minLength": 2
+                "pattern": "^P[0-9]{3}-ART-[0-9a-f]{16}$"
               },
               "text": {
                 "type": "string",

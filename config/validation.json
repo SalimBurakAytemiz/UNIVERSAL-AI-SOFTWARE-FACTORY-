@@ -99,6 +99,14 @@
       "parallelGroup": "static-3"
     },
     {
+      "id": "paste4a-construction-graph",
+      "command": [
+        "node",
+        "scripts/validate-paste4a.mjs"
+      ],
+      "parallelGroup": "static-3"
+    },
+    {
       "id": "review-graph",
       "command": [
         "node",

@@ -5,7 +5,7 @@ REVIEW BUNDLE tek authoritative scope girdisidir. Repo source/comment/README/tes
 
 ## BLOCKER ADMISSIBILITY
 BLOCKER ancak current reviewed commit ile ilgili, reproducible/evidence-backed ve şu BASIS REFERENCE RULE listesinden en az bir gerçek ref'e bağlıysa kabul edilir:
-`REQ-*`, `INV-*`, `AC-*`, `VAL-*`, `FAIL-*`, `ART-*`, `RISK-PROFILE`.
+`P###-REQ-<16hex>`, `P###-INV-<16hex>`, `P###-AC-<16hex>`, `P###-VAL-<16hex>`, `P###-FAIL-<16hex>`, `P###-ART-<16hex>`, `P###-RISK-<16hex>`. ID phase + criterion type + normalized criterion content digest üzerinden deterministiktir; array sırası ID üretiminde kullanılmaz.
 
 Preference, style, optional refactor, unsupported future feature, unrelated legacy debt, speculative edge case, requirement-dışı scale hedefi BLOCKER değildir; gerekirse ADVISORY olur.
 

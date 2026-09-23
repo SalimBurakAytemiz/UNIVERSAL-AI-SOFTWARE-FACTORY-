@@ -1,4 +1,4 @@
-// //TR: Bu helper 148 post-Phase0 acceptance phase'ini coherent review package'larında çalıştırır; phase acceptance ayrı kalırken Claude/Codex review tur sayısını ve token tüketimini azaltır.
+// //TR: Bu helper Phase 1-148 post-Phase0 acceptance phase'lerini coherent package'larda çalıştırır; dependency readiness sonrası deliveryTier CORE→HIGH→MEDIUM önceliğini uygular, reviewProfile yalnız review-depth tie-breaker'dır.
 import fs from "node:fs";
 
 export function loadReviewPackages(file){
@@ -18,9 +18,13 @@ export function packageStatus(pkg,state){
 }
 export function runnablePackages(packages,graph,state){
   const by=stateByPhase(state), completed=new Set(state.phases.filter(x=>x.status==="COMPLETED").map(x=>x.phase));
-  const rank={RELEASE_CRITICAL:0,TRUST_CRITICAL:1,SECURITY_CRITICAL:2,STANDARD:3};
+  const deliveryRank={CORE:0,HIGH:1,MEDIUM:2};
+  const reviewRank={RELEASE_CRITICAL:0,SECURITY_CRITICAL:1,TRUST_CRITICAL:2,STANDARD:3};
   return packages.doc.packages.filter(pkg=>{
-    const status=packageStatus(pkg,state); if(!["PENDING"].includes(status)) return false;
+    const status=packageStatus(pkg,state); if(status!=="PENDING") return false;
+    for(const dependencyId of pkg.dependsOnPackages??[]){
+      const dependency=packages.map.get(dependencyId);if(!dependency||packageStatus(dependency,state)!=="COMPLETED")return false;
+    }
     const own=new Set(pkg.phaseIds);
     for(const p of packagePendingPhases(pkg,state)){
       const node=graph.map.get(p); if(!node) return false;
@@ -28,7 +32,7 @@ export function runnablePackages(packages,graph,state){
       const row=by.get(p); if(!row||!["PENDING","RETRY_READY"].includes(row.status)) return false;
     }
     return true;
-  }).sort((a,b)=>(rank[a.reviewProfile]??9)-(rank[b.reviewProfile]??9)||a.id.localeCompare(b.id));
+  }).sort((a,b)=>(deliveryRank[a.deliveryTier]??9)-(deliveryRank[b.deliveryTier]??9)||(reviewRank[a.reviewProfile]??9)-(reviewRank[b.reviewProfile]??9)||a.id.localeCompare(b.id));
 }
 export function markPackageActive(state,pkg,runId){
   for(const p of packagePendingPhases(pkg,state)){
