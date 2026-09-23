@@ -1,0 +1,30 @@
+{
+  "//TR": "V6 fiziksel replay Paste 2A checkpoint. Bu kayıt yalnız doğrulanmış source-level mekanik durumu temsil eder; target machine Phase0 veya production doğrulaması değildir.",
+  "checkpoint": "V6_REPLAY_PASTE2A_COMPLETE",
+  "date": "2026-09-23",
+  "baseCommit": "99105cf8c6a8a60954c8aa936a4d0ebd4253c15f",
+  "scope": [
+    "Control Tower renderer safe DOM rendering",
+    "Control API stale process-lock handling",
+    "blocked-package technical retry authority",
+    "control audit redaction/rotation/bounded UTF-8-safe tails",
+    "mission blocked/founder-attention authority transitions"
+  ],
+  "findings": {"P0": 0, "P1": 4, "P2": 3, "P3": 0, "openP0P1P2": 0},
+  "verification": {
+    "v6Paste2aSelftest": "PASS_15_OF_15",
+    "mechanicalClosure": "PASS",
+    "foundationFtoARegression": "PASS",
+    "mechanicalKernel": "PASS",
+    "bootstrapKernel": "PASS",
+    "supervisorStateMachine": "PASS",
+    "gitDiffCheck": "PASS",
+    "typescriptDependencyAwareTypecheck": "NOT_RUN_DEPENDENCY_LOCK_NOT_ESTABLISHED"
+  },
+  "truth": {
+    "sourceLevelClosure": false,
+    "targetMachinePhase0": "PENDING",
+    "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL"
+  },
+  "nextScope": "V6_REPLAY_PASTE2B"
+}

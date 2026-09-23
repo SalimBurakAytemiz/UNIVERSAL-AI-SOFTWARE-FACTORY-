@@ -4,4 +4,5 @@ import { canTransition, assertTransition } from "../core/mission/state-machine.j
 describe("mission state",()=>{
   it("allows planned execution",()=>expect(canTransition("PLANNED","EXECUTING")).toBe(true));
   it("blocks fake completion",()=>expect(()=>assertTransition("DRAFT","COMPLETE")).toThrow());
+  it("forces blocked missions back through preflight",()=>{expect(canTransition("BLOCKED","PREFLIGHT")).toBe(true);expect(canTransition("BLOCKED","EXECUTING")).toBe(false);expect(canTransition("FOUNDER_ATTENTION_REQUIRED","EXECUTING")).toBe(false);});
 });
