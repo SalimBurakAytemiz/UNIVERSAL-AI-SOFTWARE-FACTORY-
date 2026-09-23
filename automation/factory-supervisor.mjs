@@ -120,7 +120,7 @@ function markPackageStateBlocked(state,pkg,reason,kind){markPackageBlocked(state
 function allPackagePhasesCompleted(pkg,state){return packageStatus(pkg,state)==="COMPLETED"}
 
 const ajv=new Ajv({allErrors:true,strict:false});addFormats(ajv);
-const findingSchema=readJson(path.join(repoRoot,"schemas/review-finding.schema.json"));ajv.addSchema(findingSchema);
+const findingSchema=readJson(path.join(repoRoot,"schemas/review-finding.schema.json"));ajv.addSchema(findingSchema);const milestoneSchema=readJson(path.join(repoRoot,"schemas/milestone-contract.schema.json"));ajv.addSchema(milestoneSchema);
 const reviewSchema=readJson(path.join(repoRoot,"schemas/independent-review-result.schema.json"));const validateReviewSchema=ajv.compile(reviewSchema);const reviewBundleSchema=readJson(path.join(repoRoot,"schemas/review-bundle.schema.json"));const validateReviewBundleSchema=ajv.compile(reviewBundleSchema);
 function parseGovernedReview(stdout,expected){
   const parsed=parseStrictReviewJson(stdout);

@@ -1,0 +1,1524 @@
+{
+  "//TR": "Bu registry recursive schema strictness validatorının bilinçli legacy OPEN_MAP ve strict-value TYPED_MAP istisnalarını exact file + JSON pointer ile sınırlar; yeni açık object otomatik kabul edilmez.",
+  "schemaVersion": "1.0.0",
+  "entries": [
+    {
+      "file": "schemas/action-request.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/action-request.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/action-result.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/action-result.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/adr.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-competency-v2.schema.json",
+      "pointer": "$/properties/technologyDepthProfiles/items",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `items`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-competency-v2.schema.json",
+      "pointer": "$/properties/decisionBoundary",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `decisionBoundary`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-contract.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-contract.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-contract.schema.json",
+      "pointer": "$/properties/modelPolicy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `modelPolicy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-contract.schema.json",
+      "pointer": "$/properties/dataPolicy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `dataPolicy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-review.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-review.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-review.schema.json",
+      "pointer": "$/properties/findings/items",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `items`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-role.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-role.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-run.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-skill-profile.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/agent-skill-profile.schema.json",
+      "pointer": "$/properties/technologyDepth/items",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `items`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/approval-attestation.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/approval-attestation.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/approval-attestation.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/approval-request.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/approval-request.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/artifact.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/artifact.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/asset-rights.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/asset-rights.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/assumption.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/attestation.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/attestation.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/audit-event.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/auth-session.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/auth-session.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/authorization-scope.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/authorization-scope.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/authorization-scope.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/backup.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/benchmark-case.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/benchmark-case.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/break-glass.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/break-glass.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/briefing.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/budget.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/budget.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/capability.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/certificate.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/certificate.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/certificate.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/certification.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/certification.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/chain-of-custody.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/checkpoint.schema.json",
+      "pointer": "$/properties/state",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `state`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/compatibility-contract.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/compatibility-contract.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/compensation.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/compensation.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/competency-evaluation.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/competency-evaluation.schema.json",
+      "pointer": "$/properties/axes",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `axes`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/competency-pack.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/conflict.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/conflict.schema.json",
+      "pointer": "$/properties/freshness",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `freshness`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/context-bundle.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/context-bundle.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/context-bundle.schema.json",
+      "pointer": "$/properties/dataPolicy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `dataPolicy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/contract-scope.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/contract-scope.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/cost-event.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/cost-event.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/council-decision.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/coverage-statement.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/coverage-statement.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/customer-offboarding.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/customer-offboarding.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/customer.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/customer.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/data-classification.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/data-classification.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/data-classification.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/data-routing.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/data-routing.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/data-routing.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/dependency.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/deployment.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/deprecation.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/design-artifact.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/design-artifact.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/dlp-event.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/dlp-event.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/dlp-event.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/domain-pack.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/drift-finding.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/drift-finding.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/engagement.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/engagement.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/environment.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/environment.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/erasure-request.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/erasure-request.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/erasure-request.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/escalation.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/event.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/evidence-export.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/evidence-export.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/finding.schema.json",
+      "pointer": "$/properties/reproduction",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `reproduction`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/finding.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/finding.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/framework-pack.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/freshness.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/freshness.schema.json",
+      "pointer": "$/properties/freshness",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `freshness`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/health.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/health.schema.json",
+      "pointer": "$/properties/checks/items",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `items`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/holdout-suite.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/holdout-suite.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/human-identity.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/human-identity.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/incident.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/install-report.schema.json",
+      "pointer": "$/properties/components",
+      "mode": "TYPED_MAP",
+      "reason": "Dynamic-key map with strict value schema."
+    },
+    {
+      "file": "schemas/invariant.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/invoice.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/key-metadata.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/key-metadata.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/key-metadata.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/knowledge-item.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/knowledge-item.schema.json",
+      "pointer": "$/properties/freshness",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `freshness`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/lead.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/lease.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/legal-hold.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/legal-hold.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/legal-hold.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/lesson.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/lesson.schema.json",
+      "pointer": "$/properties/freshness",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `freshness`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/license-decision.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/migration.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/mission-blueprint.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/mission-blueprint.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/mission-plan.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/mission-plan.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/mission.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/mission.schema.json",
+      "pointer": "$/properties/authorization",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `authorization`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/mission.schema.json",
+      "pointer": "$/properties/budget",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `budget`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/model-call.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/model-call.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/model-call.schema.json",
+      "pointer": "$/properties/dataPolicy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `dataPolicy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/model-evaluation.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/model-evaluation.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/model-evaluation.schema.json",
+      "pointer": "$/properties/dataPolicy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `dataPolicy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/model-routing-policy.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/model-routing-policy.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/model-routing-policy.schema.json",
+      "pointer": "$/properties/dataPolicy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `dataPolicy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/model.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/model.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/model.schema.json",
+      "pointer": "$/properties/dataPolicy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `dataPolicy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/notification.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/payment-reconciliation.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/permission.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/permission.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/phase0-acceptance.schema.json",
+      "pointer": "$/properties/checks",
+      "mode": "TYPED_MAP",
+      "reason": "Dynamic-key map with strict value schema."
+    },
+    {
+      "file": "schemas/playbook.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/plugin-manifest.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/portfolio-priority.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/portfolio-priority.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/problem.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/project-genome.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/project-genome.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/project.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/project.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/prompt-version.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/prompt-version.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/prompt-version.schema.json",
+      "pointer": "$/properties/dataPolicy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `dataPolicy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/proposal.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/provenance.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/provider-entitlement.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/provider-entitlement.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/provider-entitlement.schema.json",
+      "pointer": "$/properties/dataPolicy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `dataPolicy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/provider.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/provider.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/provider.schema.json",
+      "pointer": "$/properties/dataPolicy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `dataPolicy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/quota.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/quota.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/recertification-trigger.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/recertification-trigger.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/recertification-trigger.schema.json",
+      "pointer": "$/properties/freshness",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `freshness`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/recovery-objective.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/release.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/report-manifest.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/report-manifest.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/requirement.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/residency-rule.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/residency-rule.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/residency-rule.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/resource.schema.json",
+      "pointer": "$/properties/lease",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `lease`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/resource.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/restore.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/retention-rule.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/retention-rule.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/retention-rule.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/review-attestation.schema.json",
+      "pointer": "$/properties/reviewerProvenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `reviewerProvenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/reviewer-independence.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/reviewer-independence.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/reviewer-independence.schema.json",
+      "pointer": "$/properties/dataPolicy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `dataPolicy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/revocation.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/revocation.schema.json",
+      "pointer": "$/properties/freshness",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `freshness`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/role.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/role.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/run-event.schema.json",
+      "pointer": "$/properties/details",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `details`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/run-manifest.schema.json",
+      "pointer": "$/properties/builder",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `builder`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/run-manifest.schema.json",
+      "pointer": "$/properties/reviewer",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `reviewer`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/run-manifest.schema.json",
+      "pointer": "$/properties/summary",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `summary`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/runbook.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/sbom-component.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/schedule.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/schedule.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/schema-version.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/secret-metadata.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/secret-metadata.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/secret-metadata.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/security-assessment-contract.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/security-assessment-contract.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/security-assessment-contract.schema.json",
+      "pointer": "$/properties/policy",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `policy`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/service-identity.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/service-identity.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/side-effect.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/side-effect.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/skill.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/sla.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/sla.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/source-authority.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/source-provenance.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/source-provenance.schema.json",
+      "pointer": "$/properties/freshness",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `freshness`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/state-migration.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/support-ticket.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/target.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/target.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/task.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/task.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/technical-standard.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/technology-candidate.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/technology-decision.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/technology-decision.schema.json",
+      "pointer": "$/properties/criteria/items",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `items`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/test-run.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/test-run.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/tool.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/trace-link.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/unknown-surface.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/unknown-surface.schema.json",
+      "pointer": "$/properties/provenance",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `provenance`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/worker-identity.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/worker-identity.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/worker.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/workflow.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/workflow.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/workspace.schema.json",
+      "pointer": "$/properties/metadata",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
+    },
+    {
+      "file": "schemas/workspace.schema.json",
+      "pointer": "$/properties/scope",
+      "mode": "OPEN_MAP",
+      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
+    }
+  ]
+}

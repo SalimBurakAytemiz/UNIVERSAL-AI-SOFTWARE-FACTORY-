@@ -1,0 +1,27 @@
+// //TR: Bu adversarial self-test recursive schema strictness, strict review-bundle nested contracts ve governance ledger exact-scope/expiry filtrelemesini doğrular.
+import fs from "node:fs";
+import {buildReviewBundle} from "../automation/lib/review-bundle.mjs";
+const checks={};
+const digest="d".repeat(64),commit="b".repeat(40),base="a".repeat(40),future="2035-01-01T00:00:00.000Z",past="2020-01-01T00:00:00.000Z";
+const mc={schemaVersion:"1.1.0",id:"PKG-TEST",phase:42,phaseIds:[42,43],title:"test package",objective:"prove scoped governance",requirements:["req"],invariants:["inv"],acceptanceCriteria:["ac1","ac2"],allowedPathPrefixes:["src/"],protectedPaths:[],mandatoryValidation:["test"],mandatoryEvidence:["evidence"],riskLevel:2,allowPaidApi:false,allowProduction:false,allowRisk5:false,unsupportedCases:[],reviewProfile:"STANDARD",frozenAt:"2030-01-01T00:00:00.000Z",digest,allowDependencyChanges:false,mandatoryFailureCases:["f1","f2"],requiredArtifacts:["a1","a2"]};
+const debt={id:"DEBT-1",status:"ACTIVE",packageId:mc.id,phaseIds:[42,43],reviewedCommit:commit,frozenContractDigest:digest,reason:"bounded debt",acceptedBy:"FOUNDER",acceptedAt:"2029-01-01T00:00:00.000Z",expiresAt:future};
+const waiver={id:"W-1",status:"ACTIVE",packageId:mc.id,phaseIds:[42,43],reviewedCommit:commit,frozenContractDigest:digest,reason:"bounded waiver",expiresAt:future,approval:{id:"APP-1",approvedBy:"FOUNDER",approvedAt:"2029-01-01T00:00:00.000Z",approvalDigest:"e".repeat(64)}};
+const limitation={id:"L-1",status:"ACTIVE",packageId:mc.id,phaseIds:[42,43],reviewedCommit:commit,frozenContractDigest:digest,description:"bounded limitation",recordedAt:"2029-01-01T00:00:00.000Z",expiresAt:future,sourceRefs:["DOC-1"]};
+const build=(over={})=>buildReviewBundle({runId:"RUN-2F",cycle:1,phase:42,baseCommit:base,reviewedCommit:commit,milestoneContract:mc,changedFiles:[],changeGuard:{ok:true,violations:[],dependencyChanges:[],diffLines:0},diffStat:"",validation:{schemaVersion:"1.1.0",status:"PASS",steps:[{id:"test",command:["node","test"],status:"PASS",exitCode:0,durationMs:1,logFile:null}]},acceptedDebt:[debt],waivers:[waiver],knownLimitations:[limitation],...over});
+const exact=build();checks.bundleVersion=exact.schemaVersion==="1.4.0";checks.exactDebtIncluded=exact.acceptedDebt.length===1;checks.exactWaiverIncluded=exact.waivers.length===1;checks.exactLimitationIncluded=exact.knownLimitations.length===1;
+checks.wrongPackageExcluded=build({waivers:[{...waiver,packageId:"PKG-OTHER"}]}).waivers.length===0;
+checks.wrongCommitExcluded=build({acceptedDebt:[{...debt,reviewedCommit:"c".repeat(40)}]}).acceptedDebt.length===0;
+checks.expiredExcluded=build({knownLimitations:[{...limitation,expiresAt:past}]}).knownLimitations.length===0;
+checks.revokedExcluded=build({waivers:[{...waiver,status:"REVOKED"}]}).waivers.length===0;
+let malformedRejected=false;try{build({waivers:[{...waiver,approval:{id:"APP-X"}}]})}catch(e){malformedRejected=String(e.message).includes("GOVERNANCE_LEDGER_APPROVAL_FIELDS_REQUIRED")}checks.malformedRejected=malformedRejected;
+const schema=JSON.parse(fs.readFileSync("schemas/review-bundle.schema.json","utf8"));
+checks.cycleBound=schema.properties.cycle.maximum===2;
+checks.milestoneBound=schema.properties.milestoneContract.$ref==="milestone-contract.schema.json";
+checks.validationStrict=schema.properties.validation.additionalProperties===false&&schema.properties.validation.properties.steps.items.additionalProperties===false;
+checks.changeGuardStrict=schema.properties.changeGuard.additionalProperties===false&&schema.properties.changeGuard.properties.violations.items.additionalProperties===false;
+checks.reviewRulesStrict=schema.properties.reviewRules.additionalProperties===false;
+checks.governanceStrict=["acceptedDebt","waivers","knownLimitations"].every(k=>schema.properties[k].items.additionalProperties===false);
+checks.evidenceStrict=schema.properties.evidenceCatalog.items.oneOf.every(x=>x.additionalProperties===false);
+const registry=JSON.parse(fs.readFileSync("config/schema-open-map-exceptions.json","utf8"));checks.exceptionRegistryExact=registry.entries.length>0&&registry.entries.every(x=>x.file.startsWith("schemas/")&&x.pointer.startsWith("$")&&["OPEN_MAP","TYPED_MAP"].includes(x.mode)&&x.reason);
+checks.reviewBundleNotException=registry.entries.every(x=>x.file!=="schemas/review-bundle.schema.json");
+const failed=Object.entries(checks).filter(([,v])=>!v);if(failed.length){console.error(`V6_PASTE2F_SELFTEST: FAIL ${failed.map(([k])=>k).join(",")}`);process.exit(1)}console.log(`V6_PASTE2F_SELFTEST: PASS ${Object.keys(checks).length}/${Object.keys(checks).length}`);

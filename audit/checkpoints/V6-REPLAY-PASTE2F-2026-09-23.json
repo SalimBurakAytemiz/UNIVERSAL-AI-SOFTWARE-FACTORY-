@@ -1,0 +1,31 @@
+{
+  "//TR": "Bu checkpoint V6 recovery replay Paste 2F recursive schema strictness, strict review-bundle nested contracts ve governance ledger exact-scope filtrelemesinin kalıcı tamamlanma noktasını kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpointId": "V6-REPLAY-PASTE2F-2026-09-23",
+  "scope": "PASTE_2F_SCHEMA_REVIEW_GOVERNANCE",
+  "status": "COMPLETE",
+  "findings": {
+    "P0": 0,
+    "P1": 3,
+    "P2": 2,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "completed": [
+    "recursive schema strictness validation across all 152 schemas",
+    "exact OPEN_MAP/TYPED_MAP exception registry",
+    "review-bundle nested validation/changeGuard/reviewRules/evidence contracts hardened",
+    "accepted debt/waiver/known limitation exact package+phase+commit+frozen-contract+expiry scoping",
+    "review cycle schema maximum aligned to 2",
+    "install-report component typed-map value contract hardened",
+    "Paste 2F adversarial regression 18/18 PASS",
+    "Paste 2E through Foundation A regression PASS"
+  ],
+  "knownDeferred": [
+    "251 legacy OPEN_MAP schema extension points remain explicitly registered for later hardening; no new unregistered open object is permitted"
+  ],
+  "sourceLevelClosure": false,
+  "targetMachinePhase0": "PENDING",
+  "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL",
+  "nextScope": "PASTE_2G_RUNTIME_PRODUCER_SCHEMA_PREFLIGHT"
+}

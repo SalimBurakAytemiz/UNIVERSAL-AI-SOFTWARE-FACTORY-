@@ -14,7 +14,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "generatedAt": {
       "type": "string",
@@ -28,7 +28,26 @@
       "type": "object",
       "minProperties": 5,
       "additionalProperties": {
-        "type": "object"
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "present",
+          "file",
+          "status"
+        ],
+        "properties": {
+          "present": {
+            "type": "boolean"
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
       }
     },
     "phase0Final": {

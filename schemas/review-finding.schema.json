@@ -162,7 +162,7 @@
     "firstSeenCycle": {
       "type": "integer",
       "minimum": 1,
-      "maximum": 3
+      "maximum": 2
     },
     "status": {
       "enum": [
