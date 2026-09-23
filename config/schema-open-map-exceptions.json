@@ -1185,12 +1185,6 @@
       "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
     },
     {
-      "file": "schemas/review-attestation.schema.json",
-      "pointer": "$/properties/reviewerProvenance",
-      "mode": "OPEN_MAP",
-      "reason": "Legacy extension object `reviewerProvenance`; explicitly registered until its domain-specific value contract is hardened."
-    },
-    {
       "file": "schemas/reviewer-independence.schema.json",
       "pointer": "$/properties/metadata",
       "mode": "OPEN_MAP",
@@ -1237,24 +1231,6 @@
       "pointer": "$/properties/details",
       "mode": "OPEN_MAP",
       "reason": "Legacy extension object `details`; explicitly registered until its domain-specific value contract is hardened."
-    },
-    {
-      "file": "schemas/run-manifest.schema.json",
-      "pointer": "$/properties/builder",
-      "mode": "OPEN_MAP",
-      "reason": "Legacy extension object `builder`; explicitly registered until its domain-specific value contract is hardened."
-    },
-    {
-      "file": "schemas/run-manifest.schema.json",
-      "pointer": "$/properties/reviewer",
-      "mode": "OPEN_MAP",
-      "reason": "Legacy extension object `reviewer`; explicitly registered until its domain-specific value contract is hardened."
-    },
-    {
-      "file": "schemas/run-manifest.schema.json",
-      "pointer": "$/properties/summary",
-      "mode": "OPEN_MAP",
-      "reason": "Legacy extension object `summary`; explicitly registered until its domain-specific value contract is hardened."
     },
     {
       "file": "schemas/runbook.schema.json",

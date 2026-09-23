@@ -17,6 +17,7 @@
     "DEFINITION-OF-DONE.md",
     "FULL-REPO-CONSTRUCTION-CONTRACT.md",
     "INSTALLATION-GO-CHECKLIST.md",
+    "THIRD-PARTY-NOTICES.md",
     "automation/factory-supervisor.mjs",
     "automation/lib/evidence-signing.mjs",
     "automation/lib/filesystem-boundary.mjs",

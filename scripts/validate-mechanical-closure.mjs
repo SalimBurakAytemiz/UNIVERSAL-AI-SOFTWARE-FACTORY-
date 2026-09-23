@@ -12,6 +12,14 @@ const requiredFiles=[
  "schemas/independent-review-result.schema.json","schemas/review-finding.schema.json","schemas/review-bundle.schema.json","schemas/review-attestation.schema.json","schemas/phase0-acceptance.schema.json","schemas/install-report.schema.json",
  "config/builder-execution-policy.json","config/schema-open-map-exceptions.json","config/package-policy.json","config/git-metadata-policy.json","config/action-policy.json","config/evidence-ledger-policy.json","config/environment-policy.json",
  "governance/accepted-debt.json","governance/waivers.json","governance/known-limitations.json",
+ "automation/lib/runtime-contracts.mjs",
+ "automation/lib/preflight-policy.mjs",
+ "automation/lib/release-supply-chain.mjs",
+ "config/preflight-policy.json",
+ "scripts/validate-paste2h-runtime-release.mjs",
+ "scripts/runtime-schema-conformance-selftest.mjs",
+ "scripts/validate-release-supply-chain.mjs",
+ "THIRD-PARTY-NOTICES.md",
  "registries/agent-semantic-requirements.json","registries/technology-agent-depth.json","docs/closure/V2-RE-AUDIT-NEW-GAPS-TR.md"
 ];
 for(const f of requiredFiles)if(!fs.existsSync(f))errors.push(`missing:${f}`);
@@ -58,4 +66,16 @@ const omniClient=text("models/omniroute/client.ts"),claudeBroker=text("scripts/c
 const npmrc=text(".npmrc"),supplyPolicy=read("config/supply-chain-policy.json"),supplyLib=text("automation/lib/supply-chain.mjs"),supplyScript=text("scripts/dependency-supply-chain.mjs");for(const x of ["registry=https://registry.npmjs.org/","strict-ssl=true","ignore-scripts=true","save-exact=true","package-lock=true","engine-strict=true"])if(!npmrc.includes(x))errors.push(`npmrc-policy-missing:${x}`);if(!(supplyPolicy.allowedRegistryHosts??[]).includes("registry.npmjs.org")||supplyPolicy.requireTransitiveIntegrity!==true||supplyPolicy.requireInstalledPackageIdentity!==true||supplyPolicy.requireInstalledLicenseMetadata!==true)errors.push("supply-chain-policy-incomplete");for(const x of ["REGISTRY_HOST_DENIED","TRANSITIVE_INTEGRITY_MISSING","INSTALLED_IDENTITY_MISMATCH","INSTALLED_LICENSE_MISSING"])if(!supplyLib.includes(x))errors.push(`supply-chain-validator-missing:${x}`);for(const x of ["persistLowBacklog","DEPENDENCY_AUDIT_INVALID_RESPONSE","blockingAuditSeverities"])if(!supplyScript.includes(x))errors.push(`dependency-audit-governance-missing:${x}`);
 const sf=text("scripts/start-full-auto.ps1")+text("scripts/start-control-tower.ps1");if(/npm install/i.test(sf))errors.push("runtime-start-script-uses-npm-install");
 const reviewPrompt=text("prompts/AUTO-REVIEW.md");for(const x of ["UNTRUSTED","ADVISORY","moving","REVIEW BUNDLE","BASIS REFERENCE RULE","FAIL-*","ART-*"])if(!reviewPrompt.toLowerCase().includes(x.toLowerCase()))errors.push(`review-prompt-missing:${x}`);
+
+const preflightPolicy=read("config/preflight-policy.json"),preflightSource=text("scripts/preflight.mjs"),runtimeContracts=text("automation/lib/runtime-contracts.mjs"),runEventSchema=read("schemas/run-event.schema.json"),runManifestSchema=read("schemas/run-manifest.schema.json"),reviewAttestationSchema=read("schemas/review-attestation.schema.json"),releaseSupply=text("automation/lib/release-supply-chain.mjs"),thirdParty=text("THIRD-PARTY-NOTICES.md");
+if(preflightPolicy.minimumVersions?.node!=="24.0.0"||preflightPolicy.minimumVersions?.npm!=="11.0.0"||preflightPolicy.minimumVersions?.powershell!=="5.1.0"||Number(preflightPolicy.minimumMemoryGb)<16||Number(preflightPolicy.minimumFreeDiskGb)<20)errors.push("preflight-baseline-policy-incomplete");
+for(const x of ["evaluatePreflightBaseline","registryTls","proxyEnvNames","clockSync","utf8RoundTrip"])if(!preflightSource.includes(x))errors.push(`preflight-runtime-consumer-missing:${x}`);
+if(runEventSchema.properties?.schemaVersion?.const!=="1.1.0"||!(runEventSchema.required??[]).includes("eventHash")||!(runEventSchema.required??[]).includes("previousEventHash"))errors.push("run-event-producer-schema-drift");
+if(runManifestSchema.properties?.schemaVersion?.const!=="1.1.0"||runManifestSchema.properties?.builder?.additionalProperties!==false||runManifestSchema.properties?.reviewer?.additionalProperties!==false)errors.push("run-manifest-producer-schema-drift");
+if(reviewAttestationSchema.properties?.reviewerProvenance?.additionalProperties!==false||!(reviewAttestationSchema.properties?.reviewerProvenance?.required??[]).includes("packageJsonSha256"))errors.push("review-attestation-provenance-schema-open");
+for(const x of ["runEvent","runManifest","reviewAttestation","installReport","preflight"])if(!runtimeContracts.includes(x))errors.push(`runtime-contract-version-missing:${x}`);
+for(const x of ["SBOM_LOCK_DIGEST_MISMATCH","RELEASE_COMPONENT_LICENSE_MISSING","RELEASE_COMPONENT_PROVENANCE_MISSING","THIRD_PARTY_NOTICE_GOVERNANCE_MARKER_MISSING"])if(!releaseSupply.includes(x))errors.push(`release-supply-chain-gate-missing:${x}`);if(!thirdParty.includes("GENERATED_DEPENDENCY_NOTICES_REQUIRED"))errors.push("third-party-generated-notice-policy-missing");
+if(!validation.steps?.some(x=>x.id==="runtime-release-contracts"&&x.command?.includes("scripts/validate-paste2h-runtime-release.mjs")))errors.push("paste2h-validation-not-wired");if(!validation.steps?.some(x=>x.id==="release-supply-chain"&&x.requiresDependencies===true&&x.command?.includes("scripts/validate-release-supply-chain.mjs")))errors.push("release-supply-chain-validation-not-wired");
+
+const runtimeSchemaSelftest=text("scripts/runtime-schema-conformance-selftest.mjs");if(!runtimeSchemaSelftest.includes('Ajv2020 from "ajv/dist/2020.js"')||!runtimeSchemaSelftest.includes("RUNTIME_SCHEMA_CONFORMANCE_SELFTEST: PASS")||!validation.steps?.some(x=>x.id==="runtime-schema-conformance"&&x.requiresDependencies===true))errors.push("runtime-schema-ajv2020-conformance-not-wired");if(!text("automation/factory-supervisor.mjs").includes('Ajv2020 from "ajv/dist/2020.js"'))errors.push("supervisor-not-using-ajv2020");
 if(errors.length){console.error(errors.join("\n"));process.exit(1)}console.log(`MECHANICAL_CLOSURE_VALIDATION: PASS files=${requiredFiles.length} reviewCycles=${cfg.maxReviewCycles} maxMilestonesPerRun=${cfg.maxMilestonesPerRun} technologiesMapped=${profiles.filter(x=>x.technicalAgent).length}`);

@@ -1,23 +1,26 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://uasco.local/schemas/run-manifest.schema.json",
-  "$comment": "//TR: Bu schema bir autonomous run'ın repo/base/phase/milestone/tool provenance ve artifact/evidence bağlantılarını merkezi manifestte tutar.",
+  "$comment": "//TR: Bu schema autonomous supervisor invocation-level run manifest producer reality v1.1.0 alanlarını strict doğrular.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "artifacts",
-    "baseCommit",
-    "milestoneId",
-    "phase",
-    "repoRoot",
-    "runId",
+    "//TR",
     "schemaVersion",
+    "runId",
     "startedAt",
+    "baseCommit",
+    "mode",
+    "executionUnit",
+    "builder",
+    "reviewer",
+    "remoteConfigured",
+    "remoteUrl",
     "status"
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "runId": {
       "type": "string",
@@ -27,46 +30,73 @@
       "type": "string",
       "format": "date-time"
     },
-    "finishedAt": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "format": "date-time"
-    },
-    "repoRoot": {
-      "type": "string"
-    },
     "baseCommit": {
-      "type": "string"
+      "type": "string",
+      "minLength": 7
     },
-    "phase": {
-      "type": "integer",
-      "minimum": 0
+    "mode": {
+      "type": "string",
+      "minLength": 1
     },
-    "milestoneId": {
-      "type": "string"
-    },
-    "status": {
-      "type": "string"
+    "executionUnit": {
+      "type": "string",
+      "minLength": 1
     },
     "builder": {
-      "type": "object"
-    },
-    "reviewer": {
-      "type": "object"
-    },
-    "artifacts": {
-      "type": "array",
-      "items": {
-        "type": "string"
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "modelId"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
-    "summary": {
-      "type": [
-        "object",
-        "null"
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "modelId"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "remoteConfigured": {
+      "type": "boolean"
+    },
+    "remoteUrl": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
       ]
+    },
+    "status": {
+      "const": "RUNNING"
+    },
+    "//TR": {
+      "type": "string",
+      "minLength": 1
     }
   }
 }

@@ -4,6 +4,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "//TR",
     "schemaVersion",
     "runId",
     "packageId",
@@ -67,7 +68,52 @@
       "type": "string"
     },
     "reviewerProvenance": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "configuredModelId",
+        "toolVersion",
+        "launcherSha256",
+        "provenanceLevel",
+        "packageName",
+        "packageVersion",
+        "packageJsonSha256"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "configuredModelId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toolVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "launcherSha256": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provenanceLevel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packageName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packageVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packageJsonSha256": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "result": {
       "const": "CLEAN"
@@ -79,6 +125,10 @@
     "signature": {
       "type": "string",
       "minLength": 20
+    },
+    "//TR": {
+      "type": "string",
+      "minLength": 1
     }
   }
 }

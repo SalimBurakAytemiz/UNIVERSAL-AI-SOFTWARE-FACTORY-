@@ -34,6 +34,8 @@ export function collectPhase0Binding(root){
  const inputDigests={};for(const [id,rel] of Object.entries(PHASE0_INPUT_FILES)){const file=path.join(root,rel);inputDigests[id]={path:rel,present:fs.existsSync(file),sha256:fs.existsSync(file)?shaFile(file):null}}
  return {installId:currentInstallId(root),sourceCommit:currentHead(root),trustRootManifestSha256:shaFile(trustFile),inputDigests};
 }
+
+export function buildPhase0AcceptanceReport({binding,checks,final,generatedAt=new Date().toISOString(),sealAlgorithm="Ed25519",sealSignature}){return {"//TR":"Bu runtime report autonomous full build öncesi Phase-0 mekanik kabul kapısını exact install/source/runtime input setine bağlar ve Ed25519 ile mühürler.",schemaVersion:PHASE0_SCHEMA_VERSION,generatedAt,...binding,checks,final,sealAlgorithm,...(sealSignature?{sealSignature}:{})}}
 export function phase0UnsignedPayload(report){const x={...report};delete x.sealSignature;return x}
 export function verifyPhase0Acceptance({repoRoot,report,publicKeyFile}){
  const errors=[];if(!report||report.schemaVersion!==PHASE0_SCHEMA_VERSION)errors.push("PHASE0_SCHEMA_VERSION_INVALID");if(!["CLEAN","CLEAN_LOCAL_ONLY"].includes(report?.final))errors.push("PHASE0_NOT_CLEAN");if(report?.sealAlgorithm!=="Ed25519"||typeof report?.sealSignature!=="string"||!report.sealSignature)errors.push("PHASE0_SIGNATURE_MISSING");

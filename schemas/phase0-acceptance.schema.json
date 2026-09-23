@@ -5,6 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "//TR",
     "schemaVersion",
     "generatedAt",
     "installId",
@@ -175,6 +176,10 @@
     "sealSignature": {
       "type": "string",
       "minLength": 40
+    },
+    "//TR": {
+      "type": "string",
+      "minLength": 1
     }
   }
 }

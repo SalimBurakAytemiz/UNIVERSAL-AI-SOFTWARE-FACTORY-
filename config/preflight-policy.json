@@ -1,0 +1,29 @@
+{
+  "//TR": "Bu protected policy target Windows Phase0 öncesi minimum tool/hardware/path/network/clock baseline'ını fail-closed sabitler; proxy yalnız gözlemlenir, credential değeri raporlanmaz.",
+  "schemaVersion": "1.0.0",
+  "minimumVersions": {
+    "node": "24.0.0",
+    "npm": "11.0.0",
+    "git": "2.30.0",
+    "powershell": "5.1.0"
+  },
+  "minimumMemoryGb": 16,
+  "minimumFreeDiskGb": 20,
+  "maximumRepoPathLength": 180,
+  "requiredPorts": [
+    3210,
+    20128
+  ],
+  "registryUrl": "https://registry.npmjs.org/-/ping",
+  "registryTimeoutMs": 10000,
+  "requireRegistryTls": true,
+  "requireWindowsClockSync": true,
+  "proxyObservationEnv": [
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "NO_PROXY",
+    "https_proxy",
+    "http_proxy",
+    "no_proxy"
+  ]
+}

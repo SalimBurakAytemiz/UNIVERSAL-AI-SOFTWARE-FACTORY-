@@ -5,6 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "//TR",
     "schemaVersion",
     "generatedAt",
     "installId",
@@ -97,6 +98,10 @@
           "type": "null"
         }
       ]
+    },
+    "//TR": {
+      "type": "string",
+      "minLength": 1
     }
   }
 }

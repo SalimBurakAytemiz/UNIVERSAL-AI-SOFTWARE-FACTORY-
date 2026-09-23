@@ -1,6 +1,6 @@
 {
   "//TR": "Bu protected config package.json scriptlerine güvenmeden canonical deterministic validation adımlarını sabitler; mechanical closure + dependency-free kernel self-test typecheck/test öncesinde çalışır ve builder normal milestone sırasında bu listeyi değiştiremez.",
-  "schemaVersion": "1.4.0",
+  "schemaVersion": "1.6.0",
   "steps": [
     {
       "id": "registries",
@@ -122,6 +122,21 @@
       ]
     },
     {
+      "id": "runtime-release-contracts",
+      "command": [
+        "node",
+        "scripts/validate-paste2h-runtime-release.mjs"
+      ]
+    },
+    {
+      "id": "runtime-schema-conformance",
+      "command": [
+        "node",
+        "scripts/runtime-schema-conformance-selftest.mjs"
+      ],
+      "requiresDependencies": true
+    },
+    {
       "id": "mechanical-selftest",
       "command": [
         "node",
@@ -149,6 +164,14 @@
         "scripts/dependency-supply-chain.mjs"
       ],
       "requiresDependencies": false
+    },
+    {
+      "id": "release-supply-chain",
+      "command": [
+        "node",
+        "scripts/validate-release-supply-chain.mjs"
+      ],
+      "requiresDependencies": true
     },
     {
       "id": "typecheck",

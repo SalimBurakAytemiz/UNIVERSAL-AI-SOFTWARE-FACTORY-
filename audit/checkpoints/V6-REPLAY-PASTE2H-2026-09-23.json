@@ -1,0 +1,44 @@
+{
+  "//TR": "Bu checkpoint Paste 2H preflight/runtime producer/schema/Ajv2020/release supply-chain source hardening turunun exact durumunu kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_REPLAY_PASTE2H",
+  "date": "2026-09-23",
+  "baseCommit": "83899e9566398f6a0e5eb8e3f0fc5494db3a96f7",
+  "status": "COMPLETE_SOURCE_PENDING_DEPENDENCY_AWARE_GATES",
+  "scope": [
+    "target-machine preflight baseline policy",
+    "runtime producer/schema version authority",
+    "Ajv2020 Draft 2020-12 canonical validation wiring",
+    "runtime schema conformance selftest wiring",
+    "release SBOM/license/provenance/generated third-party notices gate"
+  ],
+  "findings": {"P0": 0, "P1": 4, "P2": 3, "P3": 0},
+  "fixed": {"P0": 0, "P1": 4, "P2": 3, "P3": 0},
+  "openInScope": {"P0": 0, "P1": 0, "P2": 0, "P3": 0},
+  "regression": [
+    "V6_PASTE2H_SELFTEST PASS 24/24",
+    "RUNTIME_CONTRACT_VALIDATION PASS 15/15",
+    "SCHEMA_CATALOG PASS 152/152",
+    "SCHEMA_STRICTNESS PASS openExceptions=247 typedMaps=2",
+    "MECHANICAL_CLOSURE PASS",
+    "PASTE2F->2A regression PASS",
+    "FOUNDATION_F->A regression PASS",
+    "MECHANICAL_KERNEL PASS",
+    "BOOTSTRAP_KERNEL PASS",
+    "SUPERVISOR_STATE PASS",
+    "TR_VALIDATION PASS",
+    "SOURCE_SYNTAX PASS",
+    "git diff --check PASS",
+    "AJV2020_SOURCE_POLICY PASS"
+  ],
+  "pendingEnvironmentGates": [
+    "runtime-schema-conformance: PENDING_DEPENDENCIES (node_modules absent)",
+    "release-supply-chain: PENDING_REVIEWED_DEPENDENCIES_AND_SBOM"
+  ],
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL"
+  },
+  "nextScope": "PASTE_2I_GLOBAL_STOP_SCHEDULER_PREV_EVIDENCE_RETENTION"
+}

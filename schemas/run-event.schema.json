@@ -1,21 +1,30 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://uasco.local/schemas/run-event.schema.json",
-  "$comment": "//TR: Bu schema bütün bootstrap/build/validation/review/git/scheduler olaylarını tek runId zincirinde structured log olarak kaydetmek için minimum event contract'ını tanımlar.",
+  "$comment": "//TR: Bu schema hash-chain bağlı runtime event producer reality v1.1.0 alanlarını strict doğrular.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "event",
-    "runId",
     "schemaVersion",
+    "runId",
     "sequence",
-    "severity",
+    "timestamp",
+    "phase",
+    "milestoneId",
+    "actor",
     "stage",
-    "timestamp"
+    "event",
+    "severity",
+    "durationMs",
+    "exitCode",
+    "details",
+    "artifactRefs",
+    "previousEventHash",
+    "eventHash"
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "runId": {
       "type": "string",
@@ -86,6 +95,21 @@
       "items": {
         "type": "string"
       }
+    },
+    "previousEventHash": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "eventHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     }
   }
 }
