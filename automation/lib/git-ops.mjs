@@ -1,6 +1,6 @@
 // //TR: Bu helper Git repo/worktree/commit/merge/push işlemlerini kontrollü yapar; remote URL credential'larını loglamaz ve her worktree için ayrı dependency tree kullanır.
-import fs from "node:fs";import path from "node:path";import crypto from "node:crypto";import cp from "node:child_process";
-function syncRun(cwd,args,options={}){const r=cp.spawnSync("git",args,{cwd,encoding:"utf8",windowsHide:true,...options});return {status:r.status,stdout:r.stdout??"",stderr:r.stderr??"",error:r.error?.message}}
+import fs from "node:fs";import path from "node:path";import crypto from "node:crypto";import cp from "node:child_process";import {spawnGitSync} from "./git-isolation.mjs";
+function syncRun(cwd,args,options={}){const r=spawnGitSync(cwd,args,options);return {status:r.status,stdout:r.stdout??"",stderr:r.stderr??"",error:r.error?.message}}
 export function sanitizeRemoteUrl(url){if(!url)return null;try{const u=new URL(url);if(u.username||u.password){u.username="***";u.password="***"}return u.toString()}catch{return String(url).replace(/(https?:\/\/)[^/@\s]+@/i,"$1***@")}}
 export function ensureGitRepository(cwd){const r=syncRun(cwd,["rev-parse","--is-inside-work-tree"]);if(r.status!==0||r.stdout.trim()!=="true")throw new Error("NOT_A_GIT_REPOSITORY")}
 export function gitHead(cwd){const r=syncRun(cwd,["rev-parse","HEAD"]);if(r.status!==0)throw new Error(r.stderr);return r.stdout.trim()}

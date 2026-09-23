@@ -1,0 +1,38 @@
+{
+  "//TR": "V6 physical replay Foundation-E checkpoint: Git/worktree/environment isolation ve immutable CI action pinning kapsamı doğrulanmış source durumunu kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_FOUNDATION_E_COMPLETE",
+  "baseCommit": "2312baf308681c0653d8122b82eda2184b7d1eaa",
+  "scope": [
+    "worktree root/ancestor symlink-junction boundary",
+    "Git global/system config isolation",
+    "Git hook isolation",
+    "credential-safe Git metadata digests",
+    "exact Git staging",
+    "explicit child environment allowlist",
+    "PowerShell Git initializer isolation",
+    "immutable GitHub Actions SHA pins and checkout credential persistence disabled"
+  ],
+  "findings": {"P0": 0, "P1": 4, "P2": 2, "P3": 0, "openP0P1P2InScope": 0},
+  "regression": {
+    "foundationE": "PASS 11/11",
+    "foundationD": "PASS 9/9",
+    "foundationC": "PASS 8/8",
+    "foundationB": "PASS 5/5",
+    "foundationA": "PASS 10/10",
+    "mechanicalClosure": "PASS",
+    "mechanicalKernel": "PASS",
+    "bootstrapKernel": "PASS",
+    "supervisorState": "PASS",
+    "gitDiffCheck": "PASS",
+    "productionDirectGitSpawnAudit": "PASS",
+    "powershellParse": "NOT_RUN_TOOL_MISSING_PWSH"
+  },
+  "truth": {
+    "sourceLevelClosure": false,
+    "targetMachinePhase0": "PENDING",
+    "trustRoot": "STALE_PENDING_FINAL_RESEAL",
+    "finalZip": "NOT_DONE"
+  },
+  "nextScope": "V6_FOUNDATION_F_INSTALLER_PROVIDER_EVIDENCE"
+}

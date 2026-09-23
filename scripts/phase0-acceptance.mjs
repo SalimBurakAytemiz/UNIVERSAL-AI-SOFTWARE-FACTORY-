@@ -1,6 +1,6 @@
 // //TR: Bu script full autonomous scheduler başlamadan artifact/preflight/dependency/validation/provider/builder-boundary/evidence/Git/trust/logging/review/state-machine/scheduler/Control Tower kontrollerini tek fail-closed PHASE0_ACCEPTANCE raporunda birleştirir.
-import fs from "node:fs";import cp from "node:child_process";import {verifyTrustRoot} from "../automation/lib/trust-root.mjs";import {initializeSchedulerState} from "../automation/lib/scheduler.mjs";
-const read=p=>fs.existsSync(p)?JSON.parse(fs.readFileSync(p,"utf8")):null;const sh=(args)=>cp.spawnSync("git",args,{encoding:"utf8",windowsHide:true});const checks={};
+import fs from "node:fs";import {spawnGitSync} from "../automation/lib/git-isolation.mjs";import {verifyTrustRoot} from "../automation/lib/trust-root.mjs";import {initializeSchedulerState} from "../automation/lib/scheduler.mjs";
+const read=p=>fs.existsSync(p)?JSON.parse(fs.readFileSync(p,"utf8")):null;const sh=(args)=>spawnGitSync(process.cwd(),args);const checks={};
 function add(name,status,detail){checks[name]={status,detail:String(detail)}}
 function fromReport(name,file,selector=x=>x?.status??x?.final){const x=read(file);if(!x){add(name,"PENDING",`missing ${file}`);return null}const v=selector(x),pass=["PASS","CLEAN","CLEAN_LOCAL_ONLY"].includes(v);add(name,pass?"PASS":(v==="WARN"?"WARN":"BLOCKED"),`${file}: ${v}`);return x}
 fromReport("artifactIntegrity",".ai/runtime/ARTIFACT_VERIFY.json");fromReport("preflight",".ai/runtime/PREFLIGHT.json",x=>x.final);

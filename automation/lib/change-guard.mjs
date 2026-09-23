@@ -1,9 +1,9 @@
 // //TR: Bu helper frozen milestone scope/protected trust-root/test weakening/package execution policy/dependency/diff budget kontrollerini commit öncesi fail-closed uygular.
-import fs from "node:fs";import path from "node:path";import cp from "node:child_process";import {protectedChangeViolations} from "./trust-root.mjs";import {evaluatePackagePolicy} from "./package-policy.mjs";
+import fs from "node:fs";import path from "node:path";import {spawnGitSync} from "./git-isolation.mjs";import {protectedChangeViolations} from "./trust-root.mjs";import {evaluatePackagePolicy} from "./package-policy.mjs";
 function allowed(n,p){return p.some(x=>n===x||n.startsWith(x.endsWith("/")?x:`${x}/`))}
-function contentAt(cwd,ref,file){const r=cp.spawnSync("git",["show",`${ref}:${file}`],{cwd,encoding:"utf8",windowsHide:true});return r.status===0?r.stdout:null}
+function contentAt(cwd,ref,file){const r=spawnGitSync(cwd,["show",`${ref}:${file}`]);return r.status===0?r.stdout:null}
 function assertionCount(s=""){return (s.match(/\b(?:expect|assert|assertEquals|assertTrue|assertFalse)\s*\(/g)||[]).length}
-function diffLines(cwd,base){const r=cp.spawnSync("git",["diff","--numstat",base,"--"],{cwd,encoding:"utf8",windowsHide:true});if(r.status!==0)return 0;return r.stdout.split(/\r?\n/).filter(Boolean).reduce((n,l)=>{const [a,b]=l.split(/\s+/);return n+(Number(a)||0)+(Number(b)||0)},0)}
+function diffLines(cwd,base){const r=spawnGitSync(cwd,["diff","--numstat",base,"--"]);if(r.status!==0)return 0;return r.stdout.split(/\r?\n/).filter(Boolean).reduce((n,l)=>{const [a,b]=l.split(/\s+/);return n+(Number(a)||0)+(Number(b)||0)},0)}
 export function evaluateChangeSet({repoRoot,worktree,baseCommit,changedFiles,milestone,protectedPolicy,governanceAuthorized=false}){
  const violations=[];const maxFiles=milestone.maxFilesChanged??120,maxLines=milestone.maxDiffLines??18000;const lines=diffLines(worktree,baseCommit);
  if(changedFiles.length>maxFiles)violations.push({type:"CHANGE_FILE_BUDGET_EXCEEDED",detail:`${changedFiles.length} > ${maxFiles}`});if(lines>maxLines)violations.push({type:"CHANGE_LINE_BUDGET_EXCEEDED",detail:`${lines} > ${maxLines}`});

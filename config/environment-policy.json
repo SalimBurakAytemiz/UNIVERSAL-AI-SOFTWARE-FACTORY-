@@ -1,5 +1,5 @@
 {
-  "//TR": "Bu policy child process environmentını explicit allowlist + dar provider prefixleriyle sınırlar; NODE_/NPM_/Git shell injection değişkenlerini özellikle aktarmaz.",
+  "//TR": "Bu policy child process environmentını explicit allowlist + exact provider değişkenleriyle sınırlar; broad CLAUDE_/CODEX_/ANTHROPIC_/OPENAI_ prefix inheritance yasaktır.",
   "schemaVersion": "2.0.0",
   "alwaysAllow": [
     "PATH",
@@ -31,7 +31,7 @@
     "CREDENTIAL"
   ],
   "exceptionPrefixes": [],
-  "note": "Common proxy/certificate env only; Claude/Codex credential prefixes are selected provider-specifically at runtime by env-policy helper.",
+  "note": "Common proxy/certificate env prefixleri dışında provider credential/config aktarımı exact-name allowlist ile yapılır.",
   "explicitDeny": [
     "NODE_OPTIONS",
     "NPM_CONFIG_USERCONFIG",
@@ -42,5 +42,21 @@
     "BASH_ENV",
     "ENV",
     "PROMPT_COMMAND"
-  ]
+  ],
+  "providerAllow": {
+    "ANTHROPIC": [
+      "CLAUDE_CONFIG_DIR"
+    ],
+    "OPENAI": [
+      "CODEX_HOME"
+    ]
+  },
+  "providerPaidApiAllow": {
+    "ANTHROPIC": [
+      "ANTHROPIC_API_KEY"
+    ],
+    "OPENAI": [
+      "OPENAI_API_KEY"
+    ]
+  }
 }

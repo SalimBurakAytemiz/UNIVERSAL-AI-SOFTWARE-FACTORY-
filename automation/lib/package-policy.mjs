@@ -1,6 +1,6 @@
 // //TR: Bu helper package.json execution semantics alanlarını field-level korur; tüm direct dependency section'larında scope taşıma, alias/protocol ve non-exact semver bypass'larını fail-closed reddeder.
-import fs from "node:fs";import cp from "node:child_process";
-function contentAt(cwd,ref,file){const r=cp.spawnSync("git",["show",`${ref}:${file}`],{cwd,encoding:"utf8",windowsHide:true});return r.status===0?r.stdout:null}
+import fs from "node:fs";import {spawnGitSync} from "./git-isolation.mjs";
+function contentAt(cwd,ref,file){const r=spawnGitSync(cwd,["show",`${ref}:${file}`]);return r.status===0?r.stdout:null}
 function dependencyChanges(before,after,sections){const out=[];for(const section of sections){const b=before?.[section]??{},a=after?.[section]??{};for(const name of new Set([...Object.keys(b),...Object.keys(a)]))if(b[name]!==a[name])out.push({section,name,before:b[name]??null,after:a[name]??null})}return out}
 const exactSemver=/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 function protocolRejected(value,protocols=[]){const s=String(value).toLowerCase();return protocols.some(p=>{const q=String(p).toLowerCase();return q.endsWith("*")?s.startsWith(q.slice(0,-1)):s.startsWith(q)})}
