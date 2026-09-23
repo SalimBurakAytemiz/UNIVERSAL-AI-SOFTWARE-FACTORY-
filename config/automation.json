@@ -2,7 +2,7 @@
   "//TR": "Bu dosya Pre-Phase-0 mekanik güvenlik kapanışından sonra autonomous supervisor'ın review-before-merge, process-lock, trust-root, logging, quota/resume, scheduler ve paid/production/risk sınırlarını fail-closed biçimde tanımlar.",
   "schemaVersion": "3.1.0",
   "mode": "AUTOMATIC",
-  "maxReviewCycles": 3,
+  "maxReviewCycles": 2,
   "maxMilestonesPerRun": 4,
   "maxParallelLanes": 1,
   "timeoutMs": 900000,
@@ -75,7 +75,7 @@
   },
   "quota": {
     "defaultRetrySeconds": 900,
-    "maxRetrySeconds": 7200,
+    "maxRetrySeconds": 86400,
     "exponentialBackoff": true,
     "infrastructureFailureDoesNotConsumeReviewCycle": true
   },

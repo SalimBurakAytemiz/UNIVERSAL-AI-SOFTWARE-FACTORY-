@@ -19,6 +19,9 @@ Full repo scan default değildir. `IN_SCOPE` finding'in file'ı changedFiles iç
 ## MOVING GOALPOST
 Current `findings` içindeki BLOCKER her zaman `status: OPEN` olmak zorundadır. Aynı review cycle içinde yeni bir blocker'ı `RESOLVED`, `DOWNGRADED` veya `DUPLICATE` işaretleyerek CLEAN üretme. Resolution yalnız sonraki cycle `priorBlockerDispositions` üzerinden gerçek retest evidence ile yapılır.
 
+
+P3/LOW hiçbir koşulda current package blocker değildir. P3 bulguyu `BLOCKER` sınıfında döndürme; durable LOW backlog/advisory olarak bırak. P3 remediation cycle tüketmez ve CLEAN kararını tek başına engellemez.
+
 Cycle 1 bütün admissible blocker setini çıkarır. Cycle 2+ önceki unresolved blocker'ların her biri `priorBlockerDispositions` içinde OPEN veya `RESOLVED + retestEvidenceRefs` olarak raporlanmak zorundadır. Hiçbiri sessizce kaybolamaz.
 Yeni blocker Cycle2+ ancak:
 - REMEDIATION_REGRESSION + causedByFindingId + causalEvidenceRefs,

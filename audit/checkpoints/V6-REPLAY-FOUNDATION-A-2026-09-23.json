@@ -1,0 +1,36 @@
+{
+  "//TR": "Bu checkpoint doğrulanmış V4 baseline üzerinde bounded V6 review-governance replay turunun fiziksel ve test edilmiş durumunu kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_REPLAY_FOUNDATION_A",
+  "status": "COMPLETE",
+  "baselineCommit": "65a45d1f364ff028e7ea4d1a7d0e671c4983c069",
+  "scope": [
+    "max automatic Codex review cycles = 2",
+    "P3/LOW cannot be a blocker",
+    "quota exhausted and rate limit classification separation",
+    "AUTH/NETWORK/TOOL_MISSING/UNKNOWN separation",
+    "UNKNOWN automatic retry forbidden",
+    "retry safety ceiling = 86400 seconds",
+    "review prompt P3 non-blocking contract",
+    "canonical self-test fixture drift repair"
+  ],
+  "findings": {
+    "P0": 0,
+    "P1": 2,
+    "P2": 3,
+    "P3": 0,
+    "openP0P1P2InScope": 0
+  },
+  "validation": [
+    "V6_FOUNDATION_A_SELFTEST: PASS 10/10",
+    "MECHANICAL_KERNEL_SELFTEST: PASS",
+    "BOOTSTRAP_KERNEL_SELFTEST: PASS",
+    "MECHANICAL_CLOSURE_VALIDATION: PASS"
+  ],
+  "closure": {
+    "sourceLevelClosure": false,
+    "targetMachinePhase0": "PENDING",
+    "paste1Replay": "IN_PROGRESS"
+  },
+  "nextScope": "V6_REPLAY_FOUNDATION_B_FINDING_BOUND_RETEST_AND_LOW_BACKLOG"
+}
