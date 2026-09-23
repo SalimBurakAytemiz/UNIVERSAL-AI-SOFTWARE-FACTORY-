@@ -1,31 +1,19 @@
-# //TR: Bu script artifact doğrulamasından sonra deterministic dependency lock/install, canonical validation, doctor, trust-root verify ve bootstrap-kernel self-test adımlarını çalıştırır; Git/autostart/provider auth install.ps1 tarafından sıralanır.
+# //TR: Bu script artifact doğrulamasından sonra yalnız source-reviewed lock ile deterministic dependency install, canonical validation, doctor, trust-root verify ve bootstrap-kernel self-test çalıştırır.
 param([switch]$SkipOmniRoute)
 $ErrorActionPreference="Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
-[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)
-
+[Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false)
 & ".\scripts\check-prereqs.ps1"
-
-if(-not (Test-Path "package-lock.json")){
-  npm install --package-lock-only --ignore-scripts
-  if($LASTEXITCODE -ne 0){throw "package-lock generation failed"}
-}
-npm ci
-if($LASTEXITCODE -ne 0){throw "npm ci failed"}
-
+if(-not (Test-Path "package-lock.json")){throw "SOURCE_REVIEWED_PACKAGE_LOCK_REQUIRED: target machine may not generate package-lock.json"}
+node ".\scripts\ensure-dependencies.mjs"
+if($LASTEXITCODE -ne 0){throw "reviewed-lock dependency install failed"}
 node ".\scripts\run-validation.mjs"
 if($LASTEXITCODE -ne 0){throw "canonical validation failed"}
-
 npm run doctor
 if($LASTEXITCODE -ne 0){throw "doctor failed"}
-
 node ".\scripts\verify-trust-root.mjs"
 if($LASTEXITCODE -ne 0){throw "trust-root verification failed"}
-
 node ".\scripts\bootstrap-kernel-selftest.mjs"
 if($LASTEXITCODE -ne 0){throw "bootstrap kernel self-test failed"}
-
-if(-not $SkipOmniRoute){
-  & ".\scripts\ensure-omniroute.ps1"
-}
+if(-not $SkipOmniRoute){& ".\scripts\ensure-omniroute.ps1"}
 Write-Host "BOOTSTRAP_CORE: PASS"

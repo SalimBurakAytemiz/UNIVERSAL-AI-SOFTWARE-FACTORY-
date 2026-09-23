@@ -2,7 +2,7 @@
 $ErrorActionPreference="Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
 if(-not (Test-Path "package-lock.json")){throw "package-lock.json missing. Run scripts/install.ps1 first."}
-if(-not (Test-Path "node_modules")){npm ci;if($LASTEXITCODE -ne 0){throw "npm ci failed"}}
+node ".\scripts\ensure-dependencies.mjs";if($LASTEXITCODE -ne 0){throw "reviewed-lock dependency state invalid/install failed"}
 if(-not (Test-Path ".ai\runtime\PHASE0_ACCEPTANCE.json")){throw "Phase0 acceptance missing. Run scripts/install.ps1 first."}
 $phase0=Get-Content ".ai\runtime\PHASE0_ACCEPTANCE.json" -Raw | ConvertFrom-Json
 if($phase0.final -ne "CLEAN" -and $phase0.final -ne "CLEAN_LOCAL_ONLY"){throw "Phase0 is not clean: $($phase0.final)"}

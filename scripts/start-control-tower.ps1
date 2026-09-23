@@ -2,8 +2,8 @@
 $ErrorActionPreference="Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
 if(-not (Test-Path "package-lock.json")){throw "package-lock.json missing. Run install.ps1 first."}
-if(-not (Test-Path "node_modules")){npm ci;if($LASTEXITCODE -ne 0){throw "npm ci failed"}}
+node ".\scripts\ensure-dependencies.mjs";if($LASTEXITCODE -ne 0){throw "reviewed-lock dependency state invalid/install failed"}
 $bytes=New-Object byte[] 32
-[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+$rng=[System.Security.Cryptography.RandomNumberGenerator]::Create();try{$rng.GetBytes($bytes)}finally{$rng.Dispose()}
 $env:UASCO_CONTROL_TOKEN=[Convert]::ToBase64String($bytes)
 npm run dev

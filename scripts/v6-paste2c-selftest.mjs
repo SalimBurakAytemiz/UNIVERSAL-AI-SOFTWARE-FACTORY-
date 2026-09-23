@@ -1,0 +1,21 @@
+// //TR: Paste 2C dependency/install self-test source-reviewed lock, strict npm ci flags, digest-aware reinstall ve PowerShell 5.1/BOM guardlarını dependency-free doğrular.
+import fs from "node:fs";import os from "node:os";import path from "node:path";import {ensureDependencies,dependencyState} from "../automation/lib/dependency-install.mjs";
+const checks=[];const ok=(n,v)=>{if(!v)throw new Error(`V6_PASTE2C_SELFTEST_FAILED:${n}`);checks.push(n)};
+const root=fs.mkdtempSync(path.join(os.tmpdir(),"uasco-2c-"));
+const pkg={name:"x",version:"1.0.0",dependencies:{a:"1.2.3"},devDependencies:{b:"2.3.4"}};
+const lock={name:"x",version:"1.0.0",lockfileVersion:3,requires:true,packages:{"":{name:"x",version:"1.0.0",dependencies:{a:"1.2.3"},devDependencies:{b:"2.3.4"}},"node_modules/a":{version:"1.2.3",resolved:"https://registry.npmjs.org/a/-/a-1.2.3.tgz",integrity:"sha512-test"},"node_modules/b":{version:"2.3.4",resolved:"https://registry.npmjs.org/b/-/b-2.3.4.tgz",integrity:"sha512-test"}}};
+fs.writeFileSync(path.join(root,"package.json"),JSON.stringify(pkg));
+let missing=false;try{dependencyState(root)}catch(e){missing=String(e.message).includes("SOURCE_REVIEWED_PACKAGE_LOCK_REQUIRED")}ok("missing-lock-fails",missing);
+fs.writeFileSync(path.join(root,"package-lock.json"),JSON.stringify(lock));
+let calls=0,lastArgs=[];const fake=(cmd,args,opts)=>{calls++;lastArgs=args;fs.mkdirSync(path.join(opts.cwd,"node_modules"),{recursive:true});return {status:0,stdout:"",stderr:""}};
+let r=ensureDependencies(root,{spawnSync:fake,npmCommand:"fake-npm"});ok("first-install-runs",r.mode==="NPM_CI_REVIEWED_LOCK"&&calls===1);for(const x of ["ci","--ignore-scripts","--no-audit","--no-fund"])ok(`npm-flag:${x}`,lastArgs.includes(x));
+r=ensureDependencies(root,{spawnSync:fake,npmCommand:"fake-npm"});ok("matching-digest-reuses",r.mode==="EXISTING_REVIEWED_LOCK"&&calls===1);
+lock.auditMarker="changed";fs.writeFileSync(path.join(root,"package-lock.json"),JSON.stringify(lock));r=ensureDependencies(root,{spawnSync:fake,npmCommand:"fake-npm"});ok("lock-digest-change-reinstalls",r.mode==="NPM_CI_REVIEWED_LOCK"&&calls===2);
+const bad=structuredClone(lock);bad.packages[""].dependencies.a="9.9.9";fs.writeFileSync(path.join(root,"package-lock.json"),JSON.stringify(bad));let mismatch=false;try{dependencyState(root)}catch(e){mismatch=String(e.message).includes("PACKAGE_LOCK_ROOT_MISMATCH:dependencies")}ok("root-lock-mismatch-fails",mismatch);
+fs.rmSync(root,{recursive:true,force:true});
+const txt=p=>fs.readFileSync(p,"utf8");const bootstrap=txt("scripts/bootstrap.ps1"),full=txt("scripts/start-full-auto.ps1"),tower=txt("scripts/start-control-tower.ps1"),gitOps=txt("automation/lib/git-ops.mjs");
+ok("target-lock-generation-removed",!bootstrap.includes("npm install --package-lock-only")&&bootstrap.includes("SOURCE_REVIEWED_PACKAGE_LOCK_REQUIRED"));
+ok("bootstrap-uses-common-gate",bootstrap.includes("ensure-dependencies.mjs"));ok("start-full-auto-common-gate",full.includes("ensure-dependencies.mjs")&&!/npm\s+ci/i.test(full));ok("control-tower-common-gate",tower.includes("ensure-dependencies.mjs")&&!/npm\s+ci/i.test(tower));
+ok("worktree-common-gate",gitOps.includes("ensureDependencies(worktree")&&gitOps.includes("preferOffline:true"));ok("ps51-rng-compatible",tower.includes("RandomNumberGenerator]::Create()")&&!tower.includes("RandomNumberGenerator]::Fill"));
+const psFiles=fs.readdirSync("scripts").filter(x=>x.endsWith(".ps1"));const bomWriters=psFiles.filter(f=>/Set-Content\s+-Encoding\s+UTF8/i.test(txt(path.join("scripts",f))));ok("ps51-json-bom-writers-removed",bomWriters.length===0);
+console.log(`V6_PASTE2C_SELFTEST: PASS ${checks.length}/${checks.length}`);

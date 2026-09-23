@@ -21,11 +21,11 @@ if(-not (Get-Command omniroute -ErrorAction SilentlyContinue)){
     "//TR"="Bu runtime provenance kaydı install öncesi npm metadata ile doğrulanan OmniRoute package kimliğini taşır."
     package=$policy.packageName;version=$version;license=$license;repository=$repo;integrity=$integrity;discoveredAt=(Get-Date).ToString("o")
   }
-  $candidate|ConvertTo-Json -Depth 5|Set-Content -Encoding UTF8 ".ai\runtime\OMNIROUTE_CANDIDATE.json"
+  $json=$candidate|ConvertTo-Json -Depth 5;[System.IO.File]::WriteAllText((Join-Path (Get-Location) ".ai\runtime\OMNIROUTE_CANDIDATE.json"),$json,(New-Object System.Text.UTF8Encoding($false)))
   npm install -g "$($policy.packageName)@$version"
   if($LASTEXITCODE -ne 0){throw "OmniRoute exact-version install failed"}
   $candidate.installedAt=(Get-Date).ToString("o")
-  $candidate|ConvertTo-Json -Depth 5|Set-Content -Encoding UTF8 ".ai\runtime\OMNIROUTE_INSTALL.json"
+  $json=$candidate|ConvertTo-Json -Depth 5;[System.IO.File]::WriteAllText((Join-Path (Get-Location) ".ai\runtime\OMNIROUTE_INSTALL.json"),$json,(New-Object System.Text.UTF8Encoding($false)))
 }
 
 $base=([string]$policy.endpoint).TrimEnd("/")

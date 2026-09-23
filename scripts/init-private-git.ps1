@@ -49,6 +49,6 @@ if($RemoteUrl){
 }
 @{
   "//TR"="Bu runtime report Git repo, remote privacy ve local merge-gate durumunu kaydeder.";checkedAt=(Get-Date).ToString("o");visibility=$visibility;detail=$detail;protection=$protection;head=(Invoke-UascoGit rev-parse HEAD).Trim()
-}|ConvertTo-Json -Depth 5|Set-Content -Encoding UTF8 ".ai\runtime\REMOTE_STATUS.json"
+}|ConvertTo-Json -Depth 5|ForEach-Object{[System.IO.File]::WriteAllText((Join-Path (Get-Location) ".ai\runtime\REMOTE_STATUS.json"),$_,(New-Object System.Text.UTF8Encoding($false)))}
 Remove-Item -Recurse -Force $GitIsolationRoot -ErrorAction SilentlyContinue
 Write-Host "GIT_INIT: PASS ($visibility)"
