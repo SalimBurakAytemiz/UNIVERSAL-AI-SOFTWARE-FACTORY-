@@ -2,7 +2,7 @@
   "//TR": "Bu JSON V6 recovery replay worktree'sinin current audit durumunu machine-readable tutar; tarihsel V2/V3/V4 finding dosyaları current authority değildir.",
   "schemaVersion": "2.0.0",
   "status": "V6_AUDIT_REMEDIATION_IN_PROGRESS",
-  "verifiedThroughParentCommit": "707c2aab617ea53d97bd172cc749c22fd6b9292c",
+  "verifiedThroughParentCommit": "51a4238d697e981f2512a9503778c9fc56430e96",
   "completedSourceScopes": [
     "PASTE_1",
     "PASTE_2",
@@ -12,9 +12,10 @@
     "PASTE_4C",
     "PASTE_4D",
     "CONFIG_RUNTIME_ENFORCEMENT_SWEEP",
-    "FULL_DEPENDENCY_FREE_SOURCE_REGRESSION"
+    "FULL_DEPENDENCY_FREE_SOURCE_REGRESSION",
+    "DEPENDENCY_TRUST_HARDENING_PRE_LOCK"
   ],
-  "activeScope": "DEPENDENCY_REVIEWED_LOCK",
+  "activeScope": "DEPENDENCY_REVIEWED_LOCK_LOCK_GENERATION",
   "boundedScopeOpenP0P1P2": 0,
   "overallRemainingP0P1P2": "ZERO_DEPENDENCY_FREE_SOURCE_PENDING_DEPENDENCY_AWARE",
   "sourceLevelClosure": false,
@@ -35,7 +36,13 @@
     "pendingDependencies": 1,
     "fail": 0,
     "sourceSyntax": "107/107 PASS",
-    "jsonParse": "1608/1608 PASS",
+    "jsonParse": "1610/1610 PASS",
     "secretSanity": "PASS"
+  },
+  "environmentGate": {
+    "node24": "AVAILABLE_AUXILIARY_V24.11.1",
+    "npm11": "NOT_AVAILABLE_LOCALLY",
+    "registryNpmjsDns": "UNRESOLVED",
+    "packageLock": "ABSENT"
   }
 }

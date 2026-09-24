@@ -62,11 +62,15 @@
     "paste4D": "COMPLETE_SOURCE",
     "paste4": "COMPLETE_SOURCE"
   },
-  "nextScope": "DEPENDENCY_REVIEWED_LOCK",
+  "nextScope": "DEPENDENCY_REVIEWED_LOCK_LOCK_GENERATION",
   "dependencyFreeSourceRegression": {
     "status": "PASS",
     "canonicalStepsPass": 29,
     "pendingDependencies": 1,
-    "fail": 0
-  }
+    "fail": 0,
+    "sourceSyntax": "107/107 PASS",
+    "jsonParse": "1610/1610 PASS"
+  },
+  "dependencyTrustHardening": "COMPLETE_SOURCE_ENVIRONMENT_GATE_PENDING",
+  "dependencyReviewedLock": "BLOCKED_ENVIRONMENT_NPM11_REGISTRY_REQUIRED"
 }

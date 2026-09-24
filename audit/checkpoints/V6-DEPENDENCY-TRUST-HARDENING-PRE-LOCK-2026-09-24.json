@@ -1,0 +1,44 @@
+{
+  "//TR": "Part 3 dependency trust hardening checkpoint'idir; dependency-aware PASS veya final release iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "scope": "DEPENDENCY_TRUST_HARDENING_PRE_LOCK",
+  "verifiedThroughParentCommit": "51a4238d697e981f2512a9503778c9fc56430e96",
+  "status": "COMPLETE_SOURCE_ENVIRONMENT_GATE_PENDING",
+  "findings": {
+    "P0": 0,
+    "P1": 3,
+    "P2": 3,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "fixes": [
+    "pre-install lock registry/path/root-identity/SHA-512 integrity policy enforcement",
+    "installed dependency tree digest and lock-external rogue package rejection",
+    "dependency marker Ed25519 seal bound to evidence-signing lifecycle",
+    "npm audit canonical registry/TLS/no-retry pinning",
+    "SBOM and supply-chain exact component/package digest binding",
+    "dependency selftests updated for the hardened runtime contract"
+  ],
+  "regression": {
+    "canonicalDependencyFree": "29/29 PASS",
+    "sourceSyntax": "107/107 PASS",
+    "jsonParseBeforeCheckpoint": "1609/1609 PASS",
+    "dependencySupplyChain": "BLOCKED_SOURCE_REVIEWED_PACKAGE_LOCK_REQUIRED"
+  },
+  "environment": {
+    "nodePath": "v22.16.0",
+    "auxiliaryNode": "v24.11.1",
+    "npm": "10.9.2",
+    "npm11": "NOT_AVAILABLE_LOCALLY",
+    "registryNpmjsDns": "UNRESOLVED",
+    "packageLock": "ABSENT"
+  },
+  "truth": {
+    "sourceLevelClosure": false,
+    "dependencyAwareValidation": "PENDING",
+    "targetMachinePhase0": "PENDING",
+    "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL",
+    "finalZip": "NOT_DONE"
+  },
+  "nextScope": "DEPENDENCY_REVIEWED_LOCK_LOCK_GENERATION"
+}

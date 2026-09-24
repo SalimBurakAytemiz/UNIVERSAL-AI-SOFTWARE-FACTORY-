@@ -7,16 +7,17 @@
   "currentPhaseName": "Source audit/remediation before final seal and target-machine Phase0",
   "currentMilestone": "V6-DEPENDENCY-REVIEWED-LOCK",
   "currentMilestoneName": "Reviewed source package-lock and dependency-aware validation gate",
-  "lastCompletedMilestone": "V6-FULL-DEPENDENCY-FREE-SOURCE-REGRESSION",
-  "lastVerifiedCommit": "707c2aab617ea53d97bd172cc749c22fd6b9292c",
+  "lastCompletedMilestone": "V6-DEPENDENCY-TRUST-HARDENING-PRE-LOCK",
+  "lastVerifiedCommit": "51a4238d697e981f2512a9503778c9fc56430e96",
   "knownBlockers": [
     "FINAL_TRUST_ROOT_RESEAL_PENDING",
     "FINAL_SHA256SUMS_PENDING",
     "FINAL_RELEASE_AUTHENTICITY_PENDING",
     "DEPENDENCY_AWARE_VALIDATION_PENDING",
-    "TARGET_MACHINE_PHASE0_PENDING"
+    "TARGET_MACHINE_PHASE0_PENDING",
+    "DEPENDENCY_REVIEWED_LOCK_ENVIRONMENT_BLOCKED"
   ],
-  "nextAction": "Generate/review the source package-lock in a Node 24/npm 11 network-capable environment, then run dependency-aware schema conformance, supply-chain, typecheck and Vitest gates.",
+  "nextAction": "Run Node 24/npm 11 with registry.npmjs.org access, generate and review package-lock.json, then run dependency-aware schema conformance, supply-chain, typecheck and Vitest gates.",
   "sourceOfTruth": "repository+git+audit/V6-FULL-SCAN-PROGRESS.json+CANONICAL-STATUS.md+PACK.json",
   "architectureDiscovery": "FROZEN_BY_EXTENSION_MODEL",
   "lastStaticClosureAudit": "NOT_FINAL",

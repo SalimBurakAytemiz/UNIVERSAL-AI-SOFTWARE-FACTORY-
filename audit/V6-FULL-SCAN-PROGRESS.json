@@ -2,7 +2,7 @@
   "//TR": "V6 recovery replay için canonical bounded-scan ilerleme kaydıdır. Bu dosya final source closure veya target-machine PASS iddiası değildir.",
   "schemaVersion": "1.0.0",
   "status": "IN_PROGRESS",
-  "verifiedThroughParentCommit": "707c2aab617ea53d97bd172cc749c22fd6b9292c",
+  "verifiedThroughParentCommit": "51a4238d697e981f2512a9503778c9fc56430e96",
   "paste1": {
     "status": "COMPLETE_SOURCE",
     "checkpointCommit": "99105cf8c6a8a60954c8aa936a4d0ebd4253c15f"
@@ -95,7 +95,7 @@
     "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
     "FINAL_ZIP": "NOT_DONE"
   },
-  "nextScope": "DEPENDENCY_REVIEWED_LOCK",
+  "nextScope": "DEPENDENCY_REVIEWED_LOCK_LOCK_GENERATION",
   "postPasteSweeps": {
     "configRuntimeEnforcement": {
       "status": "COMPLETE_SOURCE",
@@ -111,10 +111,21 @@
       "canonicalStepsPendingDependencies": 1,
       "canonicalStepsFail": 0,
       "sourceSyntaxFilesChecked": 107,
-      "jsonFilesParsed": 1608,
+      "jsonFilesParsed": 1610,
       "secretSanity": "PASS",
       "dependencySupplyChainGate": "BLOCKED_SOURCE_REVIEWED_PACKAGE_LOCK_REQUIRED",
       "dependencyFreeOpenP0P1P2": 0
+    },
+    "dependencyTrustHardeningPreLock": {
+      "status": "COMPLETE_SOURCE_ENVIRONMENT_GATE_PENDING",
+      "checkpoint": "audit/checkpoints/V6-DEPENDENCY-TRUST-HARDENING-PRE-LOCK-2026-09-24.json",
+      "canonicalStepsPass": 29,
+      "sourceSyntaxFilesChecked": 107,
+      "jsonFilesParsed": 1610,
+      "openP0P1P2": 0,
+      "packageLock": "ABSENT",
+      "npm11": "NOT_AVAILABLE_LOCALLY",
+      "registryNpmjsDns": "UNRESOLVED"
     }
   }
 }
