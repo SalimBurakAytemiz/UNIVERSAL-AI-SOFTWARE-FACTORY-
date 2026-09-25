@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_POST_DEEP_GITHUB_CLI_BOUNDARY",
+  "date": "2026-09-26",
+  "parent": "bc336f520c40cb78c4394cf5ab55dbaf60600a9d",
+  "scope": [
+    "GitHub CLI process environment isolation",
+    "remote protection Git subprocess isolation",
+    "GitHub CLI credential redaction"
+  ],
+  "findings": {"P0": 0, "P1": 1, "P2": 1, "P3": 0},
+  "fixed": 2,
+  "openP0P1P2": 0,
+  "validation": {
+    "githubCliEnvAdversarial": "PASS",
+    "architecture": "PASS",
+    "mechanicalClosure": "PASS",
+    "mechanicalSelftest": "PASS",
+    "supervisorStateSelftest": "PASS",
+    "schemaStrictness": "PASS",
+    "secretSanity": "PASS",
+    "gitDiffCheck": "PASS"
+  },
+  "environmentGate": {
+    "node": "v22.16.0",
+    "requiredNode": ">=24",
+    "npm": "10.9.2",
+    "requiredNpm": ">=11",
+    "registryNpmjsOrg": "UNRESOLVED",
+    "packageLock": "ABSENT"
+  },
+  "nextScope": "ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION",
+  "sourceLevelClosure": false,
+  "//TR": "Dependency-aware doğrulama kapısı açılmadan final closure veya final release ilan edilmez."
+}

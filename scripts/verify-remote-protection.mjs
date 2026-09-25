@@ -1,8 +1,8 @@
 // //TR: Bu target-machine check GitHub origin varsa private visibility ve main branch protection'ın exact güvenlik kurallarını doğrular; yalnız HTTP 200 ile PASS üretmez.
-import fs from "node:fs";import cp from "node:child_process";import {safeChildEnv} from "../automation/lib/env-policy.mjs";import {evaluateRemoteProtection} from "../automation/lib/remote-protection.mjs";
-const env=safeChildEnv("config/environment-policy.json",{});
-function run(c,a){const r=cp.spawnSync(c,a,{encoding:"utf8",windowsHide:true,env});return {status:r.status,stdout:r.stdout??"",stderr:r.stderr??""}}
-const url=run("git",["remote","get-url","origin"]);let report={"//TR":"Bu runtime report remote privacy/protection doğrulamasını taşır.",checkedAt:new Date().toISOString(),status:"LOCAL_ONLY",detail:"No origin"};
+import fs from "node:fs";import cp from "node:child_process";import {githubCliEnv,redactCliText} from "../automation/lib/github-cli-env.mjs";import {spawnGitSync} from "../automation/lib/git-isolation.mjs";import {evaluateRemoteProtection} from "../automation/lib/remote-protection.mjs";
+const env=githubCliEnv();
+function run(c,a){const r=cp.spawnSync(c,a,{encoding:"utf8",windowsHide:true,env});return {status:r.status,stdout:r.stdout??"",stderr:redactCliText(r.stderr??"")}}
+const gitRemote=spawnGitSync(process.cwd(),["remote","get-url","origin"],{env});const url={status:gitRemote.status,stdout:gitRemote.stdout??"",stderr:redactCliText(gitRemote.stderr??"")};let report={"//TR":"Bu runtime report remote privacy/protection doğrulamasını taşır.",checkedAt:new Date().toISOString(),status:"LOCAL_ONLY",detail:"No origin"};
 if(url.status===0){
  const gh=run("gh",["repo","view","--json","nameWithOwner,visibility,url"]);
  if(gh.status===0){
