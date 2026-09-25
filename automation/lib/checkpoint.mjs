@@ -1,5 +1,6 @@
 // //TR: Bu helper checkpoint main/.prev dosyalarını digest ile ayrı ayrı doğrular; corrupt/torn main varsa son sağlam previous generation'a fail-safe geri döner.
-import fs from "node:fs";import {writeJsonAtomic,stableStringify,sha256} from "./atomic-json.mjs";
+import fs from "node:fs";import {writeJsonAtomic,clearJsonAtomic,stableStringify,sha256} from "./atomic-json.mjs";
 function valid(file){if(!fs.existsSync(file))return null;try{const x=JSON.parse(fs.readFileSync(file,"utf8")),copy={...x},digest=copy.digest;delete copy.digest;return sha256(stableStringify(copy))===digest?x:null}catch{return null}}
 export function loadCheckpoint(file){const main=valid(file);if(main)return main;const prev=valid(`${file}.prev`);if(prev)return prev;if(fs.existsSync(file)||fs.existsSync(`${file}.prev`))throw new Error("CHECKPOINT_NO_VALID_GENERATION");return null}
 export function saveCheckpoint(file,state){const prev=loadCheckpoint(file),doc={schemaVersion:"1.1.0",generation:(prev?.generation??0)+1,updatedAt:new Date().toISOString(),state,previousDigest:prev?.digest??null};doc.digest=sha256(stableStringify(doc));writeJsonAtomic(file,doc);return doc}
+export function clearCheckpoint(file){clearJsonAtomic(file)}

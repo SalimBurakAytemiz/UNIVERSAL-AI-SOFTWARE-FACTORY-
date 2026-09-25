@@ -18,8 +18,8 @@ import {buildReviewBundle} from "./lib/review-bundle.mjs";
 import {parseStrictReviewJson,validateReviewResult,governConvergence,finalGovernedResult,effectiveReviewDigest} from "./lib/review-governance.mjs";
 import {persistLowBacklog} from "./lib/low-backlog.mjs";
 import {assertPromptBudget,assertOutputBudget,utf8Tail} from "./lib/context-budget.mjs";
-import {loadCheckpoint,saveCheckpoint} from "./lib/checkpoint.mjs";
-import {readJsonIfExists,writeJsonAtomic,sha256,stableStringify} from "./lib/atomic-json.mjs";
+import {loadCheckpoint,saveCheckpoint,clearCheckpoint} from "./lib/checkpoint.mjs";
+import {readJsonIfExists,writeJsonAtomic,clearJsonAtomic,sha256,stableStringify} from "./lib/atomic-json.mjs";
 import {
   ensureGitRepository,assertClean,gitHead,gitStatus,changedFiles,diffStat,commitAll,showChangedCommitted,
   createRunWorktree,restoreRunWorktree,removeRunWorktree,ensureWorktreeDependencies,cleanupOrphanRunWorktrees,
@@ -34,6 +34,7 @@ import {assertFrozenContract,verifyCleanReadyResume} from "./lib/resume-trust.mj
 import {verifyPhase0Acceptance} from "./lib/phase0-contract.mjs";
 import {buildRunManifest,buildReviewAttestation} from "./lib/runtime-contracts.mjs";
 import {loadGraph,loadSchedulerState,saveSchedulerState,promoteDueRetries,allComplete} from "./lib/scheduler.mjs";
+import {assertSchedulerCompletionEvidence} from "./lib/scheduler-completion.mjs";
 import {
   loadReviewPackages,runnablePackages,packagePendingPhases,packageStatus,
   markPackageActive,markPackageRetry,markPackageBlocked,markPackageCompleted
@@ -92,16 +93,16 @@ function nextRetrySeconds(state,pkg,suggested){
   return cfg.quota.exponentialBackoff?clampRetry(base*Math.max(1,2**Math.min(attempts-1,4))):base;
 }
 function writeRetry(seconds,pkg,reason){writeJsonAtomic(retryFile,{"//TR":"Bu runtime state start-full-auto wrapper'ın infrastructure/quota retry bekleme süresini taşır.",packageId:pkg.id,phaseIds:pkg.phaseIds,reason,retryAfterSeconds:seconds,retryAt:isoAfter(seconds),updatedAt:new Date().toISOString()})}
-const clearRetry=()=>rm(retryFile);
+const clearRetry=()=>clearJsonAtomic(retryFile);
 const saveStage=state=>saveCheckpoint(checkpointFile,state);
-const clearStage=()=>rm(checkpointFile);
+const clearStage=()=>clearCheckpoint(checkpointFile);
 const loadStage=()=>loadCheckpoint(checkpointFile)?.state??null;
 const buildChildEnv=(m,providerCfg)=>safeChildEnv("config/environment-policy.json",{allowPaidApi:cfg.allowPaidApi&&m.allowPaidApi,provider:providerCfg?.provider});
 const summaryAndExit=(ledger,status,extra,code)=>{ledger.writeSummary({status,finishedAt:new Date().toISOString(),...extra});return code};
 
 function refreshRemoteProtection(){
   if(!remoteUrl(repoRoot)) return {status:"LOCAL_ONLY",detail:"No origin"};
-  const r=cp.spawnSync(process.execPath,["scripts/verify-remote-protection.mjs"],{cwd:repoRoot,encoding:"utf8",windowsHide:true,env:process.env});
+  const r=cp.spawnSync(process.execPath,["scripts/verify-remote-protection.mjs"],{cwd:repoRoot,encoding:"utf8",windowsHide:true,env:safeChildEnv("config/environment-policy.json",{provider:"DETERMINISTIC"})});
   if(r.status!==0) throw new Error(`REMOTE_PROTECTION_REFRESH_FAILED: ${r.stderr||r.stdout}`);
   const report=readJsonIfExists(remoteProtectionFile,null);if(!report)throw new Error("REMOTE_PROTECTION_REPORT_MISSING");return report;
 }
@@ -114,13 +115,8 @@ function ensureProviderSeparation(review){
   if(review.reviewer.toolVersion && prov.codex.version && review.reviewer.toolVersion!==prov.codex.version) return {ok:false,reason:"REVIEWER_TOOL_VERSION_MISMATCH"};
   return {ok:true,provenance:{provider:cfg.reviewer.provider,modelId:cfg.reviewer.modelId,toolVersion:prov.codex.version,launcherSha256:prov.codex.launcherSha256,resolvedPath:prov.codex.resolvedPath,provenanceLevel:prov.codex.provenanceLevel??"UNKNOWN",packageName:prov.codex.packageName??"UNKNOWN",packageVersion:prov.codex.packageVersion??"UNKNOWN",packageJsonSha256:prov.codex.packageJsonSha256??"UNKNOWN"}};
 }
-function assertSchedulerGitConsistency(state){
-  for(const p of state.phases??[]){
-    if(p.status!=="COMPLETED"||p.phase===0) continue;
-    if(!p.completedCommit||!/^[0-9a-f]{7,64}$/i.test(p.completedCommit)) throw new Error(`SCHEDULER_COMPLETED_COMMIT_INVALID phase=${p.phase}`);
-    if(!isAncestor(repoRoot,p.completedCommit,"HEAD")) throw new Error(`SCHEDULER_COMMIT_NOT_IN_MAIN_HISTORY phase=${p.phase} commit=${p.completedCommit}`);
-  }
-}
+function assertSchedulerGitConsistency(state,packages){return assertSchedulerCompletionEvidence({repoRoot,state,packages,publicKeyFile:evidencePublicKey,isAncestor})}
+
 function ensurePackageAtomicity(pkg,state){
   const rows=pkg.phaseIds.map(p=>state.phases.find(x=>x.phase===p));
   const completed=rows.filter(x=>x?.status==="COMPLETED").length;
@@ -218,14 +214,14 @@ async function main(){
   const ledger=new RunLedger(runsRoot,runId,{maxLogBytes:cfg.logging.maxLogBytesPerFile,signingKeyFile:evidencePrivateKey,verifyBeforeCompletion:evidenceLedgerPolicy.verifyBeforeCompletion===true});
   let processed=0;
   try{
-    const graph=loadGraph(graphFile),packages=loadReviewPackages(packagesFile);let scheduler=loadSchedulerState(schedulerFile);assertSchedulerGitConsistency(scheduler);promoteDueRetries(scheduler);saveSchedulerState(schedulerFile,scheduler);
+    const graph=loadGraph(graphFile),packages=loadReviewPackages(packagesFile);let scheduler=loadSchedulerState(schedulerFile);assertSchedulerGitConsistency(scheduler,packages);promoteDueRetries(scheduler);saveSchedulerState(schedulerFile,scheduler);
     let priorStage=loadStage();
     if(priorStage?.packageId){const pp=packages.map.get(priorStage.packageId);if(pp&&allPackagePhasesCompleted(pp,scheduler)){clearStage();priorStage=null}}
     const orphanCleanup=cleanupOrphanRunWorktrees(repoRoot,priorStage?.worktreeDir?[priorStage.worktreeDir]:[],cfg.git.runBranchPrefix);if(orphanCleanup.length)ledger.event("git","ORPHAN_WORKTREES_CLEANED",orphanCleanup,"WARN",{actor:"SUPERVISOR"});
     ledger.writeManifest(buildRunManifest({runId,startedAt:new Date().toISOString(),baseCommit:gitHead(repoRoot),mode:cfg.mode,executionUnit:cfg.scheduler.executionUnit,builder:{provider:cfg.builder.provider,modelId:cfg.builder.modelId},reviewer:{provider:cfg.reviewer.provider,modelId:cfg.reviewer.modelId},remoteConfigured:Boolean(remoteUrl(repoRoot)),remoteUrl:sanitizeRemoteUrl(remoteUrl(repoRoot)),status:"RUNNING"}));
 
     while(processed<cfg.maxMilestonesPerRun){
-      assertNotStopped(globalStopFile);assertClean(repoRoot);scheduler=loadSchedulerState(schedulerFile);assertSchedulerGitConsistency(scheduler);promoteDueRetries(scheduler);saveSchedulerState(schedulerFile,scheduler);
+      assertNotStopped(globalStopFile);assertClean(repoRoot);scheduler=loadSchedulerState(schedulerFile);assertSchedulerGitConsistency(scheduler,packages);promoteDueRetries(scheduler);saveSchedulerState(schedulerFile,scheduler);
       if(allComplete(scheduler)){clearRetry();clearStage();return summaryAndExit(ledger,"COMPLETE",{processed},0)}
       let stage=loadStage(),pkg=null;
       if(stage?.packageId){const candidate=packages.map.get(stage.packageId);if(candidate&&!allPackagePhasesCompleted(candidate,scheduler)){
@@ -261,11 +257,11 @@ async function main(){
         saveStage({...stage,stage:"PUSH"});
         try{const remoteProtection=refreshRemoteProtection();const auth=authorizeAutomationAction({action:"REMOTE_PUSH",milestone,globalConfig:cfg,remoteProtection,reviewClean:true});const push=auth.allowed?pushMainAndVerify(repoRoot,cfg.git.defaultBranch):{pushed:false,reason:auth.reason};ledger.event("git","PUSH_AFTER_CLEAN",push,"INFO",{phase:leadPhase,milestoneId:pkg.id,actor:"SUPERVISOR"})}
         catch(e){const sec=nextRetrySeconds(scheduler,pkg,300),retryAt=isoAfter(sec);markPackageStateRetry(scheduler,pkg,String(e.message),retryAt);saveSchedulerState(schedulerFile,scheduler);saveStage({...stage,stage:"PUSH",lastFailure:String(e.message)});writeRetry(sec,pkg,String(e.message));return summaryAndExit(ledger,"RETRY_WAIT",{packageId:pkg.id,reason:String(e.message)},30)}
-        markPackageCompleted(scheduler,pkg,reviewedCommit,stage.evidenceRefs??[]);saveSchedulerState(schedulerFile,scheduler);clearStage();if(stage.worktreeDir&&stage.branch){removeRunWorktree(repoRoot,stage.worktreeDir,stage.branch)}processed++;continue;
+        markPackageCompleted(scheduler,pkg,reviewedCommit,stage.evidenceRefs??[]);saveSchedulerState(schedulerFile,scheduler);clearStage();if(stage.worktreeDir&&stage.branch){removeRunWorktree(repoRoot,stage.worktreeDir,stage.branch,{branchPrefix:cfg.git.runBranchPrefix})}processed++;continue;
       }
 
       let workspace;
-      if(stage.worktreeDir&&stage.branch)workspace=restoreRunWorktree(repoRoot,stage.worktreeDir,stage.branch);
+      if(stage.worktreeDir&&stage.branch)workspace=restoreRunWorktree(repoRoot,stage.worktreeDir,stage.branch,cfg.git.runBranchPrefix);
       else{workspace=createRunWorktree(repoRoot,`${runId}-${pkg.id}`,baseCommit,cfg.git.runBranchPrefix);stage={...stage,worktreeDir:workspace.dir,branch:workspace.branch,stage:"BUILD"};saveStage(stage)}
             ledger.event("scheduler","PACKAGE_STARTED",{title:pkg.title,phaseIds,branch:workspace.branch},"INFO",{phase:leadPhase,milestoneId:pkg.id,actor:"SUPERVISOR"});
 
@@ -335,7 +331,7 @@ async function main(){
           stage={...stage,stage:"PUSH"};saveStage(stage);
           try{const remoteProtection=refreshRemoteProtection();const auth=authorizeAutomationAction({action:"REMOTE_PUSH",milestone,globalConfig:cfg,remoteProtection,reviewClean:true});const push=auth.allowed?pushMainAndVerify(repoRoot,cfg.git.defaultBranch):{pushed:false,reason:auth.reason};ledger.event("git","PUSH_AFTER_CLEAN",push,"INFO",{phase:leadPhase,milestoneId:pkg.id,actor:"SUPERVISOR"})}
           catch(e){const sec=nextRetrySeconds(scheduler,pkg,300),retryAt=isoAfter(sec);markPackageStateRetry(scheduler,pkg,String(e.message),retryAt);saveSchedulerState(schedulerFile,scheduler);writeRetry(sec,pkg,String(e.message));return summaryAndExit(ledger,"RETRY_WAIT",{packageId:pkg.id,reason:String(e.message)},30)}
-          markPackageCompleted(scheduler,pkg,reviewedCommit,evidenceRefs);saveSchedulerState(schedulerFile,scheduler);clearStage();removeRunWorktree(repoRoot,workspace.dir,workspace.branch);ledger.event("scheduler","PACKAGE_COMPLETED",{commit:reviewedCommit,phaseIds},"INFO",{phase:leadPhase,milestoneId:pkg.id,actor:"SUPERVISOR"});processed++;break;
+          markPackageCompleted(scheduler,pkg,reviewedCommit,evidenceRefs);saveSchedulerState(schedulerFile,scheduler);clearStage();removeRunWorktree(repoRoot,workspace.dir,workspace.branch,{branchPrefix:cfg.git.runBranchPrefix});ledger.event("scheduler","PACKAGE_COMPLETED",{commit:reviewedCommit,phaseIds},"INFO",{phase:leadPhase,milestoneId:pkg.id,actor:"SUPERVISOR"});processed++;break;
         }
         if(["ENVIRONMENT_BLOCKED","INDEPENDENCE_INSUFFICIENT","REVIEW_INPUT_INVALID","FOUNDER_DECISION_REQUIRED"].includes(result)){markPackageStateBlocked(scheduler,pkg,review.summary||result,result);saveSchedulerState(schedulerFile,scheduler);saveStage({...stage,stage:"FOUNDER_ATTENTION",findingLedger});return summaryAndExit(ledger,"FOUNDER_ATTENTION_REQUIRED",{packageId:pkg.id,result,summary:review.summary},40)}
         if(cycle===cfg.maxReviewCycles){markPackageStateBlocked(scheduler,pkg,"REVIEW_DID_NOT_CONVERGE","REVIEW_NON_CONVERGENCE");saveSchedulerState(schedulerFile,scheduler);saveStage({...stage,stage:"FOUNDER_ATTENTION",findingLedger});return summaryAndExit(ledger,"FOUNDER_ATTENTION_REQUIRED",{packageId:pkg.id,findings:governed.acceptedBlockers},40)}

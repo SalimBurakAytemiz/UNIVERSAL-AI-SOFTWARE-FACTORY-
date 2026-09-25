@@ -62,16 +62,16 @@
     "paste4D": "COMPLETE_SOURCE",
     "paste4": "COMPLETE_SOURCE"
   },
-  "nextScope": "FULL_SYSTEM_REAUDIT_AUTOMATION_SUPERVISOR_SCHEDULER",
+  "nextScope": "FULL_SYSTEM_REAUDIT_APPS_CONTROL_API_DESKTOP",
   "dependencyFreeSourceRegression": {
     "status": "PASS",
-    "canonicalStepsPass": 43,
+    "canonicalStepsPass": 44,
     "pendingDependencies": 2,
     "fail": 0,
-    "sourceSyntax": "110/110 PASS",
-    "jsonParse": "1612/1612 PASS"
+    "sourceSyntax": "112/112 PASS",
+    "jsonParse": "1613/1613 PASS"
   },
   "dependencyTrustHardening": "COMPLETE_SOURCE_ENVIRONMENT_GATE_PENDING",
   "dependencyReviewedLock": "BLOCKED_ENVIRONMENT_NPM11_REGISTRY_REQUIRED",
-  "fullSystemReaudit": "IN_PROGRESS_ROOT_CONFIG_CI_TRUST_AND_CORE_RUNTIME_ACTION_AUTHORITY_COMPLETE"
+  "fullSystemReaudit": "IN_PROGRESS_ROOT_CONFIG_CI_TRUST_CORE_RUNTIME_ACTION_AUTHORITY_AUTOMATION_SUPERVISOR_SCHEDULER_COMPLETE"
 }

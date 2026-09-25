@@ -1,0 +1,52 @@
+{
+  "//TR": "Bu checkpoint full-system re-audit automation/supervisor/scheduler bounded scope sonucunu ve adversarial remediation kanıtını taşır; final closure iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "scope": "FULL_SYSTEM_REAUDIT_AUTOMATION_SUPERVISOR_SCHEDULER",
+  "date": "2026-09-25",
+  "parentCommit": "10580b4499f327565b0400532d8e8aecd18ccb8c",
+  "findings": {
+    "P0": 0,
+    "P1": 4,
+    "P2": 6,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "remediations": [
+    "scheduler COMPLETED state now requires exact main-history commit plus Ed25519-signed CLEAN package attestation; mutable scheduler JSON alone cannot claim completion",
+    "run worktree restore/remove is restricted to the canonical managed worktree root, expected uasco/run branch namespace and verified Git worktree identity",
+    "process-lock release is bound to a per-lock UUID owner identity so an old release closure cannot delete a replacement supervisor lock",
+    "remote-protection verifier subprocess now receives canonical sanitized deterministic child environment instead of raw host process.env",
+    "Global Stop clear removes main, .prev and stale temp generations so an old active stop cannot resurrect after resume",
+    "checkpoint and supervisor retry clear paths remove prior atomic generations instead of allowing stale resume/retry state to return",
+    "scheduler validator enforces reverse active/blocked indexes, valid retry metadata, completed commit/evidence fields and duplicate-free indexes",
+    "review-package ACTIVE transition captures pending phases before mutation so scheduler active index remains exact",
+    "Control API Global Stop and blocked-retry paths use canonical global-stop and scheduler load/save helpers rather than raw state mutation",
+    "Phase0 Global Stop gate reads canonical main/.prev state rather than checking only main-file existence",
+    "dependency-free adversarial automation/scheduler regression added"
+  ],
+  "regression": {
+    "broadDependencyFree": "44/44 PASS",
+    "automationAdversarial": "15/15 PASS",
+    "supervisorStateSelftest": "PASS",
+    "bootstrapKernel": "PASS",
+    "mechanicalKernel": "PASS",
+    "runtimeResilience": "21/21 PASS",
+    "paste2A": "15/15 PASS",
+    "configRuntime": "25/25 PASS",
+    "mechanicalClosure": "PASS",
+    "sourceSyntax": "112/112 PASS",
+    "jsonParse": "1613/1613 PASS",
+    "secretSanity": "PASS",
+    "dependencySupplyChain": "EXPECTED_FAIL_CLOSED_SOURCE_REVIEWED_PACKAGE_LOCK_REQUIRED",
+    "trustRoot": "EXPECTED_FAIL_CLOSED_STALE_PENDING_FINAL_RESEAL"
+  },
+  "canonicalTruth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_SHA256SUMS": "NOT_DONE",
+    "FINAL_RELEASE_AUTHENTICITY": "NOT_DONE",
+    "FINAL_ZIP": "NOT_DONE"
+  },
+  "nextScope": "FULL_SYSTEM_REAUDIT_APPS_CONTROL_API_DESKTOP"
+}

@@ -1,7 +1,7 @@
 // //TR: Bu helper Founder Global Stop dosyasını authoritative runtime signal olarak okur/yazar; scheduler yeni iş başlatmaz ve command runner aktif child process'i durdurabilir.
 import fs from "node:fs";
 import path from "node:path";
-import {writeJsonAtomic,readJsonIfExists} from "./atomic-json.mjs";
+import {writeJsonAtomic,readJsonIfExists,clearJsonAtomic} from "./atomic-json.mjs";
 
 export function globalStopState(file){
   const x=readJsonIfExists(file,null);
@@ -16,6 +16,6 @@ export function activateGlobalStop(file,reason="Founder requested stop",actor="F
   writeJsonAtomic(file,{"//TR":"Bu runtime signal yeni iş başlatılmasını ve destekleyen runner'larda aktif child process'in devam etmesini durdurur.",active:true,reason,actor,activatedAt:new Date().toISOString()});
 }
 export function clearGlobalStop(file,actor="FOUNDER"){
-  if(fs.existsSync(file)) fs.rmSync(file,{force:true});
+  clearJsonAtomic(file);
   return {active:false,clearedAt:new Date().toISOString(),actor};
 }

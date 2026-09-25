@@ -7,6 +7,8 @@ import cp from "node:child_process";
 import {inspectProcessLock,clearStaleProcessLock} from "../../../automation/lib/process-lock.mjs";
 import {appendControlAudit,readUtf8Tail,readJsonlTail} from "../../../automation/lib/control-audit.mjs";
 import {canRetryBlockedKind,retryableBlockedKinds} from "../../../automation/lib/retry-authority.mjs";
+import {activateGlobalStop,clearGlobalStop,globalStopState} from "../../../automation/lib/global-stop.mjs";
+import {loadSchedulerState,saveSchedulerState} from "../../../automation/lib/scheduler.mjs";
 
 const app=Fastify({logger:true,requestIdHeader:"x-request-id",genReqId:()=>crypto.randomUUID(),bodyLimit:64*1024});
 const readJson=(p:string)=>JSON.parse(fs.readFileSync(p,"utf8"));
@@ -44,7 +46,7 @@ app.get("/v1/capabilities",async()=>readJson("registries/capabilities.json"));
 app.get("/v1/fabrics",async()=>readJson("registries/execution-fabrics.json"));
 app.get("/v1/adapters",async()=>readJson("registries/tool-adapters.json"));
 app.get("/v1/domains",async()=>readJson("registries/domain-packs.json"));
-app.get("/v1/control/status",async()=>({globalStop:fs.existsSync(path.join(runtime,"GLOBAL_STOP.json"))?readJson(path.join(runtime,"GLOBAL_STOP.json")):{active:false}}));
+app.get("/v1/control/status",async()=>({globalStop:globalStopState(path.join(runtime,"GLOBAL_STOP.json"))??{active:false}}));
 app.get("/v1/retry",async()=>readJsonOr(path.join(runtime,"SUPERVISOR_RETRY.json"),null));
 app.get("/v1/founder-attention",async()=>{const scheduler=readJsonOr<any>(path.join(runtime,"scheduler-state.json"),{blocked:[]});const blocked=(scheduler.blocked??[]).map((x:any)=>({...x,retryable:canRetryBlockedKind(x.kind)}));return {blocked,retryableKinds:retryableBlockedKinds(),checkpoint:readJsonOr(path.join(runtime,"supervisor-checkpoint.json"),null),retry:readJsonOr(path.join(runtime,"SUPERVISOR_RETRY.json"),null)}});
 
@@ -70,13 +72,13 @@ app.get<{Params:{runId:string,name:string}}>("/v1/runs/:runId/logs/:name",async(
   const tail=readUtf8Tail(f,256*1024);return {runId:req.params.runId,name:req.params.name,truncated:tail.truncated,text:tail.text}
 });
 
-app.post("/v1/control/stop",async(req)=>{const body=(req.body??{}) as {reason?:string};const doc={"//TR":"Bu runtime signal Founder Global Stop durumunu taşır.",active:true,reason:String(body.reason??"Founder requested stop").slice(0,1000),actor:"FOUNDER_CONTROL_TOWER",activatedAt:new Date().toISOString()};atomicJson(path.join(runtime,"GLOBAL_STOP.json"),doc);audit("GLOBAL_STOP_ACTIVATED",{reason:doc.reason});return {ok:true,globalStop:doc}});
-app.post("/v1/control/resume",async()=>{fs.rmSync(path.join(runtime,"GLOBAL_STOP.json"),{force:true});const start=startSupervisorDetached();audit("GLOBAL_STOP_CLEARED_AND_RESUME_REQUESTED",start);return {ok:true,globalStop:{active:false},supervisor:start}});
+app.post("/v1/control/stop",async(req)=>{const body=(req.body??{}) as {reason?:string};const reason=String(body.reason??"Founder requested stop").slice(0,1000);activateGlobalStop(path.join(runtime,"GLOBAL_STOP.json"),reason,"FOUNDER_CONTROL_TOWER");const doc=globalStopState(path.join(runtime,"GLOBAL_STOP.json"));audit("GLOBAL_STOP_ACTIVATED",{reason});return {ok:true,globalStop:doc}});
+app.post("/v1/control/resume",async()=>{clearGlobalStop(path.join(runtime,"GLOBAL_STOP.json"),"FOUNDER_CONTROL_TOWER");const start=startSupervisorDetached();audit("GLOBAL_STOP_CLEARED_AND_RESUME_REQUESTED",start);return {ok:true,globalStop:{active:false},supervisor:start}});
 app.post("/v1/control/retry-blocked",async(req,reply)=>{
   const body=(req.body??{}) as {packageId?:string};const packageId=String(body.packageId??"");if(!/^PKG-\d{3}$/.test(packageId))return reply.code(400).send({error:"INVALID_PACKAGE_ID"});
   const sf=path.join(runtime,"scheduler-state.json");if(!fs.existsSync(sf))return reply.code(409).send({error:"SCHEDULER_NOT_INITIALIZED"});
   const packages=readJson("roadmap/review-packages.json").packages as Array<{id:string;phaseIds:number[]}>;const pkg=packages.find(x=>x.id===packageId);if(!pkg)return reply.code(404).send({error:"PACKAGE_NOT_FOUND"});
-  const state=readJson(sf);const blockers=(state.blocked??[]).filter((x:any)=>x.packageId===packageId||pkg.phaseIds.includes(x.phase));if(!blockers.length)return reply.code(409).send({error:"PACKAGE_NOT_BLOCKED"});const forbidden=blockers.filter((x:any)=>!canRetryBlockedKind(x.kind));if(forbidden.length)return reply.code(409).send({error:"BLOCKER_NOT_TECHNICALLY_RETRYABLE",packageId,blockedKinds:[...new Set(forbidden.map((x:any)=>String(x.kind??"UNKNOWN")))]});for(const phase of pkg.phaseIds){const row=state.phases?.find((x:any)=>x.phase===phase);if(row&&row.status==="BLOCKED"){row.status="RETRY_READY";delete row.lastFailure}}state.blocked=(state.blocked??[]).filter((x:any)=>x.packageId!==packageId&&!pkg.phaseIds.includes(x.phase));state.updatedAt=new Date().toISOString();atomicJson(sf,state);const start=startSupervisorDetached();audit("FOUNDER_RETRY_TECHNICAL_BLOCKED_PACKAGE",{packageId,blockedKinds:blockers.map((x:any)=>x.kind),...start});return {ok:true,packageId,supervisor:start};
+  let state;try{state=loadSchedulerState(sf)}catch(e){return reply.code(409).send({error:"SCHEDULER_STATE_INVALID",detail:String((e as Error).message)})}const blockers=(state.blocked??[]).filter((x:any)=>x.packageId===packageId||pkg.phaseIds.includes(x.phase));if(!blockers.length)return reply.code(409).send({error:"PACKAGE_NOT_BLOCKED"});const forbidden=blockers.filter((x:any)=>!canRetryBlockedKind(x.kind));if(forbidden.length)return reply.code(409).send({error:"BLOCKER_NOT_TECHNICALLY_RETRYABLE",packageId,blockedKinds:[...new Set(forbidden.map((x:any)=>String(x.kind??"UNKNOWN")))]});for(const phase of pkg.phaseIds){const row=state.phases?.find((x:any)=>x.phase===phase);if(row&&row.status==="BLOCKED"){row.status="RETRY_READY";delete row.lastFailure}}state.blocked=(state.blocked??[]).filter((x:any)=>x.packageId!==packageId&&!pkg.phaseIds.includes(x.phase));saveSchedulerState(sf,state);const start=startSupervisorDetached();audit("FOUNDER_RETRY_TECHNICAL_BLOCKED_PACKAGE",{packageId,blockedKinds:blockers.map((x:any)=>x.kind),...start});return {ok:true,packageId,supervisor:start};
 });
 
 const port=Number(process.env.CONTROL_API_PORT??3210);await app.listen({host:"127.0.0.1",port});

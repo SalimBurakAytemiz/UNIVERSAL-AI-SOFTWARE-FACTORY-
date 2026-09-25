@@ -35,21 +35,20 @@ export function runnablePackages(packages,graph,state){
   }).sort((a,b)=>(deliveryRank[a.deliveryTier]??9)-(deliveryRank[b.deliveryTier]??9)||(reviewRank[a.reviewProfile]??9)-(reviewRank[b.reviewProfile]??9)||a.id.localeCompare(b.id));
 }
 export function markPackageActive(state,pkg,runId){
-  for(const p of packagePendingPhases(pkg,state)){
-    const row=state.phases.find(x=>x.phase===p); row.status="ACTIVE";row.attempts=(row.attempts??0)+1;row.lastRunId=runId;
-  }
-  state.active=[...new Set([...(state.active??[]),...packagePendingPhases(pkg,state)])];
+  const pending=packagePendingPhases(pkg,state);
+  for(const p of pending){const row=state.phases.find(x=>x.phase===p);row.status="ACTIVE";row.attempts=(row.attempts??0)+1;row.lastRunId=runId;delete row.retryAt}
+  state.active=[...new Set([...(state.active??[]),...pending])];state.blocked=(state.blocked??[]).filter(x=>!pending.includes(x.phase));
 }
 export function markPackageRetry(state,pkg,reason,retryAt){
-  for(const p of pkg.phaseIds){const row=state.phases.find(x=>x.phase===p);if(row.status!=="COMPLETED"){row.status="RETRY_WAIT";row.retryAt=retryAt;row.lastFailure=reason}}
-  state.active=(state.active??[]).filter(x=>!pkg.phaseIds.includes(x));
+  for(const p of pkg.phaseIds){const row=state.phases.find(x=>x.phase===p);if(row.status!=="COMPLETED"){row.status="RETRY_WAIT";row.retryAt=retryAt;row.lastFailure=String(reason)}}
+  state.active=(state.active??[]).filter(x=>!pkg.phaseIds.includes(x));state.blocked=(state.blocked??[]).filter(x=>!pkg.phaseIds.includes(x.phase));
 }
 export function markPackageBlocked(state,pkg,reason,kind="FOUNDER_ATTENTION"){
-  for(const p of pkg.phaseIds){const row=state.phases.find(x=>x.phase===p);if(row.status!=="COMPLETED"){row.status="BLOCKED";row.lastFailure=reason}}
+  for(const p of pkg.phaseIds){const row=state.phases.find(x=>x.phase===p);if(row.status!=="COMPLETED"){row.status="BLOCKED";row.lastFailure=String(reason);delete row.retryAt}}
   state.active=(state.active??[]).filter(x=>!pkg.phaseIds.includes(x));
-  state.blocked=[...(state.blocked??[]).filter(x=>!pkg.phaseIds.includes(x.phase)),...pkg.phaseIds.filter(p=>state.phases.find(x=>x.phase===p)?.status!=="COMPLETED").map(phase=>({phase,packageId:pkg.id,reason,kind,at:new Date().toISOString()}))];
+  state.blocked=[...(state.blocked??[]).filter(x=>!pkg.phaseIds.includes(x.phase)),...pkg.phaseIds.filter(p=>state.phases.find(x=>x.phase===p)?.status!=="COMPLETED").map(phase=>({phase,packageId:pkg.id,reason:String(reason),kind:String(kind),at:new Date().toISOString()}))];
 }
 export function markPackageCompleted(state,pkg,commit,evidenceRefs=[]){
-  for(const p of pkg.phaseIds){const row=state.phases.find(x=>x.phase===p);if(row.status!=="COMPLETED"){row.status="COMPLETED";row.completedCommit=commit;row.evidenceRefs=evidenceRefs}}
+  for(const p of pkg.phaseIds){const row=state.phases.find(x=>x.phase===p);if(row.status!=="COMPLETED"){row.status="COMPLETED";row.completedCommit=commit;row.evidenceRefs=evidenceRefs;delete row.retryAt;delete row.lastFailure}}
   state.active=(state.active??[]).filter(x=>!pkg.phaseIds.includes(x));state.blocked=(state.blocked??[]).filter(x=>!pkg.phaseIds.includes(x.phase));
 }
