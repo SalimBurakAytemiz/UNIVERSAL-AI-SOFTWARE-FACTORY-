@@ -15,6 +15,8 @@ const start = text("START-HERE.md");
 const status = text("CANONICAL-STATUS.md");
 const pack = json("PACK.json");
 const progress = json("audit/V6-FULL-SCAN-PROGRESS.json");
+const currentAudit = json("audit/CURRENT-AUDIT-STATE.json");
+const nextActions = text(".ai/NEXT_ACTIONS.md");
 const tech = json("registries/technologies.json");
 const skillsV2 = json("registries/skills-v2.json");
 const skillsV1 = json("registries/skills.json");
@@ -130,6 +132,12 @@ must(progress.truth?.TARGET_MACHINE_PHASE0 === "PENDING", "progress-target-phase
 must(progress.truth?.FINAL_TRUST_ROOT_SEAL === "STALE_PENDING_FINAL_RESEAL", "progress-trust-seal-overclaim");
 must(progress.paste4?.segments?.["4A"] === "COMPLETE_SOURCE", "progress-4a-not-complete");
 must(progress.paste4?.segments?.["4B"] === "COMPLETE_SOURCE", "progress-4b-not-complete");
+must(progress.fullSystemReaudit?.status === "COMPLETE_DEPENDENCY_FREE_PENDING_DEPENDENCY_AWARE", "progress-full-system-reaudit-status-stale");
+must(progress.nextScope === "ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION", "progress-next-scope-stale");
+must(currentAudit.activeScope === "ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION", "current-audit-active-scope-stale");
+must(currentAudit.completedSourceScopes?.includes("FULL_SYSTEM_REAUDIT_DOCS_STATE_CURRENT_TRUTH_FINAL_SWEEP"), "current-audit-completed-scopes-stale");
+must(nextActions.includes("ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION"), "next-actions-scope-stale");
+must(!nextActions.includes("Continue full-system deep re-audit"), "next-actions-old-reaudit-instruction-stale");
 must(["NEXT","IN_PROGRESS","COMPLETE_SOURCE"].includes(progress.paste4?.segments?.["4C"]), "progress-4c-invalid-state");
 must(["PENDING","NEXT","IN_PROGRESS","COMPLETE_SOURCE"].includes(progress.paste4?.segments?.["4D"]), "progress-4d-invalid-state");
 

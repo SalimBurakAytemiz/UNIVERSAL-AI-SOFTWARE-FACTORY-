@@ -2,7 +2,7 @@
   "//TR": "V6 recovery replay için canonical bounded-scan ilerleme kaydıdır. Bu dosya final source closure veya target-machine PASS iddiası değildir.",
   "schemaVersion": "1.0.0",
   "status": "IN_PROGRESS",
-  "verifiedThroughParentCommit": "10580b4499f327565b0400532d8e8aecd18ccb8c",
+  "verifiedThroughParentCommit": "CURRENT_CHECKPOINT_COMMIT_SEE_GIT_HEAD",
   "paste1": {
     "status": "COMPLETE_SOURCE",
     "checkpointCommit": "99105cf8c6a8a60954c8aa936a4d0ebd4253c15f"
@@ -186,5 +186,28 @@
       "sourceSyntax": "114/114 PASS",
       "jsonParse": "1614/1614 PASS"
     }
+  },
+  "fullSystemReaudit": {
+    "status": "COMPLETE_DEPENDENCY_FREE_PENDING_DEPENDENCY_AWARE",
+    "completedScopes": [
+      "ROOT_CONFIG_CI_TRUST",
+      "CORE_RUNTIME_ACTION_AUTHORITY",
+      "AUTOMATION_SUPERVISOR_SCHEDULER",
+      "APPS_CONTROL_API_DESKTOP",
+      "PROVIDER_OMNIROUTE",
+      "REGISTRIES_AGENTS_KNOWLEDGE",
+      "ROADMAP_PHASES_REVIEW_PACKAGES",
+      "SCHEMAS_CONTRACTS_PRODUCER_CONSUMER_ALIGNMENT",
+      "INSTALLER_POWERSHELL_PHASE0_TARGET_MACHINE_CONTRACT",
+      "EVIDENCE_TRUST_ROOT_RELEASE_FINALIZATION",
+      "DOCS_STATE_CURRENT_TRUTH_FINAL_SWEEP"
+    ],
+    "aggregateFindings": {
+      "P0": 0,
+      "P1": 31,
+      "P2": 32,
+      "P3": 1
+    },
+    "dependencyFreeOpenP0P1P2": 0
   }
 }
