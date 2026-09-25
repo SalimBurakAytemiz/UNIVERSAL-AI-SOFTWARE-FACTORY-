@@ -1,6 +1,9 @@
 // //TR: Bu dosya API QA için Ajv JSON Schema validation ile recursive null/empty policy kontrolünü birleştiren gerçek Day-0 reusable validator runtime'ını sağlar.
-import Ajv, { type AnySchema, type ErrorObject } from "ajv";
-import addFormats from "ajv-formats";
+import AjvModule, { type AnySchema, type ErrorObject } from "ajv";
+import addFormatsModule from "ajv-formats";
+// //TR: NodeNext altında CJS ajv/ajv-formats default importu module.exports namespace'i olarak tiplenir; her iki paket de `.default` self-reference taşıdığından runtime ve typecheck aynı değeri görür.
+const Ajv = AjvModule.default;
+const addFormats = addFormatsModule.default;
 
 export interface StrictValuePolicy {
   allowNullPaths?: string[];

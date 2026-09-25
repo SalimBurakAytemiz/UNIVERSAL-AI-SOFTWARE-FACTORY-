@@ -1,0 +1,125 @@
+{
+  "//TR": "Bu checkpoint Node24/npm11/registry ortamında reviewed package-lock üretimini, dependency-aware doğrulama sonuçlarını, Founder yetkili minimum protected düzeltmeleri ve açık kalan release-supply-chain blocker'ını kanıtlarıyla kaydeder; CLEAN, final closure veya target-machine Phase0 PASS iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_A_DEPENDENCY_REVIEWED_LOCK",
+  "date": "2026-09-26",
+  "parent": "061f78d7783f63c2ded3171dcd320c9f6a179e0d",
+  "branch": "v6/pkg-a-dependency-reviewed-lock",
+  "scope": "ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION",
+  "founderAuthorization": {
+    "dependencyPinSet": "APPROVED_ELECTRON_44_4_5_SET",
+    "protectedChangesAuthorized": [
+      "WINDOWS_NPM_SPAWN_DIRECT_NODE_NPM_CLI_WITHOUT_SHELL",
+      "MISSING_AUTOMATION_LIB_DMTS_DECLARATIONS"
+    ],
+    "constraint": "Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+  },
+  "environment": {
+    "platform": "win32 10.0.19045 x64",
+    "node": "v24.19.0",
+    "npm": "11.17.0 (bundled npm-cli.js beside node.exe)",
+    "git": "git version 2.55.0.windows.3",
+    "powershell": "5.1.19041.6456",
+    "registryNpmjsOrg": "REACHABLE_TLS_PING_PASS",
+    "userNpmrc": "ABSENT",
+    "npmConfigEnvOverrides": "NONE"
+  },
+  "dependencyChanges": [
+    {"name": "typescript", "section": "devDependencies", "from": "5.9.0", "to": "5.9.3", "reason": "5.9.0 does not exist on registry.npmjs.org (E404); lock could not be generated"},
+    {"name": "vitest", "section": "devDependencies", "from": "3.2.0", "to": "4.1.11", "reason": "critical GHSA-5xrq-8626-4rwp (<3.2.6) and moderate GHSA-82fw-gwwq-j7x9 via @vitest/mocker (<4.1.11)"},
+    {"name": "electron", "section": "devDependencies", "from": "38.0.0", "to": "44.4.5", "reason": "multiple high/moderate advisories up to <39.8.10 and transitive extract-zip high GHSA-jmr9-qjv8-65gv/GHSA-7pqw-9j4j-h8q3; Founder selected latest supported line"},
+    {"name": "fastify", "section": "dependencies", "from": "5.6.0", "to": "5.12.5", "reason": "high GHSA-jx2c-rxcm-jvmq, high GHSA-247c-9743-5963, moderate GHSA-444r-cwp2-x5xf, moderate GHSA-w2qp-rph6-63g4"},
+    {"name": "ajv", "section": "dependencies", "from": "8.17.1", "to": "8.20.0", "reason": "moderate GHSA-2g4f-4pwh-qvx6 ReDoS (<8.18.0)"},
+    {"name": "tsx", "section": "devDependencies", "from": "4.20.0", "to": "4.23.15", "reason": "esbuild ~0.25 conflicted with vite 8 optional peer esbuild ^0.27||^0.28 and produced 27 extraneous lock entries that npm ci does not install"}
+  ],
+  "unchangedDirectDependencies": ["ajv-formats@3.0.1", "concurrently@9.2.0", "@types/node@24.0.0"],
+  "reviewedLock": {
+    "file": "package-lock.json",
+    "sha256": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4",
+    "packageJsonSha256": "bb293575c213dc2e73fa179cd46b9381eaa7249affdc37e1c8af6bd1366e5a28",
+    "lockfileVersion": 3,
+    "entries": 188,
+    "resolvedHosts": ["registry.npmjs.org"],
+    "nonSha512Integrity": 0,
+    "extraneous": 0,
+    "linkEntries": 0,
+    "nonOptionalPlatformEntries": 0,
+    "entriesWithoutLicense": 0,
+    "installScriptPackages": ["esbuild@0.28.2", "fsevents@2.3.3"],
+    "installScriptsExecuted": false,
+    "installScriptPolicy": ".npmrc ignore-scripts=true and npm ci --ignore-scripts",
+    "npmAudit": {"date": "2026-09-26", "critical": 0, "high": 0, "moderate": 0, "low": 0, "info": 0},
+    "reproducibility": "Two independent generations on the same registry snapshot produced identical sha256",
+    "installedPackageCount": 138,
+    "installedTreeSha256": "4c0aec51d8f5cfb385e214b2375d6dc618f82eac5b5fb2515b4f881bfd79ad12",
+    "markerSealStatus": "PENDING_EVIDENCE_KEY"
+  },
+  "findings": [
+    {"id": "PKGA-F1", "severity": "P1", "category": "SUPPLY_CHAIN", "file": "package.json", "observed": "typescript@5.9.0 pin unresolvable (E404)", "status": "FIXED"},
+    {"id": "PKGA-F2", "severity": "P1", "category": "SUPPLY_CHAIN", "file": "package.json", "observed": "npm audit blockers under canonical policy: 1 critical, 3 high, 2 moderate", "status": "FIXED"},
+    {"id": "PKGA-F3", "severity": "P2", "category": "SUPPLY_CHAIN", "file": "package-lock.json", "observed": "27 extraneous lock entries caused INSTALLED_PACKAGE_MISSING after npm ci", "status": "FIXED"},
+    {"id": "PKGA-F4", "severity": "P1", "category": "RUNTIME_WINDOWS", "file": "automation/lib/dependency-install.mjs", "observed": "spawnSync(\"npm.cmd\") without shell returns EINVAL on Node >=18.20.2/20.12.2 (CVE-2024-27980); ensure-dependencies, npm audit gate, preflight npm version/ping and provider provenance npm root failed on Windows", "affectedFiles": ["automation/lib/dependency-install.mjs", "scripts/dependency-supply-chain.mjs", "scripts/preflight.mjs", "scripts/capture-provider-provenance.mjs"], "status": "FIXED_FOUNDER_AUTHORIZED_PROTECTED_CHANGE"},
+    {"id": "PKGA-F5", "severity": "P2", "category": "TYPECHECK", "file": "automation/lib/*.d.mts", "observed": "6x TS7016 for automation/lib modules imported by apps/control-api/src/server.ts and tests/review-governance.test.ts", "status": "FIXED_FOUNDER_AUTHORIZED_PROTECTED_CHANGE"},
+    {"id": "PKGA-F6", "severity": "P2", "category": "TYPECHECK", "file": "core/qa/api/strict-json-validator.ts", "observed": "NodeNext CJS default-import interop: Ajv not constructable, addFormats not callable (TS2351/TS2349)", "status": "FIXED"},
+    {"id": "PKGA-F7", "severity": "P1", "category": "RELEASE_SUPPLY_CHAIN", "file": "automation/lib/release-supply-chain.mjs", "observed": "release gate requires installed.status=PRESENT, license and packageJsonSha256 for every SBOM component, but 50 lock entries are optional os/cpu-specific packages for other platforms that npm never installs; gate is unsatisfiable on every platform (also with the original pin set via @esbuild/*)", "evidence": "50 not-installed components; all optional=true with os/cpu constraints and lock license present", "status": "OPEN_REQUIRES_SEPARATE_FOUNDER_APPROVAL_PROTECTED_RELEASE_PROVENANCE_SEMANTICS"},
+    {"id": "PKGA-F8", "severity": "ENVIRONMENT", "category": "TARGET_MACHINE_PREFLIGHT", "file": "config/preflight-policy.json", "observed": "preflight memory total=15.9GB below required 16GB; w32tm /query /status failed 0x80070426 (Windows Time service not running)", "status": "OPEN_ENVIRONMENT_NOT_CODE_DEFECT"},
+    {"id": "PKGA-F9", "severity": "P2", "category": "RUNTIME_WINDOWS", "file": "scripts/smoke-desktop.mjs", "observed": "smoke-desktop/smoke-control-tower spawn node_modules\\.bin\\electron.cmd (same EINVAL class); electron@44.4.5 publishes no install script so binary provisioning under ignore-scripts is unverified; capture-provider-provenance launcher spawn would fail if a provider CLI resolves to .cmd", "status": "OPEN_OUT_OF_AUTHORIZED_SCOPE"}
+  ],
+  "validation": {
+    "gitDiffCheck": "PASS",
+    "workspace": "fresh scratch clone mirroring the branch working tree; repository .ai/runtime untouched",
+    "canonicalEnsureDependencies": "PASS NPM_CI_REVIEWED_LOCK (no wrapper, fixed helper)",
+    "canonicalRunner": {
+      "status": "FAIL",
+      "pass": 31,
+      "fail": 1,
+      "notReachedFailFast": ["typecheck", "tests"],
+      "failedStep": "release-supply-chain (PKGA-F7)",
+      "newlyPassingDependencyAwareSteps": ["runtime-schema-conformance", "dependency-supply-chain"]
+    },
+    "typecheckDirect": "PASS tsc --noEmit exit=0 (run directly because canonical runner stops at release-supply-chain)",
+    "vitestDirect": "PASS 14 files / 51 tests (44 existing + 7 new npm-invocation tests), vitest 4.1.11",
+    "broadDependencyFreeSuite": "25/25 PASS, status set identical to pre-change baseline; v6-paste2c 25/25 (was 24/24)",
+    "adversarial": {
+      "A1_ensureDependenciesWithoutBundledNpm": "FAIL_CLOSED NPM_CLI_NOT_FOUND exit=1; node_modules not deleted (116 -> 116)",
+      "A2_dependencyAuditWithoutBundledNpm": "FAIL_CLOSED DEPENDENCY_AUDIT_UNAVAILABLE:NPM_CLI_NOT_FOUND exit=1",
+      "A3_legacyNpmCmdSpawn": "REPRODUCED status=null error=EINVAL",
+      "A4_dependencyAuditRealNode": "PASS components=188 low=0",
+      "A5_preflightNpmChecks": "npm 11.17.0 PASS; registryTls PASS; reviewedLock PASS"
+    },
+    "baselineBeforeChange": "canonical 26 PASS then runtime-schema-conformance BLOCKED (SOURCE_REVIEWED_PACKAGE_LOCK_REQUIRED); broad 25/25 PASS"
+  },
+  "changedFileSha256": {
+    "automation/lib/dependency-install.mjs": "6cbfa7d8c650f5fdf3b4d7769befd6bde8ab8c74ebd7cdbda2fd7caa7d8ea482",
+    "automation/lib/env-policy.d.mts": "8e8882f9515a7dfe7812b059248fe239ccbe4dec5c73aea62af611596e34ba76",
+    "automation/lib/git-isolation.d.mts": "1bcdc286b5e694f9a0eb496671001bfc098710918f3555cfdf4a350a4d9dfdfe",
+    "automation/lib/global-stop.d.mts": "f80ddeab752ac7025c0d8e9b0a9006ce90aa3edfb6bdf4b5fda30fb6efdf63b4",
+    "automation/lib/npm-invocation.d.mts": "d7c28e2dfc68610a1815c6d94fe4eb53b0f394c001d5096200d4cca251aa246a",
+    "automation/lib/npm-invocation.mjs": "62d10a43fbc5805caf641201b6ac68c920018bb1741c9ce880e0edf2de3c78e9",
+    "automation/lib/review-governance.d.mts": "1f7e0ed1a7d10591a1823a31370ff102b3c88d2edffd0d9485ea0c0c4b6aeb15",
+    "automation/lib/scheduler-completion.d.mts": "699f395f9fac3d712fa4c821476c0fb81fb28a34da93778bdc1d2759a513dac0",
+    "automation/lib/scheduler.d.mts": "e7888c2d48d57a4229f9eee9947c3f091624333a9612e45c4b37eb1fb25d73fb",
+    "core/qa/api/strict-json-validator.ts": "dcbad8fb678faa3a303486393f3f56c9ac9c15a273ad49d07080ad1cdda3752a",
+    "package-lock.json": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4",
+    "package.json": "bb293575c213dc2e73fa179cd46b9381eaa7249affdc37e1c8af6bd1366e5a28",
+    "scripts/capture-provider-provenance.mjs": "e642ee91cca3ee4f5424964be41195586f765bc9ad5e2e524555128d674d3d74",
+    "scripts/dependency-supply-chain.mjs": "6897dba91930b3e39574c50ac1d9ac7678e32d4b0912edf270e2beee0a5cc339",
+    "scripts/preflight.mjs": "618d5905ce8b1b9137214e3c9d79e339efb04fc9e0b79fbb69a531e267574ae5",
+    "scripts/v6-paste2c-selftest.mjs": "f5e78945f77ee40ef950ebfd3344f42d3e8e35480aa65dcae2fd8927ce2cc89e",
+    "tests/npm-invocation.test.ts": "dbb9de768cfcc2e0d60ad1816b0ed48cb56471d3da067053892adc0ce0389f9e"
+  },
+  "openP0P1P2": 2,
+  "openBlockers": ["PKGA-F7", "PKGA-F9"],
+  "review": "NOT_REVIEWED_CODEX_PENDING",
+  "cleanClaim": false,
+  "trustRootManifest": "NOT_REGENERATED_FINAL_RESEAL_PENDING",
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "DEPENDENCY_REVIEWED_LOCK": "PRESENT_REVIEW_PENDING",
+    "DEPENDENCY_AWARE_VALIDATION": "PARTIAL_RELEASE_SUPPLY_CHAIN_GATE_FAIL",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_ZIP": "NOT_DONE",
+    "TARGET_MACHINE_PHASE0": "PENDING"
+  },
+  "nextScope": "FOUNDER_DECISION_RELEASE_SUPPLY_CHAIN_PLATFORM_OPTIONAL_COMPONENTS_THEN_CURRENT_TRUTH_SYNC"
+}

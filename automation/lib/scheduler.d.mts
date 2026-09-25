@@ -1,0 +1,12 @@
+export function initializeSchedulerState(templateFile:string,stateFile:string,options?:{phase0Complete?:boolean;phase0Commit?:string|null}):any;
+export function loadGraph(file:string):{doc:any;map:Map<number,any>};
+export function validateSchedulerState(state:unknown):{ok:boolean;errors:string[]};
+export function loadSchedulerState(file:string):any;
+export function saveSchedulerState(file:string,state:any):void;
+export function runnablePhases(graph:{doc:any;map:Map<number,any>},state:any):any[];
+export function markActive(state:any,phase:number,runId:string):void;
+export function markCompleted(state:any,phase:number,commit:string,evidenceRefs?:string[]):void;
+export function markRetry(state:any,phase:number,reason:string,retryAt:string):void;
+export function promoteDueRetries(state:any,now?:number):void;
+export function markBlocked(state:any,phase:number,reason:string,kind?:string):void;
+export function allComplete(state:any):boolean;

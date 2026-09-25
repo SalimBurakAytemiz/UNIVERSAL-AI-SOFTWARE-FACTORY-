@@ -1,0 +1,1 @@
+export function assertSchedulerCompletionEvidence(input:{repoRoot:string;state:any;packages:{doc:any};publicKeyFile:string;isAncestor:(repoRoot:string,ancestor:string,descendant:string)=>boolean}):{ok:true};
