@@ -1,11 +1,12 @@
 // //TR: Bu helper Founder Global Stop dosyasını authoritative runtime signal olarak okur/yazar; scheduler yeni iş başlatmaz ve command runner aktif child process'i durdurabilir.
 import fs from "node:fs";
 import path from "node:path";
-import {writeJsonAtomic,readJsonIfExists,clearJsonAtomic} from "./atomic-json.mjs";
+import {writeJsonAtomic,clearJsonAtomic} from "./atomic-json.mjs";
 
 export function globalStopState(file){
-  const x=readJsonIfExists(file,null);
-  return x?.active===true?x:null;
+  // //TR: Stop artifact mevcut fakat okunamıyor/geçersizse bunu "stop yok" saymak fail-open olur; bozuk state güvenli tarafta aktif stop kabul edilir.
+  let sawArtifact=false;for(const f of [file,`${file}.prev`]){if(!fs.existsSync(f))continue;sawArtifact=true;try{const x=JSON.parse(fs.readFileSync(f,"utf8"));if(x&&x.active===true)return x}catch{}}
+  return sawArtifact?{active:true,reason:"GLOBAL_STOP_STATE_INVALID_FAIL_CLOSED",actor:"SYSTEM"}:null;
 }
 export function assertNotStopped(file){
   const x=globalStopState(file);

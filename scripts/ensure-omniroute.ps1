@@ -37,9 +37,19 @@ if(-not (Get-Command omniroute -ErrorAction SilentlyContinue)){
   $json=$candidate|ConvertTo-Json -Depth 5;[System.IO.File]::WriteAllText((Join-Path (Get-Location) ".ai\runtime\OMNIROUTE_INSTALL.json"),$json,(New-Object System.Text.UTF8Encoding($false)))
 }
 
+# //TR: PATH üzerinde aynı isimli arbitrary executable bulunması install/provenance kontrolünü bypass edemez; launcher npm global prefix ve expected package identity ile bağlanır.
+$cmd=Get-Command omniroute -ErrorAction Stop
+$npmPrefix=(npm prefix -g).Trim();if($LASTEXITCODE -ne 0 -or -not $npmPrefix){throw "Could not resolve npm global prefix for OmniRoute launcher verification"}
+$launcher=[IO.Path]::GetFullPath([string]$cmd.Source);$prefixFull=[IO.Path]::GetFullPath($npmPrefix).TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)+[IO.Path]::DirectorySeparatorChar
+if(-not $launcher.StartsWith($prefixFull,[StringComparison]::OrdinalIgnoreCase)){throw "OmniRoute launcher is outside npm global prefix: $launcher"}
+$globalRoot=(npm root -g).Trim();if($LASTEXITCODE -ne 0 -or -not $globalRoot){throw "Could not resolve npm global root for OmniRoute package verification"}
+$pkgJson=Join-Path $globalRoot (Join-Path $policy.packageName "package.json");if(-not (Test-Path -LiteralPath $pkgJson -PathType Leaf)){throw "OmniRoute global package.json missing"}
+$installedPkg=Get-Content -LiteralPath $pkgJson -Raw|ConvertFrom-Json;if([string]$installedPkg.name -ne [string]$policy.packageName){throw "OmniRoute installed package identity mismatch"};if($policy.allowedLicenses -notcontains [string]$installedPkg.license){throw "OmniRoute installed package license not allowed: $($installedPkg.license)"}
+$installedRepo=if($installedPkg.repository -is [string]){[string]$installedPkg.repository}else{[string]$installedPkg.repository.url};$installedRepoOk=$false;foreach($needle in $policy.expectedRepositorySubstrings){if($installedRepo -like "*$needle*"){$installedRepoOk=$true}};if(-not $installedRepoOk){throw "OmniRoute installed package repository identity mismatch: $installedRepo"}
+
 $base=([string]$policy.endpoint).TrimEnd("/")
 try{Invoke-WebRequest -UseBasicParsing "$base/models" -TimeoutSec 2 -MaximumRedirection 0|Out-Null;Write-Host "OMNIROUTE REACHABLE";exit 0}catch{}
-Start-Process -WindowStyle Minimized -FilePath "omniroute" | Out-Null
+Start-Process -WindowStyle Minimized -FilePath $launcher | Out-Null
 Start-Sleep 5
 try{Invoke-WebRequest -UseBasicParsing "$base/models" -TimeoutSec 3 -MaximumRedirection 0|Out-Null;Write-Host "OMNIROUTE STARTED"}
 catch{Write-Warning "OmniRoute installed/started but provider/dashboard setup may still require one-time credentials. Runtime remains NOT_VERIFIED until /models succeeds."}

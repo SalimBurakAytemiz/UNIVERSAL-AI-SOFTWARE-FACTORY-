@@ -1,0 +1,44 @@
+{
+  "//TR": "Bu checkpoint dependency-aware environment gate öncesindeki son bağımsız deep/adversarial sweep sonucunu kaydeder; fail-open, authority/process injection, resume evidence path, Global Stop race/corruption, OmniRoute launcher provenance ve secret leakage yüzeyleri çapraz taranmıştır.",
+  "schemaVersion": "1.0.0",
+  "scope": "EXTENDED_FINAL_DEEP_ADVERSARIAL_SWEEP",
+  "date": "2026-09-26",
+  "parentCommit": "d525ac993cb5adfe714f60018d3ddc28a922e0b2",
+  "findings": {
+    "P0": 0,
+    "P1": 5,
+    "P2": 1,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "fixed": [
+    "P1 production Git subprocess inherited host GIT_SSH/GIT_ASKPASS/GIT_EXEC_PATH and injected GIT_CONFIG_KEY/VALUE process-control environment; stripped and credential helper/askpass/ext protocol disabled",
+    "P2 redaction did not cover generic URL user:password credentials; URL credential pattern added",
+    "P1 CLEAN_READY/PUSH resume evidence read used lexical containment without symlink/realpath/regular-file enforcement; evidence path boundary hardened",
+    "P1 corrupt Global Stop artifact could parse-fail to null and therefore fail open; any invalid existing stop generation now fails closed active",
+    "P1 runCommand could spawn new work in the race between supervisor stop check and one-second stop polling; pre-spawn Global Stop gate added",
+    "P1 pre-existing PATH omniroute launcher could bypass npm package provenance/install branch; launcher now bound to npm global prefix and installed package name/license/repository identity before execution"
+  ],
+  "regression": {
+    "foundationE": "16/16 PASS",
+    "foundationF": "12/12 PASS",
+    "automationSupervisorScheduler": "15/15 PASS",
+    "providerOmniRoute": "17/17 PASS",
+    "installerPhase0": "9/9 PASS",
+    "evidenceTrustRelease": "8/8 PASS",
+    "appsControlDesktop": "93/93 PASS",
+    "supervisorStateMachine": "PASS",
+    "mechanicalClosure": "PASS",
+    "mechanicalKernel": "PASS",
+    "secretSanity": "PASS",
+    "sourceSyntax": "118/118 PASS",
+    "jsonParse": "1630/1630 PASS"
+  },
+  "environmentObserved": {
+    "node": "v22.16.0",
+    "npm": "10.9.2",
+    "registryNpmjsDns": "UNRESOLVED",
+    "packageLock": "ABSENT"
+  },
+  "nextScope": "ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION"
+}

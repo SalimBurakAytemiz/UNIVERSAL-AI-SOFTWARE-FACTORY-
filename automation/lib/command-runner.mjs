@@ -74,6 +74,8 @@ export async function runCommand({
   };
   return await new Promise((resolve)=>{
     let child;
+    // //TR: Global Stop spawn öncesinde de authoritative kontrol edilir; polling aralığındaki race yeni provider/validation process'i başlatamaz.
+    if(globalStopFile&&globalStopState(globalStopFile)){writer?.end();resolve({status:null,stdout,stderr,error:"GLOBAL_STOP_ACTIVE_BEFORE_SPAWN",durationMs:Date.now()-started,timedOut:false,globalStopped:true,pid:null});return}
     try{
       child=cp.spawn(cmd,args,{cwd,env,detached:process.platform!=="win32",windowsHide:true,stdio:["pipe","pipe","pipe"]});
     }catch(error){

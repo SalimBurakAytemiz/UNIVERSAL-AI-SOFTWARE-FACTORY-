@@ -1,5 +1,6 @@
 // //TR: Bu helper builder/reviewer/validation logları diske yazılmadan önce yaygın credential/secret pattern'lerini redakte eder; production DLP'nin yerini almaz fakat bootstrap log leakage riskini azaltır.
 const patterns=[
+  [/(https?:\/\/)[^\s\/@:]+:[^\s\/@]+@/gi,"$1[REDACTED_URL_CREDENTIAL]@"],
   [/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g,"[REDACTED_PRIVATE_KEY]"],
   [/\bAKIA[0-9A-Z]{16}\b/g,"[REDACTED_AWS_ACCESS_KEY]"],
   [/\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b/g,"[REDACTED_GITHUB_TOKEN]"],

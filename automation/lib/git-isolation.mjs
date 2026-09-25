@@ -13,7 +13,12 @@ function isolationState(){
   process.once("exit",()=>{try{fs.rmSync(dir,{recursive:true,force:true})}catch{}});
   return state;
 }
-export function isolatedGitEnv(baseEnv=process.env){const s=isolationState();return {...baseEnv,GIT_CONFIG_GLOBAL:s.globalConfig,GIT_CONFIG_SYSTEM:s.systemConfig,GIT_CONFIG_NOSYSTEM:"1",GIT_TERMINAL_PROMPT:"0"}}
-export function isolatedGitArgs(args){const s=isolationState();return ["-c",`core.hooksPath=${s.hooks}`,...args]}
+export function isolatedGitEnv(baseEnv=process.env){const s=isolationState(),env={...baseEnv};
+  // //TR: Host process-control/Git transport env değişkenleri production Git child process'ine taşınmaz; aksi halde trusted Git komutu arbitrary helper/SSH binary çalıştırabilir.
+  const exactDeny=new Set(["GIT_SSH","GIT_SSH_COMMAND","GIT_ASKPASS","SSH_ASKPASS","GIT_EXEC_PATH","GIT_TEMPLATE_DIR","GIT_PROXY_COMMAND","GIT_EXTERNAL_DIFF","GIT_DIFF_OPTS","GIT_CONFIG_COUNT","GIT_CONFIG_GLOBAL","GIT_CONFIG_SYSTEM"]);
+  for(const key of Object.keys(env)){const ku=key.toUpperCase();if(exactDeny.has(ku)||/^GIT_CONFIG_(?:KEY|VALUE)_\d+$/.test(ku))delete env[key]}
+  return {...env,GIT_CONFIG_GLOBAL:s.globalConfig,GIT_CONFIG_SYSTEM:s.systemConfig,GIT_CONFIG_NOSYSTEM:"1",GIT_TERMINAL_PROMPT:"0",GCM_INTERACTIVE:"Never"}
+}
+export function isolatedGitArgs(args){const s=isolationState();return ["-c",`core.hooksPath=${s.hooks}`,"-c","credential.helper=","-c","core.askPass=","-c","protocol.ext.allow=never",...args]}
 export function spawnGitSync(cwd,args,options={}){const env=isolatedGitEnv(options.env??process.env);return cp.spawnSync("git",isolatedGitArgs(args),{cwd,encoding:"utf8",windowsHide:true,...options,env})}
 export function gitIsolationDescriptor(){const s=isolationState();return {globalConfig:s.globalConfig,systemConfig:s.systemConfig,hooks:s.hooks}}

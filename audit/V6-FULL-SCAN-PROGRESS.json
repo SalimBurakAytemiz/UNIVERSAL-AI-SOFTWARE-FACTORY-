@@ -204,10 +204,22 @@
     ],
     "aggregateFindings": {
       "P0": 0,
-      "P1": 36,
-      "P2": 33,
+      "P1": 41,
+      "P2": 34,
       "P3": 1
     },
-    "dependencyFreeOpenP0P1P2": 0
+    "dependencyFreeOpenP0P1P2": 0,
+    "postReauditFinalDeepSweep": {
+      "status": "COMPLETE_SOURCE",
+      "checkpoint": "audit/checkpoints/V6-EXTENDED-FINAL-DEEP-ADVERSARIAL-SWEEP-2026-09-26.json",
+      "findings": {
+        "P0": 0,
+        "P1": 5,
+        "P2": 1,
+        "P3": 0,
+        "openP0P1P2": 0
+      },
+      "nextScope": "ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION"
+    }
   }
 }
