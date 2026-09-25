@@ -5,9 +5,9 @@
   "state": "V6_AUDIT_REMEDIATION_IN_PROGRESS",
   "currentPhase": 0,
   "currentPhaseName": "Source audit/remediation before final seal and target-machine Phase0",
-  "currentMilestone": "V6-FULL-SYSTEM-REAUDIT-DOCS-STATE-CURRENT-TRUTH-FINAL-SWEEP",
-  "currentMilestoneName": "Full-system deep re-audit: docs/state/current truth final sweep",
-  "lastCompletedMilestone": "V6-FULL-SYSTEM-REAUDIT-EVIDENCE-TRUST-ROOT-RELEASE-FINALIZATION",
+  "currentMilestone": "V6-DEPENDENCY-AWARE-ENVIRONMENT-GATE",
+  "currentMilestoneName": "Dependency-aware validation environment gate",
+  "lastCompletedMilestone": "V6-FULL-SYSTEM-REAUDIT-DOCS-STATE-CURRENT-TRUTH-FINAL-SWEEP",
   "lastVerifiedCommit": "CURRENT_CHECKPOINT_COMMIT_SEE_GIT_HEAD",
   "knownBlockers": [
     "FINAL_TRUST_ROOT_RESEAL_PENDING",
@@ -17,7 +17,7 @@
     "TARGET_MACHINE_PHASE0_PENDING",
     "DEPENDENCY_REVIEWED_LOCK_ENVIRONMENT_BLOCKED"
   ],
-  "nextAction": "Run final docs/state/current-truth sweep, preserve dependency-aware/environment gates, then checkpoint source re-audit completion without claiming final release.",
+  "nextAction": "On a Node >=24 + npm >=11 environment with registry access, create/review package-lock.json, run canonical npm ci, supply-chain/npm audit/SBOM/Ajv/typecheck/Vitest/full regression, remediate any new P0/P1/P2, then final reseal/sign/package.",
   "sourceOfTruth": "repository+git+audit/V6-FULL-SCAN-PROGRESS.json+CANONICAL-STATUS.md+PACK.json",
   "architectureDiscovery": "FROZEN_BY_EXTENSION_MODEL",
   "lastStaticClosureAudit": "NOT_FINAL",

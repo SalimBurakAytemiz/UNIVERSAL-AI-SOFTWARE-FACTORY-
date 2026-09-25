@@ -21,7 +21,7 @@
   ],
   "activeScope": "FULL_SYSTEM_REAUDIT_PROVIDER_OMNIROUTE",
   "boundedScopeOpenP0P1P2": 0,
-  "overallRemainingP0P1P2": "UNKNOWN_FULL_SYSTEM_REAUDIT_IN_PROGRESS",
+  "overallRemainingP0P1P2": "ZERO_DEPENDENCY_FREE_SOURCE_PENDING_DEPENDENCY_AWARE",
   "sourceLevelClosure": false,
   "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL",
   "finalSha256Sums": "NOT_DONE",
