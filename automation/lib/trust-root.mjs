@@ -3,7 +3,7 @@ import fs from "node:fs";import path from "node:path";import crypto from "node:c
 const h=s=>crypto.createHash("sha256").update(s).digest("hex");
 export function fileHash(file){return h(fs.readFileSync(file))}
 function norm(p){return String(p).replaceAll("\\","/").replace(/^\.\//,"")}
-function matchesPrefix(p,prefix){p=norm(p);prefix=norm(prefix);return p.startsWith(prefix)}
+function matchesPrefix(p,prefix){p=norm(p);prefix=norm(prefix).replace(/\/$/,"");return p===prefix||p.startsWith(`${prefix}/`)}
 function walkFiles(root,dir=""){const abs=path.join(root,dir);if(!fs.existsSync(abs))return [];const out=[];for(const e of fs.readdirSync(abs,{withFileTypes:true})){if(e.name===".git"||e.name==="node_modules")continue;const rel=norm(path.posix.join(dir.replaceAll("\\","/"),e.name));if(e.isDirectory())out.push(...walkFiles(root,rel));else if(e.isFile())out.push(rel)}return out}
 export function expectedProtectedFiles(repoRoot,policy,manifestPath="config/trust-root-manifest.json"){
  const all=walkFiles(repoRoot),expected=new Set();

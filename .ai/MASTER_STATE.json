@@ -5,9 +5,9 @@
   "state": "V6_AUDIT_REMEDIATION_IN_PROGRESS",
   "currentPhase": 0,
   "currentPhaseName": "Source audit/remediation before final seal and target-machine Phase0",
-  "currentMilestone": "V6-FULL-SYSTEM-REAUDIT-EVIDENCE-TRUST-ROOT-RELEASE-FINALIZATION",
-  "currentMilestoneName": "Full-system deep re-audit: evidence/trust root/release/finalization",
-  "lastCompletedMilestone": "V6-FULL-SYSTEM-REAUDIT-INSTALLER-POWERSHELL-PHASE0-TARGET-MACHINE",
+  "currentMilestone": "V6-FULL-SYSTEM-REAUDIT-DOCS-STATE-CURRENT-TRUTH-FINAL-SWEEP",
+  "currentMilestoneName": "Full-system deep re-audit: docs/state/current truth final sweep",
+  "lastCompletedMilestone": "V6-FULL-SYSTEM-REAUDIT-EVIDENCE-TRUST-ROOT-RELEASE-FINALIZATION",
   "lastVerifiedCommit": "CURRENT_CHECKPOINT_COMMIT_SEE_GIT_HEAD",
   "knownBlockers": [
     "FINAL_TRUST_ROOT_RESEAL_PENDING",
@@ -17,7 +17,7 @@
     "TARGET_MACHINE_PHASE0_PENDING",
     "DEPENDENCY_REVIEWED_LOCK_ENVIRONMENT_BLOCKED"
   ],
-  "nextAction": "Audit evidence signing, trust-root generation/verification, release authenticity and finalization ordering; remediate concrete P0/P1/P2, then checkpoint and commit.",
+  "nextAction": "Run final docs/state/current-truth sweep, preserve dependency-aware/environment gates, then checkpoint source re-audit completion without claiming final release.",
   "sourceOfTruth": "repository+git+audit/V6-FULL-SCAN-PROGRESS.json+CANONICAL-STATUS.md+PACK.json",
   "architectureDiscovery": "FROZEN_BY_EXTENSION_MODEL",
   "lastStaticClosureAudit": "NOT_FINAL",

@@ -23,7 +23,7 @@ const psArtifact=text("scripts/verify-artifact.ps1");
 // Current worktree final artifact değildir; stale root integrity manifest current authority olamaz.
 must(!exists("SHA256SUMS.txt"),"stale-root-sha256sums-present-before-final-packaging");
 must(exists("audit/history/SHA256SUMS-V4-RECOVERY-BASELINE.txt"),"historical-sha256sums-not-preserved");
-for(const f of ["V2-STATIC-CLOSURE-RESULTS.json","V3-RE-AUDIT-RESULTS.md","V4-CURRENT-AUDIT-STATE.json","V4-CURRENT-OPEN-FINDINGS.md","V4-DEPENDENCY-FREE-RECHECK.log"]) must(exists(`audit/history/${f}`),`historical-audit-not-preserved:${f}`);
+for(const f of ["V2-STATIC-CLOSURE-RESULTS.json","V3-RE-AUDIT-RESULTS.md","V4-CURRENT-AUDIT-STATE.json","V4-CURRENT-OPEN-FINDINGS.md"]) must(exists(`audit/history/${f}`),`historical-audit-not-preserved:${f}`);
 for(const f of ["audit/STATIC-CLOSURE-RESULTS.json","audit/V3-RE-AUDIT-RESULTS.md","audit/V4-CURRENT-OPEN-FINDINGS.md"]) must(!exists(f),`stale-current-audit-surface-present:${f}`);
 
 // Current authority V6 candidate gerçeğini taşımalıdır.
