@@ -1,0 +1,31 @@
+{
+  "//TR": "Bu checkpoint installer/PowerShell/Phase0/target-machine bounded re-audit sonucunu taşır; gerçek target-machine Phase0 hâlâ PENDING'dir.",
+  "schemaVersion": "1.0.0",
+  "scope": "FULL_SYSTEM_REAUDIT_INSTALLER_POWERSHELL_PHASE0_TARGET_MACHINE_CONTRACT",
+  "date": "2026-09-26",
+  "parentCommit": "c5475233ba45a5a79dc84483e16ee562ad8038ec",
+  "findings": {
+    "P0": 0,
+    "P1": 2,
+    "P2": 1,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "remediations": [
+    "Prerequisite installer now enforces npm >=11 in addition to Node >=24.",
+    "Claude/Codex optional prerequisite installation no longer uses unpinned package specs; it discovers version+dist.integrity, installs exact version and verifies installed version.",
+    "Added dependency-free installer/Phase0 adversarial regression."
+  ],
+  "regression": {
+    "installerPhase0Adversarial": "7/7 PASS",
+    "runtimeContracts": "15/15 PASS",
+    "mechanicalClosure": "PASS",
+    "paste2H": "24/24 PASS",
+    "paste2Closure": "EXPECTED_ENVIRONMENT_BLOCKED_NODE22_AT_DEPENDENCY_GATE"
+  },
+  "canonicalTruth": {
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "SOURCE_LEVEL_CLOSURE": false
+  },
+  "nextScope": "FULL_SYSTEM_REAUDIT_EVIDENCE_TRUST_ROOT_RELEASE_FINALIZATION"
+}
