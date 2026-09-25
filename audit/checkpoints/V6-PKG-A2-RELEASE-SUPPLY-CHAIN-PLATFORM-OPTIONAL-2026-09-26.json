@@ -1,0 +1,73 @@
+{
+  "//TR": "Bu checkpoint release-supply-chain gate'inin host'u kanıtlanabilir biçimde dışlayan platform-opsiyonel lock bileşenlerini Founder onaylı dar kuralla ele aldığını ve Windows Node24 üzerinde canonical validation'ın uçtan uca geçtiğini kaydeder; Codex CLEAN, final closure veya target-machine Phase0 PASS iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_A2_RELEASE_SUPPLY_CHAIN_PLATFORM_OPTIONAL",
+  "date": "2026-09-26",
+  "parent": "ac5933571a06698412429edae1e2417547bfce4f",
+  "branch": "v6/pkg-a-dependency-reviewed-lock",
+  "resolves": ["PKGA-F7"],
+  "founderAuthorization": {
+    "decision": "NARROW_FIX_APPROVED",
+    "protectedModules": ["automation/lib/supply-chain.mjs", "automation/lib/release-supply-chain.mjs"],
+    "typeCompanions": ["automation/lib/supply-chain.d.mts", "automation/lib/release-supply-chain.d.mts"],
+    "rule": "A component that is not installed is accepted as PLATFORM_OPTIONAL_NOT_INSTALLED only if the lock marks it optional, its os/cpu/libc constraints provably exclude the current host, and it has sha512 integrity, an allowed registry URL and a lock license; every other component keeps the strict installed/license/packageJsonSha256 rule."
+  },
+  "implementation": {
+    "supplyChainComponentFields": ["optional", "platformConstraints.os", "platformConstraints.cpu", "platformConstraints.libc", "lockLicense"],
+    "hostExclusionSemantics": "npm os/cpu/libc list semantics: matching '!x' is incompatible, a positive list must contain the host value, libc applies only on linux; unknown linux libc never proves exclusion",
+    "sbomSupplyComparisonCoversNewFields": true,
+    "installedStatusRequiredForExemption": "NOT_CHECKED",
+    "releaseReportSchemaVersion": "1.1.0",
+    "releaseReportAdditions": ["platformOptionalComponentCount", "platformOptionalComponentsDigest", "host"],
+    "supplyChainGateSemanticsChanged": false,
+    "legacyComponentRowsBehaviour": "unchanged strict path"
+  },
+  "validation": {
+    "workspace": "scratch clone mirroring the branch working tree on the reviewed lock install; repository .ai/runtime untouched",
+    "gitDiffCheck": "PASS",
+    "canonicalRunner": {"status": "PASS", "pass": 34, "fail": 0, "blocked": 0},
+    "typecheck": "PASS (inside canonical runner)",
+    "vitest": "PASS 15 files / 72 tests (21 new platform-optional tests)",
+    "broadDependencyFreeSuite": "25/25 PASS",
+    "legacyReleaseSelftest": "V6_PASTE2H_SELFTEST PASS 24/24 (unchanged protected fixtures)",
+    "realTreeReleaseGate": {
+      "status": "PASS",
+      "installedComponents": 138,
+      "platformOptionalComponents": 50,
+      "lockEntries": 188,
+      "componentsDigest": "f56ec6ae7b23703a171561cdd1843c0504227200112985bb24c388da9f4977d0",
+      "platformOptionalComponentsDigest": "bbfaf7e1bf47dd250e545efd3d762d2fa83527bed7e752604dd6ed7c36d9014d",
+      "host": {"platform": "win32", "arch": "x64", "libc": null}
+    },
+    "adversarialForeignHostSimulation": {
+      "freebsd/x64": "FAIL_CLOSED 3 host-matching uninstalled components blocked",
+      "linux/x64/glibc": "FAIL_CLOSED 3 gnu components blocked; musl variants excluded",
+      "linux/x64/unknown-libc": "FAIL_CLOSED 5 components blocked (gnu and musl)",
+      "win32/arm64": "FAIL_CLOSED 3 arm64 components blocked"
+    }
+  },
+  "changedFileSha256": {
+    "automation/lib/release-supply-chain.d.mts": "b2599b827599f542de68838fe7ffd78718f6e9a2fcaf432f62489bebeb116517",
+    "automation/lib/release-supply-chain.mjs": "989e8eb7fe767a9b5a756103f33f1c3e55c769e209be31c5ae9a980b0b0ac2ba",
+    "automation/lib/supply-chain.d.mts": "a98c4dc3f73531827b0848aef82a2432bbb9afb8ed71297ce7c90827cf99db4b",
+    "automation/lib/supply-chain.mjs": "88f78f5c1ee53f36da5f1b0c99512b3bbf44a58a30c8d4994febe3f88b796bcf",
+    "tests/release-supply-chain-platform-optional.test.ts": "719205fc50d6b63ff893bc4d13051709902dd7edf64b120536adde6033d06c21"
+  },
+  "openFindings": [
+    {"id": "PKGA-F8", "severity": "ENVIRONMENT", "status": "OPEN_ENVIRONMENT_NOT_CODE_DEFECT"},
+    {"id": "PKGA-F9", "severity": "P2", "status": "OPEN_OUT_OF_AUTHORIZED_SCOPE"}
+  ],
+  "openP0P1P2": 1,
+  "review": "NOT_REVIEWED_CODEX_PENDING",
+  "cleanClaim": false,
+  "trustRootManifest": "NOT_REGENERATED_FINAL_RESEAL_PENDING",
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "DEPENDENCY_REVIEWED_LOCK": "PRESENT_REVIEW_PENDING",
+    "DEPENDENCY_AWARE_VALIDATION": "CANONICAL_PASS_ON_WINDOWS_NODE24_REVIEW_PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_ZIP": "NOT_DONE",
+    "TARGET_MACHINE_PHASE0": "PENDING"
+  },
+  "nextScope": "CODEX_REVIEW_OF_BRANCH_THEN_CURRENT_TRUTH_SYNC_AND_PKG_C_PHASE0_PREREQUISITES"
+}
