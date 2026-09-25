@@ -95,7 +95,7 @@
     "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
     "FINAL_ZIP": "NOT_DONE"
   },
-  "nextScope": "FULL_SYSTEM_REAUDIT_APPS_CONTROL_API_DESKTOP",
+  "nextScope": "FULL_SYSTEM_REAUDIT_PROVIDER_OMNIROUTE",
   "postPasteSweeps": {
     "configRuntimeEnforcement": {
       "status": "COMPLETE_SOURCE",
@@ -169,6 +169,21 @@
       "overallRemainingP0P1P2": "UNKNOWN_FULL_SYSTEM_REAUDIT_IN_PROGRESS",
       "sourceSyntax": "112/112 PASS",
       "jsonParse": "1613/1613 PASS"
+    },
+    "fullSystemReauditAppsControlApiDesktop": {
+      "status": "COMPLETE_SOURCE",
+      "checkpoint": "audit/checkpoints/V6-FULL-SYSTEM-REAUDIT-APPS-CONTROL-API-DESKTOP-2026-09-25.json",
+      "broadDependencyFreeSuite": "45/45 PASS",
+      "findings": {
+        "P0": 0,
+        "P1": 8,
+        "P2": 9,
+        "P3": 0
+      },
+      "openP0P1P2": 0,
+      "overallRemainingP0P1P2": "UNKNOWN_FULL_SYSTEM_REAUDIT_IN_PROGRESS",
+      "sourceSyntax": "114/114 PASS",
+      "jsonParse": "1614/1614 PASS"
     }
   }
 }

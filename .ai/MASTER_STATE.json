@@ -5,8 +5,8 @@
   "state": "V6_AUDIT_REMEDIATION_IN_PROGRESS",
   "currentPhase": 0,
   "currentPhaseName": "Source audit/remediation before final seal and target-machine Phase0",
-  "currentMilestone": "V6-FULL-SYSTEM-REAUDIT-APPS-CONTROL-API-DESKTOP",
-  "currentMilestoneName": "Full-system deep re-audit: apps/control-api/desktop",
+  "currentMilestone": "V6-FULL-SYSTEM-REAUDIT-PROVIDER-OMNIROUTE",
+  "currentMilestoneName": "Full-system deep re-audit: provider/OmniRoute",
   "lastCompletedMilestone": "V6-FULL-SYSTEM-REAUDIT-AUTOMATION-SUPERVISOR-SCHEDULER",
   "lastVerifiedCommit": "10580b4499f327565b0400532d8e8aecd18ccb8c",
   "knownBlockers": [
@@ -17,7 +17,7 @@
     "TARGET_MACHINE_PHASE0_PENDING",
     "DEPENDENCY_REVIEWED_LOCK_ENVIRONMENT_BLOCKED"
   ],
-  "nextAction": "Audit apps/control-api/desktop with adversarial fixtures, remediate all concrete P0/P1/P2, then checkpoint and commit before continuing.",
+  "nextAction": "Audit provider/OmniRoute launchers, provenance, auth/network/env isolation and routing with adversarial fixtures; remediate concrete P0/P1/P2, then checkpoint and commit.",
   "sourceOfTruth": "repository+git+audit/V6-FULL-SCAN-PROGRESS.json+CANONICAL-STATUS.md+PACK.json",
   "architectureDiscovery": "FROZEN_BY_EXTENSION_MODEL",
   "lastStaticClosureAudit": "NOT_FINAL",

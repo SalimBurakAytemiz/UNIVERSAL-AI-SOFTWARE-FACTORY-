@@ -1,0 +1,56 @@
+{
+  "//TR": "Bu checkpoint full-system re-audit apps/control-api/desktop bounded scope sonucunu ve adversarial remediation kanıtını taşır; final closure iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "scope": "FULL_SYSTEM_REAUDIT_APPS_CONTROL_API_DESKTOP",
+  "date": "2026-09-25",
+  "parentCommit": "c300a89845b65313b519ff54ec55c94fc26ef63f",
+  "findings": {
+    "P0": 0,
+    "P1": 8,
+    "P2": 9,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "remediations": [
+    "CONTROL_API_PORT strict numeric 1..65535 validation and exact 127.0.0.1 origin construction prevents userinfo/path/origin injection",
+    "Desktop authenticates Control API with random challenge HMAC proof before sending control token; token-bearing fetches reject redirects",
+    "Control API enforces exact loopback Host header and timing-safe control-token comparison",
+    "run/event/log and runtime evidence reads reject lexical escape, symlink/junction-style path indirection and realpath escape; audit write target is containment-checked",
+    "Phase0 endpoint revalidates current install/source/trust-root/input digests plus Ed25519 signature before presenting VERIFIED state",
+    "install endpoint revalidates report digest, Phase0 binding and current component digests before presenting VERIFIED state",
+    "scheduler view and retry mutation require structural state plus main-history commit and signed CLEAN package completion evidence",
+    "Control API detached supervisor spawn uses canonical sanitized child environment instead of raw process.env",
+    "Electron IPC is bound to the exact Control Tower BrowserWindow sender and explicit GET allowlist; package retry IDs are validated in main process",
+    "Electron browser permissions, redirects, popups, webviews, nodeIntegration and insecure-content paths are explicitly fail-closed",
+    "Control API/Desktop/Control Tower smoke tests use sanitized child env and challenge-proof server identity; desktop PASS requires HEALTHY+VERIFIED marker",
+    "Control Tower PowerShell entrypoint sanitizes process-control env before Node/npm/Electron startup",
+    "environment policy explicitly denies NODE_PATH, ELECTRON_RUN_AS_NODE and GIT_CONFIG_COUNT in addition to existing process-control variables",
+    "renderer retry button trusts only server-computed retryable=true instead of duplicating retry-kind authority",
+    "Control API/Desktop security boundary files and adversarial regression are added to protected-path governance",
+    "dependency-free apps/control-desktop adversarial regression added and automation scheduler regression updated to require signed scheduler completion validation"
+  ],
+  "regression": {
+    "broadDependencyFree": "45/45 PASS",
+    "appsAdversarial": "93/93 PASS",
+    "automationSchedulerAdversarial": "15/15 PASS",
+    "paste2A": "15/15 PASS",
+    "runtimeResilience": "21/21 PASS",
+    "configRuntime": "25/25 PASS",
+    "mechanicalClosure": "PASS",
+    "trValidation": "PASS",
+    "sourceSyntax": "114/114 PASS",
+    "jsonParse": "1614/1614 PASS",
+    "secretSanity": "PASS",
+    "dependencySupplyChain": "EXPECTED_FAIL_CLOSED_SOURCE_REVIEWED_PACKAGE_LOCK_REQUIRED",
+    "trustRoot": "EXPECTED_FAIL_CLOSED_STALE_PENDING_FINAL_RESEAL"
+  },
+  "canonicalTruth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_SHA256SUMS": "NOT_DONE",
+    "FINAL_RELEASE_AUTHENTICITY": "NOT_DONE",
+    "FINAL_ZIP": "NOT_DONE"
+  },
+  "nextScope": "FULL_SYSTEM_REAUDIT_PROVIDER_OMNIROUTE"
+}

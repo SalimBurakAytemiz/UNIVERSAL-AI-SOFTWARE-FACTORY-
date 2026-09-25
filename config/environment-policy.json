@@ -41,7 +41,10 @@
     "GIT_SSH_COMMAND",
     "BASH_ENV",
     "ENV",
-    "PROMPT_COMMAND"
+    "PROMPT_COMMAND",
+    "NODE_PATH",
+    "ELECTRON_RUN_AS_NODE",
+    "GIT_CONFIG_COUNT"
   ],
   "providerAllow": {
     "ANTHROPIC": [

@@ -2,7 +2,7 @@
   "//TR": "Bu JSON V6 recovery replay worktree'sinin current audit durumunu machine-readable tutar; tarihsel V2/V3/V4 finding dosyaları current authority değildir.",
   "schemaVersion": "2.0.0",
   "status": "V6_AUDIT_REMEDIATION_IN_PROGRESS",
-  "verifiedThroughParentCommit": "10580b4499f327565b0400532d8e8aecd18ccb8c",
+  "verifiedThroughParentCommit": "c300a89845b65313b519ff54ec55c94fc26ef63f",
   "completedSourceScopes": [
     "PASTE_1",
     "PASTE_2",
@@ -16,9 +16,10 @@
     "DEPENDENCY_TRUST_HARDENING_PRE_LOCK",
     "FULL_SYSTEM_REAUDIT_ROOT_CONFIG_CI_TRUST",
     "FULL_SYSTEM_REAUDIT_CORE_RUNTIME_ACTION_AUTHORITY",
-    "FULL_SYSTEM_REAUDIT_AUTOMATION_SUPERVISOR_SCHEDULER"
+    "FULL_SYSTEM_REAUDIT_AUTOMATION_SUPERVISOR_SCHEDULER",
+    "FULL_SYSTEM_REAUDIT_APPS_CONTROL_API_DESKTOP"
   ],
-  "activeScope": "FULL_SYSTEM_REAUDIT_APPS_CONTROL_API_DESKTOP",
+  "activeScope": "FULL_SYSTEM_REAUDIT_PROVIDER_OMNIROUTE",
   "boundedScopeOpenP0P1P2": 0,
   "overallRemainingP0P1P2": "UNKNOWN_FULL_SYSTEM_REAUDIT_IN_PROGRESS",
   "sourceLevelClosure": false,
@@ -35,11 +36,11 @@
   ],
   "dependencyFreeRegression": {
     "status": "PASS",
-    "canonicalPass": 44,
+    "canonicalPass": 45,
     "pendingDependencies": 2,
     "fail": 0,
-    "sourceSyntax": "112/112 PASS",
-    "jsonParse": "1613/1613 PASS",
+    "sourceSyntax": "114/114 PASS",
+    "jsonParse": "1614/1614 PASS",
     "secretSanity": "PASS"
   },
   "environmentGate": {
