@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "//TR: Approval'u actor/action/target digest ve expiry/revocation ile non-repudiable bağlama için minimum strict sözleşmeyi tanımlar.",
+  "$comment": "//TR: Approval'u trusted actor/action/target digest ve expiry/revocation ile non-repudiable bağlama için minimum strict runtime sözleşmesini tanımlar.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -12,34 +12,12 @@
     "targetDigest"
   ],
   "properties": {
-    "id": {
-      "type": "string"
-    },
-    "approverIdentityId": {
-      "type": "string"
-    },
-    "actionDigest": {
-      "type": "string",
-      "minLength": 16
-    },
-    "targetDigest": {
-      "type": "string",
-      "minLength": 16
-    },
-    "grantedAt": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "expiresAt": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "revokedAt": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "format": "date-time"
-    }
+    "id": {"type": "string", "minLength": 1},
+    "approverIdentityId": {"type": "string", "minLength": 1},
+    "actionDigest": {"type": "string", "minLength": 16},
+    "targetDigest": {"type": "string", "minLength": 16},
+    "grantedAt": {"type": "string", "format": "date-time"},
+    "expiresAt": {"type": "string", "format": "date-time"},
+    "revokedAt": {"type": "string", "format": "date-time"}
   }
 }

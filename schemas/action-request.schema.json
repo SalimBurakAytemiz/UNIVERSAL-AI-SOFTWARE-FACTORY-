@@ -1,57 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://uasco.local/schemas/action-request.schema.json",
-  "$comment": "//TR: Bu schema action-request primitive/contract kaydının canonical minimum yapısını doğrulamak için final architecture closure kapsamında oluşturulmuştur.",
+  "$comment": "//TR: Bu schema core Action Gateway request runtime kontratını strict ve fail-closed doğrular; production/spend/approval semantiği consumer policy tarafından ayrıca enforce edilir.",
   "title": "action-request",
   "type": "object",
-  "required": [
-    "createdAt",
-    "id",
-    "missionId",
-    "objective",
-    "riskLevel",
-    "schemaVersion",
-    "scope",
-    "status"
-  ],
+  "required": ["id","missionId","actorId","actionClass","target","actionDigest","targetDigest","production","reversible"],
   "properties": {
-    "id": {
-      "type": "string",
-      "minLength": 1
-    },
-    "schemaVersion": {
-      "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$"
-    },
-    "status": {
-      "type": "string",
-      "minLength": 1
-    },
-    "createdAt": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "updatedAt": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "metadata": {
-      "type": "object"
-    },
-    "missionId": {
-      "type": "string"
-    },
-    "objective": {
-      "type": "string"
-    },
-    "scope": {
-      "type": "object"
-    },
-    "riskLevel": {
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 5
-    }
+    "id": {"type": "string", "minLength": 1},
+    "missionId": {"type": "string", "minLength": 1},
+    "customerId": {"type": "string", "minLength": 1},
+    "actorId": {"type": "string", "minLength": 1},
+    "actionClass": {"enum": ["READ_ONLY","MUTATION","EXTERNAL_COMMUNICATION","SPEND","PRODUCTION_CHANGE","DESTRUCTIVE","IRREVERSIBLE","LEGAL_FINANCIAL_AUTHORITY"]},
+    "target": {"type": "string", "minLength": 1},
+    "actionDigest": {"type": "string", "minLength": 16},
+    "targetDigest": {"type": "string", "minLength": 16},
+    "idempotencyKey": {"type": "string", "minLength": 1},
+    "estimatedCost": {"type": "number", "minimum": 0},
+    "production": {"type": "boolean"},
+    "reversible": {"type": "boolean"}
   },
   "additionalProperties": false
 }

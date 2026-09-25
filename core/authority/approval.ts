@@ -1,4 +1,4 @@
-// //TR: Bu dosya kritik action approval'unu yalnız boolean değil exact action/target/digest/expiry/revocation bağlamına bağlayarak stale veya başka hedefe ait onayın kullanılmasını engeller.
+// //TR: Bu dosya kritik action approval'unu exact approver/action/target/digest/expiry/revocation bağlamına bağlayarak stale, sahte veya başka hedefe ait onayın kullanılmasını engeller.
 export interface ApprovalAttestation {
   id: string;
   approverIdentityId: string;
@@ -6,21 +6,28 @@ export interface ApprovalAttestation {
   targetDigest: string;
   grantedAt: string;
   expiresAt: string;
-  revokedAt?: string|null;
+  revokedAt?: string;
 }
 
-function validIdentity(value:string):boolean{return typeof value==="string"&&value.trim().length>0}
-function parseTime(value:string,label:string):number{const t=Date.parse(value);if(!Number.isFinite(t))throw new Error(`Approval ${label} invalid`);return t}
+function validIdentity(value:unknown):value is string{return typeof value==="string"&&value.trim().length>0}
+function validDigest(value:unknown):value is string{return typeof value==="string"&&value.trim().length>=16}
+function parseTime(value:unknown,label:string):number{
+  if(typeof value!=="string"||!value.trim())throw new Error(`Approval ${label} invalid`);
+  const t=Date.parse(value);if(!Number.isFinite(t))throw new Error(`Approval ${label} invalid`);return t
+}
 
 export function assertApprovalValid(
   approval: ApprovalAttestation,
   actionDigest: string,
   targetDigest: string,
+  trustedApproverIdentityIds: readonly string[],
   now = new Date()
 ): void {
+  if(!approval||typeof approval!=="object") throw new Error("Approval object invalid");
   if(!validIdentity(approval.id)||!validIdentity(approval.approverIdentityId)) throw new Error("Approval identity invalid");
-  if(!validIdentity(actionDigest)||!validIdentity(targetDigest)) throw new Error("Approval request digest invalid");
-  if(approval.revokedAt) throw new Error("Approval revoked");
+  if(!Array.isArray(trustedApproverIdentityIds)||!trustedApproverIdentityIds.some(x=>validIdentity(x)&&x===approval.approverIdentityId)) throw new Error("Approval approver not trusted");
+  if(!validDigest(actionDigest)||!validDigest(targetDigest)||!validDigest(approval.actionDigest)||!validDigest(approval.targetDigest)) throw new Error("Approval request digest invalid");
+  if(approval.revokedAt!==undefined){parseTime(approval.revokedAt,"revokedAt");throw new Error("Approval revoked")}
   if(approval.actionDigest!==actionDigest) throw new Error("Approval action mismatch");
   if(approval.targetDigest!==targetDigest) throw new Error("Approval target mismatch");
   const granted=parseTime(approval.grantedAt,"grantedAt"),expires=parseTime(approval.expiresAt,"expiresAt"),nowMs=now.getTime();

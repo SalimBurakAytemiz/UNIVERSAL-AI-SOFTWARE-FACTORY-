@@ -24,6 +24,7 @@ export interface ActionPolicyContext {
   dataPolicyAllowed: boolean;
   budgetAllowed: boolean;
   adapterCertified: boolean;
+  trustedApproverIdentityIds?: readonly string[];
   approval?: ApprovalAttestation;
   now?: Date;
 }

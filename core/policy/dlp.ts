@@ -9,6 +9,7 @@ const patterns: Array<[string,RegExp]> = [
 ];
 
 export function scanDlp(input:string): DlpFinding[] {
+  if(typeof input!=="string")throw new Error("DLP_INPUT_INVALID");
   const out:DlpFinding[]=[];
   for(const [type,re] of patterns){
     re.lastIndex=0;

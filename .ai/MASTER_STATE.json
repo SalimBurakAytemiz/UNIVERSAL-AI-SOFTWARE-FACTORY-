@@ -5,10 +5,10 @@
   "state": "V6_AUDIT_REMEDIATION_IN_PROGRESS",
   "currentPhase": 0,
   "currentPhaseName": "Source audit/remediation before final seal and target-machine Phase0",
-  "currentMilestone": "V6-FULL-SYSTEM-REAUDIT-CORE-RUNTIME-ACTION-AUTHORITY",
-  "currentMilestoneName": "Full-system deep re-audit: core/runtime/action/authority",
-  "lastCompletedMilestone": "V6-FULL-SYSTEM-REAUDIT-ROOT-CONFIG-CI-TRUST",
-  "lastVerifiedCommit": "51a4238d697e981f2512a9503778c9fc56430e96",
+  "currentMilestone": "V6-FULL-SYSTEM-REAUDIT-AUTOMATION-SUPERVISOR-SCHEDULER",
+  "currentMilestoneName": "Full-system deep re-audit: automation/supervisor/scheduler",
+  "lastCompletedMilestone": "V6-FULL-SYSTEM-REAUDIT-CORE-RUNTIME-ACTION-AUTHORITY",
+  "lastVerifiedCommit": "9574d35d689bb5e6f69adeb7356b8fbb4785dfd9",
   "knownBlockers": [
     "FINAL_TRUST_ROOT_RESEAL_PENDING",
     "FINAL_SHA256SUMS_PENDING",
@@ -17,7 +17,7 @@
     "TARGET_MACHINE_PHASE0_PENDING",
     "DEPENDENCY_REVIEWED_LOCK_ENVIRONMENT_BLOCKED"
   ],
-  "nextAction": "Audit core/runtime/action/authority with adversarial fixtures, remediate all concrete P0/P1/P2, then checkpoint and commit before continuing.",
+  "nextAction": "Audit automation/supervisor/scheduler with adversarial fixtures, remediate all concrete P0/P1/P2, then checkpoint and commit before continuing.",
   "sourceOfTruth": "repository+git+audit/V6-FULL-SCAN-PROGRESS.json+CANONICAL-STATUS.md+PACK.json",
   "architectureDiscovery": "FROZEN_BY_EXTENSION_MODEL",
   "lastStaticClosureAudit": "NOT_FINAL",

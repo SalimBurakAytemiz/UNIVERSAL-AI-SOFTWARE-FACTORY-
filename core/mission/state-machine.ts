@@ -1,7 +1,7 @@
-// //TR: Bu dosya Mission lifecycle geçişlerini allowlist ile sınırlar ve DRAFT'tan doğrudan COMPLETE gibi kanıtsız/sahte atlamaları engeller.
+// //TR: Bu dosya Mission lifecycle geçişlerini allowlist ile sınırlar ve DRAFT'tan doğrudan COMPLETE gibi kanıtsız/sahte atlamaları fail-closed engeller.
 import type { MissionStatus } from "./types.js";
 
-const transitions: Record<MissionStatus, MissionStatus[]> = {
+const transitions: Record<MissionStatus, readonly MissionStatus[]> = {
   DRAFT: ["PREFLIGHT","BLOCKED"],
   PREFLIGHT: ["AUTHORIZED","BLOCKED","FOUNDER_ATTENTION_REQUIRED"],
   AUTHORIZED: ["PLANNED","BLOCKED"],
@@ -16,10 +16,12 @@ const transitions: Record<MissionStatus, MissionStatus[]> = {
   BLOCKED: ["PREFLIGHT","FOUNDER_ATTENTION_REQUIRED"],
   FOUNDER_ATTENTION_REQUIRED: ["PREFLIGHT","BLOCKED"]
 };
-
+const statuses=new Set<MissionStatus>(Object.keys(transitions) as MissionStatus[]);
+export function isMissionStatus(value:unknown):value is MissionStatus{return typeof value==="string"&&statuses.has(value as MissionStatus)}
 export function canTransition(from: MissionStatus, to: MissionStatus): boolean {
+  if(!isMissionStatus(from)||!isMissionStatus(to))return false;
   return transitions[from].includes(to);
 }
 export function assertTransition(from: MissionStatus, to: MissionStatus): void {
-  if (!canTransition(from,to)) throw new Error(`Invalid mission transition: ${from} -> ${to}`);
+  if (!canTransition(from,to)) throw new Error(`Invalid mission transition: ${String(from)} -> ${String(to)}`);
 }

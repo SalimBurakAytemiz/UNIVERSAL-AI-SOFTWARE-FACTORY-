@@ -1,0 +1,51 @@
+{
+  "//TR": "Bu checkpoint full-system re-audit core/runtime/action/authority bounded scope sonucunu ve adversarial remediation kanıtını taşır; final closure iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "scope": "FULL_SYSTEM_REAUDIT_CORE_RUNTIME_ACTION_AUTHORITY",
+  "date": "2026-09-25",
+  "parentCommit": "9574d35d689bb5e6f69adeb7356b8fbb4785dfd9",
+  "findings": {
+    "P0": 0,
+    "P1": 7,
+    "P2": 8,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "remediations": [
+    "runtime ActionClass allowlist added; unknown classes fail closed",
+    "production actions require an approval-class classification",
+    "SPEND requires explicit finite non-negative amount and budget gate",
+    "IRREVERSIBLE classification must agree with reversible=false and non-empty idempotency key",
+    "approval validation binds trusted approver identity, minimum digest quality, expiry and revocation without nullable revocation state",
+    "Action Gateway policy booleans and evaluation time are exact runtime types rather than JavaScript truthiness",
+    "automation Action Broker rejects string/coerced policy flags and invalid risk values",
+    "mission transition, data routing and DLP runtime-invalid inputs fail closed without accidental TypeError paths",
+    "action-request/mission/approval-v2 schemas aligned with runtime contracts and stale OPEN_MAP exceptions removed",
+    "negative Vitest coverage and dependency-free adversarial selftest added"
+  ],
+  "regression": {
+    "broadDependencyFree": "43/43 PASS",
+    "coreAdversarial": "23/23 PASS",
+    "paste2B": "21/21 PASS",
+    "configRuntime": "25/25 PASS",
+    "schemaStrictness": "PASS schemas=152 openExceptions=242 typedMaps=2",
+    "schemaCatalog": "152/152 PASS",
+    "runtimeContracts": "15/15 PASS",
+    "runtimeResilience": "21/21 PASS",
+    "mechanicalClosure": "PASS",
+    "sourceSyntax": "110/110 PASS",
+    "jsonParse": "1612/1612 PASS",
+    "secretSanity": "PASS",
+    "dependencySupplyChain": "EXPECTED_FAIL_CLOSED_SOURCE_REVIEWED_PACKAGE_LOCK_REQUIRED",
+    "trustRoot": "EXPECTED_FAIL_CLOSED_STALE_PENDING_FINAL_RESEAL"
+  },
+  "canonicalTruth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_SHA256SUMS": "NOT_DONE",
+    "FINAL_RELEASE_AUTHENTICITY": "NOT_DONE",
+    "FINAL_ZIP": "NOT_DONE"
+  },
+  "nextScope": "FULL_SYSTEM_REAUDIT_AUTOMATION_SUPERVISOR_SCHEDULER"
+}

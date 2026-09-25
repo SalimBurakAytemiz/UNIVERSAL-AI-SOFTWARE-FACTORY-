@@ -2,7 +2,7 @@
   "//TR": "V6 recovery replay için canonical bounded-scan ilerleme kaydıdır. Bu dosya final source closure veya target-machine PASS iddiası değildir.",
   "schemaVersion": "1.0.0",
   "status": "IN_PROGRESS",
-  "verifiedThroughParentCommit": "51a4238d697e981f2512a9503778c9fc56430e96",
+  "verifiedThroughParentCommit": "9574d35d689bb5e6f69adeb7356b8fbb4785dfd9",
   "paste1": {
     "status": "COMPLETE_SOURCE",
     "checkpointCommit": "99105cf8c6a8a60954c8aa936a4d0ebd4253c15f"
@@ -95,7 +95,7 @@
     "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
     "FINAL_ZIP": "NOT_DONE"
   },
-  "nextScope": "FULL_SYSTEM_REAUDIT_CORE_RUNTIME_ACTION_AUTHORITY",
+  "nextScope": "FULL_SYSTEM_REAUDIT_AUTOMATION_SUPERVISOR_SCHEDULER",
   "postPasteSweeps": {
     "configRuntimeEnforcement": {
       "status": "COMPLETE_SOURCE",
@@ -139,6 +139,21 @@
       },
       "openP0P1P2": 0,
       "overallRemainingP0P1P2": "UNKNOWN_FULL_SYSTEM_REAUDIT_IN_PROGRESS"
+    },
+    "fullSystemReauditCoreRuntimeActionAuthority": {
+      "status": "COMPLETE_SOURCE",
+      "checkpoint": "audit/checkpoints/V6-FULL-SYSTEM-REAUDIT-CORE-RUNTIME-ACTION-AUTHORITY-2026-09-25.json",
+      "broadDependencyFreeSuite": "43/43 PASS",
+      "findings": {
+        "P0": 0,
+        "P1": 7,
+        "P2": 8,
+        "P3": 0
+      },
+      "openP0P1P2": 0,
+      "overallRemainingP0P1P2": "UNKNOWN_FULL_SYSTEM_REAUDIT_IN_PROGRESS",
+      "sourceSyntax": "110/110 PASS",
+      "jsonParse": "1612/1612 PASS"
     }
   }
 }

@@ -3,18 +3,6 @@
   "schemaVersion": "1.0.0",
   "entries": [
     {
-      "file": "schemas/action-request.schema.json",
-      "pointer": "$/properties/metadata",
-      "mode": "OPEN_MAP",
-      "reason": "Legacy extension object `metadata`; explicitly registered until its domain-specific value contract is hardened."
-    },
-    {
-      "file": "schemas/action-request.schema.json",
-      "pointer": "$/properties/scope",
-      "mode": "OPEN_MAP",
-      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
-    },
-    {
       "file": "schemas/action-result.schema.json",
       "pointer": "$/properties/metadata",
       "mode": "OPEN_MAP",
@@ -829,24 +817,6 @@
       "pointer": "$/properties/scope",
       "mode": "OPEN_MAP",
       "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
-    },
-    {
-      "file": "schemas/mission.schema.json",
-      "pointer": "$/properties/scope",
-      "mode": "OPEN_MAP",
-      "reason": "Legacy extension object `scope`; explicitly registered until its domain-specific value contract is hardened."
-    },
-    {
-      "file": "schemas/mission.schema.json",
-      "pointer": "$/properties/authorization",
-      "mode": "OPEN_MAP",
-      "reason": "Legacy extension object `authorization`; explicitly registered until its domain-specific value contract is hardened."
-    },
-    {
-      "file": "schemas/mission.schema.json",
-      "pointer": "$/properties/budget",
-      "mode": "OPEN_MAP",
-      "reason": "Legacy extension object `budget`; explicitly registered until its domain-specific value contract is hardened."
     },
     {
       "file": "schemas/model-call.schema.json",
