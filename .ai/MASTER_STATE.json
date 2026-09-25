@@ -5,9 +5,9 @@
   "state": "V6_AUDIT_REMEDIATION_IN_PROGRESS",
   "currentPhase": 0,
   "currentPhaseName": "Source audit/remediation before final seal and target-machine Phase0",
-  "currentMilestone": "V6-FULL-SYSTEM-REAUDIT-ROADMAP-PHASES-REVIEW-PACKAGES",
-  "currentMilestoneName": "Full-system deep re-audit: roadmap/phases/review packages",
-  "lastCompletedMilestone": "V6-FULL-SYSTEM-REAUDIT-REGISTRIES-AGENTS-KNOWLEDGE",
+  "currentMilestone": "V6-FULL-SYSTEM-REAUDIT-SCHEMAS-CONTRACTS-PRODUCER-CONSUMER",
+  "currentMilestoneName": "Full-system deep re-audit: schemas/contracts/producer-consumer alignment",
+  "lastCompletedMilestone": "V6-FULL-SYSTEM-REAUDIT-ROADMAP-PHASES-REVIEW-PACKAGES",
   "lastVerifiedCommit": "CURRENT_CHECKPOINT_COMMIT_SEE_GIT_HEAD",
   "knownBlockers": [
     "FINAL_TRUST_ROOT_RESEAL_PENDING",
@@ -17,7 +17,7 @@
     "TARGET_MACHINE_PHASE0_PENDING",
     "DEPENDENCY_REVIEWED_LOCK_ENVIRONMENT_BLOCKED"
   ],
-  "nextAction": "Audit roadmap/phases/review-package graph ordering, dependency/reviewer authority and executable package boundaries; remediate concrete P0/P1/P2, then checkpoint and commit.",
+  "nextAction": "Audit schemas/contracts against concrete producers and consumers, strictness, catalog authority and runtime validation; remediate concrete P0/P1/P2, then checkpoint and commit.",
   "sourceOfTruth": "repository+git+audit/V6-FULL-SCAN-PROGRESS.json+CANONICAL-STATUS.md+PACK.json",
   "architectureDiscovery": "FROZEN_BY_EXTENSION_MODEL",
   "lastStaticClosureAudit": "NOT_FINAL",
