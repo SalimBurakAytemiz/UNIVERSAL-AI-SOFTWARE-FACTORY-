@@ -1,0 +1,10 @@
+// //TR: Provider/OmniRoute source boundary'lerinin fail-closed kalmasını dependency-free adversarial olarak doğrular.
+import fs from "node:fs";
+const t=f=>fs.readFileSync(f,"utf8");let n=0;function ok(id,v){if(!v)throw new Error(`FAIL:${id}`);n++;console.log(`PASS ${id}`)}
+const install=t("scripts/ensure-omniroute.ps1"),cap=t("scripts/capture-provider-provenance.mjs"),claude=t("scripts/claude-builder-broker.mjs"),codex=t("scripts/codex-reviewer-broker.mjs"),disc=t("scripts/discover-omniroute-models.mjs"),client=t("models/omniroute/client.ts"),env=t("automation/lib/env-policy.mjs");
+ok("capture-requires-full-package",cap.includes('provenanceLevel==="FULL_PACKAGE"')&&cap.match(/FULL_PACKAGE/g)?.length>=3);
+ok("claude-full-package",claude.includes("CLAUDE_PACKAGE_PROVENANCE_REQUIRED"));ok("codex-full-package",codex.includes("CODEX_PACKAGE_PROVENANCE_REQUIRED"));
+for(const [id,x] of [["discover-url-credential", "OMNIROUTE_URL_CREDENTIAL_DENIED"],["discover-host-allowlist","OMNIROUTE_GATEWAY_HOST_NOT_APPROVED"],["discover-no-redirect",'redirect:"error"'],["discover-timeout","AbortSignal.timeout"],["discover-model-id","OMNIROUTE_MODEL_ID_INVALID"]])ok(id,disc.includes(x));
+ok("client-network-boundary",["OMNIROUTE_URL_CREDENTIAL_DENIED","OMNIROUTE_GATEWAY_HOST_NOT_APPROVED",'redirect:"error"',"AbortSignal.timeout"].every(x=>client.includes(x)));
+ok("provider-host-env-isolated",claude.includes("safeChildEnv")&&codex.includes("safeChildEnv")&&!claude.includes("env:process.env")&&!codex.includes("env:process.env"));
+ok("env-explicit-deny",env.includes("explicitDeny")&&env.includes("providerPaidApiAllow"));ok("installer-verifies-version",install.includes("installedVersion")&&install.includes("version mismatch"));ok("installer-no-redirect",install.match(/MaximumRedirection 0/g)?.length===2);console.log(`PROVIDER_OMNIROUTE_ADVERSARIAL: PASS ${n}/${n}`);

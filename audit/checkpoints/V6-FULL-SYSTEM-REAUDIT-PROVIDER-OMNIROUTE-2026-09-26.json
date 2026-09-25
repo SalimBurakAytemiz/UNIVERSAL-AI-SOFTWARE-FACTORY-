@@ -1,0 +1,38 @@
+{
+  "//TR": "Bu checkpoint provider/OmniRoute bounded full-system re-audit sonucunu taşır; final closure iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "scope": "FULL_SYSTEM_REAUDIT_PROVIDER_OMNIROUTE",
+  "date": "2026-09-26",
+  "parentCommit": "070da84a569e9a375cc6efdeba592e8e1174fbd1",
+  "findings": {
+    "P0": 0,
+    "P1": 3,
+    "P2": 2,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "remediations": [
+    "Provider provenance PASS now requires FULL_PACKAGE provenance for both Claude and Codex; LAUNCHER_ONLY cannot authorize runtime brokers.",
+    "Claude/Codex brokers independently enforce FULL_PACKAGE provenance before launcher execution.",
+    "OmniRoute discovery now enforces policy-approved host, URL credential denial, protocol validation, redirect denial, bounded timeout and model-id validation.",
+    "OmniRoute installer verifies launcher presence and exact installed global package version after install.",
+    "OmniRoute installer health probes reject redirects.",
+    "Dependency-free provider/OmniRoute adversarial regression added."
+  ],
+  "regression": {
+    "providerOmniRouteAdversarial": "13/13 PASS",
+    "mechanicalClosure": "PASS",
+    "paste2D": "23/23 PASS",
+    "dependencyFreeCanonicalValidators": "18/18 PASS",
+    "dependencyAware": "PENDING_NODE24_NPM11_REGISTRY_REVIEWED_LOCK"
+  },
+  "canonicalTruth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_SHA256SUMS": "NOT_DONE",
+    "FINAL_RELEASE_AUTHENTICITY": "NOT_DONE",
+    "FINAL_ZIP": "NOT_DONE"
+  },
+  "nextScope": "FULL_SYSTEM_REAUDIT_REGISTRIES_AGENTS_KNOWLEDGE"
+}

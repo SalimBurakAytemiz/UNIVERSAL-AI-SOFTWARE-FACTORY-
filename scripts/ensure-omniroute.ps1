@@ -24,13 +24,19 @@ if(-not (Get-Command omniroute -ErrorAction SilentlyContinue)){
   $json=$candidate|ConvertTo-Json -Depth 5;[System.IO.File]::WriteAllText((Join-Path (Get-Location) ".ai\runtime\OMNIROUTE_CANDIDATE.json"),$json,(New-Object System.Text.UTF8Encoding($false)))
   npm install -g "$($policy.packageName)@$version"
   if($LASTEXITCODE -ne 0){throw "OmniRoute exact-version install failed"}
+  if(-not (Get-Command omniroute -ErrorAction SilentlyContinue)){throw "OmniRoute launcher missing after install"}
+  $installedRaw=npm list -g $policy.packageName --depth=0 --json
+  if($LASTEXITCODE -ne 0){throw "Could not verify installed OmniRoute package"}
+  $installed=($installedRaw|ConvertFrom-Json).dependencies.($policy.packageName).version
+  if([string]$installed -ne $version){throw "Installed OmniRoute version mismatch: expected=$version actual=$installed"}
+  $candidate.installedVersion=[string]$installed
   $candidate.installedAt=(Get-Date).ToString("o")
   $json=$candidate|ConvertTo-Json -Depth 5;[System.IO.File]::WriteAllText((Join-Path (Get-Location) ".ai\runtime\OMNIROUTE_INSTALL.json"),$json,(New-Object System.Text.UTF8Encoding($false)))
 }
 
 $base=([string]$policy.endpoint).TrimEnd("/")
-try{Invoke-WebRequest -UseBasicParsing "$base/models" -TimeoutSec 2|Out-Null;Write-Host "OMNIROUTE REACHABLE";exit 0}catch{}
+try{Invoke-WebRequest -UseBasicParsing "$base/models" -TimeoutSec 2 -MaximumRedirection 0|Out-Null;Write-Host "OMNIROUTE REACHABLE";exit 0}catch{}
 Start-Process -WindowStyle Minimized -FilePath "omniroute" | Out-Null
 Start-Sleep 5
-try{Invoke-WebRequest -UseBasicParsing "$base/models" -TimeoutSec 3|Out-Null;Write-Host "OMNIROUTE STARTED"}
+try{Invoke-WebRequest -UseBasicParsing "$base/models" -TimeoutSec 3 -MaximumRedirection 0|Out-Null;Write-Host "OMNIROUTE STARTED"}
 catch{Write-Warning "OmniRoute installed/started but provider/dashboard setup may still require one-time credentials. Runtime remains NOT_VERIFIED until /models succeeds."}
