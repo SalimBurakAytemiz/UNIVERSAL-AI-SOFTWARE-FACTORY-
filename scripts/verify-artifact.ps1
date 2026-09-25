@@ -9,6 +9,7 @@ Get-Content "SHA256SUMS.txt" | ForEach-Object {
     if($rel.StartsWith("/") -or $rel.Contains("../")){$errors.Add("UNSAFE_PATH:$rel");return}
     [void]$manifestEntries.Add($rel)
     if(-not (Test-Path -LiteralPath $rel)){$errors.Add("MISSING:$rel");return}
+    $item=Get-Item -LiteralPath $rel -Force;if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){$errors.Add("REPARSE_POINT_NOT_ALLOWED:$rel");return};if($item.PSIsContainer){$errors.Add("NOT_REGULAR_FILE:$rel");return}
     $actual=(Get-FileHash -Algorithm SHA256 -LiteralPath $rel).Hash.ToLowerInvariant();if($actual -ne $expected){$errors.Add("HASH:$rel")}
   } else {$errors.Add("MALFORMED:$_")}
 }

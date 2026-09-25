@@ -12,11 +12,13 @@ for(const line of lines){
   if(rel.startsWith("/")||rel.includes("../")){failures.push({path:rel,reason:"UNSAFE_PATH"});continue}
   expectedFiles.add(rel); const f=path.resolve(rel);
   if(!f.startsWith(path.resolve(".")+path.sep)){failures.push({path:rel,reason:"PATH_ESCAPE"});continue}
-  if(!fs.existsSync(f)||!fs.statSync(f).isFile()){failures.push({path:rel,reason:"MISSING"});continue}
+  if(!fs.existsSync(f)){failures.push({path:rel,reason:"MISSING"});continue}
+  const lst=fs.lstatSync(f);if(lst.isSymbolicLink()){failures.push({path:rel,reason:"SYMLINK_NOT_ALLOWED"});continue}if(!lst.isFile()){failures.push({path:rel,reason:"NOT_REGULAR_FILE"});continue}
+  const real=fs.realpathSync(f);if(!(real===path.resolve(".")||real.startsWith(path.resolve(".")+path.sep))){failures.push({path:rel,reason:"REALPATH_ESCAPE"});continue}
   const actual=crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
   if(actual!==expected)failures.push({path:rel,reason:"HASH_MISMATCH",expected,actual});
 }
-function walk(dir,out=[]){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,e.name);const rel=path.relative(".",p).replaceAll("\\","/");if(rel===".git"||rel.startsWith(".git/")||rel==="node_modules"||rel.startsWith("node_modules/")||rel===".ai/runtime"||rel.startsWith(".ai/runtime/")||rel===".ai/automation"||rel.startsWith(".ai/automation/"))continue;if(e.isDirectory())walk(p,out);else out.push(rel)}return out}
+function walk(dir,out=[]){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,e.name);const rel=path.relative(".",p).replaceAll("\\","/");if(rel===".git"||rel.startsWith(".git/")||rel==="node_modules"||rel.startsWith("node_modules/")||rel===".ai/runtime"||rel.startsWith(".ai/runtime/")||rel===".ai/automation"||rel.startsWith(".ai/automation/"))continue;if(e.isSymbolicLink())out.push(rel);else if(e.isDirectory())walk(p,out);else out.push(rel)}return out}
 const actualSource=new Set(walk(".").filter(x=>x!==manifestFile));
 if(!expectedFiles.has("package-lock.json"))failures.push({path:"package-lock.json",reason:"LOCKFILE_NOT_IN_ARTIFACT_MANIFEST"});
 for(const rel of actualSource) if(!expectedFiles.has(rel)) failures.push({path:rel,reason:"UNLISTED_SOURCE_FILE"});

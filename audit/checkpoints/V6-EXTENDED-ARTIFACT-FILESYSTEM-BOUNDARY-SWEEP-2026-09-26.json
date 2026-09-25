@@ -1,0 +1,24 @@
+{
+  "//TR": "Bu checkpoint final artifact verifier extended filesystem-boundary sweep sonucunu kaydeder; manifestte hashlenen symlink/reparse-point üzerinden repo dışı hedefe takip engellenmiştir.",
+  "schemaVersion": "1.0.0",
+  "scope": "EXTENDED_ARTIFACT_FILESYSTEM_BOUNDARY_SWEEP",
+  "date": "2026-09-26",
+  "parentCommit": "2de2209fe8e2067a142ac5b6da5008a5a2259729",
+  "findings": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 0,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "fixed": [
+    "Node artifact verifier lexical in-root path kontrolünden sonra symlink targetını takip edebiliyordu; lstat symlink rejection + realpath boundary eklendi. Pre-Node PowerShell verifier reparse points artık fail-closed reddediyor."
+  ],
+  "regression": {
+    "evidenceTrustReleaseAdversarial": "8/8 PASS",
+    "paste4DReleaseTruth": "48/48 PASS",
+    "secretSanity": "PASS",
+    "nodeSyntax": "PASS"
+  },
+  "nextScope": "ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION"
+}
