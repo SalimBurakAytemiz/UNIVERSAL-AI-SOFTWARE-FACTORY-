@@ -1,0 +1,27 @@
+{
+  "//TR": "Bu checkpoint extended environment/supply-chain isolation sweep bulgularını kaydeder; external model provider proxy/CA inheritance ve PowerShell npm registry/config injection yüzeyleri fail-closed kapatılmıştır.",
+  "schemaVersion": "1.0.0",
+  "scope": "EXTENDED_ENVIRONMENT_SUPPLY_CHAIN_ISOLATION_SWEEP",
+  "date": "2026-09-26",
+  "parentCommit": "d8ad4953428a7275b5c4479f8c32a0d240ae1606",
+  "findings": {
+    "P0": 0,
+    "P1": 2,
+    "P2": 0,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "fixed": [
+    "External Claude/Codex provider children inherited generic HTTP(S)_PROXY/SSL_CERT_* prefix environment despite provider host-env isolation intent; provider network env is now exact-name opt-in and empty by default.",
+    "PowerShell AI CLI/OmniRoute npm metadata/install path could inherit hostile NPM_CONFIG_REGISTRY/userconfig/custom CA/proxy settings; official registry + strict TLS + ignore-scripts are now CLI-enforced and dangerous npm/CA environment overrides are removed."
+  ],
+  "regression": {
+    "foundationE": "12/12 PASS",
+    "providerOmniRouteAdversarial": "15/15 PASS",
+    "installerPhase0Adversarial": "8/8 PASS",
+    "fullSystemRoot": "12/12 PASS",
+    "mechanicalClosure": "PASS",
+    "secretSanity": "PASS"
+  },
+  "nextScope": "ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION"
+}

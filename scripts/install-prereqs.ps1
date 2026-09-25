@@ -9,9 +9,11 @@ $nodeCmd=Get-Command node -ErrorAction SilentlyContinue;if(-not $nodeCmd -and (T
 if(-not $nodeCmd){throw "Node installed but not available in current process. Reopen PowerShell and rerun."}
 $major=[int]((& node --version).Trim().TrimStart('v').Split('.')[0]);if($major -lt 24){throw "Node >=24 required; found $(& node --version)"}
 $npmMajor=[int]((& npm --version).Trim().Split('.')[0]);if($npmMajor -lt 11){throw "npm >=11 required; found $(& npm --version). Upgrade npm explicitly, then rerun."}
+$trustedRegistry="https://registry.npmjs.org/"
+foreach($name in @("NPM_CONFIG_REGISTRY","NPM_CONFIG_USERCONFIG","NPM_CONFIG_CAFILE","NPM_CONFIG_PROXY","NPM_CONFIG_HTTPS_PROXY","NODE_EXTRA_CA_CERTS","SSL_CERT_FILE","SSL_CERT_DIR")){Remove-Item "Env:$name" -ErrorAction SilentlyContinue}
 function Install-ExactNpmPackage([string]$Package,[string]$Label){
-  $raw=npm view $Package version dist.integrity --json;if($LASTEXITCODE -ne 0){throw "$Label metadata lookup failed"};$meta=$raw|ConvertFrom-Json;$version=[string]$meta.version;$integrity=[string]$meta.dist.integrity;if(-not $version -or -not $integrity){throw "$Label metadata missing version/integrity"}
-  npm install -g "$Package@$version";if($LASTEXITCODE -ne 0){throw "$Label exact-version install failed"}
+  $raw=npm --registry=$trustedRegistry --strict-ssl=true --ignore-scripts view $Package version dist.integrity --json;if($LASTEXITCODE -ne 0){throw "$Label metadata lookup failed"};$meta=$raw|ConvertFrom-Json;$version=[string]$meta.version;$integrity=[string]$meta.dist.integrity;if(-not $version -or -not $integrity){throw "$Label metadata missing version/integrity"}
+  npm --registry=$trustedRegistry --strict-ssl=true --ignore-scripts install -g "$Package@$version";if($LASTEXITCODE -ne 0){throw "$Label exact-version install failed"}
   $installedRaw=npm list -g $Package --depth=0 --json;if($LASTEXITCODE -ne 0){throw "$Label installed package verification failed"};$installed=($installedRaw|ConvertFrom-Json).dependencies.($Package).version;if([string]$installed -ne $version){throw "$Label installed version mismatch"}
 }
 if($InstallAiCli){

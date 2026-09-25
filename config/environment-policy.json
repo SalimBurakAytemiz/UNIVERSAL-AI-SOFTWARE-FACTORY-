@@ -31,7 +31,7 @@
     "CREDENTIAL"
   ],
   "exceptionPrefixes": [],
-  "note": "Common proxy/certificate env prefixleri dışında provider credential/config aktarımı exact-name allowlist ile yapılır.",
+  "note": "Common proxy/certificate env prefixleri deterministic/local tooling için allowlisttedir; external model provider child processlerine yalnız providerNetworkEnvAllow içindeki exact adlar aktarılır. Provider credential/config aktarımı exact-name allowlist ile yapılır.",
   "explicitDeny": [
     "NODE_OPTIONS",
     "NPM_CONFIG_USERCONFIG",
@@ -61,5 +61,9 @@
     "OPENAI": [
       "OPENAI_API_KEY"
     ]
+  },
+  "providerNetworkEnvAllow": {
+    "ANTHROPIC": [],
+    "OPENAI": []
   }
 }

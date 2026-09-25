@@ -3,9 +3,11 @@ $ErrorActionPreference="Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
 $policy=Get-Content ".\config\omniroute-policy.json" -Raw | ConvertFrom-Json
 New-Item -ItemType Directory -Force ".ai\runtime" | Out-Null
+$trustedRegistry="https://registry.npmjs.org/"
+foreach($name in @("NPM_CONFIG_REGISTRY","NPM_CONFIG_USERCONFIG","NPM_CONFIG_CAFILE","NPM_CONFIG_PROXY","NPM_CONFIG_HTTPS_PROXY","NODE_EXTRA_CA_CERTS","SSL_CERT_FILE","SSL_CERT_DIR")){Remove-Item "Env:$name" -ErrorAction SilentlyContinue}
 
 if(-not (Get-Command omniroute -ErrorAction SilentlyContinue)){
-  $raw=npm view $policy.packageName version license repository.url dist.integrity --json
+  $raw=npm --registry=$trustedRegistry --strict-ssl=true --ignore-scripts view $policy.packageName version license repository.url dist.integrity --json
   if($LASTEXITCODE -ne 0){throw "Could not query OmniRoute npm metadata"}
   $meta=$raw|ConvertFrom-Json
   $version=[string]$meta.version
@@ -22,7 +24,7 @@ if(-not (Get-Command omniroute -ErrorAction SilentlyContinue)){
     package=$policy.packageName;version=$version;license=$license;repository=$repo;integrity=$integrity;discoveredAt=(Get-Date).ToString("o")
   }
   $json=$candidate|ConvertTo-Json -Depth 5;[System.IO.File]::WriteAllText((Join-Path (Get-Location) ".ai\runtime\OMNIROUTE_CANDIDATE.json"),$json,(New-Object System.Text.UTF8Encoding($false)))
-  npm install -g "$($policy.packageName)@$version"
+  npm --registry=$trustedRegistry --strict-ssl=true --ignore-scripts install -g "$($policy.packageName)@$version"
   if($LASTEXITCODE -ne 0){throw "OmniRoute exact-version install failed"}
   if(-not (Get-Command omniroute -ErrorAction SilentlyContinue)){throw "OmniRoute launcher missing after install"}
   $installedRaw=npm list -g $policy.packageName --depth=0 --json
