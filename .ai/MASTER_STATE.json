@@ -5,9 +5,9 @@
   "state": "V6_AUDIT_REMEDIATION_IN_PROGRESS",
   "currentPhase": 0,
   "currentPhaseName": "Source audit/remediation before final seal and target-machine Phase0",
-  "currentMilestone": "V6-FULL-SYSTEM-REAUDIT-REGISTRIES-AGENTS-KNOWLEDGE",
-  "currentMilestoneName": "Full-system deep re-audit: registries/agents/knowledge",
-  "lastCompletedMilestone": "V6-FULL-SYSTEM-REAUDIT-PROVIDER-OMNIROUTE",
+  "currentMilestone": "V6-FULL-SYSTEM-REAUDIT-ROADMAP-PHASES-REVIEW-PACKAGES",
+  "currentMilestoneName": "Full-system deep re-audit: roadmap/phases/review packages",
+  "lastCompletedMilestone": "V6-FULL-SYSTEM-REAUDIT-REGISTRIES-AGENTS-KNOWLEDGE",
   "lastVerifiedCommit": "CURRENT_CHECKPOINT_COMMIT_SEE_GIT_HEAD",
   "knownBlockers": [
     "FINAL_TRUST_ROOT_RESEAL_PENDING",
@@ -17,7 +17,7 @@
     "TARGET_MACHINE_PHASE0_PENDING",
     "DEPENDENCY_REVIEWED_LOCK_ENVIRONMENT_BLOCKED"
   ],
-  "nextAction": "Audit registries/agents/knowledge cross-layer authority, genome/specialization/evaluation/skills/technology/domain/knowledge provenance and dangling/duplicate/certification references; remediate concrete P0/P1/P2, then checkpoint and commit.",
+  "nextAction": "Audit roadmap/phases/review-package graph ordering, dependency/reviewer authority and executable package boundaries; remediate concrete P0/P1/P2, then checkpoint and commit.",
   "sourceOfTruth": "repository+git+audit/V6-FULL-SCAN-PROGRESS.json+CANONICAL-STATUS.md+PACK.json",
   "architectureDiscovery": "FROZEN_BY_EXTENSION_MODEL",
   "lastStaticClosureAudit": "NOT_FINAL",

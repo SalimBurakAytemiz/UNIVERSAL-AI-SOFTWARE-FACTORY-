@@ -1,0 +1,31 @@
+{
+  "//TR": "Bu checkpoint registries/agents/knowledge bounded re-audit sonucunu taşır; final closure iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "scope": "FULL_SYSTEM_REAUDIT_REGISTRIES_AGENTS_KNOWLEDGE",
+  "date": "2026-09-26",
+  "parentCommit": "2a5f7783712d45a1e863d2e96148e13a7ac1a4c7",
+  "findings": {
+    "P0": 0,
+    "P1": 0,
+    "P2": 1,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "remediations": [
+    "Added one cross-layer adversarial regression binding all 415 technology knowledge profiles to canonical registry identities, certification evidence truth and all 363 agent evaluation identities/reviewer/provenance requirements."
+  ],
+  "regression": {
+    "crossLayerAdversarial": "7732/7732 PASS",
+    "competencies": "PASS agents=363 skills=425 technologies=415",
+    "agentSemantic": "PASS agents=363 technical=258 depthRows=6114",
+    "organization": "PASS departments=40 agents=363",
+    "reviewGraph": "PASS",
+    "technologyGraph": "PASS technologies=415",
+    "domainPacks": "PASS domains=22"
+  },
+  "canonicalTruth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "overallRemainingP0P1P2": "UNKNOWN_FULL_SYSTEM_REAUDIT_IN_PROGRESS"
+  },
+  "nextScope": "FULL_SYSTEM_REAUDIT_ROADMAP_PHASES_REVIEW_PACKAGES"
+}
