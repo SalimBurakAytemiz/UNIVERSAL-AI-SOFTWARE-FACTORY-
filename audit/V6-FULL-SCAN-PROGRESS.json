@@ -95,7 +95,7 @@
     "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
     "FINAL_ZIP": "NOT_DONE"
   },
-  "nextScope": "DEPENDENCY_REVIEWED_LOCK_LOCK_GENERATION",
+  "nextScope": "FULL_SYSTEM_REAUDIT_CORE_RUNTIME_ACTION_AUTHORITY",
   "postPasteSweeps": {
     "configRuntimeEnforcement": {
       "status": "COMPLETE_SOURCE",
@@ -126,6 +126,19 @@
       "packageLock": "ABSENT",
       "npm11": "NOT_AVAILABLE_LOCALLY",
       "registryNpmjsDns": "UNRESOLVED"
+    },
+    "fullSystemReauditRootConfigCiTrust": {
+      "status": "COMPLETE_SOURCE",
+      "checkpoint": "audit/checkpoints/V6-FULL-SYSTEM-REAUDIT-ROOT-CONFIG-CI-TRUST-2026-09-25.json",
+      "broadDependencyFreeSuite": "42/42 PASS",
+      "findings": {
+        "P0": 0,
+        "P1": 5,
+        "P2": 3,
+        "P3": 1
+      },
+      "openP0P1P2": 0,
+      "overallRemainingP0P1P2": "UNKNOWN_FULL_SYSTEM_REAUDIT_IN_PROGRESS"
     }
   }
 }

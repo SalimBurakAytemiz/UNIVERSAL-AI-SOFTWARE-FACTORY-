@@ -1,7 +1,7 @@
 {
-  "//TR": "Bu dosya mechanically-closed V3 starter için Node>=24, exact direct deps ve trust/supply-chain/domain/semantic validation zincirini tanımlar.",
+  "//TR": "Bu dosya V6 audit/remediation candidate için Node>=24, exact direct deps ve trust/supply-chain/domain/semantic validation zincirini tanımlar.",
   "name": "universal-ai-software-company-os",
-  "version": "0.0.0-mechanically-closed-v3",
+  "version": "0.0.0-v6-audit-candidate",
   "private": true,
   "type": "module",
   "engines": {

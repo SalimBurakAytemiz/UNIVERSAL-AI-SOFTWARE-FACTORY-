@@ -1,0 +1,47 @@
+{
+  "//TR": "Bu checkpoint full-system re-audit root/config/CI/trust bounded scope sonucunu ve source-level remediation kanıtını taşır; final closure iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "scope": "FULL_SYSTEM_REAUDIT_ROOT_CONFIG_CI_TRUST",
+  "date": "2026-09-25",
+  "parentCommit": "aa6712fde41de30185597ff71c71fbb1a036ef15",
+  "findings": {
+    "P0": 0,
+    "P1": 5,
+    "P2": 3,
+    "P3": 1,
+    "openP0P1P2": 0
+  },
+  "remediations": [
+    "generated .ai/runtime evidence excluded from source TR validation",
+    "dependency install and npm audit child processes use explicit environment policy instead of raw process.env",
+    "remote branch protection PASS requires exact linear-history/no-force-push/no-delete rules",
+    "CI uses canonical ensure-dependencies and protected validation runner",
+    "dependency-aware validation requires reviewed installed dependency marker, not node_modules presence",
+    "trust-root generator emits SEALED manifests when explicitly invoked at final reseal stage",
+    "package identity updated from stale V3 label to V6 audit candidate",
+    "NEXT_ACTIONS updated for full-system re-audit"
+  ],
+  "regression": {
+    "broadDependencyFree": "42/42 PASS",
+    "rootAdversarial": "12/12 PASS",
+    "paste2C": "23/23 PASS",
+    "paste2E": "17/17 PASS",
+    "paste4D": "PASS",
+    "configRuntime": "PASS",
+    "mechanicalClosure": "PASS",
+    "sourceSyntax": "109/109 PASS",
+    "jsonParse": "1611/1611 PASS",
+    "secretSanity": "PASS",
+    "dependencySupplyChain": "EXPECTED_FAIL_CLOSED_SOURCE_REVIEWED_PACKAGE_LOCK_REQUIRED",
+    "trustRoot": "EXPECTED_FAIL_CLOSED_STALE_PENDING_FINAL_RESEAL"
+  },
+  "canonicalTruth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_SHA256SUMS": "NOT_DONE",
+    "FINAL_RELEASE_AUTHENTICITY": "NOT_DONE",
+    "FINAL_ZIP": "NOT_DONE"
+  },
+  "nextScope": "FULL_SYSTEM_REAUDIT_CORE_RUNTIME_ACTION_AUTHORITY"
+}

@@ -21,8 +21,8 @@ jobs:
       - name: Require lockfile
         shell: bash
         run: test -f package-lock.json || (echo "package-lock.json missing; run install/bootstrap once and commit lockfile" && exit 1)
-      - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm run validate
+      - run: node scripts/ensure-dependencies.mjs
+      - run: node scripts/run-validation.mjs
       - run: node scripts/secret-sanity.mjs
       - name: Bootstrap trust-kernel self-test
         run: node scripts/bootstrap-kernel-selftest.mjs

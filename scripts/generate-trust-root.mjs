@@ -15,6 +15,6 @@ const normalized=all.map(x=>x.replace(/^\.\//,"")).filter(x=>x!=="config/trust-r
 const selfPath="config/trust-root-manifest.json";const selected=new Set(policy.exactPaths.filter(x=>x!==selfPath&&fs.existsSync(x)));
 for(const p of normalized) for(const pre of policy.protectedPrefixes??[]) if(p!==selfPath&&(p===pre||p.startsWith(pre.endsWith("/")?pre:`${pre}/`))) selected.add(p);
 const files=[...selected].sort().map(p=>({path:p,sha256:crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex")}));
-const doc={"//TR":"Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",schemaVersion:"1.0.0",generatedAt:new Date().toISOString(),files};
+const doc={"//TR":"Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",schemaVersion:"1.0.0",generatedAt:new Date().toISOString(),sealStatus:"SEALED",files};
 fs.writeFileSync("config/trust-root-manifest.json",JSON.stringify(doc,null,2)+"\n");
 console.log(`TRUST_ROOT_MANIFEST_GENERATED files=${files.length}`);

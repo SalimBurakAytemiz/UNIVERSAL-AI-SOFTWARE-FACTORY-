@@ -13,11 +13,12 @@
     "PASTE_4D",
     "CONFIG_RUNTIME_ENFORCEMENT_SWEEP",
     "FULL_DEPENDENCY_FREE_SOURCE_REGRESSION",
-    "DEPENDENCY_TRUST_HARDENING_PRE_LOCK"
+    "DEPENDENCY_TRUST_HARDENING_PRE_LOCK",
+    "FULL_SYSTEM_REAUDIT_ROOT_CONFIG_CI_TRUST"
   ],
-  "activeScope": "DEPENDENCY_REVIEWED_LOCK_LOCK_GENERATION",
+  "activeScope": "FULL_SYSTEM_REAUDIT_CORE_RUNTIME_ACTION_AUTHORITY",
   "boundedScopeOpenP0P1P2": 0,
-  "overallRemainingP0P1P2": "ZERO_DEPENDENCY_FREE_SOURCE_PENDING_DEPENDENCY_AWARE",
+  "overallRemainingP0P1P2": "UNKNOWN_FULL_SYSTEM_REAUDIT_IN_PROGRESS",
   "sourceLevelClosure": false,
   "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL",
   "finalSha256Sums": "NOT_DONE",
@@ -32,11 +33,11 @@
   ],
   "dependencyFreeRegression": {
     "status": "PASS",
-    "canonicalPass": 29,
-    "pendingDependencies": 1,
+    "canonicalPass": 42,
+    "pendingDependencies": 2,
     "fail": 0,
-    "sourceSyntax": "107/107 PASS",
-    "jsonParse": "1610/1610 PASS",
+    "sourceSyntax": "109/109 PASS",
+    "jsonParse": "1611/1611 PASS",
     "secretSanity": "PASS"
   },
   "environmentGate": {
