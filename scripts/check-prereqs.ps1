@@ -1,6 +1,7 @@
 # //TR: Bu script target Windows makinede Node>=24, npm, Git, PowerShell, disk/RAM/path/long-path ve mission tool görünürlüğünü kontrol eder; ayrıntılı cross-platform report için scripts/preflight.mjs çağrılır.
 $ErrorActionPreference="Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
+& ".\scripts\sanitize-process-env.ps1"
 [Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)
 
 foreach($cmd in @("git","node","npm")){

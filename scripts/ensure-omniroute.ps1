@@ -1,6 +1,7 @@
 # //TR: Bu script OmniRoute eksikse npm metadata'dan version/license/repository/dist.integrity keşfeder, policy identity/license kontrolünü geçmeden kurmaz, sonra exact version kurup provenance kaydeder ve local endpoint health probe yapar.
 $ErrorActionPreference="Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
+& ".\scripts\sanitize-process-env.ps1"
 $policy=Get-Content ".\config\omniroute-policy.json" -Raw | ConvertFrom-Json
 New-Item -ItemType Directory -Force ".ai\runtime" | Out-Null
 $trustedRegistry="https://registry.npmjs.org/"

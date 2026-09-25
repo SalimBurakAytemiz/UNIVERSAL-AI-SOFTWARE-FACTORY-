@@ -1,0 +1,24 @@
+{
+  "//TR": "Bu checkpoint PowerShell entrypoint process-injection ve preflight registry observation isolation sweep sonucunu kaydeder.",
+  "schemaVersion": "1.0.0",
+  "scope": "EXTENDED_ENTRYPOINT_PROCESS_ENVIRONMENT_SWEEP",
+  "date": "2026-09-26",
+  "parentCommit": "8ecaa64b01e9f40ea8a3140708e757e67cdb10b9",
+  "findings": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 1,
+    "P3": 0,
+    "openP0P1P2": 0
+  },
+  "fixed": [
+    "P1 install/bootstrap/check-prereqs/install-prereqs/ensure-omniroute/start-full-auto PowerShell entrypoints could invoke Node/npm before hostile process-control environment variables such as NODE_OPTIONS/NPM_CONFIG_USERCONFIG were scrubbed. All relevant entrypoints now sanitize first.",
+    "P2 preflight npm registry TLS ping inherited host proxy/custom-CA/network override environment and could report a misleading registry PASS; ping now uses denyNetworkOverrides child environment."
+  ],
+  "regression": {
+    "installerPhase0Adversarial": "9/9 PASS",
+    "providerOmniRouteAdversarial": "15/15 PASS",
+    "preflightSyntax": "PASS"
+  },
+  "nextScope": "ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION"
+}

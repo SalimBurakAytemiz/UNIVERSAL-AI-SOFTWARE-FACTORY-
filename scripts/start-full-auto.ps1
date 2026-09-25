@@ -1,6 +1,7 @@
 # //TR: Bu wrapper Phase0 CLEAN/CLEAN_LOCAL_ONLY kapısını doğrular, package-lock/node_modules deterministic durumunu korur ve supervisor'ı quota/retry/more-work kodlarına göre otomatik resume döngüsünde çalıştırır.
 $ErrorActionPreference="Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
+& ".\scripts\sanitize-process-env.ps1"
 if(-not (Test-Path "package-lock.json")){throw "package-lock.json missing. Run scripts/install.ps1 first."}
 node ".\scripts\ensure-dependencies.mjs";if($LASTEXITCODE -ne 0){throw "reviewed-lock dependency state invalid/install failed"}
 if(-not (Test-Path ".ai\runtime\PHASE0_ACCEPTANCE.json")){throw "Phase0 acceptance missing. Run scripts/install.ps1 first."}

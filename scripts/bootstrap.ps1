@@ -2,6 +2,7 @@
 param([switch]$SkipOmniRoute)
 $ErrorActionPreference="Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
+& ".\scripts\sanitize-process-env.ps1"
 [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false)
 & ".\scripts\check-prereqs.ps1"
 if(-not (Test-Path "package-lock.json")){throw "SOURCE_REVIEWED_PACKAGE_LOCK_REQUIRED: target machine may not generate package-lock.json"}

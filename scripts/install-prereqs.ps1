@@ -1,6 +1,7 @@
 # //TR: Bu guided prerequisite installer Windows'ta winget/npm mevcutsa Git, Node LTS, Claude Code ve Codex CLI'yi resmi paket adlarıyla kurmayı dener; login/OAuth insan adımı olarak ayrıca doğrulanır.
 param([switch]$InstallAiCli)
 $ErrorActionPreference="Stop"
+& (Join-Path $PSScriptRoot "sanitize-process-env.ps1")
 function Has($x){return [bool](Get-Command $x -ErrorAction SilentlyContinue)}
 if(-not (Has "winget")){throw "winget missing. Install/update App Installer first."}
 if(-not (Has "git")){winget install --id Git.Git -e --accept-source-agreements --accept-package-agreements;if($LASTEXITCODE -ne 0){throw "Git install failed"}}
