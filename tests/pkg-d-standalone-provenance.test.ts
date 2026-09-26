@@ -1,0 +1,25 @@
+// //TR: Bu test Codex/Claude broker'larının yalnız FULL_PACKAGE veya doğrulanmış STANDALONE_LAUNCHER provenance kabul ettiğini, her çağrıda launcher SHA ve standalone sürümünü yeniden doğruladığını ve capture'ın sürüm deseni tutmayan launcher'ı BLOCKED bıraktığını model çağırmadan doğrular.
+import {describe,it,expect,afterEach} from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import crypto from "node:crypto";
+import cp from "node:child_process";
+const repo=process.cwd(),node=process.execPath,sha=(f:string)=>crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
+const nodeVersion=String(cp.spawnSync(node,["--version"],{encoding:"utf8"}).stdout).trim();
+const roots:string[]=[];afterEach(()=>{for(const r of roots.splice(0))fs.rmSync(r,{recursive:true,force:true})});
+function controlRoot(tool:"codex"|"claude",entry:Record<string,unknown>){const root=fs.mkdtempSync(path.join(os.tmpdir(),"uasco-prov-"));roots.push(root);fs.mkdirSync(path.join(root,"config"),{recursive:true});fs.mkdirSync(path.join(root,".ai/runtime"),{recursive:true});for(const f of ["automation.json","environment-policy.json","builder-execution-policy.json"])fs.copyFileSync(path.join(repo,"config",f),path.join(root,"config",f));fs.writeFileSync(path.join(root,".ai/runtime/PROVIDER_PROVENANCE.json"),JSON.stringify({final:"PASS",[tool]:entry}));return root}
+function broker(tool:"codex"|"claude",entry:Record<string,unknown>){const root=controlRoot(tool,entry);const script=path.join(repo,"scripts",tool==="codex"?"codex-reviewer-broker.mjs":"claude-builder-broker.mjs");return cp.spawnSync(node,[script],{cwd:root,input:"",encoding:"utf8",env:{PATH:process.env.PATH??"",SystemRoot:process.env.SystemRoot??"",UASCO_CONTROL_ROOT:root},timeout:60000})}
+const standalone=(over:Record<string,unknown>={})=>({provenanceLevel:"STANDALONE_LAUNCHER",resolvedPath:node,launcherSha256:sha(node),version:nodeVersion,packageJsonPath:"NOT_APPLICABLE_STANDALONE_LAUNCHER",packageJsonSha256:"NOT_APPLICABLE_STANDALONE_LAUNCHER",...over});
+describe.each([["codex","CODEX"],["claude","CLAUDE"]] as const)("%s broker provenance gate",(tool,P)=>{
+  it("rejects LAUNCHER_ONLY provenance",()=>{const r=broker(tool,standalone({provenanceLevel:"LAUNCHER_ONLY"}));expect(r.status).not.toBe(0);expect(r.stderr).toContain(`${P}_PACKAGE_PROVENANCE_REQUIRED`)});
+  it("rejects a standalone launcher whose SHA-256 changed",()=>{const r=broker(tool,standalone({launcherSha256:"0".repeat(64)}));expect(r.status).not.toBe(0);expect(r.stderr).toContain(`${P}_LAUNCHER_PROVENANCE_CHANGED`)});
+  it("rejects a standalone launcher whose version changed",()=>{const r=broker(tool,standalone({version:"codex-cli 9.9.9"}));expect(r.status).not.toBe(0);expect(r.stderr).toContain(`${P}_STANDALONE_VERSION_CHANGED`)});
+  it("keeps the package.json check for FULL_PACKAGE",()=>{const pj=path.join(fs.mkdtempSync(path.join(os.tmpdir(),"uasco-pj-")),"package.json");roots.push(path.dirname(pj));fs.writeFileSync(pj,"{}");const r=broker(tool,standalone({provenanceLevel:"FULL_PACKAGE",packageJsonPath:pj,packageJsonSha256:"0".repeat(64)}));expect(r.status).not.toBe(0);expect(r.stderr).toContain(`${P}_PACKAGE_PROVENANCE_CHANGED`)});
+  it("lets a verified standalone launcher pass the provenance gate",()=>{const r=broker(tool,standalone());expect(r.stderr).not.toMatch(new RegExp(`${P}_(PACKAGE_PROVENANCE_REQUIRED|LAUNCHER_PROVENANCE_CHANGED|STANDALONE_VERSION_CHANGED|PACKAGE_PROVENANCE_CHANGED)`))});
+});
+describe.runIf(process.platform==="win32")("provider provenance capture",()=>{
+  it("keeps a launcher with a non-matching version output LAUNCHER_ONLY and BLOCKED",()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),"uasco-cap-"));roots.push(dir);const bin=path.join(dir,"bin");fs.mkdirSync(bin);for(const n of ["claude.exe","codex.exe"]){try{fs.linkSync(node,path.join(bin,n))}catch{fs.copyFileSync(node,path.join(bin,n))}}
+    const r=cp.spawnSync(node,[path.join(repo,"scripts/capture-provider-provenance.mjs")],{cwd:dir,encoding:"utf8",env:{PATH:`${bin};${process.env.SystemRoot}\\System32`,PATHEXT:process.env.PATHEXT??".COM;.EXE;.BAT;.CMD",SystemRoot:process.env.SystemRoot??""},timeout:60000});
+    expect(r.status).not.toBe(0);const rep=JSON.parse(fs.readFileSync(path.join(dir,".ai/runtime/PROVIDER_PROVENANCE.json"),"utf8"));expect(rep.final).toBe("BLOCKED");expect(rep.codex.provenanceLevel).toBe("LAUNCHER_ONLY");expect(rep.claude.provenanceLevel).toBe("LAUNCHER_ONLY")});
+});
