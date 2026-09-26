@@ -1,0 +1,58 @@
+{
+  "//TR": "Bu checkpoint Founder yetkili F10 (.gitattributes LF sabitleme) ve F9 (Electron smoke shell'siz başlatma) düzeltmelerini, doğrulama/adversarial kanıtlarını ve Electron binary temini için açık Founder kararını kaydeder; CLEAN, final closure veya target-machine Phase0 PASS iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_C_LF_AND_ELECTRON_SMOKE",
+  "date": "2026-09-26",
+  "parent": "3ed853335ee2c4e1c3b79cb02374f152e2db8bc2",
+  "branch": "v6/pkg-c-lf-and-electron-smoke",
+  "resolves": ["PKGA-F10", "PKGA-F9"],
+  "founderAuthorization": {
+    "decision": "PKG_C_F9_AND_F10_APPROVED",
+    "protectedFiles": [".gitattributes", "scripts/smoke-desktop.mjs", "scripts/smoke-control-tower.mjs"],
+    "F10": "Add protected .gitattributes that stores and checks out every text file with LF so Windows core.autocrlf=true clones keep lock, trust-root and evidence digests equal to committed bytes.",
+    "F9": "Launch Electron in smoke-desktop.mjs and smoke-control-tower.mjs without electron.cmd and without a shell; verify Electron 44 binary provisioning under ignore-scripts and report it as a separate decision if needed.",
+    "constraint": "Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+  },
+  "implementation": {
+    "F10": ".gitattributes contains '* text=auto eol=lf'; the index was already LF for all 1935 tracked files, so no content renormalization occurred.",
+    "F9": "Both smokes resolve the Electron binary inline (no new protected helper): path.txt must be one of electron.exe, electron or Electron.app/Contents/MacOS/Electron, dist/version must equal the installed electron package version, and the binary must be a regular file; the binary is spawned directly without shell. Missing or mismatched provisioning fails closed with ELECTRON_BINARY_NOT_PROVISIONED.",
+    "F9DeviationFromLiteralAuthorization": "The authorization text named 'node + electron cli'. Verification showed electron@44.4.5 cli.js/index.js silently downloads the binary from GitHub on first require and extracts it into node_modules/electron/dist, which also breaks the installed-tree seal. The smokes therefore launch the verified binary directly and never trigger that download; this is stricter than the literal text and stays inside the two authorized files.",
+    "previousBehaviour": "Both smokes spawned node_modules\\.bin\\electron.cmd with shell:true on Windows, which implicitly downloaded the binary through electron/index.js."
+  },
+  "validation": {
+    "workspace": "fresh clone of v6/pkg-c-lf-and-electron-smoke mirroring the working tree with the reviewed lock installed; repository .ai/runtime untouched",
+    "gitDiffCheck": "PASS",
+    "canonicalRunner": {"status": "PASS", "pass": 34, "fail": 0},
+    "vitest": "PASS 16 files / 81 tests (9 new PKG-C tests)",
+    "broadDependencyFreeSuite": "25/25 PASS",
+    "adversarial": {
+      "F10_defaultAutocrlfCloneWithoutGitattributes": "1935 files w/crlf; package-lock sha256 63e050b0... (drift reproduced)",
+      "F10_defaultAutocrlfCloneWithGitattributes": "1937 files w/lf; package-lock sha256 96c4bc98... (matches committed bytes)",
+      "F9_smokeDesktopUnprovisioned": "FAIL_CLOSED ELECTRON_BINARY_NOT_PROVISIONED after Control API challenge-proof identity succeeded; no dist/ or path.txt created",
+      "F9_smokeControlTowerUnprovisioned": "FAIL_CLOSED ELECTRON_BINARY_NOT_PROVISIONED; no dist/ or path.txt created",
+      "F9_pathTxtTraversalToSystemCmd": "REJECTED ELECTRON_BINARY_NOT_PROVISIONED",
+      "installedTreeSealAfterSmokes": "INTACT 4c0aec51d8f5cfb385e214b2375d6dc618f82eac5b5fb2515b4f881bfd79ad12"
+    }
+  },
+  "changedFileSha256": {
+    ".gitattributes": "28de6e31c9d7a9c16c8659b28fda6957681bdec7244b1309e80450f6c0910b4e",
+    "scripts/smoke-desktop.mjs": "a9c808edf0df845582153f765a93bce926420e1c15b30790f2fa07cd5211ff98",
+    "scripts/smoke-control-tower.mjs": "649a8da3cc53b19bbd9e777d710a425cbdefe486bdf963bdf9bed43b94a66014",
+    "tests/pkg-c-lf-electron-smoke.test.ts": "eff11f09dfaac6c22e2777fd94a9f9e1dbf62a7665cdeb0a3afd14ee028db918"
+  },
+  "openFindings": [
+    {"id": "PKGC-F1", "severity": "P2", "category": "ELECTRON_BINARY_PROVISIONING", "observed": "No reviewed provisioning step exists for the electron@44.4.5 binary under ignore-scripts; the upstream lazy download writes into node_modules/electron/dist and invalidates the installed-tree seal. scripts/install.ps1 control-tower-smoke now fails closed until provisioning is decided (-SkipDesktopSmoke remains available).", "status": "OPEN_REQUIRES_FOUNDER_DECISION"},
+    {"id": "PKGA-F8", "severity": "ENVIRONMENT", "status": "OPEN_ENVIRONMENT_NOT_CODE_DEFECT"}
+  ],
+  "review": "NOT_REVIEWED_CODEX_PENDING",
+  "cleanClaim": false,
+  "trustRootManifest": "NOT_REGENERATED_FINAL_RESEAL_PENDING",
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_ZIP": "NOT_DONE",
+    "TARGET_MACHINE_PHASE0": "PENDING",
+    "DESKTOP_SMOKE": "FAIL_CLOSED_PENDING_ELECTRON_BINARY_PROVISIONING_DECISION"
+  },
+  "nextScope": "CODEX_REVIEW_THEN_PKG_D_PROVIDER_PROVENANCE_STANDALONE_LAUNCHER"
+}

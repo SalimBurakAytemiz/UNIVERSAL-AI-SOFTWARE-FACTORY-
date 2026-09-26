@@ -1,0 +1,2 @@
+# //TR: Bu protected dosya bütün metin dosyalarının her platformda LF satır sonuyla saklanıp checkout edilmesini sabitler; Windows core.autocrlf=true klonlarında package-lock, trust-root ve evidence digest'lerinin commit byte'larından sapmasını engeller.
+* text=auto eol=lf
