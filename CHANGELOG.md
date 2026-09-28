@@ -1,6 +1,10 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-09-29 — V6 Orchestrator Executor Integration Tests (branch)
+
+- The unattended orchestrator executors are exercised against real temporary git repositories: fast-forward merge with CLEAN evidence (non-FF, missing, mismatched and BLOCKED evidence refused), adoption of completed reviews, releases, signatures and installations without provider or script calls, signer waits, Phase0 guards and builder-round rejection of out-of-scope, unauthorized protected and trust-manifest edits.
+
 ## 2026-09-29 — V6 Unattended Orchestration (branch, activation after review)
 
 - Repository-native unattended supervisor `scripts/uasco-orchestrator.mjs` under Windows Task Scheduler (`scripts/register-orchestrator-autostart.ps1`, user level, single instance).

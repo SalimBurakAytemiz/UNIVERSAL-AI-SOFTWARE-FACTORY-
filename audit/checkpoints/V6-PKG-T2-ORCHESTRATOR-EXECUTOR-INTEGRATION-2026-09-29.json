@@ -1,0 +1,62 @@
+{
+  "//TR": "Bu checkpoint gözetimsiz orkestratör yürütücülerinin gerçek git depolarıyla entegrasyon testlerini kaydeder; yalnız test ve belge ekler, hiçbir protected dosyaya dokunmaz ve bekleyen review paketlerinin kapsamını değiştirmez.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_T2_ORCHESTRATOR_EXECUTOR_INTEGRATION",
+  "date": "2026-09-29",
+  "parent": "f9b3e472fb3a77d957e2ccfb1725d9a21957bcc7",
+  "branch": "v6/pkg-t2-orchestrator-executor-integration",
+  "founderAuthorization": {
+    "decision": "INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES",
+    "rule": "Founder rule 2026-09-29: A blocked/review-pending package blocks ONLY its own dependency lane. While a package waits for Codex/review/provider availability, preserve its exact frozen review scope, do not modify its branch, frozen bundle, review clone, evidence or review-cycle state, do not merge it before the required CLEAN review, and immediately implement the next independent eligible package in an isolated branch, validate, checkpoint, commit, prepare the frozen review bundle, mark it REVIEW_PENDING if Codex is unavailable, and continue.",
+    "protectedFiles": [],
+    "constraint": "Tests and non-protected documentation only; no protected file, no pending package scope, no merge."
+  },
+  "rationale": "PKG-AUT1 scenario tests used fake executors; this package runs the real executors against real temporary git repositories before the orchestrator is activated, so defects in merge, adoption, signing, Phase0 or builder-round scope checks surface without touching the construction repository.",
+  "scenarios": [
+    "merge fast-forward with CLEAN evidence, idempotent, auditable in the reflog",
+    "merge refuses non-fast-forward, missing, mismatched and BLOCKED evidence",
+    "review adopts a completed run without any provider or script process and records the unmodified result",
+    "signing waits when the agent key is missing or the agent is down, signs with the public key only, adopts valid signatures and binds allowed_signers to identity and namespace",
+    "Phase0 rejects a tampered ZIP, binds install.ps1 to the approved remote, adopts a finished install and refuses to move a previous install outside the C:/UASCO failed-attempt pattern",
+    "packaging adopts a complete release and preserves an incomplete one before rebuilding",
+    "builder round rejects out-of-scope, unauthorized protected and trust-manifest edits and empty output without moving the branch or running validation",
+    "real git contracts stay confined to policy roots"
+  ],
+  "findingsInAut1": "none; every scenario passed against the unchanged PKG-AUT1 executors",
+  "validationEnvironment": {
+    "measuredBy": "the validation run itself",
+    "platform": "win32 10.0.19045 x64",
+    "node": "v24.19.0",
+    "npm": "11.17.0 (bundled npm-cli.js beside node.exe)",
+    "git": "git version 2.55.0.windows.3",
+    "powershell": "5.1.19041.6456",
+    "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
+  },
+  "validation": {
+    "workspace": "fresh clone of f9b3e47 mirroring the T2 working tree, reviewed lock installed, .ai/runtime cleared",
+    "gitDiffCheck": "PASS",
+    "canonicalRunner": {
+      "status": "PASS",
+      "pass": 34,
+      "fail": 0,
+      "mode": "SEALED (trust root unchanged)"
+    },
+    "vitest": "PASS 26 files / 159 tests",
+    "executorIntegrationSelftest": "PASS 8/8",
+    "broadDependencyFreeSuite": "25/25 PASS",
+    "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
+  },
+  "changedFileSha256": {
+    "scripts/orchestrator-executor-integration-selftest.mjs": "c2370b6e8cc2a017b6ebf5f6403ce0a8117d9b95f9b6dba005016ede5bc5dd1d",
+    "tests/pkg-t2-orchestrator-executor-integration.test.ts": "f668ac3d8306887fa0b3357c21afba76254c4c12e1375acf97787869c334fc20",
+    ".ai/REVIEW_STATUS.md": "f5e922f807de6667f7d7bff0fdbf203e9bede981f96307f5a1dc4d2ee807d984",
+    "audit/V6-FULL-SCAN-PROGRESS.json": "217ab0627615bef4919e1a0050e77ea25d016ca4443057ecefb43b4f350598dc",
+    "CHANGELOG.md": "3e35401d0b53038edf3bbd2bab5c7a5d292b4e1db128da70dbeeed00007d62c7"
+  },
+  "openFindings": [],
+  "review": "NOT_REVIEWED_CODEX_PENDING (reviewer quota)",
+  "merge": "AFTER_PKG_AUT1",
+  "cleanClaim": false,
+  "trustRootManifest": "UNCHANGED (no protected files)",
+  "nextScope": "CODEX_REVIEW_WHEN_AVAILABLE"
+}
