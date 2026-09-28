@@ -1,0 +1,63 @@
+{
+  "//TR": "Bu checkpoint Founder yetkili preflight fiziksel RAM ölçümünü (PKGA-F8 bellek), Windows Time servisinin Founder tarafından başlatıldığını ve gerçek preflight kanıtını kaydeder; CLEAN, final closure veya target-machine Phase0 PASS iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_G_PREFLIGHT_PHYSICAL_MEMORY",
+  "date": "2026-09-28",
+  "parent": "5fa231bd917f2132b1c50a011d150767a9c737e5",
+  "branch": "v6/pkg-g-preflight-physical-memory",
+  "resolves": ["PKGA-F8"],
+  "founderAuthorization": {
+    "decision": "MEASURE_PHYSICAL_RAM_APPROVED",
+    "rule": "Protected preflight change: on Windows the Win32_PhysicalMemory total is measured, the 16 GB threshold is kept and both values are written to the report. If the measurement cannot be taken the previous value is used and the check stays fail-closed.",
+    "protectedFiles": ["scripts/preflight.mjs"],
+    "constraint": "Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+  },
+  "founderActions": {
+    "windowsTimeService": "Started by the Founder (system setting); preflight clockSync PASS on 2026-09-28."
+  },
+  "finding": {
+    "id": "PKGA-F8",
+    "observed": "Preflight measured os.totalmem() = 15.91 GB on a machine with 16 GB installed (hardware-reserved memory), so the 16 GB policy blocked; the Windows Time service was stopped.",
+    "installedPhysicalMemoryGb": 16.0,
+    "osVisibleMemoryGb": 15.91
+  },
+  "validationEnvironment": {
+    "measuredBy": "scripts/preflight.mjs on this machine; re-measured and required to match before each isolated validation run",
+    "platform": "win32 10.0.19045 x64",
+    "node": "v24.19.0",
+    "npm": "11.17.0 (bundled npm-cli.js beside node.exe)",
+    "git": "git version 2.55.0.windows.3",
+    "powershell": "5.1.19041.6456",
+    "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
+  },
+  "implementation": {
+    "measurement": "On win32, preflight runs powershell.exe -NoProfile -NonInteractive with (Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum through the existing shell-free exec helper.",
+    "acceptance": "The value is used only when the command exits 0, the output is a plain integer and the resulting GB is not below os.totalmem(); otherwise os.totalmem() is used and the unchanged policy threshold applies.",
+    "reporting": "checks.memory.detail now appends source=Win32_PhysicalMemory|os.totalmem, osVisible and (when measured) physical GB; the report schema and automation/lib/preflight-policy.mjs are unchanged.",
+    "policy": "config/preflight-policy.json minimumMemoryGb stays 16."
+  },
+  "validation": {
+    "workspace": "fresh clone mirroring the working tree with the reviewed lock installed; repository .ai/runtime untouched",
+    "gitDiffCheck": "PASS",
+    "canonicalRunner": {"status": "PASS", "pass": 34, "fail": 0},
+    "vitest": "PASS 21 files / 134 tests (4 new PKG-G tests)",
+    "broadDependencyFreeSuite": "25/25 PASS",
+    "realPreflight": {"final": "PASS", "memory": "PASS total=16.0GB; required >=16GB; source=Win32_PhysicalMemory; osVisible=15.91GB; physical=16.00GB", "clockSync": "PASS w32tm /query /status PASS", "blockedChecks": "none"}
+  },
+  "changedFileSha256": {
+    "scripts/preflight.mjs": "b77d9d569420c28c0e5107588423c019a0d241b6f6f6b77c89a1c1e05194b754",
+    "tests/pkg-g-preflight-physical-memory.test.ts": "25f383e4ab5dc2cf25e17a4ed6b54c4c32919b18d684d181369b17e773feefb4"
+  },
+  "openFindings": [],
+  "review": "NOT_REVIEWED_CODEX_PENDING",
+  "cleanClaim": false,
+  "trustRootManifest": "NOT_REGENERATED_FINAL_RESEAL_PENDING",
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "PREFLIGHT_ON_THIS_MACHINE": "PASS_REVIEW_PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_ZIP": "NOT_DONE",
+    "TARGET_MACHINE_PHASE0": "PENDING"
+  },
+  "nextScope": "CODEX_REVIEW_THEN_LIVE_PROVIDER_SMOKE_AND_TARGET_MACHINE_PHASE0"
+}
