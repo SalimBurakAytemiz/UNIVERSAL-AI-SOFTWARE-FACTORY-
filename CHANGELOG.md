@@ -1,6 +1,12 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-09-28 — V6 Sealed Release Candidate
+
+- PKGR-F1: the doc-truth validators rejected every sealed release although `install.ps1` validates inside the extract; they now follow the trust-root seal status with a fail-closed `SEALED` release-candidate mode (in-process trust-root re-verification, `SHA256SUMS.txt` bound to the sealed manifest, no signature anywhere in the tree, no PASS values).
+- Protected release tools: `release-sha256sums.mjs`, deterministic `build-release-zip.mjs` and `verify-release-extract.mjs` (Windows Expand-Archive, unchanged artifact verifiers, optional reviewed-lock install and canonical validation in the fresh extract).
+- Final trust-root reseal in the release-candidate commit. Next: SHA256SUMS, ZIP, fresh-extract verification, Founder signature, target-machine Phase0.
+
 ## 2026-09-28 — V6 Target-Machine Phase0 Prerequisites
 
 - Every canonical validation script is protected by exact path in `config/protected-paths.json`, and mechanical closure fails if one is not (TRUST-F1).

@@ -28,8 +28,9 @@ Bu dosya `IMPLEMENTED`, `CERTIFIED`, installation-ready, runtime-ready veya prod
 - Full dependency-free source regression: `PASS`.
 - Dependency-aware environment gate (`DEPENDENCY_AWARE_ENVIRONMENT_GATE_REVIEWED_LOCK`): `PASS` on the target Windows machine (win32 10.0.19045 x64, Node v24.19.0, npm 11.17.0). Canonical validation 34/34 PASS including runtime schema conformance (Ajv 2020-12), dependency supply-chain with `npm audit` (0 findings), release supply-chain/SBOM-lite, TypeScript typecheck and Vitest.
 - Reviewed lock: `package-lock.json` (sha256 `96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4`), 188 entries, registry.npmjs.org only, sha512 integrity, no lifecycle scripts executed.
-- Dependency-aware package findings closed: PKGA-F1..F10, PKGC-F1, F-PKGE-001, PKGE-F2, TRUST-F1. Durable LOW backlog: F-PKGE-002 (P3, unused manifest `exeSha256`).
-- Open P0/P1/P2 findings: 0 (`ZERO_OPEN_P0P1P2_PENDING_FINAL_RESEAL_AND_TARGET_PHASE0`). This is not source-level closure; final reseal, packaging and target-machine Phase0 remain.
+- Dependency-aware package findings closed: PKGA-F1..F10, PKGC-F1, F-PKGE-001, PKGE-F2, TRUST-F1, PKGR-F1, F-PKGR1-001. Durable LOW backlog: F-PKGE-002 (P3, unused manifest `exeSha256`), F-PKGR-001 (P3, `validate-paste2-closure.mjs` prints a literal `finalTrustRootSeal` report value).
+- Open P0/P1/P2 findings: 0 (`ZERO_OPEN_P0P1P2_PENDING_PACKAGING_SIGNATURE_AND_TARGET_PHASE0`). This is not source-level closure; packaging, the Founder signature and target-machine Phase0 remain.
+- `PKGR-F1` closed by `V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS` (Founder decision: sealed mode): `install.ps1` runs the canonical validation inside the extracted artifact, and the doc-truth validators rejected every sealed release. The mode now follows `config/trust-root-manifest.json` `sealStatus`: pre-seal rules are unchanged; in `SEALED` mode the trust root is re-verified in-process, `SHA256SUMS.txt` must be bound to the sealed manifest, a release signature may not exist anywhere in the tree, and the final values below never say PASS. Unknown seal status fails.
 - `TRUST-F1` closed by `V6-PKG-F-PROTECT-VALIDATION-SCRIPTS` (Founder decision: exact path list + rule): the 28 canonical validation scripts that were unprotected are listed as exact paths in `config/protected-paths.json`, `matchesPrefix` keeps its directory semantics, and `scripts/validate-mechanical-closure.mjs` fails with `validation-script-not-protected:` if any canonical validation script is not protected.
 - `PKGA-F8` closed: `V6-PKG-G-PREFLIGHT-PHYSICAL-MEMORY` makes preflight measure installed physical RAM on Windows (`Win32_PhysicalMemory`, used only when numeric and not below `os.totalmem()`; the 16 GB threshold is unchanged), and the Founder started the Windows Time service. Target preflight: `PASS` (memory 16.00 GB physical, `w32tm /query /status` PASS).
 
@@ -45,14 +46,17 @@ Codex (OpenAI, separate from the Anthropic builder) reviewed each package agains
 - `V6-PKG-B-CURRENT-TRUTH-SYNC` @ `646ee76`: `CLEAN`.
 - `V6-PKG-F-PROTECT-VALIDATION-SCRIPTS` @ `5fa231b`: first output `REJECTED` (reviewer JSON failed the schema), two reviewer-quota `ENVIRONMENT_BLOCKED` attempts that consumed no cycle, then the single format-correction retry `CLEAN`.
 - `V6-PKG-G-PREFLIGHT-PHYSICAL-MEMORY` @ `a82c6f4`: `CLEAN`.
+- `V6-PKG-H-CURRENT-TRUTH-CORRECTION` @ `eaed1bd`: `CLEAN`.
+- `V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS` @ `89bc44c`: cycle 1 `BLOCKED` (F-PKGR1-001 nested release signature, remediated); @ `a7ed306`: cycle 2 `CLEAN`.
+- `V6-PKG-R2-RELEASE-CANDIDATE-RESEAL`: this release-candidate commit; reviewed after it is committed.
 
 Review records live in `audit/reviews/`. They are unsigned because the Phase0 evidence signing key is not initialized yet.
 
 ## Environment/runtime gates
 
-Sıradaki gate: `FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0`.
+Sıradaki gate: `RELEASE_PACKAGING_SIGNATURE_THEN_TARGET_MACHINE_PHASE0`.
 
-Sıra: final trust-root reseal -> `SHA256SUMS.txt` -> Founder external-key detached release signature -> final ZIP -> fresh-extract verification -> `scripts/install.ps1` target-machine Phase0 on the fresh extract. `install.ps1` starts with `verify-artifact.ps1`, which requires `SHA256SUMS.txt`, so Phase0 cannot run before packaging.
+Sıra: final trust-root reseal (this release-candidate commit) -> export exactly this commit with `git archive` -> `scripts/release-sha256sums.mjs` -> `scripts/build-release-zip.mjs` (deterministic) -> `scripts/verify-release-extract.mjs --with-validation` on a fresh extract -> Founder detached signature over the verified ZIP and its `SHA256SUMS.txt` with the Founder's external key -> `scripts/install.ps1` target-machine Phase0 on a fresh extract of the signed ZIP. `install.ps1` starts with `verify-artifact.ps1`, which requires `SHA256SUMS.txt`, so Phase0 cannot run before packaging. The trust root is sealed in this commit; any later change to a protected file needs a new reseal and review before packaging.
 
 - runtime schema conformance: `PASS`
 - release supply-chain: `PASS`
@@ -67,13 +71,13 @@ Sıra: final trust-root reseal -> `SHA256SUMS.txt` -> Founder external-key detac
 
 `SOURCE_LEVEL_CLOSURE = FALSE`
 
-`FINAL_TRUST_ROOT_SEAL = STALE_PENDING_FINAL_RESEAL`
+`FINAL_TRUST_ROOT_SEAL = SEALED_RELEASE_CANDIDATE`
 
-`FINAL_SHA256SUMS = NOT_DONE`
+`FINAL_SHA256SUMS = PACKAGING_STAGE_OUTSIDE_GIT`
 
-`FINAL_RELEASE_AUTHENTICITY = NOT_DONE`
+`FINAL_RELEASE_AUTHENTICITY = EXTERNAL_DETACHED_SIGNATURE_REQUIRED`
 
-`FINAL_ZIP = NOT_DONE`
+`FINAL_ZIP = PACKAGING_STAGE_OUTSIDE_GIT`
 
 `TARGET_MACHINE_PHASE0 = PENDING`
 

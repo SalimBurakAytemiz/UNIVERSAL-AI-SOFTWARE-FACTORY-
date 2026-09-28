@@ -1,6 +1,7 @@
-<!-- //TR: Bu dosya açık P0/P1/P2 bulgusu kalmadıktan sonraki current bounded milestone'u gösterir; final release veya CLEAN iddiası değildir. -->
+<!-- //TR: Bu dosya mühürlü release-candidate commit'inden sonraki current bounded milestone'u gösterir; final release veya CLEAN iddiası değildir. -->
 # Current Milestone
-## V6 Final Reseal, Packaging and Target-Machine Phase0
-- release paketleme paketi: SHA256SUMS üreticisi, deterministik ZIP, fresh-extract doğrulaması (bağımsız Codex review)
-- final trust-root reseal -> SHA256SUMS -> Founder harici anahtarla imza -> final ZIP -> fresh-extract doğrulaması
-- fresh extract üzerinde `scripts/install.ps1` ile target-machine Phase0 acceptance ve autostart
+## V6 Release Packaging, Founder Signature and Target-Machine Phase0
+- mühürlü release-candidate commit'inin export'undan SHA256SUMS ve deterministik ZIP
+- taze extract üzerinde reviewed-lock kurulumu ve kanonik doğrulama
+- Founder harici anahtarıyla detached imza
+- imzalı ZIP'in taze extract'i üzerinde `scripts/install.ps1` ile target-machine Phase0 acceptance ve autostart

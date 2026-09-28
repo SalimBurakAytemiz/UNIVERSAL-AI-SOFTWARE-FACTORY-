@@ -1,0 +1,1419 @@
+{
+  "//TR": "Bu kayıt tek bir Codex bağımsız review çalıştırmasının frozen bundle, değiştirilmemiş reviewer çıktısı, run manifest ve governed değerlendirmesini kalıcı tutar; evidence signing anahtarı henüz başlatılmadığı için imzasızdır.",
+  "schemaVersion": "1.0.0",
+  "signature": "UNSIGNED_EVIDENCE_KEY_NOT_INITIALIZED",
+  "runDir": "89bc44c-c1-20260928T171557Z-broker",
+  "runId": "RUN-V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-20260928T171535Z-C1",
+  "baseCommit": "eaed1bd4fb583ada4e04f144fb1c67fa850b4a7e",
+  "reviewedCommit": "89bc44c5bdd4f7da8f8cd901e0798dfd0e4f7f25",
+  "cycle": 1,
+  "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+  "bundleDigest": "66ac677e00c69332acf6925871a35ebe95f6b915b225365d502ee4b9846a31ca",
+  "bundleFileSha256": "1bc66be74892460f7b8289e68e5f030e2ec7bcbf15ca5c897985a9d67c4f4dcc",
+  "milestoneContractId": "V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS",
+  "milestoneContractDigest": "45f793f023a251ea5b1ea3e9355adee121d29078b72af5807a813d6d31198951",
+  "reviewResultText": "{\n  \"schemaVersion\": \"1.1.0\",\n  \"runId\": \"RUN-V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-20260928T171535Z-C1\",\n  \"cycle\": 1,\n  \"baseCommit\": \"eaed1bd4fb583ada4e04f144fb1c67fa850b4a7e\",\n  \"reviewedCommit\": \"89bc44c5bdd4f7da8f8cd901e0798dfd0e4f7f25\",\n  \"reviewBundleDigest\": \"66ac677e00c69332acf6925871a35ebe95f6b915b225365d502ee4b9846a31ca\",\n  \"result\": \"BLOCKED\",\n  \"reviewer\": {\n    \"provider\": \"OpenAI\",\n    \"tool\": \"Codex\",\n    \"toolVersion\": null,\n    \"modelId\": \"gpt-6\",\n    \"independenceStatus\": \"SUFFICIENT\"\n  },\n  \"findings\": [\n    {\n      \"id\": \"F-PKGR1-001\",\n      \"classification\": \"BLOCKER\",\n      \"severity\": \"P2\",\n      \"category\": \"Release signature boundary\",\n      \"basisRefs\": [\n        \"P000-AC-f671f11f5c312c71\",\n        \"P000-FAIL-a66429b26dfb260f\"\n      ],\n      \"currentDiffCausality\": \"CURRENT_DIFF\",\n      \"scopeStatus\": \"IN_SCOPE\",\n      \"file\": \"scripts/validate-paste4d-release-truth.mjs\",\n      \"symbol\": \"signatureCandidates / persistedSignature\",\n      \"line\": 109,\n      \"reproduction\": {\n        \"steps\": [\n          \"Evaluate the reviewed validator using a read-only filesystem overlay with SEALED release-candidate values and a manifest containing the actual protected-file hashes.\",\n          \"Confirm the sealed baseline passes.\",\n          \"Expose audit/RELEASE.sig through the in-memory overlay without changing protected files; evaluate the validator again.\",\n          \"As a control, expose root-level RELEASE.sig and evaluate again. No files need to be written.\"\n        ]\n      },\n      \"expected\": \"SEALED mode rejects a release signature anywhere inside the tree, including audit/RELEASE.sig.\",\n      \"observed\": \"The sealed baseline and nested-signature case both exit 0 with PASS checks=48. Root-level RELEASE.sig exits 1 with release-signature-must-stay-detached-outside-artifact. The implementation checks only four root-relative filenames.\",\n      \"evidenceRefs\": [\n        \"DIFF-804d5e2f6864a355\",\n        \"DIFF-4507084d79fb3f15\"\n      ],\n      \"blockerReason\": \"The newly introduced SEALED mode does not satisfy the frozen tree-wide detached-signature acceptance criterion and mandatory failure case.\",\n      \"remediationAcceptance\": \"Reject recognized release-signature filenames throughout the artifact tree. Add regression coverage for nested signatures, retaining the existing root-signature rejection and valid sealed baseline.\",\n      \"retestValidationIds\": [\n        \"paste4d-release-truth\",\n        \"tests\"\n      ],\n      \"confidence\": 0.99,\n      \"firstSeenCycle\": 1,\n      \"status\": \"OPEN\"\n    }\n  ],\n  \"advisories\": [],\n  \"environmentGaps\": [],\n  \"priorBlockerDispositions\": [],\n  \"startedAt\": \"2026-09-28T17:16:07Z\",\n  \"finishedAt\": \"2026-09-28T17:20:19Z\",\n  \"summary\": \"Input checks (a)-(e) passed. All eight protected changeGuard paths are Founder-authorized. Reviewed all 11 changed files; read-only pre-seal paste4c, paste4d and mechanical validators passed. One admissible P2 blocker was reproduced entirely in memory: nested release signatures bypass the SEALED signature prohibition. No files were modified and no dependencies were installed.\"\n}\n",
+  "reviewResultSha256": "eb32b58de6dc42bfa8466393cf20a2ce6849c72a298db870f76d981816cc1cdb",
+  "governed": {
+    "//TR": "Bu dosya Codex review sonucunun supervisor-eşdeğeri governed değerlendirmesini kaydeder; Codex'in review-result.json dosyası değiştirilmez.",
+    "schemaVersion": "1.0.0",
+    "evaluatedAt": "2026-09-28T17:21:03.549Z",
+    "runDir": "C:/Users/PRO/Desktop/UASCO/.ai/cache/review/runs/89bc44c-c1-20260928T171557Z-broker",
+    "exitCode": 0,
+    "checks": {
+      "promptDlpSensitiveTypes": [],
+      "resultSource": "CANONICAL_BROKER_STDOUT",
+      "resultMatchesBrokerStdout": true,
+      "schemaValid": true,
+      "validateReviewResult": "PASS",
+      "providerSeparation": "PASS"
+    },
+    "reviewResultSha256": "eb32b58de6dc42bfa8466393cf20a2ce6849c72a298db870f76d981816cc1cdb",
+    "reviewerReportedResult": "BLOCKED",
+    "governedResult": "BLOCKED",
+    "reviewer": {
+      "provider": "OpenAI",
+      "tool": "Codex",
+      "toolVersion": null,
+      "modelId": "gpt-6",
+      "independenceStatus": "SUFFICIENT"
+    },
+    "summary": "Input checks (a)-(e) passed. All eight protected changeGuard paths are Founder-authorized. Reviewed all 11 changed files; read-only pre-seal paste4c, paste4d and mechanical validators passed. One admissible P2 blocker was reproduced entirely in memory: nested release signatures bypass the SEALED signature prohibition. No files were modified and no dependencies were installed.",
+    "counts": {
+      "findings": 1,
+      "blockers": 1,
+      "advisories": 0,
+      "environmentGaps": 0,
+      "acceptedBlockers": 1,
+      "downgraded": 0
+    },
+    "findings": [
+      {
+        "id": "F-PKGR1-001",
+        "classification": "BLOCKER",
+        "severity": "P2",
+        "category": "Release signature boundary",
+        "file": "scripts/validate-paste4d-release-truth.mjs",
+        "symbol": "signatureCandidates / persistedSignature",
+        "scopeStatus": "IN_SCOPE",
+        "expected": "SEALED mode rejects a release signature anywhere inside the tree, including audit/RELEASE.sig.",
+        "observed": "The sealed baseline and nested-signature case both exit 0 with PASS checks=48. Root-level RELEASE.sig exits 1 with release-signature-must-stay-detached-outside-artifact. The implementation checks only four root-relative filenames."
+      }
+    ],
+    "advisories": [],
+    "environmentGaps": [],
+    "effectiveReviewDigest": "02eadf405d7859cd8445bbac47ba6da18000df6b80456011c4b4f6b03db9d827",
+    "status": "EVALUATED"
+  },
+  "environmentBlock": null,
+  "runManifest": {
+    "//TR": "Bu manifest kanonik codex-reviewer-broker üzerinden yapılan tek bir Codex bağımsız review çağrısının girdi/çıktı/provenance kanıtını hash'leriyle kaydeder; review içeriğini builder üretmez.",
+    "schemaVersion": "1.0.0",
+    "startedAt": "2026-09-28T17:15:57.244Z",
+    "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+    "reviewWorktree": "C:/Users/PRO/AppData/Local/Temp/claude/C--Users-PRO-Desktop-UASCO/a72e023b-e073-49b8-9fbd-20b544644a38/scratchpad/rev-g",
+    "baseCommit": "eaed1bd4fb583ada4e04f144fb1c67fa850b4a7e",
+    "reviewedCommit": "89bc44c5bdd4f7da8f8cd901e0798dfd0e4f7f25",
+    "cycle": 1,
+    "runId": "RUN-V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-20260928T171535Z-C1",
+    "bundleFile": ".ai/cache/review/V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-89bc44c-cycle-1-review-bundle.json",
+    "bundleFileSha256": "1bc66be74892460f7b8289e68e5f030e2ec7bcbf15ca5c897985a9d67c4f4dcc",
+    "bundleDigest": "66ac677e00c69332acf6925871a35ebe95f6b915b225365d502ee4b9846a31ca",
+    "milestoneContractId": "V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS",
+    "milestoneContractDigest": "45f793f023a251ea5b1ea3e9355adee121d29078b72af5807a813d6d31198951",
+    "promptFile": ".ai/cache/review/V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-89bc44c-cycle-1-review-prompt.txt",
+    "promptSha256": "450f539c9c8899b4cfb8b79b4ead2811638b09e04cd92e6bac90ecb463036fc8",
+    "precheck": {
+      "head": "89bc44c5bdd4f7da8f8cd901e0798dfd0e4f7f25",
+      "baseResolved": "eaed1bd4fb583ada4e04f144fb1c67fa850b4a7e",
+      "bundleDigestRecomputed": "66ac677e00c69332acf6925871a35ebe95f6b915b225365d502ee4b9846a31ca",
+      "contractDigestRecomputed": "45f793f023a251ea5b1ea3e9355adee121d29078b72af5807a813d6d31198951",
+      "changedFiles": 11
+    },
+    "reviewer": {
+      "provider": "OPENAI",
+      "tool": "codex",
+      "broker": "scripts/codex-reviewer-broker.mjs",
+      "brokerSha256": "267e9d4adc2d1872824796f9e3fc4798f09e7d5dfad19d8118a0c116452aee35",
+      "providerProvenanceSha256": "28bab808af29c59dfc7ad0ee5f93c0c939edb6fbed917700b5d1f99026224cab",
+      "launcher": "C:\\Users\\PRO\\.codex\\packages\\standalone\\releases\\0.156.1-x86_64-pc-windows-msvc\\bin\\codex.exe",
+      "launcherSha256": "70bcb05f9bf1a4e7306edd0cd1b57d02af3267ad02a34b26f45c8c4bb20a3301",
+      "launcherVersion": "codex-cli 0.156.1",
+      "provenanceLevel": "STANDALONE_LAUNCHER",
+      "childEnvVariableNames": [
+        "APPDATA",
+        "COMSPEC",
+        "HOME",
+        "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS",
+        "OS",
+        "PATH",
+        "PATHEXT",
+        "PROCESSOR_ARCHITECTURE",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "UASCO_CONTROL_ROOT",
+        "UASCO_PAID_API_ALLOWED",
+        "UASCO_PROVIDER",
+        "USERPROFILE"
+      ],
+      "allowPaidApi": false
+    },
+    "finishedAt": "2026-09-28T17:20:51.566Z",
+    "exitCode": 0,
+    "signal": null,
+    "outputs": {
+      "codex-stderr.log": {
+        "bytes": 243524,
+        "sha256": "0a6f27376bd331bffba984fe0db003b4d0df0ca46df25fa7235e34c1b4537e50"
+      },
+      "codex-stdout.txt": {
+        "bytes": 3117,
+        "sha256": "eb32b58de6dc42bfa8466393cf20a2ce6849c72a298db870f76d981816cc1cdb"
+      },
+      "review-result.json": {
+        "bytes": 3117,
+        "sha256": "eb32b58de6dc42bfa8466393cf20a2ce6849c72a298db870f76d981816cc1cdb"
+      }
+    }
+  },
+  "frozenBundle": {
+    "schemaVersion": "1.4.0",
+    "runId": "RUN-V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-20260928T171535Z-C1",
+    "cycle": 1,
+    "phase": 0,
+    "phaseIds": [
+      0
+    ],
+    "baseCommit": "eaed1bd4fb583ada4e04f144fb1c67fa850b4a7e",
+    "reviewedCommit": "89bc44c5bdd4f7da8f8cd901e0798dfd0e4f7f25",
+    "milestoneContract": {
+      "schemaVersion": "1.2.0",
+      "id": "V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS",
+      "phase": 0,
+      "phaseIds": [
+        0
+      ],
+      "title": "V6 PKG-R1 sealed release-candidate mode and release packaging tools",
+      "objective": "Resolve PKGR-F1 so a correctly sealed release artifact can pass the canonical validation that install.ps1 runs inside the extract, by adding a Founder-approved fail-closed SEALED release-candidate mode to the doc-truth checks, and add the protected release packaging tools (SHA256SUMS generator, deterministic ZIP, fresh-extract verification), without performing the final reseal or claiming any release gate.",
+      "requirements": [
+        "[V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28 founderAuthorization.decision] PKG_R_APPROVED + PKGR_RELEASE_MODE_APPROVED + PKGR1_MECHANICAL_CLOSURE_SEAL_STRING_APPROVED",
+        "[V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28 founderAuthorization.rule] [PKG-R] Paketleme paketi + reseal yetkisi: yeni protected release-packaging paketi (SHA256SUMS üreticisi, deterministik ZIP, mevcut verify-artifact ile fresh-extract doğrulaması) ve bu paket içinde maintainer-only generate-trust-root.mjs final reseal'ini çalıştırma yetkisi; release imzası Founder'ın harici anahtarında kalır; Codex review otomatik. [Mühürlü mod] paste4d'ye açık ve fail-closed bir SEALED modu eklenir. Mod yalnız manifest SEALED iken devreye girer; trust root ve SHA256SUMS o anda yeniden doğrulanır, doğrulamadan geçmeyen FAIL olur. İmza artifact dışında (detached) kalır. Phase0=PENDING ve SOURCE_LEVEL_CLOSURE=false zorunlu kalır. paste4c ve belgeler PASS demeyen release-candidate değerleri alır (SEALED_RELEASE_CANDIDATE, EXTERNAL_DETACHED_SIGNATURE_REQUIRED). Mühürlü durum review edilmiş bir commit olur ve ZIP tam o commit'ten üretilir. Adversarial testler eklenir, Codex review otomatik yapılır. [Mekanik kapanış] validate-mechanical-closure.mjs'teki tek metin ('FINAL_TRUST_ROOT_SEAL = STALE_PENDING_FINAL_RESEAL') paste4c ile aynı biçimde manifestin sealStatus alanından türetilir (mühür öncesi STALE_PENDING_FINAL_RESEAL, SEALED iken SEALED_RELEASE_CANDIDATE); dosyadaki diğer kontroller aynen kalır; validate-paste2-closure.mjs'in yalnız çıktıya yazdığı değer P3 backlog olarak kayda alınır ve değiştirilmez.",
+        "[V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28 founderAuthorization.protectedFiles] automation/lib/release-artifact.mjs (new), scripts/release-sha256sums.mjs (new), scripts/build-release-zip.mjs (new), scripts/verify-release-extract.mjs (new), config/protected-paths.json, scripts/validate-paste4d-release-truth.mjs, scripts/validate-paste4c-doc-truth.mjs, scripts/validate-mechanical-closure.mjs",
+        "[V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; UNKNOWN, NOT_TESTED, BLOCKED or FAIL are never converted to PASS/CLEAN without real evidence; broader protected changes require separate Founder approval."
+      ],
+      "invariants": [
+        "NO_FAKE_SUCCESS",
+        "NO_WEAKENED_CONTROLS",
+        "NO_SILENT_SCOPE_EXPANSION",
+        "NO_SELF_CERTIFICATION",
+        "EVIDENCE_REQUIRED",
+        "FAIL_CLOSED"
+      ],
+      "acceptanceCriteria": [
+        "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment.",
+        "The seal mode is derived only from config/trust-root-manifest.json sealStatus; with STALE_PENDING_FINAL_RESEAL every previous paste4d, paste4c and mechanical-closure rule still applies unchanged, and an unknown sealStatus fails.",
+        "In SEALED mode paste4d re-verifies the trust root in-process, accepts runtime TRUST_ROOT_VERIFY or ARTIFACT_VERIFY PASS reports only when the in-process verification (and, for ARTIFACT_VERIFY, the SHA256SUMS binding) passes, binds a present SHA256SUMS.txt to the sealed manifest hash, every trust-root hash and the lockfile, forbids any release signature file inside the tree, and requires release-candidate values that never state PASS while SOURCE_LEVEL_CLOSURE stays false and TARGET_MACHINE_PHASE0 stays PENDING.",
+        "release-sha256sums.mjs, build-release-zip.mjs and verify-release-extract.mjs fail closed on unclean or unsealed exports, SHA256SUMS mismatch, unsafe or duplicate paths, ZIP entries outside SHA256SUMS and non-fresh extract directories; the ZIP is deterministic; the unchanged verify-artifact.ps1/.mjs and verify-trust-root.mjs run inside the fresh extract.",
+        "The three new scripts are protected by exact path, automation/lib/release-artifact.mjs is protected by the existing automation/lib/ prefix, and no script creates, stores or uses a signing key.",
+        "Only the Founder-authorized protected files change, no existing test assertion, validator or policy is weakened beyond the authorized rule, and the trust-root manifest is not regenerated in this package."
+      ],
+      "mandatoryFailureCases": [
+        "SHA256SUMS present in pre-seal mode",
+        "stale runtime PASS reports in pre-seal mode",
+        "unknown seal status",
+        "SEALED manifest with a tampered protected file",
+        "SEALED mode with PASS release authenticity or pre-seal document values",
+        "release signature file inside the tree",
+        "SHA256SUMS not bound to the sealed manifest or trust-root hashes",
+        "tampered export before packaging",
+        "ZIP entry not listed in SHA256SUMS",
+        "zip-slip or duplicate entry names"
+      ],
+      "requiredArtifacts": [
+        "scripts/validate-paste4d-release-truth.mjs",
+        "scripts/validate-paste4c-doc-truth.mjs",
+        "automation/lib/release-artifact.mjs",
+        "scripts/release-sha256sums.mjs",
+        "scripts/build-release-zip.mjs",
+        "scripts/verify-release-extract.mjs",
+        "tests/pkg-r1-release-mode.test.ts",
+        "audit/checkpoints/V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28.json"
+      ],
+      "phaseTraceability": [
+        {
+          "phase": 0,
+          "requirement": "[V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28 founderAuthorization.decision] PKG_R_APPROVED + PKGR_RELEASE_MODE_APPROVED + PKGR1_MECHANICAL_CLOSURE_SEAL_STRING_APPROVED",
+          "acceptanceCriteria": [
+            "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment.",
+            "The seal mode is derived only from config/trust-root-manifest.json sealStatus; with STALE_PENDING_FINAL_RESEAL every previous paste4d, paste4c and mechanical-closure rule still applies unchanged, and an unknown sealStatus fails.",
+            "In SEALED mode paste4d re-verifies the trust root in-process, accepts runtime TRUST_ROOT_VERIFY or ARTIFACT_VERIFY PASS reports only when the in-process verification (and, for ARTIFACT_VERIFY, the SHA256SUMS binding) passes, binds a present SHA256SUMS.txt to the sealed manifest hash, every trust-root hash and the lockfile, forbids any release signature file inside the tree, and requires release-candidate values that never state PASS while SOURCE_LEVEL_CLOSURE stays false and TARGET_MACHINE_PHASE0 stays PENDING.",
+            "release-sha256sums.mjs, build-release-zip.mjs and verify-release-extract.mjs fail closed on unclean or unsealed exports, SHA256SUMS mismatch, unsafe or duplicate paths, ZIP entries outside SHA256SUMS and non-fresh extract directories; the ZIP is deterministic; the unchanged verify-artifact.ps1/.mjs and verify-trust-root.mjs run inside the fresh extract.",
+            "The three new scripts are protected by exact path, automation/lib/release-artifact.mjs is protected by the existing automation/lib/ prefix, and no script creates, stores or uses a signing key.",
+            "Only the Founder-authorized protected files change, no existing test assertion, validator or policy is weakened beyond the authorized rule, and the trust-root manifest is not regenerated in this package."
+          ],
+          "mandatoryFailureCases": [
+            "SHA256SUMS present in pre-seal mode",
+            "stale runtime PASS reports in pre-seal mode",
+            "unknown seal status",
+            "SEALED manifest with a tampered protected file",
+            "SEALED mode with PASS release authenticity or pre-seal document values",
+            "release signature file inside the tree",
+            "SHA256SUMS not bound to the sealed manifest or trust-root hashes",
+            "tampered export before packaging",
+            "ZIP entry not listed in SHA256SUMS",
+            "zip-slip or duplicate entry names"
+          ],
+          "requiredArtifacts": [
+            "scripts/validate-paste4d-release-truth.mjs",
+            "scripts/validate-paste4c-doc-truth.mjs",
+            "automation/lib/release-artifact.mjs",
+            "scripts/release-sha256sums.mjs",
+            "scripts/build-release-zip.mjs",
+            "scripts/verify-release-extract.mjs",
+            "tests/pkg-r1-release-mode.test.ts",
+            "audit/checkpoints/V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28.json"
+          ],
+          "unsupportedCases": [
+            "The final trust-root reseal, release-candidate document values, SHA256SUMS, ZIP, Founder signature and target-machine Phase0 are later steps (PKG-R2 and the packaging run) and are not claimed here.",
+            "The end-to-end dry run in the checkpoint used a scratch export with release-candidate document values applied; it is evidence for the mode, not a release.",
+            "paste4d verifies SHA256SUMS binding, not every file's content; full content verification is the unchanged verify-artifact.ps1/.mjs at install steps 1 and 2 and verify-release-extract.mjs, as recorded in the checkpoint design.",
+            "LOW backlog F-PKGE-002 and F-PKGR-001 (P3) stay open."
+          ]
+        }
+      ],
+      "allowedPathPrefixes": [
+        "automation/lib/release-artifact.mjs",
+        "config/protected-paths.json",
+        "scripts/build-release-zip.mjs",
+        "scripts/release-sha256sums.mjs",
+        "scripts/verify-release-extract.mjs",
+        "scripts/validate-paste4c-doc-truth.mjs",
+        "scripts/validate-paste4d-release-truth.mjs",
+        "scripts/validate-mechanical-closure.mjs",
+        "scripts/v6-evidence-trust-release-adversarial-selftest.mjs",
+        "tests/",
+        "audit/checkpoints/"
+      ],
+      "protectedPaths": [
+        ".gitattributes",
+        ".github/workflows/ci.yml",
+        ".gitignore",
+        ".gitmodules",
+        ".npmrc",
+        "AGENTS.md",
+        "ARCHITECTURE-CONSTITUTION.md",
+        "ARCHITECTURE-FREEZE.md",
+        "BUILD-RULES.md",
+        "CANONICAL-STATUS.md",
+        "CLAUDE.md",
+        "CODEX.md",
+        "DEFINITION-OF-DONE.md",
+        "FULL-REPO-CONSTRUCTION-CONTRACT.md",
+        "INSTALLATION-GO-CHECKLIST.md",
+        "THIRD-PARTY-NOTICES.md",
+        "apps/control-api/src/server.ts",
+        "apps/desktop/main.mjs",
+        "apps/desktop/preload.mjs",
+        "apps/desktop/renderer/app.js",
+        "apps/desktop/renderer/index.html",
+        "automation/factory-supervisor.mjs",
+        "automation/lib/evidence-signing.mjs",
+        "automation/lib/filesystem-boundary.mjs",
+        "automation/lib/redaction.mjs",
+        "config/action-policy.json",
+        "config/automation.json",
+        "config/builder-execution-policy.json",
+        "config/environment-policy.json",
+        "config/evidence-ledger-policy.json",
+        "config/git-metadata-policy.json",
+        "config/omniroute-policy.json",
+        "config/package-policy.json",
+        "config/protected-paths.json",
+        "config/supply-chain-policy.json",
+        "config/trust-root-manifest.json",
+        "config/validation.json",
+        "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
+        "governance/accepted-debt.json",
+        "governance/known-limitations.json",
+        "governance/waivers.json",
+        "prompts/AUTO-BUILDER.md",
+        "prompts/AUTO-REMEDIATION.md",
+        "prompts/AUTO-REVIEW.md",
+        "prompts/AUTO-VALIDATION-FIX.md",
+        "registries/phase-contracts-index.json",
+        "roadmap/build-waves.json",
+        "roadmap/critical-path.json",
+        "roadmap/dependency-graph.json",
+        "roadmap/parallel-lanes.json",
+        "roadmap/review-packages.json",
+        "roadmap/scheduler-state.template.json",
+        "schemas/install-report.schema.json",
+        "scripts/bootstrap-kernel-selftest.mjs",
+        "scripts/bootstrap.ps1",
+        "scripts/build-release-zip.mjs",
+        "scripts/builder-boundary-smoke.mjs",
+        "scripts/capture-provider-provenance.mjs",
+        "scripts/check-prereqs.ps1",
+        "scripts/claude-builder-broker.mjs",
+        "scripts/codex-reviewer-broker.mjs",
+        "scripts/dependency-supply-chain.mjs",
+        "scripts/generate-trust-root.mjs",
+        "scripts/harden-evidence-key.ps1",
+        "scripts/init-evidence-signing.mjs",
+        "scripts/init-private-git.ps1",
+        "scripts/install-report.mjs",
+        "scripts/install.ps1",
+        "scripts/mechanical-kernel-selftest.mjs",
+        "scripts/phase0-acceptance.mjs",
+        "scripts/preflight.mjs",
+        "scripts/provider-smoke.mjs",
+        "scripts/provision-electron.mjs",
+        "scripts/register-autostart.ps1",
+        "scripts/release-sha256sums.mjs",
+        "scripts/runtime-schema-conformance-selftest.mjs",
+        "scripts/sanitize-process-env.ps1",
+        "scripts/secret-sanity.mjs",
+        "scripts/smoke-control-api.mjs",
+        "scripts/smoke-control-tower.mjs",
+        "scripts/smoke-desktop.mjs",
+        "scripts/start-control-tower.ps1",
+        "scripts/start-full-auto.ps1",
+        "scripts/supervisor-state-machine-selftest.mjs",
+        "scripts/v6-apps-control-desktop-selftest.mjs",
+        "scripts/validate-agent-competencies.mjs",
+        "scripts/validate-agent-semantic.mjs",
+        "scripts/validate-architecture.mjs",
+        "scripts/validate-config-runtime-enforcement.mjs",
+        "scripts/validate-domain-packs.mjs",
+        "scripts/validate-mechanical-closure.mjs",
+        "scripts/validate-organization.mjs",
+        "scripts/validate-paste2-closure.mjs",
+        "scripts/validate-paste2h-runtime-release.mjs",
+        "scripts/validate-paste3-agent-specialization.mjs",
+        "scripts/validate-paste3-closure.mjs",
+        "scripts/validate-paste3-technology-domain-registry.mjs",
+        "scripts/validate-paste4a.mjs",
+        "scripts/validate-paste4b.mjs",
+        "scripts/validate-paste4c-doc-truth.mjs",
+        "scripts/validate-paste4d-release-truth.mjs",
+        "scripts/validate-phase-contracts.mjs",
+        "scripts/validate-registries.mjs",
+        "scripts/validate-release-supply-chain.mjs",
+        "scripts/validate-review-graph-v2.mjs",
+        "scripts/validate-runtime-contracts.mjs",
+        "scripts/validate-runtime-resilience.mjs",
+        "scripts/validate-schema-catalog.mjs",
+        "scripts/validate-schema-strictness.mjs",
+        "scripts/validate-technology-graph.mjs",
+        "scripts/validate-tr-comments.mjs",
+        "scripts/validate-woven-model.mjs",
+        "scripts/verify-artifact.mjs",
+        "scripts/verify-evidence-ledger.mjs",
+        "scripts/verify-release-extract.mjs",
+        "scripts/verify-remote-protection.mjs",
+        "scripts/verify-trust-root.mjs",
+        "tsconfig.json",
+        "automation/lib/",
+        "scripts/validate-",
+        "scripts/run-validation.mjs",
+        "schemas/independent-review-result.schema.json",
+        "schemas/review-finding.schema.json",
+        "schemas/review-bundle.schema.json",
+        "schemas/milestone-contract.schema.json",
+        "schemas/run-event.schema.json",
+        "schemas/run-manifest.schema.json",
+        "schemas/phase0-acceptance.schema.json",
+        "prompts/",
+        "roadmap/contracts/",
+        "config/"
+      ],
+      "mandatoryValidation": [
+        "Canonical runner scripts/run-validation.mjs over config/validation.json",
+        "vitest run including tests/pkg-r1-release-mode.test.ts",
+        "broad dependency-free selftest suite",
+        "end-to-end sealed dry run with fresh-extract canonical validation"
+      ],
+      "mandatoryEvidence": [
+        "reviewed commit SHA",
+        "exact tool/runtime versions",
+        "canonical validation report",
+        "changed file sha256 digests",
+        "dry-run ZIP hash and fresh-extract results"
+      ],
+      "riskLevel": 3,
+      "allowPaidApi": false,
+      "allowProduction": false,
+      "allowRisk5": false,
+      "allowDependencyChanges": false,
+      "unsupportedCases": [
+        "The final trust-root reseal, release-candidate document values, SHA256SUMS, ZIP, Founder signature and target-machine Phase0 are later steps (PKG-R2 and the packaging run) and are not claimed here.",
+        "The end-to-end dry run in the checkpoint used a scratch export with release-candidate document values applied; it is evidence for the mode, not a release.",
+        "paste4d verifies SHA256SUMS binding, not every file's content; full content verification is the unchanged verify-artifact.ps1/.mjs at install steps 1 and 2 and verify-release-extract.mjs, as recorded in the checkpoint design.",
+        "LOW backlog F-PKGE-002 and F-PKGR-001 (P3) stay open."
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "maxFilesChanged": 15,
+      "allowExistingTestAssertionReduction": false,
+      "frozenAt": "2026-09-28T17:15:35.381Z",
+      "digest": "45f793f023a251ea5b1ea3e9355adee121d29078b72af5807a813d6d31198951"
+    },
+    "reviewBasis": {
+      "requirements": [
+        {
+          "id": "P000-REQ-03b4ea16b9b90032",
+          "text": "[V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28 founderAuthorization.decision] PKG_R_APPROVED + PKGR_RELEASE_MODE_APPROVED + PKGR1_MECHANICAL_CLOSURE_SEAL_STRING_APPROVED"
+        },
+        {
+          "id": "P000-REQ-473035d628cfc1e6",
+          "text": "[V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28 founderAuthorization.rule] [PKG-R] Paketleme paketi + reseal yetkisi: yeni protected release-packaging paketi (SHA256SUMS üreticisi, deterministik ZIP, mevcut verify-artifact ile fresh-extract doğrulaması) ve bu paket içinde maintainer-only generate-trust-root.mjs final reseal'ini çalıştırma yetkisi; release imzası Founder'ın harici anahtarında kalır; Codex review otomatik. [Mühürlü mod] paste4d'ye açık ve fail-closed bir SEALED modu eklenir. Mod yalnız manifest SEALED iken devreye girer; trust root ve SHA256SUMS o anda yeniden doğrulanır, doğrulamadan geçmeyen FAIL olur. İmza artifact dışında (detached) kalır. Phase0=PENDING ve SOURCE_LEVEL_CLOSURE=false zorunlu kalır. paste4c ve belgeler PASS demeyen release-candidate değerleri alır (SEALED_RELEASE_CANDIDATE, EXTERNAL_DETACHED_SIGNATURE_REQUIRED). Mühürlü durum review edilmiş bir commit olur ve ZIP tam o commit'ten üretilir. Adversarial testler eklenir, Codex review otomatik yapılır. [Mekanik kapanış] validate-mechanical-closure.mjs'teki tek metin ('FINAL_TRUST_ROOT_SEAL = STALE_PENDING_FINAL_RESEAL') paste4c ile aynı biçimde manifestin sealStatus alanından türetilir (mühür öncesi STALE_PENDING_FINAL_RESEAL, SEALED iken SEALED_RELEASE_CANDIDATE); dosyadaki diğer kontroller aynen kalır; validate-paste2-closure.mjs'in yalnız çıktıya yazdığı değer P3 backlog olarak kayda alınır ve değiştirilmez."
+        },
+        {
+          "id": "P000-REQ-872f9f6e2bd8dc04",
+          "text": "[V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28 founderAuthorization.protectedFiles] automation/lib/release-artifact.mjs (new), scripts/release-sha256sums.mjs (new), scripts/build-release-zip.mjs (new), scripts/verify-release-extract.mjs (new), config/protected-paths.json, scripts/validate-paste4d-release-truth.mjs, scripts/validate-paste4c-doc-truth.mjs, scripts/validate-mechanical-closure.mjs"
+        },
+        {
+          "id": "P000-REQ-a8ffcbfa4fd882e0",
+          "text": "[V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; UNKNOWN, NOT_TESTED, BLOCKED or FAIL are never converted to PASS/CLEAN without real evidence; broader protected changes require separate Founder approval."
+        }
+      ],
+      "invariants": [
+        {
+          "id": "P000-INV-cee4912d3e0a2019",
+          "text": "NO_FAKE_SUCCESS"
+        },
+        {
+          "id": "P000-INV-59e59d4476fc0664",
+          "text": "NO_WEAKENED_CONTROLS"
+        },
+        {
+          "id": "P000-INV-f74092f031a0e4aa",
+          "text": "NO_SILENT_SCOPE_EXPANSION"
+        },
+        {
+          "id": "P000-INV-6122df41f404fe66",
+          "text": "NO_SELF_CERTIFICATION"
+        },
+        {
+          "id": "P000-INV-b8274eed78d72a76",
+          "text": "EVIDENCE_REQUIRED"
+        },
+        {
+          "id": "P000-INV-473c0420ab79dc5f",
+          "text": "FAIL_CLOSED"
+        }
+      ],
+      "acceptanceCriteria": [
+        {
+          "id": "P000-AC-b07722a87fadfc19",
+          "text": "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment."
+        },
+        {
+          "id": "P000-AC-db3e08f8e078afb1",
+          "text": "The seal mode is derived only from config/trust-root-manifest.json sealStatus; with STALE_PENDING_FINAL_RESEAL every previous paste4d, paste4c and mechanical-closure rule still applies unchanged, and an unknown sealStatus fails."
+        },
+        {
+          "id": "P000-AC-f671f11f5c312c71",
+          "text": "In SEALED mode paste4d re-verifies the trust root in-process, accepts runtime TRUST_ROOT_VERIFY or ARTIFACT_VERIFY PASS reports only when the in-process verification (and, for ARTIFACT_VERIFY, the SHA256SUMS binding) passes, binds a present SHA256SUMS.txt to the sealed manifest hash, every trust-root hash and the lockfile, forbids any release signature file inside the tree, and requires release-candidate values that never state PASS while SOURCE_LEVEL_CLOSURE stays false and TARGET_MACHINE_PHASE0 stays PENDING."
+        },
+        {
+          "id": "P000-AC-022442ddd8cfc580",
+          "text": "release-sha256sums.mjs, build-release-zip.mjs and verify-release-extract.mjs fail closed on unclean or unsealed exports, SHA256SUMS mismatch, unsafe or duplicate paths, ZIP entries outside SHA256SUMS and non-fresh extract directories; the ZIP is deterministic; the unchanged verify-artifact.ps1/.mjs and verify-trust-root.mjs run inside the fresh extract."
+        },
+        {
+          "id": "P000-AC-9b87c7fa9378e5cd",
+          "text": "The three new scripts are protected by exact path, automation/lib/release-artifact.mjs is protected by the existing automation/lib/ prefix, and no script creates, stores or uses a signing key."
+        },
+        {
+          "id": "P000-AC-c04c146e4f349b91",
+          "text": "Only the Founder-authorized protected files change, no existing test assertion, validator or policy is weakened beyond the authorized rule, and the trust-root manifest is not regenerated in this package."
+        }
+      ],
+      "mandatoryValidation": [
+        {
+          "id": "P000-VAL-2c7156c14e11890c",
+          "text": "Canonical runner scripts/run-validation.mjs over config/validation.json"
+        },
+        {
+          "id": "P000-VAL-d1eecbb723e6fb05",
+          "text": "vitest run including tests/pkg-r1-release-mode.test.ts"
+        },
+        {
+          "id": "P000-VAL-c9ec154ca647422f",
+          "text": "broad dependency-free selftest suite"
+        },
+        {
+          "id": "P000-VAL-64f2fa6f068d80db",
+          "text": "end-to-end sealed dry run with fresh-extract canonical validation"
+        }
+      ],
+      "mandatoryFailureCases": [
+        {
+          "id": "P000-FAIL-1e3fd81fed23a7eb",
+          "text": "SHA256SUMS present in pre-seal mode"
+        },
+        {
+          "id": "P000-FAIL-664261ed49ac7645",
+          "text": "stale runtime PASS reports in pre-seal mode"
+        },
+        {
+          "id": "P000-FAIL-4a9048e303673c55",
+          "text": "unknown seal status"
+        },
+        {
+          "id": "P000-FAIL-5778c0cbbfdfb644",
+          "text": "SEALED manifest with a tampered protected file"
+        },
+        {
+          "id": "P000-FAIL-cc4856108f266bac",
+          "text": "SEALED mode with PASS release authenticity or pre-seal document values"
+        },
+        {
+          "id": "P000-FAIL-a66429b26dfb260f",
+          "text": "release signature file inside the tree"
+        },
+        {
+          "id": "P000-FAIL-193ea1d406847777",
+          "text": "SHA256SUMS not bound to the sealed manifest or trust-root hashes"
+        },
+        {
+          "id": "P000-FAIL-e36f5e942ae21f4e",
+          "text": "tampered export before packaging"
+        },
+        {
+          "id": "P000-FAIL-50d2d70c69cd12c1",
+          "text": "ZIP entry not listed in SHA256SUMS"
+        },
+        {
+          "id": "P000-FAIL-0ba6a6279de3df85",
+          "text": "zip-slip or duplicate entry names"
+        }
+      ],
+      "requiredArtifacts": [
+        {
+          "id": "P000-ART-804d5e2f6864a355",
+          "text": "scripts/validate-paste4d-release-truth.mjs"
+        },
+        {
+          "id": "P000-ART-09cfc75ca8d5140c",
+          "text": "scripts/validate-paste4c-doc-truth.mjs"
+        },
+        {
+          "id": "P000-ART-321796e756a6f511",
+          "text": "automation/lib/release-artifact.mjs"
+        },
+        {
+          "id": "P000-ART-66bf9e130c09f875",
+          "text": "scripts/release-sha256sums.mjs"
+        },
+        {
+          "id": "P000-ART-eea3c4f0be9b486b",
+          "text": "scripts/build-release-zip.mjs"
+        },
+        {
+          "id": "P000-ART-0c79ad8a82d0272e",
+          "text": "scripts/verify-release-extract.mjs"
+        },
+        {
+          "id": "P000-ART-4507084d79fb3f15",
+          "text": "tests/pkg-r1-release-mode.test.ts"
+        },
+        {
+          "id": "P000-ART-39bff0dbe1584af1",
+          "text": "audit/checkpoints/V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28.json"
+        }
+      ],
+      "risk": [
+        {
+          "id": "P000-RISK-4391d3546bf1df6f",
+          "text": "riskLevel=3; reviewProfile=TRUST_CRITICAL"
+        }
+      ]
+    },
+    "evidenceCatalog": [
+      {
+        "id": "VALIDATION-REGISTRIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "registries",
+        "validationDigest": "8ffa6f6330a6110d8e99139af483e17c71a6df86bea6eb90b53ef87638246b30",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 81
+      },
+      {
+        "id": "VALIDATION-ARCHITECTURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "architecture",
+        "validationDigest": "e5bf5d23fdda0d99094fdb8527a39d03f097200ed58ad48e545edfa66c72268f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 74
+      },
+      {
+        "id": "VALIDATION-TR",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tr",
+        "validationDigest": "2e6b2ed7451d768a768929c1cffbfbe7163006ef338db738aee25eb2e32f0f10",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1384
+      },
+      {
+        "id": "VALIDATION-COMPETENCIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "competencies",
+        "validationDigest": "10562f2c1b237b192ff646172cda08cd586bf3f09cc90eb8537e860e8e89b83d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 103
+      },
+      {
+        "id": "VALIDATION-ORGANIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "organization",
+        "validationDigest": "6ac3f9799e6e1b0f96e62bcf1a9a0ade5c38852dcc133d2c11b1fd80156ccea5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 78
+      },
+      {
+        "id": "VALIDATION-SCHEMAS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schemas",
+        "validationDigest": "7ba29d41eceb71bd056a516963edf5ddfd26fcbd497d31ea31e504c769879057",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 131
+      },
+      {
+        "id": "VALIDATION-TECHNOLOGY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "technology",
+        "validationDigest": "4120c97312f885fb82187e6933b08c510c95e46d943ebc95f46ef4a5a2a66050",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 75
+      },
+      {
+        "id": "VALIDATION-PASTE3-TECHNOLOGY-DOMAIN-REGISTRY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-technology-domain-registry",
+        "validationDigest": "9951864be421206417dc0fc09feb8586d35de6df8b90b1132a044576afac17b5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 406
+      },
+      {
+        "id": "VALIDATION-DOMAIN-PACKS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "domain-packs",
+        "validationDigest": "6aa9c5c7e2dd34e3686e298fe3e0d67964ab0803815fd6d42f3d0f84a1048de7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 81
+      },
+      {
+        "id": "VALIDATION-AGENT-SEMANTIC",
+        "kind": "VALIDATION_STEP",
+        "validationId": "agent-semantic",
+        "validationDigest": "89e22dc4c751e6e449ca9297710721f30e635e17966c6d068f6e1100b5f0db53",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 139
+      },
+      {
+        "id": "VALIDATION-PASTE3-AGENT-SPECIALIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-agent-specialization",
+        "validationDigest": "c8caf548402f3e5d2cce7957a5e2bed0ba7e6df2b63a93989a786cd9890fbb44",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 23231
+      },
+      {
+        "id": "VALIDATION-PHASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "phase-contracts",
+        "validationDigest": "28fdd6131326497e67d9e3c3688f2c7e820c4e6d75587fb58dc9e35f8d545b59",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 188
+      },
+      {
+        "id": "VALIDATION-PASTE4A-CONSTRUCTION-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4a-construction-graph",
+        "validationDigest": "928324142269635a66da22344f852a800442428fa797d278922463d8c0790041",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 109
+      },
+      {
+        "id": "VALIDATION-PASTE4B-TRACEABILITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4b-traceability",
+        "validationDigest": "cdc94fbc1ab6b34cd1867473d6a6ab32555f421b82dc3bce66c8f95e82f9adf7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 201
+      },
+      {
+        "id": "VALIDATION-PASTE4C-DOC-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4c-doc-truth",
+        "validationDigest": "a86eb363edc20bab120a6590eeb2ac9f9168b9e0a164a5efb68574c2bb8b4e82",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 129
+      },
+      {
+        "id": "VALIDATION-PASTE4D-RELEASE-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4d-release-truth",
+        "validationDigest": "9de0bee8320b7f76dc95efd1af8751c01dc8b945d71a31a105dcef9a7c7dfaa8",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 125
+      },
+      {
+        "id": "VALIDATION-REVIEW-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "review-graph",
+        "validationDigest": "d269f09107f2fc3ffe916892e24db59375682a22a2a6775792a09b60361ec15f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 99
+      },
+      {
+        "id": "VALIDATION-SCHEMA-STRICT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schema-strict",
+        "validationDigest": "1e0b34db66453f8c8b54f4bddf4af81794090404f2b66c4fbe03d8b5c032468f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 175
+      },
+      {
+        "id": "VALIDATION-WOVEN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "woven",
+        "validationDigest": "3f4799cff5ec0a4516f7c2bf34292594d680d5e3b20ad2ca73becfb1efbe556d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 100
+      },
+      {
+        "id": "VALIDATION-PASTE3-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-source-closure",
+        "validationDigest": "96cdee7724cf5f145a0260098b33782eb8f9dad828a15f75396d4b04a492f74e",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 24123
+      },
+      {
+        "id": "VALIDATION-CONFIG-RUNTIME-ENFORCEMENT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "config-runtime-enforcement",
+        "validationDigest": "ccccb144bce66a977b83a70c4438c72ec13811a4027b94e24fe917015649fc17",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 99
+      },
+      {
+        "id": "VALIDATION-MECHANICAL",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical",
+        "validationDigest": "a802e0c8871cdac4940257b4c0ebf7ef8c837accd69e06ce8936903b9259ab62",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 162
+      },
+      {
+        "id": "VALIDATION-RUNTIME-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-contracts",
+        "validationDigest": "fef8d265e0207f281d438edd4ca13510c37c864c5bd44116e3a1741523e4267a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 735
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RELEASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-release-contracts",
+        "validationDigest": "663f4aefb74075b8404d3424fbd911793a297746e5f11fa9bf43783c285b359a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 117
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RESILIENCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-resilience",
+        "validationDigest": "d13001c5509688e16fdeb5815f15cd945076a1687a721b72c1229c1cb58f24e3",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 151
+      },
+      {
+        "id": "VALIDATION-PASTE2-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste2-source-closure",
+        "validationDigest": "3243c562d6ad710b47b4588b93cb64f8a5172ee089744a9d9d42a315736a969f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 2116
+      },
+      {
+        "id": "VALIDATION-RUNTIME-SCHEMA-CONFORMANCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-schema-conformance",
+        "validationDigest": "78210ab2268bd2aa77de25a46db9d44587cae6cedcb8da5f370e5ad2296ea0ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 213
+      },
+      {
+        "id": "VALIDATION-MECHANICAL-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical-selftest",
+        "validationDigest": "9f0d4aa941e72e684b4fd869c88eb93f07c3814dfda8eee8737f6baf9b65518c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 89
+      },
+      {
+        "id": "VALIDATION-STATE-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "state-selftest",
+        "validationDigest": "feda1327063ae6fddd47ba68f06959d79f614be5b8a5487dc79faf6ee55ee968",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7260
+      },
+      {
+        "id": "VALIDATION-SECRET-SANITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "secret-sanity",
+        "validationDigest": "bb52880e62a0e2817a87a01881b82452fd5eca0793ab916e8b2bdff625fb2888",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 888
+      },
+      {
+        "id": "VALIDATION-DEPENDENCY-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "dependency-supply-chain",
+        "validationDigest": "00a58ae3650584ec15f297865a0708e6c348620736fdbc050f30d31fdf958d6d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7014
+      },
+      {
+        "id": "VALIDATION-RELEASE-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "release-supply-chain",
+        "validationDigest": "d3c8afe4d87eab0ab03484a9bb4f2a6273ec5a5968d69f59408b90c886d090ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 97
+      },
+      {
+        "id": "VALIDATION-TYPECHECK",
+        "kind": "VALIDATION_STEP",
+        "validationId": "typecheck",
+        "validationDigest": "a98a71fd4edf3842dee1ec22f210375256ff5b3f1f45f5e9ed24426ad9e90f15",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1552
+      },
+      {
+        "id": "VALIDATION-TESTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tests",
+        "validationDigest": "40a24b33f564592720d92832d0610de5ef30a01100e26c2e7f2ca149389ca94c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 35277
+      },
+      {
+        "id": "DIFF-39bff0dbe1584af1",
+        "kind": "CHANGED_FILE",
+        "file": "audit/checkpoints/V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28.json"
+      },
+      {
+        "id": "DIFF-321796e756a6f511",
+        "kind": "CHANGED_FILE",
+        "file": "automation/lib/release-artifact.mjs"
+      },
+      {
+        "id": "DIFF-1ccc9a71b3903978",
+        "kind": "CHANGED_FILE",
+        "file": "config/protected-paths.json"
+      },
+      {
+        "id": "DIFF-eea3c4f0be9b486b",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/build-release-zip.mjs"
+      },
+      {
+        "id": "DIFF-66bf9e130c09f875",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/release-sha256sums.mjs"
+      },
+      {
+        "id": "DIFF-b76d06ae292bc712",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/v6-evidence-trust-release-adversarial-selftest.mjs"
+      },
+      {
+        "id": "DIFF-b02951bec601033c",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/validate-mechanical-closure.mjs"
+      },
+      {
+        "id": "DIFF-09cfc75ca8d5140c",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/validate-paste4c-doc-truth.mjs"
+      },
+      {
+        "id": "DIFF-804d5e2f6864a355",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/validate-paste4d-release-truth.mjs"
+      },
+      {
+        "id": "DIFF-0c79ad8a82d0272e",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/verify-release-extract.mjs"
+      },
+      {
+        "id": "DIFF-4507084d79fb3f15",
+        "kind": "CHANGED_FILE",
+        "file": "tests/pkg-r1-release-mode.test.ts"
+      }
+    ],
+    "changedFiles": [
+      "audit/checkpoints/V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28.json",
+      "automation/lib/release-artifact.mjs",
+      "config/protected-paths.json",
+      "scripts/build-release-zip.mjs",
+      "scripts/release-sha256sums.mjs",
+      "scripts/v6-evidence-trust-release-adversarial-selftest.mjs",
+      "scripts/validate-mechanical-closure.mjs",
+      "scripts/validate-paste4c-doc-truth.mjs",
+      "scripts/validate-paste4d-release-truth.mjs",
+      "scripts/verify-release-extract.mjs",
+      "tests/pkg-r1-release-mode.test.ts"
+    ],
+    "changeGuard": {
+      "ok": false,
+      "violations": [
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "automation/lib/release-artifact.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "config/protected-paths.json"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/build-release-zip.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/release-sha256sums.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/validate-mechanical-closure.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/validate-paste4c-doc-truth.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/validate-paste4d-release-truth.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/verify-release-extract.mjs"
+        }
+      ],
+      "dependencyChanges": [],
+      "diffLines": 438
+    },
+    "diffStat": " ...ELEASE-MODE-AND-PACKAGING-TOOLS-2026-09-28.json | 121 +++++++++++++++++++++\n automation/lib/release-artifact.mjs                |  65 +++++++++++\n config/protected-paths.json                        |   3 +\n scripts/build-release-zip.mjs                      |  24 ++++\n scripts/release-sha256sums.mjs                     |  15 +++\n ...evidence-trust-release-adversarial-selftest.mjs |   4 +-\n scripts/validate-mechanical-closure.mjs            |   2 +-\n scripts/validate-paste4c-doc-truth.mjs             |  28 +++--\n scripts/validate-paste4d-release-truth.mjs         |  75 ++++++++-----\n scripts/verify-release-extract.mjs                 |  31 ++++++\n tests/pkg-r1-release-mode.test.ts                  |  70 ++++++++++++\n 11 files changed, 399 insertions(+), 39 deletions(-)\n",
+    "validation": {
+      "//TR": "Bu runtime report canonical validation command/exit/duration sonuçlarını redacted biçimde kaydeder; read-only static gruplar paralel çalışabilir.",
+      "schemaVersion": "1.1.0",
+      "startedAt": "2026-09-28T17:12:50.019Z",
+      "steps": [
+        {
+          "id": "registries",
+          "command": [
+            "node",
+            "scripts/validate-registries.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 81,
+          "logFile": ".ai\\runtime\\validation-registries.log"
+        },
+        {
+          "id": "architecture",
+          "command": [
+            "node",
+            "scripts/validate-architecture.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 74,
+          "logFile": ".ai\\runtime\\validation-architecture.log"
+        },
+        {
+          "id": "tr",
+          "command": [
+            "node",
+            "scripts/validate-tr-comments.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1384,
+          "logFile": ".ai\\runtime\\validation-tr.log"
+        },
+        {
+          "id": "competencies",
+          "command": [
+            "node",
+            "scripts/validate-agent-competencies.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 103,
+          "logFile": ".ai\\runtime\\validation-competencies.log"
+        },
+        {
+          "id": "organization",
+          "command": [
+            "node",
+            "scripts/validate-organization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 78,
+          "logFile": ".ai\\runtime\\validation-organization.log"
+        },
+        {
+          "id": "schemas",
+          "command": [
+            "node",
+            "scripts/validate-schema-catalog.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 131,
+          "logFile": ".ai\\runtime\\validation-schemas.log"
+        },
+        {
+          "id": "technology",
+          "command": [
+            "node",
+            "scripts/validate-technology-graph.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 75,
+          "logFile": ".ai\\runtime\\validation-technology.log"
+        },
+        {
+          "id": "paste3-technology-domain-registry",
+          "command": [
+            "node",
+            "scripts/validate-paste3-technology-domain-registry.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 406,
+          "logFile": ".ai\\runtime\\validation-paste3-technology-domain-registry.log"
+        },
+        {
+          "id": "domain-packs",
+          "command": [
+            "node",
+            "scripts/validate-domain-packs.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 81,
+          "logFile": ".ai\\runtime\\validation-domain-packs.log"
+        },
+        {
+          "id": "agent-semantic",
+          "command": [
+            "node",
+            "scripts/validate-agent-semantic.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 139,
+          "logFile": ".ai\\runtime\\validation-agent-semantic.log"
+        },
+        {
+          "id": "paste3-agent-specialization",
+          "command": [
+            "node",
+            "scripts/validate-paste3-agent-specialization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 23231,
+          "logFile": ".ai\\runtime\\validation-paste3-agent-specialization.log"
+        },
+        {
+          "id": "phase-contracts",
+          "command": [
+            "node",
+            "scripts/validate-phase-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 188,
+          "logFile": ".ai\\runtime\\validation-phase-contracts.log"
+        },
+        {
+          "id": "paste4a-construction-graph",
+          "command": [
+            "node",
+            "scripts/validate-paste4a.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 109,
+          "logFile": ".ai\\runtime\\validation-paste4a-construction-graph.log"
+        },
+        {
+          "id": "paste4b-traceability",
+          "command": [
+            "node",
+            "scripts/validate-paste4b.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 201,
+          "logFile": ".ai\\runtime\\validation-paste4b-traceability.log"
+        },
+        {
+          "id": "paste4c-doc-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4c-doc-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 129,
+          "logFile": ".ai\\runtime\\validation-paste4c-doc-truth.log"
+        },
+        {
+          "id": "paste4d-release-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4d-release-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 125,
+          "logFile": ".ai\\runtime\\validation-paste4d-release-truth.log"
+        },
+        {
+          "id": "review-graph",
+          "command": [
+            "node",
+            "scripts/validate-review-graph-v2.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 99,
+          "logFile": ".ai\\runtime\\validation-review-graph.log"
+        },
+        {
+          "id": "schema-strict",
+          "command": [
+            "node",
+            "scripts/validate-schema-strictness.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 175,
+          "logFile": ".ai\\runtime\\validation-schema-strict.log"
+        },
+        {
+          "id": "woven",
+          "command": [
+            "node",
+            "scripts/validate-woven-model.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 100,
+          "logFile": ".ai\\runtime\\validation-woven.log"
+        },
+        {
+          "id": "paste3-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste3-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 24123,
+          "logFile": ".ai\\runtime\\validation-paste3-source-closure.log"
+        },
+        {
+          "id": "config-runtime-enforcement",
+          "command": [
+            "node",
+            "scripts/validate-config-runtime-enforcement.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 99,
+          "logFile": ".ai\\runtime\\validation-config-runtime-enforcement.log"
+        },
+        {
+          "id": "mechanical",
+          "command": [
+            "node",
+            "scripts/validate-mechanical-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 162,
+          "logFile": ".ai\\runtime\\validation-mechanical.log"
+        },
+        {
+          "id": "runtime-contracts",
+          "command": [
+            "node",
+            "scripts/validate-runtime-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 735,
+          "logFile": ".ai\\runtime\\validation-runtime-contracts.log"
+        },
+        {
+          "id": "runtime-release-contracts",
+          "command": [
+            "node",
+            "scripts/validate-paste2h-runtime-release.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 117,
+          "logFile": ".ai\\runtime\\validation-runtime-release-contracts.log"
+        },
+        {
+          "id": "runtime-resilience",
+          "command": [
+            "node",
+            "scripts/validate-runtime-resilience.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 151,
+          "logFile": ".ai\\runtime\\validation-runtime-resilience.log"
+        },
+        {
+          "id": "paste2-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste2-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 2116,
+          "logFile": ".ai\\runtime\\validation-paste2-source-closure.log"
+        },
+        {
+          "id": "runtime-schema-conformance",
+          "command": [
+            "node",
+            "scripts/runtime-schema-conformance-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 213,
+          "logFile": ".ai\\runtime\\validation-runtime-schema-conformance.log"
+        },
+        {
+          "id": "mechanical-selftest",
+          "command": [
+            "node",
+            "scripts/mechanical-kernel-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 89,
+          "logFile": ".ai\\runtime\\validation-mechanical-selftest.log"
+        },
+        {
+          "id": "state-selftest",
+          "command": [
+            "node",
+            "scripts/supervisor-state-machine-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7260,
+          "logFile": ".ai\\runtime\\validation-state-selftest.log"
+        },
+        {
+          "id": "secret-sanity",
+          "command": [
+            "node",
+            "scripts/secret-sanity.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 888,
+          "logFile": ".ai\\runtime\\validation-secret-sanity.log"
+        },
+        {
+          "id": "dependency-supply-chain",
+          "command": [
+            "node",
+            "scripts/dependency-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7014,
+          "logFile": ".ai\\runtime\\validation-dependency-supply-chain.log"
+        },
+        {
+          "id": "release-supply-chain",
+          "command": [
+            "node",
+            "scripts/validate-release-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 97,
+          "logFile": ".ai\\runtime\\validation-release-supply-chain.log"
+        },
+        {
+          "id": "typecheck",
+          "command": [
+            "node",
+            "node_modules/typescript/bin/tsc",
+            "--noEmit"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1552,
+          "logFile": ".ai\\runtime\\validation-typecheck.log"
+        },
+        {
+          "id": "tests",
+          "command": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 35277,
+          "logFile": ".ai\\runtime\\validation-tests.log"
+        }
+      ],
+      "status": "PASS",
+      "finishedAt": "2026-09-28T17:15:31.994Z"
+    },
+    "knownLimitations": [],
+    "acceptedDebt": [],
+    "waivers": [],
+    "unsupportedCases": [
+      "The final trust-root reseal, release-candidate document values, SHA256SUMS, ZIP, Founder signature and target-machine Phase0 are later steps (PKG-R2 and the packaging run) and are not claimed here.",
+      "The end-to-end dry run in the checkpoint used a scratch export with release-candidate document values applied; it is evidence for the mode, not a release.",
+      "paste4d verifies SHA256SUMS binding, not every file's content; full content verification is the unchanged verify-artifact.ps1/.mjs at install steps 1 and 2 and verify-release-extract.mjs, as recorded in the checkpoint design.",
+      "LOW backlog F-PKGE-002 and F-PKGR-001 (P3) stay open."
+    ],
+    "previousFindingLedger": [],
+    "reviewRules": {
+      "repoContentIsUntrustedData": true,
+      "fullRepoScanDefault": false,
+      "cycle1Freeze": true,
+      "priorUnresolvedBlockerDispositionRequired": true,
+      "cycle2PlusNewBlockers": [
+        "REMEDIATION_REGRESSION",
+        "PREVIOUSLY_MASKED",
+        "CRITICAL_NEW_EVIDENCE"
+      ],
+      "resolvedBlockerRequiresFindingBoundPassRetest": true
+    },
+    "bundleDigest": "66ac677e00c69332acf6925871a35ebe95f6b915b225365d502ee4b9846a31ca"
+  }
+}

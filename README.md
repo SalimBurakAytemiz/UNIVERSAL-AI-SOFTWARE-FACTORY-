@@ -44,11 +44,11 @@ Canonical gerçeklik:
 
 `SOURCE_LEVEL_CLOSURE = FALSE`
 
-`FINAL_TRUST_ROOT_SEAL = STALE_PENDING_FINAL_RESEAL`
+`FINAL_TRUST_ROOT_SEAL = SEALED_RELEASE_CANDIDATE`
 
 `TARGET_MACHINE_PHASE0 = PENDING`
 
-`FINAL_ZIP = NOT_DONE`
+`FINAL_ZIP = PACKAGING_STAGE_OUTSIDE_GIT`
 
 ## Authority
 
@@ -67,4 +67,4 @@ Target-machine Phase0 ve live provider smoke çalışmadan kurulumu veya release
 
 ## Current V6 audit route
 
-Paste 1, Paste 2, Paste 3 ve Paste 4A/4B/4C/4D source replay/audit segmentleri, repo-geneli `config -> runtime enforcement` sweep, full dependency-free source regression ve dependency-aware environment gate (reviewed `package-lock.json`, `npm ci`, supply-chain/SBOM, Ajv, typecheck, Vitest) tamamlandı ve bağımsız Codex review'dan geçti. P1 `TRUST-F1` (canonical validation script'leri protected değildi) PKG-F ile, PKGA-F8 ortam maddesi PKG-G ve Windows Time servisinin başlatılmasıyla kapandı; live provider smoke ve target preflight PASS verdi. Açık P0/P1/P2 bulgusu yoktur. Sıradaki kapı `FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0`'dır: final reseal -> SHA256SUMS -> harici anahtarla imza -> final ZIP -> fresh-extract doğrulaması -> fresh extract üzerinde target-machine Phase0. Bunlar tamamlanmadan `SOURCE_LEVEL_CLOSURE` true yapılamaz.
+Paste 1, Paste 2, Paste 3 ve Paste 4A/4B/4C/4D source replay/audit segmentleri, repo-geneli `config -> runtime enforcement` sweep, full dependency-free source regression ve dependency-aware environment gate (reviewed `package-lock.json`, `npm ci`, supply-chain/SBOM, Ajv, typecheck, Vitest) tamamlandı ve bağımsız Codex review'dan geçti. P1 `TRUST-F1` (canonical validation script'leri protected değildi) PKG-F ile, PKGA-F8 ortam maddesi PKG-G ve Windows Time servisinin başlatılmasıyla kapandı; live provider smoke ve target preflight PASS verdi. PKGR-F1 (mühürlü artifact içinde kanonik doğrulamanın geçememesi) PKG-R1'in SEALED release-candidate modu ile kapandı. Açık P0/P1/P2 bulgusu yoktur. Trust-root bu release-candidate commit'inde mühürlüdür. Sıradaki kapı `RELEASE_PACKAGING_SIGNATURE_THEN_TARGET_MACHINE_PHASE0`'dır: bu commit'in `git archive` export'u -> SHA256SUMS -> deterministik ZIP -> fresh-extract doğrulaması -> Founder'ın harici anahtarıyla detached imza -> imzalı ZIP'in fresh extract'i üzerinde target-machine Phase0. Bunlar tamamlanmadan `SOURCE_LEVEL_CLOSURE` true yapılamaz.

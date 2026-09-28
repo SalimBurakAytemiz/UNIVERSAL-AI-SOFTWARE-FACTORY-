@@ -11,6 +11,8 @@ Independent Codex reviews (frozen milestone contract + review bundle, read-only,
 - `V6-PKG-B-CURRENT-TRUTH-SYNC` @ `646ee762d868cd4a1a7f4c79e23a42ab64b0a6a0`: `CLEAN`, merged fast-forward to local master.
 - `V6-PKG-F-PROTECT-VALIDATION-SCRIPTS` @ `5fa231bd917f2132b1c50a011d150767a9c737e5`: first output `REJECTED` (schema), two reviewer-quota `ENVIRONMENT_BLOCKED` attempts (no cycle consumed), format-correction retry `CLEAN`, merged fast-forward to local master.
 - `V6-PKG-G-PREFLIGHT-PHYSICAL-MEMORY` @ `a82c6f44eceb40b91fc1bed570910dca8b6f3032`: `CLEAN`, merged fast-forward to local master.
-- `V6-PKG-H-CURRENT-TRUTH-CORRECTION`: this commit; reviewed after it is committed.
+- `V6-PKG-H-CURRENT-TRUTH-CORRECTION` @ `eaed1bd4fb583ada4e04f144fb1c67fa850b4a7e`: `CLEAN`, merged fast-forward to local master.
+- `V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS` @ `89bc44c5bdd4f7da8f8cd901e0798dfd0e4f7f25`: cycle 1 `BLOCKED` (F-PKGR1-001); @ `a7ed30628920ba58e3b67762eb0f030fceeb968b`: cycle 2 `CLEAN`, merged fast-forward to local master.
+- `V6-PKG-R2-RELEASE-CANDIDATE-RESEAL`: this release-candidate commit; reviewed after it is committed.
 
 Nothing has been pushed to a remote. Any commit after a CLEAN review needs its own review.

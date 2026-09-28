@@ -1,10 +1,10 @@
-<!-- //TR: Bu dosya açık P0/P1/P2 bulgusu kalmadıktan sonraki canonical final reseal/paketleme/target-machine Phase0 sırasını verir; final closure iddiası taşımaz. -->
+<!-- //TR: Bu dosya mühürlü release-candidate commit'inden sonraki canonical paketleme/imza/target-machine Phase0 sırasını verir; final closure iddiası taşımaz. -->
 # Next Actions
-1. Current scope: `FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0`.
-2. Release packaging package (Founder-authorized, protected, independent Codex review): a `SHA256SUMS.txt` generator, a deterministic final ZIP and fresh-extract verification with the existing `scripts/verify-artifact.mjs` / `scripts/verify-artifact.ps1`.
-3. Final trust-root reseal inside that package with the maintainer-only `scripts/generate-trust-root.mjs`, only after every source change is committed and CLEAN.
-4. Generate `SHA256SUMS.txt` over the resealed tree.
-5. Founder signs the release with their external key (detached signature); Claude never holds or uses that key.
-6. Build the final ZIP and verify a fresh extract (artifact integrity, trust root, lockfile membership).
-7. Run `scripts/install.ps1` on the fresh extract for target-machine Phase0, including evidence signing key initialization and ACL hardening, remote protection, Electron provisioning, Control Tower smoke and autostart, and obtain a CLEAN or CLEAN_LOCAL_ONLY `PHASE0_ACCEPTANCE.json`. `install.ps1` starts with `verify-artifact.ps1`, which requires `SHA256SUMS.txt`, so Phase0 cannot run before packaging. Steps that change system settings, credentials or remotes require explicit Founder approval.
-8. Keep `SOURCE_LEVEL_CLOSURE=false`, `TARGET_MACHINE_PHASE0=PENDING`, `FINAL_TRUST_ROOT_SEAL=STALE_PENDING_FINAL_RESEAL`, `FINAL_SHA256SUMS=NOT_DONE`, `FINAL_RELEASE_AUTHENTICITY=NOT_DONE` and `FINAL_ZIP=NOT_DONE` until their physical gates complete.
+1. Current scope: `RELEASE_PACKAGING_SIGNATURE_THEN_TARGET_MACHINE_PHASE0`.
+2. Export exactly the reviewed release-candidate commit into a fresh directory with `git archive` (no `.git`, `node_modules`, `.ai/runtime` or `.ai/automation`).
+3. `node scripts/release-sha256sums.mjs <exportDir>`: requires the sealed, verified trust root and writes `SHA256SUMS.txt`.
+4. `node scripts/build-release-zip.mjs <exportDir> <out.zip> --source-commit <sha>`: deterministic ZIP plus a `.release.json` sidecar with the ZIP hash.
+5. `node scripts/verify-release-extract.mjs <out.zip> <freshDir> --with-validation`: Windows Expand-Archive, unchanged `verify-artifact.ps1` / `verify-artifact.mjs` / `verify-trust-root.mjs`, reviewed-lock install and canonical validation in the fresh extract.
+6. The Founder signs the verified ZIP and its `SHA256SUMS.txt` with their external key; the detached signature stays beside the ZIP, never inside it. Claude never holds or uses that key.
+7. Run `scripts/install.ps1` on a fresh extract of the signed ZIP for target-machine Phase0, including evidence signing key initialization and ACL hardening, remote protection, Electron provisioning, Control Tower smoke and autostart, and obtain a CLEAN or CLEAN_LOCAL_ONLY `PHASE0_ACCEPTANCE.json`. Steps that change system settings, credentials or remotes require explicit Founder approval.
+8. Keep `SOURCE_LEVEL_CLOSURE=false`, `TARGET_MACHINE_PHASE0=PENDING`, `FINAL_TRUST_ROOT_SEAL=SEALED_RELEASE_CANDIDATE`, `FINAL_SHA256SUMS=PACKAGING_STAGE_OUTSIDE_GIT`, `FINAL_RELEASE_AUTHENTICITY=EXTERNAL_DETACHED_SIGNATURE_REQUIRED` and `FINAL_ZIP=PACKAGING_STAGE_OUTSIDE_GIT` until their physical gates complete; any later protected-file change needs a new reseal and review.

@@ -29,30 +29,34 @@
     "DEPENDENCY_AWARE_ENVIRONMENT_GATE_REVIEWED_LOCK",
     "TRUST_F1_CANONICAL_VALIDATION_SCRIPTS_PROTECTED",
     "PKGA_F8_TARGET_PREFLIGHT_PHYSICAL_MEMORY_AND_CLOCK",
-    "LIVE_PROVIDER_SMOKE"
+    "LIVE_PROVIDER_SMOKE",
+    "PKGR_F1_SEALED_RELEASE_CANDIDATE_MODE_AND_PACKAGING_TOOLS",
+    "FINAL_TRUST_ROOT_RESEAL_RELEASE_CANDIDATE"
   ],
-  "activeScope": "FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0",
+  "activeScope": "RELEASE_PACKAGING_SIGNATURE_THEN_TARGET_MACHINE_PHASE0",
   "boundedScopeOpenP0P1P2": 0,
-  "overallRemainingP0P1P2": "ZERO_OPEN_P0P1P2_PENDING_FINAL_RESEAL_AND_TARGET_PHASE0",
+  "overallRemainingP0P1P2": "ZERO_OPEN_P0P1P2_PENDING_PACKAGING_SIGNATURE_AND_TARGET_PHASE0",
   "openFindings": [],
   "closedFindings": [
     {"id": "TRUST-F1", "severity": "P1", "closedBy": "V6-PKG-F-PROTECT-VALIDATION-SCRIPTS", "reviewedCommit": "5fa231bd917f2132b1c50a011d150767a9c737e5", "review": "CLEAN", "record": "audit/reviews/V6-PKG-F-5fa231b-c1.json"},
-    {"id": "PKGA-F8", "severity": "ENVIRONMENT", "closedBy": "V6-PKG-G-PREFLIGHT-PHYSICAL-MEMORY + Founder started the Windows Time service", "reviewedCommit": "a82c6f44eceb40b91fc1bed570910dca8b6f3032", "review": "CLEAN", "record": "audit/reviews/V6-PKG-G-a82c6f4-c1.json", "targetPreflight": "PASS"}
+    {"id": "PKGA-F8", "severity": "ENVIRONMENT", "closedBy": "V6-PKG-G-PREFLIGHT-PHYSICAL-MEMORY + Founder started the Windows Time service", "reviewedCommit": "a82c6f44eceb40b91fc1bed570910dca8b6f3032", "review": "CLEAN", "record": "audit/reviews/V6-PKG-G-a82c6f4-c1.json", "targetPreflight": "PASS"},
+    {"id": "PKGR-F1", "severity": "P1_RELEASE_BLOCKER", "closedBy": "V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS", "reviewedCommit": "a7ed30628920ba58e3b67762eb0f030fceeb968b", "review": "CLEAN_CYCLE_2", "record": "audit/reviews/V6-PKG-R1-a7ed306-c2.json"},
+    {"id": "F-PKGR1-001", "severity": "P2", "closedBy": "V6-PKG-R1 cycle 2 remediation", "reviewedCommit": "a7ed30628920ba58e3b67762eb0f030fceeb968b", "review": "RESOLVED_CLEAN_CYCLE_2", "record": "audit/reviews/V6-PKG-R1-a7ed306-c2.json"}
   ],
   "lowBacklog": [
-    {"id": "F-PKGE-002", "severity": "P3", "file": "automation/lib/electron-provision.mjs", "observed": "verifyProvisionedElectron authenticates every dist file against the archive but never reads manifest.exeSha256; metadata consistency only."}
+    {"id": "F-PKGE-002", "severity": "P3", "file": "automation/lib/electron-provision.mjs", "observed": "verifyProvisionedElectron authenticates every dist file against the archive but never reads manifest.exeSha256; metadata consistency only."},
+    {"id": "F-PKGR-001", "severity": "P3", "file": "scripts/validate-paste2-closure.mjs", "observed": "The report output field finalTrustRootSeal is the literal STALE_PENDING_FINAL_RESEAL; output only, not a check; left unchanged by Founder decision."}
   ],
   "sourceLevelClosure": false,
-  "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL",
-  "finalSha256Sums": "NOT_DONE",
-  "finalReleaseAuthenticity": "NOT_DONE",
-  "finalZip": "NOT_DONE",
+  "finalTrustRootSeal": "SEALED_RELEASE_CANDIDATE",
+  "finalSha256Sums": "PACKAGING_STAGE_OUTSIDE_GIT",
+  "finalReleaseAuthenticity": "EXTERNAL_DETACHED_SIGNATURE_REQUIRED",
+  "finalZip": "PACKAGING_STAGE_OUTSIDE_GIT",
   "targetMachinePhase0": "PENDING",
   "pendingEnvironmentGates": [
-    "final-trust-root-reseal:PENDING",
-    "final-sha256sums:NOT_DONE",
-    "final-release-signature:NOT_DONE_FOUNDER_EXTERNAL_KEY",
-    "final-zip-and-fresh-extract-verification:NOT_DONE",
+    "final-sha256sums:PACKAGING_STAGE_OUTSIDE_GIT",
+    "final-zip-and-fresh-extract-verification:PACKAGING_STAGE_OUTSIDE_GIT",
+    "final-release-signature:EXTERNAL_DETACHED_SIGNATURE_REQUIRED_FOUNDER_KEY",
     "target-machine-phase0:PENDING"
   ],
   "dependencyFreeRegression": {

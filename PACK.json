@@ -48,10 +48,10 @@
     "HIGH": 2,
     "MEDIUM": 18
   },
-  "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL",
-  "finalSha256Sums": "NOT_DONE",
-  "finalReleaseAuthenticity": "NOT_DONE",
-  "finalZip": "NOT_DONE",
+  "finalTrustRootSeal": "SEALED_RELEASE_CANDIDATE",
+  "finalSha256Sums": "PACKAGING_STAGE_OUTSIDE_GIT",
+  "finalReleaseAuthenticity": "EXTERNAL_DETACHED_SIGNATURE_REQUIRED",
+  "finalZip": "PACKAGING_STAGE_OUTSIDE_GIT",
   "pasteStatus": {
     "paste1": "COMPLETE_SOURCE",
     "paste2": "COMPLETE_SOURCE_ENVIRONMENT_GATES_PENDING",
@@ -62,7 +62,7 @@
     "paste4D": "COMPLETE_SOURCE",
     "paste4": "COMPLETE_SOURCE"
   },
-  "nextScope": "FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0",
+  "nextScope": "RELEASE_PACKAGING_SIGNATURE_THEN_TARGET_MACHINE_PHASE0",
   "dependencyAwareValidation": {
     "status": "PASS_TARGET_WINDOWS_NODE24_NPM11",
     "environment": "win32 10.0.19045 x64, Node v24.19.0, npm 11.17.0",
@@ -70,7 +70,7 @@
     "fail": 0,
     "npmAudit": "0 findings",
     "reviewedLockSha256": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4",
-    "independentReview": "CODEX_CLEAN_PKG_A_C_D_E_E2_B_F_G",
+    "independentReview": "CODEX_CLEAN_PKG_A_C_D_E_E2_B_F_G_H_R1",
     "reviewRecords": "audit/reviews/"
   },
   "dependencyFreeSourceRegression": {
