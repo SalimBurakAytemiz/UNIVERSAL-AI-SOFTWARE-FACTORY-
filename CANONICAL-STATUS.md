@@ -51,7 +51,8 @@ Codex (OpenAI, separate from the Anthropic builder) reviewed each package agains
 - `V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS` @ `89bc44c`: cycle 1 `BLOCKED` (F-PKGR1-001 nested release signature, remediated); @ `a7ed306`: cycle 2 `CLEAN`.
 - `V6-PKG-R2-RELEASE-CANDIDATE-RESEAL` @ `f0a4f0a`: `CLEAN` (superseded release candidate).
 - `V6-PKG-R3-PHASE0-FIXES-AND-RESEAL` @ `ca21e83`: release candidate (fixes plus reseal); independent review pending (reviewer quota).
-- `V6-PKG-X1-DUAL-EXECUTION-FABRIC`: this commit on its own branch on top of `ca21e83`; reviewed after PKG-R3; merge held until the `ca21e83` release completes target-machine Phase0 (Founder decision), so the release candidate is not disturbed.
+- `V6-PKG-X1-DUAL-EXECUTION-FABRIC` @ `1e3a123`: on its own branch on top of `ca21e83`; reviewed after PKG-R3; merge held until the `ca21e83` release completes target-machine Phase0 (Founder decision).
+- `V6-PKG-AUT1-UNATTENDED-ORCHESTRATION`: this commit on its own branch on top of `1e3a123`; reviewed after PKG-X1; activated after CLEAN; merge after PKG-X1.
 
 Review records live in `audit/reviews/`. They are unsigned because the Phase0 evidence signing key is not initialized yet.
 
@@ -64,6 +65,19 @@ Review records live in `audit/reviews/`. They are unsigned because the Phase0 ev
 - Signing keys and local credentials are never cloud inputs.
 - Cloud work goes to isolated run branches and passes the same validation, evidence, independent Codex review and merge gate.
 - The cloud dispatch is `NOT_CONFIGURED` until a documented Claude product method exists and is approved. Until then, work routes to `LOCAL_CLAUDE` or is queued, and cloud execution is never claimed.
+
+## Unattended orchestration
+
+`V6-PKG-AUT1-UNATTENDED-ORCHESTRATION` adds a repository-native unattended supervisor (`docs/architecture/UNATTENDED-ORCHESTRATION.md`), run by Windows Task Scheduler at user level, one instance at a time.
+
+- **Durable state.** An authoritative `control` state with a hash-chained transition log, a lease and heartbeat, and idempotent recovery.
+- **Provider quota.** Recorded with its retry time; no review cycle is consumed, and independent work continues.
+- **Review loop.** Automatic review, remediation and re-review; fast-forward merges only when policy allows.
+- **Release pipeline.** Automated through the reviewed release tools.
+- **Narrow command contracts.** No arbitrary shell, deletion, force push or credential export.
+- **Signing.** Only through the Windows OpenSSH agent with the public key (`WAITING_FOR_SECURE_SIGNER` until the agent holds the key).
+- **Honest remote and cloud status.** GitHub branch protection is recorded as unavailable, and `CLAUDE_CLOUD_SESSION` stays `NOT_CONFIGURED` although `claude --cloud` exists.
+- **Founder decisions** apply only to genuinely new authority boundaries and block only that item.
 
 ## Environment/runtime gates
 

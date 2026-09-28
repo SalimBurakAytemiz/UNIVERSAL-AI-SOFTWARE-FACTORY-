@@ -1,0 +1,65 @@
+{
+  "//TR": "Bu protected policy UASCO'nun gözetimsiz inşa orkestratörünün (scripts/uasco-orchestrator.mjs) kalıcı kuyruk, kilit/lease, sağlayıcı kota geri çekilmesi, izinli kök dizinler, dar komut sözleşmeleri, merge/release/imza/Phase0 kurallarını ve Founder onay kaydını tanımlar; bilinmeyen komut ve yetki değiştiren işlem fail-closed kalır, bekleyen bir Founder kararı yalnız ilgili paketi durdurur.",
+  "schemaVersion": "1.0.0",
+  "roots": {
+    "repo": "${REPO}",
+    "stateFile": "${REPO}/.ai/cache/review/ORCHESTRATOR_STATE.json",
+    "transitionLog": "${REPO}/.ai/cache/review/orchestrator-transitions.jsonl",
+    "evidenceRoot": "${REPO}/.ai/cache/review",
+    "specRoot": "${REPO}/.ai/cache/review/tools",
+    "controlRoot": "${LOCALAPPDATA}/UASCO/orchestrator",
+    "releaseRoot": "${REPO}/.ai/cache/release",
+    "signRoot": "${USERPROFILE}/Desktop",
+    "installRoot": "C:/UASCO"
+  },
+  "tick": {
+    "maxActionsPerTick": 12,
+    "maxTickMinutes": 180,
+    "leaseTtlMinutes": 240,
+    "schedulerRepetitionMinutes": 15
+  },
+  "providers": {
+    "codex": {"quotaBackoffMinutes": 30, "quotaBackoffMaxMinutes": 360},
+    "claude": {"quotaBackoffMinutes": 30, "quotaBackoffMaxMinutes": 360}
+  },
+  "review": {
+    "maxReviewCycles": 2,
+    "formatRetryLimit": 1,
+    "promptTemplate": "prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt"
+  },
+  "merge": {
+    "defaultBranchRef": "refs/heads/master",
+    "fastForwardOnly": true
+  },
+  "signing": {
+    "mode": "SSH_AGENT_ONLY",
+    "publicKey": "${USERPROFILE}/.ssh/uasco-release-ed25519.pub",
+    "keyFingerprint": "SHA256:MfkZmrCjx1C+fg6n5YX1bxbYKwcu85/APcueHtefFw8",
+    "namespace": "uasco-release",
+    "identity": "founder@uasco",
+    "sshKeygen": "C:/Windows/System32/OpenSSH/ssh-keygen.exe",
+    "sshAdd": "C:/Windows/System32/OpenSSH/ssh-add.exe",
+    "privateKeyAccess": "NEVER"
+  },
+  "github": {
+    "expectedRemote": "https://github.com/SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY",
+    "expectedOwner": "SalimBurakAytemiz",
+    "ghDirectory": "C:/Program Files/GitHub CLI",
+    "constructionRepoPush": "QUEUED_UNLESS_REMOTE_PROTECTION_PASS",
+    "forcePush": "NEVER"
+  },
+  "phase0": {
+    "remoteUrl": "https://github.com/SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY",
+    "preserveFailedAttempts": true,
+    "reinstallOverAcceptedInstallation": "FOUNDER_DECISION_REQUIRED"
+  },
+  "approvals": [
+    {"id": "PKG-R", "text": "Release packaging package plus the maintainer-only generate-trust-root.mjs final reseal; release signature stays with the Founder's external key."},
+    {"id": "PKGR-RELEASE-MODE", "text": "Sealed release-candidate mode; signatures detached outside the artifact; ZIP built from the reviewed sealed commit."},
+    {"id": "PHASE0-PREREQUISITES", "text": "Install location C:\\UASCO; remote https://github.com/SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY with the initial baseline push; evidence-key ACL hardening and the UASCO-Autonomous-Supervisor scheduled task after Phase0 CLEAN or CLEAN_LOCAL_ONLY."},
+    {"id": "PHASE0-BRANCH-PROTECTION-UNAVAILABLE", "text": "Remote connected, result CLEAN_LOCAL_ONLY while GitHub branch protection is unavailable on the free plan; later autonomous pushes stay disabled until protection is verified."},
+    {"id": "PHASE0-FIXES-F1-F2-F3", "text": "Three protected Phase0 fixes; builder acceptEdits only inside the working directory; Bash, web, subagents, MCP and writes outside the working directory stay forbidden."},
+    {"id": "PKG-X1", "text": "Dual execution fabric, five protected files, no new schema; merge held until the ca21e83 release completes Phase0."},
+    {"id": "AUT1-UNATTENDED-ORCHESTRATION", "text": "Founder directive 2026-09-29: full unattended orchestration with a repository-native durable supervisor under Windows Task Scheduler, automatic Codex quota recovery, automatic review/remediation/merge/release/Phase0 within existing authority, narrow command contracts, secure local signing only through an OS-backed signer, no repeated Founder questions for approved policy."}
+  ]
+}

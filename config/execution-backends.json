@@ -45,6 +45,13 @@
       "dispatch": {
         "status": "NOT_CONFIGURED",
         "adapter": null,
+        "discovered": {
+          "mechanism": "claude --cloud [description|session_id|url] (official option listed by Claude Code CLI 2.1.274 --help, discovered 2026-09-29)",
+          "activationBlockedBy": [
+            "cloud sessions work from the GitHub repository, but the remote-protection policy does not allow autonomous pushes while GitHub branch protection is unavailable for the private repository",
+            "no cloud environment has been validated for this repository"
+          ]
+        },
         "requires": [
           "a documented Claude product method to start a cloud session on a given repository branch",
           "explicit Founder approval for the cloud workspace to access the private repository",

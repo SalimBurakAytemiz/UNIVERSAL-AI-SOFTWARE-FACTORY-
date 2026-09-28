@@ -58,7 +58,8 @@
   "finalZip": "PACKAGING_STAGE_OUTSIDE_GIT",
   "targetMachinePhase0": "PENDING",
   "pendingPackages": [
-    {"id": "V6-PKG-X1-DUAL-EXECUTION-FABRIC", "scope": "LOCAL_CLAUDE + CLAUDE_CLOUD_SESSION execution routing, provenance and merge gate", "cloudDispatch": "NOT_CONFIGURED", "review": "PENDING", "merge": "HELD_UNTIL_CA21E83_RELEASE_PHASE0"}
+    {"id": "V6-PKG-X1-DUAL-EXECUTION-FABRIC", "scope": "LOCAL_CLAUDE + CLAUDE_CLOUD_SESSION execution routing, provenance and merge gate", "cloudDispatch": "NOT_CONFIGURED", "review": "PENDING", "merge": "HELD_UNTIL_CA21E83_RELEASE_PHASE0"},
+    {"id": "V6-PKG-AUT1-UNATTENDED-ORCHESTRATION", "scope": "repository-native unattended orchestrator, durable control state, quota automation, command contracts, release/signing/Phase0 automation", "signer": "WAITING_FOR_SECURE_SIGNER_UNTIL_SSH_AGENT_HOLDS_KEY", "review": "PENDING", "activation": "AFTER_CLEAN", "merge": "AFTER_PKG_X1"}
   ],
   "pendingEnvironmentGates": [
     "final-sha256sums:PACKAGING_STAGE_OUTSIDE_GIT",
