@@ -1,4 +1,4 @@
-// //TR: Bu protected installer adımı Electron binary'sini yalnız burada ve açıkça temin eder: reviewed lock installed-tree mührünü doğrular, zip'i izinli GitHub host'larından redirect'leri tek tek denetleyerek indirir, checksums.json SHA-256 eşleşmeden açmaz, node_modules dışına staging + atomik rename ile yerleştirir ve exe SHA-256'lı manifest yazar.
+// //TR: Bu protected installer adımı Electron binary'sini yalnız burada ve açıkça temin eder: reviewed lock installed-tree mührünü doğrular, zip'i izinli GitHub host'larından redirect'leri tek tek denetleyerek indirir, checksums.json SHA-256 eşleşmeden açmaz, doğrulanmış zip'i güven bağı için saklar ve node_modules dışına staging + atomik rename ile yerleştirir.
 import fs from "node:fs";import path from "node:path";import crypto from "node:crypto";import cp from "node:child_process";import {Readable,Transform} from "node:stream";import {pipeline} from "node:stream/promises";
 import {assertInstalledDependencyState} from "../automation/lib/dependency-install.mjs";import {electronTarget,allowedDownloadUrl,verifyProvisionedElectron,fileSha256} from "../automation/lib/electron-provision.mjs";
 const root=process.cwd();
@@ -8,15 +8,17 @@ async function download(url,file,expectedSha256){let current=url;for(let hop=0;h
 function assertNoEscapingLinks(dir){const base=fs.realpathSync(dir);const walk=d=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isSymbolicLink()){const real=fs.realpathSync(p),rel=path.relative(base,real);if(rel.startsWith("..")||path.isAbsolute(rel))throw new Error(`ELECTRON_ARCHIVE_LINK_ESCAPE:${p}`)}else if(e.isDirectory())walk(p)}};walk(dir)}
 try{
  assertInstalledDependencyState(root);
- try{const exe=verifyProvisionedElectron(root);console.log(JSON.stringify({status:"EXISTING",exe},null,2));process.exit(0)}catch{}
+ try{const exe=await verifyProvisionedElectron(root);console.log(JSON.stringify({status:"EXISTING",exe},null,2));process.exit(0)}catch{}
  const t=electronTarget(root),downloads=path.join(path.dirname(t.dir),"downloads"),zip=path.join(downloads,`${t.artifact}.partial-${process.pid}`),staging=`${t.dir}.staging-${process.pid}`;
  fs.mkdirSync(downloads,{recursive:true});fs.rmSync(staging,{recursive:true,force:true});fs.mkdirSync(path.join(staging,"dist"),{recursive:true});
  const dl=await download(t.url,zip,t.expectedSha256);
  // //TR: Arşiv yalnız checksum doğrulandıktan sonra, shell olmadan sistem tar.exe (bsdtar; '..' ve mutlak yolları reddeder) veya unzip ile staging'e açılır.
  const extractor=process.platform==="win32"?[path.join(process.env.SystemRoot??"C:\\Windows","System32","tar.exe"),["-xf",zip,"-C",path.join(staging,"dist")]]:["unzip",["-q",zip,"-d",path.join(staging,"dist")]];
- const x=cp.spawnSync(extractor[0],extractor[1],{encoding:"utf8",windowsHide:true,maxBuffer:16*1024*1024});fs.rmSync(zip,{force:true});if(x.status!==0)throw new Error(`ELECTRON_EXTRACT_FAILED:${x.error?.code??x.status}:${(x.stderr||"").slice(-400)}`);
+ const x=cp.spawnSync(extractor[0],extractor[1],{encoding:"utf8",windowsHide:true,maxBuffer:16*1024*1024});if(x.status!==0){fs.rmSync(zip,{force:true});throw new Error(`ELECTRON_EXTRACT_FAILED:${x.error?.code??x.status}:${(x.stderr||"").slice(-400)}`)}
+ // //TR: Doğrulanmış zip silinmez; her doğrulamada checksums.json'a ve dist içeriğine karşı yeniden bağlanacak arşiv olarak staging/archive altına taşınır.
+ fs.mkdirSync(path.join(staging,"archive"),{recursive:true});fs.renameSync(zip,path.join(staging,"archive",t.artifact));
  assertNoEscapingLinks(path.join(staging,"dist"));const exeStaged=path.join(staging,"dist",t.exe);if(!fs.existsSync(exeStaged)||!fs.lstatSync(exeStaged).isFile())throw new Error("ELECTRON_EXTRACTED_EXECUTABLE_MISSING");
  const manifest={"//TR":"Bu manifest açıkça temin edilen Electron binary'sinin kaynağını, zip ve exe SHA-256 değerlerini kaydeder; smoke'lar exe SHA-256'yı her çalıştırmada yeniden doğrular.",schemaVersion:"1.0.0",version:t.version,platform:t.platform,arch:t.arch,artifact:t.artifact,url:t.url,finalHost:dl.finalHost,zipBytes:dl.bytes,zipSha256:t.expectedSha256,checksumSource:"node_modules/electron/checksums.json (reviewed lock, installed-tree seal verified)",exe:t.exe,exeSha256:fileSha256(exeStaged),provisionedAt:new Date().toISOString()};
  fs.writeFileSync(path.join(staging,"PROVISIONED.json"),JSON.stringify(manifest,null,2)+"\n");fs.rmSync(t.dir,{recursive:true,force:true});fs.renameSync(staging,t.dir);
- const exe=verifyProvisionedElectron(root);console.log(JSON.stringify({status:"PROVISIONED",exe,artifact:t.artifact,zipBytes:dl.bytes,zipSha256:t.expectedSha256,finalHost:dl.finalHost},null,2));
+ const exe=await verifyProvisionedElectron(root);console.log(JSON.stringify({status:"PROVISIONED",exe,artifact:t.artifact,zipBytes:dl.bytes,zipSha256:t.expectedSha256,finalHost:dl.finalHost},null,2));
 }catch(e){console.error(`ELECTRON_PROVISION: FAIL ${e instanceof Error?e.message:String(e)}`);process.exit(1)}

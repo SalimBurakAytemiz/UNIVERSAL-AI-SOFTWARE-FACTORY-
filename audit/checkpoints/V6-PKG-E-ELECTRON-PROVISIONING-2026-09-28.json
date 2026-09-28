@@ -5,11 +5,21 @@
   "date": "2026-09-28",
   "parent": "8315b9a7b30a90d2b4e5b5de07eec8a7e8633119",
   "branch": "v6/pkg-e-electron-provisioning",
-  "resolves": ["PKGC-F1"],
+  "resolves": [
+    "PKGC-F1"
+  ],
   "founderAuthorization": {
     "decision": "EXPLICIT_ELECTRON_PROVISIONING_STEP_APPROVED",
     "rule": "A new protected step, called by the installer, downloads electron-v44.4.5-win32-x64.zip from GitHub releases. Its SHA-256 is verified against checksums.json inside the locked package. The binary is extracted outside node_modules under .ai/cache/electron and the smokes verify it there before launching. The installed-tree seal is not broken; the download happens only in this step.",
-    "protectedFiles": ["scripts/provision-electron.mjs", "automation/lib/electron-provision.mjs", "automation/lib/electron-provision.d.mts", "scripts/smoke-desktop.mjs", "scripts/smoke-control-tower.mjs", "scripts/install.ps1", "config/protected-paths.json"],
+    "protectedFiles": [
+      "scripts/provision-electron.mjs",
+      "automation/lib/electron-provision.mjs",
+      "automation/lib/electron-provision.d.mts",
+      "scripts/smoke-desktop.mjs",
+      "scripts/smoke-control-tower.mjs",
+      "scripts/install.ps1",
+      "config/protected-paths.json"
+    ],
     "constraint": "Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
   },
   "validationEnvironment": {
@@ -32,7 +42,11 @@
   "validation": {
     "workspace": "fresh clone mirroring the working tree with the reviewed lock installed; repository .ai/runtime untouched",
     "gitDiffCheck": "PASS",
-    "canonicalRunner": {"status": "PASS", "pass": 34, "fail": 0},
+    "canonicalRunner": {
+      "status": "PASS",
+      "pass": 34,
+      "fail": 0
+    },
     "vitest": "PASS 18 files / 115 tests (23 new PKG-E tests, no network)",
     "broadDependencyFreeSuite": "25/25 PASS",
     "realProvisioning": {
@@ -66,9 +80,63 @@
     "tests/pkg-e-electron-provision.test.ts": "38f892956fbf37803c58104195e723647679f9786fcd1a89386bb78df4092793"
   },
   "openFindings": [
-    {"id": "PKGA-F8", "severity": "ENVIRONMENT", "status": "OPEN_ENVIRONMENT_NOT_CODE_DEFECT"}
+    {
+      "id": "PKGA-F8",
+      "severity": "ENVIRONMENT",
+      "status": "OPEN_ENVIRONMENT_NOT_CODE_DEFECT"
+    }
   ],
-  "review": "NOT_REVIEWED_CODEX_PENDING",
+  "reviewHistory": [
+    {
+      "cycle": 1,
+      "reviewedCommit": "a605e2ff5ece9943e3b044e7b4fa57ec780c63a5",
+      "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+      "run": ".ai/cache/review/runs/a605e2f-c1-20260928T034900Z-broker",
+      "result": "BLOCKED",
+      "reviewResultSha256": "c2ecd845b26fa7798a6479fc0c465fc2422aeeb3f461ba86bf99e3dbe87ad26c",
+      "blockers": [
+        {
+          "id": "F-PKGE-001",
+          "severity": "P1",
+          "observed": "verifyProvisionedElectron trusted exeSha256 and zipSha256 from the unauthenticated cache manifest, so replacing the executable together with the manifest was accepted.",
+          "remediationAcceptance": "Authenticate the archive-to-executable binding with a trust anchor independent of writable cache contents, verify it before EXISTING reuse and before either smoke, and add regression coverage."
+        }
+      ]
+    }
+  ],
+  "remediation": {
+    "//TR": "F-PKGE-001 remediation: güven kökü mühürlü checksums.json; saklanan zip ona, dist altındaki her dosya zip içeriğine birebir bağlanır.",
+    "trustAnchor": "node_modules/electron/checksums.json inside the reviewed lock, covered by assertInstalledDependencyState before it is trusted",
+    "binding": "The checksum-verified zip is kept under <cache>/archive/. verifyProvisionedElectron re-hashes the zip against checksums.json, reads its central directory (zip64, encrypted, symlink, unknown-method and unsafe-name entries fail closed), requires the set of regular files under dist to equal the archive file entries (no missing or extra files), and compares the SHA-256 of every dist file with the SHA-256 of the decompressed archive entry. The manifest is no longer a trust source.",
+    "enforcedAt": [
+      "scripts/provision-electron.mjs EXISTING reuse",
+      "scripts/provision-electron.mjs final result",
+      "scripts/smoke-desktop.mjs before spawn",
+      "scripts/smoke-control-tower.mjs before spawn"
+    ],
+    "realRunEvidence": {
+      "oldLayoutCacheWithoutArchive": "FAIL_CLOSED ARCHIVE_MISSING",
+      "reprovision": "PROVISIONED 158184819-byte zip retained under archive/",
+      "smokeDesktop": "PASS",
+      "smokeControlTower": "PASS",
+      "verifyDurationSeconds": "about 10 (seal + zip hash + full dist comparison)",
+      "exeAndManifestReplaced": "FAIL_CLOSED DIST_CONTENT_MISMATCH:electron.exe; provisioning refused EXISTING reuse and re-provisioned",
+      "extraDllNextToExe": "FAIL_CLOSED DIST_EXTRA_FILE:version.dll",
+      "sealAfterRuns": "INTACT 4c0aec51d8f5cfb385e214b2375d6dc618f82eac5b5fb2515b4f881bfd79ad12"
+    },
+    "validation": {
+      "canonicalRunner": "PASS 34/34 in a clone without an Electron cache (the reviewed configuration)",
+      "vitest": "PASS 18 files / 122 tests",
+      "pkgETestAssertions": "28 -> 37",
+      "broadDependencyFreeSuite": "25/25 PASS"
+    },
+    "separatedFinding": {
+      "id": "PKGE-F2",
+      "observed": "With .ai/cache/electron present, protected scripts/validate-tr-comments.mjs scans the gitignored cache and fails on Electron's HTML/JSON files, so a second install.ps1 run would fail in bootstrap validation.",
+      "status": "FOUNDER_APPROVED_FIX_IN_SEPARATE_PACKAGE_V6-PKG-E2 (outside this frozen contract)"
+    }
+  },
+  "review": "CYCLE_2_PENDING",
   "cleanClaim": false,
   "trustRootManifest": "NOT_REGENERATED_FINAL_RESEAL_PENDING",
   "truth": {
@@ -78,5 +146,15 @@
     "FINAL_ZIP": "NOT_DONE",
     "TARGET_MACHINE_PHASE0": "PENDING"
   },
-  "nextScope": "CODEX_REVIEW_THEN_PKG_B_CURRENT_TRUTH_SYNC_VIA_CANONICAL_BROKER"
+  "nextScope": "CODEX_REVIEW_THEN_PKG_B_CURRENT_TRUTH_SYNC_VIA_CANONICAL_BROKER",
+  "remediationChangedFileSha256": {
+    "//TR": "Cycle 2 remediation commit içinde değişen dosyaların digestleri; changedFileSha256 cycle 1 commitine aittir.",
+    "automation/lib/electron-provision.mjs": "81a5da3ecf08198e2420ad2006367bce493fc1b17197a13a2a3cc36ea78a3c66",
+    "automation/lib/electron-provision.d.mts": "830bfdc77a8b46d73d639e2aa3bb5db617b09aab0bfa6efb2781355066624dde",
+    "scripts/provision-electron.mjs": "77be5dfeb5a3e916a7974653022f4277d72b8ed8c7aefec200ec83f0a23f6833",
+    "scripts/smoke-desktop.mjs": "a3eef29076ef9c02020d6e66f792bcd1edf362ce39f597c911c64bd4f815cc47",
+    "scripts/smoke-control-tower.mjs": "8f600c0caa29804bdec5d3dfde325e8cf82acefbb6604add50aa66bf42d7e235",
+    "tests/pkg-c-lf-electron-smoke.test.ts": "abf5602745903543e5f44729a0363c28a63253253056b94d8b0dbf495ee824aa",
+    "tests/pkg-e-electron-provision.test.ts": "9c0f93b1bdf7e5841f71e854129095e814daec69d447d8c92f38929ce34fcc1f"
+  }
 }
