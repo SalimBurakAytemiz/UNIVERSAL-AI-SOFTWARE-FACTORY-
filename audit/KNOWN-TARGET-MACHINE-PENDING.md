@@ -21,7 +21,7 @@ Bu maddeler target makinede gerçek runtime ile çalıştırılmış ve bağıms
 Aşağıdakiler hâlâ tamamlanmış sayılamaz:
 
 - Windows PowerShell installer state machine end to end (`scripts/install.ps1`); the first attempt stopped at bootstrap (PHASE0-F1..F3, fixed in PKG-R3)
-- Windows process lock / kill / crash / restart / resume tests
+- Windows process lock / kill / crash / restart / resume tests: verified on this target machine for the process lock and the unattended orchestrator with real child processes (killed holder taken over as stale, one winner among concurrent invocations, unreadable/foreign-host locks fail closed, a worker killed mid-action resumed after lease expiry without a duplicate provider call, corrupted state recovered from its previous copy); the installed supervisor's own crash/resume is still covered only by Phase0
 - Task Scheduler/autostart
 - Git remote privacy + branch protection provider API
 - real merge/push/remote-SHA verification
