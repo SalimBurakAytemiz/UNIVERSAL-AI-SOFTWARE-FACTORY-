@@ -1,6 +1,14 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-09-29 — V6 Unattended Orchestration (branch, activation after review)
+
+- Repository-native unattended supervisor `scripts/uasco-orchestrator.mjs` under Windows Task Scheduler (`scripts/register-orchestrator-autostart.ps1`, user level, single instance).
+- Durable `control` state with a hash-chained transition log, lease/heartbeat, in-flight recovery and idempotent executors (no duplicate reviews, merges, packaging or signing after a restart).
+- Codex quota automation: verbatim evidence, parsed retry time, no cycle consumption, one controlled probe at the due time, Founder manual reset support, independent work continues.
+- Narrow command contracts, review pipeline moved into reviewed code, dependency-aware lanes, Founder decisions scoped to the affected item.
+- Release packaging, ssh-agent-only signing (`WAITING_FOR_SECURE_SIGNER` until the key is loaded) and Phase0 with preserved failed attempts; honest GitHub and cloud status.
+
 ## 2026-09-29 — V6 Dual Execution Fabric (branch, merge held)
 
 - Execution backend registry (`config/execution-backends.json`) with `LOCAL_CLAUDE` and `CLAUDE_CLOUD_SESSION` and routing modes `AUTO` (default), `LOCAL_ONLY`, `CLOUD_PREFERRED`, `CLOUD_ONLY`.

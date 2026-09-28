@@ -15,6 +15,7 @@ Independent Codex reviews (frozen milestone contract + review bundle, read-only,
 - `V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS` @ `89bc44c5bdd4f7da8f8cd901e0798dfd0e4f7f25`: cycle 1 `BLOCKED` (F-PKGR1-001); @ `a7ed30628920ba58e3b67762eb0f030fceeb968b`: cycle 2 `CLEAN`, merged fast-forward to local master.
 - `V6-PKG-R2-RELEASE-CANDIDATE-RESEAL` @ `f0a4f0ad4b679bb52a3d3cb954046d39a24a337b`: `CLEAN`, merged fast-forward to local master; its signed ZIP failed the first Phase0 attempt and is superseded.
 - `V6-PKG-R3-PHASE0-FIXES-AND-RESEAL` @ `ca21e830ad8c45880f3ed72cbca9bbff08b6ed84`: release candidate; independent review waiting for the reviewer quota.
-- `V6-PKG-X1-DUAL-EXECUTION-FABRIC`: this commit on branch `v6/pkg-x1-dual-execution-fabric`; reviewed after PKG-R3; merge held until the `ca21e83` release Phase0 completes.
+- `V6-PKG-X1-DUAL-EXECUTION-FABRIC` @ `1e3a1230d020ea0b955d6972c6d934d80e1abbf3`: frozen bundle ready; reviewed after PKG-R3; merge held until the `ca21e83` release Phase0 completes.
+- `V6-PKG-AUT1-UNATTENDED-ORCHESTRATION`: this commit on branch `v6/pkg-aut1-unattended-orchestration`; reviewed after PKG-X1; activated after CLEAN; merge after PKG-X1.
 
 Nothing has been pushed to a remote. Any commit after a CLEAN review needs its own review.
