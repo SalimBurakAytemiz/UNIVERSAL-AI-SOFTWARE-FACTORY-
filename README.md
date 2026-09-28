@@ -36,7 +36,11 @@ Canonical gerçeklik:
 - Paste 4A: `COMPLETE_SOURCE`
 - Paste 4B: `COMPLETE_SOURCE`
 - Paste 4C: `COMPLETE_SOURCE`
-- Paste 4D: `NEXT`
+- Paste 4D: `COMPLETE_SOURCE`
+- Dependency-aware environment gate: `PASS` on the target Windows machine (Node v24.19.0, npm 11.17.0; canonical validation 34/34, `npm audit` 0 findings)
+- Independent Codex review: PKG-A, PKG-C, PKG-D, PKG-E, PKG-E2 `CLEAN` (records in `audit/reviews/`)
+- Desktop / Control Tower smoke on this machine: `PASS`
+- Live provider smoke: `PENDING`
 
 `SOURCE_LEVEL_CLOSURE = FALSE`
 
@@ -59,8 +63,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\install.ps1
 ```
 
-Mevcut audit worktree'sinde dependency-aware ve target-machine doğrulamalarını çalışmadan PASS kabul etme.
+Target-machine Phase0 ve live provider smoke çalışmadan kurulumu veya release'i PASS kabul etme.
 
 ## Current V6 audit route
 
-Paste 1, Paste 2, Paste 3 ve Paste 4A/4B/4C/4D source replay/audit segmentleri ile repo-geneli `config -> runtime enforcement` sweep ve full dependency-free source regression tamamlandı. Dependency-free source tarafında açık P0/P1/P2 yoktur; sıradaki kapı reviewed `package-lock.json` ve dependency-aware validation'dır. Bu kapılar tamamlanmadan `SOURCE_LEVEL_CLOSURE` true yapılamaz.
+Paste 1, Paste 2, Paste 3 ve Paste 4A/4B/4C/4D source replay/audit segmentleri, repo-geneli `config -> runtime enforcement` sweep, full dependency-free source regression ve dependency-aware environment gate (reviewed `package-lock.json`, `npm ci`, supply-chain/SBOM, Ajv, typecheck, Vitest) tamamlandı ve bağımsız Codex review'dan geçti. Açık kalan tek source bulgusu önceden var olan P1 `TRUST-F1`'dir (protected önek eşleştirmesi `scripts/validate-*` validator'larını korumuyor; Founder kararı bekliyor). Sıradaki kapı `TARGET_MACHINE_PHASE0_ACCEPTANCE_AND_LIVE_PROVIDER_SMOKE`'dur; bu kapı ve final reseal/imza/ZIP tamamlanmadan `SOURCE_LEVEL_CLOSURE` true yapılamaz.

@@ -44,13 +44,13 @@ must(master.lastStaticClosureAudit==="NOT_FINAL","master-static-closure-overclai
 must(master.targetMachinePhase0==="PENDING","master-target-phase0-overclaim");
 must(!/MECHANICALLY_CLOSED|INSTALLATION_CANDIDATE_READY|INSTALLATION_READY/i.test(JSON.stringify(master)),"master-stale-closed-ready-claim");
 must(testStatus.includes("SOURCE_LEVEL_CLOSURE = FALSE"),"test-status-source-closure-overclaim");
-must(testStatus.includes("DEPENDENCY_AWARE_VALIDATION = PENDING"),"test-status-dependency-overclaim");
+must(testStatus.includes("DEPENDENCY_AWARE_VALIDATION = PASS_TARGET_WINDOWS_NODE24_NPM11"),"test-status-dependency-truth-missing");
 must(testStatus.includes("FINAL_SHA256SUMS = NOT_DONE"),"test-status-final-sha-overclaim");
 must(testStatus.includes("TARGET_MACHINE_PHASE0 = PENDING"),"test-status-target-phase0-overclaim");
 
 must(auditState.status==="V6_AUDIT_REMEDIATION_IN_PROGRESS","current-audit-state-stale");
 must(auditState.sourceLevelClosure===false,"current-audit-source-closure-overclaim");
-must(["UNKNOWN_PENDING_CONFIG_RUNTIME_SWEEP_AND_FULL_REGRESSION","UNKNOWN_PENDING_FULL_SOURCE_REGRESSION","UNKNOWN_FULL_SYSTEM_REAUDIT_IN_PROGRESS","ZERO_DEPENDENCY_FREE_SOURCE_PENDING_DEPENDENCY_AWARE"].includes(auditState.overallRemainingP0P1P2),"current-audit-premature-zero-blocker-claim");
+must(["UNKNOWN_PENDING_CONFIG_RUNTIME_SWEEP_AND_FULL_REGRESSION","UNKNOWN_PENDING_FULL_SOURCE_REGRESSION","UNKNOWN_FULL_SYSTEM_REAUDIT_IN_PROGRESS","ZERO_DEPENDENCY_FREE_SOURCE_PENDING_DEPENDENCY_AWARE","P1_OPEN_TRUST_F1_DEPENDENCY_AWARE_PASS_PENDING_FOUNDER_DECISION"].includes(auditState.overallRemainingP0P1P2),"current-audit-premature-zero-blocker-claim");
 must(auditState.finalTrustRootSeal==="STALE_PENDING_FINAL_RESEAL","current-audit-trust-overclaim");
 must(auditState.finalSha256Sums==="NOT_DONE","current-audit-final-sha-overclaim");
 must(auditState.finalReleaseAuthenticity==="NOT_DONE","current-audit-release-auth-overclaim");

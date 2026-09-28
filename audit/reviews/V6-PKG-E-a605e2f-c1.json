@@ -1,0 +1,1330 @@
+{
+  "//TR": "Bu kayıt tek bir Codex bağımsız review çalıştırmasının frozen bundle, değiştirilmemiş reviewer çıktısı, run manifest ve governed değerlendirmesini kalıcı tutar; evidence signing anahtarı henüz başlatılmadığı için imzasızdır.",
+  "schemaVersion": "1.0.0",
+  "signature": "UNSIGNED_EVIDENCE_KEY_NOT_INITIALIZED",
+  "runDir": "a605e2f-c1-20260928T034900Z-broker",
+  "runId": "RUN-V6-PKG-E-ELECTRON-PROVISIONING-20260928T034846Z-C1",
+  "baseCommit": "8315b9a7b30a90d2b4e5b5de07eec8a7e8633119",
+  "reviewedCommit": "a605e2ff5ece9943e3b044e7b4fa57ec780c63a5",
+  "cycle": 1,
+  "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+  "bundleDigest": "41f94ecf5c1eacbd63669663a1b90bdb922f2c2bf295317aa1be7cc0f4d44270",
+  "bundleFileSha256": "13e7511e0f402b9b8bf8a98efd7d085ede443c92825efa2622f9ce8827689f10",
+  "milestoneContractId": "V6-PKG-E-ELECTRON-PROVISIONING",
+  "milestoneContractDigest": "89bc5a3a0c61ea0c92735148fcaed92428973e26bee6e88a704fda0b1aec6272",
+  "reviewResultText": "{\n  \"schemaVersion\": \"1.1.0\",\n  \"runId\": \"RUN-V6-PKG-E-ELECTRON-PROVISIONING-20260928T034846Z-C1\",\n  \"cycle\": 1,\n  \"baseCommit\": \"8315b9a7b30a90d2b4e5b5de07eec8a7e8633119\",\n  \"reviewedCommit\": \"a605e2ff5ece9943e3b044e7b4fa57ec780c63a5\",\n  \"reviewBundleDigest\": \"41f94ecf5c1eacbd63669663a1b90bdb922f2c2bf295317aa1be7cc0f4d44270\",\n  \"result\": \"BLOCKED\",\n  \"reviewer\": {\n    \"provider\": \"OpenAI\",\n    \"tool\": \"Codex\",\n    \"toolVersion\": null,\n    \"modelId\": \"GPT-6\",\n    \"independenceStatus\": \"SUFFICIENT\"\n  },\n  \"findings\": [\n    {\n      \"id\": \"F-PKGE-001\",\n      \"classification\": \"BLOCKER\",\n      \"severity\": \"P1\",\n      \"category\": \"Executable provenance bypass\",\n      \"basisRefs\": [\n        \"P000-REQ-b1c76f7769b7674e\",\n        \"P000-REQ-c57018d71d9a4366\",\n        \"P000-INV-473c0420ab79dc5f\"\n      ],\n      \"currentDiffCausality\": \"CURRENT_DIFF\",\n      \"scopeStatus\": \"IN_SCOPE\",\n      \"file\": \"automation/lib/electron-provision.mjs\",\n      \"symbol\": \"verifyProvisionedElectron\",\n      \"line\": 24,\n      \"reproduction\": {\n        \"steps\": [\n          \"Load the helper source from the reviewed commit and evaluate it with an in-memory filesystem; no disk writes are required.\",\n          \"Supply an unchanged Electron package version and checksums.json, plus a matching cache dist/version.\",\n          \"Supply arbitrary replacement executable bytes and an unsigned PROVISIONED.json containing their SHA-256. Copy the public archive checksum from checksums.json into zipSha256.\",\n          \"Call verifyProvisionedElectron with platform win32 and arch x64. It returns the replacement executable path.\",\n          \"Observe that the provisioning script uses this same verifier for its EXISTING early exit, and both smokes directly spawn its returned path.\"\n        ]\n      },\n      \"expected\": \"An executable accepted by provisioning reuse and smoke launch must be authentically bound to the checksum-verified archive. Replacing cache contents and their unsigned manifest must fail closed.\",\n      \"observed\": \"The read-only, in-memory reproduction accepted arbitrary replacement bytes. zipSha256 is only compared as manifest text; exeSha256 is trusted from that same unauthenticated manifest. No archive-to-executable binding is verified. The installed-tree seal excludes this new cache, so a valid dependency seal does not prevent the bypass.\",\n      \"evidenceRefs\": [\n        \"DIFF-517b03a06da7174e\",\n        \"DIFF-2cbf86bd6b8ce3b0\",\n        \"DIFF-78c05479728a81c1\",\n        \"DIFF-963342723b166056\"\n      ],\n      \"blockerReason\": \"The new execution path can launch an executable that never passed the authorized checksum-verified provisioning step, violating the frozen provenance and fail-closed requirements.\",\n      \"remediationAcceptance\": \"Authenticate the binding between the verified archive and cached executable using a trust anchor independent of writable cache contents. Verify that binding before EXISTING reuse and before either smoke launches. Add regression coverage showing that replacing both executable and manifest is rejected while legitimate provisioned reuse succeeds.\",\n      \"retestValidationIds\": [\n        \"tests\"\n      ],\n      \"confidence\": 0.99,\n      \"firstSeenCycle\": 1,\n      \"status\": \"OPEN\"\n    }\n  ],\n  \"advisories\": [],\n  \"environmentGaps\": [],\n  \"priorBlockerDispositions\": [],\n  \"startedAt\": \"2026-09-28T03:49:09Z\",\n  \"finishedAt\": \"2026-09-28T03:50:58Z\",\n  \"summary\": \"Input checks a–e passed, including both independently recomputed digests. All seven changeGuard protected paths are Founder-authorized. The exact diff contains one reproducible executable-provenance blocker. Supplied validation reports PASS; write-producing validation and smokes were not rerun. Unsupported cases remain known limitations. No files were modified, created or deleted.\"\n}\n",
+  "reviewResultSha256": "c2ecd845b26fa7798a6479fc0c465fc2422aeeb3f461ba86bf99e3dbe87ad26c",
+  "governed": {
+    "//TR": "Bu dosya Codex review sonucunun supervisor-eşdeğeri governed değerlendirmesini kaydeder; Codex'in review-result.json dosyası değiştirilmez.",
+    "schemaVersion": "1.0.0",
+    "evaluatedAt": "2026-09-28T03:51:51.303Z",
+    "runDir": "C:/Users/PRO/Desktop/UASCO/.ai/cache/review/runs/a605e2f-c1-20260928T034900Z-broker/",
+    "exitCode": 0,
+    "checks": {
+      "promptDlpSensitiveTypes": [],
+      "resultSource": "CANONICAL_BROKER_STDOUT",
+      "resultMatchesBrokerStdout": true,
+      "schemaValid": true,
+      "validateReviewResult": "PASS",
+      "providerSeparation": "PASS"
+    },
+    "reviewResultSha256": "c2ecd845b26fa7798a6479fc0c465fc2422aeeb3f461ba86bf99e3dbe87ad26c",
+    "reviewerReportedResult": "BLOCKED",
+    "governedResult": "BLOCKED",
+    "reviewer": {
+      "provider": "OpenAI",
+      "tool": "Codex",
+      "toolVersion": null,
+      "modelId": "GPT-6",
+      "independenceStatus": "SUFFICIENT"
+    },
+    "summary": "Input checks a–e passed, including both independently recomputed digests. All seven changeGuard protected paths are Founder-authorized. The exact diff contains one reproducible executable-provenance blocker. Supplied validation reports PASS; write-producing validation and smokes were not rerun. Unsupported cases remain known limitations. No files were modified, created or deleted.",
+    "counts": {
+      "findings": 1,
+      "blockers": 1,
+      "advisories": 0,
+      "environmentGaps": 0,
+      "acceptedBlockers": 1,
+      "downgraded": 0
+    },
+    "findings": [
+      {
+        "id": "F-PKGE-001",
+        "classification": "BLOCKER",
+        "severity": "P1",
+        "category": "Executable provenance bypass",
+        "file": "automation/lib/electron-provision.mjs",
+        "symbol": "verifyProvisionedElectron",
+        "scopeStatus": "IN_SCOPE",
+        "expected": "An executable accepted by provisioning reuse and smoke launch must be authentically bound to the checksum-verified archive. Replacing cache contents and their unsigned manifest must fail closed.",
+        "observed": "The read-only, in-memory reproduction accepted arbitrary replacement bytes. zipSha256 is only compared as manifest text; exeSha256 is trusted from that same unauthenticated manifest. No archive-to-executable binding is verified. The installed-tree seal excludes this new cache, so a valid dependency seal does not prevent the bypass."
+      }
+    ],
+    "advisories": [],
+    "environmentGaps": [],
+    "effectiveReviewDigest": "a51eb0a236d4698dff45c2fbafd62f9f7bd7ed799b3c2d41dbb6f538a5342b6c",
+    "status": "EVALUATED"
+  },
+  "environmentBlock": null,
+  "runManifest": {
+    "//TR": "Bu manifest kanonik codex-reviewer-broker üzerinden yapılan tek bir Codex bağımsız review çağrısının girdi/çıktı/provenance kanıtını hash'leriyle kaydeder; review içeriğini builder üretmez.",
+    "schemaVersion": "1.0.0",
+    "startedAt": "2026-09-28T03:49:00.574Z",
+    "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+    "reviewWorktree": "C:/Users/PRO/AppData/Local/Temp/claude/C--Users-PRO-Desktop-UASCO/a72e023b-e073-49b8-9fbd-20b544644a38/scratchpad/rev-e",
+    "baseCommit": "8315b9a7b30a90d2b4e5b5de07eec8a7e8633119",
+    "reviewedCommit": "a605e2ff5ece9943e3b044e7b4fa57ec780c63a5",
+    "cycle": 1,
+    "runId": "RUN-V6-PKG-E-ELECTRON-PROVISIONING-20260928T034846Z-C1",
+    "bundleFile": ".ai/cache/review/V6-PKG-E-ELECTRON-PROVISIONING-a605e2f-cycle-1-review-bundle.json",
+    "bundleFileSha256": "13e7511e0f402b9b8bf8a98efd7d085ede443c92825efa2622f9ce8827689f10",
+    "bundleDigest": "41f94ecf5c1eacbd63669663a1b90bdb922f2c2bf295317aa1be7cc0f4d44270",
+    "milestoneContractId": "V6-PKG-E-ELECTRON-PROVISIONING",
+    "milestoneContractDigest": "89bc5a3a0c61ea0c92735148fcaed92428973e26bee6e88a704fda0b1aec6272",
+    "promptFile": ".ai/cache/review/V6-PKG-E-ELECTRON-PROVISIONING-a605e2f-cycle-1-review-prompt.txt",
+    "promptSha256": "37ea7f3e7e417c2bb91a799550f761d939906abf78b38ce509f50a233c75c429",
+    "precheck": {
+      "head": "a605e2ff5ece9943e3b044e7b4fa57ec780c63a5",
+      "baseResolved": "8315b9a7b30a90d2b4e5b5de07eec8a7e8633119",
+      "bundleDigestRecomputed": "41f94ecf5c1eacbd63669663a1b90bdb922f2c2bf295317aa1be7cc0f4d44270",
+      "contractDigestRecomputed": "89bc5a3a0c61ea0c92735148fcaed92428973e26bee6e88a704fda0b1aec6272",
+      "changedFiles": 10
+    },
+    "reviewer": {
+      "provider": "OPENAI",
+      "tool": "codex",
+      "broker": "scripts/codex-reviewer-broker.mjs",
+      "brokerSha256": "267e9d4adc2d1872824796f9e3fc4798f09e7d5dfad19d8118a0c116452aee35",
+      "providerProvenanceSha256": "766188a947eae963931800f4728058494668dd527b0a27f12ef5c61f9af63fbe",
+      "launcher": "C:\\Users\\PRO\\.codex\\packages\\standalone\\releases\\0.156.1-x86_64-pc-windows-msvc\\bin\\codex.exe",
+      "launcherSha256": "70bcb05f9bf1a4e7306edd0cd1b57d02af3267ad02a34b26f45c8c4bb20a3301",
+      "launcherVersion": "codex-cli 0.156.1",
+      "provenanceLevel": "STANDALONE_LAUNCHER",
+      "childEnvVariableNames": [
+        "APPDATA",
+        "COMSPEC",
+        "HOME",
+        "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS",
+        "OS",
+        "PATH",
+        "PATHEXT",
+        "PROCESSOR_ARCHITECTURE",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "UASCO_CONTROL_ROOT",
+        "UASCO_PAID_API_ALLOWED",
+        "UASCO_PROVIDER",
+        "USERPROFILE"
+      ],
+      "allowPaidApi": false
+    },
+    "finishedAt": "2026-09-28T03:51:31.416Z",
+    "exitCode": 0,
+    "signal": null,
+    "outputs": {
+      "codex-stderr.log": {
+        "bytes": 151310,
+        "sha256": "8d3ab037c8cdd4101ae5ccd1152c62ae0fb84794e2a32864434cfc2f284891d5"
+      },
+      "codex-stdout.txt": {
+        "bytes": 3800,
+        "sha256": "c2ecd845b26fa7798a6479fc0c465fc2422aeeb3f461ba86bf99e3dbe87ad26c"
+      },
+      "review-result.json": {
+        "bytes": 3800,
+        "sha256": "c2ecd845b26fa7798a6479fc0c465fc2422aeeb3f461ba86bf99e3dbe87ad26c"
+      }
+    }
+  },
+  "frozenBundle": {
+    "schemaVersion": "1.4.0",
+    "runId": "RUN-V6-PKG-E-ELECTRON-PROVISIONING-20260928T034846Z-C1",
+    "cycle": 1,
+    "phase": 0,
+    "phaseIds": [
+      0
+    ],
+    "baseCommit": "8315b9a7b30a90d2b4e5b5de07eec8a7e8633119",
+    "reviewedCommit": "a605e2ff5ece9943e3b044e7b4fa57ec780c63a5",
+    "milestoneContract": {
+      "schemaVersion": "1.2.0",
+      "id": "V6-PKG-E-ELECTRON-PROVISIONING",
+      "phase": 0,
+      "phaseIds": [
+        0
+      ],
+      "title": "V6 PKG-E explicit checksum-verified Electron binary provisioning",
+      "objective": "Provision the Electron binary through a single explicit, checksum-verified, protected installer step outside node_modules and make the Desktop/Control Tower smokes launch only that verified binary, using only Founder-authorized changes.",
+      "requirements": [
+        "[V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28 founderAuthorization.decision] EXPLICIT_ELECTRON_PROVISIONING_STEP_APPROVED",
+        "[V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28 founderAuthorization.rule] A new protected step, called by the installer, downloads electron-v44.4.5-win32-x64.zip from GitHub releases. Its SHA-256 is verified against checksums.json inside the locked package. The binary is extracted outside node_modules under .ai/cache/electron and the smokes verify it there before launching. The installed-tree seal is not broken; the download happens only in this step.",
+        "[V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28 founderAuthorization.protectedFiles] scripts/provision-electron.mjs, automation/lib/electron-provision.mjs, automation/lib/electron-provision.d.mts, scripts/smoke-desktop.mjs, scripts/smoke-control-tower.mjs, scripts/install.ps1, config/protected-paths.json",
+        "[V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+      ],
+      "invariants": [
+        "NO_FAKE_SUCCESS",
+        "NO_WEAKENED_CONTROLS",
+        "NO_SILENT_SCOPE_EXPANSION",
+        "NO_SELF_CERTIFICATION",
+        "EVIDENCE_REQUIRED",
+        "FAIL_CLOSED"
+      ],
+      "acceptanceCriteria": [
+        "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment.",
+        "The provisioning step verifies the installed-tree seal, downloads only through https GitHub hosts with manually checked redirects, verifies the zip SHA-256 against the locked package's checksums.json before extraction, extracts without a shell into staging outside node_modules and places it atomically.",
+        "Both smokes launch Electron only after verifying the provisioning manifest, dist/version, a regular-file executable and the recorded executable SHA-256, never download, and fail closed otherwise.",
+        "The installer runs the provisioning step immediately before the Control Tower smoke, and the new step is part of the protected trust root.",
+        "Only the Founder-authorized protected files change, the installed-tree seal remains intact after provisioning, and no existing test assertion, validator or policy is weakened."
+      ],
+      "mandatoryFailureCases": [
+        "no provision manifest",
+        "manifest checksum differs from checksums.json",
+        "dist/version mismatch",
+        "executable modified after provisioning",
+        "executable not a regular file",
+        "download host outside the allowlist",
+        "zip checksum mismatch"
+      ],
+      "requiredArtifacts": [
+        "scripts/provision-electron.mjs",
+        "automation/lib/electron-provision.mjs",
+        "audit/checkpoints/V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28.json"
+      ],
+      "phaseTraceability": [
+        {
+          "phase": 0,
+          "requirement": "[V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28 founderAuthorization.decision] EXPLICIT_ELECTRON_PROVISIONING_STEP_APPROVED",
+          "acceptanceCriteria": [
+            "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment.",
+            "The provisioning step verifies the installed-tree seal, downloads only through https GitHub hosts with manually checked redirects, verifies the zip SHA-256 against the locked package's checksums.json before extraction, extracts without a shell into staging outside node_modules and places it atomically.",
+            "Both smokes launch Electron only after verifying the provisioning manifest, dist/version, a regular-file executable and the recorded executable SHA-256, never download, and fail closed otherwise.",
+            "The installer runs the provisioning step immediately before the Control Tower smoke, and the new step is part of the protected trust root.",
+            "Only the Founder-authorized protected files change, the installed-tree seal remains intact after provisioning, and no existing test assertion, validator or policy is weakened."
+          ],
+          "mandatoryFailureCases": [
+            "no provision manifest",
+            "manifest checksum differs from checksums.json",
+            "dist/version mismatch",
+            "executable modified after provisioning",
+            "executable not a regular file",
+            "download host outside the allowlist",
+            "zip checksum mismatch"
+          ],
+          "requiredArtifacts": [
+            "scripts/provision-electron.mjs",
+            "automation/lib/electron-provision.mjs",
+            "audit/checkpoints/V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28.json"
+          ],
+          "unsupportedCases": [
+            "PKGA-F8 ENVIRONMENT (open, not code): target preflight memory 15.9GB below 16GB and Windows Time service not running.",
+            "Electron provisioning is implemented and exercised for win32-x64 on this machine; other platforms use unzip and are not exercised here.",
+            "Not claimed: live provider smoke, target-machine Phase0, trust-root manifest regeneration/final reseal, SHA256SUMS, release signature, final ZIP."
+          ]
+        }
+      ],
+      "allowedPathPrefixes": [
+        "scripts/provision-electron.mjs",
+        "automation/lib/electron-provision.mjs",
+        "automation/lib/electron-provision.d.mts",
+        "scripts/smoke-desktop.mjs",
+        "scripts/smoke-control-tower.mjs",
+        "scripts/install.ps1",
+        "config/protected-paths.json",
+        "tests/",
+        "audit/checkpoints/"
+      ],
+      "protectedPaths": [
+        ".gitattributes",
+        ".github/workflows/ci.yml",
+        ".gitignore",
+        ".gitmodules",
+        ".npmrc",
+        "AGENTS.md",
+        "ARCHITECTURE-CONSTITUTION.md",
+        "ARCHITECTURE-FREEZE.md",
+        "BUILD-RULES.md",
+        "CANONICAL-STATUS.md",
+        "CLAUDE.md",
+        "CODEX.md",
+        "DEFINITION-OF-DONE.md",
+        "FULL-REPO-CONSTRUCTION-CONTRACT.md",
+        "INSTALLATION-GO-CHECKLIST.md",
+        "THIRD-PARTY-NOTICES.md",
+        "apps/control-api/src/server.ts",
+        "apps/desktop/main.mjs",
+        "apps/desktop/preload.mjs",
+        "apps/desktop/renderer/app.js",
+        "apps/desktop/renderer/index.html",
+        "automation/factory-supervisor.mjs",
+        "automation/lib/evidence-signing.mjs",
+        "automation/lib/filesystem-boundary.mjs",
+        "automation/lib/redaction.mjs",
+        "config/action-policy.json",
+        "config/automation.json",
+        "config/builder-execution-policy.json",
+        "config/environment-policy.json",
+        "config/evidence-ledger-policy.json",
+        "config/git-metadata-policy.json",
+        "config/omniroute-policy.json",
+        "config/package-policy.json",
+        "config/protected-paths.json",
+        "config/supply-chain-policy.json",
+        "config/trust-root-manifest.json",
+        "config/validation.json",
+        "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
+        "governance/accepted-debt.json",
+        "governance/known-limitations.json",
+        "governance/waivers.json",
+        "prompts/AUTO-BUILDER.md",
+        "prompts/AUTO-REMEDIATION.md",
+        "prompts/AUTO-REVIEW.md",
+        "prompts/AUTO-VALIDATION-FIX.md",
+        "registries/phase-contracts-index.json",
+        "roadmap/build-waves.json",
+        "roadmap/critical-path.json",
+        "roadmap/dependency-graph.json",
+        "roadmap/parallel-lanes.json",
+        "roadmap/review-packages.json",
+        "roadmap/scheduler-state.template.json",
+        "schemas/install-report.schema.json",
+        "scripts/bootstrap-kernel-selftest.mjs",
+        "scripts/bootstrap.ps1",
+        "scripts/builder-boundary-smoke.mjs",
+        "scripts/capture-provider-provenance.mjs",
+        "scripts/check-prereqs.ps1",
+        "scripts/claude-builder-broker.mjs",
+        "scripts/codex-reviewer-broker.mjs",
+        "scripts/dependency-supply-chain.mjs",
+        "scripts/generate-trust-root.mjs",
+        "scripts/harden-evidence-key.ps1",
+        "scripts/init-evidence-signing.mjs",
+        "scripts/init-private-git.ps1",
+        "scripts/install-report.mjs",
+        "scripts/install.ps1",
+        "scripts/mechanical-kernel-selftest.mjs",
+        "scripts/phase0-acceptance.mjs",
+        "scripts/preflight.mjs",
+        "scripts/provider-smoke.mjs",
+        "scripts/provision-electron.mjs",
+        "scripts/register-autostart.ps1",
+        "scripts/sanitize-process-env.ps1",
+        "scripts/smoke-control-api.mjs",
+        "scripts/smoke-control-tower.mjs",
+        "scripts/smoke-desktop.mjs",
+        "scripts/start-control-tower.ps1",
+        "scripts/start-full-auto.ps1",
+        "scripts/supervisor-state-machine-selftest.mjs",
+        "scripts/v6-apps-control-desktop-selftest.mjs",
+        "scripts/validate-domain-packs.mjs",
+        "scripts/verify-artifact.mjs",
+        "scripts/verify-evidence-ledger.mjs",
+        "scripts/verify-remote-protection.mjs",
+        "scripts/verify-trust-root.mjs",
+        "tsconfig.json",
+        "automation/lib/",
+        "scripts/validate-",
+        "scripts/run-validation.mjs",
+        "schemas/independent-review-result.schema.json",
+        "schemas/review-finding.schema.json",
+        "schemas/review-bundle.schema.json",
+        "schemas/milestone-contract.schema.json",
+        "schemas/run-event.schema.json",
+        "schemas/run-manifest.schema.json",
+        "schemas/phase0-acceptance.schema.json",
+        "prompts/",
+        "roadmap/contracts/",
+        "config/"
+      ],
+      "mandatoryValidation": [
+        "Canonical runner scripts/run-validation.mjs over config/validation.json",
+        "vitest run",
+        "broad dependency-free selftest suite",
+        "real provisioning run",
+        "end-to-end desktop and control-tower smokes",
+        "tampered executable fail-closed run"
+      ],
+      "mandatoryEvidence": [
+        "reviewed commit SHA",
+        "exact tool/runtime versions",
+        "canonical validation report",
+        "changed file sha256 digests",
+        "provisioning zip and exe sha256",
+        "smoke results"
+      ],
+      "riskLevel": 3,
+      "allowPaidApi": false,
+      "allowProduction": false,
+      "allowRisk5": false,
+      "allowDependencyChanges": false,
+      "unsupportedCases": [
+        "PKGA-F8 ENVIRONMENT (open, not code): target preflight memory 15.9GB below 16GB and Windows Time service not running.",
+        "Electron provisioning is implemented and exercised for win32-x64 on this machine; other platforms use unzip and are not exercised here.",
+        "Not claimed: live provider smoke, target-machine Phase0, trust-root manifest regeneration/final reseal, SHA256SUMS, release signature, final ZIP."
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "maxFilesChanged": 15,
+      "allowExistingTestAssertionReduction": false,
+      "frozenAt": "2026-09-28T03:48:46.720Z",
+      "digest": "89bc5a3a0c61ea0c92735148fcaed92428973e26bee6e88a704fda0b1aec6272"
+    },
+    "reviewBasis": {
+      "requirements": [
+        {
+          "id": "P000-REQ-593b5013d9c34cfa",
+          "text": "[V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28 founderAuthorization.decision] EXPLICIT_ELECTRON_PROVISIONING_STEP_APPROVED"
+        },
+        {
+          "id": "P000-REQ-b1c76f7769b7674e",
+          "text": "[V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28 founderAuthorization.rule] A new protected step, called by the installer, downloads electron-v44.4.5-win32-x64.zip from GitHub releases. Its SHA-256 is verified against checksums.json inside the locked package. The binary is extracted outside node_modules under .ai/cache/electron and the smokes verify it there before launching. The installed-tree seal is not broken; the download happens only in this step."
+        },
+        {
+          "id": "P000-REQ-bcd7162ebc1c8215",
+          "text": "[V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28 founderAuthorization.protectedFiles] scripts/provision-electron.mjs, automation/lib/electron-provision.mjs, automation/lib/electron-provision.d.mts, scripts/smoke-desktop.mjs, scripts/smoke-control-tower.mjs, scripts/install.ps1, config/protected-paths.json"
+        },
+        {
+          "id": "P000-REQ-c57018d71d9a4366",
+          "text": "[V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+        }
+      ],
+      "invariants": [
+        {
+          "id": "P000-INV-cee4912d3e0a2019",
+          "text": "NO_FAKE_SUCCESS"
+        },
+        {
+          "id": "P000-INV-59e59d4476fc0664",
+          "text": "NO_WEAKENED_CONTROLS"
+        },
+        {
+          "id": "P000-INV-f74092f031a0e4aa",
+          "text": "NO_SILENT_SCOPE_EXPANSION"
+        },
+        {
+          "id": "P000-INV-6122df41f404fe66",
+          "text": "NO_SELF_CERTIFICATION"
+        },
+        {
+          "id": "P000-INV-b8274eed78d72a76",
+          "text": "EVIDENCE_REQUIRED"
+        },
+        {
+          "id": "P000-INV-473c0420ab79dc5f",
+          "text": "FAIL_CLOSED"
+        }
+      ],
+      "acceptanceCriteria": [
+        {
+          "id": "P000-AC-b07722a87fadfc19",
+          "text": "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment."
+        },
+        {
+          "id": "P000-AC-45a757997928a019",
+          "text": "The provisioning step verifies the installed-tree seal, downloads only through https GitHub hosts with manually checked redirects, verifies the zip SHA-256 against the locked package's checksums.json before extraction, extracts without a shell into staging outside node_modules and places it atomically."
+        },
+        {
+          "id": "P000-AC-842d07a7fea6e3f9",
+          "text": "Both smokes launch Electron only after verifying the provisioning manifest, dist/version, a regular-file executable and the recorded executable SHA-256, never download, and fail closed otherwise."
+        },
+        {
+          "id": "P000-AC-13ae47890644ac42",
+          "text": "The installer runs the provisioning step immediately before the Control Tower smoke, and the new step is part of the protected trust root."
+        },
+        {
+          "id": "P000-AC-347e9c0ca14b7b0a",
+          "text": "Only the Founder-authorized protected files change, the installed-tree seal remains intact after provisioning, and no existing test assertion, validator or policy is weakened."
+        }
+      ],
+      "mandatoryValidation": [
+        {
+          "id": "P000-VAL-2c7156c14e11890c",
+          "text": "Canonical runner scripts/run-validation.mjs over config/validation.json"
+        },
+        {
+          "id": "P000-VAL-ad6cd6b8acf39571",
+          "text": "vitest run"
+        },
+        {
+          "id": "P000-VAL-c9ec154ca647422f",
+          "text": "broad dependency-free selftest suite"
+        },
+        {
+          "id": "P000-VAL-f5c47d367cef8599",
+          "text": "real provisioning run"
+        },
+        {
+          "id": "P000-VAL-79f6363a0cf3e39a",
+          "text": "end-to-end desktop and control-tower smokes"
+        },
+        {
+          "id": "P000-VAL-1b3ddc91eaf6c3a3",
+          "text": "tampered executable fail-closed run"
+        }
+      ],
+      "mandatoryFailureCases": [
+        {
+          "id": "P000-FAIL-efaba74a37524b70",
+          "text": "no provision manifest"
+        },
+        {
+          "id": "P000-FAIL-75e62d95e4247898",
+          "text": "manifest checksum differs from checksums.json"
+        },
+        {
+          "id": "P000-FAIL-6eeb01a3e4a9bb3a",
+          "text": "dist/version mismatch"
+        },
+        {
+          "id": "P000-FAIL-6b50f491f959a124",
+          "text": "executable modified after provisioning"
+        },
+        {
+          "id": "P000-FAIL-020530a5c62fe929",
+          "text": "executable not a regular file"
+        },
+        {
+          "id": "P000-FAIL-aef013a07e67efe5",
+          "text": "download host outside the allowlist"
+        },
+        {
+          "id": "P000-FAIL-7341375827eff4b9",
+          "text": "zip checksum mismatch"
+        }
+      ],
+      "requiredArtifacts": [
+        {
+          "id": "P000-ART-2cbf86bd6b8ce3b0",
+          "text": "scripts/provision-electron.mjs"
+        },
+        {
+          "id": "P000-ART-517b03a06da7174e",
+          "text": "automation/lib/electron-provision.mjs"
+        },
+        {
+          "id": "P000-ART-51451275b5ee9017",
+          "text": "audit/checkpoints/V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28.json"
+        }
+      ],
+      "risk": [
+        {
+          "id": "P000-RISK-4391d3546bf1df6f",
+          "text": "riskLevel=3; reviewProfile=TRUST_CRITICAL"
+        }
+      ]
+    },
+    "evidenceCatalog": [
+      {
+        "id": "VALIDATION-REGISTRIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "registries",
+        "validationDigest": "8ffa6f6330a6110d8e99139af483e17c71a6df86bea6eb90b53ef87638246b30",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 73
+      },
+      {
+        "id": "VALIDATION-ARCHITECTURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "architecture",
+        "validationDigest": "e5bf5d23fdda0d99094fdb8527a39d03f097200ed58ad48e545edfa66c72268f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 76
+      },
+      {
+        "id": "VALIDATION-TR",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tr",
+        "validationDigest": "2e6b2ed7451d768a768929c1cffbfbe7163006ef338db738aee25eb2e32f0f10",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 850
+      },
+      {
+        "id": "VALIDATION-COMPETENCIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "competencies",
+        "validationDigest": "10562f2c1b237b192ff646172cda08cd586bf3f09cc90eb8537e860e8e89b83d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 94
+      },
+      {
+        "id": "VALIDATION-ORGANIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "organization",
+        "validationDigest": "6ac3f9799e6e1b0f96e62bcf1a9a0ade5c38852dcc133d2c11b1fd80156ccea5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 70
+      },
+      {
+        "id": "VALIDATION-SCHEMAS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schemas",
+        "validationDigest": "7ba29d41eceb71bd056a516963edf5ddfd26fcbd497d31ea31e504c769879057",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 129
+      },
+      {
+        "id": "VALIDATION-TECHNOLOGY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "technology",
+        "validationDigest": "4120c97312f885fb82187e6933b08c510c95e46d943ebc95f46ef4a5a2a66050",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 83
+      },
+      {
+        "id": "VALIDATION-PASTE3-TECHNOLOGY-DOMAIN-REGISTRY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-technology-domain-registry",
+        "validationDigest": "9951864be421206417dc0fc09feb8586d35de6df8b90b1132a044576afac17b5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 403
+      },
+      {
+        "id": "VALIDATION-DOMAIN-PACKS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "domain-packs",
+        "validationDigest": "6aa9c5c7e2dd34e3686e298fe3e0d67964ab0803815fd6d42f3d0f84a1048de7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 82
+      },
+      {
+        "id": "VALIDATION-AGENT-SEMANTIC",
+        "kind": "VALIDATION_STEP",
+        "validationId": "agent-semantic",
+        "validationDigest": "89e22dc4c751e6e449ca9297710721f30e635e17966c6d068f6e1100b5f0db53",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 159
+      },
+      {
+        "id": "VALIDATION-PASTE3-AGENT-SPECIALIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-agent-specialization",
+        "validationDigest": "c8caf548402f3e5d2cce7957a5e2bed0ba7e6df2b63a93989a786cd9890fbb44",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 23096
+      },
+      {
+        "id": "VALIDATION-PHASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "phase-contracts",
+        "validationDigest": "28fdd6131326497e67d9e3c3688f2c7e820c4e6d75587fb58dc9e35f8d545b59",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 194
+      },
+      {
+        "id": "VALIDATION-PASTE4A-CONSTRUCTION-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4a-construction-graph",
+        "validationDigest": "928324142269635a66da22344f852a800442428fa797d278922463d8c0790041",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 108
+      },
+      {
+        "id": "VALIDATION-PASTE4B-TRACEABILITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4b-traceability",
+        "validationDigest": "cdc94fbc1ab6b34cd1867473d6a6ab32555f421b82dc3bce66c8f95e82f9adf7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 200
+      },
+      {
+        "id": "VALIDATION-PASTE4C-DOC-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4c-doc-truth",
+        "validationDigest": "a86eb363edc20bab120a6590eeb2ac9f9168b9e0a164a5efb68574c2bb8b4e82",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 137
+      },
+      {
+        "id": "VALIDATION-PASTE4D-RELEASE-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4d-release-truth",
+        "validationDigest": "9de0bee8320b7f76dc95efd1af8751c01dc8b945d71a31a105dcef9a7c7dfaa8",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 91
+      },
+      {
+        "id": "VALIDATION-REVIEW-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "review-graph",
+        "validationDigest": "d269f09107f2fc3ffe916892e24db59375682a22a2a6775792a09b60361ec15f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 98
+      },
+      {
+        "id": "VALIDATION-SCHEMA-STRICT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schema-strict",
+        "validationDigest": "1e0b34db66453f8c8b54f4bddf4af81794090404f2b66c4fbe03d8b5c032468f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 159
+      },
+      {
+        "id": "VALIDATION-WOVEN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "woven",
+        "validationDigest": "3f4799cff5ec0a4516f7c2bf34292594d680d5e3b20ad2ca73becfb1efbe556d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 100
+      },
+      {
+        "id": "VALIDATION-PASTE3-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-source-closure",
+        "validationDigest": "96cdee7724cf5f145a0260098b33782eb8f9dad828a15f75396d4b04a492f74e",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 24319
+      },
+      {
+        "id": "VALIDATION-CONFIG-RUNTIME-ENFORCEMENT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "config-runtime-enforcement",
+        "validationDigest": "ccccb144bce66a977b83a70c4438c72ec13811a4027b94e24fe917015649fc17",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 100
+      },
+      {
+        "id": "VALIDATION-MECHANICAL",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical",
+        "validationDigest": "a802e0c8871cdac4940257b4c0ebf7ef8c837accd69e06ce8936903b9259ab62",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 156
+      },
+      {
+        "id": "VALIDATION-RUNTIME-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-contracts",
+        "validationDigest": "fef8d265e0207f281d438edd4ca13510c37c864c5bd44116e3a1741523e4267a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 730
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RELEASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-release-contracts",
+        "validationDigest": "663f4aefb74075b8404d3424fbd911793a297746e5f11fa9bf43783c285b359a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 113
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RESILIENCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-resilience",
+        "validationDigest": "d13001c5509688e16fdeb5815f15cd945076a1687a721b72c1229c1cb58f24e3",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 149
+      },
+      {
+        "id": "VALIDATION-PASTE2-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste2-source-closure",
+        "validationDigest": "3243c562d6ad710b47b4588b93cb64f8a5172ee089744a9d9d42a315736a969f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 2081
+      },
+      {
+        "id": "VALIDATION-RUNTIME-SCHEMA-CONFORMANCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-schema-conformance",
+        "validationDigest": "78210ab2268bd2aa77de25a46db9d44587cae6cedcb8da5f370e5ad2296ea0ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 209
+      },
+      {
+        "id": "VALIDATION-MECHANICAL-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical-selftest",
+        "validationDigest": "9f0d4aa941e72e684b4fd869c88eb93f07c3814dfda8eee8737f6baf9b65518c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 83
+      },
+      {
+        "id": "VALIDATION-STATE-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "state-selftest",
+        "validationDigest": "feda1327063ae6fddd47ba68f06959d79f614be5b8a5487dc79faf6ee55ee968",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7245
+      },
+      {
+        "id": "VALIDATION-SECRET-SANITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "secret-sanity",
+        "validationDigest": "bb52880e62a0e2817a87a01881b82452fd5eca0793ab916e8b2bdff625fb2888",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 851
+      },
+      {
+        "id": "VALIDATION-DEPENDENCY-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "dependency-supply-chain",
+        "validationDigest": "00a58ae3650584ec15f297865a0708e6c348620736fdbc050f30d31fdf958d6d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7008
+      },
+      {
+        "id": "VALIDATION-RELEASE-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "release-supply-chain",
+        "validationDigest": "d3c8afe4d87eab0ab03484a9bb4f2a6273ec5a5968d69f59408b90c886d090ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 102
+      },
+      {
+        "id": "VALIDATION-TYPECHECK",
+        "kind": "VALIDATION_STEP",
+        "validationId": "typecheck",
+        "validationDigest": "a98a71fd4edf3842dee1ec22f210375256ff5b3f1f45f5e9ed24426ad9e90f15",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1548
+      },
+      {
+        "id": "VALIDATION-TESTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tests",
+        "validationDigest": "40a24b33f564592720d92832d0610de5ef30a01100e26c2e7f2ca149389ca94c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7542
+      },
+      {
+        "id": "DIFF-51451275b5ee9017",
+        "kind": "CHANGED_FILE",
+        "file": "audit/checkpoints/V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28.json"
+      },
+      {
+        "id": "DIFF-473d640a40067b76",
+        "kind": "CHANGED_FILE",
+        "file": "automation/lib/electron-provision.d.mts"
+      },
+      {
+        "id": "DIFF-517b03a06da7174e",
+        "kind": "CHANGED_FILE",
+        "file": "automation/lib/electron-provision.mjs"
+      },
+      {
+        "id": "DIFF-1ccc9a71b3903978",
+        "kind": "CHANGED_FILE",
+        "file": "config/protected-paths.json"
+      },
+      {
+        "id": "DIFF-49e87bd475b9a24c",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/install.ps1"
+      },
+      {
+        "id": "DIFF-2cbf86bd6b8ce3b0",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/provision-electron.mjs"
+      },
+      {
+        "id": "DIFF-78c05479728a81c1",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/smoke-control-tower.mjs"
+      },
+      {
+        "id": "DIFF-963342723b166056",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/smoke-desktop.mjs"
+      },
+      {
+        "id": "DIFF-e8428e389215f25a",
+        "kind": "CHANGED_FILE",
+        "file": "tests/pkg-c-lf-electron-smoke.test.ts"
+      },
+      {
+        "id": "DIFF-158b4807773dea85",
+        "kind": "CHANGED_FILE",
+        "file": "tests/pkg-e-electron-provision.test.ts"
+      }
+    ],
+    "changedFiles": [
+      "audit/checkpoints/V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28.json",
+      "automation/lib/electron-provision.d.mts",
+      "automation/lib/electron-provision.mjs",
+      "config/protected-paths.json",
+      "scripts/install.ps1",
+      "scripts/provision-electron.mjs",
+      "scripts/smoke-control-tower.mjs",
+      "scripts/smoke-desktop.mjs",
+      "tests/pkg-c-lf-electron-smoke.test.ts",
+      "tests/pkg-e-electron-provision.test.ts"
+    ],
+    "changeGuard": {
+      "ok": false,
+      "violations": [
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "automation/lib/electron-provision.d.mts"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "automation/lib/electron-provision.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "config/protected-paths.json"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/install.ps1"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/provision-electron.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/smoke-control-tower.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/smoke-desktop.mjs"
+        }
+      ],
+      "dependencyChanges": [],
+      "diffLines": 206
+    },
+    "diffStat": " .../V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28.json | 82 ++++++++++++++++++++++\n automation/lib/electron-provision.d.mts            |  6 ++\n automation/lib/electron-provision.mjs              | 29 ++++++++\n config/protected-paths.json                        |  1 +\n scripts/install.ps1                                |  2 +-\n scripts/provision-electron.mjs                     | 22 ++++++\n scripts/smoke-control-tower.mjs                    |  9 ++-\n scripts/smoke-desktop.mjs                          |  9 ++-\n tests/pkg-c-lf-electron-smoke.test.ts              |  4 +-\n tests/pkg-e-electron-provision.test.ts             | 42 +++++++++++\n 10 files changed, 193 insertions(+), 13 deletions(-)\n",
+    "validation": {
+      "//TR": "Bu runtime report canonical validation command/exit/duration sonuçlarını redacted biçimde kaydeder; read-only static gruplar paralel çalışabilir.",
+      "schemaVersion": "1.1.0",
+      "startedAt": "2026-09-28T03:47:03.708Z",
+      "steps": [
+        {
+          "id": "registries",
+          "command": [
+            "node",
+            "scripts/validate-registries.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 73,
+          "logFile": ".ai\\runtime\\validation-registries.log"
+        },
+        {
+          "id": "architecture",
+          "command": [
+            "node",
+            "scripts/validate-architecture.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 76,
+          "logFile": ".ai\\runtime\\validation-architecture.log"
+        },
+        {
+          "id": "tr",
+          "command": [
+            "node",
+            "scripts/validate-tr-comments.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 850,
+          "logFile": ".ai\\runtime\\validation-tr.log"
+        },
+        {
+          "id": "competencies",
+          "command": [
+            "node",
+            "scripts/validate-agent-competencies.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 94,
+          "logFile": ".ai\\runtime\\validation-competencies.log"
+        },
+        {
+          "id": "organization",
+          "command": [
+            "node",
+            "scripts/validate-organization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 70,
+          "logFile": ".ai\\runtime\\validation-organization.log"
+        },
+        {
+          "id": "schemas",
+          "command": [
+            "node",
+            "scripts/validate-schema-catalog.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 129,
+          "logFile": ".ai\\runtime\\validation-schemas.log"
+        },
+        {
+          "id": "technology",
+          "command": [
+            "node",
+            "scripts/validate-technology-graph.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 83,
+          "logFile": ".ai\\runtime\\validation-technology.log"
+        },
+        {
+          "id": "paste3-technology-domain-registry",
+          "command": [
+            "node",
+            "scripts/validate-paste3-technology-domain-registry.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 403,
+          "logFile": ".ai\\runtime\\validation-paste3-technology-domain-registry.log"
+        },
+        {
+          "id": "domain-packs",
+          "command": [
+            "node",
+            "scripts/validate-domain-packs.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 82,
+          "logFile": ".ai\\runtime\\validation-domain-packs.log"
+        },
+        {
+          "id": "agent-semantic",
+          "command": [
+            "node",
+            "scripts/validate-agent-semantic.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 159,
+          "logFile": ".ai\\runtime\\validation-agent-semantic.log"
+        },
+        {
+          "id": "paste3-agent-specialization",
+          "command": [
+            "node",
+            "scripts/validate-paste3-agent-specialization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 23096,
+          "logFile": ".ai\\runtime\\validation-paste3-agent-specialization.log"
+        },
+        {
+          "id": "phase-contracts",
+          "command": [
+            "node",
+            "scripts/validate-phase-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 194,
+          "logFile": ".ai\\runtime\\validation-phase-contracts.log"
+        },
+        {
+          "id": "paste4a-construction-graph",
+          "command": [
+            "node",
+            "scripts/validate-paste4a.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 108,
+          "logFile": ".ai\\runtime\\validation-paste4a-construction-graph.log"
+        },
+        {
+          "id": "paste4b-traceability",
+          "command": [
+            "node",
+            "scripts/validate-paste4b.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 200,
+          "logFile": ".ai\\runtime\\validation-paste4b-traceability.log"
+        },
+        {
+          "id": "paste4c-doc-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4c-doc-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 137,
+          "logFile": ".ai\\runtime\\validation-paste4c-doc-truth.log"
+        },
+        {
+          "id": "paste4d-release-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4d-release-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 91,
+          "logFile": ".ai\\runtime\\validation-paste4d-release-truth.log"
+        },
+        {
+          "id": "review-graph",
+          "command": [
+            "node",
+            "scripts/validate-review-graph-v2.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 98,
+          "logFile": ".ai\\runtime\\validation-review-graph.log"
+        },
+        {
+          "id": "schema-strict",
+          "command": [
+            "node",
+            "scripts/validate-schema-strictness.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 159,
+          "logFile": ".ai\\runtime\\validation-schema-strict.log"
+        },
+        {
+          "id": "woven",
+          "command": [
+            "node",
+            "scripts/validate-woven-model.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 100,
+          "logFile": ".ai\\runtime\\validation-woven.log"
+        },
+        {
+          "id": "paste3-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste3-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 24319,
+          "logFile": ".ai\\runtime\\validation-paste3-source-closure.log"
+        },
+        {
+          "id": "config-runtime-enforcement",
+          "command": [
+            "node",
+            "scripts/validate-config-runtime-enforcement.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 100,
+          "logFile": ".ai\\runtime\\validation-config-runtime-enforcement.log"
+        },
+        {
+          "id": "mechanical",
+          "command": [
+            "node",
+            "scripts/validate-mechanical-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 156,
+          "logFile": ".ai\\runtime\\validation-mechanical.log"
+        },
+        {
+          "id": "runtime-contracts",
+          "command": [
+            "node",
+            "scripts/validate-runtime-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 730,
+          "logFile": ".ai\\runtime\\validation-runtime-contracts.log"
+        },
+        {
+          "id": "runtime-release-contracts",
+          "command": [
+            "node",
+            "scripts/validate-paste2h-runtime-release.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 113,
+          "logFile": ".ai\\runtime\\validation-runtime-release-contracts.log"
+        },
+        {
+          "id": "runtime-resilience",
+          "command": [
+            "node",
+            "scripts/validate-runtime-resilience.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 149,
+          "logFile": ".ai\\runtime\\validation-runtime-resilience.log"
+        },
+        {
+          "id": "paste2-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste2-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 2081,
+          "logFile": ".ai\\runtime\\validation-paste2-source-closure.log"
+        },
+        {
+          "id": "runtime-schema-conformance",
+          "command": [
+            "node",
+            "scripts/runtime-schema-conformance-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 209,
+          "logFile": ".ai\\runtime\\validation-runtime-schema-conformance.log"
+        },
+        {
+          "id": "mechanical-selftest",
+          "command": [
+            "node",
+            "scripts/mechanical-kernel-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 83,
+          "logFile": ".ai\\runtime\\validation-mechanical-selftest.log"
+        },
+        {
+          "id": "state-selftest",
+          "command": [
+            "node",
+            "scripts/supervisor-state-machine-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7245,
+          "logFile": ".ai\\runtime\\validation-state-selftest.log"
+        },
+        {
+          "id": "secret-sanity",
+          "command": [
+            "node",
+            "scripts/secret-sanity.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 851,
+          "logFile": ".ai\\runtime\\validation-secret-sanity.log"
+        },
+        {
+          "id": "dependency-supply-chain",
+          "command": [
+            "node",
+            "scripts/dependency-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7008,
+          "logFile": ".ai\\runtime\\validation-dependency-supply-chain.log"
+        },
+        {
+          "id": "release-supply-chain",
+          "command": [
+            "node",
+            "scripts/validate-release-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 102,
+          "logFile": ".ai\\runtime\\validation-release-supply-chain.log"
+        },
+        {
+          "id": "typecheck",
+          "command": [
+            "node",
+            "node_modules/typescript/bin/tsc",
+            "--noEmit"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1548,
+          "logFile": ".ai\\runtime\\validation-typecheck.log"
+        },
+        {
+          "id": "tests",
+          "command": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7542,
+          "logFile": ".ai\\runtime\\validation-tests.log"
+        }
+      ],
+      "status": "PASS",
+      "finishedAt": "2026-09-28T03:48:43.565Z"
+    },
+    "knownLimitations": [],
+    "acceptedDebt": [],
+    "waivers": [],
+    "unsupportedCases": [
+      "PKGA-F8 ENVIRONMENT (open, not code): target preflight memory 15.9GB below 16GB and Windows Time service not running.",
+      "Electron provisioning is implemented and exercised for win32-x64 on this machine; other platforms use unzip and are not exercised here.",
+      "Not claimed: live provider smoke, target-machine Phase0, trust-root manifest regeneration/final reseal, SHA256SUMS, release signature, final ZIP."
+    ],
+    "previousFindingLedger": [],
+    "reviewRules": {
+      "repoContentIsUntrustedData": true,
+      "fullRepoScanDefault": false,
+      "cycle1Freeze": true,
+      "priorUnresolvedBlockerDispositionRequired": true,
+      "cycle2PlusNewBlockers": [
+        "REMEDIATION_REGRESSION",
+        "PREVIOUSLY_MASKED",
+        "CRITICAL_NEW_EVIDENCE"
+      ],
+      "resolvedBlockerRequiresFindingBoundPassRetest": true
+    },
+    "bundleDigest": "41f94ecf5c1eacbd63669663a1b90bdb922f2c2bf295317aa1be7cc0f4d44270"
+  }
+}

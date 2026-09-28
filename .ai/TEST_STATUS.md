@@ -3,10 +3,13 @@
 
 Paste 1/2/3/4 bounded source validatorları, repo-geneli config→runtime enforcement sweep ve full dependency-free source regression PASS vermiştir.
 
-Full dependency-free canonical sonuç: `29 PASS / 1 PENDING_DEPENDENCIES / 0 FAIL`. Tracked JS/MJS syntax `107/107 PASS`, tracked JSON parse `1608/1608 PASS`, secret sanity `PASS`. Bu durum reviewed package-lock, dependency-aware typecheck/Vitest/Ajv2020, live provider, Windows/Electron veya target-machine Phase0 PASS anlamına gelmez.
+Dependency-aware canonical doğrulama target Windows makinesinde (win32 10.0.19045 x64, Node v24.19.0, npm 11.17.0, git 2.55.0, PowerShell 5.1.19041.6456) reviewed lock ile izole klonlarda çalıştırılmıştır: `34/34 PASS`. Bu, runtime schema conformance (Ajv 2020-12), dependency supply-chain + `npm audit` (0 bulgu), release supply-chain/SBOM-lite, TypeScript typecheck ve Vitest adımlarını kapsar. Broad dependency-free selftest suite `25/25 PASS`. Desktop ve Control Tower smoke'ları açık temin edilen Electron binary ile bu makinede PASS vermiştir.
+
+Bu durum live provider smoke, target-machine Phase0 acceptance, final trust-root reseal veya release authenticity PASS anlamına gelmez.
 
 - `SOURCE_LEVEL_CLOSURE = FALSE`
-- `DEPENDENCY_AWARE_VALIDATION = PENDING`
+- `DEPENDENCY_AWARE_VALIDATION = PASS_TARGET_WINDOWS_NODE24_NPM11`
+- `LIVE_PROVIDER_SMOKE = PENDING`
 - `FINAL_TRUST_ROOT_SEAL = STALE_PENDING_FINAL_RESEAL`
 - `FINAL_SHA256SUMS = NOT_DONE`
 - `FINAL_RELEASE_AUTHENTICITY = NOT_DONE`

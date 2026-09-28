@@ -1,0 +1,1180 @@
+{
+  "//TR": "Bu kayıt tek bir Codex bağımsız review çalıştırmasının frozen bundle, değiştirilmemiş reviewer çıktısı, run manifest ve governed değerlendirmesini kalıcı tutar; evidence signing anahtarı henüz başlatılmadığı için imzasızdır.",
+  "schemaVersion": "1.0.0",
+  "signature": "UNSIGNED_EVIDENCE_KEY_NOT_INITIALIZED",
+  "runDir": "492ea21-c1-20260928T120111Z-broker",
+  "runId": "RUN-V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-20260928T115953Z-C1",
+  "baseCommit": "baa253267daf5d991b3fec023439c77baebbd325",
+  "reviewedCommit": "492ea2128803e6b866799ed9c274627b51821ce7",
+  "cycle": 1,
+  "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+  "bundleDigest": "0891a6197d0956f929aadc57a1f517416f7163686317631111312a025c5bbf71",
+  "bundleFileSha256": "431904af71fd95e3619d289157640ea250916aeba568126ecebba637506683d7",
+  "milestoneContractId": "V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE",
+  "milestoneContractDigest": "847f349325fadd75acd40958d427b6451e309283ad967a0666513a36d01b0557",
+  "reviewResultText": "{\n  \"schemaVersion\": \"1.1.0\",\n  \"runId\": \"RUN-V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-20260928T115953Z-C1\",\n  \"cycle\": 1,\n  \"baseCommit\": \"baa253267daf5d991b3fec023439c77baebbd325\",\n  \"reviewedCommit\": \"492ea2128803e6b866799ed9c274627b51821ce7\",\n  \"reviewBundleDigest\": \"0891a6197d0956f929aadc57a1f517416f7163686317631111312a025c5bbf71\",\n  \"result\": \"CLEAN\",\n  \"reviewer\": {\n    \"provider\": \"OpenAI\",\n    \"tool\": \"Codex\",\n    \"toolVersion\": null,\n    \"modelId\": \"gpt-6\",\n    \"independenceStatus\": \"SUFFICIENT\"\n  },\n  \"findings\": [],\n  \"advisories\": [],\n  \"environmentGaps\": [],\n  \"priorBlockerDispositions\": [],\n  \"summary\": \"All input checks (a–e) passed. Reviewed the complete three-file diff against the frozen contract. The only protected change is Founder-authorized scripts/validate-tr-comments.mjs; it adds only the .ai/cache/ skip prefix. Regression tests cover cache exclusion and continued source/state enforcement. Changed-file hashes match the checkpoint. Supplied validation covers every canonical step with PASS, and the read-only TR validator rerun passed with the Electron cache present. No unresolved admissible blocker remains. No files were modified; the write-producing test suite was not rerun.\",\n  \"startedAt\": \"2026-09-28T12:01:22Z\",\n  \"finishedAt\": \"2026-09-28T12:02:40Z\"\n}\n",
+  "reviewResultSha256": "91d895a1805b177e74275a6a82d8407e01053a675c2a9dc1c4d88d0e50f46e6d",
+  "governed": {
+    "//TR": "Bu dosya Codex review sonucunun supervisor-eşdeğeri governed değerlendirmesini kaydeder; Codex'in review-result.json dosyası değiştirilmez.",
+    "schemaVersion": "1.0.0",
+    "evaluatedAt": "2026-09-28T12:03:17.815Z",
+    "runDir": "C:/Users/PRO/Desktop/UASCO/.ai/cache/review/runs/492ea21-c1-20260928T120111Z-broker/",
+    "exitCode": 0,
+    "checks": {
+      "promptDlpSensitiveTypes": [],
+      "resultSource": "CANONICAL_BROKER_STDOUT",
+      "resultMatchesBrokerStdout": true,
+      "schemaValid": true,
+      "validateReviewResult": "PASS",
+      "providerSeparation": "PASS"
+    },
+    "reviewResultSha256": "91d895a1805b177e74275a6a82d8407e01053a675c2a9dc1c4d88d0e50f46e6d",
+    "reviewerReportedResult": "CLEAN",
+    "governedResult": "CLEAN",
+    "reviewer": {
+      "provider": "OpenAI",
+      "tool": "Codex",
+      "toolVersion": null,
+      "modelId": "gpt-6",
+      "independenceStatus": "SUFFICIENT"
+    },
+    "summary": "All input checks (a–e) passed. Reviewed the complete three-file diff against the frozen contract. The only protected change is Founder-authorized scripts/validate-tr-comments.mjs; it adds only the .ai/cache/ skip prefix. Regression tests cover cache exclusion and continued source/state enforcement. Changed-file hashes match the checkpoint. Supplied validation covers every canonical step with PASS, and the read-only TR validator rerun passed with the Electron cache present. No unresolved admissible blocker remains. No files were modified; the write-producing test suite was not rerun.",
+    "counts": {
+      "findings": 0,
+      "blockers": 0,
+      "advisories": 0,
+      "environmentGaps": 0,
+      "acceptedBlockers": 0,
+      "downgraded": 0
+    },
+    "findings": [],
+    "advisories": [],
+    "environmentGaps": [],
+    "effectiveReviewDigest": "bfa6d5b4f943c8db8c4f1d8a0e19b45f2e20a229759e22faf2620d6e83f409f5",
+    "status": "EVALUATED"
+  },
+  "environmentBlock": null,
+  "runManifest": {
+    "//TR": "Bu manifest kanonik codex-reviewer-broker üzerinden yapılan tek bir Codex bağımsız review çağrısının girdi/çıktı/provenance kanıtını hash'leriyle kaydeder; review içeriğini builder üretmez.",
+    "schemaVersion": "1.0.0",
+    "startedAt": "2026-09-28T12:01:11.401Z",
+    "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+    "reviewWorktree": "C:/Users/PRO/AppData/Local/Temp/claude/C--Users-PRO-Desktop-UASCO/a72e023b-e073-49b8-9fbd-20b544644a38/scratchpad/rev-e2b",
+    "baseCommit": "baa253267daf5d991b3fec023439c77baebbd325",
+    "reviewedCommit": "492ea2128803e6b866799ed9c274627b51821ce7",
+    "cycle": 1,
+    "runId": "RUN-V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-20260928T115953Z-C1",
+    "bundleFile": ".ai/cache/review/V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-492ea21-cycle-1-review-bundle.json",
+    "bundleFileSha256": "431904af71fd95e3619d289157640ea250916aeba568126ecebba637506683d7",
+    "bundleDigest": "0891a6197d0956f929aadc57a1f517416f7163686317631111312a025c5bbf71",
+    "milestoneContractId": "V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE",
+    "milestoneContractDigest": "847f349325fadd75acd40958d427b6451e309283ad967a0666513a36d01b0557",
+    "promptFile": ".ai/cache/review/V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-492ea21-cycle-1-review-prompt.txt",
+    "promptSha256": "504734716ff50a3bd76d5fed91288661da7f5511e9a8d571110b6362b1e4f695",
+    "precheck": {
+      "head": "492ea2128803e6b866799ed9c274627b51821ce7",
+      "baseResolved": "baa253267daf5d991b3fec023439c77baebbd325",
+      "bundleDigestRecomputed": "0891a6197d0956f929aadc57a1f517416f7163686317631111312a025c5bbf71",
+      "contractDigestRecomputed": "847f349325fadd75acd40958d427b6451e309283ad967a0666513a36d01b0557",
+      "changedFiles": 3
+    },
+    "reviewer": {
+      "provider": "OPENAI",
+      "tool": "codex",
+      "broker": "scripts/codex-reviewer-broker.mjs",
+      "brokerSha256": "267e9d4adc2d1872824796f9e3fc4798f09e7d5dfad19d8118a0c116452aee35",
+      "providerProvenanceSha256": "027d6143d9f4fafcdc8f7eee9e3b936759febaeee313d5dadd4b6cff05a91e62",
+      "launcher": "C:\\Users\\PRO\\.codex\\packages\\standalone\\releases\\0.156.1-x86_64-pc-windows-msvc\\bin\\codex.exe",
+      "launcherSha256": "70bcb05f9bf1a4e7306edd0cd1b57d02af3267ad02a34b26f45c8c4bb20a3301",
+      "launcherVersion": "codex-cli 0.156.1",
+      "provenanceLevel": "STANDALONE_LAUNCHER",
+      "childEnvVariableNames": [
+        "APPDATA",
+        "COMSPEC",
+        "HOME",
+        "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS",
+        "OS",
+        "PATH",
+        "PATHEXT",
+        "PROCESSOR_ARCHITECTURE",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "UASCO_CONTROL_ROOT",
+        "UASCO_PAID_API_ALLOWED",
+        "UASCO_PROVIDER",
+        "USERPROFILE"
+      ],
+      "allowPaidApi": false
+    },
+    "finishedAt": "2026-09-28T12:02:55.074Z",
+    "exitCode": 0,
+    "signal": null,
+    "outputs": {
+      "codex-stderr.log": {
+        "bytes": 87837,
+        "sha256": "c8783f995d2c916d54e52bbf7206676e136b8231b20873fd470643057121c12f"
+      },
+      "codex-stdout.txt": {
+        "bytes": 1298,
+        "sha256": "91d895a1805b177e74275a6a82d8407e01053a675c2a9dc1c4d88d0e50f46e6d"
+      },
+      "review-result.json": {
+        "bytes": 1298,
+        "sha256": "91d895a1805b177e74275a6a82d8407e01053a675c2a9dc1c4d88d0e50f46e6d"
+      }
+    }
+  },
+  "frozenBundle": {
+    "schemaVersion": "1.4.0",
+    "runId": "RUN-V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-20260928T115953Z-C1",
+    "cycle": 1,
+    "phase": 0,
+    "phaseIds": [
+      0
+    ],
+    "baseCommit": "baa253267daf5d991b3fec023439c77baebbd325",
+    "reviewedCommit": "492ea2128803e6b866799ed9c274627b51821ce7",
+    "milestoneContract": {
+      "schemaVersion": "1.2.0",
+      "id": "V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE",
+      "phase": 0,
+      "phaseIds": [
+        0
+      ],
+      "title": "V6 PKG-E2 //TR source scan skips the gitignored machine cache",
+      "objective": "Keep canonical validation working after Electron provisioning by excluding the gitignored .ai/cache/ machine cache from the //TR source scan, without weakening the scan of source files.",
+      "requirements": [
+        "[V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28 founderAuthorization.decision] TR_VALIDATOR_SKIPS_AI_CACHE_APPROVED",
+        "[V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28 founderAuthorization.rule] Add '.ai/cache/' to the skip list of validate-tr-comments.mjs. The folder is a gitignored, machine-local cache (npm cache + Electron binary), in the same class as node_modules/ and .ai/runtime/. Checking of source files does not change. A regression test is added.",
+        "[V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28 founderAuthorization.protectedFiles] scripts/validate-tr-comments.mjs",
+        "[V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+      ],
+      "invariants": [
+        "NO_FAKE_SUCCESS",
+        "NO_WEAKENED_CONTROLS",
+        "NO_SILENT_SCOPE_EXPANSION",
+        "NO_SELF_CERTIFICATION",
+        "EVIDENCE_REQUIRED",
+        "FAIL_CLOSED"
+      ],
+      "acceptanceCriteria": [
+        "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11 while a provisioned Electron cache is present under .ai/cache/electron, and the checkpoint records the measured validation environment.",
+        "scripts/validate-tr-comments.mjs skips only the '.ai/cache/' prefix in addition to its existing skips; the extension set, lockfile exemptions and the 60-line //TR rule are unchanged.",
+        "A source file without //TR still fails the scan, and .ai state files outside the cache are still scanned.",
+        "Only the Founder-authorized protected file changes, and no existing test assertion, validator or policy is weakened beyond the authorized rule."
+      ],
+      "mandatoryFailureCases": [
+        "source JSON without //TR next to a cache",
+        "third-party files inside .ai/cache",
+        ".ai state file outside the cache without //TR"
+      ],
+      "requiredArtifacts": [
+        "scripts/validate-tr-comments.mjs",
+        "audit/checkpoints/V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28.json"
+      ],
+      "phaseTraceability": [
+        {
+          "phase": 0,
+          "requirement": "[V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28 founderAuthorization.decision] TR_VALIDATOR_SKIPS_AI_CACHE_APPROVED",
+          "acceptanceCriteria": [
+            "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11 while a provisioned Electron cache is present under .ai/cache/electron, and the checkpoint records the measured validation environment.",
+            "scripts/validate-tr-comments.mjs skips only the '.ai/cache/' prefix in addition to its existing skips; the extension set, lockfile exemptions and the 60-line //TR rule are unchanged.",
+            "A source file without //TR still fails the scan, and .ai state files outside the cache are still scanned.",
+            "Only the Founder-authorized protected file changes, and no existing test assertion, validator or policy is weakened beyond the authorized rule."
+          ],
+          "mandatoryFailureCases": [
+            "source JSON without //TR next to a cache",
+            "third-party files inside .ai/cache",
+            ".ai state file outside the cache without //TR"
+          ],
+          "requiredArtifacts": [
+            "scripts/validate-tr-comments.mjs",
+            "audit/checkpoints/V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28.json"
+          ],
+          "unsupportedCases": [
+            "PKGA-F8 ENVIRONMENT (open, not code): target preflight memory 15.9GB below 16GB and Windows Time service not running.",
+            "Not claimed: live provider smoke, target-machine Phase0, trust-root manifest regeneration/final reseal, SHA256SUMS, release signature, final ZIP."
+          ]
+        }
+      ],
+      "allowedPathPrefixes": [
+        "scripts/validate-tr-comments.mjs",
+        "tests/",
+        "audit/checkpoints/"
+      ],
+      "protectedPaths": [
+        ".gitattributes",
+        ".github/workflows/ci.yml",
+        ".gitignore",
+        ".gitmodules",
+        ".npmrc",
+        "AGENTS.md",
+        "ARCHITECTURE-CONSTITUTION.md",
+        "ARCHITECTURE-FREEZE.md",
+        "BUILD-RULES.md",
+        "CANONICAL-STATUS.md",
+        "CLAUDE.md",
+        "CODEX.md",
+        "DEFINITION-OF-DONE.md",
+        "FULL-REPO-CONSTRUCTION-CONTRACT.md",
+        "INSTALLATION-GO-CHECKLIST.md",
+        "THIRD-PARTY-NOTICES.md",
+        "apps/control-api/src/server.ts",
+        "apps/desktop/main.mjs",
+        "apps/desktop/preload.mjs",
+        "apps/desktop/renderer/app.js",
+        "apps/desktop/renderer/index.html",
+        "automation/factory-supervisor.mjs",
+        "automation/lib/evidence-signing.mjs",
+        "automation/lib/filesystem-boundary.mjs",
+        "automation/lib/redaction.mjs",
+        "config/action-policy.json",
+        "config/automation.json",
+        "config/builder-execution-policy.json",
+        "config/environment-policy.json",
+        "config/evidence-ledger-policy.json",
+        "config/git-metadata-policy.json",
+        "config/omniroute-policy.json",
+        "config/package-policy.json",
+        "config/protected-paths.json",
+        "config/supply-chain-policy.json",
+        "config/trust-root-manifest.json",
+        "config/validation.json",
+        "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
+        "governance/accepted-debt.json",
+        "governance/known-limitations.json",
+        "governance/waivers.json",
+        "prompts/AUTO-BUILDER.md",
+        "prompts/AUTO-REMEDIATION.md",
+        "prompts/AUTO-REVIEW.md",
+        "prompts/AUTO-VALIDATION-FIX.md",
+        "registries/phase-contracts-index.json",
+        "roadmap/build-waves.json",
+        "roadmap/critical-path.json",
+        "roadmap/dependency-graph.json",
+        "roadmap/parallel-lanes.json",
+        "roadmap/review-packages.json",
+        "roadmap/scheduler-state.template.json",
+        "schemas/install-report.schema.json",
+        "scripts/bootstrap-kernel-selftest.mjs",
+        "scripts/bootstrap.ps1",
+        "scripts/builder-boundary-smoke.mjs",
+        "scripts/capture-provider-provenance.mjs",
+        "scripts/check-prereqs.ps1",
+        "scripts/claude-builder-broker.mjs",
+        "scripts/codex-reviewer-broker.mjs",
+        "scripts/dependency-supply-chain.mjs",
+        "scripts/generate-trust-root.mjs",
+        "scripts/harden-evidence-key.ps1",
+        "scripts/init-evidence-signing.mjs",
+        "scripts/init-private-git.ps1",
+        "scripts/install-report.mjs",
+        "scripts/install.ps1",
+        "scripts/mechanical-kernel-selftest.mjs",
+        "scripts/phase0-acceptance.mjs",
+        "scripts/preflight.mjs",
+        "scripts/provider-smoke.mjs",
+        "scripts/provision-electron.mjs",
+        "scripts/register-autostart.ps1",
+        "scripts/sanitize-process-env.ps1",
+        "scripts/smoke-control-api.mjs",
+        "scripts/smoke-control-tower.mjs",
+        "scripts/smoke-desktop.mjs",
+        "scripts/start-control-tower.ps1",
+        "scripts/start-full-auto.ps1",
+        "scripts/supervisor-state-machine-selftest.mjs",
+        "scripts/v6-apps-control-desktop-selftest.mjs",
+        "scripts/validate-domain-packs.mjs",
+        "scripts/verify-artifact.mjs",
+        "scripts/verify-evidence-ledger.mjs",
+        "scripts/verify-remote-protection.mjs",
+        "scripts/verify-trust-root.mjs",
+        "tsconfig.json",
+        "automation/lib/",
+        "scripts/validate-",
+        "scripts/run-validation.mjs",
+        "schemas/independent-review-result.schema.json",
+        "schemas/review-finding.schema.json",
+        "schemas/review-bundle.schema.json",
+        "schemas/milestone-contract.schema.json",
+        "schemas/run-event.schema.json",
+        "schemas/run-manifest.schema.json",
+        "schemas/phase0-acceptance.schema.json",
+        "prompts/",
+        "roadmap/contracts/",
+        "config/"
+      ],
+      "mandatoryValidation": [
+        "Canonical runner scripts/run-validation.mjs over config/validation.json with the Electron cache present",
+        "vitest run"
+      ],
+      "mandatoryEvidence": [
+        "reviewed commit SHA",
+        "exact tool/runtime versions",
+        "canonical validation report",
+        "changed file sha256 digests"
+      ],
+      "riskLevel": 2,
+      "allowPaidApi": false,
+      "allowProduction": false,
+      "allowRisk5": false,
+      "allowDependencyChanges": false,
+      "unsupportedCases": [
+        "PKGA-F8 ENVIRONMENT (open, not code): target preflight memory 15.9GB below 16GB and Windows Time service not running.",
+        "Not claimed: live provider smoke, target-machine Phase0, trust-root manifest regeneration/final reseal, SHA256SUMS, release signature, final ZIP."
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "maxFilesChanged": 5,
+      "allowExistingTestAssertionReduction": false,
+      "frozenAt": "2026-09-28T11:59:53.953Z",
+      "digest": "847f349325fadd75acd40958d427b6451e309283ad967a0666513a36d01b0557"
+    },
+    "reviewBasis": {
+      "requirements": [
+        {
+          "id": "P000-REQ-e101c3570ee924d8",
+          "text": "[V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28 founderAuthorization.decision] TR_VALIDATOR_SKIPS_AI_CACHE_APPROVED"
+        },
+        {
+          "id": "P000-REQ-3aa7e04a9b1a1d08",
+          "text": "[V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28 founderAuthorization.rule] Add '.ai/cache/' to the skip list of validate-tr-comments.mjs. The folder is a gitignored, machine-local cache (npm cache + Electron binary), in the same class as node_modules/ and .ai/runtime/. Checking of source files does not change. A regression test is added."
+        },
+        {
+          "id": "P000-REQ-e2a308fc26bf37b4",
+          "text": "[V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28 founderAuthorization.protectedFiles] scripts/validate-tr-comments.mjs"
+        },
+        {
+          "id": "P000-REQ-29ee063588aa4e6a",
+          "text": "[V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+        }
+      ],
+      "invariants": [
+        {
+          "id": "P000-INV-cee4912d3e0a2019",
+          "text": "NO_FAKE_SUCCESS"
+        },
+        {
+          "id": "P000-INV-59e59d4476fc0664",
+          "text": "NO_WEAKENED_CONTROLS"
+        },
+        {
+          "id": "P000-INV-f74092f031a0e4aa",
+          "text": "NO_SILENT_SCOPE_EXPANSION"
+        },
+        {
+          "id": "P000-INV-6122df41f404fe66",
+          "text": "NO_SELF_CERTIFICATION"
+        },
+        {
+          "id": "P000-INV-b8274eed78d72a76",
+          "text": "EVIDENCE_REQUIRED"
+        },
+        {
+          "id": "P000-INV-473c0420ab79dc5f",
+          "text": "FAIL_CLOSED"
+        }
+      ],
+      "acceptanceCriteria": [
+        {
+          "id": "P000-AC-e78d2a6d8d01cc2a",
+          "text": "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11 while a provisioned Electron cache is present under .ai/cache/electron, and the checkpoint records the measured validation environment."
+        },
+        {
+          "id": "P000-AC-0464df9e4c023923",
+          "text": "scripts/validate-tr-comments.mjs skips only the '.ai/cache/' prefix in addition to its existing skips; the extension set, lockfile exemptions and the 60-line //TR rule are unchanged."
+        },
+        {
+          "id": "P000-AC-f035f01484f4cf33",
+          "text": "A source file without //TR still fails the scan, and .ai state files outside the cache are still scanned."
+        },
+        {
+          "id": "P000-AC-9ee19c36d2c35f38",
+          "text": "Only the Founder-authorized protected file changes, and no existing test assertion, validator or policy is weakened beyond the authorized rule."
+        }
+      ],
+      "mandatoryValidation": [
+        {
+          "id": "P000-VAL-0661ac30c833c9cd",
+          "text": "Canonical runner scripts/run-validation.mjs over config/validation.json with the Electron cache present"
+        },
+        {
+          "id": "P000-VAL-ad6cd6b8acf39571",
+          "text": "vitest run"
+        }
+      ],
+      "mandatoryFailureCases": [
+        {
+          "id": "P000-FAIL-f36ce38c18296d9e",
+          "text": "source JSON without //TR next to a cache"
+        },
+        {
+          "id": "P000-FAIL-88244e8a52380817",
+          "text": "third-party files inside .ai/cache"
+        },
+        {
+          "id": "P000-FAIL-a996ac02e6e98dce",
+          "text": ".ai state file outside the cache without //TR"
+        }
+      ],
+      "requiredArtifacts": [
+        {
+          "id": "P000-ART-5297cb0c52b681f1",
+          "text": "scripts/validate-tr-comments.mjs"
+        },
+        {
+          "id": "P000-ART-bdfc18ca7b0c4347",
+          "text": "audit/checkpoints/V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28.json"
+        }
+      ],
+      "risk": [
+        {
+          "id": "P000-RISK-abbd07e0ead7e36e",
+          "text": "riskLevel=2; reviewProfile=TRUST_CRITICAL"
+        }
+      ]
+    },
+    "evidenceCatalog": [
+      {
+        "id": "VALIDATION-REGISTRIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "registries",
+        "validationDigest": "8ffa6f6330a6110d8e99139af483e17c71a6df86bea6eb90b53ef87638246b30",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 154
+      },
+      {
+        "id": "VALIDATION-ARCHITECTURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "architecture",
+        "validationDigest": "e5bf5d23fdda0d99094fdb8527a39d03f097200ed58ad48e545edfa66c72268f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 163
+      },
+      {
+        "id": "VALIDATION-TR",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tr",
+        "validationDigest": "2e6b2ed7451d768a768929c1cffbfbe7163006ef338db738aee25eb2e32f0f10",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1424
+      },
+      {
+        "id": "VALIDATION-COMPETENCIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "competencies",
+        "validationDigest": "10562f2c1b237b192ff646172cda08cd586bf3f09cc90eb8537e860e8e89b83d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 196
+      },
+      {
+        "id": "VALIDATION-ORGANIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "organization",
+        "validationDigest": "6ac3f9799e6e1b0f96e62bcf1a9a0ade5c38852dcc133d2c11b1fd80156ccea5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 86
+      },
+      {
+        "id": "VALIDATION-SCHEMAS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schemas",
+        "validationDigest": "7ba29d41eceb71bd056a516963edf5ddfd26fcbd497d31ea31e504c769879057",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 158
+      },
+      {
+        "id": "VALIDATION-TECHNOLOGY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "technology",
+        "validationDigest": "4120c97312f885fb82187e6933b08c510c95e46d943ebc95f46ef4a5a2a66050",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 95
+      },
+      {
+        "id": "VALIDATION-PASTE3-TECHNOLOGY-DOMAIN-REGISTRY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-technology-domain-registry",
+        "validationDigest": "9951864be421206417dc0fc09feb8586d35de6df8b90b1132a044576afac17b5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 459
+      },
+      {
+        "id": "VALIDATION-DOMAIN-PACKS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "domain-packs",
+        "validationDigest": "6aa9c5c7e2dd34e3686e298fe3e0d67964ab0803815fd6d42f3d0f84a1048de7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 107
+      },
+      {
+        "id": "VALIDATION-AGENT-SEMANTIC",
+        "kind": "VALIDATION_STEP",
+        "validationId": "agent-semantic",
+        "validationDigest": "89e22dc4c751e6e449ca9297710721f30e635e17966c6d068f6e1100b5f0db53",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 185
+      },
+      {
+        "id": "VALIDATION-PASTE3-AGENT-SPECIALIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-agent-specialization",
+        "validationDigest": "c8caf548402f3e5d2cce7957a5e2bed0ba7e6df2b63a93989a786cd9890fbb44",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 29307
+      },
+      {
+        "id": "VALIDATION-PHASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "phase-contracts",
+        "validationDigest": "28fdd6131326497e67d9e3c3688f2c7e820c4e6d75587fb58dc9e35f8d545b59",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 329
+      },
+      {
+        "id": "VALIDATION-PASTE4A-CONSTRUCTION-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4a-construction-graph",
+        "validationDigest": "928324142269635a66da22344f852a800442428fa797d278922463d8c0790041",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 187
+      },
+      {
+        "id": "VALIDATION-PASTE4B-TRACEABILITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4b-traceability",
+        "validationDigest": "cdc94fbc1ab6b34cd1867473d6a6ab32555f421b82dc3bce66c8f95e82f9adf7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 345
+      },
+      {
+        "id": "VALIDATION-PASTE4C-DOC-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4c-doc-truth",
+        "validationDigest": "a86eb363edc20bab120a6590eeb2ac9f9168b9e0a164a5efb68574c2bb8b4e82",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 201
+      },
+      {
+        "id": "VALIDATION-PASTE4D-RELEASE-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4d-release-truth",
+        "validationDigest": "9de0bee8320b7f76dc95efd1af8751c01dc8b945d71a31a105dcef9a7c7dfaa8",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 144
+      },
+      {
+        "id": "VALIDATION-REVIEW-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "review-graph",
+        "validationDigest": "d269f09107f2fc3ffe916892e24db59375682a22a2a6775792a09b60361ec15f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 133
+      },
+      {
+        "id": "VALIDATION-SCHEMA-STRICT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schema-strict",
+        "validationDigest": "1e0b34db66453f8c8b54f4bddf4af81794090404f2b66c4fbe03d8b5c032468f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 264
+      },
+      {
+        "id": "VALIDATION-WOVEN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "woven",
+        "validationDigest": "3f4799cff5ec0a4516f7c2bf34292594d680d5e3b20ad2ca73becfb1efbe556d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 123
+      },
+      {
+        "id": "VALIDATION-PASTE3-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-source-closure",
+        "validationDigest": "96cdee7724cf5f145a0260098b33782eb8f9dad828a15f75396d4b04a492f74e",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 30075
+      },
+      {
+        "id": "VALIDATION-CONFIG-RUNTIME-ENFORCEMENT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "config-runtime-enforcement",
+        "validationDigest": "ccccb144bce66a977b83a70c4438c72ec13811a4027b94e24fe917015649fc17",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 111
+      },
+      {
+        "id": "VALIDATION-MECHANICAL",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical",
+        "validationDigest": "a802e0c8871cdac4940257b4c0ebf7ef8c837accd69e06ce8936903b9259ab62",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 189
+      },
+      {
+        "id": "VALIDATION-RUNTIME-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-contracts",
+        "validationDigest": "fef8d265e0207f281d438edd4ca13510c37c864c5bd44116e3a1741523e4267a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 839
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RELEASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-release-contracts",
+        "validationDigest": "663f4aefb74075b8404d3424fbd911793a297746e5f11fa9bf43783c285b359a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 118
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RESILIENCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-resilience",
+        "validationDigest": "d13001c5509688e16fdeb5815f15cd945076a1687a721b72c1229c1cb58f24e3",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 165
+      },
+      {
+        "id": "VALIDATION-PASTE2-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste2-source-closure",
+        "validationDigest": "3243c562d6ad710b47b4588b93cb64f8a5172ee089744a9d9d42a315736a969f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 2508
+      },
+      {
+        "id": "VALIDATION-RUNTIME-SCHEMA-CONFORMANCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-schema-conformance",
+        "validationDigest": "78210ab2268bd2aa77de25a46db9d44587cae6cedcb8da5f370e5ad2296ea0ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 285
+      },
+      {
+        "id": "VALIDATION-MECHANICAL-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical-selftest",
+        "validationDigest": "9f0d4aa941e72e684b4fd869c88eb93f07c3814dfda8eee8737f6baf9b65518c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 104
+      },
+      {
+        "id": "VALIDATION-STATE-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "state-selftest",
+        "validationDigest": "feda1327063ae6fddd47ba68f06959d79f614be5b8a5487dc79faf6ee55ee968",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7489
+      },
+      {
+        "id": "VALIDATION-SECRET-SANITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "secret-sanity",
+        "validationDigest": "bb52880e62a0e2817a87a01881b82452fd5eca0793ab916e8b2bdff625fb2888",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7252
+      },
+      {
+        "id": "VALIDATION-DEPENDENCY-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "dependency-supply-chain",
+        "validationDigest": "00a58ae3650584ec15f297865a0708e6c348620736fdbc050f30d31fdf958d6d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 9034
+      },
+      {
+        "id": "VALIDATION-RELEASE-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "release-supply-chain",
+        "validationDigest": "d3c8afe4d87eab0ab03484a9bb4f2a6273ec5a5968d69f59408b90c886d090ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 119
+      },
+      {
+        "id": "VALIDATION-TYPECHECK",
+        "kind": "VALIDATION_STEP",
+        "validationId": "typecheck",
+        "validationDigest": "a98a71fd4edf3842dee1ec22f210375256ff5b3f1f45f5e9ed24426ad9e90f15",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1840
+      },
+      {
+        "id": "VALIDATION-TESTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tests",
+        "validationDigest": "40a24b33f564592720d92832d0610de5ef30a01100e26c2e7f2ca149389ca94c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 8553
+      },
+      {
+        "id": "DIFF-bdfc18ca7b0c4347",
+        "kind": "CHANGED_FILE",
+        "file": "audit/checkpoints/V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28.json"
+      },
+      {
+        "id": "DIFF-5297cb0c52b681f1",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/validate-tr-comments.mjs"
+      },
+      {
+        "id": "DIFF-0d5d2c9a3d39dbe6",
+        "kind": "CHANGED_FILE",
+        "file": "tests/pkg-e2-tr-scan.test.ts"
+      }
+    ],
+    "changedFiles": [
+      "audit/checkpoints/V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28.json",
+      "scripts/validate-tr-comments.mjs",
+      "tests/pkg-e2-tr-scan.test.ts"
+    ],
+    "changeGuard": {
+      "ok": true,
+      "violations": [],
+      "dependencyChanges": [],
+      "diffLines": 75
+    },
+    "diffStat": " ...-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28.json | 57 ++++++++++++++++++++++\n scripts/validate-tr-comments.mjs                   |  2 +-\n tests/pkg-e2-tr-scan.test.ts                       | 16 ++++++\n 3 files changed, 74 insertions(+), 1 deletion(-)\n",
+    "validation": {
+      "//TR": "Bu runtime report canonical validation command/exit/duration sonuçlarını redacted biçimde kaydeder; read-only static gruplar paralel çalışabilir.",
+      "schemaVersion": "1.1.0",
+      "startedAt": "2026-09-28T11:56:51.646Z",
+      "steps": [
+        {
+          "id": "registries",
+          "command": [
+            "node",
+            "scripts/validate-registries.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 154,
+          "logFile": ".ai\\runtime\\validation-registries.log"
+        },
+        {
+          "id": "architecture",
+          "command": [
+            "node",
+            "scripts/validate-architecture.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 163,
+          "logFile": ".ai\\runtime\\validation-architecture.log"
+        },
+        {
+          "id": "tr",
+          "command": [
+            "node",
+            "scripts/validate-tr-comments.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1424,
+          "logFile": ".ai\\runtime\\validation-tr.log"
+        },
+        {
+          "id": "competencies",
+          "command": [
+            "node",
+            "scripts/validate-agent-competencies.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 196,
+          "logFile": ".ai\\runtime\\validation-competencies.log"
+        },
+        {
+          "id": "organization",
+          "command": [
+            "node",
+            "scripts/validate-organization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 86,
+          "logFile": ".ai\\runtime\\validation-organization.log"
+        },
+        {
+          "id": "schemas",
+          "command": [
+            "node",
+            "scripts/validate-schema-catalog.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 158,
+          "logFile": ".ai\\runtime\\validation-schemas.log"
+        },
+        {
+          "id": "technology",
+          "command": [
+            "node",
+            "scripts/validate-technology-graph.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 95,
+          "logFile": ".ai\\runtime\\validation-technology.log"
+        },
+        {
+          "id": "paste3-technology-domain-registry",
+          "command": [
+            "node",
+            "scripts/validate-paste3-technology-domain-registry.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 459,
+          "logFile": ".ai\\runtime\\validation-paste3-technology-domain-registry.log"
+        },
+        {
+          "id": "domain-packs",
+          "command": [
+            "node",
+            "scripts/validate-domain-packs.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 107,
+          "logFile": ".ai\\runtime\\validation-domain-packs.log"
+        },
+        {
+          "id": "agent-semantic",
+          "command": [
+            "node",
+            "scripts/validate-agent-semantic.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 185,
+          "logFile": ".ai\\runtime\\validation-agent-semantic.log"
+        },
+        {
+          "id": "paste3-agent-specialization",
+          "command": [
+            "node",
+            "scripts/validate-paste3-agent-specialization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 29307,
+          "logFile": ".ai\\runtime\\validation-paste3-agent-specialization.log"
+        },
+        {
+          "id": "phase-contracts",
+          "command": [
+            "node",
+            "scripts/validate-phase-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 329,
+          "logFile": ".ai\\runtime\\validation-phase-contracts.log"
+        },
+        {
+          "id": "paste4a-construction-graph",
+          "command": [
+            "node",
+            "scripts/validate-paste4a.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 187,
+          "logFile": ".ai\\runtime\\validation-paste4a-construction-graph.log"
+        },
+        {
+          "id": "paste4b-traceability",
+          "command": [
+            "node",
+            "scripts/validate-paste4b.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 345,
+          "logFile": ".ai\\runtime\\validation-paste4b-traceability.log"
+        },
+        {
+          "id": "paste4c-doc-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4c-doc-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 201,
+          "logFile": ".ai\\runtime\\validation-paste4c-doc-truth.log"
+        },
+        {
+          "id": "paste4d-release-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4d-release-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 144,
+          "logFile": ".ai\\runtime\\validation-paste4d-release-truth.log"
+        },
+        {
+          "id": "review-graph",
+          "command": [
+            "node",
+            "scripts/validate-review-graph-v2.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 133,
+          "logFile": ".ai\\runtime\\validation-review-graph.log"
+        },
+        {
+          "id": "schema-strict",
+          "command": [
+            "node",
+            "scripts/validate-schema-strictness.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 264,
+          "logFile": ".ai\\runtime\\validation-schema-strict.log"
+        },
+        {
+          "id": "woven",
+          "command": [
+            "node",
+            "scripts/validate-woven-model.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 123,
+          "logFile": ".ai\\runtime\\validation-woven.log"
+        },
+        {
+          "id": "paste3-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste3-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 30075,
+          "logFile": ".ai\\runtime\\validation-paste3-source-closure.log"
+        },
+        {
+          "id": "config-runtime-enforcement",
+          "command": [
+            "node",
+            "scripts/validate-config-runtime-enforcement.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 111,
+          "logFile": ".ai\\runtime\\validation-config-runtime-enforcement.log"
+        },
+        {
+          "id": "mechanical",
+          "command": [
+            "node",
+            "scripts/validate-mechanical-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 189,
+          "logFile": ".ai\\runtime\\validation-mechanical.log"
+        },
+        {
+          "id": "runtime-contracts",
+          "command": [
+            "node",
+            "scripts/validate-runtime-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 839,
+          "logFile": ".ai\\runtime\\validation-runtime-contracts.log"
+        },
+        {
+          "id": "runtime-release-contracts",
+          "command": [
+            "node",
+            "scripts/validate-paste2h-runtime-release.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 118,
+          "logFile": ".ai\\runtime\\validation-runtime-release-contracts.log"
+        },
+        {
+          "id": "runtime-resilience",
+          "command": [
+            "node",
+            "scripts/validate-runtime-resilience.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 165,
+          "logFile": ".ai\\runtime\\validation-runtime-resilience.log"
+        },
+        {
+          "id": "paste2-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste2-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 2508,
+          "logFile": ".ai\\runtime\\validation-paste2-source-closure.log"
+        },
+        {
+          "id": "runtime-schema-conformance",
+          "command": [
+            "node",
+            "scripts/runtime-schema-conformance-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 285,
+          "logFile": ".ai\\runtime\\validation-runtime-schema-conformance.log"
+        },
+        {
+          "id": "mechanical-selftest",
+          "command": [
+            "node",
+            "scripts/mechanical-kernel-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 104,
+          "logFile": ".ai\\runtime\\validation-mechanical-selftest.log"
+        },
+        {
+          "id": "state-selftest",
+          "command": [
+            "node",
+            "scripts/supervisor-state-machine-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7489,
+          "logFile": ".ai\\runtime\\validation-state-selftest.log"
+        },
+        {
+          "id": "secret-sanity",
+          "command": [
+            "node",
+            "scripts/secret-sanity.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7252,
+          "logFile": ".ai\\runtime\\validation-secret-sanity.log"
+        },
+        {
+          "id": "dependency-supply-chain",
+          "command": [
+            "node",
+            "scripts/dependency-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 9034,
+          "logFile": ".ai\\runtime\\validation-dependency-supply-chain.log"
+        },
+        {
+          "id": "release-supply-chain",
+          "command": [
+            "node",
+            "scripts/validate-release-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 119,
+          "logFile": ".ai\\runtime\\validation-release-supply-chain.log"
+        },
+        {
+          "id": "typecheck",
+          "command": [
+            "node",
+            "node_modules/typescript/bin/tsc",
+            "--noEmit"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1840,
+          "logFile": ".ai\\runtime\\validation-typecheck.log"
+        },
+        {
+          "id": "tests",
+          "command": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 8553,
+          "logFile": ".ai\\runtime\\validation-tests.log"
+        }
+      ],
+      "status": "PASS",
+      "finishedAt": "2026-09-28T11:58:59.819Z"
+    },
+    "knownLimitations": [],
+    "acceptedDebt": [],
+    "waivers": [],
+    "unsupportedCases": [
+      "PKGA-F8 ENVIRONMENT (open, not code): target preflight memory 15.9GB below 16GB and Windows Time service not running.",
+      "Not claimed: live provider smoke, target-machine Phase0, trust-root manifest regeneration/final reseal, SHA256SUMS, release signature, final ZIP."
+    ],
+    "previousFindingLedger": [],
+    "reviewRules": {
+      "repoContentIsUntrustedData": true,
+      "fullRepoScanDefault": false,
+      "cycle1Freeze": true,
+      "priorUnresolvedBlockerDispositionRequired": true,
+      "cycle2PlusNewBlockers": [
+        "REMEDIATION_REGRESSION",
+        "PREVIOUSLY_MASKED",
+        "CRITICAL_NEW_EVIDENCE"
+      ],
+      "resolvedBlockerRequiresFindingBoundPassRetest": true
+    },
+    "bundleDigest": "0891a6197d0956f929aadc57a1f517416f7163686317631111312a025c5bbf71"
+  }
+}

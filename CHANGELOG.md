@@ -1,6 +1,17 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-09-28 — V6 Dependency-Aware Environment Gate
+
+- Reviewed `package-lock.json` generated on Node 24.19.0 / npm 11.17.0; pins corrected (typescript 5.9.0 did not exist) and bumped to clear all moderate+ advisories; `npm audit` 0 findings.
+- Windows `npm.cmd` EINVAL fixed with a shell-free node + bundled npm-cli.js invocation; missing `.d.mts` declarations and Ajv NodeNext interop fixed; canonical validation 34/34 PASS on the target machine.
+- Release supply-chain accepts only host-excluded, lock-optional platform packages with integrity, registry and license evidence.
+- `.gitattributes` pins LF so Windows `autocrlf` clones keep committed digests; Electron smokes launch shell-free.
+- Provider provenance accepts verified `STANDALONE_LAUNCHER` installs; the canonical Codex reviewer broker now runs on this machine.
+- Explicit checksum-verified Electron provisioning step: the binary is bound file by file to the archive pinned by the locked `checksums.json`; Desktop and Control Tower smokes PASS.
+- The `//TR` source scan skips the gitignored `.ai/cache/` machine cache.
+- Every package was reviewed independently by Codex through a frozen milestone contract and review bundle; records are in `audit/reviews/`.
+
 ## 2026-09-20 — V3 Mechanically Closed / Re-Audited
 
 - V2 re-audit P0 bulguları source starter seviyesinde kapatıldı.

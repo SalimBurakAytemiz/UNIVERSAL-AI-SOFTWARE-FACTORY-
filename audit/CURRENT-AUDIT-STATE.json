@@ -25,11 +25,19 @@
     "FULL_SYSTEM_REAUDIT_INSTALLER_POWERSHELL_PHASE0_TARGET_MACHINE_CONTRACT",
     "FULL_SYSTEM_REAUDIT_EVIDENCE_TRUST_ROOT_RELEASE_FINALIZATION",
     "FULL_SYSTEM_REAUDIT_DOCS_STATE_CURRENT_TRUTH_FINAL_SWEEP",
-    "EXTENDED_FINAL_DEEP_ADVERSARIAL_SWEEP"
+    "EXTENDED_FINAL_DEEP_ADVERSARIAL_SWEEP",
+    "DEPENDENCY_AWARE_ENVIRONMENT_GATE_REVIEWED_LOCK"
   ],
-  "activeScope": "ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION",
-  "boundedScopeOpenP0P1P2": 0,
-  "overallRemainingP0P1P2": "ZERO_DEPENDENCY_FREE_SOURCE_PENDING_DEPENDENCY_AWARE",
+  "activeScope": "TARGET_MACHINE_PHASE0_ACCEPTANCE_AND_LIVE_PROVIDER_SMOKE",
+  "boundedScopeOpenP0P1P2": 1,
+  "overallRemainingP0P1P2": "P1_OPEN_TRUST_F1_DEPENDENCY_AWARE_PASS_PENDING_FOUNDER_DECISION",
+  "openFindings": [
+    {"id": "TRUST-F1", "severity": "P1", "file": "automation/lib/trust-root.mjs", "observed": "matchesPrefix treats every protected prefix as a directory, so the filename prefix scripts/validate- protects nothing; 26 of 27 scripts/validate-*.mjs validators are not flagged by the change guard or expected in the trust-root manifest.", "status": "OPEN_REQUIRES_FOUNDER_DECISION_PROTECTED_TRUST_ROOT"},
+    {"id": "PKGA-F8", "severity": "ENVIRONMENT", "status": "OPEN_ENVIRONMENT_NOT_CODE_DEFECT"}
+  ],
+  "lowBacklog": [
+    {"id": "F-PKGE-002", "severity": "P3", "file": "automation/lib/electron-provision.mjs", "observed": "verifyProvisionedElectron authenticates every dist file against the archive but never reads manifest.exeSha256; metadata consistency only."}
+  ],
   "sourceLevelClosure": false,
   "finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL",
   "finalSha256Sums": "NOT_DONE",
@@ -37,10 +45,9 @@
   "finalZip": "NOT_DONE",
   "targetMachinePhase0": "PENDING",
   "pendingEnvironmentGates": [
-    "runtime-schema-conformance:PENDING_DEPENDENCIES",
-    "release-supply-chain:PENDING_REVIEWED_DEPENDENCIES_AND_SBOM",
-    "live-provider-smoke:PENDING_TARGET_RUNTIME_PROVIDER_ENVIRONMENT",
-    "typecheck-vitest:PENDING_DEPENDENCIES"
+    "live-provider-smoke:PENDING_NOT_RUN",
+    "target-machine-phase0:PENDING",
+    "target-environment-PKGA-F8:WINDOWS_TIME_SERVICE_STOPPED_AND_MEMORY_15_9GB_BELOW_16GB_THRESHOLD"
   ],
   "dependencyFreeRegression": {
     "status": "PASS_WITH_ENVIRONMENT_CONDITIONALS",
@@ -51,10 +58,25 @@
     "jsonParse": "1618/1618 PASS",
     "secretSanity": "PASS"
   },
+  "dependencyAwareValidation": {
+    "status": "PASS_TARGET_WINDOWS_NODE24_NPM11",
+    "canonicalPass": 34,
+    "fail": 0,
+    "runtimeSchemaConformance": "PASS",
+    "dependencySupplyChain": "PASS npm audit 0 findings",
+    "releaseSupplyChain": "PASS",
+    "typecheck": "PASS",
+    "vitest": "PASS",
+    "desktopAndControlTowerSmoke": "PASS_ON_THIS_MACHINE",
+    "providerProvenance": "PASS_STANDALONE_LAUNCHER",
+    "independentReview": "CODEX_CLEAN_PKG_A_C_D_E_E2",
+    "reviewRecords": "audit/reviews/"
+  },
   "environmentGate": {
-    "node24": "NOT_AVAILABLE_IN_CURRENT_RUNTIME_NODE_22_16_0",
-    "npm11": "NOT_AVAILABLE_LOCALLY_NPM_10_9_2",
-    "registryNpmjsDns": "UNRESOLVED",
-    "packageLock": "ABSENT"
+    "platform": "win32 10.0.19045 x64",
+    "node24": "PASS_V24_19_0",
+    "npm11": "PASS_11_17_0",
+    "registryNpmjs": "REACHABLE_TLS_PING_PASS",
+    "packageLock": "PRESENT_96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
   }
 }

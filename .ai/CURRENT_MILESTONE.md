@@ -1,7 +1,7 @@
-<!-- //TR: Bu dosya Paste 4 source audit tamamlandıktan sonraki current bounded milestone'u gösterir; final release veya target-machine milestone değildir. -->
+<!-- //TR: Bu dosya dependency-aware environment gate sonrası current bounded milestone'u gösterir; final release veya CLEAN iddiası değildir. -->
 # Current Milestone
-## V6 Final Enforcement Sweep
-- config says true -> runtime consumer/enforcement var mı doğrula
-- dekoratif veya uygulanmayan claim'i PLANNED / NOT_RUNTIME_ENFORCED olarak işaretle
-- full dependency-free source regression çalıştır
-- kalan P0/P1/P2 varsa final seal öncesi kapat
+## V6 Target-Machine Phase0 Prerequisites
+- PKGA-F8 ortam maddelerini (Windows Time servisi, 16 GB bellek eşiği) Founder kararıyla kapat
+- live provider smoke'u Claude/Codex broker'ları üzerinden çalıştır
+- `scripts/install.ps1` ile target-machine Phase0 acceptance üret
+- final reseal/SHA256SUMS/imza/ZIP yalnız Phase0 sonrası

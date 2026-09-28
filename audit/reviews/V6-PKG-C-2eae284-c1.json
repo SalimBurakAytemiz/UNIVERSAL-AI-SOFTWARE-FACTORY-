@@ -1,0 +1,1259 @@
+{
+  "//TR": "Bu kayıt tek bir Codex bağımsız review çalıştırmasının frozen bundle, değiştirilmemiş reviewer çıktısı, run manifest ve governed değerlendirmesini kalıcı tutar; evidence signing anahtarı henüz başlatılmadığı için imzasızdır.",
+  "schemaVersion": "1.0.0",
+  "signature": "UNSIGNED_EVIDENCE_KEY_NOT_INITIALIZED",
+  "runDir": "2eae284-c1-20260926T032204Z",
+  "runId": "RUN-V6-PKG-C-LF-AND-ELECTRON-SMOKE-20260926T032150Z-C1",
+  "baseCommit": "3ed853335ee2c4e1c3b79cb02374f152e2db8bc2",
+  "reviewedCommit": "2eae284779116bc2891b1ccff00bbe0dd70ea337",
+  "cycle": 1,
+  "processBoundary": "same as scripts/codex-reviewer-broker.mjs: exec --sandbox read-only, stdin prompt, safeChildEnv provider=OPENAI",
+  "bundleDigest": "5bbe507dd66b134602c8024addc4960c08f9984dbd6252c85863e581f465d674",
+  "bundleFileSha256": "218c6d2bc72f890a790238469d3e1e4ed8db83d0ca89c0bda35789df1a14ea87",
+  "milestoneContractId": "V6-PKG-C-LF-AND-ELECTRON-SMOKE",
+  "milestoneContractDigest": "d1a3512ce0ae65baf341fd7dc4647998c4dd2bce914fa4e261a49800370c30c9",
+  "reviewResultText": "{\n  \"schemaVersion\": \"1.1.0\",\n  \"runId\": \"RUN-V6-PKG-C-LF-AND-ELECTRON-SMOKE-20260926T032150Z-C1\",\n  \"cycle\": 1,\n  \"baseCommit\": \"3ed853335ee2c4e1c3b79cb02374f152e2db8bc2\",\n  \"reviewedCommit\": \"2eae284779116bc2891b1ccff00bbe0dd70ea337\",\n  \"reviewBundleDigest\": \"5bbe507dd66b134602c8024addc4960c08f9984dbd6252c85863e581f465d674\",\n  \"result\": \"CLEAN\",\n  \"reviewer\": {\n    \"provider\": \"OpenAI\",\n    \"tool\": \"Codex\",\n    \"toolVersion\": null,\n    \"modelId\": \"unknown (GPT-6 family; exact deployment ID not exposed)\",\n    \"independenceStatus\": \"PROVIDER_SEPARATED_MODEL_UNKNOWN\"\n  },\n  \"findings\": [],\n  \"advisories\": [],\n  \"environmentGaps\": [],\n  \"priorBlockerDispositions\": [],\n  \"startedAt\": \"2026-09-26T03:22:14Z\",\n  \"finishedAt\": \"2026-09-26T03:25:10.408Z\",\n  \"summary\": \"Input checks (a)-(e) passed. All three protected changes are Founder-authorized. Reviewed all five changed files; verified file digests, LF coverage, package-lock bytes, canonical validation step alignment, and 20 read-only in-memory resolver cases. Supplied canonical evidence reports 34/34 PASS and 81 passing tests. No unresolved admissible blocker or in-scope environment gap remains. Declared unsupported cases remain known limitations. Full canonical validation and live smokes were not rerun because they write files. Tool version and exact model deployment ID are unavailable.\"\n}",
+  "reviewResultSha256": "4cee3b555e5373806f862357dc0364d5b7286abb5e0f3a0ad7efd76fd466e7fc",
+  "governed": {
+    "//TR": "Bu dosya Codex review sonucunun supervisor-eşdeğeri governed değerlendirmesini kaydeder; Codex'in review-result.json dosyası değiştirilmez.",
+    "schemaVersion": "1.0.0",
+    "evaluatedAt": "2026-09-26T03:26:28.925Z",
+    "runDir": "C:/Users/PRO/Desktop/UASCO/.ai/cache/review/runs/2eae284-c1-20260926T032204Z/",
+    "exitCode": 0,
+    "checks": {
+      "promptDlpSensitiveTypes": [],
+      "resultMatchesLastAgentMessage": true,
+      "eventCount": 27,
+      "commandExecutions": 10,
+      "turnCompleted": true,
+      "schemaValid": true,
+      "validateReviewResult": "PASS",
+      "providerSeparation": "PASS"
+    },
+    "reviewResultSha256": "4cee3b555e5373806f862357dc0364d5b7286abb5e0f3a0ad7efd76fd466e7fc",
+    "reviewerReportedResult": "CLEAN",
+    "governedResult": "CLEAN",
+    "reviewer": {
+      "provider": "OpenAI",
+      "tool": "Codex",
+      "toolVersion": null,
+      "modelId": "unknown (GPT-6 family; exact deployment ID not exposed)",
+      "independenceStatus": "PROVIDER_SEPARATED_MODEL_UNKNOWN"
+    },
+    "summary": "Input checks (a)-(e) passed. All three protected changes are Founder-authorized. Reviewed all five changed files; verified file digests, LF coverage, package-lock bytes, canonical validation step alignment, and 20 read-only in-memory resolver cases. Supplied canonical evidence reports 34/34 PASS and 81 passing tests. No unresolved admissible blocker or in-scope environment gap remains. Declared unsupported cases remain known limitations. Full canonical validation and live smokes were not rerun because they write files. Tool version and exact model deployment ID are unavailable.",
+    "counts": {
+      "findings": 0,
+      "blockers": 0,
+      "advisories": 0,
+      "environmentGaps": 0,
+      "acceptedBlockers": 0,
+      "downgraded": 0
+    },
+    "findings": [],
+    "advisories": [],
+    "environmentGaps": [],
+    "effectiveReviewDigest": "196f9298ba7989802dab8dc37e550934869680a318c8f900584b0e20db9d8177",
+    "status": "EVALUATED"
+  },
+  "environmentBlock": null,
+  "runManifest": {
+    "//TR": "Bu manifest tek bir Codex bağımsız review çağrısının girdi/çıktı/provenance kanıtını hash'leriyle kaydeder; review içeriğini builder üretmez.",
+    "schemaVersion": "1.0.0",
+    "startedAt": "2026-09-26T03:22:04.903Z",
+    "reviewWorktree": "C:/Users/PRO/AppData/Local/Temp/claude/C--Users-PRO-Desktop-UASCO/a72e023b-e073-49b8-9fbd-20b544644a38/scratchpad/rev-c",
+    "baseCommit": "3ed853335ee2c4e1c3b79cb02374f152e2db8bc2",
+    "reviewedCommit": "2eae284779116bc2891b1ccff00bbe0dd70ea337",
+    "cycle": 1,
+    "runId": "RUN-V6-PKG-C-LF-AND-ELECTRON-SMOKE-20260926T032150Z-C1",
+    "bundleFile": ".ai/cache/review/V6-PKG-C-LF-AND-ELECTRON-SMOKE-2eae284-cycle-1-review-bundle.json",
+    "bundleFileSha256": "218c6d2bc72f890a790238469d3e1e4ed8db83d0ca89c0bda35789df1a14ea87",
+    "bundleDigest": "5bbe507dd66b134602c8024addc4960c08f9984dbd6252c85863e581f465d674",
+    "milestoneContractId": "V6-PKG-C-LF-AND-ELECTRON-SMOKE",
+    "milestoneContractDigest": "d1a3512ce0ae65baf341fd7dc4647998c4dd2bce914fa4e261a49800370c30c9",
+    "promptFile": ".ai/cache/review/V6-PKG-C-LF-AND-ELECTRON-SMOKE-2eae284-cycle-1-review-prompt.txt",
+    "promptSha256": "f9b2cdcfdd35ab21e75f8dbd794aa85ea52fd5c5ee307af7085b6c3c6cab6417",
+    "precheck": {
+      "head": "2eae284779116bc2891b1ccff00bbe0dd70ea337",
+      "baseResolved": "3ed853335ee2c4e1c3b79cb02374f152e2db8bc2",
+      "bundleDigestRecomputed": "5bbe507dd66b134602c8024addc4960c08f9984dbd6252c85863e581f465d674",
+      "contractDigestRecomputed": "d1a3512ce0ae65baf341fd7dc4647998c4dd2bce914fa4e261a49800370c30c9",
+      "changedFiles": 5
+    },
+    "reviewer": {
+      "provider": "OPENAI",
+      "tool": "codex",
+      "launcher": "C:\\Users\\PRO\\.codex\\packages\\standalone\\releases\\0.156.1-x86_64-pc-windows-msvc\\bin\\codex.exe",
+      "launcherSha256": "70bcb05f9bf1a4e7306edd0cd1b57d02af3267ad02a34b26f45c8c4bb20a3301",
+      "launcherVersion": "codex-cli 0.156.1",
+      "provenanceLevel": "LAUNCHER_ONLY",
+      "canonicalBrokerStatus": "NOT_USED_CODEX_PACKAGE_PROVENANCE_REQUIRED_UNSATISFIED_STANDALONE_INSTALL",
+      "args": [
+        "exec",
+        "--sandbox",
+        "read-only",
+        "--color",
+        "never",
+        "--json",
+        "-c",
+        "model_reasoning_effort=high",
+        "-o",
+        "C:\\Users\\PRO\\Desktop\\UASCO\\.ai\\cache\\review\\runs\\2eae284-c1-20260926T032204Z\\review-result.json",
+        "-"
+      ],
+      "childEnvVariableNames": [
+        "APPDATA",
+        "COMSPEC",
+        "HOME",
+        "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS",
+        "OS",
+        "PATH",
+        "PATHEXT",
+        "PROCESSOR_ARCHITECTURE",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "UASCO_PAID_API_ALLOWED",
+        "UASCO_PROVIDER",
+        "USERPROFILE"
+      ],
+      "allowPaidApi": false
+    },
+    "processBoundary": "same as scripts/codex-reviewer-broker.mjs: exec --sandbox read-only, stdin prompt, safeChildEnv provider=OPENAI",
+    "finishedAt": "2026-09-26T03:25:33.162Z",
+    "exitCode": 0,
+    "signal": null,
+    "outputs": {
+      "codex-events.jsonl": {
+        "bytes": 160702,
+        "sha256": "876b88875692310f61122a5dfb3a9c72a51bf05aab23ecda06c26ac3ad439f3d"
+      },
+      "codex-stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "review-result.json": {
+        "bytes": 1359,
+        "sha256": "4cee3b555e5373806f862357dc0364d5b7286abb5e0f3a0ad7efd76fd466e7fc"
+      }
+    }
+  },
+  "frozenBundle": {
+    "schemaVersion": "1.4.0",
+    "runId": "RUN-V6-PKG-C-LF-AND-ELECTRON-SMOKE-20260926T032150Z-C1",
+    "cycle": 1,
+    "phase": 0,
+    "phaseIds": [
+      0
+    ],
+    "baseCommit": "3ed853335ee2c4e1c3b79cb02374f152e2db8bc2",
+    "reviewedCommit": "2eae284779116bc2891b1ccff00bbe0dd70ea337",
+    "milestoneContract": {
+      "schemaVersion": "1.2.0",
+      "id": "V6-PKG-C-LF-AND-ELECTRON-SMOKE",
+      "phase": 0,
+      "phaseIds": [
+        0
+      ],
+      "title": "V6 PKG-C LF line-ending pin and shell-free Electron smoke launch",
+      "objective": "Pin committed text files to LF on every platform and launch the Desktop/Control Tower Electron smokes without electron.cmd, without a shell and without implicit binary download, using only Founder-authorized minimum changes.",
+      "requirements": [
+        "[V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26 founderAuthorization.decision] PKG_C_F9_AND_F10_APPROVED",
+        "[V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26 founderAuthorization.protectedFiles] .gitattributes, scripts/smoke-desktop.mjs, scripts/smoke-control-tower.mjs",
+        "[V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26 founderAuthorization.F10] Add protected .gitattributes that stores and checks out every text file with LF so Windows core.autocrlf=true clones keep lock, trust-root and evidence digests equal to committed bytes.",
+        "[V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26 founderAuthorization.F9] Launch Electron in smoke-desktop.mjs and smoke-control-tower.mjs without electron.cmd and without a shell; verify Electron 44 binary provisioning under ignore-scripts and report it as a separate decision if needed.",
+        "[V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval.",
+        "[V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26 implementation.F9DeviationFromLiteralAuthorization] The authorization text named 'node + electron cli'. Verification showed electron@44.4.5 cli.js/index.js silently downloads the binary from GitHub on first require and extracts it into node_modules/electron/dist, which also breaks the installed-tree seal. The smokes therefore launch the verified binary directly and never trigger that download; this is stricter than the literal text and stays inside the two authorized files."
+      ],
+      "invariants": [
+        "NO_FAKE_SUCCESS",
+        "NO_WEAKENED_CONTROLS",
+        "NO_SILENT_SCOPE_EXPANSION",
+        "NO_SELF_CERTIFICATION",
+        "EVIDENCE_REQUIRED",
+        "FAIL_CLOSED"
+      ],
+      "acceptanceCriteria": [
+        "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11.",
+        ".gitattributes stores and checks out every text file with LF so a default core.autocrlf=true clone reproduces committed bytes and the package-lock digest.",
+        "Both smokes spawn the Electron binary directly without electron.cmd, without shell and without require('electron'), cli.js or install.js, keeping safe env, challenge proof and blocked redirects.",
+        "An unprovisioned or mismatched Electron binary, including a path.txt that points outside the allowlisted names, fails closed with ELECTRON_BINARY_NOT_PROVISIONED without downloading anything or changing the installed dependency tree.",
+        "Only the Founder-authorized protected files change, and no existing test, assertion, validator or policy is weakened."
+      ],
+      "mandatoryFailureCases": [
+        "Electron binary not provisioned",
+        "dist/version does not match the installed electron package",
+        "path.txt traversal to a non-Electron executable",
+        "default autocrlf clone without .gitattributes"
+      ],
+      "requiredArtifacts": [
+        ".gitattributes",
+        "audit/checkpoints/V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26.json"
+      ],
+      "phaseTraceability": [
+        {
+          "phase": 0,
+          "requirement": "[V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26 founderAuthorization.decision] PKG_C_F9_AND_F10_APPROVED",
+          "acceptanceCriteria": [
+            "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11.",
+            ".gitattributes stores and checks out every text file with LF so a default core.autocrlf=true clone reproduces committed bytes and the package-lock digest.",
+            "Both smokes spawn the Electron binary directly without electron.cmd, without shell and without require('electron'), cli.js or install.js, keeping safe env, challenge proof and blocked redirects.",
+            "An unprovisioned or mismatched Electron binary, including a path.txt that points outside the allowlisted names, fails closed with ELECTRON_BINARY_NOT_PROVISIONED without downloading anything or changing the installed dependency tree.",
+            "Only the Founder-authorized protected files change, and no existing test, assertion, validator or policy is weakened."
+          ],
+          "mandatoryFailureCases": [
+            "Electron binary not provisioned",
+            "dist/version does not match the installed electron package",
+            "path.txt traversal to a non-Electron executable",
+            "default autocrlf clone without .gitattributes"
+          ],
+          "requiredArtifacts": [
+            ".gitattributes",
+            "audit/checkpoints/V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26.json"
+          ],
+          "unsupportedCases": [
+            "PKGC-F1 (open, requires Founder decision): no reviewed provisioning step exists for the electron@44.4.5 binary under ignore-scripts; scripts/install.ps1 control-tower-smoke fails closed until provisioning is decided.",
+            "PKGA-F8 ENVIRONMENT (open, not code): target preflight memory total=15.9GB below required 16GB and Windows Time service not running.",
+            "Not claimed: target-machine Phase0, live provider smoke, successful Desktop smoke, trust-root manifest regeneration/final reseal, SHA256SUMS, release signature, final ZIP."
+          ]
+        }
+      ],
+      "allowedPathPrefixes": [
+        ".gitattributes",
+        "scripts/smoke-desktop.mjs",
+        "scripts/smoke-control-tower.mjs",
+        "tests/",
+        "audit/checkpoints/"
+      ],
+      "protectedPaths": [
+        ".gitattributes",
+        ".github/workflows/ci.yml",
+        ".gitignore",
+        ".gitmodules",
+        ".npmrc",
+        "AGENTS.md",
+        "ARCHITECTURE-CONSTITUTION.md",
+        "ARCHITECTURE-FREEZE.md",
+        "BUILD-RULES.md",
+        "CANONICAL-STATUS.md",
+        "CLAUDE.md",
+        "CODEX.md",
+        "DEFINITION-OF-DONE.md",
+        "FULL-REPO-CONSTRUCTION-CONTRACT.md",
+        "INSTALLATION-GO-CHECKLIST.md",
+        "THIRD-PARTY-NOTICES.md",
+        "apps/control-api/src/server.ts",
+        "apps/desktop/main.mjs",
+        "apps/desktop/preload.mjs",
+        "apps/desktop/renderer/app.js",
+        "apps/desktop/renderer/index.html",
+        "automation/factory-supervisor.mjs",
+        "automation/lib/evidence-signing.mjs",
+        "automation/lib/filesystem-boundary.mjs",
+        "automation/lib/redaction.mjs",
+        "config/action-policy.json",
+        "config/automation.json",
+        "config/builder-execution-policy.json",
+        "config/environment-policy.json",
+        "config/evidence-ledger-policy.json",
+        "config/git-metadata-policy.json",
+        "config/omniroute-policy.json",
+        "config/package-policy.json",
+        "config/protected-paths.json",
+        "config/supply-chain-policy.json",
+        "config/trust-root-manifest.json",
+        "config/validation.json",
+        "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
+        "governance/accepted-debt.json",
+        "governance/known-limitations.json",
+        "governance/waivers.json",
+        "prompts/AUTO-BUILDER.md",
+        "prompts/AUTO-REMEDIATION.md",
+        "prompts/AUTO-REVIEW.md",
+        "prompts/AUTO-VALIDATION-FIX.md",
+        "registries/phase-contracts-index.json",
+        "roadmap/build-waves.json",
+        "roadmap/critical-path.json",
+        "roadmap/dependency-graph.json",
+        "roadmap/parallel-lanes.json",
+        "roadmap/review-packages.json",
+        "roadmap/scheduler-state.template.json",
+        "schemas/install-report.schema.json",
+        "scripts/bootstrap-kernel-selftest.mjs",
+        "scripts/bootstrap.ps1",
+        "scripts/builder-boundary-smoke.mjs",
+        "scripts/capture-provider-provenance.mjs",
+        "scripts/check-prereqs.ps1",
+        "scripts/claude-builder-broker.mjs",
+        "scripts/codex-reviewer-broker.mjs",
+        "scripts/dependency-supply-chain.mjs",
+        "scripts/generate-trust-root.mjs",
+        "scripts/harden-evidence-key.ps1",
+        "scripts/init-evidence-signing.mjs",
+        "scripts/init-private-git.ps1",
+        "scripts/install-report.mjs",
+        "scripts/install.ps1",
+        "scripts/mechanical-kernel-selftest.mjs",
+        "scripts/phase0-acceptance.mjs",
+        "scripts/preflight.mjs",
+        "scripts/provider-smoke.mjs",
+        "scripts/register-autostart.ps1",
+        "scripts/sanitize-process-env.ps1",
+        "scripts/smoke-control-api.mjs",
+        "scripts/smoke-control-tower.mjs",
+        "scripts/smoke-desktop.mjs",
+        "scripts/start-control-tower.ps1",
+        "scripts/start-full-auto.ps1",
+        "scripts/supervisor-state-machine-selftest.mjs",
+        "scripts/v6-apps-control-desktop-selftest.mjs",
+        "scripts/validate-domain-packs.mjs",
+        "scripts/verify-artifact.mjs",
+        "scripts/verify-evidence-ledger.mjs",
+        "scripts/verify-remote-protection.mjs",
+        "scripts/verify-trust-root.mjs",
+        "tsconfig.json",
+        "automation/lib/",
+        "scripts/validate-",
+        "scripts/run-validation.mjs",
+        "schemas/independent-review-result.schema.json",
+        "schemas/review-finding.schema.json",
+        "schemas/review-bundle.schema.json",
+        "schemas/milestone-contract.schema.json",
+        "schemas/run-event.schema.json",
+        "schemas/run-manifest.schema.json",
+        "schemas/phase0-acceptance.schema.json",
+        "prompts/",
+        "roadmap/contracts/",
+        "config/"
+      ],
+      "mandatoryValidation": [
+        "Canonical runner scripts/run-validation.mjs over config/validation.json",
+        "vitest run",
+        "broad dependency-free selftest suite",
+        "unprovisioned Electron smoke fail-closed run",
+        "default autocrlf clone line-ending comparison"
+      ],
+      "mandatoryEvidence": [
+        "reviewed commit SHA",
+        "exact tool/runtime versions",
+        "canonical validation report",
+        "changed file sha256 digests",
+        "adversarial fail-closed results"
+      ],
+      "riskLevel": 3,
+      "allowPaidApi": false,
+      "allowProduction": false,
+      "allowRisk5": false,
+      "allowDependencyChanges": false,
+      "unsupportedCases": [
+        "PKGC-F1 (open, requires Founder decision): no reviewed provisioning step exists for the electron@44.4.5 binary under ignore-scripts; scripts/install.ps1 control-tower-smoke fails closed until provisioning is decided.",
+        "PKGA-F8 ENVIRONMENT (open, not code): target preflight memory total=15.9GB below required 16GB and Windows Time service not running.",
+        "Not claimed: target-machine Phase0, live provider smoke, successful Desktop smoke, trust-root manifest regeneration/final reseal, SHA256SUMS, release signature, final ZIP."
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "maxFilesChanged": 10,
+      "allowExistingTestAssertionReduction": false,
+      "frozenAt": "2026-09-26T03:21:50.550Z",
+      "digest": "d1a3512ce0ae65baf341fd7dc4647998c4dd2bce914fa4e261a49800370c30c9"
+    },
+    "reviewBasis": {
+      "requirements": [
+        {
+          "id": "P000-REQ-45d34206b0e63c71",
+          "text": "[V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26 founderAuthorization.decision] PKG_C_F9_AND_F10_APPROVED"
+        },
+        {
+          "id": "P000-REQ-6a7c5662dbd98958",
+          "text": "[V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26 founderAuthorization.protectedFiles] .gitattributes, scripts/smoke-desktop.mjs, scripts/smoke-control-tower.mjs"
+        },
+        {
+          "id": "P000-REQ-2cda0541e50fecfa",
+          "text": "[V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26 founderAuthorization.F10] Add protected .gitattributes that stores and checks out every text file with LF so Windows core.autocrlf=true clones keep lock, trust-root and evidence digests equal to committed bytes."
+        },
+        {
+          "id": "P000-REQ-a696ee45c46d91dd",
+          "text": "[V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26 founderAuthorization.F9] Launch Electron in smoke-desktop.mjs and smoke-control-tower.mjs without electron.cmd and without a shell; verify Electron 44 binary provisioning under ignore-scripts and report it as a separate decision if needed."
+        },
+        {
+          "id": "P000-REQ-8afa3a8a38883e96",
+          "text": "[V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+        },
+        {
+          "id": "P000-REQ-eb746bbcaa83234f",
+          "text": "[V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26 implementation.F9DeviationFromLiteralAuthorization] The authorization text named 'node + electron cli'. Verification showed electron@44.4.5 cli.js/index.js silently downloads the binary from GitHub on first require and extracts it into node_modules/electron/dist, which also breaks the installed-tree seal. The smokes therefore launch the verified binary directly and never trigger that download; this is stricter than the literal text and stays inside the two authorized files."
+        }
+      ],
+      "invariants": [
+        {
+          "id": "P000-INV-cee4912d3e0a2019",
+          "text": "NO_FAKE_SUCCESS"
+        },
+        {
+          "id": "P000-INV-59e59d4476fc0664",
+          "text": "NO_WEAKENED_CONTROLS"
+        },
+        {
+          "id": "P000-INV-f74092f031a0e4aa",
+          "text": "NO_SILENT_SCOPE_EXPANSION"
+        },
+        {
+          "id": "P000-INV-6122df41f404fe66",
+          "text": "NO_SELF_CERTIFICATION"
+        },
+        {
+          "id": "P000-INV-b8274eed78d72a76",
+          "text": "EVIDENCE_REQUIRED"
+        },
+        {
+          "id": "P000-INV-473c0420ab79dc5f",
+          "text": "FAIL_CLOSED"
+        }
+      ],
+      "acceptanceCriteria": [
+        {
+          "id": "P000-AC-dced01b094845052",
+          "text": "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11."
+        },
+        {
+          "id": "P000-AC-2ba2f2d0d3809be6",
+          "text": ".gitattributes stores and checks out every text file with LF so a default core.autocrlf=true clone reproduces committed bytes and the package-lock digest."
+        },
+        {
+          "id": "P000-AC-5ab05371781f757a",
+          "text": "Both smokes spawn the Electron binary directly without electron.cmd, without shell and without require('electron'), cli.js or install.js, keeping safe env, challenge proof and blocked redirects."
+        },
+        {
+          "id": "P000-AC-96ee13f9c68f97e9",
+          "text": "An unprovisioned or mismatched Electron binary, including a path.txt that points outside the allowlisted names, fails closed with ELECTRON_BINARY_NOT_PROVISIONED without downloading anything or changing the installed dependency tree."
+        },
+        {
+          "id": "P000-AC-1f85e3f703e62dd9",
+          "text": "Only the Founder-authorized protected files change, and no existing test, assertion, validator or policy is weakened."
+        }
+      ],
+      "mandatoryValidation": [
+        {
+          "id": "P000-VAL-2c7156c14e11890c",
+          "text": "Canonical runner scripts/run-validation.mjs over config/validation.json"
+        },
+        {
+          "id": "P000-VAL-ad6cd6b8acf39571",
+          "text": "vitest run"
+        },
+        {
+          "id": "P000-VAL-c9ec154ca647422f",
+          "text": "broad dependency-free selftest suite"
+        },
+        {
+          "id": "P000-VAL-809a41bfd4e74e8f",
+          "text": "unprovisioned Electron smoke fail-closed run"
+        },
+        {
+          "id": "P000-VAL-62ed9fdd5e6c5fe4",
+          "text": "default autocrlf clone line-ending comparison"
+        }
+      ],
+      "mandatoryFailureCases": [
+        {
+          "id": "P000-FAIL-91aab541ecef84ca",
+          "text": "Electron binary not provisioned"
+        },
+        {
+          "id": "P000-FAIL-542ef59021027c02",
+          "text": "dist/version does not match the installed electron package"
+        },
+        {
+          "id": "P000-FAIL-f5d2f1ec21e747d5",
+          "text": "path.txt traversal to a non-Electron executable"
+        },
+        {
+          "id": "P000-FAIL-de44fcf9ed6fe8b4",
+          "text": "default autocrlf clone without .gitattributes"
+        }
+      ],
+      "requiredArtifacts": [
+        {
+          "id": "P000-ART-618cd5b83d62060b",
+          "text": ".gitattributes"
+        },
+        {
+          "id": "P000-ART-e2509bbaaea4c909",
+          "text": "audit/checkpoints/V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26.json"
+        }
+      ],
+      "risk": [
+        {
+          "id": "P000-RISK-4391d3546bf1df6f",
+          "text": "riskLevel=3; reviewProfile=TRUST_CRITICAL"
+        }
+      ]
+    },
+    "evidenceCatalog": [
+      {
+        "id": "VALIDATION-REGISTRIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "registries",
+        "validationDigest": "8ffa6f6330a6110d8e99139af483e17c71a6df86bea6eb90b53ef87638246b30",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 71
+      },
+      {
+        "id": "VALIDATION-ARCHITECTURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "architecture",
+        "validationDigest": "e5bf5d23fdda0d99094fdb8527a39d03f097200ed58ad48e545edfa66c72268f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 71
+      },
+      {
+        "id": "VALIDATION-TR",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tr",
+        "validationDigest": "2e6b2ed7451d768a768929c1cffbfbe7163006ef338db738aee25eb2e32f0f10",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 839
+      },
+      {
+        "id": "VALIDATION-COMPETENCIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "competencies",
+        "validationDigest": "10562f2c1b237b192ff646172cda08cd586bf3f09cc90eb8537e860e8e89b83d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 93
+      },
+      {
+        "id": "VALIDATION-ORGANIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "organization",
+        "validationDigest": "6ac3f9799e6e1b0f96e62bcf1a9a0ade5c38852dcc133d2c11b1fd80156ccea5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 68
+      },
+      {
+        "id": "VALIDATION-SCHEMAS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schemas",
+        "validationDigest": "7ba29d41eceb71bd056a516963edf5ddfd26fcbd497d31ea31e504c769879057",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 123
+      },
+      {
+        "id": "VALIDATION-TECHNOLOGY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "technology",
+        "validationDigest": "4120c97312f885fb82187e6933b08c510c95e46d943ebc95f46ef4a5a2a66050",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 74
+      },
+      {
+        "id": "VALIDATION-PASTE3-TECHNOLOGY-DOMAIN-REGISTRY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-technology-domain-registry",
+        "validationDigest": "9951864be421206417dc0fc09feb8586d35de6df8b90b1132a044576afac17b5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 403
+      },
+      {
+        "id": "VALIDATION-DOMAIN-PACKS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "domain-packs",
+        "validationDigest": "6aa9c5c7e2dd34e3686e298fe3e0d67964ab0803815fd6d42f3d0f84a1048de7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 82
+      },
+      {
+        "id": "VALIDATION-AGENT-SEMANTIC",
+        "kind": "VALIDATION_STEP",
+        "validationId": "agent-semantic",
+        "validationDigest": "89e22dc4c751e6e449ca9297710721f30e635e17966c6d068f6e1100b5f0db53",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 141
+      },
+      {
+        "id": "VALIDATION-PASTE3-AGENT-SPECIALIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-agent-specialization",
+        "validationDigest": "c8caf548402f3e5d2cce7957a5e2bed0ba7e6df2b63a93989a786cd9890fbb44",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 23145
+      },
+      {
+        "id": "VALIDATION-PHASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "phase-contracts",
+        "validationDigest": "28fdd6131326497e67d9e3c3688f2c7e820c4e6d75587fb58dc9e35f8d545b59",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 197
+      },
+      {
+        "id": "VALIDATION-PASTE4A-CONSTRUCTION-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4a-construction-graph",
+        "validationDigest": "928324142269635a66da22344f852a800442428fa797d278922463d8c0790041",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 104
+      },
+      {
+        "id": "VALIDATION-PASTE4B-TRACEABILITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4b-traceability",
+        "validationDigest": "cdc94fbc1ab6b34cd1867473d6a6ab32555f421b82dc3bce66c8f95e82f9adf7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 192
+      },
+      {
+        "id": "VALIDATION-PASTE4C-DOC-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4c-doc-truth",
+        "validationDigest": "a86eb363edc20bab120a6590eeb2ac9f9168b9e0a164a5efb68574c2bb8b4e82",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 118
+      },
+      {
+        "id": "VALIDATION-PASTE4D-RELEASE-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4d-release-truth",
+        "validationDigest": "9de0bee8320b7f76dc95efd1af8751c01dc8b945d71a31a105dcef9a7c7dfaa8",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 111
+      },
+      {
+        "id": "VALIDATION-REVIEW-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "review-graph",
+        "validationDigest": "d269f09107f2fc3ffe916892e24db59375682a22a2a6775792a09b60361ec15f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 98
+      },
+      {
+        "id": "VALIDATION-SCHEMA-STRICT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schema-strict",
+        "validationDigest": "1e0b34db66453f8c8b54f4bddf4af81794090404f2b66c4fbe03d8b5c032468f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 165
+      },
+      {
+        "id": "VALIDATION-WOVEN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "woven",
+        "validationDigest": "3f4799cff5ec0a4516f7c2bf34292594d680d5e3b20ad2ca73becfb1efbe556d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 104
+      },
+      {
+        "id": "VALIDATION-PASTE3-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-source-closure",
+        "validationDigest": "96cdee7724cf5f145a0260098b33782eb8f9dad828a15f75396d4b04a492f74e",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 23761
+      },
+      {
+        "id": "VALIDATION-CONFIG-RUNTIME-ENFORCEMENT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "config-runtime-enforcement",
+        "validationDigest": "ccccb144bce66a977b83a70c4438c72ec13811a4027b94e24fe917015649fc17",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 100
+      },
+      {
+        "id": "VALIDATION-MECHANICAL",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical",
+        "validationDigest": "a802e0c8871cdac4940257b4c0ebf7ef8c837accd69e06ce8936903b9259ab62",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 163
+      },
+      {
+        "id": "VALIDATION-RUNTIME-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-contracts",
+        "validationDigest": "fef8d265e0207f281d438edd4ca13510c37c864c5bd44116e3a1741523e4267a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 742
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RELEASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-release-contracts",
+        "validationDigest": "663f4aefb74075b8404d3424fbd911793a297746e5f11fa9bf43783c285b359a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 123
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RESILIENCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-resilience",
+        "validationDigest": "d13001c5509688e16fdeb5815f15cd945076a1687a721b72c1229c1cb58f24e3",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 148
+      },
+      {
+        "id": "VALIDATION-PASTE2-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste2-source-closure",
+        "validationDigest": "3243c562d6ad710b47b4588b93cb64f8a5172ee089744a9d9d42a315736a969f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 2110
+      },
+      {
+        "id": "VALIDATION-RUNTIME-SCHEMA-CONFORMANCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-schema-conformance",
+        "validationDigest": "78210ab2268bd2aa77de25a46db9d44587cae6cedcb8da5f370e5ad2296ea0ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 216
+      },
+      {
+        "id": "VALIDATION-MECHANICAL-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical-selftest",
+        "validationDigest": "9f0d4aa941e72e684b4fd869c88eb93f07c3814dfda8eee8737f6baf9b65518c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 89
+      },
+      {
+        "id": "VALIDATION-STATE-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "state-selftest",
+        "validationDigest": "feda1327063ae6fddd47ba68f06959d79f614be5b8a5487dc79faf6ee55ee968",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7253
+      },
+      {
+        "id": "VALIDATION-SECRET-SANITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "secret-sanity",
+        "validationDigest": "bb52880e62a0e2817a87a01881b82452fd5eca0793ab916e8b2bdff625fb2888",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 856
+      },
+      {
+        "id": "VALIDATION-DEPENDENCY-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "dependency-supply-chain",
+        "validationDigest": "00a58ae3650584ec15f297865a0708e6c348620736fdbc050f30d31fdf958d6d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7001
+      },
+      {
+        "id": "VALIDATION-RELEASE-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "release-supply-chain",
+        "validationDigest": "d3c8afe4d87eab0ab03484a9bb4f2a6273ec5a5968d69f59408b90c886d090ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 95
+      },
+      {
+        "id": "VALIDATION-TYPECHECK",
+        "kind": "VALIDATION_STEP",
+        "validationId": "typecheck",
+        "validationDigest": "a98a71fd4edf3842dee1ec22f210375256ff5b3f1f45f5e9ed24426ad9e90f15",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1553
+      },
+      {
+        "id": "VALIDATION-TESTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tests",
+        "validationDigest": "40a24b33f564592720d92832d0610de5ef30a01100e26c2e7f2ca149389ca94c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1220
+      },
+      {
+        "id": "DIFF-618cd5b83d62060b",
+        "kind": "CHANGED_FILE",
+        "file": ".gitattributes"
+      },
+      {
+        "id": "DIFF-e2509bbaaea4c909",
+        "kind": "CHANGED_FILE",
+        "file": "audit/checkpoints/V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26.json"
+      },
+      {
+        "id": "DIFF-78c05479728a81c1",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/smoke-control-tower.mjs"
+      },
+      {
+        "id": "DIFF-963342723b166056",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/smoke-desktop.mjs"
+      },
+      {
+        "id": "DIFF-e8428e389215f25a",
+        "kind": "CHANGED_FILE",
+        "file": "tests/pkg-c-lf-electron-smoke.test.ts"
+      }
+    ],
+    "changedFiles": [
+      ".gitattributes",
+      "audit/checkpoints/V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26.json",
+      "scripts/smoke-control-tower.mjs",
+      "scripts/smoke-desktop.mjs",
+      "tests/pkg-c-lf-electron-smoke.test.ts"
+    ],
+    "changeGuard": {
+      "ok": false,
+      "violations": [
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": ".gitattributes"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/smoke-control-tower.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/smoke-desktop.mjs"
+        }
+      ],
+      "dependencyChanges": [],
+      "diffLines": 86
+    },
+    "diffStat": " .gitattributes                                     |  2 +\n .../V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26.json | 58 ++++++++++++++++++++++\n scripts/smoke-control-tower.mjs                    |  6 ++-\n scripts/smoke-desktop.mjs                          |  6 ++-\n tests/pkg-c-lf-electron-smoke.test.ts              | 14 ++++++\n 5 files changed, 82 insertions(+), 4 deletions(-)\n",
+    "validation": {
+      "//TR": "Bu runtime report canonical validation command/exit/duration sonuçlarını redacted biçimde kaydeder; read-only static gruplar paralel çalışabilir.",
+      "schemaVersion": "1.1.0",
+      "startedAt": "2026-09-26T03:20:17.063Z",
+      "steps": [
+        {
+          "id": "registries",
+          "command": [
+            "node",
+            "scripts/validate-registries.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 71,
+          "logFile": ".ai\\runtime\\validation-registries.log"
+        },
+        {
+          "id": "architecture",
+          "command": [
+            "node",
+            "scripts/validate-architecture.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 71,
+          "logFile": ".ai\\runtime\\validation-architecture.log"
+        },
+        {
+          "id": "tr",
+          "command": [
+            "node",
+            "scripts/validate-tr-comments.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 839,
+          "logFile": ".ai\\runtime\\validation-tr.log"
+        },
+        {
+          "id": "competencies",
+          "command": [
+            "node",
+            "scripts/validate-agent-competencies.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 93,
+          "logFile": ".ai\\runtime\\validation-competencies.log"
+        },
+        {
+          "id": "organization",
+          "command": [
+            "node",
+            "scripts/validate-organization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 68,
+          "logFile": ".ai\\runtime\\validation-organization.log"
+        },
+        {
+          "id": "schemas",
+          "command": [
+            "node",
+            "scripts/validate-schema-catalog.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 123,
+          "logFile": ".ai\\runtime\\validation-schemas.log"
+        },
+        {
+          "id": "technology",
+          "command": [
+            "node",
+            "scripts/validate-technology-graph.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 74,
+          "logFile": ".ai\\runtime\\validation-technology.log"
+        },
+        {
+          "id": "paste3-technology-domain-registry",
+          "command": [
+            "node",
+            "scripts/validate-paste3-technology-domain-registry.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 403,
+          "logFile": ".ai\\runtime\\validation-paste3-technology-domain-registry.log"
+        },
+        {
+          "id": "domain-packs",
+          "command": [
+            "node",
+            "scripts/validate-domain-packs.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 82,
+          "logFile": ".ai\\runtime\\validation-domain-packs.log"
+        },
+        {
+          "id": "agent-semantic",
+          "command": [
+            "node",
+            "scripts/validate-agent-semantic.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 141,
+          "logFile": ".ai\\runtime\\validation-agent-semantic.log"
+        },
+        {
+          "id": "paste3-agent-specialization",
+          "command": [
+            "node",
+            "scripts/validate-paste3-agent-specialization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 23145,
+          "logFile": ".ai\\runtime\\validation-paste3-agent-specialization.log"
+        },
+        {
+          "id": "phase-contracts",
+          "command": [
+            "node",
+            "scripts/validate-phase-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 197,
+          "logFile": ".ai\\runtime\\validation-phase-contracts.log"
+        },
+        {
+          "id": "paste4a-construction-graph",
+          "command": [
+            "node",
+            "scripts/validate-paste4a.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 104,
+          "logFile": ".ai\\runtime\\validation-paste4a-construction-graph.log"
+        },
+        {
+          "id": "paste4b-traceability",
+          "command": [
+            "node",
+            "scripts/validate-paste4b.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 192,
+          "logFile": ".ai\\runtime\\validation-paste4b-traceability.log"
+        },
+        {
+          "id": "paste4c-doc-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4c-doc-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 118,
+          "logFile": ".ai\\runtime\\validation-paste4c-doc-truth.log"
+        },
+        {
+          "id": "paste4d-release-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4d-release-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 111,
+          "logFile": ".ai\\runtime\\validation-paste4d-release-truth.log"
+        },
+        {
+          "id": "review-graph",
+          "command": [
+            "node",
+            "scripts/validate-review-graph-v2.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 98,
+          "logFile": ".ai\\runtime\\validation-review-graph.log"
+        },
+        {
+          "id": "schema-strict",
+          "command": [
+            "node",
+            "scripts/validate-schema-strictness.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 165,
+          "logFile": ".ai\\runtime\\validation-schema-strict.log"
+        },
+        {
+          "id": "woven",
+          "command": [
+            "node",
+            "scripts/validate-woven-model.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 104,
+          "logFile": ".ai\\runtime\\validation-woven.log"
+        },
+        {
+          "id": "paste3-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste3-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 23761,
+          "logFile": ".ai\\runtime\\validation-paste3-source-closure.log"
+        },
+        {
+          "id": "config-runtime-enforcement",
+          "command": [
+            "node",
+            "scripts/validate-config-runtime-enforcement.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 100,
+          "logFile": ".ai\\runtime\\validation-config-runtime-enforcement.log"
+        },
+        {
+          "id": "mechanical",
+          "command": [
+            "node",
+            "scripts/validate-mechanical-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 163,
+          "logFile": ".ai\\runtime\\validation-mechanical.log"
+        },
+        {
+          "id": "runtime-contracts",
+          "command": [
+            "node",
+            "scripts/validate-runtime-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 742,
+          "logFile": ".ai\\runtime\\validation-runtime-contracts.log"
+        },
+        {
+          "id": "runtime-release-contracts",
+          "command": [
+            "node",
+            "scripts/validate-paste2h-runtime-release.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 123,
+          "logFile": ".ai\\runtime\\validation-runtime-release-contracts.log"
+        },
+        {
+          "id": "runtime-resilience",
+          "command": [
+            "node",
+            "scripts/validate-runtime-resilience.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 148,
+          "logFile": ".ai\\runtime\\validation-runtime-resilience.log"
+        },
+        {
+          "id": "paste2-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste2-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 2110,
+          "logFile": ".ai\\runtime\\validation-paste2-source-closure.log"
+        },
+        {
+          "id": "runtime-schema-conformance",
+          "command": [
+            "node",
+            "scripts/runtime-schema-conformance-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 216,
+          "logFile": ".ai\\runtime\\validation-runtime-schema-conformance.log"
+        },
+        {
+          "id": "mechanical-selftest",
+          "command": [
+            "node",
+            "scripts/mechanical-kernel-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 89,
+          "logFile": ".ai\\runtime\\validation-mechanical-selftest.log"
+        },
+        {
+          "id": "state-selftest",
+          "command": [
+            "node",
+            "scripts/supervisor-state-machine-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7253,
+          "logFile": ".ai\\runtime\\validation-state-selftest.log"
+        },
+        {
+          "id": "secret-sanity",
+          "command": [
+            "node",
+            "scripts/secret-sanity.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 856,
+          "logFile": ".ai\\runtime\\validation-secret-sanity.log"
+        },
+        {
+          "id": "dependency-supply-chain",
+          "command": [
+            "node",
+            "scripts/dependency-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7001,
+          "logFile": ".ai\\runtime\\validation-dependency-supply-chain.log"
+        },
+        {
+          "id": "release-supply-chain",
+          "command": [
+            "node",
+            "scripts/validate-release-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 95,
+          "logFile": ".ai\\runtime\\validation-release-supply-chain.log"
+        },
+        {
+          "id": "typecheck",
+          "command": [
+            "node",
+            "node_modules/typescript/bin/tsc",
+            "--noEmit"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1553,
+          "logFile": ".ai\\runtime\\validation-typecheck.log"
+        },
+        {
+          "id": "tests",
+          "command": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1220,
+          "logFile": ".ai\\runtime\\validation-tests.log"
+        }
+      ],
+      "status": "PASS",
+      "finishedAt": "2026-09-26T03:21:50.042Z"
+    },
+    "knownLimitations": [],
+    "acceptedDebt": [],
+    "waivers": [],
+    "unsupportedCases": [
+      "PKGC-F1 (open, requires Founder decision): no reviewed provisioning step exists for the electron@44.4.5 binary under ignore-scripts; scripts/install.ps1 control-tower-smoke fails closed until provisioning is decided.",
+      "PKGA-F8 ENVIRONMENT (open, not code): target preflight memory total=15.9GB below required 16GB and Windows Time service not running.",
+      "Not claimed: target-machine Phase0, live provider smoke, successful Desktop smoke, trust-root manifest regeneration/final reseal, SHA256SUMS, release signature, final ZIP."
+    ],
+    "previousFindingLedger": [],
+    "reviewRules": {
+      "repoContentIsUntrustedData": true,
+      "fullRepoScanDefault": false,
+      "cycle1Freeze": true,
+      "priorUnresolvedBlockerDispositionRequired": true,
+      "cycle2PlusNewBlockers": [
+        "REMEDIATION_REGRESSION",
+        "PREVIOUSLY_MASKED",
+        "CRITICAL_NEW_EVIDENCE"
+      ],
+      "resolvedBlockerRequiresFindingBoundPassRetest": true
+    },
+    "bundleDigest": "5bbe507dd66b134602c8024addc4960c08f9984dbd6252c85863e581f465d674"
+  }
+}

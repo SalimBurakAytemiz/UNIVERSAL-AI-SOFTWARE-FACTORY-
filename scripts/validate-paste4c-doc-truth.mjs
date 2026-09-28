@@ -81,7 +81,7 @@ must(pack.name === "UNIVERSAL-AI-SOFTWARE-COMPANY-OS-V6-AUDIT-REMEDIATION-CANDID
 must(pack.status === "V6_AUDIT_REMEDIATION_IN_PROGRESS", "pack-status-not-in-progress");
 must(pack.sourceStaticClosure === false, "pack-source-closure-must-be-false");
 must(pack.mechanicalClosure === "IN_PROGRESS_NOT_FINAL", "pack-mechanical-closure-overclaim");
-must(["NOT_FINAL_PASTE4_IN_PROGRESS","PASTE4_SOURCE_COMPLETE_FINAL_SWEEP_PENDING","DEPENDENCY_FREE_SOURCE_REGRESSION_COMPLETE_DEPENDENCY_GATES_PENDING"].includes(pack.staticClosureAudit), "pack-static-audit-overclaim");
+must(["NOT_FINAL_PASTE4_IN_PROGRESS","PASTE4_SOURCE_COMPLETE_FINAL_SWEEP_PENDING","DEPENDENCY_FREE_SOURCE_REGRESSION_COMPLETE_DEPENDENCY_GATES_PENDING","DEPENDENCY_AWARE_SOURCE_VALIDATION_COMPLETE_TARGET_PHASE0_PENDING"].includes(pack.staticClosureAudit), "pack-static-audit-overclaim");
 must(pack.targetMachinePhase0 === "PENDING", "pack-target-phase0-overclaim");
 must(pack.finalTrustRootSeal === "STALE_PENDING_FINAL_RESEAL", "pack-final-seal-overclaim");
 must(pack.finalZip === "NOT_DONE", "pack-final-zip-overclaim");
@@ -132,11 +132,12 @@ must(progress.truth?.TARGET_MACHINE_PHASE0 === "PENDING", "progress-target-phase
 must(progress.truth?.FINAL_TRUST_ROOT_SEAL === "STALE_PENDING_FINAL_RESEAL", "progress-trust-seal-overclaim");
 must(progress.paste4?.segments?.["4A"] === "COMPLETE_SOURCE", "progress-4a-not-complete");
 must(progress.paste4?.segments?.["4B"] === "COMPLETE_SOURCE", "progress-4b-not-complete");
-must(progress.fullSystemReaudit?.status === "COMPLETE_DEPENDENCY_FREE_PENDING_DEPENDENCY_AWARE", "progress-full-system-reaudit-status-stale");
-must(progress.nextScope === "ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION", "progress-next-scope-stale");
-must(currentAudit.activeScope === "ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION", "current-audit-active-scope-stale");
+must(progress.fullSystemReaudit?.status === "COMPLETE_DEPENDENCY_AWARE_VALIDATION_PASS_PENDING_TARGET_PHASE0", "progress-full-system-reaudit-status-stale");
+must(progress.nextScope === "TARGET_MACHINE_PHASE0_ACCEPTANCE_AND_LIVE_PROVIDER_SMOKE", "progress-next-scope-stale");
+must(currentAudit.activeScope === "TARGET_MACHINE_PHASE0_ACCEPTANCE_AND_LIVE_PROVIDER_SMOKE", "current-audit-active-scope-stale");
 must(currentAudit.completedSourceScopes?.includes("FULL_SYSTEM_REAUDIT_DOCS_STATE_CURRENT_TRUTH_FINAL_SWEEP"), "current-audit-completed-scopes-stale");
-must(nextActions.includes("ENVIRONMENT_GATE_NODE24_NPM11_REGISTRY_REVIEWED_LOCK_DEPENDENCY_AWARE_VALIDATION"), "next-actions-scope-stale");
+must(currentAudit.completedSourceScopes?.includes("DEPENDENCY_AWARE_ENVIRONMENT_GATE_REVIEWED_LOCK"), "current-audit-dependency-aware-scope-missing");
+must(nextActions.includes("TARGET_MACHINE_PHASE0_ACCEPTANCE_AND_LIVE_PROVIDER_SMOKE"), "next-actions-scope-stale");
 must(!nextActions.includes("Continue full-system deep re-audit"), "next-actions-old-reaudit-instruction-stale");
 must(["NEXT","IN_PROGRESS","COMPLETE_SOURCE"].includes(progress.paste4?.segments?.["4C"]), "progress-4c-invalid-state");
 must(["PENDING","NEXT","IN_PROGRESS","COMPLETE_SOURCE"].includes(progress.paste4?.segments?.["4D"]), "progress-4d-invalid-state");
