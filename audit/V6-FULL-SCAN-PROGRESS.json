@@ -119,7 +119,8 @@
       "V6-PKG-R3-PHASE0-FIXES-AND-RESEAL": {"reviewedCommit": "ca21e830ad8c45880f3ed72cbca9bbff08b6ed84", "review": "PENDING_REVIEWER_QUOTA", "checkpoint": "audit/checkpoints/V6-PKG-R3-PHASE0-FIXES-AND-RESEAL-2026-09-28.json"},
       "V6-PKG-X1-DUAL-EXECUTION-FABRIC": {"reviewedCommit": "1e3a1230d020ea0b955d6972c6d934d80e1abbf3", "review": "PENDING_REVIEWER_QUOTA", "merge": "HELD_UNTIL_CA21E83_RELEASE_PHASE0", "checkpoint": "audit/checkpoints/V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29.json"},
       "V6-PKG-AUT1-UNATTENDED-ORCHESTRATION": {"reviewedCommit": "f9b3e472fb3a77d957e2ccfb1725d9a21957bcc7", "review": "PENDING_REVIEWER_QUOTA", "activation": "AFTER_CLEAN", "merge": "AFTER_PKG_X1", "checkpoint": "audit/checkpoints/V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29.json"},
-      "V6-PKG-T2-ORCHESTRATOR-EXECUTOR-INTEGRATION": {"review": "PENDING_THIS_COMMIT", "merge": "AFTER_PKG_AUT1", "checkpoint": "audit/checkpoints/V6-PKG-T2-ORCHESTRATOR-EXECUTOR-INTEGRATION-2026-09-29.json"}
+      "V6-PKG-T2-ORCHESTRATOR-EXECUTOR-INTEGRATION": {"reviewedCommit": "6ae0c2166ec56785d2e30d14218d890e32472ff0", "review": "PENDING_REVIEWER_QUOTA", "merge": "AFTER_PKG_AUT1", "checkpoint": "audit/checkpoints/V6-PKG-T2-ORCHESTRATOR-EXECUTOR-INTEGRATION-2026-09-29.json"},
+      "V6-PKG-T1-WINDOWS-CRASH-RESUME": {"review": "PENDING_THIS_COMMIT", "merge": "AFTER_PKG_T2", "checkpoint": "audit/checkpoints/V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29.json"}
     },
     "findingsClosed": ["PKGA-F1", "PKGA-F2", "PKGA-F3", "PKGA-F4", "PKGA-F5", "PKGA-F6", "PKGA-F7", "PKGA-F9", "PKGA-F10", "PKGC-F1", "F-PKGE-001", "PKGE-F2", "TRUST-F1", "PKGA-F8", "PKGR-F1", "F-PKGR1-001", "PHASE0-F1", "PHASE0-F2", "PHASE0-F3"],
     "openEnvironmentFindings": [],

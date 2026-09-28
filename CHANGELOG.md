@@ -1,6 +1,10 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-09-29 — V6 Windows Crash/Resume Tests (branch)
+
+- Real child processes on the target Windows machine prove process-lock takeover after a kill, a single winner among concurrent invocations, fail-closed unreadable/foreign-host locks, orchestrator resume after a worker is killed mid-action (lease expiry, in-flight recovery, no duplicate provider call) and auditable recovery from a corrupted state file.
+
 ## 2026-09-29 — V6 Orchestrator Executor Integration Tests (branch)
 
 - The unattended orchestrator executors are exercised against real temporary git repositories: fast-forward merge with CLEAN evidence (non-FF, missing, mismatched and BLOCKED evidence refused), adoption of completed reviews, releases, signatures and installations without provider or script calls, signer waits, Phase0 guards and builder-round rejection of out-of-scope, unauthorized protected and trust-manifest edits.
