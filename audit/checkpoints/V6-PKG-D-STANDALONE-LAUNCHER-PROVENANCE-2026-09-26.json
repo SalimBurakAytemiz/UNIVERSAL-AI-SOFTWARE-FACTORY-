@@ -7,9 +7,32 @@
   "branch": "v6/pkg-d-standalone-launcher-provenance",
   "founderAuthorization": {
     "decision": "STANDALONE_LAUNCHER_PROVENANCE_APPROVED",
-    "protectedFiles": ["scripts/capture-provider-provenance.mjs", "scripts/codex-reviewer-broker.mjs", "scripts/claude-builder-broker.mjs"],
+    "protectedFiles": [
+      "scripts/capture-provider-provenance.mjs",
+      "scripts/codex-reviewer-broker.mjs",
+      "scripts/claude-builder-broker.mjs"
+    ],
     "rule": "Add provenance level STANDALONE_LAUNCHER to capture-provider-provenance and the brokers. It is accepted only when launcher path, version and SHA-256 are verified together, and the SHA is rechecked on every broker call. FULL_PACKAGE stays unchanged for npm package installs.",
     "constraint": "Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+  },
+  "validationEnvironment": {
+    "//TR": "Frozen cycle-1 validation'ın çalıştığı izole klonda scripts/preflight.mjs ile ölçülen gerçek toolchain; aynı makinedeki sonraki validation klonları çalıştırılmadan önce aynı değerlerle yeniden ölçülür.",
+    "measuredBy": "scripts/preflight.mjs in the isolated review clone of 923d85fcb6584a85132cc97b597c945159e2aa5a",
+    "measuredAt": "2026-09-28T03:36:00Z",
+    "platform": "win32 10.0.19045 x64",
+    "node": "v24.19.0",
+    "npm": "11.17.0 (bundled npm-cli.js beside node.exe)",
+    "git": "git version 2.55.0.windows.3",
+    "powershell": "5.1.19041.6456",
+    "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4",
+    "registryTls": "PASS",
+    "preflightReportSha256": "c13c1bc23f5ebe06adec49229cd8f1083fd93cad99e09380a556c4f588a53ebb",
+    "preflightBlockedChecks": [
+      "memory",
+      "clockSync"
+    ],
+    "frozenCycle1ValidationReportSha256": "e6be16308d2b1940ca4745af2646da92d69171445fb603a51bdaec336be04efe",
+    "frozenCycle1ValidationWindow": "2026-09-26T03:33:53.669Z..2026-09-26T03:35:33.966Z"
   },
   "implementation": {
     "capture": "When no matching npm package.json is found, a launcher becomes STANDALONE_LAUNCHER only if it is a regular file, --version exits 0 and its whole stdout matches the tool pattern (codex-cli X.Y.Z or X.Y.Z (Claude Code)); otherwise it stays LAUNCHER_ONLY and final is BLOCKED. final PASS requires both tools at FULL_PACKAGE or STANDALONE_LAUNCHER.",
@@ -19,13 +42,27 @@
   "validation": {
     "workspace": "fresh clone of v6/pkg-d-standalone-launcher-provenance mirroring the working tree with the reviewed lock installed; repository .ai/runtime untouched",
     "gitDiffCheck": "PASS",
-    "canonicalRunner": {"status": "PASS", "pass": 34, "fail": 0},
+    "canonicalRunner": {
+      "status": "PASS",
+      "pass": 34,
+      "fail": 0
+    },
     "vitest": "PASS 17 files / 92 tests (11 new broker/capture tests, no model calls)",
     "broadDependencyFreeSuite": "25/25 PASS",
     "realCaptureOnThisMachine": {
       "final": "PASS",
-      "claude": {"provenanceLevel": "STANDALONE_LAUNCHER", "version": "2.1.274 (Claude Code)", "resolvedPath": "C:\\Users\\PRO\\.local\\bin\\claude.exe", "launcherSha256Prefix": "4e4c1746aff835bb"},
-      "codex": {"provenanceLevel": "STANDALONE_LAUNCHER", "version": "codex-cli 0.156.1", "resolvedPath": "C:\\Users\\PRO\\.codex\\packages\\standalone\\releases\\0.156.1-x86_64-pc-windows-msvc\\bin\\codex.exe", "launcherSha256Prefix": "70bcb05f9bf1a4e7"}
+      "claude": {
+        "provenanceLevel": "STANDALONE_LAUNCHER",
+        "version": "2.1.274 (Claude Code)",
+        "resolvedPath": "C:\\Users\\PRO\\.local\\bin\\claude.exe",
+        "launcherSha256Prefix": "4e4c1746aff835bb"
+      },
+      "codex": {
+        "provenanceLevel": "STANDALONE_LAUNCHER",
+        "version": "codex-cli 0.156.1",
+        "resolvedPath": "C:\\Users\\PRO\\.codex\\packages\\standalone\\releases\\0.156.1-x86_64-pc-windows-msvc\\bin\\codex.exe",
+        "launcherSha256Prefix": "70bcb05f9bf1a4e7"
+      }
     },
     "adversarial": {
       "LAUNCHER_ONLY_rejected_by_both_brokers": "PASS",
@@ -44,10 +81,18 @@
     "tests/pkg-d-standalone-provenance.test.ts": "bfe0a262441e778b5d0c16c79f5c2264b512db48fb8a08b0cd0436fdd645e14d"
   },
   "openFindings": [
-    {"id": "PKGC-F1", "severity": "P2", "status": "OPEN_REQUIRES_FOUNDER_DECISION"},
-    {"id": "PKGA-F8", "severity": "ENVIRONMENT", "status": "OPEN_ENVIRONMENT_NOT_CODE_DEFECT"}
+    {
+      "id": "PKGC-F1",
+      "severity": "P2",
+      "status": "OPEN_REQUIRES_FOUNDER_DECISION"
+    },
+    {
+      "id": "PKGA-F8",
+      "severity": "ENVIRONMENT",
+      "status": "OPEN_ENVIRONMENT_NOT_CODE_DEFECT"
+    }
   ],
-  "review": "NOT_REVIEWED_CODEX_PENDING",
+  "review": "CYCLE_2_PENDING",
   "cleanClaim": false,
   "trustRootManifest": "NOT_REGENERATED_FINAL_RESEAL_PENDING",
   "truth": {
@@ -58,5 +103,27 @@
     "FINAL_ZIP": "NOT_DONE",
     "TARGET_MACHINE_PHASE0": "PENDING"
   },
-  "nextScope": "CODEX_REVIEW_THEN_PKG_B_CURRENT_TRUTH_SYNC_VIA_CANONICAL_BROKER"
+  "nextScope": "CODEX_REVIEW_THEN_PKG_B_CURRENT_TRUTH_SYNC_VIA_CANONICAL_BROKER",
+  "reviewHistory": [
+    {
+      "cycle": 1,
+      "run": ".ai/cache/review/runs/923d85f-c1-20260926T033545Z",
+      "result": "NO_RESULT_ENVIRONMENT_BLOCKED_REVIEWER_QUOTA",
+      "consumesReviewCycle": false
+    },
+    {
+      "cycle": 1,
+      "run": ".ai/cache/review/runs/923d85f-c1-20260928T032745Z",
+      "result": "ENVIRONMENT_BLOCKED",
+      "reviewResultSha256": "d22cebfed6be20be069942b6db644a0c35e2918de721f33307e9f659fba37c80",
+      "findings": 0,
+      "environmentGap": "Validation report and checkpoint did not record the Node/npm versions used for the frozen validation run.",
+      "advisory": "F-PKGD-POSITIVE-TEST (P3): positive broker test only asserted absence of provenance errors.",
+      "remediation": "Added validationEnvironment measured in the frozen validation clone; the positive broker tests now prove the launcher is spawned with the broker arguments."
+    }
+  ],
+  "remediationChangedFileSha256": {
+    "//TR": "Cycle 2 remediation commit içinde değişen dosyaların digestleri; changedFileSha256 cycle 1 commitine aittir.",
+    "tests/pkg-d-standalone-provenance.test.ts": "1aa3011cac74e72bd3c00de2959cc8e8da9e2e945af00553db5941cbc5820d94"
+  }
 }
