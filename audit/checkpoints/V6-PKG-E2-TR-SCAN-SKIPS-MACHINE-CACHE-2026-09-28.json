@@ -1,0 +1,57 @@
+{
+  "//TR": "Bu checkpoint Founder yetkili //TR kaynak taramasının git'e girmeyen .ai/cache/ makine cache'ini atlamasını, bulgunun kök nedenini ve doğrulama kanıtlarını kaydeder; CLEAN, final closure veya target-machine Phase0 PASS iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_E2_TR_SCAN_SKIPS_MACHINE_CACHE",
+  "date": "2026-09-28",
+  "parent": "baa253267daf5d991b3fec023439c77baebbd325",
+  "branch": "v6/pkg-e2-tr-scan-skips-machine-cache",
+  "resolves": ["PKGE-F2"],
+  "founderAuthorization": {
+    "decision": "TR_VALIDATOR_SKIPS_AI_CACHE_APPROVED",
+    "rule": "Add '.ai/cache/' to the skip list of validate-tr-comments.mjs. The folder is a gitignored, machine-local cache (npm cache + Electron binary), in the same class as node_modules/ and .ai/runtime/. Checking of source files does not change. A regression test is added.",
+    "protectedFiles": ["scripts/validate-tr-comments.mjs"],
+    "constraint": "Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+  },
+  "finding": {
+    "id": "PKGE-F2",
+    "severity": "P2",
+    "observed": "After scripts/provision-electron.mjs places Electron under .ai/cache/electron, protected scripts/validate-tr-comments.mjs scans that gitignored cache and fails on Electron's LICENSES.chromium.html and vk_swiftshader_icd.json. scripts/bootstrap.ps1 runs canonical validation in the control repo, so a second scripts/install.ps1 run would fail.",
+    "discoveredDuring": "V6-PKG-E cycle-2 remediation validation with the Electron cache present",
+    "otherValidatorsWithCachePresent": "All other canonical validation steps passed with the cache present; only the tr step failed."
+  },
+  "validationEnvironment": {
+    "measuredBy": "scripts/preflight.mjs on this machine; re-measured and required to match before each isolated validation run",
+    "platform": "win32 10.0.19045 x64",
+    "node": "v24.19.0",
+    "npm": "11.17.0 (bundled npm-cli.js beside node.exe)",
+    "git": "git version 2.55.0.windows.3",
+    "powershell": "5.1.19041.6456",
+    "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
+  },
+  "implementation": {
+    "validator": "The skip list gains '.ai/cache/' after '.ai/runtime/'; the extension set, the lockfile exemptions and the 60-line //TR rule are unchanged.",
+    "gitignore": ".gitignore already lists .ai/cache/ and validate-mechanical-closure.mjs enforces it.",
+    "tests": "tests/pkg-e2-tr-scan.test.ts runs the real validator in temporary trees: cache files are ignored, a source JSON without //TR still fails, other .ai state files outside the cache are still scanned."
+  },
+  "validation": {
+    "trValidatorWithElectronCachePresent": "PASS",
+    "newTests": "PASS 4/4"
+  },
+  "changedFileSha256": {
+    "scripts/validate-tr-comments.mjs": "9e6cf8f151edfd5d683fc6957f5144eed2140e497b1012cfea2f3050bbceab30",
+    "tests/pkg-e2-tr-scan.test.ts": "929a50f2aac53f46739cf286fa8322bd43ac9f8e88593f452a297fe896f095b8"
+  },
+  "openFindings": [
+    {"id": "PKGA-F8", "severity": "ENVIRONMENT", "status": "OPEN_ENVIRONMENT_NOT_CODE_DEFECT"}
+  ],
+  "review": "NOT_REVIEWED_CODEX_PENDING",
+  "cleanClaim": false,
+  "trustRootManifest": "NOT_REGENERATED_FINAL_RESEAL_PENDING",
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_ZIP": "NOT_DONE",
+    "TARGET_MACHINE_PHASE0": "PENDING"
+  },
+  "nextScope": "CODEX_REVIEW_THEN_PKG_B_CURRENT_TRUTH_SYNC"
+}
