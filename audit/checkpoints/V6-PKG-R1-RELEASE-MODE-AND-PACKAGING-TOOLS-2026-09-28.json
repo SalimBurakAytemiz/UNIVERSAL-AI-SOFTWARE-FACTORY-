@@ -1,0 +1,121 @@
+{
+  "//TR": "Bu checkpoint Founder yetkili release paketleme araçlarını (SHA256SUMS üreticisi, deterministik ZIP, taze extract doğrulaması) ve paste4d/paste4c/mekanik kapanış doc-truth kontrollerinin fail-closed SEALED release-candidate modunu (PKGR-F1) kaydeder; final reseal, SHA256SUMS, imza, ZIP veya target-machine Phase0 yapıldığı iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_R1_RELEASE_MODE_AND_PACKAGING_TOOLS",
+  "date": "2026-09-28",
+  "parent": "eaed1bd4fb583ada4e04f144fb1c67fa850b4a7e",
+  "branch": "v6/pkg-r1-release-mode-and-packaging",
+  "resolves": [
+    "PKGR-F1"
+  ],
+  "founderAuthorization": {
+    "decision": "PKG_R_APPROVED + PKGR_RELEASE_MODE_APPROVED + PKGR1_MECHANICAL_CLOSURE_SEAL_STRING_APPROVED",
+    "rule": "[PKG-R] Paketleme paketi + reseal yetkisi: yeni protected release-packaging paketi (SHA256SUMS üreticisi, deterministik ZIP, mevcut verify-artifact ile fresh-extract doğrulaması) ve bu paket içinde maintainer-only generate-trust-root.mjs final reseal'ini çalıştırma yetkisi; release imzası Founder'ın harici anahtarında kalır; Codex review otomatik. [Mühürlü mod] paste4d'ye açık ve fail-closed bir SEALED modu eklenir. Mod yalnız manifest SEALED iken devreye girer; trust root ve SHA256SUMS o anda yeniden doğrulanır, doğrulamadan geçmeyen FAIL olur. İmza artifact dışında (detached) kalır. Phase0=PENDING ve SOURCE_LEVEL_CLOSURE=false zorunlu kalır. paste4c ve belgeler PASS demeyen release-candidate değerleri alır (SEALED_RELEASE_CANDIDATE, EXTERNAL_DETACHED_SIGNATURE_REQUIRED). Mühürlü durum review edilmiş bir commit olur ve ZIP tam o commit'ten üretilir. Adversarial testler eklenir, Codex review otomatik yapılır. [Mekanik kapanış] validate-mechanical-closure.mjs'teki tek metin ('FINAL_TRUST_ROOT_SEAL = STALE_PENDING_FINAL_RESEAL') paste4c ile aynı biçimde manifestin sealStatus alanından türetilir (mühür öncesi STALE_PENDING_FINAL_RESEAL, SEALED iken SEALED_RELEASE_CANDIDATE); dosyadaki diğer kontroller aynen kalır; validate-paste2-closure.mjs'in yalnız çıktıya yazdığı değer P3 backlog olarak kayda alınır ve değiştirilmez.",
+    "protectedFiles": [
+      "automation/lib/release-artifact.mjs (new)",
+      "scripts/release-sha256sums.mjs (new)",
+      "scripts/build-release-zip.mjs (new)",
+      "scripts/verify-release-extract.mjs (new)",
+      "config/protected-paths.json",
+      "scripts/validate-paste4d-release-truth.mjs",
+      "scripts/validate-paste4c-doc-truth.mjs",
+      "scripts/validate-mechanical-closure.mjs"
+    ],
+    "constraint": "Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; UNKNOWN, NOT_TESTED, BLOCKED or FAIL are never converted to PASS/CLEAN without real evidence; broader protected changes require separate Founder approval."
+  },
+  "finding": {
+    "id": "PKGR-F1",
+    "severity": "P1_RELEASE_BLOCKER",
+    "observed": "scripts/install.ps1 -> bootstrap.ps1 runs the canonical validation inside the extracted artifact. In a correctly sealed probe extract of eaed1bd (SEALED manifest, SHA256SUMS over 1967 files, verify-artifact PASS, verify-trust-root PASS) validation failed only at paste4d with stale-root-sha256sums-present-before-final-packaging, trust-root-premature-final-seal, stale-runtime-trust-root-pass-present and stale-runtime-artifact-pass-present-before-final-manifest; after the paste4d/paste4c mode was added, the end-to-end dry run exposed the same pinned seal string in validate-mechanical-closure.mjs. No final artifact could pass install.ps1, and the documents inside it would have falsely stated STALE/NOT_DONE."
+  },
+  "design": {
+    "modeKey": "The mode is derived only from config/trust-root-manifest.json sealStatus. STALE_PENDING_FINAL_RESEAL keeps every previous rule unchanged; SEALED selects the release-candidate rules; any other value fails trust-root-unknown-seal-status in paste4d and paste4c (and falls back to the pre-seal string in mechanical closure).",
+    "sealedValues": {
+      "FINAL_TRUST_ROOT_SEAL": "SEALED_RELEASE_CANDIDATE",
+      "FINAL_SHA256SUMS": "PACKAGING_STAGE_OUTSIDE_GIT",
+      "FINAL_RELEASE_AUTHENTICITY": "EXTERNAL_DETACHED_SIGNATURE_REQUIRED",
+      "FINAL_ZIP": "PACKAGING_STAGE_OUTSIDE_GIT",
+      "overallRemainingP0P1P2": "ZERO_OPEN_P0P1P2_PENDING_PACKAGING_SIGNATURE_AND_TARGET_PHASE0",
+      "scope": "RELEASE_PACKAGING_SIGNATURE_THEN_TARGET_MACHINE_PHASE0"
+    },
+    "unchangedInBothModes": [
+      "PACK/MASTER/audit status V6_AUDIT_REMEDIATION_IN_PROGRESS",
+      "SOURCE_LEVEL_CLOSURE = FALSE",
+      "TARGET_MACHINE_PHASE0 = PENDING",
+      "no MECHANICALLY_CLOSED/INSTALLATION_READY claims",
+      "verify-artifact lockfile-membership checks",
+      "no release signature file inside the tree (detached only)",
+      "historical audit preservation checks"
+    ],
+    "sealedTrustRoot": "paste4d calls verifyTrustRoot in-process (sealed manifest, full protected-file coverage and hashes); a runtime TRUST_ROOT_VERIFY PASS is accepted only when that in-process verification passes.",
+    "sealedSha256Sums": "When SHA256SUMS.txt is present in SEALED mode, paste4d requires it to parse strictly, to list package-lock.json, to carry the exact sealed manifest hash and to carry the sealed hash of every trust-root file; a runtime ARTIFACT_VERIFY PASS is accepted only with that binding and a verified trust root. Full content re-verification of every listed file is done by the unchanged scripts/verify-artifact.ps1 and scripts/verify-artifact.mjs (install steps 1 and 2, fail-closed) and by scripts/verify-release-extract.mjs; paste4d does not repeat it because the same canonical validation runs after installation, when builds change non-protected source files and .ai/cache holds provisioned Electron, which would make every later validation fail. Measured: in the dry-run extract a full re-verification still passed right after the install-time validation.",
+    "packaging": "release-sha256sums.mjs refuses an export that contains .git, node_modules, .ai/runtime or .ai/automation, an unsealed or unverified trust root, a missing lockfile or an existing SHA256SUMS.txt. build-release-zip.mjs re-verifies the trust root and SHA256SUMS (file set and contents) before packaging, packs only the listed files plus SHA256SUMS.txt with fixed timestamps and byte order, reads the ZIP back to check every entry, and writes a sidecar with the ZIP hash. verify-release-extract.mjs pre-checks ZIP names against SHA256SUMS, extracts with Windows Expand-Archive into a fresh directory, re-verifies SHA256SUMS in-process and runs the unchanged verify-artifact.ps1, verify-artifact.mjs and verify-trust-root.mjs inside the extract; --with-validation also runs the reviewed-lock install and the canonical validation.",
+    "signature": "No script creates or holds a signing key; the release signature is created by the Founder with an external key and stays beside the ZIP."
+  },
+  "validationEnvironment": {
+    "measuredBy": "the validation run itself (node/npm/git/PowerShell versions captured before the canonical runner)",
+    "platform": "win32 10.0.19045 x64",
+    "node": "v24.19.0",
+    "npm": "11.17.0 (bundled npm-cli.js beside node.exe)",
+    "git": "git version 2.55.0.windows.3",
+    "powershell": "5.1.19041.6456",
+    "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
+  },
+  "validation": {
+    "workspace": "fresh clone of local master eaed1bd mirroring the PKG-R1 working tree, reviewed lock installed, .ai/runtime cleared before the run; repository .ai/runtime untouched",
+    "gitDiffCheck": "PASS",
+    "canonicalRunner": {
+      "status": "PASS",
+      "pass": 34,
+      "fail": 0,
+      "mode": "PRE_SEAL (paste4c 93 checks, paste4d 49 checks)"
+    },
+    "vitest": "PASS 22 files / 142 tests (8 new PKG-R1 tests including a Windows Expand-Archive fresh extract)",
+    "broadDependencyFreeSuite": "25/25 PASS",
+    "endToEndDryRun": {
+      "workspace": "scratch export of the PKG-R1 tree with release-candidate document values applied and generate-trust-root run (330 protected files); not a release",
+      "sha256SumsEntries": 1972,
+      "zipBytes": 3660094,
+      "zipSha256": "494b652091abc1fb55ac2b697af4120017271b2c48a2ebcc68910b925c897eb9",
+      "zipDeterministic": "second build byte-identical",
+      "freshExtract": {
+        "expandArchive": "PASS",
+        "postExtractSha256Sums": "PASS",
+        "verifyArtifactPowerShell": "PASS",
+        "verifyArtifactNode": "PASS",
+        "verifyTrustRoot": "PASS",
+        "ensureDependencies": "PASS (npm ci, reviewed lock)",
+        "canonicalValidation": "PASS 34/34 in SEALED mode (paste4d 54 checks, paste4c 93 checks, mechanical closure PASS)"
+      }
+    }
+  },
+  "changedFileSha256": {
+    "automation/lib/release-artifact.mjs": "684b018198571261f7fe112ee27a42f854468312680631e7cbb481eb0c275c43",
+    "config/protected-paths.json": "0d4a704c17aabe659abd5143a4c45e4047f96fd19cd047f44df0abafd7502aeb",
+    "scripts/build-release-zip.mjs": "611766cfb77898ad0bc7b4f0943a43786f19316ef6dda10813d41085a3500f82",
+    "scripts/release-sha256sums.mjs": "a5cc4524bb5d16a81f10a0bb6b6f2580714654512c9d4046a92a02a17ede847a",
+    "scripts/verify-release-extract.mjs": "dd7b60b22e1bd0de350775aac6f7d896ce370c706957205db87b7b036077b0d8",
+    "scripts/validate-paste4c-doc-truth.mjs": "d136e6fca49c005ec302afc0806a7eb557cfc5bd004777dd0607a15431964dc1",
+    "scripts/validate-paste4d-release-truth.mjs": "a6b64bccd9cfec17ac59ea1657200a00d303b12c05b2f0e54f6ea3b2f01e74f9",
+    "scripts/validate-mechanical-closure.mjs": "94fe0c964f992c293d45add96825b031c8bc71e7f8955769c395645c8da4ebe4",
+    "scripts/v6-evidence-trust-release-adversarial-selftest.mjs": "a714fdf06d8090b766e541440ccb24c330b312f145af705d005ee79ea347fe39",
+    "tests/pkg-r1-release-mode.test.ts": "4676e47ca3a60662ed3cccff157568fd4af1fd309c98377bdf0dfc5cf3267ac9"
+  },
+  "openFindings": [],
+  "lowBacklog": [
+    "F-PKGE-002 (P3)",
+    "F-PKGR-001 (P3): scripts/validate-paste2-closure.mjs prints report field finalTrustRootSeal STALE_PENDING_FINAL_RESEAL as a literal; output only, not a check; left unchanged by Founder decision"
+  ],
+  "review": "NOT_REVIEWED_CODEX_PENDING",
+  "cleanClaim": false,
+  "trustRootManifest": "NOT_REGENERATED_FINAL_RESEAL_PENDING (PKG-R2)",
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_SHA256SUMS": "NOT_DONE",
+    "FINAL_RELEASE_AUTHENTICITY": "NOT_DONE",
+    "FINAL_ZIP": "NOT_DONE",
+    "TARGET_MACHINE_PHASE0": "PENDING"
+  },
+  "nextScope": "CODEX_REVIEW_THEN_PKG_R2_RELEASE_CANDIDATE_RESEAL"
+}

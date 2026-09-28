@@ -57,6 +57,7 @@
     "schemas/install-report.schema.json",
     "scripts/bootstrap-kernel-selftest.mjs",
     "scripts/bootstrap.ps1",
+    "scripts/build-release-zip.mjs",
     "scripts/builder-boundary-smoke.mjs",
     "scripts/capture-provider-provenance.mjs",
     "scripts/check-prereqs.ps1",
@@ -75,6 +76,7 @@
     "scripts/provider-smoke.mjs",
     "scripts/provision-electron.mjs",
     "scripts/register-autostart.ps1",
+    "scripts/release-sha256sums.mjs",
     "scripts/runtime-schema-conformance-selftest.mjs",
     "scripts/sanitize-process-env.ps1",
     "scripts/secret-sanity.mjs",
@@ -114,6 +116,7 @@
     "scripts/validate-woven-model.mjs",
     "scripts/verify-artifact.mjs",
     "scripts/verify-evidence-ledger.mjs",
+    "scripts/verify-release-extract.mjs",
     "scripts/verify-remote-protection.mjs",
     "scripts/verify-trust-root.mjs",
     "tsconfig.json"

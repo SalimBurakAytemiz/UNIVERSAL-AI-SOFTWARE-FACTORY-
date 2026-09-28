@@ -1,4 +1,4 @@
-// //TR: Paste 4C current-doc truth, historical authority boundary ve source-count drift kontrollerini fail-closed doğrular.
+// //TR: Paste 4C current-doc truth, historical authority boundary ve source-count drift kontrollerini fail-closed doğrular. Seal/ZIP/scope değerleri yalnız config/trust-root-manifest.json sealStatus'undan türetilen moda göre seçilir (STALE_PENDING_FINAL_RESEAL veya SEALED release candidate); bilinmeyen sealStatus FAIL.
 import fs from "node:fs";
 import path from "node:path";
 
@@ -23,6 +23,11 @@ const skillsV1 = json("registries/skills.json");
 const adapters = json("registries/tool-adapters.json");
 const rel = json("registries/technology-relations.json");
 const packages = json("roadmap/review-packages.json");
+const trust = json("config/trust-root-manifest.json");
+const SEALED = trust.sealStatus === "SEALED";
+const SEAL = SEALED ? "SEALED_RELEASE_CANDIDATE" : "STALE_PENDING_FINAL_RESEAL";
+const ZIP = SEALED ? "PACKAGING_STAGE_OUTSIDE_GIT" : "NOT_DONE";
+const SCOPE = SEALED ? "RELEASE_PACKAGING_SIGNATURE_THEN_TARGET_MACHINE_PHASE0" : "FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0";
 
 const counts = {
   agents: countFiles("organization/agents", /\.json$/),
@@ -40,6 +45,7 @@ const counts = {
   structuralRelations: rel.structuralRelations?.length ?? -1,
 };
 
+must(["STALE_PENDING_FINAL_RESEAL", "SEALED"].includes(trust.sealStatus), "trust-root-unknown-seal-status");
 must(counts.agents === 363, `agent-count:${counts.agents}`);
 must(counts.evaluations === 363, `evaluation-count:${counts.evaluations}`);
 must(counts.technologies === 415, `technology-count:${counts.technologies}`);
@@ -69,12 +75,12 @@ for (const [label, value] of Object.entries({
 })) must(readme.includes(label), `readme-count-fact-missing:${label}:${value}`);
 
 must(readme.includes("SOURCE_LEVEL_CLOSURE = FALSE"), "readme-source-closure-not-false");
-must(readme.includes("FINAL_TRUST_ROOT_SEAL = STALE_PENDING_FINAL_RESEAL"), "readme-trust-seal-truth-missing");
+must(readme.includes(`FINAL_TRUST_ROOT_SEAL = ${SEAL}`), "readme-trust-seal-truth-missing");
 must(readme.includes("TARGET_MACHINE_PHASE0 = PENDING"), "readme-target-phase0-truth-missing");
 must(start.includes("final ZIP veya installation-ready release değildir"), "start-here-release-warning-missing");
 must(start.includes("TARGET_MACHINE_PHASE0 = PENDING"), "start-here-target-pending-missing");
 must(status.includes("SOURCE_LEVEL_CLOSURE = FALSE"), "status-source-closure-not-false");
-must(status.includes("FINAL_TRUST_ROOT_SEAL = STALE_PENDING_FINAL_RESEAL"), "status-trust-seal-truth-missing");
+must(status.includes(`FINAL_TRUST_ROOT_SEAL = ${SEAL}`), "status-trust-seal-truth-missing");
 must(status.includes("TARGET_MACHINE_PHASE0 = PENDING"), "status-target-phase0-truth-missing");
 
 must(pack.name === "UNIVERSAL-AI-SOFTWARE-COMPANY-OS-V6-AUDIT-REMEDIATION-CANDIDATE", "pack-name-not-v6-candidate");
@@ -83,8 +89,8 @@ must(pack.sourceStaticClosure === false, "pack-source-closure-must-be-false");
 must(pack.mechanicalClosure === "IN_PROGRESS_NOT_FINAL", "pack-mechanical-closure-overclaim");
 must(["NOT_FINAL_PASTE4_IN_PROGRESS","PASTE4_SOURCE_COMPLETE_FINAL_SWEEP_PENDING","DEPENDENCY_FREE_SOURCE_REGRESSION_COMPLETE_DEPENDENCY_GATES_PENDING","DEPENDENCY_AWARE_SOURCE_VALIDATION_COMPLETE_TARGET_PHASE0_PENDING"].includes(pack.staticClosureAudit), "pack-static-audit-overclaim");
 must(pack.targetMachinePhase0 === "PENDING", "pack-target-phase0-overclaim");
-must(pack.finalTrustRootSeal === "STALE_PENDING_FINAL_RESEAL", "pack-final-seal-overclaim");
-must(pack.finalZip === "NOT_DONE", "pack-final-zip-overclaim");
+must(pack.finalTrustRootSeal === SEAL, "pack-final-seal-overclaim");
+must(pack.finalZip === ZIP, "pack-final-zip-overclaim");
 must(pack.roadmapPhases === counts.phases, "pack-phase-count-drift");
 must(pack.roadmapReviewPackages === counts.packages, "pack-package-count-drift");
 must(pack.technologies === counts.technologies, "pack-technology-count-drift");
@@ -129,22 +135,22 @@ must(repoIntel.includes("smallest sufficient context, not the whole repository b
 // Current progress is the machine-readable authority for Paste segment status.
 must(progress.truth?.SOURCE_LEVEL_CLOSURE === false, "progress-source-closure-overclaim");
 must(progress.truth?.TARGET_MACHINE_PHASE0 === "PENDING", "progress-target-phase0-overclaim");
-must(progress.truth?.FINAL_TRUST_ROOT_SEAL === "STALE_PENDING_FINAL_RESEAL", "progress-trust-seal-overclaim");
+must(progress.truth?.FINAL_TRUST_ROOT_SEAL === SEAL, "progress-trust-seal-overclaim");
 must(progress.paste4?.segments?.["4A"] === "COMPLETE_SOURCE", "progress-4a-not-complete");
 must(progress.paste4?.segments?.["4B"] === "COMPLETE_SOURCE", "progress-4b-not-complete");
 must(progress.fullSystemReaudit?.status === "COMPLETE_DEPENDENCY_AWARE_VALIDATION_PASS_PENDING_TARGET_PHASE0", "progress-full-system-reaudit-status-stale");
-must(progress.nextScope === "FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0", "progress-next-scope-stale");
-must(currentAudit.activeScope === "FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0", "current-audit-active-scope-stale");
+must(progress.nextScope === SCOPE, "progress-next-scope-stale");
+must(currentAudit.activeScope === SCOPE, "current-audit-active-scope-stale");
 must(currentAudit.completedSourceScopes?.includes("FULL_SYSTEM_REAUDIT_DOCS_STATE_CURRENT_TRUTH_FINAL_SWEEP"), "current-audit-completed-scopes-stale");
 must(currentAudit.completedSourceScopes?.includes("DEPENDENCY_AWARE_ENVIRONMENT_GATE_REVIEWED_LOCK"), "current-audit-dependency-aware-scope-missing");
-must(nextActions.includes("FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0"), "next-actions-scope-stale");
+must(nextActions.includes(SCOPE), "next-actions-scope-stale");
 must(!nextActions.includes("Continue full-system deep re-audit"), "next-actions-old-reaudit-instruction-stale");
 must(["NEXT","IN_PROGRESS","COMPLETE_SOURCE"].includes(progress.paste4?.segments?.["4C"]), "progress-4c-invalid-state");
 must(["PENDING","NEXT","IN_PROGRESS","COMPLETE_SOURCE"].includes(progress.paste4?.segments?.["4D"]), "progress-4d-invalid-state");
 
 if (errors.length) {
-  console.error(`PASTE4C_DOC_TRUTH_VALIDATION: FAIL checks=${checks} errors=${errors.length}`);
+  console.error(`PASTE4C_DOC_TRUTH_VALIDATION: FAIL mode=${SEALED ? "SEALED" : "PRE_SEAL"} checks=${checks} errors=${errors.length}`);
   for (const e of errors) console.error(`- ${e}`);
   process.exit(1);
 }
-console.log(`PASTE4C_DOC_TRUTH_VALIDATION: PASS checks=${checks}`);
+console.log(`PASTE4C_DOC_TRUTH_VALIDATION: PASS mode=${SEALED ? "SEALED" : "PRE_SEAL"} checks=${checks}`);
