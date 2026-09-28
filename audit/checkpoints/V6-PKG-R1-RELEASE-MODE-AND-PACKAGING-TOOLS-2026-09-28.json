@@ -87,6 +87,26 @@
         "ensureDependencies": "PASS (npm ci, reviewed lock)",
         "canonicalValidation": "PASS 34/34 in SEALED mode (paste4d 54 checks, paste4c 93 checks, mechanical closure PASS)"
       }
+    },
+    "cycle2": {
+      "workspace": "fresh clone at 89bc44c with the remediation applied, reviewed lock installed, .ai/runtime cleared before the run",
+      "gitDiffCheck": "PASS",
+      "canonicalRunner": {
+        "status": "PASS",
+        "pass": 34,
+        "fail": 0,
+        "mode": "PRE_SEAL (paste4d 49 checks)"
+      },
+      "vitest": "PASS 22 files / 142 tests (PKG-R1 tests now include nested signature regressions)",
+      "broadDependencyFreeSuite": "25/25 PASS",
+      "endToEndDryRun": {
+        "sha256SumsEntries": 1973,
+        "zipBytes": 3665998,
+        "zipSha256": "4f9f95d3b4ebe247f9c82499da0c1613e4be6b3c8c4abda8a6e2169b75369965",
+        "freshExtract": "expandArchive, postExtractSha256Sums, verify-artifact.ps1, verify-artifact.mjs, verify-trust-root, ensure-dependencies and canonical validation 34/34 PASS in SEALED mode (paste4d 54 checks)",
+        "nestedSignatureProbe": "audit/RELEASE.sig added to the sealed extract -> paste4d FAIL release-signature-must-stay-detached-outside-artifact:audit/RELEASE.sig"
+      },
+      "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
     }
   },
   "changedFileSha256": {
@@ -96,10 +116,10 @@
     "scripts/release-sha256sums.mjs": "a5cc4524bb5d16a81f10a0bb6b6f2580714654512c9d4046a92a02a17ede847a",
     "scripts/verify-release-extract.mjs": "dd7b60b22e1bd0de350775aac6f7d896ce370c706957205db87b7b036077b0d8",
     "scripts/validate-paste4c-doc-truth.mjs": "d136e6fca49c005ec302afc0806a7eb557cfc5bd004777dd0607a15431964dc1",
-    "scripts/validate-paste4d-release-truth.mjs": "a6b64bccd9cfec17ac59ea1657200a00d303b12c05b2f0e54f6ea3b2f01e74f9",
+    "scripts/validate-paste4d-release-truth.mjs": "0ce94ba7055d452cac358653e254d2f13d7eedb455dc0a0b40e8b6a106ce07ef",
     "scripts/validate-mechanical-closure.mjs": "94fe0c964f992c293d45add96825b031c8bc71e7f8955769c395645c8da4ebe4",
     "scripts/v6-evidence-trust-release-adversarial-selftest.mjs": "a714fdf06d8090b766e541440ccb24c330b312f145af705d005ee79ea347fe39",
-    "tests/pkg-r1-release-mode.test.ts": "4676e47ca3a60662ed3cccff157568fd4af1fd309c98377bdf0dfc5cf3267ac9"
+    "tests/pkg-r1-release-mode.test.ts": "bed32685d75e555571154de998f6e462b20389b4a76c74c0aa685dfa1598ef18"
   },
   "openFindings": [],
   "lowBacklog": [
@@ -117,5 +137,25 @@
     "FINAL_ZIP": "NOT_DONE",
     "TARGET_MACHINE_PHASE0": "PENDING"
   },
-  "nextScope": "CODEX_REVIEW_THEN_PKG_R2_RELEASE_CANDIDATE_RESEAL"
+  "nextScope": "CODEX_REVIEW_THEN_PKG_R2_RELEASE_CANDIDATE_RESEAL",
+  "remediation": {
+    "cycle1": {
+      "reviewedCommit": "89bc44c5bdd4f7da8f8cd901e0798dfd0e4f7f25",
+      "run": "89bc44c-c1-20260928T171557Z-broker",
+      "governedResult": "BLOCKED",
+      "reviewResultSha256": "eb32b58de6dc42bfa8466393cf20a2ce6849c72a298db870f76d981816cc1cdb"
+    },
+    "findings": {
+      "F-PKGR1-001": {
+        "severity": "P2",
+        "observed": "paste4d checked only four root-relative signature filenames, so a nested release signature such as audit/RELEASE.sig passed in SEALED mode.",
+        "fix": "paste4d now scans every file in the artifact scope (automation/lib/release-artifact.mjs listArtifactSourceFiles, including symlink/non-regular entries) in both modes and fails on a case-insensitive RELEASE.sig / release-signature.json basename or a .sig/.minisig extension; the failure message lists the offending paths. This strengthens the pre-seal rule too (previously root-only).",
+        "retest": "tests/pkg-r1-release-mode.test.ts: nested and case-variant signatures fail in pre-seal (RELEASE-SIGNATURE.json, audit/RELEASE.sig, docs/Release.Sig) and SEALED mode (audit/RELEASE.sig, docs/release-signature.JSON, audit/checkpoints/release.minisig, scripts/notes.SIG); the root RELEASE.sig case still fails.",
+        "retestValidationIds": [
+          "tests",
+          "paste4d-release-truth"
+        ]
+      }
+    }
+  }
 }

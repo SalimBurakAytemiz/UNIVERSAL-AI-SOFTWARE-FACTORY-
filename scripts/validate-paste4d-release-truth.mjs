@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {verifyTrustRoot} from "../automation/lib/trust-root.mjs";
-import {parseSha256Sums,sha256File} from "../automation/lib/release-artifact.mjs";
+import {parseSha256Sums,sha256File,listArtifactSourceFiles} from "../automation/lib/release-artifact.mjs";
 
 const root=process.cwd(),errors=[];let checks=0;
 const must=(cond,msg)=>{checks+=1;if(!cond)errors.push(msg)};
@@ -105,10 +105,10 @@ must(nodeArtifact.includes("external signature/authenticity iddiası değildir")
 must(psArtifact.includes('Contains("package-lock.json")'),"powershell-artifact-lockfile-membership-not-enforced");
 must(psArtifact.includes("LOCKFILE_NOT_IN_ARTIFACT_MANIFEST"),"powershell-artifact-lockfile-failure-missing");
 
-// Release imzası her modda artifact/worktree dışında (detached) kalır; current authority final authenticity PASS diyemez.
-const signatureCandidates=["RELEASE.sig","RELEASE-SIGNATURE.json","release.sig","release-signature.json"];
-const persistedSignature=signatureCandidates.some(exists);
-must(!persistedSignature,SEALED?"release-signature-must-stay-detached-outside-artifact":"unexpected-release-signature-present-before-final-release-stage");
+// Release imzası her modda artifact/worktree dışında (detached) kalır: artifact kapsamındaki her dizinde (release-artifact dışlamaları hariç) imza dosya adı büyük/küçük harf duyarsız veya .sig/.minisig uzantısı FAIL; current authority final authenticity PASS diyemez.
+const signatureName=/^(release\.sig|release-signature\.json)$/i,signatureExt=/\.(sig|minisig)$/i;
+const scanned=listArtifactSourceFiles(root),persistedSignatures=[...scanned.files,...scanned.violations.map(v=>v.path)].filter(f=>signatureName.test(path.posix.basename(f))||signatureExt.test(f));
+must(persistedSignatures.length===0,`${SEALED?"release-signature-must-stay-detached-outside-artifact":"unexpected-release-signature-present-before-final-release-stage"}:${persistedSignatures.slice(0,5).join(",")}`);
 must(status.finalReleaseAuthenticity===T.auth,SEALED?"release-authenticity-must-stay-external-detached-signature-required":"release-authenticity-must-remain-not-done-without-persisted-signature");
 
 if(errors.length){

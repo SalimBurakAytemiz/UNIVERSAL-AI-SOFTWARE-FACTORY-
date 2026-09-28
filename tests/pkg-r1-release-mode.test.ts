@@ -32,6 +32,7 @@ describe("release truth modes (PKGR-F1)",()=>{
     withFile("SHA256SUMS.txt","x\n",()=>{expect(p4d().out).toContain("stale-root-sha256sums-present-before-final-packaging")});
     withFile(".ai/runtime/ARTIFACT_VERIFY.json",JSON.stringify({status:"PASS"}),()=>{expect(p4d().out).toContain("stale-runtime-artifact-pass-present-before-final-manifest")});
     withFile(".ai/runtime/TRUST_ROOT_VERIFY.json",JSON.stringify({ok:true}),()=>{expect(p4d().out).toContain("stale-runtime-trust-root-pass-present")});
+    for(const f of ["RELEASE-SIGNATURE.json","audit/RELEASE.sig","docs/Release.Sig"])withFile(f,"sig",()=>{expect(p4d().out).toContain(`unexpected-release-signature-present-before-final-release-stage:${f}`)});
     mutate("PACK.json",s=>s.replace('"finalTrustRootSeal": "STALE_PENDING_FINAL_RESEAL"','"finalTrustRootSeal": "SEALED_RELEASE_CANDIDATE"'),()=>{expect(p4d().out).toContain("pack-trust-root-overclaim");expect(p4c().out).toContain("pack-final-seal-overclaim")})},600000);
   it("rejects an unknown seal status in both validators",()=>{mutate("config/trust-root-manifest.json",s=>s.replace(/"sealStatus": "[A-Z_]+"/,'"sealStatus": "SEALED_MAYBE"'),()=>{expect(p4d().out).toContain("trust-root-unknown-seal-status");expect(p4c().out).toContain("trust-root-unknown-seal-status")})});
   it("sealed mode passes only with verified trust root and release-candidate truth",()=>{setMode("SEALED");const d=p4d();expect(d.status,d.out).toBe(0);expect(d.out).toContain("mode=SEALED");const c=p4c();expect(c.status,c.out).toBe(0);expect(c.out).toContain("mode=SEALED");const m=mech();expect(m.status,m.out).toBe(0);
@@ -41,6 +42,8 @@ describe("release truth modes (PKGR-F1)",()=>{
     mutate("audit/CURRENT-AUDIT-STATE.json",s=>s.replace("ZERO_OPEN_P0P1P2_PENDING_PACKAGING_SIGNATURE_AND_TARGET_PHASE0","ZERO_OPEN_P0P1P2_PENDING_FINAL_RESEAL_AND_TARGET_PHASE0"),()=>{expect(p4d().out).toContain("current-audit-premature-zero-blocker-claim")});
     mutate(".ai/MASTER_STATE.json",s=>s.replace('"targetMachinePhase0": "PENDING"','"targetMachinePhase0": "PASS"'),()=>{expect(p4d().out).toContain("master-target-phase0-overclaim")});
     withFile("RELEASE.sig","sig",()=>{expect(p4d().out).toContain("release-signature-must-stay-detached-outside-artifact")});
+    // //TR: F-PKGR1-001 regresyonu: iç içe dizindeki, büyük/küçük harf farklı veya .sig/.minisig uzantılı imza da reddedilir.
+    for(const f of ["audit/RELEASE.sig","docs/release-signature.JSON","audit/checkpoints/release.minisig","scripts/notes.SIG"])withFile(f,"sig",()=>{expect(p4d().out).toContain(`release-signature-must-stay-detached-outside-artifact:${f}`)});
     withFile(".ai/runtime/ARTIFACT_VERIFY.json",JSON.stringify({status:"PASS"}),()=>{expect(p4d().out).toContain("stale-runtime-artifact-pass-present-before-final-manifest")})},600000);
   it("release SHA256SUMS generator refuses unsealed or unclean exports and binds to the sealed manifest",()=>{
     mutate("config/trust-root-manifest.json",s=>s.replace('"sealStatus": "SEALED"','"sealStatus": "STALE_PENDING_FINAL_RESEAL"'),()=>{const r=node(["scripts/release-sha256sums.mjs",tree]);expect(r.status).not.toBe(0);expect(r.out).toContain("TRUST_ROOT_NOT_SEALED_OR_INVALID")});
