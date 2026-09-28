@@ -24,7 +24,7 @@
   "highRiskRequiresOsSandbox": true,
   "note": "Self-build local source generation tool-policy sandbox kullanır; production/Risk5/customer-secret mission gerçek OS/container sandbox yoksa fail-closed olur.",
   "toolSetRestrictionFlag": "--tools",
-  "permissionMode": "dontAsk",
+  "permissionMode": "acceptEdits",
   "disallowedToolPatterns": [
     "mcp__*"
   ]

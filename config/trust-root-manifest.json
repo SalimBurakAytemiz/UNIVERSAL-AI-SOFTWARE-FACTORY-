@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-09-28T17:44:21.550Z",
+  "generatedAt": "2026-09-28T20:09:20.041Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -38,7 +38,7 @@
     },
     {
       "path": "CANONICAL-STATUS.md",
-      "sha256": "8f9568a8eee1c310440be1a328e335a794c5531cb9991b70a9d137837d483aa7"
+      "sha256": "57f33bf5a9d5bc0158869a96b1fc34b766a352ed3ca25fb4e85831b0541f4589"
     },
     {
       "path": "CLAUDE.md",
@@ -326,7 +326,7 @@
     },
     {
       "path": "config/builder-execution-policy.json",
-      "sha256": "0ed7d341ae966a60466f8066ed79b96795600f46778f6a459575a77dc0e677ce"
+      "sha256": "8018544c6157d35c6fb0420b03a52c1bcc08b48d099989808ee14ed31f7a9421"
     },
     {
       "path": "config/environment-policy.json",
@@ -1114,7 +1114,7 @@
     },
     {
       "path": "scripts/install-report.mjs",
-      "sha256": "eae672fccea74f110b9d448e31a9a82c38b9ae653bbbe70c4508d63c1926bdd2"
+      "sha256": "cc532e7a5de61d78bff34c7814f98627156d4653be5763c0b0eea82dc52e933b"
     },
     {
       "path": "scripts/install.ps1",
@@ -1274,7 +1274,7 @@
     },
     {
       "path": "scripts/validate-runtime-contracts.mjs",
-      "sha256": "40b34dc1e5de92a12ee75e906feac97cca06465ff57c1de5ae970bbfa1071432"
+      "sha256": "a6e2bd846265ebbc13676b9099155d08d86f734d8929558ea49dab83278d6d95"
     },
     {
       "path": "scripts/validate-runtime-resilience.mjs",

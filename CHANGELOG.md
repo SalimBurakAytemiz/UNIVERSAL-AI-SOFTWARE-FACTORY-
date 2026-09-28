@@ -1,6 +1,14 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-09-28 — V6 Phase0 Attempt 1 Fixes
+
+- The first target-machine Phase0 attempt stopped at bootstrap; nothing was pushed.
+- `validate-runtime-contracts.mjs` isolates its fixture from the installer's `UASCO_INSTALL_ID` and still asserts that an env/ledger mismatch is rejected.
+- `install-report.mjs` imports `node:crypto`, so `INSTALL_REPORT.json` is written.
+- The builder policy uses `acceptEdits` for edits inside the working directory only; the tool set stays Read/Edit/Write/Glob/Grep and shell, web, subagents and MCP stay denied.
+- New reseal and release candidate; the previous ZIP and signature are superseded.
+
 ## 2026-09-28 — V6 Sealed Release Candidate
 
 - PKGR-F1: the doc-truth validators rejected every sealed release although `install.ps1` validates inside the extract; they now follow the trust-root seal status with a fail-closed `SEALED` release-candidate mode (in-process trust-root re-verification, `SHA256SUMS.txt` bound to the sealed manifest, no signature anywhere in the tree, no PASS values).

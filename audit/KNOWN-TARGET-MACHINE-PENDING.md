@@ -20,7 +20,7 @@ Bu maddeler target makinede gerçek runtime ile çalıştırılmış ve bağıms
 
 Aşağıdakiler hâlâ tamamlanmış sayılamaz:
 
-- Windows PowerShell installer state machine end to end (`scripts/install.ps1`)
+- Windows PowerShell installer state machine end to end (`scripts/install.ps1`); the first attempt stopped at bootstrap (PHASE0-F1..F3, fixed in PKG-R3)
 - Windows process lock / kill / crash / restart / resume tests
 - Task Scheduler/autostart
 - Git remote privacy + branch protection provider API

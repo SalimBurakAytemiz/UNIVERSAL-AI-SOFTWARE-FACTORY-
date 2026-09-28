@@ -31,7 +31,8 @@
     "PKGA_F8_TARGET_PREFLIGHT_PHYSICAL_MEMORY_AND_CLOCK",
     "LIVE_PROVIDER_SMOKE",
     "PKGR_F1_SEALED_RELEASE_CANDIDATE_MODE_AND_PACKAGING_TOOLS",
-    "FINAL_TRUST_ROOT_RESEAL_RELEASE_CANDIDATE"
+    "FINAL_TRUST_ROOT_RESEAL_RELEASE_CANDIDATE",
+    "PHASE0_ATTEMPT1_FINDINGS_FIXED_AND_RESEALED"
   ],
   "activeScope": "RELEASE_PACKAGING_SIGNATURE_THEN_TARGET_MACHINE_PHASE0",
   "boundedScopeOpenP0P1P2": 0,
@@ -41,7 +42,10 @@
     {"id": "TRUST-F1", "severity": "P1", "closedBy": "V6-PKG-F-PROTECT-VALIDATION-SCRIPTS", "reviewedCommit": "5fa231bd917f2132b1c50a011d150767a9c737e5", "review": "CLEAN", "record": "audit/reviews/V6-PKG-F-5fa231b-c1.json"},
     {"id": "PKGA-F8", "severity": "ENVIRONMENT", "closedBy": "V6-PKG-G-PREFLIGHT-PHYSICAL-MEMORY + Founder started the Windows Time service", "reviewedCommit": "a82c6f44eceb40b91fc1bed570910dca8b6f3032", "review": "CLEAN", "record": "audit/reviews/V6-PKG-G-a82c6f4-c1.json", "targetPreflight": "PASS"},
     {"id": "PKGR-F1", "severity": "P1_RELEASE_BLOCKER", "closedBy": "V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS", "reviewedCommit": "a7ed30628920ba58e3b67762eb0f030fceeb968b", "review": "CLEAN_CYCLE_2", "record": "audit/reviews/V6-PKG-R1-a7ed306-c2.json"},
-    {"id": "F-PKGR1-001", "severity": "P2", "closedBy": "V6-PKG-R1 cycle 2 remediation", "reviewedCommit": "a7ed30628920ba58e3b67762eb0f030fceeb968b", "review": "RESOLVED_CLEAN_CYCLE_2", "record": "audit/reviews/V6-PKG-R1-a7ed306-c2.json"}
+    {"id": "F-PKGR1-001", "severity": "P2", "closedBy": "V6-PKG-R1 cycle 2 remediation", "reviewedCommit": "a7ed30628920ba58e3b67762eb0f030fceeb968b", "review": "RESOLVED_CLEAN_CYCLE_2", "record": "audit/reviews/V6-PKG-R1-a7ed306-c2.json"},
+    {"id": "PHASE0-F1", "severity": "P1_INSTALL_BLOCKER", "closedBy": "V6-PKG-R3-PHASE0-FIXES-AND-RESEAL", "file": "scripts/validate-runtime-contracts.mjs"},
+    {"id": "PHASE0-F2", "severity": "P2", "closedBy": "V6-PKG-R3-PHASE0-FIXES-AND-RESEAL", "file": "scripts/install-report.mjs"},
+    {"id": "PHASE0-F3", "severity": "P1_INSTALL_AND_BUILD_BLOCKER", "closedBy": "V6-PKG-R3-PHASE0-FIXES-AND-RESEAL", "file": "config/builder-execution-policy.json"}
   ],
   "lowBacklog": [
     {"id": "F-PKGE-002", "severity": "P3", "file": "automation/lib/electron-provision.mjs", "observed": "verifyProvisionedElectron authenticates every dist file against the archive but never reads manifest.exeSha256; metadata consistency only."},

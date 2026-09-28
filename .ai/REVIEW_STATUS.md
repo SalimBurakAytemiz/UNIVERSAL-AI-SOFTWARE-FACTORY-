@@ -13,6 +13,7 @@ Independent Codex reviews (frozen milestone contract + review bundle, read-only,
 - `V6-PKG-G-PREFLIGHT-PHYSICAL-MEMORY` @ `a82c6f44eceb40b91fc1bed570910dca8b6f3032`: `CLEAN`, merged fast-forward to local master.
 - `V6-PKG-H-CURRENT-TRUTH-CORRECTION` @ `eaed1bd4fb583ada4e04f144fb1c67fa850b4a7e`: `CLEAN`, merged fast-forward to local master.
 - `V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS` @ `89bc44c5bdd4f7da8f8cd901e0798dfd0e4f7f25`: cycle 1 `BLOCKED` (F-PKGR1-001); @ `a7ed30628920ba58e3b67762eb0f030fceeb968b`: cycle 2 `CLEAN`, merged fast-forward to local master.
-- `V6-PKG-R2-RELEASE-CANDIDATE-RESEAL`: this release-candidate commit; reviewed after it is committed.
+- `V6-PKG-R2-RELEASE-CANDIDATE-RESEAL` @ `f0a4f0ad4b679bb52a3d3cb954046d39a24a337b`: `CLEAN`, merged fast-forward to local master; its signed ZIP failed the first Phase0 attempt and is superseded.
+- `V6-PKG-R3-PHASE0-FIXES-AND-RESEAL`: this release-candidate commit; reviewed after it is committed.
 
 Nothing has been pushed to a remote. Any commit after a CLEAN review needs its own review.
