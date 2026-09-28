@@ -73,6 +73,7 @@
     "scripts/phase0-acceptance.mjs",
     "scripts/preflight.mjs",
     "scripts/provider-smoke.mjs",
+    "scripts/provision-electron.mjs",
     "scripts/register-autostart.ps1",
     "scripts/sanitize-process-env.ps1",
     "scripts/smoke-control-api.mjs",

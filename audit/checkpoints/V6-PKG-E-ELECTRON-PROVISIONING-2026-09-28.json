@@ -1,0 +1,82 @@
+{
+  "//TR": "Bu checkpoint Founder yetkili açık Electron binary temin adımını, smoke'ların temin doğrulamasına bağlanmasını, gerçek temin ve uçtan uca Desktop/Control Tower smoke kanıtlarını kaydeder; CLEAN, final closure veya target-machine Phase0 PASS iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_E_ELECTRON_PROVISIONING",
+  "date": "2026-09-28",
+  "parent": "8315b9a7b30a90d2b4e5b5de07eec8a7e8633119",
+  "branch": "v6/pkg-e-electron-provisioning",
+  "resolves": ["PKGC-F1"],
+  "founderAuthorization": {
+    "decision": "EXPLICIT_ELECTRON_PROVISIONING_STEP_APPROVED",
+    "rule": "A new protected step, called by the installer, downloads electron-v44.4.5-win32-x64.zip from GitHub releases. Its SHA-256 is verified against checksums.json inside the locked package. The binary is extracted outside node_modules under .ai/cache/electron and the smokes verify it there before launching. The installed-tree seal is not broken; the download happens only in this step.",
+    "protectedFiles": ["scripts/provision-electron.mjs", "automation/lib/electron-provision.mjs", "automation/lib/electron-provision.d.mts", "scripts/smoke-desktop.mjs", "scripts/smoke-control-tower.mjs", "scripts/install.ps1", "config/protected-paths.json"],
+    "constraint": "Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+  },
+  "validationEnvironment": {
+    "measuredBy": "scripts/preflight.mjs on this machine; re-measured and required to match before each isolated validation run",
+    "platform": "win32 10.0.19045 x64",
+    "node": "v24.19.0",
+    "npm": "11.17.0 (bundled npm-cli.js beside node.exe)",
+    "git": "git version 2.55.0.windows.3",
+    "powershell": "5.1.19041.6456",
+    "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
+  },
+  "implementation": {
+    "helper": "automation/lib/electron-provision.mjs derives version, artifact, URL and expected SHA-256 only from node_modules/electron/package.json and checksums.json; allows only https github.com, release-assets.githubusercontent.com and objects.githubusercontent.com without port or credentials; verifyProvisionedElectron requires PROVISIONED.json to match version/artifact/checksum/exe, dist/version to equal the package version, a regular-file executable, and the executable SHA-256 recorded at provisioning time on every call.",
+    "step": "scripts/provision-electron.mjs verifies the installed-tree seal first, returns EXISTING when a verified provision exists, otherwise follows redirects manually through the host allowlist, streams the zip while hashing, deletes it on checksum mismatch, extracts only after verification with System32 tar.exe (bsdtar) or unzip without a shell into a staging directory, rejects escaping links, writes the manifest and atomically renames staging into .ai/cache/electron/<version>-<platform>-<arch>.",
+    "smokes": "Both smokes import verifyProvisionedElectron and spawn the verified binary directly without a shell; they never download.",
+    "installer": "scripts/install.ps1 runs Run-Step electron-provision immediately before control-tower-smoke inside the existing -SkipDesktopSmoke guard.",
+    "trustRoot": "scripts/provision-electron.mjs added to config/protected-paths.json exactPaths; the helper is covered by the existing automation/lib/ protected prefix.",
+    "testUpdate": "tests/pkg-c-lf-electron-smoke.test.ts now checks the shared verifier instead of the removed inline resolver; its assertion count grew from 5 to 7 in the changed cases."
+  },
+  "validation": {
+    "workspace": "fresh clone mirroring the working tree with the reviewed lock installed; repository .ai/runtime untouched",
+    "gitDiffCheck": "PASS",
+    "canonicalRunner": {"status": "PASS", "pass": 34, "fail": 0},
+    "vitest": "PASS 18 files / 115 tests (23 new PKG-E tests, no network)",
+    "broadDependencyFreeSuite": "25/25 PASS",
+    "realProvisioning": {
+      "status": "PROVISIONED",
+      "artifact": "electron-v44.4.5-win32-x64.zip",
+      "zipBytes": 158184819,
+      "zipSha256": "11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d",
+      "checksumSource": "node_modules/electron/checksums.json",
+      "redirectChain": "github.com -> release-assets.githubusercontent.com",
+      "exeSha256": "bd14928e0728366fd3f41499cb398ff3f4304dab259a3e605077899a6f8c748e",
+      "nodeModulesElectronDistCreated": false,
+      "installedTreeSealAfterProvisioning": "INTACT 4c0aec51d8f5cfb385e214b2375d6dc618f82eac5b5fb2515b4f881bfd79ad12"
+    },
+    "smokes": {
+      "beforeProvisioning": "FAIL_CLOSED ELECTRON_BINARY_NOT_PROVISIONED:MANIFEST_MISSING",
+      "smokeDesktop": "PASS desktop marker HEALTHY+VERIFIED",
+      "smokeControlTower": "PASS Control API challenge-proof identity + Electron integration verified",
+      "reprovisionIdempotent": "EXISTING (no download)",
+      "exeTamperedAfterProvisioning": "FAIL_CLOSED EXECUTABLE_SHA256_MISMATCH; restored file verifies again"
+    }
+  },
+  "changedFileSha256": {
+    "automation/lib/electron-provision.mjs": "ef3776457637f0de5a478c60f663948a40f93ac2bfad57a55b8a980d5776e983",
+    "automation/lib/electron-provision.d.mts": "ddd86b9c3d3efe1c34d2ee371a9cc4dc7daab861e60aad9c52c0b6a9d30361d3",
+    "scripts/provision-electron.mjs": "a288c4d11f3b61608e94b3f0da8c7137639b76c7aebe687789803a9ef4c12ef9",
+    "scripts/smoke-desktop.mjs": "bf145809ee5a5e213a1ddea8f58baa116134628ec4e66945b9117f044b57ddea",
+    "scripts/smoke-control-tower.mjs": "e42104b90584a830591a32db264ab030d16c7d81eef0c8b33dab6f1d40734640",
+    "scripts/install.ps1": "3ff9c2494fd306fe4def43cf41885d79723689166c37b7abcf65077d56902345",
+    "config/protected-paths.json": "3eca54e41dc53e1c0ebf6dfa07d325c95ca5eea70ff8a99b85fdf6a15b66a843",
+    "tests/pkg-c-lf-electron-smoke.test.ts": "e6942add33a3c61fb680d8fb2a0ad9b1383781afe4c83678b4ff11d03448597d",
+    "tests/pkg-e-electron-provision.test.ts": "38f892956fbf37803c58104195e723647679f9786fcd1a89386bb78df4092793"
+  },
+  "openFindings": [
+    {"id": "PKGA-F8", "severity": "ENVIRONMENT", "status": "OPEN_ENVIRONMENT_NOT_CODE_DEFECT"}
+  ],
+  "review": "NOT_REVIEWED_CODEX_PENDING",
+  "cleanClaim": false,
+  "trustRootManifest": "NOT_REGENERATED_FINAL_RESEAL_PENDING",
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "DESKTOP_SMOKE": "PASS_ON_THIS_MACHINE_REVIEW_PENDING",
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_ZIP": "NOT_DONE",
+    "TARGET_MACHINE_PHASE0": "PENDING"
+  },
+  "nextScope": "CODEX_REVIEW_THEN_PKG_B_CURRENT_TRUTH_SYNC_VIA_CANONICAL_BROKER"
+}

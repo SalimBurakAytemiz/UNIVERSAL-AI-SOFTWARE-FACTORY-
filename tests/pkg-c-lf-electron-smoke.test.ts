@@ -7,8 +7,8 @@ describe("PKG-C line endings and Electron smoke launch",()=>{
   for(const f of smokes){
     const s=fs.readFileSync(f,"utf8"),code=s.split(/\r?\n/).filter(l=>!l.trimStart().startsWith("//")).join("\n");
     it(`${f} launches Electron without electron.cmd or a shell`,()=>{expect(code).not.toContain("electron.cmd");expect(code).not.toMatch(/\bshell\s*:/);expect(code).toContain("desktop=cp.spawn(electron,[\"apps/desktop/main.mjs\"]")});
-    it(`${f} never triggers the implicit Electron binary download`,()=>{expect(code).not.toMatch(/require\(\s*["']electron["']\s*\)|import\s[^;]*["']electron["']|electron\/cli\.js|install\.js|install-electron/);expect(code).toContain("ELECTRON_BINARY_NOT_PROVISIONED")});
-    it(`${f} validates path.txt, dist/version and a regular binary file before launch`,()=>{expect(s).toContain('["electron.exe","electron","Electron.app/Contents/MacOS/Electron"].includes(rel)');expect(s).toContain("distVersion!==version");expect(s).toContain("lstatSync(bin).isFile()")});
+    it(`${f} never triggers the implicit Electron binary download`,()=>{expect(code).not.toMatch(/require\(\s*["']electron["']\s*\)|import\s[^;]*["']electron["']|electron\/cli\.js|install\.js|install-electron|provision-electron|fetch\(\s*t\.url/);expect(code).toContain("const electron=verifyProvisionedElectron(process.cwd());")});
+    it(`${f} launches only a provisioned binary verified by manifest, dist/version and exe SHA-256`,()=>{const helper=fs.readFileSync("automation/lib/electron-provision.mjs","utf8");expect(code).toContain('import {verifyProvisionedElectron} from "../automation/lib/electron-provision.mjs"');expect(helper).toContain("ELECTRON_BINARY_NOT_PROVISIONED");expect(helper).toContain('fail("DIST_VERSION_MISMATCH")');expect(helper).toContain('fail("EXECUTABLE_NOT_REGULAR_FILE")');expect(helper).toContain('fail("EXECUTABLE_SHA256_MISMATCH")')});
     it(`${f} keeps safe env, challenge proof and blocked redirects`,()=>{expect(s).toContain("safeChildEnv");expect(s).toContain("controlChallengeProof");expect(s).toContain('redirect:"error"')});
   }
 });
