@@ -57,6 +57,9 @@
   "finalReleaseAuthenticity": "EXTERNAL_DETACHED_SIGNATURE_REQUIRED",
   "finalZip": "PACKAGING_STAGE_OUTSIDE_GIT",
   "targetMachinePhase0": "PENDING",
+  "pendingPackages": [
+    {"id": "V6-PKG-X1-DUAL-EXECUTION-FABRIC", "scope": "LOCAL_CLAUDE + CLAUDE_CLOUD_SESSION execution routing, provenance and merge gate", "cloudDispatch": "NOT_CONFIGURED", "review": "PENDING", "merge": "HELD_UNTIL_CA21E83_RELEASE_PHASE0"}
+  ],
   "pendingEnvironmentGates": [
     "final-sha256sums:PACKAGING_STAGE_OUTSIDE_GIT",
     "final-zip-and-fresh-extract-verification:PACKAGING_STAGE_OUTSIDE_GIT",

@@ -50,9 +50,20 @@ Codex (OpenAI, separate from the Anthropic builder) reviewed each package agains
 - `V6-PKG-H-CURRENT-TRUTH-CORRECTION` @ `eaed1bd`: `CLEAN`.
 - `V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS` @ `89bc44c`: cycle 1 `BLOCKED` (F-PKGR1-001 nested release signature, remediated); @ `a7ed306`: cycle 2 `CLEAN`.
 - `V6-PKG-R2-RELEASE-CANDIDATE-RESEAL` @ `f0a4f0a`: `CLEAN` (superseded release candidate).
-- `V6-PKG-R3-PHASE0-FIXES-AND-RESEAL`: this release-candidate commit (fixes plus reseal); reviewed after it is committed.
+- `V6-PKG-R3-PHASE0-FIXES-AND-RESEAL` @ `ca21e83`: release candidate (fixes plus reseal); independent review pending (reviewer quota).
+- `V6-PKG-X1-DUAL-EXECUTION-FABRIC`: this commit on its own branch on top of `ca21e83`; reviewed after PKG-R3; merge held until the `ca21e83` release completes target-machine Phase0 (Founder decision), so the release candidate is not disturbed.
 
 Review records live in `audit/reviews/`. They are unsigned because the Phase0 evidence signing key is not initialized yet.
+
+## Execution backends
+
+`V6-PKG-X1-DUAL-EXECUTION-FABRIC` adds a dual execution fabric (`docs/architecture/EXECUTION-BACKENDS.md`). There are two backends: `LOCAL_CLAUDE`, the existing path, and `CLAUDE_CLOUD_SESSION`. The routing mode defaults to `AUTO`.
+
+- Host-bound work stays local: ACL, Task Scheduler, Phase0, install validation, hardware, local credentials and devices, evidence keys, release packaging.
+- Release signing with the private key is Founder-only.
+- Signing keys and local credentials are never cloud inputs.
+- Cloud work goes to isolated run branches and passes the same validation, evidence, independent Codex review and merge gate.
+- The cloud dispatch is `NOT_CONFIGURED` until a documented Claude product method exists and is approved. Until then, work routes to `LOCAL_CLAUDE` or is queued, and cloud execution is never claimed.
 
 ## Environment/runtime gates
 

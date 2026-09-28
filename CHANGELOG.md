@@ -1,6 +1,13 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-09-29 — V6 Dual Execution Fabric (branch, merge held)
+
+- Execution backend registry (`config/execution-backends.json`) with `LOCAL_CLAUDE` and `CLAUDE_CLOUD_SESSION` and routing modes `AUTO` (default), `LOCAL_ONLY`, `CLOUD_PREFERRED`, `CLOUD_ONLY`.
+- Fail-closed routing engine (`automation/lib/execution-routing.mjs`): host-bound work stays local, private-key release signing is Founder-only, unknown availability counts as unavailable, fallback only where policy allows, otherwise queued; no invented billing or credit API.
+- The supervisor routes before the builder, records execution provenance and runs a merge gate (independent non-producer CLEAN review, isolated branch) before every fast-forward merge.
+- Cloud dispatch stays `NOT_CONFIGURED` until a documented Claude product method is approved; cloud execution is never faked.
+
 ## 2026-09-28 — V6 Phase0 Attempt 1 Fixes
 
 - The first target-machine Phase0 attempt stopped at bootstrap; nothing was pushed.

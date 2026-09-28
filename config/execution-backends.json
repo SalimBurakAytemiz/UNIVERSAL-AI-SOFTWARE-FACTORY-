@@ -1,0 +1,69 @@
+{
+  "//TR": "Bu protected registry builder işinin yürütüleceği backend'leri (LOCAL_CLAUDE, CLAUDE_CLOUD_SESSION) ve fail-closed yönlendirme politikasını tanımlar; host'a bağlı işler LOCAL_ONLY kalır, özel imza anahtarları ve yerel credential'lar cloud'a taşınmaz, cloud çıktısı aynı validation/evidence/bağımsız Codex review/merge kapısından geçer ve belgelenmiş bir dispatch yöntemi yapılandırılmadan cloud yürütmesi taklit edilmez.",
+  "schemaVersion": "1.0.0",
+  "routing": {
+    "defaultMode": "AUTO",
+    "modes": ["AUTO", "LOCAL_ONLY", "CLOUD_PREFERRED", "CLOUD_ONLY"],
+    "unknownAvailabilityIsUnavailable": true,
+    "unclassifiedTaskType": "LOCAL_ONLY",
+    "autoPrefersCloudWhen": {
+      "minExpectedDurationMinutes": 30,
+      "parallelizable": true,
+      "localQuotaPressure": "HIGH"
+    },
+    "fallback": {
+      "cloudToLocal": {"AUTO": true, "CLOUD_PREFERRED": true, "CLOUD_ONLY": false},
+      "localToCloud": {"AUTO": true, "CLOUD_PREFERRED": true, "LOCAL_ONLY": false}
+    }
+  },
+  "taskClasses": {
+    "cloudEligible": ["REPOSITORY_ANALYSIS", "IMPLEMENTATION_PACKAGE", "DOCUMENTATION", "TEST_GENERATION", "STATIC_ANALYSIS", "ISOLATED_BRANCH_WORK"],
+    "localOnly": ["WINDOWS_ACL_CHANGE", "TASK_SCHEDULER_CHANGE", "TARGET_MACHINE_PHASE0", "FINAL_LOCAL_INSTALL_VALIDATION", "HOST_HARDWARE_CHECK", "LOCAL_CREDENTIAL_OPERATION", "LOCAL_DEVICE_OPERATION", "EVIDENCE_KEY_OPERATION", "RELEASE_PACKAGING"],
+    "founderOnly": ["RELEASE_SIGNING_PRIVATE_KEY"]
+  },
+  "hostBoundResources": ["WINDOWS_ACL", "TASK_SCHEDULER", "PRIVATE_SIGNING_KEY", "EVIDENCE_SIGNING_KEY", "LOCAL_CREDENTIAL_STORE", "HOST_HARDWARE", "LOCAL_DEVICE", "TARGET_MACHINE_RUNTIME"],
+  "cloudForbiddenDataClasses": ["PRIVATE_SIGNING_KEY", "EVIDENCE_SIGNING_KEY", "LOCAL_CREDENTIAL", "PROVIDER_AUTH_TOKEN", "CUSTOMER_SECRET", "PRODUCTION_SECRET"],
+  "cloudAllowedSecurityClassifications": ["PUBLIC", "INTERNAL"],
+  "riskLevelClassification": {"1": "INTERNAL", "2": "INTERNAL", "3": "INTERNAL", "4": "CONFIDENTIAL", "5": "RESTRICTED"},
+  "backends": {
+    "LOCAL_CLAUDE": {
+      "kind": "LOCAL_CLI_PROCESS",
+      "sessionType": "LOCAL_CLI_PROCESS",
+      "provider": "ANTHROPIC",
+      "tool": "claude",
+      "dispatch": {"status": "CONFIGURED", "via": "config/automation.json builder -> scripts/claude-builder-broker.mjs"},
+      "isolation": "RUN_WORKTREE_UNDER_RUN_BRANCH_PREFIX",
+      "hostBoundCapable": true,
+      "availabilitySignal": ".ai/runtime/PROVIDER_PROVENANCE.json claude PASS",
+      "usageSignal": "run ledger usage records (approximate tokens) and classified provider quota failures"
+    },
+    "CLAUDE_CLOUD_SESSION": {
+      "kind": "PRODUCT_MANAGED_CLOUD_SESSION",
+      "sessionType": "CLAUDE_CLOUD_SESSION",
+      "provider": "ANTHROPIC",
+      "tool": "claude",
+      "dispatch": {
+        "status": "NOT_CONFIGURED",
+        "adapter": null,
+        "requires": [
+          "a documented Claude product method to start a cloud session on a given repository branch",
+          "explicit Founder approval for the cloud workspace to access the private repository",
+          "results returned only as a branch under the run branch prefix, never as a direct change to the default branch"
+        ]
+      },
+      "isolation": "ISOLATED_BRANCH_UNDER_RUN_BRANCH_PREFIX",
+      "mayMutateDefaultBranch": false,
+      "hostBoundCapable": false,
+      "capacityModel": "PRODUCT_MANAGED_CAPACITY_NOT_API_CREDITS",
+      "capacitySignal": "NONE_DOCUMENTED",
+      "billingApi": "NONE_ASSUMED",
+      "availabilitySignal": "NONE_UNTIL_DISPATCH_CONFIGURED"
+    }
+  },
+  "pipeline": {
+    "producedWorkEnters": ["DETERMINISTIC_VALIDATION", "EVIDENCE", "INDEPENDENT_CODEX_REVIEW", "REMEDIATION_RE_REVIEW", "MERGE_GATE"],
+    "independentReviewerProvider": "OPENAI",
+    "producerMayReviewOwnOutput": false,
+    "mergeRequiresGovernedResult": "CLEAN"
+  }
+}

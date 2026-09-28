@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-09-28T20:09:20.041Z",
+  "generatedAt": "2026-09-28T21:13:54.226Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -38,7 +38,7 @@
     },
     {
       "path": "CANONICAL-STATUS.md",
-      "sha256": "57f33bf5a9d5bc0158869a96b1fc34b766a352ed3ca25fb4e85831b0541f4589"
+      "sha256": "2c8051c7b3ce5c0657b443c4c05425f5f4a6205f8b7077bce780ec9363eb6d1b"
     },
     {
       "path": "CLAUDE.md",
@@ -86,7 +86,7 @@
     },
     {
       "path": "automation/factory-supervisor.mjs",
-      "sha256": "3cc423a7bcfb659e86a7585f23dc7aa068e7a6ad1e5e3c32fe3b3adc139d6cbf"
+      "sha256": "778000a9c17b10d774c486d8378255d29ad5ff90831c09b1035e8acd61175338"
     },
     {
       "path": "automation/lib/action-broker.mjs",
@@ -155,6 +155,10 @@
     {
       "path": "automation/lib/evidence-signing.mjs",
       "sha256": "28d5f94f4096a1f4b5e1ef2ed04e06981795a9150fcb7e319c89bd1f534b7b2b"
+    },
+    {
+      "path": "automation/lib/execution-routing.mjs",
+      "sha256": "6aea6fec29913562bae4483a42c8518fdb3ce02e09218c3c29ca13cc4511aff0"
     },
     {
       "path": "automation/lib/failure-classifier.mjs",
@@ -339,6 +343,10 @@
     {
       "path": "config/evidence-retention-policy.json",
       "sha256": "94ae128af7374947982119d65f2fdc216af33730c5f8aa31cf0776502a55dc57"
+    },
+    {
+      "path": "config/execution-backends.json",
+      "sha256": "5dd71c4d7a3876efa4ce3d4e141af3f557f8716e8e19f7dd9fe7e3e3b6561427"
     },
     {
       "path": "config/git-metadata-policy.json",
