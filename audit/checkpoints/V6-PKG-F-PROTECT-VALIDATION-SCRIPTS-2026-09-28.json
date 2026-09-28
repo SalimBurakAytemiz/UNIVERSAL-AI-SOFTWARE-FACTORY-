@@ -1,0 +1,63 @@
+{
+  "//TR": "Bu checkpoint Founder yetkili TRUST-F1 düzeltmesini (canonical validation script'lerinin exact path olarak protected trust-root'a eklenmesi ve mechanical-closure kuralı), kök nedeni ve doğrulama kanıtlarını kaydeder; CLEAN, final closure veya target-machine Phase0 PASS iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_F_PROTECT_VALIDATION_SCRIPTS",
+  "date": "2026-09-28",
+  "parent": "646ee762d868cd4a1a7f4c79e23a42ab64b0a6a0",
+  "branch": "v6/pkg-f-protect-validation-scripts",
+  "resolves": ["TRUST-F1"],
+  "founderAuthorization": {
+    "decision": "EXACT_PATH_LIST_AND_RULE_APPROVED",
+    "rule": "The 28 unprotected scripts are added one by one to config/protected-paths.json exactPaths. validate-mechanical-closure.mjs gains a check that every script run by config/validation.json must be protected, so new validators cannot be forgotten. The matching semantics and the existing no-overmatch selftest do not change.",
+    "protectedFiles": ["config/protected-paths.json", "scripts/validate-mechanical-closure.mjs"],
+    "constraint": "Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+  },
+  "finding": {
+    "id": "TRUST-F1",
+    "severity": "P1",
+    "rootCause": "automation/lib/trust-root.mjs matchesPrefix matches protected prefixes as directories by design (scripts/v6-foundation-d-selftest.mjs asserts that scripts/validate-evil.mjs must not be matched), so the protectedPrefixes entry 'scripts/validate-' protected nothing.",
+    "impact": "28 of 32 scripts run by config/validation.json were neither flagged by the change guard nor expected in the trust-root manifest, so a normal builder milestone could have modified them unnoticed.",
+    "discoveredDuring": "V6-PKG-E2 bundle generation"
+  },
+  "validationEnvironment": {
+    "measuredBy": "scripts/preflight.mjs on this machine; re-measured and required to match before each isolated validation run",
+    "platform": "win32 10.0.19045 x64",
+    "node": "v24.19.0",
+    "npm": "11.17.0 (bundled npm-cli.js beside node.exe)",
+    "git": "git version 2.55.0.windows.3",
+    "powershell": "5.1.19041.6456",
+    "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
+  },
+  "implementation": {
+    "exactPathsAdded": ["scripts/runtime-schema-conformance-selftest.mjs", "scripts/secret-sanity.mjs", "scripts/validate-agent-competencies.mjs", "scripts/validate-agent-semantic.mjs", "scripts/validate-architecture.mjs", "scripts/validate-config-runtime-enforcement.mjs", "scripts/validate-mechanical-closure.mjs", "scripts/validate-organization.mjs", "scripts/validate-paste2-closure.mjs", "scripts/validate-paste2h-runtime-release.mjs", "scripts/validate-paste3-agent-specialization.mjs", "scripts/validate-paste3-closure.mjs", "scripts/validate-paste3-technology-domain-registry.mjs", "scripts/validate-paste4a.mjs", "scripts/validate-paste4b.mjs", "scripts/validate-paste4c-doc-truth.mjs", "scripts/validate-paste4d-release-truth.mjs", "scripts/validate-phase-contracts.mjs", "scripts/validate-registries.mjs", "scripts/validate-release-supply-chain.mjs", "scripts/validate-review-graph-v2.mjs", "scripts/validate-runtime-contracts.mjs", "scripts/validate-runtime-resilience.mjs", "scripts/validate-schema-catalog.mjs", "scripts/validate-schema-strictness.mjs", "scripts/validate-technology-graph.mjs", "scripts/validate-tr-comments.mjs", "scripts/validate-woven-model.mjs"],
+    "exactPathsCount": "87 -> 115 (list stays sorted; protectedPrefixes unchanged)",
+    "mechanicalRule": "validate-mechanical-closure.mjs imports protectedChangeViolations and fails with validation-script-not-protected:<script> for any script referenced by config/validation.json that the change guard would not flag.",
+    "trustRootManifest": "The manifest remains STALE_PENDING_FINAL_RESEAL; the next final reseal will include the newly protected scripts."
+  },
+  "validation": {
+    "workspace": "fresh clone mirroring the working tree with the reviewed lock installed; repository .ai/runtime untouched",
+    "gitDiffCheck": "PASS",
+    "canonicalRunner": {"status": "PASS", "pass": 34, "fail": 0},
+    "vitest": "PASS 20 files / 130 tests (4 new PKG-F tests)",
+    "broadDependencyFreeSuite": "25/25 PASS (includes v6-foundation-d no-overmatch check)",
+    "adversarial": {"validatorRemovedFromExactPaths": "FAIL_CLOSED validation-script-not-protected:scripts/validate-paste4c-doc-truth.mjs; restored policy passes"}
+  },
+  "changedFileSha256": {
+    "config/protected-paths.json": "53f8557d8d695458dfe5b120a60778fd4209a6185f1b7fbfbfd3dd78b3c2af77",
+    "scripts/validate-mechanical-closure.mjs": "5239ac41cf32dbb4173a1bc532978b882847a1d4a901e899d24b168ce5d09ddf",
+    "tests/pkg-f-validation-scripts-protected.test.ts": "630f3c214574014ab67983ab8e13665ab9c84be5ea7dba2a6b70bdb018c86807"
+  },
+  "openFindings": [
+    {"id": "PKGA-F8", "severity": "ENVIRONMENT", "status": "OPEN_FOUNDER_APPROVED_FIX_PENDING_PKG_G_AND_WINDOWS_TIME_SERVICE"}
+  ],
+  "review": "NOT_REVIEWED_CODEX_PENDING",
+  "cleanClaim": false,
+  "trustRootManifest": "NOT_REGENERATED_FINAL_RESEAL_PENDING",
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_ZIP": "NOT_DONE",
+    "TARGET_MACHINE_PHASE0": "PENDING"
+  },
+  "nextScope": "CODEX_REVIEW_THEN_PKG_G_PREFLIGHT_PHYSICAL_MEMORY"
+}

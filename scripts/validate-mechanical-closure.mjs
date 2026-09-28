@@ -1,5 +1,6 @@
 // //TR: Bu validator autonomous build başlamadan installer/sandbox/action-gateway/review-convergence/logging/evidence/Git/package/scheduler/Control Tower mekaniklerinin source+config içinde fail-closed bağlı olduğunu statik çapraz kontrollerle doğrular.
 import fs from "node:fs";
+import {protectedChangeViolations} from "../automation/lib/trust-root.mjs";
 const read=p=>JSON.parse(fs.readFileSync(p,"utf8"));const text=p=>fs.readFileSync(p,"utf8");const errors=[];
 try{const tm=JSON.parse(fs.readFileSync("config/trust-root-manifest.json","utf8"));if((tm.files??[]).some(x=>x.path==="config/trust-root-manifest.json"))errors.push("trust-root-self-reference")}catch{}
 const requiredFiles=[
@@ -103,5 +104,7 @@ for(const x of ["PARALLEL_RUNTIME_ONLY_SUPPORTS_ONE_LANE","REVIEWER_PROVENANCE_M
 if(!actionBrokerSource.includes("remotePushRequires")||!actionBrokerSource.includes("remotePushAllowed")||!actionBrokerSource.includes("reviewClean"))errors.push("action-policy-runtime-consumer-missing");
 if(!runLedger.includes("RUN_SUMMARY_SIGNATURE_SELF_VERIFY_FAILED")||!runLedger.includes("verifyBeforeCompletion"))errors.push("run-summary-self-verification-not-wired");
 if(cfg.maxParallelLanes!==1||read("roadmap/parallel-lanes.json").runtimeStatus!=="SERIAL_ONLY_MAX_PARALLEL_LANES_1")errors.push("parallel-runtime-truth-invalid");
+// //TR: config/validation.json'daki her canonical script protected trust-root içinde olmalıdır; dosya-adı öneki tasarım gereği eşleşmediği için script'ler exact path olarak listelenir (TRUST-F1).
+{const scripts=[...new Set((validation.steps??[]).map(s=>(s.command??[]).find(a=>/^scripts\/[^/]+\.mjs$/.test(a))).filter(Boolean))],covered=new Set(protectedChangeViolations(scripts,protectedCfg,false));for(const s of scripts)if(!covered.has(s))errors.push(`validation-script-not-protected:${s}`)}
 
 if(errors.length){console.error(errors.join("\n"));process.exit(1)}console.log(`MECHANICAL_CLOSURE_VALIDATION: PASS files=${requiredFiles.length} reviewCycles=${cfg.maxReviewCycles} maxMilestonesPerRun=${cfg.maxMilestonesPerRun} technologiesMapped=${profiles.filter(x=>x.technicalAgent).length}`);
