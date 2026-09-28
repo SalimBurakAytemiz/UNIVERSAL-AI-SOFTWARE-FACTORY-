@@ -1,6 +1,10 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-09-29 — V6 OmniRoute Install Compatibility Test (branch)
+
+- Read-only verification of the installed OmniRoute against config/omniroute-policy.json on the target machine (identity, license, repository, Node engines range, launcher location, local-only endpoint); OmniRoute is not started and a stopped endpoint is reported as NOT_RUNNING; machines without OmniRoute skip honestly.
+
 ## 2026-09-29 — V6 Windows Crash/Resume Tests (branch)
 
 - Real child processes on the target Windows machine prove process-lock takeover after a kill, a single winner among concurrent invocations, fail-closed unreadable/foreign-host locks, orchestrator resume after a worker is killed mid-action (lease expiry, in-flight recovery, no duplicate provider call) and auditable recovery from a corrupted state file.
