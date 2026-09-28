@@ -1,0 +1,65 @@
+{
+  "//TR": "Bu checkpoint hedef makinede kurulu OmniRoute'un policy uyumunu salt okunur doğrulayan testi kaydeder; yalnız test ve belge ekler, OmniRoute'u başlatmaz, protected dosyaya ve bekleyen paket kapsamlarına dokunmaz.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_T3_OMNIROUTE_INSTALL_COMPAT",
+  "date": "2026-09-29",
+  "parent": "22d4cfe",
+  "branch": "v6/pkg-t3-omniroute-install-compat",
+  "founderAuthorization": {
+    "decision": "INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES",
+    "rule": "Founder rule 2026-09-29: A blocked/review-pending package blocks ONLY its own dependency lane; implement the next independent eligible package in an isolated branch, validate, checkpoint, commit, prepare the frozen review bundle, mark it REVIEW_PENDING if Codex is unavailable, and continue; never modify a pending package's branch, bundle, clone, evidence or cycle state.",
+    "protectedFiles": [],
+    "constraint": "Tests and non-protected documentation only; read-only checks; no protected file, no pending package scope, no merge; OmniRoute is not started."
+  },
+  "rationale": "audit/KNOWN-TARGET-MACHINE-PENDING.md listed OmniRoute installed CLI/version/provider compatibility as pending; the installed CLI/version part can be verified read-only on this machine.",
+  "observed": {
+    "package": "omniroute 3.8.50",
+    "license": "MIT",
+    "repository": "https://github.com/diegosouzapw/OmniRoute",
+    "engines": ">=22.22.2 <23 || >=24.0.0 <27",
+    "node": "v24.19.0",
+    "launchers": [
+      "C:\\Users\\PRO\\AppData\\Roaming\\npm\\omniroute",
+      "C:\\Users\\PRO\\AppData\\Roaming\\npm\\omniroute.cmd"
+    ],
+    "endpoint": "http://127.0.0.1:20128/v1 NOT_RUNNING"
+  },
+  "notClaimed": "provider routing through a running OmniRoute with credentials",
+  "validationEnvironment": {
+    "measuredBy": "the validation run itself",
+    "platform": "win32 10.0.19045 x64",
+    "node": "v24.19.0",
+    "npm": "11.17.0 (bundled npm-cli.js beside node.exe)",
+    "git": "git version 2.55.0.windows.3",
+    "powershell": "5.1.19041.6456",
+    "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
+  },
+  "validation": {
+    "workspace": "fresh clone of 22d4cfe mirroring the T3 working tree, reviewed lock installed, .ai/runtime cleared",
+    "gitDiffCheck": "PASS",
+    "canonicalRunner": {
+      "status": "PASS",
+      "pass": 34,
+      "fail": 0,
+      "mode": "SEALED (trust root unchanged)"
+    },
+    "vitest": "PASS 28 files / 162 tests",
+    "omnirouteInstallCompat": "PASS 6/6, endpoint NOT_RUNNING (informational)",
+    "broadDependencyFreeSuite": "25/25 PASS",
+    "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
+  },
+  "changedFileSha256": {
+    "scripts/omniroute-install-compat-selftest.mjs": "fb23fde0c6e49638dbe3e898a1ec8b04ecab0fb2f05304eb55433ffd793433ce",
+    "tests/pkg-t3-omniroute-install-compat.test.ts": "1ace4b6521e6cafd6225a803739e9aece56a330e27993e3f4ed3a2bd59ee75e1",
+    "audit/KNOWN-TARGET-MACHINE-PENDING.md": "eb063926a2369ec16efa3fe6e46cec1cbebd0640071f5508eedd28f68bc168b6",
+    ".ai/REVIEW_STATUS.md": "1bb50c26e92afd84cc1b8b4c8312094dbddcfd6e7216298a34c14ac70fafbe7d",
+    "audit/V6-FULL-SCAN-PROGRESS.json": "461f87cd3e2a536d74c6f6dae09b821115e397bb1f795995a701dfa9ed32097e",
+    "CHANGELOG.md": "4342b7da682a4018ded93dc357e178489c95b7968c156e9232d78532a6c4b698"
+  },
+  "openFindings": [],
+  "review": "NOT_REVIEWED_CODEX_PENDING (reviewer quota)",
+  "merge": "AFTER_PKG_T1",
+  "cleanClaim": false,
+  "trustRootManifest": "UNCHANGED (no protected files)",
+  "nextScope": "CODEX_REVIEW_WHEN_AVAILABLE"
+}

@@ -25,7 +25,7 @@ Aşağıdakiler hâlâ tamamlanmış sayılamaz:
 - Task Scheduler/autostart
 - Git remote privacy + branch protection provider API
 - real merge/push/remote-SHA verification
-- OmniRoute installed CLI/version/provider compatibility
+- OmniRoute installed CLI/version/provider compatibility: installed package identity, MIT license, expected repository, Node engines range, launcher inside the npm global prefix and local-only endpoint verified read-only on this target machine (omniroute 3.8.50); provider routing through a running OmniRoute with credentials is still pending
 - physical/cloud mobile-device adapters
 
 Target-machine `PHASE0_ACCEPTANCE.json` CLEAN olmadan autonomous roadmap build başlamamalıdır.
