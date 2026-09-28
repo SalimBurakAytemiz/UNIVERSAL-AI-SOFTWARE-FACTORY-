@@ -1,0 +1,112 @@
+{
+  "//TR": "Bu checkpoint Founder yetkili current-truth düzeltmesini (TRUST-F1 ve PKGA-F8 kapanışı, live provider smoke ve preflight PASS, doğru final reseal/paketleme/Phase0 sırası, pinli doc-truth sabitlerinin taşınması) ve PKG-B/F/G review kayıtlarını kaydeder; CLEAN, final closure, final reseal veya target-machine Phase0 PASS iddiası değildir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_H_CURRENT_TRUTH_CORRECTION",
+  "date": "2026-09-28",
+  "parent": "a82c6f44eceb40b91fc1bed570910dca8b6f3032",
+  "branch": "v6/pkg-h-current-truth-correction",
+  "founderAuthorization": {
+    "decision": "PKG_H_APPROVED",
+    "rule": "CANONICAL-STATUS.md yeni gerçeğe göre güncellenir. validate-paste4c ve paste4d'deki pinli scope/status sabitleri taşınır: yeni scope FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0 ve açık P0/P1/P2 = 0. Tüm overclaim kontrolleri aynen kalır. PKG-B/F/G review kayıtları audit/reviews'a eklenir, protected olmayan belgelerde sıra düzeltilir. Codex review'ı otomatik yapılır.",
+    "protectedFiles": [
+      "CANONICAL-STATUS.md",
+      "scripts/validate-paste4c-doc-truth.mjs",
+      "scripts/validate-paste4d-release-truth.mjs"
+    ],
+    "constraint": "Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; UNKNOWN, NOT_TESTED, BLOCKED or FAIL are never converted to PASS/CLEAN without real evidence; broader protected changes require separate Founder approval."
+  },
+  "validatorChanges": {
+    "scripts/validate-paste4c-doc-truth.mjs": "The three pinned scope strings (progress.nextScope, currentAudit.activeScope, NEXT_ACTIONS scope) move from TARGET_MACHINE_PHASE0_ACCEPTANCE_AND_LIVE_PROVIDER_SMOKE to FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0. No check is added, removed or relaxed; the DEPENDENCY_AWARE completed-scope requirement and every overclaim check are unchanged.",
+    "scripts/validate-paste4d-release-truth.mjs": "The allowed overallRemainingP0P1P2 value P1_OPEN_TRUST_F1_DEPENDENCY_AWARE_PASS_PENDING_FOUNDER_DECISION is replaced by ZERO_OPEN_P0P1P2_PENDING_FINAL_RESEAL_AND_TARGET_PHASE0. No other check changes; SHA256SUMS absence, signature absence, STALE_PENDING_FINAL_RESEAL, NOT_DONE and PENDING truth checks are unchanged."
+  },
+  "truthCorrections": {
+    "TRUST-F1": "Closed by V6-PKG-F-PROTECT-VALIDATION-SCRIPTS @ 5fa231bd917f2132b1c50a011d150767a9c737e5, governed CLEAN (record audit/reviews/V6-PKG-F-5fa231b-c1.json).",
+    "PKGA-F8": "Closed by V6-PKG-G-PREFLIGHT-PHYSICAL-MEMORY @ a82c6f44eceb40b91fc1bed570910dca8b6f3032, governed CLEAN (record audit/reviews/V6-PKG-G-a82c6f4-c1.json), plus the Founder starting the Windows Time service; target preflight PASS.",
+    "LIVE_PROVIDER_SMOKE": "PASS on 2026-09-28T14:09:33Z at a82c6f4 through scripts/claude-builder-broker.mjs and scripts/codex-reviewer-broker.mjs (both STANDALONE_LAUNCHER); report embedded below.",
+    "order": "PKG-B wrote 'Only after Phase0: final trust-root reseal -> SHA256SUMS -> ...'. That order cannot run: scripts/install.ps1 step 1 is scripts/verify-artifact.ps1, which throws 'SHA256SUMS.txt missing'. Correct order: final trust-root reseal -> SHA256SUMS.txt -> Founder external-key detached signature -> final ZIP -> fresh-extract verification -> install.ps1 target-machine Phase0 on the fresh extract."
+  },
+  "liveProviderSmokeEvidence": {
+    "file": ".ai/cache/review/evidence/PROVIDER_SMOKE-a82c6f4-20260928T140933Z.json",
+    "sha256": "6ed16cff15c6f172395238fadc11d506d14d890e10667479985d7d17d550406a",
+    "report": "{\n  \"//TR\": \"Bu runtime report Claude/Codex auth+network model smoke testini production broker sınırı üzerinden kaydeder.\",\n  \"generatedAt\": \"2026-09-28T14:09:33.292Z\",\n  \"providers\": {\n    \"claude\": {\n      \"status\": \"PASS\",\n      \"detail\": \"authenticated model response verified through production broker\",\n      \"provider\": \"ANTHROPIC\",\n      \"toolVersion\": \"2.1.274 (Claude Code)\",\n      \"provenanceLevel\": \"STANDALONE_LAUNCHER\",\n      \"modelId\": \"UNKNOWN_UNLESS_PROVIDER_EXPOSES\"\n    },\n    \"codex\": {\n      \"status\": \"PASS\",\n      \"detail\": \"authenticated model response verified through production broker\",\n      \"provider\": \"OPENAI\",\n      \"toolVersion\": \"codex-cli 0.156.1\",\n      \"provenanceLevel\": \"STANDALONE_LAUNCHER\",\n      \"modelId\": \"UNKNOWN_UNLESS_PROVIDER_EXPOSES\"\n    }\n  },\n  \"final\": \"PASS\"\n}\n",
+    "providerProvenanceFile": ".ai/cache/review/evidence/PROVIDER_PROVENANCE-a82c6f4.json",
+    "providerProvenanceSha256": "6bf4f3217d212af8ad5634b28361423df1fc91f76ea0accfe745fa85a5a1d561",
+    "providerProvenance": "{\n  \"//TR\": \"Bu runtime report provider CLI launcher + package provenanceını kaydeder; package bulunamazsa LAUNCHER_ONLY dürüstçe korunur.\",\n  \"schemaVersion\": \"2.0.0\",\n  \"capturedAt\": \"2026-09-28T14:09:17.560Z\",\n  \"node\": {\n    \"resolvedPath\": \"C:\\\\Program Files\\\\nodejs\\\\node.exe\",\n    \"version\": \"v24.19.0\",\n    \"launcherSha256\": \"3602f2bb1a10f2cbab4c36886218a33c1ab3db87290e73b033c46c77147d0237\"\n  },\n  \"claude\": {\n    \"status\": \"PASS\",\n    \"command\": \"claude\",\n    \"resolvedPath\": \"C:\\\\Users\\\\PRO\\\\.local\\\\bin\\\\claude.exe\",\n    \"version\": \"2.1.274 (Claude Code)\",\n    \"launcherSha256\": \"4e4c1746aff835bb05e5ed14cda72d21ee6fbda4147aa99b3135718614da117e\",\n    \"provenanceLevel\": \"STANDALONE_LAUNCHER\",\n    \"packageName\": \"@anthropic-ai/claude-code\",\n    \"packageVersion\": \"2.1.274\",\n    \"packageJsonPath\": \"NOT_APPLICABLE_STANDALONE_LAUNCHER\",\n    \"packageJsonSha256\": \"NOT_APPLICABLE_STANDALONE_LAUNCHER\"\n  },\n  \"codex\": {\n    \"status\": \"PASS\",\n    \"command\": \"codex\",\n    \"resolvedPath\": \"C:\\\\Users\\\\PRO\\\\.codex\\\\packages\\\\standalone\\\\releases\\\\0.156.1-x86_64-pc-windows-msvc\\\\bin\\\\codex.exe\",\n    \"version\": \"codex-cli 0.156.1\",\n    \"launcherSha256\": \"70bcb05f9bf1a4e7306edd0cd1b57d02af3267ad02a34b26f45c8c4bb20a3301\",\n    \"provenanceLevel\": \"STANDALONE_LAUNCHER\",\n    \"packageName\": \"@openai/codex\",\n    \"packageVersion\": \"0.156.1\",\n    \"packageJsonPath\": \"NOT_APPLICABLE_STANDALONE_LAUNCHER\",\n    \"packageJsonSha256\": \"NOT_APPLICABLE_STANDALONE_LAUNCHER\"\n  },\n  \"final\": \"PASS\"\n}\n",
+    "runWorkspace": "isolated clone at a82c6f4 with the reviewed lock installed",
+    "note": "Not Phase0 acceptance; install.ps1 reruns provenance and provider smoke during Phase0."
+  },
+  "reviewRecordsAdded": {
+    "audit/reviews/V6-PKG-B-646ee76-c1.json": "run 646ee76-c1-20260928T121128Z-broker, governed CLEAN",
+    "audit/reviews/V6-PKG-F-5fa231b-c1-format-rejected.json": "run 5fa231b-c1-20260928T123133Z-broker, REJECTED (reviewer JSON failed the schema: reviewBundleDigest pattern); the single format retry was then due",
+    "audit/reviews/V6-PKG-F-5fa231b-c1-quota-block-1.json": "run 5fa231b-c1-20260928T125228Z-broker, ENVIRONMENT_BLOCKED_REVIEWER_QUOTA; no cycle or format retry consumed",
+    "audit/reviews/V6-PKG-F-5fa231b-c1-quota-block-2.json": "run 5fa231b-c1-20260928T133141Z-broker, ENVIRONMENT_BLOCKED_REVIEWER_QUOTA; no cycle or format retry consumed",
+    "audit/reviews/V6-PKG-F-5fa231b-c1.json": "run 5fa231b-c1-20260928T135329Z-broker, format-correction retry, governed CLEAN",
+    "audit/reviews/V6-PKG-G-a82c6f4-c1.json": "run a82c6f4-c1-20260928T140113Z-broker, governed CLEAN"
+  },
+  "reviewRecordTool": "record-review-evidence.mjs copies the frozen bundle and the unmodified reviewer output with SHA-256 and refuses to write if the bundle digest or the review-result hash differs from the run manifest",
+  "validationEnvironment": {
+    "measuredBy": "the validation run itself (node/npm/git/PowerShell versions captured before the canonical runner)",
+    "platform": "win32 10.0.19045 x64",
+    "node": "v24.19.0",
+    "npm": "11.17.0 (bundled npm-cli.js beside node.exe)",
+    "git": "git version 2.55.0.windows.3",
+    "powershell": "5.1.19041.6456",
+    "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
+  },
+  "validation": {
+    "workspace": "fresh clone of local master a82c6f4 mirroring the PKG-H working tree, reviewed lock installed, .ai/runtime cleared before the run; repository .ai/runtime untouched",
+    "gitDiffCheck": "PASS",
+    "canonicalRunner": {
+      "status": "PASS",
+      "pass": 34,
+      "fail": 0
+    },
+    "docTruth": {
+      "paste4c": "PASS checks=92",
+      "paste4d": "PASS checks=48"
+    },
+    "vitest": "PASS 21 files / 134 tests",
+    "broadDependencyFreeSuite": "25/25 PASS",
+    "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
+  },
+  "changedFileSha256": {
+    "CANONICAL-STATUS.md": "e30ec9b8a7b895a29bc42a8ef37bfeb173e3009247ba360cd5675b5d5194eb41",
+    "scripts/validate-paste4c-doc-truth.mjs": "3202c93d82d07723872605d3bc6591483b4f2e2f572891ee0e2b17ca5484139c",
+    "scripts/validate-paste4d-release-truth.mjs": "c6d213f64baa8b89270811d1a2ef5299f6416dd34321cb83f561d0614ef80ae7",
+    ".ai/NEXT_ACTIONS.md": "e069d0d9ce05c1c95d88b3004333639effb0bbf6194d0890b8a8eb7dd3af55b1",
+    ".ai/MASTER_STATE.json": "f98b020594c469504216df1e19f1dd9e834db04e977ac7e6659782040ebe14f4",
+    ".ai/TEST_STATUS.md": "c7e62aee03d338a3206aa6bfefbeb20a7314e7a3f6a4cbe443213a79579480fd",
+    ".ai/REVIEW_STATUS.md": "aba8561c6109bf234e2baee4ea209fc8a12133fbd9a154eb34eee72595dcd21c",
+    ".ai/CURRENT_MILESTONE.md": "f89086ad9aa5d234ba1422b0fde0359ba55abb8373b56403cae09e39595c212d",
+    ".ai/CURRENT_PHASE.md": "226e0c51b61db8d30d5ee51bc9415a3da9ac41feec36146a048c5c2d61d689ce",
+    "README.md": "b5c1a1d901a23997fc8bf54509a6712b16cd9a91874aa8bbd57e633c678cab01",
+    "PACK.json": "93c3b44ec356f5f2c84435b27e0ce97c247c9a6a259d16ddc6736e6397cea745",
+    "CHANGELOG.md": "f18edd10b345620fcf288471206c29b4a2d09c52a9a3cd992e80081c588c21ef",
+    "audit/CURRENT-AUDIT-STATE.json": "3bd42834e48a770c27f446e15c0a0edd1a7684db8ded7faafe3f39ff28140373",
+    "audit/V6-FULL-SCAN-PROGRESS.json": "7503a738ef11ea3ea8d6fabd91f7b43c83b52f85a27c9ceaa3cd26ec1a40dbf5",
+    "audit/KNOWN-TARGET-MACHINE-PENDING.md": "c99d8fb5f086e98348b198357f3a3ab859b40626025c6eb509f5ad13c47cfab3",
+    "audit/reviews/V6-PKG-B-646ee76-c1.json": "47c1de68e42f627301e8604686f5a8f1a2a0c7586f17cd8852dfe5a7cd41909e",
+    "audit/reviews/V6-PKG-F-5fa231b-c1-format-rejected.json": "15ba9de7daf24f56f83ff676a9712431dbccabc29a6ebc0ff466aec763b8f2d2",
+    "audit/reviews/V6-PKG-F-5fa231b-c1-quota-block-1.json": "14f666e33cc31c22507c94c854f6d90f7ed2f208e2f1dd6c3a706441bbdd998f",
+    "audit/reviews/V6-PKG-F-5fa231b-c1-quota-block-2.json": "69c08ebb3865896985ab6400cdf72df8146e0212fbcb117842802aecf878a201",
+    "audit/reviews/V6-PKG-F-5fa231b-c1.json": "7cc5fcf6b2da18dd77deef4d68eab64d4acf417e11d7854cccbf450428e164a9",
+    "audit/reviews/V6-PKG-G-a82c6f4-c1.json": "da80dd06edc94ceb4f787725be02dea78d009de4357f4dc184043446c28eaf42"
+  },
+  "openFindings": [],
+  "lowBacklog": [
+    "F-PKGE-002 (P3)"
+  ],
+  "review": "NOT_REVIEWED_CODEX_PENDING",
+  "cleanClaim": false,
+  "trustRootManifest": "NOT_REGENERATED_FINAL_RESEAL_PENDING",
+  "truth": {
+    "SOURCE_LEVEL_CLOSURE": false,
+    "OPEN_P0P1P2": 0,
+    "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
+    "FINAL_SHA256SUMS": "NOT_DONE",
+    "FINAL_RELEASE_AUTHENTICITY": "NOT_DONE",
+    "FINAL_ZIP": "NOT_DONE",
+    "TARGET_MACHINE_PHASE0": "PENDING"
+  },
+  "nextScope": "CODEX_REVIEW_THEN_RELEASE_PACKAGING_PACKAGE_WITH_FINAL_RESEAL"
+}

@@ -35,7 +35,7 @@
   "technologyKnowledgeUnitFiles": 415,
   "roadmapReviewPackages": 34,
   "mechanicalClosure": "IN_PROGRESS_NOT_FINAL",
-  "targetRuntimeValidation": "PARTIAL_NODE24_NPM11_ELECTRON_SMOKE_PASS_LIVE_PROVIDER_SMOKE_AND_PHASE0_PENDING",
+  "targetRuntimeValidation": "PARTIAL_NODE24_NPM11_ELECTRON_SMOKE_LIVE_PROVIDER_SMOKE_PREFLIGHT_PASS_PHASE0_PENDING",
   "staticClosureAudit": "DEPENDENCY_AWARE_SOURCE_VALIDATION_COMPLETE_TARGET_PHASE0_PENDING",
   "targetPhase0Required": true,
   "sourceAudit": "audit/V6-FULL-SCAN-PROGRESS.json",
@@ -62,7 +62,7 @@
     "paste4D": "COMPLETE_SOURCE",
     "paste4": "COMPLETE_SOURCE"
   },
-  "nextScope": "TARGET_MACHINE_PHASE0_ACCEPTANCE_AND_LIVE_PROVIDER_SMOKE",
+  "nextScope": "FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0",
   "dependencyAwareValidation": {
     "status": "PASS_TARGET_WINDOWS_NODE24_NPM11",
     "environment": "win32 10.0.19045 x64, Node v24.19.0, npm 11.17.0",
@@ -70,7 +70,7 @@
     "fail": 0,
     "npmAudit": "0 findings",
     "reviewedLockSha256": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4",
-    "independentReview": "CODEX_CLEAN_PKG_A_C_D_E_E2",
+    "independentReview": "CODEX_CLEAN_PKG_A_C_D_E_E2_B_F_G",
     "reviewRecords": "audit/reviews/"
   },
   "dependencyFreeSourceRegression": {

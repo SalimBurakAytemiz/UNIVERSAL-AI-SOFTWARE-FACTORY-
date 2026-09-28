@@ -1,0 +1,1226 @@
+{
+  "//TR": "Bu kayıt tek bir Codex bağımsız review çalıştırmasının frozen bundle, değiştirilmemiş reviewer çıktısı, run manifest ve governed değerlendirmesini kalıcı tutar; evidence signing anahtarı henüz başlatılmadığı için imzasızdır.",
+  "schemaVersion": "1.0.0",
+  "signature": "UNSIGNED_EVIDENCE_KEY_NOT_INITIALIZED",
+  "runDir": "5fa231b-c1-20260928T123133Z-broker",
+  "runId": "RUN-V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-20260928T123119Z-C1",
+  "baseCommit": "646ee762d868cd4a1a7f4c79e23a42ab64b0a6a0",
+  "reviewedCommit": "5fa231bd917f2132b1c50a011d150767a9c737e5",
+  "cycle": 1,
+  "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+  "bundleDigest": "21cc64337078e5d87cfb3086afa542b55d8895e92af0cf6a62bb6c8aee4e3b7f",
+  "bundleFileSha256": "cfacc40fd89270e3e90d77af2fe7799e6e5ecd1a8be9de7462f34c42588cc0a2",
+  "milestoneContractId": "V6-PKG-F-PROTECT-VALIDATION-SCRIPTS",
+  "milestoneContractDigest": "1765b32e87ce38cd93e55cf9784c34ef66123ceb8f44586a9986fb5de08d641c",
+  "reviewResultText": "{\n  \"schemaVersion\": \"1.1.0\",\n  \"runId\": \"RUN-V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-20260928T123119Z-C1\",\n  \"cycle\": 1,\n  \"baseCommit\": \"646ee762d868cd4a1a7f4c79e23a42ab64b0a6a0\",\n  \"reviewedCommit\": \"5fa231bd917f2132b1c50a011d150767a9c737e5\",\n  \"reviewBundleDigest\": \"21cc64337078e5d87b3086afa542b55d8895e92af0cf6a62bb6c8aee4e3b7f\",\n  \"result\": \"CLEAN\",\n  \"reviewer\": {\n    \"provider\": \"OpenAI\",\n    \"tool\": \"Codex\",\n    \"toolVersion\": null,\n    \"modelId\": \"gpt-6\",\n    \"independenceStatus\": \"SUFFICIENT\"\n  },\n  \"findings\": [],\n  \"advisories\": [],\n  \"environmentGaps\": [],\n  \"priorBlockerDispositions\": [],\n  \"startedAt\": \"2026-09-28T12:31:45.703Z\",\n  \"finishedAt\": \"2026-09-28T12:34:23.393Z\",\n  \"summary\": \"All input checks (a–e) passed. Reviewed the exact four-file diff against the frozen contract and supplied evidence. Both protected changes are Founder-authorized. The policy adds exactly 28 paths without changing matching semantics or protectedPrefixes. Read-only, in-memory checks of the committed implementation confirmed protection of all 32 canonical repository scripts, detection of each script's individual removal, and preservation of no-overmatch behavior. Existing checks and the foundation selftest are unchanged. Canonical validation results were assessed from supplied evidence rather than rerun. No unresolved admissible blocker or environment gap remains.\"\n}\n",
+  "reviewResultSha256": "b3c3a5a7d635b5893b6137834c30fb395603a13002c83d7b9b16a1d6e7193787",
+  "governed": {
+    "//TR": "Bu dosya Codex review sonucunun supervisor-eşdeğeri governed değerlendirmesini kaydeder; Codex'in review-result.json dosyası değiştirilmez.",
+    "schemaVersion": "1.0.0",
+    "evaluatedAt": "2026-09-28T12:51:15.020Z",
+    "runDir": "C:/Users/PRO/Desktop/UASCO/.ai/cache/review/runs/5fa231b-c1-20260928T123133Z-broker/",
+    "exitCode": 0,
+    "checks": {
+      "promptDlpSensitiveTypes": [],
+      "resultSource": "CANONICAL_BROKER_STDOUT",
+      "resultMatchesBrokerStdout": true,
+      "schemaValid": false
+    },
+    "reviewResultSha256": "b3c3a5a7d635b5893b6137834c30fb395603a13002c83d7b9b16a1d6e7193787",
+    "status": "REJECTED",
+    "error": "REVIEW_SCHEMA_VALIDATION_FAILED: data/reviewBundleDigest must match pattern \"^[0-9a-f]{64}$\""
+  },
+  "environmentBlock": null,
+  "runManifest": {
+    "//TR": "Bu manifest kanonik codex-reviewer-broker üzerinden yapılan tek bir Codex bağımsız review çağrısının girdi/çıktı/provenance kanıtını hash'leriyle kaydeder; review içeriğini builder üretmez.",
+    "schemaVersion": "1.0.0",
+    "startedAt": "2026-09-28T12:31:33.280Z",
+    "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+    "reviewWorktree": "C:/Users/PRO/AppData/Local/Temp/claude/C--Users-PRO-Desktop-UASCO/a72e023b-e073-49b8-9fbd-20b544644a38/scratchpad/rev-f",
+    "baseCommit": "646ee762d868cd4a1a7f4c79e23a42ab64b0a6a0",
+    "reviewedCommit": "5fa231bd917f2132b1c50a011d150767a9c737e5",
+    "cycle": 1,
+    "runId": "RUN-V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-20260928T123119Z-C1",
+    "bundleFile": ".ai/cache/review/V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-5fa231b-cycle-1-review-bundle.json",
+    "bundleFileSha256": "cfacc40fd89270e3e90d77af2fe7799e6e5ecd1a8be9de7462f34c42588cc0a2",
+    "bundleDigest": "21cc64337078e5d87cfb3086afa542b55d8895e92af0cf6a62bb6c8aee4e3b7f",
+    "milestoneContractId": "V6-PKG-F-PROTECT-VALIDATION-SCRIPTS",
+    "milestoneContractDigest": "1765b32e87ce38cd93e55cf9784c34ef66123ceb8f44586a9986fb5de08d641c",
+    "promptFile": ".ai/cache/review/V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-5fa231b-cycle-1-review-prompt.txt",
+    "promptSha256": "d9a860e6ecea1fd0bb1ec33cbcf266cf26b5c56ff057441b6dea38acaf0ccff7",
+    "precheck": {
+      "head": "5fa231bd917f2132b1c50a011d150767a9c737e5",
+      "baseResolved": "646ee762d868cd4a1a7f4c79e23a42ab64b0a6a0",
+      "bundleDigestRecomputed": "21cc64337078e5d87cfb3086afa542b55d8895e92af0cf6a62bb6c8aee4e3b7f",
+      "contractDigestRecomputed": "1765b32e87ce38cd93e55cf9784c34ef66123ceb8f44586a9986fb5de08d641c",
+      "changedFiles": 4
+    },
+    "reviewer": {
+      "provider": "OPENAI",
+      "tool": "codex",
+      "broker": "scripts/codex-reviewer-broker.mjs",
+      "brokerSha256": "267e9d4adc2d1872824796f9e3fc4798f09e7d5dfad19d8118a0c116452aee35",
+      "providerProvenanceSha256": "fd3aa26965af7c53f824a12c3958af057edeb2cbb45fc3972c61e8e3780491a1",
+      "launcher": "C:\\Users\\PRO\\.codex\\packages\\standalone\\releases\\0.156.1-x86_64-pc-windows-msvc\\bin\\codex.exe",
+      "launcherSha256": "70bcb05f9bf1a4e7306edd0cd1b57d02af3267ad02a34b26f45c8c4bb20a3301",
+      "launcherVersion": "codex-cli 0.156.1",
+      "provenanceLevel": "STANDALONE_LAUNCHER",
+      "childEnvVariableNames": [
+        "APPDATA",
+        "COMSPEC",
+        "HOME",
+        "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS",
+        "OS",
+        "PATH",
+        "PATHEXT",
+        "PROCESSOR_ARCHITECTURE",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "UASCO_CONTROL_ROOT",
+        "UASCO_PAID_API_ALLOWED",
+        "UASCO_PROVIDER",
+        "USERPROFILE"
+      ],
+      "allowPaidApi": false
+    },
+    "finishedAt": "2026-09-28T12:34:40.926Z",
+    "exitCode": 0,
+    "signal": null,
+    "outputs": {
+      "codex-stderr.log": {
+        "bytes": 134385,
+        "sha256": "a819eb64eebcf8c81e6a0a63f6a4e0fdc49a639e21c73e211c15dcc65a417a67"
+      },
+      "codex-stdout.txt": {
+        "bytes": 1382,
+        "sha256": "b3c3a5a7d635b5893b6137834c30fb395603a13002c83d7b9b16a1d6e7193787"
+      },
+      "review-result.json": {
+        "bytes": 1382,
+        "sha256": "b3c3a5a7d635b5893b6137834c30fb395603a13002c83d7b9b16a1d6e7193787"
+      }
+    }
+  },
+  "frozenBundle": {
+    "schemaVersion": "1.4.0",
+    "runId": "RUN-V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-20260928T123119Z-C1",
+    "cycle": 1,
+    "phase": 0,
+    "phaseIds": [
+      0
+    ],
+    "baseCommit": "646ee762d868cd4a1a7f4c79e23a42ab64b0a6a0",
+    "reviewedCommit": "5fa231bd917f2132b1c50a011d150767a9c737e5",
+    "milestoneContract": {
+      "schemaVersion": "1.2.0",
+      "id": "V6-PKG-F-PROTECT-VALIDATION-SCRIPTS",
+      "phase": 0,
+      "phaseIds": [
+        0
+      ],
+      "title": "V6 PKG-F protect every canonical validation script (TRUST-F1)",
+      "objective": "Make every script run by config/validation.json part of the protected trust root and prevent future unprotected validators, without changing the protected-prefix matching semantics.",
+      "requirements": [
+        "[V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28 founderAuthorization.decision] EXACT_PATH_LIST_AND_RULE_APPROVED",
+        "[V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28 founderAuthorization.rule] The 28 unprotected scripts are added one by one to config/protected-paths.json exactPaths. validate-mechanical-closure.mjs gains a check that every script run by config/validation.json must be protected, so new validators cannot be forgotten. The matching semantics and the existing no-overmatch selftest do not change.",
+        "[V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28 founderAuthorization.protectedFiles] config/protected-paths.json, scripts/validate-mechanical-closure.mjs",
+        "[V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+      ],
+      "invariants": [
+        "NO_FAKE_SUCCESS",
+        "NO_WEAKENED_CONTROLS",
+        "NO_SILENT_SCOPE_EXPANSION",
+        "NO_SELF_CERTIFICATION",
+        "EVIDENCE_REQUIRED",
+        "FAIL_CLOSED"
+      ],
+      "acceptanceCriteria": [
+        "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment.",
+        "Every script referenced by config/validation.json is flagged by protectedChangeViolations under the reviewed config/protected-paths.json; the only change to that file is the addition of exact paths (protectedPrefixes and all other fields unchanged).",
+        "validate-mechanical-closure.mjs fails closed with validation-script-not-protected for any canonical script that is not protected, and none of its existing checks is removed or weakened.",
+        "automation/lib/trust-root.mjs matching semantics and the v6-foundation-d no-overmatch selftest are unchanged.",
+        "Only the Founder-authorized protected files change, and no existing test assertion, validator or policy is weakened."
+      ],
+      "mandatoryFailureCases": [
+        "canonical validator removed from exactPaths",
+        "unknown file matching a filename prefix",
+        "protectedPrefixes edited"
+      ],
+      "requiredArtifacts": [
+        "config/protected-paths.json",
+        "scripts/validate-mechanical-closure.mjs",
+        "audit/checkpoints/V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28.json"
+      ],
+      "phaseTraceability": [
+        {
+          "phase": 0,
+          "requirement": "[V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28 founderAuthorization.decision] EXACT_PATH_LIST_AND_RULE_APPROVED",
+          "acceptanceCriteria": [
+            "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment.",
+            "Every script referenced by config/validation.json is flagged by protectedChangeViolations under the reviewed config/protected-paths.json; the only change to that file is the addition of exact paths (protectedPrefixes and all other fields unchanged).",
+            "validate-mechanical-closure.mjs fails closed with validation-script-not-protected for any canonical script that is not protected, and none of its existing checks is removed or weakened.",
+            "automation/lib/trust-root.mjs matching semantics and the v6-foundation-d no-overmatch selftest are unchanged.",
+            "Only the Founder-authorized protected files change, and no existing test assertion, validator or policy is weakened."
+          ],
+          "mandatoryFailureCases": [
+            "canonical validator removed from exactPaths",
+            "unknown file matching a filename prefix",
+            "protectedPrefixes edited"
+          ],
+          "requiredArtifacts": [
+            "config/protected-paths.json",
+            "scripts/validate-mechanical-closure.mjs",
+            "audit/checkpoints/V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28.json"
+          ],
+          "unsupportedCases": [
+            "PKGA-F8 ENVIRONMENT (open): memory measurement fix is queued as a separate Founder-approved package; the Windows Time service is a Founder action.",
+            "The trust-root manifest stays STALE_PENDING_FINAL_RESEAL and is regenerated only at final reseal.",
+            "Not claimed: live provider smoke, target-machine Phase0, final reseal, SHA256SUMS, release signature, final ZIP."
+          ]
+        }
+      ],
+      "allowedPathPrefixes": [
+        "config/protected-paths.json",
+        "scripts/validate-mechanical-closure.mjs",
+        "tests/",
+        "audit/checkpoints/"
+      ],
+      "protectedPaths": [
+        ".gitattributes",
+        ".github/workflows/ci.yml",
+        ".gitignore",
+        ".gitmodules",
+        ".npmrc",
+        "AGENTS.md",
+        "ARCHITECTURE-CONSTITUTION.md",
+        "ARCHITECTURE-FREEZE.md",
+        "BUILD-RULES.md",
+        "CANONICAL-STATUS.md",
+        "CLAUDE.md",
+        "CODEX.md",
+        "DEFINITION-OF-DONE.md",
+        "FULL-REPO-CONSTRUCTION-CONTRACT.md",
+        "INSTALLATION-GO-CHECKLIST.md",
+        "THIRD-PARTY-NOTICES.md",
+        "apps/control-api/src/server.ts",
+        "apps/desktop/main.mjs",
+        "apps/desktop/preload.mjs",
+        "apps/desktop/renderer/app.js",
+        "apps/desktop/renderer/index.html",
+        "automation/factory-supervisor.mjs",
+        "automation/lib/evidence-signing.mjs",
+        "automation/lib/filesystem-boundary.mjs",
+        "automation/lib/redaction.mjs",
+        "config/action-policy.json",
+        "config/automation.json",
+        "config/builder-execution-policy.json",
+        "config/environment-policy.json",
+        "config/evidence-ledger-policy.json",
+        "config/git-metadata-policy.json",
+        "config/omniroute-policy.json",
+        "config/package-policy.json",
+        "config/protected-paths.json",
+        "config/supply-chain-policy.json",
+        "config/trust-root-manifest.json",
+        "config/validation.json",
+        "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
+        "governance/accepted-debt.json",
+        "governance/known-limitations.json",
+        "governance/waivers.json",
+        "prompts/AUTO-BUILDER.md",
+        "prompts/AUTO-REMEDIATION.md",
+        "prompts/AUTO-REVIEW.md",
+        "prompts/AUTO-VALIDATION-FIX.md",
+        "registries/phase-contracts-index.json",
+        "roadmap/build-waves.json",
+        "roadmap/critical-path.json",
+        "roadmap/dependency-graph.json",
+        "roadmap/parallel-lanes.json",
+        "roadmap/review-packages.json",
+        "roadmap/scheduler-state.template.json",
+        "schemas/install-report.schema.json",
+        "scripts/bootstrap-kernel-selftest.mjs",
+        "scripts/bootstrap.ps1",
+        "scripts/builder-boundary-smoke.mjs",
+        "scripts/capture-provider-provenance.mjs",
+        "scripts/check-prereqs.ps1",
+        "scripts/claude-builder-broker.mjs",
+        "scripts/codex-reviewer-broker.mjs",
+        "scripts/dependency-supply-chain.mjs",
+        "scripts/generate-trust-root.mjs",
+        "scripts/harden-evidence-key.ps1",
+        "scripts/init-evidence-signing.mjs",
+        "scripts/init-private-git.ps1",
+        "scripts/install-report.mjs",
+        "scripts/install.ps1",
+        "scripts/mechanical-kernel-selftest.mjs",
+        "scripts/phase0-acceptance.mjs",
+        "scripts/preflight.mjs",
+        "scripts/provider-smoke.mjs",
+        "scripts/provision-electron.mjs",
+        "scripts/register-autostart.ps1",
+        "scripts/runtime-schema-conformance-selftest.mjs",
+        "scripts/sanitize-process-env.ps1",
+        "scripts/secret-sanity.mjs",
+        "scripts/smoke-control-api.mjs",
+        "scripts/smoke-control-tower.mjs",
+        "scripts/smoke-desktop.mjs",
+        "scripts/start-control-tower.ps1",
+        "scripts/start-full-auto.ps1",
+        "scripts/supervisor-state-machine-selftest.mjs",
+        "scripts/v6-apps-control-desktop-selftest.mjs",
+        "scripts/validate-agent-competencies.mjs",
+        "scripts/validate-agent-semantic.mjs",
+        "scripts/validate-architecture.mjs",
+        "scripts/validate-config-runtime-enforcement.mjs",
+        "scripts/validate-domain-packs.mjs",
+        "scripts/validate-mechanical-closure.mjs",
+        "scripts/validate-organization.mjs",
+        "scripts/validate-paste2-closure.mjs",
+        "scripts/validate-paste2h-runtime-release.mjs",
+        "scripts/validate-paste3-agent-specialization.mjs",
+        "scripts/validate-paste3-closure.mjs",
+        "scripts/validate-paste3-technology-domain-registry.mjs",
+        "scripts/validate-paste4a.mjs",
+        "scripts/validate-paste4b.mjs",
+        "scripts/validate-paste4c-doc-truth.mjs",
+        "scripts/validate-paste4d-release-truth.mjs",
+        "scripts/validate-phase-contracts.mjs",
+        "scripts/validate-registries.mjs",
+        "scripts/validate-release-supply-chain.mjs",
+        "scripts/validate-review-graph-v2.mjs",
+        "scripts/validate-runtime-contracts.mjs",
+        "scripts/validate-runtime-resilience.mjs",
+        "scripts/validate-schema-catalog.mjs",
+        "scripts/validate-schema-strictness.mjs",
+        "scripts/validate-technology-graph.mjs",
+        "scripts/validate-tr-comments.mjs",
+        "scripts/validate-woven-model.mjs",
+        "scripts/verify-artifact.mjs",
+        "scripts/verify-evidence-ledger.mjs",
+        "scripts/verify-remote-protection.mjs",
+        "scripts/verify-trust-root.mjs",
+        "tsconfig.json",
+        "automation/lib/",
+        "scripts/validate-",
+        "scripts/run-validation.mjs",
+        "schemas/independent-review-result.schema.json",
+        "schemas/review-finding.schema.json",
+        "schemas/review-bundle.schema.json",
+        "schemas/milestone-contract.schema.json",
+        "schemas/run-event.schema.json",
+        "schemas/run-manifest.schema.json",
+        "schemas/phase0-acceptance.schema.json",
+        "prompts/",
+        "roadmap/contracts/",
+        "config/"
+      ],
+      "mandatoryValidation": [
+        "Canonical runner scripts/run-validation.mjs over config/validation.json",
+        "vitest run",
+        "broad dependency-free selftest suite including v6-foundation-d",
+        "adversarial removal of a validator from exactPaths"
+      ],
+      "mandatoryEvidence": [
+        "reviewed commit SHA",
+        "exact tool/runtime versions",
+        "canonical validation report",
+        "changed file sha256 digests"
+      ],
+      "riskLevel": 3,
+      "allowPaidApi": false,
+      "allowProduction": false,
+      "allowRisk5": false,
+      "allowDependencyChanges": false,
+      "unsupportedCases": [
+        "PKGA-F8 ENVIRONMENT (open): memory measurement fix is queued as a separate Founder-approved package; the Windows Time service is a Founder action.",
+        "The trust-root manifest stays STALE_PENDING_FINAL_RESEAL and is regenerated only at final reseal.",
+        "Not claimed: live provider smoke, target-machine Phase0, final reseal, SHA256SUMS, release signature, final ZIP."
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "maxFilesChanged": 6,
+      "allowExistingTestAssertionReduction": false,
+      "frozenAt": "2026-09-28T12:31:19.539Z",
+      "digest": "1765b32e87ce38cd93e55cf9784c34ef66123ceb8f44586a9986fb5de08d641c"
+    },
+    "reviewBasis": {
+      "requirements": [
+        {
+          "id": "P000-REQ-fd0b45223fb9531b",
+          "text": "[V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28 founderAuthorization.decision] EXACT_PATH_LIST_AND_RULE_APPROVED"
+        },
+        {
+          "id": "P000-REQ-4d5b46587494397f",
+          "text": "[V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28 founderAuthorization.rule] The 28 unprotected scripts are added one by one to config/protected-paths.json exactPaths. validate-mechanical-closure.mjs gains a check that every script run by config/validation.json must be protected, so new validators cannot be forgotten. The matching semantics and the existing no-overmatch selftest do not change."
+        },
+        {
+          "id": "P000-REQ-1985a41fcc062e95",
+          "text": "[V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28 founderAuthorization.protectedFiles] config/protected-paths.json, scripts/validate-mechanical-closure.mjs"
+        },
+        {
+          "id": "P000-REQ-81fd8d0316760c6c",
+          "text": "[V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; broader protected changes require separate Founder approval."
+        }
+      ],
+      "invariants": [
+        {
+          "id": "P000-INV-cee4912d3e0a2019",
+          "text": "NO_FAKE_SUCCESS"
+        },
+        {
+          "id": "P000-INV-59e59d4476fc0664",
+          "text": "NO_WEAKENED_CONTROLS"
+        },
+        {
+          "id": "P000-INV-f74092f031a0e4aa",
+          "text": "NO_SILENT_SCOPE_EXPANSION"
+        },
+        {
+          "id": "P000-INV-6122df41f404fe66",
+          "text": "NO_SELF_CERTIFICATION"
+        },
+        {
+          "id": "P000-INV-b8274eed78d72a76",
+          "text": "EVIDENCE_REQUIRED"
+        },
+        {
+          "id": "P000-INV-473c0420ab79dc5f",
+          "text": "FAIL_CLOSED"
+        }
+      ],
+      "acceptanceCriteria": [
+        {
+          "id": "P000-AC-b07722a87fadfc19",
+          "text": "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment."
+        },
+        {
+          "id": "P000-AC-76ff849f553155b3",
+          "text": "Every script referenced by config/validation.json is flagged by protectedChangeViolations under the reviewed config/protected-paths.json; the only change to that file is the addition of exact paths (protectedPrefixes and all other fields unchanged)."
+        },
+        {
+          "id": "P000-AC-856329721f46d3e8",
+          "text": "validate-mechanical-closure.mjs fails closed with validation-script-not-protected for any canonical script that is not protected, and none of its existing checks is removed or weakened."
+        },
+        {
+          "id": "P000-AC-01c97586848d66bf",
+          "text": "automation/lib/trust-root.mjs matching semantics and the v6-foundation-d no-overmatch selftest are unchanged."
+        },
+        {
+          "id": "P000-AC-a424f18e8e89abff",
+          "text": "Only the Founder-authorized protected files change, and no existing test assertion, validator or policy is weakened."
+        }
+      ],
+      "mandatoryValidation": [
+        {
+          "id": "P000-VAL-2c7156c14e11890c",
+          "text": "Canonical runner scripts/run-validation.mjs over config/validation.json"
+        },
+        {
+          "id": "P000-VAL-ad6cd6b8acf39571",
+          "text": "vitest run"
+        },
+        {
+          "id": "P000-VAL-3468d366b2364407",
+          "text": "broad dependency-free selftest suite including v6-foundation-d"
+        },
+        {
+          "id": "P000-VAL-61f226efac5ef996",
+          "text": "adversarial removal of a validator from exactPaths"
+        }
+      ],
+      "mandatoryFailureCases": [
+        {
+          "id": "P000-FAIL-4390b0cfb12d4783",
+          "text": "canonical validator removed from exactPaths"
+        },
+        {
+          "id": "P000-FAIL-b72856774eacf102",
+          "text": "unknown file matching a filename prefix"
+        },
+        {
+          "id": "P000-FAIL-0867c4571d20b16c",
+          "text": "protectedPrefixes edited"
+        }
+      ],
+      "requiredArtifacts": [
+        {
+          "id": "P000-ART-1ccc9a71b3903978",
+          "text": "config/protected-paths.json"
+        },
+        {
+          "id": "P000-ART-b02951bec601033c",
+          "text": "scripts/validate-mechanical-closure.mjs"
+        },
+        {
+          "id": "P000-ART-32d0bc25d7c4cac1",
+          "text": "audit/checkpoints/V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28.json"
+        }
+      ],
+      "risk": [
+        {
+          "id": "P000-RISK-4391d3546bf1df6f",
+          "text": "riskLevel=3; reviewProfile=TRUST_CRITICAL"
+        }
+      ]
+    },
+    "evidenceCatalog": [
+      {
+        "id": "VALIDATION-REGISTRIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "registries",
+        "validationDigest": "8ffa6f6330a6110d8e99139af483e17c71a6df86bea6eb90b53ef87638246b30",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 97
+      },
+      {
+        "id": "VALIDATION-ARCHITECTURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "architecture",
+        "validationDigest": "e5bf5d23fdda0d99094fdb8527a39d03f097200ed58ad48e545edfa66c72268f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 88
+      },
+      {
+        "id": "VALIDATION-TR",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tr",
+        "validationDigest": "2e6b2ed7451d768a768929c1cffbfbe7163006ef338db738aee25eb2e32f0f10",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1008
+      },
+      {
+        "id": "VALIDATION-COMPETENCIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "competencies",
+        "validationDigest": "10562f2c1b237b192ff646172cda08cd586bf3f09cc90eb8537e860e8e89b83d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 102
+      },
+      {
+        "id": "VALIDATION-ORGANIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "organization",
+        "validationDigest": "6ac3f9799e6e1b0f96e62bcf1a9a0ade5c38852dcc133d2c11b1fd80156ccea5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 112
+      },
+      {
+        "id": "VALIDATION-SCHEMAS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schemas",
+        "validationDigest": "7ba29d41eceb71bd056a516963edf5ddfd26fcbd497d31ea31e504c769879057",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 199
+      },
+      {
+        "id": "VALIDATION-TECHNOLOGY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "technology",
+        "validationDigest": "4120c97312f885fb82187e6933b08c510c95e46d943ebc95f46ef4a5a2a66050",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 138
+      },
+      {
+        "id": "VALIDATION-PASTE3-TECHNOLOGY-DOMAIN-REGISTRY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-technology-domain-registry",
+        "validationDigest": "9951864be421206417dc0fc09feb8586d35de6df8b90b1132a044576afac17b5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 494
+      },
+      {
+        "id": "VALIDATION-DOMAIN-PACKS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "domain-packs",
+        "validationDigest": "6aa9c5c7e2dd34e3686e298fe3e0d67964ab0803815fd6d42f3d0f84a1048de7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 155
+      },
+      {
+        "id": "VALIDATION-AGENT-SEMANTIC",
+        "kind": "VALIDATION_STEP",
+        "validationId": "agent-semantic",
+        "validationDigest": "89e22dc4c751e6e449ca9297710721f30e635e17966c6d068f6e1100b5f0db53",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 188
+      },
+      {
+        "id": "VALIDATION-PASTE3-AGENT-SPECIALIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-agent-specialization",
+        "validationDigest": "c8caf548402f3e5d2cce7957a5e2bed0ba7e6df2b63a93989a786cd9890fbb44",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 30206
+      },
+      {
+        "id": "VALIDATION-PHASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "phase-contracts",
+        "validationDigest": "28fdd6131326497e67d9e3c3688f2c7e820c4e6d75587fb58dc9e35f8d545b59",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 235
+      },
+      {
+        "id": "VALIDATION-PASTE4A-CONSTRUCTION-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4a-construction-graph",
+        "validationDigest": "928324142269635a66da22344f852a800442428fa797d278922463d8c0790041",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 137
+      },
+      {
+        "id": "VALIDATION-PASTE4B-TRACEABILITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4b-traceability",
+        "validationDigest": "cdc94fbc1ab6b34cd1867473d6a6ab32555f421b82dc3bce66c8f95e82f9adf7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 236
+      },
+      {
+        "id": "VALIDATION-PASTE4C-DOC-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4c-doc-truth",
+        "validationDigest": "a86eb363edc20bab120a6590eeb2ac9f9168b9e0a164a5efb68574c2bb8b4e82",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 149
+      },
+      {
+        "id": "VALIDATION-PASTE4D-RELEASE-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4d-release-truth",
+        "validationDigest": "9de0bee8320b7f76dc95efd1af8751c01dc8b945d71a31a105dcef9a7c7dfaa8",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 132
+      },
+      {
+        "id": "VALIDATION-REVIEW-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "review-graph",
+        "validationDigest": "d269f09107f2fc3ffe916892e24db59375682a22a2a6775792a09b60361ec15f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 121
+      },
+      {
+        "id": "VALIDATION-SCHEMA-STRICT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schema-strict",
+        "validationDigest": "1e0b34db66453f8c8b54f4bddf4af81794090404f2b66c4fbe03d8b5c032468f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 192
+      },
+      {
+        "id": "VALIDATION-WOVEN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "woven",
+        "validationDigest": "3f4799cff5ec0a4516f7c2bf34292594d680d5e3b20ad2ca73becfb1efbe556d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 111
+      },
+      {
+        "id": "VALIDATION-PASTE3-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-source-closure",
+        "validationDigest": "96cdee7724cf5f145a0260098b33782eb8f9dad828a15f75396d4b04a492f74e",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 29263
+      },
+      {
+        "id": "VALIDATION-CONFIG-RUNTIME-ENFORCEMENT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "config-runtime-enforcement",
+        "validationDigest": "ccccb144bce66a977b83a70c4438c72ec13811a4027b94e24fe917015649fc17",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 117
+      },
+      {
+        "id": "VALIDATION-MECHANICAL",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical",
+        "validationDigest": "a802e0c8871cdac4940257b4c0ebf7ef8c837accd69e06ce8936903b9259ab62",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 177
+      },
+      {
+        "id": "VALIDATION-RUNTIME-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-contracts",
+        "validationDigest": "fef8d265e0207f281d438edd4ca13510c37c864c5bd44116e3a1741523e4267a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1015
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RELEASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-release-contracts",
+        "validationDigest": "663f4aefb74075b8404d3424fbd911793a297746e5f11fa9bf43783c285b359a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 235
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RESILIENCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-resilience",
+        "validationDigest": "d13001c5509688e16fdeb5815f15cd945076a1687a721b72c1229c1cb58f24e3",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 215
+      },
+      {
+        "id": "VALIDATION-PASTE2-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste2-source-closure",
+        "validationDigest": "3243c562d6ad710b47b4588b93cb64f8a5172ee089744a9d9d42a315736a969f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 3276
+      },
+      {
+        "id": "VALIDATION-RUNTIME-SCHEMA-CONFORMANCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-schema-conformance",
+        "validationDigest": "78210ab2268bd2aa77de25a46db9d44587cae6cedcb8da5f370e5ad2296ea0ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 244
+      },
+      {
+        "id": "VALIDATION-MECHANICAL-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical-selftest",
+        "validationDigest": "9f0d4aa941e72e684b4fd869c88eb93f07c3814dfda8eee8737f6baf9b65518c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 102
+      },
+      {
+        "id": "VALIDATION-STATE-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "state-selftest",
+        "validationDigest": "feda1327063ae6fddd47ba68f06959d79f614be5b8a5487dc79faf6ee55ee968",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7563
+      },
+      {
+        "id": "VALIDATION-SECRET-SANITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "secret-sanity",
+        "validationDigest": "bb52880e62a0e2817a87a01881b82452fd5eca0793ab916e8b2bdff625fb2888",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1051
+      },
+      {
+        "id": "VALIDATION-DEPENDENCY-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "dependency-supply-chain",
+        "validationDigest": "00a58ae3650584ec15f297865a0708e6c348620736fdbc050f30d31fdf958d6d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 8361
+      },
+      {
+        "id": "VALIDATION-RELEASE-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "release-supply-chain",
+        "validationDigest": "d3c8afe4d87eab0ab03484a9bb4f2a6273ec5a5968d69f59408b90c886d090ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 110
+      },
+      {
+        "id": "VALIDATION-TYPECHECK",
+        "kind": "VALIDATION_STEP",
+        "validationId": "typecheck",
+        "validationDigest": "a98a71fd4edf3842dee1ec22f210375256ff5b3f1f45f5e9ed24426ad9e90f15",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1884
+      },
+      {
+        "id": "VALIDATION-TESTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tests",
+        "validationDigest": "40a24b33f564592720d92832d0610de5ef30a01100e26c2e7f2ca149389ca94c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 8890
+      },
+      {
+        "id": "DIFF-32d0bc25d7c4cac1",
+        "kind": "CHANGED_FILE",
+        "file": "audit/checkpoints/V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28.json"
+      },
+      {
+        "id": "DIFF-1ccc9a71b3903978",
+        "kind": "CHANGED_FILE",
+        "file": "config/protected-paths.json"
+      },
+      {
+        "id": "DIFF-b02951bec601033c",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/validate-mechanical-closure.mjs"
+      },
+      {
+        "id": "DIFF-6a82b770d4518728",
+        "kind": "CHANGED_FILE",
+        "file": "tests/pkg-f-validation-scripts-protected.test.ts"
+      }
+    ],
+    "changedFiles": [
+      "audit/checkpoints/V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28.json",
+      "config/protected-paths.json",
+      "scripts/validate-mechanical-closure.mjs",
+      "tests/pkg-f-validation-scripts-protected.test.ts"
+    ],
+    "changeGuard": {
+      "ok": false,
+      "violations": [
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "config/protected-paths.json"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/validate-mechanical-closure.mjs"
+        }
+      ],
+      "dependencyChanges": [],
+      "diffLines": 110
+    },
+    "diffStat": " ...KG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28.json | 63 ++++++++++++++++++++++\n config/protected-paths.json                        | 28 ++++++++++\n scripts/validate-mechanical-closure.mjs            |  3 ++\n tests/pkg-f-validation-scripts-protected.test.ts   | 16 ++++++\n 4 files changed, 110 insertions(+)\n",
+    "validation": {
+      "//TR": "Bu runtime report canonical validation command/exit/duration sonuçlarını redacted biçimde kaydeder; read-only static gruplar paralel çalışabilir.",
+      "schemaVersion": "1.1.0",
+      "startedAt": "2026-09-28T12:29:10.829Z",
+      "steps": [
+        {
+          "id": "registries",
+          "command": [
+            "node",
+            "scripts/validate-registries.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 97,
+          "logFile": ".ai\\runtime\\validation-registries.log"
+        },
+        {
+          "id": "architecture",
+          "command": [
+            "node",
+            "scripts/validate-architecture.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 88,
+          "logFile": ".ai\\runtime\\validation-architecture.log"
+        },
+        {
+          "id": "tr",
+          "command": [
+            "node",
+            "scripts/validate-tr-comments.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1008,
+          "logFile": ".ai\\runtime\\validation-tr.log"
+        },
+        {
+          "id": "competencies",
+          "command": [
+            "node",
+            "scripts/validate-agent-competencies.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 102,
+          "logFile": ".ai\\runtime\\validation-competencies.log"
+        },
+        {
+          "id": "organization",
+          "command": [
+            "node",
+            "scripts/validate-organization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 112,
+          "logFile": ".ai\\runtime\\validation-organization.log"
+        },
+        {
+          "id": "schemas",
+          "command": [
+            "node",
+            "scripts/validate-schema-catalog.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 199,
+          "logFile": ".ai\\runtime\\validation-schemas.log"
+        },
+        {
+          "id": "technology",
+          "command": [
+            "node",
+            "scripts/validate-technology-graph.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 138,
+          "logFile": ".ai\\runtime\\validation-technology.log"
+        },
+        {
+          "id": "paste3-technology-domain-registry",
+          "command": [
+            "node",
+            "scripts/validate-paste3-technology-domain-registry.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 494,
+          "logFile": ".ai\\runtime\\validation-paste3-technology-domain-registry.log"
+        },
+        {
+          "id": "domain-packs",
+          "command": [
+            "node",
+            "scripts/validate-domain-packs.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 155,
+          "logFile": ".ai\\runtime\\validation-domain-packs.log"
+        },
+        {
+          "id": "agent-semantic",
+          "command": [
+            "node",
+            "scripts/validate-agent-semantic.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 188,
+          "logFile": ".ai\\runtime\\validation-agent-semantic.log"
+        },
+        {
+          "id": "paste3-agent-specialization",
+          "command": [
+            "node",
+            "scripts/validate-paste3-agent-specialization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 30206,
+          "logFile": ".ai\\runtime\\validation-paste3-agent-specialization.log"
+        },
+        {
+          "id": "phase-contracts",
+          "command": [
+            "node",
+            "scripts/validate-phase-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 235,
+          "logFile": ".ai\\runtime\\validation-phase-contracts.log"
+        },
+        {
+          "id": "paste4a-construction-graph",
+          "command": [
+            "node",
+            "scripts/validate-paste4a.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 137,
+          "logFile": ".ai\\runtime\\validation-paste4a-construction-graph.log"
+        },
+        {
+          "id": "paste4b-traceability",
+          "command": [
+            "node",
+            "scripts/validate-paste4b.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 236,
+          "logFile": ".ai\\runtime\\validation-paste4b-traceability.log"
+        },
+        {
+          "id": "paste4c-doc-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4c-doc-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 149,
+          "logFile": ".ai\\runtime\\validation-paste4c-doc-truth.log"
+        },
+        {
+          "id": "paste4d-release-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4d-release-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 132,
+          "logFile": ".ai\\runtime\\validation-paste4d-release-truth.log"
+        },
+        {
+          "id": "review-graph",
+          "command": [
+            "node",
+            "scripts/validate-review-graph-v2.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 121,
+          "logFile": ".ai\\runtime\\validation-review-graph.log"
+        },
+        {
+          "id": "schema-strict",
+          "command": [
+            "node",
+            "scripts/validate-schema-strictness.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 192,
+          "logFile": ".ai\\runtime\\validation-schema-strict.log"
+        },
+        {
+          "id": "woven",
+          "command": [
+            "node",
+            "scripts/validate-woven-model.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 111,
+          "logFile": ".ai\\runtime\\validation-woven.log"
+        },
+        {
+          "id": "paste3-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste3-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 29263,
+          "logFile": ".ai\\runtime\\validation-paste3-source-closure.log"
+        },
+        {
+          "id": "config-runtime-enforcement",
+          "command": [
+            "node",
+            "scripts/validate-config-runtime-enforcement.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 117,
+          "logFile": ".ai\\runtime\\validation-config-runtime-enforcement.log"
+        },
+        {
+          "id": "mechanical",
+          "command": [
+            "node",
+            "scripts/validate-mechanical-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 177,
+          "logFile": ".ai\\runtime\\validation-mechanical.log"
+        },
+        {
+          "id": "runtime-contracts",
+          "command": [
+            "node",
+            "scripts/validate-runtime-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1015,
+          "logFile": ".ai\\runtime\\validation-runtime-contracts.log"
+        },
+        {
+          "id": "runtime-release-contracts",
+          "command": [
+            "node",
+            "scripts/validate-paste2h-runtime-release.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 235,
+          "logFile": ".ai\\runtime\\validation-runtime-release-contracts.log"
+        },
+        {
+          "id": "runtime-resilience",
+          "command": [
+            "node",
+            "scripts/validate-runtime-resilience.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 215,
+          "logFile": ".ai\\runtime\\validation-runtime-resilience.log"
+        },
+        {
+          "id": "paste2-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste2-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 3276,
+          "logFile": ".ai\\runtime\\validation-paste2-source-closure.log"
+        },
+        {
+          "id": "runtime-schema-conformance",
+          "command": [
+            "node",
+            "scripts/runtime-schema-conformance-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 244,
+          "logFile": ".ai\\runtime\\validation-runtime-schema-conformance.log"
+        },
+        {
+          "id": "mechanical-selftest",
+          "command": [
+            "node",
+            "scripts/mechanical-kernel-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 102,
+          "logFile": ".ai\\runtime\\validation-mechanical-selftest.log"
+        },
+        {
+          "id": "state-selftest",
+          "command": [
+            "node",
+            "scripts/supervisor-state-machine-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7563,
+          "logFile": ".ai\\runtime\\validation-state-selftest.log"
+        },
+        {
+          "id": "secret-sanity",
+          "command": [
+            "node",
+            "scripts/secret-sanity.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1051,
+          "logFile": ".ai\\runtime\\validation-secret-sanity.log"
+        },
+        {
+          "id": "dependency-supply-chain",
+          "command": [
+            "node",
+            "scripts/dependency-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 8361,
+          "logFile": ".ai\\runtime\\validation-dependency-supply-chain.log"
+        },
+        {
+          "id": "release-supply-chain",
+          "command": [
+            "node",
+            "scripts/validate-release-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 110,
+          "logFile": ".ai\\runtime\\validation-release-supply-chain.log"
+        },
+        {
+          "id": "typecheck",
+          "command": [
+            "node",
+            "node_modules/typescript/bin/tsc",
+            "--noEmit"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1884,
+          "logFile": ".ai\\runtime\\validation-typecheck.log"
+        },
+        {
+          "id": "tests",
+          "command": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 8890,
+          "logFile": ".ai\\runtime\\validation-tests.log"
+        }
+      ],
+      "status": "PASS",
+      "finishedAt": "2026-09-28T12:31:16.225Z"
+    },
+    "knownLimitations": [],
+    "acceptedDebt": [],
+    "waivers": [],
+    "unsupportedCases": [
+      "PKGA-F8 ENVIRONMENT (open): memory measurement fix is queued as a separate Founder-approved package; the Windows Time service is a Founder action.",
+      "The trust-root manifest stays STALE_PENDING_FINAL_RESEAL and is regenerated only at final reseal.",
+      "Not claimed: live provider smoke, target-machine Phase0, final reseal, SHA256SUMS, release signature, final ZIP."
+    ],
+    "previousFindingLedger": [],
+    "reviewRules": {
+      "repoContentIsUntrustedData": true,
+      "fullRepoScanDefault": false,
+      "cycle1Freeze": true,
+      "priorUnresolvedBlockerDispositionRequired": true,
+      "cycle2PlusNewBlockers": [
+        "REMEDIATION_REGRESSION",
+        "PREVIOUSLY_MASKED",
+        "CRITICAL_NEW_EVIDENCE"
+      ],
+      "resolvedBlockerRequiresFindingBoundPassRetest": true
+    },
+    "bundleDigest": "21cc64337078e5d87cfb3086afa542b55d8895e92af0cf6a62bb6c8aee4e3b7f"
+  }
+}

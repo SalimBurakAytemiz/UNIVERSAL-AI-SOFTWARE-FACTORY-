@@ -133,11 +133,11 @@ must(progress.truth?.FINAL_TRUST_ROOT_SEAL === "STALE_PENDING_FINAL_RESEAL", "pr
 must(progress.paste4?.segments?.["4A"] === "COMPLETE_SOURCE", "progress-4a-not-complete");
 must(progress.paste4?.segments?.["4B"] === "COMPLETE_SOURCE", "progress-4b-not-complete");
 must(progress.fullSystemReaudit?.status === "COMPLETE_DEPENDENCY_AWARE_VALIDATION_PASS_PENDING_TARGET_PHASE0", "progress-full-system-reaudit-status-stale");
-must(progress.nextScope === "TARGET_MACHINE_PHASE0_ACCEPTANCE_AND_LIVE_PROVIDER_SMOKE", "progress-next-scope-stale");
-must(currentAudit.activeScope === "TARGET_MACHINE_PHASE0_ACCEPTANCE_AND_LIVE_PROVIDER_SMOKE", "current-audit-active-scope-stale");
+must(progress.nextScope === "FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0", "progress-next-scope-stale");
+must(currentAudit.activeScope === "FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0", "current-audit-active-scope-stale");
 must(currentAudit.completedSourceScopes?.includes("FULL_SYSTEM_REAUDIT_DOCS_STATE_CURRENT_TRUTH_FINAL_SWEEP"), "current-audit-completed-scopes-stale");
 must(currentAudit.completedSourceScopes?.includes("DEPENDENCY_AWARE_ENVIRONMENT_GATE_REVIEWED_LOCK"), "current-audit-dependency-aware-scope-missing");
-must(nextActions.includes("TARGET_MACHINE_PHASE0_ACCEPTANCE_AND_LIVE_PROVIDER_SMOKE"), "next-actions-scope-stale");
+must(nextActions.includes("FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0"), "next-actions-scope-stale");
 must(!nextActions.includes("Continue full-system deep re-audit"), "next-actions-old-reaudit-instruction-stale");
 must(["NEXT","IN_PROGRESS","COMPLETE_SOURCE"].includes(progress.paste4?.segments?.["4C"]), "progress-4c-invalid-state");
 must(["PENDING","NEXT","IN_PROGRESS","COMPLETE_SOURCE"].includes(progress.paste4?.segments?.["4D"]), "progress-4d-invalid-state");

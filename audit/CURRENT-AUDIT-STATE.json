@@ -26,14 +26,18 @@
     "FULL_SYSTEM_REAUDIT_EVIDENCE_TRUST_ROOT_RELEASE_FINALIZATION",
     "FULL_SYSTEM_REAUDIT_DOCS_STATE_CURRENT_TRUTH_FINAL_SWEEP",
     "EXTENDED_FINAL_DEEP_ADVERSARIAL_SWEEP",
-    "DEPENDENCY_AWARE_ENVIRONMENT_GATE_REVIEWED_LOCK"
+    "DEPENDENCY_AWARE_ENVIRONMENT_GATE_REVIEWED_LOCK",
+    "TRUST_F1_CANONICAL_VALIDATION_SCRIPTS_PROTECTED",
+    "PKGA_F8_TARGET_PREFLIGHT_PHYSICAL_MEMORY_AND_CLOCK",
+    "LIVE_PROVIDER_SMOKE"
   ],
-  "activeScope": "TARGET_MACHINE_PHASE0_ACCEPTANCE_AND_LIVE_PROVIDER_SMOKE",
-  "boundedScopeOpenP0P1P2": 1,
-  "overallRemainingP0P1P2": "P1_OPEN_TRUST_F1_DEPENDENCY_AWARE_PASS_PENDING_FOUNDER_DECISION",
-  "openFindings": [
-    {"id": "TRUST-F1", "severity": "P1", "file": "automation/lib/trust-root.mjs", "observed": "matchesPrefix treats every protected prefix as a directory, so the filename prefix scripts/validate- protects nothing; 26 of 27 scripts/validate-*.mjs validators are not flagged by the change guard or expected in the trust-root manifest.", "status": "OPEN_REQUIRES_FOUNDER_DECISION_PROTECTED_TRUST_ROOT"},
-    {"id": "PKGA-F8", "severity": "ENVIRONMENT", "status": "OPEN_ENVIRONMENT_NOT_CODE_DEFECT"}
+  "activeScope": "FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0",
+  "boundedScopeOpenP0P1P2": 0,
+  "overallRemainingP0P1P2": "ZERO_OPEN_P0P1P2_PENDING_FINAL_RESEAL_AND_TARGET_PHASE0",
+  "openFindings": [],
+  "closedFindings": [
+    {"id": "TRUST-F1", "severity": "P1", "closedBy": "V6-PKG-F-PROTECT-VALIDATION-SCRIPTS", "reviewedCommit": "5fa231bd917f2132b1c50a011d150767a9c737e5", "review": "CLEAN", "record": "audit/reviews/V6-PKG-F-5fa231b-c1.json"},
+    {"id": "PKGA-F8", "severity": "ENVIRONMENT", "closedBy": "V6-PKG-G-PREFLIGHT-PHYSICAL-MEMORY + Founder started the Windows Time service", "reviewedCommit": "a82c6f44eceb40b91fc1bed570910dca8b6f3032", "review": "CLEAN", "record": "audit/reviews/V6-PKG-G-a82c6f4-c1.json", "targetPreflight": "PASS"}
   ],
   "lowBacklog": [
     {"id": "F-PKGE-002", "severity": "P3", "file": "automation/lib/electron-provision.mjs", "observed": "verifyProvisionedElectron authenticates every dist file against the archive but never reads manifest.exeSha256; metadata consistency only."}
@@ -45,9 +49,11 @@
   "finalZip": "NOT_DONE",
   "targetMachinePhase0": "PENDING",
   "pendingEnvironmentGates": [
-    "live-provider-smoke:PENDING_NOT_RUN",
-    "target-machine-phase0:PENDING",
-    "target-environment-PKGA-F8:WINDOWS_TIME_SERVICE_STOPPED_AND_MEMORY_15_9GB_BELOW_16GB_THRESHOLD"
+    "final-trust-root-reseal:PENDING",
+    "final-sha256sums:NOT_DONE",
+    "final-release-signature:NOT_DONE_FOUNDER_EXTERNAL_KEY",
+    "final-zip-and-fresh-extract-verification:NOT_DONE",
+    "target-machine-phase0:PENDING"
   ],
   "dependencyFreeRegression": {
     "status": "PASS_WITH_ENVIRONMENT_CONDITIONALS",

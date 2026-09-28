@@ -1,7 +1,6 @@
-<!-- //TR: Bu dosya dependency-aware environment gate sonrası current bounded milestone'u gösterir; final release veya CLEAN iddiası değildir. -->
+<!-- //TR: Bu dosya açık P0/P1/P2 bulgusu kalmadıktan sonraki current bounded milestone'u gösterir; final release veya CLEAN iddiası değildir. -->
 # Current Milestone
-## V6 Target-Machine Phase0 Prerequisites
-- PKGA-F8 ortam maddelerini (Windows Time servisi, 16 GB bellek eşiği) Founder kararıyla kapat
-- live provider smoke'u Claude/Codex broker'ları üzerinden çalıştır
-- `scripts/install.ps1` ile target-machine Phase0 acceptance üret
-- final reseal/SHA256SUMS/imza/ZIP yalnız Phase0 sonrası
+## V6 Final Reseal, Packaging and Target-Machine Phase0
+- release paketleme paketi: SHA256SUMS üreticisi, deterministik ZIP, fresh-extract doğrulaması (bağımsız Codex review)
+- final trust-root reseal -> SHA256SUMS -> Founder harici anahtarla imza -> final ZIP -> fresh-extract doğrulaması
+- fresh extract üzerinde `scripts/install.ps1` ile target-machine Phase0 acceptance ve autostart

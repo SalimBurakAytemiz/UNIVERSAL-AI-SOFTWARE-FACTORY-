@@ -1,6 +1,13 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-09-28 — V6 Target-Machine Phase0 Prerequisites
+
+- Every canonical validation script is protected by exact path in `config/protected-paths.json`, and mechanical closure fails if one is not (TRUST-F1).
+- Windows preflight measures installed physical RAM (`Win32_PhysicalMemory`) with the 16 GB threshold unchanged; with the Windows Time service running, target preflight PASS (PKGA-F8).
+- Live provider smoke PASS through the Claude builder and Codex reviewer brokers.
+- Open P0/P1/P2 findings: 0. Next: final reseal, SHA256SUMS, external signature, final ZIP, fresh-extract verification, then target-machine Phase0.
+
 ## 2026-09-28 — V6 Dependency-Aware Environment Gate
 
 - Reviewed `package-lock.json` generated on Node 24.19.0 / npm 11.17.0; pins corrected (typescript 5.9.0 did not exist) and bumped to clear all moderate+ advisories; `npm audit` 0 findings.

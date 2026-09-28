@@ -94,9 +94,9 @@
     "TARGET_MACHINE_PHASE0": "PENDING",
     "FINAL_TRUST_ROOT_SEAL": "STALE_PENDING_FINAL_RESEAL",
     "FINAL_ZIP": "NOT_DONE",
-    "overallRemainingP0P1P2": "P1_OPEN_TRUST_F1_DEPENDENCY_AWARE_PASS_PENDING_FOUNDER_DECISION"
+    "overallRemainingP0P1P2": "ZERO_OPEN_P0P1P2_PENDING_FINAL_RESEAL_AND_TARGET_PHASE0"
   },
-  "nextScope": "TARGET_MACHINE_PHASE0_ACCEPTANCE_AND_LIVE_PROVIDER_SMOKE",
+  "nextScope": "FINAL_RESEAL_PACKAGING_THEN_TARGET_MACHINE_PHASE0",
   "dependencyAwareEnvironmentGate": {
     "status": "PASS_TARGET_WINDOWS_NODE24_NPM11",
     "environment": "win32 10.0.19045 x64, Node v24.19.0, npm 11.17.0, git 2.55.0, PowerShell 5.1.19041.6456",
@@ -109,11 +109,16 @@
       "V6-PKG-C-LF-AND-ELECTRON-SMOKE": {"reviewedCommit": "2eae284779116bc2891b1ccff00bbe0dd70ea337", "review": "CLEAN", "checkpoint": "audit/checkpoints/V6-PKG-C-LF-AND-ELECTRON-SMOKE-2026-09-26.json"},
       "V6-PKG-D-STANDALONE-LAUNCHER-PROVENANCE": {"reviewedCommit": "8315b9a7b30a90d2b4e5b5de07eec8a7e8633119", "review": "CLEAN_CYCLE_2", "checkpoint": "audit/checkpoints/V6-PKG-D-STANDALONE-LAUNCHER-PROVENANCE-2026-09-26.json"},
       "V6-PKG-E-ELECTRON-PROVISIONING": {"review": "CLEAN_CYCLE_2", "checkpoint": "audit/checkpoints/V6-PKG-E-ELECTRON-PROVISIONING-2026-09-28.json"},
-      "V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE": {"review": "CLEAN", "checkpoint": "audit/checkpoints/V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28.json"}
+      "V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE": {"review": "CLEAN", "checkpoint": "audit/checkpoints/V6-PKG-E2-TR-SCAN-SKIPS-MACHINE-CACHE-2026-09-28.json"},
+      "V6-PKG-B-CURRENT-TRUTH-SYNC": {"reviewedCommit": "646ee762d868cd4a1a7f4c79e23a42ab64b0a6a0", "review": "CLEAN", "checkpoint": "audit/checkpoints/V6-PKG-B-CURRENT-TRUTH-SYNC-2026-09-28.json"},
+      "V6-PKG-F-PROTECT-VALIDATION-SCRIPTS": {"reviewedCommit": "5fa231bd917f2132b1c50a011d150767a9c737e5", "review": "CLEAN_FORMAT_CORRECTION_RETRY", "checkpoint": "audit/checkpoints/V6-PKG-F-PROTECT-VALIDATION-SCRIPTS-2026-09-28.json"},
+      "V6-PKG-G-PREFLIGHT-PHYSICAL-MEMORY": {"reviewedCommit": "a82c6f44eceb40b91fc1bed570910dca8b6f3032", "review": "CLEAN", "checkpoint": "audit/checkpoints/V6-PKG-G-PREFLIGHT-PHYSICAL-MEMORY-2026-09-28.json"}
     },
-    "findingsClosed": ["PKGA-F1", "PKGA-F2", "PKGA-F3", "PKGA-F4", "PKGA-F5", "PKGA-F6", "PKGA-F7", "PKGA-F9", "PKGA-F10", "PKGC-F1", "F-PKGE-001", "PKGE-F2"],
-    "openEnvironmentFindings": ["PKGA-F8"],
-    "openFindings": ["TRUST-F1 (P1, protected prefix matching in automation/lib/trust-root.mjs, Founder decision pending)"],
+    "findingsClosed": ["PKGA-F1", "PKGA-F2", "PKGA-F3", "PKGA-F4", "PKGA-F5", "PKGA-F6", "PKGA-F7", "PKGA-F9", "PKGA-F10", "PKGC-F1", "F-PKGE-001", "PKGE-F2", "TRUST-F1", "PKGA-F8"],
+    "openEnvironmentFindings": [],
+    "openFindings": [],
+    "liveProviderSmoke": "PASS_2026-09-28_CLAUDE_BUILDER_AND_CODEX_REVIEWER_BROKERS_STANDALONE_LAUNCHER",
+    "targetPreflight": "PASS",
     "lowBacklog": ["F-PKGE-002 (P3)"],
     "reviewRecords": "audit/reviews/"
   },
