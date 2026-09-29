@@ -3,7 +3,7 @@
   "schemaVersion": "1.0.0",
   "checkpoint": "V6_PKG_T2_ORCHESTRATOR_EXECUTOR_INTEGRATION",
   "date": "2026-09-29",
-  "parent": "0faf2aa03fb4744ff441039fcf6c8885e30a24f7",
+  "parent": "c48d54d7fcda998e89fab59008db17793dbcd253",
   "branch": "v6/pkg-t2-orchestrator-executor-integration-r2",
   "founderAuthorization": {
     "decision": "INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES",
@@ -33,27 +33,27 @@
     "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
   },
   "validation": {
-    "workspace": "fresh clone of 0faf2aa mirroring the rebased t2r3 working tree, reviewed lock installed",
+    "workspace": "fresh clone of 9e5549f (PKG-T2 re-applied on PKG-AUT1 cycle 3 c48d54d) mirroring the cycle-2 working tree, reviewed lock installed",
     "gitDiffCheck": "PASS",
     "verifyTrustRoot": "PASS (unchanged, SEALED)",
     "canonicalRunner": {
       "status": "PASS",
       "mode": "SEALED (trust root unchanged)"
     },
-    "vitest": "PASS 26 passed (26) files / 161 passed (161)",
-    "packageSelftest": "ORCHESTRATOR_EXECUTOR_INTEGRATION: PASS 8/8",
+    "vitest": "PASS 26 files / 161 tests",
+    "executorIntegrationSelftest": "PASS 9/9 (adds real-git-is-isolated-from-host-hooks-and-signing; reverting the isolation fails it)",
     "broadDependencyFreeSuite": "25/25 PASS",
     "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
   },
   "changedFileSha256": {
-    "scripts/orchestrator-executor-integration-selftest.mjs": "ed933fa7d6c9d87c909d534884acadb80bf3500790afc3bf435859a3de533fa4",
+    "scripts/orchestrator-executor-integration-selftest.mjs": "d4ea4136ddde3b5d6dbec92119347fabb9f91ce64e8eaf2d016c044029eb6bd6",
     "tests/pkg-t2-orchestrator-executor-integration.test.ts": "f668ac3d8306887fa0b3357c21afba76254c4c12e1375acf97787869c334fc20",
     ".ai/REVIEW_STATUS.md": "f5e922f807de6667f7d7bff0fdbf203e9bede981f96307f5a1dc4d2ee807d984",
     "audit/V6-FULL-SCAN-PROGRESS.json": "217ab0627615bef4919e1a0050e77ea25d016ca4443057ecefb43b4f350598dc",
     "CHANGELOG.md": "3e35401d0b53038edf3bbd2bab5c7a5d292b4e1db128da70dbeeed00007d62c7"
   },
   "openFindings": [],
-  "review": "NOT_REVIEWED_CODEX_PENDING (reviewer quota)",
+  "review": "CYCLE_1_BLOCKED_REMEDIATED_CYCLE_2_PENDING",
   "merge": "AFTER_PKG_AUT1",
   "cleanClaim": false,
   "trustRootManifest": "UNCHANGED (no protected files)",
@@ -61,9 +61,9 @@
   "rebase": {
     "originalCommit": "6ae0c2166ec56785d2e30d14218d890e32472ff0",
     "originalParent": "f9b3e472fb3a77d957e2ccfb1725d9a21957bcc7",
-    "newParent": "0faf2aa03fb4744ff441039fcf6c8885e30a24f7",
+    "newParent": "c48d54d7fcda998e89fab59008db17793dbcd253",
     "branch": "v6/pkg-t2-orchestrator-executor-integration-r2",
-    "reason": "PKG-AUT1 cycle-2 remediation 0faf2aa; five scenarios updated to its stricter executor semantics"
+    "reason": "PKG-AUT1 cycle 3 (c48d54d, Founder-authorized) after cycle 2 (0faf2aa)"
   },
   "aut1Cycle2Compatibility": {
     "reason": "PKG-AUT1 cycle 2 (0faf2aa) made the executors stricter; five scenarios encoded the older behaviour and now assert the stricter one instead (no assertion removed without a stronger replacement).",
@@ -74,5 +74,30 @@
       "packaging adoption keeps the verified sources in the release directory; a tampered handoff copy is repaired from them (kept as .invalid), and a corrupt source forces a rebuild with the previous release and handoff preserved as -incomplete",
       "the fixture repository carries the review schemas and settings a real review clone needs"
     ]
+  },
+  "aut1Cycle3Compatibility": {
+    "change": "the merge scenarios bind the package's frozen bundle digest to the evidence bundle (AUT1 cycle 3 rejects CLEAN evidence for another bundle before any git operation); a new assertion proves that CLEAN evidence for another bundle on the same commit is rejected."
+  },
+  "remediation": {
+    "cycle1": {
+      "reviewedCommit": "d113727081a7d0a7d0b54cedb0f43a027f3a99ab",
+      "run": "d113727-c1-20260929T191905Z-broker",
+      "governedResult": "BLOCKED",
+      "reviewResultSha256": "9c7b52507edcee0f7697cc56f4dc8469b0501974ae3cb14d90a87ac31976b513"
+    },
+    "findings": {
+      "F-T2-001": {
+        "severity": "P2",
+        "observed": "the adoption scenario asserted only that the reviewer broker was not called while dependency and provenance scripts were recorded.",
+        "fix": "with PKG-AUT1 cycle 3 the executor adopts a completed run in a git-only review tree, so the scenario now asserts zero recorded script or provider calls, exactly the frozen criterion, against the unchanged executors.",
+        "retest": "review-adopts-completed-run-without-provider-call (w.calls.length===0) and the sentinel scenario"
+      },
+      "F-T2-002": {
+        "severity": "P2",
+        "observed": "fixture Git commands and the executor Git pass-through inherited host configuration, so host hooks or commit signing could run outside the recorder.",
+        "fix": "every real Git process of the fixture (gitIn and the runner pass-through) runs with automation/lib/git-isolation.mjs (no host global/system/injected config, templates, hooks or automatic signing).",
+        "retest": "real-git-is-isolated-from-host-hooks-and-signing: a host config with a sentinel hooks path and mandatory signing through a missing signer breaks unisolated Git (negative control) but reaches no process through the fixture or the executors (merge and adoption pass, no hook marker); reverting the isolation makes this scenario fail."
+      }
+    }
   }
 }
