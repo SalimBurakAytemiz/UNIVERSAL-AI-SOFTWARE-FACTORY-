@@ -1,0 +1,37 @@
+{
+  "package": "V7-UI-071",
+  "title": "Operations & Recovery runbook (SC-16)",
+  "reviewedCommit": "55f54007c4053649cd7f147873531fa409254750",
+  "appliesToCommits": ["993ed8de187221319048020fdc980f1e787c94fd", "a5e2a68c (trunk merge of UI-071)"],
+  "codeFingerprint": {
+    "apps/desktop/renderer/operations-core.js": "c9f2538c09223b5412ff74ec9a738b0d71bcc942"
+  },
+  "date": "2026-10-17",
+  "gov": "GOV2",
+  "reviewer": "independent workflow reviewer (wf_bb8ec5d0-9f2, opus, separate rv-operations clone, read-only)",
+  "implementer": "sonnet workflow impl (interrupted pre-compaction)",
+  "independence": "ESTABLISHED (distinct clone, read-only, reviewer != implementer)",
+  "verdict": "REJECTED",
+  "violations": [
+    {
+      "class": "HONESTY_FALSE_ALL_CLEAR",
+      "severity": "DECISIVE",
+      "file": "apps/desktop/renderer/operations-core.js",
+      "lines": "154 (newestFirst), 169 (latest=items[0]), 49 (ts missing->0)",
+      "detail": "The 'latest' run was picked by manifest startedAt; ts() maps a missing startedAt to 0, so a FATAL summary WITHOUT a manifest (supervisor catch at automation/factory-supervisor.mjs:358 writes a FATAL/GLOBAL_STOP summary with no writeManifest) sorts LAST. When the newest run is that FATAL run and an older run is COMPLETE, the older COMPLETE run is chosen as 'latest' and LATEST_RUN_ATTENTION never fires -> tier NO_ISSUES_RECORDED / DONE pill / 'no recovery steps needed' WHILE the most recent recorded run is FATAL. Reproduced through api.js -> mappers -> views/operations.js. A past success hid a newer failure.",
+      "fix": "order by chronological runId (the server's own /v1/runs order, server.ts:126 sorts runId desc), manifest-independent; or treat a summary-without-manifest run as a finding"
+    },
+    {
+      "class": "HONESTY_FAIL_OPEN",
+      "severity": "MINOR",
+      "file": "apps/desktop/renderer/operations-core.js",
+      "lines": "177, 219-225",
+      "detail": "A SUPERVISOR_RETRY record whose phase resolves to UNDETERMINED (nowMs not finite) added no checklist step, so the overall state could still be NO_ISSUES_RECORDED with a pending retry on file. An UNDETERMINED retry phase should give at least an UNVERIFIED finding.",
+      "fix": "emit RETRY_UNDETERMINED (UNVERIFIED) when the retry phase is UNDETERMINED"
+    }
+  ],
+  "disposition": "CONFIRMED against source by the supervisor (OpenAI Recovery); root cause verified at blob c9f2538c. Conflicted with V7-UI-071-993ed8d-c1.json (CLEAN); per Founder P0 (conflicting reviews => BLOCKED), the CLEAN was NOT sufficient. Remediated on branch v7/ux-operations-fix: operations-core.js blob c9f2538c -> a5d7b3c8 (newestFirst orders by chronological runId; UNDETERMINED retry -> RETRY_UNDETERMINED). Independently re-reviewed CLEAN at bb8ef58 (V7-UI-071-bb8ef58-CLEAN-c3.json) with the failing scenario reproduced+confirmed fixed and the runId-ordering assumption validated.",
+  "status": "RESOLVED",
+  "resolvedBy": "bb8ef587cf717dc7c64e7aba862d59506f45974e",
+  "resolvedDate": "2026-10-17"
+}

@@ -1,0 +1,25 @@
+{
+  "package": "V7-UI-071-FIX",
+  "title": "Operations & Recovery — honest latest-run selection + UNDETERMINED retry (remediation of c2 REJECTED)",
+  "headSha": "bb8ef587cf717dc7c64e7aba862d59506f45974e",
+  "base": "v7/integration",
+  "pr": 7,
+  "date": "2026-10-17",
+  "gov": "GOV2",
+  "codeFingerprint": { "apps/desktop/renderer/operations-core.js": "a5d7b3c8f39b48ee09d64637a2973808784ef43f" },
+  "reviewer": "independent opus re-reviewer (senior-architect), detached checkout at head SHA in isolated rv-operations, read-only, adversarial",
+  "implementer": "OpenAI Recovery (opus remediation)",
+  "independence": "ESTABLISHED (distinct read-only worktree; reviewer != implementer)",
+  "verdict": "CLEAN",
+  "checks": {
+    "falseAllClearGone": "PASS — reproduced the exact scenario (older COMPLETE+manifest vs newer manifest-less FATAL): tier=ATTENTION_NEEDED, latest=the FATAL run, LATEST_RUN_ATTENTION present. 8-case adversarial sweep: no path hides a newest FATAL; duplicate runIds -> fail-closed ERROR.",
+    "runIdOrderingValid": "PASS — runId = RUN-<14-digit UTC stamp>-<hex> (run-ledger.mjs), lexicographic==chronological; server.ts:126 orders runId desc identically; runs lock-serialized. 'order by runId' correct.",
+    "retryUndetermined": "PASS — RETRY_UNDETERMINED registered + emitted for UNDETERMINED phase; tier UNVERIFIED (never NO_ISSUES_RECORDED); EN/TR i18n identical placeholders.",
+    "noRegression": "PASS — diff = 4 files (operations-core.js, en.js, tr.js, test); app.js/server.ts/main.mjs untouched; no new endpoint/POST; mappers fail-closed; no PRODUCT_VERIFIED/fabricated; i18n parity 2191=2191, 0 placeholder mismatch, 0 empty.",
+    "verification": "PASS — verify-trust-root PASS; vitest operations suite 47/47; no SBX-8 artifact in suite.",
+    "independence": "PASS — commit author OpenAI Recovery; reviewer independent/adversarial."
+  },
+  "byDesignNote": "An OLDER FATAL followed by a NEWER COMPLETE run correctly yields NO_ISSUES_RECORDED (genuine recovery; the latest run completed). This is distinct from the fixed bug (a FATAL that IS the newest being out-sorted).",
+  "findings": [],
+  "resolves": "V7-UI-071-55f5400-REJECTED-c2.json (the REJECTED finding's flagged blob c9f2538c is replaced by a5d7b3c8)"
+}

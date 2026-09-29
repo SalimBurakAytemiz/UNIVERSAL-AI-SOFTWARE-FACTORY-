@@ -1,0 +1,44 @@
+{
+  "_doc": "UASCO continuous production queue (FD KESİNTİSİZ OTONOM ÜRETİM, 2026-10-17). Governed loop per task: impl(Sonnet) -> independent review(Opus, >=1, dual for honesty) -> remediate if REJECTED -> re-review -> coded merge gate (merge-via-gate.mjs) -> controlled merge to v7/integration -> advance. master never touched. Any session (or future cloud routine) reads `active`+`queue` to know the next READY task; update statuses as the chain progresses.",
+  "spec": "FD-NIHAI-252 + Master V2 Lane B (FA-V2-PRODUCT authorized paths)",
+  "integrationBranch": "v7/integration",
+  "trunkAtUpdate": "cd4b104e",
+  "master": "061f78d7 (protected, untouched)",
+  "updatedAt": "2026-10-17",
+  "gate": "node C:/Users/salim/UASCO-recovery/governed-review/merge-via-gate.mjs --pr <n> --sha <headShaFull> --clone <checkout> --repo SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY- --reviews C:/Users/salim/Desktop/UASCO/audit/reviews",
+  "done": [
+    {"id": "UI-236", "title": "Exec Summary + Ledger"},
+    {"id": "UI-049", "title": "Reviews endpoint/visibility"},
+    {"id": "UI-211", "title": "Human-Approval Queue"},
+    {"id": "CI-GREEN", "title": "POSIX process-leak fix + platform-aware validation"},
+    {"id": "UI-227", "title": "Quality Gate / Release Readiness"},
+    {"id": "UI-037+046", "title": "Assurance & Security Posture"},
+    {"id": "UI-205", "title": "Multi-Project Command Matrix", "mergedSha": "5cb44cd", "pr": 5},
+    {"id": "UI-071", "title": "Operations & Recovery runbook", "mergedSha": "cd4b104e", "pr": "6+7(fix)", "note": "false-all-clear caught by 2nd review, fixed, re-reviewed CLEAN, merged via coded gate"}
+  ],
+  "active": {
+    "id": "UI-074", "title": "Provider Hub (routing/health)", "package": "WP-SETTINGS", "priority": "P0",
+    "workflow": "wf_03125a32-e9a", "branch": "feature/ui074-providers",
+    "stage": "impl(Sonnet)+dual-review(Opus general+honesty)", "startedAt": "2026-10-17",
+    "scope": "renderer-only via planned.js; reuse already-allow-listed provider/executor health GETs; honest NOT_CONNECTED/UNSUPPORTED/UNKNOWN; secrets never shown/logged; no false-all-clear; no new endpoint/POST"
+  },
+  "queue": [
+    {"id": "UI-248", "title": "First-run install verification", "package": "WP-FIRSTRUN/WP-SETTINGS", "priority": "P0", "risk": "renderer; reuse /v1/install,/v1/phase0,/v1/system/executors (read-only); honest doctor states"},
+    {"id": "UI-016", "title": "Final analysis approval", "package": "WP-INBOX-APPROVAL", "priority": "P0", "risk": "BACKEND: needs a new predev-approve POST + allow-list within FA-V2-PRODUCT; approval-gate must stay human-in-loop; higher scrutiny"},
+    {"id": "WP-SHELL-gaps", "title": "Application shell / command palette remaining screens", "priority": "P0"},
+    {"id": "WP-WORKOS-gaps", "title": "Missions / Tasks / Work OS remaining screens", "priority": "P0"},
+    {"id": "WP-AGENTS-gaps", "title": "AI Workforce / roles remaining screens", "priority": "P0"},
+    {"id": "WP-PROJECTS-gaps", "title": "Projects / Portfolio / Studio remaining screens", "priority": "P0"},
+    {"id": "WP-COCKPIT-gaps", "title": "Founder Cockpit remaining screens", "priority": "P0"},
+    {"id": "WP-SETTINGS-gaps", "title": "Settings / policy / autonomy-limits remaining screens", "priority": "P0"}
+  ],
+  "excluded_blocked": {
+    "reason": "FD-REL-1 (live preview/test execution) + real deploy / 3D-GPU / paid-capability Founder gates — NOT within current authority",
+    "packages": ["WP-QA-SEC (live exec parts)", "WP-DELIVERY", "WP-TOWER-2D3D", "WP-MOBILE-COMPANION", "UI-043/149/188", "UI-176"]
+  },
+  "restartGap": {
+    "persistentQueue": "PRESENT (this file) — next READY task is deterministic across sessions.",
+    "checkpoint": "PRESENT — C:/Users/salim/UASCO-recovery/governed-review/CHECKPOINT-2026-10-14-authz.md (append-only per-package record) + audit/reviews/*.json (per-SHA verdicts).",
+    "autoRestartMechanism": "MISSING / BLOCKED. The dev engine is a live Claude session; no daemon spawns the next session. When this session ends the chain halts. Closing it safely needs ONE of: (a) Cloud Routines A(dev)+B(review) at claude.ai — owner-UI, currently only a disabled stub exists; or (b) a scheduled headless `claude -p` orchestrator session on this box — needs explicit Founder authority + narrow persistent permissions (no wildcard), a real risk-reviewed setup. Recorded as a Founder-authority item, not auto-built."
+  }
+}

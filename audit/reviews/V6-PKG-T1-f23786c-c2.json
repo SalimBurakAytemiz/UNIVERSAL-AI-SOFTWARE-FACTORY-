@@ -1,0 +1,1325 @@
+{
+  "//TR": "Bu kayıt tek bir Codex bağımsız review çalıştırmasının frozen bundle, değiştirilmemiş reviewer çıktısı, run manifest ve governed değerlendirmesini kalıcı tutar; evidence signing anahtarı henüz başlatılmadığı için imzasızdır.",
+  "schemaVersion": "1.0.0",
+  "signature": "UNSIGNED_EVIDENCE_KEY_NOT_INITIALIZED",
+  "runDir": "f23786c-c2-20260929T192226Z-broker",
+  "runId": "RUN-V6-PKG-T1-WINDOWS-CRASH-RESUME-20260929T121311Z-C2",
+  "baseCommit": "d113727081a7d0a7d0b54cedb0f43a027f3a99ab",
+  "reviewedCommit": "f23786ca1fc9d18f8f4ff55bd8019909dfe16fe0",
+  "cycle": 2,
+  "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+  "bundleDigest": "f2f69b398cddbef725e91a3ba943344b5c5b8b75f286d763e23be4fff5661273",
+  "bundleFileSha256": "9424ac3d7451d3c5a34f067198c72f745b8bac777d04caf11b68cc6efe17783a",
+  "milestoneContractId": "V6-PKG-T1-WINDOWS-CRASH-RESUME",
+  "milestoneContractDigest": "fe8a1fc09e57571de018659aa55971f1cd564980d2106adcabf0c3754d133fc8",
+  "reviewResultText": "{\n  \"schemaVersion\": \"1.1.0\",\n  \"runId\": \"RUN-V6-PKG-T1-WINDOWS-CRASH-RESUME-20260929T121311Z-C2\",\n  \"cycle\": 2,\n  \"baseCommit\": \"d113727081a7d0a7d0b54cedb0f43a027f3a99ab\",\n  \"reviewedCommit\": \"f23786ca1fc9d18f8f4ff55bd8019909dfe16fe0\",\n  \"reviewBundleDigest\": \"f2f69b398cddbef725e91a3ba943344b5c5b8b75f286d763e23be4fff5661273\",\n  \"reviewer\": {\n    \"provider\": \"OpenAI\",\n    \"tool\": \"Codex\",\n    \"toolVersion\": null,\n    \"modelId\": \"gpt-6\",\n    \"independenceStatus\": \"SUFFICIENT\"\n  },\n  \"result\": \"CLEAN\",\n  \"findings\": [],\n  \"advisories\": [],\n  \"environmentGaps\": [],\n  \"priorBlockerDispositions\": [\n    {\n      \"findingId\": \"F-T1-001\",\n      \"disposition\": \"RESOLVED\",\n      \"retestEvidenceRefs\": [\n        \"RETEST-F-T1-001-TESTS-f642183cb523\"\n      ]\n    }\n  ],\n  \"summary\": \"Input checks a–e passed. Reviewed all seven changed files; no protected paths changed and the trust-root manifest is unchanged. Scope expansion followed the changed crash/resume test into production executor, review-adoption and in-flight recovery code to assess duplicate-call risk. F-T1-001 is resolved by durable cross-worker invocation accounting, production recovery/adoption coverage, a duplicate-invocation negative control, and exact-commit finding-bound PASS retest evidence. All 34 supplied canonical validation steps report PASS; checkpoint file hashes match. Runtime tests were not rerun because they write files. No unresolved admissible blocker or environment gap remains for this frozen bundle; declared unsupported cases remain limitations.\",\n  \"startedAt\": \"2026-09-29T19:22:43.8346313Z\",\n  \"finishedAt\": \"2026-09-29T19:24:19.3387847Z\"\n}\n",
+  "reviewResultSha256": "3e8acf647320bffd66a9b2f59f65b7d88d18b6e100624d8912fd782ec9dd262d",
+  "governed": {
+    "//TR": "Bu dosya Codex review sonucunun supervisor-eşdeğeri governed değerlendirmesini kaydeder; Codex'in review-result.json dosyası değiştirilmez.",
+    "schemaVersion": "1.0.0",
+    "evaluatedAt": "2026-09-29T19:24:41.344Z",
+    "runDir": "C:\\Users\\PRO\\Desktop\\UASCO\\.ai\\cache\\review\\runs\\f23786c-c2-20260929T192226Z-broker",
+    "exitCode": 0,
+    "checks": {
+      "promptDlpSensitiveTypes": [],
+      "resultSource": "CANONICAL_BROKER_STDOUT",
+      "resultMatchesBrokerStdout": true,
+      "schemaValid": true,
+      "validateReviewResult": "PASS",
+      "providerSeparation": "PASS"
+    },
+    "reviewResultSha256": "3e8acf647320bffd66a9b2f59f65b7d88d18b6e100624d8912fd782ec9dd262d",
+    "reviewerReportedResult": "CLEAN",
+    "governedResult": "CLEAN",
+    "reviewer": {
+      "provider": "OpenAI",
+      "tool": "Codex",
+      "toolVersion": null,
+      "modelId": "gpt-6",
+      "independenceStatus": "SUFFICIENT"
+    },
+    "summary": "Input checks a–e passed. Reviewed all seven changed files; no protected paths changed and the trust-root manifest is unchanged. Scope expansion followed the changed crash/resume test into production executor, review-adoption and in-flight recovery code to assess duplicate-call risk. F-T1-001 is resolved by durable cross-worker invocation accounting, production recovery/adoption coverage, a duplicate-invocation negative control, and exact-commit finding-bound PASS retest evidence. All 34 supplied canonical validation steps report PASS; checkpoint file hashes match. Runtime tests were not rerun because they write files. No unresolved admissible blocker or environment gap remains for this frozen bundle; declared unsupported cases remain limitations.",
+    "counts": {
+      "findings": 0,
+      "blockers": 0,
+      "advisories": 0,
+      "environmentGaps": 0,
+      "acceptedBlockers": 0,
+      "downgraded": 0
+    },
+    "findings": [],
+    "advisories": [],
+    "environmentGaps": [],
+    "effectiveReviewDigest": "b1bd8263ecb6d596ea5aecc987d865511f84aa589afebc9d49aa4e0ff0c27d09",
+    "status": "EVALUATED"
+  },
+  "environmentBlock": null,
+  "runManifest": {
+    "//TR": "Bu manifest kanonik codex-reviewer-broker üzerinden yapılan tek bir Codex bağımsız review çağrısının girdi/çıktı/provenance kanıtını hash'leriyle kaydeder; review içeriğini builder üretmez.",
+    "schemaVersion": "1.0.0",
+    "startedAt": "2026-09-29T19:22:26.477Z",
+    "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+    "reviewWorktree": "C:/Users/PRO/AppData/Local/Temp/claude/C--Users-PRO-Desktop-UASCO/a72e023b-e073-49b8-9fbd-20b544644a38/scratchpad/rev-t1r3",
+    "baseCommit": "d113727081a7d0a7d0b54cedb0f43a027f3a99ab",
+    "reviewedCommit": "f23786ca1fc9d18f8f4ff55bd8019909dfe16fe0",
+    "cycle": 2,
+    "runId": "RUN-V6-PKG-T1-WINDOWS-CRASH-RESUME-20260929T121311Z-C2",
+    "bundleFile": ".ai/cache/review/V6-PKG-T1-WINDOWS-CRASH-RESUME-f23786c-cycle-2-review-bundle.json",
+    "bundleFileSha256": "9424ac3d7451d3c5a34f067198c72f745b8bac777d04caf11b68cc6efe17783a",
+    "bundleDigest": "f2f69b398cddbef725e91a3ba943344b5c5b8b75f286d763e23be4fff5661273",
+    "milestoneContractId": "V6-PKG-T1-WINDOWS-CRASH-RESUME",
+    "milestoneContractDigest": "fe8a1fc09e57571de018659aa55971f1cd564980d2106adcabf0c3754d133fc8",
+    "promptFile": ".ai/cache/review/V6-PKG-T1-WINDOWS-CRASH-RESUME-f23786c-cycle-2-review-prompt.txt",
+    "promptSha256": "96933855aade8218e96773ae3418f12db8ac871185d0a6064efa51071e73fe99",
+    "precheck": {
+      "head": "f23786ca1fc9d18f8f4ff55bd8019909dfe16fe0",
+      "baseResolved": "d113727081a7d0a7d0b54cedb0f43a027f3a99ab",
+      "bundleDigestRecomputed": "f2f69b398cddbef725e91a3ba943344b5c5b8b75f286d763e23be4fff5661273",
+      "contractDigestRecomputed": "fe8a1fc09e57571de018659aa55971f1cd564980d2106adcabf0c3754d133fc8",
+      "changedFiles": 7
+    },
+    "reviewer": {
+      "provider": "OPENAI",
+      "tool": "codex",
+      "broker": "scripts/codex-reviewer-broker.mjs",
+      "brokerSha256": "267e9d4adc2d1872824796f9e3fc4798f09e7d5dfad19d8118a0c116452aee35",
+      "providerProvenanceSha256": "dbbece53370fcf836db284b847325dc189000cabb46caaba6ae24fc898c68dc6",
+      "launcher": "C:\\Users\\PRO\\.codex\\packages\\standalone\\releases\\0.156.1-x86_64-pc-windows-msvc\\bin\\codex.exe",
+      "launcherSha256": "70bcb05f9bf1a4e7306edd0cd1b57d02af3267ad02a34b26f45c8c4bb20a3301",
+      "launcherVersion": "codex-cli 0.156.1",
+      "provenanceLevel": "STANDALONE_LAUNCHER",
+      "childEnvVariableNames": [
+        "APPDATA",
+        "COMSPEC",
+        "HOME",
+        "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS",
+        "OS",
+        "PATH",
+        "PATHEXT",
+        "PROCESSOR_ARCHITECTURE",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "UASCO_CONTROL_ROOT",
+        "UASCO_PAID_API_ALLOWED",
+        "UASCO_PROVIDER",
+        "USERPROFILE"
+      ],
+      "allowPaidApi": false
+    },
+    "finishedAt": "2026-09-29T19:24:40.979Z",
+    "exitCode": 0,
+    "signal": null,
+    "outputs": {
+      "codex-stderr.log": {
+        "bytes": 138797,
+        "sha256": "4a39131fc6c38c9a6683a65df693d28e29374deabeae583c6ce3baf174108813"
+      },
+      "codex-stdout.txt": {
+        "bytes": 1636,
+        "sha256": "3e8acf647320bffd66a9b2f59f65b7d88d18b6e100624d8912fd782ec9dd262d"
+      },
+      "review-result.json": {
+        "bytes": 1636,
+        "sha256": "3e8acf647320bffd66a9b2f59f65b7d88d18b6e100624d8912fd782ec9dd262d"
+      }
+    }
+  },
+  "frozenBundle": {
+    "schemaVersion": "1.4.0",
+    "runId": "RUN-V6-PKG-T1-WINDOWS-CRASH-RESUME-20260929T121311Z-C2",
+    "cycle": 2,
+    "phase": 0,
+    "phaseIds": [
+      0
+    ],
+    "baseCommit": "d113727081a7d0a7d0b54cedb0f43a027f3a99ab",
+    "reviewedCommit": "f23786ca1fc9d18f8f4ff55bd8019909dfe16fe0",
+    "milestoneContract": {
+      "schemaVersion": "1.2.0",
+      "id": "V6-PKG-T1-WINDOWS-CRASH-RESUME",
+      "phase": 0,
+      "phaseIds": [
+        0
+      ],
+      "title": "V6 PKG-T1 Windows process lock, kill, crash, restart and resume tests",
+      "objective": "Prove on the target Windows machine, with real child processes, that the process lock and the unattended orchestrator survive kills, concurrent invocations, crashes mid-action and corrupted state without duplicate work or lost auditability, closing the corresponding target-machine pending item, without touching protected files or any pending package scope.",
+      "requirements": [
+        "[V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29 founderAuthorization.decision] INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES",
+        "[V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29 founderAuthorization.rule] Founder rule 2026-09-29: A blocked/review-pending package blocks ONLY its own dependency lane; implement the next independent eligible package in an isolated branch, validate, checkpoint, commit, prepare the frozen review bundle, mark it REVIEW_PENDING if Codex is unavailable, and continue; never modify a pending package's branch, bundle, clone, evidence or cycle state.",
+        "[V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29 founderAuthorization.protectedFiles] ",
+        "[V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29 founderAuthorization.constraint] Tests and non-protected documentation only; no protected file, no pending package scope, no merge."
+      ],
+      "invariants": [
+        "NO_FAKE_SUCCESS",
+        "NO_WEAKENED_CONTROLS",
+        "NO_SILENT_SCOPE_EXPANSION",
+        "NO_SELF_CERTIFICATION",
+        "EVIDENCE_REQUIRED",
+        "FAIL_CLOSED"
+      ],
+      "acceptanceCriteria": [
+        "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment.",
+        "The scenarios use real child processes and real kills on win32 and assert the stated properties: live-holder detection then stale dead-PID takeover, exactly one winner among concurrent invocations, fail-closed unreadable and foreign-host locks, lease-expiry takeover with in-flight recovery and no duplicate provider call, previous-copy recovery with a verifiable hash chain.",
+        "The target-machine pending document states precisely what is now verified and what remains covered only by Phase0.",
+        "No protected file changes, the trust-root manifest is unchanged, and no existing test, validator or policy is weakened."
+      ],
+      "mandatoryFailureCases": [
+        "a scenario passing without a real child process or kill",
+        "duplicate provider call after crash recovery accepted",
+        "an unreadable or foreign lock cleared",
+        "a protected file or pending package scope changed"
+      ],
+      "requiredArtifacts": [
+        "scripts/windows-crash-resume-selftest.mjs",
+        "tests/pkg-t1-windows-crash-resume.test.ts",
+        "audit/KNOWN-TARGET-MACHINE-PENDING.md",
+        "audit/checkpoints/V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29.json"
+      ],
+      "phaseTraceability": [
+        {
+          "phase": 0,
+          "requirement": "[V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29 founderAuthorization.decision] INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES",
+          "acceptanceCriteria": [
+            "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment.",
+            "The scenarios use real child processes and real kills on win32 and assert the stated properties: live-holder detection then stale dead-PID takeover, exactly one winner among concurrent invocations, fail-closed unreadable and foreign-host locks, lease-expiry takeover with in-flight recovery and no duplicate provider call, previous-copy recovery with a verifiable hash chain.",
+            "The target-machine pending document states precisely what is now verified and what remains covered only by Phase0.",
+            "No protected file changes, the trust-root manifest is unchanged, and no existing test, validator or policy is weakened."
+          ],
+          "mandatoryFailureCases": [
+            "a scenario passing without a real child process or kill",
+            "duplicate provider call after crash recovery accepted",
+            "an unreadable or foreign lock cleared",
+            "a protected file or pending package scope changed"
+          ],
+          "requiredArtifacts": [
+            "scripts/windows-crash-resume-selftest.mjs",
+            "tests/pkg-t1-windows-crash-resume.test.ts",
+            "audit/KNOWN-TARGET-MACHINE-PENDING.md",
+            "audit/checkpoints/V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29.json"
+          ],
+          "unsupportedCases": [
+            "The installed factory supervisor's own crash/resume on the target machine is still covered only by Phase0; this package covers the process lock and the construction orchestrator.",
+            "Merge happens after PKG-T2; this package is stacked on it."
+          ]
+        }
+      ],
+      "allowedPathPrefixes": [
+        "scripts/windows-crash-resume-selftest.mjs",
+        "tests/",
+        "audit/KNOWN-TARGET-MACHINE-PENDING.md",
+        ".ai/REVIEW_STATUS.md",
+        "audit/V6-FULL-SCAN-PROGRESS.json",
+        "CHANGELOG.md",
+        "audit/checkpoints/"
+      ],
+      "protectedPaths": [
+        ".gitattributes",
+        ".github/workflows/ci.yml",
+        ".gitignore",
+        ".gitmodules",
+        ".npmrc",
+        "AGENTS.md",
+        "ARCHITECTURE-CONSTITUTION.md",
+        "ARCHITECTURE-FREEZE.md",
+        "BUILD-RULES.md",
+        "CANONICAL-STATUS.md",
+        "CLAUDE.md",
+        "CODEX.md",
+        "DEFINITION-OF-DONE.md",
+        "FULL-REPO-CONSTRUCTION-CONTRACT.md",
+        "INSTALLATION-GO-CHECKLIST.md",
+        "THIRD-PARTY-NOTICES.md",
+        "apps/control-api/src/server.ts",
+        "apps/desktop/main.mjs",
+        "apps/desktop/preload.mjs",
+        "apps/desktop/renderer/app.js",
+        "apps/desktop/renderer/index.html",
+        "automation/factory-supervisor.mjs",
+        "automation/lib/evidence-signing.mjs",
+        "automation/lib/filesystem-boundary.mjs",
+        "automation/lib/redaction.mjs",
+        "config/action-policy.json",
+        "config/automation.json",
+        "config/builder-execution-policy.json",
+        "config/environment-policy.json",
+        "config/evidence-ledger-policy.json",
+        "config/git-metadata-policy.json",
+        "config/omniroute-policy.json",
+        "config/package-policy.json",
+        "config/protected-paths.json",
+        "config/supply-chain-policy.json",
+        "config/trust-root-manifest.json",
+        "config/validation.json",
+        "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
+        "governance/accepted-debt.json",
+        "governance/known-limitations.json",
+        "governance/waivers.json",
+        "prompts/AUTO-BUILDER.md",
+        "prompts/AUTO-REMEDIATION.md",
+        "prompts/AUTO-REVIEW.md",
+        "prompts/AUTO-VALIDATION-FIX.md",
+        "registries/phase-contracts-index.json",
+        "roadmap/build-waves.json",
+        "roadmap/critical-path.json",
+        "roadmap/dependency-graph.json",
+        "roadmap/parallel-lanes.json",
+        "roadmap/review-packages.json",
+        "roadmap/scheduler-state.template.json",
+        "schemas/install-report.schema.json",
+        "scripts/bootstrap-kernel-selftest.mjs",
+        "scripts/bootstrap.ps1",
+        "scripts/build-release-zip.mjs",
+        "scripts/builder-boundary-smoke.mjs",
+        "scripts/capture-provider-provenance.mjs",
+        "scripts/check-prereqs.ps1",
+        "scripts/claude-builder-broker.mjs",
+        "scripts/codex-reviewer-broker.mjs",
+        "scripts/dependency-supply-chain.mjs",
+        "scripts/generate-trust-root.mjs",
+        "scripts/harden-evidence-key.ps1",
+        "scripts/init-evidence-signing.mjs",
+        "scripts/init-private-git.ps1",
+        "scripts/install-report.mjs",
+        "scripts/install.ps1",
+        "scripts/mechanical-kernel-selftest.mjs",
+        "scripts/orchestrator-selftest.mjs",
+        "scripts/phase0-acceptance.mjs",
+        "scripts/preflight.mjs",
+        "scripts/provider-smoke.mjs",
+        "scripts/provision-electron.mjs",
+        "scripts/register-autostart.ps1",
+        "scripts/register-orchestrator-autostart.ps1",
+        "scripts/release-sha256sums.mjs",
+        "scripts/runtime-schema-conformance-selftest.mjs",
+        "scripts/sanitize-process-env.ps1",
+        "scripts/secret-sanity.mjs",
+        "scripts/smoke-control-api.mjs",
+        "scripts/smoke-control-tower.mjs",
+        "scripts/smoke-desktop.mjs",
+        "scripts/start-control-tower.ps1",
+        "scripts/start-full-auto.ps1",
+        "scripts/supervisor-state-machine-selftest.mjs",
+        "scripts/uasco-orchestrator.mjs",
+        "scripts/v6-apps-control-desktop-selftest.mjs",
+        "scripts/validate-agent-competencies.mjs",
+        "scripts/validate-agent-semantic.mjs",
+        "scripts/validate-architecture.mjs",
+        "scripts/validate-config-runtime-enforcement.mjs",
+        "scripts/validate-domain-packs.mjs",
+        "scripts/validate-mechanical-closure.mjs",
+        "scripts/validate-organization.mjs",
+        "scripts/validate-paste2-closure.mjs",
+        "scripts/validate-paste2h-runtime-release.mjs",
+        "scripts/validate-paste3-agent-specialization.mjs",
+        "scripts/validate-paste3-closure.mjs",
+        "scripts/validate-paste3-technology-domain-registry.mjs",
+        "scripts/validate-paste4a.mjs",
+        "scripts/validate-paste4b.mjs",
+        "scripts/validate-paste4c-doc-truth.mjs",
+        "scripts/validate-paste4d-release-truth.mjs",
+        "scripts/validate-phase-contracts.mjs",
+        "scripts/validate-registries.mjs",
+        "scripts/validate-release-supply-chain.mjs",
+        "scripts/validate-review-graph-v2.mjs",
+        "scripts/validate-runtime-contracts.mjs",
+        "scripts/validate-runtime-resilience.mjs",
+        "scripts/validate-schema-catalog.mjs",
+        "scripts/validate-schema-strictness.mjs",
+        "scripts/validate-technology-graph.mjs",
+        "scripts/validate-tr-comments.mjs",
+        "scripts/validate-woven-model.mjs",
+        "scripts/verify-artifact.mjs",
+        "scripts/verify-evidence-ledger.mjs",
+        "scripts/verify-release-extract.mjs",
+        "scripts/verify-remote-protection.mjs",
+        "scripts/verify-trust-root.mjs",
+        "tsconfig.json",
+        "automation/lib/",
+        "scripts/validate-",
+        "scripts/run-validation.mjs",
+        "schemas/independent-review-result.schema.json",
+        "schemas/review-finding.schema.json",
+        "schemas/review-bundle.schema.json",
+        "schemas/milestone-contract.schema.json",
+        "schemas/run-event.schema.json",
+        "schemas/run-manifest.schema.json",
+        "schemas/phase0-acceptance.schema.json",
+        "prompts/",
+        "roadmap/contracts/",
+        "config/"
+      ],
+      "mandatoryValidation": [
+        "Canonical runner scripts/run-validation.mjs over config/validation.json",
+        "vitest run including tests/pkg-t1-windows-crash-resume.test.ts",
+        "scripts/windows-crash-resume-selftest.mjs on win32",
+        "broad dependency-free selftest suite"
+      ],
+      "mandatoryEvidence": [
+        "reviewed commit SHA",
+        "exact tool/runtime versions",
+        "canonical validation report",
+        "changed file sha256 digests"
+      ],
+      "riskLevel": 2,
+      "allowPaidApi": false,
+      "allowProduction": false,
+      "allowRisk5": false,
+      "allowDependencyChanges": false,
+      "unsupportedCases": [
+        "The installed factory supervisor's own crash/resume on the target machine is still covered only by Phase0; this package covers the process lock and the construction orchestrator.",
+        "Merge happens after PKG-T2; this package is stacked on it."
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "maxFilesChanged": 10,
+      "allowExistingTestAssertionReduction": false,
+      "frozenAt": "2026-09-28T22:57:40.970Z",
+      "digest": "fe8a1fc09e57571de018659aa55971f1cd564980d2106adcabf0c3754d133fc8"
+    },
+    "reviewBasis": {
+      "requirements": [
+        {
+          "id": "P000-REQ-5067de3272235411",
+          "text": "[V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29 founderAuthorization.decision] INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES"
+        },
+        {
+          "id": "P000-REQ-4d2a14c3bfc0ab95",
+          "text": "[V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29 founderAuthorization.rule] Founder rule 2026-09-29: A blocked/review-pending package blocks ONLY its own dependency lane; implement the next independent eligible package in an isolated branch, validate, checkpoint, commit, prepare the frozen review bundle, mark it REVIEW_PENDING if Codex is unavailable, and continue; never modify a pending package's branch, bundle, clone, evidence or cycle state."
+        },
+        {
+          "id": "P000-REQ-fffbc3fb7fac878d",
+          "text": "[V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29 founderAuthorization.protectedFiles] "
+        },
+        {
+          "id": "P000-REQ-4150aea04b3b4f9d",
+          "text": "[V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29 founderAuthorization.constraint] Tests and non-protected documentation only; no protected file, no pending package scope, no merge."
+        }
+      ],
+      "invariants": [
+        {
+          "id": "P000-INV-cee4912d3e0a2019",
+          "text": "NO_FAKE_SUCCESS"
+        },
+        {
+          "id": "P000-INV-59e59d4476fc0664",
+          "text": "NO_WEAKENED_CONTROLS"
+        },
+        {
+          "id": "P000-INV-f74092f031a0e4aa",
+          "text": "NO_SILENT_SCOPE_EXPANSION"
+        },
+        {
+          "id": "P000-INV-6122df41f404fe66",
+          "text": "NO_SELF_CERTIFICATION"
+        },
+        {
+          "id": "P000-INV-b8274eed78d72a76",
+          "text": "EVIDENCE_REQUIRED"
+        },
+        {
+          "id": "P000-INV-473c0420ab79dc5f",
+          "text": "FAIL_CLOSED"
+        }
+      ],
+      "acceptanceCriteria": [
+        {
+          "id": "P000-AC-b07722a87fadfc19",
+          "text": "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment."
+        },
+        {
+          "id": "P000-AC-f945ff05044cc30f",
+          "text": "The scenarios use real child processes and real kills on win32 and assert the stated properties: live-holder detection then stale dead-PID takeover, exactly one winner among concurrent invocations, fail-closed unreadable and foreign-host locks, lease-expiry takeover with in-flight recovery and no duplicate provider call, previous-copy recovery with a verifiable hash chain."
+        },
+        {
+          "id": "P000-AC-a55e298d3eb733c4",
+          "text": "The target-machine pending document states precisely what is now verified and what remains covered only by Phase0."
+        },
+        {
+          "id": "P000-AC-3ef919e814fe74f9",
+          "text": "No protected file changes, the trust-root manifest is unchanged, and no existing test, validator or policy is weakened."
+        }
+      ],
+      "mandatoryValidation": [
+        {
+          "id": "P000-VAL-2c7156c14e11890c",
+          "text": "Canonical runner scripts/run-validation.mjs over config/validation.json"
+        },
+        {
+          "id": "P000-VAL-3b27385191540023",
+          "text": "vitest run including tests/pkg-t1-windows-crash-resume.test.ts"
+        },
+        {
+          "id": "P000-VAL-c6243b29c0a135dc",
+          "text": "scripts/windows-crash-resume-selftest.mjs on win32"
+        },
+        {
+          "id": "P000-VAL-c9ec154ca647422f",
+          "text": "broad dependency-free selftest suite"
+        }
+      ],
+      "mandatoryFailureCases": [
+        {
+          "id": "P000-FAIL-2689a3e68414f83a",
+          "text": "a scenario passing without a real child process or kill"
+        },
+        {
+          "id": "P000-FAIL-73314e9b03f1dfd6",
+          "text": "duplicate provider call after crash recovery accepted"
+        },
+        {
+          "id": "P000-FAIL-f2610c3b21c3efa3",
+          "text": "an unreadable or foreign lock cleared"
+        },
+        {
+          "id": "P000-FAIL-af38e8fe79b8ba86",
+          "text": "a protected file or pending package scope changed"
+        }
+      ],
+      "requiredArtifacts": [
+        {
+          "id": "P000-ART-484b286e046f12f7",
+          "text": "scripts/windows-crash-resume-selftest.mjs"
+        },
+        {
+          "id": "P000-ART-d9c62115e459977a",
+          "text": "tests/pkg-t1-windows-crash-resume.test.ts"
+        },
+        {
+          "id": "P000-ART-bc79238607555f4b",
+          "text": "audit/KNOWN-TARGET-MACHINE-PENDING.md"
+        },
+        {
+          "id": "P000-ART-293665ba14fe2597",
+          "text": "audit/checkpoints/V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29.json"
+        }
+      ],
+      "risk": [
+        {
+          "id": "P000-RISK-abbd07e0ead7e36e",
+          "text": "riskLevel=2; reviewProfile=TRUST_CRITICAL"
+        }
+      ]
+    },
+    "evidenceCatalog": [
+      {
+        "id": "VALIDATION-REGISTRIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "registries",
+        "validationDigest": "8ffa6f6330a6110d8e99139af483e17c71a6df86bea6eb90b53ef87638246b30",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 76
+      },
+      {
+        "id": "VALIDATION-ARCHITECTURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "architecture",
+        "validationDigest": "e5bf5d23fdda0d99094fdb8527a39d03f097200ed58ad48e545edfa66c72268f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 71
+      },
+      {
+        "id": "VALIDATION-TR",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tr",
+        "validationDigest": "2e6b2ed7451d768a768929c1cffbfbe7163006ef338db738aee25eb2e32f0f10",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 969
+      },
+      {
+        "id": "VALIDATION-COMPETENCIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "competencies",
+        "validationDigest": "10562f2c1b237b192ff646172cda08cd586bf3f09cc90eb8537e860e8e89b83d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 93
+      },
+      {
+        "id": "VALIDATION-ORGANIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "organization",
+        "validationDigest": "6ac3f9799e6e1b0f96e62bcf1a9a0ade5c38852dcc133d2c11b1fd80156ccea5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 96
+      },
+      {
+        "id": "VALIDATION-SCHEMAS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schemas",
+        "validationDigest": "7ba29d41eceb71bd056a516963edf5ddfd26fcbd497d31ea31e504c769879057",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 175
+      },
+      {
+        "id": "VALIDATION-TECHNOLOGY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "technology",
+        "validationDigest": "4120c97312f885fb82187e6933b08c510c95e46d943ebc95f46ef4a5a2a66050",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 118
+      },
+      {
+        "id": "VALIDATION-PASTE3-TECHNOLOGY-DOMAIN-REGISTRY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-technology-domain-registry",
+        "validationDigest": "9951864be421206417dc0fc09feb8586d35de6df8b90b1132a044576afac17b5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 475
+      },
+      {
+        "id": "VALIDATION-DOMAIN-PACKS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "domain-packs",
+        "validationDigest": "6aa9c5c7e2dd34e3686e298fe3e0d67964ab0803815fd6d42f3d0f84a1048de7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 115
+      },
+      {
+        "id": "VALIDATION-AGENT-SEMANTIC",
+        "kind": "VALIDATION_STEP",
+        "validationId": "agent-semantic",
+        "validationDigest": "89e22dc4c751e6e449ca9297710721f30e635e17966c6d068f6e1100b5f0db53",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 234
+      },
+      {
+        "id": "VALIDATION-PASTE3-AGENT-SPECIALIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-agent-specialization",
+        "validationDigest": "c8caf548402f3e5d2cce7957a5e2bed0ba7e6df2b63a93989a786cd9890fbb44",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 24982
+      },
+      {
+        "id": "VALIDATION-PHASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "phase-contracts",
+        "validationDigest": "28fdd6131326497e67d9e3c3688f2c7e820c4e6d75587fb58dc9e35f8d545b59",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 299
+      },
+      {
+        "id": "VALIDATION-PASTE4A-CONSTRUCTION-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4a-construction-graph",
+        "validationDigest": "928324142269635a66da22344f852a800442428fa797d278922463d8c0790041",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 206
+      },
+      {
+        "id": "VALIDATION-PASTE4B-TRACEABILITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4b-traceability",
+        "validationDigest": "cdc94fbc1ab6b34cd1867473d6a6ab32555f421b82dc3bce66c8f95e82f9adf7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 319
+      },
+      {
+        "id": "VALIDATION-PASTE4C-DOC-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4c-doc-truth",
+        "validationDigest": "a86eb363edc20bab120a6590eeb2ac9f9168b9e0a164a5efb68574c2bb8b4e82",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 204
+      },
+      {
+        "id": "VALIDATION-PASTE4D-RELEASE-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4d-release-truth",
+        "validationDigest": "9de0bee8320b7f76dc95efd1af8751c01dc8b945d71a31a105dcef9a7c7dfaa8",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 443
+      },
+      {
+        "id": "VALIDATION-REVIEW-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "review-graph",
+        "validationDigest": "d269f09107f2fc3ffe916892e24db59375682a22a2a6775792a09b60361ec15f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 183
+      },
+      {
+        "id": "VALIDATION-SCHEMA-STRICT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schema-strict",
+        "validationDigest": "1e0b34db66453f8c8b54f4bddf4af81794090404f2b66c4fbe03d8b5c032468f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 267
+      },
+      {
+        "id": "VALIDATION-WOVEN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "woven",
+        "validationDigest": "3f4799cff5ec0a4516f7c2bf34292594d680d5e3b20ad2ca73becfb1efbe556d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 101
+      },
+      {
+        "id": "VALIDATION-PASTE3-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-source-closure",
+        "validationDigest": "96cdee7724cf5f145a0260098b33782eb8f9dad828a15f75396d4b04a492f74e",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 25897
+      },
+      {
+        "id": "VALIDATION-CONFIG-RUNTIME-ENFORCEMENT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "config-runtime-enforcement",
+        "validationDigest": "ccccb144bce66a977b83a70c4438c72ec13811a4027b94e24fe917015649fc17",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 97
+      },
+      {
+        "id": "VALIDATION-MECHANICAL",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical",
+        "validationDigest": "a802e0c8871cdac4940257b4c0ebf7ef8c837accd69e06ce8936903b9259ab62",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 159
+      },
+      {
+        "id": "VALIDATION-RUNTIME-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-contracts",
+        "validationDigest": "fef8d265e0207f281d438edd4ca13510c37c864c5bd44116e3a1741523e4267a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 748
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RELEASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-release-contracts",
+        "validationDigest": "663f4aefb74075b8404d3424fbd911793a297746e5f11fa9bf43783c285b359a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 97
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RESILIENCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-resilience",
+        "validationDigest": "d13001c5509688e16fdeb5815f15cd945076a1687a721b72c1229c1cb58f24e3",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 145
+      },
+      {
+        "id": "VALIDATION-PASTE2-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste2-source-closure",
+        "validationDigest": "3243c562d6ad710b47b4588b93cb64f8a5172ee089744a9d9d42a315736a969f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 2191
+      },
+      {
+        "id": "VALIDATION-RUNTIME-SCHEMA-CONFORMANCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-schema-conformance",
+        "validationDigest": "78210ab2268bd2aa77de25a46db9d44587cae6cedcb8da5f370e5ad2296ea0ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 219
+      },
+      {
+        "id": "VALIDATION-MECHANICAL-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical-selftest",
+        "validationDigest": "9f0d4aa941e72e684b4fd869c88eb93f07c3814dfda8eee8737f6baf9b65518c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 85
+      },
+      {
+        "id": "VALIDATION-STATE-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "state-selftest",
+        "validationDigest": "feda1327063ae6fddd47ba68f06959d79f614be5b8a5487dc79faf6ee55ee968",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7291
+      },
+      {
+        "id": "VALIDATION-SECRET-SANITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "secret-sanity",
+        "validationDigest": "bb52880e62a0e2817a87a01881b82452fd5eca0793ab916e8b2bdff625fb2888",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 933
+      },
+      {
+        "id": "VALIDATION-DEPENDENCY-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "dependency-supply-chain",
+        "validationDigest": "00a58ae3650584ec15f297865a0708e6c348620736fdbc050f30d31fdf958d6d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 6183
+      },
+      {
+        "id": "VALIDATION-RELEASE-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "release-supply-chain",
+        "validationDigest": "d3c8afe4d87eab0ab03484a9bb4f2a6273ec5a5968d69f59408b90c886d090ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 107
+      },
+      {
+        "id": "VALIDATION-TYPECHECK",
+        "kind": "VALIDATION_STEP",
+        "validationId": "typecheck",
+        "validationDigest": "a98a71fd4edf3842dee1ec22f210375256ff5b3f1f45f5e9ed24426ad9e90f15",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1693
+      },
+      {
+        "id": "VALIDATION-TESTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tests",
+        "validationDigest": "40a24b33f564592720d92832d0610de5ef30a01100e26c2e7f2ca149389ca94c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 40808
+      },
+      {
+        "id": "DIFF-6e1d3c492b92f214",
+        "kind": "CHANGED_FILE",
+        "file": ".ai/REVIEW_STATUS.md"
+      },
+      {
+        "id": "DIFF-06572a96a58dc510",
+        "kind": "CHANGED_FILE",
+        "file": "CHANGELOG.md"
+      },
+      {
+        "id": "DIFF-bc79238607555f4b",
+        "kind": "CHANGED_FILE",
+        "file": "audit/KNOWN-TARGET-MACHINE-PENDING.md"
+      },
+      {
+        "id": "DIFF-8a2513579e3f27a9",
+        "kind": "CHANGED_FILE",
+        "file": "audit/V6-FULL-SCAN-PROGRESS.json"
+      },
+      {
+        "id": "DIFF-293665ba14fe2597",
+        "kind": "CHANGED_FILE",
+        "file": "audit/checkpoints/V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29.json"
+      },
+      {
+        "id": "DIFF-484b286e046f12f7",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/windows-crash-resume-selftest.mjs"
+      },
+      {
+        "id": "DIFF-d9c62115e459977a",
+        "kind": "CHANGED_FILE",
+        "file": "tests/pkg-t1-windows-crash-resume.test.ts"
+      },
+      {
+        "id": "RETEST-F-T1-001-TESTS-f642183cb523",
+        "kind": "FINDING_BOUND_RETEST",
+        "findingId": "F-T1-001",
+        "findingFingerprint": "f642183cb523dfd988dbec326b0ebd269e21f738000fe9809f03741236432b7e",
+        "reviewedCommit": "f23786ca1fc9d18f8f4ff55bd8019909dfe16fe0",
+        "remediationCycle": 1,
+        "validationId": "tests",
+        "validationDigest": "40a24b33f564592720d92832d0610de5ef30a01100e26c2e7f2ca149389ca94c",
+        "status": "PASS",
+        "coversFindingIds": [
+          "F-T1-001"
+        ]
+      }
+    ],
+    "changedFiles": [
+      ".ai/REVIEW_STATUS.md",
+      "CHANGELOG.md",
+      "audit/KNOWN-TARGET-MACHINE-PENDING.md",
+      "audit/V6-FULL-SCAN-PROGRESS.json",
+      "audit/checkpoints/V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29.json",
+      "scripts/windows-crash-resume-selftest.mjs",
+      "tests/pkg-t1-windows-crash-resume.test.ts"
+    ],
+    "changeGuard": {
+      "ok": true,
+      "violations": [],
+      "dependencyChanges": [],
+      "diffLines": 187
+    },
+    "diffStat": " .ai/REVIEW_STATUS.md                               |  3 +-\n CHANGELOG.md                                       |  4 +\n audit/KNOWN-TARGET-MACHINE-PENDING.md              |  2 +-\n audit/V6-FULL-SCAN-PROGRESS.json                   |  3 +-\n .../V6-PKG-T1-WINDOWS-CRASH-RESUME-2026-09-29.json | 88 ++++++++++++++++++++++\n scripts/windows-crash-resume-selftest.mjs          | 81 ++++++++++++++++++++\n tests/pkg-t1-windows-crash-resume.test.ts          |  6 ++\n 7 files changed, 184 insertions(+), 3 deletions(-)\n",
+    "validation": {
+      "//TR": "Bu runtime report canonical validation command/exit/duration sonuçlarını redacted biçimde kaydeder; read-only static gruplar paralel çalışabilir.",
+      "schemaVersion": "1.1.0",
+      "startedAt": "2026-09-29T12:10:56.304Z",
+      "steps": [
+        {
+          "id": "registries",
+          "command": [
+            "node",
+            "scripts/validate-registries.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 76,
+          "logFile": ".ai\\runtime\\validation-registries.log"
+        },
+        {
+          "id": "architecture",
+          "command": [
+            "node",
+            "scripts/validate-architecture.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 71,
+          "logFile": ".ai\\runtime\\validation-architecture.log"
+        },
+        {
+          "id": "tr",
+          "command": [
+            "node",
+            "scripts/validate-tr-comments.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 969,
+          "logFile": ".ai\\runtime\\validation-tr.log"
+        },
+        {
+          "id": "competencies",
+          "command": [
+            "node",
+            "scripts/validate-agent-competencies.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 93,
+          "logFile": ".ai\\runtime\\validation-competencies.log"
+        },
+        {
+          "id": "organization",
+          "command": [
+            "node",
+            "scripts/validate-organization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 96,
+          "logFile": ".ai\\runtime\\validation-organization.log"
+        },
+        {
+          "id": "schemas",
+          "command": [
+            "node",
+            "scripts/validate-schema-catalog.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 175,
+          "logFile": ".ai\\runtime\\validation-schemas.log"
+        },
+        {
+          "id": "technology",
+          "command": [
+            "node",
+            "scripts/validate-technology-graph.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 118,
+          "logFile": ".ai\\runtime\\validation-technology.log"
+        },
+        {
+          "id": "paste3-technology-domain-registry",
+          "command": [
+            "node",
+            "scripts/validate-paste3-technology-domain-registry.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 475,
+          "logFile": ".ai\\runtime\\validation-paste3-technology-domain-registry.log"
+        },
+        {
+          "id": "domain-packs",
+          "command": [
+            "node",
+            "scripts/validate-domain-packs.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 115,
+          "logFile": ".ai\\runtime\\validation-domain-packs.log"
+        },
+        {
+          "id": "agent-semantic",
+          "command": [
+            "node",
+            "scripts/validate-agent-semantic.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 234,
+          "logFile": ".ai\\runtime\\validation-agent-semantic.log"
+        },
+        {
+          "id": "paste3-agent-specialization",
+          "command": [
+            "node",
+            "scripts/validate-paste3-agent-specialization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 24982,
+          "logFile": ".ai\\runtime\\validation-paste3-agent-specialization.log"
+        },
+        {
+          "id": "phase-contracts",
+          "command": [
+            "node",
+            "scripts/validate-phase-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 299,
+          "logFile": ".ai\\runtime\\validation-phase-contracts.log"
+        },
+        {
+          "id": "paste4a-construction-graph",
+          "command": [
+            "node",
+            "scripts/validate-paste4a.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 206,
+          "logFile": ".ai\\runtime\\validation-paste4a-construction-graph.log"
+        },
+        {
+          "id": "paste4b-traceability",
+          "command": [
+            "node",
+            "scripts/validate-paste4b.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 319,
+          "logFile": ".ai\\runtime\\validation-paste4b-traceability.log"
+        },
+        {
+          "id": "paste4c-doc-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4c-doc-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 204,
+          "logFile": ".ai\\runtime\\validation-paste4c-doc-truth.log"
+        },
+        {
+          "id": "paste4d-release-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4d-release-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 443,
+          "logFile": ".ai\\runtime\\validation-paste4d-release-truth.log"
+        },
+        {
+          "id": "review-graph",
+          "command": [
+            "node",
+            "scripts/validate-review-graph-v2.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 183,
+          "logFile": ".ai\\runtime\\validation-review-graph.log"
+        },
+        {
+          "id": "schema-strict",
+          "command": [
+            "node",
+            "scripts/validate-schema-strictness.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 267,
+          "logFile": ".ai\\runtime\\validation-schema-strict.log"
+        },
+        {
+          "id": "woven",
+          "command": [
+            "node",
+            "scripts/validate-woven-model.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 101,
+          "logFile": ".ai\\runtime\\validation-woven.log"
+        },
+        {
+          "id": "paste3-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste3-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 25897,
+          "logFile": ".ai\\runtime\\validation-paste3-source-closure.log"
+        },
+        {
+          "id": "config-runtime-enforcement",
+          "command": [
+            "node",
+            "scripts/validate-config-runtime-enforcement.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 97,
+          "logFile": ".ai\\runtime\\validation-config-runtime-enforcement.log"
+        },
+        {
+          "id": "mechanical",
+          "command": [
+            "node",
+            "scripts/validate-mechanical-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 159,
+          "logFile": ".ai\\runtime\\validation-mechanical.log"
+        },
+        {
+          "id": "runtime-contracts",
+          "command": [
+            "node",
+            "scripts/validate-runtime-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 748,
+          "logFile": ".ai\\runtime\\validation-runtime-contracts.log"
+        },
+        {
+          "id": "runtime-release-contracts",
+          "command": [
+            "node",
+            "scripts/validate-paste2h-runtime-release.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 97,
+          "logFile": ".ai\\runtime\\validation-runtime-release-contracts.log"
+        },
+        {
+          "id": "runtime-resilience",
+          "command": [
+            "node",
+            "scripts/validate-runtime-resilience.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 145,
+          "logFile": ".ai\\runtime\\validation-runtime-resilience.log"
+        },
+        {
+          "id": "paste2-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste2-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 2191,
+          "logFile": ".ai\\runtime\\validation-paste2-source-closure.log"
+        },
+        {
+          "id": "runtime-schema-conformance",
+          "command": [
+            "node",
+            "scripts/runtime-schema-conformance-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 219,
+          "logFile": ".ai\\runtime\\validation-runtime-schema-conformance.log"
+        },
+        {
+          "id": "mechanical-selftest",
+          "command": [
+            "node",
+            "scripts/mechanical-kernel-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 85,
+          "logFile": ".ai\\runtime\\validation-mechanical-selftest.log"
+        },
+        {
+          "id": "state-selftest",
+          "command": [
+            "node",
+            "scripts/supervisor-state-machine-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7291,
+          "logFile": ".ai\\runtime\\validation-state-selftest.log"
+        },
+        {
+          "id": "secret-sanity",
+          "command": [
+            "node",
+            "scripts/secret-sanity.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 933,
+          "logFile": ".ai\\runtime\\validation-secret-sanity.log"
+        },
+        {
+          "id": "dependency-supply-chain",
+          "command": [
+            "node",
+            "scripts/dependency-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 6183,
+          "logFile": ".ai\\runtime\\validation-dependency-supply-chain.log"
+        },
+        {
+          "id": "release-supply-chain",
+          "command": [
+            "node",
+            "scripts/validate-release-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 107,
+          "logFile": ".ai\\runtime\\validation-release-supply-chain.log"
+        },
+        {
+          "id": "typecheck",
+          "command": [
+            "node",
+            "node_modules/typescript/bin/tsc",
+            "--noEmit"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1693,
+          "logFile": ".ai\\runtime\\validation-typecheck.log"
+        },
+        {
+          "id": "tests",
+          "command": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 40808,
+          "logFile": ".ai\\runtime\\validation-tests.log"
+        }
+      ],
+      "status": "PASS",
+      "finishedAt": "2026-09-29T12:13:09.308Z"
+    },
+    "knownLimitations": [],
+    "acceptedDebt": [],
+    "waivers": [],
+    "unsupportedCases": [
+      "The installed factory supervisor's own crash/resume on the target machine is still covered only by Phase0; this package covers the process lock and the construction orchestrator.",
+      "Merge happens after PKG-T2; this package is stacked on it."
+    ],
+    "previousFindingLedger": [
+      {
+        "id": "F-T1-001",
+        "classification": "BLOCKER",
+        "severity": "P2",
+        "category": "CRASH_RECOVERY_TEST_COVERAGE",
+        "basisRefs": [
+          "P000-AC-f945ff05044cc30f",
+          "P000-FAIL-73314e9b03f1dfd6",
+          "P000-INV-b8274eed78d72a76"
+        ],
+        "currentDiffCausality": "CURRENT_DIFF",
+        "scopeStatus": "IN_SCOPE",
+        "file": "scripts/windows-crash-resume-selftest.mjs",
+        "line": 32,
+        "reproduction": {
+          "command": "git show 22d4cfe306fde0dcc1533a97838cb24c21a7b80b:scripts/windows-crash-resume-selftest.mjs",
+          "steps": [
+            "Inspect the killed worker: it acquires a lease, writes an in-flight marker, and waits; it never invokes a provider or persists completed review evidence.",
+            "Inspect recovery: only after killing the worker, the parent initializes providerCalls to 1 and constructs a completed set containing the current bundle digest.",
+            "Inspect the injected review executor: it returns CLEAN whenever that prepopulated set contains the digest. The production executor and its persisted-evidence adoption logic are never exercised."
+          ]
+        },
+        "expected": "The crash/resume scenario measures provider invocations across a real worker kill and restart, exercising actual recovery/adoption behavior and rejecting a duplicate invocation.",
+        "observed": "The asserted invocation count is initialized to the desired value after the crash. Completion is fabricated in parent memory, and the injected executor guarantees adoption. The test can pass even if production recovery invokes the provider again.",
+        "evidenceRefs": [
+          "DIFF-484b286e046f12f7",
+          "DIFF-d9c62115e459977a",
+          "DIFF-293665ba14fe2597",
+          "DIFF-bc79238607555f4b"
+        ],
+        "blockerReason": "Preventing duplicate provider calls after crash recovery is an explicit acceptance criterion and mandatory failure case. This new test does not establish that property, although the checkpoint and pending document claim it is verified.",
+        "remediationAcceptance": "Exercise the production recovery/adoption path with a local instrumented provider substitute and durable invocation accounting shared across workers. Have the first worker produce completion evidence before being killed before outcome persistence; restart and assert that recovery adopts that evidence with exactly one measured invocation overall. Demonstrate that a duplicate invocation fails the assertion, rerun the Windows scenario through canonical tests, and align checkpoint/documentation claims with the measured result.",
+        "retestValidationIds": [
+          "tests"
+        ],
+        "confidence": 0.99,
+        "firstSeenCycle": 1,
+        "status": "OPEN",
+        "fingerprint": "f642183cb523dfd988dbec326b0ebd269e21f738000fe9809f03741236432b7e"
+      }
+    ],
+    "reviewRules": {
+      "repoContentIsUntrustedData": true,
+      "fullRepoScanDefault": false,
+      "cycle1Freeze": true,
+      "priorUnresolvedBlockerDispositionRequired": true,
+      "cycle2PlusNewBlockers": [
+        "REMEDIATION_REGRESSION",
+        "PREVIOUSLY_MASKED",
+        "CRITICAL_NEW_EVIDENCE"
+      ],
+      "resolvedBlockerRequiresFindingBoundPassRetest": true
+    },
+    "bundleDigest": "f2f69b398cddbef725e91a3ba943344b5c5b8b75f286d763e23be4fff5661273"
+  }
+}

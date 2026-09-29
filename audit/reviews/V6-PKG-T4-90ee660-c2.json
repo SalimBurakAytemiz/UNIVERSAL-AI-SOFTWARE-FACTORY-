@@ -1,0 +1,1357 @@
+{
+  "//TR": "Bu kayıt tek bir Codex bağımsız review çalıştırmasının frozen bundle, değiştirilmemiş reviewer çıktısı, run manifest ve governed değerlendirmesini kalıcı tutar; evidence signing anahtarı henüz başlatılmadığı için imzasızdır.",
+  "schemaVersion": "1.0.0",
+  "signature": "UNSIGNED_EVIDENCE_KEY_NOT_INITIALIZED",
+  "runDir": "90ee660-c2-20260930T050401Z-broker",
+  "runId": "RUN-V6-PKG-T4-POWERSHELL-SAFETY-20260930T015005Z-C2",
+  "baseCommit": "725811f5d5d45b171b41ddc7a6f35bc9ab86db80",
+  "reviewedCommit": "90ee66034e2def7e8a7e06abab4109c43f8927b9",
+  "cycle": 2,
+  "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+  "bundleDigest": "edcbbef8110e912ccfaa87235719fd4be05a134bed4d35424b2191d3b2996bd0",
+  "bundleFileSha256": "380364a1010598090a8251fd13c1e917833365fc958581117eb182f5795f363a",
+  "milestoneContractId": "V6-PKG-T4-POWERSHELL-SAFETY",
+  "milestoneContractDigest": "c646aedcc74266bd77c2e52e7e5f7eae2ee4de82c3342ab825d139dde77f01bc",
+  "reviewResultText": "{\n  \"schemaVersion\": \"1.1.0\",\n  \"runId\": \"RUN-V6-PKG-T4-POWERSHELL-SAFETY-20260930T015005Z-C2\",\n  \"cycle\": 2,\n  \"baseCommit\": \"725811f5d5d45b171b41ddc7a6f35bc9ab86db80\",\n  \"reviewedCommit\": \"90ee66034e2def7e8a7e06abab4109c43f8927b9\",\n  \"reviewBundleDigest\": \"edcbbef8110e912ccfaa87235719fd4be05a134bed4d35424b2191d3b2996bd0\",\n  \"reviewer\": {\n    \"provider\": \"OpenAI\",\n    \"tool\": \"Codex\",\n    \"toolVersion\": null,\n    \"modelId\": \"gpt-6\",\n    \"independenceStatus\": \"SUFFICIENT\"\n  },\n  \"result\": \"CLEAN\",\n  \"findings\": [],\n  \"advisories\": [],\n  \"environmentGaps\": [],\n  \"priorBlockerDispositions\": [\n    {\n      \"findingId\": \"F-T4-REVIEW-001\",\n      \"disposition\": \"RESOLVED\",\n      \"retestEvidenceRefs\": [\n        \"RETEST-F-T4-REVIEW-001-TESTS-a87a37e8f3e0\"\n      ]\n    },\n    {\n      \"findingId\": \"F-T4-REVIEW-002\",\n      \"disposition\": \"RESOLVED\",\n      \"retestEvidenceRefs\": [\n        \"RETEST-F-T4-REVIEW-002-TESTS-3c90edac9624\"\n      ]\n    }\n  ],\n  \"summary\": \"Input checks a–e passed. Reviewed the exact six-file diff; no protected-path changes were found. Read-only, in-memory checks confirmed both prior blocker fixes, and their finding-bound PASS evidence matches the reviewed commit, fingerprints and validation digests. Full validation was assessed from supplied evidence, not rerun. The documented verifier asymmetry remains an accepted scope limitation. No unresolved admissible blocker or environment gap remains.\",\n  \"startedAt\": \"2026-09-30T05:04:11Z\",\n  \"finishedAt\": \"2026-09-30T05:06:15Z\"\n}\n",
+  "reviewResultSha256": "cb906bcb6a43ab119869da6e07b33b5c98c86e02d194bca6ae7bee47924db4b4",
+  "governed": {
+    "//TR": "Bu dosya Codex review sonucunun supervisor-eşdeğeri governed değerlendirmesini kaydeder; Codex'in review-result.json dosyası değiştirilmez.",
+    "schemaVersion": "1.0.0",
+    "evaluatedAt": "2026-09-30T05:06:34.316Z",
+    "runDir": "C:\\Users\\PRO\\Desktop\\UASCO\\.ai\\cache\\review\\runs\\90ee660-c2-20260930T050401Z-broker",
+    "exitCode": 0,
+    "checks": {
+      "promptDlpSensitiveTypes": [],
+      "resultSource": "CANONICAL_BROKER_STDOUT",
+      "resultMatchesBrokerStdout": true,
+      "schemaValid": true,
+      "validateReviewResult": "PASS",
+      "providerSeparation": "PASS"
+    },
+    "reviewResultSha256": "cb906bcb6a43ab119869da6e07b33b5c98c86e02d194bca6ae7bee47924db4b4",
+    "reviewerReportedResult": "CLEAN",
+    "governedResult": "CLEAN",
+    "reviewer": {
+      "provider": "OpenAI",
+      "tool": "Codex",
+      "toolVersion": null,
+      "modelId": "gpt-6",
+      "independenceStatus": "SUFFICIENT"
+    },
+    "summary": "Input checks a–e passed. Reviewed the exact six-file diff; no protected-path changes were found. Read-only, in-memory checks confirmed both prior blocker fixes, and their finding-bound PASS evidence matches the reviewed commit, fingerprints and validation digests. Full validation was assessed from supplied evidence, not rerun. The documented verifier asymmetry remains an accepted scope limitation. No unresolved admissible blocker or environment gap remains.",
+    "counts": {
+      "findings": 0,
+      "blockers": 0,
+      "advisories": 0,
+      "environmentGaps": 0,
+      "acceptedBlockers": 0,
+      "downgraded": 0
+    },
+    "findings": [],
+    "advisories": [],
+    "environmentGaps": [],
+    "effectiveReviewDigest": "6cd73bbd3fb999c843a5d7b0671ca206718f41241680d25906299e2442cb4ebd",
+    "status": "EVALUATED"
+  },
+  "environmentBlock": null,
+  "runManifest": {
+    "//TR": "Bu manifest kanonik codex-reviewer-broker üzerinden yapılan tek bir Codex bağımsız review çağrısının girdi/çıktı/provenance kanıtını hash'leriyle kaydeder; review içeriğini builder üretmez.",
+    "schemaVersion": "1.0.0",
+    "startedAt": "2026-09-30T05:04:01.217Z",
+    "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+    "reviewWorktree": "C:/Users/PRO/AppData/Local/Temp/claude/C--Users-PRO-Desktop-UASCO/a72e023b-e073-49b8-9fbd-20b544644a38/scratchpad/rev-t4c2",
+    "baseCommit": "725811f5d5d45b171b41ddc7a6f35bc9ab86db80",
+    "reviewedCommit": "90ee66034e2def7e8a7e06abab4109c43f8927b9",
+    "cycle": 2,
+    "runId": "RUN-V6-PKG-T4-POWERSHELL-SAFETY-20260930T015005Z-C2",
+    "bundleFile": ".ai/cache/review/V6-PKG-T4-POWERSHELL-SAFETY-90ee660-cycle-2-review-bundle.json",
+    "bundleFileSha256": "380364a1010598090a8251fd13c1e917833365fc958581117eb182f5795f363a",
+    "bundleDigest": "edcbbef8110e912ccfaa87235719fd4be05a134bed4d35424b2191d3b2996bd0",
+    "milestoneContractId": "V6-PKG-T4-POWERSHELL-SAFETY",
+    "milestoneContractDigest": "c646aedcc74266bd77c2e52e7e5f7eae2ee4de82c3342ab825d139dde77f01bc",
+    "promptFile": ".ai/cache/review/V6-PKG-T4-POWERSHELL-SAFETY-90ee660-cycle-2-review-prompt.txt",
+    "promptSha256": "2b85a40e2b7c6a0e23c5a6a5f51aafa87ce13b1a22880b36bf66a6e16bed8f8e",
+    "precheck": {
+      "head": "90ee66034e2def7e8a7e06abab4109c43f8927b9",
+      "baseResolved": "725811f5d5d45b171b41ddc7a6f35bc9ab86db80",
+      "bundleDigestRecomputed": "edcbbef8110e912ccfaa87235719fd4be05a134bed4d35424b2191d3b2996bd0",
+      "contractDigestRecomputed": "c646aedcc74266bd77c2e52e7e5f7eae2ee4de82c3342ab825d139dde77f01bc",
+      "changedFiles": 6
+    },
+    "reviewer": {
+      "provider": "OPENAI",
+      "tool": "codex",
+      "broker": "scripts/codex-reviewer-broker.mjs",
+      "brokerSha256": "267e9d4adc2d1872824796f9e3fc4798f09e7d5dfad19d8118a0c116452aee35",
+      "providerProvenanceSha256": "b77fac9c421964dc7c8aecefe805c2e278599c9519759d8f41ee052d4112e9a2",
+      "launcher": "C:\\Users\\PRO\\.codex\\packages\\standalone\\releases\\0.156.1-x86_64-pc-windows-msvc\\bin\\codex.exe",
+      "launcherSha256": "70bcb05f9bf1a4e7306edd0cd1b57d02af3267ad02a34b26f45c8c4bb20a3301",
+      "launcherVersion": "codex-cli 0.156.1",
+      "provenanceLevel": "STANDALONE_LAUNCHER",
+      "childEnvVariableNames": [
+        "APPDATA",
+        "COMSPEC",
+        "HOME",
+        "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS",
+        "OS",
+        "PATH",
+        "PATHEXT",
+        "PROCESSOR_ARCHITECTURE",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "UASCO_CONTROL_ROOT",
+        "UASCO_PAID_API_ALLOWED",
+        "UASCO_PROVIDER",
+        "USERPROFILE"
+      ],
+      "allowPaidApi": false
+    },
+    "finishedAt": "2026-09-30T05:06:33.956Z",
+    "exitCode": 0,
+    "signal": null,
+    "outputs": {
+      "codex-stderr.log": {
+        "bytes": 138664,
+        "sha256": "a9aee3baa0a836a48cc34dadce11a5f3df611f1b49b2449a78f193f8c99ed0eb"
+      },
+      "codex-stdout.txt": {
+        "bytes": 1510,
+        "sha256": "cb906bcb6a43ab119869da6e07b33b5c98c86e02d194bca6ae7bee47924db4b4"
+      },
+      "review-result.json": {
+        "bytes": 1510,
+        "sha256": "cb906bcb6a43ab119869da6e07b33b5c98c86e02d194bca6ae7bee47924db4b4"
+      }
+    }
+  },
+  "frozenBundle": {
+    "schemaVersion": "1.4.0",
+    "runId": "RUN-V6-PKG-T4-POWERSHELL-SAFETY-20260930T015005Z-C2",
+    "cycle": 2,
+    "phase": 0,
+    "phaseIds": [
+      0
+    ],
+    "baseCommit": "725811f5d5d45b171b41ddc7a6f35bc9ab86db80",
+    "reviewedCommit": "90ee66034e2def7e8a7e06abab4109c43f8927b9",
+    "milestoneContract": {
+      "schemaVersion": "1.2.0",
+      "id": "V6-PKG-T4-POWERSHELL-SAFETY",
+      "phase": 0,
+      "phaseIds": [
+        0
+      ],
+      "title": "V6 PKG-T4 PowerShell script safety and artifact verifier differential tests",
+      "objective": "Parse every repository PowerShell script with the Windows PowerShell 5.1 parser and enforce script safety rules, and differentially test the two install-time artifact verifiers (verify-artifact.ps1 and verify-artifact.mjs) against the same tampering cases, recording any asymmetry as a finding without touching protected files or any pending package scope.",
+      "requirements": [
+        "[V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29 founderAuthorization.decision] INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES",
+        "[V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29 founderAuthorization.rule] Founder rule 2026-09-29: A blocked/review-pending package blocks ONLY its own dependency lane; implement the next independent eligible package in an isolated branch, validate, checkpoint, commit, prepare the frozen review bundle, mark it REVIEW_PENDING if Codex is unavailable, and continue; never modify a pending package's branch, bundle, clone, evidence or cycle state.",
+        "[V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29 founderAuthorization.protectedFiles] ",
+        "[V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29 founderAuthorization.constraint] Tests and non-protected documentation only; no protected file, no pending package scope, no merge."
+      ],
+      "invariants": [
+        "NO_FAKE_SUCCESS",
+        "NO_WEAKENED_CONTROLS",
+        "NO_SILENT_SCOPE_EXPANSION",
+        "NO_SELF_CERTIFICATION",
+        "EVIDENCE_REQUIRED",
+        "FAIL_CLOSED"
+      ],
+      "acceptanceCriteria": [
+        "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment.",
+        "Every PowerShell script under scripts/ is parsed with the PowerShell 5.1 parser without errors and without Invoke-Expression; the safety rules reject EncodedCommand, DownloadString/DownloadFile, persistent Set-ExecutionPolicy, piping to Invoke-Expression, entry scripts without $ErrorActionPreference=\"Stop\" and web requests outside the allowlist or without disabled redirects.",
+        "Both artifact verifiers accept a clean tree and reject content tamper, a missing file, a manifest without the lockfile and an unsafe path; the Node verifier rejects an unlisted file and the PowerShell verifier behaviour for it is recorded honestly as a known asymmetry and an open finding, not as PASS parity.",
+        "install.ps1 runs both verifiers before bootstrap; outside Windows the selftest skips honestly; no protected file changes and no existing test, validator or policy is weakened."
+      ],
+      "mandatoryFailureCases": [
+        "a PowerShell parse error or Invoke-Expression use accepted",
+        "a tampered artifact tree accepted by either verifier in the shared cases",
+        "the unlisted-file asymmetry hidden or reported as parity",
+        "a protected file or pending package scope changed"
+      ],
+      "requiredArtifacts": [
+        "scripts/powershell-safety-selftest.mjs",
+        "tests/pkg-t4-powershell-safety.test.ts",
+        "audit/checkpoints/V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29.json"
+      ],
+      "phaseTraceability": [
+        {
+          "phase": 0,
+          "requirement": "[V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29 founderAuthorization.decision] INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES",
+          "acceptanceCriteria": [
+            "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment.",
+            "Every PowerShell script under scripts/ is parsed with the PowerShell 5.1 parser without errors and without Invoke-Expression; the safety rules reject EncodedCommand, DownloadString/DownloadFile, persistent Set-ExecutionPolicy, piping to Invoke-Expression, entry scripts without $ErrorActionPreference=\"Stop\" and web requests outside the allowlist or without disabled redirects.",
+            "Both artifact verifiers accept a clean tree and reject content tamper, a missing file, a manifest without the lockfile and an unsafe path; the Node verifier rejects an unlisted file and the PowerShell verifier behaviour for it is recorded honestly as a known asymmetry and an open finding, not as PASS parity.",
+            "install.ps1 runs both verifiers before bootstrap; outside Windows the selftest skips honestly; no protected file changes and no existing test, validator or policy is weakened."
+          ],
+          "mandatoryFailureCases": [
+            "a PowerShell parse error or Invoke-Expression use accepted",
+            "a tampered artifact tree accepted by either verifier in the shared cases",
+            "the unlisted-file asymmetry hidden or reported as parity",
+            "a protected file or pending package scope changed"
+          ],
+          "requiredArtifacts": [
+            "scripts/powershell-safety-selftest.mjs",
+            "tests/pkg-t4-powershell-safety.test.ts",
+            "audit/checkpoints/V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29.json"
+          ],
+          "unsupportedCases": [
+            "The protected verify-artifact.ps1 is not changed; the unlisted-file check is left to a separate Founder decision (F-T4-001).",
+            "Merge happens after PKG-T3; this package is stacked on it."
+          ]
+        }
+      ],
+      "allowedPathPrefixes": [
+        "scripts/powershell-safety-selftest.mjs",
+        "tests/",
+        ".ai/REVIEW_STATUS.md",
+        "audit/V6-FULL-SCAN-PROGRESS.json",
+        "CHANGELOG.md",
+        "audit/checkpoints/"
+      ],
+      "protectedPaths": [
+        ".gitattributes",
+        ".github/workflows/ci.yml",
+        ".gitignore",
+        ".gitmodules",
+        ".npmrc",
+        "AGENTS.md",
+        "ARCHITECTURE-CONSTITUTION.md",
+        "ARCHITECTURE-FREEZE.md",
+        "BUILD-RULES.md",
+        "CANONICAL-STATUS.md",
+        "CLAUDE.md",
+        "CODEX.md",
+        "DEFINITION-OF-DONE.md",
+        "FULL-REPO-CONSTRUCTION-CONTRACT.md",
+        "INSTALLATION-GO-CHECKLIST.md",
+        "THIRD-PARTY-NOTICES.md",
+        "apps/control-api/src/server.ts",
+        "apps/desktop/main.mjs",
+        "apps/desktop/preload.mjs",
+        "apps/desktop/renderer/app.js",
+        "apps/desktop/renderer/index.html",
+        "automation/factory-supervisor.mjs",
+        "automation/lib/evidence-signing.mjs",
+        "automation/lib/filesystem-boundary.mjs",
+        "automation/lib/redaction.mjs",
+        "config/action-policy.json",
+        "config/automation.json",
+        "config/builder-execution-policy.json",
+        "config/environment-policy.json",
+        "config/evidence-ledger-policy.json",
+        "config/git-metadata-policy.json",
+        "config/omniroute-policy.json",
+        "config/package-policy.json",
+        "config/protected-paths.json",
+        "config/supply-chain-policy.json",
+        "config/trust-root-manifest.json",
+        "config/validation.json",
+        "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
+        "governance/accepted-debt.json",
+        "governance/known-limitations.json",
+        "governance/waivers.json",
+        "prompts/AUTO-BUILDER.md",
+        "prompts/AUTO-REMEDIATION.md",
+        "prompts/AUTO-REVIEW.md",
+        "prompts/AUTO-VALIDATION-FIX.md",
+        "registries/phase-contracts-index.json",
+        "roadmap/build-waves.json",
+        "roadmap/critical-path.json",
+        "roadmap/dependency-graph.json",
+        "roadmap/parallel-lanes.json",
+        "roadmap/review-packages.json",
+        "roadmap/scheduler-state.template.json",
+        "schemas/install-report.schema.json",
+        "scripts/bootstrap-kernel-selftest.mjs",
+        "scripts/bootstrap.ps1",
+        "scripts/build-release-zip.mjs",
+        "scripts/builder-boundary-smoke.mjs",
+        "scripts/capture-provider-provenance.mjs",
+        "scripts/check-prereqs.ps1",
+        "scripts/claude-builder-broker.mjs",
+        "scripts/codex-reviewer-broker.mjs",
+        "scripts/dependency-supply-chain.mjs",
+        "scripts/generate-trust-root.mjs",
+        "scripts/harden-evidence-key.ps1",
+        "scripts/init-evidence-signing.mjs",
+        "scripts/init-private-git.ps1",
+        "scripts/install-report.mjs",
+        "scripts/install.ps1",
+        "scripts/mechanical-kernel-selftest.mjs",
+        "scripts/orchestrator-selftest.mjs",
+        "scripts/phase0-acceptance.mjs",
+        "scripts/preflight.mjs",
+        "scripts/provider-smoke.mjs",
+        "scripts/provision-electron.mjs",
+        "scripts/register-autostart.ps1",
+        "scripts/register-orchestrator-autostart.ps1",
+        "scripts/release-sha256sums.mjs",
+        "scripts/runtime-schema-conformance-selftest.mjs",
+        "scripts/sanitize-process-env.ps1",
+        "scripts/secret-sanity.mjs",
+        "scripts/smoke-control-api.mjs",
+        "scripts/smoke-control-tower.mjs",
+        "scripts/smoke-desktop.mjs",
+        "scripts/start-control-tower.ps1",
+        "scripts/start-full-auto.ps1",
+        "scripts/supervisor-state-machine-selftest.mjs",
+        "scripts/uasco-orchestrator.mjs",
+        "scripts/v6-apps-control-desktop-selftest.mjs",
+        "scripts/validate-agent-competencies.mjs",
+        "scripts/validate-agent-semantic.mjs",
+        "scripts/validate-architecture.mjs",
+        "scripts/validate-config-runtime-enforcement.mjs",
+        "scripts/validate-domain-packs.mjs",
+        "scripts/validate-mechanical-closure.mjs",
+        "scripts/validate-organization.mjs",
+        "scripts/validate-paste2-closure.mjs",
+        "scripts/validate-paste2h-runtime-release.mjs",
+        "scripts/validate-paste3-agent-specialization.mjs",
+        "scripts/validate-paste3-closure.mjs",
+        "scripts/validate-paste3-technology-domain-registry.mjs",
+        "scripts/validate-paste4a.mjs",
+        "scripts/validate-paste4b.mjs",
+        "scripts/validate-paste4c-doc-truth.mjs",
+        "scripts/validate-paste4d-release-truth.mjs",
+        "scripts/validate-phase-contracts.mjs",
+        "scripts/validate-registries.mjs",
+        "scripts/validate-release-supply-chain.mjs",
+        "scripts/validate-review-graph-v2.mjs",
+        "scripts/validate-runtime-contracts.mjs",
+        "scripts/validate-runtime-resilience.mjs",
+        "scripts/validate-schema-catalog.mjs",
+        "scripts/validate-schema-strictness.mjs",
+        "scripts/validate-technology-graph.mjs",
+        "scripts/validate-tr-comments.mjs",
+        "scripts/validate-woven-model.mjs",
+        "scripts/verify-artifact.mjs",
+        "scripts/verify-evidence-ledger.mjs",
+        "scripts/verify-release-extract.mjs",
+        "scripts/verify-remote-protection.mjs",
+        "scripts/verify-trust-root.mjs",
+        "tsconfig.json",
+        "automation/lib/",
+        "scripts/validate-",
+        "scripts/run-validation.mjs",
+        "schemas/independent-review-result.schema.json",
+        "schemas/review-finding.schema.json",
+        "schemas/review-bundle.schema.json",
+        "schemas/milestone-contract.schema.json",
+        "schemas/run-event.schema.json",
+        "schemas/run-manifest.schema.json",
+        "schemas/phase0-acceptance.schema.json",
+        "prompts/",
+        "roadmap/contracts/",
+        "config/"
+      ],
+      "mandatoryValidation": [
+        "Canonical runner scripts/run-validation.mjs over config/validation.json",
+        "vitest run including tests/pkg-t4-powershell-safety.test.ts",
+        "scripts/powershell-safety-selftest.mjs on Windows PowerShell 5.1",
+        "broad dependency-free selftest suite"
+      ],
+      "mandatoryEvidence": [
+        "reviewed commit SHA",
+        "exact tool/runtime versions",
+        "canonical validation report",
+        "changed file sha256 digests"
+      ],
+      "riskLevel": 2,
+      "allowPaidApi": false,
+      "allowProduction": false,
+      "allowRisk5": false,
+      "allowDependencyChanges": false,
+      "unsupportedCases": [
+        "The protected verify-artifact.ps1 is not changed; the unlisted-file check is left to a separate Founder decision (F-T4-001).",
+        "Merge happens after PKG-T3; this package is stacked on it."
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "maxFilesChanged": 10,
+      "allowExistingTestAssertionReduction": false,
+      "frozenAt": "2026-09-29T21:03:12.535Z",
+      "digest": "c646aedcc74266bd77c2e52e7e5f7eae2ee4de82c3342ab825d139dde77f01bc"
+    },
+    "reviewBasis": {
+      "requirements": [
+        {
+          "id": "P000-REQ-9832a0de3dec5f1d",
+          "text": "[V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29 founderAuthorization.decision] INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES"
+        },
+        {
+          "id": "P000-REQ-435a84e71659f9fe",
+          "text": "[V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29 founderAuthorization.rule] Founder rule 2026-09-29: A blocked/review-pending package blocks ONLY its own dependency lane; implement the next independent eligible package in an isolated branch, validate, checkpoint, commit, prepare the frozen review bundle, mark it REVIEW_PENDING if Codex is unavailable, and continue; never modify a pending package's branch, bundle, clone, evidence or cycle state."
+        },
+        {
+          "id": "P000-REQ-f89235e0ba457d1d",
+          "text": "[V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29 founderAuthorization.protectedFiles] "
+        },
+        {
+          "id": "P000-REQ-9d8ad554e1da4707",
+          "text": "[V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29 founderAuthorization.constraint] Tests and non-protected documentation only; no protected file, no pending package scope, no merge."
+        }
+      ],
+      "invariants": [
+        {
+          "id": "P000-INV-cee4912d3e0a2019",
+          "text": "NO_FAKE_SUCCESS"
+        },
+        {
+          "id": "P000-INV-59e59d4476fc0664",
+          "text": "NO_WEAKENED_CONTROLS"
+        },
+        {
+          "id": "P000-INV-f74092f031a0e4aa",
+          "text": "NO_SILENT_SCOPE_EXPANSION"
+        },
+        {
+          "id": "P000-INV-6122df41f404fe66",
+          "text": "NO_SELF_CERTIFICATION"
+        },
+        {
+          "id": "P000-INV-b8274eed78d72a76",
+          "text": "EVIDENCE_REQUIRED"
+        },
+        {
+          "id": "P000-INV-473c0420ab79dc5f",
+          "text": "FAIL_CLOSED"
+        }
+      ],
+      "acceptanceCriteria": [
+        {
+          "id": "P000-AC-b07722a87fadfc19",
+          "text": "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11, and the checkpoint records the measured validation environment."
+        },
+        {
+          "id": "P000-AC-8c50670efbb2b7ea",
+          "text": "Every PowerShell script under scripts/ is parsed with the PowerShell 5.1 parser without errors and without Invoke-Expression; the safety rules reject EncodedCommand, DownloadString/DownloadFile, persistent Set-ExecutionPolicy, piping to Invoke-Expression, entry scripts without $ErrorActionPreference=\"Stop\" and web requests outside the allowlist or without disabled redirects."
+        },
+        {
+          "id": "P000-AC-05d10764e1ebd429",
+          "text": "Both artifact verifiers accept a clean tree and reject content tamper, a missing file, a manifest without the lockfile and an unsafe path; the Node verifier rejects an unlisted file and the PowerShell verifier behaviour for it is recorded honestly as a known asymmetry and an open finding, not as PASS parity."
+        },
+        {
+          "id": "P000-AC-cb0e39fcbfc80fb6",
+          "text": "install.ps1 runs both verifiers before bootstrap; outside Windows the selftest skips honestly; no protected file changes and no existing test, validator or policy is weakened."
+        }
+      ],
+      "mandatoryValidation": [
+        {
+          "id": "P000-VAL-2c7156c14e11890c",
+          "text": "Canonical runner scripts/run-validation.mjs over config/validation.json"
+        },
+        {
+          "id": "P000-VAL-0a69d1baaab8ae11",
+          "text": "vitest run including tests/pkg-t4-powershell-safety.test.ts"
+        },
+        {
+          "id": "P000-VAL-06a6191cf34c769a",
+          "text": "scripts/powershell-safety-selftest.mjs on Windows PowerShell 5.1"
+        },
+        {
+          "id": "P000-VAL-c9ec154ca647422f",
+          "text": "broad dependency-free selftest suite"
+        }
+      ],
+      "mandatoryFailureCases": [
+        {
+          "id": "P000-FAIL-c816721fd6c69888",
+          "text": "a PowerShell parse error or Invoke-Expression use accepted"
+        },
+        {
+          "id": "P000-FAIL-85a84bab471570a4",
+          "text": "a tampered artifact tree accepted by either verifier in the shared cases"
+        },
+        {
+          "id": "P000-FAIL-08eb5a72e5961372",
+          "text": "the unlisted-file asymmetry hidden or reported as parity"
+        },
+        {
+          "id": "P000-FAIL-af38e8fe79b8ba86",
+          "text": "a protected file or pending package scope changed"
+        }
+      ],
+      "requiredArtifacts": [
+        {
+          "id": "P000-ART-049b213363da8a92",
+          "text": "scripts/powershell-safety-selftest.mjs"
+        },
+        {
+          "id": "P000-ART-e8db174917c542ac",
+          "text": "tests/pkg-t4-powershell-safety.test.ts"
+        },
+        {
+          "id": "P000-ART-4527671d810d9793",
+          "text": "audit/checkpoints/V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29.json"
+        }
+      ],
+      "risk": [
+        {
+          "id": "P000-RISK-abbd07e0ead7e36e",
+          "text": "riskLevel=2; reviewProfile=TRUST_CRITICAL"
+        }
+      ]
+    },
+    "evidenceCatalog": [
+      {
+        "id": "VALIDATION-REGISTRIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "registries",
+        "validationDigest": "8ffa6f6330a6110d8e99139af483e17c71a6df86bea6eb90b53ef87638246b30",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 70
+      },
+      {
+        "id": "VALIDATION-ARCHITECTURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "architecture",
+        "validationDigest": "e5bf5d23fdda0d99094fdb8527a39d03f097200ed58ad48e545edfa66c72268f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 66
+      },
+      {
+        "id": "VALIDATION-TR",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tr",
+        "validationDigest": "2e6b2ed7451d768a768929c1cffbfbe7163006ef338db738aee25eb2e32f0f10",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 915
+      },
+      {
+        "id": "VALIDATION-COMPETENCIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "competencies",
+        "validationDigest": "10562f2c1b237b192ff646172cda08cd586bf3f09cc90eb8537e860e8e89b83d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 81
+      },
+      {
+        "id": "VALIDATION-ORGANIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "organization",
+        "validationDigest": "6ac3f9799e6e1b0f96e62bcf1a9a0ade5c38852dcc133d2c11b1fd80156ccea5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 76
+      },
+      {
+        "id": "VALIDATION-SCHEMAS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schemas",
+        "validationDigest": "7ba29d41eceb71bd056a516963edf5ddfd26fcbd497d31ea31e504c769879057",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 125
+      },
+      {
+        "id": "VALIDATION-TECHNOLOGY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "technology",
+        "validationDigest": "4120c97312f885fb82187e6933b08c510c95e46d943ebc95f46ef4a5a2a66050",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 75
+      },
+      {
+        "id": "VALIDATION-PASTE3-TECHNOLOGY-DOMAIN-REGISTRY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-technology-domain-registry",
+        "validationDigest": "9951864be421206417dc0fc09feb8586d35de6df8b90b1132a044576afac17b5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 415
+      },
+      {
+        "id": "VALIDATION-DOMAIN-PACKS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "domain-packs",
+        "validationDigest": "6aa9c5c7e2dd34e3686e298fe3e0d67964ab0803815fd6d42f3d0f84a1048de7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 81
+      },
+      {
+        "id": "VALIDATION-AGENT-SEMANTIC",
+        "kind": "VALIDATION_STEP",
+        "validationId": "agent-semantic",
+        "validationDigest": "89e22dc4c751e6e449ca9297710721f30e635e17966c6d068f6e1100b5f0db53",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 158
+      },
+      {
+        "id": "VALIDATION-PASTE3-AGENT-SPECIALIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-agent-specialization",
+        "validationDigest": "c8caf548402f3e5d2cce7957a5e2bed0ba7e6df2b63a93989a786cd9890fbb44",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 24853
+      },
+      {
+        "id": "VALIDATION-PHASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "phase-contracts",
+        "validationDigest": "28fdd6131326497e67d9e3c3688f2c7e820c4e6d75587fb58dc9e35f8d545b59",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 212
+      },
+      {
+        "id": "VALIDATION-PASTE4A-CONSTRUCTION-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4a-construction-graph",
+        "validationDigest": "928324142269635a66da22344f852a800442428fa797d278922463d8c0790041",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 111
+      },
+      {
+        "id": "VALIDATION-PASTE4B-TRACEABILITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4b-traceability",
+        "validationDigest": "cdc94fbc1ab6b34cd1867473d6a6ab32555f421b82dc3bce66c8f95e82f9adf7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 205
+      },
+      {
+        "id": "VALIDATION-PASTE4C-DOC-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4c-doc-truth",
+        "validationDigest": "a86eb363edc20bab120a6590eeb2ac9f9168b9e0a164a5efb68574c2bb8b4e82",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 135
+      },
+      {
+        "id": "VALIDATION-PASTE4D-RELEASE-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4d-release-truth",
+        "validationDigest": "9de0bee8320b7f76dc95efd1af8751c01dc8b945d71a31a105dcef9a7c7dfaa8",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 337
+      },
+      {
+        "id": "VALIDATION-REVIEW-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "review-graph",
+        "validationDigest": "d269f09107f2fc3ffe916892e24db59375682a22a2a6775792a09b60361ec15f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 92
+      },
+      {
+        "id": "VALIDATION-SCHEMA-STRICT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schema-strict",
+        "validationDigest": "1e0b34db66453f8c8b54f4bddf4af81794090404f2b66c4fbe03d8b5c032468f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 175
+      },
+      {
+        "id": "VALIDATION-WOVEN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "woven",
+        "validationDigest": "3f4799cff5ec0a4516f7c2bf34292594d680d5e3b20ad2ca73becfb1efbe556d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 94
+      },
+      {
+        "id": "VALIDATION-PASTE3-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-source-closure",
+        "validationDigest": "96cdee7724cf5f145a0260098b33782eb8f9dad828a15f75396d4b04a492f74e",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 25428
+      },
+      {
+        "id": "VALIDATION-CONFIG-RUNTIME-ENFORCEMENT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "config-runtime-enforcement",
+        "validationDigest": "ccccb144bce66a977b83a70c4438c72ec13811a4027b94e24fe917015649fc17",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 97
+      },
+      {
+        "id": "VALIDATION-MECHANICAL",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical",
+        "validationDigest": "a802e0c8871cdac4940257b4c0ebf7ef8c837accd69e06ce8936903b9259ab62",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 156
+      },
+      {
+        "id": "VALIDATION-RUNTIME-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-contracts",
+        "validationDigest": "fef8d265e0207f281d438edd4ca13510c37c864c5bd44116e3a1741523e4267a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 739
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RELEASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-release-contracts",
+        "validationDigest": "663f4aefb74075b8404d3424fbd911793a297746e5f11fa9bf43783c285b359a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 111
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RESILIENCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-resilience",
+        "validationDigest": "d13001c5509688e16fdeb5815f15cd945076a1687a721b72c1229c1cb58f24e3",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 153
+      },
+      {
+        "id": "VALIDATION-PASTE2-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste2-source-closure",
+        "validationDigest": "3243c562d6ad710b47b4588b93cb64f8a5172ee089744a9d9d42a315736a969f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 2153
+      },
+      {
+        "id": "VALIDATION-RUNTIME-SCHEMA-CONFORMANCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-schema-conformance",
+        "validationDigest": "78210ab2268bd2aa77de25a46db9d44587cae6cedcb8da5f370e5ad2296ea0ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 212
+      },
+      {
+        "id": "VALIDATION-MECHANICAL-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical-selftest",
+        "validationDigest": "9f0d4aa941e72e684b4fd869c88eb93f07c3814dfda8eee8737f6baf9b65518c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 88
+      },
+      {
+        "id": "VALIDATION-STATE-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "state-selftest",
+        "validationDigest": "feda1327063ae6fddd47ba68f06959d79f614be5b8a5487dc79faf6ee55ee968",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7301
+      },
+      {
+        "id": "VALIDATION-SECRET-SANITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "secret-sanity",
+        "validationDigest": "bb52880e62a0e2817a87a01881b82452fd5eca0793ab916e8b2bdff625fb2888",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 955
+      },
+      {
+        "id": "VALIDATION-DEPENDENCY-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "dependency-supply-chain",
+        "validationDigest": "00a58ae3650584ec15f297865a0708e6c348620736fdbc050f30d31fdf958d6d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 6001
+      },
+      {
+        "id": "VALIDATION-RELEASE-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "release-supply-chain",
+        "validationDigest": "d3c8afe4d87eab0ab03484a9bb4f2a6273ec5a5968d69f59408b90c886d090ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 111
+      },
+      {
+        "id": "VALIDATION-TYPECHECK",
+        "kind": "VALIDATION_STEP",
+        "validationId": "typecheck",
+        "validationDigest": "a98a71fd4edf3842dee1ec22f210375256ff5b3f1f45f5e9ed24426ad9e90f15",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1581
+      },
+      {
+        "id": "VALIDATION-TESTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tests",
+        "validationDigest": "40a24b33f564592720d92832d0610de5ef30a01100e26c2e7f2ca149389ca94c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 39890
+      },
+      {
+        "id": "DIFF-6e1d3c492b92f214",
+        "kind": "CHANGED_FILE",
+        "file": ".ai/REVIEW_STATUS.md"
+      },
+      {
+        "id": "DIFF-06572a96a58dc510",
+        "kind": "CHANGED_FILE",
+        "file": "CHANGELOG.md"
+      },
+      {
+        "id": "DIFF-8a2513579e3f27a9",
+        "kind": "CHANGED_FILE",
+        "file": "audit/V6-FULL-SCAN-PROGRESS.json"
+      },
+      {
+        "id": "DIFF-4527671d810d9793",
+        "kind": "CHANGED_FILE",
+        "file": "audit/checkpoints/V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29.json"
+      },
+      {
+        "id": "DIFF-049b213363da8a92",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/powershell-safety-selftest.mjs"
+      },
+      {
+        "id": "DIFF-e8db174917c542ac",
+        "kind": "CHANGED_FILE",
+        "file": "tests/pkg-t4-powershell-safety.test.ts"
+      },
+      {
+        "id": "RETEST-F-T4-REVIEW-001-TESTS-a87a37e8f3e0",
+        "kind": "FINDING_BOUND_RETEST",
+        "findingId": "F-T4-REVIEW-001",
+        "findingFingerprint": "a87a37e8f3e0a27d03ef97917519a20cd212ceb095e775c8a27bdfac60f5395d",
+        "reviewedCommit": "90ee66034e2def7e8a7e06abab4109c43f8927b9",
+        "remediationCycle": 1,
+        "validationId": "tests",
+        "validationDigest": "40a24b33f564592720d92832d0610de5ef30a01100e26c2e7f2ca149389ca94c",
+        "status": "PASS",
+        "coversFindingIds": [
+          "F-T4-REVIEW-001"
+        ]
+      },
+      {
+        "id": "RETEST-F-T4-REVIEW-002-TESTS-3c90edac9624",
+        "kind": "FINDING_BOUND_RETEST",
+        "findingId": "F-T4-REVIEW-002",
+        "findingFingerprint": "3c90edac9624044007afd7282fa8cc2e21ebcc3b214fe452d38b9b7c8616cf6c",
+        "reviewedCommit": "90ee66034e2def7e8a7e06abab4109c43f8927b9",
+        "remediationCycle": 1,
+        "validationId": "tests",
+        "validationDigest": "40a24b33f564592720d92832d0610de5ef30a01100e26c2e7f2ca149389ca94c",
+        "status": "PASS",
+        "coversFindingIds": [
+          "F-T4-REVIEW-002"
+        ]
+      }
+    ],
+    "changedFiles": [
+      ".ai/REVIEW_STATUS.md",
+      "CHANGELOG.md",
+      "audit/V6-FULL-SCAN-PROGRESS.json",
+      "audit/checkpoints/V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29.json",
+      "scripts/powershell-safety-selftest.mjs",
+      "tests/pkg-t4-powershell-safety.test.ts"
+    ],
+    "changeGuard": {
+      "ok": true,
+      "violations": [],
+      "dependencyChanges": [],
+      "diffLines": 156
+    },
+    "diffStat": " .ai/REVIEW_STATUS.md                               |  3 +-\n CHANGELOG.md                                       |  5 ++\n audit/V6-FULL-SCAN-PROGRESS.json                   |  3 +-\n .../V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29.json    | 90 ++++++++++++++++++++++\n scripts/powershell-safety-selftest.mjs             | 49 ++++++++++++\n tests/pkg-t4-powershell-safety.test.ts             |  6 ++\n 6 files changed, 154 insertions(+), 2 deletions(-)\n",
+    "validation": {
+      "//TR": "Bu runtime report canonical validation command/exit/duration sonuçlarını redacted biçimde kaydeder; read-only static gruplar paralel çalışabilir.",
+      "schemaVersion": "1.1.0",
+      "startedAt": "2026-09-30T01:47:52.425Z",
+      "steps": [
+        {
+          "id": "registries",
+          "command": [
+            "node",
+            "scripts/validate-registries.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 70,
+          "logFile": ".ai\\runtime\\validation-registries.log"
+        },
+        {
+          "id": "architecture",
+          "command": [
+            "node",
+            "scripts/validate-architecture.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 66,
+          "logFile": ".ai\\runtime\\validation-architecture.log"
+        },
+        {
+          "id": "tr",
+          "command": [
+            "node",
+            "scripts/validate-tr-comments.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 915,
+          "logFile": ".ai\\runtime\\validation-tr.log"
+        },
+        {
+          "id": "competencies",
+          "command": [
+            "node",
+            "scripts/validate-agent-competencies.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 81,
+          "logFile": ".ai\\runtime\\validation-competencies.log"
+        },
+        {
+          "id": "organization",
+          "command": [
+            "node",
+            "scripts/validate-organization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 76,
+          "logFile": ".ai\\runtime\\validation-organization.log"
+        },
+        {
+          "id": "schemas",
+          "command": [
+            "node",
+            "scripts/validate-schema-catalog.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 125,
+          "logFile": ".ai\\runtime\\validation-schemas.log"
+        },
+        {
+          "id": "technology",
+          "command": [
+            "node",
+            "scripts/validate-technology-graph.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 75,
+          "logFile": ".ai\\runtime\\validation-technology.log"
+        },
+        {
+          "id": "paste3-technology-domain-registry",
+          "command": [
+            "node",
+            "scripts/validate-paste3-technology-domain-registry.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 415,
+          "logFile": ".ai\\runtime\\validation-paste3-technology-domain-registry.log"
+        },
+        {
+          "id": "domain-packs",
+          "command": [
+            "node",
+            "scripts/validate-domain-packs.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 81,
+          "logFile": ".ai\\runtime\\validation-domain-packs.log"
+        },
+        {
+          "id": "agent-semantic",
+          "command": [
+            "node",
+            "scripts/validate-agent-semantic.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 158,
+          "logFile": ".ai\\runtime\\validation-agent-semantic.log"
+        },
+        {
+          "id": "paste3-agent-specialization",
+          "command": [
+            "node",
+            "scripts/validate-paste3-agent-specialization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 24853,
+          "logFile": ".ai\\runtime\\validation-paste3-agent-specialization.log"
+        },
+        {
+          "id": "phase-contracts",
+          "command": [
+            "node",
+            "scripts/validate-phase-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 212,
+          "logFile": ".ai\\runtime\\validation-phase-contracts.log"
+        },
+        {
+          "id": "paste4a-construction-graph",
+          "command": [
+            "node",
+            "scripts/validate-paste4a.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 111,
+          "logFile": ".ai\\runtime\\validation-paste4a-construction-graph.log"
+        },
+        {
+          "id": "paste4b-traceability",
+          "command": [
+            "node",
+            "scripts/validate-paste4b.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 205,
+          "logFile": ".ai\\runtime\\validation-paste4b-traceability.log"
+        },
+        {
+          "id": "paste4c-doc-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4c-doc-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 135,
+          "logFile": ".ai\\runtime\\validation-paste4c-doc-truth.log"
+        },
+        {
+          "id": "paste4d-release-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4d-release-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 337,
+          "logFile": ".ai\\runtime\\validation-paste4d-release-truth.log"
+        },
+        {
+          "id": "review-graph",
+          "command": [
+            "node",
+            "scripts/validate-review-graph-v2.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 92,
+          "logFile": ".ai\\runtime\\validation-review-graph.log"
+        },
+        {
+          "id": "schema-strict",
+          "command": [
+            "node",
+            "scripts/validate-schema-strictness.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 175,
+          "logFile": ".ai\\runtime\\validation-schema-strict.log"
+        },
+        {
+          "id": "woven",
+          "command": [
+            "node",
+            "scripts/validate-woven-model.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 94,
+          "logFile": ".ai\\runtime\\validation-woven.log"
+        },
+        {
+          "id": "paste3-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste3-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 25428,
+          "logFile": ".ai\\runtime\\validation-paste3-source-closure.log"
+        },
+        {
+          "id": "config-runtime-enforcement",
+          "command": [
+            "node",
+            "scripts/validate-config-runtime-enforcement.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 97,
+          "logFile": ".ai\\runtime\\validation-config-runtime-enforcement.log"
+        },
+        {
+          "id": "mechanical",
+          "command": [
+            "node",
+            "scripts/validate-mechanical-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 156,
+          "logFile": ".ai\\runtime\\validation-mechanical.log"
+        },
+        {
+          "id": "runtime-contracts",
+          "command": [
+            "node",
+            "scripts/validate-runtime-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 739,
+          "logFile": ".ai\\runtime\\validation-runtime-contracts.log"
+        },
+        {
+          "id": "runtime-release-contracts",
+          "command": [
+            "node",
+            "scripts/validate-paste2h-runtime-release.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 111,
+          "logFile": ".ai\\runtime\\validation-runtime-release-contracts.log"
+        },
+        {
+          "id": "runtime-resilience",
+          "command": [
+            "node",
+            "scripts/validate-runtime-resilience.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 153,
+          "logFile": ".ai\\runtime\\validation-runtime-resilience.log"
+        },
+        {
+          "id": "paste2-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste2-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 2153,
+          "logFile": ".ai\\runtime\\validation-paste2-source-closure.log"
+        },
+        {
+          "id": "runtime-schema-conformance",
+          "command": [
+            "node",
+            "scripts/runtime-schema-conformance-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 212,
+          "logFile": ".ai\\runtime\\validation-runtime-schema-conformance.log"
+        },
+        {
+          "id": "mechanical-selftest",
+          "command": [
+            "node",
+            "scripts/mechanical-kernel-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 88,
+          "logFile": ".ai\\runtime\\validation-mechanical-selftest.log"
+        },
+        {
+          "id": "state-selftest",
+          "command": [
+            "node",
+            "scripts/supervisor-state-machine-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7301,
+          "logFile": ".ai\\runtime\\validation-state-selftest.log"
+        },
+        {
+          "id": "secret-sanity",
+          "command": [
+            "node",
+            "scripts/secret-sanity.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 955,
+          "logFile": ".ai\\runtime\\validation-secret-sanity.log"
+        },
+        {
+          "id": "dependency-supply-chain",
+          "command": [
+            "node",
+            "scripts/dependency-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 6001,
+          "logFile": ".ai\\runtime\\validation-dependency-supply-chain.log"
+        },
+        {
+          "id": "release-supply-chain",
+          "command": [
+            "node",
+            "scripts/validate-release-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 111,
+          "logFile": ".ai\\runtime\\validation-release-supply-chain.log"
+        },
+        {
+          "id": "typecheck",
+          "command": [
+            "node",
+            "node_modules/typescript/bin/tsc",
+            "--noEmit"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1581,
+          "logFile": ".ai\\runtime\\validation-typecheck.log"
+        },
+        {
+          "id": "tests",
+          "command": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 39890,
+          "logFile": ".ai\\runtime\\validation-tests.log"
+        }
+      ],
+      "status": "PASS",
+      "finishedAt": "2026-09-30T01:50:02.542Z"
+    },
+    "knownLimitations": [],
+    "acceptedDebt": [],
+    "waivers": [],
+    "unsupportedCases": [
+      "The protected verify-artifact.ps1 is not changed; the unlisted-file check is left to a separate Founder decision (F-T4-001).",
+      "Merge happens after PKG-T3; this package is stacked on it."
+    ],
+    "previousFindingLedger": [
+      {
+        "id": "F-T4-REVIEW-001",
+        "classification": "BLOCKER",
+        "severity": "P2",
+        "category": "Safety rule false negative",
+        "basisRefs": [
+          "P000-AC-8c50670efbb2b7ea"
+        ],
+        "currentDiffCausality": "CURRENT_DIFF",
+        "scopeStatus": "IN_SCOPE",
+        "file": "scripts/powershell-safety-selftest.mjs",
+        "line": 22,
+        "reproduction": {
+          "steps": [
+            "Read the reviewed commit's selftest and scripts/ensure-omniroute.ps1 with git show.",
+            "In memory, remove only the first occurrence of -MaximumRedirection 0 from ensure-omniroute.ps1, leaving the second request unchanged.",
+            "Execute the exact safety-scenario body with readFileSync returning that modified string and the original allowlist and helper set.",
+            "Observe that the scenario passes despite the first web request lacking disabled redirects."
+          ]
+        },
+        "expected": "The safety rules reject a web request without disabled redirects, including when another request in the same allowed script has the required option.",
+        "observed": "The check uses src.includes(WEB_ALLOWED[name]) for the entire file. One guarded request satisfies the check for every request in that file. The read-only, in-memory reproduction returned PASS.",
+        "evidenceRefs": [
+          "DIFF-049b213363da8a92"
+        ],
+        "blockerReason": "The new safety checker does not enforce the frozen acceptance criterion requiring rejection of web requests without disabled redirects.",
+        "remediationAcceptance": "Check redirect protection for each web-request invocation and add a negative regression case containing one guarded and one unguarded request in an allowlisted script; the latter must fail.",
+        "retestValidationIds": [
+          "tests"
+        ],
+        "confidence": 1,
+        "firstSeenCycle": 1,
+        "status": "OPEN",
+        "fingerprint": "a87a37e8f3e0a27d03ef97917519a20cd212ceb095e775c8a27bdfac60f5395d"
+      },
+      {
+        "id": "F-T4-REVIEW-002",
+        "classification": "BLOCKER",
+        "severity": "P2",
+        "category": "Invalid verification evidence",
+        "basisRefs": [
+          "P000-INV-cee4912d3e0a2019",
+          "P000-AC-05d10764e1ebd429"
+        ],
+        "currentDiffCausality": "CURRENT_DIFF",
+        "scopeStatus": "IN_SCOPE",
+        "file": "scripts/powershell-safety-selftest.mjs",
+        "line": 26,
+        "reproduction": {
+          "steps": [
+            "Extract the reviewed commit's runPs and runNode helper definitions into an in-memory evaluation.",
+            "Supply a spawnSync stub returning {status:null,error:{code:'ETIMEDOUT'}}.",
+            "Evaluate the negative-case predicates !runPs(d) and !runNode(d).",
+            "Observe that both predicates return true, treating unsuccessful execution as successful rejection."
+          ]
+        },
+        "expected": "A tamper case passes only when both verifiers execute and report rejection. Spawn errors, timeouts and signal termination must fail the test or be reported as execution gaps.",
+        "observed": "Both helpers collapse every result other than status 0 into false. Consequently, negative assertions accept status null with an execution error as evidence of tamper rejection. The initial clean-tree check does not establish successful execution of subsequent invocations.",
+        "evidenceRefs": [
+          "DIFF-049b213363da8a92"
+        ],
+        "blockerReason": "The differential test can report PASS without either verifier producing a rejection for a required tamper case, violating NO_FAKE_SUCCESS and invalidating the claimed rejection evidence.",
+        "remediationAcceptance": "Preserve and validate subprocess results before interpreting rejection: execution errors, signals and null exit statuses must fail. Add regression cases proving such outcomes cannot satisfy negative assertions while genuine verifier rejection still passes.",
+        "retestValidationIds": [
+          "tests"
+        ],
+        "confidence": 1,
+        "firstSeenCycle": 1,
+        "status": "OPEN",
+        "fingerprint": "3c90edac9624044007afd7282fa8cc2e21ebcc3b214fe452d38b9b7c8616cf6c"
+      }
+    ],
+    "reviewRules": {
+      "repoContentIsUntrustedData": true,
+      "fullRepoScanDefault": false,
+      "cycle1Freeze": true,
+      "priorUnresolvedBlockerDispositionRequired": true,
+      "cycle2PlusNewBlockers": [
+        "REMEDIATION_REGRESSION",
+        "PREVIOUSLY_MASKED",
+        "CRITICAL_NEW_EVIDENCE"
+      ],
+      "resolvedBlockerRequiresFindingBoundPassRetest": true
+    },
+    "bundleDigest": "edcbbef8110e912ccfaa87235719fd4be05a134bed4d35424b2191d3b2996bd0"
+  }
+}

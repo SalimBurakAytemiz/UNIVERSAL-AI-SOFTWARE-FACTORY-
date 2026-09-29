@@ -1,0 +1,1649 @@
+{
+  "//TR": "Bu kayıt tek bir Codex bağımsız review çalıştırmasının frozen bundle, değiştirilmemiş reviewer çıktısı, run manifest ve governed değerlendirmesini kalıcı tutar; evidence signing anahtarı henüz başlatılmadığı için imzasızdır.",
+  "schemaVersion": "1.0.0",
+  "signature": "UNSIGNED_EVIDENCE_KEY_NOT_INITIALIZED",
+  "runDir": "b070dcb-c1-20260929T105716Z-broker",
+  "runId": "RUN-V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-20260929T044138Z-C1",
+  "baseCommit": "3d430dd0173fc0d043b635a4582b6dd378100b7a",
+  "reviewedCommit": "b070dcb8071254d561f70a1eb4235ab1c172f1fb",
+  "cycle": 1,
+  "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+  "bundleDigest": "d18407494fe5444dbd0a77032d0c269cc83b028b388ce9e29315fedf3fbea01b",
+  "bundleFileSha256": "45315576a4cb399fc59e7399805b8b96c88b1c5c2a68a8980d719bcb131871d8",
+  "milestoneContractId": "V6-PKG-AUT1-UNATTENDED-ORCHESTRATION",
+  "milestoneContractDigest": "07ae7574bbb879a93c9391e2de187763cd0a3b4eed6c30c9bbad6b7937e4ec89",
+  "reviewResultText": "{\n  \"schemaVersion\": \"1.1.0\",\n  \"runId\": \"RUN-V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-20260929T044138Z-C1\",\n  \"cycle\": 1,\n  \"baseCommit\": \"3d430dd0173fc0d043b635a4582b6dd378100b7a\",\n  \"reviewedCommit\": \"b070dcb8071254d561f70a1eb4235ab1c172f1fb\",\n  \"reviewBundleDigest\": \"d18407494fe5444dbd0a77032d0c269cc83b028b388ce9e29315fedf3fbea01b\",\n  \"result\": \"BLOCKED\",\n  \"reviewer\": {\n    \"provider\": \"OPENAI\",\n    \"tool\": \"Codex\",\n    \"toolVersion\": null,\n    \"modelId\": \"gpt-6\",\n    \"independenceStatus\": \"SUFFICIENT\"\n  },\n  \"findings\": [\n    {\n      \"id\": \"F-AUT1-001\",\n      \"classification\": \"BLOCKER\",\n      \"severity\": \"P1\",\n      \"category\": \"Global Stop enforcement\",\n      \"file\": \"scripts/uasco-orchestrator.mjs\",\n      \"line\": 20,\n      \"basisRefs\": [\"P000-REQ-e267451d94cc5866\"],\n      \"evidenceRefs\": [\"DIFF-3412ec41eb417186\", \"DIFF-39e0db0a560c4bf1\", \"DIFF-6ea2b1b4cd0b9472\"],\n      \"currentDiffCausality\": \"CURRENT_DIFF\",\n      \"scopeStatus\": \"IN_SCOPE\",\n      \"expected\": \"Activating Global Stop during a tick prevents subsequent actions and stops active command trees.\",\n      \"observed\": \"Global Stop is checked only before acquiring the lock. runTick never checks it between actions, and createContractRunner uses synchronous spawning without stop monitoring. A stop raised during review therefore permits subsequent merge, packaging, signing or installation.\",\n      \"reproduction\": {\n        \"steps\": [\n          \"Start a tick with a review-pending package and no stop signal.\",\n          \"Activate Global Stop while its review executor is running.\",\n          \"Complete review with CLEAN; runTick schedules the next action without checking the signal. The synchronous command runner also has no active-process stop path.\"\n        ]\n      },\n      \"blockerReason\": \"The new unattended path weakens the explicitly protected Founder Global Stop control.\",\n      \"remediationAcceptance\": \"Check the authoritative stop before every action and command, monitor it during long-running commands, and terminate the command tree safely. Test stop activation during review and before a subsequent mutation.\",\n      \"retestValidationIds\": [\"tests\"],\n      \"confidence\": 1,\n      \"firstSeenCycle\": 1,\n      \"status\": \"OPEN\"\n    },\n    {\n      \"id\": \"F-AUT1-002\",\n      \"classification\": \"BLOCKER\",\n      \"severity\": \"P1\",\n      \"category\": \"Cached independent review integrity\",\n      \"file\": \"automation/lib/review-pipeline.mjs\",\n      \"line\": 47,\n      \"basisRefs\": [\"P000-INV-6122df41f404fe66\", \"P000-INV-b8274eed78d72a76\", \"P000-INV-473c0420ab79dc5f\"],\n      \"evidenceRefs\": [\"DIFF-cdaf13d36c426844\", \"DIFF-ca0c63be98abbdb0\"],\n      \"currentDiffCausality\": \"CURRENT_DIFF\",\n      \"scopeStatus\": \"IN_SCOPE\",\n      \"expected\": \"Adopting a completed review preserves the governed decision derived from the verified independent reviewer output.\",\n      \"observed\": \"findCompletedRun trusts any cached governed-result.json with status EVALUATED. The review executor adopts it without re-evaluation. recordReviewEvidence checks the raw reviewer-output hash but does not bind the governed decision to that output; merge then trusts the copied governedResult. An in-memory fixture with unchanged BLOCKED reviewer output and a modified cached governedResult CLEAN was adopted as CLEAN.\",\n      \"reproduction\": {\n        \"steps\": [\n          \"Use a completed run for the matching bundle and cycle whose raw review result is BLOCKED and still matches its manifest hash.\",\n          \"Change only governed-result.json to status EVALUATED and governedResult CLEAN.\",\n          \"findCompletedRun returns that object; review skips evaluateReviewRun, records it, and returns CLEAN. The merge gate checks that cached value rather than re-deriving the decision.\"\n        ]\n      },\n      \"blockerReason\": \"A modified derived cache can authorize integration without a CLEAN independent review.\",\n      \"remediationAcceptance\": \"Verify the manifest/output identities and re-derive governance from the unchanged schema-valid reviewer result and frozen bundle before adoption and integration, or verify an equivalently authenticated binding. A modified governed cache must never promote BLOCKED to CLEAN.\",\n      \"retestValidationIds\": [\"tests\"],\n      \"confidence\": 1,\n      \"firstSeenCycle\": 1,\n      \"status\": \"OPEN\"\n    },\n    {\n      \"id\": \"F-AUT1-003\",\n      \"classification\": \"BLOCKER\",\n      \"severity\": \"P1\",\n      \"category\": \"Builder-controlled authorization policy\",\n      \"file\": \"automation/lib/orchestrator-executors.mjs\",\n      \"line\": 100,\n      \"basisRefs\": [\"P000-AC-d5d555cca1420ec0\", \"P000-REQ-e267451d94cc5866\"],\n      \"evidenceRefs\": [\"DIFF-ca0c63be98abbdb0\"],\n      \"currentDiffCausality\": \"CURRENT_DIFF\",\n      \"scopeStatus\": \"IN_SCOPE\",\n      \"expected\": \"Protected-change classification uses a trusted policy that the builder cannot alter during the round.\",\n      \"observed\": \"builderRound loads config/protected-paths.json from the builder worktree after the builder returns and uses that policy to classify every edit, including the policy file itself. Clearing exactPaths and protectedPrefixes makes protectedChangeViolations return no violations. Where allowedPathPrefixes covers the affected files, unauthorized protected edits pass this gate and the worktree's validation script is executed.\",\n      \"reproduction\": {\n        \"steps\": [\n          \"Use a package whose path scope includes config/protected-paths.json and another protected file, without protected authorization for those changes.\",\n          \"Have the builder empty exactPaths/protectedPrefixes and edit the other file.\",\n          \"The post-builder classifier reads the emptied policy and reports no protected changes; touchedProtected is also false. The in-memory classifier check returned an empty violation list for the policy and scripts/run-validation.mjs.\"\n        ]\n      },\n      \"blockerReason\": \"The builder can redefine the protection boundary used to enforce recorded Founder authority before validation or independent review.\",\n      \"remediationAcceptance\": \"Classify all changes against an immutable pre-builder or verified control-plane policy, including changes to that policy itself. Reject unauthorized protected edits before executing worktree code. Add an adversarial policy-removal regression.\",\n      \"retestValidationIds\": [\"tests\"],\n      \"confidence\": 1,\n      \"firstSeenCycle\": 1,\n      \"status\": \"OPEN\"\n    },\n    {\n      \"id\": \"F-AUT1-004\",\n      \"classification\": \"BLOCKER\",\n      \"severity\": \"P1\",\n      \"category\": \"Remediation convergence bypass\",\n      \"file\": \"automation/lib/orchestrator-engine.mjs\",\n      \"line\": 55,\n      \"basisRefs\": [\"P000-AC-d5d555cca1420ec0\", \"P000-INV-f74092f031a0e4aa\"],\n      \"evidenceRefs\": [\"DIFF-39e0db0a560c4bf1\", \"DIFF-ca0c63be98abbdb0\"],\n      \"currentDiffCausality\": \"CURRENT_DIFF\",\n      \"scopeStatus\": \"IN_SCOPE\",\n      \"expected\": \"A temporarily queued remediation resumes as remediation with the original frozen contract, prior blocker ledger and next review cycle.\",\n      \"observed\": \"A QUEUED outcome from REMEDIATE overwrites the package status with QUEUED. nextAction maps every QUEUED package to IMPLEMENT. builderRound then uses implementation mode: cycle 1, the implementation base, no remediation findings prompt, and no frozenContractFromBundle or previousFindingLedgerFile. The in-memory BLOCKED -> REMEDIATE -> QUEUED sequence produced nextAction IMPLEMENT.\",\n      \"reproduction\": {\n        \"steps\": [\n          \"Apply a cycle-1 BLOCKED review to an authorized package.\",\n          \"Return QUEUED from its remediation executor, as builderRound does when routing has no available backend.\",\n          \"After notBefore, call nextAction; it returns IMPLEMENT. Trace implementation mode in builderRound to its cycle and bundle construction.\"\n        ]\n      },\n      \"blockerReason\": \"A routine backend wait can discard the frozen remediation context and bypass the review-cycle/convergence boundary.\",\n      \"remediationAcceptance\": \"Persist the queued operation type and resume REMEDIATE with the same findings, frozen contract and ledger at cycle 2. Test backend unavailability followed by recovery without resetting the review cycle.\",\n      \"retestValidationIds\": [\"tests\"],\n      \"confidence\": 1,\n      \"firstSeenCycle\": 1,\n      \"status\": \"OPEN\"\n    },\n    {\n      \"id\": \"F-AUT1-005\",\n      \"classification\": \"BLOCKER\",\n      \"severity\": \"P2\",\n      \"category\": \"Format-correction recovery\",\n      \"file\": \"automation/lib/orchestrator-engine.mjs\",\n      \"line\": 48,\n      \"basisRefs\": [\"P000-REQ-ca88f0ac7be05287\", \"P000-AC-5b647723194755b1\"],\n      \"evidenceRefs\": [\"DIFF-39e0db0a560c4bf1\", \"DIFF-ca0c63be98abbdb0\"],\n      \"currentDiffCausality\": \"CURRENT_DIFF\",\n      \"scopeStatus\": \"IN_SCOPE\",\n      \"expected\": \"A format-only retry receives the rejected review output and its rejection reason so it can preserve the existing analysis.\",\n      \"observed\": \"The review executor returns FORMAT_REJECTED with runDir, but applyOutcome drops that runDir and does not update p.review. The correction executor reads only p.review.runDir. On the first malformed review it therefore sends REJECTION UNKNOWN and an empty MALFORMED OUTPUT; on later cycles it can read an older review instead. The in-memory transition confirmed that the rejected run is absent from package state.\",\n      \"reproduction\": {\n        \"steps\": [\n          \"Start a review-pending package without p.review.\",\n          \"Apply FORMAT_REJECTED with a completed malformed runDir.\",\n          \"Inspect the persisted package and correction-prompt construction: neither the rejected output nor its real error is available through p.review.runDir.\"\n        ]\n      },\n      \"blockerReason\": \"The automatic format-repair path cannot reliably preserve or repair the independent review and can exhaust its retry without the required input.\",\n      \"remediationAcceptance\": \"Persist the exact rejected run and error separately from any previous valid review; construct correction prompts from that run and preserve the association across restart and quota waits. Test first-cycle and remediation-cycle malformed output.\",\n      \"retestValidationIds\": [\"tests\"],\n      \"confidence\": 1,\n      \"firstSeenCycle\": 1,\n      \"status\": \"OPEN\"\n    },\n    {\n      \"id\": \"F-AUT1-006\",\n      \"classification\": \"BLOCKER\",\n      \"severity\": \"P2\",\n      \"category\": \"Interrupted packaging recovery\",\n      \"file\": \"automation/lib/orchestrator-executors.mjs\",\n      \"line\": 50,\n      \"basisRefs\": [\"P000-AC-afc9e9fb5bf41ef2\"],\n      \"evidenceRefs\": [\"DIFF-ca0c63be98abbdb0\"],\n      \"currentDiffCausality\": \"CURRENT_DIFF\",\n      \"scopeStatus\": \"IN_SCOPE\",\n      \"expected\": \"A resumed packaging action adopts only a complete verified signing handoff, and repairs an interrupted copy without repeating completed packaging.\",\n      \"observed\": \"RELEASE_PACKAGING.json is written before the signing-directory copies. Adoption checks only that record and the copied ZIP hash. A crash after copying the ZIP but before SHA256SUMS.txt returns PACKAGED on restart with missing signing input; the in-memory reproduction returned PACKAGED with sumsPresent false. A crash after creating signDir but before copying the ZIP instead reaches SIGN_DIR_EXISTS on retries.\",\n      \"reproduction\": {\n        \"steps\": [\n          \"Interrupt packageRelease after writing the packaging record and copying the ZIP, before copying SHA256SUMS.txt.\",\n          \"Resume the same release; the early adoption branch returns PACKAGED despite the missing sums file.\",\n          \"Alternatively interrupt after signDir creation but before ZIP copy; the existing directory prevents completing the handoff.\"\n        ]\n      },\n      \"blockerReason\": \"The required interruption recovery leaves a release incomplete or falsely marked packaged and requires manual intervention.\",\n      \"remediationAcceptance\": \"Track and verify the complete handoff file set and hashes, and resume missing copies safely from the verified package. Test crashes before and after each copy without rebuilding completed packaging or accepting missing files.\",\n      \"retestValidationIds\": [\"tests\"],\n      \"confidence\": 1,\n      \"firstSeenCycle\": 1,\n      \"status\": \"OPEN\"\n    },\n    {\n      \"id\": \"F-AUT1-007\",\n      \"classification\": \"BLOCKER\",\n      \"severity\": \"P2\",\n      \"category\": \"Interrupted builder recovery\",\n      \"file\": \"automation/lib/orchestrator-executors.mjs\",\n      \"line\": 19,\n      \"basisRefs\": [\"P000-AC-afc9e9fb5bf41ef2\", \"P000-AC-154105c5b930321d\"],\n      \"evidenceRefs\": [\"DIFF-ca0c63be98abbdb0\", \"DIFF-39e0db0a560c4bf1\"],\n      \"currentDiffCausality\": \"CURRENT_DIFF\",\n      \"scopeStatus\": \"IN_SCOPE\",\n      \"expected\": \"An interrupted or quota-limited builder round with partial edits can resume safely under the same package authority.\",\n      \"observed\": \"Builder clones have a deterministic package/cycle/base path. A failed or quota-limited builder leaves its partial edits there. The next attempt reuses that clone and prepareClone checks out the same base, then rejects any dirty status with CLONE_NOT_CLEAN. There is no preservation/recovery or fresh-attempt path, so repeated attempts eventually escalate instead of resuming.\",\n      \"reproduction\": {\n        \"steps\": [\n          \"Let a builder modify a tracked file, then return a quota error or interrupt it before commit.\",\n          \"At the next authorized retry, builderRound computes the same clone path.\",\n          \"prepareClone encounters the retained edit and throws CLONE_NOT_CLEAN before another builder call; subsequent retries encounter the same state.\"\n        ]\n      },\n      \"blockerReason\": \"Ordinary interrupted work defeats automatic recovery and provider-quota resumption, which are explicit milestone requirements.\",\n      \"remediationAcceptance\": \"Preserve partial work as evidence and either resume it through validated recovery or use a fresh isolated attempt without silently discarding edits. Test partial edits followed by quota and process interruption for implementation and remediation.\",\n      \"retestValidationIds\": [\"tests\"],\n      \"confidence\": 0.99,\n      \"firstSeenCycle\": 1,\n      \"status\": \"OPEN\"\n    },\n    {\n      \"id\": \"F-AUT1-008\",\n      \"classification\": \"BLOCKER\",\n      \"severity\": \"P2\",\n      \"category\": \"Completed signature repeated after restart\",\n      \"file\": \"automation/lib/orchestrator-executors.mjs\",\n      \"line\": 72,\n      \"basisRefs\": [\"P000-AC-afc9e9fb5bf41ef2\"],\n      \"evidenceRefs\": [\"DIFF-ca0c63be98abbdb0\"],\n      \"currentDiffCausality\": \"CURRENT_DIFF\",\n      \"scopeStatus\": \"IN_SCOPE\",\n      \"expected\": \"Each completed valid artifact signature is adopted after restart; only missing or invalid signatures are created.\",\n      \"observed\": \"sign adopts signatures only when verifyAll succeeds for both files. If the ZIP signature exists but the sums signature is missing after an interruption, the loop renames the valid ZIP signature to .invalid-* and signs the ZIP again. The in-memory reproduction recorded that rename and a second ssh.sign for the ZIP.\",\n      \"reproduction\": {\n        \"steps\": [\n          \"Complete signing the release ZIP, then interrupt before signing SHA256SUMS.txt.\",\n          \"Resume sign with the valid ZIP signature present and the sums signature absent.\",\n          \"Observe that verifyAll fails for the pair and the loop replaces both signatures, including the completed valid one.\"\n        ]\n      },\n      \"blockerReason\": \"This directly violates the frozen acceptance criterion that completed signatures are not repeated after restart.\",\n      \"remediationAcceptance\": \"Verify and adopt signatures individually, preserving each valid signature and signing only missing or invalid artifacts. Test interruption between the two signatures and assert no second signing call for the ZIP.\",\n      \"retestValidationIds\": [\"tests\"],\n      \"confidence\": 1,\n      \"firstSeenCycle\": 1,\n      \"status\": \"OPEN\"\n    },\n    {\n      \"id\": \"F-AUT1-009\",\n      \"classification\": \"BLOCKER\",\n      \"severity\": \"P1\",\n      \"category\": \"Unverified Phase0 acceptance\",\n      \"file\": \"automation/lib/orchestrator-executors.mjs\",\n      \"line\": 13,\n      \"basisRefs\": [\"P000-INV-cee4912d3e0a2019\", \"P000-INV-b8274eed78d72a76\", \"P000-REQ-e267451d94cc5866\"],\n      \"evidenceRefs\": [\"DIFF-ca0c63be98abbdb0\", \"DIFF-39e0db0a560c4bf1\"],\n      \"currentDiffCausality\": \"CURRENT_DIFF\",\n      \"scopeStatus\": \"IN_SCOPE\",\n      \"expected\": \"Phase0 is accepted only after verifying the signed report and its exact installation/source/input binding.\",\n      \"observed\": \"phase0OutcomeFrom accepts a final string and the absence of explicit failed steps. It does not require report schema, signature, binding or even INSTALL_STEPS. Both fresh completion and adoption use this helper without the existing Phase0 verifier. An in-memory call with acceptance containing only final CLEAN and steps null returned PHASE0_DONE; applyOutcome then sets phase0.accepted true and unblocks dependent work.\",\n      \"reproduction\": {\n        \"steps\": [\n          \"Supply phase0OutcomeFrom with acceptance containing only final CLEAN and steps null; it returns PHASE0_DONE.\",\n          \"Trace phase0: neither report-reading path verifies the report signature or installation binding, and the installer exit status is ignored.\",\n          \"Compare the existing verifyPhase0Acceptance contract, which requires schema, Ed25519 signature, installId, sourceCommit, trust-root digest and input digests.\"\n        ]\n      },\n      \"blockerReason\": \"The new orchestration path converts an unsigned, stale or fabricated success string into accepted installation evidence, weakening the existing trust model.\",\n      \"remediationAcceptance\": \"Validate the report schema and call the trusted Phase0 signature/binding verifier against the installed release before accepting fresh or adopted results. Reject missing, unsigned, tampered or stale reports and inconsistent installer outcomes; test these cases without upgrading CLEAN_LOCAL_ONLY.\",\n      \"retestValidationIds\": [\"tests\"],\n      \"confidence\": 1,\n      \"firstSeenCycle\": 1,\n      \"status\": \"OPEN\"\n    }\n  ],\n  \"advisories\": [],\n  \"environmentGaps\": [],\n  \"priorBlockerDispositions\": [],\n  \"startedAt\": \"2026-09-29T10:57:30Z\",\n  \"finishedAt\": \"2026-09-29T11:06:56Z\",\n  \"summary\": \"Input checks (a)-(e) passed. All 14 flagged protected paths are Founder-authorized; the 342 sealed-file hashes and checkpoint file hashes match. Nine admissible blockers remain in trust enforcement, review convergence and interruption recovery. Findings use exact-commit source and read-only in-memory reproductions; canonical write-producing tests were not rerun. No files were changed. Causal dependency reads: new runner -> existing Global Stop/process-lock controls -> stop and worker-safety risk; new builder gate -> protected-path classifier -> authority risk; new release executors -> release-tool and Phase0 contracts -> recovery and evidence-binding risk.\"\n}\n",
+  "reviewResultSha256": "a872f51cac1b199b8e9559a2b3f2f5dc5684fddf6936cac03ba682fd63c5dc02",
+  "governed": {
+    "//TR": "Bu dosya Codex review sonucunun supervisor-eşdeğeri governed değerlendirmesini kaydeder; Codex'in review-result.json dosyası değiştirilmez.",
+    "schemaVersion": "1.0.0",
+    "evaluatedAt": "2026-09-29T11:09:12.589Z",
+    "runDir": "C:\\Users\\PRO\\Desktop\\UASCO\\.ai\\cache\\review\\runs\\b070dcb-c1-20260929T105716Z-broker",
+    "exitCode": 0,
+    "checks": {
+      "promptDlpSensitiveTypes": [],
+      "resultSource": "CANONICAL_BROKER_STDOUT",
+      "resultMatchesBrokerStdout": true,
+      "schemaValid": true,
+      "validateReviewResult": "PASS",
+      "providerSeparation": "PASS"
+    },
+    "reviewResultSha256": "a872f51cac1b199b8e9559a2b3f2f5dc5684fddf6936cac03ba682fd63c5dc02",
+    "reviewerReportedResult": "BLOCKED",
+    "governedResult": "BLOCKED",
+    "reviewer": {
+      "provider": "OPENAI",
+      "tool": "Codex",
+      "toolVersion": null,
+      "modelId": "gpt-6",
+      "independenceStatus": "SUFFICIENT"
+    },
+    "summary": "Input checks (a)-(e) passed. All 14 flagged protected paths are Founder-authorized; the 342 sealed-file hashes and checkpoint file hashes match. Nine admissible blockers remain in trust enforcement, review convergence and interruption recovery. Findings use exact-commit source and read-only in-memory reproductions; canonical write-producing tests were not rerun. No files were changed. Causal dependency reads: new runner -> existing Global Stop/process-lock controls -> stop and worker-safety risk; new builder gate -> protected-path classifier -> authority risk; new release executors -> release-tool and Phase0 contracts -> recovery and evidence-binding risk.",
+    "counts": {
+      "findings": 9,
+      "blockers": 9,
+      "advisories": 0,
+      "environmentGaps": 0,
+      "acceptedBlockers": 9,
+      "downgraded": 0
+    },
+    "findings": [
+      {
+        "id": "F-AUT1-001",
+        "classification": "BLOCKER",
+        "severity": "P1",
+        "category": "Global Stop enforcement",
+        "file": "scripts/uasco-orchestrator.mjs",
+        "scopeStatus": "IN_SCOPE",
+        "expected": "Activating Global Stop during a tick prevents subsequent actions and stops active command trees.",
+        "observed": "Global Stop is checked only before acquiring the lock. runTick never checks it between actions, and createContractRunner uses synchronous spawning without stop monitoring. A stop raised during review therefore permits subsequent merge, packaging, signing or installation."
+      },
+      {
+        "id": "F-AUT1-002",
+        "classification": "BLOCKER",
+        "severity": "P1",
+        "category": "Cached independent review integrity",
+        "file": "automation/lib/review-pipeline.mjs",
+        "scopeStatus": "IN_SCOPE",
+        "expected": "Adopting a completed review preserves the governed decision derived from the verified independent reviewer output.",
+        "observed": "findCompletedRun trusts any cached governed-result.json with status EVALUATED. The review executor adopts it without re-evaluation. recordReviewEvidence checks the raw reviewer-output hash but does not bind the governed decision to that output; merge then trusts the copied governedResult. An in-memory fixture with unchanged BLOCKED reviewer output and a modified cached governedResult CLEAN was adopted as CLEAN."
+      },
+      {
+        "id": "F-AUT1-003",
+        "classification": "BLOCKER",
+        "severity": "P1",
+        "category": "Builder-controlled authorization policy",
+        "file": "automation/lib/orchestrator-executors.mjs",
+        "scopeStatus": "IN_SCOPE",
+        "expected": "Protected-change classification uses a trusted policy that the builder cannot alter during the round.",
+        "observed": "builderRound loads config/protected-paths.json from the builder worktree after the builder returns and uses that policy to classify every edit, including the policy file itself. Clearing exactPaths and protectedPrefixes makes protectedChangeViolations return no violations. Where allowedPathPrefixes covers the affected files, unauthorized protected edits pass this gate and the worktree's validation script is executed."
+      },
+      {
+        "id": "F-AUT1-004",
+        "classification": "BLOCKER",
+        "severity": "P1",
+        "category": "Remediation convergence bypass",
+        "file": "automation/lib/orchestrator-engine.mjs",
+        "scopeStatus": "IN_SCOPE",
+        "expected": "A temporarily queued remediation resumes as remediation with the original frozen contract, prior blocker ledger and next review cycle.",
+        "observed": "A QUEUED outcome from REMEDIATE overwrites the package status with QUEUED. nextAction maps every QUEUED package to IMPLEMENT. builderRound then uses implementation mode: cycle 1, the implementation base, no remediation findings prompt, and no frozenContractFromBundle or previousFindingLedgerFile. The in-memory BLOCKED -> REMEDIATE -> QUEUED sequence produced nextAction IMPLEMENT."
+      },
+      {
+        "id": "F-AUT1-005",
+        "classification": "BLOCKER",
+        "severity": "P2",
+        "category": "Format-correction recovery",
+        "file": "automation/lib/orchestrator-engine.mjs",
+        "scopeStatus": "IN_SCOPE",
+        "expected": "A format-only retry receives the rejected review output and its rejection reason so it can preserve the existing analysis.",
+        "observed": "The review executor returns FORMAT_REJECTED with runDir, but applyOutcome drops that runDir and does not update p.review. The correction executor reads only p.review.runDir. On the first malformed review it therefore sends REJECTION UNKNOWN and an empty MALFORMED OUTPUT; on later cycles it can read an older review instead. The in-memory transition confirmed that the rejected run is absent from package state."
+      },
+      {
+        "id": "F-AUT1-006",
+        "classification": "BLOCKER",
+        "severity": "P2",
+        "category": "Interrupted packaging recovery",
+        "file": "automation/lib/orchestrator-executors.mjs",
+        "scopeStatus": "IN_SCOPE",
+        "expected": "A resumed packaging action adopts only a complete verified signing handoff, and repairs an interrupted copy without repeating completed packaging.",
+        "observed": "RELEASE_PACKAGING.json is written before the signing-directory copies. Adoption checks only that record and the copied ZIP hash. A crash after copying the ZIP but before SHA256SUMS.txt returns PACKAGED on restart with missing signing input; the in-memory reproduction returned PACKAGED with sumsPresent false. A crash after creating signDir but before copying the ZIP instead reaches SIGN_DIR_EXISTS on retries."
+      },
+      {
+        "id": "F-AUT1-007",
+        "classification": "BLOCKER",
+        "severity": "P2",
+        "category": "Interrupted builder recovery",
+        "file": "automation/lib/orchestrator-executors.mjs",
+        "scopeStatus": "IN_SCOPE",
+        "expected": "An interrupted or quota-limited builder round with partial edits can resume safely under the same package authority.",
+        "observed": "Builder clones have a deterministic package/cycle/base path. A failed or quota-limited builder leaves its partial edits there. The next attempt reuses that clone and prepareClone checks out the same base, then rejects any dirty status with CLONE_NOT_CLEAN. There is no preservation/recovery or fresh-attempt path, so repeated attempts eventually escalate instead of resuming."
+      },
+      {
+        "id": "F-AUT1-008",
+        "classification": "BLOCKER",
+        "severity": "P2",
+        "category": "Completed signature repeated after restart",
+        "file": "automation/lib/orchestrator-executors.mjs",
+        "scopeStatus": "IN_SCOPE",
+        "expected": "Each completed valid artifact signature is adopted after restart; only missing or invalid signatures are created.",
+        "observed": "sign adopts signatures only when verifyAll succeeds for both files. If the ZIP signature exists but the sums signature is missing after an interruption, the loop renames the valid ZIP signature to .invalid-* and signs the ZIP again. The in-memory reproduction recorded that rename and a second ssh.sign for the ZIP."
+      },
+      {
+        "id": "F-AUT1-009",
+        "classification": "BLOCKER",
+        "severity": "P1",
+        "category": "Unverified Phase0 acceptance",
+        "file": "automation/lib/orchestrator-executors.mjs",
+        "scopeStatus": "IN_SCOPE",
+        "expected": "Phase0 is accepted only after verifying the signed report and its exact installation/source/input binding.",
+        "observed": "phase0OutcomeFrom accepts a final string and the absence of explicit failed steps. It does not require report schema, signature, binding or even INSTALL_STEPS. Both fresh completion and adoption use this helper without the existing Phase0 verifier. An in-memory call with acceptance containing only final CLEAN and steps null returned PHASE0_DONE; applyOutcome then sets phase0.accepted true and unblocks dependent work."
+      }
+    ],
+    "advisories": [],
+    "environmentGaps": [],
+    "effectiveReviewDigest": "ee36be27d704c77d42ca2383978aa8279d2a2a5f3400ef7e1028b4f294e10189",
+    "status": "EVALUATED"
+  },
+  "environmentBlock": null,
+  "runManifest": {
+    "//TR": "Bu manifest kanonik codex-reviewer-broker üzerinden yapılan tek bir Codex bağımsız review çağrısının girdi/çıktı/provenance kanıtını hash'leriyle kaydeder; review içeriğini builder üretmez.",
+    "schemaVersion": "1.0.0",
+    "startedAt": "2026-09-29T10:57:16.141Z",
+    "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+    "reviewWorktree": "C:/Users/PRO/AppData/Local/Temp/claude/C--Users-PRO-Desktop-UASCO/a72e023b-e073-49b8-9fbd-20b544644a38/scratchpad/rev-aut1r",
+    "baseCommit": "3d430dd0173fc0d043b635a4582b6dd378100b7a",
+    "reviewedCommit": "b070dcb8071254d561f70a1eb4235ab1c172f1fb",
+    "cycle": 1,
+    "runId": "RUN-V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-20260929T044138Z-C1",
+    "bundleFile": ".ai/cache/review/V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-b070dcb-cycle-1-review-bundle.json",
+    "bundleFileSha256": "45315576a4cb399fc59e7399805b8b96c88b1c5c2a68a8980d719bcb131871d8",
+    "bundleDigest": "d18407494fe5444dbd0a77032d0c269cc83b028b388ce9e29315fedf3fbea01b",
+    "milestoneContractId": "V6-PKG-AUT1-UNATTENDED-ORCHESTRATION",
+    "milestoneContractDigest": "07ae7574bbb879a93c9391e2de187763cd0a3b4eed6c30c9bbad6b7937e4ec89",
+    "promptFile": ".ai/cache/review/V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-b070dcb-cycle-1-review-prompt.txt",
+    "promptSha256": "8f92b1825fe0029a20a862c8be10a8452547a1a787969a6724a62387b1b515df",
+    "precheck": {
+      "head": "b070dcb8071254d561f70a1eb4235ab1c172f1fb",
+      "baseResolved": "3d430dd0173fc0d043b635a4582b6dd378100b7a",
+      "bundleDigestRecomputed": "d18407494fe5444dbd0a77032d0c269cc83b028b388ce9e29315fedf3fbea01b",
+      "contractDigestRecomputed": "07ae7574bbb879a93c9391e2de187763cd0a3b4eed6c30c9bbad6b7937e4ec89",
+      "changedFiles": 22
+    },
+    "reviewer": {
+      "provider": "OPENAI",
+      "tool": "codex",
+      "broker": "scripts/codex-reviewer-broker.mjs",
+      "brokerSha256": "267e9d4adc2d1872824796f9e3fc4798f09e7d5dfad19d8118a0c116452aee35",
+      "providerProvenanceSha256": "a43676cbbca2792faff1077e392a0b58dd9e1f73af91f28c1f25ba116cb1a2c0",
+      "launcher": "C:\\Users\\PRO\\.codex\\packages\\standalone\\releases\\0.156.1-x86_64-pc-windows-msvc\\bin\\codex.exe",
+      "launcherSha256": "70bcb05f9bf1a4e7306edd0cd1b57d02af3267ad02a34b26f45c8c4bb20a3301",
+      "launcherVersion": "codex-cli 0.156.1",
+      "provenanceLevel": "STANDALONE_LAUNCHER",
+      "childEnvVariableNames": [
+        "APPDATA",
+        "COMSPEC",
+        "HOME",
+        "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS",
+        "OS",
+        "PATH",
+        "PATHEXT",
+        "PROCESSOR_ARCHITECTURE",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "UASCO_CONTROL_ROOT",
+        "UASCO_PAID_API_ALLOWED",
+        "UASCO_PROVIDER",
+        "USERPROFILE"
+      ],
+      "allowPaidApi": false
+    },
+    "finishedAt": "2026-09-29T11:09:12.442Z",
+    "exitCode": 0,
+    "signal": null,
+    "outputs": {
+      "codex-stderr.log": {
+        "bytes": 561946,
+        "sha256": "179f1855593a23f1f8b2eaf7f122d61d87e6e9bd32bbb2dd0713155e377e06d8"
+      },
+      "codex-stdout.txt": {
+        "bytes": 18979,
+        "sha256": "a872f51cac1b199b8e9559a2b3f2f5dc5684fddf6936cac03ba682fd63c5dc02"
+      },
+      "review-result.json": {
+        "bytes": 18979,
+        "sha256": "a872f51cac1b199b8e9559a2b3f2f5dc5684fddf6936cac03ba682fd63c5dc02"
+      }
+    }
+  },
+  "frozenBundle": {
+    "schemaVersion": "1.4.0",
+    "runId": "RUN-V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-20260929T044138Z-C1",
+    "cycle": 1,
+    "phase": 0,
+    "phaseIds": [
+      0
+    ],
+    "baseCommit": "3d430dd0173fc0d043b635a4582b6dd378100b7a",
+    "reviewedCommit": "b070dcb8071254d561f70a1eb4235ab1c172f1fb",
+    "milestoneContract": {
+      "schemaVersion": "1.2.0",
+      "id": "V6-PKG-AUT1-UNATTENDED-ORCHESTRATION",
+      "phase": 0,
+      "phaseIds": [
+        0
+      ],
+      "title": "V6 PKG-AUT1 unattended orchestration control plane",
+      "objective": "Provide a repository-native unattended supervisor that continues the UASCO construction queue (review, remediation, fast-forward integration, release packaging, signing, Phase0) from durable state without a human operator, while preserving producer != reviewer, frozen review scope, fail-closed trust controls, narrow command execution, secure local-only signing and honest remote/cloud status.",
+      "requirements": [
+        "[V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29 founderAuthorization.decision] AUT1_DIRECTIVE_APPROVED + CLASSIFIER_PERMISSION_GRANTED_PACKAGE_SCOPED",
+        "[V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29 founderAuthorization.rule] [Directive 2026-09-29] Implement this as a separate bounded autonomy-hardening package; commit it; send it through the existing independent Codex review loop; after CLEAN, activate the unattended supervisor; do not weaken the existing trust model; Task Scheduler / existing approved autostart mechanism for the supervisor; evidence-key ACL hardening and UASCO-Autonomous-Supervisor Task Scheduler registration already approved; private signing key must never enter the repository, cloud, artifacts, logs or Claude/Codex, passphrase never stored in plaintext. [Permission 2026-09-29] İzni veriyorum. Ancak izin yalnızca bu autonomy-hardening paketinin repo içindeki dosyalarını ve önceden tanımlanmış exact command contracts kapsamını kapsasın. Şunlara blanket/genel izin VERME: arbitrary Bash / PowerShell / cmd, repo dışına yazma, credential export, signing private key erişimi, force push, trust/security policy weakening, bilinmeyen external network işlemleri. Paketi tamamla: kayıt betiği, senaryo/regression/adversarial testleri, dokümantasyon, reseal, commit, Codex independent review. Windows ssh-agent servisini Founder kendisi Administrator PowerShell'de etkinleştirir ve anahtarı kendisi ekler; bu tek sistem ayarı dışında paket devam eder.",
+        "[V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29 founderAuthorization.protectedFiles] config/orchestrator-policy.json (new), automation/lib/orchestrator-state.mjs (new), automation/lib/command-contracts.mjs (new), automation/lib/review-pipeline.mjs (new), automation/lib/orchestrator-engine.mjs (new), automation/lib/orchestrator-executors.mjs (new), scripts/uasco-orchestrator.mjs (new), scripts/register-orchestrator-autostart.ps1 (new), scripts/orchestrator-selftest.mjs (new), prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt (new), config/execution-backends.json, config/protected-paths.json, config/trust-root-manifest.json (regenerated by the unchanged generator), CANONICAL-STATUS.md",
+        "[V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; UNKNOWN, NOT_TESTED, BLOCKED or FAIL are never converted to PASS/CLEAN without real evidence; broader protected changes require separate Founder approval.",
+        "[V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29 founderRequest] Implement and activate FULL UNATTENDED UASCO ORCHESTRATION: repository-native durable supervisor under Windows Task Scheduler (login, reboot, provider retry time, recoverable interruption), authoritative ORCHESTRATOR_STATE with atomic auditable transitions and no duplicate reviews after restart, complete Codex quota automation without consuming review/format/remediation retries and with FOUNDER_MANUAL_QUOTA_RESET support, automatic Claude -> Codex review loop with CLEAN integration and package-scoped remediation, narrow exact command contracts instead of blanket shell access, LOCAL_CLAUDE + CLAUDE_CLOUD_SESSION with AUTO routing and honest NOT_CONFIGURED cloud, release pipeline automation that never reuses an old signature, secure local unattended signing only through an OS-backed signer (otherwise WAITING_FOR_SECURE_SIGNER), GitHub checks without faking branch protection, Phase0 automation preserving failed attempts, dependency-aware lanes, no repeated Founder questions for approved policy, unattended end-to-end and adversarial tests, self-healing lock/lease/idempotency, separate bounded package, validation, commit, independent Codex review, activation after CLEAN."
+      ],
+      "invariants": [
+        "NO_FAKE_SUCCESS",
+        "NO_WEAKENED_CONTROLS",
+        "NO_SILENT_SCOPE_EXPANSION",
+        "NO_SELF_CERTIFICATION",
+        "EVIDENCE_REQUIRED",
+        "FAIL_CLOSED"
+      ],
+      "acceptanceCriteria": [
+        "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11 in SEALED mode, and the checkpoint records the measured validation environment.",
+        "The control state is validated on every write, every transition is appended to a hash-chained log before the atomic state write, a tick refuses to run on a broken chain, and a process lock plus lease guarantee one active worker with stale-worker takeover.",
+        "Provider quota is recorded with verbatim evidence and a parsed or policy-backoff retry time, consumes no review cycle, format retry or remediation retry, blocks only that provider's actions, and resumes with one controlled attempt at the due time; a Founder manual reset clears only the stale retryAfter.",
+        "After a restart no completed Codex review, merge, release packaging, signature or installation is repeated; completed work is adopted and interrupted actions are re-planned safely.",
+        "Remediation happens only with recorded package authority and below the review cycle limit; protected changes outside the recorded authorization, the cycle limit and a reinstall over an accepted installation become FOUNDER_DECISION_PENDING on that item only while independent work continues.",
+        "Commands run only through exact contracts with typed parameters and policy roots; there is no contract for arbitrary shell, deletion, force push, credential export or policy changes; unknown contracts and arguments fail closed.",
+        "Signing uses only the Windows OpenSSH agent with the public key, never reads, copies or logs the private key, and waits in WAITING_FOR_SECURE_SIGNER when the agent does not hold the key; Phase0 preserves the previous installation and reports CLEAN_LOCAL_ONLY honestly; GitHub branch protection and cloud dispatch are never faked.",
+        "The ported review pipeline is equivalent to the approved manual tools, and only the Founder-authorized protected files change; no existing test, validator or policy is weakened."
+      ],
+      "mandatoryFailureCases": [
+        "duplicate Codex review after restart",
+        "review cycle consumed by a quota block",
+        "whole queue stopped by one pending Founder decision",
+        "arbitrary or unknown command executed",
+        "private signing key read or copied",
+        "old signature reused for a new artifact",
+        "CLEAN_LOCAL_ONLY reported as CLEAN",
+        "control plane running with an unverified trust root",
+        "tampered transition log accepted",
+        "two active workers"
+      ],
+      "requiredArtifacts": [
+        "scripts/uasco-orchestrator.mjs",
+        "automation/lib/orchestrator-state.mjs",
+        "automation/lib/orchestrator-engine.mjs",
+        "automation/lib/orchestrator-executors.mjs",
+        "automation/lib/command-contracts.mjs",
+        "automation/lib/review-pipeline.mjs",
+        "config/orchestrator-policy.json",
+        "scripts/register-orchestrator-autostart.ps1",
+        "scripts/orchestrator-selftest.mjs",
+        "tests/pkg-aut1-orchestrator.test.ts",
+        "docs/architecture/UNATTENDED-ORCHESTRATION.md",
+        "audit/checkpoints/V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29.json"
+      ],
+      "phaseTraceability": [
+        {
+          "phase": 0,
+          "requirement": "[V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29 founderAuthorization.decision] AUT1_DIRECTIVE_APPROVED + CLASSIFIER_PERMISSION_GRANTED_PACKAGE_SCOPED",
+          "acceptanceCriteria": [
+            "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11 in SEALED mode, and the checkpoint records the measured validation environment.",
+            "The control state is validated on every write, every transition is appended to a hash-chained log before the atomic state write, a tick refuses to run on a broken chain, and a process lock plus lease guarantee one active worker with stale-worker takeover.",
+            "Provider quota is recorded with verbatim evidence and a parsed or policy-backoff retry time, consumes no review cycle, format retry or remediation retry, blocks only that provider's actions, and resumes with one controlled attempt at the due time; a Founder manual reset clears only the stale retryAfter.",
+            "After a restart no completed Codex review, merge, release packaging, signature or installation is repeated; completed work is adopted and interrupted actions are re-planned safely.",
+            "Remediation happens only with recorded package authority and below the review cycle limit; protected changes outside the recorded authorization, the cycle limit and a reinstall over an accepted installation become FOUNDER_DECISION_PENDING on that item only while independent work continues.",
+            "Commands run only through exact contracts with typed parameters and policy roots; there is no contract for arbitrary shell, deletion, force push, credential export or policy changes; unknown contracts and arguments fail closed.",
+            "Signing uses only the Windows OpenSSH agent with the public key, never reads, copies or logs the private key, and waits in WAITING_FOR_SECURE_SIGNER when the agent does not hold the key; Phase0 preserves the previous installation and reports CLEAN_LOCAL_ONLY honestly; GitHub branch protection and cloud dispatch are never faked.",
+            "The ported review pipeline is equivalent to the approved manual tools, and only the Founder-authorized protected files change; no existing test, validator or policy is weakened."
+          ],
+          "mandatoryFailureCases": [
+            "duplicate Codex review after restart",
+            "review cycle consumed by a quota block",
+            "whole queue stopped by one pending Founder decision",
+            "arbitrary or unknown command executed",
+            "private signing key read or copied",
+            "old signature reused for a new artifact",
+            "CLEAN_LOCAL_ONLY reported as CLEAN",
+            "control plane running with an unverified trust root",
+            "tampered transition log accepted",
+            "two active workers"
+          ],
+          "requiredArtifacts": [
+            "scripts/uasco-orchestrator.mjs",
+            "automation/lib/orchestrator-state.mjs",
+            "automation/lib/orchestrator-engine.mjs",
+            "automation/lib/orchestrator-executors.mjs",
+            "automation/lib/command-contracts.mjs",
+            "automation/lib/review-pipeline.mjs",
+            "config/orchestrator-policy.json",
+            "scripts/register-orchestrator-autostart.ps1",
+            "scripts/orchestrator-selftest.mjs",
+            "tests/pkg-aut1-orchestrator.test.ts",
+            "docs/architecture/UNATTENDED-ORCHESTRATION.md",
+            "audit/checkpoints/V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29.json"
+          ],
+          "unsupportedCases": [
+            "Activation (control-plane clone, control state seeding, Task Scheduler registration) happens after this review is CLEAN and is not part of the reviewed diff.",
+            "The Windows ssh-agent service is enabled and the key is loaded by the Founder personally; until then signing stays WAITING_FOR_SECURE_SIGNER.",
+            "Scenario tests use fake executors; real executor behaviour is covered by the port-equivalence smoke recorded in the checkpoint and by the existing release tools' own tests; the real implementation/remediation builder round has not yet run unattended.",
+            "CLAUDE_CLOUD_SESSION stays NOT_CONFIGURED; construction-repository pushes stay queued while remote protection is unavailable."
+          ]
+        }
+      ],
+      "allowedPathPrefixes": [
+        "config/orchestrator-policy.json",
+        "config/execution-backends.json",
+        "config/protected-paths.json",
+        "config/trust-root-manifest.json",
+        "automation/lib/orchestrator-state.mjs",
+        "automation/lib/command-contracts.mjs",
+        "automation/lib/review-pipeline.mjs",
+        "automation/lib/orchestrator-engine.mjs",
+        "automation/lib/orchestrator-executors.mjs",
+        "scripts/uasco-orchestrator.mjs",
+        "scripts/register-orchestrator-autostart.ps1",
+        "scripts/orchestrator-selftest.mjs",
+        "prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt",
+        "CANONICAL-STATUS.md",
+        "tests/",
+        "docs/architecture/UNATTENDED-ORCHESTRATION.md",
+        ".ai/NEXT_ACTIONS.md",
+        ".ai/REVIEW_STATUS.md",
+        "CHANGELOG.md",
+        "audit/CURRENT-AUDIT-STATE.json",
+        "audit/V6-FULL-SCAN-PROGRESS.json",
+        "audit/checkpoints/"
+      ],
+      "protectedPaths": [
+        ".gitattributes",
+        ".github/workflows/ci.yml",
+        ".gitignore",
+        ".gitmodules",
+        ".npmrc",
+        "AGENTS.md",
+        "ARCHITECTURE-CONSTITUTION.md",
+        "ARCHITECTURE-FREEZE.md",
+        "BUILD-RULES.md",
+        "CANONICAL-STATUS.md",
+        "CLAUDE.md",
+        "CODEX.md",
+        "DEFINITION-OF-DONE.md",
+        "FULL-REPO-CONSTRUCTION-CONTRACT.md",
+        "INSTALLATION-GO-CHECKLIST.md",
+        "THIRD-PARTY-NOTICES.md",
+        "apps/control-api/src/server.ts",
+        "apps/desktop/main.mjs",
+        "apps/desktop/preload.mjs",
+        "apps/desktop/renderer/app.js",
+        "apps/desktop/renderer/index.html",
+        "automation/factory-supervisor.mjs",
+        "automation/lib/evidence-signing.mjs",
+        "automation/lib/filesystem-boundary.mjs",
+        "automation/lib/redaction.mjs",
+        "config/action-policy.json",
+        "config/automation.json",
+        "config/builder-execution-policy.json",
+        "config/environment-policy.json",
+        "config/evidence-ledger-policy.json",
+        "config/git-metadata-policy.json",
+        "config/omniroute-policy.json",
+        "config/package-policy.json",
+        "config/protected-paths.json",
+        "config/supply-chain-policy.json",
+        "config/trust-root-manifest.json",
+        "config/validation.json",
+        "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
+        "governance/accepted-debt.json",
+        "governance/known-limitations.json",
+        "governance/waivers.json",
+        "prompts/AUTO-BUILDER.md",
+        "prompts/AUTO-REMEDIATION.md",
+        "prompts/AUTO-REVIEW.md",
+        "prompts/AUTO-VALIDATION-FIX.md",
+        "registries/phase-contracts-index.json",
+        "roadmap/build-waves.json",
+        "roadmap/critical-path.json",
+        "roadmap/dependency-graph.json",
+        "roadmap/parallel-lanes.json",
+        "roadmap/review-packages.json",
+        "roadmap/scheduler-state.template.json",
+        "schemas/install-report.schema.json",
+        "scripts/bootstrap-kernel-selftest.mjs",
+        "scripts/bootstrap.ps1",
+        "scripts/build-release-zip.mjs",
+        "scripts/builder-boundary-smoke.mjs",
+        "scripts/capture-provider-provenance.mjs",
+        "scripts/check-prereqs.ps1",
+        "scripts/claude-builder-broker.mjs",
+        "scripts/codex-reviewer-broker.mjs",
+        "scripts/dependency-supply-chain.mjs",
+        "scripts/generate-trust-root.mjs",
+        "scripts/harden-evidence-key.ps1",
+        "scripts/init-evidence-signing.mjs",
+        "scripts/init-private-git.ps1",
+        "scripts/install-report.mjs",
+        "scripts/install.ps1",
+        "scripts/mechanical-kernel-selftest.mjs",
+        "scripts/orchestrator-selftest.mjs",
+        "scripts/phase0-acceptance.mjs",
+        "scripts/preflight.mjs",
+        "scripts/provider-smoke.mjs",
+        "scripts/provision-electron.mjs",
+        "scripts/register-autostart.ps1",
+        "scripts/register-orchestrator-autostart.ps1",
+        "scripts/release-sha256sums.mjs",
+        "scripts/runtime-schema-conformance-selftest.mjs",
+        "scripts/sanitize-process-env.ps1",
+        "scripts/secret-sanity.mjs",
+        "scripts/smoke-control-api.mjs",
+        "scripts/smoke-control-tower.mjs",
+        "scripts/smoke-desktop.mjs",
+        "scripts/start-control-tower.ps1",
+        "scripts/start-full-auto.ps1",
+        "scripts/supervisor-state-machine-selftest.mjs",
+        "scripts/uasco-orchestrator.mjs",
+        "scripts/v6-apps-control-desktop-selftest.mjs",
+        "scripts/validate-agent-competencies.mjs",
+        "scripts/validate-agent-semantic.mjs",
+        "scripts/validate-architecture.mjs",
+        "scripts/validate-config-runtime-enforcement.mjs",
+        "scripts/validate-domain-packs.mjs",
+        "scripts/validate-mechanical-closure.mjs",
+        "scripts/validate-organization.mjs",
+        "scripts/validate-paste2-closure.mjs",
+        "scripts/validate-paste2h-runtime-release.mjs",
+        "scripts/validate-paste3-agent-specialization.mjs",
+        "scripts/validate-paste3-closure.mjs",
+        "scripts/validate-paste3-technology-domain-registry.mjs",
+        "scripts/validate-paste4a.mjs",
+        "scripts/validate-paste4b.mjs",
+        "scripts/validate-paste4c-doc-truth.mjs",
+        "scripts/validate-paste4d-release-truth.mjs",
+        "scripts/validate-phase-contracts.mjs",
+        "scripts/validate-registries.mjs",
+        "scripts/validate-release-supply-chain.mjs",
+        "scripts/validate-review-graph-v2.mjs",
+        "scripts/validate-runtime-contracts.mjs",
+        "scripts/validate-runtime-resilience.mjs",
+        "scripts/validate-schema-catalog.mjs",
+        "scripts/validate-schema-strictness.mjs",
+        "scripts/validate-technology-graph.mjs",
+        "scripts/validate-tr-comments.mjs",
+        "scripts/validate-woven-model.mjs",
+        "scripts/verify-artifact.mjs",
+        "scripts/verify-evidence-ledger.mjs",
+        "scripts/verify-release-extract.mjs",
+        "scripts/verify-remote-protection.mjs",
+        "scripts/verify-trust-root.mjs",
+        "tsconfig.json",
+        "automation/lib/",
+        "scripts/validate-",
+        "scripts/run-validation.mjs",
+        "schemas/independent-review-result.schema.json",
+        "schemas/review-finding.schema.json",
+        "schemas/review-bundle.schema.json",
+        "schemas/milestone-contract.schema.json",
+        "schemas/run-event.schema.json",
+        "schemas/run-manifest.schema.json",
+        "schemas/phase0-acceptance.schema.json",
+        "prompts/",
+        "roadmap/contracts/",
+        "config/"
+      ],
+      "mandatoryValidation": [
+        "Canonical runner scripts/run-validation.mjs over config/validation.json in SEALED mode",
+        "vitest run including tests/pkg-aut1-orchestrator.test.ts",
+        "scripts/orchestrator-selftest.mjs",
+        "broad dependency-free selftest suite",
+        "scripts/verify-trust-root.mjs on a clean checkout"
+      ],
+      "mandatoryEvidence": [
+        "reviewed commit SHA",
+        "exact tool/runtime versions",
+        "canonical validation report",
+        "changed file sha256 digests",
+        "trust-root manifest sha256 and protected file count",
+        "port-equivalence smoke results"
+      ],
+      "riskLevel": 3,
+      "allowPaidApi": false,
+      "allowProduction": false,
+      "allowRisk5": false,
+      "allowDependencyChanges": false,
+      "unsupportedCases": [
+        "Activation (control-plane clone, control state seeding, Task Scheduler registration) happens after this review is CLEAN and is not part of the reviewed diff.",
+        "The Windows ssh-agent service is enabled and the key is loaded by the Founder personally; until then signing stays WAITING_FOR_SECURE_SIGNER.",
+        "Scenario tests use fake executors; real executor behaviour is covered by the port-equivalence smoke recorded in the checkpoint and by the existing release tools' own tests; the real implementation/remediation builder round has not yet run unattended.",
+        "CLAUDE_CLOUD_SESSION stays NOT_CONFIGURED; construction-repository pushes stay queued while remote protection is unavailable."
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "maxFilesChanged": 30,
+      "allowExistingTestAssertionReduction": false,
+      "frozenAt": "2026-09-29T04:41:38.847Z",
+      "digest": "07ae7574bbb879a93c9391e2de187763cd0a3b4eed6c30c9bbad6b7937e4ec89"
+    },
+    "reviewBasis": {
+      "requirements": [
+        {
+          "id": "P000-REQ-9d6cb057d11c0220",
+          "text": "[V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29 founderAuthorization.decision] AUT1_DIRECTIVE_APPROVED + CLASSIFIER_PERMISSION_GRANTED_PACKAGE_SCOPED"
+        },
+        {
+          "id": "P000-REQ-881dba8bac83e488",
+          "text": "[V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29 founderAuthorization.rule] [Directive 2026-09-29] Implement this as a separate bounded autonomy-hardening package; commit it; send it through the existing independent Codex review loop; after CLEAN, activate the unattended supervisor; do not weaken the existing trust model; Task Scheduler / existing approved autostart mechanism for the supervisor; evidence-key ACL hardening and UASCO-Autonomous-Supervisor Task Scheduler registration already approved; private signing key must never enter the repository, cloud, artifacts, logs or Claude/Codex, passphrase never stored in plaintext. [Permission 2026-09-29] İzni veriyorum. Ancak izin yalnızca bu autonomy-hardening paketinin repo içindeki dosyalarını ve önceden tanımlanmış exact command contracts kapsamını kapsasın. Şunlara blanket/genel izin VERME: arbitrary Bash / PowerShell / cmd, repo dışına yazma, credential export, signing private key erişimi, force push, trust/security policy weakening, bilinmeyen external network işlemleri. Paketi tamamla: kayıt betiği, senaryo/regression/adversarial testleri, dokümantasyon, reseal, commit, Codex independent review. Windows ssh-agent servisini Founder kendisi Administrator PowerShell'de etkinleştirir ve anahtarı kendisi ekler; bu tek sistem ayarı dışında paket devam eder."
+        },
+        {
+          "id": "P000-REQ-1d0f6a5cbe080bec",
+          "text": "[V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29 founderAuthorization.protectedFiles] config/orchestrator-policy.json (new), automation/lib/orchestrator-state.mjs (new), automation/lib/command-contracts.mjs (new), automation/lib/review-pipeline.mjs (new), automation/lib/orchestrator-engine.mjs (new), automation/lib/orchestrator-executors.mjs (new), scripts/uasco-orchestrator.mjs (new), scripts/register-orchestrator-autostart.ps1 (new), scripts/orchestrator-selftest.mjs (new), prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt (new), config/execution-backends.json, config/protected-paths.json, config/trust-root-manifest.json (regenerated by the unchanged generator), CANONICAL-STATUS.md"
+        },
+        {
+          "id": "P000-REQ-e267451d94cc5866",
+          "text": "[V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; UNKNOWN, NOT_TESTED, BLOCKED or FAIL are never converted to PASS/CLEAN without real evidence; broader protected changes require separate Founder approval."
+        },
+        {
+          "id": "P000-REQ-ca88f0ac7be05287",
+          "text": "[V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29 founderRequest] Implement and activate FULL UNATTENDED UASCO ORCHESTRATION: repository-native durable supervisor under Windows Task Scheduler (login, reboot, provider retry time, recoverable interruption), authoritative ORCHESTRATOR_STATE with atomic auditable transitions and no duplicate reviews after restart, complete Codex quota automation without consuming review/format/remediation retries and with FOUNDER_MANUAL_QUOTA_RESET support, automatic Claude -> Codex review loop with CLEAN integration and package-scoped remediation, narrow exact command contracts instead of blanket shell access, LOCAL_CLAUDE + CLAUDE_CLOUD_SESSION with AUTO routing and honest NOT_CONFIGURED cloud, release pipeline automation that never reuses an old signature, secure local unattended signing only through an OS-backed signer (otherwise WAITING_FOR_SECURE_SIGNER), GitHub checks without faking branch protection, Phase0 automation preserving failed attempts, dependency-aware lanes, no repeated Founder questions for approved policy, unattended end-to-end and adversarial tests, self-healing lock/lease/idempotency, separate bounded package, validation, commit, independent Codex review, activation after CLEAN."
+        }
+      ],
+      "invariants": [
+        {
+          "id": "P000-INV-cee4912d3e0a2019",
+          "text": "NO_FAKE_SUCCESS"
+        },
+        {
+          "id": "P000-INV-59e59d4476fc0664",
+          "text": "NO_WEAKENED_CONTROLS"
+        },
+        {
+          "id": "P000-INV-f74092f031a0e4aa",
+          "text": "NO_SILENT_SCOPE_EXPANSION"
+        },
+        {
+          "id": "P000-INV-6122df41f404fe66",
+          "text": "NO_SELF_CERTIFICATION"
+        },
+        {
+          "id": "P000-INV-b8274eed78d72a76",
+          "text": "EVIDENCE_REQUIRED"
+        },
+        {
+          "id": "P000-INV-473c0420ab79dc5f",
+          "text": "FAIL_CLOSED"
+        }
+      ],
+      "acceptanceCriteria": [
+        {
+          "id": "P000-AC-42256cf20311d18a",
+          "text": "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11 in SEALED mode, and the checkpoint records the measured validation environment."
+        },
+        {
+          "id": "P000-AC-fae1f442389ea648",
+          "text": "The control state is validated on every write, every transition is appended to a hash-chained log before the atomic state write, a tick refuses to run on a broken chain, and a process lock plus lease guarantee one active worker with stale-worker takeover."
+        },
+        {
+          "id": "P000-AC-154105c5b930321d",
+          "text": "Provider quota is recorded with verbatim evidence and a parsed or policy-backoff retry time, consumes no review cycle, format retry or remediation retry, blocks only that provider's actions, and resumes with one controlled attempt at the due time; a Founder manual reset clears only the stale retryAfter."
+        },
+        {
+          "id": "P000-AC-afc9e9fb5bf41ef2",
+          "text": "After a restart no completed Codex review, merge, release packaging, signature or installation is repeated; completed work is adopted and interrupted actions are re-planned safely."
+        },
+        {
+          "id": "P000-AC-d5d555cca1420ec0",
+          "text": "Remediation happens only with recorded package authority and below the review cycle limit; protected changes outside the recorded authorization, the cycle limit and a reinstall over an accepted installation become FOUNDER_DECISION_PENDING on that item only while independent work continues."
+        },
+        {
+          "id": "P000-AC-1fb47dd66d548bb8",
+          "text": "Commands run only through exact contracts with typed parameters and policy roots; there is no contract for arbitrary shell, deletion, force push, credential export or policy changes; unknown contracts and arguments fail closed."
+        },
+        {
+          "id": "P000-AC-b3bb2c2f815fefbd",
+          "text": "Signing uses only the Windows OpenSSH agent with the public key, never reads, copies or logs the private key, and waits in WAITING_FOR_SECURE_SIGNER when the agent does not hold the key; Phase0 preserves the previous installation and reports CLEAN_LOCAL_ONLY honestly; GitHub branch protection and cloud dispatch are never faked."
+        },
+        {
+          "id": "P000-AC-5b647723194755b1",
+          "text": "The ported review pipeline is equivalent to the approved manual tools, and only the Founder-authorized protected files change; no existing test, validator or policy is weakened."
+        }
+      ],
+      "mandatoryValidation": [
+        {
+          "id": "P000-VAL-9d71ba366a2ce356",
+          "text": "Canonical runner scripts/run-validation.mjs over config/validation.json in SEALED mode"
+        },
+        {
+          "id": "P000-VAL-6ae0a86d7f3152c8",
+          "text": "vitest run including tests/pkg-aut1-orchestrator.test.ts"
+        },
+        {
+          "id": "P000-VAL-6c99d882ed1babf2",
+          "text": "scripts/orchestrator-selftest.mjs"
+        },
+        {
+          "id": "P000-VAL-c9ec154ca647422f",
+          "text": "broad dependency-free selftest suite"
+        },
+        {
+          "id": "P000-VAL-dcd0c3f75a85d7ad",
+          "text": "scripts/verify-trust-root.mjs on a clean checkout"
+        }
+      ],
+      "mandatoryFailureCases": [
+        {
+          "id": "P000-FAIL-40d14904e1f880fd",
+          "text": "duplicate Codex review after restart"
+        },
+        {
+          "id": "P000-FAIL-b4897533903418da",
+          "text": "review cycle consumed by a quota block"
+        },
+        {
+          "id": "P000-FAIL-9cd66e592aa8b0c9",
+          "text": "whole queue stopped by one pending Founder decision"
+        },
+        {
+          "id": "P000-FAIL-1850420e4a24a1d0",
+          "text": "arbitrary or unknown command executed"
+        },
+        {
+          "id": "P000-FAIL-bba374423dd55184",
+          "text": "private signing key read or copied"
+        },
+        {
+          "id": "P000-FAIL-f6828055d3d1023b",
+          "text": "old signature reused for a new artifact"
+        },
+        {
+          "id": "P000-FAIL-bfb868d774eae4fb",
+          "text": "CLEAN_LOCAL_ONLY reported as CLEAN"
+        },
+        {
+          "id": "P000-FAIL-2b15889e7ec477f8",
+          "text": "control plane running with an unverified trust root"
+        },
+        {
+          "id": "P000-FAIL-981a60db39a6b454",
+          "text": "tampered transition log accepted"
+        },
+        {
+          "id": "P000-FAIL-df67548a42174e61",
+          "text": "two active workers"
+        }
+      ],
+      "requiredArtifacts": [
+        {
+          "id": "P000-ART-3412ec41eb417186",
+          "text": "scripts/uasco-orchestrator.mjs"
+        },
+        {
+          "id": "P000-ART-4a2500c28d4a5a56",
+          "text": "automation/lib/orchestrator-state.mjs"
+        },
+        {
+          "id": "P000-ART-39e0db0a560c4bf1",
+          "text": "automation/lib/orchestrator-engine.mjs"
+        },
+        {
+          "id": "P000-ART-ca0c63be98abbdb0",
+          "text": "automation/lib/orchestrator-executors.mjs"
+        },
+        {
+          "id": "P000-ART-6ea2b1b4cd0b9472",
+          "text": "automation/lib/command-contracts.mjs"
+        },
+        {
+          "id": "P000-ART-cdaf13d36c426844",
+          "text": "automation/lib/review-pipeline.mjs"
+        },
+        {
+          "id": "P000-ART-a948b135f74ecc15",
+          "text": "config/orchestrator-policy.json"
+        },
+        {
+          "id": "P000-ART-5e98c3d52c29e3a4",
+          "text": "scripts/register-orchestrator-autostart.ps1"
+        },
+        {
+          "id": "P000-ART-6c99d882ed1babf2",
+          "text": "scripts/orchestrator-selftest.mjs"
+        },
+        {
+          "id": "P000-ART-f65fded8c253f4dc",
+          "text": "tests/pkg-aut1-orchestrator.test.ts"
+        },
+        {
+          "id": "P000-ART-aa4dc178a56d1a91",
+          "text": "docs/architecture/UNATTENDED-ORCHESTRATION.md"
+        },
+        {
+          "id": "P000-ART-a99f3f402a323dac",
+          "text": "audit/checkpoints/V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29.json"
+        }
+      ],
+      "risk": [
+        {
+          "id": "P000-RISK-4391d3546bf1df6f",
+          "text": "riskLevel=3; reviewProfile=TRUST_CRITICAL"
+        }
+      ]
+    },
+    "evidenceCatalog": [
+      {
+        "id": "VALIDATION-REGISTRIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "registries",
+        "validationDigest": "8ffa6f6330a6110d8e99139af483e17c71a6df86bea6eb90b53ef87638246b30",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 78
+      },
+      {
+        "id": "VALIDATION-ARCHITECTURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "architecture",
+        "validationDigest": "e5bf5d23fdda0d99094fdb8527a39d03f097200ed58ad48e545edfa66c72268f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 72
+      },
+      {
+        "id": "VALIDATION-TR",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tr",
+        "validationDigest": "2e6b2ed7451d768a768929c1cffbfbe7163006ef338db738aee25eb2e32f0f10",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1040
+      },
+      {
+        "id": "VALIDATION-COMPETENCIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "competencies",
+        "validationDigest": "10562f2c1b237b192ff646172cda08cd586bf3f09cc90eb8537e860e8e89b83d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 90
+      },
+      {
+        "id": "VALIDATION-ORGANIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "organization",
+        "validationDigest": "6ac3f9799e6e1b0f96e62bcf1a9a0ade5c38852dcc133d2c11b1fd80156ccea5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 78
+      },
+      {
+        "id": "VALIDATION-SCHEMAS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schemas",
+        "validationDigest": "7ba29d41eceb71bd056a516963edf5ddfd26fcbd497d31ea31e504c769879057",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 150
+      },
+      {
+        "id": "VALIDATION-TECHNOLOGY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "technology",
+        "validationDigest": "4120c97312f885fb82187e6933b08c510c95e46d943ebc95f46ef4a5a2a66050",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 86
+      },
+      {
+        "id": "VALIDATION-PASTE3-TECHNOLOGY-DOMAIN-REGISTRY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-technology-domain-registry",
+        "validationDigest": "9951864be421206417dc0fc09feb8586d35de6df8b90b1132a044576afac17b5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 470
+      },
+      {
+        "id": "VALIDATION-DOMAIN-PACKS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "domain-packs",
+        "validationDigest": "6aa9c5c7e2dd34e3686e298fe3e0d67964ab0803815fd6d42f3d0f84a1048de7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 99
+      },
+      {
+        "id": "VALIDATION-AGENT-SEMANTIC",
+        "kind": "VALIDATION_STEP",
+        "validationId": "agent-semantic",
+        "validationDigest": "89e22dc4c751e6e449ca9297710721f30e635e17966c6d068f6e1100b5f0db53",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 204
+      },
+      {
+        "id": "VALIDATION-PASTE3-AGENT-SPECIALIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-agent-specialization",
+        "validationDigest": "c8caf548402f3e5d2cce7957a5e2bed0ba7e6df2b63a93989a786cd9890fbb44",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 27199
+      },
+      {
+        "id": "VALIDATION-PHASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "phase-contracts",
+        "validationDigest": "28fdd6131326497e67d9e3c3688f2c7e820c4e6d75587fb58dc9e35f8d545b59",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 248
+      },
+      {
+        "id": "VALIDATION-PASTE4A-CONSTRUCTION-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4a-construction-graph",
+        "validationDigest": "928324142269635a66da22344f852a800442428fa797d278922463d8c0790041",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 244
+      },
+      {
+        "id": "VALIDATION-PASTE4B-TRACEABILITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4b-traceability",
+        "validationDigest": "cdc94fbc1ab6b34cd1867473d6a6ab32555f421b82dc3bce66c8f95e82f9adf7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 321
+      },
+      {
+        "id": "VALIDATION-PASTE4C-DOC-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4c-doc-truth",
+        "validationDigest": "a86eb363edc20bab120a6590eeb2ac9f9168b9e0a164a5efb68574c2bb8b4e82",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 239
+      },
+      {
+        "id": "VALIDATION-PASTE4D-RELEASE-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4d-release-truth",
+        "validationDigest": "9de0bee8320b7f76dc95efd1af8751c01dc8b945d71a31a105dcef9a7c7dfaa8",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 456
+      },
+      {
+        "id": "VALIDATION-REVIEW-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "review-graph",
+        "validationDigest": "d269f09107f2fc3ffe916892e24db59375682a22a2a6775792a09b60361ec15f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 196
+      },
+      {
+        "id": "VALIDATION-SCHEMA-STRICT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schema-strict",
+        "validationDigest": "1e0b34db66453f8c8b54f4bddf4af81794090404f2b66c4fbe03d8b5c032468f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 282
+      },
+      {
+        "id": "VALIDATION-WOVEN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "woven",
+        "validationDigest": "3f4799cff5ec0a4516f7c2bf34292594d680d5e3b20ad2ca73becfb1efbe556d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 110
+      },
+      {
+        "id": "VALIDATION-PASTE3-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-source-closure",
+        "validationDigest": "96cdee7724cf5f145a0260098b33782eb8f9dad828a15f75396d4b04a492f74e",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 29305
+      },
+      {
+        "id": "VALIDATION-CONFIG-RUNTIME-ENFORCEMENT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "config-runtime-enforcement",
+        "validationDigest": "ccccb144bce66a977b83a70c4438c72ec13811a4027b94e24fe917015649fc17",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 108
+      },
+      {
+        "id": "VALIDATION-MECHANICAL",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical",
+        "validationDigest": "a802e0c8871cdac4940257b4c0ebf7ef8c837accd69e06ce8936903b9259ab62",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 172
+      },
+      {
+        "id": "VALIDATION-RUNTIME-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-contracts",
+        "validationDigest": "fef8d265e0207f281d438edd4ca13510c37c864c5bd44116e3a1741523e4267a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 792
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RELEASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-release-contracts",
+        "validationDigest": "663f4aefb74075b8404d3424fbd911793a297746e5f11fa9bf43783c285b359a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 120
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RESILIENCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-resilience",
+        "validationDigest": "d13001c5509688e16fdeb5815f15cd945076a1687a721b72c1229c1cb58f24e3",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 163
+      },
+      {
+        "id": "VALIDATION-PASTE2-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste2-source-closure",
+        "validationDigest": "3243c562d6ad710b47b4588b93cb64f8a5172ee089744a9d9d42a315736a969f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 2466
+      },
+      {
+        "id": "VALIDATION-RUNTIME-SCHEMA-CONFORMANCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-schema-conformance",
+        "validationDigest": "78210ab2268bd2aa77de25a46db9d44587cae6cedcb8da5f370e5ad2296ea0ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 267
+      },
+      {
+        "id": "VALIDATION-MECHANICAL-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical-selftest",
+        "validationDigest": "9f0d4aa941e72e684b4fd869c88eb93f07c3814dfda8eee8737f6baf9b65518c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 95
+      },
+      {
+        "id": "VALIDATION-STATE-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "state-selftest",
+        "validationDigest": "feda1327063ae6fddd47ba68f06959d79f614be5b8a5487dc79faf6ee55ee968",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7459
+      },
+      {
+        "id": "VALIDATION-SECRET-SANITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "secret-sanity",
+        "validationDigest": "bb52880e62a0e2817a87a01881b82452fd5eca0793ab916e8b2bdff625fb2888",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1006
+      },
+      {
+        "id": "VALIDATION-DEPENDENCY-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "dependency-supply-chain",
+        "validationDigest": "00a58ae3650584ec15f297865a0708e6c348620736fdbc050f30d31fdf958d6d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7307
+      },
+      {
+        "id": "VALIDATION-RELEASE-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "release-supply-chain",
+        "validationDigest": "d3c8afe4d87eab0ab03484a9bb4f2a6273ec5a5968d69f59408b90c886d090ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 116
+      },
+      {
+        "id": "VALIDATION-TYPECHECK",
+        "kind": "VALIDATION_STEP",
+        "validationId": "typecheck",
+        "validationDigest": "a98a71fd4edf3842dee1ec22f210375256ff5b3f1f45f5e9ed24426ad9e90f15",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1832
+      },
+      {
+        "id": "VALIDATION-TESTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tests",
+        "validationDigest": "40a24b33f564592720d92832d0610de5ef30a01100e26c2e7f2ca149389ca94c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 43820
+      },
+      {
+        "id": "DIFF-8391870b9faf7fd9",
+        "kind": "CHANGED_FILE",
+        "file": ".ai/NEXT_ACTIONS.md"
+      },
+      {
+        "id": "DIFF-6e1d3c492b92f214",
+        "kind": "CHANGED_FILE",
+        "file": ".ai/REVIEW_STATUS.md"
+      },
+      {
+        "id": "DIFF-750ed2ec3b596d3a",
+        "kind": "CHANGED_FILE",
+        "file": "CANONICAL-STATUS.md"
+      },
+      {
+        "id": "DIFF-06572a96a58dc510",
+        "kind": "CHANGED_FILE",
+        "file": "CHANGELOG.md"
+      },
+      {
+        "id": "DIFF-bf054953057e0815",
+        "kind": "CHANGED_FILE",
+        "file": "audit/CURRENT-AUDIT-STATE.json"
+      },
+      {
+        "id": "DIFF-8a2513579e3f27a9",
+        "kind": "CHANGED_FILE",
+        "file": "audit/V6-FULL-SCAN-PROGRESS.json"
+      },
+      {
+        "id": "DIFF-a99f3f402a323dac",
+        "kind": "CHANGED_FILE",
+        "file": "audit/checkpoints/V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29.json"
+      },
+      {
+        "id": "DIFF-6ea2b1b4cd0b9472",
+        "kind": "CHANGED_FILE",
+        "file": "automation/lib/command-contracts.mjs"
+      },
+      {
+        "id": "DIFF-39e0db0a560c4bf1",
+        "kind": "CHANGED_FILE",
+        "file": "automation/lib/orchestrator-engine.mjs"
+      },
+      {
+        "id": "DIFF-ca0c63be98abbdb0",
+        "kind": "CHANGED_FILE",
+        "file": "automation/lib/orchestrator-executors.mjs"
+      },
+      {
+        "id": "DIFF-4a2500c28d4a5a56",
+        "kind": "CHANGED_FILE",
+        "file": "automation/lib/orchestrator-state.mjs"
+      },
+      {
+        "id": "DIFF-cdaf13d36c426844",
+        "kind": "CHANGED_FILE",
+        "file": "automation/lib/review-pipeline.mjs"
+      },
+      {
+        "id": "DIFF-d5e8c567b7743e68",
+        "kind": "CHANGED_FILE",
+        "file": "config/execution-backends.json"
+      },
+      {
+        "id": "DIFF-a948b135f74ecc15",
+        "kind": "CHANGED_FILE",
+        "file": "config/orchestrator-policy.json"
+      },
+      {
+        "id": "DIFF-1ccc9a71b3903978",
+        "kind": "CHANGED_FILE",
+        "file": "config/protected-paths.json"
+      },
+      {
+        "id": "DIFF-441aa25954680749",
+        "kind": "CHANGED_FILE",
+        "file": "config/trust-root-manifest.json"
+      },
+      {
+        "id": "DIFF-aa4dc178a56d1a91",
+        "kind": "CHANGED_FILE",
+        "file": "docs/architecture/UNATTENDED-ORCHESTRATION.md"
+      },
+      {
+        "id": "DIFF-09bdef48d57fba45",
+        "kind": "CHANGED_FILE",
+        "file": "prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt"
+      },
+      {
+        "id": "DIFF-6c99d882ed1babf2",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/orchestrator-selftest.mjs"
+      },
+      {
+        "id": "DIFF-5e98c3d52c29e3a4",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/register-orchestrator-autostart.ps1"
+      },
+      {
+        "id": "DIFF-3412ec41eb417186",
+        "kind": "CHANGED_FILE",
+        "file": "scripts/uasco-orchestrator.mjs"
+      },
+      {
+        "id": "DIFF-f65fded8c253f4dc",
+        "kind": "CHANGED_FILE",
+        "file": "tests/pkg-aut1-orchestrator.test.ts"
+      }
+    ],
+    "changedFiles": [
+      ".ai/NEXT_ACTIONS.md",
+      ".ai/REVIEW_STATUS.md",
+      "CANONICAL-STATUS.md",
+      "CHANGELOG.md",
+      "audit/CURRENT-AUDIT-STATE.json",
+      "audit/V6-FULL-SCAN-PROGRESS.json",
+      "audit/checkpoints/V6-PKG-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29.json",
+      "automation/lib/command-contracts.mjs",
+      "automation/lib/orchestrator-engine.mjs",
+      "automation/lib/orchestrator-executors.mjs",
+      "automation/lib/orchestrator-state.mjs",
+      "automation/lib/review-pipeline.mjs",
+      "config/execution-backends.json",
+      "config/orchestrator-policy.json",
+      "config/protected-paths.json",
+      "config/trust-root-manifest.json",
+      "docs/architecture/UNATTENDED-ORCHESTRATION.md",
+      "prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt",
+      "scripts/orchestrator-selftest.mjs",
+      "scripts/register-orchestrator-autostart.ps1",
+      "scripts/uasco-orchestrator.mjs",
+      "tests/pkg-aut1-orchestrator.test.ts"
+    ],
+    "changeGuard": {
+      "ok": false,
+      "violations": [
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "CANONICAL-STATUS.md"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "automation/lib/command-contracts.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "automation/lib/orchestrator-engine.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "automation/lib/orchestrator-executors.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "automation/lib/orchestrator-state.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "automation/lib/review-pipeline.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "config/execution-backends.json"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "config/orchestrator-policy.json"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "config/protected-paths.json"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "config/trust-root-manifest.json"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/orchestrator-selftest.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/register-orchestrator-autostart.ps1"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "scripts/uasco-orchestrator.mjs"
+        }
+      ],
+      "dependencyChanges": [],
+      "diffLines": 1027
+    },
+    "diffStat": " .ai/NEXT_ACTIONS.md                                |   3 +-\n .ai/REVIEW_STATUS.md                               |   3 +-\n CANONICAL-STATUS.md                                |  16 ++-\n CHANGELOG.md                                       |   8 ++\n audit/CURRENT-AUDIT-STATE.json                     |   3 +-\n audit/V6-FULL-SCAN-PROGRESS.json                   |   3 +-\n ...G-AUT1-UNATTENDED-ORCHESTRATION-2026-09-29.json | 127 +++++++++++++++++++++\n automation/lib/command-contracts.mjs               |  60 ++++++++++\n automation/lib/orchestrator-engine.mjs             |  94 +++++++++++++++\n automation/lib/orchestrator-executors.mjs          | 115 +++++++++++++++++++\n automation/lib/orchestrator-state.mjs              |  49 ++++++++\n automation/lib/review-pipeline.mjs                 | 109 ++++++++++++++++++\n config/execution-backends.json                     |   7 ++\n config/orchestrator-policy.json                    |  65 +++++++++++\n config/protected-paths.json                        |   3 +\n config/trust-root-manifest.json                    |  48 +++++++-\n docs/architecture/UNATTENDED-ORCHESTRATION.md      | 103 +++++++++++++++++\n prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt             |  25 ++++\n scripts/orchestrator-selftest.mjs                  | 113 ++++++++++++++++++\n scripts/register-orchestrator-autostart.ps1        |  19 +++\n scripts/uasco-orchestrator.mjs                     |  40 +++++++\n tests/pkg-aut1-orchestrator.test.ts                |  14 +++\n 22 files changed, 1018 insertions(+), 9 deletions(-)\n",
+    "validation": {
+      "//TR": "Bu runtime report canonical validation command/exit/duration sonuçlarını redacted biçimde kaydeder; read-only static gruplar paralel çalışabilir.",
+      "schemaVersion": "1.1.0",
+      "startedAt": "2026-09-29T04:39:09.768Z",
+      "steps": [
+        {
+          "id": "registries",
+          "command": [
+            "node",
+            "scripts/validate-registries.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 78,
+          "logFile": ".ai\\runtime\\validation-registries.log"
+        },
+        {
+          "id": "architecture",
+          "command": [
+            "node",
+            "scripts/validate-architecture.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 72,
+          "logFile": ".ai\\runtime\\validation-architecture.log"
+        },
+        {
+          "id": "tr",
+          "command": [
+            "node",
+            "scripts/validate-tr-comments.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1040,
+          "logFile": ".ai\\runtime\\validation-tr.log"
+        },
+        {
+          "id": "competencies",
+          "command": [
+            "node",
+            "scripts/validate-agent-competencies.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 90,
+          "logFile": ".ai\\runtime\\validation-competencies.log"
+        },
+        {
+          "id": "organization",
+          "command": [
+            "node",
+            "scripts/validate-organization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 78,
+          "logFile": ".ai\\runtime\\validation-organization.log"
+        },
+        {
+          "id": "schemas",
+          "command": [
+            "node",
+            "scripts/validate-schema-catalog.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 150,
+          "logFile": ".ai\\runtime\\validation-schemas.log"
+        },
+        {
+          "id": "technology",
+          "command": [
+            "node",
+            "scripts/validate-technology-graph.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 86,
+          "logFile": ".ai\\runtime\\validation-technology.log"
+        },
+        {
+          "id": "paste3-technology-domain-registry",
+          "command": [
+            "node",
+            "scripts/validate-paste3-technology-domain-registry.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 470,
+          "logFile": ".ai\\runtime\\validation-paste3-technology-domain-registry.log"
+        },
+        {
+          "id": "domain-packs",
+          "command": [
+            "node",
+            "scripts/validate-domain-packs.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 99,
+          "logFile": ".ai\\runtime\\validation-domain-packs.log"
+        },
+        {
+          "id": "agent-semantic",
+          "command": [
+            "node",
+            "scripts/validate-agent-semantic.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 204,
+          "logFile": ".ai\\runtime\\validation-agent-semantic.log"
+        },
+        {
+          "id": "paste3-agent-specialization",
+          "command": [
+            "node",
+            "scripts/validate-paste3-agent-specialization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 27199,
+          "logFile": ".ai\\runtime\\validation-paste3-agent-specialization.log"
+        },
+        {
+          "id": "phase-contracts",
+          "command": [
+            "node",
+            "scripts/validate-phase-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 248,
+          "logFile": ".ai\\runtime\\validation-phase-contracts.log"
+        },
+        {
+          "id": "paste4a-construction-graph",
+          "command": [
+            "node",
+            "scripts/validate-paste4a.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 244,
+          "logFile": ".ai\\runtime\\validation-paste4a-construction-graph.log"
+        },
+        {
+          "id": "paste4b-traceability",
+          "command": [
+            "node",
+            "scripts/validate-paste4b.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 321,
+          "logFile": ".ai\\runtime\\validation-paste4b-traceability.log"
+        },
+        {
+          "id": "paste4c-doc-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4c-doc-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 239,
+          "logFile": ".ai\\runtime\\validation-paste4c-doc-truth.log"
+        },
+        {
+          "id": "paste4d-release-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4d-release-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 456,
+          "logFile": ".ai\\runtime\\validation-paste4d-release-truth.log"
+        },
+        {
+          "id": "review-graph",
+          "command": [
+            "node",
+            "scripts/validate-review-graph-v2.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 196,
+          "logFile": ".ai\\runtime\\validation-review-graph.log"
+        },
+        {
+          "id": "schema-strict",
+          "command": [
+            "node",
+            "scripts/validate-schema-strictness.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 282,
+          "logFile": ".ai\\runtime\\validation-schema-strict.log"
+        },
+        {
+          "id": "woven",
+          "command": [
+            "node",
+            "scripts/validate-woven-model.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 110,
+          "logFile": ".ai\\runtime\\validation-woven.log"
+        },
+        {
+          "id": "paste3-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste3-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 29305,
+          "logFile": ".ai\\runtime\\validation-paste3-source-closure.log"
+        },
+        {
+          "id": "config-runtime-enforcement",
+          "command": [
+            "node",
+            "scripts/validate-config-runtime-enforcement.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 108,
+          "logFile": ".ai\\runtime\\validation-config-runtime-enforcement.log"
+        },
+        {
+          "id": "mechanical",
+          "command": [
+            "node",
+            "scripts/validate-mechanical-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 172,
+          "logFile": ".ai\\runtime\\validation-mechanical.log"
+        },
+        {
+          "id": "runtime-contracts",
+          "command": [
+            "node",
+            "scripts/validate-runtime-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 792,
+          "logFile": ".ai\\runtime\\validation-runtime-contracts.log"
+        },
+        {
+          "id": "runtime-release-contracts",
+          "command": [
+            "node",
+            "scripts/validate-paste2h-runtime-release.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 120,
+          "logFile": ".ai\\runtime\\validation-runtime-release-contracts.log"
+        },
+        {
+          "id": "runtime-resilience",
+          "command": [
+            "node",
+            "scripts/validate-runtime-resilience.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 163,
+          "logFile": ".ai\\runtime\\validation-runtime-resilience.log"
+        },
+        {
+          "id": "paste2-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste2-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 2466,
+          "logFile": ".ai\\runtime\\validation-paste2-source-closure.log"
+        },
+        {
+          "id": "runtime-schema-conformance",
+          "command": [
+            "node",
+            "scripts/runtime-schema-conformance-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 267,
+          "logFile": ".ai\\runtime\\validation-runtime-schema-conformance.log"
+        },
+        {
+          "id": "mechanical-selftest",
+          "command": [
+            "node",
+            "scripts/mechanical-kernel-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 95,
+          "logFile": ".ai\\runtime\\validation-mechanical-selftest.log"
+        },
+        {
+          "id": "state-selftest",
+          "command": [
+            "node",
+            "scripts/supervisor-state-machine-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7459,
+          "logFile": ".ai\\runtime\\validation-state-selftest.log"
+        },
+        {
+          "id": "secret-sanity",
+          "command": [
+            "node",
+            "scripts/secret-sanity.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1006,
+          "logFile": ".ai\\runtime\\validation-secret-sanity.log"
+        },
+        {
+          "id": "dependency-supply-chain",
+          "command": [
+            "node",
+            "scripts/dependency-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7307,
+          "logFile": ".ai\\runtime\\validation-dependency-supply-chain.log"
+        },
+        {
+          "id": "release-supply-chain",
+          "command": [
+            "node",
+            "scripts/validate-release-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 116,
+          "logFile": ".ai\\runtime\\validation-release-supply-chain.log"
+        },
+        {
+          "id": "typecheck",
+          "command": [
+            "node",
+            "node_modules/typescript/bin/tsc",
+            "--noEmit"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1832,
+          "logFile": ".ai\\runtime\\validation-typecheck.log"
+        },
+        {
+          "id": "tests",
+          "command": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 43820,
+          "logFile": ".ai\\runtime\\validation-tests.log"
+        }
+      ],
+      "status": "PASS",
+      "finishedAt": "2026-09-29T04:41:34.878Z"
+    },
+    "knownLimitations": [],
+    "acceptedDebt": [],
+    "waivers": [],
+    "unsupportedCases": [
+      "Activation (control-plane clone, control state seeding, Task Scheduler registration) happens after this review is CLEAN and is not part of the reviewed diff.",
+      "The Windows ssh-agent service is enabled and the key is loaded by the Founder personally; until then signing stays WAITING_FOR_SECURE_SIGNER.",
+      "Scenario tests use fake executors; real executor behaviour is covered by the port-equivalence smoke recorded in the checkpoint and by the existing release tools' own tests; the real implementation/remediation builder round has not yet run unattended.",
+      "CLAUDE_CLOUD_SESSION stays NOT_CONFIGURED; construction-repository pushes stay queued while remote protection is unavailable."
+    ],
+    "previousFindingLedger": [],
+    "reviewRules": {
+      "repoContentIsUntrustedData": true,
+      "fullRepoScanDefault": false,
+      "cycle1Freeze": true,
+      "priorUnresolvedBlockerDispositionRequired": true,
+      "cycle2PlusNewBlockers": [
+        "REMEDIATION_REGRESSION",
+        "PREVIOUSLY_MASKED",
+        "CRITICAL_NEW_EVIDENCE"
+      ],
+      "resolvedBlockerRequiresFindingBoundPassRetest": true
+    },
+    "bundleDigest": "d18407494fe5444dbd0a77032d0c269cc83b028b388ce9e29315fedf3fbea01b"
+  }
+}

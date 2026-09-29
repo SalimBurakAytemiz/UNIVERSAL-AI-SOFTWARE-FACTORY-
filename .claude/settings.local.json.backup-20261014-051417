@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('.ai/cache/review/ORCHESTRATOR_STATE.json','utf8'\\)\\);console.log\\('ok'\\)\")",
+      "mcp__scheduled-tasks__list_scheduled_tasks",
+      "PowerShell(git status --porcelain=v1 --untracked-files=all)",
+      "PowerShell(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('.ai/cache/review/ORCHESTRATOR_STATE.json','utf8'\\)\\);console.log\\('json ok'\\)\")",
+      "PowerShell(git status --porcelain=v1)",
+      "PowerShell($s = Get-Content .ai/cache/review/ORCHESTRATOR_STATE.json -Raw | ConvertFrom-Json; $s.PSObject.Properties.Name; \"---quota\"; $s.providerQuota | ConvertTo-Json -Depth 5; \"---queue\"; $s.queue | ConvertTo-Json -Depth 4 | Select-Object -First 120)",
+      "PowerShell($s = Get-Content .ai/cache/review/ORCHESTRATOR_STATE.json -Raw | ConvertFrom-Json; $s.updatedAt; $s.lastResumeCheck | ConvertTo-Json -Depth 4; \"---req\"; $s.requestedPackages | ConvertTo-Json -Depth 4; \"---sched\"; $s.scheduledResume | ConvertTo-Json -Depth 4; \"---indep\"; $s.independentWorkExhausted | ConvertTo-Json -Depth 3)",
+      "PowerShell(git check-ignore -v .ai/cache/review/evidence/x.json .ai/cache/release/x)",
+      "PowerShell(schtasks /Query /TN UASCO-Autonomous-Supervisor /V /FO LIST)"
+    ]
+  }
+}

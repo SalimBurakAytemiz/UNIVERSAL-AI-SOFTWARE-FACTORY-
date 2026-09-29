@@ -1,0 +1,32 @@
+{
+  "package": "V7-UI-071",
+  "title": "Operations & Recovery runbook (SC-16)",
+  "headSha": "993ed8de187221319048020fdc980f1e787c94fd",
+  "base": "v7/integration",
+  "pr": 6,
+  "date": "2026-10-17",
+  "gov": "GOV2 (Claude-only; reviewer != implementer; Codex retired)",
+  "implementer": "sonnet-workflow (interrupted pre-compaction) + opus finalize (merge/conflict-resolution only)",
+  "reviewer": "independent opus agent (senior-architect), read-only, detached checkout at head SHA in isolated worktree rv-operations",
+  "independence": "ESTABLISHED — reviewer did not author/merge; reviewed read-only at detached PR head; confirmed git rev-parse HEAD == 993ed8d",
+  "verdict": "CLEAN",
+  "checks": {
+    "rendererDiscipline": "PASS (routes.js+planned.js delegation; app.js VIEWS unchanged/not-in-diff; no plannedPackage)",
+    "readOnlyLeastAuthority": "PASS (3 GET accessors to already-allow-listed /v1/control/status,/v1/runs,/v1/founder-attention; no POST; EXTRA_GET_ROUTES/main.mjs/server.ts untouched)",
+    "honestStatesFailClosed": "PASS (fail-closed mappers -> ERROR on malformed; STALLED from real startedAt; unreadable counts null not 0; NO_ISSUES_RECORDED only on real evidence; PRODUCT_VERIFIED absent)",
+    "i18nParity": "PASS (EN=TR=2189 keys; onlyEN=0 onlyTR=0; placeholder/empty mismatch=0; 206 ops.* keys both)",
+    "protectedTrustRoot": "PASS (only validation.json protected-changed; verify-trust-root PASS; within FA-V2-PRODUCT authority)",
+    "testsRealMeaningful": "PASS (47 cases; real RunLedger/Ed25519 summaries/global-stop/scheduler; fail-closed battery; positive control; POST-never-called; PRODUCT_VERIFIED scanned absent)",
+    "masterUntouchedCleanRebase": "PASS (master 061f78d does not contain head; exactly 1 linear commit atop trunk 5cb44cd; no trunk rewrite)"
+  },
+  "verification": {
+    "trustRoot": "verify-trust-root.mjs PASS (364 files)",
+    "reviewerSuites": "9 suites 392/392 passed (no SBX-8 in scope)",
+    "localFullCanonical": "all validators PASS; 106 non-SBX-8 test files passed; only SBX-8 (agent-config x2, reviewer x1) failed due to this machine's global ~/.config/git/ignore artifact; isolate-verified PASS with empty XDG_CONFIG_HOME (29/29); exit1 = VALIDATION env artifact, not a defect",
+    "githubUbuntuCI": "ubuntu JOB completed/success on head 993ed8d (run 39052599617, 5m34s)",
+    "githubWindowsCI": "VALIDATION_STEP_TIMEOUT at the deliberate 600s per-step cap; PRE-EXISTING trunk-wide caveat (trunk 5cb44cd and prior commits also run-conclusion=failure for the same cap); NOT a UI-071 regression"
+  },
+  "findings": [],
+  "merge": "controlled --merge to v7/integration on: independent review CLEAN + ubuntu green on head + local canonical PASS(env-isolated) + windows-timeout caveat accounted; master never touched; no force-push",
+  "CONFLICT_NOTE": "SUPERSEDED/CONTESTED 2026-10-17: a second independent review (V7-UI-071-55f5400-REJECTED-c2.json, workflow wf_bb8ec5d0-9f2) returned REJECTED on a reproduced HONESTY false-all-clear in operations-core.js (blob c9f2538c) that THIS review missed (it did not probe a summary-without-manifest newest run). Per Founder P0, conflicting reviews => the merge should have been BLOCKED. This CLEAN verdict is NOT a clearance for blob c9f2538c. Resolution: fix on v7/ux-operations-fix (operations-core.js -> a5d7b3c8) + independent re-review + coded merge-gate. Evidence retained, not deleted."
+}
