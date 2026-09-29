@@ -41,8 +41,8 @@
     "runAfter": "all protected edits of this commit, with no other untracked or ignored files under protected prefixes",
     "sealStatus": "SEALED",
     "protectedFiles": 342,
-    "generatedAt": "2026-09-29T11:33:54.610Z",
-    "manifestSha256": "c60e8b6ed1d96c027d7a9014cecee674c79602ef60cd6c160b3dfb26f072b47a"
+    "generatedAt": "2026-09-29T19:34:20.055Z",
+    "manifestSha256": "0cd9aa2a42503e9077b3439715559ac9895b3ce8cc7b43a6a8f6d1d7bd61b044"
   },
   "validationEnvironment": {
     "measuredBy": "the validation run itself (node/npm/git/PowerShell versions captured before the canonical runner)",
@@ -79,25 +79,39 @@
       "mutationCheck": "10/10 fix reversions detected, each by its own regression only",
       "broadDependencyFreeSuite": "25/25 PASS",
       "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
+    },
+    "cycle3": {
+      "workspace": "fresh clone of 0faf2aa mirroring the PKG-AUT1 cycle-3 working tree, reviewed lock installed",
+      "gitDiffCheck": "PASS",
+      "verifyTrustRoot": "PASS (342 protected files, SEALED)",
+      "canonicalRunner": {
+        "status": "PASS",
+        "mode": "SEALED"
+      },
+      "vitest": "PASS 25 files / 160 tests",
+      "orchestratorSelftest": "PASS 26/26 (adds aut1c3-F010-...)",
+      "mutationCheck": "3/3 cycle-3 fix reversions detected by the F010 regression",
+      "broadDependencyFreeSuite": "25/25 PASS",
+      "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
     }
   },
   "changedFileSha256": {
     "config/orchestrator-policy.json": "3d904ac2a2bad1749e9e9ec8f2ac2f8084ef1282f473360fcf466c77f0947697",
     "automation/lib/orchestrator-state.mjs": "5d567df60f9aac570b7946eed2012864c8016e5b62e317d0b37be759e8a4b451",
     "automation/lib/command-contracts.mjs": "4a72ed6e4f350ae20989ea9666d044ae5dc8705d095420ffe3b1da2587b7451a",
-    "automation/lib/review-pipeline.mjs": "8b3ce9823e59623f4e3bac94cc972e09f61a1602e0b4fed42ea30d320dcf6da3",
+    "automation/lib/review-pipeline.mjs": "8a83604824f0c5cef6dfd573b50d45bb281355e352987def44aac9bdc41e6ab1",
     "automation/lib/orchestrator-engine.mjs": "857891a7c3e38276f6da57da161cf980824761d485e47e5f8d9810d6139c73e2",
-    "automation/lib/orchestrator-executors.mjs": "b749f19d024e15550040c6261e01790f1e01710feca52e475680195924259410",
+    "automation/lib/orchestrator-executors.mjs": "99b6e57f875e82de0f1d9e44979160a24e4a20ffbdeb8c132bf7b903681747ac",
     "scripts/uasco-orchestrator.mjs": "2f5c6c3fb9f29e321ec3a0aff3bcde4ae0319fb54e44abd2790610979531ab82",
     "scripts/register-orchestrator-autostart.ps1": "e4016490a93bc35709ae33c99237c8bc142ec75179d2bf2a05d1c7e95b5272a0",
-    "scripts/orchestrator-selftest.mjs": "6c2dc5cbae89b28655a12965da42921278a6dd7ba789873548b21d1453504b40",
+    "scripts/orchestrator-selftest.mjs": "6bc7865e996d8c462d3809c98d113cb7a34cf925a747dbe139fe497a5f2f21c4",
     "prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt": "c14a4af14078c2113a5526e23aabf662c8be49c4ce257ccfbf55da59f83008b3",
     "config/execution-backends.json": "ac4542347a726d7c745e45b09634aedfde7865ed78648cf84c25f983a1542e0b",
     "config/protected-paths.json": "1b1616db407baffca10ad00d5f19198b6e54f929e06e17faef344e9c8cf45f7a",
-    "config/trust-root-manifest.json": "c60e8b6ed1d96c027d7a9014cecee674c79602ef60cd6c160b3dfb26f072b47a",
+    "config/trust-root-manifest.json": "0cd9aa2a42503e9077b3439715559ac9895b3ce8cc7b43a6a8f6d1d7bd61b044",
     "CANONICAL-STATUS.md": "7db809611bec4715e4c5b9a14f55d53ef1af94b17b792449c53feaba5164e18f",
     "tests/pkg-aut1-orchestrator.test.ts": "8a6317d2ea12f58b7d1c707c7785779f5fcdb84c8fb44b72d6a58647867067ad",
-    "docs/architecture/UNATTENDED-ORCHESTRATION.md": "2317f0e73cc30714f0a749b4a7e3450a093c18a3b7b11b9fb454ede7e12737bf",
+    "docs/architecture/UNATTENDED-ORCHESTRATION.md": "a2faa08ef42cb176f1aac68f25f6ee55828252831ec34000944a91128bc0154d",
     ".ai/NEXT_ACTIONS.md": "b141f1cbdb61cd86f6e71724f35fec05df02d3bd9c0bb99d650e17a5e0606d00",
     ".ai/REVIEW_STATUS.md": "7cad5614c1a13040cf4880c2c581554d0d1ae1e6da3704e8f871de611b05009a",
     "CHANGELOG.md": "bdfee7a0ae8a2390a0802a3848f70d909878f09487c7766bb14fbd7a33034dba",
@@ -105,7 +119,7 @@
     "audit/V6-FULL-SCAN-PROGRESS.json": "7e609dd4b2aa6f8bf2571c4e24ef7368b85aecef3b113dd4bd65b5517e2d7fb3"
   },
   "openFindings": [],
-  "review": "CYCLE_1_BLOCKED_REMEDIATED_CYCLE_2_PENDING",
+  "review": "CYCLE_2_BLOCKED_F-AUT1-010_REMEDIATED_CYCLE_3_PENDING (Founder-authorized)",
   "activation": "AFTER_CLEAN",
   "merge": "AFTER_PKG_X1",
   "cleanClaim": false,
@@ -192,6 +206,16 @@
         "severity": "P1",
         "fix": "phase0OutcomeFrom accepts Phase0 only with the trusted verifier result (verifyPhase0ForControl: schema, Ed25519 signature, installId/source commit/trust-root/input binding), the signed release's trust-root digest, complete install steps without FAIL and, for fresh installs, installer exit 0; a finished install that does not verify is preserved as a failed attempt instead of adopted.",
         "retest": "scripts/orchestrator-selftest.mjs scenario aut1c2-F009-... (a real signed report bound to a git-backed install is accepted; an unsigned one and every missing binding are rejected)."
+      },
+      "F-AUT1-010": {
+        "severity": "P1",
+        "causality": "CRITICAL_NEW_EVIDENCE",
+        "observed": "merge re-derived governance from the bundle embedded in the evidence and compared only reviewedCommit and cycle with the package, so internally consistent CLEAN evidence for another bundle on the same commit and cycle was accepted.",
+        "fix": "rederiveGovernedFromEvidence also returns the recomputed bundle digest and base commit; the merge gate requires the evidence and its recomputed frozen bundle digest to equal the package's frozen bundle digest and the base, reviewed commit and cycle to match before any git operation. The review executor checks that the placed bundle (recomputed digest, base, reviewed commit, cycle) is the package's frozen bundle before adopting or reviewing.",
+        "retest": "scripts/orchestrator-selftest.mjs scenario aut1c3-F010-... (CLEAN evidence for another bundle on the same commit/cycle, another base and a missing frozen digest are rejected with zero git calls; matching evidence merges; a swapped bundle file is rejected as FROZEN_BUNDLE_IDENTITY_MISMATCH without a provider call).",
+        "retestValidationIds": [
+          "tests"
+        ]
       }
     },
     "mutationCheck": {
@@ -258,6 +282,35 @@
             "aut1c2-F009-phase0-acceptance-requires-the-verified-signed-report-bound-to-the-install-and-release"
           ]
         }
+      ]
+    },
+    "cycle2": {
+      "reviewedCommit": "0faf2aa03fb4744ff441039fcf6c8885e30a24f7",
+      "run": "0faf2aa-c2-20260929T191219Z-broker",
+      "governedResult": "BLOCKED",
+      "priorBlockers": "F-AUT1-001..009 all RESOLVED",
+      "reviewResultSha256": "e3d45a817618b27378c938e50d7da00dd607d1da331878de0e05a2851fdcb8f2"
+    },
+    "founderCycle3Authorization": {
+      "decision": "CYCLE_3_REMEDIATION_AUTHORIZED",
+      "source": "Founder answer 2026-09-29: Onayla: F-AUT1-010 + betiksiz benimseme",
+      "scope": [
+        "F-AUT1-010",
+        "script-free adoption required by the frozen PKG-T2 acceptance criterion"
+      ],
+      "cycleLimitOtherPackages": 2
+    },
+    "scriptFreeAdoption": {
+      "reason": "Founder-authorized cycle-3 scope; the frozen PKG-T2 criterion requires adoption without provider or script calls",
+      "fix": "a completed run is re-evaluated in a review tree prepared with git only (clone/fetch/checkout/clean status); dependency and provenance scripts run only before a new provider call.",
+      "retest": "aut1c3-F010-... (a second review of a completed run adds zero non-git process calls)."
+    },
+    "mutationCheckCycle3": {
+      "detected": "3/3",
+      "mutations": [
+        "merge bundle binding removed",
+        "placed-bundle identity check removed",
+        "adoption back to full clone preparation"
       ]
     }
   }

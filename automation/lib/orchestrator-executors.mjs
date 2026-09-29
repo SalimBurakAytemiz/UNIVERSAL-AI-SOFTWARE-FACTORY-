@@ -2,7 +2,7 @@
 import fs from "node:fs";import path from "node:path";import crypto from "node:crypto";
 import {safeChildEnv} from "./env-policy.mjs";import {protectedChangeViolations} from "./trust-root.mjs";import {utf8Tail} from "./context-budget.mjs";
 import {findCompletedRun,runBrokerReview,evaluateReviewRun,recordReviewEvidence,buildFindingLedger,writeEnvironmentBlock,detectQuotaBlock,parseRetryAfter,buildFrozenBundle,rederiveGovernedFromEvidence} from "./review-pipeline.mjs";
-import {verifyPhase0ForControl} from "./control-boundary.mjs";
+import {verifyPhase0ForControl} from "./control-boundary.mjs";import {stableStringify} from "./atomic-json.mjs";
 import {loadExecutionBackendRegistry,taskFromReviewPackage,observeExecutionBackends,routeExecution,buildExecutionProvenance,assertExecutionMergeGate} from "./execution-routing.mjs";
 const sha=b=>crypto.createHash("sha256").update(b).digest("hex"),shaFile=f=>sha(fs.readFileSync(f)),readJson=f=>JSON.parse(fs.readFileSync(f,"utf8").replace(/^\uFEFF/,""));
 const norm=p=>path.resolve(p).replaceAll("\\","/").toLowerCase();
@@ -24,10 +24,15 @@ export function createExecutors({policy,repo,runner,controlPlaneRoot,now=()=>new
   const node=(cwd,script,args=[],opts={})=>runner.run("node.script",{script,cwd,args},opts);
   const mustNode=(cwd,script,args=[],opts={})=>{const r=node(cwd,script,args,opts);if(r.status!==0)throw new Error(`NODE_STEP_FAILED:${script}:exit=${r.status}:${(r.stderr||r.stdout).trim().slice(-600)}`);return r};
   function prepareClone(dir,commit){if(!fs.existsSync(dir)){fs.mkdirSync(path.dirname(dir),{recursive:true});git("git.cloneLocal",{source:repo,dest:dir})}git("git.fetchOrigin",{cwd:dir});git("git.checkoutDetached",{cwd:dir,commit});if(!fs.existsSync(path.join(dir,"node_modules")))mustNode(dir,"scripts/ensure-dependencies.mjs");mustNode(dir,"scripts/capture-provider-provenance.mjs");if(runner.must("git.status",{cwd:dir}).stdout.trim())throw new Error(`CLONE_NOT_CLEAN:${dir}`);return dir}
+  // //TR: Benimseme için inceleme ağacı yalnız git ile hazırlanır (bağımlılık/provenance betiği çalışmaz); değerlendirme yalnız frozen bundle, prompt, şemalar ve ayarları kullanır.
+  function prepareReviewTree(dir,commit){if(!fs.existsSync(dir)){fs.mkdirSync(path.dirname(dir),{recursive:true});git("git.cloneLocal",{source:repo,dest:dir})}git("git.fetchOrigin",{cwd:dir});git("git.checkoutDetached",{cwd:dir,commit});if(runner.must("git.status",{cwd:dir}).stdout.trim())throw new Error(`CLONE_NOT_CLEAN:${dir}`);return dir}
+  // //TR: Yerleştirilen bundle paketin donmuş kimliğiyle (yeniden hesaplanan digest, base, reviewed commit, cycle) aynı olmalıdır.
+  function frozenBundleMismatch(dir,p){try{const b=readJson(path.join(dir,".ai/cache/review",p.bundle.file)),{bundleDigest,...unsigned}=b;if(bundleDigest!==p.bundle.digest||sha(Buffer.from(stableStringify(unsigned)))!==p.bundle.digest||b.baseCommit!==p.baseCommit||b.reviewedCommit!==p.reviewCommit||b.cycle!==p.cycle)return "FROZEN_BUNDLE_IDENTITY_MISMATCH";return null}catch(e){return `FROZEN_BUNDLE_UNREADABLE:${e.message}`}}
   function placeBundle(dir,p){const d=path.join(dir,".ai/cache/review");fs.mkdirSync(d,{recursive:true});for(const f of [p.bundle.file,p.bundle.promptFile])fs.copyFileSync(path.join(R.evidenceRoot,f),path.join(d,f))}
   async function review(a,control){
     const p=control.packages[a.packageId],bundleRel=`.ai/cache/review/${p.bundle.file}`,rejected=p.formatCorrection?p.formatRejection??null:null,correctionRel=`.ai/cache/review/${p.bundle.file.replace(/-review-bundle\.json$/,"")}-format-correction-prompt.txt`;
-    const done=findCompletedRun({evidenceRoot:R.evidenceRoot,bundleDigest:p.bundle.digest,cycle:p.cycle,promptFile:p.formatCorrection?correctionRel:`.ai/cache/review/${p.bundle.promptFile}`}),dir=prepareClone(path.join(R.controlRoot,"reviews",`${p.id}-${p.reviewCommit.slice(0,7)}`),p.reviewCommit);placeBundle(dir,p);let runDir,governed;
+    const done=findCompletedRun({evidenceRoot:R.evidenceRoot,bundleDigest:p.bundle.digest,cycle:p.cycle,promptFile:p.formatCorrection?correctionRel:`.ai/cache/review/${p.bundle.promptFile}`}),reviewDir=path.join(R.controlRoot,"reviews",`${p.id}-${p.reviewCommit.slice(0,7)}`),dir=done?prepareReviewTree(reviewDir,p.reviewCommit):prepareClone(reviewDir,p.reviewCommit);placeBundle(dir,p);let runDir,governed;
+    const idMismatch=frozenBundleMismatch(dir,p);if(idMismatch)return {type:"INPUT_INVALID",reason:idMismatch};
     // //TR: Tamamlanmış çağrı benimsenirken önbellekteki karar kullanılmaz; aynı çıktı yeniden Codex çağrılmadan her seferinde yeniden değerlendirilir.
     if(done){runDir=done.runDir;governed=evaluateReviewRun({reviewRoot:dir,runDir,bundleRel,promptRel:done.manifest.promptFile})}
     else{
@@ -46,7 +51,9 @@ export function createExecutors({policy,repo,runner,controlPlaneRoot,now=()=>new
     return {type:"FOUNDER_DECISION",runDir,evidence,reason:`GOVERNED_${governed.governedResult}: ${String(governed.summary??"").slice(0,400)}`};
   }
   async function merge(a,control){
-    const p=control.packages[a.packageId];if(p.review?.result!=="CLEAN"||!p.review.evidence||!fs.existsSync(p.review.evidence))return {type:"NOT_FF",reason:"CLEAN_EVIDENCE_MISSING"};const ev=readJson(p.review.evidence),rd=rederiveGovernedFromEvidence({evidence:ev,controlPlaneRoot});if(!rd.ok)return {type:"NOT_FF",reason:`CLEAN_EVIDENCE_NOT_VERIFIED:${rd.error}`};if(rd.governedResult!=="CLEAN"||rd.reviewedCommit!==p.reviewCommit||ev.reviewedCommit!==p.reviewCommit||rd.cycle!==p.cycle)return {type:"NOT_FF",reason:"CLEAN_EVIDENCE_MISMATCH"};
+    const p=control.packages[a.packageId];if(p.review?.result!=="CLEAN"||!p.review.evidence||!fs.existsSync(p.review.evidence))return {type:"NOT_FF",reason:"CLEAN_EVIDENCE_MISSING"};const ev=readJson(p.review.evidence),rd=rederiveGovernedFromEvidence({evidence:ev,controlPlaneRoot});if(!rd.ok)return {type:"NOT_FF",reason:`CLEAN_EVIDENCE_NOT_VERIFIED:${rd.error}`};// //TR: Kanıt, paketin kendi donmuş bundle kimliğine (digest, base, reviewed commit, cycle) birebir bağlı olmalıdır; aynı commit için başka bir bundle'ın kendi içinde tutarlı CLEAN kanıtı reddedilir, hiçbir git işlemi yapılmaz.
+    if(!/^[0-9a-f]{64}$/.test(String(p.bundle?.digest))||rd.bundleDigest!==p.bundle.digest||ev.bundleDigest!==p.bundle.digest||rd.baseCommit!==p.baseCommit)return {type:"NOT_FF",reason:"CLEAN_EVIDENCE_NOT_FOR_THE_FROZEN_BUNDLE"};
+    if(rd.governedResult!=="CLEAN"||rd.reviewedCommit!==p.reviewCommit||ev.reviewedCommit!==p.reviewCommit||rd.cycle!==p.cycle)return {type:"NOT_FF",reason:"CLEAN_EVIDENCE_MISMATCH"};
     if(p.executionProvenance){const reg=loadExecutionBackendRegistry(readJson(path.join(controlPlaneRoot,"config/execution-backends.json")));assertExecutionMergeGate({provenance:{...p.executionProvenance,resultCommit:p.reviewCommit,reviewStatus:"CLEAN",reviewerProvider:"OPENAI"},registry:reg,governedResult:"CLEAN",reviewerProvider:"OPENAI",defaultBranch:defaultRef.replace("refs/heads/",""),runBranchPrefix:null})}
     const master=git("git.revParse",{cwd:repo,rev:defaultRef});if(master===p.reviewCommit)return {type:"MERGED",master};
     if(runner.run("git.isAncestor",{cwd:repo,ancestor:master,descendant:p.reviewCommit}).status!==0)return {type:"NOT_FF",reason:`DEFAULT_BRANCH_NOT_ANCESTOR:${master}`};
