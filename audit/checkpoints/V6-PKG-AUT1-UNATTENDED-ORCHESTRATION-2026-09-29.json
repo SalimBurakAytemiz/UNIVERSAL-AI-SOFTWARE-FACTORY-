@@ -41,8 +41,8 @@
     "runAfter": "all protected edits of this commit, with no other untracked or ignored files under protected prefixes",
     "sealStatus": "SEALED",
     "protectedFiles": 342,
-    "generatedAt": "2026-09-29T04:30:47.275Z",
-    "manifestSha256": "558bc79562298c2fd8e20d4efcf5d4b1ddb1ff50b6ec069061ba75323e42862c"
+    "generatedAt": "2026-09-29T11:33:54.610Z",
+    "manifestSha256": "c60e8b6ed1d96c027d7a9014cecee674c79602ef60cd6c160b3dfb26f072b47a"
   },
   "validationEnvironment": {
     "measuredBy": "the validation run itself (node/npm/git/PowerShell versions captured before the canonical runner)",
@@ -65,25 +65,39 @@
     "orchestratorSelftest": "PASS 17/17 (adds completed-unevaluated-review-run-adopted-incomplete-or-tampered-run-not)",
     "broadDependencyFreeSuite": "25/25 PASS",
     "portEquivalenceSmoke": "NOT_RERUN (the ported bundle and evaluation functions are unchanged; only findCompletedRun changed)",
-    "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
+    "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit",
+    "cycle2": {
+      "workspace": "fresh clone of b070dcb mirroring the PKG-AUT1 cycle-2 working tree, reviewed lock installed",
+      "gitDiffCheck": "PASS",
+      "verifyTrustRoot": "PASS (342 protected files, SEALED)",
+      "canonicalRunner": {
+        "status": "PASS",
+        "mode": "SEALED"
+      },
+      "vitest": "PASS 25 files / 160 tests",
+      "orchestratorSelftest": "PASS 25/25 (9 new aut1c2-F001..F009 regressions; the old completed-unevaluated adoption scenario is replaced by the stricter F002 scenario)",
+      "mutationCheck": "10/10 fix reversions detected, each by its own regression only",
+      "broadDependencyFreeSuite": "25/25 PASS",
+      "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
+    }
   },
   "changedFileSha256": {
     "config/orchestrator-policy.json": "3d904ac2a2bad1749e9e9ec8f2ac2f8084ef1282f473360fcf466c77f0947697",
     "automation/lib/orchestrator-state.mjs": "5d567df60f9aac570b7946eed2012864c8016e5b62e317d0b37be759e8a4b451",
-    "automation/lib/command-contracts.mjs": "5eab7f32cfcc7294a2eba774a3e92f8e861a6a710d8535c15d054b7d4021a1fd",
-    "automation/lib/review-pipeline.mjs": "257e4ad791bf27450500615083ffd41776e9965079b38724b8f8a8e9a91f5baf",
-    "automation/lib/orchestrator-engine.mjs": "876e3f6c067cf52e960a142adaf8da700341ed2442b1051bf5e847e6b50a06c4",
-    "automation/lib/orchestrator-executors.mjs": "975422477aa6856f4610b5daf0f9dade5ed549743c2930627dbb1e64d7755a24",
-    "scripts/uasco-orchestrator.mjs": "6523da7d2c44bbd264ba443cf896b7897c9325d0f340c51c824b3b4f05aca0e8",
+    "automation/lib/command-contracts.mjs": "4a72ed6e4f350ae20989ea9666d044ae5dc8705d095420ffe3b1da2587b7451a",
+    "automation/lib/review-pipeline.mjs": "8b3ce9823e59623f4e3bac94cc972e09f61a1602e0b4fed42ea30d320dcf6da3",
+    "automation/lib/orchestrator-engine.mjs": "857891a7c3e38276f6da57da161cf980824761d485e47e5f8d9810d6139c73e2",
+    "automation/lib/orchestrator-executors.mjs": "b749f19d024e15550040c6261e01790f1e01710feca52e475680195924259410",
+    "scripts/uasco-orchestrator.mjs": "2f5c6c3fb9f29e321ec3a0aff3bcde4ae0319fb54e44abd2790610979531ab82",
     "scripts/register-orchestrator-autostart.ps1": "e4016490a93bc35709ae33c99237c8bc142ec75179d2bf2a05d1c7e95b5272a0",
-    "scripts/orchestrator-selftest.mjs": "74ef66cd396bc1a9545167128e4055a738f76d6be271b94ae16bd7353d1e3772",
+    "scripts/orchestrator-selftest.mjs": "6c2dc5cbae89b28655a12965da42921278a6dd7ba789873548b21d1453504b40",
     "prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt": "c14a4af14078c2113a5526e23aabf662c8be49c4ce257ccfbf55da59f83008b3",
     "config/execution-backends.json": "ac4542347a726d7c745e45b09634aedfde7865ed78648cf84c25f983a1542e0b",
     "config/protected-paths.json": "1b1616db407baffca10ad00d5f19198b6e54f929e06e17faef344e9c8cf45f7a",
-    "config/trust-root-manifest.json": "558bc79562298c2fd8e20d4efcf5d4b1ddb1ff50b6ec069061ba75323e42862c",
+    "config/trust-root-manifest.json": "c60e8b6ed1d96c027d7a9014cecee674c79602ef60cd6c160b3dfb26f072b47a",
     "CANONICAL-STATUS.md": "7db809611bec4715e4c5b9a14f55d53ef1af94b17b792449c53feaba5164e18f",
     "tests/pkg-aut1-orchestrator.test.ts": "8a6317d2ea12f58b7d1c707c7785779f5fcdb84c8fb44b72d6a58647867067ad",
-    "docs/architecture/UNATTENDED-ORCHESTRATION.md": "1471adaed305ff7e4b81c0436045b30dd08479ed86f323693b8da2d63234f939",
+    "docs/architecture/UNATTENDED-ORCHESTRATION.md": "2317f0e73cc30714f0a749b4a7e3450a093c18a3b7b11b9fb454ede7e12737bf",
     ".ai/NEXT_ACTIONS.md": "b141f1cbdb61cd86f6e71724f35fec05df02d3bd9c0bb99d650e17a5e0606d00",
     ".ai/REVIEW_STATUS.md": "7cad5614c1a13040cf4880c2c581554d0d1ae1e6da3704e8f871de611b05009a",
     "CHANGELOG.md": "bdfee7a0ae8a2390a0802a3848f70d909878f09487c7766bb14fbd7a33034dba",
@@ -91,7 +105,7 @@
     "audit/V6-FULL-SCAN-PROGRESS.json": "7e609dd4b2aa6f8bf2571c4e24ef7368b85aecef3b113dd4bd65b5517e2d7fb3"
   },
   "openFindings": [],
-  "review": "NOT_REVIEWED_CODEX_PENDING (rebased onto PKG-X1 cycle 2)",
+  "review": "CYCLE_1_BLOCKED_REMEDIATED_CYCLE_2_PENDING",
   "activation": "AFTER_CLEAN",
   "merge": "AFTER_PKG_X1",
   "cleanClaim": false,
@@ -123,5 +137,128 @@
     ],
     "test": "scripts/orchestrator-selftest.mjs scenario completed-unevaluated-review-run-adopted-incomplete-or-tampered-run-not (17/17); the executor-level crash path is exercised by the remediated PKG-T1 crash/resume selftest.",
     "authority": "inside the recorded PKG-AUT1 Founder authorization (automation/lib/review-pipeline.mjs and automation/lib/orchestrator-executors.mjs are new AUT1 files); strengthens idempotency, no policy or authority change"
+  },
+  "remediation": {
+    "cycle1": {
+      "reviewedCommit": "b070dcb8071254d561f70a1eb4235ab1c172f1fb",
+      "run": "b070dcb-c1-20260929T105716Z-broker",
+      "governedResult": "BLOCKED",
+      "reviewResultSha256": "a872f51cac1b199b8e9559a2b3f2f5dc5684fddf6936cac03ba682fd63c5dc02",
+      "quotaBlockedEarlierAttempt": "b070dcb-c1-20260929T044207Z-broker (environment block, no cycle consumed)"
+    },
+    "authority": "Remediation of admissible Codex blockers inside the recorded PKG-AUT1 Founder authorization: only AUT1's own protected files change (automation/lib/command-contracts.mjs, review-pipeline.mjs, orchestrator-engine.mjs, orchestrator-executors.mjs, scripts/uasco-orchestrator.mjs, scripts/orchestrator-selftest.mjs, regenerated trust-root manifest); every change makes the control plane stricter or fail-closed; the existing Phase0 verifier (automation/lib/control-boundary.mjs, phase0-contract.mjs) is reused unchanged.",
+    "findings": {
+      "F-AUT1-001": {
+        "severity": "P1",
+        "fix": "runTick checks shouldStop (Global Stop) before every action and does not apply an action cut short by the stop (its in-flight marker is recovered idempotently); createContractRunner refuses every command while the stop is active and, with the default spawner, runs commands under spawnMonitored, which polls the stop and terminates the whole command tree (System32 taskkill /T /F on Windows, process group elsewhere); a terminated command throws GLOBAL_STOP_ACTIVE; the CLI wires the repository Global Stop into both.",
+        "retest": "scripts/orchestrator-selftest.mjs scenario aut1c2-F001-... (stop during an action ends the tick; a terminated action is not applied; no action or command starts during a stop; a running command tree including a grandchild is terminated)."
+      },
+      "F-AUT1-002": {
+        "severity": "P1",
+        "fix": "findCompletedRun no longer reads governed-result.json; it returns the latest finished run for the bundle, cycle and prompt whose output matches its manifest hash, and the review executor always re-derives governance with evaluateReviewRun (which now also binds the output to the manifest hash and the bundle digest). The merge gate re-derives the decision from the evidence record (unchanged reviewer text, manifest output hash, recomputed frozen-bundle digest, identity) with rederiveGovernedFromEvidence using the control plane's schemas and settings.",
+        "retest": "scripts/orchestrator-selftest.mjs scenario aut1c2-F002-... (a cached CLEAN over BLOCKED output is re-evaluated to BLOCKED without a provider call; merge rejects it before any git command; tampered text or bundle is rejected)."
+      },
+      "F-AUT1-003": {
+        "severity": "P1",
+        "fix": "builderRound classifies changed files against the verified control plane's config/protected-paths.json instead of the builder worktree copy, so emptying the policy in the worktree cannot hide protected edits; the rejection happens before any worktree code (trust-root generator, validation) runs.",
+        "retest": "scripts/orchestrator-selftest.mjs scenario aut1c2-F003-... (policy removal plus a protected script edit, and a protected edit alone, are rejected with PROTECTED_CHANGE_NOT_AUTHORIZED; run-validation is never invoked)."
+      },
+      "F-AUT1-004": {
+        "severity": "P1",
+        "fix": "A QUEUED outcome records queuedAction; nextAction resumes a queued REMEDIATE as REMEDIATE, so the findings, frozen contract, ledger and next cycle are kept; COMMITTED clears the marker.",
+        "retest": "scripts/orchestrator-selftest.mjs scenario aut1c2-F004-..."
+      },
+      "F-AUT1-005": {
+        "severity": "P2",
+        "fix": "FORMAT_REJECTED stores formatRejection {runDir, reason} separately from the last valid review; the correction prompt is built from that exact run and reason; adoption filters runs by prompt file, so only a run made with the correction prompt is adopted; a later valid review clears the correction state. Each provider call gets a unique run directory (milliseconds plus suffix).",
+        "retest": "scripts/orchestrator-selftest.mjs scenario aut1c2-F005-... (the second prompt carries the real rejection reason and the malformed output; exactly one correction call)."
+      },
+      "F-AUT1-006": {
+        "severity": "P2",
+        "fix": "Packaging is adopted only if the release directory is intact; the signing handoff (ZIP, sidecar, SHA256SUMS.txt, packaging record) is verified file by file and missing or altered copies are repaired from the verified sources (altered copies kept as .invalid-<time>); the record is written last; an incomplete sign directory is preserved as -incomplete-<time> before a rebuild instead of failing with SIGN_DIR_EXISTS.",
+        "retest": "scripts/orchestrator-selftest.mjs scenario aut1c2-F006-..."
+      },
+      "F-AUT1-007": {
+        "severity": "P2",
+        "fix": "If the deterministic implementation clone is dirty (interrupted or quota-limited round), it is renamed to .partial-<time> with a status record (never deleted) and the round is retried in a fresh clone.",
+        "retest": "scripts/orchestrator-selftest.mjs scenario aut1c2-F007-... (the partial edit is preserved, the retry commits only the new round's files)."
+      },
+      "F-AUT1-008": {
+        "severity": "P2",
+        "fix": "Signatures are verified and adopted individually; only missing or invalid signatures are created and an invalid one is kept as .invalid-<time>.",
+        "retest": "scripts/orchestrator-selftest.mjs scenario aut1c2-F008-... (with a valid ZIP signature and a missing sums signature only the sums file is signed)."
+      },
+      "F-AUT1-009": {
+        "severity": "P1",
+        "fix": "phase0OutcomeFrom accepts Phase0 only with the trusted verifier result (verifyPhase0ForControl: schema, Ed25519 signature, installId/source commit/trust-root/input binding), the signed release's trust-root digest, complete install steps without FAIL and, for fresh installs, installer exit 0; a finished install that does not verify is preserved as a failed attempt instead of adopted.",
+        "retest": "scripts/orchestrator-selftest.mjs scenario aut1c2-F009-... (a real signed report bound to a git-backed install is accepted; an unsigned one and every missing binding are rejected)."
+      }
+    },
+    "mutationCheck": {
+      "method": "each fix reverted alone in the working tree, scripts/orchestrator-selftest.mjs rerun, files restored byte-identical",
+      "detected": "10/10",
+      "mutations": [
+        {
+          "name": "F001-runTick-stop",
+          "detectedBy": [
+            "aut1c2-F001-global-stop-is-checked-before-every-action-and-command-and-terminates-running-command-trees"
+          ]
+        },
+        {
+          "name": "F001-command-precheck",
+          "detectedBy": [
+            "aut1c2-F001-global-stop-is-checked-before-every-action-and-command-and-terminates-running-command-trees"
+          ]
+        },
+        {
+          "name": "F002-merge-trusts-cache",
+          "detectedBy": [
+            "aut1c2-F002-adoption-and-merge-re-derive-governance-and-never-trust-a-cached-decision"
+          ]
+        },
+        {
+          "name": "F003-worktree-policy",
+          "detectedBy": [
+            "aut1c2-F003-builder-changes-are-classified-against-the-verified-control-plane-policy"
+          ]
+        },
+        {
+          "name": "F004-queued-as-implement",
+          "detectedBy": [
+            "aut1c2-F004-queued-remediation-resumes-as-remediation-at-the-next-cycle"
+          ]
+        },
+        {
+          "name": "F005-unknown-rejection",
+          "detectedBy": [
+            "aut1c2-F005-format-correction-uses-the-exact-rejected-run-and-reason"
+          ]
+        },
+        {
+          "name": "F006-zip-only-adoption",
+          "detectedBy": [
+            "aut1c2-F006-packaging-handoff-is-verified-per-file-and-repaired-after-interruption"
+          ]
+        },
+        {
+          "name": "F007-no-preservation",
+          "detectedBy": [
+            "aut1c2-F007-partial-builder-edits-are-preserved-and-a-fresh-clone-is-used"
+          ]
+        },
+        {
+          "name": "F008-all-or-nothing",
+          "detectedBy": [
+            "aut1c2-F008-signatures-are-adopted-and-created-individually"
+          ]
+        },
+        {
+          "name": "F009-unverified-accepted",
+          "detectedBy": [
+            "aut1c2-F009-phase0-acceptance-requires-the-verified-signed-report-bound-to-the-install-and-release"
+          ]
+        }
+      ]
+    }
   }
 }

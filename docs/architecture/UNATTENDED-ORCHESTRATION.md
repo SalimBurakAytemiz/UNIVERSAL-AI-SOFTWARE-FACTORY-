@@ -23,11 +23,14 @@ durable queue -> recover state -> next eligible package -> execution backend
 - **Atomic, auditable transitions.** Every transition is first appended to the hash-chained `orchestrator-transitions.jsonl`, then written atomically. A tick refuses to run if the log chain or the state link is broken.
 - **One active worker.** A process lock (`acquireProcessLock`) and a lease with heartbeat guarantee it. An expired lease is taken over and logged as stale.
 - **Idempotent actions.** An interrupted action is recovered by re-planning, because the executors never redo completed work:
-  - a completed Codex run for the same bundle digest and cycle is adopted instead of calling Codex again; if the worker died after the call finished but before governed evaluation, the unchanged output is evaluated without a new call, while an unfinished call is repeated;
-  - a merge whose target is already the default branch is recognized as done;
-  - a complete release directory is adopted;
-  - valid signatures are verified and adopted instead of signing again;
-  - a finished install for the same ZIP is adopted.
+  - a finished Codex run for the same bundle digest, cycle and prompt, whose output still matches its manifest hash, is adopted instead of calling Codex again. The governed decision is always re-derived from that unchanged output and the frozen bundle; a cached `governed-result.json` is never trusted. An unfinished call is repeated. Every provider call gets its own run directory;
+  - a merge whose target is already the default branch is recognized as done. The merge gate re-derives the governed decision from the recorded reviewer output and frozen bundle, not from the stored `governed` field;
+  - a release is adopted only when its release directory is intact (ZIP and `SHA256SUMS.txt` match the packaging record). The signing handoff (ZIP, sidecar, `SHA256SUMS.txt`, packaging record) is checked file by file, and missing or altered copies are repaired from the verified release directory. The packaging record is written last. An incomplete earlier signing folder is preserved as `-incomplete-<time>` before a rebuild;
+  - each signature is verified and adopted on its own; only missing or invalid signatures are created, and an invalid one is kept as `.invalid-<time>`;
+  - a finished install for the same ZIP is adopted only if its acceptance verifies (see Phase0 below).
+- **Interrupted builder rounds.** If a quota stop or crash left uncommitted edits in the implementation clone, the clone is renamed to `.partial-<time>` with a record of its status, never deleted, and the round is retried in a fresh clone.
+- **Queued work keeps its type.** When no execution backend is available, a remediation is queued as a remediation. It resumes with the same findings, frozen contract and ledger at the next cycle.
+- **Format correction.** A rejected reviewer output is stored separately from the last valid review. The correction prompt carries that exact output and its rejection reason, and only a run made with the correction prompt is adopted.
 
 ## Provider quota
 
@@ -61,6 +64,8 @@ Everything else continues. Approved policy is persisted in `config/orchestrator-
   - `gh` status reads;
   - `ssh-keygen -Y sign/verify` and `ssh-add -l`.
 - **Denied by construction.** There is no contract for arbitrary PowerShell, cmd or Bash, deletion, force push, credential export or policy changes. Unknown contracts, unknown arguments and paths outside the roots fail closed.
+- **Global Stop at every step.** Global Stop is checked before each action of a tick and before each command. Long commands run under a monitor that polls the stop signal; when it appears, the whole command tree is terminated (`taskkill /T /F` from System32 on Windows). An action cut short by the stop is not applied; its in-flight marker is recovered idempotently on the next run.
+- **Trusted protected-path policy.** Builder changes are classified against the verified control plane's `config/protected-paths.json`, never the copy the builder could edit. Unauthorized protected edits, including edits to that policy, are rejected before any worktree code runs.
 - **No Claude Code permission prompts.** The unattended path runs outside Claude Code: the builder runs through `claude-builder-broker.mjs` (tool-restricted, `acceptEdits` inside the worktree) and the reviewer through the read-only Codex broker.
 
 ## Execution backends
@@ -81,7 +86,13 @@ The Claude CLI exposes an official `--cloud` option. Cloud sessions work from th
    - a check that the entry count matches the tracked files;
    - a copy to `%USERPROFILE%\Desktop\UASCO-release-<commit>`.
 3. **Signing** uses only the Windows OpenSSH agent. The contract passes the public key; the private key is never read, copied, logged or sent to Claude or Codex. If the agent is unavailable or the key is not loaded, the release waits in `WAITING_FOR_SECURE_SIGNER`, rechecked every 30 minutes, while other work continues.
-4. **Phase0.** The previous `C:\UASCO` is preserved as `C:\UASCO-failed-attempt-<n>-<time>` with a `FAILED_ATTEMPT.json`. The signed ZIP is extracted and `install.ps1 -RemoteUrl <approved private repo>` runs. The result comes only from the signed `PHASE0_ACCEPTANCE.json`: `CLEAN_LOCAL_ONLY` stays `CLEAN_LOCAL_ONLY`. A reinstall over an accepted installation needs a Founder decision.
+4. **Phase0.** The previous `C:\UASCO` is preserved as `C:\UASCO-failed-attempt-<n>-<time>` with a `FAILED_ATTEMPT.json`. The signed ZIP is extracted and `install.ps1 -RemoteUrl <approved private repo>` runs. Phase0 is accepted only when all of these hold:
+   - `PHASE0_ACCEPTANCE.json` passes the control plane's trusted verifier (`verifyPhase0ForControl`: schema, Ed25519 signature, and binding to the installation's installId, source commit, trust-root digest and runtime inputs);
+   - its trust-root digest equals the signed release's;
+   - `INSTALL_STEPS.json` exists and no step failed;
+   - for a fresh install, the installer exited with 0.
+
+   A missing, unsigned, altered or stale report fails. `CLEAN_LOCAL_ONLY` stays `CLEAN_LOCAL_ONLY`. A finished install that does not verify is preserved as a failed attempt instead of being accepted. A reinstall over an accepted installation needs a Founder decision.
 
 ## GitHub
 

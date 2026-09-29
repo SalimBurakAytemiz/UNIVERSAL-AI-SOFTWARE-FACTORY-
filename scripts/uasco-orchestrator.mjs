@@ -28,13 +28,15 @@ try{
   control=commit(lease.control,{type:"LEASE_ACQUIRED",reason:lease.stale?`STALE_LEASE_TAKEN_OVER:${lease.previous.workerId}`:null});
   const rec=recoverInFlight(control,workerId);if(rec.recovered.length)control=persist(rec.control,{type:"INFLIGHT_RECOVERED",evidence:rec.recovered});
   const prov=arg("--founder-manual-quota-reset");if(prov){if(!["codex","claude"].includes(prov))out({status:"USAGE",reason:"provider must be codex or claude"},2);control=persist({...control,providers:{...(control.providers??{}),[prov]:{status:"PROBE_PENDING_FOUNDER_RESET",retryAfter:null,manualResetAt:new Date().toISOString()}}},{type:"FOUNDER_MANUAL_QUOTA_RESET",packageId:prov,reason:"stale retryAfter invalidated; one controlled probe"})}
-  const runner=createContractRunner({policy,repo});
+  // //TR: Global Stop yalnız başlangıçta değil, her eylem ve her komuttan önce denetlenir ve uzun komutlar süresince izlenir; durdurulan komutun ağacı sonlandırılır.
+  const stopFile=path.join(repo,".ai/runtime/GLOBAL_STOP.json"),shouldStop=()=>globalStopState(stopFile)?"GLOBAL_STOP_ACTIVE":null;
+  const runner=createContractRunner({policy,repo,shouldStop});
   // //TR: GitHub durumu günde bir kez dürüstçe kaydedilir; branch protection yoksa yerel mod ve kuyrukta bekleyen push olarak kalır, taklit edilmez.
   if(!control.github?.checkedAt||Date.now()-Date.parse(control.github.checkedAt)>86_400_000){const a=runner.run("gh.authStatus"),v=runner.run("gh.repoView"),bp=runner.run("gh.branchProtection");let repoInfo=null;try{repoInfo=JSON.parse(v.stdout)}catch{}const account=(`${a.stdout}\n${a.stderr}`.match(/account ([A-Za-z0-9-]+)/)??[])[1]??null;
     const protection=bp.status===0?"PRESENT_UNVERIFIED_RULES":/Upgrade to GitHub Pro/i.test(bp.stdout+bp.stderr)?"UNAVAILABLE_PLAN_LIMIT":/not protected/i.test(bp.stdout+bp.stderr)?"NOT_CONFIGURED":"UNKNOWN";
     control=persist({...control,github:{checkedAt:new Date().toISOString(),account,expectedOwner:policy.github.expectedOwner,ownerMatches:account===policy.github.expectedOwner,repository:repoInfo?.nameWithOwner??null,visibility:repoInfo?.visibility??null,remote:repoInfo?.url??null,remoteMatches:repoInfo?.url===policy.github.expectedRemote,branchProtection:protection,constructionRepoPush:"QUEUED_REMOTE_PROTECTION_POLICY"}},{type:"GITHUB_STATUS",reason:protection})}
   const executors=createExecutors({policy,repo,runner,controlPlaneRoot});
-  const t=await runTick({control,executors,persist,policy,workerId});control=t.control;
+  const t=await runTick({control,executors,persist,policy,workerId,shouldStop});control=t.control;
   control=commit(releaseLease(control,{workerId}),{type:"LEASE_RELEASED"});
-  out({status:"TICK_DONE",done:t.done,summary:summarize(control)},0);
+  out({status:t.stopped?"TICK_STOPPED_GLOBAL_STOP":"TICK_DONE",done:t.done,stopped:t.stopped??null,summary:summarize(control)},0);
 }finally{try{release?.()}catch{}}

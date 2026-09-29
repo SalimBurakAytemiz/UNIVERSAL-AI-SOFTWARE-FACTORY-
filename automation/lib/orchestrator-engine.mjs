@@ -20,7 +20,8 @@ export function nextAction(control,now,{skip=new Set()}={}){
     const p=control.packages[id],key=`P:${id}`;if(skip.has(key)||TERMINAL.includes(p.status)||p.status==="FOUNDER_DECISION_PENDING"||!due(p,now)||!dependenciesMet(control,p))continue;
     if(["REVIEW_PENDING","REVIEW_PENDING_PROVIDER_QUOTA"].includes(p.status)){if(providerDue(control,"codex",now))return {type:"REVIEW",packageId:id,key};continue}
     if(p.status==="REMEDIATION_PENDING"){if(providerDue(control,"claude",now))return {type:"REMEDIATE",packageId:id,key};continue}
-    if(["IMPLEMENT_PENDING","QUEUED"].includes(p.status)){if(providerDue(control,"claude",now))return {type:"IMPLEMENT",packageId:id,key};continue}
+    // //TR: Backend beklemesi nedeniyle kuyruğa alınan iş, kuyruğa alındığı eylemle (remediation ise aynı bulgular, frozen contract ve bir sonraki cycle ile) sürer.
+    if(["IMPLEMENT_PENDING","QUEUED"].includes(p.status)){if(providerDue(control,"claude",now))return {type:p.status==="QUEUED"&&p.queuedAction==="REMEDIATE"?"REMEDIATE":"IMPLEMENT",packageId:id,key};continue}
     if(p.status==="REVIEW_CLEAN"){if(p.merge?.mode==="FF_DEFAULT_BRANCH"){if(conditionsMet(control,p.merge.after))return {type:"MERGE",packageId:id,key};continue}return {type:"CLOSE",packageId:id,key}}
   }
   for(const [rk,r] of Object.entries(control.releases??{})){
@@ -42,17 +43,17 @@ export function applyOutcome(controlIn,action,outcome,now,policy){
     if(o.type==="ENV_ERROR"){transient(p,now,o.reason,policy)}
     else if(action.type==="REVIEW"){
       if(o.type==="QUOTA"){const prev=control.providers.codex??{},back=Math.min((prev.backoffMinutes?prev.backoffMinutes*2:policy.providers.codex.quotaBackoffMinutes),policy.providers.codex.quotaBackoffMaxMinutes);control.providers.codex={status:"QUOTA_BLOCKED",retryAfter:o.retryAfter??minutes(now,back),backoffMinutes:o.retryAfter?null:back,lastEvidence:o.evidence??null,since:prev.since??now.toISOString()};p.status="REVIEW_PENDING_PROVIDER_QUOTA";p.quotaBlocks=[...(p.quotaBlocks??[]),o.evidence??null];p.nextAction="REVIEW_AT_PROVIDER_RETRY"}
-      else{control.providers.codex={status:"AVAILABLE",retryAfter:null};p.transientFailures=0;
+      else{control.providers.codex={status:"AVAILABLE",retryAfter:null};p.transientFailures=0;if(o.type!=="FORMAT_REJECTED"){p.formatCorrection=false;delete p.formatRejection}
         if(o.type==="CLEAN"){p.status="REVIEW_CLEAN";p.review={result:"CLEAN",runDir:o.runDir,evidence:o.evidence,cycle:p.cycle};p.nextAction=p.merge?.mode==="FF_DEFAULT_BRANCH"?"MERGE_WHEN_ELIGIBLE":"CLOSE"}
         else if(o.type==="BLOCKED"){p.review={result:"BLOCKED",runDir:o.runDir,findings:o.findings??[],ledgerFile:o.ledgerFile??null,cycle:p.cycle};if(p.cycle>=(policy.review.maxReviewCycles??2))founder(p,"REVIEW_CYCLE_LIMIT_REACHED_WITH_OPEN_BLOCKERS");else if(p.remediation?.authorized===true){p.status="REMEDIATION_PENDING";p.nextAction="REMEDIATE"}else founder(p,"BLOCKED_WITHOUT_REMEDIATION_AUTHORITY")}
-        else if(o.type==="FORMAT_REJECTED"){const n=(p.formatRetries??0)+1;if(n>(policy.review.formatRetryLimit??1))founder(p,"REVIEW_FORMAT_RETRY_EXHAUSTED");else{p.formatRetries=n;p.formatCorrection=true;p.status="REVIEW_PENDING";p.nextAction="REVIEW_FORMAT_CORRECTION"}}
+        else if(o.type==="FORMAT_REJECTED"){const n=(p.formatRetries??0)+1;if(n>(policy.review.formatRetryLimit??1))founder(p,"REVIEW_FORMAT_RETRY_EXHAUSTED");else{p.formatRetries=n;p.formatCorrection=true;p.formatRejection={runDir:o.runDir??null,reason:o.reason??null,at:now.toISOString()};p.status="REVIEW_PENDING";p.nextAction="REVIEW_FORMAT_CORRECTION"}}
         else founder(p,o.reason??o.type,o.type==="INPUT_INVALID"?"ORCHESTRATOR_INPUT_DEFECT":"FOUNDER_DECISION_REQUIRED");
       }
     }
     else if(action.type==="REMEDIATE"||action.type==="IMPLEMENT"){
       if(o.type==="QUOTA"){const prev=control.providers.claude??{},back=Math.min((prev.backoffMinutes?prev.backoffMinutes*2:policy.providers.claude.quotaBackoffMinutes),policy.providers.claude.quotaBackoffMaxMinutes);control.providers.claude={status:"QUOTA_BLOCKED",retryAfter:o.retryAfter??minutes(now,back),backoffMinutes:o.retryAfter?null:back,lastEvidence:o.evidence??null}}
-      else if(o.type==="COMMITTED"){control.providers.claude={status:"AVAILABLE",retryAfter:null};Object.assign(p,{status:"REVIEW_PENDING",reviewCommit:o.commit,baseCommit:o.baseCommit??p.baseCommit,implementationCommit:o.commit,bundle:o.bundle,cycle:o.cycle??p.cycle,formatRetries:0,formatCorrection:false,executionBackend:o.executionBackend??p.executionBackend??null,executionProvenance:o.provenance??p.executionProvenance??null,transientFailures:0,nextAction:"REVIEW"})}
-      else if(o.type==="QUEUED"){p.status="QUEUED";p.notBefore=o.retryAfter??minutes(now,30);p.blockedReason=o.reason??null;p.nextAction="IMPLEMENT_WHEN_BACKEND_AVAILABLE"}
+      else if(o.type==="COMMITTED"){control.providers.claude={status:"AVAILABLE",retryAfter:null};delete p.queuedAction;delete p.formatRejection;Object.assign(p,{status:"REVIEW_PENDING",reviewCommit:o.commit,baseCommit:o.baseCommit??p.baseCommit,implementationCommit:o.commit,bundle:o.bundle,cycle:o.cycle??p.cycle,formatRetries:0,formatCorrection:false,executionBackend:o.executionBackend??p.executionBackend??null,executionProvenance:o.provenance??p.executionProvenance??null,transientFailures:0,nextAction:"REVIEW"})}
+      else if(o.type==="QUEUED"){p.status="QUEUED";p.queuedAction=action.type;p.notBefore=o.retryAfter??minutes(now,30);p.blockedReason=o.reason??null;p.nextAction=`${action.type}_WHEN_BACKEND_AVAILABLE`}
       else founder(p,o.reason??o.type);
     }
     else if(action.type==="MERGE"){
@@ -80,15 +81,19 @@ export function applyOutcome(controlIn,action,outcome,now,policy){
 }
 // //TR: Önceki worker'dan kalan yarım eylem işaretleri temizlenir; yürütücüler idempotent olduğundan eylem güvenle yeniden planlanır (tamamlanmış review/merge/paket/imza yeniden yapılmaz, benimsenir).
 export function recoverInFlight(controlIn,workerId){const control=clone(controlIn),recovered=[];for(const x of [...Object.values(control.packages),...Object.values(control.releases??{})])if(x.inFlight&&x.inFlight.workerId!==workerId){recovered.push({target:x.id??x.sourceCommit,action:x.inFlight.action,workerId:x.inFlight.workerId});delete x.inFlight}return {control,recovered}}
-export async function runTick({control:start,executors,persist,policy,workerId,now=()=>new Date(),maxActions}){
-  let control=start;const done=[],skip=new Set(),perTarget=new Map(),limit=maxActions??policy.tick?.maxActionsPerTick??12;
+// //TR: Global Stop (shouldStop) her eylemden önce denetlenir; durdurma nedeniyle kesilen bir eylemin sonucu uygulanmaz (yarım eylem işareti sonraki tick'te idempotent kurtarılır) ve tick durur.
+export async function runTick({control:start,executors,persist,policy,workerId,now=()=>new Date(),maxActions,shouldStop=()=>null}){
+  let control=start,stopped=null;const done=[],skip=new Set(),perTarget=new Map(),limit=maxActions??policy.tick?.maxActionsPerTick??12;
+  const stopNow=()=>{try{return shouldStop()}catch(e){return `STOP_CHECK_FAILED_FAIL_CLOSED:${e?.message??e}`}};
   for(let i=0;i<limit;i++){
+    stopped=stopNow();if(stopped)break;
     const a=nextAction(control,now(),{skip});if(!a)break;const t=now();
     const marked=clone(control),target=a.packageId?marked.packages[a.packageId]:marked.releases[a.releaseKey];target.inFlight={action:a.type,workerId,startedAt:t.toISOString()};control=persist(marked,{type:`${a.type}_STARTED`,packageId:a.packageId??a.releaseKey});
     let outcome;const fn=executors[a.type.toLowerCase()];try{outcome=fn?await fn(a,control):{type:"ENV_ERROR",reason:`NO_EXECUTOR:${a.type}`}}catch(e){outcome={type:"ENV_ERROR",reason:String(e?.message??e)}}
+    if(outcome.type==="ENV_ERROR"&&/GLOBAL_STOP_ACTIVE/.test(String(outcome.reason??""))){stopped=stopNow()??String(outcome.reason);break}
     const {control:next,event}=applyOutcome(control,a,outcome,now(),policy);control=persist(next,event);done.push({action:a.type,target:a.packageId??a.releaseKey,outcome:outcome.type});
     // //TR: Bir hedef aynı tick içinde ilerleyebilir (ör. CLEAN -> MERGE) ama sınırlı sayıda; engellenen hat diğer bağımsız işleri durdurmaz.
     const n=(perTarget.get(a.key)??0)+1;perTarget.set(a.key,n);if(n>=(policy.tick?.maxActionsPerTargetPerTick??6))skip.add(a.key);
   }
-  return {control,done};
+  return {control,done,stopped};
 }

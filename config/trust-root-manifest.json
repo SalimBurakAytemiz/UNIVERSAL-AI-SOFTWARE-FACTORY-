@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-09-29T04:30:47.275Z",
+  "generatedAt": "2026-09-29T11:33:54.610Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -106,7 +106,7 @@
     },
     {
       "path": "automation/lib/command-contracts.mjs",
-      "sha256": "5eab7f32cfcc7294a2eba774a3e92f8e861a6a710d8535c15d054b7d4021a1fd"
+      "sha256": "4a72ed6e4f350ae20989ea9666d044ae5dc8705d095420ffe3b1da2587b7451a"
     },
     {
       "path": "automation/lib/command-runner.mjs",
@@ -218,11 +218,11 @@
     },
     {
       "path": "automation/lib/orchestrator-engine.mjs",
-      "sha256": "876e3f6c067cf52e960a142adaf8da700341ed2442b1051bf5e847e6b50a06c4"
+      "sha256": "857891a7c3e38276f6da57da161cf980824761d485e47e5f8d9810d6139c73e2"
     },
     {
       "path": "automation/lib/orchestrator-executors.mjs",
-      "sha256": "975422477aa6856f4610b5daf0f9dade5ed549743c2930627dbb1e64d7755a24"
+      "sha256": "b749f19d024e15550040c6261e01790f1e01710feca52e475680195924259410"
     },
     {
       "path": "automation/lib/orchestrator-state.mjs",
@@ -298,7 +298,7 @@
     },
     {
       "path": "automation/lib/review-pipeline.mjs",
-      "sha256": "257e4ad791bf27450500615083ffd41776e9965079b38724b8f8a8e9a91f5baf"
+      "sha256": "8b3ce9823e59623f4e3bac94cc972e09f61a1602e0b4fed42ea30d320dcf6da3"
     },
     {
       "path": "automation/lib/run-ledger.mjs",
@@ -1162,7 +1162,7 @@
     },
     {
       "path": "scripts/orchestrator-selftest.mjs",
-      "sha256": "74ef66cd396bc1a9545167128e4055a738f76d6be271b94ae16bd7353d1e3772"
+      "sha256": "6c2dc5cbae89b28655a12965da42921278a6dd7ba789873548b21d1453504b40"
     },
     {
       "path": "scripts/phase0-acceptance.mjs",
@@ -1234,7 +1234,7 @@
     },
     {
       "path": "scripts/uasco-orchestrator.mjs",
-      "sha256": "6523da7d2c44bbd264ba443cf896b7897c9325d0f340c51c824b3b4f05aca0e8"
+      "sha256": "2f5c6c3fb9f29e321ec3a0aff3bcde4ae0319fb54e44abd2790610979531ab82"
     },
     {
       "path": "scripts/v6-apps-control-desktop-selftest.mjs",
