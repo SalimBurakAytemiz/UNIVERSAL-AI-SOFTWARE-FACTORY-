@@ -6,6 +6,12 @@ export const EXECUTION_PROVENANCE_VERSION="1.0.0";
 const MODES=["AUTO","LOCAL_ONLY","CLOUD_PREFERRED","CLOUD_ONLY"],LOCAL="LOCAL_CLAUDE",CLOUD="CLAUDE_CLOUD_SESSION";
 const REVIEW_STATUSES=["PENDING_INDEPENDENT_REVIEW","CLEAN","BLOCKED","ENVIRONMENT_BLOCKED","REVIEW_INPUT_INVALID"];
 const SHA=/^[0-9a-f]{64}$/,COMMIT=/^[0-9a-f]{40}$/;
+// //TR: İncelenmiş registry'nin güvenlik tabanı: bu girdiler kaldırılamaz veya başka sınıfa taşınamaz; registry yalnız daha sıkı hale getirilebilir (ek yerel iş, ek host kaynağı, ek yasak veri sınıfı).
+const REQUIRED_LOCAL_ONLY=["WINDOWS_ACL_CHANGE","TASK_SCHEDULER_CHANGE","TARGET_MACHINE_PHASE0","FINAL_LOCAL_INSTALL_VALIDATION","HOST_HARDWARE_CHECK","LOCAL_CREDENTIAL_OPERATION","LOCAL_DEVICE_OPERATION","EVIDENCE_KEY_OPERATION","RELEASE_PACKAGING"];
+const REQUIRED_FOUNDER_ONLY=["RELEASE_SIGNING_PRIVATE_KEY"];
+const REQUIRED_HOST_BOUND_RESOURCES=["WINDOWS_ACL","TASK_SCHEDULER","PRIVATE_SIGNING_KEY","EVIDENCE_SIGNING_KEY","LOCAL_CREDENTIAL_STORE","HOST_HARDWARE","LOCAL_DEVICE","TARGET_MACHINE_RUNTIME"];
+const REQUIRED_CLOUD_FORBIDDEN_DATA=["PRIVATE_SIGNING_KEY","EVIDENCE_SIGNING_KEY","LOCAL_CREDENTIAL","PROVIDER_AUTH_TOKEN","CUSTOMER_SECRET","PRODUCTION_SECRET"];
+const CLOUD_ALLOWED_CLASSIFICATIONS_MAX=["PUBLIC","INTERNAL"],REQUIRED_NON_CLOUD_RISK_LEVELS=["4","5"];
 const bad=(prefix,reason)=>{throw new Error(`${prefix}:${reason}`)};
 const arr=x=>Array.isArray(x)&&x.every(y=>typeof y==="string");
 const digest=x=>crypto.createHash("sha256").update(stableStringify(x)).digest("hex");
@@ -17,12 +23,12 @@ export function loadExecutionBackendRegistry(doc){
   if(!r||JSON.stringify(r.modes)!==JSON.stringify(MODES))bad(R,"MODES");if(!MODES.includes(r.defaultMode))bad(R,"DEFAULT_MODE");if(r.unknownAvailabilityIsUnavailable!==true)bad(R,"UNKNOWN_AVAILABILITY_MUST_BE_UNAVAILABLE");if(r.unclassifiedTaskType!=="LOCAL_ONLY")bad(R,"UNCLASSIFIED_TASK_MUST_BE_LOCAL_ONLY");
   if(!r.fallback||r.fallback.cloudToLocal?.CLOUD_ONLY!==false||r.fallback.localToCloud?.LOCAL_ONLY!==false)bad(R,"FALLBACK_MUST_RESPECT_ONLY_MODES");
   if(!t||!arr(t.cloudEligible)||!arr(t.localOnly)||!arr(t.founderOnly))bad(R,"TASK_CLASSES");const all=[...t.cloudEligible,...t.localOnly,...t.founderOnly];if(new Set(all).size!==all.length)bad(R,"TASK_CLASSES_NOT_DISJOINT");
-  for(const x of ["TARGET_MACHINE_PHASE0","WINDOWS_ACL_CHANGE","TASK_SCHEDULER_CHANGE","FINAL_LOCAL_INSTALL_VALIDATION","HOST_HARDWARE_CHECK","LOCAL_CREDENTIAL_OPERATION","LOCAL_DEVICE_OPERATION"])if(!t.localOnly.includes(x))bad(R,`LOCAL_ONLY_MISSING:${x}`);
-  if(!t.founderOnly.includes("RELEASE_SIGNING_PRIVATE_KEY"))bad(R,"RELEASE_SIGNING_MUST_BE_FOUNDER_ONLY");
-  if(!arr(doc.hostBoundResources)||!doc.hostBoundResources.includes("PRIVATE_SIGNING_KEY"))bad(R,"HOST_BOUND_RESOURCES");
-  if(!arr(doc.cloudForbiddenDataClasses)||!["PRIVATE_SIGNING_KEY","EVIDENCE_SIGNING_KEY","LOCAL_CREDENTIAL","PROVIDER_AUTH_TOKEN"].every(x=>doc.cloudForbiddenDataClasses.includes(x)))bad(R,"CLOUD_FORBIDDEN_DATA_CLASSES");
-  if(!arr(doc.cloudAllowedSecurityClassifications)||doc.cloudAllowedSecurityClassifications.some(x=>["CONFIDENTIAL","RESTRICTED","SECRET"].includes(x)))bad(R,"CLOUD_SECURITY_CLASSIFICATIONS");
-  if(!doc.riskLevelClassification||typeof doc.riskLevelClassification!=="object")bad(R,"RISK_LEVEL_CLASSIFICATION");
+  for(const x of REQUIRED_LOCAL_ONLY)if(!t.localOnly.includes(x))bad(R,`LOCAL_ONLY_MISSING:${x}`);
+  if(!REQUIRED_FOUNDER_ONLY.every(x=>t.founderOnly.includes(x)))bad(R,"RELEASE_SIGNING_MUST_BE_FOUNDER_ONLY");
+  if(!arr(doc.hostBoundResources))bad(R,"HOST_BOUND_RESOURCES");for(const x of REQUIRED_HOST_BOUND_RESOURCES)if(!doc.hostBoundResources.includes(x))bad(R,`HOST_BOUND_RESOURCES:MISSING:${x}`);
+  if(!arr(doc.cloudForbiddenDataClasses))bad(R,"CLOUD_FORBIDDEN_DATA_CLASSES");for(const x of REQUIRED_CLOUD_FORBIDDEN_DATA)if(!doc.cloudForbiddenDataClasses.includes(x))bad(R,`CLOUD_FORBIDDEN_DATA_CLASSES:MISSING:${x}`);
+  if(!arr(doc.cloudAllowedSecurityClassifications)||doc.cloudAllowedSecurityClassifications.some(x=>!CLOUD_ALLOWED_CLASSIFICATIONS_MAX.includes(x)))bad(R,"CLOUD_SECURITY_CLASSIFICATIONS");
+  const rl=doc.riskLevelClassification;if(!rl||typeof rl!=="object"||Array.isArray(rl))bad(R,"RISK_LEVEL_CLASSIFICATION");for(const k of REQUIRED_NON_CLOUD_RISK_LEVELS)if(typeof rl[k]!=="string"||doc.cloudAllowedSecurityClassifications.includes(rl[k]))bad(R,`RISK_LEVEL_CLASSIFICATION:LEVEL_${k}_MUST_NOT_BE_CLOUD_ALLOWED`);
   if(!b||!b[LOCAL]||!b[CLOUD]||Object.keys(b).some(k=>![LOCAL,CLOUD].includes(k)))bad(R,"BACKENDS");
   for(const [k,v] of Object.entries(b)){if(v.sessionType!==(k===LOCAL?"LOCAL_CLI_PROCESS":"CLAUDE_CLOUD_SESSION"))bad(R,`SESSION_TYPE:${k}`);if(!["CONFIGURED","NOT_CONFIGURED"].includes(v.dispatch?.status))bad(R,`DISPATCH_STATUS:${k}`);if(typeof v.provider!=="string"||!v.provider)bad(R,`PROVIDER:${k}`)}
   const c=b[CLOUD];if(c.hostBoundCapable!==false)bad(R,"CLOUD_MUST_NOT_BE_HOST_BOUND_CAPABLE");if(c.mayMutateDefaultBranch!==false)bad(R,"CLOUD_MUST_NOT_MUTATE_DEFAULT_BRANCH");if(c.capacityModel!=="PRODUCT_MANAGED_CAPACITY_NOT_API_CREDITS")bad(R,"CLOUD_CAPACITY_MODEL");if(c.billingApi!=="NONE_ASSUMED")bad(R,"CLOUD_BILLING_API_MUST_NOT_BE_ASSUMED");if(c.dispatch.status==="CONFIGURED"&&(typeof c.dispatch.adapter!=="string"||!c.dispatch.adapter))bad(R,"CLOUD_DISPATCH_CONFIGURED_WITHOUT_ADAPTER");
@@ -43,9 +49,11 @@ export function routeExecution({task,registry,mode=null,observations}){
   const m=mode??registry.routing.defaultMode;if(!MODES.includes(m))bad("ROUTING_MODE_INVALID",String(m));
   if(!task||typeof task.taskType!=="string"||typeof task.securityClassification!=="string")bad("ROUTING_TASK_INVALID","TASK_TYPE_OR_CLASSIFICATION");
   const hostRes=arr(task.requiresHostResources)?task.requiresHostResources:[],dataClasses=arr(task.dataClasses)?task.dataClasses:[],t=registry.taskClasses,reasons=[];
-  const localAvail=observations?.local?.available===true,cloudAvail=observations?.cloud?.available===true;
+  // //TR: Cloud yalnız registry'de yapılandırılmış bir dispatch adapter'ı VE gözlemde açıkça doğrulanmış dispatch ile birlikte erişilebilir sayılır; eksik veya çelişkili sinyal erişilemez demektir.
+  const cloudBackend=registry.backends[CLOUD],registryDispatch=cloudBackend.dispatch.status==="CONFIGURED"&&typeof cloudBackend.dispatch.adapter==="string"&&cloudBackend.dispatch.adapter.length>0;
+  const localAvail=observations?.local?.available===true,cloudAvail=observations?.cloud?.available===true&&observations?.cloud?.dispatchConfigured===true&&registryDispatch;
   if(observations?.cloud?.available!==true&&observations?.cloud?.available!==false)reasons.push("CLOUD_AVAILABILITY_UNKNOWN_TREATED_UNAVAILABLE");
-  if(observations?.cloud?.dispatchConfigured===false)reasons.push("CLOUD_DISPATCH_NOT_CONFIGURED");
+  if(observations?.cloud?.dispatchConfigured!==true||!registryDispatch)reasons.push("CLOUD_DISPATCH_NOT_CONFIGURED");
   const out=(decision,extra={})=>{const backend=[LOCAL,CLOUD].includes(decision)?decision:null;const r={"//TR":"Bu kayıt tek bir builder işinin yürütme backend kararını ve gerekçelerini taşır; cloud kararı yalnız erişilebilir, yapılandırılmış bir dispatch ile verilir ve çıktı her durumda bağımsız Codex review'dan geçer.",schemaVersion:ROUTE_DECISION_VERSION,mode:m,taskType:task.taskType,securityClassification:task.securityClassification,hostBound:false,founderOnly:false,fallbackUsed:false,...extra,decision,backend,reasons:[...reasons],observations:{local:{available:observations?.local?.available??"UNKNOWN",quotaPressure:observations?.local?.quotaPressure??"UNKNOWN"},cloud:{available:observations?.cloud?.available??"UNKNOWN",dispatchConfigured:observations?.cloud?.dispatchConfigured??false,capacity:observations?.cloud?.capacity??"UNKNOWN"}},isolation:backend?registry.backends[backend].isolation:null,mayMutateDefaultBranch:false,forbiddenCloudInputs:decision===CLOUD?[...registry.cloudForbiddenDataClasses]:[],pipeline:{stages:[...registry.pipeline.producedWorkEnters],producerProvider:backend?registry.backends[backend].provider:null,independentReviewerProvider:registry.pipeline.independentReviewerProvider,producerMayReviewOwnOutput:false,mergeRequiresGovernedResult:registry.pipeline.mergeRequiresGovernedResult}};return r};
   // //TR: Founder'a özel işler (özel release imza anahtarı) hiçbir otomatik backend'e, hiçbir modda gitmez.
   if(t.founderOnly.includes(task.taskType)){reasons.push("FOUNDER_ONLY_TASK_NO_AUTOMATED_BACKEND");return out("FOUNDER_ACTION_REQUIRED",{hostBound:true,founderOnly:true})}

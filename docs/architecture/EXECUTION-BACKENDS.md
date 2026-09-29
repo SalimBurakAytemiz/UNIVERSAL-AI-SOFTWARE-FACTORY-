@@ -36,7 +36,8 @@ Inputs: task type, local availability, local quota pressure when observable, clo
    - `CLOUD_ONLY`: cloud, else queued. There is no local fallback.
    - `CLOUD_PREFERRED`: cloud, else local if policy allows, else queued.
    - `AUTO`: cloud is preferred for long-running (at least 30 minutes), parallelizable or local-pressure work. Otherwise local is preferred, and the other backend is used only if policy allows it.
-4. Unknown availability counts as unavailable. A queued package returns `RETRY_WAIT` and is re-evaluated on the next run. Any decision that cannot be dispatched escalates to the Founder.
+4. Unknown availability counts as unavailable. Cloud counts as available only when the registry marks its dispatch `CONFIGURED` with an adapter and the observation explicitly confirms the dispatch; a missing or contradictory dispatch signal counts as unavailable in every mode. A queued package returns `RETRY_WAIT` and is re-evaluated on the next run. Any decision that cannot be dispatched escalates to the Founder.
+5. The registry loader rejects a registry that removes or moves any required local-only task type, host-bound resource or cloud-forbidden data class, drops the founder-only signing task, allows a classification other than `PUBLIC`/`INTERNAL` in the cloud, or maps risk level 4 or 5 to a cloud-allowed classification. A registry can only become stricter.
 
 ## Pipeline and merge gate
 

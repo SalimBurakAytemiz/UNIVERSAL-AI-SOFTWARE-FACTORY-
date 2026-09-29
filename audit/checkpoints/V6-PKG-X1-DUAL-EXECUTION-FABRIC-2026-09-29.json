@@ -31,7 +31,13 @@
     "sealStatus": "SEALED",
     "protectedFiles": 332,
     "generatedAt": "2026-09-28T21:13:54.226Z",
-    "manifestSha256": "c88b6ad6e678372d88aba0e9f29572f12571267a6fdef3947b55928ce4215b28"
+    "manifestSha256": "c88b6ad6e678372d88aba0e9f29572f12571267a6fdef3947b55928ce4215b28",
+    "cycle2": {
+      "tool": "scripts/generate-trust-root.mjs (unchanged)",
+      "sealStatus": "SEALED",
+      "protectedFiles": 332,
+      "manifestSha256": "761455551008d78fde4afd5ed2b93771243f98f14e2c774546322cf96615e8fc"
+    }
   },
   "validationEnvironment": {
     "measuredBy": "the validation run itself (node/npm/git/PowerShell versions captured before the canonical runner)",
@@ -54,16 +60,28 @@
     },
     "vitest": "PASS 24 files / 152 tests (7 new PKG-X1 tests)",
     "broadDependencyFreeSuite": "25/25 PASS",
-    "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
+    "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit",
+    "cycle2": {
+      "workspace": "fresh clone of 1e3a123 mirroring the PKG-X1 cycle-2 working tree, reviewed lock installed",
+      "gitDiffCheck": "PASS",
+      "verifyTrustRoot": "PASS (332 protected files, SEALED)",
+      "canonicalRunner": {
+        "status": "PASS",
+        "mode": "SEALED"
+      },
+      "vitest": "PASS 24 files / 154 tests (2 new PKG-X1 regression tests; both fail against the cycle-1 code)",
+      "broadDependencyFreeSuite": "25/25 PASS",
+      "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
+    }
   },
   "changedFileSha256": {
     "config/execution-backends.json": "5dd71c4d7a3876efa4ce3d4e141af3f557f8716e8e19f7dd9fe7e3e3b6561427",
-    "automation/lib/execution-routing.mjs": "6aea6fec29913562bae4483a42c8518fdb3ce02e09218c3c29ca13cc4511aff0",
+    "automation/lib/execution-routing.mjs": "19f4b5db0673219ea9405ee4c8f90b3c71836df0a670b5ccb227806539d37650",
     "automation/factory-supervisor.mjs": "778000a9c17b10d774c486d8378255d29ad5ff90831c09b1035e8acd61175338",
-    "config/trust-root-manifest.json": "c88b6ad6e678372d88aba0e9f29572f12571267a6fdef3947b55928ce4215b28",
+    "config/trust-root-manifest.json": "761455551008d78fde4afd5ed2b93771243f98f14e2c774546322cf96615e8fc",
     "CANONICAL-STATUS.md": "2c8051c7b3ce5c0657b443c4c05425f5f4a6205f8b7077bce780ec9363eb6d1b",
-    "tests/pkg-x1-execution-routing.test.ts": "5dde696125815ba4313b3bbcb79c0870abffa618b02ecc9412cbc1b035a94bb7",
-    "docs/architecture/EXECUTION-BACKENDS.md": "3ed34754255e65afb4122daa411295f3478f17bb8c93602732291ed9fc12059f",
+    "tests/pkg-x1-execution-routing.test.ts": "f6f06010b11762aaf65fcfa76088845a0a6f73e46d8457c81d916812aa4041cc",
+    "docs/architecture/EXECUTION-BACKENDS.md": "549e58da473899b77380e54f4ab3f9dba1fff3e2a06a7e4aa65a65941ed6de95",
     "docs/architecture/RESOURCE-SCHEDULER.md": "143da56cc4b1fdf45d2a3b7bad2987cfb544b673f54bcbdce63094424a5cd374",
     ".ai/NEXT_ACTIONS.md": "c225b6fa190bb5950d1d94b706e7a10216933a173399a89fa3bc84bcf3898fa6",
     ".ai/REVIEW_STATUS.md": "071bbe9b0b9361b9ba6a475df2cfa183890a144bf8130abbe4e2e3ba2983d580",
@@ -72,7 +90,7 @@
     "audit/V6-FULL-SCAN-PROGRESS.json": "18e65f2b7d0a289f7e3db039b49b6a94881455f61e785e150058ee7a53bcab9e"
   },
   "openFindings": [],
-  "review": "NOT_REVIEWED_CODEX_PENDING (after PKG-R3; reviewer quota)",
+  "review": "CYCLE_1_BLOCKED_REMEDIATED_CYCLE_2_PENDING",
   "merge": "HELD_UNTIL_CA21E83_RELEASE_PHASE0",
   "cleanClaim": false,
   "truth": {
@@ -84,5 +102,34 @@
     "TARGET_MACHINE_PHASE0": "PENDING",
     "CLOUD_EXECUTION": "NOT_CONFIGURED_NOT_CLAIMED"
   },
-  "nextScope": "CODEX_REVIEW_AFTER_PKG_R3_THEN_MERGE_AFTER_RELEASE_PHASE0"
+  "nextScope": "CODEX_REVIEW_AFTER_PKG_R3_THEN_MERGE_AFTER_RELEASE_PHASE0",
+  "remediation": {
+    "cycle1": {
+      "reviewedCommit": "1e3a1230d020ea0b955d6972c6d934d80e1abbf3",
+      "run": "1e3a123-c1-20260929T035726Z-broker",
+      "governedResult": "BLOCKED",
+      "reviewResultSha256": "2ed5d6a4fcb542d9d41659dd297bc0a41fcd6d7d235d89b842682ae0d3deb939"
+    },
+    "authority": "Remediation of admissible Codex blockers inside the recorded PKG-X1 Founder authorization: the same protected files (automation/lib/execution-routing.mjs and the regenerated trust-root manifest); every change makes the loader and routing stricter; no other protected file, schema or policy changes.",
+    "findings": {
+      "F-PKGX1-001": {
+        "severity": "P2",
+        "observed": "loadExecutionBackendRegistry required only seven of nine local-only task types, only PRIVATE_SIGNING_KEY among host-bound resources and only four of six cloud-forbidden data classes, so removing or moving EVIDENCE_KEY_OPERATION, RELEASE_PACKAGING, LOCAL_CREDENTIAL_STORE or CUSTOMER_SECRET was accepted and the task routed to the cloud.",
+        "fix": "The loader now requires the complete reviewed baseline: all nine local-only task types, the founder-only signing task, all eight host-bound resources and all six cloud-forbidden data classes (each missing entry fails with its name); cloud-allowed classifications must be a subset of PUBLIC/INTERNAL; risk levels 4 and 5 must map to a classification that is not cloud-allowed. A registry may only become stricter (extra entries are accepted).",
+        "retest": "tests/pkg-x1-execution-routing.test.ts 'rejects registries that remove or reclassify required host-bound tasks, host resources or forbidden data protections': removal and move-to-cloudEligible of every local-only type, removal of every host-bound resource and every forbidden data class, moving signing to local-only, a SENSITIVE cloud classification, risk 4 mapped to INTERNAL and risk 5 removed are each rejected with the specific reason; a stricter registry loads. The test fails against the cycle-1 code (2 failed) and passes with the fix.",
+        "retestValidationIds": [
+          "tests"
+        ]
+      },
+      "F-PKGX1-002": {
+        "severity": "P2",
+        "observed": "routeExecution treated the cloud as available when observations.cloud.available===true even if dispatchConfigured was false or missing and the registry dispatch was NOT_CONFIGURED, so CLOUD_ONLY returned CLAUDE_CLOUD_SESSION.",
+        "fix": "Cloud counts as available only when observations.cloud.available===true, observations.cloud.dispatchConfigured===true and the registry marks the cloud dispatch CONFIGURED with a non-empty adapter; otherwise the reason CLOUD_DISPATCH_NOT_CONFIGURED is recorded and the mode's fail-closed/fallback rule applies. Positive cloud tests now use an explicitly configured registry fixture; the reviewed registry stays NOT_CONFIGURED.",
+        "retest": "tests/pkg-x1-execution-routing.test.ts 'never produces a cloud route without a configured registry dispatch and a verified dispatch observation': with the reviewed NOT_CONFIGURED registry no mode yields CLAUDE_CLOUD_SESSION for dispatchConfigured true/false/omitted; with a configured registry false/omitted never yield cloud and CLOUD_ONLY queues; only configured registry plus verified observation routes to cloud; local down with unverified dispatch queues in every mode. The test fails against the cycle-1 code and passes with the fix.",
+        "retestValidationIds": [
+          "tests"
+        ]
+      }
+    }
+  }
 }
