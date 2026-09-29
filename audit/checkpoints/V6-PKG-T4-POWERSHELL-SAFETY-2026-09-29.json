@@ -1,0 +1,62 @@
+{
+  "//TR": "Bu checkpoint PowerShell betiklerinin ayrıştırma/güvenlik denetimini ve iki artifact doğrulayıcısının fark testini kaydeder; yalnız test ve belge ekler, protected dosyaya ve bekleyen paket kapsamlarına dokunmaz; bulunan düşük öncelikli asimetri ayrı bir yetki kararına bırakılır.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_T4_POWERSHELL_SAFETY",
+  "date": "2026-09-29",
+  "parent": "f65635d",
+  "branch": "v6/pkg-t4-powershell-safety-and-verifier-differential",
+  "founderAuthorization": {
+    "decision": "INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES",
+    "rule": "Founder rule 2026-09-29: A blocked/review-pending package blocks ONLY its own dependency lane; implement the next independent eligible package in an isolated branch, validate, checkpoint, commit, prepare the frozen review bundle, mark it REVIEW_PENDING if Codex is unavailable, and continue; never modify a pending package's branch, bundle, clone, evidence or cycle state.",
+    "protectedFiles": [],
+    "constraint": "Tests and non-protected documentation only; no protected file, no pending package scope, no merge."
+  },
+  "rationale": "The PowerShell installer scripts only run at install time; the first Phase0 attempt showed install-time-only defects are expensive. This package checks every script with the real PowerShell 5.1 parser and safety rules and cross-checks the two install-time artifact verifiers.",
+  "findings": {
+    "F-T4-001": {
+      "severity": "P3",
+      "file": "scripts/verify-artifact.ps1 (protected)",
+      "observed": "The PowerShell verifier checks listed entries, hashes, reparse points and lockfile membership but not unlisted extra files; the Node verifier rejects them. install.ps1 runs the PowerShell verifier, then the optional install-prereqs.ps1 (-InstallPrereqs), then the Node verifier, all before bootstrap.",
+      "impact": "low: only listed and hash-verified scripts run before the Node verifier; an unlisted file is caught before bootstrap",
+      "disposition": "FOUNDER_DECISION_PENDING (protected file) as queue item V6-PKG-L2-PS-VERIFIER-UNLISTED-FILES"
+    }
+  },
+  "validationEnvironment": {
+    "measuredBy": "the validation run itself",
+    "platform": "win32 10.0.19045 x64",
+    "node": "v24.19.0",
+    "npm": "11.17.0 (bundled npm-cli.js beside node.exe)",
+    "git": "git version 2.55.0.windows.3",
+    "powershell": "5.1.19041.6456",
+    "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
+  },
+  "validation": {
+    "workspace": "fresh clone of f65635d mirroring the T4 working tree, reviewed lock installed, .ai/runtime cleared",
+    "gitDiffCheck": "PASS",
+    "canonicalRunner": {
+      "status": "PASS",
+      "pass": 34,
+      "fail": 0,
+      "mode": "SEALED (trust root unchanged)"
+    },
+    "vitest": "PASS 29 files / 163 tests",
+    "powershellSafetySelftest": "PASS 3/3 (13 scripts parsed with PowerShell 5.1; verifier differential; unlisted-file asymmetry recorded as F-T4-001)",
+    "broadDependencyFreeSuite": "25/25 PASS",
+    "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
+  },
+  "changedFileSha256": {
+    "scripts/powershell-safety-selftest.mjs": "b4cce55274753627bb8413d3cd0f6b66e5a5526e84ca4a109f0764c462a22100",
+    "tests/pkg-t4-powershell-safety.test.ts": "e8309ea115e4fdcca6db29c59df22a2439300c6428bf4a52daca30c0d28f13e0",
+    ".ai/REVIEW_STATUS.md": "a20f9d4ed26c8685d96dd670054e1416006b62105085253a56c448bd73ac81cb",
+    "audit/V6-FULL-SCAN-PROGRESS.json": "5788c4fed80376a15ea1030ce4e146508b3cccec0d54d9f919b3def3568d85b6",
+    "CHANGELOG.md": "75bc879d9d685aac69d009623b8d273921ba249c4b96a0b822076dc5322346ae"
+  },
+  "openFindings": [
+    "F-T4-001 (P3, protected fix pending Founder decision)"
+  ],
+  "review": "NOT_REVIEWED_CODEX_PENDING (reviewer quota)",
+  "merge": "AFTER_PKG_T3",
+  "cleanClaim": false,
+  "trustRootManifest": "UNCHANGED (no protected files)",
+  "nextScope": "CODEX_REVIEW_WHEN_AVAILABLE"
+}

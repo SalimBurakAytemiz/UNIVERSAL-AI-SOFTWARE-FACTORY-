@@ -1,6 +1,11 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-09-29 — V6 PowerShell Safety and Verifier Differential Tests (branch)
+
+- Every PowerShell script is parsed with the Windows PowerShell 5.1 parser (no errors, no Invoke-Expression) and checked against safety rules (no EncodedCommand, DownloadString/DownloadFile or persistent Set-ExecutionPolicy; entry scripts stop on error; web requests only where allowlisted and without redirects).
+- Differential test of the two install-time artifact verifiers: both reject content tamper, a missing file, a manifest without the lockfile and an unsafe path; an unlisted file is rejected by the Node verifier (the PowerShell verifier does not check it; recorded as LOW finding F-T4-001).
+
 ## 2026-09-29 — V6 OmniRoute Install Compatibility Test (branch)
 
 - Read-only verification of the installed OmniRoute against config/omniroute-policy.json on the target machine (identity, license, repository, Node engines range, launcher location, local-only endpoint); OmniRoute is not started and a stopped endpoint is reported as NOT_RUNNING; machines without OmniRoute skip honestly.
