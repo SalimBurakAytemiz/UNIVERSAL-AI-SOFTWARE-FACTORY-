@@ -1,0 +1,90 @@
+{
+  "//TR": "Bu checkpoint PowerShell betiklerinin ayrıştırma/güvenlik denetimini ve iki artifact doğrulayıcısının fark testini kaydeder; yalnız test ve belge ekler, protected dosyaya ve bekleyen paket kapsamlarına dokunmaz; bulunan düşük öncelikli asimetri ayrı bir yetki kararına bırakılır.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_T4_POWERSHELL_SAFETY",
+  "date": "2026-09-29",
+  "parent": "03c3a9cdfd1916c0a849187ab89109c32fe0f66b",
+  "branch": "v6/pkg-t4-powershell-safety-r5",
+  "founderAuthorization": {
+    "decision": "INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES",
+    "rule": "Founder rule 2026-09-29: A blocked/review-pending package blocks ONLY its own dependency lane; implement the next independent eligible package in an isolated branch, validate, checkpoint, commit, prepare the frozen review bundle, mark it REVIEW_PENDING if Codex is unavailable, and continue; never modify a pending package's branch, bundle, clone, evidence or cycle state.",
+    "protectedFiles": [],
+    "constraint": "Tests and non-protected documentation only; no protected file, no pending package scope, no merge."
+  },
+  "rationale": "The PowerShell installer scripts only run at install time; the first Phase0 attempt showed install-time-only defects are expensive. This package checks every script with the real PowerShell 5.1 parser and safety rules and cross-checks the two install-time artifact verifiers.",
+  "findings": {
+    "F-T4-001": {
+      "severity": "P3",
+      "file": "scripts/verify-artifact.ps1 (protected)",
+      "observed": "The PowerShell verifier checks listed entries, hashes, reparse points and lockfile membership but not unlisted extra files; the Node verifier rejects them. install.ps1 runs the PowerShell verifier, then the optional install-prereqs.ps1 (-InstallPrereqs), then the Node verifier, all before bootstrap.",
+      "impact": "low: only listed and hash-verified scripts run before the Node verifier; an unlisted file is caught before bootstrap",
+      "disposition": "FOUNDER_DECISION_PENDING (protected file) as queue item V6-PKG-L2-PS-VERIFIER-UNLISTED-FILES"
+    }
+  },
+  "validationEnvironment": {
+    "measuredBy": "the validation run itself",
+    "platform": "win32 10.0.19045 x64",
+    "node": "v24.19.0",
+    "npm": "11.17.0 (bundled npm-cli.js beside node.exe)",
+    "git": "git version 2.55.0.windows.3",
+    "powershell": "5.1.19041.6456",
+    "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
+  },
+  "validation": {
+    "workspace": "fresh clone of 03c3a9c mirroring the rebased t4r6 working tree, reviewed lock installed",
+    "gitDiffCheck": "PASS",
+    "verifyTrustRoot": "PASS (unchanged, SEALED)",
+    "canonicalRunner": {
+      "status": "PASS",
+      "mode": "SEALED (trust root unchanged)"
+    },
+    "vitest": "PASS 29 passed (29) files / 167 passed (167)",
+    "packageSelftest": "powershell-safety-selftest PASS 5/5",
+    "broadDependencyFreeSuite": "25/25 PASS",
+    "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
+  },
+  "changedFileSha256": {
+    "scripts/powershell-safety-selftest.mjs": "2fdce26118be053a3f30e6ccf896bd0f43478cd5645aa27df1c88a91e26fe36f",
+    "tests/pkg-t4-powershell-safety.test.ts": "6bc08270dfa3533cd6f27519ce384b24e65988c362a8614744b519c90871bf2a",
+    ".ai/REVIEW_STATUS.md": "a20f9d4ed26c8685d96dd670054e1416006b62105085253a56c448bd73ac81cb",
+    "audit/V6-FULL-SCAN-PROGRESS.json": "5788c4fed80376a15ea1030ce4e146508b3cccec0d54d9f919b3def3568d85b6",
+    "CHANGELOG.md": "75bc879d9d685aac69d009623b8d273921ba249c4b96a0b822076dc5322346ae"
+  },
+  "openFindings": [],
+  "review": "CYCLE_1_BLOCKED_REMEDIATED_CYCLE_2_PENDING",
+  "merge": "AFTER_PKG_T3",
+  "cleanClaim": false,
+  "trustRootManifest": "UNCHANGED (no protected files)",
+  "nextScope": "CODEX_REVIEW_WHEN_AVAILABLE",
+  "rebase": {
+    "originalCommit": "90ee66034e2def7e8a7e06abab4109c43f8927b9",
+    "originalParent": "725811f5d5d45b171b41ddc7a6f35bc9ab86db80",
+    "newParent": "03c3a9cdfd1916c0a849187ab89109c32fe0f66b",
+    "branch": "v6/pkg-t4-powershell-safety-r5",
+    "reason": "the re-applied PKG-T3 03c3a9c on PKG-T2B cycle 2 (220d181); the cycle-2 CLEAN commit is re-applied unchanged"
+  },
+  "remediation": {
+    "cycle1": {
+      "reviewedCommit": "f9989e65dbeabfdba0d6746542aeb06491854d98",
+      "run": "f9989e6-c1-20260930T000526Z-broker",
+      "governedResult": "BLOCKED",
+      "reviewResultSha256": "bf379727dd0c973a1d19d0036fa1a57a7c3c4b4fcb121122dd7111b54818a675",
+      "evidence": "audit/reviews/V6-PKG-T4-f9989e6-c1.json"
+    },
+    "findings": {
+      "F-T4-REVIEW-001": {
+        "severity": "P2",
+        "observed": "the web-request rule used src.includes on the whole file, so one guarded request satisfied the rule for every other request in an allowlisted script.",
+        "fix": "webRequestViolations checks every Invoke-WebRequest/Invoke-RestMethod/iwr/irm invocation on its own command text (line continuations joined, up to the first |, ;, } or line end); each invocation in an allowlisted script must carry the required option.",
+        "retest": "web-request-rule-checks-every-invocation: the real ensure-omniroute.ps1 passes; with the first -MaximumRedirection 0 removed (the reviewer's reproduction) exactly one violation is reported; a mixed guarded/unguarded script fails, a line-continued guarded request passes, a guarded request outside the allowlist fails. Reverting to the file-wide check makes this scenario fail."
+      },
+      "F-T4-REVIEW-002": {
+        "severity": "P2",
+        "observed": "runPs and runNode collapsed every result other than exit 0 into false, so a spawn error, timeout or signal satisfied the negative (tamper rejected) assertions.",
+        "fix": "verdict() interprets a verifier result only after a real execution: a spawn error, a signal or a non-integer status fails the test; only an integer non-zero exit counts as rejection. Both verifiers must report the expected verdict.",
+        "retest": "verifier-results-require-a-real-execution: timeout (null status with ETIMEDOUT), signal, null status and spawn error all throw; exit 1 is REJECT and exit 0 is ACCEPT; the differential scenario uses the verdicts. Reverting verdict() to the collapsed form makes this scenario fail."
+      }
+    },
+    "mutationCheck": "file-wide web-request check -> web-request-rule-checks-every-invocation FAIL; collapsed verifier result -> verifier-results-require-a-real-execution FAIL; with both fixes 5/5"
+  }
+}

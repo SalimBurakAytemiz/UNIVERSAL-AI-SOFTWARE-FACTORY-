@@ -19,6 +19,7 @@ Independent Codex reviews (frozen milestone contract + review bundle, read-only,
 - `V6-PKG-AUT1-UNATTENDED-ORCHESTRATION` @ `f9b3e472fb3a77d957e2ccfb1725d9a21957bcc7`: frozen bundle ready; reviewed after PKG-X1; activated after CLEAN; merge after PKG-X1.
 - `V6-PKG-T2-ORCHESTRATOR-EXECUTOR-INTEGRATION` @ `6ae0c2166ec56785d2e30d14218d890e32472ff0` (tests only): frozen bundle ready, REVIEW_PENDING; merge after PKG-AUT1.
 - `V6-PKG-T1-WINDOWS-CRASH-RESUME` @ `22d4cfe` (tests only): frozen bundle ready, REVIEW_PENDING; merge after PKG-T2.
-- `V6-PKG-T3-OMNIROUTE-INSTALL-COMPAT`: this commit (tests only) on branch `v6/pkg-t3-omniroute-install-compat`; independent review when Codex is available; merge after PKG-T1.
+- `V6-PKG-T3-OMNIROUTE-INSTALL-COMPAT` @ `f65635d` (tests only): frozen bundle ready, REVIEW_PENDING; merge after PKG-T1.
+- `V6-PKG-T4-POWERSHELL-SAFETY`: this commit (tests only) on branch `v6/pkg-t4-powershell-safety-and-verifier-differential`; independent review when Codex is available; merge after PKG-T3.
 
 Nothing has been pushed to a remote. Any commit after a CLEAN review needs its own review.
