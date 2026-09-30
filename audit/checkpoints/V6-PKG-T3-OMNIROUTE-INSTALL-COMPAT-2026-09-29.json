@@ -3,8 +3,8 @@
   "schemaVersion": "1.0.0",
   "checkpoint": "V6_PKG_T3_OMNIROUTE_INSTALL_COMPAT",
   "date": "2026-09-29",
-  "parent": "22d4cfe",
-  "branch": "v6/pkg-t3-omniroute-install-compat",
+  "parent": "27ba5f0ab7dab9dc73d46f1b4fb24a8f0681f14c",
+  "branch": "v6/pkg-t3-omniroute-install-compat-r5",
   "founderAuthorization": {
     "decision": "INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES",
     "rule": "Founder rule 2026-09-29: A blocked/review-pending package blocks ONLY its own dependency lane; implement the next independent eligible package in an isolated branch, validate, checkpoint, commit, prepare the frozen review bundle, mark it REVIEW_PENDING if Codex is unavailable, and continue; never modify a pending package's branch, bundle, clone, evidence or cycle state.",
@@ -35,31 +35,65 @@
     "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
   },
   "validation": {
-    "workspace": "fresh clone of 22d4cfe mirroring the T3 working tree, reviewed lock installed, .ai/runtime cleared",
+    "workspace": "fresh clone of 27ba5f0 mirroring the rebased t3r6 working tree, reviewed lock installed",
     "gitDiffCheck": "PASS",
+    "verifyTrustRoot": "PASS (unchanged, SEALED)",
     "canonicalRunner": {
       "status": "PASS",
-      "pass": 34,
-      "fail": 0,
       "mode": "SEALED (trust root unchanged)"
     },
-    "vitest": "PASS 28 files / 162 tests",
-    "omnirouteInstallCompat": "PASS 6/6, endpoint NOT_RUNNING (informational)",
+    "vitest": "PASS 28 passed (28) files / 166 passed (166)",
+    "packageSelftest": "omniroute-install-compat-selftest PASS 6/6 (endpoint NOT_RUNNING)",
     "broadDependencyFreeSuite": "25/25 PASS",
     "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
   },
   "changedFileSha256": {
-    "scripts/omniroute-install-compat-selftest.mjs": "fb23fde0c6e49638dbe3e898a1ec8b04ecab0fb2f05304eb55433ffd793433ce",
-    "tests/pkg-t3-omniroute-install-compat.test.ts": "1ace4b6521e6cafd6225a803739e9aece56a330e27993e3f4ed3a2bd59ee75e1",
-    "audit/KNOWN-TARGET-MACHINE-PENDING.md": "eb063926a2369ec16efa3fe6e46cec1cbebd0640071f5508eedd28f68bc168b6",
+    "scripts/omniroute-install-compat-selftest.mjs": "847bf034c3198731a4f4d5e7bee35a1577dd7ee78b0264163732a05d344891b1",
+    "tests/pkg-t3-omniroute-install-compat.test.ts": "56659e4d985fc536968e20eb188b300fc5bf675d8fb140bcd484c018cee1accf",
+    "audit/KNOWN-TARGET-MACHINE-PENDING.md": "f7308748b75734d1e59c38cd02c963b88367b6d98bb9faca9af81f0688b41a67",
     ".ai/REVIEW_STATUS.md": "1bb50c26e92afd84cc1b8b4c8312094dbddcfd6e7216298a34c14ac70fafbe7d",
     "audit/V6-FULL-SCAN-PROGRESS.json": "461f87cd3e2a536d74c6f6dae09b821115e397bb1f795995a701dfa9ed32097e",
     "CHANGELOG.md": "4342b7da682a4018ded93dc357e178489c95b7968c156e9232d78532a6c4b698"
   },
   "openFindings": [],
-  "review": "NOT_REVIEWED_CODEX_PENDING (reviewer quota)",
+  "review": "CYCLE_1_BLOCKED_REMEDIATED_CYCLE_2_PENDING",
   "merge": "AFTER_PKG_T1",
   "cleanClaim": false,
   "trustRootManifest": "UNCHANGED (no protected files)",
-  "nextScope": "CODEX_REVIEW_WHEN_AVAILABLE"
+  "nextScope": "CODEX_REVIEW_WHEN_AVAILABLE",
+  "remediation": {
+    "cycle1": {
+      "reviewedCommit": "f65635d42f3f258f1a739468fbea7ba3c43a56d5",
+      "run": "f65635d-c1-20260929T040633Z-broker",
+      "governedResult": "BLOCKED",
+      "reviewResultSha256": "0d51bc0f1b3f00d640c59f99987711bd4514845f7748e97e8af921ac152b0bef"
+    },
+    "findings": {
+      "F-T3-001": {
+        "severity": "P1",
+        "observed": "The endpoint host check only recorded FAIL; the next statement probed policy.endpoint unconditionally, so a disallowed host such as example.invalid received an HTTP request.",
+        "fix": "checkEndpoint validates the host first and calls the probe only for an allowed local host; a disallowed or invalid endpoint reports FAIL with state NOT_PROBED_DISALLOWED_HOST and no network call.",
+        "retest": "tests/pkg-t3-omniroute-install-compat.test.ts 'never probes a disallowed or invalid endpoint': four disallowed/invalid endpoints (including a look-alike 127.0.0.1.example.invalid) produce zero probe calls; the allowed loopback host gets exactly one. Fails against the cycle-1 script.",
+        "retestValidationIds": [
+          "tests"
+        ]
+      },
+      "F-T3-002": {
+        "severity": "P2",
+        "observed": "satisfies short-circuited through some/every and dropped empty alternatives, so '>=24 || ^25', '<20 ^24' and '>=24 ||' could return true or false instead of UNKNOWN.",
+        "fix": "The whole range is validated first: every alternative must be non-empty and every token a supported comparator, and the version must be a full x.y.z; otherwise UNKNOWN. Only a fully valid range is evaluated.",
+        "retest": "tests/pkg-t3-omniroute-install-compat.test.ts 'reports partially unsupported or malformed engines ranges as UNKNOWN': eight malformed or partially unsupported ranges and a partial version return UNKNOWN; valid ranges still evaluate. Fails against the cycle-1 script.",
+        "retestValidationIds": [
+          "tests"
+        ]
+      }
+    }
+  },
+  "rebase": {
+    "originalCommit": "725811f5d5d45b171b41ddc7a6f35bc9ab86db80",
+    "originalParent": "7e01c59c39a27086209368044ff7d266b16eef98",
+    "newParent": "27ba5f0ab7dab9dc73d46f1b4fb24a8f0681f14c",
+    "branch": "v6/pkg-t3-omniroute-install-compat-r5",
+    "reason": "the re-applied PKG-T1 27ba5f0 on PKG-T2B cycle 2 (220d181); the cycle-2 CLEAN pair is re-applied unchanged"
+  }
 }
