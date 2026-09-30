@@ -8,7 +8,9 @@ const basePolicy=JSON.parse(fs.readFileSync("config/orchestrator-policy.json","u
 const sha=b=>crypto.createHash("sha256").update(b).digest("hex");
 const assert=(c,m)=>{if(!c)throw new Error(m)};
 // //TR: Fixture'ın bütün gerçek Git süreçleri üretimdeki gibi izole çalışır: host/enjekte edilmiş config, şablon, hook ve otomatik imza devre dışıdır.
-const realGit=(args,opts={})=>cp.spawnSync("git",isolatedGitArgs(args),{encoding:"utf8",...opts,env:isolatedGitEnv(opts.env??process.env)});
+// //TR: İzolasyon yardımcısının bırakmadığı GIT_CONFIG_PARAMETERS de kaldırılır ve otomatik commit/tag imzası açıkça kapatılır; böylece enjekte edilmiş Git yapılandırması kaydedicinin dışında imza süreci başlatamaz.
+const gitEnv=base=>{const e=isolatedGitEnv(base);for(const k of Object.keys(e))if(k.toUpperCase()==="GIT_CONFIG_PARAMETERS")delete e[k];return e};
+const realGit=(args,opts={})=>cp.spawnSync("git",["-c","commit.gpgSign=false","-c","tag.gpgSign=false",...isolatedGitArgs(args)],{encoding:"utf8",...opts,env:gitEnv(opts.env??process.env)});
 const gitIn=(cwd,...a)=>{const r=realGit(["-C",cwd,...a]);if(r.status!==0)throw new Error(`git ${a.join(" ")}: ${r.stderr}`);return r.stdout.trim()};
 function world(){
   const T=fs.mkdtempSync(path.join(os.tmpdir(),"uasco-exec-it-")),repo=path.join(T,"repo");fs.mkdirSync(repo);
@@ -98,4 +100,14 @@ await scenario("real-git-is-isolated-from-host-hooks-and-signing",async()=>{
     const r=await w.ex.review({packageId:"PKG-T"},{packages:{"PKG-T":pkg(w,{status:"REVIEW_PENDING",review:null})}});assert(r.type==="CLEAN"&&w.calls.length===0,`adoption under the sentinel host config failed or spawned a process: ${r.type}`);
   }finally{if(saved===undefined)delete process.env.GIT_CONFIG_GLOBAL;else process.env.GIT_CONFIG_GLOBAL=saved}
   assert(!fs.existsSync(marker),`a host hook ran through the fixture or the executors: ${fs.existsSync(marker)?fs.readFileSync(marker,"utf8"):""}`)});
+// //TR: Aynı nöbetçi kapsamı GIT_CONFIG_PARAMETERS enjeksiyon yolu için: hook yolu ve eksik bir imzalayıcıyla zorunlu imza izolasyonsuz Git'te etkilidir (negatif kontrol), fixture ve yürütücüler üzerinden hiçbir hook veya imza süreci çalışmaz.
+await scenario("real-git-ignores-injected-git-config-parameters",async()=>{
+  const S=fs.mkdtempSync(path.join(os.tmpdir(),"uasco-exec-it-params-")),hooks=path.join(S,"hooks"),marker=path.join(S,"MARKER");fs.mkdirSync(hooks);for(const h of ["pre-commit","post-commit","post-checkout","reference-transaction"])fs.writeFileSync(path.join(hooks,h),`#!/bin/sh\necho ${h} >> "${marker.replaceAll("\\","/")}"\n`,{mode:0o755});
+  const injected=`'core.hooksPath'='${hooks.replaceAll("\\","/")}' 'commit.gpgsign'='true' 'gpg.program'='${path.join(S,"no-such-signer.exe").replaceAll("\\","/")}'`;
+  const raw=path.join(S,"raw");fs.mkdirSync(raw);const rawEnv={...process.env,GIT_CONFIG_PARAMETERS:injected};cp.spawnSync("git",["-C",raw,"init","-q"],{env:rawEnv});const rc=cp.spawnSync("git",["-C",raw,"-c","user.name=t","-c","user.email=t@t.invalid","commit","-q","--allow-empty","-m","x"],{env:rawEnv,encoding:"utf8"});
+  assert(rc.status!==0||fs.existsSync(marker),"negative control: GIT_CONFIG_PARAMETERS had no effect on unisolated Git");if(fs.existsSync(marker))fs.rmSync(marker);
+  const saved=process.env.GIT_CONFIG_PARAMETERS;process.env.GIT_CONFIG_PARAMETERS=injected;try{
+    const w=world();const m=await w.ex.merge({packageId:"PKG-T"},{packages:{"PKG-T":pkg(w)}});assert(m.type==="MERGED",`merge failed under injected GIT_CONFIG_PARAMETERS (fixture commits would fail on the missing signer): ${JSON.stringify(m)}`);
+  }finally{if(saved===undefined)delete process.env.GIT_CONFIG_PARAMETERS;else process.env.GIT_CONFIG_PARAMETERS=saved}
+  assert(!fs.existsSync(marker),`an injected hook ran through the fixture or the executors: ${fs.existsSync(marker)?fs.readFileSync(marker,"utf8"):""}`)});
 const bad=Object.entries(results).filter(([,v])=>v!=="PASS");console.log(JSON.stringify({results},null,2));console.log(`ORCHESTRATOR_EXECUTOR_INTEGRATION: ${bad.length?"FAIL":"PASS"} ${Object.keys(results).length-bad.length}/${Object.keys(results).length}`);if(bad.length)process.exit(1);

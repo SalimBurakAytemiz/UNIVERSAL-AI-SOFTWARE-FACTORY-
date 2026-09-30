@@ -3,8 +3,8 @@
   "schemaVersion": "1.0.0",
   "checkpoint": "V6_PKG_T2_ORCHESTRATOR_EXECUTOR_INTEGRATION",
   "date": "2026-09-29",
-  "parent": "c48d54d7fcda998e89fab59008db17793dbcd253",
-  "branch": "v6/pkg-t2-orchestrator-executor-integration-r2",
+  "parent": "f3b4ad87d7c297a5649c5072debe58675fc1422f",
+  "branch": "v6/pkg-t2-orchestrator-executor-integration-r3",
   "founderAuthorization": {
     "decision": "INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES",
     "rule": "Founder rule 2026-09-29: A blocked/review-pending package blocks ONLY its own dependency lane. While a package waits for Codex/review/provider availability, preserve its exact frozen review scope, do not modify its branch, frozen bundle, review clone, evidence or review-cycle state, do not merge it before the required CLEAN review, and immediately implement the next independent eligible package in an isolated branch, validate, checkpoint, commit, prepare the frozen review bundle, mark it REVIEW_PENDING if Codex is unavailable, and continue.",
@@ -33,37 +33,37 @@
     "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
   },
   "validation": {
-    "workspace": "fresh clone of 9e5549f (PKG-T2 re-applied on PKG-AUT1 cycle 3 c48d54d) mirroring the cycle-2 working tree, reviewed lock installed",
+    "workspace": "fresh clone of 7fb289f (PKG-T2 re-applied on PKG-AUT1B cycle 2 f3b4ad8) mirroring the working tree, reviewed lock installed",
     "gitDiffCheck": "PASS",
     "verifyTrustRoot": "PASS (unchanged, SEALED)",
     "canonicalRunner": {
       "status": "PASS",
       "mode": "SEALED (trust root unchanged)"
     },
-    "vitest": "PASS 26 files / 161 tests",
-    "executorIntegrationSelftest": "PASS 9/9 (adds real-git-is-isolated-from-host-hooks-and-signing; reverting the isolation fails it)",
+    "vitest": "PASS 26 passed (26) files / 161 passed (161)",
+    "packageSelftest": "orchestrator-executor-integration PASS 10/10 (new real-git-ignores-injected-git-config-parameters); mutation: the previous realGit fails the new scenario",
     "broadDependencyFreeSuite": "25/25 PASS",
     "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
   },
   "changedFileSha256": {
-    "scripts/orchestrator-executor-integration-selftest.mjs": "d4ea4136ddde3b5d6dbec92119347fabb9f91ce64e8eaf2d016c044029eb6bd6",
+    "scripts/orchestrator-executor-integration-selftest.mjs": "36dbe8caa14fcc4edbac909ad2ab2776c0290568dcba64719d3777585fa7c50b",
     "tests/pkg-t2-orchestrator-executor-integration.test.ts": "f668ac3d8306887fa0b3357c21afba76254c4c12e1375acf97787869c334fc20",
     ".ai/REVIEW_STATUS.md": "f5e922f807de6667f7d7bff0fdbf203e9bede981f96307f5a1dc4d2ee807d984",
     "audit/V6-FULL-SCAN-PROGRESS.json": "217ab0627615bef4919e1a0050e77ea25d016ca4443057ecefb43b4f350598dc",
     "CHANGELOG.md": "3e35401d0b53038edf3bbd2bab5c7a5d292b4e1db128da70dbeeed00007d62c7"
   },
   "openFindings": [],
-  "review": "CYCLE_1_BLOCKED_REMEDIATED_CYCLE_2_PENDING",
+  "review": "CYCLE_2_FORMAT_REJECTED_CONTENT_BLOCKED_REVIEW_PATH_FOUNDER_DECISION_PENDING",
   "merge": "AFTER_PKG_AUT1",
   "cleanClaim": false,
   "trustRootManifest": "UNCHANGED (no protected files)",
   "nextScope": "CODEX_REVIEW_WHEN_AVAILABLE",
   "rebase": {
-    "originalCommit": "6ae0c2166ec56785d2e30d14218d890e32472ff0",
-    "originalParent": "f9b3e472fb3a77d957e2ccfb1725d9a21957bcc7",
-    "newParent": "c48d54d7fcda998e89fab59008db17793dbcd253",
-    "branch": "v6/pkg-t2-orchestrator-executor-integration-r2",
-    "reason": "PKG-AUT1 cycle 3 (c48d54d, Founder-authorized) after cycle 2 (0faf2aa)"
+    "originalCommit": "24ff163d9dfc0ffdf93d8d716254547d4a64cd4b",
+    "originalParent": "c48d54d7fcda998e89fab59008db17793dbcd253",
+    "newParent": "f3b4ad87d7c297a5649c5072debe58675fc1422f",
+    "branch": "v6/pkg-t2-orchestrator-executor-integration-r3",
+    "reason": "PKG-AUT1B cycle-2 remediation f3b4ad8 (successor of PKG-AUT1; strict transition log, future-only retry times, isolated Git contracts)"
   },
   "aut1Cycle2Compatibility": {
     "reason": "PKG-AUT1 cycle 2 (0faf2aa) made the executors stricter; five scenarios encoded the older behaviour and now assert the stricter one instead (no assertion removed without a stronger replacement).",
@@ -98,6 +98,22 @@
         "fix": "every real Git process of the fixture (gitIn and the runner pass-through) runs with automation/lib/git-isolation.mjs (no host global/system/injected config, templates, hooks or automatic signing).",
         "retest": "real-git-is-isolated-from-host-hooks-and-signing: a host config with a sentinel hooks path and mandatory signing through a missing signer breaks unisolated Git (negative control) but reaches no process through the fixture or the executors (merge and adoption pass, no hook marker); reverting the isolation makes this scenario fail."
       }
+    },
+    "cycle2": {
+      "reviewedCommit": "24ff163d9dfc0ffdf93d8d716254547d4a64cd4b",
+      "run": "24ff163-c2-20260929T235851Z-broker",
+      "governed": "FORMAT_REJECTED (FINDING_ID_REUSED_WITH_DIFFERENT_IDENTITY:F-T2-002); no cycle consumed by the rejection, format-correction retry pending",
+      "reviewResultSha256": "d083ecb94de782964f0058294cb41490698d274ab410432f3d3b3885ffb39707",
+      "evidence": "audit/reviews/V6-PKG-T2-24ff163-c2-format-rejected.json",
+      "contentOfRejectedOutput": "F-T2-001 RESOLVED; F-T2-002 still OPEN: GIT_CONFIG_PARAMETERS survives the isolation helper and isolatedGitArgs does not override commit.gpgSign or gpg.program, so an injected configuration could still start a real signer outside the recorder; the sentinel covered GIT_CONFIG_GLOBAL only."
+    },
+    "f002RemainingPath": {
+      "fix": "every real Git process of the fixture (gitIn and the runner pass-through) drops an inherited GIT_CONFIG_PARAMETERS after isolatedGitEnv and runs with commit.gpgSign=false and tag.gpgSign=false; the protected helper automation/lib/git-isolation.mjs is unchanged (not authorized for this tests-only package); the executors' Git contracts get the same guarantees from PKG-AUT1B cycle 2.",
+      "retest": "real-git-ignores-injected-git-config-parameters: GIT_CONFIG_PARAMETERS with a hooks path and mandatory signing through a missing signer is effective on unisolated Git (negative control) but the fixture commits and the executor merge succeed and no hook runs; with the previous realGit the scenario fails (git commit cannot spawn the injected signer).",
+      "reviewPath": "the cycle-2 output content is BLOCKED and cycle 2 is the last allowed cycle; the review path of this commit (a successor package as for PKG-AUT1B, or another Founder decision) is pending the governed format-correction result and the Founder's decision"
     }
+  },
+  "aut1bCycle2Compatibility": {
+    "change": "none required: the executors' Git contracts now add the isolation arguments themselves and the fixture pass-through keeps its own isolation; the integration scenarios pass unchanged (9/9 before the new sentinel)."
   }
 }
