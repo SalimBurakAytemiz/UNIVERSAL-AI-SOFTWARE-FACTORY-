@@ -33,7 +33,7 @@
     "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
   },
   "validation": {
-    "workspace": "fresh clone of 7fb289f (PKG-T2 re-applied on PKG-AUT1B cycle 2 f3b4ad8) mirroring the working tree, reviewed lock installed",
+    "workspace": "fresh clone of f79f5fd (PKG-T2B cycle 1 on master f3b4ad8) mirroring the cycle-2 remediation tree, reviewed lock installed",
     "gitDiffCheck": "PASS",
     "verifyTrustRoot": "PASS (unchanged, SEALED)",
     "canonicalRunner": {
@@ -41,19 +41,19 @@
       "mode": "SEALED (trust root unchanged)"
     },
     "vitest": "PASS 26 passed (26) files / 161 passed (161)",
-    "packageSelftest": "orchestrator-executor-integration PASS 10/10 (new real-git-ignores-injected-git-config-parameters); mutation: the previous realGit fails the new scenario",
+    "packageSelftest": "orchestrator-executor-integration PASS 11/11 (new negative-controls-ignore-unrelated-inherited-git-configuration); mutation: an unsanitized negative-control environment fails the new scenario",
     "broadDependencyFreeSuite": "25/25 PASS",
     "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
   },
   "changedFileSha256": {
-    "scripts/orchestrator-executor-integration-selftest.mjs": "36dbe8caa14fcc4edbac909ad2ab2776c0290568dcba64719d3777585fa7c50b",
+    "scripts/orchestrator-executor-integration-selftest.mjs": "030b0f67ccc0b8391b72032ffb80200ed796699c86a5e36b74c86eaeeac6ac9b",
     "tests/pkg-t2-orchestrator-executor-integration.test.ts": "f668ac3d8306887fa0b3357c21afba76254c4c12e1375acf97787869c334fc20",
     ".ai/REVIEW_STATUS.md": "f5e922f807de6667f7d7bff0fdbf203e9bede981f96307f5a1dc4d2ee807d984",
     "audit/V6-FULL-SCAN-PROGRESS.json": "217ab0627615bef4919e1a0050e77ea25d016ca4443057ecefb43b4f350598dc",
     "CHANGELOG.md": "3e35401d0b53038edf3bbd2bab5c7a5d292b4e1db128da70dbeeed00007d62c7"
   },
   "openFindings": [],
-  "review": "CYCLE_2_FORMAT_REJECTED_CONTENT_BLOCKED_REVIEW_PATH_FOUNDER_DECISION_PENDING",
+  "review": "T2B_CYCLE_1_BLOCKED_REMEDIATED_CYCLE_2_PENDING",
   "merge": "AFTER_PKG_AUT1",
   "cleanClaim": false,
   "trustRootManifest": "UNCHANGED (no protected files)",
@@ -115,5 +115,26 @@
   },
   "aut1bCycle2Compatibility": {
     "change": "none required: the executors' Git contracts now add the isolation arguments themselves and the fixture pass-through keeps its own isolation; the integration scenarios pass unchanged (9/9 before the new sentinel)."
+  },
+  "successor": {
+    "package": "V6-PKG-T2B-ORCHESTRATOR-EXECUTOR-INTEGRATION",
+    "decision": "Founder answer 2026-09-30 (T2B halef paket): the PKG-T2 lineage is closed without merge and without a CLEAN claim; the re-applied commit f79f5fd is reviewed as PKG-T2B at cycle 1 with the full scope; the two-cycle rule applies to PKG-T2B.",
+    "cycle1": {
+      "reviewedCommit": "f79f5fd322b0fd27baad9e4b5a49d8b0e3975a1b",
+      "baseCommit": "f3b4ad87d7c297a5649c5072debe58675fc1422f",
+      "run": "f79f5fd-c1-20260930T095447Z-broker",
+      "governedResult": "BLOCKED",
+      "reviewResultSha256": "82327057a7219132312047e23e7267a9fa87a35e3d1376fc2cee306a8dbc7a53",
+      "evidence": "audit/reviews/V6-PKG-T2B-f79f5fd-c1.json"
+    },
+    "findings": {
+      "F-T2B-001": {
+        "severity": "P2",
+        "observed": "the raw-Git negative controls of the two sentinel scenarios spread process.env, so an inherited GIT_CONFIG_PARAMETERS could replace the sentinel hook path with an external one and other inherited settings (signing format) reached those processes; a failing commit was accepted as proof of the sentinel.",
+        "fix": "sentinelGitEnv builds the negative controls' environment from a sanitized baseline (no GIT_* variables, an empty global config, system config disabled) and adds only the intended sentinel setting; sentinelFired requires the sentinel pre-commit hook to have run (it runs before any signing attempt), so another failure no longer counts.",
+        "retest": "negative-controls-ignore-unrelated-inherited-git-configuration: with an inherited GIT_CONFIG_PARAMETERS (foreign hook path, ssh signing format, missing key, mandatory signing) and GIT_CONFIG_COUNT/KEY/VALUE, unsanitized Git runs the foreign hook (regression control) while the sanitized negative control runs only the sentinel hook, commits unsigned and never reaches the foreign hook; the two existing sentinel scenarios now require the sentinel hook to have fired."
+      }
+    },
+    "mutationCheck": "sentinelGitEnv spreading process.env again -> negative-controls-ignore-unrelated-inherited-git-configuration FAIL (an inherited hook path reached the sanitized negative control); with the fix 11/11"
   }
 }

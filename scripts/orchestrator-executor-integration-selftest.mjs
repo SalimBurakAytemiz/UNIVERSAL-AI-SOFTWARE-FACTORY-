@@ -11,6 +11,10 @@ const assert=(c,m)=>{if(!c)throw new Error(m)};
 // //TR: İzolasyon yardımcısının bırakmadığı GIT_CONFIG_PARAMETERS de kaldırılır ve otomatik commit/tag imzası açıkça kapatılır; böylece enjekte edilmiş Git yapılandırması kaydedicinin dışında imza süreci başlatamaz.
 const gitEnv=base=>{const e=isolatedGitEnv(base);for(const k of Object.keys(e))if(k.toUpperCase()==="GIT_CONFIG_PARAMETERS")delete e[k];return e};
 const realGit=(args,opts={})=>cp.spawnSync("git",["-c","commit.gpgSign=false","-c","tag.gpgSign=false",...isolatedGitArgs(args)],{encoding:"utf8",...opts,env:gitEnv(opts.env??process.env)});
+// //TR: Negatif kontroller host'tan miras kalan Git ortamını taşımaz: GIT_* değişkeni olmayan, boş global config ve kapalı sistem config'li temiz bir taban üzerine yalnız kasıtlı nöbetçi ayarı eklenir.
+const sentinelGitEnv=(dir,extra)=>{const e={};for(const [k,v] of Object.entries(process.env))if(!/^GIT_/i.test(k))e[k]=v;const empty=path.join(dir,"empty.gitconfig");if(!fs.existsSync(empty))fs.writeFileSync(empty,"");return {...e,GIT_CONFIG_GLOBAL:empty,GIT_CONFIG_NOSYSTEM:"1",GIT_TERMINAL_PROMPT:"0",...extra}};
+// //TR: Negatif kontrol, nöbetçi pre-commit hook'unun gerçekten çalıştığını ister (imza denemesinden önce çalışır); başka bir nedenle başarısız olan commit kanıt sayılmaz.
+const sentinelFired=marker=>fs.existsSync(marker)&&/pre-commit/.test(fs.readFileSync(marker,"utf8"));
 const gitIn=(cwd,...a)=>{const r=realGit(["-C",cwd,...a]);if(r.status!==0)throw new Error(`git ${a.join(" ")}: ${r.stderr}`);return r.stdout.trim()};
 function world(){
   const T=fs.mkdtempSync(path.join(os.tmpdir(),"uasco-exec-it-")),repo=path.join(T,"repo");fs.mkdirSync(repo);
@@ -91,8 +95,8 @@ await scenario("contracts-confine-real-git-to-policy-roots",async()=>{const w=wo
 await scenario("real-git-is-isolated-from-host-hooks-and-signing",async()=>{
   const S=fs.mkdtempSync(path.join(os.tmpdir(),"uasco-exec-it-sentinel-")),hooks=path.join(S,"hooks"),marker=path.join(S,"MARKER");fs.mkdirSync(hooks);for(const h of ["pre-commit","post-commit","post-checkout","reference-transaction"])fs.writeFileSync(path.join(hooks,h),`#!/bin/sh\necho ${h} >> "${marker.replaceAll("\\","/")}"\n`,{mode:0o755});
   const cfg=path.join(S,"host.gitconfig");fs.writeFileSync(cfg,`[core]\n\thooksPath = ${hooks.replaceAll("\\","/")}\n[commit]\n\tgpgSign = true\n[gpg]\n\tprogram = ${path.join(S,"no-such-signer.exe").replaceAll("\\","/")}\n`);
-  const raw=path.join(S,"raw");fs.mkdirSync(raw);const rawEnv={...process.env,GIT_CONFIG_GLOBAL:cfg};cp.spawnSync("git",["-C",raw,"init","-q"],{env:rawEnv});const rc=cp.spawnSync("git",["-C",raw,"-c","user.name=t","-c","user.email=t@t.invalid","commit","-q","--allow-empty","-m","x"],{env:rawEnv,encoding:"utf8"});
-  assert(rc.status!==0||fs.existsSync(marker),"negative control: the sentinel configuration had no effect on unisolated Git");if(fs.existsSync(marker))fs.rmSync(marker);
+  const raw=path.join(S,"raw");fs.mkdirSync(raw);const rawEnv=sentinelGitEnv(S,{GIT_CONFIG_GLOBAL:cfg});cp.spawnSync("git",["-C",raw,"init","-q"],{env:rawEnv});const rc=cp.spawnSync("git",["-C",raw,"-c","user.name=t","-c","user.email=t@t.invalid","commit","-q","--allow-empty","-m","x"],{env:rawEnv,encoding:"utf8"});
+  assert(sentinelFired(marker),`negative control: the sentinel hook did not run on unisolated Git (exit ${rc.status})`);if(fs.existsSync(marker))fs.rmSync(marker);
   const saved=process.env.GIT_CONFIG_GLOBAL;process.env.GIT_CONFIG_GLOBAL=cfg;try{
     const w=world();const c={packages:{"PKG-T":pkg(w)}};const m=await w.ex.merge({packageId:"PKG-T"},c);assert(m.type==="MERGED",`merge failed under the sentinel host config: ${JSON.stringify(m)}`);
     const ev=w.policy.roots.evidenceRoot,run=path.join(ev,"runs","sentinel-done");fs.mkdirSync(run,{recursive:true});const bundle=fixtureBundle({base:w.A,head:w.B}),text=fixtureReview(bundle);fs.writeFileSync(path.join(ev,"t-bundle.json"),JSON.stringify(bundle));fs.writeFileSync(path.join(ev,"t-prompt.txt"),"Review the frozen fixture bundle.\n");for(const x of ["review-result.json","codex-stdout.txt"])fs.writeFileSync(path.join(run,x),text);
@@ -104,10 +108,22 @@ await scenario("real-git-is-isolated-from-host-hooks-and-signing",async()=>{
 await scenario("real-git-ignores-injected-git-config-parameters",async()=>{
   const S=fs.mkdtempSync(path.join(os.tmpdir(),"uasco-exec-it-params-")),hooks=path.join(S,"hooks"),marker=path.join(S,"MARKER");fs.mkdirSync(hooks);for(const h of ["pre-commit","post-commit","post-checkout","reference-transaction"])fs.writeFileSync(path.join(hooks,h),`#!/bin/sh\necho ${h} >> "${marker.replaceAll("\\","/")}"\n`,{mode:0o755});
   const injected=`'core.hooksPath'='${hooks.replaceAll("\\","/")}' 'commit.gpgsign'='true' 'gpg.program'='${path.join(S,"no-such-signer.exe").replaceAll("\\","/")}'`;
-  const raw=path.join(S,"raw");fs.mkdirSync(raw);const rawEnv={...process.env,GIT_CONFIG_PARAMETERS:injected};cp.spawnSync("git",["-C",raw,"init","-q"],{env:rawEnv});const rc=cp.spawnSync("git",["-C",raw,"-c","user.name=t","-c","user.email=t@t.invalid","commit","-q","--allow-empty","-m","x"],{env:rawEnv,encoding:"utf8"});
-  assert(rc.status!==0||fs.existsSync(marker),"negative control: GIT_CONFIG_PARAMETERS had no effect on unisolated Git");if(fs.existsSync(marker))fs.rmSync(marker);
+  const raw=path.join(S,"raw");fs.mkdirSync(raw);const rawEnv=sentinelGitEnv(S,{GIT_CONFIG_PARAMETERS:injected});cp.spawnSync("git",["-C",raw,"init","-q"],{env:rawEnv});const rc=cp.spawnSync("git",["-C",raw,"-c","user.name=t","-c","user.email=t@t.invalid","commit","-q","--allow-empty","-m","x"],{env:rawEnv,encoding:"utf8"});
+  assert(sentinelFired(marker),`negative control: the GIT_CONFIG_PARAMETERS sentinel hook did not run on unisolated Git (exit ${rc.status})`);if(fs.existsSync(marker))fs.rmSync(marker);
   const saved=process.env.GIT_CONFIG_PARAMETERS;process.env.GIT_CONFIG_PARAMETERS=injected;try{
     const w=world();const m=await w.ex.merge({packageId:"PKG-T"},{packages:{"PKG-T":pkg(w)}});assert(m.type==="MERGED",`merge failed under injected GIT_CONFIG_PARAMETERS (fixture commits would fail on the missing signer): ${JSON.stringify(m)}`);
   }finally{if(saved===undefined)delete process.env.GIT_CONFIG_PARAMETERS;else process.env.GIT_CONFIG_PARAMETERS=saved}
   assert(!fs.existsSync(marker),`an injected hook ran through the fixture or the executors: ${fs.existsSync(marker)?fs.readFileSync(marker,"utf8"):""}`)});
+// //TR: Kontrollü regresyon: host'tan miras kalan ilgisiz GIT_CONFIG_PARAMETERS (yabancı hook yolu, imza biçimi ve anahtarı) ve GIT_CONFIG_COUNT ayarı negatif kontrolün temiz tabanına ulaşmaz; kasıtlı nöbetçi ayarı yine etkilidir. Temizlenmemiş taban aynı durumda yabancı hook'u çalıştırır (regresyonun kendi negatif kontrolü).
+await scenario("negative-controls-ignore-unrelated-inherited-git-configuration",async()=>{
+  const S=fs.mkdtempSync(path.join(os.tmpdir(),"uasco-exec-it-inherit-")),mk=name=>{const h=path.join(S,name),m=path.join(S,name+".MARKER");fs.mkdirSync(h);for(const x of ["pre-commit","post-commit"])fs.writeFileSync(path.join(h,x),`#!/bin/sh\necho ${x} >> "${m.replaceAll("\\","/")}"\n`,{mode:0o755});return {h:h.replaceAll("\\","/"),m}};
+  const sentinel=mk("sentinel-hooks"),foreign=mk("foreign-hooks"),cfg=path.join(S,"sentinel.gitconfig");fs.writeFileSync(cfg,`[core]\n\thooksPath = ${sentinel.h}\n`);
+  const saved={};for(const k of ["GIT_CONFIG_PARAMETERS","GIT_CONFIG_COUNT","GIT_CONFIG_KEY_0","GIT_CONFIG_VALUE_0"])saved[k]=process.env[k];
+  process.env.GIT_CONFIG_PARAMETERS=`'core.hooksPath'='${foreign.h}' 'gpg.format'='ssh' 'user.signingkey'='${path.join(S,"no-such-key").replaceAll("\\","/")}' 'commit.gpgsign'='true'`;process.env.GIT_CONFIG_COUNT="1";process.env.GIT_CONFIG_KEY_0="core.hooksPath";process.env.GIT_CONFIG_VALUE_0=foreign.h;
+  const commit=(dir,env)=>{fs.mkdirSync(dir);cp.spawnSync("git",["-C",dir,"init","-q"],{env});return cp.spawnSync("git",["-C",dir,"-c","user.name=t","-c","user.email=t@t.invalid","commit","-q","--allow-empty","-m","x"],{env,encoding:"utf8"})};
+  try{
+    const unsafe=commit(path.join(S,"unsanitized"),{...process.env,GIT_CONFIG_GLOBAL:cfg});assert(fs.existsSync(foreign.m),`regression control: the inherited configuration did not reach unsanitized Git (exit ${unsafe.status})`);fs.rmSync(foreign.m);if(fs.existsSync(sentinel.m))fs.rmSync(sentinel.m);
+    const safe=commit(path.join(S,"sanitized"),sentinelGitEnv(S,{GIT_CONFIG_GLOBAL:cfg}));
+    assert(!fs.existsSync(foreign.m),`an inherited hook path reached the sanitized negative control: ${fs.existsSync(foreign.m)?fs.readFileSync(foreign.m,"utf8"):""}`);assert(sentinelFired(sentinel.m),`the intended sentinel configuration stopped working in the sanitized negative control (exit ${safe.status})`);assert(safe.status===0,`inherited signing configuration reached the sanitized negative control: ${safe.stderr}`);
+  }finally{for(const [k,v] of Object.entries(saved)){if(v===undefined)delete process.env[k];else process.env[k]=v}}});
 const bad=Object.entries(results).filter(([,v])=>v!=="PASS");console.log(JSON.stringify({results},null,2));console.log(`ORCHESTRATOR_EXECUTOR_INTEGRATION: ${bad.length?"FAIL":"PASS"} ${Object.keys(results).length-bad.length}/${Object.keys(results).length}`);if(bad.length)process.exit(1);
