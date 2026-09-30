@@ -3,8 +3,8 @@
   "schemaVersion": "1.0.0",
   "checkpoint": "V6_PKG_T1_WINDOWS_CRASH_RESUME",
   "date": "2026-09-29",
-  "parent": "6ae0c2166ec56785d2e30d14218d890e32472ff0",
-  "branch": "v6/pkg-t1-windows-crash-resume",
+  "parent": "220d1811bf8c2568452009e7f145f62382896dc9",
+  "branch": "v6/pkg-t1-windows-crash-resume-r5",
   "founderAuthorization": {
     "decision": "INDEPENDENT_WORK_RULE_NO_PROTECTED_CHANGES",
     "rule": "Founder rule 2026-09-29: A blocked/review-pending package blocks ONLY its own dependency lane; implement the next independent eligible package in an isolated branch, validate, checkpoint, commit, prepare the frozen review bundle, mark it REVIEW_PENDING if Codex is unavailable, and continue; never modify a pending package's branch, bundle, clone, evidence or cycle state.",
@@ -16,7 +16,9 @@
     "a killed lock holder leaves a same-host dead-PID lock that is taken over; the live holder is detected first",
     "five concurrent invocations produce exactly one winner",
     "unreadable and foreign-host locks stay fail-closed and are not cleared",
-    "an orchestrator worker killed mid-action keeps its lease until expiry, then a new worker takes it over as stale, recovers the in-flight action and completes it without a second provider call, with a verifiable transition log",
+    "a real worker process running the production review executor (createExecutors, canonical command contracts, real git; only the Codex broker is replaced by an instrumented provider substitute that appends every call to a durable counter shared across workers) completes the provider call and governed evaluation and is killed before the outcome is persisted; after lease expiry a second worker process takes over, recovers the in-flight action, adopts the completed review and closes the package with exactly one measured invocation",
+    "the durable state of a crash after the provider call but before governed evaluation (evaluation artefacts removed) is resumed by evaluating the completed output in place without a new provider call; this scenario fails against the pre-hardening AUT1 code (PROVIDER_INVOKED_2_TIMES)",
+    "negative control: when the completion evidence is lost the restarted worker calls the provider again and the measurement reports PROVIDER_INVOKED_2_TIMES",
     "a corrupted main state file falls back to the previous copy, the log stays verifiable and the chain continues"
   ],
   "validationEnvironment": {
@@ -29,31 +31,56 @@
     "reviewedLock": "96c4bc98998dae6a2d2f18396b4eeb129db68b8364039496c02086673a2cd2c4"
   },
   "validation": {
-    "workspace": "fresh clone of 6ae0c21 mirroring the T1 working tree, reviewed lock installed, .ai/runtime cleared",
+    "workspace": "fresh clone of 220d181 mirroring the rebased t1r6 working tree, reviewed lock installed",
     "gitDiffCheck": "PASS",
+    "verifyTrustRoot": "PASS (unchanged, SEALED)",
     "canonicalRunner": {
       "status": "PASS",
-      "pass": 34,
-      "fail": 0,
       "mode": "SEALED (trust root unchanged)"
     },
-    "vitest": "PASS 27 files / 160 tests",
-    "windowsCrashResumeSelftest": "PASS 5/5 with real child processes on win32",
+    "vitest": "PASS 27 passed (27) files / 162 passed (162)",
+    "packageSelftest": "windows-crash-resume-selftest PASS 7/7",
     "broadDependencyFreeSuite": "25/25 PASS",
     "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
   },
   "changedFileSha256": {
-    "scripts/windows-crash-resume-selftest.mjs": "9658e373d3c6542e84fabf5b89af0d01404f0a4ca4dc59aa477dd8263a475f32",
-    "tests/pkg-t1-windows-crash-resume.test.ts": "afeb37852f5e0026b519df311671adc9c2045751cb10647b581bff9fbfddc5b9",
-    "audit/KNOWN-TARGET-MACHINE-PENDING.md": "a48061d0a46537a7eced0a0dd4ce5fc5c4646ba82d72320a734dac2b76bcc6da",
+    "scripts/windows-crash-resume-selftest.mjs": "de1b4464828b42701db9d64b7bebdab107ab7b7c7303a8a3021a2caaade64b32",
+    "tests/pkg-t1-windows-crash-resume.test.ts": "ff465543286cf8d8b5e68b9148ddf04950181f2275f141aa7449358841988f5d",
+    "audit/KNOWN-TARGET-MACHINE-PENDING.md": "4e0bce236d1680800c88b82dca1647960364baaf8f0444aa49d01ffa16a3a2c3",
     ".ai/REVIEW_STATUS.md": "c4233498df1c4f025d0971454a867a2c52300a76512790d2a25dbfe959915164",
     "audit/V6-FULL-SCAN-PROGRESS.json": "45f92f5ec53a60bd3647830ecb86c5760cd75c9876a1d8b5dbd7851e9f3f0c85",
     "CHANGELOG.md": "d50f0195a7e63df553a5be81a9720743d3fb4f8e8a925c1d5e3082344a677ddd"
   },
   "openFindings": [],
-  "review": "NOT_REVIEWED_CODEX_PENDING (reviewer quota)",
+  "review": "CYCLE_1_BLOCKED_REMEDIATED_CYCLE_2_PENDING",
   "merge": "AFTER_PKG_T2",
   "cleanClaim": false,
   "trustRootManifest": "UNCHANGED (no protected files)",
-  "nextScope": "CODEX_REVIEW_WHEN_AVAILABLE"
+  "nextScope": "CODEX_REVIEW_WHEN_AVAILABLE",
+  "remediation": {
+    "cycle1": {
+      "reviewedCommit": "22d4cfe306fde0dcc1533a97838cb24c21a7b80b",
+      "run": "22d4cfe-c1-20260929T040427Z-broker",
+      "governedResult": "BLOCKED",
+      "reviewResultSha256": "6c0c382c7b7b3182dd4dfbd6a9ff529342a0c1dd0d65ed734cc5d3c38427c059"
+    },
+    "findings": {
+      "F-T1-001": {
+        "severity": "P2",
+        "observed": "The crash/resume scenario initialised the provider-call count to the expected value after the kill and fabricated completion in parent memory; the injected executor guaranteed adoption, so production recovery was never exercised.",
+        "fix": "The scenario now runs the production review executor in real worker processes with an instrumented provider substitute and a durable invocation counter shared across workers; the first worker is killed after the provider call and before outcome persistence, the restarted worker adopts via the production path, and the test asserts exactly one measured invocation. A second scenario covers a crash before governed evaluation, and a negative control shows that a duplicate invocation fails the measurement. Checking the real path exposed a production gap (a completed but unevaluated run was not adopted); it is fixed in the rebased PKG-AUT1 commit b070dcb.",
+        "retest": "scripts/windows-crash-resume-selftest.mjs PASS 7/7; the before-evaluation scenario fails against the pre-hardening AUT1 code with PROVIDER_INVOKED_2_TIMES and passes with b070dcb; tests/pkg-t1-windows-crash-resume.test.ts asserts the three scenarios by name.",
+        "retestValidationIds": [
+          "tests"
+        ]
+      }
+    }
+  },
+  "rebase": {
+    "originalCommit": "7e01c59c39a27086209368044ff7d266b16eef98",
+    "originalParent": "f79f5fd322b0fd27baad9e4b5a49d8b0e3975a1b",
+    "newParent": "220d1811bf8c2568452009e7f145f62382896dc9",
+    "branch": "v6/pkg-t1-windows-crash-resume-r5",
+    "reason": "PKG-T2B cycle 2 (220d181) on master f3b4ad8; the cycle-2 CLEAN pair is re-applied unchanged"
+  }
 }
