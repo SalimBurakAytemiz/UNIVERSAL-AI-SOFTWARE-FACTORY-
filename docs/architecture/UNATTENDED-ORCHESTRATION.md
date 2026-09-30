@@ -20,7 +20,7 @@ durable queue -> recover state -> next eligible package -> execution backend
 - `ORCHESTRATOR_STATE.json` `control` section (version 2.0.0) is authoritative for recovery. It records:
   - packages: kind, status, branch, base, implementation and review commits, cycle, frozen bundle digest, review evidence, merge policy, execution backend and provenance, next action, blocked reason, and classification;
   - releases, providers (status and retryAfter), Phase0 attempts, and GitHub status.
-- **Atomic, auditable transitions.** Every transition is first appended to the hash-chained `orchestrator-transitions.jsonl`, then written atomically. A tick refuses to run if the log chain or the state link is broken.
+- **Atomic, auditable transitions.** Every transition is first appended to the hash-chained `orchestrator-transitions.jsonl`, then written atomically. The log is strictly linear: each entry is the previous entry's seq + 1 and links to its hash, so replayed, duplicated or out-of-sequence entries are rejected. If the process dies between the append and the state write, the next transition links to that last entry and names it in `recoveredFrom`/`voids`, so the unapplied entry stays auditable and the chain never forks. A tick refuses to run if the chain, a reconciliation entry or the state link is broken.
 - **One active worker.** A process lock (`acquireProcessLock`) and a lease with heartbeat guarantee it. An expired lease is taken over and logged as stale.
 - **Idempotent actions.** An interrupted action is recovered by re-planning, because the executors never redo completed work:
   - a finished Codex run for the same bundle digest, cycle and prompt, whose output still matches its manifest hash, is adopted instead of calling Codex again. The governed decision is always re-derived from that unchanged output and the frozen bundle; a cached `governed-result.json` is never trusted. The adopted run is evaluated in a review tree prepared with git only (no dependency or provenance scripts), and the placed bundle must match the package's frozen bundle digest, base, reviewed commit and cycle. An unfinished call is repeated. Every provider call gets its own run directory;
@@ -37,7 +37,7 @@ durable queue -> recover state -> next eligible package -> execution backend
 A usage-limit response is captured verbatim. `environment-block.json` records the parsed retry time; the package is marked `REVIEW_PENDING_PROVIDER_QUOTA`.
 
 - **No retries consumed.** No review cycle, format retry or remediation retry is used.
-- **Retry timing.** At the retry time the next review is the single controlled probe. If the provider message has no time, the policy backoff applies: 30 minutes, doubling up to 6 hours.
+- **Retry timing.** At the retry time the next review is the single controlled probe. A provider retry time is used only when it is valid and in the future; with no time, or an invalid or stale one, the policy backoff applies: 30 minutes, doubling up to 6 hours. A continuing quota response therefore never causes another call in the same tick.
 - **Founder reset.** `--founder-manual-quota-reset codex` clears only the stale retryAfter and allows one immediate probe. The real result then restores normal backoff.
 - **Other work continues.** While Codex is blocked, independent packages, releases and local work keep moving.
 
@@ -58,7 +58,7 @@ Everything else continues. Approved policy is persisted in `config/orchestrator-
 
 - **Fixed programs, validated parameters, no shell.** Every contract has a fixed program and typed parameters (commit SHA, allowed ref or branch, basename, absolute path under a policy root, fixed sets).
 - **Contracts:**
-  - git read-only inspection, fast-forward `update-ref` with the expected old value, review/implementation clones, package commits;
+  - git read-only inspection, fast-forward `update-ref` with the expected old value, review/implementation clones, package commits; every Git contract runs with the repository Git isolation (`automation/lib/git-isolation.mjs`: no host global/system config, hooks or credential helpers) and additionally drops `GIT_CONFIG_PARAMETERS` and disables automatic commit/tag signing, so injected Git configuration cannot start hooks, signers or helpers;
   - the fixed list of repository node scripts;
   - `tar` extraction, `Expand-Archive`, `install.ps1` with the approved remote;
   - `gh` status reads;

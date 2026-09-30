@@ -1,5 +1,5 @@
 // //TR: Bu helper gözetimsiz orkestratörün çalıştırabileceği komutları tam sözleşmelere bağlar: her işlem sabit program + tip doğrulamalı parametrelerle shell'siz çalışır, yollar yalnız policy köklerinin altında olabilir, bilinmeyen sözleşme veya geçersiz parametre fail-closed reddedilir; keyfi PowerShell/cmd/Bash, silme, force push ve credential export sözleşmesi yoktur.
-import path from "node:path";import cp from "node:child_process";import {Worker,MessageChannel,receiveMessageOnPort} from "node:worker_threads";
+import path from "node:path";import cp from "node:child_process";import {Worker,MessageChannel,receiveMessageOnPort} from "node:worker_threads";import {isolatedGitArgs,isolatedGitEnv} from "./git-isolation.mjs";
 const SHA40=/^[0-9a-f]{40}$/,REF=/^refs\/heads\/[A-Za-z0-9._\/-]+$/,BRANCH=/^(v6|uasco\/run)\/[A-Za-z0-9._\/-]+$/,BASENAME=/^[A-Za-z0-9._-]+$/;
 const deny=reason=>{throw new Error(`COMMAND_CONTRACT_DENIED:${reason}`)};
 const norm=p=>path.resolve(String(p)).replaceAll("\\","/").toLowerCase();
@@ -77,7 +77,10 @@ export function createContractRunner({policy,repo,spawn=null,env=process.env,sho
   const contracts=buildContracts(policy,{repo});
   function run(id,params={},{input=null,timeoutMs=3_600_000,env:envOverride=null}={}){
     const c=contracts[id];if(!c)deny(`UNKNOWN_CONTRACT:${id}`);if(input!==null&&!c.input)deny(`INPUT_NOT_ALLOWED:${id}`);if(envOverride&&!c.allowEnvOverride)deny(`ENV_OVERRIDE_NOT_ALLOWED:${id}`);
-    const args=c.args(params),cwd=c.cwdFrom?c.cwdFrom(params):undefined,childEnv={...(envOverride??env),...(c.envFrom?c.envFrom(params):{})};if(c.pathPrepend)childEnv.PATH=`${c.pathPrepend}${path.delimiter}${env.PATH??""}`;
+    // //TR: Git sözleşmeleri diğer üretim Git süreçleri gibi depo Git izolasyonuyla çalışır (host global/system config, hook, credential helper yok); ek olarak
+    // //TR: enjekte edilen GIT_CONFIG_PARAMETERS kaldırılır ve otomatik commit/tag imzası kapatılır, böylece izin verilen git komutu onaysız bir alt süreç başlatamaz.
+    const isGit=c.program==="git",rawArgs=c.args(params),args=isGit?["-c","commit.gpgSign=false","-c","tag.gpgSign=false",...isolatedGitArgs(rawArgs)]:rawArgs,cwd=c.cwdFrom?c.cwdFrom(params):undefined,baseEnv={...(envOverride??env),...(c.envFrom?c.envFrom(params):{})};
+    const childEnv=isGit?isolatedGitEnv(baseEnv):baseEnv;if(isGit)for(const k of Object.keys(childEnv))if(k.toUpperCase()==="GIT_CONFIG_PARAMETERS")delete childEnv[k];if(c.pathPrepend)childEnv.PATH=`${c.pathPrepend}${path.delimiter}${env.PATH??""}`;
     const stop=shouldStop?.();if(stop)deny(`GLOBAL_STOP_ACTIVE:${id}:${stop}`);
     const opts={cwd,input:input??undefined,encoding:"utf8",windowsHide:true,timeout:timeoutMs,maxBuffer:64*1024*1024,env:childEnv,shell:false};
     const r=spawn?spawn(c.program,args,opts):shouldStop?spawnMonitored(c.program,args,opts,shouldStop):cp.spawnSync(c.program,args,opts);

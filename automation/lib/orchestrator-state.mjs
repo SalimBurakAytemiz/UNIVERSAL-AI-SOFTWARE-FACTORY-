@@ -25,20 +25,37 @@ export function validateControl(c){
 }
 export function loadState(stateFile){const doc=readJsonIfExists(stateFile,null);if(!doc)throw new Error("ORCHESTRATOR_STATE_MISSING");if(doc.control)validateControl(doc.control);return {doc,control:doc.control??null}}
 const entryHash=e=>crypto.createHash("sha256").update(stableStringify(e)).digest("hex");
-// //TR: Geçiş önce hash zincirli günlüğe eklenir, sonra durum atomik yazılır; prevHash her zaman kaydedilen son geçişe bağlanır, çökmede uygulanmamış günlük kaydı zinciri bozmadan görünür kalır.
+const GENESIS="0".repeat(64);
+function readLogEntries(logFile){if(!fs.existsSync(logFile))return [];return fs.readFileSync(logFile,"utf8").split("\n").filter(Boolean).map(l=>{try{return JSON.parse(l)}catch{throw new Error("TRANSITION_LOG_LINE_NOT_JSON")}})}
+// //TR: Günlük kesin doğrusal bir zincirdir: her kayıt bir önceki kaydın seq+1'i ve hash'ine bağlanır. Geçiş önce günlüğe eklenir, sonra durum atomik yazılır;
+// //TR: ikisi arasında çökme olursa uygulanmamış kayıt(lar) günlükte kalır ve bir sonraki geçiş bunları açık bir uzlaştırma kaydıyla (recoveredFrom + voids) geçersiz sayar, zincir hiç çatallanmaz.
 export function commitTransition({stateFile,logFile,doc,next,event,now=new Date()}){
-  validateControl(next);const prev=doc.control?.lastTransition??{seq:0,hash:"0".repeat(64)};
-  const body={seq:prev.seq+1,at:now.toISOString(),prevHash:prev.hash,type:String(event?.type??"UNSPECIFIED"),packageId:event?.packageId??null,from:event?.from??null,to:event?.to??null,reason:event?.reason??null,evidence:event?.evidence??null,workerId:next.lease?.workerId??null};
+  validateControl(next);const base=doc.control?.lastTransition??{seq:0,hash:GENESIS};
+  const log=readLogEntries(logFile),tail=log.length?log[log.length-1]:{seq:0,hash:GENESIS};let recovery={};
+  if(tail.hash!==base.hash){const i=base.hash===GENESIS?-1:log.findIndex(e=>e.hash===base.hash);if(base.hash!==GENESIS&&i<0)throw new Error("TRANSITION_LOG_STATE_DIVERGED");recovery={recoveredFrom:base.hash,voids:log.slice(i+1).map(e=>e.hash)}}
+  const body={seq:tail.seq+1,at:now.toISOString(),prevHash:tail.hash,type:String(event?.type??"UNSPECIFIED"),packageId:event?.packageId??null,from:event?.from??null,to:event?.to??null,reason:event?.reason??null,evidence:event?.evidence??null,workerId:next.lease?.workerId??null,...recovery};
   const entry={...body,hash:entryHash(body)};fs.mkdirSync(path.dirname(logFile),{recursive:true});
   const fd=fs.openSync(logFile,"a");try{fs.writeSync(fd,JSON.stringify(entry)+"\n");fs.fsyncSync(fd)}finally{fs.closeSync(fd)}
   const control={...next,lastTransition:{seq:entry.seq,hash:entry.hash,at:entry.at}};const out={...doc,control,updatedAt:now.toISOString()};writeJsonAtomic(stateFile,out);return {doc:out,control,entry};
 }
+// //TR: Doğrulama sıralı zinciri denetler: ilk kayıt seq 1 ve genesis'e, her kayıt hemen önceki kaydın seq+1'ine ve hash'ine bağlı olmalıdır (yeniden oynatılan,
+// //TR: çoğaltılan veya boşluklu kayıt reddedilir); uzlaştırma kaydı tam olarak recoveredFrom sonrasındaki kayıtları geçersiz saymalıdır; durumdaki son geçiş
+// //TR: günlükte aynı seq ile bulunmalıdır. Ondan sonraki kayıtlar çökmede uygulanmamış kayıtlardır, "unapplied" olarak raporlanır ve sonraki geçişte geçersiz sayılır.
 export function verifyTransitionLog(logFile,control){
-  if(!fs.existsSync(logFile))return {ok:!control?.lastTransition,entries:0,reason:control?.lastTransition?"LOG_MISSING":null};
-  const lines=fs.readFileSync(logFile,"utf8").split("\n").filter(Boolean),byHash=new Map();let bad=null;
-  for(const l of lines){let e;try{e=JSON.parse(l)}catch{bad="LOG_LINE_NOT_JSON";break}const {hash,...body}=e;if(entryHash(body)!==hash){bad=`LOG_ENTRY_HASH_MISMATCH:${e.seq}`;break}if(e.seq>1&&!byHash.has(e.prevHash)){bad=`LOG_CHAIN_BROKEN:${e.seq}`;break}byHash.set(hash,e)}
-  if(!bad&&control?.lastTransition&&!byHash.has(control.lastTransition.hash))bad="STATE_TRANSITION_NOT_IN_LOG";
-  return {ok:!bad,entries:lines.length,reason:bad};
+  if(!fs.existsSync(logFile))return {ok:!control?.lastTransition,entries:0,unapplied:0,reason:control?.lastTransition?"LOG_MISSING":null};
+  const lines=fs.readFileSync(logFile,"utf8").split("\n").filter(Boolean),index=new Map(),order=[];let bad=null,prev={seq:0,hash:GENESIS};
+  for(const l of lines){let e;try{e=JSON.parse(l)}catch{bad="LOG_LINE_NOT_JSON";break}const {hash,...body}=e;
+    if(entryHash(body)!==hash){bad=`LOG_ENTRY_HASH_MISMATCH:${e.seq}`;break}
+    if(e.seq!==prev.seq+1){bad=`LOG_SEQUENCE_BROKEN:${e.seq}`;break}
+    if(e.prevHash!==prev.hash){bad=`LOG_CHAIN_BROKEN:${e.seq}`;break}
+    if(index.has(hash)){bad=`LOG_ENTRY_DUPLICATE:${e.seq}`;break}
+    if("recoveredFrom" in e||"voids" in e){const from=e.recoveredFrom===GENESIS?-1:index.get(e.recoveredFrom),expected=from===undefined?null:order.slice(from+1).map(x=>x.hash);
+      if(!expected||!expected.length||!Array.isArray(e.voids)||e.voids.join(",")!==expected.join(",")){bad=`LOG_RECOVERY_INVALID:${e.seq}`;break}}
+    index.set(hash,order.length);order.push({seq:e.seq,hash});prev={seq:e.seq,hash}}
+  let unapplied=0;
+  if(!bad&&control?.lastTransition){const k=index.get(control.lastTransition.hash);if(k===undefined)bad="STATE_TRANSITION_NOT_IN_LOG";else if(order[k].seq!==control.lastTransition.seq)bad="STATE_TRANSITION_SEQ_MISMATCH";else unapplied=order.length-1-k}
+  else if(!bad)unapplied=order.length;
+  return {ok:!bad,entries:lines.length,unapplied,reason:bad};
 }
 // //TR: Lease tek aktif worker'ı garanti eder; süresi dolmamış başka bir worker'ın lease'i varken yeni worker reddedilir, süresi dolmuşsa bayat kabul edilir ve devralınır.
 export function acquireLease(control,{workerId,now=new Date(),ttlMs}){

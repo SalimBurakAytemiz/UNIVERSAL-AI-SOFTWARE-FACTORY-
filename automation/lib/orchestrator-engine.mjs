@@ -3,6 +3,8 @@ export const ACTIONS=["REVIEW","REMEDIATE","IMPLEMENT","MERGE","CLOSE","PACKAGE"
 const TERMINAL=["CLOSED","MERGED"];
 const clone=x=>JSON.parse(JSON.stringify(x));
 const minutes=(now,m)=>new Date(now.getTime()+m*60_000).toISOString();
+// //TR: Sağlayıcının bildirdiği tekrar zamanı yalnız geçerli ve gelecekteyse kullanılır; eski veya bozuk zaman policy backoff'una düşer, aynı tick'te tekrar çağrı olmaz.
+const futureIso=(v,now)=>{const t=Date.parse(v??"");return Number.isFinite(t)&&t>now.getTime()?new Date(t).toISOString():null};
 export function releaseKey(commit){return String(commit).slice(0,7)}
 export function dependenciesMet(control,pkg){
   for(const d of pkg.dependsOn??[]){
@@ -42,7 +44,7 @@ export function applyOutcome(controlIn,action,outcome,now,policy){
     const p=control.packages[action.packageId];ev.from=p.status;delete p.inFlight;
     if(o.type==="ENV_ERROR"){transient(p,now,o.reason,policy)}
     else if(action.type==="REVIEW"){
-      if(o.type==="QUOTA"){const prev=control.providers.codex??{},back=Math.min((prev.backoffMinutes?prev.backoffMinutes*2:policy.providers.codex.quotaBackoffMinutes),policy.providers.codex.quotaBackoffMaxMinutes);control.providers.codex={status:"QUOTA_BLOCKED",retryAfter:o.retryAfter??minutes(now,back),backoffMinutes:o.retryAfter?null:back,lastEvidence:o.evidence??null,since:prev.since??now.toISOString()};p.status="REVIEW_PENDING_PROVIDER_QUOTA";p.quotaBlocks=[...(p.quotaBlocks??[]),o.evidence??null];p.nextAction="REVIEW_AT_PROVIDER_RETRY"}
+      if(o.type==="QUOTA"){const prev=control.providers.codex??{},back=Math.min((prev.backoffMinutes?prev.backoffMinutes*2:policy.providers.codex.quotaBackoffMinutes),policy.providers.codex.quotaBackoffMaxMinutes);const ra=futureIso(o.retryAfter,now);control.providers.codex={status:"QUOTA_BLOCKED",retryAfter:ra??minutes(now,back),backoffMinutes:ra?null:back,lastEvidence:o.evidence??null,since:prev.since??now.toISOString()};p.status="REVIEW_PENDING_PROVIDER_QUOTA";p.quotaBlocks=[...(p.quotaBlocks??[]),o.evidence??null];p.nextAction="REVIEW_AT_PROVIDER_RETRY"}
       else{control.providers.codex={status:"AVAILABLE",retryAfter:null};p.transientFailures=0;if(o.type!=="FORMAT_REJECTED"){p.formatCorrection=false;delete p.formatRejection}
         if(o.type==="CLEAN"){p.status="REVIEW_CLEAN";p.review={result:"CLEAN",runDir:o.runDir,evidence:o.evidence,cycle:p.cycle};p.nextAction=p.merge?.mode==="FF_DEFAULT_BRANCH"?"MERGE_WHEN_ELIGIBLE":"CLOSE"}
         else if(o.type==="BLOCKED"){p.review={result:"BLOCKED",runDir:o.runDir,findings:o.findings??[],ledgerFile:o.ledgerFile??null,cycle:p.cycle};if(p.cycle>=(policy.review.maxReviewCycles??2))founder(p,"REVIEW_CYCLE_LIMIT_REACHED_WITH_OPEN_BLOCKERS");else if(p.remediation?.authorized===true){p.status="REMEDIATION_PENDING";p.nextAction="REMEDIATE"}else founder(p,"BLOCKED_WITHOUT_REMEDIATION_AUTHORITY")}
@@ -51,9 +53,9 @@ export function applyOutcome(controlIn,action,outcome,now,policy){
       }
     }
     else if(action.type==="REMEDIATE"||action.type==="IMPLEMENT"){
-      if(o.type==="QUOTA"){const prev=control.providers.claude??{},back=Math.min((prev.backoffMinutes?prev.backoffMinutes*2:policy.providers.claude.quotaBackoffMinutes),policy.providers.claude.quotaBackoffMaxMinutes);control.providers.claude={status:"QUOTA_BLOCKED",retryAfter:o.retryAfter??minutes(now,back),backoffMinutes:o.retryAfter?null:back,lastEvidence:o.evidence??null}}
+      if(o.type==="QUOTA"){const prev=control.providers.claude??{},back=Math.min((prev.backoffMinutes?prev.backoffMinutes*2:policy.providers.claude.quotaBackoffMinutes),policy.providers.claude.quotaBackoffMaxMinutes);const ra=futureIso(o.retryAfter,now);control.providers.claude={status:"QUOTA_BLOCKED",retryAfter:ra??minutes(now,back),backoffMinutes:ra?null:back,lastEvidence:o.evidence??null}}
       else if(o.type==="COMMITTED"){control.providers.claude={status:"AVAILABLE",retryAfter:null};delete p.queuedAction;delete p.formatRejection;Object.assign(p,{status:"REVIEW_PENDING",reviewCommit:o.commit,baseCommit:o.baseCommit??p.baseCommit,implementationCommit:o.commit,bundle:o.bundle,cycle:o.cycle??p.cycle,formatRetries:0,formatCorrection:false,executionBackend:o.executionBackend??p.executionBackend??null,executionProvenance:o.provenance??p.executionProvenance??null,transientFailures:0,nextAction:"REVIEW"})}
-      else if(o.type==="QUEUED"){p.status="QUEUED";p.queuedAction=action.type;p.notBefore=o.retryAfter??minutes(now,30);p.blockedReason=o.reason??null;p.nextAction=`${action.type}_WHEN_BACKEND_AVAILABLE`}
+      else if(o.type==="QUEUED"){p.status="QUEUED";p.queuedAction=action.type;p.notBefore=futureIso(o.retryAfter,now)??minutes(now,30);p.blockedReason=o.reason??null;p.nextAction=`${action.type}_WHEN_BACKEND_AVAILABLE`}
       else founder(p,o.reason??o.type);
     }
     else if(action.type==="MERGE"){
