@@ -1,7 +1,20 @@
 <!-- //TR: Bu dosya UASCO'nun gözetimsiz inşa orkestratörünü tanımlar: kalıcı kuyruk, Task Scheduler ile kendiliğinden devam, sağlayıcı kotası otomasyonu, bağımlılık farkında hatlar, dar komut sözleşmeleri, güvenli imza sınırı, dürüst GitHub/cloud durumu ve Founder'a yalnız gerçekten yeni yetki sınırlarında başvurma. -->
 # Unattended Orchestration
 
-The construction work on this repository continues without a human operator. `scripts/uasco-orchestrator.mjs` is the repository-native supervisor. Windows Task Scheduler (`scripts/register-orchestrator-autostart.ps1`) runs it at logon and every 15 minutes, at user level, one instance at a time. The Claude app routine is no longer the primary mechanism; once the orchestrator is active, it is disabled.
+The construction work on this repository continues without a human operator. `scripts/uasco-orchestrator.mjs` is the repository-native supervisor, registered in Windows Task Scheduler as `UASCO-Autonomous-Supervisor`. The chain is Task Scheduler -> narrow launcher (`scripts/uasco-supervisor-launcher.mjs`) -> durable loop (`uasco-orchestrator.mjs --daemon`). The Claude app routine is only an optional passive display: it runs no command at all and only reads `.ai/runtime/WATCHDOG_STATUS.json`, which the supervisor writes. It never runs reviews, remediation, merges, releases, signing, activation or repairs and is never part of the execution path. The supervisor works with every routine disabled.
+
+## Supervisor daemon
+
+- **Durable loop.** The daemon holds the orchestrator process lock for its whole life. Each iteration re-verifies the control-plane trust root, checks Global Stop and runs one tick (`createTick` in `automation/lib/orchestrator-daemon.mjs`, shared with `--tick`).
+- **WAITING.** Between ticks the daemon sleeps until the nearest of: ready queued work (no sleep), a provider `retryAfter`, a package or release `notBefore` (dependency backoff, signer re-check), or the periodic heartbeat (15 minutes). Sleep never exceeds 60 minutes. Founder-pending items never wake it.
+- **Early wake.** Touching `%LOCALAPPDATA%\UASCO\orchestrator\supervisor\WAKE` or activating Global Stop ends the sleep at once. A tick that makes no progress is retried after 60 seconds instead of spinning.
+- **Heartbeat.** `supervisor\SUPERVISOR_HEARTBEAT.json` records the worker, pid, state (`STARTING`, `RUNNING`, `WAITING`, `STOPPED`), the next wake time and its reason. It is refreshed at least every minute while waiting; a running tick may take up to the tick limit.
+- **Exit codes.** 0: clean stop (Global Stop). 2: fatal trust or configuration error, not restarted. 3: another worker already holds the lock. Anything else is a crash.
+- **Launcher.** It starts only the fixed daemon command, without a shell, and appends its output to a bounded log in `logs\`. A crashed daemon is restarted after 5, 15, 60, 300, then 600 seconds; the delay resets after 10 healthy minutes. After 6 restarts in an hour the launcher exits and leaves recovery to the next periodic trigger. Clean stops, fatal errors and "already running" are not restarted.
+- **Scheduled task.** Triggers: logon of the current user and a periodic heartbeat every 15 minutes. Settings: single instance (`IgnoreNew`), no execution time limit, restart on failure 3 times at 1-minute intervals, user level (`Limited`), no stored password. A startup trigger is added only when the registration runs elevated, as an S4U task without a stored password; otherwise it is reported as not applicable. The registration refuses to overwrite a same-named task that belongs to another program.
+- **Installed system.** Phase0 runs `install.ps1 -SkipAutoStart`; the installed system's own autostart is then registered under `UASCO-Installed-Supervisor`, so it can never replace the construction supervisor's task.
+- **Passive watchdog status.** The supervisor writes `.ai/runtime/WATCHDOG_STATUS.json` atomically with every heartbeat: supervisor state and heartbeat age, current master, active package, implementation and review queue counts, blocked lanes, Codex and Claude quota/retry, signer, Phase0, last successful action, next scheduled action, pending Founder decisions and an overall health (`HEALTHY`, `WAITING_PROVIDER`, `FOUNDER_DECISION_REQUIRED`, `STOPPED`, `UNHEALTHY`). It performs the discovery itself with read-only contracts: default-branch and branch heads, `git worktree list`, the scheduled-task state of `UASCO-Autonomous-Supervisor` and `UASCO-Installed-Supervisor` (a fixed, locale-independent `Get-ScheduledTask` query), the verified transition log and provider retry state. Discovery is refreshed every 5 minutes and after each tick; a failed probe is reported as `UNAVAILABLE`, never guessed. Writing the file never blocks execution.
+- **Crash adoption.** A review whose provider call finished is adopted (or evaluated) instead of calling Codex again. A builder round that was committed before a crash is adopted from its round marker, fetched from the implementation clone when needed, and never produces a second builder call or commit.
 
 ## Loop
 
@@ -66,6 +79,7 @@ Everything else continues. Approved policy is persisted in `config/orchestrator-
 - **Denied by construction.** There is no contract for arbitrary PowerShell, cmd or Bash, deletion, force push, credential export or policy changes. Unknown contracts, unknown arguments and paths outside the roots fail closed.
 - **Global Stop at every step.** Global Stop is checked before each action of a tick and before each command. Long commands run under a monitor that polls the stop signal; when it appears, the whole command tree is terminated (`taskkill /T /F` from System32 on Windows). An action cut short by the stop is not applied; its in-flight marker is recovered idempotently on the next run.
 - **Trusted protected-path policy.** Builder changes are classified against the verified control plane's `config/protected-paths.json`, never the copy the builder could edit. Unauthorized protected edits, including edits to that policy, are rejected before any worktree code runs.
+- **Isolated Git.** Git contracts run with the same isolation as every other production Git process (`automation/lib/git-isolation.mjs`): no host global or system config, no repository hooks, no credential helper.
 - **No Claude Code permission prompts.** The unattended path runs outside Claude Code: the builder runs through `claude-builder-broker.mjs` (tool-restricted, `acceptEdits` inside the worktree) and the reviewer through the read-only Codex broker.
 
 ## Execution backends
@@ -105,10 +119,11 @@ Construction-repository pushes stay queued while the remote-protection policy do
 
 ## Activation
 
-The orchestrator is activated only after this package's independent review is CLEAN:
+The supervisor is activated only after every package in the chain up to the control-plane commit is independently reviewed CLEAN:
 1. Create a control-plane clone of the reviewed commit under `%LOCALAPPDATA%\UASCO\orchestrator\control\` and install its reviewed dependencies.
 2. Verify that clone's trust root.
-3. Seed the `control` section from the current repository truth.
-4. Register the scheduled task from that clone.
+3. Keep the existing `control` section (the durable queue, pending decisions and quota state are preserved, not reseeded).
+4. Register `UASCO-Autonomous-Supervisor` from that clone.
+5. Run `uasco-orchestrator.mjs --self-check --with-provider-smoke`. It must report the daemon policy, the durable queue and transition log, a live heartbeat, the single-worker lock enforced by the running daemon, the builder boundary, provider CLI resolution, and a real Claude builder and Codex reviewer invocation through the production brokers. Without `--with-provider-smoke` the invocation check is reported as `NOT_TESTED`, never as PASS.
 
-The control plane refuses to run if its own trust root does not verify.
+The control plane refuses to run if its own trust root does not verify. `--status` also reports the supervisor heartbeat, its health, the lock and the next wake.

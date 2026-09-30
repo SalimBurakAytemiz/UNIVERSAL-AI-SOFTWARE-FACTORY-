@@ -1,42 +1,72 @@
-// //TR: Bu script UASCO'nun gözetimsiz inşa orkestratörüdür (Windows Task Scheduler ile periyodik ve oturum açılışında çalışır): kontrol düzleminin trust-root'unu doğrular, Global Stop'a uyar, tek süreç kilidi + lease alır, hash zincirli geçiş günlüğünü doğrular, yarım kalan eylemleri toparlar ve kalıcı kuyruktan bağımlılık farkında bir tick yürütür; yalnız config/orchestrator-policy.json kökleri ve automation/lib/command-contracts.mjs sözleşmeleri içinde çalışır, Founder kararı bekleyen iş yalnız kendi hattını durdurur.
-// usage: node scripts/uasco-orchestrator.mjs --repo <constructionRepo> [--tick | --status | --founder-manual-quota-reset <codex|claude>]
+// //TR: Bu script UASCO'nun gözetimsiz inşa orkestratörüdür: kontrol düzleminin trust-root'unu doğrular, Global Stop'a uyar, tek süreç kilidi + lease alır, hash zincirli geçiş günlüğünü doğrular, yarım kalan eylemleri toparlar ve kalıcı kuyruktan bağımlılık farkında tick yürütür. --daemon kipinde Windows Task Scheduler -> dar başlatıcı -> kalıcı döngü olarak canlı kalır, işler arasında WAITING durumunda en yakın sağlayıcı retry / bağımlılık / hazır iş / kalp atışı zamanına kadar uyur; --self-check kipi etkinleştirme doğrulamasını yapar. Yalnız config/orchestrator-policy.json kökleri ve automation/lib/command-contracts.mjs sözleşmeleri içinde çalışır, Founder kararı bekleyen iş yalnız kendi hattını durdurur.
+// usage: node scripts/uasco-orchestrator.mjs --repo <constructionRepo> [--tick | --daemon [--max-iterations N] | --self-check [--with-provider-smoke] | --status | --founder-manual-quota-reset <codex|claude>]
 import fs from "node:fs";import path from "node:path";import os from "node:os";import crypto from "node:crypto";import {fileURLToPath} from "node:url";
 import {expandPolicyPaths,createContractRunner} from "../automation/lib/command-contracts.mjs";
-import {loadState,commitTransition,verifyTransitionLog,acquireLease,heartbeat,releaseLease} from "../automation/lib/orchestrator-state.mjs";
-import {runTick,recoverInFlight,nextAction} from "../automation/lib/orchestrator-engine.mjs";
+import {loadState,verifyTransitionLog} from "../automation/lib/orchestrator-state.mjs";
+import {recoverInFlight,nextAction} from "../automation/lib/orchestrator-engine.mjs";
 import {createExecutors} from "../automation/lib/orchestrator-executors.mjs";
-import {acquireProcessLock} from "../automation/lib/process-lock.mjs";import {verifyTrustRoot} from "../automation/lib/trust-root.mjs";import {globalStopState} from "../automation/lib/global-stop.mjs";
+import {runDaemon,createTick,createSleeper,createHeartbeatWriter,daemonPaths,validateDaemonPolicy,readHeartbeat,heartbeatHealth,nextWake} from "../automation/lib/orchestrator-daemon.mjs";
+import {createWatchdogStatusWriter,watchdogStatusPath,readWatchdogStatus,lastMeaningfulTransition,validateWatchdogPolicy} from "../automation/lib/watchdog-status.mjs";
+import {acquireProcessLock,inspectProcessLock} from "../automation/lib/process-lock.mjs";import {verifyTrustRoot} from "../automation/lib/trust-root.mjs";import {globalStopState} from "../automation/lib/global-stop.mjs";
 const controlPlaneRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),".."),argv=process.argv.slice(2),arg=n=>{const i=argv.indexOf(n);return i>=0?argv[i+1]:null};
 const repo=path.resolve(arg("--repo")??process.env.UASCO_REPO??""),workerId=`${os.hostname()}-${process.pid}-${crypto.randomBytes(3).toString("hex")}`;
 const readJson=f=>JSON.parse(fs.readFileSync(f,"utf8"));
-let policy=null,release=null;
+// //TR: Daemon çıkış kodları başlatıcı içindir: 0 temiz durma (Global Stop), 2 ölümcül yapılandırma/güven hatası (yeniden başlatma döngüsü yok), 3 başka worker zaten çalışıyor; diğer kodlar çökme sayılır.
+const EXIT={OK:0,FATAL:2,ALREADY_RUNNING:3};
+let policy=null,release=null;const daemonMode=argv.includes("--daemon");
+function logLine(obj){try{const d=path.join(policy?.roots?.controlRoot??os.tmpdir(),"logs");fs.mkdirSync(d,{recursive:true});fs.appendFileSync(path.join(d,"ticks.jsonl"),JSON.stringify({at:new Date().toISOString(),workerId,...obj})+"\n")}catch{}}
 function out(obj,code){try{release?.()}catch{}release=null;const line=JSON.stringify({at:new Date().toISOString(),workerId,...obj},null,2);console.log(line);try{const d=path.join(policy?.roots?.controlRoot??os.tmpdir(),"logs");fs.mkdirSync(d,{recursive:true});fs.writeFileSync(path.join(d,"last-tick.json"),line+"\n");fs.appendFileSync(path.join(d,"ticks.jsonl"),JSON.stringify(JSON.parse(line))+"\n")}catch{}process.exit(code)}
-if(!arg("--repo")&&!process.env.UASCO_REPO)out({status:"USAGE",usage:"--repo <constructionRepo> [--tick|--status|--founder-manual-quota-reset <provider>]"},2);
+if(!arg("--repo")&&!process.env.UASCO_REPO)out({status:"USAGE",usage:"--repo <constructionRepo> [--tick|--daemon|--self-check|--status|--founder-manual-quota-reset <provider>]"},2);
 policy=expandPolicyPaths(readJson(path.join(controlPlaneRoot,"config/orchestrator-policy.json")),{repo});
 // //TR: Mühürlü ve doğrulanmış olmayan bir kontrol düzlemi hiçbir eylem yapmaz.
-const tr=verifyTrustRoot(controlPlaneRoot);if(!tr.ok)out({status:"CONTROL_PLANE_TRUST_ROOT_INVALID",mismatches:tr.mismatches.slice(0,5)},2);
+const tr=verifyTrustRoot(controlPlaneRoot);if(!tr.ok)out({status:"CONTROL_PLANE_TRUST_ROOT_INVALID",mismatches:tr.mismatches.slice(0,5)},EXIT.FATAL);
+const dp=daemonPaths(policy),stopFile=path.join(repo,".ai/runtime/GLOBAL_STOP.json");
 function summarize(c){if(!c)return null;return {packages:Object.fromEntries(c.order.map(id=>[id,{status:c.packages[id].status,cycle:c.packages[id].cycle,nextAction:c.packages[id].nextAction??null,blockedReason:c.packages[id].blockedReason??null,classification:c.packages[id].classification??null,notBefore:c.packages[id].notBefore??null}])),releases:Object.fromEntries(Object.entries(c.releases??{}).map(([k,r])=>[k,{status:r.status,nextAction:r.nextAction??null,blockedReason:r.blockedReason??null,signerReason:r.signerReason??null}])),providers:c.providers??{},phase0:c.phase0?{accepted:c.phase0.accepted??false,final:c.phase0.final??null,attempts:c.phase0.attempts?.length??0}:null,github:c.github??null,next:nextAction(c,new Date())}}
-if(argv.includes("--status")){const {control}=loadState(policy.roots.stateFile);out({status:"STATUS",summary:summarize(control)},0)}
-if(globalStopState(path.join(repo,".ai/runtime/GLOBAL_STOP.json")))out({status:"GLOBAL_STOP_ACTIVE"},0);
-try{release=acquireProcessLock(path.join(policy.roots.controlRoot,"orchestrator.lock"),workerId)}catch(e){if(/ALREADY_RUNNING/.test(String(e.message)))out({status:"ALREADY_RUNNING"},0);out({status:"LOCK_FAIL_CLOSED",reason:String(e.message)},2)}
-try{
-  let {doc,control}=loadState(policy.roots.stateFile);if(!control)out({status:"NO_CONTROL_STATE"},0);
-  const log=verifyTransitionLog(policy.roots.transitionLog,control);if(!log.ok)out({status:"TRANSITION_LOG_INVALID",reason:log.reason},2);
-  const ttl=policy.tick.leaseTtlMinutes*60_000,lease=acquireLease(control,{workerId,now:new Date(),ttlMs:ttl});if(!lease.ok)out({status:"LEASE_HELD",holder:lease.holder},0);
-  const commit=(next,event)=>{const r=commitTransition({stateFile:policy.roots.stateFile,logFile:policy.roots.transitionLog,doc,next,event});doc=r.doc;return r.control};
-  const persist=(next,event)=>commit(heartbeat({...next,lease:next.lease??control.lease},{workerId,now:new Date(),ttlMs:ttl}),event);
-  control=commit(lease.control,{type:"LEASE_ACQUIRED",reason:lease.stale?`STALE_LEASE_TAKEN_OVER:${lease.previous.workerId}`:null});
-  const rec=recoverInFlight(control,workerId);if(rec.recovered.length)control=persist(rec.control,{type:"INFLIGHT_RECOVERED",evidence:rec.recovered});
-  const prov=arg("--founder-manual-quota-reset");if(prov){if(!["codex","claude"].includes(prov))out({status:"USAGE",reason:"provider must be codex or claude"},2);control=persist({...control,providers:{...(control.providers??{}),[prov]:{status:"PROBE_PENDING_FOUNDER_RESET",retryAfter:null,manualResetAt:new Date().toISOString()}}},{type:"FOUNDER_MANUAL_QUOTA_RESET",packageId:prov,reason:"stale retryAfter invalidated; one controlled probe"})}
-  // //TR: Global Stop yalnız başlangıçta değil, her eylem ve her komuttan önce denetlenir ve uzun komutlar süresince izlenir; durdurulan komutun ağacı sonlandırılır.
-  const stopFile=path.join(repo,".ai/runtime/GLOBAL_STOP.json"),shouldStop=()=>globalStopState(stopFile)?"GLOBAL_STOP_ACTIVE":null;
-  const runner=createContractRunner({policy,repo,shouldStop});
-  // //TR: GitHub durumu günde bir kez dürüstçe kaydedilir; branch protection yoksa yerel mod ve kuyrukta bekleyen push olarak kalır, taklit edilmez.
-  if(!control.github?.checkedAt||Date.now()-Date.parse(control.github.checkedAt)>86_400_000){const a=runner.run("gh.authStatus"),v=runner.run("gh.repoView"),bp=runner.run("gh.branchProtection");let repoInfo=null;try{repoInfo=JSON.parse(v.stdout)}catch{}const account=(`${a.stdout}\n${a.stderr}`.match(/account ([A-Za-z0-9-]+)/)??[])[1]??null;
-    const protection=bp.status===0?"PRESENT_UNVERIFIED_RULES":/Upgrade to GitHub Pro/i.test(bp.stdout+bp.stderr)?"UNAVAILABLE_PLAN_LIMIT":/not protected/i.test(bp.stdout+bp.stderr)?"NOT_CONFIGURED":"UNKNOWN";
-    control=persist({...control,github:{checkedAt:new Date().toISOString(),account,expectedOwner:policy.github.expectedOwner,ownerMatches:account===policy.github.expectedOwner,repository:repoInfo?.nameWithOwner??null,visibility:repoInfo?.visibility??null,remote:repoInfo?.url??null,remoteMatches:repoInfo?.url===policy.github.expectedRemote,branchProtection:protection,constructionRepoPush:"QUEUED_REMOTE_PROTECTION_POLICY"}},{type:"GITHUB_STATUS",reason:protection})}
-  const executors=createExecutors({policy,repo,runner,controlPlaneRoot});
-  const t=await runTick({control,executors,persist,policy,workerId,shouldStop});control=t.control;
-  control=commit(releaseLease(control,{workerId}),{type:"LEASE_RELEASED"});
-  out({status:t.stopped?"TICK_STOPPED_GLOBAL_STOP":"TICK_DONE",done:t.done,stopped:t.stopped??null,summary:summarize(control)},0);
-}finally{try{release?.()}catch{}}
+function supervisorStatus(control){const hb=readHeartbeat(dp.heartbeat);let wake=null;try{wake=nextWake(control,new Date(),policy)}catch{}return {heartbeat:hb,health:(()=>{try{return heartbeatHealth(hb,new Date(),policy)}catch(e){return {healthy:false,reason:String(e.message)}}})(),lock:inspectProcessLock(dp.lock),nextWake:wake}}
+// //TR: Pasif durum girdileri yalnız dosyalardan okunur (kontrol durumu, günlük doğrulaması, son anlamlı geçiş, Global Stop); keşif sözleşmeleri yazıcı içinde çalışır.
+function statusInputs(){let doc=null,control=null;try{({doc,control}=loadState(policy.roots.stateFile))}catch{}let logCheck=null;try{logCheck=verifyTransitionLog(policy.roots.transitionLog,control)}catch(e){logCheck={ok:false,reason:String(e.message)}}return {doc,control,logCheck,lastTransition:lastMeaningfulTransition(policy.roots.transitionLog),globalStop:globalStopState(stopFile)}}
+const statusFile=watchdogStatusPath(policy);
+if(argv.includes("--status")){const {control}=loadState(policy.roots.stateFile);out({status:"STATUS",summary:summarize(control),supervisor:supervisorStatus(control),watchdogStatus:readWatchdogStatus(statusFile)},0)}
+if(argv.includes("--self-check"))await selfCheck();
+if(globalStopState(stopFile))out({status:"GLOBAL_STOP_ACTIVE"},0);
+if(daemonMode){try{validateDaemonPolicy(policy);validateWatchdogPolicy(policy)}catch(e){out({status:"DAEMON_POLICY_INVALID",reason:String(e.message)},EXIT.FATAL)}}
+try{release=acquireProcessLock(dp.lock,workerId)}catch(e){if(/ALREADY_RUNNING/.test(String(e.message)))out({status:"ALREADY_RUNNING"},daemonMode?EXIT.ALREADY_RUNNING:0);out({status:"LOCK_FAIL_CLOSED",reason:String(e.message)},EXIT.FATAL)}
+// //TR: Tek tick mantığı automation/lib/orchestrator-daemon.mjs createTick içindedir (--tick, --daemon ve testler aynı üretim kodunu çalıştırır).
+// //TR: Global Stop her komuttan ve her eylemden önce denetlenir; uzun komutlar izlenir ve durdurulunca süreç ağacı sonlandırılır.
+const stopNow=()=>globalStopState(stopFile)?"GLOBAL_STOP_ACTIVE":null;
+const runner=createContractRunner({policy,repo,shouldStop:stopNow}),executors=createExecutors({policy,repo,runner,controlPlaneRoot}),tickOnce=createTick({policy,workerId,runner,executors,shouldStop:stopNow});
+// //TR: Pasif durum dosyası süpervizör tarafından yazılır; yazma hatası yürütmeyi durdurmaz, günlüğe kaydedilir.
+const writeStatus=createWatchdogStatusWriter({policy,runner,repo,file:statusFile,read:statusInputs,producer:{workerId,pid:process.pid,controlPlane:controlPlaneRoot}});
+const safeWriteStatus=args=>{try{return writeStatus(args)}catch(e){logLine({event:"WATCHDOG_STATUS_WRITE_FAILED",reason:String(e?.message??e)});return null}};
+if(daemonMode){
+  // //TR: Daemon: kilit süreç ömrü boyunca tutulur; her tur öncesi kontrol düzlemi yeniden doğrulanır ve Global Stop denetlenir; uyku uyandırma dosyası ve Global Stop değişikliğiyle erken biter.
+  const shouldStop=()=>globalStopState(stopFile)?"GLOBAL_STOP_ACTIVE":null;
+  const writeHeartbeatFile=createHeartbeatWriter({file:dp.heartbeat,base:{workerId,pid:process.pid,hostname:os.hostname(),controlPlane:controlPlaneRoot,repo,startedAt:new Date().toISOString(),launcherPid:process.env.UASCO_SUPERVISOR_LAUNCHER_PID?Number(process.env.UASCO_SUPERVISOR_LAUNCHER_PID):null}});
+  // //TR: Her kalp atışı pasif durum dosyasını da yeniler; keşif discoveryMinutes'te bir ve her tick sonunda tazelenir.
+  const writeHeartbeat=fields=>{const hb=writeHeartbeatFile(fields);let health=null;try{health=heartbeatHealth(hb,new Date(),policy)}catch{}safeWriteStatus({heartbeat:hb,health,wake:hb.nextWakeAt?{at:hb.nextWakeAt,reason:hb.wakeReason}:null,refresh:Boolean(fields.lastTick)||fields.state==="STARTING"||fields.state==="STOPPED"});return hb};
+  const sleepUntil=createSleeper({wakeFile:dp.wake,watchFiles:[stopFile],chunkMs:policy.daemon.sleepChunkSeconds*1000,shouldStop,onBeat:()=>writeHeartbeat({state:"WAITING"})});
+  const loadControl=()=>{try{return loadState(policy.roots.stateFile).control}catch{return null}};
+  const maxIterations=arg("--max-iterations")?Number(arg("--max-iterations")):Infinity;if(!(maxIterations>0))out({status:"USAGE",reason:"--max-iterations must be positive"},2);
+  const tickOnceChecked=async()=>{const v=verifyTrustRoot(controlPlaneRoot);if(!v.ok)return {status:"CONTROL_PLANE_TRUST_ROOT_INVALID",fatal:true,reason:JSON.stringify(v.mismatches.slice(0,3))};if(shouldStop())return {status:"GLOBAL_STOP_ACTIVE",stop:true};return tickOnce()};
+  const r=await runDaemon({policy,tickOnce:tickOnceChecked,loadControl,sleepUntil,shouldStop,writeHeartbeat,maxIterations,log:logLine});
+  out({status:`DAEMON_${r.status}`,reason:r.reason??null,iterations:r.iteration},r.fatal?EXIT.FATAL:0);
+}
+const r=await tickOnce({manualReset:arg("--founder-manual-quota-reset")});{const hb=readHeartbeat(dp.heartbeat);let health=null;try{health=heartbeatHealth(hb,new Date(),policy)}catch{}safeWriteStatus({heartbeat:hb,health,refresh:true})}
+out({status:r.status,reason:r.reason??null,holder:r.holder,stopped:r.stopped??null,done:r.done,summary:summarize(r.control??null)},r.code??0);
+// //TR: Etkinleştirme öz denetimi: kontrol düzlemi, daemon politikası, kalıcı kuyruk ve günlük, canlı kalp atışı, tek worker kilidinin canlı daemon tarafından uygulandığı, builder yürütme sınırı ve (istenirse) Claude builder ile Codex reviewer'ın üretim broker yolundan gerçek çağrısı denetlenir; hiçbir kuyruk durumu değiştirilmez.
+async function selfCheck(){
+  const checks={controlPlaneTrustRoot:"PASS"},fail=[];const set=(k,ok,detail)=>{checks[k]=ok?{status:"PASS",...detail}:{status:"FAIL",...detail};if(!ok)fail.push(k)};
+  try{validateDaemonPolicy(policy);set("daemonPolicy",true,{})}catch(e){set("daemonPolicy",false,{reason:String(e.message)})}
+  let control=null;try{({control}=loadState(policy.roots.stateFile));const v=verifyTransitionLog(policy.roots.transitionLog,control);const rec=control?recoverInFlight(control,"self-check").recovered:[];set("durableQueue",!!control&&v.ok,{transitionLog:v.ok?`VERIFIED ${v.entries} entries`:v.reason,packages:control?control.order.length:0,recoverableInFlight:rec.length,next:control?nextAction(control,new Date()):null})}catch(e){set("durableQueue",false,{reason:String(e.message)})}
+  const hb=readHeartbeat(dp.heartbeat),health=(()=>{try{return heartbeatHealth(hb,new Date(),policy)}catch(e){return {healthy:false,reason:String(e.message)}}})();set("heartbeat",health.healthy,{state:hb?.state??null,ageSeconds:health.ageMs!==undefined?Math.round(health.ageMs/1000):null,nextWakeAt:hb?.nextWakeAt??null,wakeReason:hb?.wakeReason??null,reason:health.reason??null});
+  const lk=inspectProcessLock(dp.lock);let enforced=false,why=lk.state;if(lk.state==="ACTIVE"){try{const rel=acquireProcessLock(dp.lock,`self-check-${process.pid}`);rel();why="LOCK_ACQUIRED_BY_SELF_CHECK_DAEMON_NOT_HOLDING"}catch(e){enforced=/ALREADY_RUNNING/.test(String(e.message));why=enforced?`SECOND_WORKER_REFUSED pid=${lk.pid}`:String(e.message)}}
+  set("singleWorkerLock",enforced&&hb?.pid===lk.pid,{lock:lk.state,pid:lk.pid??null,heartbeatPid:hb?.pid??null,detail:why});
+  const bp=readJson(path.join(controlPlaneRoot,"config/builder-execution-policy.json")),boundaryOk=bp.permissionMode==="acceptEdits"&&bp.denyHostShell===true&&bp.denyMcpByDefault===true&&["Bash","WebFetch","WebSearch","Agent"].every(t=>(bp.disallowedTools??[]).includes(t))&&(bp.allowedTools??[]).every(t=>["Read","Edit","Write","Glob","Grep"].includes(t));set("builderBoundary",boundaryOk,{permissionMode:bp.permissionMode,allowedTools:bp.allowedTools??[],disallowedTools:bp.disallowedTools??[]});
+  const runner=createContractRunner({policy,repo});const pv=runner.run("node.script",{script:"scripts/capture-provider-provenance.mjs",cwd:controlPlaneRoot},{timeoutMs:300_000});let prov=null;try{prov=readJson(path.join(controlPlaneRoot,".ai/runtime/PROVIDER_PROVENANCE.json"))}catch{}
+  set("providerCliResolution",pv.status===0&&prov?.final==="PASS",{claude:prov?.claude?.status??null,claudeVersion:prov?.claude?.version??null,codex:prov?.codex?.status??null,codexVersion:prov?.codex?.version??null});
+  if(argv.includes("--with-provider-smoke")){const sm=runner.run("node.script",{script:"scripts/provider-smoke.mjs",cwd:controlPlaneRoot},{timeoutMs:600_000});let rep=null;try{rep=readJson(path.join(controlPlaneRoot,".ai/runtime/PROVIDER_SMOKE.json"))}catch{}set("builderAndReviewerInvocation",sm.status===0,{exit:sm.status,report:rep?{final:rep.final??rep.status??null,claude:rep.claude?.status??null,codex:rep.codex?.status??null}:null,stderrTail:sm.status===0?null:sm.stderr.trim().slice(-300)})}
+  else checks.builderAndReviewerInvocation={status:"NOT_TESTED",reason:"run with --with-provider-smoke to invoke Claude and Codex through the production brokers"};
+  const ws=readWatchdogStatus(statusFile),wsAge=ws?.updatedAt?(Date.now()-Date.parse(ws.updatedAt))/1000:null;set("watchdogStatus",!!ws&&ws.schemaVersion==="1.0.0"&&wsAge!==null&&wsAge<=ws.staleAfterSeconds&&ws.producer?.pid===hb?.pid,{file:statusFile,ageSeconds:wsAge===null?null:Math.round(wsAge),overallHealth:ws?.overallHealth??null,producerPid:ws?.producer?.pid??null,heartbeatPid:hb?.pid??null});
+  const stop=globalStopState(stopFile);checks.globalStop=stop?{status:"ACTIVE",reason:stop.reason??null}:{status:"INACTIVE"};
+  out({status:fail.length?"SELF_CHECK_FAIL":"SELF_CHECK_PASS",failed:fail,checks,supervisor:{heartbeatFile:dp.heartbeat,lockFile:dp.lock}},fail.length?1:0);
+}

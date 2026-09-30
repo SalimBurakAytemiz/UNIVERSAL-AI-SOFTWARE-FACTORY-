@@ -13,7 +13,9 @@ export function makeValidators(policy){
     oneOf:(set,v)=>{if(!set.includes(v))deny(`NOT_IN_SET:${v}`);return v}
   };
 }
-const NODE_SCRIPTS=["scripts/run-validation.mjs","scripts/ensure-dependencies.mjs","scripts/capture-provider-provenance.mjs","scripts/verify-trust-root.mjs","scripts/generate-trust-root.mjs","scripts/release-sha256sums.mjs","scripts/build-release-zip.mjs","scripts/verify-release-extract.mjs","scripts/codex-reviewer-broker.mjs","scripts/claude-builder-broker.mjs"];
+const NODE_SCRIPTS=["scripts/run-validation.mjs","scripts/ensure-dependencies.mjs","scripts/capture-provider-provenance.mjs","scripts/verify-trust-root.mjs","scripts/generate-trust-root.mjs","scripts/release-sha256sums.mjs","scripts/build-release-zip.mjs","scripts/verify-release-extract.mjs","scripts/codex-reviewer-broker.mjs","scripts/claude-builder-broker.mjs","scripts/provider-smoke.mjs"];
+// //TR: Zamanlanmış görev durumu yerel ayardan bağımsız, salt-okunur ve sabit bir PowerShell sorgusuyla okunur; görev adı yalnız policy'deki iki addan biri olabilir ve ortam değişkeniyle geçer.
+export const SCHEDULED_TASK_INFO_SCRIPT="$ErrorActionPreference='Stop';$n=$env:UASCO_TASK_NAME;$t=Get-ScheduledTask -TaskPath '\\' -TaskName $n -ErrorAction SilentlyContinue;if(-not $t){'{\"registered\":false}';exit 0};$i=Get-ScheduledTaskInfo -InputObject $t;$f={param($d)if($d -and $d.Year -gt 1999){$d.ToUniversalTime().ToString('o')}else{$null}};[pscustomobject]@{registered=$true;state=[string]$t.State;lastRunTime=(& $f $i.LastRunTime);lastTaskResult=$i.LastTaskResult;nextRunTime=(& $f $i.NextRunTime)}|ConvertTo-Json -Compress";
 // //TR: Sözleşme tablosu; yeni işlem eklemek bu protected dosyada değişiklik ve bağımsız review gerektirir.
 export function buildContracts(policy,{repo}){
   const v=makeValidators(policy),git="git",ps=path.join(process.env.SystemRoot??"C:/Windows","System32","WindowsPowerShell","v1.0","powershell.exe"),tar=path.join(process.env.SystemRoot??"C:/Windows","System32","tar.exe");
@@ -41,7 +43,13 @@ export function buildContracts(policy,{repo}){
     "ssh.sign":{program:policy.signing.sshKeygen,args:p=>["-Y","sign","-f",policy.signing.publicKey,"-n",policy.signing.namespace,v.under("signRoot",p.file)]},
     "ssh.verify":{program:policy.signing.sshKeygen,args:p=>["-Y","verify","-f",v.under("signRoot",p.allowedSigners),"-I",policy.signing.identity,"-n",policy.signing.namespace,"-s",v.under("signRoot",p.signature)],input:true},
     "ps.expandArchive":{program:ps,args:()=>["-NoProfile","-NonInteractive","-Command","$ErrorActionPreference='Stop';Expand-Archive -LiteralPath $env:UASCO_RELEASE_ZIP -DestinationPath $env:UASCO_RELEASE_DEST"],envFrom:p=>({UASCO_RELEASE_ZIP:v.under("signRoot",p.zip),UASCO_RELEASE_DEST:v.under("installRoot",p.dest)})},
-    "ps.installPhase0":{program:ps,args:p=>["-NoProfile","-ExecutionPolicy","Bypass","-File",path.join(v.under("installRoot",p.installRoot),"scripts","install.ps1"),"-RemoteUrl",v.oneOf([policy.phase0.remoteUrl],p.remoteUrl)],cwdFrom:p=>v.under("installRoot",p.installRoot),pathPrepend:policy.github.ghDirectory},
+    "ps.installPhase0":{program:ps,args:p=>["-NoProfile","-ExecutionPolicy","Bypass","-File",path.join(v.under("installRoot",p.installRoot),"scripts","install.ps1"),"-RemoteUrl",v.oneOf([policy.phase0.remoteUrl],p.remoteUrl),"-SkipAutoStart"],cwdFrom:p=>v.under("installRoot",p.installRoot),pathPrepend:policy.github.ghDirectory},
+    // //TR: Kurulu sistemin otomatik başlatması inşa süpervizörüyle ad çakışmasın diye policy'deki ayrı adla, kurulu kopyanın kendi betiğiyle kaydedilir.
+    "ps.registerInstalledAutostart":{program:ps,args:p=>{const root=v.under("installRoot",p.installRoot);return ["-NoProfile","-ExecutionPolicy","Bypass","-File",path.join(root,"scripts","register-autostart.ps1"),"-RepoPath",root,"-TaskName",policy.autostart.installedSystemTaskName]},cwdFrom:p=>v.under("installRoot",p.installRoot)},
+    // //TR: Süpervizörün pasif durum keşfi için salt-okunur sözleşmeler (dal uçları, worktree listesi, zamanlanmış görev durumu).
+    "git.listBranchHeads":{program:git,args:p=>["-C",v.under("repo",p.cwd),"for-each-ref","--format=%(refname) %(objectname)","refs/heads/"]},
+    "git.worktreeList":{program:git,args:p=>["-C",v.under("repo",p.cwd),"worktree","list","--porcelain"]},
+    "ps.scheduledTaskInfo":{program:ps,args:()=>["-NoProfile","-NonInteractive","-Command",SCHEDULED_TASK_INFO_SCRIPT],envFrom:p=>({UASCO_TASK_NAME:v.oneOf([policy.autostart.taskName,policy.autostart.installedSystemTaskName],p.taskName)})},
     "gh.authStatus":{program:path.join(policy.github.ghDirectory,"gh.exe"),args:()=>["auth","status"],allowExit:[0,1]},
     "gh.branchProtection":{program:path.join(policy.github.ghDirectory,"gh.exe"),args:()=>["api",`repos/${policy.github.expectedRemote.replace("https://github.com/","")}/branches/main/protection`],allowExit:[0,1]},
     "gh.repoView":{program:path.join(policy.github.ghDirectory,"gh.exe"),args:()=>["repo","view",policy.github.expectedRemote.replace(/^https:\/\/github\.com\//,""),"--json","nameWithOwner,visibility,url,isEmpty"]}

@@ -1,0 +1,1414 @@
+{
+  "//TR": "Bu kayıt tek bir Codex bağımsız review çalıştırmasının frozen bundle, değiştirilmemiş reviewer çıktısı, run manifest ve governed değerlendirmesini kalıcı tutar; evidence signing anahtarı henüz başlatılmadığı için imzasızdır.",
+  "schemaVersion": "1.0.0",
+  "signature": "UNSIGNED_EVIDENCE_KEY_NOT_INITIALIZED",
+  "runDir": "1e3a123-c1-20260929T035726Z-broker",
+  "runId": "RUN-V6-PKG-X1-DUAL-EXECUTION-FABRIC-20260928T212453Z-C1",
+  "baseCommit": "ca21e830ad8c45880f3ed72cbca9bbff08b6ed84",
+  "reviewedCommit": "1e3a1230d020ea0b955d6972c6d934d80e1abbf3",
+  "cycle": 1,
+  "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+  "bundleDigest": "549cd069ee49dc870d76c5721b4d1a830a1295a2761f49db1e88817e213a360b",
+  "bundleFileSha256": "f73571bddaeb9f216f22db286a37010f39d19677d030d8069494a5eba934cc9b",
+  "milestoneContractId": "V6-PKG-X1-DUAL-EXECUTION-FABRIC",
+  "milestoneContractDigest": "afc75e002c4880c4409de591a9e2e63c8c95292f42ae2aa66b4907397891f4f8",
+  "reviewResultText": "{\n  \"schemaVersion\": \"1.1.0\",\n  \"runId\": \"RUN-V6-PKG-X1-DUAL-EXECUTION-FABRIC-20260928T212453Z-C1\",\n  \"cycle\": 1,\n  \"baseCommit\": \"ca21e830ad8c45880f3ed72cbca9bbff08b6ed84\",\n  \"reviewedCommit\": \"1e3a1230d020ea0b955d6972c6d934d80e1abbf3\",\n  \"reviewBundleDigest\": \"549cd069ee49dc870d76c5721b4d1a830a1295a2761f49db1e88817e213a360b\",\n  \"result\": \"BLOCKED\",\n  \"reviewer\": {\n    \"provider\": \"OPENAI\",\n    \"tool\": \"Codex\",\n    \"toolVersion\": null,\n    \"modelId\": \"gpt-6\",\n    \"independenceStatus\": \"SUFFICIENT\"\n  },\n  \"findings\": [\n    {\n      \"id\": \"F-PKGX1-001\",\n      \"classification\": \"BLOCKER\",\n      \"severity\": \"P2\",\n      \"category\": \"REGISTRY_SECURITY_INVARIANTS\",\n      \"basisRefs\": [\n        \"P000-AC-661b91801237ddb3\",\n        \"P000-FAIL-e0a4c5900e8b377f\"\n      ],\n      \"currentDiffCausality\": \"CURRENT_DIFF\",\n      \"scopeStatus\": \"IN_SCOPE\",\n      \"file\": \"automation/lib/execution-routing.mjs\",\n      \"symbol\": \"loadExecutionBackendRegistry\",\n      \"line\": 20,\n      \"reproduction\": {\n        \"steps\": [\n          \"Clone the reviewed config/execution-backends.json in memory.\",\n          \"Move EVIDENCE_KEY_OPERATION from taskClasses.localOnly into taskClasses.cloudEligible, then call loadExecutionBackendRegistry.\",\n          \"Repeat independently for RELEASE_PACKAGING; also test removing LOCAL_CREDENTIAL_STORE from hostBoundResources and CUSTOMER_SECRET from cloudForbiddenDataClasses.\",\n          \"For each accepted registry, route a corresponding INTERNAL, WORKTREE_ONLY task in CLOUD_ONLY mode with cloud availability and dispatchConfigured set to true.\"\n        ]\n      },\n      \"expected\": \"The loader rejects removal of required host-bound and forbidden-data protections before routing can use the weakened registry.\",\n      \"observed\": \"All four mutations were accepted. Each corresponding task routed to CLAUDE_CLOUD_SESSION. The loader requires only seven of nine local-only task types, only PRIVATE_SIGNING_KEY among host resources, and only four of six forbidden data classes.\",\n      \"evidenceRefs\": [\n        \"DIFF-6d23257e9d2d47dc\",\n        \"DIFF-d5e8c567b7743e68\",\n        \"DIFF-4a694085480eeacc\"\n      ],\n      \"blockerReason\": \"This directly fails the frozen loader acceptance criterion and mandatory failure case for removable registry invariants. Cloud activation is not required to reproduce the validation defect.\",\n      \"remediationAcceptance\": \"Reject registry mutations that remove or reclassify required host-bound tasks, host resources, or forbidden data protections. Add regression coverage for the reproduced cases and equivalent required entries.\",\n      \"retestValidationIds\": [\n        \"tests\"\n      ],\n      \"confidence\": 1,\n      \"firstSeenCycle\": 1,\n      \"status\": \"OPEN\"\n    },\n    {\n      \"id\": \"F-PKGX1-002\",\n      \"classification\": \"BLOCKER\",\n      \"severity\": \"P2\",\n      \"category\": \"FAIL_CLOSED_ROUTING\",\n      \"basisRefs\": [\n        \"P000-AC-25ac92c039953064\",\n        \"P000-INV-473c0420ab79dc5f\"\n      ],\n      \"currentDiffCausality\": \"CURRENT_DIFF\",\n      \"scopeStatus\": \"IN_SCOPE\",\n      \"file\": \"automation/lib/execution-routing.mjs\",\n      \"symbol\": \"routeExecution\",\n      \"line\": 46,\n      \"reproduction\": {\n        \"steps\": [\n          \"Load the unchanged reviewed registry, whose cloud dispatch status is NOT_CONFIGURED and adapter is null.\",\n          \"Create an IMPLEMENTATION_PACKAGE task classified INTERNAL with empty resource/data arrays, no local credentials, and filesystemBoundary WORKTREE_ONLY.\",\n          \"Call routeExecution in CLOUD_ONLY mode with observations.local.available=true and observations.cloud={available:true,dispatchConfigured:false}.\",\n          \"Repeat with dispatchConfigured omitted.\"\n        ]\n      },\n      \"expected\": \"An unconfigured or unverified cloud dispatcher cannot produce an executable cloud route; CLOUD_ONLY must queue.\",\n      \"observed\": \"Both calls returned CLAUDE_CLOUD_SESSION. With dispatchConfigured=false, the result simultaneously included CLOUD_DISPATCH_NOT_CONFIGURED. cloudAvail checks only available===true and ignores dispatch configuration.\",\n      \"evidenceRefs\": [\n        \"DIFF-6d23257e9d2d47dc\",\n        \"DIFF-d5e8c567b7743e68\",\n        \"DIFF-4a694085480eeacc\"\n      ],\n      \"blockerReason\": \"The new routing function fails open on contradictory or missing dispatch evidence. The supervisor currently refuses cloud dispatch, limiting immediate impact, but that downstream safeguard does not satisfy the frozen routing requirement.\",\n      \"remediationAcceptance\": \"Require verified dispatch configuration alongside availability before selecting cloud. Add negative tests for false/missing dispatch signals and NOT_CONFIGURED registry state; use an explicitly configured registry fixture for positive cloud-routing tests.\",\n      \"retestValidationIds\": [\n        \"tests\"\n      ],\n      \"confidence\": 1,\n      \"firstSeenCycle\": 1,\n      \"status\": \"OPEN\"\n    }\n  ],\n  \"advisories\": [],\n  \"environmentGaps\": [],\n  \"priorBlockerDispositions\": [],\n  \"summary\": \"Input checks a–e passed. All five protected changes match Founder-authorized files. Read-only trust-root verification passed in SEALED mode; the bundle records 34 passing validation steps. Two reproducible P2 blockers remain in registry enforcement and dispatch-aware routing. No files were changed, dependencies installed, or cloud execution performed.\",\n  \"startedAt\": \"2026-09-29T03:57:35Z\",\n  \"finishedAt\": \"2026-09-29T04:01:21Z\"\n}\n",
+  "reviewResultSha256": "2ed5d6a4fcb542d9d41659dd297bc0a41fcd6d7d235d89b842682ae0d3deb939",
+  "governed": {
+    "//TR": "Bu dosya Codex review sonucunun supervisor-eşdeğeri governed değerlendirmesini kaydeder; Codex'in review-result.json dosyası değiştirilmez.",
+    "schemaVersion": "1.0.0",
+    "evaluatedAt": "2026-09-29T04:02:06.839Z",
+    "runDir": "C:\\Users\\PRO\\Desktop\\UASCO\\.ai\\cache\\review\\runs\\1e3a123-c1-20260929T035726Z-broker",
+    "exitCode": 0,
+    "checks": {
+      "promptDlpSensitiveTypes": [],
+      "resultSource": "CANONICAL_BROKER_STDOUT",
+      "resultMatchesBrokerStdout": true,
+      "schemaValid": true,
+      "validateReviewResult": "PASS",
+      "providerSeparation": "PASS"
+    },
+    "reviewResultSha256": "2ed5d6a4fcb542d9d41659dd297bc0a41fcd6d7d235d89b842682ae0d3deb939",
+    "reviewerReportedResult": "BLOCKED",
+    "governedResult": "BLOCKED",
+    "reviewer": {
+      "provider": "OPENAI",
+      "tool": "Codex",
+      "toolVersion": null,
+      "modelId": "gpt-6",
+      "independenceStatus": "SUFFICIENT"
+    },
+    "summary": "Input checks a–e passed. All five protected changes match Founder-authorized files. Read-only trust-root verification passed in SEALED mode; the bundle records 34 passing validation steps. Two reproducible P2 blockers remain in registry enforcement and dispatch-aware routing. No files were changed, dependencies installed, or cloud execution performed.",
+    "counts": {
+      "findings": 2,
+      "blockers": 2,
+      "advisories": 0,
+      "environmentGaps": 0,
+      "acceptedBlockers": 2,
+      "downgraded": 0
+    },
+    "findings": [
+      {
+        "id": "F-PKGX1-001",
+        "classification": "BLOCKER",
+        "severity": "P2",
+        "category": "REGISTRY_SECURITY_INVARIANTS",
+        "file": "automation/lib/execution-routing.mjs",
+        "symbol": "loadExecutionBackendRegistry",
+        "scopeStatus": "IN_SCOPE",
+        "expected": "The loader rejects removal of required host-bound and forbidden-data protections before routing can use the weakened registry.",
+        "observed": "All four mutations were accepted. Each corresponding task routed to CLAUDE_CLOUD_SESSION. The loader requires only seven of nine local-only task types, only PRIVATE_SIGNING_KEY among host resources, and only four of six forbidden data classes."
+      },
+      {
+        "id": "F-PKGX1-002",
+        "classification": "BLOCKER",
+        "severity": "P2",
+        "category": "FAIL_CLOSED_ROUTING",
+        "file": "automation/lib/execution-routing.mjs",
+        "symbol": "routeExecution",
+        "scopeStatus": "IN_SCOPE",
+        "expected": "An unconfigured or unverified cloud dispatcher cannot produce an executable cloud route; CLOUD_ONLY must queue.",
+        "observed": "Both calls returned CLAUDE_CLOUD_SESSION. With dispatchConfigured=false, the result simultaneously included CLOUD_DISPATCH_NOT_CONFIGURED. cloudAvail checks only available===true and ignores dispatch configuration."
+      }
+    ],
+    "advisories": [],
+    "environmentGaps": [],
+    "effectiveReviewDigest": "7711b719c1f730f62f58be340cecd82e7ab1e24c0642d58e4d3fbd178b8077c2",
+    "status": "EVALUATED"
+  },
+  "environmentBlock": null,
+  "runManifest": {
+    "//TR": "Bu manifest kanonik codex-reviewer-broker üzerinden yapılan tek bir Codex bağımsız review çağrısının girdi/çıktı/provenance kanıtını hash'leriyle kaydeder; review içeriğini builder üretmez.",
+    "schemaVersion": "1.0.0",
+    "startedAt": "2026-09-29T03:57:26.802Z",
+    "processBoundary": "CANONICAL_CODEX_REVIEWER_BROKER",
+    "reviewWorktree": "C:/Users/PRO/AppData/Local/Temp/claude/C--Users-PRO-Desktop-UASCO/a72e023b-e073-49b8-9fbd-20b544644a38/scratchpad/rev-x1",
+    "baseCommit": "ca21e830ad8c45880f3ed72cbca9bbff08b6ed84",
+    "reviewedCommit": "1e3a1230d020ea0b955d6972c6d934d80e1abbf3",
+    "cycle": 1,
+    "runId": "RUN-V6-PKG-X1-DUAL-EXECUTION-FABRIC-20260928T212453Z-C1",
+    "bundleFile": ".ai/cache/review/V6-PKG-X1-DUAL-EXECUTION-FABRIC-1e3a123-cycle-1-review-bundle.json",
+    "bundleFileSha256": "f73571bddaeb9f216f22db286a37010f39d19677d030d8069494a5eba934cc9b",
+    "bundleDigest": "549cd069ee49dc870d76c5721b4d1a830a1295a2761f49db1e88817e213a360b",
+    "milestoneContractId": "V6-PKG-X1-DUAL-EXECUTION-FABRIC",
+    "milestoneContractDigest": "afc75e002c4880c4409de591a9e2e63c8c95292f42ae2aa66b4907397891f4f8",
+    "promptFile": ".ai/cache/review/V6-PKG-X1-DUAL-EXECUTION-FABRIC-1e3a123-cycle-1-review-prompt.txt",
+    "promptSha256": "75e71ec744fff2f71238023bfb862354946b9d920ec4b7d06a4c5f63c0c92acf",
+    "precheck": {
+      "head": "1e3a1230d020ea0b955d6972c6d934d80e1abbf3",
+      "baseResolved": "ca21e830ad8c45880f3ed72cbca9bbff08b6ed84",
+      "bundleDigestRecomputed": "549cd069ee49dc870d76c5721b4d1a830a1295a2761f49db1e88817e213a360b",
+      "contractDigestRecomputed": "afc75e002c4880c4409de591a9e2e63c8c95292f42ae2aa66b4907397891f4f8",
+      "changedFiles": 14
+    },
+    "reviewer": {
+      "provider": "OPENAI",
+      "tool": "codex",
+      "broker": "scripts/codex-reviewer-broker.mjs",
+      "brokerSha256": "267e9d4adc2d1872824796f9e3fc4798f09e7d5dfad19d8118a0c116452aee35",
+      "providerProvenanceSha256": "a1e98636beda425d6879b1364cd647484043fb0e998311142e61397861f38341",
+      "launcher": "C:\\Users\\PRO\\.codex\\packages\\standalone\\releases\\0.156.1-x86_64-pc-windows-msvc\\bin\\codex.exe",
+      "launcherSha256": "70bcb05f9bf1a4e7306edd0cd1b57d02af3267ad02a34b26f45c8c4bb20a3301",
+      "launcherVersion": "codex-cli 0.156.1",
+      "provenanceLevel": "STANDALONE_LAUNCHER",
+      "childEnvVariableNames": [
+        "APPDATA",
+        "COMSPEC",
+        "HOME",
+        "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS",
+        "OS",
+        "PATH",
+        "PATHEXT",
+        "PROCESSOR_ARCHITECTURE",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "UASCO_CONTROL_ROOT",
+        "UASCO_PAID_API_ALLOWED",
+        "UASCO_PROVIDER",
+        "USERPROFILE"
+      ],
+      "allowPaidApi": false
+    },
+    "finishedAt": "2026-09-29T04:02:05.615Z",
+    "exitCode": 0,
+    "signal": null,
+    "outputs": {
+      "codex-stderr.log": {
+        "bytes": 278632,
+        "sha256": "9eda78ea212199b62de6a9d4f31c74d1ffb4ae2aa675ae92d6d452c08d71304a"
+      },
+      "codex-stdout.txt": {
+        "bytes": 5426,
+        "sha256": "2ed5d6a4fcb542d9d41659dd297bc0a41fcd6d7d235d89b842682ae0d3deb939"
+      },
+      "review-result.json": {
+        "bytes": 5426,
+        "sha256": "2ed5d6a4fcb542d9d41659dd297bc0a41fcd6d7d235d89b842682ae0d3deb939"
+      }
+    }
+  },
+  "frozenBundle": {
+    "schemaVersion": "1.4.0",
+    "runId": "RUN-V6-PKG-X1-DUAL-EXECUTION-FABRIC-20260928T212453Z-C1",
+    "cycle": 1,
+    "phase": 0,
+    "phaseIds": [
+      0
+    ],
+    "baseCommit": "ca21e830ad8c45880f3ed72cbca9bbff08b6ed84",
+    "reviewedCommit": "1e3a1230d020ea0b955d6972c6d934d80e1abbf3",
+    "milestoneContract": {
+      "schemaVersion": "1.2.0",
+      "id": "V6-PKG-X1-DUAL-EXECUTION-FABRIC",
+      "phase": 0,
+      "phaseIds": [
+        0
+      ],
+      "title": "V6 PKG-X1 dual execution fabric (LOCAL_CLAUDE + CLAUDE_CLOUD_SESSION)",
+      "objective": "Add CLAUDE_CLOUD_SESSION as a registered execution backend beside the unchanged LOCAL_CLAUDE path, with a fail-closed routing policy, execution provenance and a merge gate, so eligible work could be routed to cloud sessions while host-bound work, private signing keys and local credentials never leave the host, cloud output passes the same validation/evidence/independent Codex review/merge gate, and cloud execution is never faked while no documented dispatch method is configured.",
+      "requirements": [
+        "[V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29 founderAuthorization.decision] PKG_X1_PROTECTED_SCOPE_APPROVED + SEQUENCING_RELEASE_NOT_DISTURBED",
+        "[V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29 founderAuthorization.rule] [Kapsam: 5 dosya, şemasız] Protected: config/execution-backends.json (yeni: backend kaydı, AUTO varsayılan mod, LOCAL_ONLY iş türleri, cloud'a yasak veri sınıfları, fallback politikası), automation/lib/execution-routing.mjs (yeni: fail-closed yönlendirme, provenance, merge kapısı), automation/factory-supervisor.mjs (builder'dan önce yönlendirme ve provenance kaydı), trust-root reseal, CANONICAL-STATUS.md. Provenance sözleşmesi kodda doğrulanır ve belgelenir; paste4c'deki 152 şema sayısı sabiti değişmez. Cloud dispatch belgelenmiş bir Claude yöntemi yapılandırılana kadar NOT_CONFIGURED kalır; asla taklit edilmez. [Sıra: Release'i bozma] Paket PKG-R3'ün üzerinde ayrı bir dalda uygulanır, doğrulanır, commit edilir ve PKG-R3'ten sonra Codex review'a girer; merge ca21e83 release'inin Phase0'ı bitene kadar bekletilir; zamanlanmış 02:05 görevi değişmez.",
+        "[V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29 founderAuthorization.protectedFiles] config/execution-backends.json (new), automation/lib/execution-routing.mjs (new), automation/factory-supervisor.mjs, config/trust-root-manifest.json (regenerated by the unchanged generator), CANONICAL-STATUS.md",
+        "[V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; UNKNOWN, NOT_TESTED, BLOCKED or FAIL are never converted to PASS/CLEAN without real evidence; broader protected changes require separate Founder approval.",
+        "[V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29 founderRequest] Add CLAUDE_CLOUD_SESSION as a first-class execution backend in UASCO without replacing LOCAL_CLAUDE: backend registry, routing policy (task type, local availability and quota pressure when observable, cloud availability and credit availability when observable, host resources, filesystem/network boundaries, duration, security classification), cloud preferred for suitable long-running or parallel host-independent work, host-bound operations LOCAL_ONLY, private release-signing keys never in a cloud session, cloud work on isolated branches never mutating reviewed master, cloud output through deterministic validation -> evidence -> independent Codex review -> remediation/re-review -> merge gate, producer != reviewer, durable execution provenance, fail-closed fallback, no assumed API credits or invented billing API, routing modes AUTO/LOCAL_ONLY/CLOUD_PREFERRED/CLOUD_ONLY with AUTO default, observability only from exposed signals, regression tests, documentation, separate bounded package, canonical validation, commit, independent Codex review; do not weaken the trust model, do not make cloud mandatory, do not expose local credentials or signing keys."
+      ],
+      "invariants": [
+        "NO_FAKE_SUCCESS",
+        "NO_WEAKENED_CONTROLS",
+        "NO_SILENT_SCOPE_EXPANSION",
+        "NO_SELF_CERTIFICATION",
+        "EVIDENCE_REQUIRED",
+        "FAIL_CLOSED"
+      ],
+      "acceptanceCriteria": [
+        "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11 in SEALED mode, and the checkpoint records the measured validation environment.",
+        "The registry defines LOCAL_CLAUDE and CLAUDE_CLOUD_SESSION and the modes AUTO (default), LOCAL_ONLY, CLOUD_PREFERRED and CLOUD_ONLY; the loader rejects any registry that lets cloud do host-bound work, exposes private signing keys or local credentials to cloud, makes release signing automatable, lets the producer review its own output, uses the producer provider as reviewer, drops a pipeline stage, allows fallback in an ONLY mode, assumes a billing API, or claims a configured cloud dispatch without an adapter.",
+        "Routing is deterministic and fail-closed: founder-only private-key signing gets no automated backend in any mode; host-bound work (local-only types, host resources, forbidden data classes, local credentials, non-worktree filesystem, classification above INTERNAL, unclassified types) runs locally or is queued in every mode; unknown availability is unavailable; fallback happens only where policy allows, otherwise the task is queued.",
+        "The supervisor keeps the existing LOCAL_CLAUDE execution path, routes before the builder, queues or escalates any decision it cannot dispatch, records execution provenance (backend, session type, branch/workspace, source and result commits, timestamps, provider/tool version, evidence digest, review status) and runs the merge gate before both fast-forward merge paths; the gate requires a governed CLEAN result from the independent non-producer provider on an isolated run branch.",
+        "Cloud dispatch stays NOT_CONFIGURED, no cloud execution or cloud capacity/billing signal is claimed, and no undocumented API is used.",
+        "The trust-root manifest is what the unchanged generator produces for the reviewed tree; only the Founder-approved protected files change; no existing test, validator or policy is weakened."
+      ],
+      "mandatoryFailureCases": [
+        "host-bound job routed to CLAUDE_CLOUD_SESSION",
+        "private signing routed to any automated backend",
+        "cloud unavailable but reported as cloud execution",
+        "fallback in CLOUD_ONLY or LOCAL_ONLY mode",
+        "merge without an independent non-producer CLEAN review",
+        "merge from the default branch or without a result commit",
+        "registry invariant removable without the loader rejecting it"
+      ],
+      "requiredArtifacts": [
+        "config/execution-backends.json",
+        "automation/lib/execution-routing.mjs",
+        "automation/factory-supervisor.mjs",
+        "tests/pkg-x1-execution-routing.test.ts",
+        "docs/architecture/EXECUTION-BACKENDS.md",
+        "audit/checkpoints/V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29.json"
+      ],
+      "phaseTraceability": [
+        {
+          "phase": 0,
+          "requirement": "[V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29 founderAuthorization.decision] PKG_X1_PROTECTED_SCOPE_APPROVED + SEQUENCING_RELEASE_NOT_DISTURBED",
+          "acceptanceCriteria": [
+            "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11 in SEALED mode, and the checkpoint records the measured validation environment.",
+            "The registry defines LOCAL_CLAUDE and CLAUDE_CLOUD_SESSION and the modes AUTO (default), LOCAL_ONLY, CLOUD_PREFERRED and CLOUD_ONLY; the loader rejects any registry that lets cloud do host-bound work, exposes private signing keys or local credentials to cloud, makes release signing automatable, lets the producer review its own output, uses the producer provider as reviewer, drops a pipeline stage, allows fallback in an ONLY mode, assumes a billing API, or claims a configured cloud dispatch without an adapter.",
+            "Routing is deterministic and fail-closed: founder-only private-key signing gets no automated backend in any mode; host-bound work (local-only types, host resources, forbidden data classes, local credentials, non-worktree filesystem, classification above INTERNAL, unclassified types) runs locally or is queued in every mode; unknown availability is unavailable; fallback happens only where policy allows, otherwise the task is queued.",
+            "The supervisor keeps the existing LOCAL_CLAUDE execution path, routes before the builder, queues or escalates any decision it cannot dispatch, records execution provenance (backend, session type, branch/workspace, source and result commits, timestamps, provider/tool version, evidence digest, review status) and runs the merge gate before both fast-forward merge paths; the gate requires a governed CLEAN result from the independent non-producer provider on an isolated run branch.",
+            "Cloud dispatch stays NOT_CONFIGURED, no cloud execution or cloud capacity/billing signal is claimed, and no undocumented API is used.",
+            "The trust-root manifest is what the unchanged generator produces for the reviewed tree; only the Founder-approved protected files change; no existing test, validator or policy is weakened."
+          ],
+          "mandatoryFailureCases": [
+            "host-bound job routed to CLAUDE_CLOUD_SESSION",
+            "private signing routed to any automated backend",
+            "cloud unavailable but reported as cloud execution",
+            "fallback in CLOUD_ONLY or LOCAL_ONLY mode",
+            "merge without an independent non-producer CLEAN review",
+            "merge from the default branch or without a result commit",
+            "registry invariant removable without the loader rejecting it"
+          ],
+          "requiredArtifacts": [
+            "config/execution-backends.json",
+            "automation/lib/execution-routing.mjs",
+            "automation/factory-supervisor.mjs",
+            "tests/pkg-x1-execution-routing.test.ts",
+            "docs/architecture/EXECUTION-BACKENDS.md",
+            "audit/checkpoints/V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29.json"
+          ],
+          "unsupportedCases": [
+            "No cloud dispatch adapter exists; CLAUDE_CLOUD_SESSION is registered but not activated, by design, until a documented Claude product method is approved through the extension flow.",
+            "Cloud capacity and billing are not observable through any documented signal, so they stay UNKNOWN; local quota pressure is UNKNOWN unless supplied.",
+            "Merge is intentionally held until the ca21e83 release completes target-machine Phase0 (Founder decision); this review does not merge.",
+            "The route decision and execution provenance contracts are validated in code; no new JSON schema file is added (Founder decision, schema count 152 unchanged)."
+          ]
+        }
+      ],
+      "allowedPathPrefixes": [
+        "config/execution-backends.json",
+        "automation/lib/execution-routing.mjs",
+        "automation/factory-supervisor.mjs",
+        "config/trust-root-manifest.json",
+        "CANONICAL-STATUS.md",
+        "tests/",
+        "docs/architecture/EXECUTION-BACKENDS.md",
+        "docs/architecture/RESOURCE-SCHEDULER.md",
+        ".ai/NEXT_ACTIONS.md",
+        ".ai/REVIEW_STATUS.md",
+        "CHANGELOG.md",
+        "audit/CURRENT-AUDIT-STATE.json",
+        "audit/V6-FULL-SCAN-PROGRESS.json",
+        "audit/checkpoints/"
+      ],
+      "protectedPaths": [
+        ".gitattributes",
+        ".github/workflows/ci.yml",
+        ".gitignore",
+        ".gitmodules",
+        ".npmrc",
+        "AGENTS.md",
+        "ARCHITECTURE-CONSTITUTION.md",
+        "ARCHITECTURE-FREEZE.md",
+        "BUILD-RULES.md",
+        "CANONICAL-STATUS.md",
+        "CLAUDE.md",
+        "CODEX.md",
+        "DEFINITION-OF-DONE.md",
+        "FULL-REPO-CONSTRUCTION-CONTRACT.md",
+        "INSTALLATION-GO-CHECKLIST.md",
+        "THIRD-PARTY-NOTICES.md",
+        "apps/control-api/src/server.ts",
+        "apps/desktop/main.mjs",
+        "apps/desktop/preload.mjs",
+        "apps/desktop/renderer/app.js",
+        "apps/desktop/renderer/index.html",
+        "automation/factory-supervisor.mjs",
+        "automation/lib/evidence-signing.mjs",
+        "automation/lib/filesystem-boundary.mjs",
+        "automation/lib/redaction.mjs",
+        "config/action-policy.json",
+        "config/automation.json",
+        "config/builder-execution-policy.json",
+        "config/environment-policy.json",
+        "config/evidence-ledger-policy.json",
+        "config/git-metadata-policy.json",
+        "config/omniroute-policy.json",
+        "config/package-policy.json",
+        "config/protected-paths.json",
+        "config/supply-chain-policy.json",
+        "config/trust-root-manifest.json",
+        "config/validation.json",
+        "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
+        "governance/accepted-debt.json",
+        "governance/known-limitations.json",
+        "governance/waivers.json",
+        "prompts/AUTO-BUILDER.md",
+        "prompts/AUTO-REMEDIATION.md",
+        "prompts/AUTO-REVIEW.md",
+        "prompts/AUTO-VALIDATION-FIX.md",
+        "registries/phase-contracts-index.json",
+        "roadmap/build-waves.json",
+        "roadmap/critical-path.json",
+        "roadmap/dependency-graph.json",
+        "roadmap/parallel-lanes.json",
+        "roadmap/review-packages.json",
+        "roadmap/scheduler-state.template.json",
+        "schemas/install-report.schema.json",
+        "scripts/bootstrap-kernel-selftest.mjs",
+        "scripts/bootstrap.ps1",
+        "scripts/build-release-zip.mjs",
+        "scripts/builder-boundary-smoke.mjs",
+        "scripts/capture-provider-provenance.mjs",
+        "scripts/check-prereqs.ps1",
+        "scripts/claude-builder-broker.mjs",
+        "scripts/codex-reviewer-broker.mjs",
+        "scripts/dependency-supply-chain.mjs",
+        "scripts/generate-trust-root.mjs",
+        "scripts/harden-evidence-key.ps1",
+        "scripts/init-evidence-signing.mjs",
+        "scripts/init-private-git.ps1",
+        "scripts/install-report.mjs",
+        "scripts/install.ps1",
+        "scripts/mechanical-kernel-selftest.mjs",
+        "scripts/phase0-acceptance.mjs",
+        "scripts/preflight.mjs",
+        "scripts/provider-smoke.mjs",
+        "scripts/provision-electron.mjs",
+        "scripts/register-autostart.ps1",
+        "scripts/release-sha256sums.mjs",
+        "scripts/runtime-schema-conformance-selftest.mjs",
+        "scripts/sanitize-process-env.ps1",
+        "scripts/secret-sanity.mjs",
+        "scripts/smoke-control-api.mjs",
+        "scripts/smoke-control-tower.mjs",
+        "scripts/smoke-desktop.mjs",
+        "scripts/start-control-tower.ps1",
+        "scripts/start-full-auto.ps1",
+        "scripts/supervisor-state-machine-selftest.mjs",
+        "scripts/v6-apps-control-desktop-selftest.mjs",
+        "scripts/validate-agent-competencies.mjs",
+        "scripts/validate-agent-semantic.mjs",
+        "scripts/validate-architecture.mjs",
+        "scripts/validate-config-runtime-enforcement.mjs",
+        "scripts/validate-domain-packs.mjs",
+        "scripts/validate-mechanical-closure.mjs",
+        "scripts/validate-organization.mjs",
+        "scripts/validate-paste2-closure.mjs",
+        "scripts/validate-paste2h-runtime-release.mjs",
+        "scripts/validate-paste3-agent-specialization.mjs",
+        "scripts/validate-paste3-closure.mjs",
+        "scripts/validate-paste3-technology-domain-registry.mjs",
+        "scripts/validate-paste4a.mjs",
+        "scripts/validate-paste4b.mjs",
+        "scripts/validate-paste4c-doc-truth.mjs",
+        "scripts/validate-paste4d-release-truth.mjs",
+        "scripts/validate-phase-contracts.mjs",
+        "scripts/validate-registries.mjs",
+        "scripts/validate-release-supply-chain.mjs",
+        "scripts/validate-review-graph-v2.mjs",
+        "scripts/validate-runtime-contracts.mjs",
+        "scripts/validate-runtime-resilience.mjs",
+        "scripts/validate-schema-catalog.mjs",
+        "scripts/validate-schema-strictness.mjs",
+        "scripts/validate-technology-graph.mjs",
+        "scripts/validate-tr-comments.mjs",
+        "scripts/validate-woven-model.mjs",
+        "scripts/verify-artifact.mjs",
+        "scripts/verify-evidence-ledger.mjs",
+        "scripts/verify-release-extract.mjs",
+        "scripts/verify-remote-protection.mjs",
+        "scripts/verify-trust-root.mjs",
+        "tsconfig.json",
+        "automation/lib/",
+        "scripts/validate-",
+        "scripts/run-validation.mjs",
+        "schemas/independent-review-result.schema.json",
+        "schemas/review-finding.schema.json",
+        "schemas/review-bundle.schema.json",
+        "schemas/milestone-contract.schema.json",
+        "schemas/run-event.schema.json",
+        "schemas/run-manifest.schema.json",
+        "schemas/phase0-acceptance.schema.json",
+        "prompts/",
+        "roadmap/contracts/",
+        "config/"
+      ],
+      "mandatoryValidation": [
+        "Canonical runner scripts/run-validation.mjs over config/validation.json in SEALED mode",
+        "vitest run including tests/pkg-x1-execution-routing.test.ts",
+        "broad dependency-free selftest suite",
+        "scripts/verify-trust-root.mjs on a clean checkout"
+      ],
+      "mandatoryEvidence": [
+        "reviewed commit SHA",
+        "exact tool/runtime versions",
+        "canonical validation report",
+        "changed file sha256 digests",
+        "trust-root manifest sha256 and protected file count"
+      ],
+      "riskLevel": 3,
+      "allowPaidApi": false,
+      "allowProduction": false,
+      "allowRisk5": false,
+      "allowDependencyChanges": false,
+      "unsupportedCases": [
+        "No cloud dispatch adapter exists; CLAUDE_CLOUD_SESSION is registered but not activated, by design, until a documented Claude product method is approved through the extension flow.",
+        "Cloud capacity and billing are not observable through any documented signal, so they stay UNKNOWN; local quota pressure is UNKNOWN unless supplied.",
+        "Merge is intentionally held until the ca21e83 release completes target-machine Phase0 (Founder decision); this review does not merge.",
+        "The route decision and execution provenance contracts are validated in code; no new JSON schema file is added (Founder decision, schema count 152 unchanged)."
+      ],
+      "reviewProfile": "TRUST_CRITICAL",
+      "maxFilesChanged": 20,
+      "allowExistingTestAssertionReduction": false,
+      "frozenAt": "2026-09-28T21:24:53.943Z",
+      "digest": "afc75e002c4880c4409de591a9e2e63c8c95292f42ae2aa66b4907397891f4f8"
+    },
+    "reviewBasis": {
+      "requirements": [
+        {
+          "id": "P000-REQ-b7a0b046a8fb52b1",
+          "text": "[V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29 founderAuthorization.decision] PKG_X1_PROTECTED_SCOPE_APPROVED + SEQUENCING_RELEASE_NOT_DISTURBED"
+        },
+        {
+          "id": "P000-REQ-170f05595cba202a",
+          "text": "[V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29 founderAuthorization.rule] [Kapsam: 5 dosya, şemasız] Protected: config/execution-backends.json (yeni: backend kaydı, AUTO varsayılan mod, LOCAL_ONLY iş türleri, cloud'a yasak veri sınıfları, fallback politikası), automation/lib/execution-routing.mjs (yeni: fail-closed yönlendirme, provenance, merge kapısı), automation/factory-supervisor.mjs (builder'dan önce yönlendirme ve provenance kaydı), trust-root reseal, CANONICAL-STATUS.md. Provenance sözleşmesi kodda doğrulanır ve belgelenir; paste4c'deki 152 şema sayısı sabiti değişmez. Cloud dispatch belgelenmiş bir Claude yöntemi yapılandırılana kadar NOT_CONFIGURED kalır; asla taklit edilmez. [Sıra: Release'i bozma] Paket PKG-R3'ün üzerinde ayrı bir dalda uygulanır, doğrulanır, commit edilir ve PKG-R3'ten sonra Codex review'a girer; merge ca21e83 release'inin Phase0'ı bitene kadar bekletilir; zamanlanmış 02:05 görevi değişmez."
+        },
+        {
+          "id": "P000-REQ-d70e7f8085f40787",
+          "text": "[V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29 founderAuthorization.protectedFiles] config/execution-backends.json (new), automation/lib/execution-routing.mjs (new), automation/factory-supervisor.mjs, config/trust-root-manifest.json (regenerated by the unchanged generator), CANONICAL-STATUS.md"
+        },
+        {
+          "id": "P000-REQ-dca35e69c35ad86e",
+          "text": "[V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29 founderAuthorization.constraint] Minimum changes only; no weakening of trust, authority, reviewer isolation, evidence, provenance, Global Stop, security or fail-closed behavior; UNKNOWN, NOT_TESTED, BLOCKED or FAIL are never converted to PASS/CLEAN without real evidence; broader protected changes require separate Founder approval."
+        },
+        {
+          "id": "P000-REQ-d03d9af34eeb966d",
+          "text": "[V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29 founderRequest] Add CLAUDE_CLOUD_SESSION as a first-class execution backend in UASCO without replacing LOCAL_CLAUDE: backend registry, routing policy (task type, local availability and quota pressure when observable, cloud availability and credit availability when observable, host resources, filesystem/network boundaries, duration, security classification), cloud preferred for suitable long-running or parallel host-independent work, host-bound operations LOCAL_ONLY, private release-signing keys never in a cloud session, cloud work on isolated branches never mutating reviewed master, cloud output through deterministic validation -> evidence -> independent Codex review -> remediation/re-review -> merge gate, producer != reviewer, durable execution provenance, fail-closed fallback, no assumed API credits or invented billing API, routing modes AUTO/LOCAL_ONLY/CLOUD_PREFERRED/CLOUD_ONLY with AUTO default, observability only from exposed signals, regression tests, documentation, separate bounded package, canonical validation, commit, independent Codex review; do not weaken the trust model, do not make cloud mandatory, do not expose local credentials or signing keys."
+        }
+      ],
+      "invariants": [
+        {
+          "id": "P000-INV-cee4912d3e0a2019",
+          "text": "NO_FAKE_SUCCESS"
+        },
+        {
+          "id": "P000-INV-59e59d4476fc0664",
+          "text": "NO_WEAKENED_CONTROLS"
+        },
+        {
+          "id": "P000-INV-f74092f031a0e4aa",
+          "text": "NO_SILENT_SCOPE_EXPANSION"
+        },
+        {
+          "id": "P000-INV-6122df41f404fe66",
+          "text": "NO_SELF_CERTIFICATION"
+        },
+        {
+          "id": "P000-INV-b8274eed78d72a76",
+          "text": "EVIDENCE_REQUIRED"
+        },
+        {
+          "id": "P000-INV-473c0420ab79dc5f",
+          "text": "FAIL_CLOSED"
+        }
+      ],
+      "acceptanceCriteria": [
+        {
+          "id": "P000-AC-42256cf20311d18a",
+          "text": "Canonical validation (config/validation.json) passes on the exact reviewed commit on Windows with Node >=24 and npm >=11 in SEALED mode, and the checkpoint records the measured validation environment."
+        },
+        {
+          "id": "P000-AC-661b91801237ddb3",
+          "text": "The registry defines LOCAL_CLAUDE and CLAUDE_CLOUD_SESSION and the modes AUTO (default), LOCAL_ONLY, CLOUD_PREFERRED and CLOUD_ONLY; the loader rejects any registry that lets cloud do host-bound work, exposes private signing keys or local credentials to cloud, makes release signing automatable, lets the producer review its own output, uses the producer provider as reviewer, drops a pipeline stage, allows fallback in an ONLY mode, assumes a billing API, or claims a configured cloud dispatch without an adapter."
+        },
+        {
+          "id": "P000-AC-25ac92c039953064",
+          "text": "Routing is deterministic and fail-closed: founder-only private-key signing gets no automated backend in any mode; host-bound work (local-only types, host resources, forbidden data classes, local credentials, non-worktree filesystem, classification above INTERNAL, unclassified types) runs locally or is queued in every mode; unknown availability is unavailable; fallback happens only where policy allows, otherwise the task is queued."
+        },
+        {
+          "id": "P000-AC-7f3dad29638e81e1",
+          "text": "The supervisor keeps the existing LOCAL_CLAUDE execution path, routes before the builder, queues or escalates any decision it cannot dispatch, records execution provenance (backend, session type, branch/workspace, source and result commits, timestamps, provider/tool version, evidence digest, review status) and runs the merge gate before both fast-forward merge paths; the gate requires a governed CLEAN result from the independent non-producer provider on an isolated run branch."
+        },
+        {
+          "id": "P000-AC-7a4b8604feb58c47",
+          "text": "Cloud dispatch stays NOT_CONFIGURED, no cloud execution or cloud capacity/billing signal is claimed, and no undocumented API is used."
+        },
+        {
+          "id": "P000-AC-0aefead7830b4da6",
+          "text": "The trust-root manifest is what the unchanged generator produces for the reviewed tree; only the Founder-approved protected files change; no existing test, validator or policy is weakened."
+        }
+      ],
+      "mandatoryValidation": [
+        {
+          "id": "P000-VAL-9d71ba366a2ce356",
+          "text": "Canonical runner scripts/run-validation.mjs over config/validation.json in SEALED mode"
+        },
+        {
+          "id": "P000-VAL-89671ee0fb618daf",
+          "text": "vitest run including tests/pkg-x1-execution-routing.test.ts"
+        },
+        {
+          "id": "P000-VAL-c9ec154ca647422f",
+          "text": "broad dependency-free selftest suite"
+        },
+        {
+          "id": "P000-VAL-dcd0c3f75a85d7ad",
+          "text": "scripts/verify-trust-root.mjs on a clean checkout"
+        }
+      ],
+      "mandatoryFailureCases": [
+        {
+          "id": "P000-FAIL-865a9c1f76a8de5c",
+          "text": "host-bound job routed to CLAUDE_CLOUD_SESSION"
+        },
+        {
+          "id": "P000-FAIL-dfe63a68cb4422cc",
+          "text": "private signing routed to any automated backend"
+        },
+        {
+          "id": "P000-FAIL-a0cf48912209502a",
+          "text": "cloud unavailable but reported as cloud execution"
+        },
+        {
+          "id": "P000-FAIL-e8206d426bcbd3dc",
+          "text": "fallback in CLOUD_ONLY or LOCAL_ONLY mode"
+        },
+        {
+          "id": "P000-FAIL-4576950d10a017f0",
+          "text": "merge without an independent non-producer CLEAN review"
+        },
+        {
+          "id": "P000-FAIL-7c8e3caca8ff2339",
+          "text": "merge from the default branch or without a result commit"
+        },
+        {
+          "id": "P000-FAIL-e0a4c5900e8b377f",
+          "text": "registry invariant removable without the loader rejecting it"
+        }
+      ],
+      "requiredArtifacts": [
+        {
+          "id": "P000-ART-d5e8c567b7743e68",
+          "text": "config/execution-backends.json"
+        },
+        {
+          "id": "P000-ART-6d23257e9d2d47dc",
+          "text": "automation/lib/execution-routing.mjs"
+        },
+        {
+          "id": "P000-ART-35faea31f5cfa8bb",
+          "text": "automation/factory-supervisor.mjs"
+        },
+        {
+          "id": "P000-ART-4a694085480eeacc",
+          "text": "tests/pkg-x1-execution-routing.test.ts"
+        },
+        {
+          "id": "P000-ART-2024874cd5172935",
+          "text": "docs/architecture/EXECUTION-BACKENDS.md"
+        },
+        {
+          "id": "P000-ART-f57360110e4e16ae",
+          "text": "audit/checkpoints/V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29.json"
+        }
+      ],
+      "risk": [
+        {
+          "id": "P000-RISK-4391d3546bf1df6f",
+          "text": "riskLevel=3; reviewProfile=TRUST_CRITICAL"
+        }
+      ]
+    },
+    "evidenceCatalog": [
+      {
+        "id": "VALIDATION-REGISTRIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "registries",
+        "validationDigest": "8ffa6f6330a6110d8e99139af483e17c71a6df86bea6eb90b53ef87638246b30",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 123
+      },
+      {
+        "id": "VALIDATION-ARCHITECTURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "architecture",
+        "validationDigest": "e5bf5d23fdda0d99094fdb8527a39d03f097200ed58ad48e545edfa66c72268f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 123
+      },
+      {
+        "id": "VALIDATION-TR",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tr",
+        "validationDigest": "2e6b2ed7451d768a768929c1cffbfbe7163006ef338db738aee25eb2e32f0f10",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1296
+      },
+      {
+        "id": "VALIDATION-COMPETENCIES",
+        "kind": "VALIDATION_STEP",
+        "validationId": "competencies",
+        "validationDigest": "10562f2c1b237b192ff646172cda08cd586bf3f09cc90eb8537e860e8e89b83d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 155
+      },
+      {
+        "id": "VALIDATION-ORGANIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "organization",
+        "validationDigest": "6ac3f9799e6e1b0f96e62bcf1a9a0ade5c38852dcc133d2c11b1fd80156ccea5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 149
+      },
+      {
+        "id": "VALIDATION-SCHEMAS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schemas",
+        "validationDigest": "7ba29d41eceb71bd056a516963edf5ddfd26fcbd497d31ea31e504c769879057",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 200
+      },
+      {
+        "id": "VALIDATION-TECHNOLOGY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "technology",
+        "validationDigest": "4120c97312f885fb82187e6933b08c510c95e46d943ebc95f46ef4a5a2a66050",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 185
+      },
+      {
+        "id": "VALIDATION-PASTE3-TECHNOLOGY-DOMAIN-REGISTRY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-technology-domain-registry",
+        "validationDigest": "9951864be421206417dc0fc09feb8586d35de6df8b90b1132a044576afac17b5",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 604
+      },
+      {
+        "id": "VALIDATION-DOMAIN-PACKS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "domain-packs",
+        "validationDigest": "6aa9c5c7e2dd34e3686e298fe3e0d67964ab0803815fd6d42f3d0f84a1048de7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 215
+      },
+      {
+        "id": "VALIDATION-AGENT-SEMANTIC",
+        "kind": "VALIDATION_STEP",
+        "validationId": "agent-semantic",
+        "validationDigest": "89e22dc4c751e6e449ca9297710721f30e635e17966c6d068f6e1100b5f0db53",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 226
+      },
+      {
+        "id": "VALIDATION-PASTE3-AGENT-SPECIALIZATION",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-agent-specialization",
+        "validationDigest": "c8caf548402f3e5d2cce7957a5e2bed0ba7e6df2b63a93989a786cd9890fbb44",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 29486
+      },
+      {
+        "id": "VALIDATION-PHASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "phase-contracts",
+        "validationDigest": "28fdd6131326497e67d9e3c3688f2c7e820c4e6d75587fb58dc9e35f8d545b59",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 322
+      },
+      {
+        "id": "VALIDATION-PASTE4A-CONSTRUCTION-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4a-construction-graph",
+        "validationDigest": "928324142269635a66da22344f852a800442428fa797d278922463d8c0790041",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 215
+      },
+      {
+        "id": "VALIDATION-PASTE4B-TRACEABILITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4b-traceability",
+        "validationDigest": "cdc94fbc1ab6b34cd1867473d6a6ab32555f421b82dc3bce66c8f95e82f9adf7",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 345
+      },
+      {
+        "id": "VALIDATION-PASTE4C-DOC-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4c-doc-truth",
+        "validationDigest": "a86eb363edc20bab120a6590eeb2ac9f9168b9e0a164a5efb68574c2bb8b4e82",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 234
+      },
+      {
+        "id": "VALIDATION-PASTE4D-RELEASE-TRUTH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste4d-release-truth",
+        "validationDigest": "9de0bee8320b7f76dc95efd1af8751c01dc8b945d71a31a105dcef9a7c7dfaa8",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 521
+      },
+      {
+        "id": "VALIDATION-REVIEW-GRAPH",
+        "kind": "VALIDATION_STEP",
+        "validationId": "review-graph",
+        "validationDigest": "d269f09107f2fc3ffe916892e24db59375682a22a2a6775792a09b60361ec15f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 188
+      },
+      {
+        "id": "VALIDATION-SCHEMA-STRICT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "schema-strict",
+        "validationDigest": "1e0b34db66453f8c8b54f4bddf4af81794090404f2b66c4fbe03d8b5c032468f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 283
+      },
+      {
+        "id": "VALIDATION-WOVEN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "woven",
+        "validationDigest": "3f4799cff5ec0a4516f7c2bf34292594d680d5e3b20ad2ca73becfb1efbe556d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 122
+      },
+      {
+        "id": "VALIDATION-PASTE3-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste3-source-closure",
+        "validationDigest": "96cdee7724cf5f145a0260098b33782eb8f9dad828a15f75396d4b04a492f74e",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 30207
+      },
+      {
+        "id": "VALIDATION-CONFIG-RUNTIME-ENFORCEMENT",
+        "kind": "VALIDATION_STEP",
+        "validationId": "config-runtime-enforcement",
+        "validationDigest": "ccccb144bce66a977b83a70c4438c72ec13811a4027b94e24fe917015649fc17",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 129
+      },
+      {
+        "id": "VALIDATION-MECHANICAL",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical",
+        "validationDigest": "a802e0c8871cdac4940257b4c0ebf7ef8c837accd69e06ce8936903b9259ab62",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 192
+      },
+      {
+        "id": "VALIDATION-RUNTIME-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-contracts",
+        "validationDigest": "fef8d265e0207f281d438edd4ca13510c37c864c5bd44116e3a1741523e4267a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 805
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RELEASE-CONTRACTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-release-contracts",
+        "validationDigest": "663f4aefb74075b8404d3424fbd911793a297746e5f11fa9bf43783c285b359a",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 119
+      },
+      {
+        "id": "VALIDATION-RUNTIME-RESILIENCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-resilience",
+        "validationDigest": "d13001c5509688e16fdeb5815f15cd945076a1687a721b72c1229c1cb58f24e3",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 165
+      },
+      {
+        "id": "VALIDATION-PASTE2-SOURCE-CLOSURE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "paste2-source-closure",
+        "validationDigest": "3243c562d6ad710b47b4588b93cb64f8a5172ee089744a9d9d42a315736a969f",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 2425
+      },
+      {
+        "id": "VALIDATION-RUNTIME-SCHEMA-CONFORMANCE",
+        "kind": "VALIDATION_STEP",
+        "validationId": "runtime-schema-conformance",
+        "validationDigest": "78210ab2268bd2aa77de25a46db9d44587cae6cedcb8da5f370e5ad2296ea0ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 249
+      },
+      {
+        "id": "VALIDATION-MECHANICAL-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "mechanical-selftest",
+        "validationDigest": "9f0d4aa941e72e684b4fd869c88eb93f07c3814dfda8eee8737f6baf9b65518c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 101
+      },
+      {
+        "id": "VALIDATION-STATE-SELFTEST",
+        "kind": "VALIDATION_STEP",
+        "validationId": "state-selftest",
+        "validationDigest": "feda1327063ae6fddd47ba68f06959d79f614be5b8a5487dc79faf6ee55ee968",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7385
+      },
+      {
+        "id": "VALIDATION-SECRET-SANITY",
+        "kind": "VALIDATION_STEP",
+        "validationId": "secret-sanity",
+        "validationDigest": "bb52880e62a0e2817a87a01881b82452fd5eca0793ab916e8b2bdff625fb2888",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1071
+      },
+      {
+        "id": "VALIDATION-DEPENDENCY-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "dependency-supply-chain",
+        "validationDigest": "00a58ae3650584ec15f297865a0708e6c348620736fdbc050f30d31fdf958d6d",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 8993
+      },
+      {
+        "id": "VALIDATION-RELEASE-SUPPLY-CHAIN",
+        "kind": "VALIDATION_STEP",
+        "validationId": "release-supply-chain",
+        "validationDigest": "d3c8afe4d87eab0ab03484a9bb4f2a6273ec5a5968d69f59408b90c886d090ca",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 123
+      },
+      {
+        "id": "VALIDATION-TYPECHECK",
+        "kind": "VALIDATION_STEP",
+        "validationId": "typecheck",
+        "validationDigest": "a98a71fd4edf3842dee1ec22f210375256ff5b3f1f45f5e9ed24426ad9e90f15",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1983
+      },
+      {
+        "id": "VALIDATION-TESTS",
+        "kind": "VALIDATION_STEP",
+        "validationId": "tests",
+        "validationDigest": "40a24b33f564592720d92832d0610de5ef30a01100e26c2e7f2ca149389ca94c",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 42915
+      },
+      {
+        "id": "DIFF-8391870b9faf7fd9",
+        "kind": "CHANGED_FILE",
+        "file": ".ai/NEXT_ACTIONS.md"
+      },
+      {
+        "id": "DIFF-6e1d3c492b92f214",
+        "kind": "CHANGED_FILE",
+        "file": ".ai/REVIEW_STATUS.md"
+      },
+      {
+        "id": "DIFF-750ed2ec3b596d3a",
+        "kind": "CHANGED_FILE",
+        "file": "CANONICAL-STATUS.md"
+      },
+      {
+        "id": "DIFF-06572a96a58dc510",
+        "kind": "CHANGED_FILE",
+        "file": "CHANGELOG.md"
+      },
+      {
+        "id": "DIFF-bf054953057e0815",
+        "kind": "CHANGED_FILE",
+        "file": "audit/CURRENT-AUDIT-STATE.json"
+      },
+      {
+        "id": "DIFF-8a2513579e3f27a9",
+        "kind": "CHANGED_FILE",
+        "file": "audit/V6-FULL-SCAN-PROGRESS.json"
+      },
+      {
+        "id": "DIFF-f57360110e4e16ae",
+        "kind": "CHANGED_FILE",
+        "file": "audit/checkpoints/V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29.json"
+      },
+      {
+        "id": "DIFF-35faea31f5cfa8bb",
+        "kind": "CHANGED_FILE",
+        "file": "automation/factory-supervisor.mjs"
+      },
+      {
+        "id": "DIFF-6d23257e9d2d47dc",
+        "kind": "CHANGED_FILE",
+        "file": "automation/lib/execution-routing.mjs"
+      },
+      {
+        "id": "DIFF-d5e8c567b7743e68",
+        "kind": "CHANGED_FILE",
+        "file": "config/execution-backends.json"
+      },
+      {
+        "id": "DIFF-441aa25954680749",
+        "kind": "CHANGED_FILE",
+        "file": "config/trust-root-manifest.json"
+      },
+      {
+        "id": "DIFF-2024874cd5172935",
+        "kind": "CHANGED_FILE",
+        "file": "docs/architecture/EXECUTION-BACKENDS.md"
+      },
+      {
+        "id": "DIFF-9829a6f617e7be01",
+        "kind": "CHANGED_FILE",
+        "file": "docs/architecture/RESOURCE-SCHEDULER.md"
+      },
+      {
+        "id": "DIFF-4a694085480eeacc",
+        "kind": "CHANGED_FILE",
+        "file": "tests/pkg-x1-execution-routing.test.ts"
+      }
+    ],
+    "changedFiles": [
+      ".ai/NEXT_ACTIONS.md",
+      ".ai/REVIEW_STATUS.md",
+      "CANONICAL-STATUS.md",
+      "CHANGELOG.md",
+      "audit/CURRENT-AUDIT-STATE.json",
+      "audit/V6-FULL-SCAN-PROGRESS.json",
+      "audit/checkpoints/V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29.json",
+      "automation/factory-supervisor.mjs",
+      "automation/lib/execution-routing.mjs",
+      "config/execution-backends.json",
+      "config/trust-root-manifest.json",
+      "docs/architecture/EXECUTION-BACKENDS.md",
+      "docs/architecture/RESOURCE-SCHEDULER.md",
+      "tests/pkg-x1-execution-routing.test.ts"
+    ],
+    "changeGuard": {
+      "ok": false,
+      "violations": [
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "CANONICAL-STATUS.md"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "automation/factory-supervisor.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "automation/lib/execution-routing.mjs"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "config/execution-backends.json"
+        },
+        {
+          "type": "PROTECTED_TRUST_ROOT_CHANGE",
+          "path": "config/trust-root-manifest.json"
+        }
+      ],
+      "dependencyChanges": [],
+      "diffLines": 421
+    },
+    "diffStat": " .ai/NEXT_ACTIONS.md                                |  3 +-\n .ai/REVIEW_STATUS.md                               |  3 +-\n CANONICAL-STATUS.md                                | 13 +++-\n CHANGELOG.md                                       |  7 ++\n audit/CURRENT-AUDIT-STATE.json                     |  3 +\n audit/V6-FULL-SCAN-PROGRESS.json                   |  3 +-\n ...V6-PKG-X1-DUAL-EXECUTION-FABRIC-2026-09-29.json | 88 ++++++++++++++++++++++\n automation/factory-supervisor.mjs                  | 18 ++++-\n automation/lib/execution-routing.mjs               | 85 +++++++++++++++++++++\n config/execution-backends.json                     | 69 +++++++++++++++++\n config/trust-root-manifest.json                    | 14 +++-\n docs/architecture/EXECUTION-BACKENDS.md            | 59 +++++++++++++++\n docs/architecture/RESOURCE-SCHEDULER.md            |  2 +\n tests/pkg-x1-execution-routing.test.ts             | 54 +++++++++++++\n 14 files changed, 412 insertions(+), 9 deletions(-)\n",
+    "validation": {
+      "//TR": "Bu runtime report canonical validation command/exit/duration sonuçlarını redacted biçimde kaydeder; read-only static gruplar paralel çalışabilir.",
+      "schemaVersion": "1.1.0",
+      "startedAt": "2026-09-28T21:21:42.031Z",
+      "steps": [
+        {
+          "id": "registries",
+          "command": [
+            "node",
+            "scripts/validate-registries.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 123,
+          "logFile": ".ai\\runtime\\validation-registries.log"
+        },
+        {
+          "id": "architecture",
+          "command": [
+            "node",
+            "scripts/validate-architecture.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 123,
+          "logFile": ".ai\\runtime\\validation-architecture.log"
+        },
+        {
+          "id": "tr",
+          "command": [
+            "node",
+            "scripts/validate-tr-comments.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1296,
+          "logFile": ".ai\\runtime\\validation-tr.log"
+        },
+        {
+          "id": "competencies",
+          "command": [
+            "node",
+            "scripts/validate-agent-competencies.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 155,
+          "logFile": ".ai\\runtime\\validation-competencies.log"
+        },
+        {
+          "id": "organization",
+          "command": [
+            "node",
+            "scripts/validate-organization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 149,
+          "logFile": ".ai\\runtime\\validation-organization.log"
+        },
+        {
+          "id": "schemas",
+          "command": [
+            "node",
+            "scripts/validate-schema-catalog.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 200,
+          "logFile": ".ai\\runtime\\validation-schemas.log"
+        },
+        {
+          "id": "technology",
+          "command": [
+            "node",
+            "scripts/validate-technology-graph.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 185,
+          "logFile": ".ai\\runtime\\validation-technology.log"
+        },
+        {
+          "id": "paste3-technology-domain-registry",
+          "command": [
+            "node",
+            "scripts/validate-paste3-technology-domain-registry.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 604,
+          "logFile": ".ai\\runtime\\validation-paste3-technology-domain-registry.log"
+        },
+        {
+          "id": "domain-packs",
+          "command": [
+            "node",
+            "scripts/validate-domain-packs.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 215,
+          "logFile": ".ai\\runtime\\validation-domain-packs.log"
+        },
+        {
+          "id": "agent-semantic",
+          "command": [
+            "node",
+            "scripts/validate-agent-semantic.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 226,
+          "logFile": ".ai\\runtime\\validation-agent-semantic.log"
+        },
+        {
+          "id": "paste3-agent-specialization",
+          "command": [
+            "node",
+            "scripts/validate-paste3-agent-specialization.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 29486,
+          "logFile": ".ai\\runtime\\validation-paste3-agent-specialization.log"
+        },
+        {
+          "id": "phase-contracts",
+          "command": [
+            "node",
+            "scripts/validate-phase-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 322,
+          "logFile": ".ai\\runtime\\validation-phase-contracts.log"
+        },
+        {
+          "id": "paste4a-construction-graph",
+          "command": [
+            "node",
+            "scripts/validate-paste4a.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 215,
+          "logFile": ".ai\\runtime\\validation-paste4a-construction-graph.log"
+        },
+        {
+          "id": "paste4b-traceability",
+          "command": [
+            "node",
+            "scripts/validate-paste4b.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 345,
+          "logFile": ".ai\\runtime\\validation-paste4b-traceability.log"
+        },
+        {
+          "id": "paste4c-doc-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4c-doc-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 234,
+          "logFile": ".ai\\runtime\\validation-paste4c-doc-truth.log"
+        },
+        {
+          "id": "paste4d-release-truth",
+          "command": [
+            "node",
+            "scripts/validate-paste4d-release-truth.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 521,
+          "logFile": ".ai\\runtime\\validation-paste4d-release-truth.log"
+        },
+        {
+          "id": "review-graph",
+          "command": [
+            "node",
+            "scripts/validate-review-graph-v2.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 188,
+          "logFile": ".ai\\runtime\\validation-review-graph.log"
+        },
+        {
+          "id": "schema-strict",
+          "command": [
+            "node",
+            "scripts/validate-schema-strictness.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 283,
+          "logFile": ".ai\\runtime\\validation-schema-strict.log"
+        },
+        {
+          "id": "woven",
+          "command": [
+            "node",
+            "scripts/validate-woven-model.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 122,
+          "logFile": ".ai\\runtime\\validation-woven.log"
+        },
+        {
+          "id": "paste3-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste3-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 30207,
+          "logFile": ".ai\\runtime\\validation-paste3-source-closure.log"
+        },
+        {
+          "id": "config-runtime-enforcement",
+          "command": [
+            "node",
+            "scripts/validate-config-runtime-enforcement.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 129,
+          "logFile": ".ai\\runtime\\validation-config-runtime-enforcement.log"
+        },
+        {
+          "id": "mechanical",
+          "command": [
+            "node",
+            "scripts/validate-mechanical-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 192,
+          "logFile": ".ai\\runtime\\validation-mechanical.log"
+        },
+        {
+          "id": "runtime-contracts",
+          "command": [
+            "node",
+            "scripts/validate-runtime-contracts.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 805,
+          "logFile": ".ai\\runtime\\validation-runtime-contracts.log"
+        },
+        {
+          "id": "runtime-release-contracts",
+          "command": [
+            "node",
+            "scripts/validate-paste2h-runtime-release.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 119,
+          "logFile": ".ai\\runtime\\validation-runtime-release-contracts.log"
+        },
+        {
+          "id": "runtime-resilience",
+          "command": [
+            "node",
+            "scripts/validate-runtime-resilience.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 165,
+          "logFile": ".ai\\runtime\\validation-runtime-resilience.log"
+        },
+        {
+          "id": "paste2-source-closure",
+          "command": [
+            "node",
+            "scripts/validate-paste2-closure.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 2425,
+          "logFile": ".ai\\runtime\\validation-paste2-source-closure.log"
+        },
+        {
+          "id": "runtime-schema-conformance",
+          "command": [
+            "node",
+            "scripts/runtime-schema-conformance-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 249,
+          "logFile": ".ai\\runtime\\validation-runtime-schema-conformance.log"
+        },
+        {
+          "id": "mechanical-selftest",
+          "command": [
+            "node",
+            "scripts/mechanical-kernel-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 101,
+          "logFile": ".ai\\runtime\\validation-mechanical-selftest.log"
+        },
+        {
+          "id": "state-selftest",
+          "command": [
+            "node",
+            "scripts/supervisor-state-machine-selftest.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 7385,
+          "logFile": ".ai\\runtime\\validation-state-selftest.log"
+        },
+        {
+          "id": "secret-sanity",
+          "command": [
+            "node",
+            "scripts/secret-sanity.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1071,
+          "logFile": ".ai\\runtime\\validation-secret-sanity.log"
+        },
+        {
+          "id": "dependency-supply-chain",
+          "command": [
+            "node",
+            "scripts/dependency-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 8993,
+          "logFile": ".ai\\runtime\\validation-dependency-supply-chain.log"
+        },
+        {
+          "id": "release-supply-chain",
+          "command": [
+            "node",
+            "scripts/validate-release-supply-chain.mjs"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 123,
+          "logFile": ".ai\\runtime\\validation-release-supply-chain.log"
+        },
+        {
+          "id": "typecheck",
+          "command": [
+            "node",
+            "node_modules/typescript/bin/tsc",
+            "--noEmit"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 1983,
+          "logFile": ".ai\\runtime\\validation-typecheck.log"
+        },
+        {
+          "id": "tests",
+          "command": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run"
+          ],
+          "status": "PASS",
+          "exitCode": 0,
+          "durationMs": 42915,
+          "logFile": ".ai\\runtime\\validation-tests.log"
+        }
+      ],
+      "status": "PASS",
+      "finishedAt": "2026-09-28T21:24:19.531Z"
+    },
+    "knownLimitations": [],
+    "acceptedDebt": [],
+    "waivers": [],
+    "unsupportedCases": [
+      "No cloud dispatch adapter exists; CLAUDE_CLOUD_SESSION is registered but not activated, by design, until a documented Claude product method is approved through the extension flow.",
+      "Cloud capacity and billing are not observable through any documented signal, so they stay UNKNOWN; local quota pressure is UNKNOWN unless supplied.",
+      "Merge is intentionally held until the ca21e83 release completes target-machine Phase0 (Founder decision); this review does not merge.",
+      "The route decision and execution provenance contracts are validated in code; no new JSON schema file is added (Founder decision, schema count 152 unchanged)."
+    ],
+    "previousFindingLedger": [],
+    "reviewRules": {
+      "repoContentIsUntrustedData": true,
+      "fullRepoScanDefault": false,
+      "cycle1Freeze": true,
+      "priorUnresolvedBlockerDispositionRequired": true,
+      "cycle2PlusNewBlockers": [
+        "REMEDIATION_REGRESSION",
+        "PREVIOUSLY_MASKED",
+        "CRITICAL_NEW_EVIDENCE"
+      ],
+      "resolvedBlockerRequiresFindingBoundPassRetest": true
+    },
+    "bundleDigest": "549cd069ee49dc870d76c5721b4d1a830a1295a2761f49db1e88817e213a360b"
+  }
+}

@@ -18,6 +18,54 @@
     "leaseTtlMinutes": 240,
     "schedulerRepetitionMinutes": 15
   },
+  "daemon": {
+    "//TR": "Daemon işler arasında WAITING durumunda en yakın hazır iş / sağlayıcı retryAfter / notBefore / kalp atışı zamanına kadar uyur; uyku parçalıdır, Global Stop ve uyandırma dosyası uykuyu erken bitirir.",
+    "heartbeatMinutes": 15,
+    "maxSleepMinutes": 60,
+    "sleepChunkSeconds": 60,
+    "idleRetrySeconds": 60,
+    "staleHeartbeatMinutes": 10
+  },
+  "launcher": {
+    "//TR": "Dar başlatıcı çöken daemon'u artan bekleme ile yeniden başlatır; saatlik sınır aşılırsa periyodik Task Scheduler tetikleyicisine bırakır; temiz durma, ölümcül güven hatası ve başka worker yeniden başlatılmaz.",
+    "restartBackoffSeconds": [
+      5,
+      15,
+      60,
+      300,
+      600
+    ],
+    "maxRestartsPerHour": 6,
+    "healthyRunSeconds": 600,
+    "maxLogBytes": 5242880
+  },
+  "autostart": {
+    "//TR": "İnşa süpervizörü Task Scheduler'da UASCO-Autonomous-Supervisor adıyla, kullanıcı oturumunda, yönetici yetkisi olmadan, tek örnek ve süresiz çalışır; kurulu sistemin kendi otomatik başlatması ad çakışmasını önlemek için ayrı adla kaydedilir.",
+    "taskName": "UASCO-Autonomous-Supervisor",
+    "installedSystemTaskName": "UASCO-Installed-Supervisor",
+    "launcher": "scripts/uasco-supervisor-launcher.mjs",
+    "triggers": [
+      "AT_LOGON_CURRENT_USER",
+      "PERIODIC_HEARTBEAT"
+    ],
+    "periodicMinutes": 15,
+    "startupTrigger": "ONLY_WITH_ELEVATED_REGISTRATION_AS_S4U_WITHOUT_STORED_PASSWORD",
+    "runLevel": "LIMITED",
+    "multipleInstances": "IGNORE_NEW",
+    "executionTimeLimit": "UNLIMITED",
+    "restartOnFailure": {
+      "count": 3,
+      "intervalMinutes": 1
+    },
+    "routine": "OPTIONAL_PASSIVE_DISPLAY_READS_WATCHDOG_STATUS_ONLY"
+  },
+  "watchdog": {
+    "//TR": "Süpervizör kendi salt-okunur keşfini (git ref'leri, worktree'ler, zamanlanmış görev durumu, geçiş günlüğü, sağlayıcı retry durumu) .ai/runtime/WATCHDOG_STATUS.json dosyasına atomik yazar; Claude uygulamasındaki isteğe bağlı gözlemci hiçbir komut çalıştırmaz, yalnız bu dosyayı okur ve yürütme yolunda değildir.",
+    "statusFile": "${REPO}/.ai/runtime/WATCHDOG_STATUS.json",
+    "discoveryMinutes": 5,
+    "maxBranches": 50,
+    "observer": "PASSIVE_READ_ONLY_OPTIONAL"
+  },
   "providers": {
     "codex": {"quotaBackoffMinutes": 30, "quotaBackoffMaxMinutes": 360},
     "claude": {"quotaBackoffMinutes": 30, "quotaBackoffMaxMinutes": 360}
@@ -60,6 +108,7 @@
     {"id": "PHASE0-BRANCH-PROTECTION-UNAVAILABLE", "text": "Remote connected, result CLEAN_LOCAL_ONLY while GitHub branch protection is unavailable on the free plan; later autonomous pushes stay disabled until protection is verified."},
     {"id": "PHASE0-FIXES-F1-F2-F3", "text": "Three protected Phase0 fixes; builder acceptEdits only inside the working directory; Bash, web, subagents, MCP and writes outside the working directory stay forbidden."},
     {"id": "PKG-X1", "text": "Dual execution fabric, five protected files, no new schema; merge held until the ca21e83 release completes Phase0."},
-    {"id": "AUT1-UNATTENDED-ORCHESTRATION", "text": "Founder directive 2026-09-29: full unattended orchestration with a repository-native durable supervisor under Windows Task Scheduler, automatic Codex quota recovery, automatic review/remediation/merge/release/Phase0 within existing authority, narrow command contracts, secure local signing only through an OS-backed signer, no repeated Founder questions for approved policy."}
+    {"id": "AUT1-UNATTENDED-ORCHESTRATION", "text": "Founder directive 2026-09-29: full unattended orchestration with a repository-native durable supervisor under Windows Task Scheduler, automatic Codex quota recovery, automatic review/remediation/merge/release/Phase0 within existing authority, narrow command contracts, secure local signing only through an OS-backed signer, no repeated Founder questions for approved policy."},
+    {"id": "AUT2-AUTONOMY-HARDENING", "text": "Founder FINAL AUTONOMY DIRECTIVE 2026-09-29: the repository-native supervisor UASCO-Autonomous-Supervisor is the primary unattended executor through Windows Task Scheduler -> narrow launcher -> durable loop (logon, periodic heartbeat, restart on failure, startup only when applicable, narrowest privileges); it waits for the nearest provider retry, dependency event, queued job or heartbeat; the routine is an optional watchdog only; activation only after governed CLEAN."}
   ]
 }

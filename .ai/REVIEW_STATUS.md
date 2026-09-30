@@ -14,12 +14,14 @@ Independent Codex reviews (frozen milestone contract + review bundle, read-only,
 - `V6-PKG-H-CURRENT-TRUTH-CORRECTION` @ `eaed1bd4fb583ada4e04f144fb1c67fa850b4a7e`: `CLEAN`, merged fast-forward to local master.
 - `V6-PKG-R1-RELEASE-MODE-AND-PACKAGING-TOOLS` @ `89bc44c5bdd4f7da8f8cd901e0798dfd0e4f7f25`: cycle 1 `BLOCKED` (F-PKGR1-001); @ `a7ed30628920ba58e3b67762eb0f030fceeb968b`: cycle 2 `CLEAN`, merged fast-forward to local master.
 - `V6-PKG-R2-RELEASE-CANDIDATE-RESEAL` @ `f0a4f0ad4b679bb52a3d3cb954046d39a24a337b`: `CLEAN`, merged fast-forward to local master; its signed ZIP failed the first Phase0 attempt and is superseded.
-- `V6-PKG-R3-PHASE0-FIXES-AND-RESEAL` @ `ca21e830ad8c45880f3ed72cbca9bbff08b6ed84`: release candidate; independent review waiting for the reviewer quota.
-- `V6-PKG-X1-DUAL-EXECUTION-FABRIC` @ `1e3a1230d020ea0b955d6972c6d934d80e1abbf3`: frozen bundle ready; reviewed after PKG-R3; merge held until the `ca21e83` release Phase0 completes.
-- `V6-PKG-AUT1-UNATTENDED-ORCHESTRATION` @ `f9b3e472fb3a77d957e2ccfb1725d9a21957bcc7`: frozen bundle ready; reviewed after PKG-X1; activated after CLEAN; merge after PKG-X1.
-- `V6-PKG-T2-ORCHESTRATOR-EXECUTOR-INTEGRATION` @ `6ae0c2166ec56785d2e30d14218d890e32472ff0` (tests only): frozen bundle ready, REVIEW_PENDING; merge after PKG-AUT1.
-- `V6-PKG-T1-WINDOWS-CRASH-RESUME` @ `22d4cfe` (tests only): frozen bundle ready, REVIEW_PENDING; merge after PKG-T2.
-- `V6-PKG-T3-OMNIROUTE-INSTALL-COMPAT` @ `f65635d` (tests only): frozen bundle ready, REVIEW_PENDING; merge after PKG-T1.
-- `V6-PKG-T4-POWERSHELL-SAFETY`: this commit (tests only) on branch `v6/pkg-t4-powershell-safety-and-verifier-differential`; independent review when Codex is available; merge after PKG-T3.
+- `V6-PKG-R3-PHASE0-FIXES-AND-RESEAL` @ `ca21e830ad8c45880f3ed72cbca9bbff08b6ed84`: `CLEAN`, merged fast-forward to local master; packaged as release `ca21e83` (fresh extract PASS) and signed locally through ssh-agent; the second Phase0 attempt failed at git-baseline (PHASE0-F4), so the release is superseded by the coming PKG-R4 release.
+- `V6-PKG-X1-DUAL-EXECUTION-FABRIC` @ `1e3a1230d020ea0b955d6972c6d934d80e1abbf3`: cycle 1 `BLOCKED` (F-PKGX1-001/002); @ `3d430dd0173fc0d043b635a4582b6dd378100b7a`: cycle 2 `CLEAN`, merged fast-forward to local master.
+- `V6-PKG-AUT1-UNATTENDED-ORCHESTRATION`: @ `b070dcb` cycle 1 `BLOCKED` (F-AUT1-001..009); @ `0faf2aa` cycle 2 `BLOCKED` (F-AUT1-010); closed without merge and without a CLEAN claim (Founder decision 2026-09-30).
+- `V6-PKG-AUT1B-UNATTENDED-ORCHESTRATION` (successor of PKG-AUT1, full scope): @ `c48d54d` cycle 1 `BLOCKED` (F-AUT1B-001..003); cycle 2 remediation @ `f3b4ad8`, REVIEW_PENDING.
+- `V6-PKG-T2-ORCHESTRATOR-EXECUTOR-INTEGRATION` (tests only): `6ae0c21` `CLEAN` but superseded; @ `d113727` cycle 1 `BLOCKED` (F-T2-001/002); @ `24ff163` cycle 2 output format-rejected (its content keeps F-T2-002 open for `GIT_CONFIG_PARAMETERS`); re-applied with that path closed @ `f79f5fd`; the review path waits for the format-correction result and a Founder decision.
+- `V6-PKG-T1-WINDOWS-CRASH-RESUME` (tests only): cycle 1 `BLOCKED` @ `22d4cfe` (F-T1-001); cycle 2 `CLEAN` @ `f23786c` and @ `d662beb`, superseded by the upstream remediations; re-applied unchanged @ `7e01c59`, REVIEW_PENDING.
+- `V6-PKG-T3-OMNIROUTE-INSTALL-COMPAT` (tests only): cycle 1 `BLOCKED` @ `f65635d` (F-T3-001/002); cycle 2 `CLEAN` @ `8651995` and @ `18a4187`, superseded by the upstream remediations; re-applied unchanged @ `725811f`, REVIEW_PENDING.
+- `V6-PKG-T4-POWERSHELL-SAFETY` (tests only): cycle 1 `BLOCKED` @ `f9989e6` (F-T4-REVIEW-001/002); cycle 2 @ `90ee660`, REVIEW_PENDING; merge after PKG-T3.
+- `V6-PKG-AUT2-AUTONOMY-HARDENING`: this commit on branch `v6/pkg-aut2-autonomy-hardening-r3` (re-applied on the PKG-AUT1B cycle-2 chain, with the supervisor-maintained passive watchdog status of the Founder directive of 2026-09-30); independent review when Codex is available; activation of UASCO-Autonomous-Supervisor only after the whole chain is CLEAN.
 
 Nothing has been pushed to a remote. Any commit after a CLEAN review needs its own review.

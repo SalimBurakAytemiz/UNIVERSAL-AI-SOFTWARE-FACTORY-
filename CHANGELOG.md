@@ -1,6 +1,15 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-09-29 — V6 Autonomy Hardening: UASCO-Autonomous-Supervisor (branch)
+
+- The repository-native supervisor runs as a durable daemon: Task Scheduler (`UASCO-Autonomous-Supervisor`: logon, periodic heartbeat, restart on failure, single instance, no time limit, user level, no stored password; startup only for an elevated S4U registration) -> narrow launcher -> `uasco-orchestrator.mjs --daemon`.
+- Between ticks the daemon waits in `WAITING` until the nearest of ready work, provider retry, dependency backoff or the heartbeat; the wake file and Global Stop end the sleep; an atomic heartbeat records its state; `--self-check` verifies an activation.
+- A committed builder round is adopted after a crash (no second builder call or commit); Git command contracts run with the repository Git isolation; Phase0 registers the installed system's autostart as `UASCO-Installed-Supervisor`.
+- The supervisor maintains `.ai/runtime/WATCHDOG_STATUS.json` atomically (supervisor state, heartbeat, master, active package, queue counts, blocked lanes, Codex quota, signer, Phase0, last and next action, Founder decisions, overall health) from its own read-only discovery of git refs, worktrees, scheduled tasks, the transition log and provider retry state; the Claude app routine runs no command and only reads that file (Founder directive 2026-09-30).
+- A wake request that arrives while a tick runs is no longer lost; Git contract isolation now comes from PKG-AUT1B cycle 2.
+- Tests A-L plus lifecycle with real processes (autonomy-hardening selftest 16/16); the Claude app routine is a passive display only.
+
 ## 2026-09-29 — V6 PowerShell Safety and Verifier Differential Tests (branch)
 
 - Every PowerShell script is parsed with the Windows PowerShell 5.1 parser (no errors, no Invoke-Expression) and checked against safety rules (no EncodedCommand, DownloadString/DownloadFile or persistent Set-ExecutionPolicy; entry scripts stop on error; web requests only where allowlisted and without redirects).

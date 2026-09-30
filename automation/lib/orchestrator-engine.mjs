@@ -76,7 +76,7 @@ export function applyOutcome(controlIn,action,outcome,now,policy){
   }
   else if(action.type==="PHASE0"){
     control.phase0=control.phase0??{attempts:[]};control.phase0.attempts=[...(control.phase0.attempts??[]),{releaseKey:action.releaseKey,at:now.toISOString(),result:o.type,final:o.final??null,evidence:o.evidence??null}];
-    if(o.type==="PHASE0_DONE"&&["CLEAN","CLEAN_LOCAL_ONLY"].includes(o.final)){r.status="PHASE0_DONE";r.phase0Final=o.final;r.nextAction=null;Object.assign(control.phase0,{accepted:true,final:o.final,releaseKey:action.releaseKey,installRoot:o.installRoot??null})}
+    if(o.type==="PHASE0_DONE"&&["CLEAN","CLEAN_LOCAL_ONLY"].includes(o.final)){r.status="PHASE0_DONE";r.phase0Final=o.final;r.nextAction=null;Object.assign(control.phase0,{accepted:true,final:o.final,releaseKey:action.releaseKey,installRoot:o.installRoot??null,installedAutostart:o.installedAutostart??null})}
     else founder(r,o.reason??`PHASE0_FAILED:${o.final??"UNKNOWN"}`,"PHASE0_FAILED_NEEDS_REMEDIATION_PACKAGE");
   }
   ev.to=r.status;return {control,event:ev};
