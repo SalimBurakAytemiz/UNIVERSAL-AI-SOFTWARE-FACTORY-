@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-06T06:12:15.363Z",
+  "generatedAt": "2026-10-06T11:49:42.539Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -105,8 +105,12 @@
       "sha256": "ea2ccc437683bab887b259b89a95a0a54da51e84eeff10edcd9f9dd748528431"
     },
     {
+      "path": "automation/lib/claude-reviewer.mjs",
+      "sha256": "340dfcc8d5091d773ba0120e9409c82aeaa94dacf4db1b8f9a19b7aed5be6d6d"
+    },
+    {
       "path": "automation/lib/command-contracts.mjs",
-      "sha256": "7a66e95614eab77deae82b2ceaada9c0b5a7987fa119e5ef413077b1eb44d365"
+      "sha256": "e2607b35deafe9e612afc15937d2561b97b8e4cc465f16109ad14cb2c3e2aba6"
     },
     {
       "path": "automation/lib/command-runner.mjs",
@@ -222,15 +226,15 @@
     },
     {
       "path": "automation/lib/orchestrator-daemon.mjs",
-      "sha256": "359d0544b6eb51320412f53e04a90d729661e3f3bfb8274cb94574e8f4126d3d"
+      "sha256": "0a3f2bc521ed6cebe84e5a96046a8bb60c27c9ee9f6999608f5f58527a39ad1b"
     },
     {
       "path": "automation/lib/orchestrator-engine.mjs",
-      "sha256": "5f5d85bf254d8285b50e8bb7be156603a1338f0c797a5a8030aedf7353ae3cc6"
+      "sha256": "58a366b84c7c6444bc2ef091ac4e99c3b32bb0cf286aa532b955148699245182"
     },
     {
       "path": "automation/lib/orchestrator-executors.mjs",
-      "sha256": "72c5421edb99e2ea8faf231e408fff94a40d6bfa7a2411c583c3720cf616f63e"
+      "sha256": "0b532c2e9c2a400a42bd87854858ead560e2b130fb7c763a2578c40e73f71ede"
     },
     {
       "path": "automation/lib/orchestrator-state.mjs",
@@ -306,7 +310,11 @@
     },
     {
       "path": "automation/lib/review-pipeline.mjs",
-      "sha256": "8a83604824f0c5cef6dfd573b50d45bb281355e352987def44aac9bdc41e6ab1"
+      "sha256": "c38465a0176a1aa1f019546fec14203e3d9da53d50a90d531b749d6a37fe48b8"
+    },
+    {
+      "path": "automation/lib/review-quorum.mjs",
+      "sha256": "4a6e472efdcde96da938eed190bd5c1b0c477e5a298fad0728c2c3df832a0867"
     },
     {
       "path": "automation/lib/run-ledger.mjs",
@@ -350,7 +358,7 @@
     },
     {
       "path": "automation/lib/watchdog-status.mjs",
-      "sha256": "5f9060c7e6289f2ee73e8f61f76d0549631c683cd8c517deb28c2fdb02b9458e"
+      "sha256": "e0d454aa3ba0582d0a9edc3dadfd5993248d7dd5fde28fba44f52244bbe66a54"
     },
     {
       "path": "config/action-policy.json",
@@ -358,7 +366,7 @@
     },
     {
       "path": "config/automation.json",
-      "sha256": "034dba04d728579384ffb4f6ee1633eb6e39308c8226c95b5a9e29889b2df1b6"
+      "sha256": "cafccd8cb9b97e58aca61cfb47add521b69b9e5fa2f71d32aa8814f0c2079aed"
     },
     {
       "path": "config/builder-execution-policy.json",
@@ -390,7 +398,7 @@
     },
     {
       "path": "config/orchestrator-policy.json",
-      "sha256": "b335812ca70362e1bcec64f96bb37ec1511b0586d6df10cd81e87224c7e1e7ec"
+      "sha256": "43bcf8905aa5ca09668231a407714da9691eb98e46b17765a336541cd15a4d45"
     },
     {
       "path": "config/package-policy.json",
@@ -402,7 +410,11 @@
     },
     {
       "path": "config/protected-paths.json",
-      "sha256": "892222b849fe671eeef0b3cd4df4aaa37521a07874443b761a41941dfb3f7663"
+      "sha256": "b79d969706211c0572b19263fb9d87ebb9cd0c66705a564454be38cf1a08caa1"
+    },
+    {
+      "path": "config/reviewer-execution-policy.json",
+      "sha256": "2d22788baf7fc5664f2c29cd10b7701747b9417dfcec8ebe0fb596b8dc15e335"
     },
     {
       "path": "config/schema-open-map-exceptions.json",
@@ -447,6 +459,10 @@
     {
       "path": "prompts/AUTO-VALIDATION-FIX.md",
       "sha256": "d64163dcfdedc1f3c86b0f78682656e68675a5186a2d3a65b0b355d8b1c0c2de"
+    },
+    {
+      "path": "prompts/CLAUDE-REVIEWER-SYSTEM.md",
+      "sha256": "bb308ad550c320634a21b60569df17bf96d98209ba674c3dad88bf3b03f480e2"
     },
     {
       "path": "prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt",
@@ -1110,7 +1126,7 @@
     },
     {
       "path": "scripts/autonomy-hardening-selftest.mjs",
-      "sha256": "92811f8566859cc60fa17c3750a66d836070b1efa3db25c4722a15d62e90caa3"
+      "sha256": "a881ed6ce79f9f289647f2f18d722f3f0f9375991e93c3d04a32df42a0cc00d7"
     },
     {
       "path": "scripts/bootstrap-kernel-selftest.mjs",
@@ -1141,12 +1157,20 @@
       "sha256": "977e5f5e328526d35ab630c6e25f27655218e740054abc91302d18a4ea9a16b7"
     },
     {
+      "path": "scripts/claude-reviewer-broker.mjs",
+      "sha256": "95abe6d520651d1c926430701bd088edc8862fe1f6eafc896a361cd068c6a1ee"
+    },
+    {
       "path": "scripts/codex-reviewer-broker.mjs",
       "sha256": "267e9d4adc2d1872824796f9e3fc4798f09e7d5dfad19d8118a0c116452aee35"
     },
     {
       "path": "scripts/dependency-supply-chain.mjs",
       "sha256": "6897dba91930b3e39574c50ac1d9ac7678e32d4b0912edf270e2beee0a5cc339"
+    },
+    {
+      "path": "scripts/dual-review-selftest.mjs",
+      "sha256": "f43753407a087b23428a93976c97f337e2b74ca0a3dc9136e3edb6b656e8ef41"
     },
     {
       "path": "scripts/generate-trust-root.mjs",
@@ -1250,7 +1274,7 @@
     },
     {
       "path": "scripts/uasco-orchestrator.mjs",
-      "sha256": "98c39c9ba66c5c61319f505d404beaac5df0a2b7984652d6cbec50d3529240a3"
+      "sha256": "0843c0bca7bed61f678c08d470111f789c545f3bbb9f4cfba1616dd5f669490f"
     },
     {
       "path": "scripts/uasco-supervisor-launcher.mjs",

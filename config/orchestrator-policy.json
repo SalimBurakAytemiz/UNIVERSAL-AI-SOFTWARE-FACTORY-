@@ -77,12 +77,17 @@
   },
   "providers": {
     "codex": {"quotaBackoffMinutes": 30, "quotaBackoffMaxMinutes": 360},
-    "claude": {"quotaBackoffMinutes": 30, "quotaBackoffMaxMinutes": 360}
+    "claude": {"quotaBackoffMinutes": 30, "quotaBackoffMaxMinutes": 360},
+    "claudeReviewer": {"quotaBackoffMinutes": 30, "quotaBackoffMaxMinutes": 360}
   },
   "review": {
     "maxReviewCycles": 2,
     "formatRetryLimit": 1,
-    "promptTemplate": "prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt"
+    "promptTemplate": "prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt",
+    "dualReviewRequired": true,
+    "reviewers": ["claude", "codex"],
+    "reviewOrder": "SEQUENTIAL_SAME_FROZEN_BUNDLE",
+    "quorum": "CLAUDE_REVIEWER_CLEAN_AND_CODEX_REVIEWER_CLEAN"
   },
   "merge": {
     "defaultBranchRef": "refs/heads/master",

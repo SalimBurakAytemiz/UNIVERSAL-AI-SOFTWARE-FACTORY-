@@ -1,9 +1,11 @@
 // //TR: Bu helper gözetimsiz orkestratörün çalıştırabileceği komutları tam sözleşmelere bağlar: her işlem sabit program + tip doğrulamalı parametrelerle shell'siz çalışır, yollar yalnız policy köklerinin altında olabilir, bilinmeyen sözleşme veya geçersiz parametre fail-closed reddedilir; keyfi PowerShell/cmd/Bash, silme, force push ve credential export sözleşmesi yoktur.
-import path from "node:path";import cp from "node:child_process";import {Worker,MessageChannel,receiveMessageOnPort} from "node:worker_threads";import {isolatedGitArgs,isolatedGitEnv} from "./git-isolation.mjs";
+import path from "node:path";import cp from "node:child_process";import {fileURLToPath} from "node:url";import {Worker,MessageChannel,receiveMessageOnPort} from "node:worker_threads";import {isolatedGitArgs,isolatedGitEnv} from "./git-isolation.mjs";
 const SHA40=/^[0-9a-f]{40}$/,REF=/^refs\/heads\/[A-Za-z0-9._\/-]+$/,BRANCH=/^(v6|uasco\/run)\/[A-Za-z0-9._\/-]+$/,BASENAME=/^[A-Za-z0-9._-]+$/;
 // //TR: Orkestratör builder commit'lerinin sabit kimliği; çökme sonrası benimseme bir commit'i yalnız bu kimlik, beklenen tek ebeveyn ve tur konusu eşleşirse bu turun commit'i sayar.
 export const ORCHESTRATOR_GIT_IDENTITY=Object.freeze({name:"UASCO Orchestrator",email:"orchestrator@uasco.local.invalid"});
 const deny=reason=>{throw new Error(`COMMAND_CONTRACT_DENIED:${reason}`)};
+// //TR: CLAUDE_REVIEWER broker'ı her zaman çalışan (incelenmiş) kontrol düzleminden gelir; incelenen paket kendi reviewer'ını değiştiremez.
+export const CLAUDE_REVIEWER_BROKER=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..","..","scripts","claude-reviewer-broker.mjs");
 const norm=p=>path.resolve(String(p)).replaceAll("\\","/").toLowerCase();
 export function expandPolicyPaths(policy,{repo,env=process.env}){const sub=s=>String(s).replaceAll("${REPO}",repo).replaceAll("${LOCALAPPDATA}",env.LOCALAPPDATA??"").replaceAll("${USERPROFILE}",env.USERPROFILE??"");const roots=Object.fromEntries(Object.entries(policy.roots).map(([k,v])=>[k,path.resolve(sub(v))]));const signing={...policy.signing,publicKey:path.resolve(sub(policy.signing.publicKey))};return {...policy,roots,signing}}
 // //TR: Parametre tipleri: kesin commit SHA, izinli dal/ref, tek dosya adı, policy kökü altında mutlak yol, sabit küme.
@@ -50,6 +52,7 @@ export function buildContracts(policy,{repo}){
     "ps.registerInstalledAutostart":{program:ps,args:p=>{const root=v.under("installRoot",p.installRoot);return ["-NoProfile","-ExecutionPolicy","Bypass","-File",path.join(root,"scripts","register-autostart.ps1"),"-RepoPath",root,"-TaskName",policy.autostart.installedSystemTaskName]},cwdFrom:p=>v.under("installRoot",p.installRoot)},
     // //TR: Süpervizörün pasif durum keşfi için salt-okunur sözleşmeler (dal uçları, worktree listesi, zamanlanmış görev durumu).
     // //TR: Kendini güncelleme için salt-okunur: kontrol kökü altındaki bir düzlemin ayrık HEAD commit'i.
+    "node.claudeReviewer":{program:process.execPath,args:()=>[CLAUDE_REVIEWER_BROKER],cwdFrom:p=>anyRoot(p.cwd),input:true,allowEnvOverride:true},
     "git.headCommit":{program:git,args:p=>["-C",v.under("controlRoot",p.cwd),"rev-parse","--verify","HEAD^{commit}"]},
     // //TR: Çökme sonrası builder turu benimsemesi için salt-okunur: bir commit'in ebeveynleri, committer kimliği ve konu satırı (imza gösterimi kapalı).
     "git.commitIdentity":{program:git,args:p=>["-C",anyRoot(p.cwd),"log","-1","--no-show-signature","--format=%P%n%cn <%ce>%n%s",v.sha(p.commit)]},

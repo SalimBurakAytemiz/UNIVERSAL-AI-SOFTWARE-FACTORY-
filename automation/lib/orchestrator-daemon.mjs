@@ -58,7 +58,7 @@ export async function runDaemon({policy,tickOnce,loadControl,sleepUntil,shouldSt
 }
 export function createHeartbeatWriter({file,base}){let last={};return function writeHeartbeat(fields){last={...last,...fields};if(fields.state!=="WAITING"&&fields.state!=="RUNNING"){delete last.nextWakeAt;delete last.wakeReason}const doc={"//TR":"Bu dosya gözetimsiz orkestratör daemon'unun canlılığını ve bir sonraki uyanma nedenini taşır; bir karar veya durum geçişi değildir.",schemaVersion:SUPERVISOR_HEARTBEAT_VERSION,...base,...last,heartbeatAt:new Date().toISOString()};writeJsonAtomic(file,doc);return doc}}
 // //TR: Tek tick (CLI --tick ve --daemon ile testler aynı kodu kullanır): günlük doğrulaması, lease, yarım eylem kurtarma, isteğe bağlı Founder manuel kota sıfırlaması, günlük GitHub durumu, bağımlılık farkında eylemler; lease her durumda bırakılır. Sonuç nesne olarak döner.
-export function createTick({policy,workerId,runner,executors,now=()=>new Date(),shouldStop=()=>null}){
+export function createTick({policy,workerId,runner,executors,now=()=>new Date(),shouldStop=()=>null,controlPlaneCommit=null}){
   const ttl=policy.tick.leaseTtlMinutes*60_000,stateFile=policy.roots.stateFile,logFile=policy.roots.transitionLog;
   return async function tickOnce({manualReset=null}={}){
     let {doc,control}=loadState(stateFile);if(!control)return {status:"NO_CONTROL_STATE",code:0,done:[]};
@@ -69,6 +69,8 @@ export function createTick({policy,workerId,runner,executors,now=()=>new Date(),
     control=commit(lease.control,{type:"LEASE_ACQUIRED",reason:lease.stale?`STALE_LEASE_TAKEN_OVER:${lease.previous.workerId}`:null});
     try{
       const rec=recoverInFlight(control,workerId);if(rec.recovered.length)control=persist(rec.control,{type:"INFLIGHT_RECOVERED",evidence:rec.recovered});
+      // //TR: DUAL_REVIEW_REQUIRED bir kez, etkinleştiren kontrol düzlemi commit'iyle kaydedilir; tarihsel yalnız-Codex CLEAN kanıtları geçerli kalır, açık paketler ek CLAUDE_REVIEWER incelemesi alır.
+      if(policy.review?.dualReviewRequired===true&&control.dualReview?.active!==true)control=persist({...control,dualReview:{active:true,activatedAt:now().toISOString(),policy:"DUAL_REVIEW_REQUIRED",activationCommit:controlPlaneCommit,historicalCodexOnlyCleanRemainsValid:true}},{type:"DUAL_REVIEW_ACTIVATED",reason:`DUAL_REVIEW_REQUIRED from control plane ${controlPlaneCommit??"unknown"}`});
       if(manualReset){if(!["codex","claude"].includes(manualReset))return {status:"USAGE",reason:"provider must be codex or claude",code:2};control=persist({...control,providers:{...(control.providers??{}),[manualReset]:{status:"PROBE_PENDING_FOUNDER_RESET",retryAfter:null,manualResetAt:now().toISOString()}}},{type:"FOUNDER_MANUAL_QUOTA_RESET",packageId:manualReset,reason:"stale retryAfter invalidated; one controlled probe"})}
       // //TR: GitHub durumu günde bir kez dürüstçe kaydedilir; branch protection yoksa yerel mod ve kuyrukta bekleyen push olarak kalır, taklit edilmez.
       if(!control.github?.checkedAt||now().getTime()-Date.parse(control.github.checkedAt)>86_400_000){const a=runner.run("gh.authStatus"),v=runner.run("gh.repoView"),bp=runner.run("gh.branchProtection");let repoInfo=null;try{repoInfo=JSON.parse(v.stdout)}catch{}const account=(`${a.stdout}\n${a.stderr}`.match(/account ([A-Za-z0-9-]+)/)??[])[1]??null;

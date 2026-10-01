@@ -1,0 +1,14 @@
+{
+  "//TR": "Bu protected policy CLAUDE_REVIEWER sürecinin yetkilerini builder'dan dar tutar: kısıtlı mod, yalnız okuma araçları (Read, Glob, Grep); düzenleme, yazma, kabuk, web, alt ajan, beceri ve MCP kapalıdır; reviewer kaynak değiştiremez, commit/merge/push/imza/durum değişikliği yapamaz, kimlik bilgisine erişemez. Doğrulama kanıtı yalnız donmuş bundle'dan gelir.",
+  "schemaVersion": "1.0.0",
+  "identity": "CLAUDE_REVIEWER",
+  "restricted": true,
+  "permissionMode": "dontAsk",
+  "allowedTools": ["Read", "Glob", "Grep"],
+  "disallowedTools": ["Bash", "PowerShell", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Agent", "Task", "Skill", "TodoWrite"],
+  "disallowedToolPatterns": ["mcp__*"],
+  "strictMcpConfig": true,
+  "sessionPersistence": false,
+  "systemPromptFile": "prompts/CLAUDE-REVIEWER-SYSTEM.md",
+  "narrowerThanBuilder": "builder allows Read, Edit, Write, Glob, Grep in its working directory; the reviewer allows only Read, Glob, Grep in an isolated review clone"
+}

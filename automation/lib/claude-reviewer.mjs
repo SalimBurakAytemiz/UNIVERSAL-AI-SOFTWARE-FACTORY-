@@ -1,0 +1,11 @@
+// //TR: CLAUDE_REVIEWER süreç argümanları tek yerde, saf ve test edilebilir olarak kurulur: kısıtlı mod, yalnız okuma araçları, MCP yok, oturum diske yazılmaz, eğik çizgi komutları kapalı, sabitlenmiş model (yedek yalnız açıkça yapılandırılırsa), reviewer sistem istemi, JSON çıktı. Devam/sürdürme (--continue/--resume) veya oturum kimliği verilmez; her çağrı yeni bir oturumdur.
+export const READ_ONLY_TOOLS=["Read","Glob","Grep"];
+export function assertReviewerPolicy(pol){if(!pol||pol.identity!=="CLAUDE_REVIEWER")throw new Error("CLAUDE_REVIEWER_POLICY_IDENTITY");if(pol.restricted!==true)throw new Error("CLAUDE_REVIEWER_RESTRICTED_MODE_REQUIRED");
+  if(!Array.isArray(pol.allowedTools)||!pol.allowedTools.length||pol.allowedTools.some(t=>!READ_ONLY_TOOLS.includes(t)))throw new Error("CLAUDE_REVIEWER_TOOLS_NOT_READ_ONLY");
+  for(const t of ["Bash","Edit","Write","NotebookEdit","WebFetch","WebSearch","Agent","Skill"])if(!(pol.disallowedTools??[]).includes(t))throw new Error(`CLAUDE_REVIEWER_MUST_DENY:${t}`);if(!(pol.disallowedToolPatterns??[]).includes("mcp__*"))throw new Error("CLAUDE_REVIEWER_MUST_DENY_MCP");if(pol.permissionMode==="bypassPermissions"||pol.permissionMode==="acceptEdits")throw new Error("CLAUDE_REVIEWER_PERMISSION_MODE");return pol}
+export function buildClaudeReviewerArgs({model,fallbackModel=null,pol,systemPromptFile}){if(!model)throw new Error("CLAUDE_REVIEWER_MODEL_REQUIRED");assertReviewerPolicy(pol);
+  const deny=[...(pol.disallowedTools??[]),...(pol.disallowedToolPatterns??[])].join(",");
+  const args=["-p","--restricted","--model",model,"--permission-mode",pol.permissionMode??"dontAsk","--tools",pol.allowedTools.join(","),"--disallowedTools",deny,"--strict-mcp-config","--no-session-persistence","--disable-slash-commands","--append-system-prompt-file",systemPromptFile,"--output-format","json"];
+  if(fallbackModel)args.push("--fallback-model",fallbackModel);return args}
+// //TR: Gözlenen model yalnız yapılandırılmış kimliğin kendisi veya tarih ekli sürümüyse kabul edilir (ön ek benzerliği yetmez); reviewer kimliği sessizce değişemez.
+export function modelMatches(observed,configured){const o=String(observed??""),c=String(configured??"");if(!c)return false;if(o===c)return true;return o.startsWith(`${c}-`)&&/^\d{8}$/.test(o.slice(c.length+1))}

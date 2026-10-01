@@ -1,6 +1,13 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-10-01 — V6 PKG-DR1 dual independent review (branch)
+
+- Founder directive 2026-10-01: every governed review package frozen after the activation commit is reviewed by `CLAUDE_REVIEWER` and `CODEX_REVIEWER`; integration requires both CLEAN on the same frozen bundle, any valid BLOCKED blocks, malformed output is never CLEAN and a quota block produces no result and consumes no cycle.
+- `CLAUDE_REVIEWER` is a separate Claude process and session (restricted mode, read-only tools, no MCP, no session persistence, pinned model, reviewer system prompt) in its own clean review clone, started from the reviewed control plane; its identity is separate from `CLAUDE_BUILDER` and its evidence is re-derived with that identity at the merge gate.
+- Findings of both reviewers are aggregated with provider attribution; a new commit or bundle makes both gates stale; separate quota states for the Claude reviewer, the Codex reviewer and the builder; historical Codex-only CLEAN evidence stays valid and open packages get the Claude review in addition.
+- Dual-review selftest 17/17 with mutation checks; trust root resealed.
+
 ## 2026-10-01 — V6 PKG-M1 provenance test timeout (branch, maintenance)
 
 - The process-spawning case "keeps a launcher with a non-matching version output LAUNCHER_ONLY and BLOCKED" in `tests/pkg-d-standalone-provenance.test.ts` runs with a 120 s per-test limit instead of vitest's 5 s default (its own capture process may take up to 60 s); assertions and provenance semantics are unchanged.

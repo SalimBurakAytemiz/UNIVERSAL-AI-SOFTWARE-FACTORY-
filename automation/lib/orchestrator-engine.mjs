@@ -1,4 +1,5 @@
 // //TR: Bu motor gözetimsiz orkestratörün bağımlılık farkında planlayıcısıdır: kalıcı kontrol durumundan bir sonraki uygun eylemi seçer, enjekte edilen yürütücünün sonucunu durum geçişine çevirir; sağlayıcı kotası review cycle/format/remediation hakkı tüketmez ve yalnız o sağlayıcıya bağlı işleri bekletir, Founder kararı yalnız ilgili paketi/release'i durdurur, geçici hatalar sınırlı geri çekilmeyle yeniden denenir, yarım kalan eylemler idempotent yürütücülerle toparlanır.
+import {requiredReviewers,currentGate,computeReviewAggregate,nextReviewer,isDualPackage,aggregateFindings,PROVIDER_STATE_KEY,REVIEWER_IDENTITY} from "./review-quorum.mjs";
 export const ACTIONS=["REVIEW","REMEDIATE","IMPLEMENT","MERGE","CLOSE","PACKAGE","SIGN","PHASE0","AUTOSTART"];
 const TERMINAL=["CLOSED","MERGED"];
 const clone=x=>JSON.parse(JSON.stringify(x));
@@ -29,7 +30,11 @@ function autostartLane(prev,rec,now,policy,blockedReason=null){
 export function nextAction(control,now,{skip=new Set()}={}){
   for(const id of control.order){
     const p=control.packages[id],key=`P:${id}`;if(skip.has(key)||TERMINAL.includes(p.status)||p.status==="FOUNDER_DECISION_PENDING"||!due(p,now)||!dependenciesMet(control,p))continue;
-    if(["REVIEW_PENDING","REVIEW_PENDING_PROVIDER_QUOTA"].includes(p.status)){if(providerDue(control,"codex",now))return {type:"REVIEW",packageId:id,key};continue}
+    // //TR: Çift inceleme gereken pakette her reviewer kendi sağlayıcı durumuna göre ayrı eylemdir; biri kotadayken diğeri ve bağımsız işler sürer.
+    const reviewerDue=r=>providerDue(control,PROVIDER_STATE_KEY[r],now);
+    if(["REVIEW_PENDING","REVIEW_PENDING_PROVIDER_QUOTA"].includes(p.status)){if(isDualPackage(p,control)){const r=nextReviewer(p,control,reviewerDue);if(r)return {type:"REVIEW",packageId:id,provider:r,key:`${key}:${r}`};continue}if(providerDue(control,"codex",now))return {type:"REVIEW",packageId:id,key};continue}
+    // //TR: Etkinleştirmeden önce yalnız Codex ile CLEAN olmuş ama birleşmemiş paket, birleşmeden önce eksik CLAUDE_REVIEWER incelemesini alır.
+    if(p.status==="REVIEW_CLEAN"&&isDualPackage(p,control)&&!(p.review?.dual===true&&p.review.dualReviewClean===true&&p.review.bundleDigest===p.bundle?.digest)){const r=nextReviewer(p,control,reviewerDue);if(r)return {type:"REVIEW",packageId:id,provider:r,key:`${key}:${r}`};continue}
     if(p.status==="REMEDIATION_PENDING"){if(providerDue(control,"claude",now))return {type:"REMEDIATE",packageId:id,key};continue}
     // //TR: Backend beklemesi nedeniyle kuyruğa alınan iş, kuyruğa alındığı eylemle (remediation ise aynı bulgular, frozen contract ve bir sonraki cycle ile) sürer.
     if(["IMPLEMENT_PENDING","QUEUED"].includes(p.status)){if(providerDue(control,"claude",now))return {type:p.status==="QUEUED"&&p.queuedAction==="REMEDIATE"?"REMEDIATE":"IMPLEMENT",packageId:id,key};continue}
@@ -54,6 +59,7 @@ export function applyOutcome(controlIn,action,outcome,now,policy){
   if(action.packageId){
     const p=control.packages[action.packageId];ev.from=p.status;delete p.inFlight;
     if(o.type==="ENV_ERROR"){transient(p,now,o.reason,policy)}
+    else if(action.type==="REVIEW"&&action.provider)applyDualReview(control,p,action.provider,o,now,policy);
     else if(action.type==="REVIEW"){
       if(o.type==="QUOTA"){const prev=control.providers.codex??{},back=Math.min((prev.backoffMinutes?prev.backoffMinutes*2:policy.providers.codex.quotaBackoffMinutes),policy.providers.codex.quotaBackoffMaxMinutes);const ra=futureIso(o.retryAfter,now);control.providers.codex={status:"QUOTA_BLOCKED",retryAfter:ra??minutes(now,back),backoffMinutes:ra?null:back,lastEvidence:o.evidence??null,since:prev.since??now.toISOString()};p.status="REVIEW_PENDING_PROVIDER_QUOTA";p.quotaBlocks=[...(p.quotaBlocks??[]),o.evidence??null];p.nextAction="REVIEW_AT_PROVIDER_RETRY"}
       else{control.providers.codex={status:"AVAILABLE",retryAfter:null};p.transientFailures=0;if(o.type!=="FORMAT_REJECTED"){p.formatCorrection=false;delete p.formatRejection}
@@ -65,7 +71,7 @@ export function applyOutcome(controlIn,action,outcome,now,policy){
     }
     else if(action.type==="REMEDIATE"||action.type==="IMPLEMENT"){
       if(o.type==="QUOTA"){const prev=control.providers.claude??{},back=Math.min((prev.backoffMinutes?prev.backoffMinutes*2:policy.providers.claude.quotaBackoffMinutes),policy.providers.claude.quotaBackoffMaxMinutes);const ra=futureIso(o.retryAfter,now);control.providers.claude={status:"QUOTA_BLOCKED",retryAfter:ra??minutes(now,back),backoffMinutes:ra?null:back,lastEvidence:o.evidence??null}}
-      else if(o.type==="COMMITTED"){control.providers.claude={status:"AVAILABLE",retryAfter:null};delete p.queuedAction;delete p.formatRejection;Object.assign(p,{status:"REVIEW_PENDING",reviewCommit:o.commit,baseCommit:o.baseCommit??p.baseCommit,implementationCommit:o.commit,bundle:o.bundle,cycle:o.cycle??p.cycle,formatRetries:0,formatCorrection:false,executionBackend:o.executionBackend??p.executionBackend??null,executionProvenance:o.provenance??p.executionProvenance??null,transientFailures:0,nextAction:"REVIEW"})}
+      else if(o.type==="COMMITTED"){control.providers.claude={status:"AVAILABLE",retryAfter:null};delete p.queuedAction;delete p.formatRejection;delete p.reviewGate;if(control.dualReview?.active===true&&!p.reviewPolicy)p.reviewPolicy="DUAL";Object.assign(p,{status:"REVIEW_PENDING",reviewCommit:o.commit,baseCommit:o.baseCommit??p.baseCommit,implementationCommit:o.commit,bundle:o.bundle,cycle:o.cycle??p.cycle,formatRetries:0,formatCorrection:false,executionBackend:o.executionBackend??p.executionBackend??null,executionProvenance:o.provenance??p.executionProvenance??null,transientFailures:0,nextAction:"REVIEW"})}
       else if(o.type==="QUEUED"){p.status="QUEUED";p.queuedAction=action.type;p.notBefore=futureIso(o.retryAfter,now)??minutes(now,30);p.blockedReason=o.reason??null;p.nextAction=`${action.type}_WHEN_BACKEND_AVAILABLE`}
       else founder(p,o.reason??o.type);
     }
@@ -94,6 +100,23 @@ export function applyOutcome(controlIn,action,outcome,now,policy){
     else founder(r,o.reason??`PHASE0_FAILED:${o.final??"UNKNOWN"}`,"PHASE0_FAILED_NEEDS_REMEDIATION_PACKAGE");
   }
   ev.to=r.status;return {control,event:ev};
+}
+// //TR: Çift inceleme sonucu: yalnız ilgili reviewer'ın kapısı değişir. Kota o reviewer'ın sağlayıcı durumunu bloke eder, sonuç üretmez, cycle/format hakkı tüketmez. Biçimi bozuk çıktı format hakkını kullanır, hakkı biterse INVALID olur ve asla CLEAN sayılmaz. Yeter sayı review-quorum.mjs'dedir; CLEAN için iki reviewer'ın da bu bundle için geçerli CLEAN'i gerekir, geçerli bir BLOCKED entegrasyonu durdurur ve bulgular sağlayıcı atfıyla builder'a gider.
+function applyDualReview(control,p,k,o,now,policy){
+  const stateKey=PROVIDER_STATE_KEY[k],gate=currentGate(p),g={...(gate.providers[k]??{})},pp=policy.providers?.[stateKey]??policy.providers?.codex;
+  if(o.type==="QUOTA"){const prev=control.providers[stateKey]??{},back=Math.min((prev.backoffMinutes?prev.backoffMinutes*2:pp.quotaBackoffMinutes),pp.quotaBackoffMaxMinutes),ra=futureIso(o.retryAfter,now);control.providers[stateKey]={status:"QUOTA_BLOCKED",retryAfter:ra??minutes(now,back),backoffMinutes:ra?null:back,lastEvidence:o.evidence??null,since:prev.since??now.toISOString(),lastAttempt:now.toISOString()};Object.assign(g,{status:"PROVIDER_BLOCKED",quotaBlocks:[...(g.quotaBlocks??[]),o.evidence??null]})}
+  else{control.providers[stateKey]={status:"AVAILABLE",retryAfter:null,lastAttempt:now.toISOString()};p.transientFailures=0;
+    if(o.type==="CLEAN")Object.assign(g,{status:"CLEAN",runDir:o.runDir??null,evidence:o.evidence??null,at:now.toISOString(),formatCorrection:false});
+    else if(o.type==="BLOCKED")Object.assign(g,{status:"BLOCKED",runDir:o.runDir??null,evidence:o.evidence??null,findings:o.findings??[],ledgerFile:o.ledgerFile??null,at:now.toISOString(),formatCorrection:false});
+    else if(o.type==="FORMAT_REJECTED"){const n=(g.formatRetries??0)+1;if(n>(policy.review.formatRetryLimit??1))Object.assign(g,{status:"INVALID",formatRetries:n,formatCorrection:false,invalidReason:o.reason??null});else Object.assign(g,{status:"PENDING",formatRetries:n,formatCorrection:true,formatRejection:{runDir:o.runDir??null,reason:o.reason??null,at:now.toISOString()}})}
+    else{p.reviewGate={...gate,providers:{...gate.providers,[k]:g}};founder(p,`${REVIEWER_IDENTITY[k]}:${o.reason??o.type}`,o.type==="INPUT_INVALID"?"ORCHESTRATOR_INPUT_DEFECT":"FOUNDER_DECISION_REQUIRED");return}}
+  p.reviewGate={...gate,providers:{...gate.providers,[k]:g}};
+  const required=requiredReviewers(p,control),due=r=>providerDue(control,PROVIDER_STATE_KEY[r],now),agg=computeReviewAggregate(p.reviewGate,required,{providerDue:due});p.reviewGate.aggregate={result:agg.result,dualReviewClean:agg.dualReviewClean,statuses:agg.statuses};
+  if(agg.result==="CLEAN"){p.status="REVIEW_CLEAN";p.review={result:"CLEAN",dual:required.length===2,dualReviewClean:agg.dualReviewClean,bundleDigest:p.bundle.digest,cycle:p.cycle,evidence:Object.fromEntries(required.map(r=>[r,p.reviewGate.providers[r].evidence])),runDirs:Object.fromEntries(required.map(r=>[r,p.reviewGate.providers[r].runDir]))};p.nextAction=p.merge?.mode==="FF_DEFAULT_BRANCH"?"MERGE_WHEN_ELIGIBLE":"CLOSE";return}
+  if(agg.result==="INVALID"){founder(p,`REVIEW_INVALID:${required.filter(r=>agg.statuses[r]==="INVALID").map(r=>REVIEWER_IDENTITY[r]).join(",")}`,"REVIEW_FORMAT_RETRY_EXHAUSTED");return}
+  if(agg.result==="BLOCKED"){p.review={result:"BLOCKED",dual:true,bundleDigest:p.bundle.digest,cycle:p.cycle,blockedBy:agg.blockedBy.map(r=>REVIEWER_IDENTITY[r]),findings:aggregateFindings(Object.fromEntries(agg.blockedBy.map(r=>[r,p.reviewGate.providers[r].findings??[]]))),ledgerFiles:Object.fromEntries(agg.blockedBy.map(r=>[r,p.reviewGate.providers[r].ledgerFile??null])),ledgerFile:null,evidence:Object.fromEntries(agg.blockedBy.map(r=>[r,p.reviewGate.providers[r].evidence??null]))};
+    if(p.cycle>=(policy.review.maxReviewCycles??2))founder(p,"REVIEW_CYCLE_LIMIT_REACHED_WITH_OPEN_BLOCKERS");else if(p.remediation?.authorized===true){p.status="REMEDIATION_PENDING";p.nextAction="REMEDIATE"}else founder(p,"BLOCKED_WITHOUT_REMEDIATION_AUTHORITY");return}
+  const runnable=required.some(r=>agg.statuses[r]==="PENDING"||(agg.statuses[r]==="PROVIDER_BLOCKED"&&due(r)));if(p.status!=="REVIEW_CLEAN")p.status=runnable?"REVIEW_PENDING":"REVIEW_PENDING_PROVIDER_QUOTA";p.nextAction=runnable?"REVIEW":"REVIEW_AT_PROVIDER_RETRY";
 }
 // //TR: Önceki worker'dan kalan yarım eylem işaretleri temizlenir; yürütücüler idempotent olduğundan eylem güvenle yeniden planlanır (tamamlanmış review/merge/paket/imza yeniden yapılmaz, benimsenir).
 export function recoverInFlight(controlIn,workerId){const control=clone(controlIn),recovered=[];for(const x of [...Object.values(control.packages),...Object.values(control.releases??{})])if(x.inFlight&&x.inFlight.workerId!==workerId){recovered.push({target:x.id??x.sourceCommit,action:x.inFlight.action,workerId:x.inFlight.workerId});delete x.inFlight}return {control,recovered}}

@@ -19,6 +19,7 @@
     "args": [
       "scripts/claude-builder-broker.mjs"
     ],
+    "identity": "CLAUDE_BUILDER",
     "provider": "ANTHROPIC",
     "modelId": "ACCOUNT_DEFAULT_OR_CLI_CONFIG",
     "environmentPolicy": "MINIMAL_SAFE_ENV",
@@ -36,6 +37,12 @@
     "formatRetryLimit": 1,
     "underlyingTool": "codex",
     "provenanceRequired": true
+  },
+  "reviewers": {
+    "//TR": "Founder talimatı 2026-10-01: çift bağımsız inceleme. CODEX_REVIEWER mevcut reviewer sözleşmesiyle aynıdır; CLAUDE_REVIEWER builder'dan (CLAUDE_BUILDER) ayrı kimlik, süreç, oturum ve temiz inceleme klonunda, yalnız okuma araçlarıyla çalışır; model sabittir, yedek yalnız açıkça yapılandırılırsa kullanılır; API anahtarı kullanılmaz.",
+    "dualReviewRequired": true,
+    "codex": {"identity": "CODEX_REVIEWER", "provider": "OPENAI", "tool": "codex", "broker": "scripts/codex-reviewer-broker.mjs", "formatRetryLimit": 1},
+    "claude": {"identity": "CLAUDE_REVIEWER", "provider": "ANTHROPIC", "tool": "claude", "broker": "scripts/claude-reviewer-broker.mjs", "brokerSource": "CONTROL_PLANE", "model": "claude-opus-5", "fallbackModel": null, "policy": "config/reviewer-execution-policy.json", "systemPrompt": "prompts/CLAUDE-REVIEWER-SYSTEM.md", "formatRetryLimit": 1, "separation": "PROCESS_SESSION_CONTEXT_AND_WORKTREE_SEPARATED_FROM_CLAUDE_BUILDER", "authentication": "CURRENTLY_AUTHENTICATED_CLAUDE_CODE_NO_API_KEY"}
   },
   "git": {
     "requireRepository": true,

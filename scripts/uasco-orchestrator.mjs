@@ -35,7 +35,7 @@ try{release=acquireProcessLock(dp.lock,workerId)}catch(e){if(/ALREADY_RUNNING/.t
 // //TR: Tek tick mantığı automation/lib/orchestrator-daemon.mjs createTick içindedir (--tick, --daemon ve testler aynı üretim kodunu çalıştırır).
 // //TR: Global Stop her komuttan ve her eylemden önce denetlenir; uzun komutlar izlenir ve durdurulunca süreç ağacı sonlandırılır.
 const stopNow=()=>globalStopState(stopFile)?"GLOBAL_STOP_ACTIVE":null;
-const runner=createContractRunner({policy,repo,shouldStop:stopNow}),executors=createExecutors({policy,repo,runner,controlPlaneRoot}),tickOnce=createTick({policy,workerId,runner,executors,shouldStop:stopNow});
+const runner=createContractRunner({policy,repo,shouldStop:stopNow}),executors=createExecutors({policy,repo,runner,controlPlaneRoot}),tickOnce=createTick({policy,workerId,runner,executors,shouldStop:stopNow,controlPlaneCommit:(()=>{try{return runner.must("git.headCommit",{cwd:controlPlaneRoot}).stdout.trim()}catch{return null}})()});
 // //TR: Pasif durum dosyası süpervizör tarafından yazılır; yazma hatası yürütmeyi durdurmaz, günlüğe kaydedilir.
 const writeStatus=createWatchdogStatusWriter({policy,runner,repo,file:statusFile,read:statusInputs,producer:{workerId,pid:process.pid,controlPlane:controlPlaneRoot}});
 // //TR: Denetimli kendini güncelleme (Founder kararı 2026-10-01): yalnız governed birleştirme kontrol düzlemini değiştirdiyse; sonuç kalıcı duruma geçiş olarak yazılır, hata hiçbir şeyi değiştirmez.
