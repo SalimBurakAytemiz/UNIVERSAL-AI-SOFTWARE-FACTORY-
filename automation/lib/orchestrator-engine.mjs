@@ -29,7 +29,7 @@ function autostartLane(prev,rec,now,policy,blockedReason=null){
 }
 export function nextAction(control,now,{skip=new Set()}={}){
   for(const id of control.order){
-    const p=control.packages[id],key=`P:${id}`;if(skip.has(key)||TERMINAL.includes(p.status)||p.status==="FOUNDER_DECISION_PENDING"||!due(p,now)||!dependenciesMet(control,p))continue;
+    const p=control.packages[id],key=`P:${id}`;if(skip.has(key)||TERMINAL.includes(p.status)||p.status==="FOUNDER_DECISION_PENDING"||p.hold||!due(p,now)||!dependenciesMet(control,p))continue;
     // //TR: Çift inceleme gereken pakette her reviewer kendi sağlayıcı durumuna göre ayrı eylemdir; biri kotadayken diğeri ve bağımsız işler sürer.
     const reviewerDue=r=>providerDue(control,PROVIDER_STATE_KEY[r],now);
     if(["REVIEW_PENDING","REVIEW_PENDING_PROVIDER_QUOTA"].includes(p.status)){if(isDualPackage(p,control)){const r=nextReviewer(p,control,reviewerDue);if(r)return {type:"REVIEW",packageId:id,provider:r,key:`${key}:${r}`};continue}if(providerDue(control,"codex",now))return {type:"REVIEW",packageId:id,key};continue}

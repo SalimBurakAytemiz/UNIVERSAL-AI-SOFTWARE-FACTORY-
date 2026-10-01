@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-06T11:49:47.137Z",
+  "generatedAt": "2026-10-06T11:49:50.075Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -226,11 +226,11 @@
     },
     {
       "path": "automation/lib/orchestrator-daemon.mjs",
-      "sha256": "b071119f32e80020030d1d4118205e7dd67460a98a60cda7010cc2052710cf58"
+      "sha256": "4c672089cee674c9c3f6bf8c4a2d04ecea0d8e175ae63a9ac02412aeed51054b"
     },
     {
       "path": "automation/lib/orchestrator-engine.mjs",
-      "sha256": "58a366b84c7c6444bc2ef091ac4e99c3b32bb0cf286aa532b955148699245182"
+      "sha256": "e2f7e4dbbb1c4b6d5aabbfc49adef58e24d6ecd2e51e2413e7a8e4cf348467c7"
     },
     {
       "path": "automation/lib/orchestrator-executors.mjs",
@@ -1170,7 +1170,7 @@
     },
     {
       "path": "scripts/dual-review-selftest.mjs",
-      "sha256": "b7639d2f68d20b26305b8772d811d36c238037ff57c5810ce0d66f24cfc62dc3"
+      "sha256": "32de3fe9a01f526c80ce828508a743bf9529d1281f03bc3e97ce3af187d786dd"
     },
     {
       "path": "scripts/generate-trust-root.mjs",

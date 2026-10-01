@@ -69,6 +69,7 @@ Reviews run sequentially within a tick, after the commit is immutable and the bu
 - **When it switches on.** `DUAL_REVIEW_REQUIRED` is activated once, when the supervisor first runs a control plane whose policy sets `review.dualReviewRequired`. The activation and the control-plane commit are recorded as `control.dualReview` and a `DUAL_REVIEW_ACTIVATED` transition.
 - **Historical evidence.** Packages closed earlier keep their Codex-only CLEAN evidence, which stays valid.
 - **Open packages.** An open package that is already Codex-CLEAN on its current bundle keeps that result and receives the missing Claude review before it can merge.
+- **Held packages.** A package that must not be reviewed or merged before activation carries `hold: {until: "DUAL_REVIEW_ACTIVE"}` and a far-future `notBefore`. Every older plane skips a package with a future `notBefore` for every action, and a DR1+ engine never acts on a held package. The activating plane releases these holds in the same tick (`ACTIVATION_HOLD_RELEASED` in the transition log), so such a package is reviewed by both reviewers from the start. A hold for another activation (for example `RELEASE_AUDIT_ACTIVE`) is left untouched.
 
 ## Model and authentication
 

@@ -3,7 +3,7 @@
   "schemaVersion": "1.0.0",
   "checkpoint": "V6_PKG_DR1_DUAL_INDEPENDENT_REVIEW",
   "date": "2026-10-01",
-  "parent": "28dd5ed33695d297aeec7c25b538a7ff43eaa0fa",
+  "parent": "e72a209252625e26dffc2ff07ae572bee7e3758f",
   "branch": "v6/pkg-dr1-dual-independent-review",
   "founderDirective": "Founder directive 2026-10-01 (ADD CLAUDE AS A SECOND INDEPENDENT REVIEW PROVIDER): every governed review package must also receive an independent Claude review; this must not mean that the Claude builder reviews its own work; CLAUDE_REVIEWER runs as a separate Claude process/session in an isolated clean review clone at the frozen commit/base/bundle digest with read-only permissions narrower than the builder, a fresh adversarial prompt and a separate run/evidence directory; distinct identities CLAUDE_REVIEWER and CODEX_REVIEWER with separate provenance; merge requires both CLEAN, any valid BLOCKED blocks, malformed review is REVIEW_INVALID, quota is REVIEW_PENDING_PROVIDER without cycle consumption; findings aggregated with provider attribution; remediation then review by both again; separate Claude/Codex reviewer quota states; reviews only after the commit is immutable and the bundle frozen; historical Codex CLEAN evidence stays valid and open packages get the Claude review in addition; final release closure needs CLEAN Claude and Codex full-repository reviews of the same candidate; the supervisor orchestrates everything; use the authenticated Claude Code installation, no Anthropic API key without separate approval, no silent reviewer identity change; implement as a bounded review-governance upgrade package, review it under the existing valid mechanism, then activate DUAL_REVIEW_REQUIRED.",
   "founderAuthorization": {
@@ -41,12 +41,15 @@
     "engine": "automation/lib/orchestrator-engine.mjs: per-reviewer REVIEW actions with per-reviewer provider states (claudeReviewer separate from the claude builder); applyDualReview (quota -> PROVIDER_BLOCKED without cycle/format consumption; FORMAT_REJECTED per reviewer, INVALID after the limit -> Founder decision; quorum; BLOCKED -> remediation with aggregated findings or the cycle limit); COMMITTED resets the gate and marks DUAL after activation; codex-CLEAN open packages get the Claude review before merging; REVIEW_CLEAN skips the missing-reviewer step only for a dual-clean review of the current bundle",
     "executors": "automation/lib/orchestrator-executors.mjs: reviewDual (own clean clone per reviewer, adoption by reviewer identity, post-run review-tree check, per-reviewer evidence and ledger), dual merge gate (both evidences re-derived with their identity and bound to the frozen bundle), merged remediation ledger",
     "reviewerInputs": "automation/lib/review-pipeline.mjs writeClaudeReviewerInputs + git.diffPatch contract: the Claude reviewer has no command execution, so after the deterministic precheck the supervisor writes precheck.json, diff.patch (git diff --no-ext-diff --no-textconv -U10 base..reviewed, omitted above 8 MiB) and changed-files.txt into the ignored reviewer-input directory of the review clone and records their sha256 in the run manifest; the reviewer system prompt explains these inputs and that missing command execution is not an environment gap; the Codex contract is unchanged",
+    "activationHolds": "automation/lib/orchestrator-daemon.mjs releaseActivationHolds + orchestrator-engine.mjs: packages with hold.until=DUAL_REVIEW_ACTIVE and a far-future notBefore (which AUT1B, AUT2 and DR1 engines all honour for every action) are released only by the activating plane, recorded as ACTIVATION_HOLD_RELEASED; the DR1+ engine never schedules a held package; holds for other activations are kept",
     "manualReset": "automation/lib/orchestrator-daemon.mjs + scripts/uasco-orchestrator.mjs: --founder-manual-quota-reset also accepts claudeReviewer, so a stale far-future retryAfter of the Claude reviewer can be cleared like any provider (one controlled probe)",
     "activation": "automation/lib/orchestrator-daemon.mjs + scripts/uasco-orchestrator.mjs: DUAL_REVIEW_ACTIVATED recorded once with the control-plane commit when the running plane's policy sets dualReviewRequired",
     "model": "reviewers.claude.model = claude-opus-5, the exact id observed from the authenticated installation (a probe of 'claude-opus-5-5' returned unrecognized_model; the 'opus' alias resolved to claude-opus-5 and the exact id answered); no fallback"
   },
-  "tests": "scripts/dual-review-selftest.mjs (19 scenarios) via tests/pkg-dr1-dual-review.test.ts: quorum incl. INVALID/PENDING/PROVIDER_BLOCKED, aggregation and namespaced ledgers, stale gate on commit or digest change, engine both-CLEAN merge, Claude CLEAN + Codex BLOCKED and Claude BLOCKED + Codex CLEAN block, remediation re-review by both, refrozen bundle re-review, Claude quota without cycle consumption and automatic retry, malformed Claude review never CLEAN, restart without duplicate provider call, activation and history, isolated read-only reviewer process without builder session variables, identical frozen scope with separate evidence, builder impersonation refused (process boundary, missing observed provenance, identity equal to the builder, wrong provider, insufficient independence, changed model), reviewer cannot modify the source, Claude quota evidence and malformed output, merge requires both evidences with the right identities, the Claude reviewer receives the supervisor-verified read-only inputs (precheck, exact diff, changed files) at call time without dirtying its review tree. The AUT2 autonomy-hardening selftest (17/17) now runs its daemon scenarios under the active dual policy: an instrumented Claude reviewer substitute (separate call log) answers like the Codex substitute; scenario C additionally asserts that the Claude CLEAN of the same bundle is kept and not repeated while Codex waits for its quota, H that the Codex BLOCKED is recorded with its own ledger and the cycle-2 ledger carries the provider-namespaced id, and the CLI fixture package is a dual-clean review.",
+  "tests": "scripts/dual-review-selftest.mjs (20 scenarios) via tests/pkg-dr1-dual-review.test.ts: quorum incl. INVALID/PENDING/PROVIDER_BLOCKED, aggregation and namespaced ledgers, stale gate on commit or digest change, engine both-CLEAN merge, Claude CLEAN + Codex BLOCKED and Claude BLOCKED + Codex CLEAN block, remediation re-review by both, refrozen bundle re-review, Claude quota without cycle consumption and automatic retry, malformed Claude review never CLEAN, restart without duplicate provider call, activation and history, isolated read-only reviewer process without builder session variables, identical frozen scope with separate evidence, builder impersonation refused (process boundary, missing observed provenance, identity equal to the builder, wrong provider, insufficient independence, changed model), reviewer cannot modify the source, Claude quota evidence and malformed output, merge requires both evidences with the right identities, the Claude reviewer receives the supervisor-verified read-only inputs (precheck, exact diff, changed files) at call time without dirtying its review tree. The AUT2 autonomy-hardening selftest (17/17) now runs its daemon scenarios under the active dual policy: an instrumented Claude reviewer substitute (separate call log) answers like the Codex substitute; scenario C additionally asserts that the Claude CLEAN of the same bundle is kept and not repeated while Codex waits for its quota, H that the Codex BLOCKED is recorded with its own ledger and the cycle-2 ledger carries the provider-namespaced id, and the CLI fixture package is a dual-clean review.",
   "mutationChecks": [
+    "engine ignores hold -> held-package scenario FAIL",
+    "activation does not release holds -> held-package scenario FAIL",
     "quorum accepting one CLEAN -> quorum scenario FAIL",
     "reviewer model not checked -> impersonation scenario FAIL",
     "review-tree modification not checked -> cannot-modify scenario FAIL",
@@ -58,11 +61,11 @@
     "tool": "scripts/generate-trust-root.mjs (unchanged)",
     "sealStatus": "SEALED",
     "protectedFiles": 353,
-    "generatedAt": "2026-10-01T17:36:29.970Z",
-    "manifestSha256": "4fcdeffb67dc4765fb22cf69e0dfedb0eb960541bf06edecef9172fd526d5592"
+    "generatedAt": "2026-10-01T22:32:53.448Z",
+    "manifestSha256": "720755b6cce5cd4ad992412c753ef7586597ba9ea392b42f3f402b87c34dc013"
   },
   "validation": {
-    "workspace": "fresh clone of 28dd5ed mirroring the advisory-remediated PKG-DR1 tree, reviewed lock installed",
+    "workspace": "fresh clone of e72a209 mirroring the hold-remediated PKG-DR1 tree, reviewed lock installed",
     "gitDiffCheck": "PASS",
     "verifyTrustRoot": "PASS (resealed, 353 protected files)",
     "canonicalRunner": {
@@ -70,8 +73,8 @@
       "mode": "SEALED"
     },
     "vitest": "PASS 32 passed (32) files / 177 passed (177)",
-    "dualReviewSelftest": "PASS 19/19",
-    "autonomyHardeningSelftest": "PASS 17/17 (under the active dual policy)",
+    "dualReviewSelftest": "PASS 20/20",
+    "autonomyHardeningSelftest": "PASS 17/17",
     "orchestratorSelftest": "PASS 29/29",
     "orchestratorExecutorIntegration": "PASS 11/11",
     "windowsCrashResume": "PASS 7/7 (first DR1 commit)",
@@ -82,18 +85,19 @@
       "TR_VALIDATION: reviewer system prompt lacked the //TR header",
       "AUT2 autonomy-hardening selftest 6/17 under the dual policy: no Claude reviewer substitute, aggregated findings without id/full governed finding, CLI fixture not dual-clean",
       "live advisory run ENVIRONMENT_BLOCKED: the Claude reviewer had no command execution for STEP 1 and no base content; fixed with supervisor-prepared read-only inputs, second live run CLEAN",
-      "advisory CLAUDE_REVIEWER run of DR1 (CLEAN with P2 advisories): Codex-only CLEAN seeding bound to REVIEW_CLEAN/same cycle/recorded digest; manual quota reset accepts claudeReviewer"
+      "advisory CLAUDE_REVIEWER run of DR1 (CLEAN with P2 advisories): Codex-only CLEAN seeding bound to REVIEW_CLEAN/same cycle/recorded digest; manual quota reset accepts claudeReviewer",
+      "bootstrap design critique: packages after DR1 could be reviewed or merged by older planes with Codex alone; activation holds released only by the activating plane"
     ],
     "mutationChecksRerunOnFinalCode": "6/6 caught (M6 anchor corrected)"
   },
   "changedFileSha256": {
     ".ai/REVIEW_STATUS.md": "d441d20d480f5fb1f9d6c3d68cf0b35fb433c0a102098772230825f10d9313fa",
-    "CHANGELOG.md": "d1ba0c16854802ac547caf6d920373d4f01c5184758a709ddd381e60835b1497",
+    "CHANGELOG.md": "be1e35f8d1607bd85c821a470929e576ddf585baeaf16985d04a0b8616f55d47",
     "audit/V6-FULL-SCAN-PROGRESS.json": "3250b08766f1e351d92c8241ec2b7137e06248358a572d489275d53dfba0961d",
     "automation/lib/claude-reviewer.mjs": "340dfcc8d5091d773ba0120e9409c82aeaa94dacf4db1b8f9a19b7aed5be6d6d",
     "automation/lib/command-contracts.mjs": "c4077fc4ebf48eea759b7047d0f6b222fc596ee1a6825f2fe5aeac2c4fc15e5e",
-    "automation/lib/orchestrator-daemon.mjs": "78ac265810c68fcd9fd6f65f4036a3353293aaa3f523e7741458c3c83d4337be",
-    "automation/lib/orchestrator-engine.mjs": "b3c2f9c0b81391915d69957814a41eb2b5a727ede1cac4d027e55691bdf50c8c",
+    "automation/lib/orchestrator-daemon.mjs": "5a28f96517e3756d91719a1cf51efa53071cec43394c52bebb5d3013d4427a35",
+    "automation/lib/orchestrator-engine.mjs": "0719a2d10717d5fb7076eb8da77315f0c302662086c7fc7702ef326e3d27a424",
     "automation/lib/orchestrator-executors.mjs": "70f76e84e80be931645ee6d3a8c296fa6a1a8ec1473b7e41fa0b85ea804a5cf0",
     "automation/lib/review-pipeline.mjs": "5ebca7d5fcca8b61490b3c83628855bcbcc154fde7c82e2c205ea43e9b6f555a",
     "automation/lib/review-quorum.mjs": "a6d5dae8e73fbecc5a767d28c7a849593f12bf944eed572c08981a5930832768",
@@ -102,15 +106,15 @@
     "config/orchestrator-policy.json": "5184bc055429dd9bbca879dccfa2c346aa186e3b55a3a53f63cd87f89792d831",
     "config/protected-paths.json": "b79d969706211c0572b19263fb9d87ebb9cd0c66705a564454be38cf1a08caa1",
     "config/reviewer-execution-policy.json": "2d22788baf7fc5664f2c29cd10b7701747b9417dfcec8ebe0fb596b8dc15e335",
-    "config/trust-root-manifest.json": "4fcdeffb67dc4765fb22cf69e0dfedb0eb960541bf06edecef9172fd526d5592",
-    "docs/architecture/DUAL-INDEPENDENT-REVIEW.md": "91014933e7250e35be033e12e4ae741b422c2de9e34df279fd8bd3536c95b365",
+    "config/trust-root-manifest.json": "720755b6cce5cd4ad992412c753ef7586597ba9ea392b42f3f402b87c34dc013",
+    "docs/architecture/DUAL-INDEPENDENT-REVIEW.md": "fd5d94e39649bc617c372bb0f3dc6079130fd744d2e900c772e97706661156b7",
     "docs/architecture/UNATTENDED-ORCHESTRATION.md": "5a2d2b6449cd4a8169ffee035837e1c424051ba7c320e8983a7d7ddd0d2230e0",
     "prompts/CLAUDE-REVIEWER-SYSTEM.md": "7f665c1b43b7f1f35c3ff3967cc8f35756cf75fd5dbab4692ecc59e24b5a36b7",
     "scripts/autonomy-hardening-selftest.mjs": "08422610bab0f166cba9458ce06f21b04bcf25fe8dc8f4263de0a06a5e883b48",
     "scripts/claude-reviewer-broker.mjs": "95abe6d520651d1c926430701bd088edc8862fe1f6eafc896a361cd068c6a1ee",
-    "scripts/dual-review-selftest.mjs": "b7639d2f68d20b26305b8772d811d36c238037ff57c5810ce0d66f24cfc62dc3",
+    "scripts/dual-review-selftest.mjs": "32de3fe9a01f526c80ce828508a743bf9529d1281f03bc3e97ce3af187d786dd",
     "scripts/uasco-orchestrator.mjs": "a43ae440da7723d078803054c9239e238be4577ae2c4aa56f31646f1a83d1203",
-    "tests/pkg-dr1-dual-review.test.ts": "a5787ec6291569c755da52be7c6881fa617b70cabfa7c4f27dfd7d6f38eb7cc7"
+    "tests/pkg-dr1-dual-review.test.ts": "716880d35fe144dd8290b7a0273f65ff6ba7d7d881dcb932e9371fe203af9828"
   },
   "openFindings": [],
   "review": "NOT_REVIEWED_CODEX_PENDING (reviewed under the existing Codex mechanism; DUAL_REVIEW_REQUIRED activates from its merge)",

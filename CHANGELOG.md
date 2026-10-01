@@ -8,7 +8,8 @@
 - Findings of both reviewers are aggregated with provider attribution; a new commit or bundle makes both gates stale; separate quota states for the Claude reviewer, the Codex reviewer and the builder; historical Codex-only CLEAN evidence stays valid and open packages get the Claude review in addition.
 - The Claude reviewer has no command execution: the supervisor gives it its deterministic STEP 1 precheck, the exact diff and the changed-file list as read-only inputs in its review clone (found by the first live advisory run, which returned ENVIRONMENT_BLOCKED without them).
 - Pre-review remediation from an advisory Claude reviewer run of this package: a historical Codex-only CLEAN seeds the Codex gate only while the package is still REVIEW_CLEAN for the same cycle and bundle, and the Founder manual quota reset also accepts the `claudeReviewer` provider state.
-- Dual-review selftest 19/19 with mutation checks; trust root resealed.
+- Activation holds: a package held until `DUAL_REVIEW_ACTIVE` (hold plus far-future `notBefore`, honoured by every older plane for every action) is released only by the activating DR1+ plane, so it can never be reviewed or merged with Codex alone.
+- Dual-review selftest 20/20 with mutation checks; trust root resealed.
 
 ## 2026-10-01 — V6 PKG-M1 provenance test timeout (branch, maintenance)
 
