@@ -69,7 +69,7 @@ Everything else continues. Approved policy is persisted in `config/orchestrator-
 
 ## Dual independent review
 
-From the `DUAL_REVIEW_REQUIRED` activation commit, every review package needs a CLEAN result from both `CLAUDE_REVIEWER` and `CODEX_REVIEWER` on the same frozen bundle; each reviewer is a separate action with its own quota state, its own clean review clone and its own evidence, and any valid BLOCKED goes to remediation with the findings of both. See `docs/architecture/DUAL-INDEPENDENT-REVIEW.md`.
+From the `DUAL_REVIEW_REQUIRED` activation commit, every review package needs a CLEAN result from both `CLAUDE_REVIEWER` and `CODEX_REVIEWER` on the same frozen bundle; each reviewer is a separate action with its own quota state, its own clean review clone and its own evidence, and any valid BLOCKED goes to remediation with the findings of both. See `docs/architecture/DUAL-INDEPENDENT-REVIEW.md`. A release candidate is additionally audited as a whole by both reviewers (`CLAUDE_FULL_REPO_REVIEW`, `CODEX_FULL_REPO_REVIEW`) before packaging, signing and Phase0.
 
 ## Command contracts
 

@@ -78,6 +78,22 @@ Reviews run sequentially within a tick, after the commit is immutable and the bu
 
 The reviewer uses the currently authenticated Claude Code installation. No API key is introduced. The model is pinned in `reviewers.claude.model` to the exact id observed from the installation. There is no fallback unless one is explicitly configured, so the reviewer identity never changes silently. An unavailable model fails closed.
 
-## Not covered here
+## Final release audit (PKG-DR2)
 
-The final release closure audit — `CLAUDE_FULL_REPO_REVIEW` plus `CODEX_FULL_REPO_REVIEW` of the same immutable candidate, both CLEAN — is the follow-up package PKG-DR2.
+Before a release candidate is packaged, signed or installed, both reviewers audit the whole repository of that candidate: `CLAUDE_FULL_REPO_REVIEW` and `CODEX_FULL_REPO_REVIEW`. Release closure needs both CLEAN on the same frozen candidate bundle.
+
+```
+release package merged -> release candidate (AUDIT_PENDING)
+  -> AUDIT_FREEZE: clean clone of the candidate, canonical validation, full-tree bundle
+  -> AUDIT claude / AUDIT codex (own clean clones, same frozen bundle and prompt)
+  -> both CLEAN -> PACKAGE -> SIGN -> PHASE0
+  -> any valid BLOCKED -> AUDIT_BLOCKED (the release lane stops; a remediation package produces a new candidate)
+```
+
+- **Full tree, not a diff.** The audit base is a deterministic empty-tree commit (`releaseAudit.emptyBaseCommit`, created in each clone by the `git.auditEmptyBase` contract: identity and dates fixed in both the Git config arguments and the environment, so inherited `GIT_AUTHOR_*`/`GIT_COMMITTER_*` variables cannot change it; no signature, no ref change). `git diff <emptyBase>..<candidate>` lists every tracked file, so the existing frozen-bundle, precheck and governance code applies unchanged, and every tracked file is in scope for a blocker. The freeze step refuses a bundle whose `changedFiles` differ from `git ls-tree` of the candidate.
+- **Release-critical contract.** `config/orchestrator-policy.json` `releaseAudit.contract` defines the frozen audit contract (risk level 5, `RELEASE_CRITICAL` profile). Its requirements cite `releaseAuditContract` from the PKG-DR2 checkpoint in the candidate. `prompts/RELEASE-AUDIT-REVIEW.txt` is the audit prompt for both reviewers.
+- **Same rules as package review.** Quota blocks only that reviewer and consumes nothing. A malformed result uses the format retry and then becomes INVALID, which goes to a Founder decision and is never CLEAN. A finished provider call is adopted after a restart.
+- **Packaging, signing and Phase0 gates.** `PACKAGE`, `SIGN` and `PHASE0` each re-derive both audit evidences with their reviewer identities and require them to be bound to the candidate's frozen audit bundle. A release without an audit, whatever stage it reached before this rule existed, is sent to the audit first (`AUDIT_REQUIRED`). The packaging record carries the audit result and evidence.
+- **Release only on an auditing plane.** The first tick of a DR2+ plane records `RELEASE_AUDIT_ACTIVATED` once and then releases packages held until `RELEASE_AUDIT_ACTIVE` (hold plus far-future `notBefore`, honoured by every older plane for every action). The package that designates the release is held this way, so it is reviewed, merged and turned into a release candidate only by a plane that enforces the dual release audit.
+- **One audit per candidate.** A newer release candidate supersedes the old one and starts with an empty audit; results never carry over.
+- **Visibility.** `WATCHDOG_STATUS.json` lists the release audits, shows `AUDIT_BLOCKED` releases as blocked lanes and adds a `RELEASE_AUDIT_BLOCKED:<release>` health reason.

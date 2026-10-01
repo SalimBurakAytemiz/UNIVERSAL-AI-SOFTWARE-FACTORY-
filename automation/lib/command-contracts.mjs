@@ -20,6 +20,7 @@ export function makeValidators(policy){
 const NODE_SCRIPTS=["scripts/run-validation.mjs","scripts/ensure-dependencies.mjs","scripts/capture-provider-provenance.mjs","scripts/verify-trust-root.mjs","scripts/generate-trust-root.mjs","scripts/release-sha256sums.mjs","scripts/build-release-zip.mjs","scripts/verify-release-extract.mjs","scripts/codex-reviewer-broker.mjs","scripts/claude-builder-broker.mjs","scripts/provider-smoke.mjs"];
 // //TR: Zamanlanmış görev durumu yerel ayardan bağımsız, salt-okunur ve sabit bir PowerShell sorgusuyla okunur; görev adı yalnız policy'deki iki addan biri olabilir ve ortam değişkeniyle geçer.
 export const SCHEDULED_TASK_INFO_SCRIPT="$ErrorActionPreference='Stop';$n=$env:UASCO_TASK_NAME;$t=Get-ScheduledTask -TaskPath '\\' -TaskName $n -ErrorAction SilentlyContinue;if(-not $t){'{\"registered\":false}';exit 0};$i=Get-ScheduledTaskInfo -InputObject $t;$f={param($d)if($d -and $d.Year -gt 1999){$d.ToUniversalTime().ToString('o')}else{$null}};[pscustomobject]@{registered=$true;state=[string]$t.State;lastRunTime=(& $f $i.LastRunTime);lastTaskResult=$i.LastTaskResult;nextRunTime=(& $f $i.NextRunTime)}|ConvertTo-Json -Compress";
+export const AUDIT_EMPTY_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904",AUDIT_BASE_MESSAGE="UASCO full-repository release audit base (empty tree)";
 // //TR: Sözleşme tablosu; yeni işlem eklemek bu protected dosyada değişiklik ve bağımsız review gerektirir.
 export function buildContracts(policy,{repo}){
   const v=makeValidators(policy),git="git",ps=path.join(process.env.SystemRoot??"C:/Windows","System32","WindowsPowerShell","v1.0","powershell.exe"),tar=path.join(process.env.SystemRoot??"C:/Windows","System32","tar.exe");
@@ -29,6 +30,8 @@ export function buildContracts(policy,{repo}){
     "git.status":{program:git,args:p=>["-C",anyRoot(p.cwd),"status","--porcelain=v1","--untracked-files=all"]},
     "git.isAncestor":{program:git,args:p=>["-C",anyRoot(p.cwd),"merge-base","--is-ancestor",v.sha(p.ancestor),v.sha(p.descendant)],allowExit:[0,1]},
     "git.diffNames":{program:git,args:p=>["-C",anyRoot(p.cwd),"diff","--name-only",`${v.sha(p.base)}..${v.sha(p.head)}`]},
+    // //TR: Tam depo denetim tabanı: boş ağacın sabit kimlik, sabit tarih ve imzasız commit nesnesi; her klonda aynı SHA'yı üretir, hiçbir ref değiştirmez.
+    "git.auditEmptyBase":{program:git,args:p=>["-C",v.under("controlRoot",p.cwd),"-c","user.name=UASCO Release Audit","-c","user.email=release-audit@uasco.local.invalid","commit-tree","--no-gpg-sign",AUDIT_EMPTY_TREE,"-m",AUDIT_BASE_MESSAGE],envFrom:()=>({GIT_AUTHOR_NAME:"UASCO Release Audit",GIT_AUTHOR_EMAIL:"release-audit@uasco.local.invalid",GIT_AUTHOR_DATE:"1970-01-01T00:00:00+0000",GIT_COMMITTER_NAME:"UASCO Release Audit",GIT_COMMITTER_EMAIL:"release-audit@uasco.local.invalid",GIT_COMMITTER_DATE:"1970-01-01T00:00:00+0000"})},
     "git.diffPatch":{program:git,args:p=>["-C",anyRoot(p.cwd),"diff","--no-ext-diff","--no-textconv","--no-color","-U10",`${v.sha(p.base)}..${v.sha(p.head)}`]},
     "git.lsTree":{program:git,args:p=>["-C",v.under("repo",p.cwd),"ls-tree","-r","--name-only",v.sha(p.commit)]},
     "git.treeOf":{program:git,args:p=>["-C",v.under("repo",p.cwd),"rev-parse",`${/^refs\//.test(p.rev)?v.ref(p.rev):v.sha(p.rev)}^{tree}`]},

@@ -68,6 +68,8 @@
     "config/reviewer-execution-policy.json",
     "prompts/CLAUDE-REVIEWER-SYSTEM.md",
     "scripts/dual-review-selftest.mjs",
+    "scripts/release-audit-selftest.mjs",
+    "prompts/RELEASE-AUDIT-REVIEW.txt",
     "scripts/dependency-supply-chain.mjs",
     "scripts/generate-trust-root.mjs",
     "scripts/harden-evidence-key.ps1",

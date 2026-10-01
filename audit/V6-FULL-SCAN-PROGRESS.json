@@ -130,7 +130,8 @@
       "V6-PKG-D2-SHELL-QUOTE-ADVISORY": {"reviewedCommit": "f2fcdf2", "review": "CLEAN_GOVERNED_CLAUDE_REVIEWER", "merge": "MERGED", "checkpoint": "audit/checkpoints/V6-PKG-D2-SHELL-QUOTE-ADVISORY-2026-10-06.json"},
       "V6-PKG-R4-PHASE0-GIT-BASELINE-NATIVE-PROBES": {"review": "CYCLE_2_PENDING_THIS_COMMIT_GOVERNED_CLAUDE_REVIEWER", "cycle1": "c027ed1 BLOCKED (F-R4-REVIEW-001)", "merge": "AFTER_PKG_D2", "release": "NEXT_RELEASE_AFTER_CHAIN_CLEAN", "checkpoint": "audit/checkpoints/V6-PKG-R4-PHASE0-GIT-BASELINE-NATIVE-PROBES-2026-09-29.json"},
       "V6-PKG-M1-PROVENANCE-TEST-TIMEOUT": {"reviewedCommit": "65ae08e", "review": "PENDING_REVIEWER_QUOTA", "merge": "AFTER_PKG_R4", "checkpoint": "audit/checkpoints/V6-PKG-M1-PROVENANCE-TEST-TIMEOUT-2026-10-01.json"},
-      "V6-PKG-DR1-DUAL-INDEPENDENT-REVIEW": {"review": "PENDING_THIS_COMMIT", "merge": "AFTER_PKG_M1", "activation": "DUAL_REVIEW_REQUIRED_FROM_MERGE", "checkpoint": "audit/checkpoints/V6-PKG-DR1-DUAL-INDEPENDENT-REVIEW-2026-10-01.json"}
+      "V6-PKG-DR1-DUAL-INDEPENDENT-REVIEW": {"reviewedCommit": "634d5b8", "review": "PENDING_REVIEWER_QUOTA", "merge": "AFTER_PKG_M1", "activation": "DUAL_REVIEW_REQUIRED_FROM_MERGE", "checkpoint": "audit/checkpoints/V6-PKG-DR1-DUAL-INDEPENDENT-REVIEW-2026-10-01.json"},
+      "V6-PKG-DR2-FINAL-DUAL-RELEASE-AUDIT": {"review": "PENDING_THIS_COMMIT", "merge": "AFTER_PKG_DR1", "reviewPolicy": "DUAL_AFTER_DR1_ACTIVATION", "checkpoint": "audit/checkpoints/V6-PKG-DR2-FINAL-DUAL-RELEASE-AUDIT-2026-10-01.json"}
     },
     "findingsClosed": ["PKGA-F1", "PKGA-F2", "PKGA-F3", "PKGA-F4", "PKGA-F5", "PKGA-F6", "PKGA-F7", "PKGA-F9", "PKGA-F10", "PKGC-F1", "F-PKGE-001", "PKGE-F2", "TRUST-F1", "PKGA-F8", "PKGR-F1", "F-PKGR1-001", "PHASE0-F1", "PHASE0-F2", "PHASE0-F3"],
     "openEnvironmentFindings": [],

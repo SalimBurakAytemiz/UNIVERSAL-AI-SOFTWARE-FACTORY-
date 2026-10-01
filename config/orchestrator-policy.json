@@ -89,6 +89,60 @@
     "reviewOrder": "SEQUENTIAL_SAME_FROZEN_BUNDLE",
     "quorum": "CLAUDE_REVIEWER_CLEAN_AND_CODEX_REVIEWER_CLEAN"
   },
+  "releaseAudit": {
+    "//TR": "Son sürüm kapanışı: release adayı paketlenmeden, imzalanmadan ve kurulmadan önce CLAUDE_REVIEWER ve CODEX_REVIEWER aynı değişmez adayın tam depo denetimini ayrı ayrı yapar; ikisi de CLEAN olmadan release hattı ilerlemez.",
+    "required": true,
+    "reviewers": [
+      "claude",
+      "codex"
+    ],
+    "quorum": "CLAUDE_FULL_REPO_REVIEW_CLEAN_AND_CODEX_FULL_REPO_REVIEW_CLEAN",
+    "emptyBaseCommit": "53c1d24822689b2b1e1ca0d98a1ff117d937864d",
+    "promptTemplate": "prompts/RELEASE-AUDIT-REVIEW.txt",
+    "contract": {
+      "phase": 0,
+      "title": "V6 final dual full-repository release audit of candidate",
+      "objective": "Independently audit the entire tracked repository of the immutable release candidate before release closure (packaging, signing, Phase0): both CLAUDE_FULL_REPO_REVIEW and CODEX_FULL_REPO_REVIEW must be CLEAN on the same frozen candidate bundle.",
+      "authorizationSources": [
+        {
+          "checkpoint": "audit/checkpoints/V6-PKG-DR2-FINAL-DUAL-RELEASE-AUDIT-2026-10-01.json",
+          "fields": [
+            "founderAuthorization.decision",
+            "founderAuthorization.rule",
+            "releaseAuditContract.scope",
+            "releaseAuditContract.closureRule"
+          ]
+        }
+      ],
+      "acceptanceCriteria": [
+        "Every file tracked at the release candidate is in scope and was available to the reviewer at the candidate commit.",
+        "No unresolved admissible blocker remains anywhere in the repository for this exact candidate, including the protected trust root, reviewer separation, evidence and provenance integrity, Global Stop, signing, installer and Phase0 behavior.",
+        "Canonical validation passes on the candidate and its report is the validation evidence of this bundle."
+      ],
+      "mandatoryFailureCases": [
+        "a release-blocking defect anywhere in the tracked tree",
+        "a weakened trust, provenance, evidence, Global Stop or fail-closed control",
+        "a contradiction between governance documents and the implemented behavior that changes a release decision"
+      ],
+      "requiredArtifacts": [
+        "config/trust-root-manifest.json",
+        "config/protected-paths.json",
+        "audit/checkpoints/V6-PKG-DR2-FINAL-DUAL-RELEASE-AUDIT-2026-10-01.json"
+      ],
+      "unsupportedCases": [
+        "The audit reviews the repository content of the candidate; target-machine installation results are produced later by Phase0 and are not part of this bundle."
+      ],
+      "mandatoryValidation": [
+        "Canonical runner scripts/run-validation.mjs over config/validation.json on the release candidate"
+      ],
+      "mandatoryEvidence": [
+        "release candidate commit SHA",
+        "canonical validation report of the candidate",
+        "trust-root manifest"
+      ],
+      "riskLevel": 5
+    }
+  },
   "merge": {
     "defaultBranchRef": "refs/heads/master",
     "fastForwardOnly": true

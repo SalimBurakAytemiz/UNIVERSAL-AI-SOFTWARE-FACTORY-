@@ -1,6 +1,15 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-10-01 — V6 PKG-DR2 final dual full-repository release audit (branch)
+
+- Founder directive 2026-10-01, final release section: a release candidate is packaged, signed and installed only after `CLAUDE_FULL_REPO_REVIEW` and `CODEX_FULL_REPO_REVIEW` of the same immutable candidate are both CLEAN.
+- New release states `AUDIT_PENDING` and `AUDIT_BLOCKED`; actions `AUDIT_FREEZE` and `AUDIT` (one per reviewer, own clean clones, same frozen full-tree bundle); the audit base is a deterministic unsigned empty-tree commit so every tracked file is in scope; the packaging, signing and Phase0 gates re-derive both audit evidences with their identities.
+- Same quota, format, restart and attribution rules as package review; a blocked audit stops only the release lane; a new candidate starts a fresh audit.
+- Pre-review remediation from an advisory Claude reviewer run: signing and Phase0 also refuse an unaudited release, the audit base identity is pinned in the environment, an `AUDIT_BLOCKED` release is a watchdog health reason, and the Claude reviewer prompt reminds that schema objects allow no extra properties.
+- Release-audit activation: the first DR2+ tick records `RELEASE_AUDIT_ACTIVATED` once and releases packages held until `RELEASE_AUDIT_ACTIVE`, so the release package is merged only by a plane that enforces the audit.
+- Release-audit selftest 13/13 with 10/10 mutation checks; orchestrator selftest follows the audit policy; trust root resealed.
+
 ## 2026-10-01 — V6 PKG-DR1 dual independent review (branch)
 
 - Founder directive 2026-10-01: every governed review package frozen after the activation commit is reviewed by `CLAUDE_REVIEWER` and `CODEX_REVIEWER`; integration requires both CLEAN on the same frozen bundle, any valid BLOCKED blocks, malformed output is never CLEAN and a quota block produces no result and consumes no cycle.

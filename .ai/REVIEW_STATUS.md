@@ -28,6 +28,7 @@ Independent Codex reviews (frozen milestone contract + review bundle, read-only,
 - `V6-PKG-D2-SHELL-QUOTE-ADVISORY` (lock-only dependency fix, shell-quote 1.11.0 for GHSA-pqg4-j6r4-53mv): `a1d46e9` with its append-only reconciliation @ `f2fcdf2`: `CLEAN` by the governed CLAUDE_REVIEWER (Founder governance change 2026-10-06), merged fast-forward to local master; base of PKG-R4.
 - `V6-PKG-R4-PHASE0-GIT-BASELINE-NATIVE-PROBES`: this commit at the chain tip; reviewed by the governed CLAUDE_REVIEWER (Founder governance change 2026-10-06): @ `c027ed1` cycle 1 `BLOCKED` (F-R4-REVIEW-001, current-truth accuracy of these status documents); this commit is the cycle-2 remediation, REVIEW_PENDING; the next release is built from it after the chain is CLEAN.
 - `V6-PKG-M1-PROVENANCE-TEST-TIMEOUT` (maintenance, tests only): @ `65ae08e`, REVIEW_PENDING.
-- `V6-PKG-DR1-DUAL-INDEPENDENT-REVIEW`: this commit on branch `v6/pkg-dr1-dual-independent-review` at the chain tip; reviewed under the existing Codex mechanism; `DUAL_REVIEW_REQUIRED` activates from its merge.
+- `V6-PKG-DR1-DUAL-INDEPENDENT-REVIEW`: @ `634d5b8`, REVIEW_PENDING (existing Codex mechanism); `DUAL_REVIEW_REQUIRED` activates from its merge.
+- `V6-PKG-DR2-FINAL-DUAL-RELEASE-AUDIT`: this commit on branch `v6/pkg-dr2-final-dual-release-audit` at the chain tip; dual review (Claude + Codex) after DR1 activation; the release audit applies to every release candidate created after its merge.
 
 Nothing has been pushed to a remote. Any commit after a CLEAN review needs its own review.
