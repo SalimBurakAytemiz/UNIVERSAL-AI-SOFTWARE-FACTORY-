@@ -22,6 +22,6 @@ Independent Codex reviews (frozen milestone contract + review bundle, read-only,
 - `V6-PKG-T1-WINDOWS-CRASH-RESUME` (tests only): cycle 1 `BLOCKED` @ `22d4cfe` (F-T1-001); cycle 2 `CLEAN` @ `f23786c` and @ `d662beb`, superseded by the upstream remediations; re-applied unchanged @ `7e01c59`, REVIEW_PENDING.
 - `V6-PKG-T3-OMNIROUTE-INSTALL-COMPAT` (tests only): cycle 1 `BLOCKED` @ `f65635d` (F-T3-001/002); cycle 2 `CLEAN` @ `8651995` and @ `18a4187`, superseded by the upstream remediations; re-applied unchanged @ `725811f`, REVIEW_PENDING.
 - `V6-PKG-T4-POWERSHELL-SAFETY` (tests only): cycle 1 `BLOCKED` @ `f9989e6` (F-T4-REVIEW-001/002); cycle 2 @ `90ee660`, REVIEW_PENDING; merge after PKG-T3.
-- `V6-PKG-AUT2-AUTONOMY-HARDENING`: this commit on branch `v6/pkg-aut2-autonomy-hardening-r3` (re-applied on the PKG-AUT1B cycle-2 chain, with the supervisor-maintained passive watchdog status of the Founder directive of 2026-09-30); independent review when Codex is available; activation of UASCO-Autonomous-Supervisor only after the whole chain is CLEAN.
+- `V6-PKG-AUT2-AUTONOMY-HARDENING`: this commit on branch `v6/pkg-aut2-autonomy-hardening-r4` (passive watchdog status of the Founder directive of 2026-09-30 and governed control-plane self-upgrade of the Founder decision of 2026-10-01); independent review when Codex is available; activation of UASCO-Autonomous-Supervisor after the whole chain is CLEAN.
 
 Nothing has been pushed to a remote. Any commit after a CLEAN review needs its own review.

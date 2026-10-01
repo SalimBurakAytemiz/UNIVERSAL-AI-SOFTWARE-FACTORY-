@@ -19,7 +19,7 @@ export function discoverEnvironment({runner,policy,repo,now=()=>new Date()}){
   return {at:now().toISOString(),gitRefs,worktrees,scheduler:{constructionSupervisor:task(policy.autostart.taskName),installedSystem:task(policy.autostart.installedSystemTaskName)}};
 }
 // //TR: Saf üretici: aynı girdiler aynı durumu verir; genel sağlık yalnız gerçek sinyallerden türetilir (bilinmeyen kalp atışı sağlıklı sayılmaz).
-export function buildWatchdogStatus({control,doc,heartbeat,health,wake,logCheck,lastTransition,discovery,globalStop,producer,now,policy}){
+export function buildWatchdogStatus({control,doc,heartbeat,health,wake,logCheck,lastTransition,discovery,globalStop,producer,now,policy,controlPlane=null}){
   const d=policy.daemon,pk=control?.packages??{},order=control?.order??Object.keys(pk),live=order.map(id=>pk[id]).filter(p=>p&&!TERMINAL.includes(p.status));
   const next=control?nextAction(control,now):null,inFlight=live.find(p=>p.inFlight)??null,activeId=inFlight?.id??next?.packageId??null,active=activeId?pk[activeId]:null;
   const blockedLanes=[...live.filter(p=>p.status==="FOUNDER_DECISION_PENDING"||p.status==="QUEUED").map(p=>({kind:"package",id:p.id,status:p.status,reason:p.blockedReason??null})),
@@ -46,6 +46,7 @@ export function buildWatchdogStatus({control,doc,heartbeat,health,wake,logCheck,
     activePackage:active?{id:active.id,status:active.status,cycle:active.cycle,nextAction:active.nextAction??null,inFlight:Boolean(active.inFlight)}:null,
     queues:{implementation:live.filter(p=>IMPLEMENTATION_STATUSES.includes(p.status)).length,review:live.filter(p=>REVIEW_STATUSES.includes(p.status)).length,readyToMerge:live.filter(p=>p.status==="REVIEW_CLEAN").length,founderDecisionPending:live.filter(p=>p.status==="FOUNDER_DECISION_PENDING").length,total:live.length},
     blockedLanes,codex:control?.providers?.codex??null,claude:control?.providers?.claude??null,signer,phase0,
+    controlPlane:controlPlane?{commit:controlPlane.commit??null,path:controlPlane.path??null,activatedAt:controlPlane.activatedAt??null,previousCommit:controlPlane.previous?.commit??null}:null,
     lastSuccessfulAction:lastTransition??null,nextScheduledAction:{action:next,nextWakeAt:wake?.at??heartbeat?.nextWakeAt??null,wakeReason:wake?.reason??heartbeat?.wakeReason??null},founderDecisions,
     discovery:{at:discovery?.at??null,gitRefs:discovery?.gitRefs??{status:"UNAVAILABLE",reason:"NOT_YET_DISCOVERED"},worktrees:discovery?.worktrees??{status:"UNAVAILABLE",reason:"NOT_YET_DISCOVERED"},scheduler:discovery?.scheduler??null,
       transitionLog:{ok:logCheck?.ok===true,entries:logCheck?.entries??null,unapplied:logCheck?.unapplied??null,reason:logCheck?.reason??null,lastSeq:control?.lastTransition?.seq??null,lastAt:control?.lastTransition?.at??null},providers:control?.providers??{}}};

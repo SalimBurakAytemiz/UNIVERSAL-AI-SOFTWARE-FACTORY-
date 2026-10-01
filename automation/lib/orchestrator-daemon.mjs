@@ -36,7 +36,7 @@ export function createSleeper({wakeFile,watchFiles=[],chunkMs,shouldStop,onBeat=
   sleepUntil.wakeMtime=()=>mtime(wakeFile);return sleepUntil;
 }
 // //TR: Daemon döngüsü: bağımlılıklar enjekte edilir (üretimde CLI, testte gerçek süreçli koşum); her tur sonucu ve bir sonraki uyanma kalp atışına yazılır; hiçbir şey yapmayan anlık tekrar idleRetry ile sınırlanır.
-export async function runDaemon({policy,tickOnce,loadControl,sleepUntil,shouldStop,writeHeartbeat,now=()=>new Date(),maxIterations=Infinity,log=()=>{}}){
+export async function runDaemon({policy,tickOnce,loadControl,sleepUntil,shouldStop,writeHeartbeat,now=()=>new Date(),maxIterations=Infinity,log=()=>{},afterTick=null}){
   const d=validateDaemonPolicy(policy);let iteration=0;writeHeartbeat({state:"STARTING",iteration});
   while(iteration<maxIterations){
     const stop=shouldStop();if(stop){writeHeartbeat({state:"STOPPED",iteration,reason:stop});return {status:"STOPPED",reason:stop,iteration}}
@@ -45,6 +45,8 @@ export async function runDaemon({policy,tickOnce,loadControl,sleepUntil,shouldSt
     log({event:"TICK",iteration,status:r.status,done:r.done??[]});
     if(r.fatal){writeHeartbeat({state:"STOPPED",iteration,reason:r.status,detail:r.reason??null});return {status:r.status,fatal:true,reason:r.reason??null,iteration}}
     if(r.stop){writeHeartbeat({state:"STOPPED",iteration,reason:r.status});return {status:"STOPPED",reason:r.status,iteration}}
+    // //TR: Tick sonrası kanca (ör. denetimli kendini güncelleme): durdurma isterse daemon kendi çıkış koduyla temiz durur.
+    if(afterTick){const u=await afterTick(r,iteration);if(u?.stop){writeHeartbeat({state:"STOPPED",iteration,reason:u.status});return {status:u.status,reason:u.reason??null,iteration,exitCode:u.exitCode??0}}}
     let wake=nextWake(loadControl(),now(),policy);
     if(wake.waitMs===0&&!(r.done?.length))wake={...wake,at:new Date(now().getTime()+d.idleRetrySeconds*1000).toISOString(),waitMs:d.idleRetrySeconds*1000,reason:`${wake.reason}_NO_PROGRESS_IDLE_RETRY`};
     const lastTick={status:r.status,actions:(r.done??[]).length};writeHeartbeat({state:wake.waitMs>0?"WAITING":"RUNNING",iteration,nextWakeAt:wake.at,wakeReason:wake.reason,lastTick});

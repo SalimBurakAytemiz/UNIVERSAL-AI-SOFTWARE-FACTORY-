@@ -10,7 +10,7 @@ const logs=path.join(policy.roots.controlRoot,"logs"),daemonLog=path.join(logs,"
 const event=(type,extra={})=>{try{fs.appendFileSync(events,JSON.stringify({at:new Date().toISOString(),launcherPid:process.pid,type,...extra})+"\n")}catch{}};
 // //TR: Günlük dosyası sınırı aşınca bir önceki kopyaya döndürülür; eski kopya silinmez, üzerine yazılır.
 const rotate=()=>{try{if(fs.statSync(daemonLog).size>L.maxLogBytes)fs.renameSync(daemonLog,`${daemonLog}.1`)}catch{}};
-const EXIT={OK:0,FATAL:2,ALREADY_RUNNING:3};const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const EXIT={OK:0,FATAL:2,ALREADY_RUNNING:3,UPGRADED:4};const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const orchestrator=path.join(controlPlaneRoot,"scripts","uasco-orchestrator.mjs");let child=null,stopping=false;
 for(const sig of ["SIGINT","SIGTERM","SIGBREAK"])try{process.on(sig,()=>{stopping=true;event("LAUNCHER_SIGNAL",{signal:sig});try{child?.kill()}catch{}})}catch{}
 event("LAUNCHER_STARTED",{controlPlane:controlPlaneRoot,repo,node:process.version});
@@ -24,6 +24,8 @@ while(!stopping){
   if(code===EXIT.OK){event("LAUNCHER_STOPPED",{reason:"DAEMON_STOPPED_CLEANLY"});process.exit(0)}
   if(code===EXIT.ALREADY_RUNNING){event("LAUNCHER_STOPPED",{reason:"ANOTHER_WORKER_OWNS_THE_LOCK"});process.exit(0)}
   if(code===EXIT.FATAL){event("LAUNCHER_STOPPED",{reason:"DAEMON_FATAL_NOT_RESTARTED"});process.exit(2)}
+  // //TR: Denetimli kendini güncelleme: eski düzlem yeniden başlatılmaz; Task Scheduler'ın bir sonraki tetikleyicisi control\current bağlantısı üzerinden yeni düzlemi başlatır.
+  if(code===EXIT.UPGRADED){event("LAUNCHER_STOPPED",{reason:"CONTROL_PLANE_UPGRADED_NEXT_TRIGGER_STARTS_THE_NEW_PLANE"});process.exit(0)}
   // //TR: Çökme: uzun süre sağlıklı çalıştıysa bekleme sıfırlanır; son bir saatteki yeniden başlatma sınırı aşılırsa sonraki periyodik Task Scheduler tetikleyicisine bırakılır.
   if(ranMs>=L.healthyRunSeconds*1000)failures=0;const now=Date.now();while(restarts.length&&now-restarts[0]>3_600_000)restarts.shift();
   if(restarts.length>=L.maxRestartsPerHour){event("LAUNCHER_STOPPED",{reason:"RESTART_LIMIT_REACHED",restartsLastHour:restarts.length});process.exit(1)}

@@ -2,7 +2,8 @@
 // usage: node scripts/uasco-orchestrator.mjs --repo <constructionRepo> [--tick | --daemon [--max-iterations N] | --self-check [--with-provider-smoke] | --status | --founder-manual-quota-reset <codex|claude>]
 import fs from "node:fs";import path from "node:path";import os from "node:os";import crypto from "node:crypto";import {fileURLToPath} from "node:url";
 import {expandPolicyPaths,createContractRunner} from "../automation/lib/command-contracts.mjs";
-import {loadState,verifyTransitionLog} from "../automation/lib/orchestrator-state.mjs";
+import {loadState,verifyTransitionLog,commitTransition} from "../automation/lib/orchestrator-state.mjs";
+import {checkAndUpgrade,readControlPlaneRecord,UPGRADE_EXIT_CODE} from "../automation/lib/control-plane-upgrade.mjs";
 import {recoverInFlight,nextAction} from "../automation/lib/orchestrator-engine.mjs";
 import {createExecutors} from "../automation/lib/orchestrator-executors.mjs";
 import {runDaemon,createTick,createSleeper,createHeartbeatWriter,daemonPaths,validateDaemonPolicy,readHeartbeat,heartbeatHealth,nextWake} from "../automation/lib/orchestrator-daemon.mjs";
@@ -24,7 +25,7 @@ const dp=daemonPaths(policy),stopFile=path.join(repo,".ai/runtime/GLOBAL_STOP.js
 function summarize(c){if(!c)return null;return {packages:Object.fromEntries(c.order.map(id=>[id,{status:c.packages[id].status,cycle:c.packages[id].cycle,nextAction:c.packages[id].nextAction??null,blockedReason:c.packages[id].blockedReason??null,classification:c.packages[id].classification??null,notBefore:c.packages[id].notBefore??null}])),releases:Object.fromEntries(Object.entries(c.releases??{}).map(([k,r])=>[k,{status:r.status,nextAction:r.nextAction??null,blockedReason:r.blockedReason??null,signerReason:r.signerReason??null}])),providers:c.providers??{},phase0:c.phase0?{accepted:c.phase0.accepted??false,final:c.phase0.final??null,attempts:c.phase0.attempts?.length??0}:null,github:c.github??null,next:nextAction(c,new Date())}}
 function supervisorStatus(control){const hb=readHeartbeat(dp.heartbeat);let wake=null;try{wake=nextWake(control,new Date(),policy)}catch{}return {heartbeat:hb,health:(()=>{try{return heartbeatHealth(hb,new Date(),policy)}catch(e){return {healthy:false,reason:String(e.message)}}})(),lock:inspectProcessLock(dp.lock),nextWake:wake}}
 // //TR: Pasif durum girdileri yalnız dosyalardan okunur (kontrol durumu, günlük doğrulaması, son anlamlı geçiş, Global Stop); keşif sözleşmeleri yazıcı içinde çalışır.
-function statusInputs(){let doc=null,control=null;try{({doc,control}=loadState(policy.roots.stateFile))}catch{}let logCheck=null;try{logCheck=verifyTransitionLog(policy.roots.transitionLog,control)}catch(e){logCheck={ok:false,reason:String(e.message)}}return {doc,control,logCheck,lastTransition:lastMeaningfulTransition(policy.roots.transitionLog),globalStop:globalStopState(stopFile)}}
+function statusInputs(){let doc=null,control=null;try{({doc,control}=loadState(policy.roots.stateFile))}catch{}let logCheck=null;try{logCheck=verifyTransitionLog(policy.roots.transitionLog,control)}catch(e){logCheck={ok:false,reason:String(e.message)}}return {doc,control,logCheck,lastTransition:lastMeaningfulTransition(policy.roots.transitionLog),globalStop:globalStopState(stopFile),controlPlane:readControlPlaneRecord(policy)}}
 const statusFile=watchdogStatusPath(policy);
 if(argv.includes("--status")){const {control}=loadState(policy.roots.stateFile);out({status:"STATUS",summary:summarize(control),supervisor:supervisorStatus(control),watchdogStatus:readWatchdogStatus(statusFile)},0)}
 if(argv.includes("--self-check"))await selfCheck();
@@ -37,6 +38,11 @@ const stopNow=()=>globalStopState(stopFile)?"GLOBAL_STOP_ACTIVE":null;
 const runner=createContractRunner({policy,repo,shouldStop:stopNow}),executors=createExecutors({policy,repo,runner,controlPlaneRoot}),tickOnce=createTick({policy,workerId,runner,executors,shouldStop:stopNow});
 // //TR: Pasif durum dosyası süpervizör tarafından yazılır; yazma hatası yürütmeyi durdurmaz, günlüğe kaydedilir.
 const writeStatus=createWatchdogStatusWriter({policy,runner,repo,file:statusFile,read:statusInputs,producer:{workerId,pid:process.pid,controlPlane:controlPlaneRoot}});
+// //TR: Denetimli kendini güncelleme (Founder kararı 2026-10-01): yalnız governed birleştirme kontrol düzlemini değiştirdiyse; sonuç kalıcı duruma geçiş olarak yazılır, hata hiçbir şeyi değiştirmez.
+function upgradeCheck(){let res;try{const {control}=loadState(policy.roots.stateFile);res=checkAndUpgrade({runner,policy,repo,runningPlane:controlPlaneRoot,control,globalStop:globalStopState(stopFile)})}catch(e){logLine({event:"CONTROL_PLANE_UPGRADE_FAILED",reason:String(e?.message??e)});return null}
+  logLine({event:"CONTROL_PLANE_UPGRADE_CHECK",upgrade:res.upgrade,reason:res.reason,status:res.status??null,from:res.from??null,to:res.to??null});if(res.status!=="UPGRADED")return null;
+  try{const s=loadState(policy.roots.stateFile);commitTransition({stateFile:policy.roots.stateFile,logFile:policy.roots.transitionLog,doc:{...s.doc,controlPlane:res.record},next:s.control,event:{type:"CONTROL_PLANE_UPGRADED",packageId:res.mergedPackage??null,reason:`${res.from.slice(0,7)} -> ${res.to.slice(0,7)} (${res.reason})`,evidence:res.path}})}catch(e){logLine({event:"CONTROL_PLANE_UPGRADE_RECORD_FAILED",reason:String(e?.message??e)})}
+  return {stop:true,status:"CONTROL_PLANE_UPGRADED",reason:`${res.from.slice(0,7)}->${res.to.slice(0,7)}`,exitCode:UPGRADE_EXIT_CODE}}
 const safeWriteStatus=args=>{try{return writeStatus(args)}catch(e){logLine({event:"WATCHDOG_STATUS_WRITE_FAILED",reason:String(e?.message??e)});return null}};
 if(daemonMode){
   // //TR: Daemon: kilit süreç ömrü boyunca tutulur; her tur öncesi kontrol düzlemi yeniden doğrulanır ve Global Stop denetlenir; uyku uyandırma dosyası ve Global Stop değişikliğiyle erken biter.
@@ -48,10 +54,13 @@ if(daemonMode){
   const loadControl=()=>{try{return loadState(policy.roots.stateFile).control}catch{return null}};
   const maxIterations=arg("--max-iterations")?Number(arg("--max-iterations")):Infinity;if(!(maxIterations>0))out({status:"USAGE",reason:"--max-iterations must be positive"},2);
   const tickOnceChecked=async()=>{const v=verifyTrustRoot(controlPlaneRoot);if(!v.ok)return {status:"CONTROL_PLANE_TRUST_ROOT_INVALID",fatal:true,reason:JSON.stringify(v.mismatches.slice(0,3))};if(shouldStop())return {status:"GLOBAL_STOP_ACTIVE",stop:true};return tickOnce()};
-  const r=await runDaemon({policy,tickOnce:tickOnceChecked,loadControl,sleepUntil,shouldStop,writeHeartbeat,maxIterations,log:logLine});
-  out({status:`DAEMON_${r.status}`,reason:r.reason??null,iterations:r.iteration},r.fatal?EXIT.FATAL:0);
+  // //TR: Kendini güncelleme denetimi daemon başlangıcında ve birleştirme yapan her tick'ten sonra yapılır.
+  const afterTick=async(t,iteration)=>iteration===1||(t.done??[]).some(d=>d.action==="MERGE")?upgradeCheck():null;
+  const r=await runDaemon({policy,tickOnce:tickOnceChecked,loadControl,sleepUntil,shouldStop,writeHeartbeat,maxIterations,log:logLine,afterTick});
+  out({status:`DAEMON_${r.status}`,reason:r.reason??null,iterations:r.iteration},r.fatal?EXIT.FATAL:(r.exitCode??0));
 }
 const r=await tickOnce({manualReset:arg("--founder-manual-quota-reset")});{const hb=readHeartbeat(dp.heartbeat);let health=null;try{health=heartbeatHealth(hb,new Date(),policy)}catch{}safeWriteStatus({heartbeat:hb,health,refresh:true})}
+{const u=r.status==="TICK_DONE"?upgradeCheck():null;if(u)out({status:u.status,reason:u.reason,done:r.done,summary:summarize(r.control??null)},u.exitCode)}
 out({status:r.status,reason:r.reason??null,holder:r.holder,stopped:r.stopped??null,done:r.done,summary:summarize(r.control??null)},r.code??0);
 // //TR: Etkinleştirme öz denetimi: kontrol düzlemi, daemon politikası, kalıcı kuyruk ve günlük, canlı kalp atışı, tek worker kilidinin canlı daemon tarafından uygulandığı, builder yürütme sınırı ve (istenirse) Claude builder ile Codex reviewer'ın üretim broker yolundan gerçek çağrısı denetlenir; hiçbir kuyruk durumu değiştirilmez.
 async function selfCheck(){

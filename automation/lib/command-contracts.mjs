@@ -47,6 +47,8 @@ export function buildContracts(policy,{repo}){
     // //TR: Kurulu sistemin otomatik başlatması inşa süpervizörüyle ad çakışmasın diye policy'deki ayrı adla, kurulu kopyanın kendi betiğiyle kaydedilir.
     "ps.registerInstalledAutostart":{program:ps,args:p=>{const root=v.under("installRoot",p.installRoot);return ["-NoProfile","-ExecutionPolicy","Bypass","-File",path.join(root,"scripts","register-autostart.ps1"),"-RepoPath",root,"-TaskName",policy.autostart.installedSystemTaskName]},cwdFrom:p=>v.under("installRoot",p.installRoot)},
     // //TR: Süpervizörün pasif durum keşfi için salt-okunur sözleşmeler (dal uçları, worktree listesi, zamanlanmış görev durumu).
+    // //TR: Kendini güncelleme için salt-okunur: kontrol kökü altındaki bir düzlemin ayrık HEAD commit'i.
+    "git.headCommit":{program:git,args:p=>["-C",v.under("controlRoot",p.cwd),"rev-parse","--verify","HEAD^{commit}"]},
     "git.listBranchHeads":{program:git,args:p=>["-C",v.under("repo",p.cwd),"for-each-ref","--format=%(refname) %(objectname)","refs/heads/"]},
     "git.worktreeList":{program:git,args:p=>["-C",v.under("repo",p.cwd),"worktree","list","--porcelain"]},
     "ps.scheduledTaskInfo":{program:ps,args:()=>["-NoProfile","-NonInteractive","-Command",SCHEDULED_TASK_INFO_SCRIPT],envFrom:p=>({UASCO_TASK_NAME:v.oneOf([policy.autostart.taskName,policy.autostart.installedSystemTaskName],p.taskName)})},

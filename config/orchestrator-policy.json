@@ -59,6 +59,13 @@
     },
     "routine": "OPTIONAL_PASSIVE_DISPLAY_READS_WATCHDOG_STATUS_ONLY"
   },
+  "selfUpgrade": {
+    "//TR": "Founder kararı 2026-10-01: süpervizör yalnız master'ın ucu kontrol durumunda kayıtlı governed bir hızlı ileri birleştirmeyse, çalışan düzlemin torunuysa ve korumalı kontrol düzlemi dosyalarını değiştiriyorsa yeni düzleme geçer; hazırlık yalnız tam sözleşmelerle yapılır, mühürlü trust-root doğrulanmadan control\\current bağlantısı değişmez, eski düzlem silinmez.",
+    "enabled": true,
+    "link": "${LOCALAPPDATA}/UASCO/orchestrator/control/current",
+    "keepPreviousPlanes": true,
+    "exitCode": 4
+  },
   "watchdog": {
     "//TR": "Süpervizör kendi salt-okunur keşfini (git ref'leri, worktree'ler, zamanlanmış görev durumu, geçiş günlüğü, sağlayıcı retry durumu) .ai/runtime/WATCHDOG_STATUS.json dosyasına atomik yazar; Claude uygulamasındaki isteğe bağlı gözlemci hiçbir komut çalıştırmaz, yalnız bu dosyayı okur ve yürütme yolunda değildir.",
     "statusFile": "${REPO}/.ai/runtime/WATCHDOG_STATUS.json",
