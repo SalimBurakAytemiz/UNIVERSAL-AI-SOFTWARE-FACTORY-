@@ -1,6 +1,10 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-10-01 — V6 PKG-M1 provenance test timeout (branch, maintenance)
+
+- The process-spawning case "keeps a launcher with a non-matching version output LAUNCHER_ONLY and BLOCKED" in `tests/pkg-d-standalone-provenance.test.ts` runs with a 120 s per-test limit instead of vitest's 5 s default (its own capture process may take up to 60 s); assertions and provenance semantics are unchanged.
+
 ## 2026-09-29 — V6 PKG-R4 Phase0 git-baseline native probes (branch)
 
 - The second target-machine Phase0 attempt (release `ca21e83`) stopped at git-baseline: under `$ErrorActionPreference="Stop"` Windows PowerShell 5.1 turned the redirected stderr of `git remote get-url origin` on a fresh repository into a terminating NativeCommandError (PHASE0-F4); nothing was pushed.

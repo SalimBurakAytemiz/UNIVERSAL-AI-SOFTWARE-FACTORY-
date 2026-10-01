@@ -1,0 +1,43 @@
+{
+  "//TR": "Bu checkpoint Founder onaylı düşük riskli bakım paketini kaydeder: PKG-D provenance testindeki süreç başlatan vakanın vitest zaman aşımı, doğrulamalar ve güvenlik anlamı değişmeden yükseltilir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6_PKG_M1_PROVENANCE_TEST_TIMEOUT",
+  "date": "2026-10-01",
+  "parent": "787cd0f80426028b16007cd1006566add66597cf",
+  "branch": "v6/pkg-m1-provenance-test-timeout",
+  "founderAuthorization": {
+    "decision": "MAINTENANCE_PACKAGE_APPROVED",
+    "rule": "Founder message 2026-10-01: the suggested PKG-D provenance timeout stabilization is approved as a low-risk maintenance item; queue it as an independent package; change only the affected test timeout; do not weaken assertions; do not alter provenance/security semantics; run the relevant test repeatedly under load; run canonical regression; separate commit/checkpoint; normal independent Codex review; no Founder manual worktree creation; continue the critical queue first.",
+    "protectedFiles": [],
+    "constraint": "tests and status documents only; no protected file"
+  },
+  "observed": "the case 'keeps a launcher with a non-matching version output LAUNCHER_ONLY and BLOCKED' spawns scripts/capture-provider-provenance.mjs (its own spawn timeout is 60 s) but ran under vitest's 5 s default; it timed out at 5.3-5.6 s in the canonical validation of the PKG-T1 re-application (2026-09-29), the first PKG-R4 freeze (2026-09-30) and the final PKG-AUT2 rerun (2026-10-01), and passed on rerun each time.",
+  "change": "only that case gets a 120 s per-test limit (above its own 60 s capture timeout); every expectation is unchanged; no other test, script or semantics changed.",
+  "loadTest": {
+    "method": "three concurrent loops of scripts/orchestrator-selftest.mjs as CPU load while running vitest on the file repeatedly",
+    "original": "5 of 5 passed in this run (the timeout did not reproduce in this window; the failures above were recorded in earlier validation runs)",
+    "fixed": "10 of 10 passed"
+  },
+  "validation": {
+    "workspace": "fresh clone of 787cd0f (PKG-R4 chain tip) mirroring the PKG-M1 tree, reviewed lock installed",
+    "gitDiffCheck": "PASS",
+    "verifyTrustRoot": "PASS (unchanged, SEALED)",
+    "canonicalRunner": {
+      "status": "PASS",
+      "mode": "SEALED (trust root unchanged)"
+    },
+    "vitest": "PASS 31 passed (31) files / 175 passed (175)",
+    "broadDependencyFreeSuite": "25/25 PASS",
+    "rerunAfterCheckpointFinalized": "canonical runner rerun on the final tree before commit"
+  },
+  "changedFileSha256": {
+    "tests/pkg-d-standalone-provenance.test.ts": "a123a196073e4b72ea8c337de37625232fe18778cba39a31c4c60bfa5df201f6",
+    "CHANGELOG.md": "8448c3a62a9e6aa82292cd82c8f40b81dfd76913fde300166829f437a920b51c",
+    ".ai/REVIEW_STATUS.md": "8385ce799914ec77149da040d124de02e14c948004ff39f678f254e84085314c",
+    "audit/V6-FULL-SCAN-PROGRESS.json": "87698d24fe53565ade5417f919307300084886c1a470b3d8e4c0dc51df79b97b"
+  },
+  "openFindings": [],
+  "review": "NOT_REVIEWED_CODEX_PENDING",
+  "merge": "AFTER_PKG_R4",
+  "cleanClaim": false
+}
