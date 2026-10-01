@@ -1,6 +1,13 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-09-29 — V6 PKG-R4 Phase0 git-baseline native probes (branch)
+
+- The second target-machine Phase0 attempt (release `ca21e83`) stopped at git-baseline: under `$ErrorActionPreference="Stop"` Windows PowerShell 5.1 turned the redirected stderr of `git remote get-url origin` on a fresh repository into a terminating NativeCommandError (PHASE0-F4); nothing was pushed.
+- `scripts/init-private-git.ps1` now runs the origin and `gh repo view` probes with a scoped `Continue` restored in `finally` and decides only by the exit code; the probe output is discarded; every privacy refusal, Git isolation, the push check and the remote SHA verification are unchanged. Trust root resealed in the same commit.
+- Regression on Windows PowerShell 5.1 with a real temporary repository and a local bare remote (negative control, fresh push with SHA verification, set-url rerun, refusal without the override); the original script fails it.
+- Status documents record the reviews of 2026-09-30: PKG-AUT1B cycle 2 CLEAN and merged; PKG-T2 closed without merge and succeeded by PKG-T2B (Founder decision), whose cycle 1 was BLOCKED (F-T2B-001) and cycle 2 is pending; PKG-T1, PKG-T3, PKG-T4 and PKG-AUT2 re-applied on it.
+
 ## 2026-09-29 — V6 Autonomy Hardening: UASCO-Autonomous-Supervisor (branch)
 
 - The repository-native supervisor runs as a durable daemon: Task Scheduler (`UASCO-Autonomous-Supervisor`: logon, periodic heartbeat, restart on failure, single instance, no time limit, user level, no stored password; startup only for an elevated S4U registration) -> narrow launcher -> `uasco-orchestrator.mjs --daemon`.

@@ -31,12 +31,18 @@ if(-not (Invoke-UascoGit config --local user.email)){Invoke-UascoGit config --lo
 
 $visibility="LOCAL_ONLY";$detail="No origin remote configured";$protection="LOCAL_SUPERVISOR_MERGE_GATE"
 if($RemoteUrl){
-  Invoke-UascoGit remote get-url origin 2>$null
-  if($LASTEXITCODE -ne 0){Invoke-UascoGit remote add origin $RemoteUrl}else{Invoke-UascoGit remote set-url origin $RemoteUrl}
+  # //TR: Windows PowerShell 5.1 ErrorActionPreference=Stop altında yönlendirilen native stderr satırını sonlandırıcı NativeCommandError yapar; origin yoklaması bu yüzden kapsamlı Continue ile çalışır ve sonucu yalnız çıkış koduyla belirlenir (mevcut URL çıktıya/loga yazılmaz).
+  $eapBefore=$ErrorActionPreference;$ErrorActionPreference="Continue"
+  try{Invoke-UascoGit remote get-url origin 2>$null|Out-Null;$originExists=($LASTEXITCODE -eq 0)}finally{$ErrorActionPreference=$eapBefore}
+  if(-not $originExists){Invoke-UascoGit remote add origin $RemoteUrl}else{Invoke-UascoGit remote set-url origin $RemoteUrl}
   $safeRemote=$RemoteUrl -replace '(https?://)[^/@]+@','$1***@';$detail=$safeRemote;$visibility="REMOTE_UNVERIFIED"
   if(Get-Command gh -ErrorAction SilentlyContinue){
     try{
-      $json=gh repo view --json visibility,url 2>$null | ConvertFrom-Json
+      # //TR: gh yoklaması da kapsamlı Continue ile çalışır; sıfır olmayan çıkış kodu doğrulanmamış sayılır (REMOTE_UNVERIFIED), PRIVATE dışındaki görünürlük push'u reddeder.
+      $eapBefore=$ErrorActionPreference;$ErrorActionPreference="Continue"
+      try{$ghOut=gh repo view --json visibility,url 2>$null;$ghExit=$LASTEXITCODE}finally{$ErrorActionPreference=$eapBefore}
+      if($ghExit -ne 0){throw "gh repo view failed with exit code $ghExit"}
+      $json=($ghOut|Out-String)|ConvertFrom-Json
       if($json.visibility -eq "PRIVATE"){$visibility="PRIVATE_VERIFIED"}else{$visibility="NOT_PRIVATE"}
     }catch{$visibility="REMOTE_UNVERIFIED"}
   }
