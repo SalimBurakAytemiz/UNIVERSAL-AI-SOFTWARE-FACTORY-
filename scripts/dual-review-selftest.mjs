@@ -8,6 +8,7 @@ import {buildClaudeReviewerArgs,assertReviewerPolicy,modelMatches} from "../auto
 import {runBrokerReview,evaluateReviewRun,recordReviewEvidence,rederiveGovernedFromEvidence,governReviewText,detectQuotaBlock,parseRetryAfter} from "../automation/lib/review-pipeline.mjs";
 import {expandPolicyPaths,createContractRunner,CLAUDE_REVIEWER_BROKER} from "../automation/lib/command-contracts.mjs";
 import {createExecutors} from "../automation/lib/orchestrator-executors.mjs";
+import {createTick} from "../automation/lib/orchestrator-daemon.mjs";
 import {isolatedGitArgs,isolatedGitEnv} from "../automation/lib/git-isolation.mjs";
 const UASCO=process.cwd(),results={},assert=(c,m)=>{if(!c)throw new Error(m)},readJson=f=>JSON.parse(fs.readFileSync(f,"utf8")),tmp=()=>fs.mkdtempSync(path.join(os.tmpdir(),"uasco-dr1-"));
 const sha=b=>crypto.createHash("sha256").update(b).digest("hex"),digestOf=x=>sha(Buffer.from(stableStringify(x)));
@@ -39,7 +40,16 @@ await scenario("findings-are-aggregated-with-provider-attribution-and-ledgers-ar
 await scenario("a-changed-commit-or-bundle-digest-makes-prior-review-results-stale",async()=>{
   const p=pkgOf("S",{reviewGate:null});p.reviewGate={bundleDigest:p.bundle.digest,cycle:1,providers:{claude:{status:"CLEAN"},codex:{status:"CLEAN"}}};assert(currentGate(p).providers.claude.status==="CLEAN","current gate lost");
   const changedDigest={...p,bundle:{...p.bundle,digest:sha64()}};assert(!currentGate(changedDigest).providers.claude,"prior CLEAN carried to a changed bundle digest");
-  const changedCycle={...p,cycle:2,reviewCommit:sha40()};assert(!currentGate(changedCycle).providers.claude&&!currentGate(changedCycle).providers.codex,"prior CLEAN carried to a changed commit/cycle")});
+  const changedCycle={...p,cycle:2,reviewCommit:sha40()};assert(!currentGate(changedCycle).providers.claude&&!currentGate(changedCycle).providers.codex,"prior CLEAN carried to a changed commit/cycle");
+  const legacy=pkgOf("L",{status:"REVIEW_CLEAN",review:{result:"CLEAN",cycle:1,evidence:"ev",runDir:"r"}});assert(currentGate(legacy).providers.codex?.status==="CLEAN"&&currentGate(legacy).providers.codex.seededFromCodexOnlyReview===true,"historical Codex CLEAN of the current bundle not carried into the Codex gate");
+  for(const [label,x] of [["re-pending package",{...legacy,status:"REVIEW_PENDING"}],["refrozen bundle",{...legacy,review:{...legacy.review,bundleDigest:sha64()}}]])assert(!currentGate(x).providers.codex,`historical Codex CLEAN carried into the gate of a ${label}`)});
+await scenario("the-founder-can-reset-a-stale-claude-reviewer-quota-like-any-provider",async()=>{
+  const d=tmp(),pol={...policy,roots:{...policy.roots,stateFile:path.join(d,"s.json"),transitionLog:path.join(d,"l.jsonl")}},far=new Date(Date.now()+30*86_400_000).toISOString();
+  commitTransition({stateFile:pol.roots.stateFile,logFile:pol.roots.transitionLog,doc:{},next:ctlOf([pkgOf("Q",{reviewPolicy:"DUAL"})],{providers:{codex:{status:"AVAILABLE",retryAfter:null},claude:{status:"AVAILABLE",retryAfter:null},claudeReviewer:{status:"QUOTA_BLOCKED",retryAfter:far}},github:{checkedAt:"2099-01-01T00:00:00.000Z"}}),event:{type:"SEED"}});
+  const runner={run:()=>({status:1,stdout:"",stderr:""}),must:()=>{throw new Error("NO_COMMANDS_EXPECTED")}},tick=createTick({policy:pol,workerId:"w-reset",runner,executors:{}});
+  const bad=await tick({manualReset:"bogus"});assert(bad.status==="USAGE","an unknown provider was accepted for a manual reset");
+  await tick({manualReset:"claudeReviewer"});const log=fs.readFileSync(pol.roots.transitionLog,"utf8").split(/\r?\n/).filter(Boolean).map(l=>JSON.parse(l)),c=JSON.parse(fs.readFileSync(pol.roots.stateFile,"utf8")).control;
+  assert(log.some(e=>e.type==="FOUNDER_MANUAL_QUOTA_RESET"&&e.packageId==="claudeReviewer")&&c.providers.claudeReviewer.retryAfter===null&&c.providers.codex.status==="AVAILABLE",`Claude reviewer quota not reset: ${JSON.stringify(c.providers)}`)});
 // ================================================================ B. engine lifecycle
 await scenario("engine-both-clean-merges-and-each-reviewer-runs-once",async()=>{
   const s=store(ctlOf([pkgOf("P")])),{calls,exec}=fakeExec({claude:()=>({type:"CLEAN",runDir:"rc",evidence:"ec"}),codex:()=>({type:"CLEAN",runDir:"rx",evidence:"ex"})});

@@ -53,7 +53,7 @@ A usage-limit response is captured verbatim. `environment-block.json` records th
 
 - **No retries consumed.** No review cycle, format retry or remediation retry is used.
 - **Retry timing.** At the retry time the next review is the single controlled probe. A provider retry time is used only when it is valid and in the future; with no time, or an invalid or stale one, the policy backoff applies: 30 minutes, doubling up to 6 hours. A continuing quota response therefore never causes another call in the same tick.
-- **Founder reset.** `--founder-manual-quota-reset codex` clears only the stale retryAfter and allows one immediate probe. The real result then restores normal backoff.
+- **Founder reset.** `--founder-manual-quota-reset codex` (or `claude`, `claudeReviewer`) clears only the stale retryAfter of that provider state and allows one immediate probe. The real result then restores normal backoff.
 - **Other work continues.** While Codex is blocked, independent packages, releases and local work keep moving.
 
 ## Lanes and Founder decisions

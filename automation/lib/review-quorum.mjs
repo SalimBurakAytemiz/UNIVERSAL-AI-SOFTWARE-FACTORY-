@@ -7,10 +7,10 @@ const SEV=["P3","P2","P1","P0"],sevRank=s=>SEV.indexOf(String(s));
 // //TR: Etkinleştirmeden önce dondurulmuş ve geçmişte kapanmış paketler tarihsel politikayla (yalnız Codex) kalır; etkinleştirmeden sonra açık her paket iki reviewer ister. Paket açıkça işaretlenmişse o işaret geçerlidir.
 export function requiredReviewers(p,control){if(p?.reviewPolicy==="DUAL")return ["claude","codex"];if(p?.reviewPolicy==="CODEX_ONLY_HISTORICAL")return ["codex"];return control?.dualReview?.active===true?["claude","codex"]:["codex"]}
 export function isDualPackage(p,control){return requiredReviewers(p,control).length===2}
-// //TR: Kapı paketin o anki bundle digest'i ve cycle'ı ile anahtarlanır; ikisinden biri değişirse eski sonuçlar uygulanmaz. Etkinleştirmeden önce aynı bundle için kaydedilmiş geçerli Codex CLEAN'i Codex kapısına taşınır (tarihsel kanıt geçersiz sayılmaz), Claude kapısı boş başlar.
+// //TR: Kapı paketin o anki bundle digest'i ve cycle'ı ile anahtarlanır; ikisinden biri değişirse eski sonuçlar uygulanmaz. Etkinleştirmeden önce aynı bundle için kaydedilmiş geçerli Codex CLEAN'i (paket hâlâ REVIEW_CLEAN, aynı cycle, varsa aynı bundle digest) Codex kapısına taşınır (tarihsel kanıt geçersiz sayılmaz), Claude kapısı boş başlar; birleşme kapısı bu kanıtı yine donmuş bundle'a karşı yeniden türetir.
 export function currentGate(p){const g=p?.reviewGate;if(g&&g.bundleDigest===p.bundle?.digest&&g.cycle===p.cycle)return g;
   const fresh={bundleDigest:p?.bundle?.digest??null,cycle:p?.cycle??null,providers:{}};
-  if(p?.review?.result==="CLEAN"&&!p.review.dual&&p.review.cycle===p.cycle&&p.review.evidence)fresh.providers.codex={status:"CLEAN",runDir:p.review.runDir??null,evidence:p.review.evidence,seededFromCodexOnlyReview:true};
+  if(p?.status==="REVIEW_CLEAN"&&p.review?.result==="CLEAN"&&!p.review.dual&&p.review.cycle===p.cycle&&p.review.evidence&&(p.review.bundleDigest===undefined||p.review.bundleDigest===p.bundle?.digest))fresh.providers.codex={status:"CLEAN",runDir:p.review.runDir??null,evidence:p.review.evidence,seededFromCodexOnlyReview:true};
   return fresh}
 export function gateStatus(gate,k){const s=gate?.providers?.[k]?.status;return GATE_STATUSES.includes(s)?s:"PENDING"}
 // //TR: Yeter sayı: geçersiz sonuç -> INVALID; hepsi CLEAN -> CLEAN; bir BLOCKED varsa ve diğer reviewer şu anda çalıştırılamıyorsa (sonucu var veya kotada) -> BLOCKED; aksi halde PENDING. Bir reviewer diğerinin geçerli bulgusunu geçersiz kılamaz.
