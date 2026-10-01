@@ -29,6 +29,7 @@ export function buildContracts(policy,{repo}){
     "git.status":{program:git,args:p=>["-C",anyRoot(p.cwd),"status","--porcelain=v1","--untracked-files=all"]},
     "git.isAncestor":{program:git,args:p=>["-C",anyRoot(p.cwd),"merge-base","--is-ancestor",v.sha(p.ancestor),v.sha(p.descendant)],allowExit:[0,1]},
     "git.diffNames":{program:git,args:p=>["-C",anyRoot(p.cwd),"diff","--name-only",`${v.sha(p.base)}..${v.sha(p.head)}`]},
+    "git.diffPatch":{program:git,args:p=>["-C",anyRoot(p.cwd),"diff","--no-ext-diff","--no-textconv","--no-color","-U10",`${v.sha(p.base)}..${v.sha(p.head)}`]},
     "git.lsTree":{program:git,args:p=>["-C",v.under("repo",p.cwd),"ls-tree","-r","--name-only",v.sha(p.commit)]},
     "git.treeOf":{program:git,args:p=>["-C",v.under("repo",p.cwd),"rev-parse",`${/^refs\//.test(p.rev)?v.ref(p.rev):v.sha(p.rev)}^{tree}`]},
     "git.archive":{program:git,args:p=>["-C",v.under("repo",p.cwd),"archive","--format=tar","-o",v.under("releaseRoot",p.out),v.sha(p.commit)]},

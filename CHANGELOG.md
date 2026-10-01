@@ -6,7 +6,8 @@
 - Founder directive 2026-10-01: every governed review package frozen after the activation commit is reviewed by `CLAUDE_REVIEWER` and `CODEX_REVIEWER`; integration requires both CLEAN on the same frozen bundle, any valid BLOCKED blocks, malformed output is never CLEAN and a quota block produces no result and consumes no cycle.
 - `CLAUDE_REVIEWER` is a separate Claude process and session (restricted mode, read-only tools, no MCP, no session persistence, pinned model, reviewer system prompt) in its own clean review clone, started from the reviewed control plane; its identity is separate from `CLAUDE_BUILDER` and its evidence is re-derived with that identity at the merge gate.
 - Findings of both reviewers are aggregated with provider attribution; a new commit or bundle makes both gates stale; separate quota states for the Claude reviewer, the Codex reviewer and the builder; historical Codex-only CLEAN evidence stays valid and open packages get the Claude review in addition.
-- Dual-review selftest 17/17 with mutation checks; trust root resealed.
+- The Claude reviewer has no command execution: the supervisor gives it its deterministic STEP 1 precheck, the exact diff and the changed-file list as read-only inputs in its review clone (found by the first live advisory run, which returned ENVIRONMENT_BLOCKED without them).
+- Dual-review selftest 18/18 with mutation checks; trust root resealed.
 
 ## 2026-10-01 — V6 PKG-M1 provenance test timeout (branch, maintenance)
 

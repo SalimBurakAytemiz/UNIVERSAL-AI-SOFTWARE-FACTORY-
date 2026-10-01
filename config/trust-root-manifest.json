@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-06T11:49:42.539Z",
+  "generatedAt": "2026-10-06T11:49:44.824Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -110,7 +110,7 @@
     },
     {
       "path": "automation/lib/command-contracts.mjs",
-      "sha256": "e2607b35deafe9e612afc15937d2561b97b8e4cc465f16109ad14cb2c3e2aba6"
+      "sha256": "4c78afaacf477ecf54148ea1edc133df4cce6a86afa28c32ff86e8317d010916"
     },
     {
       "path": "automation/lib/command-runner.mjs",
@@ -310,7 +310,7 @@
     },
     {
       "path": "automation/lib/review-pipeline.mjs",
-      "sha256": "c38465a0176a1aa1f019546fec14203e3d9da53d50a90d531b749d6a37fe48b8"
+      "sha256": "5ebca7d5fcca8b61490b3c83628855bcbcc154fde7c82e2c205ea43e9b6f555a"
     },
     {
       "path": "automation/lib/review-quorum.mjs",
@@ -462,7 +462,7 @@
     },
     {
       "path": "prompts/CLAUDE-REVIEWER-SYSTEM.md",
-      "sha256": "bb308ad550c320634a21b60569df17bf96d98209ba674c3dad88bf3b03f480e2"
+      "sha256": "7f665c1b43b7f1f35c3ff3967cc8f35756cf75fd5dbab4692ecc59e24b5a36b7"
     },
     {
       "path": "prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt",
@@ -1170,7 +1170,7 @@
     },
     {
       "path": "scripts/dual-review-selftest.mjs",
-      "sha256": "f43753407a087b23428a93976c97f337e2b74ca0a3dc9136e3edb6b656e8ef41"
+      "sha256": "f73a5e68bea3c0768ef382dbd74ce38793f31614e30bcdba4b388a817c63c05e"
     },
     {
       "path": "scripts/generate-trust-root.mjs",
