@@ -46,11 +46,13 @@ The Codex checks are unchanged. Evidence is re-derived with the reviewer identit
 | INVALID (format retries exhausted) | any | REVIEW_INVALID -> Founder decision, never CLEAN |
 | quota / unavailable | any | pending; no CLEAN is fabricated |
 
-A BLOCKED result waits for the other reviewer while that reviewer can still run. If the other reviewer is quota-blocked, remediation starts with the findings available, so the queue does not stall. No reviewer can overrule another's valid finding.
+When a review result is applied, a BLOCKED result waits for the other reviewer only if that reviewer can run now. If the other reviewer's provider is quota-blocked, remediation starts with the findings available, so the queue does not stall. This also holds when the quota was recorded by another package and this package's gate is still pending. A CLEAN still needs a CLEAN from every required reviewer. No reviewer can overrule another's valid finding.
 
 ## Findings and remediation
 
-Findings of both reviewers are aggregated. They are merged only when file, symbol and category are identical. Each provider's attribution and independent evidence is kept. The builder receives these governed findings only. The next cycle's ledger contains both reviewers' governed ledgers with provider-namespaced ids (`F-CLAUDE.*`, `F-CODEX.*`), and both reviewers see it unchanged.
+Findings of both reviewers are aggregated for the package state and the builder. There, entries are grouped only when file, symbol and category are identical, and each provider's attribution and full governed finding is kept as separate evidence. The builder receives these governed findings only. The next cycle's ledger contains both reviewers' governed ledgers with provider-namespaced ids (`F-CLAUDE.*`, `F-CODEX.*`), and both reviewers see it unchanged.
+
+Ledger entries are merged only when their canonical fingerprint (category, basis, file, symbol, reproduction steps) is identical. Distinct blockers on the same file, symbol and category stay separate, even when they come from one provider, so resolving one never removes another. When equivalent entries merge, the stronger entry is kept (open over closed, blocker over advisory, higher severity), together with the retest validation ids and evidence refs of both.
 
 A remediation commit or a refrozen bundle makes both gates stale: the gate is keyed by bundle digest and cycle, so both reviewers review the new revision. The two-cycle limit applies per package revision, not per reviewer.
 
@@ -69,6 +71,7 @@ Reviews run sequentially within a tick, after the commit is immutable and the bu
 - **When it switches on.** `DUAL_REVIEW_REQUIRED` is activated once, when the supervisor first runs a control plane whose policy sets `review.dualReviewRequired`. The activation and the control-plane commit are recorded as `control.dualReview` and a `DUAL_REVIEW_ACTIVATED` transition.
 - **Historical evidence.** Packages closed earlier keep their Codex-only CLEAN evidence, which stays valid.
 - **Open packages.** An open package that is already Codex-CLEAN on its current bundle keeps that result and receives the missing Claude review before it can merge.
+- **New revisions.** Every revision committed and frozen after activation is reviewed by both reviewers. A `CODEX_ONLY_HISTORICAL` marker covers only the revision it was set for. The new commit replaces it with `DUAL` and keeps the old marker as `historicalReviewPolicy`, bound to the previous commit, bundle digest and cycle. The historical evidence itself is not touched.
 - **Held packages.** A package that must not be reviewed or merged before activation carries `hold: {until: "DUAL_REVIEW_ACTIVE"}` and a far-future `notBefore`. Every older plane skips a package with a future `notBefore` for every action, and a DR1+ engine never acts on a held package. The activating plane releases these holds in the same tick (`ACTIVATION_HOLD_RELEASED` in the transition log), so such a package is reviewed by both reviewers from the start. A hold for another activation (for example `RELEASE_AUDIT_ACTIVE`) is left untouched.
 
 ## Model and authentication

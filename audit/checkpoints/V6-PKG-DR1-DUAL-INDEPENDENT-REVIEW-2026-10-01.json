@@ -167,5 +167,95 @@
     "the final full-repository release audit (PKG-DR2)",
     "gate evidence from the live advisory runs (they used the unreviewed DR1 control plane and are stored under .ai/cache/review/pre-activation-claude, never adopted by the gate)",
     "parallel reviewer execution (reviews run sequentially by design)"
+  ],
+  "remediationRounds": [
+    {
+      "date": "2026-10-06",
+      "mode": "REMEDIATE (bootstrap builder worker, finalization sprint, Founder-authorized)",
+      "reviewedRevision": {
+        "packageHeadBefore": "702c78879290a1df683c6250571cedacb2df5b6e",
+        "packageBase": "46750f6",
+        "codexReviewCycle": 1,
+        "codexResult": "BLOCKED",
+        "branch": "v6/pkg-dr1-dual-independent-review-r2"
+      },
+      "findings": [
+        {
+          "id": "F-DR1-001",
+          "severity": "P1",
+          "file": "automation/lib/review-quorum.mjs",
+          "symbol": "mergeFindingLedgers",
+          "summary": "the next-cycle ledger deduplicated on file|symbol|category only, so a distinct blocker (also from the same provider) and its fingerprint and retest obligations were dropped; resolving the retained entry produced CLEAN",
+          "fix": "ledger identity is the canonical finding fingerprint (category, basis, file, symbol, reproduction steps), recomputed and required to equal a stored fingerprint; only identical fingerprints merge, a finding with a non-canonical stored fingerprint never merges; on merge the stronger entry is kept (open over closed, BLOCKER over other, higher severity) with its first namespaced id, and the retestValidationIds and evidenceRefs of both are unioned"
+        },
+        {
+          "id": "F-DR1-002",
+          "severity": "P1",
+          "file": "automation/lib/orchestrator-engine.mjs",
+          "symbol": "applyOutcome",
+          "summary": "COMMITTED upgraded reviewPolicy to DUAL only when it was absent, so an existing CODEX_ONLY_HISTORICAL marker survived a new revision after activation and requiredReviewers kept scheduling and the merge gate Codex-only",
+          "fix": "after activation every COMMITTED (REMEDIATE or IMPLEMENT) sets reviewPolicy DUAL; a replaced non-DUAL marker is kept as historicalReviewPolicy bound to the previous reviewCommit, bundle digest and cycle; the previous review evidence is not touched; before activation the marker is unchanged"
+        },
+        {
+          "id": "F-DR1-003",
+          "severity": "P2",
+          "file": "automation/lib/review-quorum.mjs",
+          "symbol": "computeReviewAggregate",
+          "summary": "every PENDING gate counted as runnable without consulting providerDue, so a reviewer quota recorded globally (by another package) kept a valid BLOCKED from starting authorized remediation",
+          "fix": "a reviewer is runnable only when its gate is PENDING or PROVIDER_BLOCKED and its provider is due; the PENDING aggregate returns the runnable list and applyDualReview derives REVIEW_PENDING vs REVIEW_PENDING_PROVIDER_QUOTA from it; CLEAN still requires a CLEAN from every required reviewer"
+        }
+      ],
+      "regressionScenarios": {
+        "F-DR1-001": "ledger-merge-keeps-distinct-blockers-on-the-same-file-symbol-and-category",
+        "F-DR1-002": "engine-a-new-revision-after-activation-requires-both-reviewers-despite-a-historical-marker",
+        "F-DR1-003": "engine-a-blocked-review-remediates-while-the-other-reviewer-provider-is-quota-blocked"
+      },
+      "changedFiles": {
+        "automation/lib/review-quorum.mjs": "03ce0721228cdd070b2cbb7ea5c1f5ba6804711f0fa13b1217c21193cc66c800",
+        "automation/lib/orchestrator-engine.mjs": "382963fa703782041d22a669c2ecabe213a55ff7f99fcf2ac7142d62477d263f",
+        "scripts/dual-review-selftest.mjs": "fb4b060070b1aafcd4a0564b892ad1ffc824b92d1e117f0786d5c62c310fc65f",
+        "tests/pkg-dr1-dual-review.test.ts": "a77ed3543caf09ad73f2131b06c2cc562b47bf9724e2a3841ba1e3699fd338d7",
+        "config/trust-root-manifest.json": "1023071936670e73a5a0a0e205409354f498a048febd7818302e2a89ea8c1cad",
+        "docs/architecture/DUAL-INDEPENDENT-REVIEW.md": "1a6774d88a8d8643ad60c479a9f2ac8f4fc9b074c665f71586d9f6bea49f0336",
+        "CHANGELOG.md": "da51c4e19f56ba5efd90c31cc04ef39daec18e97289a44e31a037243b975d2a0"
+      },
+      "changedFilesNote": "this checkpoint is also changed by the remediation commit and cannot list its own digest",
+      "reseal": {
+        "tool": "scripts/generate-trust-root.mjs (unchanged)",
+        "sealStatus": "SEALED",
+        "protectedFiles": 353,
+        "generatedAt": "2026-10-06T05:27:21.020Z",
+        "rehashedEntries": [
+          "automation/lib/orchestrator-engine.mjs",
+          "automation/lib/review-quorum.mjs",
+          "scripts/dual-review-selftest.mjs"
+        ],
+        "manifestSha256": "1023071936670e73a5a0a0e205409354f498a048febd7818302e2a89ea8c1cad"
+      },
+      "validation": {
+        "workspace": "remediation worktree of v6/pkg-dr1-dual-independent-review-r2 at 702c788 plus this round (Windows 10, Node >=24, shared node_modules junction)",
+        "dualReviewSelftest": "PASS 23/23",
+        "vitestTargeted": "PASS 3 files / 12 tests (tests/pkg-dr1-dual-review.test.ts, tests/pkg-aut2-autonomy-hardening.test.ts, tests/pkg-aut1-orchestrator.test.ts)",
+        "autonomyHardeningSelftest": "PASS 17/17",
+        "typecheck": "PASS (tsc --noEmit)",
+        "verifyTrustRoot": "PASS",
+        "vitestFull": "PASS 32 passed (32) files / 177 passed (177) tests (npx vitest run, exit 0)",
+        "canonicalRunner": "NOT_RUN_BY_BUILDER (the supervisor runs scripts/run-validation.mjs)"
+      },
+      "mutationEvidence": [
+        "M1 revert mergeFindingLedgers to file|symbol|category dedup -> ledger-merge-keeps-distinct-blockers-on-the-same-file-symbol-and-category FAIL (one provider: only F-CLAUDE.L-001 left), 22/23",
+        "M1b fingerprint key without the retest/evidence union -> ledger-merge-keeps-distinct-blockers-on-the-same-file-symbol-and-category FAIL (equivalent finding lost a retest obligation), 22/23",
+        "M2 revert COMMITTED to upgrade only an unmarked package -> engine-a-new-revision-after-activation-requires-both-reviewers-despite-a-historical-marker FAIL (kept CODEX_ONLY_HISTORICAL -> codex), 22/23",
+        "M2 deep, earlier assertions removed -> same scenario FAIL at scheduling (REVIEW without a provider) and, separately, at the merge gate (MERGED with Codex evidence alone)",
+        "M3 revert runnable to PENDING-always-runnable -> engine-a-blocked-review-remediates-while-the-other-reviewer-provider-is-quota-blocked FAIL (quorum assertion), 22/23",
+        "M3 deep, quorum assertion removed -> same scenario FAIL in the engine (status REVIEW_PENDING, no review/remediation)",
+        "every mutant was restored byte-identically (sha256 checked) and the unmutated selftest is 23/23"
+      ],
+      "residualRisks": [
+        "F-DR1-003 is decided when a review result is applied: if the other reviewer's quota is recorded only later by another package, the package waits for that provider's retry and then gets the missing review; it never becomes CLEAN or merges without it",
+        "aggregateFindings (state and builder view) still groups entries by file|symbol|category; it keeps every provider finding in full as evidence, so nothing reaches the builder in reduced form, and the governance ledger no longer uses that key"
+      ],
+      "cleanClaim": false
+    }
   ]
 }

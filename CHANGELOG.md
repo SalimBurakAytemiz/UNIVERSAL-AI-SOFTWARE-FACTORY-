@@ -10,6 +10,11 @@
 - Pre-review remediation from an advisory Claude reviewer run of this package: a historical Codex-only CLEAN seeds the Codex gate only while the package is still REVIEW_CLEAN for the same cycle and bundle, and the Founder manual quota reset also accepts the `claudeReviewer` provider state.
 - Activation holds: a package held until `DUAL_REVIEW_ACTIVE` (hold plus far-future `notBefore`, honoured by every older plane for every action) is released only by the activating DR1+ plane, so it can never be reviewed or merged with Codex alone.
 - Dual-review selftest 20/20 with mutation checks; trust root resealed.
+- Cycle-1 review remediation (F-DR1-001..003):
+  - The next-cycle ledger merges entries only when their canonical fingerprint is identical and keeps the retest obligations of both, so distinct blockers on the same file, symbol and category are never dropped.
+  - A revision committed after activation replaces a `CODEX_ONLY_HISTORICAL` marker with `DUAL`; the old marker is kept bound to its revision, so scheduling and the merge gate need both reviewers.
+  - A pending reviewer whose provider is quota-blocked no longer delays remediation of a valid BLOCKED; CLEAN still needs every required reviewer.
+  - The selftest now has 23 scenarios.
 
 ## 2026-10-01 — V6 PKG-M1 provenance test timeout (branch, maintenance)
 
