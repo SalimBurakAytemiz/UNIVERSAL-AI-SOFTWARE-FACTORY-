@@ -108,6 +108,70 @@
       },
       "validation": "worktree of v6/pkg-t4-powershell-safety-r6 on f4d41e9 with the changes applied, win32 10.0.19045, Windows PowerShell 5.1: node scripts/powershell-safety-selftest.mjs PASS 6/6 (exit 0); npx vitest run tests/pkg-t4-powershell-safety.test.ts 1 file / 1 test passed; npm run typecheck exit 0; node scripts/verify-trust-root.mjs TRUST_ROOT_VERIFY: PASS; full npx vitest run 29 files / 167 tests passed; scripts/run-validation.mjs not run by this worker (supervisor-owned canonical validation)",
       "mutationEvidence": "scratch copies of the fixed selftest outside the worktree (only the import rewritten to an absolute URL), run from the worktree root: unmutated control PASS 6/6 exit 0; reviewer reproduction (CommandName filter replaced with $false and error mapping replaced with @()) FAIL 5/6 exit 1 with parse-error-and-invoke-expression-detectors-catch-violating-fixtures = 'FAIL: parse error in syntax-error.ps1 not reported'; error mapping blinded only FAIL 5/6 exit 1 (same message); CommandName filter blinded only FAIL 5/6 exit 1 with 'FAIL: Invoke-Expression in invoke-expression.ps1 not reported'; in every mutant the corpus scenario still reports PASS, which is the gap the new scenario closes; the worktree file was never mutated, so nothing needed restoring"
+    },
+    {
+      "date": "2026-10-06",
+      "mode": "REMEDIATE cycle 2 (bootstrap builder worker, finalization sprint; governed Codex findings)",
+      "reviewedCommit": "725aad8f7c0f3749a15def9fb425e0ccc6449f7d",
+      "reviewRun": "725aad8-c1-20261006T114438395Z-orchestrator (Codex, result BLOCKED)",
+      "findings": [
+        {
+          "id": "F-T4-C1-001",
+          "severity": "P2",
+          "classification": "BLOCKER",
+          "file": "scripts/powershell-safety-selftest.mjs",
+          "symbol": "webRequestViolations",
+          "summary": "the web-request rule was a substring test over raw source: the text '-MaximumRedirection 0' anywhere in the invocation's text segment satisfied it, so 'Invoke-WebRequest \"$u\" -MaximumRedirection 01', 'Invoke-WebRequest \"$u\" # -MaximumRedirection 0' and 'Invoke-WebRequest \"$u\" -UserAgent \"-MaximumRedirection 0\"' all returned no violation although none disables redirects",
+          "rootCause": "compliance evidence was taken from raw source text, so comments and string contents counted as code, and the value was matched as a text prefix instead of as the parameter's parsed value",
+          "fix": "PARSE_CODE (the one PowerShell 5.1 parser path, detectPs1) now also returns, for every CommandAst in the file (nested script blocks included), the command name and its elements: parameter name, colon argument or the argument node's AST type, source text, string-constant value and quote kind. Comments never appear in this view, and string contents only appear as the value of their own argument. In the allowlisted script every parsed Invoke-WebRequest/Invoke-RestMethod/iwr/irm command must carry exactly one -MaximumRedirection parameter, written out in full, whose value (colon argument or following element) is a ConstantExpressionAst with source text exactly '0'. So 01, 00, 0x0, $x and quoted '0' are rejected. Every raw-text mention of a web-request name not matched by a parsed web-request command (comment, string) is a further violation, and outside the allowlist every mention is still a violation, as before. WEB_ALLOWED is now a set of file names."
+        },
+        {
+          "id": "F-T4-C1-002",
+          "severity": "P2",
+          "classification": "BLOCKER",
+          "file": "scripts/powershell-safety-selftest.mjs",
+          "symbol": "powershell-scripts-follow-safety-rules",
+          "summary": "the Set-ExecutionPolicy exemption regex accepted '-Scope Process' inside a trailing comment ('Set-ExecutionPolicy Unrestricted # -Scope Process'), and the entry-script regex accepted a commented-out '# $ErrorActionPreference=\"Stop\"'",
+          "rootCause": "same family as F-T4-C1-001: exemption and requirement evidence were regex matches over raw source including comments and strings",
+          "fix": "a parsed Set-ExecutionPolicy command is persistent unless it carries exactly one real -Scope parameter whose value (colon argument or following element) is the string constant Process. Every raw-text mention of Set-ExecutionPolicy not matched by a parsed command (comment, or a string passed to a child shell) is a violation. Entry scripts (all except the sanitize-process-env.ps1 helper) need an AssignmentStatementAst whose left side is exactly $ErrorActionPreference, whose operator is '=', whose right side is the single- or double-quoted string constant Stop, and which is an unconditional top-level statement of the script (parent is a named block of the root script block). An assignment in a comment, a block comment, a string, a function body (a function-local variable never affects the script scope) or a conditional block does not count. The prohibited-text rules (EncodedCommand / -enc, DownloadString/DownloadFile, pipe to Invoke-Expression) deliberately still scan the raw source: comments and strings can only add violations there, and string scanning still catches code handed to a child shell, so no existing rule was weakened"
+        }
+      ],
+      "advisoryCovered": {
+        "id": "F-CLAUDE-T4-C1-002",
+        "note": "the independent Claude pre-review found the EncodedCommand, DownloadString/DownloadFile, Set-ExecutionPolicy and $ErrorActionPreference rules had no positive control. The new regression scenario adds positive controls for each, plus pipe to Invoke-Expression, and the blind-* mutants below show each control fails when its rule is blinded"
+      },
+      "regressionScenario": {
+        "name": "safety-rules-credit-only-parsed-code-not-comments-or-strings",
+        "reported": [
+          "F-T4-C1-001 repros: -MaximumRedirection 01; -MaximumRedirection 0 only in a comment; -MaximumRedirection 0 only inside -UserAgent's string",
+          "-MaximumRedirection 0x0, $x and quoted '0'",
+          "F-T4-C1-002 repro: Set-ExecutionPolicy Unrestricted # -Scope Process",
+          "Set-ExecutionPolicy inside a child-shell string",
+          "F-T4-C1-002 repro: # $ErrorActionPreference=\"Stop\" only",
+          "Stop assignment only in a block comment, only inside a string, only inside a function body",
+          "EncodedCommand parameter, -enc abbreviation, EncodedCommand inside a Start-Process argument string",
+          "DownloadString, DownloadFile",
+          "pipe to iex"
+        ],
+        "compliantControls": [
+          "Invoke-WebRequest ... -MaximumRedirection 0 (allowlisted name)",
+          "Invoke-RestMethod ... -MaximumRedirection:0",
+          "Set-ExecutionPolicy -Scope Process Bypass",
+          "Set-ExecutionPolicy Bypass -Scope:Process -Force",
+          "active $ErrorActionPreference=\"Stop\" with a trailing comment",
+          "active $ErrorActionPreference='Stop'"
+        ],
+        "mechanics": "fixtures are written to a fresh os.tmpdir() directory (one subdirectory each, so the allowlisted name ensure-omniroute.ps1 can repeat), parsed by the same detectPs1 as the real scripts (a fixture parse error fails the scenario), evaluated by the same safetyViolations, and removed afterwards. Every expected report and every unexpected report is collected and the scenario fails listing all of them. The existing web-request-rule-checks-every-invocation scenario keeps its five assertions and messages unchanged and now evaluates its in-memory sources through the same parser path. tests/pkg-t4-powershell-safety.test.ts pins PASS 7/7 (was 6/6) and requires PASS for powershell-scripts-follow-safety-rules and the new scenario by name, in addition to the two scenarios it already named"
+      },
+      "realCorpus": "all 13 scripts/*.ps1 remain compliant under the stricter rules with no script changes: the 12 entry scripts each have one unconditional top-level $ErrorActionPreference=\"Stop\" (double-quoted), ensure-omniroute.ps1 has exactly two web-request mentions, both parsed Invoke-WebRequest commands with -MaximumRedirection 0 (ConstantExpressionAst, text '0'), and no script mentions Set-ExecutionPolicy, EncodedCommand or DownloadString/DownloadFile",
+      "changedFiles": {
+        "scripts/powershell-safety-selftest.mjs": "783fd45204eee02b43cc6e54f7dbd93244b77df5888a39f98b83779a032ee94b",
+        "tests/pkg-t4-powershell-safety.test.ts": "17eb185dc655e40f0b3bc3a18b584dea9a76a0fde74447bde996d9d4beb543e7",
+        "CHANGELOG.md": "f5a4cd683f13da2a1f63710c003a91b45f3b8c76727997921362b95eafe7693d",
+        "audit/checkpoints/V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29.json": "this file; a self-referential digest cannot be recorded"
+      },
+      "validation": "worktree of v6/pkg-t4-powershell-safety-f3 on 725aad8 with the changes applied, win32 10.0.19045, Windows PowerShell 5.1, Node 24.19.0: node scripts/powershell-safety-selftest.mjs PASS 7/7 (exit 0); npx vitest run tests/pkg-t4-powershell-safety.test.ts 1 file / 1 test passed; npm run typecheck exit 0; node scripts/verify-trust-root.mjs TRUST_ROOT_VERIFY: PASS (unchanged, manifest not regenerated); full npx vitest run: run 1 (selftest, test and CHANGELOG changes, before the pipe-to-iex control and the checkpoint entry were added): 29 files / 171 tests passed, exit 0. Run 2 (final content before this checkpoint entry): 27 files passed, 2 failed (169/171 tests); both failures were 'Test timed out in 5000ms' in unrelated tests that do not touch the changed files (tests/pkg-d-standalone-provenance.test.ts 'keeps a launcher with a non-matching version output LAUNCHER_ONLY and BLOCKED', 15193 ms; tests/pkg-r1-release-mode.test.ts 'the current tree passes both truth validators', 8840 ms). Host CPU was at 100% with about 60 node processes from other work. Rerun of those two files alone: 2 files / 19 tests passed. Run 3 (final tree including this entry): 28 files passed, 1 failed (170/171 tests); the only failure was the same pkg-d launcher test timing out at 5206 ms against its 5000 ms default, with CPU at 100%. tests/pkg-t4-powershell-safety.test.ts passed in every run; scripts/run-validation.mjs not run by this worker (supervisor-owned canonical validation)",
+      "mutationEvidence": "scratch copies of the fixed selftest outside the worktree (only the release-artifact import rewritten to an absolute file URL), run from the worktree root. Each reverted rule is the exact pre-fix 725aad8 logic with only its message aligned to the fixed rule's wording, so a failure means 'not reported', not 'worded differently'. Unmutated control: PASS 7/7, exit 0. revert-web-rule: FAIL 6/7, exit 1; the new scenario lists the three F-T4-C1-001 repros and 0x0 as 'not reported (got: none)' and also rejects the compliant -MaximumRedirection:0 control. revert-execution-policy-rule: FAIL 6/7, exit 1; 'F-T4-C1-002 repro: -Scope Process only in a comment not reported (got: none)', and the compliant -Scope:Process control is rejected. revert-error-policy-rule: FAIL 6/7, exit 1; the commented-out (F-T4-C1-002 repro), block-comment, string and function-body Stop assignments are all 'not reported (got: none)'. revert-all-three: FAIL 6/7, exit 1, with every class above in one message. blind-encodedcommand-rule: FAIL 6/7 (all three EncodedCommand controls not reported). blind-download-rule: FAIL 6/7 (DownloadString and DownloadFile not reported). blind-pipe-to-iex-rule: FAIL 6/7 (pipe to iex not reported). In every mutant the real-corpus scenario and web-request-rule-checks-every-invocation still PASS, which is the gap the new scenario closes. The worktree file was never mutated (the harness checks this), so nothing needed restoring."
     }
   ]
 }
