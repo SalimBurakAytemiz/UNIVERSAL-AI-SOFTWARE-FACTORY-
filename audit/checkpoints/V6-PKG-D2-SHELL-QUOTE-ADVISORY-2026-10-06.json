@@ -1,0 +1,63 @@
+{
+  "//TR": "Bu checkpoint, shell-quote güvenlik ilanını (GHSA-pqg4-j6r4-53mv) kapatan ve canonical bağımlılık denetimini yeniden geçirilebilir kılan PKG-D2 paketinin Founder kararını, kapsamını ve bağımsız registry/tarball kanıtını kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6-PKG-D2-SHELL-QUOTE-ADVISORY",
+  "date": "2026-10-06",
+  "parent": "8032f404150db0bbdc9f4486458d2f02704af3e0 (PKG-Q1 head of the final finalization chain); PKG-Q2 is re-applied on top of this package",
+  "branch": "v6/pkg-d2-shell-quote-advisory",
+  "founderAuthorization": {
+    "decision": "RELEASE_BLOCKER_DEPENDENCY_FIX_AUTHORIZED",
+    "rule": "Founder decision 2026-10-06 in the Claude builder session: 'd2 onay', approving the proposal: lock-only node_modules/shell-quote 1.10.0 -> 1.11.0 for the critical advisory GHSA-pqg4-j6r4-53mv (published 2026-10-06; range >=1.8.4 <1.11.0; dev-only transitive via concurrently ^1.8.1), placed between PKG-Q1 and PKG-Q2, because the canonical dependency gate (scripts/dependency-supply-chain.mjs, live npm audit, moderate+ blocks) fails for every commit while 1.10.0 is locked.",
+    "constraint": "package-lock.json only: node_modules/shell-quote version 1.10.0 -> 1.11.0 with the registry's resolved URL and integrity; no package.json change, no new package, no other lock entry, no gate or policy change"
+  },
+  "advisory": {
+    "id": "GHSA-pqg4-j6r4-53mv",
+    "package": "shell-quote",
+    "severity": "critical",
+    "cvss": "8.1 CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+    "cwe": "CWE-78",
+    "range": ">=1.8.4 <1.11.0",
+    "title": "shell-quote: quote() command injection via a line terminator in a token after a { comment } token",
+    "dependent": "node_modules/concurrently requires ^1.8.1 (dev tooling)",
+    "fixedVersion": "1.11.0",
+    "license": "MIT (unchanged)"
+  },
+  "observed": "2026-10-06 ~14:30Z: the bundle freeze of V6-PKG-Q2 (rv-q2-f4b) reported DEPENDENCY_AUDIT_BLOCKERS:1 (shell-quote, critical, fixAvailable true); the nine packages below were frozen with PASS before the advisory was published",
+  "reviewEvidence": {
+    "registryMetadata": {
+      "source": "npm view shell-quote@1.11.0 dist (registry.npmjs.org, 2026-10-06)",
+      "integrity": "sha512-JdxDPD0DBTyu08pq0kPC0xSNet/qsU07qT6IsX1AS8oO2ICNRY4ldNa8OAI6PuwAH8tG3lxEhbqmyp4Dw4036g==",
+      "shasum": "fdbed3f4f297a8090c64cc13c4643c0b3e957c79",
+      "tarball": "https://registry.npmjs.org/shell-quote/-/shell-quote-1.11.0.tgz"
+    },
+    "fetchedTarball": {
+      "source": "npm content-addressed cache (npm cache add shell-quote@1.11.0; index key make-fetch-happen:request-cache:https://registry.npmjs.org/shell-quote/-/shell-quote-1.11.0.tgz, 2026-10-06T15:26:07.580Z)",
+      "bytes": 9588,
+      "sha512": "sha512-JdxDPD0DBTyu08pq0kPC0xSNet/qsU07qT6IsX1AS8oO2ICNRY4ldNa8OAI6PuwAH8tG3lxEhbqmyp4Dw4036g==",
+      "sha1": "fdbed3f4f297a8090c64cc13c4643c0b3e957c79",
+      "packageJson": {
+        "name": "shell-quote",
+        "version": "1.11.0",
+        "license": "MIT",
+        "dependencies": null
+      }
+    },
+    "result": "MATCH: the lock integrity equals the registry dist.integrity and the sha512 recomputed from the fetched tarball bytes; the registry dist.shasum equals the sha1 of the same bytes; the tarball manifest is shell-quote 1.11.0 MIT without dependencies; npm ci additionally verifies this integrity on every install",
+    "lockChange": "only node_modules/shell-quote version/resolved/integrity changed (verified programmatically; dev, license, engines and funding unchanged)",
+    "lockSha256": "e96517ac05a35a1e03644b45588c24da3fe4d828fea1e1678aa024f2e8ffbf42",
+    "validationEnvironment": {
+      "os": "Windows 10 Pro 10.0.19045",
+      "node": "v24.19.0",
+      "npm": "11.17.0",
+      "dependencyInstall": "scripts/ensure-dependencies.mjs from the reviewed lock (npm ci verifies each tarball against its lock integrity)",
+      "binding": "the canonical validation of the exact reviewed commit runs in a fresh clean clone at that commit in this environment during the bundle freeze; the bundle records its reviewedCommit and the validation report"
+    }
+  },
+  "changedFileSha256": {
+    "package-lock.json": "e96517ac05a35a1e03644b45588c24da3fe4d828fea1e1678aa024f2e8ffbf42"
+  },
+  "validation": "PENDING (bundle freeze in a clean clone)",
+  "review": "NOT_REVIEWED",
+  "merge": "after PKG-Q1; PKG-Q2 merges after this package",
+  "cleanClaim": false
+}
