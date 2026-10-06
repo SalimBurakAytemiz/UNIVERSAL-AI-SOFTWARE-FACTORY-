@@ -59,5 +59,36 @@
   "validation": "PENDING (bundle freeze in a clean clone)",
   "review": "NOT_REVIEWED",
   "merge": "after PKG-Q1; PKG-Q2 merges after this package",
-  "cleanClaim": false
+  "cleanClaim": false,
+  "finalLineageRecords": [
+    {
+      "recordedAt": "2026-10-06T19:55:53.691Z",
+      "kind": "FINAL_LINEAGE_EVIDENCE_BINDING",
+      "reason": "the package was re-applied unchanged (identical change set) onto the final finalization chain; values recorded at its earlier revisions (parent, branch, changedFileSha256, reseal/manifest, validation workspace) describe those superseded revisions and are kept unchanged as history; this record binds the evidence to the final revision",
+      "packageId": "V6-PKG-D2-SHELL-QUOTE-ADVISORY",
+      "finalBase": "99b1f0aa732fa98f0db89d83fefca98ce3c10ab4",
+      "headSubjectChain": [
+        "a1d46e9 v6 pkg-d2: shell-quote 1.11.0 for GHSA-pqg4-j6r4-53mv"
+      ],
+      "supersededRevisions": [
+        "23a6a86"
+      ],
+      "changedFileSha256": {
+        "package-lock.json": "e96517ac05a35a1e03644b45588c24da3fe4d828fea1e1678aa024f2e8ffbf42"
+      },
+      "trustRootManifest": {
+        "sha256": "0f4a1a3eaaf6588d149812c2ae01cd61ad2f947f05fbbf9ba9e67467cc35b7b1",
+        "generatedAt": "2026-10-06T05:47:17.680Z",
+        "sealStatus": "SEALED",
+        "protectedFiles": 347
+      },
+      "validationEnvironment": {
+        "os": "Windows_NT 10.0.19045",
+        "node": "v24.19.0",
+        "npm": "11.17.0"
+      },
+      "validationBinding": "canonical validation (config/validation.json) of the exact reviewed commit runs in a fresh clean clone at that commit, in this environment, during the bundle freeze; the frozen review bundle records reviewedCommit, baseCommit and the validation report",
+      "note": "a file cannot contain the sha of the commit that adds it; the commit is identified by finalBase plus this tree's digests and by the frozen bundle"
+    }
+  ]
 }
