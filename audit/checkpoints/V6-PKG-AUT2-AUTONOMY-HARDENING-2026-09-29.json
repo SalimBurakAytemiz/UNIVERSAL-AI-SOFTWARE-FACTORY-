@@ -161,5 +161,214 @@
     "source": "Founder answer 2026-10-01 (Evet, AUT2'ye ekle)",
     "rule": "The supervisor may switch itself to a newer control plane only when the master tip is a governed-CLEAN fast-forward merge recorded in the control state and descends from the running plane, the new clone's sealed trust root verifies, all steps run through exact command contracts, the previous plane is kept for rollback, and Global Stop and the single-worker lock are respected; the first hop from the PKG-AUT1B plane to PKG-AUT2 still needs one activation because PKG-AUT1B has no such capability.",
     "operationalPolicy": "Founder policy 2026-10-01: one-time bootstrap, then zero routine Founder command execution"
-  }
+  },
+  "remediationRounds": [
+    {
+      "date": "2026-10-06",
+      "mode": "REMEDIATE (bootstrap builder worker, finalization sprint, Founder-authorized)",
+      "review": "cycle-1 Codex review RUN-V6-PKG-AUT2-AUTONOMY-HARDENING-20261001T135515Z-C1 of fc530eb7980fe4639d96e84f12684b7de96dbee3, result BLOCKED (4 admissible blockers)",
+      "roundBase": "6d55dc26719c532558f91c182307194b42e72d04",
+      "packageBase": "f4d41e9",
+      "scope": "only F-AUT2-001..004; allowedPathPrefixes of the frozen package spec; protected files changed are all listed in founderAuthorization.protectedFiles",
+      "findings": [
+        {
+          "id": "F-AUT2-001",
+          "severity": "P1",
+          "file": "automation/lib/orchestrator-executors.mjs",
+          "summary": "builderRound adopted a committed round only through a round marker. The marker was written non-atomically after the commit, and prepareClone reset the implementation clone to the base before the marker was read. A crash between the commit and a complete marker, or a torn marker, caused a second builder call and commit.",
+          "fix": "The committed round is now recognised from git before the clone is reset. A clean implementation-clone HEAD is adopted only if its single parent is exactly the base, its committer is the orchestrator identity and its subject is the exact round subject. If there is no clone or its HEAD is the base, the package branch tip is checked in the same way. The check uses a new read-only contract, git.commitIdentity (git log -1 --no-show-signature --format=%P/%cn <%ce>/%s), under the repo or control root. The adopted commit is checked out directly. An unrecognised clean HEAD is kept as evidence (.unrecognized-*) and is not adopted. git.commitAll pins the committer identity (ORCHESTRATOR_GIT_IDENTITY) through GIT_COMMITTER_NAME/EMAIL. The round marker records the start time only and is written atomically (tmp + rename)."
+        },
+        {
+          "id": "F-AUT2-002",
+          "severity": "P1",
+          "file": "automation/lib/control-plane-upgrade.mjs",
+          "summary": "switchJunction removed control\\current, the only launch path of the scheduled task, before renaming current.next. There was no rollback and no bootstrap outside the link, so an interruption left the supervisor unlaunchable until it was repaired manually.",
+          "fix": "Windows cannot rename a link over an existing link, so the switch is made recoverable. It stages current.next, writes the journal control\\SWITCH.json atomically, moves the old link to current.prev, renames current.next to current, and rolls back in place if that rename fails. The record is written last and the journal is then removed. recoverControlPlaneLink is self-contained and is embedded verbatim in a stable entry, control\\uasco-supervisor-entry.mjs, which installControlPlaneEntry writes atomically. The scheduled task now runs that entry with the control directory as working directory. On every start the entry restores the plane that was running before an interrupted switch (current.prev, the journal's previous target or CURRENT.json), or the staged plane if there was no previous one. It finalizes the record when the link has already moved, never deletes a real directory, never invents a link, and then loads the launcher through control\\current. register-orchestrator-autostart.ps1 installs the entry from the verified plane and checks that the launcher is reachable through the link. checkAndUpgrade runs the same recovery as defense in depth."
+        },
+        {
+          "id": "F-AUT2-003",
+          "severity": "P2",
+          "file": "automation/lib/control-plane-upgrade.mjs",
+          "summary": "checkAndUpgrade planned with a Global Stop snapshot, and performControlPlaneUpgrade switched the link after the final command without a live stop check.",
+          "fix": "performControlPlaneUpgrade now requires a live shouldStop predicate and refuses to run without one. It evaluates the predicate after verify-trust-root and before the first filesystem change (entry, journal, link, record). A throwing predicate counts as stopped. While Global Stop is active it returns DEFERRED and changes nothing. checkAndUpgrade passes the predicate through, and uasco-orchestrator.mjs passes stopNow (the live GLOBAL_STOP.json check)."
+        },
+        {
+          "id": "F-AUT2-004",
+          "severity": "P2",
+          "file": "automation/lib/orchestrator-executors.mjs (withInstalledAutostart) + automation/lib/orchestrator-engine.mjs (applyOutcome/nextAction)",
+          "summary": "A failed installed-autostart registration was recorded on a terminal PHASE0_DONE release and never retried.",
+          "fix": "The registration is now its own lane on the release (release.autostart, mirrored to phase0.installedAutostart); the release stays PHASE0_DONE, so the acceptance and its dependents are kept. A failed or unknown result becomes RETRY_PENDING with a 5/10/20... minute backoff. nextAction dispatches the new AUTOSTART action when it is due, and the daemon wake planning includes AUTOSTART_RETRY. The new autostart executor runs only ps.registerInstalledAutostart for the accepted installation bound to that release (marker zipSha256), so it never extracts, reinstalls or moves anything and never touches the construction-supervisor task. After policy phase0.maxAutostartRegistrationAttempts (5) attempts the lane becomes REGISTRATION_BLOCKED_RETRIES_EXHAUSTED and is not retried. A release that is not the accepted installation becomes REGISTRATION_BLOCKED. An executor error counts as one attempt and never sends the release to a Founder decision."
+        }
+      ],
+      "changedFiles": {
+        "CHANGELOG.md": "ac6d3d704ed9e5658409576511bc2d6547366ed6cf8b9807ae36ab95ae756ec8",
+        "automation/lib/command-contracts.mjs": "7a66e95614eab77deae82b2ceaada9c0b5a7987fa119e5ef413077b1eb44d365",
+        "automation/lib/control-plane-upgrade.mjs": "d5358c033ff4d690be46eccf9076338adc05af63e806ee50f8b41f6a0cac6865",
+        "automation/lib/orchestrator-daemon.mjs": "359d0544b6eb51320412f53e04a90d729661e3f3bfb8274cb94574e8f4126d3d",
+        "automation/lib/orchestrator-engine.mjs": "5f5d85bf254d8285b50e8bb7be156603a1338f0c797a5a8030aedf7353ae3cc6",
+        "automation/lib/orchestrator-executors.mjs": "72c5421edb99e2ea8faf231e408fff94a40d6bfa7a2411c583c3720cf616f63e",
+        "config/orchestrator-policy.json": "b335812ca70362e1bcec64f96bb37ec1511b0586d6df10cd81e87224c7e1e7ec",
+        "config/trust-root-manifest.json": "0f4a1a3eaaf6588d149812c2ae01cd61ad2f947f05fbbf9ba9e67467cc35b7b1",
+        "docs/architecture/UNATTENDED-ORCHESTRATION.md": "9ec1e3109767c575c325baeaaa56fda9778d1003d9b278167b20f00c511c3508",
+        "scripts/autonomy-hardening-selftest.mjs": "92811f8566859cc60fa17c3750a66d836070b1efa3db25c4722a15d62e90caa3",
+        "scripts/orchestrator-executor-integration-selftest.mjs": "bd990ceb9150f0ca0867616b9218bf4ca2bdf95f5adc657b723e1df38e42c6de",
+        "scripts/register-orchestrator-autostart.ps1": "3ae9bc53e4969d90c5ade0968f81bcbb1532851a298ebec6d43b226d18432eba",
+        "scripts/uasco-orchestrator.mjs": "98c39c9ba66c5c61319f505d404beaac5df0a2b7984652d6cbec50d3529240a3",
+        "tests/pkg-aut2-autonomy-hardening.test.ts": "80d13aabbfb91b47004980be3fc008ddb9273bc2180c9c04d3c01e5b93a0e588"
+      },
+      "changedFilesNote": "sha256 of the files changed in this round as committed; audit/checkpoints/V6-PKG-AUT2-AUTONOMY-HARDENING-2026-09-29.json itself is also changed (this entry) and cannot carry its own digest",
+      "trustRootReseal": {
+        "tool": "scripts/generate-trust-root.mjs (unchanged)",
+        "sealStatus": "SEALED",
+        "protectedFiles": 347,
+        "protectedFilesChangedThisRound": [
+          "automation/lib/command-contracts.mjs",
+          "automation/lib/control-plane-upgrade.mjs",
+          "automation/lib/orchestrator-daemon.mjs",
+          "automation/lib/orchestrator-engine.mjs",
+          "automation/lib/orchestrator-executors.mjs",
+          "config/orchestrator-policy.json",
+          "scripts/autonomy-hardening-selftest.mjs",
+          "scripts/register-orchestrator-autostart.ps1",
+          "scripts/uasco-orchestrator.mjs"
+        ],
+        "verify": "scripts/verify-trust-root.mjs TRUST_ROOT_VERIFY: PASS",
+        "manifestSha256": "0f4a1a3eaaf6588d149812c2ae01cd61ad2f947f05fbbf9ba9e67467cc35b7b1",
+        "generatedAt": "2026-10-06T05:47:17.680Z"
+      },
+      "validation": {
+        "environment": {
+          "platform": "win32 10.0.19045 x64",
+          "node": "v24.19.0",
+          "npm": "11.17.0",
+          "git": "git version 2.55.0.windows.3",
+          "vitest": "4.1.11",
+          "workspace": "isolated worktree on v6/pkg-aut2-autonomy-hardening-r5 at 6d55dc2 plus this round; node_modules junction to the shared reviewed install"
+        },
+        "commands": [
+          {
+            "command": "node scripts/autonomy-hardening-selftest.mjs",
+            "result": "PASS 20/20 (211 s; 17 previous scenarios + F-AUT2-001, F-AUT2-002, F-AUT2-003)"
+          },
+          {
+            "command": "npx vitest run tests/pkg-aut2-autonomy-hardening.test.ts tests/pkg-aut1-orchestrator.test.ts",
+            "result": "PASS Test Files 2 passed (2), Tests 10 passed (10) (206 s)"
+          },
+          {
+            "command": "node scripts/orchestrator-executor-integration-selftest.mjs",
+            "result": "PASS 12/12 (new scenario phase0-failed-installed-autostart-registration-is-retried-boundedly-then-blocked-without-reinstalling)"
+          },
+          {
+            "command": "node scripts/orchestrator-selftest.mjs",
+            "result": "PASS 29/29 (unchanged file; engine change regression check)"
+          },
+          {
+            "command": "npm run typecheck",
+            "result": "PASS (tsc --noEmit exit 0)"
+          },
+          {
+            "command": "node scripts/generate-trust-root.mjs && node scripts/verify-trust-root.mjs",
+            "result": "TRUST_ROOT_MANIFEST_GENERATED files=347; TRUST_ROOT_VERIFY: PASS"
+          },
+          {
+            "command": "git diff --check",
+            "result": "PASS"
+          },
+          {
+            "command": "powershell Parser::ParseFile scripts/register-orchestrator-autostart.ps1",
+            "result": "0 parse errors; the entry-install invocation was exercised in a scratch control directory whose path contains a space (exit 0, entry written)"
+          },
+          {
+            "command": "npx vitest run (full)",
+            "result": "PASS Test Files 30 passed (30), Tests 171 passed (171), duration 226.88 s (run on the final tree after this entry was written; only this result string was filled in afterwards)"
+          }
+        ],
+        "canonicalValidation": "NOT_RUN_BY_THE_BUILDER (scripts/run-validation.mjs is run by the supervisor)"
+      },
+      "mutationEvidence": {
+        "method": "Each regression scenario was run (1) against the unfixed package head 6d55dc2 in a scratch clone and (2) against named mutants of the fix, each applied to a scratch clone of the fixed tree and then restored. Reduced copies of the selftests containing only the relevant scenarios were used; the committed selftests contain the same scenario code.",
+        "unfixedHead6d55dc2": [
+          {
+            "scenario": "F-AUT2-001-crash-before-or-while-writing-the-round-marker-or-a-torn-marker-adopts-the-committed-round",
+            "result": "FAIL: killed before the marker write: the committed round was not adopted (a second builder commit was reviewed instead of the original commit)"
+          },
+          {
+            "scenario": "F-AUT2-002-interrupted-control-plane-switch-is-recovered-by-the-stable-entry-to-a-launchable-plane",
+            "result": "FAIL: no recovery entry exists (installControlPlaneEntry is not a function). A separate scratch demonstration with the unfixed switchJunction, killed between unlinking current and renaming current.next, left current missing, no .prev and no journal, and the unfixed task action failed with Cannot find module ...\\control\\current\\scripts\\uasco-supervisor-launcher.mjs (exit 1)"
+          },
+          {
+            "scenario": "F-AUT2-003-global-stop-activated-after-planning-defers-the-activation-and-a-later-retry-switches",
+            "result": "FAIL: the control plane was activated while Global Stop was live (status UPGRADED)"
+          },
+          {
+            "scenario": "phase0-failed-installed-autostart-registration-is-retried-boundedly-then-blocked-without-reinstalling",
+            "result": "FAIL: a failed registration was not kept as a pending lane"
+          }
+        ],
+        "mutants": [
+          {
+            "id": "M1-F001-round-commit-recognition-disabled",
+            "change": "isRoundCommit never accepts (clone and branch paths)",
+            "scenario": "F-AUT2-001",
+            "result": "FAIL (killed): the committed round was not adopted"
+          },
+          {
+            "id": "M1b-F001-adoption-requires-a-readable-marker",
+            "change": "adoption additionally requires a readable marker naming the commit (the pre-fix dependency)",
+            "scenario": "F-AUT2-001",
+            "result": "FAIL (killed): the committed round was not adopted"
+          },
+          {
+            "id": "M2-F002-entry-recovery-disabled",
+            "change": "recoverControlPlaneLink returns immediately (also inside the generated entry)",
+            "scenario": "F-AUT2-002",
+            "result": "FAIL (killed): a restart after the interrupted switch did not recover a launchable plane (ENOENT on control\\current)"
+          },
+          {
+            "id": "M2b-F002-unjournaled-unlink-then-rename-switch",
+            "change": "switch without journal and without .prev staging (pre-fix shape)",
+            "scenario": "F-AUT2-002",
+            "result": "FAIL (killed) at the scenario's precondition: the interrupted switch did not leave the recoverable journal"
+          },
+          {
+            "id": "M3-F003-live-global-stop-check-removed",
+            "change": "the DEFERRED return after the live stop check is disabled",
+            "scenario": "F-AUT2-003",
+            "result": "FAIL (killed): the control plane was activated while Global Stop was live (UPGRADED)"
+          },
+          {
+            "id": "M4-F004-autostart-retry-never-dispatched",
+            "change": "nextAction no longer returns AUTOSTART",
+            "scenario": "phase0-failed-installed-autostart-registration...",
+            "result": "FAIL (killed): the failed registration is never retried"
+          },
+          {
+            "id": "M4b-F004-first-registration-failure-terminal",
+            "change": "the first failed attempt is treated as exhausted",
+            "scenario": "phase0-failed-installed-autostart-registration...",
+            "result": "FAIL (killed): a failed registration was not kept as a pending lane"
+          }
+        ],
+        "unmutatedControls": "Each reduced scenario PASSED on the unmutated fixed tree in the same scratch clone (F-AUT2-001 9 s, F-AUT2-002 1 s, N+F-AUT2-003 108 s, F-AUT2-004 2 s)."
+      },
+      "priorAttempt": {
+        "patch": "unattended builder patch (no shell access, untested), evaluated and discarded",
+        "failingTest": "tests/pkg-aut2-autonomy-hardening.test.ts > passes every autonomy-hardening scenario (selftest FAIL 19/20)",
+        "cause": "Its new selftest scenario F-AUT2-001-torn-or-missing-recovery-marker... used its own spawn stub whose VALIDATION_REPORT.json steps lacked the required 'command' (and related) fields, so buildFrozenBundle rejected the bundle: REVIEW_BUNDLE_SCHEMA_INVALID: data/validation/steps/0 must have required property 'command'. Reproduced here by applying the patch with git apply --3way (19/20, 385 s).",
+        "designDefects": [
+          "F-001: adopted any clean clone HEAD that descends from the base, which is not proof of this round's commit (any descendant, any committer, any subject).",
+          "F-002: recovery ran only in checkAndUpgrade inside the daemon, which is launched through the missing link, so after an interruption nothing could run it.",
+          "F-004: reused the PHASE0 action for retries. The phase0 executor reinstalls when adoption fails, and a PHASE0_FAILED would send the accepted release to a Founder decision."
+        ]
+      },
+      "residualRisks": [
+        "A Founder-initiated reset of a package to the same mode/cycle/base would adopt the earlier round commit (same identity), as the previous marker-based design did.",
+        "The stable entry is not covered by the trust-root manifest (it is generated into the control directory from a verified plane at registration and on every upgrade); the launched daemon still refuses to act unless its own sealed trust root verifies.",
+        "Recovery restores the previous plane rather than completing the switch; the restored plane repeats the governed upgrade on its next check. A switch interrupted after the link moved is finalized in CURRENT.json, but the CONTROL_PLANE_UPGRADED control-state transition from that interrupted run is not re-recorded.",
+        "Two entry instances racing a switch are prevented only by the task's IgnoreNew single-instance setting and the process lock; recovery itself takes no lock.",
+        "The scheduled task is still not registered by this commit; the registration script change (stable entry action) is verified statically and by a scratch invocation only."
+      ],
+      "cleanClaim": false
+    }
+  ]
 }

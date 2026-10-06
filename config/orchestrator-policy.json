@@ -63,6 +63,8 @@
     "//TR": "Founder kararı 2026-10-01: süpervizör yalnız master'ın ucu kontrol durumunda kayıtlı governed bir hızlı ileri birleştirmeyse, çalışan düzlemin torunuysa ve korumalı kontrol düzlemi dosyalarını değiştiriyorsa yeni düzleme geçer; hazırlık yalnız tam sözleşmelerle yapılır, mühürlü trust-root doğrulanmadan control\\current bağlantısı değişmez, eski düzlem silinmez.",
     "enabled": true,
     "link": "${LOCALAPPDATA}/UASCO/orchestrator/control/current",
+    "entry": "${LOCALAPPDATA}/UASCO/orchestrator/control/uasco-supervisor-entry.mjs",
+    "switchJournal": "${LOCALAPPDATA}/UASCO/orchestrator/control/SWITCH.json",
     "keepPreviousPlanes": true,
     "exitCode": 4
   },
@@ -106,7 +108,8 @@
   "phase0": {
     "remoteUrl": "https://github.com/SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY",
     "preserveFailedAttempts": true,
-    "reinstallOverAcceptedInstallation": "FOUNDER_DECISION_REQUIRED"
+    "reinstallOverAcceptedInstallation": "FOUNDER_DECISION_REQUIRED",
+    "maxAutostartRegistrationAttempts": 5
   },
   "approvals": [
     {"id": "PKG-R", "text": "Release packaging package plus the maintainer-only generate-trust-root.mjs final reseal; release signature stays with the Founder's external key."},

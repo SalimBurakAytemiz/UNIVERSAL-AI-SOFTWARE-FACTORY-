@@ -17,6 +17,8 @@ export function nextWake(control,now,policy){
   for(const [k,p] of Object.entries(control.providers??{}))if(p?.status==="QUOTA_BLOCKED"&&p.retryAfter)add(p.retryAfter,`PROVIDER_RETRY:${k}`);
   for(const [id,p] of Object.entries(control.packages??{}))if(p?.notBefore&&!["CLOSED","MERGED","FOUNDER_DECISION_PENDING"].includes(p.status))add(p.notBefore,`NOT_BEFORE:${id}`);
   for(const [k,r] of Object.entries(control.releases??{}))if(r?.notBefore&&!["PHASE0_DONE","SUPERSEDED","FOUNDER_DECISION_PENDING"].includes(r.status))add(r.notBefore,`NOT_BEFORE:release:${k}`);
+  // //TR: Kurulu sistem otomatik başlatma kaydının sınırlı yeniden denemesi kendi zamanında uyandırır; tükenmiş (engellenmiş) hat uyandırmaz.
+  for(const [k,r] of Object.entries(control.releases??{}))if(r?.status==="PHASE0_DONE"&&r.autostart?.status==="RETRY_PENDING"&&r.autostart.notBefore)add(r.autostart.notBefore,`AUTOSTART_RETRY:release:${k}`);
   const best=cands.sort((a,b)=>a.t-b.t)[0],t=Math.min(best.t,cap);return {at:new Date(t).toISOString(),reason:best.reason,waitMs:t-t0};
 }
 export function readHeartbeat(file){return readJsonIfExists(file,null)}

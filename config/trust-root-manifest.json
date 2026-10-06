@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-01T13:07:56.993Z",
+  "generatedAt": "2026-10-06T05:47:17.680Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -106,7 +106,7 @@
     },
     {
       "path": "automation/lib/command-contracts.mjs",
-      "sha256": "da379bfe0d22a5462f2fd268f7118a115ce4d994d00c4ca0ec17ba4bcfaec21f"
+      "sha256": "7a66e95614eab77deae82b2ceaada9c0b5a7987fa119e5ef413077b1eb44d365"
     },
     {
       "path": "automation/lib/command-runner.mjs",
@@ -134,7 +134,7 @@
     },
     {
       "path": "automation/lib/control-plane-upgrade.mjs",
-      "sha256": "4f28905a429cffcdee2645219b4db76680de4798010949f04b37c4deb90916e2"
+      "sha256": "d5358c033ff4d690be46eccf9076338adc05af63e806ee50f8b41f6a0cac6865"
     },
     {
       "path": "automation/lib/dependency-install.d.mts",
@@ -222,15 +222,15 @@
     },
     {
       "path": "automation/lib/orchestrator-daemon.mjs",
-      "sha256": "7e5ee690518170d040b2a570ef5b499998aac347209404d0257d2bf20cdff082"
+      "sha256": "359d0544b6eb51320412f53e04a90d729661e3f3bfb8274cb94574e8f4126d3d"
     },
     {
       "path": "automation/lib/orchestrator-engine.mjs",
-      "sha256": "da22873ab3dde4e5d3f9d46ec31524482bad0f0ea11a155dc1259b93578303e2"
+      "sha256": "5f5d85bf254d8285b50e8bb7be156603a1338f0c797a5a8030aedf7353ae3cc6"
     },
     {
       "path": "automation/lib/orchestrator-executors.mjs",
-      "sha256": "0ce9cbcdfa5bc8648b590b47b7b085b559407bc8753af9eeb0d0b40546ce239e"
+      "sha256": "72c5421edb99e2ea8faf231e408fff94a40d6bfa7a2411c583c3720cf616f63e"
     },
     {
       "path": "automation/lib/orchestrator-state.mjs",
@@ -390,7 +390,7 @@
     },
     {
       "path": "config/orchestrator-policy.json",
-      "sha256": "0314eeb36d94e41883b7e6de11797eed0ec676b6061ae768d8c2fba73eb79786"
+      "sha256": "b335812ca70362e1bcec64f96bb37ec1511b0586d6df10cd81e87224c7e1e7ec"
     },
     {
       "path": "config/package-policy.json",
@@ -1110,7 +1110,7 @@
     },
     {
       "path": "scripts/autonomy-hardening-selftest.mjs",
-      "sha256": "23ee29a0c18c788d43941de5b43cec4a18b7bfca71e1dbfde164cce2d07fea0d"
+      "sha256": "92811f8566859cc60fa17c3750a66d836070b1efa3db25c4722a15d62e90caa3"
     },
     {
       "path": "scripts/bootstrap-kernel-selftest.mjs",
@@ -1202,7 +1202,7 @@
     },
     {
       "path": "scripts/register-orchestrator-autostart.ps1",
-      "sha256": "38eea62a702970880dea08a831304a8c44a269663ec01659119f71f8fce769de"
+      "sha256": "3ae9bc53e4969d90c5ade0968f81bcbb1532851a298ebec6d43b226d18432eba"
     },
     {
       "path": "scripts/release-sha256sums.mjs",
@@ -1250,7 +1250,7 @@
     },
     {
       "path": "scripts/uasco-orchestrator.mjs",
-      "sha256": "aa94f9c73e13a744cb3e261db789ec9b3e92425479204480932373f747ebb795"
+      "sha256": "98c39c9ba66c5c61319f505d404beaac5df0a2b7984652d6cbec50d3529240a3"
     },
     {
       "path": "scripts/uasco-supervisor-launcher.mjs",

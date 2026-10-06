@@ -1,6 +1,8 @@
 // //TR: Bu helper gözetimsiz orkestratörün çalıştırabileceği komutları tam sözleşmelere bağlar: her işlem sabit program + tip doğrulamalı parametrelerle shell'siz çalışır, yollar yalnız policy köklerinin altında olabilir, bilinmeyen sözleşme veya geçersiz parametre fail-closed reddedilir; keyfi PowerShell/cmd/Bash, silme, force push ve credential export sözleşmesi yoktur.
 import path from "node:path";import cp from "node:child_process";import {Worker,MessageChannel,receiveMessageOnPort} from "node:worker_threads";import {isolatedGitArgs,isolatedGitEnv} from "./git-isolation.mjs";
 const SHA40=/^[0-9a-f]{40}$/,REF=/^refs\/heads\/[A-Za-z0-9._\/-]+$/,BRANCH=/^(v6|uasco\/run)\/[A-Za-z0-9._\/-]+$/,BASENAME=/^[A-Za-z0-9._-]+$/;
+// //TR: Orkestratör builder commit'lerinin sabit kimliği; çökme sonrası benimseme bir commit'i yalnız bu kimlik, beklenen tek ebeveyn ve tur konusu eşleşirse bu turun commit'i sayar.
+export const ORCHESTRATOR_GIT_IDENTITY=Object.freeze({name:"UASCO Orchestrator",email:"orchestrator@uasco.local.invalid"});
 const deny=reason=>{throw new Error(`COMMAND_CONTRACT_DENIED:${reason}`)};
 const norm=p=>path.resolve(String(p)).replaceAll("\\","/").toLowerCase();
 export function expandPolicyPaths(policy,{repo,env=process.env}){const sub=s=>String(s).replaceAll("${REPO}",repo).replaceAll("${LOCALAPPDATA}",env.LOCALAPPDATA??"").replaceAll("${USERPROFILE}",env.USERPROFILE??"");const roots=Object.fromEntries(Object.entries(policy.roots).map(([k,v])=>[k,path.resolve(sub(v))]));const signing={...policy.signing,publicKey:path.resolve(sub(policy.signing.publicKey))};return {...policy,roots,signing}}
@@ -34,7 +36,7 @@ export function buildContracts(policy,{repo}){
     "git.cloneLocal":{program:git,args:p=>["clone","-q","--no-hardlinks",v.under("repo",p.source),v.under("controlRoot",p.dest)]},
     "git.fetchOrigin":{program:git,args:p=>["-C",v.under("controlRoot",p.cwd),"fetch","-q","origin"]},
     "git.checkoutDetached":{program:git,args:p=>["-C",v.under("controlRoot",p.cwd),"checkout","-q","--detach",v.sha(p.commit)]},
-    "git.commitAll":{program:git,args:p=>["-C",v.under("controlRoot",p.cwd),"-c","user.name=UASCO Orchestrator","-c","user.email=orchestrator@uasco.local.invalid","commit","-q","-a","-m",String(p.message).slice(0,2000)]},
+    "git.commitAll":{program:git,args:p=>["-C",v.under("controlRoot",p.cwd),"-c",`user.name=${ORCHESTRATOR_GIT_IDENTITY.name}`,"-c",`user.email=${ORCHESTRATOR_GIT_IDENTITY.email}`,"commit","-q","-a","-m",String(p.message).slice(0,2000)],envFrom:()=>({GIT_COMMITTER_NAME:ORCHESTRATOR_GIT_IDENTITY.name,GIT_COMMITTER_EMAIL:ORCHESTRATOR_GIT_IDENTITY.email})},
     "git.addPaths":{program:git,args:p=>["-C",v.under("controlRoot",p.cwd),"add","--",...(p.paths??[]).map(x=>{if(typeof x!=="string"||path.isAbsolute(x)||x.split(/[\\/]/).includes(".."))deny("ADD_PATH");return x})]},
     "git.fetchBranchFromClone":{program:git,args:p=>["-C",v.under("repo",p.cwd),"fetch","-q",v.under("controlRoot",p.clone),`${v.sha(p.commit)}:${v.ref(`refs/heads/${v.branch(p.branch)}`)}`]},
     "node.script":{program:process.execPath,args:p=>[v.oneOf(NODE_SCRIPTS,p.script),...(p.args??[]).map(a=>{if(typeof a!=="string")deny("ARG");if(path.isAbsolute(a))return anyRoot(a);if(a==="."||a==="--with-validation"||a==="--source-commit"||SHA40.test(a))return a;deny(`ARG_NOT_ALLOWED:${a}`)})],cwdFrom:p=>anyRoot(p.cwd),input:true,allowEnvOverride:true},
@@ -49,6 +51,8 @@ export function buildContracts(policy,{repo}){
     // //TR: Süpervizörün pasif durum keşfi için salt-okunur sözleşmeler (dal uçları, worktree listesi, zamanlanmış görev durumu).
     // //TR: Kendini güncelleme için salt-okunur: kontrol kökü altındaki bir düzlemin ayrık HEAD commit'i.
     "git.headCommit":{program:git,args:p=>["-C",v.under("controlRoot",p.cwd),"rev-parse","--verify","HEAD^{commit}"]},
+    // //TR: Çökme sonrası builder turu benimsemesi için salt-okunur: bir commit'in ebeveynleri, committer kimliği ve konu satırı (imza gösterimi kapalı).
+    "git.commitIdentity":{program:git,args:p=>["-C",anyRoot(p.cwd),"log","-1","--no-show-signature","--format=%P%n%cn <%ce>%n%s",v.sha(p.commit)]},
     "git.listBranchHeads":{program:git,args:p=>["-C",v.under("repo",p.cwd),"for-each-ref","--format=%(refname) %(objectname)","refs/heads/"]},
     "git.worktreeList":{program:git,args:p=>["-C",v.under("repo",p.cwd),"worktree","list","--porcelain"]},
     "ps.scheduledTaskInfo":{program:ps,args:()=>["-NoProfile","-NonInteractive","-Command",SCHEDULED_TASK_INFO_SCRIPT],envFrom:p=>({UASCO_TASK_NAME:v.oneOf([policy.autostart.taskName,policy.autostart.installedSystemTaskName],p.taskName)})},

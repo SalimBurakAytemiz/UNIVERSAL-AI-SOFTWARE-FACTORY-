@@ -56,6 +56,8 @@ const spawn=(prog,args,opts)=>{if(prog==="git")return cp.spawnSync(prog,args,opt
 let release;try{release=acquireProcessLock(dp.lock,cfg.workerId)}catch(e){console.log("DAEMON_RESULT "+JSON.stringify({status:"ALREADY_RUNNING",reason:String(e.message)}));process.exit(3)}
 const runner=createContractRunner({policy,repo:cfg.repo,spawn}),prod=createExecutors({policy,repo:cfg.repo,runner,controlPlaneRoot:cfg.controlPlaneRoot,now});
 const block=()=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,120000);
+// //TR: Hata enjeksiyonu (F-AUT2-001): eşleşen yola yazım başlamadan (veya yarısı yazıldıktan sonra) süreç bekletilir ve test onu SIGKILL ile öldürür; böylece commit ile tam bir işaret arasındaki gerçek çökme kurulur.
+if(cfg.crashOnWrite){const re=new RegExp(cfg.crashOnWrite.pattern),orig=fs.writeFileSync;fs.writeFileSync=function(f,data,...rest){if(typeof f==="string"&&re.test(f)){if(cfg.crashOnWrite.torn){const s=String(data);orig.call(fs,f,s.slice(0,Math.floor(s.length/2)))}fs.writeSync(1,"CRASH_POINT "+path.basename(f)+"\\n");block()}return orig.call(fs,f,data,...rest)}}
 const executors=Object.fromEntries(Object.entries(prod).map(([k,fn])=>[k,async(a,c)=>{const o=await fn(a,c);if(cfg.blockOn&&cfg.blockOn===k.toUpperCase()+":"+o.type){fs.writeSync(1,"BEFORE_OUTCOME_PERSIST "+k.toUpperCase()+":"+o.type+"\\n");block()}return o}]));
 const tick=createTick({policy,workerId:cfg.workerId,runner,executors,now}),stopFile=path.join(cfg.repo,".ai/runtime/GLOBAL_STOP.json");
 const met=()=>{if(!cfg.stopWhen)return false;const c=loadState(policy.roots.stateFile).control;return [].concat(cfg.stopWhen).every(w=>{const x=w.release?c.releases?.[w.release]:c.packages[w.package];return x&&x.status===w.status&&(w.cycle===undefined||x.cycle===w.cycle)})};
@@ -114,6 +116,51 @@ await scenario("F-reboot-before-the-commit-reached-the-branch-adopts-it-from-the
   gitIn(w.repo,"update-ref","-d","refs/heads/v6/fix-f2");
   const r=await runWorker(w,"worker-2",{stopWhen:{package:"FIX-F2",status:"CLOSED"}});const p=w.control().packages["FIX-F2"];
   assert(r.status==="STOPPED"&&p.status==="CLOSED"&&p.reviewCommit===tip,`commit not adopted from the clone: ${JSON.stringify({status:p.status,review:p.reviewCommit,tip})}`);assert(jsonl(w.builderLog).length===1&&gitIn(w.repo,"rev-parse","refs/heads/v6/fix-f2")===tip,"builder re-ran or a different commit was produced")});
+// ---------------------------------------------------------------- F-AUT2-001: a real crash after the commit but before or while the round marker is written (and a torn marker) adopts the committed round
+await scenario("F-AUT2-001-crash-before-or-while-writing-the-round-marker-or-a-torn-marker-adopts-the-committed-round",async()=>{
+  for(const [id,label,crash,plantTorn] of [["FIX-M1","killed before the marker write",{pattern:"\\.round\\.json",torn:false},false],["FIX-M2","killed while the marker was being written, then a torn marker",{pattern:"\\.round\\.json",torn:true},true]]){
+    const w=world({packages:[{id}],providerScript:["CLEAN"]}),branch=`v6/${id.toLowerCase()}`;
+    await killAt(w,"worker-1","CRASH_POINT",{crashOnWrite:crash});
+    const implDir=path.join(w.policy.roots.controlRoot,"impl",`${id}-c1-${w.A.slice(0,7)}`),marker=`${implDir}.round.json`,committed=gitIn(implDir,"rev-parse","HEAD");
+    assert(committed!==w.A&&jsonl(w.builderLog).length===1&&commitsOn(w,branch)===0&&w.control().packages[id].status==="IMPLEMENT_PENDING",`${label}: crash state not as expected`);
+    if(!crash.torn)assert(!fs.existsSync(marker),`${label}: the marker existed before the crash point`);
+    if(plantTorn)fs.writeFileSync(marker,'{"mode":"IMPLEMENT","cyc');
+    const r=await runWorker(w,"worker-2",{stopWhen:{package:id,status:"CLOSED"}});const p=w.control().packages[id];
+    assert(r.status==="STOPPED"&&p.status==="CLOSED"&&p.cycle===1&&p.reviewCommit===committed,`${label}: the committed round was not adopted: ${JSON.stringify({status:p.status,cycle:p.cycle,review:p.reviewCommit,committed})}`);
+    assert(jsonl(w.builderLog).length===1,`${label}: builder invoked ${jsonl(w.builderLog).length} times`);
+    assert(commitsOn(w,branch)===1&&gitIn(w.repo,"rev-parse",`refs/heads/${branch}`)===committed,`${label}: the original commit was not retained or a second commit was produced`);
+    assert(jsonl(w.providerLog).length===1,`${label}: reviewer invoked ${jsonl(w.providerLog).length} times (extra review cycle)`);
+  }});
+// ---------------------------------------------------------------- F-AUT2-002: an interrupted control-plane link switch is recovered by the stable entry without manual repair
+await scenario("F-AUT2-002-interrupted-control-plane-switch-is-recovered-by-the-stable-entry-to-a-launchable-plane",async()=>{
+  const cpu=await import(lib("automation/lib/control-plane-upgrade.mjs"));
+  const T=tmp(),dir=path.join(T,"orch","control"),link=path.join(dir,"current"),journal=path.join(dir,"SWITCH.json"),rec={commit:"b".repeat(40),path:null};fs.mkdirSync(dir,{recursive:true});
+  // //TR: Düzlem fixture'ı: başlatıcısı yalnız hangi düzlemin hangi argümanlarla başladığını yazar.
+  const plane=n=>{const p=path.join(dir,n);fs.mkdirSync(path.join(p,"scripts"),{recursive:true});fs.writeFileSync(path.join(p,"package.json"),'{"type":"module"}\n');fs.writeFileSync(path.join(p,"scripts","uasco-supervisor-launcher.mjs"),`console.log("PLANE_STARTED ${n} "+JSON.stringify(process.argv.slice(2)));\n`);return p};
+  const A=plane("plane-a"),B=plane("plane-b");rec.path=B;fs.symlinkSync(A,link,"junction");const ins=cpu.installControlPlaneEntry(dir);
+  const entry=path.join(dir,cpu.CONTROL_PLANE_ENTRY),start=()=>cp.spawnSync(process.execPath,[entry,"--repo",T],{cwd:dir,encoding:"utf8",timeout:60000}),started=(x,n)=>x.status===0&&x.stdout.includes(`PLANE_STARTED ${n} ${JSON.stringify(["--repo",T])}`);
+  let s=start();assert(ins.changed&&started(s,"plane-a"),`the stable entry did not launch the plane behind the link with the task arguments: ${s.status} ${s.stdout}${s.stderr}`);
+  // //TR: 1) Geçişi yapan süreç eski bağlantı kaldırıldıktan sonra, yenisi takılmadan önce öldürülür (gerçek süreç, SIGKILL).
+  const killer=spawnNode(["--input-type=module","-e",`import fs from "node:fs";const m=await import(${JSON.stringify(lib("automation/lib/control-plane-upgrade.mjs"))});const ren=fs.renameSync;fs.renameSync=function(a,b){if(String(a).endsWith(".next")){fs.writeSync(1,"CRASH_POINT_BETWEEN_REMOVE_AND_RENAME\\n");Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,120000)}return ren.call(fs,a,b)};m.switchJunction(${JSON.stringify(link)},${JSON.stringify(B)},{record:${JSON.stringify(rec)}});console.log("SWITCH_COMPLETED")`]);
+  await waitFor(killer,"CRASH_POINT_BETWEEN_REMOVE_AND_RENAME");killer.kill("SIGKILL");await exited(killer);
+  assert(!fs.existsSync(link)&&fs.existsSync(`${link}.next`)&&fs.existsSync(journal),"fixture: the interrupted switch did not leave the scheduled launch path missing");
+  s=start();assert(started(s,"plane-a"),`a restart after the interrupted switch did not recover a launchable plane: ${s.status} ${s.stdout}${s.stderr}`);
+  assert(fs.realpathSync(link)===fs.realpathSync(A)&&!fs.existsSync(journal)&&!fs.existsSync(`${link}.next`)&&!fs.existsSync(`${link}.prev`)&&fs.existsSync(path.join(B,"scripts","uasco-supervisor-launcher.mjs")),"recovery did not restore the previous plane cleanly or removed a plane");
+  assert(jsonl(path.join(T,"orch","logs","supervisor-entry.jsonl")).some(e=>e.recovered===true&&e.action==="RESTORED_PREVIOUS_PLANE"),"the entry recovery was not logged");
+  // //TR: 2) Son taşıma başarısız: geçiş yerinde geri alınır, önceki düzlem kalır, günlük kalmaz.
+  const ren=fs.renameSync,fail=re=>{fs.renameSync=function(a,b){if(re.test(String(a)))throw Object.assign(new Error("EPERM: injected rename failure"),{code:"EPERM"});return ren.call(fs,a,b)}};
+  let err=null;fail(/\.next$/);try{cpu.switchJunction(link,B,{record:rec})}catch(e){err=String(e.message)}finally{fs.renameSync=ren}
+  assert(/injected rename failure/.test(err??"")&&fs.realpathSync(link)===fs.realpathSync(A)&&!fs.existsSync(journal)&&started(start(),"plane-a"),`a failed rename did not roll back to a launchable previous plane: ${err}`);
+  // //TR: 3) Taşıma ve geri alma birlikte başarısız: zamanlanmış yol bir sonraki başlatmaya kadar yoktur; giriş onu onarır.
+  err=null;fail(/\.(next|prev)$/);try{cpu.switchJunction(link,B,{record:rec})}catch(e){err=String(e.message)}finally{fs.renameSync=ren}
+  assert(err&&!fs.existsSync(link),"fixture: the double rename failure did not leave the launch path missing");s=start();assert(started(s,"plane-a")&&fs.realpathSync(link)===fs.realpathSync(A),`a restart after a failed rename and rollback did not recover: ${s.stdout}${s.stderr}`);
+  // //TR: 4) Bağlantı taşındıktan sonra, kayıt yazılmadan kesinti: giriş yeni düzlemi başlatır ve kaydı günlükten tamamlar; önceki düzlem kalır.
+  const sw=cpu.switchJunction(link,B,{record:rec});assert(sw.current===fs.realpathSync(B)&&fs.existsSync(journal),"fixture: the switch journal is missing after the link moved");
+  s=start();const cur=fs.existsSync(path.join(dir,"CURRENT.json"))?readJson(path.join(dir,"CURRENT.json")):null;
+  assert(started(s,"plane-b")&&cur?.path===B&&!fs.existsSync(journal)&&!fs.existsSync(`${link}.prev`)&&fs.existsSync(path.join(A,"scripts","uasco-supervisor-launcher.mjs")),`a switch interrupted before its record was not finalized: ${s.stdout}${s.stderr} ${JSON.stringify(cur)}`);
+  // //TR: 5) Kurtarılacak aday yoksa giriş başarısız olur ve bağlantı uydurmaz.
+  const E=path.join(T,"empty","control");fs.mkdirSync(E,{recursive:true});cpu.installControlPlaneEntry(E);const none=cp.spawnSync(process.execPath,[path.join(E,cpu.CONTROL_PLANE_ENTRY),"--repo",T],{cwd:E,encoding:"utf8",timeout:60000});
+  assert(none.status!==0&&!fs.existsSync(path.join(E,"current")),"the entry fabricated a link with nothing to recover to")});
 // ---------------------------------------------------------------- G: CLEAN unlocks dependents
 await scenario("G-clean-unlocks-dependent-packages",async()=>{
   const w=world({packages:[{id:"FIX-G2",dependsOn:[{package:"FIX-G1",statusIn:["CLOSED"]}]},{id:"FIX-G1"}],providerScript:["CLEAN"]});
@@ -216,7 +263,7 @@ await scenario("L-supervisor-maintains-the-passive-watchdog-status-and-the-obser
   cw.stop();const code=await exited(d);assert(code===0,`daemon did not stop cleanly: ${code}`);const fin=readJson(file);assert(fin.overallHealth==="STOPPED"&&fin.supervisor.state==="STOPPED",`final status not STOPPED: ${fin.overallHealth}/${fin.supervisor.state}`)});
 // ---------------------------------------------------------------- N: governed control-plane self-upgrade (Founder decision 2026-10-01)
 await scenario("N-governed-control-plane-self-upgrade-only-to-a-sealed-governed-merge",async()=>{
-  const {planControlPlaneUpgrade,performControlPlaneUpgrade,UPGRADE_EXIT_CODE}=await import(lib("automation/lib/control-plane-upgrade.mjs"));
+  const {planControlPlaneUpgrade,performControlPlaneUpgrade,checkAndUpgrade,UPGRADE_EXIT_CODE}=await import(lib("automation/lib/control-plane-upgrade.mjs"));
   // //TR: Saf karar: her koşul ayrı ayrı reddeder; yalnız hepsi sağlanınca güncelleme yapılır.
   const A="a".repeat(40),B="b".repeat(40),pol={...policyDoc,selfUpgrade:{...policyDoc.selfUpgrade,enabled:true}},merged={packages:{P:{id:"P",status:"CLOSED",mergedCommit:B}}};
   const base={control:merged,masterSha:B,planeCommit:A,isDescendant:true,changedPaths:["docs/x.md","automation/lib/x.mjs"],protectedPaths:["automation/lib/x.mjs"],policy:pol};
@@ -230,10 +277,18 @@ await scenario("N-governed-control-plane-self-upgrade-only-to-a-sealed-governed-
   const ctlRoot=path.join(T,"orch"),cdir=path.join(ctlRoot,"control"),plane=c=>path.join(cdir,c.slice(0,12)),prep=c=>{gitIn(T,"clone","-q","--no-hardlinks",R,plane(c));gitIn(plane(c),"checkout","-q","--detach",c);fs.symlinkSync(path.join(UASCO,"node_modules"),path.join(plane(c),"node_modules"),"junction")};
   prep(Ac);prep(Bc);prep(Cc);const link=path.join(cdir,"current");fs.symlinkSync(plane(Ac),link,"junction");
   const polR=expandPolicyPaths({...pol,roots:{...pol.roots,repo:"${REPO}",controlRoot:ctlRoot}},{repo:R}),runner=createContractRunner({policy:polR,repo:R});
-  const up=performControlPlaneUpgrade({runner,policy:polR,repo:R,masterSha:Bc,planeCommit:Ac,runningPlane:plane(Ac),reason:"selftest"});
+  // //TR: F-AUT2-003: planlama anlık görüntüde Global Stop yokken geçer; Global Stop son doğrulama komutundan sonra, bağlantı değişiminden önce etkinleşir. Etkinleştirme ertelenmeli, bağlantı ve kayıt değişmemeli; Global Stop kalkınca sonraki yetkili deneme geçişi yapar.
+  await scenario("F-AUT2-003-global-stop-activated-after-planning-defers-the-activation-and-a-later-retry-switches",async()=>{
+    const stopFlag={on:false},liveStop=()=>stopFlag.on?"GLOBAL_STOP_ACTIVE":null,stopAfterVerify={must:(id,p,o)=>runner.must(id,p,o),run:(id,p,o)=>{const r=runner.run(id,p,o);if(id==="node.script"&&p?.script==="scripts/verify-trust-root.mjs")stopFlag.on=true;return r}};
+    const defRef="refs/heads/selftest-default";gitIn(R,"update-ref",defRef,Bc);const polS={...polR,merge:{...polR.merge,defaultBranchRef:defRef}},governed={packages:{P:{id:"P",status:"CLOSED",mergedCommit:Bc}},releases:{}};
+    const deferred=checkAndUpgrade({runner:stopAfterVerify,policy:polS,repo:R,runningPlane:plane(Ac),control:governed,globalStop:null,shouldStop:liveStop});
+    assert(deferred.upgrade===true&&deferred.mergedPackage==="P"&&stopFlag.on===true,`the upgrade was not planned with Global Stop inactive or the stop was not raised after verification: ${JSON.stringify(deferred)}`);
+    assert(deferred.status==="DEFERRED"&&/GLOBAL_STOP_ACTIVE_AT_ACTIVATION/.test(deferred.reason)&&fs.realpathSync(link)===fs.realpathSync(plane(Ac))&&!fs.existsSync(path.join(cdir,"CURRENT.json"))&&!fs.existsSync(path.join(cdir,"SWITCH.json"))&&!fs.existsSync(`${link}.next`),`the control plane was activated while Global Stop was live: ${JSON.stringify({status:deferred.status,reason:deferred.reason,link:fs.realpathSync(link)})}`);
+    let required=null;try{performControlPlaneUpgrade({runner,policy:polR,repo:R,masterSha:Bc,planeCommit:Ac,runningPlane:plane(Ac),reason:"selftest"})}catch(e){required=String(e.message)}assert(/REQUIRES_A_LIVE_GLOBAL_STOP_CHECK/.test(required??"")&&fs.realpathSync(link)===fs.realpathSync(plane(Ac)),`an activation without a live Global Stop check was not refused: ${required}`)});
+  const up=performControlPlaneUpgrade({runner,policy:polR,repo:R,masterSha:Bc,planeCommit:Ac,runningPlane:plane(Ac),reason:"selftest",shouldStop:()=>null});
   assert(up.status==="UPGRADED"&&fs.realpathSync(link)===fs.realpathSync(plane(Bc))&&gitIn(plane(Bc),"rev-parse","HEAD")===Bc,`upgrade did not switch to the sealed plane: ${JSON.stringify(up)}`);
   assert(fs.existsSync(path.join(plane(Ac),"scripts","uasco-orchestrator.mjs")),"the previous plane was removed");const rec=readJson(path.join(cdir,"CURRENT.json"));assert(rec.commit===Bc&&rec.previous.commit===Ac,`upgrade record wrong: ${JSON.stringify(rec)}`);
-  let refused=null;try{performControlPlaneUpgrade({runner,policy:polR,repo:R,masterSha:Cc,planeCommit:Bc,runningPlane:plane(Bc),reason:"selftest"})}catch(e){refused=String(e.message)}
+  let refused=null;try{performControlPlaneUpgrade({runner,policy:polR,repo:R,masterSha:Cc,planeCommit:Bc,runningPlane:plane(Bc),reason:"selftest",shouldStop:()=>null})}catch(e){refused=String(e.message)}
   assert(/CONTROL_PLANE_TRUST_ROOT_NOT_VERIFIED/.test(refused??"")&&fs.realpathSync(link)===fs.realpathSync(plane(Bc)),`an unsealed control-plane change was activated: ${refused}`);
   // //TR: Başlatıcı: güncellendi kodu (4) eski düzlemi yeniden başlatmaz, temiz çıkar.
   const L=path.join(T,"launcher-plane"),local=path.join(T,"LocalAppData");for(const f of ["scripts/uasco-supervisor-launcher.mjs","automation/lib/command-contracts.mjs","automation/lib/git-isolation.mjs","config/orchestrator-policy.json"]){fs.mkdirSync(path.dirname(path.join(L,f)),{recursive:true});fs.copyFileSync(path.join(UASCO,f),path.join(L,f))}

@@ -1,5 +1,5 @@
 // //TR: Bu motor gözetimsiz orkestratörün bağımlılık farkında planlayıcısıdır: kalıcı kontrol durumundan bir sonraki uygun eylemi seçer, enjekte edilen yürütücünün sonucunu durum geçişine çevirir; sağlayıcı kotası review cycle/format/remediation hakkı tüketmez ve yalnız o sağlayıcıya bağlı işleri bekletir, Founder kararı yalnız ilgili paketi/release'i durdurur, geçici hatalar sınırlı geri çekilmeyle yeniden denenir, yarım kalan eylemler idempotent yürütücülerle toparlanır.
-export const ACTIONS=["REVIEW","REMEDIATE","IMPLEMENT","MERGE","CLOSE","PACKAGE","SIGN","PHASE0"];
+export const ACTIONS=["REVIEW","REMEDIATE","IMPLEMENT","MERGE","CLOSE","PACKAGE","SIGN","PHASE0","AUTOSTART"];
 const TERMINAL=["CLOSED","MERGED"];
 const clone=x=>JSON.parse(JSON.stringify(x));
 const minutes=(now,m)=>new Date(now.getTime()+m*60_000).toISOString();
@@ -17,6 +17,15 @@ function conditionsMet(control,conds){return dependenciesMet(control,{dependsOn:
 // //TR: Sağlayıcı ancak AVAILABLE ise, Founder manuel sıfırlama sonrası tek probe bekliyorsa veya retryAfter geçmişse "due" sayılır.
 export function providerDue(control,provider,now){const p=control.providers?.[provider];if(!p||p.status==="AVAILABLE"||p.status==="PROBE_PENDING_FOUNDER_RESET")return true;return !p.retryAfter||Date.parse(p.retryAfter)<=now.getTime()}
 const due=(x,now)=>!x.notBefore||Date.parse(x.notBefore)<=now.getTime();
+// //TR: Kurulu sistem otomatik başlatma kaydı, kabul edilmiş kurulumdan bağımsız kendi hattıdır: başarısız kayıt sınırlı sayıda, artan beklemeyle yeniden denenir; hak bitince hat açıkça REGISTRATION_BLOCKED_RETRIES_EXHAUSTED olur. Release PHASE0_DONE kalır (kabul ve dependent'lar korunur); bilinmeyen kayıt sonucu kayıtlı sayılmaz.
+export function autostartDue(r,now){return r?.status==="PHASE0_DONE"&&r.autostart?.status==="RETRY_PENDING"&&(!r.autostart.notBefore||Date.parse(r.autostart.notBefore)<=now.getTime())}
+function autostartLane(prev,rec,now,policy,blockedReason=null){
+  const attempts=(prev?.attempts??0)+1,max=Math.max(1,Math.floor(Number(policy?.phase0?.maxAutostartRegistrationAttempts)||5)),at=now.toISOString(),last=rec?{status:rec.status??null,taskName:rec.taskName??null,exitCode:rec.exitCode??null,detail:rec.detail??null,at:rec.at??at}:{status:"UNKNOWN_NO_REGISTRATION_RECORD",at};
+  if(rec?.status==="REGISTERED")return {status:"REGISTERED",taskName:rec.taskName??null,attempts,adopted:rec.adopted===true,registeredAt:rec.at??at,last};
+  if(blockedReason)return {status:"REGISTRATION_BLOCKED",reason:blockedReason,attempts,max,blockedAt:at,last};
+  if(attempts>=max)return {status:"REGISTRATION_BLOCKED_RETRIES_EXHAUSTED",reason:`REGISTRATION_FAILED_${attempts}_OF_${max}`,attempts,max,blockedAt:at,last};
+  return {status:"RETRY_PENDING",attempts,max,notBefore:minutes(now,Math.min(5*2**(attempts-1),360)),last};
+}
 export function nextAction(control,now,{skip=new Set()}={}){
   for(const id of control.order){
     const p=control.packages[id],key=`P:${id}`;if(skip.has(key)||TERMINAL.includes(p.status)||p.status==="FOUNDER_DECISION_PENDING"||!due(p,now)||!dependenciesMet(control,p))continue;
@@ -27,7 +36,9 @@ export function nextAction(control,now,{skip=new Set()}={}){
     if(p.status==="REVIEW_CLEAN"){if(p.merge?.mode==="FF_DEFAULT_BRANCH"){if(conditionsMet(control,p.merge.after))return {type:"MERGE",packageId:id,key};continue}return {type:"CLOSE",packageId:id,key}}
   }
   for(const [rk,r] of Object.entries(control.releases??{})){
-    const key=`R:${rk}`;if(skip.has(key)||!due(r,now))continue;
+    const key=`R:${rk}`;if(skip.has(key))continue;
+    if(r.status==="PHASE0_DONE"){if(autostartDue(r,now))return {type:"AUTOSTART",releaseKey:rk,key};continue}
+    if(!due(r,now))continue;
     if(r.status==="PACKAGE_PENDING")return {type:"PACKAGE",releaseKey:rk,key};
     if(["SIGN_PENDING","WAITING_FOR_SECURE_SIGNER"].includes(r.status))return {type:"SIGN",releaseKey:rk,key};
     if(r.status==="PHASE0_PENDING")return {type:"PHASE0",releaseKey:rk,key};
@@ -67,7 +78,10 @@ export function applyOutcome(controlIn,action,outcome,now,policy){
     ev.to=p.status;return {control,event:ev};
   }
   const r=control.releases[action.releaseKey];ev.from=r.status;delete r.inFlight;
-  if(o.type==="ENV_ERROR")transient(r,now,o.reason,policy);
+  // //TR: Otomatik başlatma kaydı denemesi yalnız kendi hattını günceller; yürütücü hatası da sınırlı bir deneme sayılır ve release'i Founder kararına düşürmez, kabul edilmiş kurulumu geri almaz.
+  if(action.type==="AUTOSTART"){const rec=o.type==="REGISTERED"?(o.installedAutostart??{status:"REGISTERED"}):{...(o.installedAutostart??{}),status:"REGISTRATION_FAILED",detail:o.installedAutostart?.detail??o.reason??o.type};
+    r.autostart=autostartLane(r.autostart,rec,now,policy,o.type==="NOT_APPLICABLE"?(o.reason??"NOT_APPLICABLE"):null);if(control.phase0?.releaseKey===action.releaseKey)control.phase0.installedAutostart=r.autostart;ev.reason=`${r.autostart.status}${o.reason?`: ${o.reason}`:""}`}
+  else if(o.type==="ENV_ERROR")transient(r,now,o.reason,policy);
   else if(action.type==="PACKAGE"){if(o.type==="PACKAGED"){r.status="SIGN_PENDING";r.packaging=o.record;r.transientFailures=0;r.nextAction="SIGN"}else founder(r,o.reason??"PACKAGING_FAILED")}
   else if(action.type==="SIGN"){
     if(o.type==="SIGNED"){r.signatures=o.signatures;r.transientFailures=0;const accepted=control.phase0?.accepted===true&&control.phase0.releaseKey!==action.releaseKey;if(accepted)founder(r,"REINSTALL_OVER_ACCEPTED_INSTALLATION_REQUIRES_FOUNDER");else{r.status="PHASE0_PENDING";r.nextAction="PHASE0"}}
@@ -76,7 +90,7 @@ export function applyOutcome(controlIn,action,outcome,now,policy){
   }
   else if(action.type==="PHASE0"){
     control.phase0=control.phase0??{attempts:[]};control.phase0.attempts=[...(control.phase0.attempts??[]),{releaseKey:action.releaseKey,at:now.toISOString(),result:o.type,final:o.final??null,evidence:o.evidence??null}];
-    if(o.type==="PHASE0_DONE"&&["CLEAN","CLEAN_LOCAL_ONLY"].includes(o.final)){r.status="PHASE0_DONE";r.phase0Final=o.final;r.nextAction=null;Object.assign(control.phase0,{accepted:true,final:o.final,releaseKey:action.releaseKey,installRoot:o.installRoot??null,installedAutostart:o.installedAutostart??null})}
+    if(o.type==="PHASE0_DONE"&&["CLEAN","CLEAN_LOCAL_ONLY"].includes(o.final)){r.status="PHASE0_DONE";r.phase0Final=o.final;r.nextAction=null;r.autostart=autostartLane(null,o.installedAutostart??null,now,policy);Object.assign(control.phase0,{accepted:true,final:o.final,releaseKey:action.releaseKey,installRoot:o.installRoot??null,installedAutostart:r.autostart})}
     else founder(r,o.reason??`PHASE0_FAILED:${o.final??"UNKNOWN"}`,"PHASE0_FAILED_NEEDS_REMEDIATION_PACKAGE");
   }
   ev.to=r.status;return {control,event:ev};

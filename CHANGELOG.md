@@ -10,6 +10,12 @@
 - A wake request that arrives while a tick runs is no longer lost; Git contract isolation now comes from PKG-AUT1B cycle 2.
 - Governed self-upgrade (Founder decision 2026-10-01): the supervisor switches the scheduled task's `control\current` link to a newer control plane only for a governed-CLEAN fast-forward merge that changes the control plane and whose sealed trust root verifies; the previous plane is kept.
 - Tests A-L, N plus lifecycle with real processes (autonomy-hardening selftest 17/17); the Claude app routine is a passive display only.
+- Review cycle-1 remediation (F-AUT2-001..004):
+  - A committed builder round is recognised from git before the implementation clone is reset: single parent equal to the base, the orchestrator committer and the round subject. A crash before or during the round-marker write, or a torn marker, no longer causes a second builder call. The marker is written atomically.
+  - The scheduled task runs a stable entry, `control\uasco-supervisor-entry.mjs`. It repairs an interrupted `control\current` switch, which is journaled in `SWITCH.json` with the old link kept as `current.prev`, and then loads the launcher through the link.
+  - Global Stop is rechecked live right before activation, and an upgrade is `DEFERRED` while it is active.
+  - A failed installed-autostart registration is retried on its own lane (bounded backoff, `AUTOSTART` action, no reinstall). It becomes `REGISTRATION_BLOCKED_RETRIES_EXHAUSTED` after 5 attempts, and the accepted installation is kept.
+  - New regression scenarios: autonomy-hardening selftest F-AUT2-001/002/003, plus the executor-integration Phase0 registration scenario.
 
 ## 2026-09-29 — V6 PowerShell Safety and Verifier Differential Tests (branch)
 
