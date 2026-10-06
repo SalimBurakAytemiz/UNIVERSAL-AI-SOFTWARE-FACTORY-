@@ -34,5 +34,52 @@
   "cleanClaim": false,
   "changedFileSha256": {
     "package-lock.json": "a1360f0633e313adaec1de9ac451b547e5dc8aef8db1abcd03e7e846b10afea9"
+  },
+  "reviewEvidence": {
+    "addedAt": "2026-10-06",
+    "reason": "The cycle-1 Codex review of f148a38 (run f148a38-c1-20261006T093430999Z-orchestrator) returned ENVIRONMENT_BLOCKED with no code finding: the bundle carried no environment record and no independent registry/tarball evidence for the changed integrity. This block appends that evidence; no earlier value of this checkpoint is changed.",
+    "registryTarball": {
+      "package": "source-map-js",
+      "version": "1.2.2",
+      "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.2.tgz",
+      "lockIntegrity": "sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==",
+      "registryMetadata": {
+        "source": "npm view source-map-js@1.2.2 dist (registry.npmjs.org, 2026-10-06)",
+        "integrity": "sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==",
+        "shasum": "79fb88d97535a21cb27162cb05d211b67acea4ab",
+        "tarball": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.2.tgz",
+        "unpackedSize": 142723
+      },
+      "fetchedTarball": {
+        "source": "npm content-addressed cache entry written by the npm ci install of this lock (cacache index key make-fetch-happen:request-cache:https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.2.tgz, 2026-10-03T00:07:39Z)",
+        "bytes": 36349,
+        "sha512": "sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==",
+        "sha1": "79fb88d97535a21cb27162cb05d211b67acea4ab",
+        "packageJson": {
+          "name": "source-map-js",
+          "version": "1.2.2",
+          "license": "BSD-3-Clause"
+        }
+      },
+      "result": "MATCH: the lock integrity equals the registry dist.integrity and the sha512 recomputed from the fetched tarball bytes; the registry dist.shasum equals the sha1 of the same bytes; the tarball manifest is source-map-js 1.2.2 BSD-3-Clause; npm ci additionally verifies this integrity on every install"
+    },
+    "validationEnvironment": {
+      "os": "Windows 10 Pro 10.0.19045",
+      "node": "v24.19.0 (C:Program Files\nodejs\node.exe)",
+      "npm": "11.17.0",
+      "dependencyInstall": "scripts/ensure-dependencies.mjs from the reviewed lock (NPM_CI_REVIEWED_LOCK; npm ci verifies each tarball against its lock integrity)",
+      "lockSha256": "a1360f0633e313adaec1de9ac451b547e5dc8aef8db1abcd03e7e846b10afea9",
+      "binding": "the canonical validation of the exact reviewed commit runs in a fresh clean clone at that commit in this environment during the bundle freeze; the bundle records its reviewedCommit and the validation report"
+    },
+    "dependencySupplyChainReport": {
+      "gate": "scripts/dependency-supply-chain.mjs (canonical validation step dependency-supply-chain, live npm audit, moderate and higher block)",
+      "result": "PASS components=188, audit blockers [] and low [] (report .ai/runtime/SUPPLY_CHAIN.json of the f148a38 freeze, status PASS, lockSha256 a1360f0633e313adaec1de9ac451b547e5dc8aef8db1abcd03e7e846b10afea9, file sha256 3470f8a4bf9a8aebac2d5194dd9102e645e6b1dd42f0598777520629d2af3bf3)",
+      "component": {
+        "path": "node_modules/source-map-js",
+        "version": "1.2.2",
+        "lockLicense": "BSD-3-Clause",
+        "optional": false
+      }
+    }
   }
 }
