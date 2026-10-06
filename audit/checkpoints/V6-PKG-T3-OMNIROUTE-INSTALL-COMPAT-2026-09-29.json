@@ -95,5 +95,116 @@
     "newParent": "27ba5f0ab7dab9dc73d46f1b4fb24a8f0681f14c",
     "branch": "v6/pkg-t3-omniroute-install-compat-r5",
     "reason": "the re-applied PKG-T1 27ba5f0 on PKG-T2B cycle 2 (220d181); the cycle-2 CLEAN pair is re-applied unchanged"
-  }
+  },
+  "remediationRounds": [
+    {
+      "date": "2026-10-06",
+      "mode": "REMEDIATE (bootstrap builder worker, finalization sprint; advisory CLAUDE_REVIEWER pre-review finding)",
+      "reviewedCommit": "21e95c68cc5e0514b740b7b15a83241a963e4fe1",
+      "packageBase": "ab41050e500a069d4721ca3e05d3246cad920e54",
+      "finding": {
+        "id": "F-T3-003",
+        "severity": "P2",
+        "classification": "BLOCKER",
+        "category": "FAIL_OPEN_SELFTEST_SKIP_ON_INFRASTRUCTURE_FAILURE",
+        "file": "scripts/omniroute-install-compat-selftest.mjs",
+        "summary": "npm() collapsed every npm failure mode (non-zero exit, spawn error, the 30000 ms timeout) into null; a null `npm root -g` result became a null pkgFile, which was treated exactly like a missing package and printed 'OMNIROUTE_INSTALL_COMPAT: SKIP NOT_INSTALLED' with exit 0, silently dropping all six checks, and tests/pkg-t3-omniroute-install-compat.test.ts accepted that line, so the canonical tests step could PASS with zero verification."
+      },
+      "fix": "The npm runner now returns the raw spawnSync result (an unresolvable npm invocation, e.g. a missing npm-cli.js, is carried as an error result instead of an uncaught throw). The new exported classifyNpmRoot accepts the `npm root -g` result only when there is no spawn error, the exit status is 0 and stdout is exactly one non-empty line that is an absolute path to an existing directory; a spawn error (SPAWN_ERROR_<code>), timeout (TIMEOUT), signal (SIGNAL_<sig>), missing status (NO_EXIT_STATUS), non-zero exit (EXIT_<n>), empty/whitespace output (EMPTY_OUTPUT), multiple lines (MULTIPLE_LINES), a relative or garbage path (NOT_ABSOLUTE), a missing path (NOT_FOUND) or a non-directory (NOT_DIRECTORY) is unavailable. main then prints {status: FAIL, reason: NPM_ROOT_UNAVAILABLE, detail, npmRoot: null} and 'OMNIROUTE_INSTALL_COMPAT: FAIL NPM_ROOT_UNAVAILABLE reason=<detail>' and exits 1. 'SKIP NOT_INSTALLED' with exit 0 is reached only after a validated global root that has no omniroute/package.json; the PASS 6/6 path and the npm prefix -g path are unchanged. No environment override or other test hook was added to the production script; the tests inject a fake npm through the real invocation path (on win32 a copy of node.exe whose sibling node_modules/npm/bin/npm-cli.js is the fake, exactly where resolveNpmInvocation looks; elsewhere a fake npm first on PATH).",
+      "regressionTests": [
+        "tests/pkg-t3-omniroute-install-compat.test.ts 'F-T3-003: npm global root measurement failure is a FAIL, never an honest skip' > 'reports FAIL NPM_ROOT_UNAVAILABLE and exits non-zero for every unusable npm root -g result' (9 cases: exit 1 with a usable-looking root, exit 1 without output, empty, whitespace-only, garbage, relative, multiple lines, absolute missing path, absolute file path)",
+        "tests/pkg-t3-omniroute-install-compat.test.ts 'F-T3-003: ...' > 'reports FAIL NPM_ROOT_UNAVAILABLE when npm cannot be resolved or spawned' (win32: npm-cli.js missing beside node.exe -> SPAWN_ERROR_NPM_CLI_NOT_FOUND; other platforms: npm not on PATH -> SPAWN_ERROR_ENOENT)",
+        "tests/pkg-t3-omniroute-install-compat.test.ts 'F-T3-003: ...' > 'still skips honestly when npm works and the resolved global root has no OmniRoute' (a real empty temp directory as the root -> exit 0, SKIP NOT_INSTALLED, npmRoot equals that directory)",
+        "tests/pkg-t3-omniroute-install-compat.test.ts 'F-T3-003: ...' > 'classifies spawn errors, timeouts and signals as unavailable and only a clean single absolute directory as usable' (ETIMEDOUT, ENOENT, resolver throw, error with status 0, SIGKILL, null status, valid CRLF-terminated directory)",
+        "tests/pkg-t3-omniroute-install-compat.test.ts 'passes or honestly skips when OmniRoute is not installed': existing assertions kept verbatim; added that a SKIP must carry an absolute existing npmRoot without omniroute/package.json and that a PASS must carry six PASS checks"
+      ],
+      "changedFiles": {
+        "scripts/omniroute-install-compat-selftest.mjs": "9552a1368c8e2cb0d3aebbc2f8e0deb6d8ead3f6b610d9c03b23d4dd733857d9",
+        "tests/pkg-t3-omniroute-install-compat.test.ts": "7d503c8a049ce0a6c8ea860095c1fc9e5be9ca6cb9c818b286cf92ab23bb1dfd",
+        "CHANGELOG.md": "0821d7a17f6ea0d5b13ab046b489685336f3061907fad66744a05b5a98b20a76",
+        "audit/checkpoints/V6-PKG-T3-OMNIROUTE-INSTALL-COMPAT-2026-09-29.json": "SELF (this file; its own digest cannot be embedded in it)"
+      },
+      "validation": {
+        "workspace": "isolated worktree on branch v6/pkg-t3-omniroute-install-compat-r6, parent 21e95c6; node_modules is a junction to the shared install (nothing installed or modified)",
+        "environment": "win32 10.0.19045 x64, node v24.19.0",
+        "packageSelftest": "node scripts/omniroute-install-compat-selftest.mjs -> OMNIROUTE_INSTALL_COMPAT: PASS 6/6 endpoint=NOT_RUNNING (exit 0; omniroute is installed globally on this machine)",
+        "packageTests": "npx vitest run tests/pkg-t3-omniroute-install-compat.test.ts -> 1 file passed, 8 passed (8)",
+        "typecheck": "npm run typecheck (tsc --noEmit) -> exit 0",
+        "verifyTrustRoot": "node scripts/verify-trust-root.mjs -> TRUST_ROOT_VERIFY: PASS (no protected file changed)",
+        "trComments": "node scripts/validate-tr-comments.mjs -> TR_VALIDATION: PASS",
+        "gitDiffCheck": "PASS",
+        "vitest": "npx vitest run -> 28 passed (28) files / 170 passed (170) tests",
+        "canonicalRunner": "NOT_RUN by this builder worker (scripts/run-validation.mjs is run by the supervisor on the remediated commit)"
+      },
+      "mutationEvidence": {
+        "method": "tests/pkg-t3-omniroute-install-compat.test.ts was run with scripts/omniroute-install-compat-selftest.mjs temporarily replaced by the reviewed 21e95c6 version (git show HEAD:<path>); the fix was then restored and its sha256 re-verified. A per-case harness outside the worktree ran scratch copies of both versions through the same fake npm.",
+        "unfixedTestRun": "3 failed | 5 passed (8): the three new F-T3-003 failure tests fail; the honest-skip guard and the four pre-existing tests pass",
+        "unfixedFailures": [
+          "'reports FAIL NPM_ROOT_UNAVAILABLE and exits non-zero for every unusable npm root -g result': first case (npm exit 1 with a usable-looking root) expected exit 1, received exit 0 with last line 'OMNIROUTE_INSTALL_COMPAT: SKIP NOT_INSTALLED'",
+          "'reports FAIL NPM_ROOT_UNAVAILABLE when npm cannot be resolved or spawned': the unfixed script exits 1 with an uncaught NPM_CLI_NOT_FOUND stack trace and no OMNIROUTE_INSTALL_COMPAT line",
+          "'classifies spawn errors, timeouts and signals ...': the unfixed script has no classifyNpmRoot export"
+        ],
+        "fixedTestRun": "8 passed (8)",
+        "perCase": [
+          {
+            "case": "npm exit 1 + usable-looking root",
+            "unfixed": "exit 0 SKIP NOT_INSTALLED",
+            "fixed": "exit 1 FAIL NPM_ROOT_UNAVAILABLE reason=EXIT_1"
+          },
+          {
+            "case": "npm exit 1, no output",
+            "unfixed": "exit 0 SKIP NOT_INSTALLED",
+            "fixed": "exit 1 FAIL NPM_ROOT_UNAVAILABLE reason=EXIT_1"
+          },
+          {
+            "case": "empty output",
+            "unfixed": "exit 0 SKIP NOT_INSTALLED",
+            "fixed": "exit 1 FAIL NPM_ROOT_UNAVAILABLE reason=EMPTY_OUTPUT"
+          },
+          {
+            "case": "whitespace-only output",
+            "unfixed": "exit 0 SKIP NOT_INSTALLED",
+            "fixed": "exit 1 FAIL NPM_ROOT_UNAVAILABLE reason=EMPTY_OUTPUT"
+          },
+          {
+            "case": "garbage output",
+            "unfixed": "exit 0 SKIP NOT_INSTALLED",
+            "fixed": "exit 1 FAIL NPM_ROOT_UNAVAILABLE reason=NOT_ABSOLUTE"
+          },
+          {
+            "case": "relative path",
+            "unfixed": "exit 0 SKIP NOT_INSTALLED",
+            "fixed": "exit 1 FAIL NPM_ROOT_UNAVAILABLE reason=NOT_ABSOLUTE"
+          },
+          {
+            "case": "multiple lines",
+            "unfixed": "exit 0 SKIP NOT_INSTALLED",
+            "fixed": "exit 1 FAIL NPM_ROOT_UNAVAILABLE reason=MULTIPLE_LINES"
+          },
+          {
+            "case": "absolute missing path",
+            "unfixed": "exit 0 SKIP NOT_INSTALLED",
+            "fixed": "exit 1 FAIL NPM_ROOT_UNAVAILABLE reason=NOT_FOUND"
+          },
+          {
+            "case": "absolute file path",
+            "unfixed": "exit 0 SKIP NOT_INSTALLED",
+            "fixed": "exit 1 FAIL NPM_ROOT_UNAVAILABLE reason=NOT_DIRECTORY"
+          },
+          {
+            "case": "npm-cli.js missing beside node.exe",
+            "unfixed": "exit 1, uncaught NPM_CLI_NOT_FOUND, no status line",
+            "fixed": "exit 1 FAIL NPM_ROOT_UNAVAILABLE reason=SPAWN_ERROR_NPM_CLI_NOT_FOUND"
+          },
+          {
+            "case": "working npm, empty real root (honest skip)",
+            "unfixed": "exit 0 SKIP NOT_INSTALLED",
+            "fixed": "exit 0 SKIP NOT_INSTALLED"
+          }
+        ]
+      },
+      "notAddressed": "Advisories F-T3-A01..F-T3-A05 of the same review are outside this round's scope and unchanged.",
+      "cleanClaim": false
+    }
+  ]
 }

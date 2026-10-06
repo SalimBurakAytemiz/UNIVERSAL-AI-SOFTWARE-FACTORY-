@@ -4,6 +4,7 @@
 ## 2026-09-29 — V6 OmniRoute Install Compatibility Test (branch)
 
 - Read-only verification of the installed OmniRoute against config/omniroute-policy.json on the target machine (identity, license, repository, Node engines range, launcher location, local-only endpoint); OmniRoute is not started and a stopped endpoint is reported as NOT_RUNNING; machines without OmniRoute skip honestly.
+- F-T3-003: a failure of the selftest's own `npm root -g` measurement (non-zero exit, unresolvable or unspawnable npm, timeout, signal, or output that is not exactly one absolute existing directory) now reports `FAIL NPM_ROOT_UNAVAILABLE` with a non-zero exit instead of `SKIP NOT_INSTALLED`; the honest skip is kept only for a working npm whose resolved global root has no OmniRoute package.
 
 ## 2026-09-29 — V6 Windows Crash/Resume Tests (branch)
 
