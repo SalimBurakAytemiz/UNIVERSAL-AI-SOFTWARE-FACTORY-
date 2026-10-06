@@ -136,5 +136,31 @@
       }
     },
     "mutationCheck": "sentinelGitEnv spreading process.env again -> negative-controls-ignore-unrelated-inherited-git-configuration FAIL (an inherited hook path reached the sanitized negative control); with the fix 11/11"
-  }
+  },
+  "founderDecisions": [
+    {
+      "date": "2026-10-06",
+      "decision": "SCOPED_CYCLE_3_REMEDIATION_AUTHORIZED",
+      "rule": "Founder answer in the Claude builder session (2026-10-06): a scoped third remediation cycle for T2B after the cycle limit of 2 was reached with one real P2 blocker; later the same day the Founder decided that the chain is re-frozen on V6-PKG-D1 (package-lock fix), which also re-freezes this remediation as a fresh review of the new commit.",
+      "scope": "only the cycle-2 finding (test process isolation): the regression control in scenario negative-controls-ignore-unrelated-inherited-git-configuration must not inherit host Git configuration or dispatch a host signer"
+    }
+  ],
+  "remediationRounds": [
+    {
+      "date": "2026-10-06",
+      "mode": "REMEDIATE (bootstrap builder, Founder-authorized)",
+      "finding": {
+        "reportedId": "F-T2B-001 (cycle 2; the reviewer reused the cycle-1 id for a remediation regression, causedByFindingId F-T2B-001)",
+        "severity": "P2",
+        "classification": "BLOCKER",
+        "file": "scripts/orchestrator-executor-integration-selftest.mjs",
+        "summary": "the added regression control passed {...process.env,GIT_CONFIG_GLOBAL:cfg} to raw Git and enabled SSH signing, so inherited system configuration (gpg.ssh.program) could dispatch an external signer outside the recorder while the scenario still passed"
+      },
+      "fix": "the regression control now starts from the sanitized sentinel base (no host GIT_* variables, empty global config, GIT_CONFIG_NOSYSTEM=1) and carries only the deliberately injected GIT_CONFIG_PARAMETERS/GIT_CONFIG_COUNT/KEY/VALUE; the injected configuration pins gpg.ssh.program to a non-existent fixture path, so no real signer can run; the control now asserts that the injected signing configuration reached unsanitized Git (the commit fails on the missing fixture signer) besides the foreign hook marker",
+      "changedFiles": {
+        "scripts/orchestrator-executor-integration-selftest.mjs": "440fd0ec626c7743968f0f0ef1031a1fdd89742e8d9a9024d5745bd508df99c7"
+      },
+      "validation": "scripts/orchestrator-executor-integration-selftest.mjs 11/11 PASS; canonical validation recorded with the re-frozen bundle"
+    }
+  ]
 }
