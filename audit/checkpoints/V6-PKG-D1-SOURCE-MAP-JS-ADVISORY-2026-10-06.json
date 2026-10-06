@@ -1,0 +1,38 @@
+{
+  "//TR": "Bu checkpoint, source-map-js güvenlik ilanını (GHSA-68fv-2mgg-jv7q) kapatan ve canonical bağımlılık denetimini yeniden geçirilebilir kılan PKG-D1 paketinin Founder kararını, kapsamını ve kanıtını kaydeder.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6-PKG-D1-SOURCE-MAP-JS-ADVISORY",
+  "date": "2026-10-06",
+  "parent": "f3b4ad87d7c2 (master); the stacked V6 chain is re-frozen on top of this package",
+  "branch": "v6/pkg-d1-source-map-js-advisory",
+  "founderAuthorization": {
+    "decision": "RELEASE_BLOCKER_DEPENDENCY_FIX_AUTHORIZED",
+    "rule": "Founder decision 2026-10-06 in the Claude builder session: 'Karar 1: Onaylıyorum. package-lock düzeltmesini D1 olarak master tabanına koy ve zinciri bunun üzerine yeniden dondur.' A high npm advisory published on 2026-10-06 for the dev-only transitive dependency source-map-js (GHSA-68fv-2mgg-jv7q, range >=1.0.0 <1.2.2) makes the canonical dependency gate (scripts/dependency-supply-chain.mjs, live npm audit, moderate+ blocks) fail for every commit.",
+    "protectedFiles": [],
+    "constraint": "package-lock.json only: node_modules/source-map-js version 1.2.1 -> 1.2.2 with the registry's resolved URL and integrity; no package.json change, no new package, no other lock entry, no gate or policy change"
+  },
+  "advisory": {
+    "id": "GHSA-68fv-2mgg-jv7q",
+    "package": "source-map-js",
+    "severity": "high",
+    "range": ">=1.0.0 <1.2.2",
+    "title": "source-map-js allows event-loop denial of service through indexed source-map section offsets",
+    "dependent": "node_modules/postcss 8.5.28 requires ^1.2.1 (dev tooling of vite/vitest)",
+    "fixedVersion": "1.2.2",
+    "license": "BSD-3-Clause (unchanged)",
+    "integrity": "sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw=="
+  },
+  "observed": "2026-10-06: the bundle freeze of V6-PKG-Q1 reported validationStatus FAIL with DEPENDENCY_AUDIT_BLOCKERS:1 (source-map-js, high, fixAvailable true); the same commit had passed the canonical validation on 2026-10-05 before the advisory was published",
+  "validation": {
+    "workspace": "D1 worktree on master f3b4ad8 with the bumped lock; node_modules installed by scripts/ensure-dependencies.mjs (NPM_CI_REVIEWED_LOCK, lock sha256 a1360f0633e313adaec1de9ac451b547e5dc8aef8db1abcd03e7e846b10afea9)",
+    "canonicalValidation": "CANONICAL_VALIDATION: PASS (25 test files, 160 tests)",
+    "dependencySupplyChain": "DEPENDENCY_SUPPLY_CHAIN: PASS components=188 low=0 (the source-map-js blocker is gone)",
+    "note": "the bundle freeze validates the exact commit again in a clean clone"
+  },
+  "review": "NOT_REVIEWED",
+  "merge": "FIRST (chain base); the V6 chain is re-frozen on this commit",
+  "cleanClaim": false,
+  "changedFileSha256": {
+    "package-lock.json": "a1360f0633e313adaec1de9ac451b547e5dc8aef8db1abcd03e7e846b10afea9"
+  }
+}
