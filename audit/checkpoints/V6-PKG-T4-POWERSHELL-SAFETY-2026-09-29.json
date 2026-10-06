@@ -86,5 +86,28 @@
       }
     },
     "mutationCheck": "file-wide web-request check -> web-request-rule-checks-every-invocation FAIL; collapsed verifier result -> verifier-results-require-a-real-execution FAIL; with both fixes 5/5"
-  }
+  },
+  "remediationRounds": [
+    {
+      "date": "2026-10-06",
+      "mode": "REMEDIATE (bootstrap builder worker, finalization sprint; advisory CLAUDE_REVIEWER pre-review finding)",
+      "finding": {
+        "id": "F-CLAUDE-T4-C1-001",
+        "severity": "P2",
+        "classification": "BLOCKER",
+        "reviewedCommit": "f4d41e967858a9279e6a7244a5f7c25183d44057",
+        "file": "scripts/powershell-safety-selftest.mjs",
+        "summary": "scenario every-powershell-script-parses-without-errors ran the PowerShell 5.1 parse-error and Invoke-Expression detector only against the already-compliant scripts/*.ps1 corpus, so a blinded detector (empty errors or command tokens for every file) still produced PASS 5/5 and a passing vitest; the detector had no positive control"
+      },
+      "fix": "the PowerShell one-liner and its result interpretation moved unchanged into one shared function detectPs1 (PARSE_CODE; per-file errors and Invoke-Expression/iex command tokens); the real-corpus scenario now calls detectPs1 with identical assertions; new scenario parse-error-and-invoke-expression-detectors-catch-violating-fixtures writes four fixtures to a fresh os.tmpdir() directory (removed afterwards) and runs them through the same detectPs1: syntax-error.ps1 must report a parse error and no Invoke-Expression, invoke-expression.ps1 and iex-alias.ps1 must each report exactly their command token (Invoke-Expression, iex) and no parse error, compliant.ps1 (Invoke-Expression/iex only in a comment and a string literal) must report nothing; tests/pkg-t4-powershell-safety.test.ts pins PASS 6/6 and requires PASS for the corpus scenario and the new scenario by name",
+      "changedFiles": {
+        "scripts/powershell-safety-selftest.mjs": "15607e2049c24d6e9bbc9f88a85883714b726bf97ef0663411df25de89e307fa",
+        "tests/pkg-t4-powershell-safety.test.ts": "1b4c61660d64506b9dcdbb3eb93c280b0fd564c67f5f60d7a9c71cd456a637b0",
+        "CHANGELOG.md": "30282457e6864d9b371181a25e1f0e87335461630a223f21d80ad736a3faec08",
+        "audit/checkpoints/V6-PKG-T4-POWERSHELL-SAFETY-2026-09-29.json": "this file; a self-referential digest cannot be recorded"
+      },
+      "validation": "worktree of v6/pkg-t4-powershell-safety-r6 on f4d41e9 with the changes applied, win32 10.0.19045, Windows PowerShell 5.1: node scripts/powershell-safety-selftest.mjs PASS 6/6 (exit 0); npx vitest run tests/pkg-t4-powershell-safety.test.ts 1 file / 1 test passed; npm run typecheck exit 0; node scripts/verify-trust-root.mjs TRUST_ROOT_VERIFY: PASS; full npx vitest run 29 files / 167 tests passed; scripts/run-validation.mjs not run by this worker (supervisor-owned canonical validation)",
+      "mutationEvidence": "scratch copies of the fixed selftest outside the worktree (only the import rewritten to an absolute URL), run from the worktree root: unmutated control PASS 6/6 exit 0; reviewer reproduction (CommandName filter replaced with $false and error mapping replaced with @()) FAIL 5/6 exit 1 with parse-error-and-invoke-expression-detectors-catch-violating-fixtures = 'FAIL: parse error in syntax-error.ps1 not reported'; error mapping blinded only FAIL 5/6 exit 1 (same message); CommandName filter blinded only FAIL 5/6 exit 1 with 'FAIL: Invoke-Expression in invoke-expression.ps1 not reported'; in every mutant the corpus scenario still reports PASS, which is the gap the new scenario closes; the worktree file was never mutated, so nothing needed restoring"
+    }
+  ]
 }

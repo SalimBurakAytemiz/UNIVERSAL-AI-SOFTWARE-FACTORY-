@@ -5,6 +5,7 @@
 
 - Every PowerShell script is parsed with the Windows PowerShell 5.1 parser (no errors, no Invoke-Expression) and checked against safety rules (no EncodedCommand, DownloadString/DownloadFile or persistent Set-ExecutionPolicy; entry scripts stop on error; web requests only where allowlisted and without redirects).
 - Differential test of the two install-time artifact verifiers: both reject content tamper, a missing file, a manifest without the lockfile and an unsafe path; an unlisted file is rejected by the Node verifier (the PowerShell verifier does not check it; recorded as LOW finding F-T4-001).
+- Positive control for the parse-error and Invoke-Expression detectors: synthetic scripts written to a temporary directory (a syntax error, Invoke-Expression, the iex alias) must be reported by the same parser detector that scans the real scripts, and a compliant script must report nothing; a blinded detector now fails the selftest (F-CLAUDE-T4-C1-001).
 
 ## 2026-09-29 — V6 OmniRoute Install Compatibility Test (branch)
 

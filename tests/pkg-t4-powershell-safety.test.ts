@@ -2,5 +2,6 @@
 import {describe,it,expect} from "vitest";
 import cp from "node:child_process";
 describe("PowerShell script safety and artifact verifier differential (T4)",{timeout:180000},()=>{
-  it("passes or honestly skips outside Windows",()=>{const r=cp.spawnSync(process.execPath,["scripts/powershell-safety-selftest.mjs"],{encoding:"utf8",timeout:170000});expect(r.status,r.stdout+r.stderr).toBe(0);const line=r.stdout.trim().split(/\r?\n/).pop()??"";expect(line).toMatch(process.platform==="win32"?/^POWERSHELL_SAFETY_SELFTEST: PASS 5\/5$/:/^POWERSHELL_SAFETY_SELFTEST: SKIP NOT_WINDOWS$/)});
+  it("passes or honestly skips outside Windows",()=>{const r=cp.spawnSync(process.execPath,["scripts/powershell-safety-selftest.mjs"],{encoding:"utf8",timeout:170000});expect(r.status,r.stdout+r.stderr).toBe(0);const line=r.stdout.trim().split(/\r?\n/).pop()??"";expect(line).toMatch(process.platform==="win32"?/^POWERSHELL_SAFETY_SELFTEST: PASS 6\/6$/:/^POWERSHELL_SAFETY_SELFTEST: SKIP NOT_WINDOWS$/);
+    if(process.platform==="win32")for(const name of ["every-powershell-script-parses-without-errors","parse-error-and-invoke-expression-detectors-catch-violating-fixtures"])expect(r.stdout).toContain(`"${name}": "PASS"`)});
 });
