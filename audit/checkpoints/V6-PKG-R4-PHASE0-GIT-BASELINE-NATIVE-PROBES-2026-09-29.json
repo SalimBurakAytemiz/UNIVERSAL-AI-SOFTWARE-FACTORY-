@@ -97,5 +97,50 @@
     "FINAL_ZIP": "PACKAGING_STAGE_OUTSIDE_GIT",
     "TARGET_MACHINE_PHASE0": "PENDING"
   },
-  "nextScope": "CODEX_REVIEW_THEN_CHAIN_MERGE_THEN_NEW_PACKAGING_RUN_LOCAL_SIGNATURE_AND_PHASE0"
+  "nextScope": "CODEX_REVIEW_THEN_CHAIN_MERGE_THEN_NEW_PACKAGING_RUN_LOCAL_SIGNATURE_AND_PHASE0",
+  "finalLineageRecords": [
+    {
+      "recordedAt": "2026-10-06T19:55:56.156Z",
+      "kind": "FINAL_LINEAGE_EVIDENCE_BINDING",
+      "reason": "the package was re-applied unchanged (identical change set) onto the final finalization chain; values recorded at its earlier revisions (parent, branch, changedFileSha256, reseal/manifest, validation workspace) describe those superseded revisions and are kept unchanged as history; this record binds the evidence to the final revision",
+      "packageId": "V6-PKG-R4-PHASE0-GIT-BASELINE-NATIVE-PROBES",
+      "finalBase": "f2fcdf2b93c8bf746f0a173c66cb5b3441d5d3ac",
+      "headSubjectChain": [
+        "cd6d6e9 v6 pkg-r4: Phase0 git-baseline native probes and reseal"
+      ],
+      "supersededRevisions": [
+        "136ac87",
+        "a556900",
+        "f83d90c",
+        "9dbc41f",
+        "a5507bd",
+        "787cd0f",
+        "6bed2be",
+        "280b6d0",
+        "a757c74"
+      ],
+      "changedFileSha256": {
+        ".ai/REVIEW_STATUS.md": "d4eea8b5e9554bf04e1c5d3bca0386229d28c6b858ecfefd70d840590bae24ed",
+        "CHANGELOG.md": "46689118334736b51011db2bf63cea1623b5baa427e7d1e09b5dbb2ccdfee215",
+        "audit/KNOWN-TARGET-MACHINE-PENDING.md": "ee18251f0e1e8b713df134959d6bbbc2e64db7fbc925b42359c2eacdd2aa0e35",
+        "audit/V6-FULL-SCAN-PROGRESS.json": "33c3f00d095bddd537b0c17ba3311887eb35247c1bbaeb2076a07f93804e4c47",
+        "config/trust-root-manifest.json": "f31a0f795356c4762df17b66cfd2f13be3414ec9d3068100c701a1b44b2c13bd",
+        "scripts/init-private-git.ps1": "2ab8938634fa53a0baca133e37296bc7f3ad80e7834448be22e7af659a403bfd",
+        "tests/pkg-r4-init-private-git.test.ts": "050c77b3607f2e54ccee3679acad973e7d7e8c0d147143038b60ee02f5229d05"
+      },
+      "trustRootManifest": {
+        "sha256": "f31a0f795356c4762df17b66cfd2f13be3414ec9d3068100c701a1b44b2c13bd",
+        "generatedAt": "2026-10-06T06:12:15.363Z",
+        "sealStatus": "SEALED",
+        "protectedFiles": 347
+      },
+      "validationEnvironment": {
+        "os": "Windows_NT 10.0.19045",
+        "node": "v24.19.0",
+        "npm": "11.17.0"
+      },
+      "validationBinding": "canonical validation (config/validation.json) of the exact reviewed commit runs in a fresh clean clone at that commit, in this environment, during the bundle freeze; the frozen review bundle records reviewedCommit, baseCommit and the validation report",
+      "note": "a file cannot contain the sha of the commit that adds it; the commit is identified by finalBase plus this tree's digests and by the frozen bundle"
+    }
+  ]
 }
