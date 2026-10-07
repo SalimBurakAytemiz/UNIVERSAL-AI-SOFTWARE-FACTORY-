@@ -257,5 +257,68 @@
       ],
       "cleanClaim": false
     }
+  ],
+  "finalLineageRecords": [
+    {
+      "recordedAt": "2026-10-07T06:55:27.897Z",
+      "kind": "FINAL_LINEAGE_EVIDENCE_BINDING",
+      "reason": "the package was re-applied unchanged (identical change set) onto the final finalization chain; values recorded at its earlier revisions (parent, branch, changedFileSha256, reseal/manifest, validation workspace) describe those superseded revisions and are kept unchanged as history; this record binds the evidence to the final revision",
+      "packageId": "V6-PKG-DR1-DUAL-INDEPENDENT-REVIEW",
+      "finalBase": "8d62750491bd595704cbcd6efc14b8f80dcce6d5",
+      "headSubjectChain": [
+        "ff6e90e v6 pkg-dr1 c2: remediate F-DR1-001..003 (fingerprint-preserving ledger merge, dual review for new revisions after activation, quota-aware runnable gates)",
+        "f3d5a11 v6 pkg-dr1: activation holds released only by the activating plane",
+        "5030557 v6 pkg-dr1: bind historical Codex CLEAN seeding; reset for the Claude reviewer quota",
+        "6969eaa v6 pkg-dr1: supervisor-verified read-only inputs for the Claude reviewer",
+        "3099bef v6 pkg-dr1: dual independent review (CLAUDE_REVIEWER + CODEX_REVIEWER)"
+      ],
+      "supersededRevisions": [
+        "085802e",
+        "28dd5ed",
+        "e72a209",
+        "634d5b8",
+        "b9909d2",
+        "274319c"
+      ],
+      "changedFileSha256": {
+        ".ai/REVIEW_STATUS.md": "2fae7672e8851aaf339072a4e716bb97fc79f0f7ab6c2e0c64f7287aec33c231",
+        "CHANGELOG.md": "9c3c420ee2d07e2ae114284788142f8edb6b2829c81324b18120766b7326b363",
+        "audit/V6-FULL-SCAN-PROGRESS.json": "b6afc978de6c6b73b8a71336108784fb646cbda32235b56d491018e3b3f5123c",
+        "automation/lib/claude-reviewer.mjs": "340dfcc8d5091d773ba0120e9409c82aeaa94dacf4db1b8f9a19b7aed5be6d6d",
+        "automation/lib/command-contracts.mjs": "4c78afaacf477ecf54148ea1edc133df4cce6a86afa28c32ff86e8317d010916",
+        "automation/lib/orchestrator-daemon.mjs": "4c672089cee674c9c3f6bf8c4a2d04ecea0d8e175ae63a9ac02412aeed51054b",
+        "automation/lib/orchestrator-engine.mjs": "725e17514a004b0c0a4db6b9b9b64430205836a50d027a124dc1c85aef92ba5a",
+        "automation/lib/orchestrator-executors.mjs": "0b532c2e9c2a400a42bd87854858ead560e2b130fb7c763a2578c40e73f71ede",
+        "automation/lib/review-pipeline.mjs": "5ebca7d5fcca8b61490b3c83628855bcbcc154fde7c82e2c205ea43e9b6f555a",
+        "automation/lib/review-quorum.mjs": "03ce0721228cdd070b2cbb7ea5c1f5ba6804711f0fa13b1217c21193cc66c800",
+        "automation/lib/watchdog-status.mjs": "e0d454aa3ba0582d0a9edc3dadfd5993248d7dd5fde28fba44f52244bbe66a54",
+        "config/automation.json": "cafccd8cb9b97e58aca61cfb47add521b69b9e5fa2f71d32aa8814f0c2079aed",
+        "config/orchestrator-policy.json": "43bcf8905aa5ca09668231a407714da9691eb98e46b17765a336541cd15a4d45",
+        "config/protected-paths.json": "b79d969706211c0572b19263fb9d87ebb9cd0c66705a564454be38cf1a08caa1",
+        "config/reviewer-execution-policy.json": "2d22788baf7fc5664f2c29cd10b7701747b9417dfcec8ebe0fb596b8dc15e335",
+        "config/trust-root-manifest.json": "03140cde2fccc4044a44132e674b6a65fc10766d07cc169d792440e4cfdf297b",
+        "docs/architecture/DUAL-INDEPENDENT-REVIEW.md": "1a6774d88a8d8643ad60c479a9f2ac8f4fc9b074c665f71586d9f6bea49f0336",
+        "docs/architecture/UNATTENDED-ORCHESTRATION.md": "a3454f42697b2f2fb52201c8417475c017f113556998a6a6c70b7110b7e62e1d",
+        "prompts/CLAUDE-REVIEWER-SYSTEM.md": "7f665c1b43b7f1f35c3ff3967cc8f35756cf75fd5dbab4692ecc59e24b5a36b7",
+        "scripts/autonomy-hardening-selftest.mjs": "a881ed6ce79f9f289647f2f18d722f3f0f9375991e93c3d04a32df42a0cc00d7",
+        "scripts/claude-reviewer-broker.mjs": "95abe6d520651d1c926430701bd088edc8862fe1f6eafc896a361cd068c6a1ee",
+        "scripts/dual-review-selftest.mjs": "fb4b060070b1aafcd4a0564b892ad1ffc824b92d1e117f0786d5c62c310fc65f",
+        "scripts/uasco-orchestrator.mjs": "9b0e47be1e4c4a8b361bafcdbc93427c4cf9a4b580ef56b08d223f3d2f449e13",
+        "tests/pkg-dr1-dual-review.test.ts": "a77ed3543caf09ad73f2131b06c2cc562b47bf9724e2a3841ba1e3699fd338d7"
+      },
+      "trustRootManifest": {
+        "sha256": "03140cde2fccc4044a44132e674b6a65fc10766d07cc169d792440e4cfdf297b",
+        "generatedAt": "2026-10-06T11:49:53.037Z",
+        "sealStatus": "SEALED",
+        "protectedFiles": 353
+      },
+      "validationEnvironment": {
+        "os": "Windows_NT 10.0.19045",
+        "node": "v24.19.0",
+        "npm": "11.17.0"
+      },
+      "validationBinding": "canonical validation (config/validation.json) of the exact reviewed commit runs in a fresh clean clone at that commit, in this environment, during the bundle freeze; the frozen review bundle records reviewedCommit, baseCommit and the validation report",
+      "note": "a file cannot contain the sha of the commit that adds it; the commit is identified by finalBase plus this tree's digests and by the frozen bundle"
+    }
   ]
 }
