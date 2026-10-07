@@ -149,5 +149,63 @@
   "notClaimed": [
     "a live full-repository audit by either reviewer (it runs for the first release candidate after this package merges)",
     "full-repository bundle size headroom for future growth: the bundle byte budget (config/automation.json budgets.maxReviewBundleBytes) applies and an oversized bundle fails closed to a Founder decision"
+  ],
+  "finalLineageRecords": [
+    {
+      "recordedAt": "2026-10-07T06:55:31.797Z",
+      "kind": "FINAL_LINEAGE_EVIDENCE_BINDING",
+      "reason": "the package was re-applied unchanged (identical change set) onto the final finalization chain; values recorded at its earlier revisions (parent, branch, changedFileSha256, reseal/manifest, validation workspace) describe those superseded revisions and are kept unchanged as history; this record binds the evidence to the final revision",
+      "packageId": "V6-PKG-DR2-FINAL-DUAL-RELEASE-AUDIT",
+      "finalBase": "934dccbbebeea084b2ed43894e66c9e26e5b328e",
+      "headSubjectChain": [
+        "9a1a0b9 v6 pkg-dr2: adapt the AUT2 autostart retry scenario fixture to the release-audit requirement",
+        "079f103 v6 pkg-dr2: final dual full-repository release audit before release closure"
+      ],
+      "supersededRevisions": [
+        "9fad126",
+        "3698b12",
+        "e9da9db",
+        "e28b2e0",
+        "0682261"
+      ],
+      "changedFileSha256": {
+        ".ai/REVIEW_STATUS.md": "1b5bcb79cce56d10c471223061337e849c8940360ce051addc3ab9770b54099d",
+        "CHANGELOG.md": "9090ab8e28d16c5e698633dd254b3df911884b81b6ad0a26fb0eb632c3c10871",
+        "audit/V6-FULL-SCAN-PROGRESS.json": "af4feac1268ed3dd60b079faaa8d32c6267296e6d235f9242ba830e773b2db90",
+        "automation/lib/command-contracts.mjs": "990c9ab3a197dda5fbe1af73d39e175904ef3dc2b95b0c236e51d9c23e0b320b",
+        "automation/lib/orchestrator-daemon.mjs": "6256d57875cf0deb729569f21e13104dc0dde668fc438cf17a96dd3fd21d6e7e",
+        "automation/lib/orchestrator-engine.mjs": "79130360ff0373f6b7bc858fb4861f069bd39408afe0065eb39c5db09590140d",
+        "automation/lib/orchestrator-executors.mjs": "06975d65a9034a7a5645eb24e939d6c6cf62746e61db8d22895fa3aafbc978c4",
+        "automation/lib/orchestrator-state.mjs": "09855ee8f63143f464267c7480e269c37a6cc04d2345e5528156b5e200dbcf9e",
+        "automation/lib/review-quorum.mjs": "8c49153a4543a05ef969ec45fc2d206f07289592b0b1fc9f5ecc526468eb7c6e",
+        "automation/lib/watchdog-status.mjs": "8cfa42ef8326d34685c1a298f0a01ca567217e148be32b27ea0495d5aa6d632c",
+        "config/orchestrator-policy.json": "860bf51ebc64fa614b0ff52c8cb5f01d1772e271551b75df2947910590deb646",
+        "config/protected-paths.json": "973b7bdd4543ddf718cd956ab32f38538ad3b00c984743624af34565dd202eba",
+        "config/trust-root-manifest.json": "87d81529492fa6a910c597ae594b4b05778c6ebf925dcac334684d3c0c5210cc",
+        "docs/architecture/DUAL-INDEPENDENT-REVIEW.md": "6863514fd20c3e06a9c47b9350d8eec277824cf1a056ce965f9951a3bd9c473a",
+        "docs/architecture/UNATTENDED-ORCHESTRATION.md": "7f14bc1e13b5dc6eba4917642691a7f096f8574356d7f96de256d0ce283015e5",
+        "prompts/CLAUDE-REVIEWER-SYSTEM.md": "fc4f6b59fc116dc8f7553ce48e60a9d0455a473a8490e1546d7c3d8e5f577c00",
+        "prompts/RELEASE-AUDIT-REVIEW.txt": "bcacde4bf6c78556b62deda755f249027d6b539e1bd283f5d32323cf9c685b96",
+        "scripts/autonomy-hardening-selftest.mjs": "4166efe90484f4eca48d24bf284e36a53b09f4d7fb305016078207dcc1deadc1",
+        "scripts/dual-review-selftest.mjs": "2fe6c0dad0971d744973af51859600cb3140b846589592c30c92b17cf8fedbfc",
+        "scripts/orchestrator-executor-integration-selftest.mjs": "68dae95a6f3e68659c908160f5bfd5b72801d773f6e8ccfd1e93122cfc02c09d",
+        "scripts/orchestrator-selftest.mjs": "bfe6f878905d37b4268da922526bc45201e8daa0bf9e5c217ef420b7e2671293",
+        "scripts/release-audit-selftest.mjs": "a1765570ca81c79e49af33fb2adf5ed4262ad4900163d2b467d474b3fd03c1ae",
+        "tests/pkg-dr2-release-audit.test.ts": "89a1c709aa148c50ab611e3fbdcb6c4402f9d19b659e83b3ff45c410f96b5275"
+      },
+      "trustRootManifest": {
+        "sha256": "87d81529492fa6a910c597ae594b4b05778c6ebf925dcac334684d3c0c5210cc",
+        "generatedAt": "2026-10-06T11:56:11.617Z",
+        "sealStatus": "SEALED",
+        "protectedFiles": 355
+      },
+      "validationEnvironment": {
+        "os": "Windows_NT 10.0.19045",
+        "node": "v24.19.0",
+        "npm": "11.17.0"
+      },
+      "validationBinding": "canonical validation (config/validation.json) of the exact reviewed commit runs in a fresh clean clone at that commit, in this environment, during the bundle freeze; the frozen review bundle records reviewedCommit, baseCommit and the validation report",
+      "note": "a file cannot contain the sha of the commit that adds it; the commit is identified by finalBase plus this tree's digests and by the frozen bundle"
+    }
   ]
 }
