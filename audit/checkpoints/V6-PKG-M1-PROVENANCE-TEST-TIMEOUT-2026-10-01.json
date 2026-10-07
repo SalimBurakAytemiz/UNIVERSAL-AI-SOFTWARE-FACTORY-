@@ -39,5 +39,43 @@
   "openFindings": [],
   "review": "NOT_REVIEWED_CODEX_PENDING",
   "merge": "AFTER_PKG_R4",
-  "cleanClaim": false
+  "cleanClaim": false,
+  "finalLineageRecords": [
+    {
+      "recordedAt": "2026-10-07T06:55:20.730Z",
+      "kind": "FINAL_LINEAGE_EVIDENCE_BINDING",
+      "reason": "the package was re-applied unchanged (identical change set) onto the final finalization chain; values recorded at its earlier revisions (parent, branch, changedFileSha256, reseal/manifest, validation workspace) describe those superseded revisions and are kept unchanged as history; this record binds the evidence to the final revision",
+      "packageId": "V6-PKG-M1-PROVENANCE-TEST-TIMEOUT",
+      "finalBase": "2ac54dabfc9c07d5acdf6f6e346515be7af0f3cd",
+      "headSubjectChain": [
+        "34859d4 v6 pkg-m1: per-test timeout for the PKG-D provenance capture case"
+      ],
+      "supersededRevisions": [
+        "65ae08e",
+        "41955f4",
+        "0785c55",
+        "e9573a1",
+        "ae53b33"
+      ],
+      "changedFileSha256": {
+        ".ai/REVIEW_STATUS.md": "16c0ec32f855fcf959e77e43c655d52b24800e1c93f05b254e75f9cb144903bf",
+        "CHANGELOG.md": "c036afa1dc6a3239c44273596f68b75dc1c2c54a5c6da5b13b87f2b5646dbc42",
+        "audit/V6-FULL-SCAN-PROGRESS.json": "1b63e613d7a46b39b1d7d2be410c437d5fa3e119717e97779fccc41d63d7141d",
+        "tests/pkg-d-standalone-provenance.test.ts": "a123a196073e4b72ea8c337de37625232fe18778cba39a31c4c60bfa5df201f6"
+      },
+      "trustRootManifest": {
+        "sha256": "f31a0f795356c4762df17b66cfd2f13be3414ec9d3068100c701a1b44b2c13bd",
+        "generatedAt": "2026-10-06T06:12:15.363Z",
+        "sealStatus": "SEALED",
+        "protectedFiles": 347
+      },
+      "validationEnvironment": {
+        "os": "Windows_NT 10.0.19045",
+        "node": "v24.19.0",
+        "npm": "11.17.0"
+      },
+      "validationBinding": "canonical validation (config/validation.json) of the exact reviewed commit runs in a fresh clean clone at that commit, in this environment, during the bundle freeze; the frozen review bundle records reviewedCommit, baseCommit and the validation report",
+      "note": "a file cannot contain the sha of the commit that adds it; the commit is identified by finalBase plus this tree's digests and by the frozen bundle"
+    }
+  ]
 }
