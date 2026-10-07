@@ -142,5 +142,248 @@
       "validationBinding": "canonical validation (config/validation.json) of the exact reviewed commit runs in a fresh clean clone at that commit, in this environment, during the bundle freeze; the frozen review bundle records reviewedCommit, baseCommit and the validation report",
       "note": "a file cannot contain the sha of the commit that adds it; the commit is identified by finalBase plus this tree's digests and by the frozen bundle"
     }
+  ],
+  "remediationRounds": [
+    {
+      "date": "2026-10-07",
+      "mode": "REMEDIATE cycle 2 (bootstrap builder worker; governed CLAUDE_REVIEWER finding; Founder governance change 2026-10-06)",
+      "review": "cycle-1 governed CLAUDE_REVIEWER review RUN-V6-PKG-R4-PHASE0-GIT-BASELINE-NATIVE-PROBES-20261006T201717Z-C1 of c027ed1c2005d3efb202d907acf9218868b9a183 (base f2fcdf2b93c8bf746f0a173c66cb5b3441d5d3ac), result BLOCKED (1 admissible blocker, 3 P3 advisories)",
+      "scope": "only F-R4-REVIEW-001; the status lines this package's diff already adds or modifies in .ai/REVIEW_STATUS.md, audit/V6-FULL-SCAN-PROGRESS.json and CHANGELOG.md, plus the two inserted PKG-D1/PKG-D2 entries; no protected file, no script, no test and no validator changed; the trust-root manifest is unchanged",
+      "finding": {
+        "id": "F-R4-REVIEW-001",
+        "severity": "P2",
+        "classification": "BLOCKER",
+        "category": "CURRENT_TRUTH_ACCURACY_AND_EVIDENCE_INTEGRITY",
+        "file": ".ai/REVIEW_STATUS.md (line 26) and audit/V6-FULL-SCAN-PROGRESS.json",
+        "summary": "both current-truth documents were re-applied byte-identical from an fc530eb-based revision: they reported PKG-AUT2 at fc530eb as review-pending without a consumed cycle although the AUT2 checkpoint of the same tree records its cycle-1 review of fc530eb as BLOCKED (F-AUT2-001..004) and its cycle-2 remediation 99b1f0a is an ancestor of the base, and they omitted PKG-D1 and PKG-D2 although both have committed checkpoints and PKG-D2 is the package of the base f2fcdf2"
+      },
+      "fix": [
+        "PKG-AUT2 (both documents): cycle 1 at fc530eb BLOCKED (F-AUT2-001..004); cycle 2 remediation re-applied at 99b1f0a CLEAN and merged fast-forward to local master.",
+        "PKG-D1 and PKG-D2 entries inserted in chain order (PKG-D1 after PKG-AUT1B, PKG-D2 after PKG-AUT2) with their commits, review state and checkpoints.",
+        "The PKG-T2B, PKG-T1, PKG-T3 and PKG-T4 lines added by this package had the same defect (they named the superseded revisions 220d181, 27ba5f0, 03c3a9c and 0232412 as REVIEW_PENDING, while the T2 checkpoint records the T2B cycle-2 outcome, the Founder-authorized scoped third cycle and the re-freeze on PKG-D1, the T3/T4 checkpoints record the re-frozen-chain remediation rounds, and git history carries 39ff547, 9967adb, 9afae37 and 887e5bd); they now record the reviews and merge of the re-frozen chain.",
+        "PKG-R4 line: reviewed by the governed CLAUDE_REVIEWER under the Founder governance change of 2026-10-06; cycle 1 at c027ed1 BLOCKED (F-R4-REVIEW-001); this commit is the cycle-2 remediation; merge after PKG-D2 (its base). The superseded branch name was dropped.",
+        "CHANGELOG.md: the PKG-R4 bullet that describes what the status documents record now matches them.",
+        "No line outside this package's own status lines was edited or reordered; only the two new entries were inserted."
+      ],
+      "statusEvidence": {
+        "note": "every review state written by this round is bound to the supervisor's governed review record of that commit (.ai/cache/review/runs/<runDir>/governed-result.json and review-result.json; reviewResultSha256 recomputed from review-result.json and equal to the governed record) and every merge claim to git ancestry",
+        "gitAncestry": "3541287, 39ff547, 9967adb, 9afae37, 887e5bd, 99b1f0a and f2fcdf2 are ancestors of both c027ed1 and local master (master = f2fcdf2b93c8bf746f0a173c66cb5b3441d5d3ac at the time of this round); git rev-list --merges f3b4ad8..master is empty (linear, fast-forward history); fc530eb, 220d181, 27ba5f0, 03c3a9c and 0232412 are not ancestors of c027ed1 (superseded revisions)",
+        "reviews": [
+          {
+            "package": "V6-PKG-D1-SOURCE-MAP-JS-ADVISORY",
+            "reviewedCommit": "f148a38e827c5ef1f372659dee48325cb637dba3",
+            "cycle": 1,
+            "runDir": "f148a38-c1-20261006T093430999Z-orchestrator",
+            "runId": "RUN-V6-PKG-D1-SOURCE-MAP-JS-ADVISORY-20261006T050907Z-C1",
+            "reviewer": "Codex",
+            "governedResult": "ENVIRONMENT_BLOCKED",
+            "reviewResultSha256": "8c2f4b20d19b940c10259cb2700014ea362ecc48a4b857c43a847b70eabd9178"
+          },
+          {
+            "package": "V6-PKG-D1-SOURCE-MAP-JS-ADVISORY",
+            "reviewedCommit": "3541287a6e23cc20c0d862474f5fe085a7e7205d",
+            "cycle": 1,
+            "runDir": "3541287-c1-20261006T112941063Z-orchestrator",
+            "runId": "RUN-V6-PKG-D1-SOURCE-MAP-JS-ADVISORY-20261006T095024Z-C1",
+            "reviewer": "Codex",
+            "governedResult": "CLEAN",
+            "reviewResultSha256": "0b12a1394ab77cb2570832b694be16fa07fb813a11b4026addbeb3f9a122e61f"
+          },
+          {
+            "package": "V6-PKG-T2B-ORCHESTRATOR-EXECUTOR-INTEGRATION",
+            "reviewedCommit": "220d1811bf8c2568452009e7f145f62382896dc9",
+            "cycle": 2,
+            "runDir": "220d181-c2-20261005T180711076Z-orchestrator",
+            "runId": "RUN-V6-PKG-T2B-ORCHESTRATOR-EXECUTOR-INTEGRATION-20260930T101348Z-C2",
+            "reviewer": "Codex",
+            "governedResult": "REJECTED",
+            "reviewResultSha256": "32a567adf295788094e3eeb75241068aa0215a8ead7d1eb42499b47c5262023e",
+            "reviewerReportedResult": "BLOCKED",
+            "governedError": "FINDING_ID_REUSED_WITH_DIFFERENT_IDENTITY:F-T2B-001"
+          },
+          {
+            "package": "V6-PKG-T2B-ORCHESTRATOR-EXECUTOR-INTEGRATION",
+            "reviewedCommit": "39ff547ae571c677972adfe921ce3efc2a9e65ed",
+            "cycle": 1,
+            "runDir": "39ff547-c1-20261006T113312911Z-orchestrator",
+            "runId": "RUN-V6-PKG-T2B-ORCHESTRATOR-EXECUTOR-INTEGRATION-20261006T095301Z-C1",
+            "reviewer": "Codex",
+            "governedResult": "CLEAN",
+            "reviewResultSha256": "95d3ea5a3db87346f4ab720a2c1b32e224567887a739cdeb306405d408ad7eb4"
+          },
+          {
+            "package": "V6-PKG-T1-WINDOWS-CRASH-RESUME",
+            "reviewedCommit": "27ba5f0ab7dab9dc73d46f1b4fb24a8f0681f14c",
+            "cycle": 2,
+            "runDir": "27ba5f0-c2-20261005T181701143Z-orchestrator",
+            "runId": "RUN-V6-PKG-T1-WINDOWS-CRASH-RESUME-20260930T105108Z-C2",
+            "reviewer": "Codex",
+            "governedResult": "CLEAN",
+            "reviewResultSha256": "ec846e995bd7b8979365ec49e39923783f869026fa5c0513b7c096867c04841a"
+          },
+          {
+            "package": "V6-PKG-T1-WINDOWS-CRASH-RESUME",
+            "reviewedCommit": "9967adb3e6afa3af2971d06d1404657c6320ebb3",
+            "cycle": 1,
+            "runDir": "9967adb-c1-20261006T113723864Z-orchestrator",
+            "runId": "RUN-V6-PKG-T1-WINDOWS-CRASH-RESUME-20261006T095542Z-C1",
+            "reviewer": "Codex",
+            "governedResult": "CLEAN",
+            "reviewResultSha256": "1c39f05a8edf6481ef05b57f81a24d92258dd1be78dc3e8abe32213a10dae704"
+          },
+          {
+            "package": "V6-PKG-T3-OMNIROUTE-INSTALL-COMPAT",
+            "reviewedCommit": "03c3a9cdfd1916c0a849187ab89109c32fe0f66b",
+            "cycle": 2,
+            "runDir": "03c3a9c-c2-20261005T182218197Z-orchestrator",
+            "runId": "RUN-V6-PKG-T3-OMNIROUTE-INSTALL-COMPAT-20260930T105351Z-C2",
+            "reviewer": "Codex",
+            "governedResult": "CLEAN",
+            "reviewResultSha256": "fa8485f560a3cd82ae4ac049c1f5f0c1dc6f89c4841d86bc35d582bf2a6db557"
+          },
+          {
+            "package": "V6-PKG-T3-OMNIROUTE-INSTALL-COMPAT",
+            "reviewedCommit": "9afae37dd7f124f62e1aa5c15c38e2494c534bc0",
+            "cycle": 1,
+            "runDir": "9afae37-c1-20261006T114112927Z-orchestrator",
+            "runId": "RUN-V6-PKG-T3-OMNIROUTE-INSTALL-COMPAT-20261006T095847Z-C1",
+            "reviewer": "Codex",
+            "governedResult": "CLEAN",
+            "reviewResultSha256": "5b87770ad3216e0eaddaee55d498527e4683f21391457302e0dbba03b56f86e2"
+          },
+          {
+            "package": "V6-PKG-T4-POWERSHELL-SAFETY",
+            "reviewedCommit": "023241220651d450e1bc6f05be278399acac877f",
+            "cycle": 2,
+            "runDir": "0232412-c2-20261005T182921248Z-orchestrator",
+            "runId": "RUN-V6-PKG-T4-POWERSHELL-SAFETY-20260930T105636Z-C2",
+            "reviewer": "Codex",
+            "governedResult": "CLEAN",
+            "reviewResultSha256": "3333749b6f24da2e7be0758c5eda3db8f5c8bbf634cce5b048cb300db6f39d99"
+          },
+          {
+            "package": "V6-PKG-T4-POWERSHELL-SAFETY",
+            "reviewedCommit": "725aad8f7c0f3749a15def9fb425e0ccc6449f7d",
+            "cycle": 1,
+            "runDir": "725aad8-c1-20261006T114438395Z-orchestrator",
+            "runId": "RUN-V6-PKG-T4-POWERSHELL-SAFETY-20261006T100129Z-C1",
+            "reviewer": "Codex",
+            "governedResult": "ENVIRONMENT_BLOCKED",
+            "reviewResultSha256": "b942f9603062835e8aae57b22277a60bce1b1d228b5d4171c0a507dc251d98ce",
+            "reviewerReportedResult": "BLOCKED",
+            "acceptedBlockers": [
+              "F-T4-C1-001",
+              "F-T4-C1-002"
+            ]
+          },
+          {
+            "package": "V6-PKG-T4-POWERSHELL-SAFETY",
+            "reviewedCommit": "887e5bd34e515a0d46bb7af23d2d0d283da1da4d",
+            "cycle": 2,
+            "runDir": "887e5bd-c2-20261006T163014631Z-orchestrator",
+            "runId": "RUN-V6-PKG-T4-POWERSHELL-SAFETY-20261006T133817Z-C2",
+            "reviewer": "Codex",
+            "governedResult": "CLEAN",
+            "reviewResultSha256": "84db82cf9e5823bcd42d4bd280d61632c3ee185a15c05eacdce5cc9f7326ccb5"
+          },
+          {
+            "package": "V6-PKG-AUT2-AUTONOMY-HARDENING",
+            "reviewedCommit": "fc530eb7980fe4639d96e84f12684b7de96dbee3",
+            "cycle": 1,
+            "runDir": "fc530eb-c1-20261005T183417301Z-orchestrator",
+            "runId": "RUN-V6-PKG-AUT2-AUTONOMY-HARDENING-20261001T135515Z-C1",
+            "reviewer": "Codex",
+            "governedResult": "BLOCKED",
+            "reviewResultSha256": "d816a0970aec72ba19409200183ca68a6a7d79f1c014b504a91fe8865ffab803",
+            "findings": [
+              "F-AUT2-001",
+              "F-AUT2-002",
+              "F-AUT2-003",
+              "F-AUT2-004"
+            ]
+          },
+          {
+            "package": "V6-PKG-AUT2-AUTONOMY-HARDENING",
+            "reviewedCommit": "99b1f0aa732fa98f0db89d83fefca98ce3c10ab4",
+            "cycle": 2,
+            "runDir": "99b1f0a-c2-20261006T163401616Z-orchestrator",
+            "runId": "RUN-V6-PKG-AUT2-AUTONOMY-HARDENING-20261006T134713Z-C2",
+            "reviewer": "Codex",
+            "governedResult": "CLEAN",
+            "reviewResultSha256": "a066b53b0ea2955421033d1f49f386118b6eeaf2c106fa3bce782209c9426b04"
+          },
+          {
+            "package": "V6-PKG-D2-SHELL-QUOTE-ADVISORY",
+            "reviewedCommit": "f2fcdf2b93c8bf746f0a173c66cb5b3441d5d3ac",
+            "cycle": 1,
+            "runDir": "f2fcdf2-c1-20261007T045244936Z-orchestrator-claude",
+            "runId": "RUN-V6-PKG-D2-SHELL-QUOTE-ADVISORY-20261006T200818Z-C1",
+            "reviewer": "governed CLAUDE_REVIEWER",
+            "governedResult": "CLEAN",
+            "reviewResultSha256": "925086729e40caaaea1227abd6cb92b4b3e4a367743d6a2453165b225837e53e"
+          },
+          {
+            "package": "V6-PKG-R4-PHASE0-GIT-BASELINE-NATIVE-PROBES",
+            "reviewedCommit": "c027ed1c2005d3efb202d907acf9218868b9a183",
+            "cycle": 1,
+            "runDir": "c027ed1-c1-20261007T045905509Z-orchestrator-claude",
+            "runId": "RUN-V6-PKG-R4-PHASE0-GIT-BASELINE-NATIVE-PROBES-20261006T201717Z-C1",
+            "reviewer": "governed CLAUDE_REVIEWER",
+            "governedResult": "BLOCKED",
+            "reviewResultSha256": "a8f67736fd8fbcd998904ef710e9b2d7e6dfcbdfb0a671537fa9c5e4c9028b95",
+            "findings": [
+              "F-R4-REVIEW-001"
+            ]
+          }
+        ]
+      },
+      "changedFilesNote": "sha256 of the files changed in this round as committed; this checkpoint is also changed (this entry) and cannot carry its own digest",
+      "changedFiles": {
+        ".ai/REVIEW_STATUS.md": "92114bb202cdbbd3d93e8ae9d00cbda24ecc5b7ca18a182381078e796edacc76",
+        "audit/V6-FULL-SCAN-PROGRESS.json": "0e2ff618eee9e26c299ecd4a3b64dea9933fdd89fb8471e56ba36c554195b229",
+        "CHANGELOG.md": "cbae0b1a8a076807e5175e986df24b3878783cf0811c6ad93065463c55da64e3"
+      },
+      "unchangedProtectedFiles": {
+        "scripts/init-private-git.ps1": "2ab8938634fa53a0baca133e37296bc7f3ad80e7834448be22e7af659a403bfd",
+        "config/trust-root-manifest.json": "f31a0f795356c4762df17b66cfd2f13be3414ec9d3068100c701a1b44b2c13bd"
+      },
+      "validation": {
+        "environment": "win32 10.0.19045 x64, node v24.19.0, git 2.55.0.windows.3; isolated worktree at c027ed1 plus this round; node_modules is an untracked junction to the shared reviewed install (nothing installed or modified)",
+        "commands": [
+          {
+            "command": "node -e \"JSON.parse(require('fs').readFileSync('audit/V6-FULL-SCAN-PROGRESS.json','utf8'))\"",
+            "result": "PASS (valid JSON; this checkpoint also parses)"
+          },
+          {
+            "command": "node scripts/verify-trust-root.mjs",
+            "result": "TRUST_ROOT_VERIFY: PASS (committed manifest unchanged: sha256 f31a0f795356c4762df17b66cfd2f13be3414ec9d3068100c701a1b44b2c13bd, SEALED, 347 protected files, generatedAt 2026-10-06T06:12:15.363Z)"
+          },
+          {
+            "command": "node scripts/validate-tr-comments.mjs",
+            "result": "TR_VALIDATION: PASS"
+          },
+          {
+            "command": "node scripts/validate-paste4c-doc-truth.mjs",
+            "result": "PASTE4C_DOC_TRUTH_VALIDATION: PASS mode=SEALED checks=93"
+          },
+          {
+            "command": "node scripts/validate-paste4d-release-truth.mjs",
+            "result": "PASTE4D_RELEASE_TRUTH_VALIDATION: PASS mode=SEALED checks=49"
+          },
+          {
+            "command": "npx vitest run tests/pkg-r1-release-mode.test.ts",
+            "result": "PASS Test Files 1 passed (1), Tests 8 passed (8) (the only test that reads audit/V6-FULL-SCAN-PROGRESS.json; no test reads .ai/REVIEW_STATUS.md)"
+          },
+          {
+            "command": "git diff --check",
+            "result": "PASS"
+          }
+        ],
+        "rerun": "all commands above rerun on the final tree after this entry was written, with the same results",
+        "canonicalValidation": "NOT_RUN_BY_THE_BUILDER (scripts/run-validation.mjs is run by the supervisor during the bundle freeze)"
+      },
+      "advisoriesNotAddressed": "F-R4-REVIEW-A01..A03 (P3) are advisories and out of this remediation's scope; for A01 the verify-trust-root result of this round is recorded above against the committed manifest (347 protected files); no earlier value of this checkpoint is changed",
+      "cleanClaim": false
+    }
   ]
 }
