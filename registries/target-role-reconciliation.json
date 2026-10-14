@@ -1,0 +1,3876 @@
+{
+  "//TR": "Bu dosya 363 kayitli rolun hedef rollerle baslik bazli aday eslesmesidir; hicbir eslesme otomatik onaylanmamistir.",
+  "schemaVersion": "1.0.0",
+  "status": "RECONCILIATION_CANDIDATES_NOT_CONFIRMED",
+  "sourceCatalog": "registries/target-role-catalog.json",
+  "registeredCount": 363,
+  "rule": "EXACT = equal after case/punctuation/ampersand normalization and unique; CANDIDATE_NEEDS_REVIEW = token Jaccard >= 0.6 (generic seniority words dropped). Nothing is confirmed; every row needs human review.",
+  "mappings": [
+    {
+      "registeredId": "008",
+      "registeredName": "Product Strategy",
+      "targetRoleId": "UASCO-0018",
+      "targetTitle": "Chief Product Strategy Agent",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "009",
+      "registeredName": "Product Manager",
+      "targetRoleId": "UASCO-0019",
+      "targetTitle": "Principal Product Manager",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "013",
+      "registeredName": "Competitive Intelligence",
+      "targetRoleId": "UASCO-0025",
+      "targetTitle": "Principal Competitive Intelligence Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "016",
+      "registeredName": "Product Analytics",
+      "targetRoleId": "UASCO-0028",
+      "targetTitle": "Principal Product Analytics Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "017",
+      "registeredName": "Pricing Strategy",
+      "targetRoleId": "UASCO-0027",
+      "targetTitle": "Principal Pricing Strategy Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "018",
+      "registeredName": "Solution Architect",
+      "targetRoleId": "UASCO-0043",
+      "targetTitle": "Principal Solution Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "022",
+      "registeredName": "Distributed Systems Engineer",
+      "targetRoleId": "UASCO-0092",
+      "targetTitle": "Principal Distributed Systems Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "023",
+      "registeredName": "API Contract Architect",
+      "targetRoleId": "UASCO-0050",
+      "targetTitle": "Principal API Contract Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "024",
+      "registeredName": "Realtime Systems Engineer",
+      "targetRoleId": "UASCO-0093",
+      "targetTitle": "Principal Realtime Systems Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "027",
+      "registeredName": "Multi-Tenancy Architecture",
+      "targetRoleId": "UASCO-0047",
+      "targetTitle": "Principal Multi-Tenancy Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "029",
+      "registeredName": "Senior Code Review",
+      "targetRoleId": "UASCO-0252",
+      "targetTitle": "Principal Secure Code Review Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "031",
+      "registeredName": "React & Next.js Engineer",
+      "targetRoleId": "UASCO-0067",
+      "targetTitle": "Principal React & Next.js Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "032",
+      "registeredName": "Frontend Design System Engineer",
+      "targetRoleId": "UASCO-0035",
+      "targetTitle": "Principal Design System Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "034",
+      "registeredName": "Web Accessibility Engineer",
+      "targetRoleId": "UASCO-0074",
+      "targetTitle": "Principal Web Accessibility Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "036",
+      "registeredName": "REST API Engineer",
+      "targetRoleId": "UASCO-0079",
+      "targetTitle": "Principal REST API Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "037",
+      "registeredName": "GraphQL Engineer",
+      "targetRoleId": "UASCO-0080",
+      "targetTitle": "Principal GraphQL Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "040",
+      "registeredName": "Notification Service Engineer",
+      "targetRoleId": "UASCO-0086",
+      "targetTitle": "Principal Notification Service Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "043",
+      "registeredName": "Database Architect",
+      "targetRoleId": "UASCO-0129",
+      "targetTitle": "Principal Database Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "044",
+      "registeredName": "SQL & Data Modeling",
+      "targetRoleId": "UASCO-0136",
+      "targetTitle": "Principal Data Modeling Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "047",
+      "registeredName": "ETL/ELT Pipeline",
+      "targetRoleId": "UASCO-0138",
+      "targetTitle": "Principal ETL ELT Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "049",
+      "registeredName": "Data Quality & Governance",
+      "targetRoleId": "UASCO-0141",
+      "targetTitle": "Principal Data Governance & Quality Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "053",
+      "registeredName": "Flutter Engineer",
+      "targetRoleId": "UASCO-0119",
+      "targetTitle": "Principal Flutter Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "054",
+      "registeredName": "React Native Engineer",
+      "targetRoleId": "UASCO-0120",
+      "targetTitle": "Principal React Native Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "056",
+      "registeredName": "Mobile Release & Store",
+      "targetRoleId": "UASCO-0126",
+      "targetTitle": "Principal Store Release Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "057",
+      "registeredName": "Desktop Application Architect",
+      "targetRoleId": "UASCO-0258",
+      "targetTitle": "Principal Desktop Application Security Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "062",
+      "registeredName": "Design System",
+      "targetRoleId": "UASCO-0035",
+      "targetTitle": "Principal Design System Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "063",
+      "registeredName": "UX Research",
+      "targetRoleId": "UASCO-0032",
+      "targetTitle": "Principal UX Research Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "084",
+      "registeredName": "Visual Regression",
+      "targetRoleId": "UASCO-0325",
+      "targetTitle": "Principal Visual Regression Testing Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "088",
+      "registeredName": "Web Functional Test",
+      "targetRoleId": "UASCO-0300",
+      "targetTitle": "Principal Functional Test Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "100",
+      "registeredName": "Test Data Management",
+      "targetRoleId": "UASCO-0320",
+      "targetTitle": "Principal Test Data Management Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "102",
+      "registeredName": "Log Monitoring & Root Cause Analysis",
+      "targetRoleId": "UASCO-0243",
+      "targetTitle": "Principal Root Cause Analysis Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.600 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "108",
+      "registeredName": "Performance & Load Test",
+      "targetRoleId": "UASCO-0327",
+      "targetTitle": "Principal Performance Test Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "112",
+      "registeredName": "Web Automation",
+      "targetRoleId": "UASCO-0314",
+      "targetTitle": "Principal Web Automation Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "118",
+      "registeredName": "Test Automation Framework Architect",
+      "targetRoleId": "UASCO-0313",
+      "targetTitle": "Principal Test Automation Framework Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "119",
+      "registeredName": "CI/CD Quality Gate",
+      "targetRoleId": "UASCO-0326",
+      "targetTitle": "Principal CI Quality Gate Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.750 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "121",
+      "registeredName": "Service Virtualization & Mocking",
+      "targetRoleId": "UASCO-0321",
+      "targetTitle": "Principal Service Virtualization Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "128",
+      "registeredName": "Release Readiness",
+      "targetRoleId": "UASCO-0312",
+      "targetTitle": "Principal Release Readiness Evaluator",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "133",
+      "registeredName": "Application Security",
+      "targetRoleId": "UASCO-0251",
+      "targetTitle": "Principal Application Security Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "134",
+      "registeredName": "Cloud Security",
+      "targetRoleId": "UASCO-0264",
+      "targetTitle": "Principal Cloud Security Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "136",
+      "registeredName": "Secrets & Key Management",
+      "targetRoleId": "UASCO-0268",
+      "targetTitle": "Principal Key Management Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "137",
+      "registeredName": "Software Supply Chain Security",
+      "targetRoleId": "UASCO-0260",
+      "targetTitle": "Principal Supply Chain Security Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.750 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "139",
+      "registeredName": "Threat Modeling",
+      "targetRoleId": "UASCO-0254",
+      "targetTitle": "Principal Threat Modeling Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "140",
+      "registeredName": "AI Red Team",
+      "targetRoleId": "UASCO-0195",
+      "targetTitle": "Principal AI Red Team Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "142",
+      "registeredName": "Platform Engineering",
+      "targetRoleId": "UASCO-0518",
+      "targetTitle": "Principal Learning Platform Engineering Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "143",
+      "registeredName": "DevOps",
+      "targetRoleId": "UASCO-0224",
+      "targetTitle": "Principal DevOps Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "145",
+      "registeredName": "Infrastructure as Code",
+      "targetRoleId": "UASCO-0226",
+      "targetTitle": "Principal Infrastructure as Code Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "149",
+      "registeredName": "Observability",
+      "targetRoleId": "UASCO-0239",
+      "targetTitle": "Principal Observability Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "150",
+      "registeredName": "Capacity Planning",
+      "targetRoleId": "UASCO-0247",
+      "targetTitle": "Principal Capacity Planning Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "151",
+      "registeredName": "Backup & Disaster Recovery",
+      "targetRoleId": "UASCO-0245",
+      "targetTitle": "Principal Disaster Recovery Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "152",
+      "registeredName": "Model Router",
+      "targetRoleId": "UASCO-0183",
+      "targetTitle": "Principal Model Router Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "154",
+      "registeredName": "Model Benchmark",
+      "targetRoleId": "UASCO-0175",
+      "targetTitle": "Principal Model Benchmark Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "158",
+      "registeredName": "Model Cost Optimization",
+      "targetRoleId": "UASCO-0184",
+      "targetTitle": "Principal Model Cost Optimization Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "159",
+      "registeredName": "Model Availability & Fallback",
+      "targetRoleId": "UASCO-0185",
+      "targetTitle": "Principal Model Availability Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "167",
+      "registeredName": "Order Management Systems",
+      "targetRoleId": "UASCO-0379",
+      "targetTitle": "Principal Order Management Systems Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "168",
+      "registeredName": "Warehouse & Inventory Systems",
+      "targetRoleId": "UASCO-0393",
+      "targetTitle": "Principal Inventory Systems Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "172",
+      "registeredName": "Accounting & Reconciliation Systems",
+      "targetRoleId": "UASCO-0369",
+      "targetTitle": "Principal Reconciliation Systems Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "178",
+      "registeredName": "Customer Onboarding",
+      "targetRoleId": "UASCO-0553",
+      "targetTitle": "Principal Customer Onboarding Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "184",
+      "registeredName": "Email & Lifecycle Marketing",
+      "targetRoleId": "UASCO-0569",
+      "targetTitle": "Principal Lifecycle Marketing Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "189",
+      "registeredName": "Knowledge Base",
+      "targetRoleId": "UASCO-0548",
+      "targetTitle": "Principal Knowledge Base Experience Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "190",
+      "registeredName": "Customer Success & Renewal",
+      "targetRoleId": "UASCO-0552",
+      "targetTitle": "Principal Customer Success Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "195",
+      "registeredName": "Cost Controller",
+      "targetRoleId": "UASCO-0583",
+      "targetTitle": "Principal Workforce Cost Controller",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "203",
+      "registeredName": "Technical Research",
+      "targetRoleId": "UASCO-0530",
+      "targetTitle": "Principal Technical Research Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "208",
+      "registeredName": "Game Systems Architect",
+      "targetRoleId": "UASCO-0412",
+      "targetTitle": "Principal Game Design Systems Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "210",
+      "registeredName": "Unreal Engine",
+      "targetRoleId": "UASCO-0425",
+      "targetTitle": "Principal Unreal Engine Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "211",
+      "registeredName": "Unity Engine",
+      "targetRoleId": "UASCO-0426",
+      "targetTitle": "Principal Unity Engine Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "212",
+      "registeredName": "Godot Engine",
+      "targetRoleId": "UASCO-0427",
+      "targetTitle": "Principal Godot Engine Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "213",
+      "registeredName": "Multiplayer & Network",
+      "targetRoleId": "UASCO-0437",
+      "targetTitle": "Principal Multiplayer Network Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "215",
+      "registeredName": "Game Economy",
+      "targetRoleId": "UASCO-0416",
+      "targetTitle": "Principal Game Economy & Balancing Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "217",
+      "registeredName": "Anti-Cheat",
+      "targetRoleId": "UASCO-0446",
+      "targetTitle": "Principal Anti-Cheat Engineering Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "218",
+      "registeredName": "Game Trust & Safety",
+      "targetRoleId": "UASCO-0450",
+      "targetTitle": "Principal Game Trust & Safety Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "222",
+      "registeredName": "Texture & Material",
+      "targetRoleId": "UASCO-0454",
+      "targetTitle": "Principal Texture & Material Artist",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "226",
+      "registeredName": "Asset Pipeline & Provenance",
+      "targetRoleId": "UASCO-0460",
+      "targetTitle": "Principal Asset Pipeline Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "227",
+      "registeredName": "Embedded Systems",
+      "targetRoleId": "UASCO-0464",
+      "targetTitle": "Principal Embedded Systems Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "228",
+      "registeredName": "Firmware Engineer",
+      "targetRoleId": "UASCO-0465",
+      "targetTitle": "Principal Firmware Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "229",
+      "registeredName": "IoT Platform",
+      "targetRoleId": "UASCO-0468",
+      "targetTitle": "Principal IoT Platform Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "234",
+      "registeredName": "Hardware-in-the-Loop Integration",
+      "targetRoleId": "UASCO-0471",
+      "targetTitle": "Principal Hardware-in-the-Loop Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.750 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "253",
+      "registeredName": "Chief Knowledge Architect",
+      "targetRoleId": "UASCO-0529",
+      "targetTitle": "Chief Knowledge Architecture Agent",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "257",
+      "registeredName": "Technical Literature Research",
+      "targetRoleId": "UASCO-0530",
+      "targetTitle": "Principal Technical Research Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "264",
+      "registeredName": "Capability Discovery",
+      "targetRoleId": "UASCO-0536",
+      "targetTitle": "Principal Capability Gap Discovery Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "267",
+      "registeredName": "Knowledge Freshness",
+      "targetRoleId": "UASCO-0539",
+      "targetTitle": "Principal Knowledge Freshness Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "271",
+      "registeredName": "FinTech Domain Architect",
+      "targetRoleId": "UASCO-0363",
+      "targetTitle": "Principal FinTech Domain Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "277",
+      "registeredName": "KYC/KYB Specialist",
+      "targetRoleId": "UASCO-0370",
+      "targetTitle": "Principal KYC KYB Systems Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "278",
+      "registeredName": "AML/Sanctions Specialist",
+      "targetRoleId": "UASCO-0371",
+      "targetTitle": "Principal AML & Sanctions Systems Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "282",
+      "registeredName": "FinTech QA & Failure Mode Specialist",
+      "targetRoleId": "UASCO-0375",
+      "targetTitle": "Principal Financial Failure Mode QA Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.600 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "283",
+      "registeredName": "Capital Markets Domain Architect",
+      "targetRoleId": "UASCO-0376",
+      "targetTitle": "Principal Capital Markets Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "284",
+      "registeredName": "Market Data Specialist",
+      "targetRoleId": "UASCO-0377",
+      "targetTitle": "Principal Market Data Systems Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "285",
+      "registeredName": "Instrument & Reference Data Specialist",
+      "targetRoleId": "UASCO-0386",
+      "targetTitle": "Principal Reference Data Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "287",
+      "registeredName": "Execution Management Specialist",
+      "targetRoleId": "UASCO-0380",
+      "targetTitle": "Principal Execution Management Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "289",
+      "registeredName": "Pre-Trade Risk Specialist",
+      "targetRoleId": "UASCO-0381",
+      "targetTitle": "Principal Pre-Trade Risk Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "290",
+      "registeredName": "Post-Trade Risk Specialist",
+      "targetRoleId": "UASCO-0382",
+      "targetTitle": "Principal Post-Trade Risk Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "293",
+      "registeredName": "Market Surveillance Specialist",
+      "targetRoleId": "UASCO-0385",
+      "targetTitle": "Principal Market Surveillance Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "294",
+      "registeredName": "Clearing & Settlement Specialist",
+      "targetRoleId": "UASCO-0368",
+      "targetTitle": "Principal Clearing & Settlement Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "295",
+      "registeredName": "Streaming Platform Architect",
+      "targetRoleId": "UASCO-0400",
+      "targetTitle": "Principal Streaming Platform Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "296",
+      "registeredName": "Media Ingest Specialist",
+      "targetRoleId": "UASCO-0402",
+      "targetTitle": "Principal Media Ingest Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "297",
+      "registeredName": "Video Encoding / Transcoding Specialist",
+      "targetRoleId": "UASCO-0401",
+      "targetTitle": "Principal Video Encoding Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "298",
+      "registeredName": "Adaptive Streaming Specialist",
+      "targetRoleId": "UASCO-0403",
+      "targetTitle": "Principal Adaptive Streaming Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "300",
+      "registeredName": "Playback Engineering Specialist",
+      "targetRoleId": "UASCO-0405",
+      "targetTitle": "Principal Playback Engineering Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "301",
+      "registeredName": "DRM & Content Protection",
+      "targetRoleId": "UASCO-0406",
+      "targetTitle": "Principal DRM & Content Protection Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "302",
+      "registeredName": "Live Streaming Specialist",
+      "targetRoleId": "UASCO-0407",
+      "targetTitle": "Principal Live Streaming Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "303",
+      "registeredName": "Content Rights & Entitlement",
+      "targetRoleId": "UASCO-0409",
+      "targetTitle": "Principal Content Rights & Entitlement Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "305",
+      "registeredName": "Commerce Domain Architect",
+      "targetRoleId": "UASCO-0388",
+      "targetTitle": "Principal Commerce Domain Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "306",
+      "registeredName": "Catalog & Product Commerce Specialist",
+      "targetRoleId": "UASCO-0389",
+      "targetTitle": "Principal Commerce Catalog Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "310",
+      "registeredName": "Seller & Commission Specialist",
+      "targetRoleId": "UASCO-0396",
+      "targetTitle": "Principal Seller & Commission Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "311",
+      "registeredName": "Promotion & Pricing Specialist",
+      "targetRoleId": "UASCO-0397",
+      "targetTitle": "Principal Pricing & Promotion Engine Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "316",
+      "registeredName": "Enterprise Identity / SSO Specialist",
+      "targetRoleId": "UASCO-0353",
+      "targetTitle": "Principal Enterprise Identity SSO Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "318",
+      "registeredName": "Enterprise Integration Specialist",
+      "targetRoleId": "UASCO-0341",
+      "targetTitle": "Principal Enterprise Integration Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "323",
+      "registeredName": "Business Intelligence",
+      "targetRoleId": "UASCO-0144",
+      "targetTitle": "Principal Business Intelligence Architect",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "351",
+      "registeredName": "Business Continuity",
+      "targetRoleId": "UASCO-0250",
+      "targetTitle": "Principal Business Continuity Engineer",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "352",
+      "registeredName": "Financial Planning & Analysis",
+      "targetRoleId": "UASCO-0572",
+      "targetTitle": "Principal Financial Planning & Analysis Expert",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 1.000 after dropping seniority/generic words"
+    },
+    {
+      "registeredId": "359",
+      "registeredName": "Regulatory Intelligence",
+      "targetRoleId": "UASCO-0579",
+      "targetTitle": "Principal Regulatory Intelligence Analyst",
+      "status": "CANDIDATE_NEEDS_REVIEW",
+      "basis": "token Jaccard 0.667 after dropping seniority/generic words"
+    }
+  ],
+  "unmatchedRegistered": [
+    {
+      "registeredId": "001",
+      "registeredName": "Executive Operations"
+    },
+    {
+      "registeredId": "002",
+      "registeredName": "Founder Decision Coordinator"
+    },
+    {
+      "registeredId": "003",
+      "registeredName": "AI Workflow Coordinator"
+    },
+    {
+      "registeredId": "004",
+      "registeredName": "Portfolio Management"
+    },
+    {
+      "registeredId": "005",
+      "registeredName": "Program & Milestone Governance"
+    },
+    {
+      "registeredId": "006",
+      "registeredName": "Decision Ledger"
+    },
+    {
+      "registeredId": "007",
+      "registeredName": "Risk & Approval Coordinator"
+    },
+    {
+      "registeredId": "010",
+      "registeredName": "Business Analyst"
+    },
+    {
+      "registeredId": "011",
+      "registeredName": "Requirements Engineering"
+    },
+    {
+      "registeredId": "012",
+      "registeredName": "Market Research"
+    },
+    {
+      "registeredId": "014",
+      "registeredName": "Problem Validation"
+    },
+    {
+      "registeredId": "015",
+      "registeredName": "User Research"
+    },
+    {
+      "registeredId": "019",
+      "registeredName": "Software Architect"
+    },
+    {
+      "registeredId": "020",
+      "registeredName": "Domain Architect"
+    },
+    {
+      "registeredId": "021",
+      "registeredName": "Core Platform Engineer"
+    },
+    {
+      "registeredId": "025",
+      "registeredName": "Async & Queue Systems Engineer"
+    },
+    {
+      "registeredId": "026",
+      "registeredName": "Identity & Access Architecture"
+    },
+    {
+      "registeredId": "028",
+      "registeredName": "Migration & Modernization"
+    },
+    {
+      "registeredId": "030",
+      "registeredName": "Web Frontend Engineer"
+    },
+    {
+      "registeredId": "033",
+      "registeredName": "Web Performance Engineer"
+    },
+    {
+      "registeredId": "035",
+      "registeredName": "Backend Service Engineer"
+    },
+    {
+      "registeredId": "038",
+      "registeredName": "Event-Driven Backend Engineer"
+    },
+    {
+      "registeredId": "039",
+      "registeredName": "Workflow Engine Engineer"
+    },
+    {
+      "registeredId": "041",
+      "registeredName": "File & Object Storage Engineer"
+    },
+    {
+      "registeredId": "042",
+      "registeredName": "Background Jobs & Scheduler Engineer"
+    },
+    {
+      "registeredId": "045",
+      "registeredName": "Data Engineer"
+    },
+    {
+      "registeredId": "046",
+      "registeredName": "Analytics Engineer"
+    },
+    {
+      "registeredId": "048",
+      "registeredName": "Search Index & Data"
+    },
+    {
+      "registeredId": "050",
+      "registeredName": "Mobile Architect"
+    },
+    {
+      "registeredId": "051",
+      "registeredName": "Android Engineer"
+    },
+    {
+      "registeredId": "052",
+      "registeredName": "iOS Engineer"
+    },
+    {
+      "registeredId": "055",
+      "registeredName": "Firebase & Mobile Integration"
+    },
+    {
+      "registeredId": "058",
+      "registeredName": "Electron & Tauri Engineer"
+    },
+    {
+      "registeredId": "059",
+      "registeredName": "Native Desktop Integration"
+    },
+    {
+      "registeredId": "060",
+      "registeredName": "UX Architect"
+    },
+    {
+      "registeredId": "061",
+      "registeredName": "UI Designer"
+    },
+    {
+      "registeredId": "064",
+      "registeredName": "Accessibility Design"
+    },
+    {
+      "registeredId": "065",
+      "registeredName": "Content Design"
+    },
+    {
+      "registeredId": "066",
+      "registeredName": "Localization & Internationalization"
+    },
+    {
+      "registeredId": "067",
+      "registeredName": "Test Planning"
+    },
+    {
+      "registeredId": "068",
+      "registeredName": "Happy Path Test Case"
+    },
+    {
+      "registeredId": "069",
+      "registeredName": "Edge & Negative Case"
+    },
+    {
+      "registeredId": "070",
+      "registeredName": "Regression Coverage"
+    },
+    {
+      "registeredId": "071",
+      "registeredName": "Test Documentation & Checklist"
+    },
+    {
+      "registeredId": "072",
+      "registeredName": "Exploratory QA"
+    },
+    {
+      "registeredId": "073",
+      "registeredName": "Product Flow Test"
+    },
+    {
+      "registeredId": "074",
+      "registeredName": "Feature Validation"
+    },
+    {
+      "registeredId": "075",
+      "registeredName": "CMS & Content Administration Test"
+    },
+    {
+      "registeredId": "076",
+      "registeredName": "Admin Panel Process Test"
+    },
+    {
+      "registeredId": "077",
+      "registeredName": "Cross-Platform Synchronization"
+    },
+    {
+      "registeredId": "078",
+      "registeredName": "Usability & Heuristic Review"
+    },
+    {
+      "registeredId": "079",
+      "registeredName": "Localization & Internationalization QA"
+    },
+    {
+      "registeredId": "080",
+      "registeredName": "Web Design & Pixel-Perfect"
+    },
+    {
+      "registeredId": "081",
+      "registeredName": "Mobile & Responsive Design"
+    },
+    {
+      "registeredId": "082",
+      "registeredName": "iOS UI Design Review"
+    },
+    {
+      "registeredId": "083",
+      "registeredName": "Android UI Design Review"
+    },
+    {
+      "registeredId": "085",
+      "registeredName": "Accessibility Test"
+    },
+    {
+      "registeredId": "086",
+      "registeredName": "Advanced Accessibility & Assistive Tech"
+    },
+    {
+      "registeredId": "087",
+      "registeredName": "Browser / Device / OS Compatibility"
+    },
+    {
+      "registeredId": "089",
+      "registeredName": "iOS Mobile App Test"
+    },
+    {
+      "registeredId": "090",
+      "registeredName": "Android Mobile App Test"
+    },
+    {
+      "registeredId": "091",
+      "registeredName": "Notification & Messaging Test"
+    },
+    {
+      "registeredId": "092",
+      "registeredName": "Firebase Event & Analytics Validation"
+    },
+    {
+      "registeredId": "093",
+      "registeredName": "Offline / Low Network / Recovery QA"
+    },
+    {
+      "registeredId": "094",
+      "registeredName": "Feature Flag & Experiment QA"
+    },
+    {
+      "registeredId": "095",
+      "registeredName": "Data Pipeline / BI / Reporting Validation"
+    },
+    {
+      "registeredId": "096",
+      "registeredName": "API Test"
+    },
+    {
+      "registeredId": "097",
+      "registeredName": "Backend Integration Test"
+    },
+    {
+      "registeredId": "098",
+      "registeredName": "Socket & Realtime Test"
+    },
+    {
+      "registeredId": "099",
+      "registeredName": "Database Validation & Data Integrity"
+    },
+    {
+      "registeredId": "101",
+      "registeredName": "Test Environment & System Health"
+    },
+    {
+      "registeredId": "103",
+      "registeredName": "Background Jobs / Queue / Scheduler QA"
+    },
+    {
+      "registeredId": "104",
+      "registeredName": "Third-Party Integration & Contract QA"
+    },
+    {
+      "registeredId": "105",
+      "registeredName": "Migration & Backward Compatibility"
+    },
+    {
+      "registeredId": "106",
+      "registeredName": "Security & Vulnerability Scanning"
+    },
+    {
+      "registeredId": "107",
+      "registeredName": "Role / Permission / Session Security"
+    },
+    {
+      "registeredId": "109",
+      "registeredName": "Privacy / Consent / Compliance QA"
+    },
+    {
+      "registeredId": "110",
+      "registeredName": "Frontend Performance & Core Web Vitals"
+    },
+    {
+      "registeredId": "111",
+      "registeredName": "Chaos / Resilience / Failure Injection"
+    },
+    {
+      "registeredId": "113",
+      "registeredName": "Mobile Automation"
+    },
+    {
+      "registeredId": "114",
+      "registeredName": "Backend Developer in Test"
+    },
+    {
+      "registeredId": "115",
+      "registeredName": "Android Development in Test"
+    },
+    {
+      "registeredId": "116",
+      "registeredName": "iOS Development in Test"
+    },
+    {
+      "registeredId": "117",
+      "registeredName": "Testability & Code Review"
+    },
+    {
+      "registeredId": "120",
+      "registeredName": "Flaky Test Detection & Stabilization"
+    },
+    {
+      "registeredId": "122",
+      "registeredName": "Automation Observability & Suite Health"
+    },
+    {
+      "registeredId": "123",
+      "registeredName": "Defect Triage"
+    },
+    {
+      "registeredId": "124",
+      "registeredName": "Jira / Trello Work Tracking"
+    },
+    {
+      "registeredId": "125",
+      "registeredName": "Daily Quality Report"
+    },
+    {
+      "registeredId": "126",
+      "registeredName": "Weekly Quality Summary"
+    },
+    {
+      "registeredId": "127",
+      "registeredName": "Monthly Quality Risk Trend"
+    },
+    {
+      "registeredId": "129",
+      "registeredName": "Test Coverage Gap & Risk Analysis"
+    },
+    {
+      "registeredId": "130",
+      "registeredName": "Production Smoke & Canary Verification"
+    },
+    {
+      "registeredId": "131",
+      "registeredName": "Synthetic Monitoring & Live Journey"
+    },
+    {
+      "registeredId": "132",
+      "registeredName": "Security Architect"
+    },
+    {
+      "registeredId": "135",
+      "registeredName": "Identity Security"
+    },
+    {
+      "registeredId": "138",
+      "registeredName": "Dependency & SBOM Security"
+    },
+    {
+      "registeredId": "141",
+      "registeredName": "SecOps & Security Incident"
+    },
+    {
+      "registeredId": "144",
+      "registeredName": "Cloud Infrastructure"
+    },
+    {
+      "registeredId": "146",
+      "registeredName": "Container & Kubernetes"
+    },
+    {
+      "registeredId": "147",
+      "registeredName": "CI/CD Engineering"
+    },
+    {
+      "registeredId": "148",
+      "registeredName": "SRE"
+    },
+    {
+      "registeredId": "153",
+      "registeredName": "Model Operations"
+    },
+    {
+      "registeredId": "155",
+      "registeredName": "Model Quality Evaluation"
+    },
+    {
+      "registeredId": "156",
+      "registeredName": "Prompt Engineering"
+    },
+    {
+      "registeredId": "157",
+      "registeredName": "Prompt Evaluation"
+    },
+    {
+      "registeredId": "160",
+      "registeredName": "Integration Architect"
+    },
+    {
+      "registeredId": "161",
+      "registeredName": "Connector & Adapter Engineer"
+    },
+    {
+      "registeredId": "162",
+      "registeredName": "Webhook & Contract Integration"
+    },
+    {
+      "registeredId": "163",
+      "registeredName": "BaaS Integration"
+    },
+    {
+      "registeredId": "164",
+      "registeredName": "External API Drift Monitoring"
+    },
+    {
+      "registeredId": "165",
+      "registeredName": "CRM Systems"
+    },
+    {
+      "registeredId": "166",
+      "registeredName": "ERP Systems"
+    },
+    {
+      "registeredId": "169",
+      "registeredName": "PIM & Catalog Systems"
+    },
+    {
+      "registeredId": "170",
+      "registeredName": "CMS & DAM Systems"
+    },
+    {
+      "registeredId": "171",
+      "registeredName": "Payments & Billing Systems"
+    },
+    {
+      "registeredId": "173",
+      "registeredName": "Lead Generation"
+    },
+    {
+      "registeredId": "174",
+      "registeredName": "Lead Qualification"
+    },
+    {
+      "registeredId": "175",
+      "registeredName": "Sales"
+    },
+    {
+      "registeredId": "176",
+      "registeredName": "Proposal & Quotation"
+    },
+    {
+      "registeredId": "177",
+      "registeredName": "CRM Operations"
+    },
+    {
+      "registeredId": "179",
+      "registeredName": "Growth Strategy"
+    },
+    {
+      "registeredId": "180",
+      "registeredName": "Performance Marketing"
+    },
+    {
+      "registeredId": "181",
+      "registeredName": "SEO"
+    },
+    {
+      "registeredId": "182",
+      "registeredName": "Content Marketing"
+    },
+    {
+      "registeredId": "183",
+      "registeredName": "Social Media"
+    },
+    {
+      "registeredId": "185",
+      "registeredName": "Campaign / Experiment Analytics"
+    },
+    {
+      "registeredId": "186",
+      "registeredName": "Customer Support"
+    },
+    {
+      "registeredId": "187",
+      "registeredName": "Ticket Triage"
+    },
+    {
+      "registeredId": "188",
+      "registeredName": "Support Routing"
+    },
+    {
+      "registeredId": "191",
+      "registeredName": "Finance Operations"
+    },
+    {
+      "registeredId": "192",
+      "registeredName": "Accounting"
+    },
+    {
+      "registeredId": "193",
+      "registeredName": "FinOps"
+    },
+    {
+      "registeredId": "194",
+      "registeredName": "Budget Guard"
+    },
+    {
+      "registeredId": "196",
+      "registeredName": "Cash Flow Forecasting"
+    },
+    {
+      "registeredId": "197",
+      "registeredName": "ROI & Profitability"
+    },
+    {
+      "registeredId": "198",
+      "registeredName": "Privacy / KVKK / GDPR"
+    },
+    {
+      "registeredId": "199",
+      "registeredName": "Compliance"
+    },
+    {
+      "registeredId": "200",
+      "registeredName": "Consent & Data Retention"
+    },
+    {
+      "registeredId": "201",
+      "registeredName": "License & Intellectual Property"
+    },
+    {
+      "registeredId": "202",
+      "registeredName": "Contract & Regulatory Risk"
+    },
+    {
+      "registeredId": "204",
+      "registeredName": "Documentation Engineer"
+    },
+    {
+      "registeredId": "205",
+      "registeredName": "Knowledge Management"
+    },
+    {
+      "registeredId": "206",
+      "registeredName": "Architecture Decision / ADR"
+    },
+    {
+      "registeredId": "207",
+      "registeredName": "Repository & Tool Evaluation"
+    },
+    {
+      "registeredId": "209",
+      "registeredName": "Gameplay Engineer"
+    },
+    {
+      "registeredId": "214",
+      "registeredName": "Game Backend"
+    },
+    {
+      "registeredId": "216",
+      "registeredName": "LiveOps"
+    },
+    {
+      "registeredId": "219",
+      "registeredName": "Game Build / Patcher / Release"
+    },
+    {
+      "registeredId": "220",
+      "registeredName": "3D Technical Art"
+    },
+    {
+      "registeredId": "221",
+      "registeredName": "3D Modeling"
+    },
+    {
+      "registeredId": "223",
+      "registeredName": "Rigging & Animation"
+    },
+    {
+      "registeredId": "224",
+      "registeredName": "VFX"
+    },
+    {
+      "registeredId": "225",
+      "registeredName": "Audio Production"
+    },
+    {
+      "registeredId": "230",
+      "registeredName": "OTA & Device Management"
+    },
+    {
+      "registeredId": "231",
+      "registeredName": "Edge AI"
+    },
+    {
+      "registeredId": "232",
+      "registeredName": "Robotics Engineer"
+    },
+    {
+      "registeredId": "233",
+      "registeredName": "XR / AR / VR"
+    },
+    {
+      "registeredId": "235",
+      "registeredName": "Incident Management"
+    },
+    {
+      "registeredId": "236",
+      "registeredName": "Release Manager"
+    },
+    {
+      "registeredId": "237",
+      "registeredName": "Environment Management"
+    },
+    {
+      "registeredId": "238",
+      "registeredName": "Runbook Operations"
+    },
+    {
+      "registeredId": "239",
+      "registeredName": "Business Process Operations"
+    },
+    {
+      "registeredId": "240",
+      "registeredName": "LiveOps / GameOps Coordinator"
+    },
+    {
+      "registeredId": "241",
+      "registeredName": "Control Tower"
+    },
+    {
+      "registeredId": "242",
+      "registeredName": "Approval Center"
+    },
+    {
+      "registeredId": "243",
+      "registeredName": "Global Kill Switch Controller"
+    },
+    {
+      "registeredId": "244",
+      "registeredName": "Portfolio Health"
+    },
+    {
+      "registeredId": "245",
+      "registeredName": "Cost & Revenue Monitoring"
+    },
+    {
+      "registeredId": "246",
+      "registeredName": "Agent Activity Monitoring"
+    },
+    {
+      "registeredId": "247",
+      "registeredName": "Security & Incident Monitoring"
+    },
+    {
+      "registeredId": "248",
+      "registeredName": "Company Event Bus"
+    },
+    {
+      "registeredId": "249",
+      "registeredName": "Notification Orchestration"
+    },
+    {
+      "registeredId": "250",
+      "registeredName": "Automation & Workflow"
+    },
+    {
+      "registeredId": "251",
+      "registeredName": "Internal Marketplace & Capability Registry"
+    },
+    {
+      "registeredId": "252",
+      "registeredName": "Template & Industry Pack Manager"
+    },
+    {
+      "registeredId": "254",
+      "registeredName": "Knowledge Gap Detection"
+    },
+    {
+      "registeredId": "255",
+      "registeredName": "Autonomous Research Planner"
+    },
+    {
+      "registeredId": "256",
+      "registeredName": "Official Source Research"
+    },
+    {
+      "registeredId": "258",
+      "registeredName": "Open Source Intelligence"
+    },
+    {
+      "registeredId": "259",
+      "registeredName": "Source Reliability"
+    },
+    {
+      "registeredId": "260",
+      "registeredName": "Knowledge Extraction"
+    },
+    {
+      "registeredId": "261",
+      "registeredName": "Knowledge Conflict Detection"
+    },
+    {
+      "registeredId": "262",
+      "registeredName": "Knowledge Validation"
+    },
+    {
+      "registeredId": "263",
+      "registeredName": "Domain Discovery"
+    },
+    {
+      "registeredId": "265",
+      "registeredName": "Domain Pack Builder"
+    },
+    {
+      "registeredId": "266",
+      "registeredName": "Skill Overlay Builder"
+    },
+    {
+      "registeredId": "268",
+      "registeredName": "Experience Learning"
+    },
+    {
+      "registeredId": "269",
+      "registeredName": "Architecture Outcome Learning"
+    },
+    {
+      "registeredId": "270",
+      "registeredName": "Self-Improvement Evaluation"
+    },
+    {
+      "registeredId": "272",
+      "registeredName": "Financial Ledger Specialist"
+    },
+    {
+      "registeredId": "273",
+      "registeredName": "Payments Architecture Specialist"
+    },
+    {
+      "registeredId": "274",
+      "registeredName": "Wallet & Transaction Specialist"
+    },
+    {
+      "registeredId": "275",
+      "registeredName": "Settlement Specialist"
+    },
+    {
+      "registeredId": "276",
+      "registeredName": "Reconciliation Specialist"
+    },
+    {
+      "registeredId": "279",
+      "registeredName": "Financial Fraud & Risk"
+    },
+    {
+      "registeredId": "280",
+      "registeredName": "Financial Precision & Accounting Integrity"
+    },
+    {
+      "registeredId": "281",
+      "registeredName": "FinTech Regulatory Intelligence"
+    },
+    {
+      "registeredId": "286",
+      "registeredName": "Trading OMS Specialist"
+    },
+    {
+      "registeredId": "288",
+      "registeredName": "Portfolio & Position Specialist"
+    },
+    {
+      "registeredId": "291",
+      "registeredName": "Pricing & P&L Specialist"
+    },
+    {
+      "registeredId": "292",
+      "registeredName": "FIX Protocol & Trading Integration"
+    },
+    {
+      "registeredId": "299",
+      "registeredName": "CDN Architecture Specialist"
+    },
+    {
+      "registeredId": "304",
+      "registeredName": "Streaming QoE Specialist"
+    },
+    {
+      "registeredId": "307",
+      "registeredName": "Commerce OMS Specialist"
+    },
+    {
+      "registeredId": "308",
+      "registeredName": "Inventory & Fulfillment Specialist"
+    },
+    {
+      "registeredId": "309",
+      "registeredName": "Marketplace Architecture Specialist"
+    },
+    {
+      "registeredId": "312",
+      "registeredName": "Commerce Fraud & Dispute Specialist"
+    },
+    {
+      "registeredId": "313",
+      "registeredName": "SaaS Domain Architect"
+    },
+    {
+      "registeredId": "314",
+      "registeredName": "Multi-Tenant SaaS Specialist"
+    },
+    {
+      "registeredId": "315",
+      "registeredName": "Subscription Lifecycle Specialist"
+    },
+    {
+      "registeredId": "317",
+      "registeredName": "SaaS Metering & Billing Specialist"
+    },
+    {
+      "registeredId": "319",
+      "registeredName": "Corporate Strategy"
+    },
+    {
+      "registeredId": "320",
+      "registeredName": "Business Model Architect"
+    },
+    {
+      "registeredId": "321",
+      "registeredName": "Business Opportunity Discovery"
+    },
+    {
+      "registeredId": "322",
+      "registeredName": "Industry Intelligence"
+    },
+    {
+      "registeredId": "324",
+      "registeredName": "Competitive Strategy"
+    },
+    {
+      "registeredId": "325",
+      "registeredName": "Business Scenario Planning"
+    },
+    {
+      "registeredId": "326",
+      "registeredName": "Business Performance"
+    },
+    {
+      "registeredId": "327",
+      "registeredName": "Revenue Strategy"
+    },
+    {
+      "registeredId": "328",
+      "registeredName": "Monetization Optimization"
+    },
+    {
+      "registeredId": "329",
+      "registeredName": "Unit Economics"
+    },
+    {
+      "registeredId": "330",
+      "registeredName": "Pricing Intelligence"
+    },
+    {
+      "registeredId": "331",
+      "registeredName": "Revenue Forecasting"
+    },
+    {
+      "registeredId": "332",
+      "registeredName": "Revenue Leakage Detection"
+    },
+    {
+      "registeredId": "333",
+      "registeredName": "Enterprise Sales Strategy"
+    },
+    {
+      "registeredId": "334",
+      "registeredName": "Partnership Development"
+    },
+    {
+      "registeredId": "335",
+      "registeredName": "Channel Partnership"
+    },
+    {
+      "registeredId": "336",
+      "registeredName": "Strategic Account"
+    },
+    {
+      "registeredId": "337",
+      "registeredName": "Sales Operations"
+    },
+    {
+      "registeredId": "338",
+      "registeredName": "Deal Desk"
+    },
+    {
+      "registeredId": "339",
+      "registeredName": "Partnership Integration"
+    },
+    {
+      "registeredId": "340",
+      "registeredName": "Voice of Customer"
+    },
+    {
+      "registeredId": "341",
+      "registeredName": "Customer Segmentation"
+    },
+    {
+      "registeredId": "342",
+      "registeredName": "Churn Intelligence"
+    },
+    {
+      "registeredId": "343",
+      "registeredName": "Customer Lifetime Value"
+    },
+    {
+      "registeredId": "344",
+      "registeredName": "Customer Experience Strategy"
+    },
+    {
+      "registeredId": "345",
+      "registeredName": "Business Process Architect"
+    },
+    {
+      "registeredId": "346",
+      "registeredName": "Operational Excellence"
+    },
+    {
+      "registeredId": "347",
+      "registeredName": "Process Mining"
+    },
+    {
+      "registeredId": "348",
+      "registeredName": "Vendor Management"
+    },
+    {
+      "registeredId": "349",
+      "registeredName": "Procurement Intelligence"
+    },
+    {
+      "registeredId": "350",
+      "registeredName": "SLA Management"
+    },
+    {
+      "registeredId": "353",
+      "registeredName": "Treasury Management"
+    },
+    {
+      "registeredId": "354",
+      "registeredName": "Financial Risk"
+    },
+    {
+      "registeredId": "355",
+      "registeredName": "Management Reporting"
+    },
+    {
+      "registeredId": "356",
+      "registeredName": "Cost Allocation"
+    },
+    {
+      "registeredId": "357",
+      "registeredName": "Investment Evaluation"
+    },
+    {
+      "registeredId": "358",
+      "registeredName": "Financial Scenario Modeling"
+    },
+    {
+      "registeredId": "360",
+      "registeredName": "Contract Intelligence"
+    },
+    {
+      "registeredId": "361",
+      "registeredName": "Data Governance Legal"
+    },
+    {
+      "registeredId": "362",
+      "registeredName": "Digital Commerce Legal"
+    },
+    {
+      "registeredId": "363",
+      "registeredName": "Regulatory Change Impact"
+    }
+  ],
+  "unmatchedTarget": [
+    {
+      "roleId": "UASCO-0001",
+      "title": "Chief Operating Strategy Agent"
+    },
+    {
+      "roleId": "UASCO-0002",
+      "title": "Principal Portfolio Governance Architect"
+    },
+    {
+      "roleId": "UASCO-0003",
+      "title": "Principal AI Workforce Governance Expert"
+    },
+    {
+      "roleId": "UASCO-0004",
+      "title": "Executive Decision Intelligence Expert"
+    },
+    {
+      "roleId": "UASCO-0005",
+      "title": "Corporate Risk & Approval Architect"
+    },
+    {
+      "roleId": "UASCO-0006",
+      "title": "Principal Corporate Policy Engineer"
+    },
+    {
+      "roleId": "UASCO-0007",
+      "title": "Organizational Design & Capability Architect"
+    },
+    {
+      "roleId": "UASCO-0008",
+      "title": "Principal Ethics & Responsible Technology Expert"
+    },
+    {
+      "roleId": "UASCO-0009",
+      "title": "Principal Program Delivery Architect"
+    },
+    {
+      "roleId": "UASCO-0010",
+      "title": "Principal Portfolio Planning Expert"
+    },
+    {
+      "roleId": "UASCO-0011",
+      "title": "Principal Resource Allocation Expert"
+    },
+    {
+      "roleId": "UASCO-0012",
+      "title": "Principal Dependency & Critical Path Engineer"
+    },
+    {
+      "roleId": "UASCO-0013",
+      "title": "Principal Technical Project Delivery Expert"
+    },
+    {
+      "roleId": "UASCO-0014",
+      "title": "Principal Agile Delivery Expert"
+    },
+    {
+      "roleId": "UASCO-0015",
+      "title": "Principal Change Management Expert"
+    },
+    {
+      "roleId": "UASCO-0016",
+      "title": "Principal Release Governance Expert"
+    },
+    {
+      "roleId": "UASCO-0017",
+      "title": "Principal Vendor Delivery Expert"
+    },
+    {
+      "roleId": "UASCO-0020",
+      "title": "Principal Technical Product Manager"
+    },
+    {
+      "roleId": "UASCO-0021",
+      "title": "Principal Product Discovery Expert"
+    },
+    {
+      "roleId": "UASCO-0022",
+      "title": "Principal Business Analysis Architect"
+    },
+    {
+      "roleId": "UASCO-0023",
+      "title": "Principal Requirements Engineer"
+    },
+    {
+      "roleId": "UASCO-0024",
+      "title": "Principal Product Research Expert"
+    },
+    {
+      "roleId": "UASCO-0026",
+      "title": "Principal Market Sizing Expert"
+    },
+    {
+      "roleId": "UASCO-0029",
+      "title": "Principal Experimentation & Hypothesis Expert"
+    },
+    {
+      "roleId": "UASCO-0030",
+      "title": "Principal Product Operations Expert"
+    },
+    {
+      "roleId": "UASCO-0031",
+      "title": "Principal Product Design Architect"
+    },
+    {
+      "roleId": "UASCO-0033",
+      "title": "Principal Interaction Design Expert"
+    },
+    {
+      "roleId": "UASCO-0034",
+      "title": "Principal UI Visual Design Expert"
+    },
+    {
+      "roleId": "UASCO-0036",
+      "title": "Principal UX Writing & Content Design Expert"
+    },
+    {
+      "roleId": "UASCO-0037",
+      "title": "Principal Accessible Design Expert"
+    },
+    {
+      "roleId": "UASCO-0038",
+      "title": "Principal Information Architecture Expert"
+    },
+    {
+      "roleId": "UASCO-0039",
+      "title": "Principal Prototyping Expert"
+    },
+    {
+      "roleId": "UASCO-0040",
+      "title": "Principal Design QA Expert"
+    },
+    {
+      "roleId": "UASCO-0041",
+      "title": "Principal Motion & Microinteraction Design Expert"
+    },
+    {
+      "roleId": "UASCO-0042",
+      "title": "Chief Enterprise Architecture Agent"
+    },
+    {
+      "roleId": "UASCO-0044",
+      "title": "Principal Domain-Driven Design Architect"
+    },
+    {
+      "roleId": "UASCO-0045",
+      "title": "Principal Software Architecture Expert"
+    },
+    {
+      "roleId": "UASCO-0046",
+      "title": "Principal Distributed Architecture Expert"
+    },
+    {
+      "roleId": "UASCO-0048",
+      "title": "Principal Microservices Architect"
+    },
+    {
+      "roleId": "UASCO-0049",
+      "title": "Principal Event-Driven Architecture Expert"
+    },
+    {
+      "roleId": "UASCO-0051",
+      "title": "Principal Application Modernization Architect"
+    },
+    {
+      "roleId": "UASCO-0052",
+      "title": "Principal Architectural Tradeoff Analyst"
+    },
+    {
+      "roleId": "UASCO-0053",
+      "title": "Principal Architecture Compliance Reviewer"
+    },
+    {
+      "roleId": "UASCO-0054",
+      "title": "Principal Systems Software Engineer"
+    },
+    {
+      "roleId": "UASCO-0055",
+      "title": "Principal C/C++ Engineer"
+    },
+    {
+      "roleId": "UASCO-0056",
+      "title": "Principal Rust Systems Engineer"
+    },
+    {
+      "roleId": "UASCO-0057",
+      "title": "Principal JVM Runtime Engineer"
+    },
+    {
+      "roleId": "UASCO-0058",
+      "title": "Principal .NET Runtime Engineer"
+    },
+    {
+      "roleId": "UASCO-0059",
+      "title": "Principal Go Systems Engineer"
+    },
+    {
+      "roleId": "UASCO-0060",
+      "title": "Principal Python Runtime & Tooling Engineer"
+    },
+    {
+      "roleId": "UASCO-0061",
+      "title": "Principal Compiler & Language Tooling Engineer"
+    },
+    {
+      "roleId": "UASCO-0062",
+      "title": "Principal Memory & Concurrency Expert"
+    },
+    {
+      "roleId": "UASCO-0063",
+      "title": "Principal Operating Systems Integration Engineer"
+    },
+    {
+      "roleId": "UASCO-0064",
+      "title": "Principal Low-Level Debugging Engineer"
+    },
+    {
+      "roleId": "UASCO-0065",
+      "title": "Principal Performance Profiling Engineer"
+    },
+    {
+      "roleId": "UASCO-0066",
+      "title": "Principal Frontend Architect"
+    },
+    {
+      "roleId": "UASCO-0068",
+      "title": "Principal Angular Engineer"
+    },
+    {
+      "roleId": "UASCO-0069",
+      "title": "Principal Vue & Nuxt Engineer"
+    },
+    {
+      "roleId": "UASCO-0070",
+      "title": "Principal Web Platform Engineer"
+    },
+    {
+      "roleId": "UASCO-0071",
+      "title": "Principal Web Components Engineer"
+    },
+    {
+      "roleId": "UASCO-0072",
+      "title": "Principal SSR & Edge Rendering Expert"
+    },
+    {
+      "roleId": "UASCO-0073",
+      "title": "Principal Browser Performance Expert"
+    },
+    {
+      "roleId": "UASCO-0075",
+      "title": "Principal Frontend Security Engineer"
+    },
+    {
+      "roleId": "UASCO-0076",
+      "title": "Principal Frontend Testing & Testability Architect"
+    },
+    {
+      "roleId": "UASCO-0077",
+      "title": "Principal Progressive Web App Engineer"
+    },
+    {
+      "roleId": "UASCO-0078",
+      "title": "Principal Backend Architect"
+    },
+    {
+      "roleId": "UASCO-0081",
+      "title": "Principal gRPC Engineer"
+    },
+    {
+      "roleId": "UASCO-0082",
+      "title": "Principal Service Contract Engineer"
+    },
+    {
+      "roleId": "UASCO-0083",
+      "title": "Principal Authentication & Session Engineer"
+    },
+    {
+      "roleId": "UASCO-0084",
+      "title": "Principal Authorization Policy Engineer"
+    },
+    {
+      "roleId": "UASCO-0085",
+      "title": "Principal Workflow Backend Engineer"
+    },
+    {
+      "roleId": "UASCO-0087",
+      "title": "Principal Storage Service Engineer"
+    },
+    {
+      "roleId": "UASCO-0088",
+      "title": "Principal Scheduler & Background Processing Engineer"
+    },
+    {
+      "roleId": "UASCO-0089",
+      "title": "Principal File Processing Engineer"
+    },
+    {
+      "roleId": "UASCO-0090",
+      "title": "Principal API Performance Engineer"
+    },
+    {
+      "roleId": "UASCO-0091",
+      "title": "Principal Backend Migration Engineer"
+    },
+    {
+      "roleId": "UASCO-0094",
+      "title": "Principal Event Streaming Engineer"
+    },
+    {
+      "roleId": "UASCO-0095",
+      "title": "Principal Message Broker Engineer"
+    },
+    {
+      "roleId": "UASCO-0096",
+      "title": "Principal Fault Tolerance Engineer"
+    },
+    {
+      "roleId": "UASCO-0097",
+      "title": "Principal Concurrency & Synchronization Engineer"
+    },
+    {
+      "roleId": "UASCO-0098",
+      "title": "Principal Cache & Consistency Expert"
+    },
+    {
+      "roleId": "UASCO-0099",
+      "title": "Principal Distributed Transactions Expert"
+    },
+    {
+      "roleId": "UASCO-0100",
+      "title": "Principal Protocol Design Engineer"
+    },
+    {
+      "roleId": "UASCO-0101",
+      "title": "Principal High Availability Engineer"
+    },
+    {
+      "roleId": "UASCO-0102",
+      "title": "Principal RPC & Service Mesh Expert"
+    },
+    {
+      "roleId": "UASCO-0103",
+      "title": "Principal State Machine Systems Engineer"
+    },
+    {
+      "roleId": "UASCO-0104",
+      "title": "Principal Desktop Architecture Expert"
+    },
+    {
+      "roleId": "UASCO-0105",
+      "title": "Principal Windows Desktop Engineer"
+    },
+    {
+      "roleId": "UASCO-0106",
+      "title": "Principal macOS Desktop Engineer"
+    },
+    {
+      "roleId": "UASCO-0107",
+      "title": "Principal Linux Desktop Engineer"
+    },
+    {
+      "roleId": "UASCO-0108",
+      "title": "Principal Electron Engineer"
+    },
+    {
+      "roleId": "UASCO-0109",
+      "title": "Principal Tauri & Rust Desktop Engineer"
+    },
+    {
+      "roleId": "UASCO-0110",
+      "title": "Principal Qt Desktop Engineer"
+    },
+    {
+      "roleId": "UASCO-0111",
+      "title": "Principal Native OS Integration Engineer"
+    },
+    {
+      "roleId": "UASCO-0112",
+      "title": "Principal Desktop Accessibility Engineer"
+    },
+    {
+      "roleId": "UASCO-0113",
+      "title": "Principal Desktop Packaging & Installer Engineer"
+    },
+    {
+      "roleId": "UASCO-0114",
+      "title": "Principal Auto-Update & Rollback Engineer"
+    },
+    {
+      "roleId": "UASCO-0115",
+      "title": "Principal Desktop Performance & Diagnostics Engineer"
+    },
+    {
+      "roleId": "UASCO-0116",
+      "title": "Principal Mobile Solutions Architect"
+    },
+    {
+      "roleId": "UASCO-0117",
+      "title": "Principal Android Native Engineer"
+    },
+    {
+      "roleId": "UASCO-0118",
+      "title": "Principal iOS Native Engineer"
+    },
+    {
+      "roleId": "UASCO-0121",
+      "title": "Principal Kotlin Multiplatform Engineer"
+    },
+    {
+      "roleId": "UASCO-0122",
+      "title": "Principal Mobile Security Engineer"
+    },
+    {
+      "roleId": "UASCO-0123",
+      "title": "Principal Mobile Performance Engineer"
+    },
+    {
+      "roleId": "UASCO-0124",
+      "title": "Principal Mobile Offline Sync Engineer"
+    },
+    {
+      "roleId": "UASCO-0125",
+      "title": "Principal Push Notification Engineer"
+    },
+    {
+      "roleId": "UASCO-0127",
+      "title": "Principal Mobile Device Integration Expert"
+    },
+    {
+      "roleId": "UASCO-0128",
+      "title": "Principal Wearable Platform Engineer"
+    },
+    {
+      "roleId": "UASCO-0130",
+      "title": "Principal PostgreSQL Expert"
+    },
+    {
+      "roleId": "UASCO-0131",
+      "title": "Principal MySQL & MariaDB Expert"
+    },
+    {
+      "roleId": "UASCO-0132",
+      "title": "Principal SQL Server Expert"
+    },
+    {
+      "roleId": "UASCO-0133",
+      "title": "Principal NoSQL Database Expert"
+    },
+    {
+      "roleId": "UASCO-0134",
+      "title": "Principal Distributed Database Engineer"
+    },
+    {
+      "roleId": "UASCO-0135",
+      "title": "Principal Database Reliability Engineer"
+    },
+    {
+      "roleId": "UASCO-0137",
+      "title": "Principal Data Migration Engineer"
+    },
+    {
+      "roleId": "UASCO-0139",
+      "title": "Principal Data Pipeline Engineer"
+    },
+    {
+      "roleId": "UASCO-0140",
+      "title": "Principal Lakehouse Engineer"
+    },
+    {
+      "roleId": "UASCO-0142",
+      "title": "Principal Data Backup & Recovery Expert"
+    },
+    {
+      "roleId": "UASCO-0143",
+      "title": "Principal Analytics Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0145",
+      "title": "Principal Product Data Analyst"
+    },
+    {
+      "roleId": "UASCO-0146",
+      "title": "Principal Metrics & Measurement Architect"
+    },
+    {
+      "roleId": "UASCO-0147",
+      "title": "Principal Experiment Design Scientist"
+    },
+    {
+      "roleId": "UASCO-0148",
+      "title": "Principal Causal Inference Expert"
+    },
+    {
+      "roleId": "UASCO-0149",
+      "title": "Principal Forecasting Scientist"
+    },
+    {
+      "roleId": "UASCO-0150",
+      "title": "Principal Data Visualization Engineer"
+    },
+    {
+      "roleId": "UASCO-0151",
+      "title": "Principal Decision Intelligence Expert"
+    },
+    {
+      "roleId": "UASCO-0152",
+      "title": "Principal Financial Analytics Engineer"
+    },
+    {
+      "roleId": "UASCO-0153",
+      "title": "Principal Information Retrieval Engineer"
+    },
+    {
+      "roleId": "UASCO-0154",
+      "title": "Principal Search Relevance Expert"
+    },
+    {
+      "roleId": "UASCO-0155",
+      "title": "Principal Search Infrastructure Engineer"
+    },
+    {
+      "roleId": "UASCO-0156",
+      "title": "Principal Vector Search Engineer"
+    },
+    {
+      "roleId": "UASCO-0157",
+      "title": "Principal Recommendation Systems Engineer"
+    },
+    {
+      "roleId": "UASCO-0158",
+      "title": "Principal Ranking & Personalization Scientist"
+    },
+    {
+      "roleId": "UASCO-0159",
+      "title": "Principal Content Classification Expert"
+    },
+    {
+      "roleId": "UASCO-0160",
+      "title": "Principal Fraud Signal Analytics Expert"
+    },
+    {
+      "roleId": "UASCO-0161",
+      "title": "Chief AI Research Architect"
+    },
+    {
+      "roleId": "UASCO-0162",
+      "title": "Principal Machine Learning Engineer"
+    },
+    {
+      "roleId": "UASCO-0163",
+      "title": "Principal Deep Learning Engineer"
+    },
+    {
+      "roleId": "UASCO-0164",
+      "title": "Principal LLM Engineer"
+    },
+    {
+      "roleId": "UASCO-0165",
+      "title": "Principal NLP Engineer"
+    },
+    {
+      "roleId": "UASCO-0166",
+      "title": "Principal Computer Vision Engineer"
+    },
+    {
+      "roleId": "UASCO-0167",
+      "title": "Principal Speech & Audio ML Engineer"
+    },
+    {
+      "roleId": "UASCO-0168",
+      "title": "Principal Reinforcement Learning Expert"
+    },
+    {
+      "roleId": "UASCO-0169",
+      "title": "Principal Multimodal AI Engineer"
+    },
+    {
+      "roleId": "UASCO-0170",
+      "title": "Principal MLOps Engineer"
+    },
+    {
+      "roleId": "UASCO-0171",
+      "title": "Principal LLMOps Engineer"
+    },
+    {
+      "roleId": "UASCO-0172",
+      "title": "Principal Model Optimization Engineer"
+    },
+    {
+      "roleId": "UASCO-0173",
+      "title": "Principal AI Inference Systems Engineer"
+    },
+    {
+      "roleId": "UASCO-0174",
+      "title": "Principal AI Dataset & Evaluation Engineer"
+    },
+    {
+      "roleId": "UASCO-0176",
+      "title": "Principal AI Data Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0177",
+      "title": "Principal Multi-Agent Architecture Expert"
+    },
+    {
+      "roleId": "UASCO-0178",
+      "title": "Principal Agent Runtime Engineer"
+    },
+    {
+      "roleId": "UASCO-0179",
+      "title": "Principal Agent Planner Engineer"
+    },
+    {
+      "roleId": "UASCO-0180",
+      "title": "Principal Tool & Function Calling Engineer"
+    },
+    {
+      "roleId": "UASCO-0181",
+      "title": "Principal RAG Systems Engineer"
+    },
+    {
+      "roleId": "UASCO-0182",
+      "title": "Principal Context & Memory Engineer"
+    },
+    {
+      "roleId": "UASCO-0186",
+      "title": "Principal Agent Resource Scheduler Engineer"
+    },
+    {
+      "roleId": "UASCO-0187",
+      "title": "Principal Agent Experience & Feedback Engineer"
+    },
+    {
+      "roleId": "UASCO-0188",
+      "title": "Principal Agent Interoperability Engineer"
+    },
+    {
+      "roleId": "UASCO-0189",
+      "title": "Principal Agent Failure Recovery Engineer"
+    },
+    {
+      "roleId": "UASCO-0190",
+      "title": "Principal AI Assurance Architect"
+    },
+    {
+      "roleId": "UASCO-0191",
+      "title": "Principal LLM Evaluation Engineer"
+    },
+    {
+      "roleId": "UASCO-0192",
+      "title": "Principal Agent Reliability Engineer"
+    },
+    {
+      "roleId": "UASCO-0193",
+      "title": "Principal AI Security Architect"
+    },
+    {
+      "roleId": "UASCO-0194",
+      "title": "Principal Prompt Injection Defense Expert"
+    },
+    {
+      "roleId": "UASCO-0196",
+      "title": "Principal Model Output Validation Expert"
+    },
+    {
+      "roleId": "UASCO-0197",
+      "title": "Principal AI Data Privacy Engineer"
+    },
+    {
+      "roleId": "UASCO-0198",
+      "title": "Principal AI Bias & Fairness Evaluator"
+    },
+    {
+      "roleId": "UASCO-0199",
+      "title": "Principal AI Governance Expert"
+    },
+    {
+      "roleId": "UASCO-0200",
+      "title": "Principal Model Drift Monitoring Expert"
+    },
+    {
+      "roleId": "UASCO-0201",
+      "title": "Principal Agent Boundary Testing Expert"
+    },
+    {
+      "roleId": "UASCO-0202",
+      "title": "Principal Internal Developer Platform Architect"
+    },
+    {
+      "roleId": "UASCO-0203",
+      "title": "Principal Developer Experience Engineer"
+    },
+    {
+      "roleId": "UASCO-0204",
+      "title": "Principal Build Tooling Engineer"
+    },
+    {
+      "roleId": "UASCO-0205",
+      "title": "Principal Engineering Productivity Expert"
+    },
+    {
+      "roleId": "UASCO-0206",
+      "title": "Principal Monorepo & Polyrepo Architect"
+    },
+    {
+      "roleId": "UASCO-0207",
+      "title": "Principal Template & Scaffolding Engineer"
+    },
+    {
+      "roleId": "UASCO-0208",
+      "title": "Principal Software Catalog Engineer"
+    },
+    {
+      "roleId": "UASCO-0209",
+      "title": "Principal Environment Provisioning Engineer"
+    },
+    {
+      "roleId": "UASCO-0210",
+      "title": "Principal Dependency Management Engineer"
+    },
+    {
+      "roleId": "UASCO-0211",
+      "title": "Principal Local Development Tooling Expert"
+    },
+    {
+      "roleId": "UASCO-0212",
+      "title": "Principal Cloud Solutions Architect"
+    },
+    {
+      "roleId": "UASCO-0213",
+      "title": "Principal AWS Infrastructure Engineer"
+    },
+    {
+      "roleId": "UASCO-0214",
+      "title": "Principal Azure Infrastructure Engineer"
+    },
+    {
+      "roleId": "UASCO-0215",
+      "title": "Principal GCP Infrastructure Engineer"
+    },
+    {
+      "roleId": "UASCO-0216",
+      "title": "Principal Hybrid Cloud Engineer"
+    },
+    {
+      "roleId": "UASCO-0217",
+      "title": "Principal Network Architect"
+    },
+    {
+      "roleId": "UASCO-0218",
+      "title": "Principal DNS & Edge Networking Engineer"
+    },
+    {
+      "roleId": "UASCO-0219",
+      "title": "Principal Linux Infrastructure Engineer"
+    },
+    {
+      "roleId": "UASCO-0220",
+      "title": "Principal Windows Server Engineer"
+    },
+    {
+      "roleId": "UASCO-0221",
+      "title": "Principal Virtualization Engineer"
+    },
+    {
+      "roleId": "UASCO-0222",
+      "title": "Principal Storage Infrastructure Engineer"
+    },
+    {
+      "roleId": "UASCO-0223",
+      "title": "Principal GPU & Accelerated Compute Engineer"
+    },
+    {
+      "roleId": "UASCO-0225",
+      "title": "Principal CI/CD Pipeline Engineer"
+    },
+    {
+      "roleId": "UASCO-0227",
+      "title": "Principal Kubernetes Platform Engineer"
+    },
+    {
+      "roleId": "UASCO-0228",
+      "title": "Principal Container Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0229",
+      "title": "Principal GitOps Engineer"
+    },
+    {
+      "roleId": "UASCO-0230",
+      "title": "Principal Secure Build Engineer"
+    },
+    {
+      "roleId": "UASCO-0231",
+      "title": "Principal SBOM & Dependency Provenance Engineer"
+    },
+    {
+      "roleId": "UASCO-0232",
+      "title": "Principal Release Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0233",
+      "title": "Principal Artifact Signing Engineer"
+    },
+    {
+      "roleId": "UASCO-0234",
+      "title": "Principal Reproducible Build Engineer"
+    },
+    {
+      "roleId": "UASCO-0235",
+      "title": "Principal Package & Registry Engineer"
+    },
+    {
+      "roleId": "UASCO-0236",
+      "title": "Principal Software Distribution Expert"
+    },
+    {
+      "roleId": "UASCO-0237",
+      "title": "Principal Configuration Management Engineer"
+    },
+    {
+      "roleId": "UASCO-0238",
+      "title": "Principal Site Reliability Architect"
+    },
+    {
+      "roleId": "UASCO-0240",
+      "title": "Principal OpenTelemetry Engineer"
+    },
+    {
+      "roleId": "UASCO-0241",
+      "title": "Principal SLO & Error Budget Engineer"
+    },
+    {
+      "roleId": "UASCO-0242",
+      "title": "Principal Incident Response Engineer"
+    },
+    {
+      "roleId": "UASCO-0244",
+      "title": "Principal Chaos & Resilience Engineer"
+    },
+    {
+      "roleId": "UASCO-0246",
+      "title": "Principal Backup Verification Engineer"
+    },
+    {
+      "roleId": "UASCO-0248",
+      "title": "Principal Cost Reliability Optimizer"
+    },
+    {
+      "roleId": "UASCO-0249",
+      "title": "Principal Production Health & Synthetic Monitoring Engineer"
+    },
+    {
+      "roleId": "UASCO-0253",
+      "title": "Principal Secure SDLC Expert"
+    },
+    {
+      "roleId": "UASCO-0255",
+      "title": "Principal API Security Expert"
+    },
+    {
+      "roleId": "UASCO-0256",
+      "title": "Principal Web Security Expert"
+    },
+    {
+      "roleId": "UASCO-0257",
+      "title": "Principal Mobile Application Security Expert"
+    },
+    {
+      "roleId": "UASCO-0259",
+      "title": "Principal Secure Architecture Evaluator"
+    },
+    {
+      "roleId": "UASCO-0261",
+      "title": "Principal Vulnerability Remediation Engineer"
+    },
+    {
+      "roleId": "UASCO-0262",
+      "title": "Principal Software Composition Analysis Expert"
+    },
+    {
+      "roleId": "UASCO-0263",
+      "title": "Principal Secrets Detection & Hygiene Engineer"
+    },
+    {
+      "roleId": "UASCO-0265",
+      "title": "Principal Identity & Access Management Architect"
+    },
+    {
+      "roleId": "UASCO-0266",
+      "title": "Principal Privileged Access Expert"
+    },
+    {
+      "roleId": "UASCO-0267",
+      "title": "Principal Zero Trust Architect"
+    },
+    {
+      "roleId": "UASCO-0269",
+      "title": "Principal Cryptographic Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0270",
+      "title": "Principal Network Security Engineer"
+    },
+    {
+      "roleId": "UASCO-0271",
+      "title": "Principal Container Security Engineer"
+    },
+    {
+      "roleId": "UASCO-0272",
+      "title": "Principal Endpoint Security Expert"
+    },
+    {
+      "roleId": "UASCO-0273",
+      "title": "Principal Data Security & Encryption Architect"
+    },
+    {
+      "roleId": "UASCO-0274",
+      "title": "Principal Security Policy-as-Code Engineer"
+    },
+    {
+      "roleId": "UASCO-0275",
+      "title": "Principal SOC Detection Engineer"
+    },
+    {
+      "roleId": "UASCO-0276",
+      "title": "Principal SIEM & Telemetry Engineer"
+    },
+    {
+      "roleId": "UASCO-0277",
+      "title": "Principal Threat Intelligence Expert"
+    },
+    {
+      "roleId": "UASCO-0278",
+      "title": "Principal Threat Hunting Expert"
+    },
+    {
+      "roleId": "UASCO-0279",
+      "title": "Principal Incident Forensics Expert"
+    },
+    {
+      "roleId": "UASCO-0280",
+      "title": "Principal Malware Analysis Expert"
+    },
+    {
+      "roleId": "UASCO-0281",
+      "title": "Principal Binary Reverse Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0282",
+      "title": "Principal Penetration Testing Expert"
+    },
+    {
+      "roleId": "UASCO-0283",
+      "title": "Principal Adversary Emulation Expert"
+    },
+    {
+      "roleId": "UASCO-0284",
+      "title": "Principal Security Validation Expert"
+    },
+    {
+      "roleId": "UASCO-0285",
+      "title": "Principal Vulnerability Research Expert"
+    },
+    {
+      "roleId": "UASCO-0286",
+      "title": "Principal Security Incident Commander"
+    },
+    {
+      "roleId": "UASCO-0287",
+      "title": "Principal Privacy Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0288",
+      "title": "Principal Data Protection Governance Expert"
+    },
+    {
+      "roleId": "UASCO-0289",
+      "title": "Principal GDPR & KVKK Compliance Analyst"
+    },
+    {
+      "roleId": "UASCO-0290",
+      "title": "Principal Security Risk & Controls Auditor"
+    },
+    {
+      "roleId": "UASCO-0291",
+      "title": "Principal Regulatory Compliance Analyst"
+    },
+    {
+      "roleId": "UASCO-0292",
+      "title": "Principal Software License Compliance Expert"
+    },
+    {
+      "roleId": "UASCO-0293",
+      "title": "Principal Third-Party Risk Expert"
+    },
+    {
+      "roleId": "UASCO-0294",
+      "title": "Principal Privacy Consent & Retention Expert"
+    },
+    {
+      "roleId": "UASCO-0295",
+      "title": "Principal AI Regulatory Risk Expert"
+    },
+    {
+      "roleId": "UASCO-0296",
+      "title": "Principal Evidence & Audit Trail Expert"
+    },
+    {
+      "roleId": "UASCO-0297",
+      "title": "Principal Policy Controls Tester"
+    },
+    {
+      "roleId": "UASCO-0298",
+      "title": "Chief Quality Engineering Architect"
+    },
+    {
+      "roleId": "UASCO-0299",
+      "title": "Principal Test Strategy Architect"
+    },
+    {
+      "roleId": "UASCO-0301",
+      "title": "Principal API Quality Engineer"
+    },
+    {
+      "roleId": "UASCO-0302",
+      "title": "Principal Contract Testing Expert"
+    },
+    {
+      "roleId": "UASCO-0303",
+      "title": "Principal End-to-End Test Expert"
+    },
+    {
+      "roleId": "UASCO-0304",
+      "title": "Principal Exploratory Testing Expert"
+    },
+    {
+      "roleId": "UASCO-0305",
+      "title": "Principal Regression Risk Engineer"
+    },
+    {
+      "roleId": "UASCO-0306",
+      "title": "Principal State Machine Testing Expert"
+    },
+    {
+      "roleId": "UASCO-0307",
+      "title": "Principal Business Logic Testing Expert"
+    },
+    {
+      "roleId": "UASCO-0308",
+      "title": "Principal Data Integrity Testing Expert"
+    },
+    {
+      "roleId": "UASCO-0309",
+      "title": "Principal Migration Testing Expert"
+    },
+    {
+      "roleId": "UASCO-0310",
+      "title": "Principal Accessibility Quality Engineer"
+    },
+    {
+      "roleId": "UASCO-0311",
+      "title": "Principal Localization Quality Engineer"
+    },
+    {
+      "roleId": "UASCO-0315",
+      "title": "Principal Android Automation Engineer"
+    },
+    {
+      "roleId": "UASCO-0316",
+      "title": "Principal iOS Automation Engineer"
+    },
+    {
+      "roleId": "UASCO-0317",
+      "title": "Principal Cross-Platform Automation Expert"
+    },
+    {
+      "roleId": "UASCO-0318",
+      "title": "Principal Desktop Test Automation Engineer"
+    },
+    {
+      "roleId": "UASCO-0319",
+      "title": "Principal Test Environment Architect"
+    },
+    {
+      "roleId": "UASCO-0322",
+      "title": "Principal Test Observability Engineer"
+    },
+    {
+      "roleId": "UASCO-0323",
+      "title": "Principal Flaky Test Root Cause Engineer"
+    },
+    {
+      "roleId": "UASCO-0324",
+      "title": "Principal Device Farm Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0328",
+      "title": "Principal Load & Stress Testing Expert"
+    },
+    {
+      "roleId": "UASCO-0329",
+      "title": "Principal Scalability Test Engineer"
+    },
+    {
+      "roleId": "UASCO-0330",
+      "title": "Principal Network Impairment Testing Expert"
+    },
+    {
+      "roleId": "UASCO-0331",
+      "title": "Principal Chaos Testing Engineer"
+    },
+    {
+      "roleId": "UASCO-0332",
+      "title": "Principal Recovery & Failover Testing Expert"
+    },
+    {
+      "roleId": "UASCO-0333",
+      "title": "Principal Cross-Browser Compatibility Expert"
+    },
+    {
+      "roleId": "UASCO-0334",
+      "title": "Principal Cross-Device Compatibility Expert"
+    },
+    {
+      "roleId": "UASCO-0335",
+      "title": "Principal Security Testing Engineer"
+    },
+    {
+      "roleId": "UASCO-0336",
+      "title": "Principal AI System Testing Engineer"
+    },
+    {
+      "roleId": "UASCO-0337",
+      "title": "Principal Game Quality Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0338",
+      "title": "Principal Hardware-in-the-Loop Testing Expert"
+    },
+    {
+      "roleId": "UASCO-0339",
+      "title": "Principal Protocol Conformance Tester"
+    },
+    {
+      "roleId": "UASCO-0340",
+      "title": "Principal Production Verification Expert"
+    },
+    {
+      "roleId": "UASCO-0342",
+      "title": "Principal Connector SDK Engineer"
+    },
+    {
+      "roleId": "UASCO-0343",
+      "title": "Principal REST & Webhook Integration Expert"
+    },
+    {
+      "roleId": "UASCO-0344",
+      "title": "Principal Event Integration Engineer"
+    },
+    {
+      "roleId": "UASCO-0345",
+      "title": "Principal Identity Federation Integration Expert"
+    },
+    {
+      "roleId": "UASCO-0346",
+      "title": "Principal EDI Integration Expert"
+    },
+    {
+      "roleId": "UASCO-0347",
+      "title": "Principal SOAP & Legacy Protocol Expert"
+    },
+    {
+      "roleId": "UASCO-0348",
+      "title": "Principal Data Contract Integration Engineer"
+    },
+    {
+      "roleId": "UASCO-0349",
+      "title": "Principal Payment Gateway Integration Expert"
+    },
+    {
+      "roleId": "UASCO-0350",
+      "title": "Principal Third-Party API Drift Engineer"
+    },
+    {
+      "roleId": "UASCO-0351",
+      "title": "Principal Integration Observability Expert"
+    },
+    {
+      "roleId": "UASCO-0352",
+      "title": "Principal SaaS Platform Architect"
+    },
+    {
+      "roleId": "UASCO-0354",
+      "title": "Principal ERP Integration Architect"
+    },
+    {
+      "roleId": "UASCO-0355",
+      "title": "Principal CRM Architecture Expert"
+    },
+    {
+      "roleId": "UASCO-0356",
+      "title": "Principal Subscription & Metering Engineer"
+    },
+    {
+      "roleId": "UASCO-0357",
+      "title": "Principal Enterprise Billing Expert"
+    },
+    {
+      "roleId": "UASCO-0358",
+      "title": "Principal Workflow BPM Architect"
+    },
+    {
+      "roleId": "UASCO-0359",
+      "title": "Principal Multi-Region SaaS Expert"
+    },
+    {
+      "roleId": "UASCO-0360",
+      "title": "Principal Enterprise Data Migration Expert"
+    },
+    {
+      "roleId": "UASCO-0361",
+      "title": "Principal Business Systems Integration Expert"
+    },
+    {
+      "roleId": "UASCO-0362",
+      "title": "Principal Enterprise Software Reliability Expert"
+    },
+    {
+      "roleId": "UASCO-0364",
+      "title": "Principal Double-Entry Ledger Engineer"
+    },
+    {
+      "roleId": "UASCO-0365",
+      "title": "Principal Banking Integration Expert"
+    },
+    {
+      "roleId": "UASCO-0366",
+      "title": "Principal Payment Processing Architect"
+    },
+    {
+      "roleId": "UASCO-0367",
+      "title": "Principal Wallet & Stored Value Engineer"
+    },
+    {
+      "roleId": "UASCO-0372",
+      "title": "Principal Fraud Detection Engineer"
+    },
+    {
+      "roleId": "UASCO-0373",
+      "title": "Principal Financial Precision Engineer"
+    },
+    {
+      "roleId": "UASCO-0374",
+      "title": "Principal Financial Compliance Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0378",
+      "title": "Principal FIX Protocol Engineer"
+    },
+    {
+      "roleId": "UASCO-0383",
+      "title": "Principal Portfolio Analytics Engineer"
+    },
+    {
+      "roleId": "UASCO-0384",
+      "title": "Principal Pricing & PnL Engineer"
+    },
+    {
+      "roleId": "UASCO-0387",
+      "title": "Principal Clearing & Custody Engineer"
+    },
+    {
+      "roleId": "UASCO-0390",
+      "title": "Principal Marketplace Platform Engineer"
+    },
+    {
+      "roleId": "UASCO-0391",
+      "title": "Principal Cart & Checkout Engineer"
+    },
+    {
+      "roleId": "UASCO-0392",
+      "title": "Principal Order Management Architect"
+    },
+    {
+      "roleId": "UASCO-0394",
+      "title": "Principal Warehouse Integration Engineer"
+    },
+    {
+      "roleId": "UASCO-0395",
+      "title": "Principal Fulfillment & Logistics Expert"
+    },
+    {
+      "roleId": "UASCO-0398",
+      "title": "Principal Commerce Fraud & Chargeback Engineer"
+    },
+    {
+      "roleId": "UASCO-0399",
+      "title": "Principal Search & Discovery Commerce Expert"
+    },
+    {
+      "roleId": "UASCO-0404",
+      "title": "Principal Content Delivery Network Expert"
+    },
+    {
+      "roleId": "UASCO-0408",
+      "title": "Principal Streaming Quality of Experience Engineer"
+    },
+    {
+      "roleId": "UASCO-0410",
+      "title": "Principal Audio Streaming Engineer"
+    },
+    {
+      "roleId": "UASCO-0411",
+      "title": "Principal Game Creative Director Agent"
+    },
+    {
+      "roleId": "UASCO-0413",
+      "title": "Principal Gameplay Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0414",
+      "title": "Principal Combat Systems Engineer"
+    },
+    {
+      "roleId": "UASCO-0415",
+      "title": "Principal Character Progression Expert"
+    },
+    {
+      "roleId": "UASCO-0417",
+      "title": "Principal Quest & Narrative Systems Expert"
+    },
+    {
+      "roleId": "UASCO-0418",
+      "title": "Principal World Building & Level Design Expert"
+    },
+    {
+      "roleId": "UASCO-0419",
+      "title": "Principal NPC Behavior & AI Engineer"
+    },
+    {
+      "roleId": "UASCO-0420",
+      "title": "Principal Inventory & Crafting Systems Engineer"
+    },
+    {
+      "roleId": "UASCO-0421",
+      "title": "Principal Procedural Content Generation Expert"
+    },
+    {
+      "roleId": "UASCO-0422",
+      "title": "Principal Game UX & Accessibility Expert"
+    },
+    {
+      "roleId": "UASCO-0423",
+      "title": "Principal Game Live Balance Analyst"
+    },
+    {
+      "roleId": "UASCO-0424",
+      "title": "Principal Game Engine Architect"
+    },
+    {
+      "roleId": "UASCO-0428",
+      "title": "Principal Graphics Rendering Engineer"
+    },
+    {
+      "roleId": "UASCO-0429",
+      "title": "Principal Shader & Materials Engineer"
+    },
+    {
+      "roleId": "UASCO-0430",
+      "title": "Principal GPU Optimization Engineer"
+    },
+    {
+      "roleId": "UASCO-0431",
+      "title": "Principal Physics Engine Engineer"
+    },
+    {
+      "roleId": "UASCO-0432",
+      "title": "Principal Game Animation Runtime Engineer"
+    },
+    {
+      "roleId": "UASCO-0433",
+      "title": "Principal Navigation & Pathfinding Engineer"
+    },
+    {
+      "roleId": "UASCO-0434",
+      "title": "Principal Engine Tooling Engineer"
+    },
+    {
+      "roleId": "UASCO-0435",
+      "title": "Principal Game Performance Profiler"
+    },
+    {
+      "roleId": "UASCO-0436",
+      "title": "Principal Game Scripting & Modding Systems Expert"
+    },
+    {
+      "roleId": "UASCO-0438",
+      "title": "Principal Authoritative Game Server Engineer"
+    },
+    {
+      "roleId": "UASCO-0439",
+      "title": "Principal Realtime Replication Engineer"
+    },
+    {
+      "roleId": "UASCO-0440",
+      "title": "Principal Lag Compensation Expert"
+    },
+    {
+      "roleId": "UASCO-0441",
+      "title": "Principal Matchmaking Systems Expert"
+    },
+    {
+      "roleId": "UASCO-0442",
+      "title": "Principal Distributed World Sharding Expert"
+    },
+    {
+      "roleId": "UASCO-0443",
+      "title": "Principal Game Persistence Expert"
+    },
+    {
+      "roleId": "UASCO-0444",
+      "title": "Principal MMO Backend Architect"
+    },
+    {
+      "roleId": "UASCO-0445",
+      "title": "Principal Game Session Security Engineer"
+    },
+    {
+      "roleId": "UASCO-0447",
+      "title": "Principal Game Patch & Asset Delivery Engineer"
+    },
+    {
+      "roleId": "UASCO-0448",
+      "title": "Principal Game Server SRE"
+    },
+    {
+      "roleId": "UASCO-0449",
+      "title": "Principal LiveOps Event & Telemetry Engineer"
+    },
+    {
+      "roleId": "UASCO-0451",
+      "title": "Principal Technical Art Director Agent"
+    },
+    {
+      "roleId": "UASCO-0452",
+      "title": "Principal 3D Character Artist"
+    },
+    {
+      "roleId": "UASCO-0453",
+      "title": "Principal Environment Artist"
+    },
+    {
+      "roleId": "UASCO-0455",
+      "title": "Principal Rigging Technical Director"
+    },
+    {
+      "roleId": "UASCO-0456",
+      "title": "Principal Animation Systems Expert"
+    },
+    {
+      "roleId": "UASCO-0457",
+      "title": "Principal VFX Artist"
+    },
+    {
+      "roleId": "UASCO-0458",
+      "title": "Principal Audio Design & Integration Expert"
+    },
+    {
+      "roleId": "UASCO-0459",
+      "title": "Principal Music & Sound Production Expert"
+    },
+    {
+      "roleId": "UASCO-0461",
+      "title": "Principal Art Automation & Build Expert"
+    },
+    {
+      "roleId": "UASCO-0462",
+      "title": "Principal Asset Licensing & Provenance Expert"
+    },
+    {
+      "roleId": "UASCO-0463",
+      "title": "Principal Cinematics & Cutscene Expert"
+    },
+    {
+      "roleId": "UASCO-0466",
+      "title": "Principal RTOS Engineer"
+    },
+    {
+      "roleId": "UASCO-0467",
+      "title": "Principal Device Driver Expert"
+    },
+    {
+      "roleId": "UASCO-0469",
+      "title": "Principal Edge Computing Engineer"
+    },
+    {
+      "roleId": "UASCO-0470",
+      "title": "Principal OTA Update & Device Lifecycle Expert"
+    },
+    {
+      "roleId": "UASCO-0472",
+      "title": "Principal Robotics Control Engineer"
+    },
+    {
+      "roleId": "UASCO-0473",
+      "title": "Principal Industrial Protocol Engineer"
+    },
+    {
+      "roleId": "UASCO-0474",
+      "title": "Principal Sensor Fusion Engineer"
+    },
+    {
+      "roleId": "UASCO-0475",
+      "title": "Principal Embedded Security Engineer"
+    },
+    {
+      "roleId": "UASCO-0476",
+      "title": "Principal Hardware Validation Engineer"
+    },
+    {
+      "roleId": "UASCO-0477",
+      "title": "Principal XR Architecture Expert"
+    },
+    {
+      "roleId": "UASCO-0478",
+      "title": "Principal AR Application Engineer"
+    },
+    {
+      "roleId": "UASCO-0479",
+      "title": "Principal VR Application Engineer"
+    },
+    {
+      "roleId": "UASCO-0480",
+      "title": "Principal Spatial UI & Interaction Engineer"
+    },
+    {
+      "roleId": "UASCO-0481",
+      "title": "Principal Digital Twin Systems Architect"
+    },
+    {
+      "roleId": "UASCO-0482",
+      "title": "Principal Physics Simulation Engineer"
+    },
+    {
+      "roleId": "UASCO-0483",
+      "title": "Principal Real-Time 3D Visualization Engineer"
+    },
+    {
+      "roleId": "UASCO-0484",
+      "title": "Principal XR Performance & Comfort Expert"
+    },
+    {
+      "roleId": "UASCO-0485",
+      "title": "Principal Spatial Mapping Engineer"
+    },
+    {
+      "roleId": "UASCO-0486",
+      "title": "Principal Simulation Verification Expert"
+    },
+    {
+      "roleId": "UASCO-0487",
+      "title": "Principal Telecom Software Architect"
+    },
+    {
+      "roleId": "UASCO-0488",
+      "title": "Principal Telecom Protocol Engineer"
+    },
+    {
+      "roleId": "UASCO-0489",
+      "title": "Principal Network Automation Engineer"
+    },
+    {
+      "roleId": "UASCO-0490",
+      "title": "Principal Edge Orchestration Engineer"
+    },
+    {
+      "roleId": "UASCO-0491",
+      "title": "Principal Realtime Network Analytics Expert"
+    },
+    {
+      "roleId": "UASCO-0492",
+      "title": "Principal QoS & Traffic Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0493",
+      "title": "Principal Network Function Virtualization Expert"
+    },
+    {
+      "roleId": "UASCO-0494",
+      "title": "Principal Network Reliability Engineer"
+    },
+    {
+      "roleId": "UASCO-0495",
+      "title": "Principal Safety Critical Software Architect"
+    },
+    {
+      "roleId": "UASCO-0496",
+      "title": "Principal Automotive Software Engineer"
+    },
+    {
+      "roleId": "UASCO-0497",
+      "title": "Principal AUTOSAR Integration Expert"
+    },
+    {
+      "roleId": "UASCO-0498",
+      "title": "Principal Functional Safety Expert"
+    },
+    {
+      "roleId": "UASCO-0499",
+      "title": "Principal Aviation Software Assurance Expert"
+    },
+    {
+      "roleId": "UASCO-0500",
+      "title": "Principal Real-Time Control Systems Expert"
+    },
+    {
+      "roleId": "UASCO-0501",
+      "title": "Principal Formal Verification Engineer"
+    },
+    {
+      "roleId": "UASCO-0502",
+      "title": "Principal Deterministic Systems Test Expert"
+    },
+    {
+      "roleId": "UASCO-0503",
+      "title": "Principal Safety Case & Traceability Expert"
+    },
+    {
+      "roleId": "UASCO-0504",
+      "title": "Principal Fault Injection & Redundancy Expert"
+    },
+    {
+      "roleId": "UASCO-0505",
+      "title": "Principal HealthTech Domain Architect"
+    },
+    {
+      "roleId": "UASCO-0506",
+      "title": "Principal Clinical Workflow Engineer"
+    },
+    {
+      "roleId": "UASCO-0507",
+      "title": "Principal FHIR HL7 Interoperability Engineer"
+    },
+    {
+      "roleId": "UASCO-0508",
+      "title": "Principal Medical Data Privacy Expert"
+    },
+    {
+      "roleId": "UASCO-0509",
+      "title": "Principal Health Software Quality Expert"
+    },
+    {
+      "roleId": "UASCO-0510",
+      "title": "Principal Medical Device Software Assurance Expert"
+    },
+    {
+      "roleId": "UASCO-0511",
+      "title": "Principal Clinical Data Integrity Expert"
+    },
+    {
+      "roleId": "UASCO-0512",
+      "title": "Principal Health Integration Security Expert"
+    },
+    {
+      "roleId": "UASCO-0513",
+      "title": "Principal GIS & Geospatial Engineer"
+    },
+    {
+      "roleId": "UASCO-0514",
+      "title": "Principal Mapping & Geodata Expert"
+    },
+    {
+      "roleId": "UASCO-0515",
+      "title": "Principal E-Government Platform Engineer"
+    },
+    {
+      "roleId": "UASCO-0516",
+      "title": "Principal Government Identity Integration Expert"
+    },
+    {
+      "roleId": "UASCO-0517",
+      "title": "Principal EdTech Systems Architect"
+    },
+    {
+      "roleId": "UASCO-0519",
+      "title": "Principal Public Accessibility & Inclusion Expert"
+    },
+    {
+      "roleId": "UASCO-0520",
+      "title": "Principal Public Record Lifecycle Expert"
+    },
+    {
+      "roleId": "UASCO-0521",
+      "title": "Principal Blockchain Protocol Engineer"
+    },
+    {
+      "roleId": "UASCO-0522",
+      "title": "Principal Smart Contract Engineer"
+    },
+    {
+      "roleId": "UASCO-0523",
+      "title": "Principal Smart Contract Security Expert"
+    },
+    {
+      "roleId": "UASCO-0524",
+      "title": "Principal Distributed Consensus Engineer"
+    },
+    {
+      "roleId": "UASCO-0525",
+      "title": "Principal Cryptographic Protocol Engineer"
+    },
+    {
+      "roleId": "UASCO-0526",
+      "title": "Principal Custody & Key Isolation Engineer"
+    },
+    {
+      "roleId": "UASCO-0527",
+      "title": "Principal On-Chain Indexing Engineer"
+    },
+    {
+      "roleId": "UASCO-0528",
+      "title": "Principal Tokenization Platform Expert"
+    },
+    {
+      "roleId": "UASCO-0531",
+      "title": "Principal Evidence & Source Credibility Expert"
+    },
+    {
+      "roleId": "UASCO-0532",
+      "title": "Principal Scientific Literature Research Expert"
+    },
+    {
+      "roleId": "UASCO-0533",
+      "title": "Principal Knowledge Graph Engineer"
+    },
+    {
+      "roleId": "UASCO-0534",
+      "title": "Principal Memory Architecture Expert"
+    },
+    {
+      "roleId": "UASCO-0535",
+      "title": "Principal Knowledge Conflict Resolution Expert"
+    },
+    {
+      "roleId": "UASCO-0537",
+      "title": "Principal Skill Evaluation Architect"
+    },
+    {
+      "roleId": "UASCO-0538",
+      "title": "Principal Learning Outcome Analyst"
+    },
+    {
+      "roleId": "UASCO-0540",
+      "title": "Principal Research Governance Expert"
+    },
+    {
+      "roleId": "UASCO-0541",
+      "title": "Principal Technical Documentation Architect"
+    },
+    {
+      "roleId": "UASCO-0542",
+      "title": "Principal API Documentation Engineer"
+    },
+    {
+      "roleId": "UASCO-0543",
+      "title": "Principal Architecture Decision Recorder"
+    },
+    {
+      "roleId": "UASCO-0544",
+      "title": "Principal Developer Advocacy Expert"
+    },
+    {
+      "roleId": "UASCO-0545",
+      "title": "Principal Technical Training Designer"
+    },
+    {
+      "roleId": "UASCO-0546",
+      "title": "Principal Internationalization Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0547",
+      "title": "Principal Localization Quality Expert"
+    },
+    {
+      "roleId": "UASCO-0549",
+      "title": "Principal Developer Onboarding Expert"
+    },
+    {
+      "roleId": "UASCO-0550",
+      "title": "Principal Technical Support Architect"
+    },
+    {
+      "roleId": "UASCO-0551",
+      "title": "Principal L3 Application Support Expert"
+    },
+    {
+      "roleId": "UASCO-0554",
+      "title": "Principal Incident Communications Expert"
+    },
+    {
+      "roleId": "UASCO-0555",
+      "title": "Principal Support Knowledge Systems Engineer"
+    },
+    {
+      "roleId": "UASCO-0556",
+      "title": "Principal Customer Reliability Liaison"
+    },
+    {
+      "roleId": "UASCO-0557",
+      "title": "Principal SLA & Service Operations Expert"
+    },
+    {
+      "roleId": "UASCO-0558",
+      "title": "Principal Customer Renewal Analyst"
+    },
+    {
+      "roleId": "UASCO-0559",
+      "title": "Principal Product Feedback Intelligence Expert"
+    },
+    {
+      "roleId": "UASCO-0560",
+      "title": "Principal Enterprise Sales Strategist"
+    },
+    {
+      "roleId": "UASCO-0561",
+      "title": "Principal Solutions Engineering Expert"
+    },
+    {
+      "roleId": "UASCO-0562",
+      "title": "Principal Technical Pre-Sales Architect"
+    },
+    {
+      "roleId": "UASCO-0563",
+      "title": "Principal Proposal & Tender Expert"
+    },
+    {
+      "roleId": "UASCO-0564",
+      "title": "Principal Partnership Strategy Expert"
+    },
+    {
+      "roleId": "UASCO-0565",
+      "title": "Principal Channel Integration Expert"
+    },
+    {
+      "roleId": "UASCO-0566",
+      "title": "Principal Competitive Positioning Expert"
+    },
+    {
+      "roleId": "UASCO-0567",
+      "title": "Principal Growth Marketing Strategist"
+    },
+    {
+      "roleId": "UASCO-0568",
+      "title": "Principal Search Engine Optimization Expert"
+    },
+    {
+      "roleId": "UASCO-0570",
+      "title": "Principal Attribution & Campaign Analyst"
+    },
+    {
+      "roleId": "UASCO-0571",
+      "title": "Principal Customer Market Researcher"
+    },
+    {
+      "roleId": "UASCO-0573",
+      "title": "Principal FinOps & Cloud Unit Economics Expert"
+    },
+    {
+      "roleId": "UASCO-0574",
+      "title": "Principal Revenue & Monetization Expert"
+    },
+    {
+      "roleId": "UASCO-0575",
+      "title": "Principal Accounting Controls Analyst"
+    },
+    {
+      "roleId": "UASCO-0576",
+      "title": "Principal Treasury Planning Analyst"
+    },
+    {
+      "roleId": "UASCO-0577",
+      "title": "Principal Contract Risk Analyst"
+    },
+    {
+      "roleId": "UASCO-0578",
+      "title": "Principal Software Licensing & Intellectual Property Analyst"
+    },
+    {
+      "roleId": "UASCO-0580",
+      "title": "Principal Procurement & Vendor Analyst"
+    },
+    {
+      "roleId": "UASCO-0581",
+      "title": "Principal Technology Insurance Risk Expert"
+    },
+    {
+      "roleId": "UASCO-0582",
+      "title": "Principal Privacy Legal Research Agent"
+    },
+    {
+      "roleId": "UASCO-0584",
+      "title": "Principal Factory Control Plane Architect"
+    },
+    {
+      "roleId": "UASCO-0585",
+      "title": "Principal Mission State Machine Engineer"
+    },
+    {
+      "roleId": "UASCO-0586",
+      "title": "Principal Policy Engine Architect"
+    },
+    {
+      "roleId": "UASCO-0587",
+      "title": "Principal Agent Identity & Authorization Expert"
+    },
+    {
+      "roleId": "UASCO-0588",
+      "title": "Principal Resource Lease & Isolation Engineer"
+    },
+    {
+      "roleId": "UASCO-0589",
+      "title": "Principal Evidence Chain & Audit Engineer"
+    },
+    {
+      "roleId": "UASCO-0590",
+      "title": "Principal Checkpoint & Recovery Engineer"
+    },
+    {
+      "roleId": "UASCO-0591",
+      "title": "Principal Agent Scheduling Engineer"
+    },
+    {
+      "roleId": "UASCO-0592",
+      "title": "Principal Workflow DAG Orchestration Expert"
+    },
+    {
+      "roleId": "UASCO-0593",
+      "title": "Principal Sandbox Boundary Engineer"
+    },
+    {
+      "roleId": "UASCO-0594",
+      "title": "Principal Kill Switch & Safe Mode Engineer"
+    },
+    {
+      "roleId": "UASCO-0595",
+      "title": "Principal Agent Model Cost Governor"
+    },
+    {
+      "roleId": "UASCO-0596",
+      "title": "Principal Approval & Delegation Policy Architect"
+    },
+    {
+      "roleId": "UASCO-0597",
+      "title": "Principal Cross-Project Tenant Isolation Engineer"
+    },
+    {
+      "roleId": "UASCO-0598",
+      "title": "Principal Operational Truth & Status Engineer"
+    },
+    {
+      "roleId": "UASCO-0599",
+      "title": "Principal Independent Review Coordination Expert"
+    }
+  ],
+  "summary": {
+    "exact": 0,
+    "candidate": 110,
+    "unmatchedRegistered": 253,
+    "unmatchedTarget": 491
+  }
+}
