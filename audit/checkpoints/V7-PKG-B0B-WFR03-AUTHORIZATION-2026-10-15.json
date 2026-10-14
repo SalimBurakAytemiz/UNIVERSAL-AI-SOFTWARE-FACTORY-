@@ -1,0 +1,33 @@
+{
+  "//TR": "Bu checkpoint, WFR-03 tek kanonik RoleDefinition kayıt paketinin Founder yetki ekidir; herhangi bir korumalı değişiklikten önce kaydedilir ve temiz olduğunu beyan etmez.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-B0B-WFR03-AUTHORIZATION",
+  "date": "2026-10-15",
+  "parent": "06677f715a076740762825e838bb277e683fb812",
+  "branch": "v7/product-wfr03",
+  "status": "AUTHORIZATION AMENDMENT RECORD ONLY; not clean",
+  "founderAuthorization": {
+    "decision": "Founder decision 2026-10-15 (chat AskUserQuestion): FA-WFR-03 approves a single canonical RoleDefinition registry (599 promoted catalog, legacy agents.json frozen as LEGACY_REFERENCE_ONLY, WFR-02 mapping as PROPOSED legacyAliases) with one new validator and one new validation step; Claude implementer + independent Claude reviewer; Codex Review forbidden.",
+    "rule": "Only the listed protected files; config/validation.json: exactly one new step for the new validator plus appended test paths; none of the legacy validators change; nothing becomes READY/CERTIFIED.",
+    "protectedFiles": [
+      "apps/desktop/main.mjs",
+      "apps/desktop/preload.mjs",
+      "apps/desktop/renderer/app.js",
+      "apps/desktop/renderer/index.html",
+      "apps/control-api/src/server.ts",
+      "config/validation.json",
+      ".github/workflows/ci.yml",
+      "config/trust-root-manifest.json",
+      "scripts/validate-role-registry.mjs"
+    ],
+    "constraint": "No other protected file; excluded: merge to master, push, release, signing, supervisor, autostart.",
+    "authorizationRecord": {
+      "decisionId": "FA-WFR-03-2026-10-15",
+      "amends": "FA-V2-PRODUCT-2026-10-14",
+      "ledger": "C:/Users/salim/UASCO-recovery/governed-review/FOUNDER-AUTHORIZATIONS.jsonl",
+      "recordedAt": "2026-10-14T23:20:59Z",
+      "notBackdated": true,
+      "recordedBefore": "any protected change of WFR-03"
+    }
+  }
+}
