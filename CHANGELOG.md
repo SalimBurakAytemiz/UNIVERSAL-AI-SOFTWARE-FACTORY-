@@ -1,6 +1,11 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-10-06 — V6 PKG-Q1 Claude limit messages detected as a provider wait (branch)
+
+- Founder decision 2026-10-06 (protected file authorized): `detectQuotaBlock` (`automation/lib/review-pipeline.mjs`) recognises the Claude CLI limit message that the CLI prints on stdout with a non-zero exit code (for example `You've hit your session limit · resets 1:10am (Europe/Istanbul)`), and stderr messages with a word between "your" and "limit". Before, such a builder round was classified as an environment error, retried five times and escalated to a Founder decision (`RECOVERABLE_RETRIES_EXHAUSTED`, seen on PKG-AUT2 on 2026-10-05) although only the provider limit had to pass. Only short CLI limit lines at the start of a stdout line count; a successful call (exit code 0 with other output) is never a quota block. The retry time keeps coming from the existing `parseRetryAfter` (`resets 1:10am` in local time).
+- Tests: `tests/pkg-q1-claude-limit-detection.test.ts` (Claude session, weekly and epoch limit messages on stdout, existing stderr forms, and negative cases: a successful review that quotes a limit message, an unrelated non-zero exit, prose mentioning a rate limit).
+
 ## 2026-10-13 — V6 PKG-LV1 re-applied onto BS1R (branch `v6/pkg-lv1-liveness-watchdog-f9`, append-only)
 
 - Founder decision 2026-10-13: the LV1 liveness package (1f52358..5e9a610, 17 commits) is re-applied as ONE squashed commit onto `V6-PKG-BS1R-AUTONOMY-BOOTSTRAP` ef0f3bb, with both sides integrated by a single 3-way merge: the BS1R rollback of every post-registration failure (and its tests) is kept, and so is LV1's watchdog, work-conserving entry and `-Upgrade`. An upgrade that fails or is rolled back never re-enables a task the rollback disabled or removed (rolled-back state wins); the liveness test file is assigned to the new validation step `tests-lv1`.

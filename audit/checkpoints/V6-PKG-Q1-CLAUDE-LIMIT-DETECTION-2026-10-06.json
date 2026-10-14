@@ -5,7 +5,6 @@
   "date": "2026-10-06",
   "parent": "6ddce95c84faa0b44fb286725c5267c1c0202469 (PKG-LV1 review commit; this package is stacked on the chain tip and merges after it)",
   "branch": "v6/pkg-q1-claude-limit-detection",
-  "status": "F10 AUTHORIZATION RECORD ONLY: package changes not yet applied; not clean; review pending",
   "founderAuthorization": {
     "decision": "PROTECTED_FIX_AUTHORIZED",
     "rule": "Founder answer in the Claude builder session on 2026-10-06 to the question which protected packages are authorized for the continuous-execution request: 'Claude limit detection fix' was selected. Scope: automation/lib/review-pipeline.mjs detectQuotaBlock recognises the Claude CLI limit message printed on stdout with a non-zero exit code (and stderr forms with a word between 'your' and 'limit'), so that a provider limit is a provider wait instead of an environment error that escalates to a Founder decision after five retries.",
@@ -27,5 +26,155 @@
       "scope": "exact re-application of the f9-reviewed diff 550bb16..07763d6; protected files limited to protectedFiles; recorded before any protected change of this package",
       "notBackdated": true
     }
-  }
+  },
+  "motivation": {
+    "incident": "2026-10-05 18:50Z-20:00Z: PKG-AUT2 remediation rounds exited with code 1 and the builder log contained only \"You've hit your session limit · resets 1:10am (Europe/Istanbul)\" on stdout; detectQuotaBlock scanned stderr only and its pattern 'hit your limit' does not match 'hit your session limit', so five ENV_ERROR retries led to FOUNDER_DECISION_PENDING (RECOVERABLE_RETRIES_EXHAUSTED).",
+    "checkedOn": [
+      "active plane f3b4ad8: detectQuotaBlock returns quota false for the message",
+      "chain tip 6ddce95: detectQuotaBlock returns quota false; parseRetryAfter already returns the local reset time"
+    ]
+  },
+  "design": {
+    "stderr": "broad patterns as before, plus 'hit your <word> limit' and 'session limit'",
+    "stdout": "only short lines (at most 300 characters) that start with a CLI limit message: You've hit your [<word> ]limit, Claude AI usage limit reached, <n>-hour/session/weekly/usage limit reached",
+    "quota": "at least one matching line and (non-zero exit, empty stdout, or a stdout made only of limit lines)",
+    "retryTime": "unchanged parseRetryAfter (epoch suffix, 'resets 1:10am' local time, 'try again at')"
+  },
+  "tests": {
+    "file": "tests/pkg-q1-claude-limit-detection.test.ts",
+    "cases": [
+      "session limit on stdout with exit 1 (and its local reset time)",
+      "both streams, weekly limit, typographic apostrophe, epoch form",
+      "stdout made only of a limit line with exit 0",
+      "existing stderr forms (usage limit, 5-hour limit, rate limit)",
+      "negative: successful review quoting a limit message, the same review with exit 1, prose about a rate limit, unrelated git failure, plain success, an over-long line"
+    ]
+  },
+  "validation": {
+    "workspace": "fresh clone of the committed head 14d5c32 (scratchpad validate-commit.sh: clone at the commit, reviewed lock installed)",
+    "gitDiffCheck": "PASS (6ddce95..14d5c32, 5 files)",
+    "verifyTrustRoot": "PASS",
+    "canonicalValidation": "CANONICAL_VALIDATION: PASS (36 test files, 188 tests; vitest step 567 s of the fixed 600 s limit while the supervisor ran PKG-AUT2 validations concurrently)",
+    "typecheck": "tsc --noEmit: PASS",
+    "broadSuite": "25 PASS / 0 FAIL",
+    "relatedSelftests": "scripts/orchestrator-selftest.mjs 29/29, scripts/dual-review-selftest.mjs 20/20 (unchanged)"
+  },
+  "review": "NOT_REVIEWED",
+  "merge": "AFTER_PKG_LV1",
+  "cleanClaim": false,
+  "notClaimed": [
+    "activation on the running plane before this package and the chain it is stacked on are merged by governed review"
+  ],
+  "mutationChecks": {
+    "harness": "scratchpad q1-mutants.mjs: each mutant edits detectQuotaBlock in place, runs tests/pkg-q1-claude-limit-detection.test.ts, restores the file",
+    "result": "5/5 caught",
+    "mutants": [
+      "stdout not scanned",
+      "a stdout made only of limit lines with exit 0 not a quota",
+      "long stdout lines accepted",
+      "stdout pattern not anchored to the line start",
+      "a successful call with other output counted as a quota"
+    ],
+    "history": "the first run caught 4/5; the missing negative case (a successful call with a stderr limit warning) was added before the commit"
+  },
+  "changedFileSha256": {
+    "CHANGELOG.md": "507f87a0d912cbd81bc5ce62e899156fe653aa8c5183a4f36f76f1fbdb10bc29",
+    "automation/lib/review-pipeline.mjs": "c48d96f0de924fbf941b86b9e30ca1f552f002fab204656837a361ccaf86a04e",
+    "config/trust-root-manifest.json": "5284b978b4a9305c5b4fd5a226da041db0c7c969e7b2ce8b498e4d7d7e406852",
+    "tests/pkg-q1-claude-limit-detection.test.ts": "663d14b4299c6360fdc1bb2c88c328faa2df82faebf173db1b0843a35771e8ab"
+  },
+  "finalLineageRecords": [
+    {
+      "recordedAt": "2026-10-07T06:56:00.327Z",
+      "kind": "FINAL_LINEAGE_EVIDENCE_BINDING",
+      "reason": "the package was re-applied unchanged (identical change set) onto the final finalization chain; values recorded at its earlier revisions (parent, branch, changedFileSha256, reseal/manifest, validation workspace) describe those superseded revisions and are kept unchanged as history; this record binds the evidence to the final revision",
+      "packageId": "V6-PKG-Q1-CLAUDE-LIMIT-DETECTION",
+      "finalBase": "5e9a6108d4c645fa5b515b2de208b978f5f9369f",
+      "headSubjectChain": [
+        "e509d01 v6 pkg-q1: record validation and mutation evidence",
+        "733e6cc v6 pkg-q1: detect Claude CLI limit messages as a provider wait"
+      ],
+      "supersededRevisions": [
+        "8032f40",
+        "1eee6ea"
+      ],
+      "changedFileSha256": {
+        "CHANGELOG.md": "bbf70241d1d1927e104f63cf3c0240c0513ae637ee963d06c0ebcdff3dee0e3d",
+        "automation/lib/review-pipeline.mjs": "c48d96f0de924fbf941b86b9e30ca1f552f002fab204656837a361ccaf86a04e",
+        "config/trust-root-manifest.json": "efa3cd3c44674ecdeb1aa88373343e5a9ca3dc15abbd16c65d53bc6a52dfdd76",
+        "tests/pkg-q1-claude-limit-detection.test.ts": "663d14b4299c6360fdc1bb2c88c328faa2df82faebf173db1b0843a35771e8ab"
+      },
+      "trustRootManifest": {
+        "sha256": "efa3cd3c44674ecdeb1aa88373343e5a9ca3dc15abbd16c65d53bc6a52dfdd76",
+        "generatedAt": "2026-10-06T11:58:04.411Z",
+        "sealStatus": "SEALED",
+        "protectedFiles": 364
+      },
+      "validationEnvironment": {
+        "os": "Windows_NT 10.0.19045",
+        "node": "v24.19.0",
+        "npm": "11.17.0"
+      },
+      "validationBinding": "canonical validation (config/validation.json) of the exact reviewed commit runs in a fresh clean clone at that commit, in this environment, during the bundle freeze; the frozen review bundle records reviewedCommit, baseCommit and the validation report",
+      "note": "a file cannot contain the sha of the commit that adds it; the commit is identified by finalBase plus this tree's digests and by the frozen bundle"
+    },
+    {
+      "recordedAt": "2026-10-13T00:00:00.000Z",
+      "kind": "REAPPLIED_ONTO_NEW_BASE_LINEAGE_RECORD",
+      "appendOnly": true,
+      "packageId": "V6-PKG-Q1-CLAUDE-LIMIT-DETECTION",
+      "branch": "v6/pkg-q1-claude-limit-detection-f9",
+      "reason": "Founder-approved chain re-application of 2026-10-13: the commits of this package were re-applied with git cherry-pick -x onto the f9 chain. All earlier fields and records describe the original chain (bases, commits, digests) and are kept unchanged as history; they do not describe this revision.",
+      "newBase": "550bb16",
+      "oldCommits": [
+        "733e6cc",
+        "e509d01",
+        "f34f07d"
+      ],
+      "oldToNew": {
+        "733e6cc": "bcd38a5",
+        "e509d01": "8fbd00f",
+        "f34f07d": "d19c489"
+      },
+      "newCommitsInOrder": [
+        "bcd38a5",
+        "8fbd00f",
+        "d19c489",
+        "7747ef3"
+      ],
+      "unmappedNewCommits": [
+        "7747ef3"
+      ],
+      "conflicts": [
+        {
+          "file": "config/trust-root-manifest.json",
+          "resolution": "conflicts regenerated with scripts/generate-trust-root.mjs, never hand-merged"
+        },
+        {
+          "file": "CHANGELOG.md",
+          "resolution": "both sides kept by hand: the new entry placed above the existing ones"
+        },
+        {
+          "file": "config/validation.json",
+          "resolution": "integration commit: the new test file assigned to the tests step so the coverage guard passes"
+        }
+      ],
+      "changedProtectedFileSha256": {
+        "automation/lib/review-pipeline.mjs": "c48d96f0de924fbf941b86b9e30ca1f552f002fab204656837a361ccaf86a04e",
+        "config/validation.json": "cbf0ba7c9b3bb8a9b7a490b11e6f9aafabf4cacc68a953913318a34f552ff980"
+      },
+      "changedOtherFileSha256": {
+        "CHANGELOG.md": "eafbaa873bb0062aa465955f47dad93b535f057481e19b39bfc007b353fca851",
+        "audit/checkpoints/V6-PKG-Q1-CLAUDE-LIMIT-DETECTION-2026-10-06.json": "468518e45dd9e56514aa3aef53c83c8309758f26efc46e8a598e4505d22a0ef4",
+        "config/trust-root-manifest.json": "dc6aa33ced741b9249566f629d7676e55e5504bf4267d8cc78bbf9a7b654e8df",
+        "tests/pkg-q1-claude-limit-detection.test.ts": "663d14b4299c6360fdc1bb2c88c328faa2df82faebf173db1b0843a35771e8ab"
+      },
+      "digestNote": "computed from the tree of the commit preceding this record (changes against the new base) and compared with config/trust-root-manifest.json of the same tree (equal for every listed protected file); the manifest does not list audit checkpoints, so this record does not change it",
+      "reviewStatus": "PENDING_GOVERNED_REVIEW",
+      "cleanClaim": false,
+      "validationEvidence": "PENDING_FREEZE",
+      "notClaimed": "No CLEAN, merge, release or validation claim; the supervisor owns review, validation and merge"
+    }
+  ],
+  "status": "F10 re-application: changes applied; not clean; review pending"
 }
