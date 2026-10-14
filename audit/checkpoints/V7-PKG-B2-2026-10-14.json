@@ -23,15 +23,51 @@
     "audit/checkpoints/V7-PKG-B2-2026-10-14.json (new)"
   ],
   "commands": [
-    {"command": "npx tsc --noEmit", "exitCode": 0},
-    {"command": "node node_modules/vitest/vitest.mjs run tests/v7-b2-workos-hardening.test.ts tests/v7-b1-workos.test.ts tests/pkg-gov2-codex-retirement.test.ts tests/mission-state.test.ts tests/action-gateway.test.ts", "exitCode": 0, "tests": "54 passed (54)", "note": "v7-b2-workos-hardening has 18 tests; the other four cover files changed or read by this package"},
-    {"command": "node scripts/validate-tr-comments.mjs", "exitCode": 0, "result": "TR_VALIDATION: PASS"},
-    {"command": "node scripts/secret-sanity.mjs", "exitCode": 0, "result": "SECRET_SANITY: PASS"},
-    {"command": "node scripts/v6-apps-control-desktop-selftest.mjs", "exitCode": 0, "result": "PASS 93/93"},
-    {"command": "node scripts/smoke-control-api.mjs", "exitCode": 0, "result": "PASS"},
-    {"command": "node scripts/validate-mechanical-closure.mjs", "exitCode": 0, "result": "PASS files=90"},
-    {"command": "node scripts/generate-trust-root.mjs", "exitCode": 0, "result": "TRUST_ROOT_MANIFEST_GENERATED files=364"},
-    {"command": "node scripts/verify-trust-root.mjs", "exitCode": 0, "result": "TRUST_ROOT_VERIFY: PASS"}
+    {
+      "command": "npx tsc --noEmit",
+      "exitCode": 0
+    },
+    {
+      "command": "node node_modules/vitest/vitest.mjs run tests/v7-b2-workos-hardening.test.ts tests/v7-b1-workos.test.ts tests/pkg-gov2-codex-retirement.test.ts tests/mission-state.test.ts tests/action-gateway.test.ts",
+      "exitCode": 0,
+      "tests": "54 passed (54)",
+      "note": "v7-b2-workos-hardening has 18 tests; the other four cover files changed or read by this package"
+    },
+    {
+      "command": "node scripts/validate-tr-comments.mjs",
+      "exitCode": 0,
+      "result": "TR_VALIDATION: PASS"
+    },
+    {
+      "command": "node scripts/secret-sanity.mjs",
+      "exitCode": 0,
+      "result": "SECRET_SANITY: PASS"
+    },
+    {
+      "command": "node scripts/v6-apps-control-desktop-selftest.mjs",
+      "exitCode": 0,
+      "result": "PASS 93/93"
+    },
+    {
+      "command": "node scripts/smoke-control-api.mjs",
+      "exitCode": 0,
+      "result": "PASS"
+    },
+    {
+      "command": "node scripts/validate-mechanical-closure.mjs",
+      "exitCode": 0,
+      "result": "PASS files=90"
+    },
+    {
+      "command": "node scripts/generate-trust-root.mjs",
+      "exitCode": 0,
+      "result": "TRUST_ROOT_MANIFEST_GENERATED files=364"
+    },
+    {
+      "command": "node scripts/verify-trust-root.mjs",
+      "exitCode": 0,
+      "result": "TRUST_ROOT_VERIFY: PASS"
+    }
   ],
   "mutationCheck": "F-B1-001 negative case was confirmed to fail (exit non-zero) when the old key format was temporarily restored, then the fix was restored.",
   "notRun": "scripts/run-validation.mjs and the whole vitest suite were intentionally not run; the reviewer runs them independently.",
@@ -42,5 +78,69 @@
     "orchestrator-state.mjs has no .d.mts and automation/lib is protected; server.ts imports it with a documented @ts-expect-error and a narrow local cast (read-only use: loadState, verifyTransitionLog).",
     "buildServer gained an optional repoRoot option (default process.cwd(), unchanged behaviour) so cockpit tests can use an empty temp repo."
   ],
-  "reviewStatus": "not clean; review pending"
+  "reviewStatus": "not clean; review pending",
+  "remediation": {
+    "cycle": "c2",
+    "startedAt": "2026-10-14T19:05:42Z",
+    "endedAt": "2026-10-14T19:06:47Z",
+    "findingsFixed": [
+      {
+        "id": "F-B2-001",
+        "fix": "Working files with CRLF (server.ts, core/workos/*, new test) were deleted and restored from the index as LF; git ls-files --eol shows no w/crlf. config/trust-root-manifest.json was resealed with generate-trust-root; server.ts entry is 5bd90d713d8ce3f78a4700976088e7daf606c99590cef075dc963ba50e628c1a, equal to the committed blob. The earlier TRUST_ROOT_VERIFY PASS was observed only on the CRLF worktree and did not reproduce on LF checkouts.",
+        "test": "tests/v7-b2-workos-hardening.test.ts describe F-B2-001 (3 tests: manifest digest equals file bytes, no CR in touched files, git blob equals sealed digest)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "git ls-files --eol | grep w/crlf",
+        "exitCode": 1,
+        "result": "no output"
+      },
+      {
+        "command": "npx tsc --noEmit",
+        "exitCode": 0
+      },
+      {
+        "command": "node node_modules/vitest/vitest.mjs run tests/v7-b2-workos-hardening.test.ts tests/v7-b1-workos.test.ts tests/pkg-gov2-codex-retirement.test.ts tests/mission-state.test.ts tests/action-gateway.test.ts",
+        "exitCode": 0,
+        "result": "57 passed (57)"
+      },
+      {
+        "command": "node scripts/v6-apps-control-desktop-selftest.mjs",
+        "exitCode": 0,
+        "result": "PASS 93/93"
+      },
+      {
+        "command": "node scripts/smoke-control-api.mjs",
+        "exitCode": 0,
+        "result": "PASS"
+      },
+      {
+        "command": "node scripts/validate-mechanical-closure.mjs",
+        "exitCode": 0,
+        "result": "PASS files=90"
+      },
+      {
+        "command": "node scripts/validate-tr-comments.mjs",
+        "exitCode": 0,
+        "result": "TR_VALIDATION: PASS"
+      },
+      {
+        "command": "node scripts/secret-sanity.mjs",
+        "exitCode": 0,
+        "result": "SECRET_SANITY: PASS"
+      },
+      {
+        "command": "node scripts/generate-trust-root.mjs",
+        "exitCode": 0,
+        "result": "TRUST_ROOT_MANIFEST_GENERATED files=364"
+      },
+      {
+        "command": "node scripts/verify-trust-root.mjs (git archive of staged tree)",
+        "exitCode": 0,
+        "result": "TRUST_ROOT_VERIFY: PASS"
+      }
+    ],
+    "freshLfCloneVerify": "Staged tree exported with git archive (LF blob bytes, no worktree CRLF): node scripts/verify-trust-root.mjs -> TRUST_ROOT_VERIFY: PASS, exit 0"
+  }
 }

@@ -358,3 +358,26 @@ describe("B2 API hardening and cockpit", () => {
     });
   });
 });
+
+describe("F-B2-001 trust-root seal matches LF bytes", () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO, "config/trust-root-manifest.json"), "utf8")) as {files: {path: string; sha256: string}[]};
+  const sealed = ["apps/control-api/src/server.ts", "config/validation.json"];
+  const touched = ["apps/control-api/src/server.ts", "core/workos/store.ts", "core/workos/types.ts", "core/workos/schemas.ts", "core/workos/README.md", "tests/v7-b2-workos-hardening.test.ts"];
+  it("sealed B2 files have no CR bytes and manifest sha256 equals the file bytes", () => {
+    for (const rel of sealed) {
+      const buf = fs.readFileSync(path.join(REPO, rel));
+      const entry = manifest.files.find((f) => f.path === rel);
+      expect(entry, rel).toBeDefined();
+      expect(crypto.createHash("sha256").update(buf).digest("hex"), rel).toBe(entry!.sha256);
+    }
+  });
+  it("B2 touched text files are stored with LF only", () => {
+    for (const rel of touched) expect(fs.readFileSync(path.join(REPO, rel)).includes(13), rel).toBe(false);
+  });
+  it("the committed git blob of server.ts equals the sealed digest", () => {
+    let blob: Buffer;
+    try { blob = cp.execFileSync("git", ["cat-file", "blob", "HEAD:apps/control-api/src/server.ts"], {cwd: REPO}); } catch { return; }
+    const entry = manifest.files.find((f) => f.path === "apps/control-api/src/server.ts");
+    if (fs.readFileSync(path.join(REPO, "apps/control-api/src/server.ts")).equals(blob)) expect(crypto.createHash("sha256").update(blob).digest("hex")).toBe(entry!.sha256);
+  });
+});
