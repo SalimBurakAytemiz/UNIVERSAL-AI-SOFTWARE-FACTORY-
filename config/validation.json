@@ -304,7 +304,8 @@
         "tests/strict-json-validator.test.ts",
         "tests/technology-decision.test.ts",
         "tests/technology-discovery.test.ts",
-        "tests/v7-b1-workos.test.ts"
+        "tests/v7-b1-workos.test.ts",
+        "tests/v7-b4-desktop-shell.test.ts"
       ],
       "requiresDependencies": true
     },

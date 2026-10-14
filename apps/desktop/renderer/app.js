@@ -1,17 +1,71 @@
-// //TR: Bu renderer güvenli preload IPC ile health/Phase0/scheduler/run/log görünürlüğünü gösterir; API verisini HTML olarak yorumlamadan text node/createElement ile render eder.
-const items=["Dashboard","Missions","Portfolio","Customers","Projects","Departments","Agents","Skills","Technologies","Resources","Labs","Tool Adapters","Software Intelligence","Design Studio","QA Center","Security Center","Performance Lab","Mobile Device Lab","Browser Lab","Game Intelligence","Game Studio","Reports","Evidence","Logs","Problems","Incidents","Knowledge","Global Communications","Workers","Models","Costs","Approvals","Decisions","Deployments","Backups","Settings"];
-const el=id=>document.getElementById(id);const get=path=>window.uasco.apiGet(path);let latestRuns=[];
-function button(text,dataset={}){const b=document.createElement("button");b.type="button";b.textContent=String(text);for(const [k,v] of Object.entries(dataset))b.dataset[k]=String(v);return b}
-const nav=document.querySelector("#nav");nav.replaceChildren(...items.map(x=>{const b=button(x);b.disabled=true;return b}));
-async function loadRun(runId){
-  el("selectedRun").textContent=runId;const [events,logs]=await Promise.all([get(`/v1/runs/${encodeURIComponent(runId)}/events`),get(`/v1/runs/${encodeURIComponent(runId)}/logs`)]);
-  el("events").textContent=(events.events??[]).slice(-200).map(x=>`${x.timestamp??""} [${x.severity??"INFO"}] ${x.stage??""}/${x.event??""} ${JSON.stringify(x.details??{})}`).join("\n")||"Event yok.";
-  const logButtons=el("logButtons"),nodes=(logs.logs??[]).map(x=>{const b=button(`${x.name} (${x.size} B)`,{log:x.name});b.addEventListener("click",async()=>{const y=await get(`/v1/runs/${encodeURIComponent(runId)}/logs/${encodeURIComponent(b.dataset.log)}`);el("logText").textContent=(y.truncated?"[TAIL / TRUNCATED]\n":"")+y.text});return b});logButtons.replaceChildren(...(nodes.length?nodes:[document.createTextNode("Log yok.")]));
+// //TR: Bu giriş modülü renderer'ı başlatır: i18n/store/api/shell bağlantısı, hash yönlendirme, periyodik yenileme, ACİL DURDUR/Devam IPC çağrıları ve legacy blocker listesi; API verisi HTML olarak yorumlanmadan yalnız createElement/textContent/replaceChildren ile render edilir.
+import {createI18n} from "./i18n.js";
+import {createStore} from "./state.js";
+import {createApi} from "./api.js";
+import {createShell,PRINCIPAL} from "./shell.js";
+import {routeById,routeFromHash} from "./routes.js";
+import {h} from "./components.js";
+import * as home from "./views/home.js";
+import * as projects from "./views/projects.js";
+import * as work from "./views/work.js";
+import * as workforce from "./views/workforce.js";
+import * as planned from "./views/planned.js";
+import * as tower from "./views/tower.js";
+import * as inbox from "./views/inbox.js";
+import * as settings from "./views/settings.js";
+
+const VIEWS={home,projects,work,workforce,planned,tower,inbox,settings};
+const REFRESH_MS=15000;
+const doc=document;
+let storage=null;try{storage=window.localStorage}catch{storage=null}
+const i18n=createI18n(storage),store=createStore(storage),api=createApi({bridge:window.uasco,store});
+const main=doc.getElementById("main");let renderToken=0,shell=null;
+
+const ctx={doc,i18n,store,api,principal:PRINCIPAL,t:(k,v)=>i18n.t(k,v),
+  currentRouteId:()=>routeFromHash(window.location.hash),
+  navigate(id){const r=routeById(id);if(r&&window.location.hash!==r.hash)window.location.hash=r.hash;else renderRoute({focus:true,force:true})},
+  selectProject(id){if(store.selectProject(id))shell.announce(ctx.t("ctx.projectChanged"))},
+  requestStop(){shell.openStopDialog()},
+  async stop(){try{await window.uasco.stop("Founder requested from UASCO Desktop")}catch{shell.announce(ctx.t("stop.failed"))}await ctx.refreshAll({force:true})},
+  async resume(){try{await window.uasco.resume()}catch{shell.announce(ctx.t("stop.failed"))}await ctx.refreshAll({force:true})},
+  async refreshAll({force=false}={}){if(force)store.cache.clear();const ok=await shell.refresh();if(ok===false)return;await renderRoute({force})},
+  renderAttention
+};
+
+/** Legacy founder-attention blocker listesi; yeniden deneme yetkisi yalnız sunucunun retryable alanından gelir. */
+function renderAttention(container,att){
+  if(!att||att.state!=="VERIFIED"){container.replaceChildren(h(doc,"p",{class:"note",text:ctx.t(`state.${att?.state??"UNAVAILABLE"}`)}));return}
+  const attNodes=att.blocked.map(x=>{
+    const row=doc.createElement("div"),strong=doc.createElement("strong");row.className="attention-row";strong.textContent=String(x.packageId??`phase ${x.phase}`);
+    row.append(strong,doc.createTextNode(` · ${x.kind??"BLOCKED"} · ${x.reason??""} `));
+    if(x.retryable===true){const b=h(doc,"button",{type:"button",class:"btn",dataset:{retry:x.packageId??""},text:ctx.t("attention.retry")});b.addEventListener("click",async()=>{if(b.dataset.retry){await window.uasco.retryBlocked(b.dataset.retry);await ctx.refreshAll({force:true})}});row.appendChild(b)}
+    return row;
+  });
+  container.replaceChildren(...(attNodes.length?attNodes:[doc.createTextNode(ctx.t("attention.none"))]));
 }
-async function refresh(){try{
-  const [h,p,install,s,a,c,t,ctl,r,retry,attention]=await Promise.all([get("/health"),get("/v1/phase0"),get("/v1/install"),get("/v1/scheduler"),get("/v1/agents"),get("/v1/capabilities"),get("/v1/adapters"),get("/v1/control/status"),get("/v1/runs"),get("/v1/retry"),get("/v1/founder-attention")]);
-  el("health").textContent=`${h.status} · ${h.system}`;el("phase0").textContent=p.final??"PENDING";el("install").textContent=install.phase0Final??"PENDING";const completed=Array.isArray(s.phases)?s.phases.filter(x=>x.status==="COMPLETED").length:0;el("scheduler").textContent=Array.isArray(s.phases)?`${completed}/${s.phases.length} complete`:(s.status??"NOT_INITIALIZED");el("agents").textContent=`${a.count} registered`;el("caps").textContent=`${c.count} registered`;el("tools").textContent=`${t.count} registered`;el("stopState").textContent=ctl.globalStop?.active?`STOPPED: ${ctl.globalStop.reason??""}`:"RUNNING";el("retry").textContent=retry?`Retry ${retry.packageId??"package"} phases ${(retry.phaseIds??[]).join(",")} @ ${retry.retryAt}`:"No retry wait";
-  const blocked=attention.blocked??[],att=el("attention"),attNodes=blocked.map(x=>{const row=document.createElement("div"),strong=document.createElement("strong");strong.textContent=String(x.packageId??`phase ${x.phase}`);row.append(strong,document.createTextNode(` · ${x.kind??"BLOCKED"} · ${x.reason??""} `));if(x.retryable===true){const b=button("Retry",{retry:x.packageId??""});b.addEventListener("click",async()=>{if(b.dataset.retry){await window.uasco.retryBlocked(b.dataset.retry);await refresh()}});row.appendChild(b)}return row});att.replaceChildren(...(attNodes.length?attNodes:[document.createTextNode("Bekleyen blocker yok.")]));
-  latestRuns=r.runs??[];const runs=el("runs"),runNodes=latestRuns.slice(0,20).map(x=>{const b=button(`${x.runId} · ${x.summary?.status??x.manifest?.status??"RUNNING"}`,{run:x.runId});b.addEventListener("click",()=>loadRun(b.dataset.run));return b});runs.replaceChildren(...(runNodes.length?runNodes:[document.createTextNode("Henüz run yok.")]));
-}catch(e){el("health").textContent=`Control API unavailable: ${e.message}`}}
-el("refresh").addEventListener("click",refresh);el("stop").addEventListener("click",async()=>{await window.uasco.stop("Founder requested from Control Tower");await refresh()});el("resume").addEventListener("click",async()=>{await window.uasco.resume();await refresh()});refresh();
+
+async function renderRoute({focus=false,force=false}={}){
+  const token=++renderToken,epoch=store.epoch,route=routeById(ctx.currentRouteId()),view=VIEWS[route.view];
+  const sameRoute=main.dataset.route===route.id;
+  if(sameRoute&&!force&&!focus){
+    // Periyodik yenileme, kullanıcı main içindeyken veya pencere açıkken odağı bozmaz.
+    if(main.contains(doc.activeElement)&&doc.activeElement!==main){renderToken-=1;return}
+    if(doc.getElementById("stopDialog")?.open){renderToken-=1;return}
+  }
+  if(!sameRoute){main.dataset.route=route.id;main.setAttribute("aria-busy","true");main.replaceChildren(typeof view.skeleton==="function"?view.skeleton(ctx,route):h(doc,"p",{class:"note",role:"status",text:ctx.t("state.LOADING")}))}
+  let node;
+  try{node=await view.render(ctx,route)}catch{node=h(doc,"p",{class:"note note-error",role:"alert",text:ctx.t("state.ERROR")})}
+  if(token!==renderToken||epoch!==store.epoch)return;
+  main.replaceChildren(node);main.removeAttribute("aria-busy");shell.renderNav();
+  if(focus){const title=node.querySelector?.("#view-title");if(title)title.focus();shell.announce(ctx.t("route.announce",{title:ctx.t(`area.${route.id}.title`)}))}
+}
+
+function boot(){
+  shell=createShell(ctx);i18n.applyStatic(doc);shell.wireStatic();shell.renderAll();
+  window.addEventListener("hashchange",()=>{shell.renderNav();renderRoute({focus:true,force:true})});
+  store.onChange(()=>{shell.renderContext();ctx.refreshAll({force:true})});
+  i18n.onChange(()=>{i18n.applyStatic(doc);shell.renderAll();main.dataset.route="";renderRoute({force:true})});
+  ctx.refreshAll({});
+  window.setInterval(()=>{ctx.refreshAll({})},REFRESH_MS);
+}
+boot();
