@@ -4,12 +4,22 @@ import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import {fileURLToPath,pathToFileURL} from "node:url";
-import {desktopExtraGetPathAllowed} from "./get-allowlist.mjs";
 import {parseControlPort,controlOrigin,controlChallengeProof,secureStringEqual,desktopGetPathAllowed} from "../../automation/lib/control-boundary.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url)),rendererFile=path.join(here,"renderer","index.html"),rendererUrl=pathToFileURL(rendererFile).href;
 const port=parseControlPort(process.env.CONTROL_API_PORT,3210),apiBase=controlOrigin(port),token=process.env.UASCO_CONTROL_TOKEN??"";
 let controlWindow=null,identityVerifiedAt=0;
+
+// B4-ALLOWLIST-BEGIN
+// //TR: Token ana süreçte eklendiği için B4 shell'in okuduğu ek GET rotaları (cockpit, projeler, mission'lar) yalnız bu korumalı dosyada, tam eşleşme veya sıkı kimlik regex'i ile fail-closed izinlenir; renderer token veya yeni yetki görmez.
+const EXTRA_GET_ROUTES=new Set(["/v1/cockpit","/v1/projects","/v1/missions"]);
+const PROJECT_MISSIONS_RE=/^\/v1\/missions\?projectId=prj_[0-9a-f]{24}$/;
+const MISSION_DETAIL_RE=/^\/v1\/missions\/msn_[0-9a-f]{24}$/;
+function desktopExtraGetPathAllowed(value){
+  if(typeof value!=="string"||value.length>128)return false;
+  return EXTRA_GET_ROUTES.has(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value);
+}
+// B4-ALLOWLIST-END
 
 async function verifyServerIdentity(force=false){
   if(!force&&Date.now()-identityVerifiedAt<2000)return true;

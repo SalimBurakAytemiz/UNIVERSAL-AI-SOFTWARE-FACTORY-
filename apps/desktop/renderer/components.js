@@ -43,7 +43,11 @@ export function stateNote(ctx,state,messageKeyOverride){
   const k=messageKeyOverride??`state.${state}`;return h(ctx.doc,"p",{class:`note note-${String(state).toLowerCase()}`,role:"status",text:ctx.t(k)});
 }
 export function badge(ctx,text,cls=""){return h(ctx.doc,"span",{class:`badge ${cls}`.trim(),text:String(text)})}
-export function statusPill(ctx,status){return h(ctx.doc,"span",{class:"pill",dataset:{status},text:status})}
+/** Backend durum değerini sözlükten (mstatus.*) çevirir; sözlükte yoksa ham değer gösterilir (veri uydurulmaz). */
+export function statusLabel(ctx,status){
+  const raw=String(status??MISSING),key=`mstatus.${raw}`,v=ctx.t(key);return v===key?raw:v;
+}
+export function statusPill(ctx,status){return h(ctx.doc,"span",{class:"pill",dataset:{status},text:statusLabel(ctx,status)})}
 /** Henüz uygulanmamış alan için dürüst panel: planlı paket + içerecekleri. */
 export function plannedPanel(ctx,route,{partial=false}={}){
   const doc=ctx.doc,id=`planned-${route.id}`;

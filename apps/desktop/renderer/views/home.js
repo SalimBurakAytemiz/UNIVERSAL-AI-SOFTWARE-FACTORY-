@@ -1,5 +1,5 @@
 // //TR: Bu görünüm Ana Sayfa / Founder Cockpit'tir: KPI karoları yalnız GET /v1/cockpit verisinden beslenir (404 => UNAVAILABLE, "—"), kayıtlı roller ile aktif çalışanlar görsel olarak ayrıdır ve hiçbir sayı uydurulmaz.
-import {h,kpiTile,panel,chip,emptyNote,stateNote} from "../components.js";
+import {h,kpiTile,panel,chip,emptyNote,stateNote,statusLabel} from "../components.js";
 import {icon} from "../icons.js";
 import {formatCount,MISSING} from "../model.js";
 import {ROUTES,FACTORY_AREA_ORDER} from "../routes.js";
@@ -21,7 +21,7 @@ function tiles(ctx,c){
   const loadingAll=c.loading===true,m=c.missions??{byStatus:{}},b=x=>loadingAll?{...LOADING}:x;
   return h(ctx.doc,"div",{class:"kpi-row",role:"group","aria-label":ctx.t("home.kpiGroup")},
     kpiTile(ctx,{id:"projects",iconName:"folder",labelKey:"kpi.projects",block:b(c.projects),sampleKey:"projects"}),
-    kpiTile(ctx,{id:"missions",iconName:"tasks",labelKey:"kpi.missions",block:b(m),sampleKey:"missions",extra:Object.keys(m.byStatus??{}).length&&!loadingAll?h(ctx.doc,"p",{class:"kpi-hint",text:Object.entries(m.byStatus).map(([k,v])=>`${k} ${v}`).join(" · ")}):null}),
+    kpiTile(ctx,{id:"missions",iconName:"tasks",labelKey:"kpi.missions",block:b(m),sampleKey:"missions",extra:Object.keys(m.byStatus??{}).length&&!loadingAll?h(ctx.doc,"p",{class:"kpi-hint",text:Object.entries(m.byStatus).map(([k,v])=>`${statusLabel(ctx,k)} ${v}`).join(" · ")}):null}),
     kpiTile(ctx,{id:"approvals",iconName:"clock",labelKey:"kpi.approvals",block:b(c.approvals),sampleKey:"approvals"}),
     kpiTile(ctx,{id:"alerts",iconName:"alert",labelKey:"kpi.alerts",block:b(c.alerts),sampleKey:"alerts",hintKey:"kpi.alertsHint"}),
     workforceTile(ctx,loadingAll?{...LOADING,registeredRoles:null,targetRoles:null,activeWorkerRuns:null}:c.workforce));
@@ -46,7 +46,7 @@ function orchestratorPanel(ctx,o){
   const doc=ctx.doc,entries=Object.entries(o.byStatus??{}),max=Math.max(1,...entries.map(([,v])=>v));
   return panel(ctx,{titleKey:"home.orchestrator",id:"home-orch"},
     h(doc,"p",{class:"panel-meta"},chip(ctx,o),h(doc,"span",{text:ctx.t("tile.tooltip",{source:o.source??MISSING,asOf:o.asOf??MISSING})})),
-    entries.length?h(doc,"ul",{class:"bars"},entries.map(([k,v])=>h(doc,"li",{},h(doc,"span",{class:"bar-label",text:k}),h(doc,"progress",{max:String(max),value:String(v),"aria-label":`${k}: ${v}`}),h(doc,"span",{class:"bar-num",text:String(v)})))):stateNote(ctx,o.state==="VERIFIED"?"EMPTY":o.state,o.state==="VERIFIED"?"empty.general":undefined));
+    entries.length?h(doc,"ul",{class:"bars"},entries.map(([k,v])=>h(doc,"li",{},h(doc,"span",{class:"bar-label",text:statusLabel(ctx,k)}),h(doc,"progress",{max:String(max),value:String(v),"aria-label":`${statusLabel(ctx,k)}: ${v}`}),h(doc,"span",{class:"bar-num",text:String(v)})))):stateNote(ctx,o.state==="VERIFIED"?"EMPTY":o.state,o.state==="VERIFIED"?"empty.general":undefined));
 }
 export function skeleton(ctx){
   const doc=ctx.doc;return h(doc,"div",{class:"view view-home","aria-busy":"true"},homeHeader(ctx),tiles(ctx,{loading:true}));

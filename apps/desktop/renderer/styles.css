@@ -25,7 +25,7 @@ kbd{font-family:inherit;font-size:.75rem;padding:.1rem .4rem;border:1px solid va
 /* Düzen */
 .app{display:grid;min-height:100vh;grid-template-columns:var(--nav-w) minmax(0,1fr) var(--feed-w);grid-template-rows:auto auto 1fr auto;
   grid-template-areas:"top top top" "ban ban ban" "nav main feed" "strip strip strip"}
-.topbar{grid-area:top;position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;align-items:center;gap:.6rem .9rem;padding:.6rem 1rem;background:rgba(6,11,26,.94);border-bottom:1px solid var(--border);box-shadow:0 0 24px var(--glow-soft)}
+.topbar{grid-area:top;position:sticky;top:0;z-index:30;display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"brand search actions" "ctx ctx ctx";align-items:center;gap:.6rem .9rem;padding:.6rem 1rem;background:rgba(6,11,26,.94);border-bottom:1px solid var(--border);box-shadow:0 0 24px var(--glow-soft)}
 .stop-banner{grid-area:ban;display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;justify-content:center;padding:.6rem 1rem;background:var(--danger-bg);color:var(--on-danger);border-bottom:2px solid var(--on-danger)}
 .nav{grid-area:nav;padding:1rem .75rem;border-right:1px solid var(--border);background:rgba(10,18,38,.7);min-width:0}
 .main{grid-area:main;padding:1.25rem 1.5rem;min-width:0;outline:none}
@@ -33,22 +33,23 @@ kbd{font-family:inherit;font-size:.75rem;padding:.1rem .4rem;border:1px solid va
 .strip{grid-area:strip;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1rem;padding:.6rem 1rem;border-top:1px solid var(--border);background:rgba(6,11,26,.96)}
 
 /* Üst çubuk */
-.brand{display:flex;align-items:center;gap:.6rem;flex:none}
+.brand{grid-area:brand;display:flex;align-items:center;gap:.6rem;min-width:0}
 .brand-mark{display:grid;place-items:center;width:2.4rem;height:2.4rem;border-radius:.6rem;font-weight:800;background:linear-gradient(135deg,var(--accent-2),var(--accent));color:#031018}
 .brand-text{display:grid;line-height:1.1}.brand-text small{color:var(--muted);font-size:.65rem;letter-spacing:.04em}
-.search{position:relative;flex:1 1 14rem;min-width:8rem;max-width:34rem}
+.search{grid-area:search;position:relative;min-width:0}
 .search input{width:100%;padding:.55rem 3.6rem .55rem .8rem;border-radius:.6rem;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit}
 .search-hint{position:absolute;right:.5rem;top:50%;transform:translateY(-50%)}
-.search-results{position:absolute;left:0;right:0;top:calc(100% + .3rem);margin:0;padding:.3rem;list-style:none;background:var(--surface-2);border:1px solid var(--glow);border-radius:.6rem;box-shadow:0 0 24px var(--glow-soft);z-index:40}
+.search-results{position:absolute;left:0;right:0;top:calc(100% + .3rem);margin:0;padding:.3rem;list-style:none;background:var(--surface-2);border:1px solid var(--glow);border-radius:.6rem;box-shadow:0 0 24px var(--glow-soft);z-index:40;max-height:min(50vh,22rem);overflow-y:auto}
 .search-opt,.search-empty{display:flex;gap:.6rem;padding:.45rem .6rem;border-radius:.4rem;cursor:pointer}
 .search-opt[aria-selected="true"]{background:var(--surface);outline:2px solid var(--focus)}
 .search-kind{color:var(--muted);font-size:.75rem;min-width:4.5rem}.search-empty{color:var(--muted);cursor:default}
-.ctx{display:flex;align-items:flex-end;gap:.4rem 1rem;flex:1 1 auto;min-width:0;overflow-x:auto;padding-bottom:.15rem}
+.ctx{grid-area:ctx;display:flex;align-items:flex-end;gap:.4rem 1rem;flex:1 1 auto;min-width:0;overflow-x:auto;padding-bottom:.15rem}
 .ctx-item{display:grid;gap:.1rem;flex:none;font-size:.85rem}
 .ctx-label{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .ctx select{padding:.3rem .5rem;border-radius:.5rem;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;max-width:13rem}
 .ctx-api{display:flex;align-items:center;gap:.4rem}
-.actions{display:flex;align-items:center;gap:.5rem;margin-inline-start:auto;flex:none}
+.actions{grid-area:actions;justify-self:end;position:relative;z-index:50;display:flex;align-items:center;gap:.5rem;min-width:0}
+.stop-error{position:absolute;right:0;top:calc(100% + .35rem);z-index:51;width:max-content;max-width:min(22rem,90vw);margin:0;padding:.45rem .7rem;border:2px solid var(--on-danger);border-radius:.6rem;background:var(--danger-bg);color:var(--on-danger);font-weight:700;font-size:.85rem}
 .nav-count{display:inline-grid;place-items:center;min-width:1.35rem;height:1.35rem;padding:0 .35rem;border-radius:99px;background:var(--accent-2);color:#031018;font-size:.72rem;font-weight:800}
 
 /* Düğmeler */
@@ -158,6 +159,9 @@ kbd{font-family:inherit;font-size:.75rem;padding:.1rem .4rem;border:1px solid va
 @keyframes stop-glow{0%,100%{box-shadow:0 0 10px rgba(255,60,80,.35)}50%{box-shadow:0 0 22px rgba(255,60,80,.7)}}
 
 /* Duyarlı düzen: dar genişlik ve yüksek zoom */
+@media (min-width:2200px){
+  .topbar{grid-template-columns:auto minmax(8rem,34rem) minmax(0,1fr) auto;grid-template-areas:"brand search ctx actions"}
+}
 @media (max-width:1700px){
   .app{grid-template-columns:var(--nav-w) minmax(0,1fr);grid-template-areas:"top top" "ban ban" "nav main" "nav feed" "strip strip"}
   .feed{border-left:0;border-top:1px solid var(--border)}
@@ -171,10 +175,16 @@ kbd{font-family:inherit;font-size:.75rem;padding:.1rem .4rem;border:1px solid va
 }
 @media (max-width:760px){
   .brand-text{display:none}
+  .actions{flex-wrap:wrap;justify-content:flex-end}
   .main{padding:1rem .75rem}
   .app{grid-template-columns:3.6rem minmax(0,1fr);--nav-w:3.6rem}
-  .actions{flex-wrap:wrap}
   .bars li{grid-template-columns:5rem minmax(0,1fr) 2rem}
+}
+
+/* 200% zoom (örn. 640 CSS px) ve altı: arama kendi satırına iner; ACİL DURDUR satırı her zaman arama satırının üstünde kalır, açılır liste onu asla örtmez. */
+@media (max-width:640px){
+  .topbar{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"brand actions" "search search" "ctx ctx"}
+  .search-results{max-height:min(40vh,16rem)}
 }
 
 @media (prefers-reduced-motion:reduce){

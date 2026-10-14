@@ -47,5 +47,80 @@
     "Sparklines draw only from real in-session samples (at least two); otherwise an honest 'no history' placeholder is shown.",
     "Areas Assurance, Delivery, Company OS, Workforce details and Inbox actions show planned-package panels (B2/B3/B5/B6/B7), not data."
   ],
+  "remediationCycle2": {
+    "startedAt": "2026-10-14T20:50:10Z",
+    "baseHead": "5d81ef0f7db4901a46cff0e49c6d8d467a55acda",
+    "status": "REMEDIATED (cycle 2), NOT CLEAN; independent review pending",
+    "addressed": {
+      "F-B4-001 (HIGH, focus loss on refresh)": "Nav links and feed tabs are built once and updated in place (renderer/nav.js syncNav/syncTabs: aria-current, label, count, aria-selected, tabindex); the feed panel body and the main view are rebuilt through renderer/focus.js (captureFocus/restoreFocus/keepFocus by stable id/data-focus-key/data-kpi/data-retry/data-mission-id). The main re-render is skipped only while focus is on an interactive control (button, link, field, summary, log pre) or the stop dialog is open; otherwise KPI tiles refresh and focus is restored (F-B4-004). The project select is rebuilt only when its options change.",
+      "F-B4-002 (MEDIUM, search dropdown over STOP)": "Top bar is now a CSS grid whose actions cell (STOP) is always in a row at or above the search cell; .actions has position:relative and z-index 50 above .search-results (40); the dropdown is bounded (max-height, overflow-y auto) and confined to the search column; at max-width 640px the search takes its own row below the actions row.",
+      "F-B4-003 (advisory)": "desktopExtraGetPathAllowed moved into protected apps/desktop/main.mjs between B4-ALLOWLIST-BEGIN/END markers; apps/desktop/get-allowlist.mjs deleted; tests evaluate the delimited block from main.mjs.",
+      "F-B4-005 (advisory)": "index.html adds p#stopError role=alert next to ACIL DURDUR (inside .actions); app.js stop()/resume() clear it first and call shell.showStopError(stop.failed) on failure, which also announces in the live region; renderStop clears it when the stop state changes.",
+      "F-B4-007 (advisory)": "New dictionary keys (tr/en): lang.buttonLabel, shortcut.searchKey, attention.phase, tower.bytes, mstatus.* (13 mission statuses plus RUNNING/COMPLETED); components.statusLabel translates backend status with raw fallback and is used by statusPill, tower run list, home byStatus hint/bars, attention kind and search keywords; index.html Ctrl K and TR / EN now use data-i18n."
+    },
+    "filesChanged": [
+      "apps/desktop/main.mjs (protected, authorized)",
+      "apps/desktop/renderer/index.html (protected, authorized)",
+      "apps/desktop/renderer/app.js (protected, authorized)",
+      "apps/desktop/get-allowlist.mjs (deleted)",
+      "apps/desktop/renderer/{focus,nav}.js (new)",
+      "apps/desktop/renderer/{components,shell,styles}.js|css, views/{home,tower}.js, locales/{tr,en}.js",
+      "tests/v7-b4-desktop-shell.test.ts (assertions updated for moved code: allow-list from main.mjs, aria-current in nav.js, Ctrl K via dictionary; 11 tests added)",
+      "config/trust-root-manifest.json (reseal via scripts/generate-trust-root.mjs)",
+      "audit/checkpoints/V7-PKG-B4-2026-10-14.json"
+    ],
+    "commands": [
+      {
+        "command": "npx tsc --noEmit",
+        "exitCode": 0
+      },
+      {
+        "command": "node node_modules/vitest/vitest.mjs run tests/v7-b4-desktop-shell.test.ts tests/pkg-c-lf-electron-smoke.test.ts tests/pkg-e-electron-provision.test.ts",
+        "exitCode": 0,
+        "result": "3 files passed, 77 tests passed (38 + 9 + 30)"
+      },
+      {
+        "command": "node scripts/v6-apps-control-desktop-selftest.mjs",
+        "exitCode": 0,
+        "result": "PASS 93/93"
+      },
+      {
+        "command": "node scripts/validate-tr-comments.mjs",
+        "exitCode": 0,
+        "result": "TR_VALIDATION: PASS"
+      },
+      {
+        "command": "node scripts/secret-sanity.mjs",
+        "exitCode": 0,
+        "result": "SECRET_SANITY: PASS"
+      },
+      {
+        "command": "node scripts/validate-mechanical-closure.mjs",
+        "exitCode": 0,
+        "result": "PASS files=90"
+      },
+      {
+        "command": "git add -A && git ls-files --eol | grep w/crlf",
+        "exitCode": 1,
+        "result": "empty (no CRLF)"
+      },
+      {
+        "command": "node scripts/generate-trust-root.mjs",
+        "exitCode": 0,
+        "result": "TRUST_ROOT_MANIFEST_GENERATED files=364"
+      },
+      {
+        "command": "node scripts/verify-trust-root.mjs",
+        "exitCode": 0,
+        "result": "TRUST_ROOT_VERIFY: PASS"
+      }
+    ],
+    "manualBrowserObservation": "The renderer was served over a local static server (scratchpad, outside the repo) with a mock window.uasco bridge and a 600 ms refresh interval and driven in the Browser pane (Chromium). Observed: a focused nav link, feed tab and KPI tile kept focus across about 7 refreshes (KPI tile rebuilt, focus restored by key); at 640x360 and 320 wide with 8 search results open, elementFromPoint at the center of ACIL DURDUR returned the stop button, the dropdown rect did not intersect the actions rect, and STOP stayed inside the viewport; a failed stop showed role=alert text under ACIL DURDUR plus the live-region text, cleared after a successful retry; language switch kept the focused nav link node. This is an ad-hoc observation, not a repeatable test, and no Electron window was run (Electron is not provisioned).",
+    "notRun": [
+      "scripts/run-validation.mjs and the whole suite (reviewer runs them independently).",
+      "scripts/smoke-desktop.mjs (Electron not provisioned)."
+    ],
+    "reviewStatus": "not clean; review pending"
+  },
   "reviewStatus": "not clean; review pending"
 }

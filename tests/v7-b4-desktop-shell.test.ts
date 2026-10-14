@@ -233,9 +233,20 @@ describe("B4 store (project switch invalidates)", () => {
   });
 });
 
+// F-B4-003: the token-bearing allow-list lives in the protected main.mjs (electron cannot be imported in vitest, so the delimited block is evaluated in isolation).
+const loadAllowlist = (): {desktopExtraGetPathAllowed: (v: unknown) => boolean} => {
+  const m = /\/\/ B4-ALLOWLIST-BEGIN\n([\s\S]*?)\/\/ B4-ALLOWLIST-END/.exec(read(desk, "main.mjs"));
+  expect(m).not.toBeNull();
+  return {desktopExtraGetPathAllowed: new Function(`${m![1]}\nreturn desktopExtraGetPathAllowed;`)() as (v: unknown) => boolean};
+};
+
 describe("B4 GET bridge allow-list", () => {
+  it("keeps the allow-list inside protected main.mjs; no unprotected get-allowlist module remains", () => {
+    expect(fs.existsSync(path.join(desk, "get-allowlist.mjs"))).toBe(false);
+    for (const f of [...walk(desk), ...walk(path.join(root, "tests"))].filter(x => /\.(mjs|js|ts|html)$/.test(x) && !x.endsWith("v7-b4-desktop-shell.test.ts"))) expect(fs.readFileSync(f, "utf8"), f).not.toContain("get-allowlist");
+  });
   it("allows only the fixed B4 routes with strict id patterns and rejects everything else", async () => {
-    const a = await load(desk, "get-allowlist.mjs");
+    const a = loadAllowlist();
     const pid = "prj_" + crypto.randomBytes(12).toString("hex");
     const mid = "msn_" + crypto.randomBytes(12).toString("hex");
     for (const ok of ["/v1/cockpit", "/v1/projects", "/v1/missions", `/v1/missions?projectId=${pid}`, `/v1/missions/${mid}`]) expect(a.desktopExtraGetPathAllowed(ok), ok).toBe(true);
@@ -247,7 +258,7 @@ describe("B4 GET bridge allow-list", () => {
   it("main wires the allow-list on the IPC GET handler, keeps the sender check, and never exposes the token to the renderer", () => {
     const main = read(desk, "main.mjs");
     const preload = read(desk, "preload.mjs");
-    expect(main).toContain('from "./get-allowlist.mjs"');
+    expect(main).not.toContain("get-allowlist");
     expect(main).toMatch(/uasco:api-get",async\(event,p\)=>\{requireTrustedSender\(event\);if\(!desktopGetPathAllowed\(p\)&&!desktopExtraGetPathAllowed\(p\)\)throw/);
     expect(main).toContain("x-uasco-control-token");
     expect(main).toContain("UNTRUSTED_IPC_SENDER");
@@ -262,7 +273,7 @@ describe("B4 GET bridge allow-list", () => {
     }
   });
   it("renderer api only issues GET paths the main process allows", async () => {
-    const a = await load(desk, "get-allowlist.mjs");
+    const a = loadAllowlist();
     const boundary = await load(root, "automation", "lib", "control-boundary.mjs");
     const api = await load(rend, "api.js");
     const st = await load(rend, "state.js");
@@ -309,7 +320,7 @@ describe("B4 index.html (static)", () => {
     expect(html).toMatch(/id="status"[^>]*role="status"[^>]*aria-live="polite"|id="status"[^>]*aria-live="polite"[^>]*role="status"|role="status"[^>]*aria-live="polite"[^>]*id="status"/);
     expect(html).toMatch(/<dialog id="stopDialog"[^>]*aria-labelledby="stopDialogTitle"[^>]*aria-describedby="stopDialogDesc"/);
     expect(html).toMatch(/id="stopBanner" role="alert"/);
-    expect(html).toContain("Ctrl K");
+    expect(html).toContain('data-i18n="shortcut.searchKey"');
   });
   it("has the context bar controls and the always-present ACİL DURDUR control inside the top bar", () => {
     for (const id of ["ctxTenant", "projectSelect", "ctxEnv", "ctxPrincipal", "ctxApi", "ctxRefresh", "stopBtn", "resumeBtn", "stopConfirm", "stopCancel", "searchInput"]) expect(html, id).toContain(`id="${id}"`);
@@ -350,7 +361,7 @@ describe("B4 renderer safety and a11y (static)", () => {
     expect(shell).toContain("ctx.stop()");
     expect(shell).toMatch(/key\.toLowerCase\(\)==="k"/);
     expect(shell).toMatch(/e\.key==="Escape"/);
-    expect(shell).toContain("aria-current");
+    expect(read(rend, "nav.js")).toContain("aria-current");
   });
   it("styles define focus-visible, reduced-motion, forced-colors, and responsive breakpoints", () => {
     const css = read(rend, "styles.css");
@@ -378,5 +389,185 @@ describe("B4 renderer safety and a11y (static)", () => {
       if (f.includes("locales")) continue;
       expect(s, f).not.toMatch(/\b(599|1[0-9]{3})\b\s*(agents|ajan)/i);
     }
+  });
+});
+
+// ---- Remediation cycle 2 (F-B4-001/002/003/005/007) ----
+class FEl {
+  tagName: string; children: FEl[] = []; parent: FEl | null = null; attrs = new Map<string, string>(); dataset: Record<string, string> = {}; className = ""; hidden = false; id = ""; _text = ""; ls = new Map<string, Array<(e: any) => void>>();
+  constructor(public doc: FDoc, tag: string) { this.tagName = tag.toUpperCase(); }
+  get textContent(): string { return this._text + this.children.map(c => c.textContent).join(""); }
+  set textContent(v: string) { this.children.forEach(c => { c.parent = null; }); this.children = []; this._text = String(v); }
+  append(...n: Array<FEl | string>) { for (const c of n) { if (typeof c === "string") { this._text += c; continue; } if (c.parent) c.parent.children = c.parent.children.filter(x => x !== c); c.parent = this; this.children.push(c); } }
+  replaceChildren(...n: Array<FEl | string>) { this.children.forEach(c => { c.parent = null; }); this.children = []; this._text = ""; this.append(...n); }
+  setAttribute(k: string, v: string) { this.attrs.set(k, String(v)); if (k === "id") this.id = String(v); }
+  getAttribute(k: string) { return this.attrs.get(k) ?? null; }
+  removeAttribute(k: string) { this.attrs.delete(k); }
+  contains(n: FEl | null) { for (let x = n; x; x = x.parent) if (x === this) return true; return false; }
+  querySelectorAll(_s: string) { const out: FEl[] = []; const w = (e: FEl) => { for (const c of e.children) { out.push(c); w(c); } }; w(this); return out; }
+  addEventListener(ev: string, fn: (e: any) => void) { this.ls.set(ev, [...(this.ls.get(ev) ?? []), fn]); }
+  fire(ev: string, e: any = {}) { for (const fn of this.ls.get(ev) ?? []) fn(e); }
+  focus() { this.doc.focused = this; }
+}
+class FDoc {
+  body: FEl; focused: FEl | null = null;
+  constructor() { this.body = new FEl(this, "body"); }
+  createElement(t: string) { return new FEl(this, t); }
+  get activeElement(): FEl { return this.focused && this.body.contains(this.focused) ? this.focused : this.body; } // removed nodes lose focus to <body>, like a browser
+}
+const ROUTES_FOR_TEST = [{id: "home", hash: "#/home"}, {id: "tower", hash: "#/tower"}, {id: "company", hash: "#/company"}];
+
+describe("B4 remediation: F-B4-001 focus survives refresh", () => {
+  it("syncNav updates links in place: the focused nav link keeps identity and focus across refreshes and language changes", async () => {
+    const {syncNav} = await load(rend, "nav.js");
+    const doc = new FDoc(), list = doc.createElement("ul"); doc.body.append(list);
+    const opts = (cur: string, counts: any, lang: string) => ({currentId: cur, counts, labelOf: (r: any) => `${lang}:${r.id}`, countLabel: (n: number) => `n=${n}`, makeIcon: () => doc.createElement("svg")});
+    syncNav(doc, list, ROUTES_FOR_TEST, opts("home", {}, "tr"));
+    const tower = list.children[1].children[0];
+    expect(tower.dataset.route).toBe("tower");
+    tower.focus();
+    for (let i = 0; i < 5; i++) syncNav(doc, list, ROUTES_FOR_TEST, opts(i % 2 === 0 ? "tower" : "home", {tower: i}, i > 2 ? "en" : "tr"));
+    expect(list.children[1].children[0]).toBe(tower);
+    expect(doc.activeElement).toBe(tower);
+    expect(doc.activeElement).not.toBe(doc.body);
+    expect(tower.getAttribute("aria-current")).toBe("page");
+    expect(tower.children[1].textContent).toBe("en:tower");
+    expect(tower.children[2].textContent).toBe("4");
+    expect(tower.children[2].hidden).toBe(false);
+    syncNav(doc, list, ROUTES_FOR_TEST, opts("home", {tower: 0}, "en"));
+    expect(tower.getAttribute("aria-current")).toBeNull();
+    expect(tower.children[2].hidden).toBe(true);
+    expect(list.children[2].className).toBe("nav-sep");
+  });
+  it("syncTabs updates feed tabs in place: the focused tab keeps identity and focus; selection and arrow keys work", async () => {
+    const {syncTabs} = await load(rend, "nav.js");
+    const doc = new FDoc(), tabs = doc.createElement("div"); doc.body.append(tabs);
+    const keys = ["flow", "health", "agenda"]; let selected = "flow"; const picked: string[] = [];
+    const run = () => syncTabs(doc, tabs, keys, {selected, ariaLabel: "feed", labelOf: (k: string) => `tab-${k}`, onSelect: (k: string, o: any) => { picked.push(`${k}:${o.viaKey}`); selected = k; }});
+    run();
+    const health = tabs.children[1];
+    health.focus();
+    for (let i = 0; i < 4; i++) run();
+    expect(tabs.children[1]).toBe(health);
+    expect(doc.activeElement).toBe(health);
+    expect(health.getAttribute("aria-selected")).toBe("false");
+    expect(health.getAttribute("tabindex")).toBe("-1");
+    health.fire("click");
+    run();
+    expect(selected).toBe("health");
+    expect(health.getAttribute("aria-selected")).toBe("true");
+    expect(health.getAttribute("tabindex")).toBe("0");
+    expect(doc.activeElement).toBe(health);
+    health.fire("keydown", {key: "ArrowLeft", preventDefault() {}});
+    expect(picked).toEqual(["health:false", "flow:true"]);
+  });
+  it("keepFocus restores focus to the same logical control after a subtree is rebuilt, and only then", async () => {
+    const f = await load(rend, "focus.js");
+    const doc = new FDoc(), panel = doc.createElement("div"); doc.body.append(panel);
+    const mk = (attr: "id" | "kpi" | "focusKey", v: string) => { const n = doc.createElement("article"); if (attr === "id") n.setAttribute("id", v); else n.dataset[attr] = v; return n; };
+    for (const [attr, v] of [["id", "logText"], ["kpi", "missions"], ["focusKey", "feed-see-inbox"]] as const) {
+      panel.replaceChildren(mk("id", "other"), mk(attr, v)); panel.children[1].focus();
+      const old = panel.children[1];
+      f.keepFocus(doc, panel, () => panel.replaceChildren(mk("id", "other"), mk(attr, v)));
+      expect(panel.children[1]).not.toBe(old);
+      expect(doc.activeElement, attr).toBe(panel.children[1]);
+    }
+    panel.replaceChildren(mk("id", "a")); doc.body.focus();
+    f.keepFocus(doc, panel, () => panel.replaceChildren(mk("id", "a")));
+    expect(doc.activeElement).toBe(doc.body);
+    expect(f.focusKey(doc.createElement("div"))).toBeNull();
+    expect(f.isInteractive(doc.createElement("button"))).toBe(true);
+    expect(f.isInteractive(doc.createElement("article"))).toBe(false);
+  });
+  it("shell and app use the in-place/focus-preserving paths; main re-render no longer freezes KPI tiles while focus sits in main", () => {
+    const shell = read(rend, "shell.js"), app = read(rend, "app.js");
+    expect(shell).toContain("syncNav(");
+    expect(shell).toContain("syncTabs(");
+    expect(shell).toContain("keepFocus(");
+    expect(shell).not.toMatch(/el\("navList"\)\.replaceChildren/);
+    expect(app).not.toMatch(/main\.contains\(doc\.activeElement\)&&doc\.activeElement!==main\)\{renderToken/);
+    expect(app).toContain("isInteractive(doc.activeElement)");
+    expect(app).toContain("captureFocus(doc,main)");
+    expect(app).toContain("restoreFocus(doc,main,saved)");
+  });
+});
+
+describe("B4 remediation: F-B4-002 STOP never covered by the search dropdown (static CSS)", () => {
+  const css = read(rend, "styles.css");
+  it("actions (with ACIL DURDUR) stack above the dropdown and the dropdown is confined to the search column with a bounded height", () => {
+    const z = (sel: string) => Number(new RegExp(`${sel.replace(".", "\\.")}\\{[^}]*z-index:(\\d+)`).exec(css)?.[1]);
+    expect(z(".actions")).toBeGreaterThan(z(".search-results"));
+    expect(z(".search-results")).toBeGreaterThan(0);
+    const sr = /\.search-results\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(sr).toMatch(/position:absolute/);
+    expect(sr).toMatch(/left:0;right:0/);
+    expect(sr).toMatch(/max-height:/);
+    expect(sr).toMatch(/overflow-y:auto/);
+    expect(/\.actions\{([^}]*)\}/.exec(css)?.[1] ?? "").toMatch(/position:relative/);
+    expect(/\.topbar\{([^}]*)\}/.exec(css)?.[1] ?? "").not.toMatch(/overflow\s*:\s*hidden/);
+  });
+  it("in every topbar grid layout the actions row is never below the search row, so the dropdown (which extends downward) cannot overlap it", () => {
+    const layouts = [...css.matchAll(/\.topbar\{[^}]*?grid-template-areas:((?:\s*"[^"]*")+)/g)].map(m => [...m[1].matchAll(/"([^"]*)"/g)].map(r => r[1].trim().split(/\s+/)));
+    expect(layouts.length).toBeGreaterThanOrEqual(3);
+    for (const rows of layouts) {
+      const rowOf = (name: string) => rows.findIndex(r => r.includes(name));
+      expect(rowOf("actions"), JSON.stringify(rows)).toBeGreaterThanOrEqual(0);
+      expect(rowOf("search"), JSON.stringify(rows)).toBeGreaterThanOrEqual(0);
+      expect(rowOf("actions")).toBeLessThanOrEqual(rowOf("search"));
+      if (rowOf("actions") === rowOf("search")) expect(rows[rowOf("actions")].indexOf("actions")).toBeGreaterThan(rows[rowOf("search")].indexOf("search"));
+    }
+    expect(css).toMatch(/\.actions\{[^}]*grid-area:actions/);
+    expect(css).toMatch(/\.search\{[^}]*grid-area:search/);
+  });
+  it("STOP stays unhideable and wraps instead of clipping at narrow widths", () => {
+    expect(css).not.toMatch(/\.btn-stop[^{]*\{[^}]*(display\s*:\s*none|visibility\s*:\s*hidden)/);
+    expect(css).not.toMatch(/\.actions[^{]*\{[^}]*(display\s*:\s*none|visibility\s*:\s*hidden)/);
+    expect(css).toMatch(/max-width:640px\)\{[^@]*\.topbar\{[^}]*"brand actions" "search search"/);
+    expect(css).toMatch(/max-width:760px\)\{[^@]*\.actions\{flex-wrap:wrap/);
+  });
+});
+
+describe("B4 remediation: F-B4-005 visible stop/resume failure alert", () => {
+  it("has a role=alert element inside the top-bar actions next to ACIL DURDUR, shown on failure, cleared on retry/success, and still announced", () => {
+    const html = read(rend, "index.html"), shell = read(rend, "shell.js"), app = read(rend, "app.js");
+    const actions = /<div class="actions">[\s\S]*?<\/div>\s*<\/header>/.exec(html)?.[0] ?? "";
+    expect(actions).toMatch(/id="stopBtn"[\s\S]*id="stopError" role="alert" hidden/);
+    expect(app).toMatch(/async stop\(\)\{shell\.clearStopError\(\);try\{await window\.uasco\.stop\([^)]*\)\}catch\{shell\.showStopError\(ctx\.t\("stop\.failed"\)\)\}/);
+    expect(app).toMatch(/async resume\(\)\{shell\.clearStopError\(\);try\{await window\.uasco\.resume\(\)\}catch\{shell\.showStopError\(ctx\.t\("stop\.failed"\)\)\}/);
+    expect(shell).toMatch(/function showStopError\(msg\)\{[\s\S]*?n\.hidden=false[\s\S]*?announce\(msg\)\}/);
+    expect(read(rend, "styles.css")).toMatch(/\.stop-error\{[^}]*position:absolute/);
+  });
+});
+
+describe("B4 remediation: F-B4-007 no hard-coded UI strings; backend statuses go through a dictionary with raw fallback", () => {
+  it("statusLabel translates known mission statuses in tr/en and falls back to the raw backend value", async () => {
+    const {statusLabel} = await load(rend, "components.js");
+    const i18n = await load(rend, "i18n.js");
+    const ctx = (lang: string) => ({t: (k: string, v?: any) => i18n.translate(lang, k, v)});
+    expect(statusLabel(ctx("tr"), "BLOCKED")).toBe("Engelli");
+    expect(statusLabel(ctx("en"), "BLOCKED")).toBe("Blocked");
+    expect(statusLabel(ctx("en"), "FOUNDER_ATTENTION_REQUIRED")).toBe("Founder attention required");
+    expect(statusLabel(ctx("tr"), "SOME_NEW_BACKEND_STATUS")).toBe("SOME_NEW_BACKEND_STATUS");
+    expect(statusLabel(ctx("en"), undefined)).toBe("—");
+    const tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+    for (const s of ["DRAFT", "PREFLIGHT", "AUTHORIZED", "PLANNED", "EXECUTING", "VERIFYING", "REVIEWING", "REMEDIATING", "REGRESSION", "REPORTING", "COMPLETE", "BLOCKED", "FOUNDER_ATTENTION_REQUIRED", "RUNNING", "COMPLETED"]) expect(tr[`mstatus.${s}`], s).toBeTruthy();
+  });
+  it("the formerly hard-coded strings now come from dictionaries", async () => {
+    const tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+    const en = (await load(rend, "locales", "en.js")).default as Record<string, string>;
+    const html = read(rend, "index.html"), app = read(rend, "app.js"), tower = read(rend, "views", "tower.js");
+    expect(html).not.toMatch(/>\s*Ctrl K\s*</);
+    expect(html).not.toMatch(/>\s*TR \/ EN\s*</);
+    expect(html).toContain('data-i18n="lang.buttonLabel"');
+    expect(tr["shortcut.searchKey"]).toBe("Ctrl K");
+    expect(tr["lang.buttonLabel"]).toBe("TR / EN");
+    expect(app).not.toMatch(/phase \$\{/);
+    expect(app).toContain('ctx.t("attention.phase"');
+    expect(tr["attention.phase"]).toContain("{n}");
+    expect(en["attention.phase"]).toContain("{n}");
+    expect(tower).not.toMatch(/\$\{x\.size\} B/);
+    expect(tower).toContain('ctx.t("tower.bytes"');
+    expect(tower).not.toMatch(/\?\?"RUNNING"\}`/);
+    expect(read(rend, "components.js")).toMatch(/text:statusLabel\(ctx,status\)/);
   });
 });

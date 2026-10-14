@@ -1,8 +1,10 @@
-// //TR: Bu modül kalıcı shell'i yönetir: sol navigasyon (8 Factory alanı + Company OS + Ayarlar), bağlam çubuğu (şirket/proje/ortam/principal/API durumu/son yenileme), Ctrl+K arama, bildirim, ACİL DURDUR onay penceresi, sağ görev akışı ve alt canlı aktivite şeridi; tüm veri api.js üzerinden gelir.
-import {h,chip,badge,statusPill} from "./components.js";
+// //TR: Bu modül kalıcı shell'i yönetir: sol navigasyon (8 Factory alanı + Company OS + Ayarlar), bağlam çubuğu (şirket/proje/ortam/principal/API durumu/son yenileme), Ctrl+K arama, bildirim, ACİL DURDUR onay penceresi, sağ görev akışı ve alt canlı aktivite şeridi; tüm veri api.js üzerinden gelir; periyodik yenileme nav/sekme düğümlerini yerinde günceller ve yeniden kurulan alt ağaçlarda odağı korur.
+import {h,chip,badge,statusPill,statusLabel} from "./components.js";
 import {icon} from "./icons.js";
 import {ROUTES,routeById} from "./routes.js";
 import {formatCount,formatTime,MISSING,pushSample,searchEntries} from "./model.js";
+import {syncNav,syncTabs} from "./nav.js";
+import {keepFocus} from "./focus.js";
 
 export const PRINCIPAL="FOUNDER_LOCAL";
 const FEED_TABS=Object.freeze(["flow","health","agenda"]);
@@ -13,24 +15,21 @@ export function createShell(ctx){
   let feedTab="flow",searchHits=[],searchIndex=-1,lastStopActive=null,lastApiState=null;
 
   const announce=msg=>{const n=el("status");if(n)n.textContent=msg};
+  /** Durdurma/Devam başarısızlığı ACİL DURDUR'un yanında görünür role="alert" olarak gösterilir (ayrıca canlı bölgede duyurulur). */
+  function showStopError(msg){const n=el("stopError");if(n){n.textContent=msg;n.hidden=false}announce(msg)}
+  function clearStopError(){const n=el("stopError");if(n){n.textContent="";n.hidden=true}}
   const selectedProject=()=>data.projects.items.find(p=>p.projectId===store.projectId)??null;
 
   function renderNav(){
     const counts={projects:data.cockpit?.projects.value??(data.projects.state==="VERIFIED"?data.projects.items.length:null),work:data.cockpit?.missions.value??null,inbox:data.cockpit?.approvals.value??null};
-    const current=routeById(ctx.currentRouteId());
-    const items=ROUTES.map(r=>{
-      const n=counts[r.id],a=h(doc,"a",{href:r.hash,class:"nav-link",dataset:{route:r.id},"aria-current":r.id===current?.id?"page":undefined,title:t(`area.${r.id}.title`)},
-        h(doc,"span",{class:"nav-icon"},icon(doc,r.icon,20)),h(doc,"span",{class:"nav-label",text:t(`area.${r.id}.title`)}),
-        Number.isSafeInteger(n)&&n>0?h(doc,"span",{class:"nav-count",text:String(n),"aria-label":t("nav.count",{n})}):null);
-      return h(doc,"li",{class:r.id==="company"?"nav-sep":""},a);
-    });
-    el("navList").replaceChildren(...items);
+    syncNav(doc,el("navList"),ROUTES,{currentId:routeById(ctx.currentRouteId())?.id,counts,labelOf:r=>t(`area.${r.id}.title`),countLabel:n=>t("nav.count",{n}),makeIcon:r=>icon(doc,r.icon,20)});
   }
   function renderContext(){
     const p=selectedProject(),first=data.projects.items[0],sel=el("projectSelect");
     el("ctxTenant").textContent=(p??first)?.tenantId??MISSING;el("ctxEnv").textContent=p?.environmentId??MISSING;el("ctxPrincipal").textContent=PRINCIPAL;
-    const opts=[h(doc,"option",{value:"",text:t("ctx.allProjects")}),...data.projects.items.map(x=>h(doc,"option",{value:x.projectId,text:x.name}))];
-    sel.replaceChildren(...opts);sel.value=data.projects.items.some(x=>x.projectId===store.projectId)?store.projectId:"";sel.disabled=data.projects.state!=="VERIFIED";
+    const optKey=JSON.stringify([t("ctx.allProjects"),...data.projects.items.map(x=>[x.projectId,x.name])]);
+    if(sel.dataset.optKey!==optKey){const opts=[h(doc,"option",{value:"",text:t("ctx.allProjects")}),...data.projects.items.map(x=>h(doc,"option",{value:x.projectId,text:x.name}))];sel.replaceChildren(...opts);sel.dataset.optKey=optKey}
+    sel.value=data.projects.items.some(x=>x.projectId===store.projectId)?store.projectId:"";sel.disabled=data.projects.state!=="VERIFIED";
     sel.title=data.projects.state==="VERIFIED"?"":t(`state.${data.projects.state}`);
     const apiKind=data.health.state==="VERIFIED"?"VERIFIED":data.health.state==="LOADING"?"LOADING":data.health.state==="OFFLINE"?"OFFLINE":"ERROR";
     el("ctxApi").replaceChildren(chip(ctx,null,{kind:apiKind}),h(doc,"span",{class:"ctx-api-text",text:t(`ctx.api.${apiKind}`)}));
@@ -44,7 +43,7 @@ export function createShell(ctx){
     banner.hidden=!active;btn.dataset.stopped=active?"true":"false";btn.setAttribute("aria-label",t(active?"stop.buttonActiveAria":"stop.buttonAria"));
     btn.querySelector(".stop-text").textContent=t(active?"stop.stopped":"stop.button");
     el("stopBannerText").textContent=t("stop.activeLine",{reason:data.control.reason??""});
-    if(lastStopActive!==null&&lastStopActive!==active)announce(t(active?"stop.announceOn":"stop.announceOff"));lastStopActive=active;
+    if(lastStopActive!==null&&lastStopActive!==active){clearStopError();announce(t(active?"stop.announceOn":"stop.announceOff"))}lastStopActive=active;
   }
   function feedBody(){
     const body=h(doc,"div",{class:"feed-body"});
@@ -65,15 +64,17 @@ export function createShell(ctx){
       else if(a.state!=="VERIFIED"&&a.state!=="STALE")body.append(h(doc,"p",{class:"note",text:t(`state.${a.state}`)}));
       else if(!items.length)body.append(h(doc,"p",{class:"note",text:t("inbox.empty")}));
       else body.append(h(doc,"ul",{class:"timeline"},items.slice(0,10).map(x=>h(doc,"li",{},h(doc,"div",{},h(doc,"strong",{text:x.title??x.missionId}),h(doc,"div",{class:"tl-meta"},badge(ctx,x.riskLevel??"—","badge-risk")))))));
-      body.append(h(doc,"a",{class:"link-more",href:"#/inbox",text:t("feed.seeInbox")}));
+      body.append(h(doc,"a",{class:"link-more",href:"#/inbox",dataset:{focusKey:"feed-see-inbox"},text:t("feed.seeInbox")}));
     }
     return body;
   }
+  function selectFeedTab(k,{viaKey=false}={}){feedTab=k;renderFeed();if(viaKey)el(`feedTab-${k}`)?.focus()}
   function renderFeed(){
-    const tabs=h(doc,"div",{role:"tablist","aria-label":t("feed.label"),class:"tabs"},FEED_TABS.map(k=>h(doc,"button",{type:"button",role:"tab",id:`feedTab-${k}`,"aria-selected":feedTab===k?"true":"false","aria-controls":"feedPanel",tabindex:feedTab===k?"0":"-1",dataset:{tab:k},text:t(`feed.tab.${k}`),
-      on:{click:()=>{feedTab=k;renderFeed()},keydown:e=>{const i=FEED_TABS.indexOf(k),d=e.key==="ArrowRight"?1:e.key==="ArrowLeft"?-1:0;if(d){e.preventDefault();feedTab=FEED_TABS[(i+d+FEED_TABS.length)%FEED_TABS.length];renderFeed();el(`feedTab-${feedTab}`).focus()}}}})));
-    const panel=h(doc,"div",{role:"tabpanel",id:"feedPanel","aria-labelledby":`feedTab-${feedTab}`,tabindex:"0"},feedBody());
-    el("feedMount").replaceChildren(tabs,panel);
+    const mount=el("feedMount");let tabs=mount.children[0],panel=mount.children[1];
+    if(!tabs||!panel){tabs=h(doc,"div",{});panel=h(doc,"div",{role:"tabpanel",id:"feedPanel",tabindex:"0"});mount.replaceChildren(tabs,panel)}
+    syncTabs(doc,tabs,FEED_TABS,{selected:feedTab,ariaLabel:t("feed.label"),labelOf:k=>t(`feed.tab.${k}`),onSelect:selectFeedTab});
+    panel.setAttribute("aria-labelledby",`feedTab-${feedTab}`);
+    keepFocus(doc,panel,()=>panel.replaceChildren(feedBody()));
   }
   function renderStrip(){
     const e=data.events,list=el("stripList");
@@ -105,7 +106,7 @@ export function createShell(ctx){
   function searchEntriesNow(){
     return [...ROUTES.map(r=>({kind:"route",id:r.id,label:t(`area.${r.id}.title`),keywords:r.id,hash:r.hash})),
       ...data.projects.items.map(p=>({kind:"project",id:p.projectId,label:p.name,keywords:`${p.projectId} ${t("search.project")}`})),
-      ...data.missions.items.map(m=>({kind:"mission",id:m.missionId,label:m.title,keywords:`${m.missionId} ${m.status} ${t("search.mission")}`}))];
+      ...data.missions.items.map(m=>({kind:"mission",id:m.missionId,label:m.title,keywords:`${m.missionId} ${m.status} ${statusLabel(ctx,m.status)} ${t("search.mission")}`}))];
   }
   function closeSearch(){const box=el("searchResults"),inp=el("searchInput");box.hidden=true;box.replaceChildren();inp.setAttribute("aria-expanded","false");inp.removeAttribute("aria-activedescendant");searchHits=[];searchIndex=-1}
   function pick(hit){
@@ -148,5 +149,5 @@ export function createShell(ctx){
     wireSearch();
     doc.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&!e.altKey&&e.key.toLowerCase()==="k"){e.preventDefault();el("searchInput").focus();el("searchInput").select()}});
   }
-  return {data,wireStatic,renderAll,renderNav,renderContext,renderStop,refresh,announce,openStopDialog,closeStopDialog};
+  return {data,wireStatic,renderAll,renderNav,renderContext,renderStop,refresh,announce,showStopError,clearStopError,openStopDialog,closeStopDialog};
 }

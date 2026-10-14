@@ -1,5 +1,5 @@
 // //TR: Bu görünüm Control Tower alanıdır ve eski Day-0 görünürlüğü korur: health/Phase-0/install/scheduler/registry sayıları, retry beklemesi, Global Stop/Resume kartı, founder blocker listesi, run listesi, event ve redacted log görüntüleme; hepsi preload GET köprüsünden okunur.
-import {h,panel,chip,stateNote,emptyNote} from "../components.js";
+import {h,panel,chip,stateNote,emptyNote,statusLabel} from "../components.js";
 import {formatCount,MISSING} from "../model.js";
 
 const okData=r=>r.ok?r.data:null;
@@ -18,10 +18,10 @@ export async function render(ctx){
     selected.textContent=runId;
     const [events,logs]=await Promise.all([api.raw(`/v1/runs/${encodeURIComponent(runId)}/events`),api.raw(`/v1/runs/${encodeURIComponent(runId)}/logs`)]);
     eventsEl.textContent=events.ok?((events.data.events??[]).slice(-200).map(x=>`${x.timestamp??""} [${x.severity??"INFO"}] ${x.stage??""}/${x.event??""} ${JSON.stringify(x.details??{})}`).join("\n")||ctx.t("tower.noEvents")):ctx.t(`state.${events.state}`);
-    const nodes=logs.ok?(logs.data.logs??[]).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:async()=>{const y=await api.raw(`/v1/runs/${encodeURIComponent(runId)}/logs/${encodeURIComponent(x.name)}`);logText.textContent=y.ok?(y.data.truncated?`${ctx.t("tower.truncated")}\n`:"")+y.data.text:ctx.t(`state.${y.state}`)}},text:`${x.name} (${x.size} B)`})):[];
+    const nodes=logs.ok?(logs.data.logs??[]).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:async()=>{const y=await api.raw(`/v1/runs/${encodeURIComponent(runId)}/logs/${encodeURIComponent(x.name)}`);logText.textContent=y.ok?(y.data.truncated?`${ctx.t("tower.truncated")}\n`:"")+y.data.text:ctx.t(`state.${y.state}`)}},text:`${x.name} (${ctx.t("tower.bytes",{n:x.size})})`})):[];
     logButtons.replaceChildren(...(nodes.length?nodes:[doc.createTextNode(ctx.t("tower.noLogs"))]));
   }
-  const runList=runs.runs.slice(0,20).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:()=>loadRun(x.runId)},text:`${x.runId} · ${x.summary?.status??x.manifest?.status??"RUNNING"}`}));
+  const runList=runs.runs.slice(0,20).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:()=>loadRun(x.runId)},text:`${x.runId} · ${statusLabel(ctx,x.summary?.status??x.manifest?.status??"RUNNING")}`}));
   const attention=h(doc,"div",{id:"attention"});ctx.renderAttention(attention,att);
   const stopCard=h(doc,"div",{class:"panel panel-critical"},h(doc,"h2",{class:"panel-title",text:ctx.t("stop.title")}),
     h(doc,"p",{id:"stopState",text:control.active?ctx.t("stop.activeLine",{reason:control.reason??""}):ctx.t(control.state==="VERIFIED"?"stop.running":`state.${control.state}`)}),

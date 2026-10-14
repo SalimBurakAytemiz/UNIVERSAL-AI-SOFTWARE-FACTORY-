@@ -17,7 +17,7 @@
     <div class="search" role="search">
       <label class="sr-only" for="searchInput" data-i18n="search.label"></label>
       <input id="searchInput" type="search" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="searchResults" aria-autocomplete="list" data-i18n-placeholder="search.placeholder">
-      <kbd class="search-hint" aria-hidden="true">Ctrl K</kbd>
+      <kbd class="search-hint" aria-hidden="true" data-i18n="shortcut.searchKey"></kbd>
       <ul id="searchResults" class="search-results" role="listbox" data-i18n-aria="search.results" hidden></ul>
     </div>
     <div class="ctx" id="contextBar" role="group" data-i18n-aria="ctx.label">
@@ -31,8 +31,9 @@
     </div>
     <div class="actions">
       <button type="button" class="btn btn-icon" id="notifyBtn" data-i18n-aria="notify.none"><span id="bellIcon" aria-hidden="true"></span><span id="notifyCount" class="nav-count" hidden></span></button>
-      <button type="button" class="btn btn-icon" id="langBtn" data-i18n-aria="lang.switch" data-i18n-title="lang.switch">TR / EN</button>
+      <button type="button" class="btn btn-icon" id="langBtn" data-i18n-aria="lang.switch" data-i18n-title="lang.switch" data-i18n="lang.buttonLabel"></button>
       <button type="button" class="btn-stop" id="stopBtn" data-i18n-aria="stop.buttonAria" data-stopped="false"><span class="stop-glyph" aria-hidden="true">&#9632;</span><span class="stop-text" data-i18n="stop.button"></span></button>
+      <p class="stop-error" id="stopError" role="alert" hidden></p>
     </div>
   </header>
   <div class="stop-banner" id="stopBanner" role="alert" hidden>
