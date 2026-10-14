@@ -1,0 +1,46 @@
+{
+  "//TR": "Bu checkpoint, V7 B1 Work OS intake paketini (kanonik store ve yetkili mission route'ları) ve gözlenen komut sonuçlarını kaydeder; temiz değildir, inceleme beklemektedir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-B1-WORKOS-INTAKE",
+  "date": "2026-10-14",
+  "parent": "edceaeeb0eee7193025b8e10e705c0e1f8daa221",
+  "branch": "v7/product-b1",
+  "implementer": "CLAUDE_BUILDER",
+  "authorizationRecords": [
+    "audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json",
+    "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
+  ],
+  "status": "IMPLEMENTED, NOT CLEAN; review pending",
+  "filesChanged": [
+    "core/workos/types.ts (new)",
+    "core/workos/store.ts (new)",
+    "core/workos/schemas.ts (new)",
+    "core/workos/README.md (new)",
+    "tests/v7-b1-workos.test.ts (new)",
+    "apps/control-api/src/server.ts (protected, authorized: buildServer export, Work OS routes)",
+    "config/validation.json (protected, authorized: one test file added to the existing tests step)",
+    "config/trust-root-manifest.json (protected, authorized: reseal via scripts/generate-trust-root.mjs)",
+    "CHANGELOG.md",
+    "audit/checkpoints/V7-PKG-B1-WORKOS-INTAKE-2026-10-14.json (new)"
+  ],
+  "commands": [
+    {"command": "npx tsc --noEmit", "exitCode": 0},
+    {"command": "node node_modules/vitest/vitest.mjs run tests/v7-b1-workos.test.ts tests/mission-state.test.ts tests/action-gateway.test.ts tests/pkg-gov2-codex-retirement.test.ts", "exitCode": 0, "testFiles": "4 passed (4)", "tests": "36 passed (36)", "note": "v7-b1-workos has 12 tests; pkg-gov2-codex-retirement included because it reads server.ts"},
+    {"command": "node scripts/validate-tr-comments.mjs", "exitCode": 0, "result": "TR_VALIDATION: PASS"},
+    {"command": "node scripts/secret-sanity.mjs", "exitCode": 0, "result": "SECRET_SANITY: PASS", "note": "first run exit 1 (GENERIC_SECRET_ASSIGNMENT on a literal test token); fixed by generating the token with crypto.randomBytes, then PASS"},
+    {"command": "node scripts/validate-mechanical-closure.mjs", "exitCode": 0, "result": "PASS files=90"},
+    {"command": "node scripts/v6-apps-control-desktop-selftest.mjs", "exitCode": 0, "result": "PASS 93/93"},
+    {"command": "node scripts/v6-paste2a-selftest.mjs", "exitCode": 0, "result": "PASS 15/15"},
+    {"command": "node scripts/v6-automation-supervisor-scheduler-selftest.mjs", "exitCode": 0, "result": "PASS 15/15"},
+    {"command": "node scripts/smoke-control-api.mjs", "exitCode": 0, "result": "PASS (real server start via tsx; direct-run guard works)"},
+    {"command": "node scripts/generate-trust-root.mjs", "exitCode": 0, "result": "TRUST_ROOT_MANIFEST_GENERATED files=364"},
+    {"command": "node scripts/verify-trust-root.mjs", "exitCode": 0, "result": "TRUST_ROOT_VERIFY: PASS"}
+  ],
+  "notRun": "scripts/run-validation.mjs (full validation) was intentionally not run; the reviewer runs it independently.",
+  "deviations": [
+    "Missing or wrong control token returns the existing 403 FORBIDDEN (unchanged token hook), not 401 as the brief's test list says.",
+    ".gitignore does not ignore .ai/workos (only .ai/runtime, .ai/cache, .ai/automation) and .gitignore is protected; default data dir kept as <repo>/.ai/workos, tests use temp dirs.",
+    "automation/lib/atomic-json.mjs has no .d.mts and automation/lib is protected; core/workos/store.ts imports it with a documented @ts-expect-error and a narrow local cast."
+  ],
+  "reviewStatus": "not clean; review pending"
+}

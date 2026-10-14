@@ -1,6 +1,12 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-10-14 — V7 B1 Work OS intake store and authorized mission routes (branch v7/product-b1)
+
+- New `core/workos/` (types, hash-chained JSONL journal store with derived snapshot, strict Ajv body schemas, README): one canonical store for projects, missions and tasks; verify-on-load fails closed with `WORKOS_JOURNAL_TAMPERED`; mission status uses `core/mission/state-machine.ts`; idempotency keys; tenant-scoped reads.
+- `apps/control-api/src/server.ts`: exported `buildServer(opts)` (CLI start unchanged: 127.0.0.1 bind, token/Host hook) and routes `GET/POST /v1/projects`, `GET/POST /v1/missions`, `GET /v1/missions/:id`, `POST /v1/missions/:id/transition`; writes pass Global Stop (423), the action-gateway policy with explicit actor `FOUNDER_LOCAL` (403) and strict schemas (400), and write a control audit entry.
+- Tests: `tests/v7-b1-workos.test.ts` (added to the existing `tests` validation step). Record: `audit/checkpoints/V7-PKG-B1-WORKOS-INTAKE-2026-10-14.json` (authorization: B0 + B0A records; not clean; review pending).
+
 ## 2026-10-12 — V6 PKG-GOV2 Codex review retired completely; governed CLAUDE_REVIEWER is the only reviewer (branch)
 
 - Founder decisions D-GOV2-1..6: Codex review removed from UASCO governance; only the governed, independent, isolated, read-only `CLAUDE_REVIEWER` reviews (fresh process, clean clone, exact commit and bundle digest, producer != reviewer identity). Tests and quality gates are preserved; nothing converts UNKNOWN/NOT_TESTED/BLOCKED/FAIL into PASS/CLEAN.
