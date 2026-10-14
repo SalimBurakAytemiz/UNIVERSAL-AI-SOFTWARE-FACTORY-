@@ -19,13 +19,18 @@ import {parseControlPort,controlChallengeProof,secureStringEqual,hostHeaderAllow
 import {loadState as loadOrchestratorStateUntyped,verifyTransitionLog as verifyTransitionLogUntyped} from "../../../automation/lib/orchestrator-state.mjs";
 import {WorkOsStore,defaultDataDir} from "../../../core/workos/store.js";
 import {WorkOsError} from "../../../core/workos/types.js";
-import {validateProjectCreate,validateMissionCreate,validateMissionTransition} from "../../../core/workos/schemas.js";
+import {validateProjectCreate,validateMissionCreate,validateMissionTransition,validateRunStart} from "../../../core/workos/schemas.js";
 import {isMissionStatus} from "../../../core/mission/state-machine.js";
 import {authorizeAction} from "../../../core/action-gateway/policy.js";
 import type {ActionPolicyContext} from "../../../core/action-gateway/types.js";
+import {MissionRunner} from "../../../core/workos/runner.js";
+import type {RunnerOptions} from "../../../core/workos/runner.js";
+import {assertIndependentExecutors,executorsFromEnv} from "../../../core/workos/executors.js";
+import type {ExecutorPair} from "../../../core/workos/executors.js";
 
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
-export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean}
+// //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
+export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs">>}
 export function buildServer(opts:BuildServerOptions={}){
 const app=Fastify({logger:opts.logger??true,requestIdHeader:"x-request-id",genReqId:()=>crypto.randomUUID(),bodyLimit:64*1024});
 const readJson=(p:string)=>JSON.parse(fs.readFileSync(p,"utf8"));
@@ -120,6 +125,8 @@ function workosPolicy(action:string,missionId:string,body:unknown){
 function workosFail(reply:any,e:unknown){
   if(e instanceof WorkOsError){
     if(e.code==="WORKOS_IDEMPOTENCY_CONFLICT")return reply.code(409).send({error:"IDEMPOTENCY_CONFLICT"});
+    // B3a: çakışma/fencing 409; reason yalnız sabit kod parçasıdır (MISSION_NOT_RUNNABLE, RUN_ALREADY_ACTIVE), yol veya secret taşımaz.
+    if(e.code==="WORKOS_CONFLICT"||e.code==="WORKOS_LEASE_FENCED")return reply.code(409).send({error:e.code,reason:e.code==="WORKOS_CONFLICT"?e.message.replace(/^WORKOS_CONFLICT: ?/,"").slice(0,64):undefined});
     const status=e.code==="WORKOS_JOURNAL_TAMPERED"||e.code==="WORKOS_UNAVAILABLE"?503:e.code==="WORKOS_NOT_FOUND"?404:e.code==="WORKOS_INVALID_TRANSITION"?409:400;
     return reply.code(status).send({error:e.code});
   }
@@ -139,7 +146,7 @@ app.get("/v1/projects",wos(async()=>({projects:getStore().listProjects(scope)}))
 app.post("/v1/projects",wos(async(req,reply)=>{
   const body=req.body??{};if(!workosWrite(reply,"workos.project.create","NONE",body,validateProjectCreate))return reply;
   const b=body as any;
-  const r=getStore().createProjectDetailed({tenantId:scope.tenantId,orgId,name:b.name,environmentId:b.environmentId,customerId:b.customerId,repository:b.repository,createdBy:actor,idempotencyKey:b.idempotencyKey});
+  const r=getStore().createProjectDetailed({tenantId:scope.tenantId,orgId,name:b.name,environmentId:b.environmentId,customerId:b.customerId,repository:b.repository,createdBy:actor,idempotencyKey:b.idempotencyKey,testCommand:b.testCommand});
   audit(r.replayed?"WORKOS_IDEMPOTENT_REPLAY":"WORKOS_PROJECT_CREATED",{actor,kind:"project",projectId:r.entity.projectId});return reply.code(r.replayed?200:201).send({project:r.entity});
 }));
 app.get<{Querystring:{projectId?:string}}>("/v1/missions",wos(async(req,reply)=>{
@@ -149,7 +156,7 @@ app.get<{Querystring:{projectId?:string}}>("/v1/missions",wos(async(req,reply)=>
 app.post("/v1/missions",wos(async(req,reply)=>{
   const body=req.body??{};if(!workosWrite(reply,"workos.mission.create","NONE",body,validateMissionCreate))return reply;
   const b=body as any;
-  const r=getStore().createMissionDetailed({tenantId:scope.tenantId,projectId:b.projectId,title:b.title,objective:b.objective,acceptanceCriteria:b.acceptanceCriteria,riskLevel:b.riskLevel,createdBy:actor,idempotencyKey:b.idempotencyKey});
+  const r=getStore().createMissionDetailed({tenantId:scope.tenantId,projectId:b.projectId,title:b.title,objective:b.objective,acceptanceCriteria:b.acceptanceCriteria,riskLevel:b.riskLevel,createdBy:actor,idempotencyKey:b.idempotencyKey,testCommand:b.testCommand});
   const mission=r.entity;audit(r.replayed?"WORKOS_IDEMPOTENT_REPLAY":"WORKOS_MISSION_CREATED",{actor,kind:"mission",missionId:mission.missionId,projectId:mission.projectId,riskLevel:mission.riskLevel,traceId:mission.traceId});return reply.code(r.replayed?200:201).send({mission});
 }));
 app.get<{Params:{id:string}}>("/v1/missions/:id",wos(async(req,reply)=>{
@@ -161,6 +168,43 @@ app.post<{Params:{id:string}}>("/v1/missions/:id/transition",wos(async(req,reply
   const body=req.body??{};if(!workosWrite(reply,"workos.mission.transition",req.params.id,body,validateMissionTransition))return reply;
   const b=body as any;if(!isMissionStatus(b.to))return reply.code(400).send({error:"INVALID_BODY",detail:"to is not a mission status"});
   try{const before=getStore().getMission(scope,req.params.id);const mission=getStore().transitionMission(scope,req.params.id,b.to,b.reason,actor);audit("WORKOS_MISSION_TRANSITIONED",{actor,missionId:mission.missionId,from:before?.status,to:mission.status});return {mission}}catch(e){return workosFail(reply,e)}
+}));
+
+// //TR: B3a mission runner route'ları: aynı token hook'u ve aynı yazma kapısı sırası (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400). Run'lar aynı Work OS journal'ındadır; eski /v1/runs route'larına dokunulmaz.
+const validWorkRunId=(x:unknown)=>typeof x==="string"&&/^run_[0-9a-f]{24}$/.test(x);
+let executorsCache:{pair:ExecutorPair|null;reason:string}|null=null;
+const getExecutors=()=>executorsCache??=opts.executors?{pair:opts.executors,reason:opts.executors.kind}:executorsFromEnv(repoRoot);
+let workRunner:MissionRunner|null=null;
+function getRunner(){
+  if(workRunner)return workRunner;
+  const ex=getExecutors();if(!ex.pair)return null;
+  const r=opts.runner??{};
+  workRunner=new MissionRunner({store:getStore(),dataDir:getStore().dataDir,globalStopFile:path.join(runtime,"GLOBAL_STOP.json"),envPolicyFile:path.join(repoRoot,"config","environment-policy.json"),executors:ex.pair,
+    leaseTtlMs:r.leaseTtlMs,maxRemediations:r.maxRemediations,maxRetries:r.maxRetries,retryBackoffMs:r.retryBackoffMs,testTimeoutMs:r.testTimeoutMs,executorTimeoutMs:r.executorTimeoutMs});
+  return workRunner;
+}
+const runnerEnabled=opts.runner?.enabled??process.env.UASCO_WORKOS_RUNNER==="1";
+if(runnerEnabled){
+  app.addHook("onReady",async()=>{try{const r=getRunner();if(r){r.start(opts.runner?.intervalMs??2000);audit("WORKOS_RUNNER_STARTED",{engineId:r.engineId,executor:getExecutors().reason})}else audit("WORKOS_RUNNER_NOT_STARTED",{reason:getExecutors().reason})}catch{audit("WORKOS_RUNNER_NOT_STARTED",{reason:"EXECUTOR_CONFIG_REFUSED"})}});
+  app.addHook("onClose",async()=>{workRunner?.stop()});
+}
+app.post<{Params:{id:string}}>("/v1/missions/:id/runs",wos(async(req,reply)=>{
+  if(!validMissionId(req.params.id))return reply.code(400).send({error:"INVALID_MISSION_ID"});
+  const body=req.body??{};if(!workosWrite(reply,"workos.run.start",req.params.id,body,validateRunStart))return reply;
+  const ex=getExecutors();if(!ex.pair)return reply.code(409).send({error:"EXECUTOR_NOT_CONFIGURED",reason:ex.reason});
+  try{assertIndependentExecutors(ex.pair)}catch{audit("WORKOS_RUN_REFUSED",{actor,missionId:req.params.id,reason:"EXECUTOR_CONFIG_REFUSED"});return reply.code(409).send({error:"EXECUTOR_CONFIG_REFUSED"})}
+  const b=body as any;
+  const r=getStore().createRunDetailed({tenantId:scope.tenantId,missionId:req.params.id,roleId:b.roleId??null,executor:{implementer:ex.pair.implementer.identity,reviewer:ex.pair.reviewer.identity},createdBy:actor,idempotencyKey:b.idempotencyKey});
+  audit(r.replayed?"WORKOS_IDEMPOTENT_REPLAY":"WORKOS_RUN_CREATED",{actor,kind:"run",runId:r.entity.runId,missionId:r.entity.missionId,executor:r.entity.executor});
+  return reply.code(r.replayed?200:201).send({run:r.entity});
+}));
+app.get<{Querystring:{missionId?:string}}>("/v1/work-runs",wos(async(req,reply)=>{
+  const missionId=req.query?.missionId;if(missionId!==undefined&&!validMissionId(missionId))return reply.code(400).send({error:"INVALID_MISSION_ID"});
+  return {runs:getStore().listRuns(scope,missionId)};
+}));
+app.get<{Params:{id:string}}>("/v1/work-runs/:id",wos(async(req,reply)=>{
+  if(!validWorkRunId(req.params.id))return reply.code(400).send({error:"INVALID_RUN_ID"});
+  const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});return {run};
 }));
 
 // //TR: B2 GET /v1/cockpit: UI için tek okuma otoritesidir; yalnız okur (Work OS store, orchestrator state, registry), hiçbir kaynağı yazmaz, eksik/okunamayan/uygulanmamış kaynak için sayı uydurmaz (state UNAVAILABLE/ERROR, sayılar null).
@@ -202,16 +246,18 @@ function cockpitOrchestrator(){
     return mk(asOf===null||leaseExpired?"STALE":"VERIFIED",asOf,pk.length,countBy(pk,p=>String(p.status)));
   }catch{return mk("ERROR")}
 }
-// //TR: workforce bloğu activeWorkerRuns için mission runner (B3) gelene kadar UNAVAILABLE kalır; registeredRoles/targetRoles yalnız okunabilen registry dosyasından gelir.
+// //TR: B3a: workforce.activeWorkerRuns Work OS journal'ındaki LEASED/RUNNING/CHECKPOINTING/VERIFYING run sayısıdır (state VERIFIED); journal yoksa UNAVAILABLE/null, okunamazsa ERROR/null. registeredRoles/targetRoles yalnız okunabilen registry dosyasından gelir. Sözleşme şekli değişmez.
 function cockpitWorkforce(){
-  const base=(state:CockpitState,registeredRoles:number|null,targetRoles:number|null)=>({state,registeredRoles,targetRoles,activeWorkerRuns:null,source:"registries/agents.json; registries/target-role-catalog.json; activeWorkerRuns pending mission runner (B3)"});
+  const base=(state:CockpitState,registeredRoles:number|null,targetRoles:number|null,activeWorkerRuns:number|null=null)=>({state,registeredRoles,targetRoles,activeWorkerRuns,source:"registries/agents.json; registries/target-role-catalog.json; Work OS journal runs (LEASED|RUNNING|CHECKPOINTING|VERIFYING)"});
   try{
     let registered:number|null=null,target:number|null=null;
     const af=path.join(repoRoot,"registries","agents.json");
     if(fs.existsSync(af)){const a=readJson(af);if(!Array.isArray(a?.agents))return base("ERROR",null,null);registered=a.agents.length}
     const tf=path.join(repoRoot,"registries","target-role-catalog.json");
     if(fs.existsSync(tf)){const t=readJson(tf);const n=Array.isArray(t)?t.length:Array.isArray(t?.roles)?t.roles.length:Number.isInteger(t?.count)&&t.count>=0?t.count:null;if(n===null)return base("ERROR",registered,null);target=n}
-    return base("UNAVAILABLE",registered,target);
+    const st=getStore();if(!st.hasJournal)return base("UNAVAILABLE",registered,target);
+    let active:number;try{active=st.countActiveWorkerRuns(scope)}catch{return base("ERROR",registered,target)}
+    return base("VERIFIED",registered,target,active);
   }catch{return base("ERROR",null,null)}
 }
 app.get("/v1/cockpit",wos(async()=>({

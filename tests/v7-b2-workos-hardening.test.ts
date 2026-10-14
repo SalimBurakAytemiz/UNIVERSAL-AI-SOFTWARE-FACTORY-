@@ -289,7 +289,8 @@ describe("B2 API hardening and cockpit", () => {
       expect(j.awaitingApproval.state).toBe("VERIFIED");
       expect(j.awaitingApproval.items.map((i: {title: string}) => i.title).sort()).toEqual(["m2", "m3"]);
       expect(j.awaitingApproval.items[0]).toEqual(expect.objectContaining({missionId: expect.stringMatching(/^msn_/), projectId: p1.projectId, riskLevel: "R2"}));
-      expect(j.workforce).toEqual(expect.objectContaining({state: "UNAVAILABLE", registeredRoles: 3, targetRoles: 5, activeWorkerRuns: null}));
+      // B3a: the mission runner exists now; with a Work OS journal and no runs the real count is 0 (state VERIFIED).
+      expect(j.workforce).toEqual(expect.objectContaining({state: "VERIFIED", registeredRoles: 3, targetRoles: 5, activeWorkerRuns: 0}));
       // legacy routes keep their payload shape
       expect((await app.inject({method: "GET", url: "/v1/projects", headers: hdr})).json().projects.length).toBe(2);
       await app.close();
