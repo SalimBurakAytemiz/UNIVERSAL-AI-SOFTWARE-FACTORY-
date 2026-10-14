@@ -154,5 +154,117 @@
       "Clone and diff remain synchronous; explicit renewals after them were chosen over making them asynchronous (minimal change)."
     ],
     "reviewStatus": "not clean; review pending"
+  },
+  "remediationCycle3": {
+    "//TR": "Bu bölüm cycle-2 bağımsız incelemesinin F-B3A-C2-001 (adapter builder çıktısını commit etmiyordu) ve F-B3A-C2-002 (secret taraması implementer workspace'inde textconv'a açıktı) düzeltmelerini ve gözlenen komut sonuçlarını kaydeder; temiz değildir, inceleme beklemektedir.",
+    "cycle": 3,
+    "parent": "dd1999c59d56d1ec865954e4413f570e1e18a33c",
+    "findings": [
+      "F-B3A-C2-001",
+      "F-B3A-C2-002",
+      "F-B3A-C2-003 (documentation only)"
+    ],
+    "changes": [
+      "core/workos/builder-output.ts (new): gitControlDigest (sha256 over .git control files except objects/ and index), forbiddenChange (refuses .git segments incl. '.git.'/'GIT~1', '..' escapes, absolute paths, embedded repos 'x/', symlinks, paths whose real parent leaves the workspace), commitBuilderOutput (refuses BUILDER_TOUCHED_GIT_INTERNALS before any engine git call, rebuilds the index from the cycle start commit, git status -z with core.fsmonitor=false, BUILDER_PRODUCED_NO_CHANGE when nothing changed, refuses gitlinks, commits with isolated git as 'UASCO Builder (CLAUDE_BUILDER) <builder@local.invalid>', commit.gpgsign=false, --no-verify, checks parent == start SHA).",
+      "core/workos/executors.ts: new EditOnlyImplementer adapter (runs an edit-only process, then commitBuilderOutput; returns commitSha or blockReason). LocalClaudeExecutors.implement now uses it with scripts/claude-builder-broker.mjs unchanged (broker and config/builder-execution-policy.json not modified). The implement prompt no longer tells the model to commit; it says to edit files only and not touch .git. ImplementResult gains blockReason; MissionSpec gains optional startSha.",
+      "core/workos/runner.ts: IMPLEMENT passes startSha to the implementer; a blockReason ends the run BLOCKED with that reason (mission BLOCKED) and is recorded as IMPLEMENT evidence note; a reported commitSha different from the workspace HEAD is BLOCKED IMPLEMENT_COMMIT_MISMATCH.",
+      "core/workos/runner.ts: VERIFY secret scan now runs in a fresh clone of the produced commit (<run>/scan-c<cycle>), never in the implementer workspace; the diff uses -c core.attributesFile=<empty file in the run dir> -c core.fsmonitor=false diff --no-color --no-ext-diff --no-textconv --text --no-renames --src-prefix=a/ --dst-prefix=b/; commit messages base..head (git log --format='commit %H%n%B') are scanned too. The reviewer diff (already in a fresh clone) uses the same hardened diff. Tests still run in the workspace as before.",
+      "core/workos/secret-scan.ts: scanDiffForSecrets tracks hunk old/new line counts, so '+++ '/'--- ' lines inside a hunk are content; an unexpected '+' line outside a hunk is scanned too. New scanCommitMessagesForSecrets (hit file 'commit-message:<sha>').",
+      "core/workos/README.md: edit-only builder commit, fresh-clone secret scan, and the Windows .cmd shim limitation (F-B3A-C2-003, not fixed).",
+      "tests/v7-b3a-c3-builder-commit.test.ts (new, 9 tests)",
+      "config/validation.json (protected, authorized: tests/v7-b3a-c3-builder-commit.test.ts appended to the existing tests step)",
+      "config/trust-root-manifest.json (protected, authorized: reseal via scripts/generate-trust-root.mjs; only generatedAt and the config/validation.json digest changed)"
+    ],
+    "tests": [
+      "Edit-only builder (fake-executor.mjs implement with noCommit:true, wrapped by EditOnlyImplementer) -> run AWAITING_APPROVAL, mission REPORTING; IMPLEMENT evidence commitSha equals run.headSha and the SECRET_SCAN, VERIFY_TESTS and REVIEW evidence commitSha; author and committer are UASCO Builder (CLAUDE_BUILDER) <builder@local.invalid>, parent is the base SHA, commit contains exactly the edited files, workspace clean, IMPLEMENT log contains BUILDER_COMMIT <sha>.",
+      "Edit-only builder that changes nothing -> run BLOCKED BUILDER_PRODUCED_NO_CHANGE, mission BLOCKED, headSha null, evidence [WORKSPACE, IMPLEMENT] with note BUILDER_PRODUCED_NO_CHANGE, reviewer not called.",
+      "Edit-only builder that appends a textconv driver to .git/config -> BLOCKED BUILDER_TOUCHED_GIT_INTERNALS, HEAD unchanged.",
+      "forbiddenChange classification: src/a.ts and README.md allowed; .git/config, sub/.GIT/HEAD, .git./config, GIT~1/config -> GIT_INTERNALS; ../outside.txt -> OUTSIDE_WORKSPACE; nested/ -> EMBEDDED_REPOSITORY.",
+      "Textconv bypass regression: implementer adds diff.hide.textconv=true to workspace .git/config and commits '* diff=hide' plus an AWS-style key (crypto.randomBytes); precondition asserts a plain git diff in the workspace shows no secret; the run is BLOCKED SECRET_IN_DIFF with hit AWS_ACCESS_KEY config.txt:1, reviewer not called, value absent from the journal.",
+      "Checked-in '*.txt -diff' attribute -> BLOCKED SECRET_IN_DIFF (config.txt:1).",
+      "Secret only in the commit message -> BLOCKED SECRET_IN_DIFF with hit file commit-message:<headSha> line 3, value absent from the journal.",
+      "'+++ ' content inside a hunk: synthetic diff gives hit f.txt:2; end-to-end file line '++ <key>' gives BLOCKED SECRET_IN_DIFF notes.txt:1.",
+      "scanCommitMessagesForSecrets attributes hits per commit and line."
+    ],
+    "commands": [
+      {
+        "command": "git rev-parse HEAD",
+        "exitCode": 0,
+        "result": "dd1999c59d56d1ec865954e4413f570e1e18a33c (branch v7/product-b3a)"
+      },
+      {
+        "command": "npx tsc --noEmit",
+        "exitCode": 0
+      },
+      {
+        "command": "env -u PSModulePath npx vitest run --dir tests tests/v7-b3a-c3-builder-commit.test.ts tests/v7-b3a-runner.test.ts tests/v7-b3a-recovery-budget.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts",
+        "exitCode": 1,
+        "tests": "69 passed, 1 failed (70), 5 files",
+        "note": "before the trust-root reseal; the only failure was the F-B2-001 manifest digest check (sealed B2 files ... manifest sha256 equals the file bytes), expected until generate-trust-root"
+      },
+      {
+        "command": "git add -A && git ls-files --eol | grep w/crlf",
+        "exitCode": 1,
+        "result": "no output (no CRLF in the working tree)"
+      },
+      {
+        "command": "node scripts/generate-trust-root.mjs",
+        "exitCode": 0,
+        "result": "TRUST_ROOT_MANIFEST_GENERATED files=364"
+      },
+      {
+        "command": "node scripts/verify-trust-root.mjs",
+        "exitCode": 0,
+        "result": "TRUST_ROOT_VERIFY: PASS (before commit)"
+      },
+      {
+        "command": "node scripts/validate-tr-comments.mjs",
+        "exitCode": 0,
+        "result": "TR_VALIDATION: PASS"
+      },
+      {
+        "command": "node scripts/secret-sanity.mjs",
+        "exitCode": 0,
+        "result": "SECRET_SANITY: PASS"
+      },
+      {
+        "command": "node scripts/v6-apps-control-desktop-selftest.mjs",
+        "exitCode": 0,
+        "result": "V6_APPS_CONTROL_DESKTOP_SELFTEST: PASS 93/93"
+      },
+      {
+        "command": "node scripts/smoke-control-api.mjs",
+        "exitCode": 0,
+        "result": "PASS (challenge-proof identity + auth boundary verified)"
+      },
+      {
+        "command": "node scripts/validate-mechanical-closure.mjs",
+        "exitCode": 0,
+        "result": "MECHANICAL_CLOSURE_VALIDATION: PASS files=90"
+      },
+      {
+        "command": "env -u PSModulePath npx vitest run --dir tests tests/v7-b3a-c3-builder-commit.test.ts tests/v7-b3a-runner.test.ts tests/v7-b3a-recovery-budget.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts",
+        "exitCode": 0,
+        "tests": "70 passed (70), 5 files",
+        "note": "after the reseal"
+      },
+      {
+        "command": "env -u PSModulePath npx vitest run --dir tests tests/v7-b3a-c3-builder-commit.test.ts",
+        "exitCode": 0,
+        "tests": "9 passed (9), 1 file"
+      }
+    ],
+    "notRun": [
+      "scripts/run-validation.mjs and the full vitest suite (not requested for this cycle).",
+      "No real AI provider and no real scripts/claude-builder-broker.mjs run: LOCAL_CLAUDE is exercised only through EditOnlyImplementer with a deterministic edit-only fake process.",
+      "No separate mutation check this cycle; the textconv test asserts its own precondition (a plain workspace git diff hides the key).",
+      "verify-trust-root after the commit is run post-commit and is not recorded in this file."
+    ],
+    "deviations": [
+      "Builder output is not filtered by an allowedPathPrefixes list (Work OS missions carry none); only .git internals, workspace escapes, symlinks, embedded repos and gitlinks are refused.",
+      "The empty attributes file is a file in the run directory (<run>/empty-attributes) instead of the OS null device, for portability on Windows.",
+      "F-B3A-C2-003 (Windows .cmd shims) is documented in core/workos/README.md, not fixed."
+    ],
+    "reviewStatus": "not clean; review pending"
   }
 }

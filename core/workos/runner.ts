@@ -12,7 +12,7 @@ import {WorkOsError} from "./types.js";
 import type {RunEvidence, RunStatus, RunStep, WorkRun} from "./types.js";
 import {LEASED_RUN_STATUSES} from "./run-state.js";
 import {testCommandAllowed} from "./schemas.js";
-import {redactSecrets, scanDiffForSecrets} from "./secret-scan.js";
+import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
 import {assertIndependentExecutors, runProcess} from "./executors.js";
 import type {ExecutorPair, MissionSpec, ProcResult} from "./executors.js";
 
@@ -325,21 +325,35 @@ export class MissionRunner {
       if (this.gitOk(work, args) === null) return {kind: "BLOCK", reason: "WORKSPACE_RESET_FAILED", status: "FAILED"};
     }
     this.renew(run.runId, leaseId);
-    const spec = this.missionSpec(run);
+    const spec: MissionSpec = {...this.missionSpec(run), startSha: start};
     const r = await this.o.executors.implementer.implement(work, spec, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
     const head = this.gitOk(work, ["rev-parse", "HEAD"]);
     const log = this.writeLog(run, "implement", r.log);
-    const produced = r.exitCode === 0 && head && SHA.test(head) && head !== start ? head : undefined;
-    this.evidence(run, leaseId, {kind: "IMPLEMENT", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, baseSha: start, ...(produced ? {commitSha: produced} : {}), executorIdentity: this.o.executors.implementer.identity});
+    const produced = r.exitCode === 0 && !r.blockReason && head && SHA.test(head) && head !== start ? head : undefined;
+    this.evidence(run, leaseId, {kind: "IMPLEMENT", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, baseSha: start, ...(produced ? {commitSha: produced} : {}), executorIdentity: this.o.executors.implementer.identity, ...(r.blockReason ? {note: r.blockReason.slice(0, 200)} : {})});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     if (r.exitCode !== 0) return r.transient ? {kind: "RETRY", reason: "IMPLEMENT_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: "IMPLEMENT_FAILED", status: "FAILED"};
+    // Edit-only builder çıktısını engine commit etmeyi reddettiyse (değişiklik yok, .git/workspace dışı değişiklik) run BLOCKED olur.
+    if (r.blockReason) return {kind: "BLOCK", reason: r.blockReason.slice(0, 200)};
     if (!produced) return {kind: "BLOCK", reason: "NO_COMMIT_PRODUCED", status: "FAILED"};
+    if (r.commitSha !== undefined && r.commitSha !== produced) return {kind: "BLOCK", reason: "IMPLEMENT_COMMIT_MISMATCH", status: "FAILED"};
     if (this.git(work, ["merge-base", "--is-ancestor", start, produced]).status !== 0) return {kind: "BLOCK", reason: "IMPLEMENT_HISTORY_REWRITTEN", status: "FAILED"};
     return {kind: "DONE", next: "VERIFY", data: {commitSha: produced, startSha: start}, patch: {headSha: produced}};
   }
 
-  private diff(cwd: string, base: string, head: string): string | null {
-    const r = this.git(cwd, ["diff", "--no-color", "--no-ext-diff", "--no-renames", base, head]);
+  // Diff her zaman engine'in taze klonunda alınır: --text (binary/-diff attribute gizleyemez), --no-textconv/--no-ext-diff (sürücü çalışmaz),
+  // boş attributes dosyası (global attributes yok sayılır) ve sabit a/ b/ önekleri; implementer'ın .git/config veya .gitattributes'ı taramayı atlatamaz.
+  private emptyAttributes(run: WorkRun): string {
+    const f = path.join(this.runDir(run.runId), "empty-attributes");
+    fs.writeFileSync(f, "");
+    return f;
+  }
+  private diff(run: WorkRun, cwd: string, base: string, head: string): string | null {
+    const r = this.git(cwd, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--text", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/", base, head]);
+    return r.status === 0 ? String(r.stdout ?? "") : null;
+  }
+  private commitMessages(run: WorkRun, cwd: string, base: string, head: string): string | null {
+    const r = this.git(cwd, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "log", "--no-color", "--no-show-signature", "--format=commit %H%n%B", `${base}..${head}`]);
     return r.status === 0 ? String(r.stdout ?? "") : null;
   }
 
@@ -351,12 +365,16 @@ export class MissionRunner {
       if (this.gitOk(work, ["checkout", "-q", "-B", run.workBranch ?? `uasco/run/${run.runId}`, run.headSha]) === null) return {kind: "BLOCK", reason: "WORKSPACE_DIVERGED", status: "FAILED"};
     }
     const startedAt = new Date().toISOString();
-    const diff = this.diff(work, run.baseSha, run.headSha);
-    if (diff === null) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
+    // Tarama implementer workspace'inde değil, üretilen commit'in taze klonunda yapılır (workspace .git/config textconv'u etkisizdir).
+    const scanClone = this.freshClone(run, `scan-c${run.remediationCycle}`);
+    if (!scanClone) return {kind: "BLOCK", reason: "SCAN_CLONE_FAILED", status: "FAILED"};
+    const diff = this.diff(run, scanClone, run.baseSha, run.headSha);
+    const messages = this.commitMessages(run, scanClone, run.baseSha, run.headSha);
+    if (diff === null || messages === null) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
     this.renew(run.runId, leaseId);
-    const hits = scanDiffForSecrets(diff);
-    const scanLog = this.writeLog(run, "secret-scan", `secret scan ${run.baseSha}..${run.headSha}: ${hits.length} hit(s)\n${hits.map(h => `${h.kind} ${h.file}:${h.line}`).join("\n")}\n`);
-    this.evidence(run, leaseId, {kind: "SECRET_SCAN", argv: ["git", "diff", run.baseSha, run.headSha], startedAt, endedAt: new Date().toISOString(), exitCode: hits.length ? 1 : 0, ...scanLog, baseSha: run.baseSha, commitSha: run.headSha, secretHits: hits.slice(0, 100)});
+    const hits = [...scanDiffForSecrets(diff), ...scanCommitMessagesForSecrets(messages)];
+    const scanLog = this.writeLog(run, "secret-scan", `secret scan ${run.baseSha}..${run.headSha} (fresh clone, --text --no-textconv --no-ext-diff, empty attributes; diff + commit messages): ${hits.length} hit(s)\n${hits.map(h => `${h.kind} ${h.file}:${h.line}`).join("\n")}\n`);
+    this.evidence(run, leaseId, {kind: "SECRET_SCAN", argv: ["git", "diff", "--text", "--no-textconv", "--no-ext-diff", run.baseSha, run.headSha], startedAt, endedAt: new Date().toISOString(), exitCode: hits.length ? 1 : 0, ...scanLog, baseSha: run.baseSha, commitSha: run.headSha, secretHits: hits.slice(0, 100)});
     if (hits.length) return {kind: "BLOCK", reason: "SECRET_IN_DIFF"};
     const argv = this.testArgv(run);
     if (!argv) return {kind: "BLOCK", reason: "TEST_COMMAND_NOT_CONFIGURED"};
@@ -368,9 +386,8 @@ export class MissionRunner {
     return {kind: "REMEDIATE", reason: r.timedOut ? "TESTS_TIMED_OUT" : "TESTS_FAILED", data: {tests: "FAILED", exitCode: r.exitCode}, findings: [`test command exited ${r.exitCode}`]};
   }
 
-  private reviewDir(run: WorkRun): string { return path.join(this.runDir(run.runId), `review-c${run.remediationCycle}`); }
-  private freshClone(run: WorkRun): string | null {
-    const work = path.join(this.runDir(run.runId), "work"), dir = this.reviewDir(run);
+  private freshClone(run: WorkRun, name = `review-c${run.remediationCycle}`): string | null {
+    const work = path.join(this.runDir(run.runId), "work"), dir = path.join(this.runDir(run.runId), name);
     this.rmUnderRun(run.runId, dir);
     if (this.git(this.runDir(run.runId), ["clone", "--no-hardlinks", "--quiet", work, dir]).status !== 0) return null;
     if (this.gitOk(dir, ["checkout", "-q", "--detach", run.headSha!]) === null) return null;
@@ -384,7 +401,7 @@ export class MissionRunner {
     if (!run.baseSha || !run.headSha) return {kind: "BLOCK", reason: "HEAD_COMMIT_MISSING", status: "FAILED"};
     const clone = this.freshClone(run);
     if (!clone) return {kind: "BLOCK", reason: "REVIEW_CLONE_FAILED", status: "FAILED"};
-    const diff = this.diff(clone, run.baseSha, run.headSha);
+    const diff = this.diff(run, clone, run.baseSha, run.headSha);
     if (diff === null) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
     this.renew(run.runId, leaseId);
     const r = await reviewer.review(clone, this.missionSpec(run), diff, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
