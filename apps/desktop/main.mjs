@@ -1,14 +1,35 @@
-// //TR: Bu dosya hardened Electron Control Tower penceresini yalnız doğrulanmış localhost Control API kimliğine bağlar; renderer IPC sender/GET allowlist (mevcut + B4/B5 sabit rotaları) ve ayrı sabit POST allowlist (32 KB JSON gövde sınırı, token yalnız ana süreçte), redirect ve browser yetkileri fail-closed sınırlandırılır.
+// //TR: Bu dosya hardened Electron Control Tower penceresini yalnız doğrulanmış localhost Control API kimliğine bağlar; renderer IPC sender/GET allowlist (mevcut + B4/B5 sabit rotaları) ve ayrı sabit POST allowlist (32 KB JSON gövde sınırı, token yalnız ana süreçte), redirect ve browser yetkileri fail-closed sınırlandırılır. B7: paketlenmiş (kurulu) modda arka uç Electron node modunda başlatılır, değişken veri userData altına yönlendirilir ve tek örnek kilidi uygulanır; geliştirme modu (npm run dev) değişmez.
 import {app,BrowserWindow,ipcMain} from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import cp from "node:child_process";
+import net from "node:net";
 import {fileURLToPath,pathToFileURL} from "node:url";
 import {parseControlPort,controlOrigin,controlChallengeProof,secureStringEqual,desktopGetPathAllowed} from "../../automation/lib/control-boundary.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url)),rendererFile=path.join(here,"renderer","index.html"),rendererUrl=pathToFileURL(rendererFile).href;
-const port=parseControlPort(process.env.CONTROL_API_PORT,3210),apiBase=controlOrigin(port),token=process.env.UASCO_CONTROL_TOKEN??"";
+// //TR: B7: kurulu uygulamada (app.isPackaged) token her açılışta ana süreçte rastgele üretilir, hiçbir yere yazılmaz ve arka uca yalnız stdin ile verilir; port boş bir loopback portu olarak açılışta seçilir. Geliştirme modunda eski env davranışı aynen korunur.
+const packaged=app.isPackaged;
+const token=packaged?crypto.randomBytes(32).toString("hex"):(process.env.UASCO_CONTROL_TOKEN??"");
+let port=packaged?0:parseControlPort(process.env.CONTROL_API_PORT,3210),apiBase=packaged?"":controlOrigin(port);
 let controlWindow=null,identityVerifiedAt=0;
+
+// B7-PACKAGED-BEGIN
+// //TR: Saf yol/başlatma eşlemesi: kurulu modda bütün değişken veri (runtime/GLOBAL_STOP, Work OS verisi, loglar, smoke işareti) userData (%APPDATA%/UASCO) altına düşer; program dosyaları yalnız kurulum dizininde kalır. Arka uç Electron ikilisiyle node modunda, kabuksuz, en az env ile başlatılır; token argv ya da env içinde yer almaz.
+const PACKAGED_BACKEND_ENTRY=["apps","control-api","src","packaged-entry.js"];
+const BACKEND_ENV_PASSTHROUGH=["SystemRoot","SystemDrive","windir","TEMP","TMP","USERPROFILE","APPDATA","LOCALAPPDATA","ProgramData","COMPUTERNAME","NUMBER_OF_PROCESSORS","PROCESSOR_ARCHITECTURE","PATHEXT"];
+function packagedDataPaths(userData){
+  if(typeof userData!=="string"||!path.isAbsolute(userData))throw new Error("USER_DATA_PATH_INVALID");
+  const root=path.resolve(userData),runtimeDir=path.join(root,"runtime"),logsDir=path.join(root,"logs");
+  return {userData:root,runtimeDir,globalStopFile:path.join(runtimeDir,"GLOBAL_STOP.json"),smokeMarker:path.join(runtimeDir,"DESKTOP_SMOKE_READY.json"),workosDataDir:path.join(root,"workos"),logsDir,backendLogFile:path.join(logsDir,"control-api.log"),desktopLogFile:path.join(logsDir,"desktop.log")};
+}
+function backendLaunchSpec({execPath,appRoot,paths,port,baseEnv}){
+  const env={};for(const k of BACKEND_ENV_PASSTHROUGH)if(typeof baseEnv?.[k]==="string")env[k]=baseEnv[k];
+  Object.assign(env,{ELECTRON_RUN_AS_NODE:"1",NODE_ENV:"production",CONTROL_API_PORT:String(port),UASCO_DATA_DIR:paths.workosDataDir,UASCO_RUNTIME_DIR:paths.runtimeDir});
+  return {command:execPath,args:[path.join(appRoot,...PACKAGED_BACKEND_ENTRY)],options:{cwd:appRoot,env,stdio:["pipe","pipe","pipe"],windowsHide:true}};
+}
+// B7-PACKAGED-END
 
 // B4-ALLOWLIST-BEGIN
 // //TR: Token ana süreçte eklendiği için shell'in okuduğu ek GET rotaları (cockpit, projeler, mission'lar; B5: work-runs ve evidence) yalnız bu korumalı dosyada, tam eşleşme veya sıkı kimlik/sorgu kuralları ile fail-closed izinlenir; renderer token veya yeni yetki görmez.
@@ -89,15 +110,50 @@ ipcMain.handle("uasco:stop",async(event,reason)=>{requireTrustedSender(event);re
 ipcMain.handle("uasco:resume",async(event)=>{requireTrustedSender(event);return api("/v1/control/resume",{method:"POST"})});
 ipcMain.handle("uasco:retry-blocked",async(event,packageId)=>{requireTrustedSender(event);const id=String(packageId??"");if(!/^PKG-\d{3}$/.test(id))throw new Error("INVALID_PACKAGE_ID");return api("/v1/control/retry-blocked",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:id})})});
 
+// B7: kurulu modda arka uç yaşam döngüsü (başlat, /health kimlik doğrulaması ile bekle, çıkışta sonlandır) ve tek örnek kilidi.
+let backend=null,backendLog=null,backendQuitting=false;
+const singleInstanceOk=!packaged||app.requestSingleInstanceLock();
+if(!singleInstanceOk)app.quit();
+else if(packaged){app.setAppUserModelId("com.uasco.desktop");app.on("second-instance",()=>{if(controlWindow){if(controlWindow.isMinimized())controlWindow.restore();controlWindow.focus()}})}
+function logBackend(chunk){if(!backendLog)return;let t=String(chunk);if(t.includes(token))t=t.split(token).join("[redacted]");try{backendLog.write(t)}catch{}}
+function openBackendLog(file){try{if(fs.existsSync(file)&&fs.statSync(file).size>5*1024*1024)fs.renameSync(file,file+".1")}catch{}return fs.createWriteStream(file,{flags:"a"})}
+function freeLoopbackPort(){return new Promise((resolve,reject)=>{const s=net.createServer();s.unref();s.on("error",reject);s.listen({host:"127.0.0.1",port:0},()=>{const p=s.address().port;s.close(()=>resolve(p))})})}
+function stopBackend(){
+  const child=backend;backend=null;if(!child||child.exitCode!==null||child.signalCode!==null)return Promise.resolve();
+  return new Promise(resolve=>{const t=setTimeout(()=>{try{child.kill()}catch{}resolve()},3000);child.once("exit",()=>{clearTimeout(t);resolve()});try{child.stdin.end()}catch{try{child.kill()}catch{}}});
+}
+async function startPackagedBackend(){
+  const paths=packagedDataPaths(app.getPath("userData"));
+  for(const d of [paths.runtimeDir,paths.workosDataDir,paths.logsDir])fs.mkdirSync(d,{recursive:true});
+  backendLog=openBackendLog(paths.backendLogFile);
+  try{
+    port=parseControlPort(await freeLoopbackPort());apiBase=controlOrigin(port);
+    const spec=backendLaunchSpec({execPath:process.execPath,appRoot:app.getAppPath(),paths,port,baseEnv:process.env});
+    logBackend(`[desktop] ${new Date().toISOString()} starting control API on 127.0.0.1:${port}\n`);
+    const child=cp.spawn(spec.command,spec.args,spec.options);backend=child;
+    child.stdout.on("data",logBackend);child.stderr.on("data",logBackend);child.stdin.on("error",()=>{});
+    child.on("error",e=>logBackend(`[desktop] backend spawn error: ${scrubText(e?.message??e)}\n`));
+    child.on("exit",(code,signal)=>{logBackend(`[desktop] ${new Date().toISOString()} control API exited code=${code} signal=${signal}\n`);if(backend===child)backend=null});
+    child.stdin.write(token+"\n");
+    const deadline=Date.now()+30000;
+    while(Date.now()<deadline){if(backend!==child)throw new Error("CONTROL_API_EXITED");try{await verifyServerIdentity(true);logBackend("[desktop] control API identity verified\n");return true}catch{}await new Promise(r=>setTimeout(r,250))}
+    throw new Error("CONTROL_API_HEALTH_TIMEOUT");
+  }catch(e){logBackend(`[desktop] BACKEND_START_FAILED ${scrubText(e?.message??e)}\n`);await stopBackend();return false}
+}
+app.on("before-quit",e=>{if(!packaged||backendQuitting||!backend)return;e.preventDefault();backendQuitting=true;stopBackend().finally(()=>app.quit())});
+process.on("exit",()=>{if(backend){try{backend.kill()}catch{}}});
+
 app.whenReady().then(async()=>{
+  if(!singleInstanceOk)return;
   const win=new BrowserWindow({width:1500,height:920,webPreferences:{contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true,allowRunningInsecureContent:false,webviewTag:false,devTools:false,navigateOnDragDrop:false,preload:path.join(here,"preload.mjs")}});controlWindow=win;
   win.webContents.session.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));win.webContents.session.setPermissionCheckHandler(()=>false);
   win.webContents.setWindowOpenHandler(()=>({action:"deny"}));win.webContents.on("will-navigate",e=>e.preventDefault());win.webContents.on("will-redirect",e=>e.preventDefault());win.webContents.on("will-attach-webview",e=>e.preventDefault());
   if(process.env.UASCO_SMOKE==="1"){
     win.webContents.once("did-finish-load",async()=>{
-      const marker=".ai/runtime/DESKTOP_SMOKE_READY.json";try{await verifyServerIdentity(true);fs.mkdirSync(".ai/runtime",{recursive:true});fs.writeFileSync(marker,JSON.stringify({readyAt:new Date().toISOString(),controlApi:"HEALTHY",serverIdentity:"VERIFIED",port},null,2)+"\n")}catch(e){fs.mkdirSync(".ai/runtime",{recursive:true});fs.writeFileSync(marker,JSON.stringify({readyAt:new Date().toISOString(),controlApi:"FAIL",serverIdentity:"REJECTED",error:String(e?.message??e)},null,2)+"\n")}setTimeout(()=>app.quit(),500);
+      const marker=packaged?packagedDataPaths(app.getPath("userData")).smokeMarker:".ai/runtime/DESKTOP_SMOKE_READY.json";try{await verifyServerIdentity(true);fs.mkdirSync(path.dirname(marker),{recursive:true});fs.writeFileSync(marker,JSON.stringify({readyAt:new Date().toISOString(),controlApi:"HEALTHY",serverIdentity:"VERIFIED",port},null,2)+"\n")}catch(e){fs.mkdirSync(path.dirname(marker),{recursive:true});fs.writeFileSync(marker,JSON.stringify({readyAt:new Date().toISOString(),controlApi:"FAIL",serverIdentity:"REJECTED",error:String(e?.message??e)},null,2)+"\n")}setTimeout(()=>app.quit(),500);
     });
   }
+  if(packaged&&!(await startPackagedBackend())){await win.loadFile(path.join(here,"backend-error.html"));return}
   await win.loadFile(rendererFile);
 });
 app.on("window-all-closed",()=>{if(process.platform!=="darwin")app.quit()});

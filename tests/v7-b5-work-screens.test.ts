@@ -1008,7 +1008,10 @@ describe("B5 static safety, routes and wiring", () => {
   it("validation.json appends this test at the end of the tests step and nothing else changed there", () => {
     const cfg = JSON.parse(read(root, "config", "validation.json"));
     const step = cfg.steps.find((s: any) => s.id === "tests");
-    expect(step.command[step.command.length - 1]).toBe("tests/v7-b5-work-screens.test.ts");
+    // B7: later V7 packages append their own test after this one; B5 must stay directly after B4 and only later v7 package tests may follow it.
+    const i = step.command.indexOf("tests/v7-b5-work-screens.test.ts");
+    expect(step.command[i - 1]).toBe("tests/v7-b4-desktop-shell.test.ts");
+    for (const later of step.command.slice(i + 1)) expect(later).toMatch(/^tests\/v7-b([6-9]|\d{2,})[a-z]?-[a-z0-9-]+\.test\.ts$/);
     expect(step.command).toContain("tests/v7-b4-desktop-shell.test.ts");
     expect(step.command.filter((x: string) => x === "tests/v7-b5-work-screens.test.ts").length).toBe(1);
   });

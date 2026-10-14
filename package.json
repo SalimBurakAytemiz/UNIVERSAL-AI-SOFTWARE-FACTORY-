@@ -1,7 +1,7 @@
 {
   "//TR": "Bu dosya V6 audit/remediation candidate için Node>=24, exact direct deps ve trust/supply-chain/domain/semantic validation zincirini tanımlar.",
   "name": "universal-ai-software-company-os",
-  "version": "0.0.0-v6-audit-candidate",
+  "version": "0.7.0-dev.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -18,6 +18,9 @@
     "control-api": "tsx apps/control-api/src/server.ts",
     "desktop": "electron apps/desktop/main.mjs",
     "dev": "concurrently -k \"npm:control-api\" \"npm:desktop\"",
+    "dist:win": "node scripts/build-installer.mjs",
+    "dist:win:stage": "node scripts/build-installer.mjs --stage-only",
+    "installer:test": "node scripts/installer-install-test.mjs",
     "validate:competencies": "node scripts/validate-agent-competencies.mjs",
     "validate:schemas": "node scripts/validate-schema-catalog.mjs",
     "validate:organization": "node scripts/validate-organization.mjs",
@@ -33,14 +36,15 @@
     "selftest:state": "node scripts/supervisor-state-machine-selftest.mjs"
   },
   "dependencies": {
-    "fastify": "5.12.5",
     "ajv": "8.20.0",
-    "ajv-formats": "3.0.1"
+    "ajv-formats": "3.0.1",
+    "fastify": "5.12.5"
   },
   "devDependencies": {
     "@types/node": "24.0.0",
     "concurrently": "9.2.0",
     "electron": "44.4.5",
+    "electron-builder": "27.0.0-alpha.9",
     "tsx": "4.23.15",
     "typescript": "5.9.3",
     "vitest": "4.1.11"

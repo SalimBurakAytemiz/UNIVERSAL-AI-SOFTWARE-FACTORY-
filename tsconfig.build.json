@@ -1,0 +1,16 @@
+{
+  "//TR": "Bu dosya kurulu UASCO masaüstü uygulamasına gömülen Control API arka ucunu (apps/control-api + import ettiği core modülleri) korumalı tsconfig.json'ı değiştirmeden JavaScript'e derlemek için yalnız build-time ayarlarını tanımlar; çıktı dizini scripts/build-installer.mjs tarafından repo dışına verilir.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": ".",
+    "types": ["node"],
+    "declaration": false,
+    "sourceMap": false,
+    "removeComments": false,
+    "newLine": "lf"
+  },
+  "include": [
+    "apps/control-api/src/**/*.ts"
+  ]
+}

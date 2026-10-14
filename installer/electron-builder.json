@@ -1,0 +1,35 @@
+{
+  "//TR": "Bu dosya UASCO Windows NSIS kurulum paketinin (imzasız geliştirme sürümü) statik electron-builder ayarlarını tanımlar: kullanıcı başına kurulum (yönetici gerekmez), kurulum dizini seçimi, UASCO adlı masaüstü/başlat menüsü kısayolları, kaldırmada kullanıcı verisini koruma; electronDist, çıktı ve kaynak yolları scripts/build-installer.mjs tarafından doğrulanmış provisioned Electron ve repo dışı build dizininden eklenir ('//' ile başlayan anahtarlar electron-builder'a verilmeden önce çıkarılır).",
+  "appId": "com.uasco.desktop",
+  "productName": "UASCO",
+  "copyright": "UASCO - unsigned development build",
+  "asar": false,
+  "nativeModules": {"npmRebuild": false, "nodeGypRebuild": false, "buildDependenciesFromSource": false},
+  "includePdb": false,
+  "publish": null,
+  "artifactName": "UASCO-Setup-${version}-win-x64.${ext}",
+  "win": {
+    "target": [{"target": "nsis", "arch": ["x64"]}],
+    "executableName": "UASCO",
+    "requestedExecutionLevel": "asInvoker",
+    "sign": false,
+    "verifyUpdateCodeSignature": false
+  },
+  "nsis": {
+    "//note": "oneClick=false + perMachine=false: assisted per-user installer without admin rights; the user may choose the install directory (e.g. an SSD path).",
+    "oneClick": false,
+    "perMachine": false,
+    "allowElevation": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "UASCO",
+    "uninstallDisplayName": "UASCO ${version} (unsigned development build)",
+    "deleteAppDataOnUninstall": false,
+    "runAfterFinish": true,
+    "differentialPackage": false,
+    "unicode": true,
+    "warningsAsErrors": true,
+    "include": "uasco-installer.nsh"
+  }
+}

@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- //TR: Bu statik sayfa kurulu UASCO uygulamasında yerel Control API arka ucu başlatılamadığında dürüst hata durumunu gösterir; script içermez, ağ isteği yapmaz ve hiçbir yetki/token taşımaz. -->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UASCO - Arka uç başlatılamadı</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f6f7f9; --fg: #1d2330; --muted: #5a6475; --card: #ffffff; --border: #d5dae3; --accent: #b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #14171d; --fg: #e8ebf1; --muted: #a3acbb; --card: #1d2129; --border: #333a47; --accent: #ff8a80; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 640px; margin: 12vh auto 0; padding: 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 24px 28px; }
+  h1 { margin: 0 0 8px; font-size: 22px; color: var(--accent); }
+  p { margin: 8px 0; }
+  .muted { color: var(--muted); font-size: 13px; }
+  code { font-family: Consolas, ui-monospace, monospace; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="card" role="alert">
+    <h1>Arka uç başlatılamadı</h1>
+    <p>UASCO yerel kontrol arka ucunu (Control API) başlatamadı veya kimliğini doğrulayamadı. Uygulama bu durumda veri göstermez ve hiçbir işlem yapmaz.</p>
+    <p>Lütfen uygulamayı kapatıp yeniden açın. Sorun sürerse kayıt dosyasına bakın: <code>%APPDATA%\UASCO\logs\control-api.log</code></p>
+    <p class="muted" lang="en">The local backend (Control API) could not be started or its identity could not be verified. Close and reopen UASCO; if the problem persists, see the log file above.</p>
+  </div>
+</main>
+</body>
+</html>

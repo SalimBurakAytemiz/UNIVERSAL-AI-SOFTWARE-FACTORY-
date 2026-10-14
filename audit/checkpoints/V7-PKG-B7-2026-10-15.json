@@ -1,0 +1,462 @@
+{
+  "//TR": "Bu checkpoint, V7 B7 Windows NSIS kurulum paketini (imzasız geliştirme sürümü), paketlenmiş arka ucu, userData ayrımını ve gerçek %TEMP% kurulum/açılış/kaldırma testinin gözlenen sonuçlarını kaydeder; temiz değildir, bağımsız inceleme beklemektedir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-B7",
+  "date": "2026-10-15",
+  "parent": "e84fe47887da52a0324fa965ebc3037e75fcc199",
+  "branch": "v7/product-b7",
+  "implementer": "CLAUDE_BUILDER",
+  "authorizationRecords": [
+    "audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json",
+    "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json",
+    "FA-V2-PRODUCT decision 2026-10-14: electron-builder exact-pinned devDependency and its build-time NSIS/helper download"
+  ],
+  "status": "IMPLEMENTED, NOT CLEAN; independent review pending",
+  "signing": "UNSIGNED development installer: no Authenticode signature (win.sign=false). Windows SmartScreen warnings are expected. The installer welcome page and the uninstall display name say so.",
+  "artifact": {
+    "path": "C:\\Users\\salim\\UASCO-wt\\v2-b7-build\\dist-installer\\UASCO-Setup-0.7.0-dev.1-win-x64.exe",
+    "bytes": 110390421,
+    "sha256": "302710d87c92886f5e2082dfcf1afcb8a7f2b2ceef8c60ae4f57c0defe4a5bc4",
+    "version": "0.7.0-dev.1",
+    "electronVersion": "44.4.5",
+    "unpackedAppFiles": 2148,
+    "unpackedAppBytes": 8607566,
+    "buildDurationMs": 176749,
+    "location": "outside the repository tree (sibling <repo>-build/), because .gitignore is protected; never committed"
+  },
+  "filesChanged": [
+    "apps/desktop/main.mjs (protected, authorized FA-V2-PRODUCT: B7-PACKAGED block with pure packagedDataPaths/backendLaunchSpec; packaged-only per-launch random token (stdin only), free loopback port, backend spawn with Electron in node mode, /health identity wait, backend-error page, stop on quit, single-instance lock + AUMID; smoke marker under userData when packaged; dev mode unchanged)",
+    "apps/desktop/preload.mjs (protected, authorized: ESM import replaced by sandbox-preload require('electron'); exposed surface unchanged; see deviations)",
+    "apps/desktop/backend-error.html (new: static 'Arka uç başlatılamadı' page, no script, CSP default-src 'none')",
+    "apps/control-api/src/packaged-entry.ts (new: packaged backend entry; token from first stdin line; absolute UASCO_RUNTIME_DIR/UASCO_DATA_DIR; 127.0.0.1 bind; exits when stdin closes)",
+    "tsconfig.build.json (new: extends protected tsconfig.json, emits apps/control-api + imported core to JS)",
+    "installer/electron-builder.json (new: static builder config)",
+    "installer/nsis/uasco-installer.nsh (new: pre-install checks, unsigned welcome text, uninstall data checkbox default off, test-only switches, installer-copy cleanup)",
+    "scripts/build-installer.mjs (new: npm run dist:win)",
+    "scripts/installer-install-test.mjs (new: real %TEMP% install/launch/uninstall test)",
+    "tests/v7-b7-installer.test.ts (new, 21 tests)",
+    "tests/v7-b5-work-screens.test.ts (affected test: its 'B5 is the last entry of the tests step' assertion now requires B5 directly after B4 with only later v7-b* package tests after it, because B7 appends its own test as instructed)",
+    "docs/installer/README.md (new)",
+    "package.json (version 0.0.0-v6-audit-candidate -> 0.7.0-dev.1; devDependency electron-builder 27.0.0-alpha.9 exact; scripts dist:win, dist:win:stage, installer:test; npm re-sorted dependencies alphabetically)",
+    "package-lock.json (npm install --save-dev --save-exact --ignore-scripts electron-builder@27.0.0-alpha.9)",
+    "config/validation.json (protected, authorized: tests/v7-b7-installer.test.ts appended at the end of the tests step)",
+    "config/trust-root-manifest.json (reseal via scripts/generate-trust-root.mjs)",
+    "audit/checkpoints/V7-PKG-B7-2026-10-15.json"
+  ],
+  "protectedFilesNotChanged": "apps/control-api/src/server.ts (not needed: packaged-entry.ts passes runtime/dataDir/controlToken through the existing buildServer options), tsconfig.json, .gitignore, everything else under config/, automation/lib/, scripts/validate-*, scripts/run-validation.mjs, scripts/provision-electron.mjs, prompts/, roadmap/contracts/",
+  "dataPaths": {
+    "userData": "%APPDATA%\\UASCO (app.getPath('userData'); productName UASCO)",
+    "runtimeDir": "%APPDATA%\\UASCO\\runtime (was repo .ai/runtime): GLOBAL_STOP.json, control-api-events.jsonl, DESKTOP_SMOKE_READY.json (smoke only)",
+    "workosDataDir": "%APPDATA%\\UASCO\\workos (UASCO_DATA_DIR; was repo .ai/workos)",
+    "logs": "%APPDATA%\\UASCO\\logs\\control-api.log (+ .1 rotation at 5 MB; token redacted)",
+    "programFiles": "install dir only (default %LOCALAPPDATA%\\Programs\\UASCO, user-selectable); backend cwd = <install>\\resources\\app (read-only use)",
+    "secrets": "per-launch 32-byte random control token generated in the main process, passed only via child stdin, never persisted, so safeStorage is not used"
+  },
+  "dependency": {
+    "added": "electron-builder@27.0.0-alpha.9 (devDependency, exact)",
+    "whyThisVersion": "electron-builder 26.6.0..27.0.0-alpha.2 (incl. npm 'latest' 26.15.3 and v26 26.17.0) fail npm audit with 8 moderate advisories (app-builder-lib -> @electron/get@3 -> global-agent -> roarr -> sprintf-js GHSA, no fixed sprintf-js); 26.5.0 is audit-clean but its tree contains npm alias packages (string-width-cjs etc.) rejected by the protected supply-chain validator (INSTALLED_IDENTITY_MISMATCH). 27.0.0-alpha.9 (published 2026-09-26, >2 weeks old) uses @electron/get@5 and passes dependency-supply-chain.mjs (PASS components=344 low=0). It is a prerelease of a build-time-only tool; v27 renamed npmRebuild/nodeGypRebuild/buildDependenciesFromSource to nativeModules.* and replaced signAndEditExecutable with win.sign.",
+    "buildTimeDownloads": "electron-builder toolsets fetched by electron-builder itself into <build>/eb-cache from github.com/electron-userland/electron-builder-binaries with built-in checksums: nsis@1.2.1 nsis-bundle-3.12.tar.gz sha256 56997fdefe25e7928a1a68b4583d08b240b66cf660234053b20131a74cc082f4; 7zip@1.0.1 7zip-win-x64.tar.gz sha256 db50b64348d9560b875a00bd7e02f02b5f7f4b54ff5efa5908c38858c89c9f33 (v27 uses 7zip/nsis toolsets instead of winCodeSign; rcedit-style resource editing is built in). No Electron download by electron-builder (electronDist).",
+    "electronRuntime": "obtained only via node scripts/provision-electron.mjs: PROVISIONED electron-v44.4.5-win32-x64.zip zipBytes 158184819 zipSha256 11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d finalHost release-assets.githubusercontent.com (1m19s). No quarantine path and no node_modules/electron/dist were used. Supervisor-level hold V6-PKG-L1-ELECTRON-MANIFEST-EXE-SHA (seen in recovery records) did not block this governed script; noted for the reviewer."
+  },
+  "commands": [
+    {
+      "command": "git clone -q --no-hardlinks C:/Users/salim/UASCO-wt/v2-b5 C:/Users/salim/UASCO-wt/v2-b7 && git checkout -q -b v7/product-b7 e84fe47887da52a0324fa965ebc3037e75fcc199 && git remote set-url --push origin PUSH_DISABLED && node scripts/ensure-dependencies.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "npm install --save-dev --save-exact --ignore-scripts electron-builder@26.15.3 ; node scripts/dependency-supply-chain.mjs",
+      "exitCode": 1,
+      "result": "DEPENDENCY_AUDIT_BLOCKERS:8 (moderate, sprintf-js via @electron/get@3); reverted"
+    },
+    {
+      "command": "npm install --save-dev --save-exact --ignore-scripts electron-builder@26.5.0 ; node scripts/ensure-dependencies.mjs",
+      "exitCode": 1,
+      "result": "INSTALLED_IDENTITY_MISMATCH:node_modules/string-width-cjs (npm alias); reverted"
+    },
+    {
+      "command": "npm install --save-dev --save-exact --ignore-scripts electron-builder@27.0.0-alpha.9 && node scripts/ensure-dependencies.mjs && node scripts/dependency-supply-chain.mjs",
+      "exitCode": 0,
+      "result": "DEPENDENCY_SUPPLY_CHAIN: PASS components=344 low=0"
+    },
+    {
+      "command": "node scripts/provision-electron.mjs",
+      "exitCode": 0,
+      "durationS": 79,
+      "result": "PROVISIONED electron 44.4.5 win32-x64"
+    },
+    {
+      "command": "npm run dist:win (node scripts/build-installer.mjs)",
+      "exitCode": 0,
+      "durationMs": 176749,
+      "result": "UASCO-Setup-0.7.0-dev.1-win-x64.exe bytes=110390421 sha256=302710d87c92886f5e2082dfcf1afcb8a7f2b2ceef8c60ae4f57c0defe4a5bc4"
+    },
+    {
+      "command": "node scripts/installer-install-test.mjs <artifact> <win-unpacked>",
+      "exitCode": 0,
+      "durationS": 83,
+      "result": "see installTest"
+    },
+    {
+      "command": "node scripts/smoke-desktop.mjs (dev mode regression: electron apps/desktop/main.mjs + tsx backend)",
+      "exitCode": 0,
+      "durationS": 73,
+      "result": "desktop marker HEALTHY+VERIFIED"
+    }
+  ],
+  "installTest": {
+    "script": "scripts/installer-install-test.mjs",
+    "tempRoot": "C:\\Users\\salim\\AppData\\Local\\Temp\\uasco-b7-install-vuJdo8",
+    "startedAt": "2026-10-14T23:25:14.586Z",
+    "endedAt": "2026-10-14T23:26:37.659Z",
+    "artifact": {
+      "path": "C:\\Users\\salim\\UASCO-wt\\v2-b7-build\\dist-installer\\UASCO-Setup-0.7.0-dev.1-win-x64.exe",
+      "bytes": 110390421,
+      "sha256": "302710d87c92886f5e2082dfcf1afcb8a7f2b2ceef8c60ae4f57c0defe4a5bc4"
+    },
+    "installRegistryKey": "HKCU\\Software\\c08a2cf2-0094-569e-be97-c685aa0f7e0b",
+    "steps": [
+      {
+        "name": "preconditions",
+        "at": "2026-10-14T23:25:15.048Z",
+        "uninstallKeys": [],
+        "shortcuts": {
+          "desktopLnk": false,
+          "startMenuLnk": false,
+          "startMenuDir": false
+        },
+        "realAppDataExists": false,
+        "updaterCopyExists": false
+      },
+      {
+        "name": "install-refused-insufficient-space",
+        "at": "2026-10-14T23:25:15.478Z",
+        "command": "\"C:\\Users\\salim\\UASCO-wt\\v2-b7-build\\dist-installer\\UASCO-Setup-0.7.0-dev.1-win-x64.exe\" /S /UASCO_TEST_NO_SHORTCUTS --no-desktop-shortcut /UASCO_TEST_REQUIRE_MB=99999999 /D=C:\\Users\\salim\\AppData\\Local\\Temp\\uasco-b7-install-vuJdo8\\refuse\\UASCO",
+        "exitCode": 3,
+        "ms": 401,
+        "installDirCreated": false,
+        "uninstallKeys": []
+      },
+      {
+        "name": "silent-install",
+        "at": "2026-10-14T23:25:33.511Z",
+        "command": "\"C:\\Users\\salim\\UASCO-wt\\v2-b7-build\\dist-installer\\UASCO-Setup-0.7.0-dev.1-win-x64.exe\" /S /UASCO_TEST_NO_SHORTCUTS --no-desktop-shortcut /D=C:\\Users\\salim\\AppData\\Local\\Temp\\uasco-b7-install-vuJdo8\\install\\UASCO",
+        "exitCode": 0,
+        "ms": 17922,
+        "exe": true,
+        "uninstallKeys": [
+          "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\c08a2cf2-0094-569e-be97-c685aa0f7e0b"
+        ],
+        "uninstallKeyValues": [
+          {
+            "key": "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\c08a2cf2-0094-569e-be97-c685aa0f7e0b",
+            "exists": true,
+            "values": [
+              "DisplayName | REG_SZ | UASCO 0.7.0-dev.1 (unsigned development build)",
+              "UninstallString | REG_SZ | \"C:\\Users\\salim\\AppData\\Local\\Temp\\uasco-b7-install-vuJdo8\\install\\UASCO\\Uninstall UASCO.exe\" /currentuser",
+              "QuietUninstallString | REG_SZ | \"C:\\Users\\salim\\AppData\\Local\\Temp\\uasco-b7-install-vuJdo8\\install\\UASCO\\Uninstall UASCO.exe\" /currentuser /S",
+              "DisplayVersion | REG_SZ | 0.7.0-dev.1",
+              "DisplayIcon | REG_SZ | C:\\Users\\salim\\AppData\\Local\\Temp\\uasco-b7-install-vuJdo8\\install\\UASCO\\uninstallerIcon.ico",
+              "Publisher | REG_SZ | UASCO",
+              "Comments | REG_SZ | UASCO desktop (unsigned development build)",
+              "NoModify | REG_DWORD | 0x1",
+              "NoRepair | REG_DWORD | 0x1",
+              "EstimatedSize | REG_DWORD | 0x5cc00"
+            ]
+          }
+        ],
+        "shortcuts": {
+          "desktopLnk": false,
+          "startMenuLnk": false,
+          "startMenuDir": false
+        },
+        "updaterCopyExists": false,
+        "tempCopyExists": false
+      },
+      {
+        "name": "install-registry-key",
+        "at": "2026-10-14T23:25:33.551Z",
+        "key": "HKCU\\Software\\c08a2cf2-0094-569e-be97-c685aa0f7e0b",
+        "exists": true,
+        "values": [
+          "InstallLocation | REG_SZ | C:\\Users\\salim\\AppData\\Local\\Temp\\uasco-b7-install-vuJdo8\\install\\UASCO",
+          "KeepShortcuts | REG_SZ | true",
+          "ShortcutName | REG_SZ | UASCO"
+        ]
+      },
+      {
+        "name": "install-dir-snapshot",
+        "at": "2026-10-14T23:25:39.508Z",
+        "files": 1059
+      },
+      {
+        "name": "launch-0-default-flags-from-temp",
+        "at": "2026-10-14T23:25:40.435Z",
+        "args": [],
+        "exit": {
+          "code": 2147483651,
+          "signal": null
+        },
+        "ms": 927,
+        "marker": null,
+        "backendPortClosedAfterQuit": null,
+        "backendLogBytes": 75,
+        "backendLogHas64HexOutsideChallenge": 0,
+        "electronStderrTail": [
+          "[23404:1015/022540.174:ERROR:content\\browser\\gpu\\gpu_process_host.cc:1035] GPU process exited unexpectedly: exit_code=-2147483645",
+          "[23404:1015/022540.174:WARNING:content\\browser\\gpu\\gpu_process_host.cc:1479] The GPU process has crashed 9 time(s)",
+          "[23404:1015/022540.174:FATAL:content\\browser\\gpu\\gpu_data_manager_impl_private.cc:417] GPU process isn't usable. Goodbye."
+        ],
+        "backendLogTail": [
+          "[desktop] 2026-10-14T23:25:39.834Z starting control API on 127.0.0.1:59757"
+        ]
+      },
+      {
+        "name": "launch-1",
+        "at": "2026-10-14T23:25:42.263Z",
+        "args": [
+          "--no-sandbox"
+        ],
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "ms": 1828,
+        "marker": {
+          "readyAt": "2026-10-14T23:25:41.329Z",
+          "controlApi": "HEALTHY",
+          "serverIdentity": "VERIFIED",
+          "port": 59761
+        },
+        "backendPortClosedAfterQuit": true,
+        "backendLogBytes": 4929,
+        "backendLogHas64HexOutsideChallenge": 0,
+        "electronStderrTail": [
+          "    at api (file:///C:/Users/salim/AppData/Local/Temp/uasco-b7-install-vuJdo8/install/UASCO/resources/app/apps/desktop/main.mjs:86:168)",
+          "    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+          "    at async Session.<anonymous> (node:electron/js2c/browser_init:1:118174)"
+        ],
+        "backendLogTail": [
+          "[desktop] 2026-10-14T23:25:40.604Z starting control API on 127.0.0.1:59761",
+          "[desktop] control API identity verified",
+          "[desktop] 2026-10-14T23:25:41.876Z control API exited code=0 signal=null"
+        ]
+      },
+      {
+        "name": "unpacked-payload-sandboxed-launch",
+        "at": "2026-10-14T23:25:43.981Z",
+        "args": [],
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "ms": 1717,
+        "marker": {
+          "readyAt": "2026-10-14T23:25:43.323Z",
+          "controlApi": "HEALTHY",
+          "serverIdentity": "VERIFIED",
+          "port": 59772
+        },
+        "backendPortClosedAfterQuit": true,
+        "backendLogBytes": 4913,
+        "backendLogHas64HexOutsideChallenge": 0,
+        "electronStderrTail": [
+          "    at api (file:///C:/Users/salim/UASCO-wt/v2-b7-build/dist-installer/win-unpacked/resources/app/apps/desktop/main.mjs:86:168)",
+          "    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+          "    at async Session.<anonymous> (node:electron/js2c/browser_init:1:118174)"
+        ],
+        "backendLogTail": [
+          "[desktop] 2026-10-14T23:25:42.637Z starting control API on 127.0.0.1:59772",
+          "[desktop] control API identity verified",
+          "[desktop] 2026-10-14T23:25:43.846Z control API exited code=0 signal=null"
+        ]
+      },
+      {
+        "name": "single-instance",
+        "at": "2026-10-14T23:25:53.402Z",
+        "firstInstanceBackendPort": 59784,
+        "firstInstanceBackendHealthy": true,
+        "secondInstanceExitCode": 0,
+        "secondInstanceMs": 188,
+        "backendStartsLoggedAfterSecondInstance": 2,
+        "backendStartsBeforeSecondInstance": 2,
+        "firstInstanceTerminatedByTaskkill": 0,
+        "firstInstanceExit": 1,
+        "firstInstanceBackendPortClosed": true
+      },
+      {
+        "name": "install-dir-unchanged-after-launch",
+        "at": "2026-10-14T23:25:54.689Z",
+        "added": [],
+        "removed": [],
+        "changed": [],
+        "unchanged": true
+      },
+      {
+        "name": "user-data-contents",
+        "at": "2026-10-14T23:25:54.696Z",
+        "files": [
+          "blob_storage",
+          "declarative_performance_observer.db",
+          "declarative_performance_observer.db-journal",
+          "DIPS",
+          "DIPS-wal",
+          "Local State",
+          "Local Storage",
+          "logs",
+          "Network",
+          "Preferences",
+          "runtime",
+          "Session Storage",
+          "Shared Dictionary",
+          "workos",
+          "logs\\control-api.log",
+          "runtime\\DESKTOP_SMOKE_READY.json",
+          "workos\\snapshot.json",
+          "workos\\snapshot.json.prev"
+        ],
+        "realAppDataCreated": false
+      },
+      {
+        "name": "repair-reinstall-same-version",
+        "at": "2026-10-14T23:26:22.561Z",
+        "exitCode": 0,
+        "ms": 27671,
+        "exe": true,
+        "uninstallKeys": [
+          "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\c08a2cf2-0094-569e-be97-c685aa0f7e0b"
+        ],
+        "shortcuts": {
+          "desktopLnk": false,
+          "startMenuLnk": false,
+          "startMenuDir": false
+        }
+      },
+      {
+        "name": "launch-2-after-repair",
+        "at": "2026-10-14T23:26:29.236Z",
+        "args": [
+          "--no-sandbox"
+        ],
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "ms": 6674,
+        "marker": {
+          "readyAt": "2026-10-14T23:26:28.183Z",
+          "controlApi": "HEALTHY",
+          "serverIdentity": "VERIFIED",
+          "port": 59801
+        },
+        "backendPortClosedAfterQuit": true,
+        "backendLogBytes": 14615,
+        "backendLogHas64HexOutsideChallenge": 0,
+        "electronStderrTail": [
+          "    at api (file:///C:/Users/salim/AppData/Local/Temp/uasco-b7-install-vuJdo8/install/UASCO/resources/app/apps/desktop/main.mjs:86:168)",
+          "    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+          "    at async Session.<anonymous> (node:electron/js2c/browser_init:1:118174)"
+        ],
+        "backendLogTail": [
+          "[desktop] control API identity verified",
+          "[desktop] 2026-10-14T23:26:23.164Z starting control API on 127.0.0.1:59801",
+          "[desktop] control API identity verified",
+          "[desktop] 2026-10-14T23:26:28.775Z control API exited code=0 signal=null"
+        ]
+      },
+      {
+        "name": "silent-uninstall",
+        "at": "2026-10-14T23:26:37.529Z",
+        "command": "\"C:\\Users\\salim\\AppData\\Local\\Temp\\uasco-b7-install-vuJdo8\\install\\UASCO\\Uninstall UASCO.exe\" /S --keep-shortcuts",
+        "exitCode": 0,
+        "ms": 670,
+        "installDirRemoved": true,
+        "userDataKept": true,
+        "shortcuts": {
+          "desktopLnk": false,
+          "startMenuLnk": false,
+          "startMenuDir": false
+        }
+      },
+      {
+        "name": "registry-after-uninstall",
+        "at": "2026-10-14T23:26:37.659Z",
+        "uninstallKeys": [],
+        "uninstallKeyExists": [
+          {
+            "key": "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\c08a2cf2-0094-569e-be97-c685aa0f7e0b",
+            "exists": false
+          }
+        ],
+        "installRegistryKeyExists": false,
+        "realAppDataExists": false,
+        "updaterCopyExists": false,
+        "tempCopyExists": false
+      }
+    ],
+    "conclusions": {
+      "refusalPath": "silent install with /UASCO_TEST_REQUIRE_MB=99999999 exited 3, created no install dir and no registry entry",
+      "silentInstall": "exit 0 into %TEMP%; HKCU Uninstall entry created; no Desktop/Start-menu shortcut created (state identical before/after); no installer copy left in %LOCALAPPDATA%",
+      "launch": "installed UASCO.exe with isolated --user-data-dir: window loaded renderer, backend /health identity VERIFIED, clean quit closed the backend port; launched from %TEMP% only with test flag --no-sandbox (see environmentLimitation); identical payload launched with sandbox enabled from the build directory: VERIFIED",
+      "noRuntimeWritesToInstallDir": "sha256 of all 1059 install-dir files identical before vs after launches (added/removed/changed empty)",
+      "singleInstance": "second instance exited (0) in <0.5 s without starting a second backend; first instance force-killed -> its backend exited on its own (port closed)",
+      "repair": "re-running the same installer over the install exited 0 and the app launched again",
+      "uninstall": "silent uninstall removed the install dir; isolated userData kept (delete-data default off); HKCU Uninstall key and HKCU\\Software\\<guid> removed; %APPDATA%\\UASCO never created by the test"
+    },
+    "environmentLimitation": "On this machine Chromium's sandboxed GPU/renderer child processes cannot start when the binaries live under %TEMP% (C:\\Users\\salim\\AppData\\Local\\Temp has non-standard ACL entries: CodexSandboxUsers, an AppContainer SID). Default-flag launch from the %TEMP% install crashed with 0x80000003 'GPU process isn't usable' (recorded in launch-0-default-flags-from-temp); --disable-gpu and --disable-gpu-sandbox did not help; the identical payload copied into %TEMP% reproduced the crash, while it launches normally from C:\\Users\\salim\\UASCO-wt\\v2-b7-build. The test therefore uses --no-sandbox for %TEMP% launches only; app code and webPreferences (sandbox:true) are unchanged. A real install to the default %LOCALAPPDATA%\\Programs\\UASCO was not performed (forbidden outside %TEMP% without Founder approval)."
+  },
+  "verification": [
+    {
+      "command": "npx tsc --noEmit",
+      "exitCode": 0
+    },
+    {
+      "command": "npx vitest run tests/v7-b7-installer.test.ts tests/v7-b4-desktop-shell.test.ts tests/v7-b5-*.test.ts tests/pkg-c-lf-electron-smoke.test.ts tests/pkg-e-electron-provision.test.ts",
+      "exitCode": 0,
+      "result": "5 files, 153 tests passed"
+    },
+    {
+      "command": "node scripts/v6-apps-control-desktop-selftest.mjs",
+      "exitCode": 0,
+      "result": "PASS 93/93"
+    },
+    {
+      "command": "node scripts/validate-tr-comments.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/secret-sanity.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/dependency-supply-chain.mjs",
+      "exitCode": 0,
+      "result": "PASS components=344 low=0"
+    },
+    {
+      "command": "node scripts/generate-trust-root.mjs && node scripts/verify-trust-root.mjs",
+      "exitCode": 0,
+      "note": "re-run after commit"
+    },
+    {
+      "command": "npx vitest run tests/v7-b1-workos.test.ts",
+      "exitCode": 0,
+      "result": "12 passed (validation.json consumers re-checked)"
+    }
+  ],
+  "notRun": [
+    "scripts/run-validation.mjs (excluded by the package instructions)",
+    "interactive (non-silent) installer UI pages, the network-drive warning and the 'kullanıcı verilerini de sil' checkbox were not clicked through: covered by static tests only",
+    "uninstall with data deletion (would touch %APPDATA%\\UASCO); covered statically",
+    "upgrade from an older UASCO version (no older installer exists); the upgrade path is electron-builder's --updated uninstall which never deletes data (static test)",
+    "install to a non-%TEMP% location and real Desktop/Start-menu shortcuts (require Founder approval)"
+  ],
+  "deviations": [
+    "electron-builder is 27.0.0-alpha.9 (prerelease) because every 26.x that passes the protected supply-chain validator's structure fails npm audit (moderate), and 26.5.0 fails on npm alias packages; see dependency.whyThisVersion.",
+    "package.json version changed 0.0.0-v6-audit-candidate -> 0.7.0-dev.1: the old value is valid semver but is a V6 audit label, not a product version; the installer name, Windows file/product version and upgrade/repair display need a meaningful monotonically increasing 0.x prerelease.",
+    "apps/desktop/preload.mjs changed (protected, in the authorized list): with sandbox:true Electron cannot load an ESM preload ('Unable to load preload script ... Cannot use import statement outside a module'), so window.uasco was never exposed in a real Electron run (pre-existing since B4/B5); fixed by using the sandbox preload require('electron'); surface identical.",
+    "Build outputs are kept outside the repo tree (<repo>-build/) because .gitignore is protected.",
+    "Test launches of the %TEMP% install use --no-sandbox (environment limitation, see installTest.environmentLimitation).",
+    "Electron's default_app.asar from the provisioned dist is shipped unchanged in resources/ (resources/app takes precedence); asar packaging is disabled for the app.",
+    "tests/v7-b5-work-screens.test.ts assertion relaxed from 'last element' to 'directly after B4, only later v7-b* tests follow' so that the instructed append of tests/v7-b7-installer.test.ts does not break it."
+  ]
+}
