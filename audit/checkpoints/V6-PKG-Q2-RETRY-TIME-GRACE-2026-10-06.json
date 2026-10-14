@@ -299,5 +299,18 @@
       "notClaimed": "No CLEAN, merge, release or validation claim; the supervisor owns review, validation and merge"
     }
   ],
-  "status": "F10 re-application: changes applied; not clean; review pending"
+  "status": "F10 re-application: changes applied; not clean; review pending",
+  "f10Lineage": {
+    "f9Base": "07763d6df204afbc69dc8ddb6849f542d89e2786",
+    "f9Tip": "12780790cc8d88d89cf960eeffb5f69ce4cded5d",
+    "f10Base": "1c2dee8421684b611645b4ff4f751758d1a8e85d",
+    "authorizationCommit": "25458569f36e39829972d8009c30c0f7f25a6758",
+    "changeCommit": "19ad7bde2cecfc6439c5e96234bc5089d4da5731",
+    "byteIdenticalToF9Except": [
+      "audit/checkpoints/*",
+      "config/trust-root-manifest.json"
+    ],
+    "oldEvidenceUntouched": true,
+    "note": "f10 re-application under FA-F10-2026-10-14; cycle-1 governed review pending; not clean"
+  }
 }
