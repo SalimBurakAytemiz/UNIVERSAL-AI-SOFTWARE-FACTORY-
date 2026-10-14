@@ -1,0 +1,55 @@
+{
+  "//TR": "Bu kayit V6-PKG-BS1R paketinin (BS1'i devralir) incelenen revizyonunu, Founder yetkilerini, dosya ozetlerini, gercek test topolojisini ve mutasyon kanitlarini dogru bicimde tutar; temiz iddiasi veya uydurma dogrulama sonucu icermez.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V6-PKG-BS1R-AUTONOMY-BOOTSTRAP",
+  "date": "2026-10-13",
+  "branch": "v6/pkg-bs1r-autonomy-bootstrap-f8",
+  "status": "F10 AUTHORIZATION RECORD ONLY: package changes not yet applied; not clean; review pending",
+  "founderAuthorization": {
+    "date": "2026-10-13",
+    "decisions": [
+      "F-BS1-CLAUDE-C1-001 accepted as a real security risk; remediation approved (rollback of the supervisor task on every post-registration failure)",
+      "Rollback on every post-registration failure including a failed or unconfirmed first run; a pre-existing task is restored from its exported definition and kept DISABLED, never deleted",
+      "The activated control plane is left in place, inert without a task",
+      "The review-cycle limit of 2 lifted for BS1; BS1 superseded by BS1R built on the cycle-3 tree",
+      "The tests validation step split into bounded steps tests-bs1-a..e with a mechanical coverage guard (config/validation.json and scripts/phase0-acceptance.mjs are protected files changed under this decision); no timeout changed"
+    ],
+    "protectedFilesChangedAgainstBase22bbbad": [
+      "config/protected-paths.json",
+      "config/validation.json",
+      "scripts/bootstrap-autonomy-selftest.mjs",
+      "scripts/bootstrap-uasco-autonomy.ps1",
+      "scripts/phase0-acceptance.mjs",
+      "scripts/uasco-supervisor-entry.mjs",
+      "scripts/uasco-supervisor-task.ps1"
+    ],
+    "protectedFilesNamedExplicitly": [
+      "scripts/bootstrap-uasco-autonomy.ps1",
+      "scripts/bootstrap-autonomy-selftest.mjs",
+      "config/validation.json",
+      "scripts/phase0-acceptance.mjs",
+      "config/trust-root-manifest.json",
+      "docs/architecture/AUTONOMY-BOOTSTRAP.md"
+    ],
+    "originalCycle1Authorization": "audit/checkpoints/V6-PKG-BS1-AUTONOMY-BOOTSTRAP-2026-10-02.json founderAuthorization (entry, wrapper, protected-paths, UNATTENDED-ORCHESTRATION.md, AUTONOMY-BOOTSTRAP.md, selftest, ps1, manifest) stays in force",
+    "constraint": "one-time host setup only; no elevation, no stored password, no S4U, no startup trigger, no credential access, no push",
+    "protectedFiles": [
+      "config/protected-paths.json",
+      "config/trust-root-manifest.json",
+      "config/validation.json",
+      "scripts/bootstrap-autonomy-selftest.mjs",
+      "scripts/bootstrap-uasco-autonomy.ps1",
+      "scripts/phase0-acceptance.mjs",
+      "scripts/uasco-supervisor-entry.mjs",
+      "scripts/uasco-supervisor-task.ps1"
+    ],
+    "f10Authorization": {
+      "decisionId": "FA-F10-2026-10-14",
+      "planSha256": "4de6c8e5889d2ce2cb0a3704c098eb7e859a855d97af00fd4df46d831a83c8d6",
+      "listSha256": "333451dd66ec15836c227124ce2fdb2118f1b14086e067110c73bc836ceab447",
+      "recordedAt": "2026-10-14T01:48:24.941Z",
+      "scope": "exact re-application of the f9-reviewed diff 22bbbad..ef0f3bb; protected files limited to protectedFiles; recorded before any protected change of this package",
+      "notBackdated": true
+    }
+  }
+}
