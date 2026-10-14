@@ -305,7 +305,8 @@
         "tests/technology-decision.test.ts",
         "tests/technology-discovery.test.ts",
         "tests/v7-b1-workos.test.ts",
-        "tests/v7-b2-workos-hardening.test.ts"
+        "tests/v7-b2-workos-hardening.test.ts",
+        "tests/v7-b9-target-catalog.test.ts"
       ],
       "requiresDependencies": true
     },
