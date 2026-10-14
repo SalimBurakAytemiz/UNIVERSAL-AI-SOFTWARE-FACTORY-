@@ -8,7 +8,7 @@ import {fileURLToPath} from "node:url";
 import {runProcess} from "./executors.js";
 import type {ProcResult} from "./executors.js";
 import {redactSecrets} from "./secret-scan.js";
-import type {SecuritySecretFinding, SecurityStageSummary, SecurityToolInfo, SecurityToolName, SecurityVulnFinding} from "./types.js";
+import type {GitleaksPassSummary, SecuritySecretFinding, SecurityStageSummary, SecurityToolInfo, SecurityToolName, SecurityVulnFinding} from "./types.js";
 
 export interface ToolOverride { path: string; prefixArgs?: string[] }
 // tools[x] === null: araç yok sayılır (PATH araması yapılmaz). Tanımsız: PATH araması. Override yalnız programatik enjeksiyondur (env ile seçilemez).
@@ -99,33 +99,106 @@ export interface ScanCtx { env: NodeJS.ProcessEnv; timeoutMs: number; maxReportB
 export interface GitleaksResult {
   status: "CLEAN" | "FINDINGS" | "ERROR"; reason?: string; proc: ProcResult; count: number; items: SecuritySecretFinding[]; rawReportSha256: string | null; transient: boolean;
 }
-// gitleaks yalnız base..head commit aralığını tarar. Güvenlik kararları: (1) hedef çıplak taze klondur (çalışma ağacı yok): repodaki .gitleaksignore / .gitleaks.toml hiç okunmaz,
-// (2) --config motorun kendi dosyasıdır, ignore yolu boş motor dosyasıdır, (3) --ignore-gitleaks-allow satır içi "gitleaks:allow" yorumunu etkisiz kılar,
-// (4) log-opts --text --no-textconv --no-ext-diff: .gitattributes (-diff/binary) ve textconv ile içerik gizlenemez, (5) --redact: rapor ve loglarda secret değeri yoktur,
-// (6) --diff-merges=first-parent: git log -p merge commit için varsayılan olarak yama göstermez; bu olmadan "evil merge" veya çakışma çözümü ile eklenen içerik hiç taranmazdı (B3C-C1-F1).
-export async function runGitleaks(tool: ResolvedTool, a: {bareRepo: string; base: string; head: string; configFile: string; ignoreFile: string; reportFile: string; cwd: string}, ctx: ScanCtx): Promise<GitleaksResult> {
-  if (!SHA.test(a.base) || !SHA.test(a.head)) throw new Error("SECURITY_INVALID_SHA");
-  try { fs.rmSync(a.reportFile, {force: true}); } catch { /* yoksa sorun değil */ }
-  const argv = [tool.path!, ...tool.prefixArgs, "git", "--no-banner", "--no-color", "--log-level", "warn", "--redact", "--config", a.configFile, "--gitleaks-ignore-path", a.ignoreFile, "--ignore-gitleaks-allow",
-    "--report-format", "json", "--report-path", a.reportFile, "--exit-code", "1", "--log-opts", `--text --no-textconv --no-ext-diff --diff-merges=first-parent ${a.base}..${a.head}`, a.bareRepo];
-  const proc = await runProcess(argv, {cwd: a.cwd, env: ctx.env, timeoutMs: ctx.timeoutMs, shouldAbort: ctx.abort});
+// gitleaks log satırlarında hata işareti (B3C-C2-F2): gerçek gitleaks 8.30.1 iç "git log" başarısız olduğunda (ör. geçersiz revision aralığı) bile exit 0 verir ve "[]" raporu yazar;
+// stderr'de "ERR [git] fatal: ..." / "ERR error=..." görünür. Bu satırlardan biri varsa sonuç asla CLEAN sayılmaz (SECURITY_TOOL_ERROR, fail-closed).
+export const GITLEAKS_ERROR_LINE = /(?:^|\s)(?:ERR|FTL|PNC|FATAL|ERROR)(?:\s|$)|\bfatal\b|\berror=/im;
+// Ortak gitleaks bayrakları. --config motorun dosyasıdır ([extend] useDefault = true: varsayılan KURALLAR), ignore yolu boş motor dosyasıdır, --ignore-gitleaks-allow satır içi "gitleaks:allow" yorumunu etkisiz kılar, --redact rapor/loglarda değer bırakmaz.
+const glCommon = (a: {configFile: string; ignoreFile: string; reportFile: string}): string[] => ["--no-banner", "--no-color", "--log-level", "warn", "--redact", "--config", a.configFile, "--gitleaks-ignore-path", a.ignoreFile, "--ignore-gitleaks-allow",
+  "--report-format", "json", "--report-path", a.reportFile, "--exit-code", "1"];
+type GlMapper = (f: any) => SecuritySecretFinding;
+const gitMapper: GlMapper = (f: any) => ({
+  ruleId: /^[A-Za-z0-9._-]{1,100}$/.test(String(f?.RuleID ?? "")) ? String(f.RuleID) : "unknown-rule", file: safeStr(f?.File, 300),
+  line: Number.isSafeInteger(f?.StartLine) && f.StartLine >= 0 ? f.StartLine : 0, commit: SHA.test(String(f?.Commit ?? "")) ? String(f.Commit) : ""
+});
+async function execGitleaks(argv: string[], reportFile: string, cwd: string, ctx: ScanCtx, mapper: GlMapper, input?: string): Promise<GitleaksResult> {
+  try { fs.rmSync(reportFile, {force: true}); } catch { /* yoksa sorun değil */ }
+  const proc = await runProcess(argv, {cwd, env: ctx.env, timeoutMs: ctx.timeoutMs, shouldAbort: ctx.abort, ...(input !== undefined ? {input} : {})});
   const transient = proc.timedOut || proc.spawnError;
   const fail = (reason: string): GitleaksResult => ({status: "ERROR", reason, proc, count: 0, items: [], rawReportSha256: null, transient});
-  if (proc.aborted || transient) { cleanup(a.reportFile); return fail(proc.aborted ? "ABORTED" : proc.timedOut ? "TIMED_OUT" : "SPAWN_FAILED"); }
-  if (proc.exitCode !== 0 && proc.exitCode !== 1) { cleanup(a.reportFile); return fail(`UNEXPECTED_EXIT_${proc.exitCode}`); }
-  const rep = readBoundedJson(a.reportFile, ctx.maxReportBytes);
-  cleanup(a.reportFile); // ham rapor (commit mesajı gibi redakte edilmeyen alanlar içerebilir) saklanmaz; yalnız sha256 kaydedilir
-  if (!rep.ok) {
-    if (proc.exitCode === 0 && rep.reason === "REPORT_MISSING") return {status: "CLEAN", proc, count: 0, items: [], rawReportSha256: null, transient: false};
-    return fail(rep.reason);
-  }
+  if (proc.aborted || transient) { cleanup(reportFile); return fail(proc.aborted ? "ABORTED" : proc.timedOut ? "TIMED_OUT" : "SPAWN_FAILED"); }
+  if (proc.exitCode !== 0 && proc.exitCode !== 1) { cleanup(reportFile); return fail(`UNEXPECTED_EXIT_${proc.exitCode}`); }
+  const rep = readBoundedJson(reportFile, ctx.maxReportBytes);
+  cleanup(reportFile); // ham rapor (commit mesajı gibi redakte edilmeyen alanlar içerebilir) saklanmaz; yalnız sha256 kaydedilir
+  // B3C-C2-F2: hata satırı her durumda (exit 0 + "[]" dahil) fail-closed; rapor yok/boş/ayrıştırılamaz da asla CLEAN değildir.
+  if (GITLEAKS_ERROR_LINE.test(`${proc.stderr}\n${proc.stdout}`)) return fail("TOOL_REPORTED_ERROR");
+  if (!rep.ok) return fail(rep.reason);
   if (!Array.isArray(rep.value)) return fail("REPORT_SHAPE");
-  const items: SecuritySecretFinding[] = rep.value.slice(0, MAX_ITEMS).map((f: any) => ({
-    ruleId: /^[A-Za-z0-9._-]{1,100}$/.test(String(f?.RuleID ?? "")) ? String(f.RuleID) : "unknown-rule", file: safeStr(f?.File, 300),
-    line: Number.isSafeInteger(f?.StartLine) && f.StartLine >= 0 ? f.StartLine : 0, commit: SHA.test(String(f?.Commit ?? "")) ? String(f.Commit) : ""
-  }));
   if (proc.exitCode === 1 && rep.value.length === 0) return fail("EXIT_1_WITHOUT_FINDINGS");
-  return {status: rep.value.length > 0 ? "FINDINGS" : "CLEAN", proc, count: rep.value.length, items, rawReportSha256: rep.sha256, transient: false};
+  if (proc.exitCode === 0 && rep.value.length > 0) return fail("EXIT_0_WITH_FINDINGS");
+  const items = rep.value.map(mapper);
+  return {status: items.length > 0 ? "FINDINGS" : "CLEAN", proc, count: items.length, items, rawReportSha256: rep.sha256, transient: false};
+}
+// Geçiş 1 (git geçmişi): yalnız base..head commit aralığı. Güvenlik kararları: (1) hedef çıplak taze klondur (çalışma ağacı yok): repodaki .gitleaksignore / .gitleaks.toml hiç okunmaz,
+// (2) log-opts --text --no-textconv --no-ext-diff: .gitattributes (-diff/binary) ve textconv ile içerik gizlenemez,
+// (3) --diff-merges=first-parent: git log -p merge commit için varsayılan olarak yama göstermez; bu olmadan "evil merge" veya çakışma çözümü ile eklenen içerik hiç taranmazdı (B3C-C1-F1).
+// Not: "[extend] useDefault = true" gitleaks'in varsayılan GLOBAL allowlist'ini de (node_modules/, kilit dosyaları, *.png gibi uzantılar) devralır; 8.30.1'de bunu kapatan bir ayar yoktur
+// (extend yalnız disabledRules destekler, allowlist'ler her zaman eklenir). Bu yüzden git geçişi tek başına yeterli değildir; bkz. runGitleaksAddedLines (B3C-C2-F1).
+export async function runGitleaks(tool: ResolvedTool, a: {bareRepo: string; base: string; head: string; configFile: string; ignoreFile: string; reportFile: string; cwd: string}, ctx: ScanCtx): Promise<GitleaksResult> {
+  if (!SHA.test(a.base) || !SHA.test(a.head)) throw new Error("SECURITY_INVALID_SHA");
+  const argv = [tool.path!, ...tool.prefixArgs, "git", ...glCommon(a), "--log-opts", `--text --no-textconv --no-ext-diff --diff-merges=first-parent ${a.base}..${a.head}`, a.bareRepo];
+  return execGitleaks(argv, a.reportFile, a.cwd, ctx, gitMapper);
+}
+
+// ---- Geçiş 2: eklenen satırlar akışı (B3C-C2-F1) ----
+// base..head aralığındaki her commit'in (merge'ler first-parent'a göre) eklenen satırları tek bir akışa dizilir ve gitleaks "stdin" kipine verilir. stdin kipinde dosya yolu yoktur:
+// varsayılan global allowlist'in YOL desenleri (node_modules/, kilit dosyaları, görüntü/ikili uzantılar) hiçbir satırı eleyemez; varsayılan KURALLAR aynen uygulanır.
+// Kalan sınırlama: global allowlist'in DEĞER desenleri/stopword'leri (yol değil) ve yalnız yola bağlı kurallar (ör. *.p12) bu geçişte etkisizdir; yola bağlı kurallar git geçişinde çalışır.
+export interface AddedLineRef { commit: string; file: string; line: number }
+export interface AddedLineStream { text: string; refs: Array<AddedLineRef | null> }
+// Girdi: `git log -p --format=commit %H ...` çıktısı. Hunk başlığındaki satır sayıları izlenir (hunk içindeki "+++"/"commit " satırları içeriktir). Her hunk öncesine boş ayırıcı satır konur (refs: null).
+export function buildAddedLineStream(patchLog: string): AddedLineStream {
+  const out: string[] = [], refs: Array<AddedLineRef | null> = [];
+  let commit = "", file = "", line = 0, oldLeft = 0, newLeft = 0;
+  const push = (text: string, ref: AddedLineRef | null) => { out.push(text); refs.push(ref); };
+  for (const raw0 of patchLog.split("\n")) {
+    const raw = raw0.endsWith("\r") ? raw0.slice(0, -1) : raw0;
+    if (oldLeft > 0 || newLeft > 0) {
+      if (raw.startsWith("+")) { push(raw.slice(1), {commit, file, line}); line += 1; newLeft -= 1; continue; }
+      if (raw.startsWith("-")) { oldLeft -= 1; continue; }
+      if (raw.startsWith(" ") || raw === "") { line += 1; oldLeft -= 1; newLeft -= 1; continue; }
+      if (raw.startsWith("\\")) continue;
+      oldLeft = 0; newLeft = 0; // beklenmeyen satır: hunk bitti sayılır, başlık olarak işlenir
+    }
+    const c = /^commit ([0-9a-f]{40})$/.exec(raw);
+    if (c) { commit = c[1]; file = ""; continue; }
+    if (raw.startsWith("diff --git ")) { file = ""; continue; }
+    if (raw.startsWith("+++ ")) { file = raw.slice(4).replace(/^b\//, "").trim(); continue; }
+    if (raw.startsWith("--- ")) continue;
+    const h = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(raw);
+    if (h) { oldLeft = h[1] === undefined ? 1 : Number(h[1]); line = Number(h[2]); newLeft = h[3] === undefined ? 1 : Number(h[3]); if (out.length) push("", null); continue; }
+    // Hunk dışında beklenmedik "+" satırı da (bozuk/kesilmiş yama) taranır: muhafazakâr davranış.
+    if (raw.startsWith("+")) push(raw.slice(1), {commit, file, line: 0});
+  }
+  return {text: out.length ? `${out.join("\n")}\n` : "", refs};
+}
+export async function runGitleaksAddedLines(tool: ResolvedTool, a: {stream: AddedLineStream; configFile: string; ignoreFile: string; reportFile: string; cwd: string}, ctx: ScanCtx): Promise<GitleaksResult> {
+  const argv = [tool.path!, ...tool.prefixArgs, "stdin", ...glCommon(a)];
+  const mapper: GlMapper = (f: any) => {
+    const n = Number.isSafeInteger(f?.StartLine) ? f.StartLine : 0, ref = n >= 1 ? a.stream.refs[n - 1] : undefined, g = gitMapper(f);
+    return ref ? {ruleId: g.ruleId, file: safeStr(ref.file, 300), line: ref.line, commit: ref.commit} : {ruleId: g.ruleId, file: "(added-lines-stream)", line: n >= 0 ? n : 0, commit: ""};
+  };
+  return execGitleaks(argv, a.reportFile, a.cwd, ctx, mapper, a.stream.text);
+}
+
+// base..head aralığı gitleaks'ten ÖNCE doğrulanır (B3C-C2-F2): iki uç da commit olmalı ve base, head'in atası olmalı; aksi halde gitleaks'in sessiz "[]" sonucuna hiç güvenilmez.
+export function gitRangeProblem(git: (args: string[]) => {status: number | null}, base: string, head: string): string | null {
+  if (!SHA.test(base) || !SHA.test(head)) return "RANGE_INVALID_SHA";
+  for (const sha of [base, head]) if (git(["rev-parse", "--verify", "--quiet", `${sha}^{commit}`]).status !== 0) return "RANGE_COMMIT_MISSING";
+  const anc = git(["merge-base", "--is-ancestor", base, head]).status;
+  return anc === 0 ? null : anc === 1 ? "RANGE_BASE_NOT_ANCESTOR" : "RANGE_CHECK_FAILED";
+}
+
+// İki geçişin birleşimi: herhangi bir geçiş hatalıysa ERROR (fail-closed); bulgular (ruleId, dosya, satır, commit) anahtarıyla tekilleştirilir.
+export function mergeGitleaksPasses(g: GitleaksResult, added: GitleaksResult | null, addedProblem: string | null): PolicyInput["gitleaks"] {
+  const pass = (r: GitleaksResult | null, problem: string | null): GitleaksPassSummary => r ? {status: r.status, ...(r.reason ? {reason: r.reason} : {}), findings: r.count, rawReportSha256: r.rawReportSha256}
+    : {status: problem ? "ERROR" : "SKIPPED", ...(problem ? {reason: problem} : {}), findings: 0, rawReportSha256: null};
+  const passes = {git: pass(g, null), addedLines: pass(added, g.status === "ERROR" ? null : addedProblem)};
+  const err = g.status === "ERROR" ? (g.reason ?? "ERROR") : addedProblem ? addedProblem : added?.status === "ERROR" ? `ADDED_LINES_${added.reason ?? "ERROR"}` : null;
+  if (err) return {status: "ERROR", reason: err, count: 0, items: [], rawReportSha256: g.rawReportSha256, passes};
+  const key = (i: SecuritySecretFinding) => `${i.ruleId}\u0000${i.file}\u0000${i.line}\u0000${i.commit}`;
+  const seen = new Set(g.items.map(key)), all = [...g.items];
+  for (const i of added?.items ?? []) if (!seen.has(key(i))) { seen.add(key(i)); all.push(i); }
+  return {status: all.length ? "FINDINGS" : "CLEAN", count: all.length, items: all.slice(0, MAX_ITEMS), rawReportSha256: g.rawReportSha256, passes};
 }
 function cleanup(file: string): void { try { fs.rmSync(file, {force: true}); } catch { /* en iyi çaba */ } }
 
@@ -194,7 +267,7 @@ export async function runTrivy(tool: ResolvedTool, a: {target: string; cacheDir:
 // ---- Politika ----
 export interface PolicyInput {
   baseSha: string; headSha: string; cycle: number; tools: SecurityToolInfo[]; builtinHits: number;
-  gitleaks: {status: "CLEAN" | "FINDINGS" | "NOT_INSTALLED" | "ERROR"; reason?: string; count: number; items: SecuritySecretFinding[]; rawReportSha256: string | null};
+  gitleaks: {status: "CLEAN" | "FINDINGS" | "NOT_INSTALLED" | "ERROR"; reason?: string; count: number; items: SecuritySecretFinding[]; rawReportSha256: string | null; passes?: {git: GitleaksPassSummary; addedLines: GitleaksPassSummary}};
   trivy: {status: "CLEAN" | "FINDINGS" | "PARTIAL" | "NOT_INSTALLED" | "ERROR"; reason?: string; dbState?: string; counts: Record<string, number>; blocking: number; findings: SecurityVulnFinding[]; truncated: boolean; rawReportSha256: string | null};
   semgrep: SecurityToolInfo;
 }
@@ -220,7 +293,7 @@ export function evaluateSecurityPolicy(p: PolicyInput): SecurityStageSummary {
   note += ` Standing gaps: ${gaps.filter(g => !partialGaps.includes(g)).join(", ")}.`;
   return {
     schemaVersion: 1, status, blockReason, baseSha: p.baseSha, headSha: p.headSha, cycle: p.cycle,
-    secrets: {builtin: {status: p.builtinHits ? "FINDINGS" : "CLEAN", hits: p.builtinHits}, gitleaks: {status: p.gitleaks.status, ...(p.gitleaks.reason ? {reason: p.gitleaks.reason} : {}), findings: p.gitleaks.count, items: p.gitleaks.items, rawReportSha256: p.gitleaks.rawReportSha256}},
+    secrets: {builtin: {status: p.builtinHits ? "FINDINGS" : "CLEAN", hits: p.builtinHits}, gitleaks: {status: p.gitleaks.status, ...(p.gitleaks.reason ? {reason: p.gitleaks.reason} : {}), findings: p.gitleaks.count, items: p.gitleaks.items, rawReportSha256: p.gitleaks.rawReportSha256, ...(p.gitleaks.passes ? {passes: p.gitleaks.passes} : {})}},
     sca: {status: p.trivy.status, ...(p.trivy.reason ? {reason: p.trivy.reason} : {}), ...(p.trivy.dbState ? {dbState: p.trivy.dbState} : {}), counts: p.trivy.counts, blocking: p.trivy.blocking, findings: p.trivy.findings, truncated: p.trivy.truncated, rawReportSha256: p.trivy.rawReportSha256},
     sast, sbom, gaps, tools: p.tools, founderNote: note
   };
@@ -229,7 +302,9 @@ export function evaluateSecurityPolicy(p: PolicyInput): SecurityStageSummary {
 // ---- Test enjeksiyonu: FAKE tarayıcı (core/workos/fake-security-tool.mjs) ----
 export const FAKE_SECURITY_TOOL_SCRIPT = fileURLToPath(new URL("./fake-security-tool.mjs", import.meta.url));
 export interface FakeSecurityDirective {
-  gitleaks?: {installed?: boolean; findings?: Array<{ruleId: string; file: string; line: number; commit?: string}>; exitCode?: number; sleepMs?: number; plantedSecret?: string};
+  gitleaks?: {installed?: boolean; findings?: Array<{ruleId: string; file: string; line: number; commit?: string}>; exitCode?: number; sleepMs?: number; plantedSecret?: string; stderr?: string; noReport?: boolean;
+    // "stdin" kipindeki (eklenen satırlar geçişi) davranış; verilmezse temiz "[]" yazılır.
+    stdin?: {findings?: Array<{ruleId: string; line: number}>; exitCode?: number; stderr?: string; noReport?: boolean}};
   trivy?: {installed?: boolean; dbState?: "FRESH" | "STALE" | "MISSING"; dbError?: boolean; vulns?: Array<{id: string; pkg: string; version: string; severity: string; fixed?: string}>; exitCode?: number; sleepMs?: number; raw?: string};
   semgrep?: {installed?: boolean};
 }

@@ -112,7 +112,7 @@ describe("B3a mission runner engine", () => {
     expect(run.headSha).toMatch(/^[0-9a-f]{40}$/);
     expect(run.headSha).not.toBe(c.head);
     expect(run.checkpoints.map(x => x.step)).toEqual(["WORKSPACE", "IMPLEMENT", "VERIFY", "SECURITY", "REVIEW", "REGRESSION", "REPORT"]);
-    expect(kinds(run)).toEqual(["WORKSPACE", "IMPLEMENT", "SECRET_SCAN", "VERIFY_TESTS", "SECURITY_GITLEAKS", "SECURITY_TRIVY", "SECURITY_REPORT", "REVIEW", "REGRESSION_TESTS", "REPORT"]);
+    expect(kinds(run)).toEqual(["WORKSPACE", "IMPLEMENT", "SECRET_SCAN", "VERIFY_TESTS", "SECURITY_GITLEAKS", "SECURITY_GITLEAKS_ADDED_LINES", "SECURITY_TRIVY", "SECURITY_REPORT", "REVIEW", "REGRESSION_TESTS", "REPORT"]);
     for (const e of run.evidence) {
       expect(e.startedAt <= e.endedAt).toBe(true);
       expect(e.exitCode).toBe(0);

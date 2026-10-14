@@ -10,7 +10,7 @@
     "audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json",
     "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
   ],
-  "status": "IMPLEMENTED (c2 remediation of B3C-C1-F1 applied), NOT CLEAN; review pending",
+  "status": "IMPLEMENTED (c3 remediation of B3C-C2-F1 and B3C-C2-F2 applied), NOT CLEAN; review pending",
   "filesChanged": [
     "core/workos/security-tools.ts (new: tool discovery, gitleaks/trivy runners, policy, fakeSecurity() test injection)",
     "core/workos/fake-security-tool.mjs (new: deterministic FAKE gitleaks/trivy/semgrep stand-in, tests only)",
@@ -173,5 +173,97 @@
     ],
     "negativeControl": "With the --diff-merges=first-parent option temporarily removed, the real-gitleaks evil-merge test failed (expected 'AWAITING_APPROVAL' to be 'BLOCKED'); with the option restored it passes. Observed.",
     "scopeNote": "No protected file touched except config/trust-root-manifest.json (resealed via generate-trust-root). server.ts and validation.json unchanged in c2 (the b3c test path was already appended in c1)."
+  },
+  "remediationCycle3": {
+    "cycle": "c3",
+    "base": "5b8afe4",
+    "findings": [
+      {
+        "id": "B3C-C2-F1",
+        "severity": "HIGH",
+        "summary": "Engine gitleaks config '[extend] useDefault = true' inherits the default GLOBAL path allowlist (node_modules/, lockfiles, image/binary extensions such as *.png); gitleaks-only secret types placed under such paths were never seen while the stage reported PASSED."
+      },
+      {
+        "id": "B3C-C2-F2",
+        "severity": "MEDIUM (treated as blocker)",
+        "summary": "Real gitleaks 8.30.1 exits 0 and writes [] when its internal git log fails (stderr 'ERR [git] fatal' / 'error='), producing a false clean."
+      },
+      {
+        "id": "B3C-C2-N1",
+        "severity": "ADVISORY",
+        "summary": "trivy argv never run against a real binary with a DB; left as a documented gap (no DB download, no install)."
+      }
+    ],
+    "investigation": [
+      "Installed gitleaks 8.30.1 has no command to print its default config and no setting to drop the default global allowlist: [extend] only supports useDefault/path/disabledRules and the extended config's allowlists are always appended. Generating a full config copy was not chosen (would require extracting/shipping the embedded default rules).",
+      "Observed with real gitleaks 8.30.1 (scratch repo, runtime-built GitLab token in node_modules/x/c.js, img.png (text) and src.js): 'gitleaks git' with the engine config reported only src.js (exit 1, 1 finding). The same added lines piped to 'gitleaks stdin' with the same config reported all 3 (exit 1, 3 findings; File field empty). stdin mode has no file path, so path allowlists cannot apply.",
+      "Observed with real gitleaks 8.30.1: '--log-opts \"<missing-sha>..<head>\"' prints 'ERR [git] fatal: Invalid revision range ...' and 'ERR error=\"stderr is not empty\"', exits 0 and writes '[]'. A clean run and an empty stdin run print nothing on stderr and write '[]'."
+    ],
+    "fix": {
+      "F1": "core/workos/security-tools.ts + runner.ts: gitleaks now runs two passes with the same engine config/empty ignore/--ignore-gitleaks-allow/--redact. Pass 1 is the unchanged 'gitleaks git' on the fresh bare clone. Pass 2 (new) builds an added-lines stream from 'git log -p --text --no-textconv --no-ext-diff --no-renames --diff-merges=first-parent --format=commit %H base..head' (empty attributes) via buildAddedLineStream() and feeds it to 'gitleaks stdin' (runGitleaksAddedLines); each finding's StartLine is mapped back to {commit, file, line}. Both passes must succeed; findings are de-duplicated by (ruleId, file, line, commit); per-pass results are recorded in secrets.gitleaks.passes {git, addedLines} (GitleaksPassSummary in types.ts). Evidence kind SECURITY_GITLEAKS_ADDED_LINES added. The stdin input is never written to disk or logs (argv carries no content). No PARTIAL downgrade needed because the gap is closed by a real run, not by assumption.",
+      "F2": "security-tools.ts execGitleaks: any gitleaks stderr/stdout line matching GITLEAKS_ERROR_LINE (ERR|FTL|PNC|FATAL|ERROR as a level token, 'fatal', 'error=') -> ERROR TOOL_REPORTED_ERROR (fail-closed, even with exit 0 and '[]'); a missing report is now always REPORT_MISSING (previously exit 0 + missing report counted as CLEAN); empty/unparsable -> REPORT_UNREADABLE; exit 0 with findings -> EXIT_0_WITH_FINDINGS. runner.ts: gitRangeProblem() pre-validates the range on the bare clone before gitleaks (rev-parse --verify --quiet <sha>^{commit} for base and head; merge-base --is-ancestor base head) -> RANGE_COMMIT_MISSING / RANGE_BASE_NOT_ANCESTOR / RANGE_CHECK_FAILED -> SECURITY_TOOL_ERROR without running gitleaks. A failure of the patch log for pass 2 -> ADDED_LINES_UNAVAILABLE; a pass-2 error -> ADDED_LINES_<reason>.",
+      "N1": "Not changed; remains a documented gap."
+    },
+    "filesChanged": [
+      "core/workos/security-tools.ts (execGitleaks shared parser with stderr error check, runGitleaksAddedLines, buildAddedLineStream, gitRangeProblem, mergeGitleaksPasses, fake directive stderr/noReport/stdin)",
+      "core/workos/runner.ts (range pre-validation, patchLog helper, second gitleaks pass, merged result)",
+      "core/workos/types.ts (GitleaksPassSummary, secrets.gitleaks.passes)",
+      "core/workos/fake-security-tool.mjs (stdin mode; stderr/noReport directives; records only the stdin line count)",
+      "core/workos/README.md (default path allowlist and git-failure notes)",
+      "tests/v7-b3c-security-stage.test.ts (cycle-3 unit, stub and real-gitleaks cases; CLEAN case expects the new evidence kind and stdin argv)",
+      "tests/v7-b3a-runner.test.ts (happy-path evidence kind list includes SECURITY_GITLEAKS_ADDED_LINES)",
+      "config/trust-root-manifest.json (resealed via scripts/generate-trust-root.mjs)",
+      "audit/checkpoints/V7-PKG-B3C-2026-10-15.json (this section)"
+    ],
+    "tests": [
+      "unit: buildAddedLineStream keeps only added lines with commit/file/line refs (hunk-internal '+++'/'commit' lines are content, hunks separated).",
+      "unit (real git): gitRangeProblem valid -> null, unknown commit -> RANGE_COMMIT_MISSING, sibling base -> RANGE_BASE_NOT_ANCESTOR, non-SHA -> RANGE_INVALID_SHA.",
+      "unit: GITLEAKS_ERROR_LINE matches the observed 8.30.1 failure lines, not 'WRN leaks found'.",
+      "stub: exit 0 + [] + 'ERR [git] fatal' -> BLOCKED SECURITY_TOOL_ERROR (TOOL_REPORTED_ERROR), pass 2 SKIPPED; exit 0 without report -> REPORT_MISSING; pass-2 error line -> ADDED_LINES_TOOL_REPORTED_ERROR; pass-2 missing report -> ADDED_LINES_REPORT_MISSING.",
+      "stub: a pass-2 finding at stream line 1 maps to feature.txt:1 @ head -> BLOCKED SECRET_DETECTED.",
+      "stub: an orphan head (not descending from base) is rejected upstream (FAILED IMPLEMENT_HISTORY_REWRITTEN) and no gitleaks call happens; the SECURITY-stage pre-validation is therefore a second layer, covered by the gitRangeProblem unit test (no runner-level path reaches it with a non-ancestor base).",
+      "real gitleaks 8.30.1: runtime-built GitLab token force-added at node_modules/x/c.js and in text assets/img.png -> run BLOCKED SECRET_DETECTED; items gitlab-pat at both files line 1 @ head; passes.git CLEAN findings 0 (default path allowlist observed), passes.addedLines FINDINGS 2; builtin hits 0; no value persisted; no raw report kept.",
+      "real gitleaks 8.30.1: runGitleaks with a missing base SHA -> proc exit 0, stderr contains 'fatal', result ERROR TOOL_REPORTED_ERROR, report deleted."
+    ],
+    "negativeControls": [
+      "F1: with pass 2 fed an empty stream (temporary edit, reverted), the real node_modules/*.png test failed: run AWAITING_APPROVAL instead of BLOCKED (the false PASSED). Observed.",
+      "F2: with the GITLEAKS_ERROR_LINE check removed (temporary edit, reverted), the stub 'ERR [git] fatal' test failed (AWAITING_APPROVAL) and the real invalid-range test failed (status CLEAN). Observed."
+    ],
+    "residualLimits": [
+      "Value-level entries of the default global allowlist (regexes/stopwords) still apply in both passes; only the PATH part is bypassed by pass 2.",
+      "Path-only gitleaks rules (e.g. *.p12/*.pfx) fire only in pass 1, so they remain subject to the default path allowlist.",
+      "Pass 2 uses --no-renames (a moved file is scanned as fully added) and per-rule path allowlists do not apply to it: more findings are possible (fail-closed), never fewer.",
+      "The patch log is read through spawnGitSync with a 64 MiB buffer; a larger range fails closed (ADDED_LINES_UNAVAILABLE).",
+      "B3C-C2-N1 trivy real-DB run remains an open, documented gap."
+    ],
+    "commands": [
+      {
+        "cmd": "env -u PSModulePath npx tsc --noEmit",
+        "exit": 0
+      },
+      {
+        "cmd": "env -u PSModulePath npx vitest run tests/v7-b3c-security-stage.test.ts tests/v7-b3a-runner.test.ts tests/v7-b3a-recovery-budget.test.ts tests/v7-b3a-c3-builder-commit.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts",
+        "exit": 0,
+        "summary": "6 files, 99 passed (b3c: 29 incl. 5 real-gitleaks cases, not skipped; gitleaks 8.30.1 installed)"
+      },
+      {
+        "cmd": "node scripts/validate-tr-comments.mjs",
+        "exit": 0
+      },
+      {
+        "cmd": "node scripts/secret-sanity.mjs",
+        "exit": 0
+      },
+      {
+        "cmd": "node scripts/smoke-control-api.mjs",
+        "exit": 0
+      },
+      {
+        "cmd": "crlf check on changed files",
+        "exit": 0,
+        "summary": "no CR bytes"
+      }
+    ],
+    "scopeNote": "No protected file touched except config/trust-root-manifest.json (resealed via generate-trust-root). server.ts and config/validation.json unchanged in c3. Built-in secret-scan patterns were NOT extended: that was the fail-closed fallback, not needed because a verified real fix exists."
   }
 }

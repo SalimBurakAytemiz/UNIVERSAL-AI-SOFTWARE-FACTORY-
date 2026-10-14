@@ -11,7 +11,17 @@ fs.writeFileSync(startedFlag, tool);
 if (Number.isInteger(d.sleepMs) && d.sleepMs > 0) await new Promise(r => setTimeout(r, Math.min(d.sleepMs, 120_000)));
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 
-if (tool === "gitleaks") {
+if (tool === "gitleaks" && args[0] === "stdin") {
+  // Eklenen satırlar geçişi (B3C-C2-F1): girdi okunur ama hiçbir yere yazılmaz (secret içerebilir); yalnız satır sayısı kaydedilir.
+  const input = fs.readFileSync(0, "utf8"), s = d.stdin ?? {};
+  fs.appendFileSync(callsFile, JSON.stringify({tool: "gitleaks-stdin-meta", argv: [], cwd: process.cwd(), lines: input ? input.split("\n").length - 1 : 0}) + "\n");
+  const findings = (s.findings ?? []).map(f => ({RuleID: f.ruleId, File: "", StartLine: f.line, Commit: "", Match: "REDACTED", Secret: "REDACTED", Message: "msg"}));
+  if (s.stderr) console.error(s.stderr);
+  if (!s.noReport) fs.writeFileSync(opt("--report-path"), JSON.stringify(findings));
+  process.exit(s.exitCode ?? (findings.length ? 1 : 0));
+} else if (tool === "gitleaks") {
+  if (d.stderr) console.error(d.stderr);
+  if (d.noReport) process.exit(d.exitCode ?? 0);
   const findings = (d.findings ?? []).map(f => ({RuleID: f.ruleId, File: f.file, StartLine: f.line, Commit: f.commit ?? "0".repeat(40), Match: "REDACTED", Secret: d.plantedSecret ?? "REDACTED", Message: d.plantedSecret ? `leaked ${d.plantedSecret}` : "msg"}));
   // Gerçek gitleaks --redact altında stderr'e secret yazmaz; burada redaksiyon katmanını sınamak için isteğe bağlı olarak yazılır.
   if (d.plantedSecret) console.error(`fake gitleaks log: ${d.plantedSecret}`);

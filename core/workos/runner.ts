@@ -15,8 +15,8 @@ import {testCommandAllowed} from "./schemas.js";
 import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
 import {assertIndependentExecutors, runProcess} from "./executors.js";
 import type {ExecutorPair, MissionSpec, ProcResult} from "./executors.js";
-import {DEFAULT_MAX_REPORT_BYTES, DEFAULT_MAX_TRIVY_DB_AGE_MS, DEFAULT_SECURITY_TIMEOUT_MS, defaultTrivyCacheDir, discoverSecurityTools, evaluateSecurityPolicy, runGitleaks, runTrivy, toolInfo, verifyTool} from "./security-tools.js";
-import type {PolicyInput, ResolvedTool, SecurityOptions, SecurityToolset} from "./security-tools.js";
+import {DEFAULT_MAX_REPORT_BYTES, DEFAULT_MAX_TRIVY_DB_AGE_MS, DEFAULT_SECURITY_TIMEOUT_MS, buildAddedLineStream, defaultTrivyCacheDir, discoverSecurityTools, evaluateSecurityPolicy, gitRangeProblem, mergeGitleaksPasses, runGitleaks, runGitleaksAddedLines, runTrivy, toolInfo, verifyTool} from "./security-tools.js";
+import type {GitleaksResult, PolicyInput, ResolvedTool, SecurityOptions, SecurityToolset} from "./security-tools.js";
 
 export interface RunnerOptions {
   store: WorkOsStore; dataDir: string; globalStopFile: string; envPolicyFile: string; executors: ExecutorPair;
@@ -363,6 +363,12 @@ export class MissionRunner {
     const r = this.git(cwd, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--text", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/", base, head]);
     return r.status === 0 ? String(r.stdout ?? "") : null;
   }
+  // B3C-C2-F1: gitleaks git geçişinin gördüğü yamaların aynısı (--text --no-textconv --no-ext-diff, merge'ler first-parent'a göre), boş attributes ile; yalnız eklenen satırlar akışını kurmak için.
+  private patchLog(run: WorkRun, cwd: string, base: string, head: string): string | null {
+    const r = this.git(cwd, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "log", "-p", "--no-color", "--no-ext-diff", "--no-textconv", "--text", "--no-renames", "--diff-merges=first-parent",
+      "--no-show-signature", "--src-prefix=a/", "--dst-prefix=b/", "--format=commit %H", `${base}..${head}`]);
+    return r.status === 0 ? String(r.stdout ?? "") : null;
+  }
   private commitMessages(run: WorkRun, cwd: string, base: string, head: string): string | null {
     const r = this.git(cwd, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "log", "--no-color", "--no-show-signature", "--format=commit %H%n%B", `${base}..${head}`]);
     return r.status === 0 ? String(r.stdout ?? "") : null;
@@ -434,15 +440,33 @@ export class MissionRunner {
     else if (gt.status === "INSTALLED") {
       const bare = this.bareClone(run, `security-gl-c${run.remediationCycle}.git`);
       if (!bare) return {kind: "BLOCK", reason: "SECURITY_CLONE_FAILED", status: "FAILED"};
-      const cwd = path.join(secDir, "gitleaks-cwd"), configFile = path.join(secDir, "gitleaks.toml"), ignoreFile = path.join(secDir, "gitleaks.ignore");
-      fs.mkdirSync(cwd, {recursive: true});
-      fs.writeFileSync(configFile, "[extend]\nuseDefault = true\n");
-      fs.writeFileSync(ignoreFile, "");
-      const g = await runGitleaks(gt, {bareRepo: bare, base, head, configFile, ignoreFile, reportFile: path.join(secDir, `gitleaks-raw-${tag}.json`), cwd}, ctx);
-      logs.gitleaks = this.procEvidence(run, leaseId, "SECURITY_GITLEAKS", g.proc, {commitSha: head, baseSha: base, note: `gitleaks ${gt.version ?? ""}: ${g.status}${g.reason ? ` ${g.reason}` : ""} findings=${g.count}`.slice(0, 300)});
-      if (g.proc.aborted || abort()) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
-      if (g.transient) return {kind: "RETRY", reason: "SECURITY_TOOL_TRANSIENT_FAILURE"};
-      gitleaks = {status: g.status, ...(g.reason ? {reason: g.reason} : {}), count: g.count, items: g.items, rawReportSha256: g.rawReportSha256};
+      // B3C-C2-F2: aralık gitleaks'ten önce doğrulanır (gitleaks iç git hatasında exit 0 + "[]" verebilir); sorun varsa tarayıcı hiç çalışmaz, sonuç SECURITY_TOOL_ERROR olur.
+      const rangeProblem = gitRangeProblem(args => this.git(bare, args), base, head);
+      if (rangeProblem) gitleaks = {status: "ERROR", reason: rangeProblem, count: 0, items: [], rawReportSha256: null};
+      else {
+        const cwd = path.join(secDir, "gitleaks-cwd"), configFile = path.join(secDir, "gitleaks.toml"), ignoreFile = path.join(secDir, "gitleaks.ignore");
+        fs.mkdirSync(cwd, {recursive: true});
+        fs.writeFileSync(configFile, "[extend]\nuseDefault = true\n");
+        fs.writeFileSync(ignoreFile, "");
+        const g = await runGitleaks(gt, {bareRepo: bare, base, head, configFile, ignoreFile, reportFile: path.join(secDir, `gitleaks-raw-${tag}.json`), cwd}, ctx);
+        logs.gitleaks = this.procEvidence(run, leaseId, "SECURITY_GITLEAKS", g.proc, {commitSha: head, baseSha: base, note: `gitleaks ${gt.version ?? ""}: ${g.status}${g.reason ? ` ${g.reason}` : ""} findings=${g.count}`.slice(0, 300)});
+        if (g.proc.aborted || abort()) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+        if (g.transient) return {kind: "RETRY", reason: "SECURITY_TOOL_TRANSIENT_FAILURE"};
+        // B3C-C2-F1: varsayılan global YOL allowlist'i (node_modules/, kilit dosyaları, *.png ...) git geçişinde kapatılamaz; eklenen satırlar yolsuz stdin geçişiyle yeniden taranır.
+        let added: GitleaksResult | null = null, addedProblem: string | null = null;
+        if (g.status !== "ERROR") {
+          const patch = this.patchLog(run, bare, base, head);
+          this.renew(run.runId, leaseId);
+          if (patch === null) addedProblem = "ADDED_LINES_UNAVAILABLE";
+          else {
+            added = await runGitleaksAddedLines(gt, {stream: buildAddedLineStream(patch), configFile, ignoreFile, reportFile: path.join(secDir, `gitleaks-raw-added-${tag}.json`), cwd}, ctx);
+            logs.gitleaksAddedLines = this.procEvidence(run, leaseId, "SECURITY_GITLEAKS_ADDED_LINES", added.proc, {commitSha: head, baseSha: base, note: `gitleaks ${gt.version ?? ""} added-lines (stdin, no path allowlist): ${added.status}${added.reason ? ` ${added.reason}` : ""} findings=${added.count}`.slice(0, 300)});
+            if (added.proc.aborted || abort()) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+            if (added.transient) return {kind: "RETRY", reason: "SECURITY_TOOL_TRANSIENT_FAILURE"};
+          }
+        }
+        gitleaks = mergeGitleaksPasses(g, added, addedProblem);
+      }
     }
 
     // ---- trivy (çevrimdışı; DB indirilmez) ----

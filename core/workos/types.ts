@@ -46,11 +46,13 @@ export interface SecurityToolInfo { tool: SecurityToolName; status: SecurityTool
 export type SecurityStageStatus = "PASSED" | "PARTIAL" | "BLOCKED";
 export interface SecurityVulnFinding { package: string; version: string; id: string; severity: string; fixedVersion: string | null; target: string }
 export interface SecuritySecretFinding { ruleId: string; file: string; line: number; commit: string }
+// B3C-C2-F1: gitleaks iki geçişle çalışır: git geçmişi (varsayılan global yol allowlist'i etkin) + eklenen satırlar akışı (stdin; yol allowlist'i uygulanamaz). SKIPPED: önceki geçiş hatalı olduğu için çalıştırılmadı.
+export interface GitleaksPassSummary { status: "CLEAN" | "FINDINGS" | "ERROR" | "SKIPPED"; reason?: string; findings: number; rawReportSha256: string | null }
 export interface SecurityStageSummary {
   schemaVersion: 1; status: SecurityStageStatus; blockReason: "SECRET_DETECTED" | "VULNERABLE_DEPENDENCY" | "SECURITY_TOOL_ERROR" | null; baseSha: string; headSha: string; cycle: number;
   secrets: {
     builtin: { status: "CLEAN" | "FINDINGS"; hits: number };
-    gitleaks: { status: "CLEAN" | "FINDINGS" | "NOT_INSTALLED" | "ERROR"; reason?: string; findings: number; items: SecuritySecretFinding[]; rawReportSha256: string | null };
+    gitleaks: { status: "CLEAN" | "FINDINGS" | "NOT_INSTALLED" | "ERROR"; reason?: string; findings: number; items: SecuritySecretFinding[]; rawReportSha256: string | null; passes?: { git: GitleaksPassSummary; addedLines: GitleaksPassSummary } };
   };
   sca: {
     status: "CLEAN" | "FINDINGS" | "PARTIAL" | "NOT_INSTALLED" | "ERROR"; reason?: string; dbState?: string; counts: Record<string, number>; blocking: number;

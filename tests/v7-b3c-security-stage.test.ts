@@ -11,7 +11,7 @@ import {MissionRunner} from "../core/workos/runner.js";
 import type {RunnerOptions} from "../core/workos/runner.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import type {FakeScript, ImplementerAdapter} from "../core/workos/executors.js";
-import {evaluateSecurityPolicy, fakeSecurity, resolveOnPath, sha256File, trivyDbState, verifyTool} from "../core/workos/security-tools.js";
+import {GITLEAKS_ERROR_LINE, buildAddedLineStream, evaluateSecurityPolicy, fakeSecurity, gitRangeProblem, resolveOnPath, runGitleaks, sha256File, trivyDbState, verifyTool} from "../core/workos/security-tools.js";
 import type {FakeSecurityDirective, SecurityOptions} from "../core/workos/security-tools.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 import type {WorkRun} from "../core/workos/types.js";
@@ -120,7 +120,7 @@ describe("SECURITY step with stub scanners", () => {
     expect(run.reason).toBe("DELIVERY_DECISION_PENDING_FOUNDER");
     expect(missionStatus(c)).toBe("REPORTING");
     expect(run.checkpoints.map(x => x.step)).toEqual(["WORKSPACE", "IMPLEMENT", "VERIFY", "SECURITY", "REVIEW", "REGRESSION", "REPORT"]);
-    expect(kinds(run)).toEqual(["WORKSPACE", "IMPLEMENT", "SECRET_SCAN", "VERIFY_TESTS", "SECURITY_GITLEAKS", "SECURITY_TRIVY", "SECURITY_REPORT", "REVIEW", "REGRESSION_TESTS", "REPORT"]);
+    expect(kinds(run)).toEqual(["WORKSPACE", "IMPLEMENT", "SECRET_SCAN", "VERIFY_TESTS", "SECURITY_GITLEAKS", "SECURITY_GITLEAKS_ADDED_LINES", "SECURITY_TRIVY", "SECURITY_REPORT", "REVIEW", "REGRESSION_TESTS", "REPORT"]);
     const ev = secEv(run), s = ev.security!;
     expect(s.status).toBe("PASSED");
     expect(s.blockReason).toBeNull();
@@ -143,6 +143,12 @@ describe("SECURITY step with stub scanners", () => {
     const val = (a: string[], flag: string) => a[a.indexOf(flag) + 1];
     expect(val(gl, "--log-opts")).toBe(`--text --no-textconv --no-ext-diff --diff-merges=first-parent ${run.baseSha}..${run.headSha}`);
     expect(gl).toEqual(expect.arrayContaining(["--redact", "--ignore-gitleaks-allow"]));
+    // B3C-C2-F1: ikinci geçiş aynı motor config/ignore ile yolsuz stdin kipinde çalışır.
+    const glStdin = calls.filter(x => x.tool === "gitleaks")[1].argv;
+    expect(glStdin[0]).toBe("stdin");
+    expect(glStdin).toEqual(expect.arrayContaining(["--redact", "--ignore-gitleaks-allow"]));
+    expect(val(glStdin, "--config")).toBe(val(gl, "--config"));
+    expect(s.secrets.gitleaks.passes).toEqual({git: expect.objectContaining({status: "CLEAN"}), addedLines: expect.objectContaining({status: "CLEAN"})});
     const runDir = path.join(c.dataDir, "runs", run.runId);
     for (const f of ["--config", "--gitleaks-ignore-path", "--report-path"]) expect(path.resolve(val(gl, f)).startsWith(runDir + path.sep)).toBe(true);
     expect(tv).toEqual(expect.arrayContaining(["--skip-db-update", "--skip-java-db-update", "--offline-scan", "--scanners", "vuln"]));
@@ -484,5 +490,159 @@ describe("real gitleaks (skipped with an explicit reason when not installed)", (
     const s = secEv(run).security!;
     expect(s.secrets.gitleaks).toEqual(expect.objectContaining({status: "CLEAN", findings: 0}));
     expect(run.evidence.find(e => e.kind === "SECURITY_GITLEAKS")!.exitCode).toBe(0);
+  });
+});
+
+// ---- Cycle 3: B3C-C2-F1 (varsayılan global yol allowlist'i) ve B3C-C2-F2 (gitleaks iç git hatası -> sahte temiz) ----
+const MIXED = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+const fakeGitlab = () => ["gl", "pat-"].join("") + rnd(MIXED, 20);
+// Implementer node_modules/ altına (.gitignore'a rağmen -f ile) ve metin içerikli *.png dosyasına secret koyar: gitleaks varsayılan global allowlist'inin yol desenleri.
+function forceAddImplementer(files: Record<string, string>): ImplementerAdapter {
+  return {
+    identity: "FAKE_FORCE_ADD_IMPLEMENTER",
+    async implement(ws) {
+      const at = new Date().toISOString();
+      fs.writeFileSync(path.join(ws, ".gitignore"), "node_modules/\n");
+      for (const [rel, content] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(ws, rel)), {recursive: true}); fs.writeFileSync(path.join(ws, rel), content); }
+      git(ws, ["add", "-A"]);
+      git(ws, ["add", "-f", ...Object.keys(files)]);
+      git(ws, ["-c", "user.name=FAKE", "-c", "user.email=fake@local.invalid", "commit", "-q", "-m", "force add"]);
+      return {exitCode: 0, log: "force-add implementer\n", argv: ["in-process"], startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
+    }
+  };
+}
+// Implementer base'den kopuk (orphan) bir head üretir: base..head aralığı geçersizdir (base, head'in atası değildir).
+function orphanImplementer(): ImplementerAdapter {
+  return {
+    identity: "FAKE_ORPHAN_IMPLEMENTER",
+    async implement(ws) {
+      const at = new Date().toISOString();
+      git(ws, ["checkout", "-q", "--orphan", "detached-history"]);
+      fs.writeFileSync(path.join(ws, "feature.txt"), "ok\n");
+      git(ws, ["add", "-A"]);
+      git(ws, ["-c", "user.name=FAKE", "-c", "user.email=fake@local.invalid", "commit", "-q", "-m", "orphan"]);
+      return {exitCode: 0, log: "orphan implementer\n", argv: ["in-process"], startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
+    }
+  };
+}
+
+describe("cycle 3: added-lines stream and range pre-validation (unit)", () => {
+  it("buildAddedLineStream keeps only added lines with commit/file/line refs; hunk-internal '+++'/'commit' lines are content; hunks are separated", () => {
+    const c1 = "1".repeat(40), c2 = "2".repeat(40);
+    const log = [`commit ${c1}`, "", "diff --git a/node_modules/x/c.js b/node_modules/x/c.js", "new file mode 100644", "--- /dev/null", "+++ b/node_modules/x/c.js", "@@ -0,0 +1,3 @@", "+alpha", "++++ inner", "+commit " + "3".repeat(40),
+      `commit ${c2}`, "", "diff --git a/img.png b/img.png", "--- a/img.png", "+++ b/img.png", "@@ -2,2 +2,2 @@", " keep", "-old", "+beta", "@@ -9 +9 @@", "-x", "+gamma", ""].join("\n");
+    const s = buildAddedLineStream(log);
+    expect(s.text.split("\n").slice(0, -1)).toEqual(["alpha", "+++ inner", "commit " + "3".repeat(40), "", "beta", "", "gamma"]);
+    expect(s.refs).toEqual([
+      {commit: c1, file: "node_modules/x/c.js", line: 1}, {commit: c1, file: "node_modules/x/c.js", line: 2}, {commit: c1, file: "node_modules/x/c.js", line: 3}, null,
+      {commit: c2, file: "img.png", line: 3}, null, {commit: c2, file: "img.png", line: 9}
+    ]);
+    expect(buildAddedLineStream("").text).toBe("");
+  });
+
+  it("gitRangeProblem (real git): valid range -> null; unknown commit, non-ancestor base and malformed SHA are problems", { timeout: T }, () => {
+    const r = path.join(tmp, "range-repo"), id = ["-c", "user.name=A", "-c", "user.email=a@local.invalid"];
+    fs.mkdirSync(r); git(r, ["init", "-q", "-b", "main"]);
+    git(r, [...id, "commit", "-q", "--allow-empty", "-m", "base"]); const base = git(r, ["rev-parse", "HEAD"]);
+    git(r, [...id, "commit", "-q", "--allow-empty", "-m", "head"]); const head = git(r, ["rev-parse", "HEAD"]);
+    git(r, ["checkout", "-q", "-b", "side", base]); git(r, [...id, "commit", "-q", "--allow-empty", "-m", "side"]); const side = git(r, ["rev-parse", "HEAD"]);
+    const run = (args: string[]) => spawnGitSync(r, args);
+    expect(gitRangeProblem(run, base, head)).toBeNull();
+    expect(gitRangeProblem(run, base, base)).toBeNull();
+    expect(gitRangeProblem(run, "f".repeat(40), head)).toBe("RANGE_COMMIT_MISSING");
+    expect(gitRangeProblem(run, side, head)).toBe("RANGE_BASE_NOT_ANCESTOR");
+    expect(gitRangeProblem(run, "HEAD~1", head)).toBe("RANGE_INVALID_SHA");
+  });
+
+  it("GITLEAKS_ERROR_LINE matches the observed gitleaks 8.30.1 git-failure log lines but not a normal 'leaks found' warning", () => {
+    expect(GITLEAKS_ERROR_LINE.test("1:46AM ERR [git] fatal: Invalid revision range 1111..2222")).toBe(true);
+    expect(GITLEAKS_ERROR_LINE.test('1:46AM ERR error="stderr is not empty"')).toBe(true);
+    expect(GITLEAKS_ERROR_LINE.test("1:46AM WRN leaks found: 3")).toBe(false);
+    expect(GITLEAKS_ERROR_LINE.test("")).toBe(false);
+  });
+});
+
+describe("cycle 3: gitleaks failure is never a clean result (B3C-C2-F2, stub)", () => {
+  it("exit 0 + '[]' report + 'ERR [git] fatal' on stderr -> BLOCKED SECURITY_TOOL_ERROR; the added-lines pass is skipped", { timeout: T }, async () => {
+    const {c, run, sec} = await drive({gitleaks: {stderr: "1:46AM ERR [git] fatal: Invalid revision range", exitCode: 0}});
+    expect(run.status).toBe("BLOCKED");
+    expect(run.reason).toBe("SECURITY_TOOL_ERROR");
+    expect(missionStatus(c)).toBe("BLOCKED");
+    const g = secEv(run).security!.secrets.gitleaks;
+    expect(g).toEqual(expect.objectContaining({status: "ERROR", reason: "TOOL_REPORTED_ERROR", findings: 0}));
+    expect(g.passes).toEqual({git: expect.objectContaining({status: "ERROR", reason: "TOOL_REPORTED_ERROR"}), addedLines: expect.objectContaining({status: "SKIPPED"})});
+    expect(sec.calls().filter(x => x.tool === "gitleaks").length).toBe(1);
+  });
+
+  it("exit 0 without a report file -> REPORT_MISSING (fail-closed); an error line in the added-lines pass -> ADDED_LINES_TOOL_REPORTED_ERROR", { timeout: T }, async () => {
+    const noRep = await drive({gitleaks: {noReport: true, exitCode: 0}});
+    expect(noRep.run.reason).toBe("SECURITY_TOOL_ERROR");
+    expect(secEv(noRep.run).security!.secrets.gitleaks).toEqual(expect.objectContaining({status: "ERROR", reason: "REPORT_MISSING"}));
+    const stdinErr = await drive({gitleaks: {stdin: {stderr: "ERR error=\"read failed\"", exitCode: 0}}});
+    expect(stdinErr.run.reason).toBe("SECURITY_TOOL_ERROR");
+    expect(secEv(stdinErr.run).security!.secrets.gitleaks).toEqual(expect.objectContaining({status: "ERROR", reason: "ADDED_LINES_TOOL_REPORTED_ERROR"}));
+    const stdinNoRep = await drive({gitleaks: {stdin: {noReport: true, exitCode: 0}}});
+    expect(secEv(stdinNoRep.run).security!.secrets.gitleaks).toEqual(expect.objectContaining({status: "ERROR", reason: "ADDED_LINES_REPORT_MISSING"}));
+  });
+
+  // Katmanlı savunma: base'den kopuk bir head runner tarafından IMPLEMENT'te zaten reddedilir; SECURITY'deki gitRangeProblem ön doğrulaması (yukarıdaki birim testi) ikinci katmandır.
+  it("a head that does not descend from base never reaches a scanner: rejected upstream (IMPLEMENT_HISTORY_REWRITTEN), no gitleaks call, no clean security result", { timeout: T }, async () => {
+    const sec = fakeSecurity(path.join(tmp, "sec-orphan"));
+    const {run} = await driveWith(orphanImplementer(), sec.options);
+    expect([run.status, run.reason]).toEqual(["FAILED", "IMPLEMENT_HISTORY_REWRITTEN"]);
+    expect(kinds(run)).not.toContain("SECURITY_REPORT");
+    expect(sec.calls().filter(x => x.tool === "gitleaks")).toEqual([]);
+  });
+});
+
+describe("cycle 3: added-lines pass (B3C-C2-F1, stub)", () => {
+  it("a finding in the stdin pass is mapped back to commit/file/line of the added line and blocks the run", { timeout: T }, async () => {
+    const {run, sec} = await drive({gitleaks: {stdin: {findings: [{ruleId: "gitlab-pat", line: 1}]}}});
+    expect(run.status).toBe("BLOCKED");
+    expect(run.reason).toBe("SECRET_DETECTED");
+    const g = secEv(run).security!.secrets.gitleaks;
+    expect(g.items).toEqual([{ruleId: "gitlab-pat", file: "feature.txt", line: 1, commit: run.headSha}]);
+    expect(g.passes).toEqual({git: expect.objectContaining({status: "CLEAN", findings: 0}), addedLines: expect.objectContaining({status: "FINDINGS", findings: 1})});
+    expect(sec.calls().find(x => x.tool === "gitleaks-stdin-meta")).toEqual(expect.objectContaining({lines: 1}));
+  });
+});
+
+describe("cycle 3: real gitleaks default path allowlist and git failure (skipped with an explicit reason when not installed)", () => {
+  if (!REAL_GITLEAKS) it("SKIPPED(B3C-C3-real-gitleaks): TOOL_NOT_INSTALLED on this host; real-binary cases below are skipped", () => { expect(REAL_GITLEAKS).toBeNull(); });
+  realGl("GitLab token force-added under node_modules/ and in a text *.png: the git pass misses both (default global path allowlist), the added-lines pass detects both -> BLOCKED", { timeout: T }, async () => {
+    const k1 = fakeGitlab(), k2 = fakeGitlab();
+    const sec = fakeSecurity(path.join(tmp, "sec-real-allowlist"));
+    const {c, run} = await driveWith(forceAddImplementer({"feature.txt": "ok\n", "node_modules/x/c.js": `const t = "${k1}";\n`, "assets/img.png": `token = "${k2}"\n`}), {...sec.options, tools: {...sec.options.tools, gitleaks: undefined}});
+    const work = path.join(c.dataDir, "runs", run.runId, "work");
+    expect(git(work, ["ls-tree", "-r", "--name-only", run.headSha!]).split("\n")).toEqual(expect.arrayContaining(["node_modules/x/c.js", "assets/img.png"]));
+    expect(run.status).toBe("BLOCKED");
+    expect(run.reason).toBe("SECRET_DETECTED");
+    const s = secEv(run).security!;
+    expect(s.status).not.toBe("PASSED");
+    expect(s.secrets.gitleaks.status).toBe("FINDINGS");
+    expect(s.secrets.gitleaks.items.filter(i => i.ruleId === "gitlab-pat").map(i => `${i.file}:${i.line}:${i.commit}`).sort()).toEqual([`assets/img.png:1:${run.headSha}`, `node_modules/x/c.js:1:${run.headSha}`]);
+    // Gözlenen davranış (gitleaks 8.30.1): git geçişi bu iki yolu varsayılan global allowlist yüzünden görmez; tespit yolsuz stdin geçişindendir.
+    expect(s.secrets.gitleaks.passes!.git).toEqual(expect.objectContaining({status: "CLEAN", findings: 0}));
+    expect(s.secrets.gitleaks.passes!.addedLines).toEqual(expect.objectContaining({status: "FINDINGS", findings: 2}));
+    expect(s.secrets.builtin.hits).toBe(0); // yerleşik tarama bu türü tanımaz
+    const persisted = [path.join(c.dataDir, "journal.jsonl"), ...allFiles(path.join(c.dataDir, "runs", run.runId))].filter(f => fs.existsSync(f) && fs.statSync(f).isFile());
+    for (const f of persisted) { const text = fs.readFileSync(f, "utf8"); expect(text, f).not.toContain(k1); expect(text, f).not.toContain(k2); }
+    expect(fs.readdirSync(path.join(c.dataDir, "runs", run.runId, "security")).filter(f => f.startsWith("gitleaks-raw"))).toEqual([]);
+  });
+
+  realGl("real gitleaks on an invalid revision range exits 0 with '[]' but logs 'ERR [git] fatal'; runGitleaks reports ERROR (TOOL_REPORTED_ERROR), never CLEAN", { timeout: T }, async () => {
+    const r = path.join(tmp, "gl-range"), id = ["-c", "user.name=A", "-c", "user.email=a@local.invalid"];
+    fs.mkdirSync(r); git(r, ["init", "-q", "-b", "main"]);
+    fs.writeFileSync(path.join(r, "a.txt"), "a\n"); git(r, ["add", "-A"]); git(r, [...id, "commit", "-q", "-m", "a"]);
+    const head = git(r, ["rev-parse", "HEAD"]), missingBase = crypto.randomBytes(20).toString("hex");
+    const dir = path.join(tmp, "gl-range-sec"); fs.mkdirSync(path.join(dir, "cwd"), {recursive: true});
+    fs.writeFileSync(path.join(dir, "gl.toml"), "[extend]\nuseDefault = true\n"); fs.writeFileSync(path.join(dir, "gl.ignore"), "");
+    const tool = {tool: "gitleaks" as const, status: "INSTALLED" as const, path: REAL_GITLEAKS, version: null, sha256: null, prefixArgs: []};
+    const g = await runGitleaks(tool, {bareRepo: r, base: missingBase, head, configFile: path.join(dir, "gl.toml"), ignoreFile: path.join(dir, "gl.ignore"), reportFile: path.join(dir, "rep.json"), cwd: path.join(dir, "cwd")},
+      {env: process.env, timeoutMs: 120_000, maxReportBytes: 1024 * 1024, abort: () => false});
+    expect(g.proc.exitCode).toBe(0); // gitleaks'in kendi sonucu "temiz" görünür
+    expect(g.proc.stderr).toMatch(/fatal/);
+    expect(g).toEqual(expect.objectContaining({status: "ERROR", reason: "TOOL_REPORTED_ERROR", count: 0}));
+    expect(fs.existsSync(path.join(dir, "rep.json"))).toBe(false);
   });
 });
