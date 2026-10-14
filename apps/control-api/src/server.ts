@@ -19,6 +19,8 @@ import {parseControlPort,controlChallengeProof,secureStringEqual,hostHeaderAllow
 import {loadState as loadOrchestratorStateUntyped,verifyTransitionLog as verifyTransitionLogUntyped} from "../../../automation/lib/orchestrator-state.mjs";
 import {WorkOsStore,defaultDataDir} from "../../../core/workos/store.js";
 import {WorkOsError} from "../../../core/workos/types.js";
+import {EvidenceIndex,EvidenceInputError,EVIDENCE_KINDS} from "../../../core/evidence/index.js";
+import type {EvidenceKind} from "../../../core/evidence/index.js";
 import {validateProjectCreate,validateMissionCreate,validateMissionTransition,validateRunStart} from "../../../core/workos/schemas.js";
 import {isMissionStatus} from "../../../core/mission/state-machine.js";
 import {authorizeAction} from "../../../core/action-gateway/policy.js";
@@ -207,6 +209,29 @@ app.get<{Params:{id:string}}>("/v1/work-runs/:id",wos(async(req,reply)=>{
   const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});return {run};
 }));
 
+// //TR: B10A Evidence Center: salt-okunur doğrulanmış read-model; hash her istekte baytlardan yeniden hesaplanır, depolanan PASS metnine güvenilmez, hiçbir şey yazılmaz. Work OS kanıtı server tenant'ına göre süzülür; depo düzeyi kanıt yalnız tek FOUNDER_LOCAL principal'ına görünür; yanıtlarda mutlak yol yoktur, log kuyruğu en çok 4 KB ve redakte edilir.
+const evidenceIndex=()=>new EvidenceIndex({repoRoot,dataDir:path.resolve(opts.dataDir??defaultDataDir(repoRoot)),scope,store:getStore,includeRepositoryEvidence:actor==="FOUNDER_LOCAL"});
+const validEvidenceId=(x:unknown)=>typeof x==="string"&&/^evi_[0-9a-f]{32}$/.test(x);
+app.get<{Querystring:{kind?:unknown;missionId?:unknown;runId?:unknown;cursor?:unknown;limit?:unknown}}>("/v1/evidence",wos(async(req,reply)=>{
+  const q=req.query??{},one=(x:unknown)=>x===undefined?undefined:typeof x==="string"?x:null;
+  const kind=one(q.kind),missionId=one(q.missionId),runId=one(q.runId),cursor=one(q.cursor),limitRaw=one(q.limit);
+  if(kind===null||(kind!==undefined&&!(EVIDENCE_KINDS as readonly string[]).includes(kind)))return reply.code(400).send({error:"INVALID_KIND"});
+  if(missionId===null||(missionId!==undefined&&!validMissionId(missionId)))return reply.code(400).send({error:"INVALID_MISSION_ID"});
+  if(runId===null||(runId!==undefined&&!validWorkRunId(runId)))return reply.code(400).send({error:"INVALID_RUN_ID"});
+  if(cursor===null||(cursor!==undefined&&!/^[A-Za-z0-9_-]{1,1500}$/.test(cursor)))return reply.code(400).send({error:"INVALID_CURSOR"});
+  if(limitRaw===null||(limitRaw!==undefined&&!/^[0-9]{1,3}$/.test(limitRaw)))return reply.code(400).send({error:"INVALID_LIMIT"});
+  const limit=limitRaw===undefined?undefined:Number(limitRaw);if(limit!==undefined&&(limit<1||limit>100))return reply.code(400).send({error:"INVALID_LIMIT"});
+  try{
+    const page=await evidenceIndex().list({kind:kind as EvidenceKind|undefined,missionId,runId,cursor,limit});
+    return {evidence:page.items,nextCursor:page.nextCursor,sources:page.sources};
+  }catch(e){if(e instanceof EvidenceInputError)return reply.code(400).send({error:e.code});throw e}
+}));
+app.get<{Params:{evidenceId:string}}>("/v1/evidence/:evidenceId",wos(async(req,reply)=>{
+  if(!validEvidenceId(req.params.evidenceId))return reply.code(400).send({error:"INVALID_EVIDENCE_ID"});
+  const d=await evidenceIndex().get(req.params.evidenceId);if(!d)return reply.code(404).send({error:"EVIDENCE_NOT_FOUND"});
+  return {evidence:d.item,summary:d.summary,tail:d.tail,tailWithheld:d.tailWithheld};
+}));
+
 // //TR: B2 GET /v1/cockpit: UI için tek okuma otoritesidir; yalnız okur (Work OS store, orchestrator state, registry), hiçbir kaynağı yazmaz, eksik/okunamayan/uygulanmamış kaynak için sayı uydurmaz (state UNAVAILABLE/ERROR, sayılar null).
 type CockpitState="VERIFIED"|"STALE"|"UNAVAILABLE"|"ERROR";
 const loadOrchestratorState=loadOrchestratorStateUntyped as (file:string)=>{doc:any;control:any};
@@ -260,9 +285,14 @@ function cockpitWorkforce(){
     return base("VERIFIED",registered,target,active);
   }catch{return base("ERROR",null,null)}
 }
+// //TR: B10A: cockpit.evidence yeni isteğe bağlı bloktur (mevcut alanlar değişmez); kaynaklar yoksa UNAVAILABLE, okunamazsa ERROR ve sayılar null olur, sayı uydurulmaz.
+async function cockpitEvidence(){
+  try{const s=await evidenceIndex().summary();return {state:s.state as CockpitState,total:s.total,verified:s.verified,mismatch:s.mismatch,missing:s.missing,unverifiable:s.unverifiable,sources:s.sources}}
+  catch{return {state:"ERROR" as CockpitState,total:null,verified:null,mismatch:null,missing:null,unverifiable:null,sources:null}}
+}
 app.get("/v1/cockpit",wos(async()=>({
   generatedAt:new Date().toISOString(),globalStop:cockpitStop(),...cockpitWorkos(),orchestrator:cockpitOrchestrator(),workforce:cockpitWorkforce(),
-  legacy:{scheduler:{authority:false,note:"LEGACY_SNAPSHOT"}}
+  legacy:{scheduler:{authority:false,note:"LEGACY_SNAPSHOT"}},evidence:await cockpitEvidence()
 })));
 return app;
 }
