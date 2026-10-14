@@ -10,7 +10,8 @@ import {acquireProcessLock} from "../../automation/lib/process-lock.mjs";
 import {assertTransition, isMissionStatus} from "../mission/state-machine.js";
 import type {MissionStatus} from "../mission/types.js";
 import {WorkOsError, urlHasUserinfo} from "./types.js";
-import type {JournalEntry, JournalType, Project, RiskLevel, Scope, TaskStatus, WorkMission, WorkTask} from "./types.js";
+import type {JournalEntry, JournalType, Project, RiskLevel, RunCheckpoint, RunEvidence, RunStatus, RunStep, Scope, TaskStatus, WorkMission, WorkRun, WorkTask} from "./types.js";
+import {ACTIVE_WORKER_STATUSES, LEASED_RUN_STATUSES, UNLEASED_RUN_STATUSES, assertRunTransition, isOpenRun, isRunStatus, isRunStep} from "./run-state.js";
 
 const sha256 = sha256Untyped as (value: unknown) => string;
 const writeJsonAtomic = writeJsonAtomicUntyped as (file: string, value: unknown) => void;
@@ -21,10 +22,10 @@ export const newTraceId = () => newId("trc");
 
 interface IdemRecord { id: string; digest?: string }
 interface State {
-  projects: Record<string, Project>; missions: Record<string, WorkMission>; tasks: Record<string, WorkTask>;
+  projects: Record<string, Project>; missions: Record<string, WorkMission>; tasks: Record<string, WorkTask>; runs: Record<string, WorkRun>;
   idempotency: Record<string, IdemRecord>; lastSeq: number; lastHash: string;
 }
-const emptyState = (): State => ({projects: {}, missions: {}, tasks: {}, idempotency: {}, lastSeq: 0, lastHash: GENESIS});
+const emptyState = (): State => ({projects: {}, missions: {}, tasks: {}, runs: {}, idempotency: {}, lastSeq: 0, lastHash: GENESIS});
 const entryHash = (body: Omit<JournalEntry, "hash">): string => sha256(body);
 // //TR: F-B1-001: anahtar JSON dizisidir; ayırıcı karakter içeren tenant/anahtar değerleri çarpışamaz.
 const idemKey = (tenantId: string, kind: string, key: string) => JSON.stringify([tenantId, kind, key]);
@@ -40,17 +41,38 @@ export function defaultDataDir(repoRoot: string = process.cwd()): string {
 
 export interface CreateProjectInput {
   tenantId: string; orgId: string; customerId?: string; name: string; repository?: {path?: string; url?: string};
-  environmentId: string; createdBy: string; idempotencyKey?: string;
+  environmentId: string; createdBy: string; idempotencyKey?: string; testCommand?: string[];
 }
 export interface CreateMissionInput {
   tenantId: string; projectId: string; title: string; objective: string; acceptanceCriteria: string[];
-  riskLevel: RiskLevel; createdBy: string; idempotencyKey?: string;
+  riskLevel: RiskLevel; createdBy: string; idempotencyKey?: string; testCommand?: string[];
 }
 export interface CreateTaskInput {
   tenantId: string; missionId: string; title: string; dependsOn?: string[]; status?: TaskStatus; actor: string; idempotencyKey?: string;
 }
 
 export interface WriteResult<T> { entity: T; replayed: boolean }
+// //TR: B3a run yazma girdileri. Engine sistem aktörüdür ve run'ın kendi tenant'ında yazar; API okumaları her zaman scope ile filtrelenir.
+export interface CreateRunInput {
+  tenantId: string; missionId: string; roleId?: string | null; executor: {implementer: string; reviewer: string}; createdBy: string; idempotencyKey?: string;
+}
+export interface RunPatch {
+  step?: RunStep; remediationCycle?: number; retryCount?: number; retryAt?: string | null; baseSha?: string | null; headSha?: string | null; workBranch?: string | null;
+}
+export interface RunWriteOptions { patch?: RunPatch; mission?: {to: MissionStatus; reason: string} }
+export interface WorkOsStoreOptions { now?: () => number }
+const RUN_PATCH_KEYS = new Set(["step", "remediationCycle", "retryCount", "retryAt", "baseSha", "headSha", "workBranch"]);
+const isNat = (x: unknown) => typeof x === "number" && Number.isSafeInteger(x) && x >= 0;
+const isStrOrNull = (x: unknown) => x === null || (typeof x === "string" && x.length > 0 && x.length <= 200);
+function validRunPatch(p: unknown): p is RunPatch {
+  if (!isObj(p)) return false;
+  for (const [k, v] of Object.entries(p)) {
+    if (!RUN_PATCH_KEYS.has(k)) return false;
+    if (k === "step" ? !isRunStep(v) : k === "remediationCycle" || k === "retryCount" ? !isNat(v) : !isStrOrNull(v)) return false;
+  }
+  return true;
+}
+const clone = <T>(x: T): T => structuredClone(x);
 
 export class WorkOsStore {
   readonly dataDir: string; readonly journalFile: string; readonly snapshotFile: string; readonly lockFile: string;
@@ -59,9 +81,12 @@ export class WorkOsStore {
   // F-B1-002: IO/format hataları da fail-closed bayrağı kurar; guard() okuma ve yazmayı reddeder.
   private unavailableReason: string | null = null;
   private sig: string | null = null;
+  // B3a: lease süresi ve fencing için saat; testler crash/recovery senaryosunda ileri saatli ikinci bir örnek kurar.
+  private readonly now: () => number;
 
-  constructor(dataDir: string = defaultDataDir()) {
+  constructor(dataDir: string = defaultDataDir(), options: WorkOsStoreOptions = {}) {
     this.dataDir = dataDir;
+    this.now = options.now ?? Date.now;
     this.journalFile = path.join(dataDir, "journal.jsonl");
     this.snapshotFile = path.join(dataDir, "snapshot.json");
     this.lockFile = path.join(dataDir, "journal.lock");
@@ -178,9 +203,76 @@ export class WorkOsStore {
         try { assertTransition(m.status, p.to); } catch { throw tampered(`TRANSITION_ILLEGAL:${e.seq}`); }
         m.status = p.to; break;
       }
+      case "RUN_CREATED": {
+        const ent = p.entity as WorkRun;
+        if (!isObj(ent) || !isStr(ent.runId) || !isStr(ent.tenantId) || !isStr(ent.missionId) || ent.status !== "CREATED" || !isObj(ent.executor)
+          || !isStr(ent.executor.implementer) || !isStr(ent.executor.reviewer) || !Array.isArray(ent.checkpoints) || !Array.isArray(ent.evidence)) throw malformed(`ENTITY_SHAPE:${e.seq}`);
+        if (ent.executor.implementer === ent.executor.reviewer) throw tampered(`RUN_REVIEWER_NOT_INDEPENDENT:${e.seq}`);
+        const m = st.missions[ent.missionId];
+        if (!m || m.tenantId !== ent.tenantId || st.runs[ent.runId]) throw tampered(`RUN_INCONSISTENT:${e.seq}`);
+        st.runs[ent.runId] = {...ent, updatedAt: e.at};
+        this.applyMissionMove(st, p.mission, ent.missionId, e.seq);
+        idem("run", ent, ent.runId); break;
+      }
+      case "RUN_LEASE": {
+        const r = this.runFor(st, p, e.seq);
+        if (!isStr(p.leaseId) || typeof p.leaseExpiresAt !== "string" || !Number.isFinite(Date.parse(p.leaseExpiresAt))) throw malformed(`LEASE_SHAPE:${e.seq}`);
+        if (p.kind === "ACQUIRE") {
+          if (r.status !== "QUEUED" || r.leaseId !== null) throw tampered(`LEASE_ILLEGAL:${e.seq}`);
+          r.status = "LEASED"; r.attempt += 1;
+        } else if (p.kind === "RENEW") {
+          if (r.leaseId === null || r.leaseId !== p.leaseId) throw tampered(`LEASE_ILLEGAL:${e.seq}`);
+        } else if (p.kind === "TAKEOVER") {
+          if (r.leaseId === null || r.leaseId !== p.previousLeaseId || !LEASED_RUN_STATUSES.includes(r.status)) throw tampered(`LEASE_ILLEGAL:${e.seq}`);
+          if (r.status !== "RECOVERING" && r.status !== "CANCELLING") { try { assertRunTransition(r.status, "RECOVERING"); } catch { throw tampered(`RUN_TRANSITION_ILLEGAL:${e.seq}`); } r.status = "RECOVERING"; }
+          r.attempt += 1;
+        } else throw malformed(`LEASE_KIND:${e.seq}`);
+        r.leaseId = p.leaseId; r.leaseExpiresAt = p.leaseExpiresAt; r.updatedAt = e.at; break;
+      }
+      case "RUN_TRANSITION": {
+        const r = this.runFor(st, p, e.seq);
+        if (!isRunStatus(p.to) || r.status !== p.from || (p.leaseId ?? null) !== r.leaseId) throw tampered(`RUN_TRANSITION_INCONSISTENT:${e.seq}`);
+        try { assertRunTransition(r.status, p.to); } catch { throw tampered(`RUN_TRANSITION_ILLEGAL:${e.seq}`); }
+        if (p.patch !== undefined && !validRunPatch(p.patch)) throw malformed(`RUN_PATCH:${e.seq}`);
+        this.applyMissionMove(st, p.mission, r.missionId, e.seq);
+        Object.assign(r, p.patch ?? {});
+        r.status = p.to; r.reason = typeof p.reason === "string" ? p.reason : null; r.updatedAt = e.at;
+        if (UNLEASED_RUN_STATUSES.includes(r.status)) { r.leaseId = null; r.leaseExpiresAt = null; }
+        break;
+      }
+      case "RUN_CHECKPOINT": {
+        const r = this.runFor(st, p, e.seq);
+        const c = p.checkpoint as RunCheckpoint;
+        if (r.status !== "CHECKPOINTING" || (p.leaseId ?? null) !== r.leaseId) throw tampered(`RUN_CHECKPOINT_INCONSISTENT:${e.seq}`);
+        if (!isObj(c) || !isRunStep(c.step) || !isNat(c.cycle) || !isObj(c.data) || (p.patch !== undefined && !validRunPatch(p.patch))) throw malformed(`CHECKPOINT_SHAPE:${e.seq}`);
+        this.applyMissionMove(st, p.mission, r.missionId, e.seq);
+        r.checkpoints.push(c); Object.assign(r, p.patch ?? {}); r.updatedAt = e.at; break;
+      }
+      case "RUN_EVIDENCE": {
+        const r = this.runFor(st, p, e.seq);
+        const ev = p.evidence as RunEvidence;
+        if ((p.leaseId ?? null) !== r.leaseId) throw tampered(`RUN_EVIDENCE_INCONSISTENT:${e.seq}`);
+        if (!isObj(ev) || !isStr(ev.evidenceId) || !isStr(ev.kind) || !Array.isArray(ev.argv)) throw malformed(`EVIDENCE_SHAPE:${e.seq}`);
+        r.evidence.push(ev); r.updatedAt = e.at; break;
+      }
       default: throw tampered(`UNKNOWN_TYPE:${e.seq}`);
     }
     st.lastSeq = e.seq; st.lastHash = e.hash;
+  }
+  private runFor(st: State, p: Record<string, unknown>, seq: number): WorkRun {
+    if (!isStr(p.runId)) throw malformed(`RUN_SHAPE:${seq}`);
+    const r = st.runs[p.runId];
+    if (!r) throw tampered(`RUN_UNKNOWN:${seq}`);
+    return r;
+  }
+  // Run kaydına gömülü mission geçişi: aynı journal girdisinde atomik uygulanır ve yine mission state machine allowlist'inden geçer.
+  private applyMissionMove(st: State, mv: unknown, missionId: string, seq: number): void {
+    if (mv === undefined) return;
+    if (!isObj(mv) || mv.missionId !== missionId || !isMissionStatus(mv.to)) throw malformed(`MISSION_MOVE_SHAPE:${seq}`);
+    const m = st.missions[missionId];
+    if (!m || m.status !== mv.from) throw tampered(`TRANSITION_INCONSISTENT:${seq}`);
+    try { assertTransition(m.status, mv.to); } catch { throw tampered(`TRANSITION_ILLEGAL:${seq}`); }
+    m.status = mv.to;
   }
   private guard(): void {
     if (this.tamperReason) throw new WorkOsError("WORKOS_JOURNAL_TAMPERED", this.tamperReason.replace(/^WORKOS_JOURNAL_TAMPERED: /, ""));
@@ -216,12 +308,13 @@ export class WorkOsStore {
   createProjectDetailed(input: CreateProjectInput): WriteResult<Project> {
     if (input.repository?.url !== undefined && urlHasUserinfo(input.repository.url)) throw new WorkOsError("WORKOS_INVALID_INPUT", "repository.url userinfo");
     return this.write(() => {
-      const digest = sha256({orgId: input.orgId, customerId: input.customerId ?? null, name: input.name, repository: input.repository ?? null, environmentId: input.environmentId});
+      // B3a: testCommand yalnız verildiğinde özete girer; eski journal'lardaki özetler değişmez.
+      const digest = sha256({orgId: input.orgId, customerId: input.customerId ?? null, name: input.name, repository: input.repository ?? null, environmentId: input.environmentId, ...(input.testCommand ? {testCommand: input.testCommand} : {})});
       const prior = this.findIdem(this.state.projects, input.tenantId, "project", input.idempotencyKey, digest);
       if (prior) return {entity: prior, replayed: true};
       const project: Project = {
         projectId: newId("prj"), orgId: input.orgId, tenantId: input.tenantId, ...(input.customerId ? {customerId: input.customerId} : {}),
-        name: input.name, ...(input.repository ? {repository: input.repository} : {}), environmentId: input.environmentId,
+        name: input.name, ...(input.repository ? {repository: input.repository} : {}), environmentId: input.environmentId, ...(input.testCommand ? {testCommand: [...input.testCommand]} : {}),
         createdAt: new Date().toISOString(), createdBy: input.createdBy
       };
       this.append("PROJECT_CREATED", input.createdBy, {entity: project, ...this.idemFields(input.idempotencyKey, digest)});
@@ -231,14 +324,14 @@ export class WorkOsStore {
   createProject(input: CreateProjectInput): Project { return this.createProjectDetailed(input).entity; }
   createMissionDetailed(input: CreateMissionInput): WriteResult<WorkMission> {
     return this.write(() => {
-      const digest = sha256({projectId: input.projectId, title: input.title, objective: input.objective, acceptanceCriteria: input.acceptanceCriteria, riskLevel: input.riskLevel});
+      const digest = sha256({projectId: input.projectId, title: input.title, objective: input.objective, acceptanceCriteria: input.acceptanceCriteria, riskLevel: input.riskLevel, ...(input.testCommand ? {testCommand: input.testCommand} : {})});
       const prior = this.findIdem(this.state.missions, input.tenantId, "mission", input.idempotencyKey, digest);
       if (prior) return {entity: prior, replayed: true};
       const project = this.state.projects[input.projectId];
       if (!project || project.tenantId !== input.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "project");
       const mission: WorkMission = {
         missionId: newId("msn"), projectId: input.projectId, tenantId: input.tenantId, title: input.title, objective: input.objective,
-        acceptanceCriteria: [...input.acceptanceCriteria], riskLevel: input.riskLevel, status: "DRAFT",
+        acceptanceCriteria: [...input.acceptanceCriteria], riskLevel: input.riskLevel, status: "DRAFT", ...(input.testCommand ? {testCommand: [...input.testCommand]} : {}),
         createdAt: new Date().toISOString(), createdBy: input.createdBy, traceId: newTraceId()
       };
       this.append("MISSION_CREATED", input.createdBy, {entity: mission, ...this.idemFields(input.idempotencyKey, digest)});
@@ -271,6 +364,114 @@ export class WorkOsStore {
       return this.state.missions[missionId];
     });
   }
+
+  // ---- B3a worker runs (aynı journal, aynı lock, aynı hash zinciri) ----
+  private nowIso(): string { return new Date(this.now()).toISOString(); }
+  private missionMove(runMissionId: string, mv: RunWriteOptions["mission"]): Record<string, unknown> | undefined {
+    if (!mv) return undefined;
+    const m = this.state.missions[runMissionId];
+    if (!m) throw new WorkOsError("WORKOS_NOT_FOUND", "mission");
+    if (m.status === mv.to) return undefined; // idempotent yeniden giriş: hedefte zaten
+    try { assertTransition(m.status, mv.to); } catch (e) { throw new WorkOsError("WORKOS_INVALID_TRANSITION", (e as Error).message); }
+    return {missionId: runMissionId, from: m.status, to: mv.to, reason: String(mv.reason).slice(0, 1000)};
+  }
+  // Fencing: lease taşıyan run'a yalnız geçerli ve süresi dolmamış leaseId ile yazılabilir; bayat lease sahibi hiçbir şey yazamaz.
+  private fencedRun(runId: string, leaseId: string | null): WorkRun {
+    const r = this.state.runs[runId];
+    if (!r) throw new WorkOsError("WORKOS_NOT_FOUND", "run");
+    if (r.leaseId === null ? leaseId !== null : leaseId !== r.leaseId || Date.parse(r.leaseExpiresAt ?? "") <= this.now()) throw new WorkOsError("WORKOS_LEASE_FENCED", runId);
+    return r;
+  }
+  private checkPatch(patch: RunPatch | undefined): void { if (patch !== undefined && !validRunPatch(patch)) throw new WorkOsError("WORKOS_INVALID_INPUT", "patch"); }
+  createRunDetailed(input: CreateRunInput): WriteResult<WorkRun> {
+    if (!isStr(input.executor?.implementer) || !isStr(input.executor?.reviewer) || input.executor.implementer === input.executor.reviewer)
+      throw new WorkOsError("WORKOS_INVALID_INPUT", "EXECUTOR_IDENTITY_NOT_INDEPENDENT");
+    return this.write(() => {
+      const digest = sha256({missionId: input.missionId, roleId: input.roleId ?? null, executor: input.executor});
+      const prior = this.findIdem(this.state.runs, input.tenantId, "run", input.idempotencyKey, digest);
+      if (prior) return {entity: clone(prior), replayed: true};
+      const mission = this.state.missions[input.missionId];
+      if (!mission || mission.tenantId !== input.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "mission");
+      if (mission.status !== "AUTHORIZED" && mission.status !== "PLANNED") throw new WorkOsError("WORKOS_CONFLICT", "MISSION_NOT_RUNNABLE");
+      if (Object.values(this.state.runs).some(r => r.missionId === mission.missionId && isOpenRun(r.status))) throw new WorkOsError("WORKOS_CONFLICT", "RUN_ALREADY_ACTIVE");
+      const at = this.nowIso();
+      const run: WorkRun = {
+        runId: newId("run"), missionId: mission.missionId, projectId: mission.projectId, tenantId: mission.tenantId, roleId: input.roleId ?? null,
+        executor: {implementer: input.executor.implementer, reviewer: input.executor.reviewer}, leaseId: null, leaseExpiresAt: null, attempt: 0,
+        status: "CREATED", step: "WORKSPACE", remediationCycle: 0, retryCount: 0, retryAt: null, reason: null, baseSha: null, headSha: null, workBranch: null,
+        checkpoints: [], evidence: [], createdAt: at, createdBy: input.createdBy, updatedAt: at
+      };
+      const mv = this.missionMove(mission.missionId, mission.status === "AUTHORIZED" ? {to: "PLANNED", reason: `run ${run.runId} created`} : undefined);
+      this.append("RUN_CREATED", input.createdBy, {entity: run, ...(mv ? {mission: mv} : {}), ...this.idemFields(input.idempotencyKey, digest)});
+      this.append("RUN_TRANSITION", input.createdBy, {runId: run.runId, leaseId: null, from: "CREATED", to: "QUEUED", reason: "queued for runner"});
+      return {entity: clone(this.state.runs[run.runId]), replayed: false};
+    });
+  }
+  createRun(input: CreateRunInput): WorkRun { return this.createRunDetailed(input).entity; }
+  acquireRunLease(runId: string, ttlMs: number, actor: string): WorkRun {
+    return this.write(() => {
+      const r = this.state.runs[runId];
+      if (!r) throw new WorkOsError("WORKOS_NOT_FOUND", "run");
+      if (r.status !== "QUEUED" || r.leaseId !== null) throw new WorkOsError("WORKOS_LEASE_FENCED", runId);
+      this.append("RUN_LEASE", actor, {runId, kind: "ACQUIRE", leaseId: newId("lse"), previousLeaseId: null, leaseExpiresAt: new Date(this.now() + ttlMs).toISOString()});
+      return clone(this.state.runs[runId]);
+    });
+  }
+  renewRunLease(runId: string, leaseId: string, ttlMs: number, actor: string): WorkRun {
+    return this.write(() => {
+      this.fencedRun(runId, leaseId);
+      this.append("RUN_LEASE", actor, {runId, kind: "RENEW", leaseId, previousLeaseId: leaseId, leaseExpiresAt: new Date(this.now() + ttlMs).toISOString()});
+      return clone(this.state.runs[runId]);
+    });
+  }
+  // Recovery devri: yalnız süresi dolmuş lease devralınır; yeni leaseId eski sahibin bütün yazılarını fence eder.
+  takeoverRunLease(runId: string, ttlMs: number, actor: string): WorkRun {
+    return this.write(() => {
+      const r = this.state.runs[runId];
+      if (!r) throw new WorkOsError("WORKOS_NOT_FOUND", "run");
+      if (r.leaseId === null || !LEASED_RUN_STATUSES.includes(r.status) || Date.parse(r.leaseExpiresAt ?? "") > this.now()) throw new WorkOsError("WORKOS_LEASE_FENCED", runId);
+      this.append("RUN_LEASE", actor, {runId, kind: "TAKEOVER", leaseId: newId("lse"), previousLeaseId: r.leaseId, leaseExpiresAt: new Date(this.now() + ttlMs).toISOString()});
+      return clone(this.state.runs[runId]);
+    });
+  }
+  transitionRun(runId: string, leaseId: string | null, to: RunStatus, reason: string, actor: string, opts: RunWriteOptions = {}): WorkRun {
+    this.checkPatch(opts.patch);
+    return this.write(() => {
+      const r = this.fencedRun(runId, leaseId);
+      try { assertRunTransition(r.status, to); } catch (e) { throw new WorkOsError("WORKOS_INVALID_TRANSITION", (e as Error).message); }
+      const mv = this.missionMove(r.missionId, opts.mission);
+      this.append("RUN_TRANSITION", actor, {runId, leaseId, from: r.status, to, reason: String(reason).slice(0, 1000), ...(opts.patch ? {patch: opts.patch} : {}), ...(mv ? {mission: mv} : {})});
+      return clone(this.state.runs[runId]);
+    });
+  }
+  checkpointRun(runId: string, leaseId: string, checkpoint: {step: RunStep; data: Record<string, unknown>}, actor: string, opts: RunWriteOptions = {}): WorkRun {
+    this.checkPatch(opts.patch);
+    return this.write(() => {
+      const r = this.fencedRun(runId, leaseId);
+      if (r.status !== "CHECKPOINTING") throw new WorkOsError("WORKOS_INVALID_TRANSITION", "checkpoint requires CHECKPOINTING");
+      const mv = this.missionMove(r.missionId, opts.mission);
+      const c: RunCheckpoint = {step: checkpoint.step, cycle: r.remediationCycle, at: this.nowIso(), data: checkpoint.data};
+      this.append("RUN_CHECKPOINT", actor, {runId, leaseId, checkpoint: c, ...(opts.patch ? {patch: opts.patch} : {}), ...(mv ? {mission: mv} : {})});
+      return clone(this.state.runs[runId]);
+    });
+  }
+  addRunEvidence(runId: string, leaseId: string, evidence: Omit<RunEvidence, "evidenceId">, actor: string): RunEvidence {
+    return this.write(() => {
+      this.fencedRun(runId, leaseId);
+      const ev: RunEvidence = {evidenceId: newId("evd"), ...evidence};
+      this.append("RUN_EVIDENCE", actor, {runId, leaseId, evidence: ev});
+      return clone(ev);
+    });
+  }
+  getRun(scope: Scope, id: string): WorkRun | undefined { this.readGuard(); const r = this.state.runs[id]; return r && r.tenantId === scope.tenantId ? clone(r) : undefined; }
+  listRuns(scope: Scope, missionId?: string): WorkRun[] {
+    this.readGuard();
+    return Object.values(this.state.runs).filter(r => r.tenantId === scope.tenantId && (missionId === undefined || r.missionId === missionId)).map(clone);
+  }
+  countActiveWorkerRuns(scope: Scope): number { this.readGuard(); return Object.values(this.state.runs).filter(r => r.tenantId === scope.tenantId && ACTIVE_WORKER_STATUSES.includes(r.status)).length; }
+  // Engine-only (sistem aktörü) okumalar: tenant'lar arası run kuyruğunu görür; API yolları bunları kullanmaz.
+  engineListRuns(): WorkRun[] { this.readGuard(); return Object.values(this.state.runs).map(clone); }
+  engineGetRun(runId: string): WorkRun | undefined { this.readGuard(); const r = this.state.runs[runId]; return r ? clone(r) : undefined; }
 
   listProjects(scope: Scope): Project[] { this.readGuard(); return Object.values(this.state.projects).filter(p => p.tenantId === scope.tenantId); }
   getProject(scope: Scope, id: string): Project | undefined { this.readGuard(); const p = this.state.projects[id]; return p && p.tenantId === scope.tenantId ? p : undefined; }

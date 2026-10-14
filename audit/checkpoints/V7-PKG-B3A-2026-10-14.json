@@ -1,0 +1,270 @@
+{
+  "//TR": "Bu checkpoint, V7 B3a mission runner engine paketini (aynı Work OS journal'ında run varlığı, allowlist run durum tablosu, lease+fencing, checkpoint/crash-resume, sınırlı retry/remediation, GLOBAL_STOP, FAKE ve varsayılan kapalı LOCAL_CLAUDE executor adapter'ları, run API route'ları ve cockpit activeWorkerRuns) ve gözlenen komut sonuçlarını kaydeder; temiz değildir, inceleme beklemektedir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-B3A-MISSION-RUNNER-ENGINE",
+  "date": "2026-10-14",
+  "parent": "8cd05f71bb0929bc03d028b001b3ac7bb99b86fd",
+  "branch": "v7/product-b3a",
+  "implementer": "CLAUDE_BUILDER",
+  "authorizationRecords": [
+    "audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json",
+    "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
+  ],
+  "status": "IMPLEMENTED, NOT CLEAN; review pending",
+  "filesChanged": [
+    "core/workos/types.ts (RunStatus/RunStep/WorkRun/RunEvidence/RunCheckpoint types, RUN_* journal types, WORKOS_CONFLICT and WORKOS_LEASE_FENCED codes, optional testCommand on Project/WorkMission)",
+    "core/workos/run-state.ts (new: Master 06 run statuses and explicit allow-listed transition table)",
+    "core/workos/store.ts (extended, same journal/lock/hash chain: RUN_CREATED/RUN_LEASE/RUN_TRANSITION/RUN_CHECKPOINT/RUN_EVIDENCE apply+replay validation, embedded state-machine-checked mission moves, lease acquire/renew/takeover with fencing, run reads, countActiveWorkerRuns, injectable clock, testCommand input)",
+    "core/workos/schemas.ts (testCommand argv allow-list for project and mission, runStart schema)",
+    "core/workos/secret-scan.ts (new: conservative diff secret scan and log redaction)",
+    "core/workos/executors.ts (new: adapter interface, runProcess, FAKE adapter, LOCAL_CLAUDE adapter off by default, executorsFromEnv, identity independence check)",
+    "core/workos/fake-executor.mjs (new: deterministic fake executor script used by tests)",
+    "core/workos/runner.ts (new: MissionRunner engine)",
+    "core/workos/README.md (worker run section)",
+    "apps/control-api/src/server.ts (protected, authorized: POST /v1/missions/:id/runs, GET /v1/work-runs, GET /v1/work-runs/:id, optional in-process runner, WORKOS_CONFLICT/WORKOS_LEASE_FENCED -> 409, testCommand pass-through, cockpit workforce.activeWorkerRuns)",
+    "config/validation.json (protected, authorized: tests/v7-b3a-runner.test.ts appended to the existing tests step)",
+    "config/trust-root-manifest.json (protected, authorized: reseal via scripts/generate-trust-root.mjs)",
+    "tests/v7-b3a-runner.test.ts (new, 24 tests)",
+    "tests/v7-b2-workos-hardening.test.ts (one assertion updated to the new cockpit contract, see deviations)",
+    "audit/checkpoints/V7-PKG-B3A-2026-10-14.json (new)"
+  ],
+  "commands": [
+    {"command": "npx tsc --noEmit", "exitCode": 0},
+    {
+      "command": "node node_modules/vitest/vitest.mjs run tests/v7-b3a-runner.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts tests/mission-state.test.ts tests/pkg-gov2-codex-retirement.test.ts tests/action-gateway.test.ts",
+      "exitCode": 0,
+      "tests": "81 passed (81), 6 files",
+      "note": "Run after the trust-root reseal. Before the reseal the same command gave exit 1 with 80 passed and 1 failed (F-B2-001 manifest digest check, expected until generate-trust-root). v7-b3a-runner.test.ts defines 24 tests; all 6 files were reported passed in this run."
+    },
+    {"command": "node scripts/validate-tr-comments.mjs", "exitCode": 0, "result": "TR_VALIDATION: PASS"},
+    {"command": "node scripts/secret-sanity.mjs", "exitCode": 0, "result": "SECRET_SANITY: PASS"},
+    {"command": "node scripts/v6-apps-control-desktop-selftest.mjs", "exitCode": 0, "result": "V6_APPS_CONTROL_DESKTOP_SELFTEST: PASS 93/93"},
+    {"command": "node scripts/smoke-control-api.mjs", "exitCode": 0, "result": "PASS"},
+    {"command": "node scripts/validate-mechanical-closure.mjs", "exitCode": 0, "result": "MECHANICAL_CLOSURE_VALIDATION: PASS files=90"},
+    {"command": "git add -A && git ls-files --eol | grep w/crlf", "exitCode": 1, "result": "no output"},
+    {"command": "node scripts/generate-trust-root.mjs", "exitCode": 0, "result": "TRUST_ROOT_MANIFEST_GENERATED files=364"},
+    {"command": "node scripts/verify-trust-root.mjs", "exitCode": 0, "result": "TRUST_ROOT_VERIFY: PASS"}
+  ],
+  "mutationCheck": "With the lease-expiry condition temporarily removed from WorkOsStore.fencedRun, the fencing test failed (1 failed); the original code was restored before the runs recorded above.",
+  "notRun": "scripts/run-validation.mjs and the whole vitest suite were intentionally not run; the reviewer runs them independently. No real provider (LOCAL_CLAUDE) was invoked by any test or command.",
+  "deviations": [
+    "tests/v7-b2-workos-hardening.test.ts: the assertion 'workforce UNAVAILABLE, activeWorkerRuns null' for a seeded journal with readable registries was changed to 'VERIFIED, activeWorkerRuns 0', because this package was asked to replace the B3-pending null with the real count. The empty-repo (no journal) and malformed-registry assertions are unchanged and still pass.",
+    "Mission status changes caused by a run are embedded in the run journal entry (payload.mission {missionId, from, to, reason}) instead of a separate MISSION_TRANSITIONED entry, so the run step and the mission move are one atomic append; both write and replay check them with core/mission/state-machine.ts.",
+    "Mission path used: AUTHORIZED -> PLANNED at run creation, PLANNED -> EXECUTING at IMPLEMENT, -> VERIFYING after IMPLEMENT, -> REVIEWING after VERIFY, -> REGRESSION after a CLEAN review, -> REPORTING after the regression test run. The REGRESSION step re-runs the test command in a fresh clone of the reviewed commit.",
+    "Without an executor configuration POST /v1/missions/:id/runs returns 409 EXECUTOR_NOT_CONFIGURED. The FAKE adapter can only be injected programmatically (buildServer executors option / MissionRunner); no env value selects it. UASCO_WORKOS_EXECUTOR=local-claude selects LOCAL_CLAUDE; any other value is refused.",
+    "LOCAL_CLAUDE implement reuses scripts/claude-builder-broker.mjs unchanged. LOCAL_CLAUDE review re-checks provider provenance like the broker (final PASS, launcher sha256) and runs the captured launcher with Read,Grep,Glob only, because the broker applies the builder tool policy. Neither path is executed in this package.",
+    "Read-only review is enforced by detection: after review the clean clone must still be at the reviewed commit with an empty 'git status --porcelain --untracked-files=all', otherwise the run is BLOCKED (REVIEWER_MUTATED_CLONE).",
+    "testCommand is an optional argv field on project and mission (mission overrides project). Only 'node' is resolved to process.execPath; other allow-listed executables are spawned by name with shell:false, so Windows .cmd shims (npm, npx, pnpm, yarn) are not spawnable and give BLOCKED TEST_COMMAND_SPAWN_FAILED. A missing test command gives BLOCKED TEST_COMMAND_NOT_CONFIGURED.",
+    "The engine reads the run queue across tenants through engine-only methods (engineListRuns/engineGetRun); API routes use tenant-scoped reads only.",
+    "Lease heartbeats are RUN_LEASE RENEW journal entries (every leaseTtlMs/3, default TTL 120 s) and are also written between steps.",
+    "GLOBAL_STOP is checked before each step, between steps, and polled every 250 ms during child processes; an active stop kills the child process tree (taskkill /T on Windows) and the run goes CANCELLING -> CANCELLED with the mission BLOCKED.",
+    "Secret scan covers private keys, AWS, GitHub, Anthropic and OpenAI-like tokens on added diff lines only; hits record kind/file/line, never the value, and logs are redacted with the same patterns."
+  ],
+  "reviewStatus": "not clean; review pending",
+  "remediation": {
+    "//TR": "Bu bölüm F-B3A-001 (sınırsız crash/lease recovery döngüsü) düzeltmesini ve gözlenen komut sonuçlarını kaydeder; temiz değildir, inceleme beklemektedir.",
+    "cycle": 2,
+    "parent": "a125001658baf34036b18a6ba9171ce664287122",
+    "findings": [
+      "F-B3A-001"
+    ],
+    "changes": [
+      "core/workos/runner.ts: new option maxRecoveries (default 2). recoverCheck computes recoveries since the last checkpoint as run.attempt minus the attempt stored in the last checkpoint's data (1 when no checkpoint exists). Every TAKEOVER increments attempt in the journal, so the count advances even if no RECOVERY evidence could be written. When recoveries > maxRecoveries the step is NOT re-run: RECOVERY evidence (exitCode 1, problems RECOVERY_BUDGET_EXHAUSTED) is written and the run moves to RECOVERY_FAILED with the mission BLOCKED, both with reason RECOVERY_BUDGET_EXHAUSTED.",
+      "core/workos/runner.ts: checkpoint data (DONE and REMEDIATE) now records attempt, the baseline for the budget.",
+      "core/workos/runner.ts: lease renewal added at the start of every step in drive() (so also between steps) and right after the long synchronous git work: after clone/checkout in WORKSPACE, after the reset before the implementer call in IMPLEMENT, after git diff in VERIFY, after the fresh clone + diff before the reviewer call in REVIEW, after the fresh clone in REGRESSION. If the lease already expired the renewal throws WORKOS_LEASE_FENCED and the step stops before any further side effect or paid executor call.",
+      "tests/v7-b3a-recovery-budget.test.ts (new, 4 tests)",
+      "config/validation.json (protected, authorized: tests/v7-b3a-recovery-budget.test.ts appended to the existing tests step)",
+      "config/trust-root-manifest.json (protected, authorized: reseal via scripts/generate-trust-root.mjs)"
+    ],
+    "tests": [
+      "WORKSPACE step whose evidence write always outlives the lease (store clock jumps 10 min, TTL 60 s): ends RECOVERY_FAILED / RECOVERY_BUDGET_EXHAUSTED after 4 ticks, attempt 4, RECOVERY evidence exit codes [0,0,1], 3 workspace clone logs (1 + maxRecoveries), mission BLOCKED, a further tick writes nothing.",
+      "Repeated crash during IMPLEMENT with maxRecoveries 0 and 2: implementer called exactly 1 + maxRecoveries times, reviewer 0 times, run RECOVERY_FAILED, mission BLOCKED.",
+      "Budget is per checkpoint position: 2 recoveries at IMPLEMENT plus 2 at VERIFY still reach AWAITING_APPROVAL (attempt 5, checkpoint attempts [1,3,5,5,5,5]).",
+      "Lease renewal: each evidence write advances the clock 25 s (175 s total, TTL 60 s); the run completes in one tick with attempt 1, no takeover, no fencing, at least 6 RENEW entries."
+    ],
+    "mutationCheck": "With core/workos/runner.ts temporarily replaced by the a125001 version, all 4 new tests failed (the WORKSPACE run was still RUNNING after 12 ticks; the renewal test was fenced after 75 s of clock time). The fixed file was restored (cmp identical) before the runs recorded below.",
+    "commands": [
+      {
+        "command": "npx tsc --noEmit",
+        "exitCode": 0
+      },
+      {
+        "command": "node node_modules/vitest/vitest.mjs run tests/v7-b3a-recovery-budget.test.ts",
+        "exitCode": 0,
+        "tests": "4 passed (4), 1 file",
+        "note": "first run, before validation.json/manifest changes"
+      },
+      {
+        "command": "node node_modules/vitest/vitest.mjs run tests/v7-b3a-recovery-budget.test.ts tests/v7-b3a-runner.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts",
+        "exitCode": 1,
+        "tests": "60 passed, 1 failed (61), 4 files",
+        "note": "before the trust-root reseal; the only failure was the F-B2-001 manifest digest check, expected until generate-trust-root"
+      },
+      {
+        "command": "node scripts/validate-tr-comments.mjs",
+        "exitCode": 0,
+        "result": "TR_VALIDATION: PASS"
+      },
+      {
+        "command": "node scripts/secret-sanity.mjs",
+        "exitCode": 0,
+        "result": "SECRET_SANITY: PASS"
+      },
+      {
+        "command": "node scripts/v6-apps-control-desktop-selftest.mjs",
+        "exitCode": 0,
+        "result": "V6_APPS_CONTROL_DESKTOP_SELFTEST: PASS 93/93"
+      },
+      {
+        "command": "node scripts/smoke-control-api.mjs",
+        "exitCode": 0,
+        "result": "PASS (challenge-proof identity + auth boundary verified)"
+      },
+      {
+        "command": "node scripts/validate-mechanical-closure.mjs",
+        "exitCode": 0,
+        "result": "MECHANICAL_CLOSURE_VALIDATION: PASS files=90"
+      },
+      {
+        "command": "git add core/workos/runner.ts tests/v7-b3a-recovery-budget.test.ts config/validation.json && git ls-files --eol | grep w/crlf",
+        "exitCode": 1,
+        "result": "no output (git status showed no other changed or untracked files)"
+      },
+      {
+        "command": "node scripts/generate-trust-root.mjs",
+        "exitCode": 0,
+        "result": "TRUST_ROOT_MANIFEST_GENERATED files=364"
+      },
+      {
+        "command": "node scripts/verify-trust-root.mjs",
+        "exitCode": 0,
+        "result": "TRUST_ROOT_VERIFY: PASS"
+      },
+      {
+        "command": "node node_modules/vitest/vitest.mjs run tests/v7-b3a-recovery-budget.test.ts tests/v7-b3a-runner.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts",
+        "exitCode": 0,
+        "tests": "61 passed (61), 4 files",
+        "note": "after the trust-root reseal"
+      }
+    ],
+    "notRun": "scripts/run-validation.mjs and the whole vitest suite were intentionally not run. No real provider (LOCAL_CLAUDE) was invoked.",
+    "deviations": [
+      "The budget baseline is stored in checkpoint data (data.attempt) instead of a new store field, so no journal schema or replay change was needed. Checkpoints written by a125001 without data.attempt fall back to baseline 1 (stricter, fail-closed).",
+      "The budget is counted per checkpoint position (recoveries since the last completed checkpoint), so a run that makes progress between crashes is not stopped; each single step is re-run at most maxRecoveries times.",
+      "Clone and diff remain synchronous; explicit renewals after them were chosen over making them asynchronous (minimal change)."
+    ],
+    "reviewStatus": "not clean; review pending"
+  },
+  "remediationCycle3": {
+    "//TR": "Bu bölüm cycle-2 bağımsız incelemesinin F-B3A-C2-001 (adapter builder çıktısını commit etmiyordu) ve F-B3A-C2-002 (secret taraması implementer workspace'inde textconv'a açıktı) düzeltmelerini ve gözlenen komut sonuçlarını kaydeder; temiz değildir, inceleme beklemektedir.",
+    "cycle": 3,
+    "parent": "dd1999c59d56d1ec865954e4413f570e1e18a33c",
+    "findings": [
+      "F-B3A-C2-001",
+      "F-B3A-C2-002",
+      "F-B3A-C2-003 (documentation only)"
+    ],
+    "changes": [
+      "core/workos/builder-output.ts (new): gitControlDigest (sha256 over .git control files except objects/ and index), forbiddenChange (refuses .git segments incl. '.git.'/'GIT~1', '..' escapes, absolute paths, embedded repos 'x/', symlinks, paths whose real parent leaves the workspace), commitBuilderOutput (refuses BUILDER_TOUCHED_GIT_INTERNALS before any engine git call, rebuilds the index from the cycle start commit, git status -z with core.fsmonitor=false, BUILDER_PRODUCED_NO_CHANGE when nothing changed, refuses gitlinks, commits with isolated git as 'UASCO Builder (CLAUDE_BUILDER) <builder@local.invalid>', commit.gpgsign=false, --no-verify, checks parent == start SHA).",
+      "core/workos/executors.ts: new EditOnlyImplementer adapter (runs an edit-only process, then commitBuilderOutput; returns commitSha or blockReason). LocalClaudeExecutors.implement now uses it with scripts/claude-builder-broker.mjs unchanged (broker and config/builder-execution-policy.json not modified). The implement prompt no longer tells the model to commit; it says to edit files only and not touch .git. ImplementResult gains blockReason; MissionSpec gains optional startSha.",
+      "core/workos/runner.ts: IMPLEMENT passes startSha to the implementer; a blockReason ends the run BLOCKED with that reason (mission BLOCKED) and is recorded as IMPLEMENT evidence note; a reported commitSha different from the workspace HEAD is BLOCKED IMPLEMENT_COMMIT_MISMATCH.",
+      "core/workos/runner.ts: VERIFY secret scan now runs in a fresh clone of the produced commit (<run>/scan-c<cycle>), never in the implementer workspace; the diff uses -c core.attributesFile=<empty file in the run dir> -c core.fsmonitor=false diff --no-color --no-ext-diff --no-textconv --text --no-renames --src-prefix=a/ --dst-prefix=b/; commit messages base..head (git log --format='commit %H%n%B') are scanned too. The reviewer diff (already in a fresh clone) uses the same hardened diff. Tests still run in the workspace as before.",
+      "core/workos/secret-scan.ts: scanDiffForSecrets tracks hunk old/new line counts, so '+++ '/'--- ' lines inside a hunk are content; an unexpected '+' line outside a hunk is scanned too. New scanCommitMessagesForSecrets (hit file 'commit-message:<sha>').",
+      "core/workos/README.md: edit-only builder commit, fresh-clone secret scan, and the Windows .cmd shim limitation (F-B3A-C2-003, not fixed).",
+      "tests/v7-b3a-c3-builder-commit.test.ts (new, 9 tests)",
+      "config/validation.json (protected, authorized: tests/v7-b3a-c3-builder-commit.test.ts appended to the existing tests step)",
+      "config/trust-root-manifest.json (protected, authorized: reseal via scripts/generate-trust-root.mjs; only generatedAt and the config/validation.json digest changed)"
+    ],
+    "tests": [
+      "Edit-only builder (fake-executor.mjs implement with noCommit:true, wrapped by EditOnlyImplementer) -> run AWAITING_APPROVAL, mission REPORTING; IMPLEMENT evidence commitSha equals run.headSha and the SECRET_SCAN, VERIFY_TESTS and REVIEW evidence commitSha; author and committer are UASCO Builder (CLAUDE_BUILDER) <builder@local.invalid>, parent is the base SHA, commit contains exactly the edited files, workspace clean, IMPLEMENT log contains BUILDER_COMMIT <sha>.",
+      "Edit-only builder that changes nothing -> run BLOCKED BUILDER_PRODUCED_NO_CHANGE, mission BLOCKED, headSha null, evidence [WORKSPACE, IMPLEMENT] with note BUILDER_PRODUCED_NO_CHANGE, reviewer not called.",
+      "Edit-only builder that appends a textconv driver to .git/config -> BLOCKED BUILDER_TOUCHED_GIT_INTERNALS, HEAD unchanged.",
+      "forbiddenChange classification: src/a.ts and README.md allowed; .git/config, sub/.GIT/HEAD, .git./config, GIT~1/config -> GIT_INTERNALS; ../outside.txt -> OUTSIDE_WORKSPACE; nested/ -> EMBEDDED_REPOSITORY.",
+      "Textconv bypass regression: implementer adds diff.hide.textconv=true to workspace .git/config and commits '* diff=hide' plus an AWS-style key (crypto.randomBytes); precondition asserts a plain git diff in the workspace shows no secret; the run is BLOCKED SECRET_IN_DIFF with hit AWS_ACCESS_KEY config.txt:1, reviewer not called, value absent from the journal.",
+      "Checked-in '*.txt -diff' attribute -> BLOCKED SECRET_IN_DIFF (config.txt:1).",
+      "Secret only in the commit message -> BLOCKED SECRET_IN_DIFF with hit file commit-message:<headSha> line 3, value absent from the journal.",
+      "'+++ ' content inside a hunk: synthetic diff gives hit f.txt:2; end-to-end file line '++ <key>' gives BLOCKED SECRET_IN_DIFF notes.txt:1.",
+      "scanCommitMessagesForSecrets attributes hits per commit and line."
+    ],
+    "commands": [
+      {
+        "command": "git rev-parse HEAD",
+        "exitCode": 0,
+        "result": "dd1999c59d56d1ec865954e4413f570e1e18a33c (branch v7/product-b3a)"
+      },
+      {
+        "command": "npx tsc --noEmit",
+        "exitCode": 0
+      },
+      {
+        "command": "env -u PSModulePath npx vitest run --dir tests tests/v7-b3a-c3-builder-commit.test.ts tests/v7-b3a-runner.test.ts tests/v7-b3a-recovery-budget.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts",
+        "exitCode": 1,
+        "tests": "69 passed, 1 failed (70), 5 files",
+        "note": "before the trust-root reseal; the only failure was the F-B2-001 manifest digest check (sealed B2 files ... manifest sha256 equals the file bytes), expected until generate-trust-root"
+      },
+      {
+        "command": "git add -A && git ls-files --eol | grep w/crlf",
+        "exitCode": 1,
+        "result": "no output (no CRLF in the working tree)"
+      },
+      {
+        "command": "node scripts/generate-trust-root.mjs",
+        "exitCode": 0,
+        "result": "TRUST_ROOT_MANIFEST_GENERATED files=364"
+      },
+      {
+        "command": "node scripts/verify-trust-root.mjs",
+        "exitCode": 0,
+        "result": "TRUST_ROOT_VERIFY: PASS (before commit)"
+      },
+      {
+        "command": "node scripts/validate-tr-comments.mjs",
+        "exitCode": 0,
+        "result": "TR_VALIDATION: PASS"
+      },
+      {
+        "command": "node scripts/secret-sanity.mjs",
+        "exitCode": 0,
+        "result": "SECRET_SANITY: PASS"
+      },
+      {
+        "command": "node scripts/v6-apps-control-desktop-selftest.mjs",
+        "exitCode": 0,
+        "result": "V6_APPS_CONTROL_DESKTOP_SELFTEST: PASS 93/93"
+      },
+      {
+        "command": "node scripts/smoke-control-api.mjs",
+        "exitCode": 0,
+        "result": "PASS (challenge-proof identity + auth boundary verified)"
+      },
+      {
+        "command": "node scripts/validate-mechanical-closure.mjs",
+        "exitCode": 0,
+        "result": "MECHANICAL_CLOSURE_VALIDATION: PASS files=90"
+      },
+      {
+        "command": "env -u PSModulePath npx vitest run --dir tests tests/v7-b3a-c3-builder-commit.test.ts tests/v7-b3a-runner.test.ts tests/v7-b3a-recovery-budget.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts",
+        "exitCode": 0,
+        "tests": "70 passed (70), 5 files",
+        "note": "after the reseal"
+      },
+      {
+        "command": "env -u PSModulePath npx vitest run --dir tests tests/v7-b3a-c3-builder-commit.test.ts",
+        "exitCode": 0,
+        "tests": "9 passed (9), 1 file"
+      }
+    ],
+    "notRun": [
+      "scripts/run-validation.mjs and the full vitest suite (not requested for this cycle).",
+      "No real AI provider and no real scripts/claude-builder-broker.mjs run: LOCAL_CLAUDE is exercised only through EditOnlyImplementer with a deterministic edit-only fake process.",
+      "No separate mutation check this cycle; the textconv test asserts its own precondition (a plain workspace git diff hides the key).",
+      "verify-trust-root after the commit is run post-commit and is not recorded in this file."
+    ],
+    "deviations": [
+      "Builder output is not filtered by an allowedPathPrefixes list (Work OS missions carry none); only .git internals, workspace escapes, symlinks, embedded repos and gitlinks are refused.",
+      "The empty attributes file is a file in the run directory (<run>/empty-attributes) instead of the OS null device, for portability on Windows.",
+      "F-B3A-C2-003 (Windows .cmd shims) is documented in core/workos/README.md, not fixed."
+    ],
+    "reviewStatus": "not clean; review pending"
+  }
+}
