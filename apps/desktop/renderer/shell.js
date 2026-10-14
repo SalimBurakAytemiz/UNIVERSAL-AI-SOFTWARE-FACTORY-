@@ -5,6 +5,7 @@ import {ROUTES,routeById} from "./routes.js";
 import {formatCount,formatTime,MISSING,pushSample,searchEntries} from "./model.js";
 import {syncNav,syncTabs} from "./nav.js";
 import {keepFocus} from "./focus.js";
+import {selection} from "./forms.js";
 
 export const PRINCIPAL="FOUNDER_LOCAL";
 const FEED_TABS=Object.freeze(["flow","health","agenda"]);
@@ -112,7 +113,7 @@ export function createShell(ctx){
   function pick(hit){
     closeSearch();el("searchInput").value="";
     if(hit.kind==="route")ctx.navigate(hit.id);
-    else if(hit.kind==="project"){ctx.selectProject(hit.id);ctx.navigate("projects")}else ctx.navigate("work");
+    else if(hit.kind==="project"){ctx.selectProject(hit.id);ctx.navigate("projects")}else{selection.missionId=hit.id;ctx.navigate("work")}
   }
   function paintSearch(){
     const box=el("searchResults"),inp=el("searchInput");

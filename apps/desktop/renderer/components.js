@@ -1,6 +1,7 @@
 // //TR: Bu modül DOM yardımcılarını ve ortak bileşenleri (durum çipi, KPI karosu, panel, planlı-alan paneli) içerir; API verisi asla HTML olarak yorumlanmaz, yalnız createElement/textContent ve replaceChildren kullanılır.
 import {chipFor,formatCount,MISSING,formatTime} from "./model.js";
 import {icon,sparkline} from "./icons.js";
+import {verificationChipKind,VERIFICATION_STATES} from "./work-core.js";
 import {sparkPoints} from "./model.js";
 
 export function h(doc,tag,props={},...children){
@@ -56,4 +57,9 @@ export function plannedPanel(ctx,route,{partial=false}={}){
     h(doc,"p",{class:"note",text:ctx.t(partial?"planned.partial.lead":"planned.lead",{pkg:route.plannedPackage})}),
     h(doc,"h3",{class:"planned-sub",text:ctx.t("planned.contains")}),
     h(doc,"ul",{class:"planned-list"},[1,2,3].map(i=>h(doc,"li",{text:ctx.t(`area.${route.id}.plan${i}`)}))));
+}
+/** Kanıt doğrulama durumu çipi (VERIFIED/MISMATCH/MISSING/UNVERIFIABLE); durum yoksa veya bilinmiyorsa asla "doğrulandı" gösterilmez. */
+export function verificationChip(ctx,verification){
+  const k=verificationChipKind(verification),label=verification&&VERIFICATION_STATES.includes(verification)?ctx.t(`everif.${verification}`):ctx.t("everif.NONE");
+  return h(ctx.doc,"span",{class:`chip chip-${k.toLowerCase()}`,dataset:{chip:k,verification:verification??"NONE"}},h(ctx.doc,"span",{class:"chip-dot","aria-hidden":"true"}),label);
 }

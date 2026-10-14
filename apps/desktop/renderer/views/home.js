@@ -34,6 +34,7 @@ function areaCards(ctx,c){
     case "work":return val(c.missions,"map.count");
     case "workforce":return c.workforce.registeredRoles===null?ctx.t(`state.${c.workforce.state}`):ctx.t("map.roles",{n:formatCount(c.workforce.registeredRoles)});
     case "tower":return val(c.orchestrator,"map.packages");
+    case "assurance":return ctx.t("map.assurance");
     case "inbox":return val(c.approvals,"map.count");
     default:return ctx.t("map.planned",{pkg:ROUTES.find(r=>r.id===id)?.plannedPackage??MISSING});
   }};

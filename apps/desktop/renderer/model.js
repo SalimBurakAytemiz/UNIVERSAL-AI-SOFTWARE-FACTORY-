@@ -12,7 +12,7 @@ export function formatTime(iso,lang="tr"){
 export function classifyFailure(err){
   const msg=String(err&&err.message!==undefined?err.message:err??"");const m=/HTTP (\d{3})/.exec(msg);
   if(m){const status=Number(m[1]);return status===404||status===501?{state:"UNAVAILABLE",status}:{state:"ERROR",status}}
-  if(/fetch failed|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|network|timed? ?out|BRIDGE_UNAVAILABLE/i.test(msg))return {state:"OFFLINE",status:null};
+  if(/fetch failed|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|network|timed? ?out|BRIDGE_UNAVAILABLE|CONTROL_API_UNREACHABLE/i.test(msg))return {state:"OFFLINE",status:null};
   return {state:"ERROR",status:null};
 }
 export function chipFor(block){
@@ -68,7 +68,7 @@ export function mapCockpit(raw){
 }
 export function mapProjects(raw){
   if(!isObj(raw)||!Array.isArray(raw.projects))return {state:"ERROR",items:[]};
-  const items=raw.projects.filter(isObj).map(p=>({projectId:str(p.projectId,80),name:str(p.name,200)??"—",tenantId:str(p.tenantId,80),environmentId:str(p.environmentId,100),createdAt:iso(p.createdAt)})).filter(p=>p.projectId);
+  const items=raw.projects.filter(isObj).map(p=>({projectId:str(p.projectId,80),name:str(p.name,200)??"—",tenantId:str(p.tenantId,80),environmentId:str(p.environmentId,100),createdAt:iso(p.createdAt),repositoryPath:isObj(p.repository)?str(p.repository.path,1000):null})).filter(p=>p.projectId);
   return {state:"VERIFIED",items};
 }
 export function mapMissions(raw){

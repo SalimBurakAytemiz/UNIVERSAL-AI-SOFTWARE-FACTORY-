@@ -58,6 +58,15 @@
     <button type="button" class="btn btn-danger" id="stopConfirm" data-i18n="stop.dialog.confirm"></button>
   </div>
 </dialog>
+<dialog id="confirmDialog" class="dialog" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogDesc">
+  <h2 id="confirmDialogTitle"></h2>
+  <p id="confirmDialogDesc"></p>
+  <dl class="kv"><dt data-i18n="confirm.actionLabel"></dt><dd id="confirmAction"></dd><dt data-i18n="confirm.targetLabel"></dt><dd id="confirmTarget"></dd></dl>
+  <div class="btn-row">
+    <button type="button" class="btn" id="confirmCancel" autofocus data-i18n="confirm.cancel"></button>
+    <button type="button" class="btn btn-danger" id="confirmOk"></button>
+  </div>
+</dialog>
 <script type="module" src="./app.js"></script>
 </body>
 </html>

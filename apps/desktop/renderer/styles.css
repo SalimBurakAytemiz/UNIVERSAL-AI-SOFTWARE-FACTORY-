@@ -155,6 +155,51 @@ kbd{font-family:inherit;font-size:.75rem;padding:.1rem .4rem;border:1px solid va
 .dialog{max-width:min(32rem,92vw);padding:1.2rem 1.4rem;border:2px solid #ffb3bc;border-radius:var(--radius);background:var(--surface-2);color:var(--text);box-shadow:0 0 40px rgba(255,60,80,.35)}
 .dialog::backdrop{background:rgba(2,6,16,.8)}.dialog h2{margin-top:0}
 
+/* B5: formlar, liste editörü, iş ekranları */
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#031018;font-weight:700}
+.btn-primary:disabled,.btn:disabled{opacity:.6;cursor:not-allowed}
+.btn-small{padding:.3rem .55rem;min-width:2.2rem}
+.link-btn{padding:0;border:0;background:none;color:var(--accent);font:inherit;text-decoration:underline;cursor:pointer;text-align:left;overflow-wrap:anywhere}
+.row-selected{background:var(--surface-2);outline:1px solid var(--glow)}
+.form-panel>summary{cursor:pointer;font-weight:700;font-size:1.05rem}
+.form-panel[open]>summary{margin-bottom:.7rem}
+.form-panel form{display:grid;gap:.8rem}
+.field{display:grid;gap:.25rem;min-width:0}
+.field label,.field-label{font-weight:600;font-size:.88rem}
+.field input,.field select,.field textarea{padding:.5rem .65rem;border-radius:.55rem;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;width:100%;max-width:100%}
+.field textarea{resize:vertical;min-height:4rem}
+.field [aria-invalid="true"],.field[aria-invalid="true"]{border-color:var(--danger)}
+.field-hint{margin:0;font-size:.78rem;color:var(--muted)}
+.field-error{margin:0;font-size:.82rem;color:var(--danger);font-weight:600}
+.list-editor{list-style:none;margin:0;padding:0;display:grid;gap:.4rem}
+.list-editor li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.4rem;align-items:start}
+.argv-preview{margin:.2rem 0;color:var(--muted)}
+.form-status{padding:.6rem .8rem;border:1px solid var(--border);border-radius:.6rem;background:var(--bg-2)}
+.form-status:empty{display:none}
+.form-status p{margin:0}.form-status ul{margin:.3rem 0 0;padding-left:1.2rem}
+.form-status-ok{border-color:var(--ok)}.form-status-error{border-color:var(--danger)}
+.form-status-title{font-weight:700}
+.filter-bar,.filter-row{display:flex;flex-wrap:wrap;gap:.5rem;align-items:end;margin-bottom:.6rem}
+.filter-row .field{min-width:12rem;flex:0 1 16rem}
+.btn[aria-pressed="true"]{border-color:var(--glow);color:var(--accent);box-shadow:0 0 10px var(--glow-soft)}
+.risk-legend{font-size:.82rem}
+.status-timeline{list-style:none;margin:.3rem 0 .8rem;padding:0;display:flex;flex-wrap:wrap;gap:.4rem}
+.status-timeline li{display:inline-flex;align-items:center;gap:.35rem;padding:.25rem .6rem;border:1px solid var(--border);border-radius:99px;font-size:.78rem;background:var(--bg-2);color:var(--muted)}
+.status-timeline .step-done{color:var(--ok);border-color:var(--ok)}
+.status-timeline .step-current{color:var(--text);border-color:var(--glow);box-shadow:0 0 10px var(--glow-soft);font-weight:700}
+.status-timeline .step-off{border-style:dashed;border-color:var(--warn)}
+.transition-controls{display:grid;gap:.6rem}
+.transition-controls h4,.work-detail h4{margin:.4rem 0 .2rem}
+.run-list{grid-template-columns:repeat(auto-fill,minmax(20rem,1fr))}
+.run-card h5{margin:0;display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+.run-card h6{margin:.4rem 0 .1rem;color:var(--muted);font-size:.8rem}
+.checkpoints,.evidence-links{margin:0;padding-left:1.1rem;display:grid;gap:.2rem}
+.checkpoints li{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+.checkpoints time{color:var(--muted);font-size:.78rem}
+.decision-card{border-color:var(--warn)}
+.note-catalog{padding:.5rem .7rem;border:1px dashed var(--warn);border-radius:.6rem;color:var(--text)}
+#confirmDialog .kv{margin:.6rem 0}
+
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes stop-glow{0%,100%{box-shadow:0 0 10px rgba(255,60,80,.35)}50%{box-shadow:0 0 22px rgba(255,60,80,.7)}}
 
@@ -191,7 +236,9 @@ kbd{font-family:inherit;font-size:.75rem;padding:.1rem .4rem;border:1px solid va
   *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 }
 @media (forced-colors:active){
-  .btn,.btn-stop,.card,.kpi,.panel,.chip,.area-card,.nav-link,.dialog,.strip-item,.fact{border:1px solid CanvasText;forced-color-adjust:auto}
+  .btn,.btn-stop,.card,.kpi,.panel,.chip,.area-card,.nav-link,.dialog,.strip-item,.fact,.form-status,.status-timeline li,.field input,.field select,.field textarea{border:1px solid CanvasText;forced-color-adjust:auto}
+  .status-timeline .step-current{border:3px solid Highlight}
+  .link-btn{color:LinkText}
   .btn-stop{border:3px double CanvasText;background:ButtonFace;color:ButtonText}
   .nav-link[aria-current="page"]{border:3px solid Highlight}
   :focus-visible{outline:3px solid Highlight}
