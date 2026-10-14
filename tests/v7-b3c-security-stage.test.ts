@@ -141,7 +141,7 @@ describe("SECURITY step with stub scanners", () => {
     const calls = sec.calls();
     const gl = calls.find(x => x.tool === "gitleaks")!.argv, tv = calls.find(x => x.tool === "trivy")!.argv;
     const val = (a: string[], flag: string) => a[a.indexOf(flag) + 1];
-    expect(val(gl, "--log-opts")).toBe(`--text --no-textconv --no-ext-diff ${run.baseSha}..${run.headSha}`);
+    expect(val(gl, "--log-opts")).toBe(`--text --no-textconv --no-ext-diff --diff-merges=first-parent ${run.baseSha}..${run.headSha}`);
     expect(gl).toEqual(expect.arrayContaining(["--redact", "--ignore-gitleaks-allow"]));
     const runDir = path.join(c.dataDir, "runs", run.runId);
     for (const f of ["--config", "--gitleaks-ignore-path", "--report-path"]) expect(path.resolve(val(gl, f)).startsWith(runDir + path.sep)).toBe(true);
@@ -285,6 +285,40 @@ async function driveWith(implementer: ImplementerAdapter, security: SecurityOpti
   return {c, run: runOf(c, r.runId)};
 }
 
+// Implementer geçmişe "evil merge" sokar: main2 ve side commit'leri, ardından --no-commit merge + yalnız merge commit'inde görünen evil.cfg (B3C-C1-F1).
+function evilMergeImplementer(secret: string): ImplementerAdapter {
+  return {
+    identity: "FAKE_EVIL_MERGE_IMPLEMENTER",
+    async implement(ws) {
+      const at = new Date().toISOString(), id = ["-c", "user.name=FAKE", "-c", "user.email=fake@local.invalid"];
+      const main = git(ws, ["rev-parse", "--abbrev-ref", "HEAD"]);
+      git(ws, ["checkout", "-q", "-b", "side"]);
+      fs.writeFileSync(path.join(ws, "side.txt"), "side\n");
+      git(ws, ["add", "-A"]); git(ws, [...id, "commit", "-q", "-m", "side"]);
+      git(ws, ["checkout", "-q", main]);
+      fs.writeFileSync(path.join(ws, "feature.txt"), "ok\n"); fs.writeFileSync(path.join(ws, "main2.txt"), "main2\n");
+      git(ws, ["add", "-A"]); git(ws, [...id, "commit", "-q", "-m", "main2"]);
+      git(ws, [...id, "merge", "-q", "--no-ff", "--no-commit", "side"]);
+      fs.writeFileSync(path.join(ws, "evil.cfg"), `payment_key = ${secret}\n`);
+      git(ws, ["add", "-A"]); git(ws, [...id, "commit", "-q", "-m", "merge side"]);
+      return {exitCode: 0, log: "evil merge implementer\n", argv: ["in-process"], startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
+    }
+  };
+}
+
+describe("merge commits in base..head are scanned (B3C-C1-F1)", () => {
+  it("stub: the gitleaks argv carries --diff-merges=first-parent when the range contains a merge commit that adds content", { timeout: T }, async () => {
+    const sec = fakeSecurity(path.join(tmp, "sec-merge"));
+    const {c, run} = await driveWith(evilMergeImplementer(fakeStripe()), sec.options);
+    expect(run.status).toBe("AWAITING_APPROVAL");
+    const merges = git(path.join(c.dataDir, "runs", run.runId, "work"), ["rev-list", "--merges", `${run.baseSha}..${run.headSha}`]);
+    expect(merges).toContain(run.headSha!); // aralıkta gerçekten bir merge commit var
+    const gl = sec.calls().find(x => x.tool === "gitleaks")!.argv;
+    const opts = gl[gl.indexOf("--log-opts") + 1];
+    expect(opts).toBe(`--text --no-textconv --no-ext-diff --diff-merges=first-parent ${run.baseSha}..${run.headSha}`);
+  });
+});
+
 describe("scans run in fresh clones, not in the implementer workspace", () => {
   it("gitleaks targets a bare fresh clone and trivy a checked-out fresh clone; workspace .git/config textconv and .gitattributes do not carry over", { timeout: T }, async () => {
     const sec = fakeSecurity(path.join(tmp, "sec-c"));
@@ -423,6 +457,21 @@ describe("real gitleaks (skipped with an explicit reason when not installed)", (
     const persisted = [path.join(c.dataDir, "journal.jsonl"), ...allFiles(path.join(c.dataDir, "runs", run.runId))].filter(f => fs.existsSync(f) && fs.statSync(f).isFile());
     for (const f of persisted) { const text = fs.readFileSync(f, "utf8"); expect(text, f).not.toContain(k1); expect(text, f).not.toContain(k2); }
     expect(fs.readdirSync(path.join(c.dataDir, "runs", run.runId, "security")).filter(f => f.startsWith("gitleaks-raw"))).toEqual([]);
+  });
+
+  realGl("an evil merge (secret only in the merge commit) is detected by real gitleaks; the type is outside the built-in scan", { timeout: T }, async () => {
+    const k = fakeStripe();
+    const sec = fakeSecurity(path.join(tmp, "sec-real-merge"));
+    const {c, run} = await driveWith(evilMergeImplementer(k), {...sec.options, tools: {...sec.options.tools, gitleaks: undefined}});
+    expect(run.status).toBe("BLOCKED");
+    expect(run.reason).toBe("SECRET_DETECTED");
+    expect(missionStatus(c)).toBe("BLOCKED");
+    const s = secEv(run).security!;
+    expect(s.secrets.gitleaks.status).toBe("FINDINGS");
+    expect(s.secrets.gitleaks.items.some(i => i.file === "evil.cfg" && i.ruleId === "stripe-access-token" && i.commit === run.headSha)).toBe(true);
+    expect(s.secrets.builtin.hits).toBe(0);
+    const persisted = [path.join(c.dataDir, "journal.jsonl"), ...allFiles(path.join(c.dataDir, "runs", run.runId))].filter(f => fs.existsSync(f) && fs.statSync(f).isFile());
+    for (const f of persisted) expect(fs.readFileSync(f, "utf8"), f).not.toContain(k);
   });
 
   realGl("a clean commit passes real gitleaks (exit 0) and records the real version and sha256", { timeout: T }, async () => {

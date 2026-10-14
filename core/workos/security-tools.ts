@@ -101,12 +101,13 @@ export interface GitleaksResult {
 }
 // gitleaks yalnız base..head commit aralığını tarar. Güvenlik kararları: (1) hedef çıplak taze klondur (çalışma ağacı yok): repodaki .gitleaksignore / .gitleaks.toml hiç okunmaz,
 // (2) --config motorun kendi dosyasıdır, ignore yolu boş motor dosyasıdır, (3) --ignore-gitleaks-allow satır içi "gitleaks:allow" yorumunu etkisiz kılar,
-// (4) log-opts --text --no-textconv --no-ext-diff: .gitattributes (-diff/binary) ve textconv ile içerik gizlenemez, (5) --redact: rapor ve loglarda secret değeri yoktur.
+// (4) log-opts --text --no-textconv --no-ext-diff: .gitattributes (-diff/binary) ve textconv ile içerik gizlenemez, (5) --redact: rapor ve loglarda secret değeri yoktur,
+// (6) --diff-merges=first-parent: git log -p merge commit için varsayılan olarak yama göstermez; bu olmadan "evil merge" veya çakışma çözümü ile eklenen içerik hiç taranmazdı (B3C-C1-F1).
 export async function runGitleaks(tool: ResolvedTool, a: {bareRepo: string; base: string; head: string; configFile: string; ignoreFile: string; reportFile: string; cwd: string}, ctx: ScanCtx): Promise<GitleaksResult> {
   if (!SHA.test(a.base) || !SHA.test(a.head)) throw new Error("SECURITY_INVALID_SHA");
   try { fs.rmSync(a.reportFile, {force: true}); } catch { /* yoksa sorun değil */ }
   const argv = [tool.path!, ...tool.prefixArgs, "git", "--no-banner", "--no-color", "--log-level", "warn", "--redact", "--config", a.configFile, "--gitleaks-ignore-path", a.ignoreFile, "--ignore-gitleaks-allow",
-    "--report-format", "json", "--report-path", a.reportFile, "--exit-code", "1", "--log-opts", `--text --no-textconv --no-ext-diff ${a.base}..${a.head}`, a.bareRepo];
+    "--report-format", "json", "--report-path", a.reportFile, "--exit-code", "1", "--log-opts", `--text --no-textconv --no-ext-diff --diff-merges=first-parent ${a.base}..${a.head}`, a.bareRepo];
   const proc = await runProcess(argv, {cwd: a.cwd, env: ctx.env, timeoutMs: ctx.timeoutMs, shouldAbort: ctx.abort});
   const transient = proc.timedOut || proc.spawnError;
   const fail = (reason: string): GitleaksResult => ({status: "ERROR", reason, proc, count: 0, items: [], rawReportSha256: null, transient});

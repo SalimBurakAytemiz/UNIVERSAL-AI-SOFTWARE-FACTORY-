@@ -10,7 +10,7 @@
     "audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json",
     "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
   ],
-  "status": "IMPLEMENTED, NOT CLEAN; review pending",
+  "status": "IMPLEMENTED (c2 remediation of B3C-C1-F1 applied), NOT CLEAN; review pending",
   "filesChanged": [
     "core/workos/security-tools.ts (new: tool discovery, gitleaks/trivy runners, policy, fakeSecurity() test injection)",
     "core/workos/fake-security-tool.mjs (new: deterministic FAKE gitleaks/trivy/semgrep stand-in, tests only)",
@@ -28,7 +28,7 @@
   "design": {
     "step": "SECURITY between VERIFY and REVIEW; run status VERIFYING; mission VERIFYING -> REVIEWING now happens when SECURITY completes (previously at VERIFY completion); checkpoint is written after SECURITY",
     "freshClones": "built-in diff + commit-message scan and trivy run in <run>/security-c<cycle> (existing freshClone helper); gitleaks runs against a fresh bare clone <run>/security-gl-c<cycle>.git",
-    "gitleaks": "gitleaks git --redact --config <engine toml> --gitleaks-ignore-path <empty engine file> --ignore-gitleaks-allow --log-opts '--text --no-textconv --no-ext-diff <base>..<head>'; raw report deleted after parsing, sha256 kept",
+    "gitleaks": "gitleaks git --redact --config <engine toml> --gitleaks-ignore-path <empty engine file> --ignore-gitleaks-allow --log-opts '--text --no-textconv --no-ext-diff --diff-merges=first-parent <base>..<head>' (c2: --diff-merges=first-parent added, see remediation); raw report deleted after parsing, sha256 kept",
     "trivy": "trivy fs --scanners vuln --skip-db-update --skip-java-db-update --offline-scan --skip-check-update --skip-vex-repo-update --skip-version-check --disable-telemetry --config '' --ignorefile '' --cache-dir <explicit>; DB missing/unreadable -> trivy not started, PARTIAL TRIVY_DB_UNAVAILABLE; DB older than 7 days -> scan runs, PARTIAL",
     "sast": "semgrep only discovered; recorded NOT_AVAILABLE (TOOL_NOT_INSTALLED, or TOOL_INSTALLED_NOT_INTEGRATED if installed); SBOM recorded NOT_AVAILABLE (NOT_IMPLEMENTED)",
     "policy": "secret (gitleaks or built-in) -> BLOCKED SECRET_DETECTED; trivy HIGH/CRITICAL -> BLOCKED VULNERABLE_DEPENDENCY; scanner error/unparsable/oversized report/changed binary -> BLOCKED SECURITY_TOOL_ERROR; MEDIUM/LOW recorded only; timeout/spawn failure -> bounded RETRY",
@@ -36,32 +36,119 @@
   },
   "observedHostTools": {
     "note": "observed by a throwaway real-tool run of the runner on a temp repo (test file deleted afterwards); no database was downloaded and no provider was called",
-    "gitleaks": {"status": "INSTALLED", "version": "gitleaks version 8.30.1", "sha256": "17157e2ee8b76fc8b1d8bee607a250e34b8a8023c8bc81822d4b5ee4d78fcb7c"},
-    "trivy": {"status": "INSTALLED", "version": "Version: 0.75.0", "sha256": "3b4fcf6fec53c4c73c325cfd518c7264100695b19e6c59c6a777e4a67dc9f0e6"},
-    "semgrep": {"status": "NOT_INSTALLED"},
+    "gitleaks": {
+      "status": "INSTALLED",
+      "version": "gitleaks version 8.30.1",
+      "sha256": "17157e2ee8b76fc8b1d8bee607a250e34b8a8023c8bc81822d4b5ee4d78fcb7c"
+    },
+    "trivy": {
+      "status": "INSTALLED",
+      "version": "Version: 0.75.0",
+      "sha256": "3b4fcf6fec53c4c73c325cfd518c7264100695b19e6c59c6a777e4a67dc9f0e6"
+    },
+    "semgrep": {
+      "status": "NOT_INSTALLED"
+    },
     "realRunResult": {
       "runStatus": "AWAITING_APPROVAL",
       "runReason": "DELIVERY_DECISION_PENDING_FOUNDER; SECURITY_COVERAGE_PARTIAL",
       "securityStatus": "PARTIAL",
       "gitleaks": "CLEAN",
-      "sca": {"status": "PARTIAL", "reason": "TRIVY_DB_UNAVAILABLE", "dbState": "MISSING"},
-      "gaps": ["SCA:TRIVY_DB_UNAVAILABLE", "SAST:TOOL_NOT_INSTALLED", "SBOM:NOT_IMPLEMENTED"]
+      "sca": {
+        "status": "PARTIAL",
+        "reason": "TRIVY_DB_UNAVAILABLE",
+        "dbState": "MISSING"
+      },
+      "gaps": [
+        "SCA:TRIVY_DB_UNAVAILABLE",
+        "SAST:TOOL_NOT_INSTALLED",
+        "SBOM:NOT_IMPLEMENTED"
+      ]
     },
     "gitleaksCommittedConfigProbe": "manual probe before implementation: a committed .gitleaksignore in the scanned worktree suppressed a finding even with --gitleaks-ignore-path elsewhere, and '* -diff' in .gitattributes hid content without --text; both are closed by the bare clone and --log-opts --text (covered by the real-gitleaks test)"
   },
   "commands": [
-    {"cmd": "env -u PSModulePath npx tsc --noEmit", "exit": 0},
-    {"cmd": "vitest run tests/v7-b3a-runner.test.ts tests/v7-b3a-recovery-budget.test.ts tests/v7-b3a-c3-builder-commit.test.ts", "exit": 0, "summary": "37 passed"},
-    {"cmd": "vitest run tests/v7-b3c-security-stage.test.ts", "exit": 0, "summary": "18 passed (includes 2 real-gitleaks cases, not skipped on this host)"},
-    {"cmd": "vitest run b3c + b3a x3 + tests/v7-b1-workos.test.ts + tests/v7-b2-workos-hardening.test.ts (before trust-root reseal)", "exit": 1, "summary": "87 passed, 1 failed: F-B2-001 trust-root seal (server.ts sha256 differed until generate-trust-root was re-run)"},
-    {"cmd": "vitest run tests/v7-b2-workos-hardening.test.ts (after reseal)", "exit": 0, "summary": "21 passed"},
-    {"cmd": "node scripts/validate-tr-comments.mjs", "exit": 0, "summary": "TR_VALIDATION: PASS"},
-    {"cmd": "node scripts/secret-sanity.mjs", "exit": 0, "summary": "SECRET_SANITY: PASS"},
-    {"cmd": "node scripts/smoke-control-api.mjs", "exit": 0, "summary": "status PASS"},
-    {"cmd": "node scripts/generate-trust-root.mjs", "exit": 0, "summary": "TRUST_ROOT_MANIFEST_GENERATED files=364"},
-    {"cmd": "node scripts/verify-trust-root.mjs", "exit": 0, "summary": "TRUST_ROOT_VERIFY: PASS"}
+    {
+      "cmd": "env -u PSModulePath npx tsc --noEmit",
+      "exit": 0
+    },
+    {
+      "cmd": "vitest run tests/v7-b3a-runner.test.ts tests/v7-b3a-recovery-budget.test.ts tests/v7-b3a-c3-builder-commit.test.ts",
+      "exit": 0,
+      "summary": "37 passed"
+    },
+    {
+      "cmd": "vitest run tests/v7-b3c-security-stage.test.ts",
+      "exit": 0,
+      "summary": "18 passed (includes 2 real-gitleaks cases, not skipped on this host)"
+    },
+    {
+      "cmd": "vitest run b3c + b3a x3 + tests/v7-b1-workos.test.ts + tests/v7-b2-workos-hardening.test.ts (before trust-root reseal)",
+      "exit": 1,
+      "summary": "87 passed, 1 failed: F-B2-001 trust-root seal (server.ts sha256 differed until generate-trust-root was re-run)"
+    },
+    {
+      "cmd": "vitest run tests/v7-b2-workos-hardening.test.ts (after reseal)",
+      "exit": 0,
+      "summary": "21 passed"
+    },
+    {
+      "cmd": "node scripts/validate-tr-comments.mjs",
+      "exit": 0,
+      "summary": "TR_VALIDATION: PASS"
+    },
+    {
+      "cmd": "node scripts/secret-sanity.mjs",
+      "exit": 0,
+      "summary": "SECRET_SANITY: PASS"
+    },
+    {
+      "cmd": "node scripts/smoke-control-api.mjs",
+      "exit": 0,
+      "summary": "status PASS"
+    },
+    {
+      "cmd": "node scripts/generate-trust-root.mjs",
+      "exit": 0,
+      "summary": "TRUST_ROOT_MANIFEST_GENERATED files=364"
+    },
+    {
+      "cmd": "node scripts/verify-trust-root.mjs",
+      "exit": 0,
+      "summary": "TRUST_ROOT_VERIFY: PASS"
+    },
+    {
+      "cmd": "env -u PSModulePath npx tsc --noEmit (c2)",
+      "exit": 0
+    },
+    {
+      "cmd": "vitest run tests/v7-b3c-security-stage.test.ts (c2)",
+      "exit": 0,
+      "summary": "20 passed (incl. 3 real-gitleaks cases, not skipped)"
+    },
+    {
+      "cmd": "vitest run b3c + tests/v7-b3a-runner.test.ts tests/v7-b3a-recovery-budget.test.ts tests/v7-b3a-c3-builder-commit.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts (c2, before reseal)",
+      "exit": 0,
+      "summary": "6 files, 90 passed; no tests/v7-b3b-* files exist in this tree"
+    },
+    {
+      "cmd": "node scripts/validate-tr-comments.mjs (c2)",
+      "exit": 0,
+      "summary": "TR_VALIDATION: PASS"
+    },
+    {
+      "cmd": "node scripts/secret-sanity.mjs (c2)",
+      "exit": 0,
+      "summary": "SECRET_SANITY: PASS"
+    },
+    {
+      "cmd": "node scripts/smoke-control-api.mjs (c2)",
+      "exit": 0
+    }
   ],
-  "notRun": ["node scripts/run-validation.mjs (explicitly excluded by the package instructions)"],
+  "notRun": [
+    "node scripts/run-validation.mjs (explicitly excluded by the package instructions)"
+  ],
   "deviationsAndLimits": [
     "No Founder inbox module exists in this base; the founder-facing surface for partial coverage is report.json security.founderNotice, the run reason SECURITY_COVERAGE_PARTIAL and the SECURITY_REPORT evidence (visible through GET /v1/work-runs/:id).",
     "Because SAST and SBOM are standing gaps, they are listed in gaps/founderNote but do not downgrade PASSED to PARTIAL; PARTIAL is reserved for a missing/unusable enforced component (gitleaks, trivy, vulnerability DB).",
@@ -70,5 +157,21 @@
     "semgrep is not integrated; SAST is honestly NOT_AVAILABLE.",
     "Windows PATH lookup accepts only .exe/.com; .cmd/.bat shims are never used."
   ],
-  "cleanClaimed": false
+  "cleanClaimed": false,
+  "remediation": {
+    "cycle": "c2",
+    "base": "72df0de",
+    "finding": {
+      "id": "B3C-C1-F1",
+      "severity": "HIGH",
+      "summary": "gitleaks --log-opts had no merge-diff option; git log -p emits no patch for merge commits, so content introduced only by a merge commit (evil merge / conflict resolution) was never scanned and the SECURITY stage reported CLEAN."
+    },
+    "fix": "core/workos/security-tools.ts runGitleaks: --log-opts is now '--text --no-textconv --no-ext-diff --diff-merges=first-parent <base>..<head>'. README security section updated.",
+    "tests": [
+      "tests/v7-b3c-security-stage.test.ts 'merge commits in base..head are scanned (B3C-C1-F1)': stub test, implementer builds main2 + side commits and a --no-ff --no-commit merge with an extra file; asserts rev-list --merges base..head contains the head and the gitleaks --log-opts includes --diff-merges=first-parent; the existing CLEAN stub argv assertion was updated.",
+      "tests/v7-b3c-security-stage.test.ts real-gitleaks 'an evil merge (secret only in the merge commit) ...': same history shape with a runtime-built stripe-style fake key (a type the built-in scan does not recognise) only in the merge commit; real gitleaks 8.30.1 reports FINDINGS (evil.cfg, stripe-access-token, commit == head sha), run BLOCKED SECRET_DETECTED, builtin hits 0, no secret value in any persisted file."
+    ],
+    "negativeControl": "With the --diff-merges=first-parent option temporarily removed, the real-gitleaks evil-merge test failed (expected 'AWAITING_APPROVAL' to be 'BLOCKED'); with the option restored it passes. Observed.",
+    "scopeNote": "No protected file touched except config/trust-root-manifest.json (resealed via generate-trust-root). server.ts and validation.json unchanged in c2 (the b3c test path was already appended in c1)."
+  }
 }
