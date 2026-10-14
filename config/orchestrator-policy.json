@@ -90,7 +90,7 @@
     "quorum": "CLAUDE_REVIEWER_CLEAN_AND_CODEX_REVIEWER_CLEAN"
   },
   "releaseAudit": {
-    "//TR": "Son sürüm kapanışı: release adayı paketlenmeden, imzalanmadan ve kurulmadan önce CLAUDE_REVIEWER ve CODEX_REVIEWER aynı değişmez adayın tam depo denetimini ayrı ayrı yapar; ikisi de CLEAN olmadan release hattı ilerlemez.",
+    "//TR": "Son sürüm kapanışı: release adayı paketlenmeden, imzalanmadan ve kurulmadan önce CLAUDE_REVIEWER ve CODEX_REVIEWER aynı değişmez adayın tam depo denetimini ayrı ayrı yapar; ikisi de CLEAN olmadan release hattı ilerlemez. Bu reviewers/quorum DR2 tarihsel tanımıdır: reviewGate (GOV1, CLAUDE_ONLY) etkinleştirildiğinde yerine reviewGate.releaseAudit geçer ve tek governed CLAUDE_FULL_REPO_REVIEW CLEAN'i gerekir.",
     "required": true,
     "reviewers": [
       "claude",
@@ -141,6 +141,42 @@
         "trust-root manifest"
       ],
       "riskLevel": 5
+    }
+  },
+  "reviewGate": {
+    "//TR": "GOV1 açık policy etkinleştirmesi (Founder yönetişim değişikliği 2026-10-06, V6-PKG-GOV1): paket entegrasyonu, release kapanışı ve son tamamlanma için gerekli inceleme kapısı tek bağımsız governed CLAUDE_REVIEWER incelemesidir (taze yalıtılmış süreç, temiz salt-okunur inceleme klonu, builder bağlamı yok, kaynak değişikliği yok, birebir commit ve donmuş bundle digest'i, governed CLEAN/BLOCKED); Codex artık gerekmez ve planlanmaz. Bu anahtar review.reviewers/review.quorum ile releaseAudit.reviewers/releaseAudit.quorum'un (DR1/DR2 tarihsel çift kapı tanımı) yerine geçer. Kapı bir kontrol durumunda, kalıcı durum Founder kararının kaydını (control.finalization.reviewGovernance.model = CLAUDE_ONLY) taşırken engine hash zincirli REVIEW_GATE_ACTIVATED geçişini bir kez kaydettiğinde etkin olur; birleşme ve paketleme kapıları bu anahtarı ayrıca doğrular. Deterministik kapılar, trust-root, kanıt bağı, reviewer yalıtımı, üretici != reviewer, Global Stop ve fail-closed davranış değişmez; tarihsel Codex kanıtı ve işaretleri olduğu gibi korunur.",
+    "model": "CLAUDE_ONLY",
+    "required": ["claude"],
+    "codexRequired": false,
+    "activatedBy": "V6-PKG-GOV1-CLAUDE-ONLY-REVIEW-GATE",
+    "activationRecord": "control.finalization.reviewGovernance.model == CLAUDE_ONLY",
+    "quorum": "CLAUDE_REVIEWER_CLEAN",
+    "mergeRule": "DETERMINISTIC_GATES_PASS_AND_CLAUDE_REVIEWER_CLEAN",
+    "historicalCodexEvidence": "PRESERVED",
+    "supersedes": ["review.reviewers", "review.quorum", "releaseAudit.reviewers", "releaseAudit.quorum", "releaseAudit.contract"],
+    "releaseAudit": {
+      "reviewers": ["claude"],
+      "quorum": "CLAUDE_FULL_REPO_REVIEW_CLEAN",
+      "contract": {
+        "title": "V6 final governed CLAUDE full-repository release audit of candidate",
+        "objective": "Independently audit the entire tracked repository of the immutable release candidate before release closure (packaging, signing, Phase0): one governed CLAUDE_FULL_REPO_REVIEW by the independent CLAUDE_REVIEWER must be CLEAN on the frozen candidate bundle (Founder governance change 2026-10-06, V6-PKG-GOV1); Codex is not required.",
+        "authorizationSources": [
+          {
+            "checkpoint": "audit/checkpoints/V6-PKG-GOV1-CLAUDE-ONLY-REVIEW-GATE-2026-10-06.json",
+            "fields": [
+              "founderAuthorization.decision",
+              "founderAuthorization.rule",
+              "releaseAuditContract.scope",
+              "releaseAuditContract.closureRule"
+            ]
+          }
+        ],
+        "requiredArtifacts": [
+          "config/trust-root-manifest.json",
+          "config/protected-paths.json",
+          "audit/checkpoints/V6-PKG-GOV1-CLAUDE-ONLY-REVIEW-GATE-2026-10-06.json"
+        ]
+      }
     }
   },
   "merge": {

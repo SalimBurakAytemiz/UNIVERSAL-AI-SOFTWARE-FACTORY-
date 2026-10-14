@@ -5,7 +5,6 @@
   "date": "2026-10-06",
   "parent": "f24c32a61dc177806f3fb1003f0a1f7d0839437b",
   "branch": "v6/pkg-gov1-claude-only-review-gate",
-  "status": "F10 AUTHORIZATION RECORD ONLY: package changes not yet applied; not clean; review pending",
   "founderAuthorization": {
     "decision": "GOVERNANCE_CHANGE_AUTHORIZED",
     "rule": "Founder message in the Claude builder session on 2026-10-06, 'FOUNDER GOVERNANCE CHANGE: REMOVE CODEX FROM THE REQUIRED REVIEW GATE': from this point forward Codex is not required for package merge, release closure or final completion; apply prospectively from a new explicit policy activation commit; required model CLAUDE_BUILDER -> deterministic validation -> frozen reviewed commit/bundle -> independent CLAUDE_REVIEWER (fresh isolated session/process, clean read-only review clone, no inherited builder context, no source modification, exact reviewed commit and frozen bundle digest, governed CLEAN/BLOCKED evidence) -> governed result; producer != reviewer remains mandatory; merge rule: deterministic gates PASS AND independent CLAUDE_REVIEWER == CLEAN; a valid Claude BLOCKED enters the governed remediation loop; previous advisory Claude reviews are not converted into governed CLEAN; the final release gate includes one independent governed CLAUDE full-repo review; preserve all historical Codex evidence exactly as historical evidence.",
@@ -37,5 +36,1231 @@
       "scope": "exact re-application of the f9-reviewed diff 1278079..891992e; protected files limited to protectedFiles; recorded before any protected change of this package",
       "notBackdated": true
     }
-  }
+  },
+  "releaseAuditContract": {
+    "scope": "FULL_TRACKED_TREE_OF_THE_IMMUTABLE_CANDIDATE",
+    "closureRule": "CLAUDE_FULL_REPO_REVIEW_CLEAN",
+    "base": "deterministic unsigned empty-tree commit 53c1d24822689b2b1e1ca0d98a1ff117d937864d (unchanged from PKG-DR2)",
+    "order": "AUDIT_FREEZE -> AUDIT claude -> PACKAGE -> SIGN -> PHASE0",
+    "onBlocked": "AUDIT_BLOCKED: the release lane stops; a remediation package produces a new candidate, which starts a fresh audit"
+  },
+  "design": {
+    "policy": "config/orchestrator-policy.json reviewGate: model CLAUDE_ONLY, required [claude], codexRequired false, activatedBy V6-PKG-GOV1-CLAUDE-ONLY-REVIEW-GATE, quorum CLAUDE_REVIEWER_CLEAN, mergeRule DETERMINISTIC_GATES_PASS_AND_CLAUDE_REVIEWER_CLEAN, historicalCodexEvidence PRESERVED, releaseAudit {reviewers [claude], quorum CLAUDE_FULL_REPO_REVIEW_CLEAN, contract override citing this checkpoint}; it supersedes review.reviewers/review.quorum and releaseAudit.reviewers/quorum/contract, which stay unchanged as the DR1/DR2 record (tests/pkg-dr1-dual-review.test.ts and tests/pkg-dr2-release-audit.test.ts pin them and are outside this package)",
+    "activation": "two keys: the committed sealed policy key (source of truth for what the gate is) and the Founder decision record in the durable state (control.finalization.reviewGovernance.model == CLAUDE_ONLY). runTick (automation/lib/orchestrator-engine.mjs activateReviewGate) records control.reviewGate {active, model, required, codexRequired false, activatedBy, activatedAt, historicalCodexEvidence PRESERVED} once as a hash-chained REVIEW_GATE_ACTIVATED transition at the start of a tick, never while Global Stop is active. The policy key alone, the record alone or a malformed key/record activates nothing, so the earlier, stricter gate stays; this also keeps every existing selftest world that runs the committed policy (orchestrator, autonomy-hardening, executor integration, bootstrap, crash-resume) on its previous behaviour",
+    "scheduling": "review-quorum.mjs requiredReviewers returns [claude] for every open package and release audit when control.reviewGate is a valid CLAUDE_ONLY record, regardless of DUAL/CODEX_ONLY_HISTORICAL markers; usesReviewerGate routes every package through the per-provider gate path, so the legacy Codex-only action and a Codex review action are never scheduled; the COMMITTED transition leaves markers untouched under CLAUDE_ONLY",
+    "quorum": "computeReviewAggregate with required [claude]: Claude CLEAN -> CLEAN; Claude BLOCKED -> BLOCKED (remediation, attributed findings, cycle limit unchanged); INVALID after the format retry -> Founder decision; quota -> provider wait without cycle use. Option alsoBlocking [codex] keeps a valid Codex BLOCKED already recorded for the same frozen bundle and cycle blocking (no reviewer overrules another's valid finding); a missing, pending, quota-blocked or malformed Codex result never holds the gate. Default alsoBlocking [] is the previous behaviour",
+    "mergeGate": "orchestrator-executors.mjs merge: when control.reviewGate is CLAUDE_ONLY and the committed policy defines it, reviewSatisfiesGate requires a recorded CLEAN with CLAUDE_REVIEWER evidence for the current bundle digest and cycle, and verifyCleanEvidence re-derives that evidence with its identity bound to the frozen bundle digest, base, reviewed commit and cycle (same binding as the dual gate). A control-state gate without the policy key falls back to the previous gates (fail closed). For an orchestrator-built revision (execution provenance) the execution merge gate checks producer != reviewer on identity, process, workspace and session order instead of on provider (claudeOnlyExecutionMergeDenial, remediation round 1); any refusal is NOT_FF EXECUTION_MERGE_GATE_DENIED_FOR_CLAUDE_REVIEWER:<reason> before any Git operation",
+    "releaseAudit": "newAudit records policy CLAUDE_FULL_REPO_REVIEW; nextAction schedules only the Claude audit; applyAuditAggregate records result CLEAN, gateModel CLAUDE_ONLY, quorum CLAUDE_FULL_REPO_REVIEW_CLEAN, claudeClean true and the Claude evidence; auditFreeze freezes reviewGate.releaseAudit.contract; releaseAuditGate (PACKAGE, SIGN, PHASE0) requires that CLEAN (or a pre-activation dual CLEAN) and re-derives the Claude evidence bound to the candidate's frozen audit bundle",
+    "transition": "reconcileReviewGates (runTick, CLAUDE_ONLY only): an open package in REVIEW_PENDING/REVIEW_PENDING_PROVIDER_QUOTA or a release in AUDIT_PENDING whose governed Claude gate result for the current bundle and cycle is already CLEAN/BLOCKED/INVALID moves to that result without a new review (REVIEW_GATE_RECONCILED); closed packages, Founder decisions, AUDIT_BLOCKED releases and in-flight targets are untouched; an open Codex-only CLEAN package is sent to the Claude reviewer before it can merge",
+    "history": "no evidence file, ledger, marker or closed record is rewritten or deleted; a Codex-bearing p.review replaced by a CLAUDE_ONLY result is appended unchanged to p.historicalCodexReviews; the seeded Codex gate entry stays in p.reviewGate; advisory reviews are never governed evidence (only recorded CLAUDE_REVIEWER evidence re-derived by the merge/packaging gates counts)",
+    "unchanged": "deterministic gates, trust root, evidence binding, reviewer isolation and identity checks, producer != reviewer, Global Stop and fail-closed behaviour; prompts/RELEASE-AUDIT-REVIEW.txt is unchanged because it does not name the dual quorum; config/execution-backends.json and the daemon are outside this package"
+  },
+  "tests": {
+    "file": "tests/pkg-gov1-claude-only-review-gate.test.ts",
+    "selftestScenarios": {
+      "scripts/dual-review-selftest.mjs": [
+        "gov1-activation-is-explicit-two-key-hash-chained-and-recorded-once",
+        "gov1-claude-only-scheduling-never-selects-codex-and-markers-stay-history",
+        "gov1-claude-clean-merges-and-claude-blocked-remediates-with-attributed-findings",
+        "gov1-claude-quota-is-a-provider-wait-and-a-malformed-review-follows-the-format-retry-policy",
+        "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile",
+        "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle",
+        "gov1-real-executors-an-orchestrator-built-revision-is-claude-blocked-remediated-and-merges-on-claude-clean",
+        "gov1-without-the-policy-key-or-the-activation-the-previous-gate-is-unchanged"
+      ],
+      "scripts/release-audit-selftest.mjs": [
+        "gov1-a-release-candidate-is-audited-by-exactly-one-governed-claude-full-repository-review",
+        "gov1-the-packaging-signing-and-phase0-gates-require-the-claude-audit-evidence-bound-to-the-candidate"
+      ]
+    },
+    "selectiveRun": "both selftests accept --only=<prefix> (default: every scenario); the vitest file runs --only=gov1- and pins the scenario names; the DR1/DR2 tests still run every scenario",
+    "regression": "the 23 DR1 and 13 DR2 scenarios, the orchestrator (29), autonomy-hardening (20) and executor-integration (12) selftests run unchanged against the committed policy that now contains reviewGate"
+  },
+  "mutationChecks": {
+    "harness": "scratchpad gov1-mutants.cjs: each mutant edits a unique anchor in place, runs node scripts/dual-review-selftest.mjs --only=gov1- and node scripts/release-audit-selftest.mjs --only=gov1-, restores the original bytes and verifies the sha256",
+    "mutants": [
+      {
+        "id": "M1-re-require-codex",
+        "files": [
+          "automation/lib/review-quorum.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [
+            "gov1-activation-is-explicit-two-key-hash-chained-and-recorded-once",
+            "gov1-claude-only-scheduling-never-selects-codex-and-markers-stay-history",
+            "gov1-claude-clean-merges-and-claude-blocked-remediates-with-attributed-findings",
+            "gov1-claude-quota-is-a-provider-wait-and-a-malformed-review-follows-the-format-retry-policy",
+            "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile"
+          ],
+          "release-audit-selftest.mjs": [
+            "gov1-a-release-candidate-is-audited-by-exactly-one-governed-claude-full-repository-review",
+            "gov1-the-packaging-signing-and-phase0-gates-require-the-claude-audit-evidence-bound-to-the-candidate"
+          ]
+        }
+      },
+      {
+        "id": "M2-accept-missing-claude-review-in-the-quorum",
+        "files": [
+          "automation/lib/review-quorum.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [
+            "gov1-activation-is-explicit-two-key-hash-chained-and-recorded-once",
+            "gov1-claude-only-scheduling-never-selects-codex-and-markers-stay-history",
+            "gov1-claude-clean-merges-and-claude-blocked-remediates-with-attributed-findings",
+            "gov1-claude-quota-is-a-provider-wait-and-a-malformed-review-follows-the-format-retry-policy",
+            "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile"
+          ],
+          "release-audit-selftest.mjs": [
+            "gov1-a-release-candidate-is-audited-by-exactly-one-governed-claude-full-repository-review",
+            "gov1-the-packaging-signing-and-phase0-gates-require-the-claude-audit-evidence-bound-to-the-candidate"
+          ]
+        }
+      },
+      {
+        "id": "M3-accept-missing-claude-review-at-the-merge-gate",
+        "files": [
+          "automation/lib/orchestrator-executors.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [
+            "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle"
+          ],
+          "release-audit-selftest.mjs": []
+        }
+      },
+      {
+        "id": "M4-accept-a-codex-only-clean",
+        "files": [
+          "automation/lib/review-quorum.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [
+            "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile",
+            "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle"
+          ],
+          "release-audit-selftest.mjs": []
+        }
+      },
+      {
+        "id": "M5-drop-the-frozen-bundle-binding",
+        "files": [
+          "automation/lib/orchestrator-executors.mjs",
+          "automation/lib/review-quorum.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [
+            "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle"
+          ],
+          "release-audit-selftest.mjs": [
+            "gov1-the-packaging-signing-and-phase0-gates-require-the-claude-audit-evidence-bound-to-the-candidate"
+          ]
+        }
+      },
+      {
+        "id": "M6-release-gate-accepts-missing-claude-audit-evidence",
+        "files": [
+          "automation/lib/orchestrator-executors.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [],
+          "release-audit-selftest.mjs": [
+            "gov1-the-packaging-signing-and-phase0-gates-require-the-claude-audit-evidence-bound-to-the-candidate"
+          ]
+        }
+      },
+      {
+        "id": "M7-activation-without-the-founder-record",
+        "files": [
+          "automation/lib/orchestrator-engine.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [
+            "gov1-activation-is-explicit-two-key-hash-chained-and-recorded-once",
+            "gov1-without-the-policy-key-or-the-activation-the-previous-gate-is-unchanged"
+          ],
+          "release-audit-selftest.mjs": []
+        }
+      },
+      {
+        "id": "M8-drop-a-recorded-valid-codex-blocked",
+        "files": [
+          "automation/lib/review-quorum.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [
+            "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile"
+          ],
+          "release-audit-selftest.mjs": [
+            "gov1-a-release-candidate-is-audited-by-exactly-one-governed-claude-full-repository-review"
+          ]
+        }
+      },
+      {
+        "id": "M9-rewrite-historical-markers-on-a-new-commit",
+        "files": [
+          "automation/lib/orchestrator-engine.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [
+            "gov1-claude-clean-merges-and-claude-blocked-remediates-with-attributed-findings"
+          ],
+          "release-audit-selftest.mjs": []
+        }
+      },
+      {
+        "id": "M10-merge-gate-without-the-committed-policy-key",
+        "files": [
+          "automation/lib/orchestrator-executors.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [
+            "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle"
+          ],
+          "release-audit-selftest.mjs": []
+        }
+      },
+      {
+        "id": "M11-activation-during-global-stop",
+        "files": [
+          "automation/lib/orchestrator-engine.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [
+            "gov1-activation-is-explicit-two-key-hash-chained-and-recorded-once"
+          ],
+          "release-audit-selftest.mjs": []
+        }
+      },
+      {
+        "id": "M12-drop-historical-codex-review-records",
+        "files": [
+          "automation/lib/orchestrator-engine.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [
+            "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile"
+          ],
+          "release-audit-selftest.mjs": []
+        }
+      },
+      {
+        "id": "M13-release-audit-accepts-a-codex-only-audit",
+        "files": [
+          "automation/lib/orchestrator-executors.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [],
+          "release-audit-selftest.mjs": [
+            "gov1-the-packaging-signing-and-phase0-gates-require-the-claude-audit-evidence-bound-to-the-candidate"
+          ]
+        }
+      },
+      {
+        "id": "M14-reconciliation-skips-decided-claude-gates",
+        "files": [
+          "automation/lib/orchestrator-engine.mjs"
+        ],
+        "caught": true,
+        "failingScenarios": {
+          "dual-review-selftest.mjs": [
+            "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile"
+          ],
+          "release-audit-selftest.mjs": [
+            "gov1-a-release-candidate-is-audited-by-exactly-one-governed-claude-full-repository-review"
+          ]
+        }
+      }
+    ],
+    "caught": "14/14",
+    "afterRestore": {
+      "dual-review-selftest.mjs": "DUAL_REVIEW_SELFTEST: PASS 7/7",
+      "release-audit-selftest.mjs": "RELEASE_AUDIT_SELFTEST: PASS 2/2"
+    },
+    "restoredClean": true
+  },
+  "validation": {
+    "workspace": "builder worktree of branch v6/pkg-gov1-claude-only-review-gate at parent f24c32a with the shared reviewed node_modules (junction); the canonical runner scripts/run-validation.mjs is the supervisor's step and was not run by the builder",
+    "commands": [
+      {
+        "command": "node scripts/dual-review-selftest.mjs",
+        "exitCode": 0,
+        "durationSeconds": 28,
+        "summary": [
+          "DUAL_REVIEW_SELFTEST: PASS 30/30"
+        ]
+      },
+      {
+        "command": "node scripts/release-audit-selftest.mjs",
+        "exitCode": 0,
+        "durationSeconds": 48,
+        "summary": [
+          "RELEASE_AUDIT_SELFTEST: PASS 15/15"
+        ]
+      },
+      {
+        "command": "node scripts/orchestrator-selftest.mjs",
+        "exitCode": 0,
+        "durationSeconds": 39,
+        "summary": [
+          "ORCHESTRATOR_SELFTEST: PASS 29/29"
+        ]
+      },
+      {
+        "command": "node scripts/orchestrator-executor-integration-selftest.mjs",
+        "exitCode": 0,
+        "durationSeconds": 28,
+        "summary": [
+          "ORCHESTRATOR_EXECUTOR_INTEGRATION: PASS 12/12"
+        ]
+      },
+      {
+        "command": "node scripts/autonomy-hardening-selftest.mjs",
+        "exitCode": 0,
+        "durationSeconds": 361,
+        "summary": [
+          "AUTONOMY_HARDENING_SELFTEST: PASS 20/20"
+        ]
+      },
+      {
+        "command": "npx vitest run tests/pkg-gov1-claude-only-review-gate.test.ts tests/pkg-dr1-dual-review.test.ts tests/pkg-dr2-release-audit.test.ts",
+        "exitCode": 0,
+        "durationSeconds": 52,
+        "summary": [
+          "Test Files  3 passed (3)",
+          "Tests  7 passed (7)",
+          "Duration  47.74s (transform 214ms, setup 0ms, import 319ms, tests 97.59s, environment 0ms)"
+        ]
+      },
+      {
+        "command": "npm run typecheck",
+        "exitCode": 0,
+        "durationSeconds": 5,
+        "summary": [
+          "> universal-ai-software-company-os@0.0.0-v6-audit-candidate typecheck",
+          "> tsc --noEmit"
+        ]
+      },
+      {
+        "command": "node scripts/verify-trust-root.mjs",
+        "exitCode": 0,
+        "durationSeconds": 0,
+        "summary": [
+          "TRUST_ROOT_VERIFY: PASS"
+        ]
+      },
+      {
+        "command": "node scripts/validate-tr-comments.mjs",
+        "exitCode": 0,
+        "durationSeconds": 3,
+        "summary": [
+          "TR_VALIDATION: PASS"
+        ]
+      },
+      {
+        "command": "npx vitest run",
+        "exitCode": 0,
+        "durationSeconds": 1122,
+        "summary": [
+          "Test Files  38 passed (38)",
+          "Tests  204 passed (204)",
+          "Duration  1117.99s (transform 1.81s, setup 0ms, import 3.57s, tests 2138.18s, environment 8ms)"
+        ]
+      }
+    ],
+    "notes": [
+      "all commands ran in the builder worktree after the last source edit; the mutation harness restored every mutated file byte-for-byte (sha256 checked) before these runs",
+      "full vitest: 38 files / 204 tests passed in one run; tests/pkg-r1-release-mode.test.ts and the pkg-d launcher case did not time out in this run",
+      "scripts/run-validation.mjs (canonical runner) was not run by the builder: supervisor step"
+    ],
+    "status": "PASS"
+  },
+  "review": "NOT_REVIEWED",
+  "cleanClaim": false,
+  "notClaimed": [
+    "activation in the running supervisor: the running control plane predates GOV1 (its engine schedules Codex reviews and cannot record the activation), and self-upgrade needs a governed merge recorded in that control state; the gate is active in the running engine only after a supervisor-level, Founder-authorized governed bootstrap to a control plane that contains this package and a REVIEW_GATE_ACTIVATED transition in the live transition log (the Founder record control.finalization.reviewGovernance.model == CLAUDE_ONLY is the second key). Stopping the running plane from scheduling Codex in the meantime (e.g. Global Stop) is a supervisor action outside this package",
+    "wording of config/execution-backends.json (pipeline stage INDEPENDENT_CODEX_REVIEW, independentReviewerProvider OPENAI): unchanged and outside this package; it still governs the gate before activation, and under CLAUDE_ONLY its provider field is not consulted (identity-based separation instead). Aligning its text is non-blocking",
+    "canonical validation (scripts/run-validation.mjs) on the reviewed commit: supervisor step"
+  ],
+  "changedFileSha256": {
+    "CHANGELOG.md": "57df0dd735ffe0169d48841a8d188dc524d44a37f0c8d14adccec09ca8565823",
+    "automation/lib/orchestrator-engine.mjs": "56d2071cbfbd60ca4e3d300a43873bcc50d73b1cd3ab9edf1e40e69b7926a495",
+    "automation/lib/orchestrator-executors.mjs": "40ca1f7d272823b14d58383736fc7fd97d243677f12f5f6cb64427e51a40eea7",
+    "automation/lib/review-quorum.mjs": "ed68903dc942dc62ff0936f6110e983ef2d9231f3a8bf1595509883ea66401aa",
+    "config/orchestrator-policy.json": "22b010e556d1e5ef24d0bd8f9d5a15162700f8565c8a07ce8bb671e342008c61",
+    "config/trust-root-manifest.json": "fd5bd418642f9b53bc8f50d9df0b84ea430888695579bfbdcb444155f6355722",
+    "docs/architecture/DUAL-INDEPENDENT-REVIEW.md": "4ee0c7110fa6188cee0b6b670b232eb336495c91ff4dd717c448286f3c5d39cc",
+    "docs/architecture/UNATTENDED-ORCHESTRATION.md": "638411c4c9e5774b1b513d493a3c57e3523520741f3d43142c3c1758ff640f3e",
+    "scripts/dual-review-selftest.mjs": "3062e1caeaa1e60de812c0370d755e696d079ac660ffd75e7cbd168402be9405",
+    "scripts/release-audit-selftest.mjs": "e7cbb2b66fe1517de84368cdee834a64560c9017bde62d722b54eae4c03b8bad",
+    "tests/pkg-gov1-claude-only-review-gate.test.ts": "a1c267460fb91fa9ed213a66e781f4dc1f24cd4de5dd523f3e0eed82f80c4255"
+  },
+  "remediationRounds": [
+    {
+      "date": "2026-10-07",
+      "mode": "REMEDIATE (Claude builder, independent verification round 1)",
+      "reviewedRevision": {
+        "packageHeadBefore": "cfcce722fbcfbd7013e29750ce8a03a3e685413e",
+        "packageBase": "f24c32a61dc177806f3fb1003f0a1f7d0839437b",
+        "branch": "v6/pkg-gov1-claude-only-review-gate"
+      },
+      "findings": [
+        {
+          "id": "GOV1-V1",
+          "lens": "gate-correctness",
+          "severity": "P1",
+          "title": "Under CLAUDE_ONLY no orchestrator-built or orchestrator-remediated revision can ever merge, so a Claude BLOCKED leads to a Founder decision instead of an integrated fix",
+          "disposition": "REAL_FIXED",
+          "rootCause": "merge() passed reviewerProvider ANTHROPIC to assertExecutionMergeGate (automation/lib/execution-routing.mjs), which requires registry.pipeline.independentReviewerProvider (OPENAI in config/execution-backends.json) and rejects a reviewer provider equal to the producer provider; every builder backend is ANTHROPIC and builderRound always records LOCAL_CLAUDE provenance, so Claude BLOCKED -> REMEDIATE -> Claude CLEAN -> MERGE always ended NOT_FF -> FOUNDER_DECISION_PENDING. The engine selftest hid it with a fake merge executor, and the real-executor case asserted the denial",
+          "fix": "automation/lib/orchestrator-executors.mjs (allowed path, no change to execution-routing.mjs or config/execution-backends.json): new exported pure function claudeOnlyExecutionMergeDenial. Under CLAUDE_ONLY, after the Claude evidence has been re-derived and bound to the frozen bundle (unchanged), the execution merge gate (1) loads the registry with all loadExecutionBackendRegistry checks, (2) validates the provenance with the exported validateExecutionProvenance (registered builder backend, session type, provider, tool, isolated non-default branch, workspace, source commit, timestamps, digests) with resultCommit = the reviewed commit, (3) requires mergeRequiresGovernedResult CLEAN and producerMayReviewOwnOutput false, (4) requires the evidence and its run manifest to name the reviewed commit, (5) requires the reviewer to be the canonical CLAUDE_REVIEWER broker process of the control plane, (6) requires the configured builder identity (config/automation.json builder.identity, CLAUDE_BUILDER) to differ from the reviewer identity and to equal the builder identity recorded in the reviewer run manifest, (7) requires the review clone to be outside the builder workspace (basename differs from provenance.workspaceId and not under controlRoot/impl), and (8) requires the review to have started at or after the builder round finished. Any failure is NOT_FF EXECUTION_MERGE_GATE_DENIED_FOR_CLAUDE_REVIEWER:<reason> with no Git operation. The provider literal is no longer used under CLAUDE_ONLY; the legacy branch (no activation) is byte-for-byte the previous assertExecutionMergeGate call",
+          "whyNotWeakening": "Under the Founder rule producer != reviewer is CLAUDE_BUILDER vs an independent CLAUDE_REVIEWER of the same provider, so a provider-based independence check can only be satisfied by the Codex reviewer the Founder removed. The previous check passed the literal 'OPENAI' and was not linked to any evidence; the new check is derived from the re-derived reviewer evidence and the recorded provenance, and adds workspace and session-order separation",
+          "regressionScenarios": [
+            "gov1-real-executors-an-orchestrator-built-revision-is-claude-blocked-remediated-and-merges-on-claude-clean",
+            "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle"
+          ],
+          "testChanges": "the merge-gate scenario no longer asserts the (defective) REVIEWER_NOT_INDEPENDENT_PROVIDER denial; it now asserts five refusals (producer workspace is the review clone, review started before the producer finished, reviewer evidence naming the reviewer as the builder, producer on the default branch, provenance not matching its registry backend) and a MERGED for valid provenance with a valid governed Claude CLEAN. The new real-executor scenario drives runTick with the production executors: real IMPLEMENT builder round (LOCAL_CLAUDE provenance) -> real CLAUDE_REVIEWER review BLOCKED -> real REMEDIATE builder round with the attributed finding -> real cycle-2 CLAUDE_REVIEWER CLEAN resolving the finding with bound retest evidence -> real fast-forward merge (CLOSED, master = remediated commit); Codex is never called"
+        },
+        {
+          "id": "GOV1-V2",
+          "lens": "gate-correctness",
+          "severity": "P2",
+          "title": "GOV1 activation cannot reach the running supervisor without a merge that Codex must approve, and the running plane is due to schedule Codex reviews again",
+          "disposition": "REAL_OPERATIONAL_NOT_FIXABLE_IN_GOV1_ROUTED_TO_SUPERVISOR",
+          "dispositionReason": "The observation is about the deployment state of the running supervisor, not a defect in the GOV1 code: no change inside the 13 allowed paths can change code that is already running. The remedy (stop the running plane from scheduling Codex, e.g. Global Stop; then a Founder-authorized governed bootstrap that integrates GOV1 and its ancestors on governed CLAUDE_REVIEWER CLEAN evidence and records a control-plane switch) is a supervisor action; this builder must not touch %LOCALAPPDATA%\\UASCO, .ai/cache, scheduled tasks or the live state. Within the package, the checkpoint notClaimed and docs/architecture/DUAL-INDEPENDENT-REVIEW.md now state that a control plane predating GOV1 schedules Codex reviews and that the gate is not active in the running engine until a REVIEW_GATE_ACTIVATED transition appears in the live transition log",
+          "evidence": [
+            "git show 99b1f0a:automation/lib/orchestrator-engine.mjs line 32 schedules REVIEW only when providerDue(control,'codex') (read from the repository object store)",
+            "automation/lib/control-plane-upgrade.mjs planControlPlaneUpgrade returns MASTER_NOT_A_GOVERNED_MERGE unless master equals the mergedCommit of a CLOSED package in the control state",
+            "automation/lib/orchestrator-daemon.mjs:86 passes the loaded policy to runTick, so the activation is wired once a plane containing GOV1 runs",
+            "the live-state facts in the finding (CURRENT.json at 99b1f0a, providers.codex.retryAfter passed, seven pending packages, control.reviewGate absent) were not re-read by the builder (out of bounds) and are recorded as the verifier's observation"
+          ]
+        },
+        {
+          "id": "GOV1-V3",
+          "lens": "fail-closed-security",
+          "severity": "P2",
+          "title": "Under CLAUDE_ONLY, revisions built by the orchestrator can never merge, so the governed remediation loop dead-ends at a Founder decision",
+          "disposition": "REAL_SAME_ROOT_CAUSE_AS_GOV1-V1_FIXED",
+          "dispositionReason": "Same root cause and same fix as GOV1-V1 (identity-based producer != reviewer under CLAUDE_ONLY, real-executor BLOCKED -> REMEDIATE -> CLEAN -> MERGED regression). The suggested registry alignment and execution-routing.mjs change were not needed: the fix stays inside the allowed paths and leaves the registry, its loader checks and the legacy gate unchanged"
+        }
+      ],
+      "supersededCurrentStateTexts": {
+        "design.mergeGate": "orchestrator-executors.mjs merge: when control.reviewGate is CLAUDE_ONLY and the committed policy defines it, reviewSatisfiesGate requires a recorded CLEAN with CLAUDE_REVIEWER evidence for the current bundle digest and cycle, and verifyCleanEvidence re-derives that evidence with its identity bound to the frozen bundle digest, base, reviewed commit and cycle (same binding as the dual gate). A control-state gate without the policy key falls back to the previous gates (fail closed). The execution merge gate is told the real reviewer provider (ANTHROPIC) and a refusal becomes NOT_FF EXECUTION_MERGE_GATE_DENIED_FOR_CLAUDE_REVIEWER",
+        "notClaimed": [
+          "activation in the running supervisor: it needs this package merged by a governed review, a control-plane self-upgrade, and the Founder record control.finalization.reviewGovernance.model == CLAUDE_ONLY in the durable state",
+          "merge of orchestrator-built revisions with execution provenance under CLAUDE_ONLY: config/execution-backends.json still names OPENAI as the independent reviewer provider, so the execution merge gate refuses them until a separate governed change aligns that registry",
+          "canonical validation (scripts/run-validation.mjs) on the reviewed commit: supervisor step"
+        ]
+      },
+      "changedFiles": {
+        "CHANGELOG.md": "57df0dd735ffe0169d48841a8d188dc524d44a37f0c8d14adccec09ca8565823",
+        "automation/lib/orchestrator-executors.mjs": "40ca1f7d272823b14d58383736fc7fd97d243677f12f5f6cb64427e51a40eea7",
+        "config/trust-root-manifest.json": "fd5bd418642f9b53bc8f50d9df0b84ea430888695579bfbdcb444155f6355722",
+        "docs/architecture/DUAL-INDEPENDENT-REVIEW.md": "4ee0c7110fa6188cee0b6b670b232eb336495c91ff4dd717c448286f3c5d39cc",
+        "scripts/dual-review-selftest.mjs": "3062e1caeaa1e60de812c0370d755e696d079ac660ffd75e7cbd168402be9405",
+        "tests/pkg-gov1-claude-only-review-gate.test.ts": "a1c267460fb91fa9ed213a66e781f4dc1f24cd4de5dd523f3e0eed82f80c4255"
+      },
+      "changedFilesNote": "round-1 diff against cfcce72 (this checkpoint excluded); 6 files, the package total stays within the 13 allowed paths",
+      "reseal": "config/trust-root-manifest.json regenerated by the unchanged scripts/generate-trust-root.mjs after the protected edits (orchestrator-executors.mjs, dual-review-selftest.mjs); node scripts/verify-trust-root.mjs PASS",
+      "validation": {
+        "workspace": "builder worktree, branch v6/pkg-gov1-claude-only-review-gate, cfcce72 plus the round-1 changes, shared reviewed node_modules (junction); the canonical runner scripts/run-validation.mjs is the supervisor's step and was not run by the builder",
+        "commands": [
+          {
+            "command": "node scripts/dual-review-selftest.mjs",
+            "exitCode": 0,
+            "durationSeconds": 33,
+            "summary": [
+              "DUAL_REVIEW_SELFTEST: PASS 31/31"
+            ]
+          },
+          {
+            "command": "node scripts/release-audit-selftest.mjs",
+            "exitCode": 0,
+            "durationSeconds": 32,
+            "summary": [
+              "RELEASE_AUDIT_SELFTEST: PASS 15/15"
+            ]
+          },
+          {
+            "command": "node scripts/orchestrator-selftest.mjs",
+            "exitCode": 0,
+            "durationSeconds": 21,
+            "summary": [
+              "ORCHESTRATOR_SELFTEST: PASS 29/29"
+            ]
+          },
+          {
+            "command": "node scripts/orchestrator-executor-integration-selftest.mjs",
+            "exitCode": 0,
+            "durationSeconds": 18,
+            "summary": [
+              "ORCHESTRATOR_EXECUTOR_INTEGRATION: PASS 12/12"
+            ]
+          },
+          {
+            "command": "node scripts/autonomy-hardening-selftest.mjs",
+            "exitCode": 0,
+            "durationSeconds": 264,
+            "summary": [
+              "AUTONOMY_HARDENING_SELFTEST: PASS 20/20"
+            ]
+          },
+          {
+            "command": "npx vitest run tests/pkg-gov1-claude-only-review-gate.test.ts tests/pkg-dr1-dual-review.test.ts tests/pkg-dr2-release-audit.test.ts",
+            "exitCode": 0,
+            "durationSeconds": 40,
+            "summary": [
+              "Test Files  3 passed (3)",
+              "Tests  7 passed (7)",
+              "Duration  36.66s (transform 191ms, setup 0ms, import 284ms, tests 91.16s, environment 0ms)"
+            ]
+          },
+          {
+            "command": "npm run typecheck",
+            "exitCode": 0,
+            "durationSeconds": 4,
+            "summary": [
+              "> universal-ai-software-company-os@0.0.0-v6-audit-candidate typecheck",
+              "> tsc --noEmit"
+            ]
+          },
+          {
+            "command": "node scripts/verify-trust-root.mjs",
+            "exitCode": 0,
+            "durationSeconds": 0,
+            "summary": [
+              "TRUST_ROOT_VERIFY: PASS"
+            ]
+          },
+          {
+            "command": "node scripts/validate-tr-comments.mjs",
+            "exitCode": 0,
+            "durationSeconds": 1,
+            "summary": [
+              "TR_VALIDATION: PASS"
+            ]
+          },
+          {
+            "command": "npx vitest run",
+            "exitCode": 0,
+            "durationSeconds": 522,
+            "summary": [
+              "Test Files  38 passed (38)",
+              "Tests  204 passed (204)",
+              "Duration  520.11s (transform 1.52s, setup 0ms, import 3.18s, tests 1381.30s, environment 10ms)"
+            ]
+          }
+        ],
+        "status": "PASS"
+      },
+      "mutationEvidence": {
+        "harness": "scratchpad gov1r1-mutants.cjs: each mutant edits a unique anchor in place, runs node scripts/dual-review-selftest.mjs --only=gov1- and node scripts/release-audit-selftest.mjs --only=gov1-, restores the original bytes and verifies the sha256",
+        "mutants": [
+          {
+            "id": "M1-re-require-codex",
+            "files": [
+              "automation/lib/review-quorum.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-activation-is-explicit-two-key-hash-chained-and-recorded-once",
+                "gov1-claude-only-scheduling-never-selects-codex-and-markers-stay-history",
+                "gov1-claude-clean-merges-and-claude-blocked-remediates-with-attributed-findings",
+                "gov1-claude-quota-is-a-provider-wait-and-a-malformed-review-follows-the-format-retry-policy",
+                "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile",
+                "gov1-real-executors-an-orchestrator-built-revision-is-claude-blocked-remediated-and-merges-on-claude-clean"
+              ],
+              "release-audit-selftest.mjs": [
+                "gov1-a-release-candidate-is-audited-by-exactly-one-governed-claude-full-repository-review",
+                "gov1-the-packaging-signing-and-phase0-gates-require-the-claude-audit-evidence-bound-to-the-candidate"
+              ]
+            }
+          },
+          {
+            "id": "M2-accept-missing-claude-review-in-the-quorum",
+            "files": [
+              "automation/lib/review-quorum.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-activation-is-explicit-two-key-hash-chained-and-recorded-once",
+                "gov1-claude-only-scheduling-never-selects-codex-and-markers-stay-history",
+                "gov1-claude-clean-merges-and-claude-blocked-remediates-with-attributed-findings",
+                "gov1-claude-quota-is-a-provider-wait-and-a-malformed-review-follows-the-format-retry-policy",
+                "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile",
+                "gov1-real-executors-an-orchestrator-built-revision-is-claude-blocked-remediated-and-merges-on-claude-clean"
+              ],
+              "release-audit-selftest.mjs": [
+                "gov1-a-release-candidate-is-audited-by-exactly-one-governed-claude-full-repository-review",
+                "gov1-the-packaging-signing-and-phase0-gates-require-the-claude-audit-evidence-bound-to-the-candidate"
+              ]
+            }
+          },
+          {
+            "id": "M3-accept-missing-claude-review-at-the-merge-gate",
+            "files": [
+              "automation/lib/orchestrator-executors.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle"
+              ],
+              "release-audit-selftest.mjs": []
+            }
+          },
+          {
+            "id": "M4-accept-a-codex-only-clean",
+            "files": [
+              "automation/lib/review-quorum.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile",
+                "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle"
+              ],
+              "release-audit-selftest.mjs": []
+            }
+          },
+          {
+            "id": "M5-drop-the-frozen-bundle-binding",
+            "files": [
+              "automation/lib/orchestrator-executors.mjs",
+              "automation/lib/review-quorum.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle"
+              ],
+              "release-audit-selftest.mjs": [
+                "gov1-the-packaging-signing-and-phase0-gates-require-the-claude-audit-evidence-bound-to-the-candidate"
+              ]
+            }
+          },
+          {
+            "id": "M6-release-gate-accepts-missing-claude-audit-evidence",
+            "files": [
+              "automation/lib/orchestrator-executors.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [],
+              "release-audit-selftest.mjs": [
+                "gov1-the-packaging-signing-and-phase0-gates-require-the-claude-audit-evidence-bound-to-the-candidate"
+              ]
+            }
+          },
+          {
+            "id": "M7-activation-without-the-founder-record",
+            "files": [
+              "automation/lib/orchestrator-engine.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-activation-is-explicit-two-key-hash-chained-and-recorded-once",
+                "gov1-without-the-policy-key-or-the-activation-the-previous-gate-is-unchanged"
+              ],
+              "release-audit-selftest.mjs": []
+            }
+          },
+          {
+            "id": "M8-drop-a-recorded-valid-codex-blocked",
+            "files": [
+              "automation/lib/review-quorum.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile"
+              ],
+              "release-audit-selftest.mjs": [
+                "gov1-a-release-candidate-is-audited-by-exactly-one-governed-claude-full-repository-review"
+              ]
+            }
+          },
+          {
+            "id": "M9-rewrite-historical-markers-on-a-new-commit",
+            "files": [
+              "automation/lib/orchestrator-engine.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-claude-clean-merges-and-claude-blocked-remediates-with-attributed-findings"
+              ],
+              "release-audit-selftest.mjs": []
+            }
+          },
+          {
+            "id": "M10-merge-gate-without-the-committed-policy-key",
+            "files": [
+              "automation/lib/orchestrator-executors.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle"
+              ],
+              "release-audit-selftest.mjs": []
+            }
+          },
+          {
+            "id": "M11-activation-during-global-stop",
+            "files": [
+              "automation/lib/orchestrator-engine.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-activation-is-explicit-two-key-hash-chained-and-recorded-once"
+              ],
+              "release-audit-selftest.mjs": []
+            }
+          },
+          {
+            "id": "M12-drop-historical-codex-review-records",
+            "files": [
+              "automation/lib/orchestrator-engine.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile"
+              ],
+              "release-audit-selftest.mjs": []
+            }
+          },
+          {
+            "id": "M13-release-audit-accepts-a-codex-only-audit",
+            "files": [
+              "automation/lib/orchestrator-executors.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [],
+              "release-audit-selftest.mjs": [
+                "gov1-the-packaging-signing-and-phase0-gates-require-the-claude-audit-evidence-bound-to-the-candidate"
+              ]
+            }
+          },
+          {
+            "id": "M14-reconciliation-skips-decided-claude-gates",
+            "files": [
+              "automation/lib/orchestrator-engine.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile"
+              ],
+              "release-audit-selftest.mjs": [
+                "gov1-a-release-candidate-is-audited-by-exactly-one-governed-claude-full-repository-review"
+              ]
+            }
+          },
+          {
+            "id": "M15-re-require-the-provider-based-execution-gate-under-claude-only",
+            "files": [
+              "automation/lib/orchestrator-executors.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle",
+                "gov1-real-executors-an-orchestrator-built-revision-is-claude-blocked-remediated-and-merges-on-claude-clean"
+              ],
+              "release-audit-selftest.mjs": []
+            }
+          },
+          {
+            "id": "M16-drop-the-producer-reviewer-workspace-separation",
+            "files": [
+              "automation/lib/orchestrator-executors.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle",
+                "gov1-real-executors-an-orchestrator-built-revision-is-claude-blocked-remediated-and-merges-on-claude-clean"
+              ],
+              "release-audit-selftest.mjs": []
+            }
+          },
+          {
+            "id": "M17-drop-the-producer-reviewer-session-order",
+            "files": [
+              "automation/lib/orchestrator-executors.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle"
+              ],
+              "release-audit-selftest.mjs": []
+            }
+          },
+          {
+            "id": "M18-drop-the-producer-reviewer-identity-separation",
+            "files": [
+              "automation/lib/orchestrator-executors.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle"
+              ],
+              "release-audit-selftest.mjs": []
+            }
+          },
+          {
+            "id": "M19-accept-an-invalid-execution-provenance",
+            "files": [
+              "automation/lib/orchestrator-executors.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle"
+              ],
+              "release-audit-selftest.mjs": []
+            }
+          },
+          {
+            "id": "M20-claude-only-falls-back-to-the-legacy-provider-literal-gate",
+            "files": [
+              "automation/lib/orchestrator-executors.mjs"
+            ],
+            "caught": true,
+            "failingScenarios": {
+              "dual-review-selftest.mjs": [
+                "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle",
+                "gov1-real-executors-an-orchestrator-built-revision-is-claude-blocked-remediated-and-merges-on-claude-clean"
+              ],
+              "release-audit-selftest.mjs": []
+            }
+          }
+        ],
+        "caught": "20/20",
+        "afterRestore": {
+          "dual-review-selftest.mjs": "DUAL_REVIEW_SELFTEST: PASS 8/8",
+          "release-audit-selftest.mjs": "RELEASE_AUDIT_SELFTEST: PASS 2/2"
+        },
+        "restoredClean": true
+      },
+      "residualRisks": [
+        "the session-order check compares two readings of the orchestrator host clock (builder finishedAt, reviewer run startedAt); a backward clock jump between them refuses the merge (fail closed, Founder decision), it never accepts",
+        "activation in the running supervisor depends on the supervisor-level bootstrap described in GOV1-V2",
+        "config/execution-backends.json wording still describes the pre-activation Codex gate (non-blocking, outside this package)"
+      ],
+      "cleanClaim": false
+    },
+    {
+      "date": "2026-10-07",
+      "mode": "REMEDIATE (Claude builder, independent verification round 2)",
+      "reviewedRevision": {
+        "packageHeadBefore": "b2cb90a198dd387f5bbebede356db65924e0ccd3",
+        "packageBase": "f24c32a61dc177806f3fb1003f0a1f7d0839437b",
+        "branch": "v6/pkg-gov1-claude-only-review-gate"
+      },
+      "findings": [
+        {
+          "id": "GOV1-V4",
+          "lens": "gate-correctness",
+          "severity": "P1",
+          "source": "independent verification round 2 (upheld); reproduction gov1-verify/gate-probes/hold-probe.mjs in the supervisor scratchpad",
+          "title": "The activation never releases the CLAUDE_ONLY_GOVERNANCE_ACTIVE transition holds, so the recorded gate never reaches any open package in the real durable state",
+          "disposition": "REAL_FIXED",
+          "rootCause": "The bootstrap supervisor retired the Codex-required queue states by holding every open package of the durable state with hold {until: CLAUDE_ONLY_GOVERNANCE_ACTIVE, by: BOOTSTRAP_SUPERVISOR, previousHold, previousNotBefore} and notBefore 9999-12-31T00:00:00.000Z. nextAction skips every package with a hold or a future notBefore. activateReviewGate and its call in runTick only wrote control.reviewGate, and the only hold-release code (orchestrator-daemon.mjs releaseActivationHolds) handles DUAL_REVIEW_ACTIVE and RELEASE_AUDIT_ACTIVE only. So after REVIEW_GATE_ACTIVATED every held package stayed held for ever: the gate was recorded but no package could be reviewed, merged or released",
+          "fix": "automation/lib/orchestrator-engine.mjs (allowed path; orchestrator-daemon.mjs is outside the package and unchanged): new exported pure function releaseClaudeOnlyHolds(control, now, policy) and the exported constant CLAUDE_ONLY_HOLD. It acts only when all three keys hold: a valid recorded CLAUDE_ONLY gate (claudeOnlyGate), the committed policy key (claudeOnlyPolicy) and the Founder record (founderClaudeOnlyRecord). It selects exactly the packages with hold.until === CLAUDE_ONLY_GOVERNANCE_ACTIVE that are not CLOSED or MERGED. Per package it deletes the hold; restores notBefore to hold.previousNotBefore, or deletes it when that is null, not an ISO time or a far-future hold marker (more than 365 days after now); and records holdReleased {until, reason, releasedAt, activationRecord {transition REVIEW_GATE_ACTIVATED, model, activatedBy, activatedAt, founderRecord}, supersededPreviousHold, restoredPreviousHold} (an earlier holdReleased is kept as earlierHoldReleased). The status, the Founder decision fields and every other field stay unchanged, so a FOUNDER_DECISION_PENDING package keeps its decision. The change is one ACTIVATION_HOLD_RELEASED event (reason CLAUDE_ONLY_GOVERNANCE_ACTIVE:<ids>, evidence per package) that runTick commits through the same persist/commitTransition hash chain as REVIEW_GATE_ACTIVATED. runTick calls it inside the existing Global Stop guard, right after the activation and before the reconciliation, so on the activating tick ACTIVATION_HOLD_RELEASED is the transition directly after REVIEW_GATE_ACTIVATED, and on every later tick where the gate is active and such holds remain it runs again (idempotent; nothing to do means no transition)",
+          "previousHoldDecision": {
+            "DUAL_REVIEW_ACTIVE": "superseded: under CLAUDE_ONLY the dual-review prerequisite no longer exists, so the package is released and the earlier hold is recorded as supersededPreviousHold {..., resolution SUPERSEDED_BY_CLAUDE_ONLY_GATE}",
+            "RELEASE_AUDIT_ACTIVE": "satisfied only when the state's final release audit is active (control.releaseAuditActivation.active === true, the same condition under which the daemon releases that hold); under CLAUDE_ONLY that audit is the single governed CLAUDE_FULL_REPO_REVIEW (newAudit), so it is not a Codex-era block and the package is released with supersededPreviousHold {..., resolution SATISFIED_BY_ACTIVE_RELEASE_AUDIT}. Without an active release audit the earlier hold and its notBefore are put back (restoredPreviousHold RELEASE_AUDIT_ACTIVE), so a release package never closes a release without the final audit. In the real tick the daemon records RELEASE_AUDIT_ACTIVATED before runTick, so this case does not arise with the committed policy",
+            "other": "any other earlier hold is put back unchanged with its notBefore (fail closed, restoredPreviousHold), so this plane never lifts a hold it does not own; only the CLAUDE_ONLY layer is removed"
+          },
+          "regressionScenarios": [
+            "gov1-activation-releases-only-the-claude-only-governance-holds-and-the-held-packages-get-claude-reviews-only"
+          ],
+          "testChanges": "New deterministic scenario in scripts/dual-review-selftest.mjs, pinned in tests/pkg-gov1-claude-only-review-gate.test.ts. Its fixture mirrors the live durable state of 2026-10-06: CLAUDE_ONLY holds over a DUAL_REVIEW_ACTIVE hold (DR2-like), over a RELEASE_AUDIT_ACTIVE hold (LV1-like), over nothing on REVIEW_PENDING_PROVIDER_QUOTA (Q1-like), on a Codex-only REVIEW_CLEAN with CODEX_ONLY_HISTORICAL (DR1-like), on FOUNDER_DECISION_PENDING (L1-like), with a real previousNotBefore, over an unknown earlier hold, plus a package held for another activation and a CLOSED package carrying a CLAUDE_ONLY hold; Codex is AVAILABLE throughout. It proves: (1) without the activation (policy key without the Founder record, record without the policy key) runTick changes nothing and acts on nothing, and releaseClaudeOnlyHolds returns null for a recorded gate without the record, without the policy key, for a malformed recorded gate and for no gate; (2) under Global Stop neither the activation nor the release (also with the gate already recorded) happens and nothing runs; (3) the activation releases exactly the CLAUDE_ONLY holds as one ACTIVATION_HOLD_RELEASED transition directly after REVIEW_GATE_ACTIVATED (prevHash chain), with the holdReleased record, superseded/restored previous holds, the restored previousNotBefore, the Founder decision kept, other fields unchanged, and the other-until and CLOSED packages byte-identical; (4) the released review packages are scheduled for REVIEW provider claude only, then reviewed by the Claude reviewer alone (4 Claude calls, 0 Codex, 0 legacy) and merged with CLAUDE_ONLY evidence, the Codex-only CLEAN kept in historicalCodexReviews; the deferred package runs after its restored notBefore; a CLAUDE_ONLY hold that appears after the activation is released on the next tick (second ACTIVATION_HOLD_RELEASED, REVIEW_GATE_ACTIVATED still once); (5) without an active release audit the RELEASE_AUDIT_ACTIVE hold is put back and the package is not scheduled; (6) a real daemon tick (createTick) on a live-shaped state without dualReview/releaseAuditActivation records DUAL_REVIEW_ACTIVATED, RELEASE_AUDIT_ACTIVATED, REVIEW_GATE_ACTIVATED, then ACTIVATION_HOLD_RELEASED, then Claude reviews only, and the next daemon tick verifies the hash-chained log (TICK_DONE)"
+        }
+      ],
+      "changedFiles": {
+        "CHANGELOG.md": "557f43eb2aaa4d01caf776ec8c802f2bcca11936c4705bfa4985789f1f605301",
+        "automation/lib/orchestrator-engine.mjs": "e52d9774cbbb05f27c3d85efcb65d09db9f08912fa1ee9864579df94bff7f731",
+        "config/trust-root-manifest.json": "e0f49a5161dc0cf464cf4bdcb246f7f87e9be324aca97bd41968aac2849e54a8",
+        "docs/architecture/DUAL-INDEPENDENT-REVIEW.md": "2ed07c503226a4ecf88c380f34237b31c927e05fb71ee3bef90857bdbc8c23ce",
+        "scripts/dual-review-selftest.mjs": "6ad7f83c0085ca04ae02c4ee190a41a00ff7b20fad94ee50164981dc9d69c650",
+        "tests/pkg-gov1-claude-only-review-gate.test.ts": "c9869de33cbb45f05eb962fccccdc0ce7263948c5978452415ec159f4216d91b"
+      },
+      "changedFilesNote": "round-2 diff against b2cb90a (this checkpoint excluded); 6 files, all already in the package's file set, so the package total stays within the 13 allowed paths (12 files)",
+      "reseal": "config/trust-root-manifest.json regenerated by the unchanged scripts/generate-trust-root.mjs after the protected edits (automation/lib/orchestrator-engine.mjs, scripts/dual-review-selftest.mjs); node scripts/verify-trust-root.mjs PASS",
+      "validation": {
+        "workspace": "builder worktree, branch v6/pkg-gov1-claude-only-review-gate, b2cb90a plus the round-2 changes, shared reviewed node_modules (junction); the canonical runner scripts/run-validation.mjs is the supervisor's step and was not run by the builder",
+        "commands": [
+          {
+            "command": "node scripts/verify-trust-root.mjs",
+            "exitCode": 0,
+            "durationSeconds": 1,
+            "summary": [
+              "TRUST_ROOT_VERIFY: PASS"
+            ]
+          },
+          {
+            "command": "node scripts/dual-review-selftest.mjs",
+            "exitCode": 0,
+            "durationSeconds": 32,
+            "summary": [
+              "DUAL_REVIEW_SELFTEST: PASS 32/32"
+            ]
+          },
+          {
+            "command": "node scripts/release-audit-selftest.mjs",
+            "exitCode": 0,
+            "durationSeconds": 32,
+            "summary": [
+              "RELEASE_AUDIT_SELFTEST: PASS 15/15"
+            ]
+          },
+          {
+            "command": "node scripts/orchestrator-selftest.mjs",
+            "exitCode": 0,
+            "durationSeconds": 22,
+            "summary": [
+              "ORCHESTRATOR_SELFTEST: PASS 29/29"
+            ]
+          },
+          {
+            "command": "node scripts/orchestrator-executor-integration-selftest.mjs",
+            "exitCode": 0,
+            "durationSeconds": 19,
+            "summary": [
+              "ORCHESTRATOR_EXECUTOR_INTEGRATION: PASS 12/12"
+            ]
+          },
+          {
+            "command": "node scripts/autonomy-hardening-selftest.mjs",
+            "exitCode": 0,
+            "durationSeconds": 280,
+            "summary": [
+              "AUTONOMY_HARDENING_SELFTEST: PASS 20/20"
+            ]
+          },
+          {
+            "command": "npx vitest run tests/pkg-gov1-claude-only-review-gate.test.ts tests/pkg-dr1-dual-review.test.ts tests/pkg-dr2-release-audit.test.ts",
+            "exitCode": 0,
+            "durationSeconds": 45,
+            "summary": [
+              "Test Files  3 passed (3)",
+              "Tests  7 passed (7)",
+              "Duration  42.00s (transform 193ms, setup 0ms, import 284ms, tests 107.25s, environment 0ms)"
+            ]
+          },
+          {
+            "command": "npm run typecheck",
+            "exitCode": 0,
+            "durationSeconds": 4,
+            "summary": [
+              "> universal-ai-software-company-os@0.0.0-v6-audit-candidate typecheck",
+              "> tsc --noEmit"
+            ]
+          },
+          {
+            "command": "node scripts/validate-tr-comments.mjs",
+            "exitCode": 0,
+            "durationSeconds": 1,
+            "summary": [
+              "TR_VALIDATION: PASS"
+            ]
+          },
+          {
+            "command": "npx vitest run",
+            "exitCode": 0,
+            "durationSeconds": 635,
+            "summary": [
+              "Test Files  38 passed (38)",
+              "Tests  204 passed (204)",
+              "Duration  632.96s (transform 1.16s, setup 0ms, import 2.67s, tests 1586.71s, environment 10ms)"
+            ]
+          }
+        ]
+      },
+      "mutationEvidence": {
+        "harness": "scratchpad gov1r2-mutants.cjs: each mutant edits one unique anchor of automation/lib/orchestrator-engine.mjs in place, runs node scripts/dual-review-selftest.mjs --only=gov1-, restores the original bytes and verifies the sha256",
+        "engineSha256": "e52d9774cbbb05f27c3d85efcb65d09db9f08912fa1ee9864579df94bff7f731",
+        "restoredClean": true,
+        "mutants": [
+          {
+            "id": "M1-release-disabled",
+            "caught": true,
+            "summary": "DUAL_REVIEW_SELFTEST: FAIL 8/9",
+            "failingScenarios": [
+              "gov1-activation-releases-only-the-claude-only-governance-holds-and-the-held-packages-get-claude-reviews-only"
+            ]
+          },
+          {
+            "id": "M2-release-not-called-by-runTick",
+            "caught": true,
+            "summary": "DUAL_REVIEW_SELFTEST: FAIL 8/9",
+            "failingScenarios": [
+              "gov1-activation-releases-only-the-claude-only-governance-holds-and-the-held-packages-get-claude-reviews-only"
+            ]
+          },
+          {
+            "id": "M3-any-hold-released",
+            "caught": true,
+            "summary": "DUAL_REVIEW_SELFTEST: FAIL 8/9",
+            "failingScenarios": [
+              "gov1-activation-releases-only-the-claude-only-governance-holds-and-the-held-packages-get-claude-reviews-only"
+            ]
+          },
+          {
+            "id": "M4-closed-packages-released",
+            "caught": true,
+            "summary": "DUAL_REVIEW_SELFTEST: FAIL 8/9",
+            "failingScenarios": [
+              "gov1-activation-releases-only-the-claude-only-governance-holds-and-the-held-packages-get-claude-reviews-only"
+            ]
+          },
+          {
+            "id": "M5-release-without-founder-record",
+            "caught": true,
+            "summary": "DUAL_REVIEW_SELFTEST: FAIL 8/9",
+            "failingScenarios": [
+              "gov1-activation-releases-only-the-claude-only-governance-holds-and-the-held-packages-get-claude-reviews-only"
+            ]
+          },
+          {
+            "id": "M6-release-during-global-stop",
+            "caught": true,
+            "summary": "DUAL_REVIEW_SELFTEST: FAIL 8/9",
+            "failingScenarios": [
+              "gov1-activation-releases-only-the-claude-only-governance-holds-and-the-held-packages-get-claude-reviews-only"
+            ]
+          },
+          {
+            "id": "M7-unknown-previous-hold-dropped",
+            "caught": true,
+            "summary": "DUAL_REVIEW_SELFTEST: FAIL 8/9",
+            "failingScenarios": [
+              "gov1-activation-releases-only-the-claude-only-governance-holds-and-the-held-packages-get-claude-reviews-only"
+            ]
+          },
+          {
+            "id": "M8-release-audit-hold-always-satisfied",
+            "caught": true,
+            "summary": "DUAL_REVIEW_SELFTEST: FAIL 8/9",
+            "failingScenarios": [
+              "gov1-activation-releases-only-the-claude-only-governance-holds-and-the-held-packages-get-claude-reviews-only"
+            ]
+          },
+          {
+            "id": "M9-previous-not-before-ignored",
+            "caught": true,
+            "summary": "DUAL_REVIEW_SELFTEST: FAIL 8/9",
+            "failingScenarios": [
+              "gov1-activation-releases-only-the-claude-only-governance-holds-and-the-held-packages-get-claude-reviews-only"
+            ]
+          },
+          {
+            "id": "M10-no-hash-chained-record",
+            "caught": true,
+            "summary": "DUAL_REVIEW_SELFTEST: FAIL 8/9",
+            "failingScenarios": [
+              "gov1-activation-releases-only-the-claude-only-governance-holds-and-the-held-packages-get-claude-reviews-only"
+            ]
+          }
+        ],
+        "caught": "10/10"
+      },
+      "reproduction": {
+        "verifierProbe": {
+          "script": "gov1-verify/gate-probes/hold-probe.mjs (read-only reference, run unchanged against this worktree)",
+          "afterFix": {
+            "events": [
+              "SEED",
+              "REVIEW_GATE_ACTIVATED",
+              "ACTIVATION_HOLD_RELEASED",
+              "REVIEW_STARTED"
+            ],
+            "holds": {
+              "DR2": null,
+              "Q1": null
+            },
+            "reviewCalls": 2,
+            "note": "MERGE_ENV_ERROR in the probe comes from its stub executors (no merge executor), not from the engine"
+          }
+        },
+        "liveStateCopy": {
+          "script": "scratchpad gov1r2-live-copy-probe.mjs: reads C:\\Users\\PRO\\Desktop\\UASCO\\.ai\\cache\\review\\ORCHESTRATOR_STATE.json read-only, seeds a temporary store and runs one daemon tick (createTick, committed policy, maxActionsPerTick 0) with this worktree's code; the live file is not written",
+          "result": {
+            "tick": "TICK_DONE",
+            "events": [
+              "SEED_FROM_LIVE_COPY",
+              "LEASE_ACQUIRED",
+              "DUAL_REVIEW_ACTIVATED",
+              "RELEASE_AUDIT_ACTIVATED",
+              "REVIEW_GATE_ACTIVATED",
+              "ACTIVATION_HOLD_RELEASED(CLAUDE_ONLY_GOVERNANCE_ACTIVE:V6-PKG-L1-ELECTRON-MANIFEST-EXE-SHA,V6-PKG-R4-PHASE0-GIT-BASELINE-NATIVE-PROBES,V6-PKG-M1-PROVENANCE-TEST-TIMEOUT,V6-PKG-DR1-DUAL-INDEPENDENT-REVIEW,V6-PKG-DR2-FINAL-DUAL-RELEASE-AUDIT,V6-PKG-BS1-AUTONOMY-BOOTSTRAP,V6-PKG-LV1-LIVENESS-WATCHDOG,V6-PKG-Q1-CLAUDE-LIMIT-DETECTION,V6-PKG-D2-SHELL-QUOTE-ADVISORY,V6-PKG-Q2-RETRY-TIME-GRACE)",
+              "LEASE_RELEASED"
+            ],
+            "gate": "CLAUDE_ONLY",
+            "remainingHolds": [],
+            "released": [
+              "V6-PKG-L1-ELECTRON-MANIFEST-EXE-SHA:FOUNDER_DECISION_PENDING:superseded=null:notBefore=null",
+              "V6-PKG-R4-PHASE0-GIT-BASELINE-NATIVE-PROBES:FOUNDER_DECISION_PENDING:superseded=null:notBefore=null",
+              "V6-PKG-M1-PROVENANCE-TEST-TIMEOUT:FOUNDER_DECISION_PENDING:superseded=null:notBefore=null",
+              "V6-PKG-DR1-DUAL-INDEPENDENT-REVIEW:REVIEW_CLEAN:superseded=null:notBefore=null",
+              "V6-PKG-DR2-FINAL-DUAL-RELEASE-AUDIT:REVIEW_PENDING:superseded=DUAL_REVIEW_ACTIVE:notBefore=null",
+              "V6-PKG-BS1-AUTONOMY-BOOTSTRAP:REVIEW_PENDING:superseded=RELEASE_AUDIT_ACTIVE:notBefore=null",
+              "V6-PKG-LV1-LIVENESS-WATCHDOG:REVIEW_PENDING:superseded=RELEASE_AUDIT_ACTIVE:notBefore=null",
+              "V6-PKG-Q1-CLAUDE-LIMIT-DETECTION:REVIEW_PENDING_PROVIDER_QUOTA:superseded=null:notBefore=null",
+              "V6-PKG-D2-SHELL-QUOTE-ADVISORY:REVIEW_PENDING:superseded=null:notBefore=null",
+              "V6-PKG-Q2-RETRY-TIME-GRACE:REVIEW_PENDING:superseded=null:notBefore=null"
+            ],
+            "nextActions": [
+              "REVIEW:V6-PKG-DR1-DUAL-INDEPENDENT-REVIEW:claude",
+              "REVIEW:V6-PKG-DR2-FINAL-DUAL-RELEASE-AUDIT:claude",
+              "REVIEW:V6-PKG-BS1-AUTONOMY-BOOTSTRAP:claude",
+              "REVIEW:V6-PKG-LV1-LIVENESS-WATCHDOG:claude",
+              "REVIEW:V6-PKG-Q1-CLAUDE-LIMIT-DETECTION:claude",
+              "REVIEW:V6-PKG-D2-SHELL-QUOTE-ADVISORY:claude",
+              "REVIEW:V6-PKG-Q2-RETRY-TIME-GRACE:claude"
+            ]
+          }
+        }
+      },
+      "residualRisks": [
+        "reconcileReviewGates (GOV1 round 0) does not skip held packages; a package whose earlier hold is put back and that already has a decided Claude gate result for its bundle could change status without an action (nextAction still skips it while held). No package of the live durable state has such a result (dualReview was never active there)",
+        "In the live state both V6-PKG-BS1-AUTONOMY-BOOTSTRAP and V6-PKG-LV1-LIVENESS-WATCHDOG carry an earlier RELEASE_AUDIT_ACTIVE hold (LV1 supersedes BS1 as the release package); both are released and scheduled for a Claude review. Which of them should still lead to a release is a supervisor queue decision outside this package",
+        "the far-future marker threshold is 365 days: a recorded previousNotBefore more than a year ahead is treated as a hold marker and removed",
+        "activation in the running supervisor still depends on the supervisor-level bootstrap described in GOV1-V2"
+      ],
+      "cleanClaim": false
+    }
+  ],
+  "finalLineageRecords": [
+    {
+      "recordedAt": "2026-10-07T06:56:08.365Z",
+      "kind": "FINAL_LINEAGE_EVIDENCE_BINDING",
+      "reason": "the package was re-applied unchanged (identical change set) onto the final finalization chain; values recorded at its earlier revisions (parent, branch, changedFileSha256, reseal/manifest, validation workspace) describe those superseded revisions and are kept unchanged as history; this record binds the evidence to the final revision",
+      "packageId": "V6-PKG-GOV1-CLAUDE-ONLY-REVIEW-GATE",
+      "finalBase": "e01ea9ed4496e0f561e7194e6b3567de293ac0ea",
+      "headSubjectChain": [
+        "ccfc01a v6 pkg-gov1: activation releases the CLAUDE_ONLY_GOVERNANCE_ACTIVE transition holds",
+        "24cec3f v6 pkg-gov1: address independent verification findings",
+        "d3d46ac v6 pkg-gov1: independent governed CLAUDE_REVIEWER is the required review gate (Codex no longer required)"
+      ],
+      "supersededRevisions": [
+        "cfcce72",
+        "b2cb90a",
+        "6601a32"
+      ],
+      "changedFileSha256": {
+        "CHANGELOG.md": "c5320ff8b890025e783240f8c73bb1c760bd6f58fa38e6c7b8586ce6039029cc",
+        "automation/lib/orchestrator-engine.mjs": "e52d9774cbbb05f27c3d85efcb65d09db9f08912fa1ee9864579df94bff7f731",
+        "automation/lib/orchestrator-executors.mjs": "40ca1f7d272823b14d58383736fc7fd97d243677f12f5f6cb64427e51a40eea7",
+        "automation/lib/review-quorum.mjs": "ed68903dc942dc62ff0936f6110e983ef2d9231f3a8bf1595509883ea66401aa",
+        "config/orchestrator-policy.json": "22b010e556d1e5ef24d0bd8f9d5a15162700f8565c8a07ce8bb671e342008c61",
+        "config/trust-root-manifest.json": "e0f49a5161dc0cf464cf4bdcb246f7f87e9be324aca97bd41968aac2849e54a8",
+        "docs/architecture/DUAL-INDEPENDENT-REVIEW.md": "2ed07c503226a4ecf88c380f34237b31c927e05fb71ee3bef90857bdbc8c23ce",
+        "docs/architecture/UNATTENDED-ORCHESTRATION.md": "638411c4c9e5774b1b513d493a3c57e3523520741f3d43142c3c1758ff640f3e",
+        "scripts/dual-review-selftest.mjs": "6ad7f83c0085ca04ae02c4ee190a41a00ff7b20fad94ee50164981dc9d69c650",
+        "scripts/release-audit-selftest.mjs": "e7cbb2b66fe1517de84368cdee834a64560c9017bde62d722b54eae4c03b8bad",
+        "tests/pkg-gov1-claude-only-review-gate.test.ts": "c9869de33cbb45f05eb962fccccdc0ce7263948c5978452415ec159f4216d91b"
+      },
+      "trustRootManifest": {
+        "sha256": "e0f49a5161dc0cf464cf4bdcb246f7f87e9be324aca97bd41968aac2849e54a8",
+        "generatedAt": "2026-10-06T23:17:30.532Z",
+        "sealStatus": "SEALED",
+        "protectedFiles": 364
+      },
+      "validationEnvironment": {
+        "os": "Windows_NT 10.0.19045",
+        "node": "v24.19.0",
+        "npm": "11.17.0"
+      },
+      "validationBinding": "canonical validation (config/validation.json) of the exact reviewed commit runs in a fresh clean clone at that commit, in this environment, during the bundle freeze; the frozen review bundle records reviewedCommit, baseCommit and the validation report",
+      "note": "a file cannot contain the sha of the commit that adds it; the commit is identified by finalBase plus this tree's digests and by the frozen bundle"
+    },
+    {
+      "recordedAt": "2026-10-13T00:00:00.000Z",
+      "kind": "REAPPLIED_ONTO_NEW_BASE_LINEAGE_RECORD",
+      "appendOnly": true,
+      "packageId": "V6-PKG-GOV1-CLAUDE-ONLY-REVIEW-GATE",
+      "branch": "v6/pkg-gov1-claude-only-review-gate-f9",
+      "reason": "Founder-approved chain re-application of 2026-10-13: the commits of this package were re-applied with git cherry-pick -x onto the f9 chain. All earlier fields and records describe the original chain (bases, commits, digests) and are kept unchanged as history; they do not describe this revision.",
+      "newBase": "1278079",
+      "oldCommits": [
+        "d3d46ac",
+        "24cec3f",
+        "ccfc01a",
+        "dd0ea4b"
+      ],
+      "oldToNew": {
+        "d3d46ac": "83d5082",
+        "24cec3f": "a079ea9",
+        "ccfc01a": "bae578f",
+        "dd0ea4b": "058c0d5"
+      },
+      "newCommitsInOrder": [
+        "83d5082",
+        "a079ea9",
+        "bae578f",
+        "058c0d5",
+        "5068fe3"
+      ],
+      "unmappedNewCommits": [
+        "5068fe3"
+      ],
+      "conflicts": [
+        {
+          "file": "config/trust-root-manifest.json",
+          "resolution": "conflicts regenerated with scripts/generate-trust-root.mjs, never hand-merged"
+        },
+        {
+          "file": "config/validation.json",
+          "resolution": "integration commit: the new test file assigned to the tests step so the coverage guard passes"
+        }
+      ],
+      "changedProtectedFileSha256": {
+        "automation/lib/orchestrator-engine.mjs": "e52d9774cbbb05f27c3d85efcb65d09db9f08912fa1ee9864579df94bff7f731",
+        "automation/lib/orchestrator-executors.mjs": "40ca1f7d272823b14d58383736fc7fd97d243677f12f5f6cb64427e51a40eea7",
+        "automation/lib/review-quorum.mjs": "ed68903dc942dc62ff0936f6110e983ef2d9231f3a8bf1595509883ea66401aa",
+        "config/orchestrator-policy.json": "22b010e556d1e5ef24d0bd8f9d5a15162700f8565c8a07ce8bb671e342008c61",
+        "config/validation.json": "78d426e64b9f86b5de7dd4bcb2fd9ce11462b3a87f6ce16d9eaaf84541fdd5c8",
+        "scripts/dual-review-selftest.mjs": "6ad7f83c0085ca04ae02c4ee190a41a00ff7b20fad94ee50164981dc9d69c650",
+        "scripts/release-audit-selftest.mjs": "e7cbb2b66fe1517de84368cdee834a64560c9017bde62d722b54eae4c03b8bad"
+      },
+      "changedOtherFileSha256": {
+        "CHANGELOG.md": "4f636ad171ad360a94f65095e297b77e773c0f7a2c32408ffafb7b86045e08e1",
+        "audit/checkpoints/V6-PKG-GOV1-CLAUDE-ONLY-REVIEW-GATE-2026-10-06.json": "e7d51a173560ef006225ccdd4a1f8fe1f663e62a22b94a901dea4e1c07e01320",
+        "config/trust-root-manifest.json": "14ddfd1aebd864b30c8eb4be18665e868eb758b7466304ed6069cc48d5b2a9a5",
+        "docs/architecture/DUAL-INDEPENDENT-REVIEW.md": "2ed07c503226a4ecf88c380f34237b31c927e05fb71ee3bef90857bdbc8c23ce",
+        "docs/architecture/UNATTENDED-ORCHESTRATION.md": "638411c4c9e5774b1b513d493a3c57e3523520741f3d43142c3c1758ff640f3e",
+        "tests/pkg-gov1-claude-only-review-gate.test.ts": "c9869de33cbb45f05eb962fccccdc0ce7263948c5978452415ec159f4216d91b"
+      },
+      "digestNote": "computed from the tree of the commit preceding this record (changes against the new base) and compared with config/trust-root-manifest.json of the same tree (equal for every listed protected file); the manifest does not list audit checkpoints, so this record does not change it",
+      "reviewStatus": "PENDING_GOVERNED_REVIEW",
+      "cleanClaim": false,
+      "validationEvidence": "PENDING_FREEZE",
+      "notClaimed": "No CLEAN, merge, release or validation claim; the supervisor owns review, validation and merge"
+    }
+  ],
+  "status": "F10 re-application: changes applied; not clean; review pending"
 }

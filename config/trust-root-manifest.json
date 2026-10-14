@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-14T02:16:52.253Z",
+  "generatedAt": "2026-10-14T02:17:24.028Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -230,11 +230,11 @@
     },
     {
       "path": "automation/lib/orchestrator-engine.mjs",
-      "sha256": "79130360ff0373f6b7bc858fb4861f069bd39408afe0065eb39c5db09590140d"
+      "sha256": "e52d9774cbbb05f27c3d85efcb65d09db9f08912fa1ee9864579df94bff7f731"
     },
     {
       "path": "automation/lib/orchestrator-executors.mjs",
-      "sha256": "06975d65a9034a7a5645eb24e939d6c6cf62746e61db8d22895fa3aafbc978c4"
+      "sha256": "40ca1f7d272823b14d58383736fc7fd97d243677f12f5f6cb64427e51a40eea7"
     },
     {
       "path": "automation/lib/orchestrator-state.mjs",
@@ -314,7 +314,7 @@
     },
     {
       "path": "automation/lib/review-quorum.mjs",
-      "sha256": "8c49153a4543a05ef969ec45fc2d206f07289592b0b1fc9f5ecc526468eb7c6e"
+      "sha256": "ed68903dc942dc62ff0936f6110e983ef2d9231f3a8bf1595509883ea66401aa"
     },
     {
       "path": "automation/lib/run-ledger.mjs",
@@ -402,7 +402,7 @@
     },
     {
       "path": "config/orchestrator-policy.json",
-      "sha256": "860bf51ebc64fa614b0ff52c8cb5f01d1772e271551b75df2947910590deb646"
+      "sha256": "22b010e556d1e5ef24d0bd8f9d5a15162700f8565c8a07ce8bb671e342008c61"
     },
     {
       "path": "config/package-policy.json",
@@ -430,7 +430,7 @@
     },
     {
       "path": "config/validation.json",
-      "sha256": "96fb47eb12222755624f7cb41e1a3dc8c7afe21381f36e8894de63c3d635ebda"
+      "sha256": "78d426e64b9f86b5de7dd4bcb2fd9ce11462b3a87f6ce16d9eaaf84541fdd5c8"
     },
     {
       "path": "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
@@ -1186,7 +1186,7 @@
     },
     {
       "path": "scripts/dual-review-selftest.mjs",
-      "sha256": "2fe6c0dad0971d744973af51859600cb3140b846589592c30c92b17cf8fedbfc"
+      "sha256": "6ad7f83c0085ca04ae02c4ee190a41a00ff7b20fad94ee50164981dc9d69c650"
     },
     {
       "path": "scripts/generate-trust-root.mjs",
@@ -1250,7 +1250,7 @@
     },
     {
       "path": "scripts/release-audit-selftest.mjs",
-      "sha256": "a1765570ca81c79e49af33fb2adf5ed4262ad4900163d2b467d474b3fd03c1ae"
+      "sha256": "e7cbb2b66fe1517de84368cdee834a64560c9017bde62d722b54eae4c03b8bad"
     },
     {
       "path": "scripts/release-sha256sums.mjs",

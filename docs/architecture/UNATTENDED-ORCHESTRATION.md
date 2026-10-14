@@ -23,7 +23,7 @@ The construction work on this repository continues without a human operator. `sc
 ```
 durable queue -> recover state -> next eligible package -> execution backend
 -> Claude implementation -> deterministic validation -> checkpoint -> commit
--> frozen review bundle -> independent Codex review -> governed evaluation
+-> frozen review bundle -> independent review gate (one CLAUDE_REVIEWER once the PKG-GOV1 gate is active) -> governed evaluation
 -> CLEAN: fast-forward (when policy allows), evidence, continue
 -> BLOCKED: package-scoped remediation -> regression -> commit -> new bundle -> re-review
 -> PROVIDER QUOTA: environment block + retryAfter -> other independent work -> retry at due time
@@ -71,6 +71,8 @@ Everything else continues. Approved policy is persisted in `config/orchestrator-
 
 From the `DUAL_REVIEW_REQUIRED` activation commit, every review package needs a CLEAN result from both `CLAUDE_REVIEWER` and `CODEX_REVIEWER` on the same frozen bundle; each reviewer is a separate action with its own quota state, its own clean review clone and its own evidence, and any valid BLOCKED goes to remediation with the findings of both. See `docs/architecture/DUAL-INDEPENDENT-REVIEW.md`. A release candidate is additionally audited as a whole by both reviewers (`CLAUDE_FULL_REPO_REVIEW`, `CODEX_FULL_REPO_REVIEW`) before packaging, signing and Phase0.
 
+Founder governance change 2026-10-06 (PKG-GOV1): once the `CLAUDE_ONLY` review gate of `config/orchestrator-policy.json` `reviewGate` is activated in the durable state (hash-chained `REVIEW_GATE_ACTIVATED`), the required gate is one independent governed `CLAUDE_REVIEWER` review per package revision (merge rule: deterministic gates PASS and `CLAUDE_REVIEWER` CLEAN bound to the frozen bundle) and one governed `CLAUDE_FULL_REPO_REVIEW` for the release audit. Codex is no longer required or scheduled; historical Codex evidence and markers are kept unchanged. See "Claude-only review gate (PKG-GOV1)" in `docs/architecture/DUAL-INDEPENDENT-REVIEW.md`.
+
 ## Command contracts
 
 `automation/lib/command-contracts.mjs` is the only way the orchestrator runs commands.
@@ -86,7 +88,7 @@ From the `DUAL_REVIEW_REQUIRED` activation commit, every review package needs a 
 - **Global Stop at every step.** Global Stop is checked before each action of a tick and before each command. Long commands run under a monitor that polls the stop signal; when it appears, the whole command tree is terminated (`taskkill /T /F` from System32 on Windows). An action cut short by the stop is not applied; its in-flight marker is recovered idempotently on the next run.
 - **Trusted protected-path policy.** Builder changes are classified against the verified control plane's `config/protected-paths.json`, never the copy the builder could edit. Unauthorized protected edits, including edits to that policy, are rejected before any worktree code runs.
 - **Isolated Git.** Git contracts run with the same isolation as every other production Git process (`automation/lib/git-isolation.mjs`): no host global or system config, no repository hooks, no credential helper.
-- **No Claude Code permission prompts.** The unattended path runs outside Claude Code: the builder runs through `claude-builder-broker.mjs` (tool-restricted, `acceptEdits` inside the worktree) and the reviewer through the read-only Codex broker.
+- **No Claude Code permission prompts.** The unattended path runs outside Claude Code: the builder runs through `claude-builder-broker.mjs` (tool-restricted, `acceptEdits` inside the worktree) and the reviewer through its read-only broker (`claude-reviewer-broker.mjs` for the required `CLAUDE_REVIEWER` once the PKG-GOV1 gate is active; the Codex broker for reviews under the earlier gates).
 
 ## Execution backends
 

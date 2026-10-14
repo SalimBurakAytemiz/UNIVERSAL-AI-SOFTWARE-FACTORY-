@@ -5,9 +5,23 @@ export const REVIEWER_IDENTITY={claude:"CLAUDE_REVIEWER",codex:"CODEX_REVIEWER"}
 export const PROVIDER_STATE_KEY={claude:"claudeReviewer",codex:"codex"};
 export const GATE_STATUSES=["PENDING","CLEAN","BLOCKED","INVALID","PROVIDER_BLOCKED"];
 const SEV=["P3","P2","P1","P0"],sevRank=s=>SEV.indexOf(String(s));
-// //TR: Etkinleştirmeden önce dondurulmuş ve geçmişte kapanmış paketler tarihsel politikayla (yalnız Codex) kalır; etkinleştirmeden sonra açık her paket iki reviewer ister. Paket açıkça işaretlenmişse o işaret geçerlidir; CODEX_ONLY_HISTORICAL yalnız konduğu revizyona aittir ve etkinleştirmeden sonraki her yeni commit'te engine onu DUAL ile değiştirir.
-export function requiredReviewers(p,control){if(p?.reviewPolicy==="DUAL")return ["claude","codex"];if(p?.reviewPolicy==="CODEX_ONLY_HISTORICAL")return ["codex"];return control?.dualReview?.active===true?["claude","codex"]:["codex"]}
-// //TR: Son sürüm denetimi hedefi: release adayının tam depo denetimi, iki reviewer'ın aynı donmuş tam depo bundle'ını kendi temiz klonunda incelediği paket benzeri bir görünümdür; kapı adayın bundle digest'ine bağlıdır ve her zaman iki reviewer ister.
+// //TR: GOV1 (Founder yönetişim değişikliği 2026-10-06): CLAUDE_ONLY inceleme kapısı. Commit edilmiş policy'deki reviewGate kapının ne olduğunu tanımlar (tek gerekli reviewer CLAUDE_REVIEWER, Codex gerekmez); kapı bir kontrol durumunda ancak engine onu hash zincirli REVIEW_GATE_ACTIVATED geçişiyle control.reviewGate olarak kaydettikten sonra etkindir. Eksik veya bozuk policy/kayıt hiçbir şeyi gevşetmez: önceki (daha sıkı) kapı geçerli kalır.
+export const CLAUDE_ONLY="CLAUDE_ONLY";
+export const CLAUDE_ONLY_RELEASE_QUORUM="CLAUDE_FULL_REPO_REVIEW_CLEAN";
+const onlyClaude=r=>Array.isArray(r)&&r.length===1&&r[0]==="claude";
+export function claudeOnlyPolicy(policy){const g=policy?.reviewGate,ra=g?.releaseAudit;return !!g&&g.model===CLAUDE_ONLY&&onlyClaude(g.required)&&g.codexRequired===false&&typeof g.activatedBy==="string"&&g.activatedBy.length>0&&onlyClaude(ra?.reviewers)&&ra.quorum===CLAUDE_ONLY_RELEASE_QUORUM&&!!ra.contract&&typeof ra.contract==="object"}
+export function claudeOnlyGate(control){const g=control?.reviewGate;return g?.active===true&&g.model===CLAUDE_ONLY&&onlyClaude(g.required)&&g.codexRequired===false}
+// //TR: İkinci anahtar: Founder kararının kalıcı durumdaki kaydı (süpervizörün control.finalization.reviewGovernance kaydı). Policy tek başına mevcut bir kontrol durumunda kapıyı değiştirmez; kayıt tek başına da değiştiremez (policy doğruluk kaynağıdır).
+export function founderClaudeOnlyRecord(control){return control?.finalization?.reviewGovernance?.model===CLAUDE_ONLY}
+// //TR: Etkinleştirmeden önce dondurulmuş ve geçmişte kapanmış paketler tarihsel politikayla (yalnız Codex) kalır; etkinleştirmeden sonra açık her paket iki reviewer ister. Paket açıkça işaretlenmişse o işaret geçerlidir; CODEX_ONLY_HISTORICAL yalnız konduğu revizyona aittir ve etkinleştirmeden sonraki her yeni commit'te engine onu DUAL ile değiştirir. CLAUDE_ONLY kapısı etkinse açık her paket ve release denetimi yalnız CLAUDE_REVIEWER ister; DUAL/CODEX_ONLY_HISTORICAL işaretleri tarih olarak dokunulmadan kalır.
+export function requiredReviewers(p,control){if(claudeOnlyGate(control))return ["claude"];if(p?.reviewPolicy==="DUAL")return ["claude","codex"];if(p?.reviewPolicy==="CODEX_ONLY_HISTORICAL")return ["codex"];return control?.dualReview?.active===true?["claude","codex"]:["codex"]}
+// //TR: Sağlayıcı başına kapı yolu (her reviewer ayrı eylem): CLAUDE_REVIEWER gerekiyorsa kullanılır; önceki davranışta bu tam olarak çift inceleme paketidir.
+export function usesReviewerGate(p,control){return requiredReviewers(p,control).includes("claude")}
+// //TR: CLAUDE_ONLY altında gerekmeyen Codex için kaydedilmiş geçerli bir BLOCKED (aynı donmuş bundle ve cycle'ın kapısında) yine durdurur: bir reviewer diğerinin geçerli bulgusunu geçersiz kılamaz. Eksik Codex incelemesi asla bekletmez.
+export function honouredBlockers(control){return claudeOnlyGate(control)?["codex"]:[]}
+// //TR: Birleşmeden önce kaydedilen CLEAN sonucunun kapıyı karşılaması: CLAUDE_ONLY altında aynı bundle digest ve cycle için CLAUDE_REVIEWER CLEAN kanıtı içeren governed kayıt gerekir (yalnız Codex CLEAN'i yetmez); aksi halde önceki çift inceleme koşulu.
+export function reviewSatisfiesGate(p,control){const r=p?.review;if(claudeOnlyGate(control))return r?.result==="CLEAN"&&r.bundleDigest===p.bundle?.digest&&r.cycle===p.cycle&&(r.gateModel===CLAUDE_ONLY||(r.dual===true&&r.dualReviewClean===true))&&!!r.evidence&&typeof r.evidence==="object"&&!!r.evidence.claude;return r?.dual===true&&r.dualReviewClean===true&&r.bundleDigest===p.bundle?.digest}
+// //TR: Son sürüm denetimi hedefi: release adayının tam depo denetimi, iki reviewer'ın aynı donmuş tam depo bundle'ını kendi temiz klonunda incelediği paket benzeri bir görünümdür; kapı adayın bundle digest'ine bağlıdır ve iki reviewer ister; CLAUDE_ONLY kapısı etkinse requiredReviewers yalnız CLAUDE_REVIEWER'ı (tek tam depo incelemesi) döndürür.
 export function auditTarget(r){const a=r?.audit??{};return {id:a.id??null,kind:"RELEASE_AUDIT",bundle:a.bundle??null,baseCommit:a.baseCommit??null,reviewCommit:r?.sourceCommit??null,cycle:a.cycle??1,reviewGate:a.reviewGate,reviewPolicy:"DUAL",auditBase:true}}
 export function isDualPackage(p,control){return requiredReviewers(p,control).length===2}
 // //TR: Kapı paketin o anki bundle digest'i ve cycle'ı ile anahtarlanır; ikisinden biri değişirse eski sonuçlar uygulanmaz. Etkinleştirmeden önce aynı bundle için kaydedilmiş geçerli Codex CLEAN'i (paket hâlâ REVIEW_CLEAN, aynı cycle, varsa aynı bundle digest) Codex kapısına taşınır (tarihsel kanıt geçersiz sayılmaz), Claude kapısı boş başlar; birleşme kapısı bu kanıtı yine donmuş bundle'a karşı yeniden türetir.
@@ -17,11 +31,13 @@ export function currentGate(p){const g=p?.reviewGate;if(g&&g.bundleDigest===p.bu
   return fresh}
 export function gateStatus(gate,k){const s=gate?.providers?.[k]?.status;return GATE_STATUSES.includes(s)?s:"PENDING"}
 // //TR: Yeter sayı: geçersiz sonuç -> INVALID; hepsi CLEAN -> CLEAN; bir BLOCKED varsa ve diğer reviewer şu anda çalıştırılamıyorsa (sonucu var veya sağlayıcısı uygun değil) -> BLOCKED; aksi halde PENDING. Çalıştırılabilirlik PENDING kapı için de sağlayıcı durumuna bakar: başka bir paketten kaydedilmiş genel kota da reviewer'ı bekletir, bu yüzden geçerli BLOCKED bulgularıyla remediation başlar. CLEAN yine yalnız gerekli her reviewer'ın CLEAN'iyle oluşur. Bir reviewer diğerinin geçerli bulgusunu geçersiz kılamaz.
-export function computeReviewAggregate(gate,required,{providerDue=()=>true}={}){
+// //TR: alsoBlocking: gerekmeyen ama kapıda geçerli BLOCKED sonucu kayıtlı reviewer'lar (yalnız CLAUDE_ONLY altında Codex); varsayılan boş liste önceki davranıştır.
+export function computeReviewAggregate(gate,required,{providerDue=()=>true,alsoBlocking=[]}={}){
   const statuses=Object.fromEntries(required.map(k=>[k,gateStatus(gate,k)]));
   if(required.some(k=>statuses[k]==="INVALID"))return {result:"INVALID",dualReviewClean:false,statuses};
-  if(required.every(k=>statuses[k]==="CLEAN"))return {result:"CLEAN",dualReviewClean:required.length===2,statuses};
-  const blockedBy=required.filter(k=>statuses[k]==="BLOCKED"),runnable=required.filter(k=>(statuses[k]==="PENDING"||statuses[k]==="PROVIDER_BLOCKED")&&providerDue(k));
+  const honoured=alsoBlocking.filter(k=>!required.includes(k)&&gateStatus(gate,k)==="BLOCKED");
+  if(required.every(k=>statuses[k]==="CLEAN")&&!honoured.length)return {result:"CLEAN",dualReviewClean:required.length===2,statuses};
+  const blockedBy=[...required.filter(k=>statuses[k]==="BLOCKED"),...honoured],runnable=required.filter(k=>(statuses[k]==="PENDING"||statuses[k]==="PROVIDER_BLOCKED")&&providerDue(k));
   if(blockedBy.length&&!runnable.length)return {result:"BLOCKED",dualReviewClean:false,statuses,blockedBy};
   return {result:"PENDING",dualReviewClean:false,statuses,waitingFor:required.filter(k=>!["CLEAN","BLOCKED"].includes(statuses[k])),runnable};
 }
