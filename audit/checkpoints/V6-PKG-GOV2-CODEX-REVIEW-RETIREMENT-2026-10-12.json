@@ -690,5 +690,18 @@
       "cleanClaim": false
     }
   ],
-  "status": "F10 re-application: changes applied; not clean; review pending"
+  "status": "F10 re-application: changes applied; not clean; review pending",
+  "f10Lineage": {
+    "f9Base": "891992e37756c45b1f97a628bf067c6c44d9c46e",
+    "f9Tip": "791ef72b6c0da2da6589f46b24f7cd642ca4290f",
+    "f10Base": "4e060002328126cdc16e8b62966380f8a02956d6",
+    "authorizationCommit": "a28a572767031edbc017f1ce1c24eeeae545b92e",
+    "changeCommit": "ace022d8017398fa452b71322e89fb146f129b53",
+    "byteIdenticalToF9Except": [
+      "audit/checkpoints/*",
+      "config/trust-root-manifest.json"
+    ],
+    "oldEvidenceUntouched": true,
+    "note": "f10 re-application under FA-F10-2026-10-14; cycle-1 governed review pending; not clean"
+  }
 }
