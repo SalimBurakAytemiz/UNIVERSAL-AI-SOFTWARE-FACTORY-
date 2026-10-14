@@ -8,6 +8,7 @@ import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
 import {WorkOsStore} from "../core/workos/store.js";
 import {MissionRunner} from "../core/workos/runner.js";
 import type {RunnerOptions, TickReport} from "../core/workos/runner.js";
+import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import type {FakeScript} from "../core/workos/executors.js";
 import {TERMINAL_RUN_STATUSES} from "../core/workos/run-state.js";
@@ -58,7 +59,7 @@ const startRun = (c: Ctx): WorkRun => {
   return c.store.createRun({tenantId: "tA", missionId: c.missionId, executor: {implementer: p.implementer.identity, reviewer: p.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
 };
 const runner = (c: Ctx, extra: Partial<RunnerOptions> = {}) =>
-  new MissionRunner({store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: c.fake.pair(), retryBackoffMs: [0, 0], leaseTtlMs: 60_000, now: () => c.clock.t, ...extra});
+  new MissionRunner({store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: c.fake.pair(), retryBackoffMs: [0, 0], leaseTtlMs: 60_000, now: () => c.clock.t, security: fakeSecurity(`${c.dataDir}-sec`).options, ...extra});
 const runOf = (c: Ctx, id: string) => c.store.getRun({tenantId: "tA"}, id)!;
 const journal = (c: Ctx) => fs.readFileSync(path.join(c.dataDir, "journal.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l));
 async function tickUntilSettled(c: Ctx, r: MissionRunner, runId: string, max = 12): Promise<TickReport[]> {
@@ -128,8 +129,8 @@ describe("F-B3A-001 recovery budget", () => {
     expect(run.attempt).toBe(5); // IMPLEMENT'te 2 + VERIFY'da 2 recovery; toplam 4 > maxRecoveries ama her konumda <= 2
     expect(reps.flatMap(x => x.recovered)).toHaveLength(4);
     expect(c.fake.calls.implement).toBe(3);
-    expect(run.checkpoints.map(x => x.step)).toEqual(["WORKSPACE", "IMPLEMENT", "VERIFY", "REVIEW", "REGRESSION", "REPORT"]);
-    expect(run.checkpoints.map(x => x.data.attempt)).toEqual([1, 3, 5, 5, 5, 5]);
+    expect(run.checkpoints.map(x => x.step)).toEqual(["WORKSPACE", "IMPLEMENT", "VERIFY", "SECURITY", "REVIEW", "REGRESSION", "REPORT"]);
+    expect(run.checkpoints.map(x => x.data.attempt)).toEqual([1, 3, 5, 5, 5, 5, 5]);
     expect(run.evidence.filter(e => e.kind === "RECOVERY").map(e => e.exitCode)).toEqual([0, 0, 0, 0]);
     expect(c.store.getMission({tenantId: "tA"}, c.missionId)!.status).toBe("REPORTING");
   });

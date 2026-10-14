@@ -11,6 +11,7 @@ import {activateGlobalStop} from "../automation/lib/global-stop.mjs";
 import {WorkOsStore} from "../core/workos/store.js";
 import {MissionRunner} from "../core/workos/runner.js";
 import type {RunnerOptions} from "../core/workos/runner.js";
+import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors, executorsFromEnv, parseReviewOutput} from "../core/workos/executors.js";
 import type {FakeScript, MissionSpec} from "../core/workos/executors.js";
 import {RUN_STATUSES, TERMINAL_RUN_STATUSES, canRunTransition} from "../core/workos/run-state.js";
@@ -56,7 +57,7 @@ function setup(tenantId = "tA", opts: {url?: boolean; testCommand?: string[] | n
 }
 const okScript = (extra: Partial<FakeScript> = {}): FakeScript => ({implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"}), ...extra});
 function runner(c: Ctx, fake: FakeExecutors, extra: Partial<RunnerOptions> = {}): MissionRunner {
-  return new MissionRunner({store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), retryBackoffMs: [0, 0], leaseTtlMs: 60_000, ...extra});
+  return new MissionRunner({store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(`${c.dataDir}-sec`).options, ...extra});
 }
 const start = (c: Ctx, fake: FakeExecutors, tenantId = "tA") => {
   const p = fake.pair();
@@ -110,8 +111,8 @@ describe("B3a mission runner engine", () => {
     expect(run.baseSha).toBe(c.head);
     expect(run.headSha).toMatch(/^[0-9a-f]{40}$/);
     expect(run.headSha).not.toBe(c.head);
-    expect(run.checkpoints.map(x => x.step)).toEqual(["WORKSPACE", "IMPLEMENT", "VERIFY", "REVIEW", "REGRESSION", "REPORT"]);
-    expect(kinds(run)).toEqual(["WORKSPACE", "IMPLEMENT", "SECRET_SCAN", "VERIFY_TESTS", "REVIEW", "REGRESSION_TESTS", "REPORT"]);
+    expect(run.checkpoints.map(x => x.step)).toEqual(["WORKSPACE", "IMPLEMENT", "VERIFY", "SECURITY", "REVIEW", "REGRESSION", "REPORT"]);
+    expect(kinds(run)).toEqual(["WORKSPACE", "IMPLEMENT", "SECRET_SCAN", "VERIFY_TESTS", "SECURITY_GITLEAKS", "SECURITY_TRIVY", "SECURITY_REPORT", "REVIEW", "REGRESSION_TESTS", "REPORT"]);
     for (const e of run.evidence) {
       expect(e.startedAt <= e.endedAt).toBe(true);
       expect(e.exitCode).toBe(0);
@@ -375,14 +376,14 @@ describe("B3a mission runner engine", () => {
     expect(fake.calls.implement).toBe(1);
     const later = Date.now() + 10 * 60_000;
     const storeB = new WorkOsStore(c.dataDir, {now: () => later});
-    const b = new MissionRunner({store: storeB, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), retryBackoffMs: [0, 0], now: () => later});
+    const b = new MissionRunner({store: storeB, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), retryBackoffMs: [0, 0], now: () => later, security: fakeSecurity(`${c.dataDir}-sec`).options});
     const rep = await b.tick();
     expect(rep.recovered).toEqual([r.runId]);
     const run = runOf(c, r.runId);
     expect(run.status).toBe("AWAITING_APPROVAL");
     expect(run.attempt).toBe(2);
     expect(fake.calls.implement).toBe(1);
-    expect(run.checkpoints.map(x => x.step)).toEqual(["WORKSPACE", "IMPLEMENT", "VERIFY", "REVIEW", "REGRESSION", "REPORT"]);
+    expect(run.checkpoints.map(x => x.step)).toEqual(["WORKSPACE", "IMPLEMENT", "VERIFY", "SECURITY", "REVIEW", "REGRESSION", "REPORT"]);
     expect(kinds(run).filter(k => k === "IMPLEMENT" || k === "WORKSPACE")).toEqual(["WORKSPACE", "IMPLEMENT"]);
     const recovery = run.evidence.find(e => e.kind === "RECOVERY")!;
     expect(recovery.exitCode).toBe(0);
@@ -397,7 +398,7 @@ describe("B3a mission runner engine", () => {
     fs.rmSync(path.join(c.dataDir, "runs", r.runId, "work"), {recursive: true, force: true});
     const later = Date.now() + 10 * 60_000;
     const storeB = new WorkOsStore(c.dataDir, {now: () => later});
-    await new MissionRunner({store: storeB, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), now: () => later}).tick();
+    await new MissionRunner({store: storeB, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), now: () => later, security: fakeSecurity(`${c.dataDir}-sec`).options}).tick();
     const run = runOf(c, r.runId);
     expect(run.status).toBe("RECOVERY_FAILED");
     expect(run.reason).toMatch(/WORKSPACE_MISSING/);
@@ -515,7 +516,7 @@ describe("B3a control API", () => {
 
   it("the in-process runner starts only when enabled and drives runs to AWAITING_APPROVAL", { timeout: T }, async () => {
     const c = setup("tA"); const fake = new FakeExecutors(okScript());
-    const app = mk(c, "tA", {executors: fake.pair(), runner: {enabled: true, intervalMs: 250, retryBackoffMs: [0, 0]}});
+    const app = mk(c, "tA", {executors: fake.pair(), runner: {enabled: true, intervalMs: 250, retryBackoffMs: [0, 0], security: fakeSecurity(`${c.dataDir}-sec`).options}});
     await app.ready();
     const run = (await app.inject({method: "POST", url: `/v1/missions/${c.missionId}/runs`, headers: hdr, payload: {}})).json().run;
     const deadline = Date.now() + 90_000;

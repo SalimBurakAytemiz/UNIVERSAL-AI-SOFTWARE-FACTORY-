@@ -30,7 +30,7 @@ import type {ExecutorPair} from "../../../core/workos/executors.js";
 
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
-export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs">>}
+export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security">>}
 export function buildServer(opts:BuildServerOptions={}){
 const app=Fastify({logger:opts.logger??true,requestIdHeader:"x-request-id",genReqId:()=>crypto.randomUUID(),bodyLimit:64*1024});
 const readJson=(p:string)=>JSON.parse(fs.readFileSync(p,"utf8"));
@@ -180,7 +180,7 @@ function getRunner(){
   const ex=getExecutors();if(!ex.pair)return null;
   const r=opts.runner??{};
   workRunner=new MissionRunner({store:getStore(),dataDir:getStore().dataDir,globalStopFile:path.join(runtime,"GLOBAL_STOP.json"),envPolicyFile:path.join(repoRoot,"config","environment-policy.json"),executors:ex.pair,
-    leaseTtlMs:r.leaseTtlMs,maxRemediations:r.maxRemediations,maxRetries:r.maxRetries,retryBackoffMs:r.retryBackoffMs,testTimeoutMs:r.testTimeoutMs,executorTimeoutMs:r.executorTimeoutMs});
+    leaseTtlMs:r.leaseTtlMs,maxRemediations:r.maxRemediations,maxRetries:r.maxRetries,retryBackoffMs:r.retryBackoffMs,testTimeoutMs:r.testTimeoutMs,executorTimeoutMs:r.executorTimeoutMs,security:r.security});
   return workRunner;
 }
 const runnerEnabled=opts.runner?.enabled??process.env.UASCO_WORKOS_RUNNER==="1";

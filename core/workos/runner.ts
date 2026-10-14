@@ -1,4 +1,4 @@
-// //TR: Bu dosya B3a mission runner engine'idir: AUTHORIZED/PLANNED bir mission'ı izole workspace -> IMPLEMENT -> VERIFY (test + diff secret taraması) -> bağımsız REVIEW (ayrı kimlik, temiz klon, salt-okunur) -> REGRESSION -> REPORT adımlarıyla sürer ve REPORTING'de Founder teslim kararında durur (asla COMPLETE/merge/push yapmaz). Durum yalnız Work OS journal'ındadır; lease+fencing, checkpoint, sınırlı retry/remediation, GLOBAL_STOP ve crash-resume fail-closed çalışır.
+// //TR: Bu dosya B3a mission runner engine'idir: AUTHORIZED/PLANNED bir mission'ı izole workspace -> IMPLEMENT -> VERIFY (test + diff secret taraması) -> SECURITY (taze klonlarda gitleaks + trivy çevrimdışı, dürüst SAST/DB durumu) -> bağımsız REVIEW (ayrı kimlik, temiz klon, salt-okunur) -> REGRESSION -> REPORT adımlarıyla sürer ve REPORTING'de Founder teslim kararında durur (asla COMPLETE/merge/push yapmaz). Durum yalnız Work OS journal'ındadır; lease+fencing, checkpoint, sınırlı retry/remediation, GLOBAL_STOP ve crash-resume fail-closed çalışır.
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -9,22 +9,26 @@ import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
 import type {MissionStatus} from "../mission/types.js";
 import type {WorkOsStore, RunPatch, RunWriteOptions} from "./store.js";
 import {WorkOsError} from "./types.js";
-import type {RunEvidence, RunStatus, RunStep, WorkRun} from "./types.js";
+import type {RunEvidence, RunStatus, RunStep, SecurityStageSummary, WorkRun} from "./types.js";
 import {LEASED_RUN_STATUSES} from "./run-state.js";
 import {testCommandAllowed} from "./schemas.js";
 import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
 import {assertIndependentExecutors, runProcess} from "./executors.js";
 import type {ExecutorPair, MissionSpec, ProcResult} from "./executors.js";
+import {DEFAULT_MAX_REPORT_BYTES, DEFAULT_MAX_TRIVY_DB_AGE_MS, DEFAULT_SECURITY_TIMEOUT_MS, defaultTrivyCacheDir, discoverSecurityTools, evaluateSecurityPolicy, runGitleaks, runTrivy, toolInfo, verifyTool} from "./security-tools.js";
+import type {PolicyInput, ResolvedTool, SecurityOptions, SecurityToolset} from "./security-tools.js";
 
 export interface RunnerOptions {
   store: WorkOsStore; dataDir: string; globalStopFile: string; envPolicyFile: string; executors: ExecutorPair;
   actor?: string; leaseTtlMs?: number; maxRemediations?: number; maxRetries?: number; maxRecoveries?: number; retryBackoffMs?: readonly number[];
   testTimeoutMs?: number; executorTimeoutMs?: number; maxStepsPerTick?: number; now?: () => number;
+  // B3C: güvenlik araçları (tanımsız = PATH keşfi); override yalnız programatik enjeksiyondur.
+  security?: SecurityOptions;
 }
 export interface TickReport { skipped?: "BUSY" | "LOCKED"; recovered: string[]; claimed: string[]; cancelled: string[]; fenced: string[]; advanced: string[] }
 
 type Outcome =
-  | {kind: "DONE"; next: RunStep | "FINISHED"; data: Record<string, unknown>; patch?: RunPatch; mission?: MissionStatus}
+  | {kind: "DONE"; next: RunStep | "FINISHED"; data: Record<string, unknown>; patch?: RunPatch; mission?: MissionStatus; approvalReason?: string}
   | {kind: "REMEDIATE"; reason: string; data: Record<string, unknown>; findings: string[]}
   | {kind: "BLOCK"; reason: string; status?: "BLOCKED" | "FAILED" | "QUARANTINED"}
   | {kind: "RETRY"; reason: string}
@@ -32,16 +36,18 @@ type Outcome =
 
 const RUN_ID = /^run_[0-9a-f]{24}$/;
 const SHA = /^[0-9a-f]{40}$/;
-const NEXT: Record<RunStep, RunStep | "FINISHED"> = {WORKSPACE: "IMPLEMENT", IMPLEMENT: "VERIFY", VERIFY: "REVIEW", REVIEW: "REGRESSION", REGRESSION: "REPORT", REPORT: "FINISHED"};
+const NEXT: Record<RunStep, RunStep | "FINISHED"> = {WORKSPACE: "IMPLEMENT", IMPLEMENT: "VERIFY", VERIFY: "SECURITY", SECURITY: "REVIEW", REVIEW: "REGRESSION", REGRESSION: "REPORT", REPORT: "FINISHED"};
 // Adım bittiğinde mission'ın gideceği durum (state machine allowlist'i store tarafından ayrıca uygulanır).
-const MISSION_AFTER: Partial<Record<RunStep, MissionStatus>> = {IMPLEMENT: "VERIFYING", VERIFY: "REVIEWING", REVIEW: "REGRESSION", REGRESSION: "REPORTING"};
-const stepStatus = (s: RunStep): RunStatus => (s === "VERIFY" || s === "REGRESSION" ? "VERIFYING" : "RUNNING");
+const MISSION_AFTER: Partial<Record<RunStep, MissionStatus>> = {IMPLEMENT: "VERIFYING", SECURITY: "REVIEWING", REVIEW: "REGRESSION", REGRESSION: "REPORTING"};
+const stepStatus = (s: RunStep): RunStatus => (s === "VERIFY" || s === "SECURITY" || s === "REGRESSION" ? "VERIFYING" : "RUNNING");
 const sha256 = (b: Buffer | string) => crypto.createHash("sha256").update(b).digest("hex");
 
 export class MissionRunner {
   readonly engineId = `engine_${crypto.randomBytes(6).toString("hex")}`;
   private readonly o: Required<Omit<RunnerOptions, "now">> & {now: () => number};
   private readonly owned = new Map<string, string>();
+  readonly securityTools: SecurityToolset;
+  private readonly securityOpts: SecurityOptions;
   private busy = false;
   private timer: NodeJS.Timeout | null = null;
 
@@ -52,6 +58,9 @@ export class MissionRunner {
       executorTimeoutMs: 60 * 60_000, maxStepsPerTick: Number.POSITIVE_INFINITY, now: Date.now,
       ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined))
     } as unknown as Required<Omit<RunnerOptions, "now">> & {now: () => number};
+    // Araçlar motor başlangıcında bir kez çözülür (PATH -> mutlak yol, sürüm, sha256); her çalıştırmadan önce ikili dosya yeniden doğrulanır.
+    this.securityOpts = opts.security ?? {};
+    this.securityTools = discoverSecurityTools(this.securityOpts, safeChildEnv(opts.envPolicyFile, {provider: "DETERMINISTIC"}));
   }
 
   // In-process zamanlayıcı (control API): single-flight; tick içindeki süreç kilidi ikinci bir süreç/engine'i dışarıda tutar.
@@ -209,7 +218,7 @@ export class MissionRunner {
         const next = out.next === "FINISHED" ? "REPORT" : out.next;
         const mission = MISSION_AFTER[step];
         s.checkpointRun(id, leaseId, {step, data: {...out.data, attempt: run.attempt}}, a, {patch: {...(out.patch ?? {}), step: next, retryCount: 0, retryAt: null}, mission: mission ? {to: mission, reason: `run ${id}: ${step} completed`} : undefined});
-        if (out.next === "FINISHED") s.transitionRun(id, leaseId, "AWAITING_APPROVAL", "DELIVERY_DECISION_PENDING_FOUNDER", a);
+        if (out.next === "FINISHED") s.transitionRun(id, leaseId, "AWAITING_APPROVAL", out.approvalReason ?? "DELIVERY_DECISION_PENDING_FOUNDER", a);
         return;
       }
       case "REMEDIATE": {
@@ -256,9 +265,10 @@ export class MissionRunner {
   private evidence(run: WorkRun, leaseId: string, ev: Omit<RunEvidence, "evidenceId" | "step" | "cycle">): void {
     this.o.store.addRunEvidence(run.runId, leaseId, {step: run.step, cycle: run.remediationCycle, ...ev}, this.o.actor);
   }
-  private procEvidence(run: WorkRun, leaseId: string, kind: string, r: ProcResult, extra: Partial<RunEvidence> = {}): void {
+  private procEvidence(run: WorkRun, leaseId: string, kind: string, r: ProcResult, extra: Partial<RunEvidence> = {}): {logPath: string; logSha256: string} {
     const log = this.writeLog(run, kind.toLowerCase(), `$ ${r.argv.join(" ")}\n[exit=${r.exitCode} timedOut=${r.timedOut} aborted=${r.aborted}]\n--- stdout ---\n${r.stdout}\n--- stderr ---\n${r.stderr}\n`);
     this.evidence(run, leaseId, {kind, argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, ...extra});
+    return log;
   }
   private missionSpec(run: WorkRun): MissionSpec {
     const m = this.o.store.getMission({tenantId: run.tenantId}, run.missionId);
@@ -285,6 +295,7 @@ export class MissionRunner {
       case "WORKSPACE": return this.stepWorkspace(run, leaseId);
       case "IMPLEMENT": return this.stepImplement(run, leaseId, abort);
       case "VERIFY": return this.stepVerify(run, leaseId, abort);
+      case "SECURITY": return this.stepSecurity(run, leaseId, abort);
       case "REVIEW": return this.stepReview(run, leaseId, abort);
       case "REGRESSION": return this.stepRegression(run, leaseId, abort);
       case "REPORT": return this.stepReport(run, leaseId);
@@ -382,8 +393,88 @@ export class MissionRunner {
     this.procEvidence(run, leaseId, "VERIFY_TESTS", r, {commitSha: run.headSha});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     if (r.spawnError) return {kind: "BLOCK", reason: "TEST_COMMAND_SPAWN_FAILED"};
-    if (r.exitCode === 0) return {kind: "DONE", next: "REVIEW", data: {tests: "PASSED", secretHits: 0}};
+    if (r.exitCode === 0) return {kind: "DONE", next: "SECURITY", data: {tests: "PASSED", secretHits: 0}};
     return {kind: "REMEDIATE", reason: r.timedOut ? "TESTS_TIMED_OUT" : "TESTS_FAILED", data: {tests: "FAILED", exitCode: r.exitCode}, findings: [`test command exited ${r.exitCode}`]};
+  }
+
+  // Bare taze klon (çalışma ağacı yok): gitleaks yalnız git geçmişini okur; repodaki .gitleaksignore / .gitleaks.toml okunabilecek bir yer bulunmaz.
+  private bareClone(run: WorkRun, name: string): string | null {
+    const work = path.join(this.runDir(run.runId), "work"), dir = path.join(this.runDir(run.runId), name);
+    this.rmUnderRun(run.runId, dir);
+    if (this.git(this.runDir(run.runId), ["clone", "--no-hardlinks", "--quiet", "--bare", work, dir]).status !== 0) return null;
+    for (const sha of [run.baseSha, run.headSha]) if (!sha || this.gitOk(dir, ["cat-file", "-e", `${sha}^{commit}`]) === null) return null;
+    return dir;
+  }
+
+  // SECURITY (Master §07: QA -> Security -> review): üretilen commit'in taze klonlarında (implementer workspace'inde asla) yerleşik diff taraması + gitleaks (base..head, redakte) + trivy (çevrimdışı, DB indirilmez).
+  // Araç yoksa dürüst durum (TOOL_NOT_INSTALLED), DB yok/eskiyse PARTIAL (TRIVY_DB_UNAVAILABLE), SAST her zaman NOT_AVAILABLE kaydedilir. Adım durumsuzdur: yeniden girişte klonlar sıfırdan kurulur, tarama baştan yapılır.
+  private async stepSecurity(run: WorkRun, leaseId: string, abort: () => boolean): Promise<Outcome> {
+    const base = run.baseSha, head = run.headSha;
+    if (!base || !head || !SHA.test(base) || !SHA.test(head)) return {kind: "BLOCK", reason: "HEAD_COMMIT_MISSING", status: "FAILED"};
+    const startedAt = new Date().toISOString();
+    const secDir = path.join(this.runDir(run.runId), "security"), tag = `c${run.remediationCycle}-a${run.attempt}`;
+    fs.mkdirSync(secDir, {recursive: true});
+    const clone = this.freshClone(run, `security-c${run.remediationCycle}`);
+    if (!clone) return {kind: "BLOCK", reason: "SECURITY_CLONE_FAILED", status: "FAILED"};
+    const diff = this.diff(run, clone, base, head), messages = this.commitMessages(run, clone, base, head);
+    if (diff === null || messages === null) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
+    this.renew(run.runId, leaseId);
+    const builtinHits = scanDiffForSecrets(diff).length + scanCommitMessagesForSecrets(messages).length;
+    const env = safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"});
+    const so = this.securityOpts, ctx = {env, timeoutMs: so.timeoutMs ?? DEFAULT_SECURITY_TIMEOUT_MS, maxReportBytes: so.maxReportBytes ?? DEFAULT_MAX_REPORT_BYTES, abort};
+    const logs: Record<string, {logPath: string | null; logSha256: string | null}> = {};
+    // Kurulu araç her çalıştırmadan önce yeniden doğrulanır (sha256); ERROR durumundaki araç fail-closed hata sayılır.
+    const problem = (t: ResolvedTool): string | null => t.status === "INSTALLED" ? verifyTool(t) : (t.status === "ERROR" ? (t.reason ?? "TOOL_ERROR") : null);
+
+    // ---- gitleaks ----
+    const gt = this.securityTools.gitleaks;
+    let gitleaks: PolicyInput["gitleaks"] = {status: "NOT_INSTALLED", reason: "TOOL_NOT_INSTALLED", count: 0, items: [], rawReportSha256: null};
+    const gProblem = problem(gt);
+    if (gt.status !== "NOT_INSTALLED" && gProblem) gitleaks = {status: "ERROR", reason: gProblem, count: 0, items: [], rawReportSha256: null};
+    else if (gt.status === "INSTALLED") {
+      const bare = this.bareClone(run, `security-gl-c${run.remediationCycle}.git`);
+      if (!bare) return {kind: "BLOCK", reason: "SECURITY_CLONE_FAILED", status: "FAILED"};
+      const cwd = path.join(secDir, "gitleaks-cwd"), configFile = path.join(secDir, "gitleaks.toml"), ignoreFile = path.join(secDir, "gitleaks.ignore");
+      fs.mkdirSync(cwd, {recursive: true});
+      fs.writeFileSync(configFile, "[extend]\nuseDefault = true\n");
+      fs.writeFileSync(ignoreFile, "");
+      const g = await runGitleaks(gt, {bareRepo: bare, base, head, configFile, ignoreFile, reportFile: path.join(secDir, `gitleaks-raw-${tag}.json`), cwd}, ctx);
+      logs.gitleaks = this.procEvidence(run, leaseId, "SECURITY_GITLEAKS", g.proc, {commitSha: head, baseSha: base, note: `gitleaks ${gt.version ?? ""}: ${g.status}${g.reason ? ` ${g.reason}` : ""} findings=${g.count}`.slice(0, 300)});
+      if (g.proc.aborted || abort()) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+      if (g.transient) return {kind: "RETRY", reason: "SECURITY_TOOL_TRANSIENT_FAILURE"};
+      gitleaks = {status: g.status, ...(g.reason ? {reason: g.reason} : {}), count: g.count, items: g.items, rawReportSha256: g.rawReportSha256};
+    }
+
+    // ---- trivy (çevrimdışı; DB indirilmez) ----
+    const tt = this.securityTools.trivy;
+    let trivy: PolicyInput["trivy"] = {status: "NOT_INSTALLED", reason: "TOOL_NOT_INSTALLED", counts: {}, blocking: 0, findings: [], truncated: false, rawReportSha256: null};
+    const tProblem = problem(tt);
+    if (tt.status !== "NOT_INSTALLED" && tProblem) trivy = {...trivy, status: "ERROR", reason: tProblem};
+    else if (tt.status === "INSTALLED") {
+      const cwd = path.join(secDir, "trivy-cwd");
+      fs.mkdirSync(cwd, {recursive: true});
+      const r = await runTrivy(tt, {target: clone, cacheDir: so.trivyCacheDir ?? defaultTrivyCacheDir(), reportFile: path.join(secDir, `trivy-${tag}.json`), cwd, nowMs: (so.now ?? Date.now)(), maxDbAgeMs: so.maxTrivyDbAgeMs ?? DEFAULT_MAX_TRIVY_DB_AGE_MS}, ctx);
+      if (r.proc) {
+        logs.trivy = this.procEvidence(run, leaseId, "SECURITY_TRIVY", r.proc, {commitSha: head, baseSha: base, note: `trivy ${tt.version ?? ""}: ${r.status}${r.reason ? ` ${r.reason}` : ""} db=${r.dbState} blocking=${r.blocking}`.slice(0, 300)});
+        if (r.proc.aborted || abort()) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+        if (r.transient) return {kind: "RETRY", reason: "SECURITY_TOOL_TRANSIENT_FAILURE"};
+      }
+      trivy = {status: r.status, ...(r.reason ? {reason: r.reason} : {}), dbState: r.dbState, counts: r.counts, blocking: r.blocking, findings: r.findings, truncated: r.truncated, rawReportSha256: r.rawReportSha256};
+    }
+    if (abort()) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+
+    const tools = this.securityTools;
+    const summary = evaluateSecurityPolicy({baseSha: base, headSha: head, cycle: run.remediationCycle, tools: [toolInfo(tools.gitleaks), toolInfo(tools.trivy), toolInfo(tools.semgrep)], builtinHits, gitleaks, trivy, semgrep: toolInfo(tools.semgrep)});
+    const reportObj = {runId: run.runId, cycle: run.remediationCycle, attempt: run.attempt, generatedAt: new Date().toISOString(), summary, toolLogs: logs, note: "Secret values are never recorded; raw gitleaks reports are deleted after parsing and only their sha256 is kept."};
+    const bytes = Buffer.from(redactSecrets(JSON.stringify(reportObj, null, 2)) + "\n", "utf8"), file = path.join(secDir, `security-report-${tag}.json`);
+    fs.writeFileSync(file, bytes);
+    const rel = path.relative(this.o.dataDir, file).split(path.sep).join("/");
+    // Journal'daki özet sınırlı tutulur (en fazla 50 zafiyet); tam liste rapor dosyasındadır.
+    const evSummary: SecurityStageSummary = {...summary, sca: {...summary.sca, findings: summary.sca.findings.slice(0, 50), truncated: summary.sca.truncated || summary.sca.findings.length > 50}};
+    this.evidence(run, leaseId, {kind: "SECURITY_REPORT", argv: [], startedAt, endedAt: new Date().toISOString(), exitCode: summary.status === "BLOCKED" ? 1 : 0, logPath: rel, logSha256: sha256(bytes), baseSha: base, commitSha: head, security: evSummary,
+      note: `security=${summary.status}${summary.blockReason ? ` ${summary.blockReason}` : ""}; ${summary.gaps.join(",")}`.slice(0, 500)});
+    if (summary.blockReason) return {kind: "BLOCK", reason: summary.blockReason};
+    return {kind: "DONE", next: "REVIEW", data: {security: summary.status, gaps: summary.gaps, scaCounts: summary.sca.counts, reportPath: rel, reportSha256: sha256(bytes)}};
   }
 
   private freshClone(run: WorkRun, name = `review-c${run.remediationCycle}`): string | null {
@@ -443,10 +534,15 @@ export class MissionRunner {
       deliveryDecision: "PENDING_FOUNDER", delivered: false, note: "No merge, push or COMPLETE transition was performed by the runner."
     };
     if (!review || review.commitSha !== run.headSha) return {kind: "BLOCK", reason: "REVIEW_EVIDENCE_MISSING", status: "FAILED"};
+    // B3C: güvenlik kanıtı üretilen commit için zorunludur; PARTIAL kapsam Founder'a açıkça bildirilir (sessiz geçiş yok).
+    const secEv = [...run.evidence].reverse().find(e => e.kind === "SECURITY_REPORT" && e.commitSha === run.headSha);
+    const sec = secEv?.security;
+    if (!secEv || !sec || sec.status === "BLOCKED") return {kind: "BLOCK", reason: "SECURITY_EVIDENCE_MISSING", status: "FAILED"};
+    (report as Record<string, unknown>).security = {status: sec.status, founderNotice: sec.founderNote, gaps: sec.gaps, secrets: {builtin: sec.secrets.builtin.status, gitleaks: sec.secrets.gitleaks.status}, sca: {status: sec.sca.status, reason: sec.sca.reason ?? null, dbState: sec.sca.dbState ?? null, counts: sec.sca.counts}, sast: sec.sast, sbom: sec.sbom, tools: sec.tools, evidenceId: secEv.evidenceId, reportLogPath: secEv.logPath, reportLogSha256: secEv.logSha256};
     const file = path.join(this.runDir(run.runId), "report.json"), bytes = Buffer.from(JSON.stringify(report, null, 2) + "\n", "utf8");
     fs.writeFileSync(file, bytes);
     const rel = path.relative(this.o.dataDir, file).split(path.sep).join("/");
-    this.evidence(run, leaseId, {kind: "REPORT", argv: [], startedAt, endedAt: new Date().toISOString(), exitCode: 0, logPath: rel, logSha256: sha256(bytes), commitSha: run.headSha ?? undefined, reviewerIdentity: review.reviewerIdentity, verdict: "CLEAN"});
-    return {kind: "DONE", next: "FINISHED", data: {reportPath: rel, reportSha256: sha256(bytes)}};
+    this.evidence(run, leaseId, {kind: "REPORT", argv: [], startedAt, endedAt: new Date().toISOString(), exitCode: 0, logPath: rel, logSha256: sha256(bytes), commitSha: run.headSha ?? undefined, reviewerIdentity: review.reviewerIdentity, verdict: "CLEAN", note: `security=${sec.status}`});
+    return {kind: "DONE", next: "FINISHED", data: {reportPath: rel, reportSha256: sha256(bytes), security: sec.status}, ...(sec.status === "PARTIAL" ? {approvalReason: "DELIVERY_DECISION_PENDING_FOUNDER; SECURITY_COVERAGE_PARTIAL"} : {})};
   }
 }

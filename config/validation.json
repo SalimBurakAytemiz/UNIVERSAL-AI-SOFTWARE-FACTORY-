@@ -309,7 +309,8 @@
         "tests/v7-b9-target-catalog.test.ts",
         "tests/v7-b3a-runner.test.ts",
         "tests/v7-b3a-recovery-budget.test.ts",
-        "tests/v7-b3a-c3-builder-commit.test.ts"
+        "tests/v7-b3a-c3-builder-commit.test.ts",
+        "tests/v7-b3c-security-stage.test.ts"
       ],
       "requiresDependencies": true
     },

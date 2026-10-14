@@ -7,6 +7,7 @@ import crypto from "node:crypto";
 import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
 import {WorkOsStore} from "../core/workos/store.js";
 import {MissionRunner} from "../core/workos/runner.js";
+import {fakeSecurity} from "../core/workos/security-tools.js";
 import {EditOnlyImplementer, FAKE_EXECUTOR_SCRIPT, FakeExecutors} from "../core/workos/executors.js";
 import type {ExecutorPair, ImplementerAdapter} from "../core/workos/executors.js";
 import {BUILDER_GIT_IDENTITY, forbiddenChange} from "../core/workos/builder-output.js";
@@ -52,7 +53,7 @@ function editOnlyPair(directive: unknown, argv?: (ws: string) => string[]): {pai
 }
 async function drive(c: Ctx, pair: ExecutorPair) {
   const r = c.store.createRun({tenantId: "tA", missionId: c.missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
-  await new MissionRunner({store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: 60_000}).tick();
+  await new MissionRunner({store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(`${c.dataDir}-sec`).options}).tick();
   return c.store.getRun({tenantId: "tA"}, r.runId)!;
 }
 const missionStatus = (c: Ctx) => c.store.getMission({tenantId: "tA"}, c.missionId)!.status;
