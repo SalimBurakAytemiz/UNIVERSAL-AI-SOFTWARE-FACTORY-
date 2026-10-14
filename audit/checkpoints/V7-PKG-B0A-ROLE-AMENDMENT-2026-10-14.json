@@ -1,0 +1,31 @@
+{
+  "//TR": "Bu checkpoint, Lane B uygulayıcı rolünü Codex CLI'den bağımsız Claude uygulayıcı ajanına çeviren Founder rol kararının yetki ekidir; korumalı dosya kapsamı FA-V2-PRODUCT ile aynıdır.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-B0A-ROLE-AMENDMENT",
+  "date": "2026-10-14",
+  "parent": "832a704c76d8c4ed91980493159b4c18a9d0b653",
+  "branch": "v7/product-b0",
+  "status": "AUTHORIZATION AMENDMENT RECORD ONLY: no package change applied; not clean; review pending",
+  "founderAuthorization": {
+    "decision": "Founder decision FD-ROLE-CLAUDE-IMPL-2026-10-14 (chat): Codex CLI is not used for UASCO development. Claude Code performs implementation and review as separate, independent, isolated agents. Codex Review is strictly forbidden. This amends FA-V2-PRODUCT-2026-10-14: its implementer clause (Codex CLI) and its clause 'Claude writes no code' are superseded; everything else stays in force.",
+    "rule": "Implementer = a separate Claude agent (CLAUDE_BUILDER) that writes only in the standalone clone. Reviewer = a separate fresh Claude agent with read-only tools in a separate clean clone at the exact commit, with no implementer transcript; it never contributes to the implementation it reviews. Merge gate = governed CLAUDE_REVIEWER broker (builder identity != reviewer identity). Same protected-file limits as FA-V2-PRODUCT: config/validation.json test steps only; ci.yml add-only; trust-root-manifest reseal only.",
+    "protectedFiles": [
+      "apps/desktop/main.mjs",
+      "apps/desktop/preload.mjs",
+      "apps/desktop/renderer/app.js",
+      "apps/desktop/renderer/index.html",
+      "apps/control-api/src/server.ts",
+      "config/validation.json",
+      ".github/workflows/ci.yml",
+      "config/trust-root-manifest.json"
+    ],
+    "constraint": "No other protected file may change; excluded actions: merge to master, push, release, signing, supervisor, watchdog, autostart, production. Known residual risk: implementer and reviewer share one model provider and quota; independence rests on identity, process, workspace and information separation.",
+    "authorizationRecord": {
+      "decisionId": "FD-ROLE-CLAUDE-IMPL-2026-10-14",
+      "amends": "FA-V2-PRODUCT-2026-10-14",
+      "ledger": "C:/Users/salim/UASCO-recovery/governed-review/FOUNDER-AUTHORIZATIONS.jsonl",
+      "notBackdated": true,
+      "recordedBefore": "any protected change of Lane B"
+    }
+  }
+}
