@@ -1,9 +1,10 @@
-# //TR: Bu betik UASCO otonomisinin tek seferlik Windows kurulumudur ve normal (yükseltilmemiş) bir PowerShell penceresinde çalışır; yönetici yetkisi gerekmez ve yükseltilmiş oturumu reddeder. İncelenmiş kontrol düzlemini (master'daki governed birleştirme) kanonik %LOCALAPPDATA%\UASCO\orchestrator\control altında depo Git yalıtımıyla klonlar, trust-root'u ve kalıcı kuyruğu (hash zincirli günlük, governed birleştirme, Global Stop, açık release hattı yok) düzlemin kendi kütüphanesiyle doğrular, bağımlılıkları gözden geçirilmiş kilitle (npm ci) kurar, gözden geçirilmiş kaynaktan bayt bayt aynı kararlı girişi ve gizli pencereli görev sarmalayıcısını kurar, düzlemi tek-worker kilidi altında etkinleştirip (control\current, CURRENT.json, hash zincirli CONTROL_PLANE_ACTIVATED geçişi) UASCO-Autonomous-Supervisor görevini bu kullanıcı için parola saklamadan (Interactive, Limited) oturum açılışı + 15 dakikalık periyotla kaydeder ve ilk çalıştırmanın görev sürecinden gerçekten başladığını doğrulamadan kurulumu tamamlanmış saymaz. Git push, ağ git işlemi, kimlik bilgisi okuma/yazma veya başka bir sistem ayarı değişikliği yapmaz.
+# //TR: Bu betik UASCO otonomisinin tek seferlik Windows kurulumudur ve normal (yükseltilmemiş) bir PowerShell penceresinde çalışır; yönetici yetkisi gerekmez ve yükseltilmiş oturumu reddeder. İncelenmiş kontrol düzlemini (master'daki governed birleştirme) kanonik %LOCALAPPDATA%\UASCO\orchestrator\control altında depo Git yalıtımıyla klonlar, trust-root'u ve kalıcı kuyruğu (hash zincirli günlük, governed birleştirme, Global Stop, açık release hattı yok) düzlemin kendi kütüphanesiyle doğrular, bağımlılıkları gözden geçirilmiş kilitle (npm ci) kurar, gözden geçirilmiş kaynaktan bayt bayt aynı kararlı girişi ve gizli pencereli görev sarmalayıcısını kurar, düzlemi tek-worker kilidi altında etkinleştirip (control\current, CURRENT.json, hash zincirli CONTROL_PLANE_ACTIVATED geçişi) UASCO-Autonomous-Supervisor görevini bu kullanıcı için parola saklamadan (Interactive, Limited) oturum açılışı + 15 dakikalık periyotla kaydeder ve ilk çalıştırmanın görev sürecinden gerçekten başladığını doğrulamadan kurulumu tamamlanmış saymaz. LV1 ile ayrıca canlılık kütüphanesini, bağımsız watchdog betiğini ve pencere açmayan wscript sarmalayıcısını aynı doğrulamayla kurar, UASCO-Supervisor-Watchdog görevini (oturum açılışı + 5 dakikalık periyot, kendi kilidi, 15 dakika süre sınırı) kaydeder ve ilk çalışmasını doğrular; -Upgrade ile çalışan süpervizörü yalnız güvenli bir anda (giriş uyurken veya beklerken, uçuşta eylem ve tick süreci yokken) durdurup yükseltir, güvenli an gelmezse hiçbir şeyi değiştirmeden durur. Git push, ağ git işlemi, kimlik bilgisi okuma/yazma veya başka bir sistem ayarı değişikliği yapmaz.
 <#
 .SYNOPSIS
 One-time UASCO autonomy bootstrap. Run once from a NORMAL Windows PowerShell window (not "Run as administrator"; no admin rights are needed).
--TestMode performs every step under a temporary LOCALAPPDATA and writes the scheduled-task definition to a file instead of registering or starting it.
+-TestMode performs every step under a temporary LOCALAPPDATA and writes the scheduled-task definitions to files instead of registering or starting them.
 -TaskControllerFixture (TestMode only) replaces every Task Scheduler call by an in-memory fake that records the calls (bootstrap\fake-task-controller.json) so the register / read-back / rollback branches run without touching a real scheduled task.
+-Upgrade upgrades an installation whose supervisor task is running: it waits (up to 30 minutes) for a safe point, stops the task, installs and restarts both tasks.
 #>
 [CmdletBinding()]
 param(
@@ -11,11 +12,18 @@ param(
   [switch]$TestMode,
   [string]$DependencySource,
   [switch]$ProbeTaskRegistration,
-  [string]$TaskControllerFixture
+  [string]$TaskControllerFixture,
+  [switch]$Upgrade
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $TaskName = "UASCO-Autonomous-Supervisor"
+$WatchdogTaskName = "UASCO-Supervisor-Watchdog"
+$script:SupervisorDisabledForUpgrade = $false
+$script:TaskRegistered = $false; $script:WatchdogRegistered = $false; $script:RolledBack = $false
+$script:UpgradeMarker = $null
+$script:UpgradeMarkerDoc = $null
+$script:BootstrapMutex = $null
 $script:Log = $null
 $script:StartUtc = [DateTime]::UtcNow
 
@@ -29,9 +37,82 @@ function Get-SafeText([string]$text) {
   if ($t.Length -gt 700) { $t = $t.Substring(0, 700) + "..." }
   return $t
 }
+# //TR: Yükseltme için devre dışı bırakılan görevler her çıkış yolunda (başarısızlık, istisna, Ctrl+C) yeniden etkinleştirilir; kurulum eski haliyle çalışmaya ve izlenmeye devam eder. Ana gövde bunu bir finally bloğunda da çağırır.
+function Restore-TasksAfterFailure {
+  # //TR: Geri alma (BS1R) bir görevi devre dışı bıraktı veya kaldırdıysa geri alınan durum kazanır: yükseltme için devre dışı bırakılan görev yeniden etkinleştirilmez.
+  if ($script:SupervisorDisabledForUpgrade -and -not $script:RolledBack) { try { Invoke-TaskCtl "Enable" } catch { }; $script:SupervisorDisabledForUpgrade = $false; Write-Host "SUPERVISOR_REENABLED_AFTER_FAILURE" }
+  if ($script:UpgradeMarker) { if (Test-UpgradeMarkerOwned) { Remove-Item -LiteralPath $script:UpgradeMarker -Force -ErrorAction SilentlyContinue }; $script:UpgradeMarker = $null }
+}
+# //TR: İşaret bu bootstrap'ın mı (aynı PID ve başlangıç zamanı)? Başka bir bootstrap'ın yazdığı veya watchdog'un iyileştirdiği işarete dokunulmaz; sahiplik kurulumdan ve görev kaydından önce de denetlenir.
+function Test-UpgradeMarkerOwned {
+  if (-not $script:UpgradeMarker -or $null -eq $script:UpgradeMarkerDoc) { return $false }
+  $m = Read-JsonOrNull $script:UpgradeMarker
+  return ($null -ne $m -and [string](Get-JsonField $m "pid") -eq [string]$PID -and [string](Get-JsonField $m "startedAt") -eq [string]$script:UpgradeMarkerDoc["startedAt"])
+}
 function Stop-Bootstrap([string]$code, [string]$detail = "") {
   Write-Step ("BOOTSTRAP_FAILED: {0} {1}" -f $code, (Get-SafeText $detail))
+  Restore-TasksAfterFailure
   exit 1
+}
+function Get-JsonField($object, [string]$name) {
+  if ($null -ne $object -and ($object.PSObject.Properties.Name -contains $name)) { return $object.$name }
+  return $null
+}
+function Read-JsonOrNull([string]$file) {
+  if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { return $null }
+  try { return (Get-Content -LiteralPath $file -Raw | ConvertFrom-Json) } catch { return $null }
+}
+function Get-SecondsFrom([object]$iso, [DateTime]$nowUtc) {
+  try { return ([DateTime]::Parse([string]$iso).ToUniversalTime() - $nowUtc).TotalSeconds } catch { return $null }
+}
+# //TR: Yükseltme güvenli anı (dosya sistemine dokunmayan saf karar; boş dize güvenli demektir): tick/başlatıcı süreci veya uçuşta eylem varsa güvenli değildir; taze (180 sn) canlılık kalp atışı BLOCKED ise ya da SLEEPING/WAITING iken bir sonraki uyanmaya en az 60 sn varsa güvenlidir; canlılık kalp atışı olmayan (1. nesil) girişte giriş kalp atışı çıkış durumundaysa ya da SLEEPING iken bir sonraki yinelemeye en az 60 sn varsa güvenlidir; diğer her durum nedeniyle döner.
+function Resolve-UpgradeSafePoint($entryHb, $liveHb, [DateTime]$nowUtc, [int]$workerProcesses, [int]$inFlight) {
+  if ($workerProcesses -gt 0) { return "WORKER_PROCESS_RUNNING" }
+  if ($inFlight -gt 0) { return "ACTION_IN_FLIGHT" }
+  $liveAge = $null; if ($liveHb) { $liveAge = Get-SecondsFrom (Get-JsonField $liveHb "heartbeatAt") $nowUtc }
+  if ($null -ne $liveAge -and $liveAge -ge -180 -and $liveAge -le 30) {
+    $state = [string](Get-JsonField $liveHb "state")
+    if ($state -eq "BLOCKED") { return "" }
+    $wake = Get-SecondsFrom (Get-JsonField $liveHb "nextWakeAt") $nowUtc
+    if ((@("SLEEPING", "WAITING", "RECOVERING") -contains $state) -and ([string](Get-JsonField $liveHb "phase") -eq "SLEEPING") -and $null -eq (Get-JsonField $liveHb "activeChildProcess") -and $null -ne $wake -and $wake -ge 60) { return "" }
+    return "SUPERVISOR_$state"
+  }
+  if ($entryHb) {
+    $state = [string](Get-JsonField $entryHb "state")
+    if (@("BROKEN", "UPGRADE_BLOCKED", "STOPPED", "TICK_FATAL") -contains $state) { return "" }
+    $next = Get-SecondsFrom (Get-JsonField $entryHb "nextIterationAt") $nowUtc
+    if ($state -eq "SLEEPING" -and $null -ne $next -and $next -ge 60) { return "" }
+    return "ENTRY_$state"
+  }
+  return "SUPERVISOR_STATE_UNKNOWN"
+}
+# //TR: Bu kontrol kökünün süpervizör süreçleri (sarmalayıcı, giriş, tick, başlatıcı) komut satırından bulunur; "worker" yalnız tick ve başlatıcıdır. Sıra önce köktür (sarmalayıcı, giriş, sonra worker).
+function Get-SupervisorProcessRank([string]$commandLine) {
+  if ($commandLine -match 'supervisor-task\.ps1') { return 0 }
+  if ($commandLine -match 'supervisor-entry\.mjs') { return 1 }
+  return 2
+}
+function Get-SupervisorProcesses([string]$controlRoot, [string]$kind) {
+  $pattern = $(if ($kind -eq "worker") { 'uasco-(orchestrator|supervisor-launcher)\.mjs' } else { 'uasco-(supervisor-task\.ps1|supervisor-entry\.mjs|orchestrator\.mjs|supervisor-launcher\.mjs)' })
+  return @(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.IndexOf($controlRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.CommandLine -match $pattern } | Sort-Object { Get-SupervisorProcessRank $_.CommandLine })
+}
+# //TR: Bu kontrol kökünün watchdog süreçleri (wscript sarmalayıcısı ve node watchdog'u).
+function Get-WatchdogProcesses([string]$controlRoot) {
+  return @(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.IndexOf($controlRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.CommandLine -match 'uasco-supervisor-watchdog(-task\.vbs|\.mjs)' })
+}
+function Test-GlobalStopPresent([string]$repo) {
+  foreach ($stopFile in @((Join-Path $repo ".ai\runtime\GLOBAL_STOP.json"), (Join-Path $repo ".ai\runtime\GLOBAL_STOP.json.prev"))) { if (Test-Path -LiteralPath $stopFile) { return $true } }
+  return $false
+}
+function Get-InFlightCount([string]$stateFile) {
+  $doc = Read-JsonOrNull $stateFile
+  if (-not $doc) { return 1 }
+  $control = Get-JsonField $doc "control"; $n = 0
+  foreach ($group in @((Get-JsonField $control "packages"), (Get-JsonField $control "releases"))) {
+    if ($null -eq $group) { continue }
+    foreach ($p in $group.PSObject.Properties) { if (Get-JsonField $p.Value "inFlight") { $n++ } }
+  }
+  return $n
 }
 # //TR: Görev komut satırına veya cmdlet'lere giren her yol aynı doğrulayıcıdan geçer: mutlak yerel yol, sürücü kökü değil; tırnak, yüzde (Task Scheduler %VAR% genişletir), ters tırnak, köşeli parantez, joker ve kontrol karakteri yok; sonda ters eğik çizgi, nokta veya boşluk yok.
 function Get-SafePath([string]$value, [string]$label, [switch]$MustExist) {
@@ -63,9 +144,11 @@ function Read-FreshJson([string]$File, [string]$Field, [DateTime]$AfterUtc) {
 function Resolve-FirstRunState($hb, [bool]$daemonFresh) {
   if (-not $hb -or -not ($hb.PSObject.Properties.Name -contains "state")) { return "" }
   $state = [string]$hb.state
-  if (@("BROKEN", "UPGRADE_BLOCKED", "TICK_TIMEOUT", "LAUNCHER_KILLED_HUNG", "STOPPED") -contains $state) { return "FIRST_RUN_FAILED" }
+  if (@("BROKEN", "UPGRADE_BLOCKED", "TICK_TIMEOUT", "LAUNCHER_KILLED_HUNG", "STOPPED", "TICK_FATAL") -contains $state) { return "FIRST_RUN_FAILED" }
   # //TR: Başlatıcı 0 koduyla biterse (ör. governed kendini yükseltme veya Global Stop) bu bir karar değildir ve yoklama sürer; sıfırdan farklı veya bilinmeyen kod başarısızlıktır.
   if ($state -eq "LAUNCHER_EXITED") { $code = [long]-1; if (($hb.PSObject.Properties.Name -contains "exitCode") -and ($null -ne $hb.exitCode) -and [long]::TryParse([string]$hb.exitCode, [ref]$code) -and ($code -eq 0)) { return "" }; return "FIRST_RUN_FAILED" }
+  # //TR: Yükseltme beklemesindeki (UPGRADE_QUIESCE) bir giriş henüz tick yapmamıştır: karar yoktur.
+  if (($hb.PSObject.Properties.Name -contains "reason") -and ([string]$hb.reason -eq "UPGRADE_QUIESCE")) { return "" }
   if ($state -eq "TICK_FINISHED" -or $state -eq "SLEEPING") {
     $t = $null; if ($hb.PSObject.Properties.Name -contains "tick") { $t = $hb.tick }
     if ($t -and ($t.PSObject.Properties.Name -contains "code") -and ($t.code -eq 0) -and -not (($t.PSObject.Properties.Name -contains "timedOut") -and $t.timedOut) -and ($t.PSObject.Properties.Name -contains "status") -and ([string]$t.status -eq "TICK_DONE")) { return "FIRST_RUN_CONFIRMED" }
@@ -162,6 +245,15 @@ function New-SupervisorTask([string]$powershell, [string]$argumentLine, [string]
   $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
   return New-ScheduledTask -Action $action -Trigger @($logon, $periodic) -Settings $settings -Principal $principal -Description "UASCO autonomous construction supervisor (hidden wrapper -> stable entry -> reviewed control plane via control\current)"
 }
+# //TR: Bağımsız watchdog görevi: aynı kullanıcı, parola saklanmaz (Interactive, Limited); oturum açılışı + 5 dakikalık periyot; IgnoreNew; 15 dakika süre sınırı; pencere açmayan wscript sarmalayıcısı. Süpervizörün lease'ini veya tek-worker kilidini paylaşmaz.
+function New-WatchdogTask([string]$wscript, [string]$argumentLine, [string]$workingDirectory, [string]$userId, [switch]$Disabled, [int]$FirstRunMinutes = 1) {
+  $action = New-ScheduledTaskAction -Execute $wscript -Argument $argumentLine -WorkingDirectory $workingDirectory
+  $logon = New-ScheduledTaskTrigger -AtLogOn -User $userId
+  $periodic = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes($FirstRunMinutes)) -RepetitionInterval (New-TimeSpan -Minutes 5)
+  $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 5 -Disable:$Disabled
+  $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
+  return New-ScheduledTask -Action $action -Trigger @($logon, $periodic) -Settings $settings -Principal $principal -Description "UASCO independent supervisor watchdog (windowless wscript wrapper -> installed watchdog; restarts a dead, frozen, hung or livelocked supervisor)"
+}
 function Get-TaskFacts($task) {
   $a = @($task.Actions)
   $triggers = @($task.Triggers | ForEach-Object {
@@ -181,7 +273,7 @@ function Get-TaskFacts($task) {
 $script:TaskFake = $null
 function Save-FakeTask {
   $f = $script:TaskFake
-  Write-JsonAtomic $f.file ([ordered]@{ calls = @($f.calls); final = [ordered]@{ present = $f.present; state = $f.state; xml = $f.xml; facts = $f.facts } })
+  Write-JsonAtomic $f.file ([ordered]@{ calls = @($f.calls); final = [ordered]@{ present = $f.present; state = $f.state; xml = $f.xml; facts = $f.facts }; watchdogCalls = @($f.wdCalls); watchdogFinal = [ordered]@{ present = $f.wd.present; state = $f.wd.state; registered = $f.wd.registered } })
 }
 function Initialize-FakeTask([string]$fixtureFile, [string]$storeFile) {
   $fx = Get-Content -LiteralPath $fixtureFile -Raw | ConvertFrom-Json
@@ -189,7 +281,10 @@ function Initialize-FakeTask([string]$fixtureFile, [string]$storeFile) {
   $script:TaskFake = @{ file = $storeFile; calls = [System.Collections.Generic.List[string]]::new(); present = $false; state = "ABSENT"; xml = $null; facts = $null
     preExisting = (($names -contains "preExisting") -and [bool]$fx.preExisting); readBackMismatch = (($names -contains "readBackMismatch") -and [bool]$fx.readBackMismatch); failDisable = (($names -contains "failDisable") -and [bool]$fx.failDisable); failUnregister = (($names -contains "failUnregister") -and [bool]$fx.failUnregister); failRestore = (($names -contains "failRestore") -and [bool]$fx.failRestore); failRegister = (($names -contains "failRegister") -and [bool]$fx.failRegister)
     failRecordWrite = (($names -contains "failRecordWrite") -and [bool]$fx.failRecordWrite); failTaskInfo = (($names -contains "failTaskInfo") -and [bool]$fx.failTaskInfo)
-    firstRunVerdict = $(if ($names -contains "firstRunVerdict") { [string]$fx.firstRunVerdict } else { "" }) }
+    firstRunVerdict = $(if ($names -contains "firstRunVerdict") { [string]$fx.firstRunVerdict } else { "" })
+    wdCalls = [System.Collections.Generic.List[string]]::new(); wd = @{ present = $false; state = "ABSENT"; facts = $null; registered = $false }
+    watchdogReadBackMismatch = (($names -contains "watchdogReadBackMismatch") -and [bool]$fx.watchdogReadBackMismatch); watchdogNotConfirmed = (($names -contains "watchdogNotConfirmed") -and [bool]$fx.watchdogNotConfirmed); watchdogPreExisting = (($names -contains "watchdogPreExisting") -and [bool]$fx.watchdogPreExisting) }
+  if ($script:TaskFake.watchdogPreExisting) { $script:TaskFake.wd.present = $true; $script:TaskFake.wd.state = "Ready" }
   if ($script:TaskFake.preExisting) { $script:TaskFake.present = $true; $script:TaskFake.state = "Ready"; $script:TaskFake.xml = "<Task>PRE-EXISTING-DEFINITION</Task>"; $script:TaskFake.facts = [ordered]@{ marker = "pre-existing" } }
   Save-FakeTask
 }
@@ -206,6 +301,7 @@ function Invoke-TaskCtl([string]$op, $arg = $null) {
       "Unregister" { Unregister-ScheduledTask -TaskName $TaskName -TaskPath "\" -Confirm:$false; return }
       "Start" { Start-ScheduledTask -TaskName $TaskName -TaskPath "\"; return }
       "Stop" { Stop-ScheduledTask -TaskName $TaskName -TaskPath "\"; return }
+      "Enable" { Enable-ScheduledTask -TaskName $TaskName -TaskPath "\" | Out-Null; return }
       "Info" { return (Get-ScheduledTaskInfo -TaskName $TaskName -TaskPath "\").LastTaskResult }
       "State" { $t = @(Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue); if ($t.Count -eq 0) { return "ABSENT" }; return [string]$t[0].State }
     }
@@ -231,10 +327,45 @@ function Invoke-TaskCtl([string]$op, $arg = $null) {
       "Unregister" { if ($f.failUnregister) { throw "FAKE_UNREGISTER_FAILED" }; $f.present = $false; $f.state = "ABSENT"; return }
       "Start" { $f.state = "Running"; return }
       "Stop" { if ($f.present -and $f.state -eq "Running") { $f.state = "Ready" }; return }
+      "Enable" { if ($f.present -and $f.state -eq "Disabled") { $f.state = "Ready" }; return }
       "Info" { if ($f.failTaskInfo) { throw "FAKE_TASK_INFO_FAILED" }; return 0 }
       "State" { if (-not $f.present) { return "ABSENT" }; return [string]$f.state }
     }
     throw "UNKNOWN_TASK_OP $op"
+  } finally { Save-FakeTask }
+}
+# //TR: Watchdog görevine giden her çağrı da tek denetleyiciden geçer (gerçek kipte Task Scheduler cmdlet'leri; sahte denetleyicide bellekteki wd kaydı ve ayrı watchdogCalls listesi, böylece süpervizör görevinin çağrı dizileri değişmez).
+function Invoke-WatchdogCtl([string]$op, $arg = $null) {
+  $f = $script:TaskFake
+  if (-not $f) {
+    switch ($op) {
+      "Find" { return @(Get-ScheduledTask -TaskName $WatchdogTaskName -TaskPath "\" -ErrorAction SilentlyContinue) }
+      "Facts" { return (Get-TaskFacts (Get-ScheduledTask -TaskName $WatchdogTaskName -TaskPath "\")) }
+      "Register" { Register-ScheduledTask -TaskName $WatchdogTaskName -InputObject $arg -Force | Out-Null; return }
+      "Disable" { Disable-ScheduledTask -TaskName $WatchdogTaskName -TaskPath "\" | Out-Null; return }
+      "Stop" { Stop-ScheduledTask -TaskName $WatchdogTaskName -TaskPath "\" -ErrorAction SilentlyContinue; return }
+      "State" { $t = @(Get-ScheduledTask -TaskName $WatchdogTaskName -TaskPath "\" -ErrorAction SilentlyContinue); if ($t.Count -eq 0) { return "ABSENT" }; return [string]$t[0].State }
+    }
+    throw "UNKNOWN_WATCHDOG_OP $op"
+  }
+  $f.wdCalls.Add($op)
+  try {
+    switch ($op) {
+      "Find" {
+        if (-not $f.wd.present) { return @() }
+        return @([pscustomobject]@{ TaskPath = "\"; State = $f.wd.state; Actions = @([pscustomobject]@{ Execute = $wscriptExe; Arguments = ('//B //Nologo "{0}" "old"' -f $watchdogWrapper) }) })
+      }
+      "Facts" { if (-not $f.wd.present) { throw "WATCHDOG_ABSENT" }; return $f.wd.facts }
+      "Register" {
+        $nf = Get-TaskFacts $arg
+        if ($f.watchdogReadBackMismatch) { $nf.arguments = [string]$nf.arguments + " TAMPERED" }
+        $f.wd.present = $true; $f.wd.state = "Ready"; $f.wd.facts = $nf; $f.wd.registered = $true; return
+      }
+      "Disable" { if ($f.wd.present) { $f.wd.state = "Disabled" }; return }
+      "Stop" { if ($f.wd.present -and $f.wd.state -eq "Running") { $f.wd.state = "Ready" }; return }
+      "State" { if (-not $f.wd.present) { return "ABSENT" }; return [string]$f.wd.state }
+    }
+    throw "UNKNOWN_WATCHDOG_OP $op"
   } finally { Save-FakeTask }
 }
 # //TR: Kayıttan sonraki doğrulama (veya ilk çalıştırmayı başlatma) başarısız olursa bu görev çalıştırılabilir bırakılmaz. Anlambilim: bu çalıştırmadan ÖNCE var olan bir görev ASLA silinmez; önceki tanım (kayıttan önce dışa aktarılan XML) geri yüklenir ve DEVRE DIŞI bırakılır (geri yükleme olmazsa yeni tanım devre dışı bırakılır); önceden yoksa bu çalıştırmanın oluşturduğu görev kaldırılır (kaldırma olmazsa devre dışı bırakılır). Sonunda görev yok ya da Disabled değilse sonuç güvenli sayılmaz.
@@ -273,19 +404,25 @@ if ($ProbeTaskRegistration) {
   $psExe = Get-SafePath (Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe") "powershell.exe" -MustExist
   $nodeProbe = Get-SafePath ((Get-Command node.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source) "node.exe" -MustExist
   $probeArgs = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Repo "{1}" -Node "{2}"' -f (Join-Path $realLocalAppData "UASCO\orchestrator\bootstrap\uasco-supervisor-task.ps1"), (Get-SafePath $Repo "Repo" -MustExist), $nodeProbe
-  $built = New-SupervisorTask $psExe $probeArgs $realLocalAppData $userId -Disabled
-  $builtFacts = Get-TaskFacts $built
-  $back = $null
-  try {
-    Register-ScheduledTask -TaskName $probeTask -InputObject $built | Out-Null
-    $back = Get-TaskFacts (Get-ScheduledTask -TaskName $probeTask -TaskPath "\")
-  } finally { Unregister-ScheduledTask -TaskName $probeTask -TaskPath "\" -Confirm:$false -ErrorAction SilentlyContinue }
-  $left = @(Get-ScheduledTask -TaskName $probeTask -ErrorAction SilentlyContinue).Count
-  $same = $back -and ((ConvertTo-ComparableFacts $back) -eq (ConvertTo-ComparableFacts $builtFacts))
-  Write-Host ("TASK_REGISTRATION_PROBE: {0} removed={1}" -f $(if ($same) { "PASS" } else { "FAIL" }), ($left -eq 0))
-  Write-Host ("BUILT " + ($builtFacts | ConvertTo-Json -Depth 6 -Compress))
-  Write-Host ("READ  " + ($back | ConvertTo-Json -Depth 6 -Compress))
-  if ($same -and $left -eq 0) { exit 0 } else { exit 1 }
+  $wsExe = Get-SafePath (Join-Path $env:SystemRoot "System32\wscript.exe") "wscript.exe" -MustExist
+  $wdArgs = '//B //Nologo "{0}" "{1}" "{2}"' -f (Join-Path $realLocalAppData "UASCO\orchestrator\bootstrap\uasco-supervisor-watchdog-task.vbs"), (Get-SafePath $Repo "Repo" -MustExist), $nodeProbe
+  $allSame = $true
+  foreach ($probe in @(@{ kind = "SUPERVISOR"; built = (New-SupervisorTask $psExe $probeArgs $realLocalAppData $userId -Disabled) }, @{ kind = "WATCHDOG"; built = (New-WatchdogTask $wsExe $wdArgs $realLocalAppData $userId -Disabled) })) {
+    $probeTask = "UASCO-LV1-RegistrationProbe-{0}-{1}" -f $probe.kind, ([Guid]::NewGuid().ToString("N").Substring(0, 12))
+    $builtFacts = Get-TaskFacts $probe.built
+    $back = $null
+    try {
+      Register-ScheduledTask -TaskName $probeTask -InputObject $probe.built | Out-Null
+      $back = Get-TaskFacts (Get-ScheduledTask -TaskName $probeTask -TaskPath "\")
+    } finally { Unregister-ScheduledTask -TaskName $probeTask -TaskPath "\" -Confirm:$false -ErrorAction SilentlyContinue }
+    $left = @(Get-ScheduledTask -TaskName $probeTask -ErrorAction SilentlyContinue).Count
+    $same = $back -and ((ConvertTo-ComparableFacts $back) -eq (ConvertTo-ComparableFacts $builtFacts)) -and $left -eq 0
+    if (-not $same) { $allSame = $false }
+    Write-Host ("TASK_REGISTRATION_PROBE {0}: {1} removed={2}" -f $probe.kind, $(if ($same) { "PASS" } else { "FAIL" }), ($left -eq 0))
+    Write-Host ("BUILT " + ($builtFacts | ConvertTo-Json -Depth 6 -Compress))
+    Write-Host ("READ  " + ($back | ConvertTo-Json -Depth 6 -Compress))
+  }
+  if ($allSame) { exit 0 } else { exit 1 }
 }
 if ($TestMode) {
   $localAppData = Get-SafePath $env:LOCALAPPDATA "LOCALAPPDATA" -MustExist
@@ -300,6 +437,12 @@ if ($TestMode) {
   if (-not [string]::Equals(([string]$env:LOCALAPPDATA).TrimEnd('\'), $localAppData, [StringComparison]::OrdinalIgnoreCase)) { Stop-Bootstrap "LOCALAPPDATA_MISMATCH" ("env={0} profile={1}" -f $env:LOCALAPPDATA, $localAppData) }
 }
 $ControlRoot = Get-SafePath (Join-Path $localAppData "UASCO\orchestrator") "ControlRoot"
+# //TR: Aynı kontrol kökü için tek bootstrap: ikinci bir örnek (ör. aynı komut iki pencerede) hiçbir şeye dokunmadan durur. Adlandırılmış mutex süreç bitince (pencere kapansa da) kendiliğinden serbest kalır; terk edilmiş bir mutex alınmış sayılır.
+$mutexKey = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes(([string]$ControlRoot).ToLowerInvariant()))).Replace("-", "").Substring(0, 16)
+$script:BootstrapMutex = New-Object System.Threading.Mutex($false, ("Local\UASCO-Bootstrap-" + $mutexKey))
+$mutexHeld = $false
+try { $mutexHeld = $script:BootstrapMutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $mutexHeld = $true }
+if (-not $mutexHeld) { Stop-Bootstrap "BOOTSTRAP_ALREADY_RUNNING" "another bootstrap for this control root is running; nothing was changed" }
 
 # ---------------------------------------------------------------- 2. inputs and tools
 $repoPath = Get-SafePath $Repo "Repo" -MustExist
@@ -309,7 +452,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $repoPath ".git"))) { Stop-Bootstrap
 if (-not (Test-Path -LiteralPath (Join-Path $repoPath ".ai\cache\review\ORCHESTRATOR_STATE.json") -PathType Leaf)) { Stop-Bootstrap "DURABLE_STATE_MISSING" $repoPath }
 if (Test-Under $repoPath $ControlRoot) { Stop-Bootstrap "CONTROL_ROOT_INSIDE_REPO" }
 $source = Get-SafePath (Split-Path -Parent $PSScriptRoot) "BootstrapSource" -MustExist
-$installFiles = @("scripts/bootstrap-uasco-autonomy.ps1", "scripts/uasco-supervisor-entry.mjs", "scripts/uasco-supervisor-task.ps1")
+$runtimeFiles = @("scripts/uasco-liveness.mjs", "scripts/uasco-supervisor-watchdog.mjs", "scripts/uasco-supervisor-watchdog-task.vbs", "scripts/uasco-supervisor-task.ps1", "scripts/uasco-supervisor-entry.mjs")
+$installFiles = @("scripts/bootstrap-uasco-autonomy.ps1") + $runtimeFiles
 foreach ($rel in $installFiles) { if (-not (Test-Path -LiteralPath (Join-Path $source $rel) -PathType Leaf)) { Stop-Bootstrap "BOOTSTRAP_SOURCE_FILE_MISSING" $rel } }
 $nodeCmd = Get-Command node.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 $gitCmd = Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -319,6 +463,7 @@ $script:Node = Get-SafePath $nodeCmd.Source "node.exe" -MustExist
 $script:Git = Get-SafePath $gitCmd.Source "git.exe" -MustExist
 if (-not $script:Node.EndsWith("\node.exe", [StringComparison]::OrdinalIgnoreCase)) { Stop-Bootstrap "NODE_PATH_UNEXPECTED" $script:Node }
 $powershellExe = Get-SafePath (Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe") "powershell.exe" -MustExist
+$wscriptExe = Get-SafePath (Join-Path $env:SystemRoot "System32\wscript.exe") "wscript.exe" -MustExist
 $nodeVersion = (& $script:Node --version) -join ""
 if ($nodeVersion -notmatch '^v(\d+)\.' -or [int]$Matches[1] -lt 24) { Stop-Bootstrap "NODE_24_REQUIRED" $nodeVersion }
 $gitVersion = (& $script:Git --version) -join ""
@@ -361,7 +506,7 @@ foreach ($rel in $installFiles) {
 $staging = Join-Path $bootDir ("staging-{0}" -f $PID)
 New-Item -ItemType Directory -Path $staging -Force | Out-Null
 $staged = @{}
-foreach ($rel in @("scripts/uasco-supervisor-entry.mjs", "scripts/uasco-supervisor-task.ps1")) {
+foreach ($rel in $runtimeFiles) {
   $dst = Join-Path $staging (Split-Path -Leaf $rel)
   Copy-Item -LiteralPath (Join-Path $source ($rel -replace '/', '\')) -Destination $dst -Force
   $blobStaged = ((Invoke-Git @("hash-object", "--no-filters", "--", $dst) $source "BOOTSTRAP_STAGING_HASH_FAILED") -join "").Trim()
@@ -376,8 +521,21 @@ if ((Test-Path -LiteralPath $link) -and -not ((Get-Item -LiteralPath $link -Forc
 $wrapper = Join-Path $bootDir "uasco-supervisor-task.ps1"
 $entry = Join-Path $bootDir "uasco-supervisor-entry.mjs"
 $argumentLine = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Repo "{1}" -Node "{2}"' -f $wrapper, $repoPath, $script:Node
+$watchdogScript = Join-Path $bootDir "uasco-supervisor-watchdog.mjs"
+$watchdogWrapper = Join-Path $bootDir "uasco-supervisor-watchdog-task.vbs"
+$livenessLib = Join-Path $bootDir "uasco-liveness.mjs"
+$watchdogArgumentLine = '//B //Nologo "{0}" "{1}" "{2}"' -f $watchdogWrapper, $repoPath, $script:Node
 $previousXml = $null; $hadPrevious = $false
+$existing = @()
 if ((-not $TestMode) -or $script:TaskFake) {
+  # //TR: Aynı adlı bir watchdog görevi varsa bizim olmalıdır (kök yol, tek eylem, bu kontrol kökünün wscript sarmalayıcısı); değilse kurulum durur ve ona dokunulmaz.
+  $existingWatchdog = @(Invoke-WatchdogCtl "Find")
+  if ($existingWatchdog.Count -gt 1) { Stop-Bootstrap "TASK_NAME_AMBIGUOUS" ("{0} tasks named {1}" -f $existingWatchdog.Count, $WatchdogTaskName) }
+  if ($existingWatchdog.Count -eq 1) {
+    $wa = @($existingWatchdog[0].Actions)
+    $wdOurs = ($existingWatchdog[0].TaskPath -eq "\") -and ($wa.Count -eq 1) -and ($wa[0].Execute -eq $wscriptExe) -and ([string]$wa[0].Arguments).StartsWith(('//B //Nologo "{0}" "' -f $watchdogWrapper), [StringComparison]::OrdinalIgnoreCase)
+    if (-not $wdOurs) { Stop-Bootstrap "TASK_NAME_CONFLICT" (@($wa | ForEach-Object { "$($_.Execute) $($_.Arguments)" }) -join " | ") }
+  }
   $existing = @(Invoke-TaskCtl "Find")
   if ($existing.Count -gt 1) { Stop-Bootstrap "TASK_NAME_AMBIGUOUS" ("{0} tasks named {1}" -f $existing.Count, $TaskName) }
   if ($existing.Count -eq 1) {
@@ -386,7 +544,7 @@ if ((-not $TestMode) -or $script:TaskFake) {
       ($acts[0].Execute -eq $powershellExe -and ([string]$acts[0].Arguments).StartsWith(('-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Repo "' -f $wrapper), [StringComparison]::OrdinalIgnoreCase)) -or
       ($acts[0].Execute -like "*\node.exe" -and ([string]$acts[0].Arguments).StartsWith('"' + $controlDir + '\', [StringComparison]::OrdinalIgnoreCase) -and ([string]$acts[0].Arguments) -match 'scripts\\uasco-(orchestrator|supervisor-launcher)\.mjs" --'))
     if (-not $ours) { Stop-Bootstrap "TASK_NAME_CONFLICT" (@($acts | ForEach-Object { "$($_.Execute) $($_.Arguments)" }) -join " | ") }
-    if ([string]$e.State -eq "Running") { Stop-Bootstrap "SUPERVISOR_ALREADY_RUNNING" "the supervisor is running; the bootstrap is only needed again if the installation is broken" }
+    if ([string]$e.State -eq "Running" -and -not $Upgrade) { Stop-Bootstrap "SUPERVISOR_ALREADY_RUNNING" "the supervisor is running; the bootstrap is only needed again if the installation is broken, or with -Upgrade to install a newer reviewed entry and watchdog at a safe point" }
     # //TR: Var olan (bizim) tanım kayıttan ÖNCE dışa aktarılır; boş dışa aktarım güvenli geri yüklemeyi imkânsız kılar ve hiçbir şey değişmeden durulur.
     $previousXml = [string](Invoke-TaskCtl "Export")
     if ([string]::IsNullOrWhiteSpace($previousXml)) { Stop-Bootstrap "PREVIOUS_TASK_EXPORT_FAILED" $TaskName }
@@ -454,9 +612,73 @@ if ($TestMode -and $DependencySource -and -not (Test-Path -LiteralPath (Join-Pat
 $deps = Invoke-Tool $script:Node @((Join-Path $plane "scripts\ensure-dependencies.mjs")) $plane "PLANE_DEPENDENCIES_FAILED"
 Write-Step ("PLANE_DEPENDENCIES " + ((@($deps) | Select-Object -Last 1) -join ""))
 
-# ---------------------------------------------------------------- 8. install the stable entry and the hidden task wrapper (byte-identical to the verified source)
+# ---------------------------------------------------------------- 7b. upgrade: quiesce a running supervisor at a safe point (never inside a tick or an in-flight action)
+# //TR: Buradan sonuna kadar her çıkış yolu (başarısızlık, istisna, Ctrl+C) yükseltme için devre dışı bırakılan görevleri finally bloğunda yeniden etkinleştirir.
+$upgradeInfo = $null
+try {
+if (((-not $TestMode) -or $script:TaskFake) -and $existing.Count -eq 1) {
+  $entryHbFile = Join-Path $bootDir "ENTRY_HEARTBEAT.json"; $liveHbFile = Join-Path $ControlRoot "liveness\SUPERVISOR_HEARTBEAT.json"; $stateFile = Join-Path $repoPath ".ai\cache\review\ORCHESTRATOR_STATE.json"
+  # //TR: Yükseltme işareti (bootstrap\UPGRADE_IN_PROGRESS.json, bu bootstrap'ın PID'i): çalışan 2. nesil giriş yeni tick başlatmaz, watchdog hiçbir şey yapmaz. Bootstrap işareti her çıkış yolunda siler; bootstrap ölürse (pencere kapandı) watchdog işareti bayat görür, devre dışı kalmış süpervizör görevini yeniden etkinleştirir ve işareti siler.
+  $script:UpgradeMarker = Join-Path $bootDir "UPGRADE_IN_PROGRESS.json"
+  $script:UpgradeMarkerDoc = [ordered]@{ "//TR" = "Bu isaret bir bootstrap -Upgrade calisirken vardir; giris yeni tick baslatmaz, watchdog bir sey yapmaz. Sahibi olen isaret bayattir."; pid = $PID; startedAt = [DateTime]::UtcNow.ToString("o"); bootstrapCommit = $sourceCommit }
+  Write-JsonAtomic $script:UpgradeMarker $script:UpgradeMarkerDoc
+  Write-Step "UPGRADE_MARKER_WRITTEN"
+  # //TR: Eski watchdog işareti görür ve hiçbir şey yapmaz; işaretten önce başlamış çalışan bir örneği durdurulur ve bu kontrol kökündeki watchdog süreçleri sonlandırılır (yalnız kendi kilidini tutar; sahibi ölen kilit sonraki çalışmada bayat sayılır).
+  $existingWatchdog = @(Invoke-WatchdogCtl "Find")
+  if ($existingWatchdog.Count -eq 1) {
+    try { Invoke-WatchdogCtl "Stop" } catch { }
+    $wdStopDeadline = (Get-Date).AddSeconds(60)
+    while (([string](Invoke-WatchdogCtl "State") -eq "Running") -and ((Get-Date) -lt $wdStopDeadline)) { Start-Sleep -Seconds 2 }
+    foreach ($p in @(Get-WatchdogProcesses $ControlRoot)) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue; Write-Step ("WATCHDOG_PROCESS_STOPPED pid={0}" -f $p.ProcessId) }
+  }
+  # //TR: Durdurulan watchdog'un ölmeden önce silmiş olabileceği işaret aynı içerikle yeniden yazılır; bundan sonra işaret bu bootstrap'ındır ve watchdog çalışmaz.
+  Write-JsonAtomic $script:UpgradeMarker $script:UpgradeMarkerDoc
+  $wasRunning = ([string](Invoke-TaskCtl "State") -eq "Running")
+  $why = ""
+  # //TR: Görev çalışmıyor olsa da bu kontrol kökünde süpervizör süreci kalmışsa (ör. Task Scheduler End yalnız sarmalayıcıyı durdurdu) aynı güvenli an beklenir; görev çalışmıyor ve hiçbir süpervizör süreci yoksa an zaten güvenlidir.
+  if ($wasRunning -or @(Get-SupervisorProcesses $ControlRoot "any").Count -gt 0) {
+    $quiesceDeadline = (Get-Date).AddMinutes(30); $lastWhy = $null
+    Write-Step "UPGRADE_WAITING_FOR_SAFE_POINT (up to 30 minutes)"
+    do {
+      if (([string](Invoke-TaskCtl "State") -ne "Running") -and @(Get-SupervisorProcesses $ControlRoot "any").Count -eq 0) { $why = ""; break }
+      $workers = @(Get-SupervisorProcesses $ControlRoot "worker")
+      # //TR: Başlatıcı (AUT2 daemon) düzleminde güvenli an yoktur: başlatıcı sürekli çalışan bir worker'dır. Başlatıcıya duyarlı yükseltme LV2'ye ertelendi; bu yüzden 30 dakika beklenmeden ve hiçbir şey kurulmadan durulur.
+      if (@($workers | Where-Object { $_.CommandLine -match 'uasco-supervisor-launcher\.mjs' }).Count -gt 0) { Stop-Bootstrap "UPGRADE_LAUNCHER_PLANE_UNSUPPORTED" "the active control plane runs the launcher daemon; -Upgrade reaches a safe point only on a pre-launcher plane (a launcher-aware upgrade is deferred to LV2); nothing was installed" }
+      $why = Resolve-UpgradeSafePoint (Read-JsonOrNull $entryHbFile) (Read-JsonOrNull $liveHbFile) ([DateTime]::UtcNow) ($workers.Count) (Get-InFlightCount $stateFile)
+      if (-not $why) { break }
+      if ($why -ne $lastWhy) { Write-Step "UPGRADE_NOT_YET_SAFE $why"; $lastWhy = $why }
+      Start-Sleep -Seconds 5
+    } while ((Get-Date) -lt $quiesceDeadline)
+    if ($why) { Stop-Bootstrap "SUPERVISOR_BUSY" ("the running supervisor did not reach a safe point within 30 minutes ({0}); nothing was installed, run the same command again later" -f $why) }
+  }
+  # //TR: Dosyalar değişirken görevin kendi 15 dakikalık tetikleyicisi bir giriş başlatamaz: görev devre dışı bırakılır (yeniden kayıt onu etkin olarak yeniden oluşturur) ve durdurulur.
+  Invoke-TaskCtl "Disable"; $script:SupervisorDisabledForUpgrade = $true
+  if ([string](Invoke-TaskCtl "State") -eq "Running") {
+    Invoke-TaskCtl "Stop"
+    $stopDeadline = (Get-Date).AddSeconds(60)
+    while (([string](Invoke-TaskCtl "State") -eq "Running") -and ((Get-Date) -lt $stopDeadline)) { Start-Sleep -Seconds 2 }
+    Write-Step "SUPERVISOR_STOPPED_AT_SAFE_POINT"
+  }
+  # //TR: Kalanlar tek bir listeden denetlenir ve öldürülür: listede bir tick/başlatıcı süreci varsa veya uçuşta eylem belirdiyse hiçbir şey öldürülmez ve kurulmaz (görev yeniden etkinleştirilir); yoksa aynı listedeki sarmalayıcı ve giriş önce kökü sonlandırılır (girişin listeden sonra başlattığı bir node çocuğu iş nesnesiyle birlikte sonlanır).
+  $leftover = @(Get-SupervisorProcesses $ControlRoot "any")
+  if ((@($leftover | Where-Object { $_.CommandLine -match 'uasco-(orchestrator|supervisor-launcher)\.mjs' }).Count -gt 0) -or ((Get-InFlightCount $stateFile) -gt 0)) { Stop-Bootstrap "SUPERVISOR_BUSY" "a tick, the launcher or an in-flight action appeared during the stop; nothing was killed or installed and the supervisor task is enabled again; run the same command again later" }
+  foreach ($p in $leftover) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue; Write-Step ("SUPERVISOR_PROCESS_STOPPED pid={0} name={1}" -f $p.ProcessId, $p.Name) }
+  Start-Sleep -Seconds 1
+  if (@(Get-SupervisorProcesses $ControlRoot "any").Count -gt 0) { Stop-Bootstrap "SUPERVISOR_PROCESSES_REMAIN" "a supervisor process of this control root is still running after the stop" }
+  $upgradeInfo = [ordered]@{ requested = [bool]$Upgrade; wasRunning = $wasRunning; stoppedAt = [DateTime]::UtcNow.ToString("o"); leftoverProcessesStopped = $leftover.Count }
+}
+if (Test-GlobalStopPresent $repoPath) { Stop-Bootstrap "GLOBAL_STOP_ACTIVE" "Global Stop was set while the bootstrap waited; nothing was installed" }
+if ($script:UpgradeMarker -and -not (Test-UpgradeMarkerOwned)) { Stop-Bootstrap "UPGRADE_MARKER_LOST" "the upgrade marker was removed or replaced (another bootstrap, or a watchdog heal after a long pause); nothing was installed; run the same command again" }
+
+# ---------------------------------------------------------------- 8. install the liveness library, the watchdog, its windowless wrapper, the hidden task wrapper and the stable entry (byte-identical to the verified source; the entry last)
 $installed = @{}
-foreach ($pair in @(@{ src = "scripts\uasco-supervisor-entry.mjs"; rel = "scripts/uasco-supervisor-entry.mjs"; dst = $entry }, @{ src = "scripts\uasco-supervisor-task.ps1"; rel = "scripts/uasco-supervisor-task.ps1"; dst = $wrapper })) {
+$installPairs = @(
+  @{ src = "scripts\uasco-liveness.mjs"; rel = "scripts/uasco-liveness.mjs"; dst = $livenessLib },
+  @{ src = "scripts\uasco-supervisor-watchdog.mjs"; rel = "scripts/uasco-supervisor-watchdog.mjs"; dst = $watchdogScript },
+  @{ src = "scripts\uasco-supervisor-watchdog-task.vbs"; rel = "scripts/uasco-supervisor-watchdog-task.vbs"; dst = $watchdogWrapper },
+  @{ src = "scripts\uasco-supervisor-task.ps1"; rel = "scripts/uasco-supervisor-task.ps1"; dst = $wrapper },
+  @{ src = "scripts\uasco-supervisor-entry.mjs"; rel = "scripts/uasco-supervisor-entry.mjs"; dst = $entry })
+foreach ($pair in $installPairs) {
   $src = $staged[$pair.rel]; $tmp = "$($pair.dst).tmp-$PID"
   Copy-Item -LiteralPath $src -Destination $tmp -Force
   $blobTmp = ((Invoke-Git @("hash-object", "--no-filters", "--", $tmp) $source "INSTALL_COPY_HASH_FAILED") -join "").Trim()
@@ -466,10 +688,24 @@ foreach ($pair in @(@{ src = "scripts\uasco-supervisor-entry.mjs"; rel = "script
 }
 
 # ---------------------------------------------------------------- 9. activation under the single-worker lock: control\current, CURRENT.json, CONTROL_PLANE_ACTIVATED
-$actLines = Invoke-Tool $script:Node @($entry, "--activate", "--repo", $repoPath, "--control-root", $ControlRoot, "--plane", $plane, "--expect-master", $master, "--bootstrap-commit", $sourceCommit) $plane "CONTROL_PLANE_ACTIVATION_FAILED" -AllowFailure
-$act = $null; try { $act = ((@($actLines) | Select-Object -Last 1) -join "") | ConvertFrom-Json } catch { $act = $null }
-if (-not $act -or -not $act.ok) { Stop-Bootstrap "CONTROL_PLANE_ACTIVATION_FAILED" ((@($actLines) | Select-Object -Last 1) -join "") }
-Write-Step "CONTROL_PLANE_ACTIVATED $link -> $plane"
+# //TR: Yükseltmede düzlem zaten bu master commit'iyle etkinse (bağlantı ve CURRENT.json aynı düzlemi gösteriyor) yeniden etkinleştirme geçişi yazılmaz; ölü lease'i giriş kendisi bırakır.
+$alreadyActive = $false
+if ($Upgrade) {
+  try {
+    $cur = Get-Content -LiteralPath (Join-Path $controlDir "CURRENT.json") -Raw | ConvertFrom-Json
+    $tgt = @((Get-Item -LiteralPath $link -Force).Target)[0]
+    $alreadyActive = ([string](Get-JsonField $cur "commit") -eq $master) -and [string]::Equals(([string](Get-JsonField $cur "path")).TrimEnd('\'), $plane, [StringComparison]::OrdinalIgnoreCase) -and [string]::Equals(([string]$tgt).TrimEnd('\'), $plane, [StringComparison]::OrdinalIgnoreCase)
+  } catch { $alreadyActive = $false }
+}
+if (-not $TestMode -and @(Get-SupervisorProcesses $ControlRoot "any").Count -gt 0) { Stop-Bootstrap "SUPERVISOR_STARTED_DURING_UPGRADE" "a supervisor process of this control root started while the task was disabled; nothing was activated" }
+if ($alreadyActive) {
+  Write-Step "CONTROL_PLANE_ALREADY_ACTIVE $link -> $plane"
+} else {
+  $actLines = Invoke-Tool $script:Node @($entry, "--activate", "--repo", $repoPath, "--control-root", $ControlRoot, "--plane", $plane, "--expect-master", $master, "--bootstrap-commit", $sourceCommit) $plane "CONTROL_PLANE_ACTIVATION_FAILED" -AllowFailure
+  $act = $null; try { $act = ((@($actLines) | Select-Object -Last 1) -join "") | ConvertFrom-Json } catch { $act = $null }
+  if (-not $act -or -not $act.ok) { Stop-Bootstrap "CONTROL_PLANE_ACTIVATION_FAILED" ((@($actLines) | Select-Object -Last 1) -join "") }
+  Write-Step "CONTROL_PLANE_ACTIVATED $link -> $plane"
+}
 
 # ---------------------------------------------------------------- 10. read-only signer check (fingerprint only, never key material)
 $signer = [ordered]@{ agentService = $null; expectedFingerprint = [string]$verify.signingKeyFingerprint; keyLoaded = $false }
@@ -507,10 +743,19 @@ function Stop-AfterRollback([string]$code, [string]$detail, [switch]$Running) {
     $killed = Stop-ControlRootProcesses
   }
   $undo = Undo-TaskRegistration $hadPrevious $previousXml
+  # //TR: Geri alınan durum kazanır (BS1R x LV1): yükseltme için devre dışı bırakılan süpervizör görevi bundan sonra asla yeniden etkinleştirilmez. Bu çalıştırmanın kaydettiği watchdog görevi de çalıştırılabilir bırakılmaz: durdurulur ve devre dışı bırakılır (silinmez).
+  $script:RolledBack = $true; $script:SupervisorDisabledForUpgrade = $false
+  $wdState = "NOT_REGISTERED"
+  if ($script:WatchdogRegistered) {
+    try { Invoke-WatchdogCtl "Stop" } catch { Write-Step ("ROLLBACK_WATCHDOG_STOP_FAILED " + (Get-SafeText $_.Exception.Message)) }
+    try { Invoke-WatchdogCtl "Disable"; $undo.notes += ",WATCHDOG_DISABLED" } catch { $undo.notes += ",WATCHDOG_DISABLE_FAILED:" + (Get-SafeText $_.Exception.Message) }
+    $wdState = "UNKNOWN"; try { $wdState = [string](Invoke-WatchdogCtl "State") } catch { $undo.notes += ",WATCHDOG_STATE_READ_FAILED" }
+    if (@("ABSENT", "Disabled") -notcontains $wdState) { $undo.safe = $false }
+  }
   $record.status = $(if ($undo.safe) { "ROLLED_BACK_TASK_NOT_RUNNABLE" } else { "ROLLBACK_UNSAFE" })
   $record.taskRegistration = "ROLLED_BACK"
   if (-not $record.firstRun) { $record.firstRun = [ordered]@{ verdict = "NOT_STARTED" } }
-  $record.firstRun["rollback"] = [ordered]@{ cause = $code; preExistingTask = $hadPrevious; resultingTaskState = $undo.state; processesStopped = $killed; steps = $undo.notes }
+  $record.firstRun["rollback"] = [ordered]@{ cause = $code; preExistingTask = $hadPrevious; resultingTaskState = $undo.state; watchdogState = $wdState; processesStopped = $killed; steps = $undo.notes }
   try {
     Write-JsonAtomic (Join-Path $ControlRoot "BOOTSTRAP_INSTALLED.json") $record
     Write-JsonAtomic (Join-Path $repoPath ".ai\runtime\BOOTSTRAP_STATUS.json") ([ordered]@{
@@ -521,44 +766,73 @@ function Stop-AfterRollback([string]$code, [string]$detail, [switch]$Running) {
 }
 $task = New-SupervisorTask $powershellExe $argumentLine $ControlRoot $userId
 $facts = Get-TaskFacts $task
+# //TR: Watchdog görevi etkin kaydedilir; ilk periyodik çalışması 20 dakika sonradır (süpervizörün ilk çalışma yoklamasına karışmaz) ve bootstrap onu ilk çalışma kararından sonra kendisi başlatır. Pencere kapansa bile görev etkin kalır.
+$watchdogTask = New-WatchdogTask $wscriptExe $watchdogArgumentLine $ControlRoot $userId -FirstRunMinutes 20
+$watchdogFacts = Get-TaskFacts $watchdogTask
 $record = [ordered]@{
   "//TR" = "Bu kayit tek seferlik UASCO otonomi kurulumunun yapildigini ve neyin kuruldugunu tutar; kurulum yalniz bozulursa veya bilerek kaldirilirsa yinelenir."
   schemaVersion = "1.0.0"; status = "PENDING_FIRST_RUN"; installedAt = [DateTime]::UtcNow.ToString("o"); testMode = [bool]$TestMode; user = $userId
   bootstrapSource = [ordered]@{ path = $source; commit = $sourceCommit; scriptSha256 = $script:ScriptSha256Start; blobs = $sourceBlobs }
   controlRoot = $ControlRoot; controlPlane = [ordered]@{ commit = $master; path = $plane; link = $link; governedMerge = $verify.checks.governedMerge }
-  entry = [ordered]@{ path = $entry; sha256 = $installed["scripts\uasco-supervisor-entry.mjs"] }; wrapper = [ordered]@{ path = $wrapper; sha256 = $installed["scripts\uasco-supervisor-task.ps1"] }
+  entry = [ordered]@{ path = $entry; sha256 = $installed["scripts\uasco-supervisor-entry.mjs"]; generation = 2 }; wrapper = [ordered]@{ path = $wrapper; sha256 = $installed["scripts\uasco-supervisor-task.ps1"] }
+  liveness = [ordered]@{ library = [ordered]@{ path = $livenessLib; sha256 = $installed["scripts\uasco-liveness.mjs"] } }
+  watchdog = [ordered]@{ path = $watchdogScript; sha256 = $installed["scripts\uasco-supervisor-watchdog.mjs"]; wrapper = [ordered]@{ path = $watchdogWrapper; sha256 = $installed["scripts\uasco-supervisor-watchdog-task.vbs"] }; task = [ordered]@{ taskName = $WatchdogTaskName; facts = $watchdogFacts }; taskRegistration = "NOT_REGISTERED_TEST_MODE"; firstRun = $null }
+  upgrade = $upgradeInfo
   task = [ordered]@{ taskName = $TaskName; facts = $facts }; taskRegistration = "NOT_REGISTERED_TEST_MODE"; firstRun = $null
   durableState = [ordered]@{ transitions = $verify.checks.transitionLog.entries; openPackages = $verify.queue.total; codex = $verify.providers.codex }
   signer = $signer; tools = [ordered]@{ node = $script:Node; nodeVersion = $nodeVersion; nodeSha256 = (Get-Sha256 $script:Node); git = $script:Git; gitVersion = $gitVersion }
   msixShadowCopies = $shadowCopies
   limits = @(
     "Runs while this user is signed in (a locked screen is fine); after a reboot it resumes at the next sign-in. It does not wake a sleeping PC. A pre-logon start would need S4U, which cannot use the DPAPI-protected ssh-agent key needed for secure local signing, or a stored password, which is not allowed.",
-    "Recovery: the launcher restarts a crashed daemon with backoff; the entry kills a supervisor whose heartbeat is frozen; the periodic trigger restarts the task within 15 minutes. Task Scheduler's restart-on-failure only covers a task that fails to launch.",
+    "Recovery: the independent UASCO-Supervisor-Watchdog task (every 5 minutes, own lock, never the worker lease) restarts a supervisor that is not running or whose heartbeat or main thread is frozen, and on pre-launcher planes one that makes no progress for 8 awake hours while work is eligible or that sleeps while work is eligible; at most 3 recoveries per hour with growing spacing, no destructive step in the first run after sleep. The entry releases a dead worker's lease, cuts a tick whose in-flight action exceeds its awake-time backstop and restarts a stale watchdog; the launcher restarts a crashed daemon; the periodic trigger restarts the task within 15 minutes.",
+    "The watchdog task runs through wscript.exe (Windows Script Host) so that no console window flashes every 5 minutes. If Windows Script Host is disabled or VBScript is removed by a future Windows version, the watchdog does not run, the entry reports WATCHDOG_TASK state in SUPERVISOR_STATUS.json, and a bootstrap from a newer reviewed source is needed.",
+    "Per-child timeouts inside the control plane (Codex, Claude, validation, npm, Git, release, Phase0), RETRYABLE_STALL accounting and daemon-side wake fields are control-plane code and arrive only through governed merges (LV2); until then the awake-time action backstop is the outer bound.",
     "Stop the supervisor with Global Stop (.ai/runtime/GLOBAL_STOP.json), not with Task Scheduler End or Disable.",
     "Founder decisions (for example a package blocked at its cycle limit) still need a Founder answer; routine operation needs no command.")
 }
 if ($TestMode -and -not $script:TaskFake) {
   Write-JsonAtomic (Join-Path $bootDir "task-definition.json") ([ordered]@{ taskName = $TaskName; facts = $facts })
+  Write-JsonAtomic (Join-Path $bootDir "watchdog-task-definition.json") ([ordered]@{ taskName = $WatchdogTaskName; facts = $watchdogFacts })
   $record.status = "TEST_MODE_COMPLETE"
 } else {
+  if ($script:UpgradeMarker -and -not (Test-UpgradeMarkerOwned)) { Stop-Bootstrap "UPGRADE_MARKER_LOST" "the upgrade marker was removed or replaced during the installation; the tasks were not registered; run the same command again" }
   if ($hadPrevious) { Set-Content -LiteralPath (Join-Path $bootDir "previous-task-definition.xml") -Value $previousXml -Encoding Unicode }
   $registerFailure = $null; $readBack = $null
   try {
     Invoke-TaskCtl "Register" $task
+    $script:TaskRegistered = $true
     $readBack = Invoke-TaskCtl "Facts"
     if ((ConvertTo-ComparableFacts $readBack) -ne (ConvertTo-ComparableFacts $facts)) { $registerFailure = "TASK_NOT_AS_REGISTERED" }
   } catch { $registerFailure = "TASK_REGISTRATION_VERIFY_FAILED"; $readBack = $_.Exception.Message }
   if ($registerFailure) { Stop-AfterRollback $registerFailure ($readBack | ConvertTo-Json -Depth 6 -Compress) }
   $record.taskRegistration = "REGISTERED"
+  # //TR: Kayıt başarıyla yapıldı: yükseltme için devre dışı bırakılan görev artık yeni (etkin) tanımdır; bundan sonraki her başarısızlık geri almadan geçer ve geri alınan durum kazanır.
+  $script:SupervisorDisabledForUpgrade = $false
+  # //TR: Kayıttan sonraki her hata (Global Stop, watchdog kaydı, kayıt dosyası, beklenmeyen istisna) çalıştırılabilir bir görev bırakmaz: görev geri alınır.
+  if (Test-GlobalStopPresent $repoPath) { Stop-AfterRollback "GLOBAL_STOP_ACTIVE" "Global Stop was set during the installation; the supervisor task was rolled back" }
+  $wdFailure = $null; $wdBack = $null
+  try {
+    Invoke-WatchdogCtl "Register" $watchdogTask
+    $script:WatchdogRegistered = $true
+    $wdBack = Invoke-WatchdogCtl "Facts"
+    # //TR: Geri okunan tanım üretilenle aynı değilse kurulum durur ve görevler geri alınır (watchdog devre dışı bırakılır, süpervizör görevi geri alınır).
+    if ((ConvertTo-ComparableFacts $wdBack) -ne (ConvertTo-ComparableFacts $watchdogFacts)) { $wdFailure = "WATCHDOG_TASK_NOT_AS_REGISTERED" }
+  } catch { $wdFailure = "WATCHDOG_TASK_REGISTRATION_FAILED"; $wdBack = $_.Exception.Message }
+  if ($wdFailure) { Stop-AfterRollback $wdFailure ($wdBack | ConvertTo-Json -Depth 6 -Compress) }
+  $record.watchdog.taskRegistration = "REGISTERED"
+  Write-Step "WATCHDOG_TASK_REGISTERED $WatchdogTaskName (first periodic run in 20 minutes; started after the supervisor's first run is decided)"
   try {
     if ($script:TaskFake -and $script:TaskFake.failRecordWrite) { throw "FAKE_RECORD_WRITE_FAILED" }
     Write-JsonAtomic (Join-Path $ControlRoot "BOOTSTRAP_INSTALLED.json") $record
   } catch { Stop-AfterRollback "BOOTSTRAP_RECORD_WRITE_FAILED" $_.Exception.Message }
   Write-Step "TASK_REGISTERED $TaskName"
   # //TR: İlk çalıştırma, görev sürecinin kendisinin bu kurulumdan sonra yazdığı giriş kalp atışıyla doğrulanır; yalnız kayıt veya başlatma isteği başarı sayılmaz.
+  # //TR: İşaretin görevi (eski girişi bekletmek, dosyalar değişirken watchdog'u durdurmak) iki görev kaydedildikten sonra biter. İlk çalıştırmadan önce silinir: canlı işaret yeni girişi UPGRADE_QUIESCE'te tutar ve ilk çalıştırma kararı hiçbir tick görmezdi.
+  if ($script:UpgradeMarker) { if (Test-UpgradeMarkerOwned) { Remove-Item -LiteralPath $script:UpgradeMarker -Force -ErrorAction SilentlyContinue }; $script:UpgradeMarker = $null; Write-Step "UPGRADE_MARKER_REMOVED" }
   $firstRunStartUtc = [DateTime]::UtcNow
   if ($script:TaskFake) {
     $record.status = "TEST_MODE_COMPLETE"; $record.taskRegistration = "REGISTERED_FAKE_CONTROLLER"
+    $record.watchdog.firstRun = [ordered]@{ verdict = $(if ($script:TaskFake.watchdogNotConfirmed) { "WATCHDOG_FIRST_RUN_NOT_CONFIRMED" } else { "WATCHDOG_FIRST_RUN_CONFIRMED" }); classification = "INJECTED_BY_TEST_FIXTURE" }
     if ($script:TaskFake.firstRunVerdict) {
       Invoke-TaskCtl "Start"
       $fakeState = $null; $fakeResult = $null
@@ -587,7 +861,20 @@ if ($TestMode -and -not $script:TaskFake) {
   if ($verdict -eq "FIRST_RUN_NOT_CONFIRMED") { $verdict = Resolve-DeadlineVerdict $lastState $taskState }
   $record.firstRun = [ordered]@{ verdict = $verdict; entryState = $lastState; entryReason = $lastReason; lastTaskResult = $lastTaskResult; taskState = $taskState }
   $record.status = Get-InstallStatus $verdict
-  # //TR: Giriş ilk sonucu bootstrap'tan önce kayda işlediyse (firstTick/firstSuccessfulRun) o sonuç korunur; bootstrap'ın kendi kararı firstRun içinde kalır.
+  # //TR: Watchdog başlatılır; ilk çalışması, watchdog sürecinin bu andan sonra kendi kontrol kökü durum dosyasına yazdığı lastRunAt ile doğrulanır (yalnız kayıt veya başlatma isteği başarı sayılmaz). İlk çalışması bir kurtarma yaparsa birkaç dakika sürebilir; 5 dakika beklenir.
+  if (@("INSTALLED", "INSTALLED_FIRST_TICK_PENDING") -contains $record.status) {
+    $wdStartUtc = [DateTime]::UtcNow
+    Start-ScheduledTask -TaskName $WatchdogTaskName -TaskPath "\"
+    Write-Step "WATCHDOG_FIRST_RUN_STARTED waiting for its own state record (up to 5 minutes)"
+    $wdStateFile = Join-Path $ControlRoot "watchdog\WATCHDOG_STATE.json"
+    $wdDeadline = (Get-Date).AddSeconds(300); $wdState = $null
+    do { Start-Sleep -Seconds 3; $wdState = Read-FreshJson $wdStateFile "lastRunAt" $wdStartUtc } while (-not $wdState -and ((Get-Date) -lt $wdDeadline))
+    $wdInfo = Get-ScheduledTaskInfo -TaskName $WatchdogTaskName -TaskPath "\"
+    $record.watchdog.taskRegistration = "REGISTERED"
+    $record.watchdog.firstRun = [ordered]@{ verdict = $(if ($wdState) { "WATCHDOG_FIRST_RUN_CONFIRMED" } else { "WATCHDOG_FIRST_RUN_NOT_CONFIRMED" }); classification = [string](Get-JsonField $wdState "lastClass"); outcome = [string](Get-JsonField $wdState "lastOutcome"); lastTaskResult = $wdInfo.LastTaskResult; taskState = [string](Invoke-WatchdogCtl "State") }
+    Write-Step ("WATCHDOG_FIRST_RUN {0} class={1}" -f $record.watchdog.firstRun.verdict, $record.watchdog.firstRun.classification)
+  } else { $record.watchdog.firstRun = [ordered]@{ verdict = "WATCHDOG_NOT_STARTED_FIRST_RUN_FAILED" } }
+  # //TR: Giriş ilk sonucu bu arada kayda işlediyse (firstTick/firstSuccessfulRun) o sonuç korunur; bootstrap'ın kendi kararı firstRun içinde kalır (watchdog beklemesinden sonra okunur, üzerine yazılmaz).
   $onDisk = $null; try { $onDisk = Get-Content -LiteralPath (Join-Path $ControlRoot "BOOTSTRAP_INSTALLED.json") -Raw | ConvertFrom-Json } catch { $onDisk = $null }
   if ($onDisk -and ($onDisk.PSObject.Properties.Name -contains "firstRun") -and $onDisk.firstRun) {
     foreach ($k in @("firstTick", "firstSuccessfulRun")) { if ($onDisk.firstRun.PSObject.Properties.Name -contains $k) { $record.firstRun[$k] = $onDisk.firstRun.$k; $record.status = [string]$onDisk.status } }
@@ -597,15 +884,26 @@ if ($TestMode -and -not $script:TaskFake) {
   if ($record.firstRun -and (@("INSTALLED", "INSTALLED_FIRST_TICK_PENDING", "TEST_MODE_COMPLETE") -notcontains $record.status)) {
     Stop-AfterRollback ([string]$record.firstRun.verdict) ("first run not confirmed: entryState={0} reason={1} lastTaskResult={2} taskState={3}" -f $record.firstRun.entryState, $record.firstRun.entryReason, $record.firstRun.lastTaskResult, $record.firstRun.taskState) -Running
   }
+  # //TR: LV1: süpervizör kuruldu ama watchdog görevi bir çalışma kaydetmediyse kurulum başarısızdır; çalıştırılabilir görev bırakılmaz (görevler geri alınır).
+  if ($record.firstRun -and (@("INSTALLED", "INSTALLED_FIRST_TICK_PENDING") -contains $record.status) -and $record.watchdog.firstRun -and ($record.watchdog.firstRun.verdict -ne "WATCHDOG_FIRST_RUN_CONFIRMED")) {
+    Stop-AfterRollback "WATCHDOG_FIRST_RUN_NOT_CONFIRMED" ("the watchdog task did not record a run (verdict={0}); Windows Script Host may be disabled on this PC; the tasks were rolled back" -f $record.watchdog.firstRun.verdict) -Running
+  }
 }
 
 # ---------------------------------------------------------------- 12. durable record and its mirror in the repository
 Write-JsonAtomic (Join-Path $ControlRoot "BOOTSTRAP_INSTALLED.json") $record
 Write-JsonAtomic (Join-Path $repoPath ".ai\runtime\BOOTSTRAP_STATUS.json") ([ordered]@{
   "//TR" = "Bu dosya tek seferlik otonomi kurulumunun sonucunu depo icinde pasif olarak yansitir; sir icermez ve bir karar degildir."
-  schemaVersion = "1.0.0"; updatedAt = [DateTime]::UtcNow.ToString("o"); installed = [ordered]@{ status = $record.status; installedAt = $record.installedAt; taskName = $TaskName; controlPlaneCommit = $master; entrySha256 = $record.entry.sha256; bootstrapCommit = $sourceCommit; testMode = [bool]$TestMode }; firstRun = $record.firstRun; signer = $signer })
-if (@("INSTALLED", "INSTALLED_FIRST_TICK_PENDING", "TEST_MODE_COMPLETE") -contains $record.status) {
-  Write-Step ("BOOTSTRAP_COMPLETE status={0} controlPlane={1} entrySha256={2} signerKeyLoaded={3}" -f $record.status, $master.Substring(0, 12), $record.entry.sha256, $signer.keyLoaded)
+  schemaVersion = "1.0.0"; updatedAt = [DateTime]::UtcNow.ToString("o"); installed = [ordered]@{ status = $record.status; installedAt = $record.installedAt; taskName = $TaskName; controlPlaneCommit = $master; entrySha256 = $record.entry.sha256; entryGeneration = 2; bootstrapCommit = $sourceCommit; testMode = [bool]$TestMode }; firstRun = $record.firstRun; signer = $signer
+  watchdog = [ordered]@{ taskName = $WatchdogTaskName; sha256 = $record.watchdog.sha256; taskRegistration = $record.watchdog.taskRegistration; firstRun = $record.watchdog.firstRun }; upgrade = $upgradeInfo })
+$watchdogOk = $TestMode -or ($record.watchdog.firstRun -and $record.watchdog.firstRun.verdict -eq "WATCHDOG_FIRST_RUN_CONFIRMED")
+if ((@("INSTALLED", "INSTALLED_FIRST_TICK_PENDING", "TEST_MODE_COMPLETE") -contains $record.status) -and $watchdogOk) {
+  Write-Step ("BOOTSTRAP_COMPLETE status={0} controlPlane={1} entrySha256={2} watchdog={3} signerKeyLoaded={4}" -f $record.status, $master.Substring(0, 12), $record.entry.sha256, $(if ($TestMode) { "TEST_MODE" } else { $record.watchdog.firstRun.verdict }), $signer.keyLoaded)
   exit 0
 }
 Stop-Bootstrap $record.status "unexpected install status"
+} catch {
+  # //TR: Süpervizör görevi kaydedildikten sonra beklenmeyen bir istisna çalıştırılabilir görev bırakmaz: görev geri alınır (geri alma zaten yapıldıysa istisna yeniden fırlatılır).
+  $unexpectedError = $_
+  if ($script:TaskRegistered -and -not $script:RolledBack) { Stop-AfterRollback "BOOTSTRAP_UNEXPECTED_ERROR" $unexpectedError.Exception.Message -Running } else { throw }
+} finally { Restore-TasksAfterFailure }

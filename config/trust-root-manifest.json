@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-14T01:49:19.156Z",
+  "generatedAt": "2026-10-14T02:15:34.941Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -393,6 +393,10 @@
       "sha256": "9421edbe06ae2cf1e56b904a11490e9344276c97d29180b8f5717008673a5d99"
     },
     {
+      "path": "config/liveness-policy.json",
+      "sha256": "84a55106cb72f2f2f6c241e5198244a4887867242b67ce5e862f83f9b94cb889"
+    },
+    {
       "path": "config/omniroute-policy.json",
       "sha256": "8e0ac0046c9cb3ac665f7c2626f0ea6113deeabd24e33a392780807551530bd6"
     },
@@ -410,7 +414,7 @@
     },
     {
       "path": "config/protected-paths.json",
-      "sha256": "2b82c8eae75c04ac9e7c67dc0be5a233360f858ee3c356fc426789040a86773b"
+      "sha256": "d446d9ba1f827c3f531972584923c97230aded1f856959ffb8a49a135a5e53ac"
     },
     {
       "path": "config/reviewer-execution-policy.json",
@@ -426,7 +430,7 @@
     },
     {
       "path": "config/validation.json",
-      "sha256": "5d1f3196b81418388b23f25c440661c9a99d0d615cbc82a340d6ad878aabec37"
+      "sha256": "9f7298a0041cc9b548112b3d0024ea6df7f8fc62add212ea44760ca0e8687bff"
     },
     {
       "path": "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
@@ -1134,7 +1138,7 @@
     },
     {
       "path": "scripts/bootstrap-autonomy-selftest.mjs",
-      "sha256": "7747cfa4498a897ed168b1d7de1dee62a87d0d85455ac85153d29363b08e0301"
+      "sha256": "7af7818c0ad75319258f69c9e423689efd31920a92c0fed145d268270ec2646b"
     },
     {
       "path": "scripts/bootstrap-kernel-selftest.mjs",
@@ -1142,7 +1146,7 @@
     },
     {
       "path": "scripts/bootstrap-uasco-autonomy.ps1",
-      "sha256": "0c5338d54bfbf30b9f061d58acc5d10d45de5837415bd5b50574e65e69e0025d"
+      "sha256": "14f44d07696d1d114885138e024f250742de26af481b3dc8593590438e4e32b3"
     },
     {
       "path": "scripts/bootstrap.ps1",
@@ -1209,6 +1213,10 @@
       "sha256": "3ff9c2494fd306fe4def43cf41885d79723689166c37b7abcf65077d56902345"
     },
     {
+      "path": "scripts/liveness-selftest.mjs",
+      "sha256": "a39e9bc9e0c0e726ccff2b3c874302ed1f1ea76788fde5b6399946f337a3d975"
+    },
+    {
       "path": "scripts/mechanical-kernel-selftest.mjs",
       "sha256": "2a7e5f158352f3e6a5e3a288fdf1cd30f8f0b70317d2b223773c4d0540e953fb"
     },
@@ -1218,7 +1226,7 @@
     },
     {
       "path": "scripts/phase0-acceptance.mjs",
-      "sha256": "4884bfd47d3bf4ad3058556775453b39a97cf79b2c6ae2d50331c586a534012a"
+      "sha256": "de13d5692568e956b223225791bef1d3ced8df55ab2b5168ff918ffe73ebddc7"
     },
     {
       "path": "scripts/preflight.mjs",
@@ -1289,12 +1297,16 @@
       "sha256": "fd5b18b3ad33fb5c8535fac82365a21a989194d7154c4750974a226495465af3"
     },
     {
+      "path": "scripts/uasco-liveness.mjs",
+      "sha256": "a5407699d2da52be466c5be24d1dba94991294f648741f39d85ce93070b022a1"
+    },
+    {
       "path": "scripts/uasco-orchestrator.mjs",
       "sha256": "9b0e47be1e4c4a8b361bafcdbc93427c4cf9a4b580ef56b08d223f3d2f449e13"
     },
     {
       "path": "scripts/uasco-supervisor-entry.mjs",
-      "sha256": "dd2a770d0558a09b3a13ffd7fd5a4a203ff47a98d536241db6f6423469c3d5bb"
+      "sha256": "c8923fa785870b30bc2010112a2692c4555562c6c8de38a73731256a1b54350e"
     },
     {
       "path": "scripts/uasco-supervisor-launcher.mjs",
@@ -1303,6 +1315,14 @@
     {
       "path": "scripts/uasco-supervisor-task.ps1",
       "sha256": "39d25cf1f0c3424bce20771522a76548f54423b22966f8ae6565653bb5d79ab4"
+    },
+    {
+      "path": "scripts/uasco-supervisor-watchdog-task.vbs",
+      "sha256": "69d11a2b003749321086959ca380fa521c93611ee109f095ad6cf9fa242f81b0"
+    },
+    {
+      "path": "scripts/uasco-supervisor-watchdog.mjs",
+      "sha256": "477bd6091a754abc232e75b276ce3f173b425f04c9728cc030b88ea0b8bc7929"
     },
     {
       "path": "scripts/v6-apps-control-desktop-selftest.mjs",

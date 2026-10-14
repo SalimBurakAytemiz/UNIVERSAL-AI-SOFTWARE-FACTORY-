@@ -5,7 +5,7 @@
   "date": "2026-10-02",
   "parent": "6ed5d1a17264224de09915b4ca0fe961eccc83cb",
   "branch": "v6/pkg-lv1-liveness-watchdog",
-  "status": "F10 AUTHORIZATION RECORD ONLY: package changes not yet applied; not clean; review pending",
+  "founderDirective": "Founder request 2026-10-02: harden UASCO for true self-recovering continuous execution: two-layer supervision with an independent UASCO-Supervisor-Watchdog task that does not share the worker lease; an atomic, frequently refreshed SUPERVISOR_HEARTBEAT.json; stale and progress detection with automatic recovery; timeout contracts for every child; a work-conserving scheduler that never sleeps with eligible work; bounded waits with wake fields; watchdog recovery without duplicate commit/review/merge/signing; quota is not a crash; a progress watchdog; real tests; WATCHDOG_STATUS.json fields; no Founder action for routine recovery. Implement, test, commit, review and activate; do not merely document.",
   "founderAuthorization": {
     "decision": "LIVENESS_HARDENING_REQUEST",
     "rule": "Explicit Founder request of 2026-10-02 to implement, test, commit, review and activate the liveness-hardening package; the protected installed-layer files strictly necessary for it are authorized (the same files BS1 introduced, plus the new liveness library, watchdog, its wrapper and selftest, which are added to the protected paths); every change keeps or strengthens trust: no elevation, no stored password, no S4U or startup trigger, fixed task names only, the watchdog never takes the worker lock or lease and never writes the transition log, the dead lease is released only under the single-worker lock with a verified hash-chained log, Global Stop stops every recovery.",
@@ -46,5 +46,424 @@
       "scope": "exact re-application of the f9-reviewed diff ef0f3bb..550bb16; protected files limited to protectedFiles; recorded before any protected change of this package",
       "notBackdated": true
     }
-  }
+  },
+  "design": {
+    "twoLayers": "UASCO-Autonomous-Supervisor (stable entry generation 2) and the independent UASCO-Supervisor-Watchdog task (windowless wscript wrapper, every 5 minutes and at logon, IgnoreNew, 15-minute limit, own lock watchdog\\watchdog.lock and state watchdog\\WATCHDOG_STATE.json; never the single-worker lock, the lease or the transition log)",
+    "heartbeat": ".ai/runtime/SUPERVISOR_HEARTBEAT.json (+ control-root mirror) written atomically by a worker thread every 20 s and within 50 ms of every field change; main-thread shared-memory beat every 5 s; declared budgets for synchronous sections (TRUST_ROOT 600 s, PLANE_LIBRARY 300 s, UPGRADE 7200 s, LEASE_RECOVERY 300 s, PROCESS_LIST 120 s)",
+    "workConservingLoop": "planNext (pure): eligible work + progress -> next tick at once (24 then a 30 s pause); eligible without progress -> RECOVERING with backoff 60 s doubling to 15 min; LEASE_HELD -> dead-lease release then retry; nothing eligible -> WAITING/SLEEPING until the earliest real wake time (notBefore/retryAfter, holds excluded) capped at 15 min, at least 30 s; early wake within 30 s on a durable-state change that makes work eligible or on Global Stop; LOOP_PLAN events",
+    "deadLease": "released only under the single-worker lock with a verified hash-chained log (LEASE_RELEASED_DEAD_WORKER), at entry start and after LEASE_HELD or a killed tick",
+    "actionBackstop": "awake-time per in-flight action of the running tick only (REVIEW 240, MERGE 120, REMEDIATE 360, IMPLEMENT 360, PACKAGE 240, SIGN 120, PHASE0 300, AUDIT 240 min); soft limit only with no Git in the tick tree (re-checked right before the kill), hard limit 1.5x; evidence in liveness\\evidence; orphan sweep (dead parent, control root as a path, created after the tick) and Git-lock reconciliation; retried every pre-launcher iteration while no worker lock exists",
+    "watchdogClasses": "STOPPED, TASK_STATE_UNKNOWN, TASK_MISSING, SUPERVISOR_TASK_DISABLED, SUPERVISOR_BLOCKED, SUPERVISOR_NOT_RUNNING (start), SUPERVISOR_STALE (heartbeat stale, main thread over budget, or no heartbeat for 10 min; restart), WORKER_LIVELOCK (eligible work, RUNNING/RECOVERING, no progress for 480 awake minutes; clock reset by a legitimate wait), WORK_CONSERVATION_VIOLATION (SLEEPING/WAITING with eligible work on two runs), LEGIT_WAITING, HEALTHY, SUPERVISOR_STARTING",
+    "recovery": "durable recovery record before any destructive step; stop and wait; restart kills surviving supervisor processes of this control root (verify-install/activate/status runs excluded), start kills only orphans; targets re-checked against a fresh process list by creation time; Git locks of just-killed processes removed while no Git runs; provably stale single-worker lock cleared with the entry rule; abort if the watchdog task was disabled; start and confirm a fresh heartbeat from a new process (else RECOVERY_UNCONFIRMED); storm guard 3 per hour with spacing; suspend grace; 14-minute hard deadline",
+    "status": "WATCHDOG_STATUS.json (pre-launcher era, by the entry) keeps the pre-daemon schema and adds every liveness field; SUPERVISOR_STATUS.json always; the watchdog merges its fields over the existing document on problems, replaces a missing or non-object document, and when the document is older than the larger of 10 minutes and its own staleAfterSeconds it keeps the producer's time stamp, health and reasons and adds STATUS_DOCUMENT_STALE once; an unsupported generation-1 entry is not a failure (health UNKNOWN, supervisorHealth ENTRY_GENERATION_UNSUPPORTED when the watchdog writes the document); watchdog crashes, failed runs, refused locks (exit code 75) and the hard deadline are appended to watchdog/watchdog-events.jsonl",
+    "twoWay": "the entry starts a watchdog whose last run is older than 20 awake minutes when its task exists, is enabled and is not running; never enables a disabled one",
+    "delegation": "ENTRY_GENERATION 2; delegation only to a plane entry of the same or a newer generation",
+    "bootstrap": "one bootstrap per control root (named mutex, BOOTSTRAP_ALREADY_RUNNING); when the supervisor task exists (upgrade or repair): an owned upgrade marker (bootstrap PID and start time) is written, a running old watchdog instance is stopped and its processes ended (the watchdog task stays enabled), the marker is written again; launcher plane -> UPGRADE_LAUNCHER_PLANE_UNSUPPORTED at once; safe-point wait (also with only orphan supervisor processes); supervisor task disabled during file replacement, then stopped; re-check of workers and in-flight actions on one process list right before ending leftovers; Global Stop and marker ownership re-checked (UPGRADE_MARKER_LOST); five runtime files staged and blob-verified (entry last); activation skipped when already active and refused if a supervisor process appeared; marker ownership checked again, supervisor task registered, watchdog registered enabled with its first periodic run in 20 minutes; the marker is removed before the first run; the watchdog is started and confirmed after the supervisor's first-run verdict; every exit path re-enables a task the bootstrap disabled and deletes only its own marker (finally)"
+  },
+  "tests": {
+    "livenessSelftest": "scripts/liveness-selftest.mjs: 22 scenarios (11 with real supervisor-stub processes under an injected task controller in TEMP; pure tables; real backstop with a Git-named child; dead lease on a real hash-chained state; upgrade marker states including PID reuse and the marker identity check; prompt heartbeat write of a field change; bootstrap safe-point function extracted from the PowerShell AST); about 70-90 s",
+    "bootstrapSelftest": "scripts/bootstrap-autonomy-selftest.mjs: 20 scenarios in 8 parallel groups, including entry-generation-2-liveness-heartbeat-work-conserving-loop-dead-lease-and-single-instance (heartbeat and status sampled during WAITING and RECOVERING, stale watchdog started through an injected controller, second entry refused) and LV1 checks in the static, install, command-line and delegation scenarios",
+    "vitest": "tests/pkg-lv1-liveness.test.ts (selftest + static locks); tests/pkg-bs1-autonomy-bootstrap.test.ts unchanged"
+  },
+  "hostEvidence": {
+    "taskRegistrationProbe": "TASK_REGISTRATION_PROBE SUPERVISOR: PASS removed=True; TASK_REGISTRATION_PROBE WATCHDOG: PASS removed=True (real Task Scheduler on the Founder machine: uniquely named disabled tasks built by the production builders, registered, read back, compared, removed)",
+    "taskChainProbe": "TASK_CHAIN_PROBE: PASS (uniquely named task built by New-WatchdogTask, registered and started under the real Task Scheduler; wscript -> vbs -> node with a stub watchdog: ran, argv round-trip exact with spaces, ampersand and apostrophe, lastTaskResult 0, task removed)",
+    "nodeJobObjectFinding": "on Windows, node puts non-detached children in a kill-on-close job object: killing a node parent kills its node-spawned tree; the orphan sweep therefore targets detached or reparented processes (observed in the selftest)"
+  },
+  "reseal": {
+    "tool": "scripts/generate-trust-root.mjs (unchanged)",
+    "sealStatus": "SEALED",
+    "protectedFiles": 364,
+    "generatedAt": "2026-10-03T10:10:43.465Z",
+    "manifestSha256": "3dfbeb7cb023358650c3331c11fbab5de1d39a031ff04bb3aab9ee66830db3bd"
+  },
+  "validation": {
+    "workspace": "fresh clone of the committed head fd65ac3 (scratchpad validate-commit.sh: clone at the commit, reviewed lock installed, nothing else validating)",
+    "gitDiffCheck": "PASS (6ed5d1a..fd65ac3, 17 files)",
+    "verifyTrustRoot": "PASS",
+    "canonicalValidation": "CANONICAL_VALIDATION: PASS (35 test files, 183 tests; vitest step 446 s of the fixed 600 s per-step limit)",
+    "typecheck": "tsc --noEmit: PASS",
+    "broadSuite": "25 PASS / 0 FAIL",
+    "earlierRuns": "8b0713b (rounds 7-8) passed the same fresh-clone validation (vitest 319 s) with 90/90 mutation checks; fe9573b (round 9), 2d579df (round 10), 2e70b8b (round 12) and 55a8789 (round 13) passed it too (vitest 344 s, 408 s, 350 s and 328 s); the cycle-1 bundle freeze of bcac65a passed it under load (500 s) and its CLAUDE_REVIEWER review was CLEAN with six advisories; 39e5e22 failed one end-to-end check once under heavy load (an entry exit at STARTING), which motivated the round-7 crash survival and records",
+    "selftests": "liveness selftest 22/22 and the bootstrap selftest (8 parallel groups) run inside the canonical validation",
+    "laterCommits": "the evidence commit after fd65ac3 changes only this checkpoint, CHANGELOG and the manifest; the frozen review commit is validated again by the canonical runner when its bundle is frozen"
+  },
+  "mutationChecks": {
+    "harness": "isolated detached worktree per run (scratchpad lv1-mutations.mjs: each mutant weakens one property, the trust root is resealed so only the mutated property can fail, the matching scenarios must fail, originals restored, worktree clean afterwards)",
+    "result": "104/104 caught on fd65ac3",
+    "history": "90/90 on 8b0713b; 95/96 on fe9573b (W37 was missed because another Git process on the machine masked the regression; the round-10 test hides foreign Git processes and the mutant is caught); 100/100 on 2d579df (round 10); round 9 added six mutants (W34 pending-heal recovery, W35 failed-run record, W36 generation-1 health, W37 Git check after a kill, B20/B21 marker ownership) and round 10 four (W38 new live marker during a recovery, W39/W41 refused lock record and exit code, W40 crash record); round 11 one (L22 lock from before the last boot), round 12 one (E19 single-worker lock from before the last boot) and round 13 one (E20 live holder's lock kept when its creation time is unknown) and cycle 2 one (W42 unreadable heartbeat re-read); 103/103 on 55a8789 (round 13); earlier: 70 on 39e5e22, 60 on 9630a3d",
+    "families": "watchdog classification, storm guard, suspend grace, single instance, orphan sweep and relisting, restart verification, tree kill, stale-lock clear, disabled-task abort, livelock clock, upgrade marker (live, heal only on success, PID reuse, identity, in-recovery check), Git-lock rules after kills and task stops, status document handling, generation-1 handling, crash records; library heartbeat judgement, busy budgets, prompt write, thread errors, orphan/descendant filters, awake time, progress detection, task names, instance lock, work view; entry plan, dead lease, backstop, delegation generation, quiesce with in-flight actions, single instance, two-way watchdog, status fields; bootstrap safe point, marker order and ownership, launcher fail-fast, single bootstrap, first-run verdict, watchdog task definition, provenance, finally restore, supervisor disabled during install"
+  },
+  "adversarialReview": {
+    "workflow": "four independent read-only reviewers (watchdog safety, entry runtime, bootstrap upgrade, test validity) on the uncommitted package; each refuted candidates against the code before reporting",
+    "confirmedAndFixed": [
+      "HIGH (tests) end-to-end heartbeat/status checks were presence-only -> values sampled during WAITING and RECOVERING",
+      "HIGH false WORKER_LIVELOCK after a long legitimate wait (clock keyed only on the progress id) -> clock runs only with eligible work in RUNNING/RECOVERING and is reset otherwise; tested (wait then work; RECOVERING; progressing worker)",
+      "HIGH (bootstrap) a disabled watchdog could stay disabled after Ctrl+C or an exception -> finally block restores; watchdog registered enabled with a delayed first periodic run",
+      "MEDIUM supervisor's own trigger could start an entry while files were replaced -> supervisor task disabled during the install window",
+      "MEDIUM leftover kill could hit an orphan tick with an in-flight action -> safe-point wait also when only supervisor processes remain, re-check right before the kill",
+      "MEDIUM Git locks of just-killed processes kept (age rule) -> notAfter rule; retried every iteration",
+      "MEDIUM command-line process matching too broad -> path boundary, control root only for orphans, verify-install/activate/status excluded, start mode kills only orphans",
+      "MEDIUM running watchdog could race the upgrade -> bootstrap stops it and ends its processes; watchdog aborts when its task is disabled",
+      "MEDIUM backstop could kill a fresh tick on a stale marker of a killed tick -> only markers of the running tick count",
+      "MEDIUM restart verification, supervisor-tree kill and stale-lock clear untested -> tests added",
+      "LOW PID reuse in kills -> targeted kills re-checked by creation time against a fresh list",
+      "LOW durable storm-guard record and hard deadline -> recovery recorded before destructive steps; 14-minute deadline; taskkill timeouts",
+      "LOW WATCHDOG_STATUS schema replaced by the watchdog -> merge keeping schema and passive fields",
+      "LOW lastFailure overwritten, BROKEN exit status shown HEALTHY, fixed 600 s freshness -> fixed",
+      "LOW instance-lock stale removal race -> compare-and-delete",
+      "LOW watchdog confirmation window, first-run record overwrite, Global Stop during the wait, pre-tick phase accepted as safe -> fixed",
+      "LOW a tree kill after the child exited -> exit guard; soft kill re-checks Git",
+      "docs overclaims (launcher mode, wall-clock heartbeat age, early wake latency, scenario counts) -> corrected; per-child kill tests and a launcher-aware upgrade safe point disclosed under LV2",
+      "MEDIUM (found by the bundle-freeze validation under load) a reader could see a half-written heartbeat when the worker fell back to copying after a rename blocked by an open reader, leaving heartbeatAge empty in the status -> the worker retries the rename before copying and readers re-read a file that is being replaced (readJsonSettled); stress-tested with three parallel end-to-end runs plus the liveness selftest",
+      "MEDIUM (found by the second bundle freeze: the canonical tests step exceeded its fixed 600 s limit under about 4.4 of 8 cores of unrelated background load; the bootstrap selftest file took 598 s) -> fewer CIM process listings per recovery (1-2 instead of 5) and per post-kill sweep (1 instead of 2-3), blocked stubs no longer spin a CPU core (Atomics.wait), the test policy suspend-grace interval no longer misfires under slow runs, and the generation-2 end-to-end scenario uses two worlds instead of three"
+    ],
+    "residual": [
+      "two starters that both find the same stale instance lock at the same instant can both run (single-worker lock still prevents two ticks)",
+      "descendants are killed milliseconds after their root; a reused PID in that window is theoretically possible",
+      "in START mode a supervisor that a trigger starts during recovery is left alone; only orphans are swept",
+      "a BROKEN exit in a later iteration is reflected in the status only through the BLOCKED phase mapping (no dedicated end-to-end test)"
+    ],
+    "secondRound": {
+      "workflow": "lv1-load-reduction-adversarial-review (three independent lenses on 4e476b4: snapshot safety, test validity, whole package; two skeptics per finding tried to refute it)",
+      "confirmed": 15,
+      "refuted": 0,
+      "fixes": [
+        "MEDIUM Git-lock check used a process list taken before the kills (a Git process started in between could lose its lock) -> after any kill a fresh unfiltered listing taken after the kill time stamp; without kills only the 2-minute age rule (also in the entry sweep)",
+        "MEDIUM a daemon's stale WATCHDOG_STATUS.json could be refreshed as HEALTHY -> a write caused only by age keeps the producer's time stamp, health and reasons and adds STATUS_DOCUMENT_STALE and a watchdog block",
+        "LOW relisting depended on a successful kill -> it depends on restart targets; tested by the swept grandchild of a supervisor that survived the task stop",
+        "LOW a dead upgrade bootstrap could leave tasks disabled; -Upgrade could find no safe point while work stays eligible -> upgrade marker: the generation-2 entry starts no tick while it is live, the watchdog stands still while it is live and heals a supervisor task left disabled when its bootstrap died; the watchdog task is no longer disabled",
+        "LOW the LV1 watchdog would restart a healthy generation-1 entry after a BS1 bootstrap re-run -> restarts need an installed generation-2 entry (ENTRY_GENERATION_UNSUPPORTED)",
+        "LOW the bootstrap leftover kill used a second listing -> one listing for the worker check and the kill",
+        "LOW snapshots in the end-to-end scenario could pair a WAITING heartbeat with an older status, and the prompt flush was timing-dependent -> snapshots require heartbeat/status agreement and the WAITING heartbeat must follow the entry's own SLEEPING record within 5 s",
+        "LOW the killTargets list path (used in production) was untested -> tested",
+        "LOW documentation overclaims about kills, Git locks and freshness -> corrected"
+      ],
+      "residual": [
+        "during the first LV1 installation no watchdog exists yet: a bootstrap that dies between disabling the supervisor task and registering the tasks leaves the supervisor disabled until the command is run again"
+      ]
+    },
+    "loadReduction": "the bootstrap selftest shares one fixture template across its shard processes (built once by the orchestrating process, read-only clone source); a measured attempt to split long scenarios into twelve shards made the critical shard slower on the saturated machine (492 s against 435 s) and was reverted",
+    "thirdRound": {
+      "workflow": "lv1-round6-verification (independent lenses on 39e5e22: marker lifecycle, fresh Git check, stale status, generation guard, tests and documentation; two skeptics per finding)",
+      "confirmed": 20,
+      "refuted": 0,
+      "fixes": [
+        "HIGH every upgrade ended in FIRST_RUN_FAILED because the marker was still live when the new entry started (it quiesced instead of ticking) -> the bootstrap removes its marker after both tasks are registered and before the first run; Resolve-FirstRunState gives no verdict for an UPGRADE_QUIESCE heartbeat; static order checks",
+        "MEDIUM a heal deleted the stale marker even when re-enabling the supervisor task failed or its state was unknown (the task stayed disabled for good) -> the marker is deleted only when the task is enabled again or was never disabled; otherwise the next run retries",
+        "MEDIUM a restart without a kill did not count the task stop as a kill for the Git-lock check (a fresh lock left by a Git process the stop ended stayed for 2 minutes, in launcher mode until the next recovery) -> notAfter is the stop time; the evidence records it",
+        "MEDIUM the relisting after a restart kill was untested -> a test-only process-list hook of the injected controller starts a control-root orphan right after the first listing; it must be swept",
+        "MEDIUM the quiesce test covered only a marker present before the entry started -> the marker is written while the entry runs; the entry quiesces at its next tick boundary, keeps its wake time ahead over two refreshes, and the bootstrap's own safe-point function accepts that heartbeat",
+        "LOW marker removal had no owner check (a heal or another bootstrap could remove a live bootstrap's marker) -> the watchdog re-reads the marker before re-enabling and before deleting (same PID and start time); the bootstrap re-writes it after stopping the watchdog, checks ownership before installing and before registering (UPGRADE_MARKER_LOST), deletes only its own marker, and runs alone per control root (named mutex, BOOTSTRAP_ALREADY_RUNNING)",
+        "LOW a reused PID kept a dead bootstrap's marker live for up to 3 hours -> the watchdog checks the PID's creation time against the marker (PID_REUSED)",
+        "LOW quiesce blocked the tick that recovers an in-flight action, so the bootstrap waited 30 minutes -> the entry quiesces only while no action is in flight",
+        "LOW on a launcher plane -upgrade waited 30 minutes for a safe point that cannot come -> it stops at once with UPGRADE_LAUNCHER_PLANE_UNSUPPORTED (a launcher-aware upgrade stays deferred to LV2)",
+        "LOW a status document that is not an object, or has no time stamp, was rewritten in a broken form; the staleness limit ignored the document's staleAfterSeconds -> a full document replaces it; the limit is the larger of 10 minutes and staleAfterSeconds",
+        "LOW a healthy generation-1 entry was reported as a failure every run -> ENTRY_GENERATION_UNSUPPORTED is not a failure and reports health UNKNOWN; a not-running generation-1 entry is started (tested)",
+        "LOW one-line mutations not caught (staleness reason repeated, Enable on an enabled task, marker written during a recovery) -> tested",
+        "LOW the WAITING promptness check depended on the sampler's timing under load -> replaced by a load-independent unit test of the heartbeat thread's prompt write",
+        "LOW documentation statements did not match the code -> corrected"
+      ],
+      "robustness": "round 7: an error of the heartbeat worker thread no longer crashes the entry (reported, logged as HEARTBEAT_THREAD_FAILED, restarted up to 3 times); uncaught exceptions are logged as ENTRY_CRASH/ENTRY_FAILED and WATCHDOG_CRASH; selftest failure messages include the entry output and event log (motivated by one unexplained entry exit at STARTING under heavy load during the 39e5e22 validation)",
+      "residual": [
+        "the watchdog re-reads the marker right before re-enabling and right before deleting; a bootstrap that writes its marker in the milliseconds between that re-read and the delete loses it only until it writes the marker again after stopping the watchdog, and the upgrade continues; this call-site re-check has no deterministic test (the identity check is tested, also on a marker written by the bootstrap's own functions)",
+        "a bootstrap paused for more than 3 hours counts as dead; the resumed bootstrap stops at its next ownership check",
+        "a bootstrap that dies while files are being installed can leave new and old installed files side by side until the command is run again (the watchdog only re-enables the supervisor task)",
+        "during the first LV1 installation no watchdog exists yet: a bootstrap that dies between disabling the supervisor task and registering the tasks leaves the supervisor disabled until the command is run again",
+        "the cause of the single entry exit at STARTING under heavy load (39e5e22 validation) was not reproduced; round 7 adds survival of heartbeat-thread errors and crash records so a recurrence is diagnosable"
+      ]
+    },
+    "fourthRound": {
+      "workflow": "lv1-round8-verification (four lenses on 8b0713b: bootstrap/marker lifecycle, watchdog and library, entry and robustness, tests and documentation; one skeptic per lens tried to refute every finding)",
+      "confirmed": 13,
+      "refuted": 0,
+      "fixes": [
+        "MEDIUM the marker ownership check and the marker removal before the first run were guarded only by text positions -> an AST harness runs Test-UpgradeMarkerOwned with markers written by the bootstrap's own Write-JsonAtomic (owned, other start time, other PID, missing file, no document) and the liveness library reads that marker (time format, identity); the static check anchors on the whole removal statement",
+        "LOW a heal still pending for a marker with a reused PID made the in-recovery marker check abort the recovery (and use a storm-guard slot) -> the marker already judged stale in this run does not stop the recovery (tested with a task query that fails once)",
+        "LOW a generation-1 entry was still reported with supervisorHealth SUPERVISOR_STALE -> ENTRY_GENERATION_UNSUPPORTED; documentation states when UNKNOWN is written",
+        "LOW watchdog crash records went only to stderr, which the windowless wrapper discards -> crashes, failed runs and the hard deadline are appended to watchdog/watchdog-events.jsonl (failed run and crash tested; the deadline record uses the same helper)",
+        "LOW the Git-lock check after a kill could use the pre-kill list without any test noticing -> a Git-named process started after the orphan sweep must be seen (the lock is kept)",
+        "LOW the quiesce subtest could hang instead of failing -> the marker is removed after 90 s at the latest and the polled entry is killed after 300 s",
+        "LOW the selftest cleanup could kill a reused PID of a process already known to be dead -> the final cleanup kills only processes whose command line contains one of the selftest's own TEMP directories (round 9 removed two such PIDs; round 10 made the rule general)",
+        "LOW documentation: first-install exception of the heal in AUTONOMY-BOOTSTRAP and CHANGELOG, the racing-heal residual (the re-write after the watchdog stop restores the marker), the reason the entry never enables a disabled watchdog, the Git-lock test scope, and the checkpoint design text"
+      ],
+      "residual": [
+        "the task-stop rule for the Git-lock check is tested through the recorded stop time; the lock removal itself is checked only when no other Git process runs on the machine (during canonical validation other test files usually run Git)"
+      ]
+    },
+    "fifthRound": {
+      "workflow": "lv1-round9-verification (two lenses on fe9573b: production code, tests and documentation; one skeptic per lens tried to refute every finding)",
+      "confirmed": 7,
+      "refuted": 0,
+      "fixes": [
+        "LOW a watchdog that cannot take its lock for a reason other than a live second instance (another computer's lock, a lock file that cannot be created) exited 0 without a record -> such a refusal is recorded as WATCHDOG_LOCK_REFUSED and exits 75 (tested with another host's lock)",
+        "LOW the safety half of the in-recovery marker exemption (a different, live marker) was untested -> a run that begins on a dead bootstrap's marker with a pending heal aborts the restart when a new live marker appears during the recovery",
+        "LOW the crash record (uncaught exception) was untested -> a controller that crashes the watchdog asynchronously must leave a WATCHDOG_CRASH record",
+        "LOW the fresh-list Git check after a kill could pass because of another Git process on the machine -> that world hides the machine's other Git processes from the watchdog, so the check is deterministic",
+        "LOW the selftest cleanup still kept known-dead PIDs -> it kills only processes whose command line contains one of the selftest's own TEMP directories",
+        "LOW the first-install exception of the heal also applies to a repair without an enabled watchdog task -> documentation says so"
+      ],
+      "residual": [
+        "the 14-minute deadline record is not exercised by a test (it uses the same record helper as the tested crash and failed-run records)"
+      ]
+    },
+    "sixthRound": {
+      "workflow": "lv1-round10-verification (one reviewer on 2d579df and one skeptic)",
+      "confirmed": 3,
+      "refuted": 0,
+      "fixes": [
+        "LOW an instance lock left by a reboot after a PC rename was refused forever as another host's lock (the entry would never run again) -> a lock written before the last boot is judged by the liveness rule whatever host name it carries (tested)",
+        "LOW the documentation claimed that an unreadable watchdog lock exits 75 -> corrected: an unreadable lock counts as held for 20 minutes, and one that cannot be read or removed makes every run skip without a record (disclosed)",
+        "LOW the selftest's final cleanup killed nothing when the process listing failed -> it retries the listing once and otherwise kills nothing and prints the remaining PIDs (round 12: killing recorded PIDs blindly could hit a reused PID)"
+      ],
+      "residual": [
+        "an unreadable watchdog or entry lock that also cannot be removed (for example a changed ACL) makes every run skip without a record; the entry still logs ENTRY_INSTANCE_SKIPPED with the reason"
+      ]
+    },
+    "seventhRound": {
+      "workflow": "lv1-round11-verification (one reviewer on b497bae and one skeptic)",
+      "confirmed": 3,
+      "refuted": 1,
+      "fixes": [
+        "MEDIUM the cleanup fallback could tree-kill an unrelated process that reused a recorded PID -> when the process list is unavailable nothing is killed and the PIDs are printed",
+        "LOW after a PC rename a single-worker orchestrator.lock from before the reboot still blocked every tick (its stale-lock rule refused another host name) -> the entry judges such a lock by the dead-holder rules when it predates the last boot (tested)",
+        "LOW the 60 s margin of the boot rule left a window after a quick rename and restart -> the host-name bypass compares with the boot time itself (a lock with another host name cannot be written during the current boot on this machine-local root)"
+      ],
+      "refutedFindings": [
+        "the checkpoint's changed-file hashes describe older file versions: they are refreshed by the evidence commit after validation"
+      ]
+    },
+    "eighthRound": {
+      "workflow": "lv1-round12-verification (one reviewer on 2e70b8b and one skeptic)",
+      "confirmed": 2,
+      "refuted": 0,
+      "fixes": [
+        "LOW the foreign-host gate of the single-worker lock rule and the removal of the boot margin were not pinned by tests -> dead-holder locks one second before and after the boot time, in both selftests",
+        "LOW (pre-existing BS1 rule) a lock whose holder is alive but whose creation time could not be read was removed when it looked older than the last boot; after a forward clock step this could remove a live worker's lock -> fail-closed: such a lock is kept and the next run retries; the creation time is read from CIM and, if that fails, from Get-Process (LOCK_PREDATES_BOOT is no longer a removal reason; the selftest assertion was changed to the stricter rule)"
+      ]
+    }
+  },
+  "changedFileSha256": {
+    ".ai/REVIEW_STATUS.md": "eee82d53a396cffcf2d40f0eab8383f1f48c5fe3a57fec6d3db1603c476d9c2a",
+    "CHANGELOG.md": "064bd749f51bd1fad36a037bf4450a5898a9c567f5c40100b335781bec03b8bc",
+    "audit/V6-FULL-SCAN-PROGRESS.json": "4c7efc89ca38e47f1f0a5775129f7afcc08f10bff27616373ee70920d8134485",
+    "config/liveness-policy.json": "84a55106cb72f2f2f6c241e5198244a4887867242b67ce5e862f83f9b94cb889",
+    "config/protected-paths.json": "d446d9ba1f827c3f531972584923c97230aded1f856959ffb8a49a135a5e53ac",
+    "config/trust-root-manifest.json": "3dfbeb7cb023358650c3331c11fbab5de1d39a031ff04bb3aab9ee66830db3bd",
+    "docs/architecture/AUTONOMY-BOOTSTRAP.md": "fc0d56721c6a91ea8bff9b63f0505d8349909adb8d58537da40b0c43b06d3e39",
+    "docs/architecture/LIVENESS.md": "f45f922c74144bd1b54ef6305d5c433aa7134e8bac7071321a1f93be3cd00480",
+    "scripts/bootstrap-autonomy-selftest.mjs": "4dd48d1a0cb61802df1218401ed766a4fda5057653fe81d73b476214a871fc14",
+    "scripts/bootstrap-uasco-autonomy.ps1": "5095eafa40389ce06df7c112be5e69c1ed0cf045314a0364344cfd6320b59e62",
+    "scripts/liveness-selftest.mjs": "a39e9bc9e0c0e726ccff2b3c874302ed1f1ea76788fde5b6399946f337a3d975",
+    "scripts/uasco-liveness.mjs": "a5407699d2da52be466c5be24d1dba94991294f648741f39d85ce93070b022a1",
+    "scripts/uasco-supervisor-entry.mjs": "c8923fa785870b30bc2010112a2692c4555562c6c8de38a73731256a1b54350e",
+    "scripts/uasco-supervisor-watchdog-task.vbs": "69d11a2b003749321086959ca380fa521c93611ee109f095ad6cf9fa242f81b0",
+    "scripts/uasco-supervisor-watchdog.mjs": "477bd6091a754abc232e75b276ce3f173b425f04c9728cc030b88ea0b8bc7929",
+    "tests/pkg-lv1-liveness.test.ts": "ad96d0cfefc9ba58c01bb0f1fffa58f10e2ca8321026fc41cc814cb02f38a829"
+  },
+  "deferredToLV2": [
+    "explicit timeout in every control-plane command contract and broker (Claude builder/reviewer, Codex, validation, Vitest, npm, Git, release, Phase0) with evidence capture, RETRYABLE_STALL outcome and bounded retries",
+    "Claude quota detected on stdout as a provider wait",
+    "AUT2 daemon in-tick heartbeat, wake fields and liveness fields in the daemon-era WATCHDOG_STATUS.json",
+    "work-conservation enforcement in launcher mode (LV1 reports the launcher as RUNNING/LAUNCHER; livelock applies)"
+  ],
+  "openFindings": [],
+  "review": "cycle 1: pre-activation advisory CLAUDE_REVIEWER review of bcac65a (bundle digest 390a624b5fdd2eab21e71ea589dc4afd9e1379e0d34b172e076a05f723c40bd6): CLEAN, no findings, six advisories (dispositions in reviewAdvisoriesCycle1); cycle 2 (this remediation) needs its own review; the governed Codex review is pending (quota)",
+  "merge": "AFTER_PKG_BS1",
+  "cleanClaim": false,
+  "notClaimed": [
+    "a governed Codex review of LV1 before the Founder runs the upgrade bootstrap (Codex is quota-blocked until 2026-10-05T18:01Z)",
+    "per-child control-plane timeouts and RETRYABLE_STALL (LV2)",
+    "operation while the PC sleeps, is shut down or the user is signed out"
+  ],
+  "reviewAdvisoriesCycle1": {
+    "runDir": ".ai/cache/review/pre-activation-claude/runs/bcac65a-c1-20261003T094524211Z-orchestrator-claude",
+    "dispositions": {
+      "F-LV1-CLAUDE-ADV-001": "DISCLOSED: the frozen acceptance criterion says the watchdog task is registered disabled until the supervisor's first-run verdict; since round 6 it is registered enabled with its first periodic run 20 minutes later (so it stays installed if the window is closed) and is started and confirmed by the bootstrap after the verdict; the intent (no watchdog action before the verdict in the normal path) holds; the frozen criterion text is supervisor-owned and was not changed",
+      "F-LV1-CLAUDE-ADV-002": "FIXED: an unreadable heartbeat on a running task is re-read once after the short delay before 'no heartbeat for 10 minutes' can restart the supervisor (tested deterministically: both heartbeat files removed once while the task has run for 15 minutes; mutant W42)",
+      "F-LV1-CLAUDE-ADV-003": "FIXED: the entry's tick watch (Git queries and, when needed, a synchronous process list) is declared as the busy section TICK_WATCH with the default budget; not exercised by a deterministic test (it needs a Git call slower than the main-thread grace)",
+      "F-LV1-CLAUDE-ADV-004": "DISCLOSED: the canonical tests step took 319-408 s on quiet fresh-clone runs and 500 s during the bundle freeze under load, against the fixed 600 s limit; a timeout fails loudly",
+      "F-LV1-CLAUDE-ADV-005": "DISCLOSED: the upgrade orchestration block runs only outside test mode and is not executed end to end by a selftest; it is covered by the pure safe-point and first-run decision tables, the marker-ownership harness on markers written by the bootstrap's own functions, static order checks and the real Task Scheduler registration and chain probes",
+      "F-LV1-CLAUDE-ADV-006": "FIXED: both lock rules state the machine-local control-root invariant at the call site"
+    }
+  },
+  "finalLineageRecords": [
+    {
+      "recordedAt": "2026-10-07T06:55:56.355Z",
+      "kind": "FINAL_LINEAGE_EVIDENCE_BINDING",
+      "reason": "the package was re-applied unchanged (identical change set) onto the final finalization chain; values recorded at its earlier revisions (parent, branch, changedFileSha256, reseal/manifest, validation workspace) describe those superseded revisions and are kept unchanged as history; this record binds the evidence to the final revision",
+      "packageId": "V6-PKG-LV1-LIVENESS-WATCHDOG",
+      "finalBase": "1f523582e83be2c7ba8e89d30dbb6f51e04ff41e",
+      "headSubjectChain": [
+        "6d7323a v6 pkg-lv1: record cycle-2 validation and mutation evidence",
+        "f830c82 v6 pkg-lv1: re-read an unreadable heartbeat, declare the tick watch busy",
+        "fdd39ba v6 pkg-lv1: record final validation and mutation evidence",
+        "8ea803e v6 pkg-lv1: keep a live holder's lock when its creation time is unknown",
+        "1a8b75b v6 pkg-lv1: renamed-PC recovery for the single-worker lock, safe cleanup",
+        "d7d4fff v6 pkg-lv1: instance locks from before the last boot are judged by liveness",
+        "a479c28 v6 pkg-lv1: record refused watchdog locks, deterministic Git and marker tests",
+        "ebfad0a v6 pkg-lv1: ownership harness, pending-heal recovery, watchdog crash records",
+        "6132d64 v6 pkg-lv1: owned upgrade marker removed before the first run, safe heal, entry crash survival",
+        "eb7ed5c v6 pkg-lv1: upgrade marker, fresh Git check after kills, stale status handling",
+        "68d4303 v6 pkg-lv1: reduce liveness test and recovery load",
+        "97f4927 v6 pkg-lv1: record final validation and mutation evidence",
+        "3d7cb07 v6 pkg-lv1: settle heartbeat reads against concurrent replacement",
+        "787aa51 v6 pkg-lv1: record validation, mutation and host evidence",
+        "b3c55bd v6 pkg-lv1: close four mutation gaps (git re-checks, disabled watchdog, restart verification)",
+        "f7ce4e5 v6 pkg-lv1: independent supervisor watchdog and work-conserving entry"
+      ],
+      "supersededRevisions": [
+        "bcac65a",
+        "6ddce95",
+        "f2459cd",
+        "c74d41f"
+      ],
+      "changedFileSha256": {
+        ".ai/REVIEW_STATUS.md": "9d71d8747a72a928c61aed08c7b3def4c012e636c226969fd3f8d41eef9ed2fd",
+        "CHANGELOG.md": "8f6ebe453315f8126b03496cecb7a2555efa4b41f75a14426891ba9ab7d54bf3",
+        "audit/V6-FULL-SCAN-PROGRESS.json": "dad96011c178691fc5395b0c76e111b18f9377b1d2d62dbc6cf1d1b2f17fc9dd",
+        "config/liveness-policy.json": "84a55106cb72f2f2f6c241e5198244a4887867242b67ce5e862f83f9b94cb889",
+        "config/protected-paths.json": "d446d9ba1f827c3f531972584923c97230aded1f856959ffb8a49a135a5e53ac",
+        "config/trust-root-manifest.json": "8e89dcc5d58ef72dfad198c5587cbc8090066a0e50fc89bbe36988d42424b25e",
+        "docs/architecture/AUTONOMY-BOOTSTRAP.md": "fc0d56721c6a91ea8bff9b63f0505d8349909adb8d58537da40b0c43b06d3e39",
+        "docs/architecture/LIVENESS.md": "f45f922c74144bd1b54ef6305d5c433aa7134e8bac7071321a1f93be3cd00480",
+        "scripts/bootstrap-autonomy-selftest.mjs": "4dd48d1a0cb61802df1218401ed766a4fda5057653fe81d73b476214a871fc14",
+        "scripts/bootstrap-uasco-autonomy.ps1": "5095eafa40389ce06df7c112be5e69c1ed0cf045314a0364344cfd6320b59e62",
+        "scripts/liveness-selftest.mjs": "a39e9bc9e0c0e726ccff2b3c874302ed1f1ea76788fde5b6399946f337a3d975",
+        "scripts/uasco-liveness.mjs": "a5407699d2da52be466c5be24d1dba94991294f648741f39d85ce93070b022a1",
+        "scripts/uasco-supervisor-entry.mjs": "c8923fa785870b30bc2010112a2692c4555562c6c8de38a73731256a1b54350e",
+        "scripts/uasco-supervisor-watchdog-task.vbs": "69d11a2b003749321086959ca380fa521c93611ee109f095ad6cf9fa242f81b0",
+        "scripts/uasco-supervisor-watchdog.mjs": "477bd6091a754abc232e75b276ce3f173b425f04c9728cc030b88ea0b8bc7929",
+        "tests/pkg-lv1-liveness.test.ts": "ad96d0cfefc9ba58c01bb0f1fffa58f10e2ca8321026fc41cc814cb02f38a829"
+      },
+      "trustRootManifest": {
+        "sha256": "8e89dcc5d58ef72dfad198c5587cbc8090066a0e50fc89bbe36988d42424b25e",
+        "generatedAt": "2026-10-06T11:57:48.043Z",
+        "sealStatus": "SEALED",
+        "protectedFiles": 364
+      },
+      "validationEnvironment": {
+        "os": "Windows_NT 10.0.19045",
+        "node": "v24.19.0",
+        "npm": "11.17.0"
+      },
+      "validationBinding": "canonical validation (config/validation.json) of the exact reviewed commit runs in a fresh clean clone at that commit, in this environment, during the bundle freeze; the frozen review bundle records reviewedCommit, baseCommit and the validation report",
+      "note": "a file cannot contain the sha of the commit that adds it; the commit is identified by finalBase plus this tree's digests and by the frozen bundle"
+    },
+    {
+      "recordedAt": "2026-10-13T00:00:00.000Z",
+      "kind": "REAPPLIED_ONTO_BS1R_LINEAGE_RECORD",
+      "appendOnly": true,
+      "reason": "Founder decision 2026-10-13: LV1 (commits 1f52358..5e9a610) re-applied as ONE squashed commit onto V6-PKG-BS1R-AUTONOMY-BOOTSTRAP ef0f3bb. All earlier fields and finalLineageRecords[0] describe the original chain (bases, commits, digests) and are kept unchanged as history; they do not describe this revision.",
+      "packageId": "V6-PKG-LV1-LIVENESS-WATCHDOG",
+      "branch": "v6/pkg-lv1-liveness-watchdog-f9",
+      "base": "ef0f3bb (BS1R)",
+      "squashCommit": "baba7b2",
+      "followUpCommit": "d255116 (BS1R pre-existing-task selftest cases assert the integrated call order; reseal)",
+      "oldCommits": [
+        "f7ce4e5",
+        "b3c55bd",
+        "787aa51",
+        "3d7cb07",
+        "97f4927",
+        "68d4303",
+        "eb7ed5c",
+        "6132d64",
+        "ebfad0a",
+        "a479c28",
+        "d7d4fff",
+        "1a8b75b",
+        "8ea803e",
+        "fdd39ba",
+        "f830c82",
+        "6d7323a",
+        "5e9a610"
+      ],
+      "oldToNew": {
+        "f7ce4e5": "baba7b2 (squash)",
+        "b3c55bd": "baba7b2 (squash)",
+        "787aa51": "baba7b2 (squash)",
+        "3d7cb07": "baba7b2 (squash)",
+        "97f4927": "baba7b2 (squash)",
+        "68d4303": "baba7b2 (squash)",
+        "eb7ed5c": "baba7b2 (squash)",
+        "6132d64": "baba7b2 (squash)",
+        "ebfad0a": "baba7b2 (squash)",
+        "a479c28": "baba7b2 (squash)",
+        "d7d4fff": "baba7b2 (squash)",
+        "1a8b75b": "baba7b2 (squash)",
+        "8ea803e": "baba7b2 (squash)",
+        "fdd39ba": "baba7b2 (squash)",
+        "f830c82": "baba7b2 (squash)",
+        "6d7323a": "baba7b2 (squash)",
+        "5e9a610": "baba7b2 (squash)"
+      },
+      "integration": "single 3-way merge (git merge-file, base 1f52358, ours ef0f3bb, theirs 5e9a610) of the seven files changed by both sides; files changed only by LV1 taken from 5e9a610",
+      "conflicts": [
+        {
+          "file": "scripts/bootstrap-uasco-autonomy.ps1",
+          "hunks": 6,
+          "resolution": "header/params: TaskControllerFixture and Upgrade both kept; preflight: watchdog-task check kept and routed through Invoke-WatchdogCtl, supervisor Find/Export kept; SUPERVISOR_ALREADY_RUNNING bypass with -Upgrade kept together with the previous-definition export; registration block: BS1R register/read-back/rollback (Invoke-TaskCtl) kept, LV1 marker check, Global Stop check and watchdog registration added after it and routed through rollback; tail: BS1R unexpected-status stop kept, LV1 finally kept, catch added that rolls back an unexpected error after registration"
+        },
+        {
+          "file": "scripts/bootstrap-autonomy-selftest.mjs",
+          "hunks": 3,
+          "resolution": "old shard block removed (LV1 moved it) and LV1 shard block kept with the BS1R task groups added; static-safety assertions of both sides merged and adapted to the controller seam (stricter, none removed); BS1R task scenarios and LV1 entry-generation-2 scenario both kept; the two BS1R pre-existing-task cases now assert the integrated upgrade/repair call order (the existing task is disabled while files change, then restored disabled by the rollback)"
+        },
+        {
+          "file": "config/trust-root-manifest.json",
+          "hunks": 3,
+          "resolution": "not hand-merged; regenerated with scripts/generate-trust-root.mjs and verified"
+        },
+        {
+          "file": "docs/architecture/AUTONOMY-BOOTSTRAP.md",
+          "hunks": 1,
+          "resolution": "both bullets and the LV1 -Upgrade paragraph kept, BS1R Validation section kept and extended (steps a..f, tests-lv1, watchdog/upgrade rollback paragraph)"
+        },
+        {
+          "file": "CHANGELOG.md, .ai/REVIEW_STATUS.md, audit/V6-FULL-SCAN-PROGRESS.json",
+          "hunks": 3,
+          "resolution": "both sides kept; new entries state LV1 re-applied on BS1R, pending governed review, NOT CLEAN"
+        }
+      ],
+      "integrationItems": {
+        "a": "Restore-TasksAfterFailure does not re-enable a task when script:RolledBack is set; Stop-AfterRollback sets RolledBack and clears SupervisorDisabledForUpgrade; test bootstrap-task-upgrade-and-watchdog-rollback-never-re-enable-a-rolled-back-task (upgrade-then-rollback, upgrade-success) with the fake controller",
+        "b": "LV1 failure paths that left a registered runnable task now roll back: GLOBAL_STOP_ACTIVE after registration, watchdog registration/read-back failure, WATCHDOG_FIRST_RUN_NOT_CONFIRMED (previously the supervisor was deliberately kept running), unexpected error after registration; the watchdog task is stopped and disabled, never deleted",
+        "c": "tests/pkg-lv1-liveness.test.ts in step tests-lv1; new BS1 shard f (tests/pkg-bs1-autonomy-bootstrap-f.test.ts, step tests-bs1-f) for the entry-generation-2 and the new upgrade/watchdog rollback scenarios; scripts/phase0-acceptance.mjs ids extended",
+        "d": "trust-root manifest regenerated and verified",
+        "e": "docs, CHANGELOG and status files merged truthfully"
+      },
+      "changedProtectedFileSha256": {
+        "config/liveness-policy.json": "84a55106cb72f2f2f6c241e5198244a4887867242b67ce5e862f83f9b94cb889",
+        "config/protected-paths.json": "d446d9ba1f827c3f531972584923c97230aded1f856959ffb8a49a135a5e53ac",
+        "config/validation.json": "9f7298a0041cc9b548112b3d0024ea6df7f8fc62add212ea44760ca0e8687bff",
+        "scripts/bootstrap-autonomy-selftest.mjs": "7af7818c0ad75319258f69c9e423689efd31920a92c0fed145d268270ec2646b",
+        "scripts/bootstrap-uasco-autonomy.ps1": "14f44d07696d1d114885138e024f250742de26af481b3dc8593590438e4e32b3",
+        "scripts/liveness-selftest.mjs": "a39e9bc9e0c0e726ccff2b3c874302ed1f1ea76788fde5b6399946f337a3d975",
+        "scripts/phase0-acceptance.mjs": "de13d5692568e956b223225791bef1d3ced8df55ab2b5168ff918ffe73ebddc7",
+        "scripts/uasco-liveness.mjs": "a5407699d2da52be466c5be24d1dba94991294f648741f39d85ce93070b022a1",
+        "scripts/uasco-supervisor-entry.mjs": "c8923fa785870b30bc2010112a2692c4555562c6c8de38a73731256a1b54350e",
+        "scripts/uasco-supervisor-watchdog-task.vbs": "69d11a2b003749321086959ca380fa521c93611ee109f095ad6cf9fa242f81b0",
+        "scripts/uasco-supervisor-watchdog.mjs": "477bd6091a754abc232e75b276ce3f173b425f04c9728cc030b88ea0b8bc7929"
+      },
+      "changedOtherFileSha256": {
+        ".ai/REVIEW_STATUS.md": "f92404f57dac80e82ad2bace21ca265cbf48673ca7f444fedea1127bbc806e67",
+        "CHANGELOG.md": "7d467b0b6c0f97c95614629eb0aff82274be1f5a33c4e7bfe17fc3e7c51efbe6",
+        "audit/V6-FULL-SCAN-PROGRESS.json": "61e3aa98fabf94aa6a82b3a4a8015003831d2f04a2b6b16de9afb1bebf22a9a4",
+        "audit/checkpoints/V6-PKG-LV1-LIVENESS-WATCHDOG-2026-10-02.json": "466cd5a4f103c27994b1f5b267d0e670077ca719dfde1fe85adfccac1e012d90",
+        "config/trust-root-manifest.json": "093aa363b53ad4a1213f89db29374302efc1b59d1b84e0903edd367687ed90fb",
+        "docs/architecture/AUTONOMY-BOOTSTRAP.md": "7fb96f272e0c12b6f65b400d4240d6289be541e01c71863ea484f338d7018ba3",
+        "docs/architecture/LIVENESS.md": "f45f922c74144bd1b54ef6305d5c433aa7134e8bac7071321a1f93be3cd00480",
+        "tests/pkg-bs1-autonomy-bootstrap-f.test.ts": "3bd6b216cc6d37326fe03499345ebed7fe431227884d9874a1c5b2052dd5a13b",
+        "tests/pkg-lv1-liveness.test.ts": "ad96d0cfefc9ba58c01bb0f1fffa58f10e2ca8321026fc41cc814cb02f38a829",
+        "tests/support/bs1-shard.ts": "a2beccae0df868d928ef918cc11784dacd3494f4c0ff06d40d443f99d892add8"
+      },
+      "digestNote": "computed from the tree of the commit preceding this record (changes against ef0f3bb) and compared with config/trust-root-manifest.json of the same tree (equal for every listed protected file); the manifest does not list audit checkpoints, so this record does not change it",
+      "reviewStatus": "PENDING_GOVERNED_REVIEW",
+      "cleanClaim": false,
+      "validationEvidence": "PENDING_FREEZE",
+      "notClaimed": "No CLEAN, merge, release or full-validation claim; the supervisor owns review, validation and merge"
+    }
+  ],
+  "status": "F10 re-application: changes applied; not clean; review pending"
 }

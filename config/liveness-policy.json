@@ -1,0 +1,56 @@
+{
+  "//TR": "Bu politika LV1 canlılık katmanının (kararlı görev girişi ve bağımsız UASCO-Supervisor-Watchdog) eşiklerini tutar. Bütün yaşlar uyanık süre olarak ölçülür (uyku/hazırda bekleme sayılmaz). Eylem emniyet süreleri düzlemin kendi alt süreç zaman aşımlarının toplamının üstündedir; düzlem alt süreçleri kendi zaman aşımlarıyla sınırlar, bu katman yalnız tümden asılı işçiyi kurtarır.",
+  "schemaVersion": "1.0.0",
+  "heartbeat": {
+    "writeSeconds": 20,
+    "mainBeatSeconds": 5,
+    "stateRefreshSeconds": 30,
+    "staleAfterSeconds": 180,
+    "mainThreadGraceSeconds": 180
+  },
+  "busyBudgetsSeconds": {
+    "STARTUP": 900,
+    "TRUST_ROOT": 600,
+    "PLANE_LIBRARY": 300,
+    "UPGRADE": 7200,
+    "LEASE_RECOVERY": 300,
+    "PROCESS_LIST": 120,
+    "DEFAULT": 600
+  },
+  "actionBackstopMinutes": {
+    "REVIEW": 240,
+    "MERGE": 120,
+    "REMEDIATE": 360,
+    "IMPLEMENT": 360,
+    "PACKAGE": 240,
+    "SIGN": 120,
+    "PHASE0": 300,
+    "AUDIT": 240,
+    "DEFAULT": 240
+  },
+  "backstop": {
+    "pollSeconds": 30,
+    "hardFactor": 1.5,
+    "suspendGapFactor": 3
+  },
+  "loop": {
+    "probeMinutes": 15,
+    "minSleepSeconds": 30,
+    "noProgressRetrySeconds": 60,
+    "maxImmediateTicks": 24
+  },
+  "watchdog": {
+    "intervalMinutes": 5,
+    "livelockMinutes": 480,
+    "conservationViolationRuns": 2,
+    "restartVerifySeconds": 120,
+    "taskStopWaitSeconds": 60,
+    "maxRecoveriesPerHour": 3,
+    "backoffMinutes": [5, 10, 20, 40, 60],
+    "watchdogStaleMinutes": 20
+  },
+  "taskNames": {
+    "supervisor": "UASCO-Autonomous-Supervisor",
+    "watchdog": "UASCO-Supervisor-Watchdog"
+  }
+}

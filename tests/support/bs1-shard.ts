@@ -1,6 +1,6 @@
 // //TR: Bu yardımcı BS1 selftest senaryolarını doğrulama adımlarına bölen tek kaynaktır: her senaryo tam olarak bir kabukta (shard) yer alır, kabuk içindeki gruplar en çok iki eşzamanlı alt süreç olarak çalışır ve kabuğun her senaryosu PASS olmak zorundadır. Kapsam bütünlüğünü tests/pkg-vs-validation-sharding.test.ts denetler.
 import cp from "node:child_process";
-export type Bs1Shard="a"|"b"|"c"|"d"|"e";
+export type Bs1Shard="a"|"b"|"c"|"d"|"e"|"f";
 export const BS1_PARTITION:Record<Bs1Shard,string[][]>={
   a: [
     ["bootstrap-task-rollback-falls-back-to-disable-and-reports-an-unsafe-result"],
@@ -33,6 +33,10 @@ export const BS1_PARTITION:Record<Bs1Shard,string[][]>={
      "entry-refuses-an-old-plane-release-lane-and-honours-global-stop",
      "entry-kills-the-whole-tick-process-tree-on-timeout-and-clears-its-lock",
      "entry-clears-only-provably-stale-locks-and-replaces-a-dangling-link"]
+  ],
+  f: [
+    ["entry-generation-2-liveness-heartbeat-work-conserving-loop-dead-lease-and-single-instance"],
+    ["bootstrap-task-upgrade-and-watchdog-rollback-never-re-enable-a-rolled-back-task"]
   ],
 };
 export const BS1_REAL_AUT1B_SCENARIO="entry-runs-the-tick-loop-timeout-cleanup-and-governed-upgrade-on-the-real-aut1b-plane";

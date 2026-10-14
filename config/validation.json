@@ -352,6 +352,26 @@
         "tests/pkg-bs1-autonomy-bootstrap-e.test.ts"
       ],
       "requiresDependencies": true
+    },
+    {
+      "id": "tests-bs1-f",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/pkg-bs1-autonomy-bootstrap-f.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests-lv1",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/pkg-lv1-liveness.test.ts"
+      ],
+      "requiresDependencies": true
     }
   ]
 }
