@@ -41,12 +41,12 @@ Inputs: task type, local availability, local quota pressure when observable, clo
 
 ## Pipeline and merge gate
 
-Work from either backend enters the same pipeline: deterministic validation → evidence → independent Codex review → remediation/re-review → merge gate. The producer (Anthropic Claude, local or cloud) never reviews its own output.
+Work from either backend enters the same pipeline: deterministic validation → evidence → independent governed CLAUDE_REVIEWER review → remediation/re-review → merge gate. The producer (Anthropic Claude, local or cloud) never reviews its own output.
 
 The merge gate (`assertExecutionMergeGate`) runs before every fast-forward merge, including the crash-safe resume path. It requires all of the following:
 - a valid execution provenance record;
 - a governed `CLEAN` result;
-- a reviewer from the independent provider (`OPENAI`), different from the producer;
+- a reviewer from the independent reviewer identity (`CLAUDE_REVIEWER`, `config/execution-backends.json` `pipeline.independentReviewerIdentity`), different from every producer/builder identity (history: before PKG-GOV1/PKG-GOV2 this requirement named the `OPENAI` provider; Codex review is retired and no longer a requirement);
 - an isolated run branch (never the default branch);
 - a result commit.
 

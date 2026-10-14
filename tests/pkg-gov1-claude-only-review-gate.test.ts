@@ -19,7 +19,7 @@ describe("independent governed CLAUDE_REVIEWER review gate (GOV1)",{timeout:9000
       "gov1-a-codex-only-clean-is-not-sufficient-history-is-preserved-and-decided-gates-reconcile",
       "gov1-merge-gate-requires-a-claude-reviewer-clean-bound-to-the-frozen-bundle",
       "gov1-real-executors-an-orchestrator-built-revision-is-claude-blocked-remediated-and-merges-on-claude-clean",
-      "gov1-without-the-policy-key-or-the-activation-the-previous-gate-is-unchanged"])});
+      "gov1-without-the-policy-key-or-the-activation-the-gate-stays-inactive-and-fails-closed-identically"])});
   it("closes a release only on one governed CLAUDE full-repository review bound to the candidate",()=>{
     expectScenarios(runGov1("scripts/release-audit-selftest.mjs"),"RELEASE_AUDIT_SELFTEST",[
       "gov1-a-release-candidate-is-audited-by-exactly-one-governed-claude-full-repository-review",

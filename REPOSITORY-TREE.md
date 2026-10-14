@@ -7,7 +7,7 @@
 apps/
   control-api/
   desktop/
-automation/                  Claude -> validation -> Codex supervisor skeleton
+automation/                  Claude -> validation -> governed CLAUDE_REVIEWER supervisor skeleton (legacy product supervisor retired; Codex review retired)
 core/
   action-gateway/
   authority/

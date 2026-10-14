@@ -1,7 +1,7 @@
-<!-- //TR: Bu dosya Codex'in Claude'dan bağımsız reviewer olarak frozen milestone contract + exact commit + evidence bundle üzerinde scope-creep yapmadan, blocker/advisory ayrımıyla ve moving-goalpost yasağıyla review yapmasını tanımlar. -->
-# Codex Independent Reviewer Contract
+<!-- //TR: Bu dosya governed CLAUDE_REVIEWER'ın (builder'dan bağımsız, sağlayıcıdan bağımsız kural seti; geçmişte Codex dahil herhangi bir bağımsız reviewer için de geçerliydi) bağımsız reviewer olarak frozen milestone contract + exact commit + evidence bundle üzerinde scope-creep yapmadan, blocker/advisory ayrımıyla ve moving-goalpost yasağıyla review yapmasını tanımlar. -->
+# Independent Reviewer Contract
 
-Codex'in görevi kodu "mükemmelleştirmek" değildir.
+Reviewer'ın görevi kodu "mükemmelleştirmek" değildir.
 Görevi, **frozen milestone contract** kapsamındaki exact reviewed commit'in kabul kriterlerini karşılayıp karşılamadığını bağımsız doğrulamaktır.
 
 ## Authority order

@@ -83,20 +83,23 @@
   "review": {
     "maxReviewCycles": 2,
     "formatRetryLimit": 1,
-    "promptTemplate": "prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt",
+    "promptTemplate": "prompts/GOVERNED-FROZEN-BUNDLE-REVIEW.txt",
+    "//TR": "GOV2 (Founder kararı 2026-10-12): Codex incelemesi emekli edildi; bu review.reviewers/quorum değerleri YALNIZ tarihsel DR1 tanımıdır (etkin değildir, GOV1 testi bu tarihsel değerleri sabitler; değerlerin değişmesi ayrı karar) ve çift inceleme (DR1) artık gerekli değildir ve dualReviewRequired yalnız daemon'un tarihsel DUAL_REVIEW_ACTIVE bekletme/serbest bırakma mekanizması için korunur (değiştirmek mevcut hold senaryolarını değiştirir; ayrı Founder kararı); DUAL kapısı CLAUDE_ONLY reviewGate etkinken hiçbir reviewer istemez. Tek gerekli reviewer governed CLAUDE_REVIEWER'dır; etkin kapı reviewGate'tir (CLAUDE_ONLY). Geçmiş Codex kanıtı okunur, yeni Codex incelemesi istenmez.",
     "dualReviewRequired": true,
     "reviewers": ["claude", "codex"],
     "reviewOrder": "SEQUENTIAL_SAME_FROZEN_BUNDLE",
-    "quorum": "CLAUDE_REVIEWER_CLEAN_AND_CODEX_REVIEWER_CLEAN"
+    "quorum": "CLAUDE_REVIEWER_CLEAN_AND_CODEX_REVIEWER_CLEAN",
+    "status": "LEGACY_DUAL_REVIEW_RETIRED_GOV2"
   },
   "releaseAudit": {
-    "//TR": "Son sürüm kapanışı: release adayı paketlenmeden, imzalanmadan ve kurulmadan önce CLAUDE_REVIEWER ve CODEX_REVIEWER aynı değişmez adayın tam depo denetimini ayrı ayrı yapar; ikisi de CLEAN olmadan release hattı ilerlemez. Bu reviewers/quorum DR2 tarihsel tanımıdır: reviewGate (GOV1, CLAUDE_ONLY) etkinleştirildiğinde yerine reviewGate.releaseAudit geçer ve tek governed CLAUDE_FULL_REPO_REVIEW CLEAN'i gerekir.",
+    "//TR": "GOV2 (2026-10-12): reviewers/quorum yalnız tarihsel DR2 tanımıdır (Codex emekli, etkin değil; etkin tanım reviewGate.releaseAudit); aşağıdaki contract metni DR2 tarihsel çift denetim sözleşmesidir ve yürürlükte olan sözleşme reviewGate.releaseAudit.contract'tır. Son sürüm kapanışı eskiden: release adayı paketlenmeden, imzalanmadan ve kurulmadan önce CLAUDE_REVIEWER ve CODEX_REVIEWER aynı değişmez adayın tam depo denetimini ayrı ayrı yapardı. Bu DR2 tarihsel tanımıdır: reviewGate (GOV1, CLAUDE_ONLY) etkinleştirildiğinde yerine reviewGate.releaseAudit geçer ve tek governed CLAUDE_FULL_REPO_REVIEW CLEAN'i gerekir.",
     "required": true,
     "reviewers": [
       "claude",
       "codex"
     ],
     "quorum": "CLAUDE_FULL_REPO_REVIEW_CLEAN_AND_CODEX_FULL_REPO_REVIEW_CLEAN",
+    "status": "LEGACY_DUAL_RELEASE_AUDIT_CONTRACT_SUPERSEDED_BY_reviewGate_GOV2",
     "emptyBaseCommit": "53c1d24822689b2b1e1ca0d98a1ff117d937864d",
     "promptTemplate": "prompts/RELEASE-AUDIT-REVIEW.txt",
     "contract": {

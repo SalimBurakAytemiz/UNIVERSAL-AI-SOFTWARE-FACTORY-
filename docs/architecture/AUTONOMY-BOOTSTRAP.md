@@ -86,7 +86,7 @@ From the AUT2 plane on, the daemon owns the heartbeat, the watchdog status and t
 
 Two kinds of held package keep the review and release guarantees across these plane changes:
 
-- **`DUAL_REVIEW_ACTIVE`.** Packages after DR1 are held until this activation. Only an active DR1+ plane releases them, so they get the Claude and Codex reviews.
+- **`DUAL_REVIEW_ACTIVE`.** Packages after DR1 are held until this activation. Only an active DR1+ plane releases them, so they get the dual reviews of that era (history: superseded by PKG-GOV1/PKG-GOV2, where only the governed `CLAUDE_REVIEWER` reviews).
 - **`RELEASE_AUDIT_ACTIVE`.** The release package is held until this activation. Only a DR2+ plane releases it, so the release is created, audited by both reviewers, packaged, signed through the loaded ssh-agent key and installed by Phase0 (`-SkipAutoStart`, `UASCO-Installed-Supervisor`) only on a plane that enforces all of that.
 
 ## Limits (disclosed, not claimed away)

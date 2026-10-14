@@ -1,5 +1,5 @@
 // //TR: Bu motor gözetimsiz orkestratörün bağımlılık farkında planlayıcısıdır: kalıcı kontrol durumundan bir sonraki uygun eylemi seçer, enjekte edilen yürütücünün sonucunu durum geçişine çevirir; sağlayıcı kotası review cycle/format/remediation hakkı tüketmez ve yalnız o sağlayıcıya bağlı işleri bekletir, Founder kararı yalnız ilgili paketi/release'i durdurur, geçici hatalar sınırlı geri çekilmeyle yeniden denenir, yarım kalan eylemler idempotent yürütücülerle toparlanır.
-import {requiredReviewers,currentGate,gateStatus,computeReviewAggregate,nextReviewer,usesReviewerGate,reviewSatisfiesGate,claudeOnlyGate,claudeOnlyPolicy,founderClaudeOnlyRecord,honouredBlockers,aggregateFindings,auditTarget,PROVIDER_STATE_KEY,REVIEWER_IDENTITY,CLAUDE_ONLY,CLAUDE_ONLY_RELEASE_QUORUM} from "./review-quorum.mjs";
+import {requiredReviewers,currentGate,gateStatus,computeReviewAggregate,nextReviewer,reviewSatisfiesGate,claudeOnlyGate,claudeOnlyPolicy,founderClaudeOnlyRecord,honouredBlockers,aggregateFindings,auditTarget,PROVIDER_STATE_KEY,REVIEWER_IDENTITY,CLAUDE_ONLY,CLAUDE_ONLY_RELEASE_QUORUM} from "./review-quorum.mjs";
 export const ACTIONS=["REVIEW","REMEDIATE","IMPLEMENT","MERGE","CLOSE","PACKAGE","SIGN","PHASE0","AUTOSTART"];
 const TERMINAL=["CLOSED","MERGED"];
 const clone=x=>JSON.parse(JSON.stringify(x));
@@ -32,9 +32,10 @@ export function nextAction(control,now,{skip=new Set()}={}){
     const p=control.packages[id],key=`P:${id}`;if(skip.has(key)||TERMINAL.includes(p.status)||p.status==="FOUNDER_DECISION_PENDING"||p.hold||!due(p,now)||!dependenciesMet(control,p))continue;
     // //TR: Çift inceleme gereken pakette her reviewer kendi sağlayıcı durumuna göre ayrı eylemdir; biri kotadayken diğeri ve bağımsız işler sürer.
     const reviewerDue=r=>providerDue(control,PROVIDER_STATE_KEY[r],now);
-    if(["REVIEW_PENDING","REVIEW_PENDING_PROVIDER_QUOTA"].includes(p.status)){if(usesReviewerGate(p,control)){const r=nextReviewer(p,control,reviewerDue);if(r)return {type:"REVIEW",packageId:id,provider:r,key:`${key}:${r}`};continue}if(providerDue(control,"codex",now))return {type:"REVIEW",packageId:id,key};continue}
+    // //TR: GOV2: etkin CLAUDE_ONLY kapısı yoksa sağlayıcısız REVIEW eylemi üretilir; yürütücü onu hiçbir inceleme çalıştırmadan Founder kararına düşürür (REVIEW_GATE_NOT_ACTIVATED), Codex asla zamanlanmaz.
+    if(["REVIEW_PENDING","REVIEW_PENDING_PROVIDER_QUOTA"].includes(p.status)){if(!claudeOnlyGate(control))return {type:"REVIEW",packageId:id,key};const r=nextReviewer(p,control,reviewerDue);if(r)return {type:"REVIEW",packageId:id,provider:r,key:`${key}:${r}`};continue}
     // //TR: Etkinleştirmeden önce yalnız Codex ile CLEAN olmuş ama birleşmemiş paket, birleşmeden önce eksik CLAUDE_REVIEWER incelemesini alır (CLAUDE_ONLY altında da: yalnız Codex CLEAN'i yetmez).
-    if(p.status==="REVIEW_CLEAN"&&usesReviewerGate(p,control)&&!reviewSatisfiesGate(p,control)){const r=nextReviewer(p,control,reviewerDue);if(r)return {type:"REVIEW",packageId:id,provider:r,key:`${key}:${r}`};continue}
+    if(p.status==="REVIEW_CLEAN"&&!reviewSatisfiesGate(p,control)){if(!claudeOnlyGate(control))return {type:"REVIEW",packageId:id,key};const r=nextReviewer(p,control,reviewerDue);if(r)return {type:"REVIEW",packageId:id,provider:r,key:`${key}:${r}`};continue}
     if(p.status==="REMEDIATION_PENDING"){if(providerDue(control,"claude",now))return {type:"REMEDIATE",packageId:id,key};continue}
     // //TR: Backend beklemesi nedeniyle kuyruğa alınan iş, kuyruğa alındığı eylemle (remediation ise aynı bulgular, frozen contract ve bir sonraki cycle ile) sürer.
     if(["IMPLEMENT_PENDING","QUEUED"].includes(p.status)){if(providerDue(control,"claude",now))return {type:p.status==="QUEUED"&&p.queuedAction==="REMEDIATE"?"REMEDIATE":"IMPLEMENT",packageId:id,key};continue}
@@ -45,7 +46,7 @@ export function nextAction(control,now,{skip=new Set()}={}){
     if(r.status==="PHASE0_DONE"){if(autostartDue(r,now))return {type:"AUTOSTART",releaseKey:rk,key};continue}
     if(!due(r,now))continue;
     // //TR: Son sürüm denetimi: önce aday için tam depo bundle'ı dondurulur, sonra her reviewer kendi sağlayıcı durumuna göre ayrı eylemdir; iki CLEAN olmadan paketleme planlanmaz.
-    if(r.status==="AUDIT_PENDING"){if(!r.audit?.bundle)return {type:"AUDIT_FREEZE",releaseKey:rk,key};const k=nextReviewer(auditTarget(r),control,x=>providerDue(control,PROVIDER_STATE_KEY[x],now));if(k)return {type:"AUDIT",releaseKey:rk,provider:k,key:`${key}:${k}`};continue}
+    if(r.status==="AUDIT_PENDING"){if(!r.audit?.bundle)return {type:"AUDIT_FREEZE",releaseKey:rk,key};if(!claudeOnlyGate(control))return {type:"AUDIT",releaseKey:rk,key};const k=nextReviewer(auditTarget(r),control,x=>providerDue(control,PROVIDER_STATE_KEY[x],now));if(k)return {type:"AUDIT",releaseKey:rk,provider:k,key:`${key}:${k}`};continue}
     if(r.status==="PACKAGE_PENDING")return {type:"PACKAGE",releaseKey:rk,key};
     if(["SIGN_PENDING","WAITING_FOR_SECURE_SIGNER"].includes(r.status))return {type:"SIGN",releaseKey:rk,key};
     if(r.status==="PHASE0_PENDING")return {type:"PHASE0",releaseKey:rk,key};
@@ -53,7 +54,7 @@ export function nextAction(control,now,{skip=new Set()}={}){
   return null;
 }
 // //TR: Politika son sürüm denetimini gerektiriyorsa yeni release adayı paketlemeden önce iki reviewer'ın tam depo denetimini bekler (CLAUDE_ONLY kapısı etkinse tek CLAUDE_FULL_REPO_REVIEW); denetim nesnesi yalnız bu adaya aittir.
-function newAudit(rk,control){return {id:`RELEASE-AUDIT-${rk}`,required:true,cycle:1,policy:claudeOnlyGate(control)?"CLAUDE_FULL_REPO_REVIEW":"CLAUDE_FULL_REPO_REVIEW_AND_CODEX_FULL_REPO_REVIEW"}}
+function newAudit(rk,control){return {id:`RELEASE-AUDIT-${rk}`,required:true,cycle:1,policy:"CLAUDE_FULL_REPO_REVIEW"}}
 function newRelease(p,rk,now,policy,control){const audit=policy?.releaseAudit?.required===true;return {sourceCommit:p.reviewCommit,fromPackage:p.id,status:audit?"AUDIT_PENDING":"PACKAGE_PENDING",createdAt:now.toISOString(),nextAction:audit?"RELEASE_AUDIT":"PACKAGE",...(audit?{audit:newAudit(rk,control)}:{})}}
 function founder(target,reason,classification="FOUNDER_DECISION_REQUIRED"){target.status="FOUNDER_DECISION_PENDING";target.blockedReason=reason;target.classification=classification;target.nextAction="FOUNDER_DECISION"}
 function transient(target,now,reason,policy){const n=(target.transientFailures??0)+1;target.transientFailures=n;target.lastTransientError=reason;if(n>=(policy.tick?.maxTransientRetries??5)){const prior=target.status;founder(target,`RECOVERABLE_RETRIES_EXHAUSTED(${prior}): ${reason}`,"RECOVERABLE_RETRIES_EXHAUSTED");return}target.notBefore=minutes(now,Math.min(5*2**(n-1),360))}
@@ -65,18 +66,11 @@ export function applyOutcome(controlIn,action,outcome,now,policy){
     const p=control.packages[action.packageId];ev.from=p.status;delete p.inFlight;
     if(o.type==="ENV_ERROR"){transient(p,now,o.reason,policy)}
     else if(action.type==="REVIEW"&&action.provider)applyDualReview(control,p,action.provider,o,now,policy);
-    else if(action.type==="REVIEW"){
-      if(o.type==="QUOTA"){const prev=control.providers.codex??{},back=Math.min((prev.backoffMinutes?prev.backoffMinutes*2:policy.providers.codex.quotaBackoffMinutes),policy.providers.codex.quotaBackoffMaxMinutes);const ra=futureIso(o.retryAfter,now);control.providers.codex={status:"QUOTA_BLOCKED",retryAfter:ra??minutes(now,back),backoffMinutes:ra?null:back,lastEvidence:o.evidence??null,since:prev.since??now.toISOString()};p.status="REVIEW_PENDING_PROVIDER_QUOTA";p.quotaBlocks=[...(p.quotaBlocks??[]),o.evidence??null];p.nextAction="REVIEW_AT_PROVIDER_RETRY"}
-      else{control.providers.codex={status:"AVAILABLE",retryAfter:null};p.transientFailures=0;if(o.type!=="FORMAT_REJECTED"){p.formatCorrection=false;delete p.formatRejection}
-        if(o.type==="CLEAN"){p.status="REVIEW_CLEAN";p.review={result:"CLEAN",runDir:o.runDir,evidence:o.evidence,cycle:p.cycle};p.nextAction=p.merge?.mode==="FF_DEFAULT_BRANCH"?"MERGE_WHEN_ELIGIBLE":"CLOSE"}
-        else if(o.type==="BLOCKED"){p.review={result:"BLOCKED",runDir:o.runDir,findings:o.findings??[],ledgerFile:o.ledgerFile??null,cycle:p.cycle};if(p.cycle>=(policy.review.maxReviewCycles??2))founder(p,"REVIEW_CYCLE_LIMIT_REACHED_WITH_OPEN_BLOCKERS");else if(p.remediation?.authorized===true){p.status="REMEDIATION_PENDING";p.nextAction="REMEDIATE"}else founder(p,"BLOCKED_WITHOUT_REMEDIATION_AUTHORITY")}
-        else if(o.type==="FORMAT_REJECTED"){const n=(p.formatRetries??0)+1;if(n>(policy.review.formatRetryLimit??1))founder(p,"REVIEW_FORMAT_RETRY_EXHAUSTED");else{p.formatRetries=n;p.formatCorrection=true;p.formatRejection={runDir:o.runDir??null,reason:o.reason??null,at:now.toISOString()};p.status="REVIEW_PENDING";p.nextAction="REVIEW_FORMAT_CORRECTION"}}
-        else founder(p,o.reason??o.type,o.type==="INPUT_INVALID"?"ORCHESTRATOR_INPUT_DEFECT":"FOUNDER_DECISION_REQUIRED");
-      }
-    }
+    // //TR: GOV2: sağlayıcısız eski tek-Codex REVIEW sonucu emekli edildi; hiçbir sonuç (CLEAN dahil) kabul edilmez, paket Founder kararına düşer.
+    else if(action.type==="REVIEW")founder(p,o.reason??"LEGACY_GATE_RETIRED","REVIEW_GATE_NOT_ACTIVATED");
     else if(action.type==="REMEDIATE"||action.type==="IMPLEMENT"){
       if(o.type==="QUOTA"){const prev=control.providers.claude??{},back=Math.min((prev.backoffMinutes?prev.backoffMinutes*2:policy.providers.claude.quotaBackoffMinutes),policy.providers.claude.quotaBackoffMaxMinutes);const ra=futureIso(o.retryAfter,now);control.providers.claude={status:"QUOTA_BLOCKED",retryAfter:ra??minutes(now,back),backoffMinutes:ra?null:back,lastEvidence:o.evidence??null}}
-      // //TR: Etkinleştirmeden sonra commit edilip dondurulan her yeni revizyon iki reviewer ister; CODEX_ONLY_HISTORICAL işareti yalnız konduğu eski revizyona aittir, DUAL ile değiştirilir ve eski revizyonun commit/bundle/cycle kimliğine bağlı olarak historicalReviewPolicy'de saklanır (eski kanıt dokunulmadan kalır). CLAUDE_ONLY kapısı etkinse işaretler dokunulmadan kalır; yeni revizyonu yalnız CLAUDE_REVIEWER inceler.
+      // //TR: TARİHÇE (yalnız DUAL dönemi geçişi; GOV2 sonrası etkin Codex incelemesi yoktur, etkin kapı CLAUDE_ONLY'dir): DUAL kapısı etkinken commit edilip dondurulan her yeni revizyon iki reviewer isterdi; CODEX_ONLY_HISTORICAL işareti yalnız konduğu eski revizyona aittir, DUAL ile değiştirilir ve eski revizyonun commit/bundle/cycle kimliğine bağlı olarak historicalReviewPolicy'de saklanır (eski kanıt dokunulmadan kalır). CLAUDE_ONLY kapısı etkinse işaretler dokunulmadan kalır; yeni revizyonu yalnız CLAUDE_REVIEWER inceler.
       else if(o.type==="COMMITTED"){control.providers.claude={status:"AVAILABLE",retryAfter:null};delete p.queuedAction;delete p.formatRejection;delete p.reviewGate;if(control.dualReview?.active===true&&!claudeOnlyGate(control)){if(p.reviewPolicy&&p.reviewPolicy!=="DUAL")p.historicalReviewPolicy={reviewPolicy:p.reviewPolicy,reviewCommit:p.reviewCommit??null,bundleDigest:p.bundle?.digest??null,cycle:p.cycle??null,supersededAt:now.toISOString()};p.reviewPolicy="DUAL"}Object.assign(p,{status:"REVIEW_PENDING",reviewCommit:o.commit,baseCommit:o.baseCommit??p.baseCommit,implementationCommit:o.commit,bundle:o.bundle,cycle:o.cycle??p.cycle,formatRetries:0,formatCorrection:false,executionBackend:o.executionBackend??p.executionBackend??null,executionProvenance:o.provenance??p.executionProvenance??null,transientFailures:0,nextAction:"REVIEW"})}
       else if(o.type==="QUEUED"){p.status="QUEUED";p.queuedAction=action.type;p.notBefore=futureIso(o.retryAfter,now)??minutes(now,30);p.blockedReason=o.reason??null;p.nextAction=`${action.type}_WHEN_BACKEND_AVAILABLE`}
       else founder(p,o.reason??o.type);
@@ -96,6 +90,8 @@ export function applyOutcome(controlIn,action,outcome,now,policy){
   else if(o.type==="ENV_ERROR")transient(r,now,o.reason,policy);
   else if(o.type==="AUDIT_REQUIRED"&&!r.audit&&["PACKAGE","SIGN","PHASE0"].includes(action.type)){r.status="AUDIT_PENDING";r.audit=newAudit(action.releaseKey,control);r.nextAction="RELEASE_AUDIT"}
   else if(action.type==="AUDIT_FREEZE"){if(o.type==="FROZEN"){r.audit={...(r.audit??newAudit(action.releaseKey,control)),bundle:o.bundle,baseCommit:o.baseCommit,cycle:1,fileCount:o.fileCount??null,frozenAt:now.toISOString()};r.transientFailures=0;r.nextAction="RELEASE_AUDIT"}else founder(r,o.reason??"RELEASE_AUDIT_FREEZE_FAILED")}
+  // //TR: GOV2: sağlayıcısız AUDIT (kapı etkin değil) hiçbir sonuç üretmez; release denetim yolu Founder kararına düşer.
+  else if(action.type==="AUDIT"&&!action.provider)founder(r,o.reason??"REVIEW_GATE_NOT_ACTIVATED","REVIEW_GATE_NOT_ACTIVATED");
   else if(action.type==="AUDIT")applyReleaseAudit(control,r,action.provider,o,now,policy);
   else if(action.type==="PACKAGE"){if(o.type==="PACKAGED"){r.status="SIGN_PENDING";r.packaging=o.record;r.transientFailures=0;r.nextAction="SIGN"}else founder(r,o.reason??"PACKAGING_FAILED")}
   else if(action.type==="SIGN"){
@@ -113,7 +109,7 @@ export function applyOutcome(controlIn,action,outcome,now,policy){
 // //TR: Çift inceleme sonucu: yalnız ilgili reviewer'ın kapısı değişir. Kota o reviewer'ın sağlayıcı durumunu bloke eder, sonuç üretmez, cycle/format hakkı tüketmez. Biçimi bozuk çıktı format hakkını kullanır, hakkı biterse INVALID olur ve asla CLEAN sayılmaz. Yeter sayı review-quorum.mjs'dedir; CLEAN için iki reviewer'ın da bu bundle için geçerli CLEAN'i gerekir, geçerli bir BLOCKED entegrasyonu durdurur ve bulgular sağlayıcı atfıyla builder'a gider.
 // //TR: Tek reviewer sonucunun kapıya ve sağlayıcı durumuna etkisi paket incelemesi ve son sürüm denetimi için ortaktır.
 function updateReviewerGate(control,t,k,o,now,policy){let known=true;
-  const stateKey=PROVIDER_STATE_KEY[k],gate=currentGate(t),g={...(gate.providers[k]??{})},pp=policy.providers?.[stateKey]??policy.providers?.codex;
+  const stateKey=PROVIDER_STATE_KEY[k],gate=currentGate(t),g={...(gate.providers[k]??{})},pp=policy.providers?.[stateKey]??{quotaBackoffMinutes:30,quotaBackoffMaxMinutes:360};
   if(o.type==="QUOTA"){const prev=control.providers[stateKey]??{},back=Math.min((prev.backoffMinutes?prev.backoffMinutes*2:pp.quotaBackoffMinutes),pp.quotaBackoffMaxMinutes),ra=futureIso(o.retryAfter,now);control.providers[stateKey]={status:"QUOTA_BLOCKED",retryAfter:ra??minutes(now,back),backoffMinutes:ra?null:back,lastEvidence:o.evidence??null,since:prev.since??now.toISOString(),lastAttempt:now.toISOString()};Object.assign(g,{status:"PROVIDER_BLOCKED",quotaBlocks:[...(g.quotaBlocks??[]),o.evidence??null]})}
   else{control.providers[stateKey]={status:"AVAILABLE",retryAfter:null,lastAttempt:now.toISOString()};
     if(o.type==="CLEAN")Object.assign(g,{status:"CLEAN",runDir:o.runDir??null,evidence:o.evidence??null,at:now.toISOString(),formatCorrection:false});

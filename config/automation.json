@@ -27,6 +27,9 @@
     "sandboxPolicy": "config/builder-execution-policy.json"
   },
   "reviewer": {
+    "//TR": "GOV2 (Founder kararı 2026-10-12): bu blok emekli edilmiş eski Codex reviewer sözleşmesidir (yalnız tarihsel kanıt okuma ve retired legacy supervisor için); etkin reviewer DEĞİLDİR. Etkin reviewer reviewers.claude (CLAUDE_REVIEWER). Hiçbir yol bu bloğu etkin reviewer olarak seçmemelidir.",
+    "status": "RETIRED_LEGACY_CODEX_REVIEWER",
+    "activeReviewer": false,
     "command": "node",
     "args": [
       "scripts/codex-reviewer-broker.mjs"
@@ -41,7 +44,7 @@
   "reviewers": {
     "//TR": "Founder talimatı 2026-10-01: çift bağımsız inceleme. CODEX_REVIEWER mevcut reviewer sözleşmesiyle aynıdır; CLAUDE_REVIEWER builder'dan (CLAUDE_BUILDER) ayrı kimlik, süreç, oturum ve temiz inceleme klonunda, yalnız okuma araçlarıyla çalışır; model sabittir, yedek yalnız açıkça yapılandırılırsa kullanılır; API anahtarı kullanılmaz.",
     "dualReviewRequired": true,
-    "codex": {"identity": "CODEX_REVIEWER", "provider": "OPENAI", "tool": "codex", "broker": "scripts/codex-reviewer-broker.mjs", "formatRetryLimit": 1},
+    "codex": {"status": "RETIRED_HISTORICAL_ONLY", "activeReviewer": false, "identity": "CODEX_REVIEWER", "provider": "OPENAI", "tool": "codex", "broker": "scripts/codex-reviewer-broker.mjs", "formatRetryLimit": 1},
     "claude": {"identity": "CLAUDE_REVIEWER", "provider": "ANTHROPIC", "tool": "claude", "broker": "scripts/claude-reviewer-broker.mjs", "brokerSource": "CONTROL_PLANE", "model": "claude-opus-5", "fallbackModel": null, "policy": "config/reviewer-execution-policy.json", "systemPrompt": "prompts/CLAUDE-REVIEWER-SYSTEM.md", "formatRetryLimit": 1, "separation": "PROCESS_SESSION_CONTEXT_AND_WORKTREE_SEPARATED_FROM_CLAUDE_BUILDER", "authentication": "CURRENTLY_AUTHENTICATED_CLAUDE_CODE_NO_API_KEY"}
   },
   "git": {

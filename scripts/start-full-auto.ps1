@@ -1,5 +1,7 @@
 # //TR: Bu wrapper Phase0 CLEAN/CLEAN_LOCAL_ONLY kapısını doğrular, package-lock/node_modules deterministic durumunu korur ve supervisor'ı quota/retry/more-work kodlarına göre otomatik resume döngüsünde çalıştırır.
 $ErrorActionPreference="Stop"
+# //TR: GOV2: eski ürün supervisor'ı (yalnız Codex reviewer) emekli edildi; bu sarmalayıcı hiçbir şey başlatmadan fail-closed durur. Aşağıdaki gövde tarihseldir ve ulaşılamaz.
+throw "LEGACY_CODEX_REVIEW_PATH_RETIRED: start-full-auto.ps1 no longer starts the legacy Codex-review supervisor; use the governed CLAUDE_REVIEWER orchestrator"
 Set-Location (Split-Path -Parent $PSScriptRoot)
 & ".\scripts\sanitize-process-env.ps1"
 if(-not (Test-Path "package-lock.json")){throw "package-lock.json missing. Run scripts/install.ps1 first."}
@@ -22,6 +24,7 @@ while($true){
     Start-Sleep -Seconds ([Math]::Min([Math]::Max($seconds,60),7200))
     continue
   }
+  if($code -eq 64){throw "LEGACY_CODEX_REVIEW_PATH_RETIRED"}
   if($code -eq 50){Write-Host "GLOBAL_STOP_ACTIVE";break}
   if($code -eq 40){Write-Warning "FOUNDER_ATTENTION_REQUIRED";break}
   throw "Supervisor failed with exit code $code"

@@ -1,9 +1,15 @@
 <!-- //TR: Bu belge Founder'ın 2026-10-01 çift bağımsız inceleme talimatının (CLAUDE_REVIEWER + CODEX_REVIEWER) uygulamasını tanımlar: bağımsızlık, kimlikler, yeter sayı, bulgu birleştirme, remediation, kota, etkinleştirme ve testler; GOV1 bölümü 2026-10-06 Founder yönetişim değişikliğiyle gelen CLAUDE_ONLY inceleme kapısını (tek bağımsız governed CLAUDE_REVIEWER) tanımlar. -->
-# Dual independent review
+# Dual independent review (history; active gate: governed CLAUDE_REVIEWER only)
 
+> **Governance change 2026-10-12 (PKG-GOV2).** Codex review is retired completely. The only reviewer is the governed, independent, isolated, read-only `CLAUDE_REVIEWER` (fresh process, clean clone of the exact commit and bundle digest, producer != reviewer identity). Everything below about `CODEX_REVIEWER`, dual quorum and dual release audit is **history** (the record of packages reviewed before PKG-GOV1/PKG-GOV2) and does not describe an active gate. With no activated review gate, nothing is reviewed or merged (`REVIEW_GATE_NOT_ACTIVATED`); the legacy product supervisor is retired fail-closed (`LEGACY_CODEX_REVIEW_PATH_RETIRED`). A valid historical Codex BLOCKED recorded for the same bundle digest and cycle still blocks merge; no new Codex review is requested, scheduled or awaited.
+>
 > **Governance change 2026-10-06 (PKG-GOV1).** Once the `CLAUDE_ONLY` review gate is activated, the required gate for package integration and for the final release audit is one independent governed `CLAUDE_REVIEWER` review; Codex is no longer required or scheduled. The dual rules below describe the gate before that activation and stay the record of the packages reviewed under it. See [Claude-only review gate (PKG-GOV1)](#claude-only-review-gate-pkg-gov1).
 
-Every governed review package frozen after the activation commit is reviewed by two independent reviewers: `CLAUDE_REVIEWER` and `CODEX_REVIEWER`. Producer and reviewer are always different identities; the builder never reviews its own work.
+## Historical description — the dual Claude + Codex gate (superseded by PKG-GOV1 and PKG-GOV2; not in force)
+
+Everything from here up to the section "Claude-only review gate (PKG-GOV1)" describes the superseded dual gate and is kept as history; none of it is a current requirement. The only current reviewer requirement is the governed `CLAUDE_REVIEWER` described in the banners above and in the last section.
+
+Historically (until PKG-GOV1; not in force), every governed review package frozen after the activation commit was reviewed by two independent reviewers: `CLAUDE_REVIEWER` and `CODEX_REVIEWER`. Producer and reviewer were always different identities; the builder never reviews its own work.
 
 ```
 CLAUDE_BUILDER -> deterministic validation -> checkpoint -> implementation commit -> frozen review bundle
@@ -82,7 +88,7 @@ The reviewer uses the currently authenticated Claude Code installation. No API k
 
 ## Final release audit (PKG-DR2)
 
-Before a release candidate is packaged, signed or installed, both reviewers audit the whole repository of that candidate: `CLAUDE_FULL_REPO_REVIEW` and `CODEX_FULL_REPO_REVIEW`. Release closure needs both CLEAN on the same frozen candidate bundle.
+Historically (superseded by PKG-GOV1; not in force): before a release candidate is packaged, signed or installed, both reviewers audited the whole repository of that candidate: `CLAUDE_FULL_REPO_REVIEW` and `CODEX_FULL_REPO_REVIEW`. Release closure needed both CLEAN on the same frozen candidate bundle (history).
 
 ```
 release package merged -> release candidate (AUDIT_PENDING)

@@ -1,4 +1,4 @@
-<!-- //TR: Bu prompt Codex'e gitmeden önce deterministic validation'da kalan current milestone hatalarını Claude'un frozen scope içinde düzeltmesini ve validation/test/policy kapılarını zayıflatmamasını sağlar. -->
+<!-- //TR: Bu prompt bağımsız review'a gitmeden önce deterministic validation'da kalan current milestone hatalarını Claude'un frozen scope içinde düzeltmesini ve validation/test/policy kapılarını zayıflatmamasını sağlar. -->
 # Automatic Validation Fix
 
 Fix only the deterministic validation failures supplied by the supervisor for the frozen milestone contract.

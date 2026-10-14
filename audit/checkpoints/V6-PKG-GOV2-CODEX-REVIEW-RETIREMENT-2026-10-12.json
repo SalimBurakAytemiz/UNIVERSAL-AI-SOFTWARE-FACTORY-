@@ -5,7 +5,6 @@
   "date": "2026-10-12",
   "parent": "dd0ea4b",
   "branch": "v6/pkg-gov2-codex-review-retirement",
-  "status": "F10 AUTHORIZATION RECORD ONLY: package changes not yet applied; not clean; review pending",
   "founderAuthorization": {
     "decisions": {
       "D-GOV2-1": "Codex Review is removed completely from UASCO governance. The governed, independent, isolated, read-only CLAUDE_REVIEWER is the only reviewer; implementer agents make code changes, the reviewing Claude makes none.",
@@ -75,5 +74,621 @@
       "scope": "exact re-application of the f9-reviewed diff 891992e..791ef72; protected files limited to protectedFiles; recorded before any protected change of this package",
       "notBackdated": true
     }
-  }
+  },
+  "workItems": [
+    {
+      "id": "WI-1",
+      "commit": "1f17b27",
+      "summary": "Execution routing reviewer identity: stage INDEPENDENT_GOVERNED_REVIEW; independent reviewer identity CLAUDE_REVIEWER that must differ from every producer/builder identity (fail-closed separation check retained).",
+      "files": [
+        "automation/lib/execution-routing.mjs",
+        "config/execution-backends.json",
+        "automation/lib/orchestrator-executors.mjs",
+        "tests/pkg-x1-execution-routing.test.ts"
+      ]
+    },
+    {
+      "id": "WI-2",
+      "commit": "1f17b27",
+      "summary": "Provenance and prerequisites depend on Claude only; Codex captured as informational/optional, never required; Claude provenance strictness unchanged.",
+      "files": [
+        "scripts/capture-provider-provenance.mjs",
+        "scripts/preflight.mjs",
+        "scripts/phase0-acceptance.mjs",
+        "scripts/provider-smoke.mjs",
+        "scripts/install.ps1",
+        "scripts/uasco-orchestrator.mjs",
+        "scripts/v6-paste2d-selftest.mjs",
+        "scripts/validate-mechanical-closure.mjs",
+        "scripts/validate-paste2-closure.mjs",
+        "scripts/provider-omniroute-adversarial-selftest.mjs"
+      ]
+    },
+    {
+      "id": "WI-3",
+      "commit": "1f17b27",
+      "summary": "Legacy product supervisor and its launchers retired fail-closed with LEGACY_CODEX_REVIEW_PATH_RETIRED; no path can start a Codex review; test-covered.",
+      "files": [
+        "automation/factory-supervisor.mjs",
+        "scripts/start-full-auto.ps1",
+        "scripts/register-autostart.ps1",
+        "scripts/install.ps1",
+        "apps/control-api/src/server.ts"
+      ]
+    },
+    {
+      "id": "WI-4",
+      "commit": "1f17b27",
+      "summary": "No Codex fallback: no active review gate -> blocking REVIEW_GATE_NOT_ACTIVATED; legacy merge/release branches -> LEGACY_GATE_RETIRED; Codex scheduling/quota fallback removed; historical evidence readers kept; selftests re-pointed to CLAUDE_REVIEWER; tests/pkg-gov2-codex-retirement.test.ts added.",
+      "files": [
+        "automation/lib/review-quorum.mjs",
+        "automation/lib/orchestrator-engine.mjs",
+        "automation/lib/orchestrator-executors.mjs",
+        "scripts/dual-review-selftest.mjs",
+        "scripts/release-audit-selftest.mjs",
+        "scripts/orchestrator-selftest.mjs",
+        "scripts/autonomy-hardening-selftest.mjs",
+        "scripts/orchestrator-executor-integration-selftest.mjs",
+        "scripts/windows-crash-resume-selftest.mjs",
+        "tests/pkg-gov2-codex-retirement.test.ts"
+      ]
+    },
+    {
+      "id": "REVIEW-FIXES",
+      "commit": "0536392",
+      "summary": "Independent reviewer findings F-GOV2-001 (provider smoke needs both Claude brokers), F-GOV2-002 (provider required, codex spawn refused, history readable), F-GOV2-003 (stale comments).",
+      "files": []
+    },
+    {
+      "id": "WI-5",
+      "commit": "71d21ce",
+      "summary": "Legacy Codex reviewer config and superseded dual policy keys labelled retired; reviewGate stays exactly valid for claudeOnlyPolicy. Values pinned by the GOV1 test are kept (see D-GOV2-OPEN-1).",
+      "files": [
+        "config/automation.json",
+        "config/orchestrator-policy.json"
+      ]
+    },
+    {
+      "id": "WI-6",
+      "commit": "889f4b2",
+      "summary": "CODEX.md -> REVIEWER-RULES.md, prompts/CODEX-FROZEN-BUNDLE-REVIEW.txt -> prompts/GOVERNED-FROZEN-BUNDLE-REVIEW.txt, provider-neutral prompt wording, references updated.",
+      "files": [
+        "REVIEWER-RULES.md",
+        "prompts/GOVERNED-FROZEN-BUNDLE-REVIEW.txt",
+        "config/protected-paths.json",
+        "scripts/validate-architecture.mjs",
+        "scripts/phase0-acceptance.mjs"
+      ]
+    },
+    {
+      "id": "WI-7",
+      "commits": [
+        "76551eb",
+        "342cd27",
+        "(records commit)"
+      ],
+      "summary": "Docs: statements that Codex is a required/active reviewer now name the governed CLAUDE_REVIEWER (independent, isolated, read-only, fresh process, clean clone, exact commit and bundle digest, producer != reviewer); historical Codex narrative kept and marked as history; CLAUDE.md builder/reviewer separation contract intact; trust root resealed. AGENTS.md has no Codex statement (untouched).",
+      "files": [
+        "CLAUDE.md",
+        "BUILD-RULES.md",
+        "DEFINITION-OF-DONE.md",
+        "README.md",
+        "docs/architecture/DUAL-INDEPENDENT-REVIEW.md",
+        "docs/architecture/UNATTENDED-ORCHESTRATION.md",
+        "docs/architecture/EXECUTION-BACKENDS.md",
+        "docs/architecture/AUTONOMY-BOOTSTRAP.md",
+        "docs/architecture/LIVENESS.md",
+        "docs/architecture/OMNIROUTE-MODEL-FABRIC.md",
+        "governance/waivers.json",
+        "CANONICAL-STATUS.md",
+        "ARCHITECTURE-CONSTITUTION.md",
+        "FULL-REPO-CONSTRUCTION-CONTRACT.md",
+        "AI-SESSION-RULES.md",
+        "COMPLETENESS-BASELINE.md",
+        "INSTALLATION-GO-CHECKLIST.md",
+        "REPOSITORY-TREE.md",
+        "scripts/uasco-orchestrator.mjs (comment)",
+        "config/trust-root-manifest.json",
+        "CHANGELOG.md",
+        "audit/checkpoints/V6-PKG-GOV2-CODEX-REVIEW-RETIREMENT-2026-10-12.json"
+      ]
+    },
+    {
+      "id": "WI-8",
+      "status": "DEFERRED",
+      "summary": "Data enums and roadmap/playbook review text still say CODEX_OR_CERTIFIED_INDEPENDENT_REVIEWER / Codex independent review. Deferred per D-GOV2-5 because roadmap/contracts changes alter milestone-contract digests of frozen bundles.",
+      "files": [
+        "organization/agents/**",
+        "evaluations/agents/**",
+        "registries/agent-review-graph-v2.json",
+        "registries/agent-review-matrix.json",
+        "registries/phase-contracts-index.json",
+        "roadmap/**",
+        "playbooks/v2/**",
+        "ROADMAP.md"
+      ]
+    }
+  ],
+  "tests": {
+    "file": "tests/pkg-gov2-codex-retirement.test.ts",
+    "note": "new in 1f17b27, extended in 0536392"
+  },
+  "verificationEvidence": {
+    "measuredByReviewer": {
+      "who": "independent Claude reviewer (advisory; NOT governed CLEAN), clean clone, PSModulePath unset, at 889f4b2",
+      "validate": "16 validate steps PASS up to the pre-existing environment failure INSTALLED_DEPENDENCY_STATE_INVALID:DEPENDENCY_STATE_MARKER_MISSING (plus INSTALLED_IDENTITY_MISMATCH shell-quote 1.10.0/1.11.0, source-map-js 1.2.1/1.2.2)",
+      "typecheck": "PASS",
+      "secretSanity": "PASS",
+      "trustRoot": "PASS",
+      "selftests": {
+        "dual-review": "32/32",
+        "release-audit": "15/15",
+        "orchestrator": "29/29",
+        "executor-integration": "12/12",
+        "crash-resume": "7/7",
+        "autonomy-hardening": "20/20",
+        "v6-paste2d": "23/23",
+        "provider-omniroute-adversarial": "24/24",
+        "v6-registries-agents-knowledge": "7732/7732"
+      },
+      "vitest": "39 files / 213 tests passed; one full-run load timeout in pkg-aut2 (passes 2/2 alone)",
+      "baselineAtDd0ea4b": "vitest 38 files / 204 tests, provider-omniroute 23/23",
+      "advisory": true
+    },
+    "measuredByImplementer": {
+      "who": "implementer (this WI-7 round, after docs edits and reseal)",
+      "commands": [
+        "npm run validate:architecture PASS",
+        "npm run validate:tr PASS",
+        "npm run validate:mechanical PASS",
+        "npm run validate:registries PASS",
+        "node scripts/verify-trust-root.mjs PASS (after node scripts/generate-trust-root.mjs)"
+      ],
+      "finalRun": "see final handoff report of the implementer (gov2-checks.sh and env -u PSModulePath npm run validate)"
+    }
+  },
+  "mutationChecks": {
+    "who": "independent reviewer (advisory)",
+    "caught": "8/8",
+    "mutants": [
+      {
+        "mutant": "no-gate block removed",
+        "caught": true
+      },
+      {
+        "mutant": "identity separation removed",
+        "caught": true
+      },
+      {
+        "mutant": "legacy supervisor retired check removed",
+        "caught": true
+      },
+      {
+        "mutant": "Claude-only provenance relaxed",
+        "caught": true
+      },
+      {
+        "mutant": "provider-less outcome treated as CLEAN",
+        "caught": true
+      },
+      {
+        "mutant": "codex spawn allowed",
+        "caught": true
+      },
+      {
+        "mutant": "provider requirement removed",
+        "caught": true
+      },
+      {
+        "mutant": "smoke without both brokers",
+        "caught": true
+      }
+    ]
+  },
+  "knownEnvironmentIssues": [
+    "node_modules is a junction to a checkout installed from an older lock: INSTALLED_DEPENDENCY_STATE_INVALID:DEPENDENCY_STATE_MARKER_MISSING and INSTALLED_IDENTITY_MISMATCH (shell-quote, source-map-js). Environment, not package.",
+    "pkg-aut2 vitest case can time out under full-run load (passes alone)."
+  ],
+  "codexReferenceJustification": {
+    "command": "git grep -i -l codex -- . \":!audit/**\" \":!CHANGELOG.md\" (run at the WI-7 docs commit plus the comment fix)",
+    "totalFiles": 985,
+    "counts": {
+      "historical-doc": 25,
+      "WI-8-deferred": 899,
+      "retired-legacy-marker": 8,
+      "informational-provenance": 21,
+      "non-review-provider-use": 13,
+      "history-reader": 19
+    },
+    "classes": {
+      "history-reader": {
+        "meaning": "code or tests that read/honour recorded historical Codex evidence, markers and blockers (D-GOV2-6) or test those readers; no Codex review is ever requested",
+        "count": 19,
+        "files": [
+          "automation/lib/orchestrator-daemon.mjs",
+          "automation/lib/orchestrator-engine.mjs",
+          "automation/lib/orchestrator-executors.mjs",
+          "automation/lib/review-governance.mjs",
+          "automation/lib/review-pipeline.mjs",
+          "automation/lib/review-quorum.mjs",
+          "automation/lib/watchdog-status.mjs",
+          "prompts/CLAUDE-REVIEWER-SYSTEM.md",
+          "scripts/autonomy-hardening-selftest.mjs",
+          "scripts/dual-review-selftest.mjs",
+          "scripts/orchestrator-executor-integration-selftest.mjs",
+          "scripts/orchestrator-selftest.mjs",
+          "scripts/release-audit-selftest.mjs",
+          "scripts/uasco-orchestrator.mjs",
+          "scripts/uasco-supervisor-entry.mjs",
+          "scripts/windows-crash-resume-selftest.mjs",
+          "tests/pkg-dr1-dual-review.test.ts",
+          "tests/pkg-dr2-release-audit.test.ts",
+          "tests/pkg-gov1-claude-only-review-gate.test.ts"
+        ],
+        "directoryGroups": {}
+      },
+      "informational-provenance": {
+        "meaning": "Codex captured/checked only as optional informational tool or listed in allowlists/protected path inventories; never required",
+        "count": 21,
+        "files": [
+          "automation/lib/command-contracts.mjs",
+          "automation/lib/command-runner.mjs",
+          "automation/lib/env-policy.mjs",
+          "config/environment-policy.json",
+          "config/protected-paths.json",
+          "config/trust-root-manifest.json",
+          "scripts/capture-provider-provenance.mjs",
+          "scripts/doctor.mjs",
+          "scripts/install-prereqs.ps1",
+          "scripts/install.ps1",
+          "scripts/preflight.mjs",
+          "scripts/provider-omniroute-adversarial-selftest.mjs",
+          "scripts/provider-smoke.mjs",
+          "scripts/runtime-schema-conformance-selftest.mjs",
+          "scripts/v6-foundation-a-selftest.mjs",
+          "scripts/v6-foundation-b-selftest.mjs",
+          "scripts/v6-foundation-e-selftest.mjs",
+          "scripts/v6-paste2d-selftest.mjs",
+          "scripts/validate-mechanical-closure.mjs",
+          "scripts/validate-paste2-closure.mjs",
+          "tests/pkg-d-standalone-provenance.test.ts"
+        ],
+        "directoryGroups": {}
+      },
+      "retired-legacy-marker": {
+        "meaning": "retired fail-closed paths or labels (LEGACY_CODEX_REVIEW_PATH_RETIRED, retired reviewer config) and the test that covers them",
+        "count": 8,
+        "files": [
+          "apps/control-api/src/server.ts",
+          "automation/factory-supervisor.mjs",
+          "config/automation.json",
+          "config/orchestrator-policy.json",
+          "scripts/codex-reviewer-broker.mjs",
+          "scripts/register-autostart.ps1",
+          "scripts/start-full-auto.ps1",
+          "tests/pkg-gov2-codex-retirement.test.ts"
+        ],
+        "directoryGroups": {}
+      },
+      "non-review-provider-use": {
+        "meaning": "Codex mentioned as a generic child process / stub / usage-limit text / schema comment, not as a required reviewer. Note: schemas/independent-review-result.schema.json and schemas/review-bundle.schema.json $comment text still say Codex; comments only, no behavior; schemas not in WI-7 scope, left unchanged",
+        "count": 13,
+        "files": [
+          "automation/lib/failure-classifier.mjs",
+          "schemas/finding.schema.json",
+          "schemas/independent-review-result.schema.json",
+          "schemas/review-bundle.schema.json",
+          "schemas/review-finding.schema.json",
+          "scripts/bootstrap-autonomy-selftest.mjs",
+          "scripts/bootstrap-kernel-selftest.mjs",
+          "scripts/bootstrap-uasco-autonomy.ps1",
+          "scripts/liveness-selftest.mjs",
+          "scripts/mechanical-kernel-selftest.mjs",
+          "scripts/powershell-safety-selftest.mjs",
+          "scripts/uasco-liveness.mjs",
+          "tests/pkg-q2-retry-time-grace.test.ts"
+        ],
+        "directoryGroups": {}
+      },
+      "WI-8-deferred": {
+        "meaning": "D-GOV2-5 data enums and roadmap/playbook review text",
+        "count": 899,
+        "files": [
+          "ROADMAP.md",
+          "registries/agent-review-graph-v2.json",
+          "registries/agent-review-matrix.json",
+          "registries/phase-contracts-index.json",
+          "roadmap/critical-path.json",
+          "roadmap/dependency-graph.json"
+        ],
+        "directoryGroups": {
+          "evaluations/agents": 363,
+          "organization/agents": 363,
+          "playbooks/v2": 18,
+          "roadmap/contracts": 149
+        }
+      },
+      "historical-doc": {
+        "meaning": "docs where Codex remains only as marked history (pre-GOV1/GOV2), the retired-broker record or the neutral reviewer rulebook note; PACK.json independentReview label is a historical package record; docs/closure and .ai are evidence and untouched",
+        "count": 25,
+        "files": [
+          ".ai/DECISIONS.md",
+          ".ai/REVIEW_STATUS.md",
+          ".ai/TEST_STATUS.md",
+          "AI-SESSION-RULES.md",
+          "ARCHITECTURE-CONSTITUTION.md",
+          "BUILD-RULES.md",
+          "CANONICAL-STATUS.md",
+          "CLAUDE.md",
+          "COMPLETENESS-BASELINE.md",
+          "INSTALLATION-GO-CHECKLIST.md",
+          "PACK.json",
+          "README.md",
+          "REPOSITORY-TREE.md",
+          "REVIEWER-RULES.md",
+          "docs/architecture/DUAL-INDEPENDENT-REVIEW.md",
+          "docs/architecture/OMNIROUTE-MODEL-FABRIC.md",
+          "docs/architecture/UNATTENDED-ORCHESTRATION.md",
+          "docs/closure/FULL-RED-TEAM-GAP-AUDIT-TR.md",
+          "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
+          "docs/closure/MECHANICAL-CLOSURE-RED-TEAM-AUDIT-TR.md",
+          "docs/closure/ULTIMATE-ARCHITECTURE-CLOSURE-SPEC-TR.md",
+          "docs/closure/V2-RE-AUDIT-NEW-GAPS-TR.md",
+          "docs/closure/V3-HARDENING-ADDITIONS.md",
+          "docs/closure/V3-RE-AUDIT-RESULTS-TR.md",
+          "governance/waivers.json"
+        ],
+        "directoryGroups": {}
+      }
+    },
+    "requiredReviewerStatements": "none remaining outside WI-8 data (fixed in WI-7)"
+  },
+  "review": "NOT_REVIEWED",
+  "cleanClaim": false,
+  "notClaimed": [
+    "governed CLEAN or merge (reviewer results above are advisory only)",
+    "WI-8 data enum migration",
+    "D-GOV2-OPEN-1 resolution",
+    "activation in the running supervisor"
+  ],
+  "changedFiles": [
+    "AI-SESSION-RULES.md",
+    "ARCHITECTURE-CONSTITUTION.md",
+    "BUILD-RULES.md",
+    "CANONICAL-STATUS.md",
+    "CLAUDE.md",
+    "COMPLETENESS-BASELINE.md",
+    "DEFINITION-OF-DONE.md",
+    "FULL-REPO-CONSTRUCTION-CONTRACT.md",
+    "INSTALLATION-GO-CHECKLIST.md",
+    "README.md",
+    "REPOSITORY-TREE.md",
+    "REVIEWER-RULES.md",
+    "apps/control-api/src/server.ts",
+    "automation/factory-supervisor.mjs",
+    "automation/lib/execution-routing.mjs",
+    "automation/lib/orchestrator-engine.mjs",
+    "automation/lib/orchestrator-executors.mjs",
+    "automation/lib/review-pipeline.mjs",
+    "automation/lib/review-quorum.mjs",
+    "config/automation.json",
+    "config/execution-backends.json",
+    "config/orchestrator-policy.json",
+    "config/protected-paths.json",
+    "config/trust-root-manifest.json",
+    "docs/architecture/AUTONOMY-BOOTSTRAP.md",
+    "docs/architecture/DUAL-INDEPENDENT-REVIEW.md",
+    "docs/architecture/EXECUTION-BACKENDS.md",
+    "docs/architecture/LIVENESS.md",
+    "docs/architecture/OMNIROUTE-MODEL-FABRIC.md",
+    "docs/architecture/UNATTENDED-ORCHESTRATION.md",
+    "governance/waivers.json",
+    "prompts/AUTO-REMEDIATION.md",
+    "prompts/AUTO-REVIEW.md",
+    "prompts/AUTO-VALIDATION-FIX.md",
+    "prompts/CLAUDE-REVIEWER-SYSTEM.md",
+    "prompts/GOVERNED-FROZEN-BUNDLE-REVIEW.txt",
+    "prompts/RELEASE-AUDIT-REVIEW.txt",
+    "scripts/autonomy-hardening-selftest.mjs",
+    "scripts/bootstrap-autonomy-selftest.mjs",
+    "scripts/capture-provider-provenance.mjs",
+    "scripts/dual-review-selftest.mjs",
+    "scripts/install.ps1",
+    "scripts/liveness-selftest.mjs",
+    "scripts/orchestrator-executor-integration-selftest.mjs",
+    "scripts/orchestrator-selftest.mjs",
+    "scripts/phase0-acceptance.mjs",
+    "scripts/preflight.mjs",
+    "scripts/provider-omniroute-adversarial-selftest.mjs",
+    "scripts/provider-smoke.mjs",
+    "scripts/register-autostart.ps1",
+    "scripts/release-audit-selftest.mjs",
+    "scripts/start-full-auto.ps1",
+    "scripts/uasco-orchestrator.mjs",
+    "scripts/v6-paste2d-selftest.mjs",
+    "scripts/validate-architecture.mjs",
+    "scripts/validate-mechanical-closure.mjs",
+    "scripts/validate-paste2-closure.mjs",
+    "scripts/windows-crash-resume-selftest.mjs",
+    "tests/pkg-dr1-dual-review.test.ts",
+    "tests/pkg-dr2-release-audit.test.ts",
+    "tests/pkg-gov1-claude-only-review-gate.test.ts",
+    "tests/pkg-gov2-codex-retirement.test.ts",
+    "tests/pkg-x1-execution-routing.test.ts",
+    "CHANGELOG.md",
+    "audit/checkpoints/V6-PKG-GOV2-CODEX-REVIEW-RETIREMENT-2026-10-12.json"
+  ],
+  "reapplicationLineageRecords": [
+    {
+      "recordedAt": "2026-10-13T00:00:00.000Z",
+      "kind": "REAPPLIED_ONTO_NEW_BASE_LINEAGE_RECORD",
+      "appendOnly": true,
+      "packageId": "V6-PKG-GOV2-CODEX-REVIEW-RETIREMENT",
+      "branch": "v6/pkg-gov2-codex-review-retirement-f9",
+      "reason": "Founder-approved chain re-application of 2026-10-13: the commits of this package were re-applied with git cherry-pick -x onto the f9 chain. All earlier fields and records describe the original chain (bases, commits, digests) and are kept unchanged as history; they do not describe this revision.",
+      "newBase": "891992e",
+      "oldCommits": [
+        "1f17b27",
+        "0536392",
+        "71d21ce",
+        "889f4b2",
+        "76551eb",
+        "342cd27",
+        "70e7847"
+      ],
+      "oldToNew": {
+        "1f17b27": "a2be132",
+        "0536392": "5fc7afa",
+        "71d21ce": "1224e7d",
+        "889f4b2": "929e5b6",
+        "76551eb": "5e3ba63",
+        "342cd27": "5530d25",
+        "70e7847": "f98b1d5"
+      },
+      "newCommitsInOrder": [
+        "a2be132",
+        "5fc7afa",
+        "1224e7d",
+        "929e5b6",
+        "5e3ba63",
+        "5530d25",
+        "f98b1d5",
+        "174e00f"
+      ],
+      "unmappedNewCommits": [
+        "174e00f"
+      ],
+      "conflicts": [
+        {
+          "file": "config/trust-root-manifest.json",
+          "resolution": "conflicts regenerated with scripts/generate-trust-root.mjs, never hand-merged"
+        },
+        {
+          "file": "config/validation.json",
+          "resolution": "integration commit: the new test file assigned to the tests step so the coverage guard passes"
+        },
+        {
+          "file": "scripts/*-selftest.mjs",
+          "resolution": "the codex-to-claudeReviewer edits of bootstrap-autonomy-selftest.mjs and liveness-selftest.mjs applied cleanly onto the f9 versions (no conflict)"
+        }
+      ],
+      "changedProtectedFileSha256": {
+        "ARCHITECTURE-CONSTITUTION.md": "9dae08d4c72080b601d85aedb3fc64a2f1e8b7aa43130c6fb0f1a61eebe8a1ab",
+        "BUILD-RULES.md": "ee794be0fb681353fe01bbdbf3e1669a0e4a0060332952733934666489e98836",
+        "CANONICAL-STATUS.md": "efdafc77850ed459d1795e5f97c4beebb3245f5d4539e12b30c4e62669210ec0",
+        "CLAUDE.md": "6c7836d5ff6c90ee63bc01a7c9ad08a3b0150179868c33a0a26a5477f77a6fde",
+        "DEFINITION-OF-DONE.md": "69e3ebc9f63162c8dc0b84511a75730fb7e41396f5f761fc40903be12c5490be",
+        "FULL-REPO-CONSTRUCTION-CONTRACT.md": "bf0f5039599ef5dec4d9c6960d2e13d1454779a6a9c5e6d05881d70ac7a2efb3",
+        "INSTALLATION-GO-CHECKLIST.md": "fa1673af01387ad0aadc017537e3cd5b8514c8cdfdf7c378b204491b1fb3a944",
+        "REVIEWER-RULES.md": "c131cb71c4a6a2a4633d574d6439969fb394ebfe57d5653ef1e4f41c0a1dd5d8",
+        "apps/control-api/src/server.ts": "df7006acbc6fbe447def1556574ef800737f9194cf9ef0005725d215733c18c4",
+        "automation/factory-supervisor.mjs": "09516a109f8509a754666beff7860ad1e2e2ca5bb7f648d3b0de310acc3857ed",
+        "automation/lib/execution-routing.mjs": "fc721bb561c0a022089324c30ebb291772c23762a0497884eeed30cc15200e1e",
+        "automation/lib/orchestrator-engine.mjs": "b4fd33960a1266e8129a7d2135257359802a859bf06e386474121b73e20099ff",
+        "automation/lib/orchestrator-executors.mjs": "23f00d3e4f6717fb6588e67d0fb947240baf2cfa4b2a2172cb6e5a83a5721f29",
+        "automation/lib/review-pipeline.mjs": "40b921873d6853f2211b56a39a99dc903f11059c1b3b59284f0ea7740d536a15",
+        "automation/lib/review-quorum.mjs": "122bd511cc3ced3aed0b67f8662d7de2176c0de27700f283ba8e477b91eb5a55",
+        "config/automation.json": "cd55df1e52bfcf99cbb28d44eb472d3cdbfd66bb4aa687958fceecb51ab692f7",
+        "config/execution-backends.json": "edf81ffb8944ee1ca08d0cb4a4540659f60c65e23e10f3098639b23501c4888a",
+        "config/orchestrator-policy.json": "79392e77c8e9d8a5e6b5a4c5033f9e160f7d1245fd8e89abc6f68aca59e51586",
+        "config/protected-paths.json": "e1d1ca7e94c283154767a4c0e1f8e14bed336eee90a2f2b6065011fb810dda17",
+        "config/validation.json": "c07bc51ce31d8952572975b23ed9a847eff1b2c22eaa3ac0d50a3214a668b801",
+        "governance/waivers.json": "99252b9c55d5ce02a6c9952d3ee4298704398f69b629a519da235d4a7eca62bc",
+        "prompts/AUTO-REMEDIATION.md": "a06e0d860df775dfe20f172a6d01e8f79f68145ecfc35adf1cadb1e9779edff3",
+        "prompts/AUTO-REVIEW.md": "832448c5855218072348e3053601b1e1a2838b51bf01c95f8ecedd26af7e2170",
+        "prompts/AUTO-VALIDATION-FIX.md": "214849b0fdbfcafca6cecf04de0cebea24a484a0a93bfc6fd0da69aea1a0b1a2",
+        "prompts/CLAUDE-REVIEWER-SYSTEM.md": "3c4e916aa030a10d1c52fa79275e2648307a571751756058791a2d57e7d14762",
+        "prompts/GOVERNED-FROZEN-BUNDLE-REVIEW.txt": "284d20bd330f92a31a821053958ec833cdfd9300bdd60f734e41a6dc5eb8949c",
+        "prompts/RELEASE-AUDIT-REVIEW.txt": "2a742f32eb1eb68269ecd9ace00123b441006bc647cf442f451671c4e39c80f4",
+        "scripts/autonomy-hardening-selftest.mjs": "4c39894361856f67ca9991cda70ef497a3cd39ea640859059a4d48a73b1338c4",
+        "scripts/bootstrap-autonomy-selftest.mjs": "aa69541055ee6cdffaca06366fa9297f6e30a0423cacbbde715859e837409d00",
+        "scripts/capture-provider-provenance.mjs": "be3ce91d496a0ca09c8fe3393ced24867c15906e209b99d6c315e7294be39d3a",
+        "scripts/dual-review-selftest.mjs": "99becaae7e98ca8d28c1d77b05f6fb5d80a3152cac7dd1bb861aa5a855edf48d",
+        "scripts/install.ps1": "b2d1fbed1fbe8a32f7b41dc5cd6f54375093c5ff860a3a4945db60f5ccb5dcaf",
+        "scripts/liveness-selftest.mjs": "94fe6d7585f7dac1245d594f7141ec409eb837cee0c2af5aa477be05b11d60d2",
+        "scripts/orchestrator-selftest.mjs": "98b17eb2f74e05a094d7ae1c5f2e72d88d4f6959fc9b408b9b6a629a5e672a74",
+        "scripts/phase0-acceptance.mjs": "41f10019c563d79607c246862a0b2fea69d9c275267a035eb4c06b66ad1ae8e4",
+        "scripts/preflight.mjs": "008127b2e6fb2e7bbfac2d64da8c0b2c557a045596d0b45c4dca2c04acf71f3a",
+        "scripts/provider-smoke.mjs": "51c9446034c88de5ba5430e6abbdb6114eda4b04899b0a8d29da2ce51e7a58e5",
+        "scripts/register-autostart.ps1": "677aa82216bb74c6a65a929e1fbf7bc3def9bee57b497716e9458f2858517e30",
+        "scripts/release-audit-selftest.mjs": "d06b11b9c44cc0d169b67ebdb9bb21183756a79acebc2f99d388133f6104f251",
+        "scripts/start-full-auto.ps1": "18f75f5549d8b65d0a31e884e3affd08fd23f7ef46b3f3ce263c1ada5d08e1f0",
+        "scripts/uasco-orchestrator.mjs": "b4d4e5d586d8f7e27b01fbe9e4d5720eb12e1afb23cf6af44a7c3d8346bb6da8",
+        "scripts/validate-architecture.mjs": "4a7524ccfcf8a86b19f3f83f658894de9db808c0e637a3daf780e4f1c5e1148e",
+        "scripts/validate-mechanical-closure.mjs": "41d6e4380ce3b5df90e4f65ef3869d8f774cb85fbc50628fa93f0a21c6f6aef8",
+        "scripts/validate-paste2-closure.mjs": "baaeb1e4e2d8cccbe8a68f79e6230ec08ddca213491a4a65df3ac22d8cca5d90"
+      },
+      "changedOtherFileSha256": {
+        "AI-SESSION-RULES.md": "4fdf12ada7a6b46eab060c53cd875a066319d2e676c3ce1d3e78156002413139",
+        "CHANGELOG.md": "cbfc3dff131a1c10057b7e88e98b8573f21cb8f0e72c25c7dd3b7cd64bfa81dc",
+        "COMPLETENESS-BASELINE.md": "b56ccba681aa6e8db365529353c7bb21f1052de1c8919b413f0badaf60a9e858",
+        "README.md": "f31c5a0321c71d04e85e3b2922a3e57a6d055a4157671777103c0c89f7216d26",
+        "REPOSITORY-TREE.md": "7c3d64a03bb75aee80aa4a4f849ebcd8d56b7039ef1ed255d062db7de91eedd7",
+        "audit/checkpoints/V6-PKG-GOV2-CODEX-REVIEW-RETIREMENT-2026-10-12.json": "ee3af22d7d2422c407f7f02c3dffb25c136d7fb19117a51a4574e8f7728c92f4",
+        "config/trust-root-manifest.json": "fd5554257347900241f6ab9d63f4a8de71af3c52531a4b51ee84ee3fe6d2ba58",
+        "docs/architecture/AUTONOMY-BOOTSTRAP.md": "3e269b696925c3aad04c452f2544a6ed22b02a5dca738e89057938a09ed5a882",
+        "docs/architecture/DUAL-INDEPENDENT-REVIEW.md": "8a9504b1f87551348c6226fc2bde1e7aa01671f48f0061800536b0f802114b99",
+        "docs/architecture/EXECUTION-BACKENDS.md": "abb3ce0249060cf317c5ad521d796c2f58269277e7b0275f3351dbeab54269ac",
+        "docs/architecture/LIVENESS.md": "b6cc078e91ffa2ba74a812d50933b771f4503f0840787c6b5460b345bafc8596",
+        "docs/architecture/OMNIROUTE-MODEL-FABRIC.md": "c24ade7f33d07c84fb1e2f60de8e335fa50650e07c522983d5e4d737e9aded9d",
+        "docs/architecture/UNATTENDED-ORCHESTRATION.md": "5c39d308437ba7bd436c04b533b24f11ee3080a3445d066c3e9733e56bec6fc5",
+        "scripts/orchestrator-executor-integration-selftest.mjs": "3050bec548c3599d9015ce5adf3e6c9bbba8c08acd69b911f3a8613ab79e341c",
+        "scripts/provider-omniroute-adversarial-selftest.mjs": "377a0c217d7ce205dea3e79b3b869e98441a8258b1b9cb93bc099d4235681420",
+        "scripts/v6-paste2d-selftest.mjs": "2069ac3b0bc631781d7d279122e9ade116c2762e0af6a786ebfebc3226259843",
+        "scripts/windows-crash-resume-selftest.mjs": "7d0971ec56751186aab556f532b036b0ace4842881181258ba606fe59f2c6997",
+        "tests/pkg-dr1-dual-review.test.ts": "f00a491298ecbd98f5b2493c626d498031519a412ef7846ef70a47f198543d8e",
+        "tests/pkg-dr2-release-audit.test.ts": "6bdf4de12b8111dc2f5bc47b4ca0fbf7ed365b98e20eed4e2e97228d45bd47b2",
+        "tests/pkg-gov1-claude-only-review-gate.test.ts": "5326170a82313b374990203f5452cb8dc7c0f032c78afdc962ada5b01358fa30",
+        "tests/pkg-gov2-codex-retirement.test.ts": "0b0f3d5fff8719091de4b1d979176a0308ac257af66cee82ecabbadde029bda9",
+        "tests/pkg-x1-execution-routing.test.ts": "7550697ff9417119247614c4f73eaae3e3a3895ffa490cc38767a2249c180a3c"
+      },
+      "digestNote": "computed from the tree of the commit preceding this record (changes against the new base) and compared with config/trust-root-manifest.json of the same tree (equal for every listed protected file); the manifest does not list audit checkpoints, so this record does not change it",
+      "reviewStatus": "PENDING_GOVERNED_REVIEW",
+      "cleanClaim": false,
+      "validationEvidence": "PENDING_FREEZE",
+      "notClaimed": "No CLEAN, merge, release or validation claim; the supervisor owns review, validation and merge"
+    },
+    {
+      "recordedAt": "2026-10-14T00:00:00.000Z",
+      "kind": "CYCLE2_REMEDIATION_RECORD",
+      "appendOnly": true,
+      "packageId": "V6-PKG-GOV2-CODEX-REVIEW-RETIREMENT",
+      "branch": "v6/pkg-gov2-codex-review-retirement-f9",
+      "reviewedTipOfCycle1": "84f4e7a",
+      "remediationCommit": "bf5f2f7",
+      "cycle1Finding": {
+        "id": "F-GOV2C1-001",
+        "severity": "P2",
+        "file": "docs/architecture/EXECUTION-BACKENDS.md",
+        "line": 49,
+        "summary": "the Pipeline and merge gate list still named a reviewer from the independent provider (OPENAI) as an active requirement"
+      },
+      "remediation": "line 49 now states the implemented requirement: a reviewer from the independent reviewer identity CLAUDE_REVIEWER (config/execution-backends.json pipeline.independentReviewerIdentity), different from every producer/builder identity, with the OPENAI wording kept only as a marked history note; no code, config or test changed",
+      "otherDocsChecked": "grep of all documents touched by GOV2 (AUTONOMY-BOOTSTRAP, DUAL-INDEPENDENT-REVIEW, EXECUTION-BACKENDS, LIVENESS, OMNIROUTE-MODEL-FABRIC, UNATTENDED-ORCHESTRATION) found no other present-tense Codex/OPENAI reviewer requirement outside passages already marked as history (the Governance change banners of DUAL-INDEPENDENT-REVIEW.md and the History paragraphs of UNATTENDED-ORCHESTRATION.md); none changed",
+      "digest": {
+        "docs/architecture/EXECUTION-BACKENDS.md": "60866ee0bd9595b94f03b581733886885cf4f8fd848dd9a2712546fc23a11b69",
+        "inTrustRootManifest": false,
+        "note": "EXECUTION-BACKENDS.md protected status as in the manifest of this tree; the manifest was regenerated by scripts/generate-trust-root.mjs"
+      },
+      "reviewStatus": "PENDING_GOVERNED_REVIEW_CYCLE_2",
+      "cleanClaim": false,
+      "notClaimed": "No CLEAN claim; the supervisor owns review, validation and merge"
+    },
+    {
+      "recordedAt": "2026-10-14T00:00:00.000Z",
+      "kind": "CYCLE2_REMEDIATION_RECORD_ADDENDUM",
+      "appendOnly": true,
+      "packageId": "V6-PKG-GOV2-CODEX-REVIEW-RETIREMENT",
+      "remediationCommit": "5bd9bb3",
+      "previousRecord": "CYCLE2_REMEDIATION_RECORD (7bdabca)",
+      "remediation": "docs/architecture/DUAL-INDEPENDENT-REVIEW.md: a section heading frames the body as the superseded dual Claude + Codex gate (not in force), and the present-tense requirement sentences of that body (two-reviewer rule, release-audit rule) are marked historical; history is not deleted and no meaning changed. UNATTENDED-ORCHESTRATION.md passages (lines 41, 56, 72, 74) were checked and are already inside explicitly marked history/legacy wording; unchanged. No code, config or test changed.",
+      "digest": {
+        "docs/architecture/DUAL-INDEPENDENT-REVIEW.md": "1c9d59797839015f3be260ebfcce8404b5cbf57ae937f5e1d5253709907d54cd",
+        "inTrustRootManifest": false
+      },
+      "reviewStatus": "PENDING_GOVERNED_REVIEW_CYCLE_2",
+      "cleanClaim": false
+    }
+  ],
+  "status": "F10 re-application: changes applied; not clean; review pending"
 }

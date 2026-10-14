@@ -2,7 +2,7 @@
 import fs from "node:fs";
 const required=[
 "CANONICAL-STATUS.md","ARCHITECTURE-FREEZE.md","docs/architecture/AGENT-COMPETENCY-MODEL-V2.md","docs/architecture/TECHNOLOGY-KNOWLEDGE-GRAPH.md","docs/architecture/SEMANTIC-VALIDATION.md",
-"ARCHITECTURE-CONSTITUTION.md","COMPLETENESS-BASELINE.md","ROADMAP.md","AGENTS.md","CLAUDE.md","CODEX.md",
+"ARCHITECTURE-CONSTITUTION.md","COMPLETENESS-BASELINE.md","ROADMAP.md","AGENTS.md","CLAUDE.md","REVIEWER-RULES.md",
 "docs/architecture/MISSION-OS.md","docs/architecture/EXTENSION-ARCHITECTURE.md","docs/architecture/REPOSITORY-INTELLIGENCE.md",
 "docs/architecture/POLYGLOT-BUILD-FABRIC.md","docs/architecture/BROWSER-EXECUTION-LAB.md","docs/architecture/MOBILE-DEVICE-LAB.md",
 "docs/architecture/RESOURCE-SCHEDULER.md","docs/architecture/TECHNICAL-COMPETENCY-FABRIC.md","docs/architecture/TECHNOLOGY-DECISION-ENGINE.md","docs/architecture/ASSURANCE.md","docs/architecture/GAME-INTELLIGENCE.md",

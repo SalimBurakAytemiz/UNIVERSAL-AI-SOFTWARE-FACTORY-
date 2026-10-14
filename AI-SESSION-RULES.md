@@ -1,4 +1,4 @@
-<!-- //TR: Bu dosya Claude/Codex oturumlarında token/context tüketimini azaltmak için minimal boot sırasını, checkpoint kullanımını ve full-repo scan yasağını tanımlar. -->
+<!-- //TR: Bu dosya Claude builder ve governed CLAUDE_REVIEWER oturumlarında (geçmişte Codex dahil) token/context tüketimini azaltmak için minimal boot sırasını, checkpoint kullanımını ve full-repo scan yasağını tanımlar. -->
 # AI Session & Context Rules
 
 Boot:

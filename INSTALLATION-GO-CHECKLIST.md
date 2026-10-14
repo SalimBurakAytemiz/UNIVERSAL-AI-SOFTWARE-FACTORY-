@@ -14,7 +14,7 @@ Required proof families:
 - trust-root hash verification
 - Git `main`, clean worktree, exact initial commit
 - Claude auth/network smoke
-- Codex auth/network smoke
+- Claude reviewer (CLAUDE_REVIEWER) auth/network smoke (Codex is optional/informational only)
 - Control API smoke
 - Electron Control Tower smoke
 - run logger / checkpoint / process lock / scheduler / review governance / Global Stop source gates

@@ -1,4 +1,4 @@
-<!-- //TR: Bu dosya Claude primary builder ve Codex independent reviewer ayrımını korurken OmniRoute/local/free/subscription provider'ları cost+health+quota+data policy ile yönlendirmeyi tanımlar. -->
+<!-- //TR: Bu dosya Claude primary builder ve governed CLAUDE_REVIEWER independent reviewer ayrımını (tarihsel: Codex) korurken OmniRoute/local/free/subscription provider'ları cost+health+quota+data policy ile yönlendirmeyi tanımlar. -->
 # Model & OmniRoute Fabric
 
 Preference:

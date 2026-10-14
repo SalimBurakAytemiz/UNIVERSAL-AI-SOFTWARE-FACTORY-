@@ -37,7 +37,7 @@ Bu dosya `IMPLEMENTED`, `CERTIFIED`, installation-ready, runtime-ready veya prod
 
 ## Independent review
 
-Codex (OpenAI, separate from the Anthropic builder) reviewed each package against a frozen milestone contract and review bundle, invoked by the orchestrator through a read-only process boundary; results are schema-validated and governed with the supervisor rules.
+History (before PKG-GOV1/PKG-GOV2; Codex review is now retired and the governed `CLAUDE_REVIEWER` is the only reviewer): Codex (OpenAI, separate from the Anthropic builder) reviewed each package against a frozen milestone contract and review bundle, invoked by the orchestrator through a read-only process boundary; results are schema-validated and governed with the supervisor rules.
 
 - `V6-PKG-A-DEPENDENCY-REVIEWED-LOCK` @ `3ed8533`: `CLEAN`.
 - `V6-PKG-C-LF-AND-ELECTRON-SMOKE` @ `2eae284`: `CLEAN`.
@@ -63,7 +63,7 @@ Review records live in `audit/reviews/`. They are unsigned because the Phase0 ev
 - Host-bound work stays local: ACL, Task Scheduler, Phase0, install validation, hardware, local credentials and devices, evidence keys, release packaging.
 - Release signing with the private key is Founder-only.
 - Signing keys and local credentials are never cloud inputs.
-- Cloud work goes to isolated run branches and passes the same validation, evidence, independent Codex review and merge gate.
+- Cloud work goes to isolated run branches and passes the same validation, evidence, independent governed `CLAUDE_REVIEWER` review and merge gate.
 - The cloud dispatch is `NOT_CONFIGURED` until a documented Claude product method exists and is approved. Until then, work routes to `LOCAL_CLAUDE` or is queued, and cloud execution is never claimed.
 
 ## Unattended orchestration
@@ -88,7 +88,7 @@ Sıra: final trust-root reseal (this release-candidate commit) -> export exactly
 - runtime schema conformance: `PASS`
 - release supply-chain: `PASS`
 - TypeScript/Vitest dependency-aware validation: `PASS`
-- provider provenance on this machine: `PASS` (Claude and Codex `STANDALONE_LAUNCHER`)
+- provider provenance on this machine: `PASS` (Claude `STANDALONE_LAUNCHER`; Codex only informational, historical)
 - Desktop / Control Tower smoke on this machine: `PASS` (Electron binary provisioned by the explicit checksum-verified step)
 - live provider smoke: `PASS` (2026-09-28, `scripts/provider-smoke.mjs` through `claude-builder-broker.mjs` and `codex-reviewer-broker.mjs`, both `STANDALONE_LAUNCHER`; report hash recorded in the PKG-H checkpoint; not Phase0 acceptance)
 - target preflight: `PASS` (after PKG-G and the Windows Time service start)

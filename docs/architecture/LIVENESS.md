@@ -191,12 +191,12 @@ Unit and integration checks cover:
 ## Deferred to LV2 (control-plane code, governed merge only)
 
 The installed layer cannot change control-plane code: the plane runs only reviewed commits. The following therefore needs a governed package:
-- an explicit timeout in every command contract and broker (Claude builder/reviewer, Codex, validation, Vitest, npm, Git, release, Phase0), with evidence capture and a `RETRYABLE_STALL` outcome with bounded retries;
+- an explicit timeout in every command contract and broker (Claude builder/reviewer, validation, Vitest, npm, Git, release, Phase0), with evidence capture and a `RETRYABLE_STALL` outcome with bounded retries;
 - Claude quota detected on stdout as a provider wait;
 - in-tick heartbeats and wake fields from the AUT2 daemon, and liveness fields in the daemon-era `WATCHDOG_STATUS.json`;
 - liveness in launcher (AUT2) mode. In LV1 the entry reports the launcher as `RUNNING`/`LAUNCHER` without work fields. Livelock and work conservation therefore do not apply there; only a dead entry, a frozen heartbeat (entry or daemon) or a hung main thread is detected;
 - a launcher-aware upgrade safe point. With the AUT2 daemon running, the bootstrap stops at once with `UPGRADE_LAUNCHER_PLANE_UNSUPPORTED` and changes nothing;
-- kill and hang tests of individual Claude or Codex children. They belong with the per-child timeouts.
+- kill and hang tests of individual Claude children (builder or CLAUDE_REVIEWER). They belong with the per-child timeouts.
 
 Until then, the action backstop is the outer bound of a hung child.
 

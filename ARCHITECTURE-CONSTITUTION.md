@@ -45,7 +45,7 @@ A folder, schema, registry row, prompt or test source is never enough to claim i
 
 ## Review
 Claude = primary builder.  
-Codex = independent reviewer.  
+Governed CLAUDE_REVIEWER = independent reviewer (separate fresh process; never the producer identity). Historical: Codex was the independent reviewer before PKG-GOV1/PKG-GOV2.  
 Deterministic tools = first validation layer.
 
 Builder cannot independently certify its own code.

@@ -42,6 +42,6 @@ bilinmeyen teknoloji geldiğinde nasıl öğrenileceği repo içinde canonical o
 **Runtime-complete product**:
 roadmap fazları gerçekten implement edilmiş, çalıştırılmış, test edilmiş, evidence üretilmiş ve bağımsız review'dan geçmiştir.
 
-Birincisi bu starter'ın görevidir. İkincisi kurulumdan sonra Claude/Codex build döngüsünün işidir.
+Birincisi bu starter'ın görevidir. İkincisi kurulumdan sonra Claude builder / governed CLAUDE_REVIEWER build döngüsünün işidir.
 
 Hiçbir klasör, JSON kaydı veya prompt tek başına ikinci durumu kanıtlamaz.

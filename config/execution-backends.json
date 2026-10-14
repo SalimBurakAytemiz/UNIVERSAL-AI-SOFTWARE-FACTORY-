@@ -1,5 +1,5 @@
 {
-  "//TR": "Bu protected registry builder işinin yürütüleceği backend'leri (LOCAL_CLAUDE, CLAUDE_CLOUD_SESSION) ve fail-closed yönlendirme politikasını tanımlar; host'a bağlı işler LOCAL_ONLY kalır, özel imza anahtarları ve yerel credential'lar cloud'a taşınmaz, cloud çıktısı aynı validation/evidence/bağımsız Codex review/merge kapısından geçer ve belgelenmiş bir dispatch yöntemi yapılandırılmadan cloud yürütmesi taklit edilmez.",
+  "//TR": "Bu protected registry builder işinin yürütüleceği backend'leri (LOCAL_CLAUDE, CLAUDE_CLOUD_SESSION) ve fail-closed yönlendirme politikasını tanımlar; host'a bağlı işler LOCAL_ONLY kalır, özel imza anahtarları ve yerel credential'lar cloud'a taşınmaz, cloud çıktısı aynı validation/evidence/bağımsız governed CLAUDE_REVIEWER review/merge kapısından geçer ve belgelenmiş bir dispatch yöntemi yapılandırılmadan cloud yürütmesi taklit edilmez.",
   "schemaVersion": "1.0.0",
   "routing": {
     "defaultMode": "AUTO",
@@ -30,6 +30,7 @@
       "kind": "LOCAL_CLI_PROCESS",
       "sessionType": "LOCAL_CLI_PROCESS",
       "provider": "ANTHROPIC",
+      "builderIdentity": "CLAUDE_BUILDER",
       "tool": "claude",
       "dispatch": {"status": "CONFIGURED", "via": "config/automation.json builder -> scripts/claude-builder-broker.mjs"},
       "isolation": "RUN_WORKTREE_UNDER_RUN_BRANCH_PREFIX",
@@ -41,6 +42,7 @@
       "kind": "PRODUCT_MANAGED_CLOUD_SESSION",
       "sessionType": "CLAUDE_CLOUD_SESSION",
       "provider": "ANTHROPIC",
+      "builderIdentity": "CLAUDE_BUILDER",
       "tool": "claude",
       "dispatch": {
         "status": "NOT_CONFIGURED",
@@ -68,8 +70,8 @@
     }
   },
   "pipeline": {
-    "producedWorkEnters": ["DETERMINISTIC_VALIDATION", "EVIDENCE", "INDEPENDENT_CODEX_REVIEW", "REMEDIATION_RE_REVIEW", "MERGE_GATE"],
-    "independentReviewerProvider": "OPENAI",
+    "producedWorkEnters": ["DETERMINISTIC_VALIDATION", "EVIDENCE", "INDEPENDENT_GOVERNED_REVIEW", "REMEDIATION_RE_REVIEW", "MERGE_GATE"],
+    "independentReviewerIdentity": "CLAUDE_REVIEWER",
     "producerMayReviewOwnOutput": false,
     "mergeRequiresGovernedResult": "CLEAN"
   }

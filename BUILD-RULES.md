@@ -1,13 +1,13 @@
-<!-- //TR: Bu dosya bütün implementation milestone'larının frozen contract, trust-root, isolated workspace, deterministic validation, structured Codex review ve review-before-merge ile kapanmasını zorunlu kılar. -->
+<!-- //TR: Bu dosya bütün implementation milestone'larının frozen contract, trust-root, isolated workspace, deterministic validation, structured governed CLAUDE_REVIEWER review ve review-before-merge ile kapanmasını zorunlu kılar. -->
 # Build Rules
 
 Canonical flow:
 
-`PREFLIGHT -> FREEZE MILESTONE CONTRACT -> ISOLATED WORKSPACE -> BUILD -> CHANGE-SCOPE GUARD -> DETERMINISTIC VALIDATION -> LOCAL COMMIT -> FROZEN REVIEW BUNDLE -> CODEX -> REMEDIATE/REVIEW -> CLEAN -> FF MERGE -> POST-MERGE VERIFY -> PUSH`
+`PREFLIGHT -> FREEZE MILESTONE CONTRACT -> ISOLATED WORKSPACE -> BUILD -> CHANGE-SCOPE GUARD -> DETERMINISTIC VALIDATION -> LOCAL COMMIT -> FROZEN REVIEW BUNDLE -> CLAUDE_REVIEWER -> REMEDIATE/REVIEW -> CLEAN -> FF MERGE -> POST-MERGE VERIFY -> PUSH`
 
 Rules:
 
-- No push before independent CLEAN.
+- No push before independent CLEAN. The independent reviewer is the governed `CLAUDE_REVIEWER` (separate fresh process, isolated read-only clean clone, exact commit and bundle digest; producer != reviewer). Codex review is retired (PKG-GOV1/PKG-GOV2).
 - No normal builder change to protected trust-root.
 - Current milestone scope controls allowed paths and acceptance.
 - Builder does not own `.ai/runtime`.

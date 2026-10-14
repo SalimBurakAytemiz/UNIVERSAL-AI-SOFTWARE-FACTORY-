@@ -57,7 +57,8 @@ const requiredPending=[
 for(const [id] of requiredPending){const s=stepMap.get(id);if(!s||s.requiresDependencies!==true)throw new Error(`PASTE2_PENDING_GATE_WIRING_INVALID:${id}`)}
 
 const providerSmoke=fs.readFileSync("scripts/provider-smoke.mjs","utf8");
-if(!providerSmoke.includes("claude-builder-broker.mjs")||!providerSmoke.includes("codex-reviewer-broker.mjs"))throw new Error("PASTE2_PROVIDER_SMOKE_BYPASSES_BROKERS");
+if(!providerSmoke.includes("claude-builder-broker.mjs"))throw new Error("PASTE2_PROVIDER_SMOKE_BYPASSES_BROKERS");
+if(providerSmoke.includes("codex-reviewer-broker.mjs"))throw new Error("PASTE2_PROVIDER_SMOKE_INVOKES_RETIRED_CODEX_REVIEWER");
 const protectedPaths=JSON.parse(fs.readFileSync("config/protected-paths.json","utf8"));
 if(!protectedPaths.exactPaths?.includes("scripts/provider-smoke.mjs"))throw new Error("PASTE2_PROVIDER_SMOKE_NOT_PROTECTED");
 

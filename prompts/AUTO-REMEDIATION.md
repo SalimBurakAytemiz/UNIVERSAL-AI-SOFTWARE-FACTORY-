@@ -8,7 +8,7 @@ Do not:
 - change protected trust-root
 - weaken or remove tests
 - weaken requirement/invariant/policy
-- edit Codex/review governance
+- edit review governance (reviewer rules, prompts, gates)
 - edit validation to manufacture PASS
 
 For each finding:

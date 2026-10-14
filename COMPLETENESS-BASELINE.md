@@ -16,7 +16,7 @@ Ama bilinmeyen yeni teknoloji/servis/cihazın core mimariyi yeniden yazmadan sis
 ## Audit sonucu
 
 Mevcut Day-0 starter; Mission OS, 363 agent, 110 capability, 20 meta/core system, Software Intelligence,
-Design Studio, Assurance, Game Intelligence, OmniRoute, Global Communications ve day-zero Claude→Codex loop açısından
+Design Studio, Assurance, Game Intelligence, OmniRoute, Global Communications ve day-zero Claude builder → governed CLAUDE_REVIEWER loop (tarihsel: Claude→Codex) açısından
 iyi bir mimari baseline'dır.
 
 Ancak bazı alanlar yalnız genel capability/roadmap seviyesinde tanımlıdır. Gerçek dünyada "her türlü yazılım işi"
@@ -606,7 +606,7 @@ Bir daha "şunu unutmuşuz" döngüsünü azaltmak için yeni ZIP aşağıdaki k
 17. Hardware/IoT execution path olmalı.
 18. Game device/server execution path olmalı.
 19. Regulated domain packs registry'de dormant olarak bulunmalı.
-20. `//TR`, evidence, customer isolation, data routing, authorization ve Claude→Codex review kuralları bunların tamamında geçerli olmalı.
+20. `//TR`, evidence, customer isolation, data routing, authorization ve Claude builder → governed CLAUDE_REVIEWER review kuralları (tarihsel: Claude→Codex) bunların tamamında geçerli olmalı.
 
 ---
 

@@ -14,7 +14,7 @@ A milestone is complete only when:
 - evidence is linked to run/commit/environment/tool versions
 - no unresolved admissible blocker remains
 - environment gaps are explicitly recorded
-- Codex returns a schema-valid review result
+- the governed CLAUDE_REVIEWER returns a schema-valid review result
 - reviewer independence is sufficient for the risk profile
 - CLEAN is bound to exact reviewed commit and review bundle digest
 - reviewed tip is merged without modification

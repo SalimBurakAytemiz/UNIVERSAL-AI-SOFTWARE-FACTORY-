@@ -33,7 +33,9 @@ function schedulerView(){const lexical=path.join(runtime,"scheduler-state.json")
 function phase0View(){let report;try{report=safeRuntimeJsonOr<any>("PHASE0_ACCEPTANCE.json",null)}catch(e){return {final:"INVALID",verification:"REJECTED",errors:[String((e as Error).message)]}}if(!report)return {final:"PENDING",verification:"PENDING"};const v=verifyPhase0ForControl(repoRoot,report);return v.ok?{...report,verification:"VERIFIED"}:{final:"INVALID",verification:"REJECTED",errors:v.errors}}
 function installView(){let report,phase0;try{report=safeRuntimeJsonOr<any>("INSTALL_REPORT.json",null);phase0=safeRuntimeJsonOr<any>("PHASE0_ACCEPTANCE.json",null)}catch(e){return {phase0Final:"INVALID",verification:"REJECTED",components:{},errors:[String((e as Error).message)]}}if(!report)return {phase0Final:"PENDING",verification:"PENDING",components:{}};const v=verifyInstallReportForControl(repoRoot,report,phase0);return v.ok?{...report,verification:"VERIFIED"}:{phase0Final:"INVALID",verification:"REJECTED",components:{},errors:v.errors}}
 
+// //TR: GOV2: eski ürün supervisor'ı emekli edildi; control-api hiçbir süreç başlatmaz ve açık bir fail-closed sonuç döner (Codex review yolu başlatılamaz).
 function startSupervisorDetached(){
+  return {started:false,reason:"LEGACY_CODEX_REVIEW_PATH_RETIRED"};
   const lockFile=path.join(runtime,"supervisor.lock");
   try{const state=inspectProcessLock(lockFile);if(state.stale)clearStaleProcessLock(lockFile);else if(state.state!=="ABSENT")return {started:false,reason:`SUPERVISOR_LOCK_${state.state}`};}catch(e){return {started:false,reason:String((e as Error).message)}}
   const script=path.resolve("scripts/start-full-auto.ps1"),shell=process.platform==="win32"?"powershell.exe":"pwsh",env=safeChildEnv("config/environment-policy.json",{provider:"DETERMINISTIC"});
