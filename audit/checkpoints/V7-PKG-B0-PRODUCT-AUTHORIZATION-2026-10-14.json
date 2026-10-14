@@ -1,0 +1,32 @@
+{
+  "//TR": "Bu checkpoint, Master V2 ürün hattı (Lane B, paketler B0-B8) için Founder kapsamlı yetki kaydıdır; paket değişiklikleri henüz uygulanmadı.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-B0-PRODUCT-AUTHORIZATION",
+  "date": "2026-10-14",
+  "parent": "312fb6d5e1ce3050b2aea5a9bc05e589a42d10a6",
+  "branch": "v7/product-b0",
+  "status": "AUTHORIZATION RECORD ONLY: package changes not yet applied; not clean; review pending",
+  "founderAuthorization": {
+    "decision": "Founder decision 2026-10-14 (chat AskUserQuestion): approve scoped authorization FA-V2-PRODUCT for Master V2 Lane B packages B0-B8; implementer Codex CLI commits in standalone clone; electron-builder devDependency and its build-time binary download approved.",
+    "rule": "Only the listed protected files may change, minimal diff per package. config/validation.json: only add test steps or new test files to existing steps; never remove or weaken a step. .github/workflows/ci.yml: only add jobs/workflow steps; never remove existing validation. config/trust-root-manifest.json: reseal only. Every package passes G1/G2, canonical validation and an independent read-only Claude review; Codex Review is not used; Claude writes no code.",
+    "protectedFiles": [
+      "apps/desktop/main.mjs",
+      "apps/desktop/preload.mjs",
+      "apps/desktop/renderer/app.js",
+      "apps/desktop/renderer/index.html",
+      "apps/control-api/src/server.ts",
+      "config/validation.json",
+      ".github/workflows/ci.yml",
+      "config/trust-root-manifest.json"
+    ],
+    "constraint": "No other protected file may change (scripts/run-validation.mjs, config/protected-paths.json, trust-kernel policy, orchestrator libs excluded); any extra protected file needs a new Founder scope approval. Excluded actions: merge to master, push, release, signing, supervisor, watchdog, autostart, production.",
+    "authorizationRecord": {
+      "decisionId": "FA-V2-PRODUCT-2026-10-14",
+      "planSha256": "51006c7f8768f60f331557dcc3b7068f390576ce66b3c7c3909fba261cf0b229",
+      "planFile": "C:/Users/salim/UASCO-recovery/product/V2-GAP-AND-QUEUE-2026-10-14.md",
+      "recordedAt": "2026-10-14T17:05:14.669Z",
+      "notBackdated": true,
+      "recordedBefore": "any protected change of Lane B"
+    }
+  }
+}
