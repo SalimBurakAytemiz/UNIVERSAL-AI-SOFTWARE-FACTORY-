@@ -18,7 +18,7 @@ import type {ExecutorPair, MissionSpec, ProcResult} from "./executors.js";
 
 export interface RunnerOptions {
   store: WorkOsStore; dataDir: string; globalStopFile: string; envPolicyFile: string; executors: ExecutorPair;
-  actor?: string; leaseTtlMs?: number; maxRemediations?: number; maxRetries?: number; retryBackoffMs?: readonly number[];
+  actor?: string; leaseTtlMs?: number; maxRemediations?: number; maxRetries?: number; maxRecoveries?: number; retryBackoffMs?: readonly number[];
   testTimeoutMs?: number; executorTimeoutMs?: number; maxStepsPerTick?: number; now?: () => number;
 }
 export interface TickReport { skipped?: "BUSY" | "LOCKED"; recovered: string[]; claimed: string[]; cancelled: string[]; fenced: string[]; advanced: string[] }
@@ -48,7 +48,7 @@ export class MissionRunner {
   constructor(opts: RunnerOptions) {
     assertIndependentExecutors(opts.executors);
     this.o = {
-      actor: "WORKOS_RUNNER", leaseTtlMs: 120_000, maxRemediations: 2, maxRetries: 2, retryBackoffMs: [2_000, 8_000], testTimeoutMs: 10 * 60_000,
+      actor: "WORKOS_RUNNER", leaseTtlMs: 120_000, maxRemediations: 2, maxRetries: 2, maxRecoveries: 2, retryBackoffMs: [2_000, 8_000], testTimeoutMs: 10 * 60_000,
       executorTimeoutMs: 60 * 60_000, maxStepsPerTick: Number.POSITIVE_INFINITY, now: Date.now,
       ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined))
     } as unknown as Required<Omit<RunnerOptions, "now">> & {now: () => number};
@@ -78,6 +78,8 @@ export class MissionRunner {
   }
   private git(cwd: string, args: string[]) { return spawnGitSync(cwd, args, {env: safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}), maxBuffer: 64 * 1024 * 1024}); }
   private gitOk(cwd: string, args: string[]): string | null { const r = this.git(cwd, args); return r.status === 0 ? String(r.stdout ?? "").trim() : null; }
+  // Heartbeat setInterval'i senkron git işi sırasında çalışamaz: uzun senkron işlerden sonra lease açıkça yenilenir. Süresi dolmuşsa WORKOS_LEASE_FENCED fırlar ve adım yan etkili/ücretli işe geçmeden durur.
+  private renew(runId: string, leaseId: string): void { this.o.store.renewRunLease(runId, leaseId, this.o.leaseTtlMs, this.o.actor); }
 
   async tick(): Promise<TickReport> {
     const rep: TickReport = {recovered: [], claimed: [], cancelled: [], fenced: [], advanced: []};
@@ -152,17 +154,25 @@ export class MissionRunner {
       if (run.status === "RETRY_SCHEDULED" && Date.parse(run.retryAt ?? "") > this.o.now()) { s.renewRunLease(runId, leaseId, this.o.leaseTtlMs, this.o.actor); return steps > 0; }
       if (steps >= this.o.maxStepsPerTick) { s.renewRunLease(runId, leaseId, this.o.leaseTtlMs, this.o.actor); return steps > 0; }
       if (run.status === "RECOVERING" && !this.recoverCheck(run, leaseId)) { this.owned.delete(runId); return true; }
+      this.renew(runId, leaseId); // her adımın başında (yani adımlar arasında da) lease yenilenir
       await this.executeStep(run, leaseId);
       steps += 1;
     }
   }
 
   // Crash-resume: son tamamlanmış checkpoint'ten devam; workspace/commit tutarsızsa RECOVERY_FAILED + kanıt (tahmin yok).
+  // Recovery bütçesi: son checkpoint'ten beri yapılan devralma sayısı = attempt - son checkpoint'teki attempt (checkpoint yoksa ilk lease = 1). Her TAKEOVER attempt'i journal'da artırır,
+  // bu yüzden recovery kanıtı yazılamasa bile sayım ilerler. maxRecoveries aşılırsa adım tekrar edilmez: RECOVERY_FAILED + mission BLOCKED (RECOVERY_BUDGET_EXHAUSTED).
   private recoverCheck(run: WorkRun, leaseId: string): boolean {
     const at = new Date(this.o.now()).toISOString();
     const work = path.join(this.runDir(run.runId), "work");
     const problems: string[] = [];
-    if (run.step !== "WORKSPACE") {
+    const last = run.checkpoints[run.checkpoints.length - 1];
+    const baseline = last && typeof last.data.attempt === "number" && Number.isSafeInteger(last.data.attempt) ? last.data.attempt : 1;
+    const recoveries = run.attempt - baseline;
+    const exhausted = recoveries > this.o.maxRecoveries;
+    if (exhausted) problems.push("RECOVERY_BUDGET_EXHAUSTED");
+    else if (run.step !== "WORKSPACE") {
       if (!run.baseSha || !SHA.test(run.baseSha) || !fs.existsSync(path.join(work, ".git"))) problems.push("WORKSPACE_MISSING");
       else {
         if (this.gitOk(work, ["cat-file", "-e", `${run.baseSha}^{commit}`]) === null) problems.push("BASE_COMMIT_MISSING");
@@ -170,10 +180,10 @@ export class MissionRunner {
         if (needsHead && (!run.headSha || this.gitOk(work, ["cat-file", "-e", `${run.headSha}^{commit}`]) === null)) problems.push("HEAD_COMMIT_MISSING");
       }
     }
-    const note = `takeover attempt ${run.attempt}; resume step ${run.step} cycle ${run.remediationCycle}; completed checkpoints ${run.checkpoints.length}${problems.length ? `; problems ${problems.join(",")}` : ""}`;
+    const note = `takeover attempt ${run.attempt}; resume step ${run.step} cycle ${run.remediationCycle}; completed checkpoints ${run.checkpoints.length}; recovery ${recoveries} of budget ${this.o.maxRecoveries}${problems.length ? `; problems ${problems.join(",")}` : ""}`;
     this.o.store.addRunEvidence(run.runId, leaseId, {step: "RECOVERY", cycle: run.remediationCycle, kind: "RECOVERY", argv: [], startedAt: at, endedAt: at, exitCode: problems.length ? 1 : 0, logPath: null, logSha256: null, note}, this.o.actor);
     if (!problems.length) return true;
-    const reason = `RECOVERY_FAILED: ${problems.join(",")}`;
+    const reason = exhausted ? "RECOVERY_BUDGET_EXHAUSTED" : `RECOVERY_FAILED: ${problems.join(",")}`;
     this.o.store.transitionRun(run.runId, leaseId, "RECOVERY_FAILED", reason, this.o.actor, {mission: {to: "BLOCKED", reason}});
     return false;
   }
@@ -198,7 +208,7 @@ export class MissionRunner {
         s.transitionRun(id, leaseId, "CHECKPOINTING", `step ${step} completed`, a);
         const next = out.next === "FINISHED" ? "REPORT" : out.next;
         const mission = MISSION_AFTER[step];
-        s.checkpointRun(id, leaseId, {step, data: out.data}, a, {patch: {...(out.patch ?? {}), step: next, retryCount: 0, retryAt: null}, mission: mission ? {to: mission, reason: `run ${id}: ${step} completed`} : undefined});
+        s.checkpointRun(id, leaseId, {step, data: {...out.data, attempt: run.attempt}}, a, {patch: {...(out.patch ?? {}), step: next, retryCount: 0, retryAt: null}, mission: mission ? {to: mission, reason: `run ${id}: ${step} completed`} : undefined});
         if (out.next === "FINISHED") s.transitionRun(id, leaseId, "AWAITING_APPROVAL", "DELIVERY_DECISION_PENDING_FOUNDER", a);
         return;
       }
@@ -209,7 +219,7 @@ export class MissionRunner {
           return;
         }
         s.transitionRun(id, leaseId, "CHECKPOINTING", `step ${step} rejected: ${out.reason}`, a);
-        s.checkpointRun(id, leaseId, {step, data: {...out.data, outcome: "REMEDIATE", reason: out.reason, findings: out.findings.slice(0, 50)}}, a,
+        s.checkpointRun(id, leaseId, {step, data: {...out.data, attempt: run.attempt, outcome: "REMEDIATE", reason: out.reason, findings: out.findings.slice(0, 50)}}, a,
           {patch: {step: "IMPLEMENT", remediationCycle: run.remediationCycle + 1, retryCount: 0, retryAt: null}, mission: {to: "REMEDIATING", reason: `run ${id}: ${out.reason}`}});
         return;
       }
@@ -298,6 +308,7 @@ export class MissionRunner {
     const clone = this.git(dir, ["clone", "--no-hardlinks", "--quiet", src, work]);
     const co = clone.status === 0 ? this.git(work, ["checkout", "-q", "-B", branch, base]) : null;
     const head = co?.status === 0 ? this.gitOk(work, ["rev-parse", "HEAD"]) : null;
+    this.renew(run.runId, leaseId);
     const log = this.writeLog(run, "workspace", `$ git clone --no-hardlinks ${src} <run>/work\n${clone.stdout ?? ""}${clone.stderr ?? ""}\n$ git checkout -B ${branch} ${base}\n${co?.stdout ?? ""}${co?.stderr ?? ""}\nHEAD=${head}\n`);
     const ok = head === base;
     this.evidence(run, leaseId, {kind: "WORKSPACE", argv: ["git", "clone", "--no-hardlinks", src, `runs/${run.runId}/work`], startedAt, endedAt: new Date().toISOString(), exitCode: ok ? 0 : (clone.status ?? 1), ...log, baseSha: base});
@@ -313,6 +324,7 @@ export class MissionRunner {
     for (const args of [["checkout", "-q", "-B", branch, start], ["reset", "-q", "--hard", start], ["clean", "-qfdx"]]) {
       if (this.gitOk(work, args) === null) return {kind: "BLOCK", reason: "WORKSPACE_RESET_FAILED", status: "FAILED"};
     }
+    this.renew(run.runId, leaseId);
     const spec = this.missionSpec(run);
     const r = await this.o.executors.implementer.implement(work, spec, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
     const head = this.gitOk(work, ["rev-parse", "HEAD"]);
@@ -341,6 +353,7 @@ export class MissionRunner {
     const startedAt = new Date().toISOString();
     const diff = this.diff(work, run.baseSha, run.headSha);
     if (diff === null) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
+    this.renew(run.runId, leaseId);
     const hits = scanDiffForSecrets(diff);
     const scanLog = this.writeLog(run, "secret-scan", `secret scan ${run.baseSha}..${run.headSha}: ${hits.length} hit(s)\n${hits.map(h => `${h.kind} ${h.file}:${h.line}`).join("\n")}\n`);
     this.evidence(run, leaseId, {kind: "SECRET_SCAN", argv: ["git", "diff", run.baseSha, run.headSha], startedAt, endedAt: new Date().toISOString(), exitCode: hits.length ? 1 : 0, ...scanLog, baseSha: run.baseSha, commitSha: run.headSha, secretHits: hits.slice(0, 100)});
@@ -373,6 +386,7 @@ export class MissionRunner {
     if (!clone) return {kind: "BLOCK", reason: "REVIEW_CLONE_FAILED", status: "FAILED"};
     const diff = this.diff(clone, run.baseSha, run.headSha);
     if (diff === null) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
+    this.renew(run.runId, leaseId);
     const r = await reviewer.review(clone, this.missionSpec(run), diff, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
     const untouched = this.gitOk(clone, ["rev-parse", "HEAD"]) === run.headSha && this.gitOk(clone, ["status", "--porcelain", "--untracked-files=all"]) === "";
     const log = this.writeLog(run, "review", r.log);
@@ -389,6 +403,7 @@ export class MissionRunner {
   private async stepRegression(run: WorkRun, leaseId: string, abort: () => boolean): Promise<Outcome> {
     const clone = this.freshClone(run);
     if (!clone) return {kind: "BLOCK", reason: "REGRESSION_CLONE_FAILED", status: "FAILED"};
+    this.renew(run.runId, leaseId);
     const argv = this.testArgv(run);
     if (!argv) return {kind: "BLOCK", reason: "TEST_COMMAND_NOT_CONFIGURED"};
     const r = await this.runTests(argv, clone, abort);
