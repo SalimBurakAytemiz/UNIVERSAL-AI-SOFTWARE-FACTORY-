@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-06T11:56:11.617Z",
+  "generatedAt": "2026-10-14T01:49:19.156Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -410,7 +410,7 @@
     },
     {
       "path": "config/protected-paths.json",
-      "sha256": "973b7bdd4543ddf718cd956ab32f38538ad3b00c984743624af34565dd202eba"
+      "sha256": "2b82c8eae75c04ac9e7c67dc0be5a233360f858ee3c356fc426789040a86773b"
     },
     {
       "path": "config/reviewer-execution-policy.json",
@@ -426,7 +426,7 @@
     },
     {
       "path": "config/validation.json",
-      "sha256": "1d1263dad0e3264438838f2557d65e34c04f46cd09d151952832fa1ac5bf9e71"
+      "sha256": "5d1f3196b81418388b23f25c440661c9a99d0d615cbc82a340d6ad878aabec37"
     },
     {
       "path": "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
@@ -1133,8 +1133,16 @@
       "sha256": "4166efe90484f4eca48d24bf284e36a53b09f4d7fb305016078207dcc1deadc1"
     },
     {
+      "path": "scripts/bootstrap-autonomy-selftest.mjs",
+      "sha256": "7747cfa4498a897ed168b1d7de1dee62a87d0d85455ac85153d29363b08e0301"
+    },
+    {
       "path": "scripts/bootstrap-kernel-selftest.mjs",
       "sha256": "a9c8a1cb4c9b57a72b5c7e76d25727375a7952bd97918d8b7972b6861e0d06f3"
+    },
+    {
+      "path": "scripts/bootstrap-uasco-autonomy.ps1",
+      "sha256": "0c5338d54bfbf30b9f061d58acc5d10d45de5837415bd5b50574e65e69e0025d"
     },
     {
       "path": "scripts/bootstrap.ps1",
@@ -1210,7 +1218,7 @@
     },
     {
       "path": "scripts/phase0-acceptance.mjs",
-      "sha256": "43c1d2f9618409079ea812a5d3c037dadff858bd77d93897ccbfac7aedaf5580"
+      "sha256": "4884bfd47d3bf4ad3058556775453b39a97cf79b2c6ae2d50331c586a534012a"
     },
     {
       "path": "scripts/preflight.mjs",
@@ -1285,8 +1293,16 @@
       "sha256": "9b0e47be1e4c4a8b361bafcdbc93427c4cf9a4b580ef56b08d223f3d2f449e13"
     },
     {
+      "path": "scripts/uasco-supervisor-entry.mjs",
+      "sha256": "dd2a770d0558a09b3a13ffd7fd5a4a203ff47a98d536241db6f6423469c3d5bb"
+    },
+    {
       "path": "scripts/uasco-supervisor-launcher.mjs",
       "sha256": "c4068cb2c1aa0bf8f1e9825037bc0ad34cd97cc3a162f9e3f9b9e10e9d5dec4b"
+    },
+    {
+      "path": "scripts/uasco-supervisor-task.ps1",
+      "sha256": "39d25cf1f0c3424bce20771522a76548f54423b22966f8ae6565653bb5d79ab4"
     },
     {
       "path": "scripts/v6-apps-control-desktop-selftest.mjs",

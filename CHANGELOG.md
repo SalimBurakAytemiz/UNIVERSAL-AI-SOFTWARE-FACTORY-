@@ -1,6 +1,26 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-10-13 — V6 PKG-BS1R autonomy bootstrap remediation (branch, append-only)
+
+- Founder decision 2026-10-13: package `V6-PKG-BS1R-AUTONOMY-BOOTSTRAP` supersedes `V6-PKG-BS1-AUTONOMY-BOOTSTRAP`, whose governed review was BLOCKED at the review-cycle limit; BS1's records and review evidence stay untouched. BS1R is built on the BS1 cycle-3 tree (d851a4f) and is reviewed against the DR2 base 22bbbad.
+- Scope: the verified rollback of every post-registration failure (task stopped, control-root processes stopped, pre-existing task restored and kept disabled, `ROLLED_BACK_TASK_NOT_RUNNABLE` / `ROLLBACK_UNSAFE`), the narrowed process match, the two terminating-error paths, and the validation sharding (`tests-bs1-a`..`e`) are unchanged; this package adds the operator documentation of that behaviour (`docs/architecture/AUTONOMY-BOOTSTRAP.md`) and a new checkpoint `audit/checkpoints/V6-PKG-BS1R-AUTONOMY-BOOTSTRAP-2026-10-13.json` that records the reviewed revision, the Founder authorizations, the digests, the test topology and the mutation evidence. No code, test or timeout changed.
+- Status: pending governed review; NOT CLEAN; validation evidence pending the freeze.
+
+## 2026-10-13 — V6 PKG-BS1 review cycles 2-3: task rollback and validation sharding (branch, append-only)
+
+- Cycle-1 governed review finding F-BS1-CLAUDE-C1-001 (P2): a read-back mismatch after `Register-ScheduledTask` only logged and exited, leaving the supervisor task enabled on top of an activated control plane. The governed evaluator rejected it as INADMISSIBLE_BLOCKER (confidence 0.78 < 0.8); the Founder accepted it as a real security risk on 2026-10-13 and approved remediation (review-cycle limit 2 lifted for this package).
+- Remediation: every failure after registration (read-back mismatch, registration/verification error, record-write failure, start failure, unreadable task state, failed or unconfirmed first run) stops the instance, terminates the entry/wrapper/launcher processes of this control root (never other processes or the bootstrap itself), restores a pre-existing task's exported definition and keeps it disabled (never deletes it) or unregisters the task the run created, records `ROLLED_BACK_TASK_NOT_RUNNABLE` or `ROLLBACK_UNSAFE` and exits 1. The activated control plane is left in place, inert without a task. Task Scheduler calls go through one controller seam; tests use a recording fake (`-TestMode -TaskControllerFixture`) and register, start, change or delete no real task. `docs/architecture/AUTONOMY-BOOTSTRAP.md` documents the semantics.
+- Validation sharding (Founder decision 2026-10-13): the `tests` step is split into bounded steps `tests-bs1-a`..`e` with a mechanical coverage guard (`tests/pkg-vs-validation-sharding.test.ts`); no test was removed or weakened and no timeout changed.
+- Status: governed review of cycle 3 is pending; the package is NOT CLEAN and nothing here is a review result.
+
+## 2026-10-02 — V6 PKG-BS1 one-time autonomy bootstrap (branch)
+
+- Founder request 2026-10-02: a single reviewed one-time bootstrap installs `UASCO-Autonomous-Supervisor`; afterwards routine work needs no Founder command.
+- `scripts/bootstrap-uasco-autonomy.ps1` runs in a normal (not elevated) PowerShell: it clones the governed default-branch plane with Git isolation, verifies the trust root and the durable queue with that plane's library, installs reviewed dependencies, activates the plane under the single-worker lock (`CONTROL_PLANE_ACTIVATED`), and registers the task (this user, Interactive, Limited, no stored password, logon + every 15 minutes, hidden window). It confirms the first run from the task process and records `BOOTSTRAP_INSTALLED.json`, mirrored to `.ai/runtime/BOOTSTRAP_STATUS.json`.
+- `scripts/uasco-supervisor-entry.mjs`, the stable task entry, and `scripts/uasco-supervisor-task.ps1`, the hidden wrapper: link self-repair, plane provenance and trust root before any import, delegation to a governed plane entry or the AUT2 launcher with a frozen-heartbeat kill, an AUT1B tick loop with tree kill and lock cleanup, and one governed upgrade to the first launcher plane. Once the default branch has the launcher, the old tick is never run again.
+- Bootstrap selftest (19 scenarios, 67/67 mutation checks caught) with a real task-registration probe, a design critique by four independent lenses, two pre-activation CLAUDE_REVIEWER rounds and seven adversarial verification rounds of the implementation (every confirmed finding fixed; residual behaviour disclosed in docs/architecture/AUTONOMY-BOOTSTRAP.md); the release package is held until `RELEASE_AUDIT_ACTIVE`.
+
 ## 2026-10-01 — V6 PKG-DR2 final dual full-repository release audit (branch)
 
 - Founder directive 2026-10-01, final release section: a release candidate is packaged, signed and installed only after `CLAUDE_FULL_REPO_REVIEW` and `CODEX_FULL_REPO_REVIEW` of the same immutable candidate are both CLEAN.

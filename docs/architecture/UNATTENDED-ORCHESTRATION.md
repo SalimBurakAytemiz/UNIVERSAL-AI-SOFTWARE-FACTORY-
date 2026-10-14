@@ -125,11 +125,11 @@ Construction-repository pushes stay queued while the remote-protection policy do
 
 ## Activation
 
-The supervisor is activated only after every package in the chain up to the control-plane commit is independently reviewed CLEAN:
-1. Create a control-plane clone of the reviewed commit under `%LOCALAPPDATA%\UASCO\orchestrator\control\` and install its reviewed dependencies.
-2. Verify that clone's trust root.
-3. Keep the existing `control` section (the durable queue, pending decisions and quota state are preserved, not reseeded).
-4. Register `UASCO-Autonomous-Supervisor` from that clone.
-5. Run `uasco-orchestrator.mjs --self-check --with-provider-smoke`. It must report the daemon policy, the durable queue and transition log, a live heartbeat, the single-worker lock enforced by the running daemon, the builder boundary, provider CLI resolution, and a real Claude builder and Codex reviewer invocation through the production brokers. Without `--with-provider-smoke` the invocation check is reported as `NOT_TESTED`, never as PASS.
+The supervisor is installed once by `scripts/bootstrap-uasco-autonomy.ps1`, run from a normal Windows PowerShell window; no administrator rights are needed (see `docs/architecture/AUTONOMY-BOOTSTRAP.md`).
+
+- **What the bootstrap does.** It clones the governed default-branch commit into `%LOCALAPPDATA%\UASCO\orchestrator\control\<commit12>` with Git isolation. It verifies the trust root and the durable queue with that plane's own library, keeping the queue, pending decisions and quota state as they are, and installs the reviewed dependencies. It activates the plane under the single-worker lock (`CONTROL_PLANE_ACTIVATED`) and registers `UASCO-Autonomous-Supervisor`, which runs the hidden wrapper and the stable entry. It then confirms the first run from the task process itself.
+- **From the AUT1B plane to the launcher plane.** The stable entry performs the one governed upgrade from the pre-launcher AUT1B plane to the first governed plane that contains the launcher. From then on, the daemon's own governed self-upgrade switches planes.
+- **`scripts/register-orchestrator-autostart.ps1` is superseded by the bootstrap and must not be run.** It switches `control\current` before its task-name conflict check, so even a run that ends in `TASK_NAME_CONFLICT` changes the active plane. Its elevated `-IncludeStartupTrigger` path registers an S4U task, which cannot use the ssh-agent signing key.
+- **Self-check.** `uasco-orchestrator.mjs --self-check --with-provider-smoke` remains available as a diagnostic. Without `--with-provider-smoke`, the invocation check is reported as `NOT_TESTED`, never as PASS.
 
 The control plane refuses to run if its own trust root does not verify. `--status` also reports the supervisor heartbeat, its health, the lock and the next wake.

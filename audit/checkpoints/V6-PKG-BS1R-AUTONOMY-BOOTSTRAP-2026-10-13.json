@@ -3,8 +3,42 @@
   "schemaVersion": "1.0.0",
   "checkpoint": "V6-PKG-BS1R-AUTONOMY-BOOTSTRAP",
   "date": "2026-10-13",
+  "packageId": "V6-PKG-BS1R-AUTONOMY-BOOTSTRAP",
+  "supersedes": "V6-PKG-BS1-AUTONOMY-BOOTSTRAP",
+  "base": "22bbbad (DR2 final dual release audit); the review base of this package",
   "branch": "v6/pkg-bs1r-autonomy-bootstrap-f8",
-  "status": "F10 AUTHORIZATION RECORD ONLY: package changes not yet applied; not clean; review pending",
+  "builtOn": "d851a4f (BS1 cycle-3 tree, all verified security fixes unchanged)",
+  "reviewedRevision": "the final commit of branch v6/pkg-bs1r-autonomy-bootstrap-f8 (recorded by the supervisor in the review bundle; this file cannot contain its own commit id)",
+  "supersessionDecision": {
+    "date": "2026-10-13",
+    "by": "Founder",
+    "reason": "BS1 governed review was BLOCKED at the review-cycle limit; BS1 records and review evidence stay untouched and remain the history of that package"
+  },
+  "bs1CycleHistory": [
+    {
+      "cycle": 1,
+      "commit": "1f523582e83be2c7ba8e89d30dbb6f51e04ff41e",
+      "result": "INPUT_INVALID (supervisor-reported); the review-result.json of this run lists F-BS1-CLAUDE-C1-001 (P2); the governed evaluator rejected it as INADMISSIBLE_BLOCKER (confidence 0.78 < 0.8); the Founder accepted it as a real security risk on 2026-10-13",
+      "evidence": "C:\\Users\\salim\\Desktop\\UASCO\\.ai\\cache\\review\\runs\\1f52358-c1-20261012T230250413Z-orchestrator-claude\\review-result.json"
+    },
+    {
+      "cycle": 2,
+      "commit": "0196da9",
+      "result": "first attempt INPUT_INVALID (supervisor-reported); corrected-input run BLOCKED with F-BS1-C2-CLAUDE-001 (records) and F-BS1-C2-CLAUDE-002 (documentation), both P2",
+      "evidence": [
+        "C:\\Users\\salim\\Desktop\\UASCO\\.ai\\cache\\review\\runs\\0196da9-c2-20261013T073317082Z-orchestrator-claude\\review-result.json",
+        "C:\\Users\\salim\\UASCO-recovery\\governed-review\\er-bs1-c2c\\runs\\0196da9-c2-20261013T144520327Z-orchestrator-claude\\review-result.json"
+      ]
+    },
+    {
+      "cycle": 3,
+      "commit": "d851a4f",
+      "result": "cycle-3 remediation commits 218b38c, c11aeda, d851a4f; not governed-reviewed because the cycle limit blocked BS1; carried into BS1R"
+    }
+  ],
+  "bs1ArtifactsKeptUnchanged": [
+    "audit/checkpoints/V6-PKG-BS1-AUTONOMY-BOOTSTRAP-2026-10-02.json (history; only the append-only record of c11aeda was added)"
+  ],
   "founderAuthorization": {
     "date": "2026-10-13",
     "decisions": [
@@ -51,5 +85,160 @@
       "scope": "exact re-application of the f9-reviewed diff 22bbbad..ef0f3bb; protected files limited to protectedFiles; recorded before any protected change of this package",
       "notBackdated": true
     }
-  }
+  },
+  "changedProtectedFileSha256": {
+    "config/protected-paths.json": "2b82c8eae75c04ac9e7c67dc0be5a233360f858ee3c356fc426789040a86773b",
+    "config/validation.json": "5d1f3196b81418388b23f25c440661c9a99d0d615cbc82a340d6ad878aabec37",
+    "scripts/bootstrap-autonomy-selftest.mjs": "7747cfa4498a897ed168b1d7de1dee62a87d0d85455ac85153d29363b08e0301",
+    "scripts/bootstrap-uasco-autonomy.ps1": "0c5338d54bfbf30b9f061d58acc5d10d45de5837415bd5b50574e65e69e0025d",
+    "scripts/phase0-acceptance.mjs": "4884bfd47d3bf4ad3058556775453b39a97cf79b2c6ae2d50331c586a534012a",
+    "scripts/uasco-supervisor-entry.mjs": "dd2a770d0558a09b3a13ffd7fd5a4a203ff47a98d536241db6f6423469c3d5bb",
+    "scripts/uasco-supervisor-task.ps1": "39d25cf1f0c3424bce20771522a76548f54423b22966f8ae6565653bb5d79ab4"
+  },
+  "changedProtectedFileSha256Note": "computed from the working tree of the final commit and compared with config/trust-root-manifest.json of the same commit (equal for every listed file); the manifest's own digest is not listed because it covers itself",
+  "changedOtherFileSha256": {
+    ".ai/REVIEW_STATUS.md": "bcd83c2ca3d60662880628d393acfd149e4d8d21e82f93e0c619ac161bd4d46b",
+    "CHANGELOG.md": "4b609193f2bf25db3c48573c32e0ac5f2d10d4f31df79fb2ea87dc0df3d0c48c",
+    "audit/V6-FULL-SCAN-PROGRESS.json": "4e363d9b6a2cb5b2c3d47c9a34c94fb6ee1045255de27514d25c57ab8176e5b7",
+    "audit/checkpoints/V6-PKG-BS1-AUTONOMY-BOOTSTRAP-2026-10-02.json": "0f2e3bbccf371656601d3012b2adcdab139518296de7ac496f3d45b9860c9913",
+    "config/trust-root-manifest.json": "100a58ee9b4f0adfcece1d394d63cf4ad1af0e4c577f7eda11bf552d20f98fa3",
+    "docs/architecture/AUTONOMY-BOOTSTRAP.md": "f2ad285cdedd221ed26af0c57357d23e86b42c5925d5325bc444cfd67f834cb4",
+    "docs/architecture/UNATTENDED-ORCHESTRATION.md": "0e51455a2f5230ef7351e7f7bbf0a1f3ed88b2c0abb028d61743e3053ccaf627",
+    "tests/pkg-bs1-autonomy-bootstrap-a.test.ts": "a9fa70ba861c6450e2c7a2fcc668fdd9960a78096162b3c8263720ccaa09a00d",
+    "tests/pkg-bs1-autonomy-bootstrap-b.test.ts": "7078b0afe538a64a80996e378509d0b76ea661f870d1635c76f28b99ffd9314a",
+    "tests/pkg-bs1-autonomy-bootstrap-c.test.ts": "117132025d2becd0af16500a63ffb300b0b4dd23266fb4a99de07934112c1983",
+    "tests/pkg-bs1-autonomy-bootstrap-d.test.ts": "9fe73f5f8d99afec5c37b00b9ecaf0a4679de8004a4388213199ff38f1556490",
+    "tests/pkg-bs1-autonomy-bootstrap-e.test.ts": "632d13fd3b796f18806c60be8248b9b2b0f563b5b42acdebc8388174d4eab3ff",
+    "tests/pkg-vs-validation-sharding.test.ts": "12e2025052b23aa84387f0b325c5d20214de7603a3c9fda54ca47e5a79f7263a",
+    "tests/support/bs1-shard.ts": "ae14da32f0e37924d1d6f661c94bf442890a259eba8e1f2adc971c8dcab269aa"
+  },
+  "testTopology": {
+    "selftestScenarioCount": 22,
+    "selftestScenarios": [
+      "static-safety-of-the-bootstrap-wrapper-and-entry",
+      "bootstrap-installs-plane-entry-wrapper-activation-task-definition-and-record",
+      "the-scheduled-task-command-line-round-trips-paths-with-spaces-ampersands-and-quotes",
+      "bootstrap-first-run-verdict-fails-a-failed-tick-and-confirms-delegation-only-from-a-fresh-daemon-heartbeat",
+      "bootstrap-repairs-an-inactive-half-cloned-plane-and-replaces-a-dangling-link",
+      "bootstrap-refuses-unsafe-or-unverifiable-inputs-without-activating-anything",
+      "entry-delegates-to-a-governed-plane-entry-and-to-the-launcher",
+      "entry-kills-a-hung-supervisor-whose-heartbeat-is-frozen",
+      "entry-heartbeat-watch-needs-two-stale-polls-ignores-suspend-and-reads-the-backup",
+      "entry-heals-an-interrupted-link-switch-and-refuses-broken-or-unproven-planes",
+      "entry-loops-the-pre-launcher-tick-writes-passive-status-and-honours-global-stop",
+      "entry-records-the-top-level-tick-status-and-keeps-the-bootstrap-record-in-its-mirror",
+      "entry-never-runs-the-old-tick-once-master-has-the-launcher-and-upgrades-only-when-governed",
+      "entry-refuses-an-old-plane-release-lane-and-honours-global-stop",
+      "entry-kills-the-whole-tick-process-tree-on-timeout-and-clears-its-lock",
+      "entry-clears-only-provably-stale-locks-and-replaces-a-dangling-link",
+      "entry-stops-the-old-tick-once-a-governed-launcher-merge-lands-and-recovers-an-unrecorded-merge",
+      "entry-stops-the-old-tick-only-at-a-safe-point-or-at-once-in-the-release-lane",
+      "entry-runs-the-tick-loop-timeout-cleanup-and-governed-upgrade-on-the-real-aut1b-plane",
+      "bootstrap-task-registration-succeeds-or-rolls-back-without-a-runnable-task",
+      "bootstrap-task-rollback-falls-back-to-disable-and-reports-an-unsafe-result",
+      "bootstrap-task-first-run-failure-stops-and-rolls-back-the-task"
+    ],
+    "vitest": "tests/pkg-bs1-autonomy-bootstrap-a.test.ts .. -e.test.ts (one per validation step tests-bs1-a..e) using tests/support/bs1-shard.ts; tests/pkg-vs-validation-sharding.test.ts is the mechanical coverage guard (every scenario in exactly one shard, no test file dropped from tests)",
+    "validationSteps": [
+      "tests-bs1-a",
+      "tests-bs1-b",
+      "tests-bs1-c",
+      "tests-bs1-d",
+      "tests-bs1-e"
+    ],
+    "noSuchFile": "tests/pkg-bs1-autonomy-bootstrap.test.ts does not exist and is not part of the change set",
+    "realAut1bScenario": "entry-runs-the-tick-loop-timeout-cleanup-and-governed-upgrade-on-the-real-aut1b-plane may be SKIPPED only when the AUT1B commit is not in the checkout history"
+  },
+  "rollbackScenarios": {
+    "realScheduledTasksRegisteredStartedModifiedOrDeleted": 0,
+    "controllerSeam": "Invoke-TaskCtl; the tests use the recording fake (-TestMode -TaskControllerFixture) and only their own dummy node processes",
+    "scenarios": [
+      {
+        "name": "bootstrap-task-registration-succeeds-or-rolls-back-without-a-runnable-task",
+        "cases": [
+          "success (Find,Register,Facts; never started)",
+          "mismatch-new (TASK_NOT_AS_REGISTERED, new task unregistered)",
+          "mismatch-preexisting (previous definition restored and Disabled, no Unregister)",
+          "fixture refused outside -TestMode"
+        ]
+      },
+      {
+        "name": "bootstrap-task-rollback-falls-back-to-disable-and-reports-an-unsafe-result",
+        "cases": [
+          "restore-fails (disable fallback, no Unregister)",
+          "unregister-fails (disable fallback)",
+          "register-throws (TASK_REGISTRATION_VERIFY_FAILED)",
+          "rollback-unsafe (ROLLBACK_UNSAFE when neither removal nor disabling works)"
+        ]
+      },
+      {
+        "name": "bootstrap-task-first-run-failure-stops-and-rolls-back-the-task",
+        "cases": [
+          "first-run-failure-new-task (Stop, Unregister; entry and plane-launcher dummy processes stopped, bystander kept)",
+          "first-run-failure-preexisting (Stop, RestoreXml, Disable, no Unregister)",
+          "record-write-fails (BOOTSTRAP_RECORD_WRITE_FAILED)",
+          "task-info-unreadable (FIRST_RUN_STATE_UNREADABLE)",
+          "first-run-tick-in-progress (stays a success, INSTALLED_FIRST_TICK_PENDING)"
+        ]
+      }
+    ]
+  },
+  "mutationEvidence": {
+    "note": "mutants were applied to a temporary working tree, the trust root resealed so the failure is the scenario's and not the seal's, run with UASCO_BS1_ONLY, and reverted with git checkout; none was committed. Run during cycles 2-3 on the commits named.",
+    "mutants": [
+      {
+        "commit": "b02dbb3",
+        "mutant": "Stop-AfterRollback body replaced by plain Stop-Bootstrap (no Undo-TaskRegistration)",
+        "failingCase": "bootstrap-task-registration… mismatch-new ('record wrong')",
+        "caught": true
+      },
+      {
+        "commit": "b02dbb3",
+        "mutant": "restore of the previous definition disabled (if ($false) in Undo-TaskRegistration)",
+        "failingCase": "bootstrap-task-registration… mismatch-preexisting",
+        "caught": true
+      },
+      {
+        "commit": "b02dbb3",
+        "mutant": "safe forced to $true in Undo-TaskRegistration",
+        "failingCase": "bootstrap-task-rollback… rollback-unsafe",
+        "caught": true
+      },
+      {
+        "commit": "0f46e7e",
+        "mutant": "first-run rollback call (Stop-AfterRollback on a failed verdict) replaced by Write-Step",
+        "failingCase": "bootstrap-task-first-run-failure… first-run-failure-new-task ('record wrong'); an earlier syntactically broken mutant was discarded",
+        "caught": true
+      },
+      {
+        "commit": "218b38c",
+        "mutant": "record-write rollback removed (catch only logs)",
+        "failingCase": "first-run-failure… record-write-fails",
+        "caught": true
+      },
+      {
+        "commit": "218b38c",
+        "mutant": "process match widened back to any command line containing the control root",
+        "failingCase": "first-run-failure… first-run-failure-new-task (bystander was killed)",
+        "caught": true
+      },
+      {
+        "commit": "218b38c",
+        "mutant": "state-unreadable rollback removed in the fake-controller path",
+        "failingCase": "first-run-failure… task-info-unreadable",
+        "caught": true
+      }
+    ],
+    "notDirectlyTested": "The catch around the state/result read in the real-mode first-run wait loop (FIRST_RUN_STATE_UNREADABLE after the heartbeat loop) is not exercised by any test (a mutant there was NOT caught); it uses the same pattern as the tested fake-controller path."
+  },
+  "validationEvidence": {
+    "status": "PENDING_FREEZE",
+    "statement": "No canonical run-validation result is claimed for the BS1R revision. The tests step of the single-file layout exceeded its 600 s limit on this machine; the sharded steps and the full validation are produced by the supervisor's freeze."
+  },
+  "checksRunByTheImplementerOnTheInputsThatChanged": "verify-trust-root, validate-tr-comments, validate-mechanical-closure, validate-paste4c-doc-truth, validate-paste4d-release-truth, tsc --noEmit, tests/pkg-vs-validation-sharding.test.ts (see the implementer report; not a review result)",
+  "review": "NOT_REVIEWED",
+  "openFindings": [],
+  "cleanClaim": false,
+  "notClaimed": "No CLEAN, merge, release or validation claim; the supervisor owns review, validation and merge",
+  "status": "F10 re-application: changes applied; not clean; review pending"
 }

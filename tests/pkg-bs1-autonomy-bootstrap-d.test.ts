@@ -1,0 +1,14 @@
+// //TR: Bu test BS1 bootstrap selftest'inin "d" kabuğundaki senaryolarını çalıştırır (tests/support/bs1-shard.ts); her senaryo PASS olmalıdır, kabuklar birlikte tam senaryo listesini kapsar (kapsam denetimi tests/pkg-vs-validation-sharding.test.ts).
+import {describe,it,expect} from "vitest";
+import cp from "node:child_process";
+import {BS1_PARTITION,BS1_REAL_AUT1B_SCENARIO,AUT1B_COMMIT,runBs1Shard} from "./support/bs1-shard.js";
+describe("one-time autonomy bootstrap (BS1) shard d",{timeout:1_800_000},()=>{
+  it("passes every scenario assigned to this shard",async()=>{
+    const r=await runBs1Shard("d");expect(r.ok,r.detail).toBe(true);
+    if(process.platform!=="win32"){for(const l of r.line)expect(l).toBe("BOOTSTRAP_AUTONOMY_SELFTEST FILTERED: SKIP NOT_WINDOWS");return}
+    // //TR: Gerçek AUT1B düzlemi senaryosu yalnız AUT1B commit'i bu checkout'un geçmişinde yoksa (geçmişsiz dağıtım ağacı) açıkça atlanabilir; geçmiş varsa geçmek zorundadır.
+    const aut1b=cp.spawnSync("git",["cat-file","-e",AUT1B_COMMIT+"^{commit}"]).status===0,names=BS1_PARTITION["d"].flat(),hasReal=names.includes(BS1_REAL_AUT1B_SCENARIO);
+    for(const l of r.line){if(hasReal&&!aut1b&&/ SKIPPED 1$/.test(l))expect(l).toMatch(/^BOOTSTRAP_AUTONOMY_SELFTEST FILTERED: PASS (\d+)\/\1 SKIPPED 1$/);else expect(l).toMatch(/^BOOTSTRAP_AUTONOMY_SELFTEST FILTERED: PASS (\d+)\/\1$/)}
+    for(const s of names){if(s===BS1_REAL_AUT1B_SCENARIO&&!aut1b)expect(r.stdout).toMatch(new RegExp('"'+s+'": "SKIP: AUT1B_COMMIT_NOT_IN_HISTORY"'));else expect(r.stdout).toMatch(new RegExp('"'+s+'": "PASS"'))}
+  });
+});

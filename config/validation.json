@@ -265,7 +265,91 @@
       "command": [
         "node",
         "node_modules/vitest/vitest.mjs",
-        "run"
+        "run",
+        "tests/action-gateway.test.ts",
+        "tests/certification.test.ts",
+        "tests/data-routing.test.ts",
+        "tests/dlp.test.ts",
+        "tests/lease-manager.test.ts",
+        "tests/mission-state.test.ts",
+        "tests/model-router.test.ts",
+        "tests/npm-invocation.test.ts",
+        "tests/pkg-aut1-orchestrator.test.ts",
+        "tests/pkg-aut2-autonomy-hardening.test.ts",
+        "tests/pkg-c-lf-electron-smoke.test.ts",
+        "tests/pkg-d-standalone-provenance.test.ts",
+        "tests/pkg-dr1-dual-review.test.ts",
+        "tests/pkg-dr2-release-audit.test.ts",
+        "tests/pkg-e-electron-provision.test.ts",
+        "tests/pkg-e2-tr-scan.test.ts",
+        "tests/pkg-f-validation-scripts-protected.test.ts",
+        "tests/pkg-g-preflight-physical-memory.test.ts",
+        "tests/pkg-r1-release-mode.test.ts",
+        "tests/pkg-r3-phase0-fixes.test.ts",
+        "tests/pkg-r4-init-private-git.test.ts",
+        "tests/pkg-t1-windows-crash-resume.test.ts",
+        "tests/pkg-t2-orchestrator-executor-integration.test.ts",
+        "tests/pkg-t3-omniroute-install-compat.test.ts",
+        "tests/pkg-t4-powershell-safety.test.ts",
+        "tests/pkg-vs-validation-sharding.test.ts",
+        "tests/pkg-x1-execution-routing.test.ts",
+        "tests/release-supply-chain-platform-optional.test.ts",
+        "tests/resource-registry.test.ts",
+        "tests/review-governance.test.ts",
+        "tests/schema-inference.test.ts",
+        "tests/strict-json-validator.test.ts",
+        "tests/technology-decision.test.ts",
+        "tests/technology-discovery.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests-bs1-a",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/pkg-bs1-autonomy-bootstrap-a.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests-bs1-b",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/pkg-bs1-autonomy-bootstrap-b.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests-bs1-c",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/pkg-bs1-autonomy-bootstrap-c.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests-bs1-d",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/pkg-bs1-autonomy-bootstrap-d.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests-bs1-e",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/pkg-bs1-autonomy-bootstrap-e.test.ts"
       ],
       "requiresDependencies": true
     }
