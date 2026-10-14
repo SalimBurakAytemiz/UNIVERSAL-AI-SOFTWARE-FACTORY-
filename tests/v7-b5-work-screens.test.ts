@@ -260,6 +260,19 @@ describe("B5 form request builders", () => {
 });
 
 // ---------- Eşleyiciler ve Gelen Kutusu ----------
+// B5-C1-001: Lane B (core/workos/types.ts WorkRun) biçiminde koşu kaydı.
+const laneBRun = (over: Record<string, any> = {}) => ({
+  runId: RUN, missionId: MID, projectId: "prj_x", tenantId: "t1", roleId: "reporting-analyst",
+  executor: {implementer: "claude-implementer", reviewer: "claude-reviewer-configured"},
+  leaseId: null, leaseExpiresAt: null, attempt: 1, status: "AWAITING_APPROVAL", step: "REPORT",
+  remediationCycle: 1, retryCount: 0, retryAt: null, reason: null, baseSha: null, headSha: null, workBranch: null,
+  checkpoints: [{step: "IMPLEMENT", cycle: 0, at: "2026-10-14T09:00:00.000Z", data: {}}, {step: "REVIEW", cycle: 1, at: "2026-10-14T09:30:00.000Z", data: {}}],
+  evidence: [
+    {evidenceId: "ev_old_0001", step: "REVIEW", cycle: 0, kind: "REVIEW", argv: [], startedAt: "2026-10-14T09:10:00.000Z", endedAt: "2026-10-14T09:11:00.000Z", exitCode: 0, logPath: null, logSha256: null, reviewerIdentity: "claude-reviewer-old", verdict: "BLOCKED"},
+    {evidenceId: EVID, step: "REVIEW", cycle: 1, kind: "REVIEW", argv: [], startedAt: "2026-10-14T09:20:00.000Z", endedAt: "2026-10-14T09:21:00.000Z", exitCode: 0, logPath: null, logSha256: null, reviewerIdentity: "claude-reviewer", verdict: "CLEAN"},
+    {evidenceId: "ev_impl_0001", step: "IMPLEMENT", cycle: 1, kind: "IMPLEMENT", argv: [], startedAt: "2026-10-14T09:05:00.000Z", endedAt: "2026-10-14T09:06:00.000Z", exitCode: 0, logPath: null, logSha256: null, executorIdentity: "claude-implementer"}],
+  createdAt: "2026-10-14T08:00:00.000Z", createdBy: "u", updatedAt: "2026-10-14T09:31:00.000Z", ...over});
+
 describe("B5 mappers: work runs, evidence, inbox derivation", () => {
   it("maps work runs honestly (tolerant field names, invalid ids dropped, reviewer identity + verdict, lease/heartbeat)", async () => {
     const c = await load(rend, "work-core.js");
@@ -282,6 +295,31 @@ describe("B5 mappers: work runs, evidence, inbox derivation", () => {
     expect(c.mapWorkRunDetail({run: {runId: RUN, status: "FAILED"}}).run.status).toBe("FAILED");
     expect(c.mapWorkRunDetail({}).state).toBe("ERROR");
     expect(c.mapWorkRuns({runs: [{runId: RUN, status: "QUEUED"}]}).items.length).toBe(1);
+  });
+  it("B5-C1-001: maps the Lane B WorkRun shape (step/cycle checkpoints, executor.reviewer, REVIEW evidence identity + verdict) and never invents 'none'", async () => {
+    const c = await load(rend, "work-core.js");
+    const r = c.mapWorkRun(laneBRun());
+    expect(r.status).toBe("AWAITING_APPROVAL");
+    expect(r.role).toBe("reporting-analyst");
+    expect(r.step).toEqual({name: "REPORT", index: null, total: null});
+    expect(r.checkpoints).toEqual([{name: "IMPLEMENT #0", status: null, at: "2026-10-14T09:00:00.000Z"}, {name: "REVIEW #1", status: null, at: "2026-10-14T09:30:00.000Z"}]);
+    expect(r.checkpointsReported).toBe(true);
+    // en son REVIEW kaydı (cycle 1) kazanır; eski BLOCKED kararı değil
+    expect(r.reviewer).toEqual({identity: "claude-reviewer", verdict: "CLEAN"});
+    // REVIEW kaydı yoksa kimlik executor.reviewer'dan, karar bildirilmemiş (null)
+    const noEv = c.mapWorkRun(laneBRun({evidence: []}));
+    expect(noEv.reviewer).toEqual({identity: "claude-reviewer-configured", verdict: null});
+    // yalnız karar bildirilmişse kimlik yine executor.reviewer
+    expect(c.mapWorkRun(laneBRun({evidence: [{evidenceId: EVID, step: "REVIEW", cycle: 0, verdict: "BLOCKED"}]})).reviewer).toEqual({identity: "claude-reviewer-configured", verdict: "BLOCKED"});
+    // alanlar gerçekten yoksa: reviewer null, kontrol noktaları bildirilmedi
+    const bare = c.mapWorkRun({runId: RUN, status: "QUEUED"});
+    expect(bare.reviewer).toBeNull();
+    expect(bare.checkpointsReported).toBe(false);
+    expect(c.mapWorkRun(laneBRun({checkpoints: []})).checkpointsReported).toBe(true);
+    // IMPLEMENT kanıtı reviewer sayılmaz
+    expect(c.mapWorkRun(laneBRun({executor: undefined, evidence: [{evidenceId: EVID, step: "IMPLEMENT", cycle: 0, executorIdentity: "x", verdict: "CLEAN"}]})).reviewer).toBeNull();
+    // detay yanıtı da aynı biçimi okur
+    expect(c.mapWorkRunDetail({workRun: laneBRun()}).run.reviewer).toEqual({identity: "claude-reviewer", verdict: "CLEAN"});
   });
   it("evidence mapping: only the exact VERIFIED state is a verified chip; unknown/missing verification is UNVERIFIED", async () => {
     const c = await load(rend, "work-core.js");
@@ -635,6 +673,34 @@ describe("B5 Görevler / Work OS screen", () => {
     const {ctx: c3, doc: d3} = await mkCtx({get: p => p === `/v1/work-runs?missionId=${MID}` ? {workRuns: []} : g(p)});
     const r3 = mount(d3, await view.render(c3));
     expect(text(r3)).toContain("henüz koşu yok");
+  });
+  it("B5-C1-001: run card shows Lane B checkpoints, reviewer identity and verdict; absent fields read 'not reported by server', never 'not assigned'", async () => {
+    const view = await load(rend, "views", "work.js");
+    forms.selection.missionId = MID;
+    const lb = laneBRun();
+    const {ctx, doc} = await mkCtx({get: getFn({[`/v1/work-runs/${RUN}`]: {workRun: lb}, [`/v1/work-runs?missionId=${MID}`]: {workRuns: [lb]}})});
+    const t = text(byData(mount(doc, await view.render(ctx)), "runId", RUN)[0]);
+    expect(t).toContain("REPORT");
+    expect(t).toContain("IMPLEMENT #0");
+    expect(t).toContain("REVIEW #1");
+    expect(t).toContain("claude-reviewer");
+    expect(t).toContain("İnceleme kararıTemiz");
+    expect(t).not.toContain("Henüz atanmadı");
+    expect(t).not.toContain("Henüz karar yok");
+    expect(t).not.toContain("Kontrol noktası yok");
+    expect(t).toContain("reporting-analyst");
+    // alan yok: dürüst "sunucu bildirmedi"
+    const bare = {runId: RUN, missionId: MID, status: "AWAITING_APPROVAL"};
+    const {ctx: c2, doc: d2} = await mkCtx({get: getFn({[`/v1/work-runs/${RUN}`]: {workRun: bare}, [`/v1/work-runs?missionId=${MID}`]: {workRuns: [bare]}})});
+    const t2 = text(byData(mount(d2, await view.render(c2)), "runId", RUN)[0]);
+    expect(t2).toContain("Sunucu bildirmedi");
+    expect(t2).toContain("Kontrol noktaları sunucu tarafından bildirilmedi");
+    expect(t2).not.toContain("Henüz atanmadı");
+    expect(t2).not.toContain("Henüz karar yok");
+    // sunucu açıkça boş dizi bildirdiyse gerçekten yok
+    const empty = {...bare, checkpoints: []};
+    const {ctx: c3, doc: d3} = await mkCtx({get: getFn({[`/v1/work-runs/${RUN}`]: {workRun: empty}, [`/v1/work-runs?missionId=${MID}`]: {workRuns: [empty]}})});
+    expect(text(byData(mount(d3, await view.render(c3)), "runId", RUN)[0])).toContain("Kontrol noktası yok.");
   });
   it("Yeni Görev form builds the exact mission body (criteria list, risk, argv) with an idempotency key and keeps drafts", async () => {
     const {ctx, doc, calls} = await mkCtx({get: getFn(), post: () => ({status: 201, body: {mission: {missionId: MID2, title: "Yeni görev"}}})});

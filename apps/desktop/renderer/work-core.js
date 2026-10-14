@@ -197,11 +197,27 @@ function mapRunEvidence(list){
     return {evidenceId:typeof id==="string"&&SAFE_ID_RE.test(id)?id:null,kind:str(e.kind,40),verification:normalizeVerification(e.verification)};
   }).filter(Boolean);
 }
+/** En son REVIEW kanıt kaydı (en yüksek cycle, eşitlikte dizideki son); yoksa null. */
+function latestReviewEvidence(list){
+  let best=null,bestCycle=-1;
+  for(const e of arr(list,100)){
+    if(!isObj(e)||e.step!=="REVIEW"||(typeof e.reviewerIdentity!=="string"&&typeof e.verdict!=="string"))continue;
+    const cyc=Number.isSafeInteger(e.cycle)?e.cycle:0;if(cyc>=bestCycle){best=e;bestCycle=cyc}
+  }
+  return best;
+}
+/** Kontrol noktası adı: düz ad alanları, yoksa Lane B {step, cycle} biçimi ("REVIEW #1"). */
+function checkpointName(c){
+  const n=str(pick(c.name,c.id,c.label),120);if(n)return n;
+  const st=str(c.step,60);return st?`${st}${Number.isSafeInteger(c.cycle)?` #${c.cycle}`:""}`:null;
+}
 export function mapWorkRun(x){
   if(!isObj(x))return null;
   const idv=pick(x.runId,x.workRunId,x.id);if(typeof idv!=="string"||!SAFE_ID_RE.test(idv))return null;
   const stepRaw=x.step,step=typeof stepRaw==="string"?{name:str(stepRaw,120),index:null,total:null}:isObj(stepRaw)?{name:str(pick(stepRaw.name,stepRaw.label,stepRaw.id),120),index:Number.isSafeInteger(stepRaw.index)?stepRaw.index:null,total:Number.isSafeInteger(stepRaw.total)?stepRaw.total:null}:null;
-  const rv=isObj(x.reviewer)?x.reviewer:{},identity=str(pick(rv.identity,rv.id,rv.name,x.reviewerIdentity,typeof x.reviewer==="string"?x.reviewer:undefined),120),verdict=statusStr(pick(rv.verdict,x.reviewerVerdict,x.verdict));
+  // //TR: B5-C1-001: Lane B WorkRun biçimi (core/workos/types.ts): reviewer kimliği run.executor.reviewer ve REVIEW kanıt kaydında reviewerIdentity, karar o kayıtta verdict:'CLEAN'|'BLOCKED'. Alan gerçekten yoksa null kalır; arayüz bunu "sunucu bildirmedi" diye gösterir, "atanmadı" diye uydurmaz.
+  const rv=isObj(x.reviewer)?x.reviewer:{},rev=latestReviewEvidence(x.evidence),exec=isObj(x.executor)?x.executor:{};
+  const identity=str(pick(rv.identity,rv.id,rv.name,x.reviewerIdentity,typeof x.reviewer==="string"?x.reviewer:undefined,rev?.reviewerIdentity,exec.reviewer),120),verdict=statusStr(pick(rv.verdict,x.reviewerVerdict,rev?.verdict,x.verdict));
   const lease=isObj(x.lease)?x.lease:{};
   return {
     runId:idv,missionId:typeof x.missionId==="string"&&MISSION_ID_RE.test(x.missionId)?x.missionId:null,
@@ -209,7 +225,8 @@ export function mapWorkRun(x){
     role:str(pick(x.role,x.roleId,x.agentRole,isObj(x.worker)?x.worker.role:undefined),120),
     leaseExpiresAt:iso(pick(lease.expiresAt,x.leaseExpiresAt)),heartbeatAt:iso(pick(x.heartbeatAt,x.lastHeartbeatAt,lease.heartbeatAt)),
     startedAt:iso(pick(x.startedAt,x.createdAt)),
-    checkpoints:arr(x.checkpoints,50).map(c=>typeof c==="string"?{name:c.slice(0,120),status:null,at:null}:isObj(c)?{name:str(pick(c.name,c.id,c.label),120),status:statusStr(c.status),at:iso(pick(c.at,c.createdAt,c.time))}:null).filter(c=>c&&c.name),
+    checkpoints:arr(x.checkpoints,50).map(c=>typeof c==="string"?{name:c.slice(0,120),status:null,at:null}:isObj(c)?{name:checkpointName(c),status:statusStr(c.status),at:iso(pick(c.at,c.createdAt,c.time))}:null).filter(c=>c&&c.name),
+    checkpointsReported:Array.isArray(x.checkpoints),
     evidence:mapRunEvidence(x.evidence),reviewer:identity||verdict?{identity,verdict}:null
   };
 }

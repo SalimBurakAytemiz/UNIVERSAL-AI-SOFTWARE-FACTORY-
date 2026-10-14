@@ -47,5 +47,64 @@
     "While the modal confirm dialog is open the top-bar ACIL DURDUR is inert (native modal); Esc or Vazgec closes the dialog first. The STOP control itself stays visible and is never hidden.",
     "Run status and reviewer verdict labels use a dictionary with raw-value fallback; the set of active run states (QUEUED, LEASED, STARTING, RUNNING, VERIFYING, REVIEWING) is a copy used only to list live runs and should be confirmed against Master V2 section 06 at integration.",
     "Güvence kind filter and verification filter are client-side over the current server page (limit 100); paging uses the server cursor."
-  ]
+  ],
+  "remediationCycle2": {
+    "startedAt": "2026-10-14T21:55:50Z",
+    "baseHead": "ddfced8a4674487189495e0946cc7aa1dddee027",
+    "status": "REMEDIATED (cycle 2), NOT CLEAN; independent review pending",
+    "addressed": {
+      "B5-C1-001 (HIGH, run timeline showed false 'not assigned / no verdict / no checkpoints' for Lane B WorkRun)": "renderer/work-core.js mapWorkRun now reads the Lane B WorkRun shape of core/workos/types.ts (v7/product-r2): checkpoint names come from {step, cycle} ('REVIEW #1') when no name/id/label exists; reviewer identity is the latest REVIEW evidence entry's reviewerIdentity (highest cycle, last on ties), falling back to run.executor.reviewer; verdict is the latest REVIEW evidence entry's verdict ('CLEAN'|'BLOCKED'); legacy tolerant fields (x.reviewer object/string, reviewerIdentity, reviewerVerdict, verdict) keep precedence. New checkpointsReported flag (Array.isArray(x.checkpoints)). views/work.js runCard shows run.checkpointsNotReported when the server omitted the checkpoints field and run.noCheckpoints only for an explicitly empty array. locales run.reviewerNone and run.verdictNone changed from 'Not assigned yet / No verdict yet' to 'Not reported by server' (tr: 'Sunucu bildirmedi'); added run.checkpointsNotReported and mstatus.CLEAN (tr/en). Tests: tests/v7-b5-work-screens.test.ts +2 (mapper with Lane B fixture incl. superseded BLOCKED review at cycle 0, executor.reviewer fallback, verdict-only, IMPLEMENT evidence not treated as review, absent fields; runCard render with Lane B AWAITING_APPROVAL fixture with 2 checkpoints and REVIEW evidence {reviewerIdentity:'claude-reviewer', verdict:'CLEAN'}, absent-field honest text, explicitly empty checkpoints)."
+    },
+    "filesChanged": [
+      "apps/desktop/renderer/work-core.js",
+      "apps/desktop/renderer/views/work.js",
+      "apps/desktop/renderer/locales/{tr,en}.js",
+      "tests/v7-b5-work-screens.test.ts (+2 tests, 55 total; already listed in config/validation.json, no validation.json change)",
+      "config/trust-root-manifest.json (reseal via scripts/generate-trust-root.mjs)",
+      "audit/checkpoints/V7-PKG-B5-2026-10-14.json"
+    ],
+    "commands": [
+      {
+        "command": "npx tsc --noEmit",
+        "exitCode": 0
+      },
+      {
+        "command": "node node_modules/vitest/vitest.mjs run tests/v7-b4-desktop-shell.test.ts tests/pkg-c-lf-electron-smoke.test.ts tests/pkg-e-electron-provision.test.ts tests/v7-b5-work-screens.test.ts",
+        "exitCode": 0,
+        "result": "4 files passed, 132 tests passed (55 + 38 + 9 + 30)"
+      },
+      {
+        "command": "node scripts/validate-tr-comments.mjs",
+        "exitCode": 0,
+        "result": "TR_VALIDATION: PASS"
+      },
+      {
+        "command": "node scripts/secret-sanity.mjs",
+        "exitCode": 0,
+        "result": "SECRET_SANITY: PASS"
+      },
+      {
+        "command": "node scripts/v6-apps-control-desktop-selftest.mjs",
+        "exitCode": 0,
+        "result": "PASS 93/93"
+      },
+      {
+        "command": "node scripts/validate-mechanical-closure.mjs",
+        "exitCode": 0,
+        "result": "PASS files=90"
+      },
+      {
+        "command": "node scripts/generate-trust-root.mjs (run after this checkpoint was written)",
+        "exitCode": 0
+      },
+      {
+        "command": "node scripts/verify-trust-root.mjs (run after the reseal)",
+        "exitCode": 0
+      }
+    ],
+    "notRun": [
+      "scripts/run-validation.mjs was intentionally not run; the reviewer runs it independently.",
+      "The post-commit verify-trust-root re-run cannot be recorded inside the committed file; it is reported in the implementer's structured result."
+    ]
+  }
 }
