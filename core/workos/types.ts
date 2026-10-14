@@ -1,5 +1,6 @@
 // //TR: Bu dosya kullanıcı işi için Work OS varlıklarını (Project, Mission, Task, Run), journal kayıt biçimini ve hata kodlarını tanımlar; tek kanonik store şemasının tip sözleşmesidir.
 import type {MissionStatus} from "../mission/types.js";
+import type {CompanyJournalType} from "../company/types.js";
 
 export type RiskLevel = "R0" | "R1" | "R2" | "R3" | "R4";
 export type TaskStatus = "PENDING" | "IN_PROGRESS" | "DONE" | "BLOCKED";
@@ -19,7 +20,9 @@ export interface WorkTask {
   taskId: string; missionId: string; projectId: string; tenantId: string; title: string; status: TaskStatus; dependsOn: string[];
 }
 export type JournalType = "PROJECT_CREATED" | "MISSION_CREATED" | "TASK_CREATED" | "MISSION_TRANSITIONED"
-  | "RUN_CREATED" | "RUN_LEASE" | "RUN_TRANSITION" | "RUN_CHECKPOINT" | "RUN_EVIDENCE";
+  | "RUN_CREATED" | "RUN_LEASE" | "RUN_TRANSITION" | "RUN_CHECKPOINT" | "RUN_EVIDENCE"
+  // //TR: B11A: Company OS (CRM/Finans/Hukuk) girdileri aynı hash zincirli journal içindedir; kurallar core/company altındadır.
+  | CompanyJournalType;
 export interface JournalEntry {
   seq: number; prevHash: string; hash: string; type: JournalType; actor: string; at: string; payload: Record<string, unknown>;
 }

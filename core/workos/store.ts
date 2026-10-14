@@ -11,6 +11,10 @@ import {assertTransition, isMissionStatus} from "../mission/state-machine.js";
 import type {MissionStatus} from "../mission/types.js";
 import {WorkOsError, urlHasUserinfo} from "./types.js";
 import type {JournalEntry, JournalType, Project, RiskLevel, RunCheckpoint, RunEvidence, RunStatus, RunStep, Scope, TaskStatus, WorkMission, WorkRun, WorkTask} from "./types.js";
+// //TR: B11A: Company OS domainleri ikinci bir store kurmaz; girdileri bu journal'a yazar ve replay'de core/company apply fonksiyonlarına devredilir.
+import {applyCompanyEntry} from "../company/apply.js";
+import {emptyCompanyState, isCompanyJournalType} from "../company/types.js";
+import type {CompanyJournalType, CompanyRecord, CompanyState, CompanyTx, CompanyView} from "../company/types.js";
 import {ACTIVE_WORKER_STATUSES, LEASED_RUN_STATUSES, UNLEASED_RUN_STATUSES, assertRunTransition, isOpenRun, isRunStatus, isRunStep} from "./run-state.js";
 
 const sha256 = sha256Untyped as (value: unknown) => string;
@@ -23,9 +27,9 @@ export const newTraceId = () => newId("trc");
 interface IdemRecord { id: string; digest?: string }
 interface State {
   projects: Record<string, Project>; missions: Record<string, WorkMission>; tasks: Record<string, WorkTask>; runs: Record<string, WorkRun>;
-  idempotency: Record<string, IdemRecord>; lastSeq: number; lastHash: string;
+  idempotency: Record<string, IdemRecord>; lastSeq: number; lastHash: string; company: CompanyState;
 }
-const emptyState = (): State => ({projects: {}, missions: {}, tasks: {}, runs: {}, idempotency: {}, lastSeq: 0, lastHash: GENESIS});
+const emptyState = (): State => ({projects: {}, missions: {}, tasks: {}, runs: {}, idempotency: {}, lastSeq: 0, lastHash: GENESIS, company: emptyCompanyState()});
 const entryHash = (body: Omit<JournalEntry, "hash">): string => sha256(body);
 // //TR: F-B1-001: anahtar JSON dizisidir; ayırıcı karakter içeren tenant/anahtar değerleri çarpışamaz.
 const idemKey = (tenantId: string, kind: string, key: string) => JSON.stringify([tenantId, kind, key]);
@@ -255,7 +259,11 @@ export class WorkOsStore {
         if (!isObj(ev) || !isStr(ev.evidenceId) || !isStr(ev.kind) || !Array.isArray(ev.argv)) throw malformed(`EVIDENCE_SHAPE:${e.seq}`);
         r.evidence.push(ev); r.updatedAt = e.at; break;
       }
-      default: throw tampered(`UNKNOWN_TYPE:${e.seq}`);
+      default: {
+        if (!isCompanyJournalType(e.type)) throw tampered(`UNKNOWN_TYPE:${e.seq}`);
+        const applied = applyCompanyEntry(st.company, {seq: e.seq, type: e.type, at: e.at, actor: e.actor, payload: p});
+        if (applied.idem) idem(applied.idem.kind, applied.idem, applied.idem.id);
+      }
     }
     st.lastSeq = e.seq; st.lastHash = e.hash;
   }
@@ -472,6 +480,23 @@ export class WorkOsStore {
   // Engine-only (sistem aktörü) okumalar: tenant'lar arası run kuyruğunu görür; API yolları bunları kullanmaz.
   engineListRuns(): WorkRun[] { this.readGuard(); return Object.values(this.state.runs).map(clone); }
   engineGetRun(runId: string): WorkRun | undefined { this.readGuard(); const r = this.state.runs[runId]; return r ? clone(r) : undefined; }
+
+  // ---- B11A Company OS: aynı journal, aynı lock, aynı hash zinciri; domain kuralları core/company altındadır ----
+  // Yazma lock altında disk yeniden doğrulanarak yapılır; geçersiz işlem append'ten önce hata verir ve hiçbir şey yazmaz.
+  companyWrite<T>(fn: (tx: CompanyTx) => T): T {
+    return this.write(() => {
+      const st = this.state;
+      const tx: CompanyTx = {
+        get records() { return st.company.records; }, get reversals() { return st.company.reversals; }, get invoiceSeq() { return st.company.invoiceSeq; },
+        now: () => this.nowIso(), newId,
+        idem: (kind, tenantId, key, digest) => this.findIdem<CompanyRecord>(st.company.records, tenantId, kind, key, digest),
+        idemFields: (key, digest) => this.idemFields(key, digest),
+        append: (type: CompanyJournalType, actor: string, payload: Record<string, unknown>) => { this.append(type, actor, payload); }
+      };
+      return fn(tx);
+    });
+  }
+  companyRead<T>(fn: (view: CompanyView) => T): T { this.readGuard(); return fn(this.state.company); }
 
   listProjects(scope: Scope): Project[] { this.readGuard(); return Object.values(this.state.projects).filter(p => p.tenantId === scope.tenantId); }
   getProject(scope: Scope, id: string): Project | undefined { this.readGuard(); const p = this.state.projects[id]; return p && p.tenantId === scope.tenantId ? p : undefined; }

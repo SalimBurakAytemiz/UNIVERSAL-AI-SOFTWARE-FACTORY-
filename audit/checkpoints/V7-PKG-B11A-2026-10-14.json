@@ -1,0 +1,66 @@
+{
+  "//TR": "Bu checkpoint, V7 B11A Company OS çekirdek alanları (CRM, Finans fatura/ödeme, Hukuk sözleşme) paketini ve gözlenen komut sonuçlarını kaydeder; temiz değildir, bağımsız inceleme beklemektedir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-B11A-COMPANY-OS-CORE-DOMAINS",
+  "date": "2026-10-14",
+  "parent": "10b27c203212eb1d022ccf9df87784704a613a53",
+  "branch": "v7/product-b11a",
+  "implementer": "CLAUDE_BUILDER",
+  "authorizationRecords": [
+    "audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json",
+    "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
+  ],
+  "status": "IMPLEMENTED_NOT_CLEAN_REVIEW_PENDING",
+  "filesChanged": [
+    "core/company/types.ts",
+    "core/company/common.ts",
+    "core/company/crm.ts",
+    "core/company/finance.ts",
+    "core/company/legal.ts",
+    "core/company/apply.ts",
+    "core/workos/store.ts (company state in replay, apply delegation for company entry types, companyWrite/companyRead; all Work OS behaviour unchanged)",
+    "core/workos/types.ts (JournalType union extended with the company entry types)",
+    "apps/control-api/src/server.ts (/v1/company/* routes appended before the cockpit; no existing route changed)",
+    "tests/v7-b11a-company-os.test.ts",
+    "config/validation.json (appended tests/v7-b11a-company-os.test.ts at the end of the tests step only; previous last entry gained a trailing comma)",
+    "config/trust-root-manifest.json (resealed via generate-trust-root.mjs)",
+    "audit/checkpoints/V7-PKG-B11A-2026-10-14.json"
+  ],
+  "design": {
+    "singleTruth": "No second journal or store. Company entries are 11 domain-namespaced journal types (CRM_*, FIN_*, LEGAL_*) in the existing hash-chained Work OS journal, under the same process lock, tenant scope, idempotency map and fail-closed load. WorkOsStore.apply delegates company types to core/company/apply.ts; domain modules own validation, state machines and replay checks. Writes go through WorkOsStore.companyWrite (lock plus disk re-verification), reads through companyRead (fail-closed guard).",
+    "crm": "accounts, contacts (name, optional role and email; PII never written to audit), opportunities (LEAD->QUALIFIED->PROPOSAL->WON, LOST from any open stage, WON/LOST terminal; amount integer minor units plus ISO 4217 shaped code).",
+    "finance": "invoices DRAFT->ISSUED->PARTIALLY_PAID->PAID and ISSUED->VOID; line items integer minor units; totals computed server-side (a client totalMinor is accepted by the schema but ignored); status derived only from net recorded payments (ISSUED is never PAID); payments are separate append-only records; overpayment and currency mismatch rejected; corrections are REVERSAL records (same amount, one reversal per payment, a reversal cannot be reversed); void only for ISSUED invoices with zero net payments; invoice numbers INV-000001.. are per-tenant and rebuilt on replay.",
+    "legal": "contracts DRAFT->SENT->SIGNED|DECLINED|EXPIRED; SIGNED requires documentSha256 (64 hex), signerName and signedAt (enforced in the API schema, in the domain function and again on journal replay); evidence fields are rejected for any other target; an opportunity link is only a validated reference and never creates, signs or advances a contract.",
+    "replayChecks": "Every company journal entry is re-validated on load (shape, tenant ownership of references, state-machine legality, recomputed invoice totals, payment/currency/overpayment, reversal consistency, invoice number sequence, signature evidence). A hash-valid but semantically forged entry makes the store tampered (503 fail-closed).",
+    "api": "GET/POST /v1/company/accounts, contacts, opportunities, invoices, contracts; POST opportunities/:id/stage, invoices/:id/issue, invoices/:id/void, contracts/:id/transition; POST /v1/company/payments (payment or reversal body); additional read-only GET /v1/company/payments. Write gate order GLOBAL_STOP 423 -> action-gateway 403 -> strict Ajv 400 (additionalProperties false). Creates take idempotencyKey (replay 200, different payload 409). Error bodies carry only fixed codes."
+  },
+  "observed": {
+    "tests": "tests/v7-b11a-company-os.test.ts: 21 tests passed. Together with tests/v7-b1-workos, v7-b2-workos-hardening, v7-b3a-runner, v7-b3a-recovery-budget, v7-b3a-c3-builder-commit, v7-b10a-evidence, v7-b9-target-catalog: 8 files, 116 passed, 1 skipped (the pre-existing explicit symlink-file skip in the B10A test on this Windows host).",
+    "mutationCheck": "Removing the tenant comparison in scopedRecord made the tenant isolation test and the store API test fail; weakening the SIGNED evidence check in the domain function made the direct-domain signature test fail; both restored."
+  },
+  "commands": [
+    {"cmd": "npx tsc --noEmit", "exit": 0},
+    {"cmd": "node node_modules/vitest/vitest.mjs run tests/v7-b11a-company-os.test.ts", "exit": 0, "result": "21 passed"},
+    {"cmd": "node scripts/validate-tr-comments.mjs", "exit": 0, "result": "TR_VALIDATION: PASS"},
+    {"cmd": "node scripts/secret-sanity.mjs", "exit": 0, "result": "SECRET_SANITY: PASS"},
+    {"cmd": "node scripts/v6-apps-control-desktop-selftest.mjs", "exit": 0, "result": "PASS 93/93"},
+    {"cmd": "node scripts/smoke-control-api.mjs", "exit": 0, "result": "status PASS"},
+    {"cmd": "node scripts/validate-mechanical-closure.mjs", "exit": 0, "result": "PASS files=90"},
+    {"cmd": "node scripts/generate-trust-root.mjs", "exit": 0, "result": "TRUST_ROOT_MANIFEST_GENERATED files=364"},
+    {"cmd": "node scripts/verify-trust-root.mjs", "exit": 0, "result": "TRUST_ROOT_VERIFY: PASS"},
+    {"cmd": "vitest run tests/v7-b11a-company-os.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts tests/v7-b3a-runner.test.ts tests/v7-b3a-recovery-budget.test.ts tests/v7-b3a-c3-builder-commit.test.ts tests/v7-b10a-evidence.test.ts tests/v7-b9-target-catalog.test.ts (after reseal)", "exit": 0, "result": "8 files passed; 116 passed, 1 skipped"},
+    {"cmd": "vitest run tests/pkg-f-validation-scripts-protected.test.ts tests/pkg-e2-tr-scan.test.ts tests/action-gateway.test.ts tests/mission-state.test.ts", "exit": 0, "result": "4 files, 23 passed"}
+  ],
+  "notRun": [
+    "scripts/run-validation.mjs (explicitly excluded by the package instructions)"
+  ],
+  "limitations": [
+    "Currency codes are checked by the ISO 4217 shape (three uppercase letters), not against the live code list.",
+    "Company lists are unpaginated in-memory projections of the journal (fine for the local single-process store; pagination is a later concern).",
+    "No Company OS cockpit block and no desktop UI were added (out of scope)."
+  ],
+  "deviations": [
+    "None against the package scope. Added read-only GET /v1/company/payments (not in the route list) so payment and reversal ids are readable; it writes nothing. No desktop, protected-script, schema, package.json or CHANGELOG file was touched."
+  ],
+  "reviewStatus": "not clean; no CLEAN is declared by the implementer. Independent fresh Claude reviewer must decide."
+}

@@ -29,6 +29,10 @@ import {MissionRunner} from "../../../core/workos/runner.js";
 import type {RunnerOptions} from "../../../core/workos/runner.js";
 import {assertIndependentExecutors,executorsFromEnv} from "../../../core/workos/executors.js";
 import type {ExecutorPair} from "../../../core/workos/executors.js";
+import {CrmDomain,validateAccountCreate,validateContactCreate,validateOpportunityCreate,validateOpportunityStage} from "../../../core/company/crm.js";
+import {FinanceDomain,validateInvoiceCreate,validateInvoiceIssue,validateInvoiceVoid,validatePaymentCreate} from "../../../core/company/finance.js";
+import {LegalDomain,validateContractCreate,validateContractTransition} from "../../../core/company/legal.js";
+import type {Validation} from "../../../core/company/common.js";
 
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
@@ -230,6 +234,83 @@ app.get<{Params:{evidenceId:string}}>("/v1/evidence/:evidenceId",wos(async(req,r
   if(!validEvidenceId(req.params.evidenceId))return reply.code(400).send({error:"INVALID_EVIDENCE_ID"});
   const d=await evidenceIndex().get(req.params.evidenceId);if(!d)return reply.code(404).send({error:"EVIDENCE_NOT_FOUND"});
   return {evidence:d.item,summary:d.summary,tail:d.tail,tailWithheld:d.tailWithheld};
+}));
+
+// //TR: B11A Company OS route'ları (CRM, Finans, Hukuk): aynı token hook'u ve aynı yazma kapısı sırası (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400). Kayıtlar ortak Work OS journal'ındadır (ikinci store yok), tenant kapsamlıdır; audit yalnız kimlik/durum/tutar taşır, ad ve e-posta (PII) asla yazılmaz.
+const companyIdOk=(prefix:string,x:unknown)=>typeof x==="string"&&new RegExp(`^${prefix}_[0-9a-f]{24}$`).test(x);
+const companyBody=(prefix:string,id:unknown,validate:(x:unknown)=>Validation)=>(x:unknown):Validation=>companyIdOk(prefix,id)?validate(x):{ok:false,errors:"invalid id"};
+const companyFilter=(reply:any,value:unknown,prefix:string):{ok:true;id?:string}|{ok:false}=>{if(value===undefined)return {ok:true};if(!companyIdOk(prefix,value)){reply.code(400).send({error:"INVALID_FILTER"});return {ok:false}}return {ok:true,id:value as string}};
+const crmDomain=()=>new CrmDomain(getStore()),financeDomain=()=>new FinanceDomain(getStore()),legalDomain=()=>new LegalDomain(getStore());
+const created=(reply:any,replayed:boolean,body:unknown)=>reply.code(replayed?200:201).send(body);
+app.get("/v1/company/accounts",wos(async()=>({accounts:crmDomain().listAccounts(scope)})));
+app.post("/v1/company/accounts",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.account.create","NONE",body,validateAccountCreate))return reply;
+  const b=body as any,r=crmDomain().createAccount(scope,{name:b.name,idempotencyKey:b.idempotencyKey},actor);
+  audit(r.replayed?"COMPANY_IDEMPOTENT_REPLAY":"COMPANY_ACCOUNT_CREATED",{actor,kind:"account",accountId:r.entity.accountId});return created(reply,r.replayed,{account:r.entity});
+}));
+app.get<{Querystring:{accountId?:unknown}}>("/v1/company/contacts",wos(async(req,reply)=>{
+  const f=companyFilter(reply,req.query?.accountId,"acc");if(!f.ok)return reply;return {contacts:crmDomain().listContacts(scope,f.id)};
+}));
+app.post("/v1/company/contacts",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.contact.create","NONE",body,validateContactCreate))return reply;
+  const b=body as any,r=crmDomain().createContact(scope,{accountId:b.accountId,name:b.name,role:b.role,email:b.email,idempotencyKey:b.idempotencyKey},actor);
+  audit(r.replayed?"COMPANY_IDEMPOTENT_REPLAY":"COMPANY_CONTACT_CREATED",{actor,kind:"contact",contactId:r.entity.contactId,accountId:r.entity.accountId});return created(reply,r.replayed,{contact:r.entity});
+}));
+app.get<{Querystring:{accountId?:unknown}}>("/v1/company/opportunities",wos(async(req,reply)=>{
+  const f=companyFilter(reply,req.query?.accountId,"acc");if(!f.ok)return reply;return {opportunities:crmDomain().listOpportunities(scope,f.id)};
+}));
+app.post("/v1/company/opportunities",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.opportunity.create","NONE",body,validateOpportunityCreate))return reply;
+  const b=body as any,r=crmDomain().createOpportunity(scope,{accountId:b.accountId,title:b.title,amountMinor:b.amountMinor,currency:b.currency,idempotencyKey:b.idempotencyKey},actor);
+  audit(r.replayed?"COMPANY_IDEMPOTENT_REPLAY":"COMPANY_OPPORTUNITY_CREATED",{actor,kind:"opportunity",opportunityId:r.entity.opportunityId,accountId:r.entity.accountId,amountMinor:r.entity.amountMinor,currency:r.entity.currency});return created(reply,r.replayed,{opportunity:r.entity});
+}));
+app.post<{Params:{id:string}}>("/v1/company/opportunities/:id/stage",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.opportunity.stage",req.params.id,body,companyBody("opp",req.params.id,validateOpportunityStage)))return reply;
+  const b=body as any,before=crmDomain().getOpportunity(scope,req.params.id),opportunity=crmDomain().stageOpportunity(scope,req.params.id,b.stage,b.reason,actor);
+  audit("COMPANY_OPPORTUNITY_STAGED",{actor,opportunityId:opportunity.opportunityId,from:before?.stage,to:opportunity.stage});return {opportunity};
+}));
+app.get<{Querystring:{accountId?:unknown}}>("/v1/company/invoices",wos(async(req,reply)=>{
+  const f=companyFilter(reply,req.query?.accountId,"acc");if(!f.ok)return reply;return {invoices:financeDomain().listInvoices(scope,f.id)};
+}));
+app.post("/v1/company/invoices",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.invoice.create","NONE",body,validateInvoiceCreate))return reply;
+  // Client totalMinor yok sayılır; toplam sunucuda satırlardan hesaplanır.
+  const b=body as any,r=financeDomain().createInvoice(scope,{accountId:b.accountId,currency:b.currency,lineItems:b.lineItems,dueDate:b.dueDate,idempotencyKey:b.idempotencyKey},actor);
+  audit(r.replayed?"COMPANY_IDEMPOTENT_REPLAY":"COMPANY_INVOICE_CREATED",{actor,kind:"invoice",invoiceId:r.entity.invoiceId,accountId:r.entity.accountId,totalMinor:r.entity.totalMinor,currency:r.entity.currency});return created(reply,r.replayed,{invoice:r.entity});
+}));
+app.post<{Params:{id:string}}>("/v1/company/invoices/:id/issue",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.invoice.issue",req.params.id,body,companyBody("inv",req.params.id,validateInvoiceIssue)))return reply;
+  const invoice=financeDomain().issueInvoice(scope,req.params.id,actor);
+  audit("COMPANY_INVOICE_ISSUED",{actor,invoiceId:invoice.invoiceId,number:invoice.number,totalMinor:invoice.totalMinor,currency:invoice.currency});return {invoice};
+}));
+app.post<{Params:{id:string}}>("/v1/company/invoices/:id/void",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.invoice.void",req.params.id,body,companyBody("inv",req.params.id,validateInvoiceVoid)))return reply;
+  const invoice=financeDomain().voidInvoice(scope,req.params.id,(body as any).reason,actor);
+  audit("COMPANY_INVOICE_VOIDED",{actor,invoiceId:invoice.invoiceId});return {invoice};
+}));
+app.get<{Querystring:{invoiceId?:unknown}}>("/v1/company/payments",wos(async(req,reply)=>{
+  const f=companyFilter(reply,req.query?.invoiceId,"inv");if(!f.ok)return reply;return {payments:financeDomain().listPayments(scope,f.id)};
+}));
+app.post("/v1/company/payments",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.payment.record","NONE",body,validatePaymentCreate))return reply;
+  const b=body as any,fin=financeDomain();
+  const r=b.reversesPaymentId!==undefined?fin.reversePayment(scope,{reversesPaymentId:b.reversesPaymentId,invoiceId:b.invoiceId,reason:b.reason,idempotencyKey:b.idempotencyKey},actor)
+    :fin.recordPayment(scope,{invoiceId:b.invoiceId,amountMinor:b.amountMinor,currency:b.currency,receivedAt:b.receivedAt,reference:b.reference,idempotencyKey:b.idempotencyKey},actor);
+  audit(r.replayed?"COMPANY_IDEMPOTENT_REPLAY":r.entity.payment.entryKind==="REVERSAL"?"COMPANY_PAYMENT_REVERSED":"COMPANY_PAYMENT_RECORDED",{actor,kind:"payment",paymentId:r.entity.payment.paymentId,invoiceId:r.entity.payment.invoiceId,amountMinor:r.entity.payment.amountMinor,currency:r.entity.payment.currency,invoiceStatus:r.entity.invoice.status});
+  return created(reply,r.replayed,r.entity);
+}));
+app.get<{Querystring:{accountId?:unknown}}>("/v1/company/contracts",wos(async(req,reply)=>{
+  const f=companyFilter(reply,req.query?.accountId,"acc");if(!f.ok)return reply;return {contracts:legalDomain().listContracts(scope,f.id)};
+}));
+app.post("/v1/company/contracts",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.contract.create","NONE",body,validateContractCreate))return reply;
+  const b=body as any,r=legalDomain().createContract(scope,{accountId:b.accountId,opportunityId:b.opportunityId,title:b.title,idempotencyKey:b.idempotencyKey},actor);
+  audit(r.replayed?"COMPANY_IDEMPOTENT_REPLAY":"COMPANY_CONTRACT_CREATED",{actor,kind:"contract",contractId:r.entity.contractId,accountId:r.entity.accountId});return created(reply,r.replayed,{contract:r.entity});
+}));
+app.post<{Params:{id:string}}>("/v1/company/contracts/:id/transition",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.contract.transition",req.params.id,body,companyBody("ctr",req.params.id,validateContractTransition)))return reply;
+  const b=body as any,before=legalDomain().getContract(scope,req.params.id),contract=legalDomain().transitionContract(scope,req.params.id,{to:b.to,reason:b.reason,documentSha256:b.documentSha256,signerName:b.signerName,signedAt:b.signedAt},actor);
+  audit("COMPANY_CONTRACT_TRANSITIONED",{actor,contractId:contract.contractId,from:before?.status,to:contract.status,...(contract.status==="SIGNED"?{documentSha256:contract.documentSha256}:{})});return {contract};
 }));
 
 // //TR: B2 GET /v1/cockpit: UI için tek okuma otoritesidir; yalnız okur (Work OS store, orchestrator state, registry), hiçbir kaynağı yazmaz, eksik/okunamayan/uygulanmamış kaynak için sayı uydurmaz (state UNAVAILABLE/ERROR, sayılar null).
