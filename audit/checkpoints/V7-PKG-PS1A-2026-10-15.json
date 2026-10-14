@@ -1,0 +1,68 @@
+{
+  "//TR": "Bu checkpoint V7 PS-1A paketini (Project Studio arka ucu: şablon/içe aktarma ile yönetilen depo, dev-run + canlı önizleme, dosya/git görünümü, export, executor kurulumu, ADR-0001) ve gözlenen komut/çıkış kodlarını kaydeder; temiz değildir, bağımsız inceleme bekler.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-PS1A-PROJECT-STUDIO-BACKEND",
+  "date": "2026-10-15",
+  "parent": "badf38bca7321e42e18d50e4791a7bd87b8afdba",
+  "branch": "v7/product-ps1a",
+  "implementer": "CLAUDE_BUILDER",
+  "authorizationRecords": [
+    "audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json",
+    "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
+  ],
+  "scope": "Addendum UASCO-V2-ADDENDUM-PROJECT-QA-DELIVERY-RE-2026-10-15 section 2.1 PS-001..012 (backend part), acceptance PS-AT-001/002/004/005; WK-01 ADR. Desktop screens are a separate package.",
+  "status": "IMPLEMENTED, NOT CLEAN; independent review pending",
+  "filesChanged": [
+    "core/workos/project-studio.ts (new: managed repository, template repo creation, local git/ZIP import, files/file/git log/git diff views, export)",
+    "core/workos/devrun.ts (new: dev-run manager, preview probe, log rings, GLOBAL_STOP watch, orphan recovery)",
+    "core/workos/zip.ts (new: minimal safe ZIP reader on node:zlib, CRC32, test-only writer)",
+    "core/workos/project-templates.ts (new: web-node, node-lib, empty starters)",
+    "core/workos/executor-setup.ts (new: executor status, LOCAL_CLAUDE enable with provenance capture seam, persisted setting)",
+    "core/workos/types.ts (Project Studio fields, ProjectExport, journal types PROJECT_REPOSITORY_SET and PROJECT_EXPORT_RECORDED)",
+    "core/workos/store.ts (studio fields in project create + digest, managed repo preparation under the journal lock, setProjectRepository, project exports, budget.maxRuns check)",
+    "core/workos/schemas.ts (project create fields, import/export/empty body schemas)",
+    "core/workos/README.md (Project Studio section)",
+    "apps/control-api/src/server.ts (protected, authorized: project template create, import, devrun, files, git, export, executors routes; control/stop stops dev-runs; executor selection from persisted setting)",
+    "config/validation.json (protected, authorized: appended tests/v7-ps1a-project-studio.test.ts at the end of the tests step command array)",
+    "config/trust-root-manifest.json (protected, authorized: resealed with node scripts/generate-trust-root.mjs)",
+    "docs/adr/ADR-0001-claude-implementer-independent-reviewer.md (new: append-only supersession record)",
+    "tests/v7-ps1a-project-studio.test.ts (new, 14 tests)",
+    "audit/checkpoints/V7-PKG-PS1A-2026-10-15.json (this checkpoint)"
+  ],
+  "design": {
+    "singleAuthority": "Project Studio uses the same Work OS project records and journal; new journal entry types PROJECT_REPOSITORY_SET and PROJECT_EXPORT_RECORDED; no second store.",
+    "managedRepository": "<dataDir>/projects/<projectId>/repo; template repos are created under the journal lock after the idempotency check and before PROJECT_CREATED; initial commit by 'UASCO Project Studio <studio@local.invalid>' with isolated git.",
+    "import": "git: clone --no-local --no-hardlinks with the runner's neutralised git env, origin removed; zip: stored/deflate only, all entries validated (traversal, symlink, special files, .git, names, duplicates, size, count, inflate cap, CRC) before any write; local absolute paths only.",
+    "devrun": "fresh clone of repo HEAD as dev workspace, devCommand argv allow-list, safeChildEnv + free loopback PORT, single instance (map + devrun.lock), crash detection with exit code, process-tree kill, preview URL only after a real HTTP response, GLOBAL_STOP stops/blocks, orphan kill only when pid start time matches.",
+    "filesGit": "lstat walk + realpath containment, symlink/junction refused, text only <= 512 KB, redaction; git log with run links; diff --no-textconv --no-ext-diff with empty attributes file, 512 KB cap; run commits read through GIT_ALTERNATE_OBJECT_DIRECTORIES without writing to the managed repo.",
+    "export": "git archive zip (source/, README.md, reports/*), built-in secret scan of every archived file before publishing (409 EXPORT_BLOCKED_SECRET), journaled evidence with sha256 and size, relative paths only.",
+    "executors": "GET status READY|NOT_CONFIGURED|PROVENANCE_MISSING|CLI_NOT_FOUND, FAKE TEST_ONLY; enable runs scripts/capture-provider-provenance.mjs (version probes only) in the control root and persists <dataDir>/settings/executors.json; tests inject a fake capture; no model call anywhere."
+  },
+  "knownLimits": [
+    "budget.maxTokens is recorded only; no token metering exists in this base.",
+    "Import and export run synchronous git/zip work inside the request.",
+    "Process start time on Windows is read through powershell.exe ([System.Diagnostics.Process]::StartTime).",
+    "Export secret scan is the built-in pattern scanner; gitleaks is not run on exports.",
+    "Master V2 document is not in the repository; ADR-0001 references section 00.6 by number and the Founder ledger line 7 by id and sha256."
+  ],
+  "verification": {
+    "note": "observed results in the standalone clone C:/Users/salim/UASCO-wt/v2-ps1a; vitest via bash with PSModulePath unset; run-validation.mjs NOT run (supervisor-owned).",
+    "commands": [
+      {"cmd": "env -u PSModulePath npx tsc --noEmit", "exit": 0},
+      {"cmd": "env -u PSModulePath npx vitest run --dir tests tests/v7-ps1a-project-studio.test.ts", "exit": 0, "result": "14 passed"},
+      {"cmd": "env -u PSModulePath npx vitest run --dir tests tests/v7-ps1a-project-studio.test.ts tests/v7-b3c-security-stage.test.ts tests/v7-b3a-runner.test.ts tests/v7-b3a-recovery-budget.test.ts tests/v7-b3a-c3-builder-commit.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts (before trust-root reseal)", "exit": 1, "result": "112 passed, 1 failed: v7-b2 trust-root manifest hash check for the changed protected files (expected before reseal)"},
+      {"cmd": "env -u PSModulePath node scripts/smoke-control-api.mjs", "exit": 0, "result": "PASS"},
+      {"cmd": "env -u PSModulePath node scripts/v6-apps-control-desktop-selftest.mjs", "exit": 0, "result": "PASS 93/93"},
+      {"cmd": "node scripts/validate-tr-comments.mjs", "exit": 0, "result": "TR_VALIDATION: PASS"},
+      {"cmd": "node scripts/secret-sanity.mjs", "exit": 0, "result": "SECRET_SANITY: PASS"},
+      {"cmd": "CRLF check of all changed/new files", "exit": 0, "result": "no CR found"},
+      {"cmd": "node scripts/generate-trust-root.mjs", "exit": 0, "result": "files=364"},
+      {"cmd": "node scripts/verify-trust-root.mjs", "exit": 0, "result": "TRUST_ROOT_VERIFY: PASS"},
+      {"cmd": "env -u PSModulePath npx vitest run --dir tests tests/v7-b2-workos-hardening.test.ts (after reseal)", "exit": 0, "result": "21 passed"}
+    ]
+  },
+  "notDone": [
+    "No merge, push, release or production action.",
+    "No AI provider was called; no downloads or installs."
+  ]
+}

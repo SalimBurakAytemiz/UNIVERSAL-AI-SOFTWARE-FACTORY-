@@ -10,7 +10,7 @@ import {acquireProcessLock} from "../../automation/lib/process-lock.mjs";
 import {assertTransition, isMissionStatus} from "../mission/state-machine.js";
 import type {MissionStatus} from "../mission/types.js";
 import {WorkOsError, urlHasUserinfo} from "./types.js";
-import type {JournalEntry, JournalType, Project, RiskLevel, RunCheckpoint, RunEvidence, RunStatus, RunStep, Scope, TaskStatus, WorkMission, WorkRun, WorkTask} from "./types.js";
+import type {JournalEntry, JournalType, Project, ProjectExport, ProjectTemplate, ProjectType, RiskLevel, RunCheckpoint, RunEvidence, RunStatus, RunStep, Scope, TaskStatus, WorkMission, WorkRun, WorkTask} from "./types.js";
 import {ACTIVE_WORKER_STATUSES, LEASED_RUN_STATUSES, UNLEASED_RUN_STATUSES, assertRunTransition, isOpenRun, isRunStatus, isRunStep} from "./run-state.js";
 
 const sha256 = sha256Untyped as (value: unknown) => string;
@@ -23,9 +23,10 @@ export const newTraceId = () => newId("trc");
 interface IdemRecord { id: string; digest?: string }
 interface State {
   projects: Record<string, Project>; missions: Record<string, WorkMission>; tasks: Record<string, WorkTask>; runs: Record<string, WorkRun>;
+  exports: Record<string, ProjectExport>;
   idempotency: Record<string, IdemRecord>; lastSeq: number; lastHash: string;
 }
-const emptyState = (): State => ({projects: {}, missions: {}, tasks: {}, runs: {}, idempotency: {}, lastSeq: 0, lastHash: GENESIS});
+const emptyState = (): State => ({projects: {}, missions: {}, tasks: {}, runs: {}, exports: {}, idempotency: {}, lastSeq: 0, lastHash: GENESIS});
 const entryHash = (body: Omit<JournalEntry, "hash">): string => sha256(body);
 // //TR: F-B1-001: anahtar JSON dizisidir; ayırıcı karakter içeren tenant/anahtar değerleri çarpışamaz.
 const idemKey = (tenantId: string, kind: string, key: string) => JSON.stringify([tenantId, kind, key]);
@@ -42,6 +43,11 @@ export function defaultDataDir(repoRoot: string = process.cwd()): string {
 export interface CreateProjectInput {
   tenantId: string; orgId: string; customerId?: string; name: string; repository?: {path?: string; url?: string};
   environmentId: string; createdBy: string; idempotencyKey?: string; testCommand?: string[];
+  // PS-1A Project Studio alanları (verilmezse eski davranış ve eski idempotency özeti aynen kalır).
+  template?: ProjectTemplate; projectType?: ProjectType; techStack?: string[]; targetOS?: string[]; acceptanceCriteria?: string[];
+  budget?: {maxRuns?: number; maxTokens?: number}; devCommand?: string[];
+  // Yönetilen depo: journal kilidi altında, idempotency kontrolünden SONRA ve kayıt yazılmadan ÖNCE çağrılır; hata kayıt yazmaz. discard, append başarısız olursa çağrılır.
+  prepareManagedRepository?: (projectId: string) => {path: string; discard: () => void};
 }
 export interface CreateMissionInput {
   tenantId: string; projectId: string; title: string; objective: string; acceptanceCriteria: string[];
@@ -196,6 +202,20 @@ export class WorkOsStore {
         if (!isObj(ent) || !isStr(ent.taskId) || !isStr(ent.tenantId) || !isStr(ent.missionId)) throw malformed(`ENTITY_SHAPE:${e.seq}`);
         st.tasks[ent.taskId] = ent; idem("task", ent, ent.taskId); break;
       }
+      case "PROJECT_REPOSITORY_SET": {
+        const proj = isStr(p.projectId) ? st.projects[p.projectId] : undefined;
+        const repo = p.repository as Project["repository"];
+        if (!isObj(repo) || !isStr(repo.path) || repo.managed !== true) throw malformed(`REPOSITORY_SHAPE:${e.seq}`);
+        if (!proj || proj.tenantId !== p.tenantId || proj.repository?.managed) throw tampered(`PROJECT_REPOSITORY_INCONSISTENT:${e.seq}`);
+        proj.repository = {path: repo.path, managed: true}; break;
+      }
+      case "PROJECT_EXPORT_RECORDED": {
+        const ex = p.entity as ProjectExport;
+        if (!isObj(ex) || !isStr(ex.exportId) || !isStr(ex.projectId) || !isStr(ex.tenantId) || !isStr(ex.sha256) || !isStr(ex.commit)) throw malformed(`EXPORT_SHAPE:${e.seq}`);
+        const proj = st.projects[ex.projectId];
+        if (!proj || proj.tenantId !== ex.tenantId || st.exports[ex.exportId]) throw tampered(`EXPORT_INCONSISTENT:${e.seq}`);
+        st.exports[ex.exportId] = ex; break;
+      }
       case "MISSION_TRANSITIONED": {
         if (!isStr(p.missionId)) throw malformed(`TRANSITION_SHAPE:${e.seq}`);
         const m = st.missions[p.missionId];
@@ -309,19 +329,62 @@ export class WorkOsStore {
     if (input.repository?.url !== undefined && urlHasUserinfo(input.repository.url)) throw new WorkOsError("WORKOS_INVALID_INPUT", "repository.url userinfo");
     return this.write(() => {
       // B3a: testCommand yalnız verildiğinde özete girer; eski journal'lardaki özetler değişmez.
-      const digest = sha256({orgId: input.orgId, customerId: input.customerId ?? null, name: input.name, repository: input.repository ?? null, environmentId: input.environmentId, ...(input.testCommand ? {testCommand: input.testCommand} : {})});
+      // PS-1A alanları yalnız verildiğinde özete girer; yönetilen depo yolu istemciden gelmediği için özete girmez (replay aynı özeti üretir).
+      const studio = {
+        ...(input.template ? {template: input.template} : {}), ...(input.projectType ? {projectType: input.projectType} : {}), ...(input.techStack ? {techStack: [...input.techStack]} : {}),
+        ...(input.targetOS ? {targetOS: [...input.targetOS]} : {}), ...(input.acceptanceCriteria ? {acceptanceCriteria: [...input.acceptanceCriteria]} : {}),
+        ...(input.budget ? {budget: {...input.budget}} : {}), ...(input.devCommand ? {devCommand: [...input.devCommand]} : {})
+      };
+      const digest = sha256({orgId: input.orgId, customerId: input.customerId ?? null, name: input.name, repository: input.repository ?? null, environmentId: input.environmentId, ...(input.testCommand ? {testCommand: input.testCommand} : {}), ...studio});
       const prior = this.findIdem(this.state.projects, input.tenantId, "project", input.idempotencyKey, digest);
       if (prior) return {entity: prior, replayed: true};
+      if (input.prepareManagedRepository && input.repository) throw new WorkOsError("WORKOS_INVALID_INPUT", "repository and managed repository are exclusive");
+      const projectId = newId("prj");
+      const managed = input.prepareManagedRepository ? input.prepareManagedRepository(projectId) : null;
+      const repository = managed ? {path: managed.path, managed: true as const} : input.repository;
       const project: Project = {
-        projectId: newId("prj"), orgId: input.orgId, tenantId: input.tenantId, ...(input.customerId ? {customerId: input.customerId} : {}),
-        name: input.name, ...(input.repository ? {repository: input.repository} : {}), environmentId: input.environmentId, ...(input.testCommand ? {testCommand: [...input.testCommand]} : {}),
+        projectId, orgId: input.orgId, tenantId: input.tenantId, ...(input.customerId ? {customerId: input.customerId} : {}),
+        name: input.name, ...(repository ? {repository} : {}), environmentId: input.environmentId, ...(input.testCommand ? {testCommand: [...input.testCommand]} : {}), ...studio,
         createdAt: new Date().toISOString(), createdBy: input.createdBy
       };
-      this.append("PROJECT_CREATED", input.createdBy, {entity: project, ...this.idemFields(input.idempotencyKey, digest)});
+      try { this.append("PROJECT_CREATED", input.createdBy, {entity: project, ...this.idemFields(input.idempotencyKey, digest)}); }
+      catch (e) { try { managed?.discard(); } catch { /* en iyi çaba temizlik */ } throw e; }
       return {entity: project, replayed: false};
     });
   }
   createProject(input: CreateProjectInput): Project { return this.createProjectDetailed(input).entity; }
+  // PS-1A: içe aktarma sonrası proje deposu yönetilen depoya işaret eder; açık run varken veya depo zaten yönetiliyorken değiştirilemez (çalışan run'ın kaynağı sessizce değişmez).
+  setProjectRepository(scope: Scope, projectId: string, repository: {path: string; managed: true}, actor: string, source: {kind: string; headSha: string}): Project {
+    if (!isStr(repository?.path) || repository.managed !== true) throw new WorkOsError("WORKOS_INVALID_INPUT", "repository");
+    return this.write(() => {
+      const p = this.state.projects[projectId];
+      if (!p || p.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "project");
+      if (p.repository?.managed) throw new WorkOsError("WORKOS_CONFLICT", "PROJECT_REPOSITORY_ALREADY_MANAGED");
+      if (Object.values(this.state.runs).some(r => r.projectId === projectId && isOpenRun(r.status))) throw new WorkOsError("WORKOS_CONFLICT", "RUN_ALREADY_ACTIVE");
+      this.append("PROJECT_REPOSITORY_SET", actor, {projectId, tenantId: p.tenantId, repository: {path: repository.path, managed: true}, source: {kind: String(source.kind).slice(0, 16), headSha: String(source.headSha).slice(0, 64)}});
+      return this.state.projects[projectId];
+    });
+  }
+  hasOpenProjectRun(scope: Scope, projectId: string): boolean { this.readGuard(); return Object.values(this.state.runs).some(r => r.tenantId === scope.tenantId && r.projectId === projectId && isOpenRun(r.status)); }
+  // PS-1A export kanıtı: aynı journal/zincir; tenant ve proje sahipliği yazmada ve replay'de doğrulanır.
+  recordProjectExport(scope: Scope, ex: Omit<ProjectExport, "tenantId">, actor: string): ProjectExport {
+    return this.write(() => {
+      const p = this.state.projects[ex.projectId];
+      if (!p || p.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "project");
+      if (!/^exp_[0-9a-f]{24}$/.test(ex.exportId) || this.state.exports[ex.exportId]) throw new WorkOsError("WORKOS_INVALID_INPUT", "exportId");
+      const entity: ProjectExport = {...ex, tenantId: p.tenantId};
+      this.append("PROJECT_EXPORT_RECORDED", actor, {entity});
+      return clone(entity);
+    });
+  }
+  listProjectExports(scope: Scope, projectId: string): ProjectExport[] {
+    this.readGuard();
+    return Object.values(this.state.exports).filter(x => x.tenantId === scope.tenantId && x.projectId === projectId).map(clone);
+  }
+  getProjectExport(scope: Scope, projectId: string, exportId: string): ProjectExport | undefined {
+    this.readGuard(); const x = this.state.exports[exportId];
+    return x && x.tenantId === scope.tenantId && x.projectId === projectId ? clone(x) : undefined;
+  }
   createMissionDetailed(input: CreateMissionInput): WriteResult<WorkMission> {
     return this.write(() => {
       const digest = sha256({projectId: input.projectId, title: input.title, objective: input.objective, acceptanceCriteria: input.acceptanceCriteria, riskLevel: input.riskLevel, ...(input.testCommand ? {testCommand: input.testCommand} : {})});
@@ -394,6 +457,9 @@ export class WorkOsStore {
       if (!mission || mission.tenantId !== input.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "mission");
       if (mission.status !== "AUTHORIZED" && mission.status !== "PLANNED") throw new WorkOsError("WORKOS_CONFLICT", "MISSION_NOT_RUNNABLE");
       if (Object.values(this.state.runs).some(r => r.missionId === mission.missionId && isOpenRun(r.status))) throw new WorkOsError("WORKOS_CONFLICT", "RUN_ALREADY_ACTIVE");
+      // PS-1A bütçe: budget.maxRuns projenin toplam run sayısını sınırlar (maxTokens yalnız kaydedilir; bu tabanda token ölçümü yoktur).
+      const maxRuns = this.state.projects[mission.projectId]?.budget?.maxRuns;
+      if (typeof maxRuns === "number" && Object.values(this.state.runs).filter(r => r.projectId === mission.projectId).length >= maxRuns) throw new WorkOsError("WORKOS_CONFLICT", "PROJECT_RUN_BUDGET_EXHAUSTED");
       const at = this.nowIso();
       const run: WorkRun = {
         runId: newId("run"), missionId: mission.missionId, projectId: mission.projectId, tenantId: mission.tenantId, roleId: input.roleId ?? null,

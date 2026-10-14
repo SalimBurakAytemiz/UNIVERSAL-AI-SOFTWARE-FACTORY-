@@ -5,7 +5,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import {fileURLToPath} from "node:url";
 import cp from "node:child_process";
-import {inspectProcessLock,clearStaleProcessLock} from "../../../automation/lib/process-lock.mjs";
+import {inspectProcessLock,clearStaleProcessLock,acquireProcessLock} from "../../../automation/lib/process-lock.mjs";
 import {appendControlAudit,readUtf8Tail,readJsonlTail} from "../../../automation/lib/control-audit.mjs";
 import {canRetryBlockedKind,retryableBlockedKinds} from "../../../automation/lib/retry-authority.mjs";
 import {activateGlobalStop,clearGlobalStop,globalStopState} from "../../../automation/lib/global-stop.mjs";
@@ -19,18 +19,27 @@ import {parseControlPort,controlChallengeProof,secureStringEqual,hostHeaderAllow
 import {loadState as loadOrchestratorStateUntyped,verifyTransitionLog as verifyTransitionLogUntyped} from "../../../automation/lib/orchestrator-state.mjs";
 import {WorkOsStore,defaultDataDir} from "../../../core/workos/store.js";
 import {WorkOsError} from "../../../core/workos/types.js";
-import {validateProjectCreate,validateMissionCreate,validateMissionTransition,validateRunStart} from "../../../core/workos/schemas.js";
+import {validateProjectCreate,validateMissionCreate,validateMissionTransition,validateRunStart,validateProjectImport,validateProjectExport,validateEmptyBody} from "../../../core/workos/schemas.js";
 import {isMissionStatus} from "../../../core/mission/state-machine.js";
 import {authorizeAction} from "../../../core/action-gateway/policy.js";
 import type {ActionPolicyContext} from "../../../core/action-gateway/types.js";
 import {MissionRunner} from "../../../core/workos/runner.js";
 import type {RunnerOptions} from "../../../core/workos/runner.js";
-import {assertIndependentExecutors,executorsFromEnv} from "../../../core/workos/executors.js";
+import {assertIndependentExecutors,executorsFromEnv,LocalClaudeExecutors} from "../../../core/workos/executors.js";
 import type {ExecutorPair} from "../../../core/workos/executors.js";
+import {ProjectStudio,StudioError} from "../../../core/workos/project-studio.js";
+import {renderTemplate} from "../../../core/workos/project-templates.js";
+import {DevRunManager} from "../../../core/workos/devrun.js";
+import type {DevRunOptions} from "../../../core/workos/devrun.js";
+import {ExecutorSetup} from "../../../core/workos/executor-setup.js";
+import type {ExecutorSetupOptions} from "../../../core/workos/executor-setup.js";
+import type {ZipLimits} from "../../../core/workos/zip.js";
 
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
-export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security">>}
+// //TR: PS-1A: controlRoot provenance/ayar kontrol köküdür (paketli: userData, geliştirme: repo); studio/executorSetup yalnız test enjeksiyonudur (sahte provenance yakalayıcı, CLI keşfi, dev-run zamanlamaları, ZIP sınırları).
+export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security">>;
+  controlRoot?:string;studio?:{zipLimits?:Partial<ZipLimits>;devrun?:Partial<Pick<DevRunOptions,"startTimeOf"|"startWaitMs"|"graceMs"|"probeIntervalMs"|"stopPollMs"|"logRingBytes"|"logTailBytes">>};executorSetup?:Pick<ExecutorSetupOptions,"captureProvenance"|"findClaudeCli">}
 export function buildServer(opts:BuildServerOptions={}){
 const app=Fastify({logger:opts.logger??true,requestIdHeader:"x-request-id",genReqId:()=>crypto.randomUUID(),bodyLimit:64*1024});
 const readJson=(p:string)=>JSON.parse(fs.readFileSync(p,"utf8"));
@@ -99,7 +108,10 @@ app.get<{Params:{runId:string,name:string}}>("/v1/runs/:runId/logs/:name",async(
   const tail=readUtf8Tail(f,256*1024);return {runId:req.params.runId,name:req.params.name,truncated:tail.truncated,text:tail.text};
 });
 
-app.post("/v1/control/stop",async(req)=>{const body=(req.body??{}) as {reason?:string};const reason=String(body.reason??"Founder requested stop").slice(0,1000);activateGlobalStop(path.join(runtime,"GLOBAL_STOP.json"),reason,"FOUNDER_CONTROL_TOWER");const doc=globalStopState(path.join(runtime,"GLOBAL_STOP.json"));audit("GLOBAL_STOP_ACTIVATED",{reason});return {ok:true,globalStop:doc}});
+app.post("/v1/control/stop",async(req)=>{const body=(req.body??{}) as {reason?:string};const reason=String(body.reason??"Founder requested stop").slice(0,1000);activateGlobalStop(path.join(runtime,"GLOBAL_STOP.json"),reason,"FOUNDER_CONTROL_TOWER");const doc=globalStopState(path.join(runtime,"GLOBAL_STOP.json"));audit("GLOBAL_STOP_ACTIVATED",{reason});
+  // PS-1A: GLOBAL_STOP çalışan bütün dev-run'ları hemen durdurur (bant dışı stop dosyası ayrıca yönetici tarafından izlenir).
+  let devRunsStopped:string[]=[];try{devRunsStopped=await (await getDevRuns()).stopAll("GLOBAL_STOP_ACTIVE")}catch{/* dev-run yöneticisi kullanılamıyor */}
+  return {ok:true,globalStop:doc,devRunsStopped:devRunsStopped.length}});
 app.post("/v1/control/resume",async()=>{clearGlobalStop(path.join(runtime,"GLOBAL_STOP.json"),"FOUNDER_CONTROL_TOWER");const start=startSupervisorDetached();audit("GLOBAL_STOP_CLEARED_AND_RESUME_REQUESTED",start);return {ok:true,globalStop:{active:false},supervisor:start}});
 app.post("/v1/control/retry-blocked",async(req,reply)=>{
   const body=(req.body??{}) as {packageId?:string};const packageId=String(body.packageId??"");if(!/^PKG-\d{3}$/.test(packageId))return reply.code(400).send({error:"INVALID_PACKAGE_ID"});
@@ -123,6 +135,8 @@ function workosPolicy(action:string,missionId:string,body:unknown){
 }
 // //TR: B2 F-B1-007: bilinen WorkOsError kodları sabit gövdeyle döner; bilinmeyen hata ham mesaj/yol/stack olmadan genel 500 INTERNAL_ERROR olur (ayrıntı yalnız sunucu log'unda).
 function workosFail(reply:any,e:unknown){
+  // PS-1A: Project Studio hataları sabit kod + HTTP durumu taşır (yol/stack yok); export secret bulguları yalnız dosya/satır/tür içerir.
+  if(e instanceof StudioError){const d=e.details&&typeof e.details==="object"?e.details as Record<string,unknown>:{};return reply.code(e.status).send({error:e.code,...(e.reason?{reason:e.reason}:{}),...d})}
   if(e instanceof WorkOsError){
     if(e.code==="WORKOS_IDEMPOTENCY_CONFLICT")return reply.code(409).send({error:"IDEMPOTENCY_CONFLICT"});
     // B3a: çakışma/fencing 409; reason yalnız sabit kod parçasıdır (MISSION_NOT_RUNNABLE, RUN_ALREADY_ACTIVE), yol veya secret taşımaz.
@@ -146,8 +160,12 @@ app.get("/v1/projects",wos(async()=>({projects:getStore().listProjects(scope)}))
 app.post("/v1/projects",wos(async(req,reply)=>{
   const body=req.body??{};if(!workosWrite(reply,"workos.project.create","NONE",body,validateProjectCreate))return reply;
   const b=body as any;
-  const r=getStore().createProjectDetailed({tenantId:scope.tenantId,orgId,name:b.name,environmentId:b.environmentId,customerId:b.customerId,repository:b.repository,createdBy:actor,idempotencyKey:b.idempotencyKey,testCommand:b.testCommand});
-  audit(r.replayed?"WORKOS_IDEMPOTENT_REPLAY":"WORKOS_PROJECT_CREATED",{actor,kind:"project",projectId:r.entity.projectId});return reply.code(r.replayed?200:201).send({project:r.entity});
+  // PS-1A: template verilirse yönetilen depo journal kilidi altında kurulur; şablonun test/dev komutu ve proje tipi yalnız istemci vermediyse varsayılan olur.
+  const tpl=b.template?renderTemplate(b.template,b.name):null;
+  const r=getStore().createProjectDetailed({tenantId:scope.tenantId,orgId,name:b.name,environmentId:b.environmentId,customerId:b.customerId,repository:b.repository,createdBy:actor,idempotencyKey:b.idempotencyKey,testCommand:b.testCommand??tpl?.testCommand,
+    template:b.template,projectType:b.projectType??tpl?.projectType,techStack:b.techStack,targetOS:b.targetOS,acceptanceCriteria:b.acceptanceCriteria,budget:b.budget,devCommand:b.devCommand??tpl?.devCommand,
+    prepareManagedRepository:b.template?(projectId:string)=>{const x=getStudio().createTemplateRepository(projectId,b.template,b.name);return {path:x.path,discard:x.discard}}:undefined});
+  audit(r.replayed?"WORKOS_IDEMPOTENT_REPLAY":"WORKOS_PROJECT_CREATED",{actor,kind:"project",projectId:r.entity.projectId,...(b.template?{template:b.template}:{})});return reply.code(r.replayed?200:201).send({project:r.entity});
 }));
 app.get<{Querystring:{projectId?:string}}>("/v1/missions",wos(async(req,reply)=>{
   const projectId=req.query?.projectId;if(projectId!==undefined&&!validProjectId(projectId))return reply.code(400).send({error:"INVALID_PROJECT_ID"});
@@ -173,7 +191,14 @@ app.post<{Params:{id:string}}>("/v1/missions/:id/transition",wos(async(req,reply
 // //TR: B3a mission runner route'ları: aynı token hook'u ve aynı yazma kapısı sırası (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400). Run'lar aynı Work OS journal'ındadır; eski /v1/runs route'larına dokunulmaz.
 const validWorkRunId=(x:unknown)=>typeof x==="string"&&/^run_[0-9a-f]{24}$/.test(x);
 let executorsCache:{pair:ExecutorPair|null;reason:string}|null=null;
-const getExecutors=()=>executorsCache??=opts.executors?{pair:opts.executors,reason:opts.executors.kind}:executorsFromEnv(repoRoot);
+// //TR: PS-1A: açık env seçimi önceliklidir; yoksa veri dizinindeki kalıcı LOCAL_CLAUDE ayarı (yalnız geçerli provenance ile) kullanılır.
+function selectExecutors():{pair:ExecutorPair|null;reason:string}{
+  const env=executorsFromEnv(repoRoot);if(env.pair||env.reason!=="EXECUTOR_NOT_CONFIGURED")return env;
+  const setup=getExecSetup();if(!setup.settingEnabled())return env;
+  if(!setup.provenance().ok)return {pair:null,reason:"PROVENANCE_MISSING"};
+  try{return {pair:new LocalClaudeExecutors(controlRoot).pair(),reason:"LOCAL_CLAUDE"}}catch{return {pair:null,reason:"EXECUTOR_CONFIG_INVALID"}}
+}
+const getExecutors=()=>executorsCache??=opts.executors?{pair:opts.executors,reason:opts.executors.kind}:selectExecutors();
 let workRunner:MissionRunner|null=null;
 function getRunner(){
   if(workRunner)return workRunner;
@@ -205,6 +230,109 @@ app.get<{Querystring:{missionId?:string}}>("/v1/work-runs",wos(async(req,reply)=
 app.get<{Params:{id:string}}>("/v1/work-runs/:id",wos(async(req,reply)=>{
   if(!validWorkRunId(req.params.id))return reply.code(400).send({error:"INVALID_RUN_ID"});
   const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});return {run};
+}));
+
+// //TR: PS-1A Project Studio route'ları: aynı token/Host hook'u; her proje route'u Work OS kaydını scope (tenant) ile çözer, başka tenant'ın projesi 404'tür. Yazma route'ları aynı kapı sırasını izler (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400).
+const controlRoot=path.resolve(opts.controlRoot??process.env.UASCO_CONTROL_ROOT??repoRoot);
+const envPolicyFile=path.join(repoRoot,"config","environment-policy.json");
+let studio:ProjectStudio|null=null;
+const getStudio=()=>studio??=new ProjectStudio({dataDir:getStore().dataDir,envPolicyFile,zipLimits:opts.studio?.zipLimits});
+let execSetup:ExecutorSetup|null=null;
+function getExecSetup(){return execSetup??=new ExecutorSetup({repoRoot,controlRoot,dataDir:getStore().dataDir,envPolicyFile,...(opts.executorSetup??{})})}
+let devRunsP:Promise<DevRunManager>|null=null;
+function getDevRuns(){return devRunsP??=(async()=>{const m=new DevRunManager({studio:getStudio(),envPolicyFile,globalStopFile:path.join(runtime,"GLOBAL_STOP.json"),audit:(ev,d)=>{try{audit(ev,d)}catch{/* audit dizini yok */}},...(opts.studio?.devrun??{})});await m.recover();return m})()}
+app.addHook("onReady",async()=>{try{await getDevRuns()}catch{/* yönetici ilk kullanımda yeniden denenmez; route'lar 500 döner */}});
+app.addHook("onClose",async()=>{if(devRunsP){try{await (await devRunsP).close()}catch{/* kapanış */}}});
+const validExportId=(x:unknown)=>typeof x==="string"&&/^exp_[0-9a-f]{24}$/.test(x);
+const flag=(x:unknown)=>x==="1"||x==="true";
+function projectFor(id:string,reply:any){const p=getStore().getProject(scope,id);if(!p){reply.code(404).send({error:"WORKOS_NOT_FOUND"});return null}return p}
+const projectRuns=(projectId:string)=>getStore().listRuns(scope).filter(r=>r.projectId===projectId);
+const badId=(id:unknown,reply:any)=>{if(validProjectId(id))return false;reply.code(400).send({error:"INVALID_PROJECT_ID"});return true};
+
+app.post<{Params:{id:string}}>("/v1/projects/:id/import",wos(async(req,reply)=>{
+  if(badId(req.params.id,reply))return reply;
+  const body=req.body??{};if(!workosWrite(reply,"workos.project.import",req.params.id,body,validateProjectImport))return reply;
+  const p=projectFor(req.params.id,reply);if(!p)return reply;
+  const b=body as {kind:"git"|"zip";path:string};
+  if(p.repository?.managed)return reply.code(409).send({error:"PROJECT_REPOSITORY_ALREADY_MANAGED"});
+  if(getStore().hasOpenProjectRun(scope,p.projectId))return reply.code(409).send({error:"WORKOS_CONFLICT",reason:"RUN_ALREADY_ACTIVE"});
+  if((await getDevRuns()).isActive(p.projectId))return reply.code(409).send({error:"DEVRUN_ACTIVE"});
+  const st=getStudio(),dir=st.projectDir(p.projectId);fs.mkdirSync(dir,{recursive:true});
+  let release:(()=>void)|null=null;try{release=acquireProcessLock(path.join(dir,"import.lock"),`import-${crypto.randomBytes(4).toString("hex")}`)}catch{return reply.code(409).send({error:"IMPORT_IN_PROGRESS"})}
+  const staging=st.stagingDir(p.projectId),final=st.managedRepoPath(p.projectId);
+  try{
+    const headSha=b.kind==="git"?st.importGitInto(staging,b.path):st.importZipInto(staging,b.path);
+    fs.rmSync(final,{recursive:true,force:true});fs.renameSync(staging,final);
+    try{const project=getStore().setProjectRepository(scope,p.projectId,{path:final,managed:true},actor,{kind:b.kind,headSha});audit("WORKOS_PROJECT_IMPORTED",{actor,projectId:p.projectId,kind:b.kind,headSha});return reply.code(200).send({project,import:{kind:b.kind,headSha}})}
+    catch(e){fs.rmSync(final,{recursive:true,force:true});throw e}
+  }catch(e){if(e instanceof StudioError)audit("WORKOS_PROJECT_IMPORT_REJECTED",{actor,projectId:p.projectId,kind:b.kind,error:e.code,reason:e.reason??null});throw e}
+  finally{try{fs.rmSync(staging,{recursive:true,force:true})}catch{/* staging */}try{release?.()}catch{/* kilit */}}
+}));
+
+app.get<{Params:{id:string}}>("/v1/projects/:id/devrun",wos(async(req,reply)=>{if(badId(req.params.id,reply))return reply;const p=projectFor(req.params.id,reply);if(!p)return reply;return {devrun:(await getDevRuns()).view(p)}}));
+for(const action of ["start","stop","restart"] as const){
+  app.post<{Params:{id:string}}>(`/v1/projects/:id/devrun/${action}`,wos(async(req,reply)=>{
+    if(badId(req.params.id,reply))return reply;
+    const body=req.body??{};if(!workosWrite(reply,`workos.project.devrun.${action}`,req.params.id,body,validateEmptyBody))return reply;
+    const p=projectFor(req.params.id,reply);if(!p)return reply;
+    const m=await getDevRuns();
+    if(action==="start")await m.start(p);else if(action==="restart")await m.restart(p);else await m.stop(p.projectId);
+    audit(`WORKOS_DEVRUN_${action.toUpperCase()}`,{actor,projectId:p.projectId});
+    return {devrun:m.view(p)};
+  }));
+}
+
+app.get<{Params:{id:string};Querystring:{path?:string;all?:string}}>("/v1/projects/:id/files",wos(async(req,reply)=>{
+  if(badId(req.params.id,reply))return reply;const p=projectFor(req.params.id,reply);if(!p)return reply;
+  if(req.query?.path!==undefined&&typeof req.query.path!=="string")return reply.code(400).send({error:"PATH_REJECTED"});
+  return getStudio().listFiles(p,req.query?.path,flag(req.query?.all));
+}));
+app.get<{Params:{id:string};Querystring:{path?:string;all?:string}}>("/v1/projects/:id/file",wos(async(req,reply)=>{
+  if(badId(req.params.id,reply))return reply;const p=projectFor(req.params.id,reply);if(!p)return reply;
+  if(typeof req.query?.path!=="string"||!req.query.path)return reply.code(400).send({error:"PATH_REJECTED"});
+  return getStudio().readFile(p,req.query.path,flag(req.query?.all));
+}));
+app.get<{Params:{id:string};Querystring:{limit?:string;runId?:string}}>("/v1/projects/:id/git/log",wos(async(req,reply)=>{
+  if(badId(req.params.id,reply))return reply;const p=projectFor(req.params.id,reply);if(!p)return reply;
+  const limit=req.query?.limit===undefined?50:Number(req.query.limit);if(!Number.isInteger(limit)||limit<1||limit>200)return reply.code(400).send({error:"INVALID_LIMIT"});
+  const runId=req.query?.runId;if(runId!==undefined&&!validWorkRunId(runId))return reply.code(400).send({error:"INVALID_RUN_ID"});
+  return getStudio().gitLog(p,projectRuns(p.projectId),limit,runId);
+}));
+app.get<{Params:{id:string};Querystring:{from?:string;to?:string}}>("/v1/projects/:id/git/diff",wos(async(req,reply)=>{
+  if(badId(req.params.id,reply))return reply;const p=projectFor(req.params.id,reply);if(!p)return reply;
+  const ref=/^(HEAD|[0-9a-f]{7,40})$/,from=req.query?.from,to=req.query?.to??"HEAD";
+  if(typeof from!=="string"||!ref.test(from)||typeof to!=="string"||!ref.test(to))return reply.code(400).send({error:"INVALID_REF"});
+  return getStudio().gitDiff(p,projectRuns(p.projectId),from,to);
+}));
+
+app.post<{Params:{id:string}}>("/v1/projects/:id/export",wos(async(req,reply)=>{
+  if(badId(req.params.id,reply))return reply;
+  const body=req.body??{};if(!workosWrite(reply,"workos.project.export",req.params.id,body,validateProjectExport))return reply;
+  const p=projectFor(req.params.id,reply);if(!p)return reply;
+  const st=getStudio();let ex;
+  try{ex=st.exportProject(p,projectRuns(p.projectId),(body as {commit?:string}).commit,actor)}
+  catch(e){if(e instanceof StudioError&&e.code==="EXPORT_BLOCKED_SECRET")audit("WORKOS_EXPORT_BLOCKED_SECRET",{actor,projectId:p.projectId,findings:Array.isArray((e.details as any)?.findings)?(e.details as any).findings.length:0});throw e}
+  try{const recorded=getStore().recordProjectExport(scope,ex,actor);audit("WORKOS_EXPORT_CREATED",{actor,projectId:p.projectId,exportId:recorded.exportId,commit:recorded.commit,sha256:recorded.sha256,size:recorded.size});return reply.code(201).send({export:recorded})}
+  catch(e){try{fs.rmSync(path.join(st.exportsDir(),`${ex.exportId}.zip`),{force:true})}catch{/* export dosyası */}throw e}
+}));
+app.get<{Params:{id:string}}>("/v1/projects/:id/exports",wos(async(req,reply)=>{if(badId(req.params.id,reply))return reply;const p=projectFor(req.params.id,reply);if(!p)return reply;return {exports:getStore().listProjectExports(scope,p.projectId)}}));
+app.get<{Params:{id:string;exportId:string}}>("/v1/projects/:id/exports/:exportId",wos(async(req,reply)=>{
+  if(badId(req.params.id,reply))return reply;if(!validExportId(req.params.exportId))return reply.code(400).send({error:"INVALID_EXPORT_ID"});
+  const p=projectFor(req.params.id,reply);if(!p)return reply;
+  const ex=getStore().getProjectExport(scope,p.projectId,req.params.exportId);if(!ex)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});
+  return {export:ex,fileState:getStudio().exportFileState(ex)};
+}));
+
+// //TR: Executor kurulumu: durum okunur; etkinleştirme aynı yazma kapısından geçer, model çağrılmaz (provenance yakalama yalnız --version).
+app.get("/v1/system/executors",wos(async()=>({executors:getExecSetup().status(),active:{reason:getExecutors().reason}})));
+app.post("/v1/system/executors/local-claude/enable",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"workos.system.executor.enable","NONE",body,validateEmptyBody))return reply;
+  const r=await getExecSetup().enableLocalClaude(actor);
+  if(!r.ok){audit("WORKOS_EXECUTOR_ENABLE_REFUSED",{actor,executor:"LOCAL_CLAUDE",reason:r.reason});return reply.code(409).send({error:"EXECUTOR_ENABLE_REFUSED",reason:r.reason,executors:r.status})}
+  executorsCache=null;
+  if(runnerEnabled&&!workRunner){try{const rn=getRunner();if(rn){rn.start(opts.runner?.intervalMs??2000);audit("WORKOS_RUNNER_STARTED",{engineId:rn.engineId,executor:getExecutors().reason})}}catch{audit("WORKOS_RUNNER_NOT_STARTED",{reason:"EXECUTOR_CONFIG_REFUSED"})}}
+  audit("WORKOS_EXECUTOR_ENABLED",{actor,executor:"LOCAL_CLAUDE",source:"SETTING"});
+  return {executors:r.status,active:{reason:getExecutors().reason}};
 }));
 
 // //TR: B2 GET /v1/cockpit: UI için tek okuma otoritesidir; yalnız okur (Work OS store, orchestrator state, registry), hiçbir kaynağı yazmaz, eksik/okunamayan/uygulanmamış kaynak için sayı uydurmaz (state UNAVAILABLE/ERROR, sayılar null).

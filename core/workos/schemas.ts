@@ -23,7 +23,14 @@ export const projectCreateSchema = {
   properties: {
     name, environmentId: {type: "string", minLength: 1, maxLength: 100, pattern: "^[A-Za-z0-9._-]+$"}, customerId: {type: "string", minLength: 1, maxLength: 100},
     repository: {type: "object", additionalProperties: false, minProperties: 1, properties: {path: {type: "string", minLength: 1, maxLength: 1000}, url: {type: "string", minLength: 1, maxLength: 1000}}},
-    idempotencyKey: key, testCommand
+    idempotencyKey: key, testCommand,
+    // PS-1A Project Studio (hepsi isteğe bağlı; template ile repository birlikte verilemez).
+    template: {enum: ["web-node", "node-lib", "empty"]}, projectType: {enum: ["web", "api", "library", "cli", "desktop", "mobile", "native", "other"]},
+    techStack: {type: "array", maxItems: 20, uniqueItems: true, items: {type: "string", minLength: 1, maxLength: 50, pattern: "^[A-Za-z0-9.+#/ _-]+$"}},
+    targetOS: {type: "array", minItems: 1, maxItems: 6, uniqueItems: true, items: {enum: ["windows", "macos", "linux", "web", "android", "ios"]}},
+    acceptanceCriteria: {type: "array", minItems: 1, maxItems: 50, items: text},
+    budget: {type: "object", additionalProperties: false, minProperties: 1, properties: {maxRuns: {type: "integer", minimum: 1, maximum: 10000}, maxTokens: {type: "integer", minimum: 1, maximum: 10000000000}}},
+    devCommand: testCommand
   }
 } as const;
 export const missionCreateSchema = {
@@ -50,6 +57,9 @@ export const validateProjectCreate = (x: unknown): {ok: true} | {ok: false; erro
   if (!r.ok) return r;
   const url = (x as {repository?: {url?: string}}).repository?.url;
   if (url !== undefined && urlHasUserinfo(url)) return {ok: false, errors: "repository.url must not contain credentials"};
+  const b = x as {template?: unknown; repository?: unknown; devCommand?: unknown};
+  if (b.template !== undefined && b.repository !== undefined) return {ok: false, errors: "template and repository are mutually exclusive"};
+  if (b.devCommand !== undefined && !testCommandAllowed(b.devCommand)) return {ok: false, errors: `devCommand[0] must be one of ${TEST_COMMAND_EXECUTABLES.join(",")}`};
   return withTestCommand(x, r);
 };
 function withTestCommand(x: unknown, r: {ok: true}): {ok: true} | {ok: false; errors: string} {
@@ -60,3 +70,14 @@ const validateMissionShape = compile(missionCreateSchema);
 export const validateMissionCreate = (x: unknown): {ok: true} | {ok: false; errors: string} => { const r = validateMissionShape(x); return r.ok ? withTestCommand(x, r) : r; };
 export const validateRunStart = compile(runStartSchema);
 export const validateMissionTransition = compile(missionTransitionSchema);
+
+// //TR: PS-1A Project Studio route gövdeleri: içe aktarma yalnız yerel yol alır (uzak URL bu pakette reddedilir), export yalnız commit seçer, gövdesiz yazma route'ları boş nesne kabul eder.
+export const projectImportSchema = {
+  type: "object", additionalProperties: false, required: ["kind", "path"],
+  properties: {kind: {enum: ["git", "zip"]}, path: {type: "string", minLength: 1, maxLength: 1000, pattern: "^[^\\u0000\\r\\n]*$"}}
+} as const;
+export const projectExportSchema = {type: "object", additionalProperties: false, properties: {commit: {type: "string", pattern: "^(HEAD|[0-9a-f]{7,40})$"}}} as const;
+export const emptyBodySchema = {type: "object", additionalProperties: false, properties: {}} as const;
+export const validateProjectImport = compile(projectImportSchema);
+export const validateProjectExport = compile(projectExportSchema);
+export const validateEmptyBody = compile(emptyBodySchema);

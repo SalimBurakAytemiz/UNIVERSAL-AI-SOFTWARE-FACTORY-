@@ -6,9 +6,20 @@ export type TaskStatus = "PENDING" | "IN_PROGRESS" | "DONE" | "BLOCKED";
 export interface Scope { tenantId: string }
 export interface Project {
   projectId: string; orgId: string; tenantId: string; customerId?: string; name: string;
-  repository?: { path?: string; url?: string }; environmentId: string; createdAt: string; createdBy: string;
+  repository?: { path?: string; url?: string; managed?: boolean }; environmentId: string; createdAt: string; createdBy: string;
   // B3a: doğrulama komutu yalnız argv dizisidir (shell string değil); çalıştırılabilir dosya runner allowlist'inde olmalıdır.
   testCommand?: string[];
+  // PS-1A Project Studio: aynı Project kaydının isteğe bağlı alanları (ikinci store yok). managed=true ise repository.path <dataDir>/projects/<id>/repo yönetilen deposudur.
+  template?: ProjectTemplate; projectType?: ProjectType; techStack?: string[]; targetOS?: string[]; acceptanceCriteria?: string[];
+  budget?: { maxRuns?: number; maxTokens?: number }; devCommand?: string[];
+}
+export type ProjectTemplate = "web-node" | "node-lib" | "empty";
+export type ProjectType = "web" | "api" | "library" | "cli" | "desktop" | "mobile" | "native" | "other";
+// PS-1A export kaydı: journal'daki kanıt öğesi (mutlak yol yok; file dataDir'e görelidir).
+export interface ProjectExport {
+  exportId: string; projectId: string; tenantId: string; commit: string; sha256: string; size: number; file: string; createdAt: string; createdBy: string;
+  runId: string | null; contents: { readme: boolean; testReport: boolean; securityReport: boolean; runReport: boolean };
+  secretScan: { scanner: "builtin"; status: "CLEAN"; entriesScanned: number };
 }
 export interface WorkMission {
   missionId: string; projectId: string; tenantId: string; title: string; objective: string;
@@ -19,7 +30,8 @@ export interface WorkTask {
   taskId: string; missionId: string; projectId: string; tenantId: string; title: string; status: TaskStatus; dependsOn: string[];
 }
 export type JournalType = "PROJECT_CREATED" | "MISSION_CREATED" | "TASK_CREATED" | "MISSION_TRANSITIONED"
-  | "RUN_CREATED" | "RUN_LEASE" | "RUN_TRANSITION" | "RUN_CHECKPOINT" | "RUN_EVIDENCE";
+  | "RUN_CREATED" | "RUN_LEASE" | "RUN_TRANSITION" | "RUN_CHECKPOINT" | "RUN_EVIDENCE"
+  | "PROJECT_REPOSITORY_SET" | "PROJECT_EXPORT_RECORDED";
 export interface JournalEntry {
   seq: number; prevHash: string; hash: string; type: JournalType; actor: string; at: string; payload: Record<string, unknown>;
 }
