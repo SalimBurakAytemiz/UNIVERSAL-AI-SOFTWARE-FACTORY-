@@ -43,6 +43,9 @@ const readJson=(p:string)=>JSON.parse(fs.readFileSync(p,"utf8"));
 const readJsonOr=<T>(p:string,fallback:T):T=>fs.existsSync(p)?readJson(p):fallback;
 const repoRoot=opts.repoRoot?path.resolve(opts.repoRoot):process.cwd(),runtime=opts.runtime??".ai/runtime",runsRoot=path.join(runtime,"runs"),port=opts.port??parseControlPort(process.env.CONTROL_API_PORT,3210);
 const controlToken=opts.controlToken??process.env.UASCO_CONTROL_TOKEN??"";
+// //TR: Legacy 363 kayıt dondurulmuştur; yalnız /v1/agents ve cockpit sayımı için belgelenmiş projeksiyondur. Kanonik kayıt role-definitions.json'dır.
+const LEGACY_AGENTS_FILE="registries/agents.json"; // LEGACY_REFERENCE_ONLY projection (FA-WFR-03): never used for routing/decisions
+const ROLE_REGISTRY_FILE="registries/role-definitions.json";
 const validRunId=(x:string)=>/^RUN-[A-Za-z0-9-]+$/.test(x);
 const validLogName=(x:string)=>/^[A-Za-z0-9._-]+\.log$/.test(x);
 
@@ -78,7 +81,11 @@ app.get("/v1/factory",async()=>readJson(".ai/MASTER_STATE.json"));
 app.get("/v1/phase0",async()=>phase0View());
 app.get("/v1/install",async()=>installView());
 app.get("/v1/scheduler",async()=>schedulerView());
-app.get("/v1/agents",async()=>readJson("registries/agents.json"));
+// //TR: WFR-03: /v1/agents geriye uyumludur (legacy 363 kaydın alanları aynen döner) ve kanonik 599 RoleDefinition kaydının özetini ekler; legacy kayıt yalnız bu belgelenmiş LEGACY_REFERENCE_ONLY projeksiyonla okunur, karar için kullanılmaz.
+app.get("/v1/agents",async(_req,reply)=>{
+  const legacy=readJson(path.join(repoRoot,LEGACY_AGENTS_FILE));let s;try{s=roleRegistrySummary()}catch{return reply.code(503).send({error:"ROLE_REGISTRY_UNAVAILABLE"})}
+  return {...legacy,registeredRoles:s.registeredRoles,legacyRoles:Array.isArray(legacy?.agents)?legacy.agents.length:null,certified:s.certified,activeWorkerRuns:activeWorkerRunsOrNull(),roleRegistry:{path:ROLE_REGISTRY_FILE,status:s.status,notice:s.notice,authority:"CANONICAL",legacyAuthority:"LEGACY_REFERENCE_ONLY"}};
+});
 app.get("/v1/capabilities",async()=>readJson("registries/capabilities.json"));
 app.get("/v1/fabrics",async()=>readJson("registries/execution-fabrics.json"));
 app.get("/v1/adapters",async()=>readJson("registries/tool-adapters.json"));
@@ -313,6 +320,42 @@ app.post<{Params:{id:string}}>("/v1/company/contracts/:id/transition",wos(async(
   audit("COMPANY_CONTRACT_TRANSITIONED",{actor,contractId:contract.contractId,from:before?.status,to:contract.status,...(contract.status==="SIGNED"?{documentSha256:contract.documentSha256}:{})});return {contract};
 }));
 
+// //TR: WFR-03 tek kanonik RoleDefinition kaydı: dosya mtime+boyut anahtarlı önbellekle okunur, yalnız okunur; eksik/bozuk kayıt 503 döner, sayı uydurulmaz.
+const ROLE_ID_RE=/^UASCO-\d{4}$/,GUILD_ID_RE=/^G\d{2}$/,CLUSTER_ID_RE=/^CL\d{2}$/;
+let roleRegistryCache:{key:string;doc:any;index:Map<string,number>}|null=null;
+function loadRoleRegistry(){
+  const f=path.join(repoRoot,ROLE_REGISTRY_FILE),st=fs.statSync(f),key=`${st.mtimeMs}:${st.size}`;if(roleRegistryCache?.key===key)return roleRegistryCache;
+  const doc=readJson(f);if(!Array.isArray(doc?.roles))throw new Error("ROLE_REGISTRY_INVALID");
+  roleRegistryCache={key,doc,index:new Map(doc.roles.map((r:any,i:number)=>[r.roleId,i]))};return roleRegistryCache;
+}
+function roleRegistrySummary(){const {doc}=loadRoleRegistry();return {registeredRoles:doc.roles.length as number,certified:doc.roles.filter((r:any)=>r.proficiencyStatus==="CERTIFIED").length as number,status:String(doc.status),notice:String(doc.notice)}}
+function activeWorkerRunsOrNull(){try{const st=getStore();return st.hasJournal?st.countActiveWorkerRuns(scope):null}catch{return null}}
+const roleItem=(r:any)=>({roleId:r.roleId,title:r.title,guildId:r.guildId,clusterId:r.clusterId,priority:r.priority,runtimeStatus:r.runtimeStatus,proficiencyStatus:r.proficiencyStatus,certifiedScope:r.certifiedScope,legacyAliasCount:Array.isArray(r.legacyAliases)?r.legacyAliases.length:0,gapCount:Array.isArray(r.gapIds)?r.gapIds.length:0});
+// //TR: GET /v1/roles: guildId/clusterId/q filtreli, roleId artan sıralı kararlı sayfalama; cursor son dönen roleId'dir, limit 1..100 (varsayılan 50); geçersiz parametre 400 döner.
+app.get<{Querystring:Record<string,unknown>}>("/v1/roles",async(req,reply)=>{
+  const q=req.query??{},str=(k:string)=>q[k]===undefined?undefined:typeof q[k]==="string"?q[k] as string:null;
+  const guildId=str("guildId"),clusterId=str("clusterId"),text=str("q"),cursor=str("cursor"),limitRaw=str("limit");
+  if(guildId===null||(guildId!==undefined&&!GUILD_ID_RE.test(guildId)))return reply.code(400).send({error:"INVALID_GUILD_ID"});
+  if(clusterId===null||(clusterId!==undefined&&!CLUSTER_ID_RE.test(clusterId)))return reply.code(400).send({error:"INVALID_CLUSTER_ID"});
+  if(cursor===null||(cursor!==undefined&&!ROLE_ID_RE.test(cursor)))return reply.code(400).send({error:"INVALID_CURSOR"});
+  if(text===null||(text!==undefined&&text.length>200))return reply.code(400).send({error:"INVALID_QUERY"});
+  if(limitRaw===null||(limitRaw!==undefined&&!/^\d{1,3}$/.test(limitRaw)))return reply.code(400).send({error:"INVALID_LIMIT"});
+  const limit=limitRaw===undefined?50:Number(limitRaw);if(limit<1||limit>100)return reply.code(400).send({error:"INVALID_LIMIT"});
+  let reg;try{reg=loadRoleRegistry()}catch{return reply.code(503).send({error:"ROLE_REGISTRY_UNAVAILABLE"})}
+  const needle=text?.trim().toLowerCase()??"";
+  const matches=(reg.doc.roles as any[]).filter(r=>(!guildId||r.guildId===guildId)&&(!clusterId||r.clusterId===clusterId)&&(!needle||[r.roleId,r.title,...(Array.isArray(r.specializationBoundaries)?r.specializationBoundaries:[])].some(x=>String(x).toLowerCase().includes(needle)))).sort((a,b)=>a.roleId<b.roleId?-1:a.roleId>b.roleId?1:0);
+  const after=cursor?matches.filter(r=>r.roleId>cursor):matches,page=after.slice(0,limit);
+  return {status:reg.doc.status,notice:reg.doc.notice,registeredRoles:reg.doc.roles.length,total:matches.length,limit,cursor:cursor??null,nextCursor:after.length>limit?page[page.length-1].roleId:null,items:page.map(roleItem)};
+});
+// //TR: GET /v1/roles/:roleId: tam RoleDefinition (legacy takma adlar PROPOSED, gap kimlikleri, guild/cluster) döner; hiçbir durum yükseltilmez.
+app.get<{Params:{roleId:string}}>("/v1/roles/:roleId",async(req,reply)=>{
+  if(!ROLE_ID_RE.test(req.params.roleId))return reply.code(400).send({error:"INVALID_ROLE_ID"});
+  let reg;try{reg=loadRoleRegistry()}catch{return reply.code(503).send({error:"ROLE_REGISTRY_UNAVAILABLE"})}
+  const i=reg.index.get(req.params.roleId);if(i===undefined)return reply.code(404).send({error:"ROLE_NOT_FOUND"});
+  const role=reg.doc.roles[i],guild=(reg.doc.guilds??[]).find((g:any)=>g.guildId===role.guildId)??null,cluster=(reg.doc.clusters??[]).find((c:any)=>c.clusterId===role.clusterId)??null;
+  return {status:reg.doc.status,notice:reg.doc.notice,role,guild,cluster,legacyAliases:role.legacyAliases??[],gaps:{role:role.gapIds??[],guild:guild?.gapIds??[]}};
+});
+
 // //TR: B2 GET /v1/cockpit: UI için tek okuma otoritesidir; yalnız okur (Work OS store, orchestrator state, registry), hiçbir kaynağı yazmaz, eksik/okunamayan/uygulanmamış kaynak için sayı uydurmaz (state UNAVAILABLE/ERROR, sayılar null).
 type CockpitState="VERIFIED"|"STALE"|"UNAVAILABLE"|"ERROR";
 const loadOrchestratorState=loadOrchestratorStateUntyped as (file:string)=>{doc:any;control:any};
@@ -352,14 +395,15 @@ function cockpitOrchestrator(){
     return mk(asOf===null||leaseExpired?"STALE":"VERIFIED",asOf,pk.length,countBy(pk,p=>String(p.status)));
   }catch{return mk("ERROR")}
 }
+// //TR: WFR-03: workforce.registeredRoles legacy 363 kaydın sayısıdır (LEGACY_REFERENCE_ONLY projeksiyon), targetRoles kanonik role-definitions.json'dan gelir; sözleşme şekli değişmez.
 // //TR: B3a: workforce.activeWorkerRuns Work OS journal'ındaki LEASED/RUNNING/CHECKPOINTING/VERIFYING run sayısıdır (state VERIFIED); journal yoksa UNAVAILABLE/null, okunamazsa ERROR/null. registeredRoles/targetRoles yalnız okunabilen registry dosyasından gelir. Sözleşme şekli değişmez.
 function cockpitWorkforce(){
-  const base=(state:CockpitState,registeredRoles:number|null,targetRoles:number|null,activeWorkerRuns:number|null=null)=>({state,registeredRoles,targetRoles,activeWorkerRuns,source:"registries/agents.json; registries/target-role-catalog.json; Work OS journal runs (LEASED|RUNNING|CHECKPOINTING|VERIFYING)"});
+  const base=(state:CockpitState,registeredRoles:number|null,targetRoles:number|null,activeWorkerRuns:number|null=null)=>({state,registeredRoles,targetRoles,activeWorkerRuns,source:`${LEGACY_AGENTS_FILE} (LEGACY_REFERENCE_ONLY); ${ROLE_REGISTRY_FILE}; Work OS journal runs (LEASED|RUNNING|CHECKPOINTING|VERIFYING)`});
   try{
     let registered:number|null=null,target:number|null=null;
-    const af=path.join(repoRoot,"registries","agents.json");
+    const af=path.join(repoRoot,LEGACY_AGENTS_FILE);
     if(fs.existsSync(af)){const a=readJson(af);if(!Array.isArray(a?.agents))return base("ERROR",null,null);registered=a.agents.length}
-    const tf=path.join(repoRoot,"registries","target-role-catalog.json");
+    const tf=path.join(repoRoot,ROLE_REGISTRY_FILE);
     if(fs.existsSync(tf)){const t=readJson(tf);const n=Array.isArray(t)?t.length:Array.isArray(t?.roles)?t.roles.length:Number.isInteger(t?.count)&&t.count>=0?t.count:null;if(n===null)return base("ERROR",registered,null);target=n}
     const st=getStore();if(!st.hasJournal)return base("UNAVAILABLE",registered,target);
     let active:number;try{active=st.countActiveWorkerRuns(scope)}catch{return base("ERROR",registered,target)}

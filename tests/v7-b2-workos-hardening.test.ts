@@ -282,7 +282,7 @@ describe("B2 API hardening and cockpit", () => {
       expect((await tr(ids[2], "FOUNDER_ATTENTION_REQUIRED")).statusCode).toBe(200);
       fs.mkdirSync(path.join(repo, "registries"), {recursive: true});
       fs.writeFileSync(path.join(repo, "registries", "agents.json"), JSON.stringify({agents: [{id: "1"}, {id: "2"}, {id: "3"}]}));
-      fs.writeFileSync(path.join(repo, "registries", "target-role-catalog.json"), JSON.stringify({roles: [1, 2, 3, 4, 5].map(id => ({id}))}));
+      fs.writeFileSync(path.join(repo, "registries", "role-definitions.json"), JSON.stringify({roles: [1, 2, 3, 4, 5].map(id => ({id}))}));
       const j = (await get(app)).json();
       expect(j.projects).toEqual({state: "VERIFIED", count: 2});
       expect(j.missions).toEqual({state: "VERIFIED", total: 3, byStatus: {DRAFT: 1, PREFLIGHT: 1, FOUNDER_ATTENTION_REQUIRED: 1}});

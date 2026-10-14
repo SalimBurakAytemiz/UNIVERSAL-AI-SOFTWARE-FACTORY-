@@ -1,0 +1,1481 @@
+{
+  "//TR": "Bu satır dışında dosya WFR-02 bağımsız doğrulanmış eşleme kaynağıyla bayt-özdeştir; bu satır çıkarılınca SHA256SUMS ile doğrulanır.",
+  "schema": "wfr02.chunk-verified/1",
+  "chunk": 1,
+  "verifier": "WFR-02 independent verifier (Claude, delegated by supervisor; not the proposer)",
+  "notice": "SEMANTIC_VERIFIED here means two independent Claude agents agreed from sources. It is NOT Founder approval and NOT a certification. Nothing here is approved.",
+  "input": {
+    "file": "C:/Users/salim/UASCO-recovery/product/wfr00/wfr02/chunk-1-proposals.json",
+    "sha256": "370171b436d0c31c8fe3363fdc6c3c8b3fb6106c189214f44f768605d3eb9748",
+    "sha256Verified": true,
+    "entries": 121
+  },
+  "sources": {
+    "legacyRegistry": "C:/Users/salim/Desktop/UASCO master:registries/agents.json + organization/agents/*.json + registries/agent-role-overlays.json (re-extracted by verifier into verifier-c1/)",
+    "targetCatalog": "C:/Users/salim/UASCO-wt/v2-product 4f24820:registries/target-role-catalog.json",
+    "heuristicLaneB": "4f24820:registries/target-role-reconciliation.json",
+    "masterV2Heuristic": "C:/Users/salim/UASCO-recovery/product/wfr00/mapping-quality.json masterV2HeuristicTable.rows"
+  },
+  "method": "Legacy evidence = name, department, competency focus, role-specific primaryTechnologyIds (objectives and skills are department templates). Target evidence = title + guild only (catalog has no descriptions). finalTargetRoleId is null for CONFLICT/UNMAPPED/MISSING_SOURCE; CONFLICT rows list conflictCandidates. Replacement targets are SUSPECTED only.",
+  "agreementDefinition": "agreedWithProposer=true when both say UNMAPPED, or when the verifier keeps the proposer primary target as SEMANTIC_VERIFIED or SUSPECTED.",
+  "summary": {
+    "total": 121,
+    "counts": {
+      "SUSPECTED": 20,
+      "CONFLICT": 12,
+      "UNMAPPED": 9,
+      "SEMANTIC_VERIFIED": 79,
+      "MISSING_SOURCE": 1
+    },
+    "agreedWithProposer": 105,
+    "disagreedWithProposer": 16,
+    "replacedTargets": [
+      "078",
+      "113"
+    ],
+    "proposerUnmappedNowMapped": [
+      "091"
+    ],
+    "proposerUnmappedNowMissingSource": [
+      "021"
+    ],
+    "conflicts": [
+      "003",
+      "004",
+      "012",
+      "015",
+      "032",
+      "038",
+      "058",
+      "060",
+      "081",
+      "087",
+      "108",
+      "109"
+    ]
+  },
+  "rejectedCrossDomainPairs": [],
+  "rejectedCrossDomainPairsNote": "No proposer pair in chunk 1 was cross-domain enough to reject; weak pairs were downgraded to SUSPECTED, CONFLICT or replaced.",
+  "crossDomainHeuristicPairsObservedNotProposed": [
+    {
+      "legacyId": "057",
+      "source": "Lane B reconciliation",
+      "pair": "Desktop Application Architect -> UASCO-0258 Desktop Application Security Expert",
+      "issue": "target adds security domain"
+    },
+    {
+      "legacyId": "066",
+      "source": "Master V2 heuristic",
+      "pair": "Localization & Internationalization -> UASCO-0041 Motion & Microinteraction Design Expert",
+      "issue": "unrelated design specialty"
+    },
+    {
+      "legacyId": "029",
+      "source": "Master V2 heuristic",
+      "pair": "Senior Code Review -> UASCO-0048 Microservices Architect",
+      "issue": "review vs architecture"
+    },
+    {
+      "legacyId": "046",
+      "source": "Master V2 heuristic",
+      "pair": "Analytics Engineer -> UASCO-0129 Database Architect",
+      "issue": "analytics vs database architecture"
+    }
+  ],
+  "multiClaimNotes": [
+    "UASCO-0035 claimed by 032 and 062 (062 verified; 032 CONFLICT)",
+    "UASCO-0032 claimed by 063 (verified), 078 (SUSPECTED) and 015 (CONFLICT candidate)",
+    "UASCO-0300 is final target for 068/069/074/075/076/088/091 (many-to-one; only 088 verified)",
+    "UASCO-0040 final for 080/082/083",
+    "UASCO-0073 final for 033 and 110",
+    "UASCO-0310 final for 085 and 086",
+    "UASCO-0335 final for 106 and 107",
+    "UASCO-0308 final for 095 and 099",
+    "UASCO-0301 final for 096/097/114"
+  ],
+  "entries": [
+    {
+      "legacyId": "001",
+      "legacyTitle": "Executive Operations",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0001",
+      "finalTargetTitle": "Chief Operating Strategy Agent",
+      "verifierRationale": "Executive operations is operational execution; target is operating strategy. Same executive family, partial scope overlap. Master V2 heuristic chose 0004 instead.",
+      "proposerTarget": "UASCO-0001",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "002",
+      "legacyTitle": "Founder Decision Coordinator",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0004",
+      "finalTargetTitle": "Executive Decision Intelligence Expert",
+      "verifierRationale": "Founder decision coordination vs decision intelligence analysis: same founder-office guild, but coordination is not the same profession as analytic decision support.",
+      "proposerTarget": "UASCO-0004",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "003",
+      "legacyTitle": "AI Workflow Coordinator",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Governance-department AI workflow coordination fits both AI Workforce Governance (0003) and Workflow DAG Orchestration (0592); neither clearly dominant.",
+      "proposerTarget": "UASCO-0003",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": false,
+      "conflictCandidates": [
+        "UASCO-0003",
+        "UASCO-0592"
+      ]
+    },
+    {
+      "legacyId": "004",
+      "legacyTitle": "Portfolio Management",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Portfolio Management (governance dept, principal reviewer role) fits Portfolio Governance Architect 0002 (Master V2 heuristic) as well as Portfolio Planning Expert 0010.",
+      "proposerTarget": "UASCO-0010",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": false,
+      "conflictCandidates": [
+        "UASCO-0010",
+        "UASCO-0002"
+      ]
+    },
+    {
+      "legacyId": "005",
+      "legacyTitle": "Program & Milestone Governance",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0009",
+      "finalTargetTitle": "Principal Program Delivery Architect",
+      "verifierRationale": "Program and milestone governance overlaps program delivery architecture; governance emphasis only partially covered. Master V2 heuristic maps to portfolio governance 0002.",
+      "proposerTarget": "UASCO-0009",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "006",
+      "legacyTitle": "Decision Ledger",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Decision ledger is a governance record/artifact function; no catalog role is a decision-ledger owner. 0543 is architecture-only, 0296/0589 are audit evidence roles.",
+      "proposerTarget": null,
+      "proposerRelation": null,
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "007",
+      "legacyTitle": "Risk & Approval Coordinator",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0005",
+      "finalTargetTitle": "Corporate Risk & Approval Architect",
+      "verifierRationale": "Same function (risk and approval coordination) in the corporate governance guild; target is the senior/architect form of the same role. Master V2 classed it workflow, not a role.",
+      "proposerTarget": "UASCO-0005",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "008",
+      "legacyTitle": "Product Strategy",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0018",
+      "finalTargetTitle": "Chief Product Strategy Agent",
+      "verifierRationale": "Product strategy equals Chief Product Strategy Agent; same discipline and guild. Lane B heuristic agrees.",
+      "proposerTarget": "UASCO-0018",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "009",
+      "legacyTitle": "Product Manager",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0019",
+      "finalTargetTitle": "Principal Product Manager",
+      "verifierRationale": "Identical profession: Product Manager.",
+      "proposerTarget": "UASCO-0019",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "010",
+      "legacyTitle": "Business Analyst",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0022",
+      "finalTargetTitle": "Principal Business Analysis Architect",
+      "verifierRationale": "Business analyst to business analysis architect: same discipline, seniority broader.",
+      "proposerTarget": "UASCO-0022",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "011",
+      "legacyTitle": "Requirements Engineering",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0023",
+      "finalTargetTitle": "Principal Requirements Engineer",
+      "verifierRationale": "Requirements engineering equals requirements engineer.",
+      "proposerTarget": "UASCO-0023",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "012",
+      "legacyTitle": "Market Research",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Market research in product dept is equally plausible as Customer Market Researcher 0571, Product Research Expert 0024 (Master V2) or Market Sizing 0026.",
+      "proposerTarget": "UASCO-0571",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": false,
+      "conflictCandidates": [
+        "UASCO-0571",
+        "UASCO-0024",
+        "UASCO-0026"
+      ]
+    },
+    {
+      "legacyId": "013",
+      "legacyTitle": "Competitive Intelligence",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0025",
+      "finalTargetTitle": "Principal Competitive Intelligence Expert",
+      "verifierRationale": "Identical: competitive intelligence.",
+      "proposerTarget": "UASCO-0025",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "014",
+      "legacyTitle": "Problem Validation",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0021",
+      "finalTargetTitle": "Principal Product Discovery Expert",
+      "verifierRationale": "Problem validation is a core, clearly narrower activity of product discovery; same product discipline and guild.",
+      "proposerTarget": "UASCO-0021",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "015",
+      "legacyTitle": "User Research",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "User research (product dept) equally fits UX Research Expert 0032 and Product Research Expert 0024 (Master V2); 0032 is also claimed by legacy 063.",
+      "proposerTarget": "UASCO-0032",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": false,
+      "conflictCandidates": [
+        "UASCO-0032",
+        "UASCO-0024"
+      ]
+    },
+    {
+      "legacyId": "016",
+      "legacyTitle": "Product Analytics",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0028",
+      "finalTargetTitle": "Principal Product Analytics Expert",
+      "verifierRationale": "Identical: product analytics. Lane B agrees. Note Master V2 classed it overlay/workflow (class conflict, not target conflict).",
+      "proposerTarget": "UASCO-0028",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "017",
+      "legacyTitle": "Pricing Strategy",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0027",
+      "finalTargetTitle": "Principal Pricing Strategy Expert",
+      "verifierRationale": "Identical: pricing strategy.",
+      "proposerTarget": "UASCO-0027",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "018",
+      "legacyTitle": "Solution Architect",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0043",
+      "finalTargetTitle": "Principal Solution Architect",
+      "verifierRationale": "Identical: solution architect.",
+      "proposerTarget": "UASCO-0043",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "019",
+      "legacyTitle": "Software Architect",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0045",
+      "finalTargetTitle": "Principal Software Architecture Expert",
+      "verifierRationale": "Software architect equals software architecture expert.",
+      "proposerTarget": "UASCO-0045",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "020",
+      "legacyTitle": "Domain Architect",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0044",
+      "finalTargetTitle": "Principal Domain-Driven Design Architect",
+      "verifierRationale": "Domain architect is ambiguous (business-domain architect vs DDD); legacy record has only generic architecture-dept data. DDD target plausible but unconfirmed.",
+      "proposerTarget": "UASCO-0044",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "021",
+      "legacyTitle": "Core Platform Engineer",
+      "finalStatus": "MISSING_SOURCE",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Core Platform Engineer record has only the generic architecture-dept tech list and templated objective; cannot discriminate IDP 0202, control plane 0584, systems 0054.",
+      "proposerTarget": null,
+      "proposerRelation": null,
+      "agreedWithProposer": false
+    },
+    {
+      "legacyId": "022",
+      "legacyTitle": "Distributed Systems Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0092",
+      "finalTargetTitle": "Principal Distributed Systems Engineer",
+      "verifierRationale": "Identical title in distributed systems guild. Master V2 choice 0046 (architecture) is less specific.",
+      "proposerTarget": "UASCO-0092",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "023",
+      "legacyTitle": "API Contract Architect",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0050",
+      "finalTargetTitle": "Principal API Contract Architect",
+      "verifierRationale": "Identical: API contract architect; tech OpenAPI/JSON-Schema/gRPC confirms.",
+      "proposerTarget": "UASCO-0050",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "024",
+      "legacyTitle": "Realtime Systems Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0093",
+      "finalTargetTitle": "Principal Realtime Systems Architect",
+      "verifierRationale": "Realtime systems engineer to realtime systems architect; same discipline (WebSocket/MQTT tech). Master V2 0052 tradeoff analyst is not comparable.",
+      "proposerTarget": "UASCO-0093",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "025",
+      "legacyTitle": "Async & Queue Systems Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0095",
+      "finalTargetTitle": "Principal Message Broker Engineer",
+      "verifierRationale": "Queue systems engineering with Kafka/RabbitMQ/NATS/Pulsar equals message broker engineering. Master V2 0053 compliance reviewer is implausible.",
+      "proposerTarget": "UASCO-0095",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "026",
+      "legacyTitle": "Identity & Access Architecture",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0265",
+      "finalTargetTitle": "Principal Identity & Access Management Architect",
+      "verifierRationale": "Identity & access architecture equals IAM architect; OAuth/OIDC/SAML/SCIM tech confirms.",
+      "proposerTarget": "UASCO-0265",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "027",
+      "legacyTitle": "Multi-Tenancy Architecture",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0047",
+      "finalTargetTitle": "Principal Multi-Tenancy Architect",
+      "verifierRationale": "Identical: multi-tenancy architect.",
+      "proposerTarget": "UASCO-0047",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "028",
+      "legacyTitle": "Migration & Modernization",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0051",
+      "finalTargetTitle": "Principal Application Modernization Architect",
+      "verifierRationale": "Migration and modernization equals application modernization architect.",
+      "proposerTarget": "UASCO-0051",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "029",
+      "legacyTitle": "Senior Code Review",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0252",
+      "finalTargetTitle": "Principal Secure Code Review Expert",
+      "verifierRationale": "General senior code review vs security-specific secure code review: target adds security domain. No generic code-review role exists; partial overlap only.",
+      "proposerTarget": "UASCO-0252",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "030",
+      "legacyTitle": "Web Frontend Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0066",
+      "finalTargetTitle": "Principal Frontend Architect",
+      "verifierRationale": "Web frontend engineer to frontend architect: same discipline, seniority broader. Master V2 agrees.",
+      "proposerTarget": "UASCO-0066",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "031",
+      "legacyTitle": "React & Next.js Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0067",
+      "finalTargetTitle": "Principal React & Next.js Engineer",
+      "verifierRationale": "Identical: React & Next.js engineer.",
+      "proposerTarget": "UASCO-0067",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "032",
+      "legacyTitle": "Frontend Design System Engineer",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Frontend (engineering) design-system role vs G04 Design System Architect 0035 (also claimed by 062) vs Frontend Architect 0066 (Master V2) / Web Components 0071.",
+      "proposerTarget": "UASCO-0035",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": false,
+      "conflictCandidates": [
+        "UASCO-0035",
+        "UASCO-0066",
+        "UASCO-0071"
+      ]
+    },
+    {
+      "legacyId": "033",
+      "legacyTitle": "Web Performance Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0073",
+      "finalTargetTitle": "Principal Browser Performance Expert",
+      "verifierRationale": "Web performance engineer equals browser performance expert (Lighthouse tech).",
+      "proposerTarget": "UASCO-0073",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "034",
+      "legacyTitle": "Web Accessibility Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0074",
+      "finalTargetTitle": "Principal Web Accessibility Engineer",
+      "verifierRationale": "Identical: web accessibility engineer.",
+      "proposerTarget": "UASCO-0074",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "035",
+      "legacyTitle": "Backend Service Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0078",
+      "finalTargetTitle": "Principal Backend Architect",
+      "verifierRationale": "Backend service engineer to backend architect: same discipline, seniority broader. Master V2 0087 storage is narrower/off-scope.",
+      "proposerTarget": "UASCO-0078",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "036",
+      "legacyTitle": "REST API Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0079",
+      "finalTargetTitle": "Principal REST API Engineer",
+      "verifierRationale": "Identical: REST API engineer.",
+      "proposerTarget": "UASCO-0079",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "037",
+      "legacyTitle": "GraphQL Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0080",
+      "finalTargetTitle": "Principal GraphQL Engineer",
+      "verifierRationale": "Identical: GraphQL engineer.",
+      "proposerTarget": "UASCO-0080",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "038",
+      "legacyTitle": "Event-Driven Backend Engineer",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Event-driven backend engineering fits Event-Driven Architecture 0049, Event Streaming Engineer 0094 and Backend Architect 0078 (Master V2) comparably.",
+      "proposerTarget": "UASCO-0049",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": false,
+      "conflictCandidates": [
+        "UASCO-0049",
+        "UASCO-0094",
+        "UASCO-0078"
+      ]
+    },
+    {
+      "legacyId": "039",
+      "legacyTitle": "Workflow Engine Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0085",
+      "finalTargetTitle": "Principal Workflow Backend Engineer",
+      "verifierRationale": "Workflow engine engineer equals workflow backend engineer; Master V2 agrees.",
+      "proposerTarget": "UASCO-0085",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "040",
+      "legacyTitle": "Notification Service Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0086",
+      "finalTargetTitle": "Principal Notification Service Engineer",
+      "verifierRationale": "Identical: notification service engineer.",
+      "proposerTarget": "UASCO-0086",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "041",
+      "legacyTitle": "File & Object Storage Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0087",
+      "finalTargetTitle": "Principal Storage Service Engineer",
+      "verifierRationale": "Backend file/object storage service maps to storage service engineer; same backend discipline. 0089 file processing is narrower and different.",
+      "proposerTarget": "UASCO-0087",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "042",
+      "legacyTitle": "Background Jobs & Scheduler Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0088",
+      "finalTargetTitle": "Principal Scheduler & Background Processing Engineer",
+      "verifierRationale": "Identical: background jobs and scheduler engineer.",
+      "proposerTarget": "UASCO-0088",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "043",
+      "legacyTitle": "Database Architect",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0129",
+      "finalTargetTitle": "Principal Database Architect",
+      "verifierRationale": "Identical: database architect.",
+      "proposerTarget": "UASCO-0129",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "044",
+      "legacyTitle": "SQL & Data Modeling",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0136",
+      "finalTargetTitle": "Principal Data Modeling Expert",
+      "verifierRationale": "SQL & data modeling equals data modeling expert; Lane B and Master V2 agree.",
+      "proposerTarget": "UASCO-0136",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "045",
+      "legacyTitle": "Data Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0139",
+      "finalTargetTitle": "Principal Data Pipeline Engineer",
+      "verifierRationale": "Data engineer (Kafka/Spark/Airflow/dbt) to data pipeline engineer: canonical data-engineering core, clearly within same discipline.",
+      "proposerTarget": "UASCO-0139",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "046",
+      "legacyTitle": "Analytics Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0143",
+      "finalTargetTitle": "Principal Analytics Engineering Expert",
+      "verifierRationale": "Identical: analytics engineer. Master V2 0129 database architect is implausible.",
+      "proposerTarget": "UASCO-0143",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "047",
+      "legacyTitle": "ETL/ELT Pipeline",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0138",
+      "finalTargetTitle": "Principal ETL ELT Architect",
+      "verifierRationale": "Identical: ETL/ELT architect; Lane B agrees, Master V2 0139 is a near-equivalent sibling.",
+      "proposerTarget": "UASCO-0138",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "048",
+      "legacyTitle": "Search Index & Data",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0155",
+      "finalTargetTitle": "Principal Search Infrastructure Engineer",
+      "verifierRationale": "Search indexing (Elasticsearch/OpenSearch/Solr) fits search infrastructure, but title is vague and includes Neo4j/pgvector; 0153/0156 also partially fit.",
+      "proposerTarget": "UASCO-0155",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "049",
+      "legacyTitle": "Data Quality & Governance",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0141",
+      "finalTargetTitle": "Principal Data Governance & Quality Expert",
+      "verifierRationale": "Identical: data quality & governance.",
+      "proposerTarget": "UASCO-0141",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "050",
+      "legacyTitle": "Mobile Architect",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0116",
+      "finalTargetTitle": "Principal Mobile Solutions Architect",
+      "verifierRationale": "Mobile architect equals mobile solutions architect.",
+      "proposerTarget": "UASCO-0116",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "051",
+      "legacyTitle": "Android Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0117",
+      "finalTargetTitle": "Principal Android Native Engineer",
+      "verifierRationale": "Identical: Android engineer.",
+      "proposerTarget": "UASCO-0117",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "052",
+      "legacyTitle": "iOS Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0118",
+      "finalTargetTitle": "Principal iOS Native Engineer",
+      "verifierRationale": "Identical: iOS engineer.",
+      "proposerTarget": "UASCO-0118",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "053",
+      "legacyTitle": "Flutter Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0119",
+      "finalTargetTitle": "Principal Flutter Engineer",
+      "verifierRationale": "Identical: Flutter engineer.",
+      "proposerTarget": "UASCO-0119",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "054",
+      "legacyTitle": "React Native Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0120",
+      "finalTargetTitle": "Principal React Native Engineer",
+      "verifierRationale": "Identical: React Native engineer.",
+      "proposerTarget": "UASCO-0120",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "055",
+      "legacyTitle": "Firebase & Mobile Integration",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Firebase/BaaS mobile integration has no catalog equivalent; 0127 is device hardware integration, 0125 push only.",
+      "proposerTarget": null,
+      "proposerRelation": null,
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "056",
+      "legacyTitle": "Mobile Release & Store",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0126",
+      "finalTargetTitle": "Principal Store Release Engineer",
+      "verifierRationale": "Mobile release & store equals store release engineer.",
+      "proposerTarget": "UASCO-0126",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "057",
+      "legacyTitle": "Desktop Application Architect",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0104",
+      "finalTargetTitle": "Principal Desktop Architecture Expert",
+      "verifierRationale": "Desktop application architect equals desktop architecture expert. Lane B 0258 (desktop application security) adds security domain and is not comparable.",
+      "proposerTarget": "UASCO-0104",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "058",
+      "legacyTitle": "Electron & Tauri Engineer",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Legacy spans two equal targets: Electron Engineer 0108 and Tauri & Rust Desktop Engineer 0109; needs a human split or pick.",
+      "proposerTarget": "UASCO-0108",
+      "proposerRelation": "BROADER",
+      "agreedWithProposer": false,
+      "conflictCandidates": [
+        "UASCO-0108",
+        "UASCO-0109"
+      ]
+    },
+    {
+      "legacyId": "059",
+      "legacyTitle": "Native Desktop Integration",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0111",
+      "finalTargetTitle": "Principal Native OS Integration Engineer",
+      "verifierRationale": "Native desktop integration equals native OS integration engineer (desktop guild).",
+      "proposerTarget": "UASCO-0111",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "060",
+      "legacyTitle": "UX Architect",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "UX architect fits Product Design Architect 0031 and Information Architecture Expert 0038 comparably; Master V2 chose UX Research 0032.",
+      "proposerTarget": "UASCO-0031",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": false,
+      "conflictCandidates": [
+        "UASCO-0031",
+        "UASCO-0038",
+        "UASCO-0032"
+      ]
+    },
+    {
+      "legacyId": "061",
+      "legacyTitle": "UI Designer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0034",
+      "finalTargetTitle": "Principal UI Visual Design Expert",
+      "verifierRationale": "UI designer equals UI visual design expert.",
+      "proposerTarget": "UASCO-0034",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "062",
+      "legacyTitle": "Design System",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0035",
+      "finalTargetTitle": "Principal Design System Architect",
+      "verifierRationale": "Design system role in design dept equals design system architect. Note 0035 is also claimed by 032 (surfaced there as CONFLICT).",
+      "proposerTarget": "UASCO-0035",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "063",
+      "legacyTitle": "UX Research",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0032",
+      "finalTargetTitle": "Principal UX Research Expert",
+      "verifierRationale": "Identical: UX research.",
+      "proposerTarget": "UASCO-0032",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "064",
+      "legacyTitle": "Accessibility Design",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0037",
+      "finalTargetTitle": "Principal Accessible Design Expert",
+      "verifierRationale": "Accessibility design equals accessible design expert.",
+      "proposerTarget": "UASCO-0037",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "065",
+      "legacyTitle": "Content Design",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0036",
+      "finalTargetTitle": "Principal UX Writing & Content Design Expert",
+      "verifierRationale": "Content design equals UX writing & content design expert.",
+      "proposerTarget": "UASCO-0036",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "066",
+      "legacyTitle": "Localization & Internationalization",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0546",
+      "finalTargetTitle": "Principal Internationalization Engineering Expert",
+      "verifierRationale": "Legacy combines i18n and localization in the design dept; target is i18n engineering only, 0547 covers localization quality. Master V2 0041 motion design is cross-domain.",
+      "proposerTarget": "UASCO-0546",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "067",
+      "legacyTitle": "Test Planning",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0299",
+      "finalTargetTitle": "Principal Test Strategy Architect",
+      "verifierRationale": "Test planning is clearly narrower within test strategy; same QA discipline.",
+      "proposerTarget": "UASCO-0299",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "068",
+      "legacyTitle": "Happy Path Test Case",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0300",
+      "finalTargetTitle": "Principal Functional Test Engineer",
+      "verifierRationale": "Happy-path test case design is a task/technique; functional testing is the containing discipline but legacy may be a workflow, not a role.",
+      "proposerTarget": "UASCO-0300",
+      "proposerRelation": "NARROWER",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "069",
+      "legacyTitle": "Edge & Negative Case",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0300",
+      "finalTargetTitle": "Principal Functional Test Engineer",
+      "verifierRationale": "Edge/negative case design is a test technique; functional testing contains it; role-vs-task status uncertain.",
+      "proposerTarget": "UASCO-0300",
+      "proposerRelation": "NARROWER",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "070",
+      "legacyTitle": "Regression Coverage",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0305",
+      "finalTargetTitle": "Principal Regression Risk Engineer",
+      "verifierRationale": "Regression coverage and regression risk engineering are the same QA specialty.",
+      "proposerTarget": "UASCO-0305",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "071",
+      "legacyTitle": "Test Documentation & Checklist",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Test documentation/checklists is an artifact/workflow function; no catalog role corresponds.",
+      "proposerTarget": null,
+      "proposerRelation": null,
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "072",
+      "legacyTitle": "Exploratory QA",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0304",
+      "finalTargetTitle": "Principal Exploratory Testing Expert",
+      "verifierRationale": "Identical: exploratory testing.",
+      "proposerTarget": "UASCO-0304",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "073",
+      "legacyTitle": "Product Flow Test",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0303",
+      "finalTargetTitle": "Principal End-to-End Test Expert",
+      "verifierRationale": "Product flow testing equals end-to-end testing of user flows; same specialty.",
+      "proposerTarget": "UASCO-0303",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "074",
+      "legacyTitle": "Feature Validation",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0300",
+      "finalTargetTitle": "Principal Functional Test Engineer",
+      "verifierRationale": "Feature validation fits functional testing but also acceptance/business-logic testing 0307; partial.",
+      "proposerTarget": "UASCO-0300",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "075",
+      "legacyTitle": "CMS & Content Administration Test",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0300",
+      "finalTargetTitle": "Principal Functional Test Engineer",
+      "verifierRationale": "CMS/content-administration testing is a domain-specific slice of functional testing; partial.",
+      "proposerTarget": "UASCO-0300",
+      "proposerRelation": "NARROWER",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "076",
+      "legacyTitle": "Admin Panel Process Test",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0300",
+      "finalTargetTitle": "Principal Functional Test Engineer",
+      "verifierRationale": "Admin-panel process testing is a domain slice of functional/business-logic testing; partial.",
+      "proposerTarget": "UASCO-0300",
+      "proposerRelation": "NARROWER",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "077",
+      "legacyTitle": "Cross-Platform Synchronization",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Cross-platform data synchronization QA has no target; 0124 is sync engineering, 0317 is cross-platform automation, not sync testing.",
+      "proposerTarget": null,
+      "proposerRelation": null,
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "078",
+      "legacyTitle": "Usability & Heuristic Review",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0032",
+      "finalTargetTitle": "Principal UX Research Expert",
+      "verifierRationale": "Heuristic/usability review is a UX research/evaluation method; proposer 0040 Design QA checks implementation-vs-design. Replaced with 0032, hence only SUSPECTED.",
+      "proposerTarget": "UASCO-0040",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": false
+    },
+    {
+      "legacyId": "079",
+      "legacyTitle": "Localization & Internationalization QA",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0311",
+      "finalTargetTitle": "Principal Localization Quality Engineer",
+      "verifierRationale": "Localization QA equals localization quality engineer (QA guild). Note near-duplicate catalog role 0547 in G47.",
+      "proposerTarget": "UASCO-0311",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "080",
+      "legacyTitle": "Web Design & Pixel-Perfect",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0040",
+      "finalTargetTitle": "Principal Design QA Expert",
+      "verifierRationale": "Pixel-perfect design review (Figma vs implementation) is design QA.",
+      "proposerTarget": "UASCO-0040",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "081",
+      "legacyTitle": "Mobile & Responsive Design",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Mobile/responsive design checking fits Cross-Device Compatibility 0334 and Design QA 0040 comparably.",
+      "proposerTarget": "UASCO-0334",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": false,
+      "conflictCandidates": [
+        "UASCO-0334",
+        "UASCO-0040"
+      ]
+    },
+    {
+      "legacyId": "082",
+      "legacyTitle": "iOS UI Design Review",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0040",
+      "finalTargetTitle": "Principal Design QA Expert",
+      "verifierRationale": "iOS UI design review is platform-narrower design QA; same specialty.",
+      "proposerTarget": "UASCO-0040",
+      "proposerRelation": "NARROWER",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "083",
+      "legacyTitle": "Android UI Design Review",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0040",
+      "finalTargetTitle": "Principal Design QA Expert",
+      "verifierRationale": "Android UI design review is platform-narrower design QA; same specialty.",
+      "proposerTarget": "UASCO-0040",
+      "proposerRelation": "NARROWER",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "084",
+      "legacyTitle": "Visual Regression",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0325",
+      "finalTargetTitle": "Principal Visual Regression Testing Expert",
+      "verifierRationale": "Identical: visual regression testing.",
+      "proposerTarget": "UASCO-0325",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "085",
+      "legacyTitle": "Accessibility Test",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0310",
+      "finalTargetTitle": "Principal Accessibility Quality Engineer",
+      "verifierRationale": "Accessibility testing equals accessibility quality engineer.",
+      "proposerTarget": "UASCO-0310",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "086",
+      "legacyTitle": "Advanced Accessibility & Assistive Tech",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0310",
+      "finalTargetTitle": "Principal Accessibility Quality Engineer",
+      "verifierRationale": "Assistive-technology testing is a deeper slice of accessibility QA; same specialty.",
+      "proposerTarget": "UASCO-0310",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "087",
+      "legacyTitle": "Browser / Device / OS Compatibility",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Legacy spans Cross-Browser Compatibility 0333 and Cross-Device Compatibility 0334 equally; needs split or pick.",
+      "proposerTarget": "UASCO-0333",
+      "proposerRelation": "BROADER",
+      "agreedWithProposer": false,
+      "conflictCandidates": [
+        "UASCO-0333",
+        "UASCO-0334"
+      ]
+    },
+    {
+      "legacyId": "088",
+      "legacyTitle": "Web Functional Test",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0300",
+      "finalTargetTitle": "Principal Functional Test Engineer",
+      "verifierRationale": "Web functional testing is clearly narrower functional testing; Lane B and Master V2 agree.",
+      "proposerTarget": "UASCO-0300",
+      "proposerRelation": "NARROWER",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "089",
+      "legacyTitle": "iOS Mobile App Test",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0316",
+      "finalTargetTitle": "Principal iOS Automation Engineer",
+      "verifierRationale": "iOS app testing (manual and automated) only partially matches iOS automation engineer.",
+      "proposerTarget": "UASCO-0316",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "090",
+      "legacyTitle": "Android Mobile App Test",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0315",
+      "finalTargetTitle": "Principal Android Automation Engineer",
+      "verifierRationale": "Android app testing (manual and automated) only partially matches Android automation engineer.",
+      "proposerTarget": "UASCO-0315",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "091",
+      "legacyTitle": "Notification & Messaging Test",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0300",
+      "finalTargetTitle": "Principal Functional Test Engineer",
+      "verifierRationale": "Notification/messaging testing is a functional-testing slice, consistent with 075/076 treatment; proposer left it unmapped. Replacement, hence SUSPECTED.",
+      "proposerTarget": null,
+      "proposerRelation": null,
+      "agreedWithProposer": false
+    },
+    {
+      "legacyId": "092",
+      "legacyTitle": "Firebase Event & Analytics Validation",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Analytics event instrumentation validation has no QA target; 0146/0308 only tangential. Master V2 0312 release readiness is implausible.",
+      "proposerTarget": null,
+      "proposerRelation": null,
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "093",
+      "legacyTitle": "Offline / Low Network / Recovery QA",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0330",
+      "finalTargetTitle": "Principal Network Impairment Testing Expert",
+      "verifierRationale": "Offline/low-network/reconnect recovery testing is network impairment testing; same specialty.",
+      "proposerTarget": "UASCO-0330",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "094",
+      "legacyTitle": "Feature Flag & Experiment QA",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Feature-flag and experiment QA has no target; 0029/0147 are experiment design, not QA.",
+      "proposerTarget": null,
+      "proposerRelation": null,
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "095",
+      "legacyTitle": "Data Pipeline / BI / Reporting Validation",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0308",
+      "finalTargetTitle": "Principal Data Integrity Testing Expert",
+      "verifierRationale": "Data pipeline/BI/report validation is data integrity testing; Master V2 agrees.",
+      "proposerTarget": "UASCO-0308",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "096",
+      "legacyTitle": "API Test",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0301",
+      "finalTargetTitle": "Principal API Quality Engineer",
+      "verifierRationale": "API testing equals API quality engineer.",
+      "proposerTarget": "UASCO-0301",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "097",
+      "legacyTitle": "Backend Integration Test",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0301",
+      "finalTargetTitle": "Principal API Quality Engineer",
+      "verifierRationale": "Backend integration testing (DB, Kafka, RabbitMQ) is broader than API quality; partial overlap.",
+      "proposerTarget": "UASCO-0301",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "098",
+      "legacyTitle": "Socket & Realtime Test",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Socket/realtime messaging testing has no target; 0339 protocol conformance only tangential. Master V2 0309 migration testing is implausible.",
+      "proposerTarget": null,
+      "proposerRelation": null,
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "099",
+      "legacyTitle": "Database Validation & Data Integrity",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0308",
+      "finalTargetTitle": "Principal Data Integrity Testing Expert",
+      "verifierRationale": "Database validation & data integrity equals data integrity testing expert.",
+      "proposerTarget": "UASCO-0308",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "100",
+      "legacyTitle": "Test Data Management",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0320",
+      "finalTargetTitle": "Principal Test Data Management Engineer",
+      "verifierRationale": "Identical: test data management.",
+      "proposerTarget": "UASCO-0320",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "101",
+      "legacyTitle": "Test Environment & System Health",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0319",
+      "finalTargetTitle": "Principal Test Environment Architect",
+      "verifierRationale": "Test environment & health equals test environment architect; health part is supporting scope.",
+      "proposerTarget": "UASCO-0319",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "102",
+      "legacyTitle": "Log Monitoring & Root Cause Analysis",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0243",
+      "finalTargetTitle": "Principal Root Cause Analysis Expert",
+      "verifierRationale": "QA-side log monitoring/RCA vs SRE root cause analysis guild; also Observability 0239. Partial overlap across guilds.",
+      "proposerTarget": "UASCO-0243",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "103",
+      "legacyTitle": "Background Jobs / Queue / Scheduler QA",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Queue/scheduler QA has no target role.",
+      "proposerTarget": null,
+      "proposerRelation": null,
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "104",
+      "legacyTitle": "Third-Party Integration & Contract QA",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0302",
+      "finalTargetTitle": "Principal Contract Testing Expert",
+      "verifierRationale": "Third-party integration contract QA (Pact/WireMock) is contract testing.",
+      "proposerTarget": "UASCO-0302",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "105",
+      "legacyTitle": "Migration & Backward Compatibility",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0309",
+      "finalTargetTitle": "Principal Migration Testing Expert",
+      "verifierRationale": "Migration & backward compatibility testing equals migration testing expert.",
+      "proposerTarget": "UASCO-0309",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "106",
+      "legacyTitle": "Security & Vulnerability Scanning",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0335",
+      "finalTargetTitle": "Principal Security Testing Engineer",
+      "verifierRationale": "Vulnerability scanning (ZAP/Semgrep/Trivy) is clearly narrower security testing within QA.",
+      "proposerTarget": "UASCO-0335",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "107",
+      "legacyTitle": "Role / Permission / Session Security",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0335",
+      "finalTargetTitle": "Principal Security Testing Engineer",
+      "verifierRationale": "Role/permission/session security testing is narrower security testing.",
+      "proposerTarget": "UASCO-0335",
+      "proposerRelation": "NARROWER",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "108",
+      "legacyTitle": "Performance & Load Test",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Performance & load testing fits Performance Test Architect 0327 (Lane B) and Load & Stress Testing Expert 0328 equally.",
+      "proposerTarget": "UASCO-0327",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": false,
+      "conflictCandidates": [
+        "UASCO-0327",
+        "UASCO-0328"
+      ]
+    },
+    {
+      "legacyId": "109",
+      "legacyTitle": "Privacy / Consent / Compliance QA",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Privacy/consent compliance QA fits Privacy Consent & Retention 0294 (domain) and Policy Controls Tester 0297 (testing) comparably.",
+      "proposerTarget": "UASCO-0294",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": false,
+      "conflictCandidates": [
+        "UASCO-0294",
+        "UASCO-0297"
+      ]
+    },
+    {
+      "legacyId": "110",
+      "legacyTitle": "Frontend Performance & Core Web Vitals",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0073",
+      "finalTargetTitle": "Principal Browser Performance Expert",
+      "verifierRationale": "Core Web Vitals/frontend performance is browser performance; same specialty.",
+      "proposerTarget": "UASCO-0073",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "111",
+      "legacyTitle": "Chaos / Resilience / Failure Injection",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0331",
+      "finalTargetTitle": "Principal Chaos Testing Engineer",
+      "verifierRationale": "Chaos/failure-injection testing equals chaos testing engineer.",
+      "proposerTarget": "UASCO-0331",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "112",
+      "legacyTitle": "Web Automation",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0314",
+      "finalTargetTitle": "Principal Web Automation Engineer",
+      "verifierRationale": "Web automation equals web automation engineer.",
+      "proposerTarget": "UASCO-0314",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "113",
+      "legacyTitle": "Mobile Automation",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0317",
+      "finalTargetTitle": "Principal Cross-Platform Automation Expert",
+      "verifierRationale": "Mobile automation (Appium/Maestro/Detox) spans both platforms; proposer primary 0315 Android-only. Replaced with Cross-Platform Automation 0317, hence SUSPECTED.",
+      "proposerTarget": "UASCO-0315",
+      "proposerRelation": "BROADER",
+      "agreedWithProposer": false
+    },
+    {
+      "legacyId": "114",
+      "legacyTitle": "Backend Developer in Test",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0301",
+      "finalTargetTitle": "Principal API Quality Engineer",
+      "verifierRationale": "Backend SDET only partially overlaps API quality; framework work fits 0313.",
+      "proposerTarget": "UASCO-0301",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "115",
+      "legacyTitle": "Android Development in Test",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0315",
+      "finalTargetTitle": "Principal Android Automation Engineer",
+      "verifierRationale": "Android SDET equals Android automation engineer.",
+      "proposerTarget": "UASCO-0315",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "116",
+      "legacyTitle": "iOS Development in Test",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0316",
+      "finalTargetTitle": "Principal iOS Automation Engineer",
+      "verifierRationale": "iOS SDET equals iOS automation engineer.",
+      "proposerTarget": "UASCO-0316",
+      "proposerRelation": "OVERLAPPING",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "117",
+      "legacyTitle": "Testability & Code Review",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Testability + code review has no target; 0076 is frontend-only, 0252 is security-only.",
+      "proposerTarget": null,
+      "proposerRelation": null,
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "118",
+      "legacyTitle": "Test Automation Framework Architect",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0313",
+      "finalTargetTitle": "Principal Test Automation Framework Architect",
+      "verifierRationale": "Identical: test automation framework architect.",
+      "proposerTarget": "UASCO-0313",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "119",
+      "legacyTitle": "CI/CD Quality Gate",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0326",
+      "finalTargetTitle": "Principal CI Quality Gate Engineer",
+      "verifierRationale": "CI/CD quality gate equals CI quality gate engineer.",
+      "proposerTarget": "UASCO-0326",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "120",
+      "legacyTitle": "Flaky Test Detection & Stabilization",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0323",
+      "finalTargetTitle": "Principal Flaky Test Root Cause Engineer",
+      "verifierRationale": "Flaky test detection equals flaky test root cause engineer.",
+      "proposerTarget": "UASCO-0323",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    },
+    {
+      "legacyId": "121",
+      "legacyTitle": "Service Virtualization & Mocking",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0321",
+      "finalTargetTitle": "Principal Service Virtualization Engineer",
+      "verifierRationale": "Identical: service virtualization.",
+      "proposerTarget": "UASCO-0321",
+      "proposerRelation": "SAME_ROLE",
+      "agreedWithProposer": true
+    }
+  ]
+}
