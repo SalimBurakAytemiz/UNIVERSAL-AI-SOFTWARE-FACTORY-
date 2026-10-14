@@ -1,6 +1,11 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-10-14 — V7 r1 integration (branch v7/product-r1)
+
+- B2: v7 B2 c2: remediate F-B2-001 (not clean) (reviewed commit 9bf0cc1383b8c51daa45f7a871865f83ad86df1b; not clean)
+- B9: 599-role target catalog (51 guilds, 10 clusters) with honest runtime status (reviewed commit ba9cec3e71e1b14ca14f8cb4c1716e1d5813caca; not clean)
+
 ## 2026-10-14 — V7 B1 Work OS intake store and authorized mission routes (branch v7/product-b1)
 
 - New `core/workos/` (types, hash-chained JSONL journal store with derived snapshot, strict Ajv body schemas, README): one canonical store for projects, missions and tasks; verify-on-load fails closed with `WORKOS_JOURNAL_TAMPERED`; mission status uses `core/mission/state-machine.ts`; idempotency keys; tenant-scoped reads.
