@@ -1,6 +1,10 @@
 <!-- //TR: Bu dosya V3 mekanik closure ve re-audit düzeltmelerini geçmiş sürümlerden ayrıştırarak kaydeder. -->
 # Changelog
 
+## 2026-10-06 — V6 PKG-Q2 a stated retry time just passed means now, not tomorrow (branch)
+
+- Founder decision 2026-10-06 ('Q2 onay', protected file authorized): `parseRetryAfter` (`automation/lib/review-pipeline.mjs`) treats a date-less stated time-of-day (`try again at 12:52 PM`, and likewise the Claude CLI `resets 12:52pm`) that is at most 10 minutes in the past, boundary included, as a retry 2 minutes from now instead of the same time on the next day; a time further in the past still rolls to the next day, a future time stays today, an explicit date is unchanged and unrecognised text still returns null. Before, Codex's `try again at 12:52 PM` read at 12:52:06 was stored as a retry 24 hours later (a false stall on 2026-10-06). Tests: `tests/pkg-q2-retry-time-grace.test.ts` (the incident, 0 and 3 minutes past, exactly 10 minutes, 10 minutes and 1 second, 1 hour past, a future time, explicit dates, the `resets` form, unrecognised text); restoring the old rollover makes them fail. Details in `audit/checkpoints/V6-PKG-Q2-RETRY-TIME-GRACE-2026-10-06.json`.
+
 ## 2026-10-06 — V6 PKG-Q1 Claude limit messages detected as a provider wait (branch)
 
 - Founder decision 2026-10-06 (protected file authorized): `detectQuotaBlock` (`automation/lib/review-pipeline.mjs`) recognises the Claude CLI limit message that the CLI prints on stdout with a non-zero exit code (for example `You've hit your session limit · resets 1:10am (Europe/Istanbul)`), and stderr messages with a word between "your" and "limit". Before, such a builder round was classified as an environment error, retried five times and escalated to a Founder decision (`RECOVERABLE_RETRIES_EXHAUSTED`, seen on PKG-AUT2 on 2026-10-05) although only the provider limit had to pass. Only short CLI limit lines at the start of a stdout line count; a successful call (exit code 0 with other output) is never a quota block. The retry time keeps coming from the existing `parseRetryAfter` (`resets 1:10am` in local time).

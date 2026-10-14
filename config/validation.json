@@ -285,6 +285,7 @@
         "tests/pkg-f-validation-scripts-protected.test.ts",
         "tests/pkg-g-preflight-physical-memory.test.ts",
         "tests/pkg-q1-claude-limit-detection.test.ts",
+        "tests/pkg-q2-retry-time-grace.test.ts",
         "tests/pkg-r1-release-mode.test.ts",
         "tests/pkg-r3-phase0-fixes.test.ts",
         "tests/pkg-r4-init-private-git.test.ts",

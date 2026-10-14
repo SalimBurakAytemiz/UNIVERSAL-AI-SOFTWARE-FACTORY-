@@ -7,14 +7,16 @@ import {parseStrictReviewJson,validateReviewResult,governConvergence,finalGovern
 const sha=b=>crypto.createHash("sha256").update(b).digest("hex"),digestOf=x=>sha(Buffer.from(stableStringify(x)));
 const readJsonAt=(root,rel)=>JSON.parse(fs.readFileSync(path.join(root,rel),"utf8"));
 const MONTHS=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
-// //TR: Sağlayıcı mesajındaki "try again at [Mon DDth, YYYY ]H:MM AM|PM" yerel saat olarak ayrıştırılır; tarih yoksa bugün (geçmişse yarın) kabul edilir; ayrıştırılamazsa null döner ve policy backoff kullanılır.
+// //TR: Sağlayıcı mesajındaki "try again at [Mon DDth, YYYY ]H:MM AM|PM" yerel saat olarak ayrıştırılır; tarih yoksa bugün kabul edilir: saat gelecekteyse o saat, en çok 10 dakika geçmişse (sınır dahil; "12:52 PM" 12:52:06'da okunduğunda 24 saatlik sahte bekleme olmasın) şimdi+2 dakika, daha eskiyse yarın aynı saat; ayrıştırılamazsa null döner ve policy backoff kullanılır.
 export function parseRetryAfter(text,now=new Date()){
-  // //TR: Claude CLI biçimleri: "...|<unix saniye>" ve "resets 3pm" / "resets 3:30pm" (yerel saat; geçmişse yarın).
+  const PAST_TIME_GRACE_MS=10*60_000,PAST_TIME_RETRY_MS=2*60_000;
+  const dateless=d=>d.getTime()>now.getTime()?d:now.getTime()-d.getTime()<=PAST_TIME_GRACE_MS?new Date(now.getTime()+PAST_TIME_RETRY_MS):new Date(d.getTime()+86_400_000);
+  // //TR: Claude CLI biçimleri: "...|<unix saniye>" ve "resets 3pm" / "resets 3:30pm" (yerel saat; geçmiş saat kuralı yukarıdakiyle aynı).
   const ep=String(text).match(/\|(\d{10})(?!\d)/);if(ep){const d=new Date(Number(ep[1])*1000);if(Number.isFinite(d.getTime()))return d.toISOString()}
-  const rs=String(text).match(/resets (?:at )?(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);if(rs){let h=Number(rs[1])%12;if(rs[3].toLowerCase()==="pm")h+=12;let d=new Date(now.getFullYear(),now.getMonth(),now.getDate(),h,Number(rs[2]??0),0,0);if(d.getTime()<=now.getTime())d=new Date(d.getTime()+86_400_000);return d.toISOString()}
+  const rs=String(text).match(/resets (?:at )?(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);if(rs){let h=Number(rs[1])%12;if(rs[3].toLowerCase()==="pm")h+=12;const d=dateless(new Date(now.getFullYear(),now.getMonth(),now.getDate(),h,Number(rs[2]??0),0,0));return d.toISOString()}
   const m=String(text).match(/try again at (?:([A-Za-z]{3})[a-z]* (\d{1,2})(?:st|nd|rd|th)?,? (\d{4}) )?(\d{1,2}):(\d{2})\s*(AM|PM)/i);if(!m)return null;
   let h=Number(m[4])%12;if(m[6].toUpperCase()==="PM")h+=12;const min=Number(m[5]);let d;
-  if(m[1]){const mon=MONTHS.indexOf(m[1].toLowerCase());if(mon<0)return null;d=new Date(Number(m[3]),mon,Number(m[2]),h,min,0,0)}else{d=new Date(now.getFullYear(),now.getMonth(),now.getDate(),h,min,0,0);if(d.getTime()<=now.getTime())d=new Date(d.getTime()+86_400_000)}
+  if(m[1]){const mon=MONTHS.indexOf(m[1].toLowerCase());if(mon<0)return null;d=new Date(Number(m[3]),mon,Number(m[2]),h,min,0,0)}else d=dateless(new Date(now.getFullYear(),now.getMonth(),now.getDate(),h,min,0,0));
   return Number.isFinite(d.getTime())?d.toISOString():null;
 }
 // //TR: Sağlayıcı kota/limit sinyali: stderr satırlarında geniş kalıplar ("hit your session limit" gibi araya kelime giren biçimler dahil); Claude CLI limit mesajını stdout'a yazıp sıfırdan farklı kodla çıktığı için stdout'ta yalnız satır başından eşleşen, kısa CLI limit satırları sayılır. Başarılı (0 kodlu) ve yalnız limit satırlarından oluşmayan bir çıktı asla kota sayılmaz.

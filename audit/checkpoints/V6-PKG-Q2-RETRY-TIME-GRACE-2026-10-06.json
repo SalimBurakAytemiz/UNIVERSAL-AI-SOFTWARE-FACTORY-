@@ -5,7 +5,6 @@
   "date": "2026-10-06",
   "parent": "0625da4a1061009c748ef74ce06716272d81f72b (PKG-Q1 head; this package is stacked on PKG-Q1 and merges after it)",
   "branch": "v6/pkg-q2-retry-time-grace",
-  "status": "F10 AUTHORIZATION RECORD ONLY: package changes not yet applied; not clean; review pending",
   "founderAuthorization": {
     "decision": "PROTECTED_FIX_AUTHORIZED",
     "rule": "Founder answer 'Q2 onay' in the Claude builder session on 2026-10-06 to the proposal: parseRetryAfter in automation/lib/review-pipeline.mjs treats a stated date-less time-of-day at most 10 minutes in the past as a retry 2 minutes from now instead of the next day (observed 24-hour false Codex stall: 'try again at 12:52 PM' parsed at 12:52:06); explicit dates and future times unchanged; regression tests and a mutation check.",
@@ -27,5 +26,278 @@
       "scope": "exact re-application of the f9-reviewed diff 07763d6..1278079; protected files limited to protectedFiles; recorded before any protected change of this package",
       "notBackdated": true
     }
-  }
+  },
+  "motivation": {
+    "incident": "2026-10-06: the Codex review run C:/Users/PRO/Desktop/UASCO/.ai/cache/review/runs/d5a210f-c1-20261006T095206714Z-orchestrator wrote 'try again at 12:52 PM' to codex-stderr at 09:52:06Z (12:52:06 local, Europe/Istanbul); parseRetryAfter compared the stated 12:52:00 with the 6 seconds later reading time, rolled it to the next day and the provider retry time was persisted as 2026-10-07T09:52Z (a 24-hour false stall). The durable state was corrected by the Founder-approved transition seq 903.",
+    "evidenceSource": "incident run directory, stderr line and transition seq as supplied by the supervisor in the frozen task; the builder did not open the main checkout's .ai/cache or the durable state (out of the allowed scope)",
+    "rootCause": "the date-less branch used 'if the stated time is at or before now, add one day', so a stated time that has just passed (the provider prints the minute, the message is read seconds later) became tomorrow"
+  },
+  "design": {
+    "scope": "only the body of parseRetryAfter and its //TR comments; the 'try again at' regex, the explicit-date branch, the epoch branch and the 'resets' regex are unchanged",
+    "rule": "for a date-less stated local time-of-day d (built for today as before): d > now -> d; else now - d <= PAST_TIME_GRACE_MS (10 minutes, inclusive) -> now + PAST_TIME_RETRY_MS (2 minutes); else d + 1 day (unchanged rollover)",
+    "constants": "PAST_TIME_GRACE_MS=10*60_000 and PAST_TIME_RETRY_MS=2*60_000, named constants local to parseRetryAfter",
+    "dateLessForms": "the rule is one local helper used by both date-less forms of parseRetryAfter: Codex 'try again at H:MM AM|PM' (the incident) and the Claude CLI 'resets 3pm' / 'resets 3:30pm' (the same date-less time-of-day class, so the 6-second case cannot stall 24 hours there either)",
+    "unchanged": [
+      "explicit date ('try again at Sep 29th, 2026 7:02 PM') is returned as stated, also when it is in the past",
+      "a future time stays today",
+      "a time more than 10 minutes in the past rolls to the same time on the next day",
+      "the epoch form '...|<unix seconds>'",
+      "text without a recognised time (including a time without AM/PM) returns null and the policy backoff applies",
+      "detectQuotaBlock, callers in orchestrator-executors.mjs, retry policy, backoff, provider routing"
+    ]
+  },
+  "tests": {
+    "file": "tests/pkg-q2-retry-time-grace.test.ts",
+    "fixedNow": "local Dates on 2026-10-06 (no DST transition between 2026-10-06 and 2026-10-07)",
+    "cases": [
+      "incident: 'try again at 12:52 PM' (full Codex usage-limit message) at 12:52:06 -> now + 2 minutes, not 2026-10-07 12:52",
+      "stated time equal to now (12:52 at 12:52:00) and 3 minutes past (12:49 at 12:52:00) -> now + 2 minutes",
+      "exactly 10 minutes past (12:42 at 12:52:00, boundary inclusive) -> now + 2 minutes",
+      "10 minutes and 1 second past (12:42 at 12:52:01) -> 2026-10-07 12:42",
+      "1 hour past (11:52 AM at 12:52:06) -> 2026-10-07 11:52",
+      "future times (7:02 PM and 12:53 PM at 12:52:06) -> today",
+      "explicit dates unchanged: 'try again at Sep 29th, 2026 7:02 PM' and 'try again at Oct 6th, 2026 12:52 PM' read 6 seconds later",
+      "Claude CLI 'resets 12:52pm' at 12:52:06 -> now + 2 minutes; 'resets 12pm' at 12:10:01 -> next day; 'resets 3pm' -> today",
+      "null: 'no time here', 'try again later', 'try again at 12:52' (no AM/PM), an unknown month name"
+    ],
+    "unchangedExistingTests": [
+      "scripts/orchestrator-selftest.mjs provider-retry-after-parsing-and-quota-detection (dated retry, same-day retry, a time 58 minutes past still rolls to tomorrow, garbage)",
+      "scripts/dual-review-selftest.mjs Claude limit formats ('resets 3pm' at 10:00)",
+      "tests/pkg-q1-claude-limit-detection.test.ts ('resets 1:10am' at 22:00 -> next day; epoch form)"
+    ]
+  },
+  "mutationChecks": {
+    "harness": "scratchpad q2-mutants.mjs: each mutant edits parseRetryAfter in place (unique anchor checked), runs tests/pkg-q2-retry-time-grace.test.ts, restores the original bytes; after the run the file sha256 equals the original and the test file passes 9/9",
+    "result": "9/9 caught",
+    "required": "old rollover restored (const dateless=d=>d.getTime()<=now.getTime()?new Date(d.getTime()+86_400_000):d) -> 4 failed | 5 passed (9); restored -> 9 passed (9)",
+    "mutants": [
+      "old rollover restored (if d<=now then d+1 day): 4 of 9 tests fail",
+      "grace boundary exclusive (< instead of <=): 1 fails",
+      "no upper bound on the grace (any past time -> now + 2 minutes): 3 fail",
+      "grace returns the stated time instead of now + 2 minutes: 4 fail",
+      "retry offset 0 (returns now): 4 fail",
+      "grace 11 minutes: 2 fail",
+      "grace applied to an explicit date: 1 fails",
+      "a future time less than 2 minutes ahead routed through the grace: 1 fails",
+      "'resets' branch keeps the old rollover: 1 fails"
+    ]
+  },
+  "validation": {
+    "workspace": "builder worktree of branch v6/pkg-q2-retry-time-grace at parent 0625da4 with the shared reviewed node_modules (junction); the canonical runner scripts/run-validation.mjs is the supervisor's step and was not run by the builder",
+    "commands": [
+      {
+        "command": "npx vitest run tests/pkg-q2-retry-time-grace.test.ts tests/pkg-q1-claude-limit-detection.test.ts",
+        "result": "PASS (2 files, 14 tests)"
+      },
+      {
+        "command": "node scripts/orchestrator-selftest.mjs",
+        "result": "ORCHESTRATOR_SELFTEST: PASS 29/29 (unchanged script)"
+      },
+      {
+        "command": "node scripts/dual-review-selftest.mjs",
+        "result": "DUAL_REVIEW_SELFTEST: PASS 23/23 (unchanged script)"
+      },
+      {
+        "command": "npm run typecheck",
+        "result": "tsc --noEmit: PASS"
+      },
+      {
+        "command": "node scripts/generate-trust-root.mjs (generator unchanged)",
+        "result": "TRUST_ROOT_MANIFEST_GENERATED files=364; only generatedAt and the review-pipeline.mjs digest changed"
+      },
+      {
+        "command": "node scripts/verify-trust-root.mjs",
+        "result": "TRUST_ROOT_VERIFY: PASS"
+      },
+      {
+        "command": "npx vitest run",
+        "result": "FAIL (37 files: 36 passed, 1 failed; 201 tests: 200 passed, 1 failed; 1053 s). The only failure is tests/pkg-t2-orchestrator-executor-integration.test.ts, scenario phase0-failed-installed-autostart-registration-is-retried-boundedly-then-blocked-without-reinstalling ('fixture: {\"type\":\"AUDIT_REQUIRED\"}'); it is pre-existing and unrelated to parseRetryAfter"
+      },
+      {
+        "command": "node scripts/orchestrator-executor-integration-selftest.mjs with automation/lib/review-pipeline.mjs temporarily restored to the 0625da4 bytes (then put back; sha256 re-checked)",
+        "result": "ORCHESTRATOR_EXECUTOR_INTEGRATION: FAIL 11/12 with the same scenario and the same 'AUDIT_REQUIRED' outcome, so the failure exists on the parent"
+      }
+    ],
+    "preExistingFailure": {
+      "scenario": "scripts/orchestrator-executor-integration-selftest.mjs phase0-failed-installed-autostart-registration-is-retried-boundedly-then-blocked-without-reinstalling (run by tests/pkg-t2-orchestrator-executor-integration.test.ts)",
+      "cause": "its phase0World fixture (added by 04dae04, PKG-AUT2 c2 F-AUT2-004) builds executors with the repository policy, where config/orchestrator-policy.json releaseAudit.required is true since 1bc423b (PKG-DR2); executors.phase0 therefore returns the release audit gate outcome AUDIT_REQUIRED before the installation, while the neighbouring scenario phase0-guards-hash-and-adopts-finished-install disables the gate explicitly",
+      "scope": "outside the PKG-Q2 allowed paths (scripts/orchestrator-executor-integration-selftest.mjs is not touched); reported to the supervisor, not fixed here"
+    }
+  },
+  "review": "NOT_REVIEWED",
+  "merge": "AFTER_PKG_Q1",
+  "cleanClaim": false,
+  "notClaimed": [
+    "activation on the running plane before this package and the chain it is stacked on are merged by governed review",
+    "a stated time just before midnight read just after midnight (for example 11:58 PM read at 00:03) is still today's later time because the future branch is unchanged by the frozen rule",
+    "the canonical validation report on the reviewed commit (supervisor step)"
+  ],
+  "changedFileSha256": {
+    "CHANGELOG.md": "47bb51bed55db07ef84c8903f2c50c93a7a136e9309df975ae30410a8a71f689",
+    "automation/lib/review-pipeline.mjs": "61df5770279d883ebf96840d107c0c7a9b00ac1e8707110c3ab75e37f2f78193",
+    "config/trust-root-manifest.json": "af90727eb06b757a8942bd1f30d1f9bb123f780572f7bafd9dc703a451dc56fd",
+    "tests/pkg-q2-retry-time-grace.test.ts": "0ce67fe5ad49188d4f7b8b779216fd26d172c3f25dbdbb2da8e0e313fd81c903"
+  },
+  "remediationRounds": [
+    {
+      "date": "2026-10-06",
+      "mode": "REMEDIATE (Claude builder, independent verification round 1)",
+      "reviewedCommit": "cb1831d1429b5655b42889ea056b3b749d4e2f7b",
+      "packageBase": "0625da4a1061009c748ef74ce06716272d81f72b",
+      "finding": {
+        "lens": "governance",
+        "severity": "P2",
+        "title": "Acceptance criterion 1 (canonical validation passes on the exact reviewed commit) cannot be met at cb1831d: a failure that predates this package remains in the vitest step",
+        "summary": "scripts/orchestrator-executor-integration-selftest.mjs scenario phase0-failed-installed-autostart-registration-is-retried-boundedly-then-blocked-without-reinstalling fails with 'fixture: {\"type\":\"AUDIT_REQUIRED\"}' on cb1831d and on its parent 0625da4; tests/pkg-t2-orchestrator-executor-integration.test.ts runs it, so the canonical 'tests' step of config/validation.json fails on the reviewed commit"
+      },
+      "disposition": "REAL_PRE_EXISTING_OUT_OF_SCOPE_NOT_FIXED_IN_PKG_Q2",
+      "dispositionReason": "The finding is real and reproduced. Its only fix is in scripts/orchestrator-executor-integration-selftest.mjs (the phase0World fixture), which is outside the PKG-Q2 allowed paths; the finding itself says not to widen PKG-Q2's allowed paths. No code, test, manifest or CHANGELOG change was made in this round; this entry only records the reproduction, the root cause and the acceptance status.",
+      "evidence": [
+        "cb1831d worktree: node scripts/orchestrator-executor-integration-selftest.mjs -> ORCHESTRATOR_EXECUTOR_INTEGRATION: FAIL 11/12, the single failure is phase0-failed-installed-autostart-registration-is-retried-boundedly-then-blocked-without-reinstalling 'fixture: {\"type\":\"AUDIT_REQUIRED\"}'",
+        "parent 0625da4: the same scenario fails the same way (validation.commands of the implementation round with review-pipeline.mjs restored to the 0625da4 bytes, and the verifier's independent scratch archive of 0625da4)",
+        "origin: phase0World (scripts/orchestrator-executor-integration-selftest.mjs:77) was added by 04dae04 (PKG-AUT2 c2) and builds the executors with the repository policy; config/orchestrator-policy.json releaseAudit.required became true in 1bc423b (PKG-DR2); both commits are in the stacked chain master..0625da4 and neither is on master (9afae37)",
+        "root-cause diagnostic: in a scratch git archive of cb1831d outside the worktree (never committed), adding one line at the end of phase0World that rebuilds w.ex with releaseAudit.required=false, exactly as lines 59/68/112 do for the neighbouring scenarios, gives ORCHESTRATOR_EXECUTOR_INTEGRATION: PASS 12/12; the failure is therefore explained by the fixture alone and is independent of parseRetryAfter"
+      ],
+      "acceptanceStatus": "acceptanceCriteria[0] (canonical validation passes on the exact reviewed commit) is NOT met at this commit and cannot be met within the PKG-Q2 allowed paths. PKG-Q2 must not be treated as validated or CLEAN while this failure remains. acceptanceCriteria[1] and [2] are met (targeted tests and the 9/9 mutation check below).",
+      "requiredSupervisorAction": "Either a separately authorized package that makes phase0World disable the release audit gate (as the neighbouring scenarios do) lands before or under PKG-Q2 in the chain, after which canonical validation is re-run on the PKG-Q2 head, or the supervisor records an explicit decision about this failure. The builder did not touch scripts/orchestrator-executor-integration-selftest.mjs.",
+      "codeChanged": false,
+      "changedFileSha256": {
+        "CHANGELOG.md": "47bb51bed55db07ef84c8903f2c50c93a7a136e9309df975ae30410a8a71f689",
+        "automation/lib/review-pipeline.mjs": "61df5770279d883ebf96840d107c0c7a9b00ac1e8707110c3ab75e37f2f78193",
+        "config/trust-root-manifest.json": "af90727eb06b757a8942bd1f30d1f9bb123f780572f7bafd9dc703a451dc56fd",
+        "tests/pkg-q2-retry-time-grace.test.ts": "0ce67fe5ad49188d4f7b8b779216fd26d172c3f25dbdbb2da8e0e313fd81c903"
+      },
+      "validation": {
+        "workspace": "builder worktree of branch v6/pkg-q2-retry-time-grace at cb1831d (code identical to this commit, which changes only this checkpoint) with the shared reviewed node_modules (junction); the canonical runner scripts/run-validation.mjs is the supervisor's step and was not run by the builder",
+        "commands": [
+          {
+            "command": "node scripts/orchestrator-executor-integration-selftest.mjs",
+            "result": "FAIL 11/12 (the pre-existing scenario above; the other 11 PASS)"
+          },
+          {
+            "command": "npx vitest run tests/pkg-q2-retry-time-grace.test.ts tests/pkg-q1-claude-limit-detection.test.ts",
+            "result": "PASS (2 files, 14 tests)"
+          },
+          {
+            "command": "node scripts/orchestrator-selftest.mjs",
+            "result": "ORCHESTRATOR_SELFTEST: PASS 29/29"
+          },
+          {
+            "command": "node scripts/dual-review-selftest.mjs",
+            "result": "DUAL_REVIEW_SELFTEST: PASS 23/23"
+          },
+          {
+            "command": "node node_modules/typescript/bin/tsc --noEmit",
+            "result": "PASS"
+          },
+          {
+            "command": "node scripts/verify-trust-root.mjs",
+            "result": "TRUST_ROOT_VERIFY: PASS (manifest not regenerated: review-pipeline.mjs and the generator are unchanged in this round)"
+          },
+          {
+            "command": "node node_modules/vitest/vitest.mjs run",
+            "result": "FAIL (37 files: 36 passed, 1 failed; 201 tests: 200 passed, 1 failed; 619 s). The only failure is tests/pkg-t2-orchestrator-executor-integration.test.ts with the pre-existing phase0-failed-installed-autostart-registration-is-retried-boundedly-then-blocked-without-reinstalling 'fixture: {\"type\":\"AUDIT_REQUIRED\"}'; identical to the implementation round"
+          },
+          {
+            "command": "every config/validation.json step except tests, run individually on this commit's tree (checkpoint already appended)",
+            "result": "31 of 33 non-test steps PASS (registries through secret-sanity, typecheck; plus scripts/verify-trust-root.mjs PASS). dependency-supply-chain FAIL INSTALLED_DEPENDENCY_STATE_INVALID:INSTALLED_PACKAGE_REALPATH_ESCAPE:node_modules/@electron-internal/extract-zip and release-supply-chain FAIL RELEASE_INPUT_MISSING:.ai/runtime/SBOM-LITE.json are workspace-only: node_modules is a junction to a shared install and .ai/runtime/SBOM-LITE.json is written by scripts/ensure-dependencies.mjs, which the canonical runner runs first; both fail identically on a scratch archive of the unmodified cb1831d with the same junction"
+          }
+        ]
+      },
+      "mutationChecks": {
+        "harness": "scratchpad q2-mutants.mjs (unchanged from the implementation round)",
+        "result": "9/9 caught; required mutant 'old rollover restored' -> 4 failed | 5 passed (9); review-pipeline.mjs sha256 after the run 61df5770279d883ebf96840d107c0c7a9b00ac1e8707110c3ab75e37f2f78193 (matches the original), restored run 9 passed (9)"
+      }
+    }
+  ],
+  "finalLineageRecords": [
+    {
+      "recordedAt": "2026-10-07T06:56:04.405Z",
+      "kind": "FINAL_LINEAGE_EVIDENCE_BINDING",
+      "reason": "the package was re-applied unchanged (identical change set) onto the final finalization chain; values recorded at its earlier revisions (parent, branch, changedFileSha256, reseal/manifest, validation workspace) describe those superseded revisions and are kept unchanged as history; this record binds the evidence to the final revision",
+      "packageId": "V6-PKG-Q2-RETRY-TIME-GRACE",
+      "finalBase": "f34f07d5de2925d6c320709c71f46d2dbad19029",
+      "headSubjectChain": [
+        "f06dc52 v6 pkg-q2: address independent verification findings",
+        "8d4f14c v6 pkg-q2: a stated retry time just passed means now, not tomorrow"
+      ],
+      "supersededRevisions": [
+        "0133144",
+        "f24c32a"
+      ],
+      "changedFileSha256": {
+        "CHANGELOG.md": "636f60477ae018fdebdc6a41e6f9a36087c54c0ac2c3bd0e5851b493973dae8c",
+        "automation/lib/review-pipeline.mjs": "61df5770279d883ebf96840d107c0c7a9b00ac1e8707110c3ab75e37f2f78193",
+        "config/trust-root-manifest.json": "af90727eb06b757a8942bd1f30d1f9bb123f780572f7bafd9dc703a451dc56fd",
+        "tests/pkg-q2-retry-time-grace.test.ts": "0ce67fe5ad49188d4f7b8b779216fd26d172c3f25dbdbb2da8e0e313fd81c903"
+      },
+      "trustRootManifest": {
+        "sha256": "af90727eb06b757a8942bd1f30d1f9bb123f780572f7bafd9dc703a451dc56fd",
+        "generatedAt": "2026-10-06T13:06:52.646Z",
+        "sealStatus": "SEALED",
+        "protectedFiles": 364
+      },
+      "validationEnvironment": {
+        "os": "Windows_NT 10.0.19045",
+        "node": "v24.19.0",
+        "npm": "11.17.0"
+      },
+      "validationBinding": "canonical validation (config/validation.json) of the exact reviewed commit runs in a fresh clean clone at that commit, in this environment, during the bundle freeze; the frozen review bundle records reviewedCommit, baseCommit and the validation report",
+      "note": "a file cannot contain the sha of the commit that adds it; the commit is identified by finalBase plus this tree's digests and by the frozen bundle"
+    },
+    {
+      "recordedAt": "2026-10-13T00:00:00.000Z",
+      "kind": "REAPPLIED_ONTO_NEW_BASE_LINEAGE_RECORD",
+      "appendOnly": true,
+      "packageId": "V6-PKG-Q2-RETRY-TIME-GRACE",
+      "branch": "v6/pkg-q2-retry-time-grace-f9",
+      "reason": "Founder-approved chain re-application of 2026-10-13: the commits of this package were re-applied with git cherry-pick -x onto the f9 chain. All earlier fields and records describe the original chain (bases, commits, digests) and are kept unchanged as history; they do not describe this revision.",
+      "newBase": "07763d6",
+      "oldCommits": [
+        "8d4f14c",
+        "f06dc52",
+        "e01ea9e"
+      ],
+      "oldToNew": {
+        "8d4f14c": "349eca4",
+        "f06dc52": "fbb3d20",
+        "e01ea9e": "4851bab"
+      },
+      "newCommitsInOrder": [
+        "349eca4",
+        "fbb3d20",
+        "4851bab",
+        "06e5083"
+      ],
+      "unmappedNewCommits": [
+        "06e5083"
+      ],
+      "conflicts": [
+        {
+          "file": "config/trust-root-manifest.json",
+          "resolution": "conflicts regenerated with scripts/generate-trust-root.mjs, never hand-merged"
+        },
+        {
+          "file": "config/validation.json",
+          "resolution": "integration commit: the new test file assigned to the tests step so the coverage guard passes"
+        }
+      ],
+      "changedProtectedFileSha256": {
+        "automation/lib/review-pipeline.mjs": "61df5770279d883ebf96840d107c0c7a9b00ac1e8707110c3ab75e37f2f78193",
+        "config/validation.json": "96fb47eb12222755624f7cb41e1a3dc8c7afe21381f36e8894de63c3d635ebda"
+      },
+      "changedOtherFileSha256": {
+        "CHANGELOG.md": "a6ad31fe9bbea485ce531ec61b0fa7ecf7de958dfa2f845063b415a18afa75de",
+        "audit/checkpoints/V6-PKG-Q2-RETRY-TIME-GRACE-2026-10-06.json": "7466bf534c4480ad0d35509f85428969ebc5f9be052afd188fb305da39166d6a",
+        "config/trust-root-manifest.json": "ba0f2e8b06060443899eea95e3e39cf6103f814fd7e49ca5e4abb94b61c121d3",
+        "tests/pkg-q2-retry-time-grace.test.ts": "0ce67fe5ad49188d4f7b8b779216fd26d172c3f25dbdbb2da8e0e313fd81c903"
+      },
+      "digestNote": "computed from the tree of the commit preceding this record (changes against the new base) and compared with config/trust-root-manifest.json of the same tree (equal for every listed protected file); the manifest does not list audit checkpoints, so this record does not change it",
+      "reviewStatus": "PENDING_GOVERNED_REVIEW",
+      "cleanClaim": false,
+      "validationEvidence": "PENDING_FREEZE",
+      "notClaimed": "No CLEAN, merge, release or validation claim; the supervisor owns review, validation and merge"
+    }
+  ],
+  "status": "F10 re-application: changes applied; not clean; review pending"
 }
