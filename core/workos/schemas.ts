@@ -1,6 +1,7 @@
 // //TR: Bu dosya Work OS intake route gövdeleri için sıkı (additionalProperties:false) Ajv şemalarını ve doğrulayıcı fonksiyonları sağlar.
 import AjvModule from "ajv";
 import addFormatsModule from "ajv-formats";
+import {urlHasUserinfo} from "./types.js";
 // //TR: NodeNext altında CJS ajv default importu namespace olarak tiplenir; `.default` runtime ve typecheck için aynı değeri verir (strict-json-validator ile aynı desen).
 const Ajv = AjvModule.default;
 const addFormats = addFormatsModule.default;
@@ -31,6 +32,13 @@ export const missionTransitionSchema = {
 } as const;
 
 const compile = (s: object) => { const v = ajv.compile(s); return (x: unknown): {ok: true} | {ok: false; errors: string} => v(x) ? {ok: true} : {ok: false, errors: ajv.errorsText(v.errors, {separator: " | "})}; };
-export const validateProjectCreate = compile(projectCreateSchema);
+const validateProjectShape = compile(projectCreateSchema);
+// //TR: F-B1-004: userinfo içeren repository.url (user:pass@host, token@host) şema düzeyinde reddedilir; secret journal'a veya audit'e girmez.
+export const validateProjectCreate = (x: unknown): {ok: true} | {ok: false; errors: string} => {
+  const r = validateProjectShape(x);
+  if (!r.ok) return r;
+  const url = (x as {repository?: {url?: string}}).repository?.url;
+  return url !== undefined && urlHasUserinfo(url) ? {ok: false, errors: "repository.url must not contain credentials"} : r;
+};
 export const validateMissionCreate = compile(missionCreateSchema);
 export const validateMissionTransition = compile(missionTransitionSchema);
