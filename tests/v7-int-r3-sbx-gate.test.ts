@@ -55,6 +55,8 @@ function startRun(c: ReturnType<typeof setup>, f: FakeExecutors) {
 }
 const mkRunner = (c: ReturnType<typeof setup>, f: FakeExecutors, extra: Partial<RunnerOptions> = {}) =>
   new MissionRunner({store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: f.pair(), retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(`${c.dataDir}-sec`).options, ...extra});
+// yorum satırları ve satır içi // yorumları çıkarılmış kaynak (yalnız çalışan kod denetlenir)
+const code = (src: string) => src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*\*)/.test(l)).map(l => l.replace(/\s\/\/ .*$/, "")).join("\n");
 const provider = (over: Partial<SandboxProvider> = {}): SandboxProvider => ({...TEST_HOST_PASSTHROUGH_SANDBOX, id: "TEST_PROVIDER", ...over});
 
 describe("SBX-GATE ExecutionGate: single decision point", () => {
@@ -87,7 +89,9 @@ describe("SBX-GATE ExecutionGate: single decision point", () => {
     // tek kayıt yolu: buildServer opts.sandbox (programatik); packaged/CLI girişleri sağlayıcı vermez, env okunmaz
     expect(server).toContain("new ExecutionGate(opts.sandbox??null)");
     expect(server).not.toMatch(/process\.env\.[A-Z_]*SANDBOX/);
-    expect(entry).not.toContain("sandbox");
+    // packaged entry never passes a sandbox option (comments may mention it); no env var is read for one
+    expect(code(entry)).not.toMatch(/\bsandbox\s*:/i);
+    expect(code(entry)).not.toMatch(/SANDBOX/);
   });
 });
 
