@@ -1,9 +1,9 @@
 {
-  "//TR": "Bu kayıt V7-PKG-M1A-MODE paketinin (M1a ara modu: doğrulanmış sandbox yokken testler/önizleme NOT_EXECUTED, run statik güvenlik + bağımsız inceleme ile sürer, COMPLETE açık NOT_EXECUTED onayı ister, teslim NOT_VERIFIED etiketlenir) uygulama kanıtıdır; canlı merge DEĞİLDİR, hiçbir şey master'a veya remote'a yayınlanmadı. Claude CLEAN ilan etmez; bağımsız inceleyici inceler.",
+  "//TR": "Bu kayıt V7-PKG-M1A-MODE paketinin (M1a ara modu: doğrulanmış sandbox yokken testler/önizleme NOT_EXECUTED, run statik güvenlik + bağımsız inceleme ile sürer, COMPLETE açık NOT_EXECUTED onayı ister, teslim NOT_VERIFIED etiketlenir) uygulama kanıtıdır; canlı merge DEĞİLDİR, hiçbir şey master'a veya remote'a yayınlanmadı. Claude CLEAN ilan etmez; bağımsız inceleyici inceler. Cycle 2 (remediationCycle2): iki bağımsız eksen (SOURCE_GENERATION_COMPLETE / PRODUCT_VERIFIED), run.headSha'ya bağlı deterministik teslim artefaktı, runId + görev + commit + artefakt hash'ine bağlı tek kullanımlık NOT_VERIFIED kaynak teslimi kabulü, masaüstü teslim akışı ve ayrık UASCO Test kurulum varyantı.",
   "schemaVersion": "1.0.0",
   "checkpoint": "V7-PKG-M1A-MODE",
   "date": "2026-10-15",
-  "status": "IMPLEMENTED_NOT_REVIEWED (not clean)",
+  "status": "C2_IMPLEMENTED_NOT_REVIEWED (not clean)",
   "implementer": {
     "role": "UASCO IMPLEMENTER (CLAUDE_BUILDER)",
     "model": "claude-opus-5-5",
@@ -686,5 +686,152 @@
     "scripts/provision-electron.mjs downloaded the checksum-verified Electron 44.4.5 zip (sha256 11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d) into this fresh clone's .ai/cache (allowed).",
     "Existing tests updated to the mandated semantics (listed under tests.updatedForMandatedSemantics); no assertion about non-execution, budgets, gate refusal or BLOCKED completability was removed."
   ],
-  "status_final": "IMPLEMENTED, VERIFIED (canonical validation PASS; packaged build + install + sandboxed launch + acceptance walk 16/16 + uninstall/cleanup PASS), NOT REVIEWED. Claude does not self-declare CLEAN; a separate independent reviewer must review. Not a live merge; nothing pushed."
+  "status_final": "IMPLEMENTED, VERIFIED (canonical validation PASS; packaged build + install + sandboxed launch + acceptance walk 16/16 + uninstall/cleanup PASS), NOT REVIEWED. Claude does not self-declare CLEAN; a separate independent reviewer must review. Not a live merge; nothing pushed.",
+  "remediationCycle2": {
+    "cycle": 2,
+    "base": "f2f99a68aa104a2b9505a840ecc5e9c1b35f8ef9",
+    "reviewCycle1": "BLOCKED: RV-M1A-C1-F1 (P2 generated source not deliverable), RV-M1A-C1-OBS-1 (P3 acknowledgement freshness)",
+    "founderDecisions": [
+      "D-M1A-STATE-MODEL-2026-10-15 (FOUNDER-AUTHORIZATIONS.jsonl line 27)",
+      "D-M1A-ACCEPTANCE-CONDITIONS-2026-10-15 (FOUNDER-AUTHORIZATIONS.jsonl line 30)"
+    ],
+    "implementer": {
+      "role": "UASCO IMPLEMENTER (CLAUDE_BUILDER)",
+      "model": "claude-opus-5-5",
+      "identity": "UASCO Implementer (CLAUDE_BUILDER) <implementer@local.invalid>"
+    },
+    "commits": [
+      {
+        "id": "A+B+C",
+        "sha": "c0323ab",
+        "summary": "two evidence-derived axes; COMPLETE requires PRODUCT_VERIFIED; deterministic run delivery artifact (studio + store DELIVERY_ARTIFACT_PREPARED + routes); single-use bound SOURCE_DELIVERY_ACCEPTED; transition body accepts no acknowledgement"
+      },
+      {
+        "id": "A+B+C fix",
+        "sha": "43312d9",
+        "summary": "cat-file --batch input as Buffer; rewritten acceptedAt replays as tamper"
+      },
+      {
+        "id": "E",
+        "sha": "7c9283d",
+        "summary": "UASCO_BUILD_VARIANT=test isolated identity; release identity byte-for-byte unchanged; NSIS texts via PRODUCT_NAME/PRODUCT_FILENAME"
+      },
+      {
+        "id": "D",
+        "sha": "137f7f6",
+        "summary": "desktop run deliveries, bound acceptance dialog, hash-verified export bridge, COMPLETE only for PRODUCT_VERIFIED, UASCO Test AppUserModelID/window title"
+      },
+      {
+        "id": "F",
+        "sha": "15778de",
+        "summary": "new + updated tests; validation.json tests step append; trust-root reseal"
+      },
+      {
+        "id": "G",
+        "sha": "(this commit)",
+        "summary": "this checkpoint section"
+      }
+    ],
+    "stateModel": {
+      "sourceGeneration": "NOT_STARTED | IN_PROGRESS | SOURCE_GENERATION_COMPLETE | BLOCKED | FAILED; COMPLETE = run AWAITING_APPROVAL/SUCCEEDED + run.headSha != run.baseSha + IMPLEMENT evidence (exit 0) for head + non-BLOCKED SECURITY_REPORT + CLEAN REVIEW + CLEAN REPORT (all commitSha == run.headSha) + no BLOCKED TEST_SURFACE. Tree-level template check (head tree == base tree or == a root/template commit tree) is enforced at delivery preparation (NO_GENERATED_SOURCE).",
+      "productVerification": "NOT_VERIFIED | PRODUCT_VERIFIED | FAILED; PRODUCT_VERIFIED only when VERIFY_TESTS and REGRESSION_TESTS for head carry sandboxProviderId (written by the runner only after ExecutionGate.authorize allowed; gate semantics unchanged), both exit 0, TEST_SURFACE executedTests > 0, no BLOCKED surface, no test/harness change needing acknowledgement. Otherwise NOT_VERIFIED with reason (NOT_EXECUTED:SANDBOX_UNAVAILABLE, NOT_EXECUTED:TESTS_NOT_REACHED, SANDBOX_ATTESTATION_MISSING, ZERO_TESTS_EXECUTED, EXECUTED_TEST_COUNT_UNKNOWN, TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION, TEST_SURFACE_BLOCKED:*) or FAILED (TESTS_FAILED). Unreachable in M1a (no provider class in production).",
+      "complete": "completionEvidence(run) takes no acknowledgement argument: FX-1 evidence + PRODUCT_VERIFIED (409 COMPLETION_PRODUCT_NOT_VERIFIED). Cycle-1 notExecutedAcknowledgement COMPLETE path and REL-FX c4 acknowledged COMPLETE removed (schema 400 on any acknowledgement in a transition body). Completion record = {headSha, reportEvidenceId, reviewEvidenceId, securityEvidenceId, productVerification:{state, verifyEvidenceId, regressionEvidenceId, testSurfaceEvidenceId}}; replay re-derives and byte-compares; any record with acknowledgement fields is tamper.",
+      "sourceDeliveryChoice": "Mission stays REPORTING and the run stays AWAITING_APPROVAL; the acceptance is a separate journal entry SOURCE_DELIVERY_ACCEPTED on the run (run.sourceDelivery). No new mission status was added (core/mission state machine untouched), so no protected file outside the allowed set changed. deriveOutcomes: completionMode NOT_COMPLETED, release reason SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED, sourceDelivery.state SOURCE_DELIVERY_ACCEPTED, productVerification unchanged.",
+      "labels": {
+        "SOURCE_GENERATION_COMPLETE": "SOURCE_GENERATION_COMPLETE — Kaynak kod üretildi",
+        "NOT_VERIFIED": "NOT_VERIFIED — Ürün doğrulanmadı (testler çalıştırılmadı: sandbox yok)",
+        "accepted": "Kaynak teslimi kabul edildi — ürün DOĞRULANMADI",
+        "projectExport": "NO_RUN/NOT_VERIFIED — Proje dışa aktarımı; bir koşu teslimi değildir, ürün doğrulanmadı"
+      }
+    },
+    "deliveryArtifact": {
+      "objects": "run workspace objects read only through GIT_ALTERNATE_OBJECT_DIRECTORIES (workspace config/hooks never loaded; alternates with their own alternates skipped), copied with pack-objects into the managed repo object store, ref refs/uasco/runs/<runId> via update-ref; connectivity re-checked without alternates; spawnGitSync (isolated global/system config, empty hooksPath) + core.fsmonitor=false + empty core.attributesFile; ls-tree / cat-file --batch apply no filters/textconv.",
+      "archive": "stored ZIP (method 0), entries sorted bytewise, DOS time/date 0, modes 0100644/0100755/0120777, names source/<path> + README.md + VERIFICATION_STATUS.json (schemaVersion 2: runId, missionId, projectId, sourceCommit, treeSha, baseCommit, sourceGeneration, productVerification + reason, reviewVerdict + reviewEvidenceId, securitySummary, testsExecuted, notExecutedReason, labels). No timestamps, no machine paths, Founder acceptance NOT inside. Gitlinks omitted. Whole archive secret-scanned (EXPORT_BLOCKED_SECRET 409).",
+      "record": "DELIVERY_ARTIFACT_PREPARED {runId, missionId, sourceCommit, treeSha, exportArtifactHash, artifactPath=deliveries/<runId>/<hash>.zip}; re-prepare of the same run is idempotent (identical hash, no new journal entry); after acceptance re-prepare is refused (DELIVERY_ALREADY_ACCEPTED).",
+      "refusals": "NO_GENERATED_SOURCE (head == base, head tree == base tree or == a root/template commit tree), SOURCE_GENERATION_NOT_COMPLETE, DELIVERY_SOURCE_UNAVAILABLE.",
+      "reverify": "POST /v1/work-runs/:id/delivery/export and /accept re-hash the file against the record (409 DELIVERY_ARTIFACT_HASH_MISMATCH / DELIVERY_ARTIFACT_MISSING); the desktop export bridge (main.mjs uasco:export-delivery) checks the record shape, realpath under <data>/deliveries, sha256 again before writing and the written copy afterwards."
+    },
+    "acceptance": {
+      "object": "exactly {runId, missionId, sourceCommit, exportArtifactHash, acknowledgeNotExecuted:true} (+ testChangesAcknowledgement {acknowledgeTestChanges:true, testSurfaceSha256} when tests/harness changed); every field must equal the current DELIVERY_ARTIFACT_PREPARED record and the run; mission REPORTING, run AWAITING_APPROVAL and the mission's latest run; not PRODUCT_VERIFIED.",
+      "refusals": "409 DELIVERY_ACCEPTANCE_MISMATCH (any field, other run, other/stale artifact), DELIVERY_ALREADY_ACCEPTED (second use), DELIVERY_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT, DELIVERY_ARTIFACT_NOT_PREPARED, SOURCE_GENERATION_NOT_COMPLETE, DELIVERY_NOT_LATEST_RUN, DELIVERY_MISSION_NOT_REPORTING, DELIVERY_RUN_NOT_AWAITING_APPROVAL, DELIVERY_PRODUCT_VERIFIED_USE_COMPLETE; malformed body 400; journal unchanged in every case.",
+      "record": "SOURCE_DELIVERY_ACCEPTED {runId, missionId, sourceCommit, exportArtifactHash, acknowledgements:{notExecuted:{acknowledgeNotExecuted:true, productVerification:NOT_VERIFIED, reason, notExecutedEvidenceIds}, testChanges?}, acceptedAt == entry.at}; replay converts the record back to the input, re-runs the gate against the state at that point and byte-compares (forged/reused/altered entries are tamper)."
+    },
+    "desktop": "Studio > Teslim: 'Koşu teslimleri' lists SOURCE_GENERATION_COMPLETE runs (runId, sourceCommit, exportArtifactHash, file state) with 'Teslim paketini hazırla', acceptance dialog (runId, mission, commit, artifact hash, not-executed statement, changed tests, one checkbox per acknowledgement) and 'Teslim paketini dışa aktar' (after acceptance); other runs only with both axis labels; checkbox state keyed by runId|missionId|sourceCommit|exportArtifactHash|testSurfaceSha256 and reset on change (RV-M1A-C1-OBS-1); mission detail / inbox show no COMPLETE button unless PRODUCT_VERIFIED (honest note + axis labels instead); default project export titled/labelled NO_RUN/NOT_VERIFIED; Settings 'Sandbox: UNAVAILABLE — M1a modu' unchanged; focus moved to the result block after every action.",
+    "testVariant": {
+      "env": "UASCO_BUILD_VARIANT=test",
+      "appId": "com.uasco.desktop.test",
+      "productName": "UASCO Test",
+      "artifact": "UASCO-Test-Setup-<version>-win-x64.exe",
+      "uninstallKey": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\56562352-dafd-5976-a98b-1a7e1e03020d (release: c08a2cf2-0094-569e-be97-c685aa0f7e0b)",
+      "installDir": "%LOCALAPPDATA%\\Programs\\UASCO Test (or /D)",
+      "userData": "%APPDATA%\\UASCO Test",
+      "window": "title suffix ' — UASCO Test', AppUserModelID com.uasco.desktop.test",
+      "release": "no variable => static config object returned as-is, merged config and staged package.json byte-identical to the pre-c2 values (tested)"
+    },
+    "protectedFiles": "per commit protectedChangeViolations vs 312fb6d:config/protected-paths.json: only apps/control-api/src/server.ts, apps/desktop/main.mjs, apps/desktop/preload.mjs, apps/desktop/renderer/app.js, config/validation.json, config/trust-root-manifest.json (FA-V2-PRODUCT); scripts/claude-builder-broker.mjs untouched; execution-gate.ts, config/builder-execution-policy.json, config/environment-policy.json, automation/lib/** untouched; trust-root resealed in each commit touching a protected file (A+B+C, D, F, G n/a).",
+    "tests": {
+      "new": [
+        "tests/v7-m1a-c2-delivery.test.ts (8)",
+        "tests/v7-m1a-c2-test-variant.test.ts (5)"
+      ],
+      "updated": [
+        "tests/v7-m1a-mode.test.ts (never-executed marker / no child process for the test command / no budget / reviewer statement kept; COMPLETE refused with or without acknowledgement; source delivery replaces the cycle-1 path; forged cycle-1 COMPLETE entry is tamper)",
+        "tests/v7-m1a-desktop.test.ts (15: COMPLETE not offered for NOT_VERIFIED, delivery panel, acceptance dialog exact object, OBS-1 key reset, export bridge, main.mjs pure blocks + allow-lists)",
+        "tests/v7-relfx-1-completion.test.ts (COMPLETE needs PRODUCT_VERIFIED; fixture prints a vitest summary run only by the TEST provider)",
+        "tests/v7-relfx-c4-remediation.test.ts (S1-S4 kept on the source-delivery gate; COMPLETE refused for test changes)",
+        "tests/v7-ps1a-project-studio.test.ts (default export NO_RUN/NOT_VERIFIED)",
+        "tests/v7-b5-work-screens.test.ts (inbox accept only for PRODUCT_VERIFIED)",
+        "tests/v7-ps1b-project-studio-ui.test.ts (preload exportDelivery; invoke count 9)"
+      ],
+      "validationJson": "two files appended at the end of the single 'tests' step; 4f24820 entries an exact prefix; 41 steps (unchanged)"
+    },
+    "verifyGates": {
+      "tsc": "npx tsc --noEmit => exit 0",
+      "v7Vitest": "env -u PSModulePath npx vitest run tests/v7-*.test.ts => 39 files, 703 passed, 2 skipped, 1 failed = v7-b2 trust-root seal of config/validation.json before the F reseal; after reseal v7-b2 21/21 PASS",
+      "smokeControlApi": "PASS",
+      "desktopSelftest": "V6_APPS_CONTROL_DESKTOP_SELFTEST: PASS 93/93",
+      "trComments": "TR_VALIDATION: PASS",
+      "secretSanity": "SECRET_SANITY: PASS",
+      "verifyTrustRoot": "TRUST_ROOT_VERIFY: PASS",
+      "canonical": "run 1: tests step 2 failed (v7-sbx8-agent-config git import 'Test timed out in 5000ms', v7-sbx8-reviewer edits-tracked-file 8235 ms > 5000 ms) under parallel load -> both files rerun individually 29/29 PASS; run 2 (full canonical, no other load): CANONICAL_VALIDATION: PASS exit 0, tests step 77 files 918 passed 2 skipped; every step < 600 s (max 433.68 s); limits not edited"
+    },
+    "packagedAcceptance": {
+      "variant": "TEST only (release variant never built, installed or launched)",
+      "ebCache": "pre-seeded from C:/Users/salim/UASCO-wt/m0-build-c060ed3/eb-cache after re-verifying 7zip-win-x64.tar.gz db50b643...9f33 (7zip@1.0.1) and nsis-bundle-3.12.tar.gz 56997fde...82f4 (nsis@1.2.1) against app-builder-lib dist/toolsets checksums, and every extracted file against a fresh extraction of the verified tarballs (identical); build log shows no download",
+      "build": {
+        "command": "UASCO_BUILD_VARIANT=test UASCO_BUILD_OUT_DIR=C:/Users/salim/UASCO-wt/m1a2-build node scripts/build-installer.mjs",
+        "artifact": "C:/Users/salim/UASCO-wt/m1a2-build/dist-installer/UASCO-Test-Setup-0.7.0-dev.1-win-x64.exe",
+        "bytes": 110687738,
+        "sha256": "1e416cc9c43a5938b70d4540782d6f6706138531196b452e8860b1bb18585a8b",
+        "signed": false,
+        "electron": "44.4.5"
+      },
+      "hostPrecheck": "HKCU Uninstall DisplayName^UASCO: none (13 entries total); %APPDATA%\\UASCO and %APPDATA%\\UASCO Test absent; no FOUNDER_INSTALL_PRESENT",
+      "install": "node harness C:/Users/salim/UASCO-wt/m1a2-test/harness/c2-install-harness.mjs: '/S /UASCO_TEST_NO_SHORTCUTS --no-desktop-shortcut /D=C:\\Users\\salim\\UASCO-wt\\m1a2-test\\install' exit 0; key 56562352-... DisplayName 'UASCO Test 0.7.0-dev.1 (unsigned TEST build)', HKCU\\Software\\<guid> InstallLocation = the test dir; release key absent; 'UASCO Test.exe' present; TEMP/TMP = m1a2-test/tmp",
+      "walk": "C:/Users/salim/UASCO-wt/m1a2-test/harness/c2-walk.mjs (sandboxed, --user-data-dir=m1a2-test/userdata, loopback CDP 9433, TEMP/TMP=m1a2-test/tmp): 21/21 PASS — process 'UASCO Test', window title '... — UASCO Test'; health VERIFIED; /v1/agents 599/363; sandbox UNAVAILABLE + Settings 'Sandbox: UNAVAILABLE — M1a modu'; both profiles LOGIN_REQUIRED under the test userData; template create 201; dev-run 409 SANDBOX_UNAVAILABLE; run BLOCKED at IMPLEMENT CLAUDE_PROFILE_LOGIN_REQUIRED; axes BLOCKED / NOT_VERIFIED / NOT_COMPLETED; /v1/deliveries has no SOURCE_GENERATION_COMPLETE run; prepare 409 SOURCE_GENERATION_NOT_COMPLETE (no deliveries dir written); acceptance 409 DELIVERY_RUN_NOT_AWAITING_APPROVAL; renderer POST to /delivery/export rejected INVALID_API_PATH; default export NO_RUN/NOT_VERIFIED (VERIFICATION_STATUS kind PROJECT_EXPORT); Studio > Teslim shows 'SOURCE_GENERATION_COMPLETE durumunda koşu yok' and the blocked run BLOCKED/NOT_VERIFIED, no prepare/accept/export action; no COMPLETE/PRODUCT_VERIFIED/PASSED surface; focus never BODY after the first input; no renderer exceptions; quit via window.close; real user-data folders absent after quit",
+      "uninstall": "'Uninstall UASCO Test.exe' /S --keep-shortcuts exit 0; uninstall key + HKCU\\Software\\<guid> removed; install dir removed",
+      "cleanup": "own m1a2-test/userdata and tmp removed; final assertions PASS: %APPDATA%\\UASCO, %APPDATA%\\UASCO Test, %LOCALAPPDATA%\\Programs\\UASCO(Test), updater residue, UASCO/UASCO Test shortcuts all absent; HKCU Uninstall UASCO entries: 0",
+      "reports": "C:/Users/salim/UASCO-wt/m1a2-test/reports (precheck.json, install.json, precheck-installed.json, walk.json, uninstall.json, cleanup.json), screens/*.png; build log C:/Users/salim/UASCO-wt/m1a2-build-log.txt",
+      "quarantine": "C:/Users/salim/UASCO-recovery/quarantine/ never read, used, restored or deleted; stash 'c2-attempt1-partial' inspected read-only (diff) and kept"
+    },
+    "liveMergeDraft": {
+      "note": "for the Founder package after an independent CLEAN review (condition 8); the supervisor owns merge/push",
+      "rollback": "revert the cycle-2 commits (c0323ab..G) or reset the integration branch to f2f99a6; desktop/backend changes are additive (new journal entry types only appear after a delivery is prepared/accepted); a journal containing DELIVERY_ARTIFACT_PREPARED / SOURCE_DELIVERY_ACCEPTED entries would replay as UNKNOWN_TYPE tamper on a pre-c2 build, so rollback after real use needs the journal backed up first (Founder M0 c060ed3 has no runner, so no existing journal is affected by the stricter COMPLETE replay)"
+    },
+    "knownLimits": [
+      "No verified SandboxProvider exists; PRODUCT_VERIFIED and mission COMPLETE are unreachable in M1a by design.",
+      "Packaged acceptance cannot reach SOURCE_GENERATION_COMPLETE without the Founder logging in to the two UASCO Claude profiles; the full prepare -> accept -> export path on a real run is covered by API/desktop tests with fake executors and by the Founder steps.",
+      "sourceGeneration COMPLETE is evidence-based (builder commit != base); the tree-level template check runs at delivery preparation (an empty builder commit, possible only with the fake executor because the real builder refuses BUILDER_PRODUCED_NO_CHANGE, shows SOURCE_GENERATION_COMPLETE but cannot be delivered: NO_GENERATED_SOURCE).",
+      "Delivery export needs the run workspace objects the first time (alternates); once prepared the objects live in the managed repo under refs/uasco/runs/<runId>.",
+      "Large source trees are bounded by the export limits (no zip64)."
+    ],
+    "deviations": [
+      "A, B and C committed together (c0323ab) because outcomes.ts/store.ts/server.ts carry all three gates; E was committed before D.",
+      "Canonical validation run 1 failed two 5 s-timeout tests in the tests step under load (not a tests-bs1 shard); recorded both runs, reran the two files individually (PASS) and then the full canonical (PASS); no limit edited.",
+      "Install harness: electron-builder stores the per-user InstallLocation under HKCU\\Software\\<guid>, not in the Uninstall key; the FOUNDER_INSTALL_PRESENT rule uses that effective location (else UninstallString dir); the first install report's installLocationIsTestDir=false reflects the old lookup, re-verified with precheck-installed.json.",
+      "NSIS include user-data texts now use ${PRODUCT_NAME}/${PRODUCT_FILENAME} (release text renders identically)."
+    ],
+    "founderAcceptanceSteps": "M1a (cycle 2) — KURUCU KABUL ADIMLARI (RELEASE kurulum paketi, Türkçe)\n\nÖNEMLİ: M1a modunda doğrulanmış bir sandbox YOKTUR. Projenin testleri ve canlı önizlemesi bu bilgisayarda HİÇ çalıştırılmaz. Bu yüzden M1a'da PRODUCT_VERIFIED ve görev COMPLETE durumu İMKÂNSIZDIR. Alabileceğiniz en ileri sonuç: \"SOURCE_GENERATION_COMPLETE — Kaynak kod üretildi\" + \"NOT_VERIFIED — Ürün doğrulanmadı (testler çalıştırılmadı: sandbox yok)\" ve kabulünüzden sonra \"Kaynak teslimi kabul edildi — ürün DOĞRULANMADI\".\n\nÖn koşul: Bu adımlar yalnız c2 için bağımsız review CLEAN olduktan ve canlı birleştirme paketi size sunulduktan sonra yapılır. TEST kurulumları (UASCO Test) tamamlanmıştır; kendi M0 kurulumunuzu bekletmeniz artık gerekmez.\n\n1) Kurulum / yükseltme (M0 üzerine)\n   - Size verilen RELEASE paketini (\"UASCO-Setup-<sürüm>-win-x64.exe\"; \"UASCO-Test-Setup\" DEĞİL) çift tıklayın. SmartScreen uyarısı beklenir (imzasız geliştirme sürümü).\n   - Mevcut M0 kurulum dizinini seçin (aynı dizin = yükseltme). Kullanıcı verileriniz %APPDATA%\\UASCO içinde korunur.\n   - Kurulumdan sonra UASCO açılır; pencere başlığında \"UASCO Test\" YAZMAMALIDIR (yazıyorsa yanlış paket kurulmuştur: durun ve bildirin).\n\n2) İki UASCO Claude profiline giriş (kişisel profil ASLA)\n   - UASCO > Ayarlar ekranını açın. \"Sandbox: UNAVAILABLE — M1a modu\" yazısını görmelisiniz.\n   - Ayarlar'da \"implementer\" ve \"reviewer\" profilleri için gösterilen komutları BİREBİR kopyalayın. Her biri şu biçimdedir:\n       $env:CLAUDE_CONFIG_DIR='C:\\Users\\salim\\AppData\\Roaming\\UASCO\\claude-profiles\\implementer'; claude\n       $env:CLAUDE_CONFIG_DIR='C:\\Users\\salim\\AppData\\Roaming\\UASCO\\claude-profiles\\reviewer'; claude\n     (Ekrandaki yol esastır; yukarıdaki yalnız örnektir.)\n   - Her komutu AYRI, yeni bir PowerShell penceresinde çalıştırın ve açılan Claude oturumunda giriş yapın; sonra pencereyi kapatın.\n   - Kişisel profilinizi (C:\\Users\\salim\\.claude) KULLANMAYIN. CLAUDE_CONFIG_DIR ayarlanmadan \"claude\" çalıştırmayın.\n   - Ayarlar'ı yenileyin: iki profil de giriş yapılmış görünmelidir (LOGIN_REQUIRED kalmamalı).\n\n3) Küçük bir görev çalıştırma\n   - Projeler > Yeni proje (şablon: web-node) oluşturun.\n   - İşler > Yeni görev: örn. başlık \"README açıklaması\", hedef \"README.md'ye uygulamanın amacını anlatan bir satır ekle\", risk R1.\n   - Görevi PREFLIGHT, sonra AUTHORIZED durumuna geçirin ve \"Koşuyu başlat\"a basın.\n   - Koşu IMPLEMENT -> VERIFY (testler NOT_EXECUTED) -> SECURITY -> REVIEW -> REGRESSION (NOT_EXECUTED) -> REPORT adımlarından geçip \"AWAITING_APPROVAL\" durumunda durur; görev REPORTING olur.\n   - Koşu kartında \"SOURCE_GENERATION_COMPLETE — Kaynak kod üretildi\" ve \"NOT_VERIFIED — Ürün doğrulanmadı (testler çalıştırılmadı: sandbox yok)\" etiketlerini görmelisiniz. COMPLETE düğmesi GÖRÜNMEZ (beklenen davranış).\n\n4) Teslim paketini hazırlama\n   - Projeler > projeniz > Stüdyo > \"Teslim\" sekmesi > \"Koşu teslimleri\".\n   - Koşunuzun kartında \"Teslim paketini hazırla\" düğmesine basın.\n   - Kartta şunları okuyup not edin: Koşu (runId, \"run_...\" ile başlar), Görev (msn_...), Kaynak commit (40 karakter), Artefakt hash'i (SHA-256, 64 karakter). Dosya durumu \"hash kayıtla eşleşiyor\" olmalıdır.\n   - Şablonla aynı (gerçek kod üretmemiş) bir koşu \"NO_GENERATED_SOURCE\" ile reddedilir; bu doğru davranıştır.\n\n5) NOT_VERIFIED olarak kabul\n   - \"Kaynak teslimini kabul et…\" düğmesine basın. Açılan pencerede runId, görev, commit ve artefakt hash'inin 4. adımda not ettiklerinizle AYNI olduğunu doğrulayın.\n   - \"Testlerin çalıştırılmadığını ve ürünün DOĞRULANMADIĞINI (NOT_VERIFIED) onaylıyorum.\" kutusunu işaretleyin. Değişen test/harness listesi gösterilirse inceleyip ikinci kutuyu da işaretleyin.\n   - \"Kaynak teslimini kabul et (ürün DOĞRULANMADI)\" düğmesine basın ve onay penceresinde hedefin \"<runId> · <commit> · <hash>\" olduğunu kontrol edip onaylayın.\n   - Kartta \"Kaynak teslimi kabul edildi — ürün DOĞRULANMADI\" etiketi görünür. Görev REPORTING'de kalır; COMPLETE OLMAZ. Bu kabul yalnız bu koşu + görev + commit + artefakt için geçerlidir ve tekrar kullanılamaz.\n\n6) Dışa aktarma ve hash doğrulama\n   - \"Teslim paketini dışa aktar\" düğmesine basın, kaydetme konumunu seçin (örn. Belgeler). UASCO dosyanın hash'ini yazmadan önce ve yazdıktan sonra yeniden doğrular.\n   - PowerShell'de:  Get-FileHash -Algorithm SHA256 \"<kaydettiğiniz dosya yolu>\"\n   - Çıkan Hash değeri (büyük/küçük harf farkı önemsiz) 4. adımdaki Artefakt hash'i ile BİREBİR aynı olmalıdır. Farklıysa dosyayı kullanmayın ve bildirin.\n\n7) VERIFICATION_STATUS.json'u okuma\n   - ZIP'i açın. Kökte README.md, VERIFICATION_STATUS.json ve source\\ klasörü (üretilen kaynak kod) bulunur.\n   - VERIFICATION_STATUS.json içinde şunları kontrol edin: runId, missionId, sourceCommit ve treeSha 4. adımdakilerle aynı; \"sourceGeneration\": \"SOURCE_GENERATION_COMPLETE\"; \"productVerification\": \"NOT_VERIFIED\"; \"productVerificationReason\": \"NOT_EXECUTED:SANDBOX_UNAVAILABLE\"; \"testsExecuted\": false; \"reviewVerdict\": \"CLEAN\".\n   - Kabulünüz bu dosyanın İÇİNDE DEĞİLDİR (hash sabit kalsın diye); kabul UASCO kayıt defterinde (SOURCE_DELIVERY_ACCEPTED) tutulur.\n\nAçıkça: M1a'da PRODUCT_VERIFIED ve COMPLETE İMKÂNSIZDIR. Statik güvenlik taraması ve bağımsız inceleme ürünün çalıştığını göstermez; ürün doğrulaması ancak gerçek M1'de doğrulanmış sandbox ile yapılabilir. Proje (Studio) > \"Proje dışa aktarımı\" ayrıca mevcuttur ama her zaman \"NO_RUN/NOT_VERIFIED\" etiketlidir ve bir koşu teslimi DEĞİLDİR.\n",
+    "status": "IMPLEMENTED, VERIFIED (tsc, v7 suite, smoke, desktop selftest, TR, secret sanity, trust root, canonical validation PASS; TEST-variant packaged build + install + sandboxed walk 21/21 + uninstall + cleanup PASS), NOT REVIEWED, NOT CLEAN"
+  }
 }
