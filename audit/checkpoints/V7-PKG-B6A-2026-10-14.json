@@ -1,0 +1,46 @@
+{
+  "//TR": "Bu checkpoint, V7 B6A Control Tower 2B kampüs modülü paketini (kabuğa bağlanmamış, bağımlılıksız renderer modülü) ve gözlenen komut sonuçlarını kaydeder; temiz değildir, inceleme beklemektedir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-B6A-CONTROL-TOWER-2D-CAMPUS",
+  "date": "2026-10-14",
+  "parent": "8cd05f71bb0929bc03d028b001b3ac7bb99b86fd",
+  "branch": "v7/product-b6a",
+  "implementer": "CLAUDE_BUILDER",
+  "authorizationRecords": [
+    "audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json",
+    "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
+  ],
+  "status": "IMPLEMENTED, NOT CLEAN; review pending",
+  "filesChanged": [
+    "apps/desktop/renderer/control-tower/model.js (new)",
+    "apps/desktop/renderer/control-tower/render-svg.js (new)",
+    "apps/desktop/renderer/control-tower/list-view.js (new)",
+    "apps/desktop/renderer/control-tower/locales.js (new; tr/en dictionary + esc/tr/truncate helpers)",
+    "apps/desktop/renderer/control-tower/model.d.ts, render-svg.d.ts, list-view.d.ts, locales.d.ts (new; type declarations for the tsc gate only)",
+    "apps/desktop/renderer/control-tower/README.md (new)",
+    "tests/v7-b6a-control-tower.test.ts (new)",
+    "config/validation.json (protected, authorized: one test file appended to the existing tests step)",
+    "config/trust-root-manifest.json (protected, authorized: reseal via scripts/generate-trust-root.mjs)",
+    "audit/checkpoints/V7-PKG-B6A-2026-10-14.json (new)"
+  ],
+  "commands": [
+    {"command": "npx tsc --noEmit", "exitCode": 0},
+    {"command": "node node_modules/vitest/vitest.mjs run tests/v7-b6a-control-tower.test.ts", "exitCode": 0, "tests": "14 passed (14)"},
+    {"command": "node node_modules/vitest/vitest.mjs run tests/v7-b6a-control-tower.test.ts tests/pkg-c-lf-electron-smoke.test.ts tests/v7-b9-target-catalog.test.ts", "exitCode": 0, "testFiles": "3 passed (3)", "tests": "31 passed (31)", "note": "pkg-c-lf-electron-smoke references apps/desktop; v7-b9-target-catalog covers the catalog the fixture reads"},
+    {"command": "node scripts/validate-tr-comments.mjs", "exitCode": 0, "result": "TR_VALIDATION: PASS"},
+    {"command": "node scripts/secret-sanity.mjs", "exitCode": 0, "result": "SECRET_SANITY: PASS"},
+    {"command": "node scripts/validate-mechanical-closure.mjs", "exitCode": 0, "result": "PASS files=90"},
+    {"command": "node scripts/v6-apps-control-desktop-selftest.mjs", "exitCode": 0, "result": "PASS 93/93"},
+    {"command": "git add -A && git ls-files --eol | grep w/crlf", "exitCode": 1, "result": "no output (no CRLF working-tree files); grep exit 1 means no match"},
+    {"command": "node scripts/generate-trust-root.mjs", "exitCode": 0, "result": "TRUST_ROOT_MANIFEST_GENERATED files=364"},
+    {"command": "node scripts/verify-trust-root.mjs", "exitCode": 0, "result": "TRUST_ROOT_VERIFY: PASS", "note": "run before commit; re-run after commit is reported in the implementer output, not recorded here"}
+  ],
+  "notRun": "scripts/run-validation.mjs and the whole vitest suite were intentionally not run; the reviewer runs them independently. The SVG was not rendered in a browser (the preview pane cannot display local files as pages), so the visual match to the reference image is unverified; tests check structure only.",
+  "deviations": [
+    "Added .d.ts declaration files next to the .js modules because tsconfig is strict without allowJs and the new test imports the JS modules (apps/**/*.ts includes them); they carry //TR and no runtime behavior.",
+    "catalog.roles is a {guildId: count} map (the brief said 'count per guild'); a missing or invalid count makes that building UNAVAILABLE with null counts.",
+    "Without a catalog the model has no districts or buildings (no ids exist to draw, none are invented); only the tower and a notice are rendered.",
+    "Live runs without a catalog guildId are not attributed to a building (no role-to-guild mapping is supplied); they are counted only in totals.unattributedActiveRuns."
+  ],
+  "reviewStatus": "not clean; review pending"
+}

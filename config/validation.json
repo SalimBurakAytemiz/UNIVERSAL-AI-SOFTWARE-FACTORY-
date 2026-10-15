@@ -318,7 +318,8 @@
         "tests/v7-b11a-company-os.test.ts",
         "tests/v7-wfr03-role-registry.test.ts",
         "tests/v7-wfr04a-skill-academy.test.ts",
-        "tests/v7-wfr04a-c2-remediation.test.ts"
+        "tests/v7-wfr04a-c2-remediation.test.ts",
+        "tests/v7-b6a-control-tower.test.ts"
       ],
       "requiresDependencies": true
     },
