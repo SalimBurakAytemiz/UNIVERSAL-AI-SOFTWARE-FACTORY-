@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import cp from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {safeChildEnv} from "../../automation/lib/env-policy.mjs";
-import {commitBuilderOutput, gitControlDigest} from "./builder-output.js";
+import {agentConfigInWorkspace, commitBuilderOutput, gitControlDigest} from "./builder-output.js";
 import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
 import {CLAUDE_ISOLATION_FLAGS, claudeProfileForRun, withClaudeProfileEnv} from "./claude-profiles.js";
 import type {ClaudeProfileOptions} from "./claude-profiles.js";
@@ -176,10 +176,13 @@ export class EditOnlyImplementer implements ImplementerAdapter {
   async implement(workspace: string, spec: MissionSpec, ctx: ExecContext): Promise<ImplementResult> {
     const startSha = spec.startSha ?? "";
     const before = gitControlDigest(workspace);
-    const p = this.makeProcess(workspace, spec);
+    // SBX-8 (RV-INT-R3-C1-F1): çalışma alanında ajan yapılandırması (ör. yönetilmeyen depo yolundan gelen .claude/settings.json, .mcp.json) varsa builder hiç başlatılmaz.
+    const agentConfig = agentConfigInWorkspace(workspace, this.envPolicyFile);
+    const p = agentConfig === null ? {refuse: "WORKSPACE_AGENT_CONFIG_SCAN_FAILED"} : agentConfig.length ? {refuse: "WORKSPACE_CONTAINS_AGENT_CONFIG"} : this.makeProcess(workspace, spec);
     if ("refuse" in p) {
       const at = new Date().toISOString();
-      return {exitCode: null, blockReason: p.refuse, log: `NOT_EXECUTED: ${p.refuse} (builder not started)\n`, argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
+      const detail = agentConfig?.length ? `\nagent config in workspace:\n${agentConfig.slice(0, 100).map(f => `  ${f}`).join("\n")}` : "";
+      return {exitCode: null, blockReason: p.refuse, log: `NOT_EXECUTED: ${p.refuse} (builder not started)${detail}\n`, argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
     }
     const po = {cwd: workspace, env: p.env, timeoutMs: ctx.timeoutMs, input: p.input, shouldAbort: ctx.shouldAbort};
     const r = p.nodeScript ? await runNodeScript(p.argv[0], p.argv.slice(1), po) : await runProcess(p.argv, po);

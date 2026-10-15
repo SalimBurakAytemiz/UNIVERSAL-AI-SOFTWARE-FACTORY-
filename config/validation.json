@@ -347,7 +347,8 @@
         "run",
         "tests/v7-sbx8-claude-profiles.test.ts",
         "tests/v7-sbx8-broker.test.ts",
-        "tests/v7-sbx8-reviewer.test.ts"
+        "tests/v7-sbx8-reviewer.test.ts",
+        "tests/v7-sbx8-agent-config.test.ts"
       ],
       "requiresDependencies": true
     },

@@ -284,9 +284,12 @@ app.post<{Params:{id:string}}>("/v1/projects/:id/import",wos(async(req,reply)=>{
   let release:(()=>void)|null=null;try{release=acquireProcessLock(path.join(dir,"import.lock"),`import-${crypto.randomBytes(4).toString("hex")}`)}catch{return reply.code(409).send({error:"IMPORT_IN_PROGRESS"})}
   const staging=st.stagingDir(p.projectId),final=st.managedRepoPath(p.projectId);
   try{
-    const headSha=b.kind==="git"?st.importGitInto(staging,b.path):st.importZipInto(staging,b.path);
+    const imported=b.kind==="git"?st.importGitInto(staging,b.path):st.importZipInto(staging,b.path),headSha=imported.headSha,quarantined=imported.agentConfigQuarantine;
     fs.rmSync(final,{recursive:true,force:true});fs.renameSync(staging,final);
-    try{const project=getStore().setProjectRepository(scope,p.projectId,{path:final,managed:true},actor,{kind:b.kind,headSha});audit("WORKOS_PROJECT_IMPORTED",{actor,projectId:p.projectId,kind:b.kind,headSha});return reply.code(200).send({project,import:{kind:b.kind,headSha}})}
+    // //TR: SBX-8: karantinaya alınan ajan yapılandırma dosyalarının kanıtı (yol, desen, boyut, sha256) proje dizinindeki manifest'e ve audit'e yazılır; yanıt yalnız karantina varsa alanı taşır.
+    const qEvidence=quarantined.length?{count:quarantined.length,headSha,files:quarantined.slice(0,500),truncated:quarantined.length>500,storedUnder:"projects/<projectId>/quarantine/agent-config/<sha256>"}:null;
+    if(qEvidence){fs.writeFileSync(path.join(dir,"agent-config-quarantine.json"),JSON.stringify({"//TR":"SBX-8 içe aktarma karantina kanıtı; dosyalar yönetilen depoya girmedi.",importedAt:new Date().toISOString(),kind:b.kind,...qEvidence},null,2)+"\n");audit("WORKOS_PROJECT_IMPORT_AGENT_CONFIG_QUARANTINED",{actor,projectId:p.projectId,kind:b.kind,headSha,count:quarantined.length,paths:quarantined.slice(0,100).map(q=>q.path)})}
+    try{const project=getStore().setProjectRepository(scope,p.projectId,{path:final,managed:true},actor,{kind:b.kind,headSha});audit("WORKOS_PROJECT_IMPORTED",{actor,projectId:p.projectId,kind:b.kind,headSha});return reply.code(200).send({project,import:{kind:b.kind,headSha,...(qEvidence?{agentConfigQuarantine:qEvidence}:{})}})}
     catch(e){fs.rmSync(final,{recursive:true,force:true});throw e}
   }catch(e){if(e instanceof StudioError)audit("WORKOS_PROJECT_IMPORT_REJECTED",{actor,projectId:p.projectId,kind:b.kind,error:e.code,reason:e.reason??null});throw e}
   finally{try{fs.rmSync(staging,{recursive:true,force:true})}catch{/* staging */}try{release?.()}catch{/* kilit */}}

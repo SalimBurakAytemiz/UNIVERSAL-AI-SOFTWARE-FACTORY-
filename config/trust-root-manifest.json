@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-15T09:07:23.895Z",
+  "generatedAt": "2026-10-15T09:14:45.176Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -66,7 +66,7 @@
     },
     {
       "path": "apps/control-api/src/server.ts",
-      "sha256": "bcbd768c2d2ad44833c7dc2baffc05bc9059c2e7e2ba7cdf77a274db754e1c4b"
+      "sha256": "0578b19ad2aca669171963664ea98c61373982d654623911b3af737f678811be"
     },
     {
       "path": "apps/desktop/main.mjs",
@@ -430,7 +430,7 @@
     },
     {
       "path": "config/validation.json",
-      "sha256": "c0086785c4e30f291a7d8e325b29f3fb7a93d964600188d8f837faebe0a67ea0"
+      "sha256": "9125c471b97309a57d8291ca66dc51a693d1d553a9f94541e9106945ebe34d84"
     },
     {
       "path": "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",

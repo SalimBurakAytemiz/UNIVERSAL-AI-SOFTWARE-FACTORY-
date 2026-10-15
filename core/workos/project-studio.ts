@@ -10,6 +10,8 @@ import {renderTemplate} from "./project-templates.js";
 import {DEFAULT_ZIP_LIMITS, ZipError, listZipEntries, readZipEntry} from "./zip.js";
 import type {ZipLimits} from "./zip.js";
 import {canonicalPath, managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
+import {agentConfigPattern} from "./agent-config-paths.js";
+import type {AgentConfigPattern} from "./agent-config-paths.js";
 
 // Sabit kodlu hata: yol, stack veya secret taşımaz; HTTP durumu route tarafından aynen kullanılır.
 export class StudioError extends Error {
@@ -26,6 +28,10 @@ const sha256 = (b: Buffer | string) => crypto.createHash("sha256").update(b).dig
 const under = (root: string, p: string) => { const rel = path.relative(root, p); return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel)); };
 
 export interface StudioOptions { dataDir: string; envPolicyFile: string; zipLimits?: Partial<ZipLimits>; gitTimeoutMs?: number }
+// SBX-8: içe aktarmada yönetilen depo ağacından çıkarılan ajan yapılandırma dosyası (kanıt). İçerik <proje dizini>/quarantine/agent-config/<sha256> altında, özgün adı/uzantısı olmadan saklanır; hiçbir çalışma alanına girmez.
+export interface QuarantinedAgentConfig { path: string; pattern: AgentConfigPattern; kind: "file" | "symlink" | "other"; bytes: number; sha256: string }
+export interface ImportResult { headSha: string; agentConfigQuarantine: QuarantinedAgentConfig[] }
+export const AGENT_CONFIG_QUARANTINE_COMMIT = "Quarantine agent configuration files (.claude/**, .mcp.json, .claude.json, CLAUDE.md, CLAUDE.local.md) [UASCO SBX-8]";
 export interface FileEntry { name: string; type: "file" | "dir" | "symlink" | "other"; size: number | null }
 
 export class ProjectStudio {
@@ -100,22 +106,61 @@ export class ProjectStudio {
     return g.canonical;
   }
   stagingDir(projectId: string): string { return path.join(this.projectDir(projectId), `.staging-${crypto.randomBytes(6).toString("hex")}`); }
+  quarantineDir(projectId: string): string { return path.join(this.projectDir(projectId), "quarantine", "agent-config"); }
+  // İçerik adreslenen karantina kopyası (aynı içerik bir kez); staging'in kardeşi olan proje dizinine yazılır.
+  private quarantine(staging: string, rel: string, pattern: AgentConfigPattern, kind: QuarantinedAgentConfig["kind"], data: Buffer): QuarantinedAgentConfig {
+    const digest = sha256(data), dir = path.join(path.dirname(staging), "quarantine", "agent-config");
+    fs.mkdirSync(dir, {recursive: true});
+    try { fs.writeFileSync(path.join(dir, digest), data, {flag: "wx"}); } catch (e) { if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e; }
+    return {path: rel, pattern, kind, bytes: data.length, sha256: digest};
+  }
+  // Git içe aktarması: izlenen ajan yapılandırma dosyaları çalışma ağacından kaldırılır ve Studio kimliğiyle ayrı bir commit atılır; yeni HEAD bu dosyaları içermez (builder/reviewer klonlarına girmez).
+  private quarantineGitTree(staging: string): QuarantinedAgentConfig[] {
+    const ls = this.git(staging, ["-c", "core.quotePath=false", "ls-files", "-z", "--cached"]);
+    if (ls.status !== 0) throw new StudioError("IMPORT_FAILED", 422, "GIT_CLONE_FAILED");
+    const hits = String(ls.stdout ?? "").split("\0").filter(Boolean).map(rel => ({rel, pattern: agentConfigPattern(rel)})).filter((h): h is {rel: string; pattern: AgentConfigPattern} => h.pattern !== null);
+    if (!hits.length) return [];
+    const out: QuarantinedAgentConfig[] = [];
+    const root = path.resolve(staging);
+    for (const h of hits) {
+      const abs = path.resolve(root, ...h.rel.split("/"));
+      if (!under(root, abs) || abs === root) throw new StudioError("IMPORT_FAILED", 422, "AGENT_CONFIG_QUARANTINE_FAILED");
+      let st: fs.Stats | null = null;
+      try { st = fs.lstatSync(abs); } catch { st = null; }
+      if (st?.isSymbolicLink()) out.push(this.quarantine(staging, h.rel, h.pattern, "symlink", Buffer.from(fs.readlinkSync(abs), "utf8")));
+      else if (st?.isFile()) out.push(this.quarantine(staging, h.rel, h.pattern, "file", fs.readFileSync(abs)));
+      else out.push(this.quarantine(staging, h.rel, h.pattern, "other", Buffer.alloc(0)));
+    }
+    // .claude/** altındaki her şey ajan yapılandırmasıdır: yoldaki ilk .claude bileşeni (dizin/symlink) bütünüyle kaldırılır; diğerleri tek tek.
+    for (const h of hits) {
+      const segs = h.rel.split("/"), i = segs.findIndex(x => agentConfigPattern(x) === ".claude/**");
+      const target = path.resolve(root, ...(i >= 0 ? segs.slice(0, i + 1) : segs));
+      fs.rmSync(target, {recursive: true, force: true});
+    }
+    this.commitAll(staging, AGENT_CONFIG_QUARANTINE_COMMIT);
+    const after = this.git(staging, ["-c", "core.quotePath=false", "ls-files", "-z", "--cached"]);
+    if (after.status !== 0 || String(after.stdout ?? "").split("\0").filter(Boolean).some(rel => agentConfigPattern(rel) !== null)) throw new StudioError("IMPORT_FAILED", 422, "AGENT_CONFIG_QUARANTINE_FAILED");
+    return out;
+  }
 
   // git clone --no-local --no-hardlinks: orijinal depoya yazılmaz (upload-pack yalnız okur); origin uzak kaydı kaldırılır, yönetilen depo kaynağa geri bağlanmaz.
-  importGitInto(staging: string, rawSource: string): string {
+  importGitInto(staging: string, rawSource: string): ImportResult {
     const src = this.localSource(rawSource, "git");
     if (this.gitOk(src, ["rev-parse", "--verify", "HEAD^{commit}"]) === null) throw new StudioError("IMPORT_REJECTED", 400, "IMPORT_SOURCE_NOT_A_REPOSITORY");
     fs.mkdirSync(path.dirname(staging), {recursive: true});
     const r = this.git(path.dirname(staging), ["clone", "--no-local", "--no-hardlinks", "--quiet", "--", src, staging]);
     if (r.status !== 0) throw new StudioError("IMPORT_FAILED", 422, "GIT_CLONE_FAILED");
     if (this.git(staging, ["remote", "remove", "origin"]).status !== 0) throw new StudioError("IMPORT_FAILED", 422, "GIT_CLONE_FAILED");
+    if (!SHA.test(this.gitOk(staging, ["rev-parse", "--verify", "HEAD^{commit}"]) ?? "")) throw new StudioError("IMPORT_FAILED", 422, "IMPORT_SOURCE_EMPTY");
+    // SBX-8: ajan yapılandırma dosyaları karantinaya alınır (kanıt kaydıyla); dönen HEAD karantina commit'idir.
+    const agentConfigQuarantine = this.quarantineGitTree(staging);
     const head = this.gitOk(staging, ["rev-parse", "--verify", "HEAD^{commit}"]);
     if (!head || !SHA.test(head)) throw new StudioError("IMPORT_FAILED", 422, "IMPORT_SOURCE_EMPTY");
-    return head;
+    return {headSha: head, agentConfigQuarantine};
   }
 
   // ZIP: önce bütün girdiler doğrulanır (zip-slip, symlink, .git, yineleme, boyut, sayı, CRC); hiçbiri geçmezse diske tek bayt yazılmaz.
-  importZipInto(staging: string, rawSource: string): string {
+  importZipInto(staging: string, rawSource: string): ImportResult {
     const src = this.localSource(rawSource, "zip");
     if (fs.statSync(src).size > this.zipLimits.maxArchiveBytes) throw new StudioError("IMPORT_REJECTED", 400, "ZIP_TOO_LARGE");
     const buf = fs.readFileSync(src);
@@ -130,14 +175,18 @@ export class ProjectStudio {
     const strip = files.every(f => f.segments.length > 1 && f.segments[0] === first) ? 1 : 0;
     fs.mkdirSync(staging, {recursive: true});
     const root = path.resolve(staging);
+    const agentConfigQuarantine: QuarantinedAgentConfig[] = [];
     for (const f of files) {
       const target = path.resolve(root, ...f.segments.slice(strip));
       if (!under(root, target) || target === root) throw new StudioError("IMPORT_REJECTED", 400, "ZIP_PATH_TRAVERSAL");
+      // SBX-8: ajan yapılandırma girdileri depo ağacına hiç yazılmaz; içerikleri karantinaya alınır ve kanıt olarak kaydedilir.
+      const rel = f.segments.slice(strip).join("/"), pattern = agentConfigPattern(rel);
+      if (pattern) { agentConfigQuarantine.push(this.quarantine(staging, rel, pattern, "file", f.data)); continue; }
       fs.mkdirSync(path.dirname(target), {recursive: true});
       fs.writeFileSync(target, f.data, {flag: "wx"});
     }
     this.initRepo(root);
-    return this.commitAll(root, "Import ZIP archive");
+    return {headSha: this.commitAll(root, "Import ZIP archive"), agentConfigQuarantine};
   }
 
   // ---- PS-007: dosyalar ----

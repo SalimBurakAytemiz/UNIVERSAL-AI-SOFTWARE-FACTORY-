@@ -4,6 +4,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
 import {safeChildEnv} from "../../automation/lib/env-policy.mjs";
+import {agentConfigPattern} from "./agent-config-paths.js";
 
 export const BUILDER_GIT_IDENTITY = {name: "UASCO Builder (CLAUDE_BUILDER)", email: "builder@local.invalid"} as const;
 const SHA = /^[0-9a-f]{40}$/;
@@ -29,6 +30,14 @@ export function gitControlDigest(workspace: string): string | null {
   };
   walk(root, "");
   return h.digest("hex");
+}
+
+// SBX-8: builder başlamadan önce çalışma alanında (sıfırlanmış + temizlenmiş, yalnız izlenen dosyalar) ajan yapılandırması aranır; bulunursa builder hiç başlatılmaz.
+export function agentConfigInWorkspace(workspace: string, envPolicyFile: string): string[] | null {
+  const env = safeChildEnv(envPolicyFile, {provider: "DETERMINISTIC"});
+  const r = spawnGitSync(workspace, [...HARDEN, "-c", "core.quotePath=false", "ls-files", "-z", "--cached", "--others"], {env, maxBuffer: 64 * 1024 * 1024});
+  if (r.status !== 0) return null;
+  return String(r.stdout ?? "").split("\0").filter(Boolean).filter(f => agentConfigPattern(f) !== null).sort();
 }
 
 export type BuilderCommitResult =
@@ -95,6 +104,11 @@ export function commitBuilderOutput(workspace: string, opts: {envPolicyFile: str
     const why = forbiddenChange(workspace, f);
     if (why) return fail(`BUILDER_CHANGED_FORBIDDEN_PATH:${why}`, changed);
   }
+  // SBX-8: builder ajan yapılandırmasına (.claude/**, .mcp.json, .claude.json, CLAUDE.md, CLAUDE.local.md) dokunamaz; .gitignore ile gizlenmiş olanlar da sayılır. Böylece bu dosyalar asla reviewer klonuna ulaşmaz.
+  const ign = git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--no-renames"]);
+  if (!ign.ok) return fail("BUILDER_STATUS_FAILED", changed);
+  const touched = [...new Set([...changed, ...parseStatusZ(ign.out)])].filter(f => agentConfigPattern(f) !== null).sort();
+  if (touched.length) { lines.push(`agent config touched:\n${touched.map(f => `  ${f}`).join("\n")}`); return fail("BUILDER_TOUCHED_AGENT_CONFIG", changed); }
   if (!git(["add", "-A"]).ok) return fail("BUILDER_STAGE_FAILED", changed);
   const raw = git(["diff", "--cached", "--raw", "-z", "--no-renames", opts.startSha]);
   if (!raw.ok) return fail("BUILDER_STAGE_FAILED", changed);
