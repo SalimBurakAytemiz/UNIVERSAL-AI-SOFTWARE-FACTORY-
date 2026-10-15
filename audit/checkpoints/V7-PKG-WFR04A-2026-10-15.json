@@ -1,0 +1,58 @@
+{
+  "//TR": "Bu checkpoint, WFR-04a Skill Academy çekirdek kütüphanesini (öğrenme yaşam döngüsü, kaynak provenance, bağımsız terfi, drift iptali, §5.3 metrikleri) ve yalnız gözlenen komut sonuçlarını kaydeder; temiz değildir, bağımsız inceleme beklemektedir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-WFR04A-SKILL-ACADEMY-CORE",
+  "date": "2026-10-15",
+  "base": "638c2d2f4054c42e5a714606ca3d217d28588f9b",
+  "branch": "v7/product-wfr04a",
+  "implementer": "CLAUDE_BUILDER",
+  "authorization": "Lane B B0 + B0A + B0B (FA-V2-PRODUCT + FD-ROLE-CLAUDE-IMPL); protected edits limited to config/validation.json (tests step append) and config/trust-root-manifest.json (generate-trust-root only)",
+  "status": "IMPLEMENTED_NOT_CLEAN_REVIEW_PENDING",
+  "filesChanged": [
+    "core/academy/types.ts (new: source/learning/reuse records, allowlist transition table, ACADEMY_* journal types)",
+    "core/academy/rules.ts (new: independent-reviewer identity rule, supporting-source rule, freshness, reviewer evidence ref format, prompt-injection screen over source text as data)",
+    "core/academy/apply.ts (new: journal replay validation; forged/self-approved promotion fails closed)",
+    "core/academy/evidence.ts (new: reviewer evidence file verification under audit/evidence/skill-academy/<learningId>/REVIEWER.json#sha256=<hex>)",
+    "core/academy/drift.ts (new: pure drift monitor STALE/RECERTIFY_REQUIRED/REVOKED with dependency cascade)",
+    "core/academy/metrics.ts (new: pure section 5.3 metrics, null when no data)",
+    "core/academy/academy.ts (new: SkillAcademy domain over the existing Work OS store)",
+    "core/workos/store.ts (minimal extension: academy state slice, ACADEMY_* replay dispatch, academyWrite with dry-run replay before append, academyRead)",
+    "core/workos/types.ts (JournalType union includes AcademyJournalType)",
+    "tests/v7-wfr04a-skill-academy.test.ts (new)",
+    "config/validation.json (tests step: new test path appended at the end)",
+    "config/trust-root-manifest.json (regenerated via scripts/generate-trust-root.mjs)",
+    "audit/checkpoints/V7-PKG-WFR04A-2026-10-15.json (this file)"
+  ],
+  "notChanged": [
+    "registries/role-definitions.json (read-only; byte-identical sha256 asserted by the test)",
+    "apps/control-api/src/server.ts (no HTTP routes)",
+    "desktop, validators, registries/*.json, package.json/lock, .gitignore, CHANGELOG"
+  ],
+  "design": {
+    "singleAuthority": "learning/source/reuse records are ACADEMY_* entries in the existing Work OS hash-chained journal (same lock, same chain, tenant scope, idempotency); no second store, no second registry",
+    "lifecycle": "GAP_DETECTED -> SOURCE_DISCOVERY -> SOURCE_SCREENED -> CURRICULUM_DRAFTED -> CANDIDATE_PROPOSED -> LAB_EXPERIMENT_RUNNING -> LAB_RESULT_RECORDED -> AWAITING_INDEPENDENT_REVIEW -> PROMOTED_KNOWLEDGE | PROMOTED_SKILL_CANDIDATE | REJECTED; promoted -> STALE | RECERTIFY_REQUIRED | REVOKED; STALE -> RECERTIFY_REQUIRED | REVOKED; RECERTIFY_REQUIRED -> REVOKED",
+    "promotion": "explicit promote() only; reviewer identity must differ (normalized) from implementer and creator; promoter actor must not be the implementer; reviewer evidence file re-verified by sha256 and content (learningId, roleId, verdict APPROVED, reviewer, implementer, kind, TENANT/GLOBAL scope); permissionDelta always empty; executable false; authorityEffect NONE; registry proficiency/certification untouched",
+    "sources": "content is screened as data and never stored in the journal; supporting source requires sha256, trust != UNTRUSTED, ACTIVE, screened clean (hash-bound content without injection findings), fresh (fetchedAt + TTL); a cited revoked/poisoned/flagged source blocks promotion",
+    "tenancy": "tenant-scoped reads/writes; other tenants get NOT_FOUND/undefined; global promotion requires global + anonymized + GLOBAL-scoped reviewer evidence + global (public URL) supporting sources; other tenants only see a generalized projection",
+    "drift": "pure computeDrift over records + current model/tool-adapter/source state + reviewer-evidence re-verification; revocation cascades to dependent promoted records; in-flight dependents cannot promote",
+    "recertificationPath": "not implemented in this package (RECERTIFY_REQUIRED/STALE only move to REVOKED); deferred to a later governed package"
+  },
+  "observed": {
+    "startedAt": "2026-10-15T00:22:43Z",
+    "commands": [
+      {"cmd": "node scripts/ensure-dependencies.mjs", "exit": 0, "summary": "DEPENDENCIES_READY: NPM_CI_REVIEWED_LOCK"},
+      {"cmd": "env -u PSModulePath npx tsc --noEmit", "exit": 0},
+      {"cmd": "env -u PSModulePath npx vitest run tests/v7-wfr04a-skill-academy.test.ts tests/v7-wfr03-role-registry.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts tests/v7-b3a-runner.test.ts tests/v7-b10a-evidence.test.ts tests/v7-b11a-company-os.test.ts", "exit": 0, "summary": "7 files passed; 160 passed, 1 skipped (pre-existing B10A host symlink-permission skip); new file 21/21"},
+      {"cmd": "node scripts/validate-role-registry.mjs", "exit": 0, "summary": "ROLE_REGISTRY_VALIDATION: PASS roles=599 guilds=51 executed=0 certified=0 runtimeReadyOrRunning=0"},
+      {"cmd": "node scripts/validate-tr-comments.mjs", "exit": 0, "summary": "TR_VALIDATION: PASS"},
+      {"cmd": "node scripts/secret-sanity.mjs", "exit": 0, "summary": "SECRET_SANITY: PASS"},
+      {"cmd": "git ls-files --eol + grep for CR on changed files", "exit": 0, "summary": "all LF, no CR found"}
+    ],
+    "notRun": ["scripts/run-validation.mjs (excluded by package instructions)"]
+  },
+  "openItems": [
+    "Independent fresh review pending; implementer does not declare CLEAN",
+    "Recertification (RECERTIFY_REQUIRED -> new lab -> review) and registry-update consumption of promotions are later governed packages",
+    "gap_detect_precision/recall, holdout_pass_rate, cost_per_certified_capability, drift_detection_lag are not computed (no labeled dataset / cost data); precision/recall return null"
+  ]
+}

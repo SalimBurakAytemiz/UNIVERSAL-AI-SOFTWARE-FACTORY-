@@ -15,6 +15,10 @@ import type {JournalEntry, JournalType, Project, RiskLevel, RunCheckpoint, RunEv
 import {applyCompanyEntry} from "../company/apply.js";
 import {emptyCompanyState, isCompanyJournalType} from "../company/types.js";
 import type {CompanyJournalType, CompanyRecord, CompanyState, CompanyTx, CompanyView} from "../company/types.js";
+// //TR: WFR-04a: Skill Academy öğrenme kayıtları da ikinci store kurmaz; aynı journal'a domain ad alanlı (ACADEMY_*) girdiler olarak yazılır ve replay'de core/academy apply fonksiyonuna devredilir.
+import {applyAcademyEntry} from "../academy/apply.js";
+import {emptyAcademyState, isAcademyJournalType} from "../academy/types.js";
+import type {AcademyJournalType, AcademyState, AcademyTx, AcademyView} from "../academy/types.js";
 import {ACTIVE_WORKER_STATUSES, LEASED_RUN_STATUSES, UNLEASED_RUN_STATUSES, assertRunTransition, isOpenRun, isRunStatus, isRunStep} from "./run-state.js";
 
 const sha256 = sha256Untyped as (value: unknown) => string;
@@ -27,9 +31,9 @@ export const newTraceId = () => newId("trc");
 interface IdemRecord { id: string; digest?: string }
 interface State {
   projects: Record<string, Project>; missions: Record<string, WorkMission>; tasks: Record<string, WorkTask>; runs: Record<string, WorkRun>;
-  idempotency: Record<string, IdemRecord>; lastSeq: number; lastHash: string; company: CompanyState;
+  idempotency: Record<string, IdemRecord>; lastSeq: number; lastHash: string; company: CompanyState; academy: AcademyState;
 }
-const emptyState = (): State => ({projects: {}, missions: {}, tasks: {}, runs: {}, idempotency: {}, lastSeq: 0, lastHash: GENESIS, company: emptyCompanyState()});
+const emptyState = (): State => ({projects: {}, missions: {}, tasks: {}, runs: {}, idempotency: {}, lastSeq: 0, lastHash: GENESIS, company: emptyCompanyState(), academy: emptyAcademyState()});
 const entryHash = (body: Omit<JournalEntry, "hash">): string => sha256(body);
 // //TR: F-B1-001: anahtar JSON dizisidir; ayırıcı karakter içeren tenant/anahtar değerleri çarpışamaz.
 const idemKey = (tenantId: string, kind: string, key: string) => JSON.stringify([tenantId, kind, key]);
@@ -260,6 +264,11 @@ export class WorkOsStore {
         r.evidence.push(ev); r.updatedAt = e.at; break;
       }
       default: {
+        if (isAcademyJournalType(e.type)) {
+          const applied = applyAcademyEntry(st.academy, {seq: e.seq, type: e.type, at: e.at, actor: e.actor, payload: p});
+          if (applied.idem) idem(applied.idem.kind, applied.idem, applied.idem.id);
+          break;
+        }
         if (!isCompanyJournalType(e.type)) throw tampered(`UNKNOWN_TYPE:${e.seq}`);
         const applied = applyCompanyEntry(st.company, {seq: e.seq, type: e.type, at: e.at, actor: e.actor, payload: p});
         if (applied.idem) idem(applied.idem.kind, applied.idem, applied.idem.id);
@@ -497,6 +506,28 @@ export class WorkOsStore {
     });
   }
   companyRead<T>(fn: (view: CompanyView) => T): T { this.readGuard(); return fn(this.state.company); }
+
+  // ---- WFR-04a Skill Academy: aynı journal, aynı lock, aynı hash zinciri; domain kuralları core/academy altındadır ----
+  // Her academy girdisi önce state kopyası üzerinde replay kurallarıyla denenir; geçersiz girdi diske hiç yazılmaz (journal bozulamaz).
+  academyWrite<T>(fn: (tx: AcademyTx) => T): T {
+    return this.write(() => {
+      const st = this.state;
+      const tx: AcademyTx = {
+        get sources() { return st.academy.sources; }, get learnings() { return st.academy.learnings; }, get reuses() { return st.academy.reuses; },
+        now: () => this.nowIso(), newId,
+        idem: (table, kind, tenantId, key, digest) => this.findIdem(table as Record<string, {tenantId: string}>, tenantId, kind, key, digest) as never,
+        idemFields: (key, digest) => this.idemFields(key, digest),
+        append: (type: AcademyJournalType, actor: string, payload: Record<string, unknown>) => {
+          try { applyAcademyEntry(clone(st.academy), {seq: st.lastSeq + 1, type, at: new Date().toISOString(), actor, payload}); } catch (e) {
+            throw new WorkOsError("WORKOS_INVALID_INPUT", `ACADEMY_ENTRY_REJECTED:${(e as Error).message.replace(/^WORKOS_[A-Z_]+: /, "")}`);
+          }
+          this.append(type, actor, payload);
+        }
+      };
+      return fn(tx);
+    });
+  }
+  academyRead<T>(fn: (view: AcademyView) => T): T { this.readGuard(); return fn(this.state.academy); }
 
   listProjects(scope: Scope): Project[] { this.readGuard(); return Object.values(this.state.projects).filter(p => p.tenantId === scope.tenantId); }
   getProject(scope: Scope, id: string): Project | undefined { this.readGuard(); const p = this.state.projects[id]; return p && p.tenantId === scope.tenantId ? p : undefined; }

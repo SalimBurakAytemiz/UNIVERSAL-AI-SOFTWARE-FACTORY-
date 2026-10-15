@@ -312,7 +312,8 @@
         "tests/v7-b3a-c3-builder-commit.test.ts",
         "tests/v7-b10a-evidence.test.ts",
         "tests/v7-b11a-company-os.test.ts",
-        "tests/v7-wfr03-role-registry.test.ts"
+        "tests/v7-wfr03-role-registry.test.ts",
+        "tests/v7-wfr04a-skill-academy.test.ts"
       ],
       "requiresDependencies": true
     },
