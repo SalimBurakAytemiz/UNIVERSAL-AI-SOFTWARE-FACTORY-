@@ -443,7 +443,7 @@ describe("INT-R3 D-M1-03 packaged Work OS runner", () => {
       fs.writeFileSync(path.join(appRoot, "scripts", "claude-builder-broker.mjs"), [
         'import fs from "node:fs";',
         'const control = process.env.UASCO_CONTROL_ROOT;',
-        `fs.writeFileSync(${JSON.stringify(out)}, JSON.stringify({control, ern: process.env.ELECTRON_RUN_AS_NODE ?? null, policy: fs.readFileSync(control + "/config/builder-execution-policy.json", "utf8"), prompt: fs.readFileSync(0, "utf8").length > 0}));`,
+        `fs.writeFileSync(${JSON.stringify(out)}, JSON.stringify({control, ccd: process.env.CLAUDE_CONFIG_DIR ?? null, ern: process.env.ELECTRON_RUN_AS_NODE ?? null, policy: fs.readFileSync(control + "/config/builder-execution-policy.json", "utf8"), prompt: fs.readFileSync(0, "utf8").length > 0}));`,
         'fs.writeFileSync("feature.txt", "ok");'
       ].join("\n") + "\n");
       const sha = crypto.createHash("sha256").update(fs.readFileSync(process.execPath)).digest("hex");
@@ -458,6 +458,13 @@ describe("INT-R3 D-M1-03 packaged Work OS runner", () => {
       const g = (args: string[]) => { const r = spawnGitSync(ws, args); expect(r.status, args.join(" ") + r.stderr).toBe(0); return String(r.stdout).trim(); };
       g(["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(ws, "README.txt"), "base\n"); g(["add", "-A"]); g(["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "commit", "-q", "-m", "seed"]);
       const head = g(["rev-parse", "HEAD"]);
+      // SBX-8: broker yalnız oturum açılmış UASCO implementer profiliyle başlatılır; Founder girişi boş bir yer tutucu kimlik dosyasıyla taklit edilir (içeriği okunmaz).
+      const {ensureClaudeProfile} = await load("core", "workos", "claude-profiles.ts");
+      expect(ensureClaudeProfile(controlRoot, "implementer").state).toBe("LOGIN_REQUIRED");
+      const refused = await new LocalClaudeExecutors(appRoot, controlRoot).pair().implementer.implement(ws, {runId: "run_" + "0".repeat(24), missionId: "msn_" + "1".repeat(24), projectId: "prj_" + "2".repeat(24), title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", cycle: 0, baseSha: head, startSha: head}, {timeoutMs: 60_000});
+      expect(refused).toMatchObject({exitCode: null, blockReason: "CLAUDE_PROFILE_LOGIN_REQUIRED", argv: []});
+      expect(fs.existsSync(out)).toBe(false);
+      fs.writeFileSync(path.join(controlRoot, "claude-profiles", "implementer", ".credentials.json"), "");
       const pair = new LocalClaudeExecutors(appRoot, controlRoot).pair();
       const r = await pair.implementer.implement(ws, {runId: "run_" + "0".repeat(24), missionId: "msn_" + "1".repeat(24), projectId: "prj_" + "2".repeat(24), title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", cycle: 0, baseSha: head, startSha: head}, {timeoutMs: 60_000});
       expect(r.exitCode, r.log).toBe(0);
@@ -465,6 +472,7 @@ describe("INT-R3 D-M1-03 packaged Work OS runner", () => {
       expect(r.argv).toEqual([process.execPath, path.join(appRoot, "scripts", "claude-builder-broker.mjs")]);
       const p = JSON.parse(fs.readFileSync(out, "utf8"));
       expect(p.control).toBe(controlRoot);
+      expect(p.ccd).toBe(path.join(controlRoot, "claude-profiles", "implementer"));
       expect(p.ern).toBeNull();
       expect(p.prompt).toBe(true);
       for (const f of BROKER_CONTROL_CONFIG_FILES as readonly string[]) expect(fs.readFileSync(path.join(controlRoot, f)).equals(fs.readFileSync(path.join(appRoot, f))), f).toBe(true);

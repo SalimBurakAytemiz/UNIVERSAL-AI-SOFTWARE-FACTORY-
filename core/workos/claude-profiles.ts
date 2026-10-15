@@ -13,6 +13,8 @@ export const CLAUDE_PROFILES_DIRNAME = "claude-profiles";
 export const CLAUDE_CREDENTIAL_STORE_FILE = ".credentials.json";
 export const CLAUDE_HOOK_KILL_SWITCH = "disableAllHooks";
 export const CLAUDE_PROFILE_SETTINGS_FILE = "settings.json";
+// Her Claude çağrısında (builder broker'ı ve reviewer) zorunlu yalıtım bayrakları; kurulu CLI 2.1.292 --help çıktısında dördü de belgelidir. scripts/claude-builder-broker.mjs BROKER_ISOLATION_FLAGS ile aynı olmalıdır (test).
+export const CLAUDE_ISOLATION_FLAGS = ["--setting-sources", "user", "--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"] as const;
 // Her iki rol: komut/kod çalıştıran, ağa çıkan, alt ajan/skill başlatan araçlar yasak. Reviewer ek olarak dosya yazamaz.
 export const CLAUDE_PROFILE_DENY_BOTH = ["Bash", "PowerShell", "WebFetch", "WebSearch", "NotebookEdit", "Agent", "Task", "Skill"] as const;
 export const CLAUDE_PROFILE_DENY_REVIEWER_EXTRA = ["Edit", "Write", "MultiEdit"] as const;

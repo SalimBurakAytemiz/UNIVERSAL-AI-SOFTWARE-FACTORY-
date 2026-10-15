@@ -372,9 +372,9 @@ export class MissionRunner {
     const produced = r.exitCode === 0 && !r.blockReason && head && SHA.test(head) && head !== start ? head : undefined;
     this.evidence(run, leaseId, {kind: "IMPLEMENT", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, baseSha: start, ...(produced ? {commitSha: produced} : {}), executorIdentity: this.o.executors.implementer.identity, ...(r.blockReason ? {note: r.blockReason.slice(0, 200)} : {})});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
-    if (r.exitCode !== 0) return r.transient ? {kind: "RETRY", reason: "IMPLEMENT_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: "IMPLEMENT_FAILED", status: "FAILED"};
-    // Edit-only builder çıktısını engine commit etmeyi reddettiyse (değişiklik yok, .git/workspace dışı değişiklik) run BLOCKED olur.
+    // Edit-only builder çıktısını engine commit etmeyi reddettiyse (değişiklik yok, .git/workspace dışı değişiklik) veya builder hiç başlatılmadıysa (SBX-8: profil oturumu yok) run BLOCKED olur.
     if (r.blockReason) return {kind: "BLOCK", reason: r.blockReason.slice(0, 200)};
+    if (r.exitCode !== 0) return r.transient ? {kind: "RETRY", reason: "IMPLEMENT_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: "IMPLEMENT_FAILED", status: "FAILED"};
     if (!produced) return {kind: "BLOCK", reason: "NO_COMMIT_PRODUCED", status: "FAILED"};
     if (r.commitSha !== undefined && r.commitSha !== produced) return {kind: "BLOCK", reason: "IMPLEMENT_COMMIT_MISMATCH", status: "FAILED"};
     if (this.git(work, ["merge-base", "--is-ancestor", start, produced]).status !== 0) return {kind: "BLOCK", reason: "IMPLEMENT_HISTORY_REWRITTEN", status: "FAILED"};
@@ -554,10 +554,11 @@ export class MissionRunner {
     const untouched = this.gitOk(clone, ["rev-parse", "HEAD"]) === run.headSha && this.gitOk(clone, ["status", "--porcelain", "--untracked-files=all"]) === "";
     const log = this.writeLog(run, "review", r.log);
     this.evidence(run, leaseId, {kind: "REVIEW", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, commitSha: run.headSha,
-      reviewerIdentity: reviewer.identity, executorIdentity: run.executor.implementer, ...(r.valid ? {verdict: r.verdict, findingsCount: r.findings.length} : {}), ...(untouched ? {} : {note: "REVIEW_CLONE_MUTATED"})});
+      reviewerIdentity: reviewer.identity, executorIdentity: run.executor.implementer, ...(r.valid ? {verdict: r.verdict, findingsCount: r.findings.length} : {}), ...(untouched ? (r.invalidReason ? {note: `REVIEW_INVALID ${r.invalidReason}`.slice(0, 200)} : {}) : {note: "REVIEW_CLONE_MUTATED"})});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     if (!untouched) return {kind: "BLOCK", reason: "REVIEWER_MUTATED_CLONE"};
-    if (!r.valid) return r.transient ? {kind: "RETRY", reason: "REVIEW_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: "REVIEW_FAILED", status: "FAILED"};
+    // SBX-8: adapter'ın geçersizlik nedeni (profil oturumu yok -> BLOCKED; çalışma alanı değişti -> FAILED) korunur; geçersiz review asla CLEAN değildir.
+    if (!r.valid) return r.transient ? {kind: "RETRY", reason: "REVIEW_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: (r.invalidReason ?? "REVIEW_FAILED").slice(0, 200), status: r.invalidReason?.startsWith("CLAUDE_PROFILE_") ? "BLOCKED" : "FAILED"};
     if (r.verdict === "CLEAN") return {kind: "DONE", next: "REGRESSION", data: {verdict: "CLEAN", reviewerIdentity: reviewer.identity, commitSha: run.headSha}};
     return {kind: "REMEDIATE", reason: "REVIEW_BLOCKED", data: {verdict: "BLOCKED", reviewerIdentity: reviewer.identity}, findings: r.findings.map(f => `${f.severity}: ${f.title}`)};
   }

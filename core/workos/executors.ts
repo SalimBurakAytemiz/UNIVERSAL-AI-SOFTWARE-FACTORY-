@@ -6,6 +6,9 @@ import cp from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {safeChildEnv} from "../../automation/lib/env-policy.mjs";
 import {commitBuilderOutput, gitControlDigest} from "./builder-output.js";
+import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
+import {CLAUDE_ISOLATION_FLAGS, claudeProfileForRun, withClaudeProfileEnv} from "./claude-profiles.js";
+import type {ClaudeProfileOptions} from "./claude-profiles.js";
 
 export interface MissionSpec {
   runId: string; missionId: string; projectId: string; title: string; objective: string; acceptanceCriteria: string[]; riskLevel: string;
@@ -19,9 +22,10 @@ export interface ExecContext { timeoutMs: number; shouldAbort?: () => boolean }
 // blockReason: adapter builder çıktısını commit etmeyi reddettiyse (ör. BUILDER_PRODUCED_NO_CHANGE) runner run'ı BLOCKED yapar.
 export interface ImplementResult { exitCode: number | null; commitSha?: string; blockReason?: string; log: string; argv: string[]; startedAt: string; endedAt: string; timedOut: boolean; aborted: boolean; transient: boolean }
 export interface ReviewFinding { severity: string; title: string }
+// invalidReason (SBX-8): geçersiz review'un makine-okunur nedeni (ör. CLAUDE_PROFILE_LOGIN_REQUIRED, REVIEW_WORKSPACE_MODIFIED); runner bunu BLOCK nedeni olarak kullanır. Geçersiz review asla CLEAN değildir.
 export interface ReviewResult {
   verdict: "CLEAN" | "BLOCKED"; findings: ReviewFinding[]; valid: boolean; exitCode: number | null; log: string; argv: string[];
-  startedAt: string; endedAt: string; timedOut: boolean; aborted: boolean; transient: boolean;
+  startedAt: string; endedAt: string; timedOut: boolean; aborted: boolean; transient: boolean; invalidReason?: string;
 }
 export interface ImplementerAdapter { readonly identity: string; implement(workspace: string, spec: MissionSpec, ctx: ExecContext): Promise<ImplementResult> }
 export interface ReviewerAdapter { readonly identity: string; review(cleanClone: string, spec: MissionSpec, diff: string, ctx: ExecContext): Promise<ReviewResult> }
@@ -165,13 +169,18 @@ function reviewPrompt(spec: MissionSpec, diff: string): string {
 // Yalnız dosya düzenleyebilen (shell'siz, commit edemeyen) builder süreci için adapter: süreç 0 ile biterse engine-owned
 // commitBuilderOutput değişiklikleri sabit builder kimliğiyle commit eder; değişiklik yoksa veya .git/workspace dışı değiştiyse BLOCKED.
 // INT-R3 D-M1-03: nodeScript=true ise argv[0] UASCO'nun kendi node script'idir ve runNodeScript (fork) ile çalışır (paketli Electron node modu); aksi halde argv doğrudan spawn edilir.
+// SBX-8: makeProcess süreç başlatmadan reddedebilir ({refuse}); builder hiç çalışmaz, kanıt NOT_EXECUTED (exitCode null) ve run bu nedenle BLOCKED olur.
 export interface EditOnlyProcess { argv: string[]; env: NodeJS.ProcessEnv; input: string; nodeScript?: boolean }
 export class EditOnlyImplementer implements ImplementerAdapter {
-  constructor(readonly identity: string, private readonly envPolicyFile: string, private readonly makeProcess: (workspace: string, spec: MissionSpec) => EditOnlyProcess, private readonly transientExitCodes: number[] = []) {}
+  constructor(readonly identity: string, private readonly envPolicyFile: string, private readonly makeProcess: (workspace: string, spec: MissionSpec) => EditOnlyProcess | {refuse: string}, private readonly transientExitCodes: number[] = []) {}
   async implement(workspace: string, spec: MissionSpec, ctx: ExecContext): Promise<ImplementResult> {
     const startSha = spec.startSha ?? "";
     const before = gitControlDigest(workspace);
     const p = this.makeProcess(workspace, spec);
+    if ("refuse" in p) {
+      const at = new Date().toISOString();
+      return {exitCode: null, blockReason: p.refuse, log: `NOT_EXECUTED: ${p.refuse} (builder not started)\n`, argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
+    }
     const po = {cwd: workspace, env: p.env, timeoutMs: ctx.timeoutMs, input: p.input, shouldAbort: ctx.shouldAbort};
     const r = p.nodeScript ? await runNodeScript(p.argv[0], p.argv.slice(1), po) : await runProcess(p.argv, po);
     const base = {argv: r.argv, startedAt: r.startedAt, timedOut: r.timedOut, aborted: r.aborted, transient: r.timedOut || r.spawnError || (r.exitCode !== null && this.transientExitCodes.includes(r.exitCode))};
@@ -195,10 +204,38 @@ export function syncBrokerControlConfig(appRoot: string, controlRoot: string): v
     fs.renameSync(tmp, dst);
   }
 }
+// SBX-8 reviewer: yalnız okuma araçları; yazma/komut/ağ/alt ajan/skill/MCP araçları yasak; builder broker'ıyla aynı yalıtım bayrakları.
+export const REVIEWER_TOOLS = ["Read", "Grep", "Glob"] as const;
+export const REVIEWER_DISALLOWED_TOOLS = ["Edit", "Write", "MultiEdit", "Bash", "PowerShell", "NotebookEdit", "WebFetch", "WebSearch", "Agent", "Task", "Skill", "mcp__*"] as const;
+export function reviewerArgv(launcher: string): string[] {
+  return [launcher, "-p", "--permission-mode", "dontAsk", "--tools", REVIEWER_TOOLS.join(","), "--disallowedTools", REVIEWER_DISALLOWED_TOOLS.join(","), ...CLAUDE_ISOLATION_FLAGS, "--output-format", "text"];
+}
+const REVIEW_GIT_HARDEN = ["-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"];
+export interface ReviewWorkspaceSnapshot { head: string | null; status: string | null; gitDigest: string | null }
+// Review çalışma alanının bayt düzeyinde değişmediğinin kanıtı: HEAD aynı, status (izlenmeyen + yok sayılan dahil) boş, .git kontrol dosyaları özeti aynı.
+export function reviewWorkspaceSnapshot(dir: string, envPolicyFile: string): ReviewWorkspaceSnapshot {
+  const env = safeChildEnv(envPolicyFile, {provider: "DETERMINISTIC"});
+  const git = (args: string[]) => { const r = spawnGitSync(dir, [...REVIEW_GIT_HARDEN, ...args], {env, maxBuffer: 16 * 1024 * 1024}); return r.status === 0 ? String(r.stdout ?? "") : null; };
+  const head = git(["rev-parse", "--verify", "HEAD^{commit}"]);
+  return {head: head === null ? null : head.trim(), status: git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching"]), gitDigest: gitControlDigest(dir)};
+}
+export function reviewWorkspaceChange(before: ReviewWorkspaceSnapshot, after: ReviewWorkspaceSnapshot): string | null {
+  if (!before.head || before.status !== "" || !before.gitDigest) return "REVIEW_WORKSPACE_NOT_CLEAN_BEFORE";
+  if (after.head !== before.head) return "REVIEW_WORKSPACE_HEAD_CHANGED";
+  if (after.status !== "") return "REVIEW_WORKSPACE_MODIFIED";
+  if (after.gitDigest !== before.gitDigest) return "REVIEW_WORKSPACE_GIT_CHANGED";
+  return null;
+}
+export interface LocalClaudeOptions {
+  // Profil yolu reddi için ek yasak kökler (Work OS veri dizini); env yalnız testlerde (sahte ev dizini).
+  profile?: ClaudeProfileOptions;
+  // Yalnız testler: reviewer sürecini gerçek CLI yerine kaydeden sahte çalıştırıcı (programatik enjeksiyon; env ile seçilemez).
+  runReviewer?: (argv: string[], opts: ProcOptions) => Promise<ProcResult>;
+}
 export class LocalClaudeExecutors {
   readonly implementerIdentity: string; readonly reviewerIdentity: string;
   // repoRoot: uygulama kökü (config + script'ler; paketli: kurulum dizini). controlRoot: provenance kökü (paketli: userData/control; geliştirme: repo).
-  constructor(private readonly repoRoot: string, private readonly controlRoot: string = repoRoot) {
+  constructor(private readonly repoRoot: string, private readonly controlRoot: string = repoRoot, private readonly opts: LocalClaudeOptions = {}) {
     const cfg = readJson(path.join(repoRoot, "config", "execution-backends.json"));
     if (cfg?.pipeline?.producerMayReviewOwnOutput !== false) throw new Error("EXECUTOR_CONFIG_REFUSED: producerMayReviewOwnOutput must be false");
     this.implementerIdentity = String(cfg?.backends?.LOCAL_CLAUDE?.builderIdentity ?? "");
@@ -223,8 +260,14 @@ export class LocalClaudeExecutors {
     return {
       kind: "LOCAL_CLAUDE",
       // Broker ve config/builder-execution-policy.json değişmeden çalışır (Bash yok, commit edemez); commit'i engine atar.
+      // SBX-8: implementer profili hazır değilse (oturum açılmamış / yol reddi) broker hiç başlatılmaz; kişisel profile geri düşülmez. Broker aynı kontrolü bağımsız olarak tekrarlar.
       implementer: new EditOnlyImplementer(this.implementerIdentity, path.join(this.repoRoot, "config", "environment-policy.json"),
-        (_workspace, spec) => { syncBrokerControlConfig(self.repoRoot, self.controlRoot); return {argv: [path.join(self.repoRoot, "scripts", "claude-builder-broker.mjs")], nodeScript: true, env: self.env(), input: implementPrompt(spec)}; }),
+        (_workspace, spec) => {
+          const prof = claudeProfileForRun(self.controlRoot, "implementer", self.opts.profile);
+          if (!prof.ok) return {refuse: prof.reason};
+          syncBrokerControlConfig(self.repoRoot, self.controlRoot);
+          return {argv: [path.join(self.repoRoot, "scripts", "claude-builder-broker.mjs")], nodeScript: true, env: withClaudeProfileEnv(self.env(), prof.dir), input: implementPrompt(spec)};
+        }),
       reviewer: {
         identity: this.reviewerIdentity,
         async review(cleanClone, spec, diff, ctx) {
@@ -233,8 +276,18 @@ export class LocalClaudeExecutors {
           try { launcher = self.verifiedLauncher(); } catch (e) {
             return {verdict: "BLOCKED", findings: [], valid: false, exitCode: null, log: `PROVENANCE_REFUSED: ${(e as Error).message}\n`, argv: ["claude"], startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
           }
-          const argv = [launcher, "-p", "--permission-mode", "dontAsk", "--tools", "Read,Grep,Glob", "--disallowedTools", "Edit,Write,Bash,NotebookEdit,WebFetch,WebSearch", "--output-format", "text"];
-          return toReview(await runProcess(argv, {cwd: cleanClone, env: self.env(), timeoutMs: ctx.timeoutMs, input: reviewPrompt(spec, diff), shouldAbort: ctx.shouldAbort}));
+          const argv = reviewerArgv(launcher);
+          // SBX-8: ayrı, salt-okunur reviewer profili; oturum açılmamışsa review geçersizdir (asla CLEAN değil), kişisel profile geri düşülmez.
+          const prof = claudeProfileForRun(self.controlRoot, "reviewer", self.opts.profile);
+          if (!prof.ok) return {verdict: "BLOCKED", findings: [], valid: false, invalidReason: prof.reason, exitCode: null, log: `NOT_EXECUTED: ${prof.reason} (reviewer not started)\n`, argv, startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
+          const envPolicyFile = path.join(self.repoRoot, "config", "environment-policy.json");
+          const before = reviewWorkspaceSnapshot(cleanClone, envPolicyFile);
+          const po: ProcOptions = {cwd: cleanClone, env: withClaudeProfileEnv(self.env(), prof.dir), timeoutMs: ctx.timeoutMs, input: reviewPrompt(spec, diff), shouldAbort: ctx.shouldAbort};
+          const r = toReview(await (self.opts.runReviewer ?? runProcess)(argv, po));
+          // Review sonrası çalışma alanı bayt düzeyinde aynı olmalı; değilse review GEÇERSİZ (verdict ne olursa olsun CLEAN sayılmaz).
+          const changed = reviewWorkspaceChange(before, reviewWorkspaceSnapshot(cleanClone, envPolicyFile));
+          if (changed) return {...r, verdict: "BLOCKED", findings: [], valid: false, invalidReason: changed, transient: false, log: `${r.log}REVIEW_INVALID: ${changed}\n`};
+          return r;
         }
       }
     };
@@ -242,9 +295,9 @@ export class LocalClaudeExecutors {
 }
 
 // Yalnız açık env/config ile gerçek adapter seçilir; tanımsız değer = yapılandırılmamış, bilinmeyen değer = reddedilir (fail-closed).
-export function executorsFromEnv(repoRoot: string, env: NodeJS.ProcessEnv = process.env, controlRoot: string = repoRoot): {pair: ExecutorPair | null; reason: string} {
+export function executorsFromEnv(repoRoot: string, env: NodeJS.ProcessEnv = process.env, controlRoot: string = repoRoot, opts: LocalClaudeOptions = {}): {pair: ExecutorPair | null; reason: string} {
   const v = env.UASCO_WORKOS_EXECUTOR;
   if (v === undefined || v === "") return {pair: null, reason: "EXECUTOR_NOT_CONFIGURED"};
   if (v !== "local-claude") return {pair: null, reason: "EXECUTOR_UNKNOWN"};
-  try { return {pair: new LocalClaudeExecutors(repoRoot, controlRoot).pair(), reason: "LOCAL_CLAUDE"}; } catch { return {pair: null, reason: "EXECUTOR_CONFIG_INVALID"}; }
+  try { return {pair: new LocalClaudeExecutors(repoRoot, controlRoot, opts).pair(), reason: "LOCAL_CLAUDE"}; } catch { return {pair: null, reason: "EXECUTOR_CONFIG_INVALID"}; }
 }
