@@ -4,6 +4,7 @@ import {formatTime,MISSING} from "../model.js";
 import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime} from "../work-core.js";
 import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
+import {notVerifiedBadge,runNotVerified,missionNotVerified,completionAckBlock} from "../m1a.js";
 
 const FORM="mission";
 const RUN_DETAIL_LIMIT=5;
@@ -46,7 +47,7 @@ function filterBar(ctx,items){
   return h(doc,"div",{class:"btn-row filter-bar",role:"group","aria-label":ctx.t("work.filter.label")},keys.map(k=>h(doc,"button",{type:"button",class:"btn",id:`mf-${k}`,dataset:{filter:k,focusKey:`mf-${k}`},"aria-pressed":drafts.missionFilter===k?"true":"false",
     on:{click:()=>{drafts.missionFilter=k;ctx.rerender()}},text:`${k==="ALL"?ctx.t("work.filter.all"):statusLabel(ctx,k)} (${k==="ALL"?items.length:counts.get(k)})`})));
 }
-function missionTable(ctx,items,projectNames){
+function missionTable(ctx,items,projectNames,allRuns){
   const doc=ctx.doc,shown=filterMissions(items,drafts.missionFilter);
   if(!shown.length)return emptyNote(ctx,"work.filter.none");
   return h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table"},
@@ -56,7 +57,7 @@ function missionTable(ctx,items,projectNames){
       const sel=selection.missionId===m.missionId;
       return h(doc,"tr",{class:sel?"row-selected":null},
         h(doc,"td",{},h(doc,"button",{type:"button",class:"link-btn",dataset:{missionId:m.missionId},"aria-current":sel?"true":null,on:{click:()=>{selection.missionId=m.missionId;ctx.rerender()}},text:m.title})),
-        h(doc,"td",{text:projectNames.get(m.projectId)??MISSING}),h(doc,"td",{},statusPill(ctx,m.status)),h(doc,"td",{text:m.riskLevel}),h(doc,"td",{text:formatTime(m.createdAt,ctx.i18n.lang)}));
+        h(doc,"td",{text:projectNames.get(m.projectId)??MISSING}),h(doc,"td",{},statusPill(ctx,m.status),missionNotVerified(allRuns,m.missionId)?[" ",notVerifiedBadge(ctx,"mission")]:null),h(doc,"td",{text:m.riskLevel}),h(doc,"td",{text:formatTime(m.createdAt,ctx.i18n.lang)}));
     }))));
 }
 /** Durum zaman çizelgesi: mutlu yol sırası; geçilmiş adımlar yalnız yaşam döngüsü sırasından çıkarılır, yol dışı durum ayrıca vurgulanır. */
@@ -76,7 +77,7 @@ export function runCard(ctx,run){
     " ",verificationChip(ctx,e.verification)))):h(doc,"p",{class:"note",text:ctx.t("run.noEvidence")});
   const cps=run.checkpoints.length?h(doc,"ol",{class:"checkpoints"},run.checkpoints.map(c=>h(doc,"li",{},h(doc,"span",{text:c.name}),c.status?statusPill(ctx,c.status):null,h(doc,"time",{text:formatDateTime(c.at,lang)})))):h(doc,"p",{class:"note",text:ctx.t(run.checkpointsReported===false?"run.checkpointsNotReported":"run.noCheckpoints")});
   return h(doc,"li",{class:"card run-card",dataset:{runId:run.runId,runStatus:run.status}},
-    h(doc,"h5",{},h(doc,"span",{class:"mono",text:run.runId})," ",statusPill(ctx,run.status)),
+    h(doc,"h5",{},h(doc,"span",{class:"mono",text:run.runId})," ",statusPill(ctx,run.status),runNotVerified(run)?[" ",notVerifiedBadge(ctx,"run")]:null),
     h(doc,"dl",{class:"kv"},
       h(doc,"dt",{text:ctx.t("run.step")}),h(doc,"dd",{text:step}),
       h(doc,"dt",{text:ctx.t("run.role")}),h(doc,"dd",{text:run.role??MISSING}),
@@ -95,17 +96,23 @@ function runsSection(ctx,runsRes,details){
   if(!runsRes.items.length)return emptyNote(ctx,"run.none");
   return h(doc,"ul",{class:"cards run-list"},runsRes.items.map(r=>runCard(ctx,details.get(r.runId)??r)));
 }
-function transitionControls(ctx,mission){
+/** M1a: kabul bekleyen (AWAITING_APPROVAL) en son koşunun sunucu completionRequirements görünümü; yoksa null. */
+export function awaitingRequirements(runsRes,details){
+  if(runsRes?.state!=="VERIFIED")return null;
+  const r=runsRes.items.find(x=>x.status==="AWAITING_APPROVAL");if(!r)return null;
+  return details.get(r.runId)?.completionRequirements??null;
+}
+function transitionControls(ctx,mission,completion){
   const doc=ctx.doc,next=allowedNext(mission.status),sid=actionStatusId(mission.missionId),busy=drafts.busy[sid]===true;
   const reasonField=field(ctx,{id:"tr-reason",labelKey:"work.transition.reason",value:drafts.reasons[mission.missionId]??"",onInput:v=>{drafts.reasons[mission.missionId]=v},hintKey:"work.transition.reasonHint"});
   const buttons=next.map(to=>h(doc,"button",{type:"button",class:`btn${requiresConfirm(to)?" btn-primary":""}`,id:`tr-${to}`,dataset:{focusKey:`tr-${to}`,to,confirm:requiresConfirm(to)?"true":"false"},disabled:busy,
-    on:{click:()=>performTransition(ctx,{missionId:mission.missionId,title:mission.title,from:mission.status,to,reason:drafts.reasons[mission.missionId]??""})},
+    on:{click:()=>performTransition(ctx,{missionId:mission.missionId,title:mission.title,from:mission.status,to,reason:drafts.reasons[mission.missionId]??"",...(to==="COMPLETE"&&completion?{completion}:{})})},
     text:requiresConfirm(to)?ctx.t("work.transition.toConfirm",{to:statusLabel(ctx,to)}):ctx.t("work.transition.to",{to:statusLabel(ctx,to)})}));
   const startable=canStartRun(mission.status);
   const runBtn=h(doc,"button",{type:"button",class:"btn btn-primary",id:"run-start",dataset:{focusKey:"run-start"},disabled:!startable||busy,"aria-describedby":"run-start-hint",on:{click:()=>startRun(ctx,{missionId:mission.missionId,status:mission.status})},text:ctx.t("work.run.start")});
   return h(doc,"div",{class:"transition-controls"},
     h(doc,"h4",{text:ctx.t("work.transition.title")}),
-    next.length?h(doc,"div",{},reasonField,h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("work.transition.title")},buttons),h(doc,"p",{class:"field-hint",text:ctx.t("work.transition.confirmNote")})):h(doc,"p",{class:"note",text:ctx.t("work.transition.terminal")}),
+    next.length?h(doc,"div",{},reasonField,next.includes("COMPLETE")?completionAckBlock(ctx,mission.missionId,completion):null,h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("work.transition.title")},buttons),h(doc,"p",{class:"field-hint",text:ctx.t("work.transition.confirmNote")})):h(doc,"p",{class:"note",text:ctx.t("work.transition.terminal")}),
     h(doc,"h4",{text:ctx.t("work.run.title")}),h(doc,"div",{class:"btn-row"},runBtn),
     h(doc,"p",{class:"field-hint",id:"run-start-hint",text:ctx.t(startable?"work.run.hintOk":"work.run.hintNot")}),
     statusBlock(ctx,sid));
@@ -116,27 +123,28 @@ function detailPanel(ctx,detail,runsRes,runDetails){
   const m=detail.mission;
   return panel(ctx,{titleKey:"work.detail",id:"work-detail"},
     h(doc,"h3",{text:m.title}),
-    h(doc,"p",{class:"panel-meta"},statusPill(ctx,m.status),badge(ctx,m.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:m.missionId})),
+    h(doc,"p",{class:"panel-meta"},statusPill(ctx,m.status),badge(ctx,m.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:m.missionId}),missionNotVerified(runsRes.state==="VERIFIED"?runsRes.items:[],m.missionId)?notVerifiedBadge(ctx,"mission"):null),
     h(doc,"p",{text:m.objective}),
     h(doc,"h4",{text:ctx.t("work.detail.criteria")}),m.acceptanceCriteria.length?h(doc,"ul",{},m.acceptanceCriteria.map(c=>h(doc,"li",{text:c}))):emptyNote(ctx,"work.detail.noCriteria"),
     m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"ul",{},m.tasks.map(t=>h(doc,"li",{},t.title," ",statusPill(ctx,t.status))))):null,
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),
-    transitionControls(ctx,m),
+    transitionControls(ctx,m,awaitingRequirements(runsRes,runDetails)),
     h(doc,"h4",{text:ctx.t("run.timeline")}),runsSection(ctx,runsRes,runDetails));
 }
 
 export async function render(ctx){
-  const doc=ctx.doc,[res,projRes]=await Promise.all([ctx.api.missions(),ctx.api.projects()]);
+  const doc=ctx.doc,[res,projRes,allRunsRes]=await Promise.all([ctx.api.missions(),ctx.api.projects(),ctx.api.workRuns()]);
+  const allRuns=allRunsRes.state==="VERIFIED"?allRunsRes.items:[];
   const projects=projRes.state==="VERIFIED"?projRes.items:[],names=new Map(projects.map(p=>[p.projectId,p.name]));
   let body;
   if(res.state!=="VERIFIED")body=stateNote(ctx,res.state);
   else if(!res.items.length)body=emptyNote(ctx,"work.empty");
-  else body=h(doc,"div",{},filterBar(ctx,res.items),missionTable(ctx,res.items,names));
+  else body=h(doc,"div",{},filterBar(ctx,res.items),missionTable(ctx,res.items,names,allRuns));
   let detailNode=null;
   if(selection.missionId){
     const [detail,runsRes]=await Promise.all([ctx.api.missionDetail(selection.missionId),ctx.api.workRuns({missionId:selection.missionId})]);
     const runDetails=new Map();
-    if(runsRes.state==="VERIFIED")await Promise.all(runsRes.items.slice(0,RUN_DETAIL_LIMIT).map(async r=>{const d=await ctx.api.workRunDetail(r.runId);if(d.state==="VERIFIED"&&d.run)runDetails.set(r.runId,d.run)}));
+    if(runsRes.state==="VERIFIED")await Promise.all([...new Set([...runsRes.items.slice(0,RUN_DETAIL_LIMIT),...runsRes.items.filter(r=>r.status==="AWAITING_APPROVAL")])].map(async r=>{const d=await ctx.api.workRunDetail(r.runId);if(d.state==="VERIFIED"&&d.run)runDetails.set(r.runId,d.run)}));
     detailNode=detailPanel(ctx,detail,runsRes,runDetails);
   }
   return h(doc,"div",{class:"view"},h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.work.title")}),

@@ -3,6 +3,7 @@ import {h,panel,chip,stateNote,emptyNote,statusPill,plannedPanel} from "../compo
 import {formatCount,MISSING} from "../model.js";
 import {liveRuns,formatDateTime} from "../work-core.js";
 import {selection} from "../forms.js";
+import {notVerifiedBadge,runNotVerified} from "../m1a.js";
 
 function liveRunsBody(ctx,runs){
   const doc=ctx.doc;
@@ -13,7 +14,7 @@ function liveRunsBody(ctx,runs){
     h(doc,"caption",{class:"sr-only",text:ctx.t("workforce.live.caption")}),
     h(doc,"thead",{},h(doc,"tr",{},["workforce.live.run","workforce.live.role","workforce.live.status","workforce.live.heartbeat","workforce.live.mission"].map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
     h(doc,"tbody",{},live.map(r=>h(doc,"tr",{dataset:{runId:r.runId}},
-      h(doc,"td",{class:"mono",text:r.runId}),h(doc,"td",{text:r.role??MISSING}),h(doc,"td",{},statusPill(ctx,r.status)),h(doc,"td",{text:formatDateTime(r.heartbeatAt,ctx.i18n.lang)}),
+      h(doc,"td",{class:"mono",text:r.runId}),h(doc,"td",{text:r.role??MISSING}),h(doc,"td",{},statusPill(ctx,r.status),runNotVerified(r)?[" ",notVerifiedBadge(ctx,"run")]:null),h(doc,"td",{text:formatDateTime(r.heartbeatAt,ctx.i18n.lang)}),
       h(doc,"td",{},r.missionId?h(doc,"button",{type:"button",class:"link-btn",id:`wf-open-${r.runId}`,dataset:{focusKey:`wf-open-${r.runId}`},on:{click:()=>{selection.missionId=r.missionId;ctx.navigate("work")}},text:ctx.t("workforce.live.open")}):MISSING))))));
 }
 

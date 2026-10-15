@@ -4,6 +4,7 @@ import {formatTime,mapMissions,MISSING} from "../model.js";
 import {formatDateTime,describePostResult} from "../work-core.js";
 import {drafts,selection,field,statusBlock,setStatus,focusResult,settle} from "../forms.js";
 import {focusLost} from "../focus.js";
+import {notVerifiedBadge,runNotVerified} from "../m1a.js";
 import {STUDIO_TABS,GIT_LOG_LIMIT,buildDevRunRequest,buildExportRequest,previewOpenable,devRunActions,diffLineKind,formatBytes,joinRel,parentRel,validRelPath,latestRunFor,securitySummary} from "../project-core.js";
 import {studio,setTab} from "../studio-state.js";
 import {importPanel} from "./studio-wizard.js";
@@ -56,7 +57,7 @@ async function overviewTab(ctx,project,projects){
     const run=latestRunFor(rres.items,missions.items.map(m=>m.missionId));
     if(!run){runBody=emptyNote(ctx,"studio.ov.noRun");reviewBody=emptyNote(ctx,"studio.ov.noRun");secBody=emptyNote(ctx,"studio.ov.noRun")}
     else{
-      runBody=h(doc,"dl",{class:"kv"},...fact(doc,ctx.t("workforce.live.run"),run.runId,"mono"),h(doc,"dt",{text:ctx.t("workforce.live.status")}),h(doc,"dd",{},statusPill(ctx,run.status)),...fact(doc,ctx.t("studio.ov.step"),run.step?.name??MISSING),...fact(doc,ctx.t("studio.ov.startedAt"),formatDateTime(run.startedAt,ctx.i18n.lang)));
+      runBody=h(doc,"dl",{class:"kv"},...fact(doc,ctx.t("workforce.live.run"),run.runId,"mono"),h(doc,"dt",{text:ctx.t("workforce.live.status")}),h(doc,"dd",{},statusPill(ctx,run.status),runNotVerified(run)?[" ",notVerifiedBadge(ctx,"run")]:null),...fact(doc,ctx.t("studio.ov.step"),run.step?.name??MISSING),...fact(doc,ctx.t("studio.ov.startedAt"),formatDateTime(run.startedAt,ctx.i18n.lang)));
       reviewBody=run.reviewer?h(doc,"dl",{class:"kv"},...fact(doc,ctx.t("studio.ov.reviewer"),run.reviewer.identity??MISSING),...fact(doc,ctx.t("studio.ov.verdict"),run.reviewer.verdict?statusLabel(ctx,run.reviewer.verdict):MISSING)):emptyNote(ctx,"studio.ov.reviewNone");
       const ev=await ctx.api.evidenceList({runId:run.runId});
       if(ev.state!=="VERIFIED")secBody=stateNote(ctx,ev.state);
@@ -262,7 +263,7 @@ async function deliveryTab(ctx,project){
   else if(!list.items.length)body=emptyNote(ctx,"studio.export.empty");
   else body=h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table"},h(doc,"caption",{class:"sr-only",text:ctx.t("studio.export.caption")}),
     h(doc,"thead",{},h(doc,"tr",{},["studio.export.col.id","studio.export.col.created","studio.export.col.commit","studio.export.col.size","studio.export.col.status","studio.export.col.action"].map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
-    h(doc,"tbody",{},list.items.map(x=>h(doc,"tr",{},h(doc,"td",{class:"mono",text:x.exportId}),h(doc,"td",{text:formatDateTime(x.createdAt,ctx.i18n.lang)}),h(doc,"td",{class:"mono",text:x.commit?x.commit.slice(0,7):MISSING}),h(doc,"td",{text:formatBytes(x.sizeBytes)}),h(doc,"td",{text:x.status?statusLabel(ctx,x.status):MISSING}),
+    h(doc,"tbody",{},list.items.map(x=>h(doc,"tr",{},h(doc,"td",{class:"mono",text:x.exportId}),h(doc,"td",{text:formatDateTime(x.createdAt,ctx.i18n.lang)}),h(doc,"td",{class:"mono",text:x.commit?x.commit.slice(0,7):MISSING}),h(doc,"td",{text:formatBytes(x.sizeBytes)}),h(doc,"td",{},x.status?statusLabel(ctx,x.status):MISSING,x.verification?.testsExecuted===true?null:[" ",notVerifiedBadge(ctx,"export")]),
       h(doc,"td",{},h(doc,"button",{type:"button",class:"btn btn-small",id:`ex-show-${x.exportId}`,dataset:{focusKey:`ex-show-${x.exportId}`},text:ctx.t("studio.export.show"),"aria-label":ctx.t("studio.export.showAria",{id:x.exportId}),on:{click:()=>{showExport(ctx,project,x.exportId)}}})))))));
   return h(doc,"div",{class:"studio-grid"},
     h(doc,"section",{class:"panel",id:"studio-export","aria-labelledby":"studio-export-t"},h(doc,"h2",{class:"panel-title",id:"studio-export-t",text:ctx.t("studio.export.title")}),h(doc,"p",{class:"note",text:ctx.t("studio.export.lead")}),form),

@@ -3,6 +3,7 @@ import {h,panel,stateNote,emptyNote,badge} from "../components.js";
 import {drafts,statusBlock,setStatus,focusResult} from "../forms.js";
 import {buildEnableExecutorRequest,canEnableExecutor} from "../project-core.js";
 import {describePostResult} from "../work-core.js";
+import {sandboxBlock} from "../m1a.js";
 
 export const EXEC_FORM="executors";
 const EXEC_KEYS=["id:exec-enable"];
@@ -34,7 +35,8 @@ export async function executorsPanel(ctx){
       e.testOnly?h(doc,"p",{class:"note",text:ctx.t("exec.testOnlyNote")}):(hint?h(doc,"p",{class:"note",text:hint}):null),
       canEnableExecutor(e)?h(doc,"button",{type:"button",class:"btn btn-primary",id:"exec-enable",dataset:{focusKey:"exec-enable"},disabled:drafts.busy[EXEC_FORM]===true,text:ctx.t("exec.enable"),on:{click:()=>{enableLocalClaude(ctx)}}}):null);
   }));
-  return panel(ctx,{titleKey:"exec.title",id:"settings-executors"},h(doc,"p",{class:"note",text:ctx.t("exec.lead")}),body,profilesBlock(ctx,res.profiles),statusBlock(ctx,EXEC_FORM));
+  // M1a: sandbox durumu sunucudan okunur (doğrulanmış sağlayıcı yoksa "UNAVAILABLE — M1a modu"); profiller ayrı UASCO profilleridir, kişisel profile düşülmez.
+  return panel(ctx,{titleKey:"exec.title",id:"settings-executors"},h(doc,"p",{class:"note",text:ctx.t("exec.lead")}),sandboxBlock(ctx,res.state==="VERIFIED"?res.sandbox:null),body,profilesBlock(ctx,res.profiles),statusBlock(ctx,EXEC_FORM));
 }
 const tOr=(ctx,k,fallback)=>{const v=ctx.t(k);return v===k?fallback:v};
 /** SBX-8 (D-SBX-11 b): ayrı UASCO Claude profilleri (implementer / salt-okunur reviewer) için durum ve Founder'ın kendisinin çalıştıracağı giriş komutu (yalnız metin; UASCO oturum açmaz, kişisel ayar/kimlik aktarmaz). */

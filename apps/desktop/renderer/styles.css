@@ -271,3 +271,9 @@ kbd{font-family:inherit;font-size:.75rem;padding:.1rem .4rem;border:1px solid va
   .diff-add,.diff-del,.diff-hunk,.diff-meta{color:CanvasText}
   .tabs [role="tab"][aria-selected="true"]{border:3px solid Highlight}
 }
+/* //TR: M1a: NOT_VERIFIED rozeti ve COMPLETE onay bloğu (renk tek başına anlam taşımaz; metin her zaman görünür). */
+.badge-notverified{color:var(--warn);border-color:var(--warn);font-weight:600;white-space:normal}
+.ack-block{border:1px solid var(--warn);border-radius:6px;padding:8px 12px;margin:8px 0}
+.ack-block legend{font-weight:600;padding:0 4px}
+.ack-check{display:flex;align-items:flex-start;gap:6px;margin:6px 0}
+.ack-check input{margin-top:3px}

@@ -133,8 +133,9 @@ export function buildMissionRequest(input,{key}={}){
   if(!Object.keys(errors).length&&bodyBytes(body)>MAX_BODY_BYTES)errors.form="err.tooLarge";
   return result("/v1/missions",body,errors);
 }
-/** Durum geçişi isteği; yalnız durum makinesinin izin verdiği hedefler, yüksek riskli hedeflerde confirmed===true şart. */
-export function buildTransitionRequest({missionId,from,to,reason,confirmed}){
+/** Durum geçişi isteği; yalnız durum makinesinin izin verdiği hedefler, yüksek riskli hedeflerde confirmed===true şart.
+ *  M1a: acknowledgements yalnız to=COMPLETE ile ve yalnız kesin biçimde ({acknowledgeNotExecuted:true, headSha} / {acknowledgeTestChanges:true, testSurfaceSha256}) gövdeye eklenir. */
+export function buildTransitionRequest({missionId,from,to,reason,confirmed,acknowledgements}){
   const errors={},r=trim(reason);
   if(!MISSION_ID_RE.test(String(missionId??"")))errors.missionId="err.missionInvalid";
   if(!allowedNext(from).includes(to))errors.to="err.transitionNotAllowed";
@@ -142,6 +143,12 @@ export function buildTransitionRequest({missionId,from,to,reason,confirmed}){
   if(reasonRequired(to)&&!r)errors.reason="err.reasonRequired";
   if(r.length>4000)errors.reason="err.reasonLong";
   const body={to,reason:r||`${from} -> ${to} (UASCO Desktop)`};
+  const acks=acknowledgements??{},ne=acks.notExecuted,tc=acks.testChanges;
+  if((ne!==undefined||tc!==undefined)&&to!=="COMPLETE")errors.acknowledgement="err.ackOnlyComplete";
+  else{
+    if(ne!==undefined){if(ne&&ne.acknowledgeNotExecuted===true&&/^[0-9a-f]{40}$/.test(String(ne.headSha??"")))body.notExecutedAcknowledgement={acknowledgeNotExecuted:true,headSha:ne.headSha};else errors.acknowledgement="err.ackDataMissing"}
+    if(tc!==undefined){if(tc&&tc.acknowledgeTestChanges===true&&/^[0-9a-f]{64}$/.test(String(tc.testSurfaceSha256??"")))body.acknowledgement={acknowledgeTestChanges:true,testSurfaceSha256:tc.testSurfaceSha256};else errors.acknowledgement="err.ackDataMissing"}
+  }
   return result(`/v1/missions/${missionId}/transition`,body,errors);
 }
 /** Koşu başlatma isteği: mission AUTHORIZED veya PLANNED olmalı. */
@@ -155,6 +162,8 @@ export function buildRunRequest({missionId,status}){
 // ---------- POST sonucu ----------
 // //TR: SBX-GATE: SANDBOX_UNAVAILABLE dürüst bir ret nedenidir (doğrulanmış sandbox yok, proje kodu çalıştırılmadı); genel 409 yerine açık ileti gösterilir.
 const KNOWN_409=new Set(["EXECUTOR_NOT_CONFIGURED","SANDBOX_UNAVAILABLE"]);
+// //TR: M1a + FX-1: COMPLETE kanıt kapısı reddi {error:"WORKOS_CONFLICT", reason:<sabit kod>} olarak gelir; onay gerektiren nedenler açık iletiyle gösterilir.
+const KNOWN_COMPLETION_409=new Set(["COMPLETION_NOT_EXECUTED_REQUIRES_ACKNOWLEDGEMENT","COMPLETION_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT","COMPLETION_FUNCTIONAL_ACCEPTANCE_BLOCKED"]);
 /** Köprü POST yanıtını {ok, key, vars} olarak sınıflar; key bir sözlük anahtarıdır (post.*). */
 export function describePostResult(res){
   if(!res)return {ok:false,key:"post.err.generic",vars:{status:MISSING}};
@@ -164,6 +173,7 @@ export function describePostResult(res){
   if(s===400)return {ok:false,key:"post.err.400",vars:{status:s}};
   if(s===401||s===403)return {ok:false,key:"post.err.auth",vars:{status:s}};
   if(s===404||s===501)return {ok:false,key:"post.err.unavailable",vars:{status:s}};
+  if(s===409&&err==="WORKOS_CONFLICT"&&KNOWN_COMPLETION_409.has(res.body?.reason))return {ok:false,key:`post.err.409.${res.body.reason}`,vars:{status:s}};
   if(s===409)return KNOWN_409.has(err)?{ok:false,key:`post.err.409.${err}`,vars:{status:s}}:{ok:false,key:"post.err.409",vars:{status:s}};
   if(s===423)return {ok:false,key:"post.err.423",vars:{status:s}};
   if(s===503)return {ok:false,key:"post.err.503",vars:{status:s}};
@@ -230,6 +240,10 @@ export function mapWorkRun(x){
     checkpointsReported:Array.isArray(x.checkpoints),
     // SBX-GATE: koşunun durma/engellenme nedeni (ör. SANDBOX_UNAVAILABLE) sunucunun verdiği haliyle, kısaltılmış metin olarak taşınır.
     reason:str(x.reason,300),
+    // M1a: test yürütme kanıtı (VERIFY_TESTS/REGRESSION_TESTS) yalnız doğrulanmış sandbox'ta oluşur; yoksa koşu NOT_VERIFIED rozetini taşır.
+    testsExecuted:arr(x.evidence,100).some(e=>isObj(e)&&(e.kind==="VERIFY_TESTS"||e.kind==="REGRESSION_TESTS")),
+    testsNotExecuted:arr(x.evidence,100).some(e=>isObj(e)&&(e.kind==="VERIFY_TESTS_NOT_EXECUTED"||e.kind==="REGRESSION_TESTS_NOT_EXECUTED")),
+    headSha:typeof x.headSha==="string"&&/^[0-9a-f]{40}$/.test(x.headSha)?x.headSha:null,
     evidence:mapRunEvidence(x.evidence),reviewer:identity||verdict?{identity,verdict}:null
   };
 }
@@ -239,7 +253,24 @@ export function mapWorkRuns(raw){
   return {state:"VERIFIED",items:list.slice(0,500).map(mapWorkRun).filter(Boolean)};
 }
 export function mapWorkRunDetail(raw){
-  const inner=isObj(raw)?pick(raw.workRun,raw.run,raw):null,run=mapWorkRun(inner);return run?{state:"VERIFIED",run}:{state:"ERROR",run:null};
+  const inner=isObj(raw)?pick(raw.workRun,raw.run,raw):null,run=mapWorkRun(inner);
+  if(!run)return {state:"ERROR",run:null};
+  const o=isObj(raw?.outcomes)?raw.outcomes:null;
+  run.outcomes=o?{functionalAcceptance:statusStr(o.functionalAcceptance),completionMode:statusStr(o.completionMode)}:null;
+  run.completionRequirements=mapCompletionRequirements(raw?.completionRequirements);
+  return {state:"VERIFIED",run};
+}
+const strList=(x,max=200)=>arr(x,max).filter(v=>typeof v==="string").map(v=>v.slice(0,500));
+/** M1a: GET /v1/work-runs/:id completionRequirements -> onay kutuları için güvenli görünüm; biçim bozuksa null (onay nesnesi kurulmaz, sunucu fail-closed karar verir). */
+export function mapCompletionRequirements(x){
+  if(!isObj(x)||!isObj(x.notExecuted)||!isObj(x.testChanges))return null;
+  const c=isObj(x.testChanges.changed)?x.testChanges.changed:{};
+  return {
+    headSha:typeof x.headSha==="string"&&/^[0-9a-f]{40}$/.test(x.headSha)?x.headSha:null,functionalAcceptance:statusStr(x.functionalAcceptance),
+    notExecuted:{required:x.notExecuted.required===true,reason:statusStr(x.notExecuted.reason)},
+    testChanges:{required:x.testChanges.required===true,testSurfaceSha256:typeof x.testChanges.testSurfaceSha256==="string"&&/^[0-9a-f]{64}$/.test(x.testChanges.testSurfaceSha256)?x.testChanges.testSurfaceSha256:null,
+      changed:{modified:strList(c.modified),deleted:strList(c.deleted),renamed:arr(c.renamed,200).filter(r=>isObj(r)&&typeof r.from==="string"&&typeof r.to==="string").map(r=>({from:r.from.slice(0,500),to:r.to.slice(0,500)})),harness:strList(c.harness),truncated:c.truncated===true}}
+  };
 }
 export function normalizeVerification(v){return VERIFICATION_STATES.includes(v)?v:null}
 /** Doğrulama durumu -> DSK-061-08 çip türü; yalnız tam "VERIFIED" doğrulanmış gösterilir, bilinmeyen değer UNVERIFIED olur. */

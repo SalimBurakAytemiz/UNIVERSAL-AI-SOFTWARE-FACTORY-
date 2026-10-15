@@ -238,7 +238,10 @@ export function mapExports(raw){
   const items=list.slice(0,200).filter(isObj).map(x=>{
     const id=pick(x.exportId,x.id);if(typeof id!=="string"||!SAFE_ID_RE.test(id))return null;
     const commit=String(x.commit??"").toLowerCase();
-    return {exportId:id,createdAt:iso(x.createdAt),commit:COMMIT_RE.test(commit)?commit:null,sizeBytes:safeInt(pick(x.sizeBytes,x.size)),status:/^[A-Z][A-Z0-9_]{0,39}$/.test(String(x.status??""))?x.status:null,format:str(pick(x.format,x.kind),20)};
+    // M1a: export kaydının kanıttan türetilmiş doğrulama özeti (VERIFICATION_STATUS.json); yoksa null (rozet yine NOT_VERIFIED gösterir).
+    const v=isObj(x.verification)?x.verification:null;
+    const verification=v?{label:str(v.label,80),testsExecuted:v.testsExecuted===true,notExecutedReason:/^[A-Z][A-Z0-9_]{0,39}$/.test(String(v.notExecutedReason??""))?v.notExecutedReason:null}:null;
+    return {exportId:id,createdAt:iso(x.createdAt),commit:COMMIT_RE.test(commit)?commit:null,sizeBytes:safeInt(pick(x.sizeBytes,x.size)),status:/^[A-Z][A-Z0-9_]{0,39}$/.test(String(x.status??""))?x.status:null,format:str(pick(x.format,x.kind),20),verification};
   }).filter(Boolean).sort((a,b)=>String(b.createdAt??"").localeCompare(String(a.createdAt??"")));
   return {state:"VERIFIED",items};
 }
@@ -259,7 +262,14 @@ export function mapExecutors(raw){
     const s=pick(x.state,x.status),state=typeof s==="string"&&/^[A-Z][A-Z0-9_]{0,39}$/.test(s)?s:null;
     return {id,state,testOnly:id==="FAKE"||x.testOnly===true};
   }).filter(Boolean);
-  return {state:"VERIFIED",items,profiles:mapClaudeProfiles(raw.claudeProfiles)};
+  return {state:"VERIFIED",items,profiles:mapClaudeProfiles(raw.claudeProfiles),sandbox:mapSandbox(raw.sandbox)};
+}
+/** M1a: GET /v1/system/executors sandbox -> {state,reason,detail,providerId}; bilinmeyen biçim null (Ayarlar "bilinmiyor" der, AVAILABLE uydurulmaz). */
+export function mapSandbox(raw){
+  if(!isObj(raw))return null;
+  const st=raw.state==="AVAILABLE"||raw.state==="UNAVAILABLE"?raw.state:null;if(!st)return null;
+  const code=v=>typeof v==="string"&&/^[A-Z][A-Z0-9_]{0,63}$/.test(v)?v:null;
+  return {state:st,reason:code(raw.reason),detail:code(raw.detail),providerId:typeof raw.providerId==="string"&&/^[A-Za-z0-9_.:-]{1,64}$/.test(raw.providerId)?raw.providerId:null};
 }
 /** SBX-8 (D-SBX-11 b): GET /v1/system/executors claudeProfiles -> [{role,state,reason,loginCommand}]; yalnız implementer/reviewer, güvenli desenli durum/neden; giriş komutu yalnız metin olarak gösterilir (renderer asla çalıştırmaz). */
 export const CLAUDE_PROFILE_ROLES=["implementer","reviewer"];
