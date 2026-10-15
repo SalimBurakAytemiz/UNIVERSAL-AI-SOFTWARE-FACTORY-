@@ -1,0 +1,34 @@
+{
+  "//TR": "Bu checkpoint, SBX-0..SBX-8 sandbox/izolasyon paketleri için Founder korumalı dosya yetki kaydıdır (FA-SBX); SBX-8 korumalı değişikliklerinden önce kaydedilir ve temiz olduğunu beyan etmez.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-SBX-FA",
+  "date": "2026-10-15",
+  "parent": "6aa72676bf0fd603c286c720baf188a3af9a6ba6",
+  "branch": "v7/product-sbx8",
+  "status": "AUTHORIZATION RECORD ONLY: SBX-8 package changes not yet applied; not clean; review pending",
+  "founderAuthorization": {
+    "decision": "Founder decision 2026-10-15 (chat AskUserQuestion, P-SBX-6 approved): FA-SBX authorizes the listed protected files for the SBX-0..SBX-8 sandbox/isolation packages. Founder decision D-SBX-11 (b) 2026-10-15: separate UASCO Claude profile via CLAUDE_CONFIG_DIR keeping all (a) restrictions (--setting-sources user, --strict-mcp-config, --disable-slash-commands, --no-session-persistence, reject/quarantine .claude/**, .mcp.json, CLAUDE*.md on import and builder output); personal Claude settings, hooks, permissions, memory and credentials are never transferred automatically; implementer and independent reviewer contexts are separate; the reviewer is read-only (no code writing, commit, merge or configuration change); the Founder logs in personally when needed; the personal Claude configuration is never deleted or overwritten; the sandbox requirement for customer code stays; applied for M1 without unnecessarily stopping M0.",
+    "rule": "Only the listed protected files may change, minimal diff per package. config/validation.json: only add test steps or new test files to existing steps; never remove or weaken a step. config/trust-root-manifest.json: reseal only. config/builder-execution-policy.json, config/environment-policy.json and automation/lib/** must not change. Every package passes canonical validation and an independent read-only Claude review; Codex Review is not used.",
+    "protectedFiles": [
+      "scripts/claude-builder-broker.mjs",
+      "apps/desktop/main.mjs",
+      "apps/control-api/src/server.ts",
+      "config/validation.json",
+      "config/trust-root-manifest.json (reseal only)"
+    ],
+    "mustNotChange": [
+      "config/builder-execution-policy.json",
+      "config/environment-policy.json",
+      "automation/lib/**"
+    ],
+    "constraint": "No other protected file may change; any extra protected file needs a new Founder scope approval. Excluded actions: merge to master, push, release, signing, supervisor, watchdog, autostart, production.",
+    "authorizationRecord": {
+      "decisionId": "FA-SBX-2026-10-15",
+      "relatedDecisions": ["D-SBX-11-2026-10-15", "FA-V2-PRODUCT-2026-10-14", "FD-ROLE-CLAUDE-IMPL-2026-10-14"],
+      "ledger": "C:/Users/salim/UASCO-recovery/governed-review/FOUNDER-AUTHORIZATIONS.jsonl",
+      "recordedAt": "2026-10-15T08:33:31.821Z",
+      "notBackdated": true,
+      "recordedBefore": "any protected change of SBX-8"
+    }
+  }
+}
