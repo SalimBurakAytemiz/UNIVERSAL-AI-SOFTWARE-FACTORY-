@@ -29,7 +29,8 @@ buildCampusModel({
 
 - Layout: clusters sorted by `clusterId` take fixed slots (4 top, 1 right, 4 bottom, 1 left; extra clusters
   go to overflow rows). Guilds sorted by `guildId` fill the plate two per row. No randomness; same input gives
-  byte-identical output. Expected catalog: 10 districts, 51 buildings (`registries/target-role-catalog.json`).
+  byte-identical output. Expected catalog: 10 districts, 51 buildings from the canonical role registry
+  (`registries/role-definitions.json`, WFR-03; the former target catalog was promoted into it and deleted).
 - Building: `{guildId, clusterId, name, x, y, width, height, targetRoles, activeRuns, state}`.
 - `activeRuns` counts distinct `runId`s whose status is one of `LEASED`, `RUNNING`, `CHECKPOINTING`, `VERIFYING`
   and whose `guildId` is a catalog guild. Live runs without a usable `guildId` are only counted in

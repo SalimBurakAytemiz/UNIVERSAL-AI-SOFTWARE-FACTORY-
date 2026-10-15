@@ -6,7 +6,8 @@ import {renderCampusSvg} from "../apps/desktop/renderer/control-tower/render-svg
 import {renderCampusList} from "../apps/desktop/renderer/control-tower/list-view.js";
 import {STRINGS, LIVE_STATUSES} from "../apps/desktop/renderer/control-tower/locales.js";
 
-const raw = JSON.parse(fs.readFileSync("registries/target-role-catalog.json", "utf8"));
+// //TR: INT-R3 D-M1-05: WFR-03 hedef kataloğu kanonik registries/role-definitions.json içine taşıyıp sildi; fikstür artık kanonik kayıttan (aynı clusters/guilds/roles biçimi) okunur.
+const raw = JSON.parse(fs.readFileSync("registries/role-definitions.json", "utf8"));
 const roles: Record<string, number> = {};
 for (const r of raw.roles) roles[r.guildId] = (roles[r.guildId] ?? 0) + 1;
 const catalog = {
@@ -27,7 +28,7 @@ const eventAttrs = (html: string) => [...html.matchAll(/<[a-zA-Z][^>]*>/g)].map(
 const countTexts =(svg: string) => [...svg.matchAll(/<text class="count"[^>]*>([^<]*)<\/text>/g)].map((m) => m[1]);
 
 describe("control tower campus model", () => {
-  it("builds 10 districts and 51 buildings from the target role catalog fixture", () => {
+  it("builds 10 districts and 51 buildings from the canonical role registry (role-definitions.json)", () => {
     const m = buildCampusModel(input());
     expect(m.districts).toHaveLength(10);
     expect(m.buildings).toHaveLength(51);
