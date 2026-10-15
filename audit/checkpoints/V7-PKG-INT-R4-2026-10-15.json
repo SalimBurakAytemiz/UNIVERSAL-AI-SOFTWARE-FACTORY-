@@ -102,8 +102,72 @@
     "result": "PASS (by inspection)"
   },
   "perCommitGate": "before every commit: protectedChangeViolations (automation/lib/trust-root.mjs) vs git show 312fb6d:config/protected-paths.json => only FA-V2-PRODUCT UNION FA-SBX protected paths touched (server.ts, validation.json, claude-builder-broker.mjs, trust-root-manifest.json); nothing else protected; config/builder-execution-policy.json, config/environment-policy.json and automation/lib/** unchanged. LF only, //TR comments, no new deps. trust-root regenerated last in any commit touching a protected file (merge, F2). npx tsc --noEmit PASS; affected vitest PASS; verify-trust-root PASS.",
-  "validation": "PENDING_FILL",
-  "packagedCheck": "PENDING_FILL",
-  "knownLimits": ["PENDING_FILL"],
-  "deviations": ["PENDING_FILL"]
+  "verifyGates": {
+    "tsc": "npx tsc --noEmit => exit 0",
+    "smoke-control-api": "PASS (challenge-proof identity + auth boundary verified)",
+    "v6-apps-control-desktop-selftest": "PASS 93/93",
+    "validate-tr-comments": "TR_VALIDATION: PASS",
+    "secret-sanity": "SECRET_SANITY: PASS",
+    "verify-trust-root": "TRUST_ROOT_VERIFY: PASS (resealed after merge and F2)"
+  },
+  "validation": {
+    "run1": {
+      "command": "env -u PSModulePath node scripts/run-validation.mjs",
+      "result": "FAIL at step 'tests': 1/882 failed (tests/pkg-d-standalone-provenance.test.ts 'spawns a verified standalone launcher with the broker arguments'). Cause: the F2 strict allowlist correctly rejected the pkg-d test's stale profile-settings stub (permissions lacked disableBypassPermissionsMode). All 32 earlier steps PASS; runner stops at first failure so bs1/lv1 did not run.",
+      "fix": "86009d3 (aligned the pkg-d fixture with the canonical claudeProfileSettings shape; test-only, gate not weakened)"
+    },
+    "run2": {
+      "command": "env -u PSModulePath node scripts/run-validation.mjs",
+      "tip": "86009d378... (v7/int-r4-candidate)",
+      "startedAt": "2026-10-15T12:09:46Z",
+      "endedAt": "2026-10-15T12:49:26Z",
+      "result": "CANONICAL_VALIDATION: PASS (all steps); run-validation EXIT 0",
+      "testsStep": "73 files, 880 passed | 2 skipped",
+      "stepWallClockSeconds": {"tests": 337.83, "tests-bs1-a": 343.98, "tests-bs1-b": 230.88, "tests-bs1-c": 201.20, "tests-bs1-d": 408.15, "tests-bs1-e": 182.81, "tests-bs1-f": 331.45, "tests-lv1": 67.26},
+      "stepLimitIssues": "none (no tests-bs1-* shard exceeded the 600 s limit; no limit edited; no per-step re-run needed)"
+    }
+  },
+  "packagedCheck": {
+    "harness": "node child_process (scripts/build-installer.mjs then scripts/installer-install-test.mjs); serialised after the canonical validation (not concurrent, to keep bs1 shard timings clean)",
+    "build": {
+      "command": "UASCO_BUILD_OUT_DIR=C:/Users/salim/UASCO-wt/int-r4-build node scripts/build-installer.mjs",
+      "result": "PASS",
+      "artifact": "UASCO-Setup-0.7.0-dev.1-win-x64.exe",
+      "bytes": 110651670,
+      "sha256": "8e57503ecde3dfb94422d94c3234f658c77cfee965d2f81ab737519aba04a6dd",
+      "signed": false,
+      "electron": "44.4.5 (checksum-bound provisioned binary)",
+      "stagedFiles": 2200,
+      "durationMs": 103617,
+      "ebCache": "copied from int-r3-build/eb-cache (NSIS/winCodeSign helpers) to avoid download"
+    },
+    "installLaunchUninstall": {
+      "harness": "scripts/installer-install-test.mjs <artifact> (isolated %TEMP% install + user-data-dir)",
+      "preconditions": "no UASCO install registered, no shortcuts, real %APPDATA%/UASCO absent",
+      "install-refused-insufficient-space": "exit 3, install dir not created",
+      "silent-install": "/S /UASCO_TEST_NO_SHORTCUTS --no-desktop-shortcut => exit 0 in 15.3 s; HKCU uninstall key created; no shortcuts; UASCO.exe present",
+      "launch-sandboxed-default-flags": "control API started (127.0.0.1:50743) but the GPU process crashed ('GPU process isn't usable. Goodbye.') and the window did not load — a headless/no-GPU automation-environment limitation, not a product defect",
+      "launch-no-sandbox": "exit 0; controlApi HEALTHY; serverIdentity VERIFIED; backend port closed after quit; backend log has no 64-hex secret outside the challenge",
+      "install-dir-unchanged-after-launch": "PASS (no write to the install dir during run)",
+      "single-instance": "first instance healthy, second instance exits",
+      "repair-reinstall-same-version": "exit 0",
+      "silent-uninstall": "exit 0",
+      "cleanup": "HKCU uninstall key gone, install registry key gone, no shortcuts, real %APPDATA%/UASCO absent, updater/temp copies absent"
+    },
+    "apiMatrixSourceCoverage": "The task's specific packaged bridge/API matrix (/v1/agents 200 canonical counts; LOCAL_CLAUDE provenance READY; implementer/reviewer profiles CLAUDE_PROFILE_LOGIN_REQUIRED with no personal-profile fallback; Studio template project create 201; dev-run start -> 409 SANDBOX_UNAVAILABLE; mission run VERIFY -> BLOCKED SANDBOX_UNAVAILABLE with NOT_EXECUTED evidence; agent-config import quarantine on a planted .claude/settings.json) was NOT driven against the running packaged app in this session; installer-install-test.mjs runs a UASCO_SMOKE /health + window smoke, not the full API matrix. These guarantees are verified at source/integration level by vitest suites that PASS in the canonical validation: v7-int-r3-sbx-gate (dev-run 409 and VERIFY->BLOCKED SANDBOX_UNAVAILABLE NOT_EXECUTED), v7-sbx8-claude-profiles + v7-sbx8-reviewer (CLAUDE_PROFILE_LOGIN_REQUIRED, no fallback), v7-sbx8-agent-config (quarantine / BUILDER_TOUCHED / WORKSPACE_CONTAINS_AGENT_CONFIG), v7-ps1a/v7-ps1b (Studio template create 201), v7-b1/v7-b7 (/v1/agents counts, installer)."
+  },
+  "mergeToolDryRunReport": "PASS by inspection (see mergeToolDryRun): single 'tests' step, no separate int-r3/sbx8/relfx steps, base-r2 59 entries preserved as an exact in-order subsequence with exactly 14 additions. The Lane-B analyzeAdditions tool was NOT run against any clone (it is not present in this product clone).",
+  "knownLimits": [
+    "Packaged sandboxed (default-flags) launch crashed the Electron GPU process in this headless automation environment ('GPU process isn't usable. Goodbye.'); the control API backend still started. HEALTHY/VERIFIED was confirmed only under --no-sandbox launches. GUI window load under full OS sandbox was not observable here.",
+    "The task's bespoke packaged bridge/API matrix was not driven against the running packaged app (no existing harness; a bespoke CDP/bridge driver was not authored). Those guarantees are covered at source level by the passing vitest suites listed under packagedCheck.apiMatrixSourceCoverage.",
+    "TEST_SURFACE heuristic limits (assertion counting, disabled-test detection) are best-effort risk signals as documented in core/workos/test-surface.ts and the REL-FX reviews; the hard guarantee is the structural acknowledgement gate (outcomes.ts), which the SBX gate composes in front of without weakening.",
+    "D-REL-1 (host-execution notice for R0-R2) remains pending but is moot: execution is sandbox-only, so host execution never happens; the hostExecutionNotice field is kept for the record."
+  ],
+  "deviations": [
+    "scripts/provision-electron.mjs performed a checksum-verified network download of the Electron 44.4.5 zip (158 MB, sha256 11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d, from the allowed host release-assets.githubusercontent.com) because this fresh clone had no provisioned Electron cache. This is the sanctioned FA-V2-PRODUCT protected installer provisioning step (host allowlist + SHA-256 gate), but it is network beyond reviewed-lock npm ci, hence recorded as a deviation from the strict no-network rule. No other network occurred.",
+    "config/trust-root-manifest.json conflict was resolved by taking one side then regenerating via scripts/generate-trust-root.mjs (reseal) rather than hand-merging the sealed hashes; verify-trust-root PASS.",
+    "REVIEW evidence note no longer carries the REL-FX 'TEST_SURFACE_GIVEN: ...' breadcrumb; the SBX-8 exact 'REVIEW_INVALID <reason>' note semantics were kept (required by v7-sbx8-reviewer) and the reviewer still receives the test surface directly plus the full VERIFY TEST_SURFACE evidence. No guarantee weakened; no test asserted the TEST_SURFACE_GIVEN note.",
+    "The Lane-B 'tests' step additions are interleaved before the b6a/b4/b5 tail (not strictly appended at the very end) so that the v7-b5 and v7-ps1b ordering assertions keep passing; base-r2 entries remain an exact in-order subsequence (append-only at the entry level)."
+  ],
+  "status_final": "IMPLEMENTED, VERIFIED (canonical validation PASS; packaged build + install/launch/uninstall/cleanup PASS with the noted headless-GPU and API-matrix limits), NOT REVIEWED. Claude does not self-declare CLEAN; a separate independent reviewer must review. Not a live merge; nothing published to any integration repo, master or remote."
 }
