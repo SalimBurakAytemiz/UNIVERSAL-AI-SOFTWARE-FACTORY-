@@ -1,0 +1,109 @@
+{
+  "//TR": "Bu kayit V7-PKG-INT-R4 entegrasyon adayinin (canli merge DEGIL; hicbir sey entegrasyon reposuna, master'a veya remote'a yayinlanmadi) kanitidir: SBX-8 tabanina REL-FX backend dalinin --no-ff merge'i, SBX execution-gate ile REL-FX test-surface/COMPLETE/admission'in anlamsal kompozisyonu, Lane-B validation normalizasyonu, uc tasinan dusuk bulgunun katlanmasi, kanonik dogrulama ve paketli kontrol sonuclari ile bilinen sinirlar. Bagimsiz reviewer incelemesine kadar durum 'not clean'dir; Claude kendini CLEAN ilan etmez.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-INT-R4",
+  "date": "2026-10-15",
+  "status": "IMPLEMENTED_NOT_REVIEWED (not clean)",
+  "implementer": {
+    "role": "UASCO IMPLEMENTER (CLAUDE_BUILDER)",
+    "model": "claude-opus-4-8",
+    "identity": "UASCO Implementer (CLAUDE_BUILDER) <implementer@local.invalid>"
+  },
+  "authorization": [
+    "FA-V2-PRODUCT (apps/desktop/main.mjs, preload.mjs, renderer/app.js, renderer/index.html, apps/control-api/src/server.ts, config/validation.json, config/trust-root-manifest.json)",
+    "FA-SBX (scripts/claude-builder-broker.mjs)",
+    "FD-ROLE-CLAUDE-IMPL",
+    "FD-REL-1-REJECT-HOST-EXEC-2026-10-15 (AI-generated/untrusted project code must not run on the host without a verified sandbox; missing/unverified sandbox => BLOCKED(SANDBOX_UNAVAILABLE))"
+  ],
+  "clone": {
+    "path": "C:/Users/salim/UASCO-wt/v2-int-r4",
+    "branch": "v7/int-r4-candidate",
+    "base": "8d0373508788e342437df60cdb573b3d2688bf01 (SBX-8 tip)",
+    "origin": "C:/Users/salim/UASCO-wt/v2-sbx8",
+    "pushUrl": "PUSH_DISABLED",
+    "gitNeutralised": "GIT_CONFIG_NOSYSTEM=1, empty GIT_CONFIG_GLOBAL, other GIT_* unset, clone --no-local --no-hardlinks --template=<empty>",
+    "dependencies": "node scripts/ensure-dependencies.mjs => DEPENDENCIES_READY: NPM_CI_REVIEWED_LOCK lock=99e1f8a3f13087d9b4c4b38648b27208f8eb4a117c73308a6426aede51fdd838",
+    "published": false
+  },
+  "relfxSource": {
+    "src": "C:/Users/salim/UASCO-wt/v2-relfx",
+    "tip": "44416188d47109200d7b29852c7f4891f28b3958",
+    "fetchHeadVerified": true,
+    "baseAncestor": "9cb8aa1 (PS-1A c3) is an ancestor of the SBX-8 base; REL-FX tip is exactly 8 commits over 9cb8aa1",
+    "commitsFolded": [
+      "2257457b80e1bea0b8fbab1fc834ded2f70143aa v7 REL-FX-1: evidence-bound COMPLETE and deriveOutcomes read-model",
+      "96931bd87d53a88e3f4ad3fa6c9fec2e89a72770 v7 REL-FX-3: refuse R3/R4 run start and re-check at WORKSPACE (D-REL-2), interim host-execution notice (D-REL-1 pending)",
+      "eecf66a608d55d5b3afd1afaf1f523e1d971a5d4 v7 REL-FX-4: torn-tail read-only + confirmed repair, DISK_FULL append without partial line, PROVIDER_QUOTA block without retry budget",
+      "42329579d73d418540382fbecdcf5414f4488bc0 v7 REL-FX-2: VERIFY test-surface guard wired into the COMPLETE guard",
+      "706bfda3ecd8617de899e6cda8365dcf499e6033 v7 REL-FX c2: ANSI-safe executed-test count, disabled-test detection, test-surface globs, provider-limit classification",
+      "369c320bba43e5c896230558a76d5bf4f485de93 v7 REL-FX c3: chained/shorthand disabled-test detection, stream-aware summary parsing, no-tests vacuity, harness config",
+      "7b054e3f62acbc732eeddf1ff386ba1daa6dd2e1 v7 REL-FX c4: structural acknowledgement gate for changed existing tests/harness, detector fixes",
+      "44416188d47109200d7b29852c7f4891f28b3958 v7 REL-FX c5: harness classification independent of test-path branch, case-insensitive matching"
+    ]
+  },
+  "mergeCommit": {
+    "sha": "af384f8801049ac79aef9bdece781c38918b45e2",
+    "type": "--no-ff",
+    "parents": ["8d0373508788e342437df60cdb573b3d2688bf01", "44416188d47109200d7b29852c7f4891f28b3958"],
+    "conflictedFiles": [
+      "core/workos/types.ts",
+      "core/workos/store.ts",
+      "core/workos/runner.ts",
+      "apps/control-api/src/server.ts",
+      "config/validation.json",
+      "config/trust-root-manifest.json"
+    ],
+    "autoMergedBothEdited": ["core/workos/outcomes.ts", "core/workos/schemas.ts", "core/workos/executors.ts", "core/workos/fake-executor.mjs"]
+  },
+  "conflictResolutions": {
+    "core/workos/types.ts": "additive import merge: kept HEAD CompanyJournalType/AcademyJournalType plus REL-FX TestSurfaceSummary (all used).",
+    "core/workos/store.ts": "merged the ./types.js type-import line to include RunCompletionRecord (REL-FX) AND kept HEAD company/academy apply imports.",
+    "core/workos/runner.ts": "import block: union of SBX ExecutionGate/GateDecision/ProjectExecutionKind and REL-FX outcomes/risk-admission/test-surface/classifier; executors import kept assertIndependentExecutors only (runProcess dropped: execution is gate-only). stepImplement: ordering limit(FX-4) -> blockReason(SBX-8) -> exitCode so exitCode=null + CLAUDE_PROFILE_LOGIN_REQUIRED blockReason is not masked; merge-duplicated exitCode line removed. stepVerify: restructured so TEST_SURFACE (static) is recorded regardless of the gate (recordTestSurface helper); gate-allowed path byte-behaviour identical to REL-FX. stepReview: SBX-8 invalidReason->status note preserved exactly (REVIEW_INVALID <reason>), REL-FX limitBlock folded in before the invalid branch, TEST_SURFACE_GIVEN note dropped (reviewer still receives testSurface and VERIFY records full TEST_SURFACE evidence).",
+    "apps/control-api/src/server.ts": "import: kept HEAD evidence imports + added REL-FX validateTornTailRepair. BuildServerOptions: kept SBX sandbox + REL-FX workosStoreOptions. Route block: additive union (HEAD Evidence Center + Company OS + Roles routes AND REL-FX torn-tail repair route).",
+    "config/validation.json": "Lane-B normalization (see mergeToolDryRun).",
+    "config/trust-root-manifest.json": "regenerated by scripts/generate-trust-root.mjs (reseal) after protected-file changes; verify-trust-root PASS."
+  },
+  "gateComposition": {
+    "guarantee": "Both hold together. EXECUTION (runner VERIFY and REGRESSION, and devrun) is gated by core/workos/execution-gate.ts: with no verified SandboxProvider the result is BLOCKED(SANDBOX_UNAVAILABLE) with NOT_EXECUTED evidence (functionalAcceptance NOT_EXECUTED/UNKNOWN), no host child process, no retry-budget consumption; devrun returns 409 SANDBOX_UNAVAILABLE. This is unconditional and takes precedence.",
+    "testSurfaceStatic": "REL-FX TEST_SURFACE (FX-2) is STATIC git analysis (git diff --name-status base..head plus reading changed test-file text for assertion counts); it is NOT code execution, so recordTestSurface computes and records TEST_SURFACE evidence regardless of the gate. executedTests/functionalAcceptance from a real run are populated ONLY when execution happened inside the verified sandbox (testRun != null); when BLOCKED, testRun=null so executedTests stays null and functionalAcceptance is UNKNOWN/BLOCKED (never fabricated, never VERIFIED).",
+    "preserved": "FX-1 evidence-bound COMPLETE, FX-1/FX-2 structural acknowledgement gate (changed existing test/harness => acknowledgement required, never VERIFIED), FX-3 R3/R4 admission refusal all remain exactly as reviewed; the SBX gate composes in front of execution without weakening any of them.",
+    "hostExecutionNoticeMoot": "The R0-R2 hostExecutionNotice (FX-3, D-REL-1 pending) field is kept but host execution never happens because execution is sandbox-only (FD-REL-1-REJECT-HOST-EXEC-2026-10-15)."
+  },
+  "foldedFindings": [
+    {
+      "id": "RV-SBX8-C1-F1",
+      "commit": "c88e55153d5bcbc940ae19ff649bc8f6d23a3da9",
+      "file": "core/workos/builder-output.ts",
+      "fix": "post-build agent-config detection relied on `git status --ignored=matching`, which collapses an ignored directory (e.g. dist/) to one entry and hides a nested dist/.claude/settings.json. Now also enumerate every untracked+ignored file individually via `git ls-files -z --others` (no --exclude-standard) and check each against agentConfigPattern, so a hidden write is refused BUILDER_TOUCHED_AGENT_CONFIG. Regression test added (tests/v7-sbx8-agent-config.test.ts).",
+      "protected": false
+    },
+    {
+      "id": "RV-SBX8-C1-F2",
+      "commit": "0dd6a54260dd352f9cfac9144da8998a69473c66",
+      "file": "scripts/claude-builder-broker.mjs (FA-SBX protected)",
+      "fix": "implementerProfileBlock replaced its loose denylist (+disableAllHooks) with a STRICT key allowlist matching the canonical core/workos/claude-profiles.ts claudeProfileSettings shape: top-level exactly {disableAllHooks:true, enableAllProjectMcpServers:false, permissions}; permissions exactly {deny(array incl Bash/PowerShell/WebFetch/WebSearch), disableBypassPermissionsMode:'disable'}; any extra or missing key => CLAUDE_PROFILE_SETTINGS_INVALID. Exported profileSettingsValid (+ .d.mts). Regression tests added. Trust-root resealed in the commit.",
+      "protected": true,
+      "reseal": true
+    },
+    {
+      "id": "RV-RELFX-C5-OBS-1",
+      "commit": "5c9faef9e7c88fac967383c8d2343b4273488604",
+      "file": "core/workos/test-surface.ts",
+      "fix": "evaluateTestSurface diverted any harness-list match to the harness (acknowledgement-only) bucket before deletion/weakening detection, so a genuinely DELETED or assertion-WEAKENED real test whose basename matched a harness pattern (e.g. tests/vitest.config.test.ts) was downgraded. Now only entries that are ONLY harness/config (not a real test file by name: isRealTestFile = *.test.*, *_test.*, *Spec.*, *.cy.*, *.e2e-spec.*, test_*.py, test.{js,mjs,cjs,ts}) divert to harness; an entry that also touches a real test file falls through and stays hard-BLOCKED on delete/weaken. C4 harness-under-test-dir behaviour (vitest.config.ts, conftest.py, package.json) preserved. Regression test added.",
+      "protected": false
+    }
+  ],
+  "mergeToolDryRun": {
+    "note": "The Lane-B merge tool (analyzeAdditions) is supervisor tooling and is NOT present in this product clone; per the contract it was NOT run against any real clone. Confirmed by inspection that config/validation.json satisfies its contract.",
+    "singleTestsStep": true,
+    "noSeparateSteps": "no tests-int-r3 / tests-sbx8 / tests-relfx steps (bs1/lv1 shards remain, not v7 package tests)",
+    "appendOnlyVsBaseR2": "the base (r2 = SBX-8) 'tests' step 59 entries are preserved as an exact in-order subsequence in the current 73-entry 'tests' step; no base entry removed or reordered; exactly 14 additions = int-r3(2) + sbx8(4) + relfx(8). The int-r3 and sbx8 files that were separate steps in the base are now folded into 'tests'.",
+    "orderingAssertionsPreserved": "new-lineage entries inserted before the b6a/b4/b5 tail so that v7-b5 stays directly after v7-b4 with only later b6+/ps<N> tests following it (v7-b5-work-screens assertion) and the ps1b pair stays as the last two entries (v7-ps1b-project-studio-ui assertion); verified both. pkg-vs-validation-sharding strengthened to pin every tests/v7-*.test.ts to the single tests step.",
+    "result": "PASS (by inspection)"
+  },
+  "perCommitGate": "before every commit: protectedChangeViolations (automation/lib/trust-root.mjs) vs git show 312fb6d:config/protected-paths.json => only FA-V2-PRODUCT UNION FA-SBX protected paths touched (server.ts, validation.json, claude-builder-broker.mjs, trust-root-manifest.json); nothing else protected; config/builder-execution-policy.json, config/environment-policy.json and automation/lib/** unchanged. LF only, //TR comments, no new deps. trust-root regenerated last in any commit touching a protected file (merge, F2). npx tsc --noEmit PASS; affected vitest PASS; verify-trust-root PASS.",
+  "validation": "PENDING_FILL",
+  "packagedCheck": "PENDING_FILL",
+  "knownLimits": ["PENDING_FILL"],
+  "deviations": ["PENDING_FILL"]
+}
