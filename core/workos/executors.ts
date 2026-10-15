@@ -41,8 +41,21 @@ function killTree(child: cp.ChildProcess): void {
     else child.kill("SIGKILL");
   } catch { /* süreç zaten bitmiş olabilir */ }
 }
+export interface ProcOptions { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; input?: string; shouldAbort?: () => boolean }
 // Shell kullanılmaz (argv dizisi); zaman aşımı ve abort (GLOBAL_STOP / lease kaybı) süreç ağacını sonlandırır.
-export function runProcess(argv: string[], opts: {cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; input?: string; shouldAbort?: () => boolean}): Promise<ProcResult> {
+export function runProcess(argv: string[], opts: ProcOptions): Promise<ProcResult> {
+  return runChild(argv, opts, () => cp.spawn(argv[0], argv.slice(1), {cwd: opts.cwd, env: opts.env, shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"]}));
+}
+/**
+ * INT-R3 D-M1-02: UASCO'nun KENDİ node script'ini (ör. scripts/capture-provider-provenance.mjs, scripts/claude-builder-broker.mjs) çocuk süreç olarak çalıştırır.
+ * child_process.fork kullanılır: düz Node'da "node <script>" ile aynıdır; paketli Electron node modunda Electron'un kendi fork kancası çocuğu node modunda yeniden başlatır.
+ * ELECTRON_RUN_AS_NODE üst süreç env'inden asla aktarılmaz (config/environment-policy.json explicitDeny korunur; env yalnız safeChildEnv çıktısıdır). Proje kodu için KULLANILMAZ (SBX-GATE).
+ */
+export function runNodeScript(script: string, args: string[], opts: ProcOptions): Promise<ProcResult> {
+  const argv = [process.execPath, script, ...args];
+  return runChild(argv, opts, () => cp.fork(script, args, {cwd: opts.cwd, env: opts.env, execArgv: [], windowsHide: true, stdio: ["pipe", "pipe", "pipe", "ipc"]} as cp.ForkOptions));
+}
+function runChild(argv: string[], opts: ProcOptions, start: () => cp.ChildProcess): Promise<ProcResult> {
   return new Promise(resolve => {
     const startedAt = new Date().toISOString();
     let stdout = "", stderr = "", timedOut = false, aborted = false, settled = false, spawnError = false;
@@ -52,7 +65,7 @@ export function runProcess(argv: string[], opts: {cwd: string; env: NodeJS.Proce
       resolve({argv, exitCode, stdout, stderr, startedAt, endedAt: new Date().toISOString(), timedOut, aborted, spawnError});
     };
     try {
-      child = cp.spawn(argv[0], argv.slice(1), {cwd: opts.cwd, env: opts.env, shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"]});
+      child = start();
     } catch (e) {
       spawnError = true; stderr = `SPAWN_FAILED: ${(e as Error).message}`; settled = true;
       resolve({argv, exitCode: null, stdout, stderr, startedAt, endedAt: new Date().toISOString(), timedOut, aborted, spawnError}); return;

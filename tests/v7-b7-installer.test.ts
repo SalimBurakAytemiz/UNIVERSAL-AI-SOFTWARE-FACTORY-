@@ -353,3 +353,69 @@ describe("INT-R3 D-M1-01 packaged app stages every runtime-read repo file", () =
     } finally { fs.rmSync(stage, {recursive: true, force: true}); }
   });
 });
+
+// ---------- INT-R3 D-M1-02: paketli provenance yakalama (node modu fork, kontrol kökü userData) ----------
+describe("INT-R3 D-M1-02 packaged executor provenance capture", () => {
+  it("derives the control root under userData (never the install dir) and fails closed on inconsistent paths", async () => {
+    const {packagedControlRoot, packagedAppRoot} = await load("apps", "control-api", "src", "packaged-entry.ts");
+    const ud = path.join(os.tmpdir(), "uasco-ud", "UASCO");
+    expect(packagedControlRoot({runtime: path.join(ud, "runtime"), dataDir: path.join(ud, "workos")})).toBe(path.join(ud, "control"));
+    expect(() => packagedControlRoot({runtime: path.join(ud, "runtime"), dataDir: path.join(os.tmpdir(), "elsewhere", "workos")})).toThrow(/UASCO_CONTROL_ROOT_UNRESOLVED/);
+    expect(packagedAppRoot()).toBe(root);
+    const entry = read("apps", "control-api", "src", "packaged-entry.ts");
+    expect(entry).toContain("repoRoot: packagedAppRoot(), controlRoot");
+  });
+  it("runs UASCO's own node scripts via fork with the sanitized env: ELECTRON_RUN_AS_NODE is never passed through (policy unchanged)", async () => {
+    const {runNodeScript} = await load("core", "workos", "executors.ts");
+    const {safeChildEnv} = await load("automation", "lib", "env-policy.mjs");
+    const policy = JSON.parse(read("config", "environment-policy.json"));
+    expect(policy.explicitDeny).toContain("ELECTRON_RUN_AS_NODE");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b7-fork-"));
+    const prev = process.env.ELECTRON_RUN_AS_NODE;
+    try {
+      const script = path.join(dir, "probe.mjs");
+      fs.writeFileSync(script, 'process.stdout.write(JSON.stringify({cwd: process.cwd(), ern: process.env.ELECTRON_RUN_AS_NODE ?? null, input: require_input()}));\nfunction require_input(){return null}\n');
+      process.env.ELECTRON_RUN_AS_NODE = "1";
+      const env = safeChildEnv(path.join(root, "config", "environment-policy.json"), {provider: "DETERMINISTIC"});
+      expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+      const r = await runNodeScript(script, [], {cwd: dir, env, timeoutMs: 60_000});
+      expect(r.exitCode).toBe(0);
+      expect(r.argv).toEqual([process.execPath, script]);
+      const out = JSON.parse(r.stdout);
+      expect(fs.realpathSync(out.cwd)).toBe(fs.realpathSync(dir));
+      expect(out.ern).toBeNull(); // plain Node: fork adds nothing; packaged Electron's own fork hook is the only node-mode mechanism
+      const slow = path.join(dir, "slow.mjs");
+      fs.writeFileSync(slow, "setTimeout(() => {}, 60000);\n");
+      const t = await runNodeScript(slow, [], {cwd: dir, env, timeoutMs: 500});
+      expect(t.timedOut).toBe(true);
+    } finally {
+      if (prev === undefined) delete process.env.ELECTRON_RUN_AS_NODE; else process.env.ELECTRON_RUN_AS_NODE = prev;
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+  it("the default capture runs the app root's capture script with cwd = control root; provenance and settings land under userData, never in the app dir", async () => {
+    const {ExecutorSetup} = await load("core", "workos", "executor-setup.ts");
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b7-cap-"));
+    try {
+      const appRoot = path.join(base, "install", "resources", "app"), ud = path.join(base, "userdata");
+      fs.mkdirSync(path.join(appRoot, "scripts"), {recursive: true});
+      // sahte yakalayıcı: gerçek CLI'yı çağırmaz; launcher olarak bu node ikilisinin sha256'sını kaydeder
+      fs.writeFileSync(path.join(appRoot, "scripts", "capture-provider-provenance.mjs"), [
+        'import fs from "node:fs"; import crypto from "node:crypto";',
+        'const sha = crypto.createHash("sha256").update(fs.readFileSync(process.execPath)).digest("hex");',
+        'fs.mkdirSync(".ai/runtime", {recursive: true});',
+        'fs.writeFileSync(".ai/runtime/PROVIDER_PROVENANCE.json", JSON.stringify({final: "PASS", capturedAt: "2026-10-15T00:00:00.000Z", claude: {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: process.execPath, launcherSha256: sha, version: "9.9.9 (fake)"}, ern: process.env.ELECTRON_RUN_AS_NODE ?? null}));'
+      ].join("\n") + "\n");
+      const controlRoot = path.join(ud, "control");
+      const setup = new ExecutorSetup({repoRoot: appRoot, controlRoot, dataDir: path.join(ud, "workos"), envPolicyFile: path.join(root, "config", "environment-policy.json"), findClaudeCli: () => process.execPath});
+      const r = await setup.enableLocalClaude("FOUNDER_LOCAL");
+      expect(r.ok).toBe(true);
+      expect(r.status.LOCAL_CLAUDE).toMatchObject({state: "READY", enabled: true, source: "SETTING", version: "9.9.9 (fake)"});
+      const prov = JSON.parse(fs.readFileSync(path.join(controlRoot, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), "utf8"));
+      expect(prov.ern).toBeNull();
+      expect(fs.existsSync(path.join(ud, "workos", "settings", "executors.json"))).toBe(true);
+      expect(fs.existsSync(path.join(appRoot, ".ai"))).toBe(false);
+      expect(read("core", "workos", "executor-setup.ts")).not.toMatch(/execFile\(process\.execPath/);
+    } finally { fs.rmSync(base, {recursive: true, force: true}); }
+  });
+});

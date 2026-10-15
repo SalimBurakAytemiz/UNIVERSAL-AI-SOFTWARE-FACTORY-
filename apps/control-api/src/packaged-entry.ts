@@ -37,12 +37,25 @@ export function packagedServerConfig(env: NodeJS.ProcessEnv): {runtime: string; 
   return {runtime: path.resolve(runtime), dataDir: path.resolve(dataDir), port: parseControlPort(env.CONTROL_API_PORT, 3210)};
 }
 
+/**
+ * INT-R3 D-M1-02: provenance/ayar kontrol kökü userData altındadır (runtime ve veri dizinlerinin ortak üst dizini + "control"), asla kurulum dizini değildir.
+ * İki mutlak yol aynı üst dizini paylaşmalıdır (masaüstü kabuğu ikisini de userData altında kurar); aksi halde fail-closed.
+ */
+export function packagedControlRoot(cfg: {runtime: string; dataDir: string}): string {
+  const parent = path.dirname(path.resolve(cfg.runtime));
+  if (path.dirname(path.resolve(cfg.dataDir)) !== parent || path.dirname(parent) === parent) throw new Error("UASCO_CONTROL_ROOT_UNRESOLVED");
+  return path.join(parent, "control");
+}
+/** Paketli uygulama kökü: bu dosya <app>/apps/control-api/src/packaged-entry.js konumundadır. */
+export const packagedAppRoot = (): string => path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+
 async function main(): Promise<void> {
   const cfg = packagedServerConfig(process.env);
+  const controlRoot = packagedControlRoot(cfg);
   process.stdin.setEncoding("utf8");
   const token = await readFirstLine(process.stdin);
   if (!TOKEN_RE.test(token)) throw new Error("CONTROL_TOKEN_INVALID");
-  const app = buildServer({controlToken: token, runtime: cfg.runtime, dataDir: cfg.dataDir, port: cfg.port, logger: true});
+  const app = buildServer({controlToken: token, runtime: cfg.runtime, dataDir: cfg.dataDir, port: cfg.port, logger: true, repoRoot: packagedAppRoot(), controlRoot});
   let closing = false;
   const shutdown = async (code: number) => {
     if (closing) return;

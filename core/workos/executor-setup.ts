@@ -2,8 +2,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import cp from "node:child_process";
 import {safeChildEnv} from "../../automation/lib/env-policy.mjs";
+import {runNodeScript} from "./executors.js";
 
 export type LocalClaudeState = "READY" | "NOT_CONFIGURED" | "PROVENANCE_MISSING" | "CLI_NOT_FOUND";
 export interface ExecutorStatus { LOCAL_CLAUDE: {state: LocalClaudeState; version?: string; provenanceCapturedAt?: string; enabled: boolean; source: "SETTING" | "ENV" | "NONE"}; FAKE: {state: "TEST_ONLY"} }
@@ -58,12 +58,11 @@ export class ExecutorSetup {
     else state = enabled ? "READY" : "NOT_CONFIGURED";
     return {LOCAL_CLAUDE: {state, enabled, source, ...(prov.version ? {version: prov.version} : {}), ...(prov.capturedAt ? {provenanceCapturedAt: prov.capturedAt} : {})}, FAKE: {state: "TEST_ONLY"}};
   }
-  private defaultCapture(controlRoot: string): Promise<{ok: boolean}> {
-    return new Promise(resolve => {
-      fs.mkdirSync(controlRoot, {recursive: true});
-      cp.execFile(process.execPath, [path.join(this.o.repoRoot, "scripts", "capture-provider-provenance.mjs")], {cwd: controlRoot, env: safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}), windowsHide: true, timeout: 120_000, maxBuffer: 4 * 1024 * 1024},
-        err => resolve({ok: !err}));
-    });
+  // INT-R3 D-M1-02: yakalama script'i uygulama kökünden (paketli: kurulum dizinindeki sahnelenmiş kopya) node çocuk süreci olarak (fork; ELECTRON_RUN_AS_NODE aktarılmaz) çalışır; cwd = kontrol kökü (paketli: userData), yani provenance asla kurulum dizinine yazılmaz.
+  private async defaultCapture(controlRoot: string): Promise<{ok: boolean}> {
+    fs.mkdirSync(controlRoot, {recursive: true});
+    const r = await runNodeScript(path.join(this.o.repoRoot, "scripts", "capture-provider-provenance.mjs"), [], {cwd: controlRoot, env: safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}), timeoutMs: 120_000});
+    return {ok: r.exitCode === 0 && !r.timedOut && !r.spawnError};
   }
   // Etkinleştirme: CLI yoksa reddedilir; provenance kontrol köküne yakalanır ve doğrulanır; yalnız geçerliyse ayar kalıcı yazılır.
   async enableLocalClaude(actor: string): Promise<{ok: true; status: ExecutorStatus} | {ok: false; reason: "CLI_NOT_FOUND" | "PROVENANCE_CAPTURE_FAILED"; status: ExecutorStatus}> {
