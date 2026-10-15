@@ -1,4 +1,4 @@
-// //TR: Bu test REL-FX-3 risk düzeyi kabulünü doğrular: R3/R4 run başlatma 409 RISK_REQUIRES_FOUNDER_DECISION_AND_OS_SANDBOX ile reddedilir ve journal değişmez, hedef metindeki sahte onay/düzey ifadesi kapıyı açmaz (REL-AT-021), store da reddeder, journal'a enjekte edilmiş R4 run'ı runner WORKSPACE adımında klon ve alt süreç olmadan BLOCKED olur; R0-R2 davranışı değişmez ve D-REL-1 geçici host yürütme bildirimi yanıtta görünür.
+// //TR: Bu test REL-FX-3 risk düzeyi kabulünü doğrular: R3/R4 run başlatma 409 RISK_REQUIRES_FOUNDER_DECISION_AND_OS_SANDBOX ile reddedilir ve journal değişmez, hedef metindeki sahte onay/düzey ifadesi kapıyı açmaz (REL-AT-021), store da reddeder, journal'a enjekte edilmiş R4 run'ı runner WORKSPACE adımında klon ve alt süreç olmadan BLOCKED olur; R0-R2 davranışı değişmez ve yürütme bildirimi yanıtta görünür (V7-PKG-M1A-MODE: yürütme yalnız sandbox içinde, ana makinede asla; sandbox yoksa test/önizleme NOT_EXECUTED).
 import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import path from "node:path";
@@ -39,14 +39,19 @@ describe("REL-FX-3 risk-level run admission", () => {
     await app.close();
   });
 
-  it("R0-R2 keep the existing behaviour; the run-start response carries the interim host-execution notice (D-REL-1 pending)", { timeout: T }, async () => {
+  it("R0-R2 keep the existing behaviour; the run-start response carries the sandbox-only execution notice (host execution never happens; without a verified sandbox tests/preview are NOT_EXECUTED)", { timeout: T }, async () => {
     for (const riskLevel of ["R0", "R1", "R2"] as const) {
       const c = setup(tmp, "tA", {riskLevel});
       const app = api(c, {executors: new FakeExecutors(okScript()).pair()});
       const res = await app.inject({method: "POST", url: `/v1/missions/${c.missionId}/runs`, headers: HDR, payload: {}});
       expect(res.statusCode).toBe(201);
       expect(res.json().run.status).toBe("QUEUED");
-      expect(res.json().hostExecutionNotice).toEqual(expect.objectContaining({code: "HOST_EXECUTION_WITHOUT_OS_SANDBOX", decision: "D-REL-1", decisionStatus: "PENDING_FOUNDER", riskLevel}));
+      expect(res.json().hostExecutionNotice).toEqual(expect.objectContaining({code: "EXECUTION_SANDBOX_ONLY", decision: "FD-REL-1-REJECT-HOST-EXEC-2026-10-15", decisionStatus: "DECIDED", hostExecution: "NEVER", withoutVerifiedSandbox: "NOT_EXECUTED", riskLevel}));
+      const text = res.json().hostExecutionNotice.text as string;
+      expect(text).toMatch(/only inside a verified OS sandbox/);
+      expect(text).toMatch(/host execution never happens/);
+      expect(text).toMatch(/tests and preview are NOT_EXECUTED/);
+      expect(text).not.toMatch(/run on this computer/);
       await app.close();
     }
   });
@@ -77,12 +82,12 @@ describe("REL-FX-3 risk-level run admission", () => {
     expect(run.baseSha).toBeNull();
   });
 
-  it("an R1 run still runs end-to-end and its WORKSPACE evidence records the interim notice", { timeout: T }, async () => {
+  it("an R1 run still runs end-to-end and its WORKSPACE evidence records the sandbox-only notice", { timeout: T }, async () => {
     const c = setup(tmp, "tA", {riskLevel: "R1"});
     const fake = new FakeExecutors(okScript());
     const created = startRun(c, fake);
     const run = await drive(c, runner(c, fake), created.runId);
     expect(run.status).toBe("AWAITING_APPROVAL");
-    expect(runOf(c, created.runId).evidence.find(e => e.kind === "WORKSPACE")?.note).toMatch(/HOST_EXECUTION_WITHOUT_OS_SANDBOX/);
+    expect(runOf(c, created.runId).evidence.find(e => e.kind === "WORKSPACE")?.note).toMatch(/EXECUTION_SANDBOX_ONLY riskLevel=R1 \(FD-REL-1-REJECT-HOST-EXEC-2026-10-15 DECIDED\)/);
   });
 });

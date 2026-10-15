@@ -262,7 +262,7 @@ app.post<{Params:{id:string}}>("/v1/missions/:id/runs",wos(async(req,reply)=>{
   const b=body as any;
   const r=getStore().createRunDetailed({tenantId:scope.tenantId,missionId:req.params.id,roleId:b.roleId??null,executor:{implementer:ex.pair.implementer.identity,reviewer:ex.pair.reviewer.identity},createdBy:actor,idempotencyKey:b.idempotencyKey});
   audit(r.replayed?"WORKOS_IDEMPOTENT_REPLAY":"WORKOS_RUN_CREATED",{actor,kind:"run",runId:r.entity.runId,missionId:r.entity.missionId,executor:r.entity.executor});
-  // D-REL-1 Founder'da bekliyor: R0-R2 davranışı değişmez, yalnız geçici host yürütme bildirimi yanıta eklenir.
+  // V7-PKG-M1A-MODE (RV-INTR4-C1-OBS-1): yanıt, yürütmenin yalnız sandbox içinde olduğunu (ana makinede asla) ve sandbox yoksa test/önizlemenin NOT_EXECUTED olduğunu bildirir.
   return reply.code(r.replayed?200:201).send({run:r.entity,hostExecutionNotice:hostExecutionNotice((target??getStore().getMission(scope,r.entity.missionId))!.riskLevel)});
 }));
 app.get<{Querystring:{missionId?:string}}>("/v1/work-runs",wos(async(req,reply)=>{
