@@ -363,6 +363,14 @@ describe("M1a c2 protected main-process wiring (pure blocks evaluated in isolati
       expect(b.deliveryExportCheck(body, RUN, rootDir, fs, path, crypto).reason).toBe("DELIVERY_ARTIFACT_MISSING");
     } finally { fs.rmSync(tmp, {recursive: true, force: true}); }
   });
+  it("UX WP4 c2: GET /v1/roles is allowed read-only with only limit/cursor query; writes and other forms stay rejected", () => {
+    const get = block("B4-ALLOWLIST", "desktopExtraGetPathAllowed")([]) as (v: unknown) => boolean;
+    const post = block("B5-POST-ALLOWLIST", "desktopPostPathAllowed")([]) as (v: unknown) => boolean;
+    for (const ok of ["/v1/roles", "/v1/roles?limit=50", "/v1/roles?limit=50&cursor=abc_DEF-1.2", "/v1/roles?cursor=abc"]) expect(get(ok), ok).toBe(true);
+    for (const bad of ["/v1/roles?", "/v1/roles?limit=0", "/v1/roles?limit=1000", "/v1/roles?limit=5&limit=6", "/v1/roles?x=1", "/v1/roles?limit=5&x=1", "/v1/roles?cursor=a%2Fb", "/v1/roles/", "/v1/roles/role_x", "/v1/roleset", "/v1/roles?limit=5#x", "/v1/roles/../cockpit", "/v1/role"]) expect(get(bad), bad).toBe(false);
+    expect(post("/v1/roles")).toBe(false);
+    expect(get("/v1/secrets")).toBe(false);
+  });
   it("allow-lists: GET delivery views and POST prepare/accept are allowed with strict ids; export is never a renderer POST; the IPC handler checks the sender and takes only a run id", () => {
     const get = block("B4-ALLOWLIST", "desktopExtraGetPathAllowed")([]) as (v: unknown) => boolean;
     const RID = "run_" + "ab".repeat(12), P = "prj_" + "cd".repeat(12);

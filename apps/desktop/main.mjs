@@ -32,8 +32,8 @@ function backendLaunchSpec({execPath,appRoot,paths,port,baseEnv}){
 // B7-PACKAGED-END
 
 // B4-ALLOWLIST-BEGIN
-// //TR: Token ana süreçte eklendiği için shell'in okuduğu ek GET rotaları (cockpit, projeler, mission'lar; B5: work-runs ve evidence) yalnız bu korumalı dosyada, tam eşleşme veya sıkı kimlik/sorgu kuralları ile fail-closed izinlenir; renderer token veya yeni yetki görmez.
-const EXTRA_GET_ROUTES=new Set(["/v1/cockpit","/v1/projects","/v1/missions","/v1/work-runs","/v1/evidence"]);
+// //TR: Token ana süreçte eklendiği için shell'in okuduğu ek GET rotaları (cockpit, projeler, mission'lar; B5: work-runs ve evidence; UX WP4 c2: salt-okunur /v1/roles, yalnız limit ve cursor sorgusu) yalnız bu korumalı dosyada, tam eşleşme veya sıkı kimlik/sorgu kuralları ile fail-closed izinlenir; renderer token veya yeni yetki görmez.
+const EXTRA_GET_ROUTES=new Set(["/v1/cockpit","/v1/projects","/v1/missions","/v1/work-runs","/v1/evidence","/v1/roles"]);
 const PROJECT_MISSIONS_RE=/^\/v1\/missions\?projectId=prj_[0-9a-f]{24}$/;
 const MISSION_DETAIL_RE=/^\/v1\/missions\/msn_[0-9a-f]{24}$/;
 const WORK_RUN_DETAIL_RE=/^\/v1\/work-runs\/[A-Za-z0-9_-]{6,64}$/;
@@ -92,7 +92,7 @@ function projectStudioGetAllowed(value){
 function desktopExtraGetPathAllowed(value){
   if(projectStudioGetAllowed(value))return true;
   if(typeof value!=="string"||value.length>400)return false;
-  return EXTRA_GET_ROUTES.has(value)||DELIVERY_DETAIL_RE.test(value)||DELIVERY_LIST_RE.test(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"]);
+  return EXTRA_GET_ROUTES.has(value)||DELIVERY_DETAIL_RE.test(value)||DELIVERY_LIST_RE.test(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"])||listQueryAllowed(value,"/v1/roles",["limit","cursor"]);
 }
 // B4-ALLOWLIST-END
 
