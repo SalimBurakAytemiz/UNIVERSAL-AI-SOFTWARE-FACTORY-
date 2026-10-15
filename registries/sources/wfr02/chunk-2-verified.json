@@ -1,0 +1,2148 @@
+{
+  "//TR": "Bu satır dışında dosya WFR-02 bağımsız doğrulanmış eşleme kaynağıyla bayt-özdeştir; bu satır çıkarılınca SHA256SUMS ile doğrulanır.",
+  "schema": "wfr02.chunk-verified/1",
+  "chunk": 2,
+  "role": "WFR-02 independent verifier (Claude); did not create the proposals",
+  "notice": "SEMANTIC_VERIFIED here means two independent Claude agents (proposer and this verifier) agreed from the source records. It is NOT Founder approval and NOT a certification. Every pair remains unapproved pending Founder/governed review.",
+  "input": {
+    "file": "C:/Users/salim/UASCO-recovery/product/wfr00/wfr02/chunk-2-proposals.json",
+    "sha256": "496c5ecc2ffa5a80ac02631a46e0369e20e4f86bc147e97faf1d7d248a5bf8c9",
+    "sha256Verified": true,
+    "entries": 121
+  },
+  "sources": {
+    "legacyRegistry": "git show master:registries/agents.json (C:/Users/salim/Desktop/UASCO) + organization/agents/<id>-*.json + registries/agent-role-overlays.json",
+    "targetCatalog": "git show 4f24820:registries/target-role-catalog.json (C:/Users/salim/UASCO-wt/v2-product)",
+    "heuristicLaneB": "git show 4f24820:registries/target-role-reconciliation.json",
+    "heuristicMasterV2": "C:/Users/salim/UASCO-recovery/product/wfr00/mapping-quality.json masterV2HeuristicTable.rows"
+  },
+  "method": "Verifier re-extracted all sources itself (verifier-c2/), ignored proposer rationale, judged legacy name+category+competency/tech against catalog titles and guilds. Legacy org records carry category-template competencies only, so the legacy name and category are the main discriminators.",
+  "definitions": {
+    "agreedWithProposer": "true when the verifier final target equals the proposer primary target (targets[0]), or both are unmapped; CONFLICT entries (null target) count as disagreement even if the proposer listed the candidates.",
+    "finalTargetRoleId": "null for UNMAPPED and CONFLICT; CONFLICT entries list conflictCandidates.",
+    "replacementRule": "Targets replaced by the verifier are SUSPECTED only, never SEMANTIC_VERIFIED in this step."
+  },
+  "sourceAnomalies": [
+    {
+      "legacyId": "139",
+      "note": "Threat Modeling legacy technology list is Blender/Maya/3ds Max/Substance/Unity/Unreal (3D tooling), inconsistent with the role; judged from name/category."
+    }
+  ],
+  "summary": {
+    "SEMANTIC_VERIFIED": 72,
+    "UNMAPPED": 14,
+    "CONFLICT": 17,
+    "SUSPECTED": 18,
+    "REJECTED": 0,
+    "MISSING_SOURCE": 0,
+    "total": 121,
+    "agreedWithProposer": 102,
+    "disagreedWithProposer": 19,
+    "targetReplacedByVerifier": 2,
+    "proposerMap": 105,
+    "proposerUnmapped": 16
+  },
+  "rejectedCrossDomainProposerPairs": [],
+  "rejectedCrossDomainProposerPairsNote": "No proposer pair was judged cross-domain; no entry is REJECTED. Cross-domain pairs found in the existing heuristic tables (not adopted) are listed separately.",
+  "heuristicCrossDomainNotAdopted": [
+    {
+      "legacyId": "142",
+      "source": "laneB",
+      "targetRoleId": "UASCO-0518",
+      "pair": "Platform Engineering (DevOps) -> Learning Platform Engineering (EdTech)"
+    },
+    {
+      "legacyId": "167",
+      "source": "laneB",
+      "targetRoleId": "UASCO-0379",
+      "pair": "Business-systems OMS -> capital-markets trading OMS"
+    },
+    {
+      "legacyId": "167",
+      "source": "masterV2",
+      "targetRoleId": "UASCO-0354",
+      "pair": "Order Management Systems -> ERP Integration Architect"
+    },
+    {
+      "legacyId": "168",
+      "source": "masterV2",
+      "targetRoleId": "UASCO-0353",
+      "pair": "Warehouse & Inventory -> Enterprise Identity SSO"
+    },
+    {
+      "legacyId": "169",
+      "source": "masterV2",
+      "targetRoleId": "UASCO-0360",
+      "pair": "PIM & Catalog -> Enterprise Data Migration"
+    },
+    {
+      "legacyId": "178",
+      "source": "masterV2",
+      "targetRoleId": "UASCO-0571",
+      "pair": "Customer Onboarding -> Customer Market Researcher"
+    },
+    {
+      "legacyId": "185",
+      "source": "masterV2",
+      "targetRoleId": "UASCO-0571",
+      "pair": "Campaign/Experiment Analytics -> Customer Market Researcher"
+    },
+    {
+      "legacyId": "150",
+      "source": "masterV2",
+      "targetRoleId": "UASCO-0233",
+      "pair": "Capacity Planning -> Artifact Signing"
+    },
+    {
+      "legacyId": "151",
+      "source": "masterV2",
+      "targetRoleId": "UASCO-0235",
+      "pair": "Backup & DR -> Package & Registry"
+    },
+    {
+      "legacyId": "197",
+      "source": "masterV2",
+      "targetRoleId": "UASCO-0579",
+      "pair": "ROI & Profitability -> Regulatory Intelligence"
+    },
+    {
+      "legacyId": "201",
+      "source": "masterV2",
+      "targetRoleId": "UASCO-0294",
+      "pair": "License & IP -> Privacy Consent & Retention"
+    },
+    {
+      "legacyId": "204",
+      "source": "masterV2",
+      "targetRoleId": "UASCO-0537",
+      "pair": "Documentation Engineer -> Skill Evaluation Architect"
+    },
+    {
+      "legacyId": "213",
+      "source": "masterV2",
+      "targetRoleId": "UASCO-0411",
+      "pair": "Multiplayer & Network -> Game Creative Director"
+    },
+    {
+      "legacyId": "221",
+      "source": "masterV2",
+      "targetRoleId": "UASCO-0458",
+      "pair": "3D Modeling -> Audio Design & Integration (contract known-bad example)"
+    },
+    {
+      "legacyId": "233",
+      "source": "masterV2",
+      "targetRoleId": "UASCO-0465",
+      "pair": "XR/AR/VR -> Firmware Engineer"
+    }
+  ],
+  "startedAt": "2026-10-14T21:25:28Z",
+  "entries": [
+    {
+      "legacyId": "122",
+      "legacyTitle": "Automation Observability & Suite Health",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0322",
+      "finalTargetTitle": "Principal Test Observability Engineer",
+      "verifierRationale": "Automation observability and suite health is test-run telemetry/health; Test Observability Engineer is the same QA-automation discipline. Flaky-test RCA (0323) is a sub-scope. V2 heuristic 0308 is implausible.",
+      "proposerTarget": "UASCO-0322",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0308",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "123",
+      "legacyTitle": "Defect Triage",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Defect triage (severity, dedupe, routing) has no dedicated catalog role; Regression Risk (0305) and RCA (0243) only adjacent. Reads as task/workflow, not a profession.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "124",
+      "legacyTitle": "Jira / Trello Work Tracking",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Jira/Trello work tracking is tool operation/workflow; no catalog role corresponds (Agile Delivery 0014 is a different profession scope).",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "125",
+      "legacyTitle": "Daily Quality Report",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Daily quality report is a reporting cadence/task, not a profession; no catalog role corresponds.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "126",
+      "legacyTitle": "Weekly Quality Summary",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Weekly quality summary is a reporting cadence/task; no catalog role corresponds.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "127",
+      "legacyTitle": "Monthly Quality Risk Trend",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Monthly quality risk trend is a reporting task; Regression Risk (0305) and Metrics Architect (0146) only adjacent. No corresponding role.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "128",
+      "legacyTitle": "Release Readiness",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0312",
+      "finalTargetTitle": "Principal Release Readiness Evaluator",
+      "verifierRationale": "Release readiness maps 1:1 to Release Readiness Evaluator in QA guild; lane-B heuristic agrees.",
+      "proposerTarget": "UASCO-0312",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0312",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "129",
+      "legacyTitle": "Test Coverage Gap & Risk Analysis",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Coverage-gap analysis is core Test Strategy (0299); risk analysis fits Regression Risk (0305). Both equally plausible; proposer itself uncertain (0.55).",
+      "proposerTarget": "UASCO-0305",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null,
+      "conflictCandidates": [
+        "UASCO-0299",
+        "UASCO-0305"
+      ]
+    },
+    {
+      "legacyId": "130",
+      "legacyTitle": "Production Smoke & Canary Verification",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0340",
+      "finalTargetTitle": "Principal Production Verification Expert",
+      "verifierRationale": "Production smoke and canary verification equals Production Verification Expert scope. Synthetic monitoring (0249) is an adjacent secondary.",
+      "proposerTarget": "UASCO-0340",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "131",
+      "legacyTitle": "Synthetic Monitoring & Live Journey",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0249",
+      "finalTargetTitle": "Principal Production Health & Synthetic Monitoring Engineer",
+      "verifierRationale": "Synthetic monitoring and live journey checks are the named scope of Production Health & Synthetic Monitoring Engineer; cross-guild (QA to SRE) but same discipline.",
+      "proposerTarget": "UASCO-0249",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "132",
+      "legacyTitle": "Security Architect",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Generic Security Architect is broader than AppSec; Application Security Architect, Secure Architecture Evaluator, Cloud Security Architect comparably plausible. V2 0255 too narrow.",
+      "proposerTarget": "UASCO-0251",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0255",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      },
+      "conflictCandidates": [
+        "UASCO-0251",
+        "UASCO-0259",
+        "UASCO-0264"
+      ]
+    },
+    {
+      "legacyId": "133",
+      "legacyTitle": "Application Security",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0251",
+      "finalTargetTitle": "Principal Application Security Architect",
+      "verifierRationale": "Application Security maps to Application Security Architect; lane-B and V2 heuristics agree. Same discipline and scope.",
+      "proposerTarget": "UASCO-0251",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0251",
+      "heuristicMasterV2": {
+        "target": "UASCO-0251",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "134",
+      "legacyTitle": "Cloud Security",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0264",
+      "finalTargetTitle": "Principal Cloud Security Architect",
+      "verifierRationale": "Cloud Security equals Cloud Security Architect (multi-cloud tech set matches); lane-B agrees. V2 heuristic 0255 API Security implausible.",
+      "proposerTarget": "UASCO-0264",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0264",
+      "heuristicMasterV2": {
+        "target": "UASCO-0255",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "135",
+      "legacyTitle": "Identity Security",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0265",
+      "finalTargetTitle": "Principal Identity & Access Management Architect",
+      "verifierRationale": "Identity security with OAuth2/OIDC/SAML/SCIM/Keycloak/Entra tech is IAM architecture; same discipline. Privileged Access (0266) is a sub-scope.",
+      "proposerTarget": "UASCO-0265",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0255",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "136",
+      "legacyTitle": "Secrets & Key Management",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Name says key management (0268, lane-B) but legacy tech is Gitleaks/Trivy, i.e. secrets detection (0263, V2). Heuristics split with comparable plausibility.",
+      "proposerTarget": "UASCO-0268",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0268",
+      "heuristicMasterV2": {
+        "target": "UASCO-0263",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      },
+      "conflictCandidates": [
+        "UASCO-0268",
+        "UASCO-0263"
+      ]
+    },
+    {
+      "legacyId": "137",
+      "legacyTitle": "Software Supply Chain Security",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0260",
+      "finalTargetTitle": "Principal Supply Chain Security Engineer",
+      "verifierRationale": "Software supply chain security equals Supply Chain Security Engineer; lane-B and V2 agree.",
+      "proposerTarget": "UASCO-0260",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0260",
+      "heuristicMasterV2": {
+        "target": "UASCO-0260",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "138",
+      "legacyTitle": "Dependency & SBOM Security",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Syft (SBOM) fits SBOM & Dependency Provenance (0231); Grype/Snyk scanning in a security category fits Software Composition Analysis (0262). Equally plausible.",
+      "proposerTarget": "UASCO-0231",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0256",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      },
+      "conflictCandidates": [
+        "UASCO-0231",
+        "UASCO-0262"
+      ]
+    },
+    {
+      "legacyId": "139",
+      "legacyTitle": "Threat Modeling",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0254",
+      "finalTargetTitle": "Principal Threat Modeling Expert",
+      "verifierRationale": "Threat Modeling equals Threat Modeling Expert; lane-B/V2 agree. Source anomaly: legacy tech list (Blender/Maya/Unity) is wrong for this role; name and category suffice.",
+      "proposerTarget": "UASCO-0254",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0254",
+      "heuristicMasterV2": {
+        "target": "UASCO-0254",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "140",
+      "legacyTitle": "AI Red Team",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0195",
+      "finalTargetTitle": "Principal AI Red Team Expert",
+      "verifierRationale": "AI Red Team equals AI Red Team Expert; lane-B agrees. V2 heuristic 0255 API Security is a scope shift.",
+      "proposerTarget": "UASCO-0195",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0195",
+      "heuristicMasterV2": {
+        "target": "UASCO-0255",
+        "class": "SUSPECTED_SCOPE_SHIFT"
+      }
+    },
+    {
+      "legacyId": "141",
+      "legacyTitle": "SecOps & Security Incident",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0286",
+      "finalTargetTitle": "Principal Security Incident Commander",
+      "verifierRationale": "Compound role: security-incident half matches Incident Commander (0286); SecOps/SOC half matches SOC Detection (0275). Partial overlap only.",
+      "proposerTarget": "UASCO-0286",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0255",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "142",
+      "legacyTitle": "Platform Engineering",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0202",
+      "finalTargetTitle": "Principal Internal Developer Platform Architect",
+      "verifierRationale": "Platform Engineering as a discipline is internal developer platform building; IDP Architect matches. Lane-B 0518 Learning Platform Engineering is a lexical cross-domain (EdTech) error.",
+      "proposerTarget": "UASCO-0202",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0518",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "143",
+      "legacyTitle": "DevOps",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0224",
+      "finalTargetTitle": "Principal DevOps Architect",
+      "verifierRationale": "DevOps maps to DevOps Architect; lane-B agrees.",
+      "proposerTarget": "UASCO-0224",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0224",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "144",
+      "legacyTitle": "Cloud Infrastructure",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0212",
+      "finalTargetTitle": "Principal Cloud Solutions Architect",
+      "verifierRationale": "Multi-cloud infrastructure engineering vs Cloud Solutions Architect: same area, but solutioning vs infra-operations scope; per-cloud engineers 0213-0215 also partial.",
+      "proposerTarget": "UASCO-0212",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "145",
+      "legacyTitle": "Infrastructure as Code",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0226",
+      "finalTargetTitle": "Principal Infrastructure as Code Engineer",
+      "verifierRationale": "Infrastructure as Code maps 1:1 to IaC Engineer; lane-B agrees.",
+      "proposerTarget": "UASCO-0226",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0226",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "146",
+      "legacyTitle": "Container & Kubernetes",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0227",
+      "finalTargetTitle": "Principal Kubernetes Platform Engineer",
+      "verifierRationale": "Container & Kubernetes; tech is Kubernetes-heavy (Helm/ArgoCD/Istio). Kubernetes Platform Engineer covers dominant scope; Container Engineering (0228) narrower sibling.",
+      "proposerTarget": "UASCO-0227",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "147",
+      "legacyTitle": "CI/CD Engineering",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0225",
+      "finalTargetTitle": "Principal CI/CD Pipeline Engineer",
+      "verifierRationale": "CI/CD Engineering equals CI/CD Pipeline Engineer.",
+      "proposerTarget": "UASCO-0225",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "148",
+      "legacyTitle": "SRE",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0238",
+      "finalTargetTitle": "Principal Site Reliability Architect",
+      "verifierRationale": "SRE equals Site Reliability Architect; same discipline.",
+      "proposerTarget": "UASCO-0238",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "149",
+      "legacyTitle": "Observability",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0239",
+      "finalTargetTitle": "Principal Observability Engineer",
+      "verifierRationale": "Observability equals Observability Engineer; lane-B agrees. OpenTelemetry Engineer (0240) is a narrower sibling.",
+      "proposerTarget": "UASCO-0239",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0239",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "150",
+      "legacyTitle": "Capacity Planning",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0247",
+      "finalTargetTitle": "Principal Capacity Planning Engineer",
+      "verifierRationale": "Capacity Planning equals Capacity Planning Engineer; lane-B agrees. V2 heuristic 0233 Artifact Signing is unrelated.",
+      "proposerTarget": "UASCO-0247",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0247",
+      "heuristicMasterV2": {
+        "target": "UASCO-0233",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "151",
+      "legacyTitle": "Backup & Disaster Recovery",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0245",
+      "finalTargetTitle": "Principal Disaster Recovery Expert",
+      "verifierRationale": "Backup & DR is broader than Disaster Recovery Expert but same discipline; lane-B agrees. V2 heuristic 0235 Package & Registry is unrelated.",
+      "proposerTarget": "UASCO-0245",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0245",
+      "heuristicMasterV2": {
+        "target": "UASCO-0235",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "152",
+      "legacyTitle": "Model Router",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0183",
+      "finalTargetTitle": "Principal Model Router Engineer",
+      "verifierRationale": "Model Router equals Model Router Engineer; lane-B agrees.",
+      "proposerTarget": "UASCO-0183",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0183",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "153",
+      "legacyTitle": "Model Operations",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Generic Model Operations fits MLOps (0170) and LLMOps (0171) equally; legacy tech mixes PyTorch/ONNX with vLLM.",
+      "proposerTarget": "UASCO-0171",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null,
+      "conflictCandidates": [
+        "UASCO-0170",
+        "UASCO-0171"
+      ]
+    },
+    {
+      "legacyId": "154",
+      "legacyTitle": "Model Benchmark",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0175",
+      "finalTargetTitle": "Principal Model Benchmark Engineer",
+      "verifierRationale": "Model Benchmark equals Model Benchmark Engineer; lane-B agrees.",
+      "proposerTarget": "UASCO-0175",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0175",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "155",
+      "legacyTitle": "Model Quality Evaluation",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0191",
+      "finalTargetTitle": "Principal LLM Evaluation Engineer",
+      "verifierRationale": "Model quality evaluation with LLM tooling (Ollama/vLLM/LangChain) equals LLM Evaluation Engineer; Dataset & Evaluation (0174) is adjacent.",
+      "proposerTarget": "UASCO-0191",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "156",
+      "legacyTitle": "Prompt Engineering",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0164",
+      "finalTargetTitle": "Principal LLM Engineer",
+      "verifierRationale": "Prompt engineering is a narrow skill inside LLM Engineer; no dedicated target. Plausible absorption, but may be better treated as a skill overlay.",
+      "proposerTarget": "UASCO-0164",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "157",
+      "legacyTitle": "Prompt Evaluation",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0191",
+      "finalTargetTitle": "Principal LLM Evaluation Engineer",
+      "verifierRationale": "Prompt evaluation is a clear subset of LLM evaluation; same discipline, narrower legacy scope.",
+      "proposerTarget": "UASCO-0191",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "158",
+      "legacyTitle": "Model Cost Optimization",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0184",
+      "finalTargetTitle": "Principal Model Cost Optimization Expert",
+      "verifierRationale": "Model Cost Optimization equals Model Cost Optimization Expert; lane-B and V2 agree.",
+      "proposerTarget": "UASCO-0184",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0184",
+      "heuristicMasterV2": {
+        "target": "UASCO-0184",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "159",
+      "legacyTitle": "Model Availability & Fallback",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0185",
+      "finalTargetTitle": "Principal Model Availability Engineer",
+      "verifierRationale": "Model Availability & Fallback equals Model Availability Engineer; lane-B agrees.",
+      "proposerTarget": "UASCO-0185",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0185",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "160",
+      "legacyTitle": "Integration Architect",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0341",
+      "finalTargetTitle": "Principal Enterprise Integration Architect",
+      "verifierRationale": "Integration Architect equals Enterprise Integration Architect. V2 heuristic 0346 EDI is a narrow sub-specialty.",
+      "proposerTarget": "UASCO-0341",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0346",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "161",
+      "legacyTitle": "Connector & Adapter Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0342",
+      "finalTargetTitle": "Principal Connector SDK Engineer",
+      "verifierRationale": "Connector & Adapter engineering equals Connector SDK Engineer; V2 agrees.",
+      "proposerTarget": "UASCO-0342",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0342",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "162",
+      "legacyTitle": "Webhook & Contract Integration",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Webhook half fits REST & Webhook (0343); contract half (Pact/OpenAPI) is API contracts, which V2 maps to Data Contract Integration (0348). Comparable plausibility.",
+      "proposerTarget": "UASCO-0343",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0348",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      },
+      "conflictCandidates": [
+        "UASCO-0343",
+        "UASCO-0348"
+      ]
+    },
+    {
+      "legacyId": "163",
+      "legacyTitle": "BaaS Integration",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "BaaS integration (Firebase/Supabase-style backends) has no catalog role; V2 heuristic 0346 EDI is unrelated.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0346",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "164",
+      "legacyTitle": "External API Drift Monitoring",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0350",
+      "finalTargetTitle": "Principal Third-Party API Drift Engineer",
+      "verifierRationale": "External API drift monitoring equals Third-Party API Drift Engineer; V2 agrees.",
+      "proposerTarget": "UASCO-0350",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0350",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "165",
+      "legacyTitle": "CRM Systems",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0355",
+      "finalTargetTitle": "Principal CRM Architecture Expert",
+      "verifierRationale": "CRM Systems maps to CRM Architecture Expert; V2 agrees.",
+      "proposerTarget": "UASCO-0355",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0355",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "166",
+      "legacyTitle": "ERP Systems",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0354",
+      "finalTargetTitle": "Principal ERP Integration Architect",
+      "verifierRationale": "ERP Systems in a software factory is ERP integration/architecture; only ERP target, same discipline, legacy broader. V2 agrees.",
+      "proposerTarget": "UASCO-0354",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0354",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "167",
+      "legacyTitle": "Order Management Systems",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0392",
+      "finalTargetTitle": "Principal Order Management Architect",
+      "verifierRationale": "Business-systems OMS (siblings ERP/WMS/PIM) is commerce order management. Lane-B 0379 is capital-markets trading OMS (lexical cross-domain); V2 0354 ERP flagged bad.",
+      "proposerTarget": "UASCO-0392",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0379",
+      "heuristicMasterV2": {
+        "target": "UASCO-0354",
+        "class": "SUSPECTED_BAD_PAIR"
+      }
+    },
+    {
+      "legacyId": "168",
+      "legacyTitle": "Warehouse & Inventory Systems",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0393",
+      "finalTargetTitle": "Principal Inventory Systems Engineer",
+      "verifierRationale": "Warehouse & Inventory Systems is broader than Inventory Systems Engineer, same discipline; lane-B agrees. V2 heuristic 0353 Enterprise SSO is cross-domain.",
+      "proposerTarget": "UASCO-0393",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0393",
+      "heuristicMasterV2": {
+        "target": "UASCO-0353",
+        "class": "SUSPECTED_BAD_PAIR"
+      }
+    },
+    {
+      "legacyId": "169",
+      "legacyTitle": "PIM & Catalog Systems",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0389",
+      "finalTargetTitle": "Principal Commerce Catalog Engineer",
+      "verifierRationale": "PIM & catalog systems equals Commerce Catalog Engineer. V2 heuristic 0360 Enterprise Data Migration is cross-domain.",
+      "proposerTarget": "UASCO-0389",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0360",
+        "class": "SUSPECTED_BAD_PAIR"
+      }
+    },
+    {
+      "legacyId": "170",
+      "legacyTitle": "CMS & DAM Systems",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "No CMS or digital-asset-management role exists in the catalog; V2 heuristic 0352 SaaS Platform Architect is unrelated.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0352",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "171",
+      "legacyTitle": "Payments & Billing Systems",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Compound payments and billing; Payment Processing (0366) and Enterprise Billing (0357, V2 heuristic) are comparably plausible.",
+      "proposerTarget": "UASCO-0366",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0357",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      },
+      "conflictCandidates": [
+        "UASCO-0366",
+        "UASCO-0357"
+      ]
+    },
+    {
+      "legacyId": "172",
+      "legacyTitle": "Accounting & Reconciliation Systems",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0369",
+      "finalTargetTitle": "Principal Reconciliation Systems Expert",
+      "verifierRationale": "Reconciliation half matches Reconciliation Systems Expert (lane-B agrees); accounting-systems half fits Double-Entry Ledger (0364) or Accounting Controls (0575). Partial.",
+      "proposerTarget": "UASCO-0369",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0369",
+      "heuristicMasterV2": {
+        "target": "UASCO-0354",
+        "class": "SUSPECTED_BAD_PAIR"
+      }
+    },
+    {
+      "legacyId": "173",
+      "legacyTitle": "Lead Generation",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0567",
+      "finalTargetTitle": "Principal Growth Marketing Strategist",
+      "verifierRationale": "Proposer left unmapped; Growth Marketing Strategist partially covers lead/demand generation. Replacement target, so SUSPECTED only. V2 0568 SEO is a scope shift.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": true,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0568",
+        "class": "SUSPECTED_SCOPE_SHIFT"
+      }
+    },
+    {
+      "legacyId": "174",
+      "legacyTitle": "Lead Qualification",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Lead qualification is a sales-process task; no catalog role corresponds (Enterprise Sales Strategist only adjacent).",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0568",
+        "class": "SUSPECTED_SCOPE_SHIFT"
+      }
+    },
+    {
+      "legacyId": "175",
+      "legacyTitle": "Sales",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0560",
+      "finalTargetTitle": "Principal Enterprise Sales Strategist",
+      "verifierRationale": "Generic Sales head maps to Enterprise Sales Strategist; same profession. V2 0562 Technical Pre-Sales is a narrower, different function.",
+      "proposerTarget": "UASCO-0560",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0562",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "176",
+      "legacyTitle": "Proposal & Quotation",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0563",
+      "finalTargetTitle": "Principal Proposal & Tender Expert",
+      "verifierRationale": "Proposal & Quotation equals Proposal & Tender Expert.",
+      "proposerTarget": "UASCO-0563",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0563",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "177",
+      "legacyTitle": "CRM Operations",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0355",
+      "finalTargetTitle": "Principal CRM Architecture Expert",
+      "verifierRationale": "CRM operations (data hygiene, pipeline admin) vs CRM Architecture: same system area but operations vs architecture scope. V2 0565 Channel Integration unrelated.",
+      "proposerTarget": "UASCO-0355",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0565",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "178",
+      "legacyTitle": "Customer Onboarding",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0553",
+      "finalTargetTitle": "Principal Customer Onboarding Engineer",
+      "verifierRationale": "Customer Onboarding equals Customer Onboarding Engineer; lane-B agrees. V2 0571 Customer Market Researcher is wrong.",
+      "proposerTarget": "UASCO-0553",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0553",
+      "heuristicMasterV2": {
+        "target": "UASCO-0571",
+        "class": "SUSPECTED_BAD_PAIR"
+      }
+    },
+    {
+      "legacyId": "179",
+      "legacyTitle": "Growth Strategy",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0567",
+      "finalTargetTitle": "Principal Growth Marketing Strategist",
+      "verifierRationale": "Growth Strategy in Marketing & Growth equals Growth Marketing Strategist. V2 0564 Partnership Strategy less plausible.",
+      "proposerTarget": "UASCO-0567",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0564",
+        "class": "SUSPECTED_SCOPE_SHIFT"
+      }
+    },
+    {
+      "legacyId": "180",
+      "legacyTitle": "Performance Marketing",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Performance (paid) marketing splits between Growth Marketing (0567) and Attribution & Campaign Analyst (0570); no dedicated role. V2 maps 0569 Lifecycle.",
+      "proposerTarget": "UASCO-0567",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0569",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      },
+      "conflictCandidates": [
+        "UASCO-0567",
+        "UASCO-0570"
+      ]
+    },
+    {
+      "legacyId": "181",
+      "legacyTitle": "SEO",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0568",
+      "finalTargetTitle": "Principal Search Engine Optimization Expert",
+      "verifierRationale": "SEO equals Search Engine Optimization Expert.",
+      "proposerTarget": "UASCO-0568",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "182",
+      "legacyTitle": "Content Marketing",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "No content-marketing role; UX Writing (0036) and Developer Advocacy (0544) are different professions.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "183",
+      "legacyTitle": "Social Media",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "No social-media marketing role exists in the catalog.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "184",
+      "legacyTitle": "Email & Lifecycle Marketing",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0569",
+      "finalTargetTitle": "Principal Lifecycle Marketing Expert",
+      "verifierRationale": "Email & lifecycle marketing equals Lifecycle Marketing Expert; lane-B agrees.",
+      "proposerTarget": "UASCO-0569",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0569",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "185",
+      "legacyTitle": "Campaign / Experiment Analytics",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0570",
+      "finalTargetTitle": "Principal Attribution & Campaign Analyst",
+      "verifierRationale": "Campaign analytics matches Attribution & Campaign Analyst; experiment-analytics half belongs to Experiment Design Scientist (0147). Partial. V2 0571 is wrong.",
+      "proposerTarget": "UASCO-0570",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0571",
+        "class": "SUSPECTED_BAD_PAIR"
+      }
+    },
+    {
+      "legacyId": "186",
+      "legacyTitle": "Customer Support",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0550",
+      "finalTargetTitle": "Principal Technical Support Architect",
+      "verifierRationale": "Customer Support head in a software factory maps to Technical Support Architect; same profession. V2 0552 Customer Success is an adjacent, different function.",
+      "proposerTarget": "UASCO-0550",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0552",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "187",
+      "legacyTitle": "Ticket Triage",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Ticket triage is a support workflow/task; no corresponding catalog role.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "188",
+      "legacyTitle": "Support Routing",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Support routing is a workflow/task; no corresponding catalog role.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "189",
+      "legacyTitle": "Knowledge Base",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Legacy sits in Support & Success; Support Knowledge Systems Engineer (0555) is as plausible as Knowledge Base Experience Expert (0548, lane-B lexical pick).",
+      "proposerTarget": "UASCO-0548",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0548",
+      "heuristicMasterV2": null,
+      "conflictCandidates": [
+        "UASCO-0548",
+        "UASCO-0555"
+      ]
+    },
+    {
+      "legacyId": "190",
+      "legacyTitle": "Customer Success & Renewal",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0552",
+      "finalTargetTitle": "Principal Customer Success Architect",
+      "verifierRationale": "Customer Success & Renewal maps to Customer Success Architect (renewal 0558 a sub-scope); lane-B and V2 agree.",
+      "proposerTarget": "UASCO-0552",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0552",
+      "heuristicMasterV2": {
+        "target": "UASCO-0552",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "191",
+      "legacyTitle": "Finance Operations",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Finance Operations head has no corresponding role; FP&A (0572) and Accounting Controls (0575) are only partial sub-functions.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0572",
+        "class": "SUSPECTED_SCOPE_SHIFT"
+      }
+    },
+    {
+      "legacyId": "192",
+      "legacyTitle": "Accounting",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0575",
+      "finalTargetTitle": "Principal Accounting Controls Analyst",
+      "verifierRationale": "Accounting maps to Accounting Controls Analyst, a narrower target in the same discipline; V2 agrees.",
+      "proposerTarget": "UASCO-0575",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0575",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "193",
+      "legacyTitle": "FinOps",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0573",
+      "finalTargetTitle": "Principal FinOps & Cloud Unit Economics Expert",
+      "verifierRationale": "FinOps equals FinOps & Cloud Unit Economics Expert.",
+      "proposerTarget": "UASCO-0573",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0573",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "194",
+      "legacyTitle": "Budget Guard",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Budget guard could be FP&A budgeting, cloud FinOps spend guard, or agent/model cost governance; three comparably plausible targets.",
+      "proposerTarget": "UASCO-0572",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null,
+      "conflictCandidates": [
+        "UASCO-0572",
+        "UASCO-0573",
+        "UASCO-0595"
+      ]
+    },
+    {
+      "legacyId": "195",
+      "legacyTitle": "Cost Controller",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Cost Controller: lane-B lexical pick Workforce Cost Controller (0583) vs FinOps (0573); comparable plausibility, scope unclear from source.",
+      "proposerTarget": "UASCO-0573",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0583",
+      "heuristicMasterV2": null,
+      "conflictCandidates": [
+        "UASCO-0573",
+        "UASCO-0583"
+      ]
+    },
+    {
+      "legacyId": "196",
+      "legacyTitle": "Cash Flow Forecasting",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0576",
+      "finalTargetTitle": "Principal Treasury Planning Analyst",
+      "verifierRationale": "Cash flow forecasting is core treasury planning; V2 agrees. Same discipline, narrower legacy scope.",
+      "proposerTarget": "UASCO-0576",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0576",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "197",
+      "legacyTitle": "ROI & Profitability",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0572",
+      "finalTargetTitle": "Principal Financial Planning & Analysis Expert",
+      "verifierRationale": "ROI and profitability analysis is plausibly FP&A, but Revenue & Monetization (0574) also partial. V2 0579 Regulatory Intelligence is wrong.",
+      "proposerTarget": "UASCO-0572",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0579",
+        "class": "SUSPECTED_SCOPE_SHIFT"
+      }
+    },
+    {
+      "legacyId": "198",
+      "legacyTitle": "Privacy / KVKK / GDPR",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0289",
+      "finalTargetTitle": "Principal GDPR & KVKK Compliance Analyst",
+      "verifierRationale": "Privacy/KVKK/GDPR in Legal category equals GDPR & KVKK Compliance Analyst. V2 0287 Privacy Engineering is engineering-side, less plausible.",
+      "proposerTarget": "UASCO-0289",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0287",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "199",
+      "legacyTitle": "Compliance",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0291",
+      "finalTargetTitle": "Principal Regulatory Compliance Analyst",
+      "verifierRationale": "Generic Compliance maps to Regulatory Compliance Analyst; V2 0289 is narrower, privacy-only.",
+      "proposerTarget": "UASCO-0291",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0289",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "200",
+      "legacyTitle": "Consent & Data Retention",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0294",
+      "finalTargetTitle": "Principal Privacy Consent & Retention Expert",
+      "verifierRationale": "Consent & data retention equals Privacy Consent & Retention Expert; V2 agrees.",
+      "proposerTarget": "UASCO-0294",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0294",
+        "class": "SUSPECTED_SCOPE_SHIFT"
+      }
+    },
+    {
+      "legacyId": "201",
+      "legacyTitle": "License & Intellectual Property",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0578",
+      "finalTargetTitle": "Principal Software Licensing & Intellectual Property Analyst",
+      "verifierRationale": "License & IP equals Software Licensing & IP Analyst (explicit IP). V2 0294 Consent & Retention is wrong.",
+      "proposerTarget": "UASCO-0578",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0294",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "202",
+      "legacyTitle": "Contract & Regulatory Risk",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0577",
+      "finalTargetTitle": "Principal Contract Risk Analyst",
+      "verifierRationale": "Compound: contract risk matches 0577; regulatory-risk half fits Regulatory Intelligence (0579) or Compliance (0291). Partial.",
+      "proposerTarget": "UASCO-0577",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0295",
+        "class": "SUSPECTED_SCOPE_SHIFT"
+      }
+    },
+    {
+      "legacyId": "203",
+      "legacyTitle": "Technical Research",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0530",
+      "finalTargetTitle": "Principal Technical Research Expert",
+      "verifierRationale": "Technical Research equals Technical Research Expert; lane-B and V2 agree.",
+      "proposerTarget": "UASCO-0530",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0530",
+      "heuristicMasterV2": {
+        "target": "UASCO-0530",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "204",
+      "legacyTitle": "Documentation Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0541",
+      "finalTargetTitle": "Principal Technical Documentation Architect",
+      "verifierRationale": "Documentation Engineer maps to Technical Documentation Architect. V2 0537 Skill Evaluation Architect is wrong.",
+      "proposerTarget": "UASCO-0541",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0537",
+        "class": "SUSPECTED_SCOPE_SHIFT"
+      }
+    },
+    {
+      "legacyId": "205",
+      "legacyTitle": "Knowledge Management",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0529",
+      "finalTargetTitle": "Chief Knowledge Architecture Agent",
+      "verifierRationale": "Knowledge management broadly fits Knowledge Architecture, but target is chief-level vs IMPLEMENTATION legacy; V2 0533 Knowledge Graph is narrower tech.",
+      "proposerTarget": "UASCO-0529",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0533",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "206",
+      "legacyTitle": "Architecture Decision / ADR",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0543",
+      "finalTargetTitle": "Principal Architecture Decision Recorder",
+      "verifierRationale": "ADR maps 1:1 to Architecture Decision Recorder. V2 0534 Memory Architecture is wrong.",
+      "proposerTarget": "UASCO-0543",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0534",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "207",
+      "legacyTitle": "Repository & Tool Evaluation",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0530",
+      "finalTargetTitle": "Principal Technical Research Expert",
+      "verifierRationale": "Proposer left unmapped; repository/tool evaluation is a technology-evaluation subset of Technical Research Expert. Replacement target, so SUSPECTED only.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": true,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0537",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "208",
+      "legacyTitle": "Game Systems Architect",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0412",
+      "finalTargetTitle": "Principal Game Design Systems Architect",
+      "verifierRationale": "Game Systems Architect: game-industry \"systems\" usually means design systems (0412, lane-B/V2 agree), but technical Game Engine Architect (0424) remains plausible.",
+      "proposerTarget": "UASCO-0412",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0412",
+      "heuristicMasterV2": {
+        "target": "UASCO-0412",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "209",
+      "legacyTitle": "Gameplay Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0413",
+      "finalTargetTitle": "Principal Gameplay Engineering Expert",
+      "verifierRationale": "Gameplay Engineer equals Gameplay Engineering Expert; V2 agrees.",
+      "proposerTarget": "UASCO-0413",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0413",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "210",
+      "legacyTitle": "Unreal Engine",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0425",
+      "finalTargetTitle": "Principal Unreal Engine Engineer",
+      "verifierRationale": "Unreal Engine equals Unreal Engine Engineer; lane-B agrees.",
+      "proposerTarget": "UASCO-0425",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0425",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "211",
+      "legacyTitle": "Unity Engine",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0426",
+      "finalTargetTitle": "Principal Unity Engine Engineer",
+      "verifierRationale": "Unity Engine equals Unity Engine Engineer; lane-B agrees.",
+      "proposerTarget": "UASCO-0426",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0426",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "212",
+      "legacyTitle": "Godot Engine",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0427",
+      "finalTargetTitle": "Principal Godot Engine Engineer",
+      "verifierRationale": "Godot Engine equals Godot Engine Engineer; lane-B agrees.",
+      "proposerTarget": "UASCO-0427",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0427",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "213",
+      "legacyTitle": "Multiplayer & Network",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0437",
+      "finalTargetTitle": "Principal Multiplayer Network Architect",
+      "verifierRationale": "Multiplayer & Network equals Multiplayer Network Architect; lane-B agrees. V2 0411 Game Creative Director is wrong.",
+      "proposerTarget": "UASCO-0437",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0437",
+      "heuristicMasterV2": {
+        "target": "UASCO-0411",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "214",
+      "legacyTitle": "Game Backend",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Generic Game Backend fits Authoritative Game Server, Game Persistence and MMO Backend Architect comparably; no single generic target.",
+      "proposerTarget": "UASCO-0438",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0423",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      },
+      "conflictCandidates": [
+        "UASCO-0438",
+        "UASCO-0443",
+        "UASCO-0444"
+      ]
+    },
+    {
+      "legacyId": "215",
+      "legacyTitle": "Game Economy",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0416",
+      "finalTargetTitle": "Principal Game Economy & Balancing Expert",
+      "verifierRationale": "Game Economy equals Game Economy & Balancing Expert; lane-B agrees.",
+      "proposerTarget": "UASCO-0416",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0416",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "216",
+      "legacyTitle": "LiveOps",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0449",
+      "finalTargetTitle": "Principal LiveOps Event & Telemetry Engineer",
+      "verifierRationale": "LiveOps maps to LiveOps Event & Telemetry Engineer, the catalog's LiveOps role; same discipline.",
+      "proposerTarget": "UASCO-0449",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "217",
+      "legacyTitle": "Anti-Cheat",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0446",
+      "finalTargetTitle": "Principal Anti-Cheat Engineering Expert",
+      "verifierRationale": "Anti-Cheat equals Anti-Cheat Engineering Expert; lane-B agrees.",
+      "proposerTarget": "UASCO-0446",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0446",
+      "heuristicMasterV2": null
+    },
+    {
+      "legacyId": "218",
+      "legacyTitle": "Game Trust & Safety",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0450",
+      "finalTargetTitle": "Principal Game Trust & Safety Expert",
+      "verifierRationale": "Game Trust & Safety equals Game Trust & Safety Expert; lane-B agrees. V2 0422 Game UX is wrong.",
+      "proposerTarget": "UASCO-0450",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0450",
+      "heuristicMasterV2": {
+        "target": "UASCO-0422",
+        "class": "SUSPECTED_SCOPE_SHIFT"
+      }
+    },
+    {
+      "legacyId": "219",
+      "legacyTitle": "Game Build / Patcher / Release",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0447",
+      "finalTargetTitle": "Principal Game Patch & Asset Delivery Engineer",
+      "verifierRationale": "Patch/release half matches Game Patch & Asset Delivery; game-build half (CI builds) only partially covered (0232/0461). Partial.",
+      "proposerTarget": "UASCO-0447",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0423",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "220",
+      "legacyTitle": "3D Technical Art",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0451",
+      "finalTargetTitle": "Principal Technical Art Director Agent",
+      "verifierRationale": "3D Technical Art head maps to Technical Art Director; V2 agrees.",
+      "proposerTarget": "UASCO-0451",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0451",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "221",
+      "legacyTitle": "3D Modeling",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0452",
+      "finalTargetTitle": "Principal 3D Character Artist",
+      "verifierRationale": "3D modeling spans character (0452) and environment (0453) art; no generic modeler role. Correct discipline; known-bad V2 pair 221->0458 Audio rejected as cross-domain.",
+      "proposerTarget": "UASCO-0452",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0458",
+        "class": "SUSPECTED_BAD_PAIR"
+      }
+    },
+    {
+      "legacyId": "222",
+      "legacyTitle": "Texture & Material",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0454",
+      "finalTargetTitle": "Principal Texture & Material Artist",
+      "verifierRationale": "Texture & Material equals Texture & Material Artist; lane-B and V2 agree.",
+      "proposerTarget": "UASCO-0454",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0454",
+      "heuristicMasterV2": {
+        "target": "UASCO-0454",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "223",
+      "legacyTitle": "Rigging & Animation",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Compound rigging and animation: Rigging TD (0455) and Animation Systems (0456, V2 pick) equally plausible.",
+      "proposerTarget": "UASCO-0455",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0456",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      },
+      "conflictCandidates": [
+        "UASCO-0455",
+        "UASCO-0456"
+      ]
+    },
+    {
+      "legacyId": "224",
+      "legacyTitle": "VFX",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0457",
+      "finalTargetTitle": "Principal VFX Artist",
+      "verifierRationale": "VFX equals VFX Artist; V2 agrees.",
+      "proposerTarget": "UASCO-0457",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0457",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "225",
+      "legacyTitle": "Audio Production",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0459",
+      "finalTargetTitle": "Principal Music & Sound Production Expert",
+      "verifierRationale": "Audio Production equals Music & Sound Production Expert; V2 agrees. Audio Design & Integration (0458) adjacent.",
+      "proposerTarget": "UASCO-0459",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0459",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "226",
+      "legacyTitle": "Asset Pipeline & Provenance",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Compound: asset pipeline (0460, lane-B) vs provenance (0462, V2 pick); heuristics split with comparable plausibility.",
+      "proposerTarget": "UASCO-0460",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0460",
+      "heuristicMasterV2": {
+        "target": "UASCO-0462",
+        "class": "SUSPECTED_BAD_PAIR"
+      },
+      "conflictCandidates": [
+        "UASCO-0460",
+        "UASCO-0462"
+      ]
+    },
+    {
+      "legacyId": "227",
+      "legacyTitle": "Embedded Systems",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0464",
+      "finalTargetTitle": "Principal Embedded Systems Architect",
+      "verifierRationale": "Embedded Systems equals Embedded Systems Architect; lane-B and V2 agree.",
+      "proposerTarget": "UASCO-0464",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0464",
+      "heuristicMasterV2": {
+        "target": "UASCO-0464",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "228",
+      "legacyTitle": "Firmware Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0465",
+      "finalTargetTitle": "Principal Firmware Engineer",
+      "verifierRationale": "Firmware Engineer equals Firmware Engineer; lane-B and V2 agree.",
+      "proposerTarget": "UASCO-0465",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0465",
+      "heuristicMasterV2": {
+        "target": "UASCO-0465",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "229",
+      "legacyTitle": "IoT Platform",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0468",
+      "finalTargetTitle": "Principal IoT Platform Engineer",
+      "verifierRationale": "IoT Platform equals IoT Platform Engineer; lane-B and V2 agree.",
+      "proposerTarget": "UASCO-0468",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0468",
+      "heuristicMasterV2": {
+        "target": "UASCO-0468",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "230",
+      "legacyTitle": "OTA & Device Management",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0470",
+      "finalTargetTitle": "Principal OTA Update & Device Lifecycle Expert",
+      "verifierRationale": "OTA & device management equals OTA Update & Device Lifecycle Expert; V2 agrees.",
+      "proposerTarget": "UASCO-0470",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0470",
+        "class": "SUSPECTED_SCOPE_SHIFT"
+      }
+    },
+    {
+      "legacyId": "231",
+      "legacyTitle": "Edge AI",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Edge AI: Edge Computing (0469, V2) is not AI-specific; AI Inference Systems (0173) and Model Optimization (0172) equally plausible.",
+      "proposerTarget": "UASCO-0469",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0469",
+        "class": "SUSPECTED_SCOPE_SHIFT"
+      },
+      "conflictCandidates": [
+        "UASCO-0469",
+        "UASCO-0173",
+        "UASCO-0172"
+      ]
+    },
+    {
+      "legacyId": "232",
+      "legacyTitle": "Robotics Engineer",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0472",
+      "finalTargetTitle": "Principal Robotics Control Engineer",
+      "verifierRationale": "Robotics Engineer maps to Robotics Control Engineer; same discipline, narrower target. V2 agrees.",
+      "proposerTarget": "UASCO-0472",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0472",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "233",
+      "legacyTitle": "XR / AR / VR",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0477",
+      "finalTargetTitle": "Principal XR Architecture Expert",
+      "verifierRationale": "XR/AR/VR umbrella maps to XR Architecture Expert; same discipline, legacy broader. V2 0465 Firmware is wrong.",
+      "proposerTarget": "UASCO-0477",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0465",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "234",
+      "legacyTitle": "Hardware-in-the-Loop Integration",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0471",
+      "finalTargetTitle": "Principal Hardware-in-the-Loop Engineer",
+      "verifierRationale": "HIL integration equals Hardware-in-the-Loop Engineer; lane-B and V2 agree.",
+      "proposerTarget": "UASCO-0471",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": "UASCO-0471",
+      "heuristicMasterV2": {
+        "target": "UASCO-0471",
+        "class": "NO_RED_FLAG_STILL_UNAPPROVED"
+      }
+    },
+    {
+      "legacyId": "235",
+      "legacyTitle": "Incident Management",
+      "finalStatus": "SEMANTIC_VERIFIED",
+      "finalTargetRoleId": "UASCO-0242",
+      "finalTargetTitle": "Principal Incident Response Engineer",
+      "verifierRationale": "Incident Management maps to Incident Response Engineer; V2 agrees. Incident communications (0554) secondary.",
+      "proposerTarget": "UASCO-0242",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0242",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "236",
+      "legacyTitle": "Release Manager",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Release Manager is coordination/governance (Release Governance 0016) as much as engineering (Release Engineering 0232); equally plausible.",
+      "proposerTarget": "UASCO-0232",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0243",
+        "class": "SUSPECTED_BAD_PAIR"
+      },
+      "conflictCandidates": [
+        "UASCO-0232",
+        "UASCO-0016"
+      ]
+    },
+    {
+      "legacyId": "237",
+      "legacyTitle": "Environment Management",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0209",
+      "finalTargetTitle": "Principal Environment Provisioning Engineer",
+      "verifierRationale": "Environment management vs Environment Provisioning: same area, provisioning narrower; Test Environment Architect (0319) adjacent.",
+      "proposerTarget": "UASCO-0209",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0240",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "238",
+      "legacyTitle": "Runbook Operations",
+      "finalStatus": "UNMAPPED",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Runbook operations is an operational workflow; no corresponding catalog role. V2 0246 Backup Verification unrelated.",
+      "proposerTarget": null,
+      "proposerProposal": "UNMAPPED",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0246",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "239",
+      "legacyTitle": "Business Process Operations",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0358",
+      "finalTargetTitle": "Principal Workflow BPM Architect",
+      "verifierRationale": "Business process operations partially fits Workflow BPM Architect (process design vs operations); Product Operations (0030) adjacent.",
+      "proposerTarget": "UASCO-0358",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0250",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "240",
+      "legacyTitle": "LiveOps / GameOps Coordinator",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0449",
+      "finalTargetTitle": "Principal LiveOps Event & Telemetry Engineer",
+      "verifierRationale": "LiveOps/GameOps coordinator is a coordination role; LiveOps Event & Telemetry Engineer covers only part. Game Server SRE (0448) adjacent.",
+      "proposerTarget": "UASCO-0449",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": {
+        "target": "UASCO-0250",
+        "class": "NEEDS_CAREFUL_REVIEW"
+      }
+    },
+    {
+      "legacyId": "241",
+      "legacyTitle": "Control Tower",
+      "finalStatus": "CONFLICT",
+      "finalTargetRoleId": null,
+      "finalTargetTitle": null,
+      "verifierRationale": "Control Tower head could be operational status/truth (0598) or control-plane architecture (0584); equally plausible from sparse source.",
+      "proposerTarget": "UASCO-0598",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": false,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null,
+      "conflictCandidates": [
+        "UASCO-0598",
+        "UASCO-0584"
+      ]
+    },
+    {
+      "legacyId": "242",
+      "legacyTitle": "Approval Center",
+      "finalStatus": "SUSPECTED",
+      "finalTargetRoleId": "UASCO-0596",
+      "finalTargetTitle": "Principal Approval & Delegation Policy Architect",
+      "verifierRationale": "Approval Center is an operational approval surface; Approval & Delegation Policy Architect covers policy, not the operating surface. Plausible partial.",
+      "proposerTarget": "UASCO-0596",
+      "proposerProposal": "MAP",
+      "agreedWithProposer": true,
+      "targetReplacedByVerifier": false,
+      "heuristicLaneB": null,
+      "heuristicMasterV2": null
+    }
+  ]
+}

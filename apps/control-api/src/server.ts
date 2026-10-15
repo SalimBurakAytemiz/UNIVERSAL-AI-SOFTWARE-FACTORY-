@@ -19,6 +19,8 @@ import {parseControlPort,controlChallengeProof,secureStringEqual,hostHeaderAllow
 import {loadState as loadOrchestratorStateUntyped,verifyTransitionLog as verifyTransitionLogUntyped} from "../../../automation/lib/orchestrator-state.mjs";
 import {WorkOsStore,defaultDataDir} from "../../../core/workos/store.js";
 import {WorkOsError} from "../../../core/workos/types.js";
+import {EvidenceIndex,EvidenceInputError,EVIDENCE_KINDS} from "../../../core/evidence/index.js";
+import type {EvidenceKind} from "../../../core/evidence/index.js";
 import {validateProjectCreate,validateMissionCreate,validateMissionTransition,validateRunStart,validateProjectImport,validateProjectExport,validateEmptyBody} from "../../../core/workos/schemas.js";
 import {isMissionStatus} from "../../../core/mission/state-machine.js";
 import {authorizeAction} from "../../../core/action-gateway/policy.js";
@@ -34,6 +36,10 @@ import type {DevRunOptions} from "../../../core/workos/devrun.js";
 import {ExecutorSetup} from "../../../core/workos/executor-setup.js";
 import type {ExecutorSetupOptions} from "../../../core/workos/executor-setup.js";
 import type {ZipLimits} from "../../../core/workos/zip.js";
+import {CrmDomain,validateAccountCreate,validateContactCreate,validateOpportunityCreate,validateOpportunityStage} from "../../../core/company/crm.js";
+import {FinanceDomain,validateInvoiceCreate,validateInvoiceIssue,validateInvoiceVoid,validatePaymentCreate} from "../../../core/company/finance.js";
+import {LegalDomain,validateContractCreate,validateContractTransition} from "../../../core/company/legal.js";
+import type {Validation} from "../../../core/company/common.js";
 
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
@@ -46,6 +52,9 @@ const readJson=(p:string)=>JSON.parse(fs.readFileSync(p,"utf8"));
 const readJsonOr=<T>(p:string,fallback:T):T=>fs.existsSync(p)?readJson(p):fallback;
 const repoRoot=opts.repoRoot?path.resolve(opts.repoRoot):process.cwd(),runtime=opts.runtime??".ai/runtime",runsRoot=path.join(runtime,"runs"),port=opts.port??parseControlPort(process.env.CONTROL_API_PORT,3210);
 const controlToken=opts.controlToken??process.env.UASCO_CONTROL_TOKEN??"";
+// //TR: Legacy 363 kayıt dondurulmuştur; yalnız /v1/agents ve cockpit sayımı için belgelenmiş projeksiyondur. Kanonik kayıt role-definitions.json'dır.
+const LEGACY_AGENTS_FILE="registries/agents.json"; // LEGACY_REFERENCE_ONLY projection (FA-WFR-03): never used for routing/decisions
+const ROLE_REGISTRY_FILE="registries/role-definitions.json";
 const validRunId=(x:string)=>/^RUN-[A-Za-z0-9-]+$/.test(x);
 const validLogName=(x:string)=>/^[A-Za-z0-9._-]+\.log$/.test(x);
 
@@ -81,7 +90,11 @@ app.get("/v1/factory",async()=>readJson(".ai/MASTER_STATE.json"));
 app.get("/v1/phase0",async()=>phase0View());
 app.get("/v1/install",async()=>installView());
 app.get("/v1/scheduler",async()=>schedulerView());
-app.get("/v1/agents",async()=>readJson("registries/agents.json"));
+// //TR: WFR-03: /v1/agents geriye uyumludur (legacy 363 kaydın alanları aynen döner) ve kanonik 599 RoleDefinition kaydının özetini ekler; legacy kayıt yalnız bu belgelenmiş LEGACY_REFERENCE_ONLY projeksiyonla okunur, karar için kullanılmaz.
+app.get("/v1/agents",async(_req,reply)=>{
+  const legacy=readJson(path.join(repoRoot,LEGACY_AGENTS_FILE));let s;try{s=roleRegistrySummary()}catch{return reply.code(503).send({error:"ROLE_REGISTRY_UNAVAILABLE"})}
+  return {...legacy,registeredRoles:s.registeredRoles,legacyRoles:Array.isArray(legacy?.agents)?legacy.agents.length:null,certified:s.certified,activeWorkerRuns:activeWorkerRunsOrNull(),roleRegistry:{path:ROLE_REGISTRY_FILE,status:s.status,notice:s.notice,authority:"CANONICAL",legacyAuthority:"LEGACY_REFERENCE_ONLY"}};
+});
 app.get("/v1/capabilities",async()=>readJson("registries/capabilities.json"));
 app.get("/v1/fabrics",async()=>readJson("registries/execution-fabrics.json"));
 app.get("/v1/adapters",async()=>readJson("registries/tool-adapters.json"));
@@ -339,6 +352,142 @@ app.post("/v1/system/executors/local-claude/enable",wos(async(req,reply)=>{
   return {executors:r.status,active:{reason:getExecutors().reason}};
 }));
 
+// //TR: B10A Evidence Center: salt-okunur doğrulanmış read-model; hash her istekte baytlardan yeniden hesaplanır, depolanan PASS metnine güvenilmez, hiçbir şey yazılmaz. Work OS kanıtı server tenant'ına göre süzülür; depo düzeyi kanıt yalnız tek FOUNDER_LOCAL principal'ına görünür; yanıtlarda mutlak yol yoktur, log kuyruğu en çok 4 KB ve redakte edilir.
+const evidenceIndex=()=>new EvidenceIndex({repoRoot,dataDir:path.resolve(opts.dataDir??defaultDataDir(repoRoot)),scope,store:getStore,includeRepositoryEvidence:actor==="FOUNDER_LOCAL"});
+const validEvidenceId=(x:unknown)=>typeof x==="string"&&/^evi_[0-9a-f]{32}$/.test(x);
+app.get<{Querystring:{kind?:unknown;missionId?:unknown;runId?:unknown;cursor?:unknown;limit?:unknown}}>("/v1/evidence",wos(async(req,reply)=>{
+  const q=req.query??{},one=(x:unknown)=>x===undefined?undefined:typeof x==="string"?x:null;
+  const kind=one(q.kind),missionId=one(q.missionId),runId=one(q.runId),cursor=one(q.cursor),limitRaw=one(q.limit);
+  if(kind===null||(kind!==undefined&&!(EVIDENCE_KINDS as readonly string[]).includes(kind)))return reply.code(400).send({error:"INVALID_KIND"});
+  if(missionId===null||(missionId!==undefined&&!validMissionId(missionId)))return reply.code(400).send({error:"INVALID_MISSION_ID"});
+  if(runId===null||(runId!==undefined&&!validWorkRunId(runId)))return reply.code(400).send({error:"INVALID_RUN_ID"});
+  if(cursor===null||(cursor!==undefined&&!/^[A-Za-z0-9_-]{1,1500}$/.test(cursor)))return reply.code(400).send({error:"INVALID_CURSOR"});
+  if(limitRaw===null||(limitRaw!==undefined&&!/^[0-9]{1,3}$/.test(limitRaw)))return reply.code(400).send({error:"INVALID_LIMIT"});
+  const limit=limitRaw===undefined?undefined:Number(limitRaw);if(limit!==undefined&&(limit<1||limit>100))return reply.code(400).send({error:"INVALID_LIMIT"});
+  try{
+    const page=await evidenceIndex().list({kind:kind as EvidenceKind|undefined,missionId,runId,cursor,limit});
+    return {evidence:page.items,nextCursor:page.nextCursor,sources:page.sources};
+  }catch(e){if(e instanceof EvidenceInputError)return reply.code(400).send({error:e.code});throw e}
+}));
+app.get<{Params:{evidenceId:string}}>("/v1/evidence/:evidenceId",wos(async(req,reply)=>{
+  if(!validEvidenceId(req.params.evidenceId))return reply.code(400).send({error:"INVALID_EVIDENCE_ID"});
+  const d=await evidenceIndex().get(req.params.evidenceId);if(!d)return reply.code(404).send({error:"EVIDENCE_NOT_FOUND"});
+  return {evidence:d.item,summary:d.summary,tail:d.tail,tailWithheld:d.tailWithheld};
+}));
+
+// //TR: B11A Company OS route'ları (CRM, Finans, Hukuk): aynı token hook'u ve aynı yazma kapısı sırası (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400). Kayıtlar ortak Work OS journal'ındadır (ikinci store yok), tenant kapsamlıdır; audit yalnız kimlik/durum/tutar taşır, ad ve e-posta (PII) asla yazılmaz.
+const companyIdOk=(prefix:string,x:unknown)=>typeof x==="string"&&new RegExp(`^${prefix}_[0-9a-f]{24}$`).test(x);
+const companyBody=(prefix:string,id:unknown,validate:(x:unknown)=>Validation)=>(x:unknown):Validation=>companyIdOk(prefix,id)?validate(x):{ok:false,errors:"invalid id"};
+const companyFilter=(reply:any,value:unknown,prefix:string):{ok:true;id?:string}|{ok:false}=>{if(value===undefined)return {ok:true};if(!companyIdOk(prefix,value)){reply.code(400).send({error:"INVALID_FILTER"});return {ok:false}}return {ok:true,id:value as string}};
+const crmDomain=()=>new CrmDomain(getStore()),financeDomain=()=>new FinanceDomain(getStore()),legalDomain=()=>new LegalDomain(getStore());
+const created=(reply:any,replayed:boolean,body:unknown)=>reply.code(replayed?200:201).send(body);
+app.get("/v1/company/accounts",wos(async()=>({accounts:crmDomain().listAccounts(scope)})));
+app.post("/v1/company/accounts",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.account.create","NONE",body,validateAccountCreate))return reply;
+  const b=body as any,r=crmDomain().createAccount(scope,{name:b.name,idempotencyKey:b.idempotencyKey},actor);
+  audit(r.replayed?"COMPANY_IDEMPOTENT_REPLAY":"COMPANY_ACCOUNT_CREATED",{actor,kind:"account",accountId:r.entity.accountId});return created(reply,r.replayed,{account:r.entity});
+}));
+app.get<{Querystring:{accountId?:unknown}}>("/v1/company/contacts",wos(async(req,reply)=>{
+  const f=companyFilter(reply,req.query?.accountId,"acc");if(!f.ok)return reply;return {contacts:crmDomain().listContacts(scope,f.id)};
+}));
+app.post("/v1/company/contacts",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.contact.create","NONE",body,validateContactCreate))return reply;
+  const b=body as any,r=crmDomain().createContact(scope,{accountId:b.accountId,name:b.name,role:b.role,email:b.email,idempotencyKey:b.idempotencyKey},actor);
+  audit(r.replayed?"COMPANY_IDEMPOTENT_REPLAY":"COMPANY_CONTACT_CREATED",{actor,kind:"contact",contactId:r.entity.contactId,accountId:r.entity.accountId});return created(reply,r.replayed,{contact:r.entity});
+}));
+app.get<{Querystring:{accountId?:unknown}}>("/v1/company/opportunities",wos(async(req,reply)=>{
+  const f=companyFilter(reply,req.query?.accountId,"acc");if(!f.ok)return reply;return {opportunities:crmDomain().listOpportunities(scope,f.id)};
+}));
+app.post("/v1/company/opportunities",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.opportunity.create","NONE",body,validateOpportunityCreate))return reply;
+  const b=body as any,r=crmDomain().createOpportunity(scope,{accountId:b.accountId,title:b.title,amountMinor:b.amountMinor,currency:b.currency,idempotencyKey:b.idempotencyKey},actor);
+  audit(r.replayed?"COMPANY_IDEMPOTENT_REPLAY":"COMPANY_OPPORTUNITY_CREATED",{actor,kind:"opportunity",opportunityId:r.entity.opportunityId,accountId:r.entity.accountId,amountMinor:r.entity.amountMinor,currency:r.entity.currency});return created(reply,r.replayed,{opportunity:r.entity});
+}));
+app.post<{Params:{id:string}}>("/v1/company/opportunities/:id/stage",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.opportunity.stage",req.params.id,body,companyBody("opp",req.params.id,validateOpportunityStage)))return reply;
+  const b=body as any,before=crmDomain().getOpportunity(scope,req.params.id),opportunity=crmDomain().stageOpportunity(scope,req.params.id,b.stage,b.reason,actor);
+  audit("COMPANY_OPPORTUNITY_STAGED",{actor,opportunityId:opportunity.opportunityId,from:before?.stage,to:opportunity.stage});return {opportunity};
+}));
+app.get<{Querystring:{accountId?:unknown}}>("/v1/company/invoices",wos(async(req,reply)=>{
+  const f=companyFilter(reply,req.query?.accountId,"acc");if(!f.ok)return reply;return {invoices:financeDomain().listInvoices(scope,f.id)};
+}));
+app.post("/v1/company/invoices",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.invoice.create","NONE",body,validateInvoiceCreate))return reply;
+  // Client totalMinor yok sayılır; toplam sunucuda satırlardan hesaplanır.
+  const b=body as any,r=financeDomain().createInvoice(scope,{accountId:b.accountId,currency:b.currency,lineItems:b.lineItems,dueDate:b.dueDate,idempotencyKey:b.idempotencyKey},actor);
+  audit(r.replayed?"COMPANY_IDEMPOTENT_REPLAY":"COMPANY_INVOICE_CREATED",{actor,kind:"invoice",invoiceId:r.entity.invoiceId,accountId:r.entity.accountId,totalMinor:r.entity.totalMinor,currency:r.entity.currency});return created(reply,r.replayed,{invoice:r.entity});
+}));
+app.post<{Params:{id:string}}>("/v1/company/invoices/:id/issue",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.invoice.issue",req.params.id,body,companyBody("inv",req.params.id,validateInvoiceIssue)))return reply;
+  const invoice=financeDomain().issueInvoice(scope,req.params.id,actor);
+  audit("COMPANY_INVOICE_ISSUED",{actor,invoiceId:invoice.invoiceId,number:invoice.number,totalMinor:invoice.totalMinor,currency:invoice.currency});return {invoice};
+}));
+app.post<{Params:{id:string}}>("/v1/company/invoices/:id/void",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.invoice.void",req.params.id,body,companyBody("inv",req.params.id,validateInvoiceVoid)))return reply;
+  const invoice=financeDomain().voidInvoice(scope,req.params.id,(body as any).reason,actor);
+  audit("COMPANY_INVOICE_VOIDED",{actor,invoiceId:invoice.invoiceId});return {invoice};
+}));
+app.get<{Querystring:{invoiceId?:unknown}}>("/v1/company/payments",wos(async(req,reply)=>{
+  const f=companyFilter(reply,req.query?.invoiceId,"inv");if(!f.ok)return reply;return {payments:financeDomain().listPayments(scope,f.id)};
+}));
+app.post("/v1/company/payments",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.payment.record","NONE",body,validatePaymentCreate))return reply;
+  const b=body as any,fin=financeDomain();
+  const r=b.reversesPaymentId!==undefined?fin.reversePayment(scope,{reversesPaymentId:b.reversesPaymentId,invoiceId:b.invoiceId,reason:b.reason,idempotencyKey:b.idempotencyKey},actor)
+    :fin.recordPayment(scope,{invoiceId:b.invoiceId,amountMinor:b.amountMinor,currency:b.currency,receivedAt:b.receivedAt,reference:b.reference,idempotencyKey:b.idempotencyKey},actor);
+  audit(r.replayed?"COMPANY_IDEMPOTENT_REPLAY":r.entity.payment.entryKind==="REVERSAL"?"COMPANY_PAYMENT_REVERSED":"COMPANY_PAYMENT_RECORDED",{actor,kind:"payment",paymentId:r.entity.payment.paymentId,invoiceId:r.entity.payment.invoiceId,amountMinor:r.entity.payment.amountMinor,currency:r.entity.payment.currency,invoiceStatus:r.entity.invoice.status});
+  return created(reply,r.replayed,r.entity);
+}));
+app.get<{Querystring:{accountId?:unknown}}>("/v1/company/contracts",wos(async(req,reply)=>{
+  const f=companyFilter(reply,req.query?.accountId,"acc");if(!f.ok)return reply;return {contracts:legalDomain().listContracts(scope,f.id)};
+}));
+app.post("/v1/company/contracts",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.contract.create","NONE",body,validateContractCreate))return reply;
+  const b=body as any,r=legalDomain().createContract(scope,{accountId:b.accountId,opportunityId:b.opportunityId,title:b.title,idempotencyKey:b.idempotencyKey},actor);
+  audit(r.replayed?"COMPANY_IDEMPOTENT_REPLAY":"COMPANY_CONTRACT_CREATED",{actor,kind:"contract",contractId:r.entity.contractId,accountId:r.entity.accountId});return created(reply,r.replayed,{contract:r.entity});
+}));
+app.post<{Params:{id:string}}>("/v1/company/contracts/:id/transition",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"company.contract.transition",req.params.id,body,companyBody("ctr",req.params.id,validateContractTransition)))return reply;
+  const b=body as any,before=legalDomain().getContract(scope,req.params.id),contract=legalDomain().transitionContract(scope,req.params.id,{to:b.to,reason:b.reason,documentSha256:b.documentSha256,signerName:b.signerName,signedAt:b.signedAt},actor);
+  audit("COMPANY_CONTRACT_TRANSITIONED",{actor,contractId:contract.contractId,from:before?.status,to:contract.status,...(contract.status==="SIGNED"?{documentSha256:contract.documentSha256}:{})});return {contract};
+}));
+
+// //TR: WFR-03 tek kanonik RoleDefinition kaydı: dosya mtime+boyut anahtarlı önbellekle okunur, yalnız okunur; eksik/bozuk kayıt 503 döner, sayı uydurulmaz.
+const ROLE_ID_RE=/^UASCO-\d{4}$/,GUILD_ID_RE=/^G\d{2}$/,CLUSTER_ID_RE=/^CL\d{2}$/;
+let roleRegistryCache:{key:string;doc:any;index:Map<string,number>}|null=null;
+function loadRoleRegistry(){
+  const f=path.join(repoRoot,ROLE_REGISTRY_FILE),st=fs.statSync(f),key=`${st.mtimeMs}:${st.size}`;if(roleRegistryCache?.key===key)return roleRegistryCache;
+  const doc=readJson(f);if(!Array.isArray(doc?.roles))throw new Error("ROLE_REGISTRY_INVALID");
+  roleRegistryCache={key,doc,index:new Map(doc.roles.map((r:any,i:number)=>[r.roleId,i]))};return roleRegistryCache;
+}
+function roleRegistrySummary(){const {doc}=loadRoleRegistry();return {registeredRoles:doc.roles.length as number,certified:doc.roles.filter((r:any)=>r.proficiencyStatus==="CERTIFIED").length as number,status:String(doc.status),notice:String(doc.notice)}}
+function activeWorkerRunsOrNull(){try{const st=getStore();return st.hasJournal?st.countActiveWorkerRuns(scope):null}catch{return null}}
+const roleItem=(r:any)=>({roleId:r.roleId,title:r.title,guildId:r.guildId,clusterId:r.clusterId,priority:r.priority,runtimeStatus:r.runtimeStatus,proficiencyStatus:r.proficiencyStatus,certifiedScope:r.certifiedScope,legacyAliasCount:Array.isArray(r.legacyAliases)?r.legacyAliases.length:0,gapCount:Array.isArray(r.gapIds)?r.gapIds.length:0});
+// //TR: GET /v1/roles: guildId/clusterId/q filtreli, roleId artan sıralı kararlı sayfalama; cursor son dönen roleId'dir, limit 1..100 (varsayılan 50); geçersiz parametre 400 döner.
+app.get<{Querystring:Record<string,unknown>}>("/v1/roles",async(req,reply)=>{
+  const q=req.query??{},str=(k:string)=>q[k]===undefined?undefined:typeof q[k]==="string"?q[k] as string:null;
+  const guildId=str("guildId"),clusterId=str("clusterId"),text=str("q"),cursor=str("cursor"),limitRaw=str("limit");
+  if(guildId===null||(guildId!==undefined&&!GUILD_ID_RE.test(guildId)))return reply.code(400).send({error:"INVALID_GUILD_ID"});
+  if(clusterId===null||(clusterId!==undefined&&!CLUSTER_ID_RE.test(clusterId)))return reply.code(400).send({error:"INVALID_CLUSTER_ID"});
+  if(cursor===null||(cursor!==undefined&&!ROLE_ID_RE.test(cursor)))return reply.code(400).send({error:"INVALID_CURSOR"});
+  if(text===null||(text!==undefined&&text.length>200))return reply.code(400).send({error:"INVALID_QUERY"});
+  if(limitRaw===null||(limitRaw!==undefined&&!/^\d{1,3}$/.test(limitRaw)))return reply.code(400).send({error:"INVALID_LIMIT"});
+  const limit=limitRaw===undefined?50:Number(limitRaw);if(limit<1||limit>100)return reply.code(400).send({error:"INVALID_LIMIT"});
+  let reg;try{reg=loadRoleRegistry()}catch{return reply.code(503).send({error:"ROLE_REGISTRY_UNAVAILABLE"})}
+  const needle=text?.trim().toLowerCase()??"";
+  const matches=(reg.doc.roles as any[]).filter(r=>(!guildId||r.guildId===guildId)&&(!clusterId||r.clusterId===clusterId)&&(!needle||[r.roleId,r.title,...(Array.isArray(r.specializationBoundaries)?r.specializationBoundaries:[])].some(x=>String(x).toLowerCase().includes(needle)))).sort((a,b)=>a.roleId<b.roleId?-1:a.roleId>b.roleId?1:0);
+  const after=cursor?matches.filter(r=>r.roleId>cursor):matches,page=after.slice(0,limit);
+  return {status:reg.doc.status,notice:reg.doc.notice,registeredRoles:reg.doc.roles.length,total:matches.length,limit,cursor:cursor??null,nextCursor:after.length>limit?page[page.length-1].roleId:null,items:page.map(roleItem)};
+});
+// //TR: GET /v1/roles/:roleId: tam RoleDefinition (legacy takma adlar PROPOSED, gap kimlikleri, guild/cluster) döner; hiçbir durum yükseltilmez.
+app.get<{Params:{roleId:string}}>("/v1/roles/:roleId",async(req,reply)=>{
+  if(!ROLE_ID_RE.test(req.params.roleId))return reply.code(400).send({error:"INVALID_ROLE_ID"});
+  let reg;try{reg=loadRoleRegistry()}catch{return reply.code(503).send({error:"ROLE_REGISTRY_UNAVAILABLE"})}
+  const i=reg.index.get(req.params.roleId);if(i===undefined)return reply.code(404).send({error:"ROLE_NOT_FOUND"});
+  const role=reg.doc.roles[i],guild=(reg.doc.guilds??[]).find((g:any)=>g.guildId===role.guildId)??null,cluster=(reg.doc.clusters??[]).find((c:any)=>c.clusterId===role.clusterId)??null;
+  return {status:reg.doc.status,notice:reg.doc.notice,role,guild,cluster,legacyAliases:role.legacyAliases??[],gaps:{role:role.gapIds??[],guild:guild?.gapIds??[]}};
+});
+
 // //TR: B2 GET /v1/cockpit: UI için tek okuma otoritesidir; yalnız okur (Work OS store, orchestrator state, registry), hiçbir kaynağı yazmaz, eksik/okunamayan/uygulanmamış kaynak için sayı uydurmaz (state UNAVAILABLE/ERROR, sayılar null).
 type CockpitState="VERIFIED"|"STALE"|"UNAVAILABLE"|"ERROR";
 const loadOrchestratorState=loadOrchestratorStateUntyped as (file:string)=>{doc:any;control:any};
@@ -378,23 +527,30 @@ function cockpitOrchestrator(){
     return mk(asOf===null||leaseExpired?"STALE":"VERIFIED",asOf,pk.length,countBy(pk,p=>String(p.status)));
   }catch{return mk("ERROR")}
 }
+// //TR: WFR-03: workforce.registeredRoles legacy 363 kaydın sayısıdır (LEGACY_REFERENCE_ONLY projeksiyon), targetRoles kanonik role-definitions.json'dan gelir; sözleşme şekli değişmez.
+// //TR: WFR-03 c2: registeredRolesAuthority bu alanın yalnız legacy referans olduğunu açıkça söyler; canonicalRegisteredRoles kanonik kayıttan hesaplanan rol sayısıdır (/v1/agents.registeredRoles ile aynı kaynak). Mevcut anahtarlar korunur, iki alan geriye uyumlu eklenir.
 // //TR: B3a: workforce.activeWorkerRuns Work OS journal'ındaki LEASED/RUNNING/CHECKPOINTING/VERIFYING run sayısıdır (state VERIFIED); journal yoksa UNAVAILABLE/null, okunamazsa ERROR/null. registeredRoles/targetRoles yalnız okunabilen registry dosyasından gelir. Sözleşme şekli değişmez.
 function cockpitWorkforce(){
-  const base=(state:CockpitState,registeredRoles:number|null,targetRoles:number|null,activeWorkerRuns:number|null=null)=>({state,registeredRoles,targetRoles,activeWorkerRuns,source:"registries/agents.json; registries/target-role-catalog.json; Work OS journal runs (LEASED|RUNNING|CHECKPOINTING|VERIFYING)"});
+  const base=(state:CockpitState,registeredRoles:number|null,targetRoles:number|null,activeWorkerRuns:number|null=null)=>({state,registeredRoles,registeredRolesAuthority:"LEGACY_REFERENCE_ONLY",canonicalRegisteredRoles:targetRoles,targetRoles,activeWorkerRuns,source:`${LEGACY_AGENTS_FILE} (LEGACY_REFERENCE_ONLY); ${ROLE_REGISTRY_FILE}; Work OS journal runs (LEASED|RUNNING|CHECKPOINTING|VERIFYING)`});
   try{
     let registered:number|null=null,target:number|null=null;
-    const af=path.join(repoRoot,"registries","agents.json");
+    const af=path.join(repoRoot,LEGACY_AGENTS_FILE);
     if(fs.existsSync(af)){const a=readJson(af);if(!Array.isArray(a?.agents))return base("ERROR",null,null);registered=a.agents.length}
-    const tf=path.join(repoRoot,"registries","target-role-catalog.json");
+    const tf=path.join(repoRoot,ROLE_REGISTRY_FILE);
     if(fs.existsSync(tf)){const t=readJson(tf);const n=Array.isArray(t)?t.length:Array.isArray(t?.roles)?t.roles.length:Number.isInteger(t?.count)&&t.count>=0?t.count:null;if(n===null)return base("ERROR",registered,null);target=n}
     const st=getStore();if(!st.hasJournal)return base("UNAVAILABLE",registered,target);
     let active:number;try{active=st.countActiveWorkerRuns(scope)}catch{return base("ERROR",registered,target)}
     return base("VERIFIED",registered,target,active);
   }catch{return base("ERROR",null,null)}
 }
+// //TR: B10A: cockpit.evidence yeni isteğe bağlı bloktur (mevcut alanlar değişmez); kaynaklar yoksa UNAVAILABLE, okunamazsa ERROR ve sayılar null olur, sayı uydurulmaz.
+async function cockpitEvidence(){
+  try{const s=await evidenceIndex().summary();return {state:s.state as CockpitState,total:s.total,verified:s.verified,mismatch:s.mismatch,missing:s.missing,unverifiable:s.unverifiable,sources:s.sources}}
+  catch{return {state:"ERROR" as CockpitState,total:null,verified:null,mismatch:null,missing:null,unverifiable:null,sources:null}}
+}
 app.get("/v1/cockpit",wos(async()=>({
   generatedAt:new Date().toISOString(),globalStop:cockpitStop(),...cockpitWorkos(),orchestrator:cockpitOrchestrator(),workforce:cockpitWorkforce(),
-  legacy:{scheduler:{authority:false,note:"LEGACY_SNAPSHOT"}}
+  legacy:{scheduler:{authority:false,note:"LEGACY_SNAPSHOT"}},evidence:await cockpitEvidence()
 })));
 return app;
 }

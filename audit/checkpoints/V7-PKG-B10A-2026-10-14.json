@@ -1,0 +1,112 @@
+{
+  "//TR": "Bu checkpoint, V7 B10A Evidence Center doğrulanmış read-model ve API paketini ve gözlenen komut sonuçlarını kaydeder; temiz değildir, bağımsız inceleme beklemektedir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-B10A-EVIDENCE-CENTER-READ-MODEL-API",
+  "date": "2026-10-14",
+  "parent": "4f24820ffa9e960b8eeb2c81c0a1d839ab642c72",
+  "branch": "v7/product-b10a",
+  "implementer": "CLAUDE_BUILDER",
+  "authorizationRecords": [
+    "audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json",
+    "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
+  ],
+  "status": "IMPLEMENTED_NOT_CLEAN_REVIEW_PENDING",
+  "filesChanged": [
+    "core/evidence/index.ts",
+    "apps/control-api/src/server.ts (GET /v1/evidence, GET /v1/evidence/:evidenceId, cockpit.evidence block; no existing route or field changed)",
+    "tests/v7-b10a-evidence.test.ts",
+    "config/validation.json (appended tests/v7-b10a-evidence.test.ts at the end of the tests step only; previous last entry gained a trailing comma)",
+    "config/trust-root-manifest.json (resealed via generate-trust-root.mjs)",
+    "audit/checkpoints/V7-PKG-B10A-2026-10-14.json"
+  ],
+  "changedFileSha256BeforeReseal": {
+    "core/evidence/index.ts": "e2a303a4a4f93265d87436353634a6881486e9fa60af38efb8a0b590696a9bd0",
+    "apps/control-api/src/server.ts": "fe72376d310c7f1301835caf452e797375592267726a6e0e66a6c2d09d945912",
+    "tests/v7-b10a-evidence.test.ts": "6ae81ac1dfa512fbddfbed0dbe4ae358ef9797054e823f130cc4f815aceffc99",
+    "config/validation.json": "e51d2bd39f0e84a606ebead82ac14920769dd21da8e8e765b959a28bf2138ecb"
+  },
+  "design": {
+    "authority": "Evidence & Audit read-model only: creates no new truth, writes nothing (no file, journal entry, audit event or state).",
+    "kinds": "WORK_RUN_STEP (Work OS journal RUN_EVIDENCE and RUN_CHECKPOINT entries), WORK_RUN_LOG (run evidence log files under runs/<runId>/), REVIEW_EVIDENCE (<dir of orchestrator-policy roots.stateFile>/evidence/*.json), AUDIT_CHECKPOINT (audit/checkpoints/*.json).",
+    "evidenceId": "evi_ + first 32 hex of sha256(JSON [kind, repo- or data-dir-relative path, locator or store evidence id, recorded hash or null]); derived from the recorded hash, so a tampered file keeps its id and shows MISMATCH.",
+    "verificationBasis": {
+      "WORK_RUN_STEP": "journal entry hash recomputed with the store's own canonical sha256 over the entry body; chain integrity stays owned by WorkOsStore (tampered or unavailable store marks the source ERROR, counts null)",
+      "WORK_RUN_LOG": "sha256 of the file bytes recomputed (streamed) and compared with the recorded logSha256; null logSha256 gives UNVERIFIABLE NO_RECORDED_HASH",
+      "REVIEW_EVIDENCE": "recorded reviewResultSha256 compared with sha256 of the embedded reviewResultText bytes, plus bundleDigest equals frozenBundle.bundleDigest; the whole-file sha256 is reported but the file as a whole has no recorded hash",
+      "AUDIT_CHECKPOINT": "working-tree bytes hashed as a git blob id (sha1 over 'blob <size>' + NUL byte+bytes, streamed) and compared with the git HEAD blob id; untracked file gives UNVERIFIABLE NOT_COMMITTED, tracked but deleted gives MISSING"
+    },
+    "bounds": "limit 1..100 (default 50), opaque cursor over a total sort key, hash cap 64 MiB (larger gives UNVERIFIABLE FILE_TOO_LARGE_TO_HASH), JSON parse cap 16 MiB, at most 10000 directory entries per source, tail at most 4096 bytes.",
+    "pathSafety": "relative ids only, no '..', no backslash or drive letter, no absolute paths, Work OS log paths must start with runs/<runId>/, lstat + realpath containment in the allowed root, non-regular files rejected; rejected entries are listed with source.path null and are never read; source directories whose realpath leaves the repo give source state ERROR.",
+    "tail": "WORK_RUN_LOG detail returns at most 4 KB, redacted with core/workos/secret-scan redactSecrets (read with 512 byte lookback so a token cut by the window start is still matched) and scrubbed of known root and user-directory absolute paths; withheld when verification is MISMATCH or MISSING.",
+    "visibility": "Work OS evidence uses the server tenant scope; repository-level evidence is returned only when the server actor is FOUNDER_LOCAL and only for queries without missionId/runId.",
+    "cockpit": "new optional block evidence{state,total,verified,mismatch,missing,unverifiable,sources}; state VERIFIED when at least one queried source is available and none errored, UNAVAILABLE when none is available (counts null), ERROR when any source errors (counts null)."
+  },
+  "observed": {
+    "tests": "tests/v7-b10a-evidence.test.ts: 18 tests, 17 passed, 1 skipped. SKIPPED explicitly: 'symlink escaping the allowed root' (file symlink) because this Windows host refuses fs.symlinkSync file symlinks without privilege (EPERM); directory-junction escape tests for run logs and for the review evidence directory ran and passed.",
+    "mutationCheck": "removing the realpath containment check in resolveUnder made 'a directory junction/symlink inside the run directory that points outside is rejected' fail; restored.",
+    "storeSnapshotNote": "WorkOsStore may rewrite its derived snapshot.json/.prev when it loads a journal (existing store behaviour, also on other GET routes). The read-only API test therefore excludes snapshot.json and snapshot.json.prev from its before/after byte comparison and asserts everything else, including journal.jsonl, is byte-identical."
+  },
+  "commands": [
+    {
+      "cmd": "npx tsc --noEmit",
+      "exit": 0
+    },
+    {
+      "cmd": "node node_modules/vitest/vitest.mjs run tests/v7-b10a-evidence.test.ts",
+      "exit": 0,
+      "result": "1 file, 17 passed, 1 skipped"
+    },
+    {
+      "cmd": "node scripts/validate-tr-comments.mjs",
+      "exit": 0,
+      "result": "TR_VALIDATION: PASS"
+    },
+    {
+      "cmd": "node scripts/secret-sanity.mjs",
+      "exit": 0,
+      "result": "SECRET_SANITY: PASS"
+    },
+    {
+      "cmd": "node scripts/v6-apps-control-desktop-selftest.mjs",
+      "exit": 0,
+      "result": "PASS 93/93"
+    },
+    {
+      "cmd": "node scripts/smoke-control-api.mjs",
+      "exit": 0,
+      "result": "status PASS"
+    },
+    {
+      "cmd": "node scripts/validate-mechanical-closure.mjs",
+      "exit": 0,
+      "result": "PASS files=90"
+    },
+    {
+      "cmd": "vitest run tests/v7-b10a-evidence.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts tests/v7-b3a-runner.test.ts (before reseal)",
+      "exit": 1,
+      "result": "73 passed, 1 skipped, 1 failed: 'sealed B2 files have no CR bytes and manifest sha256 equals the file bytes' failed only because server.ts and validation.json changed and the trust-root manifest was not yet resealed; re-run after reseal is recorded in the final verification of this package"
+    },
+    {
+      "cmd": "node scripts/generate-trust-root.mjs",
+      "exit": 0,
+      "result": "TRUST_ROOT_MANIFEST_GENERATED files=364"
+    },
+    {
+      "cmd": "node scripts/verify-trust-root.mjs",
+      "exit": 0,
+      "result": "TRUST_ROOT_VERIFY: PASS"
+    },
+    {
+      "cmd": "vitest run tests/v7-b10a-evidence.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts tests/v7-b3a-runner.test.ts (after reseal)",
+      "exit": 0,
+      "result": "4 files passed; 74 tests passed, 1 skipped (the explicit symlink-file SKIPPED above)"
+    }
+  ],
+  "notRun": [
+    "scripts/run-validation.mjs (explicitly excluded by the package instructions)"
+  ],
+  "deviations": [
+    "None against the package scope. No desktop, protected-script, schema, package.json or CHANGELOG file was touched."
+  ],
+  "reviewStatus": "not clean; no CLEAN is declared by the implementer. Independent fresh Claude reviewer must decide."
+}

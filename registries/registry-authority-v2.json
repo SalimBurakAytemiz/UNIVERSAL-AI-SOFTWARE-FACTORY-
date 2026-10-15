@@ -2,7 +2,9 @@
   "//TR": "Canonical registry ownership ve reference domainlerini machine-readable olarak ayırır; legacy framework skill referansları runtime SK2 authority değildir.",
   "schemaVersion": "2.0.0",
   "authorities": {
-    "agents": "registries/agents.json",
+    "agents": "registries/role-definitions.json",
+    "roleDefinitions": "registries/role-definitions.json",
+    "legacyAgents": "registries/agents.json",
     "runtimeSkills": "registries/skills-v2.json",
     "legacySkills": "registries/skills.json",
     "technologies": "registries/technologies.json",
@@ -15,5 +17,7 @@
   },
   "runtimeSkillPrefix": "SK2-",
   "legacyReferenceSkillPrefix": "SKILL-",
-  "frameworkPackSkillAuthority": "LEGACY_REFERENCE_ONLY"
+  "frameworkPackSkillAuthority": "LEGACY_REFERENCE_ONLY",
+  "legacyAgentsAuthority": "LEGACY_REFERENCE_ONLY",
+  "agentsAuthorityNote": "FA-WFR-03-2026-10-15: authorities.agents and authorities.roleDefinitions point to the single canonical 599 RoleDefinition registry; registries/agents.json (363) is frozen byte-identical as LEGACY_REFERENCE_ONLY and linked only through PROPOSED legacyAliases."
 }

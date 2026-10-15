@@ -1,0 +1,1693 @@
+{
+  "//TR": "Bu satır dışında dosya WFR-02 bağımsız doğrulanmış eşleme kaynağıyla bayt-özdeştir; bu satır çıkarılınca SHA256SUMS ile doğrulanır.",
+ "schema": "wfr02.chunk-verified/1",
+ "chunk": 3,
+ "role": "WFR-02 independent verifier (Claude); did not author proposals",
+ "notice": "SEMANTIC_VERIFIED here means two independent Claude agents (proposer and this verifier) agreed from sources. It is NOT Founder approval and NOT a certification. All pairs remain UNAPPROVED for any production or governance purpose.",
+ "input": {
+  "file": "C:/Users/salim/UASCO-recovery/product/wfr00/wfr02/chunk-3-proposals.json",
+  "sha256": "b0f6f998f0f5e54434e9bc7473865442885467758f3ff41201e06f3a7fe5489c",
+  "sha256Verified": true,
+  "entries": 121
+ },
+ "sources": {
+  "legacyRegistry": "C:/Users/salim/Desktop/UASCO master:registries/agents.json (+ organization/agents/*.json)",
+  "targetCatalog": "C:/Users/salim/UASCO-wt/v2-product 4f24820:registries/target-role-catalog.json",
+  "heuristicReconciliation": "C:/Users/salim/UASCO-wt/v2-product 4f24820:registries/target-role-reconciliation.json",
+  "masterV2Heuristic": "C:/Users/salim/UASCO-recovery/product/wfr00/mapping-quality.json masterV2HeuristicTable.rows"
+ },
+ "sourceLimitation": "Legacy records for 243-363 carry only name and category; organization/agents genomes share category-wide competency tags and generic skill lists, so judgments rest mainly on role name and category.",
+ "rules": {
+  "agreedWithProposer": "true when final status is SEMANTIC_VERIFIED/SUSPECTED with target equal to proposer primary, or both UNMAPPED; CONFLICT counts as disagreement",
+  "CONFLICT": "finalTargetRoleId null; conflictCandidates lists comparable targets",
+  "replacement": "replacement targets appear only as SUSPECTED"
+ },
+ "summary": {
+  "SEMANTIC_VERIFIED": 63,
+  "CONFLICT": 26,
+  "SUSPECTED": 23,
+  "UNMAPPED": 9,
+  "total": 121,
+  "agreedWithProposer": 94,
+  "disagreedWithProposer": 27,
+  "replacementTargets": 1
+ },
+ "rejectedCrossDomainProposerPairs": [],
+ "rejectedCrossDomainNote": "No proposer pair in chunk 3 was judged cross-domain; no entry REJECTED. Heuristic-table pairs judged wrong are listed separately below.",
+ "heuristicPairsJudgedWrong": [
+  {
+   "pair": "337 Sales Operations -> UASCO-0568 Principal Search Engine Optimization Expert",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "330 Pricing Intelligence -> UASCO-0579 Principal Regulatory Intelligence Analyst",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "360 Contract Intelligence -> UASCO-0287 Principal Privacy Engineering Expert",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "326 Business Performance -> UASCO-0003 Principal AI Workforce Governance Expert",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "344 Customer Experience Strategy -> UASCO-0027 Principal Pricing Strategy Expert",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "345 Business Process Architect -> UASCO-0013 Principal Technical Project Delivery Expert",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "342 Churn Intelligence -> UASCO-0025 Principal Competitive Intelligence Expert",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "343 Customer Lifetime Value -> UASCO-0025 Principal Competitive Intelligence Expert",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "357 Investment Evaluation -> UASCO-0580 Principal Procurement & Vendor Analyst",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "269 Architecture Outcome Learning -> UASCO-0534 Principal Memory Architecture Expert",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "274 Wallet & Transaction Specialist -> UASCO-0371 Principal AML & Sanctions Systems Expert",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "286 Trading OMS Specialist -> UASCO-0384 Principal Pricing & PnL Engineer",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "299 CDN Architecture Specialist -> UASCO-0406 Principal DRM & Content Protection Expert",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "351 Business Continuity -> UASCO-0012 Principal Dependency & Critical Path Engineer",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "318 Enterprise Integration Specialist -> UASCO-0360 Principal Enterprise Data Migration Expert",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  },
+  {
+   "pair": "321 Business Opportunity Discovery -> UASCO-0002 Principal Portfolio Governance Architect",
+   "source": "masterV2 heuristic table (via WFR-00 mapping-quality rows)",
+   "verdict": "judged wrong by this verifier; not adopted"
+  }
+ ],
+ "entries": [
+  {
+   "legacyId": "243",
+   "legacyName": "Global Kill Switch Controller",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0594",
+   "finalTargetTitle": "Principal Kill Switch & Safe Mode Engineer",
+   "verifierRationale": "Global kill switch controller and kill switch/safe-mode engineer are the same emergency-stop control function.",
+   "proposerTarget": "UASCO-0594",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "244",
+   "legacyName": "Portfolio Health",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Control-tower portfolio health monitoring fits portfolio governance (0002) and operational truth/status (0598) about equally; no single target.",
+   "proposerTarget": "UASCO-0002",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0002",
+    "UASCO-0598"
+   ]
+  },
+  {
+   "legacyId": "245",
+   "legacyName": "Cost & Revenue Monitoring",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Combined cost and revenue monitoring splits across revenue (0574), cloud unit economics (0573) and agent model cost (0595); none covers both.",
+   "proposerTarget": "UASCO-0574",
+   "proposerProposal": "MAP",
+   "proposerRelation": "BROADER",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0574",
+    "UASCO-0573",
+    "UASCO-0595"
+   ]
+  },
+  {
+   "legacyId": "246",
+   "legacyName": "Agent Activity Monitoring",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0598",
+   "finalTargetTitle": "Principal Operational Truth & Status Engineer",
+   "verifierRationale": "Agent activity monitoring partially matches operational truth/status engineering; target is broader status truth, not activity telemetry specifically.",
+   "proposerTarget": "UASCO-0598",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "247",
+   "legacyName": "Security & Incident Monitoring",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0275",
+   "finalTargetTitle": "Principal SOC Detection Engineer",
+   "verifierRationale": "Security and incident monitoring overlaps SOC detection; incident handling part sits with 0286 incident commander. Partial overlap.",
+   "proposerTarget": "UASCO-0275",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "248",
+   "legacyName": "Company Event Bus",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Company event bus equally fits event streaming engineer (0094) and message broker engineer (0095); also event integration (0344).",
+   "proposerTarget": "UASCO-0094",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0094",
+    "UASCO-0095",
+    "UASCO-0344"
+   ]
+  },
+  {
+   "legacyId": "249",
+   "legacyName": "Notification Orchestration",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0086",
+   "finalTargetTitle": "Principal Notification Service Engineer",
+   "verifierRationale": "Notification orchestration is the notification service discipline; same backend scope.",
+   "proposerTarget": "UASCO-0086",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "250",
+   "legacyName": "Automation & Workflow",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Generic automation/workflow platform fits agent DAG orchestration (0592), BPM (0358) and workflow backend (0085) comparably.",
+   "proposerTarget": "UASCO-0592",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0592",
+    "UASCO-0358",
+    "UASCO-0085"
+   ]
+  },
+  {
+   "legacyId": "251",
+   "legacyName": "Internal Marketplace & Capability Registry",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0208",
+   "finalTargetTitle": "Principal Software Catalog Engineer",
+   "verifierRationale": "Capability registry resembles a software catalog, but internal marketplace/capability scope is wider than developer catalog engineering.",
+   "proposerTarget": "UASCO-0208",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "252",
+   "legacyName": "Template & Industry Pack Manager",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0207",
+   "finalTargetTitle": "Principal Template & Scaffolding Engineer",
+   "verifierRationale": "Industry pack management only partly matches code template/scaffolding engineering; business domain packs are not covered.",
+   "proposerTarget": "UASCO-0207",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "253",
+   "legacyName": "Chief Knowledge Architect",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0529",
+   "finalTargetTitle": "Chief Knowledge Architecture Agent",
+   "verifierRationale": "Chief knowledge architect equals chief knowledge architecture agent; heuristic knowledge-graph engineer (0533) is a narrower, lower-seniority role.",
+   "proposerTarget": "UASCO-0529",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "254",
+   "legacyName": "Knowledge Gap Detection",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0536",
+   "finalTargetTitle": "Principal Capability Gap Discovery Expert",
+   "verifierRationale": "Knowledge gap detection partially overlaps capability gap discovery; heuristic 0533 knowledge graph is weaker.",
+   "proposerTarget": "UASCO-0536",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "255",
+   "legacyName": "Autonomous Research Planner",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Research planning fits technical research (0530) and research governance (0540, the heuristic target) with comparable plausibility.",
+   "proposerTarget": "UASCO-0530",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0530",
+    "UASCO-0540"
+   ]
+  },
+  {
+   "legacyId": "256",
+   "legacyName": "Official Source Research",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Official source research fits source credibility (0531), technical research (0530) and heuristic literature research (0532) comparably.",
+   "proposerTarget": "UASCO-0531",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0531",
+    "UASCO-0530",
+    "UASCO-0532"
+   ]
+  },
+  {
+   "legacyId": "257",
+   "legacyName": "Technical Literature Research",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Technical literature research matches technical research (0530) and scientific literature research (0532, heuristic target) equally.",
+   "proposerTarget": "UASCO-0530",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0530",
+    "UASCO-0532"
+   ]
+  },
+  {
+   "legacyId": "258",
+   "legacyName": "Open Source Intelligence",
+   "finalStatus": "UNMAPPED",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "No catalog role covers open-source intelligence gathering for learning; 0531 credibility and 0277 threat intelligence are only adjacent.",
+   "proposerTarget": null,
+   "proposerProposal": "UNMAPPED",
+   "proposerRelation": null,
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "259",
+   "legacyName": "Source Reliability",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0531",
+   "finalTargetTitle": "Principal Evidence & Source Credibility Expert",
+   "verifierRationale": "Source reliability assessment is evidence and source credibility work; same discipline.",
+   "proposerTarget": "UASCO-0531",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "260",
+   "legacyName": "Knowledge Extraction",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0533",
+   "finalTargetTitle": "Principal Knowledge Graph Engineer",
+   "verifierRationale": "Knowledge extraction feeds knowledge graphs but extraction itself is only partly the knowledge graph engineer scope.",
+   "proposerTarget": "UASCO-0533",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "261",
+   "legacyName": "Knowledge Conflict Detection",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0535",
+   "finalTargetTitle": "Principal Knowledge Conflict Resolution Expert",
+   "verifierRationale": "Knowledge conflict detection is a narrower part of knowledge conflict resolution; same discipline.",
+   "proposerTarget": "UASCO-0535",
+   "proposerProposal": "MAP",
+   "proposerRelation": "NARROWER",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "262",
+   "legacyName": "Knowledge Validation",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Knowledge validation fits source credibility (0531), freshness (0539) and heuristic conflict resolution (0535) comparably.",
+   "proposerTarget": "UASCO-0531",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0531",
+    "UASCO-0539",
+    "UASCO-0535"
+   ]
+  },
+  {
+   "legacyId": "263",
+   "legacyName": "Domain Discovery",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0536",
+   "finalTargetTitle": "Principal Capability Gap Discovery Expert",
+   "verifierRationale": "Discovering new domains to acquire is a form of capability gap discovery; replacement for proposer UNMAPPED, unverified.",
+   "proposerTarget": null,
+   "proposerProposal": "UNMAPPED",
+   "proposerRelation": null,
+   "agreedWithProposer": false,
+   "replacementTarget": true
+  },
+  {
+   "legacyId": "264",
+   "legacyName": "Capability Discovery",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0536",
+   "finalTargetTitle": "Principal Capability Gap Discovery Expert",
+   "verifierRationale": "Capability discovery equals capability gap discovery; proposer, heuristic and lane-B agree.",
+   "proposerTarget": "UASCO-0536",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "265",
+   "legacyName": "Domain Pack Builder",
+   "finalStatus": "UNMAPPED",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "No catalog role builds domain packs; heuristic capability gap discovery (0536) is a different activity.",
+   "proposerTarget": null,
+   "proposerProposal": "UNMAPPED",
+   "proposerRelation": null,
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "266",
+   "legacyName": "Skill Overlay Builder",
+   "finalStatus": "UNMAPPED",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "No catalog role builds skill overlays; heuristic research governance (0540) does not correspond.",
+   "proposerTarget": null,
+   "proposerProposal": "UNMAPPED",
+   "proposerRelation": null,
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "267",
+   "legacyName": "Knowledge Freshness",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0539",
+   "finalTargetTitle": "Principal Knowledge Freshness Engineer",
+   "verifierRationale": "Knowledge freshness equals knowledge freshness engineering.",
+   "proposerTarget": "UASCO-0539",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "268",
+   "legacyName": "Experience Learning",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0538",
+   "finalTargetTitle": "Principal Learning Outcome Analyst",
+   "verifierRationale": "Experience learning partly matches learning outcome analysis; learning-from-execution scope is not fully covered.",
+   "proposerTarget": "UASCO-0538",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "269",
+   "legacyName": "Architecture Outcome Learning",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0538",
+   "finalTargetTitle": "Principal Learning Outcome Analyst",
+   "verifierRationale": "Architecture outcome learning partly matches learning outcome analysis; heuristic memory architecture (0534) misreads architecture.",
+   "proposerTarget": "UASCO-0538",
+   "proposerProposal": "MAP",
+   "proposerRelation": "NARROWER",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "270",
+   "legacyName": "Self-Improvement Evaluation",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0537",
+   "finalTargetTitle": "Principal Skill Evaluation Architect",
+   "verifierRationale": "Self-improvement evaluation overlaps skill evaluation architecture and learning outcome analysis (0538); partial.",
+   "proposerTarget": "UASCO-0537",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "271",
+   "legacyName": "FinTech Domain Architect",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0363",
+   "finalTargetTitle": "Principal FinTech Domain Architect",
+   "verifierRationale": "Identical FinTech domain architect role.",
+   "proposerTarget": "UASCO-0363",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "272",
+   "legacyName": "Financial Ledger Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0364",
+   "finalTargetTitle": "Principal Double-Entry Ledger Engineer",
+   "verifierRationale": "Financial ledger specialist equals double-entry ledger engineering; heuristic 0373 precision is weaker.",
+   "proposerTarget": "UASCO-0364",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "273",
+   "legacyName": "Payments Architecture Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0366",
+   "finalTargetTitle": "Principal Payment Processing Architect",
+   "verifierRationale": "Payments architecture equals payment processing architecture; heuristic wallet engineer (0367) is narrower.",
+   "proposerTarget": "UASCO-0366",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "274",
+   "legacyName": "Wallet & Transaction Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0367",
+   "finalTargetTitle": "Principal Wallet & Stored Value Engineer",
+   "verifierRationale": "Wallet and transaction specialist matches wallet and stored value engineering in the same fintech guild; heuristic AML pair is wrong.",
+   "proposerTarget": "UASCO-0367",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "275",
+   "legacyName": "Settlement Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0368",
+   "finalTargetTitle": "Principal Clearing & Settlement Expert",
+   "verifierRationale": "Settlement specialist is narrower within clearing and settlement; same fintech discipline.",
+   "proposerTarget": "UASCO-0368",
+   "proposerProposal": "MAP",
+   "proposerRelation": "NARROWER",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "276",
+   "legacyName": "Reconciliation Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0369",
+   "finalTargetTitle": "Principal Reconciliation Systems Expert",
+   "verifierRationale": "Reconciliation specialist equals reconciliation systems expert.",
+   "proposerTarget": "UASCO-0369",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "277",
+   "legacyName": "KYC/KYB Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0370",
+   "finalTargetTitle": "Principal KYC KYB Systems Expert",
+   "verifierRationale": "KYC/KYB specialist equals KYC KYB systems expert.",
+   "proposerTarget": "UASCO-0370",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "278",
+   "legacyName": "AML/Sanctions Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0371",
+   "finalTargetTitle": "Principal AML & Sanctions Systems Expert",
+   "verifierRationale": "AML/sanctions specialist equals AML and sanctions systems expert.",
+   "proposerTarget": "UASCO-0371",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "279",
+   "legacyName": "Financial Fraud & Risk",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0372",
+   "finalTargetTitle": "Principal Fraud Detection Engineer",
+   "verifierRationale": "Financial fraud and risk is slightly broader than fraud detection engineering; same fintech discipline.",
+   "proposerTarget": "UASCO-0372",
+   "proposerProposal": "MAP",
+   "proposerRelation": "BROADER",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "280",
+   "legacyName": "Financial Precision & Accounting Integrity",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0373",
+   "finalTargetTitle": "Principal Financial Precision Engineer",
+   "verifierRationale": "Financial precision and accounting integrity matches financial precision engineer; same discipline.",
+   "proposerTarget": "UASCO-0373",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "281",
+   "legacyName": "FinTech Regulatory Intelligence",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "FinTech regulatory intelligence fits fintech compliance engineering (0374) and regulatory intelligence analyst (0579) equally.",
+   "proposerTarget": "UASCO-0374",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0374",
+    "UASCO-0579"
+   ]
+  },
+  {
+   "legacyId": "282",
+   "legacyName": "FinTech QA & Failure Mode Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0375",
+   "finalTargetTitle": "Principal Financial Failure Mode QA Expert",
+   "verifierRationale": "FinTech QA and failure modes equals financial failure mode QA expert.",
+   "proposerTarget": "UASCO-0375",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "283",
+   "legacyName": "Capital Markets Domain Architect",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0376",
+   "finalTargetTitle": "Principal Capital Markets Architect",
+   "verifierRationale": "Capital markets domain architect equals capital markets architect.",
+   "proposerTarget": "UASCO-0376",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "284",
+   "legacyName": "Market Data Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0377",
+   "finalTargetTitle": "Principal Market Data Systems Expert",
+   "verifierRationale": "Market data specialist equals market data systems expert.",
+   "proposerTarget": "UASCO-0377",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "285",
+   "legacyName": "Instrument & Reference Data Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0386",
+   "finalTargetTitle": "Principal Reference Data Engineer",
+   "verifierRationale": "Instrument and reference data equals reference data engineering.",
+   "proposerTarget": "UASCO-0386",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "286",
+   "legacyName": "Trading OMS Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0379",
+   "finalTargetTitle": "Principal Order Management Systems Expert",
+   "verifierRationale": "Trading OMS specialist equals order management systems expert; heuristic pricing/PnL pair is wrong.",
+   "proposerTarget": "UASCO-0379",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "287",
+   "legacyName": "Execution Management Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0380",
+   "finalTargetTitle": "Principal Execution Management Expert",
+   "verifierRationale": "Execution management specialist equals execution management expert.",
+   "proposerTarget": "UASCO-0380",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "288",
+   "legacyName": "Portfolio & Position Specialist",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0383",
+   "finalTargetTitle": "Principal Portfolio Analytics Engineer",
+   "verifierRationale": "Position keeping is not portfolio analytics; overlap is partial.",
+   "proposerTarget": "UASCO-0383",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "289",
+   "legacyName": "Pre-Trade Risk Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0381",
+   "finalTargetTitle": "Principal Pre-Trade Risk Engineer",
+   "verifierRationale": "Same pre-trade risk role.",
+   "proposerTarget": "UASCO-0381",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "290",
+   "legacyName": "Post-Trade Risk Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0382",
+   "finalTargetTitle": "Principal Post-Trade Risk Engineer",
+   "verifierRationale": "Same post-trade risk role.",
+   "proposerTarget": "UASCO-0382",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "291",
+   "legacyName": "Pricing & P&L Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0384",
+   "finalTargetTitle": "Principal Pricing & PnL Engineer",
+   "verifierRationale": "Pricing and P&L specialist equals pricing and PnL engineer.",
+   "proposerTarget": "UASCO-0384",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "292",
+   "legacyName": "FIX Protocol & Trading Integration",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0378",
+   "finalTargetTitle": "Principal FIX Protocol Engineer",
+   "verifierRationale": "FIX protocol and trading integration equals FIX protocol engineer.",
+   "proposerTarget": "UASCO-0378",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "293",
+   "legacyName": "Market Surveillance Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0385",
+   "finalTargetTitle": "Principal Market Surveillance Expert",
+   "verifierRationale": "Same market surveillance role.",
+   "proposerTarget": "UASCO-0385",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "294",
+   "legacyName": "Clearing & Settlement Specialist",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Capital-markets clearing fits 0387 clearing and custody (heuristic, same guild) as well as proposer 0368 fintech clearing; 0368 also taken by 275.",
+   "proposerTarget": "UASCO-0368",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0368",
+    "UASCO-0387"
+   ]
+  },
+  {
+   "legacyId": "295",
+   "legacyName": "Streaming Platform Architect",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0400",
+   "finalTargetTitle": "Principal Streaming Platform Architect",
+   "verifierRationale": "Same streaming platform architect role.",
+   "proposerTarget": "UASCO-0400",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "296",
+   "legacyName": "Media Ingest Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0402",
+   "finalTargetTitle": "Principal Media Ingest Engineer",
+   "verifierRationale": "Same media ingest role.",
+   "proposerTarget": "UASCO-0402",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "297",
+   "legacyName": "Video Encoding / Transcoding Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0401",
+   "finalTargetTitle": "Principal Video Encoding Engineer",
+   "verifierRationale": "Video encoding/transcoding equals video encoding engineer.",
+   "proposerTarget": "UASCO-0401",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "298",
+   "legacyName": "Adaptive Streaming Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0403",
+   "finalTargetTitle": "Principal Adaptive Streaming Engineer",
+   "verifierRationale": "Same adaptive streaming role.",
+   "proposerTarget": "UASCO-0403",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "299",
+   "legacyName": "CDN Architecture Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0404",
+   "finalTargetTitle": "Principal Content Delivery Network Expert",
+   "verifierRationale": "CDN architecture equals content delivery network expert; heuristic DRM pair is wrong.",
+   "proposerTarget": "UASCO-0404",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "300",
+   "legacyName": "Playback Engineering Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0405",
+   "finalTargetTitle": "Principal Playback Engineering Expert",
+   "verifierRationale": "Same playback engineering role.",
+   "proposerTarget": "UASCO-0405",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "301",
+   "legacyName": "DRM & Content Protection",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0406",
+   "finalTargetTitle": "Principal DRM & Content Protection Expert",
+   "verifierRationale": "Same DRM and content protection role.",
+   "proposerTarget": "UASCO-0406",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "302",
+   "legacyName": "Live Streaming Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0407",
+   "finalTargetTitle": "Principal Live Streaming Engineer",
+   "verifierRationale": "Same live streaming role.",
+   "proposerTarget": "UASCO-0407",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "303",
+   "legacyName": "Content Rights & Entitlement",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0409",
+   "finalTargetTitle": "Principal Content Rights & Entitlement Expert",
+   "verifierRationale": "Same content rights and entitlement role.",
+   "proposerTarget": "UASCO-0409",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "304",
+   "legacyName": "Streaming QoE Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0408",
+   "finalTargetTitle": "Principal Streaming Quality of Experience Engineer",
+   "verifierRationale": "Streaming QoE equals streaming quality of experience engineer.",
+   "proposerTarget": "UASCO-0408",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "305",
+   "legacyName": "Commerce Domain Architect",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0388",
+   "finalTargetTitle": "Principal Commerce Domain Architect",
+   "verifierRationale": "Same commerce domain architect role.",
+   "proposerTarget": "UASCO-0388",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "306",
+   "legacyName": "Catalog & Product Commerce Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0389",
+   "finalTargetTitle": "Principal Commerce Catalog Engineer",
+   "verifierRationale": "Catalog and product commerce equals commerce catalog engineer.",
+   "proposerTarget": "UASCO-0389",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "307",
+   "legacyName": "Commerce OMS Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0392",
+   "finalTargetTitle": "Principal Order Management Architect",
+   "verifierRationale": "Commerce OMS equals order management architect in commerce guild; heuristic domain architect is broader.",
+   "proposerTarget": "UASCO-0392",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "308",
+   "legacyName": "Inventory & Fulfillment Specialist",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Inventory and fulfillment spans inventory systems (0393) and fulfillment/logistics (0395, heuristic) equally.",
+   "proposerTarget": "UASCO-0393",
+   "proposerProposal": "MAP",
+   "proposerRelation": "BROADER",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0393",
+    "UASCO-0395",
+    "UASCO-0394"
+   ]
+  },
+  {
+   "legacyId": "309",
+   "legacyName": "Marketplace Architecture Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0390",
+   "finalTargetTitle": "Principal Marketplace Platform Engineer",
+   "verifierRationale": "Marketplace architecture equals marketplace platform engineering.",
+   "proposerTarget": "UASCO-0390",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "310",
+   "legacyName": "Seller & Commission Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0396",
+   "finalTargetTitle": "Principal Seller & Commission Engineer",
+   "verifierRationale": "Same seller and commission role.",
+   "proposerTarget": "UASCO-0396",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "311",
+   "legacyName": "Promotion & Pricing Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0397",
+   "finalTargetTitle": "Principal Pricing & Promotion Engine Expert",
+   "verifierRationale": "Promotion and pricing equals pricing and promotion engine expert.",
+   "proposerTarget": "UASCO-0397",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "312",
+   "legacyName": "Commerce Fraud & Dispute Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0398",
+   "finalTargetTitle": "Principal Commerce Fraud & Chargeback Engineer",
+   "verifierRationale": "Commerce fraud and dispute equals commerce fraud and chargeback engineer.",
+   "proposerTarget": "UASCO-0398",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "313",
+   "legacyName": "SaaS Domain Architect",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0352",
+   "finalTargetTitle": "Principal SaaS Platform Architect",
+   "verifierRationale": "SaaS domain architect equals SaaS platform architect.",
+   "proposerTarget": "UASCO-0352",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "314",
+   "legacyName": "Multi-Tenant SaaS Specialist",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0352",
+   "finalTargetTitle": "Principal SaaS Platform Architect",
+   "verifierRationale": "Multi-tenancy is a sub-scope of SaaS platform architecture; 0359 is multi-region, not multi-tenant.",
+   "proposerTarget": "UASCO-0352",
+   "proposerProposal": "MAP",
+   "proposerRelation": "NARROWER",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "315",
+   "legacyName": "Subscription Lifecycle Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0356",
+   "finalTargetTitle": "Principal Subscription & Metering Engineer",
+   "verifierRationale": "Subscription lifecycle is the subscription and metering engineering discipline.",
+   "proposerTarget": "UASCO-0356",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "316",
+   "legacyName": "Enterprise Identity / SSO Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0353",
+   "finalTargetTitle": "Principal Enterprise Identity SSO Expert",
+   "verifierRationale": "Enterprise identity/SSO equals enterprise identity SSO expert.",
+   "proposerTarget": "UASCO-0353",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "317",
+   "legacyName": "SaaS Metering & Billing Specialist",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Metering and billing fits enterprise billing (0357) and subscription and metering (0356) equally.",
+   "proposerTarget": "UASCO-0357",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0357",
+    "UASCO-0356"
+   ]
+  },
+  {
+   "legacyId": "318",
+   "legacyName": "Enterprise Integration Specialist",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0341",
+   "finalTargetTitle": "Principal Enterprise Integration Architect",
+   "verifierRationale": "Enterprise integration specialist equals enterprise integration architect; heuristic data migration pair is weaker.",
+   "proposerTarget": "UASCO-0341",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "319",
+   "legacyName": "Corporate Strategy",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0001",
+   "finalTargetTitle": "Chief Operating Strategy Agent",
+   "verifierRationale": "Corporate strategy only partly matches chief operating strategy agent; operating strategy is narrower.",
+   "proposerTarget": "UASCO-0001",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "320",
+   "legacyName": "Business Model Architect",
+   "finalStatus": "UNMAPPED",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "No catalog role owns business model design; heuristic decision intelligence (0004) does not correspond.",
+   "proposerTarget": null,
+   "proposerProposal": "UNMAPPED",
+   "proposerRelation": null,
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "321",
+   "legacyName": "Business Opportunity Discovery",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Opportunity discovery fits market sizing (0026) and product discovery (0021) comparably.",
+   "proposerTarget": "UASCO-0026",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0026",
+    "UASCO-0021"
+   ]
+  },
+  {
+   "legacyId": "322",
+   "legacyName": "Industry Intelligence",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Industry intelligence fits competitive intelligence (0025), customer market research (0571) and product research (0024) comparably.",
+   "proposerTarget": "UASCO-0025",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0025",
+    "UASCO-0571",
+    "UASCO-0024"
+   ]
+  },
+  {
+   "legacyId": "323",
+   "legacyName": "Business Intelligence",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0144",
+   "finalTargetTitle": "Principal Business Intelligence Architect",
+   "verifierRationale": "Business intelligence equals business intelligence architect.",
+   "proposerTarget": "UASCO-0144",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "324",
+   "legacyName": "Competitive Strategy",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Competitive strategy fits competitive intelligence (0025) and competitive positioning (0566) equally; heuristic 0001 also plausible.",
+   "proposerTarget": "UASCO-0025",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0025",
+    "UASCO-0566",
+    "UASCO-0001"
+   ]
+  },
+  {
+   "legacyId": "325",
+   "legacyName": "Business Scenario Planning",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0151",
+   "finalTargetTitle": "Principal Decision Intelligence Expert",
+   "verifierRationale": "Scenario planning partly overlaps decision intelligence; forecasting (0149) also relevant.",
+   "proposerTarget": "UASCO-0151",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "326",
+   "legacyName": "Business Performance",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0146",
+   "finalTargetTitle": "Principal Metrics & Measurement Architect",
+   "verifierRationale": "Business performance management partly overlaps metrics and measurement architecture; heuristic AI workforce governance is wrong.",
+   "proposerTarget": "UASCO-0146",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "327",
+   "legacyName": "Revenue Strategy",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0574",
+   "finalTargetTitle": "Principal Revenue & Monetization Expert",
+   "verifierRationale": "Revenue strategy matches revenue and monetization expert.",
+   "proposerTarget": "UASCO-0574",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "328",
+   "legacyName": "Monetization Optimization",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0574",
+   "finalTargetTitle": "Principal Revenue & Monetization Expert",
+   "verifierRationale": "Monetization optimization is narrower within revenue and monetization.",
+   "proposerTarget": "UASCO-0574",
+   "proposerProposal": "MAP",
+   "proposerRelation": "NARROWER",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "329",
+   "legacyName": "Unit Economics",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Business unit economics fits FP&A (0572) about as well as cloud unit economics (0573), which is narrower cloud cost scope.",
+   "proposerTarget": "UASCO-0573",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0573",
+    "UASCO-0572"
+   ]
+  },
+  {
+   "legacyId": "330",
+   "legacyName": "Pricing Intelligence",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0027",
+   "finalTargetTitle": "Principal Pricing Strategy Expert",
+   "verifierRationale": "Pricing intelligence is narrower within pricing strategy; heuristic regulatory intelligence pair is wrong.",
+   "proposerTarget": "UASCO-0027",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "331",
+   "legacyName": "Revenue Forecasting",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Revenue forecasting fits forecasting scientist (0149), revenue (0574, heuristic) and FP&A (0572) comparably.",
+   "proposerTarget": "UASCO-0149",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0149",
+    "UASCO-0574",
+    "UASCO-0572"
+   ]
+  },
+  {
+   "legacyId": "332",
+   "legacyName": "Revenue Leakage Detection",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Revenue leakage fits billing (0357), accounting controls (0575) and revenue (0574) comparably.",
+   "proposerTarget": "UASCO-0357",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0357",
+    "UASCO-0575",
+    "UASCO-0574"
+   ]
+  },
+  {
+   "legacyId": "333",
+   "legacyName": "Enterprise Sales Strategy",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0560",
+   "finalTargetTitle": "Principal Enterprise Sales Strategist",
+   "verifierRationale": "Enterprise sales strategy equals enterprise sales strategist.",
+   "proposerTarget": "UASCO-0560",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "334",
+   "legacyName": "Partnership Development",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0564",
+   "finalTargetTitle": "Principal Partnership Strategy Expert",
+   "verifierRationale": "Partnership development matches partnership strategy expert.",
+   "proposerTarget": "UASCO-0564",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "335",
+   "legacyName": "Channel Partnership",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Channel partnership fits channel integration (0565) and partnership strategy (0564) equally.",
+   "proposerTarget": "UASCO-0565",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0565",
+    "UASCO-0564"
+   ]
+  },
+  {
+   "legacyId": "336",
+   "legacyName": "Strategic Account",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Strategic account management fits enterprise sales (0560) and customer success (0552) comparably.",
+   "proposerTarget": "UASCO-0560",
+   "proposerProposal": "MAP",
+   "proposerRelation": "NARROWER",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0560",
+    "UASCO-0552"
+   ]
+  },
+  {
+   "legacyId": "337",
+   "legacyName": "Sales Operations",
+   "finalStatus": "UNMAPPED",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "No sales operations role in catalog; heuristic SEO pair (0568) is cross-domain and wrong.",
+   "proposerTarget": null,
+   "proposerProposal": "UNMAPPED",
+   "proposerRelation": null,
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "338",
+   "legacyName": "Deal Desk",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Deal desk fits proposal/tender (0563), contract risk (0577) and heuristic pre-sales (0562) comparably.",
+   "proposerTarget": "UASCO-0563",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0563",
+    "UASCO-0577",
+    "UASCO-0562"
+   ]
+  },
+  {
+   "legacyId": "339",
+   "legacyName": "Partnership Integration",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0565",
+   "finalTargetTitle": "Principal Channel Integration Expert",
+   "verifierRationale": "Partnership integration partially overlaps channel integration expert.",
+   "proposerTarget": "UASCO-0565",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "340",
+   "legacyName": "Voice of Customer",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0559",
+   "finalTargetTitle": "Principal Product Feedback Intelligence Expert",
+   "verifierRationale": "Voice of customer largely matches product feedback intelligence; customer market research (0571) also overlaps.",
+   "proposerTarget": "UASCO-0559",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "341",
+   "legacyName": "Customer Segmentation",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0571",
+   "finalTargetTitle": "Principal Customer Market Researcher",
+   "verifierRationale": "Customer segmentation is part of customer market research; partial.",
+   "proposerTarget": "UASCO-0571",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "342",
+   "legacyName": "Churn Intelligence",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0558",
+   "finalTargetTitle": "Principal Customer Renewal Analyst",
+   "verifierRationale": "Churn intelligence partly overlaps renewal analysis; heuristic competitive intelligence is wrong.",
+   "proposerTarget": "UASCO-0558",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "343",
+   "legacyName": "Customer Lifetime Value",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0558",
+   "finalTargetTitle": "Principal Customer Renewal Analyst",
+   "verifierRationale": "Customer lifetime value only partly overlaps renewal analysis; product data analyst (0145) also partial.",
+   "proposerTarget": "UASCO-0558",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "344",
+   "legacyName": "Customer Experience Strategy",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0552",
+   "finalTargetTitle": "Principal Customer Success Architect",
+   "verifierRationale": "Customer experience strategy partly overlaps customer success architecture; heuristic pricing strategy is wrong.",
+   "proposerTarget": "UASCO-0552",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "345",
+   "legacyName": "Business Process Architect",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0358",
+   "finalTargetTitle": "Principal Workflow BPM Architect",
+   "verifierRationale": "Business process architecture is BPM architecture; heuristic project delivery pair is wrong.",
+   "proposerTarget": "UASCO-0358",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "346",
+   "legacyName": "Operational Excellence",
+   "finalStatus": "UNMAPPED",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "No operational excellence role; heuristic project delivery (0013) does not correspond.",
+   "proposerTarget": null,
+   "proposerProposal": "UNMAPPED",
+   "proposerRelation": null,
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "347",
+   "legacyName": "Process Mining",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0358",
+   "finalTargetTitle": "Principal Workflow BPM Architect",
+   "verifierRationale": "Process mining is adjacent to BPM architecture; agent DAG orchestration (0592) does not fit.",
+   "proposerTarget": "UASCO-0358",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "348",
+   "legacyName": "Vendor Management",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Vendor management fits procurement and vendor analyst (0580) and vendor delivery expert (0017) equally.",
+   "proposerTarget": "UASCO-0580",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0580",
+    "UASCO-0017",
+    "UASCO-0293"
+   ]
+  },
+  {
+   "legacyId": "349",
+   "legacyName": "Procurement Intelligence",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0580",
+   "finalTargetTitle": "Principal Procurement & Vendor Analyst",
+   "verifierRationale": "Procurement intelligence is within procurement and vendor analysis discipline.",
+   "proposerTarget": "UASCO-0580",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "350",
+   "legacyName": "SLA Management",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0557",
+   "finalTargetTitle": "Principal SLA & Service Operations Expert",
+   "verifierRationale": "SLA management equals SLA and service operations expert.",
+   "proposerTarget": "UASCO-0557",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "351",
+   "legacyName": "Business Continuity",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0250",
+   "finalTargetTitle": "Principal Business Continuity Engineer",
+   "verifierRationale": "Same business continuity role; heuristic critical-path pair is wrong.",
+   "proposerTarget": "UASCO-0250",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "352",
+   "legacyName": "Financial Planning & Analysis",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0572",
+   "finalTargetTitle": "Principal Financial Planning & Analysis Expert",
+   "verifierRationale": "Same FP&A role.",
+   "proposerTarget": "UASCO-0572",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "353",
+   "legacyName": "Treasury Management",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0576",
+   "finalTargetTitle": "Principal Treasury Planning Analyst",
+   "verifierRationale": "Treasury management matches treasury planning analyst.",
+   "proposerTarget": "UASCO-0576",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "354",
+   "legacyName": "Financial Risk",
+   "finalStatus": "UNMAPPED",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "No financial risk role; corporate risk (0005), treasury (0576) and contract risk (0577) are only adjacent.",
+   "proposerTarget": null,
+   "proposerProposal": "UNMAPPED",
+   "proposerRelation": null,
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "355",
+   "legacyName": "Management Reporting",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Management reporting fits FP&A (0572), financial analytics (0152) and BI (0144) comparably.",
+   "proposerTarget": "UASCO-0572",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0572",
+    "UASCO-0152",
+    "UASCO-0144"
+   ]
+  },
+  {
+   "legacyId": "356",
+   "legacyName": "Cost Allocation",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Cost allocation fits cloud unit economics (0573), workforce cost (0583) and accounting controls (0575) comparably.",
+   "proposerTarget": "UASCO-0573",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0573",
+    "UASCO-0583",
+    "UASCO-0575"
+   ]
+  },
+  {
+   "legacyId": "357",
+   "legacyName": "Investment Evaluation",
+   "finalStatus": "UNMAPPED",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "No investment evaluation role; heuristic procurement pair is wrong.",
+   "proposerTarget": null,
+   "proposerProposal": "UNMAPPED",
+   "proposerRelation": null,
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "358",
+   "legacyName": "Financial Scenario Modeling",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0572",
+   "finalTargetTitle": "Principal Financial Planning & Analysis Expert",
+   "verifierRationale": "Financial scenario modeling is a core narrower FP&A activity.",
+   "proposerTarget": "UASCO-0572",
+   "proposerProposal": "MAP",
+   "proposerRelation": "NARROWER",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "359",
+   "legacyName": "Regulatory Intelligence",
+   "finalStatus": "SEMANTIC_VERIFIED",
+   "finalTargetRoleId": "UASCO-0579",
+   "finalTargetTitle": "Principal Regulatory Intelligence Analyst",
+   "verifierRationale": "Regulatory intelligence equals regulatory intelligence analyst; lane-B agrees.",
+   "proposerTarget": "UASCO-0579",
+   "proposerProposal": "MAP",
+   "proposerRelation": "SAME_ROLE",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "360",
+   "legacyName": "Contract Intelligence",
+   "finalStatus": "SUSPECTED",
+   "finalTargetRoleId": "UASCO-0577",
+   "finalTargetTitle": "Principal Contract Risk Analyst",
+   "verifierRationale": "Contract intelligence partly overlaps contract risk analysis; heuristic privacy engineering is wrong.",
+   "proposerTarget": "UASCO-0577",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "361",
+   "legacyName": "Data Governance Legal",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Data governance legal fits data protection governance (0288, heuristic) and privacy legal research (0582) equally.",
+   "proposerTarget": "UASCO-0288",
+   "proposerProposal": "MAP",
+   "proposerRelation": "OVERLAPPING",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0288",
+    "UASCO-0582",
+    "UASCO-0141"
+   ]
+  },
+  {
+   "legacyId": "362",
+   "legacyName": "Digital Commerce Legal",
+   "finalStatus": "UNMAPPED",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "No digital commerce legal role; heuristic data protection governance (0288) does not correspond.",
+   "proposerTarget": null,
+   "proposerProposal": "UNMAPPED",
+   "proposerRelation": null,
+   "agreedWithProposer": true
+  },
+  {
+   "legacyId": "363",
+   "legacyName": "Regulatory Change Impact",
+   "finalStatus": "CONFLICT",
+   "finalTargetRoleId": null,
+   "finalTargetTitle": null,
+   "verifierRationale": "Regulatory change impact fits regulatory intelligence (0579) and regulatory compliance analyst (0291, heuristic) comparably.",
+   "proposerTarget": "UASCO-0579",
+   "proposerProposal": "MAP",
+   "proposerRelation": "NARROWER",
+   "agreedWithProposer": false,
+   "conflictCandidates": [
+    "UASCO-0579",
+    "UASCO-0291"
+   ]
+  }
+ ]
+}

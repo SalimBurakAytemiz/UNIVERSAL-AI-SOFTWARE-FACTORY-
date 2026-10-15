@@ -1,0 +1,217 @@
+{
+  "//TR": "Bu checkpoint, WFR-03 tek kanonik 599 RoleDefinition kayıt paketini ve yalnız gözlenen komut sonuçlarını kaydeder; temiz değildir, bağımsız inceleme beklemektedir ve yeni validator adımı yetki engeli nedeniyle eklenmemiştir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-WFR03-SINGLE-CANONICAL-ROLE-REGISTRY",
+  "date": "2026-10-15",
+  "parent": "194bfb34e675b57ab5c6fb5a91b608d428ee06c3",
+  "base": "06677f715a076740762825e838bb277e683fb812",
+  "branch": "v7/product-wfr03",
+  "implementer": "CLAUDE_BUILDER",
+  "authorizationRecords": [
+    "audit/checkpoints/V7-PKG-B0B-WFR03-AUTHORIZATION-2026-10-15.json"
+  ],
+  "status": "IMPLEMENTED_NOT_CLEAN_REVIEW_PENDING; BLOCKED_ITEM: role-registry validation step not added (see blocked)",
+  "filesChanged": [
+    "registries/target-role-catalog.json -> registries/role-definitions.json (git mv; promoted and rewritten to the contract section 3 RoleDefinition shape)",
+    "registries/target-role-reconciliation.json (git rm; every entry represented, see observed.reconciliation)",
+    "registries/sources/wfr02/{chunk-1-verified.json,chunk-2-verified.json,chunk-3-verified.json,SUMMARY.json,SHA256SUMS} (WFR-02 evidence; JSON files carry one inserted //TR line 2)",
+    "registries/registry-authority-v2.json (authorities.agents and authorities.roleDefinitions -> role-definitions.json; authorities.legacyAgents -> agents.json; legacyAgentsAuthority LEGACY_REFERENCE_ONLY)",
+    "scripts/build-target-role-catalog.mjs -> scripts/build-role-definitions.mjs (git mv; rewritten)",
+    "scripts/validate-role-registry.mjs (new, authorized)",
+    "apps/control-api/src/server.ts (/v1/agents summary fields, /v1/roles, /v1/roles/:roleId, cockpit targetRoles path)",
+    "apps/desktop/renderer/app.js (agents label: registered / legacy / certified)",
+    "config/validation.json (appended tests/v7-wfr03-role-registry.test.ts only)",
+    "config/trust-root-manifest.json (resealed via generate-trust-root.mjs)",
+    "tests/v7-wfr03-role-registry.test.ts (new)",
+    "tests/v7-b9-target-catalog.test.ts (path + status values + reconciliation block re-pointed to legacyAliases)",
+    "tests/v7-b2-workos-hardening.test.ts (fixture path target-role-catalog.json -> role-definitions.json only)",
+    "audit/checkpoints/V7-PKG-WFR03-2026-10-15.json"
+  ],
+  "observed": {
+    "registry": "registries/role-definitions.json sha256 aaaac2dd2f58d967448e96358a70b9635f42079f5c52da046cea12570f979b0a; 599 roles (UASCO-0001..0599), 51 guilds (ownerRoleId null + WFR-GAP-GUILD-OWNER-Gnn), 10 clusters; every role runtimeStatus UNKNOWN, proficiencyStatus NOT_EVALUATED, certifiedScope null; 3594 evaluation specs (EV-01..EV-06 x 599) all NOT_EXECUTED; 4843 gap ids",
+    "genomeImport": "Master V2 genome sections A-H parsed for all 599 roles: responsibilities (D), forbiddenActions (F), EV spec line refs (E), learningCandidates PROPOSED (A), technology candidates (B, CANDIDATE_NOT_VERIFIED), tool class candidates (C); requiredSkillIds/desiredMasteryLevels/toolAdapterIds/domainPacks/knowledgeSourceRefs/allowedWorkerScope/permissionGrants are empty with concrete WFR-GAP-* ids",
+    "conflicts": "19 = the 10 carried source conflicts (DERIVED_ID + 9 PRIORITY_DIFFERS_FROM_GUILD_TABLE) + 9 GENOME_PRIORITY_DIFFERS_FROM_ROSTER (88 roles in G32,G34,G39-G45: genome says P3, roster row says BACKLOG; roster value kept)",
+    "legacyAliases": "443 aliases, all approval PROPOSED: SEMANTIC_VERIFIED 214, SUSPECTED 61, CONFLICT 133 (55 conflict rows x candidate targets), REJECTED 35 (verifier-rejected heuristic pairs incl. 221 3D Modeling -> UASCO-0458 Audio Design), EXACT_ID 0; legacyUnmapped 88 (UNMAPPED 32, MISSING_SOURCE 1, CONFLICT 55)",
+    "wfr02Evidence": "source SHA256SUMS verified (sha256sum -c OK for 7 files) before copy; each copied JSON minus its inserted //TR line 2 matches SHA256SUMS; proposal files not copied",
+    "reconciliation": "HEAD registries/target-role-reconciliation.json: mappings 110/110 represented as legacy aliases (SEMANTIC_VERIFIED 95, SUSPECTED 4, CONFLICT 8, REJECTED 3), unmatchedRegistered 253/253 represented, unmatchedTarget 491/491 represented as roles -> git rm",
+    "legacyAgents": "registries/agents.json byte-identical to base: sha256 cbe7abf00b4c1e7d989f8478f4d3aacb21d8daabedead45e44d892aa8332f5e3, 363 agents",
+    "authorityRepoint": "authorities.agents repointed to role-definitions.json; all 11 listed legacy validators/selftests PASS after the repoint",
+    "api": "/v1/agents keeps all agents.json fields and adds registeredRoles 599, legacyRoles 363, certified 0, activeWorkerRuns (Work OS), roleRegistry; /v1/roles paginated (limit 1..100, default 50, cursor = last roleId, roleId order) with guildId/clusterId/q filters; /v1/roles/:roleId full definition + legacyAliases + gaps; /v1/cockpit workforce keys unchanged, targetRoles from role-definitions.json",
+    "trustRootManifestNote": "generate-trust-root.mjs matches protected prefixes with an appended '/', so scripts/validate-role-registry.mjs is not sealed in the manifest unless listed in config/protected-paths.json exactPaths (not authorized)"
+  },
+  "blocked": {
+    "item": "config/validation.json step {\"id\":\"role-registry\",\"command\":[\"node\",\"scripts/validate-role-registry.mjs\"]}",
+    "reason": "Adding the step makes the canonical 'mechanical' step fail: node scripts/validate-mechanical-closure.mjs -> exit 1 'validation-script-not-protected:scripts/validate-role-registry.mjs'. The fix is listing scripts/validate-role-registry.mjs in config/protected-paths.json exactPaths, which is outside the FA-WFR-03 protected-file list; the implementer stopped and did not edit it. The step was removed; the validator still runs inside canonical validation through tests/v7-wfr03-role-registry.test.ts (appended to the tests step).",
+    "needs": "Founder authorization to add scripts/validate-role-registry.mjs to config/protected-paths.json exactPaths, then add the step and reseal"
+  },
+  "commands": [
+    {"cmd": "node scripts/build-role-definitions.mjs <master.md> --check (byte-for-byte reproduction from Master V2 + registries/sources/wfr02)", "exit": 0, "result": "ROLE_DEFINITIONS_REPRODUCE: PASS sha256=aaaac2dd2f58d967448e96358a70b9635f42079f5c52da046cea12570f979b0a reconciliation=REMOVED_ALL_ENTRIES_REPRESENTED"},
+    {"cmd": "npx tsc --noEmit", "exit": 0},
+    {"cmd": "vitest run tests/v7-wfr03-role-registry.test.ts tests/v7-b9-target-catalog.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts tests/v7-b3a-runner.test.ts tests/v7-b3a-recovery-budget.test.ts tests/v7-b3a-c3-builder-commit.test.ts tests/v7-b10a-evidence.test.ts tests/v7-b11a-company-os.test.ts tests/pkg-vs-validation-sharding.test.ts", "exit": 0, "result": "10 files passed; 153 passed, 1 skipped"},
+    {"cmd": "node scripts/validate-role-registry.mjs", "exit": 0, "result": "ROLE_REGISTRY_VALIDATION: PASS roles=599 guilds=51 clusters=10 evaluationSpecs=3594 executed=0 certified=0 legacyAgents=363 (byte-identical) aliases=443 legacyUnmapped=88 runtimeFilesScanned=38"},
+    {"cmd": "node scripts/validate-registries.mjs", "exit": 0},
+    {"cmd": "node scripts/validate-agent-competencies.mjs", "exit": 0},
+    {"cmd": "node scripts/validate-organization.mjs", "exit": 0},
+    {"cmd": "node scripts/validate-paste3-agent-specialization.mjs", "exit": 0},
+    {"cmd": "node scripts/validate-paste3-closure.mjs", "exit": 0},
+    {"cmd": "node scripts/validate-paste3-technology-domain-registry.mjs", "exit": 0},
+    {"cmd": "node scripts/validate-agent-semantic.mjs", "exit": 0},
+    {"cmd": "node scripts/validate-review-graph-v2.mjs", "exit": 0},
+    {"cmd": "node scripts/validate-woven-model.mjs", "exit": 0},
+    {"cmd": "node scripts/validate-paste4c-doc-truth.mjs", "exit": 0, "result": "mode=SEALED checks=93"},
+    {"cmd": "node scripts/v6-registries-agents-knowledge-selftest.mjs", "exit": 0, "result": "7732/7732"},
+    {"cmd": "node scripts/v6-apps-control-desktop-selftest.mjs", "exit": 0, "result": "93/93"},
+    {"cmd": "node scripts/smoke-control-api.mjs", "exit": 0, "result": "status PASS"},
+    {"cmd": "node scripts/validate-tr-comments.mjs", "exit": 0},
+    {"cmd": "node scripts/secret-sanity.mjs", "exit": 0},
+    {"cmd": "node scripts/validate-config-runtime-enforcement.mjs", "exit": 0},
+    {"cmd": "node scripts/validate-mechanical-closure.mjs (with role-registry step)", "exit": 1, "result": "validation-script-not-protected:scripts/validate-role-registry.mjs"},
+    {"cmd": "node scripts/validate-mechanical-closure.mjs (step removed)", "exit": 0},
+    {"cmd": "node scripts/generate-trust-root.mjs && node scripts/verify-trust-root.mjs", "exit": 0, "result": "files=364; TRUST_ROOT_VERIFY: PASS"}
+  ],
+  "notRun": ["scripts/run-validation.mjs (excluded by package instructions)"],
+  "notClaimed": "No role is READY/RUNNING/CERTIFIED; no evaluation executed; no alias approved; no AI provider call; no push.",
+  "remediationCycle2": {
+    "//TR": "Bu bölüm WFR-03 cycle-2 düzeltmesini (WFR03-C1-F1/F2/F3) ve yalnız gözlenen komut sonuçlarını kaydeder; temiz değildir, yeni bağımsız inceleme beklemektedir.",
+    "parent": "25e8d205efa2ada77d78a0ce952ef96dd365cc9d",
+    "status": "REMEDIATED_NOT_CLEAN_REVIEW_PENDING",
+    "authorization": "Lane B B0 + B0A + B0B (FA-WFR-03); protected files touched: scripts/validate-role-registry.mjs, apps/control-api/src/server.ts, config/trust-root-manifest.json (generate-trust-root.mjs only)",
+    "findings": {
+      "WFR03-C1-F1": {
+        "severity": "HIGH",
+        "fix": "validate-role-registry.mjs prints the COMPUTED counts (executed, certified, runtimeReadyOrRunning) on PASS and on FAIL ('ROLE_REGISTRY_COUNTS (computed): ...'); FA-WFR-03 invariants evaluationSpecsExecuted==0, certified==0, runtimeReadyOrRunning==0 are hard failures (FA_WFR03_EVALUATIONS_EXECUTED / FA_WFR03_CERTIFIED / FA_WFR03_RUNTIME_READY) even when evidence looks valid; resolvable() removed. Evaluation/reviewer evidence is accepted only as audit/evidence/role-evaluations/<roleId>/<EV-0n|REVIEWER>.json#sha256=<hex>: real file inside that root (realpath, no symlink escape), not the registry, byte sha256 equal to the pinned value, JSON naming the same roleId/evaluationId/verdict (spec status; REVIEWER -> APPROVED), and artifactPath/artifactSha256 binding another file in the same role directory.",
+        "tests": "fixture A (README.md/package.json as evaluation, certification and reviewer evidence), fixture A3 (registry self-reference), computed-count assertions (executed=1 / executed=6 certified=1 runtimeReadyOrRunning=1), well-formed pinned evidence in a temp root still fails the FA-WFR-03 invariants, wrong pinned sha256 / other role / mismatched verdict / forged roleId / artifact outside the role directory each fail"
+      },
+      "WFR03-C1-F2": {
+        "severity": "MEDIUM",
+        "fix": "validator loads registries/sources/wfr02/{chunk-1,2,3-verified.json,SUMMARY.json}, pins the SHA256SUMS file itself (sha256 eeb7e04ead9d3a65a0ded54e70302cd7d3f3bdd30ae2e948ee65053bbd13edc7), verifies each file against SHA256SUMS after stripping the inserted //TR line 2, re-derives the expected legacyAliases per role and legacyUnmapped (finalStatus, finalTargetRoleId, conflictCandidates as CONFLICT, the three verifier-rejected heuristic lists as REJECTED, first pair kept) with the same rule as build-role-definitions.mjs, and requires field-exact equality (ALIAS_NOT_BOUND_TO_WFR02 / UNMAPPED_NOT_BOUND_TO_WFR02); every alias/unmapped evidenceRef must be the WFR-02 entry (or rejected-list row) of the same legacy id (ALIAS_EVIDENCE / UNMAPPED_EVIDENCE); header legacyAliases total/byStatus and legacyUnmapped counts are recomputed (COUNTS_ALIASES / COUNTS_LEGACY_UNMAPPED).",
+        "tests": "forged SUSPECTED->SEMANTIC_VERIFIED (counts consistent), REJECTED 337 Sales Operations -> UASCO-0568 promoted to verified, CONFLICT 003 resolved to verified, SEMANTIC_VERIFIED/SUSPECTED swap (counts unchanged), alias and legacyUnmapped evidenceRef -> package.json, evidenceRef to another legacy id's entry, tampered chunk-1 (WFR02_SHA256_MISMATCH) and tampered chunk-1 with regenerated SHA256SUMS (WFR02_SHA256SUMS_CHANGED)"
+      },
+      "WFR03-C1-F3": {
+        "severity": "MEDIUM",
+        "fix": "/v1/cockpit workforce keeps every existing key and value (registeredRoles stays the legacy 363) and adds two non-breaking fields: registeredRolesAuthority \"LEGACY_REFERENCE_ONLY\" and canonicalRegisteredRoles (computed from registries/role-definitions.json roles length, 599; null when the registry is unavailable, ERROR when unreadable — same source as targetRoles and /v1/agents.registeredRoles).",
+        "testAdjustment": "tests/v7-wfr03-role-registry.test.ts and tests/v7-b3a-runner.test.ts asserted the exact workforce key set; both keep exact equality with the new 7-key set (activeWorkerRuns, canonicalRegisteredRoles, registeredRoles, registeredRolesAuthority, source, state, targetRoles). No other assertion was changed; WFR03 test adds registeredRolesAuthority == LEGACY_REFERENCE_ONLY, canonicalRegisteredRoles == 599 == /v1/agents.registeredRoles."
+      },
+      "WFR03-C1-F4": "left as documented advisory (role-registry validation step still not in config/validation.json; needs config/protected-paths.json exactPaths authorization)",
+      "WFR03-C1-F5": "left as documented advisory (503 behaviour unchanged)"
+    },
+    "filesChanged": [
+      "scripts/validate-role-registry.mjs",
+      "apps/control-api/src/server.ts (cockpitWorkforce: registeredRolesAuthority, canonicalRegisteredRoles)",
+      "tests/v7-wfr03-role-registry.test.ts",
+      "tests/v7-b3a-runner.test.ts (exact workforce key set only)",
+      "config/trust-root-manifest.json (generate-trust-root.mjs; only server.ts sha256 and generatedAt changed)",
+      "audit/checkpoints/V7-PKG-WFR03-2026-10-15.json (this section)"
+    ],
+    "observed": {
+      "preFixReproduction": "HEAD 25e8d20 validator vs remediated validator on the same forged fixtures (--root worktree): fixture A, fixture A3, forged SUSPECTED->SEMANTIC_VERIFIED, REJECTED 337->UASCO-0568 verified, CONFLICT 003->verified, status swap, alias evidenceRef->package.json: HEAD exit 0 (PASS, printed 'executed=0 certified=0') for all 7; remediated exit 2 for all 7 (fixture A/A3 computed 'executed=6 certified=1 runtimeReadyOrRunning=1')",
+      "lf": "CR byte count 0 in apps/control-api/src/server.ts, scripts/validate-role-registry.mjs, tests/v7-b3a-runner.test.ts, tests/v7-wfr03-role-registry.test.ts before reseal"
+    },
+    "commands": [
+      {
+        "cmd": "npx tsc --noEmit",
+        "exit": 0
+      },
+      {
+        "cmd": "vitest run tests/v7-wfr03-role-registry.test.ts tests/v7-b9-target-catalog.test.ts tests/v7-b2-workos-hardening.test.ts tests/v7-b3a-runner.test.ts tests/v7-b10a-evidence.test.ts tests/v7-b11a-company-os.test.ts (before reseal)",
+        "exit": 1,
+        "result": "1 failed (F-B2-001 manifest sha256 equals file bytes: server.ts changed, manifest not yet resealed) | 134 passed | 1 skipped"
+      },
+      {
+        "cmd": "node scripts/generate-trust-root.mjs",
+        "exit": 0,
+        "result": "TRUST_ROOT_MANIFEST_GENERATED files=364"
+      },
+      {
+        "cmd": "node scripts/verify-trust-root.mjs",
+        "exit": 0,
+        "result": "TRUST_ROOT_VERIFY: PASS"
+      },
+      {
+        "cmd": "vitest run (same 6 files, after reseal)",
+        "exit": 0,
+        "result": "6 files passed; 135 passed, 1 skipped (tests/v7-wfr03-role-registry.test.ts 44 passed)"
+      },
+      {
+        "cmd": "node scripts/validate-role-registry.mjs",
+        "exit": 0,
+        "result": "ROLE_REGISTRY_VALIDATION: PASS roles=599 guilds=51 clusters=10 evaluationSpecs=3594 executed=0 certified=0 runtimeReadyOrRunning=0 legacyAgents=363 (byte-identical) aliases=443 (bound to WFR-02, SHA256SUMS verified) legacyUnmapped=88 runtimeFilesScanned=38"
+      },
+      {
+        "cmd": "node scripts/validate-role-registry.mjs --registry <each forged fixture>",
+        "exit": 2,
+        "result": "all forged fixtures FAIL (see observed.preFixReproduction and the vitest fixtures)"
+      },
+      {
+        "cmd": "node scripts/validate-registries.mjs",
+        "exit": 0
+      },
+      {
+        "cmd": "node scripts/validate-agent-competencies.mjs",
+        "exit": 0
+      },
+      {
+        "cmd": "node scripts/validate-organization.mjs",
+        "exit": 0
+      },
+      {
+        "cmd": "node scripts/validate-paste3-agent-specialization.mjs",
+        "exit": 0
+      },
+      {
+        "cmd": "node scripts/validate-paste3-closure.mjs",
+        "exit": 0
+      },
+      {
+        "cmd": "node scripts/validate-paste3-technology-domain-registry.mjs",
+        "exit": 0
+      },
+      {
+        "cmd": "node scripts/validate-agent-semantic.mjs",
+        "exit": 0
+      },
+      {
+        "cmd": "node scripts/validate-review-graph-v2.mjs",
+        "exit": 0
+      },
+      {
+        "cmd": "node scripts/validate-woven-model.mjs",
+        "exit": 0
+      },
+      {
+        "cmd": "node scripts/validate-paste4c-doc-truth.mjs",
+        "exit": 0,
+        "result": "mode=SEALED checks=93"
+      },
+      {
+        "cmd": "node scripts/v6-registries-agents-knowledge-selftest.mjs",
+        "exit": 0,
+        "result": "7732/7732"
+      },
+      {
+        "cmd": "node scripts/v6-apps-control-desktop-selftest.mjs",
+        "exit": 0,
+        "result": "93/93"
+      },
+      {
+        "cmd": "node scripts/smoke-control-api.mjs",
+        "exit": 0,
+        "result": "status PASS"
+      },
+      {
+        "cmd": "node scripts/validate-tr-comments.mjs",
+        "exit": 0,
+        "result": "TR_VALIDATION: PASS"
+      },
+      {
+        "cmd": "node scripts/secret-sanity.mjs",
+        "exit": 0,
+        "result": "SECRET_SANITY: PASS"
+      }
+    ],
+    "notRun": [
+      "scripts/run-validation.mjs (excluded by package instructions)"
+    ],
+    "notClaimed": "Not CLEAN; no role READY/RUNNING/CERTIFIED; no evaluation executed; no alias approved; no AI provider call; no push."
+  }
+}

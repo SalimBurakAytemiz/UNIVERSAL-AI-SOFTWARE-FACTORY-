@@ -1,15 +1,14 @@
-// //TR: Bu test 599 rollu hedef katalogun (51 guild, 10 cluster) bütünlüğünü, dürüst durum alanlarını ve 363 rol uzlaştırmasının geçerli kimlik referanslarını doğrular.
+// //TR: Bu test 599 rollu hedef katalogun (WFR-03 ile registries/role-definitions.json olarak kanonik kayda terfi etti; 51 guild, 10 cluster) bütünlüğünü, dürüst durum alanlarını ve 363 legacy rolün (eski uzlaştırma dosyası WFR-03'te legacyAliases/legacyUnmapped ile temsil edilip kaldırıldı) geçerli kimlik referanslarını doğrular.
 import {describe, it, expect} from "vitest";
 import fs from "node:fs";
 
 const read = (p: string) => JSON.parse(fs.readFileSync(p, "utf8"));
-const cat = read("registries/target-role-catalog.json");
-const rec = read("registries/target-role-reconciliation.json");
+const cat = read("registries/role-definitions.json");
 const agents = read("registries/agents.json").agents as Array<{id: string}>;
 
 describe("target role catalog", () => {
   it("has the honest status string", () => {
-    expect(cat.status).toBe("TARGET_CATALOG_NOT_RUNTIME");
+    expect(cat.status).toBe("CANONICAL_ROLE_REGISTRY_TARGET_NOT_RUNTIME");
     expect(cat.source.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
   it("has exactly 599 unique contiguous ids 0001..0599", () => {
@@ -38,28 +37,34 @@ describe("target role catalog", () => {
   it("claims no runtime or certification state", () => {
     for (const r of cat.roles) {
       expect(r.lifecycle).toBe("TARGET");
-      expect(r.runtimeStatus).toBe("NOT_IMPLEMENTED");
-      expect(r.certification).toBe("NOT_EVALUATED");
+      expect(r.runtimeStatus).toBe("UNKNOWN");
+      expect(r.proficiencyStatus).toBe("NOT_EVALUATED");
+      expect(r.certifiedScope).toBeNull();
     }
   });
 });
 
-describe("target role reconciliation", () => {
+describe("target role reconciliation (superseded by legacyAliases)", () => {
   const targets = new Set(cat.roles.map((r: {roleId: string}) => r.roleId));
   const regIds = new Set(agents.map((a) => a.id));
+  const aliases = cat.roles.flatMap((r: {roleId: string; legacyAliases: Array<{legacyId: string; status: string; approval: string}>}) => r.legacyAliases.map((a) => ({...a, roleId: r.roleId})));
   it("references only valid ids on both sides and confirms nothing", () => {
-    expect(rec.registeredCount).toBe(363);
+    expect(cat.authority.legacyRegistry.count).toBe(363);
     expect(regIds.size).toBe(363);
-    for (const m of rec.mappings) {
-      expect(regIds.has(m.registeredId)).toBe(true);
-      expect(targets.has(m.targetRoleId)).toBe(true);
-      expect(["EXACT", "CANDIDATE_NEEDS_REVIEW"]).toContain(m.status);
+    expect(aliases.length).toBeGreaterThan(0);
+    for (const m of aliases) {
+      expect(regIds.has(m.legacyId)).toBe(true);
+      expect(targets.has(m.roleId)).toBe(true);
+      expect(["EXACT_ID", "SEMANTIC_VERIFIED", "SUSPECTED", "CONFLICT", "MISSING_SOURCE", "REJECTED", "UNMAPPED"]).toContain(m.status);
+      expect(m.approval).toBe("PROPOSED");
     }
-    for (const u of rec.unmatchedRegistered) expect(regIds.has(u.registeredId)).toBe(true);
-    for (const u of rec.unmatchedTarget) expect(targets.has(u.roleId)).toBe(true);
+    for (const u of cat.legacyUnmapped) expect(regIds.has(u.legacyId)).toBe(true);
+    expect(fs.existsSync("registries/target-role-reconciliation.json")).toBe(false);
+    expect(cat.reconciliationSupersession.candidatePairsRepresentedAsLegacyAlias).toBe(cat.reconciliationSupersession.candidatePairs);
   });
   it("accounts for every registered role exactly once", () => {
-    const seen = [...rec.mappings.map((m: {registeredId: string}) => m.registeredId), ...rec.unmatchedRegistered.map((u: {registeredId: string}) => u.registeredId)];
+    const primary = aliases.filter((a: {status: string}) => ["EXACT_ID", "SEMANTIC_VERIFIED", "SUSPECTED"].includes(a.status)).map((a: {legacyId: string}) => a.legacyId);
+    const seen = [...primary, ...cat.legacyUnmapped.map((u: {legacyId: string}) => u.legacyId)];
     expect(seen.length).toBe(363);
     expect(new Set(seen).size).toBe(363);
   });

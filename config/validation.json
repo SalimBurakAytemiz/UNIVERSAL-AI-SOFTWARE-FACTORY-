@@ -313,7 +313,12 @@
         "tests/v7-b3c-security-stage.test.ts",
         "tests/v7-ps1a-project-studio.test.ts",
         "tests/v7-ps1a-c2-remediation.test.ts",
-        "tests/v7-ps1a-c3-remediation.test.ts"
+        "tests/v7-ps1a-c3-remediation.test.ts",
+        "tests/v7-b10a-evidence.test.ts",
+        "tests/v7-b11a-company-os.test.ts",
+        "tests/v7-wfr03-role-registry.test.ts",
+        "tests/v7-wfr04a-skill-academy.test.ts",
+        "tests/v7-wfr04a-c2-remediation.test.ts"
       ],
       "requiresDependencies": true
     },

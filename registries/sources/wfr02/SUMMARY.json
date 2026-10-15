@@ -1,0 +1,16 @@
+{
+  "//TR": "Bu satır dışında dosya WFR-02 bağımsız doğrulanmış eşleme kaynağıyla bayt-özdeştir; bu satır çıkarılınca SHA256SUMS ile doğrulanır.",
+  "generatedAt": "2026-10-14T21:32:21.098Z",
+  "notice": "PROPOSED mapping. SEMANTIC_VERIFIED = two independent Claude agents agreed from sources; NOT Founder approval, NOT certification.",
+  "total": 363,
+  "uniqueLegacyIds": 363,
+  "byStatus": {
+    "SUSPECTED": 61,
+    "CONFLICT": 55,
+    "UNMAPPED": 32,
+    "SEMANTIC_VERIFIED": 214,
+    "MISSING_SOURCE": 1
+  },
+  "verifiedTargetsUsedMoreThanOnce": 16,
+  "distinctVerifiedTargets": 197
+}
