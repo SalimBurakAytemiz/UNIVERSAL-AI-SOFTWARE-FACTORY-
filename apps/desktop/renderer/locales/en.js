@@ -137,7 +137,7 @@ export default {
   "workforce.active":"Active workers",
   "workforce.target":"Target roles: {n}",
   "workforce.activeNote":"Number of running worker runs; not the registered role count",
-  "workforce.registryLegacy":"Agent registry entries (registries/agents.json): {n}",
+  "workforce.registryLegacy":"Legacy reference entries (LEGACY_REFERENCE_ONLY, not the canonical role count): {n}",
   "map.home":"Overall status",
   "map.count":"{n} records",
   "map.roles":"{n} registered roles",

@@ -137,7 +137,7 @@ export default {
   "workforce.active":"Aktif çalışan",
   "workforce.target":"Hedef rol: {n}",
   "workforce.activeNote":"Çalışan koşu sayısı; kayıtlı rol sayısı değildir",
-  "workforce.registryLegacy":"Ajan registry kaydı (registries/agents.json): {n}",
+  "workforce.registryLegacy":"Eski referans kaydı (LEGACY_REFERENCE_ONLY, kanonik rol sayısı değildir): {n}",
   "map.home":"Genel durum",
   "map.count":"{n} kayıt",
   "map.roles":"{n} kayıtlı rol",
