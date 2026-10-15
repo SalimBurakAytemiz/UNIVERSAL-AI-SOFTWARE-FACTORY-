@@ -39,7 +39,7 @@ import type {ZipLimits} from "../../../core/workos/zip.js";
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
 // //TR: PS-1A: controlRoot provenance/ayar kontrol köküdür (paketli: userData, geliştirme: repo); studio/executorSetup yalnız test enjeksiyonudur (sahte provenance yakalayıcı, CLI keşfi, dev-run zamanlamaları, ZIP sınırları).
 export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security">>;
-  controlRoot?:string;studio?:{zipLimits?:Partial<ZipLimits>;devrun?:Partial<Pick<DevRunOptions,"startTimeOf"|"startWaitMs"|"graceMs"|"probeIntervalMs"|"stopPollMs"|"logRingBytes"|"logTailBytes">>};executorSetup?:Pick<ExecutorSetupOptions,"captureProvenance"|"findClaudeCli">}
+  controlRoot?:string;studio?:{zipLimits?:Partial<ZipLimits>;devrun?:Partial<Pick<DevRunOptions,"startTimeOf"|"startWaitMs"|"graceMs"|"probeIntervalMs"|"stopPollMs"|"logRingBytes"|"logTailBytes"|"treeSnapshotMs">>};executorSetup?:Pick<ExecutorSetupOptions,"captureProvenance"|"findClaudeCli">}
 export function buildServer(opts:BuildServerOptions={}){
 const app=Fastify({logger:opts.logger??true,requestIdHeader:"x-request-id",genReqId:()=>crypto.randomUUID(),bodyLimit:64*1024});
 const readJson=(p:string)=>JSON.parse(fs.readFileSync(p,"utf8"));
@@ -278,6 +278,8 @@ for(const action of ["start","stop","restart"] as const){
     const body=req.body??{};if(!workosWrite(reply,`workos.project.devrun.${action}`,req.params.id,body,validateEmptyBody))return reply;
     const p=projectFor(req.params.id,reply);if(!p)return reply;
     const m=await getDevRuns();
+    // PS1A-C2-F1: dev-run route'ları yalnız yönetilen depo üzerinde (409 REPOSITORY_NOT_MANAGED); çalışan bir dev-run'ı durdurmak süreç güvenliği için her zaman serbesttir.
+    if(action==="stop"&&!m.isActive(p.projectId))getStudio().managedRepoRoot(p);
     if(action==="start")await m.start(p);else if(action==="restart")await m.restart(p);else await m.stop(p.projectId);
     audit(`WORKOS_DEVRUN_${action.toUpperCase()}`,{actor,projectId:p.projectId});
     return {devrun:m.view(p)};

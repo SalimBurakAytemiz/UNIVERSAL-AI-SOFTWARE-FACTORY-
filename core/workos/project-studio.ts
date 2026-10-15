@@ -9,6 +9,7 @@ import {findSecretKinds, redactSecrets} from "./secret-scan.js";
 import {renderTemplate} from "./project-templates.js";
 import {DEFAULT_ZIP_LIMITS, ZipError, listZipEntries, readZipEntry} from "./zip.js";
 import type {ZipLimits} from "./zip.js";
+import {canonicalPath, managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
 
 // Sabit kodlu hata: yol, stack veya secret taşımaz; HTTP durumu route tarafından aynen kullanılır.
 export class StudioError extends Error {
@@ -83,19 +84,20 @@ export class ProjectStudio {
 
   // ---- PS-003: içe aktarma (yalnız yerel kaynak) ----
   // Uzak URL, scp biçimi, UNC/ağ yolu, göreli yol ve veri dizini içindeki kaynaklar (başka projenin yönetilen deposu) reddedilir.
+  // PS1A-C2-F1: içerme kararı kanonik yol (realpathSync.native: 8.3 kısa ad, junction/symlink açılır) üzerinden verilir; açılamayan kısa ad/UNC/aygıt yolu fail-closed reddedilir.
   private localSource(raw: string, kind: "git" | "zip"): string {
     if (typeof raw !== "string" || !raw || /[\u0000\r\n]/.test(raw)) throw new StudioError("IMPORT_REJECTED", 400, "IMPORT_PATH_INVALID");
     if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(raw) || /^[^\\/]+@[^\\/]+:/.test(raw) || /::/.test(raw)) throw new StudioError("IMPORT_REJECTED", 400, "IMPORT_REMOTE_NOT_SUPPORTED");
     if (raw.startsWith("\\\\") || raw.startsWith("//")) throw new StudioError("IMPORT_REJECTED", 400, "IMPORT_REMOTE_NOT_SUPPORTED");
     if (!path.isAbsolute(raw)) throw new StudioError("IMPORT_REJECTED", 400, "IMPORT_PATH_NOT_ABSOLUTE");
-    const p = path.resolve(raw);
+    const c = canonicalPath(raw);
+    if (!c.ok) throw new StudioError("IMPORT_REJECTED", 400, c.reason === "PATH_UNC_OR_DEVICE" ? "IMPORT_REMOTE_NOT_SUPPORTED" : c.reason === "PATH_UNRESOLVABLE" ? "IMPORT_SOURCE_NOT_FOUND" : "IMPORT_SOURCE_FORBIDDEN");
+    const g = pathOverlapsDataDir(raw, this.dataDir);
+    if (g.forbidden) throw new StudioError("IMPORT_REJECTED", 400, "IMPORT_SOURCE_FORBIDDEN");
     let st: fs.Stats;
-    try { st = fs.statSync(p); } catch { throw new StudioError("IMPORT_REJECTED", 400, "IMPORT_SOURCE_NOT_FOUND"); }
+    try { st = fs.statSync(g.canonical); } catch { throw new StudioError("IMPORT_REJECTED", 400, "IMPORT_SOURCE_NOT_FOUND"); }
     if (kind === "git" ? !st.isDirectory() : !st.isFile()) throw new StudioError("IMPORT_REJECTED", 400, "IMPORT_SOURCE_NOT_FOUND");
-    let real: string; try { real = fs.realpathSync(p); } catch { throw new StudioError("IMPORT_REJECTED", 400, "IMPORT_SOURCE_NOT_FOUND"); }
-    let dataReal = this.dataDir; try { dataReal = fs.realpathSync(this.dataDir); } catch { /* veri dizini henüz yok */ }
-    if (under(dataReal, real) || under(real, dataReal)) throw new StudioError("IMPORT_REJECTED", 400, "IMPORT_SOURCE_FORBIDDEN");
-    return real;
+    return g.canonical;
   }
   stagingDir(projectId: string): string { return path.join(this.projectDir(projectId), `.staging-${crypto.randomBytes(6).toString("hex")}`); }
 
@@ -141,32 +143,22 @@ export class ProjectStudio {
   // ---- PS-007: dosyalar ----
   // PS1A-C1-F1: Studio dosya/git/export/dev-run işlemleri YALNIZ bu projenin yönetilen deposunda çalışır. İstemcinin verdiği (yönetilmeyen) repository.path
   // veri dizinine, başka bir tenant'ın yönetilen deposuna veya journal'a işaret edebilir; bu yüzden managed bayrağı ve realpath'in <dataDir>/projects/<id>/repo'ya eşitliği zorunludur.
+  // PS1A-C2-F1: eşitlik ve içerme kanonik yol (realpathSync.native) üzerinden; 8.3 kısa ad/junction takma adı başka bir projenin deposuna eşlenemez.
   managedRepoRoot(project: Project): string {
     const p = project.repository?.path;
     if (!p) throw new StudioError("REPOSITORY_NOT_CONFIGURED", 409);
     if (project.repository?.managed !== true) throw new StudioError("REPOSITORY_NOT_MANAGED", 409);
-    let real: string;
-    try { real = fs.realpathSync(path.resolve(p)); } catch { throw new StudioError("REPOSITORY_NOT_CONFIGURED", 409); }
-    let expected = this.managedRepoPath(project.projectId), projectsReal = path.join(this.dataDir, "projects");
-    try { expected = fs.realpathSync(expected); } catch { /* bu projenin yönetilen deposu yok: eşleşme olamaz */ }
-    try { projectsReal = fs.realpathSync(projectsReal); } catch { /* projects kökü yok */ }
-    const eq = (x: string, y: string) => process.platform === "win32" ? x.toLowerCase() === y.toLowerCase() : x === y;
-    if (!eq(real, expected) || !under(projectsReal, real) || eq(real, projectsReal)) throw new StudioError("REPOSITORY_NOT_MANAGED", 409);
+    const real = managedRepoCanonical(this.dataDir, project.projectId, p);
+    if (!real) throw new StudioError("REPOSITORY_NOT_MANAGED", 409);
     try { if (!fs.statSync(real).isDirectory()) throw new Error("x"); } catch { throw new StudioError("REPOSITORY_NOT_CONFIGURED", 409); }
     return real;
   }
   private repoRoot(project: Project): string { return this.managedRepoRoot(project); }
-  // PS1A-C1-F1 (proje oluşturma): istemcinin verdiği repository.path veri dizininin içinde veya üstünde olamaz (localSource ile aynı under(dataReal, real) || under(real, dataReal) testi).
+  // PS1A-C1-F1/PS1A-C2-F1 (proje oluşturma): istemcinin verdiği repository.path'in kanonik biçimi veri dizininin kanonik biçiminin içinde veya üstünde olamaz;
+  // UNC/aygıt yolu ve kanonik açılımı alınamayan kısa ad da reddedilir.
   assertRepositoryPathAllowed(raw: unknown): void {
     if (raw === undefined) return;
-    if (typeof raw !== "string" || !raw || /[\u0000\r\n]/.test(raw)) throw new StudioError("REPOSITORY_PATH_FORBIDDEN", 400);
-    const abs = path.resolve(raw);
-    let real = abs; try { real = fs.realpathSync(abs); } catch { /* henüz yok: çözülmüş mutlak yol kullanılır */ }
-    let dataReal = this.dataDir; try { dataReal = fs.realpathSync(this.dataDir); } catch { /* veri dizini henüz yok */ }
-    for (const d of new Set([dataReal, this.dataDir])) for (const r of new Set([real, abs])) {
-      if (under(d, r) || under(r, d)) throw new StudioError("REPOSITORY_PATH_FORBIDDEN", 400);
-      if (process.platform === "win32" && (under(d.toLowerCase(), r.toLowerCase()) || under(r.toLowerCase(), d.toLowerCase()))) throw new StudioError("REPOSITORY_PATH_FORBIDDEN", 400);
-    }
+    if (pathOverlapsDataDir(raw, this.dataDir).forbidden) throw new StudioError("REPOSITORY_PATH_FORBIDDEN", 400);
   }
   // Göreli yol: '..', mutlak yol, sürücü/ADS ':' ve (all=false iken) '.git' reddedilir; her segment lstat ile yürünür, symlink/junction reddedilir; son olarak realpath kökün altında olmalıdır.
   private safePath(root: string, raw: string | undefined, all: boolean): {abs: string; rel: string} {
@@ -183,8 +175,11 @@ export class ProjectStudio {
       try { st = fs.lstatSync(cur); } catch { throw new StudioError("FILE_NOT_FOUND", 404); }
       if (st.isSymbolicLink()) throw new StudioError("PATH_REJECTED", 400, "SYMLINK_NOT_FOLLOWED");
     }
-    let real: string; try { real = fs.realpathSync(cur); } catch { throw new StudioError("FILE_NOT_FOUND", 404); }
-    if (!under(root, real)) throw new StudioError("PATH_REJECTED", 400, "SYMLINK_NOT_FOLLOWED");
+    let real: string; try { real = fs.realpathSync.native(cur); } catch { throw new StudioError("FILE_NOT_FOUND", 404); }
+    const k = (x: string) => process.platform === "win32" ? x.toLowerCase() : x;
+    if (!under(k(root), k(real))) throw new StudioError("PATH_REJECTED", 400, "SYMLINK_NOT_FOLLOWED");
+    // PS1A-C2-F1: 8.3 kısa ad (ör. GIT~1) gizli '.git' kuralını aşamaz: karar kanonik (açılmış) göreli yol üzerinden de verilir.
+    if (!all && path.relative(k(root), k(real)).split(path.sep).some(x => x === ".git")) throw new StudioError("PATH_REJECTED", 400);
     return {abs: cur, rel: segs.join("/")};
   }
   listFiles(project: Project, rawPath: string | undefined, all: boolean): {path: string; entries: FileEntry[]; truncated: boolean} {

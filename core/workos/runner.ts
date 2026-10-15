@@ -12,6 +12,7 @@ import {WorkOsError} from "./types.js";
 import type {RunEvidence, RunStatus, RunStep, SecurityStageSummary, WorkRun} from "./types.js";
 import {LEASED_RUN_STATUSES} from "./run-state.js";
 import {testCommandAllowed} from "./schemas.js";
+import {managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
 import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
 import {assertIndependentExecutors, runProcess} from "./executors.js";
 import type {ExecutorPair, MissionSpec, ProcResult} from "./executors.js";
@@ -308,7 +309,18 @@ export class MissionRunner {
     if (!project) return {kind: "BLOCK", reason: "PROJECT_NOT_FOUND"};
     const repo = project.repository;
     if (!repo?.path) return {kind: "BLOCK", reason: repo?.url ? "REMOTE_REPO_NOT_SUPPORTED_YET" : "REPOSITORY_NOT_CONFIGURED"};
-    const src = path.resolve(repo.path);
+    // PS1A-C2-F1 (derinlemesine savunma): yönetilen depo yalnız bu projenin <dataDir>/projects/<id>/repo kanonik yolundan; yönetilmeyen yol ise kanonik biçimi
+    // (8.3 kısa ad/junction açılmış) veri dizininin içinde/üstünde olmamalıdır (başka tenant'ın yönetilen deposu, journal). Aksi halde klonlanmaz.
+    let src: string;
+    if (repo.managed === true) {
+      const m = managedRepoCanonical(this.o.dataDir, project.projectId, repo.path);
+      if (!m) return {kind: "BLOCK", reason: "REPOSITORY_NOT_MANAGED"};
+      src = m;
+    } else {
+      const g = pathOverlapsDataDir(repo.path, this.o.dataDir);
+      if (g.forbidden) return {kind: "BLOCK", reason: "REPOSITORY_PATH_FORBIDDEN"};
+      src = g.canonical;
+    }
     if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) return {kind: "BLOCK", reason: "REPOSITORY_PATH_NOT_FOUND"};
     const base = this.gitOk(src, ["rev-parse", "--verify", "HEAD^{commit}"]);
     if (!base || !SHA.test(base)) return {kind: "BLOCK", reason: "REPOSITORY_HEAD_UNRESOLVED"};

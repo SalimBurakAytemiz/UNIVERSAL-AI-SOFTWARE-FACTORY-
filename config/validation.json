@@ -312,7 +312,8 @@
         "tests/v7-b3a-c3-builder-commit.test.ts",
         "tests/v7-b3c-security-stage.test.ts",
         "tests/v7-ps1a-project-studio.test.ts",
-        "tests/v7-ps1a-c2-remediation.test.ts"
+        "tests/v7-ps1a-c2-remediation.test.ts",
+        "tests/v7-ps1a-c3-remediation.test.ts"
       ],
       "requiresDependencies": true
     },

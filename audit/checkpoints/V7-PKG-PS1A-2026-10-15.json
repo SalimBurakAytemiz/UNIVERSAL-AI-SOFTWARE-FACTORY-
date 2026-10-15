@@ -157,5 +157,82 @@
         "No merge, push, release or production action; no AI provider called; no downloads or installs."
       ]
     }
-  ]
+  ],
+  "remediationCycle3": {
+    "//TR": "Bu bölüm PS-1A c3 düzeltmesini kaydeder: c2 bağımsız incelemesinin PS1A-C2-F1/F2 bulguları, uygulanan yapısal düzeltmeler, eklenen testler ve gözlenen doğrulama sonuçları (yalnız gözlenen sonuçlar; CLEAN beyanı değildir).",
+    "cycle": "c3",
+    "parent": "273ad7ae436e37bcac1337a54f70a462d23439f2",
+    "date": "2026-10-15",
+    "implementer": "CLAUDE_BUILDER",
+    "findings": [
+      {
+        "id": "PS1A-C2-F1",
+        "severity": "HIGH",
+        "fix": "New core/workos/path-guard.ts: canonicalPath(raw) resolves the path (or its nearest existing ancestor, appending the non-existent tail) with fs.realpathSync.native (Windows GetFinalPathNameByHandle: expands 8.3 short names, resolves junctions/symlinks), rejects UNC/device forms (\\\\?\\, \\\\.\\, \\\\server\\share, //...) before any filesystem call and when the native result is UNC, on win32 trims trailing dots/spaces of non-existent segments, rejects ':' in them and fails closed on any non-existent '~<digit>' segment (PATH_SHORT_NAME_UNRESOLVED); comparison keys are lower-cased on win32. pathOverlapsDataDir(raw, dataDir) forbids a path whose canonical (and nominal) form is inside or above the canonical (and nominal) dataDir, fail-closed when either cannot be canonicalised. managedRepoCanonical(dataDir, projectId, raw) accepts only when canonical(raw) equals canonical(<dataDir>/projects/<projectId>/repo) AND that expected path is itself link-free (equals canonical(<dataDir>/projects) + projectId + repo). Used by: ProjectStudio.assertRepositoryPathAllowed (project creation, 400 REPOSITORY_PATH_FORBIDDEN), ProjectStudio.localSource (/import git+zip, 400 IMPORT_SOURCE_FORBIDDEN; source returned and cloned/read as its canonical path), ProjectStudio.managedRepoRoot (files, file, git/log, git/diff, export, devrun start/restart: managed===true and canonical equality with the same tenant-scoped project's managedRepoPath, else 409 REPOSITORY_NOT_MANAGED), apps/control-api/src/server.ts devrun/stop (409 REPOSITORY_NOT_MANAGED unless a dev-run is active, so a running process can always be stopped), and MissionRunner.stepWorkspace (managed: same canonical equality else BLOCK REPOSITORY_NOT_MANAGED; unmanaged: canonical overlap with dataDir -> BLOCK REPOSITORY_PATH_FORBIDDEN; clone source is the canonical path). Also safePath now realpaths with realpathSync.native and rejects a canonical '.git' segment when all=false, so an 8.3 alias (GIT~1) cannot bypass the hidden .git rule.",
+        "experiment": {
+          "description": "Host experiment on this Windows 10 host (node v24.20.0): created a long-named temp dir and subdir, obtained its short name with cmd /c for %I in (dir) do @echo %~sI.",
+          "observed": {
+            "shortName": "C:\\Users\\salim\\AppData\\Local\\Temp\\UA68C1~2\\AVERYV~1",
+            "fsRealpathSync": "C:\\Users\\salim\\AppData\\Local\\Temp\\UA68C1~2\\AVERYV~1 (NOT expanded)",
+            "fsRealpathSyncNative": "C:\\Users\\salim\\AppData\\Local\\Temp\\uasco-longname-experiment-0eK6Ca\\averyverylongdirectoryname (expanded)"
+          },
+          "alsoAssertedInTest": "tests/v7-ps1a-c3-remediation.test.ts asserts realpathSync(short) != long, realpathSync.native(short) == long, and that pathOverlapsDataDir/canonicalPath refuse the alias; the test did not skip on this host (8.3 names available)."
+        },
+        "tests": [
+          "tests/v7-ps1a-c3-remediation.test.ts: unit (real 8.3 expansion, non-existent tail, unresolvable ~1 segment fail-closed, UNC/device forms, trailing-dot normalisation)",
+          "tests/v7-ps1a-c3-remediation.test.ts: 8.3 aliases of dataDir, <dataDir>/projects, tenant B managed repo (+file), path above dataDir and journal refused at create (400); git/zip import from 8.3 aliases incl. B's export zip refused (400 IMPORT_SOURCE_FORBIDDEN); journal-injected unmanaged alias records and managed=true records pointing at B repo / projects root via 8.3 alias get 409 REPOSITORY_NOT_MANAGED on files, file, git/log, git/diff, export, devrun/start, devrun/restart, devrun/stop; runner runs for those projects end with reason REPOSITORY_PATH_FORBIDDEN / REPOSITORY_NOT_MANAGED, no WORKSPACE evidence, no runs/<id>/work",
+          "tests/v7-ps1a-c3-remediation.test.ts: junction aliases (to dataDir, B repo, above dataDir, non-existent child under a junction) refused at create and import; a managed repo dir replaced by a junction to B repo and an unmanaged junction record get 409 (junction creation was permitted on this host; not skipped)",
+          "tests/v7-ps1a-c3-remediation.test.ts: UNC/device forms refused at create (400) and import (400 IMPORT_REMOTE_NOT_SUPPORTED); unmanaged legacy project -> all Studio routes 409, then /import makes it managed and file read works",
+          "tests/v7-ps1a-c3-remediation.test.ts: server started with dataDir given as its 8.3 alias: template project files, GIT~1/HEAD refused (400 PATH_REJECTED), devrun start -> real HTTP preview AVAILABLE -> stop (pid dead) -> export 201 CLEAN"
+        ]
+      },
+      {
+        "id": "PS1A-C2-F2",
+        "severity": "LOW",
+        "fix": "core/workos/devrun.ts: after the dev root exits (crash or stop) the exit handler runs reapTree before resolving `exited`. Windows: listProcesses() (Get-CimInstance Win32_Process: pid, ppid, creation ms) + treeDescendants() walks ppid links from the (possibly dead) root only when creation times are consistent (child created at/after the parent; if a parent pid is now reused, only children created before the reusing process), seeded with descendants recorded by a periodic snapshot (treeSnapshotMs, default 2000 ms, while STARTING/RUNNING) so grandchildren whose intermediate parent already exited are still linked; victims are killed with taskkill /F /T. POSIX: process.kill(-pid, SIGKILL) on the detached process group. The result is recorded in state.treeCleanup {at, method PPID_WALK|PROCESS_GROUP|UNAVAILABLE, killed, survivors} (written only if the persisted state still belongs to the same run) and audited as DEVRUN_TREE_REAPED. No Job Object is used.",
+        "tests": [
+          "tests/v7-ps1a-c3-remediation.test.ts: treeDescendants unit (pid reuse of root and of a dead known intermediate excluded)",
+          "tests/v7-ps1a-c3-remediation.test.ts: dev root spawns a detached grandchild and an intermediate that spawns a detached grandchild and exits after 3 s; root crashes with exit 7 at 6 s -> CRASHED/PROCESS_EXITED:7, treeCleanup.method PPID_WALK, survivors 0, both grandchildren dead, an unrelated bystander process alive; restart + stop also leaves both grandchildren dead"
+        ]
+      }
+    ],
+    "knownLimits": [
+      "Windows descendant reaping is ppid/creation-time based, not a Job Object: a descendant whose every intermediate ancestor exited before any snapshot (snapshot interval default 2 s) cannot be linked to the dev-run and may survive.",
+      "listProcesses spawns powershell.exe (Get-CimInstance) per snapshot/reap; if it fails, treeCleanup.method is UNAVAILABLE and nothing extra is killed.",
+      "8.3 test coverage depends on 8.3 name generation on the temp volume; on this host it is enabled and the tests ran (none skipped). On a volume without 8.3 names the 8.3 tests skip with an explicit reason.",
+      "Orphan recovery after an API restart (recover()) still uses taskkill /T on the recorded root pid only (unchanged in c3)."
+    ],
+    "filesChanged": [
+      "core/workos/path-guard.ts (new)",
+      "core/workos/project-studio.ts",
+      "core/workos/runner.ts",
+      "core/workos/devrun.ts",
+      "apps/control-api/src/server.ts",
+      "tests/v7-ps1a-c3-remediation.test.ts (new)",
+      "config/validation.json (appended tests/v7-ps1a-c3-remediation.test.ts at end of tests step)",
+      "config/trust-root-manifest.json (generate-trust-root)",
+      "audit/checkpoints/V7-PKG-PS1A-2026-10-15.json"
+    ],
+    "verification": {
+      "environment": "bash, env -u PSModulePath, Windows 10 host, node v24.20.0, vitest 4.1.11",
+      "observed": [
+        "npx tsc --noEmit: exit 0",
+        "vitest tests/v7-ps1a-c3-remediation.test.ts --reporter=verbose: 7/7 passed, 0 skipped",
+        "vitest full set before reseal: 122 passed, 1 failed (v7-b2 trust-root seal: server.ts sha mismatch, expected before reseal)",
+        "node scripts/generate-trust-root.mjs: TRUST_ROOT_MANIFEST_GENERATED files=364 (server.ts, validation.json entries changed)",
+        "vitest full set after reseal (v7-ps1a-project-studio, v7-ps1a-c2-remediation, v7-ps1a-c3-remediation, v7-b3c-security-stage, v7-b3a-runner, v7-b3a-recovery-budget, v7-b3a-c3-builder-commit, v7-b1-workos, v7-b2-workos-hardening): 9 files, 123/123 passed",
+        "node scripts/smoke-control-api.mjs: exit 0, status PASS",
+        "node scripts/v6-apps-control-desktop-selftest.mjs: PASS 93/93",
+        "node scripts/validate-tr-comments.mjs: TR_VALIDATION: PASS",
+        "node scripts/secret-sanity.mjs: SECRET_SANITY: PASS",
+        "node scripts/verify-trust-root.mjs: TRUST_ROOT_VERIFY: PASS",
+        "CRLF check on all changed/new files: no CR bytes"
+      ],
+      "notPerformed": [
+        "No negative-control run of the new tests against the c2 code (the new test file imports new exports, so it cannot load against c2).",
+        "No network, AI provider, install or paid action was used."
+      ]
+    },
+    "status": "IMPLEMENTED_NOT_REVIEWED (not clean; independent review pending)"
+  }
 }

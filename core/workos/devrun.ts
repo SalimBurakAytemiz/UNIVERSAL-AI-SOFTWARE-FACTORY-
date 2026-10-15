@@ -25,6 +25,8 @@ export interface DevRunState {
   ownerStartTime?: string | null;
   startedAt: string | null; endedAt: string | null; exitCode: number | null; signal: string | null; port: number | null; argv: string[]; headSha: string | null;
   preview: DevRunPreview; recovery?: DevRunRecovery;
+  // PS1A-C2-F2: süreç çıkışından sonra kalan süreç ağacı temizliği (Windows: ppid yürüyüşü + periyodik soy anlık görüntüsü; POSIX: süreç grubu).
+  treeCleanup?: {at: string; method: "PPID_WALK" | "PROCESS_GROUP" | "UNAVAILABLE"; killed: number; survivors: number};
 }
 export interface DevRunView extends Omit<DevRunState, "ownerPid" | "ownerHost" | "instanceId" | "pidStartTime" | "ownerStartTime" | "schemaVersion" | "tenantId"> { logTail: {stdout: string; stderr: string; truncated: boolean} }
 export interface DevRunOptions {
@@ -34,6 +36,8 @@ export interface DevRunOptions {
   // Test enjeksiyonu: boş loopback port seçimi (varsayılan freeLoopbackPort); PS1A-C1-F2 yarışını deterministik kurmak için kullanılır.
   freePort?: () => Promise<number>;
   logRingBytes?: number; logTailBytes?: number; startWaitMs?: number; graceMs?: number; probeIntervalMs?: number; stopPollMs?: number;
+  // PS1A-C2-F2: Windows'ta çalışırken soy süreçlerin (pid + oluşturma zamanı) anlık görüntü aralığı; 0 kapatır.
+  treeSnapshotMs?: number;
 }
 const NO_PREVIEW_TYPES = new Set(["desktop", "mobile", "native"]);
 const ACTIVE: ReadonlySet<DevRunStatus> = new Set(["STARTING", "RUNNING"]);
@@ -58,6 +62,44 @@ export function killProcessTree(pid: number): void {
     if (process.platform === "win32") cp.spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], {windowsHide: true, stdio: "ignore", timeout: 15_000});
     else { try { process.kill(-pid, "SIGKILL"); } catch { process.kill(pid, "SIGKILL"); } }
   } catch { /* süreç zaten bitmiş olabilir */ }
+}
+// PS1A-C2-F2: Windows süreç tablosu (pid, ppid, oluşturma zamanı ms). Okunamazsa null (temizlik yapılamadı olarak raporlanır).
+export interface ProcInfo { pid: number; ppid: number; created: number }
+export function listProcesses(): Promise<ProcInfo[] | null> {
+  if (process.platform !== "win32") return Promise.resolve(null);
+  const script = "Get-CimInstance Win32_Process | ForEach-Object { if ($_.CreationDate) { '{0},{1},{2}' -f $_.ProcessId,$_.ParentProcessId,([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds() } }";
+  return new Promise(resolve => {
+    cp.execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {windowsHide: true, timeout: 30_000, encoding: "utf8", maxBuffer: 16 * 1024 * 1024}, (err, out) => {
+      if (err) return resolve(null);
+      const rows = String(out).split(/\r?\n/).map(l => l.trim().split(",").map(Number)).filter(r => r.length === 3 && r.every(Number.isFinite)).map(([pid, ppid, created]) => ({pid, ppid, created}));
+      resolve(rows.length ? rows : null);
+    });
+  });
+}
+// Kök sürecin (çökmüş olabilir) soyu: ppid zinciri yalnız oluşturma zamanı tutarlıysa izlenir (çocuk ebeveynden sonra, ebeveyn pid'i yeniden kullanıldıysa yeni sahibinden önce oluşmuştur).
+// known: daha önce görülen soy (pid -> oluşturma zamanı); ara ebeveyni ölmüş torunlar bu kayıtlar üzerinden bağlanır. Bu API süreci asla dahil edilmez.
+export function treeDescendants(procs: ProcInfo[], root: {pid: number; notBefore: number; startTime: number | null}, known: ReadonlyMap<number, number> = new Map()): ProcInfo[] {
+  const live = new Map(procs.map(p => [p.pid, p]));
+  const anc = new Map<number, {created: number; until: number}>();
+  const out = new Map<number, ProcInfo>();
+  const r = live.get(root.pid);
+  const rootReused = r ? (root.startTime !== null ? Math.abs(r.created - root.startTime) > 1000 : r.created < root.notBefore) : false;
+  anc.set(root.pid, {created: root.notBefore, until: rootReused && r ? r.created : Infinity});
+  for (const [pid, created] of known) {
+    if (pid === root.pid || pid === process.pid) continue;
+    const l = live.get(pid);
+    if (l && Math.abs(l.created - created) <= 2) { out.set(pid, l); anc.set(pid, {created, until: Infinity}); }
+    else anc.set(pid, {created, until: l ? l.created : Infinity});
+  }
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const p of procs) {
+      if (out.has(p.pid) || p.pid === root.pid || p.pid === process.pid) continue;
+      const a = anc.get(p.ppid);
+      if (a && p.created >= a.created && p.created < a.until) { out.set(p.pid, p); anc.set(p.pid, {created: p.created, until: Infinity}); changed = true; }
+    }
+  }
+  return [...out.values()];
 }
 export function freeLoopbackPort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -85,6 +127,7 @@ class Ring {
 interface Active {
   state: DevRunState; child: cp.ChildProcess | null; stopping: boolean; stdout: Ring; stderr: Ring;
   release: (() => void) | null; probeTimer: NodeJS.Timeout | null; flushTimer: NodeJS.Timeout | null; exited: Promise<void>; projectType: string | undefined;
+  known: Map<number, number>; snapTimer: NodeJS.Timeout | null;
 }
 
 export class DevRunManager {
@@ -95,7 +138,7 @@ export class DevRunManager {
   readonly recoveries: Array<{projectId: string} & DevRunRecovery> = [];
 
   constructor(opts: DevRunOptions) {
-    this.o = {audit: () => undefined, startTimeOf: processStartTime, freePort: freeLoopbackPort, logRingBytes: 256 * 1024, logTailBytes: 16 * 1024, startWaitMs: 15_000, graceMs: 1_000, probeIntervalMs: 500, stopPollMs: 500, ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined))} as unknown as DevRunManager["o"];
+    this.o = {audit: () => undefined, startTimeOf: processStartTime, freePort: freeLoopbackPort, logRingBytes: 256 * 1024, logTailBytes: 16 * 1024, startWaitMs: 15_000, graceMs: 1_000, probeIntervalMs: 500, stopPollMs: 500, treeSnapshotMs: 2_000, ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined))} as unknown as DevRunManager["o"];
   }
 
   // Bu API sürecinin başlangıç zamanı (sahiplik kimliği); bir kez okunur.
@@ -198,7 +241,7 @@ export class DevRunManager {
     catch (e) { if (e instanceof StudioError && e.code === "REPOSITORY_NOT_CONFIGURED") return this.block(project, "REPOSITORY_NOT_CONFIGURED"); throw e; }
     // Yer tutucu: aynı süreçteki eşzamanlı ikinci start await'ten önce reddedilir.
     const st: DevRunState = {...this.blank(project), status: "STARTING", startedAt: new Date().toISOString(), argv: [...argv]};
-    const a: Active = {state: st, child: null, stopping: false, stdout: new Ring(this.o.logRingBytes), stderr: new Ring(this.o.logRingBytes), release: null, probeTimer: null, flushTimer: null, exited: Promise.resolve(), projectType: project.projectType};
+    const a: Active = {state: st, child: null, stopping: false, stdout: new Ring(this.o.logRingBytes), stderr: new Ring(this.o.logRingBytes), release: null, probeTimer: null, flushTimer: null, exited: Promise.resolve(), projectType: project.projectType, known: new Map(), snapTimer: null};
     this.active.set(id, a);
     // PS1A-C1-F2: her await'ten sonra (özellikle spawn'dan hemen önce) stop/stopAll/GLOBAL_STOP ve harita sahipliği yeniden kontrol edilir.
     const aborted = () => a.stopping || this.active.get(id) !== a || this.stopActive() !== null;
@@ -229,7 +272,8 @@ export class DevRunManager {
       const child = cp.spawn(exe, argv.slice(1), {cwd: ws, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32"});
       a.child = child;
       a.exited = new Promise<void>(resolve => {
-        child.once("exit", (code, signal) => { this.onExit(a, code, signal); resolve(); });
+        // PS1A-C2-F2: çıkış (çökme veya durdurma) sonrası kalan ağaç (ayrık torunlar dahil) temizlenmeden exited çözülmez.
+        child.once("exit", (code, signal) => { this.onExit(a, code, signal); void this.reapTree(a).catch(() => undefined).finally(resolve); });
         child.once("error", () => { if (child.pid === undefined) { this.onExit(a, null, null, "DEVRUN_SPAWN_FAILED"); resolve(); } });
       });
       child.stdout?.on("data", (b: Buffer) => { a.stdout.push(b); this.scheduleFlush(a); });
@@ -247,6 +291,7 @@ export class DevRunManager {
       if (ACTIVE.has(st.status)) this.writeState(st, true);
       this.o.audit("DEVRUN_STARTED", {projectId: id, pid: child.pid, port: st.port, headSha: head});
       this.ensureStopWatch();
+      this.snapshotLoop(a);
       if (NO_PREVIEW_TYPES.has(String(project.projectType))) st.preview = {url: null, state: "UNAVAILABLE", lastProbeAt: null, reason: "PREVIEW_NOT_SUPPORTED_FOR_PROJECT_TYPE"};
       else { st.preview = {url: null, state: "UNAVAILABLE", lastProbeAt: null, reason: "PROBE_PENDING"}; this.probeLoop(a); }
       // İlk yoklama başarısı, süreç çıkışı veya (önizlemesiz/yanıtsız) grace süresi beklenir.
@@ -290,6 +335,51 @@ export class DevRunManager {
     };
     a.probeTimer = setTimeout(() => void tick(), 100);
     a.probeTimer.unref?.();
+  }
+  // PS1A-C2-F2: Windows'ta kök canlıyken soy süreçler periyodik kaydedilir; ara ebeveyn öldükten sonra kök çökerse torun bu kayıtla bulunur.
+  private rootInfo(a: Active): {pid: number; notBefore: number; startTime: number | null} | null {
+    const pid = a.child?.pid, nb = Date.parse(a.state.startedAt ?? "");
+    if (!pid || !Number.isFinite(nb)) return null;
+    const t = a.state.pidStartTime ? Date.parse(a.state.pidStartTime) : NaN;
+    return {pid, notBefore: nb - 1000, startTime: Number.isFinite(t) ? t : null};
+  }
+  private snapshotLoop(a: Active): void {
+    if (process.platform !== "win32" || !this.o.treeSnapshotMs || a.snapTimer) return;
+    let busy = false;
+    a.snapTimer = setInterval(() => {
+      if (busy || !ACTIVE.has(a.state.status)) return;
+      const root = this.rootInfo(a); if (!root) return;
+      busy = true;
+      void listProcesses().then(ps => { if (ps && ACTIVE.has(a.state.status)) for (const d of treeDescendants(ps, root, a.known)) a.known.set(d.pid, d.created); }).finally(() => { busy = false; });
+    }, this.o.treeSnapshotMs);
+    a.snapTimer.unref?.();
+  }
+  private async reapTree(a: Active): Promise<void> {
+    if (a.snapTimer) clearInterval(a.snapTimer); a.snapTimer = null;
+    const root = this.rootInfo(a);
+    if (!root) return;
+    let method: NonNullable<DevRunState["treeCleanup"]>["method"], victims: number[] = [];
+    if (process.platform !== "win32") {
+      method = "PROCESS_GROUP";
+      try { process.kill(-root.pid, "SIGKILL"); } catch { /* grup boş */ }
+    } else {
+      const ps = await listProcesses();
+      if (!ps) method = "UNAVAILABLE";
+      else {
+        method = "PPID_WALK";
+        victims = treeDescendants(ps, root, a.known).map(p => p.pid);
+        for (let i = 0; i < victims.length; i += 20) {
+          cp.spawnSync("taskkill", ["/F", "/T", ...victims.slice(i, i + 20).flatMap(p => ["/PID", String(p)])], {windowsHide: true, stdio: "ignore", timeout: 15_000});
+        }
+        for (let i = 0; i < 30 && victims.some(pidAlive); i++) await sleep(100);
+      }
+    }
+    const st = a.state;
+    st.treeCleanup = {at: new Date().toISOString(), method, killed: victims.length, survivors: victims.filter(pidAlive).length};
+    if (victims.length || method === "UNAVAILABLE") this.o.audit("DEVRUN_TREE_REAPED", {projectId: st.projectId, method, killed: victims.length, survivors: st.treeCleanup.survivors});
+    // Yalnız aynı çalıştırmanın kaydı hâlâ geçerliyse yazılır (bu arada başlatılan yeni çalıştırma ezilmez).
+    const cur = this.readState(st.projectId);
+    if (!this.active.has(st.projectId) && cur && cur.instanceId === this.instanceId && cur.startedAt === st.startedAt && !ACTIVE.has(cur.status)) { try { this.writeState(st); } catch { /* durum yazılamadı */ } }
   }
   private cleanup(a: Active): void {
     if (a.probeTimer) clearTimeout(a.probeTimer); a.probeTimer = null;
