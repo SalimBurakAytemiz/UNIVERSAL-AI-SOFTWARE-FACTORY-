@@ -212,10 +212,11 @@ const validWorkRunId=(x:unknown)=>typeof x==="string"&&/^run_[0-9a-f]{24}$/.test
 let executorsCache:{pair:ExecutorPair|null;reason:string}|null=null;
 // //TR: PS-1A: açık env seçimi önceliklidir; yoksa veri dizinindeki kalıcı LOCAL_CLAUDE ayarı (yalnız geçerli provenance ile) kullanılır.
 function selectExecutors():{pair:ExecutorPair|null;reason:string}{
-  const env=executorsFromEnv(repoRoot);if(env.pair||env.reason!=="EXECUTOR_NOT_CONFIGURED")return env;
+  const env=executorsFromEnv(repoRoot,process.env,controlRoot);if(env.pair||env.reason!=="EXECUTOR_NOT_CONFIGURED")return env;
   const setup=getExecSetup();if(!setup.settingEnabled())return env;
   if(!setup.provenance().ok)return {pair:null,reason:"PROVENANCE_MISSING"};
-  try{return {pair:new LocalClaudeExecutors(controlRoot).pair(),reason:"LOCAL_CLAUDE"}}catch{return {pair:null,reason:"EXECUTOR_CONFIG_INVALID"}}
+  // INT-R3 D-M1-03: config/script'ler uygulama kökünden (repoRoot), provenance kontrol kökünden (paketli: userData) okunur.
+  try{return {pair:new LocalClaudeExecutors(repoRoot,controlRoot).pair(),reason:"LOCAL_CLAUDE"}}catch{return {pair:null,reason:"EXECUTOR_CONFIG_INVALID"}}
 }
 const getExecutors=()=>executorsCache??=opts.executors?{pair:opts.executors,reason:opts.executors.kind}:selectExecutors();
 let workRunner:MissionRunner|null=null;

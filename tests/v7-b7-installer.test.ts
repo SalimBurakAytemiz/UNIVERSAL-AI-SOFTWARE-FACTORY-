@@ -3,6 +3,7 @@ import {describe, it, expect} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
 import {PassThrough} from "node:stream";
 import {pathToFileURL} from "node:url";
 
@@ -416,6 +417,66 @@ describe("INT-R3 D-M1-02 packaged executor provenance capture", () => {
       expect(fs.existsSync(path.join(ud, "workos", "settings", "executors.json"))).toBe(true);
       expect(fs.existsSync(path.join(appRoot, ".ai"))).toBe(false);
       expect(read("core", "workos", "executor-setup.ts")).not.toMatch(/execFile\(process\.execPath/);
+    } finally { fs.rmSync(base, {recursive: true, force: true}); }
+  });
+});
+
+// ---------- INT-R3 D-M1-03: paketli arka uç Work OS runner'ı etkinleştirir; kökler userData altında ----------
+describe("INT-R3 D-M1-03 packaged Work OS runner", () => {
+  it("packaged buildServer options enable the runner with data/runtime/control roots under userData and the app root as config root; no sandbox option exists", async () => {
+    const {packagedServerOptions, packagedControlRoot, packagedAppRoot} = await load("apps", "control-api", "src", "packaged-entry.ts");
+    const ud = path.join(os.tmpdir(), "uasco-ud", "UASCO"), cfg = {runtime: path.join(ud, "runtime"), dataDir: path.join(ud, "workos"), port: 50000};
+    const o = packagedServerOptions(cfg, "a".repeat(64), packagedControlRoot(cfg));
+    expect(o).toEqual({controlToken: "a".repeat(64), runtime: cfg.runtime, dataDir: cfg.dataDir, port: 50000, logger: true, repoRoot: packagedAppRoot(), controlRoot: path.join(ud, "control"), runner: {enabled: true}});
+    for (const k of ["runtime", "dataDir", "controlRoot"]) { const rel = path.relative(ud, o[k]); expect(rel.startsWith("..") || path.isAbsolute(rel), k).toBe(false); }
+    expect("sandbox" in o).toBe(false);
+  });
+  it("LOCAL_CLAUDE reads config/scripts from the app root and provenance from the control root; the broker runs via fork with refreshed control-root config copies", async () => {
+    const {LocalClaudeExecutors, BROKER_CONTROL_CONFIG_FILES} = await load("core", "workos", "executors.ts");
+    const {spawnGitSync} = await load("automation", "lib", "git-isolation.mjs");
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b7-lc-"));
+    try {
+      const appRoot = path.join(base, "install", "resources", "app"), controlRoot = path.join(base, "userdata", "control"), out = path.join(base, "probe.json");
+      for (const f of ["config/execution-backends.json", "config/automation.json", "config/environment-policy.json", "config/builder-execution-policy.json"]) { fs.mkdirSync(path.dirname(path.join(appRoot, f)), {recursive: true}); fs.copyFileSync(path.join(root, f), path.join(appRoot, f)); }
+      // sahte broker: Claude'u çağırmaz; kontrol kökünü/eşitlenmiş config'i kaydeder ve çalışma alanında bir dosyayı düzenler
+      fs.mkdirSync(path.join(appRoot, "scripts"), {recursive: true});
+      fs.writeFileSync(path.join(appRoot, "scripts", "claude-builder-broker.mjs"), [
+        'import fs from "node:fs";',
+        'const control = process.env.UASCO_CONTROL_ROOT;',
+        `fs.writeFileSync(${JSON.stringify(out)}, JSON.stringify({control, ern: process.env.ELECTRON_RUN_AS_NODE ?? null, policy: fs.readFileSync(control + "/config/builder-execution-policy.json", "utf8"), prompt: fs.readFileSync(0, "utf8").length > 0}));`,
+        'fs.writeFileSync("feature.txt", "ok");'
+      ].join("\n") + "\n");
+      const sha = crypto.createHash("sha256").update(fs.readFileSync(process.execPath)).digest("hex");
+      const prov = JSON.stringify({final: "PASS", capturedAt: "2026-10-15T00:00:00.000Z", claude: {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: process.execPath, launcherSha256: sha, version: "9.9.9 (fake)"}});
+      fs.mkdirSync(path.join(controlRoot, ".ai", "runtime"), {recursive: true});
+      fs.writeFileSync(path.join(controlRoot, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), prov);
+      // bayat/kurcalanmış kontrol kökü kopyası broker çalışmadan önce kurulu uygulamadaki kopyayla değiştirilir
+      fs.mkdirSync(path.join(controlRoot, "config"), {recursive: true});
+      fs.writeFileSync(path.join(controlRoot, "config", "builder-execution-policy.json"), '{"allowedTools":["Bash"]}');
+      const ws = path.join(base, "ws");
+      fs.mkdirSync(ws, {recursive: true});
+      const g = (args: string[]) => { const r = spawnGitSync(ws, args); expect(r.status, args.join(" ") + r.stderr).toBe(0); return String(r.stdout).trim(); };
+      g(["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(ws, "README.txt"), "base\n"); g(["add", "-A"]); g(["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "commit", "-q", "-m", "seed"]);
+      const head = g(["rev-parse", "HEAD"]);
+      const pair = new LocalClaudeExecutors(appRoot, controlRoot).pair();
+      const r = await pair.implementer.implement(ws, {runId: "run_" + "0".repeat(24), missionId: "msn_" + "1".repeat(24), projectId: "prj_" + "2".repeat(24), title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", cycle: 0, baseSha: head, startSha: head}, {timeoutMs: 60_000});
+      expect(r.exitCode, r.log).toBe(0);
+      expect(r.commitSha).toMatch(/^[0-9a-f]{40}$/);
+      expect(r.argv).toEqual([process.execPath, path.join(appRoot, "scripts", "claude-builder-broker.mjs")]);
+      const p = JSON.parse(fs.readFileSync(out, "utf8"));
+      expect(p.control).toBe(controlRoot);
+      expect(p.ern).toBeNull();
+      expect(p.prompt).toBe(true);
+      for (const f of BROKER_CONTROL_CONFIG_FILES as readonly string[]) expect(fs.readFileSync(path.join(controlRoot, f)).equals(fs.readFileSync(path.join(appRoot, f))), f).toBe(true);
+      expect(p.policy).toBe(fs.readFileSync(path.join(appRoot, "config", "builder-execution-policy.json"), "utf8"));
+      expect(fs.existsSync(path.join(appRoot, ".ai"))).toBe(false);
+      // provenance yalnız kontrol kökünden okunur: kontrol kökünde yoksa (uygulama kökünde olsa bile) reviewer reddeder
+      fs.rmSync(path.join(controlRoot, ".ai"), {recursive: true, force: true});
+      fs.mkdirSync(path.join(appRoot, ".ai", "runtime"), {recursive: true});
+      fs.writeFileSync(path.join(appRoot, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), prov);
+      const rv = await new LocalClaudeExecutors(appRoot, controlRoot).pair().reviewer.review(ws, {runId: "run_" + "0".repeat(24), missionId: "m", projectId: "p", title: "t", objective: "o", acceptanceCriteria: [], riskLevel: "R1", cycle: 0, baseSha: head}, "", {timeoutMs: 10_000});
+      expect(rv.verdict).toBe("BLOCKED");
+      expect(rv.log).toContain("PROVENANCE_REFUSED");
     } finally { fs.rmSync(base, {recursive: true, force: true}); }
   });
 });

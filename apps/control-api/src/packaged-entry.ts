@@ -49,13 +49,21 @@ export function packagedControlRoot(cfg: {runtime: string; dataDir: string}): st
 /** Paketli uygulama kökü: bu dosya <app>/apps/control-api/src/packaged-entry.js konumundadır. */
 export const packagedAppRoot = (): string => path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
+/**
+ * INT-R3 D-M1-03: kurulu uygulamanın buildServer seçenekleri: Work OS runner etkin (veri/çalışma/kontrol kökleri userData altında, uygulama kökü kurulum dizini).
+ * sandbox seçeneği YOKTUR: proje kodu yürütmesi SBX-GATE ile her zaman SANDBOX_UNAVAILABLE'dır.
+ */
+export function packagedServerOptions(cfg: {runtime: string; dataDir: string; port: number}, controlToken: string, controlRoot: string) {
+  return {controlToken, runtime: cfg.runtime, dataDir: cfg.dataDir, port: cfg.port, logger: true, repoRoot: packagedAppRoot(), controlRoot, runner: {enabled: true}};
+}
+
 async function main(): Promise<void> {
   const cfg = packagedServerConfig(process.env);
   const controlRoot = packagedControlRoot(cfg);
   process.stdin.setEncoding("utf8");
   const token = await readFirstLine(process.stdin);
   if (!TOKEN_RE.test(token)) throw new Error("CONTROL_TOKEN_INVALID");
-  const app = buildServer({controlToken: token, runtime: cfg.runtime, dataDir: cfg.dataDir, port: cfg.port, logger: true, repoRoot: packagedAppRoot(), controlRoot});
+  const app = buildServer(packagedServerOptions(cfg, token, controlRoot));
   let closing = false;
   const shutdown = async (code: number) => {
     if (closing) return;

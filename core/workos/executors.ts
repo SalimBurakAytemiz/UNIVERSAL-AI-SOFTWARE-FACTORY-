@@ -164,14 +164,16 @@ function reviewPrompt(spec: MissionSpec, diff: string): string {
 }
 // Yalnız dosya düzenleyebilen (shell'siz, commit edemeyen) builder süreci için adapter: süreç 0 ile biterse engine-owned
 // commitBuilderOutput değişiklikleri sabit builder kimliğiyle commit eder; değişiklik yoksa veya .git/workspace dışı değiştiyse BLOCKED.
-export interface EditOnlyProcess { argv: string[]; env: NodeJS.ProcessEnv; input: string }
+// INT-R3 D-M1-03: nodeScript=true ise argv[0] UASCO'nun kendi node script'idir ve runNodeScript (fork) ile çalışır (paketli Electron node modu); aksi halde argv doğrudan spawn edilir.
+export interface EditOnlyProcess { argv: string[]; env: NodeJS.ProcessEnv; input: string; nodeScript?: boolean }
 export class EditOnlyImplementer implements ImplementerAdapter {
   constructor(readonly identity: string, private readonly envPolicyFile: string, private readonly makeProcess: (workspace: string, spec: MissionSpec) => EditOnlyProcess, private readonly transientExitCodes: number[] = []) {}
   async implement(workspace: string, spec: MissionSpec, ctx: ExecContext): Promise<ImplementResult> {
     const startSha = spec.startSha ?? "";
     const before = gitControlDigest(workspace);
     const p = this.makeProcess(workspace, spec);
-    const r = await runProcess(p.argv, {cwd: workspace, env: p.env, timeoutMs: ctx.timeoutMs, input: p.input, shouldAbort: ctx.shouldAbort});
+    const po = {cwd: workspace, env: p.env, timeoutMs: ctx.timeoutMs, input: p.input, shouldAbort: ctx.shouldAbort};
+    const r = p.nodeScript ? await runNodeScript(p.argv[0], p.argv.slice(1), po) : await runProcess(p.argv, po);
     const base = {argv: r.argv, startedAt: r.startedAt, timedOut: r.timedOut, aborted: r.aborted, transient: r.timedOut || r.spawnError || (r.exitCode !== null && this.transientExitCodes.includes(r.exitCode))};
     if (r.exitCode !== 0 || r.aborted) return {...base, exitCode: r.exitCode, log: procLog(r), endedAt: r.endedAt};
     const subject = `uasco run ${spec.runId} cycle ${spec.cycle}: ${spec.title.replace(/[\r\n]+/g, " ").slice(0, 120)}`;
@@ -181,9 +183,22 @@ export class EditOnlyImplementer implements ImplementerAdapter {
   }
 }
 
+// INT-R3 D-M1-03: broker'ın (korumalı, değiştirilmez) kontrol kökünden okuduğu config dosyaları; kontrol kökü uygulama kökünden farklıysa (paketli: userData)
+// her broker çalıştırmasından hemen önce kurulu uygulamadaki salt-okunur kopyalardan yenilenen kontrollü çalışma kopyalarıdır.
+export const BROKER_CONTROL_CONFIG_FILES = ["config/builder-execution-policy.json", "config/automation.json", "config/environment-policy.json"] as const;
+export function syncBrokerControlConfig(appRoot: string, controlRoot: string): void {
+  if (path.resolve(appRoot) === path.resolve(controlRoot)) return;
+  for (const rel of BROKER_CONTROL_CONFIG_FILES) {
+    const dst = path.join(controlRoot, rel), tmp = `${dst}.${process.pid}.${crypto.randomBytes(3).toString("hex")}.tmp`;
+    fs.mkdirSync(path.dirname(dst), {recursive: true});
+    fs.writeFileSync(tmp, fs.readFileSync(path.join(appRoot, rel)));
+    fs.renameSync(tmp, dst);
+  }
+}
 export class LocalClaudeExecutors {
   readonly implementerIdentity: string; readonly reviewerIdentity: string;
-  constructor(private readonly repoRoot: string) {
+  // repoRoot: uygulama kökü (config + script'ler; paketli: kurulum dizini). controlRoot: provenance kökü (paketli: userData/control; geliştirme: repo).
+  constructor(private readonly repoRoot: string, private readonly controlRoot: string = repoRoot) {
     const cfg = readJson(path.join(repoRoot, "config", "execution-backends.json"));
     if (cfg?.pipeline?.producerMayReviewOwnOutput !== false) throw new Error("EXECUTOR_CONFIG_REFUSED: producerMayReviewOwnOutput must be false");
     this.implementerIdentity = String(cfg?.backends?.LOCAL_CLAUDE?.builderIdentity ?? "");
@@ -191,11 +206,11 @@ export class LocalClaudeExecutors {
   }
   private env(): NodeJS.ProcessEnv {
     const automation = readJson(path.join(this.repoRoot, "config", "automation.json"));
-    return {...safeChildEnv(path.join(this.repoRoot, "config", "environment-policy.json"), {provider: "ANTHROPIC", allowPaidApi: automation.allowPaidApi === true}), UASCO_CONTROL_ROOT: this.repoRoot};
+    return {...safeChildEnv(path.join(this.repoRoot, "config", "environment-policy.json"), {provider: "ANTHROPIC", allowPaidApi: automation.allowPaidApi === true}), UASCO_CONTROL_ROOT: this.controlRoot};
   }
   // Reviewer için claude-builder-broker.mjs ile aynı provenance kuralları: PASS + launcher sha256 eşleşmesi zorunlu.
   private verifiedLauncher(): string {
-    const prov = readJson(path.join(this.repoRoot, ".ai", "runtime", "PROVIDER_PROVENANCE.json"));
+    const prov = readJson(path.join(this.controlRoot, ".ai", "runtime", "PROVIDER_PROVENANCE.json"));
     if (prov.final !== "PASS") throw new Error("PROVIDER_PROVENANCE_NOT_READY");
     const level = prov.claude?.provenanceLevel;
     if (level !== "FULL_PACKAGE" && level !== "STANDALONE_LAUNCHER") throw new Error("CLAUDE_PACKAGE_PROVENANCE_REQUIRED");
@@ -209,7 +224,7 @@ export class LocalClaudeExecutors {
       kind: "LOCAL_CLAUDE",
       // Broker ve config/builder-execution-policy.json değişmeden çalışır (Bash yok, commit edemez); commit'i engine atar.
       implementer: new EditOnlyImplementer(this.implementerIdentity, path.join(this.repoRoot, "config", "environment-policy.json"),
-        (_workspace, spec) => ({argv: [process.execPath, path.join(self.repoRoot, "scripts", "claude-builder-broker.mjs")], env: self.env(), input: implementPrompt(spec)})),
+        (_workspace, spec) => { syncBrokerControlConfig(self.repoRoot, self.controlRoot); return {argv: [path.join(self.repoRoot, "scripts", "claude-builder-broker.mjs")], nodeScript: true, env: self.env(), input: implementPrompt(spec)}; }),
       reviewer: {
         identity: this.reviewerIdentity,
         async review(cleanClone, spec, diff, ctx) {
@@ -227,9 +242,9 @@ export class LocalClaudeExecutors {
 }
 
 // Yalnız açık env/config ile gerçek adapter seçilir; tanımsız değer = yapılandırılmamış, bilinmeyen değer = reddedilir (fail-closed).
-export function executorsFromEnv(repoRoot: string, env: NodeJS.ProcessEnv = process.env): {pair: ExecutorPair | null; reason: string} {
+export function executorsFromEnv(repoRoot: string, env: NodeJS.ProcessEnv = process.env, controlRoot: string = repoRoot): {pair: ExecutorPair | null; reason: string} {
   const v = env.UASCO_WORKOS_EXECUTOR;
   if (v === undefined || v === "") return {pair: null, reason: "EXECUTOR_NOT_CONFIGURED"};
   if (v !== "local-claude") return {pair: null, reason: "EXECUTOR_UNKNOWN"};
-  try { return {pair: new LocalClaudeExecutors(repoRoot).pair(), reason: "LOCAL_CLAUDE"}; } catch { return {pair: null, reason: "EXECUTOR_CONFIG_INVALID"}; }
+  try { return {pair: new LocalClaudeExecutors(repoRoot, controlRoot).pair(), reason: "LOCAL_CLAUDE"}; } catch { return {pair: null, reason: "EXECUTOR_CONFIG_INVALID"}; }
 }
