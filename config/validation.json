@@ -345,7 +345,8 @@
         "node",
         "node_modules/vitest/vitest.mjs",
         "run",
-        "tests/v7-sbx8-claude-profiles.test.ts"
+        "tests/v7-sbx8-claude-profiles.test.ts",
+        "tests/v7-sbx8-broker.test.ts"
       ],
       "requiresDependencies": true
     },
