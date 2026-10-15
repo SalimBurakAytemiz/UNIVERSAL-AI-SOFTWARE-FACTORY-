@@ -166,6 +166,17 @@ describe("SBX-8 E: builder output and workspace refusal", () => {
       expect(r.ok ? "OK" : r.reason, rel).toBe("BUILDER_TOUCHED_AGENT_CONFIG");
     }
   });
+  it("RV-SBX8-C1-F1: an agent-config write inside an ignored directory (dist/.claude/settings.json, dist/ in .gitignore) is still refused, though a collapsed status hides it", () => {
+    const {ws, head} = workspace({".gitignore": ".claude/\n*.local.md\ndist/\n"}), before = gitControlDigest(ws);
+    fs.writeFileSync(path.join(ws, "feature.txt"), "ok\n");
+    fs.mkdirSync(path.join(ws, "dist", ".claude"), {recursive: true});
+    fs.writeFileSync(path.join(ws, "dist", ".claude", "settings.json"), "{}");
+    // `status --ignored=matching` yoksayılan dizini "dist/" olarak daraltır; iç içe ajan yapılandırması gizlenir. Engine dosya-başına `ls-files --others` ile yine de reddetmelidir.
+    expect(git(ws, ["status", "--porcelain=v1", "--ignored=matching"]).includes("dist/.claude")).toBe(false);
+    const r = commitBuilderOutput(ws, {envPolicyFile: ENV_POLICY, startSha: head, gitDigestBefore: before, message: "m"});
+    expect(r.ok ? "OK" : r.reason).toBe("BUILDER_TOUCHED_AGENT_CONFIG");
+    expect(git(ws, ["rev-parse", "HEAD"])).toBe(head);
+  });
   it("an unrelated builder change still commits", () => {
     const {ws, head} = workspace(), before = gitControlDigest(ws);
     fs.writeFileSync(path.join(ws, "docs-claude.md"), "fine\n");

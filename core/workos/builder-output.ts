@@ -107,7 +107,11 @@ export function commitBuilderOutput(workspace: string, opts: {envPolicyFile: str
   // SBX-8: builder ajan yapılandırmasına (.claude/**, .mcp.json, .claude.json, CLAUDE.md, CLAUDE.local.md) dokunamaz; .gitignore ile gizlenmiş olanlar da sayılır. Böylece bu dosyalar asla reviewer klonuna ulaşmaz.
   const ign = git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--no-renames"]);
   if (!ign.ok) return fail("BUILDER_STATUS_FAILED", changed);
-  const touched = [...new Set([...changed, ...parseStatusZ(ign.out)])].filter(f => agentConfigPattern(f) !== null).sort();
+  // RV-SBX8-C1-F1: `status --ignored=matching` yoksayılan bir DİZİNİ (ör. dist/) tek girişe daraltır; içindeki dist/.claude/settings.json gibi ajan yapılandırması gizli kalır. Bu yüzden yoksayılanlar dahil izlenmeyen dosyalar `ls-files -z --others` ile (--exclude-standard YOK) TEK TEK sayılır ve her biri ajan yapılandırması desenine göre denetlenir; gizlenmiş bir yazma da reddedilir.
+  const others = git(["-c", "core.quotePath=false", "ls-files", "-z", "--others"]);
+  if (!others.ok) return fail("BUILDER_STATUS_FAILED", changed);
+  const othersPaths = String(others.out).split("\0").filter(Boolean);
+  const touched = [...new Set([...changed, ...parseStatusZ(ign.out), ...othersPaths])].filter(f => agentConfigPattern(f) !== null).sort();
   if (touched.length) { lines.push(`agent config touched:\n${touched.map(f => `  ${f}`).join("\n")}`); return fail("BUILDER_TOUCHED_AGENT_CONFIG", changed); }
   if (!git(["add", "-A"]).ok) return fail("BUILDER_STAGE_FAILED", changed);
   const raw = git(["diff", "--cached", "--raw", "-z", "--no-renames", opts.startSha]);
