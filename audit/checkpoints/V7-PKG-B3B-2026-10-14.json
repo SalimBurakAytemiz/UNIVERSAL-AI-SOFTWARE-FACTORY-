@@ -1,0 +1,61 @@
+{
+  "//TR": "Bu checkpoint V7 B3B paketini (ilk canlı LOCAL_CLAUDE mission smoke'u: scripts/workos-live-smoke.mjs, tek gerçek sağlayıcı çalıştırması ve kanıt özeti) ve gözlenen komut/çıkış kodlarını kaydeder; temiz değildir, bağımsız inceleme beklemektedir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-B3B-FIRST-LIVE-AGENT-MISSION-SMOKE",
+  "date": "2026-10-14",
+  "parent": "4f24820ffa9e960b8eeb2c81c0a1d839ab642c72",
+  "branch": "v7/product-b3b",
+  "implementer": "CLAUDE_BUILDER",
+  "authorizationRecords": [
+    "audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json",
+    "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
+  ],
+  "status": "IMPLEMENTED, NOT CLEAN; review pending",
+  "filesChanged": [
+    "scripts/workos-live-smoke.mjs (new, non-protected: live LOCAL_CLAUDE mission smoke driver through the in-process Control API; --fake-plumbing dry mode without provider; requires UASCO_LIVE_SMOKE=1 for live runs)",
+    "core/workos/README.md (how to run the live smoke)",
+    "audit/checkpoints/V7-PKG-B3B-LIVE-SMOKE-EVIDENCE-2026-10-14.json (redacted live evidence summary written by the script)",
+    "audit/checkpoints/V7-PKG-B3B-2026-10-14.json (this checkpoint)",
+    "config/trust-root-manifest.json (resealed via node scripts/generate-trust-root.mjs; only generatedAt changed)"
+  ],
+  "coreWorkosDefectsFound": [],
+  "coreWorkosFixes": "none; the live chain completed on the first attempt, so no core/workos change and no new vitest file (config/validation.json untouched)",
+  "providerProvenance": {
+    "command": "node scripts/capture-provider-provenance.mjs (run in the clone; writes .ai/runtime/PROVIDER_PROVENANCE.json, git-ignored)",
+    "exitCode": 0,
+    "final": "PASS",
+    "claude": {"status": "PASS", "provenanceLevel": "STANDALONE_LAUNCHER", "version": "2.1.292 (Claude Code)", "launcherSha256": "eb95bb65955f8b1702e800815f9a2c0388a5de0f196c354c7ee1dd5cb9a2ba23"},
+    "codex": {"status": "WARN", "version": "", "note": "the script probes codex --version itself (informational only); the npm shim on PATH produced no version; no PATH prepend was used and Codex was not used for anything"},
+    "locatedBy": "LocalClaudeExecutors(repoRoot) reads <repoRoot>/config/* and <repoRoot>/.ai/runtime/PROVIDER_PROVENANCE.json; the broker gets UASCO_CONTROL_ROOT=<repoRoot> in its env and reads the same files"
+  },
+  "liveRuns": {
+    "attemptsUsed": 1,
+    "attemptsAllowed": 2,
+    "dryRunsWithoutProvider": 1,
+    "evidenceFile": "audit/checkpoints/V7-PKG-B3B-LIVE-SMOKE-EVIDENCE-2026-10-14.json",
+    "evidenceSha256": "ea92b44c3fcb3bc7ae70077590dc5fc8823bef0467d2394961054f25b69ad39b",
+    "outcome": "REPORTING_AWAITING_APPROVAL",
+    "missionStatus": "REPORTING",
+    "runStatus": "AWAITING_APPROVAL",
+    "producedCommit": "e7e3725d20b29302fd621387b251250922ae0b0a",
+    "reviewer": {"identity": "CLAUDE_REVIEWER", "verdict": "CLEAN", "findings": 0},
+    "observation": "the reviewer (Read/Grep/Glob only) states it did not execute node test.js and judged the test by reading; executed test evidence comes from the engine VERIFY and REGRESSION steps (exit 0) and the script's independent re-run (exit 0)"
+  },
+  "commands": [
+    {"cmd": "git clone -q --no-hardlinks C:/Users/salim/UASCO-wt/v2-product C:/Users/salim/UASCO-wt/v2-b3b && git checkout -q -b v7/product-b3b 4f24820 && git remote set-url --push origin PUSH_DISABLED && node scripts/ensure-dependencies.mjs", "exit": 0},
+    {"cmd": "node scripts/capture-provider-provenance.mjs", "exit": 0},
+    {"cmd": "node --check scripts/workos-live-smoke.mjs", "exit": 0},
+    {"cmd": "node scripts/workos-live-smoke.mjs --fake-plumbing", "exit": 0, "summary": "FAKE executors, no provider: REPORTING_AWAITING_APPROVAL"},
+    {"cmd": "UASCO_LIVE_SMOKE=1 node scripts/workos-live-smoke.mjs", "exit": 0, "summary": "live LOCAL_CLAUDE run, 32.1 s total: mission REPORTING, run AWAITING_APPROVAL, reviewer CLAUDE_REVIEWER CLEAN"},
+    {"cmd": "npx tsc --noEmit", "exit": 0},
+    {"cmd": "node scripts/validate-tr-comments.mjs", "exit": 0},
+    {"cmd": "node scripts/secret-sanity.mjs", "exit": 0},
+    {"cmd": "npx vitest run --dir tests tests/v7-b3a-runner.test.ts tests/v7-b3a-c3-builder-commit.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts", "exit": 0, "summary": "4 files, 66 tests passed"},
+    {"cmd": "node scripts/smoke-control-api.mjs", "exit": 0},
+    {"cmd": "git add -A && git ls-files --eol | grep w/crlf", "exit": 1, "summary": "no CRLF files"},
+    {"cmd": "node scripts/generate-trust-root.mjs", "exit": 0},
+    {"cmd": "node scripts/verify-trust-root.mjs", "exit": 0}
+  ],
+  "notRun": ["node scripts/run-validation.mjs (excluded by the package contract)"],
+  "selfDeclaredClean": false
+}

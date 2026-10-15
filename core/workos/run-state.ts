@@ -17,7 +17,7 @@ const transitions: Record<RunStatus, readonly RunStatus[]> = {
   SUCCEEDED: [], BLOCKED: [], QUARANTINED: [], CANCELLED: [], RECOVERY_FAILED: [], FAILED: []
 };
 export const RUN_STATUSES = Object.keys(transitions) as RunStatus[];
-export const RUN_STEPS: readonly RunStep[] = ["WORKSPACE", "IMPLEMENT", "VERIFY", "REVIEW", "REGRESSION", "REPORT"];
+export const RUN_STEPS: readonly RunStep[] = ["WORKSPACE", "IMPLEMENT", "VERIFY", "SECURITY", "REVIEW", "REGRESSION", "REPORT"];
 // Engine'in sahiplendiği (lease taşıyan) durumlar; lease süresi dolarsa recovery devralır.
 export const LEASED_RUN_STATUSES: readonly RunStatus[] = ["LEASED", "RUNNING", "VERIFYING", "CHECKPOINTING", "RETRY_SCHEDULED", "DEGRADED", "RECOVERING", "CANCELLING"];
 // Cockpit workforce.activeWorkerRuns sayımı yalnız bu durumları sayar.

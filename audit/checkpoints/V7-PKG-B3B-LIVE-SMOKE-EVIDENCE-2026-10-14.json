@@ -1,0 +1,597 @@
+{
+  "//TR": "Bu dosya B3B canlı LOCAL_CLAUDE mission smoke'unun kanıt özetidir (scripts/workos-live-smoke.mjs üretir); yalnız gözlenen değerler içerir, mutlak kullanıcı yolları ve secret desenleri maskelenmiştir.",
+  "schemaVersion": "1.0.0",
+  "package": "V7-PKG-B3B",
+  "kind": "WORKOS_LIVE_SMOKE_EVIDENCE",
+  "startedAt": "2026-10-14T21:26:10.931Z",
+  "endedAt": "2026-10-14T21:26:43.045Z",
+  "durationMs": 32114,
+  "hardTimeoutMs": 1500000,
+  "executorTimeoutMs": 900000,
+  "hardTimeoutHit": false,
+  "outcome": "REPORTING_AWAITING_APPROVAL",
+  "failurePoint": null,
+  "mode": "LIVE_LOCAL_CLAUDE",
+  "environment": {
+    "node": "v24.20.0",
+    "platform": "win32",
+    "tempDir": "uasco-b3b-live-NXWmRx",
+    "executorEnv": "UASCO_WORKOS_EXECUTOR=local-claude",
+    "apiTransport": "in-process app.inject (no listening socket)",
+    "runnerOptions": {
+      "intervalMs": 1000,
+      "maxRemediations": 1,
+      "maxRetries": 0,
+      "testTimeoutMs": 60000
+    }
+  },
+  "providerProvenance": {
+    "final": "PASS",
+    "capturedAt": "2026-10-14T21:23:20.643Z",
+    "claudeVersion": "2.1.292 (Claude Code)",
+    "provenanceLevel": "STANDALONE_LAUNCHER",
+    "launcherSha256": "eb95bb65955f8b1702e800815f9a2c0388a5de0f196c354c7ee1dd5cb9a2ba23"
+  },
+  "sample": {
+    "seedSha": "c099806f7aca5a6370fa797f05906b607536cc68",
+    "testCommand": [
+      "node",
+      "test.js"
+    ],
+    "testJsSha256": "4997dba29214706f7032405568473c1891b827dd5750135750843073d935de0a",
+    "testBefore": {
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "%TEMP%/uasco-b3b-live-NXWmRx\\sample-repo\\src\\add.js:3\r\n  throw new Error(\"add is not implemented\");\r\n  ^\r\n\r\nError: add is not implemented\r\n    at add (%TEMP%/uasco-b3b-live-NXWmRx\\sample-repo\\src\\add.js:3:9)\r\n    at Object.<anonymous> (%TEMP%/uasco-b3b-live-NXWmRx\\sample-repo\\test.js:4:20)\r\n    at Module._compile (node:internal/modules/cjs/loader:1929:14)\r\n    at Object..js (node:internal/modules/cjs/loader:2060:10)\r\n    at Module.load (node:internal/modules/cjs/loader:1651:32)\r\n    at Module._load (node:internal/modules/cjs/loader:1443:12)\r\n    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)\r\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\r\n    at node:internal/main/run_main_module:33:47\r\n\r\nNode.js v24.20.0\r\n"
+    }
+  },
+  "projectId": "prj_a174fe8279581e12011491c0",
+  "missionId": "msn_b35682252a78ca7ff8f9a648",
+  "runId": "run_e2106dca276855e2a8117b8e",
+  "mission": {
+    "status": "REPORTING",
+    "title": "Implement add(a,b)",
+    "objective": "Implement add(a,b) in src/add.js so node test.js passes; do not modify test.js"
+  },
+  "run": {
+    "status": "AWAITING_APPROVAL",
+    "step": "REPORT",
+    "reason": "DELIVERY_DECISION_PENDING_FOUNDER",
+    "attempt": 1,
+    "remediationCycle": 0,
+    "retryCount": 0,
+    "executor": {
+      "implementer": "CLAUDE_BUILDER",
+      "reviewer": "CLAUDE_REVIEWER"
+    },
+    "baseSha": "c099806f7aca5a6370fa797f05906b607536cc68",
+    "headSha": "e7e3725d20b29302fd621387b251250922ae0b0a",
+    "workBranch": "uasco/run/run_e2106dca276855e2a8117b8e",
+    "createdAt": "2026-10-14T21:26:11.956Z",
+    "updatedAt": "2026-10-14T21:26:41.489Z",
+    "durationMs": 29533
+  },
+  "statusTimeline": {
+    "mission": [
+      {
+        "at": "2026-10-14T21:26:11.911Z",
+        "from": null,
+        "to": "DRAFT",
+        "via": "MISSION_CREATED"
+      },
+      {
+        "at": "2026-10-14T21:26:11.925Z",
+        "from": "DRAFT",
+        "to": "PREFLIGHT",
+        "via": "MISSION_TRANSITIONED",
+        "actor": "FOUNDER_LOCAL",
+        "reason": "B3B live smoke: Founder moves mission to PREFLIGHT"
+      },
+      {
+        "at": "2026-10-14T21:26:11.940Z",
+        "from": "PREFLIGHT",
+        "to": "AUTHORIZED",
+        "via": "MISSION_TRANSITIONED",
+        "actor": "FOUNDER_LOCAL",
+        "reason": "B3B live smoke: Founder moves mission to AUTHORIZED"
+      },
+      {
+        "at": "2026-10-14T21:26:11.957Z",
+        "from": "AUTHORIZED",
+        "to": "PLANNED",
+        "via": "RUN_CREATED",
+        "reason": "run run_e2106dca276855e2a8117b8e created"
+      },
+      {
+        "at": "2026-10-14T21:26:13.610Z",
+        "from": "PLANNED",
+        "to": "EXECUTING",
+        "via": "RUN_TRANSITION",
+        "reason": "run run_e2106dca276855e2a8117b8e implementing"
+      },
+      {
+        "at": "2026-10-14T21:26:26.931Z",
+        "from": "EXECUTING",
+        "to": "VERIFYING",
+        "via": "RUN_CHECKPOINT",
+        "reason": "run run_e2106dca276855e2a8117b8e: IMPLEMENT completed"
+      },
+      {
+        "at": "2026-10-14T21:26:27.998Z",
+        "from": "VERIFYING",
+        "to": "REVIEWING",
+        "via": "RUN_CHECKPOINT",
+        "reason": "run run_e2106dca276855e2a8117b8e: VERIFY completed"
+      },
+      {
+        "at": "2026-10-14T21:26:40.716Z",
+        "from": "REVIEWING",
+        "to": "REGRESSION",
+        "via": "RUN_CHECKPOINT",
+        "reason": "run run_e2106dca276855e2a8117b8e: REVIEW completed"
+      },
+      {
+        "at": "2026-10-14T21:26:41.355Z",
+        "from": "REGRESSION",
+        "to": "REPORTING",
+        "via": "RUN_CHECKPOINT",
+        "reason": "run run_e2106dca276855e2a8117b8e: REGRESSION completed"
+      }
+    ],
+    "run": [
+      {
+        "at": "2026-10-14T21:26:11.957Z",
+        "from": null,
+        "to": "CREATED"
+      },
+      {
+        "at": "2026-10-14T21:26:11.961Z",
+        "from": "CREATED",
+        "to": "QUEUED",
+        "reason": "queued for runner"
+      },
+      {
+        "at": "2026-10-14T21:26:12.875Z",
+        "lease": "ACQUIRE"
+      },
+      {
+        "at": "2026-10-14T21:26:12.907Z",
+        "from": "LEASED",
+        "to": "RUNNING",
+        "reason": "step WORKSPACE started"
+      },
+      {
+        "at": "2026-10-14T21:26:13.572Z",
+        "from": "RUNNING",
+        "to": "CHECKPOINTING",
+        "reason": "step WORKSPACE completed"
+      },
+      {
+        "at": "2026-10-14T21:26:13.585Z",
+        "checkpoint": "WORKSPACE",
+        "cycle": 0,
+        "outcome": "DONE"
+      },
+      {
+        "at": "2026-10-14T21:26:13.610Z",
+        "from": "CHECKPOINTING",
+        "to": "RUNNING",
+        "reason": "step IMPLEMENT started"
+      },
+      {
+        "at": "2026-10-14T21:26:26.916Z",
+        "from": "RUNNING",
+        "to": "CHECKPOINTING",
+        "reason": "step IMPLEMENT completed"
+      },
+      {
+        "at": "2026-10-14T21:26:26.931Z",
+        "checkpoint": "IMPLEMENT",
+        "cycle": 0,
+        "outcome": "DONE"
+      },
+      {
+        "at": "2026-10-14T21:26:26.959Z",
+        "from": "CHECKPOINTING",
+        "to": "VERIFYING",
+        "reason": "step VERIFY started"
+      },
+      {
+        "at": "2026-10-14T21:26:27.984Z",
+        "from": "VERIFYING",
+        "to": "CHECKPOINTING",
+        "reason": "step VERIFY completed"
+      },
+      {
+        "at": "2026-10-14T21:26:27.998Z",
+        "checkpoint": "VERIFY",
+        "cycle": 0,
+        "outcome": "DONE"
+      },
+      {
+        "at": "2026-10-14T21:26:28.030Z",
+        "from": "CHECKPOINTING",
+        "to": "RUNNING",
+        "reason": "step REVIEW started"
+      },
+      {
+        "at": "2026-10-14T21:26:40.700Z",
+        "from": "RUNNING",
+        "to": "CHECKPOINTING",
+        "reason": "step REVIEW completed"
+      },
+      {
+        "at": "2026-10-14T21:26:40.716Z",
+        "checkpoint": "REVIEW",
+        "cycle": 0,
+        "outcome": "DONE"
+      },
+      {
+        "at": "2026-10-14T21:26:40.748Z",
+        "from": "CHECKPOINTING",
+        "to": "VERIFYING",
+        "reason": "step REGRESSION started"
+      },
+      {
+        "at": "2026-10-14T21:26:41.337Z",
+        "from": "VERIFYING",
+        "to": "CHECKPOINTING",
+        "reason": "step REGRESSION completed"
+      },
+      {
+        "at": "2026-10-14T21:26:41.355Z",
+        "checkpoint": "REGRESSION",
+        "cycle": 0,
+        "outcome": "DONE"
+      },
+      {
+        "at": "2026-10-14T21:26:41.391Z",
+        "from": "CHECKPOINTING",
+        "to": "RUNNING",
+        "reason": "step REPORT started"
+      },
+      {
+        "at": "2026-10-14T21:26:41.456Z",
+        "from": "RUNNING",
+        "to": "CHECKPOINTING",
+        "reason": "step REPORT completed"
+      },
+      {
+        "at": "2026-10-14T21:26:41.472Z",
+        "checkpoint": "REPORT",
+        "cycle": 0,
+        "outcome": "DONE"
+      },
+      {
+        "at": "2026-10-14T21:26:41.489Z",
+        "from": "CHECKPOINTING",
+        "to": "AWAITING_APPROVAL",
+        "reason": "DELIVERY_DECISION_PENDING_FOUNDER"
+      }
+    ]
+  },
+  "tests": {
+    "before": {
+      "exitCode": 1
+    },
+    "verify": [
+      {
+        "cycle": 0,
+        "exitCode": 0
+      }
+    ],
+    "regression": [
+      {
+        "cycle": 0,
+        "exitCode": 0
+      }
+    ],
+    "independentRerunAfter": {
+      "exitCode": 0,
+      "stdout": "add tests passed\n"
+    }
+  },
+  "producedCommit": {
+    "commitSha": "e7e3725d20b29302fd621387b251250922ae0b0a",
+    "parentSha": "c099806f7aca5a6370fa797f05906b607536cc68",
+    "author": "UASCO Builder (CLAUDE_BUILDER) <builder@local.invalid>",
+    "subject": "uasco run run_e2106dca276855e2a8117b8e cycle 0: Implement add(a,b)",
+    "changedFiles": [
+      "src/add.js"
+    ],
+    "testJsUnchanged": true,
+    "diff": "diff --git a/src/add.js b/src/add.js\nindex ed4523e..0551c4a 100644\n--- a/src/add.js\n+++ b/src/add.js\n@@ -1,6 +1,6 @@\n // add(a, b) must return the numeric sum of a and b.\n function add(a, b) {\n-  throw new Error(\"add is not implemented\");\n+  return a + b;\n }\n \n module.exports = add;",
+    "independentTestRerun": {
+      "exitCode": 0,
+      "stdout": "add tests passed\n",
+      "stderr": ""
+    }
+  },
+  "review": [
+    {
+      "cycle": 0,
+      "commitSha": "e7e3725d20b29302fd621387b251250922ae0b0a",
+      "reviewerIdentity": "CLAUDE_REVIEWER",
+      "implementerIdentity": "CLAUDE_BUILDER",
+      "verdict": "CLEAN",
+      "findingsCount": 0,
+      "exitCode": 0,
+      "durationMs": 11306,
+      "verdictLine": "{\"verdict\":\"CLEAN\",\"findings\":[]}",
+      "reviewerNarrative": "The diff changes only `src/add.js`, replacing the `throw` with `return a + b;`. I didn't run `node test.js` because Bash is disabled in this session. I checked it by reading instead. `test.js` calls `add` four times with numbers: `add(2,3)` gives 5, `add(-1,1)` gives 0, `add(0.5,0.25)` gives 0.75, and `add(0,0)` gives 0. Plain `a + b` returns all four values exactly, because the floating-point sums are exact here. `test.js` is not in the diff.\n\nOf the acceptance criteria, \"test.js is not modified\" and \"only src/add.js needs to change\" are met. \"node test.js exits 0\" rests on this reading, not a run.\n\n{\"verdict\":\"CLEAN\",\"findings\":[]}"
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "evd_401b3975ef8f6264a760d3b8",
+      "step": "WORKSPACE",
+      "cycle": 0,
+      "kind": "WORKSPACE",
+      "argv0": "git",
+      "argvTail": [
+        "clone",
+        "--no-hardlinks",
+        "%TEMP%/uasco-b3b-live-NXWmRx\\sample-repo",
+        "runs/run_e2106dca276855e2a8117b8e/work"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 457,
+      "logPath": "runs/run_e2106dca276855e2a8117b8e/logs/workspace-c0-a1-workspace-a0a7cc.log",
+      "logSha256": "a01239e3ae3b270be50241ff5913aa2417e422625a43595700d2697e01a07705",
+      "logSha256Verified": true
+    },
+    {
+      "evidenceId": "evd_6b8651f2d44ea6d04ac92451",
+      "step": "IMPLEMENT",
+      "cycle": 0,
+      "kind": "IMPLEMENT",
+      "argv0": "node.exe",
+      "argvTail": [
+        "<CONTROL_ROOT>\\scripts\\claude-builder-broker.mjs"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 12710,
+      "logPath": "runs/run_e2106dca276855e2a8117b8e/logs/implement-c0-a1-implement-c4a03c.log",
+      "logSha256": "d89f53f250fae12c30e3f11d01a5aece75c44d8802de9d7a6367a0a53a719c07",
+      "logSha256Verified": true,
+      "commitSha": "e7e3725d20b29302fd621387b251250922ae0b0a",
+      "executorIdentity": "CLAUDE_BUILDER"
+    },
+    {
+      "evidenceId": "evd_dba50cfa758617f2fed6c575",
+      "step": "VERIFY",
+      "cycle": 0,
+      "kind": "SECRET_SCAN",
+      "argv0": "git",
+      "argvTail": [
+        "diff",
+        "--text",
+        "--no-textconv",
+        "--no-ext-diff",
+        "c099806f7aca5a6370fa797f05906b607536cc68",
+        "e7e3725d20b29302fd621387b251250922ae0b0a"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 757,
+      "logPath": "runs/run_e2106dca276855e2a8117b8e/logs/verify-c0-a1-secret-scan-bfc8cc.log",
+      "logSha256": "4b0acf4b0e59f4c1e0ac08c82b64ef9b4a0f5b85b185040773a9c9d443dd5010",
+      "logSha256Verified": true,
+      "commitSha": "e7e3725d20b29302fd621387b251250922ae0b0a"
+    },
+    {
+      "evidenceId": "evd_6d14cccaefbe645642bd766f",
+      "step": "VERIFY",
+      "cycle": 0,
+      "kind": "VERIFY_TESTS",
+      "argv0": "node.exe",
+      "argvTail": [
+        "test.js"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 125,
+      "logPath": "runs/run_e2106dca276855e2a8117b8e/logs/verify-c0-a1-verify_tests-889e1d.log",
+      "logSha256": "42c0ac865bc90cdb25c3c2965ab69dab0eb6b36c5ff3906774fdf7e60e3500d6",
+      "logSha256Verified": true,
+      "commitSha": "e7e3725d20b29302fd621387b251250922ae0b0a"
+    },
+    {
+      "evidenceId": "evd_e659778dc2630a53cfa273a7",
+      "step": "REVIEW",
+      "cycle": 0,
+      "kind": "REVIEW",
+      "argv0": "claude.exe",
+      "argvTail": [
+        "-p",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Grep,Glob",
+        "--disallowedTools",
+        "Edit,Write,Bash,NotebookEdit,WebFetch,WebSearch",
+        "--output-format",
+        "text"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 11306,
+      "logPath": "runs/run_e2106dca276855e2a8117b8e/logs/review-c0-a1-review-b5c206.log",
+      "logSha256": "c678bfb93f3cb8cd2638e8d59d8827e57f55556ed7ad2fb168682e8a2ee9bf48",
+      "logSha256Verified": true,
+      "commitSha": "e7e3725d20b29302fd621387b251250922ae0b0a",
+      "executorIdentity": "CLAUDE_BUILDER",
+      "reviewerIdentity": "CLAUDE_REVIEWER",
+      "verdict": "CLEAN",
+      "findingsCount": 0
+    },
+    {
+      "evidenceId": "evd_22d78ada9bcfa9bacc95e96a",
+      "step": "REGRESSION",
+      "cycle": 0,
+      "kind": "REGRESSION_TESTS",
+      "argv0": "node.exe",
+      "argvTail": [
+        "test.js"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 90,
+      "logPath": "runs/run_e2106dca276855e2a8117b8e/logs/regression-c0-a1-regression_tests-75d617.log",
+      "logSha256": "42c0ac865bc90cdb25c3c2965ab69dab0eb6b36c5ff3906774fdf7e60e3500d6",
+      "logSha256Verified": true,
+      "commitSha": "e7e3725d20b29302fd621387b251250922ae0b0a"
+    },
+    {
+      "evidenceId": "evd_b7a50fd1594600a730a3a67a",
+      "step": "REPORT",
+      "cycle": 0,
+      "kind": "REPORT",
+      "argv0": null,
+      "argvTail": [],
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 0,
+      "logPath": "runs/run_e2106dca276855e2a8117b8e/report.json",
+      "logSha256": "3d57c66aea5c706036a2924c38a51e8a4d4bbcb0546acf300c647d6a078da625",
+      "logSha256Verified": true,
+      "commitSha": "e7e3725d20b29302fd621387b251250922ae0b0a",
+      "reviewerIdentity": "CLAUDE_REVIEWER",
+      "verdict": "CLEAN"
+    }
+  ],
+  "report": {
+    "path": "runs/run_e2106dca276855e2a8117b8e/report.json",
+    "sha256": "3d57c66aea5c706036a2924c38a51e8a4d4bbcb0546acf300c647d6a078da625"
+  },
+  "journal": {
+    "entries": 44,
+    "lastSeq": 44,
+    "lastHash": "64dba81111fc9e27a02e8ee5a840d559ede725a8caef4f5ce31bfb1329696c7c"
+  },
+  "apiCalls": [
+    {
+      "label": "PROJECT_CREATE",
+      "method": "POST",
+      "route": "/v1/projects",
+      "status": 201
+    },
+    {
+      "label": "MISSION_CREATE",
+      "method": "POST",
+      "route": "/v1/missions",
+      "status": 201
+    },
+    {
+      "label": "MISSION_PREFLIGHT",
+      "method": "POST",
+      "route": "/v1/missions/msn_*/transition",
+      "status": 200
+    },
+    {
+      "label": "MISSION_AUTHORIZED",
+      "method": "POST",
+      "route": "/v1/missions/msn_*/transition",
+      "status": 200
+    },
+    {
+      "label": "RUN_START",
+      "method": "POST",
+      "route": "/v1/missions/msn_*/runs",
+      "status": 201
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    },
+    {
+      "label": "RUN_GET",
+      "method": "GET",
+      "route": "/v1/work-runs/run_*",
+      "status": 200
+    }
+  ],
+  "note": "Runner never merges, pushes or completes the mission; delivery decision stays with the Founder. Live provider run; not part of the vitest suite."
+}
