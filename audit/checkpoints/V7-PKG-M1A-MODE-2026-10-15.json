@@ -1,0 +1,690 @@
+{
+  "//TR": "Bu kayıt V7-PKG-M1A-MODE paketinin (M1a ara modu: doğrulanmış sandbox yokken testler/önizleme NOT_EXECUTED, run statik güvenlik + bağımsız inceleme ile sürer, COMPLETE açık NOT_EXECUTED onayı ister, teslim NOT_VERIFIED etiketlenir) uygulama kanıtıdır; canlı merge DEĞİLDİR, hiçbir şey master'a veya remote'a yayınlanmadı. Claude CLEAN ilan etmez; bağımsız inceleyici inceler.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-M1A-MODE",
+  "date": "2026-10-15",
+  "status": "IMPLEMENTED_NOT_REVIEWED (not clean)",
+  "implementer": {
+    "role": "UASCO IMPLEMENTER (CLAUDE_BUILDER)",
+    "model": "claude-opus-5-5",
+    "identity": "UASCO Implementer (CLAUDE_BUILDER) <implementer@local.invalid>"
+  },
+  "founderDecisions": [
+    "D-SBX1-PATH-2026-10-15 (C:/Users/salim/UASCO-recovery/governed-review/FOUNDER-AUTHORIZATIONS.jsonl line 20): prepare the no-execution M1a interim (real code development + independent review + static scan + export; tests/preview NOT_EXECUTED, labelled NOT_VERIFIED); implies D-SBX-6 behaviour (ii) (continue to static scan + review; COMPLETE never shown as verified).",
+    "D-SBX1-PATH-CONDITIONS-2026-10-15 (line 21): (1) code generation, static analysis, independent Claude review and export may proceed; (2) execution of untrusted/AI-generated project code, live preview and dynamic tests stay BLOCKED; (8) keep M1a clearly separate from real M1; (10) keep Trust Kernel, independent review and security approval mechanisms.",
+    "FD-REL-1-REJECT-HOST-EXEC-2026-10-15 (unchanged): project code never runs on the host; execution-gate.ts is the single decision point."
+  ],
+  "authorization": [
+    "FA-V2-PRODUCT (apps/control-api/src/server.ts, config/validation.json, config/trust-root-manifest.json reseal used; apps/desktop/main.mjs, preload.mjs, renderer/app.js, renderer/index.html NOT changed)",
+    "FA-SBX (scripts/claude-builder-broker.mjs NOT changed)",
+    "FD-ROLE-CLAUDE-IMPL"
+  ],
+  "clone": {
+    "path": "C:/Users/salim/UASCO-wt/v2-m1a",
+    "branch": "v7/product-m1a",
+    "base": "2bdf9b01e21583b9b385c857bee5d20496dc851b (INT-R4 candidate tip)",
+    "origin": "C:/Users/salim/UASCO-wt/v2-int-r4 (fetch); push URL PUSH_DISABLED",
+    "gitConfig": "GIT_CONFIG_NOSYSTEM=1, empty GIT_CONFIG_GLOBAL, --template=<empty dir>, --no-local --no-hardlinks"
+  },
+  "commits": [
+    {
+      "id": "A+B",
+      "sha": "c82a2f16fa5bd44100cfff892247e81af9b6fc14",
+      "summary": "Runner M1a progression (NOT_EXECUTED evidence, continue SECURITY->REVIEW->REGRESSION(NOT_EXECUTED)->REPORT->AWAITING_APPROVAL, reviewer statement) + COMPLETE NOT_EXECUTED acknowledgement gate (store/replay/schema/server/completionRequirements view). Combined because outcomes.ts carries both the functionalAcceptance derivation (A) and the gate (B)."
+    },
+    {
+      "id": "C",
+      "sha": "19e40ba135fb95900c4ac164c5aee61c4439a734",
+      "summary": "Export ZIP VERIFICATION_STATUS.json (evidence-derived, NOT_VERIFIED; NO_RUN), README Verification row, export record verification summary."
+    },
+    {
+      "id": "D",
+      "sha": "f9b9962a8a8523670c4a6d3801d24e0780e3e923",
+      "summary": "hostExecutionNotice reworded: EXECUTION_SANDBOX_ONLY / hostExecution NEVER / withoutVerifiedSandbox NOT_EXECUTED (RV-INTR4-C1-OBS-1)."
+    },
+    {
+      "id": "E",
+      "sha": "76567839e759cd3925d07cfcda1c1dfb20b1b99c",
+      "summary": "Desktop: NOT_VERIFIED badges (run/mission/delivery/export/workforce), Settings sandbox block, COMPLETE checkbox-per-acknowledgement flow; non-protected renderer files only."
+    },
+    {
+      "id": "F",
+      "sha": "66c31363e1bfdfed03fee359819dd8ed33dbabcd",
+      "summary": "tests/v7-m1a-mode.test.ts + tests/v7-m1a-desktop.test.ts appended at the END of the single tests step; B5/PS-1B ordering pins widened only for v7-m1a-*."
+    }
+  ],
+  "scope": {
+    "A_runner": {
+      "noProvider": "execution-gate.ts unchanged (fail-closed; authorize() still refuses every kind). VERIFY: secret scan + static TEST_SURFACE (functionalAcceptance NOT_EXECUTED reason SANDBOX_UNAVAILABLE; deleted/weakened tests stay BLOCKED) + VERIFY_TESTS_NOT_EXECUTED evidence (exitCode null, log + sha256), then DONE -> SECURITY. REGRESSION: REGRESSION_TESTS_NOT_EXECUTED, DONE -> REPORT. No child process is spawned for the test command; retryCount/remediationCycle untouched.",
+      "security": "unchanged static scanners (builtin diff scan, gitleaks on a bare clone, trivy offline) — read files only.",
+      "review": "MissionSpec.testExecution {executed:false, reason:SANDBOX_UNAVAILABLE}; reviewPrompt prepends TESTS_NOT_EXECUTED_STATEMENT ('TESTS WERE NOT EXECUTED: no verified sandbox exists (SANDBOX_UNAVAILABLE) ...') and still lists the TEST_SURFACE.",
+      "report": "report.json testExecution {testsExecuted:false, notExecutedReason:SANDBOX_UNAVAILABLE, functionalAcceptance:NOT_EXECUTED, label:'NOT_VERIFIED (M1a: tests not executed)'}; AWAITING_APPROVAL reason includes TESTS_NOT_EXECUTED_SANDBOX_UNAVAILABLE.",
+      "functionalAcceptance": "NOT_EXECUTED is a distinct OutcomeState/TestSurfaceAcceptance value; outcomes.functionalAcceptanceOf: BLOCKED first, then any *_TESTS_NOT_EXECUTED evidence for run.headSha -> NOT_EXECUTED, else the TEST_SURFACE value. Never VERIFIED.",
+      "verifiedProvider": "unchanged: tests run only through gate.provider.run (covered by v7-int-r3-sbx-gate + v7-m1a-mode verified-provider test).",
+      "devRun": "unchanged: 409 SANDBOX_UNAVAILABLE."
+    },
+    "B_complete": {
+      "body": "POST /v1/missions/:id/transition {to:'COMPLETE', reason, notExecutedAcknowledgement:{acknowledgeNotExecuted:true, headSha:<run.headSha>} [, acknowledgement:{acknowledgeTestChanges:true, testSurfaceSha256}]}; schema additionalProperties:false, const true, 40-hex headSha; 400 when given with to!=COMPLETE.",
+      "gate": "completionEvidence(run, evidence, testAck, notExecutedAck): fa NOT_EXECUTED requires the exact object with headSha === run.headSha; missing, stale, mismatched, malformed, or supplied for a non-NOT_EXECUTED run -> 409 {error:WORKOS_CONFLICT, reason:COMPLETION_NOT_EXECUTED_REQUIRES_ACKNOWLEDGEMENT}, journal unchanged. Test-change acknowledgement still independently required. BLOCKED -> COMPLETION_FUNCTIONAL_ACCEPTANCE_BLOCKED before either acknowledgement is considered.",
+      "record": "RunCompletionRecord.notExecutedAcknowledgement {acknowledgeNotExecuted, headSha, functionalAcceptance:'NOT_EXECUTED', reason, notExecutedEvidenceIds} in the same RUN_TRANSITION SUCCEEDED + mission COMPLETE journal entry; replay rebuilds the input from the record, re-runs the gate and byte-compares JSON (stripped or re-pointed acknowledgement = tamper).",
+      "completionMode": "NOT_EXECUTED_ACKNOWLEDGED | NOT_EXECUTED_ACKNOWLEDGED_WITH_TEST_CHANGES (plus existing EVIDENCE_GUARD / ACKNOWLEDGED_TEST_CHANGES / NOT_COMPLETED).",
+      "readView": "GET /v1/work-runs/:id adds completionRequirements {headSha, functionalAcceptance, notExecuted{required,reason}, testChanges{required,testSurfaceSha256,changed}} — read-only, used by the desktop to build the exact objects; the decision stays in the gate."
+    },
+    "C_export": "VERIFICATION_STATUS.json at the archive root: {schemaVersion, runId, missionId, headSha, functionalAcceptance, completionMode, testsExecuted, notExecutedReason (SANDBOX_UNAVAILABLE | TESTS_NOT_REACHED | NO_RUN | null), reviewVerdict, securitySummary, label}; derived only from evidence (outcomes.verificationStatus).",
+    "D_notice": "hostExecutionNotice {code:EXECUTION_SANDBOX_ONLY, decision:FD-REL-1-REJECT-HOST-EXEC-2026-10-15, decisionStatus:DECIDED, hostExecution:NEVER, withoutVerifiedSandbox:NOT_EXECUTED, riskLevel, text}.",
+    "E_desktop": "renderer/m1a.js + work-core/project-core/work-actions/views(work, inbox, studio-workspace, workforce, executors-panel)/locales/styles. Badge shown only when no VERIFY_TESTS/REGRESSION_TESTS evidence (or export verification.testsExecuted !== true). Settings sandbox block from GET /v1/system/executors. COMPLETE: fieldset with statement + changed tests/harness list, one checkbox per acknowledgement, no POST until ticked, exact objects, confirm dialog repeats the statement, focus via focusResult/settleFocus. main.mjs POST allowlist needed no change (route already allowed; body is checked only as a plain JSON object).",
+    "unchanged": [
+      "core/workos/execution-gate.ts",
+      "config/builder-execution-policy.json",
+      "config/environment-policy.json",
+      "automation/lib/**",
+      "apps/desktop/main.mjs",
+      "apps/desktop/preload.mjs",
+      "apps/desktop/renderer/app.js",
+      "apps/desktop/renderer/index.html",
+      "scripts/claude-builder-broker.mjs"
+    ]
+  },
+  "perCommitGate": "before every commit: protectedChangeViolations (automation/lib/trust-root.mjs) vs git show 312fb6d:config/protected-paths.json => protected paths touched only apps/control-api/src/server.ts, config/validation.json, config/trust-root-manifest.json (all FA-V2-PRODUCT); trust-root resealed last in each commit touching a protected file (A+B, D, F); verify-trust-root PASS.",
+  "tests": {
+    "new": [
+      "tests/v7-m1a-mode.test.ts (9 tests)",
+      "tests/v7-m1a-desktop.test.ts (8 tests)"
+    ],
+    "updatedForMandatedSemantics": [
+      "tests/v7-int-r3-sbx-gate.test.ts: 4 runner/API cases now assert AWAITING_APPROVAL + NOT_EXECUTED (all never-executed marker, no-provider-call, no-budget assertions kept; self-test-failed detail asserted on the evidence note).",
+      "tests/v7-relfx-3-risk-admission.test.ts: notice assertions now the exact new fields and text.",
+      "tests/v7-ps1a-project-studio.test.ts: export entry list includes VERIFICATION_STATUS.json and asserts its content (verified test provider: testsExecuted true, still NOT_VERIFIED).",
+      "tests/v7-b5-work-screens.test.ts, tests/v7-ps1b-project-studio-ui.test.ts: validation.json ordering pins widened only to allow tests/v7-m1a-* after their tail (merge-tool contract: append at END)."
+    ],
+    "validationJson": "config/validation.json: 2 entries appended at the END of the single 'tests' step; vs r2 base 4f24820: 41 steps both, identical step ids, the 47 base 'tests' entries are an exact prefix (78 now)."
+  },
+  "verifyGates": {
+    "tsc": "npx tsc --noEmit => exit 0",
+    "v7Vitest": "env -u PSModulePath npx vitest run tests/v7-*.test.ts => 37 files, 683 passed, 2 skipped (covers core/workos + control-api suites)",
+    "smokeControlApi": "PASS (challenge-proof identity + auth boundary verified)",
+    "desktopSelftest": "V6_APPS_CONTROL_DESKTOP_SELFTEST: PASS 93/93",
+    "trComments": "TR_VALIDATION: PASS",
+    "secretSanity": "SECRET_SANITY: PASS",
+    "verifyTrustRoot": "TRUST_ROOT_VERIFY: PASS",
+    "canonical": "env -u PSModulePath node scripts/run-validation.mjs => CANONICAL_VALIDATION: PASS, exit 0 (tests step 75 files / 897 passed / 2 skipped; no tests-bs1-* shard exceeded 600 s, so no individual rerun was needed)"
+  },
+  "packagedAcceptance": {
+    "build": {
+      "command": "UASCO_BUILD_OUT_DIR=C:/Users/salim/UASCO-wt/m1a-build node scripts/build-installer.mjs (after node scripts/provision-electron.mjs)",
+      "artifact": "C:/Users/salim/UASCO-wt/m1a-build/dist-installer/UASCO-Setup-0.7.0-dev.1-win-x64.exe",
+      "bytes": 110651753,
+      "sha256": "4c907ed2baf54e3ab130653b2784a21c8182e79f4afe56e25e7041a8d4c0a287",
+      "signed": false,
+      "electron": "44.4.5"
+    },
+    "serialised": "run after canonical validation finished; no other UASCO install registered before install (HKCU Uninstall query: 0 matches).",
+    "install": {
+      "harness": "node child_process (C:/Users/salim/UASCO-wt/m1a-test/harness/install-harness.mjs, copied from m0r-test/harness/m0-harness.mjs), TEMP/TMP=C:/Users/salim/UASCO-wt/m1a-test/tmp",
+      "command": "\"C:\\Users\\salim\\UASCO-wt\\m1a-build\\dist-installer\\UASCO-Setup-0.7.0-dev.1-win-x64.exe\" /S /UASCO_TEST_NO_SHORTCUTS --no-desktop-shortcut /D=C:\\Users\\salim\\UASCO-wt\\m1a-test\\install\\UASCO",
+      "exitCode": 0,
+      "exe": true,
+      "uninstallKey": [
+        "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\c08a2cf2-0094-569e-be97-c685aa0f7e0b"
+      ],
+      "shortcuts": {
+        "desktopLnk": false,
+        "startMenuLnk": false,
+        "startMenuDir": false
+      },
+      "residue": {
+        "realAppDataUASCO": false,
+        "updaterCopy": false,
+        "tempInstallerCopy": false
+      }
+    },
+    "launch": {
+      "args": [
+        "--user-data-dir=C:/Users/salim/UASCO-wt/m1a-test/userdata",
+        "--enable-logging=stderr",
+        "--remote-debugging-port=9333"
+      ],
+      "noSandboxFlag": false,
+      "harness": "C:/Users/salim/UASCO-wt/m1a-test/harness/m1a-walk.mjs (adapted from m0r-test/harness/route-walk.mjs) + dialog-fill.ps1 (Win32 WM_SETTEXT/BM_CLICK on the app's own Open dialog)",
+      "gpuCrashLines": []
+    },
+    "checks": [
+      {
+        "check": "launch sandboxed (no --no-sandbox) + CDP attach on loopback",
+        "result": "PASS"
+      },
+      {
+        "check": "health VERIFIED (bridge call after main-process server-identity proof)",
+        "result": "PASS"
+      },
+      {
+        "check": "GET /v1/agents 200 canonical counts",
+        "result": "PASS"
+      },
+      {
+        "check": "executors: sandbox UNAVAILABLE; both UASCO profiles CLAUDE_PROFILE_LOGIN_REQUIRED under the isolated userData (no personal-profile fallback)",
+        "result": "PASS"
+      },
+      {
+        "check": "Settings shows 'Sandbox: UNAVAILABLE — M1a modu' and both UASCO profiles login-required with their login commands",
+        "result": "PASS"
+      },
+      {
+        "check": "Studio template project create 201",
+        "result": "PASS"
+      },
+      {
+        "check": "dev-run start 409 SANDBOX_UNAVAILABLE (live preview BLOCKED in M1a)",
+        "result": "PASS"
+      },
+      {
+        "check": "mission run stops at IMPLEMENT BLOCKED CLAUDE_PROFILE_LOGIN_REQUIRED (builder never started; honest)",
+        "result": "PASS"
+      },
+      {
+        "check": "run-start notice is sandbox-only (host execution never; NOT_EXECUTED without sandbox)",
+        "result": "PASS"
+      },
+      {
+        "check": "zip import with planted .claude/settings.json is quarantined",
+        "result": "PASS"
+      },
+      {
+        "check": "Studio export ZIP contains VERIFICATION_STATUS.json with NOT_VERIFIED",
+        "result": "PASS"
+      },
+      {
+        "check": "NOT_VERIFIED badge renders on mission list, mission detail and run card",
+        "result": "PASS"
+      },
+      {
+        "check": "NOT_VERIFIED badge renders on Studio last-run (overview) and delivery export list",
+        "result": "PASS"
+      },
+      {
+        "check": "keyboard focus never on BODY during the walk",
+        "result": "PASS"
+      },
+      {
+        "check": "no renderer exceptions",
+        "result": "PASS"
+      },
+      {
+        "check": "quit via window.close()",
+        "result": "PASS"
+      }
+    ],
+    "evidence": {
+      "launch sandboxed (no --no-sandbox) + CDP attach on loopback": {
+        "args": [
+          "--user-data-dir=C:/Users/salim/UASCO-wt/m1a-test/userdata",
+          "--enable-logging=stderr",
+          "--remote-debugging-port=9333"
+        ],
+        "rendererUrlIsFileIndex": true
+      },
+      "health VERIFIED (bridge call after main-process server-identity proof)": {
+        "ok": true,
+        "body": {
+          "status": "HEALTHY",
+          "system": "UNIVERSAL-AI-SOFTWARE-COMPANY-OS",
+          "serverIdentity": "VERIFIED"
+        }
+      },
+      "GET /v1/agents 200 canonical counts": {
+        "registeredRoles": 599,
+        "legacyRoles": 363,
+        "certified": 0,
+        "count": 363,
+        "roleRegistry": {
+          "path": "registries/role-definitions.json",
+          "status": "CANONICAL_ROLE_REGISTRY_TARGET_NOT_RUNTIME",
+          "notice": "599 REGISTERED ≠ certified ≠ running",
+          "authority": "CANONICAL",
+          "legacyAuthority": "LEGACY_REFERENCE_ONLY"
+        }
+      },
+      "executors: sandbox UNAVAILABLE; both UASCO profiles CLAUDE_PROFILE_LOGIN_REQUIRED under the isolated userData (no personal-profile fallback)": {
+        "sandbox": {
+          "state": "UNAVAILABLE",
+          "reason": "SANDBOX_UNAVAILABLE",
+          "detail": "NO_VERIFIED_PROVIDER",
+          "providerId": null
+        },
+        "active": {
+          "reason": "LOCAL_CLAUDE"
+        },
+        "executors": {
+          "LOCAL_CLAUDE": {
+            "state": "READY",
+            "enabled": true,
+            "source": "SETTING",
+            "version": "2.1.292 (Claude Code)",
+            "provenanceCapturedAt": "2026-10-15T14:45:15.441Z"
+          },
+          "FAKE": {
+            "state": "TEST_ONLY"
+          }
+        },
+        "profiles": {
+          "implementer": {
+            "state": "LOGIN_REQUIRED",
+            "reason": "CLAUDE_PROFILE_LOGIN_REQUIRED",
+            "loginCommand": "$env:CLAUDE_CONFIG_DIR='C:\\Users\\salim\\UASCO-wt\\m1a-test\\userdata\\control\\claude-profiles\\implementer'; claude; Remove-Item Env:\\CLAUDE_CONFIG_DIR"
+          },
+          "reviewer": {
+            "state": "LOGIN_REQUIRED",
+            "reason": "CLAUDE_PROFILE_LOGIN_REQUIRED",
+            "loginCommand": "$env:CLAUDE_CONFIG_DIR='C:\\Users\\salim\\UASCO-wt\\m1a-test\\userdata\\control\\claude-profiles\\reviewer'; claude; Remove-Item Env:\\CLAUDE_CONFIG_DIR"
+          }
+        }
+      },
+      "Settings shows 'Sandbox: UNAVAILABLE — M1a modu' and both UASCO profiles login-required with their login commands": {
+        "text": "Yürütme sandbox'ı\n\nSandbox: UNAVAILABLE — M1a modu\n\nM1a modu: kod üretimi, statik güvenlik taraması, bağımsız inceleme ve dışa aktarma çalışır. Proje kodu, testleri ve canlı önizleme bu bilgisayarda asla çalıştırılmaz; doğrulanmış sandbox yoksa bunlar NOT_EXECUTED olur ve her sonuç NOT_VERIFIED etiketlenir.",
+        "state": "UNAVAILABLE",
+        "profiles": [
+          {
+            "role": "implementer",
+            "state": "LOGIN_REQUIRED",
+            "text": "Uygulayıcı profili\n\nGiriş gerekli\n\nBu profile siz giriş yapana kadar görevler engelli kalır. UASCO sizin yerinize asla giriş yapmaz.\n\nGiriş için bu komutu yeni bir PowerShell penceresinde çalıştırın, Claude içinde /login yazıp giriş yapın, sonra /exit yazın:\n\n$env:CLAUDE_CONFIG_DIR='C:\\Users\\salim\\U"
+          },
+          {
+            "role": "reviewer",
+            "state": "LOGIN_REQUIRED",
+            "text": "Denetçi profili (salt okunur)\n\nGiriş gerekli\n\nBu profile siz giriş yapana kadar görevler engelli kalır. UASCO sizin yerinize asla giriş yapmaz.\n\nGiriş için bu komutu yeni bir PowerShell penceresinde çalıştırın, Claude içinde /login yazıp giriş yapın, sonra /exit yazın:\n\n$env:CLAUDE_CONFIG_DIR='C:\\Us"
+          }
+        ],
+        "commands": [
+          "$env:CLAUDE_CONFIG_DIR='C:\\Users\\salim\\UASCO-wt\\m1a-test\\userdata\\control\\claude-profiles\\implementer'; claude; Remove-Item Env:\\CLAUDE_CONFIG_DIR",
+          "$env:CLAUDE_CONFIG_DIR='C:\\Users\\salim\\UASCO-wt\\m1a-test\\userdata\\control\\claude-profiles\\reviewer'; claude; Remove-Item Env:\\CLAUDE_CONFIG_DIR"
+        ]
+      },
+      "Studio template project create 201": {
+        "status": 201,
+        "projectId": "prj_9b3826254c6b34d888478a79",
+        "managed": true,
+        "template": "web-node"
+      },
+      "dev-run start 409 SANDBOX_UNAVAILABLE (live preview BLOCKED in M1a)": {
+        "status": 409,
+        "body": {
+          "error": "SANDBOX_UNAVAILABLE",
+          "reason": "NO_VERIFIED_PROVIDER"
+        }
+      },
+      "mission run stops at IMPLEMENT BLOCKED CLAUDE_PROFILE_LOGIN_REQUIRED (builder never started; honest)": {
+        "missionCreate": 201,
+        "transitions": [
+          200,
+          200
+        ],
+        "runStart": 201,
+        "hostExecutionNotice": {
+          "code": "EXECUTION_SANDBOX_ONLY",
+          "decision": "FD-REL-1-REJECT-HOST-EXEC-2026-10-15",
+          "decisionStatus": "DECIDED",
+          "hostExecution": "NEVER",
+          "withoutVerifiedSandbox": "NOT_EXECUTED",
+          "riskLevel": "R1",
+          "text": "Project code (AI-generated code, its tests and the live preview) is executed only inside a verified OS sandbox; host execution never happens on this computer. Without a verified sandbox, tests and preview are NOT_EXECUTED and results are labelled NOT_VERIFIED. R3/R4 missions are refused."
+        },
+        "run": {
+          "status": "BLOCKED",
+          "step": "IMPLEMENT",
+          "reason": "CLAUDE_PROFILE_LOGIN_REQUIRED"
+        },
+        "evidence": [
+          {
+            "kind": "WORKSPACE",
+            "exitCode": 0,
+            "note": "EXECUTION_SANDBOX_ONLY riskLevel=R1 (FD-REL-1-REJECT-HOST-EXEC-2026-10-15 DECIDED)"
+          },
+          {
+            "kind": "IMPLEMENT",
+            "exitCode": null,
+            "note": "CLAUDE_PROFILE_LOGIN_REQUIRED"
+          }
+        ],
+        "outcomes": {
+          "schemaVersion": 1,
+          "runId": "run_e967d9180e6eda36e45f64e6",
+          "headSha": null,
+          "completionMode": "NOT_COMPLETED",
+          "execution": "BLOCKED",
+          "functionalAcceptance": "UNKNOWN",
+          "security": "NOT_EXECUTED",
+          "evidenceIntegrity": "UNKNOWN",
+          "recovery": "NOT_APPLICABLE",
+          "release": "NOT_EXECUTED",
+          "customerOutcome": "UNKNOWN",
+          "reasons": {
+            "execution": "BLOCKED",
+            "functionalAcceptance": "NO_TEST_SURFACE_EVIDENCE",
+            "security": "NO_SECURITY_EVIDENCE",
+            "evidenceIntegrity": "EVIDENCE_INDEX_NOT_VERIFIED",
+            "recovery": "NO_RECOVERY_NEEDED",
+            "release": "DELIVERY_DECISION_PENDING_FOUNDER",
+            "customerOutcome": "NO_CUSTOMER_SIGNAL"
+          }
+        },
+        "completionRequirements": {
+          "headSha": null,
+          "functionalAcceptance": "UNKNOWN",
+          "notExecuted": {
+            "required": false,
+            "reason": null
+          },
+          "testChanges": {
+            "required": false,
+            "testSurfaceSha256": null,
+            "changed": {
+              "modified": [],
+              "deleted": [],
+              "renamed": [],
+              "harness": [],
+              "truncated": false
+            }
+          }
+        }
+      },
+      "run-start notice is sandbox-only (host execution never; NOT_EXECUTED without sandbox)": {
+        "code": "EXECUTION_SANDBOX_ONLY",
+        "decision": "FD-REL-1-REJECT-HOST-EXEC-2026-10-15",
+        "decisionStatus": "DECIDED",
+        "hostExecution": "NEVER",
+        "withoutVerifiedSandbox": "NOT_EXECUTED",
+        "riskLevel": "R1",
+        "text": "Project code (AI-generated code, its tests and the live preview) is executed only inside a verified OS sandbox; host execution never happens on this computer. Without a verified sandbox, tests and preview are NOT_EXECUTED and results are labelled NOT_VERIFIED. R3/R4 missions are refused."
+      },
+      "zip import with planted .claude/settings.json is quarantined": {
+        "projectCreate": 201,
+        "dialogFill": {
+          "stdout": "DIALOG_FILLED",
+          "stderr": "",
+          "code": 0
+        },
+        "picked": {
+          "cancelled": false,
+          "path": "C:\\Users\\salim\\UASCO-wt\\m1a-test\\fixture\\m1a-planted-agent-config.zip",
+          "kind": "zip"
+        },
+        "importStatus": 200,
+        "import": {
+          "kind": "zip",
+          "headSha": "1ab3cd7c88c031a3e60f6e23f78d7d659c9b6b81",
+          "agentConfigQuarantine": {
+            "count": 1,
+            "headSha": "1ab3cd7c88c031a3e60f6e23f78d7d659c9b6b81",
+            "files": [
+              {
+                "path": ".claude/settings.json",
+                "pattern": ".claude/**",
+                "kind": "file",
+                "bytes": 38,
+                "sha256": "740c0836037936b89d26b3b827742b54276928a2664be881a588e3d72c04ace3"
+              }
+            ],
+            "truncated": false,
+            "storedUnder": "projects/<projectId>/quarantine/agent-config/<sha256>"
+          }
+        }
+      },
+      "Studio export ZIP contains VERIFICATION_STATUS.json with NOT_VERIFIED": {
+        "status": 201,
+        "export": {
+          "exportId": "exp_fe193d54f9d80a4a9771e927",
+          "projectId": "prj_9b3826254c6b34d888478a79",
+          "commit": "33a5c26907a7dabcac7c5a8827a4a89d97d6f17f",
+          "sha256": "3ced3ddc4d2bdbe3540e5bcc6aff4d8a03cbebb31d306e610ef09e425f1c9716",
+          "size": 3751,
+          "file": "exports/exp_fe193d54f9d80a4a9771e927.zip",
+          "createdAt": "2026-10-15T14:45:29.993Z",
+          "createdBy": "FOUNDER_LOCAL",
+          "runId": null,
+          "contents": {
+            "readme": true,
+            "testReport": false,
+            "securityReport": false,
+            "runReport": false,
+            "verificationStatus": true
+          },
+          "secretScan": {
+            "scanner": "builtin",
+            "status": "CLEAN",
+            "entriesScanned": 8
+          },
+          "verification": {
+            "label": "NOT_VERIFIED",
+            "testsExecuted": false,
+            "notExecutedReason": "NO_RUN",
+            "functionalAcceptance": "NOT_EXECUTED",
+            "completionMode": "NOT_COMPLETED"
+          },
+          "tenantId": "local"
+        },
+        "zipPath": "C:\\Users\\salim\\UASCO-wt\\m1a-test\\userdata\\workos\\exports\\exp_fe193d54f9d80a4a9771e927.zip",
+        "zipEntries": [
+          "source/",
+          "source/.gitignore",
+          "source/README.md",
+          "source/package.json",
+          "source/public/",
+          "source/public/index.html",
+          "source/server.js",
+          "source/test.js",
+          "README.md",
+          "VERIFICATION_STATUS.json"
+        ],
+        "verificationStatus": {
+          "schemaVersion": 1,
+          "runId": null,
+          "missionId": null,
+          "headSha": "33a5c26907a7dabcac7c5a8827a4a89d97d6f17f",
+          "functionalAcceptance": "NOT_EXECUTED",
+          "completionMode": "NOT_COMPLETED",
+          "testsExecuted": false,
+          "notExecutedReason": "NO_RUN",
+          "reviewVerdict": null,
+          "securitySummary": null,
+          "label": "NOT_VERIFIED"
+        }
+      },
+      "NOT_VERIFIED badge renders on mission list, mission detail and run card": [
+        {
+          "scope": "mission",
+          "text": "Testler çalıştırılmadı — NOT_VERIFIED (sandbox doğrulanmadı)"
+        },
+        {
+          "scope": "mission",
+          "text": "Testler çalıştırılmadı — NOT_VERIFIED (sandbox doğrulanmadı)"
+        },
+        {
+          "scope": "run",
+          "text": "Testler çalıştırılmadı — NOT_VERIFIED (sandbox doğrulanmadı)"
+        }
+      ],
+      "NOT_VERIFIED badge renders on Studio last-run (overview) and delivery export list": {
+        "overview": [
+          {
+            "scope": "run",
+            "text": "Testler çalıştırılmadı — NOT_VERIFIED (sandbox doğrulanmadı)"
+          }
+        ],
+        "delivery": [
+          {
+            "scope": "export",
+            "text": "Testler çalıştırılmadı — NOT_VERIFIED (sandbox doğrulanmadı)"
+          }
+        ]
+      },
+      "keyboard focus never on BODY during the walk": {
+        "steps": 13,
+        "bodyHits": []
+      },
+      "no renderer exceptions": {
+        "exceptions": [],
+        "consoleErrors": []
+      },
+      "quit via window.close()": {
+        "exit": {
+          "code": 0,
+          "signal": null,
+          "at": "2026-10-15T14:45:53.585Z"
+        },
+        "ms": 263
+      }
+    },
+    "preWalkInitialFocus": {
+      "tag": "BODY",
+      "id": null,
+      "focusKey": null,
+      "isBody": true
+    },
+    "focusSteps": [
+      {
+        "step": "boot:first Tab",
+        "tag": "A",
+        "id": null,
+        "focusKey": null,
+        "isBody": false
+      },
+      {
+        "step": "nav:settings",
+        "tag": "H1",
+        "id": "view-title",
+        "focusKey": null,
+        "isBody": false
+      },
+      {
+        "step": "settings:tab x6",
+        "tag": "INPUT",
+        "id": "searchInput",
+        "focusKey": null,
+        "isBody": false
+      },
+      {
+        "step": "nav:work",
+        "tag": "H1",
+        "id": "view-title",
+        "focusKey": null,
+        "isBody": false
+      },
+      {
+        "step": "work:select mission",
+        "tag": "BUTTON",
+        "id": null,
+        "focusKey": null,
+        "isBody": false
+      },
+      {
+        "step": "work:tab x8",
+        "tag": "A",
+        "id": null,
+        "focusKey": null,
+        "isBody": false
+      },
+      {
+        "step": "nav:projects",
+        "tag": "H1",
+        "id": "view-title",
+        "focusKey": null,
+        "isBody": false
+      },
+      {
+        "step": "projects:open studio",
+        "tag": "H1",
+        "id": "view-title",
+        "focusKey": null,
+        "isBody": false
+      },
+      {
+        "step": "studio:delivery tab",
+        "tag": "BUTTON",
+        "id": "studio-tab-delivery",
+        "focusKey": "studio-tab-delivery",
+        "isBody": false
+      },
+      {
+        "step": "studio:tab x5",
+        "tag": "DIV",
+        "id": "feedPanel",
+        "focusKey": null,
+        "isBody": false
+      },
+      {
+        "step": "nav:inbox",
+        "tag": "H1",
+        "id": "view-title",
+        "focusKey": null,
+        "isBody": false
+      },
+      {
+        "step": "nav:workforce",
+        "tag": "H1",
+        "id": "view-title",
+        "focusKey": null,
+        "isBody": false
+      },
+      {
+        "step": "nav:home",
+        "tag": "H1",
+        "id": "view-title",
+        "focusKey": null,
+        "isBody": false
+      }
+    ],
+    "uninstall": {
+      "command": "\"C:\\Users\\salim\\UASCO-wt\\m1a-test\\install\\UASCO\\Uninstall UASCO.exe\" /S --keep-shortcuts",
+      "exitCode": 0,
+      "installDirRemoved": true,
+      "uninstallKeysAfter": [],
+      "appRegistryKey": {
+        "key": "HKCU\\Software\\c08a2cf2-0094-569e-be97-c685aa0f7e0b",
+        "exists": false
+      },
+      "shortcuts": {
+        "desktopLnk": false,
+        "startMenuLnk": false,
+        "startMenuDir": false
+      },
+      "residue": {
+        "realAppDataUASCO": false,
+        "updaterCopy": false,
+        "tempInstallerCopy": false
+      }
+    },
+    "reports": [
+      "C:/Users/salim/UASCO-wt/m1a-test/reports/install.json",
+      "C:/Users/salim/UASCO-wt/m1a-test/reports/walk.json",
+      "C:/Users/salim/UASCO-wt/m1a-test/reports/uninstall.json",
+      "C:/Users/salim/UASCO-wt/m1a-test/screens/*.png",
+      "earlier harness attempts kept as reports/walk-attempt1..5.json"
+    ]
+  },
+  "labelSemantics": {
+    "NOT_EXECUTED": "functionalAcceptance state: tests were not run because no verified sandbox exists; distinct from UNKNOWN (never treated as pass) and never VERIFIED.",
+    "NOT_VERIFIED": "delivery label on every run/mission/delivery/export surface and in VERIFICATION_STATUS.json; M1a can never produce a verified label because no execution happens.",
+    "NOT_VERIFIED (M1a: tests not executed)": "exact label when NOT_EXECUTED evidence exists for the exported commit.",
+    "NO_RUN": "export of a commit no UASCO run produced (label NOT_VERIFIED).",
+    "NOT_EXECUTED_ACKNOWLEDGED": "completionMode when the Founder accepted with the exact NOT_EXECUTED acknowledgement; it is an acceptance of an unverified result, not verification.",
+    "M1a_vs_M1": "M1a = code generation + static analysis + independent Claude review + export only. Real M1 requires a verified SandboxProvider with real negative isolation tests (file, network, credential, process, host); none exists in this build."
+  },
+  "founderAcceptanceSteps": "M1a ADAYI — FOUNDER KABUL ADIMLARI (Türkçe)\n\nÖNEMLİ: Bu aday M1a modudur. Doğrulanmış bir sandbox YOKTUR; bu yüzden proje testleri ve canlı önizleme HİÇ çalıştırılmaz (NOT_EXECUTED). Kod üretimi, statik güvenlik taraması, bağımsız Claude incelemesi ve dışa aktarma çalışır. Sonuç her yerde NOT_VERIFIED olarak etiketlenir; bu gerçek M1 değildir ve asla \"doğrulandı\" anlamına gelmez.\n\n(1) KURULUM\n1. Başka bir UASCO kurulumu açıksa kapatın. Varsa eski UASCO test kurulumunu Ayarlar > Uygulamalar'dan kaldırın (aynı kullanıcı kayıt anahtarını paylaşırlar).\n2. Kurulum dosyasını çalıştırın: UASCO-Setup-0.7.0-dev.1-win-x64.exe\n   SHA-256 (kurmadan önce PowerShell ile kontrol edin):\n   Get-FileHash .\\UASCO-Setup-0.7.0-dev.1-win-x64.exe -Algorithm SHA256\n   Beklenen: 4C907ED2BAF54E3AB130653B2784A21C8182E79F4AFE56E25E7041A8D4C0A287\n3. İmzasız geliştirme sürümü olduğu için SmartScreen uyarısı çıkabilir: \"Ek bilgi\" > \"Yine de çalıştır\".\n4. Kurulum bitince UASCO'yu açın. Ana ekranda sağlık durumu \"Doğrulandı\" (VERIFIED) görünmelidir.\n\n(2) UASCO CLAUDE PROFİLLERİNE GİRİŞ (kişisel profil DEĞİL)\n1. UASCO'da Ayarlar > \"AI Yürütücüleri\" paneline gidin.\n2. \"Sandbox: UNAVAILABLE — M1a modu\" yazısını görün (beklenen durum).\n3. \"Yerel Claude Code CLI\" yürütücüsü NOT_CONFIGURED ise \"Etkinleştir\"e basın ve onay penceresini okuyup onaylayın.\n4. \"UASCO Claude profilleri\" bölümünde iki kart vardır: Implementer (uygulayıcı) ve Reviewer (bağımsız inceleyici). İkisi de \"giriş gerekli\" (LOGIN_REQUIRED) gösterir.\n5. Her kartın altındaki giriş komutunu AYNEN kopyalayın (komutu elle yazmayın). Biçimi şöyledir:\n   $env:CLAUDE_CONFIG_DIR='<Ayarlar'da gösterilen yol>\\control\\claude-profiles\\implementer'; claude; Remove-Item Env:\\CLAUDE_CONFIG_DIR\n   ve reviewer için aynı biçimde ...\\claude-profiles\\reviewer ile biten komut.\n6. Normal bir PowerShell penceresi açın, implementer komutunu yapıştırıp Enter'a basın. Açılan Claude Code içinde /login ile giriş yapın, giriş tamamlanınca /exit ile çıkın. Komut sonunda ortam değişkenini kendisi temizler.\n7. Aynısını reviewer komutu için ayrı olarak yapın.\n8. YAPMAYIN: Ortam değişkeni olmadan düz \"claude\" komutuyla giriş yapmayın; bu kişisel profilinizdir ve UASCO onu kullanmaz. İki profile aynı hesabı kullanmak mümkündür ama profiller ayrı klasörlerde kalmalıdır.\n9. UASCO'ya dönün, Ayarlar sayfasını yenileyin (başka bir menüye gidip geri gelin). İki profil de READY olmalıdır. Sandbox hâlâ \"UNAVAILABLE — M1a modu\" kalır (doğru).\n\n(3) KÜÇÜK BİR GÖREVİ BAŞTAN SONA ÇALIŞTIRMA\n1. Projeler > yeni proje: şablon olarak \"web-node\" seçin, bir ad verin, oluşturun.\n2. Görevler > \"Yeni Görev\": projeyi seçin, kısa bir başlık ve hedef yazın (ör. \"README.md'ye uygulamanın amacını anlatan bir satır ekle\"), en az bir kabul kriteri girin, risk düzeyi R0, R1 veya R2 seçin (R3/R4 reddedilir), kaydedin.\n3. Görev ayrıntısında durumu sırayla PREFLIGHT, sonra AUTHORIZED yapın (AUTHORIZED onay penceresi ister).\n4. \"Çalıştır\"a basın. Koşu kartında adımlar ilerler:\n   IMPLEMENT (Claude uygulayıcı kodu yazar) -> VERIFY (testler ÇALIŞTIRILMAZ: VERIFY_TESTS_NOT_EXECUTED, SANDBOX_UNAVAILABLE) -> SECURITY (yalnız dosya okuyan statik tarayıcılar; gitleaks/trivy kurulu değilse durum dürüstçe PARTIAL/NOT_INSTALLED yazılır) -> REVIEW (bağımsız Claude inceleyici; isteminde \"testler çalıştırılmadı\" açıkça yazar) -> REGRESSION (yine NOT_EXECUTED) -> REPORT.\n5. Koşu AWAITING_APPROVAL, görev REPORTING olunca her koşu/görev kartında \"Testler çalıştırılmadı — NOT_VERIFIED (sandbox doğrulanmadı)\" rozetini görün.\n6. Gelen Kutusu (veya görev ayrıntısı) > teslim kararı kartında \"Kabulden önce gereken onaylar\" bölümünü okuyun:\n   - \"Testlerin çalıştırılmadığını ve bu sonucun NOT_VERIFIED olduğunu onaylıyorum.\" kutusunu işaretleyin.\n   - Eğer koşu mevcut testleri veya test harness'ını değiştirdiyse liste gösterilir ve ikinci bir kutu çıkar; listeyi inceleyip onu da işaretleyin.\n   Kutular işaretlenmeden kabul isteği gönderilmez.\n7. \"Kabul et ve tamamla\" (COMPLETE) düğmesine basın; onay penceresinde \"Testler ÇALIŞTIRILMADI ... NOT_VERIFIED olarak tamamlanacak\" cümlesini okuyup onaylayın. Görev COMPLETE olur (tamamlama biçimi NOT_EXECUTED_ACKNOWLEDGED).\n8. Projeler > projeyi açın > \"Teslim\" sekmesi > Dışa aktar. Dışa aktarma listesinde aynı NOT_VERIFIED rozeti görünür. \"Klasörde göster\" ile ZIP'i açın; kökte VERIFICATION_STATUS.json bulunur ve label alanı \"NOT_VERIFIED (M1a: tests not executed)\" yazar (testsExecuted:false, notExecutedReason:\"SANDBOX_UNAVAILABLE\").\n9. Canlı önizleme (Çalıştır & Önizle) bu modda \"SANDBOX_UNAVAILABLE\" ile reddedilir; bu beklenen davranıştır.\n\nNOT_VERIFIED NE DEMEK?\n- Kod yazıldı, statik güvenlik taramasından ve bağımsız incelemeden geçti, ama hiçbir test veya uygulama bu bilgisayarda ya da bir sandbox'ta ÇALIŞTIRILMADI. İşlevsel doğruluk KANITLANMADI.\n- Teslim paketini müşteriye \"test edilmiş\" diye vermeyin. Gerçek doğrulama ancak dosya, ağ, kimlik bilgisi, süreç ve ana makine izolasyonu gerçek negatif testlerle doğrulanmış bir sandbox geldiğinde (gerçek M1) mümkündür.\n- Proje kodu bu bilgisayarda asla doğrudan çalıştırılmaz; bu bir hata değil, Founder kararıdır (FD-REL-1-REJECT-HOST-EXEC-2026-10-15, D-SBX1-PATH-2026-10-15).\n",
+  "knownLimits": [
+    "No verified SandboxProvider exists; every packaged run is NOT_EXECUTED/NOT_VERIFIED by design. Real M1 is not delivered by this package.",
+    "Packaged walk: the UASCO Claude profiles were not logged in, so the mission run stopped at IMPLEMENT BLOCKED CLAUDE_PROFILE_LOGIN_REQUIRED (builder never started). The end-to-end M1a path (IMPLEMENT -> NOT_EXECUTED VERIFY -> SECURITY -> REVIEW -> REPORT -> acknowledged COMPLETE -> export) is proven only at source level with fake executors; the Founder steps cover the real path after login.",
+    "The packaged COMPLETE checkbox flow and the delivery badge in the Inbox were therefore not exercised against a REPORTING mission in the packaged app (covered by tests/v7-m1a-desktop.test.ts with the real view modules).",
+    "Enabling LOCAL_CLAUDE in the isolated test userData ran the product's own provenance capture (Claude Code CLI version 2.1.292 reported); no AI-generated or project code was executed.",
+    "Initial document focus right after app launch, before any user input, is on BODY (recorded as preWalkInitialFocus); the first Tab moves to the skip link and no step of the walk left focus on BODY. app.js was not changed for this.",
+    "deriveOutcomes.execution stays VERIFIED when REPORT evidence exists (FX-1 semantics unchanged; it means the pipeline ran, not that tests ran); functionalAcceptance and every label carry NOT_EXECUTED/NOT_VERIFIED.",
+    "A run blocked by TEST_COMMAND_NOT_CONFIGURED (no test command) still BLOCKs at VERIFY (unchanged; template projects configure a test command).",
+    "gitleaks/trivy availability on the Founder machine decides SECURITY coverage (PARTIAL/NOT_INSTALLED is reported honestly)."
+  ],
+  "deviations": [
+    "A and B were committed together (c82a2f1) because core/workos/outcomes.ts carries both the NOT_EXECUTED derivation and the gate; C and D were split out with index-level partial staging.",
+    "electron-builder downloaded its pinned nsis-bundle-3.12.tar.gz toolchain over the network during the build (the previous package copied an eb-cache to avoid this; this fresh build dir had none). This is outside 'reviewed-lock npm ci + checksum-pinned provision-electron' and is recorded here.",
+    "scripts/provision-electron.mjs downloaded the checksum-verified Electron 44.4.5 zip (sha256 11c395820a5aaa8ebcc0686b476d0ac98a730274ebfbdc8cf5538a7c2815cb5d) into this fresh clone's .ai/cache (allowed).",
+    "Existing tests updated to the mandated semantics (listed under tests.updatedForMandatedSemantics); no assertion about non-execution, budgets, gate refusal or BLOCKED completability was removed."
+  ],
+  "status_final": "IMPLEMENTED, VERIFIED (canonical validation PASS; packaged build + install + sandboxed launch + acceptance walk 16/16 + uninstall/cleanup PASS), NOT REVIEWED. Claude does not self-declare CLEAN; a separate independent reviewer must review. Not a live merge; nothing pushed."
+}
