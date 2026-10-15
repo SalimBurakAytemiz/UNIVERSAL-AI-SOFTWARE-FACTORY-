@@ -2,7 +2,7 @@
 import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip} from "../components.js";
 import {formatTime,MISSING} from "../model.js";
 import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime} from "../work-core.js";
-import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusStatus} from "../forms.js";
+import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
 
 const FORM="mission";
@@ -12,13 +12,13 @@ const inputOf=()=>({projectId:drafts.mission.projectId,title:drafts.mission.titl
 /** Formu doğrular; geçerliyse idempotency anahtarıyla POST eder (yalnız kullanıcı gönderimi çağırır). */
 export async function submitMission(ctx){
   const check=buildMissionRequest(inputOf());
-  if(!check.ok){setStatus(FORM,{ok:false,errors:check.errors});await ctx.rerender();focusStatus(ctx.doc,FORM);return {ok:false,validation:true}}
+  if(!check.ok){setStatus(FORM,{ok:false,errors:check.errors});await ctx.rerender();focusResult(ctx,FORM,["id:mission-submit","id:mission-form-t"]);return {ok:false,validation:true}}
   const key=trackers.mission.keyFor(check.body),req=buildMissionRequest(inputOf(),{key});
   drafts.busy[FORM]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[FORM]=false}
   const title=res?.body?.mission?.title??check.body.title,ok=recordPost(FORM,res,"mission.created",{title});
   if(ok){const id=res?.body?.mission?.missionId;if(typeof id==="string")selection.missionId=id;resetMissionDraft()}
-  await ctx.refreshAll({force:true});focusStatus(ctx.doc,FORM);return {ok};
+  await ctx.refreshAll({force:true});focusResult(ctx,FORM,["id:mission-submit","id:mission-form-t"]);return {ok};
 }
 function missionForm(ctx,projects){
   const doc=ctx.doc,st=drafts.status[FORM],errs=st?.errors??{},d=drafts.mission;

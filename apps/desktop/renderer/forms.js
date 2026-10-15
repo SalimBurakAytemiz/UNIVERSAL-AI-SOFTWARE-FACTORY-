@@ -66,3 +66,11 @@ export function recordPost(formId,res,okKey,okVars={}){
 }
 /** Yeniden çizimden sonra durum bloğuna odak taşır (ekran okuyucu sonucu duyurur). */
 export function focusStatus(doc,formId){const n=doc.getElementById?.(`${formId}-status`);if(n&&typeof n.focus==="function")n.focus()}
+/** Odağı belirlenimci yerleştirir (focus.js settleFocus): odak canlı bir denetimdeyse dokunmaz; değilse `keys` sırasıyla, sonra ilk liste öğesi, sonra görünüm başlığı; asla gövde. */
+export function settle(ctx,keys=[]){return typeof ctx.settleFocus==="function"?ctx.settleFocus({keys}):null}
+/** Bir eylemin sonucundan sonra odağı sonuç bloğuna (varsa) taşır, yoksa `keys` yedeğiyle yerleştirir; sonunda odak asla gövdede kalmaz. */
+export function focusResult(ctx,formId,keys=[]){
+  const n=ctx.doc.getElementById?.(`${formId}-status`);
+  if(n&&typeof n.focus==="function"&&n.disabled!==true)n.focus();
+  return settle(ctx,keys);
+}

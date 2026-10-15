@@ -2,7 +2,7 @@
 import {h,panel,stateNote,emptyNote,statusPill,statusLabel,badge} from "../components.js";
 import {formatTime,mapMissions,MISSING} from "../model.js";
 import {formatDateTime,describePostResult} from "../work-core.js";
-import {drafts,selection,field,statusBlock,setStatus,focusStatus} from "../forms.js";
+import {drafts,selection,field,statusBlock,setStatus,focusResult,settle} from "../forms.js";
 import {STUDIO_TABS,GIT_LOG_LIMIT,buildDevRunRequest,buildExportRequest,previewOpenable,devRunActions,diffLineKind,formatBytes,joinRel,parentRel,validRelPath,latestRunFor,securitySummary} from "../project-core.js";
 import {studio,setTab} from "../studio-state.js";
 import {importPanel} from "./studio-wizard.js";
@@ -19,7 +19,7 @@ export function stopRunPolling(){if(runTimer!==null){clearInterval(runTimer);run
 
 // ---------- Sekme çubuğu ----------
 function tabBar(ctx){
-  const doc=ctx.doc,go=(k,focus)=>{setTab(k);if(focus){const n=doc.getElementById?.(`studio-tab-${k}`);if(n)n.focus()}ctx.rerender()};
+  const doc=ctx.doc,go=async(k,focus)=>{setTab(k);if(focus){const n=doc.getElementById?.(`studio-tab-${k}`);if(n)n.focus()}await ctx.rerender();settle(ctx,[`id:studio-tab-${k}`,"id:studio-panel"])};
   return h(doc,"div",{class:"tabs studio-tabs",role:"tablist","aria-label":ctx.t("studio.tabs.label")},STUDIO_TABS.map((k,i)=>{
     const sel=studio.tab===k;
     return h(doc,"button",{type:"button",role:"tab",id:`studio-tab-${k}`,"aria-selected":sel?"true":"false","aria-controls":"studio-panel",tabindex:sel?"0":"-1",dataset:{focusKey:`studio-tab-${k}`,tab:k},text:ctx.t(`studio.tab.${k}`),
@@ -72,6 +72,8 @@ async function overviewTab(ctx,project,projects){
 function paintRun(ctx,nodes,run){
   const t=ctx.t,acts=devRunActions(run.status);
   nodes.current=run;
+  const stale=drafts.status[DEV_FORM];
+  if(stale&&stale.forState!==undefined&&stale.forState!==run.status){drafts.status[DEV_FORM]=undefined;if(nodes.statusWrap)repaintStatus(ctx,nodes.statusWrap,DEV_FORM)}
   nodes.state.textContent=t("studio.run.state",{state:t(`devrun.state.${run.status}`)});
   nodes.state.dataset.status=run.status;
   nodes.facts.replaceChildren(...fact(ctx.doc,"PID",run.pid===null?MISSING:String(run.pid),"mono"),...fact(ctx.doc,t("studio.run.port"),run.port===null?MISSING:String(run.port),"mono"),...fact(ctx.doc,t("studio.run.started"),formatDateTime(run.startedAt,ctx.i18n.lang)),
@@ -94,20 +96,30 @@ function startRunPolling(ctx,project,nodes){
     if(r.state==="VERIFIED"){paintRun(ctx,nodes,r.run);if(!LIVE_STATES.includes(r.run.status))stopRunPolling()}
   },RUN_POLL_MS);
 }
-const repaintStatus=(ctx,wrap,formId)=>wrap.replaceChildren(statusBlock(ctx,formId));
+/** Durum bloğunu yeniden kurar; odak eski bloktaysa yeni bloğa (içerik varsa) veya durum satırına taşınır, gövdeye düşmez. */
+const repaintStatus=(ctx,wrap,formId)=>{
+  const had=wrap.contains(ctx.doc.activeElement)&&ctx.doc.activeElement!==wrap;
+  wrap.replaceChildren(statusBlock(ctx,formId));
+  if(had)settle(ctx,drafts.status[formId]?[`id:${formId}-status`,"id:studio-run-state"]:["id:studio-run-state",`id:${formId}-status`]);
+};
+/** Dev-run durum iletisini yazar; ileti, gösterildiği dev-run durumuna bağlanır (forState) ve durum değişince paintRun tarafından silinir. */
+const setDevStatus=(nodes,msg)=>setStatus(DEV_FORM,{...msg,forState:nodes.current?.status??null});
+const runKeys=action=>[`id:studio-run-${action}`,`id:${DEV_FORM}-status`,"id:studio-run-state"];
 export async function runAction(ctx,project,nodes,action){
   const req=buildDevRunRequest({projectId:project.projectId,action});
-  if(!req.ok){setStatus(DEV_FORM,{ok:false,errors:req.errors});repaintStatus(ctx,nodes.statusWrap,DEV_FORM);return {ok:false,validation:true}}
+  if(!req.ok){setStatus(DEV_FORM,{ok:false,errors:req.errors});repaintStatus(ctx,nodes.statusWrap,DEV_FORM);settle(ctx,runKeys(action));return {ok:false,validation:true}}
   if(action!=="stop"){
     const yes=await ctx.confirm({title:ctx.t("studio.run.confirm.title",{action:ctx.t(`studio.run.${action}`)}),body:ctx.t("studio.run.confirm.body"),action:ctx.t(`studio.run.${action}`),target:`${project.name} (${project.projectId})`,confirmLabel:ctx.t(`studio.run.${action}`)});
-    if(yes!==true){setStatus(DEV_FORM,{ok:false,key:"confirm.cancelled",vars:{},errors:null});repaintStatus(ctx,nodes.statusWrap,DEV_FORM);return {ok:false,cancelled:true}}
+    if(yes!==true){setDevStatus(nodes,{ok:false,key:"confirm.cancelled",vars:{},errors:null});repaintStatus(ctx,nodes.statusWrap,DEV_FORM);settle(ctx,runKeys(action));return {ok:false,cancelled:true}}
   }
   drafts.busy[DEV_FORM]=true;if(nodes.current)paintRun(ctx,nodes,nodes.current);
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[DEV_FORM]=false}
   const d=describePostResult(res);
-  setStatus(DEV_FORM,{ok:d.ok,key:d.ok?`studio.run.done.${action}`:d.key,vars:d.ok?{}:d.vars,errors:null});repaintStatus(ctx,nodes.statusWrap,DEV_FORM);
   const r=await ctx.api.devrun(project.projectId,{force:true});
   if(r.state==="VERIFIED"){paintRun(ctx,nodes,r.run);startRunPolling(ctx,project,nodes)}else if(nodes.current)paintRun(ctx,nodes,nodes.current);
+  // Sonuç iletisi, eylemin etkisi yansıtıldıktan sonra o anki dev-run durumuna bağlanır; sonraki durum değişiminde silinir (bayat ileti kalmaz).
+  setDevStatus(nodes,{ok:d.ok,key:d.ok?`studio.run.done.${action}`:d.key,vars:d.ok?{}:d.vars,errors:null});repaintStatus(ctx,nodes.statusWrap,DEV_FORM);
+  settle(ctx,runKeys(action));
   return {ok:d.ok,status:res?.status??null};
 }
 export async function openPreview(ctx,project,nodes){
@@ -118,14 +130,14 @@ export async function openPreview(ctx,project,nodes){
     let r=null;try{r=await native.openPreview(project.projectId)}catch{r=null}
     msg=r&&r.opened===true?{ok:true,key:"studio.run.preview.opened",vars:{},errors:null}:{ok:false,key:`studio.run.preview.reason.${r&&PREVIEW_REASONS.includes(r.reason)?r.reason:"OPEN_FAILED"}`,vars:{},errors:null};
   }
-  setStatus(DEV_FORM,msg);repaintStatus(ctx,nodes.statusWrap,DEV_FORM);return {ok:msg.ok};
+  setDevStatus(nodes,msg);repaintStatus(ctx,nodes.statusWrap,DEV_FORM);settle(ctx,["id:studio-run-preview",`id:${DEV_FORM}-status`,"id:studio-run-state"]);return {ok:msg.ok};
 }
 async function runTab(ctx,project){
   const doc=ctx.doc,res=await ctx.api.devrun(project.projectId,{force:true});
   if(res.state!=="VERIFIED")return panel(ctx,{titleKey:"studio.run.title",id:"studio-run"},stateNote(ctx,res.state),h(doc,"p",{class:"note",text:ctx.t("studio.run.unavailable")}));
   const nodes={current:null};
   const btn=(key,text,onClick,extra={})=>h(doc,"button",{type:"button",class:"btn",id:`studio-run-${key}`,dataset:{focusKey:`studio-run-${key}`},text,on:{click:onClick},...extra});
-  nodes.state=h(doc,"p",{class:"studio-run-state",id:"studio-run-state",role:"status","aria-live":"polite"});
+  nodes.state=h(doc,"p",{class:"studio-run-state",id:"studio-run-state",role:"status","aria-live":"polite",tabindex:"-1"});
   nodes.facts=h(doc,"dl",{class:"kv"});
   nodes.start=btn("start",ctx.t("studio.run.start"),()=>runAction(ctx,project,nodes,"start"));
   nodes.stop=btn("stop",ctx.t("studio.run.stop"),()=>runAction(ctx,project,nodes,"stop"),{class:"btn btn-danger"});
@@ -147,15 +159,15 @@ async function runTab(ctx,project){
 // ---------- Dosyalar ----------
 async function filesTab(ctx,project){
   const doc=ctx.doc,id=project.projectId,dir=studio.dir,list=await ctx.api.projectFiles(id,dir);
-  const crumb=h(doc,"p",{class:"mono path-chosen",id:"studio-files-path","aria-label":ctx.t("studio.files.here"),text:`/${dir}`});
-  const up=dir?h(doc,"button",{type:"button",class:"btn btn-small",id:"studio-files-up",dataset:{focusKey:"studio-files-up"},text:ctx.t("studio.files.up"),on:{click:()=>{studio.dir=parentRel(dir);studio.file=null;ctx.rerender()}}}):null;
+  const crumb=h(doc,"p",{class:"mono path-chosen",id:"studio-files-path",tabindex:"-1","aria-label":ctx.t("studio.files.here"),text:`/${dir}`});
+  const up=dir?h(doc,"button",{type:"button",class:"btn btn-small",id:"studio-files-up",dataset:{focusKey:"studio-files-up"},text:ctx.t("studio.files.up"),on:{click:async()=>{studio.dir=parentRel(dir);studio.file=null;await ctx.rerender();settle(ctx,[`id:fe-${dir}`,"id:studio-files-path"])}}}):null;
   let tree;
   if(list.state!=="VERIFIED")tree=stateNote(ctx,list.state);
   else if(!list.entries.length)tree=emptyNote(ctx,"studio.files.empty");
-  else tree=h(doc,"div",{},h(doc,"ul",{class:"file-list"},list.entries.map(e=>{
+  else tree=h(doc,"div",{},h(doc,"ul",{class:"file-list"},list.entries.map((e,i)=>{
     const rel=joinRel(dir,e.name),ok=validRelPath(rel),isSel=!e.dir&&studio.file===rel;
-    return h(doc,"li",{},h(doc,"button",{type:"button",class:"link-btn",id:`fe-${rel}`,dataset:{focusKey:`fe:${rel}`},"aria-current":isSel?"true":null,disabled:!ok,
-      on:{click:()=>{if(e.dir){studio.dir=rel;studio.file=null}else studio.file=rel;ctx.rerender()}},text:`${e.dir?ctx.t("studio.files.dir"):ctx.t("studio.files.file")} ${e.name}`}),e.dir||e.size===null?null:h(doc,"span",{class:"field-hint",text:` ${formatBytes(e.size)}`}));
+    return h(doc,"li",{},h(doc,"button",{type:"button",class:"link-btn",id:`fe-${rel}`,dataset:{focusKey:`fe:${rel}`,...(i===0&&ok?{focusFirst:"1"}:{})},"aria-current":isSel?"true":null,disabled:!ok,
+      on:{click:async()=>{if(e.dir){studio.dir=rel;studio.file=null}else studio.file=rel;await ctx.rerender();settle(ctx,e.dir?["id:studio-files-up","id:studio-files-path"]:[`id:fe-${rel}`,"id:studio-file-view"])}},text:`${e.dir?ctx.t("studio.files.dir"):ctx.t("studio.files.file")} ${e.name}`}),e.dir||e.size===null?null:h(doc,"span",{class:"field-hint",text:` ${formatBytes(e.size)}`}));
   })),list.truncated?h(doc,"p",{class:"note",text:ctx.t("studio.files.listTruncated")}):null);
   let viewer=emptyNote(ctx,"studio.files.pick");
   if(studio.file){
@@ -184,7 +196,7 @@ async function changesTab(ctx,project){
   const picker=h(doc,"div",{class:"filter-row"},
     field(ctx,{id:"studio-diff-from",labelKey:"studio.git.from",value:studio.diffFrom,onInput:v=>{studio.diffFrom=v},options:opts}),
     field(ctx,{id:"studio-diff-to",labelKey:"studio.git.to",value:studio.diffTo,onInput:v=>{studio.diffTo=v},options:opts.slice(1)}),
-    h(doc,"button",{type:"button",class:"btn btn-primary",id:"studio-diff-show",dataset:{focusKey:"studio-diff-show"},text:ctx.t("studio.git.show"),on:{click:()=>{studio.diffRequested=true;ctx.rerender()}}}));
+    h(doc,"button",{type:"button",class:"btn btn-primary",id:"studio-diff-show",dataset:{focusKey:"studio-diff-show"},text:ctx.t("studio.git.show"),on:{click:async()=>{studio.diffRequested=true;await ctx.rerender();settle(ctx,["id:studio-diff-show","id:studio-diff-view"])}}}));
   let diffBody=null;
   if(studio.diffRequested){
     const d=await ctx.api.gitDiff(id,studio.diffFrom,studio.diffTo);
@@ -215,12 +227,12 @@ async function missionsTab(ctx,project){
 // ---------- Teslim ----------
 export async function submitExport(ctx,project){
   const req=buildExportRequest({projectId:project.projectId,commit:studio.commit});
-  if(!req.ok){setStatus(EXPORT_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusStatus(ctx.doc,EXPORT_FORM);return {ok:false,validation:true}}
+  if(!req.ok){setStatus(EXPORT_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,EXPORT_FORM,["id:studio-export-submit"]);return {ok:false,validation:true}}
   drafts.busy[EXPORT_FORM]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[EXPORT_FORM]=false}
   const d=describePostResult(res);
   setStatus(EXPORT_FORM,{ok:d.ok,key:d.ok?"studio.export.done":d.key,vars:d.ok?{}:d.vars,errors:null});
-  await ctx.refreshAll({force:true});focusStatus(ctx.doc,EXPORT_FORM);return {ok:d.ok,status:res?.status??null};
+  await ctx.refreshAll({force:true});focusResult(ctx,EXPORT_FORM,["id:studio-export-submit"]);return {ok:d.ok,status:res?.status??null};
 }
 /** Klasörde göster: renderer yalnız kimlikleri verir; yolu ana süreç backend'den okuyup veri dizinindeki exports klasörüne karşı doğrular. */
 export async function showExport(ctx,project,exportId){
@@ -230,7 +242,7 @@ export async function showExport(ctx,project,exportId){
     let r=null;try{r=await native.showExport(project.projectId,exportId)}catch{r=null}
     msg=r&&r.shown===true?{ok:true,key:"studio.export.shown",vars:{},errors:null}:{ok:false,key:`studio.export.reason.${r&&SHOW_REASONS.includes(r.reason)?r.reason:"EXPORT_UNAVAILABLE"}`,vars:{},errors:null};
   }
-  setStatus(EXPORT_FORM,msg);await ctx.rerender();focusStatus(ctx.doc,EXPORT_FORM);return {ok:msg.ok};
+  setStatus(EXPORT_FORM,msg);await ctx.rerender();focusResult(ctx,EXPORT_FORM,[`id:ex-show-${exportId}`,"id:studio-export-submit"]);return {ok:msg.ok};
 }
 async function deliveryTab(ctx,project){
   const doc=ctx.doc,st=drafts.status[EXPORT_FORM],errs=st?.errors??{},list=await ctx.api.projectExports(project.projectId);

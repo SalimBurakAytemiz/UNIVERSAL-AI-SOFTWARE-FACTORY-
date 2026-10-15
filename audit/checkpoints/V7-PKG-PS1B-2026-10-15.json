@@ -70,5 +70,35 @@
       "server.ts side of the file routes (out of scope; not touched, so its own path-length handling for up to 2700 encoded chars is not verified here)"
     ],
     "claims": "Not clean. No CLEAN or review verdict is claimed."
+  },
+  "remediationCycle3": {
+    "//TR": "PS1B-C2-001/002 düzeltmesi: Project Studio birincil denetimlerinde odak belirlenimci olarak geri verilir ve bayat dev-run eylem iletisi silinir; yalnız gözlenen sonuçlar kaydedilir, temiz değildir.",
+    "findings": [
+      "PS1B-C2-001 (medium, blocker)",
+      "PS1B-C2-002 (low)"
+    ],
+    "startedAt": "2026-10-15T00:51:07Z",
+    "endedAt": "2026-10-15T01:03:16Z",
+    "parent": "b84c74bf25d574e9fc2ed8d2f27f0c5b82c41e04",
+    "change": [
+      "focus.js: restoreFocus skips disabled targets; new focusLost and settleFocus (keep live focus, else ordered focus keys, else first data-focus-first list item, else #view-title; never body)",
+      "app.js: ctx.settleFocus; renderRoute safety net (focus lost after rebuild -> settleFocus); confirmAction returns focus to its invoking control on close",
+      "forms.js: settle and focusResult helpers; views (studio-wizard, studio-workspace, executors-panel, projects, work) use them after wizard submit, import pick/kind/submit, dev-run start/stop/restart/preview/cancel, tab switch, folder/file/up, diff show, export create/show, open/back, executor enable; focus targets: studio-run-state, studio-files-path now tabindex -1; first file entry marked data-focus-first",
+      "studio-workspace.js: dev-run result messages carry forState and are cleared by paintRun when the polled dev-run state differs, and when the tab is rebuilt under a different state (PS1B-C2-002)",
+      "tests/v7-ps1b-project-studio-ui.test.ts: fake DOM now has querySelectorAll and loses focus on disabled elements; new live-redraw tests assert document.activeElement is never body after each primary action, plus stale-message test (no new test file, validation.json unchanged)"
+    ],
+    "observed": {
+      "tsc --noEmit": "exit 0",
+      "vitest (ps1b-ui + b4 + b5 + b7 + pkg-c + pkg-e)": "6 files, 214 tests passed",
+      "scripts/v6-apps-control-desktop-selftest.mjs": "PASS 93/93",
+      "scripts/smoke-desktop.mjs": "PASS desktop marker HEALTHY+VERIFIED",
+      "scripts/validate-tr-comments.mjs": "PASS",
+      "scripts/secret-sanity.mjs": "PASS"
+    },
+    "notRun": [
+      "real Electron/Chromium focus behaviour (tests use the fake DOM only)",
+      "scripts/run-validation.mjs (not requested)"
+    ],
+    "claims": "Not clean. No CLEAN or review verdict is claimed."
   }
 }

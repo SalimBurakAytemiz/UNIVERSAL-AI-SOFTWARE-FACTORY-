@@ -28,11 +28,28 @@ export function restoreFocus(doc,container,key){
   if(!key)return false;
   const all=container.querySelectorAll("[id],[data-focus-key],[data-kpi],[data-retry],[data-mission-id]");
   for(const n of all){
-    if(focusKey(n)!==key)continue;
+    if(focusKey(n)!==key||n.disabled===true)continue;
     if(doc.activeElement!==n){try{n.focus({preventScroll:true})}catch{n.focus()}}
     return true;
   }
   return false;
+}
+/** Odak gövdeye (veya hiçbir yere) düştüyse true. */
+export function focusLost(doc){const a=doc.activeElement;return !a||a===doc.body||a===doc.documentElement}
+function takeFocus(doc,n){if(doc.activeElement!==n){try{n.focus({preventScroll:true})}catch{n.focus()}}return n}
+/** Bir eylem veya yeniden çizimden sonra odağı belirlenimci biçimde yerleştirir, asla gövdeye bırakmaz: (1) odak container içinde canlı ve etkin bir öğede ise dokunmaz; (2) sırayla `keys` (focusKey biçiminde, ör. "id:x") içinden ilk var olan ve etkin öğe; (3) container içindeki ilk `data-focus-first` öğesi; (4) `#view-title`. Odaklanan öğeyi döndürür, hiçbiri yoksa null. */
+export function settleFocus(doc,container,{keys=[]}={}){
+  const a=doc.activeElement,onTitle=Boolean(a)&&a.id==="view-title";
+  if(a&&a!==doc.body&&a!==container&&container.contains(a)&&a.disabled!==true&&a.isConnected!==false&&!onTitle)return a;
+  const all=container.querySelectorAll("[id],[data-focus-key],[data-kpi],[data-retry],[data-mission-id],[data-focus-first]");
+  for(const key of keys){
+    if(!key)continue;
+    for(const n of all){if(focusKey(n)===key&&n.disabled!==true)return takeFocus(doc,n)}
+  }
+  for(const n of all){if(n.dataset?.focusFirst&&n.disabled!==true)return takeFocus(doc,n)}
+  if(onTitle)return a;
+  for(const n of all){if(n.id==="view-title")return takeFocus(doc,n)}
+  return null;
 }
 /** fn() container içeriğini yeniden kurar; çalışmadan önce odak anahtarı kaydedilir, sonra geri verilir. */
 export function keepFocus(doc,container,fn){

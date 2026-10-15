@@ -418,9 +418,11 @@ describe("PS-1B i18n", () => {
 
 // ---------- Sahte DOM + gerçek görünüm modülleri ----------
 class N {
-  tagName: string; children: N[] = []; parent: N | null = null; attrs = new Map<string, string>(); dataset: Record<string, string> = {}; className = ""; value = ""; open = false; checked = false; disabled = false; _text = ""; ls = new Map<string, Array<(e: any) => void>>();
+  tagName: string; children: N[] = []; parent: N | null = null; attrs = new Map<string, string>(); dataset: Record<string, string> = {}; className = ""; value = ""; open = false; checked = false; _dis = false; _text = ""; ls = new Map<string, Array<(e: any) => void>>();
   constructor(public doc: D, tag: string) { this.tagName = tag.toUpperCase(); }
   get id() { return this.attrs.get("id") ?? ""; }
+  get disabled() { return this._dis || this.attrs.has("disabled"); }
+  set disabled(v: boolean) { this._dis = v; if (!v) this.attrs.delete("disabled"); }
   get textContent(): string { return this._text + this.children.map(c => c.textContent).join(""); }
   set textContent(v: string) { this.children.forEach(c => { c.parent = null; }); this.children = []; this._text = String(v); }
   append(...n: Array<N | string>) { for (const c of n) { const node = typeof c === "string" ? this.doc.createTextNode(c) : c; if (node.parent) node.parent.children = node.parent.children.filter(x => x !== node); node.parent = this; this.children.push(node); } }
@@ -433,6 +435,7 @@ class N {
   fire(ev: string, e: any = {}) { const evt = {preventDefault() {}, target: this, ...e}; for (const fn of this.ls.get(ev) ?? []) fn(evt); }
   focus() { this.doc.focused = this; }
   contains(n: N | null) { for (let x = n; x; x = x.parent) if (x === this) return true; return false; }
+  querySelectorAll(_s: string): N[] { return all(this); }
 }
 class D {
   body: N; focused: N | null = null;
@@ -440,7 +443,7 @@ class D {
   createElement(t: string) { return new N(this, t); }
   createTextNode(s: string) { const n = new N(this, "#text"); n._text = s; return n; }
   getElementById(id: string): N | null { return all(this.body).find(n => n.id === id) ?? null; }
-  get activeElement(): N { return this.focused && this.body.contains(this.focused) ? this.focused : this.body; }
+  get activeElement(): N { return this.focused && this.body.contains(this.focused) && !this.focused.disabled ? this.focused : this.body; } // gerçek tarayıcı gibi: devre dışı kalan odaklı öğe odağı kaybeder
 }
 const all = (n: N): N[] => n.children.flatMap(c => [c, ...all(c)]);
 const byId = (root: N, id: string) => all(root).find(n => n.id === id) ?? null;
@@ -882,5 +885,213 @@ describe("PS-1B static safety and wiring", () => {
     expect(step.command.slice(-2)).toEqual(["tests/v7-ps1b-project-studio-ui.test.ts", "tests/v7-ps1b-relpath-canonical.test.ts"]); // c2: PS1B-C1-001 testi sona eklendi
     expect(step.command.filter((x: string) => x === "tests/v7-ps1b-project-studio-ui.test.ts").length).toBe(1);
     expect(step.command).toContain("tests/v7-b7-installer.test.ts");
+  });
+});
+
+// ---------- PS-1B c3: odak tutma (PS1B-C2-001) ve bayat dev-run iletisi (PS1B-C2-002) ----------
+describe("PS-1B c3: keyboard focus stays on a real element after every primary action (never <body>)", () => {
+  // app.js renderRoute ile aynı odak mantığını (captureFocus -> değiştir -> restoreFocus -> yedek) gerçek focus.js ile çalıştıran canlı yeniden çizim.
+  async function mkLive(o: CtxOpts, mode: "projects" | "settings" = "projects") {
+    const c = await mkCtx(o), fm = await load(rend, "focus.js"), settings = await load(rend, "views", "settings.js");
+    const view = mode === "settings" ? settings : projectsView;
+    const redraw = async () => {
+      c.store.cache.clear();
+      const node = await view.render(c.ctx);
+      const saved = fm.captureFocus(c.doc, c.doc.body), had = c.doc.body.contains(c.doc.activeElement) && c.doc.activeElement !== c.doc.body;
+      c.doc.body.replaceChildren(node); fm.restoreFocus(c.doc, c.doc.body, saved);
+      if (had && fm.focusLost(c.doc)) fm.settleFocus(c.doc, c.doc.body, {});
+    };
+    c.ctx.rerender = async () => { c.calls.rerender++; await redraw(); };
+    c.ctx.refreshAll = async () => { c.calls.refresh++; await redraw(); };
+    c.ctx.settleFocus = (opts: any) => fm.settleFocus(c.doc, c.doc.body, opts);
+    await redraw();
+    return {...c, fm, redraw, $: (id: string) => byId(c.doc.body, id)};
+  }
+  const focusId = (doc: D) => doc.activeElement === doc.body ? "<body>" : (doc.activeElement.id || doc.activeElement.tagName);
+  const settleTicks = async () => { for (let i = 0; i < 8; i++) await tick(); };
+  const press = async (n: N | null, ev = "click") => { expect(n).not.toBeNull(); n!.focus(); n!.fire(ev); await settleTicks(); };
+
+  it("focus.js: settleFocus skips disabled targets, prefers keys, then the first list item, then the view title, and never returns body", async () => {
+    const fm = await load(rend, "focus.js"), doc = new D(), main = doc.createElement("div");
+    const mk = (tag: string, id: string, extra: Record<string, string> = {}) => { const n = doc.createElement(tag); n.attrs.set("id", id); Object.assign(n.dataset, extra); return n; };
+    const title = mk("h1", "view-title"), off = mk("button", "off"), first = mk("button", "first", {focusFirst: "1"}), on = mk("button", "on");
+    off.disabled = true; main.append(title, off, first, on); doc.body.append(main);
+    expect(fm.focusLost(doc)).toBe(true);
+    expect(fm.settleFocus(doc, main, {keys: ["id:off", "id:on"]})).toBe(on); // devre dışı atlanır
+    doc.focused = null; expect(fm.settleFocus(doc, main, {keys: ["id:gone"]})).toBe(first); // ilk liste öğesi
+    first.disabled = true; doc.focused = null; expect(fm.settleFocus(doc, main, {})).toBe(title); // başlık
+    expect(fm.restoreFocus(doc, main, "id:off")).toBe(false);
+    doc.focused = on; expect(fm.settleFocus(doc, main, {keys: ["id:first"]})).toBe(on); // canlı odak korunur
+    expect(doc.activeElement).not.toBe(doc.body);
+    off.disabled = false; doc.focused = off; off.disabled = true; expect(fm.focusLost(doc)).toBe(true); // devre dışı kalan odaklı öğe odağı kaybeder
+  });
+  it("wizard: failed validation and success each leave focus on the status result (not body); the create-open button leads to the workspace title", async () => {
+    const {doc, $} = await mkLive({get: projectsGet(), post: () => ({status: 201, body: {project: {projectId: PID, name: "Yeni"}}})});
+    $("studio-name")!.focus();
+    $("studio-wizard-form")!.fire("submit"); await settleTicks();
+    expect(focusId(doc)).toBe("studio-wizard-status"); // doğrulama hatası
+    $("studio-name")!.value = "Yeni"; $("studio-name")!.fire("input");
+    $("studio-wizard-submit")!.focus();
+    $("studio-wizard-form")!.fire("submit"); await settleTicks();
+    expect(focusId(doc)).toBe("studio-wizard-status");
+    expect(text($("studio-wizard-status")!)).toContain("Yeni");
+    await press($("studio-open-created"));
+    expect(st.studio.projectId).toBe(PID);
+    expect(focusId(doc)).toBe("view-title"); // tıklanan düğme kalktı; başlığa taşındı
+  });
+  it("wizard: a server error result also lands focus on the status region", async () => {
+    const {doc, $} = await mkLive({get: projectsGet(), post: () => ({status: 503, body: {error: "WORKOS_UNAVAILABLE"}})});
+    $("studio-name")!.value = "A"; $("studio-name")!.fire("input");
+    $("studio-wizard-submit")!.focus();
+    $("studio-wizard-form")!.fire("submit"); await settleTicks();
+    expect(forms.drafts.status["studio-wizard"].key).toBe("post.err.503");
+    expect(focusId(doc)).toBe("studio-wizard-status");
+  });
+  it("import: pick (success, cancel, no bridge), kind switch and submit never drop focus to body", async () => {
+    let cancel = false;
+    const native = {pickImportPath: async (kind: string) => cancel ? {cancelled: true} : {cancelled: false, path: kind === "zip" ? "C:\\Projeler\\app.zip" : "C:\\Projeler\\app", kind}};
+    const {doc, $} = await mkLive({get: projectsGet(), post: () => ({status: 202, body: {}}), native});
+    await press($("studio-import-pick"));
+    expect(focusId(doc)).toBe("studio-import-pick");
+    cancel = true; await press($("studio-import-pick"));
+    expect(focusId(doc)).toBe("studio-import-pick");
+    const kind = $("studio-import-kind")!; kind.focus(); kind.value = "zip"; kind.fire("change"); await settleTicks();
+    expect(focusId(doc)).toBe("studio-import-kind");
+    cancel = false; await press($("studio-import-pick"));
+    expect(text($("studio-import-path")!)).toContain("Projeler");
+    $("studio-import-submit")!.focus(); $("studio-import-form")!.fire("submit"); await settleTicks();
+    expect(focusId(doc)).toBe("studio-import-status");
+    expect($("studio-import-submit")!.disabled).toBe(true); // sıfırlanınca devre dışı; yine de odak gövdede değil
+    const none = await mkLive({get: projectsGet()});
+    await press(none.$("studio-import-pick"));
+    expect(focusId(none.doc)).toBe("studio-import-status");
+  });
+  it("dev-run: start/stop/restart/preview and a declined confirmation keep focus on the control, or on the result when the control becomes disabled", async () => {
+    let status = "STOPPED"; const opened: string[] = [];
+    const getFn = (p: string) => p === `/v1/projects/${PID}/devrun` ? runBody({status, pid: status === "STOPPED" ? null : 9, preview: status === "RUNNING" ? {url: "http://127.0.0.1:5173/", state: "AVAILABLE"} : {url: null, state: "UNAVAILABLE"}}) : projectsGet()(p);
+    let yes = false;
+    st.openProject(PID, "run");
+    const {doc, $} = await mkLive({get: getFn, post: p => { if (p.endsWith("/start")) status = "RUNNING"; if (p.endsWith("/stop")) status = "STOPPED"; if (p.endsWith("/restart")) status = "RUNNING"; return {status: 202, body: {}}; }, confirm: () => yes, native: {openPreview: async (id: string) => { opened.push(id); return {opened: true}; }}});
+    await press($("studio-run-start")); // onay reddedildi
+    expect(focusId(doc)).toBe("studio-run-start");
+    expect(text($("studio-devrun-status")!)).toContain("onaylanmad");
+    yes = true;
+    await press($("studio-run-start")); // başlat -> düğme devre dışı kalır
+    expect($("studio-run-start")!.disabled).toBe(true);
+    expect(focusId(doc)).toBe("studio-devrun-status");
+    await press($("studio-run-preview"));
+    expect(opened).toEqual([PID]);
+    expect(focusId(doc)).toBe("studio-run-preview");
+    await press($("studio-run-restart"));
+    expect(focusId(doc)).toBe("studio-run-restart"); // hâlâ etkin
+    await press($("studio-run-stop")); // durdur -> düğme devre dışı kalır
+    expect($("studio-run-stop")!.disabled).toBe(true);
+    expect(focusId(doc)).toBe("studio-devrun-status");
+  });
+  it("tabs: click and arrow keys keep focus on the active tab through the rebuild", async () => {
+    st.openProject(PID, "overview");
+    const L = await mkLive({get: projectsGet()});
+    await press(L.$("studio-tab-run"));
+    expect(focusId(L.doc)).toBe("studio-tab-run");
+    L.$("studio-tab-run")!.focus(); L.$("studio-tab-run")!.fire("keydown", {key: "ArrowRight"}); await settleTicks();
+    expect(focusId(L.doc)).toBe("studio-tab-files");
+    L.$("studio-tab-files")!.fire("keydown", {key: "End"}); await settleTicks();
+    expect(focusId(L.doc)).toBe("studio-tab-delivery");
+  });
+  it("files: opening a folder moves focus into the new list, up returns to the folder, opening a file keeps its button", async () => {
+    const g = projectsGet({[`/v1/projects/${PID}/files`]: {entries: [{name: "src", type: "dir"}, {name: "README.md", type: "file", size: 12}]},
+      [`/v1/projects/${PID}/files?path=src`]: {entries: [{name: "index.js", type: "file", size: 20}]},
+      [`/v1/projects/${PID}/file?path=${enc("src/index.js")}`]: {content: "console.log(1)", size: 20}});
+    st.openProject(PID, "files");
+    const {doc, $} = await mkLive({get: g});
+    await press($("fe-src"));
+    expect(st.studio.dir).toBe("src");
+    expect(focusId(doc)).toBe("fe-src/index.js"); // yeni listenin ilk öğesi
+    await press($("fe-src/index.js"));
+    expect(focusId(doc)).toBe("fe-src/index.js");
+    expect(byId(doc.body, "studio-file-view")).not.toBeNull();
+    await press($("studio-files-up"));
+    expect(st.studio.dir).toBe("");
+    expect(focusId(doc)).toBe("fe-src");
+  });
+  it("changes, delivery (export submit, validation error, show in folder) and back-to-list never leave focus on body", async () => {
+    const g = projectsGet({[`/v1/projects/${PID}/git/log?limit=30`]: {commits: [{hash: HASH, subject: "ikinci", author: "A", date: "2026-10-15T00:00:00Z"}, {hash: "abcdef0123456789abcdef0123456789abcdef01", subject: "ilk"}]},
+      [`/v1/projects/${PID}/git/diff?from=abcdef0123456789abcdef0123456789abcdef01&to=${HASH}`]: {diff: "@@ -1 +1 @@\n-a\n+b", files: [{path: "x", additions: 1, deletions: 1}]},
+      [`/v1/projects/${PID}/exports`]: {exports: [{exportId: EXP, createdAt: "2026-10-15T00:00:00Z", commit: HASH, sizeBytes: 4096, status: "COMPLETE"}]}});
+    st.openProject(PID, "changes");
+    const L = await mkLive({get: g, post: () => ({status: 201, body: {export: {exportId: EXP}}}), native: {showExport: async () => ({shown: true})}});
+    await press(L.$("studio-diff-show"));
+    expect(byId(L.doc.body, "studio-diff-view")).not.toBeNull();
+    expect(focusId(L.doc)).toBe("studio-diff-show");
+    await press(L.$("studio-tab-delivery"));
+    st.studio.commit = "main"; await L.redraw();
+    L.$("studio-export-submit")!.focus(); L.$("studio-export-form")!.fire("submit"); await settleTicks();
+    expect(forms.drafts.status["studio-export"].errors.commit).toBe("studio.err.commit");
+    expect(focusId(L.doc)).toBe("studio-export-status");
+    st.studio.commit = ""; await L.redraw();
+    L.$("studio-export-submit")!.focus(); L.$("studio-export-form")!.fire("submit"); await settleTicks();
+    expect(forms.drafts.status["studio-export"].key).toBe("studio.export.done");
+    expect(focusId(L.doc)).toBe("studio-export-status");
+    await press(L.$(`ex-show-${EXP}`));
+    expect(forms.drafts.status["studio-export"].key).toBe("studio.export.shown");
+    expect(focusId(L.doc)).toBe("studio-export-status");
+    await press(L.$("studio-back"));
+    expect(st.studio.projectId).toBeNull();
+    expect(focusId(L.doc)).toBe(`open-${PID}`); // geri: proje listesindeki kendi "Aç" düğmesi
+    await press(L.$(`open-${PID}`));
+    expect(st.studio.projectId).toBe(PID);
+    expect(focusId(L.doc)).toBe("view-title");
+  });
+  it("executors: declined and accepted enable leave focus on the result region (the enable button disappears when READY)", async () => {
+    let state = "NOT_CONFIGURED", yes = false;
+    const L = await mkLive({get: p => p === "/v1/system/executors" ? {executors: [{id: "LOCAL_CLAUDE", state}]} : undefined, post: () => { state = "READY"; return {status: 200, body: {}}; }, confirm: () => yes}, "settings");
+    await press(L.$("exec-enable"));
+    expect(focusId(L.doc)).toBe("executors-status");
+    yes = true; await press(L.$("exec-enable"));
+    expect(L.$("exec-enable")).toBeNull();
+    expect(focusId(L.doc)).toBe("executors-status");
+  });
+  it("app.js wires the same focus.js mechanism: lost-focus safety net after rebuild, ctx.settleFocus, and the confirm dialog returns focus to its invoker", () => {
+    const app = code(read(rend, "app.js"));
+    expect(app).toContain("captureFocus(doc,main)");
+    expect(app).toContain("restoreFocus(doc,main,saved)");
+    expect(app).toContain("if(hadFocus&&focusLost(doc))settleFocus(doc,main,{})");
+    expect(app).toContain("settleFocus:opts=>settleFocus(doc,main,opts)");
+    expect(app).toContain("invoker=active&&active!==doc.body?active:null");
+    expect(app).toContain("invoker.focus()");
+    for (const f of ["studio-wizard.js", "studio-workspace.js", "executors-panel.js", "projects.js", "work.js"]) expect(code(read(rend, "views", f)), f).not.toContain("focusStatus(");
+  });
+});
+
+describe("PS-1B c3: a dev-run action message does not outlive the state it described (PS1B-C2-002)", () => {
+  it("clears the 'accepted' message when the polled dev-run state changes, and when the tab is rebuilt under a different state", async () => {
+    vi.useFakeTimers();
+    let status = "STOPPED";
+    const getFn = (p: string) => p === `/v1/projects/${PID}/devrun` ? runBody({status, pid: status === "STOPPED" ? null : 9, preview: {url: null, state: "UNAVAILABLE"}}) : projectsGet()(p);
+    const {root} = await openWs({get: getFn, post: p => { if (p.endsWith("/start")) status = "STARTING"; return {status: 202, body: {}}; }, confirm: () => true}, "run");
+    byId(root, "studio-run-start")!.fire("click");
+    await vi.advanceTimersByTimeAsync(10);
+    expect(text(byId(root, "studio-run-state")!)).toContain("Başlıyor");
+    expect(text(byId(root, "studio-devrun-status")!)).toContain("Başlatma isteği kabul edildi"); // sonuç yansıtıldıktan sonra görünür
+    expect(forms.drafts.status["studio-devrun"].forState).toBe("STARTING");
+    await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS + 10); // durum değişmedi -> ileti kalır
+    expect(text(byId(root, "studio-devrun-status")!)).toContain("kabul edildi");
+    status = "RUNNING";
+    await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS + 10);
+    expect(text(byId(root, "studio-run-state")!)).toContain("Çalışıyor");
+    expect(text(byId(root, "studio-devrun-status")!)).not.toContain("kabul edildi"); // bayat ileti silindi
+    expect(forms.drafts.status["studio-devrun"]).toBeUndefined();
+    // stop kabul edildi (STOPPED); sonra durum dışarıdan değişti; sekme yeniden kurulunca eski ileti gösterilmez
+    status = "RUNNING";
+    const again = await mkCtx({get: getFn, post: p => { if (p.endsWith("/stop")) status = "STOPPED"; return {status: 202, body: {}}; }, confirm: () => true});
+    st.openProject(PID, "run");
+    const r2 = mount(again.doc, await projectsView.render(again.ctx));
+    byId(r2, "studio-run-stop")!.fire("click"); await vi.advanceTimersByTimeAsync(10);
+    expect(text(byId(r2, "studio-devrun-status")!)).toContain("Durdurma isteği kabul edildi");
+    status = "STARTING"; // dışarıdan başka bir başlatma
+    workspace.stopRunPolling();
+    const r3 = mount(again.doc, await projectsView.render(again.ctx));
+    expect(text(byId(r3, "studio-run-state")!)).toContain("Başlıyor");
+    expect(text(byId(r3, "studio-devrun-status")!)).not.toContain("Durdurma isteği kabul edildi");
   });
 });

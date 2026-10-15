@@ -5,7 +5,7 @@ import {createApi} from "./api.js";
 import {createShell,PRINCIPAL} from "./shell.js";
 import {routeById,routeFromHash} from "./routes.js";
 import {h,statusLabel} from "./components.js";
-import {captureFocus,restoreFocus,isInteractive} from "./focus.js";
+import {captureFocus,restoreFocus,isInteractive,focusLost,settleFocus} from "./focus.js";
 import * as home from "./views/home.js";
 import * as projects from "./views/projects.js";
 import * as work from "./views/work.js";
@@ -34,6 +34,7 @@ const ctx={doc,i18n,store,api,principal:PRINCIPAL,t:(k,v)=>i18n.t(k,v),
   renderAttention,
   rerender(){return renderRoute({force:true})},
   confirm:confirmAction,
+  settleFocus:opts=>settleFocus(doc,main,opts),
   // //TR: PS-1B: renderer'ın yerel yetenekleri yalnız üç dar ana-süreç çağrısıdır; hiçbiri yol, URL veya komut kabul etmez (yalnız tür ve kimlik), çözümleme ana süreçte yapılır.
   native:{
     pickImportPath:kind=>typeof window.uasco?.pickImportPath==="function"?window.uasco.pickImportPath(kind):Promise.reject(new Error("BRIDGE_UNAVAILABLE")),
@@ -50,11 +51,13 @@ function confirmAction({title,body,action,target,confirmLabel}){
     const set=(id,v)=>{const n=doc.getElementById(id);if(n)n.textContent=String(v??"")};
     set("confirmDialogTitle",title);set("confirmDialogDesc",body);set("confirmAction",action);set("confirmTarget",target);set("confirmOk",confirmLabel??ctx.t("confirm.ok"));
     const ok=doc.getElementById("confirmOk"),cancel=doc.getElementById("confirmCancel");
-    let done=false;
+    let done=false;const active=doc.activeElement,invoker=active&&active!==doc.body?active:null;
     const finish=value=>{
       if(done)return;done=true;
       ok.removeEventListener("click",onOk);cancel.removeEventListener("click",onCancel);d.removeEventListener("cancel",onEsc);d.removeEventListener("keydown",onKey);
       if(typeof d.close==="function"){if(d.open)d.close()}else d.removeAttribute("open");
+      // Pencere kapanınca odak çağıran denetime döner (hâlâ bağlı ve etkinse); değilse çağıran eylem odağı yerleştirir.
+      if(invoker&&invoker.isConnected!==false&&invoker.disabled!==true&&typeof invoker.focus==="function")invoker.focus();
       resolve(value);
     };
     const onOk=()=>finish(true),onCancel=()=>finish(false),onEsc=e=>{e.preventDefault();finish(false)},onKey=e=>{if(e.key==="Escape"){e.preventDefault();finish(false)}};
@@ -89,8 +92,10 @@ async function renderRoute({focus=false,force=false}={}){
   try{node=await view.render(ctx,route)}catch{node=h(doc,"p",{class:"note note-error",role:"alert",text:ctx.t("state.ERROR")})}
   if(token!==renderToken||epoch!==store.epoch)return;
   if(sameRoute&&!force&&!focus&&main.contains(doc.activeElement)&&isInteractive(doc.activeElement))return;
-  const saved=focus?null:captureFocus(doc,main);
+  const saved=focus?null:captureFocus(doc,main),hadFocus=!focus&&main.contains(doc.activeElement)&&doc.activeElement!==main;
   main.replaceChildren(node);main.removeAttribute("aria-busy");shell.renderNav();restoreFocus(doc,main,saved);
+  // Odak ana görünümdeyken yeniden kurulum onu gövdeye düşürdüyse (öğe kalktı veya devre dışı kaldı) kararlı yedeğe (ilk liste öğesi, sonra görünüm başlığı) yerleştirilir.
+  if(hadFocus&&focusLost(doc))settleFocus(doc,main,{});
   if(focus){const title=node.querySelector?.("#view-title");if(title)title.focus();shell.announce(ctx.t("route.announce",{title:ctx.t(`area.${route.id}.title`)}))}
 }
 

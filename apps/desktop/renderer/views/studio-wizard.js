@@ -1,18 +1,20 @@
 // //TR: Bu görünüm parçası Project Studio'nun "Yeni Proje" sihirbazı ve "İçe Aktar" panelidir: şablon (boş dahil), ad, tür/teknoloji/hedef işletim sistemi, kabul kriterleri, bütçe ve dev/test komutları (argv listesi) project-core kurucusuyla doğrulanır, her gönderim için idempotency anahtarı üretilir; içe aktarma yolu renderer'a yazdırılmaz, yalnız ana süreçteki yerel dosya diyaloğundan dönen yol gösterilir ve geri gönderilir. Hiçbir otomatik gönderim yoktur.
 import {h} from "../components.js";
 import {buildWizardRequest,buildImportRequest,TEMPLATES,TARGET_OS,IMPORT_KINDS} from "../project-core.js";
-import {drafts,field,listEditor,statusBlock,setStatus,recordPost,focusStatus} from "../forms.js";
+import {drafts,field,listEditor,statusBlock,setStatus,recordPost,focusResult,settle} from "../forms.js";
 import {describePostResult} from "../work-core.js";
 import {studio,wizard,importDraft,studioTrackers,studioUi,resetWizard,resetImport,openProject} from "../studio-state.js";
 
 export const WIZARD_FORM="studio-wizard";
 export const IMPORT_FORM="studio-import";
+// Odak yedekleri (focusKey biçimi): eylemden sonra aynı denetim varsa o, yoksa sonuç/başlık öğesi.
+const WIZARD_KEYS=["id:studio-wizard-submit","id:studio-wizard-t"],IMPORT_KEYS=["id:studio-import-pick","id:studio-import-submit","id:studio-import-t"];
 const wizardInput=()=>({name:wizard.name,template:wizard.template,projectType:wizard.projectType,techStack:wizard.techStack,targetOS:wizard.targetOS,acceptanceCriteria:wizard.acceptanceCriteria,maxRuns:wizard.maxRuns,maxTokens:wizard.maxTokens,devCommand:wizard.devCommand,testCommand:wizard.testCommand});
 
 /** Sihirbazı doğrular; geçerliyse idempotency anahtarıyla POST eder (yalnız kullanıcı gönderimi çağırır). */
 export async function submitWizard(ctx){
   const check=buildWizardRequest(wizardInput());
-  if(!check.ok){setStatus(WIZARD_FORM,{ok:false,errors:check.errors});await ctx.rerender();focusStatus(ctx.doc,WIZARD_FORM);return {ok:false,validation:true}}
+  if(!check.ok){setStatus(WIZARD_FORM,{ok:false,errors:check.errors});await ctx.rerender();focusResult(ctx,WIZARD_FORM,WIZARD_KEYS);return {ok:false,validation:true}}
   const key=studioTrackers.wizard.keyFor(check.body),req=buildWizardRequest(wizardInput(),{key});
   drafts.busy[WIZARD_FORM]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[WIZARD_FORM]=false}
@@ -22,7 +24,7 @@ export async function submitWizard(ctx){
     if(typeof id==="string"&&/^prj_[0-9a-f]{24}$/.test(id)){studio.lastCreated={projectId:id,name};importDraft.projectId=id}
     resetWizard();
   }
-  await ctx.refreshAll({force:true});focusStatus(ctx.doc,WIZARD_FORM);return {ok};
+  await ctx.refreshAll({force:true});focusResult(ctx,WIZARD_FORM,WIZARD_KEYS);return {ok};
 }
 function choiceGroup(ctx,{id,legendKey,hintKey,type,options,isChecked,onChange,errorKey}){
   const doc=ctx.doc,describedBy=[hintKey?`${id}-hint`:null,errorKey?`${id}-err`:null].filter(Boolean).join(" ");
@@ -55,7 +57,7 @@ export function wizardPanel(ctx){
     listEditor(ctx,{id:"studio-test",labelKey:"form.testCommand",itemLabelKey:"form.argvToken",addKey:"form.argvAdd",removeKey:"form.argvRemove",items:d.testCommand,errorKey:errs.testCommand,hintKey:"form.testCommandHint",preview:true}),
     statusBlock(ctx,WIZARD_FORM),
     studio.lastCreated?h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",id:"studio-open-created",dataset:{focusKey:"studio-open-created"},text:ctx.t("studio.wizard.openCreated",{name:studio.lastCreated.name}),
-      on:{click:()=>{const id=studio.lastCreated.projectId;studio.lastCreated=null;ctx.selectProject(id);openProject(id);ctx.rerender()}}})):null,
+      on:{click:async()=>{const id=studio.lastCreated.projectId;studio.lastCreated=null;ctx.selectProject(id);openProject(id);await ctx.rerender();settle(ctx,["id:view-title"])}}})):null,
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"submit",class:"btn btn-primary",id:"studio-wizard-submit",dataset:{focusKey:"studio-wizard-submit"},disabled:drafts.busy[WIZARD_FORM]===true,text:ctx.t("studio.wizard.submit")})));
   const details=h(doc,"details",{class:"panel form-panel",id:"studio-wizard",open:studioUi.wizardOpen||Boolean(st)},
     h(doc,"summary",{id:"studio-wizard-t",dataset:{focusKey:"studio-wizard-summary"},text:ctx.t("studio.wizard.title")}),
@@ -68,21 +70,21 @@ export function wizardPanel(ctx){
 /** Ana süreçteki yerel dosya diyaloğunu açar; renderer yalnız tür verir, yol ana süreçten gelir. */
 export async function pickImportPath(ctx){
   const native=ctx.native;
-  if(!native||typeof native.pickImportPath!=="function"){setStatus(IMPORT_FORM,{ok:false,key:"studio.import.noDialog",vars:{},errors:null});await ctx.rerender();return {ok:false}}
-  let r;try{r=await native.pickImportPath(importDraft.kind)}catch{setStatus(IMPORT_FORM,{ok:false,key:"studio.import.dialogFailed",vars:{},errors:null});await ctx.rerender();return {ok:false}}
-  if(!r||r.cancelled===true||typeof r.path!=="string"||r.kind!==importDraft.kind)return {ok:false,cancelled:true};
+  if(!native||typeof native.pickImportPath!=="function"){setStatus(IMPORT_FORM,{ok:false,key:"studio.import.noDialog",vars:{},errors:null});await ctx.rerender();focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:false}}
+  let r;try{r=await native.pickImportPath(importDraft.kind)}catch{setStatus(IMPORT_FORM,{ok:false,key:"studio.import.dialogFailed",vars:{},errors:null});await ctx.rerender();focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:false}}
+  if(!r||r.cancelled===true||typeof r.path!=="string"||r.kind!==importDraft.kind){settle(ctx,IMPORT_KEYS);return {ok:false,cancelled:true}}
   importDraft.path=r.path;importDraft.pickedFor=importDraft.kind;drafts.status[IMPORT_FORM]=undefined;
-  await ctx.rerender();return {ok:true};
+  await ctx.rerender();settle(ctx,IMPORT_KEYS);return {ok:true};
 }
 export async function submitImport(ctx){
   const req=buildImportRequest({projectId:importDraft.projectId,kind:importDraft.kind,path:importDraft.path});
-  if(!req.ok){setStatus(IMPORT_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusStatus(ctx.doc,IMPORT_FORM);return {ok:false,validation:true}}
+  if(!req.ok){setStatus(IMPORT_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:false,validation:true}}
   drafts.busy[IMPORT_FORM]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[IMPORT_FORM]=false}
   const d=describePostResult(res);
   setStatus(IMPORT_FORM,{ok:d.ok,key:d.ok?"studio.import.done":d.key,vars:d.ok?{}:d.vars,errors:null});
   if(d.ok)resetImport();
-  await ctx.refreshAll({force:true});focusStatus(ctx.doc,IMPORT_FORM);return {ok:d.ok,status:res?.status??null};
+  await ctx.refreshAll({force:true});focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:d.ok,status:res?.status??null};
 }
 /** projects: seçilebilir proje listesi; fixedId verilirse hedef proje sabittir (çalışma alanı içinden). */
 export function importPanel(ctx,{projects,fixedId=null}){
@@ -92,7 +94,7 @@ export function importPanel(ctx,{projects,fixedId=null}){
   if(d.pickedFor!==d.kind){d.path="";d.pickedFor=null}
   const form=h(doc,"form",{id:"studio-import-form",novalidate:true,"aria-labelledby":"studio-import-t",on:{submit:e=>{e.preventDefault();if(!drafts.busy[IMPORT_FORM])submitImport(ctx)}}},
     fixedId?null:field(ctx,{id:"studio-import-project",labelKey:"studio.import.project",value:d.projectId,onInput:v=>{d.projectId=v},errorKey:errs.projectId,required:true,options:projects.length?projects.map(p=>({value:p.projectId,label:p.name})):[{value:"",label:ctx.t("work.form.noProjects")}]}),
-    field(ctx,{id:"studio-import-kind",labelKey:"studio.import.kind",value:d.kind,onInput:v=>{d.kind=IMPORT_KINDS.includes(v)?v:"git";d.path="";d.pickedFor=null;ctx.rerender()},errorKey:errs.importKind,required:true,options:IMPORT_KINDS.map(k=>({value:k,label:ctx.t(`studio.import.kind.${k}`)}))}),
+    field(ctx,{id:"studio-import-kind",labelKey:"studio.import.kind",value:d.kind,onInput:v=>{d.kind=IMPORT_KINDS.includes(v)?v:"git";d.path="";d.pickedFor=null;Promise.resolve(ctx.rerender()).then(()=>settle(ctx,["id:studio-import-kind"]))},errorKey:errs.importKind,required:true,options:IMPORT_KINDS.map(k=>({value:k,label:ctx.t(`studio.import.kind.${k}`)}))}),
     h(doc,"div",{class:"field"},
       h(doc,"span",{class:"field-label",id:"studio-import-path-l",text:ctx.t("studio.import.path")+" *"}),
       h(doc,"p",{class:"mono path-chosen",id:"studio-import-path","aria-labelledby":"studio-import-path-l","aria-live":"polite",text:d.path||ctx.t("studio.import.noneChosen")}),
