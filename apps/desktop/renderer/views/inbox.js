@@ -3,24 +3,28 @@ import {h,panel,stateNote,emptyNote,chip,badge,statusPill,statusLabel} from "../
 import {deriveInbox} from "../work-core.js";
 import {drafts,selection,field,statusBlock} from "../forms.js";
 import {performTransition,actionStatusId} from "../work-actions.js";
-import {notVerifiedBadge,runNotVerified,completionAckBlock} from "../m1a.js";
+import {notVerifiedBadge,runNotVerified} from "../m1a.js";
+import {canOfferComplete} from "../delivery-core.js";
+import {completeNotOffered} from "./work.js";
 
 function actionLabel(ctx,a){
   if(a.type==="accept")return ctx.t("inbox.action.accept");
   if(a.type==="retry")return ctx.t("inbox.action.retry",{to:statusLabel(ctx,a.to)});
   return ctx.t("inbox.action.reject",{to:statusLabel(ctx,a.to)});
 }
-// M1a: teslim kararı kartı koşunun test yürütme kanıtına göre NOT_VERIFIED rozetini ve COMPLETE için sunucu completionRequirements'a bağlı onay kutularını gösterir.
+// M1a c2: teslim kararı kartı koşunun test yürütme kanıtına göre NOT_VERIFIED rozetini gösterir; "kabul" (COMPLETE) yalnız PRODUCT_VERIFIED koşuda sunulur,
+// aksi halde iki eksen ve kaynak tesliminin Proje Stüdyosu > Teslim'de olduğu açıklaması gösterilir (onay kutusu ile COMPLETE yoktur).
 function decisionCard(ctx,it,run){
-  const doc=ctx.doc,sid=actionStatusId(it.missionId),busy=drafts.busy[sid]===true,rid=`ib-reason-${it.missionId}`,completion=run?.completionRequirements??null;
-  const buttons=it.actions.map(a=>h(doc,"button",{type:"button",class:`btn${a.type==="accept"?" btn-primary":""}`,id:`ib-${a.to}-${it.missionId}`,dataset:{focusKey:`ib-${a.to}-${it.missionId}`,action:a.type,to:a.to},disabled:busy,
-    on:{click:()=>performTransition(ctx,{missionId:it.missionId,title:it.title,from:it.status,to:a.to,reason:drafts.reasons[it.missionId]??"",statusId:sid,...(a.to==="COMPLETE"&&completion?{completion}:{})})},text:actionLabel(ctx,a)}));
+  const doc=ctx.doc,sid=actionStatusId(it.missionId),busy=drafts.busy[sid]===true,rid=`ib-reason-${it.missionId}`;
+  const actions=it.actions.filter(a=>a.to!=="COMPLETE"||canOfferComplete(run)),hidden=actions.length!==it.actions.length;
+  const buttons=actions.map(a=>h(doc,"button",{type:"button",class:`btn${a.type==="accept"?" btn-primary":""}`,id:`ib-${a.to}-${it.missionId}`,dataset:{focusKey:`ib-${a.to}-${it.missionId}`,action:a.type,to:a.to},disabled:busy,
+    on:{click:()=>performTransition(ctx,{missionId:it.missionId,title:it.title,from:it.status,to:a.to,reason:drafts.reasons[it.missionId]??"",statusId:sid})},text:actionLabel(ctx,a)}));
   return h(doc,"li",{class:"card decision-card",dataset:{decision:it.kind,decisionMission:it.missionId}},
     h(doc,"h3",{text:it.title}),
     h(doc,"p",{class:"panel-meta"},statusPill(ctx,it.status),badge(ctx,it.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:it.missionId}),it.kind==="DELIVERY_DECISION"&&runNotVerified(run)?notVerifiedBadge(ctx,"delivery"):null),
     h(doc,"p",{class:"note",text:ctx.t(it.kind==="DELIVERY_DECISION"?"inbox.kind.delivery":"inbox.kind.attention",{run:it.runId??""})}),
     field(ctx,{id:rid,labelKey:"work.transition.reason",value:drafts.reasons[it.missionId]??"",onInput:v=>{drafts.reasons[it.missionId]=v},hintKey:"inbox.reasonHint"}),
-    it.actions.some(a=>a.to==="COMPLETE")?completionAckBlock(ctx,it.missionId,completion):null,
+    hidden?completeNotOffered(ctx,run,`ib-complete-na-${it.missionId}`):null,
     h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("inbox.actions",{title:it.title})},buttons,
       h(doc,"button",{type:"button",class:"btn",id:`ib-open-${it.missionId}`,dataset:{focusKey:`ib-open-${it.missionId}`},on:{click:()=>{selection.missionId=it.missionId;ctx.navigate("work")}},text:ctx.t("inbox.open")})),
     statusBlock(ctx,sid));
@@ -44,7 +48,7 @@ export async function render(ctx){
   else approvals=h(doc,"ul",{class:"cards"},a.items.map(x=>h(doc,"li",{class:"card",dataset:{approval:x.missionId}},h(doc,"h3",{text:x.title??x.missionId}),badge(ctx,x.riskLevel??"—","badge-risk"),h(doc,"p",{class:"mono",text:x.missionId}),
     h(doc,"button",{type:"button",class:"btn",dataset:{focusKey:`ap-open-${x.missionId}`},id:`ap-open-${x.missionId}`,on:{click:()=>{selection.missionId=x.missionId;ctx.navigate("work")}},text:ctx.t("inbox.open")}))));
   const legacy=h(doc,"div",{id:"inbox-attention"});ctx.renderAttention(legacy,att);
-  // M1a: teslim kararı bekleyen koşuların ayrıntısı (completionRequirements) yalnız sunucudan okunur.
+  // M1a c2: teslim kararı bekleyen koşuların ayrıntısı (iki eksen + teslim görünümü) yalnız sunucudan okunur.
   const runDetails=new Map();
   if(missions.state==="VERIFIED"&&runs.state==="VERIFIED")await Promise.all(deriveInbox(missions.items,runs.items).filter(it=>it.runId).slice(0,10).map(async it=>{const d=await ctx.api.workRunDetail(it.runId);if(d.state==="VERIFIED"&&d.run)runDetails.set(it.runId,d.run)}));
   return h(doc,"div",{class:"view"},h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.inbox.title")}),

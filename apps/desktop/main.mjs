@@ -38,6 +38,9 @@ const PROJECT_MISSIONS_RE=/^\/v1\/missions\?projectId=prj_[0-9a-f]{24}$/;
 const MISSION_DETAIL_RE=/^\/v1\/missions\/msn_[0-9a-f]{24}$/;
 const WORK_RUN_DETAIL_RE=/^\/v1\/work-runs\/[A-Za-z0-9_-]{6,64}$/;
 const EVIDENCE_DETAIL_RE=/^\/v1\/evidence\/[A-Za-z0-9_-]{6,64}$/;
+// //TR: M1a c2: koşu teslim görünümü (salt-okunur) ve proje bazlı teslim listesi; kimlikler sıkı biçimlidir.
+const DELIVERY_DETAIL_RE=/^\/v1\/work-runs\/run_[0-9a-f]{24}\/delivery$/;
+const DELIVERY_LIST_RE=/^\/v1\/deliveries\?projectId=prj_[0-9a-f]{24}$/;
 const QUERY_RULES={missionId:/^msn_[0-9a-f]{24}$/,runId:/^[A-Za-z0-9_-]{6,64}$/,kind:/^[A-Z][A-Z0-9_]{0,39}$/,cursor:/^[A-Za-z0-9_.=:-]{1,128}$/,limit:/^[1-9][0-9]{0,2}$/};
 function listQueryAllowed(value,base,keys){
   if(!value.startsWith(base+"?"))return false;
@@ -89,7 +92,7 @@ function projectStudioGetAllowed(value){
 function desktopExtraGetPathAllowed(value){
   if(projectStudioGetAllowed(value))return true;
   if(typeof value!=="string"||value.length>400)return false;
-  return EXTRA_GET_ROUTES.has(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"]);
+  return EXTRA_GET_ROUTES.has(value)||DELIVERY_DETAIL_RE.test(value)||DELIVERY_LIST_RE.test(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"]);
 }
 // B4-ALLOWLIST-END
 
@@ -98,7 +101,9 @@ function desktopExtraGetPathAllowed(value){
 const POST_MAX_BODY_BYTES=32768;
 // //TR: PS-1B: Project Studio yazma rotaları da sabittir: proje içe aktarma, geliştirme koşusu başlat/durdur/yeniden başlat, dışa aktarma ve yerel Claude yürütücüsünü etkinleştirme; başka yöntem veya rota yoktur.
 const POST_ROUTE_RES=[/^\/v1\/projects$/,/^\/v1\/missions$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/transition$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/runs$/,
-  /^\/v1\/projects\/prj_[0-9a-f]{24}\/import$/,/^\/v1\/projects\/prj_[0-9a-f]{24}\/devrun\/(?:start|stop|restart)$/,/^\/v1\/projects\/prj_[0-9a-f]{24}\/export$/,/^\/v1\/system\/executors\/local-claude\/enable$/];
+  /^\/v1\/projects\/prj_[0-9a-f]{24}\/import$/,/^\/v1\/projects\/prj_[0-9a-f]{24}\/devrun\/(?:start|stop|restart)$/,/^\/v1\/projects\/prj_[0-9a-f]{24}\/export$/,/^\/v1\/system\/executors\/local-claude\/enable$/,
+  // M1a c2: teslim paketini hazırla ve NOT_VERIFIED kaynak teslimini kabul et; dışa aktarma yalnız ana süreç köprüsündedir (hash ana süreçte yeniden doğrulanır).
+  /^\/v1\/work-runs\/run_[0-9a-f]{24}\/delivery\/(?:prepare|accept)$/];
 function desktopPostPathAllowed(value){
   return typeof value==="string"&&value.length<=128&&POST_ROUTE_RES.some(re=>re.test(value));
 }
@@ -157,6 +162,29 @@ function psResolveExportPath(candidate,exportsRoot,fsMod,pathMod){
 }
 // PS1B-NATIVE-END
 
+// M1A-C2-BEGIN
+// //TR: M1a c2 saf yardımcıları (electron'suz, testle izole değerlendirilir): (1) uygulama kimliği yalnız paketlenmiş ürün adından türetilir: "UASCO Test" TEST varyantıdır (ayrı AppUserModelID,
+// pencere başlığında "UASCO Test"), diğer her ad RELEASE kimliğini (değişmeden) kullanır; (2) teslim artefaktının dışa aktarımı: kayıt biçimi sıkıdır, dosya gerçek yola çözülüp yalnız veri
+// dizinindeki deliveries/<runId>/<hash>.zip ise kabul edilir ve baytların sha256'sı kayıttaki exportArtifactHash ile birebir eşleşmeden hiçbir bayt verilmez.
+const TEST_PRODUCT_NAME="UASCO Test";
+function desktopIdentity(appName){return appName===TEST_PRODUCT_NAME?{variant:"test",appUserModelId:"com.uasco.desktop.test",titleSuffix:` — ${TEST_PRODUCT_NAME}`}:{variant:"release",appUserModelId:"com.uasco.desktop",titleSuffix:""}}
+function windowTitleFor(pageTitle,identity){const t=typeof pageTitle==="string"&&pageTitle?pageTitle:"UASCO";return identity.titleSuffix&&!t.includes(TEST_PRODUCT_NAME)?`${t}${identity.titleSuffix}`:t}
+const DELIVERY_RUN_ID_RE=/^run_[0-9a-f]{24}$/,DELIVERY_HASH_RE=/^[0-9a-f]{64}$/;
+function deliveryExportFileName(rec){return `UASCO-teslim-${rec.runId}-${rec.exportArtifactHash.slice(0,12)}.zip`}
+function deliveryExportCheck(body,runId,deliveriesRoot,fsMod,pathMod,cryptoMod){
+  const rec=body&&typeof body==="object"?body.artifact:null;
+  if(!DELIVERY_RUN_ID_RE.test(String(runId))||!rec||typeof rec!=="object"||rec.runId!==runId||!DELIVERY_HASH_RE.test(String(rec.exportArtifactHash))||rec.artifactPath!==`deliveries/${rec.runId}/${rec.exportArtifactHash}.zip`)return {ok:false,reason:"DELIVERY_RECORD_INVALID"};
+  if(body.sha256!==rec.exportArtifactHash||body.fileState!=="VERIFIED")return {ok:false,reason:"DELIVERY_ARTIFACT_HASH_MISMATCH"};
+  if(typeof deliveriesRoot!=="string"||!pathMod.isAbsolute(deliveriesRoot))return {ok:false,reason:"DELIVERY_PATH_REJECTED"};
+  let real,expected;try{real=fsMod.realpathSync(String(body.path));expected=fsMod.realpathSync(pathMod.join(deliveriesRoot,rec.runId,`${rec.exportArtifactHash}.zip`))}catch{return {ok:false,reason:"DELIVERY_ARTIFACT_MISSING"}}
+  if(real!==expected)return {ok:false,reason:"DELIVERY_PATH_REJECTED"};
+  let bytes;try{bytes=fsMod.readFileSync(real)}catch{return {ok:false,reason:"DELIVERY_ARTIFACT_MISSING"}}
+  const sha=cryptoMod.createHash("sha256").update(bytes).digest("hex");
+  if(sha!==rec.exportArtifactHash)return {ok:false,reason:"DELIVERY_ARTIFACT_HASH_MISMATCH"};
+  return {ok:true,bytes,sha256:sha,fileName:deliveryExportFileName(rec)};
+}
+// M1A-C2-END
+
 
 async function verifyServerIdentity(force=false){
   if(!force&&Date.now()-identityVerifiedAt<2000)return true;
@@ -210,6 +238,19 @@ ipcMain.handle("uasco:show-export",async(event,projectId,exportId)=>{
   const resolved=psResolveExportPath(psExportPathFromBody(body),path.join(dataDirRoot(),"exports"),fs,path);if(!resolved)return {shown:false,reason:"EXPORT_PATH_REJECTED"};
   shell.showItemInFolder(resolved);return {shown:true};
 });
+// //TR: M1a c2 "Teslim paketini dışa aktar": renderer yalnız run kimliği verir. Ana süreç sunucudan kaydı ister (sunucu hash'i yeniden doğrular), dosyayı kendisi yeniden doğrular, kullanıcının seçtiği
+// konuma yazar ve yazılan kopyanın sha256'sını tekrar karşılaştırır; uyuşmazlıkta kopya silinir ve bayt verilmez.
+ipcMain.handle("uasco:export-delivery",async(event,runId)=>{
+  requireTrustedSender(event);if(typeof runId!=="string"||!DELIVERY_RUN_ID_RE.test(runId))throw new Error("INVALID_RUN_ID");
+  let res;try{res=await apiPost(`/v1/work-runs/${runId}/delivery/export`,"{}")}catch{return {exported:false,reason:"DELIVERY_UNAVAILABLE"}}
+  if(res.status!==200)return {exported:false,reason:typeof res.body?.error==="string"?res.body.error:"DELIVERY_UNAVAILABLE"};
+  const chk=deliveryExportCheck(res.body,runId,path.join(dataDirRoot(),"deliveries"),fs,path,crypto);if(!chk.ok)return {exported:false,reason:chk.reason};
+  const r=await dialog.showSaveDialog(controlWindow,{title:"UASCO — Teslim paketini dışa aktar / Export delivery package",defaultPath:chk.fileName,filters:[{name:"ZIP",extensions:["zip"]}]});
+  if(r.canceled||!r.filePath)return {exported:false,reason:"CANCELLED"};
+  try{fs.writeFileSync(r.filePath,chk.bytes);const back=crypto.createHash("sha256").update(fs.readFileSync(r.filePath)).digest("hex");if(back!==chk.sha256){try{fs.rmSync(r.filePath,{force:true})}catch{}return {exported:false,reason:"DELIVERY_ARTIFACT_HASH_MISMATCH"}}}
+  catch{return {exported:false,reason:"DELIVERY_WRITE_FAILED"}}
+  return {exported:true,sha256:chk.sha256,fileName:path.basename(r.filePath),savedTo:r.filePath};
+});
 ipcMain.handle("uasco:api-get",async(event,p)=>{requireTrustedSender(event);if(!desktopGetPathAllowed(p)&&!desktopExtraGetPathAllowed(p))throw new Error("INVALID_API_PATH");if(p==="/health"){await verifyServerIdentity(true);return {status:"HEALTHY",system:"UNIVERSAL-AI-SOFTWARE-COMPANY-OS",serverIdentity:"VERIFIED"}}return api(p)});
 ipcMain.handle("uasco:api-post",async(event,p,body)=>{requireTrustedSender(event);if(!desktopPostPathAllowed(p))throw new Error("INVALID_API_PATH");const prepared=desktopPostBodyCheck(body);if(!prepared.ok)throw new Error(prepared.error);if(!psImportPostAllowed(p,body,importIssued))throw new Error("IMPORT_PATH_NOT_MAIN_RESOLVED");const res=await apiPost(p,prepared.text);if(res.status>=200&&res.status<300&&PS_IMPORT_PATH_RE.test(p))importIssued.delete(body.path);return res});
 ipcMain.handle("uasco:stop",async(event,reason)=>{requireTrustedSender(event);return api("/v1/control/stop",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({reason:String(reason??"Founder requested stop").slice(0,1000)})})});
@@ -220,7 +261,7 @@ ipcMain.handle("uasco:retry-blocked",async(event,packageId)=>{requireTrustedSend
 let backend=null,backendLog=null,backendQuitting=false;
 const singleInstanceOk=!packaged||app.requestSingleInstanceLock();
 if(!singleInstanceOk)app.quit();
-else if(packaged){app.setAppUserModelId("com.uasco.desktop");app.on("second-instance",()=>{if(controlWindow){if(controlWindow.isMinimized())controlWindow.restore();controlWindow.focus()}})}
+else if(packaged){app.setAppUserModelId(desktopIdentity(app.getName()).appUserModelId);app.on("second-instance",()=>{if(controlWindow){if(controlWindow.isMinimized())controlWindow.restore();controlWindow.focus()}})}
 function logBackend(chunk){if(!backendLog)return;let t=String(chunk);if(t.includes(token))t=t.split(token).join("[redacted]");try{backendLog.write(t)}catch{}}
 function openBackendLog(file){try{if(fs.existsSync(file)&&fs.statSync(file).size>5*1024*1024)fs.renameSync(file,file+".1")}catch{}return fs.createWriteStream(file,{flags:"a"})}
 function freeLoopbackPort(){return new Promise((resolve,reject)=>{const s=net.createServer();s.unref();s.on("error",reject);s.listen({host:"127.0.0.1",port:0},()=>{const p=s.address().port;s.close(()=>resolve(p))})})}
@@ -253,6 +294,8 @@ app.whenReady().then(async()=>{
   if(!singleInstanceOk)return;
   const win=new BrowserWindow({width:1500,height:920,webPreferences:{contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true,allowRunningInsecureContent:false,webviewTag:false,devTools:false,navigateOnDragDrop:false,preload:path.join(here,"preload.mjs")}});controlWindow=win;
   win.webContents.session.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));win.webContents.session.setPermissionCheckHandler(()=>false);
+  // M1a c2: TEST varyantının penceresi başlığında her zaman "UASCO Test" taşır (RELEASE başlığı değişmez).
+  const identity=desktopIdentity(app.getName());if(identity.titleSuffix){win.on("page-title-updated",(e,title)=>{e.preventDefault();win.setTitle(windowTitleFor(title,identity))});win.setTitle(windowTitleFor(win.getTitle(),identity))}
   win.webContents.setWindowOpenHandler(()=>({action:"deny"}));win.webContents.on("will-navigate",e=>e.preventDefault());win.webContents.on("will-redirect",e=>e.preventDefault());win.webContents.on("will-attach-webview",e=>e.preventDefault());
   if(process.env.UASCO_SMOKE==="1"){
     win.webContents.once("did-finish-load",async()=>{

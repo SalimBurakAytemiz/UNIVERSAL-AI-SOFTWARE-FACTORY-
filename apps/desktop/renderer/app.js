@@ -39,7 +39,9 @@ const ctx={doc,i18n,store,api,principal:PRINCIPAL,t:(k,v)=>i18n.t(k,v),
   native:{
     pickImportPath:kind=>typeof window.uasco?.pickImportPath==="function"?window.uasco.pickImportPath(kind):Promise.reject(new Error("BRIDGE_UNAVAILABLE")),
     openPreview:projectId=>typeof window.uasco?.openPreview==="function"?window.uasco.openPreview(projectId):Promise.reject(new Error("BRIDGE_UNAVAILABLE")),
-    showExport:(projectId,exportId)=>typeof window.uasco?.showExport==="function"?window.uasco.showExport(projectId,exportId):Promise.reject(new Error("BRIDGE_UNAVAILABLE"))
+    showExport:(projectId,exportId)=>typeof window.uasco?.showExport==="function"?window.uasco.showExport(projectId,exportId):Promise.reject(new Error("BRIDGE_UNAVAILABLE")),
+    // M1a c2: teslim paketi dışa aktarımı (ana süreç hash'i yeniden doğrular).
+    exportDelivery:runId=>typeof window.uasco?.exportDelivery==="function"?window.uasco.exportDelivery(runId):Promise.reject(new Error("BRIDGE_UNAVAILABLE"))
   }
 };
 

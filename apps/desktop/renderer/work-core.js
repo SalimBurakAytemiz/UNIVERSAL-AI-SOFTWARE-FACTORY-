@@ -1,5 +1,6 @@
 // //TR: Bu modül B5 iş ekranlarının saf (DOM'suz) çekirdeğidir: mission durum makinesinin salt-okunur kopyası (core/mission/state-machine.ts ile test eşleşir), yalnız izinli sonraki geçişler, yüksek riskli geçiş onayı, proje/mission/geçiş/koşu istek gövdesi kurucuları (argv dizisi, idempotency anahtarı, doğrulama), POST sonuç sınıflandırması, work-run/evidence eşleyicileri ve Gelen Kutusu türetimi; eksik veri asla uydurulmaz.
 import {MISSING} from "./model.js";
+import {mapDelivery} from "./delivery-core.js";
 
 /** core/mission/state-machine.ts içindeki transitions tablosunun kopyası; tests/v7-b5-work-screens.test.ts eşitliği doğrular. */
 export const MISSION_TRANSITIONS=Object.freeze({
@@ -134,7 +135,7 @@ export function buildMissionRequest(input,{key}={}){
   return result("/v1/missions",body,errors);
 }
 /** Durum geçişi isteği; yalnız durum makinesinin izin verdiği hedefler, yüksek riskli hedeflerde confirmed===true şart.
- *  M1a: acknowledgements yalnız to=COMPLETE ile ve yalnız kesin biçimde ({acknowledgeNotExecuted:true, headSha} / {acknowledgeTestChanges:true, testSurfaceSha256}) gövdeye eklenir. */
+ *  D-M1A-STATE-MODEL-2026-10-15: geçiş gövdesi hiçbir onay alanı taşımaz (COMPLETE yalnız PRODUCT_VERIFIED kanıtıyla olur); onay verilmeye çalışılırsa istek kurulmaz. */
 export function buildTransitionRequest({missionId,from,to,reason,confirmed,acknowledgements}){
   const errors={},r=trim(reason);
   if(!MISSION_ID_RE.test(String(missionId??"")))errors.missionId="err.missionInvalid";
@@ -142,13 +143,8 @@ export function buildTransitionRequest({missionId,from,to,reason,confirmed,ackno
   if(!errors.to&&requiresConfirm(to)&&confirmed!==true)errors.confirm="err.confirmRequired";
   if(reasonRequired(to)&&!r)errors.reason="err.reasonRequired";
   if(r.length>4000)errors.reason="err.reasonLong";
+  if(acknowledgements!==undefined)errors.acknowledgement="err.ackNotForTransition";
   const body={to,reason:r||`${from} -> ${to} (UASCO Desktop)`};
-  const acks=acknowledgements??{},ne=acks.notExecuted,tc=acks.testChanges;
-  if((ne!==undefined||tc!==undefined)&&to!=="COMPLETE")errors.acknowledgement="err.ackOnlyComplete";
-  else{
-    if(ne!==undefined){if(ne&&ne.acknowledgeNotExecuted===true&&/^[0-9a-f]{40}$/.test(String(ne.headSha??"")))body.notExecutedAcknowledgement={acknowledgeNotExecuted:true,headSha:ne.headSha};else errors.acknowledgement="err.ackDataMissing"}
-    if(tc!==undefined){if(tc&&tc.acknowledgeTestChanges===true&&/^[0-9a-f]{64}$/.test(String(tc.testSurfaceSha256??"")))body.acknowledgement={acknowledgeTestChanges:true,testSurfaceSha256:tc.testSurfaceSha256};else errors.acknowledgement="err.ackDataMissing"}
-  }
   return result(`/v1/missions/${missionId}/transition`,body,errors);
 }
 /** Koşu başlatma isteği: mission AUTHORIZED veya PLANNED olmalı. */
@@ -161,9 +157,12 @@ export function buildRunRequest({missionId,status}){
 
 // ---------- POST sonucu ----------
 // //TR: SBX-GATE: SANDBOX_UNAVAILABLE dürüst bir ret nedenidir (doğrulanmış sandbox yok, proje kodu çalıştırılmadı); genel 409 yerine açık ileti gösterilir.
-const KNOWN_409=new Set(["EXECUTOR_NOT_CONFIGURED","SANDBOX_UNAVAILABLE"]);
+// //TR: M1a c2: teslim artefaktı retleri ({error:<kod>}) da açık iletiyle gösterilir (NO_GENERATED_SOURCE, hash uyuşmazlığı vb.).
+const KNOWN_409=new Set(["EXECUTOR_NOT_CONFIGURED","SANDBOX_UNAVAILABLE","NO_GENERATED_SOURCE","SOURCE_GENERATION_NOT_COMPLETE","DELIVERY_ALREADY_ACCEPTED","DELIVERY_ARTIFACT_HASH_MISMATCH","DELIVERY_ARTIFACT_MISSING","DELIVERY_ARTIFACT_NOT_PREPARED","DELIVERY_SOURCE_UNAVAILABLE","EXPORT_BLOCKED_SECRET"]);
 // //TR: M1a + FX-1: COMPLETE kanıt kapısı reddi {error:"WORKOS_CONFLICT", reason:<sabit kod>} olarak gelir; onay gerektiren nedenler açık iletiyle gösterilir.
-const KNOWN_COMPLETION_409=new Set(["COMPLETION_NOT_EXECUTED_REQUIRES_ACKNOWLEDGEMENT","COMPLETION_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT","COMPLETION_FUNCTIONAL_ACCEPTANCE_BLOCKED"]);
+// D-M1A-STATE-MODEL-2026-10-15: COMPLETE PRODUCT_VERIFIED ister; kaynak teslimi kabul kapısı da {error:"WORKOS_CONFLICT", reason} ile reddeder.
+const KNOWN_COMPLETION_409=new Set(["COMPLETION_PRODUCT_NOT_VERIFIED","COMPLETION_FUNCTIONAL_ACCEPTANCE_BLOCKED","SOURCE_GENERATION_NOT_COMPLETE","NO_GENERATED_SOURCE","DELIVERY_ACCEPTANCE_MISMATCH","DELIVERY_ALREADY_ACCEPTED",
+  "DELIVERY_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT","DELIVERY_ARTIFACT_NOT_PREPARED","DELIVERY_NOT_LATEST_RUN","DELIVERY_MISSION_NOT_REPORTING","DELIVERY_RUN_NOT_AWAITING_APPROVAL","DELIVERY_PRODUCT_VERIFIED_USE_COMPLETE"]);
 /** Köprü POST yanıtını {ok, key, vars} olarak sınıflar; key bir sözlük anahtarıdır (post.*). */
 export function describePostResult(res){
   if(!res)return {ok:false,key:"post.err.generic",vars:{status:MISSING}};
@@ -257,20 +256,11 @@ export function mapWorkRunDetail(raw){
   if(!run)return {state:"ERROR",run:null};
   const o=isObj(raw?.outcomes)?raw.outcomes:null;
   run.outcomes=o?{functionalAcceptance:statusStr(o.functionalAcceptance),completionMode:statusStr(o.completionMode)}:null;
-  run.completionRequirements=mapCompletionRequirements(raw?.completionRequirements);
+  // M1a c2: iki ayrı eksen ve teslim görünümü yalnız sunucudan okunur; bilinmeyen değer asla PRODUCT_VERIFIED sayılmaz.
+  run.delivery=mapDelivery(raw?.delivery);
+  run.sourceGeneration=run.delivery?.sourceGeneration?.state??null;
+  run.productVerification=run.delivery?.productVerification?.state??null;
   return {state:"VERIFIED",run};
-}
-const strList=(x,max=200)=>arr(x,max).filter(v=>typeof v==="string").map(v=>v.slice(0,500));
-/** M1a: GET /v1/work-runs/:id completionRequirements -> onay kutuları için güvenli görünüm; biçim bozuksa null (onay nesnesi kurulmaz, sunucu fail-closed karar verir). */
-export function mapCompletionRequirements(x){
-  if(!isObj(x)||!isObj(x.notExecuted)||!isObj(x.testChanges))return null;
-  const c=isObj(x.testChanges.changed)?x.testChanges.changed:{};
-  return {
-    headSha:typeof x.headSha==="string"&&/^[0-9a-f]{40}$/.test(x.headSha)?x.headSha:null,functionalAcceptance:statusStr(x.functionalAcceptance),
-    notExecuted:{required:x.notExecuted.required===true,reason:statusStr(x.notExecuted.reason)},
-    testChanges:{required:x.testChanges.required===true,testSurfaceSha256:typeof x.testChanges.testSurfaceSha256==="string"&&/^[0-9a-f]{64}$/.test(x.testChanges.testSurfaceSha256)?x.testChanges.testSurfaceSha256:null,
-      changed:{modified:strList(c.modified),deleted:strList(c.deleted),renamed:arr(c.renamed,200).filter(r=>isObj(r)&&typeof r.from==="string"&&typeof r.to==="string").map(r=>({from:r.from.slice(0,500),to:r.to.slice(0,500)})),harness:strList(c.harness),truncated:c.truncated===true}}
-  };
 }
 export function normalizeVerification(v){return VERIFICATION_STATES.includes(v)?v:null}
 /** Doğrulama durumu -> DSK-061-08 çip türü; yalnız tam "VERIFIED" doğrulanmış gösterilir, bilinmeyen değer UNVERIFIED olur. */

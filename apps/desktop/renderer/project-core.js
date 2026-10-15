@@ -240,7 +240,7 @@ export function mapExports(raw){
     const commit=String(x.commit??"").toLowerCase();
     // M1a: export kaydının kanıttan türetilmiş doğrulama özeti (VERIFICATION_STATUS.json); yoksa null (rozet yine NOT_VERIFIED gösterir).
     const v=isObj(x.verification)?x.verification:null;
-    const verification=v?{label:str(v.label,80),testsExecuted:v.testsExecuted===true,notExecutedReason:/^[A-Z][A-Z0-9_]{0,39}$/.test(String(v.notExecutedReason??""))?v.notExecutedReason:null}:null;
+    const verification=v?{label:str(v.label,160),testsExecuted:v.testsExecuted===true,notExecutedReason:/^[A-Z][A-Z0-9_]{0,39}$/.test(String(v.notExecutedReason??""))?v.notExecutedReason:null}:null;
     return {exportId:id,createdAt:iso(x.createdAt),commit:COMMIT_RE.test(commit)?commit:null,sizeBytes:safeInt(pick(x.sizeBytes,x.size)),status:/^[A-Z][A-Z0-9_]{0,39}$/.test(String(x.status??""))?x.status:null,format:str(pick(x.format,x.kind),20),verification};
   }).filter(Boolean).sort((a,b)=>String(b.createdAt??"").localeCompare(String(a.createdAt??"")));
   return {state:"VERIFIED",items};

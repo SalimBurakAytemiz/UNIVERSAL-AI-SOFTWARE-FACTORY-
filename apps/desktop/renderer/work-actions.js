@@ -2,38 +2,30 @@
 import {buildTransitionRequest,buildRunRequest,requiresConfirm,describePostResult} from "./work-core.js";
 import {drafts,setStatus,focusStatus,focusResult} from "./forms.js";
 import {statusLabel} from "./components.js";
-import {ackState,buildCompletionAcknowledgements,resetAcks} from "./m1a.js";
 
 export const actionStatusId=missionId=>`act-${missionId}`;
 
 /** Geçişi doğrular, gerekirse onay ister, POST eder ve sonucu drafts.status[statusId] içine yazar.
- *  M1a: to=COMPLETE ve completionRequirements (sunucu) verildiyse her gerekli onay kutusu işaretli olmalıdır; kesin onay nesneleri gövdeye eklenir, aksi halde istek gönderilmez. */
-export async function performTransition(ctx,{missionId,title,from,to,reason,statusId=actionStatusId(missionId),completion}){
+ *  D-M1A-STATE-MODEL-2026-10-15: geçişlerde onay nesnesi yoktur; COMPLETE yalnız sunucunun PRODUCT_VERIFIED kanıt kapısıyla olur (masaüstü onu yalnız PRODUCT_VERIFIED koşuda sunar). */
+export async function performTransition(ctx,{missionId,title,from,to,reason,statusId=actionStatusId(missionId)}){
   const keys=[`id:tr-${to}`,`id:ib-${to}-${missionId}`];
-  let acknowledgements;
-  if(to==="COMPLETE"&&completion){
-    const a=buildCompletionAcknowledgements(completion,ackState(missionId));
-    if(!a.ok){setStatus(statusId,{ok:false,errors:a.errors});await ctx.rerender();focusResult(ctx,statusId,keys);return {ok:false,validation:true}}
-    acknowledgements=a.acknowledgements;
-  }
-  const probe=buildTransitionRequest({missionId,from,to,reason,confirmed:true,acknowledgements});
+  const probe=buildTransitionRequest({missionId,from,to,reason,confirmed:true});
   if(!probe.ok){setStatus(statusId,{ok:false,errors:probe.errors});await ctx.rerender();focusResult(ctx,statusId,keys);return {ok:false,validation:true}}
   let confirmed;
   if(requiresConfirm(to)){
-    const notExecuted=to==="COMPLETE"&&completion?.notExecuted?.required===true;
-    const body=ctx.t("confirm.transition.body",{from:statusLabel(ctx,from),to:statusLabel(ctx,to)})+(notExecuted?` ${ctx.t("m1a.confirm.notExecuted")}`:"");
+    const body=ctx.t("confirm.transition.body",{from:statusLabel(ctx,from),to:statusLabel(ctx,to)});
     const yes=await ctx.confirm({title:ctx.t("confirm.transition.title",{to:statusLabel(ctx,to)}),body,
       action:ctx.t("confirm.transition.action",{from:statusLabel(ctx,from),to:statusLabel(ctx,to)}),target:`${title} (${missionId})`,confirmLabel:ctx.t("confirm.transition.ok",{to:statusLabel(ctx,to)})});
     if(yes!==true){setStatus(statusId,{ok:false,key:"confirm.cancelled",vars:{},errors:null});await ctx.rerender();focusResult(ctx,statusId,keys);return {ok:false,cancelled:true}}
     confirmed=true;
   }
-  const req=buildTransitionRequest({missionId,from,to,reason,confirmed,acknowledgements});
+  const req=buildTransitionRequest({missionId,from,to,reason,confirmed});
   if(!req.ok){setStatus(statusId,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,statusId,keys);return {ok:false,validation:true}}
   drafts.busy[statusId]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[statusId]=false}
   const d=describePostResult(res);
   setStatus(statusId,{ok:d.ok,key:d.ok?"transition.done":d.key,vars:d.ok?{to:statusLabel(ctx,to)}:d.vars,errors:null});
-  if(d.ok){delete drafts.reasons[missionId];if(to==="COMPLETE")resetAcks(missionId)}
+  if(d.ok)delete drafts.reasons[missionId];
   await ctx.refreshAll({force:true});focusResult(ctx,statusId,keys);return {ok:d.ok,status:res?.status??null};
 }
 /** Koşu başlatır (mission AUTHORIZED veya PLANNED olmalı); sunucu 409 EXECUTOR_NOT_CONFIGURED veya 423 dönerse açık mesaj gösterilir. */

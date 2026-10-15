@@ -8,6 +8,7 @@ import {notVerifiedBadge,runNotVerified} from "../m1a.js";
 import {STUDIO_TABS,GIT_LOG_LIMIT,buildDevRunRequest,buildExportRequest,previewOpenable,devRunActions,diffLineKind,formatBytes,joinRel,parentRel,validRelPath,latestRunFor,securitySummary} from "../project-core.js";
 import {studio,setTab} from "../studio-state.js";
 import {importPanel} from "./studio-wizard.js";
+import {runDeliveriesPanel} from "./delivery-panel.js";
 
 export const DEV_FORM="studio-devrun";
 export const EXPORT_FORM="studio-export";
@@ -252,8 +253,10 @@ export async function showExport(ctx,project,exportId){
   }
   setStatus(EXPORT_FORM,msg);await ctx.rerender();focusResult(ctx,EXPORT_FORM,[`id:ex-show-${exportId}`,"id:studio-export-submit"]);return {ok:msg.ok};
 }
+// M1a c2: önce koşu teslimleri (SOURCE_GENERATION_COMPLETE koşuların deterministik artefaktı + NOT_VERIFIED kabul + hash doğrulamalı dışa aktarma), sonra varsayılan proje dışa aktarımı
+// (her zaman NO_RUN/NOT_VERIFIED etiketli; bir koşu teslimi olarak sunulmaz).
 async function deliveryTab(ctx,project){
-  const doc=ctx.doc,st=drafts.status[EXPORT_FORM],errs=st?.errors??{},list=await ctx.api.projectExports(project.projectId);
+  const doc=ctx.doc,st=drafts.status[EXPORT_FORM],errs=st?.errors??{},[list,deliveries]=await Promise.all([ctx.api.projectExports(project.projectId),ctx.api.deliveries(project.projectId)]);
   const form=h(doc,"form",{id:"studio-export-form",novalidate:true,"aria-labelledby":"studio-export-t",on:{submit:e=>{e.preventDefault();if(!drafts.busy[EXPORT_FORM])submitExport(ctx,project)}}},
     field(ctx,{id:"studio-export-commit",labelKey:"studio.export.commit",value:studio.commit,onInput:v=>{studio.commit=v},errorKey:errs.commit,hintKey:"studio.export.commitHint"}),
     statusBlock(ctx,EXPORT_FORM),
@@ -263,9 +266,10 @@ async function deliveryTab(ctx,project){
   else if(!list.items.length)body=emptyNote(ctx,"studio.export.empty");
   else body=h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table"},h(doc,"caption",{class:"sr-only",text:ctx.t("studio.export.caption")}),
     h(doc,"thead",{},h(doc,"tr",{},["studio.export.col.id","studio.export.col.created","studio.export.col.commit","studio.export.col.size","studio.export.col.status","studio.export.col.action"].map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
-    h(doc,"tbody",{},list.items.map(x=>h(doc,"tr",{},h(doc,"td",{class:"mono",text:x.exportId}),h(doc,"td",{text:formatDateTime(x.createdAt,ctx.i18n.lang)}),h(doc,"td",{class:"mono",text:x.commit?x.commit.slice(0,7):MISSING}),h(doc,"td",{text:formatBytes(x.sizeBytes)}),h(doc,"td",{},x.status?statusLabel(ctx,x.status):MISSING,x.verification?.testsExecuted===true?null:[" ",notVerifiedBadge(ctx,"export")]),
+    h(doc,"tbody",{},list.items.map(x=>h(doc,"tr",{},h(doc,"td",{class:"mono",text:x.exportId}),h(doc,"td",{text:formatDateTime(x.createdAt,ctx.i18n.lang)}),h(doc,"td",{class:"mono",text:x.commit?x.commit.slice(0,7):MISSING}),h(doc,"td",{text:formatBytes(x.sizeBytes)}),h(doc,"td",{},x.status?statusLabel(ctx,x.status):MISSING," ",badge(ctx,ctx.t("m1a.export.noRun"),"badge-notverified"),x.verification?.testsExecuted===true?null:[" ",notVerifiedBadge(ctx,"export")]),
       h(doc,"td",{},h(doc,"button",{type:"button",class:"btn btn-small",id:`ex-show-${x.exportId}`,dataset:{focusKey:`ex-show-${x.exportId}`},text:ctx.t("studio.export.show"),"aria-label":ctx.t("studio.export.showAria",{id:x.exportId}),on:{click:()=>{showExport(ctx,project,x.exportId)}}})))))));
   return h(doc,"div",{class:"studio-grid"},
+    runDeliveriesPanel(ctx,deliveries),
     h(doc,"section",{class:"panel",id:"studio-export","aria-labelledby":"studio-export-t"},h(doc,"h2",{class:"panel-title",id:"studio-export-t",text:ctx.t("studio.export.title")}),h(doc,"p",{class:"note",text:ctx.t("studio.export.lead")}),form),
     panel(ctx,{titleKey:"studio.export.list",id:"studio-exports"},body));
 }

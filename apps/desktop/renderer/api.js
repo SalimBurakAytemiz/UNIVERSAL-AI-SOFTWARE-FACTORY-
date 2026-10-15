@@ -2,6 +2,7 @@
 import {classifyFailure,mapCockpit,emptyCockpit,mapProjects,mapMissions,mapControlStatus,mapEvents,mapAttention} from "./model.js";
 import {MISSION_ID_RE,SAFE_ID_RE,mapMissionDetail,mapWorkRuns,mapWorkRunDetail,mapEvidenceList,mapEvidenceDetail} from "./work-core.js";
 import {devrunPath,filesPath,filePath,gitLogPath,gitDiffPath,exportsPath,exportItemPath,EXECUTORS_PATH,mapDevRun,mapFileList,mapFileContent,mapGitLog,mapGitDiff,mapExports,mapExecutors} from "./project-core.js";
+import {deliveriesPath,deliveryPath,mapDeliveries,mapDelivery} from "./delivery-core.js";
 
 const TTL_MS=3000;
 export function createApi({bridge,store,now=()=>Date.now()}){
@@ -65,6 +66,9 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async gitDiff(projectId,from,to){const p=gitDiffPath(projectId,from,to);if(!p)return {state:"ERROR",diff:null};const r=await get(p);return r.ok?mapGitDiff(r.data):{state:r.state,diff:null,message:r.message}},
     async projectExports(projectId){const p=exportsPath(projectId);if(!p)return {state:"ERROR",items:[]};const r=await get(p);return r.ok?mapExports(r.data):{state:r.state,items:[],message:r.message}},
     async exportItem(projectId,exportId){const p=exportItemPath(projectId,exportId);if(!p)return {state:"ERROR",items:[]};const r=await get(p);return r.ok?mapExports({exports:[r.data?.export??r.data]}):{state:r.state,items:[],message:r.message}},
+    // M1a c2: koşu teslim görünümleri (salt-okunur; main allow-list ile aynı kurallı yollar).
+    async deliveries(projectId){const p=deliveriesPath(projectId);if(!p)return {state:"ERROR",items:[]};const r=await get(p);return r.ok?mapDeliveries(r.data):{state:r.state,items:[],message:r.message}},
+    async delivery(runId){const p=deliveryPath(runId);if(!p)return {state:"ERROR",delivery:null};const r=await get(p);const d=r.ok?mapDelivery(r.data?.delivery):null;return r.ok?{state:d?"VERIFIED":"ERROR",delivery:d}:{state:r.state,delivery:null,message:r.message}},
     async executors(){const r=await get(EXECUTORS_PATH);return r.ok?mapExecutors(r.data):{state:r.state,items:[],message:r.message}},
     // //TR: INT-R3 D-M1-07: rol sayısı kanonik WFR-03 alanlarından okunur (registeredRoles/certified); eski "count" (LEGACY_REFERENCE_ONLY) kayıtlı rol olarak kullanılmaz, yalnız legacyRoles olarak taşınır.
     async agentCount(){const r=await get("/v1/agents"),n=v=>Number.isSafeInteger(v)&&v>=0?v:null,none={count:null,registeredRoles:null,certified:null,legacyRoles:null};if(!r.ok)return {state:r.state,...none};const reg=n(r.data?.registeredRoles);return reg===null?{state:"ERROR",...none}:{state:"VERIFIED",count:reg,registeredRoles:reg,certified:n(r.data?.certified),legacyRoles:n(r.data?.legacyRoles)}},

@@ -4,7 +4,8 @@ import {formatTime,MISSING} from "../model.js";
 import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime} from "../work-core.js";
 import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
-import {notVerifiedBadge,runNotVerified,missionNotVerified,completionAckBlock} from "../m1a.js";
+import {notVerifiedBadge,runNotVerified,missionNotVerified,axisBadges} from "../m1a.js";
+import {canOfferComplete} from "../delivery-core.js";
 
 const FORM="mission";
 const RUN_DETAIL_LIMIT=5;
@@ -78,6 +79,8 @@ export function runCard(ctx,run){
   const cps=run.checkpoints.length?h(doc,"ol",{class:"checkpoints"},run.checkpoints.map(c=>h(doc,"li",{},h(doc,"span",{text:c.name}),c.status?statusPill(ctx,c.status):null,h(doc,"time",{text:formatDateTime(c.at,lang)})))):h(doc,"p",{class:"note",text:ctx.t(run.checkpointsReported===false?"run.checkpointsNotReported":"run.noCheckpoints")});
   return h(doc,"li",{class:"card run-card",dataset:{runId:run.runId,runStatus:run.status}},
     h(doc,"h5",{},h(doc,"span",{class:"mono",text:run.runId})," ",statusPill(ctx,run.status),runNotVerified(run)?[" ",notVerifiedBadge(ctx,"run")]:null),
+    // M1a c2: iki ayrı eksen (sunucu etiketleri) yalnız ayrıntı görünümünde bilinir.
+    run.delivery?h(doc,"p",{class:"panel-meta"},axisBadges(ctx,run.delivery.sourceGeneration,run.delivery.productVerification,"run")):null,
     h(doc,"dl",{class:"kv"},
       h(doc,"dt",{text:ctx.t("run.step")}),h(doc,"dd",{text:step}),
       h(doc,"dt",{text:ctx.t("run.role")}),h(doc,"dd",{text:run.role??MISSING}),
@@ -96,23 +99,30 @@ function runsSection(ctx,runsRes,details){
   if(!runsRes.items.length)return emptyNote(ctx,"run.none");
   return h(doc,"ul",{class:"cards run-list"},runsRes.items.map(r=>runCard(ctx,details.get(r.runId)??r)));
 }
-/** M1a: kabul bekleyen (AWAITING_APPROVAL) en son koşunun sunucu completionRequirements görünümü; yoksa null. */
-export function awaitingRequirements(runsRes,details){
+/** M1a c2: kabul bekleyen (AWAITING_APPROVAL) en son koşunun sunucu ayrıntısı (iki eksen + teslim görünümü); yoksa null. */
+export function awaitingRun(runsRes,details){
   if(runsRes?.state!=="VERIFIED")return null;
   const r=runsRes.items.find(x=>x.status==="AWAITING_APPROVAL");if(!r)return null;
-  return details.get(r.runId)?.completionRequirements??null;
+  return details.get(r.runId)??null;
 }
-function transitionControls(ctx,mission,completion){
-  const doc=ctx.doc,next=allowedNext(mission.status),sid=actionStatusId(mission.missionId),busy=drafts.busy[sid]===true;
+/** D-M1A-STATE-MODEL-2026-10-15: ürün düzeyi COMPLETE yalnız PRODUCT_VERIFIED koşuda sunulur; aksi halde düğme yoktur ve dürüst açıklama + iki eksen gösterilir. */
+export function completeNotOffered(ctx,run,id){
+  const doc=ctx.doc;
+  return h(doc,"div",{class:"note complete-not-offered",id,dataset:{completeOffered:"false"}},
+    run?.delivery?h(doc,"p",{},axisBadges(ctx,run.delivery.sourceGeneration,run.delivery.productVerification,"complete")):null,
+    h(doc,"p",{text:ctx.t("m1a.complete.notOffered")}));
+}
+function transitionControls(ctx,mission,awaiting){
+  const doc=ctx.doc,all=allowedNext(mission.status),next=all.filter(to=>to!=="COMPLETE"||canOfferComplete(awaiting)),hidden=all.includes("COMPLETE")&&!next.includes("COMPLETE"),sid=actionStatusId(mission.missionId),busy=drafts.busy[sid]===true;
   const reasonField=field(ctx,{id:"tr-reason",labelKey:"work.transition.reason",value:drafts.reasons[mission.missionId]??"",onInput:v=>{drafts.reasons[mission.missionId]=v},hintKey:"work.transition.reasonHint"});
   const buttons=next.map(to=>h(doc,"button",{type:"button",class:`btn${requiresConfirm(to)?" btn-primary":""}`,id:`tr-${to}`,dataset:{focusKey:`tr-${to}`,to,confirm:requiresConfirm(to)?"true":"false"},disabled:busy,
-    on:{click:()=>performTransition(ctx,{missionId:mission.missionId,title:mission.title,from:mission.status,to,reason:drafts.reasons[mission.missionId]??"",...(to==="COMPLETE"&&completion?{completion}:{})})},
+    on:{click:()=>performTransition(ctx,{missionId:mission.missionId,title:mission.title,from:mission.status,to,reason:drafts.reasons[mission.missionId]??""})},
     text:requiresConfirm(to)?ctx.t("work.transition.toConfirm",{to:statusLabel(ctx,to)}):ctx.t("work.transition.to",{to:statusLabel(ctx,to)})}));
   const startable=canStartRun(mission.status);
   const runBtn=h(doc,"button",{type:"button",class:"btn btn-primary",id:"run-start",dataset:{focusKey:"run-start"},disabled:!startable||busy,"aria-describedby":"run-start-hint",on:{click:()=>startRun(ctx,{missionId:mission.missionId,status:mission.status})},text:ctx.t("work.run.start")});
   return h(doc,"div",{class:"transition-controls"},
     h(doc,"h4",{text:ctx.t("work.transition.title")}),
-    next.length?h(doc,"div",{},reasonField,next.includes("COMPLETE")?completionAckBlock(ctx,mission.missionId,completion):null,h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("work.transition.title")},buttons),h(doc,"p",{class:"field-hint",text:ctx.t("work.transition.confirmNote")})):h(doc,"p",{class:"note",text:ctx.t("work.transition.terminal")}),
+    next.length?h(doc,"div",{},reasonField,hidden?completeNotOffered(ctx,awaiting,`complete-na-${mission.missionId}`):null,h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("work.transition.title")},buttons),h(doc,"p",{class:"field-hint",text:ctx.t("work.transition.confirmNote")})):h(doc,"p",{class:"note",text:ctx.t("work.transition.terminal")}),
     h(doc,"h4",{text:ctx.t("work.run.title")}),h(doc,"div",{class:"btn-row"},runBtn),
     h(doc,"p",{class:"field-hint",id:"run-start-hint",text:ctx.t(startable?"work.run.hintOk":"work.run.hintNot")}),
     statusBlock(ctx,sid));
@@ -128,7 +138,7 @@ function detailPanel(ctx,detail,runsRes,runDetails){
     h(doc,"h4",{text:ctx.t("work.detail.criteria")}),m.acceptanceCriteria.length?h(doc,"ul",{},m.acceptanceCriteria.map(c=>h(doc,"li",{text:c}))):emptyNote(ctx,"work.detail.noCriteria"),
     m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"ul",{},m.tasks.map(t=>h(doc,"li",{},t.title," ",statusPill(ctx,t.status))))):null,
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),
-    transitionControls(ctx,m,awaitingRequirements(runsRes,runDetails)),
+    transitionControls(ctx,m,awaitingRun(runsRes,runDetails)),
     h(doc,"h4",{text:ctx.t("run.timeline")}),runsSection(ctx,runsRes,runDetails));
 }
 

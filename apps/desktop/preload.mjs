@@ -8,5 +8,7 @@ contextBridge.exposeInMainWorld("uasco",{
   retryBlocked:(packageId)=>ipcRenderer.invoke("uasco:retry-blocked",packageId),
   pickImportPath:(kind)=>ipcRenderer.invoke("uasco:pick-import-path",kind),
   openPreview:(projectId)=>ipcRenderer.invoke("uasco:open-preview",projectId),
-  showExport:(projectId,exportId)=>ipcRenderer.invoke("uasco:show-export",projectId,exportId)
+  showExport:(projectId,exportId)=>ipcRenderer.invoke("uasco:show-export",projectId,exportId),
+  // M1a c2: teslim paketini dışa aktar (yalnız run kimliği; yol/hash ana süreçte çözülür ve doğrulanır).
+  exportDelivery:(runId)=>ipcRenderer.invoke("uasco:export-delivery",runId)
 });
