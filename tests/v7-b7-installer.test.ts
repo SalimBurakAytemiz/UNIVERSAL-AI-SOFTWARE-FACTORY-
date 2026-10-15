@@ -271,3 +271,29 @@ describe("B7 relative import closure of the staged app", () => {
     }
   });
 });
+
+// ---------- INT-R3 D-M1-04: kanonik rol kaydı paketlenmiş uygulamaya sahnelenir ----------
+describe("INT-R3 D-M1-04 packaged GET /v1/agents", () => {
+  it("stages registries/role-definitions.json so the packaged backend answers /v1/agents with canonical counts (not 503)", async () => {
+    const {STATIC_DATA_FILES} = await load("scripts", "build-installer.mjs");
+    expect(STATIC_DATA_FILES).toContain("registries/role-definitions.json");
+    const {buildServer} = await load("apps", "control-api", "src", "server.ts");
+    const app0 = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b7-app-"));
+    try {
+      // paketlenmiş uygulama kökü: yalnız sahnelenen statik veri dosyaları vardır
+      for (const f of STATIC_DATA_FILES as string[]) { fs.mkdirSync(path.dirname(path.join(app0, f)), {recursive: true}); fs.copyFileSync(path.join(root, f), path.join(app0, f)); }
+      const tokenValue = "a".repeat(64), runtimeDir = path.join(app0, "ud", "runtime");
+      fs.mkdirSync(runtimeDir, {recursive: true});
+      const app = buildServer({controlToken: tokenValue, runtime: runtimeDir, dataDir: path.join(app0, "ud", "workos"), repoRoot: app0, port: 3210, logger: false});
+      try {
+        const r = await app.inject({method: "GET", url: "/v1/agents", headers: {"x-uasco-control-token": tokenValue, host: "127.0.0.1:3210"}});
+        expect(r.statusCode).toBe(200);
+        const j = r.json();
+        expect(j.registeredRoles).toBe(599);
+        expect(j.legacyRoles).toBe(363);
+        expect(Number.isSafeInteger(j.certified)).toBe(true);
+        expect(j.roleRegistry).toMatchObject({path: "registries/role-definitions.json", authority: "CANONICAL", legacyAuthority: "LEGACY_REFERENCE_ONLY"});
+      } finally { await app.close(); }
+    } finally { fs.rmSync(app0, {recursive: true, force: true}); }
+  });
+});

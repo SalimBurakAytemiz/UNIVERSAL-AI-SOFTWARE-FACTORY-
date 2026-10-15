@@ -12,7 +12,9 @@ export const STATIC_DATA_FILES = [
   "registries/execution-fabrics.json",
   "registries/tool-adapters.json",
   "registries/domain-packs.json",
-  "roadmap/review-packages.json"
+  "roadmap/review-packages.json",
+  // INT-R3 D-M1-04: WFR-03 kanonik rol kaydı (GET /v1/agents, /v1/roles, cockpit workforce); yoksa paketli /v1/agents 503 döner.
+  "registries/role-definitions.json"
 ];
 export const DESKTOP_FILES = ["apps/desktop/main.mjs", "apps/desktop/preload.mjs", "apps/desktop/backend-error.html"];
 export const BACKEND_ENTRY = "apps/control-api/src/packaged-entry.js";
