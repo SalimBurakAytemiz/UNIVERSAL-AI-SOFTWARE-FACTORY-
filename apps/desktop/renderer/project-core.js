@@ -259,7 +259,20 @@ export function mapExecutors(raw){
     const s=pick(x.state,x.status),state=typeof s==="string"&&/^[A-Z][A-Z0-9_]{0,39}$/.test(s)?s:null;
     return {id,state,testOnly:id==="FAKE"||x.testOnly===true};
   }).filter(Boolean);
-  return {state:"VERIFIED",items};
+  return {state:"VERIFIED",items,profiles:mapClaudeProfiles(raw.claudeProfiles)};
+}
+/** SBX-8 (D-SBX-11 b): GET /v1/system/executors claudeProfiles -> [{role,state,reason,loginCommand}]; yalnız implementer/reviewer, güvenli desenli durum/neden; giriş komutu yalnız metin olarak gösterilir (renderer asla çalıştırmaz). */
+export const CLAUDE_PROFILE_ROLES=["implementer","reviewer"];
+export function mapClaudeProfiles(raw){
+  if(!isObj(raw))return [];
+  return CLAUDE_PROFILE_ROLES.map(role=>{
+    const p=raw[role];if(!isObj(p))return null;
+    const state=typeof p.state==="string"&&/^[A-Z][A-Z_]{0,39}$/.test(p.state)?p.state:null;
+    const reason=typeof p.reason==="string"&&/^[A-Z][A-Z0-9_:]{0,119}$/.test(p.reason)?p.reason:null;
+    const cmd=p.loginCommand;
+    const loginCommand=typeof cmd==="string"&&cmd.length<=2000&&!CONTROL_RE.test(cmd)&&cmd.startsWith("$env:CLAUDE_CONFIG_DIR='")?cmd:null;
+    return {role,state,reason,loginCommand};
+  }).filter(Boolean);
 }
 /** "Etkinleştir" yalnız LOCAL_CLAUDE ve NOT_CONFIGURED iken sunulur; CLI/köken eksikse veya zaten READY ise sunulmaz, FAKE yalnız test içindir. */
 export const canEnableExecutor=e=>Boolean(e)&&e.id==="LOCAL_CLAUDE"&&e.state==="NOT_CONFIGURED"&&e.testOnly!==true;

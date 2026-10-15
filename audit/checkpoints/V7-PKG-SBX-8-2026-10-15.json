@@ -1,0 +1,93 @@
+{
+  "//TR": "Bu checkpoint V7-PKG-SBX-8 (builder/reviewer confinement, D-SBX-11 b ayrı UASCO Claude profili) uygulama kaydıdır: commit'ler, kapatılan bulgular, kurulu CLI kanıtı, çalıştırılan ve çalıştırılmayan kontroller, bilinen sınırlar. Temiz olduğunu beyan etmez; bağımsız salt-okunur review bekler.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-SBX-8",
+  "date": "2026-10-15",
+  "parent": "6aa72676bf0fd603c286c720baf188a3af9a6ba6",
+  "branch": "v7/product-sbx8",
+  "status": "IMPLEMENTED BY CLAUDE_BUILDER; not clean; independent read-only review pending; full canonical validation is run after this commit and reported by the implementer",
+  "authorization": {
+    "founderAuthorization": "FA-SBX-2026-10-15 (record audit/checkpoints/V7-PKG-SBX-FA-2026-10-15.json, commit A)",
+    "founderDecision": "D-SBX-11-2026-10-15 (b) separate UASCO Claude profile via CLAUDE_CONFIG_DIR keeping all (a) restrictions",
+    "alsoUnder": ["FA-V2-PRODUCT-2026-10-14", "FD-ROLE-CLAUDE-IMPL-2026-10-14", "D-SBX-10 condition 4 (tests run no untrusted samples)"],
+    "protectedFilesChanged": ["scripts/claude-builder-broker.mjs", "apps/control-api/src/server.ts", "config/validation.json", "config/trust-root-manifest.json (reseal only)"],
+    "mustNotChangeRespected": ["config/builder-execution-policy.json", "config/environment-policy.json", "automation/lib/**"],
+    "protectedChangeCheck": "protectedChangeViolations (automation/lib/trust-root.mjs) against git show 312fb6d:config/protected-paths.json, authorized = FA-V2-PRODUCT + FA-SBX files, plus mustNotChange check, before every commit: 0 violations"
+  },
+  "commits": [
+    {"id": "A", "sha": "17d5c483313b664490f605dc45fa434fff57578a", "summary": "FA-SBX + D-SBX-11 authorization record only; authorizedProtectedFiles() parses it to the 5 FA-SBX paths"},
+    {"id": "B", "sha": "f3d515b2667d72bee1e1325299c8059a2d87c77e", "summary": "core/workos/claude-profiles.ts role profiles + GET /v1/system/executors claudeProfiles (status + Founder login command)"},
+    {"id": "C", "sha": "a521335690602c0ba39b44f889678d44fd120afc", "summary": "builder broker isolation flags, CLAUDE_CONFIG_DIR = implementer profile, BLOCKED CLAUDE_PROFILE_LOGIN_REQUIRED/REFUSED/SETTINGS_*"},
+    {"id": "D", "sha": "ad2fc9aefd68268a8baee2e75b6a3763294f8775", "summary": "reviewer argv/profile/read-only tools; byte-unchanged review workspace else INVALID; LOCAL_CLAUDE implementer refuses before broker without login; runner keeps reasons"},
+    {"id": "E", "sha": "744990a7bf1e6372518524c39393e788b3259c31", "summary": "agent-config import quarantine (git + zip) with evidence; BUILDER_TOUCHED_AGENT_CONFIG; WORKSPACE_CONTAINS_AGENT_CONFIG"},
+    {"id": "F", "sha": "47f669bade41f7bee7f868306c8e2c8bb9cbdfc5", "summary": "RV-INT-R3-C1-F2 committed REGRESSION refusal test"},
+    {"id": "G", "sha": "THIS_COMMIT", "summary": "desktop Settings profile status + login command text (non-protected renderer files) and this audit record"}
+  ],
+  "findingsAddressed": {
+    "C-01": "Broker passes --setting-sources user --strict-mcp-config --disable-slash-commands --no-session-persistence and CLAUDE_CONFIG_DIR=<controlRoot>/claude-profiles/implementer whose settings.json is UASCO-written (disableAllHooks, no hooks/MCP/statusLine/apiKeyHelper/env, tool denies). Studio import quarantines .claude/**, .mcp.json, .claude.json, CLAUDE.md, CLAUDE.local.md; the builder is never started in a workspace containing them (unmanaged repository paths included).",
+    "C-02": "Builder changes to agent-config paths (ignored ones included) are refused before commit (BUILDER_TOUCHED_AGENT_CONFIG), so they never reach the reviewer clone; Work OS reviewer path (core/workos/executors.ts) uses the same flags and a separate read-only reviewer profile. The second reviewer path automation/lib/claude-reviewer.mjs is NOT changed (automation/lib/** mustNotChange) - see knownLimits.",
+    "C-03": "Founder's personal ~/.claude settings, hooks, permissions, memory and credentials are no longer inherited by the Work OS builder/reviewer: separate CLAUDE_CONFIG_DIR per role, --setting-sources user points at the UASCO profile, inherited CLAUDE_CONFIG_DIR/CLAUDE_SECURESTORAGE_CONFIG_DIR dropped, no fallback when not logged in; profile paths equal to/inside ~/.claude, equal to home, inside the Work OS data dir or inside any git work tree are refused.",
+    "RV-INT-R3-C1-F1": "Same as C-01 (defense that does not rely on the CLI untrusted-workspace default): explicit setting sources, strict empty MCP config, workspace agent-config refusal before IMPLEMENT, import quarantine.",
+    "RV-INT-R3-C1-F2": "tests/v7-int-r3-sbx-gate.test.ts: verify-only ExecutionGate subclass -> BLOCKED at REGRESSION, SANDBOX_UNAVAILABLE, REGRESSION_TESTS_NOT_EXECUTED evidence (exitCode null), provider saw only the VERIFY call."
+  },
+  "installedCliEvidence": {
+    "method": "read-only: claude --version and claude --help run with CLAUDE_CONFIG_DIR set to an empty scratch directory (it stayed empty); binary text searched with grep -a; the personal ~/.claude was not read",
+    "launcher": "C:/Users/salim/AppData/Local/Microsoft/WinGet/Packages/Anthropic.ClaudeCode_Microsoft.Winget.Source_8wekyb3d8bbwe/claude",
+    "launcherSha256": "eb95bb65955f8b1702e800815f9a2c0388a5de0f196c354c7ee1dd5cb9a2ba23",
+    "version": "2.1.292 (Claude Code)",
+    "helpOutputSha256": "550db4f88ae1d97bf7244ca96dc89554aabd3978241ceb69f79001e816c35f09",
+    "flags": {
+      "--setting-sources": "present (help line 225: 'Comma-separated list of setting sources to load (user, project, local).')",
+      "--strict-mcp-config": "present (help line 229: 'Only use MCP servers from --mcp-config, ignoring all other MCP configurations')",
+      "--disable-slash-commands": "present (help line 80: 'Disable all skills')",
+      "--no-session-persistence": "present (help line 142: 'Disable session persistence ... (only works with --print)')"
+    },
+    "flagsMissing": [],
+    "hookKillSwitch": "disableAllHooks (setting key present in the CLI text; set true in both UASCO profiles)",
+    "otherSettingKeysUsed": ["enableAllProjectMcpServers (false)", "permissions.disableBypassPermissionsMode (\"disable\")"],
+    "credentialStore": "<config dir>/.credentials.json (CLI text: storagePath join(<config dir>, '.credentials.json')); UASCO checks existence with lstat only (regular file, nlink 1), never reads it"
+  },
+  "profiles": {
+    "implementer": "<controlRoot>/claude-profiles/implementer (packaged: %APPDATA%/UASCO/control/claude-profiles/implementer)",
+    "reviewer": "<controlRoot>/claude-profiles/reviewer (packaged: %APPDATA%/UASCO/control/claude-profiles/reviewer)",
+    "writtenByUasco": "settings.json only",
+    "loginCommand": "$env:CLAUDE_CONFIG_DIR='<profile dir>'; claude; Remove-Item Env:\\CLAUDE_CONFIG_DIR  (Founder runs it personally, then /login, /exit)",
+    "founderLoginStatus": "NOT DONE - both profiles LOGIN_REQUIRED until the Founder logs in; every LOCAL_CLAUDE run blocks with CLAUDE_PROFILE_LOGIN_REQUIRED meanwhile"
+  },
+  "testsAdded": [
+    "tests/v7-sbx8-claude-profiles.test.ts (B)",
+    "tests/v7-sbx8-broker.test.ts (C; real broker process with node.exe as fake launcher and a fake HOME)",
+    "tests/v7-sbx8-reviewer.test.ts (D; injected fake reviewer process, real git workspace mutations, runner reasons)",
+    "tests/v7-sbx8-agent-config.test.ts (E; git/zip import quarantine per name, API evidence, builder refusal per name incl. ignored, workspace refusal, runner)",
+    "tests/v7-int-r3-sbx-gate.test.ts (F; RV-INT-R3-C1-F2 REGRESSION refusal)",
+    "tests/v7-ps1b-project-studio-ui.test.ts (G; settings profile section)"
+  ],
+  "testsAdapted": [
+    "tests/pkg-d-standalone-provenance.test.ts: claude control root gets a UASCO implementer profile fixture (settings + empty placeholder credential file) so the 'spawns a verified standalone launcher' case still reaches the spawn; all provenance refusals unchanged",
+    "tests/v7-b7-installer.test.ts: LOCAL_CLAUDE broker-fork case first asserts CLAUDE_PROFILE_LOGIN_REQUIRED (broker not started), then logs in with a placeholder and asserts CLAUDE_CONFIG_DIR = implementer profile"
+  ],
+  "validationStep": "config/validation.json: new step tests-sbx8 (4 new test files); no step removed or weakened",
+  "notExecuted": [
+    "Real Claude CLI runs with the new UASCO profiles (builder and reviewer): NOT_EXECUTED - the Founder has not logged in to the profiles and the personal profile must not be used",
+    "Assessment negative tests N-16b..e (project hook does not run, project permissions.allow not applied, .claude/.credentials.json not readable via Read, .mcp.json server does not start) and the C-02 extra test (builder-written hook does not run in the reviewer) against the real CLI: NOT_EXECUTED for the same reason; covered only structurally (flags, settings, quarantine/refusal tests)",
+    "Whether the CLI honours permissions.deny path rules Read(~/.claude/**) / Read(//c/...claude-profiles/**) and disableAllHooks with --setting-sources user: NOT_EXECUTED (UNKNOWN until a logged-in run)",
+    "Packaged installer build/install smoke for this package: NOT_EXECUTED by the implementer"
+  ],
+  "knownLimits": [
+    "automation/lib/claude-reviewer.mjs (governed CLAUDE_REVIEWER for UASCO self-build) still lacks --setting-sources; automation/lib/** is mustNotChange under FA-SBX - needs a separate Founder authorization",
+    "The developer-factory orchestrator (automation/lib/orchestrator-executors.mjs) and scripts/builder-boundary-smoke.mjs run this broker with the UASCO repository clone as control root; the broker now refuses that (CLAUDE_PROFILE_REFUSED:PROFILE_PATH_INSIDE_GIT_WORKTREE) instead of inheriting the personal profile or storing credentials inside a git work tree. Those self-build paths stay BLOCKED until they pass a control root outside the work tree (automation/lib change -> separate authorization). M0 delivery does not use them (Claude subagent implementers per FD-ROLE-CLAUDE-IMPL).",
+    "Dev-mode control API (controlRoot = repository) reports both profiles REFUSED; use UASCO_CONTROL_ROOT outside the clone (packaged builds use userData/control).",
+    "CLI text shows a device-key file fixed at <home>/.claude/.device-keys.json independent of CLAUDE_CONFIG_DIR; whether the CLI touches it in -p mode is UNKNOWN (not verified).",
+    "Managed (policy) settings still apply under --setting-sources user (by CLI design).",
+    "Studio git import keeps quarantined files in the managed repository HISTORY (only the new HEAD tree drops them); workspaces check out HEAD, so they are absent from builder/reviewer working trees and the CLI cannot load them as configuration (they exist only as compressed git objects).",
+    "Quarantined bytes are stored content-addressed under projects/<id>/quarantine/agent-config/ (no names or extensions); they are never placed in a workspace.",
+    "Credential-store symlink refusal test is skipped on hosts without symlink privilege; the hard-link refusal is always tested."
+  ],
+  "deviations": [
+    "core/workos/runner.ts (not listed in the package file list) changed minimally: implementer blockReason is checked before the exit code (so a not-started builder is BLOCKED with its reason, exitCode null) and an invalid review keeps its reason (CLAUDE_PROFILE_* -> BLOCKED, workspace change -> FAILED).",
+    "EditOnlyImplementer refuses to start the builder when the workspace already contains agent config (WORKSPACE_CONTAINS_AGENT_CONFIG) - the alternative fix named by RV-INT-R3-C1-F1, needed for unmanaged repository paths that bypass Studio import.",
+    "Profile paths inside any git work tree are refused (credentials must never sit in a repository work tree); this blocks the dev/self-build broker paths listed in knownLimits.",
+    "New type declaration scripts/claude-builder-broker.d.mts (non-protected) so tests can import the broker's pure helpers; the broker runs main() only when executed as a script."
+  ],
+  "rulesFollowed": ["LF only", "//TR comments", "no new dependencies", "no network", "no AI-generated or untrusted project code executed (test fixtures are fixed test-authored files)", "personal %USERPROFILE%/.claude and .claude.json never read for content, deleted or overwritten", "never declared CLEAN"]
+}

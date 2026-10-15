@@ -1260,3 +1260,39 @@ describe("PS-1B c5: focus placement is verified against activeElement and falls 
     expect(doc.activeElement).toBe(log);
   });
 });
+
+// //TR: SBX-8 G (D-SBX-11 b): Ayarlar → AI Yürütücüleri, ayrı UASCO Claude profillerinin (implementer / salt-okunur reviewer) durumunu ve Founder'ın kendisinin çalıştıracağı giriş komutunu YALNIZ METİN olarak gösterir; komutu çalıştıran veya kimlik isteyen hiçbir düğme yoktur; şüpheli komut/durum gösterilmez.
+describe("SBX-8 G: Settings shows the UASCO Claude profile status and the login command text", () => {
+  const BS = String.fromCharCode(92); // ters bölü (Windows yolu)
+  const cmd = (role: string) => `$env:CLAUDE_CONFIG_DIR='${["C:", "Users", "x", "AppData", "Roaming", "UASCO", "control", "claude-profiles", role].join(BS)}'; claude; Remove-Item Env:${BS}CLAUDE_CONFIG_DIR`;
+  it("maps only implementer/reviewer with safe state/reason and a well-formed login command; anything else is dropped", () => {
+    expect(core.mapClaudeProfiles(undefined)).toEqual([]);
+    expect(core.mapClaudeProfiles({implementer: {state: "LOGIN_REQUIRED", reason: "CLAUDE_PROFILE_LOGIN_REQUIRED", loginCommand: cmd("implementer")}, reviewer: {state: "bad state", reason: "x y", loginCommand: "calc.exe"}, personal: {state: "READY"}}))
+      .toEqual([{role: "implementer", state: "LOGIN_REQUIRED", reason: "CLAUDE_PROFILE_LOGIN_REQUIRED", loginCommand: cmd("implementer")}, {role: "reviewer", state: null, reason: null, loginCommand: null}]);
+    expect(core.mapClaudeProfiles({implementer: {state: "READY", loginCommand: `${cmd("implementer")}\nStart-Process calc`}})[0].loginCommand).toBeNull();
+    expect(core.mapExecutors({executors: [], claudeProfiles: {reviewer: {state: "REFUSED", reason: "CLAUDE_PROFILE_REFUSED:PROFILE_PATH_INSIDE_GIT_WORKTREE", loginCommand: null}}}).profiles).toEqual([{role: "reviewer", state: "REFUSED", reason: "CLAUDE_PROFILE_REFUSED:PROFILE_PATH_INSIDE_GIT_WORKTREE", loginCommand: null}]);
+  });
+  it("renders both profiles with honest states and the command as text only (no extra buttons, nothing executed or posted)", async () => {
+    const settings = await load(rend, "views", "settings.js");
+    const body = {executors: [{id: "LOCAL_CLAUDE", state: "READY"}], claudeProfiles: {implementer: {state: "LOGIN_REQUIRED", reason: "CLAUDE_PROFILE_LOGIN_REQUIRED", loginCommand: cmd("implementer")}, reviewer: {state: "READY", loginCommand: cmd("reviewer")}}};
+    for (const lang of ["tr", "en"]) {
+      const {ctx, doc, calls} = await mkCtx({lang, get: p => p === "/v1/system/executors" ? body : undefined});
+      const root = mount(doc, await settings.render(ctx));
+      const sec = byId(root, "settings-claude-profiles")!;
+      expect(sec, lang).not.toBeNull();
+      const t = text(sec);
+      expect(t).toContain(lang === "tr" ? "Giriş gerekli" : "Sign-in required");
+      expect(t).toContain(lang === "tr" ? "Giriş yapıldı" : "Signed in");
+      expect(t).toContain(lang === "tr" ? "salt okunur" : "read-only");
+      expect(t).toContain(cmd("implementer"));
+      expect(t).toContain(cmd("reviewer"));
+      expect(all(sec).some(n => n.tagName === "BUTTON")).toBe(false);
+      expect(calls.post).toEqual([]);
+    }
+  });
+  it("no claudeProfiles in the response (older backend) -> no profile section", async () => {
+    const settings = await load(rend, "views", "settings.js");
+    const {ctx, doc} = await mkCtx({get: p => p === "/v1/system/executors" ? {executors: [{id: "LOCAL_CLAUDE", state: "READY"}]} : undefined});
+    expect(byId(mount(doc, await settings.render(ctx)), "settings-claude-profiles")).toBeNull();
+  });
+});

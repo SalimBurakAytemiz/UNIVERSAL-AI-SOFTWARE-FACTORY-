@@ -34,5 +34,19 @@ export async function executorsPanel(ctx){
       e.testOnly?h(doc,"p",{class:"note",text:ctx.t("exec.testOnlyNote")}):(hint?h(doc,"p",{class:"note",text:hint}):null),
       canEnableExecutor(e)?h(doc,"button",{type:"button",class:"btn btn-primary",id:"exec-enable",dataset:{focusKey:"exec-enable"},disabled:drafts.busy[EXEC_FORM]===true,text:ctx.t("exec.enable"),on:{click:()=>{enableLocalClaude(ctx)}}}):null);
   }));
-  return panel(ctx,{titleKey:"exec.title",id:"settings-executors"},h(doc,"p",{class:"note",text:ctx.t("exec.lead")}),body,statusBlock(ctx,EXEC_FORM));
+  return panel(ctx,{titleKey:"exec.title",id:"settings-executors"},h(doc,"p",{class:"note",text:ctx.t("exec.lead")}),body,profilesBlock(ctx,res.profiles),statusBlock(ctx,EXEC_FORM));
+}
+const tOr=(ctx,k,fallback)=>{const v=ctx.t(k);return v===k?fallback:v};
+/** SBX-8 (D-SBX-11 b): ayrı UASCO Claude profilleri (implementer / salt-okunur reviewer) için durum ve Founder'ın kendisinin çalıştıracağı giriş komutu (yalnız metin; UASCO oturum açmaz, kişisel ayar/kimlik aktarmaz). */
+function profilesBlock(ctx,profiles){
+  const doc=ctx.doc;if(!Array.isArray(profiles)||!profiles.length)return null;
+  return h(doc,"section",{id:"settings-claude-profiles"},
+    h(doc,"h3",{text:ctx.t("exec.profiles.title")}),
+    h(doc,"p",{class:"note",text:ctx.t("exec.profiles.lead")}),
+    h(doc,"ul",{class:"cards exec-profiles"},profiles.map(p=>h(doc,"li",{class:"card",dataset:{profile:p.role,state:p.state??"UNKNOWN"}},
+      h(doc,"h4",{text:ctx.t(`exec.profile.role.${p.role}`)}),
+      h(doc,"p",{},badge(ctx,p.state===null?ctx.t("exec.state.UNKNOWN"):tOr(ctx,`exec.profile.state.${p.state}`,p.state),p.state==="READY"?"badge-ok":"badge-risk")),
+      p.state&&p.state!=="READY"?h(doc,"p",{class:"note",text:tOr(ctx,`exec.profile.hint.${p.state}`,p.reason??p.state)}):null,
+      p.loginCommand?h(doc,"p",{class:"note",text:ctx.t("exec.profile.loginHint")}):null,
+      p.loginCommand?h(doc,"pre",{class:"code",dataset:{loginCommand:p.role}},h(doc,"code",{text:p.loginCommand})):null))));
 }
