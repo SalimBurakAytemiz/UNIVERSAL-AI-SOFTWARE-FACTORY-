@@ -338,7 +338,9 @@
         "tests/v7-b5-work-screens.test.ts",
         "tests/v7-b7-installer.test.ts",
         "tests/v7-ps1b-project-studio-ui.test.ts",
-        "tests/v7-ps1b-relpath-canonical.test.ts"
+        "tests/v7-ps1b-relpath-canonical.test.ts",
+        "tests/v7-m1a-mode.test.ts",
+        "tests/v7-m1a-desktop.test.ts"
       ],
       "requiresDependencies": true
     },
