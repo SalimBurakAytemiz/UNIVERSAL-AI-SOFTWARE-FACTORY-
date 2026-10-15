@@ -10,7 +10,7 @@ import {acquireProcessLock} from "../../automation/lib/process-lock.mjs";
 import {assertTransition, isMissionStatus} from "../mission/state-machine.js";
 import type {MissionStatus} from "../mission/types.js";
 import {WorkOsError, urlHasUserinfo} from "./types.js";
-import type {JournalEntry, JournalType, Project, ProjectExport, ProjectTemplate, ProjectType, RiskLevel, RunCheckpoint, RunEvidence, RunStatus, RunStep, Scope, TaskStatus, WorkMission, WorkRun, WorkTask} from "./types.js";
+import type {JournalEntry, JournalType, Project, ProjectExport, ProjectTemplate, ProjectType, RiskLevel, RunCheckpoint, RunCompletionRecord, RunEvidence, RunStatus, RunStep, Scope, TaskStatus, WorkMission, WorkRun, WorkTask} from "./types.js";
 import {ACTIVE_WORKER_STATUSES, LEASED_RUN_STATUSES, UNLEASED_RUN_STATUSES, assertRunTransition, isOpenRun, isRunStatus, isRunStep} from "./run-state.js";
 import {completionEvidence} from "./outcomes.js";
 import {RISK_REFUSAL, riskAdmitted} from "./risk-admission.js";
@@ -322,14 +322,20 @@ export class WorkOsStore {
         try { assertRunTransition(r.status, p.to); } catch { throw tampered(`RUN_TRANSITION_ILLEGAL:${e.seq}`); }
         if (p.patch !== undefined && !validRunPatch(p.patch)) throw malformed(`RUN_PATCH:${e.seq}`);
         // REL-FX-1: run SUCCEEDED ve mission COMPLETE yalnız birlikte ve yalnız kanıt yüklemi replay anında da sağlanıyorsa geçerlidir (tek journal girdisi).
+        // REL-FX c4: kayıtlı onay (varsa) yeniden doğrulanır; tamamlama kaydı replay anında yeniden türetilenle birebir aynı olmalıdır (onay gerekirken onaysız girdi tamper'dır).
         const toComplete = isObj(p.mission) && p.mission.to === "COMPLETE";
+        let completion: RunCompletionRecord | undefined;
         if (p.to === "SUCCEEDED" || toComplete) {
-          const chk = completionEvidence(r);
-          if (p.to !== "SUCCEEDED" || !toComplete || p.patch !== undefined || !chk.ok || !isObj(p.completion) || p.completion.headSha !== chk.refs.headSha) throw tampered(`COMPLETION_UNSUPPORTED:${e.seq}`);
+          const rec = isObj(p.completion) ? p.completion.testChangesAcknowledgement : undefined;
+          const ack = rec === undefined ? undefined : isObj(rec) ? {acknowledgeTestChanges: rec.acknowledgeTestChanges, testSurfaceSha256: rec.testSurfaceSha256} : rec;
+          const chk = completionEvidence(r, r.evidence, ack);
+          if (p.to !== "SUCCEEDED" || !toComplete || p.patch !== undefined || !chk.ok || !isObj(p.completion) || JSON.stringify(p.completion) !== JSON.stringify(chk.refs)) throw tampered(`COMPLETION_UNSUPPORTED:${e.seq}`);
+          completion = chk.refs;
         }
         this.applyMissionMove(st, p.mission, r.missionId, e.seq);
         Object.assign(r, p.patch ?? {});
         r.status = p.to; r.reason = typeof p.reason === "string" ? p.reason : null; r.updatedAt = e.at;
+        if (completion) r.completion = completion;
         if (UNLEASED_RUN_STATUSES.includes(r.status)) { r.leaseId = null; r.leaseExpiresAt = null; }
         break;
       }
@@ -521,7 +527,8 @@ export class WorkOsStore {
 
   // //TR: REL-FX-1 kanıta bağlı tamamlama: mission REPORTING olmalı, mission'ın EN SON run'ı AWAITING_APPROVAL olmalı ve run.headSha için REPORT + CLEAN REVIEW + BLOCKED olmayan
   // SECURITY_REPORT kanıtı bulunmalıdır. Tek journal girdisi (RUN_TRANSITION + gömülü mission hareketi) run'ı SUCCEEDED, mission'ı COMPLETE yapar; aksi halde 409 sabit sebep, journal değişmez.
-  completeMission(scope: Scope, missionId: string, reason: string, actor: string): {mission: WorkMission; run: WorkRun} {
+  // REL-FX c4: mevcut test/harness değişikliği varsa acknowledgement ({acknowledgeTestChanges: true, testSurfaceSha256}) güncel TEST_SURFACE kanıtıyla eşleşmelidir; onay aynı yazıda kaydedilir.
+  completeMission(scope: Scope, missionId: string, reason: string, actor: string, acknowledgement?: unknown): {mission: WorkMission; run: WorkRun} {
     if (typeof reason !== "string" || reason.trim().length === 0) throw new WorkOsError("WORKOS_INVALID_INPUT", "reason");
     return this.write(() => {
       const m = this.state.missions[missionId];
@@ -529,7 +536,7 @@ export class WorkOsStore {
       try { assertTransition(m.status, "COMPLETE"); } catch (e) { throw new WorkOsError("WORKOS_INVALID_TRANSITION", (e as Error).message); }
       const runs = Object.values(this.state.runs).filter(r => r.missionId === missionId && r.tenantId === m.tenantId);
       const run = runs[runs.length - 1];
-      const chk = completionEvidence(run);
+      const chk = completionEvidence(run, run?.evidence ?? [], acknowledgement);
       if (!chk.ok) throw new WorkOsError("WORKOS_CONFLICT", chk.reason);
       const why = reason.slice(0, 1000);
       this.append("RUN_TRANSITION", actor, {runId: run.runId, leaseId: null, from: "AWAITING_APPROVAL", to: "SUCCEEDED", reason: `FOUNDER_ACCEPTED: ${why}`.slice(0, 1000),

@@ -44,9 +44,14 @@ export const runStartSchema = {
   type: "object", additionalProperties: false,
   properties: {idempotencyKey: key, roleId: {type: "string", minLength: 1, maxLength: 100, pattern: "^[A-Za-z0-9._:-]+$"}}
 } as const;
+// //TR: REL-FX c4 (S1): acknowledgement yalnız to=COMPLETE ile geçerlidir (route ayrıca denetler); açık true ve TEST_SURFACE kanıt logunun sha256'sı (64 küçük hex) ister.
 export const missionTransitionSchema = {
   type: "object", additionalProperties: false, required: ["to", "reason"],
-  properties: {to: {type: "string", minLength: 1, maxLength: 64}, reason: text}
+  properties: {
+    to: {type: "string", minLength: 1, maxLength: 64}, reason: text,
+    acknowledgement: {type: "object", additionalProperties: false, required: ["acknowledgeTestChanges", "testSurfaceSha256"],
+      properties: {acknowledgeTestChanges: {const: true}, testSurfaceSha256: {type: "string", pattern: "^[0-9a-f]{64}$"}}}
+  }
 } as const;
 
 const compile = (s: object) => { const v = ajv.compile(s); return (x: unknown): {ok: true} | {ok: false; errors: string} => v(x) ? {ok: true} : {ok: false, errors: ajv.errorsText(v.errors, {separator: " | "})}; };

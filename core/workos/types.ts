@@ -90,6 +90,14 @@ export interface RunEvidence {
   // REL-FX-2: yalnız TEST_SURFACE kanıtında; base..head test yüzeyi sınıflaması ve functionalAcceptance durumu (dosya içeriği yazılmaz).
   testSurface?: TestSurfaceSummary;
 }
+// //TR: REL-FX c4 (S1/S2): mevcut test/harness değişikliği olan run'ın COMPLETE'i Founder'ın açık onayını ister; onay, değişen yollar ve değişmeyen functionalAcceptance
+// run SUCCEEDED geçişiyle aynı journal yazısında kaydedilir (asla VERIFIED değildir).
+export interface TestChangesAcknowledgement {
+  acknowledgeTestChanges: true; testSurfaceSha256: string; testSurfaceEvidenceId: string;
+  changed: { modified: string[]; deleted: string[]; renamed: {from: string; to: string}[]; harness: string[]; truncated: boolean };
+  functionalAcceptance: string;
+}
+export interface RunCompletionRecord { headSha: string; reportEvidenceId: string; reviewEvidenceId: string; securityEvidenceId: string; testChangesAcknowledgement?: TestChangesAcknowledgement }
 export interface WorkRun {
   runId: string; missionId: string; projectId: string; tenantId: string; roleId: string | null;
   executor: { implementer: string; reviewer: string };
@@ -97,4 +105,6 @@ export interface WorkRun {
   remediationCycle: number; retryCount: number; retryAt: string | null; reason: string | null;
   baseSha: string | null; headSha: string | null; workBranch: string | null;
   checkpoints: RunCheckpoint[]; evidence: RunEvidence[]; createdAt: string; createdBy: string; updatedAt: string;
+  // REL-FX c4: yalnız kanıt kapısından geçen birleşik SUCCEEDED yazısında (replay ile aynı değer) set edilir.
+  completion?: RunCompletionRecord;
 }

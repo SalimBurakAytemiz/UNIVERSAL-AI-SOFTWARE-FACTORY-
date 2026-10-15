@@ -11,7 +11,7 @@
     "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
   ],
   "scope": "C:/Users/salim/UASCO-recovery/product/rel/REL-FIRST-EXE-P0.md sections REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2 (backend only; apps/desktop/** not touched). One commit per FX in the order FX-1, FX-3, FX-4, FX-2.",
-  "status": "IMPLEMENTED (REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2) + cycle-2 remediation of RV-RELFX-C1-001..004 + cycle-3 remediation of RV-RELFX-C2-001..004, NOT CLEAN; independent review pending",
+  "status": "IMPLEMENTED (REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2) + cycle-2 remediation of RV-RELFX-C1-001..004 + cycle-3 remediation of RV-RELFX-C2-001..004 + cycle-4 remediation of RV-RELFX-C3-001..005 (structural acknowledgement gate), NOT CLEAN; independent review pending",
   "decisions": {
     "D-REL-3": "FA-V2-PRODUCT-2026-10-14 covers apps/control-api/src/server.ts, config/validation.json (test steps appended) and config/trust-root-manifest.json (resealed with node scripts/generate-trust-root.mjs). No other protected file changed.",
     "D-REL-2": "Refuse R3/R4 run start (fail-closed default).",
@@ -91,7 +91,12 @@
     "REL-FX-2: no mission-pinned independent oracle exists yet (fixture hash at mission creation is not implemented), so functionalAcceptance is never VERIFIED; WFR-06 holdout isolation remains the long-term owner.",
     "REL-FX-2: the assertion-count heuristic is syntactic (expect/assert call count, .skip/.only); semantic weakening that keeps the count (e.g. replacing an assertion with a tautology) is not detected and is left to the independent reviewer, who receives the touched-test list.",
     "REL-FX-2: the executed-test count is parsed only for recognised runner output formats; otherwise it is null (UNKNOWN), never guessed.",
-    "Regression runs: dev-run pid-liveness assertions in tests/v7-ps1a-project-studio.test.ts and tests/v7-ps1a-c3-remediation.test.ts failed once each under the parallel combined run (process exit latency after stop/restart) and passed when rerun alone; the code under test (devrun) was not changed by this package."
+    "Regression runs: dev-run pid-liveness assertions in tests/v7-ps1a-project-studio.test.ts and tests/v7-ps1a-c3-remediation.test.ts failed once each under the parallel combined run (process exit latency after stop/restart) and passed when rerun alone; the code under test (devrun) was not changed by this package.",
+    "REL-FX c4: the text-pattern disabled-test detector is a best-effort risk signal only (it decides the BLOCKED label); the guarantee is the structural COMPLETE rule S1: any modified, deleted or renamed pre-existing test file or any harness/config change at run.headSha needs an explicit Founder acknowledgement bound to the TEST_SURFACE log sha256. Undetected weakening therefore cannot complete silently, but an acknowledged completion of an undetected weakening is still possible and is labelled completionMode ACKNOWLEDGED_TEST_CHANGES (functionalAcceptance never VERIFIED).",
+    "REL-FX c4: the structural rule only sees what TEST_SURFACE classifies as test surface or harness. Tests outside the test globs (e.g. Rust #[cfg(test)] modules inside src/*.rs, doctests, tests embedded in production modules, custom test directories not matched by TEST_GLOBS) and harness inputs outside the fixed list (babel/tsconfig/swc/nyc/.env files that change test behaviour, setup files referenced from a config outside the test globs, CI or Makefile targets) are treated as production code and do not require acknowledgement.",
+    "REL-FX c4: a run without TEST_SURFACE evidence for run.headSha (legacy shape; every runner VERIFY writes one) does not require acknowledgement; functionalAcceptance stays UNKNOWN (NO_TEST_SURFACE_EVIDENCE). A supplied acknowledgement can never match such a run (409).",
+    "REL-FX c4: replay re-derives the completion record from the run's evidence and requires byte-equal JSON; a combined SUCCEEDED entry written by an unmerged cycle-1..3 build for a run with changed existing tests (no acknowledgement) would replay as tamper. No such journal exists outside this unmerged package.",
+    "REL-FX c4: the desktop surface for the acknowledgement (showing the changed paths and sending {acknowledgeTestChanges, testSurfaceSha256}) is out of scope; until the integration package wires it, such runs can only be completed through the API with the acknowledgement body."
   ],
   "remediationCycle2": {
     "reviewedSha": "42329579d73d418540382fbecdcf5414f4488bc0",
@@ -176,6 +181,73 @@
       "Any test that prints a line identical in shape to its runner's summary with different numbers makes the run UNKNOWN (conflict) rather than silently trusted; a printed line identical to the real summary is indistinguishable and harmless.",
       "vite.config.* changes always count as harness surface, including changes unrelated to tests (fail-closed: UNVERIFIED_ORACLE instead of UNKNOWN).",
       "Disabled-test markers remain text patterns: a { skip } shorthand whose runtime value is false still counts (fail-closed BLOCKED); markers inside strings or comments can count (only a base-to-head increase matters)."
+    ]
+  },
+  "remediationCycle4": {
+    "reviewedSha": "369c320bba43e5c896230558a76d5bf4f485de93",
+    "reviewVerdict": "BLOCKED (cycle 3): residual text-pattern evasions of the disabled-test detector",
+    "implementer": "CLAUDE_BUILDER",
+    "designDecision": {
+      "owner": "supervisor",
+      "summary": "Ends the detector pattern arms race (fail-closed): the text-pattern detector is a best-effort risk signal; the guarantee moves to a structural rule in the COMPLETE gate.",
+      "S1": "core/workos/outcomes.ts testChangesRequirement + completionEvidence(run, evidence, acknowledgement): if the latest TEST_SURFACE evidence for run.headSha lists any modified, deleted or renamed pre-existing test file or any harness change, COMPLETE is refused with 409 COMPLETION_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT unless the request carries {acknowledgeTestChanges: true, testSurfaceSha256} equal to that evidence's logSha256 (sha256 of the exact TEST_SURFACE log). A supplied acknowledgement must always match the current evidence (stale = sha of an earlier TEST_SURFACE or of another head; mismatched; malformed) -> 409, journal unchanged. Evidence without a valid 64-hex log sha256 can never be acknowledged. API: POST /v1/missions/:id/transition accepts an optional acknowledgement object (strict Ajv schema, 400 when malformed or used with to != COMPLETE); the store path transitionMission(COMPLETE) carries no acknowledgement and is refused the same way.",
+      "S2": "The acknowledgement is recorded in the same RUN_TRANSITION journal entry as the run SUCCEEDED / mission COMPLETE move: completion.testChangesAcknowledgement = {acknowledgeTestChanges, testSurfaceSha256, testSurfaceEvidenceId, changed: {modified, deleted, renamed, harness, truncated}, functionalAcceptance (unchanged, never VERIFIED)}. Replay re-derives the completion record from the run's evidence with the recorded acknowledgement and requires byte-equal JSON (stripped, altered sha, altered path list, altered functionalAcceptance or null acknowledgement -> tamper). WorkRun.completion holds the record; deriveOutcomes exposes completionMode NOT_COMPLETED | EVIDENCE_GUARD | ACKNOWLEDGED_TEST_CHANGES on every surface that returns outcomes (COMPLETE response, GET work-run view, audit WORKOS_MISSION_COMPLETED).",
+      "S3": "functionalAcceptance BLOCKED (detected deletion/weakening) is checked before the acknowledgement and refuses COMPLETE even with a matching acknowledgement (409 COMPLETION_FUNCTIONAL_ACCEPTANCE_BLOCKED).",
+      "S4": "Newly added test files alone do not require acknowledgement (they cannot weaken existing tests) and keep UNVERIFIED_ORACLE; completionMode EVIDENCE_GUARD."
+    },
+    "findings": {
+      "RV-RELFX-C3-001": {
+        "severity": "P2 (BLOCKER)",
+        "fix": "DISABLED_RES modifier and x/f-prefix patterns accept a template-literal terminator after the member chain (\\s*[(`]): it.skip.each`...`, it.only.each`...`, test.skip.for`...`, describe.skip.each`...`, it.todo.each `...`, xit.each`...`, fit.each`...` count. Structurally covered regardless by S1.",
+        "tests": "tests/v7-relfx-c4-remediation.test.ts: 7 tagged-template cases on a base with existing it.each`...` and test.for`...` -> BLOCKED / SKIP_OR_ONLY_ADDED; negative: unmodified tagged templates are not markers. All 7 verified failing against the 369c320 detector."
+      },
+      "RV-RELFX-C3-002": {
+        "severity": "P2 (BLOCKER)",
+        "fix": "The test-call options-object pattern accepts a member receiver chain ((?:[A-Za-z_$][\\w$]*\\.)*): node:test subtests t.test(name, {skip|todo|only}, fn), t.sub.test(...), nameless t.test({skip: true}, fn). Structurally covered regardless by S1.",
+        "tests": "5 subtest cases -> BLOCKED; negatives: t.test(name, {timeout}), {skip: false}, pattern.test(value). All 5 verified failing against 369c320."
+      },
+      "RV-RELFX-C3-003": {
+        "severity": "P3",
+        "fix": "Aliased pytest/unittest forms: mark.skip/skipif/xfail on any receiver (pytest.mark, pt.mark, from pytest import mark), decorators @<alias>.skip/skipIf/skipUnless/expectedFailure and bare @skipif/@xfail, bare skip(/xfail( calls (from pytest import skip), .xfail( (pytest.xfail/pt.xfail), importorskip(, SkipTest (raise unittest.SkipTest / raise SkipTest).",
+        "tests": "13 Python cases on a base with a pytest function and a unittest.TestCase -> BLOCKED; 11 verified failing against 369c320 (pt.mark.skip and @ut.skip were already counted via the .skip( pattern and are kept as regressions); negative: skipped_items helper / .skipped attribute."
+      },
+      "RV-RELFX-C3-004": {
+        "severity": "P3",
+        "fix": "ava.config.* and karma.conf.* are unconditional harness files; package.json comparison also covers the script named by the mission testCommand and its pre/post scripts (testCommandScripts: npm/pnpm/yarn run|run-script <name>, npm test|t|tst, yarn/pnpm <name>); a --opt=<file> option value in testCommand is test surface like a positional file argument. isHarnessChange takes the testCommand; evaluateTestSurface passes it.",
+        "tests": "ava/karma paths -> harness/UNVERIFIED_ORACLE; testCommandScripts table; npm run test:unit script change and added pretest:unit -> harness, unrelated build script change -> not harness, same change without the testCommand -> not harness (the pre-c4 gap); --config=./cfg/x.mjs -> test path."
+      },
+      "RV-RELFX-C3-005": {
+        "severity": "P3",
+        "disposition": "Recorded as accepted heuristic limits (below and in knownLimits). The cycle-3 review text for items (a)-(d) was not part of the cycle-4 task bundle verbatim; the residual gaps listed here are the implementer's explicit enumeration and are expected to subsume them. Under S1 every listed detector gap on a pre-existing test still requires the Founder acknowledgement; the gaps only affect whether the run is labelled BLOCKED.",
+        "residualHeuristicGaps": [
+          "(a) Indirection: aliases and computed members are not resolved (const later = it.skip; later(...); it['skip'](...); const {skip} = test; from unittest import skip as sk; @sk(...); wrapper helpers that call skip internally).",
+          "(b) Runtime-conditional disabling is not evaluated (early return inside a test, if (process.env.X) return, t.skip() behind a condition that is always true, {skip: someVariable}, skipIf(true) vs skipIf(cond)); {skip: <variable>} still counts (fail-closed) but a guard that never runs the assertions does not.",
+          "(c) Semantic weakening that keeps the assertion and marker counts (tautological expect(x).toBe(x), loosened matchers, changed expected values, try/catch swallowing, mocking the unit under test) is not detected.",
+          "(d) Markers are counted textually: markers in strings or comments count, a move of a marker between files or a simultaneous remove/add keeps the count, and the comparison is per file (base vs head counts), not per test.",
+          "(e) Assertion counting recognises expect/assert call shapes only; Python bare assert statements, Go if/t.Errorf checks, JUnit assertThat on other receivers and custom assertion helpers are not counted.",
+          "(f) Harness classification is a fixed list (see knownLimits): unlisted configuration that changes test selection or behaviour is treated as production code, and the testCommand script resolution covers npm/pnpm/yarn script names only (not Makefile/tox/nox targets or shell wrappers)."
+        ]
+      }
+    },
+    "files": [
+      "core/workos/outcomes.ts (testChangesRequirement, acknowledgement in completionEvidence, completionMode in deriveOutcomes)",
+      "core/workos/types.ts (TestChangesAcknowledgement, RunCompletionRecord, WorkRun.completion)",
+      "core/workos/store.ts (completeMission acknowledgement parameter; replay re-derivation and byte-equal completion record)",
+      "core/workos/schemas.ts (missionTransitionSchema optional strict acknowledgement object)",
+      "apps/control-api/src/server.ts (protected, authorized: acknowledgement passed to completeMission, 400 on non-COMPLETE, completionMode in audit)",
+      "core/workos/test-surface.ts (C3-001..004 detector and harness fixes, testCommandScripts)",
+      "tests/v7-relfx-c4-remediation.test.ts (new)",
+      "config/validation.json (protected, authorized: new test file appended to the existing tests step)",
+      "config/trust-root-manifest.json (protected, resealed with node scripts/generate-trust-root.mjs)",
+      "audit/checkpoints/V7-PKG-RELFX-BACKEND-2026-10-15.json"
+    ],
+    "safety": "No AI-generated or untrusted project code executed on the host: new tests use synthetic strings, the existing FAKE executors and a UASCO-authored fixture repository (run-tests.mjs and test modules written by the test itself). No new dependencies, no network. Desktop surface for the acknowledgement not touched (backend only).",
+    "limits": [
+      "REL-FX c4: the text-pattern disabled-test detector is a best-effort risk signal only (it decides the BLOCKED label); the guarantee is the structural COMPLETE rule S1: any modified, deleted or renamed pre-existing test file or any harness/config change at run.headSha needs an explicit Founder acknowledgement bound to the TEST_SURFACE log sha256. Undetected weakening therefore cannot complete silently, but an acknowledged completion of an undetected weakening is still possible and is labelled completionMode ACKNOWLEDGED_TEST_CHANGES (functionalAcceptance never VERIFIED).",
+      "REL-FX c4: the structural rule only sees what TEST_SURFACE classifies as test surface or harness. Tests outside the test globs (e.g. Rust #[cfg(test)] modules inside src/*.rs, doctests, tests embedded in production modules, custom test directories not matched by TEST_GLOBS) and harness inputs outside the fixed list (babel/tsconfig/swc/nyc/.env files that change test behaviour, setup files referenced from a config outside the test globs, CI or Makefile targets) are treated as production code and do not require acknowledgement.",
+      "REL-FX c4: a run without TEST_SURFACE evidence for run.headSha (legacy shape; every runner VERIFY writes one) does not require acknowledgement; functionalAcceptance stays UNKNOWN (NO_TEST_SURFACE_EVIDENCE). A supplied acknowledgement can never match such a run (409).",
+      "REL-FX c4: replay re-derives the completion record from the run's evidence and requires byte-equal JSON; a combined SUCCEEDED entry written by an unmerged cycle-1..3 build for a run with changed existing tests (no acknowledgement) would replay as tamper. No such journal exists outside this unmerged package.",
+      "REL-FX c4: the desktop surface for the acknowledgement (showing the changed paths and sending {acknowledgeTestChanges, testSurfaceSha256}) is out of scope; until the integration package wires it, such runs can only be completed through the API with the acknowledgement body."
     ]
   }
 }

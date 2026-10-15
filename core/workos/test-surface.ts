@@ -22,19 +22,29 @@ const TEST_PATH_RES: readonly RegExp[] = [/(^|\/)tests?\//, /(^|\/)specs?\//, /(
 // Koşulsuz: config dosyaları (vite.config.* dahil: vitest test bloğunu taşıyabilir; blok ayrıştırılmaz, fail-closed dosyanın her değişikliği sayılır), conftest.py (her dizinde),
 // pytest.ini, tox.ini. Koşullu: package.json yalnız scripts.test/pretest/posttest veya üst düzey jest/mocha/ava anahtarları değişince,
 // setup.cfg yalnız [tool:pytest] bölümü, pyproject.toml yalnız [tool.pytest.ini_options] bölümü değişince.
-export const HARNESS_GLOBS: readonly string[] = ["**/vitest.config.*", "**/vite.config.*", "**/vitest.workspace.*", "**/jest.config.*", "**/playwright.config.*", "**/cypress.config.*", "**/.mocharc*", "**/conftest.py", "**/pytest.ini", "**/tox.ini",
-  "**/package.json (scripts.test|pretest|posttest, jest, mocha, ava)", "**/setup.cfg ([tool:pytest])", "**/pyproject.toml ([tool.pytest.ini_options])"];
-const HARNESS_ALWAYS_RES: readonly RegExp[] = [/(^|\/)(?:vitest|vite|jest|playwright|cypress)\.config\.[A-Za-z0-9.]+$/, /(^|\/)vitest\.workspace\.[A-Za-z0-9.]+$/, /(^|\/)\.mocharc(?:\.[A-Za-z0-9]+)?$/,
+// RV-RELFX-C3-004: ava.config.* ve karma.conf.* koşulsuz harness'tır; package.json'da mission testCommand'ının adlandırdığı betik (npm/pnpm/yarn run <ad>) ve pre/post eşleri de karşılaştırılır.
+export const HARNESS_GLOBS: readonly string[] = ["**/vitest.config.*", "**/vite.config.*", "**/vitest.workspace.*", "**/jest.config.*", "**/playwright.config.*", "**/cypress.config.*", "**/ava.config.*", "**/karma.conf.*", "**/.mocharc*", "**/conftest.py", "**/pytest.ini", "**/tox.ini",
+  "**/package.json (scripts.test|pretest|posttest, the script named by testCommand and its pre/post, jest, mocha, ava)", "**/setup.cfg ([tool:pytest])", "**/pyproject.toml ([tool.pytest.ini_options])"];
+const HARNESS_ALWAYS_RES: readonly RegExp[] = [/(^|\/)(?:vitest|vite|jest|playwright|cypress|ava)\.config\.[A-Za-z0-9.]+$/, /(^|\/)karma\.conf\.[A-Za-z0-9.]+$/, /(^|\/)vitest\.workspace\.[A-Za-z0-9.]+$/, /(^|\/)\.mocharc(?:\.[A-Za-z0-9]+)?$/,
   /(^|\/)conftest\.py$/, /(^|\/)(?:pytest|tox)\.ini$/];
 const CODE_RE = /\.(m?[jt]sx?|cjs|cts|mts|py|go|rs|java|cs|kt|rb|php)$/;
 const MAX_LIST = 200;
 const norm = (p: string) => p.replace(/\\/g, "/");
 
-// Test komutunun (argv) göreli dosya argümanları da test yüzeyidir (ör. ["node", "check.mjs"]).
+// Test komutunun (argv) göreli dosya argümanları da test yüzeyidir (ör. ["node", "check.mjs"]; RV-RELFX-C3-004: --config=x.mjs biçimindeki seçenek değerleri dahil).
 export function isTestPath(p: string, testCommand: readonly string[] = []): boolean {
   const n = norm(p);
   if (TEST_PATH_RES.some(re => re.test(n))) return true;
-  return testCommand.slice(1).some(a => !a.startsWith("-") && /\.[A-Za-z0-9]+$/.test(a) && norm(a).replace(/^\.\//, "") === n);
+  const fileArgs = testCommand.slice(1).map(a => (a.startsWith("-") ? (a.includes("=") ? a.slice(a.indexOf("=") + 1) : "") : a));
+  return fileArgs.some(a => a !== "" && /\.[A-Za-z0-9]+$/.test(a) && norm(a).replace(/^\.\//, "") === n);
+}
+// Mission testCommand'ının adlandırdığı package.json betikleri: npm/pnpm/yarn run|run-script <ad>, npm test|t|tst, yarn/pnpm <ad>. Bilinmeyen biçimde boş liste (yalnız scripts.test karşılaştırılır).
+export function testCommandScripts(testCommand: readonly string[] = []): string[] {
+  const [exe, ...rest] = testCommand;
+  if (exe !== "npm" && exe !== "pnpm" && exe !== "yarn") return [];
+  const args = rest.filter(a => !a.startsWith("-"));
+  const name = args[0] === "run" || args[0] === "run-script" ? args[1] : args[0] === "t" || args[0] === "tst" ? "test" : exe !== "npm" || args[0] === "test" ? args[0] : undefined;
+  return name ? [`pre${name}`, name, `post${name}`] : [];
 }
 
 // INI/TOML bölüm metni (başlıktan bir sonraki başlığa kadar); bölüm yoksa null.
@@ -47,18 +57,23 @@ function iniSection(s: string | null, header: string): string | null {
   return out.join("\n").trim();
 }
 // package.json test betikleri ve test koşucusu yapılandırma anahtarları (jest/mocha/ava); ayrıştırılamazsa ham metin döner (karşılaştırma fail-closed: ham metin farkı değişiklik sayılır).
-function testScripts(s: string | null): string | null {
+function testScripts(s: string | null, named: readonly string[] = []): string | null {
   if (s === null) return null;
-  try { const j = JSON.parse(s) as {scripts?: Record<string, unknown>; jest?: unknown; mocha?: unknown; ava?: unknown}; const sc = j?.scripts ?? {}; return JSON.stringify([sc.test ?? null, sc.pretest ?? null, sc.posttest ?? null, j?.jest ?? null, j?.mocha ?? null, j?.ava ?? null]); } catch { return `UNPARSEABLE:${s}`; }
+  try {
+    const j = JSON.parse(s) as {scripts?: Record<string, unknown>; jest?: unknown; mocha?: unknown; ava?: unknown}; const sc = j?.scripts ?? {};
+    const own = (k: string) => (Object.prototype.hasOwnProperty.call(sc, k) ? sc[k] : null);
+    return JSON.stringify([own("test"), own("pretest"), own("posttest"), j?.jest ?? null, j?.mocha ?? null, j?.ava ?? null, ...named.map(own)]);
+  } catch { return `UNPARSEABLE:${s}`; }
 }
 // Harness yapılandırma değişikliği mi? contentAt yalnız koşullu dosyalarda okunur (before: base'deki eski yol, after: head'deki yol).
-export function isHarnessChange(e: NameStatusEntry, baseSha: string, headSha: string, contentAt: (ref: string, path: string) => string | null): boolean {
+export function isHarnessChange(e: NameStatusEntry, baseSha: string, headSha: string, contentAt: (ref: string, path: string) => string | null, testCommand: readonly string[] = []): boolean {
   const after = norm(e.path), before = norm(e.oldPath ?? e.path);
   if ([after, before].some(p => HARNESS_ALWAYS_RES.some(re => re.test(p)))) return true;
   const b = (p: string) => (e.status === "ADDED" ? null : contentAt(baseSha, p)), a = (p: string) => (e.status === "DELETED" ? null : contentAt(headSha, p));
   const named = (p: string, n: string) => p.split("/").pop() === n;
   const differs = (n: string, view: (s: string | null) => string | null) => view(named(before, n) ? b(before) : null) !== view(named(after, n) ? a(after) : null);
-  if (named(after, "package.json") || named(before, "package.json")) return differs("package.json", testScripts);
+  const scripts = testCommandScripts(testCommand);
+  if (named(after, "package.json") || named(before, "package.json")) return differs("package.json", x => testScripts(x, scripts));
   if (named(after, "setup.cfg") || named(before, "setup.cfg")) return differs("setup.cfg", x => iniSection(x, "[tool:pytest]"));
   if (named(after, "pyproject.toml") || named(before, "pyproject.toml")) return differs("pyproject.toml", x => iniSection(x, "[tool.pytest.ini_options]"));
   return false;
@@ -83,13 +98,22 @@ export function assertionCount(s = ""): number { return (s.match(/\b(?:expect|as
 // vitest/jest/mocha/node:test t.skip, pytest.skip), xit/xdescribe/xtest/fit/fdescribe( (xit.each( dahil), node:test/vitest seçenek nesnesi {skip|todo|only: <false olmayan>}
 // ve kısaltması { skip } / { todo } / { only } (adlı ilk argümandan sonra veya adsız ilk argüman olarak: test({ skip: true }, fn)), pytest.mark.skip/skipif/xfail (parantezli/parantezsiz), unittest skip/skipIf/skipUnless/expectedFailure,
 // self.skipTest(, Go t.Skip(, Rust #[ignore], JUnit @Disabled/@Ignore, xUnit Skip = "...". Sayı artışı (mevcut testte) zayıflatmadır.
+// REL-FX c4: bu dedektör yalnız en iyi çaba risk sinyalidir (BLOCKED etiketi); garanti COMPLETE kapısındaki yapısal onay kuralıdır (outcomes.ts testChangesRequirement):
+// mevcut test/harness değişikliği desen kaçırılsa da Founder onayı olmadan tamamlanamaz. c4 desen düzeltmeleri: değiştirici zincirinden sonra tagged template (it.skip.each`...`,
+// xit.each`...`; RV-RELFX-C3-001), üye alıcılı node:test alt testi t.test(ad, {skip|todo|only}, fn) (RV-RELFX-C3-002), takma adlı pytest/unittest biçimleri (mark.skip/skipif/xfail,
+// @<alias>.skip, çıplak skip(/xfail(, importorskip(, SkipTest; RV-RELFX-C3-003).
 const DISABLED_RES: readonly RegExp[] = [
-  /\.(?:skip|only|todo|skipIf|runIf)\b(?:\.\w+)*\s*\(/g,
-  /(?<![.\w$])[xf](?:it|describe|test|context|specify)(?:\.\w+)*\s*\(/g,
-  /(?<![.\w$])(?:it|test|describe|suite|specify|context)(?:\.\w+)*\s*\(\s*(?:(?:`[^`]*`|'[^']*'|"[^"]*"|[\w.]+)\s*,\s*)?\{[^{}]*?(?<=[{,]\s*)(?:["']?(?:skip|todo|only)["']?\s*:(?!\s*(?:false\b|null\b|undefined\b|0\b|''|""|[,}]))|(?:skip|todo|only)\s*(?=[,}]))/g,
-  /\bpytest\.mark\.(?:skip|skipif|xfail)\b/g,
+  /\.(?:skip|only|todo|skipIf|runIf)\b(?:\.\w+)*\s*[(`]/g,
+  /(?<![.\w$])[xf](?:it|describe|test|context|specify)(?:\.\w+)*\s*[(`]/g,
+  /(?<![.\w$])(?:[A-Za-z_$][\w$]*\.)*(?:it|test|describe|suite|specify|context)(?:\.\w+)*\s*\(\s*(?:(?:`[^`]*`|'[^']*'|"[^"]*"|[\w.]+)\s*,\s*)?\{[^{}]*?(?<=[{,]\s*)(?:["']?(?:skip|todo|only)["']?\s*:(?!\s*(?:false\b|null\b|undefined\b|0\b|''|""|[,}]))|(?:skip|todo|only)\s*(?=[,}]))/g,
+  /\bmark\.(?:skip|skipif|xfail)\b/g,
   /\bunittest\.(?:skip|skipIf|skipUnless|expectedFailure)\b/g,
-  /^\s*@(?:skip|skipIf|skipUnless|expectedFailure)\b/gm,
+  /^\s*@(?:skip|skipIf|skipUnless|expectedFailure|skipif|xfail)\b/gm,
+  /^\s*@[A-Za-z_][\w.]*\.(?:skip|skipIf|skipUnless|expectedFailure)\b/gm,
+  /(?<![.\w$])(?:skip|xfail)\s*\(/g,
+  /\.xfail\s*\(/g,
+  /\bimportorskip\s*\(/g,
+  /\bSkipTest\b/g,
   /\bskipTest\s*\(/g,
   /\.Skip(?:Now|f)?\s*\(/g,
   /#\[ignore\b/g,
@@ -200,11 +224,11 @@ export function evaluateTestSurface(i: EvaluateInput): TestSurfaceSummary {
     if (e.status === "RENAMED" && e.oldPath !== undefined) {
       const fromT = isT(e.oldPath), toT = isT(e.path);
       if (fromT && !toT) { deleted.push(e.oldPath); continue; } // test glob'u dışına taşımak testi siler
-      if (!fromT && !toT) { if (isHarnessChange(e, i.baseSha, i.headSha, i.contentAt)) harness.push(e.path); continue; }
+      if (!fromT && !toT) { if (isHarnessChange(e, i.baseSha, i.headSha, i.contentAt, tc)) harness.push(e.path); continue; }
       if (!fromT) { added.push(e.path); continue; }
       renamed.push({from: e.oldPath, to: e.path}); compare(e.oldPath, e.path); continue;
     }
-    if (!isT(e.path)) { if (isHarnessChange(e, i.baseSha, i.headSha, i.contentAt)) harness.push(e.path); continue; }
+    if (!isT(e.path)) { if (isHarnessChange(e, i.baseSha, i.headSha, i.contentAt, tc)) harness.push(e.path); continue; }
     if (e.status === "DELETED") deleted.push(e.path);
     else if (e.status === "ADDED") { added.push(e.path); const a = CODE_RE.test(e.path) ? i.contentAt(i.headSha, e.path) : null; if (a !== null && assertionCount(a) === 0) trivialAdded.push(e.path); }
     else { modified.push(e.path); compare(e.path, e.path); }
