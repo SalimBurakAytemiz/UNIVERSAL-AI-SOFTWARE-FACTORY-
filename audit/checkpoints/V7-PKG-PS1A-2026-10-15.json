@@ -11,7 +11,7 @@
     "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
   ],
   "scope": "Addendum UASCO-V2-ADDENDUM-PROJECT-QA-DELIVERY-RE-2026-10-15 section 2.1 PS-001..012 (backend part), acceptance PS-AT-001/002/004/005; WK-01 ADR. Desktop screens are a separate package.",
-  "status": "IMPLEMENTED, NOT CLEAN; independent review pending",
+  "status": "IMPLEMENTED, NOT CLEAN; c2 remediation of PS1A-C1-F1/F2/F3 applied, independent review pending",
   "filesChanged": [
     "core/workos/project-studio.ts (new: managed repository, template repo creation, local git/ZIP import, files/file/git log/git diff views, export)",
     "core/workos/devrun.ts (new: dev-run manager, preview probe, log rings, GLOBAL_STOP watch, orphan recovery)",
@@ -64,5 +64,98 @@
   "notDone": [
     "No merge, push, release or production action.",
     "No AI provider was called; no downloads or installs."
+  ],
+  "remediation": [
+    {
+      "//TR": "Bu bölüm PS-1A c2 düzeltmesini kaydeder: bağımsız incelemenin PS1A-C1-F1/F2/F3 bulguları, uygulanan düzeltmeler, eklenen testler ve gözlenen doğrulama sonuçları.",
+      "cycle": "c2",
+      "parent": "3fed4ccaf6c35cb933b8270d5cd91e85fbb10495",
+      "date": "2026-10-15",
+      "implementer": "CLAUDE_BUILDER",
+      "findings": [
+        {
+          "id": "PS1A-C1-F1",
+          "severity": "HIGH",
+          "fix": "core/workos/project-studio.ts: new managedRepoRoot(project) used by every files/file/git log/git diff/export operation (repoRoot) and by DevRunManager.start: requires repository.managed === true and realpath(repository.path) equal to realpath(<dataDir>/projects/<projectId>/repo) (case-insensitive on win32) and strictly under <dataDir>/projects; otherwise 409 REPOSITORY_NOT_MANAGED (missing path/dir stays 409 REPOSITORY_NOT_CONFIGURED). Defense in depth: new assertRepositoryPathAllowed(raw) rejects a client repository.path that resolves inside or above dataDir (same under(dataReal, real) || under(real, dataReal) test as localSource, on realpath and resolved path) and apps/control-api/src/server.ts POST /v1/projects calls it after the write gates: 400 REPOSITORY_PATH_FORBIDDEN.",
+          "tests": [
+            "tests/v7-ps1a-c2-remediation.test.ts: PS1A-C1-F1 (tenant A cannot create projects pointing at <dataDir>, <dataDir>/projects, B project dir, B managed repo, a file in it, a path above dataDir or a non-existent path inside dataDir; journal-injected tA projects pointing at <dataDir>, <dataDir>/projects, an external non-managed repo, and a managed=true record pointing at B managed repo all get 409 REPOSITORY_NOT_MANAGED on files, file, git/log, git/diff, export, devrun/start, devrun/restart; no export zip written; B still reads its own repo)"
+          ]
+        },
+        {
+          "id": "PS1A-C1-F2",
+          "severity": "MEDIUM",
+          "fix": "core/workos/devrun.ts start(): after every await (owner start time / owner liveness, freePort, child startTimeOf) checks a.stopping || this.active.get(id) !== a || GLOBAL_STOP; before spawn it does not spawn (abortStart finalizes the entry as STOPPED if not yet finalized, releases the lock, returns the view, or throws 423 GLOBAL_STOP_ACTIVE when the stop file is active); after spawn it stops the child via stop() or awaits the exit already in progress. The port is assigned to state only after the check. cleanup() no longer overwrites persisted logs when no child was spawned. freePort is injectable (default freeLoopbackPort) to make the race deterministic in tests.",
+          "tests": [
+            "tests/v7-ps1a-c2-remediation.test.ts: PS1A-C1-F2 (stopAll during the port wait -> STOPPED/GLOBAL_STOP_ACTIVE, pid null, port null, marker child never spawned, second stopAll finds 0, lock released; GLOBAL_STOP file activated during the port wait -> 423 and no spawn; stopAll during the post-spawn start-time await -> spawned child pid not alive; positive control: normal start spawns the marker child and close() stops it)"
+          ]
+        },
+        {
+          "id": "PS1A-C1-F3",
+          "severity": "MEDIUM",
+          "fix": "core/workos/devrun.ts: state records ownerStartTime (startTimeOf(process.pid), cached); ownerLive(state) treats another-process owner as live only when its pid is alive and the recorded start time matches (missing/unreadable start time on an alive pid stays fail-closed live; other host stays live). recover(), start() and takeLock() use it: a reused owner pid is not live, recover() reaps the orphan (child pid + start time still required to kill) and removes the lock only when the lock carries exactly that stale owner pid and instanceId; start() passes the same stale owner to takeLock. view() never returns an AVAILABLE preview/url read from the file when this instance has no active entry: masked to UNAVAILABLE with reason NOT_OWNED_BY_THIS_INSTANCE. ownerStartTime is not exposed in the public view.",
+          "tests": [
+            "tests/v7-ps1a-c2-remediation.test.ts: PS1A-C1-F3 (live unrelated ownerPid with mismatching ownerStartTime -> ORPHAN_KILLED, unrelated process not killed, lock taken over, start 200, persisted ownerStartTime equals this process start time; genuinely live owner (pid + start time match) -> not recovered, preview masked NOT_OWNED_BY_THIS_INSTANCE, orphan untouched, start 409 DEVRUN_LOCKED; after that owner dies start 200)"
+          ]
+        }
+      ],
+      "filesChanged": [
+        "core/workos/project-studio.ts",
+        "core/workos/devrun.ts",
+        "apps/control-api/src/server.ts",
+        "tests/v7-ps1a-c2-remediation.test.ts (new)",
+        "config/validation.json (tests step: appended tests/v7-ps1a-c2-remediation.test.ts at the end)",
+        "config/trust-root-manifest.json (regenerated via scripts/generate-trust-root.mjs)",
+        "audit/checkpoints/V7-PKG-PS1A-2026-10-15.json (this remediation section)"
+      ],
+      "behaviourChanges": [
+        "Studio files/file/git/export/devrun routes on a project whose repository is not this project managed repo now return 409 REPOSITORY_NOT_MANAGED (previously served the caller-controlled path).",
+        "POST /v1/projects with repository.path inside or above dataDir returns 400 REPOSITORY_PATH_FORBIDDEN.",
+        "Dev-run start ordering: DEVRUN_COMMAND_NOT_CONFIGURED/NOT_ALLOWED and repository checks now run before the cross-process owner check (owner check needs an await and runs after the in-process placeholder)."
+      ],
+      "verification": {
+        "note": "observed results in C:/Users/salim/UASCO-wt/v2-ps1a; bash with PSModulePath unset; run-validation.mjs NOT run (supervisor-owned)",
+        "results": [
+          {
+            "cmd": "npx tsc --noEmit",
+            "exit": 0
+          },
+          {
+            "cmd": "npx vitest run --dir tests tests/v7-ps1a-c2-remediation.test.ts tests/v7-ps1a-project-studio.test.ts tests/v7-b3c-security-stage.test.ts tests/v7-b3a-runner.test.ts tests/v7-b3a-recovery-budget.test.ts tests/v7-b3a-c3-builder-commit.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts",
+            "exit": 0,
+            "summary": "8 files, 116 tests passed (after trust-root reseal; before reseal only the B2 seal test failed on server.ts sha256, as expected)"
+          },
+          {
+            "cmd": "node scripts/smoke-control-api.mjs",
+            "exit": 0,
+            "summary": "PASS"
+          },
+          {
+            "cmd": "node scripts/v6-apps-control-desktop-selftest.mjs",
+            "exit": 0,
+            "summary": "PASS 93/93"
+          },
+          {
+            "cmd": "node scripts/validate-tr-comments.mjs",
+            "exit": 0,
+            "summary": "TR_VALIDATION: PASS"
+          },
+          {
+            "cmd": "node scripts/secret-sanity.mjs",
+            "exit": 0,
+            "summary": "SECRET_SANITY: PASS"
+          },
+          {
+            "cmd": "node scripts/generate-trust-root.mjs && node scripts/verify-trust-root.mjs",
+            "exit": 0,
+            "summary": "files=364; TRUST_ROOT_VERIFY: PASS (re-run after commit by the implementer)"
+          }
+        ]
+      },
+      "notDone": [
+        "Not self-declared clean; independent review pending.",
+        "Negative (pre-fix) runs of the new tests were not executed; EXP1/EXP4/EXP5 from the review are the pre-fix evidence.",
+        "No merge, push, release or production action; no AI provider called; no downloads or installs."
+      ]
+    }
   ]
 }

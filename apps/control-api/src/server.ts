@@ -160,6 +160,8 @@ app.get("/v1/projects",wos(async()=>({projects:getStore().listProjects(scope)}))
 app.post("/v1/projects",wos(async(req,reply)=>{
   const body=req.body??{};if(!workosWrite(reply,"workos.project.create","NONE",body,validateProjectCreate))return reply;
   const b=body as any;
+  // PS1A-C1-F1: istemcinin verdiği repository.path veri dizininin içinde/üstünde olamaz (başka tenant'ın yönetilen deposu, journal, run dizinleri); 400 REPOSITORY_PATH_FORBIDDEN.
+  if(b.repository&&typeof b.repository==="object"&&b.repository.path!==undefined)getStudio().assertRepositoryPathAllowed(b.repository.path);
   // PS-1A: template verilirse yönetilen depo journal kilidi altında kurulur; şablonun test/dev komutu ve proje tipi yalnız istemci vermediyse varsayılan olur.
   const tpl=b.template?renderTemplate(b.template,b.name):null;
   const r=getStore().createProjectDetailed({tenantId:scope.tenantId,orgId,name:b.name,environmentId:b.environmentId,customerId:b.customerId,repository:b.repository,createdBy:actor,idempotencyKey:b.idempotencyKey,testCommand:b.testCommand??tpl?.testCommand,

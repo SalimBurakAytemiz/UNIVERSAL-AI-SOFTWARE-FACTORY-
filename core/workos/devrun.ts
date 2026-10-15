@@ -21,14 +21,18 @@ export interface DevRunRecovery { at: string; result: "ORPHAN_KILLED" | "ORPHAN_
 export interface DevRunState {
   schemaVersion: 1; projectId: string; tenantId: string; status: DevRunStatus; reason: string | null;
   pid: number | null; pidStartTime: string | null; ownerPid: number; ownerHost: string; instanceId: string;
+  // PS1A-C1-F3: sahip API sürecinin başlangıç zamanı; pid tek başına yeniden kullanılabildiği için sahip yalnız pid + başlangıç zamanı eşleşirse canlı sayılır (yoksa: eski kayıt, fail-closed).
+  ownerStartTime?: string | null;
   startedAt: string | null; endedAt: string | null; exitCode: number | null; signal: string | null; port: number | null; argv: string[]; headSha: string | null;
   preview: DevRunPreview; recovery?: DevRunRecovery;
 }
-export interface DevRunView extends Omit<DevRunState, "ownerPid" | "ownerHost" | "instanceId" | "pidStartTime" | "schemaVersion" | "tenantId"> { logTail: {stdout: string; stderr: string; truncated: boolean} }
+export interface DevRunView extends Omit<DevRunState, "ownerPid" | "ownerHost" | "instanceId" | "pidStartTime" | "ownerStartTime" | "schemaVersion" | "tenantId"> { logTail: {stdout: string; stderr: string; truncated: boolean} }
 export interface DevRunOptions {
   studio: ProjectStudio; envPolicyFile: string; globalStopFile: string;
   audit?: (event: string, details: Record<string, unknown>) => void;
   startTimeOf?: (pid: number) => Promise<string | null>;
+  // Test enjeksiyonu: boş loopback port seçimi (varsayılan freeLoopbackPort); PS1A-C1-F2 yarışını deterministik kurmak için kullanılır.
+  freePort?: () => Promise<number>;
   logRingBytes?: number; logTailBytes?: number; startWaitMs?: number; graceMs?: number; probeIntervalMs?: number; stopPollMs?: number;
 }
 const NO_PREVIEW_TYPES = new Set(["desktop", "mobile", "native"]);
@@ -91,9 +95,23 @@ export class DevRunManager {
   readonly recoveries: Array<{projectId: string} & DevRunRecovery> = [];
 
   constructor(opts: DevRunOptions) {
-    this.o = {audit: () => undefined, startTimeOf: processStartTime, logRingBytes: 256 * 1024, logTailBytes: 16 * 1024, startWaitMs: 15_000, graceMs: 1_000, probeIntervalMs: 500, stopPollMs: 500, ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined))} as unknown as DevRunManager["o"];
+    this.o = {audit: () => undefined, startTimeOf: processStartTime, freePort: freeLoopbackPort, logRingBytes: 256 * 1024, logTailBytes: 16 * 1024, startWaitMs: 15_000, graceMs: 1_000, probeIntervalMs: 500, stopPollMs: 500, ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined))} as unknown as DevRunManager["o"];
   }
 
+  // Bu API sürecinin başlangıç zamanı (sahiplik kimliği); bir kez okunur.
+  private selfStart: string | null = null;
+  private selfStartP: Promise<string | null> | null = null;
+  private ownStartTime(): Promise<string | null> { return this.selfStartP ??= this.o.startTimeOf(process.pid).then(t => { this.selfStart = t; return t; }, () => null); }
+  // PS1A-C1-F3: kaydın sahibi başka bir canlı API süreci mi? Aynı süreç (başka yönetici örneği) burada canlı sayılmaz (kilit ayrıca bakar).
+  // pid ölü -> değil; pid canlı ama kayıtlı başlangıç zamanı farklı -> pid yeniden kullanılmış, değil; zaman yok/okunamıyor -> fail-closed canlı.
+  private async ownerLive(st: DevRunState): Promise<boolean> {
+    if (st.ownerPid === process.pid) return false;
+    if (st.ownerHost !== os.hostname()) return true;
+    if (!pidAlive(st.ownerPid)) return false;
+    if (!st.ownerStartTime) return true;
+    const now = await this.o.startTimeOf(st.ownerPid).catch(() => null);
+    return now === null ? true : now === st.ownerStartTime;
+  }
   private dir(projectId: string): string { return path.join(this.o.studio.projectDir(projectId), "devrun"); }
   private stateFile(projectId: string): string { return path.join(this.dir(projectId), "state.json"); }
   private lockFile(projectId: string): string { return path.join(this.dir(projectId), "devrun.lock"); }
@@ -110,7 +128,7 @@ export class DevRunManager {
     fs.renameSync(tmp, f);
   }
   private blank(project: Project): DevRunState {
-    return {schemaVersion: 1, projectId: project.projectId, tenantId: project.tenantId, status: "STOPPED", reason: null, pid: null, pidStartTime: null, ownerPid: process.pid, ownerHost: os.hostname(), instanceId: this.instanceId,
+    return {schemaVersion: 1, projectId: project.projectId, tenantId: project.tenantId, status: "STOPPED", reason: null, pid: null, pidStartTime: null, ownerPid: process.pid, ownerHost: os.hostname(), ownerStartTime: this.selfStart, instanceId: this.instanceId,
       startedAt: null, endedAt: null, exitCode: null, signal: null, port: null, argv: [], headSha: null, preview: {url: null, state: "UNAVAILABLE", lastProbeAt: null, reason: "NOT_RUNNING"}};
   }
   private readLogs(projectId: string, a?: Active): {stdout: string; stderr: string; truncated: boolean} {
@@ -137,17 +155,21 @@ export class DevRunManager {
   view(project: Project): DevRunView {
     const a = this.active.get(project.projectId);
     const st = a?.state ?? this.readState(project.projectId) ?? this.blank(project);
-    const {ownerPid: _o, ownerHost: _h, instanceId: _i, pidStartTime: _p, schemaVersion: _s, tenantId: _t, ...pub} = st;
-    return {...pub, argv: [...pub.argv], preview: {...pub.preview}, logTail: this.readLogs(project.projectId, a)};
+    const {ownerPid: _o, ownerHost: _h, instanceId: _i, pidStartTime: _p, ownerStartTime: _ost, schemaVersion: _s, tenantId: _t, ...pub} = st;
+    // PS1A-C1-F3: önizleme URL'si yalnız bu örneğin kendi HTTP yoklamasından gelir; dosyadan okunan (başka/eski örneğe ait) AVAILABLE önizleme maskelenir.
+    const preview: DevRunPreview = !a && pub.preview?.state === "AVAILABLE" ? {url: null, state: "UNAVAILABLE", lastProbeAt: pub.preview.lastProbeAt ?? null, reason: "NOT_OWNED_BY_THIS_INSTANCE"} : {...pub.preview};
+    return {...pub, argv: [...pub.argv], preview, logTail: this.readLogs(project.projectId, a)};
   }
   isActive(projectId: string): boolean { const a = this.active.get(projectId); return Boolean(a && ACTIVE.has(a.state.status)); }
 
   // Süreçler arası tek örnek: kilit canlı başka bir API sürecindeyse reddedilir; bu süreçteki eski bir örneğe veya ölü pid'e aitse devralınır.
-  private takeLock(projectId: string): () => void {
+  // PS1A-C1-F3: staleOwner, pid'i canlı ama başlangıç zamanı kayıttakinden farklı (pid yeniden kullanılmış) önceki sahiptir; kilit tam olarak o sahibin kimliğini taşıyorsa devralınır.
+  private takeLock(projectId: string, staleOwner: {pid: number; instanceId: string} | null = null): () => void {
     const f = this.lockFile(projectId);
     fs.mkdirSync(path.dirname(f), {recursive: true});
     const s = inspectProcessLock(f) as {state: string; pid?: number; runId?: string | null};
-    if (s.state === "ACTIVE" && s.pid === process.pid) {
+    if (s.state === "ACTIVE" && s.pid !== process.pid && staleOwner && s.pid === staleOwner.pid && s.runId === staleOwner.instanceId) fs.rmSync(f, {force: true});
+    else if (s.state === "ACTIVE" && s.pid === process.pid) {
       // Aynı süreçteki başka bir yönetici örneği hâlâ çalıştırıyorsa kilitli sayılır; yalnız artık sahiplenilmeyen kilit kaldırılır.
       const cur = this.readState(projectId);
       if (s.runId !== this.instanceId && cur && ACTIVE.has(cur.status) && cur.instanceId === s.runId) throw new StudioError("DEVRUN_LOCKED", 409);
@@ -167,19 +189,30 @@ export class DevRunManager {
     const id = project.projectId;
     if (this.isActive(id)) throw new StudioError("DEVRUN_ALREADY_RUNNING", 409);
     if (this.stopActive()) throw new StudioError("GLOBAL_STOP_ACTIVE", 423);
-    const persisted = this.readState(id);
-    if (persisted && ACTIVE.has(persisted.status) && persisted.instanceId !== this.instanceId && persisted.ownerPid !== process.pid && pidAlive(persisted.ownerPid)) throw new StudioError("DEVRUN_LOCKED", 409);
     const argv = project.devCommand;
     if (!argv) return this.block(project, "DEVRUN_COMMAND_NOT_CONFIGURED");
     if (!testCommandAllowed(argv)) return this.block(project, "DEVRUN_COMMAND_NOT_ALLOWED");
-    const repo = project.repository?.path;
-    if (!repo || !fs.existsSync(repo)) return this.block(project, "REPOSITORY_NOT_CONFIGURED");
+    // PS1A-C1-F1: dev-run yalnız projenin kendi yönetilen deposundan klonlanır; istemci kontrollü (yönetilmeyen) repository.path 409 REPOSITORY_NOT_MANAGED'dir.
+    let repo: string;
+    try { repo = this.o.studio.managedRepoRoot(project); }
+    catch (e) { if (e instanceof StudioError && e.code === "REPOSITORY_NOT_CONFIGURED") return this.block(project, "REPOSITORY_NOT_CONFIGURED"); throw e; }
     // Yer tutucu: aynı süreçteki eşzamanlı ikinci start await'ten önce reddedilir.
     const st: DevRunState = {...this.blank(project), status: "STARTING", startedAt: new Date().toISOString(), argv: [...argv]};
     const a: Active = {state: st, child: null, stopping: false, stdout: new Ring(this.o.logRingBytes), stderr: new Ring(this.o.logRingBytes), release: null, probeTimer: null, flushTimer: null, exited: Promise.resolve(), projectType: project.projectType};
     this.active.set(id, a);
+    // PS1A-C1-F2: her await'ten sonra (özellikle spawn'dan hemen önce) stop/stopAll/GLOBAL_STOP ve harita sahipliği yeniden kontrol edilir.
+    const aborted = () => a.stopping || this.active.get(id) !== a || this.stopActive() !== null;
     try {
-      a.release = this.takeLock(id);
+      st.ownerStartTime = await this.ownStartTime();
+      // PS1A-C1-F3: kaydın sahibi yalnız pid + başlangıç zamanı eşleşirse canlı başka bir API sürecidir; pid yeniden kullanılmışsa kilit devralınabilir.
+      const persisted = this.readState(id);
+      let staleOwner: {pid: number; instanceId: string} | null = null;
+      if (persisted && persisted.instanceId !== this.instanceId && persisted.ownerPid !== process.pid) {
+        if (await this.ownerLive(persisted)) { if (ACTIVE.has(persisted.status)) throw new StudioError("DEVRUN_LOCKED", 409); }
+        else staleOwner = {pid: persisted.ownerPid, instanceId: persisted.instanceId};
+      }
+      if (aborted()) return await this.abortStart(project, a);
+      a.release = this.takeLock(id, staleOwner);
       // Dev workspace: yönetilen deponun HEAD'inin taze çalışma kopyası (run workspace'leri asla kullanılmaz).
       const ws = path.join(this.dir(id), "workspace");
       fs.rmSync(ws, {recursive: true, force: true});
@@ -187,7 +220,10 @@ export class DevRunManager {
       const head = c.status === 0 ? String(this.o.studio.git(ws, ["rev-parse", "HEAD"]).stdout ?? "").trim() : "";
       if (!/^[0-9a-f]{40}$/.test(head)) throw new StudioError("DEVRUN_BLOCKED", 409, "DEVRUN_WORKSPACE_FAILED");
       st.headSha = head;
-      st.port = await freeLoopbackPort();
+      const port = await this.o.freePort();
+      // PS1A-C1-F2: port beklenirken stop/stopAll/GLOBAL_STOP geldiyse süreç BAŞLATILMAZ (izlenmeyen süreç sızıntısı yok).
+      if (aborted()) return await this.abortStart(project, a);
+      st.port = port;
       const env = {...safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}), PORT: String(st.port), HOST: "127.0.0.1"};
       const exe = argv[0] === "node" ? process.execPath : argv[0];
       const child = cp.spawn(exe, argv.slice(1), {cwd: ws, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32"});
@@ -201,6 +237,13 @@ export class DevRunManager {
       if (child.pid === undefined) { await a.exited; return this.view(project); }
       st.pid = child.pid;
       st.pidStartTime = await this.o.startTimeOf(child.pid);
+      // Spawn'dan sonraki await sırasında durdurma geldiyse: stop() çocuğu sonlandırır (a.child atanmıştır); bant dışı GLOBAL_STOP burada da uygulanır.
+      if (aborted()) {
+        if (!a.stopping && this.active.get(id) === a) await this.stop(id, "GLOBAL_STOP_ACTIVE");
+        else await Promise.race([a.exited, sleep(15_000)]);
+        if (this.stopActive()) throw new StudioError("GLOBAL_STOP_ACTIVE", 423);
+        return this.view(project);
+      }
       if (ACTIVE.has(st.status)) this.writeState(st, true);
       this.o.audit("DEVRUN_STARTED", {projectId: id, pid: child.pid, port: st.port, headSha: head});
       this.ensureStopWatch();
@@ -224,6 +267,13 @@ export class DevRunManager {
     }
   }
 
+  // PS1A-C1-F2: süreç başlatılmadan önce durdurma/GLOBAL_STOP geldiyse kayıt (henüz sonlandırılmadıysa) STOPPED olarak kapatılır; GLOBAL_STOP 423 döner.
+  private async abortStart(project: Project, a: Active): Promise<DevRunView> {
+    const g = this.stopActive();
+    if (this.active.get(project.projectId) === a) { a.stopping = true; a.state.reason = a.state.reason ?? (g ? "GLOBAL_STOP_ACTIVE" : "STOP_REQUESTED"); this.onExit(a, null, null); }
+    if (g) throw new StudioError("GLOBAL_STOP_ACTIVE", 423);
+    return this.view(project);
+  }
   private probeLoop(a: Active): void {
     const tick = async () => {
       a.probeTimer = null;
@@ -244,7 +294,8 @@ export class DevRunManager {
   private cleanup(a: Active): void {
     if (a.probeTimer) clearTimeout(a.probeTimer); a.probeTimer = null;
     if (a.flushTimer) clearTimeout(a.flushTimer); a.flushTimer = null;
-    this.flushLogs(a);
+    // Hiç süreç başlatılmadıysa (kilitli/iptal) önceki örneğin kalıcı logları boş halkayla ezilmez.
+    if (a.child) this.flushLogs(a);
     try { a.release?.(); } catch { /* kilit devralınmış olabilir */ }
     a.release = null;
   }
@@ -291,11 +342,14 @@ export class DevRunManager {
     let ids: string[] = [];
     try { ids = fs.readdirSync(root).filter(x => /^prj_[0-9a-f]{24}$/.test(x)); } catch { return []; }
     const out: Array<{projectId: string} & DevRunRecovery> = [];
+    const self = await this.ownStartTime();
     for (const id of ids) {
       const st = this.readState(id);
       if (!st || !ACTIVE.has(st.status) || st.instanceId === this.instanceId || this.active.has(id)) continue;
       if (st.ownerHost !== os.hostname()) continue;
-      if (st.ownerPid !== process.pid && pidAlive(st.ownerPid)) continue; // canlı başka API süreci
+      // PS1A-C1-F3: canlı başka API süreci yalnız pid + başlangıç zamanı eşleşirse; yeniden kullanılmış pid sahibi canlı saymaz.
+      if (await this.ownerLive(st)) continue;
+      const ownerReused = st.ownerPid !== process.pid && pidAlive(st.ownerPid);
       let result: DevRunRecovery["result"];
       if (!pidAlive(st.pid)) result = "ORPHAN_ALREADY_EXITED";
       else {
@@ -304,11 +358,12 @@ export class DevRunManager {
         else { killProcessTree(st.pid!); for (let i = 0; i < 50 && pidAlive(st.pid); i++) await sleep(100); result = pidAlive(st.pid) ? "ORPHAN_KILL_FAILED" : "ORPHAN_KILLED"; }
       }
       const rec: DevRunRecovery = {at: new Date().toISOString(), result, previousInstanceId: st.instanceId, pid: st.pid};
-      const next: DevRunState = {...st, status: result === "ORPHAN_KILL_FAILED" ? "CRASHED" : "STOPPED", reason: `RECOVERED_AFTER_API_RESTART:${result}`, endedAt: rec.at, instanceId: this.instanceId, ownerPid: process.pid, ownerHost: os.hostname(),
+      const next: DevRunState = {...st, status: result === "ORPHAN_KILL_FAILED" ? "CRASHED" : "STOPPED", reason: `RECOVERED_AFTER_API_RESTART:${result}`, endedAt: rec.at, instanceId: this.instanceId, ownerPid: process.pid, ownerHost: os.hostname(), ownerStartTime: self,
         preview: {url: null, state: "UNAVAILABLE", lastProbeAt: st.preview?.lastProbeAt ?? null, reason: "NOT_RUNNING"}, recovery: rec};
       this.writeState(next, true);
-      const lf = this.lockFile(id), ls = inspectProcessLock(lf) as {state: string; pid?: number};
-      if (ls.state !== "ABSENT" && (ls.pid === process.pid || ls.state === "STALE_SAME_HOST_DEAD_PID")) { try { fs.rmSync(lf, {force: true}); } catch { /* kilit */ } }
+      const lf = this.lockFile(id), ls = inspectProcessLock(lf) as {state: string; pid?: number; runId?: string | null};
+      const reusedLock = ownerReused && ls.state === "ACTIVE" && ls.pid === st.ownerPid && ls.runId === st.instanceId;
+      if (ls.state !== "ABSENT" && (ls.pid === process.pid || ls.state === "STALE_SAME_HOST_DEAD_PID" || reusedLock)) { try { fs.rmSync(lf, {force: true}); } catch { /* kilit */ } }
       this.o.audit("DEVRUN_ORPHAN_RECOVERED", {projectId: id, result, pid: st.pid});
       out.push({projectId: id, ...rec});
     }

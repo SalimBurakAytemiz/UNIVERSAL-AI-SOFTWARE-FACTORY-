@@ -139,10 +139,34 @@ export class ProjectStudio {
   }
 
   // ---- PS-007: dosyalar ----
-  private repoRoot(project: Project): string {
+  // PS1A-C1-F1: Studio dosya/git/export/dev-run işlemleri YALNIZ bu projenin yönetilen deposunda çalışır. İstemcinin verdiği (yönetilmeyen) repository.path
+  // veri dizinine, başka bir tenant'ın yönetilen deposuna veya journal'a işaret edebilir; bu yüzden managed bayrağı ve realpath'in <dataDir>/projects/<id>/repo'ya eşitliği zorunludur.
+  managedRepoRoot(project: Project): string {
     const p = project.repository?.path;
     if (!p) throw new StudioError("REPOSITORY_NOT_CONFIGURED", 409);
-    try { const real = fs.realpathSync(path.resolve(p)); if (!fs.statSync(real).isDirectory()) throw new Error("x"); return real; } catch { throw new StudioError("REPOSITORY_NOT_CONFIGURED", 409); }
+    if (project.repository?.managed !== true) throw new StudioError("REPOSITORY_NOT_MANAGED", 409);
+    let real: string;
+    try { real = fs.realpathSync(path.resolve(p)); } catch { throw new StudioError("REPOSITORY_NOT_CONFIGURED", 409); }
+    let expected = this.managedRepoPath(project.projectId), projectsReal = path.join(this.dataDir, "projects");
+    try { expected = fs.realpathSync(expected); } catch { /* bu projenin yönetilen deposu yok: eşleşme olamaz */ }
+    try { projectsReal = fs.realpathSync(projectsReal); } catch { /* projects kökü yok */ }
+    const eq = (x: string, y: string) => process.platform === "win32" ? x.toLowerCase() === y.toLowerCase() : x === y;
+    if (!eq(real, expected) || !under(projectsReal, real) || eq(real, projectsReal)) throw new StudioError("REPOSITORY_NOT_MANAGED", 409);
+    try { if (!fs.statSync(real).isDirectory()) throw new Error("x"); } catch { throw new StudioError("REPOSITORY_NOT_CONFIGURED", 409); }
+    return real;
+  }
+  private repoRoot(project: Project): string { return this.managedRepoRoot(project); }
+  // PS1A-C1-F1 (proje oluşturma): istemcinin verdiği repository.path veri dizininin içinde veya üstünde olamaz (localSource ile aynı under(dataReal, real) || under(real, dataReal) testi).
+  assertRepositoryPathAllowed(raw: unknown): void {
+    if (raw === undefined) return;
+    if (typeof raw !== "string" || !raw || /[\u0000\r\n]/.test(raw)) throw new StudioError("REPOSITORY_PATH_FORBIDDEN", 400);
+    const abs = path.resolve(raw);
+    let real = abs; try { real = fs.realpathSync(abs); } catch { /* henüz yok: çözülmüş mutlak yol kullanılır */ }
+    let dataReal = this.dataDir; try { dataReal = fs.realpathSync(this.dataDir); } catch { /* veri dizini henüz yok */ }
+    for (const d of new Set([dataReal, this.dataDir])) for (const r of new Set([real, abs])) {
+      if (under(d, r) || under(r, d)) throw new StudioError("REPOSITORY_PATH_FORBIDDEN", 400);
+      if (process.platform === "win32" && (under(d.toLowerCase(), r.toLowerCase()) || under(r.toLowerCase(), d.toLowerCase()))) throw new StudioError("REPOSITORY_PATH_FORBIDDEN", 400);
+    }
   }
   // Göreli yol: '..', mutlak yol, sürücü/ADS ':' ve (all=false iken) '.git' reddedilir; her segment lstat ile yürünür, symlink/junction reddedilir; son olarak realpath kökün altında olmalıdır.
   private safePath(root: string, raw: string | undefined, all: boolean): {abs: string; rel: string} {
