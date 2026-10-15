@@ -15,6 +15,7 @@ import {testCommandAllowed} from "./schemas.js";
 import {managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
 import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
 import {assertIndependentExecutors, runProcess} from "./executors.js";
+import {reviewAndSecurityFor} from "./outcomes.js";
 import type {ExecutorPair, MissionSpec, ProcResult} from "./executors.js";
 import {DEFAULT_MAX_REPORT_BYTES, DEFAULT_MAX_TRIVY_DB_AGE_MS, DEFAULT_SECURITY_TIMEOUT_MS, buildAddedLineStream, defaultTrivyCacheDir, discoverSecurityTools, evaluateSecurityPolicy, gitRangeProblem, mergeGitleaksPasses, runGitleaks, runGitleaksAddedLines, runTrivy, toolInfo, verifyTool} from "./security-tools.js";
 import type {GitleaksResult, PolicyInput, ResolvedTool, SecurityOptions, SecurityToolset} from "./security-tools.js";
@@ -561,19 +562,18 @@ export class MissionRunner {
   // REPORT: kanıt özeti dosyası + sha256; teslim kararı Founder'da kalır (merge/push/COMPLETE yok).
   private stepReport(run: WorkRun, leaseId: string): Outcome {
     const startedAt = new Date().toISOString();
-    const review = [...run.evidence].reverse().find(e => e.kind === "REVIEW" && e.verdict === "CLEAN");
+    const cleanReview = [...run.evidence].reverse().find(e => e.kind === "REVIEW" && e.verdict === "CLEAN");
     const report = {
       runId: run.runId, missionId: run.missionId, projectId: run.projectId, tenantId: run.tenantId, baseSha: run.baseSha, headSha: run.headSha, workBranch: run.workBranch,
-      executor: run.executor, review: review ? {reviewerIdentity: review.reviewerIdentity, verdict: review.verdict, commitSha: review.commitSha} : null,
+      executor: run.executor, review: cleanReview ? {reviewerIdentity: cleanReview.reviewerIdentity, verdict: cleanReview.verdict, commitSha: cleanReview.commitSha} : null,
       remediationCycles: run.remediationCycle, attempt: run.attempt,
       evidence: run.evidence.map(e => ({evidenceId: e.evidenceId, step: e.step, cycle: e.cycle, kind: e.kind, exitCode: e.exitCode, logPath: e.logPath, logSha256: e.logSha256, commitSha: e.commitSha ?? null})),
       deliveryDecision: "PENDING_FOUNDER", delivered: false, note: "No merge, push or COMPLETE transition was performed by the runner."
     };
-    if (!review || review.commitSha !== run.headSha) return {kind: "BLOCK", reason: "REVIEW_EVIDENCE_MISSING", status: "FAILED"};
-    // B3C: güvenlik kanıtı üretilen commit için zorunludur; PARTIAL kapsam Founder'a açıkça bildirilir (sessiz geçiş yok).
-    const secEv = [...run.evidence].reverse().find(e => e.kind === "SECURITY_REPORT" && e.commitSha === run.headSha);
-    const sec = secEv?.security;
-    if (!secEv || !sec || sec.status === "BLOCKED") return {kind: "BLOCK", reason: "SECURITY_EVIDENCE_MISSING", status: "FAILED"};
+    // REL-FX-1: bu yüklem COMPLETE kapısıyla paylaşılır (outcomes.ts reviewAndSecurityFor); B3C: güvenlik kanıtı üretilen commit için zorunludur, PARTIAL kapsam Founder'a açıkça bildirilir.
+    const rs = reviewAndSecurityFor(run.headSha, run.evidence);
+    if (!rs.ok) return {kind: "BLOCK", reason: rs.reason, status: "FAILED"};
+    const review = rs.review, secEv = rs.security, sec = secEv.security;
     (report as Record<string, unknown>).security = {status: sec.status, founderNotice: sec.founderNote, gaps: sec.gaps, secrets: {builtin: sec.secrets.builtin.status, gitleaks: sec.secrets.gitleaks.status}, sca: {status: sec.sca.status, reason: sec.sca.reason ?? null, dbState: sec.sca.dbState ?? null, counts: sec.sca.counts}, sast: sec.sast, sbom: sec.sbom, tools: sec.tools, evidenceId: secEv.evidenceId, reportLogPath: secEv.logPath, reportLogSha256: secEv.logSha256};
     const file = path.join(this.runDir(run.runId), "report.json"), bytes = Buffer.from(JSON.stringify(report, null, 2) + "\n", "utf8");
     fs.writeFileSync(file, bytes);

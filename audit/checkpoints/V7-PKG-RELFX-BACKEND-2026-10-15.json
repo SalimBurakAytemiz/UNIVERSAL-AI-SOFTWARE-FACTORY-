@@ -1,0 +1,33 @@
+{
+  "//TR": "Bu checkpoint V7-PKG-RELFX-BACKEND paketini (ilk EXE güvenilirlik minimumu, yalnız arka uç: REL-FX-1 kanıta bağlı tamamlama, REL-FX-3 risk kabulü, REL-FX-4 kesinti kurtarma minimumu, REL-FX-2 test yüzeyi koruması) kaydeder; temiz değildir, bağımsız inceleme bekler.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-RELFX-BACKEND",
+  "date": "2026-10-15",
+  "parent": "9cb8aa1f70cfbb2ba0c9e5e90642c3a792d94aca",
+  "branch": "v7/product-relfx",
+  "implementer": "CLAUDE_BUILDER",
+  "authorizationRecords": [
+    "audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json",
+    "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
+  ],
+  "scope": "C:/Users/salim/UASCO-recovery/product/rel/REL-FIRST-EXE-P0.md sections REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2 (backend only; apps/desktop/** not touched). One commit per FX in the order FX-1, FX-3, FX-4, FX-2.",
+  "status": "IMPLEMENTED, NOT CLEAN; independent review pending",
+  "decisions": {
+    "D-REL-3": "FA-V2-PRODUCT-2026-10-14 covers apps/control-api/src/server.ts, config/validation.json (test steps appended) and config/trust-root-manifest.json (resealed with node scripts/generate-trust-root.mjs). No other protected file changed.",
+    "D-REL-2": "Refuse R3/R4 run start (fail-closed default).",
+    "D-REL-1": "PENDING with the Founder. R0-R2 keep the existing runner behaviour; the interim host-execution notice is added only as a field in the run-start response and in the WORKSPACE evidence note."
+  },
+  "fx": {
+    "REL-FX-1": {
+      "summary": "Evidence-bound COMPLETE. REPORTING -> COMPLETE (API and store.transitionMission/completeMission) only when the mission's latest run is AWAITING_APPROVAL with REPORT + CLEAN REVIEW + non-BLOCKED SECURITY_REPORT evidence whose commitSha == run.headSha (runner stepReport predicate shared via core/workos/outcomes.ts reviewAndSecurityFor). One RUN_TRANSITION journal entry carries the run AWAITING_APPROVAL -> SUCCEEDED move and the embedded mission REPORTING -> COMPLETE move plus completion evidence refs; otherwise 409 WORKOS_CONFLICT with a stable reason (COMPLETION_NO_RUN, COMPLETION_RUN_NOT_AWAITING_APPROVAL, COMPLETION_HEAD_SHA_MISSING, COMPLETION_REVIEW_EVIDENCE_MISSING, COMPLETION_SECURITY_EVIDENCE_MISSING, COMPLETION_REPORT_EVIDENCE_MISSING) and the journal unchanged. Replay re-checks the predicate (COMPLETION_UNSUPPORTED tamper). Engine write paths cannot produce SUCCEEDED or a mission move to COMPLETE (COMPLETION_REQUIRES_EVIDENCE_GUARD). Pure deriveOutcomes(run, evidence) returns execution, functionalAcceptance, security, evidenceIntegrity, recovery, release, customerOutcome with reasons; exposed read-only on GET /v1/work-runs/:id and in the COMPLETE response.",
+      "files": ["core/workos/outcomes.ts (new)", "core/workos/store.ts", "core/workos/runner.ts", "apps/control-api/src/server.ts (protected, authorized by D-REL-3)", "config/validation.json (protected, authorized)", "config/trust-root-manifest.json (protected, resealed)", "tests/support/relfx.ts (new)", "tests/v7-relfx-1-completion.test.ts (new)"],
+      "tests": "tests/v7-relfx-1-completion.test.ts: pure predicate (REL-AT-003 other-commit evidence, BLOCKED security, missing REPORT/REVIEW), honest deriveOutcomes (REL-AT-001 not VERIFIED without oracle), REL-AT-005 API COMPLETE without run/evidence -> 409 journal unchanged, accept writes one combined entry and replay reproduces it, second COMPLETE refused, REPORT for another commit -> 409, BLOCKED security -> 409 via API, forged combined entries are tamper on replay, engine path cannot write SUCCEEDED."
+    }
+  },
+  "knownLimits": [
+    "Desktop UX (run view outcome vector, Inbox Accept disabled with the reason, TORN_TAIL/DISK_FULL/PROVIDER_QUOTA states) is not part of this backend package (apps/desktop/** untouched); it follows after M1 integration.",
+    "evidenceIntegrity stays UNKNOWN until the B10A evidence index is independently verified.",
+    "A legacy plain MISSION_TRANSITIONED REPORTING -> COMPLETE entry written before this package still replays (fail-closed lockout of existing journals was not chosen); new writes cannot produce one.",
+    "Journal hashes are unkeyed: replay checks enforce semantic consistency, not authenticity against an attacker with write access to the data directory."
+  ]
+}

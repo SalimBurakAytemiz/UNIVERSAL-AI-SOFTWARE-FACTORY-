@@ -24,6 +24,7 @@ import {isMissionStatus} from "../../../core/mission/state-machine.js";
 import {authorizeAction} from "../../../core/action-gateway/policy.js";
 import type {ActionPolicyContext} from "../../../core/action-gateway/types.js";
 import {MissionRunner} from "../../../core/workos/runner.js";
+import {deriveOutcomes} from "../../../core/workos/outcomes.js";
 import type {RunnerOptions} from "../../../core/workos/runner.js";
 import {assertIndependentExecutors,executorsFromEnv,LocalClaudeExecutors} from "../../../core/workos/executors.js";
 import type {ExecutorPair} from "../../../core/workos/executors.js";
@@ -187,6 +188,8 @@ app.post<{Params:{id:string}}>("/v1/missions/:id/transition",wos(async(req,reply
   if(!validMissionId(req.params.id))return reply.code(400).send({error:"INVALID_MISSION_ID"});
   const body=req.body??{};if(!workosWrite(reply,"workos.mission.transition",req.params.id,body,validateMissionTransition))return reply;
   const b=body as any;if(!isMissionStatus(b.to))return reply.code(400).send({error:"INVALID_BODY",detail:"to is not a mission status"});
+  // //TR: REL-FX-1: COMPLETE istemcinin "to" alanıyla değil, kanıt kapısıyla olur: run.headSha için REPORT + CLEAN REVIEW + BLOCKED olmayan SECURITY_REPORT; aynı journal yazısı run'ı SUCCEEDED yapar, aksi halde 409 + sabit sebep.
+  if(b.to==="COMPLETE"){try{const r=getStore().completeMission(scope,req.params.id,b.reason,actor);audit("WORKOS_MISSION_COMPLETED",{actor,missionId:r.mission.missionId,runId:r.run.runId,headSha:r.run.headSha});return {mission:r.mission,run:r.run,outcomes:deriveOutcomes(r.run)}}catch(e){if(e instanceof WorkOsError&&e.code==="WORKOS_CONFLICT")audit("WORKOS_MISSION_COMPLETE_REFUSED",{actor,missionId:req.params.id,reason:e.message.replace(/^WORKOS_CONFLICT: ?/,"").slice(0,64)});return workosFail(reply,e)}}
   try{const before=getStore().getMission(scope,req.params.id);const mission=getStore().transitionMission(scope,req.params.id,b.to,b.reason,actor);audit("WORKOS_MISSION_TRANSITIONED",{actor,missionId:mission.missionId,from:before?.status,to:mission.status});return {mission}}catch(e){return workosFail(reply,e)}
 }));
 
@@ -231,7 +234,7 @@ app.get<{Querystring:{missionId?:string}}>("/v1/work-runs",wos(async(req,reply)=
 }));
 app.get<{Params:{id:string}}>("/v1/work-runs/:id",wos(async(req,reply)=>{
   if(!validWorkRunId(req.params.id))return reply.code(400).send({error:"INVALID_RUN_ID"});
-  const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});return {run};
+  const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});return {run,outcomes:deriveOutcomes(run)};
 }));
 
 // //TR: PS-1A Project Studio route'ları: aynı token/Host hook'u; her proje route'u Work OS kaydını scope (tenant) ile çözer, başka tenant'ın projesi 404'tür. Yazma route'ları aynı kapı sırasını izler (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400).

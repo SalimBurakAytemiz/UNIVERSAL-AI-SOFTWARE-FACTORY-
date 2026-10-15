@@ -12,6 +12,7 @@ import type {MissionStatus} from "../mission/types.js";
 import {WorkOsError, urlHasUserinfo} from "./types.js";
 import type {JournalEntry, JournalType, Project, ProjectExport, ProjectTemplate, ProjectType, RiskLevel, RunCheckpoint, RunEvidence, RunStatus, RunStep, Scope, TaskStatus, WorkMission, WorkRun, WorkTask} from "./types.js";
 import {ACTIVE_WORKER_STATUSES, LEASED_RUN_STATUSES, UNLEASED_RUN_STATUSES, assertRunTransition, isOpenRun, isRunStatus, isRunStep} from "./run-state.js";
+import {completionEvidence} from "./outcomes.js";
 
 const sha256 = sha256Untyped as (value: unknown) => string;
 const writeJsonAtomic = writeJsonAtomicUntyped as (file: string, value: unknown) => void;
@@ -254,6 +255,12 @@ export class WorkOsStore {
         if (!isRunStatus(p.to) || r.status !== p.from || (p.leaseId ?? null) !== r.leaseId) throw tampered(`RUN_TRANSITION_INCONSISTENT:${e.seq}`);
         try { assertRunTransition(r.status, p.to); } catch { throw tampered(`RUN_TRANSITION_ILLEGAL:${e.seq}`); }
         if (p.patch !== undefined && !validRunPatch(p.patch)) throw malformed(`RUN_PATCH:${e.seq}`);
+        // REL-FX-1: run SUCCEEDED ve mission COMPLETE yalnız birlikte ve yalnız kanıt yüklemi replay anında da sağlanıyorsa geçerlidir (tek journal girdisi).
+        const toComplete = isObj(p.mission) && p.mission.to === "COMPLETE";
+        if (p.to === "SUCCEEDED" || toComplete) {
+          const chk = completionEvidence(r);
+          if (p.to !== "SUCCEEDED" || !toComplete || p.patch !== undefined || !chk.ok || !isObj(p.completion) || p.completion.headSha !== chk.refs.headSha) throw tampered(`COMPLETION_UNSUPPORTED:${e.seq}`);
+        }
         this.applyMissionMove(st, p.mission, r.missionId, e.seq);
         Object.assign(r, p.patch ?? {});
         r.status = p.to; r.reason = typeof p.reason === "string" ? p.reason : null; r.updatedAt = e.at;
@@ -418,6 +425,8 @@ export class WorkOsStore {
   }
   createTask(input: CreateTaskInput): WorkTask { return this.createTaskDetailed(input).entity; }
   transitionMission(scope: Scope, missionId: string, to: MissionStatus, reason: string, actor: string): WorkMission {
+    // REL-FX-1: COMPLETE hiçbir yoldan kanıt kapısını atlayamaz; store çağrısı da aynı birleşik yazıya yönlenir.
+    if (to === "COMPLETE") return this.completeMission(scope, missionId, reason, actor).mission;
     return this.write(() => {
       const m = this.state.missions[missionId];
       if (!m || m.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "mission");
@@ -428,6 +437,25 @@ export class WorkOsStore {
     });
   }
 
+  // //TR: REL-FX-1 kanıta bağlı tamamlama: mission REPORTING olmalı, mission'ın EN SON run'ı AWAITING_APPROVAL olmalı ve run.headSha için REPORT + CLEAN REVIEW + BLOCKED olmayan
+  // SECURITY_REPORT kanıtı bulunmalıdır. Tek journal girdisi (RUN_TRANSITION + gömülü mission hareketi) run'ı SUCCEEDED, mission'ı COMPLETE yapar; aksi halde 409 sabit sebep, journal değişmez.
+  completeMission(scope: Scope, missionId: string, reason: string, actor: string): {mission: WorkMission; run: WorkRun} {
+    if (typeof reason !== "string" || reason.trim().length === 0) throw new WorkOsError("WORKOS_INVALID_INPUT", "reason");
+    return this.write(() => {
+      const m = this.state.missions[missionId];
+      if (!m || m.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "mission");
+      try { assertTransition(m.status, "COMPLETE"); } catch (e) { throw new WorkOsError("WORKOS_INVALID_TRANSITION", (e as Error).message); }
+      const runs = Object.values(this.state.runs).filter(r => r.missionId === missionId && r.tenantId === m.tenantId);
+      const run = runs[runs.length - 1];
+      const chk = completionEvidence(run);
+      if (!chk.ok) throw new WorkOsError("WORKOS_CONFLICT", chk.reason);
+      const why = reason.slice(0, 1000);
+      this.append("RUN_TRANSITION", actor, {runId: run.runId, leaseId: null, from: "AWAITING_APPROVAL", to: "SUCCEEDED", reason: `FOUNDER_ACCEPTED: ${why}`.slice(0, 1000),
+        mission: {missionId, from: m.status, to: "COMPLETE", reason: why}, completion: chk.refs});
+      return {mission: this.state.missions[missionId], run: clone(this.state.runs[run.runId])};
+    });
+  }
+
   // ---- B3a worker runs (aynı journal, aynı lock, aynı hash zinciri) ----
   private nowIso(): string { return new Date(this.now()).toISOString(); }
   private missionMove(runMissionId: string, mv: RunWriteOptions["mission"]): Record<string, unknown> | undefined {
@@ -435,6 +463,7 @@ export class WorkOsStore {
     const m = this.state.missions[runMissionId];
     if (!m) throw new WorkOsError("WORKOS_NOT_FOUND", "mission");
     if (m.status === mv.to) return undefined; // idempotent yeniden giriş: hedefte zaten
+    if (mv.to === "COMPLETE") throw new WorkOsError("WORKOS_CONFLICT", "COMPLETION_REQUIRES_EVIDENCE_GUARD");
     try { assertTransition(m.status, mv.to); } catch (e) { throw new WorkOsError("WORKOS_INVALID_TRANSITION", (e as Error).message); }
     return {missionId: runMissionId, from: m.status, to: mv.to, reason: String(mv.reason).slice(0, 1000)};
   }
@@ -505,6 +534,7 @@ export class WorkOsStore {
     return this.write(() => {
       const r = this.fencedRun(runId, leaseId);
       try { assertRunTransition(r.status, to); } catch (e) { throw new WorkOsError("WORKOS_INVALID_TRANSITION", (e as Error).message); }
+      if (to === "SUCCEEDED") throw new WorkOsError("WORKOS_CONFLICT", "COMPLETION_REQUIRES_EVIDENCE_GUARD");
       const mv = this.missionMove(r.missionId, opts.mission);
       this.append("RUN_TRANSITION", actor, {runId, leaseId, from: r.status, to, reason: String(reason).slice(0, 1000), ...(opts.patch ? {patch: opts.patch} : {}), ...(mv ? {mission: mv} : {})});
       return clone(this.state.runs[runId]);
