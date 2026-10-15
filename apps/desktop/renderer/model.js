@@ -133,3 +133,16 @@ export function searchEntries(query,entries,limit=8){
   const q=String(query??"").trim().toLocaleLowerCase("tr");if(!q)return [];
   return entries.filter(e=>`${e.label} ${e.keywords??""}`.toLocaleLowerCase("tr").includes(q)).slice(0,limit);
 }
+// //TR: UX WP4: GET /v1/roles sayfasını (yalnız roleId/guildId/clusterId) doğrular; geçersiz biçimde null döner, böylece eksik/bozuk katalog asla kısmi sayıyla gösterilmez.
+const ROLE_RE=/^UASCO-\d{4}$/,GUILD_RE=/^G\d{2}$/,CLUSTER_RE=/^CL\d{2}$/;
+export function mapRolesPage(raw){
+  if(!isObj(raw)||!Array.isArray(raw.items)||!Number.isSafeInteger(raw.total)||raw.total<0)return null;
+  const next=raw.nextCursor===null||raw.nextCursor===undefined?null:raw.nextCursor;
+  if(next!==null&&!(typeof next==="string"&&ROLE_RE.test(next)))return null;
+  const items=[];
+  for(const x of raw.items){
+    if(!isObj(x)||!ROLE_RE.test(String(x.roleId))||!GUILD_RE.test(String(x.guildId))||!CLUSTER_RE.test(String(x.clusterId)))return null;
+    items.push({roleId:x.roleId,guildId:x.guildId,clusterId:x.clusterId});
+  }
+  return {items,total:raw.total,nextCursor:next};
+}

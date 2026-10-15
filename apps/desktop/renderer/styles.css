@@ -359,3 +359,19 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .ack-block legend{font-weight:600;padding:0 4px}
 .ack-check{display:flex;align-items:flex-start;gap:6px;margin:6px 0}
 .ack-check input{margin-top:3px}
+
+/* UX WP4: Control Tower 2B operasyon haritası (durağan; animasyon yok, parıltı yalnız sabit SVG filtresi) */
+.ct-campus{display:grid;gap:var(--space-3);min-width:0}
+.ct-summary{margin:0;font-weight:700}
+.ct-map{overflow:auto;max-height:70vh;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);box-shadow:var(--glow-sm)}
+.ct-map svg{display:block;min-width:56rem;width:100%;height:auto}
+.ct-map .building{cursor:pointer}
+.ct-map .building:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.ct-map .building[data-selected="true"] rect{stroke-width:3}
+.ct-detail{padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-2)}
+.ct-list .ct-note,.ct-list .ct-global,.ct-list .ct-notice{margin:.4rem 0}
+.ct-list button[aria-pressed="true"]{font-weight:700;text-decoration-thickness:2px}
+@media (forced-colors:active){
+  .ct-map .building[data-selected="true"] rect{stroke:Highlight}
+  .ct-map .building:focus-visible{outline:3px solid Highlight}
+}

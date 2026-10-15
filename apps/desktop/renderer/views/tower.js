@@ -1,11 +1,14 @@
-// //TR: Bu görünüm Control Tower alanıdır ve eski Day-0 görünürlüğü korur: health/Phase-0/install/scheduler/registry sayıları, retry beklemesi, Global Stop/Resume kartı, founder blocker listesi, run listesi, event ve redacted log görüntüleme; hepsi preload GET köprüsünden okunur.
+// //TR: Bu görünüm Control Tower alanıdır: en üstte gerçek okuma modelinden (cockpit global stop, /v1/roles katalogu, /v1/work-runs) beslenen 2B operasyon haritası ve eşdeğer erişilebilir listesi (UX WP4, 3B yok), altında eski Day-0 görünürlüğü korunur: health/Phase-0/install/scheduler/registry sayıları, retry beklemesi, Global Stop/Resume kartı, founder blocker listesi, run listesi, event ve redacted log görüntüleme; hepsi preload GET köprüsünden okunur.
 import {h,panel,chip,stateNote,emptyNote,statusLabel} from "../components.js";
 import {formatCount,MISSING} from "../model.js";
+import {buildCampusInput} from "../control-tower/feed.js";
+import {mountCampus} from "../control-tower/mount.js";
 
 const okData=r=>r.ok?r.data:null;
 export async function render(ctx){
   const doc=ctx.doc,api=ctx.api;
-  const [health,phase0,install,sched,agents,caps,tools,retry,runs,att,control]=await Promise.all([api.health(),api.raw("/v1/phase0"),api.raw("/v1/install"),api.raw("/v1/scheduler"),api.raw("/v1/agents"),api.raw("/v1/capabilities"),api.raw("/v1/adapters"),api.raw("/v1/retry"),api.runs(),api.attention(),api.control()]);
+  const [health,phase0,install,sched,agents,caps,tools,retry,runs,att,control,cockpit,roleList,workRuns]=await Promise.all([api.health(),api.raw("/v1/phase0"),api.raw("/v1/install"),api.raw("/v1/scheduler"),api.raw("/v1/agents"),api.raw("/v1/capabilities"),api.raw("/v1/adapters"),api.raw("/v1/retry"),api.runs(),api.attention(),api.control(),api.cockpit(),api.roles(),api.workRuns()]);
+  const campus=mountCampus(ctx,buildCampusInput({cockpit,control,roles:roleList,workRuns}));
   const s=okData(sched),completed=Array.isArray(s?.phases)?s.phases.filter(x=>x.status==="COMPLETED").length:0;
   const fact=(labelKey,value,state)=>h(doc,"div",{class:"fact",dataset:{fact:labelKey}},h(doc,"span",{class:"fact-label",text:ctx.t(labelKey)}),h(doc,"strong",{class:"fact-value",text:value}),state?chip(ctx,{state,value:1}):null);
   const cnt=r=>r.ok&&Number.isSafeInteger(r.data?.count)?`${formatCount(r.data.count)}`:MISSING;
@@ -30,6 +33,7 @@ export async function render(ctx){
     h(doc,"p",{id:"stopState",text:control.active?ctx.t("stop.activeLine",{reason:control.reason??""}):ctx.t(control.state==="VERIFIED"?"stop.running":`state.${control.state}`)}),
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-danger",id:"towerStop",on:{click:()=>ctx.requestStop()},text:ctx.t("stop.button")}),h(doc,"button",{type:"button",class:"btn",id:"towerResume",on:{click:()=>ctx.resume()},text:ctx.t("stop.resume")})));
   return h(doc,"div",{class:"view"},h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.tower.title")}),
+    panel(ctx,{titleKey:"tower.map.title",id:"tower-map"},campus),
     panel(ctx,{titleKey:"tower.health",id:"tower-health"},h(doc,"p",{id:"health",text:healthText}),
       h(doc,"div",{class:"facts"},fact("tower.install",okData(install)?.phase0Final??MISSING),fact("tower.phase0",okData(phase0)?.final??MISSING),
         fact("tower.scheduler",Array.isArray(s?.phases)?`${completed}/${s.phases.length}`:(s?.status??MISSING)),fact("tower.agents",roles(agents)),fact("tower.caps",cnt(caps)),fact("tower.tools",cnt(tools)),

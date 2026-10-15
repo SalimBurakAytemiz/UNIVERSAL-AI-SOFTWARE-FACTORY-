@@ -1,9 +1,9 @@
-<!-- //TR: Bu README Control Tower 2B kampüs modülünün veri sözleşmesini, 2B/3B parite kuralını ve dürüstlük kurallarını anlatır; modül henüz kabuğa bağlı değildir. -->
+<!-- //TR: Bu README Control Tower 2B kampüs modülünün veri sözleşmesini, 2B/3B parite kuralını ve dürüstlük kurallarını anlatır; modül UX WP4 ile Control Tower rotasına (views/tower.js) bağlıdır; 3B yoktur. -->
 # Control Tower 2D campus module
 
 Self-contained, dependency-free renderer module (Master V2 section 10, UX-DEC-067 Guild Company Campus,
-DSK-061-10 2D/3D parity, DSK-061-11 role registry is not runtime). It is **not wired into the shell yet**;
-the shell owner imports it later. Plain ES modules, no DOM access, no network, no AI provider calls.
+DSK-061-10 2D/3D parity, DSK-061-11 role registry is not runtime). It is mounted by `views/tower.js` (UX WP4; 2D only, no 3D);
+`feed.js` maps the real read model to the input and `mount.js` builds the DOM without HTML string injection via `markup.js`; model, render-svg and list-view are plain ES modules with no DOM access, no network, no AI provider calls.
 
 ## Files
 
@@ -13,6 +13,8 @@ the shell owner imports it later. Plain ES modules, no DOM access, no network, n
 | `render-svg.js` | `renderCampusSvg(model, {t, reducedMotion, locale})` returns an SVG string |
 | `list-view.js` | `renderCampusList(model, {locale})` returns the accessible table equivalent (HTML string) |
 | `locales.js` | `STRINGS` (`tr`, `en`), `tr()`, `esc()`, `truncate()`; the shell merges the dictionary later |
+| `feed.js` | Real read model (cockpit/control, /v1/roles pages, /v1/work-runs) to `buildCampusModel` input; no invented names or counts |
+| `mount.js`, `markup.js` | DOM mount with keyboard guild selection, and the escaped-markup to DOM converter (no HTML string injection) |
 | `*.d.ts` | Type declarations for the tsc gate only |
 
 ## Data contract

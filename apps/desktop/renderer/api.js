@@ -1,5 +1,5 @@
 // //TR: Bu modül renderer veri erişiminin tek kapısıdır: yalnız preload köprüsü (window.uasco.apiGet / apiPost) üzerinden GET ve sabit allow-list'li JSON POST yapar, token'ı hiç görmez; sonuçları epoch'lu önbellekte tutar, aynı anda gelen istekleri birleştirir ve eski epoch yanıtlarını atar.
-import {classifyFailure,mapCockpit,emptyCockpit,mapProjects,mapMissions,mapControlStatus,mapEvents,mapAttention} from "./model.js";
+import {classifyFailure,mapRolesPage,mapCockpit,emptyCockpit,mapProjects,mapMissions,mapControlStatus,mapEvents,mapAttention} from "./model.js";
 import {MISSION_ID_RE,SAFE_ID_RE,mapMissionDetail,mapWorkRuns,mapWorkRunDetail,mapEvidenceList,mapEvidenceDetail} from "./work-core.js";
 import {devrunPath,filesPath,filePath,gitLogPath,gitDiffPath,exportsPath,exportItemPath,EXECUTORS_PATH,mapDevRun,mapFileList,mapFileContent,mapGitLog,mapGitDiff,mapExports,mapExecutors} from "./project-core.js";
 import {deliveriesPath,deliveryPath,mapDeliveries,mapDelivery} from "./delivery-core.js";
@@ -72,6 +72,20 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async executors(){const r=await get(EXECUTORS_PATH);return r.ok?mapExecutors(r.data):{state:r.state,items:[],message:r.message}},
     // //TR: INT-R3 D-M1-07: rol sayısı kanonik WFR-03 alanlarından okunur (registeredRoles/certified); eski "count" (LEGACY_REFERENCE_ONLY) kayıtlı rol olarak kullanılmaz, yalnız legacyRoles olarak taşınır.
     async agentCount(){const r=await get("/v1/agents"),n=v=>Number.isSafeInteger(v)&&v>=0?v:null,none={count:null,registeredRoles:null,certified:null,legacyRoles:null};if(!r.ok)return {state:r.state,...none};const reg=n(r.data?.registeredRoles);return reg===null?{state:"ERROR",...none}:{state:"VERIFIED",count:reg,registeredRoles:reg,certified:n(r.data?.certified),legacyRoles:n(r.data?.legacyRoles)}},
+    // //TR: UX WP4: rol kataloğu GET /v1/roles sayfalarından (limit=100, sabit imleç biçimi) okunur; sayfa eksik, bozuk, tekrarlı veya toplamla uyuşmazsa katalog UNAVAILABLE/ERROR olur, kısmi sayı asla dönmez.
+    async roles(){
+      const items=[],seen=new Set();let cursor=null,total=null;
+      for(let page=0;page<12;page++){
+        const r=await get(cursor?`/v1/roles?limit=100&cursor=${cursor}`:"/v1/roles?limit=100");
+        if(!r.ok)return {state:r.state,items:[],total:null,message:r.message};
+        const p=mapRolesPage(r.data);if(!p||(total!==null&&p.total!==total))return {state:"ERROR",items:[],total:null};
+        total=p.total;
+        for(const it of p.items){if(seen.has(it.roleId))return {state:"ERROR",items:[],total:null};seen.add(it.roleId);items.push(it)}
+        if(p.nextCursor===null)return items.length===total?{state:"VERIFIED",items,total}:{state:"ERROR",items:[],total:null};
+        cursor=p.nextCursor;
+      }
+      return {state:"ERROR",items:[],total:null};
+    },
     async raw(path){return get(path)}
   };
 }
