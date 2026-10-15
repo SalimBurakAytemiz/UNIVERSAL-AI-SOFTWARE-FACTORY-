@@ -9,7 +9,10 @@
   "status": "IMPLEMENTED, NOT CLEAN; independent review pending",
   "startedAt": "2026-10-14T23:54:53Z",
   "endedAt": "2026-10-15T00:26:57Z",
-  "authorizationRecords": ["audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json", "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"],
+  "authorizationRecords": [
+    "audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json",
+    "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
+  ],
   "backendDependency": "PS-1A backend routes are not in this lineage; every new read returns HTTP 404 here and the UI shows honest UNAVAILABLE (observed in the real Electron launch). No data is faked.",
   "decisions": {
     "preview": "shell.openExternal to the default browser, chosen over an in-app isolated BrowserWindow: generated app code never enters the Electron process/session or IPC surface. The URL is read by the main process from backend devrun state (RUNNING + AVAILABLE + exact http://127.0.0.1:<port>/, port 1024-65535, not the Control API port, matching devrun.port), never taken from the renderer.",
@@ -37,6 +40,35 @@
     "generate-trust-root / verify-trust-root": "files=364, PASS (re-run after commit recorded in final report)"
   },
   "defectFoundAndFixed": "Pre-existing B4 defect: trustedSender required senderFrame.url === rendererUrl exactly, but hash routes append #/route, so every IPC call after leaving the initial route failed with UNTRUSTED_IPC_SENDER (seen in the real launch). Fixed by ignoring only the URL fragment; unit-tested.",
-  "notRun": ["scripts/run-validation.mjs (not requested)", "electron-builder packaged build (not requested)", "interactive native file dialog (cannot be driven headless)", "default-browser preview opening (needs a live backend dev-run)"],
-  "claims": "Not clean. No CLEAN or review verdict is claimed."
+  "notRun": [
+    "scripts/run-validation.mjs (not requested)",
+    "electron-builder packaged build (not requested)",
+    "interactive native file dialog (cannot be driven headless)",
+    "default-browser preview opening (needs a live backend dev-run)"
+  ],
+  "claims": "Not clean. No CLEAN or review verdict is claimed.",
+  "remediationC2": {
+    "//TR": "PS1B-C1-001 düzeltmesi: renderer ve main aynı kanonik yol kodlayıcısını kullanır; yalnız gözlenen sonuçlar kaydedilir, temiz değildir.",
+    "finding": "PS1B-C1-001 (medium, blocker)",
+    "startedAt": "2026-10-15T00:35:13Z",
+    "parent": "d4495809c40906c9c4ae2a6226bd921715661437",
+    "change": [
+      "project-core.js: encodeRelPath = encodeURIComponent + %XX for ! ' ( ) *; filesPath/filePath use it; validRelPath now also rejects lone surrogates (encodeURIComponent would throw)",
+      "main.mjs: psEncodeRel is the identical encoder, used for the canonical check; encoded value cap 600 -> 2700 (300 decoded chars x 9); overall GET cap 900 -> 2900",
+      "tests/v7-ps1b-relpath-canonical.test.ts (new, appended at the end of the tests step in config/validation.json); tests/v7-ps1b-project-studio-ui.test.ts end-of-list assertion now expects the last two entries"
+    ],
+    "observed": {
+      "tsc --noEmit": "exit 0",
+      "vitest (relpath-canonical + ps1b-ui + b4 + b5 + b7 + pkg-c + pkg-e)": "7 files, 208 tests passed",
+      "scripts/v6-apps-control-desktop-selftest.mjs": "PASS 93/93",
+      "scripts/smoke-desktop.mjs": "PASS desktop marker HEALTHY+VERIFIED",
+      "scripts/validate-tr-comments.mjs": "PASS",
+      "scripts/secret-sanity.mjs": "PASS"
+    },
+    "notRun": [
+      "scripts/run-validation.mjs (not requested)",
+      "server.ts side of the file routes (out of scope; not touched, so its own path-length handling for up to 2700 encoded chars is not verified here)"
+    ],
+    "claims": "Not clean. No CLEAN or review verdict is claimed."
+  }
 }

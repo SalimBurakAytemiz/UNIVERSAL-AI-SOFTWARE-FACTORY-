@@ -60,8 +60,10 @@ export function redactHead(value,max){const t=redactText(value),cut=t.length>max
 
 // ---------- Göreli yol (main allow-list ile aynı kurallar) ----------
 /** Proje içi göreli yol: boş değil, "/" ile başlamaz/bitmez, ".." "." boş parça yok, ters eğik çizgi/":"/"%"/kontrol karakteri yok, ≤300 karakter. */
+// //TR: PS-1B c2: eşleşmemiş vekil (surrogate) karakterler encodeURIComponent'i fırlattığı için geçersiz yol sayılır.
+const LONE_SURROGATE_RE=/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 export function validRelPath(p){
-  if(typeof p!=="string"||p.length<1||p.length>300||CONTROL_RE.test(p)||/[\\%:]/.test(p)||p.startsWith("/")||p.endsWith("/"))return false;
+  if(typeof p!=="string"||p.length<1||p.length>300||CONTROL_RE.test(p)||/[\\%:]/.test(p)||LONE_SURROGATE_RE.test(p)||p.startsWith("/")||p.endsWith("/"))return false;
   return p.split("/").every(s=>s.length>0&&s!=="."&&s!=="..");
 }
 export const joinRel=(dir,name)=>dir?`${dir}/${name}`:name;
@@ -72,11 +74,13 @@ const pid=id=>typeof id==="string"&&PROJECT_ID_RE.test(id)?id:null;
 export const devrunPath=id=>pid(id)?`/v1/projects/${id}/devrun`:null;
 export const exportsPath=id=>pid(id)?`/v1/projects/${id}/exports`:null;
 export const exportItemPath=(id,eid)=>pid(id)&&typeof eid==="string"&&SAFE_ID_RE.test(eid)?`/v1/projects/${id}/exports/${eid}`:null;
+// //TR: PS-1B c2: tek kanonik kodlayıcı; encodeURIComponent'in bırakıp bıraktığı ! ' ( ) * karakterleri de %XX olur (main.mjs psEncodeRel ile birebir aynı).
+export const encodeRelPath=rel=>encodeURIComponent(rel).replace(/[!'()*]/g,c=>"%"+c.charCodeAt(0).toString(16).toUpperCase());
 export function filesPath(id,rel=""){
   if(!pid(id))return null;if(!rel)return `/v1/projects/${id}/files`;
-  return validRelPath(rel)?`/v1/projects/${id}/files?path=${encodeURIComponent(rel)}`:null;
+  return validRelPath(rel)?`/v1/projects/${id}/files?path=${encodeRelPath(rel)}`:null;
 }
-export const filePath=(id,rel)=>pid(id)&&validRelPath(rel)?`/v1/projects/${id}/file?path=${encodeURIComponent(rel)}`:null;
+export const filePath=(id,rel)=>pid(id)&&validRelPath(rel)?`/v1/projects/${id}/file?path=${encodeRelPath(rel)}`:null;
 export function gitLogPath(id,limit=GIT_LOG_LIMIT){
   if(!pid(id))return null;if(!Number.isSafeInteger(limit)||limit<1||limit>500)return null;return `/v1/projects/${id}/git/log?limit=${limit}`;
 }

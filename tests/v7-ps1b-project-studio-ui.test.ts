@@ -879,7 +879,7 @@ describe("PS-1B static safety and wiring", () => {
   it("validation.json appends this test at the very end of the tests step and nothing else changed there", () => {
     const cfg = JSON.parse(read(root, "config", "validation.json"));
     const step = cfg.steps.find((s: any) => s.id === "tests");
-    expect(step.command[step.command.length - 1]).toBe("tests/v7-ps1b-project-studio-ui.test.ts");
+    expect(step.command.slice(-2)).toEqual(["tests/v7-ps1b-project-studio-ui.test.ts", "tests/v7-ps1b-relpath-canonical.test.ts"]); // c2: PS1B-C1-001 testi sona eklendi
     expect(step.command.filter((x: string) => x === "tests/v7-ps1b-project-studio-ui.test.ts").length).toBe(1);
     expect(step.command).toContain("tests/v7-b7-installer.test.ts");
   });

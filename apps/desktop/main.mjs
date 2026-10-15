@@ -50,10 +50,12 @@ function listQueryAllowed(value,base,keys){
   return seen.size>0;
 }
 // //TR: PS-1B: Project Studio okuma rotaları tam eşleşme ile izinlenir (kimlik prj_ + 24 hex, dışa aktarma kimliği sıkı desen); yol sorgusu yüzde-kodlu ve kanonik olmalı, "..", "/" ile başlama, ters eğik çizgi, ":" ve "%" reddedilir; git referansı yalnız onaltılık özet veya HEAD(~N); bilinmeyen/yinelenen parametre reddedilir.
+// //TR: PS-1B c2: kanonik kodlayıcı renderer (project-core.js encodeRelPath) ile birebir aynıdır; encodeURIComponent'in bırakıp bıraktığı ! ' ( ) * karakterleri de %XX olarak kodlanır; kodlanmış yol üst sınırı 300 karakter x 9 = 2700'dür.
+function psEncodeRel(rel){return encodeURIComponent(rel).replace(/[!'()*]/g,c=>"%"+c.charCodeAt(0).toString(16).toUpperCase())}
 function psRelPathValueOk(enc){
-  if(typeof enc!=="string"||enc.length<1||enc.length>600||!/^(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+$/.test(enc))return false;
+  if(typeof enc!=="string"||enc.length<1||enc.length>2700||!/^(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+$/.test(enc))return false;
   let dec;try{dec=decodeURIComponent(enc)}catch{return false}
-  if(encodeURIComponent(dec)!==enc)return false;
+  if(psEncodeRel(dec)!==enc)return false;
   if(dec.length>300||/[\u0000-\u001f\u007f\\%:]/.test(dec)||dec.startsWith("/")||dec.endsWith("/"))return false;
   return dec.split("/").every(s=>s.length>0&&s!=="."&&s!=="..");
 }
@@ -69,7 +71,7 @@ const PS_QUERY={
   "exports":{keys:{},req:[]}
 };
 function projectStudioGetAllowed(value){
-  if(typeof value!=="string"||value.length>900)return false;
+  if(typeof value!=="string"||value.length>2900)return false;
   if(value==="/v1/system/executors")return true;
   const q=value.indexOf("?"),base=q<0?value:value.slice(0,q);
   if(PS_EXPORT_DETAIL_RE.test(base))return q<0;
