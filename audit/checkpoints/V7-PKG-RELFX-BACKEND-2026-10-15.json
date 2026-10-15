@@ -11,7 +11,7 @@
     "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
   ],
   "scope": "C:/Users/salim/UASCO-recovery/product/rel/REL-FIRST-EXE-P0.md sections REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2 (backend only; apps/desktop/** not touched). One commit per FX in the order FX-1, FX-3, FX-4, FX-2.",
-  "status": "IMPLEMENTED (REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2) + cycle-2 remediation of RV-RELFX-C1-001..004, NOT CLEAN; independent review pending",
+  "status": "IMPLEMENTED (REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2) + cycle-2 remediation of RV-RELFX-C1-001..004 + cycle-3 remediation of RV-RELFX-C2-001..004, NOT CLEAN; independent review pending",
   "decisions": {
     "D-REL-3": "FA-V2-PRODUCT-2026-10-14 covers apps/control-api/src/server.ts, config/validation.json (test steps appended) and config/trust-root-manifest.json (resealed with node scripts/generate-trust-root.mjs). No other protected file changed.",
     "D-REL-2": "Refuse R3/R4 run start (fail-closed default).",
@@ -134,6 +134,48 @@
       "Output parsing is heuristic per known runner summary formats; mixed multi-runner output uses the first recognised format.",
       "Provider-limit detection depends on the Claude CLI's current error wording; unrecognised wording is a normal failure (fail-closed against false PROVIDER_QUOTA, may retry/fail instead).",
       "Disabled-test markers are text patterns; a marker inside a string or comment can count (compared base vs head, so only an increase matters)."
+    ]
+  },
+  "remediationCycle3": {
+    "reviewedSha": "706bfda3ecd8617de899e6cda8365dcf499e6033",
+    "reviewVerdict": "BLOCKED (cycle 2)",
+    "implementer": "CLAUDE_BUILDER",
+    "findings": {
+      "RV-RELFX-C2-001": {
+        "severity": "P2 (BLOCKER)",
+        "fix": "core/workos/test-surface.ts DISABLED_RES: the modifier pattern allows a member chain after the modifier (/\\.(?:skip|only|todo|skipIf|runIf)\\b(?:\\.\\w+)*\\s*\\(/g) so it.skip.each(table)(, describe.skip.each(, test.only.each(, it.concurrent.skip( count; the x/f-prefixed pattern also allows a chain (xit.each(, fit.each(). The test-call options-object pattern accepts an optional first argument (nameless test({ skip: true }, fn)), a key position after '{' or ',' (optionally quoted: {\"skip\": true}) with a non-falsy value, and the shorthand properties { skip } / { todo } / { only } (followed by ',' or '}'). skip used as a value ({ timeout: skip }), {skip: false}, .skipped(, .onlyOnce( and pagination shorthand outside a test call are not markers.",
+        "tests": "tests/v7-relfx-c3-remediation.test.ts: 12 cases on a base with an existing parametrized it.each test (it.skip.each, describe.skip.each, test.only.each, it.concurrent.skip, xit.each, { skip }, { timeout: 5, todo }, {only}, nameless test({ skip: true }), nameless test({ skip }), nameless it({ todo }), quoted {\"skip\": true}) each -> BLOCKED / TEST_WEAKENED / SKIP_OR_ONLY_ADDED; negatives listed above. Verified failing against 706bfda code before the fix."
+      },
+      "RV-RELFX-C2-002": {
+        "severity": "P3",
+        "fix": "New parseTestRunStreams(stdout, stderr): each stream is parsed separately by runner convention (vitest, node:test TAP/spec, pytest, cargo, dotnet, mocha on stdout; jest on stderr; zero-test markers on either). Within one stream, the single-summary runners (vitest Tests line, jest Tests: line, TAP counters, pytest final line, mocha passing/failing/pending) must not have different-content duplicates; a conflict -> null. A stream that is recognised but unreadable/conflicting -> null (no fallback to the other stream); two streams with different summaries -> null. null -> UNKNOWN (EXECUTED_TEST_COUNT_UNPARSEABLE), never executed. parseTestRunSummary(output, stream = 'any') keeps the single-text API (concatenated text with two different vitest summaries is now null, not the last one). core/workos/runner.ts VERIFY uses parseTestRunStreams(r.stdout, r.stderr) instead of parsing the concatenation.",
+        "tests": "synthetic real-ANSI stdout + fake stderr summary -> real (0 executed, 1 skipped); fake summary on stdout before the real one -> null; vitest summary only on stderr -> null; jest summary on stdout ignored, on stderr parsed; disagreeing streams -> null; unreadable stdout + stderr jest -> null; TAP diagnostic conflict -> null. Reproduced live with the repo's own vitest 4.1.11 on a UASCO-authored fixture that writes '      Tests  99 passed (99)' to stderr and skips its only test: parseTestRunStreams gives 0 executed / 1 skipped (the old concatenated parse gave 99). Runner-level VERIFY with a UASCO-authored test command printing a real stdout summary and a fake stderr summary -> TEST_SURFACE executedTests 0, UNVERIFIED_VACUOUS (ZERO_TESTS_EXECUTED)."
+      },
+      "RV-RELFX-C2-003": {
+        "severity": "P3",
+        "fix": "The vitest Tests-line pattern also accepts '      Tests  no tests' (passWithNoTests) -> vitest summary with 0 executed -> UNVERIFIED_VACUOUS (ZERO_TESTS_EXECUTED) instead of UNKNOWN.",
+        "tests": "captured repo-vitest 4.1.11 --passWithNoTests output (ANSI) -> {format: vitest, executed: 0} -> UNVERIFIED_VACUOUS/ZERO_TESTS_EXECUTED; live run of the repo's own vitest with --passWithNoTests on a UASCO-authored empty-describe fixture gives the same."
+      },
+      "RV-RELFX-C2-004": {
+        "severity": "P3",
+        "fix": "vite.config.* is an unconditional harness file (its test block is not parsed; fail-closed, any change counts) and appears in HARNESS_GLOBS; the conditional package.json comparison includes the top-level jest, mocha and ava keys besides scripts.test/pretest/posttest.",
+        "tests": "vite.config.ts / apps/web/vite.config.mjs / vite.config.mts -> harness, UNVERIFIED_ORACLE; package.json jest testMatch change, mocha spec change, ava key added -> harness; description-only change with an unchanged jest key -> not harness (UNKNOWN)."
+      }
+    },
+    "files": [
+      "core/workos/test-surface.ts",
+      "core/workos/runner.ts (VERIFY parses stdout/stderr separately via parseTestRunStreams)",
+      "tests/v7-relfx-c3-remediation.test.ts (new)",
+      "config/validation.json (protected, authorized: new test file appended to the existing step)",
+      "config/trust-root-manifest.json (protected, resealed with node scripts/generate-trust-root.mjs)",
+      "audit/checkpoints/V7-PKG-RELFX-BACKEND-2026-10-15.json"
+    ],
+    "safety": "No AI-generated or untrusted project code executed on the host (Founder D-REL-1 / D-SBX-10 condition 4): the new tests use synthetic output strings, the repo's own vitest (node_modules/vitest) and UASCO-authored fixtures written by the test itself (an empty describe file, a file that writes a fake summary to stderr, a run-tests.mjs printing fixed lines). No new dependencies, no network.",
+    "limits": [
+      "Stream convention is fixed per runner: a project that redirects jest output to stdout (e.g. 2>&1 in its test script) or vitest output to stderr is read as UNKNOWN (fail-closed, never executed).",
+      "Any test that prints a line identical in shape to its runner's summary with different numbers makes the run UNKNOWN (conflict) rather than silently trusted; a printed line identical to the real summary is indistinguishable and harmless.",
+      "vite.config.* changes always count as harness surface, including changes unrelated to tests (fail-closed: UNVERIFIED_ORACLE instead of UNKNOWN).",
+      "Disabled-test markers remain text patterns: a { skip } shorthand whose runtime value is false still counts (fail-closed BLOCKED); markers inside strings or comments can count (only a base-to-head increase matters)."
     ]
   }
 }

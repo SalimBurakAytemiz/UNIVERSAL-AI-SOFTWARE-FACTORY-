@@ -17,7 +17,7 @@ import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from ".
 import {assertIndependentExecutors, runProcess} from "./executors.js";
 import {reviewAndSecurityFor} from "./outcomes.js";
 import {RISK_REFUSAL, hostExecutionNotice, riskAdmitted} from "./risk-admission.js";
-import {evaluateTestSurface, parseNameStatusZ, parseTestRunSummary, stripAnsi} from "./test-surface.js";
+import {evaluateTestSurface, parseNameStatusZ, parseTestRunStreams, stripAnsi} from "./test-surface.js";
 import type {ReviewerTestSurface} from "./executors.js";
 // //TR: REL-FX-4: sağlayıcı kota/hız sınırı sınıflandırması korumalı master sınıflandırıcıyla yapılır (kopyalanmaz); tip bildirimi olmadığı için dar yerel tiple bağlanır.
 // @ts-expect-error TS7016: failure-classifier.mjs tip bildirimi yok
@@ -472,7 +472,8 @@ export class MissionRunner {
     if (r.spawnError) return {kind: "BLOCK", reason: "TEST_COMMAND_SPAWN_FAILED"};
     const base = run.baseSha, head = run.headSha, surfaceStart = new Date().toISOString();
     const contentAt = (ref: string, p: string): string | null => { const x = this.git(scanClone, ["show", `${ref}:${p}`]); return x.status === 0 ? String(x.stdout ?? "") : null; };
-    const testRun = parseTestRunSummary(`${r.stdout}\n${r.stderr}`);
+    // RV-RELFX-C2-002: stdout ve stderr akış kuralına göre ayrı okunur (birleştirilip son satır seçilmez; stderr'e basılan sahte özet gerçeğini ezemez, çelişki UNKNOWN).
+    const testRun = parseTestRunStreams(String(r.stdout ?? ""), String(r.stderr ?? ""));
     const surface = evaluateTestSurface({baseSha: base, headSha: head, entries: touched, contentAt, executedTests: testRun?.executed ?? null, testRun, testCommand: this.rawTestCommand(run)});
     this.renew(run.runId, leaseId);
     // Her kanıt gibi TEST_SURFACE de log dosyası + sha256 taşır (tam sınıflama JSON'u; dosya içeriği yazılmaz).
