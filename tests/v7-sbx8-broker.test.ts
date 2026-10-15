@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import cp from "node:child_process";
-import {BROKER_ISOLATION_FLAGS, brokerPlan, builderArgs, implementerProfileBlock, implementerProfileDir, profilePathRefusal, withProfileEnv} from "../scripts/claude-builder-broker.mjs";
+import {BROKER_ISOLATION_FLAGS, brokerPlan, builderArgs, implementerProfileBlock, implementerProfileDir, profilePathRefusal, profileSettingsValid, withProfileEnv} from "../scripts/claude-builder-broker.mjs";
 import {CLAUDE_CREDENTIAL_STORE_FILE, ensureClaudeProfile} from "../core/workos/claude-profiles.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
@@ -74,6 +74,25 @@ describe("SBX-8 C: builder broker isolation flags and implementer profile", () =
     expect(r.status).toBe(3);
     expect(r.stderr).toContain("BROKER_BLOCKED CLAUDE_PROFILE_SETTINGS_INVALID");
     expect(implementerProfileBlock(dir, {USERPROFILE: home, HOME: home})).toBe("CLAUDE_PROFILE_SETTINGS_INVALID");
+  });
+  it("RV-SBX8-C1-F2: strict key allowlist refuses settings with any extra key the old denylist missed, accepts only the canonical shape", () => {
+    const base = temp(), home = path.join(base, "home"), root = control(path.join(base, "control"));
+    ensureClaudeProfile(root, "implementer", {env: {USERPROFILE: home, HOME: home}});
+    const dir = implementerProfileDir(root), canonical = JSON.parse(fs.readFileSync(path.join(dir, "settings.json"), "utf8"));
+    expect(profileSettingsValid(canonical)).toBe(true);
+    // Eski denylist yalnız üst düzey hooks/mcpServers/statusLine/apiKeyHelper/env'i reddediyordu; bu anahtarların hiçbiri aşağıda yok, yine de hepsi GEÇERSIZ olmalı (katı allowlist).
+    for (const extra of [{...canonical, model: "claude-x"}, {...canonical, includeCoAuthoredBy: false}, {...canonical, cleanupPeriodDays: 0},
+      {...canonical, permissions: {...canonical.permissions, allow: ["Bash"]}}, {...canonical, permissions: {...canonical.permissions, defaultMode: "bypassPermissions"}}])
+      expect(profileSettingsValid(extra), JSON.stringify(extra).slice(0, 80)).toBe(false);
+    // Kanonik anahtar eksikse de geçersiz.
+    const {enableAllProjectMcpServers: _drop, ...noMcp} = canonical;
+    expect(profileSettingsValid(noMcp)).toBe(false);
+    // Diske yazılan böyle bir ayar broker tarafından herhangi bir spawn'dan önce reddedilir.
+    fs.writeFileSync(path.join(dir, CLAUDE_CREDENTIAL_STORE_FILE), "");
+    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify({...canonical, permissions: {...canonical.permissions, allow: ["Bash"]}}));
+    const r = run(root, home);
+    expect(r.status).toBe(3);
+    expect(r.stderr).toContain("BROKER_BLOCKED CLAUDE_PROFILE_SETTINGS_INVALID");
   });
   it("control root inside the personal ~/.claude or inside a git work tree -> BROKER_BLOCKED CLAUDE_PROFILE_REFUSED, nothing spawned", () => {
     const base = temp(), home = path.join(base, "home");

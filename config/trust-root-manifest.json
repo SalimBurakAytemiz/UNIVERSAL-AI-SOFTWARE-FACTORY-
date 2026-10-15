@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-15T11:39:22.586Z",
+  "generatedAt": "2026-10-15T11:50:40.249Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -1170,7 +1170,7 @@
     },
     {
       "path": "scripts/claude-builder-broker.mjs",
-      "sha256": "de17095d9cebe2572f1cbfcdd792fb03069a82ccac327200fce244ade8a72fb6"
+      "sha256": "f0cde83a4bad37e4e72aab0d67878fc2c3d892459183630712783ea89cbd6074"
     },
     {
       "path": "scripts/claude-reviewer-broker.mjs",
