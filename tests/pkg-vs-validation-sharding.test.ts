@@ -16,6 +16,13 @@ describe("validation test sharding coverage",()=>{
     // //TR: vitest konumsal argümanları alt dizge filtresidir; her argüman tam olarak bir dosyayla eşleşmelidir.
     for(const a of seen.keys())expect(allTests.filter(f=>f.includes(a)),`${a} must match exactly one file`).toEqual([a]);
   });
+  // //TR: INT-R4 (Lane-B normalizasyonu): her tests/v7-*.test.ts dosyası TEK "tests" adımında listelenir (ayrı tests-int-r3/tests-sbx8/tests-relfx adımı yoktur); BS1/LV1 shard'ları v7 değildir, ayrı kalır.
+  it("lists every tests/v7-*.test.ts on disk in the single tests step",()=>{
+    const testsStep=vitestSteps.find(s=>s.id==="tests");expect(testsStep,"a step with id 'tests' must exist").toBeTruthy();
+    expect(vitestSteps.filter(s=>["tests-int-r3","tests-sbx8","tests-relfx"].includes(s.id)).map(s=>s.id),"no separate int-r3/sbx8/relfx test steps").toEqual([]);
+    const v7=allTests.filter(f=>f.startsWith("tests/v7-"));expect(v7.length,"v7 test files present").toBeGreaterThan(0);
+    for(const f of v7)expect(testsStep!.command,`${f} must be listed in the single tests step`).toContain(f);
+  });
   it("assigns every BS1 selftest scenario to exactly one shard and every shard has a step and a test file",()=>{
     expect(bs1Scenarios(selftest).length).toBeGreaterThan(0);
     expect(checkBs1Partition(BS1_PARTITION,selftest)).toEqual([]);

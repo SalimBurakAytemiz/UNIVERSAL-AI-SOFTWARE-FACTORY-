@@ -10,7 +10,7 @@ import {acquireProcessLock} from "../../automation/lib/process-lock.mjs";
 import {assertTransition, isMissionStatus} from "../mission/state-machine.js";
 import type {MissionStatus} from "../mission/types.js";
 import {WorkOsError, urlHasUserinfo} from "./types.js";
-import type {JournalEntry, JournalType, Project, ProjectExport, ProjectTemplate, ProjectType, RiskLevel, RunCheckpoint, RunEvidence, RunStatus, RunStep, Scope, TaskStatus, WorkMission, WorkRun, WorkTask} from "./types.js";
+import type {JournalEntry, JournalType, Project, ProjectExport, ProjectTemplate, ProjectType, RiskLevel, RunCheckpoint, RunCompletionRecord, RunEvidence, RunStatus, RunStep, Scope, TaskStatus, WorkMission, WorkRun, WorkTask} from "./types.js";
 // //TR: B11A: Company OS domainleri ikinci bir store kurmaz; girdileri bu journal'a yazar ve replay'de core/company apply fonksiyonlarına devredilir.
 import {applyCompanyEntry} from "../company/apply.js";
 import {emptyCompanyState, isCompanyJournalType} from "../company/types.js";
@@ -20,6 +20,8 @@ import {applyAcademyEntry} from "../academy/apply.js";
 import {emptyAcademyState, isAcademyJournalType} from "../academy/types.js";
 import type {AcademyJournalType, AcademyState, AcademyTx, AcademyView} from "../academy/types.js";
 import {ACTIVE_WORKER_STATUSES, LEASED_RUN_STATUSES, UNLEASED_RUN_STATUSES, assertRunTransition, isOpenRun, isRunStatus, isRunStep} from "./run-state.js";
+import {completionEvidence} from "./outcomes.js";
+import {RISK_REFUSAL, riskAdmitted} from "./risk-admission.js";
 
 const sha256 = sha256Untyped as (value: unknown) => string;
 const writeJsonAtomic = writeJsonAtomicUntyped as (file: string, value: unknown) => void;
@@ -74,7 +76,13 @@ export interface RunPatch {
   step?: RunStep; remediationCycle?: number; retryCount?: number; retryAt?: string | null; baseSha?: string | null; headSha?: string | null; workBranch?: string | null;
 }
 export interface RunWriteOptions { patch?: RunPatch; mission?: {to: MissionStatus; reason: string} }
-export interface WorkOsStoreOptions { now?: () => number }
+// //TR: REL-FX-4 fs seam'i: yalnız test enjeksiyonu (ENOSPC/kısa yazma); verilmezse fs.writeSync kullanılır.
+export interface WorkOsStoreOptions { now?: () => number; io?: {writeSync?: (fd: number, data: Buffer) => number} }
+// //TR: REL-FX-4: geçerli zincir üzerinde tek sonlandırılmamış son satır (yırtık append). quarantineFile dataDir'e görelidir (mutlak yol sızmaz).
+export interface TornTail { offset: number; bytes: number; sha256: string; fileSha256: string; expectedSeq: number; lastSeq: number; quarantineFile: string; quarantined: boolean }
+export interface JournalHealth { state: "OK" | "ABSENT" | "TORN_TAIL" | "TAMPERED" | "UNAVAILABLE"; reason: string | null; tornTail: TornTail | null }
+export interface TornTailRepair { truncatedBytes: number; tailSha256: string; quarantineFile: string; lastSeq: number }
+const hexSha = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");
 const RUN_PATCH_KEYS = new Set(["step", "remediationCycle", "retryCount", "retryAt", "baseSha", "headSha", "workBranch"]);
 const isNat = (x: unknown) => typeof x === "number" && Number.isSafeInteger(x) && x >= 0;
 const isStrOrNull = (x: unknown) => x === null || (typeof x === "string" && x.length > 0 && x.length <= 200);
@@ -95,12 +103,16 @@ export class WorkOsStore {
   // F-B1-002: IO/format hataları da fail-closed bayrağı kurar; guard() okuma ve yazmayı reddeder.
   private unavailableReason: string | null = null;
   private sig: string | null = null;
+  // REL-FX-4: yırtık kuyruk varsa store salt-okunurdur; yazılar WORKOS_READ_ONLY ile reddedilir, okumalar geçerli önekten sunulur.
+  private tornTail: TornTail | null = null;
+  private readonly writeSyncFn: (fd: number, data: Buffer) => number;
   // B3a: lease süresi ve fencing için saat; testler crash/recovery senaryosunda ileri saatli ikinci bir örnek kurar.
   private readonly now: () => number;
 
   constructor(dataDir: string = defaultDataDir(), options: WorkOsStoreOptions = {}) {
     this.dataDir = dataDir;
     this.now = options.now ?? Date.now;
+    this.writeSyncFn = options.io?.writeSync ?? ((fd, data) => fs.writeSync(fd, data));
     this.journalFile = path.join(dataDir, "journal.jsonl");
     this.snapshotFile = path.join(dataDir, "snapshot.json");
     this.lockFile = path.join(dataDir, "journal.lock");
@@ -111,6 +123,15 @@ export class WorkOsStore {
   get isUnavailable(): boolean { this.refresh(); return this.unavailableReason !== null; }
   get hasJournal(): boolean { return fs.existsSync(this.journalFile); }
   get lastSeq(): number { this.refresh(); return this.state.lastSeq; }
+  get isReadOnly(): boolean { this.refresh(); return this.tornTail !== null; }
+  // Sistem durumu için journal sağlığı (yol/stack içermez).
+  journalHealth(): JournalHealth {
+    this.refresh();
+    if (this.tamperReason) return {state: "TAMPERED", reason: this.tamperReason.replace(/^WORKOS_JOURNAL_TAMPERED: /, ""), tornTail: null};
+    if (this.unavailableReason) return {state: "UNAVAILABLE", reason: this.unavailableReason, tornTail: null};
+    if (this.tornTail) return {state: "TORN_TAIL", reason: "JOURNAL_TORN_TAIL", tornTail: {...this.tornTail}};
+    return {state: this.hasJournal ? "OK" : "ABSENT", reason: null, tornTail: null};
+  }
 
   // Journal dosyasının parmak izi: başka bir örnek/süreç yazınca veya dosya değişince okuma yeniden doğrular (bayat veri sessizce sunulmaz).
   private signature(): string {
@@ -129,7 +150,7 @@ export class WorkOsStore {
     try { return fn(); } finally { try { release?.(); } catch { /* lock sahipliği değişmişse yazma zaten tamamlandı */ } }
   }
   private fail(e: unknown): void {
-    this.sig = null;
+    this.sig = null; this.tornTail = null;
     if (e instanceof WorkOsError && e.code === "WORKOS_JOURNAL_TAMPERED") { this.tamperReason = e.message; this.unavailableReason = null; return; }
     // Yol/stack sızmasın: yalnız sabit sebep saklanır.
     this.tamperReason = null; this.unavailableReason = e instanceof WorkOsError ? e.message.replace(/^WORKOS_UNAVAILABLE: ?/, "") || "UNAVAILABLE" : "LOAD_FAILED";
@@ -147,18 +168,23 @@ export class WorkOsStore {
   private load(): void {
     const sigBefore = this.signature();
     try {
-      const entries = this.readVerifiedEntries();
+      const {entries, torn} = this.readVerifiedEntries();
       const st = emptyState();
       for (const e of entries) this.apply(st, e);
       this.checkSnapshotAgainst(entries);
       this.state = st; this.tamperReason = null; this.unavailableReason = null; this.sig = sigBefore;
-      if (entries.length > 0) this.writeSnapshot();
+      // REL-FX-4: yırtık kuyrukta hiçbir şey yazılmaz (snapshot dahil); yalnız karantina kopyası alınır.
+      this.tornTail = torn ? this.quarantine(torn, st.lastSeq) : null;
+      if (!torn && entries.length > 0) this.writeSnapshotBestEffort();
     } catch (e) { this.fail(e); }
   }
-  private readVerifiedEntries(): JournalEntry[] {
-    if (!fs.existsSync(this.journalFile)) return [];
-    const raw = fs.readFileSync(this.journalFile, "utf8");
-    if (raw.length > 0 && !raw.endsWith("\n")) throw tampered("JOURNAL_TRUNCATED_LINE");
+  // //TR: REL-FX-4: dosya "\n" ile bitmiyorsa son satır ayrılır; önek tam zincir doğrulamasından geçer. Kuyruk yalnız zincirin beklenen SONRAKİ girdisinin baş baytlarıysa
+  // TORN_TAIL'dır (tek yırtık append); önek bozuksa, kuyruk yabancıysa veya snapshot ileride ise tamper/fail-closed kalır.
+  private readVerifiedEntries(): {entries: JournalEntry[]; torn: {offset: number; tail: Buffer; full: Buffer} | null} {
+    if (!fs.existsSync(this.journalFile)) return {entries: [], torn: null};
+    const buf = fs.readFileSync(this.journalFile);
+    const cut = buf.length > 0 && buf[buf.length - 1] !== 0x0a ? buf.lastIndexOf(0x0a) + 1 : buf.length;
+    const raw = buf.subarray(0, cut).toString("utf8");
     const out: JournalEntry[] = []; let prev = {seq: 0, hash: GENESIS};
     for (const line of raw.split("\n").filter(Boolean)) {
       let e: JournalEntry;
@@ -170,7 +196,46 @@ export class WorkOsStore {
       if (e.prevHash !== prev.hash) throw tampered(`CHAIN_BROKEN:${e.seq}`);
       out.push(e); prev = {seq: e.seq, hash: e.hash};
     }
-    return out;
+    if (cut === buf.length) return {entries: out, torn: null};
+    const tail = buf.subarray(cut), expected = Buffer.from(`{"seq":${prev.seq + 1},"prevHash":"${prev.hash}","type":"`, "utf8");
+    const n = Math.min(expected.length, tail.length);
+    if (n === 0 || !tail.subarray(0, n).equals(expected.subarray(0, n))) throw tampered("JOURNAL_TRUNCATED_LINE");
+    return {entries: out, torn: {offset: cut, tail, full: buf}};
+  }
+  // Karantina kopyası: yırtık dosyanın bayt bayt kopyası (adı tam dosya sha256'sından); atomik yazılır, aynı içerik tekrar yazılmaz.
+  private quarantine(t: {offset: number; tail: Buffer; full: Buffer}, lastSeq: number): TornTail {
+    const fileSha256 = hexSha(t.full), rel = `quarantine/journal-torn-${fileSha256.slice(0, 16)}.jsonl`, file = path.join(this.dataDir, rel);
+    let quarantined = false;
+    try {
+      if (!fs.existsSync(file) || hexSha(fs.readFileSync(file)) !== fileSha256) {
+        fs.mkdirSync(path.dirname(file), {recursive: true});
+        const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`;
+        fs.writeFileSync(tmp, t.full); fs.renameSync(tmp, file);
+      }
+      quarantined = hexSha(fs.readFileSync(file)) === fileSha256;
+    } catch { quarantined = false; }
+    return {offset: t.offset, bytes: t.tail.length, sha256: hexSha(t.tail), fileSha256, expectedSeq: lastSeq + 1, lastSeq, quarantineFile: rel, quarantined};
+  }
+  // //TR: REL-FX-4 onaylı onarım: yalnız TORN_TAIL durumunda, kuyruğun tam sha256'sı onaylanırsa ve karantina kopyası doğrulanmışsa journal yırtık satırdan önceye kesilir.
+  // Tamper/bozuk zincir asla kesilmez (guard fırlatır). Onarım kaydı karantina kopyasının yanına yazılır.
+  repairTornTail(confirmTailSha256: string, actor: string): TornTailRepair {
+    return this.withLock(() => {
+      this.load(); this.guard();
+      const t = this.tornTail;
+      if (!t) throw new WorkOsError("WORKOS_CONFLICT", "JOURNAL_NOT_TORN");
+      if (typeof confirmTailSha256 !== "string" || confirmTailSha256.length !== t.sha256.length || !crypto.timingSafeEqual(Buffer.from(confirmTailSha256), Buffer.from(t.sha256)))
+        throw new WorkOsError("WORKOS_CONFLICT", "TORN_TAIL_CONFIRMATION_MISMATCH");
+      const buf = fs.readFileSync(this.journalFile);
+      if (buf.length !== t.offset + t.bytes || hexSha(buf) !== t.fileSha256) throw new WorkOsError("WORKOS_CONFLICT", "JOURNAL_CHANGED");
+      const q = path.join(this.dataDir, t.quarantineFile);
+      if (!t.quarantined || !fs.existsSync(q) || hexSha(fs.readFileSync(q)) !== t.fileSha256) throw new WorkOsError("WORKOS_UNAVAILABLE", "QUARANTINE_COPY_MISSING");
+      writeJsonAtomic(`${q}.repair.json`, {"//TR": "REL-FX-4 onaylı yırtık kuyruk onarım kaydı; kesilen baytlar karantina kopyasında durur.", schemaVersion: 1, repairedAt: new Date().toISOString(), actor: String(actor).slice(0, 100),
+        offset: t.offset, truncatedBytes: t.bytes, tailSha256: t.sha256, fileSha256: t.fileSha256, lastSeq: t.lastSeq});
+      const fd = fs.openSync(this.journalFile, "r+");
+      try { fs.ftruncateSync(fd, t.offset); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+      this.sig = null; this.load(); this.guard(true);
+      return {truncatedBytes: t.bytes, tailSha256: t.sha256, quarantineFile: t.quarantineFile, lastSeq: this.state.lastSeq};
+    });
   }
   // Snapshot geride kalabilir (çökme), ama journal'dan ileri veya farklı bir geçmişe işaret edemez (kuyruk silme tespiti).
   private checkSnapshotAgainst(entries: JournalEntry[]): void {
@@ -183,6 +248,8 @@ export class WorkOsStore {
     const expected = s === 0 ? GENESIS : entries[s - 1].hash;
     if (snap.lastHash !== expected) throw tampered("SNAPSHOT_HASH_NOT_IN_JOURNAL");
   }
+  // Snapshot türetilmiştir: yazılamaması (ör. disk dolu) journal'ı veya okumaları bozmaz; sonraki yüklemede yeniden yazılır.
+  private writeSnapshotBestEffort(): void { try { this.writeSnapshot(); } catch { /* türetilmiş dosya */ } }
   private writeSnapshot(): void {
     writeJsonAtomic(this.snapshotFile, {"//TR": "Bu snapshot journal.jsonl dosyasından türetilir; otorite journal'dır, bu dosya silinip yeniden üretilebilir.", schemaVersion: "1.0.0", ...this.state});
   }
@@ -262,9 +329,21 @@ export class WorkOsStore {
         if (!isRunStatus(p.to) || r.status !== p.from || (p.leaseId ?? null) !== r.leaseId) throw tampered(`RUN_TRANSITION_INCONSISTENT:${e.seq}`);
         try { assertRunTransition(r.status, p.to); } catch { throw tampered(`RUN_TRANSITION_ILLEGAL:${e.seq}`); }
         if (p.patch !== undefined && !validRunPatch(p.patch)) throw malformed(`RUN_PATCH:${e.seq}`);
+        // REL-FX-1: run SUCCEEDED ve mission COMPLETE yalnız birlikte ve yalnız kanıt yüklemi replay anında da sağlanıyorsa geçerlidir (tek journal girdisi).
+        // REL-FX c4: kayıtlı onay (varsa) yeniden doğrulanır; tamamlama kaydı replay anında yeniden türetilenle birebir aynı olmalıdır (onay gerekirken onaysız girdi tamper'dır).
+        const toComplete = isObj(p.mission) && p.mission.to === "COMPLETE";
+        let completion: RunCompletionRecord | undefined;
+        if (p.to === "SUCCEEDED" || toComplete) {
+          const rec = isObj(p.completion) ? p.completion.testChangesAcknowledgement : undefined;
+          const ack = rec === undefined ? undefined : isObj(rec) ? {acknowledgeTestChanges: rec.acknowledgeTestChanges, testSurfaceSha256: rec.testSurfaceSha256} : rec;
+          const chk = completionEvidence(r, r.evidence, ack);
+          if (p.to !== "SUCCEEDED" || !toComplete || p.patch !== undefined || !chk.ok || !isObj(p.completion) || JSON.stringify(p.completion) !== JSON.stringify(chk.refs)) throw tampered(`COMPLETION_UNSUPPORTED:${e.seq}`);
+          completion = chk.refs;
+        }
         this.applyMissionMove(st, p.mission, r.missionId, e.seq);
         Object.assign(r, p.patch ?? {});
         r.status = p.to; r.reason = typeof p.reason === "string" ? p.reason : null; r.updatedAt = e.at;
+        if (completion) r.completion = completion;
         if (UNLEASED_RUN_STATUSES.includes(r.status)) { r.leaseId = null; r.leaseExpiresAt = null; }
         break;
       }
@@ -311,25 +390,41 @@ export class WorkOsStore {
     try { assertTransition(m.status, mv.to); } catch { throw tampered(`TRANSITION_ILLEGAL:${seq}`); }
     m.status = mv.to;
   }
-  private guard(): void {
+  private guard(write = false): void {
     if (this.tamperReason) throw new WorkOsError("WORKOS_JOURNAL_TAMPERED", this.tamperReason.replace(/^WORKOS_JOURNAL_TAMPERED: /, ""));
     if (this.unavailableReason) throw new WorkOsError("WORKOS_UNAVAILABLE", this.unavailableReason);
+    if (write && this.tornTail) throw new WorkOsError("WORKOS_READ_ONLY", "JOURNAL_TORN_TAIL");
   }
   private readGuard(): void { this.refresh(); this.guard(); }
   // Her yazı lock altında disk yeniden doğrulanarak yapılır: başka örnek/süreç yazdıysa onun yazıları görülür, bozuk disk fail-closed.
   private write<T>(fn: () => T): T {
-    return this.withLock(() => { this.load(); this.guard(); return fn(); });
+    return this.withLock(() => { this.load(); this.guard(true); return fn(); });
   }
   // WFR04A-C1-F3: at verilirse (academy ön-denemesinde kullanılan zaman) aynen yazılır; ön-deneme ile diske yazılan girdi aynı zamanı taşır.
   private append(type: JournalType, actor: string, payload: Record<string, unknown>, at?: string): JournalEntry {
     const body = {seq: this.state.lastSeq + 1, prevHash: this.state.lastHash, type, actor, at: at ?? new Date().toISOString(), payload};
     const entry: JournalEntry = {...body, hash: entryHash(body)};
+    const line = Buffer.from(JSON.stringify(entry) + "\n", "utf8");
     fs.mkdirSync(this.dataDir, {recursive: true});
     const fd = fs.openSync(this.journalFile, "a");
-    try { fs.writeSync(fd, JSON.stringify(entry) + "\n"); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    try {
+      const size = fs.fstatSync(fd).size;
+      try {
+        const n = this.writeSyncFn(fd, line);
+        if (n !== line.length) throw Object.assign(new Error("SHORT_WRITE"), {code: "ESHORTWRITE"});
+        fs.fsyncSync(fd);
+      } catch (e) {
+        // REL-FX-4: yarım satır bırakılmaz: dosya yazı öncesi boyuta geri kesilir; geri kesme de başarısızsa sonraki açılış TORN_TAIL görür (sessiz PASS yok).
+        // Windows'ta "a" kipindeki tanıtıcı kesemez (EPERM); geri kesme ayrı bir "r+" tanıtıcıyla yapılır.
+        try { const rfd = fs.openSync(this.journalFile, "r+"); try { fs.ftruncateSync(rfd, size); fs.fsyncSync(rfd); } finally { fs.closeSync(rfd); } } catch { /* sonraki yükleme TORN_TAIL/tamper ayrımını yapar */ }
+        this.sig = null;
+        const code = (e as NodeJS.ErrnoException).code;
+        throw code === "ENOSPC" || code === "EDQUOT" || code === "ESHORTWRITE" ? new WorkOsError("WORKOS_DISK_FULL", "JOURNAL_APPEND") : new WorkOsError("WORKOS_UNAVAILABLE", "JOURNAL_APPEND_FAILED");
+      }
+    } finally { fs.closeSync(fd); }
     this.apply(this.state, entry);
     this.sig = this.signature();
-    this.writeSnapshot();
+    this.writeSnapshotBestEffort();
     return entry;
   }
   // F-B1-001/005: aynı tenant+kind+key için önceki varlık döner; yük özeti farklıysa çakışma hatası.
@@ -436,6 +531,8 @@ export class WorkOsStore {
   }
   createTask(input: CreateTaskInput): WorkTask { return this.createTaskDetailed(input).entity; }
   transitionMission(scope: Scope, missionId: string, to: MissionStatus, reason: string, actor: string): WorkMission {
+    // REL-FX-1: COMPLETE hiçbir yoldan kanıt kapısını atlayamaz; store çağrısı da aynı birleşik yazıya yönlenir.
+    if (to === "COMPLETE") return this.completeMission(scope, missionId, reason, actor).mission;
     return this.write(() => {
       const m = this.state.missions[missionId];
       if (!m || m.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "mission");
@@ -446,6 +543,26 @@ export class WorkOsStore {
     });
   }
 
+  // //TR: REL-FX-1 kanıta bağlı tamamlama: mission REPORTING olmalı, mission'ın EN SON run'ı AWAITING_APPROVAL olmalı ve run.headSha için REPORT + CLEAN REVIEW + BLOCKED olmayan
+  // SECURITY_REPORT kanıtı bulunmalıdır. Tek journal girdisi (RUN_TRANSITION + gömülü mission hareketi) run'ı SUCCEEDED, mission'ı COMPLETE yapar; aksi halde 409 sabit sebep, journal değişmez.
+  // REL-FX c4: mevcut test/harness değişikliği varsa acknowledgement ({acknowledgeTestChanges: true, testSurfaceSha256}) güncel TEST_SURFACE kanıtıyla eşleşmelidir; onay aynı yazıda kaydedilir.
+  completeMission(scope: Scope, missionId: string, reason: string, actor: string, acknowledgement?: unknown): {mission: WorkMission; run: WorkRun} {
+    if (typeof reason !== "string" || reason.trim().length === 0) throw new WorkOsError("WORKOS_INVALID_INPUT", "reason");
+    return this.write(() => {
+      const m = this.state.missions[missionId];
+      if (!m || m.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "mission");
+      try { assertTransition(m.status, "COMPLETE"); } catch (e) { throw new WorkOsError("WORKOS_INVALID_TRANSITION", (e as Error).message); }
+      const runs = Object.values(this.state.runs).filter(r => r.missionId === missionId && r.tenantId === m.tenantId);
+      const run = runs[runs.length - 1];
+      const chk = completionEvidence(run, run?.evidence ?? [], acknowledgement);
+      if (!chk.ok) throw new WorkOsError("WORKOS_CONFLICT", chk.reason);
+      const why = reason.slice(0, 1000);
+      this.append("RUN_TRANSITION", actor, {runId: run.runId, leaseId: null, from: "AWAITING_APPROVAL", to: "SUCCEEDED", reason: `FOUNDER_ACCEPTED: ${why}`.slice(0, 1000),
+        mission: {missionId, from: m.status, to: "COMPLETE", reason: why}, completion: chk.refs});
+      return {mission: this.state.missions[missionId], run: clone(this.state.runs[run.runId])};
+    });
+  }
+
   // ---- B3a worker runs (aynı journal, aynı lock, aynı hash zinciri) ----
   private nowIso(): string { return new Date(this.now()).toISOString(); }
   private missionMove(runMissionId: string, mv: RunWriteOptions["mission"]): Record<string, unknown> | undefined {
@@ -453,6 +570,7 @@ export class WorkOsStore {
     const m = this.state.missions[runMissionId];
     if (!m) throw new WorkOsError("WORKOS_NOT_FOUND", "mission");
     if (m.status === mv.to) return undefined; // idempotent yeniden giriş: hedefte zaten
+    if (mv.to === "COMPLETE") throw new WorkOsError("WORKOS_CONFLICT", "COMPLETION_REQUIRES_EVIDENCE_GUARD");
     try { assertTransition(m.status, mv.to); } catch (e) { throw new WorkOsError("WORKOS_INVALID_TRANSITION", (e as Error).message); }
     return {missionId: runMissionId, from: m.status, to: mv.to, reason: String(mv.reason).slice(0, 1000)};
   }
@@ -474,6 +592,8 @@ export class WorkOsStore {
       const mission = this.state.missions[input.missionId];
       if (!mission || mission.tenantId !== input.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "mission");
       if (mission.status !== "AUTHORIZED" && mission.status !== "PLANNED") throw new WorkOsError("WORKOS_CONFLICT", "MISSION_NOT_RUNNABLE");
+      // REL-FX-3 (D-REL-2): R3/R4 run'ı Founder kararı ve OS sandbox olmadan oluşturulamaz; düzey yalnız mission kaydından okunur.
+      if (!riskAdmitted(mission.riskLevel)) throw new WorkOsError("WORKOS_CONFLICT", RISK_REFUSAL);
       if (Object.values(this.state.runs).some(r => r.missionId === mission.missionId && isOpenRun(r.status))) throw new WorkOsError("WORKOS_CONFLICT", "RUN_ALREADY_ACTIVE");
       // PS-1A bütçe: budget.maxRuns projenin toplam run sayısını sınırlar (maxTokens yalnız kaydedilir; bu tabanda token ölçümü yoktur).
       const maxRuns = this.state.projects[mission.projectId]?.budget?.maxRuns;
@@ -523,6 +643,7 @@ export class WorkOsStore {
     return this.write(() => {
       const r = this.fencedRun(runId, leaseId);
       try { assertRunTransition(r.status, to); } catch (e) { throw new WorkOsError("WORKOS_INVALID_TRANSITION", (e as Error).message); }
+      if (to === "SUCCEEDED") throw new WorkOsError("WORKOS_CONFLICT", "COMPLETION_REQUIRES_EVIDENCE_GUARD");
       const mv = this.missionMove(r.missionId, opts.mission);
       this.append("RUN_TRANSITION", actor, {runId, leaseId, from: r.status, to, reason: String(reason).slice(0, 1000), ...(opts.patch ? {patch: opts.patch} : {}), ...(mv ? {mission: mv} : {})});
       return clone(this.state.runs[runId]);

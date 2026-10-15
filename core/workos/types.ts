@@ -2,6 +2,7 @@
 import type {MissionStatus} from "../mission/types.js";
 import type {CompanyJournalType} from "../company/types.js";
 import type {AcademyJournalType} from "../academy/types.js";
+import type {TestSurfaceSummary} from "./test-surface.js";
 
 export type RiskLevel = "R0" | "R1" | "R2" | "R3" | "R4";
 export type TaskStatus = "PENDING" | "IN_PROGRESS" | "DONE" | "BLOCKED";
@@ -43,7 +44,9 @@ export interface JournalEntry {
 }
 export type WorkOsErrorCode =
   | "WORKOS_JOURNAL_TAMPERED" | "WORKOS_NOT_FOUND" | "WORKOS_INVALID_INPUT" | "WORKOS_INVALID_TRANSITION"
-  | "WORKOS_UNAVAILABLE" | "WORKOS_IDEMPOTENCY_CONFLICT" | "WORKOS_CONFLICT" | "WORKOS_LEASE_FENCED";
+  | "WORKOS_UNAVAILABLE" | "WORKOS_IDEMPOTENCY_CONFLICT" | "WORKOS_CONFLICT" | "WORKOS_LEASE_FENCED"
+  // REL-FX-4: TORN_TAIL salt-okunur modu ve append sırasında disk dolu (yarım satır bırakılmaz).
+  | "WORKOS_READ_ONLY" | "WORKOS_DISK_FULL";
 export class WorkOsError extends Error {
   readonly code: WorkOsErrorCode;
   constructor(code: WorkOsErrorCode, detail?: string) { super(detail ? `${code}: ${detail}` : code); this.code = code; this.name = "WorkOsError"; }
@@ -90,7 +93,17 @@ export interface RunEvidence {
   executorIdentity?: string; reviewerIdentity?: string; verdict?: "CLEAN" | "BLOCKED"; findingsCount?: number; secretHits?: SecretHit[]; note?: string;
   // B3C: yalnız SECURITY_REPORT kanıtında; redakte edilmiş güvenlik aşaması özeti (secret değeri asla içermez).
   security?: SecurityStageSummary;
+  // REL-FX-2: yalnız TEST_SURFACE kanıtında; base..head test yüzeyi sınıflaması ve functionalAcceptance durumu (dosya içeriği yazılmaz).
+  testSurface?: TestSurfaceSummary;
 }
+// //TR: REL-FX c4 (S1/S2): mevcut test/harness değişikliği olan run'ın COMPLETE'i Founder'ın açık onayını ister; onay, değişen yollar ve değişmeyen functionalAcceptance
+// run SUCCEEDED geçişiyle aynı journal yazısında kaydedilir (asla VERIFIED değildir).
+export interface TestChangesAcknowledgement {
+  acknowledgeTestChanges: true; testSurfaceSha256: string; testSurfaceEvidenceId: string;
+  changed: { modified: string[]; deleted: string[]; renamed: {from: string; to: string}[]; harness: string[]; truncated: boolean };
+  functionalAcceptance: string;
+}
+export interface RunCompletionRecord { headSha: string; reportEvidenceId: string; reviewEvidenceId: string; securityEvidenceId: string; testChangesAcknowledgement?: TestChangesAcknowledgement }
 export interface WorkRun {
   runId: string; missionId: string; projectId: string; tenantId: string; roleId: string | null;
   executor: { implementer: string; reviewer: string };
@@ -98,4 +111,6 @@ export interface WorkRun {
   remediationCycle: number; retryCount: number; retryAt: string | null; reason: string | null;
   baseSha: string | null; headSha: string | null; workBranch: string | null;
   checkpoints: RunCheckpoint[]; evidence: RunEvidence[]; createdAt: string; createdBy: string; updatedAt: string;
+  // REL-FX c4: yalnız kanıt kapısından geçen birleşik SUCCEEDED yazısında (replay ile aynı değer) set edilir.
+  completion?: RunCompletionRecord;
 }

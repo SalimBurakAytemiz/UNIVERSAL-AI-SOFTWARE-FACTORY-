@@ -319,36 +319,26 @@
         "tests/v7-wfr03-role-registry.test.ts",
         "tests/v7-wfr04a-skill-academy.test.ts",
         "tests/v7-wfr04a-c2-remediation.test.ts",
+        "tests/v7-int-r3-desktop.test.ts",
+        "tests/v7-int-r3-sbx-gate.test.ts",
+        "tests/v7-sbx8-claude-profiles.test.ts",
+        "tests/v7-sbx8-broker.test.ts",
+        "tests/v7-sbx8-reviewer.test.ts",
+        "tests/v7-sbx8-agent-config.test.ts",
+        "tests/v7-relfx-1-completion.test.ts",
+        "tests/v7-relfx-3-risk-admission.test.ts",
+        "tests/v7-relfx-4-interruption.test.ts",
+        "tests/v7-relfx-2-test-surface.test.ts",
+        "tests/v7-relfx-c2-remediation.test.ts",
+        "tests/v7-relfx-c3-remediation.test.ts",
+        "tests/v7-relfx-c4-remediation.test.ts",
+        "tests/v7-relfx-c5-remediation.test.ts",
         "tests/v7-b6a-control-tower.test.ts",
         "tests/v7-b4-desktop-shell.test.ts",
         "tests/v7-b5-work-screens.test.ts",
         "tests/v7-b7-installer.test.ts",
         "tests/v7-ps1b-project-studio-ui.test.ts",
         "tests/v7-ps1b-relpath-canonical.test.ts"
-      ],
-      "requiresDependencies": true
-    },
-    {
-      "id": "tests-int-r3",
-      "command": [
-        "node",
-        "node_modules/vitest/vitest.mjs",
-        "run",
-        "tests/v7-int-r3-desktop.test.ts",
-        "tests/v7-int-r3-sbx-gate.test.ts"
-      ],
-      "requiresDependencies": true
-    },
-    {
-      "id": "tests-sbx8",
-      "command": [
-        "node",
-        "node_modules/vitest/vitest.mjs",
-        "run",
-        "tests/v7-sbx8-claude-profiles.test.ts",
-        "tests/v7-sbx8-broker.test.ts",
-        "tests/v7-sbx8-reviewer.test.ts",
-        "tests/v7-sbx8-agent-config.test.ts"
       ],
       "requiresDependencies": true
     },

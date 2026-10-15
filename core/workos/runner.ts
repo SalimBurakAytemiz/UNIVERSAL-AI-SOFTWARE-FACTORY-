@@ -14,9 +14,18 @@ import {LEASED_RUN_STATUSES} from "./run-state.js";
 import {testCommandAllowed} from "./schemas.js";
 import {managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
 import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
+// INT-R4: runProcess (REL-FX ana-makine test çalıştırıcısı) ARTIK kullanılmaz; yürütme yalnız execution-gate sağlayıcısı (gate.provider.run) üzerinden gider, ana makinede asla.
 import {assertIndependentExecutors} from "./executors.js";
 import {ExecutionGate} from "./execution-gate.js";
 import type {GateDecision, ProjectExecutionKind} from "./execution-gate.js";
+import {reviewAndSecurityFor} from "./outcomes.js";
+import {RISK_REFUSAL, hostExecutionNotice, riskAdmitted} from "./risk-admission.js";
+import {evaluateTestSurface, parseNameStatusZ, parseTestRunStreams, stripAnsi} from "./test-surface.js";
+import type {NameStatusEntry, TestRunSummary} from "./test-surface.js";
+import type {ReviewerTestSurface} from "./executors.js";
+// //TR: REL-FX-4: sağlayıcı kota/hız sınırı sınıflandırması korumalı master sınıflandırıcıyla yapılır (kopyalanmaz); tip bildirimi olmadığı için dar yerel tiple bağlanır.
+// @ts-expect-error TS7016: failure-classifier.mjs tip bildirimi yok
+import {classifyFailure as classifyFailureUntyped} from "../../automation/lib/failure-classifier.mjs";
 import type {ExecutorPair, MissionSpec, ProcResult} from "./executors.js";
 import {DEFAULT_MAX_REPORT_BYTES, DEFAULT_MAX_TRIVY_DB_AGE_MS, DEFAULT_SECURITY_TIMEOUT_MS, buildAddedLineStream, defaultTrivyCacheDir, discoverSecurityTools, evaluateSecurityPolicy, gitRangeProblem, mergeGitleaksPasses, runGitleaks, runGitleaksAddedLines, runTrivy, toolInfo, verifyTool} from "./security-tools.js";
 import type {GitleaksResult, PolicyInput, ResolvedTool, SecurityOptions, SecurityToolset} from "./security-tools.js";
@@ -46,6 +55,32 @@ const NEXT: Record<RunStep, RunStep | "FINISHED"> = {WORKSPACE: "IMPLEMENT", IMP
 const MISSION_AFTER: Partial<Record<RunStep, MissionStatus>> = {IMPLEMENT: "VERIFYING", SECURITY: "REVIEWING", REVIEW: "REGRESSION", REGRESSION: "REPORTING"};
 const stepStatus = (s: RunStep): RunStatus => (s === "VERIFY" || s === "SECURITY" || s === "REGRESSION" ? "VERIFYING" : "RUNNING");
 const sha256 = (b: Buffer | string) => crypto.createHash("sha256").update(b).digest("hex");
+const classifyFailure = classifyFailureUntyped as (x: {status: number | null; error?: string; stdout?: string; stderr?: string; timedOut?: boolean}) => {class: string};
+// REL-FX c2 (RV-RELFX-C1-004): başarısız executor çıktısının (ANSI temizlenmiş) son 8 KiB'ı satır satır incelenir. Sağlayıcı sınırı yalnız
+// (a) yapılandırılmış işaret satırı `UASCO_PROVIDER_LIMIT: QUOTA_EXHAUSTED|RATE_LIMIT` veya (b) Claude CLI hata satırları (satır başında "API Error",
+// "Claude AI usage limit reached", "usage limit reached", "You've hit your ... limit") üzerinde master sınıflandırıcı
+// QUOTA_EXHAUSTED/RATE_LIMIT verdiğinde sayılır; keyfi stderr (ör. "TypeError: rateLimiter is not a function") sağlayıcı sınırı değildir.
+// Disk dolu/kotası (ENOSPC, EDQUOT, "disk quota exceeded", "no space left on device") DISK_FULL ailesidir, asla PROVIDER_QUOTA değildir.
+export type ExecutorLimit = "QUOTA_EXHAUSTED" | "RATE_LIMIT" | "DISK_FULL";
+const PROVIDER_MARKER_RE = /^UASCO_PROVIDER_LIMIT[:=]\s*(QUOTA_EXHAUSTED|RATE_LIMIT)\s*$/;
+const CLAUDE_CLI_ERROR_RE = /^(?:error:\s*)?(?:api error\b|claude(?: ai)? usage limit reached\b|usage limit reached\b|you(?:'|’)ve hit your (?:[\w-]+ )*limit\b|you have (?:hit|reached) your (?:[\w-]+ )*limit\b)/i;
+const DISK_FULL_RE = /\b(?:ENOSPC|EDQUOT)\b|no space left on device|disk quota exceeded|not enough space on the disk/i;
+export function executorLimit(exitCode: number | null, log: string): ExecutorLimit | null {
+  const lines = stripAnsi(String(log ?? "").slice(-8192)).split("\n").map(l => l.trim()).filter(Boolean);
+  for (const l of lines) { const m = PROVIDER_MARKER_RE.exec(l); if (m) return m[1] as ExecutorLimit; }
+  const cli = lines.filter(l => CLAUDE_CLI_ERROR_RE.test(l) && !DISK_FULL_RE.test(l));
+  if (cli.length) {
+    const c = classifyFailure({status: exitCode ?? 1, stderr: cli.join("\n"), timedOut: false}).class;
+    if (c === "QUOTA_EXHAUSTED" || c === "RATE_LIMIT") return c;
+  }
+  return lines.some(l => DISK_FULL_RE.test(l)) ? "DISK_FULL" : null;
+}
+export function providerLimit(exitCode: number | null, log: string): "QUOTA_EXHAUSTED" | "RATE_LIMIT" | null {
+  const l = executorLimit(exitCode, log);
+  return l === "QUOTA_EXHAUSTED" || l === "RATE_LIMIT" ? l : null;
+}
+const limitNote = (l: ExecutorLimit) => (l === "DISK_FULL" ? "RESOURCE_LIMIT: DISK_FULL" : `PROVIDER_LIMIT: ${l}`);
+const limitBlock = (l: ExecutorLimit): Outcome => ({kind: "BLOCK", reason: l === "DISK_FULL" ? "DISK_FULL" : "PROVIDER_QUOTA"});
 
 export class MissionRunner {
   readonly engineId = `engine_${crypto.randomBytes(6).toString("hex")}`;
@@ -287,9 +322,18 @@ export class MissionRunner {
       ...(run.remediationCycle > 0 && last ? {remediation: {reason: String(last.data.reason ?? ""), findings: (Array.isArray(last.data.findings) ? last.data.findings : []).map(String)}} : {})
     };
   }
-  private testArgv(run: WorkRun): string[] | null {
+  private rawTestCommand(run: WorkRun): string[] | undefined {
     const m = this.o.store.getMission({tenantId: run.tenantId}, run.missionId), p = this.o.store.getProject({tenantId: run.tenantId}, run.projectId);
-    const argv = m?.testCommand ?? p?.testCommand;
+    return m?.testCommand ?? p?.testCommand;
+  }
+  // REL-FX-2: reviewer'a verilen test yüzeyi, run.headSha için en son TEST_SURFACE kanıtından.
+  private reviewerTestSurface(run: WorkRun): ReviewerTestSurface | undefined {
+    const ev = [...run.evidence].reverse().find(e => e.kind === "TEST_SURFACE" && e.commitSha === run.headSha && e.testSurface);
+    const t = ev?.testSurface;
+    return t ? {added: t.added, modified: t.modified, deleted: t.deleted, renamed: t.renamed, weakened: t.weakened, trivialAdded: t.trivialAdded, harness: t.harness ?? [], executedTests: t.executedTests, skippedTests: t.testRun?.skipped ?? null, todoTests: t.testRun?.todo ?? null, functionalAcceptance: t.functionalAcceptance, reason: t.reason} : undefined;
+  }
+  private testArgv(run: WorkRun): string[] | null {
+    const argv = this.rawTestCommand(run);
     if (!testCommandAllowed(argv)) return null;
     return argv[0] === "node" ? [process.execPath, ...argv.slice(1)] : [...argv];
   }
@@ -322,6 +366,15 @@ export class MissionRunner {
 
   // İzole workspace: proje deposunun yerel yolundan --no-hardlinks klon, HEAD base SHA olarak kaydedilir, run branch'i açılır. Yeniden girişte sıfırdan kurulur.
   private stepWorkspace(run: WorkRun, leaseId: string): Outcome {
+    // REL-FX-3 derinlemesine savunma: journal'a enjekte edilmiş run bile R3/R4 mission için klon veya alt süreç başlatamaz; düzey yalnız mission kaydından okunur.
+    const mission = this.o.store.getMission({tenantId: run.tenantId}, run.missionId);
+    if (!mission) return {kind: "BLOCK", reason: "MISSION_NOT_FOUND"};
+    if (!riskAdmitted(mission.riskLevel)) {
+      const at = new Date().toISOString();
+      this.evidence(run, leaseId, {kind: "RISK_ADMISSION", argv: [], startedAt: at, endedAt: at, exitCode: 1, logPath: null, logSha256: null, note: `riskLevel=${String(mission.riskLevel).slice(0, 8)}; ${RISK_REFUSAL} (D-REL-2)`});
+      return {kind: "BLOCK", reason: RISK_REFUSAL};
+    }
+    const notice = hostExecutionNotice(mission.riskLevel);
     const project = this.o.store.getProject({tenantId: run.tenantId}, run.projectId);
     if (!project) return {kind: "BLOCK", reason: "PROJECT_NOT_FOUND"};
     const repo = project.repository;
@@ -351,7 +404,7 @@ export class MissionRunner {
     this.renew(run.runId, leaseId);
     const log = this.writeLog(run, "workspace", `$ git clone --no-hardlinks ${src} <run>/work\n${clone.stdout ?? ""}${clone.stderr ?? ""}\n$ git checkout -B ${branch} ${base}\n${co?.stdout ?? ""}${co?.stderr ?? ""}\nHEAD=${head}\n`);
     const ok = head === base;
-    this.evidence(run, leaseId, {kind: "WORKSPACE", argv: ["git", "clone", "--no-hardlinks", src, `runs/${run.runId}/work`], startedAt, endedAt: new Date().toISOString(), exitCode: ok ? 0 : (clone.status ?? 1), ...log, baseSha: base});
+    this.evidence(run, leaseId, {kind: "WORKSPACE", argv: ["git", "clone", "--no-hardlinks", src, `runs/${run.runId}/work`], startedAt, endedAt: new Date().toISOString(), exitCode: ok ? 0 : (clone.status ?? 1), ...log, baseSha: base, note: `${notice.code} riskLevel=${notice.riskLevel} (${notice.decision} ${notice.decisionStatus})`});
     if (!ok) return {kind: "BLOCK", reason: "WORKSPACE_CLONE_FAILED"};
     return {kind: "DONE", next: "IMPLEMENT", data: {baseSha: base, workBranch: branch}, patch: {baseSha: base, headSha: null, workBranch: branch}};
   }
@@ -370,9 +423,14 @@ export class MissionRunner {
     const head = this.gitOk(work, ["rev-parse", "HEAD"]);
     const log = this.writeLog(run, "implement", r.log);
     const produced = r.exitCode === 0 && !r.blockReason && head && SHA.test(head) && head !== start ? head : undefined;
-    this.evidence(run, leaseId, {kind: "IMPLEMENT", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, baseSha: start, ...(produced ? {commitSha: produced} : {}), executorIdentity: this.o.executors.implementer.identity, ...(r.blockReason ? {note: r.blockReason.slice(0, 200)} : {})});
+    const limit = r.exitCode !== 0 && !r.aborted && !r.timedOut ? executorLimit(r.exitCode, r.log) : null;
+    this.evidence(run, leaseId, {kind: "IMPLEMENT", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, baseSha: start, ...(produced ? {commitSha: produced} : {}), executorIdentity: this.o.executors.implementer.identity,
+      ...(limit ? {note: limitNote(limit)} : r.blockReason ? {note: r.blockReason.slice(0, 200)} : {})});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+    // REL-FX-4: sağlayıcı kota/hız sınırı kör retry ile bütçe tüketmez: run BLOCKED(PROVIDER_QUOTA), retryCount değişmez; disk dolu/kotası BLOCKED(DISK_FULL).
+    if (limit) return limitBlock(limit);
     // Edit-only builder çıktısını engine commit etmeyi reddettiyse (değişiklik yok, .git/workspace dışı değişiklik) veya builder hiç başlatılmadıysa (SBX-8: profil oturumu yok) run BLOCKED olur.
+    // INT-R4 kompozisyon: blockReason, exitCode!=0 dalından ÖNCE kalır; profil oturumu yok refüzü exitCode=null + blockReason=CLAUDE_PROFILE_LOGIN_REQUIRED ile gelir ve null!==0 doğru olduğundan generic IMPLEMENT_FAILED'e düşmemelidir (SBX-8 v7-sbx8-reviewer).
     if (r.blockReason) return {kind: "BLOCK", reason: r.blockReason.slice(0, 200)};
     if (r.exitCode !== 0) return r.transient ? {kind: "RETRY", reason: "IMPLEMENT_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: "IMPLEMENT_FAILED", status: "FAILED"};
     if (!produced) return {kind: "BLOCK", reason: "NO_COMMIT_PRODUCED", status: "FAILED"};
@@ -422,16 +480,40 @@ export class MissionRunner {
     const scanLog = this.writeLog(run, "secret-scan", `secret scan ${run.baseSha}..${run.headSha} (fresh clone, --text --no-textconv --no-ext-diff, empty attributes; diff + commit messages): ${hits.length} hit(s)\n${hits.map(h => `${h.kind} ${h.file}:${h.line}`).join("\n")}\n`);
     this.evidence(run, leaseId, {kind: "SECRET_SCAN", argv: ["git", "diff", "--text", "--no-textconv", "--no-ext-diff", run.baseSha, run.headSha], startedAt, endedAt: new Date().toISOString(), exitCode: hits.length ? 1 : 0, ...scanLog, baseSha: run.baseSha, commitSha: run.headSha, secretHits: hits.slice(0, 100)});
     if (hits.length) return {kind: "BLOCK", reason: "SECRET_IN_DIFF"};
+    // REL-FX-2: test yüzeyi de aynı taze klonda base..head name-status ile alınır (implementer workspace'i/config'i etkisizdir).
+    const ns = this.git(scanClone, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "diff", "--name-status", "-z", "--find-renames", "--no-ext-diff", "--no-textconv", run.baseSha, run.headSha]);
+    if (ns.status !== 0) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
+    const touched = parseNameStatusZ(String(ns.stdout ?? ""));
     const argv = this.testArgv(run);
     if (!argv) return {kind: "BLOCK", reason: "TEST_COMMAND_NOT_CONFIGURED"};
+    const base = run.baseSha, head = run.headSha;
+    // INT-R4 kompozisyon: yürütme SBX kapısına tabidir; TEST_SURFACE (REL-FX-2) ise statik git analizidir (name-status + değişen test dosyası metni) ve kapıdan bağımsız hesaplanıp kaydedilir.
     const gate = await this.authorizeTests("RUNNER_VERIFY_TESTS");
-    if (!gate.allowed) return this.sandboxBlocked(run, leaseId, "VERIFY_TESTS", argv, gate);
+    if (!gate.allowed) {
+      // SBX kapısı önceliklidir ve koşulsuzdur: doğrulanmış sağlayıcı yoksa proje kodu HİÇ çalıştırılmaz (ana makinede çocuk süreç yok). Statik TEST_SURFACE yine de kaydedilir (executedTests=null, uydurma sayı yok), sonra run BLOCKED(SANDBOX_UNAVAILABLE) NOT_EXECUTED kanıtıyla; yeniden deneme bütçesi tüketilmez.
+      this.recordTestSurface(run, leaseId, base, head, touched, scanClone, null);
+      return this.sandboxBlocked(run, leaseId, "VERIFY_TESTS", argv, gate);
+    }
     const r = await this.runTests(gate, argv, work, abort);
     this.procEvidence(run, leaseId, "VERIFY_TESTS", r, {commitSha: run.headSha});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     if (r.spawnError) return {kind: "BLOCK", reason: "TEST_COMMAND_SPAWN_FAILED"};
+    // RV-RELFX-C2-002: stdout ve stderr akış kuralına göre ayrı okunur (birleştirilip son satır seçilmez; stderr'e basılan sahte özet gerçeğini ezemez, çelişki UNKNOWN). executedTests yalnız doğrulanmış sandbox içindeki gerçek koşudan gelir.
+    const testRun = parseTestRunStreams(String(r.stdout ?? ""), String(r.stderr ?? ""));
+    this.recordTestSurface(run, leaseId, base, head, touched, scanClone, testRun);
     if (r.exitCode === 0) return {kind: "DONE", next: "SECURITY", data: {tests: "PASSED", secretHits: 0}};
     return {kind: "REMEDIATE", reason: r.timedOut ? "TESTS_TIMED_OUT" : "TESTS_FAILED", data: {tests: "FAILED", exitCode: r.exitCode}, findings: [`test command exited ${r.exitCode}`]};
+  }
+  // REL-FX-2 + INT-R4: TEST_SURFACE statik git analizidir (taze klonda base..head name-status + değişen test dosyası metni) ve SBX kapısından bağımsız kaydedilir. executedTests/functionalAcceptance gerçek koşu yalnız doğrulanmış sandbox içinde olduğunda (testRun != null) dolar; yürütme bloklandığında testRun=null ve sayı uydurulmaz (UNKNOWN/BLOCKED).
+  private recordTestSurface(run: WorkRun, leaseId: string, base: string, head: string, touched: NameStatusEntry[], scanClone: string, testRun: TestRunSummary | null): void {
+    const surfaceStart = new Date().toISOString();
+    const contentAt = (ref: string, p: string): string | null => { const x = this.git(scanClone, ["show", `${ref}:${p}`]); return x.status === 0 ? String(x.stdout ?? "") : null; };
+    const surface = evaluateTestSurface({baseSha: base, headSha: head, entries: touched, contentAt, executedTests: testRun?.executed ?? null, testRun, testCommand: this.rawTestCommand(run)});
+    this.renew(run.runId, leaseId);
+    // Her kanıt gibi TEST_SURFACE de log dosyası + sha256 taşır (tam sınıflama JSON'u; dosya içeriği yazılmaz).
+    const surfaceLog = this.writeLog(run, "test-surface", `${JSON.stringify(surface, null, 2)}\n`);
+    this.evidence(run, leaseId, {kind: "TEST_SURFACE", argv: ["git", "diff", "--name-status", "--find-renames", base, head], startedAt: surfaceStart, endedAt: new Date().toISOString(), exitCode: surface.functionalAcceptance === "BLOCKED" ? 1 : 0,
+      ...surfaceLog, baseSha: base, commitSha: head, testSurface: surface, note: `functionalAcceptance=${surface.functionalAcceptance} ${surface.reason}; added=${surface.added.length} modified=${surface.modified.length} deleted=${surface.deleted.length} renamed=${surface.renamed.length} weakened=${surface.weakened.length} harness=${surface.harness.length} executed=${surface.executedTests ?? "unknown"} skipped=${testRun?.skipped ?? "unknown"} todo=${testRun?.todo ?? "unknown"}`});
   }
 
   // Bare taze klon (çalışma ağacı yok): gitleaks yalnız git geçmişini okur; repodaki .gitleaksignore / .gitleaks.toml okunabilecek bir yer bulunmaz.
@@ -550,13 +632,22 @@ export class MissionRunner {
     const diff = this.diff(run, clone, run.baseSha, run.headSha);
     if (diff === null) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
     this.renew(run.runId, leaseId);
-    const r = await reviewer.review(clone, this.missionSpec(run), diff, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
+    const testSurface = this.reviewerTestSurface(run);
+    const r = await reviewer.review(clone, {...this.missionSpec(run), ...(testSurface ? {testSurface} : {})}, diff, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
     const untouched = this.gitOk(clone, ["rev-parse", "HEAD"]) === run.headSha && this.gitOk(clone, ["status", "--porcelain", "--untracked-files=all"]) === "";
     const log = this.writeLog(run, "review", r.log);
+    const limit = !r.valid && !r.aborted && !r.timedOut ? executorLimit(r.exitCode, r.log) : null;
+    // INT-R4 kompozisyon: REVIEW kanıt notu SBX-8 anlambilimini birebir korur (çalışma alanı değişti -> REVIEW_CLONE_MUTATED; geçersiz -> REVIEW_INVALID <neden>), REL-FX provider kota/hız sınırı notunu (limitNote) ekler. Test yüzeyi reviewer'a ayrıca verilir (reviewer.review) ve VERIFY'de ayrı TEST_SURFACE kanıtı olarak kaydedilir; notta tekrarlanmaz.
+    const reviewNote = !untouched ? "REVIEW_CLONE_MUTATED"
+      : limit ? limitNote(limit)
+      : r.invalidReason ? `REVIEW_INVALID ${r.invalidReason}`.slice(0, 200)
+      : "";
     this.evidence(run, leaseId, {kind: "REVIEW", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, commitSha: run.headSha,
-      reviewerIdentity: reviewer.identity, executorIdentity: run.executor.implementer, ...(r.valid ? {verdict: r.verdict, findingsCount: r.findings.length} : {}), ...(untouched ? (r.invalidReason ? {note: `REVIEW_INVALID ${r.invalidReason}`.slice(0, 200)} : {}) : {note: "REVIEW_CLONE_MUTATED"})});
+      reviewerIdentity: reviewer.identity, executorIdentity: run.executor.implementer, ...(r.valid ? {verdict: r.verdict, findingsCount: r.findings.length} : {}), ...(reviewNote ? {note: reviewNote} : {})});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     if (!untouched) return {kind: "BLOCK", reason: "REVIEWER_MUTATED_CLONE"};
+    // REL-FX: reviewer sağlayıcı kota/hız sınırına çarptıysa BLOCKED(PROVIDER_QUOTA/DISK_FULL), yeniden deneme bütçesi tüketilmez; SBX-8 geçersizlik dalından önce.
+    if (limit) return limitBlock(limit);
     // SBX-8: adapter'ın geçersizlik nedeni (profil oturumu yok -> BLOCKED; çalışma alanı değişti -> FAILED) korunur; geçersiz review asla CLEAN değildir.
     if (!r.valid) return r.transient ? {kind: "RETRY", reason: "REVIEW_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: (r.invalidReason ?? "REVIEW_FAILED").slice(0, 200), status: r.invalidReason?.startsWith("CLAUDE_PROFILE_") ? "BLOCKED" : "FAILED"};
     if (r.verdict === "CLEAN") return {kind: "DONE", next: "REGRESSION", data: {verdict: "CLEAN", reviewerIdentity: reviewer.identity, commitSha: run.headSha}};
@@ -583,19 +674,20 @@ export class MissionRunner {
   // REPORT: kanıt özeti dosyası + sha256; teslim kararı Founder'da kalır (merge/push/COMPLETE yok).
   private stepReport(run: WorkRun, leaseId: string): Outcome {
     const startedAt = new Date().toISOString();
-    const review = [...run.evidence].reverse().find(e => e.kind === "REVIEW" && e.verdict === "CLEAN");
+    const cleanReview = [...run.evidence].reverse().find(e => e.kind === "REVIEW" && e.verdict === "CLEAN");
     const report = {
       runId: run.runId, missionId: run.missionId, projectId: run.projectId, tenantId: run.tenantId, baseSha: run.baseSha, headSha: run.headSha, workBranch: run.workBranch,
-      executor: run.executor, review: review ? {reviewerIdentity: review.reviewerIdentity, verdict: review.verdict, commitSha: review.commitSha} : null,
+      executor: run.executor, review: cleanReview ? {reviewerIdentity: cleanReview.reviewerIdentity, verdict: cleanReview.verdict, commitSha: cleanReview.commitSha} : null,
       remediationCycles: run.remediationCycle, attempt: run.attempt,
       evidence: run.evidence.map(e => ({evidenceId: e.evidenceId, step: e.step, cycle: e.cycle, kind: e.kind, exitCode: e.exitCode, logPath: e.logPath, logSha256: e.logSha256, commitSha: e.commitSha ?? null})),
       deliveryDecision: "PENDING_FOUNDER", delivered: false, note: "No merge, push or COMPLETE transition was performed by the runner."
     };
-    if (!review || review.commitSha !== run.headSha) return {kind: "BLOCK", reason: "REVIEW_EVIDENCE_MISSING", status: "FAILED"};
-    // B3C: güvenlik kanıtı üretilen commit için zorunludur; PARTIAL kapsam Founder'a açıkça bildirilir (sessiz geçiş yok).
-    const secEv = [...run.evidence].reverse().find(e => e.kind === "SECURITY_REPORT" && e.commitSha === run.headSha);
-    const sec = secEv?.security;
-    if (!secEv || !sec || sec.status === "BLOCKED") return {kind: "BLOCK", reason: "SECURITY_EVIDENCE_MISSING", status: "FAILED"};
+    // REL-FX-1: bu yüklem COMPLETE kapısıyla paylaşılır (outcomes.ts reviewAndSecurityFor); B3C: güvenlik kanıtı üretilen commit için zorunludur, PARTIAL kapsam Founder'a açıkça bildirilir.
+    const rs = reviewAndSecurityFor(run.headSha, run.evidence);
+    if (!rs.ok) return {kind: "BLOCK", reason: rs.reason, status: "FAILED"};
+    const review = rs.review, secEv = rs.security, sec = secEv.security;
+    const ts = this.reviewerTestSurface(run);
+    (report as Record<string, unknown>).testSurface = ts ? {functionalAcceptance: ts.functionalAcceptance, reason: ts.reason, deleted: ts.deleted, weakened: ts.weakened, added: ts.added, modified: ts.modified, executedTests: ts.executedTests} : null;
     (report as Record<string, unknown>).security = {status: sec.status, founderNotice: sec.founderNote, gaps: sec.gaps, secrets: {builtin: sec.secrets.builtin.status, gitleaks: sec.secrets.gitleaks.status}, sca: {status: sec.sca.status, reason: sec.sca.reason ?? null, dbState: sec.sca.dbState ?? null, counts: sec.sca.counts}, sast: sec.sast, sbom: sec.sbom, tools: sec.tools, evidenceId: secEv.evidenceId, reportLogPath: secEv.logPath, reportLogSha256: secEv.logSha256};
     const file = path.join(this.runDir(run.runId), "report.json"), bytes = Buffer.from(JSON.stringify(report, null, 2) + "\n", "utf8");
     fs.writeFileSync(file, bytes);

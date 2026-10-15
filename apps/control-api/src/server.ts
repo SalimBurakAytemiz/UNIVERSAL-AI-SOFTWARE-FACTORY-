@@ -18,14 +18,17 @@ import {parseControlPort,controlChallengeProof,secureStringEqual,hostHeaderAllow
 // @ts-expect-error TS7016: orchestrator-state.mjs tip bildirimi yok
 import {loadState as loadOrchestratorStateUntyped,verifyTransitionLog as verifyTransitionLogUntyped} from "../../../automation/lib/orchestrator-state.mjs";
 import {WorkOsStore,defaultDataDir} from "../../../core/workos/store.js";
+import type {WorkOsStoreOptions} from "../../../core/workos/store.js";
 import {WorkOsError} from "../../../core/workos/types.js";
 import {EvidenceIndex,EvidenceInputError,EVIDENCE_KINDS} from "../../../core/evidence/index.js";
 import type {EvidenceKind} from "../../../core/evidence/index.js";
-import {validateProjectCreate,validateMissionCreate,validateMissionTransition,validateRunStart,validateProjectImport,validateProjectExport,validateEmptyBody} from "../../../core/workos/schemas.js";
+import {validateProjectCreate,validateMissionCreate,validateMissionTransition,validateRunStart,validateProjectImport,validateProjectExport,validateEmptyBody,validateTornTailRepair} from "../../../core/workos/schemas.js";
 import {isMissionStatus} from "../../../core/mission/state-machine.js";
 import {authorizeAction} from "../../../core/action-gateway/policy.js";
 import type {ActionPolicyContext} from "../../../core/action-gateway/types.js";
 import {MissionRunner} from "../../../core/workos/runner.js";
+import {deriveOutcomes} from "../../../core/workos/outcomes.js";
+import {RISK_REFUSAL,hostExecutionNotice,riskAdmitted} from "../../../core/workos/risk-admission.js";
 import type {RunnerOptions} from "../../../core/workos/runner.js";
 import {assertIndependentExecutors,executorsFromEnv,LocalClaudeExecutors} from "../../../core/workos/executors.js";
 import type {ExecutorPair} from "../../../core/workos/executors.js";
@@ -50,7 +53,7 @@ import type {Validation} from "../../../core/company/common.js";
 export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security">>;
   controlRoot?:string;studio?:{zipLimits?:Partial<ZipLimits>;devrun?:Partial<Pick<DevRunOptions,"startTimeOf"|"startWaitMs"|"graceMs"|"probeIntervalMs"|"stopPollMs"|"logRingBytes"|"logTailBytes"|"treeSnapshotMs">>};executorSetup?:Pick<ExecutorSetupOptions,"captureProvenance"|"findClaudeCli">;
   // //TR: SBX-GATE: sandbox yalnız programatik test enjeksiyonudur (testlerdeki sahte sağlayıcı); env/config/journal/API gövdesi/masaüstü ayarı sağlayıcı kaydedemez. Verilmezse proje kodu yürütmesi her zaman SANDBOX_UNAVAILABLE ile reddedilir.
-  sandbox?:SandboxProvider}
+  sandbox?:SandboxProvider;workosStoreOptions?:WorkOsStoreOptions}
 export function buildServer(opts:BuildServerOptions={}){
 const app=Fastify({logger:opts.logger??true,requestIdHeader:"x-request-id",genReqId:()=>crypto.randomUUID(),bodyLimit:64*1024});
 const readJson=(p:string)=>JSON.parse(fs.readFileSync(p,"utf8"));
@@ -104,7 +107,9 @@ app.get("/v1/capabilities",async()=>readJson("registries/capabilities.json"));
 app.get("/v1/fabrics",async()=>readJson("registries/execution-fabrics.json"));
 app.get("/v1/adapters",async()=>readJson("registries/tool-adapters.json"));
 app.get("/v1/domains",async()=>readJson("registries/domain-packs.json"));
-app.get("/v1/control/status",async()=>{try{const f=path.join(runtime,"GLOBAL_STOP.json");if(fs.existsSync(f))resolveExistingPathUnder(runtime,"GLOBAL_STOP.json");return {globalStop:globalStopState(f)??{active:false}}}catch{return {globalStop:{active:true,reason:"GLOBAL_STOP_STATE_UNSAFE"},verification:"REJECTED"}}});
+// //TR: REL-FX-4: durum route'u Work OS journal sağlığını da gösterir (OK/ABSENT/TORN_TAIL/TAMPERED/UNAVAILABLE; yalnız göreli karantina yolu).
+function workosHealth(){try{return getStore().journalHealth()}catch{return {state:"UNAVAILABLE",reason:"HEALTH_UNREADABLE",tornTail:null}}}
+app.get("/v1/control/status",async()=>{try{const f=path.join(runtime,"GLOBAL_STOP.json");if(fs.existsSync(f))resolveExistingPathUnder(runtime,"GLOBAL_STOP.json");return {globalStop:globalStopState(f)??{active:false},workos:workosHealth()}}catch{return {globalStop:{active:true,reason:"GLOBAL_STOP_STATE_UNSAFE"},verification:"REJECTED",workos:workosHealth()}}});
 app.get("/v1/retry",async()=>{try{return safeRuntimeJsonOr("SUPERVISOR_RETRY.json",null)}catch{return {status:"INVALID",error:"SUPERVISOR_RETRY_STATE_UNSAFE"}}});
 app.get("/v1/founder-attention",async()=>{const scheduler=schedulerView() as any;if(scheduler.verification==="REJECTED")return {blocked:[],retryableKinds:retryableBlockedKinds(),schedulerVerification:"REJECTED",error:scheduler.error};const blocked=(scheduler.blocked??[]).map((x:any)=>({...x,retryable:canRetryBlockedKind(x.kind)}));return {blocked,retryableKinds:retryableBlockedKinds(),schedulerVerification:scheduler.verification,checkpoint:safeRuntimeJsonOr("supervisor-checkpoint.json",null),retry:safeRuntimeJsonOr("SUPERVISOR_RETRY.json",null)}});
 
@@ -142,7 +147,8 @@ app.post("/v1/control/retry-blocked",async(req,reply)=>{
 // //TR: B1 Work OS intake route'ları: hepsi mevcut control token/Host hook'u arkasındadır; yazma route'ları sırasıyla Global Stop (423), action-gateway policy (403) ve sıkı şema (400) kapılarından geçer ve secret içermeyen control audit yazar.
 const actor=opts.actor??"FOUNDER_LOCAL",scope={tenantId:opts.tenantId??"local"},orgId=opts.orgId??"local";
 let workosStore:WorkOsStore|null=null;
-const getStore=()=>workosStore??=new WorkOsStore(opts.dataDir??defaultDataDir(repoRoot));
+// //TR: REL-FX-4: workosStoreOptions yalnız test enjeksiyonudur (fs seam ile ENOSPC).
+const getStore=()=>workosStore??=new WorkOsStore(opts.dataDir??defaultDataDir(repoRoot),opts.workosStoreOptions);
 const sha=(x:string)=>crypto.createHash("sha256").update(x).digest("hex");
 const validProjectId=(x:unknown)=>typeof x==="string"&&/^prj_[0-9a-f]{24}$/.test(x);
 const validMissionId=(x:unknown)=>typeof x==="string"&&/^msn_[0-9a-f]{24}$/.test(x);
@@ -159,6 +165,9 @@ function workosFail(reply:any,e:unknown){
     if(e.code==="WORKOS_IDEMPOTENCY_CONFLICT")return reply.code(409).send({error:"IDEMPOTENCY_CONFLICT"});
     // B3a: çakışma/fencing 409; reason yalnız sabit kod parçasıdır (MISSION_NOT_RUNNABLE, RUN_ALREADY_ACTIVE), yol veya secret taşımaz.
     if(e.code==="WORKOS_CONFLICT"||e.code==="WORKOS_LEASE_FENCED")return reply.code(409).send({error:e.code,reason:e.code==="WORKOS_CONFLICT"?e.message.replace(/^WORKOS_CONFLICT: ?/,"").slice(0,64):undefined});
+    // REL-FX-4: yırtık kuyrukta store salt-okunurdur (503 + sabit sebep); disk dolu 507 (yazı yapılmadı, yarım satır yok).
+    if(e.code==="WORKOS_READ_ONLY")return reply.code(503).send({error:e.code,reason:"JOURNAL_TORN_TAIL"});
+    if(e.code==="WORKOS_DISK_FULL")return reply.code(507).send({error:e.code});
     const status=e.code==="WORKOS_JOURNAL_TAMPERED"||e.code==="WORKOS_UNAVAILABLE"?503:e.code==="WORKOS_NOT_FOUND"?404:e.code==="WORKOS_INVALID_TRANSITION"?409:400;
     return reply.code(status).send({error:e.code});
   }
@@ -205,6 +214,10 @@ app.post<{Params:{id:string}}>("/v1/missions/:id/transition",wos(async(req,reply
   if(!validMissionId(req.params.id))return reply.code(400).send({error:"INVALID_MISSION_ID"});
   const body=req.body??{};if(!workosWrite(reply,"workos.mission.transition",req.params.id,body,validateMissionTransition))return reply;
   const b=body as any;if(!isMissionStatus(b.to))return reply.code(400).send({error:"INVALID_BODY",detail:"to is not a mission status"});
+  // //TR: REL-FX-1: COMPLETE istemcinin "to" alanıyla değil, kanıt kapısıyla olur: run.headSha için REPORT + CLEAN REVIEW + BLOCKED olmayan SECURITY_REPORT; aynı journal yazısı run'ı SUCCEEDED yapar, aksi halde 409 + sabit sebep.
+  // //TR: REL-FX c4 (S1/S2): mevcut test/harness değişikliği olan run için COMPLETE yalnız güncel TEST_SURFACE kanıtına bağlı açık acknowledgement ile olur; onay yalnız COMPLETE'te geçerlidir.
+  if(b.acknowledgement!==undefined&&b.to!=="COMPLETE")return reply.code(400).send({error:"INVALID_BODY",detail:"acknowledgement is only valid with to=COMPLETE"});
+  if(b.to==="COMPLETE"){try{const r=getStore().completeMission(scope,req.params.id,b.reason,actor,b.acknowledgement);const outcomes=deriveOutcomes(r.run);audit("WORKOS_MISSION_COMPLETED",{actor,missionId:r.mission.missionId,runId:r.run.runId,headSha:r.run.headSha,completionMode:outcomes.completionMode});return {mission:r.mission,run:r.run,outcomes}}catch(e){if(e instanceof WorkOsError&&e.code==="WORKOS_CONFLICT")audit("WORKOS_MISSION_COMPLETE_REFUSED",{actor,missionId:req.params.id,reason:e.message.replace(/^WORKOS_CONFLICT: ?/,"").slice(0,64)});return workosFail(reply,e)}}
   try{const before=getStore().getMission(scope,req.params.id);const mission=getStore().transitionMission(scope,req.params.id,b.to,b.reason,actor);audit("WORKOS_MISSION_TRANSITIONED",{actor,missionId:mission.missionId,from:before?.status,to:mission.status});return {mission}}catch(e){return workosFail(reply,e)}
 }));
 
@@ -239,12 +252,16 @@ if(runnerEnabled){
 app.post<{Params:{id:string}}>("/v1/missions/:id/runs",wos(async(req,reply)=>{
   if(!validMissionId(req.params.id))return reply.code(400).send({error:"INVALID_MISSION_ID"});
   const body=req.body??{};if(!workosWrite(reply,"workos.run.start",req.params.id,body,validateRunStart))return reply;
+  // //TR: REL-FX-3 (D-REL-2): R3/R4 mission'ı için run başlatılmaz (409); düzey yalnız mission kaydından okunur, gövde veya hedef metni onu değiştiremez.
+  const target=getStore().getMission(scope,req.params.id);
+  if(target&&!riskAdmitted(target.riskLevel)){audit("WORKOS_RUN_REFUSED",{actor,missionId:req.params.id,reason:RISK_REFUSAL,riskLevel:target.riskLevel});return reply.code(409).send({error:RISK_REFUSAL,riskLevel:target.riskLevel})}
   const ex=getExecutors();if(!ex.pair)return reply.code(409).send({error:"EXECUTOR_NOT_CONFIGURED",reason:ex.reason});
   try{assertIndependentExecutors(ex.pair)}catch{audit("WORKOS_RUN_REFUSED",{actor,missionId:req.params.id,reason:"EXECUTOR_CONFIG_REFUSED"});return reply.code(409).send({error:"EXECUTOR_CONFIG_REFUSED"})}
   const b=body as any;
   const r=getStore().createRunDetailed({tenantId:scope.tenantId,missionId:req.params.id,roleId:b.roleId??null,executor:{implementer:ex.pair.implementer.identity,reviewer:ex.pair.reviewer.identity},createdBy:actor,idempotencyKey:b.idempotencyKey});
   audit(r.replayed?"WORKOS_IDEMPOTENT_REPLAY":"WORKOS_RUN_CREATED",{actor,kind:"run",runId:r.entity.runId,missionId:r.entity.missionId,executor:r.entity.executor});
-  return reply.code(r.replayed?200:201).send({run:r.entity});
+  // D-REL-1 Founder'da bekliyor: R0-R2 davranışı değişmez, yalnız geçici host yürütme bildirimi yanıta eklenir.
+  return reply.code(r.replayed?200:201).send({run:r.entity,hostExecutionNotice:hostExecutionNotice((target??getStore().getMission(scope,r.entity.missionId))!.riskLevel)});
 }));
 app.get<{Querystring:{missionId?:string}}>("/v1/work-runs",wos(async(req,reply)=>{
   const missionId=req.query?.missionId;if(missionId!==undefined&&!validMissionId(missionId))return reply.code(400).send({error:"INVALID_MISSION_ID"});
@@ -252,7 +269,7 @@ app.get<{Querystring:{missionId?:string}}>("/v1/work-runs",wos(async(req,reply)=
 }));
 app.get<{Params:{id:string}}>("/v1/work-runs/:id",wos(async(req,reply)=>{
   if(!validWorkRunId(req.params.id))return reply.code(400).send({error:"INVALID_RUN_ID"});
-  const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});return {run};
+  const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});return {run,outcomes:deriveOutcomes(run)};
 }));
 
 // //TR: PS-1A Project Studio route'ları: aynı token/Host hook'u; her proje route'u Work OS kaydını scope (tenant) ile çözer, başka tenant'ın projesi 404'tür. Yazma route'ları aynı kapı sırasını izler (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400).
@@ -500,6 +517,14 @@ app.get<{Params:{roleId:string}}>("/v1/roles/:roleId",async(req,reply)=>{
   const role=reg.doc.roles[i],guild=(reg.doc.guilds??[]).find((g:any)=>g.guildId===role.guildId)??null,cluster=(reg.doc.clusters??[]).find((c:any)=>c.clusterId===role.clusterId)??null;
   return {status:reg.doc.status,notice:reg.doc.notice,role,guild,cluster,legacyAliases:role.legacyAliases??[],gaps:{role:role.gapIds??[],guild:guild?.gapIds??[]}};
 });
+
+// //TR: REL-FX-4 onaylı yırtık kuyruk onarımı: aynı token/Host hook'u (her açılışta verilen control token) ve aynı yazma kapısı; gövde kuyruğun tam sha256'sını aynen onaylamalıdır. Tamper asla kesilmez.
+app.post("/v1/system/workos/journal/repair-torn-tail",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"workos.system.journal.repair-torn-tail","NONE",body,validateTornTailRepair))return reply;
+  const repair=getStore().repairTornTail((body as {confirmTailSha256:string}).confirmTailSha256,actor);
+  audit("WORKOS_JOURNAL_TORN_TAIL_REPAIRED",{actor,...repair});
+  return {repair,workos:workosHealth()};
+}));
 
 // //TR: B2 GET /v1/cockpit: UI için tek okuma otoritesidir; yalnız okur (Work OS store, orchestrator state, registry), hiçbir kaynağı yazmaz, eksik/okunamayan/uygulanmamış kaynak için sayı uydurmaz (state UNAVAILABLE/ERROR, sayılar null).
 type CockpitState="VERIFIED"|"STALE"|"UNAVAILABLE"|"ERROR";
