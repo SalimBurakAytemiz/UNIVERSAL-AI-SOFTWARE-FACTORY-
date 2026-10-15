@@ -66,7 +66,8 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async projectExports(projectId){const p=exportsPath(projectId);if(!p)return {state:"ERROR",items:[]};const r=await get(p);return r.ok?mapExports(r.data):{state:r.state,items:[],message:r.message}},
     async exportItem(projectId,exportId){const p=exportItemPath(projectId,exportId);if(!p)return {state:"ERROR",items:[]};const r=await get(p);return r.ok?mapExports({exports:[r.data?.export??r.data]}):{state:r.state,items:[],message:r.message}},
     async executors(){const r=await get(EXECUTORS_PATH);return r.ok?mapExecutors(r.data):{state:r.state,items:[],message:r.message}},
-    async agentCount(){const r=await get("/v1/agents");return r.ok&&Number.isSafeInteger(r.data?.count)&&r.data.count>=0?{state:"VERIFIED",count:r.data.count}:{state:r.ok?"ERROR":r.state,count:null}},
+    // //TR: INT-R3 D-M1-07: rol sayısı kanonik WFR-03 alanlarından okunur (registeredRoles/certified); eski "count" (LEGACY_REFERENCE_ONLY) kayıtlı rol olarak kullanılmaz, yalnız legacyRoles olarak taşınır.
+    async agentCount(){const r=await get("/v1/agents"),n=v=>Number.isSafeInteger(v)&&v>=0?v:null,none={count:null,registeredRoles:null,certified:null,legacyRoles:null};if(!r.ok)return {state:r.state,...none};const reg=n(r.data?.registeredRoles);return reg===null?{state:"ERROR",...none}:{state:"VERIFIED",count:reg,registeredRoles:reg,certified:n(r.data?.certified),legacyRoles:n(r.data?.legacyRoles)}},
     async raw(path){return get(path)}
   };
 }

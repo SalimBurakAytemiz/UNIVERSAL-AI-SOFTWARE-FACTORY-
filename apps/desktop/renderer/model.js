@@ -38,7 +38,7 @@ export function unavailableTile(state="UNAVAILABLE",source=null){return tile(sta
 export function emptyCockpit(state="UNAVAILABLE"){
   return {generatedAt:null,globalStop:{active:false,reason:null,known:false},
     projects:unavailableTile(state,"COCKPIT"),missions:unavailableTile(state,"COCKPIT"),approvals:{...unavailableTile(state,"COCKPIT"),items:[]},
-    orchestrator:unavailableTile(state,"ORCHESTRATOR_STATE"),workforce:{...unavailableTile(state,"WORKFORCE"),registeredRoles:null,targetRoles:null,activeWorkerRuns:null},
+    orchestrator:unavailableTile(state,"ORCHESTRATOR_STATE"),workforce:{...unavailableTile(state,"WORKFORCE"),registeredRoles:null,legacyRoles:null,targetRoles:null,activeWorkerRuns:null},
     alerts:unavailableTile(state,"COCKPIT"),legacySchedulerAuthority:false};
 }
 /** GET /v1/cockpit sözleşmesini renderer modeline eşler; sayılar yalnız VERIFIED/STALE bloklardan ve yalnız geçerli tamsayıysa alınır. */
@@ -60,7 +60,9 @@ export function mapCockpit(raw){
   }
   if(isObj(raw.workforce)){
     const s=normState(raw.workforce.state),live=s==="VERIFIED"||s==="STALE",w=raw.workforce;
-    out.workforce={...tile(s,live?safeCount(w.registeredRoles):null,{source:str(w.source,60)??"WORKFORCE",asOf,byStatus:{}}),registeredRoles:live?safeCount(w.registeredRoles):null,targetRoles:live?safeCount(w.targetRoles):null,activeWorkerRuns:live?safeCount(w.activeWorkerRuns):null};
+    // //TR: INT-R3 D-M1-07: "kayıtlı rol" yalnız kanonik sayıdır (WFR-03 canonicalRegisteredRoles); LEGACY_REFERENCE_ONLY etiketli eski sayı asla kayıtlı rol diye gösterilmez, yalnız legacyRoles alanında taşınır.
+    const legacyLabelled=w.registeredRolesAuthority==="LEGACY_REFERENCE_ONLY",reg=safeCount(w.canonicalRegisteredRoles)??(legacyLabelled?null:safeCount(w.registeredRoles));
+    out.workforce={...tile(s,live?reg:null,{source:str(w.source,60)??"WORKFORCE",asOf,byStatus:{}}),registeredRoles:live?reg:null,legacyRoles:live&&legacyLabelled?safeCount(w.registeredRoles):null,targetRoles:live?safeCount(w.targetRoles):null,activeWorkerRuns:live?safeCount(w.activeWorkerRuns):null};
   }
   const bs=out.missions.byStatus??{},blocked=(bs.BLOCKED??0)+(bs.FOUNDER_ATTENTION_REQUIRED??0);
   out.alerts=out.missions.value===null?unavailableTile(out.missions.state,"COCKPIT:missions"):tile(out.missions.state,blocked+(out.globalStop.active?1:0),{source:"COCKPIT:missions+globalStop",asOf,byStatus:{},detail:{blockedMissions:bs.BLOCKED??0,attentionMissions:bs.FOUNDER_ATTENTION_REQUIRED??0,globalStop:out.globalStop.active}});

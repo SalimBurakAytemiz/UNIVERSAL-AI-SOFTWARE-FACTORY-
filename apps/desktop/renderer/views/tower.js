@@ -9,6 +9,9 @@ export async function render(ctx){
   const s=okData(sched),completed=Array.isArray(s?.phases)?s.phases.filter(x=>x.status==="COMPLETED").length:0;
   const fact=(labelKey,value,state)=>h(doc,"div",{class:"fact",dataset:{fact:labelKey}},h(doc,"span",{class:"fact-label",text:ctx.t(labelKey)}),h(doc,"strong",{class:"fact-value",text:value}),state?chip(ctx,{state,value:1}):null);
   const cnt=r=>r.ok&&Number.isSafeInteger(r.data?.count)?`${formatCount(r.data.count)}`:MISSING;
+  // //TR: INT-R3 D-M1-07 (WFR-03'ün eski app.js satırındaki niyeti): rol kaydı kanonik registeredRoles ile gösterilir; sertifikalı ve eski (LEGACY_REFERENCE_ONLY) sayılar ayrı etiketlenir, eski sayı kayıtlı rol yerine geçmez.
+  const num=v=>Number.isSafeInteger(v)&&v>=0?formatCount(v):MISSING;
+  const roles=r=>r.ok&&Number.isSafeInteger(r.data?.registeredRoles)&&r.data.registeredRoles>=0?ctx.t("tower.rolesValue",{registered:num(r.data.registeredRoles),certified:num(r.data.certified),legacy:num(r.data.legacyRoles)}):MISSING;
   const retryData=okData(retry);
   const healthText=health.state==="VERIFIED"?`${health.data.status} · ${health.data.system}`:ctx.t(`state.${health.state}`);
   const eventsEl=h(doc,"pre",{id:"events",class:"log",tabindex:"0","aria-label":ctx.t("tower.events"),text:ctx.t("tower.pickRun")});
@@ -29,7 +32,7 @@ export async function render(ctx){
   return h(doc,"div",{class:"view"},h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.tower.title")}),
     panel(ctx,{titleKey:"tower.health",id:"tower-health"},h(doc,"p",{id:"health",text:healthText}),
       h(doc,"div",{class:"facts"},fact("tower.install",okData(install)?.phase0Final??MISSING),fact("tower.phase0",okData(phase0)?.final??MISSING),
-        fact("tower.scheduler",Array.isArray(s?.phases)?`${completed}/${s.phases.length}`:(s?.status??MISSING)),fact("tower.agents",cnt(agents)),fact("tower.caps",cnt(caps)),fact("tower.tools",cnt(tools)),
+        fact("tower.scheduler",Array.isArray(s?.phases)?`${completed}/${s.phases.length}`:(s?.status??MISSING)),fact("tower.agents",roles(agents)),fact("tower.caps",cnt(caps)),fact("tower.tools",cnt(tools)),
         fact("tower.retry",retryData&&retryData.packageId?`${retryData.packageId} ${(retryData.phaseIds??[]).join(",")} @ ${retryData.retryAt}`:ctx.t("tower.noRetry")))),
     stopCard,
     panel(ctx,{titleKey:"tower.attention",id:"tower-attention"},attention),
