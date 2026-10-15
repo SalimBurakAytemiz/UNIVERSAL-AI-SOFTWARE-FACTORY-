@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import {EVIDENCE_ROOT, parseReviewerEvidenceRef, sameIdentity} from "./rules.js";
+import {EVIDENCE_ROOT, distinctIdentity, parseReviewerEvidenceRef, sameIdentity} from "./rules.js";
 import type {LearningRecord, PromotionKind} from "./types.js";
 
 const MAX_EVIDENCE_BYTES = 1024 * 1024;
@@ -35,6 +35,8 @@ export function verifyReviewerEvidence(repoRoot: string, ref: unknown, rec: Pick
   if (j.verdict !== "APPROVED") return {ok: false, problem: "CONTENT_VERDICT_NOT_APPROVED"};
   if (typeof j.reviewerIdentity !== "string" || !sameIdentity(j.reviewerIdentity, claim.reviewerIdentity)) return {ok: false, problem: "CONTENT_REVIEWER_MISMATCH"};
   if (typeof j.implementerIdentity !== "string" || !sameIdentity(j.implementerIdentity, rec.implementerIdentity)) return {ok: false, problem: "CONTENT_IMPLEMENTER_MISMATCH"};
+  // WFR04A-C1-F1: kanıt içindeki reviewer ile implementer aynı kanonik kimliğe inerse (biçim farkı, görünmez karakter vb.) kanıt kendi kendini onaydır.
+  if (!distinctIdentity(j.reviewerIdentity, j.implementerIdentity)) return {ok: false, problem: "CONTENT_SELF_REVIEW"};
   if (j.promotionKind !== claim.kind) return {ok: false, problem: "CONTENT_KIND_MISMATCH"};
   if (j.scope !== (claim.global ? "GLOBAL" : "TENANT")) return {ok: false, problem: "CONTENT_SCOPE_MISMATCH"};
   return {ok: true, sha256: parsed.sha256, ref: `${parsed.relPath}#sha256=${parsed.sha256}`};

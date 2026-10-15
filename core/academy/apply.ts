@@ -1,6 +1,6 @@
 // //TR: Bu dosya Skill Academy journal girdilerinin replay kurallarını uygular: her girdi şekil, tenant, allowlist geçiş, boş permissionDelta, bağımsız reviewer ve destekleyici kaynak bakımından yeniden doğrulanır; tutarsız veya sahte (ör. kendi kendini onaylayan) girdi journal'ı fail-closed yapar.
 import {isObj, isStr, isTime, malformed, tampered} from "../company/common.js";
-import {blockingSources, isSha256, sameIdentity, parseReviewerEvidenceRef, reviewerIsIndependent, sourceVisibleTo, supportProblem} from "./rules.js";
+import {blockingSources, distinctIdentity, identityKey, isSha256, learnerIdentities, parseReviewerEvidenceRef, reviewerIsIndependent, sourceVisibleTo, supportProblem} from "./rules.js";
 import {LEARNING_TRIGGERS, PROMOTED_STATUSES, SOURCE_TRUSTS, DRIFT_STATUSES, canTransition, isLearningStatus} from "./types.js";
 import type {AcademyApplied, AcademyEntry, AcademyState, Curriculum, LabResult, LearningRecord, LearningStatus, Promotion, ReuseEvent, SourceRecord, SourceScreen} from "./types.js";
 
@@ -34,7 +34,8 @@ function validOpened(l: unknown): l is LearningRecord {
     && r.reviewerIdentity === null && r.reviewerRunRef === null && isStr(r.implementerIdentity) && isStr(r.createdBy)
     && Array.isArray(r.permissionDelta) && r.permissionDelta.length === 0 && isStrArr(r.dependsOn)
     && r.status === "GAP_DETECTED" && r.statusReason === null && r.screen === null && r.curriculum === null && r.labResult === null && r.promotion === null
-    && Array.isArray(r.drift) && r.drift.length === 0 && isObj(r.timestamps) && isTime(r.timestamps.createdAt);
+    && Array.isArray(r.drift) && r.drift.length === 0 && isObj(r.timestamps) && isTime(r.timestamps.createdAt)
+    && Array.isArray(r.lifecycleActors) && r.lifecycleActors.length === 1 && r.lifecycleActors[0] === r.createdBy;
 }
 function validScreen(s: unknown, rec: LearningRecord): s is SourceScreen {
   if (!isObj(s)) return false;
@@ -58,8 +59,11 @@ function owned(st: AcademyState, p: Record<string, unknown>, seq: number): Learn
 // Terfi kuralları (yazma tarafında da aynen uygulanır); ihlal yalnız sabit kod döndürür.
 export function promotionProblem(st: AcademyState, rec: LearningRecord, reviewerIdentity: unknown, reviewerRunRef: unknown, pr: Promotion, atMs: number, actor: string): string | null {
   if (rec.status !== "AWAITING_INDEPENDENT_REVIEW") return "NOT_AWAITING_INDEPENDENT_REVIEW";
-  // Kendi kendini terfi: öğrenen/implementer terfi çağrısının aktörü de olamaz.
-  if (sameIdentity(actor, rec.implementerIdentity)) return "PROMOTER_IS_IMPLEMENTER";
+  // WFR04A-C1-F1/F2: tüm öğrenen kimlikleri (implementer, açan, yaşam döngüsü aktörleri) kanonik anahtarla doğrulanabilir olmalıdır; terfi aktörü bunlardan biri olamaz.
+  const learners = learnerIdentities(rec);
+  if (learners.some(l => identityKey(l) === null)) return "LEARNER_IDENTITY_UNVERIFIABLE";
+  if (identityKey(actor) === null) return "PROMOTER_IDENTITY_INVALID";
+  if (!learners.every(l => distinctIdentity(actor, l))) return "PROMOTER_IS_IMPLEMENTER";
   if (!Array.isArray(rec.permissionDelta) || rec.permissionDelta.length !== 0) return "PERMISSION_DELTA_FORBIDDEN";
   if (!isStr(reviewerIdentity) || !reviewerIsIndependent(rec, reviewerIdentity)) return "REVIEWER_NOT_INDEPENDENT";
   if (!isStr(reviewerRunRef)) return "REVIEWER_RUN_REF_REQUIRED";
@@ -99,6 +103,8 @@ export function applyAcademyEntry(st: AcademyState, e: AcademyEntry): AcademyApp
       const l = p.entity;
       if (!validOpened(l)) throw malformed(`ENTITY_SHAPE:${e.seq}`);
       if (st.learnings[l.learningId]) throw tampered(`ACADEMY_DUPLICATE:${e.seq}`);
+      // WFR04A-C1-F2: kaydı açan, girdiyi yazan aktördür (createdBy serbestçe başka bir kimliğe bağlanamaz).
+      if (l.createdBy !== e.actor) throw tampered(`ACADEMY_CREATOR_MISMATCH:${e.seq}`);
       for (const d of l.dependsOn) { const dep = st.learnings[d]; if (!dep || !learningVisibleTo(dep, l.tenantId) || !PROMOTED_STATUSES.includes(dep.status)) throw tampered(`ACADEMY_DEPENDENCY:${e.seq}`); }
       st.learnings[l.learningId] = l;
       return {idem: {tenantId: l.tenantId, kind: "academy.learning", id: l.learningId}};
@@ -130,6 +136,8 @@ export function applyAcademyEntry(st: AcademyState, e: AcademyEntry): AcademyApp
         default: break;
       }
       rec.status = to; rec.statusReason = isStr(p.reason) ? p.reason : null; rec.timestamps.updatedAt = e.at;
+      // WFR04A-C1-F2: öğrenme işini yapan her aktör kayda bağlanır (yazma ve replay aynı yoldan geçer).
+      if (!rec.lifecycleActors.includes(e.actor)) rec.lifecycleActors.push(e.actor);
       return {};
     }
     case "ACADEMY_LEARNING_PROMOTED": {

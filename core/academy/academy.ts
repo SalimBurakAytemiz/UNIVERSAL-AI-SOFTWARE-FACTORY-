@@ -11,7 +11,7 @@ import type {DriftDecision, DriftEnvironment} from "./drift.js";
 import {verifyReviewerEvidence} from "./evidence.js";
 import {computeMetrics} from "./metrics.js";
 import type {AcademyMetrics} from "./metrics.js";
-import {parseReviewerEvidenceRef, screenSourceText, sha256Text, sourceVisibleTo, supportProblem} from "./rules.js";
+import {identityKey, parseReviewerEvidenceRef, screenSourceText, sha256Text, sourceVisibleTo, supportProblem} from "./rules.js";
 import {PROMOTED_STATUSES, canTransition} from "./types.js";
 import type {AcademyTx, AcademyView, Curriculum, LabResult, LearningRecord, LearningStatus, LearningTrigger, Promotion, PromotionKind, ReuseEvent, ReuseOutcome, SourceRecord, SourceScreen, SourceTrust} from "./types.js";
 
@@ -21,6 +21,9 @@ const textSchema = {type: "string", minLength: 1, maxLength: 2000, pattern: "\\S
 const shortText = {type: "string", minLength: 1, maxLength: 200, pattern: "\\S"} as const;
 const nullable = (s: object) => ({anyOf: [s, {type: "null"}]});
 const timeSchema = {type: "string", format: "date-time"} as const;
+// WFR04A-C1-F1: kimlik alanları yalnız yazdırılabilir ASCII kabul eder (Unicode tire, sıfır genişlikli karakter, homoglif/karışık betik reddedilir) ve en az bir harf/rakam içerir.
+const identitySchema = {type: "string", minLength: 1, maxLength: 200, pattern: "^[\\x20-\\x7E]*[A-Za-z0-9][\\x20-\\x7E]*$"} as const;
+const assertActor = (actor: string) => { if (identityKey(actor) === null) throw invalid("ACTOR_IDENTITY_INVALID"); };
 
 export const sourceInputSchema = {
   type: "object", additionalProperties: false, required: ["sourceTrust", "freshnessTTLDays"],
@@ -40,7 +43,7 @@ export const openGapSchema = {
   type: "object", additionalProperties: false, required: ["roleId", "guildId", "trigger", "hypothesis", "implementerIdentity"],
   properties: {
     roleId: {type: "string", pattern: "^UASCO-\\d{4}$"}, guildId: {type: "string", pattern: "^G\\d{2}$"}, projectId: nullable(idSchema("prj")),
-    trigger: {enum: ["REAL_MISSION", "CAPABILITY_GAP", "RELEASE_DRIFT", "FAILED_EVAL"]}, hypothesis: textSchema, implementerIdentity: shortText,
+    trigger: {enum: ["REAL_MISSION", "CAPABILITY_GAP", "RELEASE_DRIFT", "FAILED_EVAL"]}, hypothesis: textSchema, implementerIdentity: identitySchema,
     dependsOn: {type: "array", maxItems: 50, uniqueItems: true, items: idSchema("lrn")},
     // Öğrenme yetki vermez: yalnız boş dizi kabul edilir (boş olmayan değer daha önce açık hata ile reddedilir).
     permissionDelta: {type: "array", maxItems: 0},
@@ -58,7 +61,7 @@ const labResultSchema = {
 export const promoteSchema = {
   type: "object", additionalProperties: false, required: ["kind", "reviewerIdentity", "reviewerRunRef", "reviewerEvidenceRef"],
   properties: {
-    kind: {enum: ["KNOWLEDGE", "SKILL_CANDIDATE"]}, reviewerIdentity: shortText, reviewerRunRef: refSchema, reviewerEvidenceRef: {type: "string", minLength: 1, maxLength: 300},
+    kind: {enum: ["KNOWLEDGE", "SKILL_CANDIDATE"]}, reviewerIdentity: identitySchema, reviewerRunRef: refSchema, reviewerEvidenceRef: {type: "string", minLength: 1, maxLength: 300},
     supportingSourceIds: {type: "array", minItems: 1, maxItems: 50, uniqueItems: true, items: idSchema("src")}, global: {type: "boolean"}, anonymized: {type: "boolean"}
   }
 } as const;
@@ -83,6 +86,15 @@ export interface LabResultInput { passed: boolean; deterministicTestRefs: string
 export interface PromoteInput { kind: PromotionKind; reviewerIdentity: string; reviewerRunRef: string; reviewerEvidenceRef: string; supportingSourceIds?: string[]; global?: boolean; anonymized?: boolean }
 export interface ReuseInput { outcome: ReuseOutcome; missionRef: string; evidenceRef: string; idempotencyKey?: string }
 // Diğer tenant'lara görünen global bilgi yalnız genelleştirilmiş izdüşümdür: köken tenant/proje, kaynak ve lab referansları sızmaz.
+// WFR04A-C1-F4: sahibi olmayan tenant'a global kaynak yalnız bu izdüşümle görünür: köken tenant, oluşturan aktör, durum gerekçesi ve serbest metin çelişkiler sızmaz.
+export interface GlobalSourceView {
+  recordKind: "globalSource"; sourceId: string; url: string | null; fetchedAt: string | null; publishedAt: string | null; version: string | null; publisher: string | null;
+  sourceTrust: SourceTrust; license: string | null; sha256: string | null; freshnessTTLDays: number; global: true; status: SourceRecord["status"]; contradictionCount: number;
+}
+export const projectGlobalSource = (s: SourceRecord): GlobalSourceView => ({
+  recordKind: "globalSource", sourceId: s.sourceId, url: s.url, fetchedAt: s.fetchedAt, publishedAt: s.publishedAt, version: s.version, publisher: s.publisher,
+  sourceTrust: s.sourceTrust, license: s.license, sha256: s.sha256, freshnessTTLDays: s.freshnessTTLDays, global: true, status: s.status, contradictionCount: s.contradictions.length
+});
 export interface GlobalKnowledgeView { learningId: string; roleId: string; guildId: string; hypothesis: string; status: LearningStatus; knowledgeStatus: Promotion["knowledgeStatus"]; promotedAt: string }
 export interface SkillAcademyOptions { repoRoot: string; registryFile?: string }
 
@@ -120,6 +132,7 @@ export class SkillAcademy {
     return rec;
   }
   private move(scope: Scope, id: string, to: LearningStatus, actor: string, patch: Record<string, unknown>, reason?: string, pre?: (rec: LearningRecord, tx: AcademyTx) => Record<string, unknown> | void): LearningRecord {
+    assertActor(actor);
     return this.store.academyWrite(tx => {
       const rec = this.owned(tx, scope, id);
       if (!canTransition(rec.status, to)) throw badTransition(`LEARNING_${rec.status}_TO_${to}`);
@@ -151,6 +164,9 @@ export class SkillAcademy {
     });
   }
   // Kaynak iptali/zehirlenmesi yalnız sahibi tenant tarafından yazılır; etkisi drift uygulamasıyla bağımlı öğrenmelere yayılır.
+  // WFR04A-C1-F4 (belgelenmiş çapraz-tenant etki): global bir kaynağın sahibi onu iptal/zehirli işaretlerse, o kaynağa atıf yapan BAŞKA tenant'ların
+  // terfi etmiş öğrenmeleri de applyDrift ile REVOKED olur. Bu bilinçli fail-closed davranıştır: iptal yalnız desteği kaldırır, hiçbir tenant'a
+  // yetki/durum/veri vermez ve diğer tenant'ın kayıt içeriğini açığa çıkarmaz; yanlış iptal yalnız yeniden öğrenme (yeni kaynak) gerektirir.
   revokeSource(scope: Scope, sourceId: string, to: "REVOKED" | "POISONED", reason: string, actor: string): SourceRecord {
     check(validateReason(reason), "reason"); noSecrets(reason);
     if (to !== "REVOKED" && to !== "POISONED") throw invalid("status");
@@ -169,6 +185,7 @@ export class SkillAcademy {
     const normalized = {...input, ...(input.permissionDelta !== undefined ? {permissionDelta: []} : {})};
     check(validateOpen(normalized), "learning");
     noSecrets(input.hypothesis, input.implementerIdentity);
+    assertActor(actor);
     const guild = this.roles().get(input.roleId);
     if (guild === undefined) throw notFound("role");
     if (guild !== input.guildId) throw invalid("ROLE_GUILD_MISMATCH");
@@ -186,7 +203,7 @@ export class SkillAcademy {
         trigger: input.trigger, hypothesis: input.hypothesis, sourceIds: [], labRunRefs: [], negativeEvalRefs: [], reviewerIdentity: null, reviewerRunRef: null,
         implementerIdentity: input.implementerIdentity, permissionDelta: [], dependsOn, status: "GAP_DETECTED", statusReason: null,
         screen: null, curriculum: null, labResult: null, promotion: null, drift: [],
-        timestamps: {createdAt: at, updatedAt: at, promotedAt: null, driftedAt: null, closedAt: null}, createdBy: actor
+        timestamps: {createdAt: at, updatedAt: at, promotedAt: null, driftedAt: null, closedAt: null}, createdBy: actor, lifecycleActors: [actor]
       };
       tx.append("ACADEMY_LEARNING_OPENED", actor, {entity: rec, ...tx.idemFields(input.idempotencyKey, digest)});
       return {entity: clone(rec), replayed: false};
@@ -206,7 +223,8 @@ export class SkillAcademy {
       const screen: SourceScreen = {screenedAt: tx.now(), cleanSourceIds: [], flaggedSourceIds: [], unscreenedSourceIds: [], injectionFindings: [], conflicts: []};
       for (const id of rec.sourceIds) {
         const s = tx.sources[id];
-        if (s && s.contradictions.length > 0) screen.conflicts.push({sourceId: id, contradictions: [...s.contradictions]});
+        // WFR04A-C1-F4: başka tenant'ın global kaynağındaki serbest metin çelişkiler bu tenant'ın kaydına kopyalanmaz; yalnız sayılı bir işaret yazılır.
+        if (s && s.contradictions.length > 0) screen.conflicts.push({sourceId: id, contradictions: s.tenantId === rec.tenantId ? [...s.contradictions] : [`REDACTED_CROSS_TENANT_CONTRADICTIONS:${s.contradictions.length}`]});
         const text = Object.prototype.hasOwnProperty.call(contents, id) ? contents[id] : undefined;
         if (!s || text === undefined || s.sha256 === null) { screen.unscreenedSourceIds.push(id); continue; }
         const codes = sha256Text(text) !== s.sha256 ? ["CONTENT_HASH_MISMATCH" as const] : screenSourceText(text);
@@ -271,7 +289,8 @@ export class SkillAcademy {
       if (problem) throw invalid(problem);
       if (!ev.ok) throw invalid(`REVIEWER_EVIDENCE_${ev.problem}`);
       const to: LearningStatus = input.kind === "KNOWLEDGE" ? "PROMOTED_KNOWLEDGE" : "PROMOTED_SKILL_CANDIDATE";
-      tx.append("ACADEMY_LEARNING_PROMOTED", actor, {learningId, tenantId: scope.tenantId, from: rec.status, to, reviewerIdentity: input.reviewerIdentity, reviewerRunRef: input.reviewerRunRef, promotion});
+      // WFR04A-C1-F3: yazma tarafı kontrolünde kullanılan aynı zaman (at) ön-denemede ve kalıcı girdide kullanılır.
+      tx.append("ACADEMY_LEARNING_PROMOTED", actor, {learningId, tenantId: scope.tenantId, from: rec.status, to, reviewerIdentity: input.reviewerIdentity, reviewerRunRef: input.reviewerRunRef, promotion}, at);
       return clone(tx.learnings[learningId]);
     });
   }
@@ -307,8 +326,13 @@ export class SkillAcademy {
   }
 
   // ---- Okumalar: tenant kapsamlı; başka tenant'ın kaydı "yok" görünür ----
-  getSource(scope: Scope, id: string): SourceRecord | undefined { return this.store.academyRead(v => { const s = v.sources[id]; return s && (s.tenantId === scope.tenantId || s.scope.global) ? clone(s) : undefined; }); }
-  listSources(scope: Scope): SourceRecord[] { return this.store.academyRead(v => Object.values(v.sources).filter(s => s.tenantId === scope.tenantId || s.scope.global).map(clone)); }
+  // WFR04A-C1-F4: sahibi tenant tam kaydı görür; diğer tenant'lar global kaynağı yalnız GlobalSourceView izdüşümüyle görür.
+  getSource(scope: Scope, id: string): SourceRecord | GlobalSourceView | undefined {
+    return this.store.academyRead(v => { const s = v.sources[id]; if (!s) return undefined; if (s.tenantId === scope.tenantId) return clone(s); return s.scope.global ? projectGlobalSource(s) : undefined; });
+  }
+  listSources(scope: Scope): Array<SourceRecord | GlobalSourceView> {
+    return this.store.academyRead(v => Object.values(v.sources).filter(s => s.tenantId === scope.tenantId || s.scope.global).map(s => s.tenantId === scope.tenantId ? clone(s) : projectGlobalSource(s)));
+  }
   getLearning(scope: Scope, id: string): LearningRecord | undefined { return this.store.academyRead(v => { const r = v.learnings[id]; return r && r.tenantId === scope.tenantId ? clone(r) : undefined; }); }
   listLearnings(scope: Scope): LearningRecord[] { return this.store.academyRead(v => Object.values(v.learnings).filter(r => r.tenantId === scope.tenantId).map(clone)); }
   listReuses(scope: Scope): ReuseEvent[] { return this.store.academyRead(v => Object.values(v.reuses).filter(r => r.tenantId === scope.tenantId).map(clone)); }

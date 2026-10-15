@@ -6,11 +6,28 @@ const DAY_MS = 86_400_000;
 export const isSha256 = (x: unknown): x is string => typeof x === "string" && /^[0-9a-f]{64}$/.test(x);
 export const sha256Text = (s: string): string => crypto.createHash("sha256").update(Buffer.from(s, "utf8")).digest("hex");
 
-// Kimlik karşılaştırması büyük/küçük harf, boşluk ve ayırıcı farklarına duyarsızdır: "Claude-Builder" ile " claude_builder " aynı kişidir (kendi kendini onay reddedilir).
-export const normIdentity = (x: string): string => x.normalize("NFKC").trim().toLowerCase().replace(/[\s_.-]+/g, "-");
-export const sameIdentity = (a: string, b: string): boolean => normIdentity(a) === normIdentity(b);
-export function reviewerIsIndependent(rec: Pick<LearningRecord, "implementerIdentity" | "createdBy">, reviewer: string): boolean {
-  return normIdentity(reviewer).length > 0 && !sameIdentity(rec.implementerIdentity, reviewer) && !sameIdentity(rec.createdBy, reviewer);
+// WFR04A-C1-F1: kanonik kimlik anahtarı. NFKC sonrası biçim/görünmez karakterler (\p{Cf}, sıfır genişlikli, varsayılan-yok-sayılan) atılır;
+// kalan metin yalnız yazdırılabilir ASCII olmalıdır (Unicode tire, homoglif/karışık betik -> geçersiz, null); ardından küçük harfe çevrilip
+// harf/rakam dışı her karakter atılır. Böylece "claudebuilder", "ClaudeBuilder", " CLAUDE_BUILDER ", "claude​-builder" aynı anahtara iner.
+const IGNORABLE_RE = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu;
+export const IDENTITY_ASCII_RE = /^[\x20-\x7E]*$/;
+export function identityKey(x: unknown): string | null {
+  if (typeof x !== "string") return null;
+  const n = x.normalize("NFKC").replace(IGNORABLE_RE, "");
+  if (!IDENTITY_ASCII_RE.test(n)) return null;
+  const k = n.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return k.length > 0 ? k : null;
+}
+// Eşleşme: iki kimlik de geçerli ve anahtarları aynı (kanıt içeriği eşleşmesi için; geçersiz kimlik hiçbir şeyle eşleşmez).
+export const sameIdentity = (a: unknown, b: unknown): boolean => { const ka = identityKey(a), kb = identityKey(b); return ka !== null && kb !== null && ka === kb; };
+// Ayrılık: iki kimlik de geçerli ve anahtarları farklı (bağımsızlık için; geçersiz kimlik fail-closed olarak "ayrı değil" sayılır).
+export const distinctIdentity = (a: unknown, b: unknown): boolean => { const ka = identityKey(a), kb = identityKey(b); return ka !== null && kb !== null && ka !== kb; };
+// WFR04A-C1-F2: öğrenen kimlikleri = beyan edilen implementer + kaydı açan aktör + yaşam döngüsü geçişlerini yazan her aktör.
+export function learnerIdentities(rec: Pick<LearningRecord, "implementerIdentity" | "createdBy" | "lifecycleActors">): string[] {
+  return [rec.implementerIdentity, rec.createdBy, ...(Array.isArray(rec.lifecycleActors) ? rec.lifecycleActors : [])];
+}
+export function reviewerIsIndependent(rec: Pick<LearningRecord, "implementerIdentity" | "createdBy" | "lifecycleActors">, reviewer: unknown): boolean {
+  return learnerIdentities(rec).every(l => distinctIdentity(reviewer, l));
 }
 
 // Reviewer kanıtı WFR-03 doğrulayıcısıyla aynı kök biçimindedir: audit/evidence/<alan>/<kayıt>/<ad>.json#sha256=<hex>.

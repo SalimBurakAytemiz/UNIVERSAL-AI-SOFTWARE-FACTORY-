@@ -300,8 +300,9 @@ export class WorkOsStore {
   private write<T>(fn: () => T): T {
     return this.withLock(() => { this.load(); this.guard(); return fn(); });
   }
-  private append(type: JournalType, actor: string, payload: Record<string, unknown>): JournalEntry {
-    const body = {seq: this.state.lastSeq + 1, prevHash: this.state.lastHash, type, actor, at: new Date().toISOString(), payload};
+  // WFR04A-C1-F3: at verilirse (academy ön-denemesinde kullanılan zaman) aynen yazılır; ön-deneme ile diske yazılan girdi aynı zamanı taşır.
+  private append(type: JournalType, actor: string, payload: Record<string, unknown>, at?: string): JournalEntry {
+    const body = {seq: this.state.lastSeq + 1, prevHash: this.state.lastHash, type, actor, at: at ?? new Date().toISOString(), payload};
     const entry: JournalEntry = {...body, hash: entryHash(body)};
     fs.mkdirSync(this.dataDir, {recursive: true});
     const fd = fs.openSync(this.journalFile, "a");
@@ -517,11 +518,14 @@ export class WorkOsStore {
         now: () => this.nowIso(), newId,
         idem: (table, kind, tenantId, key, digest) => this.findIdem(table as Record<string, {tenantId: string}>, tenantId, kind, key, digest) as never,
         idemFields: (key, digest) => this.idemFields(key, digest),
-        append: (type: AcademyJournalType, actor: string, payload: Record<string, unknown>) => {
-          try { applyAcademyEntry(clone(st.academy), {seq: st.lastSeq + 1, type, at: new Date().toISOString(), actor, payload}); } catch (e) {
+        append: (type: AcademyJournalType, actor: string, payload: Record<string, unknown>, at?: string) => {
+          // WFR04A-C1-F3: zaman bir kez belirlenir; ön-deneme ve kalıcı girdi aynı gövdeyi (aynı at) kullanır, saat sınırında yarış journal'ı bozamaz.
+          const entryAt = at ?? this.nowIso();
+          if (!Number.isFinite(Date.parse(entryAt))) throw new WorkOsError("WORKOS_INVALID_INPUT", "ACADEMY_ENTRY_REJECTED:AT");
+          try { applyAcademyEntry(clone(st.academy), {seq: st.lastSeq + 1, type, at: entryAt, actor, payload}); } catch (e) {
             throw new WorkOsError("WORKOS_INVALID_INPUT", `ACADEMY_ENTRY_REJECTED:${(e as Error).message.replace(/^WORKOS_[A-Z_]+: /, "")}`);
           }
-          this.append(type, actor, payload);
+          this.append(type, actor, payload, entryAt);
         }
       };
       return fn(tx);

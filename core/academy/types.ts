@@ -92,6 +92,8 @@ export interface LearningRecord {
   status: LearningStatus; statusReason: string | null;
   screen: SourceScreen | null; curriculum: Curriculum | null; labResult: LabResult | null; promotion: Promotion | null; drift: DriftMark[];
   timestamps: LearningTimestamps; createdBy: string;
+  // WFR04A-C1-F2: kaydı açan aktör + her ACADEMY_LEARNING_TRANSITIONED aktörü (replay'de journal'dan yeniden türetilir); reviewer ve terfi aktörü bunlardan biri olamaz.
+  lifecycleActors: string[];
 }
 export type ReuseOutcome = "SUCCESS" | "FAILURE";
 export interface ReuseEvent { recordKind: "reuse"; reuseId: string; tenantId: string; learningId: string; outcome: ReuseOutcome; missionRef: string; evidenceRef: string; at: string; actor: string }
@@ -122,7 +124,8 @@ export interface AcademyTx {
   newId(prefix: string): string;
   idem<T extends {tenantId: string}>(table: Readonly<Record<string, T>>, kind: string, tenantId: string, key: string | undefined, digest: string): T | undefined;
   idemFields(key: string | undefined, digest: string): Record<string, unknown>;
-  append(type: AcademyJournalType, actor: string, payload: Record<string, unknown>): void;
+  // WFR04A-C1-F3: at verilirse hem ön-deneme (dry-run) hem diske yazılan girdi tam olarak bu zamanı kullanır; verilmezse store saati bir kez okunur ve ikisi için de kullanılır.
+  append(type: AcademyJournalType, actor: string, payload: Record<string, unknown>, at?: string): void;
 }
 export interface AcademyView {
   readonly sources: Readonly<Record<string, SourceRecord>>;

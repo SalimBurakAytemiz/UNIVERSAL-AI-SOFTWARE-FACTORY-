@@ -54,5 +54,88 @@
     "Independent fresh review pending; implementer does not declare CLEAN",
     "Recertification (RECERTIFY_REQUIRED -> new lab -> review) and registry-update consumption of promotions are later governed packages",
     "gap_detect_precision/recall, holdout_pass_rate, cost_per_certified_capability, drift_detection_lag are not computed (no labeled dataset / cost data); precision/recall return null"
-  ]
+  ],
+  "remediationCycle2": {
+    "//TR": "Bu bölüm WFR-04a cycle-2 düzeltmesini (WFR04A-C1-F1/F2/F3/F4) ve yalnız gözlenen komut sonuçlarını kaydeder; temiz değildir, yeni bağımsız inceleme beklemektedir.",
+    "parent": "ce522e1cb51a8fcff8faa974c7bf7a3ba1611e75",
+    "status": "REMEDIATED_NOT_CLEAN_REVIEW_PENDING",
+    "authorization": "Lane B B0 + B0A + B0B (FA-V2-PRODUCT + FD-ROLE-CLAUDE-IMPL); protected files touched: config/validation.json (tests step END append only), config/trust-root-manifest.json (generate-trust-root.mjs only)",
+    "findings": {
+      "WFR04A-C1-F1": {
+        "severity": "HIGH",
+        "fix": "rules.ts identityKey(): NFKC, strip \\p{Cf} and \\p{Default_Ignorable_Code_Point} (zero-width etc.), require printable ASCII (Unicode dash, homoglyph/mixed script, accented -> invalid/null), lowercase, drop every non [a-z0-9]. sameIdentity = both valid and equal; distinctIdentity = both valid and different (invalid fails closed). openGapSchema.implementerIdentity and promoteSchema.reviewerIdentity restricted to an ASCII allow-list pattern; openGap and lifecycle move() reject actors without a valid key (ACTOR_IDENTITY_INVALID). Same rule used in reviewerIsIndependent, promotionProblem (actor: PROMOTER_IDENTITY_INVALID / PROMOTER_IS_IMPLEMENTER) and verifyReviewerEvidence (canonical match + new CONTENT_SELF_REVIEW when the file's reviewer and implementer share a key).",
+        "tests": "tests/v7-wfr04a-c2-remediation.test.ts: identityKey unit cases; separator-less, camel-case, dotted, padded underscore, double-dash reviewer variants -> REVIEWER_NOT_INDEPENDENT (and as actor -> PROMOTER_IS_IMPLEMENTER); en dash, zero-width, Cyrillic a, fullwidth c, accented reviewer -> schema reject; zero-width actor -> PROMOTER_IS_IMPLEMENTER, en dash/Cyrillic/accented actor -> PROMOTER_IDENTITY_INVALID; non-ASCII implementerIdentity and actor refused at open; evidence self-review and homoglyph reviewer mismatch; no journal line written on any rejection"
+      },
+      "WFR04A-C1-F2": {
+        "severity": "MEDIUM",
+        "fix": "LearningRecord.lifecycleActors (types.ts) = openGap actor + each ACADEMY_LEARNING_TRANSITIONED actor, maintained by applyAcademyEntry so the write path and replay derive it identically; OPENED replay requires entity.createdBy === entry actor (ACADEMY_CREATOR_MISMATCH) and lifecycleActors === [createdBy]. promotionProblem (write and replay) rejects when any learner identity (implementer, createdBy, lifecycle actors) is unverifiable (LEARNER_IDENTITY_UNVERIFIABLE), when the promote actor matches any of them (PROMOTER_IS_IMPLEMENTER) or when the reviewer matches any of them (REVIEWER_NOT_INDEPENDENT).",
+        "notDone": "implementerIdentity is not forced to equal the openGap actor (a supervisor may open a gap for a named implementer); instead every actor that performed the lifecycle is bound to the record and excluded from review/promotion",
+        "tests": "reviewer scenario (opener supervisor, implementer nominal-impl, lab actor claude-builder): lab actor as reviewer/promoter rejected, Claude_Builder variant rejected, opener as reviewer or promoter rejected, independent reviewer + third actor promotes; replay re-derives lifecycleActors; forged hash-chained PROMOTED entry with a lifecycle actor as reviewer -> fresh store tampered (REVIEWER_NOT_INDEPENDENT); forged OPENED entry with createdBy != actor -> ACADEMY_CREATOR_MISMATCH"
+      },
+      "WFR04A-C1-F3": {
+        "severity": "MEDIUM",
+        "fix": "store.ts append(type, actor, payload, at?) persists a supplied timestamp; academyWrite tx.append(type, actor, payload, at?) computes entryAt once (given at, else the store clock nowIso() read once), dry-runs applyAcademyEntry with entryAt and persists the same entryAt. promote() passes its write-side check time (tx.now()) so write check, dry-run and persisted entry share one timestamp. Non-academy append callers unchanged (at omitted -> new Date() as before).",
+        "tests": "injected clock 60 days behind real time, source expiring 1 ms after the first clock read and every later read past expiry: promotion succeeds, persisted ACADEMY_LEARNING_PROMOTED at == expiry-1ms == promotion.promotedAt, fresh WorkOsStore isTampered=false; clock at expiry -> NO_SUPPORTING_SOURCE, nothing written, store clean; registerSource reads the clock exactly twice (createdAt, append) and persists the append read"
+      },
+      "WFR04A-C1-F4": {
+        "severity": "MEDIUM",
+        "fix": "academy.ts getSource/listSources: owner tenant gets the full SourceRecord; other tenants get GlobalSourceView (recordKind globalSource; sourceId, url, fetchedAt, publishedAt, version, publisher, sourceTrust, license, sha256, freshnessTTLDays, global, status, contradictionCount) without tenantId, createdBy, statusReason, contradiction text or createdAt/updatedAt. screenSources writes REDACTED_CROSS_TENANT_CONTRADICTIONS:<n> instead of copying another tenant's contradiction text into the screening tenant's record. Cross-tenant revocation documented in the academy.ts revokeSource comment: only the owner can revoke/poison; it propagates REVOKED to other tenants' learnings citing the source via applyDrift (intended fail-closed, removes support only, grants nothing, exposes no record content).",
+        "tests": "WFR-AT-011: tenant B view key set is exactly the projection; tenant-a, alice, internal note, statusReason, createdBy absent from B's getSource/listSources; B's screening conflicts redacted, A's own screening keeps the text; B cannot revoke A's source (NOT_FOUND); A's POISONED revocation -> B's promoted learning REVOKED via applyDrift, reason text not visible to B, permissionDelta stays empty, A cannot read B's learning"
+      }
+    },
+    "filesChanged": [
+      "core/academy/rules.ts (identityKey, sameIdentity, distinctIdentity, learnerIdentities, reviewerIsIndependent; normIdentity removed)",
+      "core/academy/apply.ts (promotionProblem learner/actor checks, OPENED creator binding, lifecycleActors derivation)",
+      "core/academy/types.ts (LearningRecord.lifecycleActors, AcademyTx.append at?)",
+      "core/academy/evidence.ts (CONTENT_SELF_REVIEW)",
+      "core/academy/academy.ts (identity schema, actor validation, lifecycleActors on open, promote passes at, GlobalSourceView projection, cross-tenant contradiction redaction, revocation doc)",
+      "core/workos/store.ts (append at?, academyWrite single timestamp)",
+      "tests/v7-wfr04a-c2-remediation.test.ts (new, 13 tests)",
+      "config/validation.json (new test path appended at END of tests step)",
+      "config/trust-root-manifest.json (generate-trust-root.mjs; generatedAt and sealed sha256 values only)",
+      "audit/checkpoints/V7-PKG-WFR04A-2026-10-15.json (this section)"
+    ],
+    "observed": {
+      "startedAt": "2026-10-15T00:48:20Z",
+      "preFixReproduction": "with core/ stashed back to ce522e1 the new test file reported 12 failed | 1 passed (13); after the fix 13 passed",
+      "existingTests": "tests/v7-wfr04a-skill-academy.test.ts unchanged and 21/21 passing after the fix",
+      "lf": "CR byte count 0 in all changed/new files before reseal",
+      "commands": [
+        {
+          "cmd": "env -u PSModulePath npx tsc --noEmit",
+          "exit": 0,
+          "summary": "no errors (first run reported 4 typing errors in the new test file; fixed, re-run exit 0)"
+        },
+        {
+          "cmd": "env -u PSModulePath npx vitest run --dir tests tests/v7-wfr04a-c2-remediation.test.ts tests/v7-wfr04a-skill-academy.test.ts tests/v7-wfr03-role-registry.test.ts tests/v7-b1-workos.test.ts tests/v7-b2-workos-hardening.test.ts tests/v7-b3a-runner.test.ts tests/v7-b10a-evidence.test.ts tests/v7-b11a-company-os.test.ts",
+          "exit": 0,
+          "summary": "Test Files 8 passed (8); Tests 173 passed | 1 skipped (174) (pre-reseal run: 1 failed = B2 trust-root seal check, expected until generate-trust-root)"
+        },
+        {
+          "cmd": "node scripts/validate-role-registry.mjs",
+          "exit": 0,
+          "summary": "ROLE_REGISTRY_VALIDATION: PASS roles=599 executed=0 certified=0 runtimeReadyOrRunning=0"
+        },
+        {
+          "cmd": "node scripts/validate-tr-comments.mjs",
+          "exit": 0,
+          "summary": "TR_VALIDATION: PASS"
+        },
+        {
+          "cmd": "node scripts/secret-sanity.mjs",
+          "exit": 0,
+          "summary": "SECRET_SANITY: PASS"
+        },
+        {
+          "cmd": "node scripts/generate-trust-root.mjs && node scripts/verify-trust-root.mjs",
+          "exit": 0,
+          "summary": "TRUST_ROOT_MANIFEST_GENERATED files=364; TRUST_ROOT_VERIFY: PASS"
+        }
+      ],
+      "notRun": [
+        "scripts/run-validation.mjs (excluded by package instructions)"
+      ]
+    },
+    "notClaimed": "Not CLEAN; no AI/network call; no push; no server.ts/desktop/validator/registry edits."
+  }
 }
