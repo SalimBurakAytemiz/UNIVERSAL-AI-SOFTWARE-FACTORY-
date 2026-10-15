@@ -100,5 +100,33 @@
       "scripts/run-validation.mjs (not requested)"
     ],
     "claims": "Not clean. No CLEAN or review verdict is claimed."
+  },
+  "remediationCycle4": {
+    "//TR": "PS1B-C3-001/002 düzeltmesi: yoklama kaynaklı dev-run yeniden çizimi odaklı Stop düğmesini devre dışı bırakınca odak durum satırına/dev-run durumuna taşınır; yalnız gözlenen sonuçlar kaydedilir, temiz değildir.",
+    "findings": [
+      "PS1B-C3-001 (medium, blocker)",
+      "PS1B-C3-002 (low, optional)"
+    ],
+    "startedAt": "2026-10-15T01:15:36Z",
+    "endedAt": "2026-10-15T01:20:15Z",
+    "parent": "f7e5c21f55e4948f62fe6cafe76c2f1704f75ce4",
+    "change": [
+      "views/studio-workspace.js: new paintRunPolled used by the startRunPolling interval handler; it records whether focus was inside the run panel before paintRun and, if focus was lost (focusLost) or sits on a disabled control afterwards, calls settle(ctx,[studio-devrun-status, studio-run-state]) (focus.js settleFocus). Action-driven repaints (runAction busy paint) are unchanged so the existing result-focus behaviour is kept. The dev-run poll is the only setInterval-driven repaint in the Project Studio views",
+      "app.js: renderRoute lost-focus safety net now passes a panel-level fallback (PANEL_FOCUS_FALLBACK: studio-devrun-status -> studio-run-state) before #view-title (PS1B-C3-002)",
+      "tests/v7-ps1b-project-studio-ui.test.ts: 3 new tests (RUNNING->STOPPED after a stop POST that left RUNNING, RUNNING->CRASHED with no user action, no focus stealing when focus is outside the run panel or on the enabled log); app.js wiring assertion updated; the two focus tests were observed to fail with the guard removed (no new test file, validation.json unchanged)"
+    ],
+    "observed": {
+      "tsc --noEmit": "exit 0",
+      "vitest (ps1b-ui + b4 + b5 + b7)": "4 files, 178 tests passed",
+      "scripts/v6-apps-control-desktop-selftest.mjs": "PASS 93/93",
+      "scripts/smoke-desktop.mjs": "PASS desktop marker HEALTHY+VERIFIED",
+      "scripts/validate-tr-comments.mjs": "PASS",
+      "scripts/secret-sanity.mjs": "PASS"
+    },
+    "notRun": [
+      "real Electron/Chromium focus behaviour (tests use the fake DOM only)",
+      "scripts/run-validation.mjs (not requested)"
+    ],
+    "claims": "Not clean. No CLEAN or review verdict is claimed."
   }
 }

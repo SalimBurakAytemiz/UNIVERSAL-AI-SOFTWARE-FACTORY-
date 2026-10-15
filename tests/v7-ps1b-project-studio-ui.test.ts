@@ -1055,7 +1055,8 @@ describe("PS-1B c3: keyboard focus stays on a real element after every primary a
     const app = code(read(rend, "app.js"));
     expect(app).toContain("captureFocus(doc,main)");
     expect(app).toContain("restoreFocus(doc,main,saved)");
-    expect(app).toContain("if(hadFocus&&focusLost(doc))settleFocus(doc,main,{})");
+    expect(app).toContain("if(hadFocus&&focusLost(doc))settleFocus(doc,main,{keys:PANEL_FOCUS_FALLBACK[saved]??[]})");
+    expect(app).toContain('"id:studio-devrun-status":["id:studio-run-state"]'); // c4: PS1B-C3-002
     expect(app).toContain("settleFocus:opts=>settleFocus(doc,main,opts)");
     expect(app).toContain("invoker=active&&active!==doc.body?active:null");
     expect(app).toContain("invoker.focus()");
@@ -1093,5 +1094,53 @@ describe("PS-1B c3: a dev-run action message does not outlive the state it descr
     const r3 = mount(again.doc, await projectsView.render(again.ctx));
     expect(text(byId(r3, "studio-run-state")!)).toContain("Başlıyor");
     expect(text(byId(r3, "studio-devrun-status")!)).not.toContain("Durdurma isteği kabul edildi");
+  });
+});
+
+// ---------- PS-1B c4: yoklama kaynaklı yeniden çizim odaklı Stop'u devre dışı bırakınca odak gövdeye düşmez (PS1B-C3-001) ----------
+describe("PS-1B c4: a poll-driven repaint that disables the focused dev-run control keeps focus on a real element", () => {
+  const focusId = (doc: D) => doc.activeElement === doc.body ? "<body>" : (doc.activeElement.id || doc.activeElement.tagName);
+  async function openRun(initial: string) {
+    vi.useFakeTimers();
+    let status = initial;
+    const getFn = (p: string) => p === `/v1/projects/${PID}/devrun` ? runBody({status, pid: status === "RUNNING" ? 9 : null, exitCode: status === "CRASHED" ? 1 : null, preview: status === "RUNNING" ? {url: "http://127.0.0.1:5173/", state: "AVAILABLE"} : {url: null, state: "UNAVAILABLE"}}) : projectsGet()(p);
+    const c = await mkCtx({get: getFn, post: () => ({status: 202, body: {}}), confirm: () => true});
+    const fm = await load(rend, "focus.js");
+    c.ctx.settleFocus = (opts: any) => fm.settleFocus(c.doc, c.doc.body, opts);
+    st.openProject(PID, "run");
+    const root = mount(c.doc, await projectsView.render(c.ctx));
+    return {...c, root, setStatus: (v: string) => { status = v; }};
+  }
+  it("RUNNING, focus on Stop, stop POST leaves RUNNING, then the poll reports STOPPED -> focus lands on the status/state node, not <body>", async () => {
+    const {root, doc, setStatus} = await openRun("RUNNING");
+    const stop = byId(root, "studio-run-stop")!;
+    stop.focus();
+    stop.fire("click"); await vi.advanceTimersByTimeAsync(10);
+    expect(stop.disabled).toBe(false); // POST sonrası hâlâ RUNNING
+    stop.focus(); // kullanıcı odağı Stop üzerine geri alır; yoklama durumu değiştirir
+    expect(doc.activeElement).toBe(stop);
+    setStatus("STOPPED");
+    await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS + 10);
+    expect(stop.disabled).toBe(true);
+    expect(["studio-devrun-status", "studio-run-state"]).toContain(focusId(doc));
+  });
+  it("RUNNING -> CRASHED by the poll alone (no user action) while Stop is focused -> focus lands on the status/state node", async () => {
+    const {root, doc, setStatus} = await openRun("RUNNING");
+    const stop = byId(root, "studio-run-stop")!;
+    stop.focus();
+    setStatus("CRASHED");
+    await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS + 10);
+    expect(stop.disabled).toBe(true);
+    expect(["studio-devrun-status", "studio-run-state"]).toContain(focusId(doc));
+  });
+  it("a poll repaint does not steal focus when focus is outside the run panel or still on an enabled control", async () => {
+    const {root, doc, setStatus} = await openRun("RUNNING");
+    const outside = doc.createElement("button"); outside.setAttribute("id", "outside-btn"); doc.body.append(outside); outside.focus();
+    setStatus("STOPPED");
+    await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS + 10);
+    expect(doc.activeElement).toBe(outside);
+    const log = byId(root, "studio-log")!; log.focus();
+    await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS * 2);
+    expect(doc.activeElement).toBe(log);
   });
 });

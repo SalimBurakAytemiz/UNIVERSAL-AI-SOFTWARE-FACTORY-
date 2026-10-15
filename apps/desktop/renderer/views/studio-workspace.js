@@ -3,6 +3,7 @@ import {h,panel,stateNote,emptyNote,statusPill,statusLabel,badge} from "../compo
 import {formatTime,mapMissions,MISSING} from "../model.js";
 import {formatDateTime,describePostResult} from "../work-core.js";
 import {drafts,selection,field,statusBlock,setStatus,focusResult,settle} from "../forms.js";
+import {focusLost} from "../focus.js";
 import {STUDIO_TABS,GIT_LOG_LIMIT,buildDevRunRequest,buildExportRequest,previewOpenable,devRunActions,diffLineKind,formatBytes,joinRel,parentRel,validRelPath,latestRunFor,securitySummary} from "../project-core.js";
 import {studio,setTab} from "../studio-state.js";
 import {importPanel} from "./studio-wizard.js";
@@ -86,6 +87,12 @@ function paintRun(ctx,nodes,run){
   pre.textContent=run.logTail||t("studio.run.logEmpty");
   if(stick&&pre.scrollHeight!==undefined)pre.scrollTop=pre.scrollHeight;
 }
+/** Yoklama kaynaklı yeniden çizim odaklı denetimi devre dışı bırakıp odağı gövdeye düşürebilir (PS1B-C3-001): çizimden önce odağın çalıştır panelinde olup olmadığı kaydedilir; sonra odak kaybolduysa veya devre dışı öğedeyse durum satırına/dev-run durumuna taşınır. */
+function paintRunPolled(ctx,nodes,run){
+  const doc=ctx.doc,a0=doc.activeElement,had=Boolean(nodes.root)&&Boolean(a0)&&a0!==nodes.root&&nodes.root.contains(a0);
+  paintRun(ctx,nodes,run);
+  if(had){const a=doc.activeElement;if(focusLost(doc)||a.disabled===true)settle(ctx,[`id:${DEV_FORM}-status`,"id:studio-run-state"])}
+}
 function startRunPolling(ctx,project,nodes){
   stopRunPolling();
   if(!nodes.current||!LIVE_STATES.includes(nodes.current.status))return;
@@ -93,7 +100,7 @@ function startRunPolling(ctx,project,nodes){
     if(nodes.root.isConnected===false){stopRunPolling();return}
     const r=await ctx.api.devrun(project.projectId,{force:true});
     if(nodes.root.isConnected===false){stopRunPolling();return}
-    if(r.state==="VERIFIED"){paintRun(ctx,nodes,r.run);if(!LIVE_STATES.includes(r.run.status))stopRunPolling()}
+    if(r.state==="VERIFIED"){paintRunPolled(ctx,nodes,r.run);if(!LIVE_STATES.includes(r.run.status))stopRunPolling()}
   },RUN_POLL_MS);
 }
 /** Durum bloğunu yeniden kurar; odak eski bloktaysa yeni bloğa (içerik varsa) veya durum satırına taşınır, gövdeye düşmez. */

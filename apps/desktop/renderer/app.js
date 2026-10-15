@@ -79,6 +79,9 @@ function renderAttention(container,att){
   container.replaceChildren(...(attNodes.length?attNodes:[doc.createTextNode(ctx.t("attention.none"))]));
 }
 
+/** Yeniden kurulumda kaydedilen anahtar artık yoksa görünüm başlığından önce aynı paneldeki kararlı yedek (PS1B-C3-002). */
+const PANEL_FOCUS_FALLBACK={"id:studio-devrun-status":["id:studio-run-state"]};
+
 async function renderRoute({focus=false,force=false}={}){
   const token=++renderToken,epoch=store.epoch,route=routeById(ctx.currentRouteId()),view=VIEWS[route.view];
   const sameRoute=main.dataset.route===route.id;
@@ -95,7 +98,7 @@ async function renderRoute({focus=false,force=false}={}){
   const saved=focus?null:captureFocus(doc,main),hadFocus=!focus&&main.contains(doc.activeElement)&&doc.activeElement!==main;
   main.replaceChildren(node);main.removeAttribute("aria-busy");shell.renderNav();restoreFocus(doc,main,saved);
   // Odak ana görünümdeyken yeniden kurulum onu gövdeye düşürdüyse (öğe kalktı veya devre dışı kaldı) kararlı yedeğe (ilk liste öğesi, sonra görünüm başlığı) yerleştirilir.
-  if(hadFocus&&focusLost(doc))settleFocus(doc,main,{});
+  if(hadFocus&&focusLost(doc))settleFocus(doc,main,{keys:PANEL_FOCUS_FALLBACK[saved]??[]});
   if(focus){const title=node.querySelector?.("#view-title");if(title)title.focus();shell.announce(ctx.t("route.announce",{title:ctx.t(`area.${route.id}.title`)}))}
 }
 
