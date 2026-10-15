@@ -364,13 +364,18 @@ describe("PS-1A files and git (PS-007)", () => {
     expect(zip.length).toBe(meta.size);
     const entries = listZipEntries(zip, undefined, {scanOnly: true});
     const names = entries.filter(e => !e.isDir).map(e => e.name).sort();
-    expect(names).toEqual(["README.md", "reports/run-report.json", "reports/security-report.json", "reports/test-report.json", "source/.gitignore", "source/README.md", "source/feature.txt", "source/package.json", "source/public/index.html", "source/server.js", "source/test.js"]);
+    // V7-PKG-M1A-MODE: arşiv kökünde kanıttan türetilmiş VERIFICATION_STATUS.json da vardır (bu test TEST sağlayıcısıyla testleri yürütür: testsExecuted=true, yine NOT_VERIFIED).
+    expect(names).toEqual(["README.md", "VERIFICATION_STATUS.json", "reports/run-report.json", "reports/security-report.json", "reports/test-report.json", "source/.gitignore", "source/README.md", "source/feature.txt", "source/package.json", "source/public/index.html", "source/server.js", "source/test.js"]);
     expect(entries.some(e => e.segments.includes(".git"))).toBe(false);
     const readme = readZipEntry(zip, entries.find(e => e.name === "README.md")!).toString("utf8");
     expect(readme).toContain(done.headSha!);
     expect(readme).toContain("| Independent review | CLEAN by FAKE_REVIEWER |");
     expect(readme).toContain("| Tests | PASSED");
     expect(readme).toContain("`node test.js`");
+    const vs = JSON.parse(readZipEntry(zip, entries.find(e => e.name === "VERIFICATION_STATUS.json")!).toString("utf8"));
+    expect(vs).toMatchObject({runId: run.runId, headSha: done.headSha, testsExecuted: true, notExecutedReason: null, reviewVerdict: "CLEAN", label: "NOT_VERIFIED"});
+    expect(vs.functionalAcceptance).not.toBe("VERIFIED");
+    expect(meta.verification).toMatchObject({label: "NOT_VERIFIED", testsExecuted: true});
     const tr = JSON.parse(readZipEntry(zip, entries.find(e => e.name === "reports/test-report.json")!).toString("utf8"));
     expect(tr).toMatchObject({runId: run.runId, commit: done.headSha, status: "PASSED"});
     expect(JSON.parse(readZipEntry(zip, entries.find(e => e.name === "reports/security-report.json")!).toString("utf8")).summary.status).toBe("PASSED");

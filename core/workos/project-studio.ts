@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import {safeChildEnv} from "../../automation/lib/env-policy.mjs";
 import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
 import type {Project, ProjectExport, ProjectTemplate, RunEvidence, WorkRun} from "./types.js";
+import {verificationStatus} from "./outcomes.js";
 import {findSecretKinds, redactSecrets} from "./secret-scan.js";
 import {renderTemplate} from "./project-templates.js";
 import {DEFAULT_ZIP_LIMITS, ZipError, listZipEntries, readZipEntry} from "./zip.js";
@@ -351,7 +352,9 @@ export class ProjectStudio {
       const reportEv = ev(e => e.kind === "REPORT" && e.commitSha === sha);
       const reportDir = path.join(tmp, "reports-src"); fs.mkdirSync(reportDir);
       const added: Array<{prefix: string; file: string}> = [];
-      const contents = {readme: true, testReport: false, securityReport: false, runReport: false};
+      const contents = {readme: true, testReport: false, securityReport: false, runReport: false, verificationStatus: true};
+      // M1a (D-SBX1-PATH-2026-10-15): VERIFICATION_STATUS.json arşiv köküne yazılır; yalnız kanıttan türetilir (run yoksa NO_RUN), etiket her zaman NOT_VERIFIED.
+      const vs = verificationStatus(run, sha);
       if (run && tests.length) {
         const f = path.join(reportDir, "test-report.json");
         const last = tests[tests.length - 1];
@@ -375,7 +378,8 @@ export class ProjectStudio {
         "| Field | Value |", "| --- | --- |",
         `| Project | ${project.projectId} |`, `| Commit | ${sha} |`, `| Export | ${exportId} |`, `| Generated at | ${new Date().toISOString()} |`,
         `| Produced by run | ${run ? run.runId : "none (commit not produced by a UASCO run)"} |`,
-        `| Tests | ${tests.length ? `${tests[tests.length - 1].exitCode === 0 ? "PASSED" : "FAILED"} (${tests.map(t => `${t.kind} exit ${t.exitCode}`).join(", ")})` : "NOT_AVAILABLE"} |`,
+        `| Tests | ${tests.length ? `${tests[tests.length - 1].exitCode === 0 ? "PASSED" : "FAILED"} (${tests.map(t => `${t.kind} exit ${t.exitCode}`).join(", ")})` : `NOT_EXECUTED (${vs.notExecutedReason})`} |`,
+        `| Verification | ${vs.label} (functionalAcceptance ${vs.functionalAcceptance}; see VERIFICATION_STATUS.json) |`,
         `| Security | ${sec ? `${sec.status}${sec.gaps.length ? ` (gaps: ${sec.gaps.join(", ")})` : ""}` : "NOT_AVAILABLE"} |`,
         `| Independent review | ${review ? `${review.verdict} by ${review.reviewerIdentity ?? "unknown"}` : "NOT_AVAILABLE"} |`,
         "| Export secret scan | CLEAN (built-in scanner over every archived file) |", "",
@@ -386,8 +390,10 @@ export class ProjectStudio {
       ].join("\n");
       const readmeFile = path.join(reportDir, "README.md");
       fs.writeFileSync(readmeFile, readme);
+      const vsFile = path.join(reportDir, "VERIFICATION_STATUS.json");
+      fs.writeFileSync(vsFile, JSON.stringify(vs, null, 2) + "\n");
       const zipTmp = path.join(tmp, "archive.zip");
-      const args = ["-c", `core.attributesFile=${this.emptyAttributesFile()}`, "archive", "--format=zip", "-o", zipTmp, "--prefix=", `--add-file=${readmeFile}`];
+      const args = ["-c", `core.attributesFile=${this.emptyAttributesFile()}`, "archive", "--format=zip", "-o", zipTmp, "--prefix=", `--add-file=${readmeFile}`, `--add-file=${vsFile}`];
       let lastPrefix = "";
       for (const a of added) { if (a.prefix !== lastPrefix) { args.push(`--prefix=${a.prefix}`); lastPrefix = a.prefix; } args.push(`--add-file=${a.file}`); }
       args.push("--prefix=source/", sha);
@@ -409,7 +415,8 @@ export class ProjectStudio {
       const final = path.join(outDir, `${exportId}.zip`);
       fs.renameSync(zipTmp, final);
       return {exportId, projectId: project.projectId, commit: sha, sha256: sha256(buf), size: buf.length, file: `exports/${exportId}.zip`, createdAt: new Date().toISOString(), createdBy: actor,
-        runId: run?.runId ?? null, contents, secretScan: {scanner: "builtin", status: "CLEAN", entriesScanned: scanned}};
+        runId: run?.runId ?? null, contents, secretScan: {scanner: "builtin", status: "CLEAN", entriesScanned: scanned},
+        verification: {label: vs.label, testsExecuted: vs.testsExecuted, notExecutedReason: vs.notExecutedReason, functionalAcceptance: vs.functionalAcceptance, completionMode: vs.completionMode}};
     } finally { try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* geçici dizin */ } }
   }
   exportFileState(ex: ProjectExport): "PRESENT" | "MISSING" | "MODIFIED" {

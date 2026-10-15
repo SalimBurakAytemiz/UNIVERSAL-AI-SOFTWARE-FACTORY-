@@ -122,6 +122,28 @@ function functionalAcceptanceOf(head: string | null, evidence: readonly RunEvide
   return [ts.testSurface.functionalAcceptance, ts.testSurface.reason];
 }
 
+// //TR: M1a export/teslim etiketi (VERIFICATION_STATUS.json): yalnız kanıttan türetilir; functionalAcceptance bu dilimde asla VERIFIED olmadığından etiket her zaman NOT_VERIFIED'dır.
+// Test yürütmesi kanıtı (VERIFY_TESTS/REGRESSION_TESTS) yoksa testsExecuted=false; neden SANDBOX_UNAVAILABLE (NOT_EXECUTED kanıtı), TESTS_NOT_REACHED (run test adımına gelmedi) veya NO_RUN (commit bir run'a ait değil).
+export const M1A_NOT_VERIFIED_LABEL = "NOT_VERIFIED (M1a: tests not executed)";
+export interface VerificationSecuritySummary { status: string; blockReason: string | null; gaps: string[]; secrets: {builtin: string; gitleaks: string}; sca: string }
+export interface VerificationStatus {
+  schemaVersion: 1; runId: string | null; missionId: string | null; headSha: string; functionalAcceptance: OutcomeState; completionMode: CompletionMode;
+  testsExecuted: boolean; notExecutedReason: "SANDBOX_UNAVAILABLE" | "TESTS_NOT_REACHED" | "NO_RUN" | null; reviewVerdict: "CLEAN" | "BLOCKED" | null;
+  securitySummary: VerificationSecuritySummary | null; label: string;
+}
+export function verificationStatus(run: WorkRun | null, headSha: string): VerificationStatus {
+  if (!run || run.headSha !== headSha) return {schemaVersion: 1, runId: null, missionId: null, headSha, functionalAcceptance: "NOT_EXECUTED", completionMode: "NOT_COMPLETED", testsExecuted: false, notExecutedReason: "NO_RUN", reviewVerdict: null, securitySummary: null, label: "NOT_VERIFIED"};
+  const o = deriveOutcomes(run), ev = run.evidence;
+  const testsExecuted = ev.some(e => (e.kind === "VERIFY_TESTS" || e.kind === "REGRESSION_TESTS") && e.commitSha === headSha);
+  const notExecutedReason = testsExecuted ? null : notExecutedEvidence(headSha, ev).length ? "SANDBOX_UNAVAILABLE" as const : "TESTS_NOT_REACHED" as const;
+  const review = latest(ev, e => e.kind === "REVIEW" && e.commitSha === headSha && e.verdict !== undefined);
+  const sec = latest(ev, e => e.kind === "SECURITY_REPORT" && e.commitSha === headSha)?.security;
+  return {schemaVersion: 1, runId: run.runId, missionId: run.missionId, headSha, functionalAcceptance: o.functionalAcceptance, completionMode: o.completionMode, testsExecuted, notExecutedReason,
+    reviewVerdict: review?.verdict ?? null,
+    securitySummary: sec ? {status: sec.status, blockReason: sec.blockReason, gaps: [...sec.gaps], secrets: {builtin: sec.secrets.builtin.status, gitleaks: sec.secrets.gitleaks.status}, sca: sec.sca.status} : null,
+    label: notExecutedReason === "SANDBOX_UNAVAILABLE" ? M1A_NOT_VERIFIED_LABEL : "NOT_VERIFIED"};
+}
+
 // Saf okuma modeli: yalnız run kaydı ve kanıt listesinden türetilir; yan etkisi yoktur, journal'a yazmaz.
 export function deriveOutcomes(run: WorkRun, evidence: readonly RunEvidence[] = run.evidence): RunOutcomes {
   const head = run.headSha && SHA.test(run.headSha) ? run.headSha : null;
