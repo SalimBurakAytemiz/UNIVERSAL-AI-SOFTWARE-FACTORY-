@@ -1,0 +1,344 @@
+{
+  "//TR": "Bu checkpoint V7 PS-1B masaüstü Project Studio paketinin (sihirbaz, içe aktarma, dev-run + önizleme, dosyalar/diff, dışa aktarma, yürütücü kurulumu) yalnız gözlenen sonuçlarını kaydeder; temiz değildir, bağımsız inceleme beklemektedir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-PS1B",
+  "date": "2026-10-15",
+  "parent": "db0fb8d2cc38f9a6b3f127610b982cb5d0e0e5e4",
+  "branch": "v7/product-ps1b",
+  "implementer": "CLAUDE_BUILDER",
+  "status": "IMPLEMENTED, NOT CLEAN; independent review pending",
+  "startedAt": "2026-10-14T23:54:53Z",
+  "endedAt": "2026-10-15T00:26:57Z",
+  "authorizationRecords": [
+    "audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json",
+    "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
+  ],
+  "backendDependency": "PS-1A backend routes are not in this lineage; every new read returns HTTP 404 here and the UI shows honest UNAVAILABLE (observed in the real Electron launch). No data is faked.",
+  "decisions": {
+    "preview": "shell.openExternal to the default browser, chosen over an in-app isolated BrowserWindow: generated app code never enters the Electron process/session or IPC surface. The URL is read by the main process from backend devrun state (RUNNING + AVAILABLE + exact http://127.0.0.1:<port>/, port 1024-65535, not the Control API port, matching devrun.port), never taken from the renderer.",
+    "importPaths": "Paths come only from a main-process native open dialog; main remembers up to 8 issued paths and rejects an import POST whose {kind,path} was not issued (consumed on 2xx).",
+    "exportFolder": "Main fetches the export record itself, realpath-resolves the path and only shows it when strictly inside <dataDir>/exports (packaged: userData/workos/exports; dev: UASCO_DATA_DIR or .ai/workos/exports)."
+  },
+  "filesChanged": [
+    "apps/desktop/main.mjs (protected, authorized): GET/POST allow-list additions, PS1B-NATIVE block, 3 IPC handlers, import-path enforcement in POST, trustedSender ignores URL fragment",
+    "apps/desktop/preload.mjs (protected, authorized): pickImportPath, openPreview, showExport",
+    "apps/desktop/renderer/app.js (protected, authorized): ctx.native wrappers only",
+    "apps/desktop/renderer/{project-core.js,studio-state.js,api.js,work-core.js,styles.css,locales/tr.js,locales/en.js}",
+    "apps/desktop/renderer/views/{projects.js,settings.js,studio-wizard.js,studio-workspace.js,executors-panel.js}",
+    "config/validation.json (protected, authorized): test path appended at the end of the tests step",
+    "config/trust-root-manifest.json (regenerated via generate-trust-root only)",
+    "tests/v7-ps1b-project-studio-ui.test.ts (new), tests/v7-b5-work-screens.test.ts (later-package filename regex widened to allow ps<N> names)"
+  ],
+  "observed": {
+    "tsc --noEmit": "exit 0",
+    "vitest (new + b4 + b5 + b7 + pkg-c + pkg-e)": "6 files, 203 tests passed",
+    "scripts/v6-apps-control-desktop-selftest.mjs": "PASS 93/93",
+    "scripts/smoke-desktop.mjs (dev mode, provisioned Electron 44.4.5)": "PASS desktop marker HEALTHY+VERIFIED",
+    "real Electron renderer probe (CDP, scratch script, not committed)": "bridge keys apiGet,apiPost,openPreview,pickImportPath,resume,retryBlocked,showExport,stop; apiGet(/health) VERIFIED; traversal GET rejected INVALID_API_PATH; import POST with non-dialog path rejected IMPORT_PATH_NOT_MAIN_RESOLVED; openPreview('../x') INVALID_PROJECT_ID; showExport bad id INVALID_EXPORT_REF; openPreview(valid id, no backend route) {opened:false,reason:DEVRUN_UNAVAILABLE}; #/projects renders wizard+import; #/settings executors panel shows Kullanilamiyor (UNAVAILABLE) on 404",
+    "validate-tr-comments": "PASS",
+    "secret-sanity": "PASS",
+    "generate-trust-root / verify-trust-root": "files=364, PASS (re-run after commit recorded in final report)"
+  },
+  "defectFoundAndFixed": "Pre-existing B4 defect: trustedSender required senderFrame.url === rendererUrl exactly, but hash routes append #/route, so every IPC call after leaving the initial route failed with UNTRUSTED_IPC_SENDER (seen in the real launch). Fixed by ignoring only the URL fragment; unit-tested.",
+  "notRun": [
+    "scripts/run-validation.mjs (not requested)",
+    "electron-builder packaged build (not requested)",
+    "interactive native file dialog (cannot be driven headless)",
+    "default-browser preview opening (needs a live backend dev-run)"
+  ],
+  "claims": "Not clean. No CLEAN or review verdict is claimed.",
+  "remediationC2": {
+    "//TR": "PS1B-C1-001 düzeltmesi: renderer ve main aynı kanonik yol kodlayıcısını kullanır; yalnız gözlenen sonuçlar kaydedilir, temiz değildir.",
+    "finding": "PS1B-C1-001 (medium, blocker)",
+    "startedAt": "2026-10-15T00:35:13Z",
+    "parent": "d4495809c40906c9c4ae2a6226bd921715661437",
+    "change": [
+      "project-core.js: encodeRelPath = encodeURIComponent + %XX for ! ' ( ) *; filesPath/filePath use it; validRelPath now also rejects lone surrogates (encodeURIComponent would throw)",
+      "main.mjs: psEncodeRel is the identical encoder, used for the canonical check; encoded value cap 600 -> 2700 (300 decoded chars x 9); overall GET cap 900 -> 2900",
+      "tests/v7-ps1b-relpath-canonical.test.ts (new, appended at the end of the tests step in config/validation.json); tests/v7-ps1b-project-studio-ui.test.ts end-of-list assertion now expects the last two entries"
+    ],
+    "observed": {
+      "tsc --noEmit": "exit 0",
+      "vitest (relpath-canonical + ps1b-ui + b4 + b5 + b7 + pkg-c + pkg-e)": "7 files, 208 tests passed",
+      "scripts/v6-apps-control-desktop-selftest.mjs": "PASS 93/93",
+      "scripts/smoke-desktop.mjs": "PASS desktop marker HEALTHY+VERIFIED",
+      "scripts/validate-tr-comments.mjs": "PASS",
+      "scripts/secret-sanity.mjs": "PASS"
+    },
+    "notRun": [
+      "scripts/run-validation.mjs (not requested)",
+      "server.ts side of the file routes (out of scope; not touched, so its own path-length handling for up to 2700 encoded chars is not verified here)"
+    ],
+    "claims": "Not clean. No CLEAN or review verdict is claimed."
+  },
+  "remediationCycle3": {
+    "//TR": "PS1B-C2-001/002 düzeltmesi: Project Studio birincil denetimlerinde odak belirlenimci olarak geri verilir ve bayat dev-run eylem iletisi silinir; yalnız gözlenen sonuçlar kaydedilir, temiz değildir.",
+    "findings": [
+      "PS1B-C2-001 (medium, blocker)",
+      "PS1B-C2-002 (low)"
+    ],
+    "startedAt": "2026-10-15T00:51:07Z",
+    "endedAt": "2026-10-15T01:03:16Z",
+    "parent": "b84c74bf25d574e9fc2ed8d2f27f0c5b82c41e04",
+    "change": [
+      "focus.js: restoreFocus skips disabled targets; new focusLost and settleFocus (keep live focus, else ordered focus keys, else first data-focus-first list item, else #view-title; never body)",
+      "app.js: ctx.settleFocus; renderRoute safety net (focus lost after rebuild -> settleFocus); confirmAction returns focus to its invoking control on close",
+      "forms.js: settle and focusResult helpers; views (studio-wizard, studio-workspace, executors-panel, projects, work) use them after wizard submit, import pick/kind/submit, dev-run start/stop/restart/preview/cancel, tab switch, folder/file/up, diff show, export create/show, open/back, executor enable; focus targets: studio-run-state, studio-files-path now tabindex -1; first file entry marked data-focus-first",
+      "studio-workspace.js: dev-run result messages carry forState and are cleared by paintRun when the polled dev-run state differs, and when the tab is rebuilt under a different state (PS1B-C2-002)",
+      "tests/v7-ps1b-project-studio-ui.test.ts: fake DOM now has querySelectorAll and loses focus on disabled elements; new live-redraw tests assert document.activeElement is never body after each primary action, plus stale-message test (no new test file, validation.json unchanged)"
+    ],
+    "observed": {
+      "tsc --noEmit": "exit 0",
+      "vitest (ps1b-ui + b4 + b5 + b7 + pkg-c + pkg-e)": "6 files, 214 tests passed",
+      "scripts/v6-apps-control-desktop-selftest.mjs": "PASS 93/93",
+      "scripts/smoke-desktop.mjs": "PASS desktop marker HEALTHY+VERIFIED",
+      "scripts/validate-tr-comments.mjs": "PASS",
+      "scripts/secret-sanity.mjs": "PASS"
+    },
+    "notRun": [
+      "real Electron/Chromium focus behaviour (tests use the fake DOM only)",
+      "scripts/run-validation.mjs (not requested)"
+    ],
+    "claims": "Not clean. No CLEAN or review verdict is claimed."
+  },
+  "remediationCycle4": {
+    "//TR": "PS1B-C3-001/002 düzeltmesi: yoklama kaynaklı dev-run yeniden çizimi odaklı Stop düğmesini devre dışı bırakınca odak durum satırına/dev-run durumuna taşınır; yalnız gözlenen sonuçlar kaydedilir, temiz değildir.",
+    "findings": [
+      "PS1B-C3-001 (medium, blocker)",
+      "PS1B-C3-002 (low, optional)"
+    ],
+    "startedAt": "2026-10-15T01:15:36Z",
+    "endedAt": "2026-10-15T01:20:15Z",
+    "parent": "f7e5c21f55e4948f62fe6cafe76c2f1704f75ce4",
+    "change": [
+      "views/studio-workspace.js: new paintRunPolled used by the startRunPolling interval handler; it records whether focus was inside the run panel before paintRun and, if focus was lost (focusLost) or sits on a disabled control afterwards, calls settle(ctx,[studio-devrun-status, studio-run-state]) (focus.js settleFocus). Action-driven repaints (runAction busy paint) are unchanged so the existing result-focus behaviour is kept. The dev-run poll is the only setInterval-driven repaint in the Project Studio views",
+      "app.js: renderRoute lost-focus safety net now passes a panel-level fallback (PANEL_FOCUS_FALLBACK: studio-devrun-status -> studio-run-state) before #view-title (PS1B-C3-002)",
+      "tests/v7-ps1b-project-studio-ui.test.ts: 3 new tests (RUNNING->STOPPED after a stop POST that left RUNNING, RUNNING->CRASHED with no user action, no focus stealing when focus is outside the run panel or on the enabled log); app.js wiring assertion updated; the two focus tests were observed to fail with the guard removed (no new test file, validation.json unchanged)"
+    ],
+    "observed": {
+      "tsc --noEmit": "exit 0",
+      "vitest (ps1b-ui + b4 + b5 + b7)": "4 files, 178 tests passed",
+      "scripts/v6-apps-control-desktop-selftest.mjs": "PASS 93/93",
+      "scripts/smoke-desktop.mjs": "PASS desktop marker HEALTHY+VERIFIED",
+      "scripts/validate-tr-comments.mjs": "PASS",
+      "scripts/secret-sanity.mjs": "PASS"
+    },
+    "notRun": [
+      "real Electron/Chromium focus behaviour (tests use the fake DOM only)",
+      "scripts/run-validation.mjs (not requested)"
+    ],
+    "claims": "Not clean. No CLEAN or review verdict is claimed."
+  },
+  "remediationCycle5": {
+    "//TR": "PS1B-C4-001 düzeltmesi: focus.js odak taşımayı activeElement ile doğrular ve odak alamayan adayda (devre dışı, display:none boş .form-status, tabindex'siz kap) sıradakine geçer; yoklama boş durum bloğunda önce durum satırını dener. Gerçek Electron kanıtı aşağıdadır; temiz değildir.",
+    "findings": [
+      "PS1B-C4-001 (medium, blocker)"
+    ],
+    "startedAt": "2026-10-15T01:37:28Z",
+    "endedAt": "2026-10-15T01:54:54Z",
+    "parent": "c060ed3316d1c41aa918a8e135bf2cd55f50e2f5",
+    "change": [
+      "renderer/focus.js: takeFocus now returns the node only if doc.activeElement === node after node.focus() (else null). settleFocus's key loop, data-focus-first loop and #view-title fallback each continue to the next candidate when a candidate cannot take focus (never stop at a failed candidate); returns null only if nothing took focus. restoreFocus uses the same verified takeFocus and returns true only when focus actually moved",
+      "renderer/views/studio-workspace.js: paintRunPolled settles with [studio-run-state, studio-devrun-status] when the dev-run status is empty (stale message cleared by paintRun; '.form-status:empty{display:none}'), and with [status, state] only when a message is present (same rule as repaintStatus)",
+      "call-site audit (no further code change needed once takeFocus is verified): repaintStatus already orders state first when empty; runAction/openPreview keys list the control, then status (always non-empty at that point), then studio-run-state; wizard/import/export/executors use focusResult (status set before rerender, then settle with fall-through keys); files/diff/tabs/back keys fall through to data-focus-first or #view-title (studio-panel and panel h2 titles have no tabindex and are now skipped instead of 'succeeding'); confirm dialog returns focus to a connected, enabled invoker and the caller then settles; renderRoute safety net (restoreFocus -> focusLost -> settleFocus with PANEL_FOCUS_FALLBACK) now falls through when the restored status is empty. app.js unchanged",
+      "tests/v7-ps1b-project-studio-ui.test.ts: fake DOM models Chromium — focus() is a no-op for disabled nodes, [hidden] subtrees, empty .form-status (display:none) and nodes that are neither natively focusable nor carry tabindex; opt-in lazyBlur keeps a disabled focused node as activeElement until flushBlur() (Chromium blurs lazily). c4 assertions tightened to the exact landing element (studio-run-state). 9 new c5 tests: fake-DOM model check, settleFocus key fall-through, focusFirst/title fall-through (and null when nothing focusable), restoreFocus verified result, S1, S2, S3, S5 and S4 control, all asserting the exact landing element after flushBlur",
+      "no change to main.mjs, preload.mjs, app.js, index.html, validation.json, trust-root manifest (regeneration changed only generatedAt; committed manifest restored), CHANGELOG or package.json"
+    ],
+    "testsAgainstC4": {
+      "c4 focus.js + c4 studio-workspace.js (full c4 renderer)": "9 failed / 64 passed of 73: both tightened c4 tests, the 3 focus.js unit tests, S1, S2, S3, S5 fail; S4 control and the fake-DOM model test pass (they do not depend on the fix)",
+      "c4 focus.js + c5 studio-workspace.js": "3 failed (the 3 focus.js unit tests); S1-S5 pass here because the paintRunPolled ordering fix alone avoids the empty status — each of the two fixes covers S1-S5 independently",
+      "c5 focus.js + c4 studio-workspace.js": "73 passed (fall-through alone covers S1-S5)",
+      "c5 (this commit)": "73 passed"
+    },
+    "realElectronProof": {
+      "runtime": "Electron 44.4.5 / Chrome 152.0.7977.130, provisioned only via scripts/provision-electron.mjs (status EXISTING, .ai/cache/electron/44.4.5-win32-x64)",
+      "harness": "copy of the cycle-4 reviewer harness (ps1b-c4, not edited in place) in the session scratchpad ps1b-c5/harness: emain/main.cjs (BrowserWindow contextIsolation+sandbox, port via HPORT), probe.js = reviewer probe-full.js plus S5b, opening the import/wizard <details> before using them (the reviewer probe clicked the import picker while its <details> was closed, which a keyboard user cannot do), and an END activeElement line; serve.mjs serves the renderer copy with mock.js (mocked window.uasco). site-c4 = git archive of c060ed3 renderer, site-c5 = working-tree renderer. Harness is outside the repository",
+      "method": "activeElement read ~1000 ms after the polled state change (after Chromium's lazy blur); bodySamples = number of 50 ms samples where the focused window had activeElement === body during the wait",
+      "results": [
+        {
+          "scenario": "S1 Stop -> 202 RUNNING -> poll STOPPED",
+          "focusBefore": "#studio-run-stop",
+          "c4ActiveElement": "BODY (bodySamples=1)",
+          "c5ActiveElement": "#studio-run-state (bodySamples=0)"
+        },
+        {
+          "scenario": "S2 RUNNING -> CRASHED by poll",
+          "focusBefore": "#studio-run-stop",
+          "c4ActiveElement": "BODY (bodySamples=2)",
+          "c5ActiveElement": "#studio-run-state (bodySamples=0)"
+        },
+        {
+          "scenario": "S3 RUNNING -> CRASHED by poll",
+          "focusBefore": "#studio-run-preview",
+          "c4ActiveElement": "BODY (bodySamples=1)",
+          "c5ActiveElement": "#studio-run-state (bodySamples=0)"
+        },
+        {
+          "scenario": "S4 control RUNNING -> CRASHED by poll",
+          "focusBefore": "#studio-log",
+          "c4ActiveElement": "#studio-log",
+          "c5ActiveElement": "#studio-log"
+        },
+        {
+          "scenario": "S5 RUNNING -> STOPPED by poll",
+          "focusBefore": "#studio-run-restart",
+          "c4ActiveElement": "BODY (bodySamples=2)",
+          "c5ActiveElement": "#studio-run-state (bodySamples=0)"
+        },
+        {
+          "scenario": "S5b status focused after start; poll STARTING->RUNNING clears the message, then CRASHED",
+          "focusBefore": "#studio-devrun-status",
+          "c4ActiveElement": "#studio-run-state",
+          "c5ActiveElement": "#studio-run-state (bodySamples=0)"
+        },
+        {
+          "scenario": "start confirm dialog opened / start confirmed",
+          "focusBefore": "#studio-run-start",
+          "c4ActiveElement": "#confirmCancel / #studio-devrun-status",
+          "c5ActiveElement": "#confirmCancel / #studio-devrun-status"
+        },
+        {
+          "scenario": "confirm cancel",
+          "focusBefore": "#studio-run-start",
+          "c4ActiveElement": "#studio-run-start",
+          "c5ActiveElement": "#studio-run-start"
+        },
+        {
+          "scenario": "tab files",
+          "focusBefore": "#studio-tab-files",
+          "c4ActiveElement": "#studio-tab-files",
+          "c5ActiveElement": "#studio-tab-files"
+        },
+        {
+          "scenario": "tab changes",
+          "focusBefore": "#studio-tab-changes",
+          "c4ActiveElement": "#studio-tab-changes",
+          "c5ActiveElement": "#studio-tab-changes"
+        },
+        {
+          "scenario": "tab missions",
+          "focusBefore": "#studio-tab-missions",
+          "c4ActiveElement": "#studio-tab-missions",
+          "c5ActiveElement": "#studio-tab-missions"
+        },
+        {
+          "scenario": "tab delivery",
+          "focusBefore": "#studio-tab-delivery",
+          "c4ActiveElement": "#studio-tab-delivery",
+          "c5ActiveElement": "#studio-tab-delivery"
+        },
+        {
+          "scenario": "tab overview",
+          "focusBefore": "#studio-tab-overview",
+          "c4ActiveElement": "#studio-tab-overview",
+          "c5ActiveElement": "#studio-tab-overview"
+        },
+        {
+          "scenario": "tab run",
+          "focusBefore": "#studio-tab-run",
+          "c4ActiveElement": "#studio-tab-run",
+          "c5ActiveElement": "#studio-tab-run"
+        },
+        {
+          "scenario": "files dir click",
+          "focusBefore": "#fe-src (x)!",
+          "c4ActiveElement": "#fe-src (x)!/deep",
+          "c5ActiveElement": "#fe-src (x)!/deep"
+        },
+        {
+          "scenario": "files up",
+          "focusBefore": "#studio-files-up",
+          "c4ActiveElement": "#fe-src (x)!",
+          "c5ActiveElement": "#fe-src (x)!"
+        },
+        {
+          "scenario": "files file click",
+          "focusBefore": "#fe-readme.md",
+          "c4ActiveElement": "#fe-readme.md",
+          "c5ActiveElement": "#fe-readme.md"
+        },
+        {
+          "scenario": "diff show",
+          "focusBefore": "#studio-diff-show",
+          "c4ActiveElement": "#studio-diff-show",
+          "c5ActiveElement": "#studio-diff-show"
+        },
+        {
+          "scenario": "export submit",
+          "focusBefore": "#studio-export-submit",
+          "c4ActiveElement": "#studio-export-status",
+          "c5ActiveElement": "#studio-export-status"
+        },
+        {
+          "scenario": "export show in folder",
+          "focusBefore": "#ex-show-exp_000001",
+          "c4ActiveElement": "#studio-export-status",
+          "c5ActiveElement": "#studio-export-status"
+        },
+        {
+          "scenario": "back to project list",
+          "focusBefore": "#studio-back",
+          "c4ActiveElement": "#open-prj_0123456789abcdef01234567",
+          "c5ActiveElement": "#open-prj_0123456789abcdef01234567"
+        },
+        {
+          "scenario": "wizard open (summary)",
+          "focusBefore": "#studio-wizard-t",
+          "c4ActiveElement": "#studio-wizard-t",
+          "c5ActiveElement": "#studio-wizard-t"
+        },
+        {
+          "scenario": "wizard submit (empty -> validation)",
+          "focusBefore": "#studio-wizard-submit",
+          "c4ActiveElement": "#studio-wizard-status",
+          "c5ActiveElement": "#studio-wizard-status"
+        },
+        {
+          "scenario": "wizard submit (name -> created)",
+          "focusBefore": "#studio-wizard-submit",
+          "c4ActiveElement": "#studio-wizard-status",
+          "c5ActiveElement": "#studio-wizard-status"
+        },
+        {
+          "scenario": "import open (summary)",
+          "focusBefore": "#studio-import-t",
+          "c4ActiveElement": "#studio-import-t",
+          "c5ActiveElement": "#studio-import-t"
+        },
+        {
+          "scenario": "import pick",
+          "focusBefore": "#studio-import-pick",
+          "c4ActiveElement": "#studio-import-pick",
+          "c5ActiveElement": "#studio-import-pick"
+        },
+        {
+          "scenario": "import submit",
+          "focusBefore": "#studio-import-submit",
+          "c4ActiveElement": "#studio-import-status",
+          "c5ActiveElement": "#studio-import-status"
+        },
+        {
+          "scenario": "executor enable (dialog / accepted)",
+          "focusBefore": "#exec-enable",
+          "c4ActiveElement": "#confirmCancel / #executors-status",
+          "c5ActiveElement": "#confirmCancel / #executors-status"
+        }
+      ],
+      "summary": "c5: no scenario ends on BODY and no BODY sample was taken in S1-S5/S5b. c4 baseline reproduces PS1B-C4-001 (S1, S2, S3, S5 end on BODY). Extra observation with the unmodified reviewer probe (first c5 run): the import picker inside the closed import <details> cannot take focus, so a programmatic click left focus on the previously focused, still live #studio-wizard-status (same as the reviewer c4 run); in an isolated probe starting from BODY the same click lands on #studio-import-t (summary) with c5 because settle falls through the unfocusable picker and disabled submit"
+    },
+    "observed": {
+      "tsc --noEmit": "exit 0",
+      "vitest (ps1b-ui + ps1b-relpath + b1 + b4 + b5 + b7)": "6 files, 204 tests passed",
+      "scripts/v6-apps-control-desktop-selftest.mjs": "PASS 93/93",
+      "scripts/smoke-desktop.mjs": "PASS desktop marker HEALTHY+VERIFIED",
+      "scripts/validate-tr-comments.mjs": "PASS",
+      "scripts/secret-sanity.mjs": "PASS",
+      "scripts/generate-trust-root.mjs + verify-trust-root.mjs": "generated files=364, only generatedAt changed -> committed manifest restored; TRUST_ROOT_VERIFY: PASS"
+    },
+    "notRun": [
+      "scripts/run-validation.mjs (not requested)",
+      "real backend in Electron (the proof uses the reviewer's mocked window.uasco over a local static server, not main.mjs/preload.mjs)"
+    ],
+    "claims": "Not clean. No CLEAN or review verdict is claimed."
+  }
+}

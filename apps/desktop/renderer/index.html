@@ -1,2 +1,72 @@
-<!-- //TR: Bu dosya Day-0 Control Tower'da gerçek Phase0/scheduler/run/event/redacted-log görünürlüğü ile authoritative Global Stop/Resume kontrolünü güvenli preload IPC üzerinden sunar. -->
-<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:"><title>Universal AI Software Company OS</title><link rel="stylesheet" href="./styles.css"></head><body><aside><h1>UASCO</h1><nav id="nav"></nav></aside><main><header><div><h2>Factory Health</h2><small>Bootstrap/Build Control Tower</small></div><button id="refresh">Yenile</button></header><section id="health" class="card">Control API bekleniyor...</section><section class="grid"><div class="card"><strong>Install</strong><p id="install">-</p></div><div class="card"><strong>Phase-0</strong><p id="phase0">-</p></div><div class="card"><strong>Scheduler</strong><p id="scheduler">-</p></div><div class="card"><strong>Agents</strong><p id="agents">-</p></div><div class="card"><strong>Capabilities</strong><p id="caps">-</p></div><div class="card"><strong>Tool Adapters</strong><p id="tools">-</p></div><div class="card"><strong>Retry/Quota</strong><p id="retry">-</p></div><div class="card critical"><strong>GLOBAL STOP</strong><p id="stopState">-</p><button id="stop">Durdur</button><button id="resume">Devam</button></div></section><section class="card"><strong>Founder Attention</strong><div id="attention">Bekleyen blocker yok.</div></section><section class="card"><strong>Recent Runs</strong><div id="runs">Henüz run yok.</div></section><section class="card"><strong>Selected Run</strong><p id="selectedRun">-</p><h3>Events</h3><pre id="events">Run seç.</pre><h3>Redacted Logs</h3><div id="logButtons"></div><pre id="logText">Log seç.</pre></section></main><script src="./app.js"></script></body></html>
+<!-- //TR: Bu dosya UASCO Desktop premium shell'inin iskeletidir: skip link, banner/nav/main/aside landmark'ları, her genişlikte görünür ACİL DURDUR, bağlam çubuğu ve onay penceresi; CSP script/style 'self' ile sınırlıdır, inline script veya style yoktur ve metinler data-i18n sözlüklerinden gelir. -->
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+<meta name="color-scheme" content="dark">
+<title>UASCO</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main" data-i18n="skip.main"></a>
+<div class="app">
+  <header class="topbar" id="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">U</span><span class="brand-text"><strong>UASCO</strong><small data-i18n="brand.sub"></small></span></div>
+    <div class="search" role="search">
+      <label class="sr-only" for="searchInput" data-i18n="search.label"></label>
+      <input id="searchInput" type="search" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="searchResults" aria-autocomplete="list" data-i18n-placeholder="search.placeholder">
+      <kbd class="search-hint" aria-hidden="true" data-i18n="shortcut.searchKey"></kbd>
+      <ul id="searchResults" class="search-results" role="listbox" data-i18n-aria="search.results" hidden></ul>
+    </div>
+    <div class="ctx" id="contextBar" role="group" data-i18n-aria="ctx.label">
+      <div class="ctx-item"><span class="ctx-label" data-i18n="ctx.company"></span><strong id="ctxTenant">—</strong></div>
+      <div class="ctx-item"><label class="ctx-label" for="projectSelect" data-i18n="ctx.project"></label><select id="projectSelect"></select></div>
+      <div class="ctx-item"><span class="ctx-label" data-i18n="ctx.environment"></span><strong id="ctxEnv">—</strong></div>
+      <div class="ctx-item"><span class="ctx-label" data-i18n="ctx.principal"></span><strong id="ctxPrincipal">—</strong></div>
+      <div class="ctx-item"><span class="ctx-label" data-i18n="ctx.apiState"></span><span id="ctxApi" class="ctx-api"></span></div>
+      <div class="ctx-item"><span class="ctx-label" data-i18n="ctx.lastRefresh"></span><time id="ctxRefresh">—</time></div>
+      <div class="ctx-item"><button type="button" class="btn" id="refreshBtn" data-i18n="action.refresh"></button></div>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-icon" id="notifyBtn" data-i18n-aria="notify.none"><span id="bellIcon" aria-hidden="true"></span><span id="notifyCount" class="nav-count" hidden></span></button>
+      <button type="button" class="btn btn-icon" id="langBtn" data-i18n-aria="lang.switch" data-i18n-title="lang.switch" data-i18n="lang.buttonLabel"></button>
+      <button type="button" class="btn-stop" id="stopBtn" data-i18n-aria="stop.buttonAria" data-stopped="false"><span class="stop-glyph" aria-hidden="true">&#9632;</span><span class="stop-text" data-i18n="stop.button"></span></button>
+      <p class="stop-error" id="stopError" role="alert" hidden></p>
+    </div>
+  </header>
+  <div class="stop-banner" id="stopBanner" role="alert" hidden>
+    <strong id="stopBannerText"></strong>
+    <button type="button" class="btn" id="resumeBtn" data-i18n="stop.resume"></button>
+  </div>
+  <nav class="nav" id="nav" data-i18n-aria="nav.label"><ul id="navList"></ul></nav>
+  <main class="main" id="main" tabindex="-1" aria-busy="true"></main>
+  <aside class="feed" id="feed" data-i18n-aria="feed.label"><h2 class="feed-title" data-i18n="feed.title"></h2><div id="feedMount"></div></aside>
+  <footer class="strip" id="strip" data-i18n-aria="strip.label">
+    <h2 class="strip-title"><span class="live-dot" aria-hidden="true"></span><span data-i18n="strip.title"></span></h2>
+    <span class="strip-run mono" id="stripRun">—</span>
+    <ul class="strip-list" id="stripList"></ul>
+  </footer>
+</div>
+<div id="status" class="sr-only" role="status" aria-live="polite"></div>
+<dialog id="stopDialog" class="dialog" aria-labelledby="stopDialogTitle" aria-describedby="stopDialogDesc">
+  <h2 id="stopDialogTitle" data-i18n="stop.dialog.title"></h2>
+  <p id="stopDialogDesc" data-i18n="stop.dialog.body"></p>
+  <div class="btn-row">
+    <button type="button" class="btn" id="stopCancel" autofocus data-i18n="stop.dialog.cancel"></button>
+    <button type="button" class="btn btn-danger" id="stopConfirm" data-i18n="stop.dialog.confirm"></button>
+  </div>
+</dialog>
+<dialog id="confirmDialog" class="dialog" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogDesc">
+  <h2 id="confirmDialogTitle"></h2>
+  <p id="confirmDialogDesc"></p>
+  <dl class="kv"><dt data-i18n="confirm.actionLabel"></dt><dd id="confirmAction"></dd><dt data-i18n="confirm.targetLabel"></dt><dd id="confirmTarget"></dd></dl>
+  <div class="btn-row">
+    <button type="button" class="btn" id="confirmCancel" autofocus data-i18n="confirm.cancel"></button>
+    <button type="button" class="btn btn-danger" id="confirmOk"></button>
+  </div>
+</dialog>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

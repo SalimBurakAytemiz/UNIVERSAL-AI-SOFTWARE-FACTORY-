@@ -1,0 +1,38 @@
+// //TR: Bu görünüm Control Tower alanıdır ve eski Day-0 görünürlüğü korur: health/Phase-0/install/scheduler/registry sayıları, retry beklemesi, Global Stop/Resume kartı, founder blocker listesi, run listesi, event ve redacted log görüntüleme; hepsi preload GET köprüsünden okunur.
+import {h,panel,chip,stateNote,emptyNote,statusLabel} from "../components.js";
+import {formatCount,MISSING} from "../model.js";
+
+const okData=r=>r.ok?r.data:null;
+export async function render(ctx){
+  const doc=ctx.doc,api=ctx.api;
+  const [health,phase0,install,sched,agents,caps,tools,retry,runs,att,control]=await Promise.all([api.health(),api.raw("/v1/phase0"),api.raw("/v1/install"),api.raw("/v1/scheduler"),api.raw("/v1/agents"),api.raw("/v1/capabilities"),api.raw("/v1/adapters"),api.raw("/v1/retry"),api.runs(),api.attention(),api.control()]);
+  const s=okData(sched),completed=Array.isArray(s?.phases)?s.phases.filter(x=>x.status==="COMPLETED").length:0;
+  const fact=(labelKey,value,state)=>h(doc,"div",{class:"fact",dataset:{fact:labelKey}},h(doc,"span",{class:"fact-label",text:ctx.t(labelKey)}),h(doc,"strong",{class:"fact-value",text:value}),state?chip(ctx,{state,value:1}):null);
+  const cnt=r=>r.ok&&Number.isSafeInteger(r.data?.count)?`${formatCount(r.data.count)}`:MISSING;
+  const retryData=okData(retry);
+  const healthText=health.state==="VERIFIED"?`${health.data.status} · ${health.data.system}`:ctx.t(`state.${health.state}`);
+  const eventsEl=h(doc,"pre",{id:"events",class:"log",tabindex:"0","aria-label":ctx.t("tower.events"),text:ctx.t("tower.pickRun")});
+  const logText=h(doc,"pre",{id:"logText",class:"log",tabindex:"0","aria-label":ctx.t("tower.logs"),text:ctx.t("tower.pickLog")});
+  const logButtons=h(doc,"div",{id:"logButtons",class:"btn-row"});const selected=h(doc,"p",{id:"selectedRun",class:"mono",text:MISSING});
+  async function loadRun(runId){
+    selected.textContent=runId;
+    const [events,logs]=await Promise.all([api.raw(`/v1/runs/${encodeURIComponent(runId)}/events`),api.raw(`/v1/runs/${encodeURIComponent(runId)}/logs`)]);
+    eventsEl.textContent=events.ok?((events.data.events??[]).slice(-200).map(x=>`${x.timestamp??""} [${x.severity??"INFO"}] ${x.stage??""}/${x.event??""} ${JSON.stringify(x.details??{})}`).join("\n")||ctx.t("tower.noEvents")):ctx.t(`state.${events.state}`);
+    const nodes=logs.ok?(logs.data.logs??[]).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:async()=>{const y=await api.raw(`/v1/runs/${encodeURIComponent(runId)}/logs/${encodeURIComponent(x.name)}`);logText.textContent=y.ok?(y.data.truncated?`${ctx.t("tower.truncated")}\n`:"")+y.data.text:ctx.t(`state.${y.state}`)}},text:`${x.name} (${ctx.t("tower.bytes",{n:x.size})})`})):[];
+    logButtons.replaceChildren(...(nodes.length?nodes:[doc.createTextNode(ctx.t("tower.noLogs"))]));
+  }
+  const runList=runs.runs.slice(0,20).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:()=>loadRun(x.runId)},text:`${x.runId} · ${statusLabel(ctx,x.summary?.status??x.manifest?.status??"RUNNING")}`}));
+  const attention=h(doc,"div",{id:"attention"});ctx.renderAttention(attention,att);
+  const stopCard=h(doc,"div",{class:"panel panel-critical"},h(doc,"h2",{class:"panel-title",text:ctx.t("stop.title")}),
+    h(doc,"p",{id:"stopState",text:control.active?ctx.t("stop.activeLine",{reason:control.reason??""}):ctx.t(control.state==="VERIFIED"?"stop.running":`state.${control.state}`)}),
+    h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-danger",id:"towerStop",on:{click:()=>ctx.requestStop()},text:ctx.t("stop.button")}),h(doc,"button",{type:"button",class:"btn",id:"towerResume",on:{click:()=>ctx.resume()},text:ctx.t("stop.resume")})));
+  return h(doc,"div",{class:"view"},h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.tower.title")}),
+    panel(ctx,{titleKey:"tower.health",id:"tower-health"},h(doc,"p",{id:"health",text:healthText}),
+      h(doc,"div",{class:"facts"},fact("tower.install",okData(install)?.phase0Final??MISSING),fact("tower.phase0",okData(phase0)?.final??MISSING),
+        fact("tower.scheduler",Array.isArray(s?.phases)?`${completed}/${s.phases.length}`:(s?.status??MISSING)),fact("tower.agents",cnt(agents)),fact("tower.caps",cnt(caps)),fact("tower.tools",cnt(tools)),
+        fact("tower.retry",retryData&&retryData.packageId?`${retryData.packageId} ${(retryData.phaseIds??[]).join(",")} @ ${retryData.retryAt}`:ctx.t("tower.noRetry")))),
+    stopCard,
+    panel(ctx,{titleKey:"tower.attention",id:"tower-attention"},attention),
+    panel(ctx,{titleKey:"tower.runs",id:"tower-runs"},runs.state!=="VERIFIED"?stateNote(ctx,runs.state):runList.length?h(doc,"div",{class:"btn-row"},runList):emptyNote(ctx,"tower.noRuns")),
+    panel(ctx,{titleKey:"tower.selected",id:"tower-selected"},selected,h(doc,"h3",{text:ctx.t("tower.events")}),eventsEl,h(doc,"h3",{text:ctx.t("tower.logs")}),logButtons,logText));
+}
