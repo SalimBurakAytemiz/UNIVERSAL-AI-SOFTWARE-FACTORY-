@@ -15,7 +15,7 @@ export interface MissionSpec {
 }
 export interface ReviewerTestSurface {
   added: string[]; modified: string[]; deleted: string[]; renamed: {from: string; to: string}[]; weakened: {path: string; before: number; after: number; reason: string}[];
-  trivialAdded: string[]; executedTests: number | null; functionalAcceptance: string; reason: string;
+  trivialAdded: string[]; harness?: string[]; executedTests: number | null; skippedTests?: number | null; todoTests?: number | null; functionalAcceptance: string; reason: string;
 }
 export interface ProcResult {
   argv: string[]; exitCode: number | null; stdout: string; stderr: string; startedAt: string; endedAt: string;
@@ -149,9 +149,9 @@ function implementPrompt(spec: MissionSpec): string {
 // REL-FX-2: reviewer'a test yüzeyi listesi verilir; silinen/zayıflatılan testler açıkça işaretlenir (liste uzunluğu sınırlı).
 function reviewerTestSurfaceLines(t: ReviewerTestSurface): string[] {
   const l = (name: string, xs: string[]) => `- ${name} (${xs.length}): ${xs.slice(0, 50).join(", ") || "none"}`;
-  return [`Test surface touched by the implementer (functionalAcceptance=${t.functionalAcceptance}, ${t.reason}, executed tests=${t.executedTests ?? "unknown"}):`,
+  return [`Test surface touched by the implementer (functionalAcceptance=${t.functionalAcceptance}, ${t.reason}, executed tests=${t.executedTests ?? "unknown"}, skipped=${t.skippedTests ?? "unknown"}, todo=${t.todoTests ?? "unknown"}):`,
     l("added", t.added), l("modified", t.modified), l("deleted", t.deleted), l("renamed", t.renamed.map(r => `${r.from} -> ${r.to}`)),
-    l("weakened", t.weakened.map(w => `${w.path} assertions ${w.before} -> ${w.after} (${w.reason})`)), l("added without assertions", t.trivialAdded),
+    l("weakened", t.weakened.map(w => `${w.path} assertions ${w.before} -> ${w.after} (${w.reason})`)), l("added without assertions", t.trivialAdded), l("test harness config changed", t.harness ?? []),
     "Deleted or weakened tests must be justified by the mission; otherwise report a finding."];
 }
 function reviewPrompt(spec: MissionSpec, diff: string): string {

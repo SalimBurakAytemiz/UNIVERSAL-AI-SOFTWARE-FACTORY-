@@ -17,7 +17,7 @@ import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from ".
 import {assertIndependentExecutors, runProcess} from "./executors.js";
 import {reviewAndSecurityFor} from "./outcomes.js";
 import {RISK_REFUSAL, hostExecutionNotice, riskAdmitted} from "./risk-admission.js";
-import {evaluateTestSurface, parseExecutedTestCount, parseNameStatusZ} from "./test-surface.js";
+import {evaluateTestSurface, parseNameStatusZ, parseTestRunSummary, stripAnsi} from "./test-surface.js";
 import type {ReviewerTestSurface} from "./executors.js";
 // //TR: REL-FX-4: sağlayıcı kota/hız sınırı sınıflandırması korumalı master sınıflandırıcıyla yapılır (kopyalanmaz); tip bildirimi olmadığı için dar yerel tiple bağlanır.
 // @ts-expect-error TS7016: failure-classifier.mjs tip bildirimi yok
@@ -50,11 +50,31 @@ const MISSION_AFTER: Partial<Record<RunStep, MissionStatus>> = {IMPLEMENT: "VERI
 const stepStatus = (s: RunStep): RunStatus => (s === "VERIFY" || s === "SECURITY" || s === "REGRESSION" ? "VERIFYING" : "RUNNING");
 const sha256 = (b: Buffer | string) => crypto.createHash("sha256").update(b).digest("hex");
 const classifyFailure = classifyFailureUntyped as (x: {status: number | null; error?: string; stdout?: string; stderr?: string; timedOut?: boolean}) => {class: string};
-// Başarısız executor çıktısının son 8 KiB'ı sınıflandırılır; yalnız QUOTA_EXHAUSTED / RATE_LIMIT sınıfları sağlayıcı sınırı sayılır.
-export function providerLimit(exitCode: number | null, log: string): "QUOTA_EXHAUSTED" | "RATE_LIMIT" | null {
-  const c = classifyFailure({status: exitCode ?? 1, stdout: String(log ?? "").slice(-8192), timedOut: false}).class;
-  return c === "QUOTA_EXHAUSTED" || c === "RATE_LIMIT" ? c : null;
+// REL-FX c2 (RV-RELFX-C1-004): başarısız executor çıktısının (ANSI temizlenmiş) son 8 KiB'ı satır satır incelenir. Sağlayıcı sınırı yalnız
+// (a) yapılandırılmış işaret satırı `UASCO_PROVIDER_LIMIT: QUOTA_EXHAUSTED|RATE_LIMIT` veya (b) Claude CLI hata satırları (satır başında "API Error",
+// "Claude AI usage limit reached", "usage limit reached", "You've hit your ... limit") üzerinde master sınıflandırıcı
+// QUOTA_EXHAUSTED/RATE_LIMIT verdiğinde sayılır; keyfi stderr (ör. "TypeError: rateLimiter is not a function") sağlayıcı sınırı değildir.
+// Disk dolu/kotası (ENOSPC, EDQUOT, "disk quota exceeded", "no space left on device") DISK_FULL ailesidir, asla PROVIDER_QUOTA değildir.
+export type ExecutorLimit = "QUOTA_EXHAUSTED" | "RATE_LIMIT" | "DISK_FULL";
+const PROVIDER_MARKER_RE = /^UASCO_PROVIDER_LIMIT[:=]\s*(QUOTA_EXHAUSTED|RATE_LIMIT)\s*$/;
+const CLAUDE_CLI_ERROR_RE = /^(?:error:\s*)?(?:api error\b|claude(?: ai)? usage limit reached\b|usage limit reached\b|you(?:'|’)ve hit your (?:[\w-]+ )*limit\b|you have (?:hit|reached) your (?:[\w-]+ )*limit\b)/i;
+const DISK_FULL_RE = /\b(?:ENOSPC|EDQUOT)\b|no space left on device|disk quota exceeded|not enough space on the disk/i;
+export function executorLimit(exitCode: number | null, log: string): ExecutorLimit | null {
+  const lines = stripAnsi(String(log ?? "").slice(-8192)).split("\n").map(l => l.trim()).filter(Boolean);
+  for (const l of lines) { const m = PROVIDER_MARKER_RE.exec(l); if (m) return m[1] as ExecutorLimit; }
+  const cli = lines.filter(l => CLAUDE_CLI_ERROR_RE.test(l) && !DISK_FULL_RE.test(l));
+  if (cli.length) {
+    const c = classifyFailure({status: exitCode ?? 1, stderr: cli.join("\n"), timedOut: false}).class;
+    if (c === "QUOTA_EXHAUSTED" || c === "RATE_LIMIT") return c;
+  }
+  return lines.some(l => DISK_FULL_RE.test(l)) ? "DISK_FULL" : null;
 }
+export function providerLimit(exitCode: number | null, log: string): "QUOTA_EXHAUSTED" | "RATE_LIMIT" | null {
+  const l = executorLimit(exitCode, log);
+  return l === "QUOTA_EXHAUSTED" || l === "RATE_LIMIT" ? l : null;
+}
+const limitNote = (l: ExecutorLimit) => (l === "DISK_FULL" ? "RESOURCE_LIMIT: DISK_FULL" : `PROVIDER_LIMIT: ${l}`);
+const limitBlock = (l: ExecutorLimit): Outcome => ({kind: "BLOCK", reason: l === "DISK_FULL" ? "DISK_FULL" : "PROVIDER_QUOTA"});
 
 export class MissionRunner {
   readonly engineId = `engine_${crypto.randomBytes(6).toString("hex")}`;
@@ -302,7 +322,7 @@ export class MissionRunner {
   private reviewerTestSurface(run: WorkRun): ReviewerTestSurface | undefined {
     const ev = [...run.evidence].reverse().find(e => e.kind === "TEST_SURFACE" && e.commitSha === run.headSha && e.testSurface);
     const t = ev?.testSurface;
-    return t ? {added: t.added, modified: t.modified, deleted: t.deleted, renamed: t.renamed, weakened: t.weakened, trivialAdded: t.trivialAdded, executedTests: t.executedTests, functionalAcceptance: t.functionalAcceptance, reason: t.reason} : undefined;
+    return t ? {added: t.added, modified: t.modified, deleted: t.deleted, renamed: t.renamed, weakened: t.weakened, trivialAdded: t.trivialAdded, harness: t.harness ?? [], executedTests: t.executedTests, skippedTests: t.testRun?.skipped ?? null, todoTests: t.testRun?.todo ?? null, functionalAcceptance: t.functionalAcceptance, reason: t.reason} : undefined;
   }
   private testArgv(run: WorkRun): string[] | null {
     const argv = this.rawTestCommand(run);
@@ -384,12 +404,12 @@ export class MissionRunner {
     const head = this.gitOk(work, ["rev-parse", "HEAD"]);
     const log = this.writeLog(run, "implement", r.log);
     const produced = r.exitCode === 0 && !r.blockReason && head && SHA.test(head) && head !== start ? head : undefined;
-    const limit = r.exitCode !== 0 && !r.aborted && !r.timedOut ? providerLimit(r.exitCode, r.log) : null;
+    const limit = r.exitCode !== 0 && !r.aborted && !r.timedOut ? executorLimit(r.exitCode, r.log) : null;
     this.evidence(run, leaseId, {kind: "IMPLEMENT", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, baseSha: start, ...(produced ? {commitSha: produced} : {}), executorIdentity: this.o.executors.implementer.identity,
-      ...(limit ? {note: `PROVIDER_LIMIT: ${limit}`} : r.blockReason ? {note: r.blockReason.slice(0, 200)} : {})});
+      ...(limit ? {note: limitNote(limit)} : r.blockReason ? {note: r.blockReason.slice(0, 200)} : {})});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
-    // REL-FX-4: sağlayıcı kota/hız sınırı kör retry ile bütçe tüketmez: run BLOCKED(PROVIDER_QUOTA), retryCount değişmez.
-    if (limit) return {kind: "BLOCK", reason: "PROVIDER_QUOTA"};
+    // REL-FX-4: sağlayıcı kota/hız sınırı kör retry ile bütçe tüketmez: run BLOCKED(PROVIDER_QUOTA), retryCount değişmez; disk dolu/kotası BLOCKED(DISK_FULL).
+    if (limit) return limitBlock(limit);
     if (r.exitCode !== 0) return r.transient ? {kind: "RETRY", reason: "IMPLEMENT_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: "IMPLEMENT_FAILED", status: "FAILED"};
     // Edit-only builder çıktısını engine commit etmeyi reddettiyse (değişiklik yok, .git/workspace dışı değişiklik) run BLOCKED olur.
     if (r.blockReason) return {kind: "BLOCK", reason: r.blockReason.slice(0, 200)};
@@ -452,12 +472,13 @@ export class MissionRunner {
     if (r.spawnError) return {kind: "BLOCK", reason: "TEST_COMMAND_SPAWN_FAILED"};
     const base = run.baseSha, head = run.headSha, surfaceStart = new Date().toISOString();
     const contentAt = (ref: string, p: string): string | null => { const x = this.git(scanClone, ["show", `${ref}:${p}`]); return x.status === 0 ? String(x.stdout ?? "") : null; };
-    const surface = evaluateTestSurface({baseSha: base, headSha: head, entries: touched, contentAt, executedTests: parseExecutedTestCount(`${r.stdout}\n${r.stderr}`), testCommand: this.rawTestCommand(run)});
+    const testRun = parseTestRunSummary(`${r.stdout}\n${r.stderr}`);
+    const surface = evaluateTestSurface({baseSha: base, headSha: head, entries: touched, contentAt, executedTests: testRun?.executed ?? null, testRun, testCommand: this.rawTestCommand(run)});
     this.renew(run.runId, leaseId);
     // Her kanıt gibi TEST_SURFACE de log dosyası + sha256 taşır (tam sınıflama JSON'u; dosya içeriği yazılmaz).
     const surfaceLog = this.writeLog(run, "test-surface", `${JSON.stringify(surface, null, 2)}\n`);
     this.evidence(run, leaseId, {kind: "TEST_SURFACE", argv: ["git", "diff", "--name-status", "--find-renames", base, head], startedAt: surfaceStart, endedAt: new Date().toISOString(), exitCode: surface.functionalAcceptance === "BLOCKED" ? 1 : 0,
-      ...surfaceLog, baseSha: base, commitSha: head, testSurface: surface, note: `functionalAcceptance=${surface.functionalAcceptance} ${surface.reason}; added=${surface.added.length} modified=${surface.modified.length} deleted=${surface.deleted.length} renamed=${surface.renamed.length} weakened=${surface.weakened.length} executed=${surface.executedTests ?? "unknown"}`});
+      ...surfaceLog, baseSha: base, commitSha: head, testSurface: surface, note: `functionalAcceptance=${surface.functionalAcceptance} ${surface.reason}; added=${surface.added.length} modified=${surface.modified.length} deleted=${surface.deleted.length} renamed=${surface.renamed.length} weakened=${surface.weakened.length} harness=${surface.harness.length} executed=${surface.executedTests ?? "unknown"} skipped=${testRun?.skipped ?? "unknown"} todo=${testRun?.todo ?? "unknown"}`});
     if (r.exitCode === 0) return {kind: "DONE", next: "SECURITY", data: {tests: "PASSED", secretHits: 0}};
     return {kind: "REMEDIATE", reason: r.timedOut ? "TESTS_TIMED_OUT" : "TESTS_FAILED", data: {tests: "FAILED", exitCode: r.exitCode}, findings: [`test command exited ${r.exitCode}`]};
   }
@@ -582,14 +603,14 @@ export class MissionRunner {
     const r = await reviewer.review(clone, {...this.missionSpec(run), ...(testSurface ? {testSurface} : {})}, diff, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
     const untouched = this.gitOk(clone, ["rev-parse", "HEAD"]) === run.headSha && this.gitOk(clone, ["status", "--porcelain", "--untracked-files=all"]) === "";
     const log = this.writeLog(run, "review", r.log);
-    const limit = !r.valid && !r.aborted && !r.timedOut ? providerLimit(r.exitCode, r.log) : null;
-    const notes = [...(untouched ? [] : ["REVIEW_CLONE_MUTATED"]), ...(limit ? [`PROVIDER_LIMIT: ${limit}`] : []),
+    const limit = !r.valid && !r.aborted && !r.timedOut ? executorLimit(r.exitCode, r.log) : null;
+    const notes = [...(untouched ? [] : ["REVIEW_CLONE_MUTATED"]), ...(limit ? [limitNote(limit)] : []),
       testSurface ? `TEST_SURFACE_GIVEN: ${testSurface.functionalAcceptance} deleted=${testSurface.deleted.length} weakened=${testSurface.weakened.length} added=${testSurface.added.length} modified=${testSurface.modified.length}` : "TEST_SURFACE_GIVEN: NONE"];
     this.evidence(run, leaseId, {kind: "REVIEW", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, commitSha: run.headSha,
       reviewerIdentity: reviewer.identity, executorIdentity: run.executor.implementer, ...(r.valid ? {verdict: r.verdict, findingsCount: r.findings.length} : {}), ...(notes.length ? {note: notes.join("; ")} : {})});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     if (!untouched) return {kind: "BLOCK", reason: "REVIEWER_MUTATED_CLONE"};
-    if (limit) return {kind: "BLOCK", reason: "PROVIDER_QUOTA"};
+    if (limit) return limitBlock(limit);
     if (!r.valid) return r.transient ? {kind: "RETRY", reason: "REVIEW_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: "REVIEW_FAILED", status: "FAILED"};
     if (r.verdict === "CLEAN") return {kind: "DONE", next: "REGRESSION", data: {verdict: "CLEAN", reviewerIdentity: reviewer.identity, commitSha: run.headSha}};
     return {kind: "REMEDIATE", reason: "REVIEW_BLOCKED", data: {verdict: "BLOCKED", reviewerIdentity: reviewer.identity}, findings: r.findings.map(f => `${f.severity}: ${f.title}`)};

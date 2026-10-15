@@ -1,26 +1,66 @@
-// //TR: Bu dosya REL-FX-2 test yüzeyi korumasının saf yardımcılarını tanımlar: base..head name-status çıktısını ayrıştırır, test yollarını sabit glob listesiyle (ve test komutunun dosya argümanlarıyla) sınıflar, master change-guard'ın assertion sayımı fikrini yeniden kullanır, test koşucusu çıktısından yürütülen test sayısını okur ve functionalAcceptance durumunu dürüstçe türetir (bağımsız/sabitlenmiş oracle yoksa asla VERIFIED değildir).
+// //TR: Bu dosya REL-FX-2 test yüzeyi korumasının saf yardımcılarını tanımlar: base..head name-status çıktısını ayrıştırır, test yollarını sabit glob listesiyle (ve test komutunun dosya argümanlarıyla) sınıflar, test harness yapılandırma değişikliklerini (vitest/jest/playwright config, conftest.py, package.json scripts.test, pytest ini bölümleri) test yüzeyi sayar, master change-guard'ın assertion sayımı fikrini ve devre dışı bırakılmış test işaretlerini (skip/only/todo/xit/skipIf, node:test {skip}, pytest/unittest skip) karşılaştırır, ANSI/VT kaçışlarını temizleyerek test koşucusu çıktısından yalnız yürütülen (passed + failed) test sayısını okur ve functionalAcceptance durumunu dürüstçe türetir (bağımsız/sabitlenmiş oracle yoksa asla VERIFIED değildir; okunamayan çıktı UNKNOWN'dır, yürütülmüş sayılmaz).
 
 export type TestChangeStatus = "ADDED" | "MODIFIED" | "DELETED" | "RENAMED";
 export interface NameStatusEntry { status: TestChangeStatus; path: string; oldPath?: string }
 export interface WeakenedTest { path: string; before: number; after: number; reason: "ASSERTION_COUNT_REDUCED" | "SKIP_OR_ONLY_ADDED" }
 export type TestSurfaceAcceptance = "BLOCKED" | "UNVERIFIED_VACUOUS" | "UNVERIFIED_ORACLE" | "UNKNOWN";
+export type TestRunFormat = "vitest" | "jest" | "tap" | "pytest" | "cargo" | "dotnet" | "mocha";
+// executed = passed + failed (gerçekten yürütülen); skipped/todo/pending/ignored ayrı raporlanır, asla yürütülmüş sayılmaz.
+export interface TestRunSummary { format: TestRunFormat; executed: number; passed: number; failed: number; skipped: number; todo: number }
 export interface TestSurfaceSummary {
-  schemaVersion: 1; baseSha: string; headSha: string; testGlobs: readonly string[];
-  added: string[]; modified: string[]; deleted: string[]; renamed: {from: string; to: string}[]; weakened: WeakenedTest[]; trivialAdded: string[];
-  executedTests: number | null; oracle: "NONE"; functionalAcceptance: TestSurfaceAcceptance; reason: string; truncated: boolean;
+  schemaVersion: 1; baseSha: string; headSha: string; testGlobs: readonly string[]; harnessGlobs: readonly string[];
+  added: string[]; modified: string[]; deleted: string[]; renamed: {from: string; to: string}[]; weakened: WeakenedTest[]; trivialAdded: string[]; harness: string[];
+  executedTests: number | null; testRun: TestRunSummary | null; oracle: "NONE"; functionalAcceptance: TestSurfaceAcceptance; reason: string; truncated: boolean;
 }
 
 // Repo test glob'ları (master change-guard tests/** kuralı + yaygın ekosistem kalıpları). Belgeleme için glob, eşleme için eşdeğer regex.
-export const TEST_GLOBS: readonly string[] = ["tests/**", "test/**", "**/tests/**", "**/test/**", "**/__tests__/**", "**/*.test.*", "**/*.spec.*", "**/*_test.*", "**/test_*.py", "**/test.{js,mjs,cjs,ts}"];
-const TEST_PATH_RES: readonly RegExp[] = [/(^|\/)tests?\//, /(^|\/)__tests__\//, /\.(test|spec)\.[A-Za-z0-9]+$/, /_test\.[A-Za-z0-9]+$/, /(^|\/)test_[^/]*\.py$/, /(^|\/)test\.(js|mjs|cjs|ts)$/];
+export const TEST_GLOBS: readonly string[] = ["tests/**", "test/**", "**/tests/**", "**/test/**", "spec/**", "specs/**", "**/spec/**", "**/specs/**", "**/__tests__/**", "**/*.test.*", "**/*.spec.*", "**/*_test.*", "**/*_spec.*", "**/*Spec.*",
+  "**/*.cy.*", "**/*.e2e-spec.*", "**/test_*.py", "**/test.{js,mjs,cjs,ts}"];
+const TEST_PATH_RES: readonly RegExp[] = [/(^|\/)tests?\//, /(^|\/)specs?\//, /(^|\/)__tests__\//, /\.(test|spec)\.[A-Za-z0-9]+$/, /_(test|spec)\.[A-Za-z0-9]+$/, /[^/]Spec\.[A-Za-z0-9]+$/,
+  /\.cy\.[A-Za-z0-9]+$/, /\.e2e-spec\.[A-Za-z0-9]+$/, /(^|\/)test_[^/]*\.py$/, /(^|\/)test\.(js|mjs|cjs|ts)$/];
+// Test harness yapılandırması: bu dosyalar testlerin hangi kapsamda/nasıl koşacağını belirler; değişiklikleri TEST_SURFACE sayılır (harness listesi).
+// Koşulsuz: config dosyaları, conftest.py (her dizinde), pytest.ini, tox.ini. Koşullu: package.json yalnız scripts.test/pretest/posttest değişince,
+// setup.cfg yalnız [tool:pytest] bölümü, pyproject.toml yalnız [tool.pytest.ini_options] bölümü değişince.
+export const HARNESS_GLOBS: readonly string[] = ["**/vitest.config.*", "**/vitest.workspace.*", "**/jest.config.*", "**/playwright.config.*", "**/cypress.config.*", "**/.mocharc*", "**/conftest.py", "**/pytest.ini", "**/tox.ini",
+  "**/package.json (scripts.test|pretest|posttest)", "**/setup.cfg ([tool:pytest])", "**/pyproject.toml ([tool.pytest.ini_options])"];
+const HARNESS_ALWAYS_RES: readonly RegExp[] = [/(^|\/)(?:vitest|jest|playwright|cypress)\.config\.[A-Za-z0-9.]+$/, /(^|\/)vitest\.workspace\.[A-Za-z0-9.]+$/, /(^|\/)\.mocharc(?:\.[A-Za-z0-9]+)?$/,
+  /(^|\/)conftest\.py$/, /(^|\/)(?:pytest|tox)\.ini$/];
 const CODE_RE = /\.(m?[jt]sx?|cjs|cts|mts|py|go|rs|java|cs|kt|rb|php)$/;
 const MAX_LIST = 200;
+const norm = (p: string) => p.replace(/\\/g, "/");
 
 // Test komutunun (argv) göreli dosya argümanları da test yüzeyidir (ör. ["node", "check.mjs"]).
 export function isTestPath(p: string, testCommand: readonly string[] = []): boolean {
-  const n = p.replace(/\\/g, "/");
+  const n = norm(p);
   if (TEST_PATH_RES.some(re => re.test(n))) return true;
-  return testCommand.slice(1).some(a => !a.startsWith("-") && /\.[A-Za-z0-9]+$/.test(a) && a.replace(/\\/g, "/").replace(/^\.\//, "") === n);
+  return testCommand.slice(1).some(a => !a.startsWith("-") && /\.[A-Za-z0-9]+$/.test(a) && norm(a).replace(/^\.\//, "") === n);
+}
+
+// INI/TOML bölüm metni (başlıktan bir sonraki başlığa kadar); bölüm yoksa null.
+function iniSection(s: string | null, header: string): string | null {
+  if (s === null) return null;
+  const lines = s.replace(/\r\n?/g, "\n").split("\n"), i = lines.findIndex(l => l.trim() === header);
+  if (i < 0) return null;
+  const out: string[] = [];
+  for (const l of lines.slice(i + 1)) { if (/^\s*\[/.test(l)) break; out.push(l.trimEnd()); }
+  return out.join("\n").trim();
+}
+// package.json test betikleri; ayrıştırılamazsa ham metin döner (karşılaştırma fail-closed: ham metin farkı değişiklik sayılır).
+function testScripts(s: string | null): string | null {
+  if (s === null) return null;
+  try { const j = JSON.parse(s) as {scripts?: Record<string, unknown>}; const sc = j?.scripts ?? {}; return JSON.stringify([sc.test ?? null, sc.pretest ?? null, sc.posttest ?? null]); } catch { return `UNPARSEABLE:${s}`; }
+}
+// Harness yapılandırma değişikliği mi? contentAt yalnız koşullu dosyalarda okunur (before: base'deki eski yol, after: head'deki yol).
+export function isHarnessChange(e: NameStatusEntry, baseSha: string, headSha: string, contentAt: (ref: string, path: string) => string | null): boolean {
+  const after = norm(e.path), before = norm(e.oldPath ?? e.path);
+  if ([after, before].some(p => HARNESS_ALWAYS_RES.some(re => re.test(p)))) return true;
+  const b = (p: string) => (e.status === "ADDED" ? null : contentAt(baseSha, p)), a = (p: string) => (e.status === "DELETED" ? null : contentAt(headSha, p));
+  const named = (p: string, n: string) => p.split("/").pop() === n;
+  const differs = (n: string, view: (s: string | null) => string | null) => view(named(before, n) ? b(before) : null) !== view(named(after, n) ? a(after) : null);
+  if (named(after, "package.json") || named(before, "package.json")) return differs("package.json", testScripts);
+  if (named(after, "setup.cfg") || named(before, "setup.cfg")) return differs("setup.cfg", x => iniSection(x, "[tool:pytest]"));
+  if (named(after, "pyproject.toml") || named(before, "pyproject.toml")) return differs("pyproject.toml", x => iniSection(x, "[tool.pytest.ini_options]"));
+  return false;
 }
 
 // `git diff --name-status -z --find-renames` çıktısı: durum NUL yol [NUL yeni-yol]. Bilinmeyen durumlar (C, T, U, X) değiştirilmiş sayılır (yok sayılmaz).
@@ -38,51 +78,105 @@ export function parseNameStatusZ(out: string): NameStatusEntry[] {
 
 // automation/lib/change-guard.mjs assertionCount fikri (orada export edilmez; korumalı dosya değiştirilmez): expect/assert çağrıları + assert.<yöntem>(.
 export function assertionCount(s = ""): number { return (s.match(/\b(?:expect|assert(?:\.\w+)?|assertEquals|assertTrue|assertFalse)\s*\(/g) ?? []).length; }
-const skipOrOnly = (s: string) => (s.match(/\.(?:skip|only)\s*\(/g) ?? []).length;
+// Testi devre dışı bırakan/daraltan işaretler: .skip/.only/.todo/.skipIf/.runIf( (vitest/jest/mocha/node:test t.skip, pytest.skip), xit/xdescribe/xtest/fit/fdescribe(,
+// node:test/vitest seçenek nesnesi {skip|todo|only: <false olmayan>}, pytest.mark.skip/skipif/xfail (parantezli/parantezsiz), unittest skip/skipIf/skipUnless/expectedFailure,
+// self.skipTest(, Go t.Skip(, Rust #[ignore], JUnit @Disabled/@Ignore, xUnit Skip = "...". Sayı artışı (mevcut testte) zayıflatmadır.
+const DISABLED_RES: readonly RegExp[] = [
+  /\.(?:skip|only|todo|skipIf|runIf)\s*\(/g,
+  /(?<![.\w$])[xf](?:it|describe|test|context|specify)\s*\(/g,
+  /(?<![.\w$])(?:it|test|describe|suite|specify|context)(?:\.\w+)*\s*\(\s*(?:`[^`]*`|'[^']*'|"[^"]*"|[\w.]+)\s*,\s*\{[^{}]*\b(?:skip|todo|only)\s*:(?!\s*(?:false\b|null\b|undefined\b|0\b|''|""|[,}]))/g,
+  /\bpytest\.mark\.(?:skip|skipif|xfail)\b/g,
+  /\bunittest\.(?:skip|skipIf|skipUnless|expectedFailure)\b/g,
+  /^\s*@(?:skip|skipIf|skipUnless|expectedFailure)\b/gm,
+  /\bskipTest\s*\(/g,
+  /\.Skip(?:Now|f)?\s*\(/g,
+  /#\[ignore\b/g,
+  /@(?:Disabled|Ignore)\b/g,
+  /\bSkip\s*=\s*"/g
+];
+export function disabledTestMarkers(s = ""): number { return DISABLED_RES.reduce((n, re) => n + (s.match(re) ?? []).length, 0); }
 
-// Test koşucusu çıktısından yürütülen test sayısı; tanınmayan biçimde null (sayı uydurulmaz).
-export function parseExecutedTestCount(output: string): number | null {
-  const s = String(output ?? "");
+// ANSI/VT kaçışları: OSC (ESC ] ... BEL|ST, 8-bit OSC), CSI (ESC [ / 8-bit CSI ... son bayt), diğer 2 baytlık ESC dizileri; CR'ler satır sonuna çevrilir.
+const ANSI_RE = /\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)|\u009d[^\u0007\u009c]*(?:\u0007|\u009c)|(?:\u001b\[|\u009b)[0-?]*[ -/]*[@-~]|\u001b[ -/]*[0-~]/g;
+export function stripAnsi(s: string): string { return String(s ?? "").replace(ANSI_RE, "").replace(/\r\n?/g, "\n"); }
+
+// Sayım: tanınan kategoriler toplamı bilinen toplamla uyuşmuyorsa ve hiç yürütülen test görünmüyorsa sonuç belirsizdir (null; asla yürütülmüş sayılmaz).
+function summary(format: TestRunFormat, passed: number, failed: number, skipped: number, todo: number, total?: number): TestRunSummary | null {
+  if (total !== undefined && passed + failed + skipped + todo !== total && passed + failed === 0) return null;
+  return {format, executed: passed + failed, passed, failed, skipped, todo};
+}
+function tally(text: string, buckets: Record<string, "passed" | "failed" | "skipped" | "todo">): {passed: number; failed: number; skipped: number; todo: number} {
+  const c = {passed: 0, failed: 0, skipped: 0, todo: 0};
+  for (const m of text.matchAll(/(\d+)\s+([A-Za-z]+)/g)) { const b = buckets[m[2].toLowerCase()]; if (b) c[b] += Number(m[1]); }
+  return c;
+}
+// Test koşucusu çıktısından özet; tanınmayan biçimde null (sayı uydurulmaz). Biçim önceliği: vitest, jest, node:test TAP, pytest, cargo, dotnet, mocha.
+export function parseTestRunSummary(output: string): TestRunSummary | null {
+  const s = stripAnsi(output);
   const last = (re: RegExp): RegExpMatchArray | null => { const all = [...s.matchAll(re)]; return all.length ? all[all.length - 1] : null; };
-  if (/No test files found/i.test(s)) return 0;
-  const vitest = last(/^\s*Tests\s+[^\n(]*\((\d+)\)\s*$/gm); if (vitest) return Number(vitest[1]);
-  const jest = last(/^Tests:\s+.*?(\d+) total/gm); if (jest) return Number(jest[1]);
-  const tap = last(/^(?:#|ℹ) tests (\d+)\s*$/gm); if (tap) return Number(tap[1]);
-  if (/=+ no tests ran\b/i.test(s)) return 0;
-  const py = last(/^=+ (.+?) in [\d.]+s\b.*=*\s*$/gm);
-  if (py) { const n = [...py[1].matchAll(/(\d+) (passed|failed|errors?|skipped|xfailed|xpassed)/g)].reduce((a, m) => a + Number(m[1]), 0); if (n > 0 || /passed|failed/.test(py[1])) return n; }
-  const cargo = [...s.matchAll(/test result: \w+\. (\d+) passed; (\d+) failed; (\d+) ignored/g)]; if (cargo.length) return cargo.reduce((a, m) => a + Number(m[1]) + Number(m[2]) + Number(m[3]), 0);
-  const dotnet = last(/Total tests: (\d+)/g) ?? last(/Total:\s+(\d+),/g); if (dotnet) return Number(dotnet[1]);
-  const mocha = last(/^\s*(\d+) passing\b/gm); if (mocha) { const f = last(/^\s*(\d+) failing\b/gm), p = last(/^\s*(\d+) pending\b/gm); return Number(mocha[1]) + Number(f?.[1] ?? 0) + Number(p?.[1] ?? 0); }
+  const vitest = last(/^\s*Tests\s+(.+?)\s*\((\d+)\)\s*$/gm);
+  if (vitest) { const c = tally(vitest[1], {passed: "passed", failed: "failed", skipped: "skipped", todo: "todo"}); return summary("vitest", c.passed, c.failed, c.skipped, c.todo, Number(vitest[2])); }
+  if (/No test files found/i.test(s)) return summary("vitest", 0, 0, 0, 0);
+  const jest = last(/^\s*Tests:\s+(.*?)(\d+) total\s*$/gm);
+  if (jest) { const c = tally(jest[1], {passed: "passed", failed: "failed", skipped: "skipped", todo: "todo", pending: "skipped"}); return summary("jest", c.passed, c.failed, c.skipped, c.todo, Number(jest[2])); }
+  if (/^\s*No tests found\b/m.test(s)) return summary("jest", 0, 0, 0, 0);
+  const tapKey = (k: string): number | null => { const m = last(new RegExp(`^\\s*(?:#|ℹ) ${k} (\\d+)\\s*$`, "gm")); return m ? Number(m[1]) : null; };
+  const tapTests = tapKey("tests");
+  if (tapTests !== null) {
+    const pass = tapKey("pass"), fail = tapKey("fail");
+    if (pass === null && fail === null) return tapTests === 0 ? summary("tap", 0, 0, 0, 0) : null;
+    return summary("tap", pass ?? 0, fail ?? 0, tapKey("skipped") ?? tapKey("skip") ?? 0, tapKey("todo") ?? 0);
+  }
+  if (/^=*\s*no tests ran\b/im.test(s)) return summary("pytest", 0, 0, 0, 0);
+  // pytest: xpassed/xfailed gövdesi yürütülmüş testlerdir (sırasıyla passed/failed kovasına), error(s) failed sayılır; deselected yürütülmemiştir (skipped).
+  const PYW = "(?:passed|failed|errors?|skipped|xfailed|xpassed|deselected|warnings?|rerun)";
+  const py = last(new RegExp(`^=*\\s*(\\d+ ${PYW}(?:, \\d+ ${PYW})*) in [\\d.]+s\\b.*$`, "gm"));
+  if (py) { const c = tally(py[1], {passed: "passed", xpassed: "passed", failed: "failed", xfailed: "failed", error: "failed", errors: "failed", skipped: "skipped", deselected: "skipped"}); return summary("pytest", c.passed, c.failed, c.skipped, c.todo); }
+  const cargo = [...s.matchAll(/test result: \w+\. (\d+) passed; (\d+) failed; (\d+) ignored/g)];
+  if (cargo.length) return summary("cargo", ...cargo.reduce<[number, number, number]>((a, m) => [a[0] + Number(m[1]), a[1] + Number(m[2]), a[2] + Number(m[3])], [0, 0, 0]), 0);
+  const dn = [...s.matchAll(/Failed:\s*(\d+),\s*Passed:\s*(\d+),\s*Skipped:\s*(\d+),\s*Total:\s*(\d+)/g)];
+  if (dn.length) { const t = dn.reduce((a, m) => [a[0] + Number(m[2]), a[1] + Number(m[1]), a[2] + Number(m[3]), a[3] + Number(m[4])], [0, 0, 0, 0]); return summary("dotnet", t[0], t[1], t[2], 0, t[3]); }
+  const dnTotal = last(/Total tests:\s*(\d+)/g);
+  if (dnTotal) {
+    const k = (n: string) => { const m = last(new RegExp(`^\\s*${n}:\\s*(\\d+)\\s*$`, "gm")); return m ? Number(m[1]) : null; };
+    const p = k("Passed"), f = k("Failed");
+    if (p === null && f === null) return Number(dnTotal[1]) === 0 ? summary("dotnet", 0, 0, 0, 0) : null;
+    return summary("dotnet", p ?? 0, f ?? 0, k("Skipped") ?? 0, 0, Number(dnTotal[1]));
+  }
+  const mocha = last(/^\s*(\d+) passing\b/gm);
+  if (mocha) { const f = last(/^\s*(\d+) failing\b/gm), p = last(/^\s*(\d+) pending\b/gm); return summary("mocha", Number(mocha[1]), Number(f?.[1] ?? 0), Number(p?.[1] ?? 0), 0); }
   return null;
 }
+// Yürütülen (passed + failed) test sayısı; tanınmayan biçimde null.
+export function parseExecutedTestCount(output: string): number | null { return parseTestRunSummary(output)?.executed ?? null; }
 
 export interface EvaluateInput {
   baseSha: string; headSha: string; entries: NameStatusEntry[]; contentAt: (ref: string, path: string) => string | null;
-  executedTests: number | null; testCommand?: readonly string[];
+  executedTests: number | null; testRun?: TestRunSummary | null; testCommand?: readonly string[];
 }
-// Öncelik: silinen/zayıflatılan test -> BLOCKED; sıfır yürütülen test veya assertion'sız yeni test -> UNVERIFIED_VACUOUS; dokunulan test yüzeyi -> UNVERIFIED_ORACLE
-// (mission'a sabitlenmiş bağımsız oracle yok); dokunulmamış testler -> UNKNOWN. VERIFIED bu dilimde üretilmez.
+// Öncelik: silinen/zayıflatılan (assertion azaltma veya devre dışı bırakma) test -> BLOCKED; sıfır yürütülen test veya assertion'sız yeni test -> UNVERIFIED_VACUOUS;
+// okunamayan koşucu çıktısı -> UNKNOWN (yürütülmüş sayılmaz); dokunulan test yüzeyi/harness -> UNVERIFIED_ORACLE (mission'a sabitlenmiş bağımsız oracle yok);
+// test yüzeyi değişikliği tespit edilmedi -> UNKNOWN. VERIFIED bu dilimde üretilmez.
 export function evaluateTestSurface(i: EvaluateInput): TestSurfaceSummary {
   const tc = i.testCommand ?? [], isT = (p: string) => isTestPath(p, tc);
-  const added: string[] = [], modified: string[] = [], deleted: string[] = [], renamed: {from: string; to: string}[] = [], weakened: WeakenedTest[] = [], trivialAdded: string[] = [];
+  const added: string[] = [], modified: string[] = [], deleted: string[] = [], renamed: {from: string; to: string}[] = [], weakened: WeakenedTest[] = [], trivialAdded: string[] = [], harness: string[] = [];
   const compare = (beforePath: string, afterPath: string) => {
     if (!CODE_RE.test(afterPath)) return;
     const b = i.contentAt(i.baseSha, beforePath), a = i.contentAt(i.headSha, afterPath);
     if (b === null || a === null) return;
     const nb = assertionCount(b), na = assertionCount(a);
     if (nb > 0 && na < nb) weakened.push({path: afterPath, before: nb, after: na, reason: "ASSERTION_COUNT_REDUCED"});
-    else if (skipOrOnly(a) > skipOrOnly(b)) weakened.push({path: afterPath, before: nb, after: na, reason: "SKIP_OR_ONLY_ADDED"});
+    else if (disabledTestMarkers(a) > disabledTestMarkers(b)) weakened.push({path: afterPath, before: nb, after: na, reason: "SKIP_OR_ONLY_ADDED"});
   };
   for (const e of i.entries) {
     if (e.status === "RENAMED" && e.oldPath !== undefined) {
       const fromT = isT(e.oldPath), toT = isT(e.path);
       if (fromT && !toT) { deleted.push(e.oldPath); continue; } // test glob'u dışına taşımak testi siler
-      if (!fromT && !toT) continue;
+      if (!fromT && !toT) { if (isHarnessChange(e, i.baseSha, i.headSha, i.contentAt)) harness.push(e.path); continue; }
       if (!fromT) { added.push(e.path); continue; }
       renamed.push({from: e.oldPath, to: e.path}); compare(e.oldPath, e.path); continue;
     }
-    if (!isT(e.path)) continue;
+    if (!isT(e.path)) { if (isHarnessChange(e, i.baseSha, i.headSha, i.contentAt)) harness.push(e.path); continue; }
     if (e.status === "DELETED") deleted.push(e.path);
     else if (e.status === "ADDED") { added.push(e.path); const a = CODE_RE.test(e.path) ? i.contentAt(i.headSha, e.path) : null; if (a !== null && assertionCount(a) === 0) trivialAdded.push(e.path); }
     else { modified.push(e.path); compare(e.path, e.path); }
@@ -92,10 +186,11 @@ export function evaluateTestSurface(i: EvaluateInput): TestSurfaceSummary {
     : weakened.length ? ["BLOCKED", "TEST_WEAKENED"]
     : i.executedTests === 0 ? ["UNVERIFIED_VACUOUS", "ZERO_TESTS_EXECUTED"]
     : trivialAdded.length ? ["UNVERIFIED_VACUOUS", "TRIVIAL_TEST_ADDED"]
-    : added.length || modified.length || renamed.length ? ["UNVERIFIED_ORACLE", "TEST_SURFACE_CHANGED_NO_PINNED_ORACLE"]
-    : ["UNKNOWN", "TESTS_UNCHANGED_NO_PINNED_ORACLE"];
+    : i.executedTests === null ? ["UNKNOWN", "EXECUTED_TEST_COUNT_UNPARSEABLE"]
+    : added.length || modified.length || renamed.length || harness.length ? ["UNVERIFIED_ORACLE", "TEST_SURFACE_CHANGED_NO_PINNED_ORACLE"]
+    : ["UNKNOWN", "NO_TEST_SURFACE_CHANGE_DETECTED_NO_PINNED_ORACLE"];
   const cap = <T>(xs: T[]) => xs.slice(0, MAX_LIST);
-  const truncated = [added, modified, deleted, renamed, weakened, trivialAdded].some(x => x.length > MAX_LIST);
-  return {schemaVersion: 1, baseSha: i.baseSha, headSha: i.headSha, testGlobs: TEST_GLOBS, added: cap(added), modified: cap(modified), deleted: cap(deleted), renamed: cap(renamed), weakened: cap(weakened), trivialAdded: cap(trivialAdded),
-    executedTests: i.executedTests, oracle: "NONE", functionalAcceptance, reason, truncated};
+  const truncated = [added, modified, deleted, renamed, weakened, trivialAdded, harness].some(x => x.length > MAX_LIST);
+  return {schemaVersion: 1, baseSha: i.baseSha, headSha: i.headSha, testGlobs: TEST_GLOBS, harnessGlobs: HARNESS_GLOBS, added: cap(added), modified: cap(modified), deleted: cap(deleted), renamed: cap(renamed), weakened: cap(weakened), trivialAdded: cap(trivialAdded), harness: cap(harness),
+    executedTests: i.executedTests, testRun: i.testRun ?? null, oracle: "NONE", functionalAcceptance, reason, truncated};
 }

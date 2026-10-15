@@ -11,7 +11,7 @@
     "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
   ],
   "scope": "C:/Users/salim/UASCO-recovery/product/rel/REL-FIRST-EXE-P0.md sections REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2 (backend only; apps/desktop/** not touched). One commit per FX in the order FX-1, FX-3, FX-4, FX-2.",
-  "status": "IMPLEMENTED (REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2), NOT CLEAN; independent review pending",
+  "status": "IMPLEMENTED (REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2) + cycle-2 remediation of RV-RELFX-C1-001..004, NOT CLEAN; independent review pending",
   "decisions": {
     "D-REL-3": "FA-V2-PRODUCT-2026-10-14 covers apps/control-api/src/server.ts, config/validation.json (test steps appended) and config/trust-root-manifest.json (resealed with node scripts/generate-trust-root.mjs). No other protected file changed.",
     "D-REL-2": "Refuse R3/R4 run start (fail-closed default).",
@@ -92,5 +92,48 @@
     "REL-FX-2: the assertion-count heuristic is syntactic (expect/assert call count, .skip/.only); semantic weakening that keeps the count (e.g. replacing an assertion with a tautology) is not detected and is left to the independent reviewer, who receives the touched-test list.",
     "REL-FX-2: the executed-test count is parsed only for recognised runner output formats; otherwise it is null (UNKNOWN), never guessed.",
     "Regression runs: dev-run pid-liveness assertions in tests/v7-ps1a-project-studio.test.ts and tests/v7-ps1a-c3-remediation.test.ts failed once each under the parallel combined run (process exit latency after stop/restart) and passed when rerun alone; the code under test (devrun) was not changed by this package."
-  ]
+  ],
+  "remediationCycle2": {
+    "reviewedSha": "42329579d73d418540382fbecdcf5414f4488bc0",
+    "reviewVerdict": "BLOCKED (cycle 1)",
+    "implementer": "CLAUDE_BUILDER",
+    "findings": {
+      "RV-RELFX-C1-001": {
+        "severity": "P1",
+        "fix": "core/workos/test-surface.ts: stripAnsi removes CSI (7-bit and 8-bit), OSC (BEL/ST terminated, 7-bit and 8-bit) and other ESC sequences and normalises CR/CRLF before parsing. New parseTestRunSummary returns {format, executed, passed, failed, skipped, todo} for vitest, jest, node:test TAP/spec reporter, pytest, cargo, dotnet and mocha; executed = passed + failed only (pytest xpassed/xfailed/error count as executed in passed/failed; skipped, todo, pending, ignored, deselected are reported separately and never executed). Inconsistent category totals with zero executed, unknown pytest vocabulary and unrecognised output return null. parseExecutedTestCount = summary.executed or null. evaluateTestSurface: executed 0 -> UNVERIFIED_VACUOUS (ZERO_TESTS_EXECUTED); null -> UNKNOWN (EXECUTED_TEST_COUNT_UNPARSEABLE), ranked after BLOCKED/VACUOUS and before UNVERIFIED_ORACLE. The TEST_SURFACE summary carries testRun; the evidence note and the reviewer prompt show skipped/todo.",
+        "tests": "tests/v7-relfx-c2-remediation.test.ts (real ANSI vitest all-skipped and mixed, OSC/8-bit CSI/CR stripping, jest, mocha, node --test TAP and spec reporter, pytest incl. all-skipped/deselected/xfail/error and a non-pytest 'N things in Xs' line, cargo, dotnet, unparseable -> UNKNOWN, zero -> UNVERIFIED_VACUOUS); tests/v7-relfx-2-test-surface.test.ts pytest '3 passed, 1 skipped' expectation corrected from 4 to 3 (skipped is not executed)."
+      },
+      "RV-RELFX-C1-002": {
+        "severity": "P2",
+        "fix": "disabledTestMarkers replaces skipOrOnly: .skip/.only/.todo/.skipIf/.runIf( (incl. it.skipIf(c)(, describe.skipIf, test.todo/it.todo, node:test t.skip, pytest.skip), xit/xdescribe/xtest/xcontext/xspecify and fit/fdescribe( (not after '.' or an identifier character), test-call option objects {skip|todo|only: <not false/null/undefined/0/empty>}, pytest.mark.skip/skipif/xfail with or without parentheses, unittest.skip/skipIf/skipUnless/expectedFailure, bare @skip/@skipIf/@skipUnless/@expectedFailure decorators, skipTest(, Go t.Skip/SkipNow/Skipf(, Rust #[ignore], JUnit @Disabled/@Ignore, xUnit Skip = \"...\". A count increase in a modified or renamed existing test -> weakened SKIP_OR_ONLY_ADDED -> BLOCKED (TEST_WEAKENED).",
+        "tests": "one test per JS pattern (12) and per Python pattern (7) plus negatives ({skip: false}, ORM {skip: 10}, model.fit(, curve.xit(, xtestHelper()."
+      },
+      "RV-RELFX-C1-003": {
+        "severity": "P3",
+        "fix": "TEST_PATH_RES/TEST_GLOBS add spec/ and specs/ directories, *_spec.*, *Spec.*, *.cy.*, *.e2e-spec.*. Test-harness configuration is TEST_SURFACE (new summary list harness + harnessGlobs): vitest/jest/playwright/cypress config, vitest.workspace, .mocharc*, conftest.py anywhere, pytest.ini, tox.ini unconditionally; package.json only when scripts.test/pretest/posttest changes (unparseable JSON compares raw text, fail-closed); setup.cfg only when [tool:pytest] changes; pyproject.toml only when [tool.pytest.ini_options] changes. Harness changes give UNVERIFIED_ORACLE (not BLOCKED, including deletion) and are listed to the reviewer. The UNKNOWN reason for no detected test-surface change is now NO_TEST_SURFACE_CHANGE_DETECTED_NO_PINNED_ORACLE (was the misleading TESTS_UNCHANGED_NO_PINNED_ORACLE).",
+        "tests": "path classification positives/negatives, every unconditional harness file, deleted/renamed harness, package.json scripts.test vs version-only change, unparseable package.json, added package.json, setup.cfg and pyproject section-scoped changes; tests/v7-relfx-2-test-surface.test.ts reason string updated."
+      },
+      "RV-RELFX-C1-004": {
+        "severity": "P3",
+        "fix": "core/workos/runner.ts executorLimit: on the ANSI-stripped last 8 KiB of a failed executor log, a provider limit is only (a) a structured marker line UASCO_PROVIDER_LIMIT: QUOTA_EXHAUSTED|RATE_LIMIT or (b) the master classifier (automation/lib/failure-classifier.mjs, unchanged) returning QUOTA_EXHAUSTED/RATE_LIMIT on Claude CLI error lines (line-start 'API Error', 'Claude AI usage limit reached', 'usage limit reached', \"You've hit your ... limit\"). ENOSPC/EDQUOT/'disk quota exceeded'/'no space left on device'/'not enough space on the disk' -> DISK_FULL: run BLOCKED(DISK_FULL), note RESOURCE_LIMIT: DISK_FULL, no retry budget used. Anything else (e.g. 'TypeError: rateLimiter is not a function') is a normal failure. providerLimit remains as the provider-only view.",
+        "tests": "pure EDQUOT/ENOSPC -> DISK_FULL, rateLimiter TypeError / arbitrary 'quota exceeded' / source text / API 500 -> null; true positives (usage limit reached, API Error 429 JSON, ANSI-wrapped API Error 429, You've hit your usage limit, marker); runner: implementer EDQUOT -> BLOCKED(DISK_FULL) retryCount 0, implementer and reviewer 'rateLimiter is not a function' -> FAILED IMPLEMENT_FAILED / REVIEW_FAILED. Existing REL-FX-4 PROVIDER_QUOTA tests still pass."
+      }
+    },
+    "files": [
+      "core/workos/test-surface.ts",
+      "core/workos/runner.ts",
+      "core/workos/executors.ts (ReviewerTestSurface harness/skippedTests/todoTests, reviewer prompt lines)",
+      "tests/v7-relfx-c2-remediation.test.ts (new)",
+      "tests/v7-relfx-2-test-surface.test.ts (two expectations corrected to the fixed semantics; not weakened)",
+      "config/validation.json (protected, authorized: new test file appended to the existing step)",
+      "config/trust-root-manifest.json (protected, resealed with node scripts/generate-trust-root.mjs)",
+      "audit/checkpoints/V7-PKG-RELFX-BACKEND-2026-10-15.json"
+    ],
+    "safety": "No AI-generated or untrusted project code executed on the host: the new tests use synthetic output strings and the existing UASCO fixtures (FakeExecutors / core/workos/fake-executor.mjs). No new dependencies, no network.",
+    "limits": [
+      "Output parsing is heuristic per known runner summary formats; mixed multi-runner output uses the first recognised format.",
+      "Provider-limit detection depends on the Claude CLI's current error wording; unrecognised wording is a normal failure (fail-closed against false PROVIDER_QUOTA, may retry/fail instead).",
+      "Disabled-test markers are text patterns; a marker inside a string or comment can count (compared base vs head, so only an increase matters)."
+    ]
+  }
 }

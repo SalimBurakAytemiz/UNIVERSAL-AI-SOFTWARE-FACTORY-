@@ -58,7 +58,7 @@ describe("REL-FX-2 test-surface helpers (pure)", () => {
     expect(parseExecutedTestCount("No test files found, exiting with code 1")).toBe(0);
     expect(parseExecutedTestCount("Tests:       5 passed, 5 total")).toBe(5);
     expect(parseExecutedTestCount("# tests 7\n# pass 7")).toBe(7);
-    expect(parseExecutedTestCount("=========== 3 passed, 1 skipped in 0.12s ===========")).toBe(4);
+    expect(parseExecutedTestCount("=========== 3 passed, 1 skipped in 0.12s ===========")).toBe(3); // RV-RELFX-C1-001: skipped is not executed
     expect(parseExecutedTestCount("============ no tests ran in 0.01s ============")).toBe(0);
     expect(parseExecutedTestCount("feature=ok")).toBeNull();
   });
@@ -73,7 +73,7 @@ describe("REL-FX-2 test-surface helpers (pure)", () => {
     expect(ev([{status: "ADDED", path: "tests/c.test.ts"}])).toEqual(expect.objectContaining({functionalAcceptance: "UNVERIFIED_VACUOUS", reason: "TRIVIAL_TEST_ADDED", trivialAdded: ["tests/c.test.ts"]}));
     expect(ev([{status: "ADDED", path: "tests/d.test.ts"}])).toEqual(expect.objectContaining({functionalAcceptance: "UNVERIFIED_ORACLE", added: ["tests/d.test.ts"]}));
     expect(ev([{status: "MODIFIED", path: "src/a.ts"}], 0)).toEqual(expect.objectContaining({functionalAcceptance: "UNVERIFIED_VACUOUS", reason: "ZERO_TESTS_EXECUTED"}));
-    expect(ev([{status: "MODIFIED", path: "src/a.ts"}])).toEqual(expect.objectContaining({functionalAcceptance: "UNKNOWN", reason: "TESTS_UNCHANGED_NO_PINNED_ORACLE", oracle: "NONE"}));
+    expect(ev([{status: "MODIFIED", path: "src/a.ts"}])).toEqual(expect.objectContaining({functionalAcceptance: "UNKNOWN", reason: "NO_TEST_SURFACE_CHANGE_DETECTED_NO_PINNED_ORACLE", oracle: "NONE"}));
   });
 });
 
