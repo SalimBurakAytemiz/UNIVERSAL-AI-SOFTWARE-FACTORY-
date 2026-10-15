@@ -7,7 +7,8 @@ import {WorkOsStore} from "../core/workos/store.js";
 import {ExecutionGate} from "../core/workos/execution-gate.js";
 import {FakeExecutors, reviewPrompt, TESTS_NOT_EXECUTED_STATEMENT} from "../core/workos/executors.js";
 import type {MissionSpec} from "../core/workos/executors.js";
-import {completionEvidence, completionRequirements, deriveOutcomes, verificationStatus, M1A_NOT_VERIFIED_LABEL} from "../core/workos/outcomes.js";
+import {completionEvidence, deliveryView, deriveOutcomes, verificationStatus, M1A_LABELS, M1A_NOT_VERIFIED_LABEL} from "../core/workos/outcomes.js";
+import type {WorkRun} from "../core/workos/types.js";
 import {listZipEntries, readZipEntry} from "../core/workos/zip.js";
 import {T, setup, okScript, runner, startRun, runOf, missionOf, drive, journalEntries, journalText, rewriteJournal, api, HDR, kinds, tmpRoot, rmTmp} from "./support/relfx.js";
 import type {Ctx} from "./support/relfx.js";
@@ -20,6 +21,8 @@ afterEach(async () => { vi.restoreAllMocks(); for (const a of apps.splice(0)) { 
 // Test komutu çalışırsa işaret dosyası bırakır: YOKLUĞU komutun hiç çalışmadığının kanıtıdır (testin kendi sabit fikstürü).
 const markerTest = (marker: string) => `import fs from "node:fs";\nfs.writeFileSync(${JSON.stringify(marker)}, "EXECUTED");\nprocess.exit(0);\n`;
 const noSandbox = () => new ExecutionGate(null);
+// M1a c2: yalnız TEST sağlayıcısıyla yürütülen, vitest biçiminde özet basan sabit fikstür (PRODUCT_VERIFIED yolunun testi için; M1a üretiminde sağlayıcı yoktur).
+const COUNTING_TEST = ["import fs from \"node:fs\";", "const v = fs.existsSync(\"feature.txt\") ? fs.readFileSync(\"feature.txt\", \"utf8\").trim() : \"\";", "console.log(v === \"ok\" ? \" Tests  1 passed (1)\" : \" Tests  1 failed (1)\");", "process.exit(v === \"ok\" ? 0 : 1);", ""].join(String.fromCharCode(10));
 const noProviderApi = (c: Ctx) => { const a = api(c, {sandbox: undefined}); apps.push(a); return a; };
 const complete = (app: ReturnType<typeof api>, c: Ctx, body: Record<string, unknown>) => app.inject({method: "POST", url: `/v1/missions/${c.missionId}/transition`, headers: HDR, payload: {to: "COMPLETE", reason: "Founder accepts (M1a)", ...body}});
 
@@ -71,12 +74,15 @@ describe("M1a runner progression without a verified sandbox", () => {
     expect(prompt).toContain("Test surface touched by the implementer (functionalAcceptance=NOT_EXECUTED");
     // report.json carries the honest label
     const report = JSON.parse(fs.readFileSync(path.join(c.dataDir, run.evidence.find(e => e.kind === "REPORT")!.logPath!), "utf8"));
-    expect(report.testExecution).toEqual({testsExecuted: false, notExecutedReason: "SANDBOX_UNAVAILABLE", functionalAcceptance: "NOT_EXECUTED", label: M1A_NOT_VERIFIED_LABEL});
+    expect(report.testExecution).toEqual({testsExecuted: false, notExecutedReason: "SANDBOX_UNAVAILABLE", functionalAcceptance: "NOT_EXECUTED", productVerification: "NOT_VERIFIED", productVerificationReason: "NOT_EXECUTED:SANDBOX_UNAVAILABLE", label: M1A_NOT_VERIFIED_LABEL});
     // outcomes: a distinct NOT_EXECUTED state, never UNKNOWN-as-pass or VERIFIED
     const o = deriveOutcomes(run);
     expect(o.functionalAcceptance).toBe("NOT_EXECUTED");
     expect(o.reasons.functionalAcceptance).toBe("SANDBOX_UNAVAILABLE");
     expect(o.completionMode).toBe("NOT_COMPLETED");
+    // M1a c2: two separate axes; source generation complete never means the product is verified
+    expect(o.sourceGeneration).toMatchObject({state: "SOURCE_GENERATION_COMPLETE", label: M1A_LABELS.SOURCE_GENERATION_COMPLETE});
+    expect(o.productVerification).toMatchObject({state: "NOT_VERIFIED", reason: "NOT_EXECUTED:SANDBOX_UNAVAILABLE", label: M1A_NOT_VERIFIED_LABEL});
   });
 
   it("the reviewer prompt has no not-executed statement when tests were executed (spec without testExecution)", () => {
@@ -84,125 +90,140 @@ describe("M1a runner progression without a verified sandbox", () => {
     expect(reviewPrompt(spec, "")).not.toContain("TESTS WERE NOT EXECUTED");
   });
 
-  it("a deleted/weakened existing test stays BLOCKED (not NOT_EXECUTED) and is never completable, even with both acknowledgements", { timeout: T }, async () => {
+  it("a deleted/weakened existing test stays BLOCKED (not NOT_EXECUTED): never completable, no source delivery, and COMPLETE accepts no acknowledgement", { timeout: T }, async () => {
     const {c, run} = await m1aRun({files: {"tests/a.test.mjs": "expect(1).toBe(1);\nexpect(2).toBe(2);\n"}, implement: {"tests/a.test.mjs": "expect(1).toBe(1);\n"}});
     expect(run.status).toBe("AWAITING_APPROVAL");
     expect(deriveOutcomes(run).functionalAcceptance).toBe("BLOCKED");
-    const req = completionRequirements(run);
-    expect(req.notExecuted.required).toBe(false);
+    expect(deliveryView(run)).toMatchObject({sourceGeneration: {state: "BLOCKED"}, productVerification: {state: "NOT_VERIFIED"}});
+    const tsSha = deliveryView(run).testChanges.testSurfaceSha256 ?? "0".repeat(64);
     const app = noProviderApi(c), before = journalText(c);
-    for (const body of [{}, {notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: run.headSha}}, {notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: run.headSha}, acknowledgement: {acknowledgeTestChanges: true, testSurfaceSha256: req.testChanges.testSurfaceSha256 ?? "0".repeat(64)}}]) {
-      const r = await complete(app, c, body);
-      expect(r.statusCode).toBe(409);
-      expect(r.json()).toEqual({error: "WORKOS_CONFLICT", reason: "COMPLETION_FUNCTIONAL_ACCEPTANCE_BLOCKED"});
-    }
+    const plain = await complete(app, c, {});
+    expect(plain.statusCode).toBe(409);
+    expect(plain.json()).toEqual({error: "WORKOS_CONFLICT", reason: "COMPLETION_FUNCTIONAL_ACCEPTANCE_BLOCKED"});
+    for (const body of [{notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: run.headSha}}, {notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: run.headSha}, acknowledgement: {acknowledgeTestChanges: true, testSurfaceSha256: tsSha}}])
+      expect((await complete(app, c, body)).statusCode).toBe(400);
+    const prep = await app.inject({method: "POST", url: `/v1/work-runs/${run.runId}/delivery/prepare`, headers: HDR, payload: {}});
+    expect(prep.statusCode).toBe(409);
+    expect(prep.json().error).toBe("SOURCE_GENERATION_NOT_COMPLETE");
+    expect(() => c.store.acceptSourceDelivery({tenantId: "tA"}, run.runId, {runId: run.runId, missionId: run.missionId, sourceCommit: run.headSha, exportArtifactHash: "e".repeat(64), acknowledgeNotExecuted: true, testChangesAcknowledgement: {acknowledgeTestChanges: true, testSurfaceSha256: tsSha}}, "FOUNDER_LOCAL")).toThrow(/SOURCE_GENERATION_NOT_COMPLETE/);
     expect(journalText(c)).toBe(before);
   });
 });
 
-describe("M1a COMPLETE gate (FX-1 extension, fail-closed)", () => {
-  it("refuses missing, stale, mismatched and malformed NOT_EXECUTED acknowledgements with the journal unchanged", { timeout: T }, async () => {
+// M1a c2: sentetik (biçimi geçerli) teslim artefaktı kaydı; artefakt dosyası ve API kabul yolu v7-m1a-c2-delivery testlerindedir.
+const HASH = "e".repeat(64);
+const artifactRecord = (run: WorkRun) => ({runId: run.runId, missionId: run.missionId, sourceCommit: run.headSha!, treeSha: "d".repeat(40), exportArtifactHash: HASH, artifactPath: `deliveries/${run.runId}/${HASH}.zip`});
+const acceptanceFor = (run: WorkRun, extra: Record<string, unknown> = {}) => ({runId: run.runId, missionId: run.missionId, sourceCommit: run.headSha, exportArtifactHash: HASH, acknowledgeNotExecuted: true, ...extra});
+
+describe("M1a c2 COMPLETE gate (D-M1A-STATE-MODEL-2026-10-15): PRODUCT_VERIFIED required, no acknowledgement ever completes", () => {
+  it("an M1a run (tests never executed) is refused COMPLETE with or without any acknowledgement; malformed bodies 400; the journal is unchanged", { timeout: T }, async () => {
     const {c, run} = await m1aRun();
     const app = noProviderApi(c), before = journalText(c), head = run.headSha!;
     const view = (await app.inject({method: "GET", url: `/v1/work-runs/${run.runId}`, headers: HDR})).json();
-    expect(view.completionRequirements).toEqual({headSha: head, functionalAcceptance: "NOT_EXECUTED", notExecuted: {required: true, reason: "SANDBOX_UNAVAILABLE"}, testChanges: {required: false, testSurfaceSha256: expect.any(String), changed: {modified: [], deleted: [], renamed: [], harness: [], truncated: false}}});
-    const refused = async (body: Record<string, unknown>, code = 409) => {
+    expect(view.delivery).toMatchObject({sourceCommit: head, sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE"}, productVerification: {state: "NOT_VERIFIED", reason: "NOT_EXECUTED:SANDBOX_UNAVAILABLE", label: M1A_NOT_VERIFIED_LABEL}, testsExecuted: false,
+      testChanges: {required: false, testSurfaceSha256: expect.any(String), changed: {modified: [], deleted: [], renamed: [], harness: [], truncated: false}}});
+    expect(view.completionRequirements).toBeUndefined();
+    const plain = await complete(app, c, {});
+    expect(plain.statusCode).toBe(409);
+    expect(plain.json()).toEqual({error: "WORKOS_CONFLICT", reason: "COMPLETION_PRODUCT_NOT_VERIFIED"});
+    // the cycle-1 exact acknowledgement (and every other acknowledgement shape) is no longer accepted by COMPLETE
+    const tsSha = view.delivery.testChanges.testSurfaceSha256;
+    for (const body of [{notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: head}}, {notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: "f".repeat(40)}},
+      {notExecutedAcknowledgement: {acknowledgeNotExecuted: false, headSha: head}}, {notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: head, extra: 1}}, {acknowledgement: {acknowledgeTestChanges: true, testSurfaceSha256: tsSha}},
+      {notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: head}, acknowledgement: {acknowledgeTestChanges: true, testSurfaceSha256: tsSha}}]) {
       const r = await complete(app, c, body);
-      expect(r.statusCode, JSON.stringify(body)).toBe(code);
-      if (code === 409) expect(r.json()).toEqual({error: "WORKOS_CONFLICT", reason: "COMPLETION_NOT_EXECUTED_REQUIRES_ACKNOWLEDGEMENT"});
-      expect(journalText(c)).toBe(before);
-    };
-    await refused({});
-    await refused({notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: "f".repeat(40)}}); // stale / other commit
-    await refused({notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: run.baseSha}}); // base, not head
-    await refused({notExecutedAcknowledgement: {acknowledgeNotExecuted: false, headSha: head}}, 400); // schema: const true
-    await refused({notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: head, extra: 1}}, 400);
-    await refused({notExecutedAcknowledgement: {acknowledgeNotExecuted: true}}, 400);
-    // the test-change acknowledgement can never stand in for it
-    const tsSha = view.completionRequirements.testChanges.testSurfaceSha256;
-    await refused({acknowledgement: {acknowledgeTestChanges: true, testSurfaceSha256: tsSha}});
-    // only with to=COMPLETE
+      expect(r.statusCode, JSON.stringify(body)).toBe(400);
+    }
     const other = await app.inject({method: "POST", url: `/v1/missions/${c.missionId}/transition`, headers: HDR, payload: {to: "BLOCKED", reason: "x", notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: head}}});
     expect(other.statusCode).toBe(400);
     expect(journalText(c)).toBe(before);
-    // store-level: non-exact objects are refused the same way (no schema in front)
-    for (const bad of [{acknowledgeNotExecuted: true, headSha: head, extra: 1}, {acknowledgeNotExecuted: "true", headSha: head}, [true, head], null, head])
-      expect(completionEvidence(runOf(c, run.runId), undefined, undefined, bad)).toEqual({ok: false, reason: "COMPLETION_NOT_EXECUTED_REQUIRES_ACKNOWLEDGEMENT"});
+    // store/pure level: the gate takes no acknowledgement; extra arguments cannot change the decision
+    expect(() => c.store.completeMission({tenantId: "tA"}, c.missionId, "accept", "FOUNDER_LOCAL")).toThrow(/COMPLETION_PRODUCT_NOT_VERIFIED/);
+    expect((completionEvidence as unknown as (...a: unknown[]) => unknown)(runOf(c, run.runId), undefined, undefined, {acknowledgeNotExecuted: true, headSha: head})).toEqual({ok: false, reason: "COMPLETION_PRODUCT_NOT_VERIFIED"});
     expect(runOf(c, run.runId).status).toBe("AWAITING_APPROVAL");
+    expect(missionOf(c).status).toBe("REPORTING");
+    expect(journalText(c)).toBe(before);
   });
 
-  it("accepts the exact acknowledgement in the same journal write as SUCCEEDED; outcomes NOT_EXECUTED_ACKNOWLEDGED; replay re-derives byte-identically; a stripped acknowledgement is tamper", { timeout: T }, async () => {
+  it("the NOT_VERIFIED source delivery replaces the cycle-1 path: one exact bound acceptance, mission stays REPORTING, outcomes NOT_COMPLETED/NOT_VERIFIED, replay byte-identical, a forged cycle-1 COMPLETE entry is tamper", { timeout: T }, async () => {
     const {c, run} = await m1aRun();
-    const app = noProviderApi(c), n = journalEntries(c).length, head = run.headSha!;
-    const res = await complete(app, c, {notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: head}});
-    expect(res.statusCode, res.body).toBe(200);
-    const body = res.json();
-    expect(body.mission.status).toBe("COMPLETE");
-    expect(body.run.status).toBe("SUCCEEDED");
-    expect(body.outcomes).toMatchObject({completionMode: "NOT_EXECUTED_ACKNOWLEDGED", functionalAcceptance: "NOT_EXECUTED"});
+    c.store.recordDeliveryArtifact({tenantId: "tA"}, run.runId, artifactRecord(run), "FOUNDER_LOCAL");
+    const n = journalEntries(c).length;
+    const ok = c.store.acceptSourceDelivery({tenantId: "tA"}, run.runId, acceptanceFor(run), "FOUNDER_LOCAL");
+    expect(ok.mission.status).toBe("REPORTING");
+    expect(ok.run.status).toBe("AWAITING_APPROVAL");
     const neIds = run.evidence.filter(e => e.kind.endsWith("_TESTS_NOT_EXECUTED")).map(e => e.evidenceId);
     expect(neIds).toHaveLength(2);
-    expect(body.run.completion.notExecutedAcknowledgement).toEqual({acknowledgeNotExecuted: true, headSha: head, functionalAcceptance: "NOT_EXECUTED", reason: "SANDBOX_UNAVAILABLE", notExecutedEvidenceIds: neIds});
-    expect(body.run.completion.testChangesAcknowledgement).toBeUndefined();
-    const entries = journalEntries(c);
-    expect(entries.length).toBe(n + 1);
-    const last = entries[entries.length - 1];
-    expect(last.payload).toMatchObject({runId: run.runId, from: "AWAITING_APPROVAL", to: "SUCCEEDED", mission: {to: "COMPLETE"}});
-    expect(last.payload.completion).toEqual(body.run.completion);
-    // replay from the journal alone
+    expect(ok.run.sourceDelivery).toEqual({runId: run.runId, missionId: run.missionId, sourceCommit: run.headSha, exportArtifactHash: HASH,
+      acknowledgements: {notExecuted: {acknowledgeNotExecuted: true, productVerification: "NOT_VERIFIED", reason: "NOT_EXECUTED:SANDBOX_UNAVAILABLE", notExecutedEvidenceIds: neIds}}, acceptedAt: expect.any(String)});
+    expect(deriveOutcomes(ok.run)).toMatchObject({completionMode: "NOT_COMPLETED", functionalAcceptance: "NOT_EXECUTED", productVerification: {state: "NOT_VERIFIED"}, sourceDelivery: {state: "SOURCE_DELIVERY_ACCEPTED"}});
+    expect(journalEntries(c).length).toBe(n + 1);
+    // second use is refused; COMPLETE stays impossible
+    expect(() => c.store.acceptSourceDelivery({tenantId: "tA"}, run.runId, acceptanceFor(run), "FOUNDER_LOCAL")).toThrow(/DELIVERY_ALREADY_ACCEPTED/);
+    expect(() => c.store.completeMission({tenantId: "tA"}, c.missionId, "accept", "FOUNDER_LOCAL")).toThrow(/COMPLETION_PRODUCT_NOT_VERIFIED/);
+    expect(journalEntries(c).length).toBe(n + 1);
     fs.rmSync(path.join(c.dataDir, "snapshot.json"), {force: true});
     const fresh = new WorkOsStore(c.dataDir);
     expect(fresh.isTampered).toBe(false);
-    const replayed = fresh.getRun({tenantId: "tA"}, run.runId)!;
-    expect(JSON.stringify(replayed.completion)).toBe(JSON.stringify(body.run.completion));
-    expect(deriveOutcomes(replayed).completionMode).toBe("NOT_EXECUTED_ACKNOWLEDGED");
-    await app.close();
-    // forged: the combined entry without the acknowledgement (valid chain) is tamper on replay
-    rewriteJournal(c, es => es.map((e, i) => i === es.length - 1 ? {...e, payload: {...e.payload, completion: {...e.payload.completion, notExecutedAcknowledgement: undefined}}} : e));
+    expect(JSON.stringify(fresh.getRun({tenantId: "tA"}, run.runId)!.sourceDelivery)).toBe(JSON.stringify(ok.run.sourceDelivery));
+    // forged: a cycle-1 style combined COMPLETE entry with the exact NOT_EXECUTED acknowledgement (valid chain) is tamper on replay
+    const good = journalEntries(c);
+    rewriteJournal(c, () => [...good, {type: "RUN_TRANSITION", actor: "x", at: new Date().toISOString(), payload: {runId: run.runId, leaseId: null, from: "AWAITING_APPROVAL", to: "SUCCEEDED", reason: "FOUNDER_ACCEPTED: x",
+      mission: {missionId: c.missionId, from: "REPORTING", to: "COMPLETE", reason: "x"}, completion: {headSha: run.headSha, reportEvidenceId: "x", reviewEvidenceId: "x", securityEvidenceId: "x",
+        notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: run.headSha, functionalAcceptance: "NOT_EXECUTED", reason: "SANDBOX_UNAVAILABLE", notExecutedEvidenceIds: neIds}}}}]);
     expect(new WorkOsStore(c.dataDir).isTampered).toBe(true);
-    // forged: an acknowledgement for another commit is tamper too
-    rewriteJournal(c, es => es.map((e, i) => i === es.length - 1 ? {...e, payload: {...e.payload, completion: {...body.run.completion, notExecutedAcknowledgement: {...body.run.completion.notExecutedAcknowledgement, headSha: "f".repeat(40)}}}} : e));
-    expect(new WorkOsStore(c.dataDir).isTampered).toBe(true);
+    rewriteJournal(c, () => good);
+    expect(new WorkOsStore(c.dataDir).isTampered).toBe(false);
   });
 
-  it("changed existing tests need BOTH acknowledgements (never one instead of the other); completionMode NOT_EXECUTED_ACKNOWLEDGED_WITH_TEST_CHANGES", { timeout: T }, async () => {
+  it("changed existing tests: the source delivery needs BOTH acknowledgements (never one instead of the other); still never COMPLETE", { timeout: T }, async () => {
     const {c, run} = await m1aRun({files: {"tests/a.test.mjs": "expect(1).toBe(1);\n"}, implement: {"tests/a.test.mjs": "expect(1).toBe(1);\nexpect(2).toBe(2);\n"}});
     expect(run.status).toBe("AWAITING_APPROVAL");
-    const req = completionRequirements(run);
-    expect(req.notExecuted.required).toBe(true);
-    expect(req.testChanges).toMatchObject({required: true, changed: {modified: ["tests/a.test.mjs"]}});
-    const app = noProviderApi(c), before = journalText(c);
-    const ne = {acknowledgeNotExecuted: true, headSha: run.headSha}, tc = {acknowledgeTestChanges: true, testSurfaceSha256: req.testChanges.testSurfaceSha256};
-    const r1 = await complete(app, c, {notExecutedAcknowledgement: ne});
-    expect(r1.json()).toEqual({error: "WORKOS_CONFLICT", reason: "COMPLETION_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT"});
-    const r2 = await complete(app, c, {acknowledgement: tc});
-    expect(r2.json()).toEqual({error: "WORKOS_CONFLICT", reason: "COMPLETION_NOT_EXECUTED_REQUIRES_ACKNOWLEDGEMENT"});
+    const v = deliveryView(run);
+    expect(v.productVerification.state).toBe("NOT_VERIFIED");
+    expect(v.testChanges).toMatchObject({required: true, changed: {modified: ["tests/a.test.mjs"]}});
+    c.store.recordDeliveryArtifact({tenantId: "tA"}, run.runId, artifactRecord(run), "FOUNDER_LOCAL");
+    const before = journalText(c), tc = {acknowledgeTestChanges: true, testSurfaceSha256: v.testChanges.testSurfaceSha256};
+    expect(() => c.store.acceptSourceDelivery({tenantId: "tA"}, run.runId, acceptanceFor(run), "FOUNDER_LOCAL")).toThrow(/DELIVERY_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT/);
+    const {acknowledgeNotExecuted: _n, ...withoutNe} = acceptanceFor(run, {testChangesAcknowledgement: tc});
+    expect(() => c.store.acceptSourceDelivery({tenantId: "tA"}, run.runId, withoutNe, "FOUNDER_LOCAL")).toThrow(/DELIVERY_ACCEPTANCE_INVALID/);
     expect(journalText(c)).toBe(before);
-    const ok = await complete(app, c, {notExecutedAcknowledgement: ne, acknowledgement: tc});
-    expect(ok.statusCode, ok.body).toBe(200);
-    expect(ok.json().outcomes.completionMode).toBe("NOT_EXECUTED_ACKNOWLEDGED_WITH_TEST_CHANGES");
-    expect(ok.json().run.completion.testChangesAcknowledgement).toMatchObject({functionalAcceptance: "NOT_EXECUTED", changed: {modified: ["tests/a.test.mjs"]}});
+    const ok = c.store.acceptSourceDelivery({tenantId: "tA"}, run.runId, acceptanceFor(run, {testChangesAcknowledgement: tc}), "FOUNDER_LOCAL");
+    expect(ok.run.sourceDelivery?.acknowledgements.testChanges).toMatchObject({functionalAcceptance: "NOT_EXECUTED", changed: {modified: ["tests/a.test.mjs"]}});
+    expect(deriveOutcomes(ok.run).completionMode).toBe("NOT_COMPLETED");
     fs.rmSync(path.join(c.dataDir, "snapshot.json"), {force: true});
-    expect(deriveOutcomes(new WorkOsStore(c.dataDir).getRun({tenantId: "tA"}, run.runId)!).completionMode).toBe("NOT_EXECUTED_ACKNOWLEDGED_WITH_TEST_CHANGES");
+    expect(deriveOutcomes(new WorkOsStore(c.dataDir).getRun({tenantId: "tA"}, run.runId)!).sourceDelivery.state).toBe("SOURCE_DELIVERY_ACCEPTED");
   });
 
-  it("with a test-injected verified provider the old execute path is unchanged: tests run via the provider, no NOT_EXECUTED, the acknowledgement is refused and plain COMPLETE works", { timeout: T }, async () => {
-    const c = setup(tmp);
+  it("with a test-injected verified provider the execute path is unchanged (tests run via the provider, no NOT_EXECUTED); COMPLETE needs a positive executed count (PRODUCT_VERIFIED) and accepts no acknowledgement", { timeout: T }, async () => {
+    const c = setup(tmp, "tA", {files: {"test.mjs": COUNTING_TEST, "README.txt": "base\n"}});
     const fake = new FakeExecutors(okScript());
     const created = startRun(c, fake);
     const run = await drive(c, runner(c, fake), created.runId); // runner() injects the test-only provider
     expect(run.status).toBe("AWAITING_APPROVAL");
     expect(run.reason).toBe("DELIVERY_DECISION_PENDING_FOUNDER");
     expect(kinds(run)).toEqual(expect.arrayContaining(["VERIFY_TESTS", "REGRESSION_TESTS"]));
+    expect(run.evidence.filter(e => e.kind === "VERIFY_TESTS" || e.kind === "REGRESSION_TESTS").map(e => e.sandboxProviderId)).toEqual(["TEST_ONLY_HOST_PASSTHROUGH", "TEST_ONLY_HOST_PASSTHROUGH"]);
     expect(kinds(run).some(k => k.endsWith("_NOT_EXECUTED"))).toBe(false);
     expect(deriveOutcomes(run).functionalAcceptance).not.toBe("NOT_EXECUTED");
-    expect(verificationStatus(run, run.headSha!)).toMatchObject({testsExecuted: true, notExecutedReason: null, label: "NOT_VERIFIED"});
+    expect(deriveOutcomes(run).productVerification.state).toBe("PRODUCT_VERIFIED");
+    // the default project export is never a run delivery: NO_RUN/NOT_VERIFIED even for a verified run's commit
+    expect(verificationStatus(run, run.headSha!)).toMatchObject({testsExecuted: true, notExecutedReason: null, runDelivery: "NO_RUN", productVerification: "NOT_VERIFIED", label: M1A_LABELS.NO_RUN_NOT_VERIFIED});
     const app = api(c); apps.push(app);
     const bad = await complete(app, c, {notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: run.headSha}});
-    expect(bad.json()).toEqual({error: "WORKOS_CONFLICT", reason: "COMPLETION_NOT_EXECUTED_REQUIRES_ACKNOWLEDGEMENT"});
+    expect(bad.statusCode).toBe(400);
     const ok = await complete(app, c, {});
     expect(ok.statusCode).toBe(200);
     expect(ok.json().outcomes.completionMode).toBe("EVIDENCE_GUARD");
+  });
+
+  it("with the provider but an unparseable executed count the product stays NOT_VERIFIED and COMPLETE is refused", { timeout: T }, async () => {
+    const c = setup(tmp);
+    const fake = new FakeExecutors(okScript());
+    const run = await drive(c, runner(c, fake), startRun(c, fake).runId);
+    expect(kinds(run)).toEqual(expect.arrayContaining(["VERIFY_TESTS", "REGRESSION_TESTS"]));
+    expect(deriveOutcomes(run).productVerification).toMatchObject({state: "NOT_VERIFIED", reason: "EXECUTED_TEST_COUNT_UNKNOWN"});
+    expect(() => c.store.completeMission({tenantId: "tA"}, c.missionId, "accept", "FOUNDER_LOCAL")).toThrow(/COMPLETION_PRODUCT_NOT_VERIFIED/);
   });
 });
 
@@ -226,19 +247,20 @@ describe("M1a export and live preview", () => {
     expect(ex.statusCode, ex.body).toBe(201);
     const meta = ex.json().export;
     expect(meta.runId).toBe(done.runId);
-    expect(meta.verification).toEqual({label: M1A_NOT_VERIFIED_LABEL, testsExecuted: false, notExecutedReason: "SANDBOX_UNAVAILABLE", functionalAcceptance: "NOT_EXECUTED", completionMode: "NOT_COMPLETED"});
+    expect(meta.verification).toEqual({label: M1A_LABELS.NO_RUN_NOT_VERIFIED, testsExecuted: false, notExecutedReason: "SANDBOX_UNAVAILABLE", functionalAcceptance: "NOT_EXECUTED", completionMode: "NOT_COMPLETED", runDelivery: "NO_RUN", productVerification: "NOT_VERIFIED"});
     const zip = fs.readFileSync(path.join(c.dataDir, "exports", `${meta.exportId}.zip`));
     const entries = listZipEntries(zip, undefined, {scanOnly: true});
     expect(entries.filter(e => !e.isDir).map(e => e.name)).toContain("VERIFICATION_STATUS.json");
     expect(entries.some(e => e.name === "reports/test-report.json")).toBe(false); // nothing executed -> no test report
     const vs = JSON.parse(readZipEntry(zip, entries.find(e => e.name === "VERIFICATION_STATUS.json")!).toString("utf8"));
-    expect(vs).toEqual({schemaVersion: 1, runId: done.runId, missionId, headSha: done.headSha, functionalAcceptance: "NOT_EXECUTED", completionMode: "NOT_COMPLETED", testsExecuted: false, notExecutedReason: "SANDBOX_UNAVAILABLE",
-      reviewVerdict: "CLEAN", securitySummary: expect.objectContaining({status: expect.any(String), gaps: expect.any(Array), secrets: expect.any(Object), sca: expect.any(String)}), label: "NOT_VERIFIED (M1a: tests not executed)"});
+    expect(vs).toEqual({schemaVersion: 2, kind: "PROJECT_EXPORT", runDelivery: "NO_RUN", producedByRunId: done.runId, missionId, headSha: done.headSha, productVerification: "NOT_VERIFIED", functionalAcceptance: "NOT_EXECUTED", completionMode: "NOT_COMPLETED", testsExecuted: false, notExecutedReason: "SANDBOX_UNAVAILABLE",
+      reviewVerdict: "CLEAN", securitySummary: expect.objectContaining({status: expect.any(String), gaps: expect.any(Array), secrets: expect.any(Object), sca: expect.any(String)}), label: M1A_LABELS.NO_RUN_NOT_VERIFIED});
     expect(vs).toEqual(verificationStatus(done, done.headSha!));
     const readme = readZipEntry(zip, entries.find(e => e.name === "README.md")!).toString("utf8");
     expect(readme).toContain("| Tests | NOT_EXECUTED (SANDBOX_UNAVAILABLE) |");
-    expect(readme).toContain("| Verification | NOT_VERIFIED (M1a: tests not executed)");
-    expect(verificationStatus(null, "a".repeat(40))).toEqual({schemaVersion: 1, runId: null, missionId: null, headSha: "a".repeat(40), functionalAcceptance: "NOT_EXECUTED", completionMode: "NOT_COMPLETED", testsExecuted: false, notExecutedReason: "NO_RUN", reviewVerdict: null, securitySummary: null, label: "NOT_VERIFIED"});
+    expect(readme).toContain(`| Verification | ${M1A_LABELS.NO_RUN_NOT_VERIFIED}`);
+    expect(readme).toContain("| Run delivery | NO_RUN (project export, not a run delivery package) |");
+    expect(verificationStatus(null, "a".repeat(40))).toEqual({schemaVersion: 2, kind: "PROJECT_EXPORT", runDelivery: "NO_RUN", producedByRunId: null, missionId: null, headSha: "a".repeat(40), productVerification: "NOT_VERIFIED", functionalAcceptance: "NOT_EXECUTED", completionMode: "NOT_COMPLETED", testsExecuted: false, notExecutedReason: "NO_RUN", reviewVerdict: null, securitySummary: null, label: M1A_LABELS.NO_RUN_NOT_VERIFIED});
   });
 
   it("Studio template project: export ZIP contains VERIFICATION_STATUS.json (NO_RUN, NOT_VERIFIED) and dev-run start stays 409 SANDBOX_UNAVAILABLE", { timeout: T }, async () => {
@@ -254,15 +276,18 @@ describe("M1a export and live preview", () => {
     expect(ex.statusCode, ex.body).toBe(201);
     const meta = ex.json().export;
     expect(meta.contents.verificationStatus).toBe(true);
-    expect(meta.verification).toEqual({label: "NOT_VERIFIED", testsExecuted: false, notExecutedReason: "NO_RUN", functionalAcceptance: "NOT_EXECUTED", completionMode: "NOT_COMPLETED"});
+    expect(meta.verification).toEqual({label: M1A_LABELS.NO_RUN_NOT_VERIFIED, testsExecuted: false, notExecutedReason: "NO_RUN", functionalAcceptance: "NOT_EXECUTED", completionMode: "NOT_COMPLETED", runDelivery: "NO_RUN", productVerification: "NOT_VERIFIED"});
     const zip = fs.readFileSync(path.join(c.dataDir, "exports", `${meta.exportId}.zip`));
     const entries = listZipEntries(zip, undefined, {scanOnly: true});
     const vsEntry = entries.find(e => e.name === "VERIFICATION_STATUS.json")!;
     expect(vsEntry).toBeTruthy();
     const vs = JSON.parse(readZipEntry(zip, vsEntry).toString("utf8"));
-    expect(vs).toEqual({schemaVersion: 1, runId: null, missionId: null, headSha: meta.commit, functionalAcceptance: "NOT_EXECUTED", completionMode: "NOT_COMPLETED", testsExecuted: false, notExecutedReason: "NO_RUN", reviewVerdict: null, securitySummary: null, label: "NOT_VERIFIED"});
+    expect(vs).toEqual({schemaVersion: 2, kind: "PROJECT_EXPORT", runDelivery: "NO_RUN", producedByRunId: null, missionId: null, headSha: meta.commit, productVerification: "NOT_VERIFIED", functionalAcceptance: "NOT_EXECUTED", completionMode: "NOT_COMPLETED", testsExecuted: false, notExecutedReason: "NO_RUN", reviewVerdict: null, securitySummary: null, label: M1A_LABELS.NO_RUN_NOT_VERIFIED});
     const readme = readZipEntry(zip, entries.find(e => e.name === "README.md")!).toString("utf8");
     expect(readme).toContain("| Tests | NOT_EXECUTED (NO_RUN) |");
-    expect(readme).toContain("| Verification | NOT_VERIFIED");
+    expect(readme).toContain(`| Verification | ${M1A_LABELS.NO_RUN_NOT_VERIFIED}`);
+    // the default project export is never presented as a run delivery
+    expect(readme).toContain("NOT a UASCO run delivery package");
+    expect(readme).not.toMatch(/PRODUCT_VERIFIED —|[|] COMPLETE/);
   });
 });

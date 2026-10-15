@@ -18,6 +18,7 @@ import {FakeExecutors} from "../core/workos/executors.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {listZipEntries, readZipEntry, writeZip, crc32, ZipError} from "../core/workos/zip.js";
 import {pidAlive, processStartTime} from "../core/workos/devrun.js";
+import {M1A_LABELS} from "../core/workos/outcomes.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
 const ENV_POLICY = path.join(REPO, "config", "environment-policy.json");
@@ -373,9 +374,10 @@ describe("PS-1A files and git (PS-007)", () => {
     expect(readme).toContain("| Tests | PASSED");
     expect(readme).toContain("`node test.js`");
     const vs = JSON.parse(readZipEntry(zip, entries.find(e => e.name === "VERIFICATION_STATUS.json")!).toString("utf8"));
-    expect(vs).toMatchObject({runId: run.runId, headSha: done.headSha, testsExecuted: true, notExecutedReason: null, reviewVerdict: "CLEAN", label: "NOT_VERIFIED"});
+    // M1a c2: the default project export is never a run delivery: NO_RUN/NOT_VERIFIED (the producing run is informational only)
+    expect(vs).toMatchObject({kind: "PROJECT_EXPORT", runDelivery: "NO_RUN", producedByRunId: run.runId, headSha: done.headSha, testsExecuted: true, notExecutedReason: null, reviewVerdict: "CLEAN", productVerification: "NOT_VERIFIED", label: M1A_LABELS.NO_RUN_NOT_VERIFIED});
     expect(vs.functionalAcceptance).not.toBe("VERIFIED");
-    expect(meta.verification).toMatchObject({label: "NOT_VERIFIED", testsExecuted: true});
+    expect(meta.verification).toMatchObject({label: M1A_LABELS.NO_RUN_NOT_VERIFIED, testsExecuted: true, runDelivery: "NO_RUN", productVerification: "NOT_VERIFIED"});
     const tr = JSON.parse(readZipEntry(zip, entries.find(e => e.name === "reports/test-report.json")!).toString("utf8"));
     expect(tr).toMatchObject({runId: run.runId, commit: done.headSha, status: "PASSED"});
     expect(JSON.parse(readZipEntry(zip, entries.find(e => e.name === "reports/security-report.json")!).toString("utf8")).summary.status).toBe("PASSED");

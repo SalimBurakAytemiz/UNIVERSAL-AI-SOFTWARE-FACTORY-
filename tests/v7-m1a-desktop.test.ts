@@ -1,11 +1,13 @@
-// //TR: Bu test V7-PKG-M1A-MODE masaüstü yüzeylerini gerçek görünüm modülleri + sahte DOM ile doğrular: koşu/görev/teslim/export yüzeylerinde "Testler çalıştırılmadı — NOT_VERIFIED (sandbox doğrulanmadı)" rozeti yalnız test yürütme kanıtı yoksa görünür (sahte veri yok), Ayarlar "Sandbox: UNAVAILABLE — M1a modu" ve ayrı UASCO profillerinin giriş gerekli durumunu gösterir, COMPLETE akışı NOT_EXECUTED beyanını ve değişen test/harness listesini gösterir, her onay için ayrı kutu ister (işaretsizse istek gönderilmez) ve kesin onay nesnelerini gönderir; klavye odağı hiçbir adımda BODY'ye düşmez (focus.js settleFocus).
+// //TR: Bu test V7-PKG-M1A-MODE (cycle 2: D-M1A-STATE-MODEL-2026-10-15 + D-M1A-ACCEPTANCE-CONDITIONS-2026-10-15) masaüstü yüzeylerini gerçek görünüm modülleri + sahte DOM ile doğrular: koşu/görev/teslim/export yüzeylerinde "Testler çalıştırılmadı — NOT_VERIFIED (sandbox doğrulanmadı)" rozeti yalnız test yürütme kanıtı yoksa görünür (sahte veri yok), Ayarlar "Sandbox: UNAVAILABLE — M1a modu" ve ayrı UASCO profillerinin giriş gerekli durumunu gösterir, COMPLETE akışı NOT_EXECUTED beyanını ve değişen test/harness listesini gösterir, her onay için ayrı kutu ister (işaretsizse istek gönderilmez) ve kesin onay nesnelerini gönderir; klavye odağı hiçbir adımda BODY'ye düşmez (focus.js settleFocus).
 import {describe, it, expect, beforeEach} from "vitest";
+import fs from "node:fs";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
 
 const root = path.resolve(__dirname, "..");
 const rend = path.join(root, "apps", "desktop", "renderer");
 const load = async (...p: string[]): Promise<any> => import(pathToFileURL(path.join(...p)).href);
+const read = (...p: string[]) => fs.readFileSync(path.join(...p), "utf8");
 
 // ---------- Sahte DOM (B5 biçimi + settleFocus için öznitelik seçicisi) ----------
 class N {
@@ -143,68 +145,244 @@ describe("M1a Settings sandbox state", () => {
   });
 });
 
-describe("M1a COMPLETE flow: explicit checkbox per acknowledgement, exact objects, focus never on BODY", () => {
-  const get = (tc: boolean) => ({"/v1/missions": {missions: [mission()]}, "/v1/projects": {projects: []}, "/v1/work-runs": {runs: [m1aRun()]}, [`/v1/work-runs?missionId=${MID}`]: {runs: [m1aRun()]},
-    [`/v1/missions/${MID}`]: {mission: mission(), tasks: []}, [`/v1/work-runs/${RUN}`]: {run: m1aRun(), outcomes: {functionalAcceptance: "NOT_EXECUTED"}, completionRequirements: reqs(tc)}, "/v1/founder-attention": {blocked: []}});
-  it("mission detail: shows the not-executed statement and changed tests/harness; unchecked boxes block the POST; checked boxes send the exact objects", async () => {
-    const work = await load(rend, "views", "work.js");
+// ---------- M1a c2 (D-M1A-STATE-MODEL-2026-10-15 + D-M1A-ACCEPTANCE-CONDITIONS-2026-10-15) ----------
+const SG = "SOURCE_GENERATION_COMPLETE — Kaynak kod üretildi", NV = "NOT_VERIFIED — Ürün doğrulanmadı (testler çalıştırılmadı: sandbox yok)", ACC = "Kaynak teslimi kabul edildi — ürün DOĞRULANMADI";
+const H1 = "a".repeat(64), H2 = "b".repeat(64), TREE = "3".repeat(40);
+const deliveryOf = (o: any = {}) => ({runId: RUN, missionId: MID, projectId: PID, status: "AWAITING_APPROVAL", sourceCommit: HEAD,
+  sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE", reason: "SOURCE_EVIDENCE_FOR_HEAD", label: SG}, productVerification: {state: "NOT_VERIFIED", reason: "NOT_EXECUTED:SANDBOX_UNAVAILABLE", label: NV}, testsExecuted: false,
+  artifact: {runId: RUN, missionId: MID, sourceCommit: HEAD, treeSha: TREE, exportArtifactHash: H1, artifactPath: `deliveries/${RUN}/${H1}.zip`}, accepted: null, fileState: "VERIFIED",
+  testChanges: {required: false, testSurfaceSha256: TSSHA, changed: {modified: [], deleted: [], renamed: [], harness: [], truncated: false}}, labels: {sourceGeneration: SG, productVerification: NV, sourceDelivery: null}, ...o});
+const tcChanged = {required: true, testSurfaceSha256: TSSHA, changed: {modified: ["tests/a.test.mjs"], deleted: [], renamed: [], harness: ["vitest.config.ts"], truncated: false}};
+const blockedDelivery = () => deliveryOf({runId: RUN2, status: "BLOCKED", sourceCommit: null, artifact: null, fileState: null, sourceGeneration: {state: "BLOCKED", reason: "CLAUDE_PROFILE_LOGIN_REQUIRED", label: "BLOCKED — Kaynak kod üretimi engellendi"},
+  productVerification: {state: "NOT_VERIFIED", reason: "NOT_EXECUTED:NO_HEAD_COMMIT", label: "NOT_VERIFIED — Ürün doğrulanmadı"}});
+const runDetail = (pv: "NOT_VERIFIED" | "PRODUCT_VERIFIED") => ({run: m1aRun(), outcomes: {functionalAcceptance: "NOT_EXECUTED", completionMode: "NOT_COMPLETED"},
+  delivery: deliveryOf(pv === "PRODUCT_VERIFIED" ? {productVerification: {state: "PRODUCT_VERIFIED", reason: "TESTS_EXECUTED_IN_VERIFIED_SANDBOX", label: "PRODUCT_VERIFIED — Ürün doğrulandı (testler doğrulanmış sandbox içinde çalıştı ve geçti)"}, testsExecuted: true} : {})});
+const tick = async (n = 6, until?: () => boolean) => { for (let i = 0; i < n && !(until?.()); i++) await new Promise(r => setTimeout(r, 0)); };
+
+describe("M1a c2 COMPLETE is never offered for an unverified product (no acknowledgement path)", () => {
+  const get = (pv: "NOT_VERIFIED" | "PRODUCT_VERIFIED") => ({"/v1/missions": {missions: [mission()]}, "/v1/projects": {projects: []}, "/v1/work-runs": {runs: [m1aRun()]}, [`/v1/work-runs?missionId=${MID}`]: {runs: [m1aRun()]},
+    [`/v1/missions/${MID}`]: {mission: mission(), tasks: []}, [`/v1/work-runs/${RUN}`]: runDetail(pv), "/v1/founder-attention": {blocked: []}});
+  it("mission detail and inbox: NOT_VERIFIED run -> no COMPLETE button, an honest note with both axis labels; PRODUCT_VERIFIED run -> COMPLETE is offered and posts no acknowledgement", async () => {
+    const work = await load(rend, "views", "work.js"), inbox = await load(rend, "views", "inbox.js");
     forms.selection.missionId = MID;
-    const {doc, calls, show} = await mkCtx({get: get(true), confirm: true, post: () => ({status: 200, body: {mission: {}}})});
-    let w = await show(work);
-    const block = byId(w, `ack-block-${MID}`)!;
-    expect(block.textContent).toContain("Bu koşunun testleri ÇALIŞTIRILMADI: doğrulanmış bir sandbox yok (SANDBOX_UNAVAILABLE)");
-    expect(block.textContent).toContain("tests/a.test.mjs");
-    expect(block.textContent).toContain("vitest.config.ts");
-    expect(byData(block, "ack").map(n => n.dataset.ack)).toEqual(["notExecuted", "testChanges"]);
-    // 1) nothing ticked -> no POST, explicit error, focus on the status block (not BODY)
-    byId(w, "tr-COMPLETE")!.fire("click");
-    await new Promise(r => setTimeout(r, 0));
-    expect(calls.post).toHaveLength(0);
-    expect(byId(doc.body, `act-${MID}-status`)!.textContent).toContain("testlerin çalıştırılmadığını (NOT_VERIFIED) onaylayan kutuyu işaretleyin");
-    expect(doc.activeElement).not.toBe(doc.body);
-    // 2) only the NOT_EXECUTED box -> still refused locally (test-change box missing)
-    w = doc.body;
-    byId(w, `ack-ne-${MID}`)!.fire("change", {target: {checked: true}});
-    byId(w, "tr-COMPLETE")!.fire("click");
-    await new Promise(r => setTimeout(r, 0));
-    expect(calls.post).toHaveLength(0);
-    expect(byId(doc.body, `act-${MID}-status`)!.textContent).toContain("değişen testleri / harness'ı onaylayan kutuyu işaretleyin");
-    expect(doc.activeElement).not.toBe(doc.body);
-    // 3) both ticked -> confirm dialog carries the statement, POST carries exactly both objects
-    byId(doc.body, `ack-tc-${MID}`)!.fire("change", {target: {checked: true}});
-    byId(doc.body, "tr-COMPLETE")!.fire("click");
-    for (let i = 0; i < 5 && !calls.post.length; i++) await new Promise(r => setTimeout(r, 0));
-    expect(calls.confirm.at(-1).body).toContain("Testler ÇALIŞTIRILMADI (doğrulanmış sandbox yok); görev NOT_VERIFIED olarak tamamlanacak.");
-    expect(calls.post).toHaveLength(1);
-    expect(calls.post[0].path).toBe(`/v1/missions/${MID}/transition`);
-    expect(calls.post[0].body).toEqual({to: "COMPLETE", reason: "REPORTING -> COMPLETE (UASCO Desktop)", notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: HEAD}, acknowledgement: {acknowledgeTestChanges: true, testSurfaceSha256: TSSHA}});
-    await new Promise(r => setTimeout(r, 0));
-    expect(doc.activeElement).not.toBe(doc.body);
-  });
-  it("inbox delivery decision: NOT_EXECUTED only -> one box; server 409 refusal is shown explicitly and focus stays off BODY", async () => {
-    const inbox = await load(rend, "views", "inbox.js");
-    const {doc, calls, show} = await mkCtx({get: get(false), confirm: true, post: () => ({status: 409, body: {error: "WORKOS_CONFLICT", reason: "COMPLETION_NOT_EXECUTED_REQUIRES_ACKNOWLEDGEMENT"}})});
+    const {show} = await mkCtx({get: get("NOT_VERIFIED")});
+    const w = await show(work);
+    expect(byId(w, "tr-COMPLETE")).toBeNull();
+    expect(byId(w, "tr-BLOCKED")).not.toBeNull();
+    const na = byId(w, `complete-na-${MID}`)!;
+    expect(na.dataset.completeOffered).toBe("false");
+    expect(na.textContent).toContain(SG);
+    expect(na.textContent).toContain(NV);
+    expect(na.textContent).toContain("COMPLETE mümkün değildir");
+    expect(byData(w, "ack")).toHaveLength(0);
     const i = await show(inbox);
-    expect(byData(i, "ack").map(n => n.dataset.ack)).toEqual(["notExecuted"]);
-    byId(i, `ack-ne-${MID}`)!.fire("change", {target: {checked: true}});
-    byId(i, `ib-COMPLETE-${MID}`)!.fire("click");
-    for (let k = 0; k < 5 && !calls.post.length; k++) await new Promise(r => setTimeout(r, 0));
-    expect(calls.post[0].body).toEqual({to: "COMPLETE", reason: "REPORTING -> COMPLETE (UASCO Desktop)", notExecutedAcknowledgement: {acknowledgeNotExecuted: true, headSha: HEAD}});
-    await new Promise(r => setTimeout(r, 0));
-    expect(byId(doc.body, `act-${MID}-status`)!.textContent).toContain("COMPLETION_NOT_EXECUTED_REQUIRES_ACKNOWLEDGEMENT");
+    expect(byId(i, `ib-COMPLETE-${MID}`)).toBeNull();
+    expect(byData(i, "action", "accept")).toHaveLength(0);
+    expect(byId(i, `ib-complete-na-${MID}`)).not.toBeNull();
+    expect(byId(i, `ib-BLOCKED-${MID}`)).not.toBeNull();
+    // with sandbox-verified tests the button exists; its POST body never carries an acknowledgement
+    forms.resetAllForms(); forms.selection.missionId = MID;
+    const v = await mkCtx({get: get("PRODUCT_VERIFIED"), confirm: true, post: () => ({status: 200, body: {mission: {}}})});
+    const w2 = await v.show(work);
+    expect(byId(w2, `complete-na-${MID}`)).toBeNull();
+    byId(w2, "tr-COMPLETE")!.fire("click");
+    await tick(6, () => v.calls.post.length > 0);
+    expect(v.calls.post).toEqual([{path: `/v1/missions/${MID}/transition`, body: {to: "COMPLETE", reason: "REPORTING -> COMPLETE (UASCO Desktop)"}}]);
+  });
+  it("request builder refuses any acknowledgement on a transition; mapping never invents PRODUCT_VERIFIED; refusals are explicit", async () => {
+    const core = await load(rend, "work-core.js"), dc = await load(rend, "delivery-core.js");
+    expect(core.buildTransitionRequest({missionId: MID, from: "REPORTING", to: "COMPLETE", reason: "x", confirmed: true, acknowledgements: {notExecuted: {acknowledgeNotExecuted: true, headSha: HEAD}}})).toMatchObject({ok: false, errors: {acknowledgement: "err.ackNotForTransition"}});
+    expect(core.buildTransitionRequest({missionId: MID, from: "REPORTING", to: "COMPLETE", reason: "x", confirmed: true})).toMatchObject({ok: true, body: {to: "COMPLETE", reason: "x"}});
+    expect(core.mapWorkRunDetail({run: m1aRun(), delivery: {productVerification: {state: "VERIFIED"}}}).run.productVerification).toBeNull();
+    expect(dc.canOfferComplete({productVerification: null})).toBe(false);
+    expect(dc.canOfferComplete(core.mapWorkRunDetail(runDetail("NOT_VERIFIED")).run)).toBe(false);
+    expect(dc.canOfferComplete(core.mapWorkRunDetail(runDetail("PRODUCT_VERIFIED")).run)).toBe(true);
+    for (const reason of ["COMPLETION_PRODUCT_NOT_VERIFIED", "DELIVERY_ACCEPTANCE_MISMATCH", "DELIVERY_ALREADY_ACCEPTED", "DELIVERY_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT"])
+      expect(core.describePostResult({status: 409, body: {error: "WORKOS_CONFLICT", reason}}).key).toBe(`post.err.409.${reason}`);
+    for (const error of ["NO_GENERATED_SOURCE", "SOURCE_GENERATION_NOT_COMPLETE", "DELIVERY_ARTIFACT_HASH_MISMATCH"])
+      expect(core.describePostResult({status: 409, body: {error}}).key).toBe(`post.err.409.${error}`);
+  });
+});
+
+describe("M1a c2 Studio > Delivery: run deliveries (prepare, bound acceptance dialog, hash-verified export)", () => {
+  const listOf = (...ds: any[]) => ({deliveries: ds});
+  async function panelCtx(o: {deliveries: () => any; post?: (p: string, b: any) => {status: number; body: any}; confirm?: boolean; native?: any}) {
+    const dp = await load(rend, "views", "delivery-panel.js");
+    const m = await mkCtx({get: {[`/v1/deliveries?projectId=${PID}`]: () => o.deliveries()}, post: o.post, confirm: o.confirm});
+    m.ctx.native = o.native;
+    const view = {render: async (c: any) => dp.runDeliveriesPanel(c, await c.api.deliveries(PID))};
+    const root = await m.show(view);
+    return {...m, dp, root};
+  }
+  it("lists SOURCE_GENERATION_COMPLETE runs with runId, sourceCommit and the artifact hash; other runs only with their axis labels; the project export is labelled NO_RUN/NOT_VERIFIED", async () => {
+    const {root} = await panelCtx({deliveries: () => listOf(deliveryOf(), blockedDelivery())});
+    const card = byData(root, "deliveryRun", RUN)[0];
+    expect(card.dataset.deliveryState).toBe("PREPARED");
+    for (const s of [RUN, MID, HEAD, H1, SG, NV]) expect(card.textContent).toContain(s);
+    expect(byId(root, `dl-prep-${RUN}`)).not.toBeNull();
+    expect(byId(root, `dl-open-${RUN}`)).not.toBeNull();
+    expect(byId(root, `dl-export-${RUN}`)).toBeNull(); // export only after the acceptance
+    expect(byData(root, "deliveryRun", RUN2)).toHaveLength(0);
+    const other = byData(root, "otherRun", RUN2)[0];
+    expect(other.textContent).toContain("BLOCKED — Kaynak kod üretimi engellendi");
+    expect(other.textContent).toContain("NOT_VERIFIED — Ürün doğrulanmadı");
+    expect(all(other).some(n => n.tagName === "BUTTON")).toBe(false);
+    expect(root.textContent).not.toMatch(/PRODUCT_VERIFIED —|\bPASS(ED)?\b|\bworks\b/);
+    const none = await panelCtx({deliveries: () => listOf(blockedDelivery())});
+    expect(none.root.textContent).toContain("SOURCE_GENERATION_COMPLETE durumunda koşu yok");
+    const tr = (await load(rend, "locales", "tr.js")).default;
+    expect(tr["studio.export.title"]).toContain("NO_RUN/NOT_VERIFIED");
+    expect(tr["m1a.export.noRun"]).toContain("NO_RUN/NOT_VERIFIED");
+    expect(read(rend, "views", "studio-workspace.js")).toContain("runDeliveriesPanel(ctx,deliveries)");
+  });
+  it("prepare posts an empty body to the run's prepare route; a 409 NO_GENERATED_SOURCE is shown explicitly; focus never drops to BODY", async () => {
+    const {root, doc, calls} = await panelCtx({deliveries: () => listOf(deliveryOf({artifact: null, fileState: null})), post: () => ({status: 409, body: {error: "NO_GENERATED_SOURCE"}})});
+    byId(root, `dl-prep-${RUN}`)!.fire("click");
+    await tick(8, () => calls.post.length > 0);
+    await tick();
+    expect(calls.post).toEqual([{path: `/v1/work-runs/${RUN}/delivery/prepare`, body: {}}]);
+    expect(byId(doc.body, `dl-${RUN}-status`)!.textContent).toContain("NO_GENERATED_SOURCE");
     expect(doc.activeElement).not.toBe(doc.body);
   });
-  it("request builder: acknowledgements only with COMPLETE and only in the exact shape", async () => {
-    const core = await load(rend, "work-core.js"), m1a = await load(rend, "m1a.js");
-    expect(core.buildTransitionRequest({missionId: MID, from: "REPORTING", to: "BLOCKED", reason: "x", acknowledgements: {notExecuted: {acknowledgeNotExecuted: true, headSha: HEAD}}}).ok).toBe(false);
-    expect(core.buildTransitionRequest({missionId: MID, from: "REPORTING", to: "COMPLETE", reason: "x", confirmed: true, acknowledgements: {notExecuted: {acknowledgeNotExecuted: true, headSha: "zz"}}}).ok).toBe(false);
-    expect(m1a.buildCompletionAcknowledgements(reqs(false), {notExecuted: false})).toMatchObject({ok: false, errors: {acknowledgement: "err.ackNotExecutedRequired"}});
-    expect(m1a.buildCompletionAcknowledgements({...reqs(false), headSha: null}, {notExecuted: true})).toMatchObject({ok: false, errors: {acknowledgement: "err.ackDataMissing"}});
-    expect(m1a.buildCompletionAcknowledgements(reqs(false), {notExecuted: true})).toEqual({ok: true, errors: {}, acknowledgements: {notExecuted: {acknowledgeNotExecuted: true, headSha: HEAD}}});
-    expect(core.mapCompletionRequirements({headSha: HEAD})).toBeNull();
-    const d = core.describePostResult({status: 409, body: {error: "WORKOS_CONFLICT", reason: "COMPLETION_NOT_EXECUTED_REQUIRES_ACKNOWLEDGEMENT"}});
-    expect(d.key).toBe("post.err.409.COMPLETION_NOT_EXECUTED_REQUIRES_ACKNOWLEDGEMENT");
+  it("acceptance dialog: shows runId, mission, commit, artifact hash, the not-executed statement and changed tests with one checkbox per acknowledgement; unticked boxes send nothing; ticked boxes send exactly the bound object", async () => {
+    const {root, doc, calls} = await panelCtx({deliveries: () => listOf(deliveryOf({testChanges: tcChanged})), confirm: true, post: () => ({status: 200, body: {}})});
+    byId(root, `dl-open-${RUN}`)!.fire("click");
+    await tick();
+    const dlg = byId(doc.body, `dl-dialog-${RUN}`)!;
+    for (const s of [RUN, MID, HEAD, H1, NV, "ÇALIŞTIRILMADI", "tests/a.test.mjs", "vitest.config.ts"]) expect(dlg.textContent).toContain(s);
+    expect(byData(dlg, "ack").map(n => n.dataset.ack)).toEqual(["notExecuted", "testChanges"]);
+    expect(doc.activeElement).not.toBe(doc.body);
+    // 1) nothing ticked
+    byId(doc.body, `dl-accept-${RUN}`)!.fire("click");
+    await tick();
+    expect(calls.post).toHaveLength(0);
+    expect(byId(doc.body, `dl-${RUN}-status`)!.textContent).toContain("testlerin çalıştırılmadığını (NOT_VERIFIED) onaylayan kutuyu işaretleyin");
+    expect(doc.activeElement).not.toBe(doc.body);
+    // 2) only the NOT_EXECUTED box
+    byId(doc.body, `ack-ne-${RUN}`)!.fire("change", {target: {checked: true}});
+    byId(doc.body, `dl-accept-${RUN}`)!.fire("click");
+    await tick();
+    expect(calls.post).toHaveLength(0);
+    expect(byId(doc.body, `dl-${RUN}-status`)!.textContent).toContain("değişen testleri / harness'ı onaylayan kutuyu işaretleyin");
+    // 3) both: confirm dialog names the run, commit and artifact; the POST carries exactly the bound acceptance
+    byId(doc.body, `ack-tc-${RUN}`)!.fire("change", {target: {checked: true}});
+    byId(doc.body, `dl-accept-${RUN}`)!.fire("click");
+    await tick(10, () => calls.post.length > 0);
+    expect(calls.confirm.at(-1).target).toBe(`${RUN} · ${HEAD} · ${H1}`);
+    expect(calls.confirm.at(-1).body).toContain(ACC);
+    expect(calls.post).toEqual([{path: `/v1/work-runs/${RUN}/delivery/accept`, body: {acceptance: {runId: RUN, missionId: MID, sourceCommit: HEAD, exportArtifactHash: H1, acknowledgeNotExecuted: true,
+      testChangesAcknowledgement: {acknowledgeTestChanges: true, testSurfaceSha256: TSSHA}}}}]);
+    await tick();
+    expect(doc.activeElement).not.toBe(doc.body);
   });
+  it("RV-M1A-C1-OBS-1: ticks are keyed by runId + missionId + sourceCommit + exportArtifactHash (+ testSurfaceSha256) and reset when any of them changes", async () => {
+    let current = deliveryOf();
+    const {root, doc, calls, ctx} = await panelCtx({deliveries: () => listOf(current), confirm: true, post: () => ({status: 200, body: {}})});
+    const m1a = await load(rend, "m1a.js"), dc = await load(rend, "delivery-core.js");
+    byId(root, `dl-open-${RUN}`)!.fire("click");
+    await tick();
+    byId(doc.body, `ack-ne-${RUN}`)!.fire("change", {target: {checked: true}});
+    expect(m1a.deliveryAckState(dc.mapDelivery(current)).notExecuted).toBe(true);
+    // a re-prepared/different artifact (new hash) for the same run: the old tick must not carry over
+    for (const next of [deliveryOf({artifact: {...deliveryOf().artifact, exportArtifactHash: H2, artifactPath: `deliveries/${RUN}/${H2}.zip`}}), deliveryOf({sourceCommit: "4".repeat(40), artifact: {...deliveryOf().artifact, sourceCommit: "4".repeat(40)}}),
+      deliveryOf({testChanges: {...tcChanged, testSurfaceSha256: "5".repeat(64)}})]) {
+      byId(doc.body, `ack-ne-${RUN}`)!.fire("change", {target: {checked: true}});
+      current = next;
+      await ctx.rerender();
+      const box = byId(doc.body, `ack-ne-${RUN}`)!;
+      expect(box.attrs.has("checked")).toBe(false);
+      expect(m1a.deliveryAckState(dc.mapDelivery(current)).notExecuted).toBe(false);
+      byId(doc.body, `dl-accept-${RUN}`)!.fire("click");
+      await tick();
+      expect(calls.post).toHaveLength(0);
+    }
+    // a stale checks object (key of another artifact) is refused by the builder itself
+    const d = dc.mapDelivery(deliveryOf());
+    expect(dc.buildAcceptanceRequest(d, {key: dc.deliveryAckKey(dc.mapDelivery(deliveryOf({artifact: {...deliveryOf().artifact, exportArtifactHash: H2}}))), notExecuted: true})).toMatchObject({ok: false, errors: {acknowledgement: "err.ackStale"}});
+    expect(dc.buildAcceptanceRequest(d, {key: dc.deliveryAckKey(d), notExecuted: true})).toEqual({ok: true, path: `/v1/work-runs/${RUN}/delivery/accept`, body: {acceptance: {runId: RUN, missionId: MID, sourceCommit: HEAD, exportArtifactHash: H1, acknowledgeNotExecuted: true}}});
+    expect(dc.buildAcceptanceRequest({...d, artifact: null}, {key: dc.deliveryAckKey({...d, artifact: null}), notExecuted: true})).toMatchObject({ok: false, errors: {acknowledgement: "err.deliveryNotPrepared"}});
+    expect(dc.mapDelivery({...deliveryOf(), sourceGeneration: {state: "COMPLETE"}})).toBeNull();
+    expect(dc.mapDelivery({...deliveryOf(), runId: "run_x"})).toBeNull();
+  });
+  it("after acceptance: the accepted label, no prepare/accept actions, and 'Teslim paketini dışa aktar' calls the main-process bridge with the run id only (success, mismatch, no bridge)", async () => {
+    const accepted = deliveryOf({accepted: {runId: RUN, missionId: MID, sourceCommit: HEAD, exportArtifactHash: H1, acceptedAt: "2026-10-15T10:00:00.000Z", acknowledgements: {}}});
+    const native = {calls: [] as any[], next: {exported: true, sha256: H1, fileName: "UASCO-teslim.zip", savedTo: "C:\\x\\UASCO-teslim.zip"} as any, async exportDelivery(id: string) { native.calls.push(id); return native.next; }};
+    const {root, doc} = await panelCtx({deliveries: () => listOf(accepted), native});
+    const card = byData(root, "deliveryRun", RUN)[0];
+    expect(card.dataset.deliveryState).toBe("ACCEPTED");
+    expect(card.textContent).toContain(ACC);
+    expect(byId(root, `dl-prep-${RUN}`)).toBeNull();
+    expect(byId(root, `dl-open-${RUN}`)).toBeNull();
+    byId(root, `dl-export-${RUN}`)!.fire("click");
+    await tick();
+    expect(native.calls).toEqual([RUN]);
+    expect(byId(doc.body, `dl-${RUN}-status`)!.textContent).toContain(H1);
+    expect(doc.activeElement).not.toBe(doc.body);
+    native.next = {exported: false, reason: "DELIVERY_ARTIFACT_HASH_MISMATCH"};
+    byId(doc.body, `dl-export-${RUN}`)!.fire("click");
+    await tick();
+    expect(byId(doc.body, `dl-${RUN}-status`)!.textContent).toContain("hiçbir bayt verilmedi");
+    const nob = await panelCtx({deliveries: () => listOf(accepted)});
+    byId(nob.root, `dl-export-${RUN}`)!.fire("click");
+    await tick();
+    expect(byId(nob.doc.body, `dl-${RUN}-status`)!.textContent).toContain("dışa aktarılamıyor");
+  });
+});
+
+describe("M1a c2 protected main-process wiring (pure blocks evaluated in isolation)", () => {
+  const mainSrc = read(root, "apps", "desktop", "main.mjs");
+  const block = (name: string, ret: string, ...params: string[]) => { const m = new RegExp(`// ${name}-BEGIN\\n([\\s\\S]*?)// ${name}-END`).exec(mainSrc); expect(m, name).not.toBeNull(); return (vals: unknown[]) => new Function(...params, `${m![1]}\nreturn ${ret};`)(...vals); };
+  it("identity: only the packaged product name 'UASCO Test' selects the TEST AppUserModelID and window title; the release identity is unchanged", () => {
+    const b = block("M1A-C2", "{desktopIdentity,windowTitleFor,deliveryExportCheck,deliveryExportFileName}")([]) as any;
+    expect(b.desktopIdentity("UASCO")).toEqual({variant: "release", appUserModelId: "com.uasco.desktop", titleSuffix: ""});
+    expect(b.desktopIdentity("UASCO Test")).toEqual({variant: "test", appUserModelId: "com.uasco.desktop.test", titleSuffix: " — UASCO Test"});
+    for (const n of ["uasco", "UASCO test", "", undefined]) expect(b.desktopIdentity(n).appUserModelId).toBe("com.uasco.desktop");
+    expect(b.windowTitleFor("UASCO", b.desktopIdentity("UASCO Test"))).toBe("UASCO — UASCO Test");
+    expect(b.windowTitleFor("UASCO", b.desktopIdentity("UASCO"))).toBe("UASCO");
+    expect(mainSrc).toContain("app.setAppUserModelId(desktopIdentity(app.getName()).appUserModelId)");
+  });
+  it("delivery export check: only the record's own file under <data>/deliveries with the recorded sha256 is handed out", async () => {
+    const fs = await import("node:fs"), os = await import("node:os"), crypto = await import("node:crypto");
+    const b = block("M1A-C2", "{deliveryExportCheck}")([]) as any;
+    const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "m1a-c2-exp-")), rootDir = path.join(tmp, "deliveries");
+    try {
+      const bytes = Buffer.from("PK-fake-archive"), hash = crypto.createHash("sha256").update(bytes).digest("hex"), file = path.join(rootDir, RUN, `${hash}.zip`);
+      fs.mkdirSync(path.dirname(file), {recursive: true}); fs.writeFileSync(file, bytes);
+      const rec = {runId: RUN, missionId: MID, sourceCommit: HEAD, treeSha: TREE, exportArtifactHash: hash, artifactPath: `deliveries/${RUN}/${hash}.zip`};
+      const body = {artifact: rec, sha256: hash, fileState: "VERIFIED", path: file};
+      const ok = b.deliveryExportCheck(body, RUN, rootDir, fs, path, crypto);
+      expect(ok).toMatchObject({ok: true, sha256: hash, fileName: `UASCO-teslim-${RUN}-${hash.slice(0, 12)}.zip`});
+      expect(Buffer.compare(ok.bytes, bytes)).toBe(0);
+      expect(b.deliveryExportCheck(body, RUN2, rootDir, fs, path, crypto).reason).toBe("DELIVERY_RECORD_INVALID");
+      expect(b.deliveryExportCheck({...body, sha256: H2}, RUN, rootDir, fs, path, crypto).reason).toBe("DELIVERY_ARTIFACT_HASH_MISMATCH");
+      const outside = path.join(tmp, "elsewhere.zip"); fs.writeFileSync(outside, bytes);
+      expect(b.deliveryExportCheck({...body, path: outside}, RUN, rootDir, fs, path, crypto).reason).toBe("DELIVERY_PATH_REJECTED");
+      fs.writeFileSync(file, Buffer.concat([bytes, Buffer.from("x")]));
+      expect(b.deliveryExportCheck(body, RUN, rootDir, fs, path, crypto).reason).toBe("DELIVERY_ARTIFACT_HASH_MISMATCH");
+      fs.rmSync(file);
+      expect(b.deliveryExportCheck(body, RUN, rootDir, fs, path, crypto).reason).toBe("DELIVERY_ARTIFACT_MISSING");
+    } finally { fs.rmSync(tmp, {recursive: true, force: true}); }
+  });
+  it("allow-lists: GET delivery views and POST prepare/accept are allowed with strict ids; export is never a renderer POST; the IPC handler checks the sender and takes only a run id", () => {
+    const get = block("B4-ALLOWLIST", "desktopExtraGetPathAllowed")([]) as (v: unknown) => boolean;
+    const RID = "run_" + "ab".repeat(12), P = "prj_" + "cd".repeat(12);
+    expect(get(`/v1/work-runs/${RID}/delivery`)).toBe(true);
+    expect(get(`/v1/deliveries?projectId=${P}`)).toBe(true);
+    for (const bad of [`/v1/work-runs/${RID}/delivery/export`, "/v1/work-runs/run_x/delivery", "/v1/deliveries", `/v1/deliveries?projectId=${P}&x=1`]) expect(get(bad), bad).toBe(false);
+    const post = block("B5-POST-ALLOWLIST", "desktopPostPathAllowed")([]) as (v: unknown) => boolean;
+    expect(post(`/v1/work-runs/${RID}/delivery/prepare`)).toBe(true);
+    expect(post(`/v1/work-runs/${RID}/delivery/accept`)).toBe(true);
+    expect(post(`/v1/work-runs/${RID}/delivery/export`)).toBe(false);
+    expect(post("/v1/work-runs/run_x/delivery/accept")).toBe(false);
+    const i = mainSrc.indexOf('ipcMain.handle("uasco:export-delivery"'), h = mainSrc.slice(i, mainSrc.indexOf("\n});", i));
+    expect(h).toMatch(/^ipcMain\.handle\("uasco:export-delivery",async\(event,runId\)=>\{\s*requireTrustedSender\(event\);/);
+    expect(h).toContain("DELIVERY_RUN_ID_RE.test(runId)");
+    expect(h).toContain("deliveryExportCheck(res.body,runId,path.join(dataDirRoot(),\"deliveries\"),fs,path,crypto)");
+    expect(h).toContain("if(back!==chk.sha256)");
+  });
+});
+
+describe("M1a dictionary", () => {
   it("every new M1a dictionary key exists in both languages with non-empty text", async () => {
     const en = (await load(rend, "locales", "en.js")).default, tr = (await load(rend, "locales", "tr.js")).default;
     const keys = Object.keys(en).filter(k => k.startsWith("m1a.") || k.startsWith("err.ack") || k.includes("COMPLETION_") || k === "form.field.acknowledgement");
@@ -212,5 +390,9 @@ describe("M1a COMPLETE flow: explicit checkbox per acknowledgement, exact object
     for (const k of keys) { expect(typeof tr[k], k).toBe("string"); expect(tr[k].length, k).toBeGreaterThan(0); expect(en[k].length, k).toBeGreaterThan(0); }
     expect(tr["m1a.badge"]).toBe(BADGE_TR);
     expect(en["m1a.badge"]).toBe(BADGE_EN);
+    // M1a c2: the Founder's exact labels; the acknowledgement-based COMPLETE texts are gone
+    for (const lang of [tr, en]) expect(lang["m1a.delivery.acceptedLabel"]).toBe("Kaynak teslimi kabul edildi — ürün DOĞRULANMADI");
+    for (const k of ["m1a.confirm.notExecuted", "err.ackOnlyComplete", "post.err.409.COMPLETION_NOT_EXECUTED_REQUIRES_ACKNOWLEDGEMENT", "post.err.409.COMPLETION_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT"]) { expect(tr[k], k).toBeUndefined(); expect(en[k], k).toBeUndefined(); }
+    expect(tr["m1a.sandbox.unavailable"]).toBe("Sandbox: UNAVAILABLE — M1a modu");
   });
 });

@@ -340,7 +340,9 @@
         "tests/v7-ps1b-project-studio-ui.test.ts",
         "tests/v7-ps1b-relpath-canonical.test.ts",
         "tests/v7-m1a-mode.test.ts",
-        "tests/v7-m1a-desktop.test.ts"
+        "tests/v7-m1a-desktop.test.ts",
+        "tests/v7-m1a-c2-delivery.test.ts",
+        "tests/v7-m1a-c2-test-variant.test.ts"
       ],
       "requiresDependencies": true
     },

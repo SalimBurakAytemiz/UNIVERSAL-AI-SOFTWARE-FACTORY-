@@ -738,8 +738,16 @@ describe("B5 Gelen Kutusu screen", () => {
     if (p === "/v1/work-runs") return {workRuns: [{runId: RUN, missionId: MID, status: "AWAITING_APPROVAL"}]};
     return undefined;
   };
+  // M1a c2 (D-M1A-STATE-MODEL-2026-10-15): "kabul" (COMPLETE) yalnız PRODUCT_VERIFIED koşu ayrıntısıyla sunulur; ayrıntı yoksa veya NOT_VERIFIED ise düğme yoktur.
+  const pvDetail = (state: "PRODUCT_VERIFIED" | "NOT_VERIFIED") => ({[`/v1/work-runs/${RUN}`]: {run: {runId: RUN, missionId: MID, status: "AWAITING_APPROVAL"}, outcomes: {}, delivery: {runId: "run_" + "0".repeat(24), missionId: MID,
+    sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE", reason: "x", label: "SOURCE_GENERATION_COMPLETE — Kaynak kod üretildi"}, productVerification: {state, reason: "x", label: null}, testChanges: {}}}});
   it("shows delivery decisions and Founder-attention items; rendering alone sends nothing", async () => {
-    const {ctx, doc, calls} = await mkCtx({get: getFn(), post: () => ({status: 200, body: {}})});
+    const hidden = await mkCtx({get: getFn(pvDetail("NOT_VERIFIED"))});
+    const hv = mount(hidden.doc, await (await load(rend, "views", "inbox.js")).render(hidden.ctx, {id: "inbox"}));
+    expect(byData(hv, "action", "accept").length).toBe(0);
+    expect(byId(hv, `ib-COMPLETE-${MID}`)).toBeNull();
+    expect(byId(hv, `ib-complete-na-${MID}`)).not.toBeNull();
+    const {ctx, doc, calls} = await mkCtx({get: getFn(pvDetail("PRODUCT_VERIFIED")), post: () => ({status: 200, body: {}})});
     const view = await load(rend, "views", "inbox.js");
     const root = mount(doc, await view.render(ctx, {id: "inbox"}));
     expect(byData(root, "decisionMission").map(n => [n.dataset.decision, n.dataset.decisionMission])).toEqual([["DELIVERY_DECISION", MID], ["FOUNDER_ATTENTION", MID2]]);
@@ -752,7 +760,7 @@ describe("B5 Gelen Kutusu screen", () => {
   });
   it("accept requires the confirm dialog then POSTs COMPLETE; reject needs a reason and goes to BLOCKED (REMEDIATING is not allowed from REPORTING)", async () => {
     let answer = false;
-    const {ctx, doc, calls} = await mkCtx({get: getFn(), confirm: () => answer, post: () => ({status: 200, body: {}})});
+    const {ctx, doc, calls} = await mkCtx({get: getFn(pvDetail("PRODUCT_VERIFIED")), confirm: () => answer, post: () => ({status: 200, body: {}})});
     const view = await load(rend, "views", "inbox.js");
     const root = mount(doc, await view.render(ctx, {id: "inbox"}));
     byId(root, `ib-COMPLETE-${MID}`)!.fire("click"); await new Promise(r => setTimeout(r, 0));

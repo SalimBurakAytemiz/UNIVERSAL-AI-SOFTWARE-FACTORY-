@@ -192,13 +192,14 @@ describe("PS-1B IPC wiring (main.mjs, preload.mjs) is static and narrow", () => 
     expect(mainSrc).toContain("sandbox:true");
     expect(mainSrc).toContain("contextIsolation:true");
   });
-  it("preload exposes only the three narrow calls (kind / ids), no token and no generic invoke", () => {
+  it("preload exposes only the narrow calls (kind / ids; M1a c2 adds exportDelivery(runId)), no token and no generic invoke", () => {
     const preload = read(desk, "preload.mjs");
     expect(preload).toContain('pickImportPath:(kind)=>ipcRenderer.invoke("uasco:pick-import-path",kind)');
     expect(preload).toContain('openPreview:(projectId)=>ipcRenderer.invoke("uasco:open-preview",projectId)');
     expect(preload).toContain('showExport:(projectId,exportId)=>ipcRenderer.invoke("uasco:show-export",projectId,exportId)');
     expect(code(preload)).not.toMatch(/token|process\.env|ipcRenderer\.send|ipcRenderer\.on\(|shell|dialog|openExternal/i);
-    expect(preload.match(/ipcRenderer\.invoke\(/g)?.length).toBe(8);
+    expect(preload).toContain('exportDelivery:(runId)=>ipcRenderer.invoke("uasco:export-delivery",runId)');
+    expect(preload.match(/ipcRenderer\.invoke\(/g)?.length).toBe(9);
     expect(preload).not.toMatch(/^import /m);
   });
   it("the trusted-sender check ignores only the URL fragment (hash routes keep working) and still rejects any other document", () => {

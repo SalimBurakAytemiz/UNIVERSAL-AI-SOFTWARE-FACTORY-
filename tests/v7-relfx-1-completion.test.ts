@@ -19,9 +19,18 @@ const sec = (status: "PASSED" | "PARTIAL" | "BLOCKED", commitSha = H1) => ev("SE
 const baseRun = (over: Partial<WorkRun> = {}): WorkRun => ({runId: "run_" + "0".repeat(24), missionId: "msn_x", projectId: "prj_x", tenantId: "tA", roleId: null, executor: {implementer: "I", reviewer: "R"}, leaseId: null, leaseExpiresAt: null,
   attempt: 1, status: "AWAITING_APPROVAL", step: "REPORT", remediationCycle: 0, retryCount: 0, retryAt: null, reason: null, baseSha: H2, headSha: H1, workBranch: "b", checkpoints: [], evidence: [], createdAt: "", createdBy: "x", updatedAt: "", ...over});
 const fullEvidence = (head = H1) => [ev("IMPLEMENT", {commitSha: head}), sec("PASSED", head), ev("REVIEW", {verdict: "CLEAN", commitSha: head}), ev("REPORT", {verdict: "CLEAN", commitSha: head})];
+// D-M1A-STATE-MODEL-2026-10-15: ürün düzeyi COMPLETE ayrıca PRODUCT_VERIFIED kanıtı ister: doğrulanmış sandbox tanıklı VERIFY/REGRESSION (exit 0) + TEST_SURFACE'te yürütülen test sayısı > 0.
+const productEvidence = (head = H1) => [ev("VERIFY_TESTS", {commitSha: head, sandboxProviderId: "TEST_SBX"}), ev("REGRESSION_TESTS", {commitSha: head, sandboxProviderId: "TEST_SBX"}),
+  ev("TEST_SURFACE", {commitSha: head, testSurface: {added: [], modified: [], deleted: [], renamed: [], weakened: [], harness: [], executedTests: 2, functionalAcceptance: "UNVERIFIED_ORACLE", reason: "NO_INDEPENDENT_ORACLE", truncated: false} as never})];
+// Test komutu (testin kendi sabit fikstürü) vitest biçiminde özet basar; yalnız TEST sağlayıcısıyla (passthrough) yürütülür.
+const COUNTING_TEST = `import fs from "node:fs";
+const v = fs.existsSync("feature.txt") ? fs.readFileSync("feature.txt", "utf8").trim() : "";
+console.log(v === "ok" ? " Tests  1 passed (1)" : " Tests  1 failed (1)");
+process.exit(v === "ok" ? 0 : 1);
+`;
 
 async function finishedRun(): Promise<{c: Ctx; run: WorkRun}> {
-  const c = setup(tmp); const fake = new FakeExecutors(okScript());
+  const c = setup(tmp, "tA", {files: {"test.mjs": COUNTING_TEST, "README.txt": "base\n"}}); const fake = new FakeExecutors(okScript());
   const created = startRun(c, fake);
   const run = await drive(c, runner(c, fake), created.runId);
   expect(run.status).toBe("AWAITING_APPROVAL");
@@ -31,7 +40,11 @@ async function finishedRun(): Promise<{c: Ctx; run: WorkRun}> {
 
 describe("REL-FX-1 completion predicate and outcome read-model (pure)", () => {
   it("accepts only REPORT + CLEAN REVIEW + non-BLOCKED SECURITY_REPORT bound to run.headSha", () => {
-    expect(completionEvidence(baseRun({evidence: fullEvidence()}))).toEqual({ok: true, refs: {headSha: H1, reportEvidenceId: "evd_report", reviewEvidenceId: "evd_review", securityEvidenceId: "evd_security_report"}});
+    expect(completionEvidence(baseRun({evidence: [...fullEvidence(), ...productEvidence()]}))).toEqual({ok: true, refs: {headSha: H1, reportEvidenceId: "evd_report", reviewEvidenceId: "evd_review", securityEvidenceId: "evd_security_report",
+      productVerification: {state: "PRODUCT_VERIFIED", verifyEvidenceId: "evd_verify_tests", regressionEvidenceId: "evd_regression_tests", testSurfaceEvidenceId: "evd_test_surface"}}});
+    // FX-1 evidence alone (static security + independent review + report) is never product-level COMPLETE
+    expect(completionEvidence(baseRun({evidence: fullEvidence()}))).toEqual({ok: false, reason: "COMPLETION_PRODUCT_NOT_VERIFIED"});
+    expect(completionEvidence(baseRun({evidence: [...fullEvidence(), ...productEvidence().map(e => ({...e, sandboxProviderId: undefined}))]}))).toEqual({ok: false, reason: "COMPLETION_PRODUCT_NOT_VERIFIED"});
     expect(completionEvidence(undefined)).toEqual({ok: false, reason: "COMPLETION_NO_RUN"});
     expect(completionEvidence(baseRun({status: "BLOCKED", evidence: fullEvidence()}))).toEqual({ok: false, reason: "COMPLETION_RUN_NOT_AWAITING_APPROVAL"});
     expect(completionEvidence(baseRun({headSha: null, evidence: fullEvidence()}))).toEqual({ok: false, reason: "COMPLETION_HEAD_SHA_MISSING"});
@@ -43,7 +56,7 @@ describe("REL-FX-1 completion predicate and outcome read-model (pure)", () => {
     expect(completionEvidence(baseRun({evidence: [sec("PASSED"), ev("REVIEW", {verdict: "BLOCKED", commitSha: H1}), ev("REPORT", {verdict: "CLEAN", commitSha: H1})]}))).toEqual({ok: false, reason: "COMPLETION_REVIEW_EVIDENCE_MISSING"});
     expect(completionEvidence(baseRun({evidence: [sec("PASSED"), ev("REVIEW", {verdict: "CLEAN", commitSha: H1})]}))).toEqual({ok: false, reason: "COMPLETION_REPORT_EVIDENCE_MISSING"});
     // a PARTIAL security stage is not BLOCKED (the gap is shown, not hidden)
-    expect(completionEvidence(baseRun({evidence: [sec("PARTIAL"), ev("REVIEW", {verdict: "CLEAN", commitSha: H1}), ev("REPORT", {verdict: "CLEAN", commitSha: H1})]})).ok).toBe(true);
+    expect(completionEvidence(baseRun({evidence: [sec("PARTIAL"), ev("REVIEW", {verdict: "CLEAN", commitSha: H1}), ev("REPORT", {verdict: "CLEAN", commitSha: H1}), ...productEvidence()]})).ok).toBe(true);
   });
 
   it("deriveOutcomes is honest: NOT_EXECUTED / UNKNOWN where there is no evidence, never a guessed VERIFIED", () => {
@@ -86,6 +99,9 @@ describe("REL-FX-1 evidence-bound COMPLETE (store + API)", () => {
     const app = api(c);
     const view = (await app.inject({method: "GET", url: `/v1/work-runs/${run.runId}`, headers: HDR})).json();
     expect(view.outcomes).toEqual(expect.objectContaining({runId: run.runId, headSha: run.headSha, execution: "VERIFIED", functionalAcceptance: "UNKNOWN", evidenceIntegrity: "UNKNOWN", release: "NOT_EXECUTED"}));
+    // the TEST sandbox provider executed the fixture test inside the gate: the only path to PRODUCT_VERIFIED (unreachable in M1a where no provider exists)
+    expect(view.outcomes.productVerification).toMatchObject({state: "PRODUCT_VERIFIED", reason: "TESTS_EXECUTED_IN_VERIFIED_SANDBOX"});
+    expect(view.outcomes.sourceGeneration.state).toBe("SOURCE_GENERATION_COMPLETE");
     const n = journalEntries(c).length;
     const res = await app.inject({method: "POST", url: `/v1/missions/${c.missionId}/transition`, headers: HDR, payload: {to: "COMPLETE", reason: "Founder accepts"}});
     expect(res.statusCode).toBe(200);
@@ -98,7 +114,7 @@ describe("REL-FX-1 evidence-bound COMPLETE (store + API)", () => {
     const last = entries[entries.length - 1];
     expect(last.type).toBe("RUN_TRANSITION");
     expect(last.payload).toEqual(expect.objectContaining({runId: run.runId, from: "AWAITING_APPROVAL", to: "SUCCEEDED", mission: expect.objectContaining({from: "REPORTING", to: "COMPLETE"}),
-      completion: expect.objectContaining({headSha: run.headSha})}));
+      completion: expect.objectContaining({headSha: run.headSha, productVerification: expect.objectContaining({state: "PRODUCT_VERIFIED"})})}));
     // replay of the combined write from the journal alone
     fs.rmSync(`${c.dataDir}/snapshot.json`, {force: true});
     const fresh = new WorkOsStore(c.dataDir);
