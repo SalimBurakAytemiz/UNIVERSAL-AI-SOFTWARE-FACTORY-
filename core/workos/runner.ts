@@ -18,7 +18,7 @@ import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from ".
 import {assertIndependentExecutors} from "./executors.js";
 import {ExecutionGate} from "./execution-gate.js";
 import type {GateDecision, ProjectExecutionKind} from "./execution-gate.js";
-import {reviewAndSecurityFor} from "./outcomes.js";
+import {M1A_NOT_VERIFIED_LABEL, productVerificationOf, reviewAndSecurityFor} from "./outcomes.js";
 import {RISK_REFUSAL, hostExecutionNotice, riskAdmitted} from "./risk-admission.js";
 import {evaluateTestSurface, parseNameStatusZ, parseTestRunStreams, stripAnsi} from "./test-surface.js";
 import type {NameStatusEntry, TestRunSummary} from "./test-surface.js";
@@ -502,7 +502,8 @@ export class MissionRunner {
       return {kind: "DONE", next: "SECURITY", data: {tests: "NOT_EXECUTED", testsReason: gate.reason, secretHits: 0}};
     }
     const r = await this.runTests(gate, argv, work, abort);
-    this.procEvidence(run, leaseId, "VERIFY_TESTS", r, {commitSha: run.headSha});
+    // M1a c2: kanıt, kapı kararındaki doğrulanmış sağlayıcının kimliğini taşır (PRODUCT_VERIFIED için sandbox tanığı; kapı semantiği değişmez).
+    this.procEvidence(run, leaseId, "VERIFY_TESTS", r, {commitSha: run.headSha, sandboxProviderId: gate.providerId});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     if (r.spawnError) return {kind: "BLOCK", reason: "TEST_COMMAND_SPAWN_FAILED"};
     // RV-RELFX-C2-002: stdout ve stderr akış kuralına göre ayrı okunur (birleştirilip son satır seçilmez; stderr'e basılan sahte özet gerçeğini ezemez, çelişki UNKNOWN). executedTests yalnız doğrulanmış sandbox içindeki gerçek koşudan gelir.
@@ -674,7 +675,7 @@ export class MissionRunner {
     // M1a: sandbox yoksa regresyon komutu HİÇ çalışmaz; NOT_EXECUTED kanıtı yazılır ve REPORT'a geçilir (BLOCKED değil, bütçe tüketilmez).
     if (!gate.allowed) { this.sandboxNotExecuted(run, leaseId, "REGRESSION_TESTS", argv, gate); return {kind: "DONE", next: "REPORT", data: {tests: "NOT_EXECUTED", testsReason: gate.reason}}; }
     const r = await this.runTests(gate, argv, clone, abort);
-    this.procEvidence(run, leaseId, "REGRESSION_TESTS", r, {commitSha: run.headSha ?? undefined});
+    this.procEvidence(run, leaseId, "REGRESSION_TESTS", r, {commitSha: run.headSha ?? undefined, sandboxProviderId: gate.providerId});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     if (r.spawnError) return {kind: "BLOCK", reason: "TEST_COMMAND_SPAWN_FAILED"};
     if (r.exitCode === 0) return {kind: "DONE", next: "REPORT", data: {tests: "PASSED"}};
@@ -699,9 +700,11 @@ export class MissionRunner {
     const ts = this.reviewerTestSurface(run);
     const notExecuted = this.testsNotExecuted(run);
     // M1a: rapor, testlerin sandbox yokluğundan çalıştırılmadığını ve sonucun NOT_VERIFIED olduğunu açıkça taşır (kanıttan türetilir).
+    // M1a c2: ürün doğrulaması ekseni (productVerification) aynı saf yüklemden gelir; kaynak üretimi ekseni REPORT kanıtından sonra türetilir ve rapora yazılmaz.
+    const pv = productVerificationOf(run.headSha, run.evidence);
     (report as Record<string, unknown>).testExecution = notExecuted
-      ? {testsExecuted: false, notExecutedReason: "SANDBOX_UNAVAILABLE", functionalAcceptance: "NOT_EXECUTED", label: "NOT_VERIFIED (M1a: tests not executed)"}
-      : {testsExecuted: run.evidence.some(e => (e.kind === "VERIFY_TESTS" || e.kind === "REGRESSION_TESTS") && e.commitSha === run.headSha), notExecutedReason: null, functionalAcceptance: ts?.functionalAcceptance ?? "UNKNOWN", label: "NOT_VERIFIED"};
+      ? {testsExecuted: false, notExecutedReason: "SANDBOX_UNAVAILABLE", functionalAcceptance: "NOT_EXECUTED", productVerification: pv.state, productVerificationReason: pv.reason, label: M1A_NOT_VERIFIED_LABEL}
+      : {testsExecuted: run.evidence.some(e => (e.kind === "VERIFY_TESTS" || e.kind === "REGRESSION_TESTS") && e.commitSha === run.headSha), notExecutedReason: null, functionalAcceptance: ts?.functionalAcceptance ?? "UNKNOWN", productVerification: pv.state, productVerificationReason: pv.reason, label: pv.label};
     (report as Record<string, unknown>).testSurface = ts ? {functionalAcceptance: ts.functionalAcceptance, reason: ts.reason, deleted: ts.deleted, weakened: ts.weakened, added: ts.added, modified: ts.modified, executedTests: ts.executedTests} : null;
     (report as Record<string, unknown>).security = {status: sec.status, founderNotice: sec.founderNote, gaps: sec.gaps, secrets: {builtin: sec.secrets.builtin.status, gitleaks: sec.secrets.gitleaks.status}, sca: {status: sec.sca.status, reason: sec.sca.reason ?? null, dbState: sec.sca.dbState ?? null, counts: sec.sca.counts}, sast: sec.sast, sbom: sec.sbom, tools: sec.tools, evidenceId: secEv.evidenceId, reportLogPath: secEv.logPath, reportLogSha256: secEv.logSha256};
     const file = path.join(this.runDir(run.runId), "report.json"), bytes = Buffer.from(JSON.stringify(report, null, 2) + "\n", "utf8");

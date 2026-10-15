@@ -24,7 +24,8 @@ export interface ProjectExport {
   runId: string | null; contents: { readme: boolean; testReport: boolean; securityReport: boolean; runReport: boolean; verificationStatus?: boolean };
   secretScan: { scanner: "builtin"; status: "CLEAN"; entriesScanned: number };
   // M1a: arşiv kökündeki VERIFICATION_STATUS.json'un özeti (kanıttan türetilir; masaüstü NOT_VERIFIED rozeti için). Eski kayıtlarda yoktur.
-  verification?: { label: string; testsExecuted: boolean; notExecutedReason: string | null; functionalAcceptance: string; completionMode: string };
+  // M1a c2: varsayılan proje dışa aktarımı bir koşu teslimi DEĞİLDİR: runDelivery "NO_RUN", productVerification her zaman NOT_VERIFIED (eski kayıtlarda bu iki alan yoktur).
+  verification?: { label: string; testsExecuted: boolean; notExecutedReason: string | null; functionalAcceptance: string; completionMode: string; runDelivery?: "NO_RUN"; productVerification?: "NOT_VERIFIED" };
 }
 export interface WorkMission {
   missionId: string; projectId: string; tenantId: string; title: string; objective: string;
@@ -37,6 +38,8 @@ export interface WorkTask {
 export type JournalType = "PROJECT_CREATED" | "MISSION_CREATED" | "TASK_CREATED" | "MISSION_TRANSITIONED"
   | "RUN_CREATED" | "RUN_LEASE" | "RUN_TRANSITION" | "RUN_CHECKPOINT" | "RUN_EVIDENCE"
   | "PROJECT_REPOSITORY_SET" | "PROJECT_EXPORT_RECORDED"
+  // //TR: M1a c2 (D-M1A-ACCEPTANCE-CONDITIONS-2026-10-15): gerçek koşu çıktısının deterministik teslim artefaktı ve ona bağlı tek kullanımlık NOT_VERIFIED kaynak teslimi kabulü (COMPLETE değildir).
+  | "DELIVERY_ARTIFACT_PREPARED" | "SOURCE_DELIVERY_ACCEPTED"
   // //TR: B11A: Company OS (CRM/Finans/Hukuk) girdileri aynı hash zincirli journal içindedir; kurallar core/company altındadır.
   | CompanyJournalType
   // //TR: WFR-04a: Skill Academy (kaynak, öğrenme yaşam döngüsü, terfi, drift, yeniden kullanım) girdileri de aynı journal içindedir; kurallar core/academy altındadır.
@@ -97,6 +100,9 @@ export interface RunEvidence {
   security?: SecurityStageSummary;
   // REL-FX-2: yalnız TEST_SURFACE kanıtında; base..head test yüzeyi sınıflaması ve functionalAcceptance durumu (dosya içeriği yazılmaz).
   testSurface?: TestSurfaceSummary;
+  // M1a c2: yalnız VERIFY_TESTS/REGRESSION_TESTS kanıtında; testin SBX kapısının izin verdiği doğrulanmış sandbox sağlayıcısında koştuğunun tanığı (kapı kararındaki providerId).
+  // Tanıksız test kanıtı (ör. SBX kapısından önceki ana makine koşuları) PRODUCT_VERIFIED sayılmaz.
+  sandboxProviderId?: string;
 }
 // //TR: REL-FX c4 (S1/S2): mevcut test/harness değişikliği olan run'ın COMPLETE'i Founder'ın açık onayını ister; onay, değişen yollar ve değişmeyen functionalAcceptance
 // run SUCCEEDED geçişiyle aynı journal yazısında kaydedilir (asla VERIFIED değildir).
@@ -105,10 +111,20 @@ export interface TestChangesAcknowledgement {
   changed: { modified: string[]; deleted: string[]; renamed: {from: string; to: string}[]; harness: string[]; truncated: boolean };
   functionalAcceptance: string;
 }
-// //TR: M1a (D-SBX1-PATH-2026-10-15): testleri sandbox yokluğundan çalıştırılmamış (NOT_EXECUTED) run'ın COMPLETE'i Founder'ın açık onayını ister; onay run SUCCEEDED geçişiyle aynı
-// journal yazısında kaydedilir ve replay'de yeniden türetilip birebir karşılaştırılır (asla VERIFIED değildir).
-export interface NotExecutedAcknowledgement { acknowledgeNotExecuted: true; headSha: string; functionalAcceptance: "NOT_EXECUTED"; reason: string; notExecutedEvidenceIds: string[] }
-export interface RunCompletionRecord { headSha: string; reportEvidenceId: string; reviewEvidenceId: string; securityEvidenceId: string; testChangesAcknowledgement?: TestChangesAcknowledgement; notExecutedAcknowledgement?: NotExecutedAcknowledgement }
+// //TR: D-M1A-STATE-MODEL-2026-10-15: ürün düzeyi COMPLETE kaydı FX-1 kanıtına ek olarak PRODUCT_VERIFIED kanıt kimliklerini taşır (replay'de yeniden türetilip birebir karşılaştırılır).
+// Hiçbir onay alanı yoktur: ne NOT_EXECUTED onayı (cycle-1 yolu kaldırıldı) ne de test-değişikliği onayı COMPLETE üretir; onay asla test kanıtının yerine geçmez.
+export interface RunCompletionRecord {
+  headSha: string; reportEvidenceId: string; reviewEvidenceId: string; securityEvidenceId: string;
+  productVerification: { state: "PRODUCT_VERIFIED"; verifyEvidenceId: string; regressionEvidenceId: string; testSurfaceEvidenceId: string };
+}
+// //TR: M1a c2 (Founder koşulu 1): SOURCE_GENERATION_COMPLETE koşunun run.headSha ağacından üretilmiş deterministik teslim artefaktının journal kaydı. artifactPath dataDir'e görelidir.
+export interface DeliveryArtifactRecord { runId: string; missionId: string; sourceCommit: string; treeSha: string; exportArtifactHash: string; artifactPath: string }
+// //TR: M1a c2 (Founder koşulu 2): NOT_VERIFIED kaynak teslimi kabulü; runId + missionId + sourceCommit + exportArtifactHash'e bağlı, tek kullanımlık. productVerification'ı değiştirmez, COMPLETE değildir.
+export interface SourceDeliveryAcknowledgements {
+  notExecuted: { acknowledgeNotExecuted: true; productVerification: "NOT_VERIFIED"; reason: string; notExecutedEvidenceIds: string[] };
+  testChanges?: TestChangesAcknowledgement;
+}
+export interface SourceDeliveryAcceptance { runId: string; missionId: string; sourceCommit: string; exportArtifactHash: string; acknowledgements: SourceDeliveryAcknowledgements; acceptedAt: string }
 export interface WorkRun {
   runId: string; missionId: string; projectId: string; tenantId: string; roleId: string | null;
   executor: { implementer: string; reviewer: string };
@@ -118,4 +134,7 @@ export interface WorkRun {
   checkpoints: RunCheckpoint[]; evidence: RunEvidence[]; createdAt: string; createdBy: string; updatedAt: string;
   // REL-FX c4: yalnız kanıt kapısından geçen birleşik SUCCEEDED yazısında (replay ile aynı değer) set edilir.
   completion?: RunCompletionRecord;
+  // M1a c2: en son DELIVERY_ARTIFACT_PREPARED kaydı ve (varsa) tek SOURCE_DELIVERY_ACCEPTED kaydı; yalnız journal girdilerinden (replay ile aynı değer) set edilir.
+  deliveryArtifact?: DeliveryArtifactRecord;
+  sourceDelivery?: SourceDeliveryAcceptance;
 }

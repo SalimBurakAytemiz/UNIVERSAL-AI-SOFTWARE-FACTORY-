@@ -44,16 +44,24 @@ export const runStartSchema = {
   type: "object", additionalProperties: false,
   properties: {idempotencyKey: key, roleId: {type: "string", minLength: 1, maxLength: 100, pattern: "^[A-Za-z0-9._:-]+$"}}
 } as const;
-// //TR: REL-FX c4 (S1): acknowledgement yalnız to=COMPLETE ile geçerlidir (route ayrıca denetler); açık true ve TEST_SURFACE kanıt logunun sha256'sı (64 küçük hex) ister.
+// //TR: D-M1A-STATE-MODEL-2026-10-15: mission geçişi hiçbir onay alanı kabul etmez (cycle-1 notExecutedAcknowledgement ve REL-FX c4 acknowledgement kaldırıldı; gövdede bulunmaları 400'dür).
+// COMPLETE yalnız kanıt kapısıyla (FX-1 + PRODUCT_VERIFIED) olur; NOT_VERIFIED kaynak teslimi ayrı rotadadır (POST /v1/work-runs/:id/delivery/accept).
 export const missionTransitionSchema = {
   type: "object", additionalProperties: false, required: ["to", "reason"],
+  properties: {to: {type: "string", minLength: 1, maxLength: 64}, reason: text}
+} as const;
+// //TR: M1a c2 kaynak teslimi kabul gövdesi: acceptance birebir {runId, missionId, sourceCommit, exportArtifactHash, acknowledgeNotExecuted: true} (+ gerekirse testChangesAcknowledgement).
+// Biçim burada (400), alanların güncel DELIVERY_ARTIFACT_PREPARED kaydı ve run ile eşitliği store kapısında (409, journal değişmez) denetlenir.
+export const sourceDeliveryAcceptSchema = {
+  type: "object", additionalProperties: false, required: ["acceptance"],
   properties: {
-    to: {type: "string", minLength: 1, maxLength: 64}, reason: text,
-    acknowledgement: {type: "object", additionalProperties: false, required: ["acknowledgeTestChanges", "testSurfaceSha256"],
-      properties: {acknowledgeTestChanges: {const: true}, testSurfaceSha256: {type: "string", pattern: "^[0-9a-f]{64}$"}}},
-    // M1a: NOT_EXECUTED onayı; yalnız to=COMPLETE ile (route ayrıca denetler), açık true ve run.headSha (40 küçük hex).
-    notExecutedAcknowledgement: {type: "object", additionalProperties: false, required: ["acknowledgeNotExecuted", "headSha"],
-      properties: {acknowledgeNotExecuted: {const: true}, headSha: {type: "string", pattern: "^[0-9a-f]{40}$"}}}
+    acceptance: {type: "object", additionalProperties: false, required: ["runId", "missionId", "sourceCommit", "exportArtifactHash", "acknowledgeNotExecuted"],
+      properties: {
+        runId: {type: "string", pattern: "^run_[0-9a-f]{24}$"}, missionId: {type: "string", pattern: "^msn_[0-9a-f]{24}$"},
+        sourceCommit: {type: "string", pattern: "^[0-9a-f]{40}$"}, exportArtifactHash: {type: "string", pattern: "^[0-9a-f]{64}$"}, acknowledgeNotExecuted: {const: true},
+        testChangesAcknowledgement: {type: "object", additionalProperties: false, required: ["acknowledgeTestChanges", "testSurfaceSha256"],
+          properties: {acknowledgeTestChanges: {const: true}, testSurfaceSha256: {type: "string", pattern: "^[0-9a-f]{64}$"}}}
+      }}
   }
 } as const;
 
@@ -78,6 +86,7 @@ const validateMissionShape = compile(missionCreateSchema);
 export const validateMissionCreate = (x: unknown): {ok: true} | {ok: false; errors: string} => { const r = validateMissionShape(x); return r.ok ? withTestCommand(x, r) : r; };
 export const validateRunStart = compile(runStartSchema);
 export const validateMissionTransition = compile(missionTransitionSchema);
+export const validateSourceDeliveryAccept = compile(sourceDeliveryAcceptSchema);
 
 // //TR: PS-1A Project Studio route gövdeleri: içe aktarma yalnız yerel yol alır (uzak URL bu pakette reddedilir), export yalnız commit seçer, gövdesiz yazma route'ları boş nesne kabul eder.
 export const projectImportSchema = {

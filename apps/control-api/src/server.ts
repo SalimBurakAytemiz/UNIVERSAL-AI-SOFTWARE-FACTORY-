@@ -22,12 +22,12 @@ import type {WorkOsStoreOptions} from "../../../core/workos/store.js";
 import {WorkOsError} from "../../../core/workos/types.js";
 import {EvidenceIndex,EvidenceInputError,EVIDENCE_KINDS} from "../../../core/evidence/index.js";
 import type {EvidenceKind} from "../../../core/evidence/index.js";
-import {validateProjectCreate,validateMissionCreate,validateMissionTransition,validateRunStart,validateProjectImport,validateProjectExport,validateEmptyBody,validateTornTailRepair} from "../../../core/workos/schemas.js";
+import {validateProjectCreate,validateMissionCreate,validateMissionTransition,validateRunStart,validateProjectImport,validateProjectExport,validateEmptyBody,validateTornTailRepair,validateSourceDeliveryAccept} from "../../../core/workos/schemas.js";
 import {isMissionStatus} from "../../../core/mission/state-machine.js";
 import {authorizeAction} from "../../../core/action-gateway/policy.js";
 import type {ActionPolicyContext} from "../../../core/action-gateway/types.js";
 import {MissionRunner} from "../../../core/workos/runner.js";
-import {completionRequirements,deriveOutcomes} from "../../../core/workos/outcomes.js";
+import {M1A_LABELS,deliveryView,deriveOutcomes} from "../../../core/workos/outcomes.js";
 import {RISK_REFUSAL,hostExecutionNotice,riskAdmitted} from "../../../core/workos/risk-admission.js";
 import type {RunnerOptions} from "../../../core/workos/runner.js";
 import {assertIndependentExecutors,executorsFromEnv,LocalClaudeExecutors} from "../../../core/workos/executors.js";
@@ -215,11 +215,9 @@ app.post<{Params:{id:string}}>("/v1/missions/:id/transition",wos(async(req,reply
   const body=req.body??{};if(!workosWrite(reply,"workos.mission.transition",req.params.id,body,validateMissionTransition))return reply;
   const b=body as any;if(!isMissionStatus(b.to))return reply.code(400).send({error:"INVALID_BODY",detail:"to is not a mission status"});
   // //TR: REL-FX-1: COMPLETE istemcinin "to" alanıyla değil, kanıt kapısıyla olur: run.headSha için REPORT + CLEAN REVIEW + BLOCKED olmayan SECURITY_REPORT; aynı journal yazısı run'ı SUCCEEDED yapar, aksi halde 409 + sabit sebep.
-  // //TR: REL-FX c4 (S1/S2): mevcut test/harness değişikliği olan run için COMPLETE yalnız güncel TEST_SURFACE kanıtına bağlı açık acknowledgement ile olur; onay yalnız COMPLETE'te geçerlidir.
-  if(b.acknowledgement!==undefined&&b.to!=="COMPLETE")return reply.code(400).send({error:"INVALID_BODY",detail:"acknowledgement is only valid with to=COMPLETE"});
-  // //TR: M1a (D-SBX1-PATH-2026-10-15): testleri sandbox yokluğundan çalıştırılmamış (NOT_EXECUTED) run'ın COMPLETE'i ek olarak {acknowledgeNotExecuted:true, headSha:run.headSha} ister; yalnız to=COMPLETE ile geçerlidir.
-  if(b.notExecutedAcknowledgement!==undefined&&b.to!=="COMPLETE")return reply.code(400).send({error:"INVALID_BODY",detail:"notExecutedAcknowledgement is only valid with to=COMPLETE"});
-  if(b.to==="COMPLETE"){try{const r=getStore().completeMission(scope,req.params.id,b.reason,actor,b.acknowledgement,b.notExecutedAcknowledgement);const outcomes=deriveOutcomes(r.run);audit("WORKOS_MISSION_COMPLETED",{actor,missionId:r.mission.missionId,runId:r.run.runId,headSha:r.run.headSha,completionMode:outcomes.completionMode});return {mission:r.mission,run:r.run,outcomes}}catch(e){if(e instanceof WorkOsError&&e.code==="WORKOS_CONFLICT")audit("WORKOS_MISSION_COMPLETE_REFUSED",{actor,missionId:req.params.id,reason:e.message.replace(/^WORKOS_CONFLICT: ?/,"").slice(0,64)});return workosFail(reply,e)}}
+  // //TR: D-M1A-STATE-MODEL-2026-10-15: ürün düzeyi COMPLETE ayrıca PRODUCT_VERIFIED ister (M1a'da erişilemez, 409 COMPLETION_PRODUCT_NOT_VERIFIED); gövde hiçbir onay alanı taşıyamaz (şema 400).
+  // NOT_VERIFIED kaynak teslimi kabulü ayrı rotadadır (POST /v1/work-runs/:id/delivery/accept) ve mission'ı COMPLETE yapmaz.
+  if(b.to==="COMPLETE"){try{const r=getStore().completeMission(scope,req.params.id,b.reason,actor);const outcomes=deriveOutcomes(r.run);audit("WORKOS_MISSION_COMPLETED",{actor,missionId:r.mission.missionId,runId:r.run.runId,headSha:r.run.headSha,completionMode:outcomes.completionMode});return {mission:r.mission,run:r.run,outcomes}}catch(e){if(e instanceof WorkOsError&&e.code==="WORKOS_CONFLICT")audit("WORKOS_MISSION_COMPLETE_REFUSED",{actor,missionId:req.params.id,reason:e.message.replace(/^WORKOS_CONFLICT: ?/,"").slice(0,64)});return workosFail(reply,e)}}
   try{const before=getStore().getMission(scope,req.params.id);const mission=getStore().transitionMission(scope,req.params.id,b.to,b.reason,actor);audit("WORKOS_MISSION_TRANSITIONED",{actor,missionId:mission.missionId,from:before?.status,to:mission.status});return {mission}}catch(e){return workosFail(reply,e)}
 }));
 
@@ -271,8 +269,51 @@ app.get<{Querystring:{missionId?:string}}>("/v1/work-runs",wos(async(req,reply)=
 }));
 app.get<{Params:{id:string}}>("/v1/work-runs/:id",wos(async(req,reply)=>{
   if(!validWorkRunId(req.params.id))return reply.code(400).send({error:"INVALID_RUN_ID"});
-  // M1a: completionRequirements salt-okunur görünümdür (masaüstü COMPLETE onay kutuları için); kapı kararı yine store.completeMission'dadır.
-  const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});return {run,outcomes:deriveOutcomes(run),completionRequirements:completionRequirements(run)};
+  // M1a c2: delivery salt-okunur görünümdür (iki eksen + teslim artefaktı/kabul kaydı; masaüstü teslim akışı için); kapı kararları store'dadır.
+  const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});return {run,outcomes:deriveOutcomes(run),delivery:deliveryView(run)};
+}));
+// //TR: M1a c2 (D-M1A-ACCEPTANCE-CONDITIONS-2026-10-15) koşu teslim rotaları: liste/ayrıntı salt-okunurdur; hazırla, kabul et ve dışa aktar yazma kapısından (GLOBAL_STOP 423 -> policy 403 -> şema 400)
+// geçer. Teslim artefaktı yalnız SOURCE_GENERATION_COMPLETE run'ın run.headSha ağacından deterministik üretilir; kabul tek kullanımlıktır ve COMPLETE/PRODUCT_VERIFIED üretmez; dışa aktarma
+// ve kabul öncesinde artefakt dosyasının sha256'sı kayda karşı yeniden doğrulanır (uyuşmazlık 409, bayt verilmez).
+const deliveryOut=(run:any)=>{const d=deliveryView(run);return {...d,fileState:d.artifact?getStudio().deliveryFileState(d.artifact):null}};
+app.get<{Querystring:{projectId?:string}}>("/v1/deliveries",wos(async(req,reply)=>{
+  const projectId=req.query?.projectId;if(projectId!==undefined&&!validProjectId(projectId))return reply.code(400).send({error:"INVALID_PROJECT_ID"});
+  return {deliveries:getStore().listRuns(scope).filter(r=>projectId===undefined||r.projectId===projectId).map(deliveryOut)};
+}));
+app.get<{Params:{id:string}}>("/v1/work-runs/:id/delivery",wos(async(req,reply)=>{
+  if(!validWorkRunId(req.params.id))return reply.code(400).send({error:"INVALID_RUN_ID"});
+  const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});return {delivery:deliveryOut(run)};
+}));
+app.post<{Params:{id:string}}>("/v1/work-runs/:id/delivery/prepare",wos(async(req,reply)=>{
+  if(!validWorkRunId(req.params.id))return reply.code(400).send({error:"INVALID_RUN_ID"});
+  const body=req.body??{};if(!workosWrite(reply,"workos.delivery.prepare",req.params.id,body,validateEmptyBody))return reply;
+  const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});
+  const p=getStore().getProject(scope,run.projectId);if(!p)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});
+  let rec;try{rec=getStudio().prepareRunDelivery(p,run)}catch(e){if(e instanceof StudioError)audit("WORKOS_DELIVERY_PREPARE_REFUSED",{actor,runId:run.runId,reason:e.code});throw e}
+  const r=getStore().recordDeliveryArtifact(scope,run.runId,rec,actor);
+  audit("WORKOS_DELIVERY_ARTIFACT_PREPARED",{actor,runId:r.record.runId,missionId:r.record.missionId,sourceCommit:r.record.sourceCommit,treeSha:r.record.treeSha,exportArtifactHash:r.record.exportArtifactHash,recorded:r.recorded});
+  return reply.code(r.recorded?201:200).send({artifact:r.record,recorded:r.recorded,delivery:deliveryOut(r.run)});
+}));
+app.post<{Params:{id:string}}>("/v1/work-runs/:id/delivery/accept",wos(async(req,reply)=>{
+  if(!validWorkRunId(req.params.id))return reply.code(400).send({error:"INVALID_RUN_ID"});
+  const body=req.body??{};if(!workosWrite(reply,"workos.delivery.accept",req.params.id,body,validateSourceDeliveryAccept))return reply;
+  const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});
+  // Kabul edilen artefakt bozulmamış olmalıdır: dosya kayıttaki hash ile birebir eşleşmiyorsa kabul yazılmaz.
+  if(run.deliveryArtifact){const fsState=getStudio().deliveryFileState(run.deliveryArtifact);if(fsState!=="VERIFIED"){audit("WORKOS_SOURCE_DELIVERY_REFUSED",{actor,runId:run.runId,reason:`DELIVERY_ARTIFACT_${fsState}`});return reply.code(409).send({error:fsState==="MODIFIED"?"DELIVERY_ARTIFACT_HASH_MISMATCH":"DELIVERY_ARTIFACT_MISSING"})}}
+  try{const r=getStore().acceptSourceDelivery(scope,run.runId,(body as any).acceptance,actor);const outcomes=deriveOutcomes(r.run);
+    audit("WORKOS_SOURCE_DELIVERY_ACCEPTED",{actor,runId:r.run.runId,missionId:r.run.missionId,sourceCommit:r.run.sourceDelivery?.sourceCommit,exportArtifactHash:r.run.sourceDelivery?.exportArtifactHash,productVerification:outcomes.productVerification.state});
+    return {delivery:deliveryOut(r.run),mission:r.mission,outcomes,label:M1A_LABELS.SOURCE_DELIVERY_ACCEPTED}}
+  catch(e){if(e instanceof WorkOsError&&e.code==="WORKOS_CONFLICT")audit("WORKOS_SOURCE_DELIVERY_REFUSED",{actor,runId:run.runId,reason:e.message.replace(/^WORKOS_CONFLICT: ?/,"").slice(0,64)});throw e}
+}));
+app.post<{Params:{id:string}}>("/v1/work-runs/:id/delivery/export",wos(async(req,reply)=>{
+  if(!validWorkRunId(req.params.id))return reply.code(400).send({error:"INVALID_RUN_ID"});
+  const body=req.body??{};if(!workosWrite(reply,"workos.delivery.export",req.params.id,body,validateEmptyBody))return reply;
+  const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});
+  if(!run.deliveryArtifact)return reply.code(409).send({error:"DELIVERY_ARTIFACT_NOT_PREPARED"});
+  const st=getStudio(),rec=run.deliveryArtifact,bytes=st.readVerifiedDelivery(rec);
+  audit("WORKOS_DELIVERY_EXPORT_VERIFIED",{actor,runId:rec.runId,exportArtifactHash:rec.exportArtifactHash,size:bytes.length});
+  // Yol yalnız ana sürecin kendi doğrulamasıyla (veri dizinindeki deliveries klasörü + yeniden sha256) kullanılır.
+  return {artifact:rec,sha256:rec.exportArtifactHash,size:bytes.length,fileState:"VERIFIED",path:st.deliveryFile(rec),accepted:run.sourceDelivery??null,delivery:deliveryOut(run)};
 }));
 
 // //TR: PS-1A Project Studio route'ları: aynı token/Host hook'u; her proje route'u Work OS kaydını scope (tenant) ile çözer, başka tenant'ın projesi 404'tür. Yazma route'ları aynı kapı sırasını izler (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400).

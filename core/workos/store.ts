@@ -10,7 +10,7 @@ import {acquireProcessLock} from "../../automation/lib/process-lock.mjs";
 import {assertTransition, isMissionStatus} from "../mission/state-machine.js";
 import type {MissionStatus} from "../mission/types.js";
 import {WorkOsError, urlHasUserinfo} from "./types.js";
-import type {JournalEntry, JournalType, Project, ProjectExport, ProjectTemplate, ProjectType, RiskLevel, RunCheckpoint, RunCompletionRecord, RunEvidence, RunStatus, RunStep, Scope, TaskStatus, WorkMission, WorkRun, WorkTask} from "./types.js";
+import type {DeliveryArtifactRecord, JournalEntry, JournalType, Project, ProjectExport, ProjectTemplate, ProjectType, RiskLevel, RunCheckpoint, RunCompletionRecord, RunEvidence, RunStatus, RunStep, Scope, TaskStatus, WorkMission, WorkRun, WorkTask} from "./types.js";
 // //TR: B11A: Company OS domainleri ikinci bir store kurmaz; girdileri bu journal'a yazar ve replay'de core/company apply fonksiyonlarına devredilir.
 import {applyCompanyEntry} from "../company/apply.js";
 import {emptyCompanyState, isCompanyJournalType} from "../company/types.js";
@@ -20,7 +20,7 @@ import {applyAcademyEntry} from "../academy/apply.js";
 import {emptyAcademyState, isAcademyJournalType} from "../academy/types.js";
 import type {AcademyJournalType, AcademyState, AcademyTx, AcademyView} from "../academy/types.js";
 import {ACTIVE_WORKER_STATUSES, LEASED_RUN_STATUSES, UNLEASED_RUN_STATUSES, assertRunTransition, isOpenRun, isRunStatus, isRunStep} from "./run-state.js";
-import {completionEvidence} from "./outcomes.js";
+import {completionEvidence, deliveryPrepareCheck, sourceDeliveryAcceptanceCheck, validDeliveryArtifactRecord} from "./outcomes.js";
 import {RISK_REFUSAL, riskAdmitted} from "./risk-admission.js";
 
 const sha256 = sha256Untyped as (value: unknown) => string;
@@ -330,16 +330,12 @@ export class WorkOsStore {
         try { assertRunTransition(r.status, p.to); } catch { throw tampered(`RUN_TRANSITION_ILLEGAL:${e.seq}`); }
         if (p.patch !== undefined && !validRunPatch(p.patch)) throw malformed(`RUN_PATCH:${e.seq}`);
         // REL-FX-1: run SUCCEEDED ve mission COMPLETE yalnız birlikte ve yalnız kanıt yüklemi replay anında da sağlanıyorsa geçerlidir (tek journal girdisi).
-        // REL-FX c4: kayıtlı onay (varsa) yeniden doğrulanır; tamamlama kaydı replay anında yeniden türetilenle birebir aynı olmalıdır (onay gerekirken onaysız girdi tamper'dır).
+        // D-M1A-STATE-MODEL-2026-10-15: kapı replay anında yeniden çalışır (FX-1 + PRODUCT_VERIFIED); tamamlama kaydı yeniden türetilenle birebir aynı olmalıdır. Onay alanı taşıyan
+        // (cycle-1 NOT_EXECUTED onaylı veya REL-FX c4 test-değişikliği onaylı) ya da PRODUCT_VERIFIED kanıtı olmayan bir tamamlama kaydı artık türetilemez ve tamper'dır.
         const toComplete = isObj(p.mission) && p.mission.to === "COMPLETE";
         let completion: RunCompletionRecord | undefined;
         if (p.to === "SUCCEEDED" || toComplete) {
-          const rec = isObj(p.completion) ? p.completion.testChangesAcknowledgement : undefined;
-          const ack = rec === undefined ? undefined : isObj(rec) ? {acknowledgeTestChanges: rec.acknowledgeTestChanges, testSurfaceSha256: rec.testSurfaceSha256} : rec;
-          // M1a: kayıtlı NOT_EXECUTED onayı da girdiye çevrilip kapı yeniden çalıştırılır; gerekirken onaysız veya fazladan onaylı girdi tamper'dır.
-          const neRec = isObj(p.completion) ? p.completion.notExecutedAcknowledgement : undefined;
-          const neAck = neRec === undefined ? undefined : isObj(neRec) ? {acknowledgeNotExecuted: neRec.acknowledgeNotExecuted, headSha: neRec.headSha} : neRec;
-          const chk = completionEvidence(r, r.evidence, ack, neAck);
+          const chk = completionEvidence(r, r.evidence);
           if (p.to !== "SUCCEEDED" || !toComplete || p.patch !== undefined || !chk.ok || !isObj(p.completion) || JSON.stringify(p.completion) !== JSON.stringify(chk.refs)) throw tampered(`COMPLETION_UNSUPPORTED:${e.seq}`);
           completion = chk.refs;
         }
@@ -348,6 +344,28 @@ export class WorkOsStore {
         r.status = p.to; r.reason = typeof p.reason === "string" ? p.reason : null; r.updatedAt = e.at;
         if (completion) r.completion = completion;
         if (UNLEASED_RUN_STATUSES.includes(r.status)) { r.leaseId = null; r.leaseExpiresAt = null; }
+        break;
+      }
+      case "DELIVERY_ARTIFACT_PREPARED": {
+        // M1a c2: teslim artefaktı kaydı replay'de yeniden doğrulanır: biçim birebir, run SOURCE_GENERATION_COMPLETE ve kabul edilmemiş, sourceCommit === run.headSha, mission eşleşir.
+        // Aynı hash'in tekrar kaydı yazma yolunda üretilmez (yeniden hazırlama idempotenttir) ve tamper'dır.
+        const r = this.runFor(st, p, e.seq);
+        if (!validDeliveryArtifactRecord(p)) throw malformed(`DELIVERY_ARTIFACT_SHAPE:${e.seq}`);
+        if (p.missionId !== r.missionId || p.sourceCommit !== r.headSha || !deliveryPrepareCheck(r).ok || r.deliveryArtifact?.exportArtifactHash === p.exportArtifactHash) throw tampered(`DELIVERY_ARTIFACT_INCONSISTENT:${e.seq}`);
+        r.deliveryArtifact = {runId: p.runId, missionId: p.missionId, sourceCommit: p.sourceCommit, treeSha: p.treeSha, exportArtifactHash: p.exportArtifactHash, artifactPath: p.artifactPath};
+        break;
+      }
+      case "SOURCE_DELIVERY_ACCEPTED": {
+        // M1a c2: NOT_VERIFIED kaynak teslimi kabulü replay'de yeniden türetilir: kayıtlı alanlar kabul girdisine çevrilir, kapı o anki durumla (güncel artefakt kaydı, run, mission) yeniden
+        // çalıştırılır ve kayıt birebir karşılaştırılır (farklı run/artefakt/bayat kayıt/ikinci kullanım tamper'dır). Run ve mission durumu değişmez; productVerification değişmez.
+        const r = this.runFor(st, p, e.seq);
+        const acks = isObj(p.acknowledgements) ? p.acknowledgements : null, tc = acks && isObj(acks.testChanges) ? acks.testChanges : undefined;
+        if (!acks || !isObj(acks.notExecuted) || p.acceptedAt !== e.at) throw malformed(`SOURCE_DELIVERY_SHAPE:${e.seq}`);
+        const input = {runId: p.runId, missionId: p.missionId, sourceCommit: p.sourceCommit, exportArtifactHash: p.exportArtifactHash, acknowledgeNotExecuted: acks.notExecuted.acknowledgeNotExecuted,
+          ...(acks.testChanges !== undefined ? {testChangesAcknowledgement: tc ? {acknowledgeTestChanges: tc.acknowledgeTestChanges, testSurfaceSha256: tc.testSurfaceSha256} : acks.testChanges} : {})};
+        const chk = sourceDeliveryAcceptanceCheck({run: r, missionStatus: st.missions[r.missionId]?.status ?? null, latestRunId: this.latestRunId(st, r.missionId, r.tenantId)}, input);
+        if (!chk.ok || JSON.stringify({...chk.record, acceptedAt: e.at}) !== JSON.stringify(p)) throw tampered(`SOURCE_DELIVERY_UNSUPPORTED:${e.seq}`);
+        r.sourceDelivery = {...chk.record, acceptedAt: e.at};
         break;
       }
       case "RUN_CHECKPOINT": {
@@ -377,6 +395,11 @@ export class WorkOsStore {
       }
     }
     st.lastSeq = e.seq; st.lastHash = e.hash;
+  }
+  // Mission'ın en son run'ı (oluşturma sırası); COMPLETE ve kaynak teslimi kabulü yalnız bu run için geçerlidir.
+  private latestRunId(st: State, missionId: string, tenantId: string): string | null {
+    const runs = Object.values(st.runs).filter(r => r.missionId === missionId && r.tenantId === tenantId);
+    return runs.length ? runs[runs.length - 1].runId : null;
   }
   private runFor(st: State, p: Record<string, unknown>, seq: number): WorkRun {
     if (!isStr(p.runId)) throw malformed(`RUN_SHAPE:${seq}`);
@@ -548,9 +571,8 @@ export class WorkOsStore {
 
   // //TR: REL-FX-1 kanıta bağlı tamamlama: mission REPORTING olmalı, mission'ın EN SON run'ı AWAITING_APPROVAL olmalı ve run.headSha için REPORT + CLEAN REVIEW + BLOCKED olmayan
   // SECURITY_REPORT kanıtı bulunmalıdır. Tek journal girdisi (RUN_TRANSITION + gömülü mission hareketi) run'ı SUCCEEDED, mission'ı COMPLETE yapar; aksi halde 409 sabit sebep, journal değişmez.
-  // REL-FX c4: mevcut test/harness değişikliği varsa acknowledgement ({acknowledgeTestChanges: true, testSurfaceSha256}) güncel TEST_SURFACE kanıtıyla eşleşmelidir; onay aynı yazıda kaydedilir.
-  // M1a: functionalAcceptance NOT_EXECUTED ise notExecutedAcknowledgement ({acknowledgeNotExecuted: true, headSha: run.headSha}) zorunludur; aynı yazıda kaydedilir.
-  completeMission(scope: Scope, missionId: string, reason: string, actor: string, acknowledgement?: unknown, notExecutedAcknowledgement?: unknown): {mission: WorkMission; run: WorkRun} {
+  // D-M1A-STATE-MODEL-2026-10-15: ürün düzeyi COMPLETE ayrıca productVerification === PRODUCT_VERIFIED ister; hiçbir onay parametresi yoktur (M1a'da erişilemez).
+  completeMission(scope: Scope, missionId: string, reason: string, actor: string): {mission: WorkMission; run: WorkRun} {
     if (typeof reason !== "string" || reason.trim().length === 0) throw new WorkOsError("WORKOS_INVALID_INPUT", "reason");
     return this.write(() => {
       const m = this.state.missions[missionId];
@@ -558,12 +580,42 @@ export class WorkOsStore {
       try { assertTransition(m.status, "COMPLETE"); } catch (e) { throw new WorkOsError("WORKOS_INVALID_TRANSITION", (e as Error).message); }
       const runs = Object.values(this.state.runs).filter(r => r.missionId === missionId && r.tenantId === m.tenantId);
       const run = runs[runs.length - 1];
-      const chk = completionEvidence(run, run?.evidence ?? [], acknowledgement, notExecutedAcknowledgement);
+      const chk = completionEvidence(run, run?.evidence ?? []);
       if (!chk.ok) throw new WorkOsError("WORKOS_CONFLICT", chk.reason);
       const why = reason.slice(0, 1000);
       this.append("RUN_TRANSITION", actor, {runId: run.runId, leaseId: null, from: "AWAITING_APPROVAL", to: "SUCCEEDED", reason: `FOUNDER_ACCEPTED: ${why}`.slice(0, 1000),
         mission: {missionId, from: m.status, to: "COMPLETE", reason: why}, completion: chk.refs});
       return {mission: this.state.missions[missionId], run: clone(this.state.runs[run.runId])};
+    });
+  }
+  // //TR: M1a c2 (Founder koşulu 1): SOURCE_GENERATION_COMPLETE run için deterministik teslim artefaktının kaydı (artefakt kilit dışında studio tarafından run.headSha'dan üretilir; burada kilit altında
+  // kapı yeniden denetlenir ve kayıt run'a birebir bağlanır);
+  // aynı kayıt zaten günceldiyse journal'a yeni girdi yazılmaz (yeniden hazırlama idempotent). Kabulden sonra yeni artefakt reddedilir (409 DELIVERY_ALREADY_ACCEPTED).
+  recordDeliveryArtifact(scope: Scope, runId: string, rec: DeliveryArtifactRecord, actor: string): {record: DeliveryArtifactRecord; run: WorkRun; recorded: boolean} {
+    return this.write(() => {
+      const r = this.state.runs[runId];
+      if (!r || r.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "run");
+      const pre = deliveryPrepareCheck(r);
+      if (!pre.ok) throw new WorkOsError("WORKOS_CONFLICT", pre.reason);
+      if (!validDeliveryArtifactRecord(rec) || rec.runId !== r.runId || rec.missionId !== r.missionId || rec.sourceCommit !== r.headSha) throw new WorkOsError("WORKOS_INVALID_INPUT", "delivery record");
+      const norm: DeliveryArtifactRecord = {runId: rec.runId, missionId: rec.missionId, sourceCommit: rec.sourceCommit, treeSha: rec.treeSha, exportArtifactHash: rec.exportArtifactHash, artifactPath: rec.artifactPath};
+      if (r.deliveryArtifact && JSON.stringify(r.deliveryArtifact) === JSON.stringify(norm)) return {record: norm, run: clone(r), recorded: false};
+      this.append("DELIVERY_ARTIFACT_PREPARED", actor, {...norm});
+      return {record: norm, run: clone(this.state.runs[runId]), recorded: true};
+    });
+  }
+  // //TR: M1a c2 (Founder koşulu 2): NOT_VERIFIED kaynak teslimi kabulü; kabul nesnesi güncel DELIVERY_ARTIFACT_PREPARED kaydı ve run ile birebir eşleşmeli ve tek kullanımlıktır.
+  // Kayıt tek journal girdisidir (SOURCE_DELIVERY_ACCEPTED); mission REPORTING, run AWAITING_APPROVAL kalır, productVerification NOT_VERIFIED kalır (COMPLETE değildir). Aksi halde 409, journal değişmez.
+  acceptSourceDelivery(scope: Scope, runId: string, acceptance: unknown, actor: string): {run: WorkRun; mission: WorkMission} {
+    return this.write(() => {
+      const r = this.state.runs[runId];
+      if (!r || r.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "run");
+      const m = this.state.missions[r.missionId];
+      const chk = sourceDeliveryAcceptanceCheck({run: r, missionStatus: m?.status ?? null, latestRunId: this.latestRunId(this.state, r.missionId, r.tenantId)}, acceptance);
+      if (!chk.ok) throw new WorkOsError("WORKOS_CONFLICT", chk.reason);
+      const at = new Date().toISOString();
+      this.append("SOURCE_DELIVERY_ACCEPTED", actor, {...chk.record, acceptedAt: at}, at);
+      return {run: clone(this.state.runs[runId]), mission: clone(this.state.missions[r.missionId])};
     });
   }
 
