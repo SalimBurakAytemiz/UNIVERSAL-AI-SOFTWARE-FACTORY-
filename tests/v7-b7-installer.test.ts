@@ -297,3 +297,59 @@ describe("INT-R3 D-M1-04 packaged GET /v1/agents", () => {
     } finally { fs.rmSync(app0, {recursive: true, force: true}); }
   });
 });
+
+// ---------- INT-R3 D-M1-01: çalışma anında okunan her repo dosyası paketli uygulamada vardır ----------
+// Paketli arka ucun, masaüstü kabuğunun ve paketli modda çalışan UASCO script'lerinin göreli import kapanışı taranır;
+// adı geçen her repo-göreli config/registry/roadmap/script yolu ya sahnelenir ya da gerekçeli olarak hariç tutulur.
+const IMPORT_SPEC = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)["'](\.{1,2}\/[^"']+)["']/g;
+function packagedSourceClosure(entries: string[]): string[] {
+  const seen = new Set<string>(), queue = [...entries];
+  while (queue.length) {
+    const rel = queue.shift()!;
+    if (seen.has(rel)) continue;
+    seen.add(rel);
+    for (const m of read(rel).matchAll(IMPORT_SPEC)) {
+      let t = path.posix.normalize(path.posix.join(path.posix.dirname(rel), m[1]));
+      if (t.endsWith(".js") && fs.existsSync(path.join(root, t.replace(/\.js$/, ".ts")))) t = t.replace(/\.js$/, ".ts");
+      expect(fs.existsSync(path.join(root, t)), `${rel} -> ${m[1]}`).toBe(true);
+      queue.push(t);
+    }
+  }
+  return [...seen].sort();
+}
+const REPO_PATH_LITERAL = /["'`/]((?:config|registries|roadmap|scripts|schemas|governance|prompts)\/[A-Za-z0-9._/-]+\.(?:json|mjs|js|ps1))/g;
+const REPO_PATH_JOIN = /["'](config|registries|roadmap|scripts|schemas)["']\s*,\s*["']([A-Za-z0-9._-]+\.(?:json|mjs|js|ps1))["']/g;
+describe("INT-R3 D-M1-01 packaged app stages every runtime-read repo file", () => {
+  it("covers every config/registry/roadmap/script path referenced by the packaged backend, desktop shell and runtime scripts", async () => {
+    const b = await load("scripts", "build-installer.mjs");
+    const staged = new Set<string>([...b.STATIC_DATA_FILES, ...b.RUNTIME_CONFIG_FILES, ...b.RUNTIME_SCRIPTS]);
+    const excluded = b.PACKAGED_RUNTIME_READ_EXCLUSIONS as Record<string, string>;
+    const sources = packagedSourceClosure(["apps/control-api/src/packaged-entry.ts", "apps/desktop/main.mjs", "apps/desktop/preload.mjs", ...b.RUNTIME_SCRIPTS]);
+    for (const f of ["apps/control-api/src/server.ts", "core/workos/executor-setup.ts", "core/workos/executors.ts", "automation/lib/env-policy.mjs", "automation/lib/npm-invocation.mjs"]) expect(sources).toContain(f);
+    const referenced = new Set<string>();
+    for (const f of sources) {
+      const s = read(f);
+      for (const m of s.matchAll(REPO_PATH_LITERAL)) referenced.add(m[1]);
+      for (const m of s.matchAll(REPO_PATH_JOIN)) referenced.add(`${m[1]}/${m[2]}`);
+    }
+    for (const must of ["config/environment-policy.json", "config/execution-backends.json", "config/automation.json", "config/builder-execution-policy.json", "registries/role-definitions.json", "scripts/capture-provider-provenance.mjs", "scripts/claude-builder-broker.mjs"]) expect(referenced, must).toContain(must);
+    const uncovered = [...referenced].filter(p => !staged.has(p) && !(p in excluded)).sort();
+    expect(uncovered).toEqual([]);
+    for (const [p, why] of Object.entries(excluded)) { expect(referenced, p).toContain(p); expect(why.length).toBeGreaterThan(40); expect(staged.has(p)).toBe(false); }
+  });
+  it("stageRuntimeFiles copies the staged set byte-identically and the import closure pulls the runtime scripts' helpers", async () => {
+    const b = await load("scripts", "build-installer.mjs");
+    const stage = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b7-stage-"));
+    try {
+      const files: string[] = b.stageRuntimeFiles(root, stage);
+      for (const f of [...b.STATIC_DATA_FILES, ...b.RUNTIME_CONFIG_FILES, ...b.RUNTIME_SCRIPTS]) {
+        expect(files).toContain(f);
+        expect(fs.readFileSync(path.join(stage, f)).equals(fs.readFileSync(path.join(root, f))), f).toBe(true);
+      }
+      const libs: string[] = b.copyRelativeImportClosure(root, stage, [...b.RUNTIME_SCRIPTS]);
+      expect(libs).toEqual(expect.arrayContaining(["automation/lib/env-policy.mjs", "automation/lib/npm-invocation.mjs"]));
+      expect(buildScript).toContain("copyRelativeImportClosure(root, stage, [\"apps/desktop/main.mjs\", \"apps/desktop/preload.mjs\", BACKEND_ENTRY, ...RUNTIME_SCRIPTS])");
+      expect(buildScript).toContain("const stagedFiles = stageRuntimeFiles(root, stage);");
+    } finally { fs.rmSync(stage, {recursive: true, force: true}); }
+  });
+});

@@ -17,6 +17,28 @@ export const STATIC_DATA_FILES = [
   "registries/role-definitions.json"
 ];
 export const DESKTOP_FILES = ["apps/desktop/main.mjs", "apps/desktop/preload.mjs", "apps/desktop/backend-error.html"];
+// INT-R3 D-M1-01: paketli arka ucun çalışma anında okuduğu repo-göreli config dosyaları (safeChildEnv politikası, LOCAL_CLAUDE executor/broker yapılandırması).
+// Bu dosyalar kurulum dizininde salt-okunur program verisidir; değişken veri (provenance, ayarlar) userData altındaki kontrol köküne yazılır.
+export const RUNTIME_CONFIG_FILES = [
+  "config/environment-policy.json",
+  "config/execution-backends.json",
+  "config/automation.json",
+  "config/builder-execution-policy.json"
+];
+// INT-R3 D-M1-01/02: paketli modda node çocuk süreci olarak çalışan UASCO'nun kendi script'leri (göreli import kapanışlarıyla birlikte sahnelenir).
+export const RUNTIME_SCRIPTS = ["scripts/capture-provider-provenance.mjs", "scripts/claude-builder-broker.mjs"];
+// INT-R3 D-M1-01: paketli arka ucun import kapanışında adı geçen ama BİLEREK sahnelenmeyen repo dosyaları (gerekçeli); test bu listeyi ve sahnelenen kümeyi birlikte denetler.
+export const PACKAGED_RUNTIME_READ_EXCLUSIONS = {
+  "config/orchestrator-policy.json": "Developer-factory orchestrator policy; absent in the installed app -> cockpit orchestrator tile and repository review evidence are honestly UNAVAILABLE.",
+  "config/trust-root-manifest.json": "Phase-0 acceptance binding of a developer install; the installed app has no Phase-0 report, so /v1/phase0 and /v1/install stay PENDING.",
+  "scripts/start-full-auto.ps1": "Retired legacy supervisor path (GOV2): startSupervisorDetached returns LEGACY_CODEX_REVIEW_PATH_RETIRED before this path is used."
+};
+/** Statik veri, config ve script dosyalarını sahne köküne aynı göreli yollarla kopyalar; kopyalanan listeyi döner. */
+export function stageRuntimeFiles(root, stage) {
+  const files = [...DESKTOP_FILES, ...STATIC_DATA_FILES, ...RUNTIME_CONFIG_FILES, ...RUNTIME_SCRIPTS];
+  for (const f of files) { fs.mkdirSync(path.dirname(path.join(stage, f)), {recursive: true}); fs.copyFileSync(path.join(root, f), path.join(stage, f)); }
+  return files;
+}
 export const BACKEND_ENTRY = "apps/control-api/src/packaged-entry.js";
 export const RUNTIME_DEPENDENCIES = ["fastify", "ajv", "ajv-formats"];
 
@@ -181,10 +203,10 @@ async function main() {
   log("backend-compiled");
 
   // 2) desktop shell + renderer + static read-only data
-  for (const f of [...DESKTOP_FILES, ...STATIC_DATA_FILES]) { fs.mkdirSync(path.dirname(path.join(stage, f)), {recursive: true}); fs.copyFileSync(path.join(root, f), path.join(stage, f)); }
+  const stagedFiles = stageRuntimeFiles(root, stage);
   copyDir(path.join(root, "apps", "desktop", "renderer"), path.join(stage, "apps", "desktop", "renderer"));
-  const copiedLibs = copyRelativeImportClosure(root, stage, ["apps/desktop/main.mjs", "apps/desktop/preload.mjs", BACKEND_ENTRY]);
-  log("app-staged", {copiedLibs});
+  const copiedLibs = copyRelativeImportClosure(root, stage, ["apps/desktop/main.mjs", "apps/desktop/preload.mjs", BACKEND_ENTRY, ...RUNTIME_SCRIPTS]);
+  log("app-staged", {stagedFiles, copiedLibs});
 
   // 3) runtime node_modules closure (exact versions from the reviewed lock)
   const lock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"));
