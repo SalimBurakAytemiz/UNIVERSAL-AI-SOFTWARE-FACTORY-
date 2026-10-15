@@ -30,6 +30,7 @@ import type {RunnerOptions} from "../../../core/workos/runner.js";
 import {assertIndependentExecutors,executorsFromEnv,LocalClaudeExecutors} from "../../../core/workos/executors.js";
 import type {ExecutorPair} from "../../../core/workos/executors.js";
 import {ProjectStudio,StudioError} from "../../../core/workos/project-studio.js";
+import {ensureClaudeProfiles} from "../../../core/workos/claude-profiles.js";
 import {renderTemplate} from "../../../core/workos/project-templates.js";
 import {DevRunManager} from "../../../core/workos/devrun.js";
 import type {DevRunOptions} from "../../../core/workos/devrun.js";
@@ -348,7 +349,9 @@ app.get<{Params:{id:string;exportId:string}}>("/v1/projects/:id/exports/:exportI
 }));
 
 // //TR: Executor kurulumu: durum okunur; etkinleştirme aynı yazma kapısından geçer, model çağrılmaz (provenance yakalama yalnız --version).
-app.get("/v1/system/executors",wos(async()=>({executors:getExecSetup().status(),active:{reason:getExecutors().reason},sandbox:await executionGate.status()})));
+// //TR: SBX-8 (D-SBX-11 b): implementer/reviewer UASCO Claude profillerinin durumu (READY/LOGIN_REQUIRED/REFUSED) ve Founder'ın kendisinin çalıştıracağı giriş komutu; UASCO yalnız kendi settings.json dosyasını yazar, kimlik bilgisi okumaz/kopyalamaz.
+const claudeProfiles=()=>{try{return ensureClaudeProfiles(controlRoot,{forbiddenRoots:[getStore().dataDir]})}catch{return {error:"CLAUDE_PROFILE_STATUS_UNAVAILABLE"}}};
+app.get("/v1/system/executors",wos(async()=>({executors:getExecSetup().status(),active:{reason:getExecutors().reason},sandbox:await executionGate.status(),claudeProfiles:claudeProfiles()})));
 app.post("/v1/system/executors/local-claude/enable",wos(async(req,reply)=>{
   const body=req.body??{};if(!workosWrite(reply,"workos.system.executor.enable","NONE",body,validateEmptyBody))return reply;
   const r=await getExecSetup().enableLocalClaude(actor);

@@ -340,6 +340,16 @@
       "requiresDependencies": true
     },
     {
+      "id": "tests-sbx8",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/v7-sbx8-claude-profiles.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
       "id": "tests-bs1-a",
       "command": [
         "node",
