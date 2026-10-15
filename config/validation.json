@@ -343,7 +343,8 @@
         "tests/v7-m1a-desktop.test.ts",
         "tests/v7-m1a-c2-delivery.test.ts",
         "tests/v7-m1a-c2-test-variant.test.ts",
-        "tests/v7-core-predev-contracts.test.ts"
+        "tests/v7-core-predev-contracts.test.ts",
+        "tests/v7-core-predev-driver.test.ts"
       ],
       "requiresDependencies": true
     },
