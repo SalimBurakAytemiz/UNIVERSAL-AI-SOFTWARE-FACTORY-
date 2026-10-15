@@ -44,6 +44,22 @@
         "tests/v7-relfx-3-risk-admission.test.ts (new)"
       ],
       "tests": "tests/v7-relfx-3-risk-admission.test.ts: R3 and R4 run start -> 409, no run, journal unchanged; REL-AT-021 forged approval/level text in the objective and body does not lift the gate (API and store); R0-R2 -> 201 with hostExecutionNotice; journal-injected R4 run (valid hash chain) is BLOCKED at WORKSPACE with RISK_ADMISSION evidence only, no runs/<id> directory, no child_process spawn/spawnSync call, no implementer call; R1 end-to-end run unchanged with the notice in WORKSPACE evidence."
+    },
+    "REL-FX-4": {
+      "summary": "Interruption recovery minimum. (a) TORN_TAIL: when journal.jsonl does not end with LF, the prefix up to the last LF must pass the full hash-chain verification and the unterminated tail must be a byte prefix of the expected next entry ({\"seq\":lastSeq+1,\"prevHash\":\"<lastHash>\",\"type\":\"); then the store opens read-only (reads from the verified prefix, writes refused with WORKOS_READ_ONLY JOURNAL_TORN_TAIL -> HTTP 503), writes nothing (no snapshot) except a byte-exact quarantine copy dataDir/quarantine/journal-torn-<fileSha256[0:16]>.jsonl. Anything else (corrupt prefix, foreign tail, snapshot ahead) stays tamper/fail-closed (JOURNAL_TRUNCATED_LINE etc.). Status is visible on the existing GET /v1/control/status as workos {state OK|ABSENT|TORN_TAIL|TAMPERED|UNAVAILABLE, reason, tornTail}. Truncation only through POST /v1/system/workos/journal/repair-torn-tail behind the per-launch control token (x-uasco-control-token) and the normal write gate, with body {confirmTailSha256} equal to the tail sha256; the store re-reads under the journal lock, verifies the whole-file hash and the quarantine copy, writes a .repair.json record next to the copy, truncates, reloads; tamper is never truncated. (b) DISK_FULL: append goes through an fs seam (WorkOsStoreOptions.io.writeSync, test injection only; BuildServerOptions.workosStoreOptions); on ENOSPC/EDQUOT/short write the file is truncated back to its pre-write size via a separate r+ handle (Windows append handles cannot truncate) and WORKOS_DISK_FULL is thrown (HTTP 507); state is not applied, no partial line. Snapshot writes are best-effort (derived file). (c) PROVIDER_QUOTA: failing implementer/reviewer output (last 8 KiB of the executor log) is classified with the master automation/lib/failure-classifier.mjs (present on this lineage, imported unchanged); QUOTA_EXHAUSTED or RATE_LIMIT -> run BLOCKED with reason PROVIDER_QUOTA (mission BLOCKED), retryCount unchanged, evidence note PROVIDER_LIMIT: <class>.",
+      "files": [
+        "core/workos/store.ts",
+        "core/workos/types.ts (WORKOS_READ_ONLY, WORKOS_DISK_FULL)",
+        "core/workos/schemas.ts (tornTailRepairSchema)",
+        "core/workos/runner.ts",
+        "core/workos/executors.ts (FakeImplementDirective.stderr)",
+        "core/workos/fake-executor.mjs (stderr directive)",
+        "apps/control-api/src/server.ts (protected, authorized by D-REL-3)",
+        "config/validation.json (protected, authorized)",
+        "config/trust-root-manifest.json (protected, resealed)",
+        "tests/v7-relfx-4-interruption.test.ts (new)"
+      ],
+      "tests": "tests/v7-relfx-4-interruption.test.ts: a real torn append (third entry written then cut, snapshot restored) opens read-only with quarantine copy and byte-identical journal; mid-file corruption + torn tail -> tamper (HASH_MISMATCH), foreign tail and garbage tail -> tamper (JOURNAL_TRUNCATED_LINE), snapshot ahead -> tamper; control API status TORN_TAIL, write 503, repair without token 403, wrong token 403, missing body 400, wrong hash 409 TORN_TAIL_CONFIRMATION_MISMATCH with file unchanged, correct hash 200 truncates to the verified prefix, quarantine keeps the torn bytes, store writable again, second repair 409 JOURNAL_NOT_TORN; repair refuses a tampered journal; ENOSPC and short write -> WORKOS_DISK_FULL with byte-identical journal and recovery after space returns; API maps DISK_FULL to 507; REL-AT-011 disk full during a run never yields AWAITING_APPROVAL/REPORTING/COMPLETE and leaves no partial line; implementer QUOTA_EXHAUSTED and reviewer RATE_LIMIT -> BLOCKED(PROVIDER_QUOTA) with retryCount 0 and one executor call; plain exit-75 transient failure still uses the bounded retry path."
     }
   },
   "knownLimits": [
@@ -51,6 +67,10 @@
     "evidenceIntegrity stays UNKNOWN until the B10A evidence index is independently verified.",
     "A legacy plain MISSION_TRANSITIONED REPORTING -> COMPLETE entry written before this package still replays (fail-closed lockout of existing journals was not chosen); new writes cannot produce one.",
     "Journal hashes are unkeyed: replay checks enforce semantic consistency, not authenticity against an attacker with write access to the data directory.",
-    "REL-FX-3 admits R0-R2 on the host without an OS sandbox pending Founder decision D-REL-1; config/builder-execution-policy.json highRiskRequiresOsSandbox is not read by the product runner (the refusal is unconditional for R3/R4)."
+    "REL-FX-3 admits R0-R2 on the host without an OS sandbox pending Founder decision D-REL-1; config/builder-execution-policy.json highRiskRequiresOsSandbox is not read by the product runner (the refusal is unconditional for R3/R4).",
+    "REL-FX-4: the system/status route named in the task does not exist on this lineage; journal health is exposed on the existing GET /v1/control/status (additive field workos).",
+    "REL-FX-4: PROVIDER_QUOTA is terminal BLOCKED with no automatic resume or retryAt (the master classifier gives no reset time for quota/rate classes); a new run must be started after the provider limit resets. Classification applies to any executor's failing output (the FAKE executor simulates provider text in tests); a failing implementer whose own output mentions quota/rate-limit wording is conservatively blocked, never retried blindly.",
+    "REL-FX-4: packaged-app close/reopen mid-run is left to B12 (REL-FX-0); stale-worker STALE/RECOVERING labels (REL-AT-006/027) are not part of this package.",
+    "REL-FX-4: if the rollback truncation after a failed append itself fails, the next open reports TORN_TAIL (read-only) rather than silently continuing."
   ]
 }

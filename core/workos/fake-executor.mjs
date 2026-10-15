@@ -11,6 +11,7 @@ if (Number.isInteger(d.sleepMs) && d.sleepMs > 0) await new Promise(r => setTime
 const git = (args) => { const r = spawnGitSync(root, args); if (r.status !== 0) { console.error(`FAKE_GIT_FAILED ${args[0]}: ${r.stderr}`); process.exit(3); } return r.stdout.trim(); };
 
 if (mode === "implement") {
+  if (d.stderr) console.error(String(d.stderr));
   for (const [rel, content] of Object.entries(d.files ?? {})) {
     const target = path.resolve(root, rel);
     if (!target.startsWith(root + path.sep) || target.split(path.sep).includes(".git")) { console.error("FAKE_PATH_ESCAPE"); process.exit(2); }

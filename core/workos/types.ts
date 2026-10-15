@@ -37,7 +37,9 @@ export interface JournalEntry {
 }
 export type WorkOsErrorCode =
   | "WORKOS_JOURNAL_TAMPERED" | "WORKOS_NOT_FOUND" | "WORKOS_INVALID_INPUT" | "WORKOS_INVALID_TRANSITION"
-  | "WORKOS_UNAVAILABLE" | "WORKOS_IDEMPOTENCY_CONFLICT" | "WORKOS_CONFLICT" | "WORKOS_LEASE_FENCED";
+  | "WORKOS_UNAVAILABLE" | "WORKOS_IDEMPOTENCY_CONFLICT" | "WORKOS_CONFLICT" | "WORKOS_LEASE_FENCED"
+  // REL-FX-4: TORN_TAIL salt-okunur modu ve append sırasında disk dolu (yarım satır bırakılmaz).
+  | "WORKOS_READ_ONLY" | "WORKOS_DISK_FULL";
 export class WorkOsError extends Error {
   readonly code: WorkOsErrorCode;
   constructor(code: WorkOsErrorCode, detail?: string) { super(detail ? `${code}: ${detail}` : code); this.code = code; this.name = "WorkOsError"; }

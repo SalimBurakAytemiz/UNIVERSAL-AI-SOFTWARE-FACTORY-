@@ -17,6 +17,9 @@ import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from ".
 import {assertIndependentExecutors, runProcess} from "./executors.js";
 import {reviewAndSecurityFor} from "./outcomes.js";
 import {RISK_REFUSAL, hostExecutionNotice, riskAdmitted} from "./risk-admission.js";
+// //TR: REL-FX-4: sağlayıcı kota/hız sınırı sınıflandırması korumalı master sınıflandırıcıyla yapılır (kopyalanmaz); tip bildirimi olmadığı için dar yerel tiple bağlanır.
+// @ts-expect-error TS7016: failure-classifier.mjs tip bildirimi yok
+import {classifyFailure as classifyFailureUntyped} from "../../automation/lib/failure-classifier.mjs";
 import type {ExecutorPair, MissionSpec, ProcResult} from "./executors.js";
 import {DEFAULT_MAX_REPORT_BYTES, DEFAULT_MAX_TRIVY_DB_AGE_MS, DEFAULT_SECURITY_TIMEOUT_MS, buildAddedLineStream, defaultTrivyCacheDir, discoverSecurityTools, evaluateSecurityPolicy, gitRangeProblem, mergeGitleaksPasses, runGitleaks, runGitleaksAddedLines, runTrivy, toolInfo, verifyTool} from "./security-tools.js";
 import type {GitleaksResult, PolicyInput, ResolvedTool, SecurityOptions, SecurityToolset} from "./security-tools.js";
@@ -44,6 +47,12 @@ const NEXT: Record<RunStep, RunStep | "FINISHED"> = {WORKSPACE: "IMPLEMENT", IMP
 const MISSION_AFTER: Partial<Record<RunStep, MissionStatus>> = {IMPLEMENT: "VERIFYING", SECURITY: "REVIEWING", REVIEW: "REGRESSION", REGRESSION: "REPORTING"};
 const stepStatus = (s: RunStep): RunStatus => (s === "VERIFY" || s === "SECURITY" || s === "REGRESSION" ? "VERIFYING" : "RUNNING");
 const sha256 = (b: Buffer | string) => crypto.createHash("sha256").update(b).digest("hex");
+const classifyFailure = classifyFailureUntyped as (x: {status: number | null; error?: string; stdout?: string; stderr?: string; timedOut?: boolean}) => {class: string};
+// Başarısız executor çıktısının son 8 KiB'ı sınıflandırılır; yalnız QUOTA_EXHAUSTED / RATE_LIMIT sınıfları sağlayıcı sınırı sayılır.
+export function providerLimit(exitCode: number | null, log: string): "QUOTA_EXHAUSTED" | "RATE_LIMIT" | null {
+  const c = classifyFailure({status: exitCode ?? 1, stdout: String(log ?? "").slice(-8192), timedOut: false}).class;
+  return c === "QUOTA_EXHAUSTED" || c === "RATE_LIMIT" ? c : null;
+}
 
 export class MissionRunner {
   readonly engineId = `engine_${crypto.randomBytes(6).toString("hex")}`;
@@ -364,8 +373,12 @@ export class MissionRunner {
     const head = this.gitOk(work, ["rev-parse", "HEAD"]);
     const log = this.writeLog(run, "implement", r.log);
     const produced = r.exitCode === 0 && !r.blockReason && head && SHA.test(head) && head !== start ? head : undefined;
-    this.evidence(run, leaseId, {kind: "IMPLEMENT", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, baseSha: start, ...(produced ? {commitSha: produced} : {}), executorIdentity: this.o.executors.implementer.identity, ...(r.blockReason ? {note: r.blockReason.slice(0, 200)} : {})});
+    const limit = r.exitCode !== 0 && !r.aborted && !r.timedOut ? providerLimit(r.exitCode, r.log) : null;
+    this.evidence(run, leaseId, {kind: "IMPLEMENT", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, baseSha: start, ...(produced ? {commitSha: produced} : {}), executorIdentity: this.o.executors.implementer.identity,
+      ...(limit ? {note: `PROVIDER_LIMIT: ${limit}`} : r.blockReason ? {note: r.blockReason.slice(0, 200)} : {})});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+    // REL-FX-4: sağlayıcı kota/hız sınırı kör retry ile bütçe tüketmez: run BLOCKED(PROVIDER_QUOTA), retryCount değişmez.
+    if (limit) return {kind: "BLOCK", reason: "PROVIDER_QUOTA"};
     if (r.exitCode !== 0) return r.transient ? {kind: "RETRY", reason: "IMPLEMENT_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: "IMPLEMENT_FAILED", status: "FAILED"};
     // Edit-only builder çıktısını engine commit etmeyi reddettiyse (değişiklik yok, .git/workspace dışı değişiklik) run BLOCKED olur.
     if (r.blockReason) return {kind: "BLOCK", reason: r.blockReason.slice(0, 200)};
@@ -545,10 +558,13 @@ export class MissionRunner {
     const r = await reviewer.review(clone, this.missionSpec(run), diff, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
     const untouched = this.gitOk(clone, ["rev-parse", "HEAD"]) === run.headSha && this.gitOk(clone, ["status", "--porcelain", "--untracked-files=all"]) === "";
     const log = this.writeLog(run, "review", r.log);
+    const limit = !r.valid && !r.aborted && !r.timedOut ? providerLimit(r.exitCode, r.log) : null;
+    const notes = [...(untouched ? [] : ["REVIEW_CLONE_MUTATED"]), ...(limit ? [`PROVIDER_LIMIT: ${limit}`] : [])];
     this.evidence(run, leaseId, {kind: "REVIEW", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, commitSha: run.headSha,
-      reviewerIdentity: reviewer.identity, executorIdentity: run.executor.implementer, ...(r.valid ? {verdict: r.verdict, findingsCount: r.findings.length} : {}), ...(untouched ? {} : {note: "REVIEW_CLONE_MUTATED"})});
+      reviewerIdentity: reviewer.identity, executorIdentity: run.executor.implementer, ...(r.valid ? {verdict: r.verdict, findingsCount: r.findings.length} : {}), ...(notes.length ? {note: notes.join("; ")} : {})});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     if (!untouched) return {kind: "BLOCK", reason: "REVIEWER_MUTATED_CLONE"};
+    if (limit) return {kind: "BLOCK", reason: "PROVIDER_QUOTA"};
     if (!r.valid) return r.transient ? {kind: "RETRY", reason: "REVIEW_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: "REVIEW_FAILED", status: "FAILED"};
     if (r.verdict === "CLEAN") return {kind: "DONE", next: "REGRESSION", data: {verdict: "CLEAN", reviewerIdentity: reviewer.identity, commitSha: run.headSha}};
     return {kind: "REMEDIATE", reason: "REVIEW_BLOCKED", data: {verdict: "BLOCKED", reviewerIdentity: reviewer.identity}, findings: r.findings.map(f => `${f.severity}: ${f.title}`)};

@@ -93,7 +93,7 @@ function toReview(r: ProcResult): ReviewResult {
 }
 
 // ---- FAKE adapter (yalnız testler; programatik enjeksiyonla seçilir, env ile seçilemez) ----
-export interface FakeImplementDirective { files?: Record<string, string>; exitCode?: number; noCommit?: boolean; message?: string; sleepMs?: number }
+export interface FakeImplementDirective { files?: Record<string, string>; exitCode?: number; noCommit?: boolean; message?: string; sleepMs?: number; stderr?: string }
 export interface FakeReviewDirective { verdict?: "CLEAN" | "BLOCKED"; findings?: ReviewFinding[]; exitCode?: number; mutate?: boolean; raw?: string }
 export interface FakeScript {
   implement: (call: number, spec: MissionSpec) => FakeImplementDirective;

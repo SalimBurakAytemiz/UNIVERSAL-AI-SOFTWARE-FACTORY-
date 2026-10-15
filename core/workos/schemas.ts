@@ -81,3 +81,6 @@ export const emptyBodySchema = {type: "object", additionalProperties: false, pro
 export const validateProjectImport = compile(projectImportSchema);
 export const validateProjectExport = compile(projectExportSchema);
 export const validateEmptyBody = compile(emptyBodySchema);
+// //TR: REL-FX-4 onaylı yırtık kuyruk onarımı: kullanıcı kuyruğun tam sha256 değerini aynen onaylamalıdır.
+export const tornTailRepairSchema = {type: "object", additionalProperties: false, required: ["confirmTailSha256"], properties: {confirmTailSha256: {type: "string", pattern: "^[0-9a-f]{64}$"}}} as const;
+export const validateTornTailRepair = compile(tornTailRepairSchema);
