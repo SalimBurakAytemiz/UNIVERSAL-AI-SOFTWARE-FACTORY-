@@ -3,6 +3,7 @@ import type {MissionStatus} from "../mission/types.js";
 import type {CompanyJournalType} from "../company/types.js";
 import type {AcademyJournalType} from "../academy/types.js";
 import type {TestSurfaceSummary} from "./test-surface.js";
+import type {PreDevJournalType} from "./predev/types.js";
 
 export type RiskLevel = "R0" | "R1" | "R2" | "R3" | "R4";
 export type TaskStatus = "PENDING" | "IN_PROGRESS" | "DONE" | "BLOCKED";
@@ -43,7 +44,9 @@ export type JournalType = "PROJECT_CREATED" | "MISSION_CREATED" | "TASK_CREATED"
   // //TR: B11A: Company OS (CRM/Finans/Hukuk) girdileri aynı hash zincirli journal içindedir; kurallar core/company altındadır.
   | CompanyJournalType
   // //TR: WFR-04a: Skill Academy (kaynak, öğrenme yaşam döngüsü, terfi, drift, yeniden kullanım) girdileri de aynı journal içindedir; kurallar core/academy altındadır.
-  | AcademyJournalType;
+  | AcademyJournalType
+  // //TR: CORE pre-dev: Business Analysis/Requirements/Plan/Architecture/UX artefakt sözleşmeleri ve PRE_DEV faz dizisi girdileri de aynı journal içindedir; kurallar core/workos/predev altındadır.
+  | PreDevJournalType;
 export interface JournalEntry {
   seq: number; prevHash: string; hash: string; type: JournalType; actor: string; at: string; payload: Record<string, unknown>;
 }
