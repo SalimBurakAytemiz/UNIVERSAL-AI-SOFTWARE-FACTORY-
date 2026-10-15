@@ -505,7 +505,7 @@ describe("B3a control API", () => {
     expect(runOf(c, run.runId).status).toBe("CHECKPOINTING");
     const w = await wf(a);
     expect(w).toEqual(expect.objectContaining({state: "VERIFIED", activeWorkerRuns: 1}));
-    expect(Object.keys(w).sort()).toEqual(["activeWorkerRuns", "registeredRoles", "source", "state", "targetRoles"]);
+    expect(Object.keys(w).sort()).toEqual(["activeWorkerRuns", "canonicalRegisteredRoles", "registeredRoles", "registeredRolesAuthority", "source", "state", "targetRoles"]);
     expect((await wf(b)).activeWorkerRuns).toBe(0);
     for (let i = 0; i < 20 && runOf(c, run.runId).status !== "AWAITING_APPROVAL"; i++) await eng.tick();
     expect(runOf(c, run.runId).status).toBe("AWAITING_APPROVAL");

@@ -396,9 +396,10 @@ function cockpitOrchestrator(){
   }catch{return mk("ERROR")}
 }
 // //TR: WFR-03: workforce.registeredRoles legacy 363 kaydın sayısıdır (LEGACY_REFERENCE_ONLY projeksiyon), targetRoles kanonik role-definitions.json'dan gelir; sözleşme şekli değişmez.
+// //TR: WFR-03 c2: registeredRolesAuthority bu alanın yalnız legacy referans olduğunu açıkça söyler; canonicalRegisteredRoles kanonik kayıttan hesaplanan rol sayısıdır (/v1/agents.registeredRoles ile aynı kaynak). Mevcut anahtarlar korunur, iki alan geriye uyumlu eklenir.
 // //TR: B3a: workforce.activeWorkerRuns Work OS journal'ındaki LEASED/RUNNING/CHECKPOINTING/VERIFYING run sayısıdır (state VERIFIED); journal yoksa UNAVAILABLE/null, okunamazsa ERROR/null. registeredRoles/targetRoles yalnız okunabilen registry dosyasından gelir. Sözleşme şekli değişmez.
 function cockpitWorkforce(){
-  const base=(state:CockpitState,registeredRoles:number|null,targetRoles:number|null,activeWorkerRuns:number|null=null)=>({state,registeredRoles,targetRoles,activeWorkerRuns,source:`${LEGACY_AGENTS_FILE} (LEGACY_REFERENCE_ONLY); ${ROLE_REGISTRY_FILE}; Work OS journal runs (LEASED|RUNNING|CHECKPOINTING|VERIFYING)`});
+  const base=(state:CockpitState,registeredRoles:number|null,targetRoles:number|null,activeWorkerRuns:number|null=null)=>({state,registeredRoles,registeredRolesAuthority:"LEGACY_REFERENCE_ONLY",canonicalRegisteredRoles:targetRoles,targetRoles,activeWorkerRuns,source:`${LEGACY_AGENTS_FILE} (LEGACY_REFERENCE_ONLY); ${ROLE_REGISTRY_FILE}; Work OS journal runs (LEASED|RUNNING|CHECKPOINTING|VERIFYING)`});
   try{
     let registered:number|null=null,target:number|null=null;
     const af=path.join(repoRoot,LEGACY_AGENTS_FILE);
