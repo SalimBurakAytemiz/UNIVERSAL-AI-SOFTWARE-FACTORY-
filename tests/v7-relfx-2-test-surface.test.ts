@@ -2,7 +2,7 @@
 import {describe, it, expect, beforeEach, afterEach} from "vitest";
 import {FakeExecutors} from "../core/workos/executors.js";
 import type {FakeImplementDirective, MissionSpec} from "../core/workos/executors.js";
-import {assertionCount, evaluateTestSurface, isTestPath, parseExecutedTestCount, parseNameStatusZ} from "../core/workos/test-surface.js";
+import {assertionCount, evaluateTestSurface, isHarnessChange, isRealTestFile, isTestPath, parseExecutedTestCount, parseNameStatusZ} from "../core/workos/test-surface.js";
 import {deriveOutcomes} from "../core/workos/outcomes.js";
 import {HDR, T, api, drive, okScript, rmTmp, runner, setup, startRun, tmpRoot} from "./support/relfx.js";
 import type {Ctx} from "./support/relfx.js";
@@ -74,6 +74,22 @@ describe("REL-FX-2 test-surface helpers (pure)", () => {
     expect(ev([{status: "ADDED", path: "tests/d.test.ts"}])).toEqual(expect.objectContaining({functionalAcceptance: "UNVERIFIED_ORACLE", added: ["tests/d.test.ts"]}));
     expect(ev([{status: "MODIFIED", path: "src/a.ts"}], 0)).toEqual(expect.objectContaining({functionalAcceptance: "UNVERIFIED_VACUOUS", reason: "ZERO_TESTS_EXECUTED"}));
     expect(ev([{status: "MODIFIED", path: "src/a.ts"}])).toEqual(expect.objectContaining({functionalAcceptance: "UNKNOWN", reason: "NO_TEST_SURFACE_CHANGE_DETECTED_NO_PINNED_ORACLE", oracle: "NONE"}));
+  });
+
+  it("RV-RELFX-C5-OBS-1: a deleted or assertion-weakened real test stays hard BLOCKED even when its basename also matches the harness list; a pure config file only diverts to harness", () => {
+    const content: Record<string, string> = {"base:tests/vitest.config.test.ts": "expect(1);expect(2);", "head:tests/vitest.config.test.ts": "expect(1);"};
+    const at = (ref: string, p: string) => content[`${ref === "B" ? "base" : "head"}:${p}`] ?? null;
+    const ev = (entries: ReturnType<typeof parseNameStatusZ>) => evaluateTestSurface({baseSha: "B", headSha: "H", entries, contentAt: at, executedTests: 3});
+    // vitest.config.test.ts matches BOTH the harness list (vitest.config.*) and a real test-file name (*.test.*)
+    expect(isHarnessChange({status: "DELETED", path: "tests/vitest.config.test.ts"}, "B", "H", at)).toBe(true);
+    expect(isRealTestFile("tests/vitest.config.test.ts")).toBe(true);
+    // deleted -> hard BLOCKED (TEST_DELETED), NOT downgraded to harness/acknowledgement
+    expect(ev([{status: "DELETED", path: "tests/vitest.config.test.ts"}])).toEqual(expect.objectContaining({functionalAcceptance: "BLOCKED", reason: "TEST_DELETED", deleted: ["tests/vitest.config.test.ts"], harness: []}));
+    // assertion-weakened -> hard BLOCKED (TEST_WEAKENED), NOT harness
+    expect(ev([{status: "MODIFIED", path: "tests/vitest.config.test.ts"}])).toEqual(expect.objectContaining({functionalAcceptance: "BLOCKED", reason: "TEST_WEAKENED", harness: []}));
+    // a pure config/harness file (not a real test file) still diverts to harness, even when deleted (acknowledgement, not a hard block)
+    expect(isRealTestFile("tests/vitest.config.ts")).toBe(false);
+    expect(ev([{status: "DELETED", path: "tests/vitest.config.ts"}])).toEqual(expect.objectContaining({harness: ["tests/vitest.config.ts"], deleted: [], functionalAcceptance: "UNVERIFIED_ORACLE"}));
   });
 });
 

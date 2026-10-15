@@ -40,6 +40,11 @@ export function isTestPath(p: string, testCommand: readonly string[] = []): bool
   const fileArgs = testCommand.slice(1).map(a => (a.startsWith("-") ? (a.includes("=") ? a.slice(a.indexOf("=") + 1) : "") : a));
   return fileArgs.some(a => a !== "" && /\.[A-Za-z0-9]+$/.test(a) && norm(a).replace(/^\.\//, "") === n);
 }
+// RV-RELFX-C5-OBS-1: "gerçek test dosyası" yalnız bir test DİZİNİ altında olmakla değil, dosya ADININ bir test deseniyle eşleşmesiyle belirlenir (*.test.*, *_test.*, *Spec.*, *.cy.*, *.e2e-spec.*, test_*.py, test.{js,mjs,cjs,ts}). Harness/config dosyaları (vitest.config.*, conftest.py, pytest.ini ...) bu desenlere uymaz, gerçek test değildir. Silinen veya assertion'ı zayıflatılan GERÇEK bir test, adı harness desenine de uysa, sert BLOCKED kalmalıdır; harness listesine (yalnız onay gerektiren) saptırılmaz. Yalnız SADECE harness/config olan (gerçek test dosyası olmayan) girişler harness'a saptırılır.
+const REAL_TEST_FILE_RES: readonly RegExp[] = [/\.(test|spec)\.[A-Za-z0-9]+$/i, /_(test|spec)\.[A-Za-z0-9]+$/i, /[^/]Spec\.[A-Za-z0-9]+$/i, /\.cy\.[A-Za-z0-9]+$/i, /\.e2e-spec\.[A-Za-z0-9]+$/i, /(^|\/)test_[^/]*\.py$/i, /(^|\/)test\.(js|mjs|cjs|ts)$/i];
+export function isRealTestFile(p: string): boolean { const n = norm(p); return REAL_TEST_FILE_RES.some(re => re.test(n)); }
+// Giriş (RENAMED'de her iki yol) gerçek bir test dosyasına mı dokunuyor? Harness saptırmasını bastırmak için kullanılır.
+function entryTouchesRealTest(e: NameStatusEntry): boolean { return isRealTestFile(e.path) || (e.oldPath !== undefined && isRealTestFile(e.oldPath)); }
 // Mission testCommand'ının adlandırdığı package.json betikleri: npm/pnpm/yarn run|run-script <ad>, npm test|t|tst, yarn/pnpm <ad>. Bilinmeyen biçimde boş liste (yalnız scripts.test karşılaştırılır).
 export function testCommandScripts(testCommand: readonly string[] = []): string[] {
   const [exe, ...rest] = testCommand;
@@ -226,7 +231,8 @@ export function evaluateTestSurface(i: EvaluateInput): TestSurfaceSummary {
     // RV-RELFX-C4-001: harness sınıflaması test-yolu dalından bağımsızdır. Harness kontrolü her name-status girişinde (RENAMED'de hem eski hem yeni yolda, isHarnessChange içinde)
     // önce çalışır: sabit harness listesine uyan EKLENEN veya bir test dizinine YENİDEN ADLANDIRILAN bir yapılandırma dosyası (ör. tests/vitest.config.ts, tests/conftest.py),
     // bir test dizini altında olsa bile harness sayılır ve onay gerektirir (testChangesRequirement.required). Harness OLMAYAN yeni test dosyaları aşağıda S4 onaysız yolunu korur.
-    if (isHarnessChange(e, i.baseSha, i.headSha, i.contentAt, tc)) { harness.push(e.path); continue; }
+    // RV-RELFX-C5-OBS-1: yalnız SADECE harness/config olan girişler harness'a saptırılır; giriş aynı zamanda gerçek bir test dosyasına dokunuyorsa (silme/zayıflatma) saptırılmaz, aşağıdaki test sınıflaması onu sert BLOCKED yapar.
+    if (isHarnessChange(e, i.baseSha, i.headSha, i.contentAt, tc) && !entryTouchesRealTest(e)) { harness.push(e.path); continue; }
     if (e.status === "RENAMED" && e.oldPath !== undefined) {
       const fromT = isT(e.oldPath), toT = isT(e.path);
       if (fromT && !toT) { deleted.push(e.oldPath); continue; } // test glob'u dışına taşımak testi siler
