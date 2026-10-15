@@ -1,6 +1,7 @@
 // //TR: Bu modül renderer veri erişiminin tek kapısıdır: yalnız preload köprüsü (window.uasco.apiGet / apiPost) üzerinden GET ve sabit allow-list'li JSON POST yapar, token'ı hiç görmez; sonuçları epoch'lu önbellekte tutar, aynı anda gelen istekleri birleştirir ve eski epoch yanıtlarını atar.
 import {classifyFailure,mapCockpit,emptyCockpit,mapProjects,mapMissions,mapControlStatus,mapEvents,mapAttention} from "./model.js";
 import {MISSION_ID_RE,SAFE_ID_RE,mapMissionDetail,mapWorkRuns,mapWorkRunDetail,mapEvidenceList,mapEvidenceDetail} from "./work-core.js";
+import {devrunPath,filesPath,filePath,gitLogPath,gitDiffPath,exportsPath,exportItemPath,EXECUTORS_PATH,mapDevRun,mapFileList,mapFileContent,mapGitLog,mapGitDiff,mapExports,mapExecutors} from "./project-core.js";
 
 const TTL_MS=3000;
 export function createApi({bridge,store,now=()=>Date.now()}){
@@ -56,6 +57,15 @@ export function createApi({bridge,store,now=()=>Date.now()}){
       const r=await get(q.length?`/v1/evidence?${q.join("&")}`:"/v1/evidence");return r.ok?mapEvidenceList(r.data):{state:r.state,items:[],nextCursor:null,message:r.message};
     },
     async evidenceItem(id){if(!SAFE_ID_RE.test(String(id)))return {state:"ERROR",item:null};const r=await get(`/v1/evidence/${id}`);return r.ok?mapEvidenceDetail(r.data):{state:r.state,item:null,message:r.message}},
+    // PS-1B Project Studio okumaları: yol kurucuları main allow-list ile aynı kurallıdır; geçersiz girdi istek üretmez, 404 dürüst UNAVAILABLE kalır.
+    async devrun(projectId,{force=false}={}){const p=devrunPath(projectId);if(!p)return {state:"ERROR",run:null};const r=await get(p,{force});return r.ok?mapDevRun(r.data):{state:r.state,run:null,message:r.message}},
+    async projectFiles(projectId,rel=""){const p=filesPath(projectId,rel);if(!p)return {state:"ERROR",entries:[],truncated:false};const r=await get(p);return r.ok?mapFileList(r.data):{state:r.state,entries:[],truncated:false,message:r.message}},
+    async projectFile(projectId,rel){const p=filePath(projectId,rel);if(!p)return {state:"ERROR",file:null};const r=await get(p);return r.ok?mapFileContent(r.data):{state:r.state,file:null,message:r.message}},
+    async gitLog(projectId,limit){const p=gitLogPath(projectId,limit);if(!p)return {state:"ERROR",commits:[]};const r=await get(p);return r.ok?mapGitLog(r.data):{state:r.state,commits:[],message:r.message}},
+    async gitDiff(projectId,from,to){const p=gitDiffPath(projectId,from,to);if(!p)return {state:"ERROR",diff:null};const r=await get(p);return r.ok?mapGitDiff(r.data):{state:r.state,diff:null,message:r.message}},
+    async projectExports(projectId){const p=exportsPath(projectId);if(!p)return {state:"ERROR",items:[]};const r=await get(p);return r.ok?mapExports(r.data):{state:r.state,items:[],message:r.message}},
+    async exportItem(projectId,exportId){const p=exportItemPath(projectId,exportId);if(!p)return {state:"ERROR",items:[]};const r=await get(p);return r.ok?mapExports({exports:[r.data?.export??r.data]}):{state:r.state,items:[],message:r.message}},
+    async executors(){const r=await get(EXECUTORS_PATH);return r.ok?mapExecutors(r.data):{state:r.state,items:[],message:r.message}},
     async agentCount(){const r=await get("/v1/agents");return r.ok&&Number.isSafeInteger(r.data?.count)&&r.data.count>=0?{state:"VERIFIED",count:r.data.count}:{state:r.ok?"ERROR":r.state,count:null}},
     async raw(path){return get(path)}
   };

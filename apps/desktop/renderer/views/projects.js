@@ -1,8 +1,11 @@
-// //TR: Bu görünüm Projeler alanıdır: GET /v1/projects gerçek proje listesi ve "Yeni Proje" formu (ad, yerel depo yolu, argv belirteç listesi olarak test komutu); gövde work-core kurucusuyla doğrulanır, her gönderim için idempotency anahtarı üretilir, istek yalnız ana süreçteki sabit POST köprüsünden gider ve proje seçimi store.selectProject ile önbelleği geçersiz kılar (DSK-061-06).
+// //TR: PS-1B: Bu görünüm artık Project Studio girişidir: proje listesi, "Yeni Proje" sihirbazı (şablon, tür/teknoloji/OS, kabul kriterleri, bütçe, dev/test argv), "İçe Aktar" paneli ve bir proje açıldığında bağlamsal çalışma alanı (sekmeler); B5 "mevcut yerel depoyu kaydet" formu gelişmiş seçenek olarak korunur. Önceki B5 açıklaması: Bu görünüm Projeler alanıdır: GET /v1/projects gerçek proje listesi ve "Yeni Proje" formu (ad, yerel depo yolu, argv belirteç listesi olarak test komutu); gövde work-core kurucusuyla doğrulanır, her gönderim için idempotency anahtarı üretilir, istek yalnız ana süreçteki sabit POST köprüsünden gider ve proje seçimi store.selectProject ile önbelleği geçersiz kılar (DSK-061-06).
 import {h,panel,stateNote,emptyNote,chip} from "../components.js";
 import {formatTime} from "../model.js";
 import {buildProjectRequest} from "../work-core.js";
 import {drafts,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetProjectDraft,focusStatus} from "../forms.js";
+import {studio,openProject,closeProject} from "../studio-state.js";
+import {wizardPanel,importPanel} from "./studio-wizard.js";
+import {renderWorkspace,stopRunPolling} from "./studio-workspace.js";
 
 const FORM="project";
 const inputOf=()=>({name:drafts.project.name,repositoryPath:drafts.project.repositoryPath,environmentId:drafts.project.environmentId,testCommand:drafts.project.testCommand});
@@ -35,6 +38,11 @@ function projectForm(ctx){
 
 export async function render(ctx){
   const doc=ctx.doc,res=await ctx.api.projects();
+  if(studio.projectId&&res.state==="VERIFIED"){
+    const open=res.items.find(x=>x.projectId===studio.projectId);
+    if(open)return renderWorkspace(ctx,open,res.items,{onBack:()=>{stopRunPolling();closeProject();ctx.rerender()}});
+    closeProject();
+  }
   let body;
   if(res.state!=="VERIFIED")body=stateNote(ctx,res.state);
   else if(!res.items.length)body=emptyNote(ctx,"projects.empty");
@@ -43,10 +51,14 @@ export async function render(ctx){
     return h(doc,"li",{class:`card${active?" card-active":""}`,dataset:{projectId:p.projectId}},
       h(doc,"h3",{text:p.name}),
       h(doc,"dl",{class:"kv"},h(doc,"dt",{text:ctx.t("projects.env")}),h(doc,"dd",{text:p.environmentId??"—"}),h(doc,"dt",{text:ctx.t("projects.tenant")}),h(doc,"dd",{text:p.tenantId??"—"}),h(doc,"dt",{text:ctx.t("projects.repo")}),h(doc,"dd",{class:"mono",text:p.repositoryPath??"—"}),h(doc,"dt",{text:ctx.t("projects.created")}),h(doc,"dd",{text:formatTime(p.createdAt,ctx.i18n.lang)}),h(doc,"dt",{text:ctx.t("projects.id")}),h(doc,"dd",{class:"mono",text:p.projectId})),
-      h(doc,"button",{type:"button",class:"btn",disabled:active,"aria-pressed":active?"true":"false",on:{click:()=>ctx.selectProject(p.projectId)},text:ctx.t(active?"projects.selected":"projects.select")}));
+      h(doc,"div",{class:"btn-row"},
+        h(doc,"button",{type:"button",class:"btn btn-primary",id:`open-${p.projectId}`,dataset:{focusKey:`open-${p.projectId}`},on:{click:()=>{openProject(p.projectId);ctx.selectProject(p.projectId);ctx.rerender()}},text:ctx.t("studio.open")}),
+        h(doc,"button",{type:"button",class:"btn",disabled:active,"aria-pressed":active?"true":"false",on:{click:()=>ctx.selectProject(p.projectId)},text:ctx.t(active?"projects.selected":"projects.select")})));
   }));
   return h(doc,"div",{class:"view"},h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.projects.title")}),
     h(doc,"p",{class:"panel-meta"},chip(ctx,{state:res.state==="VERIFIED"?"VERIFIED":res.state,value:res.items?.length??null}),h(doc,"span",{text:ctx.t("projects.source")})),
-    projectForm(ctx),
-    panel(ctx,{titleKey:"projects.list",id:"projects-list"},body));
+    wizardPanel(ctx),
+    importPanel(ctx,{projects:res.state==="VERIFIED"?res.items:[]}),
+    panel(ctx,{titleKey:"projects.list",id:"projects-list"},body),
+    projectForm(ctx));
 }

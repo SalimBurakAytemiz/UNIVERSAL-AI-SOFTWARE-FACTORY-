@@ -1,5 +1,5 @@
-// //TR: Bu dosya hardened Electron Control Tower penceresini yalnız doğrulanmış localhost Control API kimliğine bağlar; renderer IPC sender/GET allowlist (mevcut + B4/B5 sabit rotaları) ve ayrı sabit POST allowlist (32 KB JSON gövde sınırı, token yalnız ana süreçte), redirect ve browser yetkileri fail-closed sınırlandırılır. B7: paketlenmiş (kurulu) modda arka uç Electron node modunda başlatılır, değişken veri userData altına yönlendirilir ve tek örnek kilidi uygulanır; geliştirme modu (npm run dev) değişmez.
-import {app,BrowserWindow,ipcMain} from "electron";
+// //TR: Bu dosya hardened Electron Control Tower penceresini yalnız doğrulanmış localhost Control API kimliğine bağlar; renderer IPC sender/GET allowlist (mevcut + B4/B5 sabit rotaları) ve ayrı sabit POST allowlist (32 KB JSON gövde sınırı, token yalnız ana süreçte), redirect ve browser yetkileri fail-closed sınırlandırılır. B7: paketlenmiş (kurulu) modda arka uç Electron node modunda başlatılır, değişken veri userData altına yönlendirilir ve tek örnek kilidi uygulanır; geliştirme modu (npm run dev) değişmez. PS-1B (Project Studio): sabit proje çalışma alanı GET/POST rotaları allow-list'e eklenir; içe aktarma diyaloğu, önizleme ve dışa aktarma klasörü yalnız ana süreçte çözülen değerlerle çalışır (renderer rastgele yol, URL veya komut veremez).
+import {app,BrowserWindow,ipcMain,dialog,shell} from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
@@ -49,7 +49,43 @@ function listQueryAllowed(value,base,keys){
   }
   return seen.size>0;
 }
+// //TR: PS-1B: Project Studio okuma rotaları tam eşleşme ile izinlenir (kimlik prj_ + 24 hex, dışa aktarma kimliği sıkı desen); yol sorgusu yüzde-kodlu ve kanonik olmalı, "..", "/" ile başlama, ters eğik çizgi, ":" ve "%" reddedilir; git referansı yalnız onaltılık özet veya HEAD(~N); bilinmeyen/yinelenen parametre reddedilir.
+function psRelPathValueOk(enc){
+  if(typeof enc!=="string"||enc.length<1||enc.length>600||!/^(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+$/.test(enc))return false;
+  let dec;try{dec=decodeURIComponent(enc)}catch{return false}
+  if(encodeURIComponent(dec)!==enc)return false;
+  if(dec.length>300||/[\u0000-\u001f\u007f\\%:]/.test(dec)||dec.startsWith("/")||dec.endsWith("/"))return false;
+  return dec.split("/").every(s=>s.length>0&&s!=="."&&s!=="..");
+}
+const PS_GIT_REF_RE=/^(?:[0-9a-f]{7,64}|HEAD(?:~[0-9]{1,3})?)$/;
+const PS_GET_ROUTE_RE=/^\/v1\/projects\/prj_[0-9a-f]{24}\/(devrun|files|file|git\/log|git\/diff|exports)$/;
+const PS_EXPORT_DETAIL_RE=/^\/v1\/projects\/prj_[0-9a-f]{24}\/exports\/[A-Za-z0-9_-]{6,64}$/;
+const PS_QUERY={
+  "devrun":{keys:{},req:[]},
+  "files":{keys:{path:psRelPathValueOk},req:[]},
+  "file":{keys:{path:psRelPathValueOk},req:["path"]},
+  "git/log":{keys:{limit:v=>/^[1-9][0-9]{0,2}$/.test(v)&&Number(v)<=500},req:[]},
+  "git/diff":{keys:{from:v=>PS_GIT_REF_RE.test(v),to:v=>PS_GIT_REF_RE.test(v)},req:[]},
+  "exports":{keys:{},req:[]}
+};
+function projectStudioGetAllowed(value){
+  if(typeof value!=="string"||value.length>900)return false;
+  if(value==="/v1/system/executors")return true;
+  const q=value.indexOf("?"),base=q<0?value:value.slice(0,q);
+  if(PS_EXPORT_DETAIL_RE.test(base))return q<0;
+  const m=PS_GET_ROUTE_RE.exec(base);if(!m)return false;
+  const rule=PS_QUERY[m[1]];
+  if(q<0)return rule.req.length===0;
+  const seen=new Set();
+  for(const pair of value.slice(q+1).split("&")){
+    const i=pair.indexOf("="),k=i>0?pair.slice(0,i):"",v=i>0?pair.slice(i+1):"";
+    if(!Object.prototype.hasOwnProperty.call(rule.keys,k)||seen.has(k)||!rule.keys[k](v))return false;
+    seen.add(k);
+  }
+  return rule.req.every(k=>seen.has(k));
+}
 function desktopExtraGetPathAllowed(value){
+  if(projectStudioGetAllowed(value))return true;
   if(typeof value!=="string"||value.length>400)return false;
   return EXTRA_GET_ROUTES.has(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"]);
 }
@@ -58,7 +94,9 @@ function desktopExtraGetPathAllowed(value){
 // B5-POST-ALLOWLIST-BEGIN
 // //TR: Renderer'ın yazma yetkisi yalnız bu sabit POST rotalarıyla sınırlıdır (proje oluştur, mission oluştur, mission geçişi, koşu başlat); gövde yalnız düz JSON nesnesi ve en çok 32 KB olabilir, token ana süreçte eklenir ve renderer'a hiç dönmez.
 const POST_MAX_BODY_BYTES=32768;
-const POST_ROUTE_RES=[/^\/v1\/projects$/,/^\/v1\/missions$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/transition$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/runs$/];
+// //TR: PS-1B: Project Studio yazma rotaları da sabittir: proje içe aktarma, geliştirme koşusu başlat/durdur/yeniden başlat, dışa aktarma ve yerel Claude yürütücüsünü etkinleştirme; başka yöntem veya rota yoktur.
+const POST_ROUTE_RES=[/^\/v1\/projects$/,/^\/v1\/missions$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/transition$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/runs$/,
+  /^\/v1\/projects\/prj_[0-9a-f]{24}\/import$/,/^\/v1\/projects\/prj_[0-9a-f]{24}\/devrun\/(?:start|stop|restart)$/,/^\/v1\/projects\/prj_[0-9a-f]{24}\/export$/,/^\/v1\/system\/executors\/local-claude\/enable$/];
 function desktopPostPathAllowed(value){
   return typeof value==="string"&&value.length<=128&&POST_ROUTE_RES.some(re=>re.test(value));
 }
@@ -73,6 +111,49 @@ function desktopPostBodyCheck(body){
   return {ok:true,text};
 }
 // B5-POST-ALLOWLIST-END
+
+// PS1B-NATIVE-BEGIN
+// //TR: PS-1B saf yardımcıları (electron'suz, testle izole değerlendirilir): içe aktarma yolu yalnız ana süreçteki dosya diyaloğundan gelmiş olmalıdır (POST gövdesindeki path önceden verilmiş yollar tablosunda aranır); önizleme URL'si renderer'dan alınmaz, ana süreç backend devrun durumundan okur ve yalnız RUNNING + AVAILABLE iken http://127.0.0.1:<port>/ biçimindeki (Control API portu hariç, 1024-65535) adres kabul edilir; dışa aktarma konumu gerçek yola çözülüp yalnız veri dizinindeki exports klasörünün altındaysa gösterilir.
+const PS_PROJECT_ID_RE=/^prj_[0-9a-f]{24}$/;
+const PS_EXPORT_ID_RE=/^[A-Za-z0-9_-]{6,64}$/;
+const PS_IMPORT_KINDS=["git","zip"];
+const PS_IMPORT_PATH_RE=/^\/v1\/projects\/prj_[0-9a-f]{24}\/import$/;
+const PS_PREVIEW_URL_RE=/^http:\/\/127\.0\.0\.1:([1-9][0-9]{0,4})\/$/;
+function psImportPathValid(p,kind,pathMod){
+  if(typeof p!=="string"||p.length<3||p.length>1000||/[\u0000-\u001f\u007f]/.test(p)||!pathMod.isAbsolute(p))return false;
+  if(p.split(/[\\/]+/).includes(".."))return false;
+  if(kind==="zip")return /\.zip$/i.test(p);
+  return kind==="git";
+}
+function psImportPostAllowed(pathName,body,issued){
+  if(typeof pathName!=="string"||!PS_IMPORT_PATH_RE.test(pathName))return true;
+  const b=body===undefined||body===null?{}:body;
+  if(typeof b!=="object"||Array.isArray(b)||Object.keys(b).sort().join(",")!=="kind,path")return false;
+  return typeof b.path==="string"&&PS_IMPORT_KINDS.includes(b.kind)&&issued.get(b.path)===b.kind;
+}
+function psPreviewUrl(devrun,controlPort){
+  if(!devrun||typeof devrun!=="object"||devrun.status!=="RUNNING")return null;
+  const pv=devrun.preview;if(!pv||typeof pv!=="object"||pv.state!=="AVAILABLE"||typeof pv.url!=="string")return null;
+  const m=PS_PREVIEW_URL_RE.exec(pv.url);if(!m)return null;
+  const p=Number(m[1]);if(p<1024||p>65535||(Number.isSafeInteger(controlPort)&&p===controlPort))return null;
+  if(devrun.port!==undefined&&devrun.port!==null&&devrun.port!==p)return null;
+  return pv.url;
+}
+function psExportPathFromBody(body){
+  const e=body&&typeof body==="object"?(body.export&&typeof body.export==="object"?body.export:body):null;
+  if(!e)return null;
+  for(const k of ["path","filePath","exportPath","archivePath"])if(typeof e[k]==="string"&&e[k])return e[k];
+  return null;
+}
+function psResolveExportPath(candidate,exportsRoot,fsMod,pathMod){
+  if(typeof candidate!=="string"||candidate.length<3||candidate.length>1000||/[\u0000-\u001f\u007f]/.test(candidate)||!pathMod.isAbsolute(candidate))return null;
+  if(typeof exportsRoot!=="string"||!pathMod.isAbsolute(exportsRoot))return null;
+  let real,root;try{real=fsMod.realpathSync(candidate);root=fsMod.realpathSync(exportsRoot)}catch{return null}
+  const rel=pathMod.relative(root,real);
+  if(!rel||rel===".."||rel.startsWith(".."+pathMod.sep)||pathMod.isAbsolute(rel))return null;
+  return real;
+}
+// PS1B-NATIVE-END
 
 
 async function verifyServerIdentity(force=false){
@@ -101,11 +182,34 @@ async function apiPost(pathName,bodyText){
   let parsed=null;try{parsed=JSON.parse((await r.text()).slice(0,262144))}catch{parsed=null}
   return {status:r.status,body:sanitizePostBody(r.status,parsed)};
 }
-function trustedSender(event){return Boolean(controlWindow)&&event.sender===controlWindow.webContents&&event.senderFrame?.url===rendererUrl}
+// //TR: PS-1B: hash yönlendirmesi (#/projects vb.) aynı belgede kalır ve senderFrame.url sonuna "#..." ekler; güvenilir gönderen kontrolü yalnız fragmanı yok sayar, dosya yolu birebir aynı olmalıdır (başka dosya/URL hâlâ reddedilir).
+function trustedSender(event){const u=event.senderFrame?.url;return Boolean(controlWindow)&&event.sender===controlWindow.webContents&&typeof u==="string"&&u.split("#")[0]===rendererUrl}
 function requireTrustedSender(event){if(!trustedSender(event))throw new Error("UNTRUSTED_IPC_SENDER")}
 
+// //TR: PS-1B ana süreç köprüleri: renderer yalnız tür ("git"|"zip"), proje kimliği ve dışa aktarma kimliği verir; yol, URL ve konum ana süreçte çözülür. Önizleme güvenli seçenek olarak varsayılan tarayıcıda açılır (uygulama içi pencere yok): üretilen uygulamanın kodu Electron sürecine/oturumuna hiç girmez, token ve IPC yüzeyine erişemez; URL yine de yalnız backend devrun durumundan, sıkı loopback biçiminde alınır.
+const importIssued=new Map();
+function dataDirRoot(){return packaged?packagedDataPaths(app.getPath("userData")).workosDataDir:(process.env.UASCO_DATA_DIR?path.resolve(process.env.UASCO_DATA_DIR):path.resolve(here,"..","..",".ai","workos"))}
+ipcMain.handle("uasco:pick-import-path",async(event,kind)=>{
+  requireTrustedSender(event);if(!PS_IMPORT_KINDS.includes(kind))throw new Error("INVALID_IMPORT_KIND");
+  const r=await dialog.showOpenDialog(controlWindow,{title:kind==="git"?"UASCO — Git deposu / Git repository":"UASCO — ZIP",properties:kind==="git"?["openDirectory"]:["openFile"],filters:kind==="zip"?[{name:"ZIP",extensions:["zip"]}]:[]});
+  if(r.canceled||!Array.isArray(r.filePaths)||r.filePaths.length!==1)return {cancelled:true};
+  const p=path.resolve(r.filePaths[0]);if(!psImportPathValid(p,kind,path))throw new Error("IMPORT_PATH_REJECTED");
+  if(importIssued.size>=8)importIssued.delete(importIssued.keys().next().value);importIssued.set(p,kind);return {cancelled:false,path:p,kind};
+});
+ipcMain.handle("uasco:open-preview",async(event,projectId)=>{
+  requireTrustedSender(event);if(typeof projectId!=="string"||!PS_PROJECT_ID_RE.test(projectId))throw new Error("INVALID_PROJECT_ID");
+  let devrun;try{devrun=await api(`/v1/projects/${projectId}/devrun`)}catch{return {opened:false,reason:"DEVRUN_UNAVAILABLE"}}
+  const url=psPreviewUrl(devrun,port);if(!url)return {opened:false,reason:"PREVIEW_UNAVAILABLE"};
+  try{await shell.openExternal(url)}catch{return {opened:false,reason:"OPEN_FAILED"}}return {opened:true};
+});
+ipcMain.handle("uasco:show-export",async(event,projectId,exportId)=>{
+  requireTrustedSender(event);if(typeof projectId!=="string"||!PS_PROJECT_ID_RE.test(projectId)||typeof exportId!=="string"||!PS_EXPORT_ID_RE.test(exportId))throw new Error("INVALID_EXPORT_REF");
+  let body;try{body=await api(`/v1/projects/${projectId}/exports/${exportId}`)}catch{return {shown:false,reason:"EXPORT_UNAVAILABLE"}}
+  const resolved=psResolveExportPath(psExportPathFromBody(body),path.join(dataDirRoot(),"exports"),fs,path);if(!resolved)return {shown:false,reason:"EXPORT_PATH_REJECTED"};
+  shell.showItemInFolder(resolved);return {shown:true};
+});
 ipcMain.handle("uasco:api-get",async(event,p)=>{requireTrustedSender(event);if(!desktopGetPathAllowed(p)&&!desktopExtraGetPathAllowed(p))throw new Error("INVALID_API_PATH");if(p==="/health"){await verifyServerIdentity(true);return {status:"HEALTHY",system:"UNIVERSAL-AI-SOFTWARE-COMPANY-OS",serverIdentity:"VERIFIED"}}return api(p)});
-ipcMain.handle("uasco:api-post",async(event,p,body)=>{requireTrustedSender(event);if(!desktopPostPathAllowed(p))throw new Error("INVALID_API_PATH");const prepared=desktopPostBodyCheck(body);if(!prepared.ok)throw new Error(prepared.error);return apiPost(p,prepared.text)});
+ipcMain.handle("uasco:api-post",async(event,p,body)=>{requireTrustedSender(event);if(!desktopPostPathAllowed(p))throw new Error("INVALID_API_PATH");const prepared=desktopPostBodyCheck(body);if(!prepared.ok)throw new Error(prepared.error);if(!psImportPostAllowed(p,body,importIssued))throw new Error("IMPORT_PATH_NOT_MAIN_RESOLVED");const res=await apiPost(p,prepared.text);if(res.status>=200&&res.status<300&&PS_IMPORT_PATH_RE.test(p))importIssued.delete(body.path);return res});
 ipcMain.handle("uasco:stop",async(event,reason)=>{requireTrustedSender(event);return api("/v1/control/stop",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({reason:String(reason??"Founder requested stop").slice(0,1000)})})});
 ipcMain.handle("uasco:resume",async(event)=>{requireTrustedSender(event);return api("/v1/control/resume",{method:"POST"})});
 ipcMain.handle("uasco:retry-blocked",async(event,packageId)=>{requireTrustedSender(event);const id=String(packageId??"");if(!/^PKG-\d{3}$/.test(id))throw new Error("INVALID_PACKAGE_ID");return api("/v1/control/retry-blocked",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({packageId:id})})});

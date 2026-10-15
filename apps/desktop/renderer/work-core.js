@@ -90,7 +90,7 @@ export function normalizeArgv(tokens){
   return {ok:true,argv};
 }
 const ABSOLUTE_PATH_RE=/^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/]|\/)/;
-function validatePath(p){
+export function validatePath(p){
   if(!p)return "err.pathRequired";
   if(p.length>1000)return "err.pathLong";
   if(CONTROL_RE.test(p))return "err.pathInvalid";

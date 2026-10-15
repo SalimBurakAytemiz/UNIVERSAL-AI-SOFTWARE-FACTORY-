@@ -307,7 +307,8 @@
         "tests/v7-b1-workos.test.ts",
         "tests/v7-b4-desktop-shell.test.ts",
         "tests/v7-b5-work-screens.test.ts",
-        "tests/v7-b7-installer.test.ts"
+        "tests/v7-b7-installer.test.ts",
+        "tests/v7-ps1b-project-studio-ui.test.ts"
       ],
       "requiresDependencies": true
     },

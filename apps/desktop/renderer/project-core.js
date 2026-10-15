@@ -1,0 +1,276 @@
+// //TR: Bu modül PS-1B Project Studio'nun saf (DOM'suz) çekirdeğidir: sihirbaz/içe aktarma/dev-run/dışa aktarma/yürütücü istek gövdesi kurucuları (argv dizisi, idempotency), main allow-list ile aynı kurallı GET yol kurucuları, dev-run/dosya/git/dışa aktarma/yürütücü eşleyicileri, renderer tarafı gizli bilgi sansürü (backend sansürüne ek savunma), boyut sınırları ve önizleme kapısı; eksik veri asla uydurulmaz, 404 dürüst UNAVAILABLE olarak kalır.
+import {MISSING} from "./model.js";
+import {normalizeArgv,validatePath,IDEMPOTENCY_KEY_RE,PROJECT_ID_RE,SAFE_ID_RE,MAX_BODY_BYTES,MAX_CRITERIA} from "./work-core.js";
+
+export const TEMPLATES=Object.freeze(["web-node","node-lib","empty"]);
+export const TARGET_OS=Object.freeze(["windows","macos","linux"]);
+export const IMPORT_KINDS=Object.freeze(["git","zip"]);
+export const DEVRUN_STATES=Object.freeze(["STOPPED","STARTING","RUNNING","CRASHED","BLOCKED"]);
+export const DEVRUN_ACTIONS=Object.freeze(["start","stop","restart"]);
+export const PREVIEW_STATES=Object.freeze(["AVAILABLE","UNAVAILABLE"]);
+export const EXECUTOR_STATES=Object.freeze(["READY","NOT_CONFIGURED","PROVENANCE_MISSING","CLI_NOT_FOUND"]);
+export const STUDIO_TABS=Object.freeze(["overview","run","files","changes","missions","delivery"]);
+export const LOG_TAIL_MAX_CHARS=20000;
+export const FILE_VIEW_MAX_CHARS=100000;
+export const DIFF_VIEW_MAX_CHARS=200000;
+export const DIFF_VIEW_MAX_LINES=4000;
+export const GIT_LOG_LIMIT=30;
+export const PREVIEW_URL_RE=/^http:\/\/127\.0\.0\.1:([1-9][0-9]{0,4})\/$/;
+export const GIT_REF_RE=/^(?:[0-9a-f]{7,64}|HEAD(?:~[0-9]{1,3})?)$/;
+export const COMMIT_RE=/^[0-9a-f]{7,64}$/;
+export const MAX_TECH_ITEMS=20;
+export const MAX_TECH_LENGTH=60;
+export const MAX_RUNS_LIMIT=1000;
+export const MAX_TOKENS_MIN=1000;
+export const MAX_TOKENS_MAX=1000000000;
+
+const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
+const str=(x,max=300)=>typeof x==="string"&&x.length?x.slice(0,max):null;
+const iso=x=>typeof x==="string"&&!Number.isNaN(new Date(x).getTime())?x:null;
+const pick=(...v)=>v.find(x=>x!==undefined&&x!==null);
+const arr=(x,max=1000)=>Array.isArray(x)?x.slice(0,max):[];
+const trim=v=>typeof v==="string"?v.trim():"";
+const CONTROL_RE=/[\u0000-\u001f\u007f]/;
+const bodyBytes=body=>{try{return new TextEncoder().encode(JSON.stringify(body)).length}catch{return Infinity}};
+const result=(path,body,errors)=>Object.keys(errors).length?{ok:false,errors}:{ok:true,path,body};
+const safeInt=x=>Number.isSafeInteger(x)?x:null;
+
+// ---------- Gizli bilgi sansürü (backend sansürüne ek savunma; asla "temiz" iddiası değildir) ----------
+const REDACTED="[REDACTED]";
+const SECRET_PATTERNS=Object.freeze([
+  new RegExp("-----BEGIN"+" [A-Z ]*PRIVATE KEY-----[\\s\\S]*?(?:-----END"+" [A-Z ]*PRIVATE KEY-----|$)","g"),
+  /\bsk-[A-Za-z0-9_-]{16,}/g,
+  /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/g,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\bxox[abprs]-[A-Za-z0-9-]{10,}/g,
+  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g,
+  /\bBearer\s+[A-Za-z0-9._~+\/=-]{16,}/gi
+]);
+const KEYED_SECRET_RE=/((?:api[_-]?key|secret|token|passwd|password|authorization|credential)[A-Za-z0-9_-]{0,20})(["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s"',;]+)/gi;
+export function redactText(value){
+  let t=typeof value==="string"?value:"";
+  for(const re of SECRET_PATTERNS)t=t.replace(re,REDACTED);
+  return t.replace(KEYED_SECRET_RE,(_m,k,sep)=>`${k}${sep}${REDACTED}`);
+}
+/** Sansürler ve son max karakteri tutar (log kuyruğu). */
+export function redactTail(value,max=LOG_TAIL_MAX_CHARS){const t=redactText(value);return t.length>max?t.slice(t.length-max):t}
+/** Sansürler ve ilk max karakteri tutar; {text,truncated} döner (dosya/diff görüntüleyici). */
+export function redactHead(value,max){const t=redactText(value),cut=t.length>max;return {text:cut?t.slice(0,max):t,truncated:cut}}
+
+// ---------- Göreli yol (main allow-list ile aynı kurallar) ----------
+/** Proje içi göreli yol: boş değil, "/" ile başlamaz/bitmez, ".." "." boş parça yok, ters eğik çizgi/":"/"%"/kontrol karakteri yok, ≤300 karakter. */
+export function validRelPath(p){
+  if(typeof p!=="string"||p.length<1||p.length>300||CONTROL_RE.test(p)||/[\\%:]/.test(p)||p.startsWith("/")||p.endsWith("/"))return false;
+  return p.split("/").every(s=>s.length>0&&s!=="."&&s!=="..");
+}
+export const joinRel=(dir,name)=>dir?`${dir}/${name}`:name;
+export const parentRel=p=>{const i=typeof p==="string"?p.lastIndexOf("/"):-1;return i<0?"":p.slice(0,i)};
+
+// ---------- GET yol kurucuları (geçersizse null; main allow-list ile birebir uyumlu) ----------
+const pid=id=>typeof id==="string"&&PROJECT_ID_RE.test(id)?id:null;
+export const devrunPath=id=>pid(id)?`/v1/projects/${id}/devrun`:null;
+export const exportsPath=id=>pid(id)?`/v1/projects/${id}/exports`:null;
+export const exportItemPath=(id,eid)=>pid(id)&&typeof eid==="string"&&SAFE_ID_RE.test(eid)?`/v1/projects/${id}/exports/${eid}`:null;
+export function filesPath(id,rel=""){
+  if(!pid(id))return null;if(!rel)return `/v1/projects/${id}/files`;
+  return validRelPath(rel)?`/v1/projects/${id}/files?path=${encodeURIComponent(rel)}`:null;
+}
+export const filePath=(id,rel)=>pid(id)&&validRelPath(rel)?`/v1/projects/${id}/file?path=${encodeURIComponent(rel)}`:null;
+export function gitLogPath(id,limit=GIT_LOG_LIMIT){
+  if(!pid(id))return null;if(!Number.isSafeInteger(limit)||limit<1||limit>500)return null;return `/v1/projects/${id}/git/log?limit=${limit}`;
+}
+export function gitDiffPath(id,from,to){
+  if(!pid(id))return null;const q=[];
+  if(from){if(!GIT_REF_RE.test(from))return null;q.push(`from=${from}`)}
+  if(to){if(!GIT_REF_RE.test(to))return null;q.push(`to=${to}`)}
+  return `/v1/projects/${id}/git/diff${q.length?`?${q.join("&")}`:""}`;
+}
+export const EXECUTORS_PATH="/v1/system/executors";
+export const ENABLE_LOCAL_CLAUDE_PATH="/v1/system/executors/local-claude/enable";
+
+// ---------- İstek kurucuları ----------
+const GENERIC_ARGV_ERRORS=Object.freeze({"err.argvInvalid":"studio.err.argvInvalid","err.argvControl":"studio.err.argvControl","err.argvLong":"studio.err.argvLong","err.argvMany":"studio.err.argvMany","err.argvShellString":"studio.err.argvShellString"});
+const argvOrError=(tokens,errors,field)=>{
+  const a=normalizeArgv(tokens);
+  if(!a.ok){errors[field]=GENERIC_ARGV_ERRORS[a.error]??a.error;return []}
+  return a.argv;
+};
+const parseIntStrict=(v,lo,hi)=>{
+  const s=trim(String(v??""));if(!s)return {empty:true};
+  if(!/^[0-9]{1,12}$/.test(s))return {error:true};
+  const n=Number(s);return Number.isSafeInteger(n)&&n>=lo&&n<=hi?{value:n}:{error:true};
+};
+/** Yeni proje sihirbazı: POST /v1/projects gövdesi (şablon dahil boş proje; argv dizileri; bütçe isteğe bağlı). */
+export function buildWizardRequest(input,{key}={}){
+  const errors={},name=trim(input?.name),template=trim(input?.template),type=trim(input?.projectType);
+  if(!name)errors.name="err.nameRequired";else if(name.length>200)errors.name="err.nameLong";
+  if(!TEMPLATES.includes(template))errors.template="studio.err.template";
+  if(type.length>MAX_TECH_LENGTH||CONTROL_RE.test(type))errors.projectType="studio.err.typeLong";
+  const tech=arr(input?.techStack,100).map(trim).filter(Boolean);
+  if(tech.length>MAX_TECH_ITEMS||tech.some(t=>t.length>MAX_TECH_LENGTH||CONTROL_RE.test(t)))errors.techStack="studio.err.techInvalid";
+  const os=arr(input?.targetOS,10).filter(x=>typeof x==="string");
+  if(os.some(x=>!TARGET_OS.includes(x))||new Set(os).size!==os.length)errors.targetOS="studio.err.osInvalid";
+  const crit=arr(input?.acceptanceCriteria,200).map(trim).filter(Boolean);
+  if(crit.length>MAX_CRITERIA)errors.acceptanceCriteria="err.criteriaMany";else if(crit.some(c=>c.length>4000))errors.acceptanceCriteria="err.criteriaLong";
+  const runs=parseIntStrict(input?.maxRuns,1,MAX_RUNS_LIMIT),tokens=parseIntStrict(input?.maxTokens,MAX_TOKENS_MIN,MAX_TOKENS_MAX);
+  if(runs.error)errors.budgetMaxRuns="studio.err.budgetRuns";
+  if(tokens.error)errors.budgetMaxTokens="studio.err.budgetTokens";
+  const dev=argvOrError(input?.devCommand,errors,"devCommand"),test=argvOrError(input?.testCommand,errors,"testCommand");
+  if(key!==undefined&&!IDEMPOTENCY_KEY_RE.test(String(key)))errors.idempotencyKey="err.idempotencyKey";
+  const body={name,template};
+  if(type)body.projectType=type;
+  if(tech.length)body.techStack=tech;
+  if(os.length)body.targetOS=os;
+  if(crit.length)body.acceptanceCriteria=crit;
+  const budget={};if(runs.value!==undefined)budget.maxRuns=runs.value;if(tokens.value!==undefined)budget.maxTokens=tokens.value;
+  if(Object.keys(budget).length)body.budget=budget;
+  if(dev.length)body.devCommand=dev;
+  if(test.length)body.testCommand=test;
+  if(key!==undefined)body.idempotencyKey=String(key);
+  if(!Object.keys(errors).length&&bodyBytes(body)>MAX_BODY_BYTES)errors.form="err.tooLarge";
+  return result("/v1/projects",body,errors);
+}
+/** İçe aktarma: yol yalnız ana süreçteki dosya diyaloğundan gelir; renderer burada yalnız biçimi doğrular. */
+export function buildImportRequest({projectId,kind,path}){
+  const errors={};
+  if(!pid(projectId))errors.projectId="err.projectRequired";
+  if(!IMPORT_KINDS.includes(kind))errors.importKind="studio.err.importKind";
+  const p=typeof path==="string"?path.trim():"";
+  const pe=validatePath(p);if(pe)errors.importPath=pe;else if(kind==="zip"&&!/\.zip$/i.test(p))errors.importPath="studio.err.zipExt";
+  return result(`/v1/projects/${projectId}/import`,{kind,path:p},errors);
+}
+export function buildDevRunRequest({projectId,action}){
+  const errors={};
+  if(!pid(projectId))errors.projectId="err.projectRequired";
+  if(!DEVRUN_ACTIONS.includes(action))errors.action="studio.err.action";
+  return result(`/v1/projects/${projectId}/devrun/${action}`,{},errors);
+}
+export function buildExportRequest({projectId,commit}){
+  const errors={},c=trim(commit);
+  if(!pid(projectId))errors.projectId="err.projectRequired";
+  if(c&&!COMMIT_RE.test(c))errors.commit="studio.err.commit";
+  const body={};if(c)body.commit=c;
+  return result(`/v1/projects/${projectId}/export`,body,errors);
+}
+export const buildEnableExecutorRequest=()=>({ok:true,path:ENABLE_LOCAL_CLAUDE_PATH,body:{}});
+
+// ---------- Dev-run ----------
+/** Durumdan izinli eylemler; STOP her durumda görünür kalır (yalnız çalışmıyorsa devre dışı), başlatma yalnız STOPPED/CRASHED durumunda. */
+export function devRunActions(status){
+  const live=status==="STARTING"||status==="RUNNING";
+  return {start:status==="STOPPED"||status==="CRASHED",stop:live,restart:live||status==="CRASHED"};
+}
+export function mapDevRun(raw){
+  const r=isObj(raw)?(isObj(raw.devrun)?raw.devrun:raw):null;
+  if(!r||!DEVRUN_STATES.includes(r.status))return {state:"ERROR",run:null};
+  const pv=isObj(r.preview)?r.preview:{},url=typeof pv.url==="string"&&PREVIEW_URL_RE.test(pv.url)?pv.url:null,port=safeInt(r.port);
+  return {state:"VERIFIED",run:{
+    status:r.status,pid:safeInt(r.pid),startedAt:iso(r.startedAt),exitCode:safeInt(r.exitCode),port:port!==null&&port>=1&&port<=65535?port:null,
+    preview:{url,state:PREVIEW_STATES.includes(pv.state)?pv.state:"UNAVAILABLE",lastProbeAt:iso(pv.lastProbeAt)},
+    logTail:redactTail(typeof r.logTail==="string"?r.logTail:Array.isArray(r.logTail)?r.logTail.filter(x=>typeof x==="string").join("\n"):"")
+  }};
+}
+/** Önizleme düğmesi yalnız dev-run RUNNING, önizleme AVAILABLE ve URL kesin http://127.0.0.1:<port>/ biçimindeyse (ve varsa port uyuşuyorsa) etkin olur; aksi halde asla açılmaz. */
+export function previewOpenable(run){
+  if(!run||run.status!=="RUNNING"||!run.preview||run.preview.state!=="AVAILABLE"||typeof run.preview.url!=="string")return false;
+  const m=PREVIEW_URL_RE.exec(run.preview.url);if(!m)return false;
+  const p=Number(m[1]);if(p<1024||p>65535)return false;
+  return run.port===null||run.port===undefined||run.port===p;
+}
+
+// ---------- Dosyalar ----------
+export function mapFileList(raw){
+  if(!isObj(raw))return {state:"ERROR",entries:[],truncated:false};
+  const list=pick(raw.entries,raw.files,raw.items,raw.children);if(!Array.isArray(list))return {state:"ERROR",entries:[],truncated:false};
+  const entries=list.slice(0,1000).filter(isObj).map(x=>{
+    const name=str(x.name,255);if(!name||/[\/\\]/.test(name)||CONTROL_RE.test(name)||name==="."||name==="..")return null;
+    const t=String(pick(x.type,x.kind)??"").toLowerCase();
+    return {name,dir:x.isDirectory===true||t==="dir"||t==="directory"||t==="tree",size:safeInt(x.size)};
+  }).filter(Boolean).sort((a,b)=>(a.dir===b.dir?a.name.localeCompare(b.name):a.dir?-1:1));
+  return {state:"VERIFIED",entries,truncated:raw.truncated===true||list.length>1000};
+}
+export function mapFileContent(raw){
+  if(!isObj(raw))return {state:"ERROR",file:null};
+  const f=isObj(raw.file)?raw.file:raw,text=pick(f.content,f.text);
+  if(f.binary===true)return {state:"VERIFIED",file:{binary:true,text:"",size:safeInt(f.size),truncated:false}};
+  if(typeof text!=="string")return {state:"ERROR",file:null};
+  const cut=redactHead(text,FILE_VIEW_MAX_CHARS);
+  return {state:"VERIFIED",file:{binary:false,text:cut.text,size:safeInt(f.size),truncated:cut.truncated||f.truncated===true}};
+}
+
+// ---------- Git ----------
+export function mapGitLog(raw){
+  if(!isObj(raw))return {state:"ERROR",commits:[]};
+  const list=pick(raw.commits,raw.log,raw.items);if(!Array.isArray(list))return {state:"ERROR",commits:[]};
+  const commits=list.slice(0,500).filter(isObj).map(x=>{
+    const hash=String(pick(x.hash,x.sha,x.id)??"").toLowerCase();if(!COMMIT_RE.test(hash))return null;
+    const author=isObj(x.author)?str(x.author.name,120):str(x.author,120),subject=str(pick(x.subject,typeof x.message==="string"?x.message.split(/\r?\n/)[0]:undefined),300);
+    return {hash,short:hash.slice(0,7),subject:subject?redactText(subject):MISSING,author,date:iso(pick(x.date,x.authoredAt,x.committedAt))};
+  }).filter(Boolean);
+  return {state:"VERIFIED",commits};
+}
+export function mapGitDiff(raw){
+  if(!isObj(raw))return {state:"ERROR",diff:null};
+  const text=pick(raw.diff,raw.patch,raw.text);if(typeof text!=="string")return {state:"ERROR",diff:null};
+  const cut=redactHead(text,DIFF_VIEW_MAX_CHARS),all=cut.text.split(/\r?\n/),lines=all.slice(0,DIFF_VIEW_MAX_LINES);
+  const files=arr(raw.files,200).filter(isObj).map(f=>({path:str(f.path,300),additions:safeInt(f.additions),deletions:safeInt(f.deletions)})).filter(f=>f.path);
+  return {state:"VERIFIED",diff:{lines,files,truncated:cut.truncated||all.length>DIFF_VIEW_MAX_LINES||raw.truncated===true,empty:text.trim().length===0}};
+}
+/** Diff satırı türü: yalnız görsel sınıf; anlam ayrıca "+"/"-" önekiyle okunur (renk tek başına taşıyıcı değildir). */
+export function diffLineKind(line){
+  const s=String(line??"");
+  if(s.startsWith("@@"))return "hunk";
+  if(s.startsWith("+++ ")||s.startsWith("--- ")||s.startsWith("diff --git")||s.startsWith("index "))return "meta";
+  if(s.startsWith("+"))return "add";
+  if(s.startsWith("-"))return "del";
+  return "ctx";
+}
+
+// ---------- Dışa aktarma ----------
+export function mapExports(raw){
+  if(!isObj(raw))return {state:"ERROR",items:[]};
+  const list=pick(raw.exports,raw.items);if(!Array.isArray(list))return {state:"ERROR",items:[]};
+  const items=list.slice(0,200).filter(isObj).map(x=>{
+    const id=pick(x.exportId,x.id);if(typeof id!=="string"||!SAFE_ID_RE.test(id))return null;
+    const commit=String(x.commit??"").toLowerCase();
+    return {exportId:id,createdAt:iso(x.createdAt),commit:COMMIT_RE.test(commit)?commit:null,sizeBytes:safeInt(pick(x.sizeBytes,x.size)),status:/^[A-Z][A-Z0-9_]{0,39}$/.test(String(x.status??""))?x.status:null,format:str(pick(x.format,x.kind),20)};
+  }).filter(Boolean).sort((a,b)=>String(b.createdAt??"").localeCompare(String(a.createdAt??"")));
+  return {state:"VERIFIED",items};
+}
+export function formatBytes(n){
+  if(!Number.isSafeInteger(n)||n<0)return MISSING;
+  if(n<1024)return `${n} B`;if(n<1048576)return `${(n/1024).toFixed(1)} KB`;if(n<1073741824)return `${(n/1048576).toFixed(1)} MB`;return `${(n/1073741824).toFixed(2)} GB`;
+}
+
+// ---------- Yürütücüler ----------
+/** GET /v1/system/executors -> [{id,state,label?}]; bilinmeyen durum ham (büyük harf, güvenli desenli) gösterilir, aksi halde null (uydurulmaz). */
+export function mapExecutors(raw){
+  if(!isObj(raw))return {state:"ERROR",items:[]};
+  let list=pick(raw.executors,raw.items);
+  if(isObj(list))list=Object.entries(list).map(([id,v])=>isObj(v)?{id,...v}:{id,state:v});
+  if(!Array.isArray(list))return {state:"ERROR",items:[]};
+  const items=list.slice(0,20).filter(isObj).map(x=>{
+    const id=String(pick(x.id,x.executor,x.kind,x.name)??"").toUpperCase().replace(/-/g,"_");if(!/^[A-Z][A-Z0-9_]{0,39}$/.test(id))return null;
+    const s=pick(x.state,x.status),state=typeof s==="string"&&/^[A-Z][A-Z0-9_]{0,39}$/.test(s)?s:null;
+    return {id,state,testOnly:id==="FAKE"||x.testOnly===true};
+  }).filter(Boolean);
+  return {state:"VERIFIED",items};
+}
+/** "Etkinleştir" yalnız LOCAL_CLAUDE ve NOT_CONFIGURED iken sunulur; CLI/köken eksikse veya zaten READY ise sunulmaz, FAKE yalnız test içindir. */
+export const canEnableExecutor=e=>Boolean(e)&&e.id==="LOCAL_CLAUDE"&&e.state==="NOT_CONFIGURED"&&e.testOnly!==true;
+
+// ---------- Genel bakış türetimleri ----------
+/** Projeye ait mission kimlikleriyle koşuları süzer ve en son başlayanı seçer; koşu yoksa null (uydurulmaz). */
+export function latestRunFor(runs,missionIds){
+  const ids=new Set(missionIds??[]);let best=null;
+  for(const r of runs??[]){if(!r||!ids.has(r.missionId))continue;if(!best||String(r.startedAt??"").localeCompare(String(best.startedAt??""))>=0)best=r}
+  return best;
+}
+export const SECURITY_KIND_RE=/SECURITY|SAST|SECRET|AUDIT|VULN/;
+/** Kanıt listesinden güvenlik türündekileri ve doğrulama durum sayısını çıkarır; hiç güvenlik kanıtı yoksa seen:false (güvenli sayılmaz). */
+export function securitySummary(evidence){
+  const sec=(evidence??[]).filter(e=>typeof e?.kind==="string"&&SECURITY_KIND_RE.test(e.kind));
+  const counts={};for(const e of sec){const k=e.verification??"NONE";counts[k]=(counts[k]??0)+1}
+  return {seen:sec.length>0,total:sec.length,counts,allVerified:sec.length>0&&sec.every(e=>e.verification==="VERIFIED")};
+}

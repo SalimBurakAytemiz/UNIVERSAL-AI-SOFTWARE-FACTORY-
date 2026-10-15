@@ -33,7 +33,13 @@ const ctx={doc,i18n,store,api,principal:PRINCIPAL,t:(k,v)=>i18n.t(k,v),
   async refreshAll({force=false}={}){if(force)store.cache.clear();const ok=await shell.refresh();if(ok===false)return;await renderRoute({force})},
   renderAttention,
   rerender(){return renderRoute({force:true})},
-  confirm:confirmAction
+  confirm:confirmAction,
+  // //TR: PS-1B: renderer'ın yerel yetenekleri yalnız üç dar ana-süreç çağrısıdır; hiçbiri yol, URL veya komut kabul etmez (yalnız tür ve kimlik), çözümleme ana süreçte yapılır.
+  native:{
+    pickImportPath:kind=>typeof window.uasco?.pickImportPath==="function"?window.uasco.pickImportPath(kind):Promise.reject(new Error("BRIDGE_UNAVAILABLE")),
+    openPreview:projectId=>typeof window.uasco?.openPreview==="function"?window.uasco.openPreview(projectId):Promise.reject(new Error("BRIDGE_UNAVAILABLE")),
+    showExport:(projectId,exportId)=>typeof window.uasco?.showExport==="function"?window.uasco.showExport(projectId,exportId):Promise.reject(new Error("BRIDGE_UNAVAILABLE"))
+  }
 };
 
 /** Yüksek riskli eylemler için erişilebilir onay penceresi: eylem ve hedef adıyla açılır, varsayılan odak "Vazgeç"tir, Esc veya Vazgeç false döndürür; yalnız açıkça "Onayla" true döndürür. */

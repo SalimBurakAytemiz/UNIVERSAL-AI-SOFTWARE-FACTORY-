@@ -244,3 +244,30 @@ kbd{font-family:inherit;font-size:.75rem;padding:.1rem .4rem;border:1px solid va
   :focus-visible{outline:3px solid Highlight}
   .spark polyline{stroke:CanvasText}
 }
+
+/* PS-1B: Project Studio (sekmeler, sihirbaz seçimleri, dosya/diff görüntüleyici) */
+.studio-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:1rem;align-items:start}
+.studio-files{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:1rem;align-items:start}
+.studio-tabs{margin:.6rem 0 1rem}
+.studio-run-state{margin:0 0 .5rem;font-weight:700}
+.choice-group{border:1px solid var(--border);border-radius:.6rem;padding:.6rem .8rem;margin:0;min-width:0}
+.choice-group legend{font-weight:600;font-size:.88rem;padding:0 .3rem}
+.choice-list{display:grid;gap:.5rem;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr))}
+.choice{display:flex;gap:.5rem;align-items:flex-start;padding:.5rem;border:1px solid var(--border);border-radius:.55rem;background:var(--surface);cursor:pointer}
+.choice input{margin-top:.2rem;inline-size:1.1rem;block-size:1.1rem;flex:none}
+.choice-text{display:grid;gap:.1rem;min-width:0}.choice-text small{color:var(--muted)}
+.field-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr));gap:.8rem}
+.path-chosen{margin:0;padding:.4rem .6rem;border:1px dashed var(--border);border-radius:.5rem;overflow-wrap:anywhere}
+.inline-list{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.5rem}
+.file-list{list-style:none;margin:.4rem 0;padding:0;display:grid;gap:.2rem}
+.code-view,.diff-view{max-height:32rem;white-space:pre;overflow:auto}
+.diff-line{display:block}
+.diff-add{color:var(--ok)}.diff-del{color:var(--danger)}.diff-hunk{color:var(--accent-2)}.diff-meta{color:var(--muted)}
+.badge-ok{color:var(--ok);border-color:var(--ok)}
+.exec-list{grid-template-columns:repeat(auto-fill,minmax(min(100%,20rem),1fr))}
+@media (max-width:1100px){.studio-files{grid-template-columns:minmax(0,1fr)}}
+@media (forced-colors:active){
+  .choice,.choice-group,.path-chosen{border:1px solid CanvasText}
+  .diff-add,.diff-del,.diff-hunk,.diff-meta{color:CanvasText}
+  .tabs [role="tab"][aria-selected="true"]{border:3px solid Highlight}
+}

@@ -1,0 +1,42 @@
+{
+  "//TR": "Bu checkpoint V7 PS-1B masaüstü Project Studio paketinin (sihirbaz, içe aktarma, dev-run + önizleme, dosyalar/diff, dışa aktarma, yürütücü kurulumu) yalnız gözlenen sonuçlarını kaydeder; temiz değildir, bağımsız inceleme beklemektedir.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-PS1B",
+  "date": "2026-10-15",
+  "parent": "db0fb8d2cc38f9a6b3f127610b982cb5d0e0e5e4",
+  "branch": "v7/product-ps1b",
+  "implementer": "CLAUDE_BUILDER",
+  "status": "IMPLEMENTED, NOT CLEAN; independent review pending",
+  "startedAt": "2026-10-14T23:54:53Z",
+  "endedAt": "2026-10-15T00:26:57Z",
+  "authorizationRecords": ["audit/checkpoints/V7-PKG-B0-PRODUCT-AUTHORIZATION-2026-10-14.json", "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"],
+  "backendDependency": "PS-1A backend routes are not in this lineage; every new read returns HTTP 404 here and the UI shows honest UNAVAILABLE (observed in the real Electron launch). No data is faked.",
+  "decisions": {
+    "preview": "shell.openExternal to the default browser, chosen over an in-app isolated BrowserWindow: generated app code never enters the Electron process/session or IPC surface. The URL is read by the main process from backend devrun state (RUNNING + AVAILABLE + exact http://127.0.0.1:<port>/, port 1024-65535, not the Control API port, matching devrun.port), never taken from the renderer.",
+    "importPaths": "Paths come only from a main-process native open dialog; main remembers up to 8 issued paths and rejects an import POST whose {kind,path} was not issued (consumed on 2xx).",
+    "exportFolder": "Main fetches the export record itself, realpath-resolves the path and only shows it when strictly inside <dataDir>/exports (packaged: userData/workos/exports; dev: UASCO_DATA_DIR or .ai/workos/exports)."
+  },
+  "filesChanged": [
+    "apps/desktop/main.mjs (protected, authorized): GET/POST allow-list additions, PS1B-NATIVE block, 3 IPC handlers, import-path enforcement in POST, trustedSender ignores URL fragment",
+    "apps/desktop/preload.mjs (protected, authorized): pickImportPath, openPreview, showExport",
+    "apps/desktop/renderer/app.js (protected, authorized): ctx.native wrappers only",
+    "apps/desktop/renderer/{project-core.js,studio-state.js,api.js,work-core.js,styles.css,locales/tr.js,locales/en.js}",
+    "apps/desktop/renderer/views/{projects.js,settings.js,studio-wizard.js,studio-workspace.js,executors-panel.js}",
+    "config/validation.json (protected, authorized): test path appended at the end of the tests step",
+    "config/trust-root-manifest.json (regenerated via generate-trust-root only)",
+    "tests/v7-ps1b-project-studio-ui.test.ts (new), tests/v7-b5-work-screens.test.ts (later-package filename regex widened to allow ps<N> names)"
+  ],
+  "observed": {
+    "tsc --noEmit": "exit 0",
+    "vitest (new + b4 + b5 + b7 + pkg-c + pkg-e)": "6 files, 203 tests passed",
+    "scripts/v6-apps-control-desktop-selftest.mjs": "PASS 93/93",
+    "scripts/smoke-desktop.mjs (dev mode, provisioned Electron 44.4.5)": "PASS desktop marker HEALTHY+VERIFIED",
+    "real Electron renderer probe (CDP, scratch script, not committed)": "bridge keys apiGet,apiPost,openPreview,pickImportPath,resume,retryBlocked,showExport,stop; apiGet(/health) VERIFIED; traversal GET rejected INVALID_API_PATH; import POST with non-dialog path rejected IMPORT_PATH_NOT_MAIN_RESOLVED; openPreview('../x') INVALID_PROJECT_ID; showExport bad id INVALID_EXPORT_REF; openPreview(valid id, no backend route) {opened:false,reason:DEVRUN_UNAVAILABLE}; #/projects renders wizard+import; #/settings executors panel shows Kullanilamiyor (UNAVAILABLE) on 404",
+    "validate-tr-comments": "PASS",
+    "secret-sanity": "PASS",
+    "generate-trust-root / verify-trust-root": "files=364, PASS (re-run after commit recorded in final report)"
+  },
+  "defectFoundAndFixed": "Pre-existing B4 defect: trustedSender required senderFrame.url === rendererUrl exactly, but hash routes append #/route, so every IPC call after leaving the initial route failed with UNTRUSTED_IPC_SENDER (seen in the real launch). Fixed by ignoring only the URL fragment; unit-tested.",
+  "notRun": ["scripts/run-validation.mjs (not requested)", "electron-builder packaged build (not requested)", "interactive native file dialog (cannot be driven headless)", "default-browser preview opening (needs a live backend dev-run)"],
+  "claims": "Not clean. No CLEAN or review verdict is claimed."
+}
