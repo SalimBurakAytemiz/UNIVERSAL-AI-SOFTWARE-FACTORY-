@@ -27,7 +27,7 @@ import {isMissionStatus} from "../../../core/mission/state-machine.js";
 import {authorizeAction} from "../../../core/action-gateway/policy.js";
 import type {ActionPolicyContext} from "../../../core/action-gateway/types.js";
 import {MissionRunner} from "../../../core/workos/runner.js";
-import {deriveOutcomes} from "../../../core/workos/outcomes.js";
+import {completionRequirements,deriveOutcomes} from "../../../core/workos/outcomes.js";
 import {RISK_REFUSAL,hostExecutionNotice,riskAdmitted} from "../../../core/workos/risk-admission.js";
 import type {RunnerOptions} from "../../../core/workos/runner.js";
 import {assertIndependentExecutors,executorsFromEnv,LocalClaudeExecutors} from "../../../core/workos/executors.js";
@@ -217,7 +217,9 @@ app.post<{Params:{id:string}}>("/v1/missions/:id/transition",wos(async(req,reply
   // //TR: REL-FX-1: COMPLETE istemcinin "to" alanıyla değil, kanıt kapısıyla olur: run.headSha için REPORT + CLEAN REVIEW + BLOCKED olmayan SECURITY_REPORT; aynı journal yazısı run'ı SUCCEEDED yapar, aksi halde 409 + sabit sebep.
   // //TR: REL-FX c4 (S1/S2): mevcut test/harness değişikliği olan run için COMPLETE yalnız güncel TEST_SURFACE kanıtına bağlı açık acknowledgement ile olur; onay yalnız COMPLETE'te geçerlidir.
   if(b.acknowledgement!==undefined&&b.to!=="COMPLETE")return reply.code(400).send({error:"INVALID_BODY",detail:"acknowledgement is only valid with to=COMPLETE"});
-  if(b.to==="COMPLETE"){try{const r=getStore().completeMission(scope,req.params.id,b.reason,actor,b.acknowledgement);const outcomes=deriveOutcomes(r.run);audit("WORKOS_MISSION_COMPLETED",{actor,missionId:r.mission.missionId,runId:r.run.runId,headSha:r.run.headSha,completionMode:outcomes.completionMode});return {mission:r.mission,run:r.run,outcomes}}catch(e){if(e instanceof WorkOsError&&e.code==="WORKOS_CONFLICT")audit("WORKOS_MISSION_COMPLETE_REFUSED",{actor,missionId:req.params.id,reason:e.message.replace(/^WORKOS_CONFLICT: ?/,"").slice(0,64)});return workosFail(reply,e)}}
+  // //TR: M1a (D-SBX1-PATH-2026-10-15): testleri sandbox yokluğundan çalıştırılmamış (NOT_EXECUTED) run'ın COMPLETE'i ek olarak {acknowledgeNotExecuted:true, headSha:run.headSha} ister; yalnız to=COMPLETE ile geçerlidir.
+  if(b.notExecutedAcknowledgement!==undefined&&b.to!=="COMPLETE")return reply.code(400).send({error:"INVALID_BODY",detail:"notExecutedAcknowledgement is only valid with to=COMPLETE"});
+  if(b.to==="COMPLETE"){try{const r=getStore().completeMission(scope,req.params.id,b.reason,actor,b.acknowledgement,b.notExecutedAcknowledgement);const outcomes=deriveOutcomes(r.run);audit("WORKOS_MISSION_COMPLETED",{actor,missionId:r.mission.missionId,runId:r.run.runId,headSha:r.run.headSha,completionMode:outcomes.completionMode});return {mission:r.mission,run:r.run,outcomes}}catch(e){if(e instanceof WorkOsError&&e.code==="WORKOS_CONFLICT")audit("WORKOS_MISSION_COMPLETE_REFUSED",{actor,missionId:req.params.id,reason:e.message.replace(/^WORKOS_CONFLICT: ?/,"").slice(0,64)});return workosFail(reply,e)}}
   try{const before=getStore().getMission(scope,req.params.id);const mission=getStore().transitionMission(scope,req.params.id,b.to,b.reason,actor);audit("WORKOS_MISSION_TRANSITIONED",{actor,missionId:mission.missionId,from:before?.status,to:mission.status});return {mission}}catch(e){return workosFail(reply,e)}
 }));
 
@@ -269,7 +271,8 @@ app.get<{Querystring:{missionId?:string}}>("/v1/work-runs",wos(async(req,reply)=
 }));
 app.get<{Params:{id:string}}>("/v1/work-runs/:id",wos(async(req,reply)=>{
   if(!validWorkRunId(req.params.id))return reply.code(400).send({error:"INVALID_RUN_ID"});
-  const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});return {run,outcomes:deriveOutcomes(run)};
+  // M1a: completionRequirements salt-okunur görünümdür (masaüstü COMPLETE onay kutuları için); kapı kararı yine store.completeMission'dadır.
+  const run=getStore().getRun(scope,req.params.id);if(!run)return reply.code(404).send({error:"WORKOS_NOT_FOUND"});return {run,outcomes:deriveOutcomes(run),completionRequirements:completionRequirements(run)};
 }));
 
 // //TR: PS-1A Project Studio route'ları: aynı token/Host hook'u; her proje route'u Work OS kaydını scope (tenant) ile çözer, başka tenant'ın projesi 404'tür. Yazma route'ları aynı kapı sırasını izler (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400).

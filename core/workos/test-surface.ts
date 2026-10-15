@@ -3,7 +3,8 @@
 export type TestChangeStatus = "ADDED" | "MODIFIED" | "DELETED" | "RENAMED";
 export interface NameStatusEntry { status: TestChangeStatus; path: string; oldPath?: string }
 export interface WeakenedTest { path: string; before: number; after: number; reason: "ASSERTION_COUNT_REDUCED" | "SKIP_OR_ONLY_ADDED" }
-export type TestSurfaceAcceptance = "BLOCKED" | "UNVERIFIED_VACUOUS" | "UNVERIFIED_ORACLE" | "UNKNOWN";
+// //TR: M1a (D-SBX1-PATH-2026-10-15): NOT_EXECUTED, doğrulanmış sandbox olmadığı için testlerin HİÇ çalıştırılmadığını söyleyen ayrı durumdur (UNKNOWN-geçti veya VERIFIED değildir).
+export type TestSurfaceAcceptance = "BLOCKED" | "NOT_EXECUTED" | "UNVERIFIED_VACUOUS" | "UNVERIFIED_ORACLE" | "UNKNOWN";
 export type TestRunFormat = "vitest" | "jest" | "tap" | "pytest" | "cargo" | "dotnet" | "mocha";
 // executed = passed + failed (gerçekten yürütülen); skipped/todo/pending/ignored ayrı raporlanır, asla yürütülmüş sayılmaz.
 export interface TestRunSummary { format: TestRunFormat; executed: number; passed: number; failed: number; skipped: number; todo: number }
@@ -212,8 +213,10 @@ export function parseExecutedTestCount(output: string): number | null { return p
 export interface EvaluateInput {
   baseSha: string; headSha: string; entries: NameStatusEntry[]; contentAt: (ref: string, path: string) => string | null;
   executedTests: number | null; testRun?: TestRunSummary | null; testCommand?: readonly string[];
+  // M1a: testler sandbox yokluğundan çalıştırılmadıysa nedeni (yalnız runner SBX kapısı reddinde verilir); BLOCKED (silinen/zayıflatılan test) yine önceliklidir.
+  notExecutedReason?: "SANDBOX_UNAVAILABLE";
 }
-// Öncelik: silinen/zayıflatılan (assertion azaltma veya devre dışı bırakma) test -> BLOCKED; sıfır yürütülen test veya assertion'sız yeni test -> UNVERIFIED_VACUOUS;
+// Öncelik: silinen/zayıflatılan (assertion azaltma veya devre dışı bırakma) test -> BLOCKED; M1a: testler sandbox yokluğundan çalıştırılmadı -> NOT_EXECUTED; sıfır yürütülen test veya assertion'sız yeni test -> UNVERIFIED_VACUOUS;
 // okunamayan koşucu çıktısı -> UNKNOWN (yürütülmüş sayılmaz); dokunulan test yüzeyi/harness -> UNVERIFIED_ORACLE (mission'a sabitlenmiş bağımsız oracle yok);
 // test yüzeyi değişikliği tespit edilmedi -> UNKNOWN. VERIFIED bu dilimde üretilmez.
 export function evaluateTestSurface(i: EvaluateInput): TestSurfaceSummary {
@@ -248,6 +251,7 @@ export function evaluateTestSurface(i: EvaluateInput): TestSurfaceSummary {
   const [functionalAcceptance, reason]: [TestSurfaceAcceptance, string] =
     deleted.length ? ["BLOCKED", "TEST_DELETED"]
     : weakened.length ? ["BLOCKED", "TEST_WEAKENED"]
+    : i.notExecutedReason ? ["NOT_EXECUTED", i.notExecutedReason]
     : i.executedTests === 0 ? ["UNVERIFIED_VACUOUS", "ZERO_TESTS_EXECUTED"]
     : trivialAdded.length ? ["UNVERIFIED_VACUOUS", "TRIVIAL_TEST_ADDED"]
     : i.executedTests === null ? ["UNKNOWN", "EXECUTED_TEST_COUNT_UNPARSEABLE"]

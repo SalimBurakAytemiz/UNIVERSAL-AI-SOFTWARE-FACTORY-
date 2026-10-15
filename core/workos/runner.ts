@@ -1,4 +1,4 @@
-// //TR: Bu dosya B3a mission runner engine'idir: AUTHORIZED/PLANNED bir mission'ı izole workspace -> IMPLEMENT -> VERIFY (test + diff secret taraması) -> SECURITY (taze klonlarda gitleaks + trivy çevrimdışı, dürüst SAST/DB durumu) -> bağımsız REVIEW (ayrı kimlik, temiz klon, salt-okunur) -> REGRESSION -> REPORT adımlarıyla sürer ve REPORTING'de Founder teslim kararında durur (asla COMPLETE/merge/push yapmaz). Durum yalnız Work OS journal'ındadır; lease+fencing, checkpoint, sınırlı retry/remediation, GLOBAL_STOP ve crash-resume fail-closed çalışır.
+// //TR: Bu dosya B3a mission runner engine'idir: AUTHORIZED/PLANNED bir mission'ı izole workspace -> IMPLEMENT -> VERIFY (diff secret taraması + yalnız doğrulanmış sandbox'ta test; sandbox yoksa M1a: NOT_EXECUTED kanıtı ve devam) -> SECURITY (taze klonlarda gitleaks + trivy çevrimdışı, dürüst SAST/DB durumu) -> bağımsız REVIEW (ayrı kimlik, temiz klon, salt-okunur) -> REGRESSION -> REPORT adımlarıyla sürer ve REPORTING'de Founder teslim kararında durur (asla COMPLETE/merge/push yapmaz). Durum yalnız Work OS journal'ındadır; lease+fencing, checkpoint, sınırlı retry/remediation, GLOBAL_STOP ve crash-resume fail-closed çalışır.
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -36,7 +36,7 @@ export interface RunnerOptions {
   testTimeoutMs?: number; executorTimeoutMs?: number; maxStepsPerTick?: number; now?: () => number;
   // B3C: güvenlik araçları (tanımsız = PATH keşfi); override yalnız programatik enjeksiyondur.
   security?: SecurityOptions;
-  // SBX-GATE: proje test komutları yalnız bu kapının izin verdiği doğrulanmış sandbox sağlayıcısında çalışır; tanımsız = sağlayıcı yok = VERIFY/REGRESSION BLOCKED (SANDBOX_UNAVAILABLE).
+  // SBX-GATE: proje test komutları yalnız bu kapının izin verdiği doğrulanmış sandbox sağlayıcısında çalışır; tanımsız = sağlayıcı yok = VERIFY/REGRESSION NOT_EXECUTED (SANDBOX_UNAVAILABLE, M1a: run statik güvenlik + bağımsız review ile sürer).
   executionGate?: ExecutionGate;
 }
 export interface TickReport { skipped?: "BUSY" | "LOCKED"; recovered: string[]; claimed: string[]; cancelled: string[]; fenced: string[]; advanced: string[] }
@@ -341,14 +341,19 @@ export class MissionRunner {
   private runTests(gate: Extract<GateDecision, {allowed: true}>, argv: string[], cwd: string, abort: () => boolean): Promise<ProcResult> {
     return gate.provider.run(argv, {cwd, env: safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}), timeoutMs: this.o.testTimeoutMs, shouldAbort: abort});
   }
-  // SBX-GATE: sandbox yoksa test HİÇ çalıştırılmaz; kanıt NOT_EXECUTED olarak yazılır (PASS/FAILED değil) ve run BLOCKED olur (yeniden deneme bütçesi tüketilmez, remediation yok).
-  private sandboxBlocked(run: WorkRun, leaseId: string, kind: "VERIFY_TESTS" | "REGRESSION_TESTS", argv: string[], d: Extract<GateDecision, {allowed: false}>): Outcome {
-    const at = new Date().toISOString(), note = `NOT_EXECUTED: ${d.reason} (${d.detail}); project code is never run on the host without a verified sandbox (FD-REL-1-REJECT-HOST-EXEC-2026-10-15)`;
+  // SBX-GATE + M1a (D-SBX1-PATH-2026-10-15): sandbox yoksa test HİÇ çalıştırılmaz (kapı değişmez, fail-closed; ana makinede çocuk süreç yok); kanıt NOT_EXECUTED olarak yazılır (PASS/FAILED değil).
+  // Run BLOCKED olmaz: M1a ilerlemesi statik SECURITY -> bağımsız REVIEW -> REPORT -> AWAITING_APPROVAL ile sürer; functionalAcceptance NOT_EXECUTED olur (asla VERIFIED değil).
+  // Yeniden deneme/remediation bütçesi tüketilmez (DONE checkpoint'i retryCount'u 0 bırakır).
+  private sandboxNotExecuted(run: WorkRun, leaseId: string, kind: "VERIFY_TESTS" | "REGRESSION_TESTS", argv: string[], d: Extract<GateDecision, {allowed: false}>): void {
+    const at = new Date().toISOString(), note = `NOT_EXECUTED: ${d.reason} (${d.detail}); project code is never run on the host without a verified sandbox (FD-REL-1-REJECT-HOST-EXEC-2026-10-15); M1a: run continues to static security and independent review, result NOT_VERIFIED`;
     const log = this.writeLog(run, `${kind.toLowerCase()}-not-executed`, `$ ${argv.join(" ")}
 [${note}]
 `);
     this.evidence(run, leaseId, {kind: `${kind}_NOT_EXECUTED`, argv, startedAt: at, endedAt: at, exitCode: null, ...log, commitSha: run.headSha ?? undefined, note});
-    return {kind: "BLOCK", reason: d.reason, status: "BLOCKED"};
+  }
+  // M1a: run.headSha için testler sandbox yokluğundan çalıştırılmadıysa (NOT_EXECUTED kanıtı) reviewer'a ve rapora bu bilgi açıkça verilir.
+  private testsNotExecuted(run: WorkRun): boolean {
+    return !!run.headSha && run.evidence.some(e => (e.kind === "VERIFY_TESTS_NOT_EXECUTED" || e.kind === "REGRESSION_TESTS_NOT_EXECUTED") && e.commitSha === run.headSha);
   }
   private authorizeTests(kind: ProjectExecutionKind): Promise<GateDecision> { return this.o.executionGate.authorize(kind); }
 
@@ -490,9 +495,11 @@ export class MissionRunner {
     // INT-R4 kompozisyon: yürütme SBX kapısına tabidir; TEST_SURFACE (REL-FX-2) ise statik git analizidir (name-status + değişen test dosyası metni) ve kapıdan bağımsız hesaplanıp kaydedilir.
     const gate = await this.authorizeTests("RUNNER_VERIFY_TESTS");
     if (!gate.allowed) {
-      // SBX kapısı önceliklidir ve koşulsuzdur: doğrulanmış sağlayıcı yoksa proje kodu HİÇ çalıştırılmaz (ana makinede çocuk süreç yok). Statik TEST_SURFACE yine de kaydedilir (executedTests=null, uydurma sayı yok), sonra run BLOCKED(SANDBOX_UNAVAILABLE) NOT_EXECUTED kanıtıyla; yeniden deneme bütçesi tüketilmez.
-      this.recordTestSurface(run, leaseId, base, head, touched, scanClone, null);
-      return this.sandboxBlocked(run, leaseId, "VERIFY_TESTS", argv, gate);
+      // SBX kapısı önceliklidir ve koşulsuzdur: doğrulanmış sağlayıcı yoksa proje kodu HİÇ çalıştırılmaz (ana makinede çocuk süreç yok). Statik TEST_SURFACE yine de kaydedilir (executedTests=null, uydurma sayı yok;
+      // functionalAcceptance NOT_EXECUTED, silinen/zayıflatılan test yine BLOCKED), sonra NOT_EXECUTED kanıtı yazılır ve M1a ilerlemesiyle SECURITY adımına geçilir; yeniden deneme bütçesi tüketilmez.
+      this.recordTestSurface(run, leaseId, base, head, touched, scanClone, null, gate.reason);
+      this.sandboxNotExecuted(run, leaseId, "VERIFY_TESTS", argv, gate);
+      return {kind: "DONE", next: "SECURITY", data: {tests: "NOT_EXECUTED", testsReason: gate.reason, secretHits: 0}};
     }
     const r = await this.runTests(gate, argv, work, abort);
     this.procEvidence(run, leaseId, "VERIFY_TESTS", r, {commitSha: run.headSha});
@@ -505,10 +512,10 @@ export class MissionRunner {
     return {kind: "REMEDIATE", reason: r.timedOut ? "TESTS_TIMED_OUT" : "TESTS_FAILED", data: {tests: "FAILED", exitCode: r.exitCode}, findings: [`test command exited ${r.exitCode}`]};
   }
   // REL-FX-2 + INT-R4: TEST_SURFACE statik git analizidir (taze klonda base..head name-status + değişen test dosyası metni) ve SBX kapısından bağımsız kaydedilir. executedTests/functionalAcceptance gerçek koşu yalnız doğrulanmış sandbox içinde olduğunda (testRun != null) dolar; yürütme bloklandığında testRun=null ve sayı uydurulmaz (UNKNOWN/BLOCKED).
-  private recordTestSurface(run: WorkRun, leaseId: string, base: string, head: string, touched: NameStatusEntry[], scanClone: string, testRun: TestRunSummary | null): void {
+  private recordTestSurface(run: WorkRun, leaseId: string, base: string, head: string, touched: NameStatusEntry[], scanClone: string, testRun: TestRunSummary | null, notExecutedReason?: "SANDBOX_UNAVAILABLE"): void {
     const surfaceStart = new Date().toISOString();
     const contentAt = (ref: string, p: string): string | null => { const x = this.git(scanClone, ["show", `${ref}:${p}`]); return x.status === 0 ? String(x.stdout ?? "") : null; };
-    const surface = evaluateTestSurface({baseSha: base, headSha: head, entries: touched, contentAt, executedTests: testRun?.executed ?? null, testRun, testCommand: this.rawTestCommand(run)});
+    const surface = evaluateTestSurface({baseSha: base, headSha: head, entries: touched, contentAt, executedTests: testRun?.executed ?? null, testRun, testCommand: this.rawTestCommand(run), ...(notExecutedReason ? {notExecutedReason} : {})});
     this.renew(run.runId, leaseId);
     // Her kanıt gibi TEST_SURFACE de log dosyası + sha256 taşır (tam sınıflama JSON'u; dosya içeriği yazılmaz).
     const surfaceLog = this.writeLog(run, "test-surface", `${JSON.stringify(surface, null, 2)}\n`);
@@ -633,7 +640,9 @@ export class MissionRunner {
     if (diff === null) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
     this.renew(run.runId, leaseId);
     const testSurface = this.reviewerTestSurface(run);
-    const r = await reviewer.review(clone, {...this.missionSpec(run), ...(testSurface ? {testSurface} : {})}, diff, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
+    // M1a: testler çalıştırılmadıysa reviewer'a açıkça söylenir (istem metni executors.ts reviewPrompt); TEST_SURFACE listesi yine verilir.
+    const testExecution = this.testsNotExecuted(run) ? {executed: false as const, reason: "SANDBOX_UNAVAILABLE" as const} : undefined;
+    const r = await reviewer.review(clone, {...this.missionSpec(run), ...(testSurface ? {testSurface} : {}), ...(testExecution ? {testExecution} : {})}, diff, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
     const untouched = this.gitOk(clone, ["rev-parse", "HEAD"]) === run.headSha && this.gitOk(clone, ["status", "--porcelain", "--untracked-files=all"]) === "";
     const log = this.writeLog(run, "review", r.log);
     const limit = !r.valid && !r.aborted && !r.timedOut ? executorLimit(r.exitCode, r.log) : null;
@@ -662,7 +671,8 @@ export class MissionRunner {
     const argv = this.testArgv(run);
     if (!argv) return {kind: "BLOCK", reason: "TEST_COMMAND_NOT_CONFIGURED"};
     const gate = await this.authorizeTests("RUNNER_REGRESSION_TESTS");
-    if (!gate.allowed) return this.sandboxBlocked(run, leaseId, "REGRESSION_TESTS", argv, gate);
+    // M1a: sandbox yoksa regresyon komutu HİÇ çalışmaz; NOT_EXECUTED kanıtı yazılır ve REPORT'a geçilir (BLOCKED değil, bütçe tüketilmez).
+    if (!gate.allowed) { this.sandboxNotExecuted(run, leaseId, "REGRESSION_TESTS", argv, gate); return {kind: "DONE", next: "REPORT", data: {tests: "NOT_EXECUTED", testsReason: gate.reason}}; }
     const r = await this.runTests(gate, argv, clone, abort);
     this.procEvidence(run, leaseId, "REGRESSION_TESTS", r, {commitSha: run.headSha ?? undefined});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
@@ -687,12 +697,18 @@ export class MissionRunner {
     if (!rs.ok) return {kind: "BLOCK", reason: rs.reason, status: "FAILED"};
     const review = rs.review, secEv = rs.security, sec = secEv.security;
     const ts = this.reviewerTestSurface(run);
+    const notExecuted = this.testsNotExecuted(run);
+    // M1a: rapor, testlerin sandbox yokluğundan çalıştırılmadığını ve sonucun NOT_VERIFIED olduğunu açıkça taşır (kanıttan türetilir).
+    (report as Record<string, unknown>).testExecution = notExecuted
+      ? {testsExecuted: false, notExecutedReason: "SANDBOX_UNAVAILABLE", functionalAcceptance: "NOT_EXECUTED", label: "NOT_VERIFIED (M1a: tests not executed)"}
+      : {testsExecuted: run.evidence.some(e => (e.kind === "VERIFY_TESTS" || e.kind === "REGRESSION_TESTS") && e.commitSha === run.headSha), notExecutedReason: null, functionalAcceptance: ts?.functionalAcceptance ?? "UNKNOWN", label: "NOT_VERIFIED"};
     (report as Record<string, unknown>).testSurface = ts ? {functionalAcceptance: ts.functionalAcceptance, reason: ts.reason, deleted: ts.deleted, weakened: ts.weakened, added: ts.added, modified: ts.modified, executedTests: ts.executedTests} : null;
     (report as Record<string, unknown>).security = {status: sec.status, founderNotice: sec.founderNote, gaps: sec.gaps, secrets: {builtin: sec.secrets.builtin.status, gitleaks: sec.secrets.gitleaks.status}, sca: {status: sec.sca.status, reason: sec.sca.reason ?? null, dbState: sec.sca.dbState ?? null, counts: sec.sca.counts}, sast: sec.sast, sbom: sec.sbom, tools: sec.tools, evidenceId: secEv.evidenceId, reportLogPath: secEv.logPath, reportLogSha256: secEv.logSha256};
     const file = path.join(this.runDir(run.runId), "report.json"), bytes = Buffer.from(JSON.stringify(report, null, 2) + "\n", "utf8");
     fs.writeFileSync(file, bytes);
     const rel = path.relative(this.o.dataDir, file).split(path.sep).join("/");
     this.evidence(run, leaseId, {kind: "REPORT", argv: [], startedAt, endedAt: new Date().toISOString(), exitCode: 0, logPath: rel, logSha256: sha256(bytes), commitSha: run.headSha ?? undefined, reviewerIdentity: review.reviewerIdentity, verdict: "CLEAN", note: `security=${sec.status}`});
-    return {kind: "DONE", next: "FINISHED", data: {reportPath: rel, reportSha256: sha256(bytes), security: sec.status}, ...(sec.status === "PARTIAL" ? {approvalReason: "DELIVERY_DECISION_PENDING_FOUNDER; SECURITY_COVERAGE_PARTIAL"} : {})};
+    const approval = ["DELIVERY_DECISION_PENDING_FOUNDER", ...(sec.status === "PARTIAL" ? ["SECURITY_COVERAGE_PARTIAL"] : []), ...(notExecuted ? ["TESTS_NOT_EXECUTED_SANDBOX_UNAVAILABLE"] : [])];
+    return {kind: "DONE", next: "FINISHED", data: {reportPath: rel, reportSha256: sha256(bytes), security: sec.status, ...(notExecuted ? {tests: "NOT_EXECUTED"} : {})}, ...(approval.length > 1 ? {approvalReason: approval.join("; ")} : {})};
   }
 }

@@ -336,7 +336,10 @@ export class WorkOsStore {
         if (p.to === "SUCCEEDED" || toComplete) {
           const rec = isObj(p.completion) ? p.completion.testChangesAcknowledgement : undefined;
           const ack = rec === undefined ? undefined : isObj(rec) ? {acknowledgeTestChanges: rec.acknowledgeTestChanges, testSurfaceSha256: rec.testSurfaceSha256} : rec;
-          const chk = completionEvidence(r, r.evidence, ack);
+          // M1a: kayıtlı NOT_EXECUTED onayı da girdiye çevrilip kapı yeniden çalıştırılır; gerekirken onaysız veya fazladan onaylı girdi tamper'dır.
+          const neRec = isObj(p.completion) ? p.completion.notExecutedAcknowledgement : undefined;
+          const neAck = neRec === undefined ? undefined : isObj(neRec) ? {acknowledgeNotExecuted: neRec.acknowledgeNotExecuted, headSha: neRec.headSha} : neRec;
+          const chk = completionEvidence(r, r.evidence, ack, neAck);
           if (p.to !== "SUCCEEDED" || !toComplete || p.patch !== undefined || !chk.ok || !isObj(p.completion) || JSON.stringify(p.completion) !== JSON.stringify(chk.refs)) throw tampered(`COMPLETION_UNSUPPORTED:${e.seq}`);
           completion = chk.refs;
         }
@@ -546,7 +549,8 @@ export class WorkOsStore {
   // //TR: REL-FX-1 kanıta bağlı tamamlama: mission REPORTING olmalı, mission'ın EN SON run'ı AWAITING_APPROVAL olmalı ve run.headSha için REPORT + CLEAN REVIEW + BLOCKED olmayan
   // SECURITY_REPORT kanıtı bulunmalıdır. Tek journal girdisi (RUN_TRANSITION + gömülü mission hareketi) run'ı SUCCEEDED, mission'ı COMPLETE yapar; aksi halde 409 sabit sebep, journal değişmez.
   // REL-FX c4: mevcut test/harness değişikliği varsa acknowledgement ({acknowledgeTestChanges: true, testSurfaceSha256}) güncel TEST_SURFACE kanıtıyla eşleşmelidir; onay aynı yazıda kaydedilir.
-  completeMission(scope: Scope, missionId: string, reason: string, actor: string, acknowledgement?: unknown): {mission: WorkMission; run: WorkRun} {
+  // M1a: functionalAcceptance NOT_EXECUTED ise notExecutedAcknowledgement ({acknowledgeNotExecuted: true, headSha: run.headSha}) zorunludur; aynı yazıda kaydedilir.
+  completeMission(scope: Scope, missionId: string, reason: string, actor: string, acknowledgement?: unknown, notExecutedAcknowledgement?: unknown): {mission: WorkMission; run: WorkRun} {
     if (typeof reason !== "string" || reason.trim().length === 0) throw new WorkOsError("WORKOS_INVALID_INPUT", "reason");
     return this.write(() => {
       const m = this.state.missions[missionId];
@@ -554,7 +558,7 @@ export class WorkOsStore {
       try { assertTransition(m.status, "COMPLETE"); } catch (e) { throw new WorkOsError("WORKOS_INVALID_TRANSITION", (e as Error).message); }
       const runs = Object.values(this.state.runs).filter(r => r.missionId === missionId && r.tenantId === m.tenantId);
       const run = runs[runs.length - 1];
-      const chk = completionEvidence(run, run?.evidence ?? [], acknowledgement);
+      const chk = completionEvidence(run, run?.evidence ?? [], acknowledgement, notExecutedAcknowledgement);
       if (!chk.ok) throw new WorkOsError("WORKOS_CONFLICT", chk.reason);
       const why = reason.slice(0, 1000);
       this.append("RUN_TRANSITION", actor, {runId: run.runId, leaseId: null, from: "AWAITING_APPROVAL", to: "SUCCEEDED", reason: `FOUNDER_ACCEPTED: ${why}`.slice(0, 1000),

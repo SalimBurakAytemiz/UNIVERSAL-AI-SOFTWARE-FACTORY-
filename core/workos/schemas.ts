@@ -50,7 +50,10 @@ export const missionTransitionSchema = {
   properties: {
     to: {type: "string", minLength: 1, maxLength: 64}, reason: text,
     acknowledgement: {type: "object", additionalProperties: false, required: ["acknowledgeTestChanges", "testSurfaceSha256"],
-      properties: {acknowledgeTestChanges: {const: true}, testSurfaceSha256: {type: "string", pattern: "^[0-9a-f]{64}$"}}}
+      properties: {acknowledgeTestChanges: {const: true}, testSurfaceSha256: {type: "string", pattern: "^[0-9a-f]{64}$"}}},
+    // M1a: NOT_EXECUTED onayı; yalnız to=COMPLETE ile (route ayrıca denetler), açık true ve run.headSha (40 küçük hex).
+    notExecutedAcknowledgement: {type: "object", additionalProperties: false, required: ["acknowledgeNotExecuted", "headSha"],
+      properties: {acknowledgeNotExecuted: {const: true}, headSha: {type: "string", pattern: "^[0-9a-f]{40}$"}}}
   }
 } as const;
 

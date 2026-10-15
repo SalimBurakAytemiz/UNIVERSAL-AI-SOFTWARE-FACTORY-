@@ -103,7 +103,10 @@ export interface TestChangesAcknowledgement {
   changed: { modified: string[]; deleted: string[]; renamed: {from: string; to: string}[]; harness: string[]; truncated: boolean };
   functionalAcceptance: string;
 }
-export interface RunCompletionRecord { headSha: string; reportEvidenceId: string; reviewEvidenceId: string; securityEvidenceId: string; testChangesAcknowledgement?: TestChangesAcknowledgement }
+// //TR: M1a (D-SBX1-PATH-2026-10-15): testleri sandbox yokluğundan çalıştırılmamış (NOT_EXECUTED) run'ın COMPLETE'i Founder'ın açık onayını ister; onay run SUCCEEDED geçişiyle aynı
+// journal yazısında kaydedilir ve replay'de yeniden türetilip birebir karşılaştırılır (asla VERIFIED değildir).
+export interface NotExecutedAcknowledgement { acknowledgeNotExecuted: true; headSha: string; functionalAcceptance: "NOT_EXECUTED"; reason: string; notExecutedEvidenceIds: string[] }
+export interface RunCompletionRecord { headSha: string; reportEvidenceId: string; reviewEvidenceId: string; securityEvidenceId: string; testChangesAcknowledgement?: TestChangesAcknowledgement; notExecutedAcknowledgement?: NotExecutedAcknowledgement }
 export interface WorkRun {
   runId: string; missionId: string; projectId: string; tenantId: string; roleId: string | null;
   executor: { implementer: string; reviewer: string };
