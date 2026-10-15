@@ -87,11 +87,11 @@ function paintRun(ctx,nodes,run){
   pre.textContent=run.logTail||t("studio.run.logEmpty");
   if(stick&&pre.scrollHeight!==undefined)pre.scrollTop=pre.scrollHeight;
 }
-/** Yoklama kaynaklı yeniden çizim odaklı denetimi devre dışı bırakıp odağı gövdeye düşürebilir (PS1B-C3-001): çizimden önce odağın çalıştır panelinde olup olmadığı kaydedilir; sonra odak kaybolduysa veya devre dışı öğedeyse durum satırına/dev-run durumuna taşınır. */
+/** Yoklama kaynaklı yeniden çizim odaklı denetimi devre dışı bırakıp odağı gövdeye düşürebilir (PS1B-C3-001): çizimden önce odağın çalıştır panelinde olup olmadığı kaydedilir; sonra odak kaybolduysa veya devre dışı öğedeyse durum iletisine (içerik varsa) yoksa dev-run durum satırına taşınır. paintRun bayat iletiyi sildiyse boş .form-status display:none olduğundan odak alamaz; bu durumda önce durum satırı denenir (PS1B-C4-001). */
 function paintRunPolled(ctx,nodes,run){
   const doc=ctx.doc,a0=doc.activeElement,had=Boolean(nodes.root)&&Boolean(a0)&&a0!==nodes.root&&nodes.root.contains(a0);
   paintRun(ctx,nodes,run);
-  if(had){const a=doc.activeElement;if(focusLost(doc)||a.disabled===true)settle(ctx,[`id:${DEV_FORM}-status`,"id:studio-run-state"])}
+  if(had){const a=doc.activeElement;if(focusLost(doc)||a.disabled===true)settle(ctx,drafts.status[DEV_FORM]?[`id:${DEV_FORM}-status`,"id:studio-run-state"]:["id:studio-run-state",`id:${DEV_FORM}-status`])}
 }
 function startRunPolling(ctx,project,nodes){
   stopRunPolling();

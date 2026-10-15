@@ -433,7 +433,7 @@ class N {
   removeAttribute(k: string) { this.attrs.delete(k); }
   addEventListener(ev: string, fn: (e: any) => void) { this.ls.set(ev, [...(this.ls.get(ev) ?? []), fn]); }
   fire(ev: string, e: any = {}) { const evt = {preventDefault() {}, target: this, ...e}; for (const fn of this.ls.get(ev) ?? []) fn(evt); }
-  focus() { this.doc.focused = this; }
+  focus() { if (this.doc.canFocus(this)) this.doc.focused = this; } // c5: Chromium gibi odaklanamayan öğede (devre dışı, display:none, tabindex'siz kap) sessiz no-op
   contains(n: N | null) { for (let x = n; x; x = x.parent) if (x === this) return true; return false; }
   querySelectorAll(_s: string): N[] { return all(this); }
 }
@@ -443,8 +443,19 @@ class D {
   createElement(t: string) { return new N(this, t); }
   createTextNode(s: string) { const n = new N(this, "#text"); n._text = s; return n; }
   getElementById(id: string): N | null { return all(this.body).find(n => n.id === id) ?? null; }
-  get activeElement(): N { return this.focused && this.body.contains(this.focused) && !this.focused.disabled ? this.focused : this.body; } // gerçek tarayıcı gibi: devre dışı kalan odaklı öğe odağı kaybeder
+  // c5 (PS1B-C4-001): lazyBlur=true Chromium'u modeller — devre dışı/gizli kalan odaklı öğe activeElement olarak kalır, flushBlur() (stil yeniden hesabı) sonra gövdeye düşürür; false iken hemen düşer.
+  lazyBlur = false;
+  /** Chromium'un focus() koşulları: bağlı, devre dışı değil, kendisi veya atası [hidden] / display:none (boş .form-status, styles.css '.form-status:empty{display:none}') değil, doğası gereği odaklanabilir etiket veya tabindex. */
+  canFocus(n: N): boolean {
+    if (n === this.body || !this.body.contains(n) || n.disabled) return false;
+    for (let x: N | null = n; x && x !== this.body; x = x.parent) if (x.attrs.has("hidden") || isEmptyFormStatus(x)) return false;
+    return FOCUSABLE_TAGS.has(n.tagName) || (n.tagName === "A" && n.attrs.has("href")) || n.attrs.has("tabindex");
+  }
+  flushBlur() { if (this.focused && !this.canFocus(this.focused)) this.focused = null; }
+  get activeElement(): N { const f = this.focused; if (!f || !this.body.contains(f)) return this.body; return this.lazyBlur || this.canFocus(f) ? f : this.body; } // kaldırılan öğe her durumda odağı hemen kaybeder
 }
+const FOCUSABLE_TAGS = new Set(["BUTTON", "INPUT", "SELECT", "TEXTAREA", "SUMMARY"]);
+const isEmptyFormStatus = (x: N) => x.className.split(/\s+/).includes("form-status") && x.children.length === 0 && x._text === "";
 const all = (n: N): N[] => n.children.flatMap(c => [c, ...all(c)]);
 const byId = (root: N, id: string) => all(root).find(n => n.id === id) ?? null;
 const text = (n: N) => n.textContent;
@@ -915,6 +926,7 @@ describe("PS-1B c3: keyboard focus stays on a real element after every primary a
     const fm = await load(rend, "focus.js"), doc = new D(), main = doc.createElement("div");
     const mk = (tag: string, id: string, extra: Record<string, string> = {}) => { const n = doc.createElement(tag); n.attrs.set("id", id); Object.assign(n.dataset, extra); return n; };
     const title = mk("h1", "view-title"), off = mk("button", "off"), first = mk("button", "first", {focusFirst: "1"}), on = mk("button", "on");
+    title.attrs.set("tabindex", "-1"); // gerçek görünüm başlığı gibi (h1 tabindex=-1)
     off.disabled = true; main.append(title, off, first, on); doc.body.append(main);
     expect(fm.focusLost(doc)).toBe(true);
     expect(fm.settleFocus(doc, main, {keys: ["id:off", "id:on"]})).toBe(on); // devre dışı atlanır
@@ -1122,7 +1134,7 @@ describe("PS-1B c4: a poll-driven repaint that disables the focused dev-run cont
     setStatus("STOPPED");
     await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS + 10);
     expect(stop.disabled).toBe(true);
-    expect(["studio-devrun-status", "studio-run-state"]).toContain(focusId(doc));
+    expect(focusId(doc)).toBe("studio-run-state"); // c5: tam iniş noktası (bayat ileti silindi, boş durum bloğu display:none)
   });
   it("RUNNING -> CRASHED by the poll alone (no user action) while Stop is focused -> focus lands on the status/state node", async () => {
     const {root, doc, setStatus} = await openRun("RUNNING");
@@ -1131,7 +1143,7 @@ describe("PS-1B c4: a poll-driven repaint that disables the focused dev-run cont
     setStatus("CRASHED");
     await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS + 10);
     expect(stop.disabled).toBe(true);
-    expect(["studio-devrun-status", "studio-run-state"]).toContain(focusId(doc));
+    expect(focusId(doc)).toBe("studio-run-state"); // c5: tam iniş noktası (bayat ileti silindi, boş durum bloğu display:none)
   });
   it("a poll repaint does not steal focus when focus is outside the run panel or still on an enabled control", async () => {
     const {root, doc, setStatus} = await openRun("RUNNING");
@@ -1141,6 +1153,110 @@ describe("PS-1B c4: a poll-driven repaint that disables the focused dev-run cont
     expect(doc.activeElement).toBe(outside);
     const log = byId(root, "studio-log")!; log.focus();
     await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS * 2);
+    expect(doc.activeElement).toBe(log);
+  });
+});
+
+// ---------- PS-1B c5: odak yerleştirme doğrulanır ve odak alamayan aday atlanır (PS1B-C4-001) ----------
+describe("PS-1B c5: focus placement is verified against activeElement and falls through to the next candidate (PS1B-C4-001)", () => {
+  const focusId = (doc: D) => doc.activeElement === doc.body ? "<body>" : (doc.activeElement.id || doc.activeElement.tagName);
+  // Chromium modeli: devre dışı kalan odaklı öğe activeElement olarak kalır (lazyBlur); flushBlur sonraki stil hesabıdır — son iniş noktası budur.
+  const landed = (doc: D) => { doc.flushBlur(); return focusId(doc); };
+  const mkEl = (doc: D, tag: string, id: string, attrs: Record<string, string> = {}, dataset: Record<string, string> = {}) => { const n = doc.createElement(tag); n.attrs.set("id", id); for (const [k, v] of Object.entries(attrs)) n.attrs.set(k, v); Object.assign(n.dataset, dataset); return n; };
+  async function openRun(initial: string) {
+    vi.useFakeTimers();
+    let status = initial;
+    const getFn = (p: string) => p === `/v1/projects/${PID}/devrun` ? runBody({status, pid: status === "RUNNING" ? 9 : null, exitCode: status === "CRASHED" ? 1 : null, preview: status === "RUNNING" ? {url: "http://127.0.0.1:5173/", state: "AVAILABLE"} : {url: null, state: "UNAVAILABLE"}}) : projectsGet()(p);
+    const c = await mkCtx({get: getFn, post: () => ({status: 202, body: {}}), confirm: () => true});
+    c.doc.lazyBlur = true;
+    const fm = await load(rend, "focus.js");
+    c.ctx.settleFocus = (opts: any) => fm.settleFocus(c.doc, c.doc.body, opts);
+    st.openProject(PID, "run");
+    const root = mount(c.doc, await projectsView.render(c.ctx));
+    return {...c, root, setStatus: (v: string) => { status = v; }};
+  }
+
+  it("fake DOM models Chromium: focus() is a no-op on disabled, [hidden], empty .form-status and non-focusable nodes; a disabled focused node blurs lazily", () => {
+    const doc = new D(); doc.lazyBlur = true;
+    const btn = mkEl(doc, "button", "b"), off = mkEl(doc, "button", "off"), empty = mkEl(doc, "div", "st", {tabindex: "-1"}), full = mkEl(doc, "div", "st2", {tabindex: "-1"}), hid = mkEl(doc, "div", "h", {hidden: ""}), inHid = mkEl(doc, "button", "ih"), plain = mkEl(doc, "div", "plain");
+    empty.className = "form-status"; full.className = "form-status form-status-ok"; full.append(doc.createElement("p")); off.disabled = true; hid.append(inHid);
+    doc.body.append(btn, off, empty, full, hid, plain);
+    for (const n of [off, empty, inHid, plain]) { n.focus(); expect(doc.activeElement, n.id).toBe(doc.body); }
+    full.focus(); expect(doc.activeElement).toBe(full);
+    btn.focus(); expect(doc.activeElement).toBe(btn);
+    btn.disabled = true; expect(doc.activeElement).toBe(btn); // tembel blur: hâlâ activeElement
+    expect(landed(doc)).toBe("<body>");
+  });
+  it("focus.js: settleFocus skips an empty (display:none) status and a non-focusable candidate and continues to the next key", async () => {
+    const fm = await load(rend, "focus.js"), doc = new D(); doc.lazyBlur = true;
+    const main = doc.createElement("div"), stop = mkEl(doc, "button", "stop"), status = mkEl(doc, "div", "x-status", {tabindex: "-1"}), panelEl = mkEl(doc, "section", "panel"), state = mkEl(doc, "p", "state", {tabindex: "-1"}), title = mkEl(doc, "h1", "view-title", {tabindex: "-1"});
+    status.className = "form-status"; main.append(title, stop, status, panelEl, state); doc.body.append(main);
+    stop.focus(); stop.disabled = true; // tembel: odak hâlâ devre dışı Stop üzerinde
+    expect(fm.settleFocus(doc, main, {keys: ["id:x-status", "id:panel", "id:state"]})).toBe(state);
+    expect(landed(doc)).toBe("state");
+  });
+  it("focus.js: the data-focus-first loop and the view-title fallback continue past candidates that cannot take focus; nothing focusable -> null", async () => {
+    const fm = await load(rend, "focus.js"), doc = new D(); doc.lazyBlur = true;
+    const main = doc.createElement("div"), wrap = mkEl(doc, "div", "wrap", {hidden: ""}), f1 = mkEl(doc, "button", "f1", {}, {focusFirst: "1"}), f2 = mkEl(doc, "button", "f2", {}, {focusFirst: "1"}), title = mkEl(doc, "h1", "view-title", {tabindex: "-1"}), gone = mkEl(doc, "button", "gone");
+    wrap.append(f1); main.append(title, gone, wrap, f2); doc.body.append(main);
+    gone.focus(); gone.disabled = true;
+    expect(fm.settleFocus(doc, main, {keys: ["id:missing"]})).toBe(f2); // gizli ilk liste öğesi atlandı
+    expect(landed(doc)).toBe("f2");
+    f2.disabled = true; doc.flushBlur();
+    expect(fm.settleFocus(doc, main, {})).toBe(title);
+    expect(landed(doc)).toBe("view-title");
+    title.attrs.delete("tabindex"); doc.focused = null;
+    expect(fm.settleFocus(doc, main, {})).toBeNull(); // odaklanamayan başlık "yerleştirildi" sayılmaz
+  });
+  it("focus.js: restoreFocus reports false when the restored node cannot take focus (emptied status), so the safety-net fallback runs", async () => {
+    const fm = await load(rend, "focus.js"), doc = new D(); doc.lazyBlur = true;
+    const main = doc.createElement("div"), status = mkEl(doc, "div", "studio-devrun-status", {tabindex: "-1"}), state = mkEl(doc, "p", "studio-run-state", {tabindex: "-1"});
+    status.className = "form-status"; main.append(status, state); doc.body.append(main);
+    expect(fm.restoreFocus(doc, main, "id:studio-devrun-status")).toBe(false);
+    expect(fm.focusLost(doc)).toBe(true);
+    expect(fm.settleFocus(doc, main, {keys: ["id:studio-run-state"]})).toBe(state); // app.js PANEL_FOCUS_FALLBACK yedeği
+    expect(fm.restoreFocus(doc, main, "id:studio-run-state")).toBe(true);
+  });
+  it("S1: RUNNING, Stop -> 202 (still RUNNING), focus back on Stop, poll reports STOPPED -> exactly #studio-run-state", async () => {
+    const {root, doc, setStatus} = await openRun("RUNNING");
+    const stop = byId(root, "studio-run-stop")!;
+    stop.focus(); stop.fire("click"); await vi.advanceTimersByTimeAsync(10);
+    expect(stop.disabled).toBe(false);
+    expect(text(byId(root, "studio-devrun-status")!)).toContain("Durdurma isteği kabul edildi");
+    expect(focusId(doc)).toBe("studio-run-stop");
+    setStatus("STOPPED"); await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS + 10);
+    expect(stop.disabled).toBe(true);
+    expect(text(byId(root, "studio-devrun-status")!)).toBe(""); // bayat ileti silindi -> boş blok display:none
+    expect(focusId(doc)).toBe("studio-run-state");
+    expect(landed(doc)).toBe("studio-run-state");
+  });
+  it("S2: RUNNING -> CRASHED by the poll alone while Stop is focused -> exactly #studio-run-state", async () => {
+    const {root, doc, setStatus} = await openRun("RUNNING");
+    const stop = byId(root, "studio-run-stop")!; stop.focus();
+    setStatus("CRASHED"); await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS + 10);
+    expect(stop.disabled).toBe(true);
+    expect(landed(doc)).toBe("studio-run-state");
+  });
+  it("S3: focus on Open preview, the poll reports CRASHED -> exactly #studio-run-state", async () => {
+    const {root, doc, setStatus} = await openRun("RUNNING");
+    const pv = byId(root, "studio-run-preview")!; expect(pv.disabled).toBe(false); pv.focus(); expect(doc.activeElement).toBe(pv);
+    setStatus("CRASHED"); await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS + 10);
+    expect(pv.disabled).toBe(true);
+    expect(landed(doc)).toBe("studio-run-state");
+  });
+  it("S5: focus on Restart, the poll reports STOPPED -> exactly #studio-run-state", async () => {
+    const {root, doc, setStatus} = await openRun("RUNNING");
+    const rs = byId(root, "studio-run-restart")!; expect(rs.disabled).toBe(false); rs.focus(); expect(doc.activeElement).toBe(rs);
+    setStatus("STOPPED"); await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS + 10);
+    expect(rs.disabled).toBe(true);
+    expect(landed(doc)).toBe("studio-run-state");
+  });
+  it("S4 control: focus on the enabled #studio-log stays on the log through a CRASHED poll", async () => {
+    const {root, doc, setStatus} = await openRun("RUNNING");
+    const log = byId(root, "studio-log")!; log.focus();
+    setStatus("CRASHED"); await vi.advanceTimersByTimeAsync(workspace.RUN_POLL_MS + 10);
+    expect(byId(root, "studio-run-stop")!.disabled).toBe(true);
+    expect(landed(doc)).toBe("studio-log");
     expect(doc.activeElement).toBe(log);
   });
 });
