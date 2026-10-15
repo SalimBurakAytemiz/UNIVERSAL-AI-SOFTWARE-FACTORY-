@@ -360,7 +360,8 @@ export class WorkOsStore {
         // çalıştırılır ve kayıt birebir karşılaştırılır (farklı run/artefakt/bayat kayıt/ikinci kullanım tamper'dır). Run ve mission durumu değişmez; productVerification değişmez.
         const r = this.runFor(st, p, e.seq);
         const acks = isObj(p.acknowledgements) ? p.acknowledgements : null, tc = acks && isObj(acks.testChanges) ? acks.testChanges : undefined;
-        if (!acks || !isObj(acks.notExecuted) || p.acceptedAt !== e.at) throw malformed(`SOURCE_DELIVERY_SHAPE:${e.seq}`);
+        if (!acks || !isObj(acks.notExecuted)) throw malformed(`SOURCE_DELIVERY_SHAPE:${e.seq}`);
+        if (p.acceptedAt !== e.at) throw tampered(`SOURCE_DELIVERY_UNSUPPORTED:${e.seq}`);
         const input = {runId: p.runId, missionId: p.missionId, sourceCommit: p.sourceCommit, exportArtifactHash: p.exportArtifactHash, acknowledgeNotExecuted: acks.notExecuted.acknowledgeNotExecuted,
           ...(acks.testChanges !== undefined ? {testChangesAcknowledgement: tc ? {acknowledgeTestChanges: tc.acknowledgeTestChanges, testSurfaceSha256: tc.testSurfaceSha256} : acks.testChanges} : {})};
         const chk = sourceDeliveryAcceptanceCheck({run: r, missionStatus: st.missions[r.missionId]?.status ?? null, latestRunId: this.latestRunId(st, r.missionId, r.tenantId)}, input);

@@ -490,7 +490,7 @@ export class ProjectStudio {
       files.push({name: Buffer.from(`source/${name}`, "utf8"), mode, sha});
     }
     if (files.length > EXPORT_LIMITS.maxFiles) throw new StudioError("DELIVERY_TOO_LARGE", 409);
-    const cat = files.length ? spawnGitSync(root, [...neutral, "cat-file", "--batch"], {env: this.env(), encoding: "buffer", input: files.map(f => f.sha).join("\n") + "\n", maxBuffer: EXPORT_LIMITS.maxTotalBytes + 64 * files.length + 1024, timeout: this.o.gitTimeoutMs ?? 10 * 60_000}) : null;
+    const cat = files.length ? spawnGitSync(root, [...neutral, "cat-file", "--batch"], {env: this.env(), encoding: "buffer", input: Buffer.from(files.map(f => f.sha).join("\n") + "\n", "utf8"), maxBuffer: EXPORT_LIMITS.maxTotalBytes + 64 * files.length + 1024, timeout: this.o.gitTimeoutMs ?? 10 * 60_000}) : null;
     if (cat && cat.status !== 0) throw new StudioError("DELIVERY_SOURCE_UNAVAILABLE", 409);
     const out = cat ? cat.stdout as unknown as Buffer : Buffer.alloc(0);
     const entries: ZipWriteEntry[] = [];
