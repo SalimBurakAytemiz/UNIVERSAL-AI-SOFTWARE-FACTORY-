@@ -40,6 +40,55 @@ export function stageRuntimeFiles(root, stage) {
   return files;
 }
 export const BACKEND_ENTRY = "apps/control-api/src/packaged-entry.js";
+
+// //TR: M1a c2 (D-M1A-ACCEPTANCE-CONDITIONS-2026-10-15 koşul 4): UASCO_BUILD_VARIANT=test, gerçek UASCO'dan uygulama kimliği (appId), kayıt defteri kaldırma anahtarı (appId'den türeyen
+// electron-builder GUID'i), kurulum dizini, userData (%APPDATA%\<productName>), çalıştırılabilir dosya/kısayol adı ve pencere başlığı bakımından AYRIŞMIŞ bir "UASCO Test" paketi üretir.
+// Değişken verilmezse (veya "release") RELEASE kimliği bayt bayt değişmez: statik config aynı nesnedir, sahne package.json'ı önceki birebir metindir.
+export const BUILD_VARIANTS = Object.freeze({
+  release: Object.freeze({appId: "com.uasco.desktop", productName: "UASCO", executableName: "UASCO", packageName: "uasco-desktop", artifactPrefix: "UASCO-Setup"}),
+  test: Object.freeze({appId: "com.uasco.desktop.test", productName: "UASCO Test", executableName: "UASCO Test", packageName: "uasco-desktop-test", artifactPrefix: "UASCO-Test-Setup"})
+});
+export function resolveBuildVariant(env = process.env) {
+  const v = env.UASCO_BUILD_VARIANT;
+  if (v === undefined || v === "" || v === "release") return "release";
+  if (v === "test") return "test";
+  throw new Error(`BUILD_VARIANT_INVALID:${String(v).slice(0, 40)}`);
+}
+/** Statik electron-builder config'ine varyant kimliğini uygular; release için girdinin kendisini döndürür (bayt bayt aynı). */
+export function variantStaticConfig(staticConfig, variant) {
+  if (variant === "release") return staticConfig;
+  if (variant !== "test") throw new Error(`BUILD_VARIANT_INVALID:${variant}`);
+  const v = BUILD_VARIANTS.test, c = JSON.parse(JSON.stringify(staticConfig));
+  return {...c, appId: v.appId, productName: v.productName, copyright: "UASCO Test - unsigned TEST build (isolated identity; never the release app)", artifactName: `${v.artifactPrefix}-\${version}-win-x64.\${ext}`,
+    win: {...c.win, executableName: v.executableName},
+    nsis: {...c.nsis, shortcutName: v.productName, uninstallDisplayName: `${v.productName} \${version} (unsigned TEST build)`}};
+}
+/** Sahnelenen uygulama package.json metni; release için önceki birebir içerik. */
+export function stagePackageJson(rootPkg, deps, variant = "release") {
+  if (variant === "release") return JSON.stringify({name: "uasco-desktop", productName: "UASCO", version: rootPkg.version, description: "UASCO desktop (unsigned development build)", author: {name: "UASCO"}, private: true, type: "module", main: "apps/desktop/main.mjs", dependencies: deps}, null, 2) + "\n";
+  if (variant !== "test") throw new Error(`BUILD_VARIANT_INVALID:${variant}`);
+  const v = BUILD_VARIANTS.test;
+  return JSON.stringify({name: v.packageName, productName: v.productName, version: rootPkg.version, description: "UASCO desktop TEST build (unsigned; isolated identity, never the release app)", author: {name: "UASCO"}, private: true, type: "module", main: "apps/desktop/main.mjs", dependencies: deps}, null, 2) + "\n";
+}
+export const installerArtifactName = (version, variant = "release") => `${BUILD_VARIANTS[variant].artifactPrefix}-${version}-win-x64.exe`;
+// electron-builder (app-builder-lib NsisTarget.appGuid): UUID v5(appId, ELECTRON_BUILDER_NS_UUID); kaldırma anahtarı HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\<guid>.
+export const ELECTRON_BUILDER_NS_UUID = "50e065bc-3134-11e6-9bab-38c9862bdaf3";
+export function uuidV5(name, namespace = ELECTRON_BUILDER_NS_UUID) {
+  const h = crypto.createHash("sha1").update(Buffer.from(namespace.replace(/-/g, ""), "hex")).update(name).digest();
+  h[6] = (h[6] & 0x0f) | 0x50; h[8] = (h[8] & 0x3f) | 0x80;
+  const x = h.subarray(0, 16).toString("hex");
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20, 32)}`;
+}
+/** Varyantın Windows kimliği (testler ve kurulum kabulü için): kaldırma anahtarı, varsayılan kurulum dizini adı, userData dizin adı, pencere başlığı. */
+export function variantIdentity(variant, version) {
+  const v = BUILD_VARIANTS[variant];
+  if (!v) throw new Error(`BUILD_VARIANT_INVALID:${variant}`);
+  const guid = uuidV5(v.appId);
+  return {variant, appId: v.appId, productName: v.productName, executable: `${v.executableName}.exe`, artifactName: installerArtifactName(version, variant), packageName: v.packageName,
+    uninstallKeyName: guid, uninstallKey: `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${guid}`, appRegistryKey: `HKCU\\Software\\${guid}`,
+    installDirName: v.executableName, defaultInstallDir: `%LOCALAPPDATA%\\Programs\\${v.executableName}`, userDataDirName: v.productName, userDataDir: `%APPDATA%\\${v.productName}`,
+    windowTitleContains: v.productName, appUserModelId: v.appId};
+}
 export const RUNTIME_DEPENDENCIES = ["fastify", "ajv", "ajv-formats"];
 
 const sha256File = (f) => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -182,7 +231,7 @@ function dirStats(dir) { let files = 0, bytes = 0; const walk = (d) => { for (co
 function log(step, extra = {}) { console.log(JSON.stringify({step, at: new Date().toISOString(), ...extra})); }
 
 async function main() {
-  const root = process.cwd(), stageOnly = process.argv.includes("--stage-only"), started = Date.now();
+  const root = process.cwd(), stageOnly = process.argv.includes("--stage-only"), started = Date.now(), variant = resolveBuildVariant();
   const {assertInstalledDependencyState} = await import("../automation/lib/dependency-install.mjs");
   const {verifyProvisionedElectron} = await import("../automation/lib/electron-provision.mjs");
   assertInstalledDependencyState(root);
@@ -191,7 +240,7 @@ async function main() {
   const rootPkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   const electronVersion = JSON.parse(fs.readFileSync(path.join(root, "node_modules", "electron", "package.json"), "utf8")).version;
   const outRoot = resolveBuildOutDir(root), stage = path.join(outRoot, "app"), resources = path.join(outRoot, "resources"), output = path.join(outRoot, "dist-installer");
-  log("verified", {electronDist, electronVersion, outRoot});
+  log("verified", {electronDist, electronVersion, outRoot, variant});
 
   fs.rmSync(stage, {recursive: true, force: true}); fs.rmSync(resources, {recursive: true, force: true});
   fs.mkdirSync(stage, {recursive: true}); fs.mkdirSync(resources, {recursive: true});
@@ -216,7 +265,7 @@ async function main() {
 
   // 4) app package.json (version from root package.json)
   const deps = Object.fromEntries(RUNTIME_DEPENDENCIES.map(n => [n, rootPkg.dependencies[n]]));
-  fs.writeFileSync(path.join(stage, "package.json"), JSON.stringify({name: "uasco-desktop", productName: "UASCO", version: rootPkg.version, description: "UASCO desktop (unsigned development build)", author: {name: "UASCO"}, private: true, type: "module", main: "apps/desktop/main.mjs", dependencies: deps}, null, 2) + "\n");
+  fs.writeFileSync(path.join(stage, "package.json"), stagePackageJson(rootPkg, deps, variant));
 
   // 5) build resources: generated icon + NSIS include
   fs.writeFileSync(path.join(resources, "icon.ico"), makeIco());
@@ -229,13 +278,13 @@ async function main() {
   process.env.ELECTRON_BUILDER_CACHE = path.join(outRoot, "eb-cache");
   process.env.CSC_IDENTITY_AUTO_DISCOVERY = "false";
   const staticConfig = JSON.parse(fs.readFileSync(path.join(root, "installer", "electron-builder.json"), "utf8"));
-  const config = builderConfig(staticConfig, {electronDist, electronVersion, outputDir: output, resourcesDir: resources});
+  const config = builderConfig(variantStaticConfig(staticConfig, variant), {electronDist, electronVersion, outputDir: output, resourcesDir: resources});
   fs.rmSync(output, {recursive: true, force: true});
   const ebModule = await import("electron-builder"), eb = typeof ebModule.build === "function" ? ebModule : ebModule.default;
   await eb.build({projectDir: stage, targets: eb.Platform.WINDOWS.createTarget(["nsis"], eb.Arch.x64), config, publish: "never"});
-  const artifact = path.join(output, `UASCO-Setup-${rootPkg.version}-win-x64.exe`);
+  const artifact = path.join(output, installerArtifactName(rootPkg.version, variant));
   if (!fs.existsSync(artifact)) throw new Error(`INSTALLER_NOT_PRODUCED:${artifact}`);
-  const summary = {artifact, bytes: fs.statSync(artifact).size, sha256: sha256File(artifact), version: rootPkg.version, signed: false, signature: "NONE (unsigned development build; SmartScreen warnings expected)", electronVersion, electronDist, unpackedApp: stageStats, durationMs: Date.now() - started};
+  const summary = {variant, identity: variantIdentity(variant, rootPkg.version), artifact, bytes: fs.statSync(artifact).size, sha256: sha256File(artifact), version: rootPkg.version, signed: false, signature: "NONE (unsigned development build; SmartScreen warnings expected)", electronVersion, electronDist, unpackedApp: stageStats, durationMs: Date.now() - started};
   fs.writeFileSync(path.join(output, "BUILD-SUMMARY.json"), JSON.stringify(summary, null, 2) + "\n");
   log("installer-built", summary);
 }

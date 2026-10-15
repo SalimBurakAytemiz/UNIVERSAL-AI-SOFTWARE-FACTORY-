@@ -1,4 +1,4 @@
-; //TR: Bu NSIS include UASCO imzasız geliştirme kurulumuna ön-kurulum kontrollerini (hedef sürücü var mı, boş alan >= gereken boyut + pay, ağ sürücüsü uyarısı), imzasız sürüm karşılama metnini, kullanıcı verisini varsayılan olarak koruyan kaldırma seçeneğini ("kullanıcı verilerini de sil", varsayılan işaretsiz) ve YALNIZ otomatik testlerde kullanılan kısayolsuz kurulum anahtarını ekler.
+; //TR: Bu NSIS include (M1a c2: kullanıcı verisi yolu ve başlık ${PRODUCT_NAME}/${PRODUCT_FILENAME} ile yazılır; RELEASE için metin "UASCO" olarak aynı kalır, TEST varyantında "UASCO Test" olur) UASCO imzasız geliştirme kurulumuna ön-kurulum kontrollerini (hedef sürücü var mı, boş alan >= gereken boyut + pay, ağ sürücüsü uyarısı), imzasız sürüm karşılama metnini, kullanıcı verisini varsayılan olarak koruyan kaldırma seçeneğini ("kullanıcı verilerini de sil", varsayılan işaretsiz) ve YALNIZ otomatik testlerde kullanılan kısayolsuz kurulum anahtarını ekler.
 ;
 ; Test-only switches (documented in docs/installer/README.md; never used by the Founder's normal install):
 ;   /UASCO_TEST_NO_SHORTCUTS      desktop + Start menu shortcut paths are redirected into $PLUGINSDIR (a temp dir
@@ -130,8 +130,8 @@
 
 !macro customWelcomePage
   !insertmacro uascoDefineInstallerFunctions
-  !define MUI_WELCOMEPAGE_TITLE "UASCO ${VERSION} Kurulumu"
-  !define MUI_WELCOMEPAGE_TEXT "Bu, UASCO'nun İMZASIZ GELİŞTİRME kurulumudur (Authenticode imzası yok). Windows SmartScreen uyarısı göstermesi beklenir.$\r$\n$\r$\nKurulum yalnız bu Windows kullanıcısı için yapılır (yönetici izni gerekmez). Program dosyaları seçtiğiniz dizine, kullanıcı verileri %APPDATA%\UASCO altına yazılır.$\r$\n$\r$\nThis is an UNSIGNED DEVELOPMENT installer (no Authenticode signature); a SmartScreen warning is expected. Per-user install, no administrator rights; user data lives in %APPDATA%\UASCO."
+  !define MUI_WELCOMEPAGE_TITLE "${PRODUCT_NAME} ${VERSION} Kurulumu"
+  !define MUI_WELCOMEPAGE_TEXT "Bu, UASCO'nun İMZASIZ GELİŞTİRME kurulumudur (Authenticode imzası yok). Windows SmartScreen uyarısı göstermesi beklenir.$\r$\n$\r$\nKurulum yalnız bu Windows kullanıcısı için yapılır (yönetici izni gerekmez). Program dosyaları seçtiğiniz dizine, kullanıcı verileri %APPDATA%\${PRODUCT_FILENAME} altına yazılır.$\r$\n$\r$\nThis is an UNSIGNED DEVELOPMENT installer (no Authenticode signature); a SmartScreen warning is expected. Per-user install, no administrator rights; user data lives in %APPDATA%\${PRODUCT_FILENAME}."
   !insertmacro MUI_PAGE_WELCOME
 !macroend
 
@@ -192,9 +192,9 @@
     ${If} $0 == error
       Abort
     ${EndIf}
-    ${NSD_CreateLabel} 0 0 100% 48u "UASCO program dosyaları kaldırılacak. Kullanıcı verileriniz (%APPDATA%\UASCO: projeler, görevler, kayıtlar) varsayılan olarak KORUNUR.$\r$\n$\r$\nProgram files will be removed. Your user data (%APPDATA%\UASCO) is KEPT by default."
+    ${NSD_CreateLabel} 0 0 100% 48u "UASCO program dosyaları kaldırılacak. Kullanıcı verileriniz (%APPDATA%\${PRODUCT_FILENAME}: projeler, görevler, kayıtlar) varsayılan olarak KORUNUR.$\r$\n$\r$\nProgram files will be removed. Your user data (%APPDATA%\${PRODUCT_FILENAME}) is KEPT by default."
     Pop $0
-    ${NSD_CreateCheckbox} 0 56u 100% 14u "Kullanıcı verilerini de sil / Also delete user data (%APPDATA%\UASCO)"
+    ${NSD_CreateCheckbox} 0 56u 100% 14u "Kullanıcı verilerini de sil / Also delete user data (%APPDATA%\${PRODUCT_FILENAME})"
     Pop $uascoDeleteCheckbox
     ${NSD_Uncheck} $uascoDeleteCheckbox
     nsDialogs::Show
