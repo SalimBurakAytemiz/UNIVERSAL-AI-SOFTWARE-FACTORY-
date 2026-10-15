@@ -96,3 +96,31 @@ describe("INT-R3 D-M1-07 canonical role counts in the desktop", () => {
     expect(c.workforce.registeredRoles).not.toBe(363);
   });
 });
+
+describe("INT-R3 SBX-GATE honest BLOCKED reason in the desktop", () => {
+  it("maps 409 SANDBOX_UNAVAILABLE to an explicit message in both languages (not the generic conflict text)", async () => {
+    const core = await load(rend, "work-core.js");
+    const d = core.describePostResult({status: 409, body: {error: "SANDBOX_UNAVAILABLE", reason: "NO_VERIFIED_PROVIDER"}});
+    expect(d).toEqual({ok: false, key: "post.err.409.SANDBOX_UNAVAILABLE", vars: {status: 409}});
+    for (const lang of ["en", "tr"]) {
+      const dict = (await load(rend, "locales", `${lang}.js`)).default as Record<string, string>;
+      expect(dict["post.err.409.SANDBOX_UNAVAILABLE"]).toContain("SANDBOX_UNAVAILABLE");
+      expect(dict["run.reason.SANDBOX_UNAVAILABLE"].length).toBeGreaterThan(20);
+      expect(dict["run.reason"].length).toBeGreaterThan(0);
+    }
+  });
+  it("the run card shows the BLOCKED status with the SANDBOX_UNAVAILABLE reason and explanation; runs without a reason show no reason row", async () => {
+    const core = await load(rend, "work-core.js"), work = await load(rend, "views", "work.js");
+    const {ctx, doc} = await mkCtx(() => undefined);
+    const blocked = core.mapWorkRun({runId: "run_0123456789abcdef01234567", missionId: "msn_" + "ab12".repeat(6), status: "BLOCKED", step: "VERIFY", reason: "SANDBOX_UNAVAILABLE", evidence: [{evidenceId: "evd_0123456789ab", kind: "VERIFY_TESTS_NOT_EXECUTED"}], checkpoints: []});
+    expect(blocked.reason).toBe("SANDBOX_UNAVAILABLE");
+    const card = mount(doc, work.runCard(ctx, blocked));
+    expect(card.dataset.runStatus).toBe("BLOCKED");
+    const dd = all(card).find(n => n.dataset.runReason === "SANDBOX_UNAVAILABLE")!;
+    expect(dd.textContent).toContain("SANDBOX_UNAVAILABLE — no verified sandbox is available");
+    expect(card.textContent).toContain("VERIFY_TESTS_NOT_EXECUTED");
+    const clean = core.mapWorkRun({runId: "run_0123456789abcdef01234568", status: "RUNNING", checkpoints: []});
+    expect(clean.reason).toBeNull();
+    expect(all(mount(doc, work.runCard(ctx, clean))).some(n => "runReason" in n.dataset)).toBe(false);
+  });
+});

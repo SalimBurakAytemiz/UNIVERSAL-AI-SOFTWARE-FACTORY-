@@ -36,6 +36,8 @@ import type {DevRunOptions} from "../../../core/workos/devrun.js";
 import {ExecutorSetup} from "../../../core/workos/executor-setup.js";
 import type {ExecutorSetupOptions} from "../../../core/workos/executor-setup.js";
 import type {ZipLimits} from "../../../core/workos/zip.js";
+import {ExecutionGate} from "../../../core/workos/execution-gate.js";
+import type {SandboxProvider} from "../../../core/workos/execution-gate.js";
 import {CrmDomain,validateAccountCreate,validateContactCreate,validateOpportunityCreate,validateOpportunityStage} from "../../../core/company/crm.js";
 import {FinanceDomain,validateInvoiceCreate,validateInvoiceIssue,validateInvoiceVoid,validatePaymentCreate} from "../../../core/company/finance.js";
 import {LegalDomain,validateContractCreate,validateContractTransition} from "../../../core/company/legal.js";
@@ -45,7 +47,9 @@ import type {Validation} from "../../../core/company/common.js";
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
 // //TR: PS-1A: controlRoot provenance/ayar kontrol köküdür (paketli: userData, geliştirme: repo); studio/executorSetup yalnız test enjeksiyonudur (sahte provenance yakalayıcı, CLI keşfi, dev-run zamanlamaları, ZIP sınırları).
 export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security">>;
-  controlRoot?:string;studio?:{zipLimits?:Partial<ZipLimits>;devrun?:Partial<Pick<DevRunOptions,"startTimeOf"|"startWaitMs"|"graceMs"|"probeIntervalMs"|"stopPollMs"|"logRingBytes"|"logTailBytes"|"treeSnapshotMs">>};executorSetup?:Pick<ExecutorSetupOptions,"captureProvenance"|"findClaudeCli">}
+  controlRoot?:string;studio?:{zipLimits?:Partial<ZipLimits>;devrun?:Partial<Pick<DevRunOptions,"startTimeOf"|"startWaitMs"|"graceMs"|"probeIntervalMs"|"stopPollMs"|"logRingBytes"|"logTailBytes"|"treeSnapshotMs">>};executorSetup?:Pick<ExecutorSetupOptions,"captureProvenance"|"findClaudeCli">;
+  // //TR: SBX-GATE: sandbox yalnız programatik test enjeksiyonudur (testlerdeki sahte sağlayıcı); env/config/journal/API gövdesi/masaüstü ayarı sağlayıcı kaydedemez. Verilmezse proje kodu yürütmesi her zaman SANDBOX_UNAVAILABLE ile reddedilir.
+  sandbox?:SandboxProvider}
 export function buildServer(opts:BuildServerOptions={}){
 const app=Fastify({logger:opts.logger??true,requestIdHeader:"x-request-id",genReqId:()=>crypto.randomUUID(),bodyLimit:64*1024});
 const readJson=(p:string)=>JSON.parse(fs.readFileSync(p,"utf8"));
@@ -215,11 +219,13 @@ function selectExecutors():{pair:ExecutorPair|null;reason:string}{
 }
 const getExecutors=()=>executorsCache??=opts.executors?{pair:opts.executors,reason:opts.executors.kind}:selectExecutors();
 let workRunner:MissionRunner|null=null;
+// //TR: SBX-GATE (FD-REL-1-REJECT-HOST-EXEC-2026-10-15): runner testleri ve Studio dev-run için tek karar noktası; sağlayıcı yalnız opts.sandbox (test) ile gelir.
+const executionGate=new ExecutionGate(opts.sandbox??null);
 function getRunner(){
   if(workRunner)return workRunner;
   const ex=getExecutors();if(!ex.pair)return null;
   const r=opts.runner??{};
-  workRunner=new MissionRunner({store:getStore(),dataDir:getStore().dataDir,globalStopFile:path.join(runtime,"GLOBAL_STOP.json"),envPolicyFile:path.join(repoRoot,"config","environment-policy.json"),executors:ex.pair,
+  workRunner=new MissionRunner({store:getStore(),dataDir:getStore().dataDir,globalStopFile:path.join(runtime,"GLOBAL_STOP.json"),envPolicyFile:path.join(repoRoot,"config","environment-policy.json"),executors:ex.pair,executionGate,
     leaseTtlMs:r.leaseTtlMs,maxRemediations:r.maxRemediations,maxRetries:r.maxRetries,retryBackoffMs:r.retryBackoffMs,testTimeoutMs:r.testTimeoutMs,executorTimeoutMs:r.executorTimeoutMs,security:r.security});
   return workRunner;
 }
@@ -255,7 +261,7 @@ const getStudio=()=>studio??=new ProjectStudio({dataDir:getStore().dataDir,envPo
 let execSetup:ExecutorSetup|null=null;
 function getExecSetup(){return execSetup??=new ExecutorSetup({repoRoot,controlRoot,dataDir:getStore().dataDir,envPolicyFile,...(opts.executorSetup??{})})}
 let devRunsP:Promise<DevRunManager>|null=null;
-function getDevRuns(){return devRunsP??=(async()=>{const m=new DevRunManager({studio:getStudio(),envPolicyFile,globalStopFile:path.join(runtime,"GLOBAL_STOP.json"),audit:(ev,d)=>{try{audit(ev,d)}catch{/* audit dizini yok */}},...(opts.studio?.devrun??{})});await m.recover();return m})()}
+function getDevRuns(){return devRunsP??=(async()=>{const m=new DevRunManager({studio:getStudio(),envPolicyFile,executionGate,globalStopFile:path.join(runtime,"GLOBAL_STOP.json"),audit:(ev,d)=>{try{audit(ev,d)}catch{/* audit dizini yok */}},...(opts.studio?.devrun??{})});await m.recover();return m})()}
 app.addHook("onReady",async()=>{try{await getDevRuns()}catch{/* yönetici ilk kullanımda yeniden denenmez; route'lar 500 döner */}});
 app.addHook("onClose",async()=>{if(devRunsP){try{await (await devRunsP).close()}catch{/* kapanış */}}});
 const validExportId=(x:unknown)=>typeof x==="string"&&/^exp_[0-9a-f]{24}$/.test(x);
@@ -341,7 +347,7 @@ app.get<{Params:{id:string;exportId:string}}>("/v1/projects/:id/exports/:exportI
 }));
 
 // //TR: Executor kurulumu: durum okunur; etkinleştirme aynı yazma kapısından geçer, model çağrılmaz (provenance yakalama yalnız --version).
-app.get("/v1/system/executors",wos(async()=>({executors:getExecSetup().status(),active:{reason:getExecutors().reason}})));
+app.get("/v1/system/executors",wos(async()=>({executors:getExecSetup().status(),active:{reason:getExecutors().reason},sandbox:await executionGate.status()})));
 app.post("/v1/system/executors/local-claude/enable",wos(async(req,reply)=>{
   const body=req.body??{};if(!workosWrite(reply,"workos.system.executor.enable","NONE",body,validateEmptyBody))return reply;
   const r=await getExecSetup().enableLocalClaude(actor);

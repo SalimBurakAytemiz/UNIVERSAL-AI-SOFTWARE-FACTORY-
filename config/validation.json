@@ -334,7 +334,8 @@
         "node",
         "node_modules/vitest/vitest.mjs",
         "run",
-        "tests/v7-int-r3-desktop.test.ts"
+        "tests/v7-int-r3-desktop.test.ts",
+        "tests/v7-int-r3-sbx-gate.test.ts"
       ],
       "requiresDependencies": true
     },

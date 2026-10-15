@@ -1,5 +1,7 @@
 // //TR: Bu test B3a mission runner engine'ini gerçek geçici git deposu ve deterministik FAKE executor ile doğrular: mutlu yol (mission REPORTING + run AWAITING_APPROVAL + tam kanıt), test hatası/reviewer BLOCKED sınırlı remediation, diff'te secret, aynı kimlik reddi, GLOBAL_STOP, lease fencing, crash-resume, tenant izolasyonu, path traversal ve cockpit activeWorkerRuns. Gerçek sağlayıcı çağrılmaz.
 import {describe, it, expect, beforeEach, afterEach} from "vitest";
+// SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
+import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -57,7 +59,7 @@ function setup(tenantId = "tA", opts: {url?: boolean; testCommand?: string[] | n
 }
 const okScript = (extra: Partial<FakeScript> = {}): FakeScript => ({implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"}), ...extra});
 function runner(c: Ctx, fake: FakeExecutors, extra: Partial<RunnerOptions> = {}): MissionRunner {
-  return new MissionRunner({store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(`${c.dataDir}-sec`).options, ...extra});
+  return new MissionRunner({executionGate: testExecutionGate(), store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(`${c.dataDir}-sec`).options, ...extra});
 }
 const start = (c: Ctx, fake: FakeExecutors, tenantId = "tA") => {
   const p = fake.pair();
@@ -240,7 +242,7 @@ describe("B3a mission runner engine", () => {
     expect(() => runner(c, same)).toThrow(/EXECUTOR_CONFIG_REFUSED/);
     expect(() => c.store.createRun({tenantId: "tA", missionId: c.missionId, executor: {implementer: "X", reviewer: "X"}, createdBy: "F"})).toThrow(/EXECUTOR_IDENTITY_NOT_INDEPENDENT/);
     const before = journal(c).length;
-    const app = buildServer({controlToken: "t".repeat(32), runtime: c.runtime, repoRoot: tmp, dataDir: c.dataDir, tenantId: "tA", port: 3210, logger: false, executors: same.pair()});
+    const app = buildServer({sandbox: TEST_HOST_PASSTHROUGH_SANDBOX, controlToken: "t".repeat(32), runtime: c.runtime, repoRoot: tmp, dataDir: c.dataDir, tenantId: "tA", port: 3210, logger: false, executors: same.pair()});
     const res = await app.inject({method: "POST", url: `/v1/missions/${c.missionId}/runs`, headers: {"x-uasco-control-token": "t".repeat(32), host: "127.0.0.1:3210"}, payload: {}});
     expect(res.statusCode).toBe(409);
     expect(res.json()).toEqual({error: "EXECUTOR_CONFIG_REFUSED"});
@@ -376,7 +378,7 @@ describe("B3a mission runner engine", () => {
     expect(fake.calls.implement).toBe(1);
     const later = Date.now() + 10 * 60_000;
     const storeB = new WorkOsStore(c.dataDir, {now: () => later});
-    const b = new MissionRunner({store: storeB, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), retryBackoffMs: [0, 0], now: () => later, security: fakeSecurity(`${c.dataDir}-sec`).options});
+    const b = new MissionRunner({executionGate: testExecutionGate(), store: storeB, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), retryBackoffMs: [0, 0], now: () => later, security: fakeSecurity(`${c.dataDir}-sec`).options});
     const rep = await b.tick();
     expect(rep.recovered).toEqual([r.runId]);
     const run = runOf(c, r.runId);
@@ -398,7 +400,7 @@ describe("B3a mission runner engine", () => {
     fs.rmSync(path.join(c.dataDir, "runs", r.runId, "work"), {recursive: true, force: true});
     const later = Date.now() + 10 * 60_000;
     const storeB = new WorkOsStore(c.dataDir, {now: () => later});
-    await new MissionRunner({store: storeB, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), now: () => later, security: fakeSecurity(`${c.dataDir}-sec`).options}).tick();
+    await new MissionRunner({executionGate: testExecutionGate(), store: storeB, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), now: () => later, security: fakeSecurity(`${c.dataDir}-sec`).options}).tick();
     const run = runOf(c, r.runId);
     expect(run.status).toBe("RECOVERY_FAILED");
     expect(run.reason).toMatch(/WORKSPACE_MISSING/);
@@ -430,7 +432,7 @@ describe("B3a control API", () => {
   // repoRoot geçici dizindir (cockpit gerçek registry okumaz); runner'ın env policy dosyası oraya kopyalanır.
   const mk = (c: {runtime: string; dataDir: string}, tenantId: string, extra: Record<string, unknown> = {}) =>
     (fs.mkdirSync(path.join(tmp, "config"), {recursive: true}), fs.copyFileSync(ENV_POLICY, path.join(tmp, "config", "environment-policy.json")),
-    buildServer({controlToken: token, runtime: c.runtime, repoRoot: tmp, dataDir: c.dataDir, tenantId, port: 3210, logger: false, ...extra}));
+    buildServer({sandbox: TEST_HOST_PASSTHROUGH_SANDBOX, controlToken: token, runtime: c.runtime, repoRoot: tmp, dataDir: c.dataDir, tenantId, port: 3210, logger: false, ...extra}));
 
   it("POST /v1/missions/:id/runs gate order, GET /v1/work-runs and tenant isolation", { timeout: T }, async () => {
     const c = setup("tA"); const fake = new FakeExecutors(okScript());

@@ -1,5 +1,7 @@
 // //TR: Bu test PS-1A Project Studio arka ucunu gerçek geçici dizin/git ve gerçek alt süreçlerle doğrular (ağ yok, AI sağlayıcı yok): şablonla yönetilen depo, yerel git/ZIP içe aktarma (zip-slip/symlink/boyut reddi), dev-run + gerçek HTTP önizleme, çökme/yeniden başlatma/tek örnek, GLOBAL_STOP, API yeniden başlangıcında orphan kurtarma, dosya/git görünümü güvenliği ve redaksiyonu, export içeriği ve secret engeli, executor kurulumu (sahte provenance yakalayıcı) ve her yeni route için tenant izolasyonu.
 import {describe, it, expect, beforeEach, afterEach} from "vitest";
+// SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
+import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -37,7 +39,7 @@ function mk(o: {tenantId?: string; dataDir?: string; runtime?: string; extra?: P
   const runtime = o.runtime ?? path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
   const dataDir = o.dataDir ?? path.join(tmp, "data");
   const {studio, ...rest} = o.extra ?? {};
-  const app = buildServer({controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, port: 3210, logger: false, tenantId: o.tenantId ?? "tA",
+  const app = buildServer({sandbox: TEST_HOST_PASSTHROUGH_SANDBOX, controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, port: 3210, logger: false, tenantId: o.tenantId ?? "tA",
     studio: {...(studio ?? {}), devrun: {probeIntervalMs: 150, stopPollMs: 150, ...(studio?.devrun ?? {})}}, ...rest});
   apps.push(app);
   return {app, runtime, dataDir};
@@ -331,7 +333,7 @@ describe("PS-1A files and git (PS-007)", () => {
     const store = new WorkOsStore(dataDir);
     const pair = fake.pair();
     const run = store.createRun({tenantId: "tA", missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
-    await new MissionRunner({store, dataDir, globalStopFile: path.join(runtime, "GLOBAL_STOP.json"), envPolicyFile: ENV_POLICY, executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(path.join(tmp, "sec")).options}).tick();
+    await new MissionRunner({executionGate: testExecutionGate(), store, dataDir, globalStopFile: path.join(runtime, "GLOBAL_STOP.json"), envPolicyFile: ENV_POLICY, executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(path.join(tmp, "sec")).options}).tick();
     const done = store.getRun({tenantId: "tA"}, run.runId)!;
     expect(done.status, done.reason ?? "").toBe("AWAITING_APPROVAL");
     const base = git(p.repository!.path, ["rev-parse", "HEAD"]);

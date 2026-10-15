@@ -153,7 +153,8 @@ export function buildRunRequest({missionId,status}){
 }
 
 // ---------- POST sonucu ----------
-const KNOWN_409=new Set(["EXECUTOR_NOT_CONFIGURED"]);
+// //TR: SBX-GATE: SANDBOX_UNAVAILABLE dürüst bir ret nedenidir (doğrulanmış sandbox yok, proje kodu çalıştırılmadı); genel 409 yerine açık ileti gösterilir.
+const KNOWN_409=new Set(["EXECUTOR_NOT_CONFIGURED","SANDBOX_UNAVAILABLE"]);
 /** Köprü POST yanıtını {ok, key, vars} olarak sınıflar; key bir sözlük anahtarıdır (post.*). */
 export function describePostResult(res){
   if(!res)return {ok:false,key:"post.err.generic",vars:{status:MISSING}};
@@ -227,6 +228,8 @@ export function mapWorkRun(x){
     startedAt:iso(pick(x.startedAt,x.createdAt)),
     checkpoints:arr(x.checkpoints,50).map(c=>typeof c==="string"?{name:c.slice(0,120),status:null,at:null}:isObj(c)?{name:checkpointName(c),status:statusStr(c.status),at:iso(pick(c.at,c.createdAt,c.time))}:null).filter(c=>c&&c.name),
     checkpointsReported:Array.isArray(x.checkpoints),
+    // SBX-GATE: koşunun durma/engellenme nedeni (ör. SANDBOX_UNAVAILABLE) sunucunun verdiği haliyle, kısaltılmış metin olarak taşınır.
+    reason:str(x.reason,300),
     evidence:mapRunEvidence(x.evidence),reviewer:identity||verdict?{identity,verdict}:null
   };
 }

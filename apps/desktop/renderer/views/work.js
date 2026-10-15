@@ -84,7 +84,9 @@ export function runCard(ctx,run){
       h(doc,"dt",{text:ctx.t("run.heartbeat")}),h(doc,"dd",{text:formatDateTime(run.heartbeatAt,lang)}),
       h(doc,"dt",{text:ctx.t("run.lease")}),h(doc,"dd",{text:formatDateTime(run.leaseExpiresAt,lang)}),
       h(doc,"dt",{text:ctx.t("run.reviewer")}),h(doc,"dd",{text:run.reviewer?.identity??ctx.t("run.reviewerNone")}),
-      h(doc,"dt",{text:ctx.t("run.verdict")}),h(doc,"dd",{text:run.reviewer?.verdict?statusLabel(ctx,run.reviewer.verdict):ctx.t("run.verdictNone")})),
+      h(doc,"dt",{text:ctx.t("run.verdict")}),h(doc,"dd",{text:run.reviewer?.verdict?statusLabel(ctx,run.reviewer.verdict):ctx.t("run.verdictNone")}),
+      // SBX-GATE: BLOCKED/FAILED nedeni dürüstçe gösterilir; SANDBOX_UNAVAILABLE için kodun yanında açıklama vardır.
+      ...(run.reason?[h(doc,"dt",{text:ctx.t("run.reason")}),h(doc,"dd",{dataset:{runReason:run.reason},text:run.reason==="SANDBOX_UNAVAILABLE"?`SANDBOX_UNAVAILABLE — ${ctx.t("run.reason.SANDBOX_UNAVAILABLE")}`:run.reason})]:[])),
     h(doc,"h6",{text:ctx.t("run.checkpoints")}),cps,h(doc,"h6",{text:ctx.t("run.evidence")}),ev);
 }
 function runsSection(ctx,runsRes,details){

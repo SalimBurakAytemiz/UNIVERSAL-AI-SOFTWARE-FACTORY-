@@ -14,6 +14,7 @@ import {testCommandAllowed} from "./schemas.js";
 import {redactSecrets} from "./secret-scan.js";
 import type {ProjectStudio} from "./project-studio.js";
 import {StudioError} from "./project-studio.js";
+import {ExecutionGate} from "./execution-gate.js";
 
 export type DevRunStatus = "STOPPED" | "STARTING" | "RUNNING" | "CRASHED" | "BLOCKED";
 export interface DevRunPreview { url: string | null; state: "AVAILABLE" | "UNAVAILABLE"; lastProbeAt: string | null; reason?: string }
@@ -38,6 +39,8 @@ export interface DevRunOptions {
   logRingBytes?: number; logTailBytes?: number; startWaitMs?: number; graceMs?: number; probeIntervalMs?: number; stopPollMs?: number;
   // PS1A-C2-F2: Windows'ta çalışırken soy süreçlerin (pid + oluşturma zamanı) anlık görüntü aralığı; 0 kapatır.
   treeSnapshotMs?: number;
+  // SBX-GATE: dev komutu proje kodudur; yalnız bu kapının izin verdiği doğrulanmış sandbox sağlayıcısında başlatılır. Tanımsız = sağlayıcı yok = 409 SANDBOX_UNAVAILABLE (süreç başlatılmaz).
+  executionGate?: ExecutionGate;
 }
 const NO_PREVIEW_TYPES = new Set(["desktop", "mobile", "native"]);
 const ACTIVE: ReadonlySet<DevRunStatus> = new Set(["STARTING", "RUNNING"]);
@@ -134,11 +137,13 @@ export class DevRunManager {
   readonly instanceId = `dev_${crypto.randomBytes(8).toString("hex")}`;
   private readonly active = new Map<string, Active>();
   private stopTimer: NodeJS.Timeout | null = null;
-  private readonly o: Required<Omit<DevRunOptions, "audit">> & {audit: (event: string, details: Record<string, unknown>) => void};
+  private readonly o: Required<Omit<DevRunOptions, "audit" | "executionGate">> & {audit: (event: string, details: Record<string, unknown>) => void; executionGate: ExecutionGate};
   readonly recoveries: Array<{projectId: string} & DevRunRecovery> = [];
 
   constructor(opts: DevRunOptions) {
     this.o = {audit: () => undefined, startTimeOf: processStartTime, freePort: freeLoopbackPort, logRingBytes: 256 * 1024, logTailBytes: 16 * 1024, startWaitMs: 15_000, graceMs: 1_000, probeIntervalMs: 500, stopPollMs: 500, treeSnapshotMs: 2_000, ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined))} as unknown as DevRunManager["o"];
+    // SBX-GATE: yalnız gerçek bir ExecutionGate örneği kabul edilir; başka her değer sağlayıcısız kapıdır (fail-closed).
+    if (!(this.o.executionGate instanceof ExecutionGate)) this.o.executionGate = new ExecutionGate(null);
   }
 
   // Bu API sürecinin başlangıç zamanı (sahiplik kimliği); bir kez okunur.
@@ -232,6 +237,17 @@ export class DevRunManager {
     const id = project.projectId;
     if (this.isActive(id)) throw new StudioError("DEVRUN_ALREADY_RUNNING", 409);
     if (this.stopActive()) throw new StudioError("GLOBAL_STOP_ACTIVE", 423);
+    // SBX-GATE (FD-REL-1-REJECT-HOST-EXEC-2026-10-15): doğrulanmış sandbox yoksa dev komutu hiç başlatılmaz; durum dürüstçe BLOCKED/SANDBOX_UNAVAILABLE yazılır ve 409 döner.
+    const gate = await this.o.executionGate.authorize("STUDIO_DEVRUN");
+    if (!gate.allowed) {
+      const cur = this.readState(id);
+      if (!cur || !ACTIVE.has(cur.status)) { try { this.writeState({...this.blank(project), status: "BLOCKED", reason: gate.reason, endedAt: new Date().toISOString()}, true); } catch { /* durum yazılamadı */ } }
+      this.o.audit("WORKOS_DEVRUN_REFUSED", {projectId: id, reason: gate.reason, detail: gate.detail});
+      throw new StudioError(gate.reason, 409, gate.detail);
+    }
+    // Kapı beklemesinden sonra (await) eşzamanlı start ve GLOBAL_STOP yeniden kontrol edilir.
+    if (this.isActive(id)) throw new StudioError("DEVRUN_ALREADY_RUNNING", 409);
+    if (this.stopActive()) throw new StudioError("GLOBAL_STOP_ACTIVE", 423);
     const argv = project.devCommand;
     if (!argv) return this.block(project, "DEVRUN_COMMAND_NOT_CONFIGURED");
     if (!testCommandAllowed(argv)) return this.block(project, "DEVRUN_COMMAND_NOT_ALLOWED");
@@ -269,7 +285,8 @@ export class DevRunManager {
       st.port = port;
       const env = {...safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}), PORT: String(st.port), HOST: "127.0.0.1"};
       const exe = argv[0] === "node" ? process.execPath : argv[0];
-      const child = cp.spawn(exe, argv.slice(1), {cwd: ws, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32"});
+      // SBX-GATE: süreç ana makinede değil, kapının doğruladığı sağlayıcıda başlatılır.
+      const child = gate.provider.spawn(exe, argv.slice(1), {cwd: ws, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32"});
       a.child = child;
       a.exited = new Promise<void>(resolve => {
         // PS1A-C2-F2: çıkış (çökme veya durdurma) sonrası kalan ağaç (ayrık torunlar dahil) temizlenmeden exited çözülmez.

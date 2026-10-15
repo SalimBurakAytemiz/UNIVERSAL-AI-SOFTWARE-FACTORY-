@@ -1,5 +1,7 @@
 // //TR: Bu test F-B3A-001 düzeltmesini doğrular: süresi dolan lease'in tekrar tekrar devralınması sınırsız döngü yaratmaz; aynı checkpoint konumunda maxRecoveries aşılınca run RECOVERY_FAILED, mission BLOCKED (RECOVERY_BUDGET_EXHAUSTED) olur, executor/klon çağrıları sınırlı kalır, bütçe ilerleme (checkpoint) sonrası sıfırlanır ve lease adım başında/uzun senkron işlerden sonra yenilenir. Gerçek sağlayıcı çağrılmaz.
 import {describe, it, expect, beforeEach, afterEach} from "vitest";
+// SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
+import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -59,7 +61,7 @@ const startRun = (c: Ctx): WorkRun => {
   return c.store.createRun({tenantId: "tA", missionId: c.missionId, executor: {implementer: p.implementer.identity, reviewer: p.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
 };
 const runner = (c: Ctx, extra: Partial<RunnerOptions> = {}) =>
-  new MissionRunner({store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: c.fake.pair(), retryBackoffMs: [0, 0], leaseTtlMs: 60_000, now: () => c.clock.t, security: fakeSecurity(`${c.dataDir}-sec`).options, ...extra});
+  new MissionRunner({executionGate: testExecutionGate(), store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: c.fake.pair(), retryBackoffMs: [0, 0], leaseTtlMs: 60_000, now: () => c.clock.t, security: fakeSecurity(`${c.dataDir}-sec`).options, ...extra});
 const runOf = (c: Ctx, id: string) => c.store.getRun({tenantId: "tA"}, id)!;
 const journal = (c: Ctx) => fs.readFileSync(path.join(c.dataDir, "journal.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l));
 async function tickUntilSettled(c: Ctx, r: MissionRunner, runId: string, max = 12): Promise<TickReport[]> {

@@ -14,7 +14,9 @@ import {LEASED_RUN_STATUSES} from "./run-state.js";
 import {testCommandAllowed} from "./schemas.js";
 import {managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
 import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
-import {assertIndependentExecutors, runProcess} from "./executors.js";
+import {assertIndependentExecutors} from "./executors.js";
+import {ExecutionGate} from "./execution-gate.js";
+import type {GateDecision, ProjectExecutionKind} from "./execution-gate.js";
 import type {ExecutorPair, MissionSpec, ProcResult} from "./executors.js";
 import {DEFAULT_MAX_REPORT_BYTES, DEFAULT_MAX_TRIVY_DB_AGE_MS, DEFAULT_SECURITY_TIMEOUT_MS, buildAddedLineStream, defaultTrivyCacheDir, discoverSecurityTools, evaluateSecurityPolicy, gitRangeProblem, mergeGitleaksPasses, runGitleaks, runGitleaksAddedLines, runTrivy, toolInfo, verifyTool} from "./security-tools.js";
 import type {GitleaksResult, PolicyInput, ResolvedTool, SecurityOptions, SecurityToolset} from "./security-tools.js";
@@ -25,6 +27,8 @@ export interface RunnerOptions {
   testTimeoutMs?: number; executorTimeoutMs?: number; maxStepsPerTick?: number; now?: () => number;
   // B3C: güvenlik araçları (tanımsız = PATH keşfi); override yalnız programatik enjeksiyondur.
   security?: SecurityOptions;
+  // SBX-GATE: proje test komutları yalnız bu kapının izin verdiği doğrulanmış sandbox sağlayıcısında çalışır; tanımsız = sağlayıcı yok = VERIFY/REGRESSION BLOCKED (SANDBOX_UNAVAILABLE).
+  executionGate?: ExecutionGate;
 }
 export interface TickReport { skipped?: "BUSY" | "LOCKED"; recovered: string[]; claimed: string[]; cancelled: string[]; fenced: string[]; advanced: string[] }
 
@@ -59,6 +63,8 @@ export class MissionRunner {
       executorTimeoutMs: 60 * 60_000, maxStepsPerTick: Number.POSITIVE_INFINITY, now: Date.now,
       ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined))
     } as unknown as Required<Omit<RunnerOptions, "now">> & {now: () => number};
+    // SBX-GATE: yalnız gerçek bir ExecutionGate örneği kabul edilir; başka her değer (eksik, düz nesne) sağlayıcısız kapıdır (fail-closed).
+    if (!(this.o.executionGate instanceof ExecutionGate)) this.o.executionGate = new ExecutionGate(null);
     // Araçlar motor başlangıcında bir kez çözülür (PATH -> mutlak yol, sürüm, sha256); her çalıştırmadan önce ikili dosya yeniden doğrulanır.
     this.securityOpts = opts.security ?? {};
     this.securityTools = discoverSecurityTools(this.securityOpts, safeChildEnv(opts.envPolicyFile, {provider: "DETERMINISTIC"}));
@@ -287,9 +293,20 @@ export class MissionRunner {
     if (!testCommandAllowed(argv)) return null;
     return argv[0] === "node" ? [process.execPath, ...argv.slice(1)] : [...argv];
   }
-  private runTests(argv: string[], cwd: string, abort: () => boolean): Promise<ProcResult> {
-    return runProcess(argv, {cwd, env: safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}), timeoutMs: this.o.testTimeoutMs, shouldAbort: abort});
+  // SBX-GATE: test komutu proje kodudur; yalnız kapının verdiği sağlayıcıda (sandbox) çalışır, ana makinede asla.
+  private runTests(gate: Extract<GateDecision, {allowed: true}>, argv: string[], cwd: string, abort: () => boolean): Promise<ProcResult> {
+    return gate.provider.run(argv, {cwd, env: safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}), timeoutMs: this.o.testTimeoutMs, shouldAbort: abort});
   }
+  // SBX-GATE: sandbox yoksa test HİÇ çalıştırılmaz; kanıt NOT_EXECUTED olarak yazılır (PASS/FAILED değil) ve run BLOCKED olur (yeniden deneme bütçesi tüketilmez, remediation yok).
+  private sandboxBlocked(run: WorkRun, leaseId: string, kind: "VERIFY_TESTS" | "REGRESSION_TESTS", argv: string[], d: Extract<GateDecision, {allowed: false}>): Outcome {
+    const at = new Date().toISOString(), note = `NOT_EXECUTED: ${d.reason} (${d.detail}); project code is never run on the host without a verified sandbox (FD-REL-1-REJECT-HOST-EXEC-2026-10-15)`;
+    const log = this.writeLog(run, `${kind.toLowerCase()}-not-executed`, `$ ${argv.join(" ")}
+[${note}]
+`);
+    this.evidence(run, leaseId, {kind: `${kind}_NOT_EXECUTED`, argv, startedAt: at, endedAt: at, exitCode: null, ...log, commitSha: run.headSha ?? undefined, note});
+    return {kind: "BLOCK", reason: d.reason, status: "BLOCKED"};
+  }
+  private authorizeTests(kind: ProjectExecutionKind): Promise<GateDecision> { return this.o.executionGate.authorize(kind); }
 
   private async performStep(run: WorkRun, leaseId: string, abort: () => boolean): Promise<Outcome> {
     switch (run.step) {
@@ -407,7 +424,9 @@ export class MissionRunner {
     if (hits.length) return {kind: "BLOCK", reason: "SECRET_IN_DIFF"};
     const argv = this.testArgv(run);
     if (!argv) return {kind: "BLOCK", reason: "TEST_COMMAND_NOT_CONFIGURED"};
-    const r = await this.runTests(argv, work, abort);
+    const gate = await this.authorizeTests("RUNNER_VERIFY_TESTS");
+    if (!gate.allowed) return this.sandboxBlocked(run, leaseId, "VERIFY_TESTS", argv, gate);
+    const r = await this.runTests(gate, argv, work, abort);
     this.procEvidence(run, leaseId, "VERIFY_TESTS", r, {commitSha: run.headSha});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     if (r.spawnError) return {kind: "BLOCK", reason: "TEST_COMMAND_SPAWN_FAILED"};
@@ -550,7 +569,9 @@ export class MissionRunner {
     this.renew(run.runId, leaseId);
     const argv = this.testArgv(run);
     if (!argv) return {kind: "BLOCK", reason: "TEST_COMMAND_NOT_CONFIGURED"};
-    const r = await this.runTests(argv, clone, abort);
+    const gate = await this.authorizeTests("RUNNER_REGRESSION_TESTS");
+    if (!gate.allowed) return this.sandboxBlocked(run, leaseId, "REGRESSION_TESTS", argv, gate);
+    const r = await this.runTests(gate, argv, clone, abort);
     this.procEvidence(run, leaseId, "REGRESSION_TESTS", r, {commitSha: run.headSha ?? undefined});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     if (r.spawnError) return {kind: "BLOCK", reason: "TEST_COMMAND_SPAWN_FAILED"};

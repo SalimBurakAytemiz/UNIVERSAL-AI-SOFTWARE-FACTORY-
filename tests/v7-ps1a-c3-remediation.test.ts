@@ -1,5 +1,7 @@
 // //TR: Bu test PS-1A c3 düzeltmelerini gerçek geçici dizin/git, gerçek Windows 8.3 kısa adları, junction'lar ve gerçek alt süreçlerle doğrular (ağ yok, AI sağlayıcı yok): PS1A-C2-F1 (kanonik yol: 8.3 kısa ad/junction/UNC/aygıt takma adlarıyla veri dizini, projects kökü veya başka tenant'ın yönetilen deposu proje oluşturma, import, Studio route'ları ve runner klonunda kabul edilmez; kendi yönetilen proje uçtan uca çalışır) ve PS1A-C2-F2 (dev süreci çöktüğünde ayrık torun süreçler hayatta kalmaz).
 import {describe, it, expect, beforeEach, afterEach} from "vitest";
+// SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
+import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -41,7 +43,7 @@ afterEach(async () => {
 function mk(o: {tenantId?: string; dataDir?: string; runtime?: string} = {}) {
   const runtime = o.runtime ?? path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
   const dataDir = o.dataDir ?? path.join(tmp, "datadirectory-long");
-  const app = buildServer({controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, port: 3210, logger: false, tenantId: o.tenantId ?? "tA",
+  const app = buildServer({sandbox: TEST_HOST_PASSTHROUGH_SANDBOX, controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, port: 3210, logger: false, tenantId: o.tenantId ?? "tA",
     studio: {devrun: {probeIntervalMs: 150, stopPollMs: 150, treeSnapshotMs: 200}}});
   apps.push(app);
   return {app, runtime, dataDir};
@@ -162,7 +164,7 @@ describe("PS1A-C2-F1: canonical (8.3 / junction / UNC safe) path containment", (
     expect(managedRepoCanonical(b.dataDir, pb.projectId, sRepo)?.toLowerCase()).toBe(fs.realpathSync.native(bRepo).toLowerCase());
     // 4) Runner klonu (derinlemesine savunma): takma adlı yönetilmeyen/yönetilen kayıtlar klonlanmaz.
     const fake = new FakeExecutors({implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"})});
-    const runner = new MissionRunner({store, dataDir: b.dataDir, globalStopFile: path.join(b.runtime, "GLOBAL_STOP.json"), envPolicyFile: ENV_POLICY, executors: fake.pair(), retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(`${b.dataDir}-sec`).options});
+    const runner = new MissionRunner({executionGate: testExecutionGate(), store, dataDir: b.dataDir, globalStopFile: path.join(b.runtime, "GLOBAL_STOP.json"), envPolicyFile: ENV_POLICY, executors: fake.pair(), retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(`${b.dataDir}-sec`).options});
     const expectBlocked: Array<[Project, string]> = [...unmanaged.map(p => [p, "REPOSITORY_PATH_FORBIDDEN"] as [Project, string]), [managedAlias, "REPOSITORY_NOT_MANAGED"], [managedProjects, "REPOSITORY_NOT_MANAGED"]];
     const runIds: string[] = [];
     for (const [p] of expectBlocked) {

@@ -1,5 +1,7 @@
 // //TR: Bu test V7 B3C mission pipeline güvenlik aşamasını doğrular: araç keşfi (PATH -> mutlak yol, sürüm, sha256), SECURITY adımı (taze klonlarda gitleaks + trivy çevrimdışı; SAST dürüstçe NOT_AVAILABLE), politika (SECRET_DETECTED / VULNERABLE_DEPENDENCY BLOCKED, DB yok -> PARTIAL, araç yok -> NOT_INSTALLED), taze klon (workspace .gitattributes/.git/config gizleyemez), secret sızıntısı yok, GLOBAL_STOP ve idempotent yeniden giriş. Testler host araçlarına bağlı değildir (sahte tarayıcı enjekte edilir); host'ta gitleaks kuruluysa bir GERÇEK gitleaks çalıştırması da vardır. Gerçek sağlayıcı çağrılmaz.
 import {describe, it, expect, beforeEach, afterEach} from "vitest";
+// SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
+import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -50,7 +52,7 @@ function setup(): Ctx {
 }
 const okScript = (): FakeScript => ({implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"})});
 function engine(c: Ctx, fake: FakeExecutors, security: SecurityOptions, extra: Partial<RunnerOptions> = {}): MissionRunner {
-  return new MissionRunner({store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security, ...extra});
+  return new MissionRunner({executionGate: testExecutionGate(), store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security, ...extra});
 }
 function startRun(c: Ctx, fake: FakeExecutors) {
   const p = fake.pair();
@@ -87,7 +89,7 @@ describe("tool discovery", () => {
     expect(t.trivy).toEqual(expect.objectContaining({tool: "trivy", status: "NOT_INSTALLED", path: null, version: null, sha256: null, reason: "TOOL_NOT_INSTALLED"}));
     expect(t.semgrep.status).toBe("NOT_INSTALLED");
     const exit3 = path.join(tmp, "exit3.mjs"); fs.writeFileSync(exit3, "process.exit(3);\n");
-    const bad = new MissionRunner({store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), security: {tools: {gitleaks: {path: process.execPath, prefixArgs: [exit3]}, trivy: null, semgrep: null}}});
+    const bad = new MissionRunner({executionGate: testExecutionGate(), store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: fake.pair(), security: {tools: {gitleaks: {path: process.execPath, prefixArgs: [exit3]}, trivy: null, semgrep: null}}});
     expect(bad.securityTools.gitleaks).toEqual(expect.objectContaining({status: "ERROR", reason: "VERSION_CHECK_FAILED"}));
   });
 
@@ -287,7 +289,7 @@ async function driveWith(implementer: ImplementerAdapter, security: SecurityOpti
   const c = setup(), fake = new FakeExecutors(okScript());
   const pair = {kind: "FAKE" as const, implementer, reviewer: fake.pair().reviewer};
   const r = c.store.createRun({tenantId: "tA", missionId: c.missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
-  await new MissionRunner({store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security}).tick();
+  await new MissionRunner({executionGate: testExecutionGate(), store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security}).tick();
   return {c, run: runOf(c, r.runId)};
 }
 
@@ -410,7 +412,7 @@ describe("GLOBAL_STOP and re-entry", () => {
     expect(mid.status).toBe("CHECKPOINTING");
     const later = Date.now() + 10 * 60_000;
     const storeB = new WorkOsStore(c2.dataDir, {now: () => later});
-    const rep = await new MissionRunner({store: storeB, dataDir: c2.dataDir, globalStopFile: c2.stopFile, envPolicyFile: ENV_POLICY, executors: fake2.pair(), retryBackoffMs: [0, 0], now: () => later, security: sec2.options}).tick();
+    const rep = await new MissionRunner({executionGate: testExecutionGate(), store: storeB, dataDir: c2.dataDir, globalStopFile: c2.stopFile, envPolicyFile: ENV_POLICY, executors: fake2.pair(), retryBackoffMs: [0, 0], now: () => later, security: sec2.options}).tick();
     expect(rep.recovered).toEqual([r2.runId]);
     const done = runOf(c2, r2.runId);
     expect(done.status).toBe("AWAITING_APPROVAL");
@@ -423,7 +425,7 @@ describe("GLOBAL_STOP and re-entry", () => {
     const token = crypto.randomBytes(24).toString("hex");
     fs.mkdirSync(path.join(tmp, "config"), {recursive: true});
     fs.copyFileSync(ENV_POLICY, path.join(tmp, "config", "environment-policy.json"));
-    const app = buildServer({controlToken: token, runtime: path.dirname(c.stopFile), repoRoot: tmp, dataDir: c.dataDir, tenantId: "tA", port: 3210, logger: false});
+    const app = buildServer({sandbox: TEST_HOST_PASSTHROUGH_SANDBOX, controlToken: token, runtime: path.dirname(c.stopFile), repoRoot: tmp, dataDir: c.dataDir, tenantId: "tA", port: 3210, logger: false});
     const res = await app.inject({method: "GET", url: `/v1/work-runs/${run.runId}`, headers: {"x-uasco-control-token": token, host: "127.0.0.1:3210"}});
     expect(res.statusCode).toBe(200);
     const ev = (res.json().run as WorkRun).evidence.find(e => e.kind === "SECURITY_REPORT")!;

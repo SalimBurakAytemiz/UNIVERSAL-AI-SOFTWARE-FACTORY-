@@ -1,5 +1,7 @@
 // //TR: Bu test V7 B3a cycle-3 remediation'ını doğrular: F-B3A-C2-001 (yalnız dosya düzenleyen, commit edemeyen broker benzeri builder'ın çıktısını engine commit eder, üretilen SHA VERIFY'a akar, değişiklik yoksa BLOCKED, .git'e dokunan builder reddedilir) ve F-B3A-C2-002 (secret taraması taze klonda --text --no-textconv ile; workspace textconv / -diff attribute atlatması, commit mesajı ve hunk içi "+++" içerik satırı yakalanır). Gerçek sağlayıcı çağrılmaz.
 import {describe, it, expect, beforeEach, afterEach} from "vitest";
+// SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
+import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -53,7 +55,7 @@ function editOnlyPair(directive: unknown, argv?: (ws: string) => string[]): {pai
 }
 async function drive(c: Ctx, pair: ExecutorPair) {
   const r = c.store.createRun({tenantId: "tA", missionId: c.missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
-  await new MissionRunner({store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(`${c.dataDir}-sec`).options}).tick();
+  await new MissionRunner({executionGate: testExecutionGate(), store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(`${c.dataDir}-sec`).options}).tick();
   return c.store.getRun({tenantId: "tA"}, r.runId)!;
 }
 const missionStatus = (c: Ctx) => c.store.getMission({tenantId: "tA"}, c.missionId)!.status;
