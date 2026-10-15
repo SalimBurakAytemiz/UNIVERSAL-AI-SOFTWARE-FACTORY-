@@ -320,7 +320,8 @@
         "tests/v7-relfx-2-test-surface.test.ts",
         "tests/v7-relfx-c2-remediation.test.ts",
         "tests/v7-relfx-c3-remediation.test.ts",
-        "tests/v7-relfx-c4-remediation.test.ts"
+        "tests/v7-relfx-c4-remediation.test.ts",
+        "tests/v7-relfx-c5-remediation.test.ts"
       ],
       "requiresDependencies": true
     },

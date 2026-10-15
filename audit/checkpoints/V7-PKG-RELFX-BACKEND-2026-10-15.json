@@ -11,7 +11,7 @@
     "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
   ],
   "scope": "C:/Users/salim/UASCO-recovery/product/rel/REL-FIRST-EXE-P0.md sections REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2 (backend only; apps/desktop/** not touched). One commit per FX in the order FX-1, FX-3, FX-4, FX-2.",
-  "status": "IMPLEMENTED (REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2) + cycle-2 remediation of RV-RELFX-C1-001..004 + cycle-3 remediation of RV-RELFX-C2-001..004 + cycle-4 remediation of RV-RELFX-C3-001..005 (structural acknowledgement gate), NOT CLEAN; independent review pending",
+  "status": "IMPLEMENTED (REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2) + cycle-2 remediation of RV-RELFX-C1-001..004 + cycle-3 remediation of RV-RELFX-C2-001..004 + cycle-4 remediation of RV-RELFX-C3-001..005 (structural acknowledgement gate) + cycle-5 remediation of RV-RELFX-C4-001..002 (harness classification independent of the test-path branch, case-insensitive matching), NOT CLEAN; independent review pending",
   "decisions": {
     "D-REL-3": "FA-V2-PRODUCT-2026-10-14 covers apps/control-api/src/server.ts, config/validation.json (test steps appended) and config/trust-root-manifest.json (resealed with node scripts/generate-trust-root.mjs). No other protected file changed.",
     "D-REL-2": "Refuse R3/R4 run start (fail-closed default).",
@@ -248,6 +248,37 @@
       "REL-FX c4: a run without TEST_SURFACE evidence for run.headSha (legacy shape; every runner VERIFY writes one) does not require acknowledgement; functionalAcceptance stays UNKNOWN (NO_TEST_SURFACE_EVIDENCE). A supplied acknowledgement can never match such a run (409).",
       "REL-FX c4: replay re-derives the completion record from the run's evidence and requires byte-equal JSON; a combined SUCCEEDED entry written by an unmerged cycle-1..3 build for a run with changed existing tests (no acknowledgement) would replay as tamper. No such journal exists outside this unmerged package.",
       "REL-FX c4: the desktop surface for the acknowledgement (showing the changed paths and sending {acknowledgeTestChanges, testSurfaceSha256}) is out of scope; until the integration package wires it, such runs can only be completed through the API with the acknowledgement body."
+    ]
+  },
+  "remediationCycle5": {
+    "reviewedSha": "7b054e3f62acbc732eeddf1ff386ba1daa6dd2e1",
+    "reviewVerdict": "BLOCKED (cycle 4): harness classification was gated by the test-path branch; harness files added/renamed into a test directory were misclassified as newly added tests (S4 no-ack); harness/test-path matching was case-sensitive on case-insensitive NTFS. The S1-S3 structural acknowledgement gate itself was VERIFIED by the reviewer and is unchanged.",
+    "implementer": "CLAUDE_BUILDER",
+    "model": "claude-opus-4-8",
+    "modelNote": "Recorded per Founder directive: the Claude interface auto-switched Opus 5.5 -> Opus 4.8. This cycle's evidence is produced under claude-opus-4-8. Prior CLEAN/VERIFIED results from earlier cycles are NOT retroactively altered on the basis of the model change.",
+    "scopeNote": "Fixes ONLY the TEST_SURFACE harness classification in core/workos/test-surface.ts. The S1-S4 gate logic in outcomes.ts / store.ts / schemas.ts is unchanged; it now simply sees harness files it previously missed (they land in TestSurfaceSummary.harness, so testChangesRequirement.required becomes true).",
+    "findings": {
+      "RV-RELFX-C4-001": {
+        "severity": "P1 (BLOCKER)",
+        "fix": "evaluateTestSurface now runs isHarnessChange on EVERY name-status entry before the test-path branch (for RENAMED it already checks both the old and the new path). Any entry whose basename matches the unconditional harness list (vite/vitest/jest/playwright/cypress/ava *.config.*, vitest.workspace.*, karma.conf.*, .mocharc*, conftest.py, pytest.ini, tox.ini) or the conditional named files (package.json scripts, setup.cfg [tool:pytest], pyproject.toml [tool.pytest.ini_options]) is classified as harness even under a test directory, so a harness file git-mv'd into tests/ (R100) or ADDED at a test-dir path is harness (acknowledgement required), not a newly added test. Genuinely added non-harness test files keep the S4 no-ack path. No gate logic changed.",
+        "tests": "tests/v7-relfx-c5-remediation.test.ts: RENAMED vitest.config.ts -> tests/vitest.config.ts; ADDED tests/conftest.py; ADDED tests/vitest.config.ts -> each harness + testChangesRequirement.required true; S4 regression (added tests/new.test.ts -> added, required false); ADDED pytest.ini/tox.ini/.mocharc anywhere -> harness."
+      },
+      "RV-RELFX-C4-002": {
+        "severity": "P2",
+        "fix": "HARNESS_ALWAYS_RES and TEST_PATH_RES carry the i flag and the isHarnessChange named() basename check lower-cases before comparing, so Vitest.config.ts / Conftest.py / PYTEST.INI / Package.json and test-path case variants (Tests/, A.Test.ts, TEST_a.py) match on case-insensitive NTFS (fail-closed: more inclusive classification).",
+        "tests": "Case variants of harness basenames at root and in subdirectories -> harness; case variants of test paths -> test surface; case-insensitive named() Package.json script change -> harness; negative: config.ts / jestSetup.ts / conftester.py are not harness."
+      }
+    },
+    "files": [
+      "core/workos/test-surface.ts (harness check on every entry in evaluateTestSurface; i flag on HARNESS_ALWAYS_RES and TEST_PATH_RES; case-insensitive named())",
+      "tests/v7-relfx-c5-remediation.test.ts (new)",
+      "config/validation.json (protected, authorized: new test file appended to the existing tests step)",
+      "config/trust-root-manifest.json (protected, resealed with node scripts/generate-trust-root.mjs)",
+      "audit/checkpoints/V7-PKG-RELFX-BACKEND-2026-10-15.json"
+    ],
+    "safety": "No AI-generated or untrusted project code executed on the host: the new tests use synthetic strings and UASCO fixtures only. No new dependencies, no network. S1-S3 gate logic (outcomes.ts/store.ts/schemas.ts) untouched; apps/control-api/src/server.ts untouched this cycle.",
+    "knownLimits": [
+      "REL-FX c5: the structural rule still only sees what TEST_SURFACE classifies. Tests outside TEST_GLOBS (Rust #[cfg(test)] modules in src/*.rs, doctests, tests embedded in production modules, custom test directories not matched by TEST_GLOBS) and harness inputs outside the fixed list (babel/tsconfig/swc/nyc/.env, setup files referenced from a config outside the test globs, CI/Makefile/tox/nox targets, shell wrappers) are treated as production code and still need no acknowledgement. This cycle widens neither TEST_GLOBS nor the harness list; it only makes the existing fixed lists apply on every entry and case-insensitively."
     ]
   }
 }

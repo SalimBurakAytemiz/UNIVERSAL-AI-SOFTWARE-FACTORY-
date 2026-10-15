@@ -16,8 +16,9 @@ export interface TestSurfaceSummary {
 // Repo test glob'ları (master change-guard tests/** kuralı + yaygın ekosistem kalıpları). Belgeleme için glob, eşleme için eşdeğer regex.
 export const TEST_GLOBS: readonly string[] = ["tests/**", "test/**", "**/tests/**", "**/test/**", "spec/**", "specs/**", "**/spec/**", "**/specs/**", "**/__tests__/**", "**/*.test.*", "**/*.spec.*", "**/*_test.*", "**/*_spec.*", "**/*Spec.*",
   "**/*.cy.*", "**/*.e2e-spec.*", "**/test_*.py", "**/test.{js,mjs,cjs,ts}"];
-const TEST_PATH_RES: readonly RegExp[] = [/(^|\/)tests?\//, /(^|\/)specs?\//, /(^|\/)__tests__\//, /\.(test|spec)\.[A-Za-z0-9]+$/, /_(test|spec)\.[A-Za-z0-9]+$/, /[^/]Spec\.[A-Za-z0-9]+$/,
-  /\.cy\.[A-Za-z0-9]+$/, /\.e2e-spec\.[A-Za-z0-9]+$/, /(^|\/)test_[^/]*\.py$/, /(^|\/)test\.(js|mjs|cjs|ts)$/];
+// RV-RELFX-C4-002: koşular büyük/küçük harfe duyarsız NTFS'te yürür; test yolu desenleri de duyarsız (i) eşlenir (Tests/, A.Test.ts, TEST_a.py varyantları test sayılır; fail-closed).
+const TEST_PATH_RES: readonly RegExp[] = [/(^|\/)tests?\//i, /(^|\/)specs?\//i, /(^|\/)__tests__\//i, /\.(test|spec)\.[A-Za-z0-9]+$/i, /_(test|spec)\.[A-Za-z0-9]+$/i, /[^/]Spec\.[A-Za-z0-9]+$/i,
+  /\.cy\.[A-Za-z0-9]+$/i, /\.e2e-spec\.[A-Za-z0-9]+$/i, /(^|\/)test_[^/]*\.py$/i, /(^|\/)test\.(js|mjs|cjs|ts)$/i];
 // Test harness yapılandırması: bu dosyalar testlerin hangi kapsamda/nasıl koşacağını belirler; değişiklikleri TEST_SURFACE sayılır (harness listesi).
 // Koşulsuz: config dosyaları (vite.config.* dahil: vitest test bloğunu taşıyabilir; blok ayrıştırılmaz, fail-closed dosyanın her değişikliği sayılır), conftest.py (her dizinde),
 // pytest.ini, tox.ini. Koşullu: package.json yalnız scripts.test/pretest/posttest veya üst düzey jest/mocha/ava anahtarları değişince,
@@ -25,8 +26,9 @@ const TEST_PATH_RES: readonly RegExp[] = [/(^|\/)tests?\//, /(^|\/)specs?\//, /(
 // RV-RELFX-C3-004: ava.config.* ve karma.conf.* koşulsuz harness'tır; package.json'da mission testCommand'ının adlandırdığı betik (npm/pnpm/yarn run <ad>) ve pre/post eşleri de karşılaştırılır.
 export const HARNESS_GLOBS: readonly string[] = ["**/vitest.config.*", "**/vite.config.*", "**/vitest.workspace.*", "**/jest.config.*", "**/playwright.config.*", "**/cypress.config.*", "**/ava.config.*", "**/karma.conf.*", "**/.mocharc*", "**/conftest.py", "**/pytest.ini", "**/tox.ini",
   "**/package.json (scripts.test|pretest|posttest, the script named by testCommand and its pre/post, jest, mocha, ava)", "**/setup.cfg ([tool:pytest])", "**/pyproject.toml ([tool.pytest.ini_options])"];
-const HARNESS_ALWAYS_RES: readonly RegExp[] = [/(^|\/)(?:vitest|vite|jest|playwright|cypress|ava)\.config\.[A-Za-z0-9.]+$/, /(^|\/)karma\.conf\.[A-Za-z0-9.]+$/, /(^|\/)vitest\.workspace\.[A-Za-z0-9.]+$/, /(^|\/)\.mocharc(?:\.[A-Za-z0-9]+)?$/,
-  /(^|\/)conftest\.py$/, /(^|\/)(?:pytest|tox)\.ini$/];
+// RV-RELFX-C4-002: koşulsuz harness desenleri de büyük/küçük harfe duyarsız (i) eşlenir (Vitest.config.ts, Conftest.py, PYTEST.INI harness sayılır; fail-closed).
+const HARNESS_ALWAYS_RES: readonly RegExp[] = [/(^|\/)(?:vitest|vite|jest|playwright|cypress|ava)\.config\.[A-Za-z0-9.]+$/i, /(^|\/)karma\.conf\.[A-Za-z0-9.]+$/i, /(^|\/)vitest\.workspace\.[A-Za-z0-9.]+$/i, /(^|\/)\.mocharc(?:\.[A-Za-z0-9]+)?$/i,
+  /(^|\/)conftest\.py$/i, /(^|\/)(?:pytest|tox)\.ini$/i];
 const CODE_RE = /\.(m?[jt]sx?|cjs|cts|mts|py|go|rs|java|cs|kt|rb|php)$/;
 const MAX_LIST = 200;
 const norm = (p: string) => p.replace(/\\/g, "/");
@@ -70,7 +72,7 @@ export function isHarnessChange(e: NameStatusEntry, baseSha: string, headSha: st
   const after = norm(e.path), before = norm(e.oldPath ?? e.path);
   if ([after, before].some(p => HARNESS_ALWAYS_RES.some(re => re.test(p)))) return true;
   const b = (p: string) => (e.status === "ADDED" ? null : contentAt(baseSha, p)), a = (p: string) => (e.status === "DELETED" ? null : contentAt(headSha, p));
-  const named = (p: string, n: string) => p.split("/").pop() === n;
+  const named = (p: string, n: string) => (p.split("/").pop() ?? "").toLowerCase() === n.toLowerCase(); // RV-RELFX-C4-002: taban ad eşlemesi büyük/küçük harfe duyarsız (Package.json, Setup.cfg, PyProject.toml; fail-closed)
   const differs = (n: string, view: (s: string | null) => string | null) => view(named(before, n) ? b(before) : null) !== view(named(after, n) ? a(after) : null);
   const scripts = testCommandScripts(testCommand);
   if (named(after, "package.json") || named(before, "package.json")) return differs("package.json", x => testScripts(x, scripts));
@@ -221,14 +223,18 @@ export function evaluateTestSurface(i: EvaluateInput): TestSurfaceSummary {
     else if (disabledTestMarkers(a) > disabledTestMarkers(b)) weakened.push({path: afterPath, before: nb, after: na, reason: "SKIP_OR_ONLY_ADDED"});
   };
   for (const e of i.entries) {
+    // RV-RELFX-C4-001: harness sınıflaması test-yolu dalından bağımsızdır. Harness kontrolü her name-status girişinde (RENAMED'de hem eski hem yeni yolda, isHarnessChange içinde)
+    // önce çalışır: sabit harness listesine uyan EKLENEN veya bir test dizinine YENİDEN ADLANDIRILAN bir yapılandırma dosyası (ör. tests/vitest.config.ts, tests/conftest.py),
+    // bir test dizini altında olsa bile harness sayılır ve onay gerektirir (testChangesRequirement.required). Harness OLMAYAN yeni test dosyaları aşağıda S4 onaysız yolunu korur.
+    if (isHarnessChange(e, i.baseSha, i.headSha, i.contentAt, tc)) { harness.push(e.path); continue; }
     if (e.status === "RENAMED" && e.oldPath !== undefined) {
       const fromT = isT(e.oldPath), toT = isT(e.path);
       if (fromT && !toT) { deleted.push(e.oldPath); continue; } // test glob'u dışına taşımak testi siler
-      if (!fromT && !toT) { if (isHarnessChange(e, i.baseSha, i.headSha, i.contentAt, tc)) harness.push(e.path); continue; }
-      if (!fromT) { added.push(e.path); continue; }
+      if (!fromT && !toT) continue; // harness olmayan, test olmayan taşıma: yüzey dışı
+      if (!fromT) { added.push(e.path); continue; } // harness olmayan, test dizinine eklenen yeni test (S4 onaysız)
       renamed.push({from: e.oldPath, to: e.path}); compare(e.oldPath, e.path); continue;
     }
-    if (!isT(e.path)) { if (isHarnessChange(e, i.baseSha, i.headSha, i.contentAt, tc)) harness.push(e.path); continue; }
+    if (!isT(e.path)) continue; // harness olmayan, test olmayan değişiklik: yüzey dışı
     if (e.status === "DELETED") deleted.push(e.path);
     else if (e.status === "ADDED") { added.push(e.path); const a = CODE_RE.test(e.path) ? i.contentAt(i.headSha, e.path) : null; if (a !== null && assertionCount(a) === 0) trivialAdded.push(e.path); }
     else { modified.push(e.path); compare(e.path, e.path); }
