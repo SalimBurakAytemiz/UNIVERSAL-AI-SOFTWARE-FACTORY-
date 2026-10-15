@@ -13,6 +13,7 @@ import {WorkOsError, urlHasUserinfo} from "./types.js";
 import type {JournalEntry, JournalType, Project, ProjectExport, ProjectTemplate, ProjectType, RiskLevel, RunCheckpoint, RunEvidence, RunStatus, RunStep, Scope, TaskStatus, WorkMission, WorkRun, WorkTask} from "./types.js";
 import {ACTIVE_WORKER_STATUSES, LEASED_RUN_STATUSES, UNLEASED_RUN_STATUSES, assertRunTransition, isOpenRun, isRunStatus, isRunStep} from "./run-state.js";
 import {completionEvidence} from "./outcomes.js";
+import {RISK_REFUSAL, riskAdmitted} from "./risk-admission.js";
 
 const sha256 = sha256Untyped as (value: unknown) => string;
 const writeJsonAtomic = writeJsonAtomicUntyped as (file: string, value: unknown) => void;
@@ -485,6 +486,8 @@ export class WorkOsStore {
       const mission = this.state.missions[input.missionId];
       if (!mission || mission.tenantId !== input.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "mission");
       if (mission.status !== "AUTHORIZED" && mission.status !== "PLANNED") throw new WorkOsError("WORKOS_CONFLICT", "MISSION_NOT_RUNNABLE");
+      // REL-FX-3 (D-REL-2): R3/R4 run'ı Founder kararı ve OS sandbox olmadan oluşturulamaz; düzey yalnız mission kaydından okunur.
+      if (!riskAdmitted(mission.riskLevel)) throw new WorkOsError("WORKOS_CONFLICT", RISK_REFUSAL);
       if (Object.values(this.state.runs).some(r => r.missionId === mission.missionId && isOpenRun(r.status))) throw new WorkOsError("WORKOS_CONFLICT", "RUN_ALREADY_ACTIVE");
       // PS-1A bütçe: budget.maxRuns projenin toplam run sayısını sınırlar (maxTokens yalnız kaydedilir; bu tabanda token ölçümü yoktur).
       const maxRuns = this.state.projects[mission.projectId]?.budget?.maxRuns;

@@ -25,6 +25,7 @@ import {authorizeAction} from "../../../core/action-gateway/policy.js";
 import type {ActionPolicyContext} from "../../../core/action-gateway/types.js";
 import {MissionRunner} from "../../../core/workos/runner.js";
 import {deriveOutcomes} from "../../../core/workos/outcomes.js";
+import {RISK_REFUSAL,hostExecutionNotice,riskAdmitted} from "../../../core/workos/risk-admission.js";
 import type {RunnerOptions} from "../../../core/workos/runner.js";
 import {assertIndependentExecutors,executorsFromEnv,LocalClaudeExecutors} from "../../../core/workos/executors.js";
 import type {ExecutorPair} from "../../../core/workos/executors.js";
@@ -221,12 +222,16 @@ if(runnerEnabled){
 app.post<{Params:{id:string}}>("/v1/missions/:id/runs",wos(async(req,reply)=>{
   if(!validMissionId(req.params.id))return reply.code(400).send({error:"INVALID_MISSION_ID"});
   const body=req.body??{};if(!workosWrite(reply,"workos.run.start",req.params.id,body,validateRunStart))return reply;
+  // //TR: REL-FX-3 (D-REL-2): R3/R4 mission'ı için run başlatılmaz (409); düzey yalnız mission kaydından okunur, gövde veya hedef metni onu değiştiremez.
+  const target=getStore().getMission(scope,req.params.id);
+  if(target&&!riskAdmitted(target.riskLevel)){audit("WORKOS_RUN_REFUSED",{actor,missionId:req.params.id,reason:RISK_REFUSAL,riskLevel:target.riskLevel});return reply.code(409).send({error:RISK_REFUSAL,riskLevel:target.riskLevel})}
   const ex=getExecutors();if(!ex.pair)return reply.code(409).send({error:"EXECUTOR_NOT_CONFIGURED",reason:ex.reason});
   try{assertIndependentExecutors(ex.pair)}catch{audit("WORKOS_RUN_REFUSED",{actor,missionId:req.params.id,reason:"EXECUTOR_CONFIG_REFUSED"});return reply.code(409).send({error:"EXECUTOR_CONFIG_REFUSED"})}
   const b=body as any;
   const r=getStore().createRunDetailed({tenantId:scope.tenantId,missionId:req.params.id,roleId:b.roleId??null,executor:{implementer:ex.pair.implementer.identity,reviewer:ex.pair.reviewer.identity},createdBy:actor,idempotencyKey:b.idempotencyKey});
   audit(r.replayed?"WORKOS_IDEMPOTENT_REPLAY":"WORKOS_RUN_CREATED",{actor,kind:"run",runId:r.entity.runId,missionId:r.entity.missionId,executor:r.entity.executor});
-  return reply.code(r.replayed?200:201).send({run:r.entity});
+  // D-REL-1 Founder'da bekliyor: R0-R2 davranışı değişmez, yalnız geçici host yürütme bildirimi yanıta eklenir.
+  return reply.code(r.replayed?200:201).send({run:r.entity,hostExecutionNotice:hostExecutionNotice((target??getStore().getMission(scope,r.entity.missionId))!.riskLevel)});
 }));
 app.get<{Querystring:{missionId?:string}}>("/v1/work-runs",wos(async(req,reply)=>{
   const missionId=req.query?.missionId;if(missionId!==undefined&&!validMissionId(missionId))return reply.code(400).send({error:"INVALID_MISSION_ID"});

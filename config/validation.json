@@ -314,7 +314,8 @@
         "tests/v7-ps1a-project-studio.test.ts",
         "tests/v7-ps1a-c2-remediation.test.ts",
         "tests/v7-ps1a-c3-remediation.test.ts",
-        "tests/v7-relfx-1-completion.test.ts"
+        "tests/v7-relfx-1-completion.test.ts",
+        "tests/v7-relfx-3-risk-admission.test.ts"
       ],
       "requiresDependencies": true
     },

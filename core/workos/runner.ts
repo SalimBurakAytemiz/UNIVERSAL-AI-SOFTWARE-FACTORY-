@@ -16,6 +16,7 @@ import {managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
 import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
 import {assertIndependentExecutors, runProcess} from "./executors.js";
 import {reviewAndSecurityFor} from "./outcomes.js";
+import {RISK_REFUSAL, hostExecutionNotice, riskAdmitted} from "./risk-admission.js";
 import type {ExecutorPair, MissionSpec, ProcResult} from "./executors.js";
 import {DEFAULT_MAX_REPORT_BYTES, DEFAULT_MAX_TRIVY_DB_AGE_MS, DEFAULT_SECURITY_TIMEOUT_MS, buildAddedLineStream, defaultTrivyCacheDir, discoverSecurityTools, evaluateSecurityPolicy, gitRangeProblem, mergeGitleaksPasses, runGitleaks, runGitleaksAddedLines, runTrivy, toolInfo, verifyTool} from "./security-tools.js";
 import type {GitleaksResult, PolicyInput, ResolvedTool, SecurityOptions, SecurityToolset} from "./security-tools.js";
@@ -306,6 +307,15 @@ export class MissionRunner {
 
   // İzole workspace: proje deposunun yerel yolundan --no-hardlinks klon, HEAD base SHA olarak kaydedilir, run branch'i açılır. Yeniden girişte sıfırdan kurulur.
   private stepWorkspace(run: WorkRun, leaseId: string): Outcome {
+    // REL-FX-3 derinlemesine savunma: journal'a enjekte edilmiş run bile R3/R4 mission için klon veya alt süreç başlatamaz; düzey yalnız mission kaydından okunur.
+    const mission = this.o.store.getMission({tenantId: run.tenantId}, run.missionId);
+    if (!mission) return {kind: "BLOCK", reason: "MISSION_NOT_FOUND"};
+    if (!riskAdmitted(mission.riskLevel)) {
+      const at = new Date().toISOString();
+      this.evidence(run, leaseId, {kind: "RISK_ADMISSION", argv: [], startedAt: at, endedAt: at, exitCode: 1, logPath: null, logSha256: null, note: `riskLevel=${String(mission.riskLevel).slice(0, 8)}; ${RISK_REFUSAL} (D-REL-2)`});
+      return {kind: "BLOCK", reason: RISK_REFUSAL};
+    }
+    const notice = hostExecutionNotice(mission.riskLevel);
     const project = this.o.store.getProject({tenantId: run.tenantId}, run.projectId);
     if (!project) return {kind: "BLOCK", reason: "PROJECT_NOT_FOUND"};
     const repo = project.repository;
@@ -335,7 +345,7 @@ export class MissionRunner {
     this.renew(run.runId, leaseId);
     const log = this.writeLog(run, "workspace", `$ git clone --no-hardlinks ${src} <run>/work\n${clone.stdout ?? ""}${clone.stderr ?? ""}\n$ git checkout -B ${branch} ${base}\n${co?.stdout ?? ""}${co?.stderr ?? ""}\nHEAD=${head}\n`);
     const ok = head === base;
-    this.evidence(run, leaseId, {kind: "WORKSPACE", argv: ["git", "clone", "--no-hardlinks", src, `runs/${run.runId}/work`], startedAt, endedAt: new Date().toISOString(), exitCode: ok ? 0 : (clone.status ?? 1), ...log, baseSha: base});
+    this.evidence(run, leaseId, {kind: "WORKSPACE", argv: ["git", "clone", "--no-hardlinks", src, `runs/${run.runId}/work`], startedAt, endedAt: new Date().toISOString(), exitCode: ok ? 0 : (clone.status ?? 1), ...log, baseSha: base, note: `${notice.code} riskLevel=${notice.riskLevel} (${notice.decision} ${notice.decisionStatus})`});
     if (!ok) return {kind: "BLOCK", reason: "WORKSPACE_CLONE_FAILED"};
     return {kind: "DONE", next: "IMPLEMENT", data: {baseSha: base, workBranch: branch}, patch: {baseSha: base, headSha: null, workBranch: branch}};
   }
