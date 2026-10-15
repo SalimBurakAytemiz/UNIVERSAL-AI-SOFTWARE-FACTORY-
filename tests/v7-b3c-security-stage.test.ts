@@ -120,7 +120,7 @@ describe("SECURITY step with stub scanners", () => {
     expect(run.reason).toBe("DELIVERY_DECISION_PENDING_FOUNDER");
     expect(missionStatus(c)).toBe("REPORTING");
     expect(run.checkpoints.map(x => x.step)).toEqual(["WORKSPACE", "IMPLEMENT", "VERIFY", "SECURITY", "REVIEW", "REGRESSION", "REPORT"]);
-    expect(kinds(run)).toEqual(["WORKSPACE", "IMPLEMENT", "SECRET_SCAN", "VERIFY_TESTS", "SECURITY_GITLEAKS", "SECURITY_GITLEAKS_ADDED_LINES", "SECURITY_TRIVY", "SECURITY_REPORT", "REVIEW", "REGRESSION_TESTS", "REPORT"]);
+    expect(kinds(run)).toEqual(["WORKSPACE", "IMPLEMENT", "SECRET_SCAN", "VERIFY_TESTS", "TEST_SURFACE", "SECURITY_GITLEAKS", "SECURITY_GITLEAKS_ADDED_LINES", "SECURITY_TRIVY", "SECURITY_REPORT", "REVIEW", "REGRESSION_TESTS", "REPORT"]);
     const ev = secEv(run), s = ev.security!;
     expect(s.status).toBe("PASSED");
     expect(s.blockReason).toBeNull();

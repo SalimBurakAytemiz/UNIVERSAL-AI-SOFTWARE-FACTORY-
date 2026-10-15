@@ -316,7 +316,8 @@
         "tests/v7-ps1a-c3-remediation.test.ts",
         "tests/v7-relfx-1-completion.test.ts",
         "tests/v7-relfx-3-risk-admission.test.ts",
-        "tests/v7-relfx-4-interruption.test.ts"
+        "tests/v7-relfx-4-interruption.test.ts",
+        "tests/v7-relfx-2-test-surface.test.ts"
       ],
       "requiresDependencies": true
     },

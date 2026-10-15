@@ -47,10 +47,12 @@ export function completionEvidence(run: WorkRun | undefined, evidence: readonly 
   return {ok: true, refs: {headSha: head, reportEvidenceId: report.evidenceId, reviewEvidenceId: rs.review.evidenceId, securityEvidenceId: rs.security.evidenceId}};
 }
 
-// //TR: FX-2 bağlantı noktası: TEST_SURFACE kanıtı yoksa işlevsel kabul dürüstçe UNKNOWN'dır (bağımsız oracle yok; VERIFIED asla tahmin edilmez).
+// //TR: REL-FX-2: işlevsel kabul run.headSha için en son TEST_SURFACE kanıtından okunur (BLOCKED / UNVERIFIED_VACUOUS / UNVERIFIED_ORACLE / UNKNOWN); kanıt yoksa
+// dürüstçe UNKNOWN'dır. Mission'a sabitlenmiş bağımsız oracle bu dilimde olmadığı için VERIFIED asla üretilmez.
 function functionalAcceptanceOf(head: string | null, evidence: readonly RunEvidence[]): [OutcomeState, string] {
-  void head; void evidence;
-  return ["UNKNOWN", "NO_INDEPENDENT_ORACLE"];
+  const ts = head ? latest(evidence, e => e.kind === "TEST_SURFACE" && e.commitSha === head && !!e.testSurface) : undefined;
+  if (!ts?.testSurface) return ["UNKNOWN", "NO_TEST_SURFACE_EVIDENCE"];
+  return [ts.testSurface.functionalAcceptance, ts.testSurface.reason];
 }
 
 // Saf okuma modeli: yalnız run kaydı ve kanıt listesinden türetilir; yan etkisi yoktur, journal'a yazmaz.

@@ -18,6 +18,11 @@ if (mode === "implement") {
     fs.mkdirSync(path.dirname(target), {recursive: true});
     fs.writeFileSync(target, String(content));
   }
+  for (const rel of d.deleteFiles ?? []) {
+    const target = path.resolve(root, rel);
+    if (!target.startsWith(root + path.sep) || target.split(path.sep).includes(".git")) { console.error("FAKE_PATH_ESCAPE"); process.exit(2); }
+    fs.rmSync(target, {force: true});
+  }
   if (!d.noCommit && (d.exitCode ?? 0) === 0) {
     git(["add", "-A"]);
     git(["-c", "user.name=FAKE_IMPLEMENTER", "-c", "user.email=fake-implementer@local.invalid", "commit", "-q", "--allow-empty", "-m", String(d.message ?? "fake implement")]);

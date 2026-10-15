@@ -1,5 +1,6 @@
 // //TR: Bu dosya kullanıcı işi için Work OS varlıklarını (Project, Mission, Task, Run), journal kayıt biçimini ve hata kodlarını tanımlar; tek kanonik store şemasının tip sözleşmesidir.
 import type {MissionStatus} from "../mission/types.js";
+import type {TestSurfaceSummary} from "./test-surface.js";
 
 export type RiskLevel = "R0" | "R1" | "R2" | "R3" | "R4";
 export type TaskStatus = "PENDING" | "IN_PROGRESS" | "DONE" | "BLOCKED";
@@ -86,6 +87,8 @@ export interface RunEvidence {
   executorIdentity?: string; reviewerIdentity?: string; verdict?: "CLEAN" | "BLOCKED"; findingsCount?: number; secretHits?: SecretHit[]; note?: string;
   // B3C: yalnız SECURITY_REPORT kanıtında; redakte edilmiş güvenlik aşaması özeti (secret değeri asla içermez).
   security?: SecurityStageSummary;
+  // REL-FX-2: yalnız TEST_SURFACE kanıtında; base..head test yüzeyi sınıflaması ve functionalAcceptance durumu (dosya içeriği yazılmaz).
+  testSurface?: TestSurfaceSummary;
 }
 export interface WorkRun {
   runId: string; missionId: string; projectId: string; tenantId: string; roleId: string | null;

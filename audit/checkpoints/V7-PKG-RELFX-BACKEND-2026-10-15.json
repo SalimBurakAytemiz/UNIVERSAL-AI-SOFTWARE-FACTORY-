@@ -11,7 +11,7 @@
     "audit/checkpoints/V7-PKG-B0A-ROLE-AMENDMENT-2026-10-14.json"
   ],
   "scope": "C:/Users/salim/UASCO-recovery/product/rel/REL-FIRST-EXE-P0.md sections REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2 (backend only; apps/desktop/** not touched). One commit per FX in the order FX-1, FX-3, FX-4, FX-2.",
-  "status": "IMPLEMENTED, NOT CLEAN; independent review pending",
+  "status": "IMPLEMENTED (REL-FX-1, REL-FX-3, REL-FX-4, REL-FX-2), NOT CLEAN; independent review pending",
   "decisions": {
     "D-REL-3": "FA-V2-PRODUCT-2026-10-14 covers apps/control-api/src/server.ts, config/validation.json (test steps appended) and config/trust-root-manifest.json (resealed with node scripts/generate-trust-root.mjs). No other protected file changed.",
     "D-REL-2": "Refuse R3/R4 run start (fail-closed default).",
@@ -60,6 +60,22 @@
         "tests/v7-relfx-4-interruption.test.ts (new)"
       ],
       "tests": "tests/v7-relfx-4-interruption.test.ts: a real torn append (third entry written then cut, snapshot restored) opens read-only with quarantine copy and byte-identical journal; mid-file corruption + torn tail -> tamper (HASH_MISMATCH), foreign tail and garbage tail -> tamper (JOURNAL_TRUNCATED_LINE), snapshot ahead -> tamper; control API status TORN_TAIL, write 503, repair without token 403, wrong token 403, missing body 400, wrong hash 409 TORN_TAIL_CONFIRMATION_MISMATCH with file unchanged, correct hash 200 truncates to the verified prefix, quarantine keeps the torn bytes, store writable again, second repair 409 JOURNAL_NOT_TORN; repair refuses a tampered journal; ENOSPC and short write -> WORKOS_DISK_FULL with byte-identical journal and recovery after space returns; API maps DISK_FULL to 507; REL-AT-011 disk full during a run never yields AWAITING_APPROVAL/REPORTING/COMPLETE and leaves no partial line; implementer QUOTA_EXHAUSTED and reviewer RATE_LIMIT -> BLOCKED(PROVIDER_QUOTA) with retryCount 0 and one executor call; plain exit-75 transient failure still uses the bounded retry path."
+    },
+    "REL-FX-2": {
+      "summary": "Test-surface guard (first slice of the independent oracle). In VERIFY, in the run's fresh scan clone, git diff --name-status -z --find-renames base..head (empty attributes, no textconv/ext-diff) is classified against fixed test globs (tests/**, test/**, **/__tests__/**, **/*.test.*, **/*.spec.*, **/*_test.*, **/test_*.py, **/test.{js,mjs,cjs,ts}) plus the relative file arguments of the mission/project testCommand. Added / modified / deleted / renamed test paths, assertion-count drop (master change-guard assertionCount idea: expect/assert/assert.<m>/assertEquals/assertTrue/assertFalse calls) and newly added .skip/.only are recorded with the parsed executed-test count (vitest, jest, node:test TAP, pytest, cargo, dotnet, mocha; null when unrecognised) in a TEST_SURFACE evidence item (commitSha=headSha). functionalAcceptance: deleted test (including a rename out of the test globs) or weakened test -> BLOCKED; zero executed tests or a newly added test file without assertions -> UNVERIFIED_VACUOUS; any other touched test without a mission-pinned oracle -> UNVERIFIED_ORACLE; untouched -> UNKNOWN. VERIFIED is never produced in this slice (no pinned oracle). The list is passed to the independent reviewer (MissionSpec.testSurface + prompt section) and noted in the REVIEW evidence (TEST_SURFACE_GIVEN) and report.json. deriveOutcomes reads functionalAcceptance from the TEST_SURFACE evidence for run.headSha, and the FX-1 COMPLETE guard refuses with COMPLETION_FUNCTIONAL_ACCEPTANCE_BLOCKED when it is BLOCKED (wired in completionEvidence, also enforced on replay). The run itself still proceeds to AWAITING_APPROVAL so the reviewer and Founder see the truthful outcome.",
+      "files": [
+        "core/workos/test-surface.ts (new)",
+        "core/workos/runner.ts",
+        "core/workos/outcomes.ts",
+        "core/workos/types.ts (RunEvidence.testSurface)",
+        "core/workos/executors.ts (MissionSpec.testSurface, reviewer prompt section, FakeImplementDirective.deleteFiles)",
+        "core/workos/fake-executor.mjs (deleteFiles directive)",
+        "tests/v7-b3a-runner.test.ts and tests/v7-b3c-security-stage.test.ts (exact evidence-kind lists now also expect TEST_SURFACE after VERIFY_TESTS; assertion strengthened, not weakened)",
+        "config/validation.json (protected, authorized)",
+        "config/trust-root-manifest.json (protected, resealed)",
+        "tests/v7-relfx-2-test-surface.test.ts (new)"
+      ],
+      "tests": "tests/v7-relfx-2-test-surface.test.ts: pure helpers (test-path globs incl. testCommand argument, name-status -z parsing incl. renames, assertion counting, executed-count parsing for vitest/jest/TAP/pytest, precedence BLOCKED > VACUOUS > ORACLE > UNKNOWN); runner baseline (untouched tests -> UNKNOWN, TEST_SURFACE recorded for headSha, reviewer receives the list, COMPLETE allowed); negatives: implementer deletes a test file -> BLOCKED, reviewer told, COMPLETE 409 COMPLETION_FUNCTIONAL_ACCEPTANCE_BLOCKED; implementer removes assertions -> BLOCKED (ASSERTION_COUNT_REDUCED) and COMPLETE 409; moving a test out of the globs counts as deletion; adding only a trivial test -> UNVERIFIED_ORACLE (with an assertion; Founder may still accept and the outcome says so) or UNVERIFIED_VACUOUS (without); zero executed tests -> UNVERIFIED_VACUOUS."
     }
   },
   "knownLimits": [
@@ -71,6 +87,10 @@
     "REL-FX-4: the system/status route named in the task does not exist on this lineage; journal health is exposed on the existing GET /v1/control/status (additive field workos).",
     "REL-FX-4: PROVIDER_QUOTA is terminal BLOCKED with no automatic resume or retryAt (the master classifier gives no reset time for quota/rate classes); a new run must be started after the provider limit resets. Classification applies to any executor's failing output (the FAKE executor simulates provider text in tests); a failing implementer whose own output mentions quota/rate-limit wording is conservatively blocked, never retried blindly.",
     "REL-FX-4: packaged-app close/reopen mid-run is left to B12 (REL-FX-0); stale-worker STALE/RECOVERING labels (REL-AT-006/027) are not part of this package.",
-    "REL-FX-4: if the rollback truncation after a failed append itself fails, the next open reports TORN_TAIL (read-only) rather than silently continuing."
+    "REL-FX-4: if the rollback truncation after a failed append itself fails, the next open reports TORN_TAIL (read-only) rather than silently continuing.",
+    "REL-FX-2: no mission-pinned independent oracle exists yet (fixture hash at mission creation is not implemented), so functionalAcceptance is never VERIFIED; WFR-06 holdout isolation remains the long-term owner.",
+    "REL-FX-2: the assertion-count heuristic is syntactic (expect/assert call count, .skip/.only); semantic weakening that keeps the count (e.g. replacing an assertion with a tautology) is not detected and is left to the independent reviewer, who receives the touched-test list.",
+    "REL-FX-2: the executed-test count is parsed only for recognised runner output formats; otherwise it is null (UNKNOWN), never guessed.",
+    "Regression runs: dev-run pid-liveness assertions in tests/v7-ps1a-project-studio.test.ts and tests/v7-ps1a-c3-remediation.test.ts failed once each under the parallel combined run (process exit latency after stop/restart) and passed when rerun alone; the code under test (devrun) was not changed by this package."
   ]
 }

@@ -17,6 +17,8 @@ import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from ".
 import {assertIndependentExecutors, runProcess} from "./executors.js";
 import {reviewAndSecurityFor} from "./outcomes.js";
 import {RISK_REFUSAL, hostExecutionNotice, riskAdmitted} from "./risk-admission.js";
+import {evaluateTestSurface, parseExecutedTestCount, parseNameStatusZ} from "./test-surface.js";
+import type {ReviewerTestSurface} from "./executors.js";
 // //TR: REL-FX-4: sağlayıcı kota/hız sınırı sınıflandırması korumalı master sınıflandırıcıyla yapılır (kopyalanmaz); tip bildirimi olmadığı için dar yerel tiple bağlanır.
 // @ts-expect-error TS7016: failure-classifier.mjs tip bildirimi yok
 import {classifyFailure as classifyFailureUntyped} from "../../automation/lib/failure-classifier.mjs";
@@ -292,9 +294,18 @@ export class MissionRunner {
       ...(run.remediationCycle > 0 && last ? {remediation: {reason: String(last.data.reason ?? ""), findings: (Array.isArray(last.data.findings) ? last.data.findings : []).map(String)}} : {})
     };
   }
-  private testArgv(run: WorkRun): string[] | null {
+  private rawTestCommand(run: WorkRun): string[] | undefined {
     const m = this.o.store.getMission({tenantId: run.tenantId}, run.missionId), p = this.o.store.getProject({tenantId: run.tenantId}, run.projectId);
-    const argv = m?.testCommand ?? p?.testCommand;
+    return m?.testCommand ?? p?.testCommand;
+  }
+  // REL-FX-2: reviewer'a verilen test yüzeyi, run.headSha için en son TEST_SURFACE kanıtından.
+  private reviewerTestSurface(run: WorkRun): ReviewerTestSurface | undefined {
+    const ev = [...run.evidence].reverse().find(e => e.kind === "TEST_SURFACE" && e.commitSha === run.headSha && e.testSurface);
+    const t = ev?.testSurface;
+    return t ? {added: t.added, modified: t.modified, deleted: t.deleted, renamed: t.renamed, weakened: t.weakened, trivialAdded: t.trivialAdded, executedTests: t.executedTests, functionalAcceptance: t.functionalAcceptance, reason: t.reason} : undefined;
+  }
+  private testArgv(run: WorkRun): string[] | null {
+    const argv = this.rawTestCommand(run);
     if (!testCommandAllowed(argv)) return null;
     return argv[0] === "node" ? [process.execPath, ...argv.slice(1)] : [...argv];
   }
@@ -429,12 +440,24 @@ export class MissionRunner {
     const scanLog = this.writeLog(run, "secret-scan", `secret scan ${run.baseSha}..${run.headSha} (fresh clone, --text --no-textconv --no-ext-diff, empty attributes; diff + commit messages): ${hits.length} hit(s)\n${hits.map(h => `${h.kind} ${h.file}:${h.line}`).join("\n")}\n`);
     this.evidence(run, leaseId, {kind: "SECRET_SCAN", argv: ["git", "diff", "--text", "--no-textconv", "--no-ext-diff", run.baseSha, run.headSha], startedAt, endedAt: new Date().toISOString(), exitCode: hits.length ? 1 : 0, ...scanLog, baseSha: run.baseSha, commitSha: run.headSha, secretHits: hits.slice(0, 100)});
     if (hits.length) return {kind: "BLOCK", reason: "SECRET_IN_DIFF"};
+    // REL-FX-2: test yüzeyi de aynı taze klonda base..head name-status ile alınır (implementer workspace'i/config'i etkisizdir).
+    const ns = this.git(scanClone, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "diff", "--name-status", "-z", "--find-renames", "--no-ext-diff", "--no-textconv", run.baseSha, run.headSha]);
+    if (ns.status !== 0) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
+    const touched = parseNameStatusZ(String(ns.stdout ?? ""));
     const argv = this.testArgv(run);
     if (!argv) return {kind: "BLOCK", reason: "TEST_COMMAND_NOT_CONFIGURED"};
     const r = await this.runTests(argv, work, abort);
     this.procEvidence(run, leaseId, "VERIFY_TESTS", r, {commitSha: run.headSha});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     if (r.spawnError) return {kind: "BLOCK", reason: "TEST_COMMAND_SPAWN_FAILED"};
+    const base = run.baseSha, head = run.headSha, surfaceStart = new Date().toISOString();
+    const contentAt = (ref: string, p: string): string | null => { const x = this.git(scanClone, ["show", `${ref}:${p}`]); return x.status === 0 ? String(x.stdout ?? "") : null; };
+    const surface = evaluateTestSurface({baseSha: base, headSha: head, entries: touched, contentAt, executedTests: parseExecutedTestCount(`${r.stdout}\n${r.stderr}`), testCommand: this.rawTestCommand(run)});
+    this.renew(run.runId, leaseId);
+    // Her kanıt gibi TEST_SURFACE de log dosyası + sha256 taşır (tam sınıflama JSON'u; dosya içeriği yazılmaz).
+    const surfaceLog = this.writeLog(run, "test-surface", `${JSON.stringify(surface, null, 2)}\n`);
+    this.evidence(run, leaseId, {kind: "TEST_SURFACE", argv: ["git", "diff", "--name-status", "--find-renames", base, head], startedAt: surfaceStart, endedAt: new Date().toISOString(), exitCode: surface.functionalAcceptance === "BLOCKED" ? 1 : 0,
+      ...surfaceLog, baseSha: base, commitSha: head, testSurface: surface, note: `functionalAcceptance=${surface.functionalAcceptance} ${surface.reason}; added=${surface.added.length} modified=${surface.modified.length} deleted=${surface.deleted.length} renamed=${surface.renamed.length} weakened=${surface.weakened.length} executed=${surface.executedTests ?? "unknown"}`});
     if (r.exitCode === 0) return {kind: "DONE", next: "SECURITY", data: {tests: "PASSED", secretHits: 0}};
     return {kind: "REMEDIATE", reason: r.timedOut ? "TESTS_TIMED_OUT" : "TESTS_FAILED", data: {tests: "FAILED", exitCode: r.exitCode}, findings: [`test command exited ${r.exitCode}`]};
   }
@@ -555,11 +578,13 @@ export class MissionRunner {
     const diff = this.diff(run, clone, run.baseSha, run.headSha);
     if (diff === null) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
     this.renew(run.runId, leaseId);
-    const r = await reviewer.review(clone, this.missionSpec(run), diff, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
+    const testSurface = this.reviewerTestSurface(run);
+    const r = await reviewer.review(clone, {...this.missionSpec(run), ...(testSurface ? {testSurface} : {})}, diff, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
     const untouched = this.gitOk(clone, ["rev-parse", "HEAD"]) === run.headSha && this.gitOk(clone, ["status", "--porcelain", "--untracked-files=all"]) === "";
     const log = this.writeLog(run, "review", r.log);
     const limit = !r.valid && !r.aborted && !r.timedOut ? providerLimit(r.exitCode, r.log) : null;
-    const notes = [...(untouched ? [] : ["REVIEW_CLONE_MUTATED"]), ...(limit ? [`PROVIDER_LIMIT: ${limit}`] : [])];
+    const notes = [...(untouched ? [] : ["REVIEW_CLONE_MUTATED"]), ...(limit ? [`PROVIDER_LIMIT: ${limit}`] : []),
+      testSurface ? `TEST_SURFACE_GIVEN: ${testSurface.functionalAcceptance} deleted=${testSurface.deleted.length} weakened=${testSurface.weakened.length} added=${testSurface.added.length} modified=${testSurface.modified.length}` : "TEST_SURFACE_GIVEN: NONE"];
     this.evidence(run, leaseId, {kind: "REVIEW", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, commitSha: run.headSha,
       reviewerIdentity: reviewer.identity, executorIdentity: run.executor.implementer, ...(r.valid ? {verdict: r.verdict, findingsCount: r.findings.length} : {}), ...(notes.length ? {note: notes.join("; ")} : {})});
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
@@ -600,6 +625,8 @@ export class MissionRunner {
     const rs = reviewAndSecurityFor(run.headSha, run.evidence);
     if (!rs.ok) return {kind: "BLOCK", reason: rs.reason, status: "FAILED"};
     const review = rs.review, secEv = rs.security, sec = secEv.security;
+    const ts = this.reviewerTestSurface(run);
+    (report as Record<string, unknown>).testSurface = ts ? {functionalAcceptance: ts.functionalAcceptance, reason: ts.reason, deleted: ts.deleted, weakened: ts.weakened, added: ts.added, modified: ts.modified, executedTests: ts.executedTests} : null;
     (report as Record<string, unknown>).security = {status: sec.status, founderNotice: sec.founderNote, gaps: sec.gaps, secrets: {builtin: sec.secrets.builtin.status, gitleaks: sec.secrets.gitleaks.status}, sca: {status: sec.sca.status, reason: sec.sca.reason ?? null, dbState: sec.sca.dbState ?? null, counts: sec.sca.counts}, sast: sec.sast, sbom: sec.sbom, tools: sec.tools, evidenceId: secEv.evidenceId, reportLogPath: secEv.logPath, reportLogSha256: secEv.logSha256};
     const file = path.join(this.runDir(run.runId), "report.json"), bytes = Buffer.from(JSON.stringify(report, null, 2) + "\n", "utf8");
     fs.writeFileSync(file, bytes);
