@@ -1020,7 +1020,7 @@ describe("B5 static safety, routes and wiring", () => {
     const i = step.command.indexOf("tests/v7-b5-work-screens.test.ts");
     expect(step.command[i - 1]).toBe("tests/v7-b4-desktop-shell.test.ts");
     // V7-PKG-M1A-MODE: merge-tool sözleşmesi gereği M1a testleri de sona eklenir (m1a-*); B5 sırası ve tekilliği değişmez.
-    for (const later of step.command.slice(i + 1)) expect(later).toMatch(/^tests\/v7-(?:b([6-9]|\d{2,})[a-z]?|ps\d+[a-z]?|m1a)-[a-z0-9-]+\.test\.ts$/);
+    for (const later of step.command.slice(i + 1)) expect(later).toMatch(/^tests\/v7-(?:b([6-9]|\d{2,})[a-z]?|ps\d+[a-z]?|m1a|ux-wp\d+[a-z]?)-[a-z0-9-]+\.test\.ts$/);
     expect(step.command).toContain("tests/v7-b4-desktop-shell.test.ts");
     expect(step.command.filter((x: string) => x === "tests/v7-b5-work-screens.test.ts").length).toBe(1);
   });

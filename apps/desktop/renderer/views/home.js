@@ -1,29 +1,51 @@
-// //TR: Bu görünüm Ana Sayfa / Founder Cockpit'tir: KPI karoları yalnız GET /v1/cockpit verisinden beslenir (404 => UNAVAILABLE, "—"), kayıtlı roller ile aktif çalışanlar görsel olarak ayrıdır ve hiçbir sayı uydurulmaz.
-import {h,kpiTile,panel,chip,emptyNote,stateNote,statusLabel} from "../components.js";
+// //TR: Bu görünüm Ana Sayfa / Founder Cockpit'tir: KPI karoları yalnız GET /v1/cockpit verisinden beslenir (404 => UNAVAILABLE, "—"), kayıtlı roller ile aktif çalışanlar görsel olarak ayrıdır, delta/sparkline yalnız gerçek örnekle çizilir ve hiçbir sayı uydurulmaz.
+import {h,kpiTile,panel,emptyNote,stateNote,statusLabel,statePill,iconChip,miniBars,tooltipText,chip} from "../components.js";
 import {icon} from "../icons.js";
-import {formatCount,MISSING} from "../model.js";
+import {formatCount,MISSING,formatTime,pillKindFor,missionPillKind,topEntries} from "../model.js";
 import {ROUTES,FACTORY_AREA_ORDER} from "../routes.js";
 
 const LOADING={loading:true,state:"UNAVAILABLE",value:null};
+const TONE={BLOCKED:"danger",FAILED:"danger",ATTENTION:"warn",WAITING:"warn",ACTIVE:"accent",DONE:"ok",STOPPED:"muted",IDLE:"muted",NEUTRAL:"muted"};
+const isLiveBlock=x=>x?.loading!==true&&(x?.state==="VERIFIED"||x?.state==="STALE");
 function workforceTile(ctx,w){
-  const doc=ctx.doc,loading=w.loading===true,regState=loading?"LOADING":w.state;
+  const doc=ctx.doc,loading=w.loading===true,regState=loading?"LOADING":w.state,isLive=!loading&&isLiveBlock(w);
   const registered=loading?MISSING:formatCount(w.registeredRoles),target=loading||w.targetRoles===null?MISSING:formatCount(w.targetRoles),active=loading?MISSING:formatCount(w.activeWorkerRuns);
   const activeBlock={...w,loading,value:w.activeWorkerRuns,state:w.activeWorkerRuns===null?"UNAVAILABLE":w.state};
-  return h(doc,"article",{class:`kpi kpi-wide kpi-${w.state==="VERIFIED"?"ok":"na"}`,dataset:{kpi:"workforce",state:regState},tabindex:"0","aria-labelledby":"kpi-workforce-l",title:ctx.t("tile.tooltip",{source:w.source??MISSING,asOf:w.asOf??MISSING})},
-    h(doc,"span",{class:"kpi-icon"},icon(doc,"bot",26)),
-    h(doc,"div",{class:"kpi-body"},
-      h(doc,"h3",{class:"kpi-label",id:"kpi-workforce-l",text:ctx.t("kpi.workforce")}),
-      h(doc,"div",{class:"kpi-duo"},
-        h(doc,"div",{class:"duo duo-registered",dataset:{duo:"registered"}},h(doc,"p",{class:"kpi-value",text:registered}),h(doc,"p",{class:"duo-label",text:ctx.t("workforce.registered")}),h(doc,"p",{class:"duo-sub",text:ctx.t("workforce.target",{n:target})}),chip(ctx,{...w,loading})),
-        h(doc,"div",{class:"duo duo-active",dataset:{duo:"active"}},h(doc,"p",{class:"kpi-value",text:active}),h(doc,"p",{class:"duo-label",text:ctx.t("workforce.active")}),h(doc,"p",{class:"duo-sub",text:ctx.t("workforce.activeNote")}),chip(ctx,activeBlock)))));
+  // //TR: Canlı olmayan blokta nitelik satırı dürüst durumu söyler (DOĞRULANMADI · Kullanılamıyor); sayı uydurulmaz.
+  const honest=loading||(isLive&&w.state==="VERIFIED")?null:`${ctx.t("chip.UNVERIFIED")} · ${ctx.t(`state.${regState}`)}`;
+  const go=()=>ctx.navigate("workforce");
+  const tile=h(doc,"article",{class:`kpi kpi-wide kpi-drill kpi-${w.state==="VERIFIED"?"ok":"na"}${isLive&&w.activeWorkerRuns>0?" kpi-live":""}`,dataset:{kpi:"workforce",state:regState,drill:"workforce"},tabindex:"0",role:"link","aria-labelledby":"kpi-workforce-l",title:ctx.t("tile.tooltip",{source:w.source??MISSING,asOf:w.asOf??MISSING})},
+    h(doc,"div",{class:"kpi-head"},iconChip(ctx,"bot",24),h(doc,"h3",{class:"kpi-label",id:"kpi-workforce-l",text:ctx.t("kpi.workforce")})),
+    h(doc,"div",{class:"kpi-duo"},
+      h(doc,"div",{class:"duo duo-registered",dataset:{duo:"registered"}},h(doc,"p",{class:"kpi-value",text:registered}),h(doc,"p",{class:"duo-label",text:ctx.t("workforce.registered")}),h(doc,"p",{class:"duo-sub",text:ctx.t("workforce.target",{n:target})}),statePill(ctx,pillKindFor({...w,loading}))),
+      h(doc,"div",{class:"duo duo-active",dataset:{duo:"active"}},h(doc,"p",{class:"kpi-value",text:active}),h(doc,"p",{class:"duo-label",text:ctx.t("workforce.active")}),h(doc,"p",{class:"duo-sub",text:ctx.t("workforce.activeNote")}),statePill(ctx,pillKindFor(activeBlock)))),
+    h(doc,"p",{class:"kpi-qual",text:honest??ctx.t("kpi.q.workforce")}),
+    h(doc,"p",{class:"kpi-src",dataset:{src:w.source??""},text:tooltipText(ctx,w)}),
+    h(doc,"span",{class:"kpi-go","aria-hidden":"true"},icon(doc,"chevron",16)));
+  tile.addEventListener("click",go);
+  tile.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target===tile){if(typeof e.preventDefault==="function")e.preventDefault();go()}});
+  return tile;
 }
+/** //TR: UX WP2: mini grafikler yalnız backend'in döndürdüğü kırılımlardan (byStatus, riskLevel, evidence sayıları) çizilir; kırılım yoksa grafik çizilmez. */
 function tiles(ctx,c){
   const loadingAll=c.loading===true,m=c.missions??{byStatus:{}},b=x=>loadingAll?{...LOADING}:x;
+  const live=x=>!loadingAll&&isLiveBlock(x);
+  const missionBars=live(m)?miniBars(ctx,topEntries(m.byStatus).map(e=>({...e,label:statusLabel(ctx,e.key),tone:TONE[missionPillKind(e.key)]??"muted"})),ctx.t("kpi.bars.missions")):null;
+  const missionQual=live(m)&&Object.keys(m.byStatus??{}).length?topEntries(m.byStatus,3).map(e=>`${statusLabel(ctx,e.key)} ${e.value}`).join(" · "):null;
+  const riskCounts={};if(live(c.approvals))for(const x of c.approvals.items??[]){const k=x.riskLevel??MISSING;riskCounts[k]=(riskCounts[k]??0)+1}
+  const approvalBars=live(c.approvals)?miniBars(ctx,topEntries(riskCounts,5).map(e=>({...e,tone:"warn"})),ctx.t("kpi.bars.approvals")):null;
+  const d=c.alerts?.detail;
+  const alertBars=live(c.alerts)&&d?miniBars(ctx,[{key:"blocked",value:d.blockedMissions,label:ctx.t("kpi.alert.blocked"),tone:"danger"},{key:"attention",value:d.attentionMissions,label:ctx.t("kpi.alert.attention"),tone:"warn"},{key:"stop",value:d.globalStop?1:0,label:ctx.t("kpi.alert.stop"),tone:"danger"}],ctx.t("kpi.bars.alerts")):null;
+  const ev=c.evidence,evLive=live(ev);
+  const evBars=evLive?miniBars(ctx,[{key:"verified",value:ev.verified,label:ctx.t("everif.VERIFIED"),tone:"ok"},{key:"mismatch",value:ev.mismatch,label:ctx.t("everif.MISMATCH"),tone:"danger"},{key:"missing",value:ev.missing,label:ctx.t("everif.MISSING"),tone:"danger"},{key:"unverifiable",value:ev.unverifiable,label:ctx.t("everif.UNVERIFIABLE"),tone:"muted"}],ctx.t("kpi.bars.evidence")):null;
+  const evQual=evLive&&ev.total!==null?ctx.t("kpi.q.evidence",{total:formatCount(ev.total),mismatch:formatCount(ev.mismatch),missing:formatCount(ev.missing)}):null;
+  const evKind=evLive&&ev.verified===0&&(ev.total??0)>0?"NOT_VERIFIED":undefined;
   return h(ctx.doc,"div",{class:"kpi-row",role:"group","aria-label":ctx.t("home.kpiGroup")},
-    kpiTile(ctx,{id:"projects",iconName:"folder",labelKey:"kpi.projects",block:b(c.projects),sampleKey:"projects"}),
-    kpiTile(ctx,{id:"missions",iconName:"tasks",labelKey:"kpi.missions",block:b(m),sampleKey:"missions",extra:Object.keys(m.byStatus??{}).length&&!loadingAll?h(ctx.doc,"p",{class:"kpi-hint",text:Object.entries(m.byStatus).map(([k,v])=>`${statusLabel(ctx,k)} ${v}`).join(" · ")}):null}),
-    kpiTile(ctx,{id:"approvals",iconName:"clock",labelKey:"kpi.approvals",block:b(c.approvals),sampleKey:"approvals"}),
-    kpiTile(ctx,{id:"alerts",iconName:"alert",labelKey:"kpi.alerts",block:b(c.alerts),sampleKey:"alerts",hintKey:"kpi.alertsHint"}),
+    kpiTile(ctx,{id:"projects",iconName:"folder",labelKey:"kpi.projects",block:b(c.projects),sampleKey:"projects",route:"projects",qualifier:ctx.t("kpi.q.projects"),deltaGood:"neutral"}),
+    kpiTile(ctx,{id:"missions",iconName:"tasks",labelKey:"kpi.missions",block:b(m),sampleKey:"missions",route:"work",qualifier:missionQual,bars:missionBars,deltaGood:"neutral"}),
+    kpiTile(ctx,{id:"approvals",iconName:"clock",labelKey:"kpi.approvals",block:b(c.approvals),sampleKey:"approvals",route:"inbox",qualifier:ctx.t("kpi.q.approvals"),bars:approvalBars,deltaGood:"down"}),
+    kpiTile(ctx,{id:"alerts",iconName:"alert",labelKey:"kpi.alerts",block:b(c.alerts),sampleKey:"alerts",route:"work",hintKey:"kpi.alertsHint",bars:alertBars,risk:(c.alerts?.value??0)>0,deltaGood:"down"}),
+    kpiTile(ctx,{id:"evidence",iconName:"evidence",labelKey:"kpi.evidence",block:b(ev),route:"assurance",qualifier:evQual,bars:evBars,pillKind:evKind,wide:true,risk:evLive&&(ev.mismatch??0)>0}),
     workforceTile(ctx,loadingAll?{...LOADING,registeredRoles:null,targetRoles:null,activeWorkerRuns:null}:c.workforce));
 }
 function areaCards(ctx,c){
@@ -52,10 +74,24 @@ function orchestratorPanel(ctx,o){
 export function skeleton(ctx){
   const doc=ctx.doc;return h(doc,"div",{class:"view view-home","aria-busy":"true"},homeHeader(ctx),tiles(ctx,{loading:true}));
 }
-function homeHeader(ctx){const doc=ctx.doc;return h(doc,"div",{class:"hero"},h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.home.title")}),h(doc,"p",{class:"hero-sub",text:ctx.t("home.subtitle")}))}
+/** //TR: UX WP2: karşılama; kimlik ve rol yalnız oturumdaki gerçek principal'dan (ctx.principal), kiracı yalnız gerçek proje kaydından gelir; ad uydurulmaz, bilinmeyen alan gösterilmez. */
+function homeHeader(ctx,{asOf=null,tenant=null}={}){
+  const doc=ctx.doc,principal=typeof ctx.principal==="string"&&ctx.principal?ctx.principal:null,founder=principal!==null&&/^FOUNDER/.test(principal);
+  return h(doc,"div",{class:"hero"},
+    h(doc,"p",{class:"hero-eyebrow",text:ctx.t("home.welcome")}),
+    h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.home.title")}),
+    h(doc,"p",{class:"hero-sub",text:ctx.t("home.subtitle")}),
+    h(doc,"p",{class:"hero-id"},
+      principal?h(doc,"span",{class:"id-chip",dataset:{identity:principal}},icon(doc,"user",16),founder?h(doc,"strong",{text:ctx.t("home.role.founder")}):null,h(doc,"span",{class:"mono",text:ctx.t("home.identity",{principal})})):null,
+      tenant?h(doc,"span",{class:"id-chip",dataset:{tenant:"1"}},icon(doc,"building",16),h(doc,"span",{class:"mono",text:ctx.t("home.tenant",{tenant})})):null,
+      h(doc,"span",{class:"id-asof",text:ctx.t("home.asOf",{time:asOf?formatTime(asOf,ctx.i18n.lang):MISSING})})),
+    h(doc,"p",{class:"hero-hint",text:ctx.t("home.drillHint")}));
+}
 export async function render(ctx){
-  const doc=ctx.doc,res=await ctx.api.cockpit(),c=res.data,note=res.state==="OK"?null:h(doc,"p",{class:`note note-${res.state.toLowerCase()}`,role:"status",text:ctx.t(res.state==="UNAVAILABLE"?"cockpit.unavailable":"cockpit.failed")});
-  return h(doc,"div",{class:"view view-home"},homeHeader(ctx),note,tiles(ctx,c),
+  const doc=ctx.doc,[res,prj]=await Promise.all([ctx.api.cockpit(),ctx.api.projects()]),c=res.data;
+  const tenant=prj.state==="VERIFIED"?(prj.items.find(p=>p.projectId===ctx.store.projectId)??prj.items[0])?.tenantId??null:null;
+  const note=res.state==="OK"?null:h(doc,"p",{class:`note note-${res.state.toLowerCase()}`,role:"status",text:ctx.t(res.state==="UNAVAILABLE"?"cockpit.unavailable":"cockpit.failed")});
+  return h(doc,"div",{class:"view view-home"},homeHeader(ctx,{asOf:c.generatedAt,tenant}),note,tiles(ctx,c),
     panel(ctx,{titleKey:"home.map",id:"home-map",className:"panel-map"},areaCards(ctx,c)),
     h(doc,"div",{class:"two-col"},orchestratorPanel(ctx,c.orchestrator),
       panel(ctx,{titleKey:"home.workforceNote.title",id:"home-wf"},emptyNote(ctx,"home.workforceNote.body"))));

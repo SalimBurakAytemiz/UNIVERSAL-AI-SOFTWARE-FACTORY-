@@ -1,8 +1,8 @@
 // //TR: Bu modül kalıcı shell'i yönetir: sol navigasyon (8 Factory alanı + Company OS + Ayarlar), bağlam çubuğu (şirket/proje/ortam/principal/API durumu/son yenileme), Ctrl+K arama, bildirim, ACİL DURDUR onay penceresi, sağ görev akışı ve alt canlı aktivite şeridi; tüm veri api.js üzerinden gelir; periyodik yenileme nav/sekme düğümlerini yerinde günceller ve yeniden kurulan alt ağaçlarda odağı korur.
-import {h,chip,badge,statusPill,statusLabel} from "./components.js";
+import {h,chip,badge,statusLabel,statePill,missionPill,timelineItem} from "./components.js";
 import {icon} from "./icons.js";
 import {ROUTES,routeById} from "./routes.js";
-import {formatCount,formatTime,MISSING,pushSample,searchEntries} from "./model.js";
+import {formatCount,formatTime,MISSING,pushSample,searchEntries,pillKindFor} from "./model.js";
 import {syncNav,syncTabs} from "./nav.js";
 import {keepFocus} from "./focus.js";
 import {selection} from "./forms.js";
@@ -53,18 +53,25 @@ export function createShell(ctx){
       if(m.state==="LOADING")body.append(chip(ctx,null,{kind:"LOADING"}));
       else if(m.state!=="VERIFIED")body.append(h(doc,"p",{class:"note",text:t(`state.${m.state}`)}));
       else if(!m.items.length)body.append(h(doc,"p",{class:"note",text:t("work.empty")}));
-      else body.append(h(doc,"ol",{class:"timeline"},m.items.slice(0,10).map(x=>h(doc,"li",{},h(doc,"time",{text:formatTime(x.createdAt,ctx.i18n.lang)}),h(doc,"div",{},h(doc,"strong",{text:x.title}),h(doc,"div",{class:"tl-meta"},statusPill(ctx,x.status),badge(ctx,x.riskLevel,"badge-risk")))))));
+      else body.append(h(doc,"ol",{class:"timeline"},m.items.slice(0,10).map(x=>{
+        // //TR: UX WP2: atıf yalnız gerçek kayıttan (mission'ın proje adı) gelir; ajan/servis adı backend vermediği için uydurulmaz.
+        const proj=data.projects.items.find(p=>p.projectId===x.projectId);
+        return timelineItem(ctx,{time:formatTime(x.createdAt,ctx.i18n.lang),iso:x.createdAt,title:x.title,attribution:proj?t("feed.attr.project",{name:proj.name}):null,pill:missionPill(ctx,x.status),meta:badge(ctx,x.riskLevel,"badge-risk")});
+      })));
     }else if(feedTab==="health"){
       const c=data.cockpit,o=c?.orchestrator;
-      body.append(h(doc,"dl",{class:"kv"},h(doc,"dt",{text:t("feed.api")}),h(doc,"dd",{},chip(ctx,null,{kind:data.health.state==="VERIFIED"?"VERIFIED":data.health.state==="OFFLINE"?"OFFLINE":data.health.state==="LOADING"?"LOADING":"ERROR"})),
-        h(doc,"dt",{text:t("feed.orchestrator")}),h(doc,"dd",{},o?chip(ctx,o):chip(ctx,null,{kind:"LOADING"}),h(doc,"span",{text:` ${o?formatCount(o.value):MISSING}`})),
-        h(doc,"dt",{text:t("feed.workforce")}),h(doc,"dd",{},c?chip(ctx,c.workforce):chip(ctx,null,{kind:"LOADING"}))));
+      body.append(h(doc,"dl",{class:"kv"},h(doc,"dt",{text:t("feed.api")}),h(doc,"dd",{},statePill(ctx,data.health.state==="VERIFIED"?"VERIFIED":data.health.state==="OFFLINE"?"OFFLINE":data.health.state==="LOADING"?"LOADING":"FAILED")),
+        h(doc,"dt",{text:t("feed.orchestrator")}),h(doc,"dd",{},statePill(ctx,o?pillKindFor(o):"LOADING"),h(doc,"span",{text:` ${o?formatCount(o.value):MISSING}`})),
+        h(doc,"dt",{text:t("feed.workforce")}),h(doc,"dd",{},statePill(ctx,c?pillKindFor(c.workforce):"LOADING"))));
     }else{
       const a=data.cockpit?.approvals,items=a?.items??[];
       if(!a)body.append(chip(ctx,null,{kind:"LOADING"}));
       else if(a.state!=="VERIFIED"&&a.state!=="STALE")body.append(h(doc,"p",{class:"note",text:t(`state.${a.state}`)}));
       else if(!items.length)body.append(h(doc,"p",{class:"note",text:t("inbox.empty")}));
-      else body.append(h(doc,"ul",{class:"timeline"},items.slice(0,10).map(x=>h(doc,"li",{},h(doc,"div",{},h(doc,"strong",{text:x.title??x.missionId}),h(doc,"div",{class:"tl-meta"},badge(ctx,x.riskLevel??"—","badge-risk")))))));
+      else body.append(h(doc,"ol",{class:"timeline"},items.slice(0,10).map(x=>{
+        const proj=data.projects.items.find(p=>p.projectId===x.projectId);
+        return timelineItem(ctx,{time:null,title:x.title??x.missionId,attribution:proj?t("feed.attr.project",{name:proj.name}):null,pill:statePill(ctx,"WAITING",{label:t("feed.agenda.waiting")}),meta:badge(ctx,x.riskLevel??"—","badge-risk")});
+      })));
       body.append(h(doc,"a",{class:"link-more",href:"#/inbox",dataset:{focusKey:"feed-see-inbox"},text:t("feed.seeInbox")}));
     }
     return body;

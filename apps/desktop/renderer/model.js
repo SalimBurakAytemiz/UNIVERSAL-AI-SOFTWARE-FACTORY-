@@ -39,7 +39,7 @@ export function emptyCockpit(state="UNAVAILABLE"){
   return {generatedAt:null,globalStop:{active:false,reason:null,known:false},
     projects:unavailableTile(state,"COCKPIT"),missions:unavailableTile(state,"COCKPIT"),approvals:{...unavailableTile(state,"COCKPIT"),items:[]},
     orchestrator:unavailableTile(state,"ORCHESTRATOR_STATE"),workforce:{...unavailableTile(state,"WORKFORCE"),registeredRoles:null,legacyRoles:null,targetRoles:null,activeWorkerRuns:null},
-    alerts:unavailableTile(state,"COCKPIT"),legacySchedulerAuthority:false};
+    alerts:unavailableTile(state,"COCKPIT"),evidence:{...unavailableTile(state,"COCKPIT:evidence"),total:null,verified:null,mismatch:null,missing:null,unverifiable:null},legacySchedulerAuthority:false};
 }
 /** GET /v1/cockpit sözleşmesini renderer modeline eşler; sayılar yalnız VERIFIED/STALE bloklardan ve yalnız geçerli tamsayıysa alınır. */
 export function mapCockpit(raw){
@@ -63,6 +63,11 @@ export function mapCockpit(raw){
     // //TR: INT-R3 D-M1-07: "kayıtlı rol" yalnız kanonik sayıdır (WFR-03 canonicalRegisteredRoles); LEGACY_REFERENCE_ONLY etiketli eski sayı asla kayıtlı rol diye gösterilmez, yalnız legacyRoles alanında taşınır.
     const legacyLabelled=w.registeredRolesAuthority==="LEGACY_REFERENCE_ONLY",reg=safeCount(w.canonicalRegisteredRoles)??(legacyLabelled?null:safeCount(w.registeredRoles));
     out.workforce={...tile(s,live?reg:null,{source:str(w.source,60)??"WORKFORCE",asOf,byStatus:{}}),registeredRoles:live?reg:null,legacyRoles:live&&legacyLabelled?safeCount(w.registeredRoles):null,targetRoles:live?safeCount(w.targetRoles):null,activeWorkerRuns:live?safeCount(w.activeWorkerRuns):null};
+  }
+  // //TR: UX WP2: cockpit.evidence (B10A) isteğe bağlı bloktur; sayılar yalnız VERIFIED/STALE ve geçerli tamsayıysa alınır, yoksa UNAVAILABLE ve null kalır (uydurma yok).
+  if(isObj(raw.evidence)){
+    const e=raw.evidence,s=normState(e.state),n=k=>withValue(s,e[k]);
+    out.evidence={...tile(s,n("verified"),{source:"COCKPIT:evidence",asOf,byStatus:{}}),total:n("total"),verified:n("verified"),mismatch:n("mismatch"),missing:n("missing"),unverifiable:n("unverifiable")};
   }
   const bs=out.missions.byStatus??{},blocked=(bs.BLOCKED??0)+(bs.FOUNDER_ATTENTION_REQUIRED??0);
   out.alerts=out.missions.value===null?unavailableTile(out.missions.state,"COCKPIT:missions"):tile(out.missions.state,blocked+(out.globalStop.active?1:0),{source:"COCKPIT:missions+globalStop",asOf,byStatus:{},detail:{blockedMissions:bs.BLOCKED??0,attentionMissions:bs.FOUNDER_ATTENTION_REQUIRED??0,globalStop:out.globalStop.active}});
@@ -94,6 +99,35 @@ export function pushSample(samples,value,max=30){const n=safeCount(value);if(n==
 export function sparkPoints(samples,w=64,h=20){
   const v=samples.filter(x=>Number.isFinite(x));if(v.length<2)return "";const lo=Math.min(...v),hi=Math.max(...v),span=hi-lo||1;
   return v.map((x,i)=>`${((i/(v.length-1))*w).toFixed(1)},${(h-2-((x-lo)/span)*(h-4)).toFixed(1)}`).join(" ");
+}
+/** //TR: UX WP2: bir göstergenin oturum içi gerçek örneklerinden işaretli fark üretir; 2'den az örnek veya geçersiz değer varsa null (delta ve çizim gösterilmez). Bu arka ucun 24 saat/7 gün serisi DEĞİLDİR, yalnız bu oturumda alınan okumaların ilk-son farkıdır. */
+export function kpiTrend(samples){
+  const v=(Array.isArray(samples)?samples:[]).filter(x=>safeCount(x)!==null);
+  if(v.length<2)return null;
+  const delta=v[v.length-1]-v[0];
+  return {delta,direction:delta>0?"up":delta<0?"down":"flat",count:v.length,points:sparkPoints(v)};
+}
+/** İşaretli delta metni: +3, −2, ±0 (gerçek eksi işareti). */
+export function formatDelta(delta){return !Number.isSafeInteger(delta)?MISSING:delta>0?`+${delta}`:delta<0?`−${Math.abs(delta)}`:"±0"}
+export const PILL_KINDS=Object.freeze(["LOADING","EMPTY","VERIFIED","STALE","OFFLINE","FAILED","BLOCKED","DENIED","NOT_CONNECTED","UNAVAILABLE","NOT_EXECUTED","NOT_VERIFIED","PRODUCT_VERIFIED"]);
+/** //TR: UX WP2: veri bloğu durumunu ayrık durum rozeti türüne çevirir; ERROR=FAILED, UNAVAILABLE ayrı kalır, tek yeşil/kırmızıya indirgenmez. */
+export function pillKindFor(block){
+  if(!block||block.loading===true)return "LOADING";
+  switch(block.state){
+    case "OFFLINE":return "OFFLINE";case "ERROR":return "FAILED";case "STALE":return "STALE";
+    case "VERIFIED":return block.value===0?"EMPTY":"VERIFIED";
+    default:return "UNAVAILABLE";
+  }
+}
+const MISSION_CATEGORY=Object.freeze({BLOCKED:"BLOCKED",FAILED:"FAILED",FOUNDER_ATTENTION_REQUIRED:"ATTENTION",PREFLIGHT:"WAITING",AWAITING_APPROVAL:"WAITING",
+  AUTHORIZED:"ACTIVE",PLANNED:"ACTIVE",EXECUTING:"ACTIVE",VERIFYING:"ACTIVE",REVIEWING:"ACTIVE",REMEDIATING:"ACTIVE",REGRESSION:"ACTIVE",REPORTING:"ACTIVE",RUNNING:"ACTIVE",STARTING:"ACTIVE",LEASED:"ACTIVE",IN_PROGRESS:"ACTIVE",
+  COMPLETE:"DONE",COMPLETED:"DONE",DONE:"DONE",CLEAN:"DONE",CANCELLED:"STOPPED",STOPPED:"STOPPED",DRAFT:"IDLE",QUEUED:"IDLE",PENDING:"IDLE"});
+/** //TR: UX WP2: mission/koşu durumunu rozet kategorisine çevirir (ikon+metin); bilinmeyen durum NEUTRAL kalır ve ham değer gösterilir. */
+export function missionPillKind(status){return MISSION_CATEGORY[String(status)]??"NEUTRAL"}
+/** Anahtar-değer nesnesini azalan sıralı en fazla max girdiye çevirir (yalnız geçerli tamsayılar). */
+export function topEntries(obj,max=4){
+  if(!isObj(obj))return [];
+  return Object.entries(obj).filter(([,v])=>safeCount(v)!==null).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,max).map(([key,value])=>({key,value}));
 }
 export function searchEntries(query,entries,limit=8){
   const q=String(query??"").trim().toLocaleLowerCase("tr");if(!q)return [];

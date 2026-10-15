@@ -897,7 +897,7 @@ describe("PS-1B static safety and wiring", () => {
     // c2: PS1B-C1-001 testi PS-1B UI testinin hemen ardından; V7-PKG-M1A-MODE (merge-tool sözleşmesi) yalnız m1a-* testlerini bu çiftin sonrasına ekler.
     const j = step.command.indexOf("tests/v7-ps1b-project-studio-ui.test.ts");
     expect(step.command.slice(j, j + 2)).toEqual(["tests/v7-ps1b-project-studio-ui.test.ts", "tests/v7-ps1b-relpath-canonical.test.ts"]);
-    for (const later of step.command.slice(j + 2)) expect(later).toMatch(/^tests\/v7-m1a-[a-z0-9-]+\.test\.ts$/);
+    for (const later of step.command.slice(j + 2)) expect(later).toMatch(/^tests\/v7-(?:m1a|ux-wp\d+[a-z]?)-[a-z0-9-]+\.test\.ts$/);
     expect(step.command.filter((x: string) => x === "tests/v7-ps1b-project-studio-ui.test.ts").length).toBe(1);
     expect(step.command).toContain("tests/v7-b7-installer.test.ts");
   });
