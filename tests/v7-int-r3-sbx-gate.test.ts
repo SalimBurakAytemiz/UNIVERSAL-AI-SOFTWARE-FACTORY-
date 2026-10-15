@@ -11,7 +11,7 @@ import type {RunnerOptions} from "../core/workos/runner.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {ExecutionGate, PROJECT_EXECUTION_KINDS, SANDBOX_UNAVAILABLE} from "../core/workos/execution-gate.js";
-import type {SandboxProvider} from "../core/workos/execution-gate.js";
+import type {GateDecision, SandboxProvider} from "../core/workos/execution-gate.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 import {TEST_HOST_PASSTHROUGH_SANDBOX, testExecutionGate} from "./support/test-sandbox.js";
 
@@ -199,5 +199,40 @@ describe("SBX-GATE control API (production wiring: no sandbox option)", () => {
     expect(spawned[0].slice(1)).toEqual(["server.js"]);
     expect((await call(app, "POST", `/v1/projects/${pid}/devrun/stop`, {})).statusCode).toBe(200);
     expect(testExecutionGate()).toBeInstanceOf(ExecutionGate);
+  });
+});
+
+// //TR: SBX-8 F (RV-INT-R3-C1-F2): REGRESSION reddi yolu için kalıcı test. Kapı yalnız VERIFY'a izin verir (TEST sağlayıcısı testin kendi sabit fikstürünü çalıştırır); REGRESSION'da sandbox yoktur: run BLOCKED, adım REGRESSION, kanıt REGRESSION_TESTS_NOT_EXECUTED ve regresyon komutu hiç çalışmaz.
+describe("SBX-GATE runner: REGRESSION without a verified sandbox (RV-INT-R3-C1-F2)", () => {
+  it("blocks at REGRESSION with SANDBOX_UNAVAILABLE and REGRESSION_TESTS_NOT_EXECUTED evidence; the regression command never runs", { timeout: T }, async () => {
+    const marker = path.join(tmp, "regression.flag"), c = setup(marker), f = fake(), created = startRun(c, f);
+    const seen: string[] = [];
+    class VerifyOnlyGate extends ExecutionGate {
+      override async authorize(kind: Parameters<ExecutionGate["authorize"]>[0]): Promise<GateDecision> {
+        if (kind === "RUNNER_REGRESSION_TESTS") return {allowed: false as const, kind, reason: SANDBOX_UNAVAILABLE, detail: "NO_VERIFIED_PROVIDER" as const};
+        return super.authorize(kind);
+      }
+    }
+    const gate = new VerifyOnlyGate(provider({run: async (a, o) => { seen.push(a.slice(1).join(" ")); return TEST_HOST_PASSTHROUGH_SANDBOX.run(a, o); }}));
+    await mkRunner(c, f, {executionGate: gate}).tick();
+    const run = c.store.getRun({tenantId: "tA"}, created.runId)!;
+    expect(run).toMatchObject({status: "BLOCKED", reason: "SANDBOX_UNAVAILABLE", step: "REGRESSION"});
+    expect(run.retryCount).toBe(0);
+    expect(run.remediationCycle).toBe(0);
+    expect(seen).toEqual(["test.mjs"]); // VERIFY only; REGRESSION never reached the provider
+    const kinds = run.evidence.map(e => e.kind);
+    expect(kinds).toContain("VERIFY_TESTS");
+    expect(kinds).toContain("REVIEW");
+    expect(kinds).toContain("REGRESSION_TESTS_NOT_EXECUTED");
+    expect(kinds).not.toContain("REGRESSION_TESTS");
+    const ne = run.evidence.find(e => e.kind === "REGRESSION_TESTS_NOT_EXECUTED")!;
+    expect(ne.exitCode).toBeNull();
+    expect(ne.note).toMatch(/^NOT_EXECUTED: SANDBOX_UNAVAILABLE \(NO_VERIFIED_PROVIDER\)/);
+    expect(ne.commitSha).toBe(run.headSha);
+    expect(fs.readFileSync(path.join(c.dataDir, ne.logPath!), "utf8")).toContain("NOT_EXECUTED");
+    expect(c.store.getMission({tenantId: "tA"}, c.missionId)!.status).toBe("BLOCKED");
+    // terminal: a later tick with the same gate still never runs the regression command
+    await mkRunner(c, f, {executionGate: gate}).tick();
+    expect(seen).toEqual(["test.mjs"]);
   });
 });
