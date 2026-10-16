@@ -43,6 +43,9 @@ const ROLE_DETAIL_RE=/^\/v1\/roles\/UASCO-\d{4}$/;
 // //TR: M1a c2: koşu teslim görünümü (salt-okunur) ve proje bazlı teslim listesi; kimlikler sıkı biçimlidir.
 const DELIVERY_DETAIL_RE=/^\/v1\/work-runs\/run_[0-9a-f]{24}\/delivery$/;
 const DELIVERY_LIST_RE=/^\/v1\/deliveries\?projectId=prj_[0-9a-f]{24}$/;
+// //TR: FA-V2-PRODUCT (WP-ACADEMY): salt-okunur Skill Academy okumaları; liste /v1/academy sorgusuz tam eşleşir, tek kayıt yalnız kanonik lrn_/src_ + 24 hex kimliğidir (sorgu/segment/kodlama/sondaki eğik çizgi hilesi fail-closed reddedilir). Yazma yoktur; EXTRA_GET_ROUTES kümesi değişmez (detay/liste rotaları gibi ayrık desenle izinlenir).
+const ACADEMY_LIST_RE=/^\/v1\/academy$/;
+const ACADEMY_DETAIL_RE=/^\/v1\/academy\/(?:lrn|src)_[0-9a-f]{24}$/;
 const QUERY_RULES={missionId:/^msn_[0-9a-f]{24}$/,runId:/^[A-Za-z0-9_-]{6,64}$/,kind:/^[A-Z][A-Z0-9_]{0,39}$/,cursor:/^[A-Za-z0-9_.=:-]{1,128}$/,limit:/^[1-9][0-9]{0,2}$/,accountId:/^acc_[0-9a-f]{24}$/,invoiceId:/^inv_[0-9a-f]{24}$/};
 function listQueryAllowed(value,base,keys){
   if(!value.startsWith(base+"?"))return false;
@@ -94,7 +97,7 @@ function projectStudioGetAllowed(value){
 function desktopExtraGetPathAllowed(value){
   if(projectStudioGetAllowed(value))return true;
   if(typeof value!=="string"||value.length>400)return false;
-  return EXTRA_GET_ROUTES.has(value)||ROLE_DETAIL_RE.test(value)||DELIVERY_DETAIL_RE.test(value)||DELIVERY_LIST_RE.test(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"])||listQueryAllowed(value,"/v1/roles",["limit","cursor"])||listQueryAllowed(value,"/v1/company/contacts",["accountId"])||listQueryAllowed(value,"/v1/company/opportunities",["accountId"])||listQueryAllowed(value,"/v1/company/invoices",["accountId"])||listQueryAllowed(value,"/v1/company/payments",["invoiceId"])||listQueryAllowed(value,"/v1/company/contracts",["accountId"]);
+  return EXTRA_GET_ROUTES.has(value)||ROLE_DETAIL_RE.test(value)||ACADEMY_LIST_RE.test(value)||ACADEMY_DETAIL_RE.test(value)||DELIVERY_DETAIL_RE.test(value)||DELIVERY_LIST_RE.test(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"])||listQueryAllowed(value,"/v1/roles",["limit","cursor"])||listQueryAllowed(value,"/v1/company/contacts",["accountId"])||listQueryAllowed(value,"/v1/company/opportunities",["accountId"])||listQueryAllowed(value,"/v1/company/invoices",["accountId"])||listQueryAllowed(value,"/v1/company/payments",["invoiceId"])||listQueryAllowed(value,"/v1/company/contracts",["accountId"]);
 }
 // B4-ALLOWLIST-END
 

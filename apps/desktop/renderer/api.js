@@ -4,6 +4,7 @@ import {MISSION_ID_RE,SAFE_ID_RE,mapMissionDetail,mapWorkRuns,mapWorkRunDetail,m
 import {devrunPath,filesPath,filePath,gitLogPath,gitDiffPath,exportsPath,exportItemPath,EXECUTORS_PATH,mapDevRun,mapFileList,mapFileContent,mapGitLog,mapGitDiff,mapExports,mapExecutors} from "./project-core.js";
 import {deliveriesPath,deliveryPath,mapDeliveries,mapDelivery} from "./delivery-core.js";
 import {COMPANY_KEYS,COMPANY_PATHS,COMPANY_MAPPERS,companyFailureState} from "./company-core.js";
+import {ACADEMY_PATH,mapAcademy} from "./academy-core.js";
 
 const TTL_MS=3000;
 const ROLE_ID_RE=/^UASCO-\d{4}$/;
@@ -125,6 +126,8 @@ export function createApi({bridge,store,now=()=>Date.now()}){
       });
       return out;
     },
+    // //TR: FA-V2-PRODUCT: Skill Academy salt-okunur okuma-modeli (GET /v1/academy). Başarılıysa mapAcademy ile sanitize edilir (uydurma yok, dürüst durumlar); okuma başarısızsa ayrık dürüst durum ve boş veri döner.
+    async academy(){const r=await get(ACADEMY_PATH);return r.ok?mapAcademy(r.data):{state:r.state,learnings:[],sources:[],reuses:0,globalKnowledge:[],byStatus:{},metrics:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }

@@ -72,7 +72,7 @@ describe("B4 routes and navigation", () => {
     const tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
     const en = (await load(rend, "locales", "en.js")).default as Record<string, string>;
     expect(routes.FACTORY_AREA_ORDER).toEqual(FACTORY);
-    expect(routes.ROUTES.map((r: any) => r.id)).toEqual([...FACTORY, "company", "settings"]);
+    expect(routes.ROUTES.map((r: any) => r.id)).toEqual([...FACTORY, "company", "academy", "settings"]);
     for (const r of routes.ROUTES) {
       expect(r.hash).toBe(`#/${r.id}`);
       expect(routes.routeFromHash(r.hash)).toBe(r.id);

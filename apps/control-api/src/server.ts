@@ -45,6 +45,7 @@ import type {SandboxProvider} from "../../../core/workos/execution-gate.js";
 import {CrmDomain,validateAccountCreate,validateContactCreate,validateOpportunityCreate,validateOpportunityStage} from "../../../core/company/crm.js";
 import {FinanceDomain,validateInvoiceCreate,validateInvoiceIssue,validateInvoiceVoid,validatePaymentCreate} from "../../../core/company/finance.js";
 import {LegalDomain,validateContractCreate,validateContractTransition} from "../../../core/company/legal.js";
+import {SkillAcademy} from "../../../core/academy/academy.js";
 import type {Validation} from "../../../core/company/common.js";
 
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
@@ -561,6 +562,19 @@ app.get<{Params:{roleId:string}}>("/v1/roles/:roleId",async(req,reply)=>{
   const role=reg.doc.roles[i],guild=(reg.doc.guilds??[]).find((g:any)=>g.guildId===role.guildId)??null,cluster=(reg.doc.clusters??[]).find((c:any)=>c.clusterId===role.clusterId)??null;
   return {status:reg.doc.status,notice:reg.doc.notice,role,guild,cluster,legacyAliases:role.legacyAliases??[],gaps:{role:role.gapIds??[],guild:guild?.gapIds??[]}};
 });
+
+// //TR: FA-V2-PRODUCT: Skill Academy salt-okunur okuma rotaları. Kayıtlar ortak Work OS journal'ındadır (ikinci store yok), tenant kapsamlıdır ve aynı token/Host hook'u arkasındadır; hiçbir yazma/mutasyon yoktur (öğrenme yetki/sertifika/proficiency VERMEZ — yalnız öğrenme/yetkinlik kataloğudur). Veri yoksa boş dizi / null metrik döner, değer uydurulmaz.
+const academyDomain=()=>new SkillAcademy(getStore(),{repoRoot});
+const ACADEMY_ID_RE=/^(?:lrn|src)_[0-9a-f]{24}$/;
+// //TR: GET /v1/academy: tenant kapsamlı akademi okuma-modelinin tamamı (öğrenmeler, kaynaklar, yeniden kullanımlar, genelleştirilmiş global bilgi ve §5.3 ölçülebilir öğrenme metrikleri); hepsi store'dan türetilir, boşsa dürüst boş dizi/null.
+app.get("/v1/academy",wos(async()=>{const a=academyDomain();return {learnings:a.listLearnings(scope),sources:a.listSources(scope),reuses:a.listReuses(scope),globalKnowledge:a.listGlobalKnowledge(),metrics:a.metrics(scope)};}));
+// //TR: GET /v1/academy/:id: adreslenebilir tek kayıt (lrn_ öğrenme kaydı veya src_ kaynak kaydı); kimlik yalnız kanonik desendir (geçersiz 400), başka tenant'ın/eksik kaydı dürüst 404. Yalnız okuma; durum yükseltilmez.
+app.get<{Params:{id:string}}>("/v1/academy/:id",wos(async(req,reply)=>{
+  const id=req.params.id;if(!ACADEMY_ID_RE.test(id))return reply.code(400).send({error:"INVALID_ACADEMY_ID"});
+  const a=academyDomain();
+  if(id.startsWith("lrn_")){const learning=a.getLearning(scope,id);if(!learning)return reply.code(404).send({error:"ACADEMY_LEARNING_NOT_FOUND"});return {learning};}
+  const source=a.getSource(scope,id);if(!source)return reply.code(404).send({error:"ACADEMY_SOURCE_NOT_FOUND"});return {source};
+}));
 
 // //TR: REL-FX-4 onaylı yırtık kuyruk onarımı: aynı token/Host hook'u (her açılışta verilen control token) ve aynı yazma kapısı; gövde kuyruğun tam sha256'sını aynen onaylamalıdır. Tamper asla kesilmez.
 app.post("/v1/system/workos/journal/repair-torn-tail",wos(async(req,reply)=>{
