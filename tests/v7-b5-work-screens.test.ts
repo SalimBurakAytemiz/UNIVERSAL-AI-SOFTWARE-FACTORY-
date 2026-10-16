@@ -421,6 +421,8 @@ class N {
   get textContent(): string { return this._text + this.children.map(c => c.textContent).join(""); }
   set textContent(v: string) { this.children.forEach(c => { c.parent = null; }); this.children = []; this._text = String(v); }
   append(...n: Array<N | string>) { for (const c of n) { const node = typeof c === "string" ? this.doc.createTextNode(c) : c; if (node.parent) node.parent.children = node.parent.children.filter(x => x !== node); node.parent = this; this.children.push(node); } }
+  // //TR: UX WP-PROJECTS: Projeler görünümü artık WP2 kpiTile'ını (SVG ikon/sparkline) kullandığı için appendChild gerçek DOM gibi sağlanır; doğrulama gevşetilmez.
+  appendChild(n: N) { this.append(n); return n; }
   replaceChildren(...n: Array<N | string>) { this.children.forEach(c => { c.parent = null; }); this.children = []; this._text = ""; this.append(...n); }
   setAttribute(k: string, v: string) { this.attrs.set(k, String(v)); }
   getAttribute(k: string) { return this.attrs.get(k) ?? null; }
@@ -436,6 +438,8 @@ class D {
   body: N; focused: N | null = null;
   constructor() { this.body = new N(this, "body"); }
   createElement(t: string) { return new N(this, t); }
+  // //TR: UX WP-PROJECTS: kpiTile SVG ikon/sparkline için createElementNS gerektirir; sahte DOM bunu gerçek document gibi sağlar (WP2/WP3/WP4 harness'leriyle aynı); doğrulama gevşetilmez.
+  createElementNS(_ns: string, t: string) { return new N(this, t); }
   createTextNode(s: string) { const n = new N(this, "#text"); n._text = s; return n; }
   getElementById(id: string): N | null { return all(this.body).find(n => n.id === id) ?? null; }
   get activeElement(): N { return this.focused && this.body.contains(this.focused) ? this.focused : this.body; }

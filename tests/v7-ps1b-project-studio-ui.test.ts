@@ -427,6 +427,8 @@ class N {
   get textContent(): string { return this._text + this.children.map(c => c.textContent).join(""); }
   set textContent(v: string) { this.children.forEach(c => { c.parent = null; }); this.children = []; this._text = String(v); }
   append(...n: Array<N | string>) { for (const c of n) { const node = typeof c === "string" ? this.doc.createTextNode(c) : c; if (node.parent) node.parent.children = node.parent.children.filter(x => x !== node); node.parent = this; this.children.push(node); } }
+  // //TR: UX WP-PROJECTS: kpiTile'ın SVG ikon/sparkline'ı appendChild kullandığı için sahte düğüm bunu gerçek DOM gibi sağlar (WP2/WP3/WP4 harness'leriyle aynı); doğrulama gevşetilmez.
+  appendChild(n: N) { this.append(n); return n; }
   replaceChildren(...n: Array<N | string>) { this.children.forEach(c => { c.parent = null; }); this.children = []; this._text = ""; this.append(...n); }
   setAttribute(k: string, v: string) { this.attrs.set(k, String(v)); }
   getAttribute(k: string) { return this.attrs.get(k) ?? null; }
@@ -442,6 +444,8 @@ class D {
   body: N; focused: N | null = null;
   constructor() { this.body = new N(this, "body"); }
   createElement(t: string) { return new N(this, t); }
+  // //TR: UX WP-PROJECTS: proje listesi artık WP2 kpiTile'ını (SVG ikon/sparkline) kullandığı için sahte DOM gerçek document gibi createElementNS sağlar (WP2/WP3/WP4 harness'leriyle aynı); hiçbir mevcut doğrulama gevşetilmez.
+  createElementNS(_ns: string, t: string) { return new N(this, t); }
   createTextNode(s: string) { const n = new N(this, "#text"); n._text = s; return n; }
   getElementById(id: string): N | null { return all(this.body).find(n => n.id === id) ?? null; }
   // c5 (PS1B-C4-001): lazyBlur=true Chromium'u modeller — devre dışı/gizli kalan odaklı öğe activeElement olarak kalır, flushBlur() (stil yeniden hesabı) sonra gövdeye düşürür; false iken hemen düşer.

@@ -129,7 +129,7 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 
 /* KPI */
 /* //TR: KPI ızgarası konteyner genişliğine göre 1/2/4 sütundur (6 kart: 4 tekil + 2 geniş); kart içeriği hiçbir genişlikte taşmaz. */
-.view-home,.view-company{container-type:inline-size}
+.view-home,.view-company,.view-projects{container-type:inline-size}
 .kpi-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem}
 @container (min-width:52rem){.kpi-row{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @container (max-width:38rem){.kpi-row{grid-template-columns:minmax(0,1fr)}.kpi-wide{grid-column:auto}}
@@ -413,4 +413,23 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   .company-state,.company-stale{border:1px solid CanvasText}
   .delivery-gated{border:1px solid CanvasText}
   .tab-flag{color:CanvasText}
+}
+/* //TR: UX WP-PROJECTS: Premium portföy katmanı mevcut token tabanını kullanır (palet değişmez, yeni renk token'ı yok): KPI satırı + görev durumu şeridi + yoğun proje kartları. Glow yalnız mevcut .card-active / .kpi-live sınıflarından gelir; forced-colors altında sınırlar CanvasText'e düşer. */
+.pf-journey .pf-strip,.pf-strip{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-3)}
+.pf-strip-item{display:inline-flex;align-items:center;gap:var(--space-2);padding:var(--space-1) .6rem;border:1px solid var(--border);border-radius:99px;background:var(--bg-2)}
+.pf-strip-count{font-variant-numeric:tabular-nums;font-weight:800}
+.pf-cards{grid-template-columns:repeat(auto-fill,minmax(min(100%,22rem),1fr))}
+.pf-card{gap:var(--space-3);padding:1.1rem;box-shadow:var(--elev-1)}
+.pf-card:hover{border-color:var(--glow)}
+.pf-card-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2)}
+.pf-card-head h3{margin:0;font-size:1.05rem}
+.pf-card-meta{margin:0}
+.pf-card-section{display:grid;gap:var(--space-2)}
+.pf-card-label{margin:0;font-size:var(--fs-caption);font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.pf-card-note{margin:0}
+.pf-runline{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
+.pf-run-id{font-size:var(--fs-caption);color:var(--muted)}
+@media (forced-colors:active){
+  .pf-strip-item,.pf-card{border:1px solid CanvasText;forced-color-adjust:auto}
+  .pf-card-active,.card-active{border:2px solid Highlight}
 }
