@@ -360,7 +360,10 @@
         "tests/v7-ux-wp-qasec.test.ts",
         "tests/v7-ux-firstrun.test.ts",
         "tests/v7-ux-shell.test.ts",
-        "tests/v7-ux-academy.test.ts"
+        "tests/v7-ux-academy.test.ts",
+        "tests/v7-core-predev-crew-coordination.test.ts",
+        "tests/v7-core-predev-crew-dev-review.test.ts",
+        "tests/v7-core-predev-team-composer.test.ts"
       ],
       "requiresDependencies": true
     },
