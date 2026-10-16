@@ -7,6 +7,7 @@ import {syncNav,syncTabs} from "./nav.js";
 import {keepFocus} from "./focus.js";
 import {selection} from "./forms.js";
 import {maybeOpenFirstRun} from "./views/firstrun.js";
+import {createInspector,isInspectableRef} from "./inspector.js";
 
 export const PRINCIPAL="FOUNDER_LOCAL";
 const FEED_TABS=Object.freeze(["flow","health","agenda"]);
@@ -15,8 +16,11 @@ export function createShell(ctx){
   const doc=ctx.doc,el=id=>doc.getElementById(id),{t,store,api}=ctx;
   const data={projects:{state:"LOADING",items:[]},cockpit:null,control:{state:"LOADING",active:false,reason:null},health:{state:"LOADING"},missions:{state:"LOADING",items:[]},attention:{state:"LOADING",blocked:[]},events:{state:"LOADING",runId:null,events:[]}};
   let feedTab="flow",searchHits=[],searchIndex=-1,lastStopActive=null,lastApiState=null;
+  const inspector=createInspector(ctx);
 
   const announce=msg=>{const n=el("status");if(n)n.textContent=msg};
+  /** Inspector çekmecesini verilen varlık referansıyla açar; çağıran denetim (invoker) kapanışta odağı geri alır. Referans geçersizse sessizce yok sayılır. */
+  function openInspector(ref,invoker){if(isInspectableRef(ref))inspector.open(ref,invoker??el("searchInput"))}
   /** Durdurma/Devam başarısızlığı ACİL DURDUR'un yanında görünür role="alert" olarak gösterilir (ayrıca canlı bölgede duyurulur). */
   function showStopError(msg){const n=el("stopError");if(n){n.textContent=msg;n.hidden=false}announce(msg)}
   function clearStopError(){const n=el("stopError");if(n){n.textContent="";n.hidden=true}}
@@ -47,6 +51,11 @@ export function createShell(ctx){
     el("stopBannerText").textContent=t("stop.activeLine",{reason:data.control.reason??""});
     if(lastStopActive!==null&&lastStopActive!==active){clearStopError();announce(t(active?"stop.announceOn":"stop.announceOff"))}lastStopActive=active;
   }
+  /** Akış/gündem satırından (gerçek varlık satırı) Inspector'ı açan küçük, klavye erişilebilir düğme; düğmenin kendisi kapanışta odağı geri alan invoker olur. */
+  function inspectBtn(ref,name){
+    if(!isInspectableRef(ref))return null;
+    return h(doc,"button",{type:"button",class:"btn btn-small tl-inspect","aria-label":t("inspector.rowAria",{name:name??ref.id}),on:{click:e=>openInspector(ref,e&&e.currentTarget?e.currentTarget:null)}},t("inspector.open"));
+  }
   function feedBody(){
     const body=h(doc,"div",{class:"feed-body"});
     if(feedTab==="flow"){
@@ -57,7 +66,7 @@ export function createShell(ctx){
       else body.append(h(doc,"ol",{class:"timeline"},m.items.slice(0,10).map(x=>{
         // //TR: UX WP2: atıf yalnız gerçek kayıttan (mission'ın proje adı) gelir; ajan/servis adı backend vermediği için uydurulmaz.
         const proj=data.projects.items.find(p=>p.projectId===x.projectId);
-        return timelineItem(ctx,{time:formatTime(x.createdAt,ctx.i18n.lang),iso:x.createdAt,title:x.title,attribution:proj?t("feed.attr.project",{name:proj.name}):null,pill:missionPill(ctx,x.status),meta:badge(ctx,x.riskLevel,"badge-risk")});
+        return timelineItem(ctx,{time:formatTime(x.createdAt,ctx.i18n.lang),iso:x.createdAt,title:x.title,attribution:proj?t("feed.attr.project",{name:proj.name}):null,pill:missionPill(ctx,x.status),meta:[badge(ctx,x.riskLevel,"badge-risk"),inspectBtn({kind:"mission",id:x.missionId},x.title)]});
       })));
     }else if(feedTab==="health"){
       const c=data.cockpit,o=c?.orchestrator;
@@ -71,7 +80,7 @@ export function createShell(ctx){
       else if(!items.length)body.append(h(doc,"p",{class:"note",text:t("inbox.empty")}));
       else body.append(h(doc,"ol",{class:"timeline"},items.slice(0,10).map(x=>{
         const proj=data.projects.items.find(p=>p.projectId===x.projectId);
-        return timelineItem(ctx,{time:null,title:x.title??x.missionId,attribution:proj?t("feed.attr.project",{name:proj.name}):null,pill:statePill(ctx,"WAITING",{label:t("feed.agenda.waiting")}),meta:badge(ctx,x.riskLevel??"—","badge-risk")});
+        return timelineItem(ctx,{time:null,title:x.title??x.missionId,attribution:proj?t("feed.attr.project",{name:proj.name}):null,pill:statePill(ctx,"WAITING",{label:t("feed.agenda.waiting")}),meta:[badge(ctx,x.riskLevel??"—","badge-risk"),inspectBtn({kind:"mission",id:x.missionId},x.title??x.missionId)]});
       })));
       body.append(h(doc,"a",{class:"link-more",href:"#/inbox",dataset:{focusKey:"feed-see-inbox"},text:t("feed.seeInbox")}));
     }
@@ -112,26 +121,63 @@ export function createShell(ctx){
   }
 
   // Arama (Ctrl+K)
-  function searchEntriesNow(){
-    return [...ROUTES.map(r=>({kind:"route",id:r.id,label:t(`area.${r.id}.title`),keywords:r.id,hash:r.hash})),
-      ...data.projects.items.map(p=>({kind:"project",id:p.projectId,label:p.name,keywords:`${p.projectId} ${t("search.project")}`})),
-      ...data.missions.items.map(m=>({kind:"mission",id:m.missionId,label:m.title,keywords:`${m.missionId} ${m.status} ${statusLabel(ctx,m.status)} ${t("search.mission")}`}))];
+  // //TR: UX WP-SHELL-REFINE: Ctrl+K komut paleti. Mevcut "aramayla gezin" (proje/mission) KALDIRILMAZ; üzerine gruplu bir EYLEMLER bölümü eklenir: her rota için "git" (go-to-view), geçerli seçim için Inspector aç ve global STOP_ALL. STOP_ALL yeni bir yan etkili/yazma denetimi EKLEMEZ; yalnız mevcut ACİL DURDUR onay penceresini (openStopDialog) ve onun zaten allow-list'li kontrol yolunu yeniden kullanır. Combobox/listbox a11y semantiği korunur: seçilebilir öğeler role=option + aria-activedescendant, grup başlıkları role=presentation'dır ve gezinmede sayılmaz.
+  /** Palet "geçerli seçim" eylemi için referans: önce seçili mission (hâlâ listede ise), sonra seçili proje; yoksa null (eylem gösterilmez). */
+  function currentSelectionRef(){
+    if(selection.missionId&&data.missions.items.some(m=>m.missionId===selection.missionId))return {kind:"mission",id:selection.missionId};
+    const p=selectedProject();return p?{kind:"project",id:p.projectId}:null;
+  }
+  function actionEntries(){
+    const acts=ROUTES.map(r=>({kind:"action",action:"goto",group:"action",id:`goto:${r.id}`,routeId:r.id,label:t("palette.goto",{name:t(`area.${r.id}.title`)}),keywords:`${r.id} ${t(`area.${r.id}.title`)} ${t("palette.goKeyword")}`}));
+    const sel=currentSelectionRef();
+    if(sel){const m=data.missions.items.find(x=>x.missionId===sel.id),p=selectedProject(),name=sel.kind==="mission"?(m?.title??sel.id):(p?.name??sel.id);
+      acts.push({kind:"action",action:"inspect",group:"action",id:"inspect:selection",ref:sel,label:t("palette.inspect",{name}),keywords:`${t("palette.inspectKeyword")} ${sel.id} ${name}`});}
+    acts.push({kind:"action",action:"stopall",group:"action",id:"action:stopall",label:t("palette.stopAll"),keywords:`${t("palette.stopKeyword")} ${t("stop.button")}`});
+    return acts;
+  }
+  // //TR: Aramayla gezin (search-to-navigate) sonuç grubu: gerçek projeler ve mission'lar; seçildiğinde o ekrana/kayda gidilir (eski davranış korunur).
+  function resultEntries(){
+    return [...data.projects.items.map(p=>({kind:"project",group:"result",id:p.projectId,label:p.name,keywords:`${p.projectId} ${t("search.project")}`})),
+      ...data.missions.items.map(m=>({kind:"mission",group:"result",id:m.missionId,label:m.title,keywords:`${m.missionId} ${m.status} ${statusLabel(ctx,m.status)} ${t("search.mission")}`}))];
+  }
+  /** Boş sorgu: tüm eylemleri göster (palet açılışı). Aksi halde eylemler + sonuçlar sorguyla süzülür (her grup kendi içinde sınırlı). */
+  function computeHits(query){
+    const q=String(query??"").trim();
+    if(!q)return actionEntries();
+    return [...searchEntries(q,actionEntries()),...searchEntries(q,resultEntries())];
   }
   function closeSearch(){const box=el("searchResults"),inp=el("searchInput");box.hidden=true;box.replaceChildren();inp.setAttribute("aria-expanded","false");inp.removeAttribute("aria-activedescendant");searchHits=[];searchIndex=-1}
   function pick(hit){
+    if(!hit)return;
     closeSearch();el("searchInput").value="";
-    if(hit.kind==="route")ctx.navigate(hit.id);
-    else if(hit.kind==="project"){ctx.selectProject(hit.id);ctx.navigate("projects")}else{selection.missionId=hit.id;ctx.navigate("work")}
+    if(hit.kind==="action"){
+      if(hit.action==="goto")ctx.navigate(hit.routeId);
+      else if(hit.action==="inspect")openInspector(hit.ref);
+      else if(hit.action==="stopall")openStopDialog();
+      return;
+    }
+    if(hit.kind==="project"){ctx.selectProject(hit.id);ctx.navigate("projects")}
+    else{selection.missionId=hit.id;ctx.navigate("work")}
   }
   function paintSearch(){
     const box=el("searchResults"),inp=el("searchInput");
-    if(!searchHits.length){box.replaceChildren(h(doc,"li",{class:"search-empty",role:"presentation",text:t("search.none")}));box.hidden=!inp.value.trim();inp.setAttribute("aria-expanded",String(!box.hidden));return}
-    box.replaceChildren(...searchHits.map((x,i)=>h(doc,"li",{role:"option",id:`searchOpt-${i}`,"aria-selected":i===searchIndex?"true":"false",class:"search-opt",dataset:{kind:x.kind},on:{mousedown:e=>{e.preventDefault();pick(x)}}},h(doc,"span",{class:"search-kind",text:t(`search.kind.${x.kind}`)}),h(doc,"span",{text:x.label}))));
+    if(!searchHits.length){box.replaceChildren(h(doc,"li",{class:"search-empty",role:"presentation",text:t("search.none")}));box.hidden=!inp.value.trim();inp.setAttribute("aria-expanded",String(!box.hidden));inp.removeAttribute("aria-activedescendant");return}
+    const nodes=[];let lastGroup=null;
+    searchHits.forEach((x,i)=>{
+      const g=x.group??"result";
+      if(g!==lastGroup){nodes.push(h(doc,"li",{class:"search-group",role:"presentation",text:t(`palette.group.${g}`)}));lastGroup=g}
+      nodes.push(h(doc,"li",{role:"option",id:`searchOpt-${i}`,"aria-selected":i===searchIndex?"true":"false",class:"search-opt",dataset:{kind:x.kind},on:{mousedown:e=>{e.preventDefault();pick(x)}}},
+        h(doc,"span",{class:"search-kind",text:t(`palette.kind.${x.kind}`)}),h(doc,"span",{class:"search-opt-label",text:x.label})));
+    });
+    box.replaceChildren(...nodes);
     box.hidden=false;inp.setAttribute("aria-expanded","true");if(searchIndex>=0)inp.setAttribute("aria-activedescendant",`searchOpt-${searchIndex}`);else inp.removeAttribute("aria-activedescendant");
   }
+  /** Palet açılışı (Ctrl+K veya boş alana odak): sorgusuz eylem listesini gösterir. */
+  function openPalette(){searchHits=computeHits("");searchIndex=searchHits.length?0:-1;paintSearch()}
   function wireSearch(){
     const inp=el("searchInput");
-    inp.addEventListener("input",()=>{searchHits=searchEntries(inp.value,searchEntriesNow());searchIndex=searchHits.length?0:-1;if(!inp.value.trim()){closeSearch();return}paintSearch()});
+    inp.addEventListener("input",()=>{searchHits=computeHits(inp.value);searchIndex=searchHits.length?0:-1;if(!inp.value.trim()){openPalette();return}paintSearch()});
+    inp.addEventListener("focus",()=>{if(!inp.value.trim())openPalette()});
     inp.addEventListener("keydown",e=>{
       if(e.key==="ArrowDown"&&searchHits.length){e.preventDefault();searchIndex=(searchIndex+1)%searchHits.length;paintSearch()}
       else if(e.key==="ArrowUp"&&searchHits.length){e.preventDefault();searchIndex=(searchIndex-1+searchHits.length)%searchHits.length;paintSearch()}
@@ -156,9 +202,9 @@ export function createShell(ctx){
     el("langBtn").addEventListener("click",()=>ctx.i18n.setLang(ctx.i18n.lang==="tr"?"en":"tr"));
     el("projectSelect").addEventListener("change",e=>{ctx.selectProject(e.target.value||null)});
     wireSearch();
-    doc.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&!e.altKey&&e.key.toLowerCase()==="k"){e.preventDefault();el("searchInput").focus();el("searchInput").select()}});
+    doc.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&!e.altKey&&e.key.toLowerCase()==="k"){e.preventDefault();el("searchInput").focus();el("searchInput").select();openPalette()}});
     // //TR: UX WP-FIRSTRUN: ilk açılışta (güvenli per-user tercih "görülmedi" ise) kurulum/onboarding sihirbazını bir kez aç. Sihirbaz KAPI DEĞİLDİR (atlanır/başarısız olursa uygulama yine açılır) ve asla giriş yapmaz/durum uydurmaz; her hata yutulur.
     try{maybeOpenFirstRun(ctx)}catch{/* ilk kurulum sihirbazı açılamadı; uygulama yine açılır */}
   }
-  return {data,wireStatic,renderAll,renderNav,renderContext,renderStop,refresh,announce,showStopError,clearStopError,openStopDialog,closeStopDialog};
+  return {data,wireStatic,renderAll,renderNav,renderContext,renderStop,refresh,announce,showStopError,clearStopError,openStopDialog,closeStopDialog,openInspector,inspector};
 }

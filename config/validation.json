@@ -358,7 +358,8 @@
         "tests/v7-ux-settings.test.ts",
         "tests/v7-ux-inbox.test.ts",
         "tests/v7-ux-wp-qasec.test.ts",
-        "tests/v7-ux-firstrun.test.ts"
+        "tests/v7-ux-firstrun.test.ts",
+        "tests/v7-ux-shell.test.ts"
       ],
       "requiresDependencies": true
     },
