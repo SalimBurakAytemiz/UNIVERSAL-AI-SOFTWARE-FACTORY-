@@ -19,6 +19,12 @@ import type {CompanyJournalType, CompanyRecord, CompanyState, CompanyTx, Company
 import {applyAcademyEntry} from "../academy/apply.js";
 import {emptyAcademyState, isAcademyJournalType} from "../academy/types.js";
 import type {AcademyJournalType, AcademyState, AcademyTx, AcademyView} from "../academy/types.js";
+// //TR: CORE pre-dev artefakt sözleşmeleri + PRE_DEV faz dizisi: ikinci store kurmaz; girdiler aynı journal'a yazılır ve replay'de applyPreDevEntry'ye devredilir (Company/Academy ile aynı desen).
+import {applyPreDevEntry} from "./predev/apply.js";
+import {derivePreDevReadModel} from "./predev/read-model.js";
+import {PREDEV_OPEN_MISSION_STATUSES, emptyPreDevState, isPreDevJournalType} from "./predev/types.js";
+import type {ArtifactContent, ArtifactKind, ArtifactState, PreDevArtifact, PreDevJournalType, PreDevPhase, PreDevSequence, PreDevState} from "./predev/types.js";
+import type {PreDevReadModel} from "./predev/read-model.js";
 import {ACTIVE_WORKER_STATUSES, LEASED_RUN_STATUSES, UNLEASED_RUN_STATUSES, assertRunTransition, isOpenRun, isRunStatus, isRunStep} from "./run-state.js";
 import {completionEvidence, deliveryPrepareCheck, sourceDeliveryAcceptanceCheck, validDeliveryArtifactRecord} from "./outcomes.js";
 import {RISK_REFUSAL, riskAdmitted} from "./risk-admission.js";
@@ -34,9 +40,9 @@ interface IdemRecord { id: string; digest?: string }
 interface State {
   projects: Record<string, Project>; missions: Record<string, WorkMission>; tasks: Record<string, WorkTask>; runs: Record<string, WorkRun>;
   exports: Record<string, ProjectExport>;
-  idempotency: Record<string, IdemRecord>; lastSeq: number; lastHash: string; company: CompanyState; academy: AcademyState;
+  idempotency: Record<string, IdemRecord>; lastSeq: number; lastHash: string; company: CompanyState; academy: AcademyState; predev: PreDevState;
 }
-const emptyState = (): State => ({projects: {}, missions: {}, tasks: {}, runs: {}, exports: {}, idempotency: {}, lastSeq: 0, lastHash: GENESIS, company: emptyCompanyState(), academy: emptyAcademyState()});
+const emptyState = (): State => ({projects: {}, missions: {}, tasks: {}, runs: {}, exports: {}, idempotency: {}, lastSeq: 0, lastHash: GENESIS, company: emptyCompanyState(), academy: emptyAcademyState(), predev: emptyPreDevState()});
 const entryHash = (body: Omit<JournalEntry, "hash">): string => sha256(body);
 // //TR: F-B1-001: anahtar JSON dizisidir; ayırıcı karakter içeren tenant/anahtar değerleri çarpışamaz.
 const idemKey = (tenantId: string, kind: string, key: string) => JSON.stringify([tenantId, kind, key]);
@@ -385,6 +391,11 @@ export class WorkOsStore {
         r.evidence.push(ev); r.updatedAt = e.at; break;
       }
       default: {
+        if (isPreDevJournalType(e.type)) {
+          const applied = applyPreDevEntry(st.predev, {seq: e.seq, type: e.type, at: e.at, actor: e.actor, payload: p});
+          if (applied.idem) idem(applied.idem.kind, applied.idem, applied.idem.id);
+          break;
+        }
         if (isAcademyJournalType(e.type)) {
           const applied = applyAcademyEntry(st.academy, {seq: e.seq, type: e.type, at: e.at, actor: e.actor, payload: p});
           if (applied.idem) idem(applied.idem.kind, applied.idem, applied.idem.id);
@@ -776,6 +787,89 @@ export class WorkOsStore {
     });
   }
   academyRead<T>(fn: (view: AcademyView) => T): T { this.readGuard(); return fn(this.state.academy); }
+
+  // ---- CORE pre-dev artefakt sözleşmeleri + PRE_DEV faz dizisi (aynı journal, aynı lock, aynı hash zinciri; replay kuralları core/workos/predev altındadır) ----
+  // //TR: Her pre-dev girdisi önce state kopyası üzerinde replay kurallarıyla denenir (at bir kez belirlenir); geçersiz girdi diske hiç yazılmaz (journal bozulamaz). Mevcut mission lifecycle ve hiçbir mevcut kapı değiştirilmez: bu katman tamamen eklemeli ve geriye dönük uyumludur.
+  private predevAppend(type: PreDevJournalType, actor: string, payload: Record<string, unknown>): void {
+    const at = this.nowIso();
+    try { applyPreDevEntry(clone(this.state.predev), {seq: this.state.lastSeq + 1, type, at, actor, payload}); }
+    catch (e) { throw new WorkOsError("WORKOS_INVALID_INPUT", `PREDEV_ENTRY_REJECTED:${(e as Error).message.replace(/^WORKOS_[A-Z_]+: /, "")}`); }
+    this.append(type, actor, payload, at);
+  }
+  private predevSequenceFor(tenantId: string, missionId: string): PreDevSequence | undefined {
+    return Object.values(this.state.predev.sequences).find(q => q.missionId === missionId && q.tenantId === tenantId);
+  }
+  // //TR: Pre-dev isteği: mission için faz dizisini açar (mevcut path'i etkilemeyen ek katman). Yalnız pre-execution mission durumunda ve mission başına bir kez.
+  openPreDevSequence(scope: Scope, missionId: string, createdBy: string, idempotencyKey?: string): PreDevSequence {
+    return this.write(() => {
+      const digest = sha256({missionId});
+      const prior = this.findIdem(this.state.predev.sequences, scope.tenantId, "predev.sequence", idempotencyKey, digest);
+      if (prior) return clone(prior);
+      const m = this.state.missions[missionId];
+      if (!m || m.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "mission");
+      if (!PREDEV_OPEN_MISSION_STATUSES.includes(m.status)) throw new WorkOsError("WORKOS_CONFLICT", "MISSION_NOT_PREDEV_ELIGIBLE");
+      if (this.predevSequenceFor(m.tenantId, missionId)) throw new WorkOsError("WORKOS_CONFLICT", "PREDEV_SEQUENCE_EXISTS");
+      const at = this.nowIso();
+      const seq: PreDevSequence = {preDevId: newId("pdv"), missionId, tenantId: m.tenantId, phase: "AUTHORIZED", artifacts: {}, createdAt: at, createdBy, updatedAt: at, lifecycleActors: [createdBy]};
+      this.predevAppend("PREDEV_SEQUENCE_OPENED", createdBy, {entity: seq, ...this.idemFields(idempotencyKey, digest)});
+      return clone(this.state.predev.sequences[seq.preDevId]);
+    });
+  }
+  // //TR: Artefaktı DRAFT olarak kaydeder. Sürüm/supersedes store'da türetilir, replay'de yeniden doğrulanır. İçerik yalnız yapı+izlenebilirlik kapısından geçer (uydurma veri reddedilir).
+  recordPreDevArtifact(scope: Scope, preDevId: string, input: {kind: ArtifactKind; authorRoleId: string; content: ArtifactContent; supersedes?: string | null; evidenceRefs?: string[]}, actor: string, idempotencyKey?: string): PreDevArtifact {
+    return this.write(() => {
+      const seq = this.state.predev.sequences[preDevId];
+      if (!seq || seq.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "predev sequence");
+      const prevId = seq.artifacts[input.kind];
+      const prev = prevId ? this.state.predev.artifacts[prevId] : undefined;
+      const supersedes = input.supersedes ?? null;
+      const version = supersedes && prev ? prev.version + 1 : 1;
+      const evidenceRefs = [...(input.evidenceRefs ?? [])];
+      const digest = sha256({preDevId, kind: input.kind, version, authorRoleId: input.authorRoleId, supersedes, evidenceRefs, content: input.content});
+      const prior = this.findIdem(this.state.predev.artifacts, scope.tenantId, "predev.artifact", idempotencyKey, digest);
+      if (prior) return clone(prior);
+      const at = this.nowIso();
+      const art: PreDevArtifact = {id: newId("pda"), missionId: seq.missionId, tenantId: seq.tenantId, kind: input.kind, version, authorRoleId: input.authorRoleId,
+        createdAt: at, state: "DRAFT", supersedes, evidenceRefs, content: input.content, recordedBy: actor, approvedBy: null, rejectedBy: null, updatedAt: at};
+      this.predevAppend("PREDEV_ARTIFACT_RECORDED", actor, {preDevId, entity: art, ...this.idemFields(idempotencyKey, digest)});
+      return clone(this.state.predev.artifacts[art.id]);
+    });
+  }
+  // //TR: Artefakt durum geçişi (DRAFT->SUBMITTED->APPROVED|REJECTED). APPROVED yalnız kanıta bağlı (evidenceRefs boş olamaz) ve kaydedenden bağımsız aktörle olur.
+  transitionPreDevArtifact(scope: Scope, preDevId: string, artifactId: string, to: ArtifactState, opts: {reason?: string; evidenceRefs?: string[]}, actor: string): PreDevArtifact {
+    return this.write(() => {
+      const art = this.state.predev.artifacts[artifactId];
+      if (!art || art.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "predev artifact");
+      const seq = this.state.predev.sequences[preDevId];
+      if (!seq || seq.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "predev sequence");
+      this.predevAppend("PREDEV_ARTIFACT_TRANSITIONED", actor, {preDevId, artifactId, tenantId: art.tenantId, from: art.state, to,
+        ...(opts.reason !== undefined ? {reason: String(opts.reason).slice(0, 1000)} : {}), ...(opts.evidenceRefs !== undefined ? {evidenceRefs: [...opts.evidenceRefs]} : {})});
+      return clone(this.state.predev.artifacts[artifactId]);
+    });
+  }
+  // //TR: PRE_DEV fazını ilerletir. O ANKİ fazın artefaktı APPROVED değilse replay kapısı reddeder (advance only on APPROVED).
+  advancePreDevPhase(scope: Scope, preDevId: string, to: PreDevPhase, actor: string): PreDevSequence {
+    return this.write(() => {
+      const seq = this.state.predev.sequences[preDevId];
+      if (!seq || seq.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "predev sequence");
+      this.predevAppend("PREDEV_PHASE_ADVANCED", actor, {preDevId, tenantId: seq.tenantId, from: seq.phase, to});
+      return clone(this.state.predev.sequences[preDevId]);
+    });
+  }
+  getPreDevSequence(scope: Scope, missionId: string): PreDevSequence | undefined { this.readGuard(); const s = this.predevSequenceFor(scope.tenantId, missionId); return s ? clone(s) : undefined; }
+  getPreDevArtifact(scope: Scope, artifactId: string): PreDevArtifact | undefined { this.readGuard(); const a = this.state.predev.artifacts[artifactId]; return a && a.tenantId === scope.tenantId ? clone(a) : undefined; }
+  listPreDevArtifacts(scope: Scope, preDevId: string): PreDevArtifact[] {
+    this.readGuard();
+    const seq = this.state.predev.sequences[preDevId];
+    if (!seq || seq.tenantId !== scope.tenantId) return [];
+    return Object.values(this.state.predev.artifacts).filter(a => a.tenantId === scope.tenantId && a.missionId === seq.missionId).map(clone);
+  }
+  // //TR: Kokpit-tüketilebilir salt-okunur özet: pre-dev fazı ve her artefaktın dürüst durumu (dizi yoksa NOT_STARTED). Render yoktur; yalnız okuma modeli alanları.
+  preDevReadModel(scope: Scope, missionId: string): PreDevReadModel {
+    this.readGuard();
+    const seq = this.predevSequenceFor(scope.tenantId, missionId) ?? null;
+    return derivePreDevReadModel(missionId, seq, this.state.predev.artifacts);
+  }
 
   listProjects(scope: Scope): Project[] { this.readGuard(); return Object.values(this.state.projects).filter(p => p.tenantId === scope.tenantId); }
   getProject(scope: Scope, id: string): Project | undefined { this.readGuard(); const p = this.state.projects[id]; return p && p.tenantId === scope.tenantId ? p : undefined; }
