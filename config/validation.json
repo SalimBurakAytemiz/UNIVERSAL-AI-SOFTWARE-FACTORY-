@@ -363,7 +363,8 @@
         "tests/v7-ux-academy.test.ts",
         "tests/v7-core-predev-crew-coordination.test.ts",
         "tests/v7-core-predev-crew-dev-review.test.ts",
-        "tests/v7-core-predev-team-composer.test.ts"
+        "tests/v7-core-predev-team-composer.test.ts",
+        "tests/v7-core-predev-crew-api.test.ts"
       ],
       "requiresDependencies": true
     },
