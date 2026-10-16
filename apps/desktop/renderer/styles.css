@@ -577,3 +577,28 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   .journey-phase[aria-current="step"] .tl-dot{background:Highlight}
   .journey-phase::before{background:CanvasText}
 }
+
+/* //TR: FA-V2-PRODUCT Kurucu Yönetim Özeti ve İcra Defteri: KPI satırı mevcut kpiTile bileşenini, İcra Defteri mevcut zaman çizelgesi (ol.timeline > li.tl-item) desenini ve mevcut token tabanını kullanır (palet değişmez, yeni renk token'ı yok). Durum anlamı rozet METNİNDE ve ikonundadır; nokta rengi yalnız pekiştirmedir. TR uzun etiketler ve %200 yakınlaştırma için tüm hücreler min-width:0 + overflow-wrap ile sarılır; forced-colors altında sistem renklerine düşer, reduced-motion altında geçiş yoktur (global kural). */
+.view-executive{container-type:inline-size;display:grid;gap:var(--space-4)}
+.executive-sub{margin:var(--space-4) 0 var(--space-1);font-size:var(--fs-h3)}
+.executive-state{display:grid;gap:var(--space-1);padding:var(--space-3);margin:var(--space-3) 0;border:1px dashed var(--border-ui);border-radius:var(--radius-md)}
+.executive-state-head,.executive-row-head,.executive-fact-body{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
+.executive-platform{margin-top:var(--space-2)}
+.executive-ledger{margin-top:var(--space-3)}
+.executive-ledger .tl-item{grid-template-columns:.75rem 9rem minmax(0,1fr)}
+.executive-row[data-status="AWAITING_APPROVAL"] .tl-dot{background:var(--warn)}
+.executive-row[data-status="SUCCEEDED"] .tl-dot{background:var(--ok)}
+.executive-row[data-status="FAILED"] .tl-dot,.executive-row[data-status="BLOCKED"] .tl-dot,.executive-row[data-status="RECOVERY_FAILED"] .tl-dot{background:var(--danger)}
+.executive-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:.2rem var(--space-3);margin:var(--space-1) 0 0;font-size:var(--fs-label)}
+.executive-facts dt{color:var(--muted)}.executive-facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.executive-ledger .executive-versions{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
+.executive-ledger .executive-versions li{display:block;grid-template-columns:none;padding:0;border:0}
+.executive-cycle{color:var(--muted);margin-right:var(--space-2)}
+.executive-delivery{display:grid;gap:var(--space-1);min-width:0}
+.executive-delivery-facts{padding:var(--space-2);border:1px dashed var(--border-ui);border-radius:var(--radius-sm)}
+@container (max-width:40rem){.executive-ledger .tl-item{grid-template-columns:minmax(0,1fr)}.executive-ledger .tl-item::before,.executive-ledger .tl-dot{display:none}.executive-facts{grid-template-columns:minmax(0,1fr)}}
+@media (forced-colors:active){
+  .executive-state,.executive-delivery-facts{border:1px solid CanvasText;forced-color-adjust:auto}
+  .executive-row .tl-dot{background:CanvasText}
+  .executive-section :focus-visible{outline:3px solid Highlight}
+}

@@ -6,6 +6,7 @@ import {deliveriesPath,deliveryPath,mapDeliveries,mapDelivery} from "./delivery-
 import {COMPANY_KEYS,COMPANY_PATHS,COMPANY_MAPPERS,companyFailureState} from "./company-core.js";
 import {ACADEMY_PATH,mapAcademy} from "./academy-core.js";
 import {predevPath,crewPath,mapPredev,mapCrew} from "./journey-core.js";
+import {COCKPIT_PATH,MISSIONS_PATH,WORK_RUNS_PATH,ATTENTION_PATH,mapExecCockpit,mapExecMissions,mapExecWorkRuns,mapExecAttention} from "./executive-core.js";
 
 const TTL_MS=3000;
 const ROLE_ID_RE=/^UASCO-\d{4}$/;
@@ -132,6 +133,11 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     // //TR: FA-V2-PRODUCT: Proje Yolculuğu salt-okunur okuma-modelleri (GET /v1/predev/:missionId, GET /v1/crew/:missionId; ikisi de CORE-8'de izinli). Yalnız kanonik msn_ kimliği istek üretir; başarılıysa sanitize edilir, bozuk yanıt dürüst ERROR olur, okuma hatası ayrık dürüst durumdur (uydurma yok).
     async predev(missionId){const p=predevPath(missionId);if(!p)return {state:"ERROR",predev:null};const r=await get(p);return r.ok?mapPredev(r.data):{state:r.state,predev:null,message:r.message}},
     async crew(missionId){const p=crewPath(missionId);if(!p)return {state:"ERROR",crew:null};const r=await get(p);return r.ok?mapCrew(r.data):{state:r.state,crew:null,message:r.message}},
+    // //TR: FA-V2-PRODUCT (UI-236): Kurucu Yönetim Özeti ve İcra Defteri salt-okunur okumaları; dört sabit yol da main allow-list'inde zaten vardır (yeni uç nokta yok). Başarılıysa executive-core eşleyicileriyle fail-closed sanitize edilir (bozuk yanıt dürüst ERROR), okuma hatası ayrık dürüst durumdur; uydurma yok.
+    async execCockpit(){const r=await get(COCKPIT_PATH);return r.ok?mapExecCockpit(r.data):{state:r.state,cockpit:null,message:r.message}},
+    async execMissions(){const r=await get(MISSIONS_PATH);return r.ok?mapExecMissions(r.data):{state:r.state,missions:null,message:r.message}},
+    async execWorkRuns(){const r=await get(WORK_RUNS_PATH);return r.ok?mapExecWorkRuns(r.data):{state:r.state,runs:null,message:r.message}},
+    async execAttention(){const r=await get(ATTENTION_PATH);return r.ok?mapExecAttention(r.data):{state:r.state,attention:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }

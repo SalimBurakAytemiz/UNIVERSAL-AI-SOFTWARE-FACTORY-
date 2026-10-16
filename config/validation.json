@@ -366,7 +366,8 @@
         "tests/v7-core-predev-team-composer.test.ts",
         "tests/v7-ux-vp-visual-parity.test.ts",
         "tests/v7-core-predev-crew-api.test.ts",
-        "tests/v7-ux-journey.test.ts"
+        "tests/v7-ux-journey.test.ts",
+        "tests/v7-ux-executive.test.ts"
       ],
       "requiresDependencies": true
     },

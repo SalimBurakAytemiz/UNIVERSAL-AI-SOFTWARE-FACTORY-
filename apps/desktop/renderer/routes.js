@@ -4,6 +4,7 @@
 // //TR: UX WP-AGENTS: AI İş Gücü (workforce) artık canlı /v1/roles rol kataloğuna bağlı gerçek ve tam bir görünümdür; eski plannedPackage:"B3" (kısmi/planlı) etiketi kaldırıldı (app.js VIEWS değişmez).
 // //TR: FA-V2-PRODUCT (WP-ACADEMY): Skill Academy (Öğrenme & Yetkinlik) alanı Company OS/Teslimat ile aynı desende `component:"academy"` ile planned.js üzerinden gerçek görünüme (views/academy.js, salt-okunur GET /v1/academy) devreder; app.js VIEWS değişmez, plannedPackage yoktur. Bu bir öğrenme/yetkinlik KATALOĞUDUR, sertifika/eğitim kanıtı değildir (öğrenme yetki vermez).
 // //TR: FA-V2-PRODUCT (Proje Yolculuğu): seçili mission'ın otonom zinciri (pre-dev fazları, ekip koordinasyon ledger'ı, geliştirme -> bağımsız inceleme -> teslim) Company OS/Skill Academy ile aynı desende `component:"journey"` ile planned.js üzerinden gerçek görünüme (views/journey.js, salt-okunur GET /v1/predev/:missionId + GET /v1/crew/:missionId) devreder; app.js VIEWS değişmez, plannedPackage yoktur. Hiçbir faz/onay/verdict uydurulmaz, PRODUCT_VERIFIED gösterilmez.
+// //TR: FA-V2-PRODUCT (UI-236 Kurucu Yönetim Özeti ve İcra Defteri): Founder için başlık sayıları (cockpit, mission, koşu, Founder dikkati) ve yeni-etkinlik-önce İcra Defteri (koşu başına kaynak sürümleri, bağımsız inceleme kararı, teslim durumu) Company OS/Skill Academy/Proje Yolculuğu ile aynı desende `component:"executive"` ile planned.js üzerinden gerçek görünüme (views/executive.js, salt-okunur GET /v1/cockpit + /v1/missions + /v1/work-runs + /v1/founder-attention; dördü de zaten izinli) devreder; app.js VIEWS değişmez, plannedPackage yoktur. Hiçbir sayı/karar uydurulmaz, ürün doğrulaması gösterilmez.
 // Planlı paket numaraları yol haritası göstergesidir; tek yerde burada tutulur.
 export const ROUTES=Object.freeze([
   {id:"home",hash:"#/home",icon:"home",factory:true,view:"home"},
@@ -17,6 +18,7 @@ export const ROUTES=Object.freeze([
   {id:"company",hash:"#/company",icon:"building",factory:false,view:"planned",component:"company"},
   {id:"academy",hash:"#/academy",icon:"layers",factory:false,view:"planned",component:"academy"},
   {id:"journey",hash:"#/journey",icon:"route",factory:false,view:"planned",component:"journey"},
+  {id:"executive",hash:"#/executive",icon:"receipt",factory:false,view:"planned",component:"executive"},
   {id:"settings",hash:"#/settings",icon:"gear",factory:false,view:"settings"}
 ]);
 export const DEFAULT_ROUTE="home";

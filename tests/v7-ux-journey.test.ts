@@ -553,13 +553,13 @@ describe("Project Journey — locale parity and key coverage", () => {
 
 // ---------------- (7) routing ----------------
 describe("Project Journey — route delegation (app.js VIEWS unchanged)", () => {
-  it("routes.js maps #/journey to the planned host with component 'journey' (no plannedPackage), after academy", async () => {
+  it("routes.js maps #/journey to the planned host with component 'journey' (no plannedPackage), after academy and before executive", async () => {
     const routes = await load("routes.js");
     const r = routes.routeById("journey");
     expect(r).toMatchObject({id: "journey", hash: "#/journey", view: "planned", component: "journey", factory: false});
     expect(r.plannedPackage).toBeUndefined();
     expect(routes.routeFromHash("#/journey")).toBe("journey");
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-4)).toEqual(["company", "academy", "journey", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-5)).toEqual(["company", "academy", "journey", "executive", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("journey");
   });
   it("planned.js delegates the 'journey' component to the real view; app.js VIEWS table has no journey entry", async () => {
