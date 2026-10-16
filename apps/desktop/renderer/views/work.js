@@ -1,6 +1,6 @@
-// //TR: Bu görünüm Görevler / Work OS alanıdır: mission listesi (durum filtreli), "Yeni Görev" formu (proje, başlık, hedef, kabul kriterleri listesi, R0–R4 risk açıklamaları, isteğe bağlı argv test komutu), mission detayı (durum zaman çizelgesi, yalnız izinli sonraki geçişler, yüksek riskli geçişlerde onay penceresi, Çalıştır) ve /v1/work-runs koşu zaman çizelgesi; sunucu verisi yoksa dürüst UNAVAILABLE gösterilir, ilerleme uydurulmaz.
-import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip} from "../components.js";
-import {formatTime,MISSING} from "../model.js";
+// //TR: Bu görünüm Görevler / Work OS alanıdır ve UX WP-WORKOS ile Kurucu-Kokpiti sınıfı premium katmana yükseltilmiştir: üstte gerçek /v1/missions + /v1/work-runs okumalarından beslenen görev/koşu özeti (KPI karoları: toplam mission, etkin koşu, Kurucu dikkati bekleyen, gerçekten doğrulanmış koşu) ve yaşam-döngüsü dağılım şeridi vardır. Alt kısımda "Yeni Görev" formu (proje, başlık, hedef, kabul kriterleri listesi, R0–R4 risk açıklamaları, isteğe bağlı argv test komutu), mission listesi (durum filtreli), mission detayı (durum/faz/risk, izinli geçişler, yüksek riskli geçişlerde onay, Çalıştır), /v1/work-runs koşu zaman çizelgesi + koşu kartları ve /v1/evidence kanıt bağlama bölümü korunur/eklenir. WP2/WP-PROJECTS token ve bileşenleri (kpiTile/statePill/missionPill/timelineItem) yeniden kullanılır (palet değişmez, yeni token yok). Hiçbir sayı/durum uydurulmaz: veri canlı değilse dürüst UNAVAILABLE/OFFLINE, boşsa dürüst boş metin; koşu yalnız gerçek test-yürütme kanıtı varsa doğrulanmış sayılır (FD-REL-1; SOURCE_GENERATION_COMPLETE != PRODUCT_VERIFIED), aksi halde NOT_VERIFIED dürüstçe gösterilir. API verisi asla HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip,kpiTile,statePill,missionPill,timelineItem} from "../components.js";
+import {formatTime,MISSING,missionPillKind} from "../model.js";
 import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime} from "../work-core.js";
 import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
@@ -9,7 +9,80 @@ import {canOfferComplete} from "../delivery-core.js";
 
 const FORM="mission";
 const RUN_DETAIL_LIMIT=5;
+const RUN_TIMELINE_LIMIT=8;
+const EVIDENCE_LIMIT=12;
+// //TR: Görev durumu kategorilerinin yaşam-döngüsü sırası (soldan sağa); yalnız gerçekten mission bulunan kategoriler şeritte gösterilir. Bu, arka ucun bildirmediği bir "aşama" icat etmez, yalnız gerçek mission durumlarını kategoriye göre toplar (WP-PROJECTS ile aynı sıra).
+const CATEGORY_ORDER=Object.freeze(["IDLE","WAITING","ACTIVE","ATTENTION","BLOCKED","FAILED","DONE","STOPPED","NEUTRAL"]);
+const LIVE=r=>r&&(r.state==="VERIFIED"||r.state==="STALE");
 const inputOf=()=>({projectId:drafts.mission.projectId,title:drafts.mission.title,objective:drafts.mission.objective,acceptanceCriteria:drafts.mission.criteria,riskLevel:drafts.mission.riskLevel,testCommand:drafts.mission.testCommand});
+
+// ---------- Premium görev/koşu özeti katmanı (UX WP-WORKOS) ----------
+/** //TR: Dürüst veri bloğu: değer yalnız kaynak canlıyken (VERIFIED/STALE) geçerli tamsayıdır, aksi halde null (karo "—" ve ayrık durum rozeti gösterir). */
+const blockOf=(res,value,source)=>({state:res?.state??"ERROR",value:LIVE(res)?value:null,loading:false,source,asOf:null});
+
+/** //TR: Görev/koşu özeti KPI satırı — hepsi gerçek okumalardan: toplam mission, etkin koşu (ACTIVE kategorisi), Kurucu dikkati bekleyen mission (ATTENTION+BLOCKED) ve gerçekten doğrulanmış koşu (yalnız test-yürütme kanıtı olan; FD-REL-1). Hiçbir sayı uydurulmaz. */
+function summaryTiles(ctx,miss,runs){
+  const activeRuns=LIVE(runs)?runs.items.filter(r=>missionPillKind(r.status)==="ACTIVE").length:null;
+  const attention=LIVE(miss)?miss.items.filter(m=>{const k=missionPillKind(m.status);return k==="ATTENTION"||k==="BLOCKED"}).length:null;
+  const verifiedRuns=LIVE(runs)?runs.items.filter(r=>r&&r.testsExecuted===true).length:null;
+  return h(ctx.doc,"div",{class:"kpi-row",role:"group","aria-label":ctx.t("work.kpiGroup")},
+    kpiTile(ctx,{id:"wk-missions",iconName:"tasks",labelKey:"work.kpi.missions",block:blockOf(miss,LIVE(miss)?miss.items.length:null,"GET /v1/missions"),qualifier:ctx.t("work.kpi.q.missions")}),
+    kpiTile(ctx,{id:"wk-active",iconName:"pulse",labelKey:"work.kpi.activeRuns",block:blockOf(runs,activeRuns,"GET /v1/work-runs"),qualifier:ctx.t("work.kpi.q.activeRuns"),live:LIVE(runs)&&activeRuns>0}),
+    kpiTile(ctx,{id:"wk-attention",iconName:"alert",labelKey:"work.kpi.attention",block:blockOf(miss,attention,"GET /v1/missions"),qualifier:ctx.t("work.kpi.q.attention"),risk:LIVE(miss)&&attention>0}),
+    kpiTile(ctx,{id:"wk-verified",iconName:"shield",labelKey:"work.kpi.verifiedRuns",block:blockOf(runs,verifiedRuns,"GET /v1/work-runs"),qualifier:ctx.t("work.kpi.q.verifiedRuns")}));
+}
+
+/** //TR: Yaşam-döngüsü dağılım şeridi: gerçek mission durumlarını kategoriye (missionPillKind) göre toplayıp sıralı rozet+sayı olarak gösterir; mission yoksa null (çağıran dürüst boş metni gösterir). */
+function lifecycleStrip(ctx,missions,{id,labelKey}){
+  const doc=ctx.doc,counts=new Map();
+  for(const m of missions)counts.set(missionPillKind(m.status),(counts.get(missionPillKind(m.status))??0)+1);
+  const ordered=CATEGORY_ORDER.filter(k=>counts.has(k));
+  if(!ordered.length)return null;
+  const summary=ordered.map(k=>`${ctx.t(`pill.${k}`)} ${counts.get(k)}`).join(" · ");
+  return h(doc,"ul",{class:"pf-strip",id,role:"group","aria-label":`${ctx.t(labelKey)}: ${summary}`},ordered.map(k=>
+    h(doc,"li",{class:"pf-strip-item",dataset:{category:k,count:String(counts.get(k))}},statePill(ctx,k),h(doc,"strong",{class:"pf-strip-count",text:String(counts.get(k))}))));
+}
+
+/** //TR: Özet paneli: yaşam-döngüsü dağılımı; görev verisi canlı değilse dürüst durum, boşsa dürüst boş metin. Sayı/aşama uydurulmaz. */
+function overviewPanel(ctx,miss){
+  const doc=ctx.doc;
+  let body;
+  if(!LIVE(miss))body=stateNote(ctx,miss?.state??"ERROR");
+  else if(!miss.items.length)body=emptyNote(ctx,"work.overview.empty");
+  else body=lifecycleStrip(ctx,miss.items,{id:"work-overview-strip",labelKey:"work.overview.title"});
+  return panel(ctx,{titleKey:"work.overview.title",id:"work-overview",className:"pf-journey"},
+    h(doc,"p",{class:"note",text:ctx.t("work.overview.lead")}),body);
+}
+
+/** //TR: Yoğun koşu zaman çizelgesi: bu mission'a bağlı koşuların kronolojik premium özeti (başlangıç zamanı + durum rozeti + adım); yalnız koşu verisi canlıysa ve koşu varsa render edilir. Ayrıntılı koşu kartları ayrıca altta kalır. */
+function runTimeline(ctx,runsRes){
+  const doc=ctx.doc;
+  if(runsRes.state!=="VERIFIED"||!runsRes.items.length)return null;
+  const items=[...runsRes.items].sort((a,b)=>String(b.startedAt??"").localeCompare(String(a.startedAt??""))).slice(0,RUN_TIMELINE_LIMIT);
+  // //TR: Zaman çizelgesi yalnız durum + adımı gösterir; doğrulama/NOT_VERIFIED rozeti yinelenmez (ayrıntılı koşu kartında ve özet KPI'da dürüstçe zaten vardır), böylece tek koşu-kapsamlı rozet değişmezi (M1a) korunur.
+  return h(doc,"ol",{class:"timeline run-timeline",id:"work-run-timeline","aria-label":ctx.t("work.runtl.title")},items.map(r=>{
+    const step=r.step?`${r.step.name??MISSING}${r.step.index!==null?` (${r.step.index}${r.step.total!==null?`/${r.step.total}`:""})`:""}`:null;
+    return timelineItem(ctx,{time:formatTime(r.startedAt,ctx.i18n.lang),iso:r.startedAt??undefined,title:r.runId,
+      attribution:r.role??undefined,pill:missionPill(ctx,r.status),
+      meta:step?h(doc,"span",{class:"tl-step"},h(doc,"span",{text:step})):null});
+  }));
+}
+
+/** //TR: Kanıt bağlama bölümü: GET /v1/evidence (missionId süzgeçli) gerçek kanıt kayıtlarını listeler; her kayıt tür + doğrulama çipi (yalnız gerçek "VERIFIED" doğrulanmış sayılır) + kaynak yol + zaman taşır ve Güvence görünümüne bağlanır. Veri canlı değilse dürüst durum, boşsa dürüst boş metin; kanıt uydurulmaz. */
+function evidenceSection(ctx,evRes){
+  const doc=ctx.doc;
+  if(!evRes||evRes.state!=="VERIFIED")return stateNote(ctx,evRes?.state??"ERROR",evRes?.state==="UNAVAILABLE"?"work.evidence.unavailable":undefined);
+  if(!evRes.items.length)return emptyNote(ctx,"work.evidence.none");
+  const shown=evRes.items.slice(0,EVIDENCE_LIMIT);
+  return h(doc,"ul",{class:"cards evidence-list",id:"work-evidence-list"},shown.map(e=>
+    h(doc,"li",{class:"card evidence-item",dataset:{evidenceId:e.evidenceId}},
+      h(doc,"div",{class:"evidence-head"},
+        h(doc,"button",{type:"button",class:"link-btn",dataset:{focusKey:`wev-${e.evidenceId}`},on:{click:()=>{selection.evidenceId=e.evidenceId;ctx.navigate("assurance")}},text:`${e.kind??ctx.t("evidence.kindUnknown")} · ${e.evidenceId}`}),
+        verificationChip(ctx,e.verification)),
+      e.runId?h(doc,"p",{class:"note evidence-meta"},h(doc,"span",{class:"mono",text:e.runId})):null,
+      e.sourcePath?h(doc,"p",{class:"note evidence-meta mono",text:e.sourcePath}):null,
+      h(doc,"p",{class:"note evidence-meta"},h(doc,"time",{text:formatDateTime(e.createdAt,ctx.i18n.lang)})))));
+}
 
 /** Formu doğrular; geçerliyse idempotency anahtarıyla POST eder (yalnız kullanıcı gönderimi çağırır). */
 export async function submitMission(ctx){
@@ -127,10 +200,11 @@ function transitionControls(ctx,mission,awaiting){
     h(doc,"p",{class:"field-hint",id:"run-start-hint",text:ctx.t(startable?"work.run.hintOk":"work.run.hintNot")}),
     statusBlock(ctx,sid));
 }
-function detailPanel(ctx,detail,runsRes,runDetails){
+function detailPanel(ctx,detail,runsRes,runDetails,evRes){
   const doc=ctx.doc;
   if(detail.state!=="VERIFIED")return panel(ctx,{titleKey:"work.detail",id:"work-detail"},stateNote(ctx,detail.state));
   const m=detail.mission;
+  const tl=runTimeline(ctx,runsRes);
   return panel(ctx,{titleKey:"work.detail",id:"work-detail"},
     h(doc,"h3",{text:m.title}),
     h(doc,"p",{class:"panel-meta"},statusPill(ctx,m.status),badge(ctx,m.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:m.missionId}),missionNotVerified(runsRes.state==="VERIFIED"?runsRes.items:[],m.missionId)?notVerifiedBadge(ctx,"mission"):null),
@@ -139,7 +213,9 @@ function detailPanel(ctx,detail,runsRes,runDetails){
     m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"ul",{},m.tasks.map(t=>h(doc,"li",{},t.title," ",statusPill(ctx,t.status))))):null,
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),
     transitionControls(ctx,m,awaitingRun(runsRes,runDetails)),
-    h(doc,"h4",{text:ctx.t("run.timeline")}),runsSection(ctx,runsRes,runDetails));
+    tl?[h(doc,"h4",{text:ctx.t("work.runtl.title")}),h(doc,"p",{class:"note",text:ctx.t("work.runtl.lead")}),tl]:null,
+    h(doc,"h4",{text:ctx.t("run.timeline")}),runsSection(ctx,runsRes,runDetails),
+    h(doc,"h4",{text:ctx.t("work.evidence.title")}),h(doc,"p",{class:"note",text:ctx.t("work.evidence.lead")}),evidenceSection(ctx,evRes));
 }
 
 export async function render(ctx){
@@ -152,13 +228,20 @@ export async function render(ctx){
   else body=h(doc,"div",{},filterBar(ctx,res.items),missionTable(ctx,res.items,names,allRuns));
   let detailNode=null;
   if(selection.missionId){
-    const [detail,runsRes]=await Promise.all([ctx.api.missionDetail(selection.missionId),ctx.api.workRuns({missionId:selection.missionId})]);
+    const [detail,runsRes,evRes]=await Promise.all([ctx.api.missionDetail(selection.missionId),ctx.api.workRuns({missionId:selection.missionId}),ctx.api.evidenceList({missionId:selection.missionId,limit:EVIDENCE_LIMIT})]);
     const runDetails=new Map();
     if(runsRes.state==="VERIFIED")await Promise.all([...new Set([...runsRes.items.slice(0,RUN_DETAIL_LIMIT),...runsRes.items.filter(r=>r.status==="AWAITING_APPROVAL")])].map(async r=>{const d=await ctx.api.workRunDetail(r.runId);if(d.state==="VERIFIED"&&d.run)runDetails.set(r.runId,d.run)}));
-    detailNode=detailPanel(ctx,detail,runsRes,runDetails);
+    detailNode=detailPanel(ctx,detail,runsRes,runDetails,evRes);
   }
-  return h(doc,"div",{class:"view"},h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.work.title")}),
-    h(doc,"p",{class:"panel-meta"},chip(ctx,{state:res.state,value:res.items?.length??null}),h(doc,"span",{text:ctx.store.projectId?ctx.t("work.scopeProject"):ctx.t("work.scopeAll")})),
+  // //TR: Premium başlık (hero): göz üstü etiket + başlık + alt başlık + dürüst kaynak çipi/kapsam. Mevcut h1#view-title korunur (odak hedefi).
+  const header=h(doc,"div",{class:"hero"},
+    h(doc,"p",{class:"hero-eyebrow",text:ctx.t("work.eyebrow")}),
+    h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.work.title")}),
+    h(doc,"p",{class:"hero-sub",text:ctx.t("work.subtitle")}),
+    h(doc,"p",{class:"panel-meta"},chip(ctx,{state:res.state,value:res.items?.length??null}),h(doc,"span",{text:ctx.store.projectId?ctx.t("work.scopeProject"):ctx.t("work.scopeAll")})));
+  return h(doc,"div",{class:"view view-work"},header,
+    summaryTiles(ctx,res,allRunsRes),
+    overviewPanel(ctx,res),
     missionForm(ctx,projects),
     panel(ctx,{titleKey:"work.list",id:"work-list"},body),
     detailNode);

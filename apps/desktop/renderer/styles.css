@@ -433,3 +433,16 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   .pf-strip-item,.pf-card{border:1px solid CanvasText;forced-color-adjust:auto}
   .pf-card-active,.card-active{border:2px solid Highlight}
 }
+
+/* //TR: UX WP-WORKOS: Görev/koşu premium katmanı mevcut WP2/WP-PROJECTS token tabanını kullanır (palet değişmez, yeni renk token'ı yok): KPI satırı + yaşam-döngüsü şeridi (pf-strip) + koşu akışı zaman çizelgesi (timeline) + kanıt bağlama kartları. Vurgu yalnız mevcut .kpi-live/.kpi-risk ve .timeline çizgisinden gelir; forced-colors altında sınırlar CanvasText'e düşer. */
+.view-work{display:grid;gap:var(--space-4)}
+.run-timeline{margin:.2rem 0 .6rem}
+.run-timeline .tl-step{display:inline-flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);color:var(--muted);font-size:var(--fs-caption)}
+.evidence-list{grid-template-columns:repeat(auto-fill,minmax(min(100%,20rem),1fr))}
+.evidence-item{gap:var(--space-2);padding:.9rem;box-shadow:var(--elev-1)}
+.evidence-item:hover{border-color:var(--glow)}
+.evidence-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2)}
+.evidence-meta{margin:0;font-size:var(--fs-caption)}
+@media (forced-colors:active){
+  .evidence-item{border:1px solid CanvasText;forced-color-adjust:auto}
+}
