@@ -6,6 +6,7 @@ import {formatCount,formatTime,MISSING,pushSample,searchEntries,pillKindFor} fro
 import {syncNav,syncTabs} from "./nav.js";
 import {keepFocus} from "./focus.js";
 import {selection} from "./forms.js";
+import {maybeOpenFirstRun} from "./views/firstrun.js";
 
 export const PRINCIPAL="FOUNDER_LOCAL";
 const FEED_TABS=Object.freeze(["flow","health","agenda"]);
@@ -156,6 +157,8 @@ export function createShell(ctx){
     el("projectSelect").addEventListener("change",e=>{ctx.selectProject(e.target.value||null)});
     wireSearch();
     doc.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&!e.altKey&&e.key.toLowerCase()==="k"){e.preventDefault();el("searchInput").focus();el("searchInput").select()}});
+    // //TR: UX WP-FIRSTRUN: ilk açılışta (güvenli per-user tercih "görülmedi" ise) kurulum/onboarding sihirbazını bir kez aç. Sihirbaz KAPI DEĞİLDİR (atlanır/başarısız olursa uygulama yine açılır) ve asla giriş yapmaz/durum uydurmaz; her hata yutulur.
+    try{maybeOpenFirstRun(ctx)}catch{/* ilk kurulum sihirbazı açılamadı; uygulama yine açılır */}
   }
   return {data,wireStatic,renderAll,renderNav,renderContext,renderStop,refresh,announce,showStopError,clearStopError,openStopDialog,closeStopDialog};
 }

@@ -492,3 +492,16 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 @media (forced-colors:active){
   .qa-stat,.qa-code,.qa-sec-table tr[class~="row-selected"]{border:1px solid CanvasText;forced-color-adjust:auto}
 }
+/* //TR: UX WP-FIRSTRUN ilk-açılış sihirbazı (modal dialog): mevcut .dialog tabanı + WP2 token/bileşenleri yeniden kullanılır, YENİ renk token'ı yoktur; sınır vurgusu --accent'tendir, forced-colors altında CanvasText/Highlight'a düşer, reduced-motion global kuralla korunur. */
+.wizard{max-width:min(42rem,94vw);border-color:var(--accent);box-shadow:var(--glow-lg);display:grid;gap:var(--space-4)}
+.wiz-head{display:grid;gap:.2rem}
+.wiz-title{margin:0;font-size:1.2rem}
+.wiz-steps{margin:0;color:var(--muted);font-size:var(--fs-caption);text-transform:uppercase;letter-spacing:.05em}
+.wiz-body{min-width:0}
+.wiz-step{display:grid;gap:var(--space-2);min-width:0}
+.wiz-step-title{margin:0;font-size:1.05rem;outline:none}
+.wiz-sub{margin:.4rem 0 0;font-size:var(--fs-label)}
+.wiz-foot{margin:0}
+@media (forced-colors:active){
+  .wizard{border:2px solid CanvasText;forced-color-adjust:auto}
+}
