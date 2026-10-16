@@ -3,6 +3,7 @@ import {classifyFailure,mapRolesPage,mapCockpit,emptyCockpit,mapProjects,mapMiss
 import {MISSION_ID_RE,SAFE_ID_RE,mapMissionDetail,mapWorkRuns,mapWorkRunDetail,mapEvidenceList,mapEvidenceDetail} from "./work-core.js";
 import {devrunPath,filesPath,filePath,gitLogPath,gitDiffPath,exportsPath,exportItemPath,EXECUTORS_PATH,mapDevRun,mapFileList,mapFileContent,mapGitLog,mapGitDiff,mapExports,mapExecutors} from "./project-core.js";
 import {deliveriesPath,deliveryPath,mapDeliveries,mapDelivery} from "./delivery-core.js";
+import {COMPANY_KEYS,COMPANY_PATHS,COMPANY_MAPPERS,companyFailureState} from "./company-core.js";
 
 const TTL_MS=3000;
 export function createApi({bridge,store,now=()=>Date.now()}){
@@ -27,6 +28,8 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     }catch(e){return {ok:false,thrown:true,...classifyFailure(e),message:String(e&&e.message!==undefined?e.message:e).slice(0,300)}}
   }
   const stale=r=>r.epoch!==store.epoch;
+  // //TR: UX WP3: Company OS kaynaklarının son başarılı okuması; sonraki okuma başarısız olursa kayıtlar STALE (eski veri, zamanıyla) gösterilir, hiç başarılı okuma yoksa asla veri uydurulmaz.
+  const companyLastGood=new Map();
   return {
     get,post,stale,
     async cockpit(){const r=await get("/v1/cockpit");return r.ok?{state:"OK",data:mapCockpit(r.data)}:{state:r.state,data:emptyCockpit(r.state),message:r.message}},
@@ -85,6 +88,21 @@ export function createApi({bridge,store,now=()=>Date.now()}){
         cursor=p.nextCursor;
       }
       return {state:"ERROR",items:[],total:null};
+    },
+    /**
+     * //TR: UX WP3: GET /v1/company/* (CRM hesap/kişi/fırsat, Finans fatura/ödeme, Hukuk sözleşme) altı kaynağı paralel okur ve her biri için {state,items,asOf,cause,message} döner:
+     * VERIFIED (gerçek kayıtlar; boşsa görünüm EMPTY gösterir), STALE (son başarılı okuma + neden), NOT_CONNECTED (köprü allow-list'i yolu kabul etmiyor), UNAVAILABLE, OFFLINE, ERROR. Yalnız GET; yazma yok.
+     */
+    async company(){
+      const rs=await Promise.all(COMPANY_KEYS.map(k=>get(COMPANY_PATHS[k])));
+      const out={};
+      COMPANY_KEYS.forEach((k,i)=>{
+        const r=rs[i],mapped=r.ok?COMPANY_MAPPERS[k](r.data):null;
+        if(mapped&&mapped.state==="VERIFIED"){const asOf=new Date(now()).toISOString();companyLastGood.set(k,{items:mapped.items,asOf});out[k]={state:"VERIFIED",items:mapped.items,asOf,cause:null,message:null};return}
+        const cause=mapped?"ERROR":companyFailureState(r),message=mapped?"COMPANY_RESPONSE_INVALID":r.message??null,prev=companyLastGood.get(k);
+        out[k]=prev&&cause!=="NOT_CONNECTED"?{state:"STALE",items:prev.items,asOf:prev.asOf,cause,message}:{state:cause,items:[],asOf:null,cause,message};
+      });
+      return out;
     },
     async raw(path){return get(path)}
   };

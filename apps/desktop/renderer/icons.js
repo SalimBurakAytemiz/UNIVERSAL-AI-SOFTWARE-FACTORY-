@@ -33,7 +33,10 @@ const PATHS=Object.freeze({
   arrowdown:"M12 5v14M6 13l6 6 6-6",
   minus:"M5 12h14",
   evidence:"M6 3h8l4 4v14H6zM14 3v4h4M9 14l2 2 4-4",
-  chevron:"M9 6l6 6-6 6"
+  chevron:"M9 6l6 6-6 6",
+  receipt:"M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3",
+  contract:"M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h3",
+  funnel:"M3 4h18l-7 8v6l-4 2v-8z"
 });
 export const ICON_NAMES=Object.freeze(Object.keys(PATHS));
 export function icon(doc,name,size=20){

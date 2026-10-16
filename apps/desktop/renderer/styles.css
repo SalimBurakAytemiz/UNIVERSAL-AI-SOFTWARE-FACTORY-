@@ -129,7 +129,7 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 
 /* KPI */
 /* //TR: KPI ızgarası konteyner genişliğine göre 1/2/4 sütundur (6 kart: 4 tekil + 2 geniş); kart içeriği hiçbir genişlikte taşmaz. */
-.view-home{container-type:inline-size}
+.view-home,.view-company{container-type:inline-size}
 .kpi-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem}
 @container (min-width:52rem){.kpi-row{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @container (max-width:38rem){.kpi-row{grid-template-columns:minmax(0,1fr)}.kpi-wide{grid-column:auto}}
@@ -374,4 +374,33 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 @media (forced-colors:active){
   .ct-map .building[data-selected="true"] rect{stroke:Highlight}
   .ct-map .building:focus-visible{outline:3px solid Highlight}
+}
+/* //TR: UX WP3: Company OS (CRM/Finans/Hukuk) görünümü. Durum ve kayıt rozetleri ikon+metin taşır (renk tek başına anlam değildir); sayısal sütunlar sağa hizalı; para birimleri ayrı satırlarda listelenir; glow yalnız mevcut KPI sınıflarından gelir. */
+.company-toolbar{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:var(--space-3) var(--space-4)}
+.company-tabs{margin:0}
+.company-tabs [role="tab"]{min-height:2.25rem}
+.tab-flag{color:var(--warn);font-weight:800}
+.company-filter{margin:0}
+.company-panel{display:grid;gap:var(--space-4);min-width:0}
+.company-panel:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.company-section .company-pill-row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3);margin:0 0 var(--space-3)}
+.company-src{color:var(--muted);font-size:var(--fs-caption)}
+.company-state{display:grid;gap:var(--space-1);padding:var(--space-3) var(--space-4);border:1px dashed var(--border-ui);border-radius:var(--radius-md);background:var(--bg-2)}
+.company-state-head{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
+.company-state .note{margin:0}
+.state-not_connected{border-color:var(--accent-2);border-style:dotted}
+.state-offline{border-color:var(--danger);border-style:dotted}
+.state-error{border-color:var(--danger)}
+.company-stale{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);margin:0 0 var(--space-3);border:1px solid var(--warn);border-radius:var(--radius-md);background:var(--bg-2);color:var(--text)}
+.company-sources{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-4)}
+.company-sources li{display:inline-flex;align-items:center;gap:var(--space-2)}
+.company-src-name{font-weight:600}
+.company-table th.num,.company-table td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.money{font-variant-numeric:tabular-nums}
+.money-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
+.money-list .money{font-weight:700}
+.company-money{display:grid;gap:var(--space-1)}
+@media (forced-colors:active){
+  .company-state,.company-stale{border:1px solid CanvasText}
+  .tab-flag{color:CanvasText}
 }

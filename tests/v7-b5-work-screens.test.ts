@@ -957,12 +957,13 @@ describe("B5 static safety, routes and wiring", () => {
     expect(api).not.toMatch(/apiPost\(\s*[^p]/);
     for (const f of walk(path.join(rend, "views")).concat(["forms.js", "work-actions.js", "shell.js"].map(x => path.join(rend, x)))) expect(read(f), f).not.toMatch(/\bbridge\b|apiPost|apiGet/);
   });
-  it("routes: Güvence and Gelen Kutusu are real views, Teslimat/Company stay honest planned panels, workforce keeps the partial panel", async () => {
+  it("routes: Güvence and Gelen Kutusu are real views, Teslimat stays an honest planned panel and Company OS (UX WP3) is a real view hosted by planned.js, workforce keeps the partial panel", async () => {
     const routes = await load(rend, "routes.js");
     const by = (id: string) => routes.ROUTES.find((r: any) => r.id === id);
     expect(by("assurance").view).toBe("assurance"); expect(by("assurance").plannedPackage).toBeUndefined();
     expect(by("inbox").view).toBe("inbox"); expect(by("inbox").plannedPackage).toBeUndefined();
-    expect(by("delivery").view).toBe("planned"); expect(by("company").view).toBe("planned");
+    expect(by("delivery").view).toBe("planned"); expect(by("delivery").component).toBeUndefined();
+    expect(by("company").view).toBe("planned"); expect(by("company").component).toBe("company"); expect(by("company").plannedPackage).toBeUndefined();
     expect(by("workforce").plannedPackage).toBe("B3");
     expect(fs.existsSync(path.join(rend, "views", "assurance.js"))).toBe(true);
   });

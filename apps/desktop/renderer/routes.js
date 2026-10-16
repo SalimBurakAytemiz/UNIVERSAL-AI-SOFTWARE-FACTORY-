@@ -1,4 +1,5 @@
 // //TR: Bu modül hash tabanlı yönlendirme tablosunu tanımlar: sol navigasyondaki 8 Factory alanı sabit sırada, ardından Company OS ve Ayarlar (B5: Güvence ve Gelen Kutusu artık gerçek görünümdür); her alanın route id'si, başlığı ve ya gerçek görünümü ya da planlı paketi (dürüst "henüz uygulanmadı" paneli) vardır.
+// //TR: UX WP3: Company OS artık gerçek görünümdür (views/company.js, GET /v1/company/*); app.js (korumalı) görünümleri VIEWS tablosundan sabit anahtarla seçtiği için rota "planned" ev sahibi modülüne bağlı kalır ve views/planned.js `component` alanı olan rotayı gerçek görünüme devreder; plannedPackage yoktur.
 // Planlı paket numaraları yol haritası göstergesidir; tek yerde burada tutulur.
 export const ROUTES=Object.freeze([
   {id:"home",hash:"#/home",icon:"home",factory:true,view:"home"},
@@ -9,7 +10,7 @@ export const ROUTES=Object.freeze([
   {id:"delivery",hash:"#/delivery",icon:"rocket",factory:true,view:"planned",plannedPackage:"B6"},
   {id:"tower",hash:"#/tower",icon:"tower",factory:true,view:"tower"},
   {id:"inbox",hash:"#/inbox",icon:"inbox",factory:true,view:"inbox"},
-  {id:"company",hash:"#/company",icon:"building",factory:false,view:"planned",plannedPackage:"B7"},
+  {id:"company",hash:"#/company",icon:"building",factory:false,view:"planned",component:"company"},
   {id:"settings",hash:"#/settings",icon:"gear",factory:false,view:"settings"}
 ]);
 export const DEFAULT_ROUTE="home";

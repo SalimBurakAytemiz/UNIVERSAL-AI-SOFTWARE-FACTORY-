@@ -48,7 +48,7 @@ describe("B4 i18n", () => {
     const tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
     const routes = await load(rend, "routes.js");
     const need = new Set<string>();
-    for (const r of routes.ROUTES) { need.add(`area.${r.id}.title`); need.add(`area.${r.id}.desc`); if (r.plannedPackage || r.view === "planned") for (const i of [1, 2, 3]) need.add(`area.${r.id}.plan${i}`); }
+    for (const r of routes.ROUTES) { need.add(`area.${r.id}.title`); need.add(`area.${r.id}.desc`); if (r.plannedPackage || (r.view === "planned" && !r.component)) for (const i of [1, 2, 3]) need.add(`area.${r.id}.plan${i}`); }
     for (const k of ["LOADING", "EMPTY", "STALE", "OFFLINE", "ERROR", "UNVERIFIED", "VERIFIED"]) need.add(`chip.${k}`);
     for (const k of ["LOADING", "EMPTY", "VERIFIED", "STALE", "UNAVAILABLE", "ERROR", "OFFLINE"]) need.add(`state.${k}`);
     for (const k of ["VERIFIED", "LOADING", "OFFLINE", "ERROR"]) need.add(`ctx.api.${k}`);
@@ -78,7 +78,7 @@ describe("B4 routes and navigation", () => {
       expect(routes.routeFromHash(r.hash)).toBe(r.id);
       expect(tr[`area.${r.id}.title`]).toBeTruthy();
       expect(en[`area.${r.id}.title`]).toBeTruthy();
-      if (r.view === "planned") expect(r.plannedPackage, r.id).toMatch(/^B\d+$/);
+      if (r.view === "planned" && !r.component) expect(r.plannedPackage, r.id).toMatch(/^B\d+$/);
     }
     expect(tr["area.home.title"]).toContain("Ana Sayfa");
     expect(tr["area.work.title"]).toContain("Work OS");
