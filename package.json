@@ -1,7 +1,7 @@
 {
   "//TR": "Bu dosya V6 audit/remediation candidate için Node>=24, exact direct deps ve trust/supply-chain/domain/semantic validation zincirini tanımlar.",
   "name": "universal-ai-software-company-os",
-  "version": "0.7.0-dev.2",
+  "version": "0.7.0-dev.3",
   "private": true,
   "type": "module",
   "engines": {
