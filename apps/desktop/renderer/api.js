@@ -5,6 +5,7 @@ import {devrunPath,filesPath,filePath,gitLogPath,gitDiffPath,exportsPath,exportI
 import {deliveriesPath,deliveryPath,mapDeliveries,mapDelivery} from "./delivery-core.js";
 import {COMPANY_KEYS,COMPANY_PATHS,COMPANY_MAPPERS,companyFailureState} from "./company-core.js";
 import {ACADEMY_PATH,mapAcademy} from "./academy-core.js";
+import {predevPath,crewPath,mapPredev,mapCrew} from "./journey-core.js";
 
 const TTL_MS=3000;
 const ROLE_ID_RE=/^UASCO-\d{4}$/;
@@ -128,6 +129,9 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     },
     // //TR: FA-V2-PRODUCT: Skill Academy salt-okunur okuma-modeli (GET /v1/academy). Başarılıysa mapAcademy ile sanitize edilir (uydurma yok, dürüst durumlar); okuma başarısızsa ayrık dürüst durum ve boş veri döner.
     async academy(){const r=await get(ACADEMY_PATH);return r.ok?mapAcademy(r.data):{state:r.state,learnings:[],sources:[],reuses:0,globalKnowledge:[],byStatus:{},metrics:null,message:r.message}},
+    // //TR: FA-V2-PRODUCT: Proje Yolculuğu salt-okunur okuma-modelleri (GET /v1/predev/:missionId, GET /v1/crew/:missionId; ikisi de CORE-8'de izinli). Yalnız kanonik msn_ kimliği istek üretir; başarılıysa sanitize edilir, bozuk yanıt dürüst ERROR olur, okuma hatası ayrık dürüst durumdur (uydurma yok).
+    async predev(missionId){const p=predevPath(missionId);if(!p)return {state:"ERROR",predev:null};const r=await get(p);return r.ok?mapPredev(r.data):{state:r.state,predev:null,message:r.message}},
+    async crew(missionId){const p=crewPath(missionId);if(!p)return {state:"ERROR",crew:null};const r=await get(p);return r.ok?mapCrew(r.data):{state:r.state,crew:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }

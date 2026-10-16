@@ -533,3 +533,47 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   .drawer{border:2px solid CanvasText;forced-color-adjust:auto}
   .search-opt[aria-selected="true"]{outline:3px solid Highlight}
 }
+
+/* //TR: FA-V2-PRODUCT Proje Yolculuğu: otonom zincir şeridi (ol > li > button), pre-dev faz listesi, uzman ledger'ı ve geliştirme/inceleme/teslim kartları mevcut token tabanını kullanır (palet değişmez, yeni renk token'ı yok). Durum anlamı rozet METNİNDE ve ikonundadır; üst kenar rengi yalnız pekiştirmedir. TR uzun etiketler ve %200 yakınlaştırma için tüm hücreler min-width:0 + overflow-wrap ile sarılır; forced-colors altında sistem renklerine düşer, reduced-motion altında geçiş yoktur. */
+.view-journey{container-type:inline-size;display:grid;gap:var(--space-4)}
+.journey-rail{list-style:none;margin:var(--space-3) 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,9.5rem),1fr));gap:var(--space-2)}
+.journey-step{min-width:0;display:grid}
+.journey-node{display:grid;gap:var(--space-1);align-content:start;justify-items:start;width:100%;min-width:0;text-align:left;padding:var(--space-3);border:1px solid var(--border-ui);border-top:3px solid var(--border-ui);border-radius:var(--radius-md);background:linear-gradient(180deg,var(--surface-2),var(--surface));color:var(--text);font:inherit;cursor:pointer;transition:border-color var(--motion-hover) ease,box-shadow var(--motion-hover) ease}
+.journey-node:hover{border-color:var(--glow);box-shadow:var(--glow-sm)}
+.journey-node[aria-current="step"]{border-color:var(--accent);border-top-color:var(--accent);box-shadow:var(--glow-md)}
+.journey-step[data-step-state="APPROVED"] .journey-node,.journey-step[data-step-state="SOURCE_RECORDED"] .journey-node,.journey-step[data-step-state="REVIEW_CLEAN"] .journey-node{border-top-color:var(--ok)}
+.journey-step[data-step-state="DRAFT"] .journey-node{border-top-color:var(--accent)}
+.journey-step[data-step-state="SUBMITTED"] .journey-node,.journey-step[data-step-state="SOURCE_ONLY"] .journey-node{border-top-color:var(--warn)}
+.journey-step[data-step-state="REJECTED"] .journey-node,.journey-step[data-step-state="REWORK_REQUESTED"] .journey-node,.journey-step[data-step-state="REVIEW_REWORK_LIMIT_EXCEEDED"] .journey-node{border-top-color:var(--danger)}
+.journey-num{font-family:var(--font-mono);font-size:var(--fs-caption);color:var(--muted)}
+.journey-name{font-weight:700;overflow-wrap:anywhere}
+.journey-sub{font-size:var(--fs-caption);color:var(--muted);overflow-wrap:anywhere}
+.journey-phases,.journey-experts{list-style:none;margin:var(--space-3) 0 0;padding:0;display:grid;gap:var(--space-2)}
+.journey-phase{position:relative;display:grid;grid-template-columns:.75rem minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) 0}
+.journey-phase:not(:last-child)::before{content:"";position:absolute;left:.28rem;top:1.4rem;bottom:-.5rem;width:1px;background:var(--border)}
+.journey-phase[aria-current="step"] .tl-dot{background:var(--warn);box-shadow:var(--glow-md)}
+.journey-phase[data-art-state="APPROVED"] .tl-dot{background:var(--ok)}
+.journey-phase[data-art-state="NOT_STARTED"] .tl-dot{background:var(--muted);box-shadow:none}
+.journey-phase-body{display:grid;gap:var(--space-1);min-width:0}
+.journey-phase-head{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
+.journey-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:.2rem var(--space-3);margin:var(--space-1) 0 0;font-size:var(--fs-label)}
+.journey-facts dt{color:var(--muted)}.journey-facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.journey-role{display:inline-block;margin-right:var(--space-2)}
+.journey-expert{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3);padding:var(--space-2) var(--space-3);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)}
+.journey-expert-kind{font-weight:700;min-width:0;overflow-wrap:anywhere}
+.journey-events,.journey-versions{margin-top:var(--space-3)}
+.journey-versions .tl-item{grid-template-columns:.75rem 5rem minmax(0,1fr)}
+.journey-state-head{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
+.journey-state,.journey-delivery{display:grid;gap:var(--space-1);padding:var(--space-3);border:1px dashed var(--border-ui);border-radius:var(--radius-md)}
+.journey-run{display:grid;gap:var(--space-2);padding:var(--space-4);margin-top:var(--space-3);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface)}
+.journey-run-title{margin:0;font-size:var(--fs-h3)}
+.journey-chosen{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:var(--space-3) 0 0}
+.journey-section:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+@container (max-width:40rem){.journey-rail{grid-template-columns:minmax(0,1fr)}.journey-facts{grid-template-columns:minmax(0,1fr)}.journey-versions .tl-item{grid-template-columns:.75rem minmax(0,1fr)}}
+@media (forced-colors:active){
+  .journey-node,.journey-expert,.journey-run,.journey-state,.journey-delivery{border:1px solid CanvasText;forced-color-adjust:auto}
+  .journey-node[aria-current="step"]{border:3px solid Highlight}
+  .journey-node:focus-visible,.journey-section:focus-visible{outline:3px solid Highlight}
+  .journey-phase[aria-current="step"] .tl-dot{background:Highlight}
+  .journey-phase::before{background:CanvasText}
+}
