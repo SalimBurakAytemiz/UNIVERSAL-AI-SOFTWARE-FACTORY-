@@ -868,7 +868,7 @@ describe("B5 Güvence screen", () => {
 });
 
 describe("B5 AI İş Gücü screen", () => {
-  it("separates registered roles (GET /v1/agents) from active workers and lists live runs; carries the 599 ≠ running note and the planned catalog panel", async () => {
+  it("separates registered roles (GET /v1/agents) from active workers and lists live runs; carries the 599 ≠ running note and the live /v1/roles role-catalog panel (UX WP-AGENTS, no stale planned panel)", async () => {
     const get = (p: string) => {
       if (p === "/v1/agents") return {count: 12};
       if (p === "/v1/cockpit") return {generatedAt: "2026-10-14T10:00:00.000Z", workforce: {state: "VERIFIED", registeredRoles: 12, targetRoles: 599, activeWorkerRuns: 1}};
@@ -884,7 +884,9 @@ describe("B5 AI İş Gücü screen", () => {
     expect(text(root)).toContain("599 hedef rol kataloğu ≠ çalışan ajan");
     expect(byData(root, "runId").map(n => n.dataset.runId)).toEqual([RUN]);
     expect(text(byData(root, "runId", RUN)[0])).toContain("qa-engineer");
-    expect(byData(root, "planned").length).toBe(1);
+    // UX WP-AGENTS: AI İş Gücü artık canlı /v1/roles rol kataloğuna bağlı gerçek bir görünümdür; eski planlı/kısmi panel (data-planned) kaldırıldı ve yerini rol kataloğu paneli aldı.
+    expect(byData(root, "planned").length).toBe(0);
+    expect(byId(root, "wf-catalog")).not.toBeNull();
     const tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
     expect(tr["workforce.catalogNote"]).toContain("599");
   });
@@ -961,14 +963,14 @@ describe("B5 static safety, routes and wiring", () => {
     expect(api).not.toMatch(/apiPost\(\s*[^p]/);
     for (const f of walk(path.join(rend, "views")).concat(["forms.js", "work-actions.js", "shell.js"].map(x => path.join(rend, x)))) expect(read(f), f).not.toMatch(/\bbridge\b|apiPost|apiGet/);
   });
-  it("routes: Güvence and Gelen Kutusu are real views, Teslimat (UX WP-DELIVERY) and Company OS (UX WP3) are real views hosted by planned.js, workforce keeps the partial panel", async () => {
+  it("routes: Güvence and Gelen Kutusu are real views, Teslimat (UX WP-DELIVERY) and Company OS (UX WP3) are real views hosted by planned.js, workforce (UX WP-AGENTS) is a real /v1/roles catalog view with no planned package", async () => {
     const routes = await load(rend, "routes.js");
     const by = (id: string) => routes.ROUTES.find((r: any) => r.id === id);
     expect(by("assurance").view).toBe("assurance"); expect(by("assurance").plannedPackage).toBeUndefined();
     expect(by("inbox").view).toBe("inbox"); expect(by("inbox").plannedPackage).toBeUndefined();
     expect(by("delivery").view).toBe("planned"); expect(by("delivery").component).toBe("delivery"); expect(by("delivery").plannedPackage).toBeUndefined();
     expect(by("company").view).toBe("planned"); expect(by("company").component).toBe("company"); expect(by("company").plannedPackage).toBeUndefined();
-    expect(by("workforce").plannedPackage).toBe("B3");
+    expect(by("workforce").view).toBe("workforce"); expect(by("workforce").plannedPackage).toBeUndefined();
     expect(fs.existsSync(path.join(rend, "views", "assurance.js"))).toBe(true);
     expect(fs.existsSync(path.join(rend, "views", "delivery.js"))).toBe(true);
   });

@@ -1,11 +1,12 @@
 // //TR: Bu modül renderer veri erişiminin tek kapısıdır: yalnız preload köprüsü (window.uasco.apiGet / apiPost) üzerinden GET ve sabit allow-list'li JSON POST yapar, token'ı hiç görmez; sonuçları epoch'lu önbellekte tutar, aynı anda gelen istekleri birleştirir ve eski epoch yanıtlarını atar.
-import {classifyFailure,mapRolesPage,mapCockpit,emptyCockpit,mapProjects,mapMissions,mapControlStatus,mapEvents,mapAttention} from "./model.js";
+import {classifyFailure,mapRolesPage,mapRoleCatalogPage,mapRoleDetail,mapCockpit,emptyCockpit,mapProjects,mapMissions,mapControlStatus,mapEvents,mapAttention} from "./model.js";
 import {MISSION_ID_RE,SAFE_ID_RE,mapMissionDetail,mapWorkRuns,mapWorkRunDetail,mapEvidenceList,mapEvidenceDetail} from "./work-core.js";
 import {devrunPath,filesPath,filePath,gitLogPath,gitDiffPath,exportsPath,exportItemPath,EXECUTORS_PATH,mapDevRun,mapFileList,mapFileContent,mapGitLog,mapGitDiff,mapExports,mapExecutors} from "./project-core.js";
 import {deliveriesPath,deliveryPath,mapDeliveries,mapDelivery} from "./delivery-core.js";
 import {COMPANY_KEYS,COMPANY_PATHS,COMPANY_MAPPERS,companyFailureState} from "./company-core.js";
 
 const TTL_MS=3000;
+const ROLE_ID_RE=/^UASCO-\d{4}$/;
 export function createApi({bridge,store,now=()=>Date.now()}){
   async function get(path,{force=false}={}){
     const hit=store.cache.get(path);if(!force&&hit&&now()-hit.at<TTL_MS)return hit.promise;
@@ -88,6 +89,26 @@ export function createApi({bridge,store,now=()=>Date.now()}){
         cursor=p.nextCursor;
       }
       return {state:"ERROR",items:[],total:null};
+    },
+    // //TR: UX WP-AGENTS: rol KATALOĞU /v1/roles sayfalarından (limit=100, sabit imleç biçimi) zengin ama güvenli alanlarla okunur; roles() ile aynı tam-ya-da-boş garantisi (sayfa eksik/bozuk/tekrarlı/toplamla uyuşmaz => UNAVAILABLE/ERROR, asla kısmi). control-tower sözleşmesini değiştirmemek için ayrı eşleyici (mapRoleCatalogPage) kullanılır.
+    async roleCatalog(){
+      const items=[],seen=new Set();let cursor=null,total=null;
+      for(let page=0;page<12;page++){
+        const r=await get(cursor?`/v1/roles?limit=100&cursor=${cursor}`:"/v1/roles?limit=100");
+        if(!r.ok)return {state:r.state,items:[],total:null,message:r.message};
+        const p=mapRoleCatalogPage(r.data);if(!p||(total!==null&&p.total!==total))return {state:"ERROR",items:[],total:null};
+        total=p.total;
+        for(const it of p.items){if(seen.has(it.roleId))return {state:"ERROR",items:[],total:null};seen.add(it.roleId);items.push(it)}
+        if(p.nextCursor===null)return items.length===total?{state:"VERIFIED",items,total}:{state:"ERROR",items:[],total:null};
+        cursor=p.nextCursor;
+      }
+      return {state:"ERROR",items:[],total:null};
+    },
+    // //TR: UX WP-AGENTS: tek rol tanımı GET /v1/roles/:roleId (yalnız UASCO-NNNN kimliği istek üretir; geçersiz kimlik istek yapmaz). Yanıt mapRoleDetail ile sanitize edilir; durumlar yükseltilmez, geçersiz yanıt dürüst ERROR olur.
+    async roleDetail(roleId){
+      if(!ROLE_ID_RE.test(String(roleId)))return {state:"ERROR",role:null};
+      const r=await get(`/v1/roles/${roleId}`);if(!r.ok)return {state:r.state,role:null,message:r.message};
+      const d=mapRoleDetail(r.data);return d?{state:"VERIFIED",...d}:{state:"ERROR",role:null};
     },
     /**
      * //TR: UX WP3: GET /v1/company/* (CRM hesap/kişi/fırsat, Finans fatura/ödeme, Hukuk sözleşme) altı kaynağı paralel okur ve her biri için {state,items,asOf,cause,message} döner:

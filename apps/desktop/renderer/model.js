@@ -146,3 +146,32 @@ export function mapRolesPage(raw){
   }
   return {items,total:raw.total,nextCursor:next};
 }
+// //TR: UX WP-AGENTS: /v1/roles sayfasını rol KATALOĞU için zengin ama güvenli alanlarla eşler (roleId/guildId/clusterId sıkı desen; title/priority/runtimeStatus/proficiencyStatus/certifiedScope metin; legacyAliasCount/gapCount tamsayı). Geçersiz biçim null döner, böylece eksik/bozuk katalog asla kısmi gösterilmez. Hiçbir durum YÜKSELTİLMEZ: runtimeStatus/proficiencyStatus sunucu ne derse öyle taşınır (UNKNOWN/NOT_EVALUATED). mapRolesPage'ten ayrıdır (control-tower sözleşmesini değiştirmez).
+export function mapRoleCatalogPage(raw){
+  if(!isObj(raw)||!Array.isArray(raw.items)||!Number.isSafeInteger(raw.total)||raw.total<0)return null;
+  const next=raw.nextCursor===null||raw.nextCursor===undefined?null:raw.nextCursor;
+  if(next!==null&&!(typeof next==="string"&&ROLE_RE.test(next)))return null;
+  const items=[];
+  for(const x of raw.items){
+    if(!isObj(x)||!ROLE_RE.test(String(x.roleId))||!GUILD_RE.test(String(x.guildId))||!CLUSTER_RE.test(String(x.clusterId)))return null;
+    items.push({roleId:x.roleId,guildId:x.guildId,clusterId:x.clusterId,title:str(x.title,200)??x.roleId,
+      priority:str(x.priority,16),runtimeStatus:str(x.runtimeStatus,40)??"UNKNOWN",proficiencyStatus:str(x.proficiencyStatus,40)??"NOT_EVALUATED",
+      certifiedScope:str(x.certifiedScope,200),legacyAliasCount:safeCount(x.legacyAliasCount)??0,gapCount:safeCount(x.gapCount)??0});
+  }
+  return {items,total:raw.total,nextCursor:next};
+}
+// //TR: UX WP-AGENTS: GET /v1/roles/:roleId tam RoleDefinition yanıtını güvenli görünüm modeline eşler; diziler metne sanitize edilir, durumlar OLDUĞU GİBİ taşınır (runtimeStatus/proficiencyStatus/evaluationSpecs.status yükseltilmez). Geçersiz/eksik yanıtta null (görünüm dürüst ERROR gösterir).
+const strList=(v,max=60,len=400)=>Array.isArray(v)?v.filter(x=>typeof x==="string"&&x.length>0).map(x=>x.slice(0,len)).slice(0,max):[];
+export function mapRoleDetail(raw){
+  if(!isObj(raw)||!isObj(raw.role)||!ROLE_RE.test(String(raw.role.roleId)))return null;
+  const r=raw.role;
+  const evals=Array.isArray(r.evaluationSpecs)?r.evaluationSpecs.filter(isObj).slice(0,200).map(e=>({evaluationId:str(e.evaluationId,40)??MISSING,kind:str(e.kind,80)??MISSING,status:str(e.status,40)??"UNKNOWN"})):[];
+  const g=isObj(raw.guild)?{guildId:str(raw.guild.guildId,8),name:str(raw.guild.name,200),clusterId:str(raw.guild.clusterId,8)}:null;
+  const c=isObj(raw.cluster)?{clusterId:str(raw.cluster.clusterId,8),name:str(raw.cluster.name,200)}:null;
+  return {role:{roleId:r.roleId,title:str(r.title,200)??r.roleId,guildId:str(r.guildId,8),clusterId:str(r.clusterId,8),
+    lifecycle:str(r.lifecycle,40),priority:str(r.priority,16),runtimeStatus:str(r.runtimeStatus,40)??"UNKNOWN",proficiencyStatus:str(r.proficiencyStatus,40)??"NOT_EVALUATED",
+    certifiedScope:str(r.certifiedScope,200),specializationBoundaries:strList(r.specializationBoundaries),responsibilities:strList(r.responsibilities),
+    forbiddenActions:strList(r.forbiddenActions),evaluationSpecs:evals,requiredTechnologies:strList(r.requiredTechnologies),requiredSkillIds:strList(r.requiredSkillIds)},
+    guild:g,cluster:c,legacyAliasCount:Array.isArray(raw.legacyAliases)?raw.legacyAliases.length:0,
+    gaps:{role:strList(raw.gaps?.role,200,40),guild:strList(raw.gaps?.guild,200,40)}};
+}

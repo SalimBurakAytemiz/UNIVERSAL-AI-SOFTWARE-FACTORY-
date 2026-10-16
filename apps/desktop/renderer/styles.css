@@ -446,3 +446,28 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 @media (forced-colors:active){
   .evidence-item{border:1px solid CanvasText;forced-color-adjust:auto}
 }
+/* //TR: UX WP-AGENTS: Rol kataloğu premium katmanı mevcut WP2/WP3 token tabanını kullanır (palet değişmez, yeni renk token'ı yok): genel bakış istatistikleri + küme dağılımı (minibars) + süzgeçli gözatma tablosu + rol tanımı ayrıntısı. Vurgu yalnız mevcut --accent/--glow/--border token'larından gelir; forced-colors altında sınırlar CanvasText'e düşer, reduced-motion global kuralla korunur. */
+.view-workforce{display:grid;gap:var(--space-4)}
+.wf-catalog,.wf-browse,.wf-detail{display:grid;gap:var(--space-3)}
+.wf-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:var(--space-3)}
+.wf-stat{display:grid;gap:.15rem;padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-2)}
+.wf-stat-num{font-size:var(--fs-title);font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.wf-stat-label{font-size:var(--fs-label);color:var(--muted)}
+.wf-stat-sub{font-size:var(--fs-caption);color:var(--muted)}
+.wf-dist{display:grid;gap:var(--space-2)}
+.wf-dist-title{margin:0;font-size:var(--fs-label);color:var(--muted);font-weight:700}
+.wf-filter{margin:0}
+.wf-filter .field{min-width:11rem;flex:0 1 15rem}
+.wf-cat-table td button.link-btn[aria-current="true"]{font-weight:700;text-decoration-thickness:2px}
+.wf-cat-table tr[data-selected="1"]{background:var(--bg-2)}
+.wf-detail-head{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3)}
+.wf-detail-name{margin:0;font-size:var(--fs-title)}
+.wf-detail-id{color:var(--muted);font-size:var(--fs-caption)}
+.wf-detail-close{margin-left:auto}
+.wf-detail-kv{margin:0}
+.wf-def{display:grid;gap:.2rem}
+.wf-def-title{margin:.3rem 0 0;font-size:var(--fs-label);color:var(--muted);font-weight:700}
+.wf-def-list{margin:0;padding-left:1.1rem;display:grid;gap:.2rem}
+@media (forced-colors:active){
+  .wf-stat,.wf-cat-table tr[data-selected="1"]{border:1px solid CanvasText;forced-color-adjust:auto}
+}

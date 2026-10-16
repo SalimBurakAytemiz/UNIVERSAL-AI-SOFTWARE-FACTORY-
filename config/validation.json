@@ -353,7 +353,8 @@
         "tests/v7-ux-delivery.test.ts",
         "tests/v7-ux-company-allowlist.test.ts",
         "tests/v7-ux-wp-projects.test.ts",
-        "tests/v7-ux-wp-workos.test.ts"
+        "tests/v7-ux-wp-workos.test.ts",
+        "tests/v7-ux-wp-agents.test.ts"
       ],
       "requiresDependencies": true
     },

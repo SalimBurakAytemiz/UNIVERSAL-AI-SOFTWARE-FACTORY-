@@ -38,6 +38,8 @@ const PROJECT_MISSIONS_RE=/^\/v1\/missions\?projectId=prj_[0-9a-f]{24}$/;
 const MISSION_DETAIL_RE=/^\/v1\/missions\/msn_[0-9a-f]{24}$/;
 const WORK_RUN_DETAIL_RE=/^\/v1\/work-runs\/[A-Za-z0-9_-]{6,64}$/;
 const EVIDENCE_DETAIL_RE=/^\/v1\/evidence\/[A-Za-z0-9_-]{6,64}$/;
+// //TR: UX WP-AGENTS: salt-okunur tek rol tanımı GET /v1/roles/:roleId; kimlik yalnız kanonik UASCO-NNNN desenidir (sorgu/segment/kodlama hilesi fail-closed reddedilir). /v1/roles listesi gibi yazma yoktur.
+const ROLE_DETAIL_RE=/^\/v1\/roles\/UASCO-\d{4}$/;
 // //TR: M1a c2: koşu teslim görünümü (salt-okunur) ve proje bazlı teslim listesi; kimlikler sıkı biçimlidir.
 const DELIVERY_DETAIL_RE=/^\/v1\/work-runs\/run_[0-9a-f]{24}\/delivery$/;
 const DELIVERY_LIST_RE=/^\/v1\/deliveries\?projectId=prj_[0-9a-f]{24}$/;
@@ -92,7 +94,7 @@ function projectStudioGetAllowed(value){
 function desktopExtraGetPathAllowed(value){
   if(projectStudioGetAllowed(value))return true;
   if(typeof value!=="string"||value.length>400)return false;
-  return EXTRA_GET_ROUTES.has(value)||DELIVERY_DETAIL_RE.test(value)||DELIVERY_LIST_RE.test(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"])||listQueryAllowed(value,"/v1/roles",["limit","cursor"])||listQueryAllowed(value,"/v1/company/contacts",["accountId"])||listQueryAllowed(value,"/v1/company/opportunities",["accountId"])||listQueryAllowed(value,"/v1/company/invoices",["accountId"])||listQueryAllowed(value,"/v1/company/payments",["invoiceId"])||listQueryAllowed(value,"/v1/company/contracts",["accountId"]);
+  return EXTRA_GET_ROUTES.has(value)||ROLE_DETAIL_RE.test(value)||DELIVERY_DETAIL_RE.test(value)||DELIVERY_LIST_RE.test(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"])||listQueryAllowed(value,"/v1/roles",["limit","cursor"])||listQueryAllowed(value,"/v1/company/contacts",["accountId"])||listQueryAllowed(value,"/v1/company/opportunities",["accountId"])||listQueryAllowed(value,"/v1/company/invoices",["accountId"])||listQueryAllowed(value,"/v1/company/payments",["invoiceId"])||listQueryAllowed(value,"/v1/company/contracts",["accountId"]);
 }
 // B4-ALLOWLIST-END
 
