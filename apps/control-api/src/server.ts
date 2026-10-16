@@ -47,6 +47,10 @@ import {FinanceDomain,validateInvoiceCreate,validateInvoiceIssue,validateInvoice
 import {LegalDomain,validateContractCreate,validateContractTransition} from "../../../core/company/legal.js";
 import {SkillAcademy} from "../../../core/academy/academy.js";
 import type {Validation} from "../../../core/company/common.js";
+// //TR: FA-V2-PRODUCT: pre-dev (CORE-2) + crew (CORE-5/CORE-6) salt-okunur okuma-modelleri; hepsi mevcut store/pure ledger fonksiyonlarıyla GERÇEK journal'dan türetilir (ikinci store yok, yeniden yazım yok, uydurma veri yok).
+import {buildCrewPlan} from "../../../core/workos/crew/assignment.js";
+import {deriveCoordinationLedger} from "../../../core/workos/crew/ledger.js";
+import {deriveDevReviewTimeline} from "../../../core/workos/crew/dev-review.js";
 
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
@@ -574,6 +578,23 @@ app.get<{Params:{id:string}}>("/v1/academy/:id",wos(async(req,reply)=>{
   const a=academyDomain();
   if(id.startsWith("lrn_")){const learning=a.getLearning(scope,id);if(!learning)return reply.code(404).send({error:"ACADEMY_LEARNING_NOT_FOUND"});return {learning};}
   const source=a.getSource(scope,id);if(!source)return reply.code(404).send({error:"ACADEMY_SOURCE_NOT_FOUND"});return {source};
+}));
+
+// //TR: FA-V2-PRODUCT: pre-dev + crew salt-okunur okuma rotaları. Aynı token/Host hook'u ve wos() hata kapısı arkasındadır; HİÇBİR yazma/mutasyon/yürütme yoktur ve başka hiçbir rota/yürütme kapısı değişmez. Kimlik yalnız kanonik mission desenidir (geçersiz 400); bilinmeyen/başka tenant mission dürüst 404. Okuma-modelleri mevcut CORE-2 store read-model'i ve CORE-5/CORE-6 SAF ledger fonksiyonlarıyla GERÇEK journal'dan türetilir: dizi/artefakt yoksa dürüst NOT_STARTED/boş; durumlar kayıttan AYNEN taşınır (yükseltme yok), hiçbir pre-dev artefaktı, crew aktivitesi, onay veya verdict UYDURULMAZ ve hiçbir alan PRODUCT_VERIFIED ima etmez.
+app.get<{Params:{missionId:string}}>("/v1/predev/:missionId",wos(async(req,reply)=>{
+  if(!validMissionId(req.params.missionId))return reply.code(400).send({error:"INVALID_MISSION_ID"});
+  const st=getStore();if(!st.getMission(scope,req.params.missionId))return reply.code(404).send({error:"WORKOS_NOT_FOUND"});
+  return {predev:st.preDevReadModel(scope,req.params.missionId)};
+}));
+app.get<{Params:{missionId:string}}>("/v1/crew/:missionId",wos(async(req,reply)=>{
+  if(!validMissionId(req.params.missionId))return reply.code(400).send({error:"INVALID_MISSION_ID"});
+  const st=getStore();if(!st.getMission(scope,req.params.missionId))return reply.code(404).send({error:"WORKOS_NOT_FOUND"});
+  // CORE-5: koordinasyon ledger'ı pre-dev dizisinin GERÇEK artefakt kayıtlarından türetilir (dizi yoksa preDevId null + boş artefakt => dürüst tüm-ASSIGNED, olaysız). CORE-6: dev/review zaman çizelgesi mission'ın GERÇEK run(lar)ından, her run'ın kendi executor kimliklerine göre türetilir (run yoksa boş).
+  const seq=st.getPreDevSequence(scope,req.params.missionId),preDevId=seq?.preDevId??null;
+  const artifacts=preDevId?st.listPreDevArtifacts(scope,preDevId):[];
+  const coordination=deriveCoordinationLedger(buildCrewPlan(),req.params.missionId,preDevId,artifacts,[]);
+  const devReview=st.listRuns(scope,req.params.missionId).map(r=>deriveDevReviewTimeline(r,r.executor.implementer,r.executor.reviewer));
+  return {crew:{missionId:req.params.missionId,preDevId,coordination,devReview}};
 }));
 
 // //TR: REL-FX-4 onaylı yırtık kuyruk onarımı: aynı token/Host hook'u (her açılışta verilen control token) ve aynı yazma kapısı; gövde kuyruğun tam sha256'sını aynen onaylamalıdır. Tamper asla kesilmez.
