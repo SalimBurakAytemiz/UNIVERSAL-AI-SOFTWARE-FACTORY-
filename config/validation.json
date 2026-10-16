@@ -355,7 +355,8 @@
         "tests/v7-ux-wp-projects.test.ts",
         "tests/v7-ux-wp-workos.test.ts",
         "tests/v7-ux-wp-agents.test.ts",
-        "tests/v7-ux-settings.test.ts"
+        "tests/v7-ux-settings.test.ts",
+        "tests/v7-ux-inbox.test.ts"
       ],
       "requiresDependencies": true
     },
