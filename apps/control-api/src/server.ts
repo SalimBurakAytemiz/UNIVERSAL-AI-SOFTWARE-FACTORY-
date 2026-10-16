@@ -51,6 +51,9 @@ import type {Validation} from "../../../core/company/common.js";
 import {buildCrewPlan} from "../../../core/workos/crew/assignment.js";
 import {deriveCoordinationLedger} from "../../../core/workos/crew/ledger.js";
 import {deriveDevReviewTimeline} from "../../../core/workos/crew/dev-review.js";
+// //TR: UI-049: bağımsız review kararları salt-okunur olarak Work OS journal'daki GERÇEK run REVIEW kanıtlarından türetilir; ikinci store yok, uydurma karar yok. Reviewer metinleri (bulgu başlıkları) çıktıya konmadan önce redakte edilip kırpılır.
+import {redactSecrets} from "../../../core/workos/secret-scan.js";
+import type {WorkRun,RunEvidence} from "../../../core/workos/types.js";
 
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
@@ -595,6 +598,63 @@ app.get<{Params:{missionId:string}}>("/v1/crew/:missionId",wos(async(req,reply)=
   const coordination=deriveCoordinationLedger(buildCrewPlan(),req.params.missionId,preDevId,artifacts,[]);
   const devReview=st.listRuns(scope,req.params.missionId).map(r=>deriveDevReviewTimeline(r,r.executor.implementer,r.executor.reviewer));
   return {crew:{missionId:req.params.missionId,preDevId,coordination,devReview}};
+}));
+
+// //TR: UI-049: bağımsız review kararları — salt-okunur. Tek kaynak: Work OS journal'daki run kanıtlarından kind="REVIEW" kayıtları (MissionRunner'ın bağımsız reviewer adımı; reviewer kimliği, incelenen commit, CLEAN|BLOCKED kararı, zaman damgası, bulgu sayısı) ve aynı döngünün REVIEW_BLOCKED REMEDIATE checkpoint'indeki bulgu başlıkları. Aynı token/Host hook'u ve wos() kapısı arkasındadır, tenant kapsamlıdır, HİÇBİR yazma/mutasyon/yürütme yoktur.
+// Karar kayıttan AYNEN taşınır (CLEAN|BLOCKED; geçerli karar kaydedilmediyse NO_VERDICT). Karar UYDURULMAZ ve YÜKSELTİLMEZ: run'ın GÜNCEL head commit'i için review kaydı yoksa run NOT_REVIEWED'dır (eski commit'teki CLEAN bunu CLEAN yapmaz), bağımsızlık kayıtlı kimliklerden kanıtlanamıyorsa CLEAN sayılmaz. Bir review CLEAN'i PRODUCT_VERIFIED ima etmez.
+const REVIEW_ID_RE=/^evd_[0-9a-f]{24}$/;
+const REVIEWS_MAX=500;
+const REVIEWS_NOTICE="Verdicts are read as recorded in the Work OS journal. NOT_REVIEWED means the run's current head commit has no independent review record. A CLEAN review is not product verification.";
+type ReviewVerdict="CLEAN"|"BLOCKED"|"NO_VERDICT";
+type RunReviewState=ReviewVerdict|"NOT_REVIEWED"|"INDEPENDENCE_UNVERIFIED";
+const reviewText=(x:unknown,n:number)=>redactSecrets(String(x)).slice(0,n);
+const idOrNull=(x:unknown)=>typeof x==="string"&&x.length>0?x:null;
+function reviewRecord(run:WorkRun,ev:RunEvidence){
+  const reviewer=idOrNull(ev.reviewerIdentity),implementer=idOrNull(ev.executorIdentity),commit=idOrNull(ev.commitSha);
+  // Runner, reviewer çalışma alanını değiştirdiyse (REVIEW_CLONE_MUTATED) veya adapter geçersiz saydıysa (REVIEW_INVALID) kayıtlı kararı CLEAN/BLOCKED olarak onurlandırmaz; burada da NO_VERDICT'tir (kayıtlı ham karar evidence.recordedVerdict'te aynen görünür).
+  const recorded:"CLEAN"|"BLOCKED"|null=ev.verdict==="CLEAN"||ev.verdict==="BLOCKED"?ev.verdict:null;
+  const invalidated=/^(REVIEW_CLONE_MUTATED|REVIEW_INVALID)(?![A-Za-z0-9])/.exec(typeof ev.note==="string"?ev.note:"")?.[1]??null;
+  const verdict:ReviewVerdict=recorded!==null&&invalidated===null?recorded:"NO_VERDICT";
+  // Bulgu başlıkları yalnız BLOCKED kararın aynı döngüdeki REVIEW_BLOCKED checkpoint'inde bulunur; yoksa null (kaydedilmedi), uydurulmaz.
+  const cp=verdict==="BLOCKED"?[...run.checkpoints].reverse().find(c=>c.step==="REVIEW"&&c.cycle===ev.cycle&&(c.data as any)?.outcome==="REMEDIATE"&&(c.data as any)?.reason==="REVIEW_BLOCKED"):undefined;
+  const findings=cp&&Array.isArray((cp.data as any).findings)?((cp.data as any).findings as unknown[]).slice(0,20).map(f=>reviewText(f,300)):null;
+  return {
+    reviewId:ev.evidenceId,runId:run.runId,missionId:run.missionId,projectId:run.projectId,cycle:ev.cycle,step:ev.step,
+    reviewer:{identity:reviewer},implementer:{identity:implementer},independent:reviewer&&implementer?reviewer!==implementer:null,
+    reviewedCommit:commit,reviewedRange:{baseSha:run.baseSha,headSha:commit},currentHead:commit!==null&&commit===run.headSha,
+    verdict,startedAt:ev.startedAt,timestamp:ev.endedAt,
+    evidence:{recordedVerdict:recorded,invalidated,findingsCount:typeof ev.findingsCount==="number"?ev.findingsCount:null,findings,exitCode:ev.exitCode??null,timedOut:ev.timedOut===true,logSha256:idOrNull(ev.logSha256),note:ev.note?reviewText(ev.note,200):null}
+  };
+}
+type ReviewRecord=ReturnType<typeof reviewRecord>;
+function runReviewSummary(run:WorkRun){
+  const recs=run.evidence.filter(e=>e.kind==="REVIEW"),atHead=run.headSha?recs.filter(e=>e.commitSha===run.headSha):[],last=atHead[atHead.length-1];
+  let reviewState:RunReviewState="NOT_REVIEWED";
+  if(last){const r=reviewRecord(run,last);reviewState=r.verdict==="NO_VERDICT"?"NO_VERDICT":r.independent!==true?"INDEPENDENCE_UNVERIFIED":r.verdict}
+  return {runId:run.runId,missionId:run.missionId,projectId:run.projectId,status:run.status,step:run.step,headSha:run.headSha,reviewState,latestReviewId:last?.evidenceId??null,reviewCount:recs.length};
+}
+// //TR: GET /v1/reviews: tenant kapsamlı liste; isteğe bağlı missionId/runId süzgeci (geçersiz 400). reviews en yeni önce (kararlı sıralama), runs her run için GÜNCEL head'in review durumunu verir (review yoksa NOT_REVIEWED). Veri yoksa dürüst boş dizi + sıfır sayaç.
+app.get<{Querystring:Record<string,unknown>}>("/v1/reviews",wos(async(req,reply)=>{
+  const q=req.query??{},one=(x:unknown)=>x===undefined?undefined:typeof x==="string"?x:null;
+  const missionId=one(q.missionId),runId=one(q.runId);
+  if(missionId===null||(missionId!==undefined&&!validMissionId(missionId)))return reply.code(400).send({error:"INVALID_MISSION_ID"});
+  if(runId===null||(runId!==undefined&&!validWorkRunId(runId)))return reply.code(400).send({error:"INVALID_RUN_ID"});
+  const runs=getStore().listRuns(scope,missionId).filter(r=>runId===undefined||r.runId===runId);
+  const all:ReviewRecord[]=runs.flatMap(r=>r.evidence.filter(e=>e.kind==="REVIEW").map(e=>reviewRecord(r,e)));
+  all.sort((a,b)=>a.timestamp<b.timestamp?1:a.timestamp>b.timestamp?-1:a.reviewId<b.reviewId?1:a.reviewId>b.reviewId?-1:0);
+  const summaries=runs.map(runReviewSummary).sort((a,b)=>a.runId<b.runId?1:a.runId>b.runId?-1:0);
+  return {source:"WORK_OS_JOURNAL_RUN_EVIDENCE",notice:REVIEWS_NOTICE,
+    summary:{runs:summaries.length,reviews:all.length,runsByReviewState:countBy(summaries,s=>s.reviewState),reviewsByVerdict:countBy(all,r=>r.verdict),truncated:all.length>REVIEWS_MAX||summaries.length>REVIEWS_MAX},
+    reviews:all.slice(0,REVIEWS_MAX),runs:summaries.slice(0,REVIEWS_MAX)};
+}));
+// //TR: GET /v1/reviews/:reviewId: tek review kaydı (reviewId = REVIEW kanıtının evd_ + 24 hex kimliği; geçersiz 400) ve ait olduğu run'ın güncel review özeti; başka tenant'ın/eksik kayıt dürüst 404. Yalnız okuma; karar yükseltilmez.
+app.get<{Params:{reviewId:string}}>("/v1/reviews/:reviewId",wos(async(req,reply)=>{
+  const id=req.params.reviewId;if(!REVIEW_ID_RE.test(id))return reply.code(400).send({error:"INVALID_REVIEW_ID"});
+  for(const run of getStore().listRuns(scope)){
+    const ev=run.evidence.find(e=>e.kind==="REVIEW"&&e.evidenceId===id);
+    if(ev)return {source:"WORK_OS_JOURNAL_RUN_EVIDENCE",notice:REVIEWS_NOTICE,review:reviewRecord(run,ev),run:runReviewSummary(run)};
+  }
+  return reply.code(404).send({error:"REVIEW_NOT_FOUND"});
 }));
 
 // //TR: REL-FX-4 onaylı yırtık kuyruk onarımı: aynı token/Host hook'u (her açılışta verilen control token) ve aynı yazma kapısı; gövde kuyruğun tam sha256'sını aynen onaylamalıdır. Tamper asla kesilmez.
