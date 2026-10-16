@@ -471,3 +471,24 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 @media (forced-colors:active){
   .wf-stat,.wf-cat-table tr[data-selected="1"]{border:1px solid CanvasText;forced-color-adjust:auto}
 }
+/* //TR: UX WP-QA-SEC Güvence (QA + Güvenlik) görünümü: WP2 token/bileşenlerini yeniden kullanır, YENİ renk token'ı eklemez; renk tek başına anlam taşımaz (ikon+metin+desen). */
+.qa-stats{margin:var(--space-2) 0}
+.qa-stat[data-tone="ok"] .wf-stat-num{color:var(--ok)}
+.qa-stat[data-tone="warn"] .wf-stat-num{color:var(--warn)}
+.qa-stat[data-tone="danger"] .wf-stat-num{color:var(--danger)}
+.qa-stat[data-tone="muted"] .wf-stat-num{color:var(--muted)}
+.note-blocked{padding:var(--space-2) .7rem;border:1px dashed var(--danger);border-radius:.6rem;color:var(--text)}
+.note-stale{padding:var(--space-2) .7rem;border:1px dashed var(--warn);border-radius:.6rem;color:var(--text)}
+.qa-code{display:inline-flex;align-items:center;padding:.05rem .4rem;border:1px solid var(--border-ui);border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:var(--fs-caption);color:var(--text);background:var(--bg-2)}
+.qa-tool-row{display:flex;flex-wrap:wrap;gap:.3rem}
+.qa-def-title{margin:.5rem 0 .2rem;font-size:var(--fs-label);color:var(--muted);font-weight:700}
+.qa-secdetail-head{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2)}
+.qa-secdetail-id{font-size:var(--fs-label)}
+.qa-secdetail-kv dd{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem}
+.qa-gaps{margin:.2rem 0 0;padding-left:1.1rem;display:grid;gap:.2rem;font-size:var(--fs-caption)}
+.qa-foundernote{margin-top:var(--space-2)}
+.qa-foundernote summary{cursor:pointer;color:var(--muted);font-size:var(--fs-label)}
+.qa-sec-table td,.qa-dyn-table td{vertical-align:top}
+@media (forced-colors:active){
+  .qa-stat,.qa-code,.qa-sec-table tr[class~="row-selected"]{border:1px solid CanvasText;forced-color-adjust:auto}
+}
