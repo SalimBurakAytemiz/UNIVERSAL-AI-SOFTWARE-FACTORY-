@@ -356,7 +356,8 @@
         "tests/v7-ux-wp-workos.test.ts",
         "tests/v7-ux-wp-agents.test.ts",
         "tests/v7-ux-settings.test.ts",
-        "tests/v7-core-predev-crew-coordination.test.ts"
+        "tests/v7-core-predev-crew-coordination.test.ts",
+        "tests/v7-core-predev-crew-dev-review.test.ts"
       ],
       "requiresDependencies": true
     },
