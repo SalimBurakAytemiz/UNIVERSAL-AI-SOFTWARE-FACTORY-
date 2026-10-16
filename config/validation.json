@@ -345,7 +345,9 @@
         "tests/v7-m1a-c2-test-variant.test.ts",
         "tests/v7-ux-wp2-cockpit.test.ts",
         "tests/v7-ux-wp4-tower.test.ts",
-        "tests/v7-ux-wp3-company.test.ts"
+        "tests/v7-ux-wp3-company.test.ts",
+        "tests/v7-ux-delivery.test.ts",
+        "tests/v7-ux-company-allowlist.test.ts"
       ],
       "requiresDependencies": true
     },

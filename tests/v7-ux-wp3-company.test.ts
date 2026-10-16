@@ -403,7 +403,7 @@ describe("UX WP3 tabs, keyboard and account filter", () => {
 });
 
 describe("UX WP3 wiring and static safety", () => {
-  it("replaces the planned panel: the company route is hosted by planned.js and delegates to views/company.js; delivery stays planned", async () => {
+  it("replaces the planned panel: the company route is hosted by planned.js and delegates to views/company.js; delivery is now a real component too", async () => {
     const routes = await load("routes.js"), planned = await load("views", "planned.js");
     const co = routes.ROUTES.find((r: any) => r.id === "company");
     expect(co).toMatchObject({view: "planned", component: "company"});
@@ -412,8 +412,13 @@ describe("UX WP3 wiring and static safety", () => {
     const root = await planned.render(ctx, co);
     expect(root.className).toContain("view-company");
     expect(all(root).some(n => n.dataset.planned !== undefined)).toBe(false);
-    const delivery = await planned.render(ctx, routes.ROUTES.find((r: any) => r.id === "delivery"));
-    expect(all(delivery).some(n => n.dataset.planned === "B6")).toBe(true);
+    // UX WP-DELIVERY: delivery is no longer a planned placeholder; it delegates to the real view with no planned panel.
+    const dRoute = routes.ROUTES.find((r: any) => r.id === "delivery");
+    expect(dRoute).toMatchObject({view: "planned", component: "delivery"});
+    expect(dRoute.plannedPackage).toBeUndefined();
+    const delivery = await planned.render(ctx, dRoute);
+    expect(delivery.className).toContain("view-delivery");
+    expect(all(delivery).some(n => n.dataset.planned !== undefined)).toBe(false);
     // app.js (korumalı) değişmedi: VIEWS tablosu "planned" anahtarını kullanmaya devam eder, company için yeni anahtar yoktur.
     expect(read("app.js")).toMatch(/const VIEWS=\{home,projects,work,workforce,assurance,planned,tower,inbox,settings\};/);
   });

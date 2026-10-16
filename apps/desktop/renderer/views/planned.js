@@ -1,8 +1,9 @@
-// //TR: Bu modül app.js VIEWS tablosundaki "planned" anahtarının ev sahibidir: rotada `component` varsa (Company OS, UX WP3) gerçek görünüme devreder; yoksa henüz uygulanmamış alan (Teslimat & SRE) için sessizce devre dışı bırakmak yerine planlı paketi ve alanın içereceklerini listeleyen dürüst paneli gösterir.
+// //TR: Bu modül app.js VIEWS tablosundaki "planned" anahtarının ev sahibidir: rotada `component` varsa (Company OS, UX WP3; Teslimat & SRE, UX WP-DELIVERY) gerçek görünüme devreder; yoksa henüz uygulanmamış alan için sessizce devre dışı bırakmak yerine planlı paketi ve alanın içereceklerini listeleyen dürüst paneli gösterir.
 import {h,plannedPanel} from "../components.js";
 import * as company from "./company.js";
+import * as delivery from "./delivery.js";
 
-const REAL=Object.freeze({company});
+const REAL=Object.freeze({company,delivery});
 export async function render(ctx,route){
   const real=REAL[route.component];
   if(real)return real.render(ctx,route);

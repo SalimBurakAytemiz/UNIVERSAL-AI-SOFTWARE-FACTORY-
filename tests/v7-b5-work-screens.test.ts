@@ -957,15 +957,16 @@ describe("B5 static safety, routes and wiring", () => {
     expect(api).not.toMatch(/apiPost\(\s*[^p]/);
     for (const f of walk(path.join(rend, "views")).concat(["forms.js", "work-actions.js", "shell.js"].map(x => path.join(rend, x)))) expect(read(f), f).not.toMatch(/\bbridge\b|apiPost|apiGet/);
   });
-  it("routes: Güvence and Gelen Kutusu are real views, Teslimat stays an honest planned panel and Company OS (UX WP3) is a real view hosted by planned.js, workforce keeps the partial panel", async () => {
+  it("routes: Güvence and Gelen Kutusu are real views, Teslimat (UX WP-DELIVERY) and Company OS (UX WP3) are real views hosted by planned.js, workforce keeps the partial panel", async () => {
     const routes = await load(rend, "routes.js");
     const by = (id: string) => routes.ROUTES.find((r: any) => r.id === id);
     expect(by("assurance").view).toBe("assurance"); expect(by("assurance").plannedPackage).toBeUndefined();
     expect(by("inbox").view).toBe("inbox"); expect(by("inbox").plannedPackage).toBeUndefined();
-    expect(by("delivery").view).toBe("planned"); expect(by("delivery").component).toBeUndefined();
+    expect(by("delivery").view).toBe("planned"); expect(by("delivery").component).toBe("delivery"); expect(by("delivery").plannedPackage).toBeUndefined();
     expect(by("company").view).toBe("planned"); expect(by("company").component).toBe("company"); expect(by("company").plannedPackage).toBeUndefined();
     expect(by("workforce").plannedPackage).toBe("B3");
     expect(fs.existsSync(path.join(rend, "views", "assurance.js"))).toBe(true);
+    expect(fs.existsSync(path.join(rend, "views", "delivery.js"))).toBe(true);
   });
   it("api exposes no generic POST and never forwards a caller-chosen method; every API GET path is accepted by the main allow-list", async () => {
     const ok = loadGet();
@@ -1020,8 +1021,8 @@ describe("B5 static safety, routes and wiring", () => {
     // B7: later V7 packages append their own test after this one; B5 must stay directly after B4 and only later v7 package tests (b6+ or product-studio ps<N>) may follow it.
     const i = step.command.indexOf("tests/v7-b5-work-screens.test.ts");
     expect(step.command[i - 1]).toBe("tests/v7-b4-desktop-shell.test.ts");
-    // V7-PKG-M1A-MODE: merge-tool sözleşmesi gereği M1a testleri de sona eklenir (m1a-*); B5 sırası ve tekilliği değişmez.
-    for (const later of step.command.slice(i + 1)) expect(later).toMatch(/^tests\/v7-(?:b([6-9]|\d{2,})[a-z]?|ps\d+[a-z]?|m1a|ux-wp\d+[a-z]?)-[a-z0-9-]+\.test\.ts$/);
+    // V7-PKG-M1A-MODE: merge-tool sözleşmesi gereği M1a testleri de sona eklenir (m1a-*); B5 sırası ve tekilliği değişmez. UX paketleri (ux-*) de sona eklenir.
+    for (const later of step.command.slice(i + 1)) expect(later).toMatch(/^tests\/v7-(?:b([6-9]|\d{2,})[a-z]?|ps\d+[a-z]?|m1a|ux)-[a-z0-9-]+\.test\.ts$/);
     expect(step.command).toContain("tests/v7-b4-desktop-shell.test.ts");
     expect(step.command.filter((x: string) => x === "tests/v7-b5-work-screens.test.ts").length).toBe(1);
   });
