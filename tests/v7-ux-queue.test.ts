@@ -900,7 +900,7 @@ describe("Queue — route delegation (app.js VIEWS unchanged)", () => {
     expect(routes.routeFromHash("#/queue")).toBe("queue");
     expect(routes.routeFromHash("#/queue/")).toBe("queue");
     expect(routes.routeFromHash("#/queues")).toBe(routes.DEFAULT_ROUTE);
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-7)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-8)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("queue");
     expect(routes.ROUTES.filter((x: any) => x.factory).length).toBe(8);
     // Eski rotalar etkilenmez.
