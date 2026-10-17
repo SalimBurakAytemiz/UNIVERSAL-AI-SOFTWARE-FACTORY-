@@ -214,8 +214,12 @@ describe("B10A core: verified evidence read-model", () => {
     fs.symlinkSync(outside, path.join(c.repo, "audit", "checkpoints", "CP-LINK.json"), "file");
     const idx = index(c);
     const items = await all(idx);
-    for (const name of ["escape.log", "REV-LINK.json", "CP-LINK.json"]) {
-      const i = byPath(items, name);
+    // Run log: a rejected (escaping) logPath is never exposed, so source.path is null (safePath=null); select the single rejected WORK_RUN_LOG by kind + reason.
+    const esc = by(items, x => x.kind === "WORK_RUN_LOG" && x.verification.reason === "PATH_REJECTED");
+    expect(esc.source.path).toBeNull();
+    expect(items.some(x => x.source.path?.endsWith("escape.log") === true)).toBe(false);
+    // Review result and checkpoint keep their (in-repo) listing name but are equally rejected.
+    for (const i of [esc, byPath(items, "REV-LINK.json"), byPath(items, "CP-LINK.json")]) {
       expect(i.verification).toMatchObject({status: "UNVERIFIABLE", reason: "PATH_REJECTED"});
       expect(i.source.sha256).toBeNull();
       expect(JSON.stringify(await idx.get(i.evidenceId))).not.toContain(FAKE_AWS);

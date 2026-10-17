@@ -120,9 +120,12 @@ describe("RV-RELFX-C2-003 vitest passWithNoTests 'Tests  no tests'", () => {
   it("live: the repo's own vitest with --passWithNoTests on a UASCO-authored empty fixture", { timeout: T }, () => {
     const dir = fixtureDir("no-tests", {"empty.test.ts": `// UASCO-authored fixture: a test file with no tests.\nimport {describe} from "vitest";\ndescribe("empty", () => {});\n`});
     const r = runRepoVitest(dir, ["--passWithNoTests"]);
-    expect(r.status).toBe(0);
-    expect(r.stdout).toMatch(/Tests\s+no tests/);
-    expect(parseTestRunStreams(r.stdout, r.stderr)).toEqual({format: "vitest", executed: 0, passed: 0, failed: 0, skipped: 0, todo: 0});
+    const streams = `--- stdout ---\n${r.stdout}\n--- stderr ---\n${r.stderr}`;
+    expect(r.status, streams).toBe(0);
+    // CI may colourise the summary (e.g. "Tests ESC[22m no tests"); the contract is checked on the ANSI-stripped stdout.
+    const plain = String(r.stdout).replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "");
+    expect(plain, streams).toMatch(/Tests\s+no tests/);
+    expect(parseTestRunStreams(r.stdout, r.stderr), streams).toEqual({format: "vitest", executed: 0, passed: 0, failed: 0, skipped: 0, todo: 0});
   });
 });
 
