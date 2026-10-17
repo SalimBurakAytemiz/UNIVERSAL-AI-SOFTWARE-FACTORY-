@@ -1,4 +1,4 @@
-// //TR: Bu modül app.js VIEWS tablosundaki "planned" anahtarının ev sahibidir: rotada `component` varsa (Company OS, UX WP3; Teslimat & SRE, UX WP-DELIVERY; Skill Academy, Proje Yolculuğu, Kurucu Yönetim Özeti, İnsan Onayı Kuyruğu, Kalite Kapısı/Release Readiness, Güvence Komuta Merkezi/Güvenlik Duruşu ve Çoklu Proje Komuta Matrisi, FA-V2-PRODUCT) gerçek görünüme devreder; yoksa henüz uygulanmamış alan için sessizce devre dışı bırakmak yerine planlı paketi ve alanın içereceklerini listeleyen dürüst paneli gösterir.
+// //TR: Bu modül app.js VIEWS tablosundaki "planned" anahtarının ev sahibidir: rotada `component` varsa (Company OS, UX WP3; Teslimat & SRE, UX WP-DELIVERY; Skill Academy, Proje Yolculuğu, Kurucu Yönetim Özeti, İnsan Onayı Kuyruğu, Kalite Kapısı/Release Readiness, Güvence Komuta Merkezi/Güvenlik Duruşu, Çoklu Proje Komuta Matrisi ve Operasyon ve Kurtarma, FA-V2-PRODUCT) gerçek görünüme devreder; yoksa henüz uygulanmamış alan için sessizce devre dışı bırakmak yerine planlı paketi ve alanın içereceklerini listeleyen dürüst paneli gösterir.
 import {h,plannedPanel} from "../components.js";
 import * as company from "./company.js";
 import * as delivery from "./delivery.js";
@@ -9,8 +9,9 @@ import * as queue from "./queue.js";
 import * as readiness from "./readiness.js";
 import * as posture from "./posture.js";
 import * as matrix from "./matrix.js";
+import * as operations from "./operations.js";
 
-const REAL=Object.freeze({company,delivery,academy,journey,executive,queue,readiness,posture,matrix});
+const REAL=Object.freeze({company,delivery,academy,journey,executive,queue,readiness,posture,matrix,operations});
 export async function render(ctx,route){
   const real=REAL[route.component];
   if(real)return real.render(ctx,route);

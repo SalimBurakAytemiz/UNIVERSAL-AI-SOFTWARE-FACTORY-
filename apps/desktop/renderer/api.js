@@ -11,6 +11,7 @@ import {mapQueueMissions,mapQueueWorkRuns,mapQueueAttention} from "./queue-core.
 import {REVIEWS_PATH,mapReadinessWorkRuns,mapReadinessReviews,mapReadinessEvidence} from "./readiness-core.js";
 import {mapPostureWorkRuns,mapPostureReviews,mapPostureEvidence} from "./posture-core.js";
 import {PROJECTS_PATH,mapMatrixProjects,mapMatrixMissions,mapMatrixWorkRuns,mapMatrixCockpit} from "./matrix-core.js";
+import {CONTROL_PATH,RUNS_PATH,mapOperationsControl,mapOperationsRuns,mapOperationsAttention} from "./operations-core.js";
 
 const TTL_MS=3000;
 const ROLE_ID_RE=/^UASCO-\d{4}$/;
@@ -160,6 +161,10 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async matrixMissions(){const r=await get(MISSIONS_PATH);return r.ok?mapMatrixMissions(r.data):{state:r.state,missions:null,message:r.message}},
     async matrixWorkRuns(){const r=await get(WORK_RUNS_PATH);return r.ok?mapMatrixWorkRuns(r.data):{state:r.state,runs:null,message:r.message}},
     async matrixCockpit(){const r=await get(COCKPIT_PATH);return r.ok?mapMatrixCockpit(r.data):{state:r.state,cockpit:null,message:r.message}},
+    // //TR: FA-V2-PRODUCT (UI-071): Operasyon ve Kurtarma salt-okunur okumaları; üç sabit yol da main allow-list'inde zaten vardır (GET /v1/control/status, GET /v1/runs, GET /v1/founder-attention; yeni uç nokta yok, sorgu dizesi yok, yeni POST yok). Başarılıysa operations-core eşleyicileriyle fail-closed sanitize edilir (bozuk yanıt dürüst ERROR), okuma hatası ayrık dürüst durum olarak döner. Stop/Resume/Retry eylemleri BURADA yoktur; mevcut kabuk/IPC yolunda kalır.
+    async operationsControl(){const r=await get(CONTROL_PATH);return r.ok?mapOperationsControl(r.data):{state:r.state,control:null,message:r.message}},
+    async operationsRuns(){const r=await get(RUNS_PATH);return r.ok?mapOperationsRuns(r.data):{state:r.state,runs:null,message:r.message}},
+    async operationsAttention(){const r=await get(ATTENTION_PATH);return r.ok?mapOperationsAttention(r.data):{state:r.state,attention:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }
