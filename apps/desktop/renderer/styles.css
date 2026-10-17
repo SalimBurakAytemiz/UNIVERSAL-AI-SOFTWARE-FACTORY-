@@ -670,3 +670,39 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   .posture-pillar,.posture-item{border:1px solid CanvasText;border-left-width:4px}
   .posture-section :focus-visible{outline:3px solid Highlight}
 }
+
+/* //TR: FA-V2-PRODUCT Çoklu Proje Komuta Matrisi: KPI satırı mevcut kpiTile bileşenini kullanır, matris mevcut token tabanıyla gerçek bir <table> olarak kurulur (palet değişmez, yeni renk token'ı yok). Proje durumunun anlamı rozet METNİNDE ve ikonunda taşınır; renk (sol kenar vurgusu) yalnız ek ipucudur ve zorunlu-renk modunda sistem renklerine düşer. Geniş tablo kendi klavye ile kaydırılabilir bölgesinde kalır (sayfa yatay taşmaz). */
+.view-matrix{container-type:inline-size;display:grid;gap:var(--space-4)}
+.matrix-sub{margin:var(--space-4) 0 var(--space-1);font-size:var(--fs-h3)}
+.matrix-state{display:grid;gap:var(--space-1);padding:var(--space-3);margin:var(--space-3) 0;border:1px dashed var(--border-ui);border-radius:var(--radius-md)}
+.matrix-state-head,.matrix-cell-head,.matrix-fact-body{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
+.matrix-sources{margin-bottom:var(--space-2)}
+.matrix-fact{margin-top:var(--space-3)}
+.matrix-reconcile{margin:var(--space-2) 0;padding-left:var(--space-4);display:grid;gap:var(--space-1);font-size:var(--fs-label)}
+.matrix-scroll{overflow-x:auto;margin-top:var(--space-3);border:1px solid var(--border);border-radius:var(--radius-md)}
+.matrix-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.matrix-table{width:100%;min-width:68rem;border-collapse:collapse;font-size:var(--fs-label)}
+.matrix-table th,.matrix-table td{padding:var(--space-2);text-align:left;vertical-align:top;border-bottom:1px solid var(--border);min-width:0;overflow-wrap:normal}
+.matrix-table .mono{overflow-wrap:anywhere}
+.matrix-table td[data-withheld] .spill,.matrix-table td[data-col="status"] .spill{white-space:nowrap}
+.matrix-table th[data-col="project"],.matrix-table th[data-col="status"]{min-width:10rem}
+.matrix-table th[data-col="missions"],.matrix-table th[data-col="runs"]{min-width:8rem}
+.matrix-table th[data-col="blocked"],.matrix-table th[data-col="awaiting"]{min-width:6rem}
+.matrix-table th[data-col="review"],.matrix-table th[data-col="delivery"]{min-width:9.5rem}
+.matrix-table th[data-col="open"]{min-width:5rem}
+.matrix-table thead th{color:var(--muted);font-weight:700}
+.matrix-group-row th{background:var(--surface-2);font-weight:400}
+.matrix-project>*{display:block}
+.matrix-project-name{font-size:var(--fs-h3)}
+.matrix-count{font-size:var(--fs-h3)}
+.matrix-signals{list-style:none;margin:var(--space-1) 0 0;padding:0;display:grid;gap:var(--space-1)}
+.matrix-row[data-status="ATTENTION_NEEDED"] .matrix-project{box-shadow:inset 4px 0 0 var(--warn)}
+.matrix-row[data-status="UNKNOWN"] .matrix-project{box-shadow:inset 4px 0 0 var(--border-ui)}
+.matrix-actions{gap:var(--space-1)}
+@container (max-width:40rem){.matrix-table th,.matrix-table td{padding:var(--space-1) var(--space-2)}}
+@media (forced-colors:active){
+  .matrix-state{border:1px solid CanvasText;forced-color-adjust:auto}
+  .matrix-scroll,.matrix-table th,.matrix-table td{border:1px solid CanvasText}
+  .matrix-row[data-status] .matrix-project{box-shadow:none;border-left:4px solid CanvasText}
+  .matrix-section :focus-visible,.matrix-scroll:focus-visible{outline:3px solid Highlight}
+}
