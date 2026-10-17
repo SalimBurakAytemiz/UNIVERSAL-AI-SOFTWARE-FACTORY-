@@ -649,3 +649,24 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   .readiness-item{border:1px solid CanvasText;border-left-width:4px}
   .readiness-section :focus-visible{outline:3px solid Highlight}
 }
+
+/* //TR: FA-V2-PRODUCT Güvence Komuta Merkezi ve Güvenlik Duruşu: KPI satırı mevcut kpiTile bileşenini, sütun/koşu kartları mevcut `.cards > .card` desenini ve mevcut token tabanını kullanır (palet değişmez, yeni renk token'ı yok). Duruş anlamı rozet METNİNDE ve ikonunda taşınır; renk (sol kenar vurgusu) yalnız ek ipucudur ve zorunlu-renk modunda sistem renklerine düşer. */
+.view-posture{container-type:inline-size;display:grid;gap:var(--space-4)}
+.posture-sub{margin:var(--space-4) 0 var(--space-1);font-size:var(--fs-h3)}
+.posture-state{display:grid;gap:var(--space-1);padding:var(--space-3);margin:var(--space-3) 0;border:1px dashed var(--border-ui);border-radius:var(--radius-md)}
+.posture-state-head,.posture-pillar-head,.posture-overall{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
+.posture-sources{margin-bottom:var(--space-2)}
+.posture-pillar-list,.posture-list{margin-top:var(--space-2);grid-template-columns:minmax(0,1fr)}
+.posture-pillar,.posture-item{border-left:4px solid var(--border-ui)}
+.posture-pillar[data-pillar-status="OK"]{border-left-color:var(--ok)}
+.posture-pillar[data-pillar-status="INCOMPLETE"],.posture-pillar[data-pillar-status="NO_DATA"]{border-left-color:var(--warn)}
+.posture-pillar[data-pillar-status="FAIL"]{border-left-color:var(--danger)}
+.posture-missing,.posture-counts{margin:0;padding-left:var(--space-4);display:grid;gap:var(--space-1);font-size:var(--fs-label)}
+.posture-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:.2rem var(--space-3);margin:var(--space-2) 0;font-size:var(--fs-label)}
+.posture-facts dt{color:var(--muted)}.posture-facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+@container (max-width:40rem){.posture-facts{grid-template-columns:minmax(0,1fr)}}
+@media (forced-colors:active){
+  .posture-state{border:1px solid CanvasText;forced-color-adjust:auto}
+  .posture-pillar,.posture-item{border:1px solid CanvasText;border-left-width:4px}
+  .posture-section :focus-visible{outline:3px solid Highlight}
+}

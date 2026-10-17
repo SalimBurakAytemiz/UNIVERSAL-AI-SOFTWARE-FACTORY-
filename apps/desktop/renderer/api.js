@@ -9,6 +9,7 @@ import {predevPath,crewPath,mapPredev,mapCrew} from "./journey-core.js";
 import {COCKPIT_PATH,MISSIONS_PATH,WORK_RUNS_PATH,ATTENTION_PATH,mapExecCockpit,mapExecMissions,mapExecWorkRuns,mapExecAttention} from "./executive-core.js";
 import {mapQueueMissions,mapQueueWorkRuns,mapQueueAttention} from "./queue-core.js";
 import {REVIEWS_PATH,mapReadinessWorkRuns,mapReadinessReviews,mapReadinessEvidence} from "./readiness-core.js";
+import {mapPostureWorkRuns,mapPostureReviews,mapPostureEvidence} from "./posture-core.js";
 
 const TTL_MS=3000;
 const ROLE_ID_RE=/^UASCO-\d{4}$/;
@@ -149,6 +150,10 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async readinessReviews(){const r=await get(REVIEWS_PATH);return r.ok?mapReadinessReviews(r.data):{state:r.state,reviews:null,message:r.message}},
     async readinessEvidence(){const r=await get(COCKPIT_PATH);return r.ok?mapReadinessEvidence(r.data):{state:r.state,evidence:null,message:r.message}},
     async readinessMissions(){const r=await get(MISSIONS_PATH);return r.ok?mapQueueMissions(r.data):{state:r.state,missions:null,message:r.message}},
+    // //TR: FA-V2-PRODUCT (UI-037+046): Güvence Komuta Merkezi ve Güvenlik Duruşu salt-okunur okumaları; üç sabit yol da main allow-list'inde zaten vardır (GET /v1/work-runs, GET /v1/reviews [UI-049], GET /v1/cockpit evidence bloğu; yeni uç nokta yok, sorgu dizesi yok). Başarılıysa posture-core eşleyicileriyle fail-closed sanitize edilir (bozuk yanıt dürüst ERROR), okuma hatası ayrık dürüst durum olarak döner.
+    async commandCenterWorkRuns(){const r=await get(WORK_RUNS_PATH);return r.ok?mapPostureWorkRuns(r.data):{state:r.state,runs:null,message:r.message}},
+    async commandCenterReviews(){const r=await get(REVIEWS_PATH);return r.ok?mapPostureReviews(r.data):{state:r.state,reviews:null,message:r.message}},
+    async commandCenterEvidence(){const r=await get(COCKPIT_PATH);return r.ok?mapPostureEvidence(r.data):{state:r.state,evidence:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }
