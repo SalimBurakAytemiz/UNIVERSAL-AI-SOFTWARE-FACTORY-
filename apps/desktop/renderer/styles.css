@@ -705,4 +705,23 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   .matrix-scroll,.matrix-table th,.matrix-table td{border:1px solid CanvasText}
   .matrix-row[data-status] .matrix-project{box-shadow:none;border-left:4px solid CanvasText}
   .matrix-section :focus-visible,.matrix-scroll:focus-visible{outline:3px solid Highlight}
+/* //TR: FA-V2-PRODUCT Operasyon ve Kurtarma: KPI satırı mevcut kpiTile bileşenini, kontrol listesi/denetim/koşu kartları mevcut `.cards > .card` desenini ve mevcut token tabanını kullanır (palet değişmez, yeni renk token'ı yok). Durum anlamı rozet METNİNDE ve ikonunda taşınır; renk (sol kenar vurgusu) yalnız ek ipucudur ve zorunlu-renk modunda sistem renklerine düşer. */
+.view-operations{container-type:inline-size;display:grid;gap:var(--space-4)}
+.ops-sub{margin:var(--space-4) 0 var(--space-1);font-size:var(--fs-h3)}
+.ops-state{display:grid;gap:var(--space-1);padding:var(--space-3);margin:var(--space-3) 0;border:1px dashed var(--border-ui);border-radius:var(--radius-md)}
+.ops-state-head,.ops-step-head,.ops-control-head,.ops-overall{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
+.ops-sources{margin-bottom:var(--space-2)}
+.ops-list{margin-top:var(--space-2);grid-template-columns:minmax(0,1fr)}
+.ops-step,.ops-item,.ops-control{border-left:4px solid var(--border-ui)}
+.ops-step[data-step-severity="ACTION"],.ops-item[data-liveness="STALLED"]{border-left-color:var(--danger)}
+.ops-step[data-step-severity="UNKNOWN"],.ops-step[data-step-severity="UNVERIFIED"]{border-left-color:var(--warn)}
+.ops-step[data-step-severity="WATCH"]{border-left-color:var(--accent)}
+.ops-counts{margin:var(--space-2) 0;padding-left:var(--space-4);display:grid;gap:var(--space-1);font-size:var(--fs-label)}
+.ops-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:.2rem var(--space-3);margin:var(--space-2) 0;font-size:var(--fs-label)}
+.ops-facts dt{color:var(--muted)}.ops-facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+@container (max-width:40rem){.ops-facts{grid-template-columns:minmax(0,1fr)}}
+@media (forced-colors:active){
+  .ops-state{border:1px solid CanvasText;forced-color-adjust:auto}
+  .ops-step,.ops-item,.ops-control{border:1px solid CanvasText;border-left-width:4px}
+  .ops-section :focus-visible{outline:3px solid Highlight}
 }

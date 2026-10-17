@@ -1001,7 +1001,7 @@ describe("Matrix — route delegation (app.js VIEWS unchanged)", () => {
     expect(routes.routeFromHash("#/matrix/")).toBe("matrix");
     expect(routes.routeFromHash("#/matrixx")).toBe(routes.DEFAULT_ROUTE);
     expect(routes.routeFromHash("#/Matrix")).toBe(routes.DEFAULT_ROUTE);
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-9)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-10)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("matrix");
     expect(routes.ROUTES.filter((x: any) => x.factory).length).toBe(8);
     // Eski rotalar etkilenmez.
