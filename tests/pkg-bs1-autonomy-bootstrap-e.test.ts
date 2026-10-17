@@ -3,9 +3,10 @@ import {describe,it,expect} from "vitest";
 import cp from "node:child_process";
 import {BS1_PARTITION,BS1_REAL_AUT1B_SCENARIO,AUT1B_COMMIT,runBs1Shard} from "./support/bs1-shard.js";
 describe("one-time autonomy bootstrap (BS1) shard e",{timeout:1_800_000},()=>{
-  it("passes every scenario assigned to this shard",async()=>{
+  it("passes every scenario assigned to this shard",async(ctx)=>{
     const r=await runBs1Shard("e");expect(r.ok,r.detail).toBe(true);
-    if(process.platform!=="win32"){for(const l of r.line)expect(l).toBe("BOOTSTRAP_AUTONOMY_SELFTEST FILTERED: SKIP NOT_WINDOWS");return}
+    // //TR: Windows dışında selftest'in dürüst SKIP satırı doğrulanır ve test PASSED değil SKIPPED olarak raporlanır (sessiz geçiş yok).
+    if(process.platform!=="win32"){for(const l of r.line)expect(l).toBe("BOOTSTRAP_AUTONOMY_SELFTEST FILTERED: SKIP NOT_WINDOWS");return ctx.skip("NOT_WINDOWS: BS1 selftest reported SKIP NOT_WINDOWS; scenarios not executed on "+process.platform)}
     // //TR: Gerçek AUT1B düzlemi senaryosu yalnız AUT1B commit'i bu checkout'un geçmişinde yoksa (geçmişsiz dağıtım ağacı) açıkça atlanabilir; geçmiş varsa geçmek zorundadır.
     const aut1b=cp.spawnSync("git",["cat-file","-e",AUT1B_COMMIT+"^{commit}"]).status===0,names=BS1_PARTITION["e"].flat(),hasReal=names.includes(BS1_REAL_AUT1B_SCENARIO);
     for(const l of r.line){if(hasReal&&!aut1b&&/ SKIPPED 1$/.test(l))expect(l).toMatch(/^BOOTSTRAP_AUTONOMY_SELFTEST FILTERED: PASS (\d+)\/\1 SKIPPED 1$/);else expect(l).toMatch(/^BOOTSTRAP_AUTONOMY_SELFTEST FILTERED: PASS (\d+)\/\1$/)}

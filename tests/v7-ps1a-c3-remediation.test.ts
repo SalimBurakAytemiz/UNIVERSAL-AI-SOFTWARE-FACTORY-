@@ -31,8 +31,8 @@ let tmp = "", ext = "";
 const apps: App[] = [];
 const pids: number[] = [];
 beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-ps1a-c3-longname-"));
-  ext = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-ps1a-c3-external-"));
+  tmp = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), "uasco-ps1a-c3-longname-"));
+  ext = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), "uasco-ps1a-c3-external-"));
 });
 afterEach(async () => {
   for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } }

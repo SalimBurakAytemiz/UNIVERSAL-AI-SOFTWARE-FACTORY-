@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-17T03:46:42.467Z",
+  "generatedAt": "2026-10-17T05:40:11.371Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -430,7 +430,7 @@
     },
     {
       "path": "config/validation.json",
-      "sha256": "435e4bd90675b06b547cb4379d39be7373cb1086105737eb9bbb04557c8feaa0"
+      "sha256": "1d7bc9e1cb75c6efac1385cf397ec1679d63f8578cb954a630ef11197fd7b13c"
     },
     {
       "path": "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
@@ -1138,7 +1138,7 @@
     },
     {
       "path": "scripts/bootstrap-autonomy-selftest.mjs",
-      "sha256": "aa69541055ee6cdffaca06366fa9297f6e30a0423cacbbde715859e837409d00"
+      "sha256": "773b6183548516ce6304620cf537617588599a5bf19c5800f78f752230699633"
     },
     {
       "path": "scripts/bootstrap-kernel-selftest.mjs",
@@ -1258,7 +1258,7 @@
     },
     {
       "path": "scripts/run-validation.mjs",
-      "sha256": "42835579e11c398ee0558ff1060c0ca0fd93710fa0a15644a6b775f48ff81f0e"
+      "sha256": "df18cfdc6e3ec37edee809aeb9250c4a3813101108dcff1f19600b6bdd1b8557"
     },
     {
       "path": "scripts/runtime-schema-conformance-selftest.mjs",

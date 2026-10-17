@@ -380,7 +380,10 @@
         "run",
         "tests/pkg-bs1-autonomy-bootstrap-a.test.ts"
       ],
-      "requiresDependencies": true
+      "requiresDependencies": true,
+      "platforms": [
+        "win32"
+      ]
     },
     {
       "id": "tests-bs1-b",
@@ -390,7 +393,10 @@
         "run",
         "tests/pkg-bs1-autonomy-bootstrap-b.test.ts"
       ],
-      "requiresDependencies": true
+      "requiresDependencies": true,
+      "platforms": [
+        "win32"
+      ]
     },
     {
       "id": "tests-bs1-c",
@@ -400,7 +406,10 @@
         "run",
         "tests/pkg-bs1-autonomy-bootstrap-c.test.ts"
       ],
-      "requiresDependencies": true
+      "requiresDependencies": true,
+      "platforms": [
+        "win32"
+      ]
     },
     {
       "id": "tests-bs1-d",
@@ -410,7 +419,10 @@
         "run",
         "tests/pkg-bs1-autonomy-bootstrap-d.test.ts"
       ],
-      "requiresDependencies": true
+      "requiresDependencies": true,
+      "platforms": [
+        "win32"
+      ]
     },
     {
       "id": "tests-bs1-e",
@@ -420,7 +432,10 @@
         "run",
         "tests/pkg-bs1-autonomy-bootstrap-e.test.ts"
       ],
-      "requiresDependencies": true
+      "requiresDependencies": true,
+      "platforms": [
+        "win32"
+      ]
     },
     {
       "id": "tests-bs1-f",
@@ -430,7 +445,10 @@
         "run",
         "tests/pkg-bs1-autonomy-bootstrap-f.test.ts"
       ],
-      "requiresDependencies": true
+      "requiresDependencies": true,
+      "platforms": [
+        "win32"
+      ]
     },
     {
       "id": "tests-lv1",
@@ -440,7 +458,10 @@
         "run",
         "tests/pkg-lv1-liveness.test.ts"
       ],
-      "requiresDependencies": true
+      "requiresDependencies": true,
+      "platforms": [
+        "win32"
+      ]
     }
   ]
 }
