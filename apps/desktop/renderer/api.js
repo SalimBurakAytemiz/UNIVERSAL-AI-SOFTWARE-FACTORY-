@@ -8,6 +8,7 @@ import {ACADEMY_PATH,mapAcademy} from "./academy-core.js";
 import {predevPath,crewPath,mapPredev,mapCrew} from "./journey-core.js";
 import {COCKPIT_PATH,MISSIONS_PATH,WORK_RUNS_PATH,ATTENTION_PATH,mapExecCockpit,mapExecMissions,mapExecWorkRuns,mapExecAttention} from "./executive-core.js";
 import {mapQueueMissions,mapQueueWorkRuns,mapQueueAttention} from "./queue-core.js";
+import {REVIEWS_PATH,mapReadinessWorkRuns,mapReadinessReviews,mapReadinessEvidence} from "./readiness-core.js";
 
 const TTL_MS=3000;
 const ROLE_ID_RE=/^UASCO-\d{4}$/;
@@ -143,6 +144,11 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async queueAttention(){const r=await get(ATTENTION_PATH);return r.ok?mapQueueAttention(r.data):{state:r.state,attention:null,message:r.message}},
     async queueMissions(){const r=await get(MISSIONS_PATH);return r.ok?mapQueueMissions(r.data):{state:r.state,missions:null,message:r.message}},
     async queueWorkRuns(){const r=await get(WORK_RUNS_PATH);return r.ok?mapQueueWorkRuns(r.data):{state:r.state,runs:null,message:r.message}},
+    // //TR: FA-V2-PRODUCT (UI-227): Kalite Kapısı ve Release Readiness salt-okunur okumaları; dört sabit yol da main allow-list'inde zaten vardır (GET /v1/work-runs, GET /v1/reviews [UI-049], GET /v1/cockpit evidence bloğu, GET /v1/missions; yeni uç nokta yok, sorgu dizesi yok). Başarılıysa readiness-core eşleyicileriyle fail-closed sanitize edilir (bozuk yanıt dürüst ERROR), okuma hatası ayrık dürüst durum olarak döner.
+    async readinessWorkRuns(){const r=await get(WORK_RUNS_PATH);return r.ok?mapReadinessWorkRuns(r.data):{state:r.state,runs:null,message:r.message}},
+    async readinessReviews(){const r=await get(REVIEWS_PATH);return r.ok?mapReadinessReviews(r.data):{state:r.state,reviews:null,message:r.message}},
+    async readinessEvidence(){const r=await get(COCKPIT_PATH);return r.ok?mapReadinessEvidence(r.data):{state:r.state,evidence:null,message:r.message}},
+    async readinessMissions(){const r=await get(MISSIONS_PATH);return r.ok?mapQueueMissions(r.data):{state:r.state,missions:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }
