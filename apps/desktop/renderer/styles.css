@@ -725,3 +725,22 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   .ops-step,.ops-item,.ops-control{border:1px solid CanvasText;border-left-width:4px}
   .ops-section :focus-visible{outline:3px solid Highlight}
 }
+/* //TR: FA-V2-PRODUCT Provider Hub: KPI satırı mevcut kpiTile bileşenini, bulgu/sağlayıcı kartları mevcut `.cards > .card` desenini ve mevcut token tabanını kullanır (palet değişmez, yeni renk token'ı yok). Durum anlamı rozet METNİNDE ve ikonunda taşınır; renk (sol kenar vurgusu) yalnız ek ipucudur ve zorunlu-renk modunda sistem renklerine düşer. */
+.view-providers{container-type:inline-size;display:grid;gap:var(--space-4)}
+.prov-sub{margin:var(--space-4) 0 var(--space-1);font-size:var(--fs-h3)}
+.prov-state{display:grid;gap:var(--space-1);padding:var(--space-3);margin:var(--space-3) 0;border:1px dashed var(--border-ui);border-radius:var(--radius-md)}
+.prov-state-head,.prov-finding-head,.prov-item-head,.prov-overall,.prov-unreported{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
+.prov-sources{margin-bottom:var(--space-2)}
+.prov-list{margin-top:var(--space-2);grid-template-columns:minmax(0,1fr)}
+.prov-finding,.prov-item{border-left:4px solid var(--border-ui)}
+.prov-finding[data-finding-severity="BLOCKED"],.prov-finding[data-finding-severity="HALTED"],.prov-item[data-provider-status="REFUSED"]{border-left-color:var(--danger)}
+.prov-finding[data-finding-severity="UNKNOWN"],.prov-finding[data-finding-severity="NOT_READY"],.prov-finding[data-finding-severity="UNVERIFIED"]{border-left-color:var(--warn)}
+.prov-boundary-list{margin:var(--space-2) 0;padding-left:var(--space-4);display:grid;gap:var(--space-1);font-size:var(--fs-label)}
+.prov-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:.2rem var(--space-3);margin:var(--space-2) 0;font-size:var(--fs-label)}
+.prov-facts dt{color:var(--muted)}.prov-facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+@container (max-width:40rem){.prov-facts{grid-template-columns:minmax(0,1fr)}}
+@media (forced-colors:active){
+  .prov-state{border:1px solid CanvasText;forced-color-adjust:auto}
+  .prov-finding,.prov-item{border:1px solid CanvasText;border-left-width:4px}
+  .prov-section :focus-visible{outline:3px solid Highlight}
+}
