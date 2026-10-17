@@ -21,9 +21,9 @@ export function claim(store,a){req(a,ID);reqTime(a);
   if(sameOwner(cur,a)){const next={...cur,headSha:a.headSha??cur.headSha,heartbeatAt:a.now,expiresAt:a.now+a.ttlMs},r=store.cas(a.taskId,cur.token,next);return r.ok?{status:"GRANTED",record:next}:{status:"HELD",record:r.current??null}}
   return {status:"HELD",record:cur}}
 // renew: only the current owner extends; the token is stable across renews, so a stale holder never matches after a takeover (owner/token differ -> LOST).
-export function renew(store,a){req(a,ID);reqTime(a);
-  const cur=store.read(a.taskId);if(!sameOwner(cur,a)||(a.token!==undefined&&a.token!==cur.token))return {status:"LOST",record:cur??null};
+export function renew(store,a){req(a,[...ID,"token"]);reqTime(a);
+  const cur=store.read(a.taskId);if(!sameOwner(cur,a)||a.token!==cur.token)return {status:"LOST",record:cur??null};
   const next={...cur,heartbeatAt:a.now,expiresAt:a.now+a.ttlMs},r=store.cas(a.taskId,cur.token,next);return r.ok?{status:"RENEWED",record:next}:{status:"LOST",record:r.current??null}}
-export function release(store,a){req(a,ID);
-  const cur=store.read(a.taskId);if(!sameOwner(cur,a)||(a.token!==undefined&&a.token!==cur.token))return {status:"NOOP"};
+export function release(store,a){req(a,[...ID,"token"]);
+  const cur=store.read(a.taskId);if(!sameOwner(cur,a)||a.token!==cur.token)return {status:"NOOP"};
   return store.remove(a.taskId,cur.token).ok?{status:"RELEASED"}:{status:"NOOP"}}

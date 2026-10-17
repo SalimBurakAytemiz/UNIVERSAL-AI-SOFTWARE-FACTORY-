@@ -34,17 +34,19 @@ describe("atomic cross-environment task lease",()=>{
     expect(claim(s,B({taskId:"TTL-1",now:1100})).status).toBe("HELD");expect(isExpired(g.record,1100)).toBe(false);
     const r=claim(s,B({taskId:"TTL-1",now:1101}));expect(r.status).toBe("GRANTED");expect(r.record!.epoch).toBe(2);expect(r.previous!.token).toBe(g.record!.token);expect(r.record!.token).not.toBe(g.record!.token);
   });
-  it("same owner re-claim is idempotent GRANTED (same token); renew keeps ownership; reclaimed owner gets LOST",()=>{
-    const s=createLocalGitRefStore({repoDir:repo}),g=claim(s,A({taskId:"REN-1"}));
-    expect(claim(s,A({taskId:"REN-1",now:1050})).record!.token).toBe(g.record!.token);
-    const r=renew(s,A({taskId:"REN-1",now:1090}));expect(r.status).toBe("RENEWED");expect(s.read("REN-1")!.expiresAt).toBe(1190);expect(claim(s,B({taskId:"REN-1",now:1150})).status).toBe("HELD");
+  it("same owner re-claim is idempotent GRANTED (same token); renew keeps ownership (token required); reclaimed owner gets LOST",()=>{
+    const s=createLocalGitRefStore({repoDir:repo}),g=claim(s,A({taskId:"REN-1"})),tok=g.record!.token;
+    expect(claim(s,A({taskId:"REN-1",now:1050})).record!.token).toBe(tok);
+    expect(()=>renew(s,A({taskId:"REN-1",now:1090}) as any)).toThrow(/LEASE_ARG_MISSING:token/);
+    const r=renew(s,A({taskId:"REN-1",now:1090,token:tok}));expect(r.status).toBe("RENEWED");expect(s.read("REN-1")!.expiresAt).toBe(1190);expect(claim(s,B({taskId:"REN-1",now:1150})).status).toBe("HELD");
     expect(claim(s,B({taskId:"REN-1",now:1191})).status).toBe("GRANTED");
-    expect(renew(s,A({taskId:"REN-1",now:1192})).status).toBe("LOST");expect(s.read("REN-1")!.workerId).toBe("w-b");
+    expect(renew(s,A({taskId:"REN-1",now:1192,token:tok})).status).toBe("LOST");expect(s.read("REN-1")!.workerId).toBe("w-b");
   });
-  it("release frees the lease; non-owner release is NOOP",()=>{
-    const s=createLocalGitRefStore({repoDir:repo});claim(s,A({taskId:"REL-1"}));
-    expect(release(s,B({taskId:"REL-1"})).status).toBe("NOOP");expect(s.read("REL-1")).not.toBeNull();
-    expect(release(s,A({taskId:"REL-1"})).status).toBe("RELEASED");expect(s.read("REL-1")).toBeNull();expect(release(s,A({taskId:"REL-1"})).status).toBe("NOOP");
+  it("release frees the lease; non-owner release is NOOP; token is required",()=>{
+    const s=createLocalGitRefStore({repoDir:repo}),g=claim(s,A({taskId:"REL-1"})).record!;
+    expect(()=>release(s,A({taskId:"REL-1"}) as any)).toThrow(/LEASE_ARG_MISSING:token/);
+    expect(release(s,B({taskId:"REL-1",token:"not-owner"})).status).toBe("NOOP");expect(s.read("REL-1")).not.toBeNull();
+    expect(release(s,A({taskId:"REL-1",token:g.token})).status).toBe("RELEASED");expect(s.read("REL-1")).toBeNull();expect(release(s,A({taskId:"REL-1",token:g.token})).status).toBe("NOOP");
     expect(claim(s,B({taskId:"REL-1",now:1001})).status).toBe("GRANTED");
   });
   it("git store cas/remove reject a stale token and invalid task ids are refused",()=>{
@@ -83,7 +85,7 @@ describe("atomic cross-environment task lease",()=>{
 });
 describe("SHA + session bound reviewer verdict",()=>{
   const SHA="c".repeat(40),base={taskId:"T-1",reviewedSha:SHA,reviewerSessionId:"rev-1",implementerSessionId:"impl-1",result:"CLEAN",reviewerIdentity:"CLAUDE_REVIEWER",builderIdentity:"CLAUDE_BUILDER"};
-  const opts={expectedHeadSha:SHA,implementerSessionId:"impl-1"};
+  const opts={expectedTaskId:"T-1",expectedHeadSha:SHA,implementerSessionId:"impl-1"};
   it("accepts only a CLEAN, SHA-matching, independent verdict",()=>{const v=bindVerdict(base);expect(Object.isFrozen(v)).toBe(true);expect(verifyVerdict(v,opts)).toEqual({ok:true,reason:"OK"})});
   it("rejects STALE_SHA",()=>expect(verifyVerdict(bindVerdict({...base,reviewedSha:"d".repeat(40)}),opts)).toEqual({ok:false,reason:"STALE_SHA"}));
   it("rejects NOT_INDEPENDENT (reviewer session == implementer session, recorded or expected)",()=>{
@@ -92,4 +94,11 @@ describe("SHA + session bound reviewer verdict",()=>{
   it("rejects SAME_IDENTITY",()=>expect(verifyVerdict(bindVerdict({...base,reviewerIdentity:"X",builderIdentity:"X"}),opts).reason).toBe("SAME_IDENTITY"));
   it("rejects every non-CLEAN result",()=>{for(const r of ["BLOCKED","INCONCLUSIVE","INVALID"])expect(verifyVerdict(bindVerdict({...base,result:r}),opts)).toEqual({ok:false,reason:`NOT_CLEAN:${r}`})});
   it("bindVerdict refuses unknown results and missing fields; null verdict is rejected",()=>{expect(()=>bindVerdict({...base,result:"OK"})).toThrow(/VERDICT_RESULT_INVALID/);expect(()=>bindVerdict({...base,reviewedSha:""})).toThrow(/VERDICT_ARG_MISSING/);expect(verifyVerdict(null,opts).ok).toBe(false)});
+  it("binds to the task and requires the authoritative implementer session (fail-closed)",()=>{
+    const v=bindVerdict(base);
+    expect(verifyVerdict(v,{...opts,expectedTaskId:"OTHER"}).reason).toBe("TASK_MISMATCH");
+    expect(verifyVerdict(v,{expectedHeadSha:SHA,implementerSessionId:"impl-1"} as any).reason).toBe("TASK_MISMATCH");
+    expect(verifyVerdict(v,{expectedTaskId:"T-1",expectedHeadSha:SHA} as any).reason).toBe("NOT_INDEPENDENT");
+    expect(verifyVerdict(bindVerdict({...base,implementerSessionId:"fake"}),opts).reason).toBe("NOT_INDEPENDENT");
+  });
 });
