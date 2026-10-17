@@ -26,8 +26,8 @@ export interface DevRunState {
   ownerStartTime?: string | null;
   startedAt: string | null; endedAt: string | null; exitCode: number | null; signal: string | null; port: number | null; argv: string[]; headSha: string | null;
   preview: DevRunPreview; recovery?: DevRunRecovery;
-  // PS1A-C2-F2: süreç çıkışından sonra kalan süreç ağacı temizliği (Windows: ppid yürüyüşü + periyodik soy anlık görüntüsü; POSIX: süreç grubu).
-  treeCleanup?: {at: string; method: "PPID_WALK" | "PROCESS_GROUP" | "UNAVAILABLE"; killed: number; survivors: number};
+  // PS1A-C2-F2: süreç çıkışından sonra kalan süreç ağacı temizliği (Windows: ppid yürüyüşü + periyodik soy anlık görüntüsü; Linux: süreç grubu + kaydedilmiş soy (setsid'li torunlar dahil) ppid yürüyüşü; diğer POSIX: yalnız süreç grubu).
+  treeCleanup?: {at: string; method: "PPID_WALK" | "PROCESS_GROUP" | "PROCESS_GROUP_PPID_WALK" | "UNAVAILABLE"; killed: number; survivors: number};
 }
 export interface DevRunView extends Omit<DevRunState, "ownerPid" | "ownerHost" | "instanceId" | "pidStartTime" | "ownerStartTime" | "schemaVersion" | "tenantId"> { logTail: {stdout: string; stderr: string; truncated: boolean} }
 export interface DevRunOptions {
@@ -58,7 +58,38 @@ export async function processStartTime(pid: number): Promise<string | null> {
 }
 export function pidAlive(pid: number | null): boolean {
   if (!pid || !Number.isInteger(pid) || pid <= 0) return false;
-  try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; }
+  try { process.kill(pid, 0); } catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; }
+  // Linux: kill(pid, 0) zombi (çıkmış, ebeveyni henüz toplamamış) süreç için de başarılıdır; yalnız /proc durumu açıkça Z/X ise ölü sayılır (okunamazsa kill sonucu geçerli: yanlış "ölü" yok).
+  if (process.platform === "linux") { try { const s = parseLinuxStat(fs.readFileSync(`/proc/${pid}/stat`, "utf8")); if (s && (s.state === "Z" || s.state === "X")) return false; } catch { /* okunamadı */ } }
+  return true;
+}
+// Linux /proc/<pid>/stat: "pid (comm) S ppid ... starttime(alan 22)"; comm boşluk/parantez içerebilir, son ")" sonrası ayrıştırılır.
+function parseLinuxStat(text: string): {pid: number; state: string; ppid: number; startTicks: number} | null {
+  const close = text.lastIndexOf(")"); if (close < 0) return null;
+  const pid = Number(text.slice(0, text.indexOf("(")).trim());
+  const f = text.slice(close + 2).split(" ");
+  const ppid = Number(f[1]), startTicks = Number(f[19]);
+  return Number.isInteger(pid) && Number.isInteger(ppid) && Number.isFinite(startTicks) && f[0] ? {pid, state: f[0], ppid, startTicks} : null;
+}
+// Linux saat dönüşümü (açılış anı ms + tik süresi ms) süreç başına bir kez hesaplanır; böylece aynı sürecin oluşturma zamanı her listede birebir aynı sayıdır (bilinen soy eşleşmesi ±2 ms).
+let linuxClock: {bootMs: number; tickMs: number} | null | undefined;
+function linuxClockInfo(): {bootMs: number; tickMs: number} | null {
+  if (linuxClock !== undefined) return linuxClock;
+  try {
+    const up = Number(fs.readFileSync("/proc/uptime", "utf8").trim().split(/\s+/)[0]);
+    const r = cp.spawnSync("getconf", ["CLK_TCK"], {encoding: "utf8", timeout: 5_000, windowsHide: true});
+    const hz = Number(String(r.stdout ?? "").trim());
+    linuxClock = Number.isFinite(up) && up > 0 ? {bootMs: Date.now() - up * 1000, tickMs: Number.isFinite(hz) && hz > 0 ? 1000 / hz : 10} : null;
+  } catch { linuxClock = null; }
+  return linuxClock;
+}
+function linuxTicksToMs(ticks: number): number | null { const c = linuxClockInfo(); return c ? Math.round(c.bootMs + ticks * c.tickMs) : null; }
+// processStartTime çıktısını epoch ms'ye çevirir (Linux: /proc tik sayısı, diğer: tarih metni). Okunamazsa null.
+export function startTimeMs(s: string | null): number | null {
+  if (!s) return null;
+  if (process.platform === "linux" && /^\d+$/.test(s)) return linuxTicksToMs(Number(s));
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : null;
 }
 export function killProcessTree(pid: number): void {
   try {
@@ -66,9 +97,26 @@ export function killProcessTree(pid: number): void {
     else { try { process.kill(-pid, "SIGKILL"); } catch { process.kill(pid, "SIGKILL"); } }
   } catch { /* süreç zaten bitmiş olabilir */ }
 }
-// PS1A-C2-F2: Windows süreç tablosu (pid, ppid, oluşturma zamanı ms). Okunamazsa null (temizlik yapılamadı olarak raporlanır).
+// PS1A-C2-F2: süreç tablosu (pid, ppid, oluşturma zamanı ms). Windows: Win32_Process; Linux: /proc/<pid>/stat (zombiler hariç: çıkmışlardır, öldürülemez ve canlı çocukları yoktur).
+// Desteklenmeyen platformda veya okunamazsa null (temizlik yalnız süreç grubuyla / yapılamadı olarak raporlanır).
 export interface ProcInfo { pid: number; ppid: number; created: number }
+export const PROCESS_LIST_SUPPORTED = process.platform === "win32" || process.platform === "linux";
+async function listLinuxProcesses(): Promise<ProcInfo[] | null> {
+  if (!linuxClockInfo()) return null;
+  let names: string[];
+  try { names = await fs.promises.readdir("/proc"); } catch { return null; }
+  const rows = await Promise.all(names.filter(n => /^\d+$/.test(n)).map(async n => {
+    try {
+      const s = parseLinuxStat(await fs.promises.readFile(`/proc/${n}/stat`, "utf8"));
+      const created = s ? linuxTicksToMs(s.startTicks) : null;
+      return s && created !== null && s.state !== "Z" && s.state !== "X" ? {pid: s.pid, ppid: s.ppid, created} : null;
+    } catch { return null; /* süreç bu arada bitti */ }
+  }));
+  const out = rows.filter((r): r is ProcInfo => r !== null);
+  return out.length ? out : null;
+}
 export function listProcesses(): Promise<ProcInfo[] | null> {
+  if (process.platform === "linux") return listLinuxProcesses();
   if (process.platform !== "win32") return Promise.resolve(null);
   const script = "Get-CimInstance Win32_Process | ForEach-Object { if ($_.CreationDate) { '{0},{1},{2}' -f $_.ProcessId,$_.ParentProcessId,([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds() } }";
   return new Promise(resolve => {
@@ -357,11 +405,13 @@ export class DevRunManager {
   private rootInfo(a: Active): {pid: number; notBefore: number; startTime: number | null} | null {
     const pid = a.child?.pid, nb = Date.parse(a.state.startedAt ?? "");
     if (!pid || !Number.isFinite(nb)) return null;
-    const t = a.state.pidStartTime ? Date.parse(a.state.pidStartTime) : NaN;
-    return {pid, notBefore: nb - 1000, startTime: Number.isFinite(t) ? t : null};
+    // Linux: pidStartTime /proc tik sayısıdır; listProcesses ile aynı dönüşümle ms'ye çevrilir (Date.parse rakam dizisini geçerli ama anlamsız bir yıl sayar).
+    return {pid, notBefore: nb - 1000, startTime: startTimeMs(a.state.pidStartTime)};
   }
+  // Windows ve Linux: kök canlıyken soy periyodik kaydedilir. Linux'ta kök (veya ara ebeveyn) ölünce yetimler init'e/alt toplayıcıya bağlanır (ppid kaybolur);
+  // bu yüzden ayrık (setsid) torunlar yalnız bu kayıtla bulunabilir.
   private snapshotLoop(a: Active): void {
-    if (process.platform !== "win32" || !this.o.treeSnapshotMs || a.snapTimer) return;
+    if (!PROCESS_LIST_SUPPORTED || !this.o.treeSnapshotMs || a.snapTimer) return;
     let busy = false;
     a.snapTimer = setInterval(() => {
       if (busy || !ACTIVE.has(a.state.status)) return;
@@ -371,14 +421,28 @@ export class DevRunManager {
     }, this.o.treeSnapshotMs);
     a.snapTimer.unref?.();
   }
+  // POSIX durdurma: kök öldürülmeden hemen önce soy bir kez daha kaydedilir (son periyodik görüntüden sonra doğan setsid'li torunlar da reapTree'de bulunur).
+  private async recordTree(a: Active): Promise<void> {
+    const root = this.rootInfo(a); if (!root) return;
+    const ps = await listProcesses().catch(() => null);
+    if (ps) for (const d of treeDescendants(ps, root, a.known)) a.known.set(d.pid, d.created);
+  }
   private async reapTree(a: Active): Promise<void> {
     if (a.snapTimer) clearInterval(a.snapTimer); a.snapTimer = null;
     const root = this.rootInfo(a);
     if (!root) return;
     let method: NonNullable<DevRunState["treeCleanup"]>["method"], victims: number[] = [];
     if (process.platform !== "win32") {
-      method = "PROCESS_GROUP";
+      // Önce süreç grubu (grup üyeleri atomik olarak); ardından setsid ile gruptan kaçan kaydedilmiş/ppid bağlı soy da tek tek SIGKILL edilir.
       try { process.kill(-root.pid, "SIGKILL"); } catch { /* grup boş */ }
+      const ps = await listProcesses();
+      if (!ps) method = "PROCESS_GROUP";
+      else {
+        method = "PROCESS_GROUP_PPID_WALK";
+        victims = treeDescendants(ps, root, a.known).map(p => p.pid);
+        for (const v of victims) { try { process.kill(v, "SIGKILL"); } catch { /* bu arada bitti */ } }
+        for (let i = 0; i < 30 && victims.some(pidAlive); i++) await sleep(100);
+      }
     } else {
       const ps = await listProcesses();
       if (!ps) method = "UNAVAILABLE";
@@ -422,7 +486,10 @@ export class DevRunManager {
     const a = this.active.get(projectId);
     if (!a) return false;
     a.stopping = true; a.state.reason = reason;
-    if (a.child?.pid && a.child.exitCode === null && a.child.signalCode === null) killProcessTree(a.child.pid);
+    const running = () => Boolean(a.child?.pid && a.child.exitCode === null && a.child.signalCode === null);
+    // POSIX: kök ölünce yetimlerin ppid'si kaybolur; öldürmeden önce soy kaydedilir. Bekleme sonrası kök hâlâ çalışıyorsa öldürülür (toplanmış pid'e sinyal yok). Windows davranışı değişmez.
+    if (running() && process.platform !== "win32" && PROCESS_LIST_SUPPORTED) await this.recordTree(a);
+    if (running()) killProcessTree(a.child!.pid!);
     await Promise.race([a.exited, sleep(15_000)]);
     if (this.active.get(projectId) === a) { this.onExit(a, a.child?.exitCode ?? null, null); }
     return true;
