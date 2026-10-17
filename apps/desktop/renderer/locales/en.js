@@ -2079,6 +2079,8 @@ export default {
   "ops.step.RETRY_WAITING.detail":"Package {packageId} will retry at {retryAt} (in {remaining}). Reason: {reason}.",
   "ops.step.RETRY_DUE.title":"Retry is due",
   "ops.step.RETRY_DUE.detail":"Package {packageId} retry time {retryAt} passed {overdue} ago; it is within the {grace} grace period before it is shown as overdue. Reason: {reason}.",
+  "ops.step.RETRY_UNDETERMINED.title":"Retry state cannot be determined",
+  "ops.step.RETRY_UNDETERMINED.detail":"Package {packageId} has a retry record for {retryAt}, but the current time could not be read, so whether it is waiting, due or overdue is unverified. Reason: {reason}.",
   "ops.step.RUN_IN_PROGRESS.title":"Run {runId} is unfinished",
   "ops.step.RUN_IN_PROGRESS.detail":"Started {startedAt} ({age} ago) with no final summary yet; within the {threshold} display threshold.",
   "ops.step.where.resume":"Existing control: Resume (stop banner in the shell, or Control Tower). It is not triggered from here.",

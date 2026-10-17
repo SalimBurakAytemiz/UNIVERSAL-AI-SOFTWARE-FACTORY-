@@ -506,7 +506,8 @@ const CASES: Case[] = [
   ["unfinished run within the threshold", {"/v1/runs": runsBody([...OK_RUNS, openRun(RID("02"), H)])}, "WATCH", ["RUN_IN_PROGRESS"]],
   ["unfinished run without a start time", {"/v1/runs": runsBody([...OK_RUNS, openRun(RID("02"), null)])}, "UNVERIFIED", ["RUN_UNDETERMINED"]],
   ["latest run ended FATAL", {"/v1/runs": runsBody([finishedRun(RID("01"), "COMPLETE", 10 * H), finishedRun(RID("02"), "FATAL", 2 * H, {error: "boom"})])}, "ATTENTION_NEEDED", ["LATEST_RUN_ATTENTION"]],
-  ["latest run ended FOUNDER_ATTENTION_REQUIRED", {"/v1/runs": runsBody([finishedRun(RID("01"), "COMPLETE", 10 * H), finishedRun(RID("02"), "FOUNDER_ATTENTION_REQUIRED", 2 * H)])}, "ATTENTION_NEEDED", ["LATEST_RUN_ATTENTION"]]
+  ["latest run ended FOUNDER_ATTENTION_REQUIRED", {"/v1/runs": runsBody([finishedRun(RID("01"), "COMPLETE", 10 * H), finishedRun(RID("02"), "FOUNDER_ATTENTION_REQUIRED", 2 * H)])}, "ATTENTION_NEEDED", ["LATEST_RUN_ATTENTION"]],
+  ["newest run (by runId) is FATAL with a summary but NO manifest (supervisor crashed before writeManifest); it must not be out-sorted behind an older COMPLETE run", {"/v1/runs": runsBody([finishedRun(RID("01"), "COMPLETE", 10 * H), {runId: RID("09"), summary: {runId: RID("09"), status: "FATAL", finishedAt: ago(1 * H), packageId: "PKG-001", error: "crash before manifest"}, manifest: null}])}, "ATTENTION_NEEDED", ["LATEST_RUN_ATTENTION"]]
 ];
 describe("Operations — the overall state is 'no issues recorded' only when everything is genuinely satisfied; nothing is assumed", () => {
   it("the baseline with every condition satisfied is NO_ISSUES_RECORDED with an empty checklist (positive control)", async () => {
@@ -589,7 +590,7 @@ describe("Operations — the overall state is 'no issues recorded' only when eve
     // Bitmiş koşu hiçbir zaman takılmış sayılmaz (özeti vardır), ne kadar eski olursa olsun.
     expect(await live([finishedRun(RID("01"), "COMPLETE", 500 * H)])).toEqual({[RID("01")]: "FINISHED"});
     const nan = await assess({"/v1/runs": runsBody([openRun(RID("01"), 20 * H)]), "/v1/founder-attention": attBody({retry: retryRec(ago(H)), checkpoint: checkpointRec(ago(20 * H))})}, Number.NaN);
-    expect(nan.out.steps.map((s: any) => s.id)).toEqual(["RUN_UNDETERMINED"]); // retry/checkpoint de sınıflanmaz
+    expect(nan.out.steps.map((s: any) => s.id)).toEqual(["RETRY_UNDETERMINED", "RUN_UNDETERMINED"]); // retry fazı belirlenemiyor -> UNVERIFIED (fail-open düzeltmesi, 2. reviewer); checkpoint yaşı hesaplanamaz (stale değil)
     expect(nan.out.queue.retry.phase).toBe("UNDETERMINED");
     expect(nan.out.queue.checkpoint.ageMs).toBeNull();
     // Yeniden deneme sınırları: gelecek -> WAITING, geçmiş <= 10 dk -> DUE, > 10 dk -> OVERDUE.
@@ -1047,5 +1048,26 @@ describe("Operations — route delegation (app.js VIEWS unchanged)", () => {
     for (const lang of ["en", "tr"]) for (const r of routes.ROUTES) expect(i18n.translate(lang, `area.${r.id}.title`), `${lang}/${r.id}`).not.toBe(`area.${r.id}.title`);
     expect(i18n.translate("tr", "area.operations.title")).toBe("Operasyon ve Kurtarma");
     expect(i18n.translate("en", "area.operations.desc")).toContain("Read-only.");
+  });
+});
+
+// //TR: UI-071 2. bağımsız reviewer remediasyonu — "en yeni koşu" seçimi ve belirlenemeyen retry fazının dürüstlüğü (yanlış all-clear regresyonu).
+describe("Operations — regression: newest-run selection and retry-phase honesty (UI-071 2nd-reviewer finding)", () => {
+  it("picks the latest run by chronological runId (server order), so a FATAL summary WITHOUT a manifest is never hidden behind an older COMPLETE run", async () => {
+    const older = finishedRun(RID("01"), "COMPLETE", 10 * H); // has manifest + startedAt
+    const newerFatal = {runId: RID("09"), summary: {runId: RID("09"), status: "FATAL", finishedAt: ago(1 * H), packageId: "PKG-001", error: "crash before manifest"}, manifest: null}; // newer runId, no manifest -> no startedAt
+    const {out} = await assess({"/v1/runs": runsBody([older, newerFatal])});
+    expect(out.runs.latest.runId).toBe(RID("09"));
+    expect(out.runs.latest.hasManifest).toBe(false);
+    expect(out.runs.latest.group).toBe("ATTENTION");
+    expect(out.steps.map((x: any) => x.id)).toContain("LATEST_RUN_ATTENTION");
+    expect(out.tier).toBe("ATTENTION_NEEDED");
+    expect(out.tier).not.toBe("NO_ISSUES_RECORDED");
+  });
+  it("surfaces a retry record whose phase cannot be determined (current time unreadable) as UNVERIFIED, never silently all-clear", async () => {
+    const {out} = await assess({"/v1/founder-attention": attBody({retry: retryRec(ago(2 * H))})}, NaN);
+    expect(out.queue.retry.phase).toBe("UNDETERMINED");
+    expect(out.steps.map((x: any) => x.id)).toContain("RETRY_UNDETERMINED");
+    expect(out.tier).not.toBe("NO_ISSUES_RECORDED");
   });
 });
