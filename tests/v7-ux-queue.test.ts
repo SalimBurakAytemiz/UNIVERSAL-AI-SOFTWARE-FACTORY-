@@ -430,15 +430,35 @@ describe("Queue — derivation is from recorded state only, deterministic, and n
     expect(order(a)).toEqual([`mission:${MSN("d4")}`, `mission:${MSN("b2")}`, `mission:${MSN("c3")}`, `mission:${MSN("a1")}`]);
     expect(order(b)).toEqual(order(a));
   });
-  it("kind is decided from the recorded mission status; a run whose mission is unknown or unreadable is a RUN_GATE with no invented title", async () => {
+  it("kind is decided from the recorded mission status: RUN_GATE only when the mission list was READ; an unreadable mission list yields MISSION_STATUS_UNKNOWN and never asserts a mission state", async () => {
+    // Mission listesi BAŞARIYLA okundu ve koşunun mission'ı o listede gerçekten yok: meşru RUN_GATE, uydurma başlık yok.
     const orphan = {runs: [runRow(RUN("99"), MSN("99"), {updatedAt: "2026-10-17T11:00:00.000Z"})]};
     const unknown = (await derive({"/v1/work-runs": orphan})).q;
+    expect(unknown.sources.missions.state).toBe("VERIFIED");
     expect(unknown.items.find((i: any) => i.key === `run:${RUN("99")}`)).toMatchObject({kind: "RUN_GATE", title: null, missionKnown: false, missionStatus: null, riskLevel: null, waitMs: H});
-    // mission listesi okunamaz: REPORTING/PREFLIGHT/FOUNDER_ATTENTION sınıflaması yapılamaz; koşular yine kapı bekleyen koşu olarak listelenir.
+    // Mission listesi OKUNAMAZ (ERROR): koşunun mission durumu BİLİNMEZ. "REPORTING değil" iddiası kurulamaz -> RUN_GATE DEĞİL, ayrık MISSION_STATUS_UNKNOWN.
+    // Fixture'da K.rep'in mission'ı gerçekte REPORTING'dir; okunamayan listeden bu bilinemez ve yanlış bir RUN_GATE etiketi uydurulmaz.
     const noMissions = (await derive({"/v1/missions": {nonsense: 1}})).q;
     expect(noMissions.complete).toBe(false);
+    expect(noMissions.sources.missions.state).toBe("ERROR");
     expect(noMissions.items.map((i: any) => i.key).sort()).toEqual([K.rep, K.gate, K.pkg, K.ph0].sort());
-    expect(noMissions.items.find((i: any) => i.key === K.rep)).toMatchObject({kind: "RUN_GATE", title: null, missionKnown: false});
+    for (const k of [K.rep, K.gate]) {
+      expect(noMissions.items.find((i: any) => i.key === k), k).toMatchObject({kind: "MISSION_STATUS_UNKNOWN", priority: 2, title: null, missionKnown: false, missionStatus: null, riskLevel: null, runStatus: "AWAITING_APPROVAL"});
+    }
+    expect(noMissions.items.some((i: any) => i.kind === "RUN_GATE" || i.kind === "DELIVERY_DECISION")).toBe(false);
+    expect(noMissions.counts).toBeNull();
+    // Her başarısız mission okuması aynı sonucu verir (ERROR / OFFLINE / UNAVAILABLE): durum bilinmez.
+    for (const state of ["ERROR", "OFFLINE", "UNAVAILABLE"]) {
+      const {core, res} = await derive();
+      const q2 = core.buildQueue({...res, missions: {state, missions: null}}, NOW);
+      expect(q2.sources.missions.state, state).toBe(state);
+      expect(q2.items.filter((i: any) => i.runId !== null).map((i: any) => [i.key, i.kind, i.missionKnown, i.missionStatus]).sort(), state)
+        .toEqual([[K.gate, "MISSION_STATUS_UNKNOWN", false, null], [K.rep, "MISSION_STATUS_UNKNOWN", false, null]].sort());
+    }
+    // Karşıt kanıt: liste okunduğunda aynı fixture'daki koşular gerçek durumlarıyla sınıflanır (REPORTING -> teslim kararı, aksi halde kapı).
+    const read = (await derive()).q;
+    expect(read.items.find((i: any) => i.key === K.rep)).toMatchObject({kind: "DELIVERY_DECISION", missionKnown: true, missionStatus: "REPORTING"});
+    expect(read.items.find((i: any) => i.key === K.gate)).toMatchObject({kind: "RUN_GATE", missionKnown: true, missionStatus: "EXECUTING"});
     // koşu listesi okunamaz: REPORTING mission'ın teslim kararı bilinemez, listelenmez.
     const noRuns = (await derive({"/v1/work-runs": {runs: "x"}})).q;
     expect(noRuns.items.map((i: any) => i.key).sort()).toEqual([K.fa, K.pf, K.pf2, K.pkg, K.ph0].sort());
@@ -477,8 +497,8 @@ describe("Queue — derivation is from recorded state only, deterministic, and n
   });
   it("priority is only a documented display order derived from the item kind (no recorded field is claimed)", async () => {
     const core = await load("queue-core.js");
-    expect(core.QUEUE_KINDS).toEqual(["FOUNDER_ATTENTION", "BLOCKED_PACKAGE", "DELIVERY_DECISION", "RUN_GATE", "AUTHORIZATION"]);
-    expect(core.PRIORITY_OF_KIND).toEqual({FOUNDER_ATTENTION: 1, BLOCKED_PACKAGE: 1, DELIVERY_DECISION: 2, RUN_GATE: 2, AUTHORIZATION: 3});
+    expect(core.QUEUE_KINDS).toEqual(["FOUNDER_ATTENTION", "BLOCKED_PACKAGE", "DELIVERY_DECISION", "RUN_GATE", "MISSION_STATUS_UNKNOWN", "AUTHORIZATION"]);
+    expect(core.PRIORITY_OF_KIND).toEqual({FOUNDER_ATTENTION: 1, BLOCKED_PACKAGE: 1, DELIVERY_DECISION: 2, RUN_GATE: 2, MISSION_STATUS_UNKNOWN: 2, AUTHORIZATION: 3});
     expect(core.PRIORITIES).toEqual([1, 2, 3]);
     const src = read("queue-core.js");
     expect(src).not.toMatch(/\bsla(Target|Breach|Deadline|Status)\b|\boverdue\b|\bbreached\b/i);
@@ -578,12 +598,29 @@ describe("Queue — view honesty", () => {
     expect(allData(r.root, "bandCount").every(n => n.dataset.bandCount === "—")).toBe(true);
     expect(allData(r.root, "tierEmpty").length).toBe(0);
     expect(byData(r.root, "queueState")!.textContent).toContain("GET /v1/founder-attention");
-    // mission listesi bozuk (ERROR): hiçbir mission öğesi yok; koşular başlıksız ve açıkça "mission okunamadı" ile listelenir.
+    // mission listesi bozuk (ERROR): hiçbir mission öğesi yok; koşular başlıksız, mission durumu BİLİNMİYOR olarak listelenir —
+    // okunamayan bir mission durumu hakkında ("REPORTING değil" gibi) hiçbir iddia kurulmaz (fixture'da K.rep'in mission'ı gerçekte REPORTING'dir).
     r = await renderView(serve({"/v1/missions": {missions: [{...MISSIONS.missions[0], riskLevel: "R9"}]}}));
     expect(allData(r.root, "queueState").map(n => [n.dataset.source, n.dataset.queueState])).toEqual([["missions", "ERROR"]]);
     expect(itemsOf(r.root).map(n => n.dataset.queueItem)).toEqual([K.pkg, K.ph0, K.gate, K.rep]);
-    expect(itemFor(r.root, K.rep).dataset.kind).toBe("RUN_GATE");
-    expect(field(itemFor(r.root, K.rep), "mission")!.textContent).toContain("Mission title unavailable: the mission list could not be read");
+    for (const k of [K.gate, K.rep]) {
+      const li = itemFor(r.root, k);
+      expect(li.dataset.kind, k).toBe("MISSION_STATUS_UNKNOWN");
+      expect(li.dataset.kind, k).not.toBe("RUN_GATE");
+      expect(li.dataset.kind, k).not.toBe("DELIVERY_DECISION");
+      expect(field(li, "mission")!.textContent, k).toContain("Mission title unavailable: the mission list could not be read");
+      expect(field(li, "needs")!.textContent, k).toContain("mission list could not be read");
+      expect(field(li, "needs")!.textContent, k).toContain("mission status is unknown");
+      expect(li.textContent, k).not.toMatch(/not in REPORTING|offers no delivery decision/i);
+      expect(allData(li, "pill").map(n => n.dataset.pill), k).not.toContain("EXECUTING");
+      expect(allData(li, "pill").map(n => n.dataset.pill), k).not.toContain("REPORTING");
+      // Gelen Kutusu yolu sessizce düşürülmez (mission REPORTING olabilir); Work'te mission da açılabilir.
+      expect(all(li).filter(n => n.tagName === "BUTTON").map(n => n.dataset.navigate), k).toEqual(["work", "inbox"]);
+    }
+    // Kuyruktaki kısmi bildirim doğrudur: okunamayan kaynaktan gelen öğeler listelenmez, durum bilinmeyen koşular ise açıkça belirtilir.
+    expect(byData(r.root, "queuePartial")!.dataset.queuePartial).toBe("missions");
+    expect(byData(r.root, "queuePartial")!.textContent).toContain("items that come from an unreadable source are not listed");
+    expect(byData(r.root, "note", "mission-status-unknown")!.textContent).toContain("whether its mission is in REPORTING");
     expect(kpiValue(r.root, "total")).toBe("—");
     expect(kpi(r.root, "total").dataset.state).toBe("ERROR");
     // koşu listesi çevrimdışı: REPORTING mission'ın teslim kararı bilinemez, listelenmez.
@@ -592,6 +629,41 @@ describe("Queue — view honesty", () => {
     expect(itemsOf(r.root).map(n => n.dataset.queueItem)).toEqual([K.fa, K.pkg, K.ph0, K.pf, K.pf2]);
     expect(kpi(r.root, "total").dataset.state).toBe("OFFLINE");
     expect(pills(kpi(r.root, "total"))).toContain("OFFLINE");
+  });
+  it("a run is described as 'mission not in REPORTING' only when the mission list was READ; an unreadable mission list never produces that claim (every failure state, EN and TR)", async () => {
+    const orphan = {runs: [runRow(RUN("99"), MSN("99"), {updatedAt: "2026-10-17T11:00:00.000Z"})]};
+    const NOT_REPORTING = /not in REPORTING|offers no delivery decision|REPORTING durumunda değil|teslim kararı sunmaz/;
+    // Liste BAŞARIYLA okundu ve mission listede gerçekten yok: meşru RUN_GATE (iddia doğru; Gelen Kutusu yolu yok), mission durumu uydurulmaz.
+    for (const lang of ["en", "tr"]) {
+      const ok = await renderView(serve({"/v1/work-runs": orphan}), lang);
+      const gate = itemFor(ok.root, `run:${RUN("99")}`);
+      expect(gate.dataset.kind, lang).toBe("RUN_GATE");
+      expect(field(gate, "needs")!.textContent, lang).toMatch(NOT_REPORTING);
+      expect(all(gate).filter(n => n.tagName === "BUTTON").map(n => n.dataset.navigate), lang).toEqual(["work"]);
+      expect(byData(ok.root, "note", "mission-status-unknown"), lang).toBeUndefined();
+      expect(byData(ok.root, "queuePartial"), lang).toBeUndefined();
+    }
+    // Liste okunamadı (her başarısızlık durumu): REPORTING olan ve olmayan koşular da dahil HİÇBİR koşu için mission durumu iddia edilmez.
+    const failures: Array<[string, (p: string) => any]> = [
+      ["error-500", p => fail(p, 500)], ["unavailable-404", p => fail(p, 404)], ["offline", () => { throw new Error("fetch failed"); }], ["malformed", () => ({nonsense: true})]];
+    for (const lang of ["en", "tr"]) for (const [name, failure] of failures) {
+      const label = `${lang}/${name}`;
+      const {root} = await renderView((p: string) => (p === "/v1/missions" ? failure(p) : serve({"/v1/work-runs": {runs: [...RUNS.runs, ...orphan.runs]}})(p)), lang);
+      const runItems = itemsOf(root).filter(n => n.dataset.queueItem!.startsWith("run:"));
+      expect(runItems.map(n => n.dataset.queueItem).sort(), label).toEqual([K.gate, K.rep, `run:${RUN("99")}`].sort());
+      for (const li of runItems) {
+        expect(li.dataset.kind, `${label} ${li.dataset.queueItem}`).toBe("MISSION_STATUS_UNKNOWN");
+        expect(li.textContent, `${label} ${li.dataset.queueItem}`).not.toMatch(NOT_REPORTING);
+        expect(field(li, "mission")!.textContent, label).not.toContain("Mission not found in the readable mission list");
+        expect(allData(li, "pill").map(n => n.dataset.pill), label).not.toContain("REPORTING");
+        expect(all(li).filter(n => n.tagName === "BUTTON").map(n => n.dataset.navigate), label).toEqual(["work", "inbox"]);
+      }
+      expect(itemsOf(root).some(n => n.dataset.kind === "RUN_GATE" || n.dataset.kind === "DELIVERY_DECISION"), label).toBe(false);
+      expect(byData(root, "note", "mission-status-unknown"), label).toBeTruthy();
+      expect(byData(root, "queuePartial")!.dataset.queuePartial, label).toBe("missions");
+      expect(root.textContent, label).not.toMatch(NOT_REPORTING);
+      expect(kpiValue(root, "total"), label).toBe("—");
+    }
   });
   it("when everything is unreadable no item and no figure is shown, and the queue is never called empty", async () => {
     for (const [fn, st] of [[() => { throw new Error("fetch failed"); }, "OFFLINE"], [() => fail("x", 404), "UNAVAILABLE"], [() => fail("x", 500), "ERROR"], [() => ({nonsense: true}), "ERROR"]] as const) {

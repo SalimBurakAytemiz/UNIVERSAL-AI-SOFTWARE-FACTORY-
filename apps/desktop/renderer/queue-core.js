@@ -7,9 +7,9 @@ export {MISSIONS_PATH,WORK_RUNS_PATH,ATTENTION_PATH};
 export const QUEUE_SOURCES=Object.freeze(["attention","missions","workRuns"]);
 export const QUEUE_SOURCE_PATHS=Object.freeze({attention:ATTENTION_PATH,missions:MISSIONS_PATH,workRuns:WORK_RUNS_PATH});
 /** Kuyruk öğesi türleri (sıra sabit). Her tür YALNIZ kayıtlı bir durumdan türetilir. */
-export const QUEUE_KINDS=Object.freeze(["FOUNDER_ATTENTION","BLOCKED_PACKAGE","DELIVERY_DECISION","RUN_GATE","AUTHORIZATION"]);
+export const QUEUE_KINDS=Object.freeze(["FOUNDER_ATTENTION","BLOCKED_PACKAGE","DELIVERY_DECISION","RUN_GATE","MISSION_STATUS_UNKNOWN","AUTHORIZATION"]);
 /** Sıralama düzeyi (1 en önde): kayıtlı bir alan değil, türden türetilen belgelenmiş görüntü sırasıdır. 1 = iş engelli ve Founder'ı bekliyor, 2 = teslim/koşu kapısı kararı, 3 = başlatma yetkisi (PREFLIGHT). */
-export const PRIORITY_OF_KIND=Object.freeze({FOUNDER_ATTENTION:1,BLOCKED_PACKAGE:1,DELIVERY_DECISION:2,RUN_GATE:2,AUTHORIZATION:3});
+export const PRIORITY_OF_KIND=Object.freeze({FOUNDER_ATTENTION:1,BLOCKED_PACKAGE:1,DELIVERY_DECISION:2,RUN_GATE:2,MISSION_STATUS_UNKNOWN:2,AUTHORIZATION:3});
 export const PRIORITIES=Object.freeze([1,2,3]);
 /** Bekleme bantları: YALNIZ geçen sürenin görüntü gruplamasıdır (hedef/son tarih/SLA değildir). */
 export const WAIT_BANDS=Object.freeze([
@@ -133,7 +133,8 @@ const byQueueOrder=(a,b)=>{
 /**
  * Üç okuma sonucundan (mapQueue* çıktıları) kuyruğu türetir. Öğe türleri:
  * FOUNDER_ATTENTION (mission FOUNDER_ATTENTION_REQUIRED), AUTHORIZATION (mission PREFLIGHT), DELIVERY_DECISION (mission REPORTING + AWAITING_APPROVAL koşusu),
- * RUN_GATE (AWAITING_APPROVAL koşusu; mission REPORTING değil ya da mission listesinde yok), BLOCKED_PACKAGE (founder-attention engelli paket/faz).
+ * RUN_GATE (AWAITING_APPROVAL koşusu; mission listesi BAŞARIYLA okundu ve mission ya REPORTING değil ya da o listede yok), MISSION_STATUS_UNKNOWN (AWAITING_APPROVAL koşusu; mission listesi
+ * OKUNAMADI, bu yüzden mission durumu BİLİNMİYOR — REPORTING olup olmadığı iddia edilmez, teslim kararı mı kapı mı olduğu söylenemez), BLOCKED_PACKAGE (founder-attention engelli paket/faz).
  * Bir kaynak okunamıyorsa kuyruk EKSİKTİR (complete=false): o kaynağa bağlı öğeler listelenmez ve toplam/öncelik/bant sayıları null olur — eksik kuyruk ne "boş" ne de sayılı gösterilir.
  */
 export function buildQueue({missions,runs,attention},nowMs){
@@ -155,7 +156,10 @@ export function buildQueue({missions,runs,attention},nowMs){
   if(r)for(const x of r.items){
     if(x.status!==AWAITING_RUN_STATUS)continue;
     const ms=byId.get(x.missionId)??null;
-    push({kind:ms&&ms.status==="REPORTING"?"DELIVERY_DECISION":"RUN_GATE",key:`run:${x.runId}`,title:ms?ms.title:null,missionId:x.missionId,projectId:x.projectId,riskLevel:ms?ms.riskLevel:null,
+    // Mission listesi OKUNAMADIYSA (m===null) mission durumu bilinmez: "REPORTING değil" gibi bir iddia kurulamaz -> ayrık MISSION_STATUS_UNKNOWN.
+    // RUN_GATE yalnız liste BAŞARIYLA okunmuşken (m!==null) mission REPORTING değilse ya da o listede hiç yoksa verilir.
+    const kind=m===null?"MISSION_STATUS_UNKNOWN":ms&&ms.status==="REPORTING"?"DELIVERY_DECISION":"RUN_GATE";
+    push({kind,key:`run:${x.runId}`,title:ms?ms.title:null,missionId:x.missionId,projectId:x.projectId,riskLevel:ms?ms.riskLevel:null,
       missionStatus:ms?ms.status:null,missionKnown:ms!==null,runId:x.runId,runStatus:x.status,step:x.step,since:x.updatedAt,basis:"RUN_UPDATED"});
   }
   if(a)for(const x of a.items)push({kind:"BLOCKED_PACKAGE",key:`attention:${x.packageId??""}|${x.phase??""}`,packageId:x.packageId,phase:x.phase,blockerKind:x.kind,reason:x.reason,retryable:x.retryable,since:x.at,basis:x.at?"BLOCKED_AT":null});

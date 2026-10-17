@@ -12,9 +12,11 @@ const failState=state=>state==="OFFLINE"||state==="UNAVAILABLE"?state:"ERROR";
 const stateRes=res=>res&&typeof res.state==="string"?res:{state:"UNAVAILABLE"};
 const mono=(doc,t)=>t!==null&&t!==undefined&&t!==""?h(doc,"span",{class:"mono",text:String(t)}):MISSING;
 /** Öğe türünden durum rozeti türü: iş engelliyse ATTENTION, karar/kapı/yetki bekliyorsa WAITING (renk tek başına anlam taşımaz; etiket yerelleştirilmiş tür adıdır). */
-const PILL_FOR_KIND=Object.freeze({FOUNDER_ATTENTION:"ATTENTION",BLOCKED_PACKAGE:"ATTENTION",DELIVERY_DECISION:"WAITING",RUN_GATE:"WAITING",AUTHORIZATION:"WAITING"});
-/** Mevcut Gelen Kutusu akışının listelediği türler; RUN_GATE (mission REPORTING değil) Gelen Kutusu'nda karar olarak sunulmaz. */
-const INBOX_KINDS=Object.freeze(["FOUNDER_ATTENTION","BLOCKED_PACKAGE","DELIVERY_DECISION","AUTHORIZATION"]);
+const PILL_FOR_KIND=Object.freeze({FOUNDER_ATTENTION:"ATTENTION",BLOCKED_PACKAGE:"ATTENTION",DELIVERY_DECISION:"WAITING",RUN_GATE:"WAITING",MISSION_STATUS_UNKNOWN:"WAITING",AUTHORIZATION:"WAITING"});
+/** Mevcut Gelen Kutusu akışının listelediği türler. RUN_GATE (mission listesi okundu ve mission REPORTING değil) Gelen Kutusu'nda karar olarak sunulmaz.
+ * MISSION_STATUS_UNKNOWN (mission listesi okunamadı) için mission REPORTING olabilir ve o zaman teslim kararı Gelen Kutusu'ndadır; durum bilinmediği için yol AÇIK tutulur
+ * ve açıklama bunun doğrulanamadığını söyler (yol sessizce düşürülmez, karar da iddia edilmez). */
+const INBOX_KINDS=Object.freeze(["FOUNDER_ATTENTION","BLOCKED_PACKAGE","DELIVERY_DECISION","MISSION_STATUS_UNKNOWN","AUTHORIZATION"]);
 const safeId=key=>String(key).replace(/[^A-Za-z0-9_-]/g,"_");
 
 function header(ctx){
@@ -161,7 +163,10 @@ function queuePanel(ctx,q){
   }else{
     let budget=MAX_QUEUE_ROWS,shownTotal=0;
     const tiers=q.groups.map(g=>{const t=tierSection(ctx,g,q,budget);budget-=t.shown;shownTotal+=t.shown;return t.node});
-    body=[shownTotal<q.items.length?h(doc,"p",{class:"note",dataset:{note:"truncated"},text:ctx.t("queue.truncated",{shown:shownTotal,total:q.items.length})}):null,...tiers];
+    // Mission listesi okunamadığında listelenen koşuların mission durumu bilinmez; bu AÇIKÇA söylenir (teslim kararı olup olmadığı iddia edilmez).
+    const unknownStatus=q.items.some(i=>i.kind==="MISSION_STATUS_UNKNOWN");
+    body=[shownTotal<q.items.length?h(doc,"p",{class:"note",dataset:{note:"truncated"},text:ctx.t("queue.truncated",{shown:shownTotal,total:q.items.length})}):null,
+      unknownStatus?h(doc,"p",{class:"note",role:"status",dataset:{note:"mission-status-unknown"},text:ctx.t("queue.unknownStatus.note")}):null,...tiers];
   }
   return panel(ctx,{titleKey:"queue.list.title",id:"queue-list",className:"queue-section"},
     h(doc,"p",{class:"note",dataset:{note:"order"},text:ctx.t("queue.order.note")}),
