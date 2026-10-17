@@ -5,6 +5,7 @@
 // //TR: FA-V2-PRODUCT (WP-ACADEMY): Skill Academy (Öğrenme & Yetkinlik) alanı Company OS/Teslimat ile aynı desende `component:"academy"` ile planned.js üzerinden gerçek görünüme (views/academy.js, salt-okunur GET /v1/academy) devreder; app.js VIEWS değişmez, plannedPackage yoktur. Bu bir öğrenme/yetkinlik KATALOĞUDUR, sertifika/eğitim kanıtı değildir (öğrenme yetki vermez).
 // //TR: FA-V2-PRODUCT (Proje Yolculuğu): seçili mission'ın otonom zinciri (pre-dev fazları, ekip koordinasyon ledger'ı, geliştirme -> bağımsız inceleme -> teslim) Company OS/Skill Academy ile aynı desende `component:"journey"` ile planned.js üzerinden gerçek görünüme (views/journey.js, salt-okunur GET /v1/predev/:missionId + GET /v1/crew/:missionId) devreder; app.js VIEWS değişmez, plannedPackage yoktur. Hiçbir faz/onay/verdict uydurulmaz, PRODUCT_VERIFIED gösterilmez.
 // //TR: FA-V2-PRODUCT (UI-236 Kurucu Yönetim Özeti ve İcra Defteri): Founder için başlık sayıları (cockpit, mission, koşu, Founder dikkati) ve yeni-etkinlik-önce İcra Defteri (koşu başına kaynak sürümleri, bağımsız inceleme kararı, teslim durumu) Company OS/Skill Academy/Proje Yolculuğu ile aynı desende `component:"executive"` ile planned.js üzerinden gerçek görünüme (views/executive.js, salt-okunur GET /v1/cockpit + /v1/missions + /v1/work-runs + /v1/founder-attention; dördü de zaten izinli) devreder; app.js VIEWS değişmez, plannedPackage yoktur. Hiçbir sayı/karar uydurulmaz, ürün doğrulaması gösterilmez.
+// //TR: FA-V2-PRODUCT (UI-211 İnsan Onayı Bekleyen İş Kuyruğu): Founder kararı bekleyen işlerin (FOUNDER_ATTENTION_REQUIRED/PREFLIGHT mission'ları, AWAITING_APPROVAL koşuları, Founder dikkati engelli paketleri) önceliğe ve GERÇEK bekleme süresine göre gruplu salt-okunur kuyruğu Company OS/Skill Academy/Proje Yolculuğu/Yönetim Özeti ile aynı desende `component:"queue"` ile planned.js üzerinden gerçek görünüme (views/queue.js, salt-okunur GET /v1/founder-attention + /v1/missions + /v1/work-runs; üçü de zaten izinli) devreder; app.js VIEWS değişmez, plannedPackage yoktur. SLA değeri, onay veya sayı uydurulmaz; eylemler mevcut Gelen Kutusu/Work akışlarına gezinmedir, toplu eylem yoktur.
 // Planlı paket numaraları yol haritası göstergesidir; tek yerde burada tutulur.
 export const ROUTES=Object.freeze([
   {id:"home",hash:"#/home",icon:"home",factory:true,view:"home"},
@@ -19,6 +20,7 @@ export const ROUTES=Object.freeze([
   {id:"academy",hash:"#/academy",icon:"layers",factory:false,view:"planned",component:"academy"},
   {id:"journey",hash:"#/journey",icon:"route",factory:false,view:"planned",component:"journey"},
   {id:"executive",hash:"#/executive",icon:"receipt",factory:false,view:"planned",component:"executive"},
+  {id:"queue",hash:"#/queue",icon:"clock",factory:false,view:"planned",component:"queue"},
   {id:"settings",hash:"#/settings",icon:"gear",factory:false,view:"settings"}
 ]);
 export const DEFAULT_ROUTE="home";

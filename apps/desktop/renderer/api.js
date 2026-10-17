@@ -7,6 +7,7 @@ import {COMPANY_KEYS,COMPANY_PATHS,COMPANY_MAPPERS,companyFailureState} from "./
 import {ACADEMY_PATH,mapAcademy} from "./academy-core.js";
 import {predevPath,crewPath,mapPredev,mapCrew} from "./journey-core.js";
 import {COCKPIT_PATH,MISSIONS_PATH,WORK_RUNS_PATH,ATTENTION_PATH,mapExecCockpit,mapExecMissions,mapExecWorkRuns,mapExecAttention} from "./executive-core.js";
+import {mapQueueMissions,mapQueueWorkRuns,mapQueueAttention} from "./queue-core.js";
 
 const TTL_MS=3000;
 const ROLE_ID_RE=/^UASCO-\d{4}$/;
@@ -138,6 +139,10 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async execMissions(){const r=await get(MISSIONS_PATH);return r.ok?mapExecMissions(r.data):{state:r.state,missions:null,message:r.message}},
     async execWorkRuns(){const r=await get(WORK_RUNS_PATH);return r.ok?mapExecWorkRuns(r.data):{state:r.state,runs:null,message:r.message}},
     async execAttention(){const r=await get(ATTENTION_PATH);return r.ok?mapExecAttention(r.data):{state:r.state,attention:null,message:r.message}},
+    // //TR: FA-V2-PRODUCT (UI-211): İnsan Onayı Bekleyen İş Kuyruğu salt-okunur okumaları; üç sabit yol da main allow-list'inde zaten vardır (yeni uç nokta yok, sorgu dizesi yok). Başarılıysa queue-core eşleyicileriyle fail-closed sanitize edilir (bozuk yanıt dürüst ERROR), okuma hatası ayrık dürüst durum olarak döner.
+    async queueAttention(){const r=await get(ATTENTION_PATH);return r.ok?mapQueueAttention(r.data):{state:r.state,attention:null,message:r.message}},
+    async queueMissions(){const r=await get(MISSIONS_PATH);return r.ok?mapQueueMissions(r.data):{state:r.state,missions:null,message:r.message}},
+    async queueWorkRuns(){const r=await get(WORK_RUNS_PATH);return r.ok?mapQueueWorkRuns(r.data):{state:r.state,runs:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }
