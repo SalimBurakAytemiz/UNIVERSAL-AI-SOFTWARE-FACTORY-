@@ -373,7 +373,8 @@
         "tests/v7-ux-readiness.test.ts",
         "tests/v7-ux-posture.test.ts",
         "tests/v7-ux-matrix.test.ts",
-        "tests/v7-ux-operations.test.ts"
+        "tests/v7-ux-operations.test.ts",
+        "tests/uasco-atomic-lease.test.ts"
       ],
       "requiresDependencies": true
     },
