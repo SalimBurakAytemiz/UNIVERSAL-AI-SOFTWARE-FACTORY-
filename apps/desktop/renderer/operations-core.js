@@ -31,7 +31,7 @@ export const TIER_OF_SEVERITY=Object.freeze({ACTION:"ATTENTION_NEEDED",UNKNOWN:"
 export const STEP_IDS=Object.freeze({
   ACTION:Object.freeze(["STOP_ACTIVE","STOP_FAIL_CLOSED","JOURNAL_TAMPERED","JOURNAL_TORN_TAIL","JOURNAL_UNAVAILABLE","SCHEDULER_REJECTED","BLOCKED_PACKAGE","RETRY_OVERDUE","CHECKPOINT_STALE","RUN_STALLED","LATEST_RUN_ATTENTION"]),
   UNKNOWN:Object.freeze(["SOURCE_UNREADABLE"]),
-  UNVERIFIED:Object.freeze(["SCHEDULER_NOT_VERIFIED","JOURNAL_ABSENT","JOURNAL_NOT_REPORTED","NO_RUNS_RECORDED","RUN_UNDETERMINED"]),
+  UNVERIFIED:Object.freeze(["SCHEDULER_NOT_VERIFIED","JOURNAL_ABSENT","JOURNAL_NOT_REPORTED","NO_RUNS_RECORDED","RUN_UNDETERMINED","RETRY_UNDETERMINED"]),
   WATCH:Object.freeze(["RETRY_WAITING","RETRY_DUE","RUN_IN_PROGRESS"])});
 export const UNKNOWN_DETAILS=Object.freeze(["OFFLINE","UNAVAILABLE","ERROR"]);
 /** Mevcut IPC denetimi bu paket kimliği biçimi dışında yeniden denemeyi reddeder (main.mjs'teki retry-blocked IPC kuralı ile aynı). */
@@ -46,7 +46,6 @@ const opt=(v,ok)=>v===undefined||v===null?null:ok(v)?v:undefined;
 /** Metin alanı: yok/null/boş -> null, dize -> kısaltılmış değer, dize olmayan -> undefined (okuma reddedilir). Boş bir neden gerçek bir stop'u gizlememelidir. */
 const optText=(v,max)=>{const r=opt(v,x=>typeof x==="string");return r===null||r===undefined?r:r.length?r.slice(0,max):null};
 const optIso=v=>opt(v,x=>iso(x)!==null);
-const ts=x=>{const t=Date.parse(x);return Number.isNaN(t)?0:t};
 
 // ---------- GET /v1/control/status ----------
 /**
@@ -151,7 +150,8 @@ export function mapOperationsAttention(raw){
 const ok=res=>Boolean(res)&&res.state==="VERIFIED";
 const failState=s=>s==="OFFLINE"||s==="UNAVAILABLE"?s:"ERROR";
 const rankOf=s=>SEVERITIES.indexOf(s);
-const newestFirst=(a,b)=>ts(b.startedAt)-ts(a.startedAt)||(a.runId<b.runId?1:a.runId>b.runId?-1:0);
+// //TR: "En yeni" koşu KRONOLOJİK runId'den seçilir (sunucunun /v1/runs sıralamasıyla birebir aynı), manifest'e bağlı DEĞİL: writeManifest'ten önce yazılan manifest'siz bir FATAL özet, startedAt yokluğundan en eskiye düşüp gerçek en-yeni sorunu gizleyemez.
+const newestFirst=(a,b)=>(a.runId<b.runId?1:a.runId>b.runId?-1:0);
 
 /** Bir koşunun canlılığı: özeti olan koşu FINISHED; özetsiz koşu YALNIZ kayıtlı başlangıç zamanından sınıflanır (zaman yok/gelecekte -> UNDETERMINED). */
 export function classifyRun(row,nowMs){
@@ -222,6 +222,7 @@ export function buildOperations(res,nowMs){
       if(r.phase==="OVERDUE")add("RETRY_OVERDUE","ACTION","attention",{...p,overdueMs:r.overdueMs});
       else if(r.phase==="DUE")add("RETRY_DUE","WATCH","attention",{...p,overdueMs:r.overdueMs});
       else if(r.phase==="WAITING")add("RETRY_WAITING","WATCH","attention",{...p,remainingMs:r.remainingMs});
+      else if(r.phase==="UNDETERMINED")add("RETRY_UNDETERMINED","UNVERIFIED","attention",{...p});
     }
     if(queue.checkpoint&&queue.checkpoint.stale)add("CHECKPOINT_STALE","ACTION","attention",{generation:queue.checkpoint.generation,updatedAt:queue.checkpoint.updatedAt,ageMs:queue.checkpoint.ageMs});
   }

@@ -2079,6 +2079,8 @@ export default {
   "ops.step.RETRY_WAITING.detail":"{packageId} paketi {retryAt} zamanında yeniden denenecek ({remaining} sonra). Neden: {reason}.",
   "ops.step.RETRY_DUE.title":"Yeniden deneme zamanı geldi",
   "ops.step.RETRY_DUE.detail":"{packageId} paketinin yeniden deneme zamanı {retryAt}, {overdue} önce geçti; gecikmiş gösterilmeden önceki {grace} tolerans süresi içinde. Neden: {reason}.",
+  "ops.step.RETRY_UNDETERMINED.title":"Yeniden deneme durumu belirlenemiyor",
+  "ops.step.RETRY_UNDETERMINED.detail":"{packageId} paketinin {retryAt} için bir yeniden deneme kaydı var, ama şimdiki zaman okunamadığı için beklemede mi, zamanı geldi mi yoksa gecikmiş mi olduğu doğrulanamıyor. Neden: {reason}.",
   "ops.step.RUN_IN_PROGRESS.title":"{runId} koşusu bitmemiş",
   "ops.step.RUN_IN_PROGRESS.detail":"{startedAt} zamanında başladı ({age} önce), henüz nihai özeti yok; {threshold} görüntü eşiği içinde.",
   "ops.step.where.resume":"Mevcut denetim: Devam et (kabuktaki stop bandı ya da Control Tower). Buradan tetiklenmez.",
