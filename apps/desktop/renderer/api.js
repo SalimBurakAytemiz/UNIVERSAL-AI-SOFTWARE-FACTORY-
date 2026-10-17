@@ -12,6 +12,7 @@ import {REVIEWS_PATH,mapReadinessWorkRuns,mapReadinessReviews,mapReadinessEviden
 import {mapPostureWorkRuns,mapPostureReviews,mapPostureEvidence} from "./posture-core.js";
 import {PROJECTS_PATH,mapMatrixProjects,mapMatrixMissions,mapMatrixWorkRuns,mapMatrixCockpit} from "./matrix-core.js";
 import {CONTROL_PATH,RUNS_PATH,mapOperationsControl,mapOperationsRuns,mapOperationsAttention} from "./operations-core.js";
+import {INSTALL_PATH,PHASE0_PATH,mapInstallReport,mapPhase0Report} from "./install-core.js";
 
 const TTL_MS=3000;
 const ROLE_ID_RE=/^UASCO-\d{4}$/;
@@ -165,6 +166,9 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async operationsControl(){const r=await get(CONTROL_PATH);return r.ok?mapOperationsControl(r.data):{state:r.state,control:null,message:r.message}},
     async operationsRuns(){const r=await get(RUNS_PATH);return r.ok?mapOperationsRuns(r.data):{state:r.state,runs:null,message:r.message}},
     async operationsAttention(){const r=await get(ATTENTION_PATH);return r.ok?mapOperationsAttention(r.data):{state:r.state,attention:null,message:r.message}},
+    // //TR: FA-V2-PRODUCT (UI-248): İlk Çalıştırma Kurulum Doğrulaması salt-okunur okumaları; GET /v1/install ve GET /v1/phase0 main allow-list'inde zaten vardır (yeni uç nokta yok, sorgu dizesi yok). GET /v1/system/executors için mevcut executors() erişimcisi YENİDEN kullanılır (kopya yok). Başarılıysa install-core eşleyicileriyle fail-closed sanitize edilir (bozuk yanıt dürüst ERROR), okuma hatası ayrık dürüst durum olarak döner.
+    async installInstall(){const r=await get(INSTALL_PATH);return r.ok?mapInstallReport(r.data):{state:r.state,install:null,message:r.message}},
+    async installPhase0(){const r=await get(PHASE0_PATH);return r.ok?mapPhase0Report(r.data):{state:r.state,phase0:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }

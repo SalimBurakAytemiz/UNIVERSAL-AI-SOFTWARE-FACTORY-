@@ -29,8 +29,8 @@ export const ROUTES=Object.freeze([
   {id:"readiness",hash:"#/readiness",icon:"check",factory:false,view:"planned",component:"readiness"},
   {id:"posture",hash:"#/posture",icon:"shield",factory:false,view:"planned",component:"posture"},
   {id:"matrix",hash:"#/matrix",icon:"layers",factory:false,view:"planned",component:"matrix"},
-  {id:"install",hash:"#/install",icon:"check",factory:false,view:"planned",component:"install"},
   {id:"operations",hash:"#/operations",icon:"pulse",factory:false,view:"planned",component:"operations"},
+  {id:"install",hash:"#/install",icon:"check",factory:false,view:"planned",component:"install"},
   {id:"settings",hash:"#/settings",icon:"gear",factory:false,view:"settings"}
 ]);
 export const DEFAULT_ROUTE="home";
