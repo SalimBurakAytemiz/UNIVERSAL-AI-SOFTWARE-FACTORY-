@@ -89,7 +89,14 @@ const REVIEWS = {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", notice: "n",
   runs: [rrun("a", "CLEAN", rid("a")), rrun("b", "BLOCKED", rid("b")), rrun("c", "INDEPENDENCE_UNVERIFIED", rid("c"))]};
 const REVIEWS_EMPTY = {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", notice: "n", summary: {runs: 0, reviews: 0, runsByReviewState: {}, reviewsByVerdict: {}, truncated: false}, reviews: [], runs: []};
 
-interface Feed { cockpit?: "ok" | "unavail"; workRuns?: "ok" | "off"; evidence?: "ok" | "off"; reviews?: "ok" | "off" | "empty" | "bad" }
+// UI-050: evidence list with mission+run, mission only, run only, and neither (real list fields only).
+const MSN2 = `msn_${"1".repeat(24)}`;
+const lev = (c: string, extra: Record<string, unknown>) => ({evidenceId: `evi_${c.repeat(32)}`, kind: "WORK_RUN_STEP", verification: "VERIFIED", sourcePath: "work-os/x", sha256: "f".repeat(64), createdAt: "2026-10-16T00:00:00.000Z", ...extra});
+const LINEAGE_EVIDENCE = {evidence: [
+  lev("1", {missionId: MSN, runId: runId("a")}), lev("2", {missionId: MSN, runId: runId("a")}), lev("3", {missionId: MSN, runId: runId("b")}),
+  lev("4", {missionId: MSN2}), lev("5", {runId: runId("a")}), lev("6", {})], nextCursor: null};
+
+interface Feed { cockpit?: "ok" | "unavail"; workRuns?: "ok" | "off"; evidence?: "ok" | "off" | "lineage"; reviews?: "ok" | "off" | "empty" | "bad" }
 async function mkCtx(feed: Feed = {}, lang = "tr") {
   const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
   const doc = new D(), store = st.createStore(null), calls: string[] = [];
@@ -105,7 +112,7 @@ async function mkCtx(feed: Feed = {}, lang = "tr") {
       return {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", notice: "n", review: {...rec, evidence: {recordedVerdict: rec.verdict === "NO_VERDICT" ? null : rec.verdict, invalidated: null, findingsCount: rec.verdict === "BLOCKED" ? 2 : 0, findings: rec.verdict === "BLOCKED" ? ["<img src=x onerror=alert(1)> finding one", "finding two"] : null, exitCode: 0, timedOut: false, logSha256: null, note: null}}, run: REVIEWS.runs[0]};
     }
     if (p.startsWith("/v1/evidence/")) return {evidence: EVIDENCE.evidence[0], summary: {}, tail: null, tailWithheld: null};
-    if (p.startsWith("/v1/evidence")) { if (feed.evidence === "off") throw new Error(`${p}: HTTP 404`); return EVIDENCE; }
+    if (p.startsWith("/v1/evidence")) { if (feed.evidence === "off") throw new Error(`${p}: HTTP 404`); return feed.evidence === "lineage" ? LINEAGE_EVIDENCE : EVIDENCE; }
     throw new Error(`${p}: HTTP 404`);
   }};
   const api = apiMod.createApi({bridge, store});
@@ -294,6 +301,57 @@ describe("UI-049 assurance Reviews panel (real verdicts, honest states)", () => 
     const ks = Object.keys(en).filter(k => k.startsWith("assurance.reviews."));
     expect(ks.length).toBeGreaterThan(30);
     expect(ks.sort()).toEqual(Object.keys(tr).filter(k => k.startsWith("assurance.reviews.")).sort());
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of ks) expect(ph(en[k]), k).toBe(ph(tr[k]));
+  });
+});
+
+describe("UI-050 evidence lineage (mission -> run -> evidence from list fields only)", () => {
+  beforeEach(async () => { (await load("views", "assurance.js")).resetAssuranceView(); const f = (await load("forms.js")); f.selection.evidenceId = null; f.selection.missionId = null; });
+
+  it("buildLineage creates edges only from present fields and never infers", async () => {
+    const {buildLineage} = await load("assurance-core.js");
+    const L = buildLineage(LINEAGE_EVIDENCE.evidence);
+    expect(L.total).toBe(6);
+    const m1 = L.missions.find((m: any) => m.missionId === MSN), m2 = L.missions.find((m: any) => m.missionId === MSN2);
+    expect(m1.runs.map((r: any) => [r.runId, r.evidence.length])).toEqual([[runId("a"), 2], [runId("b"), 1]]);
+    // mission-only item stays on the mission with NO run; it is not attached to any run.
+    expect(m2.runs).toEqual([]); expect(m2.noRun.map((e: any) => e.evidenceId)).toEqual([`evi_${"4".repeat(32)}`]);
+    // run-only item is NOT adopted by MSN even though run a belongs to MSN elsewhere.
+    expect(L.orphanRuns.map((r: any) => [r.runId, r.evidence.length])).toEqual([[runId("a"), 1]]);
+    expect(m1.runs[0].evidence.map((e: any) => e.evidenceId)).not.toContain(`evi_${"5".repeat(32)}`);
+    expect(L.ungrouped.map((e: any) => e.evidenceId)).toEqual([`evi_${"6".repeat(32)}`]);
+    expect(buildLineage(null).total).toBe(0);
+  });
+  it("renders the grouped tree and shows missing ids as ungrouped", async () => {
+    const {ctx} = await mkCtx({evidence: "lineage"}, "en");
+    const {node} = await renderAssurance(ctx);
+    const p = byId(node, "as-lineage")!;
+    expect(byData(p, "lineage", "mission").length).toBe(2);
+    const m1 = byData(p, "missionId", MSN).find(n => n.dataset.lineage === "mission")!;
+    expect(byData(m1, "lineage", "run").length).toBe(2);
+    expect(byData(m1, "lineage", "evidence").length).toBe(3);
+    expect(byData(p, "lineage", "orphanRuns").length).toBe(1);
+    const un = byData(p, "lineage", "ungrouped")[0];
+    expect(byData(un, "lineage", "evidence").length).toBe(1);
+    expect(text(byData(p, "lineageScope")[0])).toContain("6");
+  });
+  it("honest empty and unavailable states, no invented groups", async () => {
+    const empty = await mkCtx({}, "en");
+    const a = await renderAssurance(empty.ctx);
+    // default fixture has one mission-only item: one mission, no runs invented.
+    expect(byData(byId(a.node, "as-lineage")!, "lineage", "run").length).toBe(0);
+    expect(byData(byId(a.node, "as-lineage")!, "lineage", "norun").length).toBe(1);
+    const off = await mkCtx({evidence: "off"}, "en");
+    const b = await renderAssurance(off.ctx);
+    expect(byData(byId(b.node, "as-lineage")!, "lineage").length).toBe(0);
+  });
+  it("assurance.lineage.* keys have EN/TR parity", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const ks = Object.keys(en).filter(k => k.startsWith("assurance.lineage."));
+    expect(ks.length).toBeGreaterThanOrEqual(9);
+    expect(ks.sort()).toEqual(Object.keys(tr).filter(k => k.startsWith("assurance.lineage.")).sort());
     const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
     for (const k of ks) expect(ph(en[k]), k).toBe(ph(tr[k]));
   });

@@ -3,12 +3,13 @@
 // (2) Güvenlik statik taraması: her work-run'ın en son güvenlik aşaması (secret-scan + gitleaks/trivy/semgrep durumu, core/workos/security-tools.ts); araç yoksa NOT_INSTALLED, kapsam eksikse PARTIAL, kanıt yoksa NOT_EXECUTED — asla sahte "temiz/geçti";
 // (3) Kanıt yüzeyi (DEĞİŞMEDİ): GET /v1/evidence listesi doğrulama çipleriyle (VERIFIED/MISMATCH/MISSING/UNVERIFIABLE) + detay (kaynak yolu, sha256, redakte log);
 // (3b) UI-049 Reviews: GET /v1/reviews (+ /:evd_id) bağımsız review kararları AYNEN, yükseltilmeden; veri yoksa dürüst boş/UNAVAILABLE/ERROR durumu;
+// (3c) UI-050 Soyağacı: GET /v1/evidence liste alanlarından (missionId, runId) mission->run->evidence; eksik alan gruplanmamış, bağ çıkarımı yok;
 // (4) Dinamik QA — Founder kapısı (BLOCKED): testleri çalıştırma, görsel/API/web/mobil/masaüstü yürütme, cihaz farmı, canlı önizleme FD-REL-1 (yürütme) + ücretli cihaz farmı kapısındadır; bu yüzey ASLA sahte koş/geçti/kapsam göstermez, "koş" düğmesi yoktur ve SOURCE_GENERATION_COMPLETE asla PRODUCT_VERIFIED sayılmaz. 404 => UNAVAILABLE; veri yalnız h()/textContent ile çizilir, HTML olarak yorumlanmaz.
 import {h,panel,stateNote,emptyNote,chip,verificationChip,statePill,miniBars,badge} from "../components.js";
 import {MISSING,formatCount} from "../model.js";
 import {VERIFICATION_STATES,filterEvidence,formatDateTime} from "../work-core.js";
 import {drafts,selection,field} from "../forms.js";
-import {mapSecurityScans,evidenceIntegrity} from "../assurance-core.js";
+import {mapSecurityScans,evidenceIntegrity,buildLineage} from "../assurance-core.js";
 import {icon} from "../icons.js";
 
 const PAGE_LIMIT=100;
@@ -245,6 +246,37 @@ async function reviewDetailPanel(ctx){
     r.findings&&r.findings.length?h(doc,"ul",{class:"qa-gaps",dataset:{findings:"1"}},r.findings.map(f=>h(doc,"li",{text:f}))):h(doc,"p",{class:"note",text:ctx.t("assurance.reviews.detail.noFindings")}));
 }
 
+// ---------- (6) UI-050: Kanıt soyağacı mission -> run -> evidence (yalnız GET /v1/evidence liste alanları) ----------
+// //TR: Yalnız listedeki missionId/runId alanları kenar üretir; eksik alan "gruplanmamış" olarak ayrı gösterilir, hiçbir bağ çıkarılmaz. Kapsam yalnız yüklü sayfadır (sayfalama/mission kapsamı geçerlidir) ve bu açıkça yazılır.
+function lineageLeaf(ctx,e){
+  const doc=ctx.doc,sel=selection.evidenceId===e.evidenceId;
+  return h(doc,"li",{class:"as-lineage-leaf",dataset:{lineage:"evidence",evidenceId:e.evidenceId}},
+    h(doc,"button",{type:"button",class:"link-btn mono",id:`lin-${e.evidenceId}`,dataset:{focusKey:`lin-${e.evidenceId}`},"aria-current":sel?"true":null,on:{click:()=>{selection.evidenceId=e.evidenceId;ctx.rerender()}},text:e.evidenceId})," ",
+    h(doc,"span",{text:e.kind??MISSING}));
+}
+function lineageRun(ctx,run,{noMission=false}={}){
+  const doc=ctx.doc;
+  return h(doc,"li",{class:"as-lineage-run",dataset:{lineage:"run",lineageRun:run.runId,...(noMission?{noMission:"1"}:{})}},
+    h(doc,"span",{class:"mono",text:run.runId}),noMission?h(doc,"span",{class:"note",text:` · ${ctx.t("assurance.lineage.noMission")}`}):null,
+    h(doc,"ul",{class:"as-lineage-list"},run.evidence.map(e=>lineageLeaf(ctx,e))));
+}
+function lineagePanel(ctx,res){
+  const doc=ctx.doc,mk=(...k)=>panel(ctx,{titleKey:"assurance.lineage.title",id:"as-lineage",className:"as-lineage"},h(doc,"p",{class:"note",text:ctx.t("assurance.lineage.lead")}),...k);
+  if(res.state!=="VERIFIED")return mk(stateNote(ctx,res.state));
+  if(!res.items.length)return mk(emptyNote(ctx,"assurance.lineage.none"));
+  const L=buildLineage(res.items);
+  return mk(
+    h(doc,"p",{class:"note",dataset:{lineageScope:"page"},text:ctx.t("assurance.lineage.scope",{n:String(L.total)})}),
+    h(doc,"ul",{class:"as-lineage-list as-lineage-root",role:"tree","aria-label":ctx.t("assurance.lineage.title")},
+      L.missions.map(m=>h(doc,"li",{class:"as-lineage-mission",dataset:{lineage:"mission",missionId:m.missionId}},
+        h(doc,"span",{class:"mono",text:m.missionId}),
+        h(doc,"ul",{class:"as-lineage-list"},
+          m.runs.map(r=>lineageRun(ctx,r)),
+          m.noRun.length?h(doc,"li",{class:"as-lineage-run",dataset:{lineage:"norun",missionId:m.missionId}},h(doc,"span",{class:"note",text:ctx.t("assurance.lineage.noRun")}),h(doc,"ul",{class:"as-lineage-list"},m.noRun.map(e=>lineageLeaf(ctx,e)))):null)))),
+    L.orphanRuns.length?h(doc,"div",{class:"as-lineage-ungrouped",dataset:{lineage:"orphanRuns"}},h(doc,"h4",{class:"qa-def-title",text:ctx.t("assurance.lineage.orphanRuns")}),h(doc,"ul",{class:"as-lineage-list"},L.orphanRuns.map(r=>lineageRun(ctx,r,{noMission:true})))):null,
+    L.ungrouped.length?h(doc,"div",{class:"as-lineage-ungrouped",dataset:{lineage:"ungrouped"}},h(doc,"h4",{class:"qa-def-title",text:ctx.t("assurance.lineage.ungrouped")}),h(doc,"p",{class:"note",text:ctx.t("assurance.lineage.ungroupedNote")}),h(doc,"ul",{class:"as-lineage-list"},L.ungrouped.map(e=>lineageLeaf(ctx,e)))):null);
+}
+
 // ---------- (3) Kanıt yüzeyi (mevcut davranış) ----------
 function filters(ctx,items){
   const doc=ctx.doc,f=drafts.evidence,kinds=[...new Set(items.map(e=>e.kind).filter(Boolean))].sort();
@@ -320,5 +352,6 @@ export async function render(ctx){
     await reviewDetailPanel(ctx),
     h(doc,"p",{class:"panel-meta"},chip(ctx,{state:res.state,value:res.items?.length??null}),h(doc,"span",{text:ctx.t("assurance.source")})),
     panel(ctx,{titleKey:"assurance.list",id:"assurance-list"},res.state==="VERIFIED"?filters(ctx,res.items):null,listBody(ctx,res,shown),res.state==="VERIFIED"?pager(ctx,res):null),
+    lineagePanel(ctx,res),
     detail);
 }

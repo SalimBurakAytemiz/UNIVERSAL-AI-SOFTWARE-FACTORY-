@@ -134,4 +134,23 @@ export function mapReviewDetail(raw){
     recordedVerdict:REVIEW_VERDICT_SET.includes(ev.recordedVerdict)?ev.recordedVerdict:null,invalidated:str(ev.invalidated,60),findingsCount:safeInt(ev.findingsCount),findings,
     exitCode:Number.isSafeInteger(ev.exitCode)?ev.exitCode:null,timedOut:ev.timedOut===true,note:str(ev.note,200)}};
 }
+// //TR: UI-050: kanıt soyağacı YALNIZ GET /v1/evidence liste alanlarından (missionId, runId) kurulur. Kenar yalnız alan mevcutsa vardır: ikisi de varsa mission->run->evidence; yalnız missionId varsa mission altında "koşu kaydı yok"; yalnız runId varsa görev bağı olmayan koşu; ikisi de yoksa gruplanmamış. Hiçbir bağ başka kanıtlardan ÇIKARILMAZ (aynı runId'li başka kayıttan missionId ödünç alınmaz).
+export function buildLineage(items){
+  const list=Array.isArray(items)?items.filter(e=>isObj(e)&&typeof e.evidenceId==="string"):[];
+  const missions=new Map(),orphanRuns=new Map(),ungrouped=[];
+  const mission=id=>{let m=missions.get(id);if(!m){m={missionId:id,runs:new Map(),noRun:[]};missions.set(id,m)}return m};
+  for(const e of list){
+    const mid=typeof e.missionId==="string"&&e.missionId?e.missionId:null,rid=typeof e.runId==="string"&&e.runId?e.runId:null;
+    if(mid&&rid){const m=mission(mid);if(!m.runs.has(rid))m.runs.set(rid,[]);m.runs.get(rid).push(e)}
+    else if(mid)mission(mid).noRun.push(e);
+    else if(rid){if(!orphanRuns.has(rid))orphanRuns.set(rid,[]);orphanRuns.get(rid).push(e)}
+    else ungrouped.push(e);
+  }
+  const cmp=(a,b)=>a<b?-1:a>b?1:0;
+  return {
+    total:list.length,
+    missions:[...missions.values()].sort((a,b)=>cmp(a.missionId,b.missionId)).map(m=>({missionId:m.missionId,noRun:m.noRun,runs:[...m.runs.entries()].sort((a,b)=>cmp(a[0],b[0])).map(([runId,evidence])=>({runId,evidence}))})),
+    orphanRuns:[...orphanRuns.entries()].sort((a,b)=>cmp(a[0],b[0])).map(([runId,evidence])=>({runId,evidence})),
+    ungrouped};
+}
 export {MISSING};
