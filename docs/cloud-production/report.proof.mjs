@@ -236,6 +236,51 @@ const hugeTasks = new Array(2 ** 28);
   const o = rep({ queue: { tasks: [flip] } });
   check("stateful task id getter is snapshotted once", o.completedTasks === 1 && o.unknowns.length === 0);
 }
+// Review remediation: never use the iterator; snapshot; blocker/notes
+{
+  const P0 = { periodStart: "2026-01-01T00:00:00Z", periodEnd: "2026-01-01T01:00:00Z" };
+  const mk = (arr, extra) => { let hits = 0; Object.defineProperty(arr, Symbol.iterator, { value: function* () { hits++; if (extra) yield* extra(); else for (;;) yield { number: hits++, createdAt: P0.periodStart }; } }); return { arr, hits: () => hits }; };
+  let t0 = Date.now();
+  const inf = mk([{ number: 1, createdAt: P0.periodStart }]);
+  const r1 = buildReport({ ...P0, prs: inf.arr, queue: { tasks: [] }, runFacts: { activeImplementers: 0, failures: [] } });
+  check("prs with infinite own Symbol.iterator: indexed contents only (newPrs 1), iterator never called, <1s", r1.newPrs === 1 && inf.hits() === 0 && Date.now() - t0 < 1000);
+  t0 = Date.now();
+  const gen = mk([{ id: "T1", status: "DONE" }], function* () { for (let i = 0; i < 3e6; i++) yield { id: "G" + i, status: "BLOCKED" }; });
+  const r2 = buildReport({ ...P0, prs: [], queue: { tasks: gen.arr }, runFacts: { activeImplementers: 0, failures: [] } });
+  check("queue.tasks with 3e6-item own iterator: equals indexed contents, <1s", r2.completedTasks === 1 && r2.bottlenecks.length === 0 && gen.hits() === 0 && Date.now() - t0 < 1000);
+  const fi = mk([]);
+  const r3 = buildReport({ ...P0, prs: [], queue: { tasks: [] }, runFacts: { activeImplementers: 0, failures: fi.arr } });
+  check("failures with infinite iterator: length 0 (indexed), no iteration", Array.isArray(r3.failures) && r3.failures.length === 0 && fi.hits() === 0);
+  t0 = Date.now();
+  const ri = mk([]); const ui = mk([]);
+  const md = renderMarkdown({ ...buildReport(full), failures: ri.arr, unknowns: ui.arr, bottlenecks: mk([]).arr });
+  check("render lists/unknowns never iterate (empty arrays with infinite iterators render 'none'), <1s",
+    ri.hits() === 0 && ui.hits() === 0 && md.includes("- Failures: 0") && md.includes("Unknowns: none") && Date.now() - t0 < 1000);
+  const th = new Proxy([{ number: 1, createdAt: P0.periodStart }], { get(t, k, rc) { if (k === "0") throw new Error("boom"); return Reflect.get(t, k, rc); } });
+  let o; let threw = false;
+  try { o = buildReport({ ...P0, prs: th, queue: { tasks: th }, runFacts: { activeImplementers: 1, failures: th } }); } catch { threw = true; }
+  check("Proxy of array with throwing get -> UNKNOWN everywhere, no throw", !threw && o.newPrs === "UNKNOWN" && o.completedTasks === "UNKNOWN" && o.failures === "UNKNOWN" && o.bottlenecks === "UNKNOWN");
+  let md2; threw = false;
+  try { md2 = renderMarkdown({ ...buildReport(full), failures: th, unknowns: th }); } catch { threw = true; }
+  check("render of throwing-get proxy lists -> [unrenderable], no throw", !threw && md2.includes("[unrenderable]"));
+  // snapshot: mutate the caller's arrays after buildReport
+  const f = ["a", "b"]; const prs = [{ number: 1, createdAt: P0.periodStart }]; const tasks = [{ id: "T", status: "BLOCKED", blocker: "x" }];
+  const rr = buildReport({ ...P0, prs, queue: { tasks }, runFacts: { activeImplementers: 1, failures: f } });
+  const before = renderMarkdown(rr);
+  f.push("c"); f[0] = "ZZZ"; tasks.push({ id: "U", status: "BLOCKED" }); prs.length = 0;
+  check("later mutation of caller's failures/tasks/prs cannot change the rendered report", renderMarkdown(rr) === before && rr.failures.length === 2 && rr.failures[0] === "a");
+  check("failures over cap -> UNKNOWN + 'failures'", (() => { const x = buildReport({ ...P0, runFacts: { activeImplementers: 1, failures: new Array(100001) } }); return x.failures === "UNKNOWN" && x.unknowns.includes("failures"); })());
+  // blocker / notes
+  const bl = (t) => buildReport({ ...P0, queue: { tasks: [{ id: "B", status: "BLOCKED", ...t }] } }).bottlenecks[0].blocker;
+  check("blocker non-empty string wins over notes", bl({ blocker: "bb", notes: "nn" }) === "bb");
+  check("empty blocker falls back to notes", bl({ blocker: "", notes: "nn" }) === "nn");
+  check("absent blocker falls back to notes", bl({ notes: "nn" }) === "nn");
+  check("non-string blocker falls back to notes", bl({ blocker: 5, notes: "nn" }) === "nn");
+  check("neither -> unspecified", bl({}) === "unspecified" && bl({ blocker: "", notes: "" }) === "unspecified" && bl({ notes: 7 }) === "unspecified");
+  check("notes capped at 200 chars", bl({ notes: "n".repeat(500) }).length === 200);
+  const nb = renderMarkdown(buildReport({ ...P0, queue: { tasks: [{ id: "B", status: "BLOCKED", notes: "a<b>&\nline" }] } }));
+  check("notes rendered via safe() escaping", !nb.includes("<") && !nb.includes("&") && nb.includes("a\\u003cb>\\u0026\\nline"));
+}
 
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

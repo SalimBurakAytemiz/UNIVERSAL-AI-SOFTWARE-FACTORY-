@@ -20,15 +20,21 @@ export const STATUSES = Object.freeze([...STATUS_LIST]);
 const ID_RE = /^[A-Za-z0-9._:+-]+$/;
 const validId = (v) => typeof v === "string" && ID_RE.test(v) && /[A-Za-z0-9]/.test(v);
 
-// Hard cap on list sizes, checked from .length BEFORE any Array.from so a huge sparse array cannot stall the report.
+// Hard cap on list sizes, checked from .length BEFORE any copy so a huge sparse array cannot stall the report.
 const MAX_ITEMS = 100000;
-// 0 = ok, 1 = over cap, 2 = length unreadable/invalid (hostile)
-const lenState = (a) => {
+// Snapshot a list WITHOUT ever touching the iterator (an own Symbol.iterator could be infinite or generate millions of
+// items): read length once, apply the cap, then copy by index a[0..n-1] (holes read as undefined). The copy is shallow,
+// so later mutation of the caller's array cannot change the report. A throwing proxy/getter => state 2 (hostile).
+// Returns { state: 0 ok | 1 over cap | 2 hostile, items }.
+const readList = (a) => {
   try {
     const n = a.length;
-    if (!Number.isSafeInteger(n) || n < 0) return 2;
-    return n > MAX_ITEMS ? 1 : 0;
-  } catch { return 2; }
+    if (!Number.isSafeInteger(n) || n < 0) return { state: 2, items: null };
+    if (n > MAX_ITEMS) return { state: 1, items: null };
+    const items = new Array(n);
+    for (let i = 0; i < n; i++) items[i] = a[i];
+    return { state: 0, items };
+  } catch { return { state: 2, items: null }; }
 };
 
 const ISO = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(\.\d+)?(Z|([+-])(\d\d):(\d\d))$/;
@@ -47,14 +53,17 @@ const toMs = (v) => {
   return Number.isFinite(t) ? t : NaN;
 };
 
-// Reading/stringifying a hostile blocker (throwing getter or toString, Symbol, ...) must never throw.
+// Blocker text: t.blocker if a non-empty string, else t.notes if a non-empty string, else 'unspecified'; capped at 200 chars.
+// Reading a hostile field (throwing getter, ...) must never throw. Output is safe()-escaped at render time.
+const BLOCKER_CAP = 200;
 const blockerText = (t) => {
-  try {
-    const b = t.blocker;
-    return b ? String(b) : "unspecified";
-  } catch {
-    return "unspecified";
+  for (const k of ["blocker", "notes"]) {
+    try {
+      const v = t[k];
+      if (typeof v === "string" && v.length > 0) return v.length > BLOCKER_CAP ? v.slice(0, BLOCKER_CAP) : v;
+    } catch { /* unreadable field: try the next source */ }
   }
+  return "unspecified";
 };
 
 // PR identity key: a safe positive integer (number) or its canonical decimal string; everything else is malformed (null).
@@ -83,14 +92,15 @@ export function buildReport(input) {
   if (!periodOk) unknowns.push("period");
 
   let newPrs = UNKNOWN;
+  let prsL = null;
   if (!Array.isArray(prs)) unknowns.push("prs");
-  else if (lenState(prs) !== 0) unknowns.push("prs[]"); // over cap or hostile length: UNKNOWN, no iteration
   else if (!periodOk) newPrs = UNKNOWN;
+  else if ((prsL = readList(prs)).state !== 0) unknowns.push("prs[]"); // over cap or hostile: UNKNOWN, never iterated
   else {
     let times = null;
     let keys = null;
     try {
-      const list = Array.from(prs); // visits sparse-array holes as undefined
+      const list = prsL.items; // holes already read as undefined
       times = list.map((p) => toMs(p && p.createdAt));
       keys = list.map((p) => prKey(p && p.number));
     } catch {
@@ -113,8 +123,10 @@ export function buildReport(input) {
   try {
     const qt = queue ? queue.tasks : undefined;
     if (!Array.isArray(qt)) qtasks = null;
-    else if (lenState(qt) !== 0) qtasks = undefined; // checked before Array.from
-    else qtasks = Array.from(qt);
+    else {
+      const l = readList(qt); // cap check, then indexed copy; never the iterator
+      qtasks = l.state === 0 ? l.items : undefined;
+    }
   } catch { qtasks = undefined; }
   if (qtasks === null) unknowns.push("queue");
   else {
@@ -150,7 +162,10 @@ export function buildReport(input) {
     const ai = rf ? rf.activeImplementers : undefined;
     const fl = rf ? rf.failures : undefined;
     if (Number.isSafeInteger(ai) && ai >= 0 && !Object.is(ai, -0)) activeImplementers = ai;
-    if (Array.isArray(fl)) failures = fl;
+    if (Array.isArray(fl)) {
+      const l = readList(fl);
+      if (l.state === 0) failures = l.items; // snapshot: later caller mutation cannot change the report
+    }
   } catch { /* hostile runFacts: stays UNKNOWN */ }
   if (activeImplementers === UNKNOWN) unknowns.push("activeImplementers");
   if (failures === UNKNOWN) unknowns.push("failures");
@@ -191,16 +206,18 @@ export function renderMarkdown(r) {
 }
 
 function renderMarkdownUnsafe(r) {
-  const list = (a, f) => (a.length ? Array.from(a, (x) => f(x)).join("; ") : "none");
+  // Indexed snapshot (never the iterator); over-cap or hostile lists throw into guard() => "[unrenderable]".
+  const items = (a) => { const l = readList(a); if (l.state !== 0) throw new Error("unrenderable list"); return l.items; };
+  const list = (a, f) => { const xs = items(a); return xs.length ? xs.map((x) => f(x)).join("; ") : "none"; };
   return [
     "# Production Report",
     `- Period: ${guard(() => `${safe(r.period.start)} → ${safe(r.period.end)}`)}`,
     `- Completed tasks: ${show(r.completedTasks)}`,
     `- New PRs: ${show(r.newPrs)}`,
     `- Active implementers: ${show(r.activeImplementers)}`,
-    `- Failures: ${show(r.failures, (a) => `${a.length}${a.length ? " (" + list(a, safe) + ")" : ""}`)}`,
+    `- Failures: ${show(r.failures, (a) => { const n = items(a).length; return `${n}${n ? " (" + list(a, safe) + ")" : ""}`; })}`,
     `- Bottlenecks: ${show(r.bottlenecks, (a) => list(a, (b) => `${safe(b.id)}: ${safe(b.blocker)}`))}`,
-    `- Unknowns: ${guard(() => (r.unknowns.length ? Array.from(r.unknowns, String).join(", ") : "none"))}`,
+    `- Unknowns: ${guard(() => (items(r.unknowns).length ? items(r.unknowns).map(String).join(", ") : "none"))}`,
     "",
   ].join("\n");
 }
