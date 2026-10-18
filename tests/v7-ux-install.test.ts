@@ -638,7 +638,10 @@ describe("Install — route delegation (app.js VIEWS unchanged)", () => {
 describe("Install — the forbidden verified-product constant never appears in new source or rendered surface", () => {
   it("none of the new/edited renderer sources contains it, and the test fixtures that carry it as API data never reach the surface", async () => {
     for (const f of [["install-core.js"], ["views", "install.js"], ["locales", "en.js"].slice(0, 0).length ? [] : ["views", "planned.js"]]) expect(read(...(f as string[])), f.join("/")).not.toContain(FORBIDDEN);
-    const added = (await import("node:child_process")).execFileSync("git", ["diff", "-U0", "origin/v7/integration", "--", "apps/desktop/renderer/locales/en.js", "apps/desktop/renderer/locales/tr.js", "apps/desktop/renderer/routes.js", "apps/desktop/renderer/api.js"], {cwd: root, encoding: "utf8"}).split("\n").filter(l => l.startsWith("+") && !l.startsWith("+++"));
+    // Ortamdan bağımsız: CI checkout'unda origin/v7/integration yok; bu paketin eklediği satırlar içerikle seçilip taranır.
+    const sel: [string[], RegExp][] = [[["locales", "en.js"], /"(area\.)?install\./], [["locales", "tr.js"], /"(area\.)?install\./], [["routes.js"], /install|phase0/i], [["api.js"], /install|phase0/i]];
+    const added = sel.flatMap(([f, re]) => read(...f).split("\n").filter(l => re.test(l)));
+    expect(added.length).toBeGreaterThanOrEqual(150);
     for (const l of added) expect(l, l.slice(0, 80)).not.toContain(FORBIDDEN);
     const {root: r} = await renderView(serve({"/v1/install": {...INSTALL_OK(), note: FORBIDDEN}, "/v1/phase0": {...PHASE0_OK(), productVerification: {status: FORBIDDEN}}}));
     expect(surface(r)).not.toContain(FORBIDDEN);
