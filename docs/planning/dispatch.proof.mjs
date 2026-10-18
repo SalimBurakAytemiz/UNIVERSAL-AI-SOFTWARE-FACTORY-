@@ -1,4 +1,4 @@
-// //TR: Bu betik dispatch.mjs için gerçek git ref'leriyle (geçici bare remote + klonlar) çalışan kanıttır: START, otomatik ilerleme, çift süreçli yarış, bozuk alanların fail-closed reddi, BLOCKED/NO_ACTION, bayat claim RECLAIMABLE raporu, düşman id'ler, D/F ref çakışması, lease-store reddi, yarış dışı push hatası ve 8 süreçli yarış (gerçek backlog kontrolü isteğe bağlıdır, yoksa SKIPPED).
+// //TR: Bu betik dispatch.mjs için gerçek git ref'leriyle (geçici bare remote + klonlar) çalışan kanıttır: START, otomatik ilerleme, çift süreçli yarış, bozuk alanların fail-closed reddi, BLOCKED/NO_ACTION, bayat claim RECLAIMABLE raporu, düşman id'ler, D/F ref çakışması, lease-store reddi, yarış dışı push hatası ve 8 süreçli yarış, çıktı kanallarının kapatılması (lease status/token/epoch, atılan getter, sha, düşman backlog, global gizli-işaret taraması) (gerçek backlog kontrolü isteğe bağlıdır, yoksa SKIPPED).
 // Run: node docs/planning/dispatch.proof.mjs   (needs git + Node >= 22; creates and removes temp dirs only)
 import fs from "node:fs";
 import os from "node:os";
@@ -32,15 +32,17 @@ function mkEnv(tasks, backlogRaw) {
 }
 const T = (id, extra = {}) => ({id, status: "READY", owner: "CLOUD", authorizedBy: "FOUNDER:test", dependsOn: [], protectedEdit: false, requiresNewAuthority: false, ...extra});
 const heads = bare => G(bare, ["for-each-ref", "--format=%(refname)", "refs/heads/claude/"]).split("\n").filter(Boolean);
-const dispatchSync = (cwd, args, env) => {
-  const r = spawnSync("node", [DISPATCH, ...args], {cwd, encoding: "utf8", ...(env ? {env: {...process.env, ...env}} : {})});
+const ALL_RAW = []; // every stdout captured from any dispatch.mjs run in this proof (scanned globally at the end)
+const dispatchSync = (cwd, args, env, nodeArgs = []) => {
+  const r = spawnSync("node", [...nodeArgs, DISPATCH, ...args], {cwd, encoding: "utf8", ...(env ? {env: {...process.env, ...env}} : {})});
+  ALL_RAW.push(r.stdout);
   const line = r.stdout.trim().split("\n").filter(Boolean).pop() ?? "";
   let j = null; try { j = JSON.parse(line); } catch { /* keep null */ }
   return {code: r.status, j, raw: r.stdout, err: r.stderr};
 };
 const dispatchAsync = (cwd, args) => new Promise(res => {
   const c = spawn("node", [DISPATCH, ...args], {cwd}); let out = "";
-  c.stdout.on("data", d => out += d); c.on("close", code => { let j = null; try { j = JSON.parse(out.trim().split("\n").pop()); } catch { /* null */ } res({code, j, raw: out}); });
+  c.stdout.on("data", d => out += d); c.on("close", code => { ALL_RAW.push(out); let j = null; try { j = JSON.parse(out.trim().split("\n").pop()); } catch { /* null */ } res({code, j, raw: out}); });
 });
 
 console.log(`node ${process.version}`);
@@ -164,11 +166,11 @@ for (const mode of [[], ["--no-lease"]]) {
   const allHeads = G(e.bare, ["for-each-ref", "--format=%(refname)", "refs/heads/"]).split("\n").filter(Boolean).filter(h => h !== "refs/heads/v7/integration");
   const dry = dispatchSync(e.work, ["--backlog", e.bl]);
   console.log(`  hostile ids claimed: ${JSON.stringify(claimed)}`);
-  check("hostile ids a.LOCK/@{u}/refs/heads/master/../x/a:b/-x => MALFORMED_ID, never pushed", ["a.LOCK", "@{u}", "refs/heads/master", "../x", "a:b", "-x"].every(id => dry.j.reasons.includes(`${id}:MALFORMED_ID`)), JSON.stringify(dry.j.reasons));
+  check("hostile ids a.LOCK/@{u}/refs/heads/master/../x/a:b/-x => ?:MALFORMED_ID (id sanitised to '?'), never pushed, never echoed", dry.j.reasons.filter(x => x === "?:MALFORMED_ID").length === 6 && ["a.LOCK", "@{u}", "refs/heads/master", "../x", "a:b", "-x"].every(id => !dry.raw.includes(id)), JSON.stringify(dry.j.reasons));
   check("only refs/heads/claude/{master,head} exist (no ref outside claude/ and no malformed ref)", allHeads.sort().join(",") === "refs/heads/claude/head,refs/heads/claude/master" && G(e.bare, ["for-each-ref", "refs/uasco/"]).split("\n").every(l => !/\.lock|@|\.\./i.test(l)), allHeads.join(","));
   const e2 = mkEnv([T("a.LOCK"), T("OK-1")]);
   const r2 = dispatchSync(e2.work, ["--claim", "--backlog", e2.bl]);
-  check("a.LOCK does not halt the queue: OK-1 claimed, a.LOCK:MALFORMED_ID", r2.code === 0 && r2.j.outcome === "START" && r2.j.taskId === "OK-1" && r2.j.reasons.includes("a.LOCK:MALFORMED_ID"), r2.raw);
+  check("a.LOCK does not halt the queue: OK-1 claimed, ?:MALFORMED_ID", r2.code === 0 && r2.j.outcome === "START" && r2.j.taskId === "OK-1" && r2.j.reasons.includes("?:MALFORMED_ID") && !r2.raw.includes("a.LOCK"), r2.raw);
 }
 // 8. Directory/file ref conflict.
 {
@@ -359,6 +361,85 @@ const writeHook = (bare, body) => { fs.mkdirSync(path.join(bare, "hooks"), {recu
   const r = dispatchSync(e.work, ["--backlog", e.bl]);
   const st = Object.fromEntries((r.j?.reclaimable ?? []).map(x => [x.taskId, x.state]));
   check("future-dated claim => UNKNOWN (not FRESH); claim with changed tree => HAS_WORK_COMMITS (not RECLAIMABLE)", st["U-1"] === "UNKNOWN" && st["U-2"] === "HAS_WORK_COMMITS", JSON.stringify(r.j?.reclaimable));
+}
+// 13. Output sinks: stdout holds only fixed codes / validated tokens. Token-like fixtures are built at runtime (fake values; the repo secret scanner stays unchanged).
+const FK = s => "gh" + "p_" + s; // fake token-shaped marker assembled at runtime. NB: "_" is a legal id/ref/token character, so id/dep/branch fixtures add a space to be genuinely invalid.
+const MARKERS = ["STATUSLEAK", "TOKENLEAK", "EPOCHLEAK", "SHALEAK", "IDLEAK", "OWNERLEAK", "DEPLEAK", "BRANCHLEAK", "PRLEAK", "DUPLEAK", "INTERNALLEAK", "GETTERLEAK", "ARGLEAK"].map(FK);
+const stubLease = (work, {claimBody, releaseLog}) => {
+  const d = path.join(work, "automation/lib"); fs.mkdirSync(d, {recursive: true});
+  fs.writeFileSync(path.join(d, "task-lease.mjs"), `import fs from "node:fs";\nexport function claim() { ${claimBody} }\nexport function release() { fs.appendFileSync(${JSON.stringify(releaseLog)}, "released\\n"); return {status: "RELEASED"}; }\n`);
+  fs.writeFileSync(path.join(d, "task-lease-git-store.mjs"), "export function createRemoteRefStore() { return {createIfAbsent() { return {created: true, current: null}; }, read() { return null; }}; }\n");
+};
+const mod13 = await import(path.join(HERE, "dispatch.mjs"));
+{
+  // (1a) unknown lease status: fail-closed skip, nothing released, status text never echoed.
+  const a = mkEnv([T("LK-1"), T("LK-2")]); const logA = path.join(a.dir, "release.log");
+  stubLease(a.work, {releaseLog: logA, claimBody: `return {status: ${JSON.stringify(FK("STATUSLEAK"))}, record: {token: ${JSON.stringify(FK("TOKENLEAK"))}, epoch: 1}};`});
+  const ra = dispatchSync(a.work, ["--claim", "--backlog", a.bl]);
+  check("lease status other than GRANTED/HELD => LK-1:LEASE_ERROR:UNKNOWN skip, nothing pushed, nothing released, status/token not echoed", ra.j?.reasons?.includes("LK-1:LEASE_ERROR:UNKNOWN") && ra.j.reasons.includes("LK-2:LEASE_ERROR:UNKNOWN") && heads(a.bare).length === 0 && !fs.existsSync(logA) && !ra.raw.includes(FK("STATUSLEAK")) && !ra.raw.includes(FK("TOKENLEAK")), ra.raw);
+  // (1b) GRANTED with hostile token/epoch: claim proceeds, token and epoch omitted.
+  const b = mkEnv([T("LK-3")]); const logB = path.join(b.dir, "release.log");
+  stubLease(b.work, {releaseLog: logB, claimBody: `return {status: "GRANTED", record: {token: ${JSON.stringify(FK("TOKENLEAK"))}, epoch: ${JSON.stringify(FK("EPOCHLEAK"))}}};`});
+  const rb = dispatchSync(b.work, ["--claim", "--backlog", b.bl]);
+  check("GRANTED with token/epoch of invalid shape => START, lease.status GRANTED, token and epoch omitted", rb.j?.outcome === "START" && rb.j.lease?.status === "GRANTED" && !("token" in rb.j.lease) && !("epoch" in rb.j.lease) && !rb.raw.includes(FK("TOKENLEAK")) && !rb.raw.includes(FK("EPOCHLEAK")), rb.raw);
+  const c = mkEnv([T("LK-4")]);
+  stubLease(c.work, {releaseLog: path.join(c.dir, "r.log"), claimBody: 'return {status: "GRANTED", record: {token: "abc.DEF:1-2-x", epoch: 7}};'});
+  const rc = dispatchSync(c.work, ["--claim", "--backlog", c.bl]);
+  check("GRANTED with a validated token and safe-integer epoch => both echoed", rc.j?.lease?.token === "abc.DEF:1-2-x" && rc.j.lease.epoch === 7, rc.raw);
+  // (2a) throwing-getter error object from the lease module: leaseErrorCode never throws, process prints exactly one JSON line.
+  const d = mkEnv([T("LK-5")]);
+  stubLease(d.work, {releaseLog: path.join(d.dir, "r.log"), claimBody: `const e = {}; Object.defineProperty(e, "message", {get() { throw new Error(${JSON.stringify(FK("GETTERLEAK"))}); }}); throw e;`});
+  const rd = dispatchSync(d.work, ["--claim", "--backlog", d.bl]);
+  check("lease module throws an object with a throwing getter => exactly one JSON line, no crash, LEASE_ERROR:UNKNOWN, no leak", rd.code === 0 && rd.raw.trim().split("\n").length === 1 && rd.j?.lease?.error === "LEASE_ERROR:UNKNOWN" && !rd.raw.includes(FK("GETTERLEAK")), rd.raw + rd.err.slice(0, 200));
+  const hostileErr = new Proxy({}, {get() { throw new Error("x"); }});
+  check("leaseErrorCode never throws (throwing getter, throwing Proxy)", mod13.leaseErrorCode(hostileErr) === "LEASE_ERROR:UNKNOWN" && mod13.leaseErrorCode({get message() { throw 1; }}) === "LEASE_ERROR:UNKNOWN");
+  // (2b) unexpected exception inside run(): fixed JSON line, exit 3. A preload makes the claim commit-tree spawn throw (outside every inner try).
+  const e = mkEnv([T("IE-1")]);
+  const pre = path.join(e.dir, "preload.mjs");
+  fs.writeFileSync(pre, `import cp from "node:child_process"; import {syncBuiltinESMExports} from "node:module";\nconst o = cp.spawnSync; cp.spawnSync = (...a) => { if (a[1]?.[0] === "commit-tree") throw new Error(${JSON.stringify(FK("INTERNALLEAK"))}); return o(...a); };\nsyncBuiltinESMExports();\n`);
+  const re = dispatchSync(e.work, ["--claim", "--no-lease", "--backlog", e.bl], undefined, ["--import", pre]);
+  check("unexpected exception => exactly one fixed line {RECOVERABLE_FAILURE, [INTERNAL_ERROR]}, exit 3, exception text not echoed", re.code === 3 && re.raw.trim() === JSON.stringify({outcome: "RECOVERABLE_FAILURE", reasons: ["INTERNAL_ERROR"]}) && !re.raw.includes(FK("INTERNALLEAK")), re.raw + re.err.slice(0, 200));
+  // (3) ls-remote sha rewritten to a token-like string: line ignored, never reaches baseSha / git argv / output.
+  const f = mkEnv([T("SH-1")]);
+  const real = spawnSync("sh", ["-c", "command -v git"], {encoding: "utf8"}).stdout.trim();
+  const wdir = path.join(tmpRoot, "gitwrap3"); fs.mkdirSync(wdir);
+  const argvLog = path.join(f.dir, "argv.log");
+  fs.writeFileSync(path.join(wdir, "git"), `#!/bin/sh\necho "$@" >> '${argvLog}'\nif [ "$1" = ls-remote ]; then out=$("${real}" "$@") || exit $?; printf '%s\\n' "$out" | sed 's/^[0-9a-f]\\{40\\}/${FK("SHALEAK")}/'; exit 0; fi\nexec "${real}" "$@"\n`, {mode: 0o755});
+  const rf = dispatchSync(f.work, ["--claim", "--backlog", f.bl], {PATH: `${wdir}${path.delimiter}${process.env.PATH}`});
+  const argvSeen = fs.existsSync(argvLog) ? fs.readFileSync(argvLog, "utf8") : "";
+  check("ls-remote sha rewritten to a non-hex string => lines ignored: not in stdout, not in any git argv, nothing pushed", !rf.raw.includes(FK("SHALEAK")) && !argvSeen.includes(FK("SHALEAK")) && heads(f.bare).length === 0 && rf.j?.outcome === "RECOVERABLE_FAILURE", rf.raw + argvSeen.slice(0, 200));
+  // (4) hostile backlog: ids/status/owner/dep/branch carrying token-like text never appear in stdout.
+  const long = "claude/" + "b".repeat(130);
+  const h = mkEnv([
+    T(FK("IDLEAK") + " x"), T("HB-1", {status: FK("STATUSLEAK")}), T("HB-2", {owner: FK("OWNERLEAK")}), T("HB-3", {dependsOn: [FK("DEPLEAK") + " x"]}),
+    T("HB-4", {branch: FK("PRLEAK") + " x"}), T("HB-5", {branch: long}), T("HB-6", {status: 5, owner: {x: FK("OWNERLEAK")}}), T("HB-7", {status: "DONE", owner: "LOCAL"}),
+  ]);
+  G(h.work, ["push", "-q", "origin", `HEAD:refs/heads/${long}`]);
+  const rh = dispatchSync(h.work, ["--backlog", h.bl, "--open-prs", FK("PRLEAK") + " x"]);
+  const rs = rh.j?.reasons ?? [];
+  console.log(`  hostile backlog reasons: ${JSON.stringify(rs)}`);
+  check("hostile backlog: no marker in stdout; id->'?', status/owner->'malformed', dep->'?', branch->BRANCH_INVALID (also for a >120-char existing head); known enum values still shown",
+    MARKERS.every(m => !rh.raw.includes(m)) && !rh.raw.includes("bbbbbbbb") && rs.includes("?:MALFORMED_ID") && rs.includes("HB-1:NOT_READY:malformed") && rs.includes("HB-2:OWNER_NOT_CLOUD:malformed") && rs.includes("HB-3:UNMET_DEP:?") && rs.includes("HB-4:OPEN_PR:BRANCH_INVALID") && rs.includes("HB-5:BRANCH_EXISTS:BRANCH_INVALID") && rs.includes("HB-6:NOT_READY:malformed") && rs.includes("HB-7:NOT_READY:DONE") && rs.includes("HB-7:OWNER_NOT_CLOUD:LOCAL"), rh.raw);
+  check("every reason string is at most 160 chars", rs.every(x => x.length <= 160) && rh.j.perTask.every(p => p.reasons.every(x => x.length <= 160)));
+  const dupe = mkEnv([T(FK("DUPLEAK") + " x"), T(FK("DUPLEAK") + " x")]);
+  const rdup = dispatchSync(dupe.work, ["--backlog", dupe.bl]);
+  check("BACKLOG_DUPLICATE_ID echoes '?' for an invalid id", rdup.code === 2 && rdup.j.reasons[0] === "BACKLOG_DUPLICATE_ID:?" && !rdup.raw.includes(FK("DUPLEAK")), rdup.raw);
+  const dv = mkEnv([T("Dv-1"), T("dv-1")]);
+  check("BACKLOG_DUPLICATE_ID:<id> echoes a valid id", dispatchSync(dv.work, ["--backlog", dv.bl]).j.reasons[0] === "BACKLOG_DUPLICATE_ID:Dv-1" || dispatchSync(dv.work, ["--backlog", dv.bl]).j.reasons[0] === "BACKLOG_DUPLICATE_ID:dv-1");
+  const ra2 = dispatchSync(h.work, ["--" + FK("ARGLEAK")]);
+  check("unknown argv flag with token-like text => ARG_UNKNOWN:? (not echoed)", ra2.code === 2 && ra2.j.reasons[0] === "ARG_UNKNOWN:?" && !ra2.raw.includes("ARGLEAK"), ra2.raw);
+  // (5) classifier: word boundaries; codes are advisory labels.
+  check("classifier: 'hostlsxy'/'opensslx' no longer match NETWORK; standalone 'ssl'/'tls'/'timed out' still do", mod13.classifyFailure("hostlsxy") === "UNKNOWN" && mod13.classifyFailure("opensslx") === "UNKNOWN" && mod13.classifyFailure("fatal: ssl handshake failed") === "NETWORK" && mod13.classifyFailure("tls alert") === "NETWORK" && mod13.classifyFailure("operation timed out") === "NETWORK");
+  check("sanitisers: safeBranch caps at 120 and validates; safeStatus/safeOwner are closed", mod13.safeBranch("claude/ok") === "claude/ok" && mod13.safeBranch("a".repeat(121)) === "BRANCH_INVALID" && mod13.safeBranch("x y") === "BRANCH_INVALID" && mod13.safeStatus("READY") === "READY" && mod13.safeStatus("nope") === "malformed" && mod13.safeOwner("FOUNDER") === "FOUNDER" && mod13.safeOwner("root") === "malformed");
+}
+// 14. Global proof: every stdout produced by every scenario above is a single JSON line and holds none of the fake secret markers.
+{
+  const globalMarkers = [...MARKERS, FK("abcdefghijklmnopqrstuvwxyz0123456789"), "hunter2", "SUPERSECRETCOOKIE", "policy:", "remote.git", "/tmp/"];
+  const lines = ALL_RAW.filter(x => x && x.trim());
+  const oneLine = lines.filter(x => x.trim().split("\n").length === 1 && (() => { try { JSON.parse(x); return true; } catch { return false; } })()).length;
+  const hit = [];
+  for (const x of lines) for (const m of globalMarkers) if (x.includes(m)) hit.push(`${m} in ${x.slice(0, 120)}`);
+  check(`global scan: ${lines.length} stdout lines from every scenario are single JSON lines (${oneLine}) and contain none of ${globalMarkers.length} fake secret markers`, oneLine === lines.length && hit.length === 0, hit.slice(0, 3).join(" ## "));
 }
 fs.rmSync(tmpRoot, {recursive: true, force: true});
 console.log(`DISPATCH_PROOF: ${failures === 0 ? "PASS" : "FAIL"} (${n - failures}/${n} checks)`);

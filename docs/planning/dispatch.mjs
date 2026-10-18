@@ -10,12 +10,15 @@ import {fileURLToPath, pathToFileURL} from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const REF_RE = /^[A-Za-z0-9][A-Za-z0-9._\/-]{0,200}$/;
+const SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const CLAIM_SUBJECT = "dispatch-claim:";
 export const EXIT = {START: 0, NO_ACTION: 0, BLOCKED: 2, RECOVERABLE_FAILURE: 3};
 
 const isStr = v => typeof v === "string";
 const nonEmpty = v => isStr(v) && v.trim() !== "";
+const CAP = 160;
+export const capReason = x => String(x).slice(0, CAP);
 export const claimBranchOf = id => `claude/${id.toLowerCase()}`;
 const refOkCache = new Map();
 // Ask git itself whether a ref name is well-formed (args array, no shell). Fail-closed: spawn failure => invalid.
@@ -30,6 +33,17 @@ function gitRefOk(name, branch) {
 // Validates the id AND the final lowercased claim branch and the lease ref.
 export const validId = id => isStr(id) && ID_RE.test(id) && !id.includes("..") && !/\.lock$/i.test(id) && !id.endsWith(".")
   && gitRefOk(claimBranchOf(id), true) && gitRefOk(`refs/uasco/claims/${id}`, false);
+
+// Output sanitisers: backlog/argv text reaches stdout ONLY through these (fixed vocabulary or strictly validated tokens).
+const STATUS_ENUM = new Set(["IMPLEMENT_PENDING", "REVIEW_PENDING", "REVIEW_PENDING_PROVIDER_QUOTA", "REVIEW_CLEAN", "REMEDIATION_PENDING", "MERGED", "CLOSED", "QUEUED", "FOUNDER_DECISION_PENDING",
+  "AUTHORITY_REQUIRED", "DRAFT_NOT_READY", "IN_REVIEW", "BLOCKED", "DONE", "READY", "IN_PROGRESS", "PENDING_REVIEW", "PENDING_CI", "NOT_STARTED", "COMPLETED"]);
+const OWNER_ENUM = new Set(["CLOUD", "LOCAL", "FOUNDER"]);
+export const safeId = id => validId(id) ? id : "?";
+export const safeStatus = s => isStr(s) && STATUS_ENUM.has(s) ? s : "malformed";
+export const safeOwner = o => isStr(o) && OWNER_ENUM.has(o) ? o : "malformed";
+export const refNameOk = b => isStr(b) && REF_RE.test(b) && !b.includes("..") && !b.endsWith(".") && !/\.lock$/i.test(b);
+export const safeBranch = b => refNameOk(b) && b.length <= 120 ? b : "BRANCH_INVALID";
+const safeArg = a => isStr(a) && /^--?[A-Za-z0-9][A-Za-z0-9-]{0,39}$/.test(a) ? a : "?";
 
 class Blocked extends Error { constructor(code) { super(code); this.code = code; } }
 
@@ -47,7 +61,7 @@ export function parseArgs(argv) {
     else if (a === "--base-branch") o.baseBranch = val(i++, a);
     else if (a === "--stale-hours") { const n = Number(val(i++, a)); if (!Number.isFinite(n) || n < 0) throw new Blocked("ARG_INVALID:--stale-hours"); o.staleHours = n; }
     else if (a === "--open-prs") o.openPrs = val(i++, a).split(",").map(s => s.trim()).filter(Boolean);
-    else throw new Blocked(`ARG_UNKNOWN:${a}`);
+    else throw new Blocked(`ARG_UNKNOWN:${safeArg(a)}`);
   }
   if (!NAME_RE.test(o.owner)) throw new Blocked("ARG_INVALID:--owner");
   if (!NAME_RE.test(o.remote)) throw new Blocked("ARG_INVALID:--remote");
@@ -66,7 +80,7 @@ export function loadBacklog(file) {
   for (const t of doc.tasks) {
     if (t && typeof t === "object" && isStr(t.id)) {
       const k = t.id.toLowerCase();
-      if (seen.has(k)) throw new Blocked(`BACKLOG_DUPLICATE_ID:${t.id}`);
+      if (seen.has(k)) throw new Blocked(`BACKLOG_DUPLICATE_ID:${safeId(t.id)}`);
       seen.add(k);
     }
   }
@@ -78,13 +92,13 @@ export function evaluateTask(t, env) {
   const r = [];
   if (!t || typeof t !== "object" || Array.isArray(t)) return ["MALFORMED_TASK"];
   if (!validId(t.id)) return ["MALFORMED_ID"];
-  if (t.status !== "READY") r.push(`NOT_READY:${isStr(t.status) ? t.status : "malformed"}`);
-  if (t.owner !== "CLOUD") r.push(`OWNER_NOT_CLOUD:${isStr(t.owner) ? t.owner : "malformed"}`);
+  if (t.status !== "READY") r.push(`NOT_READY:${safeStatus(t.status)}`);
+  if (t.owner !== "CLOUD") r.push(`OWNER_NOT_CLOUD:${safeOwner(t.owner)}`);
   if (!nonEmpty(t.authorizedBy)) r.push("NO_AUTHORIZED_BY");
   if (!Array.isArray(t.dependsOn) || !t.dependsOn.every(nonEmpty)) r.push("MALFORMED_DEPENDS_ON");
   else for (const d of t.dependsOn) {
     const dep = env.tasks.find(x => x && isStr(x.id) && x.id === d);
-    if (!dep || dep.status !== "DONE") r.push(`UNMET_DEP:${d}`);
+    if (!dep || dep.status !== "DONE") r.push(`UNMET_DEP:${safeId(d)}`);
   }
   if (t.protectedEdit !== undefined && t.protectedEdit !== false) r.push(t.protectedEdit === true ? "PROTECTED_EDIT" : "MALFORMED_PROTECTED_EDIT");
   if (t.requiresNewAuthority !== undefined && t.requiresNewAuthority !== false) r.push(t.requiresNewAuthority === true ? "REQUIRES_NEW_AUTHORITY" : "MALFORMED_REQUIRES_NEW_AUTHORITY");
@@ -102,8 +116,8 @@ export function evaluateTask(t, env) {
   const own = [cb];
   if (t.branch !== undefined) { if (nonEmpty(t.branch)) own.push(t.branch.trim()); else r.push("MALFORMED_BRANCH"); }
   for (const b of own) {
-    if (b !== cb && env.remoteHeads.has(b)) r.push(`BRANCH_EXISTS:${b}`);
-    if (env.openPrs.has(b)) r.push(`OPEN_PR:${b}`);
+    if (b !== cb && env.remoteHeads.has(b)) r.push(`BRANCH_EXISTS:${safeBranch(b)}`);
+    if (env.openPrs.has(b)) r.push(`OPEN_PR:${safeBranch(b)}`);
   }
   return r;
 }
@@ -113,7 +127,7 @@ export function select(tasks, env) {
   let chosen = null;
   for (const t of tasks) {
     const reasons = evaluateTask(t, env);
-    const id = t && isStr(t.id) ? t.id : null;
+    const id = t && validId(t.id) ? t.id : null;
     if (reasons.length) perTask.push({taskId: id, reasons});
     else if (!chosen) chosen = t;
   }
@@ -133,7 +147,13 @@ function remoteHeads(git, remote) {
   const r = git(["ls-remote", "--heads", remote]);
   if (r.status !== 0) return null;
   const m = new Map();
-  for (const l of r.stdout.split("\n")) { const p = l.trim().split(/\s+/); if (p.length === 2 && p[1].startsWith("refs/heads/")) m.set(p[1].slice(11), p[0]); }
+  // Only well-formed lines are kept: a sha must be 40/64 hex and the head a REF_RE-valid name; anything else is ignored (never reaches argv or output).
+  for (const l of r.stdout.split("\n")) {
+    const p = l.trim().split(/\s+/);
+    if (p.length !== 2 || !SHA_RE.test(p[0]) || !p[1].startsWith("refs/heads/")) continue;
+    const name = p[1].slice(11);
+    if (refNameOk(name)) m.set(name, p[0]);
+  }
   return m;
 }
 
@@ -173,6 +193,8 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
 export const leaseRefAbsent = lr => !!lr && lr.status === 0 && String(lr.stdout ?? "").trim() === "";
 export const leaseCheckFailed = lr => !lr || lr.status !== 0;
 
+// NOTE: codes are ADVISORY LABELS. The matched text (remote/hook/lease stderr) is attacker-influenceable, so a hook can make its own
+// rejection look like e.g. NETWORK or PERMISSION_DENIED (first match wins, in the order below). Never gate a decision on a code.
 // Closed-vocabulary classifier for untrusted server/hook/lease-module error text. The text is NEVER echoed: it is matched
 // against fixed patterns and only a CODE from FAIL_CODES can leave this function (so no substring of it reaches any output).
 // Patterns are simple (no nested quantifiers, bounded input) so matching is linear. First match wins.
@@ -185,7 +207,7 @@ const CLASSIFIERS = [
   ["AUTH_FAILED", /authentication failed|could not read (?:username|password)|(?:username|password) for |terminal prompts disabled|bad credentials|invalid credentials|requires authentication/],
   ["PERMISSION_DENIED", /permission denied|access denied|permission to [^ ]+ denied|write access to repository not granted|not permitted/],
   ["HOOK_DECLINED", /hook declined|hook exited|hook failed|hook returned|pre-receive|update hook|post-receive/],
-  ["NETWORK", /could not resolve host|unable to access|connection (?:refused|timed out|reset|closed)|network is unreachable|timed out|early eof|remote end hung up|ssl|tls|could not read from remote/],
+  ["NETWORK", /could not resolve host|unable to access|connection (?:refused|timed out|reset|closed)|network is unreachable|\b(?:timed out|ssl|tls)\b|early eof|remote end hung up|could not read from remote/],
   ["REMOTE_REJECTED", /remote rejected|failed to push|rejected/],
 ];
 export function classifyFailure(text) {
@@ -196,14 +218,23 @@ export function classifyFailure(text) {
   return "UNKNOWN";
 }
 export const pushFailReason = stderr => classifyFailure(stderr);
-export const leaseErrorCode = e => `LEASE_ERROR:${classifyFailure(e?.message ?? e)}`;
+// Never throws (hostile error objects with throwing getters/toString included).
+export const leaseErrorCode = e => { try { return `LEASE_ERROR:${classifyFailure(e?.message ?? e)}`; } catch { return "LEASE_ERROR:UNKNOWN"; } };
+// Real lease tokens are <owner>:<pid>:<uuid>:<epoch>:<uuid>; "_" is deliberately excluded so token-shaped secrets (ghp_..., sk_...) are never echoed.
+const TOKEN_RE = /^[A-Za-z0-9.:-]{1,256}$/;
 
 function fin(outcome, reasons, extra = {}) {
-  const out = {outcome, taskId: null, branch: null, claimRef: null, reasons, ...extra};
+  const out = {outcome, taskId: null, branch: null, claimRef: null, ...extra, reasons: reasons.map(capReason)};
+  if (Array.isArray(out.perTask)) out.perTask = out.perTask.map(p => ({...p, reasons: p.reasons.map(capReason)}));
   return {outcome, exit: EXIT[outcome], line: JSON.stringify(out)};
 }
 
+const INTERNAL_LINE = JSON.stringify({outcome: "RECOVERABLE_FAILURE", reasons: ["INTERNAL_ERROR"]});
 export async function run(argv, cwd = process.cwd()) {
+  try { return await runInner(argv, cwd); } catch { return {outcome: "RECOVERABLE_FAILURE", exit: EXIT.RECOVERABLE_FAILURE, line: INTERNAL_LINE}; }
+}
+
+async function runInner(argv, cwd) {
   let o;
   try { o = parseArgs(argv); } catch (e) { return fin("BLOCKED", [e.code || "ARG_ERROR"]); }
   let tasks;
@@ -267,23 +298,33 @@ export async function run(argv, cwd = process.cwd()) {
       leaseFlag.unavail = false;
       try {
         const g = leaseApi.claim(store, {...lid, headSha: baseSha, now: Date.now(), ttlMs: Math.max(o.staleHours, 0.001) * 36e5});
-        leaseInfo = {status: g.status, token: g.record?.token ?? null, epoch: g.record?.epoch ?? null};
-        if (g.status === "GRANTED") grant = g.record;
-        else if (g.status === "HELD" && leaseFlag.unavail) {
-          // Lease write failed and nothing is readable: if the lease ref does not exist on the remote, the store is unavailable
-          // (e.g. server rejects refs/uasco/*), NOT held by someone else. Fail-safe: the branch-ref claim is the arbiter.
-          const lr = git(["ls-remote", o.remote, `refs/uasco/claims/${id}`]);
-          if (leaseCheckFailed(lr)) leaseInfo = {status: "LEASE_CHECK_FAILED"};
-          else if (leaseRefAbsent(lr)) leaseInfo = {status: "LEASE_STORE_UNAVAILABLE", token: null, epoch: null};
-        }
+        const gs = g.status, rec = g.record;
+        if (gs === "GRANTED") {
+          grant = rec;
+          leaseInfo = {status: "GRANTED"};
+          const tok = rec?.token, ep = rec?.epoch;
+          if (isStr(tok) && TOKEN_RE.test(tok)) leaseInfo.token = tok;
+          if (Number.isSafeInteger(ep)) leaseInfo.epoch = ep;
+        } else if (gs === "HELD") {
+          leaseInfo = {status: "HELD"};
+          if (leaseFlag.unavail) {
+            // Lease write failed and nothing is readable: if the lease ref does not exist on the remote, the store is unavailable
+            // (e.g. server rejects refs/uasco/*), NOT held by someone else. Fail-safe: the branch-ref claim is the arbiter.
+            const lr = git(["ls-remote", o.remote, `refs/uasco/claims/${id}`]);
+            if (leaseCheckFailed(lr)) leaseInfo = {status: "LEASE_CHECK_FAILED"};
+            else if (leaseRefAbsent(lr)) leaseInfo = {status: "LEASE_STORE_UNAVAILABLE"};
+          }
+        } else leaseInfo = {status: "LEASE_ERROR_UNKNOWN_STATUS"}; // any other value: fail closed; nothing obtained, nothing released
       } catch (e) {
         // Same ls-remote gating as above: only a SUCCESSFUL empty ls-remote means "store unavailable"; a failed one is fail-closed,
         // and a lease ref that exists (unreadable here) is treated as held. The error text is untrusted: only a LEASE_ERROR:<CODE> classification is reported.
+        releaseGrant(lid, grant); grant = null; // an exception after a grant was obtained: give it back (only what we obtained)
         const why = leaseErrorCode(e);
         let lr = null; try { lr = git(["ls-remote", o.remote, `refs/uasco/claims/${id}`]); } catch { /* stays null => check failed */ }
         leaseInfo = leaseCheckFailed(lr) ? {status: "LEASE_CHECK_FAILED", error: why}
           : leaseRefAbsent(lr) ? {status: "LEASE_STORE_UNAVAILABLE", error: why} : {status: "HELD", error: why};
       }
+      if (leaseInfo.status === "LEASE_ERROR_UNKNOWN_STATUS") { lost.push(`${id}:LEASE_ERROR:UNKNOWN`); chosen = skipNext(id, "LEASE_ERROR:UNKNOWN"); continue; }
       if (leaseInfo.status === "LEASE_STORE_UNAVAILABLE") lost.push(`${id}:LEASE_STORE_UNAVAILABLE`);
       if (leaseInfo.status === "LEASE_CHECK_FAILED") { lost.push(`${id}:LEASE_CHECK_FAILED`); chosen = skipNext(id, "LEASE_CHECK_FAILED"); continue; }
       if (leaseInfo.status === "HELD") { lost.push(`${id}:LEASE_HELD`); chosen = skipNext(id, "LEASE_HELD"); continue; }
@@ -315,7 +356,8 @@ export async function run(argv, cwd = process.cwd()) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const r = await run(process.argv.slice(2));
+  let r;
+  try { r = await run(process.argv.slice(2)); } catch { r = {exit: EXIT.RECOVERABLE_FAILURE, line: INTERNAL_LINE}; }
   process.stdout.write(r.line + "\n");
   process.exitCode = r.exit;
 }
