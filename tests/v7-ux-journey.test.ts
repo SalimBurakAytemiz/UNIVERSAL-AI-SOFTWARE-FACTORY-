@@ -559,7 +559,7 @@ describe("Project Journey — route delegation (app.js VIEWS unchanged)", () => 
     expect(r).toMatchObject({id: "journey", hash: "#/journey", view: "planned", component: "journey", factory: false});
     expect(r.plannedPackage).toBeUndefined();
     expect(routes.routeFromHash("#/journey")).toBe("journey");
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-11)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-12)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "domains", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("journey");
   });
   it("planned.js delegates the 'journey' component to the real view; app.js VIEWS table has no journey entry", async () => {

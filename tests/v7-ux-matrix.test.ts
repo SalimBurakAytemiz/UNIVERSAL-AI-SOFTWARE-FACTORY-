@@ -1001,7 +1001,7 @@ describe("Matrix — route delegation (app.js VIEWS unchanged)", () => {
     expect(routes.routeFromHash("#/matrix/")).toBe("matrix");
     expect(routes.routeFromHash("#/matrixx")).toBe(routes.DEFAULT_ROUTE);
     expect(routes.routeFromHash("#/Matrix")).toBe(routes.DEFAULT_ROUTE);
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-11)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-12)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "domains", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("matrix");
     expect(routes.ROUTES.filter((x: any) => x.factory).length).toBe(8);
     // Eski rotalar etkilenmez.
@@ -1033,5 +1033,153 @@ describe("Matrix — route delegation (app.js VIEWS unchanged)", () => {
     for (const lang of ["en", "tr"]) for (const r of routes.ROUTES) expect(i18n.translate(lang, `area.${r.id}.title`), `${lang}/${r.id}`).not.toBe(`area.${r.id}.title`);
     expect(i18n.translate("tr", "area.matrix.title")).toBe("Çoklu Proje Komuta Matrisi");
     expect(i18n.translate("en", "area.matrix.desc")).toContain("Read-only.");
+  });
+});
+
+// //TR: UI-DOMAIN-PACKS Alan Paketleri (#/domains) — kayıtlı alan paketlerinin salt-okunur listesi; fixture GERÇEK registries/domain-packs.json dosyasından gelir (sunucu bu dosyayı aynen döndürür). REGISTERED/ON_DEMAND/SEED_DOMAIN_PROFILE etkin, güncel ya da sertifikalı anlamına gelmez; hiçbir değer yükseltilmez.
+const DOM: any = JSON.parse(fs.readFileSync(path.join(root, "registries", "domain-packs.json"), "utf8"));
+const domServe = (over: Record<string, any> = {}) => (p: string) => {
+  const m: Record<string, any> = {"/v1/domains": DOM, ...over};
+  if (!(p in m)) throw new Error(`${p}: HTTP 404`);
+  if (m[p] instanceof Error) throw m[p];
+  return m[p];
+};
+async function renderDom(getFn: (p: string) => any, lang = "en") {
+  const view = await load("views", "domains.js");
+  const posts: string[] = [];
+  const m = await mkCtx(getFn, lang, (p: string) => { posts.push(p); throw new Error("POST must never be called"); });
+  const rootNode: N = await view.render(m.ctx);
+  return {root: rootNode, posts, ...m};
+}
+const boom = (msg: string) => new Error(msg);
+const domItems = (r: N) => allData(r, "domainItem").filter(n => n.tagName === "LI");
+const domCount = (r: N) => all(allData(r, "domainCount")[0]).find(n => cls(n, "kpi-value"))!.textContent;
+const domLines = (r: N) => all(r).map(n => n._text).filter(Boolean).join("\n");
+
+describe("Domain Packs — route, reachability and allow-list", () => {
+  it("routes.js maps #/domains to the planned host (component 'domains', no plannedPackage), after install and before settings, with an existing icon; app.js is untouched", async () => {
+    const routes = await load("routes.js"), icons = await load("icons.js"), i18n = await load("i18n.js");
+    const r = routes.routeById("domains");
+    expect(r).toMatchObject({id: "domains", hash: "#/domains", view: "planned", component: "domains", factory: false});
+    expect(r.plannedPackage).toBeUndefined();
+    expect(icons.ICON_NAMES).toContain(r.icon);
+    expect(routes.routeFromHash("#/domains")).toBe("domains");
+    expect(routes.routeFromHash("#/domainsx")).toBe(routes.DEFAULT_ROUTE);
+    expect(routes.FACTORY_AREA_ORDER).not.toContain("domains");
+    expect(read("views", "planned.js")).toContain('import * as domains from "./domains.js"');
+    expect(read("app.js")).not.toMatch(/domains/);
+    for (const lang of ["en", "tr"]) expect(i18n.translate(lang, "area.domains.title")).not.toBe("area.domains.title");
+  });
+  it("GET /v1/domains is already admitted by the desktop allow-list; nothing else under that name is", async () => {
+    const extra = new Function(`${blockOf("B4-ALLOWLIST")}\nreturn desktopExtraGetPathAllowed;`)() as (v: unknown) => boolean;
+    const boundary = await import(pathToFileURL(path.join(root, "automation", "lib", "control-boundary.mjs")).href);
+    const allowed = (v: string) => boundary.desktopGetPathAllowed(v) || extra(v);
+    const core = await load("domains-core.js");
+    expect(allowed("/v1/domains")).toBe(true);
+    expect(core.DOMAINS_PATH).toBe("/v1/domains");
+    for (const p of ["/v1/domains?x=1", "/v1/domains/x", "/v1/domains/activate", "/v1/domain"]) expect(allowed(p), p).toBe(false);
+  });
+});
+
+describe("Domain Packs — strict mapping of the real registry shape", () => {
+  it("maps the real registries/domain-packs.json (count, ids, verbatim values)", async () => {
+    const core = await load("domains-core.js");
+    const m = core.mapDomains(DOM);
+    expect(m.state).toBe("VERIFIED");
+    expect(m.registry.count).toBe(DOM.count);
+    expect(m.registry.items[0]).toMatchObject({id: DOM.domains[0].id, name: DOM.domains[0].name, status: "REGISTERED", activation: "ON_DEMAND", knowledgeState: "SEED_DOMAIN_PROFILE"});
+    expect(m.registry.byStatus).toEqual([{value: "REGISTERED", count: DOM.count}]);
+  });
+  it("rejects contradictory or malformed responses wholesale (count mismatch, duplicate id, bad enum, missing name, wrong key, path traversal, over the cap)", async () => {
+    const core = await load("domains-core.js");
+    const d = (over: Record<string, any> = {}) => ({id: "domain-x", name: "X", status: "REGISTERED", activation: "ON_DEMAND", profilePath: "domain-packs/x.json", knowledgeState: "SEED_DOMAIN_PROFILE", freshnessPolicy: "MISSION_TIME_REVALIDATION_REQUIRED", ...over});
+    const bads: Array<[string, any]> = [
+      ["count", {count: 2, domains: [d()]}], ["dup", {count: 2, domains: [d(), d()]}], ["enum", {count: 1, domains: [d({status: "registered"})]}],
+      ["name", {count: 1, domains: [d({name: ""})]}], ["key", {count: 1, packs: [d()]}], ["null", null], ["arr", []], ["row", {count: 1, domains: ["x"]}],
+      ["trav", {count: 1, domains: [d({profilePath: "../secret.json"})]}], ["abs", {count: 1, domains: [d({profilePath: "/etc/passwd"})]}],
+      ["cap", {count: 501, domains: Array.from({length: 501}, (_, i) => d({id: `domain-${i}`}))}]
+    ];
+    for (const [label, raw] of bads) { const m = core.mapDomains(raw); expect(m.state, label).toBe("ERROR"); expect(m.registry, label).toBeNull(); }
+    // Unknown-but-well-formed values are carried verbatim, never promoted.
+    expect(core.mapDomains({count: 1, domains: [d({status: "ACTIVE"})]}).registry.items[0].status).toBe("ACTIVE");
+  });
+  it("buildDomains reports a null count for an unreadable source (never 0)", async () => {
+    const core = await load("domains-core.js");
+    expect(core.buildDomains({state: "OFFLINE", registry: null})).toEqual({state: "OFFLINE", registry: null, count: null});
+    expect(core.buildDomains(undefined).count).toBeNull();
+    expect(core.buildDomains(core.mapDomains(DOM)).count).toBe(DOM.count);
+  });
+});
+
+describe("Domain Packs — rendering (read-only, verbatim values, honest states, accessibility)", () => {
+  it("renders every domain pack with verbatim values, exact count, no controls, no writes, no 'active/verified/certified' claims, exactly one GET", async () => {
+    const {root, posts, calls} = await renderDom(domServe());
+    expect(cls(root, "view-domains")).toBe(true);
+    expect(byId(root, "view-title")!.textContent).toBe("Domain Packs");
+    expect(domItems(root).length).toBe(DOM.count);
+    expect(domCount(root)).toBe(String(DOM.count));
+    for (const li of domItems(root)) { expect(li.dataset.status).toBe("REGISTERED"); expect(li.dataset.activation).toBe("ON_DEMAND"); expect(li.dataset.knowledgeState).toBe("SEED_DOMAIN_PROFILE"); }
+    const first = domItems(root)[0];
+    expect(domLines(first)).toContain(DOM.domains[0].name);
+    expect(domLines(first)).toContain("SEED_DOMAIN_PROFILE");
+    expect(all(root).filter(n => ["BUTTON", "A", "INPUT", "SELECT", "FORM"].includes(n.tagName)).length).toBe(0);
+    expect(all(root).some(n => n.ls.size > 0)).toBe(false);
+    expect(posts).toEqual([]);
+    expect([...calls]).toEqual(["/v1/domains"]);
+    expect(surface(root)).not.toContain(FORBIDDEN);
+    expect(allData(first, "pill").length).toBe(0);
+    for (const li of domItems(root)) expect(domLines(li)).not.toMatch(/\b(connected|active|enabled|installed|certified|verified|compliant|ready|healthy)\b/i);
+  });
+  it("accessibility: one h1 that is focusable, a labelled list, labelled count group, and status roles on state blocks", async () => {
+    const {root} = await renderDom(domServe());
+    const h1s = all(root).filter(n => n.tagName === "H1");
+    expect(h1s.length).toBe(1);
+    expect(h1s[0].attrs.get("tabindex")).toBe("-1");
+    expect(all(root).find(n => n.tagName === "UL" && n.attrs.get("aria-label") === "Registered domain packs")).toBeTruthy();
+    expect(all(root).find(n => n.attrs.get("role") === "group" && n.attrs.get("aria-label"))).toBeTruthy();
+    const down = await renderDom(domServe({"/v1/domains": boom("fetch failed")}));
+    expect(byData(down.root, "domainState")!.attrs.get("role")).toBe("status");
+    expect(byData(down.root, "domainWithheld")!.attrs.get("role")).toBe("status");
+  });
+  it("server text is written as text only (markup in a name stays literal)", async () => {
+    const evil = "<img src=x onerror=alert(1)>";
+    const dom = {...DOM, count: 1, domains: [{...DOM.domains[0], id: "domain-evil", name: evil}]};
+    const {root} = await renderDom(domServe({"/v1/domains": dom}));
+    const li = domItems(root)[0];
+    expect(all(li).some(n => n.textContent === evil)).toBe(true);
+    expect(all(li).every(n => n.tagName !== "IMG")).toBe(true);
+  });
+  it("a read failure shows an honest state and a dash count (never 0, never an empty list)", async () => {
+    for (const err of [boom("fetch failed"), boom("HTTP 404"), boom("HTTP 500")]) {
+      const {root} = await renderDom(domServe({"/v1/domains": err}));
+      expect(domCount(root)).toBe("—");
+      expect(domItems(root).length).toBe(0);
+      expect(byData(root, "domainWithheld")).toBeTruthy();
+      expect(byData(root, "domainEmpty")).toBeUndefined();
+      expect(byData(root, "domainState")).toBeTruthy();
+    }
+  });
+  it("a malformed registry (count mismatch) is rejected as a read failure, not rendered partially or as zero", async () => {
+    const {root} = await renderDom(domServe({"/v1/domains": {...DOM, count: DOM.count + 1}}));
+    expect(domCount(root)).toBe("—");
+    expect(byData(root, "domainState", "ERROR")).toBeTruthy();
+    expect(domItems(root).length).toBe(0);
+  });
+  it("a genuinely empty readable registry says only that it returned no entries, and its count is a real 0", async () => {
+    const {root} = await renderDom(domServe({"/v1/domains": {schemaVersion: "2.0.0", count: 0, domains: []}}));
+    expect(domCount(root)).toBe("0");
+    expect(byData(root, "domainEmpty")!.textContent).toBe("The domain pack registry returned no entries.");
+  });
+  it("EN and TR render without raw i18n keys; domains.* locale keys have exact EN/TR key and placeholder parity", async () => {
+    for (const lang of ["en", "tr"]) for (const over of [{}, {"/v1/domains": boom("fetch failed")}, {"/v1/domains": boom("HTTP 404")}, {"/v1/domains": {count: 9, domains: []}}]) {
+      const {root} = await renderDom(domServe(over), lang);
+      expect(surface(root), lang).not.toMatch(/\b(domains|area)\.[a-z][A-Za-z.]*\b/);
+    }
+    const en = (await load("locales", "en.js")).default, tr = (await load("locales", "tr.js")).default;
+    const keys = (o: Record<string, string>) => Object.keys(o).filter(k => k.startsWith("domains.") || k === "area.domains.title" || k === "area.domains.desc").sort();
+    expect(keys(en).length).toBeGreaterThan(25);
+    expect(keys(tr)).toEqual(keys(en));
+    const ph = (s: string) => (s.match(/\{[A-Za-z]+\}/g) ?? []).sort().join(",");
+    for (const k of keys(en)) { expect(tr[k].length, k).toBeGreaterThan(0); expect(ph(tr[k]), k).toBe(ph(en[k])); }
   });
 });
