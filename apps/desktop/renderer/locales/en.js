@@ -337,6 +337,7 @@ export default {
   "tower.trace.title":"Stage timeline",
   "tower.trace.note":"Read-only view derived only from event timestamps and stage fields. It is not a trace: no span durations exist, so a stage duration is only the time between its first and last event.",
   "tower.trace.empty":"No events with a valid timestamp.",
+  "tower.trace.truncated":"Timeline covers the last {shown} of {total} events; unplaced event numbers count within these {shown}.",
   "tower.trace.noStage":"(no stage)",
   "tower.trace.item":"{stage}: {n} events · starts +{offset} · first to last event {duration}",
   "tower.trace.total":"Placed events span {span}.",
