@@ -712,6 +712,13 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .ops-state-head,.ops-step-head,.ops-control-head,.ops-overall{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
 .ops-sources{margin-bottom:var(--space-2)}
 .ops-list{margin-top:var(--space-2);grid-template-columns:minmax(0,1fr)}
+.audit-state{display:grid;gap:var(--space-1);padding:var(--space-3);margin:var(--space-3) 0;border:1px dashed var(--border-ui);border-radius:var(--radius-md)}
+.audit-state-head{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
+.audit-sources{margin-bottom:var(--space-2)}
+.audit-list{list-style:none;margin:var(--space-2) 0 0;padding:0;display:grid;gap:var(--space-1)}
+.audit-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-2);padding:var(--space-1) var(--space-2);border-left:4px solid var(--border-ui);overflow-wrap:anywhere}
+.audit-row[data-severity="ERROR"],.audit-row[data-severity="FATAL"],.audit-row[data-severity="CRITICAL"]{border-left-color:var(--danger)}
+.audit-sev{text-transform:uppercase}
 .ops-step,.ops-item,.ops-control{border-left:4px solid var(--border-ui)}
 .ops-step[data-step-severity="ACTION"],.ops-item[data-liveness="STALLED"]{border-left-color:var(--danger)}
 .ops-step[data-step-severity="UNKNOWN"],.ops-step[data-step-severity="UNVERIFIED"]{border-left-color:var(--warn)}

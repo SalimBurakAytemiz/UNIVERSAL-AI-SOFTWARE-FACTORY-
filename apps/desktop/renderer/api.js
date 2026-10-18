@@ -13,6 +13,7 @@ import {mapPostureWorkRuns,mapPostureReviews,mapPostureEvidence} from "./posture
 import {PROJECTS_PATH,mapMatrixProjects,mapMatrixMissions,mapMatrixWorkRuns,mapMatrixCockpit} from "./matrix-core.js";
 import {CONTROL_PATH,RUNS_PATH,mapOperationsControl,mapOperationsRuns,mapOperationsAttention} from "./operations-core.js";
 import {INSTALL_PATH,PHASE0_PATH,mapInstallReport,mapPhase0Report} from "./install-core.js";
+import {RUNS_PATH as AUDIT_RUNS_PATH,EVIDENCE_PATH as AUDIT_EVIDENCE_PATH,runEventsPath,mapAuditRuns,mapAuditEvents,mapAuditEvidence} from "./audit-core.js";
 
 const TTL_MS=3000;
 const ROLE_ID_RE=/^UASCO-\d{4}$/;
@@ -169,6 +170,10 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     // //TR: FA-V2-PRODUCT (UI-248): İlk Çalıştırma Kurulum Doğrulaması salt-okunur okumaları; GET /v1/install ve GET /v1/phase0 main allow-list'inde zaten vardır (yeni uç nokta yok, sorgu dizesi yok). GET /v1/system/executors için mevcut executors() erişimcisi YENİDEN kullanılır (kopya yok). Başarılıysa install-core eşleyicileriyle fail-closed sanitize edilir (bozuk yanıt dürüst ERROR), okuma hatası ayrık dürüst durum olarak döner.
     async installInstall(){const r=await get(INSTALL_PATH);return r.ok?mapInstallReport(r.data):{state:r.state,install:null,message:r.message}},
     async installPhase0(){const r=await get(PHASE0_PATH);return r.ok?mapPhase0Report(r.data):{state:r.state,phase0:null,message:r.message}},
+    // //TR: FA-V2-PRODUCT (UI-070): Denetim İzi salt-okunur okumaları; GET /v1/runs, GET /v1/runs/RUN-*/events ve GET /v1/evidence?limit=100 main/control-boundary allow-list'inde zaten vardır (yeni uç nokta ve POST yok). Başarılıysa audit-core eşleyicileriyle fail-closed sanitize edilir; okuma başarısızsa ayrık dürüst durum döner ve asla boş-temiz liste sayılmaz.
+    async auditRuns(){const r=await get(AUDIT_RUNS_PATH);return r.ok?mapAuditRuns(r.data):{state:r.state,runs:null,message:r.message}},
+    async auditRunEvents(runId){const p=runEventsPath(runId);if(!p)return {state:"ERROR",runId,events:null};const r=await get(p);return r.ok?mapAuditEvents(runId,r.data):{state:r.state,runId,events:null,message:r.message}},
+    async auditEvidence(){const r=await get(AUDIT_EVIDENCE_PATH);return r.ok?mapAuditEvidence(r.data):{state:r.state,evidence:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }
