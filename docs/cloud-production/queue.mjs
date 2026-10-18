@@ -17,14 +17,14 @@ export function loadQueue(obj) {
   const byId = new Map();
   const seen = new Set();
   for (const t of tasks) {
-    const id = t && typeof t.id === 'string' && t.id.length > 0 ? t.id : null;
-    if (id === null) { err(null, 'TASK_ID_INVALID', 'id must be a non-empty string'); continue; }
+    const id = t && typeof t.id === 'string' && t.id.length > 0 && t.id === t.id.trim() ? t.id : null;
+    if (id === null) { err(null, 'TASK_ID_INVALID', 'id must be a non-empty, untrimmed-free string'); continue; }
     if (seen.has(id)) err(id, 'DUPLICATE_ID', `duplicate id ${id}`);
     else byId.set(id, t);
     seen.add(id);
   }
   for (const t of tasks) {
-    if (!t || typeof t.id !== 'string' || t.id.length === 0) continue;
+    if (!t || typeof t.id !== 'string' || t.id.length === 0 || t.id !== t.id.trim()) continue;
     const id = t.id;
     if (!OWNERS.has(t.owner)) err(id, 'OWNER_INVALID', `owner ${String(t.owner)}`);
     if (!STATUSES.has(t.status)) err(id, 'STATUS_INVALID', `status ${String(t.status)}`);
@@ -37,7 +37,7 @@ export function loadQueue(obj) {
       if (!byId.has(d)) err(id, 'DEP_ABSENT_FROM_BACKLOG', `dependency ${String(d)} not in backlog`);
     }
     if (t.status === 'READY') {
-      if (typeof t.authorizedBy !== 'string' || t.authorizedBy.trim().length === 0) {
+      if (typeof t.authorizedBy !== 'string' || t.authorizedBy.replace(/[\p{Cf}\s]/gu, '').length === 0) {
         err(id, 'UNAUTHORIZED_READY', 'READY requires non-empty authorizedBy');
       }
       for (const d of deps) {
@@ -56,15 +56,16 @@ export function loadQueue(obj) {
   return { ok: errors.length === 0, errors, tasks };
 }
 
-export function nextDispatchable(queue, heldLeaseTaskIds = [], openPrTaskIds = []) {
+export function nextDispatchable(queue, heldLeaseTaskIds = [], openPrTaskIds = [], owner = 'CLOUD') {
   const loaded = loadQueue(queue);
   if (!loaded.ok) return null;
+  if (!OWNERS.has(owner)) return null;
   const idList = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
   if (!idList(heldLeaseTaskIds) || !idList(openPrTaskIds)) return null;
   const held = new Set(heldLeaseTaskIds);
   const open = new Set(openPrTaskIds);
   for (const t of loaded.tasks) {
-    if (t.status === 'READY' && !held.has(t.id) && !open.has(t.id)) return t;
+    if (t.status === 'READY' && t.owner === owner && !held.has(t.id) && !open.has(t.id)) return { ...t };
   }
   return null;
 }

@@ -52,5 +52,31 @@ check('non-array heldLeaseTaskIds (string) fails closed to null', nextDispatchab
 check('non-array openPrTaskIds (non-iterable) fails closed to null', nextDispatchable(valid, [], 5) === null);
 check('module does not mutate/declare ready', valid.tasks[0].status === 'DONE');
 
+// Advisory remediation proofs
+check('protectedEdit null rejected', has({ tasks: [T({ id: 'X', protectedEdit: null })] }, 'READY_REQUIRES_PROTECTED_EDIT'));
+check("protectedEdit 'false' string rejected", has({ tasks: [T({ id: 'X', protectedEdit: 'false' })] }, 'READY_REQUIRES_PROTECTED_EDIT'));
+check('non-string authorizedBy (number/object) rejected',
+  has({ tasks: [T({ id: 'X', authorizedBy: 5 })] }, 'UNAUTHORIZED_READY') &&
+  has({ tasks: [T({ id: 'X', authorizedBy: { a: 1 } })] }, 'UNAUTHORIZED_READY'));
+check('Set / object lists fail closed to null',
+  nextDispatchable(valid, new Set(['B'])) === null && nextDispatchable(valid, [], { B: 1 }) === null);
+check('duplicate-id queue is never dispatched', nextDispatchable({ tasks: [T({ id: 'X' }), T({ id: 'X' })] }) === null);
+const mixed = { tasks: [T({ id: 'F', owner: 'FOUNDER' }), T({ id: 'L', owner: 'LOCAL' }), T({ id: 'C1' })] };
+check('owner filter: default CLOUD skips FOUNDER/LOCAL READY', nextDispatchable(mixed)?.id === 'C1');
+check('owner filter: only FOUNDER task -> null for cloud',
+  nextDispatchable({ tasks: [T({ id: 'F', owner: 'FOUNDER' })] }) === null);
+check('owner filter: explicit owner selects LOCAL', nextDispatchable(mixed, [], [], 'LOCAL')?.id === 'L');
+check('owner filter: unknown owner param -> null', nextDispatchable(mixed, [], [], 'BOT') === null);
+check('zero-width-only authorizedBy rejected',
+  has({ tasks: [T({ id: 'X', authorizedBy: '\u200B' })] }, 'UNAUTHORIZED_READY') &&
+  has({ tasks: [T({ id: 'X', authorizedBy: ' \u200B\uFEFF ' })] }, 'UNAUTHORIZED_READY'));
+check('authorizedBy with visible char accepted', loadQueue({ tasks: [T({ id: 'X', authorizedBy: 'a\u200B' })] }).ok === true);
+check('untrimmed ids -> TASK_ID_INVALID',
+  has({ tasks: [T({ id: ' X' })] }, 'TASK_ID_INVALID') && has({ tasks: [T({ id: 'X\n' })] }, 'TASK_ID_INVALID'));
+check('held/open compared exactly (no trim)', nextDispatchable(valid, ['B '])?.id === 'B' && nextDispatchable(valid, [], [' B'])?.id === 'B');
+const live = nextDispatchable(valid);
+live.status = 'DONE';
+check('returns shallow copy, not live task', valid.tasks[1].status === 'READY');
+
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
