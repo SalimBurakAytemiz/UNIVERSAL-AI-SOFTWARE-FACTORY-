@@ -2,6 +2,8 @@
 
 # Founder batch approval request — 2026-10-18
 
+**Status 2026-10-18: Founder APPROVED all four lanes (in-session); now IN_PROGRESS, see BACKLOG_CHECKPOINT.json.**
+
 Source: stale `SCREEN_TRACEABILITY_252_PLUS.csv` (data only) cross-checked against `v7/integration @ e12dbdd` by three read-only audits (47 rows examined). **Nothing below is READY**; approval = Founder writes "APPROVED: <lane ids>" and the dispatcher records `authorizedBy`.
 
 Result of the audit: of 47 rows, ~19 are already implemented, ~21 need new endpoints / write actions / protected-file edits / backend data (not startable), and **7 rows are genuine, read-only, non-protected gaps**, grouped into 4 file-disjoint lanes. All lanes touch `locales/en.js`+`tr.js`+`styles.css` in separate hunks, so merge order must be serialized by the reviewer, not the implementers.

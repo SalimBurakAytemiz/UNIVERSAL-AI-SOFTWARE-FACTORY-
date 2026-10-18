@@ -362,9 +362,9 @@
       "id": "L-WORKFORCE",
       "title": "UI-197 cluster->guild taxonomy",
       "owner": "CLOUD",
-      "status": "AUTHORITY_REQUIRED",
+      "status": "IN_PROGRESS",
       "dependsOn": [],
-      "requiresNewAuthority": true,
+      "requiresNewAuthority": false,
       "protectedEdit": false,
       "files": [
         "apps/desktop/renderer/views/workforce.js",
@@ -372,15 +372,21 @@
         "styles.css"
       ],
       "testFile": "tests/v7-ux-wp-agents.test.ts",
-      "notes": "Verified read-only gap at e12dbdd; awaiting Founder batch approval (docs/planning/FOUNDER_BATCH_APPROVAL_2026-10-18.md). No authorizedBy: not READY."
+      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit.",
+      "authorizedBy": "FOUNDER-APPROVAL:2026-10-18 in-session message (scope-limited; no protected edit, no new backend, no spend, no reseal)",
+      "branches": [
+        "claude/l-workforce-ui197"
+      ],
+      "ownership": "TEMPORARY: remote branch ref claimed by supervisor push before dispatch (atomic create); NOT an atomic lease (FA-LEASE2 not wired)",
+      "baseSha": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0"
     },
     {
       "id": "L-TOWER-TRACE",
       "title": "UI-226 stage timeline",
       "owner": "CLOUD",
-      "status": "AUTHORITY_REQUIRED",
+      "status": "IN_PROGRESS",
       "dependsOn": [],
-      "requiresNewAuthority": true,
+      "requiresNewAuthority": false,
       "protectedEdit": false,
       "files": [
         "apps/desktop/renderer/views/tower.js",
@@ -389,15 +395,21 @@
         "styles.css"
       ],
       "testFile": "tests/v7-ux-wp4-tower.test.ts",
-      "notes": "Verified read-only gap at e12dbdd; awaiting Founder batch approval (docs/planning/FOUNDER_BATCH_APPROVAL_2026-10-18.md). No authorizedBy: not READY."
+      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit.",
+      "authorizedBy": "FOUNDER-APPROVAL:2026-10-18 in-session message (scope-limited; no protected edit, no new backend, no spend, no reseal)",
+      "branches": [
+        "claude/l-tower-trace-ui226"
+      ],
+      "ownership": "TEMPORARY: remote branch ref claimed by supervisor push before dispatch (atomic create); NOT an atomic lease (FA-LEASE2 not wired)",
+      "baseSha": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0"
     },
     {
       "id": "L-ASSURANCE",
       "title": "UI-049 -> UI-050 -> UI-051 (sequential)",
       "owner": "CLOUD",
-      "status": "AUTHORITY_REQUIRED",
+      "status": "IN_PROGRESS",
       "dependsOn": [],
-      "requiresNewAuthority": true,
+      "requiresNewAuthority": false,
       "protectedEdit": false,
       "files": [
         "apps/desktop/renderer/views/assurance.js",
@@ -407,15 +419,23 @@
         "styles.css"
       ],
       "testFile": "tests/v7-ux-wp-qasec.test.ts",
-      "notes": "Verified read-only gap at e12dbdd; awaiting Founder batch approval (docs/planning/FOUNDER_BATCH_APPROVAL_2026-10-18.md). No authorizedBy: not READY."
+      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit.",
+      "authorizedBy": "FOUNDER-APPROVAL:2026-10-18 in-session message (scope-limited; no protected edit, no new backend, no spend, no reseal)",
+      "branches": [
+        "claude/l-assurance-ui049",
+        "claude/l-assurance-ui050",
+        "claude/l-assurance-ui051"
+      ],
+      "ownership": "TEMPORARY: remote branch ref claimed by supervisor push before dispatch (atomic create); NOT an atomic lease (FA-LEASE2 not wired)",
+      "baseSha": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0"
     },
     {
       "id": "L-ROUTES",
       "title": "UI-070 -> UI-078 (sequential)",
       "owner": "CLOUD",
-      "status": "AUTHORITY_REQUIRED",
+      "status": "IN_PROGRESS",
       "dependsOn": [],
-      "requiresNewAuthority": true,
+      "requiresNewAuthority": false,
       "protectedEdit": false,
       "files": [
         "views/audit.js",
@@ -429,7 +449,14 @@
         "styles.css"
       ],
       "testFile": "tests/v7-ux-operations.test.ts",
-      "notes": "Verified read-only gap at e12dbdd; awaiting Founder batch approval (docs/planning/FOUNDER_BATCH_APPROVAL_2026-10-18.md). No authorizedBy: not READY."
+      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit.",
+      "authorizedBy": "FOUNDER-APPROVAL:2026-10-18 in-session message (scope-limited; no protected edit, no new backend, no spend, no reseal)",
+      "branches": [
+        "claude/l-routes-ui070",
+        "claude/l-routes-ui078"
+      ],
+      "ownership": "TEMPORARY: remote branch ref claimed by supervisor push before dispatch (atomic create); NOT an atomic lease (FA-LEASE2 not wired)",
+      "baseSha": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0"
     }
   ],
   "relations": [
