@@ -1,0 +1,79 @@
+# //TR: Ucretsiz self-hosted CI (GitHub-hosted kota 2000/2000 dolu, ek faturalandirma YASAK). GUVENLIK: bu workflow YALNIZ workflow_dispatch ile (elle) tetiklenir — pull_request/push ile OTOMATIK CALISMAZ — boylece guvenilmeyen PR kodu kisisel runner'da izolasyon saglanmadan ASLA otomatik kosmaz (Founder talimati #1/#10). environment: self-hosted-ci (zorunlu onaylayici) ek bir insan kapisi koyar. En az yetki: contents:read, secret yok, persist-credentials:false. Zorunlu test kapsamini (run-validation + secret-sanity + bootstrap-kernel-selftest) korur; adim sureleri yazdirilir (Windows 600sn per-step limiti gorunur olsun). Korunan .github/workflows/ci.yml'e DOKUNMAZ; bu AYRI, eklenen bir dosyadir.
+name: CI (self-hosted)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which self-hosted leg to run"
+        type: choice
+        default: both
+        options: [both, windows, linux]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-selfhosted-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: validate (${{ matrix.leg }})
+    # GUVENLIK: environment zorunlu onaylayici ile her kosuyu insan onayina baglar (runner'da kod kosmadan once).
+    environment: self-hosted-ci
+    if: ${{ github.event.inputs.target == 'both' || github.event.inputs.target == matrix.leg }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - leg: windows
+            runner: [self-hosted, windows]
+          - leg: linux
+            runner: [self-hosted, linux]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout (no persisted credentials, clean, no submodules)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          clean: true
+          submodules: false
+      - name: Setup Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Assert Node >= 24 (repo engines)
+        shell: bash
+        run: |
+          v="$(node -p 'process.versions.node.split(".")[0]')"
+          echo "node=$(node --version) runner=${{ runner.os }}/${{ runner.name }}"
+          test "$v" -ge 24 || { echo "Node >=24 required (repo engines); runner has $(node --version)"; exit 1; }
+      - name: Require lockfile
+        shell: bash
+        run: test -f package-lock.json || (echo "package-lock.json missing; run install/bootstrap once and commit lockfile" && exit 1)
+      - name: Ensure dependencies (reviewed state)
+        run: node scripts/ensure-dependencies.mjs
+      - name: Canonical validation (platform-filtered; Windows-only steps NOT_RUN on Linux)
+        run: node scripts/run-validation.mjs
+      - name: Secret sanity
+        run: node scripts/secret-sanity.mjs
+      - name: Bootstrap trust-kernel self-test
+        run: node scripts/bootstrap-kernel-selftest.mjs
+      - name: Surface per-step durations (Windows 600s per-step limit visibility)
+        if: always()
+        shell: bash
+        run: |
+          f=".ai/runtime/VALIDATION_REPORT.json"
+          test -f "$f" || { echo "no VALIDATION_REPORT.json"; exit 0; }
+          node -e '
+            const r=JSON.parse(require("fs").readFileSync(".ai/runtime/VALIDATION_REPORT.json","utf8"));
+            console.log("status="+r.status+" platform="+r.platform);
+            let near=0;
+            for(const s of r.steps){const ms=s.durationMs||0; const flag=ms>=540000?"  <-- NEAR/OVER 600s PER-STEP LIMIT":""; if(ms>=540000)near++; console.log(`${s.status.padEnd(18)} ${String(ms).padStart(8)}ms  ${s.id}${flag}`);}
+            if(near)console.log(`WARN: ${near} step(s) within 60s of the hardcoded 600s per-step cap in scripts/run-validation.mjs (protected). If a real self-hosted run still overruns, shard the step in config/validation.json (maintainer/reseal step).`);
+          '
