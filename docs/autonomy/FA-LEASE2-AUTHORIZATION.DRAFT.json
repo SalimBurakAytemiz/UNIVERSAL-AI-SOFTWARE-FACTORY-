@@ -1,0 +1,36 @@
+{
+  "//TR": "DRAFT — Cloud builder tarafindan hazirlanan FA-LEASE2 yetki kaydi TASLAGIDIR; CANLI yetki kaydi DEGILDIR. Gercek kayit Local/Founder tarafindan mevcut governance proseduruyle audit/checkpoints/ altinda olusturulup muhurlenir. Cloud kendi yetkisini veremez; bu dosya yalniz incelenecek oneridir ve korunan hicbir dosyaya dokunmaz.",
+  "status": "DRAFT_PROPOSAL_NOT_A_LIVE_AUTHORIZATION",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-LEASE2-AUTHORIZATION",
+  "proposedDate": "2026-10-18",
+  "pr": "TBD (the FA-LEASE2 wiring PR, opened after approval)",
+  "branch": "TBD (a new branch off v7/integration; NOT claude/autonomy-recovery-prep)",
+  "reviewedHeadAtAuthorization": "TBD (set to the wiring PR head at authorization time)",
+  "note": "Authorizes the CODE wiring only. Remote git-ref store activation on origin, merge, re-seal, signing remain excluded and separately gated.",
+  "founderAuthorization": {
+    "decisionId": "FA-LEASE2-2026-10-18",
+    "decision": "PENDING Founder decision. Proposed: 'Authorize wiring the merged atomic per-task lease + SHA/session-bound verdict guard into the orchestrator core, editing ONLY the six listed protected files, per docs/autonomy/FA-LEASE2-CHANGE-SCOPE.md.'",
+    "rule": "Only the six listed protected files may change, and only for the lease/verdict wiring described in FA-LEASE2-CHANGE-SCOPE.md. The per-task lease is ADDITIVE: the global-worker lease (control.lease, acquireLease/heartbeat/releaseLease) is not removed or weakened. No test, validation step, or security gate may be weakened. config/trust-root-manifest.json: Local re-seal only. The lease token must never be written to the transition log, review bundle, or committed evidence.",
+    "protectedFiles": [
+      "automation/lib/orchestrator-engine.mjs",
+      "automation/lib/orchestrator-state.mjs",
+      "automation/lib/orchestrator-executors.mjs",
+      "automation/lib/review-pipeline.mjs",
+      "automation/lib/review-quorum.mjs",
+      "config/execution-backends.json"
+    ],
+    "alsoResealed": [
+      "config/trust-root-manifest.json (Local maintainer re-seal only; never edited by the builder)"
+    ],
+    "excluded": [
+      "Creating live refs/uasco/claims/* on origin (remote-store activation) — separate Founder runtime step",
+      "Granting Cloud trust-root re-seal or merge authority",
+      "Merge to master/default beyond the existing coded gate, force-push, release, signing",
+      "Any protected/core file not in the list above"
+    ],
+    "newTestsUnder": "tests/ (non-protected) — wiring acceptance tests; registration in config/validation.json is a sealed-config change requiring the Local re-seal",
+    "recordedBefore": "the Local reseal of the FA-LEASE2 wiring PR",
+    "authorizationChannel": "Must be created by Local/Founder via the existing governance procedure (AskUserQuestion in a Local session chat, as FA-LEASE1 was), then committed under audit/checkpoints/ and sealed. This draft is not that record."
+  }
+}

@@ -9,7 +9,7 @@ bundle.** Items that require Founder authority, Local re-seal, or admin apply ar
 | Priority | Deliverable | File(s) | Apply gate |
 |---|---|---|---|
 | P1 Merge gate | root cause + fix + Windows-600 s analysis | `MERGE-GATE-FIX.md`, `../../scripts/configure-integration-branch-protection.mjs` | **Local/admin** runs the script (not Cloud). |
-| P2 Lease wiring | exact protected files + wiring contract + authority ask | `FA-LEASE2-AUTHORIZATION-REQUEST.md` | **Founder** authority + **Local** re-seal. |
+| P2 Lease wiring | authority ask + **final line-anchored change scope** + **draft authority record** + **Local delegation** | `FA-LEASE2-AUTHORIZATION-REQUEST.md`, `FA-LEASE2-CHANGE-SCOPE.md`, `FA-LEASE2-AUTHORIZATION.DRAFT.json`, `LOCAL-MAINTAINER-DELEGATION.md` | **Founder** authority record (via governance) + **Local** re-seal/apply. |
 | P3 Canonical backlog | DRAFT checkpoint + queue (nothing READY) | `backlog-drafts/` | promote only after FA-LEASE2 + READY/authority decision. |
 | P4 Next-step engine | reference impl + executable proof (65/65 PASS) | `reference/` | import into core = FA-LEASE2. |
 | P5 Parallel / single ownership | enforced by the lease's `createIfAbsent`/CAS; proven in P4 | `reference/README.md`, `FA-LEASE2-…` §4.2 | same as P4. |
