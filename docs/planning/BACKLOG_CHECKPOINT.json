@@ -362,7 +362,7 @@
       "id": "L-WORKFORCE",
       "title": "UI-197 cluster->guild taxonomy",
       "owner": "CLOUD",
-      "status": "IN_PROGRESS",
+      "status": "IN_REVIEW",
       "dependsOn": [],
       "requiresNewAuthority": false,
       "protectedEdit": false,
@@ -372,19 +372,22 @@
         "styles.css"
       ],
       "testFile": "tests/v7-ux-wp-agents.test.ts",
-      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit.",
+      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN.",
       "authorizedBy": "FOUNDER-APPROVAL:2026-10-18 in-session message (scope-limited; no protected edit, no new backend, no spend, no reseal)",
       "branches": [
         "claude/l-workforce-ui197"
       ],
       "ownership": "TEMPORARY: remote branch ref claimed by supervisor push before dispatch (atomic create); NOT an atomic lease (FA-LEASE2 not wired)",
-      "baseSha": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0"
+      "baseSha": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0",
+      "prs": [
+        22
+      ]
     },
     {
       "id": "L-TOWER-TRACE",
       "title": "UI-226 stage timeline",
       "owner": "CLOUD",
-      "status": "IN_PROGRESS",
+      "status": "IN_REVIEW",
       "dependsOn": [],
       "requiresNewAuthority": false,
       "protectedEdit": false,
@@ -395,19 +398,22 @@
         "styles.css"
       ],
       "testFile": "tests/v7-ux-wp4-tower.test.ts",
-      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit.",
+      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN.",
       "authorizedBy": "FOUNDER-APPROVAL:2026-10-18 in-session message (scope-limited; no protected edit, no new backend, no spend, no reseal)",
       "branches": [
         "claude/l-tower-trace-ui226"
       ],
       "ownership": "TEMPORARY: remote branch ref claimed by supervisor push before dispatch (atomic create); NOT an atomic lease (FA-LEASE2 not wired)",
-      "baseSha": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0"
+      "baseSha": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0",
+      "prs": [
+        23
+      ]
     },
     {
       "id": "L-ASSURANCE",
       "title": "UI-049 -> UI-050 -> UI-051 (sequential)",
       "owner": "CLOUD",
-      "status": "IN_PROGRESS",
+      "status": "IN_REVIEW",
       "dependsOn": [],
       "requiresNewAuthority": false,
       "protectedEdit": false,
@@ -419,7 +425,7 @@
         "styles.css"
       ],
       "testFile": "tests/v7-ux-wp-qasec.test.ts",
-      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit.",
+      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN.",
       "authorizedBy": "FOUNDER-APPROVAL:2026-10-18 in-session message (scope-limited; no protected edit, no new backend, no spend, no reseal)",
       "branches": [
         "claude/l-assurance-ui049",
@@ -427,13 +433,18 @@
         "claude/l-assurance-ui051"
       ],
       "ownership": "TEMPORARY: remote branch ref claimed by supervisor push before dispatch (atomic create); NOT an atomic lease (FA-LEASE2 not wired)",
-      "baseSha": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0"
+      "baseSha": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0",
+      "prs": [
+        24,
+        25,
+        26
+      ]
     },
     {
       "id": "L-ROUTES",
       "title": "UI-070 -> UI-078 (sequential)",
       "owner": "CLOUD",
-      "status": "IN_PROGRESS",
+      "status": "IN_REVIEW",
       "dependsOn": [],
       "requiresNewAuthority": false,
       "protectedEdit": false,
@@ -449,14 +460,18 @@
         "styles.css"
       ],
       "testFile": "tests/v7-ux-operations.test.ts",
-      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit.",
+      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN.",
       "authorizedBy": "FOUNDER-APPROVAL:2026-10-18 in-session message (scope-limited; no protected edit, no new backend, no spend, no reseal)",
       "branches": [
         "claude/l-routes-ui070",
         "claude/l-routes-ui078"
       ],
       "ownership": "TEMPORARY: remote branch ref claimed by supervisor push before dispatch (atomic create); NOT an atomic lease (FA-LEASE2 not wired)",
-      "baseSha": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0"
+      "baseSha": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0",
+      "prs": [
+        27,
+        28
+      ]
     }
   ],
   "relations": [
