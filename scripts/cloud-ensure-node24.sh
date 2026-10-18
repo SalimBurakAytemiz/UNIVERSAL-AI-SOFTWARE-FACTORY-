@@ -26,7 +26,11 @@ fail() { echo "NODE24_INSTALL_FAILED: $1; full validation must be reported NOT_R
 if command -v node >/dev/null 2>&1; then
   cur="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
   case "$cur" in ''|*[!0-9]*) cur=0 ;; esac
-  if [ "$cur" -ge 24 ]; then echo "node $(node -v) already satisfies engines"; exit 0; fi
+  if [ "$cur" -ge 24 ]; then
+    # Write a no-op env file so the documented `&& source ~/.uasco-node24.env` also works here.
+    if [ -n "${HOME:-}" ] && [ -d "$HOME" ]; then printf '%s\n' ': # node >=24 already on PATH; nothing to export' > "$HOME/.uasco-node24.env" || true; fi
+    echo "node $(node -v) already satisfies engines"; exit 0
+  fi
 fi
 
 # 2. Platform
