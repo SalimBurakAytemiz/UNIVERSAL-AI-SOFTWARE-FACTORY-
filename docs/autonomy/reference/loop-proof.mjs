@@ -15,6 +15,8 @@ const {release} = await import(`${REPO}/task-lease.mjs`);
 
 const HERE = import.meta.dirname;
 const tmpRoot = mkdtempSync(path.join(HERE, ".loop-proof-repos-"));
+// //TR: Gecici repo dizini her cikista (normal, throw, erken exit) temizlenir; basari yoluna bagli degildir.
+process.on("exit", () => { try { rmSync(tmpRoot, {recursive: true, force: true}); } catch {} });
 let passed = 0, failed = 0;
 const git = (cwd, args) => spawnSync("git", args, {cwd, encoding: "utf8"});
 function newRepo() {
@@ -80,8 +82,7 @@ ok(leaseRefs(dir).length === 0, "no Cloud lease is left held after the loop drai
 
 // P5 — two Cloud workers never take the SAME task, but DO parallelize across tasks.
 console.log("\n== SINGLE OWNERSHIP ACROSS WORKERS (P5)");
-// fresh backlog, nothing handed off yet
-for (const t of Object.values(T)) {}
+// A fresh, independent backlog (U1/U2) so the P5 case does not depend on the mutated T above.
 const b2 = [
   {id: "U1", owner: "CLOUD", status: "READY", authorizedBy: "founder", dependsOn: [], priority: 1},
   {id: "U2", owner: "CLOUD", status: "READY", authorizedBy: "founder", dependsOn: [], priority: 2},
@@ -96,7 +97,6 @@ ok(w1Again.action === "START" && w1Again.task.id === "U1" && w1Again.lease.token
 release(store, {...cloud, taskId: "U1", token: w1.lease.token});
 release(store, {...cloud2, taskId: "U2", token: w2.lease.token});
 
-rmSync(tmpRoot, {recursive: true, force: true});
 console.log(`\nSUMMARY: ${passed} passed, ${failed} failed`);
 console.log(failed === 0 ? "RESULT: ALL CHECKS PASS" : "RESULT: FAILURES PRESENT");
 process.exit(failed === 0 ? 0 : 1);
