@@ -264,7 +264,61 @@ describe("UI-197 workforce taxonomy (cluster > guild, derived only from /v1/role
     expect(tx).not.toBeNull();
     expect(byData(tx, "clusterId").length).toBe(0);
     expect(byData(tx, "taxonomyState").length).toBe(1);
-    expect(text(tx)).not.toContain(String(REG.length));
+    // Doğrudan: küme/lonca düğümü yok ve tam olarak TEK durum notu (role=status) var.
+    expect(byData(tx, "clusterId").length).toBe(0);
+    expect(byData(tx, "guildId").length).toBe(0);
+    expect(byData(tx, "taxonomySummary").length).toBe(0);
+    expect(all(tx).filter(n => n.attrs.get("role") === "status").length).toBe(1);
+    // Yalnız lead + tek durum notu: yinelenen durum mesajı yok.
+    expect(byTag(tx, "p").length).toBe(2);
+  });
+  it("core reports skippedCount for malformed items and never throws", async () => {
+    const {buildTaxonomy} = await load("workforce-taxonomy-core.js");
+    const ok = {clusterId: "C1", guildId: "G1", proficiencyStatus: "NOT_EVALUATED"};
+    const t = buildTaxonomy([ok, null, 5, "x", {clusterId: "C1"}, {guildId: "G1"}, {clusterId: 1, guildId: "G1"}, undefined]);
+    expect([t.skippedCount, t.totalCount, t.roleCount]).toEqual([7, 8, 1]);
+    const bad = buildTaxonomy([null, 3, {clusterId: "C1"}]);
+    expect(bad.clusters).toEqual([]);
+    expect([bad.skippedCount, bad.totalCount]).toEqual([3, 3]);
+    for (const x of [null, undefined, "x", 3, {}]) expect(buildTaxonomy(x)).toMatchObject({clusters: [], skippedCount: 0, totalCount: 0});
+  });
+  it("core counts only exact CERTIFIED and keeps case/whitespace ids distinct", async () => {
+    const {buildTaxonomy} = await load("workforce-taxonomy-core.js");
+    const t = buildTaxonomy([
+      {clusterId: "C1", guildId: "G1", proficiencyStatus: "certified"},
+      {clusterId: "C1", guildId: "G1", proficiencyStatus: "CERTIFIED"},
+      {clusterId: "c1", guildId: "G1", proficiencyStatus: "NOT_EVALUATED"},
+      {clusterId: "C1 ", guildId: "G1", proficiencyStatus: "NOT_EVALUATED"},
+    ]);
+    expect(t.clusters.find((c: any) => c.clusterId === "C1").certified).toBe(1);
+    expect(t.clusterCount).toBe(3);
+    expect(t.clusters.map((c: any) => c.clusterId).sort()).toEqual(["C1", "C1 ", "c1"]);
+  });
+  it("core merges duplicate cluster/guild keys and separates pair count from distinct guild ids", async () => {
+    const {buildTaxonomy} = await load("workforce-taxonomy-core.js");
+    const t = buildTaxonomy([{clusterId: "C1", guildId: "G1"}, {clusterId: "C1", guildId: "G1"}, {clusterId: "C2", guildId: "G1"}]);
+    expect(t.clusters[0].guilds).toEqual([{guildId: "G1", roles: 2, certified: 0}]);
+    expect([t.guildCount, t.distinctGuildCount, t.roleCount]).toEqual([2, 1, 3]);
+  });
+  it("view shows a skipped note with numbers, and 'unclassified' (never 'empty') when nothing is classifiable", async () => {
+    const mk = async (items: any[]) => { const {ctx} = await mkCtx(); ctx.api.roleCatalog = async () => ({state: "VERIFIED", total: items.length, items}); const {node} = await renderWf(ctx); return byId(node, "wf-taxonomy")!; };
+    const good = {roleId: "R1", title: "t", clusterId: "C1", guildId: "G1", proficiencyStatus: "NOT_EVALUATED"};
+    const tx1 = await mk([good, {roleId: "R2", title: "t", clusterId: "C1"}]);
+    const sk = byData(tx1, "taxonomySkipped");
+    expect(sk.length).toBe(1);
+    expect(text(sk[0])).toContain("1");
+    expect(text(sk[0])).toContain("2");
+    expect(text(byData(tx1, "taxonomySummary")[0])).toContain("1");
+    const tx0 = await mk([good]);
+    expect(byData(tx0, "taxonomySkipped").length).toBe(0);
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const tx2 = await mk([{roleId: "R2", title: "t", clusterId: "C1"}, {roleId: "R3", title: "t"}]);
+    expect(byData(tx2, "clusterId").length).toBe(0);
+    expect(byData(tx2, "taxonomyUnclassified").length).toBe(1);
+    expect(text(tx2)).not.toContain("no role definitions");
+    expect(text(tx2)).not.toContain(en["workforce.cat.empty"]);
+    const tx3 = await mk([]);
+    expect(byData(tx3, "taxonomyUnclassified").length).toBe(0);
   });
   it("taxonomy locale keys exist in TR and EN with identical key sets", async () => {
     const tr = (await load("locales", "tr.js")).default as Record<string, string>;
@@ -272,6 +326,11 @@ describe("UI-197 workforce taxonomy (cluster > guild, derived only from /v1/role
     const tk = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("workforce.taxonomy.")).sort();
     expect(tk(en).length).toBeGreaterThan(3);
     expect(tk(tr)).toEqual(tk(en));
+    // Yer tutucu paritesi: her anahtarda {c},{g},{d},{r},{k},{s},{t} kümeleri EN ve TR'de aynıdır.
+    const ph = (v: string) => [...v.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort().join(",");
+    for (const k of tk(en)) expect(ph(tr[k]), k).toBe(ph(en[k]));
+    expect(ph(en["workforce.taxonomy.summary"])).toBe("c,d,g,r");
+    expect(ph(en["workforce.taxonomy.counts"])).toBe("g,k,r");
   });
 });
 

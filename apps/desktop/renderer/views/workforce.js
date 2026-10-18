@@ -150,12 +150,15 @@ function detailPanel(ctx,detail){
 function taxonomySection(ctx,catalog){
   const doc=ctx.doc;
   if(catalog.state!=="VERIFIED")return panel(ctx,{titleKey:"workforce.taxonomy.title",id:"wf-taxonomy",className:"wf-taxonomy"},
-    h(doc,"p",{class:"note",text:ctx.t("workforce.taxonomy.lead")}),stateNote(ctx,catalog.state),h(doc,"p",{class:"note",dataset:{taxonomyState:catalog.state},text:ctx.t("workforce.taxonomy.notVerified")}));
+    h(doc,"p",{class:"note",text:ctx.t("workforce.taxonomy.lead")}),h(doc,"p",{class:`note note-${String(catalog.state).toLowerCase()}`,role:"status",dataset:{taxonomyState:catalog.state},text:ctx.t("workforce.taxonomy.notVerified")}));
   const tax=buildTaxonomy(catalog.items);
-  if(!tax.clusters.length)return panel(ctx,{titleKey:"workforce.taxonomy.title",id:"wf-taxonomy",className:"wf-taxonomy"},h(doc,"p",{class:"note",text:ctx.t("workforce.taxonomy.lead")}),emptyNote(ctx,"workforce.cat.empty"));
+  // //TR: Katalog boşsa "boş" notu; öğe var ama hiçbiri sınıflanamıyorsa "sınıflandırılmamış" notu (asla "boş" denmez).
+  if(!tax.clusters.length)return panel(ctx,{titleKey:"workforce.taxonomy.title",id:"wf-taxonomy",className:"wf-taxonomy"},h(doc,"p",{class:"note",text:ctx.t("workforce.taxonomy.lead")}),
+    tax.totalCount>0?h(doc,"p",{class:"note",dataset:{taxonomyUnclassified:"1"},text:ctx.t("workforce.taxonomy.unclassified",{s:formatCount(tax.skippedCount),t:formatCount(tax.totalCount)})}):emptyNote(ctx,"workforce.cat.empty"));
   return panel(ctx,{titleKey:"workforce.taxonomy.title",id:"wf-taxonomy",className:"wf-taxonomy"},
     h(doc,"p",{class:"note",text:ctx.t("workforce.taxonomy.lead")}),
-    h(doc,"p",{class:"note",dataset:{taxonomySummary:"1"},text:ctx.t("workforce.taxonomy.summary",{c:formatCount(tax.clusterCount),g:formatCount(tax.guildCount),r:formatCount(tax.roleCount)})}),
+    h(doc,"p",{class:"note",dataset:{taxonomySummary:"1"},text:ctx.t("workforce.taxonomy.summary",{c:formatCount(tax.clusterCount),g:formatCount(tax.guildCount),d:formatCount(tax.distinctGuildCount),r:formatCount(tax.roleCount)})}),
+    tax.skippedCount>0?h(doc,"p",{class:"note",role:"note",dataset:{taxonomySkipped:String(tax.skippedCount)},text:ctx.t("workforce.taxonomy.skipped",{s:formatCount(tax.skippedCount),t:formatCount(tax.totalCount)})}):null,
     h(doc,"ul",{class:"wf-taxonomy-tree","aria-label":ctx.t("workforce.taxonomy.treeLabel")},tax.clusters.map(c=>
       h(doc,"li",{class:"wf-taxonomy-cluster",dataset:{clusterId:c.clusterId}},
         h(doc,"span",{class:"mono wf-taxonomy-name",text:c.clusterId})," ",h(doc,"span",{class:"wf-taxonomy-count",text:ctx.t("workforce.taxonomy.counts",{r:formatCount(c.roles),g:formatCount(c.guilds.length),k:formatCount(c.certified)})}),

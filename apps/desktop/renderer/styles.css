@@ -477,7 +477,7 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .wf-def-list{margin:0;padding-left:1.1rem;display:grid;gap:.2rem}
 .wf-taxonomy{display:grid;gap:var(--space-3)}
 .wf-taxonomy-tree,.wf-taxonomy-guilds{margin:0;padding-left:1.1rem;display:grid;gap:.25rem}
-.wf-taxonomy-name{font-weight:700}
+.wf-taxonomy-name{font-weight:700;overflow-wrap:anywhere}
 .wf-taxonomy-count{color:var(--muted);font-size:var(--fs-caption)}
 @media (forced-colors:active){
   .wf-stat,.wf-cat-table tr[data-selected="1"]{border:1px solid CanvasText;forced-color-adjust:auto}
