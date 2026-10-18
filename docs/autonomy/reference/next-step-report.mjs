@@ -13,8 +13,19 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_LIB = path.join(HERE, "../../../automation/lib");
 const {createLocalGitRefStore} = await import(path.join(REPO_LIB, "task-lease-git-store.mjs"));
 
-const backlog = JSON.parse(readFileSync(path.join(HERE, "../backlog-drafts/BACKLOG_CHECKPOINT.json"), "utf8"));
-const tasks = backlog.tasks ?? [];
+// //TR: Bozuk/bos backlog fail-closed hatadir (MALFORMED_BACKLOG, exit 2), NO_READY_WORK degil: bozuk bir dosya "is yok" gibi gizlenmemelidir (rule #8: RECOVERABLE_FAILURE'i NO_READY_WORK'ten ayir).
+let backlog;
+try {
+  backlog = JSON.parse(readFileSync(path.join(HERE, "../backlog-drafts/BACKLOG_CHECKPOINT.json"), "utf8"));
+} catch (e) {
+  console.error(`MALFORMED_BACKLOG: cannot read/parse BACKLOG_CHECKPOINT.json: ${e?.message ?? e}`);
+  process.exit(2);
+}
+const tasks = backlog.tasks;
+if (!Array.isArray(tasks) || tasks.length === 0) {
+  console.error(`MALFORMED_BACKLOG: backlog.tasks is ${Array.isArray(tasks) ? "empty" : "missing or not an array"} — refusing to report NO_READY_WORK on a malformed/empty backlog (fail-closed; this is a config/RECOVERABLE_FAILURE state, not an absence of work).`);
+  process.exit(2);
+}
 // Map the draft schema to the engine's selectable shape (id, owner, status, authorizedBy, dependsOn).
 const engineTasks = tasks.map((t) => ({
   id: t.id, owner: t.owner, status: t.status, authorizedBy: t.authorizedBy ?? null, dependsOn: t.dependsOn ?? [],
