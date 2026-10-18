@@ -22,3 +22,23 @@
 1. FA-LEASE2: needs D3 sealed authority record + trust-root reseal; depends on CP-GOV built and proven, then distinct identity issues D3. Not actionable by builder.
 2. ACTIONS-CI-RESTORE: Actions billing/runner outage (admin-owned); blocks merge of all PRs.
 3. BACKLOG-SOURCE-REBASELINE: Founder must choose authoritative backlog source (depends on FA-LEASE2).
+
+## 2026-10-18 heartbeat #2 (queue read from claude/cloud-production-engine@ed5cfb9; v7/integration has no QUEUE.json)
+
+**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0 (steady state).
+
+**Queue task states (observed):** unchanged from previous block. No task DONE.
+
+**Open PRs: 20** (observed this fire; mergeable state UNKNOWN, CI status UNKNOWN, not queried): #8, #11-#29 (all targeting v7/integration except #8, which targets an older base sha). No PR carries a uasco-cloud-production label. uasco-needs-fix label on #11, #13, #14.
+- Cloud-production related: #12 CP-CI, #13 CP-REPORT, #14 CP-QUEUE, #15 engine contract+queue, #17 CP-QUEUE remediation, #18 CP-REPORT remediation, #21 Node24 env, #29 CP-DISPATCH-IMPL.
+
+**Active implementer sessions:** UNKNOWN (claude-code-remote list_sessions not available in this fire).
+
+**Merged PRs (observed, base v7/integration):** 9 total (#1-#7, #9, #10; latest #10 pkg-lease1 closed 2026-10-18T05:09Z). Queue tasks completed (DONE): 0.
+
+**Current failures:** needs-fix on #11, #13, #14. Repo-wide Actions CI red per queue (not independently verified this fire).
+
+**Top blockers:**
+1. FA-LEASE2: needs sealed D3 authority record + trust-root reseal; blocked on CP-GOV being built and proven. Not actionable by builder.
+2. ACTIONS-CI-RESTORE: Actions billing/runner outage (admin-owned); blocks merge of all PRs.
+3. BACKLOG-SOURCE-REBASELINE: Founder must choose the authoritative backlog source (depends on FA-LEASE2).
