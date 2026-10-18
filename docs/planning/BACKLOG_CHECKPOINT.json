@@ -617,7 +617,7 @@
       "prs": [
         29
       ],
-      "notes": "Not the atomic lease / not FA-LEASE2 wiring. Reviewed twice; no integrity issue; advisories being fixed. Not CLEAN."
+      "notes": "Not the atomic lease / not FA-LEASE2 wiring. Five review rounds; closed-vocabulary output; final delta awaiting independent re-review. Not CLEAN."
     },
     {
       "id": "CP-NODE24-ENV",
