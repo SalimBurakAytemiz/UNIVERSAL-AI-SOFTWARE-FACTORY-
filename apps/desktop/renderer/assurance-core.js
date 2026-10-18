@@ -115,4 +115,23 @@ export function evidenceIntegrity(evBlock){
   return {state:b?b.state:"UNAVAILABLE",live:Boolean(live),total:n("total"),verified:n("verified"),mismatch:n("mismatch"),missing:n("missing"),unverifiable:n("unverifiable")};
 }
 
+// //TR: UI-049: GET /v1/reviews/:evd_id yanıtının fail-closed eşlemesi. Karar sunucudan AYNEN taşınır (yükseltilmez); biçim bozuksa {state:"ERROR",review:null}. Serbest metin yalnız sınırlı uzunlukta alınır ve textContent ile çizilir.
+export const REVIEW_ID_RE=/^evd_[0-9a-f]{24}$/;
+const REVIEW_VERDICT_SET=Object.freeze(["CLEAN","BLOCKED","NO_VERDICT"]);
+const RUN_RE_R=/^run_[0-9a-f]{24}$/;
+const isoOrNull=x=>typeof x==="string"&&x.length>0&&!Number.isNaN(new Date(x).getTime())?x:null;
+export function mapReviewDetail(raw){
+  const bad={state:"ERROR",review:null};
+  if(!isObj(raw)||raw.source!=="WORK_OS_JOURNAL_RUN_EVIDENCE"||!isObj(raw.review))return bad;
+  const r=raw.review,ev=r.evidence;
+  if(!REVIEW_ID_RE.test(String(r.reviewId))||!RUN_RE_R.test(String(r.runId))||!MSN_RE.test(String(r.missionId))||!REVIEW_VERDICT_SET.includes(r.verdict)||!isObj(r.reviewer)||!isObj(r.implementer)||!isObj(ev)||typeof r.currentHead!=="boolean"||safeInt(r.cycle)===null)return bad;
+  if(r.independent!==null&&typeof r.independent!=="boolean")return bad;
+  const commit=r.reviewedCommit===null||r.reviewedCommit===undefined?null:SHA_RE.test(String(r.reviewedCommit))?r.reviewedCommit:undefined;
+  if(commit===undefined)return bad;
+  const findings=Array.isArray(ev.findings)?ev.findings.filter(f=>typeof f==="string").slice(0,20).map(f=>f.slice(0,300)):null;
+  return {state:"VERIFIED",review:{reviewId:r.reviewId,runId:r.runId,missionId:r.missionId,cycle:r.cycle,verdict:r.verdict,independent:r.independent===true?true:r.independent===false?false:null,
+    reviewer:str(r.reviewer.identity,120),implementer:str(r.implementer.identity,120),reviewedCommit:commit,currentHead:r.currentHead,timestamp:isoOrNull(r.timestamp),
+    recordedVerdict:REVIEW_VERDICT_SET.includes(ev.recordedVerdict)?ev.recordedVerdict:null,invalidated:str(ev.invalidated,60),findingsCount:safeInt(ev.findingsCount),findings,
+    exitCode:Number.isSafeInteger(ev.exitCode)?ev.exitCode:null,timedOut:ev.timedOut===true,note:str(ev.note,200)}};
+}
 export {MISSING};

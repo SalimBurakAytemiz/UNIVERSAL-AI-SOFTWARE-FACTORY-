@@ -2,6 +2,7 @@
 // (1) QA/Güvenlik genel bakışı: kanıt bütünlüğü sayıları GET /v1/cockpit evidence bloğundan (yalnız VERIFIED/STALE ve geçerli tamsayı), güvenlik duruşu GET /v1/work-runs SECURITY_REPORT kanıtından toplanır;
 // (2) Güvenlik statik taraması: her work-run'ın en son güvenlik aşaması (secret-scan + gitleaks/trivy/semgrep durumu, core/workos/security-tools.ts); araç yoksa NOT_INSTALLED, kapsam eksikse PARTIAL, kanıt yoksa NOT_EXECUTED — asla sahte "temiz/geçti";
 // (3) Kanıt yüzeyi (DEĞİŞMEDİ): GET /v1/evidence listesi doğrulama çipleriyle (VERIFIED/MISMATCH/MISSING/UNVERIFIABLE) + detay (kaynak yolu, sha256, redakte log);
+// (3b) UI-049 Reviews: GET /v1/reviews (+ /:evd_id) bağımsız review kararları AYNEN, yükseltilmeden; veri yoksa dürüst boş/UNAVAILABLE/ERROR durumu;
 // (4) Dinamik QA — Founder kapısı (BLOCKED): testleri çalıştırma, görsel/API/web/mobil/masaüstü yürütme, cihaz farmı, canlı önizleme FD-REL-1 (yürütme) + ücretli cihaz farmı kapısındadır; bu yüzey ASLA sahte koş/geçti/kapsam göstermez, "koş" düğmesi yoktur ve SOURCE_GENERATION_COMPLETE asla PRODUCT_VERIFIED sayılmaz. 404 => UNAVAILABLE; veri yalnız h()/textContent ile çizilir, HTML olarak yorumlanmaz.
 import {h,panel,stateNote,emptyNote,chip,verificationChip,statePill,miniBars,badge} from "../components.js";
 import {MISSING,formatCount} from "../model.js";
@@ -14,7 +15,7 @@ const PAGE_LIMIT=100;
 const SCAN_LIMIT=150;
 // //TR: Seçili güvenlik tarama koşusu görünüm ömrü boyunca korunur (periyodik yenileme seçimi bozmaz).
 const secState={runId:null};
-export function resetAssuranceView(){secState.runId=null}
+export function resetAssuranceView(){secState.runId=null;revState.id=null}
 
 // //TR: Dinamik QA yetenekleri Founder kapısındadır; her satır dürüst BLOCKED/NOT_EXECUTED taşır, hiçbiri yürütme tetiklemez.
 const DYNAMIC_QA=Object.freeze([
@@ -178,6 +179,72 @@ function securityDetail(ctx,scans){
     r.founderNote?h(doc,"details",{class:"qa-foundernote"},h(doc,"summary",{text:ctx.t("qa.security.detail.founderNote")}),h(doc,"p",{class:"note",text:r.founderNote})):null);
 }
 
+// ---------- (5) UI-049: Bağımsız review kararları (GET /v1/reviews, GET /v1/reviews/:evd_id) ----------
+// //TR: Karar sunucudan AYNEN gösterilir; CLEAN yalnız bağımsızlığı kanıtlı ve incelenen commit güncel head ise VERIFIED rozetidir, aksi halde STALE (asla yükseltilmez). Veri yoksa dürüst boş durum; uydurma karar yok. Seçim görünüm ömrü boyunca korunur.
+const revState={id:null};
+const REVIEW_LIMIT=100;
+function verdictPill(ctx,r){
+  const kind=r.verdict==="BLOCKED"?"BLOCKED":r.verdict==="NO_VERDICT"?"NOT_EXECUTED":(r.independent===true&&r.currentHead)?"VERIFIED":"STALE";
+  const p=statePill(ctx,kind,{label:r.verdict});p.dataset.verdict=r.verdict;return p;
+}
+function indepText(ctx,v){return ctx.t(v===true?"assurance.reviews.indep.yes":v===false?"assurance.reviews.indep.no":"assurance.reviews.indep.unknown")}
+function reviewRow(ctx,r){
+  const doc=ctx.doc,on=revState.id===r.reviewId;
+  return h(doc,"tr",{class:on?"row-selected":null,dataset:{reviewId:r.reviewId,verdict:r.verdict}},
+    h(doc,"td",{},h(doc,"button",{type:"button",class:"link-btn mono",id:`rev-${r.reviewId}`,dataset:{focusKey:`rev-${r.reviewId}`},"aria-current":on?"true":null,"aria-label":ctx.t("assurance.reviews.select",{id:r.reviewId}),
+      on:{click:()=>{revState.id=r.reviewId;if(typeof ctx.rerender==="function")ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys:["id:as-reviews-detail-h",`id:rev-${r.reviewId}`]})}},text:r.reviewId})),
+    h(doc,"td",{},verdictPill(ctx,r)),
+    h(doc,"td",{class:"mono",text:r.runId}),
+    h(doc,"td",{class:"mono",text:r.missionId}),
+    h(doc,"td",{text:indepText(ctx,r.independent)}),
+    h(doc,"td",{text:formatDateTime(r.timestamp,ctx.i18n.lang)}));
+}
+function reviewsPanel(ctx,res){
+  const doc=ctx.doc,mk=(...k)=>panel(ctx,{titleKey:"assurance.reviews.title",id:"as-reviews",className:"as-reviews"},h(doc,"p",{class:"note",text:ctx.t("assurance.reviews.lead")}),...k,h(doc,"p",{class:"note mono",text:ctx.t("assurance.reviews.source")}));
+  if(res.state!=="VERIFIED"||!res.reviews)return mk(stateNote(ctx,res.state==="VERIFIED"?"ERROR":res.state));
+  const recs=res.reviews.records;
+  if(!recs.length)return mk(emptyNote(ctx,"assurance.reviews.none"));
+  const page=recs.slice(0,REVIEW_LIMIT),cols=["assurance.reviews.col.id","assurance.reviews.col.verdict","assurance.reviews.col.run","assurance.reviews.col.mission","assurance.reviews.col.independent","assurance.reviews.col.time"];
+  return mk(
+    h(doc,"p",{class:"note",dataset:{results:"reviews"},text:ctx.t("assurance.reviews.results",{shown:String(page.length),total:String(recs.length)})}),
+    h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table as-reviews-table"},
+      h(doc,"caption",{class:"sr-only",text:ctx.t("assurance.reviews.caption")}),
+      h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
+      h(doc,"tbody",{},page.map(r=>reviewRow(ctx,r))))),
+    res.reviews.truncated?h(doc,"p",{class:"note",dataset:{truncated:"reviews"},text:ctx.t("assurance.reviews.truncated")}):null);
+}
+async function reviewDetailPanel(ctx){
+  const doc=ctx.doc;
+  const base=(...kids)=>panel(ctx,{titleKey:"assurance.reviews.detail.title",id:"as-reviews-detail",className:"as-reviews"},h(doc,"h3",{id:"as-reviews-detail-h",tabindex:"-1",class:"sr-only",text:ctx.t("assurance.reviews.detail.title")}),...kids);
+  if(!revState.id)return base(emptyNote(ctx,"assurance.reviews.detail.none"));
+  const res=await ctx.api.assuranceReview(revState.id);
+  if(res.state!=="VERIFIED"||!res.review)return base(stateNote(ctx,res.state==="VERIFIED"?"ERROR":res.state));
+  const r=res.review,id=r.reviewId;
+  const close=h(doc,"button",{type:"button",class:"btn btn-small",id:"as-reviews-close",dataset:{focusKey:"as-reviews-close"},text:ctx.t("assurance.reviews.detail.close"),
+    on:{click:()=>{revState.id=null;if(typeof ctx.rerender==="function")ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys:[`id:rev-${id}`,"id:as-reviews-t"]})}}});
+  const kv=(k,v,cls)=>h(doc,"div",{},h(doc,"dt",{text:ctx.t(k)}),h(doc,"dd",cls?{class:cls}:{},v));
+  const dash=v=>v===null||v===undefined?MISSING:String(v);
+  return base(
+    h(doc,"div",{class:"as-reviews-head"},h(doc,"span",{class:"mono",text:id}),verdictPill(ctx,r),close),
+    r.verdict==="CLEAN"&&!(r.independent===true&&r.currentHead)?h(doc,"p",{class:"note note-stale",role:"note",text:ctx.t("assurance.reviews.detail.cleanCaveat")}):null,
+    h(doc,"dl",{class:"kv as-reviews-kv"},
+      kv("assurance.reviews.col.run",r.runId,"mono"),kv("assurance.reviews.col.mission",r.missionId,"mono"),
+      kv("assurance.reviews.detail.cycle",String(r.cycle)),
+      kv("assurance.reviews.detail.reviewer",dash(r.reviewer),"mono"),kv("assurance.reviews.detail.implementer",dash(r.implementer),"mono"),
+      kv("assurance.reviews.col.independent",indepText(ctx,r.independent)),
+      kv("assurance.reviews.detail.commit",dash(r.reviewedCommit),"mono"),
+      kv("assurance.reviews.detail.currentHead",ctx.t(r.currentHead?"assurance.reviews.yes":"assurance.reviews.no")),
+      kv("assurance.reviews.col.time",formatDateTime(r.timestamp,ctx.i18n.lang)),
+      kv("assurance.reviews.detail.recorded",dash(r.recordedVerdict),"mono"),
+      r.invalidated?kv("assurance.reviews.detail.invalidated",r.invalidated,"mono"):null,
+      kv("assurance.reviews.detail.findingsCount",dash(r.findingsCount)),
+      kv("assurance.reviews.detail.exit",dash(r.exitCode),"mono"),
+      kv("assurance.reviews.detail.timedOut",ctx.t(r.timedOut?"assurance.reviews.yes":"assurance.reviews.no")),
+      r.note?kv("assurance.reviews.detail.note",r.note):null),
+    h(doc,"h4",{class:"qa-def-title",text:ctx.t("assurance.reviews.detail.findings")}),
+    r.findings&&r.findings.length?h(doc,"ul",{class:"qa-gaps",dataset:{findings:"1"}},r.findings.map(f=>h(doc,"li",{text:f}))):h(doc,"p",{class:"note",text:ctx.t("assurance.reviews.detail.noFindings")}));
+}
+
 // ---------- (3) Kanıt yüzeyi (mevcut davranış) ----------
 function filters(ctx,items){
   const doc=ctx.doc,f=drafts.evidence,kinds=[...new Set(items.map(e=>e.kind).filter(Boolean))].sort();
@@ -232,10 +299,11 @@ async function detailBody(ctx){
 export async function render(ctx){
   const doc=ctx.doc,f=drafts.evidence;
   // //TR: Kanıt listesi (mevcut davranış) önce istenir; genel bakış/güvenlik okumaları salt-okunur ektir ve başarısızlıkları dürüst duruma düşer.
-  const [res,cockpit,scansRaw]=await Promise.all([
+  const [res,cockpit,scansRaw,revRes]=await Promise.all([
     ctx.api.evidenceList({missionId:selection.missionId??undefined,cursor:f.cursor??undefined,limit:PAGE_LIMIT}),
     ctx.api.cockpit(),
-    ctx.api.raw("/v1/work-runs")
+    ctx.api.raw("/v1/work-runs"),
+    ctx.api.assuranceReviews()
   ]);
   const scans=mapSecurityScans(scansRaw),ev=evidenceIntegrity(cockpit?.data?.evidence);
   if(res.state==="VERIFIED"&&f.kind!=="ALL"&&!res.items.some(e=>e.kind===f.kind))f.kind="ALL";
@@ -248,6 +316,8 @@ export async function render(ctx){
     dynamicQaPanel(ctx),
     securityPanel(ctx,scans),
     securityDetail(ctx,scans),
+    reviewsPanel(ctx,revRes),
+    await reviewDetailPanel(ctx),
     h(doc,"p",{class:"panel-meta"},chip(ctx,{state:res.state,value:res.items?.length??null}),h(doc,"span",{text:ctx.t("assurance.source")})),
     panel(ctx,{titleKey:"assurance.list",id:"assurance-list"},res.state==="VERIFIED"?filters(ctx,res.items):null,listBody(ctx,res,shown),res.state==="VERIFIED"?pager(ctx,res):null),
     detail);
