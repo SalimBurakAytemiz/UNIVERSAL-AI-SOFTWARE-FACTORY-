@@ -96,7 +96,7 @@ const LINEAGE_EVIDENCE = {evidence: [
   lev("1", {missionId: MSN, runId: runId("a")}), lev("2", {missionId: MSN, runId: runId("a")}), lev("3", {missionId: MSN, runId: runId("b")}),
   lev("4", {missionId: MSN2}), lev("5", {runId: runId("a")}), lev("6", {})], nextCursor: null};
 
-interface Feed { cockpit?: "ok" | "unavail"; workRuns?: "ok" | "off"; evidence?: "ok" | "off" | "lineage"; reviews?: "ok" | "off" | "empty" | "bad" }
+interface Feed { cockpit?: "ok" | "unavail"; workRuns?: "ok" | "off"; evidence?: "ok" | "off" | "lineage"; reviews?: "ok" | "off" | "empty" | "bad"; mutate?: (kind: "list" | "detail", payload: any) => any }
 async function mkCtx(feed: Feed = {}, lang = "tr") {
   const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
   const doc = new D(), store = st.createStore(null), calls: string[] = [];
@@ -106,10 +106,11 @@ async function mkCtx(feed: Feed = {}, lang = "tr") {
     if (p === "/v1/work-runs") { if (feed.workRuns === "off") throw new Error(`${p}: HTTP 404`); return WORK_RUNS; }
     if (p === "/v1/reviews" || p.startsWith("/v1/reviews/")) {
       if (feed.reviews === "off") throw new Error(`${p}: HTTP 404`);
-      if (p === "/v1/reviews") return feed.reviews === "empty" ? REVIEWS_EMPTY : feed.reviews === "bad" ? {source: "WRONG"} : REVIEWS;
+      if (p === "/v1/reviews") return feed.reviews === "empty" ? REVIEWS_EMPTY : feed.reviews === "bad" ? {source: "WRONG"} : (feed.mutate ? feed.mutate("list", structuredClone(REVIEWS)) : REVIEWS);
       const rec = REVIEWS.reviews.find(r => p === `/v1/reviews/${r.reviewId}`);
       if (!rec) throw new Error(`${p}: HTTP 404`);
-      return {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", notice: "n", review: {...rec, evidence: {recordedVerdict: rec.verdict === "NO_VERDICT" ? null : rec.verdict, invalidated: null, findingsCount: rec.verdict === "BLOCKED" ? 2 : 0, findings: rec.verdict === "BLOCKED" ? ["<img src=x onerror=alert(1)> finding one", "finding two"] : null, exitCode: 0, timedOut: false, logSha256: null, note: null}}, run: REVIEWS.runs[0]};
+      const det = {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", notice: "n", review: {...rec, evidence: {recordedVerdict: rec.verdict === "NO_VERDICT" ? null : rec.verdict, invalidated: null, findingsCount: rec.verdict === "BLOCKED" ? 2 : 0, findings: rec.verdict === "BLOCKED" ? ["<img src=x onerror=alert(1)> finding one", "finding two"] : null, exitCode: 0, timedOut: false, logSha256: null, note: null}}, run: REVIEWS.runs.find(x => x.runId === rec.runId)};
+      return feed.mutate ? feed.mutate("detail", structuredClone(det)) : det;
     }
     if (p.startsWith("/v1/evidence/")) return {evidence: EVIDENCE.evidence[0], summary: {}, tail: null, tailWithheld: null};
     if (p.startsWith("/v1/evidence")) { if (feed.evidence === "off") throw new Error(`${p}: HTTP 404`); return feed.evidence === "lineage" ? LINEAGE_EVIDENCE : EVIDENCE; }
@@ -280,7 +281,7 @@ describe("UI-049 assurance Reviews panel (real verdicts, honest states)", () => 
     const core = await load("assurance-core.js");
     expect(core.mapReviewDetail(null).state).toBe("ERROR");
     expect(core.mapReviewDetail({source: "X", review: {}}).state).toBe("ERROR");
-    const good = {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", review: {...REVIEWS.reviews[0], evidence: {findings: null}}};
+    const good = {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", review: {...REVIEWS.reviews[0], evidence: {findings: null}}, run: REVIEWS.runs[0]};
     expect(core.mapReviewDetail(good).state).toBe("VERIFIED");
     expect(core.mapReviewDetail({...good, review: {...good.review, verdict: "PASS"}}).state).toBe("ERROR");
     expect(core.mapReviewDetail({...good, review: {...good.review, reviewId: "evd_zz"}}).state).toBe("ERROR");
@@ -289,6 +290,70 @@ describe("UI-049 assurance Reviews panel (real verdicts, honest states)", () => 
     const {api, calls} = await mkCtx({}, "en");
     expect((await api.assuranceReview("../x")).state).toBe("ERROR");
     expect(calls.filter((c: string) => c.startsWith("/v1/reviews"))).toEqual([]);
+  });
+  it("only a fully-bound latest independent CLEAN gets the VERIFIED reviewed-commit pill (list)", async () => {
+    const core = await load("assurance-core.js");
+    const ok = core.reviewRowVerified(REVIEWS.reviews[0], REVIEWS.runs);
+    expect(ok).toBe(true);
+    const rec = REVIEWS.reviews[0];
+    expect(core.reviewRowVerified({...rec, currentHead: false}, REVIEWS.runs)).toBe(false);
+    expect(core.reviewRowVerified({...rec, reviewedCommit: OTHER}, REVIEWS.runs)).toBe(false);
+    expect(core.reviewRowVerified({...rec, reviewedCommit: null}, REVIEWS.runs)).toBe(false);
+    expect(core.reviewRowVerified(rec, REVIEWS.runs.map(r => ({...r, headSha: OTHER})))).toBe(false);
+    expect(core.reviewRowVerified(rec, REVIEWS.runs.map(r => ({...r, latestReviewId: rid("z")})))).toBe(false);
+    expect(core.reviewRowVerified(rec, [])).toBe(false);
+  });
+  it("list view: an older CLEAN record of the same run (non-latest) shows STALE not VERIFIED", async () => {
+    const add = (p: any) => { p.reviews.push(rrec("d", "a", "CLEAN", true, true)); p.summary.reviews = 4; p.summary.reviewsByVerdict.CLEAN = 3; return p; };
+    const {ctx} = await mkCtx({mutate: (k, p) => k === "list" ? add(p) : p}, "en");
+    const {node} = await renderAssurance(ctx);
+    const panel = byId(node, "as-reviews")!;
+    expect(byData(byData(panel, "reviewId", rid("a"))[0], "pill", "VERIFIED").length).toBe(1);
+    const old = byData(panel, "reviewId", rid("d"))[0];
+    expect(byData(old, "pill", "VERIFIED").length).toBe(0);
+    expect(byData(old, "pill", "STALE").length).toBe(1);
+  });
+  it("detail view: stale or contradictory CLEAN records never show VERIFIED", async () => {
+    const cases: Array<[string, (p: any) => any]> = [
+      ["currentHead false", p => { p.review.currentHead = false; return p; }],
+      ["reviewedCommit != head", p => { p.review.reviewedCommit = OTHER; return p; }],
+      ["reviewedCommit null", p => { p.review.reviewedCommit = null; return p; }],
+      ["invalidated", p => { p.review.evidence.invalidated = "REVIEW_INVALID"; return p; }],
+      ["recordedVerdict differs", p => { p.review.evidence.recordedVerdict = "BLOCKED"; return p; }],
+      ["non-latest", p => { p.run.latestReviewId = rid("z"); return p; }]
+    ];
+    for (const [name, fn] of cases) {
+      const {ctx} = await mkCtx({mutate: (k, p) => k === "detail" ? fn(p) : p}, "en");
+      const first = await renderAssurance(ctx);
+      (byId(first.node, `rev-${rid("a")}`) as N).fire("click");
+      const {node} = await renderAssurance(ctx);
+      const d = byId(node, "as-reviews-detail")!;
+      expect(byData(d, "pill", "VERIFIED").length, name).toBe(0);
+    }
+    // control: untouched payload IS verified.
+    const {ctx} = await mkCtx({}, "en");
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `rev-${rid("a")}`) as N).fire("click");
+    const d = byId((await renderAssurance(ctx)).node, "as-reviews-detail")!;
+    expect(byData(d, "pill", "VERIFIED").length).toBe(1);
+  });
+  it("mapReviewDetail: requested-id mismatch and malformed counters fail the read", async () => {
+    const core = await load("assurance-core.js");
+    const good = () => ({source: "WORK_OS_JOURNAL_RUN_EVIDENCE", review: {...REVIEWS.reviews[0], evidence: {recordedVerdict: "CLEAN", invalidated: null, findingsCount: 0, findings: null, exitCode: 0, timedOut: false}}, run: REVIEWS.runs[0]});
+    expect(core.mapReviewDetail(good(), rid("a")).review.verified).toBe(true);
+    expect(core.mapReviewDetail(good(), rid("b")).state).toBe("ERROR");
+    for (const [k, v] of [["findingsCount", "2"], ["findingsCount", -1], ["findingsCount", 1.5], ["exitCode", "0"], ["exitCode", 1.5], ["recordedVerdict", "PASS"]] as const) {
+      const g: any = good(); g.review.evidence[k] = v;
+      expect(core.mapReviewDetail(g, rid("a")).state, `${k}=${String(v)}`).toBe("ERROR");
+    }
+    const noRun: any = good(); delete noRun.run;
+    expect(core.mapReviewDetail(noRun, rid("a")).state).toBe("ERROR");
+    const otherRun: any = good(); otherRun.run = REVIEWS.runs[1];
+    expect(core.mapReviewDetail(otherRun, rid("a")).state).toBe("ERROR");
+  });
+  it("assuranceReview passes the requested id so a foreign record is ERROR", async () => {
+    const {api} = await mkCtx({mutate: (k, p) => k === "detail" ? {...p, review: {...p.review, reviewId: rid("b")}} : p}, "en");
+    expect((await api.assuranceReview(rid("a"))).state).toBe("ERROR");
   });
   it("review routes are already allow-listed read-only GETs (no new route)", () => {
     const ok = loadGet();
@@ -335,6 +400,43 @@ describe("UI-050 evidence lineage (mission -> run -> evidence from list fields o
     const un = byData(p, "lineage", "ungrouped")[0];
     expect(byData(un, "lineage", "evidence").length).toBe(1);
     expect(text(byData(p, "lineageScope")[0])).toContain("6");
+  });
+  it("skips repeated evidenceId so DOM ids stay unique, and discloses the count", async () => {
+    const {buildLineage} = await load("assurance-core.js");
+    const dup = [...LINEAGE_EVIDENCE.evidence, LINEAGE_EVIDENCE.evidence[0], {...LINEAGE_EVIDENCE.evidence[2], runId: runId("a")}];
+    const L = buildLineage(dup);
+    expect(L.total).toBe(6); expect(L.duplicates).toBe(2);
+    const m1 = L.missions.find((m: any) => m.missionId === MSN);
+    expect(m1.runs.map((r: any) => [r.runId, r.evidence.length])).toEqual([[runId("a"), 2], [runId("b"), 1]]);
+    const {ctx} = await mkCtx({evidence: "lineage"}, "en");
+    const orig = LINEAGE_EVIDENCE.evidence.slice();
+    LINEAGE_EVIDENCE.evidence.push(orig[0], orig[0]);
+    try {
+      const {node} = await renderAssurance(ctx);
+      const p = byId(node, "as-lineage")!;
+      const ids = all(p).map(n => n.id).filter(Boolean);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(byData(p, "lineage", "evidence").length).toBe(6);
+      expect(text(byData(p, "lineageDuplicates")[0])).toContain("2");
+    } finally { LINEAGE_EVIDENCE.evidence.length = orig.length; }
+  });
+  it("keeps the same runId under two missions separate and treats a __proto__ mission id as data", async () => {
+    const {buildLineage} = await load("assurance-core.js");
+    const L = buildLineage([lev("7", {missionId: MSN, runId: runId("a")}), lev("8", {missionId: MSN2, runId: runId("a")}), lev("9", {missionId: "__proto__", runId: "__proto__"}), lev("a", {missionId: "__proto__"})]);
+    expect(L.missions.map((m: any) => m.missionId).sort()).toEqual(["__proto__", MSN, MSN2].sort());
+    for (const id of [MSN, MSN2]) expect(L.missions.find((m: any) => m.missionId === id).runs.map((r: any) => r.evidence.length)).toEqual([1]);
+    const pm = L.missions.find((m: any) => m.missionId === "__proto__");
+    expect(pm.runs.map((r: any) => r.runId)).toEqual(["__proto__"]); expect(pm.noRun.length).toBe(1);
+    expect(({} as any).runs).toBeUndefined(); expect(Object.prototype.hasOwnProperty.call(Object.prototype, "runs")).toBe(false);
+  });
+  it("clicking a lineage leaf selects that evidence", async () => {
+    const {ctx} = await mkCtx({evidence: "lineage"}, "en");
+    const forms = await load("forms.js");
+    const {node} = await renderAssurance(ctx);
+    expect(forms.selection.evidenceId).toBeNull();
+    const target = `evi_${"3".repeat(32)}`;
+    (byId(node, `lin-${target}`) as N).fire("click");
+    expect(forms.selection.evidenceId).toBe(target);
   });
   it("honest empty and unavailable states, no invented groups", async () => {
     const empty = await mkCtx({}, "en");

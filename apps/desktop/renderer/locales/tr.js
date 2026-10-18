@@ -650,6 +650,7 @@ export default {
   "assurance.lineage.orphanRuns":"Görevi olmayan koşular",
   "assurance.lineage.ungrouped":"Gruplanmamış (görev ve koşu kaydı yok)",
   "assurance.lineage.ungroupedNote":"Bu kayıtlarda ne missionId ne runId var; bu yüzden bağ gösterilmez.",
+  "assurance.lineage.duplicates":"Liste {n} kanıt kimliğini tekrarladı; her kayıt bir kez görünsün diye tekrarlar atlandı.",
   "everif.VERIFIED":"DOĞRULANDI",
   "everif.MISMATCH":"UYUŞMUYOR",
   "everif.MISSING":"EKSİK",

@@ -172,7 +172,7 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async installPhase0(){const r=await get(PHASE0_PATH);return r.ok?mapPhase0Report(r.data):{state:r.state,phase0:null,message:r.message}},
     // //TR: UI-049: Güvence Reviews paneli; /v1/reviews ve /v1/reviews/:evd_id main allow-list'inde zaten vardır (yeni uç nokta yok, yazma yok). Liste readiness-core ile fail-closed eşlenir; detay kimliği kanonik evd_+24 hex değilse istek yapılmaz.
     async assuranceReviews(){const r=await get(REVIEWS_PATH);return r.ok?mapReadinessReviews(r.data):{state:r.state,reviews:null,message:r.message}},
-    async assuranceReview(id){if(!REVIEW_ID_RE.test(String(id)))return {state:"ERROR",review:null};const r=await get(`${REVIEWS_PATH}/${id}`);return r.ok?mapReviewDetail(r.data):{state:r.state,review:null,message:r.message}},
+    async assuranceReview(id){if(!REVIEW_ID_RE.test(String(id)))return {state:"ERROR",review:null};const r=await get(`${REVIEWS_PATH}/${id}`);return r.ok?mapReviewDetail(r.data,id):{state:r.state,review:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }

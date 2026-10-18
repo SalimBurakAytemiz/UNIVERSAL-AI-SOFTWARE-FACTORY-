@@ -650,6 +650,7 @@ export default {
   "assurance.lineage.orphanRuns":"Runs without a mission",
   "assurance.lineage.ungrouped":"Ungrouped (no mission and no run recorded)",
   "assurance.lineage.ungroupedNote":"These items carry neither a missionId nor a runId, so no link is shown.",
+  "assurance.lineage.duplicates":"The list repeated {n} evidence IDs; the repeats were skipped so each item appears once.",
   "everif.VERIFIED":"VERIFIED",
   "everif.MISMATCH":"MISMATCH",
   "everif.MISSING":"MISSING",

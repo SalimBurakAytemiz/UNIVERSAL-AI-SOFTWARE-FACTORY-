@@ -9,7 +9,7 @@ import {h,panel,stateNote,emptyNote,chip,verificationChip,statePill,miniBars,bad
 import {MISSING,formatCount} from "../model.js";
 import {VERIFICATION_STATES,filterEvidence,formatDateTime} from "../work-core.js";
 import {drafts,selection,field} from "../forms.js";
-import {mapSecurityScans,evidenceIntegrity,buildLineage} from "../assurance-core.js";
+import {mapSecurityScans,evidenceIntegrity,buildLineage,reviewRowVerified} from "../assurance-core.js";
 import {icon} from "../icons.js";
 
 const PAGE_LIMIT=100;
@@ -184,17 +184,17 @@ function securityDetail(ctx,scans){
 // //TR: Karar sunucudan AYNEN gösterilir; CLEAN yalnız bağımsızlığı kanıtlı ve incelenen commit güncel head ise VERIFIED rozetidir, aksi halde STALE (asla yükseltilmez). Veri yoksa dürüst boş durum; uydurma karar yok. Seçim görünüm ömrü boyunca korunur.
 const revState={id:null};
 const REVIEW_LIMIT=100;
-function verdictPill(ctx,r){
-  const kind=r.verdict==="BLOCKED"?"BLOCKED":r.verdict==="NO_VERDICT"?"NOT_EXECUTED":(r.independent===true&&r.currentHead)?"VERIFIED":"STALE";
+function verdictPill(ctx,r,verified){
+  const kind=r.verdict==="BLOCKED"?"BLOCKED":r.verdict==="NO_VERDICT"?"NOT_EXECUTED":verified===true?"VERIFIED":"STALE";
   const p=statePill(ctx,kind,{label:r.verdict});p.dataset.verdict=r.verdict;return p;
 }
 function indepText(ctx,v){return ctx.t(v===true?"assurance.reviews.indep.yes":v===false?"assurance.reviews.indep.no":"assurance.reviews.indep.unknown")}
-function reviewRow(ctx,r){
+function reviewRow(ctx,r,runs){
   const doc=ctx.doc,on=revState.id===r.reviewId;
   return h(doc,"tr",{class:on?"row-selected":null,dataset:{reviewId:r.reviewId,verdict:r.verdict}},
     h(doc,"td",{},h(doc,"button",{type:"button",class:"link-btn mono",id:`rev-${r.reviewId}`,dataset:{focusKey:`rev-${r.reviewId}`},"aria-current":on?"true":null,"aria-label":ctx.t("assurance.reviews.select",{id:r.reviewId}),
       on:{click:()=>{revState.id=r.reviewId;if(typeof ctx.rerender==="function")ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys:["id:as-reviews-detail-h",`id:rev-${r.reviewId}`]})}},text:r.reviewId})),
-    h(doc,"td",{},verdictPill(ctx,r)),
+    h(doc,"td",{},verdictPill(ctx,r,reviewRowVerified(r,runs))),
     h(doc,"td",{class:"mono",text:r.runId}),
     h(doc,"td",{class:"mono",text:r.missionId}),
     h(doc,"td",{text:indepText(ctx,r.independent)}),
@@ -211,7 +211,7 @@ function reviewsPanel(ctx,res){
     h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table as-reviews-table"},
       h(doc,"caption",{class:"sr-only",text:ctx.t("assurance.reviews.caption")}),
       h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
-      h(doc,"tbody",{},page.map(r=>reviewRow(ctx,r))))),
+      h(doc,"tbody",{},page.map(r=>reviewRow(ctx,r,res.reviews.runs))))),
     res.reviews.truncated?h(doc,"p",{class:"note",dataset:{truncated:"reviews"},text:ctx.t("assurance.reviews.truncated")}):null);
 }
 async function reviewDetailPanel(ctx){
@@ -226,8 +226,8 @@ async function reviewDetailPanel(ctx){
   const kv=(k,v,cls)=>h(doc,"div",{},h(doc,"dt",{text:ctx.t(k)}),h(doc,"dd",cls?{class:cls}:{},v));
   const dash=v=>v===null||v===undefined?MISSING:String(v);
   return base(
-    h(doc,"div",{class:"as-reviews-head"},h(doc,"span",{class:"mono",text:id}),verdictPill(ctx,r),close),
-    r.verdict==="CLEAN"&&!(r.independent===true&&r.currentHead)?h(doc,"p",{class:"note note-stale",role:"note",text:ctx.t("assurance.reviews.detail.cleanCaveat")}):null,
+    h(doc,"div",{class:"as-reviews-head"},h(doc,"span",{class:"mono",text:id}),verdictPill(ctx,r,r.verified),close),
+    r.verdict==="CLEAN"&&!r.verified?h(doc,"p",{class:"note note-stale",role:"note",text:ctx.t("assurance.reviews.detail.cleanCaveat")}):null,
     h(doc,"dl",{class:"kv as-reviews-kv"},
       kv("assurance.reviews.col.run",r.runId,"mono"),kv("assurance.reviews.col.mission",r.missionId,"mono"),
       kv("assurance.reviews.detail.cycle",String(r.cycle)),
@@ -267,6 +267,7 @@ function lineagePanel(ctx,res){
   const L=buildLineage(res.items);
   return mk(
     h(doc,"p",{class:"note",dataset:{lineageScope:"page"},text:ctx.t("assurance.lineage.scope",{n:String(L.total)})}),
+    L.duplicates>0?h(doc,"p",{class:"note note-stale",role:"note",dataset:{lineageDuplicates:String(L.duplicates)},text:ctx.t("assurance.lineage.duplicates",{n:String(L.duplicates)})}):null,
     h(doc,"ul",{class:"as-lineage-list as-lineage-root",role:"tree","aria-label":ctx.t("assurance.lineage.title")},
       L.missions.map(m=>h(doc,"li",{class:"as-lineage-mission",dataset:{lineage:"mission",missionId:m.missionId}},
         h(doc,"span",{class:"mono",text:m.missionId}),
