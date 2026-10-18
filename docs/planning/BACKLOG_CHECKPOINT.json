@@ -472,6 +472,138 @@
         27,
         28
       ]
+    },
+    {
+      "id": "B2-UI-023",
+      "title": "Read-only mission/run status board in #/work",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "riskLevel": 3,
+      "type": "UI",
+      "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY."
+    },
+    {
+      "id": "B2-UI-124",
+      "title": "Stop dialog live impact counts",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "riskLevel": 3,
+      "type": "UI",
+      "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY."
+    },
+    {
+      "id": "B2-UI-246",
+      "title": "Settings contrast/token preview",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "riskLevel": 3,
+      "type": "UI",
+      "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY."
+    },
+    {
+      "id": "B2-T-APPROVAL",
+      "title": "assertApprovalValid unit tests",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "riskLevel": 1,
+      "type": "TEST",
+      "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY."
+    },
+    {
+      "id": "B2-T-RESOLVER",
+      "title": "resolveCapability unit tests",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "riskLevel": 1,
+      "type": "TEST",
+      "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY."
+    },
+    {
+      "id": "B2-T-TEMPLATES",
+      "title": "renderTemplate unit tests",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "riskLevel": 1,
+      "type": "TEST",
+      "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY."
+    },
+    {
+      "id": "B2-T-PREDEV",
+      "title": "predev apply/read-model unit tests",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "riskLevel": 1,
+      "type": "TEST",
+      "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY."
+    },
+    {
+      "id": "B2-T-ACADEMY",
+      "title": "academy apply unit tests",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "riskLevel": 1,
+      "type": "TEST",
+      "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY."
+    },
+    {
+      "id": "B2-T-COMPANY",
+      "title": "company common/apply unit tests",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "riskLevel": 1,
+      "type": "TEST",
+      "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY."
+    },
+    {
+      "id": "B2-T-SELFTESTS",
+      "title": "orphan selftest vitest wrapper",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "riskLevel": 2,
+      "type": "TEST",
+      "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY."
+    },
+    {
+      "id": "B2-SBOM",
+      "title": "Offline SBOM step in security-tools",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "riskLevel": 3,
+      "type": "BACKEND",
+      "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY."
     }
   ],
   "relations": [
