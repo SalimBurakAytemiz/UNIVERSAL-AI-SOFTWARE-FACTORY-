@@ -1076,13 +1076,14 @@ describe("Operations — regression: newest-run selection and retry-phase honest
 const AEV = (ts: string | null, event: string, over: Record<string, any> = {}) => ({...(ts === null ? {} : {timestamp: ts}), severity: "INFO", stage: "IMPLEMENT", event, ...over});
 const evBody = (runId: string, events: any[], over: Record<string, any> = {}) => ({runId, events, truncated: false, ...over});
 const EVID = (id: string, createdAt: string | null, over: Record<string, any> = {}) => ({evidenceId: id, missionId: null, runId: null, kind: "TEST_RESULT", verification: "VERIFIED", createdAt, ...over});
+const OKSRC = {workos: "AVAILABLE", review: "AVAILABLE", checkpoints: "NOT_QUERIED"};
 const AUD_RUNS = [finishedRun(RID("01")), finishedRun(RID("02"))];
 const auditServe = (over: Record<string, any> = {}) => (p: string) => {
   const m: Record<string, any> = {
     "/v1/runs": runsBody(AUD_RUNS),
     [`/v1/runs/${RID("01")}/events`]: evBody(RID("01"), [AEV("2026-10-16T08:00:01.000Z", "a1"), AEV("2026-10-16T08:00:05.000Z", "a2")]),
     [`/v1/runs/${RID("02")}/events`]: evBody(RID("02"), [AEV("2026-10-16T08:00:03.000Z", "b1"), AEV("2026-10-16T08:00:07.000Z", "b2", {severity: "ERROR"})]),
-    "/v1/evidence?limit=100": {evidence: [EVID("evd-old-0001", "2026-10-16T08:00:00.000Z"), EVID("evd-new-0002", "2026-10-16T09:00:00.000Z")]},
+    "/v1/evidence?limit=100": {sources: OKSRC, evidence: [EVID("evd-old-0001", "2026-10-16T08:00:00.000Z"), EVID("evd-new-0002", "2026-10-16T09:00:00.000Z")]},
     ...over
   };
   if (!(p in m)) throw new Error(`${p}: HTTP 404`);
@@ -1165,11 +1166,11 @@ describe("Audit Trail UI-070 — merge, ordering and strict mapping", () => {
       expect(m.events).toBeNull();
     }
     expect(core.mapAuditRuns({count: 2, runs: [AUD_RUNS[0]]}).state).toBe("ERROR");
-    expect(core.mapAuditEvidence({evidence: "nope"}).state).toBe("ERROR");
+    expect(core.mapAuditEvidence({sources: OKSRC, evidence: "nope"}).state).toBe("ERROR");
   });
   it("evidence list: newest first; unreadable entries are counted (not silently dropped)", async () => {
     const core = await load("audit-core.js");
-    const m = core.mapAuditEvidence({evidence: [EVID("evd-a-00001", "2026-10-16T08:00:00.000Z"), {nonsense: true}, EVID("evd-b-00002", "2026-10-16T09:00:00.000Z"), EVID("evd-c-00003", null)]});
+    const m = core.mapAuditEvidence({sources: OKSRC, evidence: [EVID("evd-a-00001", "2026-10-16T08:00:00.000Z"), {nonsense: true}, EVID("evd-b-00002", "2026-10-16T09:00:00.000Z"), EVID("evd-c-00003", null)]});
     expect(m.evidence.items.map((e: any) => e.evidenceId)).toEqual(["evd-b-00002", "evd-a-00001", "evd-c-00003"]);
     expect(m.evidence.skipped).toBe(1);
   });
@@ -1221,7 +1222,7 @@ describe("Audit Trail UI-070 — rendering (read-only, honest states)", () => {
     expect(allData(root, "auditEvidence").length).toBe(0);
     expect(byData(root, "auditEmpty", "evidence")).toBeUndefined();
     expect(byData(root, "auditPartial")!.dataset.auditPartial).toBe("evidence");
-    const empty = await renderAudit(auditServe({"/v1/runs": runsBody([]), "/v1/evidence?limit=100": {evidence: []}}));
+    const empty = await renderAudit(auditServe({"/v1/runs": runsBody([]), "/v1/evidence?limit=100": {sources: OKSRC, evidence: []}}));
     expect(byData(empty.root, "auditEmpty", "events")!.textContent).toBe("No runs are recorded, so there are no events to show.");
     expect(byData(empty.root, "auditEmpty", "evidence")).toBeTruthy();
     expect(byData(empty.root, "auditPartial")).toBeUndefined();
@@ -1238,5 +1239,123 @@ describe("Audit Trail UI-070 — rendering (read-only, honest states)", () => {
     expect(keys(en).length).toBeGreaterThan(30);
     expect(keys(tr)).toEqual(keys(en));
     for (const k of keys(en)) expect(tr[k].length, k).toBeGreaterThan(0);
+  });
+});
+
+// //TR: UI-070 bağımsız inceleme düzeltmeleri: kanıt kaynak durumları (workos/review/checkpoints), KPI rozeti, yinelenen kimlik, ISO-8601 ve "yeni önce" iddiası.
+const ERRSRC = {workos: "ERROR", review: "ERROR", checkpoints: "ERROR"};
+const sourceLi = (r: N, k: string) => allData(r, "source").find(n => n.tagName === "LI" && n.dataset.source === k)!;
+const kpiPills = (r: N, id: string) => all(allData(r, "kpi").find(n => n.dataset.kpi === `audit-${id}`)!).filter(n => "pill" in n.dataset).map(n => n.dataset.pill);
+const evServe = (body: any) => auditServe({"/v1/evidence?limit=100": body});
+const TWO = [EVID("evd-old-0001", "2026-10-16T08:00:00.000Z"), EVID("evd-new-0002", "2026-10-16T09:00:00.000Z")];
+
+describe("Audit Trail UI-070 remediation — evidence source states", () => {
+  it("mapAuditEvidence validates sources: missing/unknown/non-object is rejected; coverage is FULL/PARTIAL/FAILED/NONE", async () => {
+    const core = await load("audit-core.js");
+    for (const bad of [undefined, null, "x", [], {}, {workos: "AVAILABLE", review: "AVAILABLE"}, {...OKSRC, review: "OK"}, {...OKSRC, checkpoints: 1}]) expect(core.mapAuditEvidence({sources: bad, evidence: TWO}).state, JSON.stringify(bad)).toBe("ERROR");
+    const cov = (sources: any) => core.mapAuditEvidence({sources, evidence: []}).evidence.coverage;
+    expect(cov(OKSRC)).toBe("FULL");
+    expect(cov({...OKSRC, review: "ERROR"})).toBe("PARTIAL");
+    expect(cov(ERRSRC)).toBe("FAILED");
+    expect(cov({workos: "UNAVAILABLE", review: "NOT_QUERIED", checkpoints: "NOT_QUERIED"})).toBe("NONE");
+    expect(cov({workos: "UNAVAILABLE", review: "UNAVAILABLE", checkpoints: "UNAVAILABLE"})).toBe("NONE");
+  });
+  it("all sources ERROR: evidence source is ERROR/unreadable, never 'Read OK' and never 'No evidence references were returned'", async () => {
+    const {root} = await renderAudit(evServe({sources: ERRSRC, evidence: []}));
+    expect(sourceLi(root, "evidence").dataset.sourceState).toBe("ERROR");
+    expect(sourceLi(root, "evidence").textContent).not.toContain("Read OK");
+    expect(byData(root, "auditEmpty", "evidence")).toBeUndefined();
+    expect(lines(byId(root, "audit-evidence")!)).not.toContain("No evidence references were returned");
+    expect(byData(root, "auditPartial")!.dataset.auditPartial).toBe("evidence");
+    expect(byData(root, "note", "coverage")!.dataset.coverage).toBe("FAILED");
+    expect(kpiValueAudit(root, "evidence")).toBe("—");
+  });
+  it("one source ERROR: PARTIAL, readable items still listed, flagged incomplete, no clean-empty claim", async () => {
+    const {root} = await renderAudit(evServe({sources: {...OKSRC, review: "ERROR"}, evidence: TWO}));
+    expect(sourceLi(root, "evidence").dataset.sourceState).toBe("PARTIAL");
+    expect(sourceLi(root, "evidence").textContent).not.toContain("Read OK");
+    expect(allData(root, "auditEvidence").filter(n => n.tagName === "LI").length).toBe(2);
+    expect(byData(root, "note", "coverage")!.dataset.coverage).toBe("PARTIAL");
+    expect(byData(root, "auditPartial")!.dataset.auditPartial).toBe("evidence");
+    const empty = await renderAudit(evServe({sources: {...OKSRC, review: "ERROR"}, evidence: []}));
+    expect(byData(empty.root, "auditEmpty", "evidence")).toBeUndefined();
+  });
+  it("all sources unavailable / not queried: not a clean empty list", async () => {
+    const {root} = await renderAudit(evServe({sources: {workos: "UNAVAILABLE", review: "NOT_QUERIED", checkpoints: "NOT_QUERIED"}, evidence: []}));
+    expect(sourceLi(root, "evidence").dataset.sourceState).toBe("UNAVAILABLE");
+    expect(byData(root, "auditEmpty", "evidence")).toBeUndefined();
+    expect(byData(root, "note", "coverage")!.dataset.coverage).toBe("NONE");
+    expect(byData(root, "auditPartial")!.dataset.auditPartial).toBe("evidence");
+  });
+  it("all sources OK: evidence source reads VERIFIED ('Read OK') and an empty list says only that nothing was returned", async () => {
+    const {root} = await renderAudit(evServe({sources: OKSRC, evidence: TWO}));
+    expect(sourceLi(root, "evidence").dataset.sourceState).toBe("VERIFIED");
+    expect(byData(root, "note", "coverage")).toBeUndefined();
+    expect(byData(root, "auditPartial")).toBeUndefined();
+    const empty = await renderAudit(evServe({sources: OKSRC, evidence: []}));
+    expect(byData(empty.root, "auditEmpty", "evidence")).toBeTruthy();
+  });
+  it("a missing sources object makes the evidence read ERROR (rejected), not a clean list", async () => {
+    const {root} = await renderAudit(evServe({evidence: TWO}));
+    expect(sourceLi(root, "evidence").dataset.sourceState).toBe("ERROR");
+    expect(allData(root, "auditEvidence").length).toBe(0);
+  });
+});
+
+describe("Audit Trail UI-070 remediation — KPI pills, duplicates, ISO, wording", () => {
+  it("KPI tiles never carry the VERIFIED pill for a successful read; a clean read carries none", async () => {
+    const {root} = await renderAudit(auditServe());
+    for (const id of ["runs", "events", "evidence"]) {
+      expect(kpiPills(root, id), id).not.toContain("VERIFIED");
+      expect(kpiPills(root, id), id).toEqual([]);
+      expect(allData(root, "kpi").find(n => n.dataset.kpi === `audit-${id}`)!.dataset.auditAttention).toBe("0");
+    }
+  });
+  it("KPI tiles get an attention (STALE) pill for skipped rows, more pages, truncated events, partial evidence and unread older runs", async () => {
+    const sk = await renderAudit(evServe({sources: OKSRC, evidence: [...TWO, {nonsense: true}]}));
+    expect(kpiPills(sk.root, "evidence")).toEqual(["STALE"]);
+    const more = await renderAudit(evServe({sources: OKSRC, evidence: TWO, nextCursor: "abc"}));
+    expect(kpiPills(more.root, "evidence")).toEqual(["STALE"]);
+    const part = await renderAudit(evServe({sources: {...OKSRC, review: "ERROR"}, evidence: TWO}));
+    expect(kpiPills(part.root, "evidence")).toEqual(["STALE"]);
+    const trunc = await renderAudit(auditServe({[`/v1/runs/${RID("01")}/events`]: evBody(RID("01"), [AEV("2026-10-16T08:00:01.000Z", "a1")], {truncated: true})}));
+    expect(kpiPills(trunc.root, "events")).toEqual(["STALE"]);
+    expect(kpiPills(trunc.root, "evidence")).toEqual([]);
+    const many = Array.from({length: 13}, (_, i) => finishedRun(RID(String(i).padStart(2, "0"))));
+    const over: Record<string, any> = {"/v1/runs": runsBody(many)};
+    for (let i = 0; i < 13; i++) over[`/v1/runs/${RID(String(i).padStart(2, "0"))}/events`] = evBody(RID(String(i).padStart(2, "0")), [AEV("2026-10-16T08:00:00.000Z", `e${i}`)]);
+    const older = await renderAudit(auditServe(over));
+    expect(kpiPills(older.root, "runs")).toEqual(["STALE"]);
+    expect(kpiPills(older.root, "events")).toEqual(["STALE"]);
+    for (const r of [sk, more, part, trunc, older]) for (const id of ["runs", "events", "evidence"]) expect(kpiPills(r.root, id)).not.toContain("VERIFIED");
+  });
+  it("unreadable KPI blocks keep an honest non-VERIFIED state pill", async () => {
+    const {root} = await renderAudit(evServe({sources: ERRSRC, evidence: []}));
+    expect(kpiPills(root, "evidence")).toEqual(["UNAVAILABLE"]);
+  });
+  it("duplicate evidenceId is rejected (first kept) and counted in skipped", async () => {
+    const core = await load("audit-core.js");
+    const m = core.mapAuditEvidence({sources: OKSRC, evidence: [EVID("evd-dup-0001", "2026-10-16T08:00:00.000Z"), EVID("evd-dup-0001", "2026-10-16T09:00:00.000Z"), EVID("evd-dup-0001", null), EVID("evd-two-0002", null)]});
+    expect(m.evidence.items.map((e: any) => e.evidenceId).sort()).toEqual(["evd-dup-0001", "evd-two-0002"]);
+    expect(m.evidence.skipped).toBe(2);
+    const {root} = await renderAudit(evServe({sources: OKSRC, evidence: [EVID("evd-dup-0001", null), EVID("evd-dup-0001", null)]}));
+    expect(allData(root, "auditEvidence").filter(n => n.tagName === "LI").length).toBe(1);
+    expect(byData(root, "note", "skipped")!.dataset.n).toBe("1");
+  });
+  it("non-ISO-8601 timestamps become null ('—'), for events and evidence", async () => {
+    const core = await load("audit-core.js");
+    for (const bad of ["10/16/2026", "Oct 16 2026", "2026-10-16", "1760601600000", "2026-10-16 08:00:00", "16 Oct 2026 08:00 GMT", "2026-10-16T08:00:00"]) {
+      const e = core.mapAuditEvents(RID("01"), evBody(RID("01"), [AEV(bad, "x")]));
+      expect(e.events[0].timestamp, bad).toBeNull();
+      expect(core.mapAuditEvidence({sources: OKSRC, evidence: [EVID("evd-iso-0001", bad)]}).evidence.items[0].createdAt, bad).toBeNull();
+    }
+    for (const good of ["2026-10-16T08:00:00Z", "2026-10-16T08:00:00.123Z", "2026-10-16T08:00:00+03:00", "2026-10-16T08:00Z"]) expect(core.mapAuditEvents(RID("01"), evBody(RID("01"), [AEV(good, "x")])).events[0].timestamp, good).toBe(good);
+  });
+  it("evidence is not claimed newest-first globally (sorted within the page read), and FAIL/WARN/HOLD severities have CSS emphasis", async () => {
+    const en = (await load("locales", "en.js")).default;
+    expect(en["audit.evidence.lead"]).toMatch(/within the single page/);
+    expect(en["audit.evidence.aria"]).toMatch(/within the page read/);
+    const css = read("styles.css");
+    for (const sev of ["FAIL", "WARN", "HOLD"]) expect(css).toContain(`.audit-row[data-severity="${sev}"]`);
   });
 });

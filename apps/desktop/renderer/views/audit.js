@@ -2,7 +2,7 @@
 import {h,panel,statePill,kpiTile,stateNote} from "../components.js";
 import {MISSING} from "../model.js";
 import {formatDateTime} from "../work-core.js";
-import {AUDIT_SOURCES,AUDIT_SOURCE_PATHS,AUDIT_RUN_LIMIT,buildAudit} from "../audit-core.js";
+import {EVIDENCE_SOURCE_NAMES,AUDIT_SOURCES,AUDIT_SOURCE_PATHS,AUDIT_RUN_LIMIT,buildAudit} from "../audit-core.js";
 
 const failKind=state=>state==="OFFLINE"?"OFFLINE":state==="UNAVAILABLE"?"UNAVAILABLE":"FAILED";
 const failState=state=>state==="OFFLINE"||state==="UNAVAILABLE"?state:"ERROR";
@@ -49,14 +49,38 @@ function sourcesPanel(ctx,res,a){
     failedIds.length?h(doc,"p",{class:"note mono",dataset:{auditFailedRuns:failedIds.join(",")},text:failedIds.join(", ")}):null);
 }
 
+const hasClass=(n,c)=>typeof n.className==="string"&&n.className.split(/\s+/).includes(c);
+function findByClass(n,c){
+  for(const k of Array.from(n.children??[])){if(hasClass(k,c))return k;const f=findByClass(k,c);if(f)return f}
+  return null;
+}
+
 function kpiRow(ctx,a){
   const doc=ctx.doc,t=ctx.t;
-  const runsOk=a.runs!==null,evOk=a.evidence!==null;
-  const tile=(id,iconName,value,src,state)=>kpiTile(ctx,{id:`audit-${id}`,iconName,labelKey:`audit.kpi.${id}`,block:{state:state?"VERIFIED":"UNAVAILABLE",value:state?value:null,loading:false,source:src,asOf:null},qualifier:t(`audit.kpi.q.${id}`),pillKind:state?undefined:"UNAVAILABLE"});
+  const runsOk=a.runs!==null,evState=a.sources.evidence.state,evOk=a.evidence!==null&&(evState==="VERIFIED"||evState==="PARTIAL");
+  const er=a.eventsRead,ev=a.evidence;
+  // Dikkat: tüm koşular okunmadı, olaylar kırpıldı, kanıt satırı atlandı/ek sayfa var ya da kaynak kısmi.
+  const attention={
+    runs:runsOk&&(a.runs.total>a.runs.read||a.runs.capped),
+    events:a.events!==null&&er.failed.length===0&&(er.truncatedRuns>0||a.runs.total>er.runsSelected||a.runs.capped),
+    evidence:evOk&&(ev.skipped>0||ev.more||evState==="PARTIAL")
+  };
+  // Başarılı okuma "VERIFIED" rozeti taşımaz (okuma != denetim kararı): sağlıklı durumda rozet yoktur, dikkat gerektiğinde STALE rozeti; okunamayan blokta dürüst durum rozeti kalır.
+  const tile=(id,iconName,value,src,state)=>{
+    const el=kpiTile(ctx,{id:`audit-${id}`,iconName,labelKey:`audit.kpi.${id}`,block:{state:state?"VERIFIED":"UNAVAILABLE",value:state?value:null,loading:false,source:src,asOf:null},qualifier:t(`audit.kpi.q.${id}`),pillKind:state?undefined:"UNAVAILABLE"});
+    if(state){
+      const slot=findByClass(el,"kpi-pill");
+      if(slot){
+        slot.replaceChildren(...(attention[id]?[statePill(ctx,"STALE",{label:t("audit.kpi.attention")})]:[]));
+        el.dataset.auditAttention=attention[id]?"1":"0";
+      }
+    }
+    return el;
+  };
   return h(doc,"div",{class:"kpi-row audit-kpis",role:"group","aria-label":t("audit.kpi.group")},
     tile("runs","tasks",runsOk?a.runs.read:null,`GET ${AUDIT_SOURCE_PATHS.runs}`,runsOk),
     tile("events","pulse",a.events?a.events.length:null,`GET ${AUDIT_SOURCE_PATHS.events}`,a.events!==null&&a.eventsRead.failed.length===0),
-    tile("evidence","folder",evOk?a.evidence.items.length:null,`GET ${AUDIT_SOURCE_PATHS.evidence}`,evOk));
+    tile("evidence","folder",evOk?ev.items.length:null,`GET ${AUDIT_SOURCE_PATHS.evidence}`,evOk));
 }
 
 function eventsPanel(ctx,a){
@@ -90,6 +114,7 @@ function evidencePanel(ctx,a){
     const ev=a.evidence,notes=[];
     if(ev.skipped>0)notes.push(h(doc,"p",{class:"note",role:"status",dataset:{note:"skipped",n:String(ev.skipped)},text:t("audit.evidence.skipped",{n:ev.skipped})}));
     if(ev.more)notes.push(h(doc,"p",{class:"note",dataset:{note:"more"},text:t("audit.evidence.more")}));
+    if(ev.coverage!=="FULL")notes.push(h(doc,"p",{class:"note",role:"status",dataset:{note:"coverage",coverage:ev.coverage,evidenceSources:EVIDENCE_SOURCE_NAMES.map(k=>`${k}=${ev.sources[k]}`).join(",")},text:t(`audit.evidence.coverage.${ev.coverage}`)}));
     body=ev.items.length
       ?[...notes,h(doc,"ul",{class:"audit-list","aria-label":t("audit.evidence.aria")},ev.items.map(e=>
         h(doc,"li",{class:"audit-row",dataset:{auditEvidence:e.evidenceId,verification:e.verification??"NONE"}},
@@ -98,7 +123,7 @@ function evidencePanel(ctx,a){
           h(doc,"span",{class:"mono audit-run",text:e.kind??MISSING}),
           h(doc,"span",{class:"mono audit-label",dataset:{verbatim:"1"},text:e.evidenceId}),
           e.runId?h(doc,"span",{class:"mono audit-run",text:e.runId}):null)))]
-      :[...notes,ev.skipped===0?h(doc,"p",{class:"note",role:"status",dataset:{auditEmpty:"evidence"},text:t("audit.evidence.none")}):null];
+      :[...notes,ev.skipped===0&&ev.coverage==="FULL"?h(doc,"p",{class:"note",role:"status",dataset:{auditEmpty:"evidence"},text:t("audit.evidence.none")}):null];
   }
   return panel(ctx,{titleKey:"audit.evidence.title",id:"audit-evidence",className:"audit-section"},h(doc,"p",{class:"note",text:t("audit.evidence.lead")}),body);
 }
