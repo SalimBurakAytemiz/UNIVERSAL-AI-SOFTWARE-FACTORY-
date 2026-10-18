@@ -1,3 +1,5 @@
+<!-- //TR: Atomic per-task lease'i korunan orkestratör cekirdegine baglamak icin FA-LEASE2 Founder yetki talebi; korunan dosyalara dokunmaz, yalniz incelenebilir oneridir. -->
+
 # FA-LEASE2 — Authority Request: wire the atomic per-task lease into the orchestrator core
 
 **Status: REQUEST — NOT APPLIED.** This document asks the Founder/Local maintainer to authorize a scoped

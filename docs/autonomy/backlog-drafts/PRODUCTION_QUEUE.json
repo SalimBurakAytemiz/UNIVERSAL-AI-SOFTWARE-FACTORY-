@@ -1,4 +1,5 @@
 {
+  "//TR": "TASLAK uretim kuyrugu; aktif degildir, atomic-lease wiring ve Founder READY yetkisi olmadan tuketilmez. Ayrinti icin BACKLOG_CHECKPOINT.json.",
   "_doc": "DRAFT — see BACKLOG_CHECKPOINT.json. Queue is NOT active; needs atomic-lease wiring + Founder READY authorization before Cloud Developer A consumes it.",
   "integrationBranch": "v7/integration",
   "trunkAtUpdate": "e12dbdd",

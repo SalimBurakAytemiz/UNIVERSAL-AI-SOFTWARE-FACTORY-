@@ -1,4 +1,5 @@
 {
+  "//TR": "TASLAK gorev envanteri (v7/integration@e12dbdd'den turetildi); yetkisiz hicbir gorev READY degildir, atomic lease aktiflesmeden Cloud Developer A bu dosyayla uretime alinmaz.",
   "_doc": "DRAFT — not authoritative; no task is READY without Founder authorization; do not activate Cloud Developer A on this until the atomic lease is wired+active. Regenerated from v7/integration@e12dbdd.",
   "generatedAt": "2026-10-18",
   "head": "e12dbdd",

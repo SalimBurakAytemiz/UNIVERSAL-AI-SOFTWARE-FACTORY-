@@ -1,3 +1,5 @@
+<!-- //TR: PR #9'un Windows CI bitmeden neden merge edildiginin kok nedeni ve merge-gate duzeltmesi; Windows 600s analizi dahil. Uygulama Local/admin. -->
+
 # Merge-Gate Fix — why PR #9 merged with Windows CI unfinished, and the fix
 
 **Status:** prepared (code + spec). The code change (`scripts/configure-integration-branch-protection.mjs`) is non-protected and reviewable here; **applying** branch protection is a Local/admin `gh api` action (flagged). The Windows-timeout remedy touches sealed `config/validation.json` + the sharding guard → **Local re-seal + governance** (not applied here).

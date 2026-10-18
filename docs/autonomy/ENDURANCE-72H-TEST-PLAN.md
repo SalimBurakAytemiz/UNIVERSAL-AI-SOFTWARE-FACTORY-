@@ -1,3 +1,5 @@
+<!-- //TR: 72 saatlik kesintisiz calisma dayaniklilik testinin plani; tum kritik entegrasyonlar dogrulanmadan baslatilmaz (yalniz tasarim). -->
+
 # 72-hour continuous-operation endurance test — plan (design only)
 
 Priority-6 deliverable. This is the **plan**; the test does **not** start here. The user's directive is

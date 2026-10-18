@@ -1,3 +1,5 @@
+<!-- //TR: next-step engine referans/oneri uygulamasi ve yurutulebilir kaniti; korunan cekirdege baglanmamistir (baglama = FA-LEASE2). -->
+
 # Next-step engine — reference / proposal (NOT wired)
 
 `next-step-engine.mjs` is the Priority-4 "auto-advance" mechanism and the Priority-5 single-ownership

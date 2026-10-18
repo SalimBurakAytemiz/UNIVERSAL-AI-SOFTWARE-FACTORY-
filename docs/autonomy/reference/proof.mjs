@@ -1,3 +1,4 @@
+//TR: next-step-engine icin gercek birlestirilmis lease modullerine (git-ref destekli) karsi yurutulebilir kanit; her bolum icin gecici repo kullanir, repoda iz birakmaz.
 // Executable proof for next-step-engine.mjs against the REAL merged lease modules (git-ref backed, temp repo per section).
 // Run: node proof.mjs   (Node 24). Prints PASS/FAIL per assertion, exits 1 on any FAIL.
 import {mkdtempSync, rmSync} from "node:fs";

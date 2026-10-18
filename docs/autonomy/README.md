@@ -1,3 +1,5 @@
+<!-- //TR: Otonomi kurtarma hazırlık paketinin (P1-P6) korunmayan teslimat dizini; Founder yetkisi / Local re-seal gerektiren işler işaretlidir, uygulanmamıştır. -->
+
 # Autonomy recovery — prep bundle (P0: "OTONOMİ SİSTEMİNİ TAMAMLAMA")
 
 Non-protected deliverables for the 6-priority autonomy directive, based on `v7/integration @ e12dbdd`

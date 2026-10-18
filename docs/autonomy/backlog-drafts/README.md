@@ -1,3 +1,5 @@
+<!-- //TR: Canonical backlog TASLAK dosyalarinin aciklamasi; hicbir gorev READY degildir, kuyruk aktif degildir, lease wiring ve yetki karari olmadan devreye alinmaz. -->
+
 # Canonical backlog — DRAFTS (NOT activated)
 
 Priority-3 deliverable. `BACKLOG_CHECKPOINT.json` and `PRODUCTION_QUEUE.json` here are **drafts** re-derived

@@ -1,3 +1,4 @@
+//TR: UASCO next-step engine REFERANS/ONERI; orkestratore bagli degildir (baglama korunan cekirdek, FA-LEASE2). Atomiklik yalniz enjekte edilen lease store'dan gelir.
 // UASCO next-step engine: REFERENCE / PROPOSAL (not wired into the orchestrator; wiring is protected-core, FA-LEASE2).
 //
 // selectNext(backlog, {store, owner, now, ttlMs, headSha?}) decides what the autonomous worker does next and ALWAYS returns a
