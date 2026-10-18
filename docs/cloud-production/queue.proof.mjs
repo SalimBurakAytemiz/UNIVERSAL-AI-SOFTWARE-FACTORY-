@@ -1,4 +1,5 @@
 //TR: CP-QUEUE bağımsız kanıt betiği (node docs/cloud-production/queue.proof.mjs)
+import { execFileSync } from 'node:child_process';
 import { loadQueue, nextDispatchable, STATUSES } from './queue.mjs';
 
 let passed = 0;
@@ -100,8 +101,102 @@ const got = nextDispatchable(dq);
 got.dependsOn.push('ZZZ'); got.dependsOn[0] = 'MUTATED';
 check('mutating returned dependsOn does not touch the input queue',
   dq.tasks[1].dependsOn.length === 1 && dq.tasks[1].dependsOn[0] === 'A' && got.dependsOn !== dq.tasks[1].dependsOn);
-check('STATUSES is exported with the exact queue statuses',
-  STATUSES instanceof Set && STATUSES.size === 10 && STATUSES.has('READY') && STATUSES.has('NOT_STARTED') && !STATUSES.has('done'));
+check('STATUSES is exported as a frozen array with the exact queue statuses',
+  Array.isArray(STATUSES) && Object.isFrozen(STATUSES) && STATUSES.length === 11 && STATUSES.includes('READY') &&
+  STATUSES.includes('NOT_STARTED') && STATUSES.includes('IN_REVIEW') && !STATUSES.includes('done'));
+{
+  let threw = false;
+  try { STATUSES.push('EVIL'); } catch { threw = true; }
+  try { STATUSES[0] = 'EVIL'; } catch { /* strict mode throws */ }
+  check('mutating exported STATUSES does not widen validation',
+    threw && !STATUSES.includes('EVIL') && has({ tasks: [T({ id: 'X', status: 'EVIL' })] }, 'STATUS_INVALID'));
+}
+
+// Delta-2 proofs: real backlog ids/statuses, id allowlist, TOCTOU, hostile input, placeholders
+const REAL_IDS = ["UI-236", "UI-049", "UI-211", "CI-GREEN", "UI-227", "UI-037+046", "UI-205", "UI-071", "UI-074", "UI-248", "pkg-lease1", "pkg-lease1-wiring", "RESEAL-SERIALIZATION", "BACKLOG-SOURCE-REBASELINE", "UI-023", "UI-016", "UI-004", "UI-027+UI-220", "WP-COMPANY-WRITE", "FD-REL-1-GATED-SET", "RELEASE-SIGNATURE-PHASE0", "DOC-TRUTH-CANONICAL-STATUS", "ADVISORIES-F-PKGE-002-F-PKGR-001", "SCREEN-EVIDENCE-DEBT", "P0-REMAINDER-AUDIT", "P1-P2-BACKLOG-AUDIT", "HOME-DELIVERY-STATE", "PLANNED-SCAFFOLD-CLEANUP", "L-WORKFORCE", "L-TOWER-TRACE", "L-ASSURANCE", "L-ROUTES", "B2-UI-023", "B2-UI-124", "B2-UI-246", "B2-T-APPROVAL", "B2-T-RESOLVER", "B2-T-TEMPLATES", "B2-T-PREDEV", "B2-T-ACADEMY", "B2-T-COMPANY", "B2-T-SELFTESTS", "B2-SBOM", "CP-DISPATCH-IMPL", "CP-NODE24-ENV"];
+const REAL_STATUSES = ['DONE', 'IN_REVIEW', 'BLOCKED', 'DRAFT_NOT_READY', 'AUTHORITY_REQUIRED'];
+const realTasks = REAL_IDS.map((id, i) => ({ id, owner: 'LOCAL', status: REAL_STATUSES[i % REAL_STATUSES.length] }));
+const rl = loadQueue({ tasks: realTasks });
+check('ALL real backlog ids (incl. UI-037+046, UI-027+UI-220) accepted; no TASK_ID_INVALID',
+  REAL_IDS.length === 45 && REAL_IDS.includes('UI-037+046') && REAL_IDS.includes('UI-027+UI-220') &&
+  !rl.errors.some((e) => e.code === 'TASK_ID_INVALID' || e.code === 'STATUS_INVALID'));
+check('all real backlog statuses accepted', REAL_STATUSES.every((s) => STATUSES.includes(s)));
+check('IN_REVIEW is neither READY nor dispatched',
+  nextDispatchable({ tasks: [T({ id: 'X', status: 'IN_REVIEW' })] }) === null &&
+  loadQueue({ tasks: [T({ id: 'X', status: 'IN_REVIEW' })] }).ok === true);
+check('IN_REVIEW dependency does not satisfy a READY dependent (not DONE)',
+  has({ tasks: [T({ id: 'D', status: 'IN_REVIEW' }), T({ id: 'X', dependsOn: ['D'] })] }, 'READY_WITH_UNMET_DEP'));
+{
+  let live = null;
+  try {
+    live = JSON.parse(execFileSync('git', ['show', 'origin/claude/pensive-mayer-16pnt2:docs/planning/BACKLOG_CHECKPOINT.json'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
+  } catch { /* ref not available: fixture above is the proof; not counted as pass/fail */ }
+  if (live) {
+    const lq = loadQueue({ tasks: live.tasks.map((t) => ({ id: t.id, owner: t.owner, status: t.status })) });
+    check('LIVE origin backlog file: no id/status/owner rejected',
+      !lq.errors.some((e) => ['TASK_ID_INVALID', 'STATUS_INVALID', 'OWNER_INVALID'].includes(e.code)));
+    check('LIVE origin backlog authorizedBy strings pass',
+      live.tasks.filter((t) => t.authorizedBy).every((t) => !auth(t.authorizedBy)));
+  } else console.log('SKIP live origin backlog read (ref unavailable); fixture proofs apply');
+}
+check('real authorizedBy strings pass',
+  !auth('FOUNDER-AUTHORIZATION:2026-10-18 in-session (Home Delivery state + planned scaffolding cleanup)') &&
+  !auth('FOUNDER-APPROVAL:2026-10-18 in-session message (scope-limited; no protected edit, no new backend, no spend, no reseal)') &&
+  !auth('FOUNDER-DIRECTIVE:2026-10-18 Cloud-only dispatch/next-step infra within current limits') &&
+  !auth('FOUNDER-DIRECTIVE:2026-10-18 Cloud Node 24 permanent environment'));
+check('ids with + accepted, lone punctuation rejected',
+  loadQueue({ tasks: [T({ id: 'UI-037+046' })] }).ok === true &&
+  ['.', '..', '-', ':', '+', '_', '+-.', '._:'].every((i) => badId(i)));
+for (const ph of ['none', 'N/A', 'null', 'Undefined', 'TODO', 'tbd', 'None ', 'TBD']) {
+  check(`placeholder authorizedBy '${ph}' rejected`, auth(ph));
+}
+check('authorizedBy containing a placeholder word within real text still accepted', !auth('founder none-needed ok'));
+
+// TOCTOU: stateful getters must not produce a tainted dispatch
+{
+  let n = 0;
+  const q = { tasks: [{ id: 'X', owner: 'CLOUD', status: 'READY', authorizedBy: 'founder',
+    get protectedEdit() { return n++ === 0 ? undefined : true; } }] };
+  const r = nextDispatchable(q);
+  check('TOCTOU protectedEdit (undefined then true): not dispatched tainted', r === null || r.protectedEdit !== true);
+  check('TOCTOU protectedEdit: dispatched copy is exactly the validated snapshot', r === null || r.protectedEdit === undefined);
+  let m = 0;
+  const q2 = { tasks: [{ id: 'Y', owner: 'CLOUD', status: 'READY', protectedEdit: false,
+    get authorizedBy() { return m++ === 0 ? 'founder' : 'ㅤㅤㅤ'; } }] };
+  const r2 = nextDispatchable(q2);
+  check('TOCTOU authorizedBy (valid then U+3164): never dispatched with tainted value',
+    r2 === null || r2.authorizedBy === 'founder');
+  let k = 0;
+  const q3 = { get tasks() { return k++ === 0 ? [T({ id: 'Z' })] : [T({ id: 'Z', protectedEdit: true })]; } };
+  const r3 = nextDispatchable(q3);
+  check('TOCTOU tasks getter: dispatch matches a single read', r3 === null || (r3.protectedEdit === undefined && k <= 1));
+}
+
+// Hostile input
+{
+  const throwing = { tasks: [{ id: 'X', owner: 'CLOUD', status: 'READY', get authorizedBy() { throw new Error('boom'); } }] };
+  let r; let threw = false;
+  try { r = loadQueue(throwing); } catch { threw = true; }
+  check('throwing getter -> ok=false INPUT_HOSTILE, no throw', !threw && r.ok === false && r.errors.some((e) => e.code === 'INPUT_HOSTILE'));
+  check('nextDispatchable on throwing getter -> null', (() => { try { return nextDispatchable(throwing) === null; } catch { return false; } })());
+  const { proxy, revoke } = Proxy.revocable({ tasks: [] }, {});
+  revoke();
+  threw = false;
+  try { r = loadQueue(proxy); } catch { threw = true; }
+  check('revoked proxy -> ok=false INPUT_HOSTILE, no throw', !threw && r.ok === false && r.errors.some((e) => e.code === 'INPUT_HOSTILE'));
+  const hostileTasks = { get tasks() { throw new Error('boom'); } };
+  threw = false;
+  try { r = loadQueue(hostileTasks); } catch { threw = true; }
+  check('throwing tasks getter -> INPUT_HOSTILE', !threw && r.errors.some((e) => e.code === 'INPUT_HOSTILE'));
+  const unclone = { tasks: [T({ id: 'A' }), T({ id: 'B', fn: () => 1 })] };
+  r = loadQueue(unclone);
+  check('one uncloneable task invalidates whole queue (fail-closed abort, not skip): QUEUE_UNCLONEABLE, no tasks, no dispatch',
+    r.ok === false && r.tasks.length === 0 && r.errors.some((e) => e.code === 'QUEUE_UNCLONEABLE') && nextDispatchable(unclone) === null);
+  const hostileList = [];
+  Object.defineProperty(hostileList, 0, { get() { throw new Error('boom'); }, enumerable: true });
+  check('hostile held/open lists fail closed to null', nextDispatchable(valid, hostileList) === null && nextDispatchable(valid, [], hostileList) === null);
+}
 
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
