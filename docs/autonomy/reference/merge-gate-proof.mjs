@@ -21,6 +21,9 @@ ok(refusedFor({ ...GOOD(), checkRuns: [greenChecks[0]] }, "REQUIRED_CHECK_MISSIN
 ok(refusedFor({ ...GOOD(), checkRuns: greenChecks.map((c, i) => i === 1 ? { ...c, conclusion: "failure" } : c) }, "REQUIRED_CHECK_NOT_SUCCESS"), "a failed required check -> REFUSE");
 ok(refusedFor({ ...GOOD(), checkRuns: greenChecks.map((c, i) => i === 1 ? { ...c, conclusion: "cancelled" } : c) }, "REQUIRED_CHECK_NOT_SUCCESS"), "a cancelled required check -> REFUSE");
 ok(refusedFor({ ...GOOD(), checkRuns: [] }, "REQUIRED_CHECK_MISSING"), "no checks at all -> REFUSE (both missing)");
+// (regression) a required context with MULTIPLE runs (repo emits push + pull_request per SHA): one success must NOT mask a sibling failure/pending
+ok(refusedFor({ ...GOOD(), checkRuns: [...greenChecks.map((c) => ({ ...c })), { name: REQUIRED_CONTEXTS[0], status: "completed", conclusion: "failure" }] }, `REQUIRED_CHECK_NOT_SUCCESS:${REQUIRED_CONTEXTS[0]}`), "a required context with success+failure runs -> REFUSE (no fail-open via .some)");
+ok(refusedFor({ ...GOOD(), checkRuns: [...greenChecks.map((c) => ({ ...c })), { name: REQUIRED_CONTEXTS[0], status: "in_progress", conclusion: null }] }, `REQUIRED_CHECK_NOT_SUCCESS:${REQUIRED_CONTEXTS[0]}`), "a required context with success+in_progress runs -> REFUSE (no fail-open via .some)");
 
 // strict / fast-forward gate
 ok(refusedFor({ ...GOOD(), baseIsAncestorOfHead: false }, "NOT_FAST_FORWARD_OR_BEHIND_BASE"), "head behind base (not FF) -> REFUSE");

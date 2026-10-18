@@ -16,11 +16,14 @@ export function evaluateMergeGate(evidence = {}) {
   const reasons = [];
   const { headSha, requiredContexts = REQUIRED_CONTEXTS, checkRuns = [], baseIsAncestorOfHead, hasConflict, verdict, verdictExpectation } = evidence;
   if (typeof headSha !== "string" || !/^[0-9a-f]{40}$/.test(headSha)) reasons.push("NO_VALID_HEAD_SHA");
-  // (1) every required CI context must be completed+success on exactly this head
+  // (1) every run of every required CI context must be completed+success on exactly this head.
+  //     Fail-closed: one success must NOT mask another run of the same context that failed / is pending.
+  //     This repo emits multiple runs per SHA for the same context name (push + pull_request), so
+  //     `every` (not `some`) is required — otherwise a merge could proceed with a failed required check.
   for (const ctx of requiredContexts) {
     const runs = checkRuns.filter((r) => r && r.name === ctx);
     if (!runs.length) { reasons.push(`REQUIRED_CHECK_MISSING:${ctx}`); continue; }
-    const ok = runs.some((r) => r.status === "completed" && r.conclusion === "success");
+    const ok = runs.every((r) => r.status === "completed" && r.conclusion === "success");
     if (!ok) reasons.push(`REQUIRED_CHECK_NOT_SUCCESS:${ctx}:${runs.map((r) => r.conclusion ?? r.status).join("/")}`);
   }
   // (2) governed independent verdict, SHA + session + identity bound, CLEAN
