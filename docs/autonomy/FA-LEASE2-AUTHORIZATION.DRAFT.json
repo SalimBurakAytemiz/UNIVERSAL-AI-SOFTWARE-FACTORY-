@@ -1,6 +1,13 @@
 {
   "//TR": "DRAFT — Cloud builder tarafindan hazirlanan FA-LEASE2 yetki kaydi TASLAGIDIR; CANLI yetki kaydi DEGILDIR. Gercek kayit Local/Founder tarafindan mevcut governance proseduruyle audit/checkpoints/ altinda olusturulup muhurlenir. Cloud kendi yetkisini veremez; bu dosya yalniz incelenecek oneridir ve korunan hicbir dosyaya dokunmaz.",
   "status": "DRAFT_PROPOSAL_NOT_A_LIVE_AUTHORIZATION",
+  "founderDecisionCaptured": {
+    "note": "The Founder approved FA-LEASE2 on 2026-10-18 via AskUserQuestion (cloud session, principal salimburakaytemiz), option 'Approve - proceed to wiring', scope exactly per docs/autonomy/FA-LEASE2-CHANGE-SCOPE.md. This is the captured decision, NOT the sealed live record: Local/Founder must still create and seal audit/checkpoints/V7-PKG-LEASE2-AUTHORIZATION-2026-10-18.json (delegation D3) before any protected file is edited. Cloud does not write the sealed record and does not edit protected files until it exists.",
+    "decision": "APPROVE_PROCEED_TO_WIRING",
+    "decidedAt": "2026-10-18",
+    "channel": "AskUserQuestion (cloud session)",
+    "scopeRef": "docs/autonomy/FA-LEASE2-CHANGE-SCOPE.md"
+  },
   "schemaVersion": "1.0.0",
   "checkpoint": "V7-PKG-LEASE2-AUTHORIZATION",
   "proposedDate": "2026-10-18",
