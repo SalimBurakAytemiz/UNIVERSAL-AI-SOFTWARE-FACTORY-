@@ -1,5 +1,5 @@
 //TR: CP-QUEUE bağımsız kanıt betiği (node docs/cloud-production/queue.proof.mjs)
-import { loadQueue, nextDispatchable } from './queue.mjs';
+import { loadQueue, nextDispatchable, STATUSES } from './queue.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -70,13 +70,38 @@ check('owner filter: unknown owner param -> null', nextDispatchable(mixed, [], [
 check('zero-width-only authorizedBy rejected',
   has({ tasks: [T({ id: 'X', authorizedBy: '\u200B' })] }, 'UNAUTHORIZED_READY') &&
   has({ tasks: [T({ id: 'X', authorizedBy: ' \u200B\uFEFF ' })] }, 'UNAUTHORIZED_READY'));
-check('authorizedBy with visible char accepted', loadQueue({ tasks: [T({ id: 'X', authorizedBy: 'a\u200B' })] }).ok === true);
+check('authorizedBy with trailing zero-width rejected (ASCII allowlist)', has({ tasks: [T({ id: 'X', authorizedBy: 'abc\u200B' })] }, 'UNAUTHORIZED_READY'));
 check('untrimmed ids -> TASK_ID_INVALID',
   has({ tasks: [T({ id: ' X' })] }, 'TASK_ID_INVALID') && has({ tasks: [T({ id: 'X\n' })] }, 'TASK_ID_INVALID'));
 check('held/open compared exactly (no trim)', nextDispatchable(valid, ['B '])?.id === 'B' && nextDispatchable(valid, [], [' B'])?.id === 'B');
 const live = nextDispatchable(valid);
 live.status = 'DONE';
-check('returns shallow copy, not live task', valid.tasks[1].status === 'READY');
+check('returns copy, not live task', valid.tasks[1].status === 'READY');
+
+// Strict allowlist proofs
+const auth = (a) => has({ tasks: [T({ id: 'X', authorizedBy: a })] }, 'UNAUTHORIZED_READY');
+const cps = { U3164: '\u3164', U2800: '\u2800', U115F: '\u115F', UFFA0: '\uFFA0', U034F: '\u034F', UFE0F: '\uFE0F',
+  NUL: '\0', ESC: '\x1b', LONE_SURROGATE: '\uD800', U0085: '\u0085' };
+for (const [n, c] of Object.entries(cps)) {
+  check(`authorizedBy rejects ${n} (alone, padded, and embedded)`,
+    auth(c) && auth(`abc${c}`) && auth(`${c}abc`) && auth(`ab${c}cd`) && auth(c.repeat(5)));
+}
+check('authorizedBy rejects non-ASCII letters (by design)', auth('M\u00FCller') && auth('\u5F20\u4E09\u4E00'));
+check('authorizedBy rejects too short / leading space / no alnum / newline / tab',
+  auth('ab') && auth(' abc') && auth('   ') && auth('!!!') && auth('abc\n') && auth('a\tb') && auth('abc\r'));
+check('authorizedBy accepts plain ASCII tokens', ['founder', 'a b', 'user@example.com', 'x-1'].every((a) => !auth(a)));
+const badId = (i) => has({ tasks: [T({ id: i })] }, 'TASK_ID_INVALID');
+check('ids with space, NUL, newline, trailing/leading ZWSP rejected',
+  badId('a b') && badId('a\0b') && badId('a\nb') && badId('a\u200B') && badId('\u200Ba'));
+check('ids with unicode / empty / slash rejected', badId('\u00E9') && badId('') && badId('a/b') && badId('a\u3164'));
+check('ids with . _ : - accepted', loadQueue({ tasks: [T({ id: 'CP-1.a_b:c' })] }).ok === true);
+const dq = { tasks: [T({ id: 'A', status: 'DONE' }), T({ id: 'B', dependsOn: ['A'] })] };
+const got = nextDispatchable(dq);
+got.dependsOn.push('ZZZ'); got.dependsOn[0] = 'MUTATED';
+check('mutating returned dependsOn does not touch the input queue',
+  dq.tasks[1].dependsOn.length === 1 && dq.tasks[1].dependsOn[0] === 'A' && got.dependsOn !== dq.tasks[1].dependsOn);
+check('STATUSES is exported with the exact queue statuses',
+  STATUSES instanceof Set && STATUSES.size === 10 && STATUSES.has('READY') && STATUSES.has('NOT_STARTED') && !STATUSES.has('done'));
 
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

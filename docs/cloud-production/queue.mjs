@@ -1,10 +1,19 @@
 //TR: CP-QUEUE saf (pure) bulut görev kuyruğu doğrulayıcı + lease-aware seçici; hiçbir şeyi kendi başına READY ilan etmez
 const OWNERS = new Set(['CLOUD', 'LOCAL', 'FOUNDER']);
-const STATUSES = new Set([
+export const STATUSES = new Set([
   'READY', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'COMPLETED', 'DRAFT_NOT_READY',
   'PENDING_REVIEW', 'PENDING_CI', 'AUTHORITY_REQUIRED', 'NOT_STARTED',
 ]);
 const DONE = new Set(['DONE', 'COMPLETED']);
+// Strict allowlists (not blocklists of invisible characters).
+// ids: only ASCII letters, digits and . _ : - ; whitespace/control/zero-width/unicode are rejected.
+const ID_RE = /^[A-Za-z0-9._:-]+$/;
+const validId = (v) => typeof v === 'string' && ID_RE.test(v);
+// authorizedBy: printable ASCII only (U+0020-U+007E), first char a printable non-space, length >= 3, and at least one
+// alphanumeric. Non-ASCII authority tokens (e.g. non-Latin names) are NOT accepted, by design: any non-ASCII code point
+// (U+3164, U+2800, zero-width, NEL, lone surrogates, ...) could render as blank, so authority must be plain ASCII.
+const AUTH_RE = /^[\x21-\x7E][\x20-\x7E]{2,}$/;
+const validAuth = (v) => typeof v === 'string' && AUTH_RE.test(v) && /[A-Za-z0-9]/.test(v);
 
 export function loadQueue(obj) {
   const errors = [];
@@ -17,14 +26,14 @@ export function loadQueue(obj) {
   const byId = new Map();
   const seen = new Set();
   for (const t of tasks) {
-    const id = t && typeof t.id === 'string' && t.id.length > 0 && t.id === t.id.trim() ? t.id : null;
-    if (id === null) { err(null, 'TASK_ID_INVALID', 'id must be a non-empty, untrimmed-free string'); continue; }
+    const id = t && validId(t.id) ? t.id : null;
+    if (id === null) { err(null, 'TASK_ID_INVALID', 'id must match /^[A-Za-z0-9._:-]+$/'); continue; }
     if (seen.has(id)) err(id, 'DUPLICATE_ID', `duplicate id ${id}`);
     else byId.set(id, t);
     seen.add(id);
   }
   for (const t of tasks) {
-    if (!t || typeof t.id !== 'string' || t.id.length === 0 || t.id !== t.id.trim()) continue;
+    if (!t || !validId(t.id)) continue;
     const id = t.id;
     if (!OWNERS.has(t.owner)) err(id, 'OWNER_INVALID', `owner ${String(t.owner)}`);
     if (!STATUSES.has(t.status)) err(id, 'STATUS_INVALID', `status ${String(t.status)}`);
@@ -37,8 +46,8 @@ export function loadQueue(obj) {
       if (!byId.has(d)) err(id, 'DEP_ABSENT_FROM_BACKLOG', `dependency ${String(d)} not in backlog`);
     }
     if (t.status === 'READY') {
-      if (typeof t.authorizedBy !== 'string' || t.authorizedBy.replace(/[\p{Cf}\s]/gu, '').length === 0) {
-        err(id, 'UNAUTHORIZED_READY', 'READY requires non-empty authorizedBy');
+      if (!validAuth(t.authorizedBy)) {
+        err(id, 'UNAUTHORIZED_READY', 'READY requires authorizedBy: printable ASCII, length >= 3, with an alphanumeric');
       }
       for (const d of deps) {
         const dt = byId.get(d);
@@ -65,7 +74,10 @@ export function nextDispatchable(queue, heldLeaseTaskIds = [], openPrTaskIds = [
   const held = new Set(heldLeaseTaskIds);
   const open = new Set(openPrTaskIds);
   for (const t of loaded.tasks) {
-    if (t.status === 'READY' && t.owner === owner && !held.has(t.id) && !open.has(t.id)) return { ...t };
+    if (t.status === 'READY' && t.owner === owner && !held.has(t.id) && !open.has(t.id)) {
+      // Deep copy: nested arrays/objects (e.g. dependsOn) must not alias the caller's queue.
+      try { return structuredClone(t); } catch { return null; }
+    }
   }
   return null;
 }
