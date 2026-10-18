@@ -1206,3 +1206,14 @@ describe("Integrations UI-078 — rendering (read-only, verbatim values, honest 
     for (const k of keys(en)) expect(tr[k].length, k).toBeGreaterThan(0);
   });
 });
+
+describe("Integrations UI-078 remediation — activation is a recorded policy value", () => {
+  it("integrations.honesty states (EN+TR) that activation is a recorded policy value, not a live state, and it is rendered on the page", async () => {
+    const en = (await load("locales", "en.js")).default, tr = (await load("locales", "tr.js")).default;
+    expect(en["integrations.honesty"]).toContain("An activation value is a policy value recorded in the registry, not a live state");
+    expect(tr["integrations.honesty"]).toContain("Etkinleştirme (activation) değeri kayıt defterinde kayıtlı bir politika değeridir, canlı bir durum değildir");
+    const view = await load("views", "integrations.js");
+    expect(read("views", "integrations.js")).toContain('ctx.t("integrations.honesty")');
+    expect(typeof view.render).toBe("function");
+  });
+});

@@ -16,7 +16,9 @@ export const UNKNOWN_DETAILS=Object.freeze(["OFFLINE","UNAVAILABLE","ERROR"]);
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 const RUN_ID_RE=/^RUN-[A-Za-z0-9-]{1,100}$/;
 const SEV_RE=/^[A-Za-z][A-Za-z0-9_]{0,11}$/;
-const iso=x=>typeof x==="string"&&x.length>0&&!Number.isNaN(new Date(x).getTime())?x:null;
+const ISO_RE=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+/** Yalnız ISO-8601 (tarih+saat+bölge) kabul edilir; "10/16/2026" gibi yerel biçimler Date.parse'a güvenilmeden null ("—") olur. */
+const iso=x=>typeof x==="string"&&ISO_RE.test(x)&&!Number.isNaN(new Date(x).getTime())?x:null;
 const text=(x,max)=>typeof x==="string"&&x.length?x.slice(0,max):null;
 const failState=s=>s==="OFFLINE"||s==="UNAVAILABLE"?s:"ERROR";
 
@@ -54,24 +56,37 @@ export function mapAuditEvents(runId,raw){
   return {state:"VERIFIED",runId,events,truncated:raw.truncated===true||src.length>tail.length,shown:events.length};
 }
 
+export const EVIDENCE_SOURCE_NAMES=Object.freeze(["workos","review","checkpoints"]);
+export const EVIDENCE_SOURCE_STATES=Object.freeze(["AVAILABLE","UNAVAILABLE","ERROR","NOT_QUERIED"]);
 /**
- * GET /v1/evidence -> {state:"VERIFIED",evidence:{items,skipped,more}} | {state:"ERROR",evidence:null}.
- * Liste dizi olmalıdır; geçersiz satırlar sessizce yok sayılmaz, `skipped` olarak sayılır ve görünümde kısmi okuma olarak söylenir. Yalnız referans alanları taşınır (log kuyruğu/yol taşınmaz).
+ * GET /v1/evidence -> {state:"VERIFIED",evidence:{items,skipped,more,sources,coverage}} | {state:"ERROR",evidence:null}.
+ * Liste dizi olmalıdır; geçersiz satırlar ve yinelenen evidenceId sessizce yok sayılmaz, `skipped` olarak sayılır. Sunucunun `sources` ({workos,review,checkpoints}: AVAILABLE|UNAVAILABLE|ERROR|NOT_QUERIED) alanı doğrulanır; eksik/bozuksa okuma reddedilir.
+ * coverage: "FULL" (ERROR yok, en az bir AVAILABLE) | "PARTIAL" (en az bir ERROR ve bir AVAILABLE) | "FAILED" (ERROR var, AVAILABLE yok) | "NONE" (hiçbiri sorgulanamadı/kullanılamadı). FULL dışında boş liste asla "kanıt yok" sayılmaz. Yalnız referans alanları taşınır (log kuyruğu/yol taşınmaz).
  */
 export function mapAuditEvidence(raw){
   const bad={state:"ERROR",evidence:null};
   if(!isObj(raw))return bad;
   const list=Array.isArray(raw.evidence)?raw.evidence:Array.isArray(raw.items)?raw.items:null;
   if(list===null)return bad;
-  const items=[];let skipped=0;
+  if(!isObj(raw.sources))return bad;
+  const sources={};
+  for(const k of EVIDENCE_SOURCE_NAMES){
+    const v=raw.sources[k];
+    if(typeof v!=="string"||!EVIDENCE_SOURCE_STATES.includes(v))return bad;
+    sources[k]=v;
+  }
+  const states=Object.values(sources),hasErr=states.includes("ERROR"),hasOk=states.includes("AVAILABLE");
+  const coverage=hasErr?(hasOk?"PARTIAL":"FAILED"):hasOk?"FULL":"NONE";
+  const items=[],seen=new Set();let skipped=0;
   for(const x of list.slice(0,MAX_EVIDENCE_ROWS)){
     const m=mapEvidenceItem(x);
-    if(m===null){skipped++;continue}
-    items.push({evidenceId:m.evidenceId,missionId:m.missionId,runId:m.runId,kind:m.kind,verification:m.verification,createdAt:m.createdAt});
+    if(m===null||seen.has(m.evidenceId)){skipped++;continue}
+    seen.add(m.evidenceId);
+    items.push({evidenceId:m.evidenceId,missionId:m.missionId,runId:m.runId,kind:m.kind,verification:m.verification,createdAt:iso(m.createdAt)});
   }
   items.sort((a,b)=>(b.createdAt===null?-Infinity:Date.parse(b.createdAt))-(a.createdAt===null?-Infinity:Date.parse(a.createdAt))||b.evidenceId.localeCompare(a.evidenceId));
   const more=list.length>MAX_EVIDENCE_ROWS||(typeof raw.nextCursor==="string"&&raw.nextCursor.length>0);
-  return {state:"VERIFIED",evidence:{items,skipped,more}};
+  return {state:"VERIFIED",evidence:{items,skipped,more,sources,coverage}};
 }
 
 const tsKey=t=>t===null?-Infinity:Date.parse(t);
@@ -90,10 +105,13 @@ export function compareEvents(a,b){
 export function buildAudit(res){
   const runsRes=res?.runs,runsOk=Boolean(runsRes)&&runsRes.state==="VERIFIED"&&runsRes.runs!==null&&runsRes.runs!==undefined;
   const evRes=res?.evidence,evOk=Boolean(evRes)&&evRes.state==="VERIFIED"&&Boolean(evRes.evidence);
+  // Kanıt kaynağı: FULL -> VERIFIED (yalnız "okunabildi"); PARTIAL -> PARTIAL; FAILED -> ERROR; NONE -> UNAVAILABLE. FULL dışı hiçbir durum temiz sayılmaz.
+  const cov=evOk?evRes.evidence.coverage:null;
+  const evState=!evOk?failState(evRes?.state):cov==="FULL"?"VERIFIED":cov==="PARTIAL"?"PARTIAL":cov==="FAILED"?"ERROR":"UNAVAILABLE";
   const sources={
     runs:{state:runsOk?"VERIFIED":failState(runsRes?.state)},
     events:{state:"UNAVAILABLE"},
-    evidence:{state:evOk?"VERIFIED":failState(evRes?.state)}
+    evidence:{state:evState}
   };
   const rows=[],failedRuns=[];let readRuns=0,truncatedRuns=0;
   if(runsOk){
@@ -108,7 +126,7 @@ export function buildAudit(res){
   const unreadable=[];
   if(!runsOk)unreadable.push("runs");
   if(runsOk&&failedRuns.length>0)unreadable.push("events");
-  if(!evOk)unreadable.push("evidence");
+  if(evState!=="VERIFIED")unreadable.push("evidence");
   return {
     sources,
     runs:runsOk?runsRes.runs:null,

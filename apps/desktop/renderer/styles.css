@@ -727,6 +727,10 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .integ-facts{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);margin:var(--space-1) 0 0}
 .integ-fact-label{color:var(--muted)}
 .integ-tally{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1)}
+.audit-row[data-severity="FAIL"],.audit-row[data-severity="FAILED"]{border-left-color:var(--danger)}
+.audit-row[data-severity="WARN"],.audit-row[data-severity="WARNING"],.audit-row[data-severity="HOLD"]{border-left-color:var(--warn)}
+.audit-row[data-severity="ERROR"] .audit-sev,.audit-row[data-severity="FATAL"] .audit-sev,.audit-row[data-severity="CRITICAL"] .audit-sev,.audit-row[data-severity="FAIL"] .audit-sev,.audit-row[data-severity="FAILED"] .audit-sev{font-weight:700;color:var(--danger)}
+.audit-row[data-severity="WARN"] .audit-sev,.audit-row[data-severity="WARNING"] .audit-sev,.audit-row[data-severity="HOLD"] .audit-sev{font-weight:700;color:var(--warn)}
 .ops-step,.ops-item,.ops-control{border-left:4px solid var(--border-ui)}
 .ops-step[data-step-severity="ACTION"],.ops-item[data-liveness="STALLED"]{border-left-color:var(--danger)}
 .ops-step[data-step-severity="UNKNOWN"],.ops-step[data-step-severity="UNVERIFIED"]{border-left-color:var(--warn)}
