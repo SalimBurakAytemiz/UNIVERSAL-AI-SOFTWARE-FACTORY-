@@ -15,15 +15,26 @@ const DONE = new Set(['DONE', 'COMPLETED']);
 const ID_RE = /^[A-Za-z0-9._:+-]+$/;
 const validId = (v) => typeof v === 'string' && ID_RE.test(v) && /[A-Za-z0-9]/.test(v);
 // Placeholder authority values are not authority (compared case-insensitively, trimmed).
-const PLACEHOLDERS = new Set(['none', 'n/a', 'null', 'undefined', 'todo', 'tbd']);
+// NOTE: this is a SYNTACTIC SANITY CHECK only (shape + obvious placeholder words); it does NOT verify that any real
+// authorization exists. Actual authority verification is the supervisor's job.
+// Compared after lowercasing/trimming AND after stripping all non-alphanumerics (so 'N/A', 'n.a.', 'to-do', 'T.B.D' collapse).
+const PLACEHOLDERS = new Set(['none', 'na', 'null', 'undefined', 'todo', 'tbd', 'tbc', 'unknown', 'pending',
+  'xxx', 'false', 'true', 'nobody', 'nil', '-', 'n/a']);
+const isPlaceholder = (v) => {
+  const t = v.trim().toLowerCase();
+  const stripped = t.replace(/[^a-z0-9]/g, '');
+  return PLACEHOLDERS.has(t) || PLACEHOLDERS.has(stripped) || /^x+$/.test(stripped) || stripped === '';
+};
 // authorizedBy: printable ASCII only (U+0020-U+007E), first char a printable non-space, length >= 3, and at least one
 // alphanumeric. Non-ASCII authority tokens (e.g. non-Latin names) are NOT accepted, by design: any non-ASCII code point
 // (U+3164, U+2800, zero-width, NEL, lone surrogates, ...) could render as blank, so authority must be plain ASCII.
 const AUTH_RE = /^[\x21-\x7E][\x20-\x7E]{2,}$/;
 const validAuth = (v) => typeof v === 'string' && AUTH_RE.test(v) && /[A-Za-z0-9]/.test(v) &&
-  !PLACEHOLDERS.has(v.trim().toLowerCase());
+  !isPlaceholder(v);
 
 // Snapshot first (TOCTOU defence): all validation and dispatch run on a plain-data deep copy, never on live input.
+// Labels: ANY snapshot failure is INPUT_HOSTILE (getter throws, revoked/hostile proxy, ...), except a genuine
+// DataCloneError on a non-hostile input (e.g. a function value), which is QUEUE_UNCLONEABLE.
 // Fail-closed abort: if the queue (or any one task in it) cannot be cloned, the WHOLE queue is invalid; tasks are not skipped.
 function snapshot(input) {
   try {
@@ -37,9 +48,25 @@ function snapshot(input) {
   }
 }
 
+// Hard cap on queue size, checked on the INPUT's own data property before any clone is attempted.
+const MAX_TASKS = 100000;
+function lengthOfOwnTasks(input) {
+  // Only a plain own data property is inspected (no getter is invoked, so single-read TOCTOU behaviour is preserved).
+  try {
+    if (input === null || typeof input !== 'object') return -1;
+    const d = Object.getOwnPropertyDescriptor(input, 'tasks');
+    if (d && 'value' in d && Array.isArray(d.value)) return d.value.length;
+  } catch { /* handled by snapshot */ }
+  return -1;
+}
+
 export function loadQueue(input) {
   const errors = [];
   const err = (taskId, code, detail) => errors.push({ taskId, code, detail });
+  if (lengthOfOwnTasks(input) > MAX_TASKS) {
+    err(null, 'QUEUE_TOO_LARGE', `tasks.length exceeds ${MAX_TASKS}`);
+    return { ok: false, errors, tasks: [] };
+  }
   const snap = snapshot(input);
   if (!snap.ok) {
     err(null, snap.code, 'queue could not be safely snapshotted; whole queue rejected (fail-closed abort, not skip)');
@@ -51,16 +78,39 @@ export function loadQueue(input) {
     return { ok: false, errors, tasks: [] };
   }
   const tasks = obj.tasks;
+  if (tasks.length > MAX_TASKS) {
+    err(null, 'QUEUE_TOO_LARGE', `tasks.length exceeds ${MAX_TASKS}`);
+    return { ok: false, errors, tasks: [] };
+  }
+  try {
+    validateTasks(tasks, err);
+  } catch {
+    errors.length = 0;
+    err(null, 'INPUT_HOSTILE', 'validation aborted on unexpected input; whole queue rejected');
+    return { ok: false, errors, tasks: [] };
+  }
+  // ok=false never carries tasks.
+  if (errors.length > 0) return { ok: false, errors, tasks: [] };
+  return { ok: true, errors, tasks };
+}
+
+function validateTasks(tasks, err) {
+  const n = tasks.length;
   const byId = new Map();
   const seen = new Set();
-  for (const t of tasks) {
+  let badIds = 0;
+  for (let i = 0; i < n; i++) {
+    const t = tasks[i];
     const id = t && validId(t.id) ? t.id : null;
-    if (id === null) { err(null, 'TASK_ID_INVALID', 'id must match /^[A-Za-z0-9._:+-]+$/ with an alphanumeric'); continue; }
+    if (id === null) { badIds++; continue; }
     if (seen.has(id)) err(id, 'DUPLICATE_ID', `duplicate id ${id}`);
     else byId.set(id, t);
     seen.add(id);
   }
-  for (const t of tasks) {
+  // One aggregate error (never one per hole/entry): a sparse or garbage array cannot flood the error list.
+  if (badIds > 0) err(null, 'TASK_ID_INVALID', `${badIds} task(s) with missing/invalid id; id must match /^[A-Za-z0-9._:+-]+$/ with an alphanumeric`);
+  for (let i = 0; i < n; i++) {
+    const t = tasks[i];
     if (!t || !validId(t.id)) continue;
     const id = t.id;
     if (!OWNERS.has(t.owner)) err(id, 'OWNER_INVALID', `owner ${String(t.owner)}`);
@@ -90,7 +140,6 @@ export function loadQueue(input) {
       }
     }
   }
-  return { ok: errors.length === 0, errors, tasks };
 }
 
 export function nextDispatchable(queue, heldLeaseTaskIds = [], openPrTaskIds = [], owner = 'CLOUD') {

@@ -198,5 +198,31 @@ check('authorizedBy containing a placeholder word within real text still accepte
   check('hostile held/open lists fail closed to null', nextDispatchable(valid, hostileList) === null && nextDispatchable(valid, [], hostileList) === null);
 }
 
+// Review remediation: size cap, sparse arrays, ok=false => tasks:[], placeholder variants
+{
+  const sparse = []; sparse.length = 2 ** 28;
+  let t0 = Date.now(); let r; let threw = false;
+  try { r = loadQueue({ tasks: sparse }); } catch { threw = true; }
+  check('sparse 2**28 array: no throw, < 1 s, QUEUE_TOO_LARGE, ok=false, tasks=[]',
+    !threw && Date.now() - t0 < 1000 && r.ok === false && r.tasks.length === 0 && r.errors.length === 1 && r.errors[0].code === 'QUEUE_TOO_LARGE');
+  const big = new Array(100001).fill(null).map((_, i) => T({ id: `I${i}` }));
+  check('tasks.length 100001 -> QUEUE_TOO_LARGE', has({ tasks: big }, 'QUEUE_TOO_LARGE'));
+  check('tasks.length exactly 100000 accepted', loadQueue({ tasks: big.slice(0, 100000) }).ok === true);
+  const mid = []; mid.length = 50000;
+  t0 = Date.now(); r = loadQueue({ tasks: mid });
+  check('sparse array under cap: single aggregate TASK_ID_INVALID, not one per hole',
+    Date.now() - t0 < 1000 && r.ok === false && r.errors.length === 1 && r.errors[0].code === 'TASK_ID_INVALID');
+  check('ok=false always returns tasks:[]',
+    [{ tasks: [T({ id: 'X', owner: 'BAD' })] }, { tasks: mid }, null, { tasks: 'x' }].every((q) => { const l = loadQueue(q); return l.ok === false && Array.isArray(l.tasks) && l.tasks.length === 0; }));
+  const odd = { tasks: [{ id: 'A', owner: 'CLOUD', status: 'DONE', get dependsOn() { throw new Error('boom'); } }] };
+  check('throwing getter inside a task: INPUT_HOSTILE, no throw', (() => { try { const l = loadQueue(odd); return !l.ok && l.errors.some((e) => e.code === 'INPUT_HOSTILE'); } catch { return false; } })());
+  check('function value (non-hostile DataCloneError) -> QUEUE_UNCLONEABLE',
+    has({ tasks: [T({ id: 'A', f: () => 1 })] }, 'QUEUE_UNCLONEABLE'));
+  for (const ph of ['unknown', 'pending', 'xxx', 'XXXX', 'false', 'true', 'nobody', 'nil', 'tbc', 'na', 'N.A.', 'to-do', '---', 'Unknown ']) {
+    check(`placeholder variant authorizedBy '${ph}' rejected`, auth(ph));
+  }
+  check('real text containing placeholder-ish words still accepted', !auth('founder pending-review ok'));
+}
+
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
