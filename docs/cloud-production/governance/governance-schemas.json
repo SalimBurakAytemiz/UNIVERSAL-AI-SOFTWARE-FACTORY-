@@ -1,0 +1,23 @@
+{
+  "//TR": "Phase-0 PROPOSAL (korunmayan scaffold): seal/D3 istegi + quorum-registry sekilleri. Aktif kontrol degil; maintainer sonradan korumali kapsama terfi ettirir. Gercek anahtar/kayit yok.",
+  "status": "PROPOSAL_NOT_ACTIVE",
+  "governanceSealRequest": {
+    "required": ["payload", "signatures"],
+    "payload": {
+      "required": ["manifestFilesDigest", "commit", "policyDigest", "epoch", "nonce", "authoredBy"],
+      "notes": "manifestFilesDigest excludes config/trust-root-seal.json and config/trust-root-manifest.json (non-circular). epoch is an integer checked against a tamper-evident oracle. policyDigest is bound to an out-of-band expected value."
+    },
+    "signatures": { "items": { "required": ["principalId", "keyFingerprint", "signature"], "signature": "base64 Ed25519 over SHA-256(stableStringify(payload))" } }
+  },
+  "governanceD3Request": { "extends": "governanceSealRequest", "payloadExtra": ["d3Epoch", "subject"], "notes": "D3 issuance uses the same quorum rules; no D3 record is created by this scaffold." },
+  "quorumRegistry": {
+    "required": ["epoch", "principals", "quorum"],
+    "quorum": { "m": "integer >= 2", "n": "integer >= m", "mandatoryRoleClass": "human-custody" },
+    "principal": {
+      "required": ["principalId", "roleClass", "publicKeyPem", "keyFingerprint"],
+      "roleClassEnum": ["human-custody", "cloud-automation", "local-automation"],
+      "roleClassExcludes": ["builder", "implementer", "orchestrator"],
+      "keyFingerprint": "hex SHA-256 of SPKI DER public key"
+    }
+  }
+}
