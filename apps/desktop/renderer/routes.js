@@ -35,7 +35,6 @@ export const ROUTES=Object.freeze([
 ]);
 export const DEFAULT_ROUTE="home";
 export const FACTORY_AREA_ORDER=Object.freeze(["home","projects","work","workforce","assurance","delivery","tower","inbox"]);
-export const PLAN_ITEM_COUNT=3;
 export const routeById=id=>ROUTES.find(r=>r.id===id)??null;
 /** "#/projects" -> "projects"; bilinmeyen/boş hash varsayılan rotaya düşer. */
 export function routeFromHash(hash){
