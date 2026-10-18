@@ -368,6 +368,13 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .ack-check{display:flex;align-items:flex-start;gap:6px;margin:6px 0}
 .ack-check input{margin-top:3px}
 
+/* //TR: UI-226 aşama zaman çizelgesi (salt-okunur, gerçek timestamp'lerden; animasyon yok) */
+.tw-trace{display:grid;gap:var(--space-2);min-width:0}
+.tw-trace-row{display:grid;grid-template-columns:minmax(6rem,12rem) 1fr;gap:var(--space-2);align-items:center}
+.tw-trace-track{position:relative;height:.75rem;border:1px solid var(--border-ui);border-radius:var(--radius-lg)}
+.tw-trace-bar{position:absolute;top:0;bottom:0;min-width:2px;background:var(--accent);border-radius:var(--radius-lg)}
+.tw-trace-list{margin:0;padding-left:var(--space-4)}
+
 /* UX WP4: Control Tower 2B operasyon haritası (durağan; animasyon yok, parıltı yalnız sabit SVG filtresi) */
 .ct-campus{display:grid;gap:var(--space-3);min-width:0}
 .ct-summary{margin:0;font-weight:700}

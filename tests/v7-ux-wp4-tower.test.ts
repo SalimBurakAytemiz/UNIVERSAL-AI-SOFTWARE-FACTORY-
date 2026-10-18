@@ -477,3 +477,53 @@ describe("UX hardening: tower scheduler fact (UI-206)", () => {
     expect(valueOf(st.f)).not.toMatch(/\d/);
   });
 });
+
+// //TR: UI-226 aşama zaman çizelgesi testleri: yalnız gerçek timestamp/stage alanlarından ofset ve süre, geçersiz timestamp "yerleştirilemeyen", süre uydurulmaz, metin eşdeğer liste, mevcut <pre> değişmez, en/tr tower.trace anahtar eşitliği.
+describe("UI-226 stage timeline from real event timestamps", () => {
+  const EV: any[] = [
+    {timestamp: "2026-10-18T10:00:00.000Z", stage: "PLAN", event: "start"},
+    {timestamp: "2026-10-18T10:00:02.000Z", stage: "PLAN", event: "end"},
+    {timestamp: "2026-10-18T10:00:01.000Z", stage: "BUILD", event: "start"},
+    {timestamp: "2026-10-18T10:00:05.000Z", stage: "BUILD", event: "end"},
+    {timestamp: "not-a-date", stage: "BUILD", event: "bad"},
+    {stage: "VERIFY", event: "nots"},
+    {timestamp: "2026-10-18T10:00:04.000Z", event: "nostage"}
+  ];
+  it("computes offsets and durations only from valid timestamps and lists the rest as unplaced", async () => {
+    const core = await load("trace-core.js"), tl = core.buildStageTimeline(EV);
+    expect(tl.spanMs).toBe(5000);
+    expect(tl.stages.map((s: any) => [s.stage, s.count, s.offsetMs, s.durationMs])).toEqual([["PLAN", 2, 0, 2000], ["BUILD", 2, 1000, 4000], ["", 1, 4000, 0]]);
+    expect(tl.stages[1].startPct).toBe(20);
+    expect(tl.stages[1].widthPct).toBe(80);
+    expect(tl.unplaced.map((u: any) => [u.index, u.stage, u.event])).toEqual([[4, "BUILD", "bad"], [5, "VERIFY", "nots"]]);
+    expect(core.buildStageTimeline([{stage: "X"}, null, 5])).toEqual({stages: [], unplaced: [{index: 0, stage: "X", event: ""}, {index: 1, stage: "", event: ""}, {index: 2, stage: "", event: ""}], originMs: null, spanMs: 0});
+    expect(core.buildStageTimeline(undefined).stages).toEqual([]);
+    expect(core.buildStageTimeline([{timestamp: "2026-10-18T10:00:00Z", stage: "A"}]).stages[0]).toMatchObject({offsetMs: 0, durationMs: 0, widthPct: 0});
+  });
+  it("renders text-equivalent list, unplaced list and keeps the raw events <pre> unchanged", async () => {
+    const m = await mkCtx({cockpit: COCKPIT(), workRuns: []}), tower = await load("views", "tower.js");
+    const orig = m.ctx.api.raw;
+    m.ctx.api = {...m.ctx.api, runs: async () => ({state: "VERIFIED", runs: [{runId: "RUN-1"}]}), raw: async (p: string) => p.endsWith("/events") ? {ok: true, state: "VERIFIED", data: {events: EV}} : orig(p)};
+    const view: N = await tower.render(m.ctx);
+    const btn = all(view).find(n => n.tagName === "BUTTON" && n.textContent.startsWith("RUN-1"))!;
+    btn.fire("click");
+    await new Promise(r => setTimeout(r, 20));
+    const tlEl = all(view).find(n => n.id === "stageTimeline")!, pre = all(view).find(n => n.id === "events")!;
+    const items = byTag(tlEl, "li").map(n => n.textContent);
+    expect(items).toHaveLength(5);
+    expect(items[0]).toContain("PLAN: 2");
+    expect(items[1]).toContain("BUILD: 2");
+    expect(items.filter(t => t.includes("VERIFY/nots") || t.includes("BUILD/bad"))).toHaveLength(2);
+    expect(all(tlEl).filter(n => n.className === "tw-trace-bar")).toHaveLength(3);
+    expect(pre.textContent).toBe(EV.map(x => `${x.timestamp ?? ""} [INFO] ${x.stage ?? ""}/${x.event ?? ""} {}`).join("\n"));
+  });
+  it("has en/tr parity for tower.trace keys and every key used by the view", async () => {
+    const trD = (await load("locales", "tr.js")).default as Record<string, string>, enD = (await load("locales", "en.js")).default as Record<string, string>;
+    const keys = Object.keys(trD).filter(k => k.startsWith("tower.trace."));
+    expect(keys).toHaveLength(8);
+    expect(Object.keys(enD).filter(k => k.startsWith("tower.trace.")).sort()).toEqual(keys.sort());
+    const used = new Set<string>();
+    for (const m of read("views", "tower.js").matchAll(/"(tower\.trace\.[A-Za-z0-9_.]+)"/g)) used.add(m[1]);
+    expect([...used].sort()).toEqual(keys.sort());
+  });
+});
