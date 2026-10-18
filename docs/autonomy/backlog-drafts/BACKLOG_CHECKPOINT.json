@@ -1,0 +1,335 @@
+{
+  "_doc": "DRAFT — not authoritative; no task is READY without Founder authorization; do not activate Cloud Developer A on this until the atomic lease is wired+active. Regenerated from v7/integration@e12dbdd.",
+  "generatedAt": "2026-10-18",
+  "head": "e12dbdd",
+  "source": "RCA wmcrvq9w6 inventory + merged-state verification",
+  "tasks": [
+    {
+      "id": "UI-236",
+      "title": "Founder Executive Summary + Execution Ledger",
+      "package": "WP-COCKPIT",
+      "owner": "LOCAL",
+      "status": "DONE",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": "tests/v7-ux-executive.test.ts",
+      "notes": "Merged: feature commit d04039f (UI-236 line) integrated by merge 39248eb; no PR number (pre-PR era). Owner LOCAL by landing path (not in RCA inventory). DONE means merged to v7/integration; review verdict not re-verified here."
+    },
+    {
+      "id": "UI-049",
+      "title": "Read-only independent-review verdict endpoint (/v1/reviews)",
+      "package": "WP-QA-SEC",
+      "owner": "LOCAL",
+      "status": "DONE",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": "tests/v7-ux-reviews-api.test.ts",
+      "notes": "Merged: feature commit 2bc852d integrated by merge 39248eb; no PR number (pre-PR era). Owner LOCAL by landing path (not in RCA inventory). DONE means merged to v7/integration; review verdict not re-verified here."
+    },
+    {
+      "id": "UI-211",
+      "title": "Human-Approval Queue (#/queue)",
+      "package": "WP-INBOX-APPROVAL",
+      "owner": "LOCAL",
+      "status": "DONE",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": "tests/v7-ux-queue.test.ts",
+      "notes": "Merged: PR #1, merge da2285c (feature commits dd1d94f, 8e3d8ec fail-closed remediation, 44777ad baseline merge + reseal). Owner LOCAL by landing path (not in RCA inventory). DONE means merged to v7/integration; review verdict not re-verified here."
+    },
+    {
+      "id": "CI-GREEN",
+      "title": "POSIX process-leak fix + platform-aware validation",
+      "package": "PLATFORM-CI",
+      "owner": "LOCAL",
+      "status": "DONE",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": null,
+      "notes": "Merged: PR #2 content as c492172 (devrun.ts process-tree leak + 4 test/script corrections) and e8ec442 (platform-aware validation: win32-only shards NOT_RUN on Linux, never PASS); folded into trunk via 44777ad/da2285c. PR head 4f1e1f7 has an identical tree to e8ec442 but is not itself an ancestor (re-committed). Owner LOCAL by landing path (not in RCA inventory). DONE means merged to v7/integration; review verdict not re-verified here."
+    },
+    {
+      "id": "UI-227",
+      "title": "Quality Gate & Release Readiness (#/readiness)",
+      "package": "WP-QA-SEC",
+      "owner": "LOCAL",
+      "status": "DONE",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": "tests/v7-ux-readiness.test.ts",
+      "notes": "Merged: PR #3 content as commit 25ddda5 (PR head f08268b has an identical tree but is not itself an ancestor). Owner LOCAL by landing path (not in RCA inventory). DONE means merged to v7/integration; review verdict not re-verified here."
+    },
+    {
+      "id": "UI-037+046",
+      "title": "Assurance Command Center & Security Posture (#/posture)",
+      "package": "WP-QA-SEC",
+      "owner": "LOCAL",
+      "status": "DONE",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": "tests/v7-ux-posture.test.ts",
+      "notes": "Merged: PR #4, merge 232d2b4 (feature commit 8896e01). Owner LOCAL by landing path (not in RCA inventory). DONE means merged to v7/integration; review verdict not re-verified here."
+    },
+    {
+      "id": "UI-205",
+      "title": "Multi-Project Command Matrix (#/matrix)",
+      "package": "WP-COCKPIT",
+      "owner": "LOCAL",
+      "status": "DONE",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": "tests/v7-ux-matrix.test.ts",
+      "notes": "Merged: PR #5 content as commit 5cb44cd (PR head 2a5e509 has an identical tree but is not itself an ancestor). Owner LOCAL by landing path (not in RCA inventory). DONE means merged to v7/integration; review verdict not re-verified here."
+    },
+    {
+      "id": "UI-071",
+      "title": "Operations & Recovery runbook (#/operations)",
+      "package": "WP-TOWER-2D3D",
+      "owner": "LOCAL",
+      "status": "DONE",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": "tests/v7-ux-operations.test.ts",
+      "notes": "Merged: PR #6 (merge a5e2a68, commit 993ed8d) + PR #7 fix (merge cd4b104, commit bb8ef58: honest latest-run selection, UNDETERMINED retry finding). Owner LOCAL by landing path (not in RCA inventory). DONE means merged to v7/integration; review verdict not re-verified here."
+    },
+    {
+      "id": "UI-074",
+      "title": "Provider Hub (routing/health) - land PR #8",
+      "package": "WP-SETTINGS",
+      "owner": "LOCAL",
+      "status": "IN_REVIEW",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": "tests/v7-ux-providers.test.ts + PR #8 body @ feature/ui074-providers 76c9a57 (NOT on v7/integration)",
+      "notes": "[INV-01] Implemented, NOT merged: PR #8 is OPEN, head 76c9a57 (1 commit ahead of, 11 behind, e12dbdd; PR base is still the old cd4b104). Renderer-only (providers-core.js, views/providers.js, routes/planned/api/locales, tests/v7-ux-providers.test.ts); no endpoint/POST/IPC. Do NOT re-implement. Per RCA inventory both cloud reviews are INCONCLUSIVE (not CLEAN) because the review sandbox had Node v22 (repo needs >=24); no CLEAN verdict verified. CI per RCA: ubuntu push run hit a 10-minute step timeout, windows failed (cause unconfirmed). Landing needs: rebase onto e12dbdd (16 files overlap with what merged since cd4b104: routes.js, views/planned.js, api.js, locales en/tr, validation.json, trust-root-manifest.json and 9 existing test files; file-level overlap only, textual conflicts not tested), Local maintainer reseal, Windows validation, independent CLEAN review on the final SHA, coded merge gate. Cloud-side work cannot finish this."
+    },
+    {
+      "id": "UI-248",
+      "title": "First-run install verification (merged via PR #9)",
+      "package": "WP-FIRSTRUN",
+      "owner": "LOCAL",
+      "status": "DONE",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": "tests/v7-ux-install.test.ts",
+      "notes": "[INV-02] MERGED to v7/integration: PR #9, merge commit 55bcede (feature commits 80ae4df, 9f0018d, b337463 Local reseal, 6db12a5). Read-only renderer screen (install-core.js, views/install.js, route #/install) present at e12dbdd. DONE means merged to canonical; an independent CLEAN verdict on the merged head was not verified here (RCA saw only INCONCLUSIVE/BLOCKED GitHub reviews on earlier heads; any CLEAN record would live in the Local audit/reviews dir). GitHub label uasco-needs-fix is still attached to the merged PR."
+    },
+    {
+      "id": "pkg-lease1",
+      "title": "Atomic task lease + SHA/session-bound verdict (mechanism only, merged via PR #10)",
+      "package": "AUTONOMY-LEASE",
+      "owner": "LOCAL",
+      "status": "DONE",
+      "dependsOn": [],
+      "riskLevel": 3,
+      "requiresNewAuthority": false,
+      "specFile": "tests/uasco-atomic-lease.test.ts",
+      "notes": "[INV-03] MERGED to v7/integration: PR #10, merge commit e12dbdd (efd9d3d mechanism, 23e0eb0 hardening, a77e082 merge + Local reseal FA-LEASE1-2026-10-18, 9469494 remediation of review a77e082 REJECTED). Files: automation/lib/task-lease.mjs, task-lease-git-store.mjs, lease-verdict.mjs + tests/uasco-atomic-lease.test.ts. MECHANISM ONLY: not wired into orchestrator-engine / review-pipeline / validateControl, and the remote store (live refs/uasco/claims/*) is fake-tested only and NOT activated. So the atomic lease is NOT active; this is the reason Cloud Developer A must not consume this queue yet (see pkg-lease1-wiring). An independent CLEAN verdict on the merged head 9469494 was not verified here. GitHub label uasco-needs-fix is still attached to the merged PR."
+    },
+    {
+      "id": "pkg-lease1-wiring",
+      "title": "Wire the atomic lease into orchestrator-engine / review-pipeline / validateControl, then activate",
+      "package": "AUTONOMY-LEASE",
+      "owner": "FOUNDER",
+      "status": "BLOCKED",
+      "dependsOn": [
+        "pkg-lease1"
+      ],
+      "riskLevel": 4,
+      "requiresNewAuthority": true,
+      "specFile": "PR #10 body, section 'Follow-up (reviewed, NOT in this PR)'; draft LEASE-WIRING-INTEGRATION-PLAN.md (uncommitted, session scratchpad, not in repo)",
+      "notes": "[INV-04] Real remaining work deferred by PR #10: claim/renew/release at the runTick claim site in orchestrator-engine.mjs; control.packages[id].claim through validateControl; reviewerSessionId/implementerSessionId in review-pipeline.mjs (implementer id from supervisor-owned state, never self-reported). All targets are protected/core under automation/lib/ (governanceChangeMode EXPLICIT_GOVERNANCE_CHANGE_ONLY, normalBuilderMayModifyProtectedPaths=false), so it needs an explicit maintainer governance change, a Local reseal and Windows validation; also needs Founder authority to activate live refs/uasco/claims/* on origin. Wiring-time items from the PR #10 re-review: epoch fencing on same-owner re-claim; SAME_IDENTITY source from supervisor-owned state. Planned rollout: wiring PR -> independent review -> reseal -> merge -> dark-launch (log-only) -> enforce. Also requires Local Windows maintainer (owner set to FOUNDER because the authority gate comes first). This is the gate for activating Cloud Developer A."
+    },
+    {
+      "id": "RESEAL-SERIALIZATION",
+      "title": "Serialize merge + trust-root reseal of open sealed-line PRs (structural reseal bottleneck)",
+      "package": "GOVERNANCE-TRUST-ROOT",
+      "owner": "LOCAL",
+      "status": "BLOCKED",
+      "dependsOn": [
+        "UI-074"
+      ],
+      "riskLevel": 3,
+      "requiresNewAuthority": false,
+      "specFile": "config/trust-root-manifest.json; config/protected-paths.json",
+      "notes": "[INV-05] Re-derived at e12dbdd: the original three-way conflict (#8/#9/#10) is largely resolved because #9 and #10 were merged serially with Local reseals. Remaining: PR #8 (UI-074) must be rebased on e12dbdd and resealed again (see UI-074). Standing structural bottleneck: every new renderer screen registers a test in sealed config/validation.json, changing its sha256 in config/trust-root-manifest.json, which only a Local maintainer reseal can regenerate, so throughput is roughly one screen PR per reseal cycle. Any new cloud screen PR opened before UI-074 lands joins the conflict set. Blocked on UI-074 reaching an independent CLEAN review; Local maintainer owns the action."
+    },
+    {
+      "id": "BACKLOG-SOURCE-REBASELINE",
+      "title": "Land an authoritative re-baselined canonical backlog on v7/integration",
+      "package": "AUTONOMY-BACKLOG",
+      "owner": "FOUNDER",
+      "status": "BLOCKED",
+      "dependsOn": [
+        "pkg-lease1-wiring"
+      ],
+      "riskLevel": 2,
+      "requiresNewAuthority": true,
+      "specFile": "docs/planning/BACKLOG_CHECKPOINT.json + docs/planning/PRODUCTION_QUEUE.json (these DRAFTs; stale originals only on origin/v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph@9dbb708)",
+      "notes": "[INV-06] docs/planning/ does not exist on v7/integration (verified at e12dbdd), so Cloud Developer A's start-of-run gate correctly reports BLOCKED and must not invent a backlog. The stale v6-branch copies (snapshot ec105b7, 'mapping only; nothing VERIFIED', READY statuses) must NOT be copied: they would make a builder re-implement delivered screens (UI-236, UI-205, ...). The two regenerated DRAFT files are the proposed re-baseline; a maintainer/Founder must choose the authoritative source and authorize it. docs/planning/ is not sealed, so landing needs no reseal. Per the lease-wiring plan, transfer only after the lease is wired and enforce is proven, so Developer A reads the backlog under lease protection."
+    },
+    {
+      "id": "UI-023",
+      "title": "Read-only mission/run status board (kanban) in #/work",
+      "package": "WP-WORKOS",
+      "owner": "CLOUD",
+      "status": "DRAFT_NOT_READY",
+      "dependsOn": [
+        "pkg-lease1-wiring",
+        "BACKLOG-SOURCE-REBASELINE"
+      ],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": "docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv [row UI-023, P0 PARTIAL] @ origin/v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph@9dbb708 (NOT on v7/integration)",
+      "notes": "[INV-07] Only task shown to be a real, still-missing, renderer-only, cloud-independent gap: Work view is a mission/run list and the renderer has no board/column/lane construct (git grep kanban in renderer: 0 matches at e12dbdd). A READ-ONLY board needs only already allow-listed GET /v1/missions and GET /v1/work-runs; drag-and-drop transitions would use the allow-listed POST /v1/missions/:id/transition (a write/approval action) and would leave the cloud-independent definition, so they are out of scope. NOT ready: no canonical backlog entry or verified ownership; only source is a stale CSV saying 'verify vs design'; reference design images are not in the repo (scope/parity unverifiable); needs a test registered in sealed config/validation.json so a Local reseal follows; would join the sealed-line conflict set, so serialize behind UI-074 landing (recommendation)."
+    },
+    {
+      "id": "UI-016",
+      "title": "Final Analysis Approval (pre-dev approval action)",
+      "package": "WP-INBOX-APPROVAL",
+      "owner": "FOUNDER",
+      "status": "BLOCKED",
+      "dependsOn": [],
+      "riskLevel": 4,
+      "requiresNewAuthority": true,
+      "specFile": "docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv [row UI-016] and SCREEN_TRACEABILITY_REBASELINE_2026-10-16.md item 3 @ origin/v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph@9dbb708 (NOT on v7/integration)",
+      "notes": "[INV-08] Real and unimplemented but not renderer-only. PreDevDriver.approveAndAdvance exists in core/workos/predev/driver.ts but no HTTP route exposes it (no predev-approve route in apps/control-api/src/server.ts) and the desktop POST allow-list in apps/desktop/main.mjs has no pre-dev approval path (verified at e12dbdd). Needs a new POST in server.ts plus an allow-list entry in main.mjs, both exact-protected and sealed: reseal, human-in-the-loop approval-gate design and higher scrutiny. Also requires Local Windows maintainer (owner set to FOUNDER because new authority is the first gate)."
+    },
+    {
+      "id": "UI-004",
+      "title": "Founder Command Center (chat / command console)",
+      "package": "WP-SHELL",
+      "owner": "FOUNDER",
+      "status": "BLOCKED",
+      "dependsOn": [],
+      "riskLevel": 4,
+      "requiresNewAuthority": true,
+      "specFile": "docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv [row UI-004, P0 MISSING] @ origin/v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph@9dbb708 (NOT on v7/integration)",
+      "notes": "[INV-09] No route, view or backend exists. The source CSV states free-form command execution needs a Founder decision (UNAPPROVED-adjacent). A real implementation needs a new endpoint plus allow-list entries in sealed files; not buildable by a cloud builder under current authority. Also requires Local Windows maintainer (owner set to FOUNDER because new authority is the first gate)."
+    },
+    {
+      "id": "UI-027+UI-220",
+      "title": "Autonomy-level/budget controls (UI-027) and quarantine cockpit (UI-220)",
+      "package": "WP-TOWER-2D3D",
+      "owner": "FOUNDER",
+      "status": "BLOCKED",
+      "dependsOn": [],
+      "riskLevel": 4,
+      "requiresNewAuthority": true,
+      "specFile": "docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv [rows UI-027, UI-220, P0 PARTIAL] @ origin/v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph@9dbb708 (NOT on v7/integration)",
+      "notes": "[INV-10] Stop/Resume/Retry already exist in tower and the shell. Missing: setting an autonomy level or budget, and isolating a project/agent/secret. Neither has a control endpoint, so each needs a new endpoint plus allow-list entry in sealed files and a risk decision. A read-only display is conceivable but the CSV does not define one and no evidence shows it is wanted. Also requires Local Windows maintainer (owner set to FOUNDER because new authority is the first gate)."
+    },
+    {
+      "id": "WP-COMPANY-WRITE",
+      "title": "Company OS write/management screens (WP-COMPANY: 33 screens, 29 MISSING, 3 UNAPPROVED)",
+      "package": "WP-COMPANY",
+      "owner": "FOUNDER",
+      "status": "BLOCKED",
+      "dependsOn": [],
+      "riskLevel": 5,
+      "requiresNewAuthority": true,
+      "specFile": "docs/planning/BACKLOG_CHECKPOINT.json WP-COMPANY @ origin/v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph@9dbb708 (NOT on v7/integration)",
+      "notes": "[INV-11] Company OS view is read-only by design. The backend has six write endpoints (company accounts, contacts, opportunities, invoices, payments, contracts) but none is in the desktop POST allow-list (verified main.mjs:114-118 at e12dbdd). Exposing them needs allow-list changes in sealed main.mjs and a Founder decision because invoices and payments touch money. Which of the 33 rows are read-only gaps vs write flows is unknown without a fresh audit, so no read-only subset is claimed. Also requires Local Windows maintainer (owner set to FOUNDER because new authority is the first gate)."
+    },
+    {
+      "id": "FD-REL-1-GATED-SET",
+      "title": "FD-REL-1 / Founder-gated set: UI-043, UI-149, UI-188, UI-176, live QA execution, real deploy, 2D/3D tower GPU, mobile companion",
+      "package": "WP-QA-SEC/WP-DELIVERY/WP-TOWER-2D3D/WP-MOBILE-COMPANION/WP-MISC",
+      "owner": "FOUNDER",
+      "status": "BLOCKED",
+      "dependsOn": [],
+      "riskLevel": 5,
+      "requiresNewAuthority": true,
+      "specFile": "docs/planning/PRODUCTION_QUEUE.json excluded_blocked @ origin/v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph@9dbb708 (NOT on v7/integration)",
+      "notes": "[INV-12] Excluded by the prior queue as outside current authority: FD-REL-1 (live preview/test execution), real deploy, 3D/GPU and paid capability are Founder gates; desktop and mobile execution also need local hardware/devices. The Delivery view already shows real production deploy and live SRE as Founder-gated BLOCKED/NOT_CONNECTED, so nothing honest is left to build in the renderer. risk-5/production/paid authority must never be assumed. Also requires Local Windows maintainer (owner set to FOUNDER because new authority is the first gate)."
+    },
+    {
+      "id": "RELEASE-SIGNATURE-PHASE0",
+      "title": "Release packaging, Founder detached signature, then target-machine Phase0",
+      "package": "RELEASE-PACKAGING",
+      "owner": "FOUNDER",
+      "status": "BLOCKED",
+      "dependsOn": [],
+      "riskLevel": 5,
+      "requiresNewAuthority": true,
+      "specFile": "CANONICAL-STATUS.md (Environment/runtime gates section)",
+      "notes": "[INV-13] CANONICAL-STATUS.md (sealed) still lists the next gate as RELEASE_PACKAGING_SIGNATURE_THEN_TARGET_MACHINE_PHASE0 with target Windows Phase0 = PENDING (re-read at e12dbdd). Chain: git archive, SHA256SUMS, deterministic ZIP, verify-release-extract, Founder detached signature with the external private key, then install.ps1 on a target Windows machine. Signing keys are Founder-only and never cloud inputs. Caveat: the doc is demonstrably stale elsewhere (see DOC-TRUTH-CANONICAL-STATUS), so currency rests on the doc alone; no checkpoint claims Phase0 acceptance, consistent with PENDING but not proof. Also requires Local Windows (owner set to FOUNDER because new authority is the first gate)."
+    },
+    {
+      "id": "DOC-TRUTH-CANONICAL-STATUS",
+      "title": "CANONICAL-STATUS.md is stale on package states (X1/R3/AUT1 listed pending/held but already in integration history)",
+      "package": "GOVERNANCE-DOC-TRUTH",
+      "owner": "LOCAL",
+      "status": "DRAFT_NOT_READY",
+      "dependsOn": [],
+      "riskLevel": 3,
+      "requiresNewAuthority": false,
+      "specFile": "CANONICAL-STATUS.md",
+      "notes": "[INV-14] Doc-truth drift, re-verified at e12dbdd: the doc still says PKG-R3 'independent review pending', PKG-X1 'merge held' and PKG-AUT1 'merge after PKG-X1', while ca21e83 (R3) and 1e3a123 (X1) are ancestors of v7/integration and AUT1/AUT2 commits are in history; it also predates pkg-lease1. The file is exact-protected and in the sealed manifest, so a correction needs a Local maintainer reseal and review. Low priority, not a feature; not every other line of the doc was checked."
+    },
+    {
+      "id": "ADVISORIES-F-PKGE-002-F-PKGR-001",
+      "title": "Durable P3 advisories F-PKGE-002 and F-PKGR-001",
+      "package": "PACKAGING-ADVISORIES",
+      "owner": "LOCAL",
+      "status": "DRAFT_NOT_READY",
+      "dependsOn": [],
+      "riskLevel": 3,
+      "requiresNewAuthority": false,
+      "specFile": "CANONICAL-STATUS.md (durable LOW backlog line); scripts/provision-electron.mjs; scripts/validate-paste2-closure.mjs",
+      "notes": "[INV-15] Recorded LOW items, not blockers; both live in exact-protected sealed scripts, so a cloud builder cannot touch them. Re-checked at e12dbdd: exeSha256 appears only in scripts/provision-electron.mjs:21 (written, never read by that name), matching F-PKGE-002; scripts/validate-paste2-closure.mjs:83 now prints finalTrustRootSeal 'STALE_PENDING_FINAL_RESEAL' (not a PASS), so F-PKGR-001 may already be mitigated. Needs a Local maintainer look before anyone calls either open or closed."
+    },
+    {
+      "id": "SCREEN-EVIDENCE-DEBT",
+      "title": "Per-screen verification evidence debt (functional, negative, a11y, design parity, evidence path)",
+      "package": "SCREEN-VERIFICATION",
+      "owner": "LOCAL",
+      "status": "DRAFT_NOT_READY",
+      "dependsOn": [
+        "BACKLOG-SOURCE-REBASELINE"
+      ],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": "SCREEN_TRACEABILITY_REBASELINE_2026-10-16.md + docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv @ origin/v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph@9dbb708 (NOT on v7/integration)",
+      "notes": "[INV-16] Rebaseline calls this the most critical honesty gap: 'BOUND' means route + data binding + a test file exist, not a passing test, pixel parity or accessibility. In the stale CSV (252 rows) functional/negative tests NOT_EXECUTED 252, a11y NOT_VERIFIED 252, commit_sha NOT_VERIFIED 252, evidence_path blank. Pixel-parity needs the reference designs, which are not in the repo (0 image files on v7/integration; they sit in a local Windows Downloads package), so that part is Local. Per-screen a11y might be possible in the cloud but feasibility was not verified. CSV is an ec105b7 snapshot, so counts are an upper bound on the debt."
+    },
+    {
+      "id": "P0-REMAINDER-AUDIT",
+      "title": "Remaining P0 screen rows with unknown delta (19 rows: UI-001,005,006,007,008,009,010,011,022,026,028,030,053,076,113,115,124,125,134)",
+      "package": "P0-SCREENS",
+      "owner": "CLOUD",
+      "status": "DRAFT_NOT_READY",
+      "dependsOn": [
+        "BACKLOG-SOURCE-REBASELINE"
+      ],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": "docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv (P0 rows) @ origin/v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph@9dbb708 (NOT on v7/integration)",
+      "notes": "[INV-17] UNVERIFIED_STALE_BACKLOG. Owner CLOUD only by boolean derivation (both flags false means 'not cleared', NOT 'free to do'); do not dispatch from this row. Their CSV text is from the ec105b7 audit and several similar rows have since merged (UI-002 b946d0a, UI-055 e562169, UI-081 65caaa9 are ancestors of v7/integration; completeness vs spec not verified), so what is still missing for any of the 19 cannot be said without a fresh per-screen audit. UI-009 (company/product portfolio grouping) has a stated gap, but the shipped matrix rollup is a command-matrix rollup and /v1/projects grouping data was not checked. No per-screen tasks created because none would be evidence-backed."
+    },
+    {
+      "id": "P1-P2-BACKLOG-AUDIT",
+      "title": "P1 (122 rows) and P2 (87 rows) screen backlog, status unverified",
+      "package": "P1-P2-SCREENS",
+      "owner": "CLOUD",
+      "status": "DRAFT_NOT_READY",
+      "dependsOn": [
+        "BACKLOG-SOURCE-REBASELINE"
+      ],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "specFile": "docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv (P1/P2 rows) @ origin/v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph@9dbb708 (NOT on v7/integration)",
+      "notes": "[INV-18] UNVERIFIED_STALE_BACKLOG long tail; nothing here can be called READY. Owner CLOUD only by boolean derivation (flags false means 'not cleared'); cloud independence cannot be assumed because UNAPPROVED and BLOCKED rows need new endpoints or Founder approval. Stale-audit counts: P1 MISSING 60 / PARTIAL 48 / BLOCKED 5 / NOT_APPLICABLE 5 / UNAPPROVED 3 / DUPLICATE 1; P2 MISSING 61 / UNAPPROVED 17 / BLOCKED 7 / PARTIAL 1 / NOT_APPLICABLE 1. Rebaseline measured only 14 BOUND / 85 PARTIAL / 153 DESIGN_ONLY across all 252 at its own date. No per-screen tasks created because none would be evidence-backed."
+    }
+  ]
+}

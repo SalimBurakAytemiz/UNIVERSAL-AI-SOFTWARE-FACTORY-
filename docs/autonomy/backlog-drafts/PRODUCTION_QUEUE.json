@@ -1,0 +1,115 @@
+{
+  "_doc": "DRAFT — see BACKLOG_CHECKPOINT.json. Queue is NOT active; needs atomic-lease wiring + Founder READY authorization before Cloud Developer A consumes it.",
+  "integrationBranch": "v7/integration",
+  "trunkAtUpdate": "e12dbdd",
+  "done": [
+    "UI-236",
+    "UI-049",
+    "UI-211",
+    "CI-GREEN",
+    "UI-227",
+    "UI-037+046",
+    "UI-205",
+    "UI-071",
+    "UI-248",
+    "pkg-lease1"
+  ],
+  "inReview": [
+    "UI-074"
+  ],
+  "inReviewDetail": [
+    {
+      "id": "UI-074",
+      "pr": 8,
+      "state": "OPEN",
+      "branch": "feature/ui074-providers",
+      "headSha": "76c9a57",
+      "baseShaOfPr": "cd4b104",
+      "behindTrunk": 11,
+      "aheadOfTrunk": 1
+    }
+  ],
+  "candidates": [
+    {
+      "id": "UI-023",
+      "owner": "CLOUD",
+      "status": "DRAFT_NOT_READY",
+      "blockedBy": [
+        "FOUNDER_READY_AUTHORIZATION",
+        "ATOMIC_LEASE_WIRED_AND_ACTIVE (pkg-lease1-wiring)",
+        "BACKLOG-SOURCE-REBASELINE (no canonical backlog on v7/integration)",
+        "REFERENCE_DESIGN_IMAGES_NOT_IN_REPO (scope/parity unverifiable)",
+        "LOCAL_RESEAL_AFTER_CLOUD_PR (test registered in sealed config/validation.json)",
+        "RECOMMENDED: serialize behind UI-074 landing (shared sealed lines)"
+      ]
+    },
+    {
+      "id": "DOC-TRUTH-CANONICAL-STATUS",
+      "owner": "LOCAL",
+      "status": "DRAFT_NOT_READY",
+      "blockedBy": [
+        "FOUNDER_READY_AUTHORIZATION",
+        "LOCAL_MAINTAINER_RESEAL (CANONICAL-STATUS.md is exact-protected + sealed)",
+        "LOCAL_MAINTAINER_REVIEW"
+      ]
+    },
+    {
+      "id": "ADVISORIES-F-PKGE-002-F-PKGR-001",
+      "owner": "LOCAL",
+      "status": "DRAFT_NOT_READY",
+      "blockedBy": [
+        "FOUNDER_READY_AUTHORIZATION",
+        "LOCAL_MAINTAINER_TRIAGE (current open/closed state unconfirmed; F-PKGR-001 may be mitigated)",
+        "LOCAL_MAINTAINER_RESEAL (exact-protected sealed scripts)"
+      ]
+    },
+    {
+      "id": "SCREEN-EVIDENCE-DEBT",
+      "owner": "LOCAL",
+      "status": "DRAFT_NOT_READY",
+      "blockedBy": [
+        "FOUNDER_READY_AUTHORIZATION",
+        "BACKLOG-SOURCE-REBASELINE",
+        "REFERENCE_DESIGN_IMAGES_NOT_IN_REPO (local Windows Downloads package)",
+        "LOCAL_WINDOWS_VERIFICATION"
+      ]
+    },
+    {
+      "id": "P0-REMAINDER-AUDIT",
+      "owner": "CLOUD",
+      "status": "DRAFT_NOT_READY",
+      "blockedBy": [
+        "FOUNDER_READY_AUTHORIZATION",
+        "ATOMIC_LEASE_WIRED_AND_ACTIVE (pkg-lease1-wiring)",
+        "BACKLOG-SOURCE-REBASELINE",
+        "FRESH_PER_SCREEN_AUDIT_REQUIRED (stale ec105b7 data; NOT dispatchable as-is)"
+      ]
+    },
+    {
+      "id": "P1-P2-BACKLOG-AUDIT",
+      "owner": "CLOUD",
+      "status": "DRAFT_NOT_READY",
+      "blockedBy": [
+        "FOUNDER_READY_AUTHORIZATION",
+        "ATOMIC_LEASE_WIRED_AND_ACTIVE (pkg-lease1-wiring)",
+        "BACKLOG-SOURCE-REBASELINE",
+        "FRESH_PER_SCREEN_AUDIT_REQUIRED (stale ec105b7 data; NOT dispatchable as-is)",
+        "UNAPPROVED_AND_BLOCKED_ROWS_NEED_FOUNDER_DECISION"
+      ]
+    }
+  ],
+  "excludedBlocked": {
+    "reason": "Gated outside Cloud Developer A authority: Founder authority/decision (new endpoint or allow-list in sealed files, live remote refs/uasco/claims activation, release signing, FD-REL-1/real deploy/paid/risk-5, backlog-source decision) or a Local-maintainer gate (reseal, Windows validation, coded merge gate). Nothing here may be started without explicit Founder authorization.",
+    "ids": [
+      "pkg-lease1-wiring",
+      "RESEAL-SERIALIZATION",
+      "BACKLOG-SOURCE-REBASELINE",
+      "UI-016",
+      "UI-004",
+      "UI-027+UI-220",
+      "WP-COMPANY-WRITE",
+      "FD-REL-1-GATED-SET",
+      "RELEASE-SIGNATURE-PHASE0"
+    ]
+  }
+}
