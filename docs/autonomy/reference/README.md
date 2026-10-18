@@ -39,6 +39,18 @@ Local share the same git-ref store so arbitration is cross-environment.
 Re-verified from this committed path on 2026-10-18: 65/65 PASS. The proof creates and deletes its own temp
 repos; it writes nothing into the working tree and claims no lease in the real repo.
 
+`loop-proof.mjs` is the **end-to-end** proof of the P0 success criterion: it drives the orchestrator loop
+over the real engine + real leases — `selectNext` → `START` → "Cloud finished, hand to Local"
+(status→`AWAITING_LOCAL`, release the Cloud lease) → `selectNext` again — and asserts Cloud auto-advances
+`T1 → T2 → T3`, that a Local hand-off never blocks the next independent task, that a dependent task recovers
+only once Local marks its dependency `DONE`, that two Cloud workers never take the same task (P5), and that the
+terminal state is an honest `AUTHORITY_REQUIRED` rather than a hang.
+
+```
+<node24>/node docs/autonomy/reference/loop-proof.mjs
+# => SUMMARY: 19 passed, 0 failed ; RESULT: ALL CHECKS PASS ; EXIT=0
+```
+
 ## On wiring (FA-LEASE2 only)
 
 When authorized, the engine moves into `automation/lib/` and its import becomes `./task-lease.mjs`; the

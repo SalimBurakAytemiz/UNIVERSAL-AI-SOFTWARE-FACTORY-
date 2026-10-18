@@ -28,6 +28,8 @@ bundle.** Items that require Founder authority, Local re-seal, or admin apply ar
 ## Evidence
 
 - Next-step proof: `node docs/autonomy/reference/proof.mjs` (Node 24) → `SUMMARY: 65 passed, 0 failed`.
+- End-to-end auto-advance loop proof (P0 success criterion): `node docs/autonomy/reference/loop-proof.mjs`
+  (Node 24) → `SUMMARY: 19 passed, 0 failed` (start → hand to Local → auto-advance → dependent recovers → terminal AUTHORITY_REQUIRED; two-worker single ownership).
 - Backlog drafts: valid JSON; re-derived from `e12dbdd`; nothing READY; no `authorizedBy`.
 - Merge-gate script: syntax-checked; writes `.ai/runtime/INTEGRATION_BRANCH_PROTECTION.json` when a Local
   admin runs it.
