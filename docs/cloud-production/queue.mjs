@@ -28,20 +28,29 @@ export function loadQueue(obj) {
     const id = t.id;
     if (!OWNERS.has(t.owner)) err(id, 'OWNER_INVALID', `owner ${String(t.owner)}`);
     if (!STATUSES.has(t.status)) err(id, 'STATUS_INVALID', `status ${String(t.status)}`);
-    const deps = Array.isArray(t.dependsOn) ? t.dependsOn : [];
+    // Fail closed: dependsOn must be absent or an array of non-empty strings; anything else is invalid, never "no deps".
+    const depsValid = t.dependsOn === undefined ||
+      (Array.isArray(t.dependsOn) && t.dependsOn.every((d) => typeof d === 'string' && d.length > 0));
+    if (!depsValid) err(id, 'DEPS_INVALID', 'dependsOn must be an array of non-empty strings');
+    const deps = depsValid && t.dependsOn !== undefined ? t.dependsOn : [];
     for (const d of deps) {
       if (!byId.has(d)) err(id, 'DEP_ABSENT_FROM_BACKLOG', `dependency ${String(d)} not in backlog`);
     }
     if (t.status === 'READY') {
-      if (typeof t.authorizedBy !== 'string' || t.authorizedBy.length === 0) {
+      if (typeof t.authorizedBy !== 'string' || t.authorizedBy.trim().length === 0) {
         err(id, 'UNAUTHORIZED_READY', 'READY requires non-empty authorizedBy');
       }
       for (const d of deps) {
         const dt = byId.get(d);
         if (dt && !DONE.has(dt.status)) err(id, 'READY_WITH_UNMET_DEP', `dependency ${d} is ${dt.status}`);
       }
-      if (t.protectedEdit === true) err(id, 'READY_REQUIRES_PROTECTED_EDIT', 'protectedEdit is true');
-      if (t.requiresNewAuthority === true) err(id, 'READY_REQUIRES_NEW_AUTHORITY', 'requiresNewAuthority is true');
+      // Only an absent field or the boolean false is acceptable; truthy strings/numbers must not slip through.
+      if (t.protectedEdit !== undefined && t.protectedEdit !== false) {
+        err(id, 'READY_REQUIRES_PROTECTED_EDIT', `protectedEdit must be absent or false, got ${String(t.protectedEdit)}`);
+      }
+      if (t.requiresNewAuthority !== undefined && t.requiresNewAuthority !== false) {
+        err(id, 'READY_REQUIRES_NEW_AUTHORITY', `requiresNewAuthority must be absent or false, got ${String(t.requiresNewAuthority)}`);
+      }
     }
   }
   return { ok: errors.length === 0, errors, tasks };
@@ -50,6 +59,8 @@ export function loadQueue(obj) {
 export function nextDispatchable(queue, heldLeaseTaskIds = [], openPrTaskIds = []) {
   const loaded = loadQueue(queue);
   if (!loaded.ok) return null;
+  const idList = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
+  if (!idList(heldLeaseTaskIds) || !idList(openPrTaskIds)) return null;
   const held = new Set(heldLeaseTaskIds);
   const open = new Set(openPrTaskIds);
   for (const t of loaded.tasks) {

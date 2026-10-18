@@ -36,6 +36,20 @@ check('skips task in openPrTaskIds', nextDispatchable(valid, [], ['B'])?.id === 
 check('returns null when all READY ids held', nextDispatchable(valid, ['B', 'C']) === null);
 check('returns null for invalid queue',
   nextDispatchable({ tasks: [T({ id: 'X', authorizedBy: '' })] }) === null);
+check('malformed dependsOn (string) -> DEPS_INVALID and not dispatched',
+  has({ tasks: [T({ id: 'D', status: 'IN_PROGRESS' }), T({ id: 'X', dependsOn: 'D' })] }, 'DEPS_INVALID') &&
+  nextDispatchable({ tasks: [T({ id: 'D', status: 'IN_PROGRESS' }), T({ id: 'X', dependsOn: 'D' })] }) === null);
+check('dependsOn with non-string element -> DEPS_INVALID', has({ tasks: [T({ id: 'X', dependsOn: [1] })] }, 'DEPS_INVALID'));
+check("truthy non-boolean protectedEdit ('true') rejected",
+  has({ tasks: [T({ id: 'X', protectedEdit: 'true' })] }, 'READY_REQUIRES_PROTECTED_EDIT'));
+check('truthy non-boolean requiresNewAuthority (1) rejected',
+  has({ tasks: [T({ id: 'X', requiresNewAuthority: 1 })] }, 'READY_REQUIRES_NEW_AUTHORITY'));
+check('explicit false protectedEdit/requiresNewAuthority accepted',
+  loadQueue({ tasks: [T({ id: 'X', protectedEdit: false, requiresNewAuthority: false })] }).ok === true);
+check('whitespace-only authorizedBy -> UNAUTHORIZED_READY',
+  has({ tasks: [T({ id: 'X', authorizedBy: '   ' })] }, 'UNAUTHORIZED_READY'));
+check('non-array heldLeaseTaskIds (string) fails closed to null', nextDispatchable(valid, 'B') === null);
+check('non-array openPrTaskIds (non-iterable) fails closed to null', nextDispatchable(valid, [], 5) === null);
 check('module does not mutate/declare ready', valid.tasks[0].status === 'DONE');
 
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
