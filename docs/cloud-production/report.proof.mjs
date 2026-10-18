@@ -282,5 +282,48 @@ const hugeTasks = new Array(2 ** 28);
   check("notes rendered via safe() escaping", !nb.includes("<") && !nb.includes("&") && nb.includes("a\\u003cb>\\u0026\\nline"));
 }
 
+// Review remediation 2: bounded rendering and best-effort secret redaction
+{
+  const base = { periodStart: "2026-01-01T00:00:00Z", periodEnd: "2026-01-01T01:00:00Z", prs: [], queue: { tasks: [] } };
+  const t0 = Date.now();
+  const fl = Array.from({ length: 1e5 }, (_, i) => "F" + i + "x".repeat(2000));
+  const md = renderMarkdown(buildReport({ ...base, runFacts: { activeImplementers: 1, failures: fl } }));
+  check("1e5 failures of 2000 chars: markdown < 500 KB in < 2 s", md.length < 500 * 1024 && Date.now() - t0 < 2000);
+  check("failures list ends with fixed '(+99000 more)' marker and shows the true count", md.includes("(+99000 more)") && md.includes("Failures: 100000 ("));
+  check("each rendered failure string is capped (truncated marker present, no 2000-char run)", md.includes("...(truncated)") && !md.includes("x".repeat(250)));
+  const exactly = renderMarkdown(buildReport({ ...base, runFacts: { activeImplementers: 1, failures: fl.slice(0, 1000) } }));
+  check("exactly 1000 items: no '(+N more)' marker", !exactly.includes("more)"));
+  const bn = { ...base, queue: { tasks: Array.from({ length: 5000 }, (_, i) => ({ id: "B" + i, status: "BLOCKED", blocker: "b" })) } };
+  const mb = renderMarkdown(buildReport(bn));
+  check("5000 bottlenecks: capped at 1000 with '(+4000 more)'", mb.includes("(+4000 more)") && !mb.includes("B1000:") && mb.includes("B999\""));
+  const longId = renderMarkdown({ period: { start: "p".repeat(5000), end: "e" }, completedTasks: 0, newPrs: 0, activeImplementers: 0, failures: [], bottlenecks: [{ id: "i".repeat(5000), blocker: "k" }], unknowns: ["u".repeat(5000)] });
+  check("long period/id/unknown strings are capped", longId.length < 2000);
+
+  // NOTE: fixtures are FAKE values assembled at runtime so no token-shaped literal exists in this file;
+  // scripts/secret-sanity.mjs is unchanged. Redaction is a best-effort denylist, not a guarantee; blocker/notes must not hold secrets.
+  const A = "A".repeat(24);
+  const fakes = {
+    ghp: "gh" + "p_" + A,
+    pat: "github" + "_pat_" + A,
+    glpat: "gl" + "pat-" + A,
+    akia: "AK" + "IA" + "B".repeat(16),
+    xox: "xo" + "xb-" + "1234567890-abc",
+    jwt: "ey" + "Jhbgci.ey" + "Jzdwiy.sig_nature",
+  };
+  const bt = (text) => buildReport({ ...base, queue: { tasks: [{ id: "S", status: "BLOCKED", notes: text }] } }).bottlenecks[0].blocker;
+  for (const [k, v] of Object.entries(fakes)) {
+    const out = bt("see " + v + " end");
+    check(`redaction: ${k} token shape replaced`, out === "see [redacted] end" && !out.includes(v));
+  }
+  for (const kv of ["Authorization: Bearer abc123def", "password=hunter2", "client_secret = zzz", "api-token: qqq"]) {
+    const out = bt("x " + kv + " y");
+    check(`redaction: key/value pair '${kv.split(/[:=]/)[0].trim()}' replaced`, out === "x [redacted] y");
+  }
+  check("redaction applies to blocker field too", buildReport({ ...base, queue: { tasks: [{ id: "S", status: "BLOCKED", blocker: fakes.ghp }] } }).bottlenecks[0].blocker === "[redacted]");
+  check("token straddling the 200-char cap is redacted, not half-leaked", !bt("a".repeat(190) + " " + fakes.ghp).includes("gh" + "p_"));
+  check("plain blocker text untouched", bt("waiting for review of PR 12") === "waiting for review of PR 12");
+  check("redaction regexes run in linear-ish time on hostile 1e6-char input", (() => { const t = Date.now(); bt("token".repeat(2e5)); bt("a-".repeat(5e5)); return Date.now() - t < 1000; })());
+}
+
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -55,12 +55,35 @@ const toMs = (v) => {
 
 // Blocker text: t.blocker if a non-empty string, else t.notes if a non-empty string, else 'unspecified'; capped at 200 chars.
 // Reading a hostile field (throwing getter, ...) must never throw. Output is safe()-escaped at render time.
+//
+// SECURITY NOTE: blocker/notes are free text and MUST NOT contain secrets. Authors must never put credentials in them.
+// As a last line of defence only, redactSecrets() masks a few well-known token shapes and key=value credential pairs.
+// This is a BEST-EFFORT DENYLIST, NOT A GUARANTEE: unknown token formats, split/encoded values and prose secrets pass through.
+// It is intentionally simple (linear-time regexes, applied to at most 2000 chars) and applies to notes/blocker only.
 const BLOCKER_CAP = 200;
+const REDACT_SCAN_CAP = 2000;
+const SECRET_PATTERNS = [
+  /gh[pousr]_[A-Za-z0-9_]{20,}/g,
+  /github_pat_[A-Za-z0-9_]{20,}/g,
+  /glpat-[A-Za-z0-9_-]{20,}/g,
+  /AKIA[0-9A-Z]{16}/g,
+  /xox[abprs]-[A-Za-z0-9-]{10,}/g,
+  /eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g,
+  /[A-Za-z0-9_-]*(?:authorization|password|passwd|secret|token)[A-Za-z0-9_-]*[ \t]*[:=][ \t]*(?:(?:bearer|basic)[ \t]+)?[^\s,;"']+/gi,
+];
+export const redactSecrets = (v) => {
+  let out = v.length > REDACT_SCAN_CAP ? v.slice(0, REDACT_SCAN_CAP) : v;
+  for (const re of SECRET_PATTERNS) out = out.replace(re, "[redacted]");
+  return out;
+};
 const blockerText = (t) => {
   for (const k of ["blocker", "notes"]) {
     try {
       const v = t[k];
-      if (typeof v === "string" && v.length > 0) return v.length > BLOCKER_CAP ? v.slice(0, BLOCKER_CAP) : v;
+      if (typeof v === "string" && v.length > 0) {
+        const r = redactSecrets(v); // redact BEFORE capping so a token straddling the cap is not half-leaked
+        return r.length > BLOCKER_CAP ? r.slice(0, BLOCKER_CAP) : r;
+      }
     } catch { /* unreadable field: try the next source */ }
   }
   return "unspecified";
@@ -185,17 +208,27 @@ export function buildReport(input) {
 const guard = (f) => { try { return f(); } catch { return "[unrenderable]"; } };
 const show = (v, f = String) => guard(() => (v === UNKNOWN ? "UNKNOWN (not observed)" : f(v)));
 
-// Escapes any value to a single-line JSON token; never throws (circular, BigInt, ...).
+// Escapes any value to a single-line JSON token, capped at SAFE_CAP chars; never throws (circular, BigInt, ...).
+const SAFE_CAP = 200;
+const MAX_RENDER_ITEMS = 1000;
 const safe = (v) => {
   try {
-    const j = JSON.stringify(v);
+    let j = JSON.stringify(v);
     if (typeof j !== "string") return "[unserializable]";
+    if (j.length > SAFE_CAP) {
+      j = j.slice(0, SAFE_CAP);
+      const last = j.charCodeAt(j.length - 1);
+      if (last >= 0xd800 && last <= 0xdbff) j = j.slice(0, -1); // do not leave a lone high surrogate
+      j += "...(truncated)";
+    }
     // U+2028/U+2029 (line separators), '<' and '&' are escaped so the token cannot break lines or inject HTML.
     return j.replace(/[\u2028\u2029<&]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
   } catch {
     return "[unserializable]";
   }
 };
+// Plain-string variant for unknown labels: same cap, no JSON quoting.
+const capStr = (x) => { const t = String(x); return t.length > SAFE_CAP ? t.slice(0, SAFE_CAP) + "...(truncated)" : t; };
 
 export function renderMarkdown(r) {
   try {
@@ -208,7 +241,13 @@ export function renderMarkdown(r) {
 function renderMarkdownUnsafe(r) {
   // Indexed snapshot (never the iterator); over-cap or hostile lists throw into guard() => "[unrenderable]".
   const items = (a) => { const l = readList(a); if (l.state !== 0) throw new Error("unrenderable list"); return l.items; };
-  const list = (a, f) => { const xs = items(a); return xs.length ? xs.map((x) => f(x)).join("; ") : "none"; };
+  // At most MAX_RENDER_ITEMS items are rendered, then a fixed "(+N more)" marker.
+  const cut = (xs, f, sep) => {
+    const shown = xs.length > MAX_RENDER_ITEMS ? xs.slice(0, MAX_RENDER_ITEMS) : xs;
+    const out = shown.map((x) => f(x)).join(sep);
+    return xs.length > MAX_RENDER_ITEMS ? `${out}${sep}(+${xs.length - MAX_RENDER_ITEMS} more)` : out;
+  };
+  const list = (a, f) => { const xs = items(a); return xs.length ? cut(xs, f, "; ") : "none"; };
   return [
     "# Production Report",
     `- Period: ${guard(() => `${safe(r.period.start)} → ${safe(r.period.end)}`)}`,
@@ -217,7 +256,7 @@ function renderMarkdownUnsafe(r) {
     `- Active implementers: ${show(r.activeImplementers)}`,
     `- Failures: ${show(r.failures, (a) => { const n = items(a).length; return `${n}${n ? " (" + list(a, safe) + ")" : ""}`; })}`,
     `- Bottlenecks: ${show(r.bottlenecks, (a) => list(a, (b) => `${safe(b.id)}: ${safe(b.blocker)}`))}`,
-    `- Unknowns: ${guard(() => (items(r.unknowns).length ? items(r.unknowns).map(String).join(", ") : "none"))}`,
+    `- Unknowns: ${guard(() => (items(r.unknowns).length ? cut(items(r.unknowns), capStr, ", ") : "none"))}`,
     "",
   ].join("\n");
 }
