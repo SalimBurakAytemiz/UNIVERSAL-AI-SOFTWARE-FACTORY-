@@ -96,14 +96,27 @@ const LINEAGE_EVIDENCE = {evidence: [
   lev("1", {missionId: MSN, runId: runId("a")}), lev("2", {missionId: MSN, runId: runId("a")}), lev("3", {missionId: MSN, runId: runId("b")}),
   lev("4", {missionId: MSN2}), lev("5", {runId: runId("a")}), lev("6", {})], nextCursor: null};
 
-interface Feed { cockpit?: "ok" | "unavail"; workRuns?: "ok" | "off"; evidence?: "ok" | "off" | "lineage"; reviews?: "ok" | "off" | "empty" | "bad" }
+// UI-051: work runs carrying real-shaped test evidence (f=EXECUTED, g=FAILED, h=UNVERIFIED, i=tests bound to another commit, j=surface BLOCKED, k=NOT_EXECUTED record, e=no test evidence).
+const tev = (id: string, kind: string, commitSha: string, o: any = {}) => ({evidenceId: `evi_${id.repeat(32)}`, step: "VERIFY", cycle: 1, kind, argv: [], startedAt: "", endedAt: "", exitCode: 0, logPath: null, logSha256: null, commitSha, ...o});
+const tsurf = (id: string, commitSha: string, acceptance: string, n: number | null) => tev(id, "TEST_SURFACE", commitSha, {testSurface: {functionalAcceptance: acceptance, executedTests: n}});
+const SBX = {sandboxProviderId: "docker-local"};
+const TEST_RUNS = {runs: [
+  mkRun("f", HEAD1, [tev("7", "VERIFY_TESTS", HEAD1, SBX), tev("8", "REGRESSION_TESTS", HEAD1, SBX), tsurf("9", HEAD1, "UNVERIFIED_ORACLE", 12)]),
+  mkRun("g", HEAD1, [tev("a", "VERIFY_TESTS", HEAD1, {...SBX, exitCode: 1}), tev("b", "REGRESSION_TESTS", HEAD1, SBX), tsurf("c", HEAD1, "UNVERIFIED_ORACLE", 5)]),
+  mkRun("h", HEAD1, [tev("d", "VERIFY_TESTS", HEAD1), tev("e", "REGRESSION_TESTS", HEAD1), tsurf("1", HEAD1, "UNVERIFIED_ORACLE", 3)]),
+  mkRun("i", HEAD2, [tev("2", "VERIFY_TESTS", HEAD1, SBX), tev("3", "REGRESSION_TESTS", HEAD1, SBX), tsurf("4", HEAD1, "UNVERIFIED_ORACLE", 9)]),
+  mkRun("j", HEAD1, [tev("5", "VERIFY_TESTS", HEAD1, SBX), tev("6", "REGRESSION_TESTS", HEAD1, SBX), tsurf("7", HEAD1, "BLOCKED", 4)]),
+  mkRun("k", HEAD1, [tev("8", "VERIFY_TESTS_NOT_EXECUTED", HEAD1, {exitCode: null})]),
+  RUN_E]};
+
+interface Feed { cockpit?: "ok" | "unavail"; workRuns?: "ok" | "off" | "tests"; evidence?: "ok" | "off" | "lineage"; reviews?: "ok" | "off" | "empty" | "bad" }
 async function mkCtx(feed: Feed = {}, lang = "tr") {
   const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
   const doc = new D(), store = st.createStore(null), calls: string[] = [];
   const bridge = {apiGet: async (p: string) => {
     calls.push(p);
     if (p === "/v1/cockpit") { if (feed.cockpit === "unavail") throw new Error(`${p}: HTTP 404`); return COCKPIT; }
-    if (p === "/v1/work-runs") { if (feed.workRuns === "off") throw new Error(`${p}: HTTP 404`); return WORK_RUNS; }
+    if (p === "/v1/work-runs") { if (feed.workRuns === "off") throw new Error(`${p}: HTTP 404`); return feed.workRuns === "tests" ? TEST_RUNS : WORK_RUNS; }
     if (p === "/v1/reviews" || p.startsWith("/v1/reviews/")) {
       if (feed.reviews === "off") throw new Error(`${p}: HTTP 404`);
       if (p === "/v1/reviews") return feed.reviews === "empty" ? REVIEWS_EMPTY : feed.reviews === "bad" ? {source: "WRONG"} : REVIEWS;
@@ -112,7 +125,7 @@ async function mkCtx(feed: Feed = {}, lang = "tr") {
       return {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", notice: "n", review: {...rec, evidence: {recordedVerdict: rec.verdict === "NO_VERDICT" ? null : rec.verdict, invalidated: null, findingsCount: rec.verdict === "BLOCKED" ? 2 : 0, findings: rec.verdict === "BLOCKED" ? ["<img src=x onerror=alert(1)> finding one", "finding two"] : null, exitCode: 0, timedOut: false, logSha256: null, note: null}}, run: REVIEWS.runs[0]};
     }
     if (p.startsWith("/v1/evidence/")) return {evidence: EVIDENCE.evidence[0], summary: {}, tail: null, tailWithheld: null};
-    if (p.startsWith("/v1/evidence")) { if (feed.evidence === "off") throw new Error(`${p}: HTTP 404`); return feed.evidence === "lineage" ? LINEAGE_EVIDENCE : EVIDENCE; }
+    if (p.startsWith("/v1/evidence")) { if (feed.evidence === "off") throw new Error(`${p}: HTTP 404`); if (p.includes("runId=")) return {evidence: [lev("7", {runId: runId("f")})], nextCursor: null}; return feed.evidence === "lineage" ? LINEAGE_EVIDENCE : EVIDENCE; }
     throw new Error(`${p}: HTTP 404`);
   }};
   const api = apiMod.createApi({bridge, store});
@@ -352,6 +365,74 @@ describe("UI-050 evidence lineage (mission -> run -> evidence from list fields o
     const ks = Object.keys(en).filter(k => k.startsWith("assurance.lineage."));
     expect(ks.length).toBeGreaterThanOrEqual(9);
     expect(ks.sort()).toEqual(Object.keys(tr).filter(k => k.startsWith("assurance.lineage.")).sort());
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of ks) expect(ph(en[k]), k).toBe(ph(tr[k]));
+  });
+});
+
+describe("UI-051 per-run test report (recorded evidence else NOT_EXECUTED, never a pass without evidence)", () => {
+  beforeEach(async () => { (await load("views", "assurance.js")).resetAssuranceView(); const f = (await load("forms.js")); f.selection.evidenceId = null; f.selection.missionId = null; });
+  const stateOf = (node: N, c: string) => byData(node, "testRun", runId(c))[0]?.dataset.testState;
+
+  it("testStateOf/mapTestReports derive status only from head-bound attested evidence", async () => {
+    const core = await load("assurance-core.js");
+    const m = core.mapTestReports({ok: true, data: TEST_RUNS});
+    const st = (c: string) => m.runs.find((r: any) => r.runId === runId(c)).state;
+    expect([st("f"), st("g"), st("h"), st("i"), st("j"), st("k"), st("e")]).toEqual(["EXECUTED", "FAILED", "UNVERIFIED", "NOT_EXECUTED", "BLOCKED", "NOT_EXECUTED", "NOT_EXECUTED"]);
+    expect(m.runs.find((r: any) => r.runId === runId("f")).executedTests).toBe(12);
+    // Run with no test evidence has zero records and is NOT_EXECUTED.
+    expect(m.runs.find((r: any) => r.runId === runId("e")).records).toEqual([]);
+    expect(core.mapTestReports({ok: false, state: "UNAVAILABLE"})).toEqual({state: "UNAVAILABLE", runs: []});
+    expect(core.mapTestReports({ok: true, data: {}}).state).toBe("ERROR");
+  });
+  it("renders EXECUTED only for the evidenced run; stale/missing/zero-count never read as executed", async () => {
+    const {ctx} = await mkCtx({workRuns: "tests"}, "en");
+    const {node} = await renderAssurance(ctx);
+    const p = byId(node, "as-testrep")!;
+    expect(byData(p, "testRun").length).toBe(7);
+    expect(stateOf(p, "f")).toBe("EXECUTED");
+    for (const c of ["i", "k", "e"]) expect(stateOf(p, c), c).toBe("NOT_EXECUTED");
+    expect(stateOf(p, "g")).toBe("FAILED");
+    expect(stateOf(p, "h")).toBe("UNVERIFIED");
+    expect(byData(p, "testState", "EXECUTED").filter(n => n.tagName === "TR").length).toBe(1);
+    // The word PASS/PASSED is never produced by this panel.
+    expect(/\bPASS(ED)?\b/.test(text(p))).toBe(false);
+  });
+  it("detail lists the recorded test evidence and cross-checks the evidence index by exact id", async () => {
+    const {ctx, calls} = await mkCtx({workRuns: "tests"}, "en");
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `tr-${runId("f")}`) as N).fire("click");
+    const {node} = await renderAssurance(ctx);
+    expect(calls.some((c: string) => c.startsWith("/v1/evidence?") && c.includes(`runId=${runId("f")}`))).toBe(true);
+    const d = byId(node, "as-testrep-detail")!;
+    expect(byData(d, "testRecord", "VERIFY_TESTS").length).toBe(1);
+    expect(byData(d, "testRecord", "REGRESSION_TESTS").length).toBe(1);
+    // Only the VERIFY_TESTS id (evi_7...) is in the index; the others are shown as not indexed, not as verified.
+    expect(byData(d, "chip", "VERIFIED").length).toBe(1);
+    expect(byData(d, "indexState", "NOT_INDEXED").length).toBeGreaterThan(0);
+  });
+  it("a run with no test evidence shows NOT_EXECUTED and no records in detail", async () => {
+    const {ctx} = await mkCtx({workRuns: "tests"}, "en");
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `tr-${runId("e")}`) as N).fire("click");
+    const {node} = await renderAssurance(ctx);
+    const d = byId(node, "as-testrep-detail")!;
+    expect(byData(d, "testState", "NOT_EXECUTED").length).toBeGreaterThan(0);
+    expect(byData(d, "testNotExecuted").length).toBe(1);
+    expect(byData(d, "testRecord").length).toBe(0);
+  });
+  it("shows honest UNAVAILABLE and empty states", async () => {
+    const off = await mkCtx({workRuns: "off"}, "en");
+    const a = await renderAssurance(off.ctx);
+    expect(byData(byId(a.node, "as-testrep")!, "testRun").length).toBe(0);
+    expect(byTag(byId(a.node, "as-testrep")!, "table").length).toBe(0);
+  });
+  it("assurance.testreport.* keys have EN/TR parity", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const ks = Object.keys(en).filter(k => k.startsWith("assurance.testreport."));
+    expect(ks.length).toBeGreaterThan(30);
+    expect(ks.sort()).toEqual(Object.keys(tr).filter(k => k.startsWith("assurance.testreport.")).sort());
     const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
     for (const k of ks) expect(ph(en[k]), k).toBe(ph(tr[k]));
   });

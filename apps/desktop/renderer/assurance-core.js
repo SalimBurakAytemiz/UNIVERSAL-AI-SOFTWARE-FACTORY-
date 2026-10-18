@@ -153,4 +153,46 @@ export function buildLineage(items){
     orphanRuns:[...orphanRuns.entries()].sort((a,b)=>cmp(a[0],b[0])).map(([runId,evidence])=>({runId,evidence})),
     ungrouped};
 }
+// //TR: UI-051: koşu başına test raporu GET /v1/work-runs ham kanıt kayıtlarından (VERIFY_TESTS, REGRESSION_TESTS, *_NOT_EXECUTED, TEST_SURFACE) türetilir; anlamı readiness-core testsOf ile aynıdır ve yalnız GÜNCEL head'e (run.headSha) bağlı kayıt sayılır. EXECUTED yalnız iki test kaydı da exit 0, sandbox tanıklı ve yürütülen test sayısı > 0 iken; kayıt yoksa NOT_EXECUTED. Hiçbir durum yükseltilmez, "geçti" üretilmez.
+export const TEST_REPORT_STATES=Object.freeze(["EXECUTED","FAILED","BLOCKED","NOT_EXECUTED","UNVERIFIED"]);
+const TEST_KINDS=Object.freeze(["VERIFY_TESTS","REGRESSION_TESTS","VERIFY_TESTS_NOT_EXECUTED","REGRESSION_TESTS_NOT_EXECUTED","TEST_SURFACE"]);
+const lastOf=(list,pred)=>{for(let i=list.length-1;i>=0;i--)if(pred(list[i]))return list[i];return null};
+function mapTestRecord(e,head){
+  if(!isObj(e)||!TEST_KINDS.includes(e.kind))return null;
+  const sha=typeof e.commitSha==="string"&&SHA_RE.test(e.commitSha)?e.commitSha:null,ts=isObj(e.testSurface)?e.testSurface:null;
+  return {evidenceId:typeof e.evidenceId==="string"&&e.evidenceId.length<=80?e.evidenceId:null,kind:e.kind,cycle:safeInt(e.cycle),commitSha:sha,atHead:head!==null&&sha===head,
+    exitCode:Number.isSafeInteger(e.exitCode)?e.exitCode:null,attested:typeof e.sandboxProviderId==="string"&&e.sandboxProviderId.length>0,
+    acceptance:ts&&typeof ts.functionalAcceptance==="string"?str(ts.functionalAcceptance,40):null,executedTests:ts?safeInt(ts.executedTests):null};
+}
+export function testStateOf(records){
+  const at=records.filter(r=>r.atHead);
+  const surface=lastOf(at,r=>r.kind==="TEST_SURFACE"&&r.acceptance!==null);
+  if(surface&&surface.acceptance==="BLOCKED")return "BLOCKED";
+  if(lastOf(at,r=>r.kind==="VERIFY_TESTS_NOT_EXECUTED"||r.kind==="REGRESSION_TESTS_NOT_EXECUTED"))return "NOT_EXECUTED";
+  const v=lastOf(at,r=>r.kind==="VERIFY_TESTS"),g=lastOf(at,r=>r.kind==="REGRESSION_TESTS");
+  if((v&&v.exitCode!==0)||(g&&g.exitCode!==0))return "FAILED";
+  if(!v||!g)return "NOT_EXECUTED";
+  if(!v.attested||!g.attested)return "UNVERIFIED";
+  const n=surface?surface.executedTests:null;
+  if(n===null||n<=0)return "UNVERIFIED";
+  return "EXECUTED";
+}
+export function mapTestReports(r){
+  if(!isObj(r)||r.ok!==true){
+    const state=isObj(r)&&typeof r.state==="string"?r.state:"ERROR";
+    return {state,runs:[]};
+  }
+  const data=r.data;
+  const list=isObj(data)?(Array.isArray(data.workRuns)?data.workRuns:Array.isArray(data.runs)?data.runs:Array.isArray(data.items)?data.items:null):null;
+  if(!list)return {state:"ERROR",runs:[]};
+  const runs=[];
+  for(const x of list.slice(0,500)){
+    if(!isObj(x)||typeof x.runId!=="string"||!RUN_ID_RE.test(x.runId))continue;
+    const head=typeof x.headSha==="string"&&SHA_RE.test(x.headSha)?x.headSha:null;
+    const records=(Array.isArray(x.evidence)?x.evidence:[]).map(e=>mapTestRecord(e,head)).filter(Boolean);
+    const surface=lastOf(records.filter(q=>q.atHead),q=>q.kind==="TEST_SURFACE"&&q.acceptance!==null);
+    runs.push({runId:x.runId,missionId:typeof x.missionId==="string"&&MSN_RE.test(x.missionId)?x.missionId:null,headSha:head,state:testStateOf(records),records,executedTests:surface?surface.executedTests:null});
+  }
+  return {state:"VERIFIED",runs};
+}
 export {MISSING};
