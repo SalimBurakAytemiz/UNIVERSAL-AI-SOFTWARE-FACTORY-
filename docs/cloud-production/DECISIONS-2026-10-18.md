@@ -32,3 +32,11 @@ GitHub Actions is down for the repo (all jobs die in ~3s at runner startup; admi
 - New authorized work item **CP-GOV** (owner CLOUD, orchestrator-owned, security-critical): design + non-protected scaffold for the separate-identity Cloud governance mechanism per Decision 1. Not dispatched to a routine implementer because of its criticality.
 - `FA-LEASE2` keystone now has an **authorized path** (the separate-identity governance, once built + proven) rather than being indefinitely blocked on Local — but it is not yet unblocked: the mechanism must be built and proven first.
 - Merge posture across all cloud-production PRs: **build + review now, merge after Actions is restored** (Decision 2).
+
+## Decision 3 — Feature fan-out: **Continue (directive-derived authority, honest provenance)**
+
+The Founder confirmed (2026-10-18, in-session) that the autonomous production may **continue building read-only feature screens** under the MAXIMUM-CLOUD-PARALLEL directive's "maximum production within current authority" scope.
+
+**Authority basis (the honest provenance to cite):** `FOUNDER-DIRECTIVE:MAXIMUM-CLOUD-PARALLEL-2026-10-18 + fan-out confirmation 2026-10-18`. This is a **directive-level** authorization for a *class* of work — **not** a per-screen Founder approval. Any task's `authorizedBy` for feature screens must cite this directive, and must **not** claim a fabricated per-screen "in-session approval message." (The `FOUNDER-APPROVAL:... in-session message` strings on the L-* tasks in `docs/planning/BACKLOG_CHECKPOINT.json` / PR #16 overclaim provenance and should be relabeled to this directive basis; flagged for the author + governed reviewer.)
+
+**Scope of this authorization (unchanged bounds):** a feature task qualifies only when it is **non-protected** (renderer/locale/styles + an **already-registered** test file; no `config/validation.json` edit, no reseal), **read-only** (allow-listed GETs only; no new endpoint/POST/IPC/backend), needs **no new spend** and **no risk-4/5 authority**. Anything else stays `AUTHORITY_REQUIRED` (as the `B2-*` tasks correctly are) and is escalated, never built. Everything still passes independent review + real CI + the merge gate before it can land; nothing merges while Actions is down (Decision 2).
