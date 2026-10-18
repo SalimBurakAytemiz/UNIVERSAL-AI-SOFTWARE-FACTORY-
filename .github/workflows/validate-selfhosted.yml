@@ -22,15 +22,11 @@ jobs:
     name: validate (${{ matrix.leg }})
     # GUVENLIK: environment zorunlu onaylayici ile her kosuyu insan onayina baglar (runner'da kod kosmadan once).
     environment: self-hosted-ci
-    if: ${{ github.event.inputs.target == 'both' || github.event.inputs.target == matrix.leg }}
+    # GUVENLIK (fail-closed): yalniz v7/integration'dan dispatch edilen workflow dosyasi kosar; baska bir dal'dan duzenlenmis workflow dispatch'i job'u atlar. (matrix baglami job-level if'te YOK; leg filtresi strategy.matrix icinde.)
+    if: ${{ github.ref == 'refs/heads/v7/integration' }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - leg: windows
-            runner: [self-hosted, windows]
-          - leg: linux
-            runner: [self-hosted, linux]
+      matrix: ${{ fromJSON(inputs.target == 'windows' && '{"include":[{"leg":"windows","runner":["self-hosted","windows"]}]}' || inputs.target == 'linux' && '{"include":[{"leg":"linux","runner":["self-hosted","linux"]}]}' || '{"include":[{"leg":"windows","runner":["self-hosted","windows"]},{"leg":"linux","runner":["self-hosted","linux"]}]}') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     permissions:
@@ -67,13 +63,21 @@ jobs:
       - name: Surface per-step durations (Windows 600s per-step limit visibility)
         if: always()
         shell: bash
+        env:
+          LEG: ${{ matrix.leg }}
+          TARGET: ${{ inputs.target }}
         run: |
           f=".ai/runtime/VALIDATION_REPORT.json"
-          test -f "$f" || { echo "no VALIDATION_REPORT.json"; exit 0; }
+          test -f "$f" || { echo "no VALIDATION_REPORT.json (validation did not complete)"; exit 1; }
           node -e '
             const r=JSON.parse(require("fs").readFileSync(".ai/runtime/VALIDATION_REPORT.json","utf8"));
-            console.log("status="+r.status+" platform="+r.platform);
+            console.log("status="+r.status+" platform="+r.platform+" leg="+process.env.LEG+" target="+process.env.TARGET);
             let near=0;
             for(const s of r.steps){const ms=s.durationMs||0; const flag=ms>=540000?"  <-- NEAR/OVER 600s PER-STEP LIMIT":""; if(ms>=540000)near++; console.log(`${s.status.padEnd(18)} ${String(ms).padStart(8)}ms  ${s.id}${flag}`);}
+            const nr=r.steps.filter(s=>String(s.status).startsWith("NOT_RUN")).map(s=>s.id);
+            if(nr.length)console.log("NOT_RUN steps on this leg (platform-filtered, NOT a pass): "+nr.join(", "));
+            if(process.env.TARGET!=="both")console.log("INCOMPLETE: only the "+process.env.LEG+" leg ran; full coverage needs target=both. This run is NOT sufficient for CLEAN.");
+            if(r.status!=="PASS"&&r.status!=="PASS_PLATFORM_FILTERED"){console.log("FAIL: validation status "+r.status);process.exitCode=1;}
+            if(r.steps.some(s=>s.status!=="PASS"&&s.status!=="NOT_RUN_PLATFORM")){console.log("FAIL: unexpected non-PASS step status");process.exitCode=1;}
             if(near)console.log(`WARN: ${near} step(s) within 60s of the hardcoded 600s per-step cap in scripts/run-validation.mjs (protected). If a real self-hosted run still overruns, shard the step in config/validation.json (maintainer/reseal step).`);
           '

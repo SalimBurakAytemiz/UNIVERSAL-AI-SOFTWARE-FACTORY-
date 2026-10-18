@@ -9,8 +9,9 @@ A self-hosted runner executes workflow code **on the host machine**. If an untru
 
 1. **`validate-selfhosted.yml` triggers on `workflow_dispatch` ONLY.** No `pull_request`, no `push`. Adding the file is **inert** — opening this PR runs nothing on the runner. It executes only when a human clicks "Run workflow."
 2. **`environment: self-hosted-ci` with a required reviewer.** Every run pauses for one-click Founder approval before any code executes on the runner. Create it first (below).
-3. **Least privilege:** `permissions: contents: read`, no secrets exposed to the job, `persist-credentials: false`, `clean: true`, `submodules: false`.
-4. **Runner-side isolation (Founder machine — do before enabling PR triggers):**
+3. **Ref guard (fail-closed):** the job runs only when `github.ref == refs/heads/v7/integration`, so a write-access user cannot dispatch an edited workflow from another branch onto the runner. To test a branch, merge it first (Phase 2) — this is deliberate.
+4. **Least privilege:** `permissions: contents: read`, no secrets exposed to the job, `persist-credentials: false`, `clean: true`, `submodules: false`.
+5. **Runner-side isolation (Founder machine — do before enabling PR triggers):**
    - Run the runner as a **dedicated low-privilege local account**, not your user/admin.
    - Prefer an **ephemeral** runner (`./config.cmd --ephemeral`) so each job gets a fresh registration (no cross-job persistence).
    - Prefer a **throwaway VM or Windows container** for the runner so a hostile job cannot touch your real machine; snapshot/revert between jobs.
@@ -21,6 +22,8 @@ A self-hosted runner executes workflow code **on the host machine**. If an untru
 
 ## Required test coverage — preserved
 The workflow runs the exact canonical set from `ci.yml`: `ensure-dependencies` → `run-validation.mjs` → `secret-sanity.mjs` → `bootstrap-kernel-selftest.mjs`, on Node 24. `run-validation.mjs` already **platform-filters** (Windows-only steps report `NOT_RUN_PLATFORM`, never PASS), so **full coverage needs both a Windows and a Linux self-hosted runner** — same as the old `ubuntu+windows` matrix.
+
+**Partial runs:** `target=windows|linux` runs one leg; the final step prints `INCOMPLETE` and the run does not substitute for `target=both`. The step also fails on a missing `VALIDATION_REPORT.json` or any step that is neither PASS nor NOT_RUN_PLATFORM.
 
 ## Windows 600s timeout (directive #4)
 The per-step cap is **hardcoded** at `timeoutMs: 600000` in `scripts/run-validation.mjs:6` (protected; not env-tunable). On github-hosted `windows-latest` (slow) the `tests` step overran it → `VALIDATION_STEP_TIMEOUT`. A real self-hosted Windows machine is typically much faster, so the **expected fix is simply running on the faster runner** — the workflow's final step prints every step's `durationMs` and flags any within 60s of the cap. **Honest:** this is confirmed only when a real self-hosted run shows the `tests` step under 600s. If it still overruns, the fix is to **shard that step in `config/validation.json`** (protected → maintainer edit + trust-root reseal) or raise the constant in `run-validation.mjs` (protected). Neither is a builder step.
@@ -39,6 +42,7 @@ The Founder has a Windows runner; the Linux leg needs a free Linux runner. In or
 ## Rollout phases (prepare safe runner → then run real CI; directive "run after safe")
 - **Phase 0 (this PR):** add `validate-selfhosted.yml` (dispatch-only, inert) + this runbook on branch `claude/ci-selfhosted-integration`. Nothing runs on the runner.
 - **Phase 1 (Founder, machine-side):** harden the runner (dedicated account + ephemeral + VM/container + network limits), confirm Node ≥24 on it, add labels `self-hosted,windows` (and a `self-hosted,linux` runner per the Linux options). Create the `self-hosted-ci` **Environment** with yourself as a **required reviewer**.
+- **Phase 1 precondition (verify before Phase 2):** the `self-hosted-ci` Environment EXISTS and lists a required reviewer. If it is missing GitHub auto-creates it unprotected and the job would run without approval.
 - **Phase 2 (merge this PR):** land the workflow (infra; non-protected new file). `workflow_dispatch` becomes available on the default branch.
 - **Phase 3 (run real CI):** dispatch `CI (self-hosted)` → approve the environment gate → it runs validation on the runner(s). Read the per-step durations (600s check). Iterate until **green on both legs**. Only then is a CLEAN verdict + merge honest — **do not declare CLEAN/MERGED before this**.
 - **Phase 4 (admin):** point branch-protection required checks at the self-hosted contexts; optionally disable the dead github-hosted `ci.yml` (a protected-file change → maintainer + reseal) to stop it producing failing required checks.
