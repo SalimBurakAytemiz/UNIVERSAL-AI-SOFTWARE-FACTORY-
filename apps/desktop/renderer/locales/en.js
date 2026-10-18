@@ -220,6 +220,7 @@ export default {
   "map.roles":"{n} registered roles",
   "map.packages":"{n} packages",
   "map.planned":"Planned package: {pkg}",
+  "map.delivery":"Read-only delivery and SRE status",
   "projects.list":"Project list",
   "projects.empty":"There are no projects yet.",
   "projects.source":"Source: GET /v1/projects",

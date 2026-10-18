@@ -220,6 +220,7 @@ export default {
   "map.roles":"{n} kayıtlı rol",
   "map.packages":"{n} paket",
   "map.planned":"Planlı paket: {pkg}",
+  "map.delivery":"Salt-okunur teslimat ve SRE durumu",
   "projects.list":"Proje listesi",
   "projects.empty":"Henüz proje yok.",
   "projects.source":"Kaynak: GET /v1/projects",
