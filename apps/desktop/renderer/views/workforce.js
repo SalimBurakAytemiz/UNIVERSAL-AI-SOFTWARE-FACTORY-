@@ -6,6 +6,7 @@ import {formatCount,MISSING} from "../model.js";
 import {liveRuns,formatDateTime} from "../work-core.js";
 import {selection} from "../forms.js";
 import {notVerifiedBadge,runNotVerified} from "../m1a.js";
+import {buildTaxonomy} from "../workforce-taxonomy-core.js";
 
 // //TR: Katalog gözatma seçimi (süzgeç + seçili rol) görünüm ömrü boyunca korunur; periyodik yenileme seçimi bozmaz.
 const catState={cluster:"ALL",guild:"ALL",q:"",roleId:null};
@@ -145,11 +146,31 @@ function detailPanel(ctx,detail){
     h(doc,"p",{class:"note mono",text:ctx.t("workforce.cat.srcDetail",{id:r.roleId})}));
 }
 
+// //TR: UI-197 Uzman Rol Taksonomisi: salt-okunur küme->lonca ağacı, yalnız VERIFIED katalogdaki mevcut alanlardan (clusterId/guildId/sayılar); katalog VERIFIED değilse ağaç yerine dürüst durum notu; "genom" alanı uydurulmaz, yeni uç nokta/yazma yoktur.
+function taxonomySection(ctx,catalog){
+  const doc=ctx.doc;
+  if(catalog.state!=="VERIFIED")return panel(ctx,{titleKey:"workforce.taxonomy.title",id:"wf-taxonomy",className:"wf-taxonomy"},
+    h(doc,"p",{class:"note",text:ctx.t("workforce.taxonomy.lead")}),stateNote(ctx,catalog.state),h(doc,"p",{class:"note",dataset:{taxonomyState:catalog.state},text:ctx.t("workforce.taxonomy.notVerified")}));
+  const tax=buildTaxonomy(catalog.items);
+  if(!tax.clusters.length)return panel(ctx,{titleKey:"workforce.taxonomy.title",id:"wf-taxonomy",className:"wf-taxonomy"},h(doc,"p",{class:"note",text:ctx.t("workforce.taxonomy.lead")}),emptyNote(ctx,"workforce.cat.empty"));
+  return panel(ctx,{titleKey:"workforce.taxonomy.title",id:"wf-taxonomy",className:"wf-taxonomy"},
+    h(doc,"p",{class:"note",text:ctx.t("workforce.taxonomy.lead")}),
+    h(doc,"p",{class:"note",dataset:{taxonomySummary:"1"},text:ctx.t("workforce.taxonomy.summary",{c:formatCount(tax.clusterCount),g:formatCount(tax.guildCount),r:formatCount(tax.roleCount)})}),
+    h(doc,"ul",{class:"wf-taxonomy-tree","aria-label":ctx.t("workforce.taxonomy.treeLabel")},tax.clusters.map(c=>
+      h(doc,"li",{class:"wf-taxonomy-cluster",dataset:{clusterId:c.clusterId}},
+        h(doc,"span",{class:"mono wf-taxonomy-name",text:c.clusterId})," ",h(doc,"span",{class:"wf-taxonomy-count",text:ctx.t("workforce.taxonomy.counts",{r:formatCount(c.roles),g:formatCount(c.guilds.length),k:formatCount(c.certified)})}),
+        h(doc,"ul",{class:"wf-taxonomy-guilds"},c.guilds.map(g=>
+          h(doc,"li",{class:"wf-taxonomy-guild",dataset:{guildId:g.guildId}},
+            h(doc,"span",{class:"mono wf-taxonomy-name",text:g.guildId})," ",h(doc,"span",{class:"wf-taxonomy-count",text:ctx.t("workforce.taxonomy.guildCounts",{r:formatCount(g.roles),k:formatCount(g.certified)})}))))))),
+    h(doc,"p",{class:"note",text:ctx.t("workforce.taxonomy.noGenome")}),
+    h(doc,"p",{class:"note mono",text:ctx.t("workforce.cat.source")}));
+}
+
 function catalogSection(ctx,catalog,detail){
   const doc=ctx.doc;
   const browse=catalog.state==="VERIFIED"?panel(ctx,{titleKey:"workforce.cat.browseTitle",id:"wf-browse",className:"wf-browse"},
     catalog.items.length?[filterBar(ctx,catalog.items),...[roleList(ctx,catalog.items)].flat()]:emptyNote(ctx,"workforce.cat.empty")):null;
-  return [overview(ctx,catalog),browse,detailPanel(ctx,detail)].filter(Boolean);
+  return [overview(ctx,catalog),taxonomySection(ctx,catalog),browse,detailPanel(ctx,detail)].filter(Boolean);
 }
 
 export async function render(ctx,route){
