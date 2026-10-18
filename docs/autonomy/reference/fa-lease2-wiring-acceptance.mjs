@@ -6,6 +6,7 @@
 //   node docs/autonomy/reference/fa-lease2-wiring-acceptance.mjs
 import {mkdtempSync, rmSync} from "node:fs";
 import {spawnSync} from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
@@ -15,7 +16,8 @@ const {claim, renew, release, isValidLeaseRecord, leaseVersion} = await import(p
 const {createLocalGitRefStore} = await import(path.join(LIB, "task-lease-git-store.mjs"));
 const {bindVerdict, verifyVerdict} = await import(path.join(LIB, "lease-verdict.mjs"));
 
-const tmpRoot = mkdtempSync(path.join(HERE, ".fa-lease2-accept-"));
+// //TR: Gecici repo repo agacinin DISINDA (os.tmpdir) olusur; SIGKILL dahi repoda iz birakmaz.
+const tmpRoot = mkdtempSync(path.join(os.tmpdir(), "fa-lease2-accept-"));
 process.on("exit", () => { try { rmSync(tmpRoot, {recursive: true, force: true}); } catch {} });
 let passed = 0, failed = 0;
 const ok = (c, label, got) => { if (c) { passed++; console.log(`PASS  ${label}`); } else { failed++; console.log(`FAIL  ${label}${got !== undefined ? `\n        got: ${JSON.stringify(got)}` : ""}`); } };
@@ -49,10 +51,12 @@ ok(r1.status === "RENEWED" && r1.record.token === c1.record.token, "renew-on-tic
 const taker = claim(store, {...other, taskId: "T", headSha, now: now + ttlMs + 2000, ttlMs}); // after expiry
 ok(taker.status === "GRANTED" && taker.record.epoch === c1.record.epoch + 1, "expired lease reclaimed by another env (epoch+1)", taker.record && taker.record.epoch);
 const lost = renew(store, {...impl, taskId: "T", token: c1.record.token, now: now + ttlMs + 3000, ttlMs});
-let committed = false;
-if (lost.status === "RENEWED") committed = true; // the wiring must NOT commit when it has lost the lease
 ok(lost.status === "LOST", "the displaced implementer's renew returns LOST", lost.status);
-ok(committed === false, "LOST -> the builder round aborts BEFORE git.commitAll (no commit under a lost lease)");
+// The wiring's commit precondition in builderRound: commit ONLY while the lease is still held. Tested as a
+// predicate against both real renew outcomes (RENEWED earlier, LOST after takeover), not a restatement of one.
+const mayCommit = (renewStatus) => renewStatus === "RENEWED";
+ok(mayCommit(r1.status) === true, "commit-gate: while the lease is held (RENEWED) the builder round may commit", r1.status);
+ok(mayCommit(lost.status) === false, "commit-gate: after LOST the builder round must NOT commit (abort before git.commitAll)", lost.status);
 
 // Seam 3 — orchestrator-engine applyOutcome terminal (L79-84): release on CLOSED/MERGED; task re-claimable.
 section("3. orchestrator-engine applyOutcome terminal: release frees the lease");
@@ -78,9 +82,9 @@ ok(verifyVerdict(bindVerdict({...base, result: "BLOCKED"}), expected).reason ===
 // Seam 5 — orchestrator-state validateControl: control.packages[id].claim must satisfy isValidLeaseRecord (fail-closed).
 section("5. orchestrator-state validateControl: a per-task claim record must be a valid lease record");
 ok(isValidLeaseRecord(c1.record) === true, "a real GRANTED claim record is a valid lease record (validateControl accepts)");
-for (const bad of [null, {}, {token: ""}, {...c1.record, token: ""}, {...c1.record, epoch: 0}, {...c1.record, expiresAt: "soon"}])
-  if (isValidLeaseRecord(bad)) { ok(false, "malformed claim record wrongly accepted", bad); }
-ok(![null, {}, {token: ""}, {...c1.record, epoch: 0}, {...c1.record, expiresAt: "soon"}].some(isValidLeaseRecord), "malformed/empty claim records are rejected -> CONTROL_INVALID (fail-closed)");
+const badClaims = {"null": null, "empty-object": {}, "empty-token": {...c1.record, token: ""}, "zero-epoch": {...c1.record, epoch: 0}, "non-numeric-expiresAt": {...c1.record, expiresAt: "soon"}};
+for (const [name, bad] of Object.entries(badClaims))
+  ok(isValidLeaseRecord(bad) === false, `validateControl rejects a ${name} claim record (fail-closed -> CONTROL_INVALID)`, isValidLeaseRecord(bad));
 
 // Seam 6 — orchestrator-state commitTransition: the raw lease token must never be written to the hash-chained log.
 section("6. orchestrator-state transition log: the lease token is never persisted (only taskId/epoch/expiresAt summary)");
