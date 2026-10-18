@@ -604,6 +604,34 @@
       "riskLevel": 3,
       "type": "BACKEND",
       "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY."
+    },
+    {
+      "id": "CP-DISPATCH-IMPL",
+      "title": "Cloud-only dispatcher with claim refs + lease record",
+      "owner": "CLOUD",
+      "status": "IN_REVIEW",
+      "dependsOn": [],
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-18 Cloud-only dispatch/next-step infra within current limits",
+      "prs": [
+        29
+      ],
+      "notes": "Not the atomic lease / not FA-LEASE2 wiring. Reviewed twice; no integrity issue; advisories being fixed. Not CLEAN."
+    },
+    {
+      "id": "CP-NODE24-ENV",
+      "title": ".nvmrc + Node 24 setup script",
+      "owner": "CLOUD",
+      "status": "IN_REVIEW",
+      "dependsOn": [],
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-18 Cloud Node 24 permanent environment",
+      "prs": [
+        21
+      ],
+      "notes": "Permanence also requires the environment setup-script setting (owner action)."
     }
   ],
   "relations": [
