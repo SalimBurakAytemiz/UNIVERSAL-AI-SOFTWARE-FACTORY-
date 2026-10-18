@@ -7,10 +7,29 @@ const DONE = new Set(["DONE", "COMPLETED"]);
 // import would break this module here. report.proof.mjs compares this set to ./queue.mjs STATUSES whenever that file
 // exists (i.e. after both branches are integrated) and reports an explicit SKIP otherwise. Once both are merged, replace
 // this copy with: import { STATUSES } from "./queue.mjs";
-export const STATUSES = new Set([
+// IN_REVIEW is deliberate (the real backlog uses it for PRs awaiting independent review; like PENDING_REVIEW it is neither
+// READY nor DONE). Exported as a frozen array; the validating Set stays private so mutating the export cannot widen validation.
+const STATUS_LIST = [
   "READY", "IN_PROGRESS", "BLOCKED", "DONE", "COMPLETED", "DRAFT_NOT_READY",
-  "PENDING_REVIEW", "PENDING_CI", "AUTHORITY_REQUIRED", "NOT_STARTED",
-]);
+  "PENDING_REVIEW", "IN_REVIEW", "PENDING_CI", "AUTHORITY_REQUIRED", "NOT_STARTED",
+];
+const STATUS_SET = new Set(STATUS_LIST);
+export const STATUSES = Object.freeze([...STATUS_LIST]);
+
+// Same id policy as queue.mjs: ASCII letters/digits and . _ : + - with at least one alphanumeric.
+const ID_RE = /^[A-Za-z0-9._:+-]+$/;
+const validId = (v) => typeof v === "string" && ID_RE.test(v) && /[A-Za-z0-9]/.test(v);
+
+// Hard cap on list sizes, checked from .length BEFORE any Array.from so a huge sparse array cannot stall the report.
+const MAX_ITEMS = 100000;
+// 0 = ok, 1 = over cap, 2 = length unreadable/invalid (hostile)
+const lenState = (a) => {
+  try {
+    const n = a.length;
+    if (!Number.isSafeInteger(n) || n < 0) return 2;
+    return n > MAX_ITEMS ? 1 : 0;
+  } catch { return 2; }
+};
 
 const ISO = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(\.\d+)?(Z|([+-])(\d\d):(\d\d))$/;
 // Only strict ISO-8601 strings with a real calendar date are parseable; numbers/Dates/other strings are NaN.
@@ -65,6 +84,7 @@ export function buildReport(input) {
 
   let newPrs = UNKNOWN;
   if (!Array.isArray(prs)) unknowns.push("prs");
+  else if (lenState(prs) !== 0) unknowns.push("prs[]"); // over cap or hostile length: UNKNOWN, no iteration
   else if (!periodOk) newPrs = UNKNOWN;
   else {
     let times = null;
@@ -90,7 +110,12 @@ export function buildReport(input) {
   let completedTasks = UNKNOWN;
   let bottlenecks = UNKNOWN;
   let qtasks = null;
-  try { qtasks = queue && Array.isArray(queue.tasks) ? Array.from(queue.tasks) : null; } catch { qtasks = undefined; }
+  try {
+    const qt = queue ? queue.tasks : undefined;
+    if (!Array.isArray(qt)) qtasks = null;
+    else if (lenState(qt) !== 0) qtasks = undefined; // checked before Array.from
+    else qtasks = Array.from(qt);
+  } catch { qtasks = undefined; }
   if (qtasks === null) unknowns.push("queue");
   else {
     // Snapshot each task exactly once (hostile getters/proxies must not throw or change between reads).
@@ -101,11 +126,13 @@ export function buildReport(input) {
         : null));
     } catch { snap = null; }
     const bad = qtasks === undefined || snap === null || snap.some(
-      (t) => t === null || typeof t.status !== "string" || !STATUSES.has(t.status) || typeof t.id !== "string" || t.id.length === 0,
+      (t) => t === null || typeof t.status !== "string" || !STATUS_SET.has(t.status) || typeof t.id !== "string" || t.id.length === 0,
     );
     if (bad) {
       // Malformed entries are surfaced, never silently dropped or counted as "not done".
       unknowns.push("queue.tasks[]");
+    } else if (snap.some((t) => !validId(t.id))) {
+      unknowns.push("queue.tasks[].id"); // id outside the queue.mjs id policy
     } else if (new Set(snap.map((t) => t.id)).size !== snap.length) {
       unknowns.push("queue.tasks[].id");
     } else {
@@ -139,7 +166,9 @@ export function buildReport(input) {
   };
 }
 
-const show = (v, f = String) => (v === UNKNOWN ? "UNKNOWN (not observed)" : f(v));
+// Rendering must never throw, even for a hostile report object (throwing getters, revoked proxies, ...).
+const guard = (f) => { try { return f(); } catch { return "[unrenderable]"; } };
+const show = (v, f = String) => guard(() => (v === UNKNOWN ? "UNKNOWN (not observed)" : f(v)));
 
 // Escapes any value to a single-line JSON token; never throws (circular, BigInt, ...).
 const safe = (v) => {
@@ -154,16 +183,24 @@ const safe = (v) => {
 };
 
 export function renderMarkdown(r) {
-  const list = (a, f) => (a.length ? a.map(f).join("; ") : "none");
+  try {
+    return renderMarkdownUnsafe(r);
+  } catch {
+    return "# Production Report\n- [unrenderable]\n"; // hostile report object (revoked proxy, throwing getters)
+  }
+}
+
+function renderMarkdownUnsafe(r) {
+  const list = (a, f) => (a.length ? Array.from(a, (x) => f(x)).join("; ") : "none");
   return [
     "# Production Report",
-    `- Period: ${safe(r.period.start)} → ${safe(r.period.end)}`,
+    `- Period: ${guard(() => `${safe(r.period.start)} → ${safe(r.period.end)}`)}`,
     `- Completed tasks: ${show(r.completedTasks)}`,
     `- New PRs: ${show(r.newPrs)}`,
     `- Active implementers: ${show(r.activeImplementers)}`,
     `- Failures: ${show(r.failures, (a) => `${a.length}${a.length ? " (" + list(a, safe) + ")" : ""}`)}`,
     `- Bottlenecks: ${show(r.bottlenecks, (a) => list(a, (b) => `${safe(b.id)}: ${safe(b.blocker)}`))}`,
-    `- Unknowns: ${r.unknowns.length ? r.unknowns.join(", ") : "none"}`,
+    `- Unknowns: ${guard(() => (r.unknowns.length ? Array.from(r.unknowns, String).join(", ") : "none"))}`,
     "",
   ].join("\n");
 }

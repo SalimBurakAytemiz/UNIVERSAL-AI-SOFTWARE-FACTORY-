@@ -99,7 +99,7 @@ const stT = (status) => rep({ queue: { tasks: [{ id: "a", status }] } });
 check("status ' DONE' / 'done' / unknown -> malformed",
   [" DONE", "done", "Done", "WAT", "RUNNING", "DONE "].every((x) => stT(x).completedTasks === "UNKNOWN" && stT(x).bottlenecks === "UNKNOWN" && stT(x).unknowns.includes("queue.tasks[]")));
 check("every exact queue status accepted",
-  ["READY","IN_PROGRESS","BLOCKED","DONE","COMPLETED","DRAFT_NOT_READY","PENDING_REVIEW","PENDING_CI","AUTHORITY_REQUIRED","NOT_STARTED"].every((x) => stT(x).unknowns.length === 0));
+  ["READY","IN_PROGRESS","BLOCKED","DONE","COMPLETED","DRAFT_NOT_READY","PENDING_REVIEW","IN_REVIEW","PENDING_CI","AUTHORITY_REQUIRED","NOT_STARTED"].every((x) => stT(x).unknowns.length === 0));
 check("task missing / empty / non-string id -> malformed",
   [{ status: "DONE" }, { id: "", status: "DONE" }, { id: 5, status: "DONE" }].every((t) => rep({ queue: { tasks: [t] } }).unknowns.includes("queue.tasks[]")));
 const dt = rep({ queue: { tasks: [{ id: "a", status: "DONE" }, { id: "a", status: "DONE" }] } });
@@ -161,18 +161,81 @@ const esc = renderMarkdown(rep({ runFacts: { activeImplementers: 1, failures: ["
 check("U+2028 / U+2029 escaped as \\u2028 / \\u2029", !/[\u2028\u2029]/.test(esc) && esc.includes("\\u2028") && esc.includes("\\u2029"));
 check("'<' escaped: no raw <img", !esc.includes("<") && esc.includes("\\u003cimg src=x onerror=1>"));
 check("'&' escaped: no raw &", !esc.includes("&") && esc.includes("x\\u0026y"));
-const blk = renderMarkdown(rep({ queue: { tasks: [{ id: "<b>", status: "BLOCKED", blocker: "a&b\u2028c" }] } }));
+const blk = renderMarkdown({ ...buildReport(full), bottlenecks: [{ id: "<b>", blocker: "a&b\u2028c" }] });
 check("bottleneck id/blocker escaped too", !blk.includes("<") && !blk.includes("&") && !/[\u2028\u2029]/.test(blk));
 // STATUSES parity with queue.mjs: queue.mjs lives on the CP-QUEUE branch, so this runs only where that file exists.
 if (fs.existsSync(new URL("./queue.mjs", import.meta.url))) {
   const q = await import("./queue.mjs");
   const a = [...q.STATUSES].sort().join(","), b = [...STATUSES].sort().join(",");
-  check("report STATUSES equals queue.mjs STATUSES", q.STATUSES instanceof Set && a === b);
+  check("report STATUSES equals queue.mjs STATUSES", Array.isArray(q.STATUSES) && a === b);
 } else {
   console.log("SKIP: ./queue.mjs not present on this branch; STATUSES parity not checked here (not counted as a pass)");
 }
-check("report STATUSES has the 10 exact queue statuses",
-  STATUSES.size === 10 && ["READY","IN_PROGRESS","BLOCKED","DONE","COMPLETED","DRAFT_NOT_READY","PENDING_REVIEW","PENDING_CI","AUTHORITY_REQUIRED","NOT_STARTED"].every((x) => STATUSES.has(x)));
+check("report STATUSES is a frozen array with the 11 exact queue statuses incl. IN_REVIEW",
+  Array.isArray(STATUSES) && Object.isFrozen(STATUSES) && STATUSES.length === 11 &&
+  ["READY","IN_PROGRESS","BLOCKED","DONE","COMPLETED","DRAFT_NOT_READY","PENDING_REVIEW","IN_REVIEW","PENDING_CI","AUTHORITY_REQUIRED","NOT_STARTED"].every((x) => STATUSES.includes(x)));
+{
+  let threw = false;
+  try { STATUSES.push("EVIL"); } catch { threw = true; }
+  check("mutating exported STATUSES does not widen validation",
+    threw && !STATUSES.includes("EVIL") && stT("EVIL").unknowns.includes("queue.tasks[]"));
+}
+check("IN_REVIEW counts as neither DONE nor bottleneck",
+  stT("IN_REVIEW").completedTasks === 0 && stT("IN_REVIEW").bottlenecks.length === 0);
+check("all real backlog statuses accepted",
+  ["DONE","IN_REVIEW","BLOCKED","DRAFT_NOT_READY","AUTHORITY_REQUIRED"].every((x) => stT(x).unknowns.length === 0));
+
+// Delta-2 proofs: id policy, caps, hostile render
+const idT = (id) => rep({ queue: { tasks: [{ id, status: "DONE" }] } });
+check("real backlog ids with '+' accepted", ["UI-037+046", "UI-027+UI-220", "CP-1.a_b:c"].every((x) => idT(x).unknowns.length === 0 && idT(x).completedTasks === 1));
+check("malformed task ids rejected as queue.tasks[].id",
+  ["a b", " a", "a\n", "a\u200B", "\u3164", "a/b", "\u00E9", ".", "..", "-", ":", "+", "_"].every((x) => idT(x).unknowns.includes("queue.tasks[].id") && idT(x).completedTasks === "UNKNOWN"));
+const hugePrs = new Array(2 ** 28);
+const hugeTasks = new Array(2 ** 28);
+{
+  const t0 = Date.now();
+  const a = rep({ prs: hugePrs });
+  const b = rep({ queue: { tasks: hugeTasks } });
+  const ms = Date.now() - t0;
+  check("sparse prs of length 2**28 -> UNKNOWN + 'prs[]' in <1s", a.newPrs === "UNKNOWN" && a.unknowns.includes("prs[]") && ms < 1000);
+  check("sparse queue.tasks of length 2**28 -> UNKNOWN + 'queue.tasks[]' in <1s",
+    b.completedTasks === "UNKNOWN" && b.bottlenecks === "UNKNOWN" && b.unknowns.includes("queue.tasks[]") && ms < 1000);
+}
+{
+  const atCap = Array.from({ length: 100000 }, (_, i) => ({ number: i + 1, createdAt: P.periodStart }));
+  const over = Array.from({ length: 100001 }, (_, i) => ({ number: i + 1, createdAt: P.periodStart }));
+  check("exactly 100000 prs accepted, 100001 -> UNKNOWN 'prs[]'", rep({ prs: atCap }).newPrs === 100000 && rep({ prs: over }).newPrs === "UNKNOWN" && rep({ prs: over }).unknowns.includes("prs[]"));
+  const tAt = Array.from({ length: 100000 }, (_, i) => ({ id: "T" + i, status: "DONE" }));
+  const tOver = Array.from({ length: 100001 }, (_, i) => ({ id: "T" + i, status: "DONE" }));
+  check("exactly 100000 tasks accepted, 100001 -> UNKNOWN 'queue.tasks[]'", rep({ queue: { tasks: tAt } }).completedTasks === 100000 && rep({ queue: { tasks: tOver } }).completedTasks === "UNKNOWN" && rep({ queue: { tasks: tOver } }).unknowns.includes("queue.tasks[]"));
+}
+{
+  const hl = new Proxy([], { get(t, k) { if (k === "length") throw new Error("len"); return Reflect.get(t, k); } });
+  let o; let threw = false;
+  try { o = rep({ prs: hl, queue: { tasks: hl } }); } catch { threw = true; }
+  check("throwing length getter never throws -> UNKNOWN", !threw && o.newPrs === "UNKNOWN" && o.completedTasks === "UNKNOWN");
+}
+{
+  const { proxy, revoke } = Proxy.revocable({}, {});
+  revoke();
+  let o = ""; let threw = false;
+  try { o = renderMarkdown(proxy); } catch { threw = true; }
+  check("renderMarkdown of revoked-proxy report never throws", !threw && typeof o === "string" && o.includes("[unrenderable]"));
+  const hostileRep = { ...buildReport(full), failures: new Proxy([], { get() { throw new Error("x"); } }), bottlenecks: { get length() { throw new Error("y"); } } };
+  threw = false;
+  try { o = renderMarkdown(hostileRep); } catch { threw = true; }
+  check("renderMarkdown with throwing list rendering never throws -> [unrenderable], other lines survive", !threw && o.includes("[unrenderable]") && o.includes("Completed tasks: 2"));
+  const lr = { ...buildReport(full), unknowns: { get length() { throw new Error("z"); } } };
+  threw = false;
+  try { o = renderMarkdown(lr); } catch { threw = true; }
+  check("renderMarkdown with hostile unknowns never throws", !threw && o.includes("[unrenderable]"));
+}
+{
+  let n = 0;
+  const flip = { get id() { return n++ === 0 ? "OK" : "bad id"; }, status: "DONE" };
+  const o = rep({ queue: { tasks: [flip] } });
+  check("stateful task id getter is snapshotted once", o.completedTasks === 1 && o.unknowns.length === 0);
+}
 
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
