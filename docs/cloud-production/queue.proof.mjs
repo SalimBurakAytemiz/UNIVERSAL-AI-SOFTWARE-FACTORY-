@@ -224,5 +224,30 @@ check('authorizedBy containing a placeholder word within real text still accepte
   check('real text containing placeholder-ish words still accepted', !auth('founder pending-review ok'));
 }
 
+// Review remediation 2: dependsOn / error-count bounds
+{
+  let t0 = Date.now(); let r; let threw = false;
+  const sp = Object.assign([], { length: 2 ** 32 - 1 });
+  try { r = loadQueue({ tasks: [T({ id: 'S', dependsOn: sp })] }); } catch { threw = true; }
+  check('dependsOn sparse length 2**32-1: no throw, < 1 s, DEPS_INVALID',
+    !threw && Date.now() - t0 < 1000 && r.ok === false && r.errors.some((e) => e.code === 'DEPS_INVALID'));
+  const dense = new Array(5e6).fill('A');
+  t0 = Date.now(); threw = false;
+  try { r = loadQueue({ tasks: [T({ id: 'A', status: 'DONE' }), T({ id: 'B', dependsOn: dense })] }); } catch { threw = true; }
+  check('dependsOn dense 5e6 strings: < 1 s, DEPS_INVALID (cap checked before iteration)',
+    !threw && Date.now() - t0 < 1000 && r.ok === false && r.errors.some((e) => e.code === 'DEPS_INVALID'));
+  check('dependsOn exactly 1000 accepted, 1001 rejected',
+    loadQueue({ tasks: [T({ id: 'A', status: 'DONE' }), T({ id: 'B', dependsOn: new Array(1000).fill('A') })] }).ok === true &&
+    has({ tasks: [T({ id: 'A', status: 'DONE' }), T({ id: 'B', dependsOn: new Array(1001).fill('A') })] }, 'DEPS_INVALID'));
+  const abs = loadQueue({ tasks: [T({ id: 'B', status: 'DONE', dependsOn: ['X1', 'X2', 'X3'] })] });
+  check('DEP_ABSENT_FROM_BACKLOG aggregated: one error per task with a count',
+    abs.errors.filter((e) => e.code === 'DEP_ABSENT_FROM_BACKLOG').length === 1 && /^3 dependencies/.test(abs.errors[0].detail));
+  const many = Array.from({ length: 1e5 }, (_, i) => T({ id: `M${i}`, owner: 'BAD', status: 'BAD', dependsOn: 7 }));
+  t0 = Date.now(); r = loadQueue({ tasks: many });
+  check('1e5 invalid tasks: errors <= 1000, final ERRORS_TRUNCATED, < 2 s',
+    Date.now() - t0 < 2000 && r.ok === false && r.errors.length <= 1000 && r.errors[r.errors.length - 1].code === 'ERRORS_TRUNCATED');
+  check('few errors: no ERRORS_TRUNCATED entry', !has({ tasks: [T({ id: 'X', owner: 'BAD' })] }, 'ERRORS_TRUNCATED'));
+}
+
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

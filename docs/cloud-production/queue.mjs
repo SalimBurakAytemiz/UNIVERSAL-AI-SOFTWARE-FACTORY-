@@ -60,9 +60,24 @@ function lengthOfOwnTasks(input) {
   return -1;
 }
 
+// Hard cap on collected errors: the list never exceeds MAX_ERRORS entries; the last one is an ERRORS_TRUNCATED aggregate.
+const MAX_ERRORS = 1000;
+// Hard cap on dependsOn.length per task, checked BEFORE any iteration (a sparse array can claim length 2**32-1).
+const MAX_DEPS = 1000;
+
 export function loadQueue(input) {
   const errors = [];
-  const err = (taskId, code, detail) => errors.push({ taskId, code, detail });
+  let truncated = false;
+  const err = (taskId, code, detail) => {
+    if (truncated) return;
+    if (errors.length >= MAX_ERRORS - 1) {
+      truncated = true;
+      errors.push({ taskId: null, code: 'ERRORS_TRUNCATED', detail: `more than ${MAX_ERRORS - 1} errors; remaining errors omitted` });
+      return;
+    }
+    errors.push({ taskId, code, detail });
+  };
+  err.full = () => truncated;
   if (lengthOfOwnTasks(input) > MAX_TASKS) {
     err(null, 'QUEUE_TOO_LARGE', `tasks.length exceeds ${MAX_TASKS}`);
     return { ok: false, errors, tasks: [] };
@@ -113,21 +128,38 @@ function validateTasks(tasks, err) {
     const t = tasks[i];
     if (!t || !validId(t.id)) continue;
     const id = t.id;
+    if (err.full()) break;
     if (!OWNERS.has(t.owner)) err(id, 'OWNER_INVALID', `owner ${String(t.owner)}`);
     if (!STATUS_SET.has(t.status)) err(id, 'STATUS_INVALID', `status ${String(t.status)}`);
     // Fail closed: dependsOn must be absent or an array of non-empty strings; anything else is invalid, never "no deps".
-    const depsValid = t.dependsOn === undefined ||
-      (Array.isArray(t.dependsOn) && t.dependsOn.every((d) => typeof d === 'string' && d.length > 0));
-    if (!depsValid) err(id, 'DEPS_INVALID', 'dependsOn must be an array of non-empty strings');
-    const deps = depsValid && t.dependsOn !== undefined ? t.dependsOn : [];
-    for (const d of deps) {
-      if (!byId.has(d)) err(id, 'DEP_ABSENT_FROM_BACKLOG', `dependency ${String(d)} not in backlog`);
+    // Length is read once (try/catch) and capped BEFORE iterating; an indexed loop is used, never for...of / .every.
+    let depsValid = true;
+    const deps = [];
+    if (t.dependsOn !== undefined) {
+      let len = -1;
+      try { if (Array.isArray(t.dependsOn)) len = t.dependsOn.length; } catch { len = -1; }
+      if (!Number.isInteger(len) || len < 0 || len > MAX_DEPS) depsValid = false;
+      else {
+        for (let j = 0; j < len; j++) {
+          const d = t.dependsOn[j];
+          if (typeof d !== 'string' || d.length === 0) { depsValid = false; break; }
+          deps.push(d);
+        }
+      }
     }
+    if (!depsValid) { err(id, 'DEPS_INVALID', `dependsOn must be an array of at most ${MAX_DEPS} non-empty strings`); deps.length = 0; }
+    // One aggregate error per task for absent dependencies.
+    let absent = 0; let firstAbsent = null;
+    for (let j = 0; j < deps.length; j++) {
+      if (!byId.has(deps[j])) { if (absent === 0) firstAbsent = deps[j]; absent++; }
+    }
+    if (absent > 0) err(id, 'DEP_ABSENT_FROM_BACKLOG', `${absent} dependenc${absent === 1 ? 'y' : 'ies'} not in backlog (first: ${firstAbsent.slice(0, 80)})`);
     if (t.status === 'READY') {
       if (!validAuth(t.authorizedBy)) {
         err(id, 'UNAUTHORIZED_READY', 'READY requires authorizedBy: printable ASCII, length >= 3, with an alphanumeric');
       }
-      for (const d of deps) {
+      for (let j = 0; j < deps.length; j++) {
+        const d = deps[j];
         const dt = byId.get(d);
         if (dt && !DONE.has(dt.status)) err(id, 'READY_WITH_UNMET_DEP', `dependency ${d} is ${dt.status}`);
       }
