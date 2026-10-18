@@ -4,7 +4,7 @@
 
 `BACKLOG_CHECKPOINT.json` exists so the hourly Cloud Developer routine can read a canonical backlog at
 `v7/integration` instead of dead-ending on a missing file. It is derived from the draft in PR #11
-(`docs/autonomy/backlog-drafts/`) and is **honest**: no task is `READY`, none carries `authorizedBy`.
+(`docs/autonomy/backlog-drafts/`) and is **honest**: no task is `READY`. Two Founder-authorized tasks (HOME-DELIVERY-STATE, PLANNED-SCAFFOLD-CLEANUP) are `IN_REVIEW`; every other task is unauthorized.
 
 ## Routine outcome semantics
 

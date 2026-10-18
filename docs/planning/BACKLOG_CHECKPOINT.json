@@ -1,6 +1,6 @@
 {
   "//TR": "TASLAK gorev envanteri (v7/integration@e12dbdd'den turetildi); yetkisiz hicbir gorev READY degildir, atomic lease aktiflesmeden Cloud Developer A bu dosyayla uretime alinmaz.",
-  "_doc": "CANONICAL SOURCE (bootstrap, honest state). Nothing is READY: no task carries authorizedBy. A task becomes READY only via a Founder/Local authority record plus an active FA-LEASE2 lease. Routines reading this file must exit NO_ACTION (not BLOCKED) while no task is READY. Derived from docs/autonomy/backlog-drafts (PR #11); see docs/planning/README.md.",
+  "_doc": "CANONICAL SOURCE (bootstrap, honest state). Two Founder-authorized tasks (see authorizedBy) are IN_REVIEW; no task is READY. A task becomes READY only via a Founder/Local authority record plus an active FA-LEASE2 lease. Routines reading this file must exit NO_ACTION (not BLOCKED) while no task is READY. Derived from docs/autonomy/backlog-drafts (PR #11); see docs/planning/README.md.",
   "generatedAt": "2026-10-18",
   "head": "e12dbdd",
   "source": "RCA wmcrvq9w6 inventory + merged-state verification",
@@ -331,6 +331,32 @@
       "requiresNewAuthority": false,
       "specFile": "docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv (P1/P2 rows) @ origin/v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph@9dbb708 (NOT on v7/integration)",
       "notes": "[INV-18] UNVERIFIED_STALE_BACKLOG long tail; nothing here can be called READY. Owner CLOUD only by boolean derivation (flags false means 'not cleared'); cloud independence cannot be assumed because UNAPPROVED and BLOCKED rows need new endpoints or Founder approval. Stale-audit counts: P1 MISSING 60 / PARTIAL 48 / BLOCKED 5 / NOT_APPLICABLE 5 / UNAPPROVED 3 / DUPLICATE 1; P2 MISSING 61 / UNAPPROVED 17 / BLOCKED 7 / PARTIAL 1 / NOT_APPLICABLE 1. Rebaseline measured only 14 BOUND / 85 PARTIAL / 153 DESIGN_ONLY across all 252 at its own date. No per-screen tasks created because none would be evidence-backed."
+    },
+    {
+      "id": "HOME-DELIVERY-STATE",
+      "title": "Home shows true Delivery state (replace stale planned line)",
+      "owner": "CLOUD",
+      "status": "IN_REVIEW",
+      "authorizedBy": "FOUNDER-AUTHORIZATION:2026-10-18 in-session (Home Delivery state + planned scaffolding cleanup)",
+      "dependsOn": [],
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "branch": "claude/home-delivery-status",
+      "pr": 19,
+      "notes": "Implemented by a cloud implementer; PR open, awaiting independent review/CI (Actions down). Not CLEAN."
+    },
+    {
+      "id": "PLANNED-SCAFFOLD-CLEANUP",
+      "title": "Remove unused plannedPanel partial scaffolding + orphan locale keys",
+      "owner": "CLOUD",
+      "status": "IN_REVIEW",
+      "authorizedBy": "FOUNDER-AUTHORIZATION:2026-10-18 in-session (Home Delivery state + planned scaffolding cleanup)",
+      "dependsOn": [],
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "branch": "claude/cleanup-planned-scaffolding",
+      "pr": 20,
+      "notes": "Implemented by a cloud implementer; PR open, awaiting independent review/CI (Actions down). Not CLEAN."
     }
   ]
 }
