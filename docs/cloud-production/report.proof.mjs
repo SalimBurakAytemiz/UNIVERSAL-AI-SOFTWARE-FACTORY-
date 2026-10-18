@@ -56,5 +56,23 @@ check("deterministic", JSON.stringify(buildReport(full)) === JSON.stringify(buil
 check("markdown renders 'UNKNOWN (not observed)'", renderMarkdown(np).includes("UNKNOWN (not observed)"));
 check("markdown full has no UNKNOWN", !renderMarkdown(r).includes("UNKNOWN"));
 
+const P = { periodStart: "2026-01-01T00:00:00Z", periodEnd: "2026-01-01T01:00:00Z" };
+const rep = (o) => buildReport({ ...full, ...o });
+const g = rep({ prs: [{ createdAt: "garbage" }, {}] });
+check("unparseable PR createdAt -> newPrs UNKNOWN + unknowns entry", g.newPrs === "UNKNOWN" && g.unknowns.includes("prs[].createdAt"));
+const inv = rep({ periodStart: P.periodEnd, periodEnd: P.periodStart });
+check("inverted period -> period+newPrs UNKNOWN", inv.newPrs === "UNKNOWN" && inv.unknowns.includes("period"));
+const bt = rep({ prs: [{ createdAt: P.periodStart }, { createdAt: P.periodEnd }, { createdAt: "2026-01-01T01:00:01Z" }] });
+check("boundaries start/end inclusive, just-after excluded", bt.newPrs === 2);
+const mt = rep({ queue: { tasks: [{ id: "1", status: "DONE" }, null, { id: "2" }] } });
+check("malformed tasks -> completedTasks/bottlenecks UNKNOWN + flagged",
+  mt.completedTasks === "UNKNOWN" && mt.bottlenecks === "UNKNOWN" && mt.unknowns.includes("queue.tasks[]"));
+check("negative / fractional activeImplementers -> UNKNOWN",
+  rep({ runFacts: { activeImplementers: -3, failures: [] } }).activeImplementers === "UNKNOWN" &&
+  rep({ runFacts: { activeImplementers: 1.5, failures: [] } }).activeImplementers === "UNKNOWN");
+check("zero activeImplementers is valid", rep({ runFacts: { activeImplementers: 0, failures: [] } }).activeImplementers === 0);
+const u = buildReport({ ...full, periodStart: undefined, periodEnd: undefined });
+check("undefined period bounds -> UNKNOWN, no throw", u.newPrs === "UNKNOWN" && u.unknowns.includes("period"));
+
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

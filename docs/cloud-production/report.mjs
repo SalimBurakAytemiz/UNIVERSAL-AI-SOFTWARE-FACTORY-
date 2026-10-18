@@ -13,23 +13,31 @@ export function buildReport(input) {
   const unknowns = [];
   const start = toMs(periodStart);
   const end = toMs(periodEnd);
-  const periodOk = Number.isFinite(start) && Number.isFinite(end);
+  // An inverted window is invalid, not an empty one.
+  const periodOk = Number.isFinite(start) && Number.isFinite(end) && start <= end;
   if (!periodOk) unknowns.push("period");
 
   let newPrs = UNKNOWN;
   if (!Array.isArray(prs)) unknowns.push("prs");
   else if (!periodOk) newPrs = UNKNOWN;
-  else newPrs = prs.filter((p) => {
-    const t = toMs(p && p.createdAt);
-    return t >= start && t <= end;
-  }).length;
+  else {
+    const times = prs.map((p) => toMs(p && p.createdAt));
+    // A PR with an unparseable createdAt cannot be placed in or out of the window: never report a confident undercount.
+    if (times.some((t) => Number.isNaN(t))) {
+      newPrs = UNKNOWN;
+      unknowns.push("prs[].createdAt");
+    } else newPrs = times.filter((t) => t >= start && t <= end).length;
+  }
 
   let completedTasks = UNKNOWN;
   let bottlenecks = UNKNOWN;
   if (!queue || !Array.isArray(queue.tasks)) unknowns.push("queue");
-  else {
-    const tasks = queue.tasks.filter((t) => t && typeof t === "object");
-    const st = (t) => String(t.status ?? "").toUpperCase();
+  else if (queue.tasks.some((t) => !t || typeof t !== "object" || typeof t.status !== "string" || t.status.length === 0)) {
+    // Malformed entries are surfaced, never silently dropped or counted as "not done".
+    unknowns.push("queue.tasks[]");
+  } else {
+    const tasks = queue.tasks;
+    const st = (t) => t.status.toUpperCase();
     completedTasks = tasks.filter((t) => DONE.has(st(t))).length;
     bottlenecks = tasks
       .filter((t) => st(t) === "BLOCKED")
@@ -38,7 +46,7 @@ export function buildReport(input) {
 
   const rf = runFacts && typeof runFacts === "object" ? runFacts : null;
   const activeImplementers =
-    rf && typeof rf.activeImplementers === "number" && Number.isFinite(rf.activeImplementers)
+    rf && Number.isInteger(rf.activeImplementers) && rf.activeImplementers >= 0
       ? rf.activeImplementers
       : UNKNOWN;
   const failures = rf && Array.isArray(rf.failures) ? rf.failures : UNKNOWN;
