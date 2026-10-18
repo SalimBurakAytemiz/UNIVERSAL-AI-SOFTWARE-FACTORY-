@@ -1,5 +1,6 @@
 //TR: CP-REPORT standalone proof for report.mjs
-import { buildReport, renderMarkdown } from "./report.mjs";
+import fs from "node:fs";
+import { buildReport, renderMarkdown, STATUSES } from "./report.mjs";
 
 let passed = 0, failed = 0;
 const check = (name, ok) => {
@@ -62,7 +63,7 @@ const g = rep({ prs: [{ createdAt: "garbage" }, {}] });
 check("unparseable PR createdAt -> newPrs UNKNOWN + unknowns entry", g.newPrs === "UNKNOWN" && g.unknowns.includes("prs[].createdAt"));
 const inv = rep({ periodStart: P.periodEnd, periodEnd: P.periodStart });
 check("inverted period -> period+newPrs UNKNOWN", inv.newPrs === "UNKNOWN" && inv.unknowns.includes("period"));
-const bt = rep({ prs: [{ createdAt: P.periodStart }, { createdAt: P.periodEnd }, { createdAt: "2026-01-01T01:00:01Z" }] });
+const bt = rep({ prs: [{ number: 1, createdAt: P.periodStart }, { number: 2, createdAt: P.periodEnd }, { number: 3, createdAt: "2026-01-01T01:00:01Z" }] });
 check("boundaries start/end inclusive, just-after excluded", bt.newPrs === 2);
 const mt = rep({ queue: { tasks: [{ id: "1", status: "DONE" }, null, { id: "2" }] } });
 check("malformed tasks -> completedTasks/bottlenecks UNKNOWN + flagged",
@@ -77,7 +78,7 @@ check("undefined period bounds -> UNKNOWN, no throw", u.newPrs === "UNKNOWN" && 
 // Advisory remediation proofs
 const iso = (a, b) => rep({ periodStart: a, periodEnd: b });
 check("start==end: instant PR counted, others not",
-  rep({ periodStart: P.periodStart, periodEnd: P.periodStart, prs: [{ createdAt: P.periodStart }, { createdAt: "2026-01-01T00:00:01Z" }] }).newPrs === 1);
+  rep({ periodStart: P.periodStart, periodEnd: P.periodStart, prs: [{ number: 1, createdAt: P.periodStart }, { number: 2, createdAt: "2026-01-01T00:00:01Z" }] }).newPrs === 1);
 check("NaN/Infinity period -> period unknown",
   iso(NaN, 1).unknowns.includes("period") && iso(0, Infinity).unknowns.includes("period") && iso(-Infinity, Infinity).newPrs === "UNKNOWN");
 check("epoch-seconds number period -> unparseable (period unknown)", iso(1767225600, 1767229200).unknowns.includes("period"));
@@ -92,7 +93,7 @@ check("Feb 30 / Apr 31 / month 13 / hour 24 rejected",
 check("leap day valid, non-leap Feb 29 rejected",
   !iso("2028-02-29T00:00:00Z", "2028-03-01T00:00:00Z").unknowns.includes("period") && iso("2026-02-29T00:00:00Z", "2026-03-01T00:00:00Z").unknowns.includes("period"));
 check("offset and fractional seconds accepted",
-  rep({ prs: [{ createdAt: "2026-01-01T01:30:00.123+01:00" }] }).newPrs === 1);
+  rep({ prs: [{ number: 1, createdAt: "2026-01-01T01:30:00.123+01:00" }] }).newPrs === 1);
 check("bad offset rejected", rep({ prs: [{ createdAt: "2026-01-01T00:30:00+25:00" }] }).newPrs === "UNKNOWN");
 const stT = (status) => rep({ queue: { tasks: [{ id: "a", status }] } });
 check("status ' DONE' / 'done' / unknown -> malformed",
@@ -125,6 +126,53 @@ check("newline in failure string / blocker escaped", !circ.includes("ok\nline"))
 let big = "";
 try { big = renderMarkdown(rep({ runFacts: { activeImplementers: 1, failures: [{ n: 10n }] } })); } catch { big = "THROW"; }
 check("BigInt failure -> [unserializable], no throw", big.includes("[unserializable]"));
+
+// Delta-review remediation proofs
+const okPr = (number) => ({ number, createdAt: P.periodStart });
+const nPrs = (...a) => rep({ prs: a });
+check("PR number 1 vs '1' is a duplicate (String key)", nPrs(okPr(1), okPr("1")).newPrs === "UNKNOWN" && nPrs(okPr(1), okPr("1")).unknowns.includes("prs[].number"));
+check("distinct numbers 1 and 2 (number/string mix) counted", nPrs(okPr(1), okPr("2")).newPrs === 2);
+const bothUndef = nPrs({ createdAt: P.periodStart }, { createdAt: P.periodStart });
+check("both PR numbers undefined -> malformed, not filtered", bothUndef.newPrs === "UNKNOWN" && bothUndef.unknowns.includes("prs[].number"));
+check("single PR with missing number -> malformed", nPrs({ createdAt: P.periodStart }).unknowns.includes("prs[].number"));
+check("non-safe / fractional / zero / negative / NaN / non-integer-string / other-type numbers -> malformed",
+  [2 ** 53, 1.5, 0, -1, NaN, Infinity, "1.5", "01", "", " 1", "1 ", "abc", "9007199254740993", null, {}, [], 1n, true]
+    .every((n) => nPrs(okPr(n)).newPrs === "UNKNOWN" && nPrs(okPr(n)).unknowns.includes("prs[].number")));
+const thrower = { toString() { throw new Error("boom"); } };
+const sym = Symbol("s");
+const hostileQ = { tasks: [
+  { id: "H1", status: "BLOCKED", blocker: thrower },
+  { id: "H2", status: "BLOCKED", blocker: sym },
+  { id: "H3", status: "BLOCKED", blocker: { toString: () => ({}) , valueOf: () => ({}) } },
+  { id: "H4", status: "BLOCKED", get blocker() { throw new Error("getter"); } },
+] };
+let hr = null; let hmd = "";
+try { hr = rep({ queue: hostileQ }); hmd = renderMarkdown(hr); } catch { hr = "THROW"; }
+check("throwing toString / throwing getter / non-primitive blocker never throws -> 'unspecified'",
+  hr !== "THROW" && Array.isArray(hr.bottlenecks) && hr.bottlenecks.length === 4 && hr.bottlenecks.filter((b) => b.id !== "H2").every((b) => b.blocker === "unspecified"));
+check("Symbol blocker does not throw", hr !== "THROW" && Array.isArray(hr.bottlenecks) && hr.bottlenecks.some((b) => b.id === "H2" && typeof b.blocker === "string"));
+let hid = "";
+try { hid = renderMarkdown({ ...buildReport(full), bottlenecks: [{ id: sym, blocker: thrower }], failures: [thrower, sym, { toJSON() { throw new Error("j"); } }] }); } catch { hid = "THROW"; }
+check("renderMarkdown with hostile ids/blockers/failures never throws -> [unserializable]", hid !== "THROW" && hid.includes("[unserializable]"));
+let hg = "";
+try { hg = JSON.stringify(buildReport({ ...full, queue: { get tasks() { throw new Error("t"); } }, prs: new Proxy([], { get() { throw new Error("p"); } }) })); } catch { hg = "THROW"; }
+check("throwing queue.tasks getter / hostile prs proxy never throws", hg !== "THROW");
+const esc = renderMarkdown(rep({ runFacts: { activeImplementers: 1, failures: ["a\u2028b\u2029c", "<img src=x onerror=1>", "x&y"] } }));
+check("U+2028 / U+2029 escaped as \\u2028 / \\u2029", !/[\u2028\u2029]/.test(esc) && esc.includes("\\u2028") && esc.includes("\\u2029"));
+check("'<' escaped: no raw <img", !esc.includes("<") && esc.includes("\\u003cimg src=x onerror=1>"));
+check("'&' escaped: no raw &", !esc.includes("&") && esc.includes("x\\u0026y"));
+const blk = renderMarkdown(rep({ queue: { tasks: [{ id: "<b>", status: "BLOCKED", blocker: "a&b\u2028c" }] } }));
+check("bottleneck id/blocker escaped too", !blk.includes("<") && !blk.includes("&") && !/[\u2028\u2029]/.test(blk));
+// STATUSES parity with queue.mjs: queue.mjs lives on the CP-QUEUE branch, so this runs only where that file exists.
+if (fs.existsSync(new URL("./queue.mjs", import.meta.url))) {
+  const q = await import("./queue.mjs");
+  const a = [...q.STATUSES].sort().join(","), b = [...STATUSES].sort().join(",");
+  check("report STATUSES equals queue.mjs STATUSES", q.STATUSES instanceof Set && a === b);
+} else {
+  console.log("SKIP: ./queue.mjs not present on this branch; STATUSES parity not checked here (not counted as a pass)");
+}
+check("report STATUSES has the 10 exact queue statuses",
+  STATUSES.size === 10 && ["READY","IN_PROGRESS","BLOCKED","DONE","COMPLETED","DRAFT_NOT_READY","PENDING_REVIEW","PENDING_CI","AUTHORITY_REQUIRED","NOT_STARTED"].every((x) => STATUSES.has(x)));
 
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
