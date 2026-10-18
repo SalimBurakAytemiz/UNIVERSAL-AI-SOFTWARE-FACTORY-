@@ -4,6 +4,8 @@
   "generatedAt": "2026-10-18",
   "base": "v7/integration@e12dbdd",
   "authority": "FOUNDER-DIRECTIVE:MAXIMUM-CLOUD-PARALLEL-PRODUCTION-OVERRIDE-2026-10-18",
+  "mergePosture": "BUILD_AND_REVIEW_NOW_MERGE_AFTER_ACTIONS_RESTORED (Founder decision 2026-10-18; no gate weakened; required CI + governed review remain the merge conditions)",
+  "sealAuthorityDecision": "SEPARATE_IDENTITY_CLOUD_GOVERNANCE (Founder decision 2026-10-18; builder never becomes the sealer; old Local controls retained until transfer proven). See DECISIONS-2026-10-18.md.",
   "fullInventory": "docs/autonomy/backlog-drafts/BACKLOG_CHECKPOINT.json",
   "readyInvariant": "A task is READY only with a non-empty authorizedBy AND all dependsOn DONE AND no protected-path edit required to complete AND no new Founder spend/security authority required.",
   "tasks": [
@@ -75,6 +77,19 @@
       "protectedEdit": false,
       "notes": "Implemented via claude-code-remote scheduled triggers (routines): a recovery/continuous-dispatch routine that re-arms production after this cloud session ends, and a 60-minute production reporter. Does NOT touch the supervisor-owned scheduler state (.ai/runtime/, protected); this is a separate, non-protected cloud-production layer."
     },
+    {
+      "id": "CP-GOV",
+      "title": "Separate-identity Cloud governance mechanism (design + non-protected scaffold) — enables cloud-independent seal/reseal + FA-LEASE2 D3 issuance",
+      "owner": "CLOUD",
+      "status": "IN_PROGRESS",
+      "dependsOn": [],
+      "authorizedBy": "FOUNDER-DECISION-2026-10-18:SEPARATE-IDENTITY-CLOUD-GOVERNANCE",
+      "riskLevel": 4,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "files": ["docs/cloud-production/governance/SEPARATE-IDENTITY-CLOUD-GOVERNANCE.md"],
+      "notes": "Orchestrator-owned (Opus), NOT dispatched to a routine implementer due to security-criticality. DESIGN + non-protected scaffold only. HARD INVARIANTS: (i) sealing identity distinct from every implementer/builder; (ii) same agent never seals/approves its own code; (iii) old Local controls remain active in parallel until the transfer is PROVEN. The actual key instantiation + first real seal / D3 issuance is performed by the Founder or the distinct governance identity, NEVER by this builder. See DECISIONS-2026-10-18.md."
+    },
 
     {
       "id": "FA-LEASE2",
@@ -86,8 +101,8 @@
       "riskLevel": 4,
       "requiresNewAuthority": true,
       "protectedEdit": true,
-      "blocker": "Needs the Founder FA-LEASE2 D3 sealed authority record (governance) + Local/maintainer reseal; edits protected automation/lib/ + config/execution-backends.json. Cloud must not create the D3 record or reseal. This is the single highest-leverage unblock: it activates Cloud Developer A consuming the canonical backlog, which unblocks the whole feature/screen backlog.",
-      "notes": "Escalated to the Founder as the keystone decision. Detector already armed to auto-start wiring the moment the sealed record lands on v7/integration."
+      "blocker": "Needs the FA-LEASE2 D3 sealed authority record + a trust-root reseal; edits protected automation/lib/ + config/execution-backends.json. Cloud/builder must not create the D3 record or reseal. AUTHORIZED PATH (Founder decision 2026-10-18): the separate-identity Cloud governance mechanism (CP-GOV), once built AND independently proven, becomes the distinct identity that issues the D3 record + reseal — with old Local controls retained until proven. So FA-LEASE2 is no longer blocked on Local indefinitely; it is blocked on CP-GOV being built + proven, then the distinct identity issuing D3.",
+      "notes": "Keystone. Depends on CP-GOV (separate-identity governance) reaching a proven state, then the distinct identity (not the builder) issuing the sealed D3 record. Detector armed to auto-start wiring the moment the sealed record lands on v7/integration."
     },
     {
       "id": "BACKLOG-SOURCE-REBASELINE",
