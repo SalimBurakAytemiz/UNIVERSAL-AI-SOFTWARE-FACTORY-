@@ -3,6 +3,7 @@ import {h,panel,chip,stateNote,emptyNote,statusLabel} from "../components.js";
 import {formatCount,MISSING} from "../model.js";
 import {buildCampusInput} from "../control-tower/feed.js";
 import {mountCampus} from "../control-tower/mount.js";
+import {buildStageTimeline,formatMs} from "../trace-core.js";
 
 const okData=r=>r.ok?r.data:null;
 export async function render(ctx){
@@ -18,12 +19,31 @@ export async function render(ctx){
   const retryData=okData(retry);
   const healthText=health.state==="VERIFIED"?`${health.data.status} · ${health.data.system}`:ctx.t(`state.${health.state}`);
   const eventsEl=h(doc,"pre",{id:"events",class:"log",tabindex:"0","aria-label":ctx.t("tower.events"),text:ctx.t("tower.pickRun")});
+  const traceEl=h(doc,"div",{id:"stageTimeline",class:"tw-trace"});
+  // //TR: UI-226 aşama zaman çizelgesi: yalnız gerçek event timestamp/stage alanlarından; süre uydurulmaz, geçersiz timestamp'ler "yerleştirilemeyen" listesinde. CSP inline style özniteliğini engellediği için çubuk konumu CSSOM ile atanır.
+  function renderTrace(list){
+    const tl=buildStageTimeline(list),stg=x=>x||ctx.t("tower.trace.noStage");
+    const kids=[h(doc,"p",{class:"note",text:ctx.t("tower.trace.note")})];
+    if(!tl.stages.length)kids.push(h(doc,"p",{class:"note",text:ctx.t("tower.trace.empty")}));
+    else{
+      kids.push(h(doc,"p",{class:"note",text:ctx.t("tower.trace.total",{span:formatMs(tl.spanMs)})}));
+      for(const x of tl.stages){
+        const bar=h(doc,"div",{class:"tw-trace-bar",dataset:{offsetMs:x.offsetMs,durationMs:x.durationMs}});
+        if(bar.style){bar.style.left=`${x.startPct.toFixed(2)}%`;bar.style.width=`${x.widthPct.toFixed(2)}%`}
+        kids.push(h(doc,"div",{class:"tw-trace-row","aria-hidden":"true"},h(doc,"span",{text:stg(x.stage)}),h(doc,"div",{class:"tw-trace-track"},bar)));
+      }
+      kids.push(h(doc,"ul",{class:"tw-trace-list","aria-label":ctx.t("tower.trace.title")},...tl.stages.map(x=>h(doc,"li",{text:ctx.t("tower.trace.item",{stage:stg(x.stage),n:x.count,offset:formatMs(x.offsetMs),duration:formatMs(x.durationMs)})}))));
+    }
+    if(tl.unplaced.length)kids.push(h(doc,"p",{class:"note",text:ctx.t("tower.trace.unplacedTitle",{n:tl.unplaced.length})}),h(doc,"ul",{class:"tw-trace-list",dataset:{unplaced:"1"}},...tl.unplaced.map(x=>h(doc,"li",{text:ctx.t("tower.trace.unplacedItem",{i:x.index+1,stage:stg(x.stage),event:x.event})}))));
+    traceEl.replaceChildren(...kids);
+  }
   const logText=h(doc,"pre",{id:"logText",class:"log",tabindex:"0","aria-label":ctx.t("tower.logs"),text:ctx.t("tower.pickLog")});
   const logButtons=h(doc,"div",{id:"logButtons",class:"btn-row"});const selected=h(doc,"p",{id:"selectedRun",class:"mono",text:MISSING});
   async function loadRun(runId){
     selected.textContent=runId;
     const [events,logs]=await Promise.all([api.raw(`/v1/runs/${encodeURIComponent(runId)}/events`),api.raw(`/v1/runs/${encodeURIComponent(runId)}/logs`)]);
     eventsEl.textContent=events.ok?((events.data.events??[]).slice(-200).map(x=>`${x.timestamp??""} [${x.severity??"INFO"}] ${x.stage??""}/${x.event??""} ${JSON.stringify(x.details??{})}`).join("\n")||ctx.t("tower.noEvents")):ctx.t(`state.${events.state}`);
+    if(events.ok)renderTrace((events.data.events??[]).slice(-200));else traceEl.replaceChildren(h(doc,"p",{class:"note",text:ctx.t(`state.${events.state}`)}));
     const nodes=logs.ok?(logs.data.logs??[]).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:async()=>{const y=await api.raw(`/v1/runs/${encodeURIComponent(runId)}/logs/${encodeURIComponent(x.name)}`);logText.textContent=y.ok?(y.data.truncated?`${ctx.t("tower.truncated")}\n`:"")+y.data.text:ctx.t(`state.${y.state}`)}},text:`${x.name} (${ctx.t("tower.bytes",{n:x.size})})`})):[];
     logButtons.replaceChildren(...(nodes.length?nodes:[doc.createTextNode(ctx.t("tower.noLogs"))]));
   }
@@ -41,5 +61,5 @@ export async function render(ctx){
     stopCard,
     panel(ctx,{titleKey:"tower.attention",id:"tower-attention"},attention),
     panel(ctx,{titleKey:"tower.runs",id:"tower-runs"},runs.state!=="VERIFIED"?stateNote(ctx,runs.state):runList.length?h(doc,"div",{class:"btn-row"},runList):emptyNote(ctx,"tower.noRuns")),
-    panel(ctx,{titleKey:"tower.selected",id:"tower-selected"},selected,h(doc,"h3",{text:ctx.t("tower.events")}),eventsEl,h(doc,"h3",{text:ctx.t("tower.logs")}),logButtons,logText));
+    panel(ctx,{titleKey:"tower.selected",id:"tower-selected"},selected,h(doc,"h3",{text:ctx.t("tower.events")}),eventsEl,h(doc,"h3",{text:ctx.t("tower.trace.title")}),traceEl,h(doc,"h3",{text:ctx.t("tower.logs")}),logButtons,logText));
 }
