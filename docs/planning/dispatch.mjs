@@ -168,6 +168,25 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
   return out;
 }
 
+// Pure decision: the lease store is "unavailable" (not held) ONLY when ls-remote SUCCEEDED and printed nothing.
+// A failed ls-remote (non-zero status) proves nothing about the ref, so it stays fail-closed.
+export const leaseRefAbsent = lr => !!lr && lr.status === 0 && String(lr.stdout ?? "").trim() === "";
+export const leaseCheckFailed = lr => !lr || lr.status !== 0;
+
+// Redact URLs and filesystem/remote paths from a git stderr fragment.
+export const redactRemote = t => String(t)
+  .replace(/\b[a-zA-Z][a-zA-Z0-9+.-]*:\/\/\S+/g, "<url>")
+  .replace(/\b[\w.-]+@[\w.-]+:\S+/g, "<url>")
+  .replace(/[A-Za-z]:[\\/][^\s'")]+/g, "<path>")
+  .replace(/(^|[\s'"(=])((?:\.{1,2})?\/[^\s'")]+)/g, "$1<path>");
+// Reason text for a failed push: prefer "remote: ..." and "! [remote rejected]" lines, else the last stderr line.
+export function pushFailReason(stderr) {
+  const lines = String(stderr ?? "").split("\n").map(x => x.trim()).filter(Boolean);
+  const pick = lines.filter(x => /^remote:/.test(x) || /^!\s*\[remote rejected\]/.test(x));
+  const txt = (pick.length ? pick.join(" | ") : (lines.at(-1) ?? "unknown")).replace(/\s+/g, " ");
+  return redactRemote(txt).slice(0, 240);
+}
+
 function fin(outcome, reasons, extra = {}) {
   const out = {outcome, taskId: null, branch: null, claimRef: null, reasons, ...extra};
   return {outcome, exit: EXIT[outcome], line: JSON.stringify(out)};
@@ -243,10 +262,12 @@ export async function run(argv, cwd = process.cwd()) {
           // Lease write failed and nothing is readable: if the lease ref does not exist on the remote, the store is unavailable
           // (e.g. server rejects refs/uasco/*), NOT held by someone else. Fail-safe: the branch-ref claim is the arbiter.
           const lr = git(["ls-remote", o.remote, `refs/uasco/claims/${id}`]);
-          if (lr.status !== 0 || lr.stdout.trim() === "") leaseInfo = {status: "LEASE_STORE_UNAVAILABLE", token: null, epoch: null};
+          if (leaseCheckFailed(lr)) leaseInfo = {status: "LEASE_CHECK_FAILED"};
+          else if (leaseRefAbsent(lr)) leaseInfo = {status: "LEASE_STORE_UNAVAILABLE", token: null, epoch: null};
         }
       } catch (e) { leaseInfo = {status: "LEASE_STORE_UNAVAILABLE", error: String(e.message).slice(0, 120)}; }
       if (leaseInfo.status === "LEASE_STORE_UNAVAILABLE") lost.push(`${id}:LEASE_STORE_UNAVAILABLE`);
+      if (leaseInfo.status === "LEASE_CHECK_FAILED") { lost.push(`${id}:LEASE_CHECK_FAILED`); chosen = skipNext(id, "LEASE_CHECK_FAILED"); continue; }
       if (leaseInfo.status === "HELD") { lost.push(`${id}:LEASE_HELD`); chosen = skipNext(id, "LEASE_HELD"); continue; }
     }
     const msg = `${CLAIM_SUBJECT} ${id} owner=${o.owner} at=${new Date().toISOString()} nonce=${crypto.randomUUID()}`;
@@ -264,7 +285,7 @@ export async function run(argv, cwd = process.cwd()) {
     if (!again) return fin("RECOVERABLE_FAILURE", [...flat, ...lost, ...pushFailed, `${id}:PUSH_FAILED_REMOTE_UNREACHABLE`], extras);
     if (!again.has(br)) {
       // Non-race failure for this task only (e.g. hook rejection, ref conflict): record and continue with the next task.
-      pushFailed.push(`${id}:PUSH_FAILED:${p.stderr.trim().split("\n").pop().slice(0, 160)}`);
+      pushFailed.push(`${id}:PUSH_FAILED:${pushFailReason(p.stderr)}`);
       chosen = skipNext(id, "PUSH_FAILED");
       continue;
     }

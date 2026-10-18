@@ -32,8 +32,8 @@ function mkEnv(tasks, backlogRaw) {
 }
 const T = (id, extra = {}) => ({id, status: "READY", owner: "CLOUD", authorizedBy: "FOUNDER:test", dependsOn: [], protectedEdit: false, requiresNewAuthority: false, ...extra});
 const heads = bare => G(bare, ["for-each-ref", "--format=%(refname)", "refs/heads/claude/"]).split("\n").filter(Boolean);
-const dispatchSync = (cwd, args) => {
-  const r = spawnSync("node", [DISPATCH, ...args], {cwd, encoding: "utf8"});
+const dispatchSync = (cwd, args, env) => {
+  const r = spawnSync("node", [DISPATCH, ...args], {cwd, encoding: "utf8", ...(env ? {env: {...process.env, ...env}} : {})});
   const line = r.stdout.trim().split("\n").filter(Boolean).pop() ?? "";
   let j = null; try { j = JSON.parse(line); } catch { /* keep null */ }
   return {code: r.status, j, raw: r.stdout, err: r.stderr};
@@ -200,6 +200,30 @@ const writeHook = (bare, body) => { fs.mkdirSync(path.join(bare, "hooks"), {recu
   writeHook(e2.bare, 'while read o n r; do case "$r" in refs/heads/claude/*) exit 1;; esac; done; exit 0');
   const r2 = dispatchSync(e2.work, ["--claim", "--backlog", e2.bl]);
   check("only task fails to push with reachable remote => NO_ACTION with PUSH_FAILED (RECOVERABLE only when remote unreachable)", r2.code === 0 && r2.j.outcome === "NO_ACTION" && r2.j.reasons.some(x => x.startsWith("PF-3:PUSH_FAILED")), r2.raw);
+}
+// 10b. PUSH_FAILED reason carries the hook message and no remote path/URL.
+{
+  const e = mkEnv([T("PR-1")]);
+  writeHook(e.bare, 'while read o n r; do case "$r" in refs/heads/claude/*) echo "policy: claude branches closed" >&2; exit 1;; esac; done; exit 0');
+  const r = dispatchSync(e.work, ["--claim", "--backlog", e.bl]);
+  const reason = (r.j?.reasons ?? []).find(x => x.startsWith("PR-1:PUSH_FAILED")) ?? "";
+  console.log(`  push-failed reason: ${reason}`);
+  check("PUSH_FAILED reason contains hook message and no remote path/URL", reason.includes("claude branches closed") && !reason.includes(e.bare) && !reason.includes(tmpRoot) && !/:\/\/|\/tmp\/|remote\.git/.test(reason), reason);
+}
+// 10c. Failed ls-remote after a lease-store failure is fail-closed (LEASE_CHECK_FAILED, task skipped); only a successful empty ls-remote means unavailable.
+{
+  const mod = await import(path.join(HERE, "dispatch.mjs"));
+  check("leaseRefAbsent: failed ls-remote => false; success+empty => true; success+output => false",
+    mod.leaseRefAbsent({status: 128, stdout: "", stderr: "x"}) === false && mod.leaseRefAbsent({status: 0, stdout: "\n"}) === true && mod.leaseRefAbsent({status: 0, stdout: "abc\trefs/uasco/claims/X\n"}) === false && mod.leaseRefAbsent(null) === false);
+  check("redactRemote strips file paths and URLs", !/\/tmp\/|https?:/.test(mod.redactRemote("fatal: '/tmp/a/b.git' does not appear; see https://x.y/z.git")));
+  const e = mkEnv([T("FC-1"), T("FC-2")]);
+  writeHook(e.bare, 'while read o n r; do case "$r" in refs/uasco/*) echo "uasco rejected" >&2; exit 1;; esac; done; exit 0');
+  // git wrapper on PATH: ls-remote of a lease ref fails (deterministic); everything else passes through.
+  const real = spawnSync("sh", ["-c", "command -v git"], {encoding: "utf8"}).stdout.trim();
+  const wdir = path.join(tmpRoot, "gitwrap"); fs.mkdirSync(wdir);
+  fs.writeFileSync(path.join(wdir, "git"), `#!/bin/sh\nif [ "$1" = ls-remote ]; then for a in "$@"; do case "$a" in refs/uasco/claims/*) echo "simulated ls-remote failure" >&2; exit 128;; esac; done; fi\nexec "${real}" "$@"\n`, {mode: 0o755});
+  const r = dispatchSync(e.work, ["--claim", "--backlog", e.bl], {PATH: `${wdir}${path.delimiter}${process.env.PATH}`});
+  check("lease write rejected AND lease-ref ls-remote fails => FC-1:LEASE_CHECK_FAILED skipped (not LEASE_STORE_UNAVAILABLE), FC-1 branch not pushed", r.j?.reasons?.includes("FC-1:LEASE_CHECK_FAILED") && !r.j.reasons.includes("FC-1:LEASE_STORE_UNAVAILABLE") && !heads(e.bare).includes("refs/heads/claude/fc-1"), r.raw);
 }
 // 11. 8 processes racing on 3 tasks: each task claimed exactly once.
 {
