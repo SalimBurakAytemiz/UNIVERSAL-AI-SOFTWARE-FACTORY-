@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-17T17:10:33.548Z",
+  "generatedAt": "2026-10-18T04:38:52.328Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -209,6 +209,14 @@
       "sha256": "1313f97610095bf13baf0ad7cc76eaa79bc0da9589efadc6d9eaed6e5074938e"
     },
     {
+      "path": "automation/lib/lease-verdict.d.mts",
+      "sha256": "8a5aee10539713f79a27dc8cd3d6b90def783a13b33af224eba6d00a21f9b496"
+    },
+    {
+      "path": "automation/lib/lease-verdict.mjs",
+      "sha256": "64d7268aab705691d137a1f70ff9c6b0a70edd9fc1f48e6dff90fae266941709"
+    },
+    {
       "path": "automation/lib/low-backlog.mjs",
       "sha256": "a5ebb4e2f2ad8a5c1e73753c637f7b8abaa9b39e48ae71153c77295ebc83a08a"
     },
@@ -353,6 +361,22 @@
       "sha256": "88f78f5c1ee53f36da5f1b0c99512b3bbf44a58a30c8d4994febe3f88b796bcf"
     },
     {
+      "path": "automation/lib/task-lease-git-store.d.mts",
+      "sha256": "095dbe984409d48b3b03b00b1c8077678668f1c6a45b20dc3a18c741b15094b7"
+    },
+    {
+      "path": "automation/lib/task-lease-git-store.mjs",
+      "sha256": "54f3a3b8c83ce47704ddaf4fafe442b50e6b5c9762feae095ebc9be36e01aed2"
+    },
+    {
+      "path": "automation/lib/task-lease.d.mts",
+      "sha256": "6f8d038e1c1f5f0b99cffd3bcd9f9c2ea53897555fcc7818559358da9827c20e"
+    },
+    {
+      "path": "automation/lib/task-lease.mjs",
+      "sha256": "8a5168cc71204d6169bdfe32fd04a9b163fa51254fc48c234ed0209fc8094bf3"
+    },
+    {
       "path": "automation/lib/trust-root.mjs",
       "sha256": "7f52779be6833ab33878dd807faca9d8a5774b274130acf7137fd07af4c0a7e9"
     },
@@ -430,7 +454,7 @@
     },
     {
       "path": "config/validation.json",
-      "sha256": "4410728260aa05c3e25a32699c2c7f9eb28db0841c1d53d06cf43f8939b206e3"
+      "sha256": "b8b637241d958970a26c8d897ae75be1f3c4c485e95c5563b1a660984e2fcd4d"
     },
     {
       "path": "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
