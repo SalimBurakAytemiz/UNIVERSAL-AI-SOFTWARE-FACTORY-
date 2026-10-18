@@ -357,6 +357,92 @@
       "branch": "claude/cleanup-planned-scaffolding",
       "pr": 20,
       "notes": "Implemented by a cloud implementer; PR open, awaiting independent review/CI (Actions down). Not CLEAN."
+    },
+    {
+      "id": "L-WORKFORCE",
+      "title": "UI-197 cluster->guild taxonomy",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "files": [
+        "apps/desktop/renderer/views/workforce.js",
+        "locales",
+        "styles.css"
+      ],
+      "testFile": "tests/v7-ux-wp-agents.test.ts",
+      "notes": "Verified read-only gap at e12dbdd; awaiting Founder batch approval (docs/planning/FOUNDER_BATCH_APPROVAL_2026-10-18.md). No authorizedBy: not READY."
+    },
+    {
+      "id": "L-TOWER-TRACE",
+      "title": "UI-226 stage timeline",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "files": [
+        "apps/desktop/renderer/views/tower.js",
+        "apps/desktop/renderer/trace-core.js",
+        "locales",
+        "styles.css"
+      ],
+      "testFile": "tests/v7-ux-wp4-tower.test.ts",
+      "notes": "Verified read-only gap at e12dbdd; awaiting Founder batch approval (docs/planning/FOUNDER_BATCH_APPROVAL_2026-10-18.md). No authorizedBy: not READY."
+    },
+    {
+      "id": "L-ASSURANCE",
+      "title": "UI-049 -> UI-050 -> UI-051 (sequential)",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "files": [
+        "apps/desktop/renderer/views/assurance.js",
+        "apps/desktop/renderer/assurance-core.js",
+        "apps/desktop/renderer/api.js",
+        "locales",
+        "styles.css"
+      ],
+      "testFile": "tests/v7-ux-wp-qasec.test.ts",
+      "notes": "Verified read-only gap at e12dbdd; awaiting Founder batch approval (docs/planning/FOUNDER_BATCH_APPROVAL_2026-10-18.md). No authorizedBy: not READY."
+    },
+    {
+      "id": "L-ROUTES",
+      "title": "UI-070 -> UI-078 (sequential)",
+      "owner": "CLOUD",
+      "status": "AUTHORITY_REQUIRED",
+      "dependsOn": [],
+      "requiresNewAuthority": true,
+      "protectedEdit": false,
+      "files": [
+        "views/audit.js",
+        "audit-core.js",
+        "views/integrations.js",
+        "integrations-core.js",
+        "routes.js",
+        "planned.js",
+        "api.js",
+        "locales",
+        "styles.css"
+      ],
+      "testFile": "tests/v7-ux-operations.test.ts",
+      "notes": "Verified read-only gap at e12dbdd; awaiting Founder batch approval (docs/planning/FOUNDER_BATCH_APPROVAL_2026-10-18.md). No authorizedBy: not READY."
+    }
+  ],
+  "relations": [
+    {
+      "pr": 17,
+      "supersedes": 14,
+      "task": "CP-QUEUE"
+    },
+    {
+      "pr": 18,
+      "supersedes": 13,
+      "task": "CP-REPORT",
+      "note": "old PRs not closed; owner/independent review decides"
     }
   ]
 }
