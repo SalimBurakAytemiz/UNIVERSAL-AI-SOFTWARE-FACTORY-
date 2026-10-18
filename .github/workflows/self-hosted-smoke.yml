@@ -1,0 +1,23 @@
+
+# //TR: UASCO Windows self-hosted runner bağlantı testi.
+name: UASCO Self Hosted Runner Test
+
+on:
+  push:
+    branches:
+      - test/uasco-runner-smoke
+
+permissions:
+  contents: read
+
+jobs:
+  runner-test:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 5
+
+    steps:
+      - name: Verify Windows Runner
+        shell: pwsh
+        run: |
+          Write-Output "UASCO RUNNER CONNECTED"
+          Write-Output "Windows runner test successful"
