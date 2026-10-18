@@ -49,10 +49,29 @@ describe("atomic cross-environment task lease",()=>{
     expect(release(s,A({taskId:"REL-1",token:g.token})).status).toBe("RELEASED");expect(s.read("REL-1")).toBeNull();expect(release(s,A({taskId:"REL-1",token:g.token})).status).toBe("NOOP");
     expect(claim(s,B({taskId:"REL-1",now:1001})).status).toBe("GRANTED");
   });
-  it("git store cas/remove reject a stale token and invalid task ids are refused",()=>{
+  it("git store cas/remove reject a stale token or a stale version (same token, renewed) and invalid task ids are refused",()=>{
     const s=createLocalGitRefStore({repoDir:repo}),g=claim(s,A({taskId:"CAS-1"})).record!;
-    expect(s.cas("CAS-1","wrong",{...g,token:"x"}).ok).toBe(false);expect(s.remove("CAS-1","wrong").ok).toBe(false);expect(s.read("CAS-1")!.token).toBe(g.token);
+    expect(s.cas("CAS-1",{...g,token:"wrong"},{...g,token:"x"}).ok).toBe(false);expect(s.remove("CAS-1",{...g,token:"wrong"}).ok).toBe(false);expect(s.read("CAS-1")!.token).toBe(g.token);
+    expect(s.cas("CAS-1",{...g,expiresAt:g.expiresAt-1},{...g,token:"x"}).ok).toBe(false);expect(s.remove("CAS-1",{...g,heartbeatAt:g.heartbeatAt+1}).ok).toBe(false);
+    expect(s.cas("CAS-1",{note:"no lease shape"} as any,{...g,token:"x"}).ok).toBe(false);expect(s.read("CAS-1")!.token).toBe(g.token);
     expect(()=>s.read("../evil")).toThrow(/LEASE_TASK_ID_INVALID/);expect(()=>s.read("a b")).toThrow(/LEASE_TASK_ID_INVALID/);
+  });
+  // regression (review a77e082 M1): a renew committed between the taker's observation of an expired record and its CAS must win
+  const renewBetween=(real:LeaseStore,owner:any)=>{let fired=false;return {...real,read:(id:string)=>real.read(id),
+    createIfAbsent:(id:string,rec:any)=>{const c=real.createIfAbsent(id,rec);if(!c.created&&!fired){fired=true;owner.result=renew(real,owner.args)}return c},
+    cas:(id:string,e:any,r:any)=>real.cas(id,e,r),remove:(id:string,e:any)=>real.remove(id,e)} as LeaseStore};
+  it("TAKEOVER RACE: a renew landing after the taker read the expired record is not overwritten (git store)",()=>{
+    const s=createLocalGitRefStore({repoDir:repo}),g=claim(s,A({taskId:"TOR-1"})).record!;
+    const owner:any={args:A({taskId:"TOR-1",now:1150,token:g.token})},r=claim(renewBetween(s,owner),B({taskId:"TOR-1",now:1150}));
+    expect(owner.result.status).toBe("RENEWED");expect(r.status).toBe("HELD");
+    const held=s.read("TOR-1")!;expect(held.workerId).toBe("w-a");expect(held.token).toBe(g.token);expect(held.expiresAt).toBe(1250);
+  });
+  it("schema-invalid but parseable lease record is unreadable state -> HELD / LOST / NOOP, never GRANTED",()=>{
+    const s=createLocalGitRefStore({repoDir:repo}),blob=cp.execFileSync("git",["hash-object","-w","--stdin"],{cwd:repo,input:JSON.stringify({note:"corrupt"}),encoding:"utf8"}).trim();
+    cp.execFileSync("git",["update-ref","refs/uasco/claims/BAD-1",blob],{cwd:repo});
+    expect(claim(s,A({taskId:"BAD-1",now:99999})).status).toBe("HELD");
+    expect(renew(s,A({taskId:"BAD-1",token:"t"})).status).toBe("LOST");expect(release(s,A({taskId:"BAD-1",token:"t"})).status).toBe("NOOP");
+    expect(s.read("BAD-1")).toEqual({note:"corrupt"});
   });
   describe("remote ref store (fake runGit, no network)",()=>{
     // in-memory fake of the git remote: models ls-remote / fetch / hash-object / cat-file / push --force-with-lease
@@ -70,11 +89,17 @@ describe("atomic cross-environment task lease",()=>{
       const rec=(tok:string)=>({taskId:"R-1",environment:"e",workerId:"w",sessionId:"s",headSha:null,epoch:1,token:tok,acquiredAt:1,heartbeatAt:1,expiresAt:99});
       expect(s.createIfAbsent("R-1",rec("t1")).created).toBe(true);
       const second=s.createIfAbsent("R-1",rec("t2"));expect(second.created).toBe(false);expect(second.current!.token).toBe("t1");
-      expect(s.cas("R-1","stale",rec("t3")).ok).toBe(false);expect(s.read("R-1")!.token).toBe("t1");
+      expect(s.cas("R-1",rec("stale"),rec("t3")).ok).toBe(false);expect(s.read("R-1")!.token).toBe("t1");
       // lost update at the ref level: the lease check fails when the remote ref moved after we read it
       const lease=f.log.filter(a=>a[0]==="push").map(a=>a[3]);expect(lease[0]).toBe("--force-with-lease=refs/uasco/claims/R-1:");
-      expect(s.cas("R-1","t1",rec("t4")).ok).toBe(true);expect(s.read("R-1")!.token).toBe("t4");
-      expect(s.remove("R-1","t1").ok).toBe(false);expect(s.remove("R-1","t4").ok).toBe(true);expect(s.read("R-1")).toBeNull();
+      expect(s.cas("R-1",rec("t1"),rec("t4")).ok).toBe(true);expect(s.read("R-1")!.token).toBe("t4");
+      expect(s.remove("R-1",rec("t1")).ok).toBe(false);expect(s.remove("R-1",rec("t4")).ok).toBe(true);expect(s.read("R-1")).toBeNull();
+    });
+    it("TAKEOVER RACE over the fake remote: a renew between the taker's read and CAS wins",()=>{
+      const f=mkFake(),s=createRemoteRefStore({runGit:f.runGit}),g=claim(s,A({taskId:"R-3"})).record!;
+      const owner:any={args:A({taskId:"R-3",now:1150,token:g.token})};
+      expect(claim(renewBetween(s,owner),B({taskId:"R-3",now:1150})).status).toBe("HELD");expect(owner.result.status).toBe("RENEWED");
+      expect(s.read("R-3")!.workerId).toBe("w-a");
     });
     it("claim over the fake remote: first GRANTED, second HELD, expired takeover GRANTED",()=>{
       const f=mkFake(),s=createRemoteRefStore({runGit:f.runGit});
@@ -85,13 +110,28 @@ describe("atomic cross-environment task lease",()=>{
 });
 describe("SHA + session bound reviewer verdict",()=>{
   const SHA="c".repeat(40),base={taskId:"T-1",reviewedSha:SHA,reviewerSessionId:"rev-1",implementerSessionId:"impl-1",result:"CLEAN",reviewerIdentity:"CLAUDE_REVIEWER",builderIdentity:"CLAUDE_BUILDER"};
-  const opts={expectedTaskId:"T-1",expectedHeadSha:SHA,implementerSessionId:"impl-1"};
+  const opts={expectedTaskId:"T-1",expectedHeadSha:SHA,implementerSessionId:"impl-1",builderIdentity:"CLAUDE_BUILDER"};
   it("accepts only a CLEAN, SHA-matching, independent verdict",()=>{const v=bindVerdict(base);expect(Object.isFrozen(v)).toBe(true);expect(verifyVerdict(v,opts)).toEqual({ok:true,reason:"OK"})});
   it("rejects STALE_SHA",()=>expect(verifyVerdict(bindVerdict({...base,reviewedSha:"d".repeat(40)}),opts)).toEqual({ok:false,reason:"STALE_SHA"}));
   it("rejects NOT_INDEPENDENT (reviewer session == implementer session, recorded or expected)",()=>{
     expect(verifyVerdict(bindVerdict({...base,reviewerSessionId:"impl-1"}),opts).reason).toBe("NOT_INDEPENDENT");
     expect(verifyVerdict(bindVerdict({...base,implementerSessionId:"other",reviewerSessionId:"impl-1"}),opts).reason).toBe("NOT_INDEPENDENT")});
-  it("rejects SAME_IDENTITY",()=>expect(verifyVerdict(bindVerdict({...base,reviewerIdentity:"X",builderIdentity:"X"}),opts).reason).toBe("SAME_IDENTITY"));
+  it("rejects SAME_IDENTITY, including case/whitespace variants of the builder",()=>{
+    expect(verifyVerdict(bindVerdict({...base,reviewerIdentity:"CLAUDE_BUILDER"}),opts).reason).toBe("SAME_IDENTITY");
+    expect(verifyVerdict(bindVerdict({...base,reviewerIdentity:" claude_builder "}),opts).reason).toBe("SAME_IDENTITY");
+    expect(verifyVerdict(bindVerdict({...base,reviewerIdentity:"X",builderIdentity:"X"}),{...opts,builderIdentity:"X"}).reason).toBe("SAME_IDENTITY")});
+  // regression (review a77e082 M2): builder identity must be supervisor-supplied and match the verdict; missing/empty never passes
+  it("IDENTITY_UNVERIFIED when the builder identity is missing, empty, self-reported differently, or not supplied by the supervisor",()=>{
+    const {builderIdentity:_b,...noBuilder}=base;
+    expect(verifyVerdict(noBuilder as any,opts).reason).toBe("IDENTITY_UNVERIFIED");
+    expect(verifyVerdict({...base,builderIdentity:""} as any,opts).reason).toBe("IDENTITY_UNVERIFIED");
+    expect(verifyVerdict(bindVerdict({...base,builderIdentity:"SOMEONE_ELSE"}),opts).reason).toBe("IDENTITY_UNVERIFIED");
+    const {builderIdentity:_o,...noOpt}=opts;
+    expect(verifyVerdict(bindVerdict(base),noOpt as any).reason).toBe("IDENTITY_UNVERIFIED");
+    expect(verifyVerdict(bindVerdict(base),{...opts,builderIdentity:"  "}).reason).toBe("IDENTITY_UNVERIFIED");
+    expect(verifyVerdict({...base,reviewerIdentity:""} as any,opts).reason).toBe("IDENTITY_UNVERIFIED");
+    expect(verifyVerdict(bindVerdict({...base,builderIdentity:"claude_builder"}),opts)).toEqual({ok:true,reason:"OK"});
+  });
   it("rejects every non-CLEAN result",()=>{for(const r of ["BLOCKED","INCONCLUSIVE","INVALID"])expect(verifyVerdict(bindVerdict({...base,result:r}),opts)).toEqual({ok:false,reason:`NOT_CLEAN:${r}`})});
   it("bindVerdict refuses unknown results and missing fields; null verdict is rejected",()=>{expect(()=>bindVerdict({...base,result:"OK"})).toThrow(/VERDICT_RESULT_INVALID/);expect(()=>bindVerdict({...base,reviewedSha:""})).toThrow(/VERDICT_ARG_MISSING/);expect(verifyVerdict(null,opts).ok).toBe(false)});
   it("binds to the task and requires the authoritative implementer session (fail-closed)",()=>{

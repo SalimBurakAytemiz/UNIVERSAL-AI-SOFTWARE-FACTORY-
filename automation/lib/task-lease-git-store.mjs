@@ -1,6 +1,7 @@
 // //TR: Bu modül task-lease Store sözleşmesini gerçek git ref'leriyle atomik yapar: local backend `update-ref` (old=0000… create-if-absent, old=sha CAS) kullanır, remote backend enjekte edilen runGit ile push/--force-with-lease kullanır; atomiklik JS kilidinden değil git'in ref kilidinden gelir.
 // RUNTIME NOTE: createRemoteRefStore against the real origin creates live `refs/uasco/claims/*` refs; that activation is a runtime step and is NOT exercised by tests (tests inject a fake runGit).
 import {spawnSync} from "node:child_process";
+import {leaseVersion} from "./task-lease.mjs";
 const ZERO="0".repeat(40),PREFIX="refs/uasco/claims/";
 const sleep=ms=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,ms);
 const refOf=(prefix,id)=>{if(typeof id!=="string"||!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id)||id.includes("..")||id.endsWith(".lock")||id.endsWith("."))throw new Error(`LEASE_TASK_ID_INVALID:${id}`);return prefix+id};
@@ -13,8 +14,10 @@ function makeStore(prefix,ops){
     // a loser can briefly observe "absent" while the winner holds the ref lock; retry reads, then fail closed (created:false,current:null).
     createIfAbsent(id,rec){const ref=refOf(prefix,id);if(ops.put(ref,blob(rec),null))return {created:true,current:rec};
       for(let i=0;i<40;i++){const c=load(ref).rec;if(c)return {created:false,current:c};sleep(5)}return {created:false,current:null}},
-    cas(id,tok,rec){const ref=refOf(prefix,id),c=load(ref);if(!c.rec||c.rec.token!==tok)return {ok:false,current:c.rec};return ops.put(ref,blob(rec),c.sha)?{ok:true,current:rec}:{ok:false,current:load(ref).rec}},
-    remove(id,tok){const ref=refOf(prefix,id),c=load(ref);if(!c.rec||c.rec.token!==tok)return {ok:false};return {ok:ops.del(ref,c.sha)}}}}
+    // version check against the caller's observation, then the ref-level CAS on the sha we just loaded: a write landing after the
+    // caller's read changes the version (refused here), a write landing after our load moves the ref (refused by git).
+    cas(id,expected,rec){const ref=refOf(prefix,id),c=load(ref),v=leaseVersion(expected);if(!v||leaseVersion(c.rec)!==v)return {ok:false,current:c.rec};return ops.put(ref,blob(rec),c.sha)?{ok:true,current:rec}:{ok:false,current:load(ref).rec}},
+    remove(id,expected){const ref=refOf(prefix,id),c=load(ref),v=leaseVersion(expected);if(!v||leaseVersion(c.rec)!==v)return {ok:false};return {ok:ops.del(ref,c.sha)}}}}
 export function createLocalGitRefStore({repoDir,refPrefix=PREFIX}={}){
   if(!repoDir)throw new Error("LEASE_REPO_DIR_REQUIRED");
   const git=(args,input)=>{const r=spawnSync("git",args,{cwd:repoDir,input,encoding:"utf8",windowsHide:true});return {status:r.status??1,stdout:r.stdout??"",stderr:r.stderr??""}};

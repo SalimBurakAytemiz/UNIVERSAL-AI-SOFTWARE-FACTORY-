@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-18T04:38:52.328Z",
+  "generatedAt": "2026-10-18T04:55:18.016Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -210,11 +210,11 @@
     },
     {
       "path": "automation/lib/lease-verdict.d.mts",
-      "sha256": "8a5aee10539713f79a27dc8cd3d6b90def783a13b33af224eba6d00a21f9b496"
+      "sha256": "b372dec651ce5f2cd832db9ebe135d6b3462c653c0d9c3babe64b1cc7e2dc2f2"
     },
     {
       "path": "automation/lib/lease-verdict.mjs",
-      "sha256": "64d7268aab705691d137a1f70ff9c6b0a70edd9fc1f48e6dff90fae266941709"
+      "sha256": "12a7d0f62f59a18758873cfcb914589213b402d6b9298559bcea95b6de8b1257"
     },
     {
       "path": "automation/lib/low-backlog.mjs",
@@ -366,15 +366,15 @@
     },
     {
       "path": "automation/lib/task-lease-git-store.mjs",
-      "sha256": "54f3a3b8c83ce47704ddaf4fafe442b50e6b5c9762feae095ebc9be36e01aed2"
+      "sha256": "6d7a8e77c4d3fb2d0b25f99f251e0e1929a81b0a44eab20c3e82d98ead8deb48"
     },
     {
       "path": "automation/lib/task-lease.d.mts",
-      "sha256": "6f8d038e1c1f5f0b99cffd3bcd9f9c2ea53897555fcc7818559358da9827c20e"
+      "sha256": "732f741211899cd0983c14198158589b70e3b394272df8f7a0d48d4b6b577db4"
     },
     {
       "path": "automation/lib/task-lease.mjs",
-      "sha256": "8a5168cc71204d6169bdfe32fd04a9b163fa51254fc48c234ed0209fc8094bf3"
+      "sha256": "866490aac34f3e45056627bd898a584bf31342cd24b3a5b8a30503e5ce24a870"
     },
     {
       "path": "automation/lib/trust-root.mjs",
@@ -454,7 +454,7 @@
     },
     {
       "path": "config/validation.json",
-      "sha256": "b8b637241d958970a26c8d897ae75be1f3c4c485e95c5563b1a660984e2fcd4d"
+      "sha256": "82177ae0fff536d985de73e4b74796af47bef38646a9bc5fcbb8482e57250b26"
     },
     {
       "path": "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
