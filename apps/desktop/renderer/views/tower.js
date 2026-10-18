@@ -21,9 +21,10 @@ export async function render(ctx){
   const eventsEl=h(doc,"pre",{id:"events",class:"log",tabindex:"0","aria-label":ctx.t("tower.events"),text:ctx.t("tower.pickRun")});
   const traceEl=h(doc,"div",{id:"stageTimeline",class:"tw-trace"});
   // //TR: UI-226 aşama zaman çizelgesi: yalnız gerçek event timestamp/stage alanlarından; süre uydurulmaz, geçersiz timestamp'ler "yerleştirilemeyen" listesinde. CSP inline style özniteliğini engellediği için çubuk konumu CSSOM ile atanır.
-  function renderTrace(list){
+  function renderTrace(list,total){
     const tl=buildStageTimeline(list),stg=x=>x||ctx.t("tower.trace.noStage");
     const kids=[h(doc,"p",{class:"note",text:ctx.t("tower.trace.note")})];
+    if(total>list.length)kids.push(h(doc,"p",{class:"note",dataset:{truncated:"1"},text:ctx.t("tower.trace.truncated",{shown:list.length,total})}));
     if(!tl.stages.length)kids.push(h(doc,"p",{class:"note",text:ctx.t("tower.trace.empty")}));
     else{
       kids.push(h(doc,"p",{class:"note",text:ctx.t("tower.trace.total",{span:formatMs(tl.spanMs)})}));
@@ -43,7 +44,7 @@ export async function render(ctx){
     selected.textContent=runId;
     const [events,logs]=await Promise.all([api.raw(`/v1/runs/${encodeURIComponent(runId)}/events`),api.raw(`/v1/runs/${encodeURIComponent(runId)}/logs`)]);
     eventsEl.textContent=events.ok?((events.data.events??[]).slice(-200).map(x=>`${x.timestamp??""} [${x.severity??"INFO"}] ${x.stage??""}/${x.event??""} ${JSON.stringify(x.details??{})}`).join("\n")||ctx.t("tower.noEvents")):ctx.t(`state.${events.state}`);
-    if(events.ok)renderTrace((events.data.events??[]).slice(-200));else traceEl.replaceChildren(h(doc,"p",{class:"note",text:ctx.t(`state.${events.state}`)}));
+    if(events.ok)renderTrace((events.data.events??[]).slice(-200),(events.data.events??[]).length);else traceEl.replaceChildren(h(doc,"p",{class:"note",text:ctx.t(`state.${events.state}`)}));
     const nodes=logs.ok?(logs.data.logs??[]).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:async()=>{const y=await api.raw(`/v1/runs/${encodeURIComponent(runId)}/logs/${encodeURIComponent(x.name)}`);logText.textContent=y.ok?(y.data.truncated?`${ctx.t("tower.truncated")}\n`:"")+y.data.text:ctx.t(`state.${y.state}`)}},text:`${x.name} (${ctx.t("tower.bytes",{n:x.size})})`})):[];
     logButtons.replaceChildren(...(nodes.length?nodes:[doc.createTextNode(ctx.t("tower.noLogs"))]));
   }

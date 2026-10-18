@@ -310,6 +310,7 @@ export default {
   "tower.trace.title":"Aşama zaman çizelgesi",
   "tower.trace.note":"Yalnızca olay zaman damgaları ve aşama alanlarından türetilen salt-okunur görünüm. Bu bir trace değildir: gerçek span süresi yoktur, bu yüzden aşama süresi yalnızca ilk ve son olay arasındaki zamandır.",
   "tower.trace.empty":"Geçerli zaman damgalı olay yok.",
+  "tower.trace.truncated":"Zaman çizelgesi {total} olaydan yalnızca son {shown} olayı kapsar; yerleştirilemeyen olay numaraları bu {shown} olay içinde sayılır.",
   "tower.trace.noStage":"(aşama yok)",
   "tower.trace.item":"{stage}: {n} olay · başlangıç +{offset} · ilk-son olay arası {duration}",
   "tower.trace.total":"Yerleştirilen olaylar {span} kapsar.",

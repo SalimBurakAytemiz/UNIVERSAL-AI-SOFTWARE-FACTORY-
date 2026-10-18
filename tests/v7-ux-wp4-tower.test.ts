@@ -9,7 +9,7 @@ const load = async (...p: string[]): Promise<any> => import(pathToFileURL(path.j
 const read = (...p: string[]) => fs.readFileSync(path.join(rend, ...p), "utf8");
 
 class N {
-  tagName: string; children: N[] = []; parent: N | null = null; attrs = new Map<string, string>(); dataset: Record<string, string> = {}; className = ""; _text = ""; ls = new Map<string, Array<(e: any) => void>>();
+  tagName: string; children: N[] = []; parent: N | null = null; attrs = new Map<string, string>(); dataset: Record<string, string> = {}; style: Record<string, string> = {}; className = ""; _text = ""; ls = new Map<string, Array<(e: any) => void>>();
   constructor(public doc: D, tag: string) { this.tagName = tag.toUpperCase(); }
   get id() { return this.attrs.get("id") ?? ""; }
   get textContent(): string { return this._text + this.children.map(c => c.textContent).join(""); }
@@ -301,10 +301,76 @@ describe("UI-226 stage timeline from real event timestamps", () => {
     expect(all(tlEl).filter(n => n.className === "tw-trace-bar")).toHaveLength(3);
     expect(pre.textContent).toBe(EV.map(x => `${x.timestamp ?? ""} [INFO] ${x.stage ?? ""}/${x.event ?? ""} {}`).join("\n"));
   });
+  it("accepts only full ISO timestamps with an explicit offset and validates the calendar", async () => {
+    const core = await load("trace-core.js");
+    for (const bad of ["2026-10-18T10:00:00", "2026-10-18T10:00", "2026-10-18 10:00:00Z", "2026-10-18", "2026-02-30T10:00:00Z", "2026-13-01T10:00:00Z", "2026-10-18T24:00:00Z", "2026-10-18T10:60:00Z", "2026-10-18T10:00:60Z", "2026-10-18T10:00:00+24:00", "2026-10-18T10:00:00+0200", "2026-10-18T10:00Z junk", 5, null]) expect(core.parseTs(bad), String(bad)).toBeNull();
+    const t = Date.UTC(2026, 9, 18, 10, 0, 0);
+    expect(core.parseTs("2026-10-18T10:00:00Z")).toBe(t);
+    expect(core.parseTs("2026-10-18T10:00Z")).toBe(t);
+    expect(core.parseTs("2026-10-18T12:00:00+02:00")).toBe(t);
+    expect(core.parseTs("2026-10-18T05:30:00-04:30")).toBe(t);
+    expect(core.parseTs("2026-10-18T10:00:00.250Z")).toBe(t + 250);
+    expect(core.parseTs("2028-02-29T00:00:00Z")).toBe(Date.UTC(2028, 1, 29));
+    expect(core.parseTs("2026-02-29T00:00:00Z")).toBeNull();
+    const tl = core.buildStageTimeline([{timestamp: "2026-10-18T10:00:00", stage: "A", event: "naive"}, {timestamp: "2026-02-30T10:00:00Z", stage: "A", event: "feb30"}]);
+    expect(tl.stages).toEqual([]);
+    expect(tl.unplaced.map((u: any) => u.event)).toEqual(["naive", "feb30"]);
+  });
+  it("formats durations by rounding to whole seconds before splitting and adds hour and day units", async () => {
+    const {formatMs} = await load("trace-core.js");
+    expect(formatMs(59999)).toBe("1 min 0 s");
+    expect(formatMs(119999)).toBe("2 min 0 s");
+    expect(formatMs(999.6)).toBe("1.0 s");
+    expect(formatMs(999.4)).toBe("999 ms");
+    expect(formatMs(1500)).toBe("1.5 s");
+    expect(formatMs(59949)).toBe("59.9 s");
+    expect(formatMs(61000)).toBe("1 min 1 s");
+    expect(formatMs(3599999)).toBe("1 h 0 min");
+    expect(formatMs(3600000)).toBe("1 h 0 min");
+    expect(formatMs(3 * 86400000)).toBe("3 d 0 h");
+    expect(formatMs(86400000 + 5 * 3600000)).toBe("1 d 5 h");
+    expect(formatMs(-1)).toBe("");
+    expect(formatMs(NaN)).toBe("");
+  });
+  it("groups trimmed stage names, treats blank as no-stage and orders first-time ties by stage name then first index", async () => {
+    const core = await load("trace-core.js"), T = "2026-10-18T10:00:00Z";
+    const tl = core.buildStageTimeline([{timestamp: T, stage: " B "}, {timestamp: T, stage: "B"}, {timestamp: T, stage: "   "}, {timestamp: T, stage: "A"}, {timestamp: T}]);
+    expect(tl.stages.map((s: any) => [s.stage, s.count])).toEqual([["", 2], ["A", 1], ["B", 2]]);
+    const rev = core.buildStageTimeline([{timestamp: T, stage: "B"}, {timestamp: T, stage: "A"}]);
+    expect(rev.stages.map((s: any) => s.stage)).toEqual(["A", "B"]);
+    expect(core.buildStageTimeline([{stage: "  X  "}]).unplaced[0].stage).toBe("X");
+  });
+  it("assigns bar left/width through the style object and shows a visible truncation note with slice-relative unplaced numbers", async () => {
+    const m = await mkCtx({cockpit: COCKPIT(), workRuns: []}, "en"), tower = await load("views", "tower.js");
+    const orig = m.ctx.api.raw;
+    const evs: any[] = [];
+    for (let i = 0; i < 250; i++) evs.push({timestamp: i === 249 ? "bad" : new Date(Date.UTC(2026, 9, 18, 10, 0, i)).toISOString(), stage: i < 225 ? "PLAN" : "BUILD", event: "e" + i});
+    let data: any[] = evs;
+    m.ctx.api = {...m.ctx.api, runs: async () => ({state: "VERIFIED", runs: [{runId: "RUN-1"}]}), raw: async (p: string) => p.endsWith("/events") ? {ok: true, state: "VERIFIED", data: {events: data}} : orig(p)};
+    const view: N = await tower.render(m.ctx);
+    const btn = all(view).find(n => n.tagName === "BUTTON" && n.textContent.startsWith("RUN-1"))!;
+    btn.fire("click");
+    await new Promise(r => setTimeout(r, 20));
+    let tlEl = all(view).find(n => n.id === "stageTimeline")!;
+    const note = all(tlEl).find(n => n.dataset.truncated === "1")!;
+    expect(note.textContent).toBe("Timeline covers the last 200 of 250 events; unplaced event numbers count within these 200.");
+    expect(byTag(tlEl, "li").map(n => n.textContent).find(t => t.includes("e249"))).toContain("#200 BUILD/e249");
+    const bars = all(tlEl).filter(n => n.className === "tw-trace-bar");
+    expect(bars).toHaveLength(2);
+    expect(bars[0].style.left).toBe("0.00%");
+    expect(bars[0].style.width).toMatch(/^\d+\.\d{2}%$/);
+    expect(bars[1].style.left).toMatch(/^\d+\.\d{2}%$/);
+    expect(Number.parseFloat(bars[1].style.left)).toBeGreaterThan(0);
+    data = evs.slice(0, 200);
+    btn.fire("click");
+    await new Promise(r => setTimeout(r, 20));
+    tlEl = all(view).find(n => n.id === "stageTimeline")!;
+    expect(all(tlEl).some(n => n.dataset.truncated === "1")).toBe(false);
+  });
   it("has en/tr parity for tower.trace keys and every key used by the view", async () => {
     const trD = (await load("locales", "tr.js")).default as Record<string, string>, enD = (await load("locales", "en.js")).default as Record<string, string>;
     const keys = Object.keys(trD).filter(k => k.startsWith("tower.trace."));
-    expect(keys).toHaveLength(8);
+    expect(keys).toHaveLength(9);
     expect(Object.keys(enD).filter(k => k.startsWith("tower.trace.")).sort()).toEqual(keys.sort());
     const used = new Set<string>();
     for (const m of read("views", "tower.js").matchAll(/"(tower\.trace\.[A-Za-z0-9_.]+)"/g)) used.add(m[1]);
