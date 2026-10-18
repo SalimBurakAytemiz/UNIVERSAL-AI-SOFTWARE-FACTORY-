@@ -1,5 +1,6 @@
 // //TR: Bu modül Güvence (QA + Güvenlik) görünümünün saf (DOM'suz) çekirdeğidir: GET /v1/work-runs ham kayıtlarındaki SECURITY_REPORT kanıtının (core/workos security-tools.ts aşama özeti) güvenli, DÜRÜST eşlemesi. Hiçbir durum YÜKSELTİLMEZ: yalnız sunucunun bildirdiği gitleaks/trivy/semgrep durumu (INSTALLED/NOT_INSTALLED/ERROR), secret-scan ve SCA durumu taşınır; araç yoksa NOT_INSTALLED, kapsam eksikse PARTIAL, kanıt yoksa NOT_EXECUTED gösterilir; sahte "temiz/geçti" asla üretilmez ve SOURCE_GENERATION_COMPLETE asla PRODUCT_VERIFIED sayılmaz. Veri HTML olarak yorumlanmaz; bu modül yalnız salt-okunur veri üretir.
 import {MISSING} from "./model.js";
+import {mapReadinessWorkRuns} from "./readiness-core.js";
 
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 const str=(x,max=200)=>typeof x==="string"&&x.length?x.slice(0,max):null;
@@ -120,23 +121,56 @@ export const REVIEW_ID_RE=/^evd_[0-9a-f]{24}$/;
 const REVIEW_VERDICT_SET=Object.freeze(["CLEAN","BLOCKED","NO_VERDICT"]);
 const RUN_RE_R=/^run_[0-9a-f]{24}$/;
 const isoOrNull=x=>typeof x==="string"&&x.length>0&&!Number.isNaN(new Date(x).getTime())?x:null;
-export function mapReviewDetail(raw){
+/** //TR: CLEAN kararı yalnız TÜM koşullar sağlanırsa doğrulanmış sayılır: bağımsızlık kanıtlı, incelenen commit boş değil ve AYNI yanıttaki koşunun head'ine eşit, kayıt koşunun son review'u, geçersiz kılınmamış ve kayıtlı ham karar boş ya da karara eşit. Aksi halde STALE (asla VERIFIED). */
+export function reviewCleanVerified(x){
+  if(!isObj(x)||x.verdict!=="CLEAN")return false;
+  return x.independent===true&&x.currentHead===true&&typeof x.reviewedCommit==="string"&&SHA_RE.test(x.reviewedCommit)
+    &&typeof x.headSha==="string"&&x.reviewedCommit===x.headSha
+    &&typeof x.reviewId==="string"&&x.latestReviewId===x.reviewId
+    &&!x.invalidated&&(x.recordedVerdict===null||x.recordedVerdict===undefined||x.recordedVerdict===x.verdict);
+}
+/** //TR: Liste satırı için aynı kural: koşu özeti (runs) AYNI liste yanıtından gelir; eşleşen koşu yoksa doğrulanmış sayılmaz (liste kaydı invalidated/recordedVerdict taşımaz; bunlar yalnız detayda kontrol edilir). */
+export function reviewRowVerified(rec,runs){
+  if(!isObj(rec)||!Array.isArray(runs))return false;
+  const run=runs.find(r=>isObj(r)&&r.runId===rec.runId);
+  return run?reviewCleanVerified({...rec,headSha:run.headSha,latestReviewId:run.latestReviewId}):false;
+}
+export function mapReviewDetail(raw,requestedId){
   const bad={state:"ERROR",review:null};
-  if(!isObj(raw)||raw.source!=="WORK_OS_JOURNAL_RUN_EVIDENCE"||!isObj(raw.review))return bad;
-  const r=raw.review,ev=r.evidence;
+  if(!isObj(raw)||raw.source!=="WORK_OS_JOURNAL_RUN_EVIDENCE"||!isObj(raw.review)||!isObj(raw.run))return bad;
+  const r=raw.review,ev=r.evidence,run=raw.run;
   if(!REVIEW_ID_RE.test(String(r.reviewId))||!RUN_RE_R.test(String(r.runId))||!MSN_RE.test(String(r.missionId))||!REVIEW_VERDICT_SET.includes(r.verdict)||!isObj(r.reviewer)||!isObj(r.implementer)||!isObj(ev)||typeof r.currentHead!=="boolean"||safeInt(r.cycle)===null)return bad;
+  if(requestedId!==undefined&&r.reviewId!==requestedId)return bad;
   if(r.independent!==null&&typeof r.independent!=="boolean")return bad;
   const commit=r.reviewedCommit===null||r.reviewedCommit===undefined?null:SHA_RE.test(String(r.reviewedCommit))?r.reviewedCommit:undefined;
   if(commit===undefined)return bad;
+  // //TR: Koşu özeti aynı yanıttan; kimlik uyuşmazlığı ya da bozuk head/son review kimliği okumayı reddeder.
+  if(run.runId!==r.runId)return bad;
+  const headSha=run.headSha===null||run.headSha===undefined?null:typeof run.headSha==="string"&&SHA_RE.test(run.headSha)?run.headSha:undefined;
+  const latestReviewId=run.latestReviewId===null||run.latestReviewId===undefined?null:typeof run.latestReviewId==="string"&&REVIEW_ID_RE.test(run.latestReviewId)?run.latestReviewId:undefined;
+  if(headSha===undefined||latestReviewId===undefined)return bad;
+  // //TR: Bozuk sayaç/çıkış kodu/kayıtlı karar okumayı başarısız kılar (sessizce null + VERIFIED olmaz).
+  const fc=ev.findingsCount,ec=ev.exitCode;
+  if(fc!==null&&fc!==undefined&&safeInt(fc)===null)return bad;
+  if(ec!==null&&ec!==undefined&&!Number.isSafeInteger(ec))return bad;
+  if(ev.recordedVerdict!==null&&ev.recordedVerdict!==undefined&&!REVIEW_VERDICT_SET.includes(ev.recordedVerdict))return bad;
   const findings=Array.isArray(ev.findings)?ev.findings.filter(f=>typeof f==="string").slice(0,20).map(f=>f.slice(0,300)):null;
-  return {state:"VERIFIED",review:{reviewId:r.reviewId,runId:r.runId,missionId:r.missionId,cycle:r.cycle,verdict:r.verdict,independent:r.independent===true?true:r.independent===false?false:null,
+  const out={reviewId:r.reviewId,runId:r.runId,missionId:r.missionId,cycle:r.cycle,verdict:r.verdict,independent:r.independent===true?true:r.independent===false?false:null,
     reviewer:str(r.reviewer.identity,120),implementer:str(r.implementer.identity,120),reviewedCommit:commit,currentHead:r.currentHead,timestamp:isoOrNull(r.timestamp),
-    recordedVerdict:REVIEW_VERDICT_SET.includes(ev.recordedVerdict)?ev.recordedVerdict:null,invalidated:str(ev.invalidated,60),findingsCount:safeInt(ev.findingsCount),findings,
-    exitCode:Number.isSafeInteger(ev.exitCode)?ev.exitCode:null,timedOut:ev.timedOut===true,note:str(ev.note,200)}};
+    recordedVerdict:ev.recordedVerdict??null,invalidated:str(ev.invalidated,60),findingsCount:fc??null,findings,
+    exitCode:ec??null,timedOut:ev.timedOut===true,note:str(ev.note,200),runHeadSha:headSha,latestReviewId};
+  out.verified=reviewCleanVerified({...out,headSha});
+  return {state:"VERIFIED",review:out};
 }
 // //TR: UI-050: kanıt soyağacı YALNIZ GET /v1/evidence liste alanlarından (missionId, runId) kurulur. Kenar yalnız alan mevcutsa vardır: ikisi de varsa mission->run->evidence; yalnız missionId varsa mission altında "koşu kaydı yok"; yalnız runId varsa görev bağı olmayan koşu; ikisi de yoksa gruplanmamış. Hiçbir bağ başka kanıtlardan ÇIKARILMAZ (aynı runId'li başka kayıttan missionId ödünç alınmaz).
 export function buildLineage(items){
-  const list=Array.isArray(items)?items.filter(e=>isObj(e)&&typeof e.evidenceId==="string"):[];
+  // //TR: Tekrarlanan evidenceId (aynı kanıtın iki kez gelmesi) atlanır; DOM kimlikleri benzersiz kalır ve atlanan sayı açıkça bildirilir.
+  const list=[],seenIds=new Set();let duplicates=0;
+  for(const e of (Array.isArray(items)?items:[])){
+    if(!isObj(e)||typeof e.evidenceId!=="string")continue;
+    if(seenIds.has(e.evidenceId)){duplicates+=1;continue}
+    seenIds.add(e.evidenceId);list.push(e);
+  }
   const missions=new Map(),orphanRuns=new Map(),ungrouped=[];
   const mission=id=>{let m=missions.get(id);if(!m){m={missionId:id,runs:new Map(),noRun:[]};missions.set(id,m)}return m};
   for(const e of list){
@@ -148,7 +182,7 @@ export function buildLineage(items){
   }
   const cmp=(a,b)=>a<b?-1:a>b?1:0;
   return {
-    total:list.length,
+    total:list.length,duplicates,
     missions:[...missions.values()].sort((a,b)=>cmp(a.missionId,b.missionId)).map(m=>({missionId:m.missionId,noRun:m.noRun,runs:[...m.runs.entries()].sort((a,b)=>cmp(a[0],b[0])).map(([runId,evidence])=>({runId,evidence}))})),
     orphanRuns:[...orphanRuns.entries()].sort((a,b)=>cmp(a[0],b[0])).map(([runId,evidence])=>({runId,evidence})),
     ungrouped};
@@ -164,35 +198,22 @@ function mapTestRecord(e,head){
     exitCode:Number.isSafeInteger(e.exitCode)?e.exitCode:null,attested:typeof e.sandboxProviderId==="string"&&e.sandboxProviderId.length>0,
     acceptance:ts&&typeof ts.functionalAcceptance==="string"?str(ts.functionalAcceptance,40):null,executedTests:ts?safeInt(ts.executedTests):null};
 }
-export function testStateOf(records){
-  const at=records.filter(r=>r.atHead);
-  const surface=lastOf(at,r=>r.kind==="TEST_SURFACE"&&r.acceptance!==null);
-  if(surface&&surface.acceptance==="BLOCKED")return "BLOCKED";
-  if(lastOf(at,r=>r.kind==="VERIFY_TESTS_NOT_EXECUTED"||r.kind==="REGRESSION_TESTS_NOT_EXECUTED"))return "NOT_EXECUTED";
-  const v=lastOf(at,r=>r.kind==="VERIFY_TESTS"),g=lastOf(at,r=>r.kind==="REGRESSION_TESTS");
-  if((v&&v.exitCode!==0)||(g&&g.exitCode!==0))return "FAILED";
-  if(!v||!g)return "NOT_EXECUTED";
-  if(!v.attested||!g.attested)return "UNVERIFIED";
-  const n=surface?surface.executedTests:null;
-  if(n===null||n<=0)return "UNVERIFIED";
-  return "EXECUTED";
-}
+// //TR: Durum (EXECUTED/FAILED/...) readiness-core'un testsOf'u ile BİREBİR aynı kaynaktan gelir: tüm liste önce mapReadinessWorkRuns ile fail-closed doğrulanır (bozuk kanıt öğesi, biçimsiz commit/exitCode/sağlayıcı/kabul, yinelenen runId, bozuk koşu satırı => TÜM okuma ERROR) ve satır başına `tests` değeri oradan alınır; burada ikinci bir kural kopyası YOKTUR. Kayıtlar yalnız doğrulanmış ham öğelerden gösterim için türetilir.
+export const TEST_ROWS_MAX=500;
 export function mapTestReports(r){
-  if(!isObj(r)||r.ok!==true){
-    const state=isObj(r)&&typeof r.state==="string"?r.state:"ERROR";
-    return {state,runs:[]};
-  }
+  const bad=state=>({state,runs:[],total:0,truncated:false});
+  if(!isObj(r)||r.ok!==true)return bad(isObj(r)&&typeof r.state==="string"?r.state:"ERROR");
   const data=r.data;
   const list=isObj(data)?(Array.isArray(data.workRuns)?data.workRuns:Array.isArray(data.runs)?data.runs:Array.isArray(data.items)?data.items:null):null;
-  if(!list)return {state:"ERROR",runs:[]};
-  const runs=[];
-  for(const x of list.slice(0,500)){
-    if(!isObj(x)||typeof x.runId!=="string"||!RUN_ID_RE.test(x.runId))continue;
-    const head=typeof x.headSha==="string"&&SHA_RE.test(x.headSha)?x.headSha:null;
-    const records=(Array.isArray(x.evidence)?x.evidence:[]).map(e=>mapTestRecord(e,head)).filter(Boolean);
+  if(!list)return bad("ERROR");
+  const rd=mapReadinessWorkRuns({runs:list});
+  if(rd.state!=="VERIFIED"||!rd.runs||rd.runs.items.length!==list.length)return bad("ERROR");
+  const runs=list.slice(0,TEST_ROWS_MAX).map((x,i)=>{
+    const row=rd.runs.items[i],head=row.headSha;
+    const records=x.evidence.map(e=>mapTestRecord(e,head)).filter(Boolean);
     const surface=lastOf(records.filter(q=>q.atHead),q=>q.kind==="TEST_SURFACE"&&q.acceptance!==null);
-    runs.push({runId:x.runId,missionId:typeof x.missionId==="string"&&MSN_RE.test(x.missionId)?x.missionId:null,headSha:head,state:testStateOf(records),records,executedTests:surface?surface.executedTests:null});
-  }
-  return {state:"VERIFIED",runs};
+    return {runId:row.runId,missionId:row.missionId,headSha:head,state:row.tests,records,executedTests:surface?surface.executedTests:null};
+  });
+  return {state:"VERIFIED",runs,total:list.length,truncated:list.length>TEST_ROWS_MAX};
 }
 export {MISSING};

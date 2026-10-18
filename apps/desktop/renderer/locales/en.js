@@ -688,6 +688,7 @@ export default {
   "assurance.testreport.notHead":"not current head",
   "assurance.testreport.yes":"Yes",
   "assurance.testreport.no":"No",
+  "assurance.lineage.duplicates":"The list repeated {n} evidence IDs; the repeats were skipped so each item appears once.",
   "everif.VERIFIED":"VERIFIED",
   "everif.MISMATCH":"MISMATCH",
   "everif.MISSING":"MISSING",

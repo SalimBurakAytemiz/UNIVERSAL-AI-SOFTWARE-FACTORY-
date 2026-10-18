@@ -688,6 +688,7 @@ export default {
   "assurance.testreport.notHead":"güncel head değil",
   "assurance.testreport.yes":"Evet",
   "assurance.testreport.no":"Hayır",
+  "assurance.lineage.duplicates":"Liste {n} kanıt kimliğini tekrarladı; her kayıt bir kez görünsün diye tekrarlar atlandı.",
   "everif.VERIFIED":"DOĞRULANDI",
   "everif.MISMATCH":"UYUŞMUYOR",
   "everif.MISSING":"EKSİK",
