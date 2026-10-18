@@ -221,9 +221,91 @@ const writeHook = (bare, body) => { fs.mkdirSync(path.join(bare, "hooks"), {recu
   // git wrapper on PATH: ls-remote of a lease ref fails (deterministic); everything else passes through.
   const real = spawnSync("sh", ["-c", "command -v git"], {encoding: "utf8"}).stdout.trim();
   const wdir = path.join(tmpRoot, "gitwrap"); fs.mkdirSync(wdir);
-  fs.writeFileSync(path.join(wdir, "git"), `#!/bin/sh\nif [ "$1" = ls-remote ]; then for a in "$@"; do case "$a" in refs/uasco/claims/*) echo "simulated ls-remote failure" >&2; exit 128;; esac; done; fi\nexec "${real}" "$@"\n`, {mode: 0o755});
+  fs.writeFileSync(path.join(wdir, "git"), `#!/bin/sh\nif [ "$1" = ls-remote ]; then for a in "$@"; do case "$a" in refs/uasco/claims/FC-1) echo "simulated ls-remote failure" >&2; exit 128;; esac; done; fi\nexec "${real}" "$@"\n`, {mode: 0o755});
   const r = dispatchSync(e.work, ["--claim", "--backlog", e.bl], {PATH: `${wdir}${path.delimiter}${process.env.PATH}`});
   check("lease write rejected AND lease-ref ls-remote fails => FC-1:LEASE_CHECK_FAILED skipped (not LEASE_STORE_UNAVAILABLE), FC-1 branch not pushed", r.j?.reasons?.includes("FC-1:LEASE_CHECK_FAILED") && !r.j.reasons.includes("FC-1:LEASE_STORE_UNAVAILABLE") && !heads(e.bare).includes("refs/heads/claude/fc-1"), r.raw);
+  check("queue continues after LEASE_CHECK_FAILED: FC-1 skipped, FC-2 claimed (START; its lease store is unavailable but its ls-remote succeeds)", r.code === 0 && r.j?.outcome === "START" && r.j.taskId === "FC-2" && heads(e.bare).join() === "refs/heads/claude/fc-2", r.raw);
+}
+// 10d. Secret redaction (defence in depth) for PUSH_FAILED reasons and other untrusted text.
+{
+  const mod = await import(path.join(HERE, "dispatch.mjs"));
+  const AWS40 = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+  const cases = [
+    ["remote: token gh\x70_abcdefghijklmnopqrstuvwxyz0123456789 bad", "gh\x70_abcdefghijklmnopqrstuvwxyz"],
+    ["remote: Authorization: Bearer abc123secret", "abc123secret"],
+    ["Authorization: basic dXNlcjpwYXNz", "dXNlcjpwYXNz"],
+    ["password=hunter2 x-access-token:ghs_AAAA@github.com", "hunter2"],
+    ["password=hunter2 x-access-token:ghs_AAAA@github.com", "ghs_AAAA"],
+    ['remote: cannot open "/tmp/with space/repo.git" now', "space/repo.git"],
+    ['remote: cannot open "/tmp/with space/repo.git" now', "with space"],
+    ["remote: /srv/priv dir/with space/repo.git denied", "with space"],
+    ["Cookie: session=SUPERSECRETCOOKIE; theme=dark", "SUPERSECRETCOOKIE"],
+    ["remote: Set-Cookie: _gh_sess=ABCDEF123456; Path=/; HttpOnly", "ABCDEF123456"],
+    ["Proxy-Authorization: Basic cHJveHk6cHc=", "cHJveHk6cHc"],
+    ["remote: Authorization:", "Authorization:"],
+    ["remote: aws_secret_access_key = " + AWS40, AWS40],
+    ["remote: key " + AWS40 + " rejected", "K7MDENG"],
+    ["remote: slack xoxb-123456789012-abcdefghijkl leaked", "xoxb-123456789012"],
+    ["remote: xoxp-1234567890-0987654321-abcdefABCDEF", "0987654321"],
+    ["remote: github_pat_11ABCDEFG0abcdefghijklmnop_qrstuvwxyz0123 x", "github_pat_11ABCDEFG0"],
+    ["remote: glpat-abcdefghijklmnop1234 x", "glpat-abcdefghijklmnop"],
+    ["remote: AKI\x41IOSFODNN7EXAMPLE used", "AKI\x41IOSFODNN7EXAMPLE"],
+    ["remote: jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.sig_nature_value end", "eyJzdWIiOiJ4In0"],
+    ["remote: blob 0123456789abcdef0123456789abcdef0123 end", "0123456789abcdef0123456789abcdef"],
+    ["fatal: unable to access 'https://user:pa55w0rd@example.com/o/r.git/'", "pa55w0rd"],
+    ["fatal: https://alice:s3cr3t@example.com/x y z", "s3cr3t"],
+    ["fatal: ssh://deploy:topsecret@host.example/r.git", "topsecret"],
+    ["remote: user bob:pa55@host.example.com denied", "pa55"],
+    ["remote: api_key=ZZZ-top-1 and api-key: YYY-top-2", "ZZZ-top-1"],
+    ["remote: api_key=ZZZ-top-1 and api-key: YYY-top-2", "YYY-top-2"],
+    ['remote: password="two words" x', "two words"],
+    ["remote: line1\nremote: Authorization: Bearer NEWLINESECRET\nremote: line3", "NEWLINESECRET"],
+    ["remote: pre\0NULSECRET gh\x70_abcdefghijklmnopqrstuvwxyz0123 post", "gh\x70_abcdefghijklmnopqrstuvwxyz"],
+    ["remote: unicode  password=LSEPSECRET", "LSEPSECRET"],
+  ];
+  const bad = [];
+  let jsonOk = true;
+  for (const [raw, secret] of cases) {
+    for (const out of [mod.redactRemote(raw), mod.pushFailReason(raw), mod.pushFailReason("To x\n" + raw + "\n! [remote rejected] a -> b (hook declined)")]) {
+      if (out.includes(secret)) bad.push(`${JSON.stringify(secret)} in ${JSON.stringify(out)}`);
+      if (out.length > 240 || /[^\x20-\x7e]/.test(out)) bad.push("allowlist/cap violated: " + JSON.stringify(out));
+      try { if (JSON.parse(JSON.stringify({reasons: [out]})).reasons[0] !== out) jsonOk = false; } catch { jsonOk = false; }
+    }
+  }
+  check(`redaction: ${cases.length} adversarial inputs x 3 entry points leak no secret substring and stay <=240 chars printable ASCII`, bad.length === 0, bad.slice(0, 5).join(" ## "));
+  check("redaction output always survives a JSON round-trip", jsonOk);
+  check("benign hook text preserved", mod.pushFailReason("remote: policy: claude branches closed").includes("policy: claude branches closed") && mod.redactRemote("policy: claude branches closed") === "policy: claude branches closed");
+  check("long non-secret text is capped at 240 chars; non-ASCII/control become '?'", mod.redactRemote("remote: " + "word ".repeat(200)).length === 240 && mod.redactRemote("café \u0007x") === "caf? ?x");
+  check("redaction never throws on odd input (null, undefined, object, array, number, lone surrogate, NUL)", [null, undefined, {}, [], 42, "\ud800", "\u0000"].every(v => { try { return typeof mod.redactRemote(v) === "string" && typeof mod.pushFailReason(v) === "string"; } catch { return false; } }));
+  const patho = ["a/".repeat(500000), '"/'.repeat(500000), "token ".repeat(170000), " ".repeat(1e6) + "x", "@".repeat(1e6), "A".repeat(1e6), "remote: " + "ab:".repeat(350000), "eyJ".repeat(333333), "\n".repeat(1e6) + "remote: x"];
+  const slow = patho.map(x => { const t0 = performance.now(); mod.redactRemote(x); mod.pushFailReason(x); return performance.now() - t0; });
+  check(`ReDoS guard: 1 MB pathological inputs each redacted in <100 ms (max ${Math.max(...slow).toFixed(1)} ms)`, slow.every(ms => ms < 100), slow.map(x => x.toFixed(0)).join(","));
+  // End to end: a hook that echoes secrets must not reach the JSON line.
+  const e = mkEnv([T("SEC-1")]);
+  writeHook(e.bare, 'while read o n r; do case "$r" in refs/heads/claude/*) echo "token gh\x70_abcdefghijklmnopqrstuvwxyz0123456789 bad" >&2; echo "Authorization: Bearer abc123secret" >&2; echo "denied for /tmp/with space/x.git" >&2; exit 1;; esac; done; exit 0');
+  const r = dispatchSync(e.work, ["--claim", "--backlog", e.bl]);
+  check("end-to-end: hook-echoed token/Authorization/path never appear in the JSON output", r.j?.outcome === "NO_ACTION" && r.j.reasons.some(x => x.startsWith("SEC-1:PUSH_FAILED")) && !/gh\x70_|abc123secret|with space|Bearer/.test(r.raw), r.raw);
+}
+// 10e. Lease-module-throws path uses the same ls-remote gating (stub lease modules live in the temp work clone only).
+{
+  const stub = work => {
+    const d = path.join(work, "automation/lib"); fs.mkdirSync(d, {recursive: true});
+    fs.writeFileSync(path.join(d, "task-lease.mjs"), 'export function claim() { throw new Error("boom gh\x70_abcdefghijklmnopqrstuvwxyz0123456789"); }\nexport function release() {}\n');
+    fs.writeFileSync(path.join(d, "task-lease-git-store.mjs"), "export function createRemoteRefStore() { return {createIfAbsent() { return {created: false, current: null}; }, read() { return null; }}; }\n");
+  };
+  const real = spawnSync("sh", ["-c", "command -v git"], {encoding: "utf8"}).stdout.trim();
+  const wdir = path.join(tmpRoot, "gitwrap2"); fs.mkdirSync(wdir);
+  fs.writeFileSync(path.join(wdir, "git"), `#!/bin/sh\nif [ "$1" = ls-remote ]; then for a in "$@"; do case "$a" in refs/uasco/claims/*) echo "simulated ls-remote failure" >&2; exit 128;; esac; done; fi\nexec "${real}" "$@"\n`, {mode: 0o755});
+  const a = mkEnv([T("CT-1")]); stub(a.work);
+  const ra = dispatchSync(a.work, ["--claim", "--backlog", a.bl]);
+  check("lease module throws + successful empty ls-remote => LEASE_STORE_UNAVAILABLE, branch claim proceeds, error text redacted", ra.j?.outcome === "START" && ra.j.lease?.status === "LEASE_STORE_UNAVAILABLE" && heads(a.bare).includes("refs/heads/claude/ct-1") && !ra.raw.includes("gh\x70_abcdefghijklmnopqrstuvwxyz"), ra.raw);
+  const b = mkEnv([T("CT-2")]); stub(b.work);
+  const rb = dispatchSync(b.work, ["--claim", "--backlog", b.bl], {PATH: `${wdir}${path.delimiter}${process.env.PATH}`});
+  check("lease module throws + FAILED ls-remote => fail-closed CT-2:LEASE_CHECK_FAILED, nothing pushed", rb.j?.reasons?.includes("CT-2:LEASE_CHECK_FAILED") && !rb.j.reasons.includes("CT-2:LEASE_STORE_UNAVAILABLE") && heads(b.bare).length === 0 && rb.j.outcome === "NO_ACTION", rb.raw);
+  const c = mkEnv([T("CT-3")]); stub(c.work);
+  G(c.work, ["push", "-q", "origin", "HEAD:refs/uasco/claims/CT-3"]);
+  const rc = dispatchSync(c.work, ["--claim", "--backlog", c.bl]);
+  check("lease module throws + lease ref EXISTS on remote => treated as held (CT-3:LEASE_HELD), nothing pushed", rc.j?.reasons?.includes("CT-3:LEASE_HELD") && heads(c.bare).length === 0, rc.raw);
 }
 // 11. 8 processes racing on 3 tasks: each task claimed exactly once.
 {
