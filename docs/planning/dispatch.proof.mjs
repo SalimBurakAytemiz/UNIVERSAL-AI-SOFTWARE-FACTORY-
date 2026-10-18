@@ -364,7 +364,7 @@ const writeHook = (bare, body) => { fs.mkdirSync(path.join(bare, "hooks"), {recu
 }
 // 13. Output sinks: stdout holds only fixed codes / validated tokens. Token-like fixtures are built at runtime (fake values; the repo secret scanner stays unchanged).
 const FK = s => "gh" + "p_" + s; // fake token-shaped marker assembled at runtime. NB: "_" is a legal id/ref/token character, so id/dep/branch fixtures add a space to be genuinely invalid.
-const MARKERS = ["STATUSLEAK", "TOKENLEAK", "EPOCHLEAK", "SHALEAK", "IDLEAK", "OWNERLEAK", "DEPLEAK", "BRANCHLEAK", "PRLEAK", "DUPLEAK", "INTERNALLEAK", "GETTERLEAK", "ARGLEAK"].map(FK);
+const MARKERS = ["STATUSLEAK", "TOKENLEAK", "EPOCHLEAK", "SHALEAK", "IDLEAK", "OWNERLEAK", "DEPLEAK", "BRANCHLEAK", "PRLEAK", "DUPLEAK", "INTERNALLEAK", "GETTERLEAK", "ARGLEAK", "HEADLEAK", "OWNERLEAK2", "BASELEAK"].map(FK);
 const stubLease = (work, {claimBody, releaseLog}) => {
   const d = path.join(work, "automation/lib"); fs.mkdirSync(d, {recursive: true});
   fs.writeFileSync(path.join(d, "task-lease.mjs"), `import fs from "node:fs";\nexport function claim() { ${claimBody} }\nexport function release() { fs.appendFileSync(${JSON.stringify(releaseLog)}, "released\\n"); return {status: "RELEASED"}; }\n`);
@@ -398,7 +398,7 @@ const mod13 = await import(path.join(HERE, "dispatch.mjs"));
   const pre = path.join(e.dir, "preload.mjs");
   fs.writeFileSync(pre, `import cp from "node:child_process"; import {syncBuiltinESMExports} from "node:module";\nconst o = cp.spawnSync; cp.spawnSync = (...a) => { if (a[1]?.[0] === "commit-tree") throw new Error(${JSON.stringify(FK("INTERNALLEAK"))}); return o(...a); };\nsyncBuiltinESMExports();\n`);
   const re = dispatchSync(e.work, ["--claim", "--no-lease", "--backlog", e.bl], undefined, ["--import", pre]);
-  check("unexpected exception => exactly one fixed line {RECOVERABLE_FAILURE, [INTERNAL_ERROR]}, exit 3, exception text not echoed", re.code === 3 && re.raw.trim() === JSON.stringify({outcome: "RECOVERABLE_FAILURE", reasons: ["INTERNAL_ERROR"]}) && !re.raw.includes(FK("INTERNALLEAK")), re.raw + re.err.slice(0, 200));
+  check("unexpected exception => exactly one fixed line {RECOVERABLE_FAILURE, [INTERNAL_ERROR, CLAIM_MAY_EXIST_CHECK_REMOTE]} (claim mode), exit 3, exception text not echoed", re.code === 3 && re.raw.trim() === JSON.stringify({outcome: "RECOVERABLE_FAILURE", reasons: ["INTERNAL_ERROR", "CLAIM_MAY_EXIST_CHECK_REMOTE"]}) && !re.raw.includes(FK("INTERNALLEAK")), re.raw + re.err.slice(0, 200));
   // (3) ls-remote sha rewritten to a token-like string: line ignored, never reaches baseSha / git argv / output.
   const f = mkEnv([T("SH-1")]);
   const real = spawnSync("sh", ["-c", "command -v git"], {encoding: "utf8"}).stdout.trim();
@@ -431,6 +431,61 @@ const mod13 = await import(path.join(HERE, "dispatch.mjs"));
   // (5) classifier: word boundaries; codes are advisory labels.
   check("classifier: 'hostlsxy'/'opensslx' no longer match NETWORK; standalone 'ssl'/'tls'/'timed out' still do", mod13.classifyFailure("hostlsxy") === "UNKNOWN" && mod13.classifyFailure("opensslx") === "UNKNOWN" && mod13.classifyFailure("fatal: ssl handshake failed") === "NETWORK" && mod13.classifyFailure("tls alert") === "NETWORK" && mod13.classifyFailure("operation timed out") === "NETWORK");
   check("sanitisers: safeBranch caps at 120 and validates; safeStatus/safeOwner are closed", mod13.safeBranch("claude/ok") === "claude/ok" && mod13.safeBranch("a".repeat(121)) === "BRANCH_INVALID" && mod13.safeBranch("x y") === "BRANCH_INVALID" && mod13.safeStatus("READY") === "READY" && mod13.safeStatus("nope") === "malformed" && mod13.safeOwner("FOUNDER") === "FOUNDER" && mod13.safeOwner("root") === "malformed");
+}
+// 15. Delta-review fixes: full head set (F1), non-zero push status (F2), argv echo (F3), muted lease modules (F4).
+{
+  const wrapDir = name => { const d = path.join(tmpRoot, name); fs.mkdirSync(d); return d; };
+  const real = spawnSync("sh", ["-c", "command -v git"], {encoding: "utf8"}).stdout.trim();
+  const withPath = d => ({PATH: `${d}${path.delimiter}${process.env.PATH}`});
+  // F1: exotic (non-ASCII) heads stay in the full set: BRANCH_EXISTS / REF_CONFLICT still fire, nothing exotic is echoed or started.
+  const HL = FK("HEADLEAK");
+  const f1 = mkEnv([T("T1", {branch: "feat/é"}), T("T2", {branch: "feat/plain"}), T("T3", {branch: `feat/${HL}é`})]);
+  for (const h of ["feat/é", "feat/plain", `feat/${HL}é`]) G(f1.work, ["push", "-q", "origin", `HEAD:refs/heads/${h}`]);
+  for (const args of [["--backlog", f1.bl], ["--claim", "--backlog", f1.bl]]) {
+    const r = dispatchSync(f1.work, args), rs = r.j?.reasons ?? [];
+    check(`F1 ${args[0] === "--claim" ? "claim" : "dry-run"}: exotic head feat/é => T1 skipped (BRANCH_EXISTS:BRANCH_INVALID), T2 BRANCH_EXISTS:feat/plain, T3 skipped, never START, no claude head pushed`,
+      r.j?.outcome === "NO_ACTION" && rs.includes("T1:BRANCH_EXISTS:BRANCH_INVALID") && rs.includes("T2:BRANCH_EXISTS:feat/plain") && rs.includes("T3:BRANCH_EXISTS:BRANCH_INVALID") && !r.raw.includes("é") && !r.raw.includes(HL) && heads(f1.bare).length === 0, r.raw);
+  }
+  const f1b = mkEnv([T("T1"), T("T2")]);
+  G(f1b.work, ["push", "-q", "origin", "HEAD:refs/heads/claude/t1/é"]);
+  const rdf = dispatchSync(f1b.work, ["--claim", "--backlog", f1b.bl]);
+  check("F1 exotic D/F: head claude/t1/é still gives T1:REF_CONFLICT (T1 never claimed), T2 claimed", rdf.j?.outcome === "START" && rdf.j.taskId === "T2" && rdf.j.reasons.includes("T1:REF_CONFLICT") && !heads(f1b.bare).includes("refs/heads/claude/t1") && !rdf.raw.includes("é"), rdf.raw);
+  // F2: push performs the real push, then exits 1 (only for refs/heads/claude/*; lease pushes pass through).
+  const w2 = wrapDir("gitwrap-f2");
+  fs.writeFileSync(path.join(w2, "git"), `#!/bin/sh\nif [ "$1" = push ]; then for a in "$@"; do case "$a" in *refs/heads/claude/*) "${real}" "$@"; exit 1;; esac; done; fi\nexec "${real}" "$@"\n`, {mode: 0o755});
+  const f2 = mkEnv([T("F2-1"), T("F2-2")]);
+  const r2a = dispatchSync(f2.work, ["--claim", "--backlog", f2.bl], withPath(w2));
+  check("F2 run 1 (push lands, exit 1): START F2-1 (claim is ours), lease kept, no CLAIM_RACE_LOST, F2-2 NOT also claimed",
+    r2a.j?.outcome === "START" && r2a.j.taskId === "F2-1" && r2a.j.claimed === true && r2a.j.lease?.status === "GRANTED" && !r2a.raw.includes("CLAIM_RACE_LOST") && heads(f2.bare).join() === "refs/heads/claude/f2-1" && G(f2.bare, ["for-each-ref", "refs/uasco/claims/"]).includes("refs/uasco/claims/F2-1"), r2a.raw);
+  const r2b = dispatchSync(f2.work, ["--backlog", f2.bl]);
+  check("F2 run 2: F2-1:ALREADY_CLAIMED, next selectable is F2-2", r2b.j?.reasons?.includes("F2-1:ALREADY_CLAIMED") && r2b.j.taskId === "F2-2", r2b.raw);
+  // Second wrapper: exits 1 WITHOUT pushing => PUSH_FAILED, next task claimed.
+  const w3 = wrapDir("gitwrap-f2b");
+  fs.writeFileSync(path.join(w3, "git"), `#!/bin/sh\nif [ "$1" = push ]; then for a in "$@"; do case "$a" in *refs/heads/claude/f2-3) echo "boom" >&2; exit 1;; esac; done; fi\nexec "${real}" "$@"\n`, {mode: 0o755});
+  const f3 = mkEnv([T("F2-3"), T("F2-4")]);
+  const r3 = dispatchSync(f3.work, ["--claim", "--backlog", f3.bl], withPath(w3));
+  check("F2 push fails without landing => F2-3:PUSH_FAILED, F2-4 claimed, no CLAIM_RACE_LOST", r3.j?.outcome === "START" && r3.j.taskId === "F2-4" && r3.j.reasons.some(x => x.startsWith("F2-3:PUSH_FAILED:")) && !r3.raw.includes("CLAIM_RACE_LOST") && heads(f3.bare).join() === "refs/heads/claude/f2-4", r3.raw);
+  // Internal-error hint is claim-mode only.
+  check("internal-error line carries CLAIM_MAY_EXIST_CHECK_REMOTE in claim mode only", JSON.parse(mod13.internalLine(["--claim"])).reasons.join() === "INTERNAL_ERROR,CLAIM_MAY_EXIST_CHECK_REMOTE" && JSON.parse(mod13.internalLine([])).reasons.join() === "INTERNAL_ERROR");
+  // F3: argv echo.
+  const OW = FK("OWNERLEAK2"), BB = FK("BASELEAK");
+  const f4 = mkEnv([T("A-1")]);
+  const ro = dispatchSync(f4.work, ["--backlog", f4.bl, "--owner", OW]);
+  check("F3 owner with token-shaped text => BLOCKED ARG_INVALID:--owner, never echoed", ro.code === 2 && ro.j?.reasons?.[0] === "ARG_INVALID:--owner" && !ro.raw.includes("OWNERLEAK2"), ro.raw);
+  const rb = dispatchSync(f4.work, ["--claim", "--backlog", f4.bl, "--base-branch", BB]);
+  check("F3 --base-branch with token-shaped text => BASE_UNAVAILABLE:origin/BRANCH_INVALID, never echoed", rb.code === 3 && rb.j?.reasons?.includes("BASE_UNAVAILABLE:origin/BRANCH_INVALID") && !rb.raw.includes("BASELEAK"), rb.raw);
+  const rb2 = dispatchSync(f4.work, ["--claim", "--backlog", f4.bl, "--base-branch", "nobase"]);
+  check("F3 plain unknown base branch is echoed as a valid ref (BASE_UNAVAILABLE:origin/nobase)", rb2.j?.reasons?.includes("BASE_UNAVAILABLE:origin/nobase"), rb2.raw);
+  check("F3 safeOwnerArg: plain owner echoed, '_'/space/empty/non-string => '?'", mod13.safeOwnerArg("cloud-1") === "cloud-1" && mod13.safeOwnerArg(OW) === "?" && mod13.safeOwnerArg("a b") === "?" && mod13.safeOwnerArg("") === "?" && mod13.safeOwnerArg(5) === "?");
+  // F4: a lease module that prints to console/stdout/stderr (top level, claim, store) cannot add output lines.
+  const f5 = mkEnv([T("MU-1")]);
+  const MK = FK("MUTELEAK"); MARKERS.push(MK);
+  const dd = path.join(f5.work, "automation/lib"); fs.mkdirSync(dd, {recursive: true});
+  fs.writeFileSync(path.join(dd, "task-lease.mjs"), `console.log(${JSON.stringify(MK + "-top")});\nexport function claim() { console.log(${JSON.stringify(MK + "-claim")}); process.stdout.write(${JSON.stringify(MK + "-w\n")}); console.error(${JSON.stringify(MK + "-err")}); process.stderr.write(${JSON.stringify(MK + "-e2\n")}); return {status: "GRANTED", record: {token: "abc.DEF:1", epoch: 3}}; }\nexport function release() { console.log(${JSON.stringify(MK + "-rel")}); }\n`);
+  fs.writeFileSync(path.join(dd, "task-lease-git-store.mjs"), `export function createRemoteRefStore() { console.log(${JSON.stringify(MK + "-store")}); return {createIfAbsent() { return {created: true, current: null}; }, read() { console.log(${JSON.stringify(MK + "-read")}); return null; }}; }\n`);
+  const rm = dispatchSync(f5.work, ["--claim", "--backlog", f5.bl]);
+  check("F4 lease module printing to console.log/stdout/stderr: stdout is exactly one JSON line without the marker, stderr free of it, claim still START with lease GRANTED",
+    rm.raw.trim().split("\n").length === 1 && rm.j?.outcome === "START" && rm.j.lease?.status === "GRANTED" && !rm.raw.includes("MUTELEAK") && !rm.err.includes("MUTELEAK"), rm.raw + rm.err.slice(0, 200));
 }
 // 14. Global proof: every stdout produced by every scenario above is a single JSON line and holds none of the fake secret markers.
 {

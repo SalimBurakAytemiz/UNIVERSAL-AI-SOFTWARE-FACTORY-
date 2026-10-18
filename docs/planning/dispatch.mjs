@@ -11,7 +11,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const REF_RE = /^[A-Za-z0-9][A-Za-z0-9._\/-]{0,200}$/;
 const SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+// "_" is deliberately not allowed in --owner/--remote names so token-shaped secrets (ghp_..., sk_...) can never be accepted or echoed.
+const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9.-]{0,63}$/;
 const CLAIM_SUBJECT = "dispatch-claim:";
 export const EXIT = {START: 0, NO_ACTION: 0, BLOCKED: 2, RECOVERABLE_FAILURE: 3};
 
@@ -43,6 +44,9 @@ export const safeStatus = s => isStr(s) && STATUS_ENUM.has(s) ? s : "malformed";
 export const safeOwner = o => isStr(o) && OWNER_ENUM.has(o) ? o : "malformed";
 export const refNameOk = b => isStr(b) && REF_RE.test(b) && !b.includes("..") && !b.endsWith(".") && !/\.lock$/i.test(b);
 export const safeBranch = b => refNameOk(b) && b.length <= 120 ? b : "BRANCH_INVALID";
+// argv values: owner is echoed only if it passes the TOKEN_RE-style check (no "_"), the base branch only as a valid "_"-free ref name.
+export const safeOwnerArg = o => isStr(o) && /^[A-Za-z0-9.:-]{1,256}$/.test(o) ? o : "?";
+export const safeBaseEcho = b => isStr(b) && !b.includes("_") ? safeBranch(b) : "BRANCH_INVALID";
 const safeArg = a => isStr(a) && /^--?[A-Za-z0-9][A-Za-z0-9-]{0,39}$/.test(a) ? a : "?";
 
 class Blocked extends Error { constructor(code) { super(code); this.code = code; } }
@@ -147,12 +151,14 @@ function remoteHeads(git, remote) {
   const r = git(["ls-remote", "--heads", remote]);
   if (r.status !== 0) return null;
   const m = new Map();
-  // Only well-formed lines are kept: a sha must be 40/64 hex and the head a REF_RE-valid name; anything else is ignored (never reaches argv or output).
+  // EVERY head the remote lists is kept (full set) for existence/conflict decisions; only the sha is validated (40/64 hex; a malformed line is ignored).
+  // Head names are never echoed from here: output goes through safeBranch/validId only. ls-remote format is "<sha>\t<ref>".
   for (const l of r.stdout.split("\n")) {
-    const p = l.trim().split(/\s+/);
-    if (p.length !== 2 || !SHA_RE.test(p[0]) || !p[1].startsWith("refs/heads/")) continue;
-    const name = p[1].slice(11);
-    if (refNameOk(name)) m.set(name, p[0]);
+    const i = l.indexOf("\t");
+    if (i < 0) continue;
+    const sha = l.slice(0, i), ref = l.slice(i + 1);
+    if (!SHA_RE.test(sha) || !ref.startsWith("refs/heads/") || ref.length === 11) continue;
+    m.set(ref.slice(11), sha);
   }
   return m;
 }
@@ -230,9 +236,25 @@ function fin(outcome, reasons, extra = {}) {
 }
 
 const INTERNAL_LINE = JSON.stringify({outcome: "RECOVERABLE_FAILURE", reasons: ["INTERNAL_ERROR"]});
+// In claim mode a claim push may already have reached the remote when the unexpected exception hit.
+const INTERNAL_LINE_CLAIM = JSON.stringify({outcome: "RECOVERABLE_FAILURE", reasons: ["INTERNAL_ERROR", "CLAIM_MAY_EXIST_CHECK_REMOTE"]});
+export const internalLine = argv => Array.isArray(argv) && argv.includes("--claim") ? INTERNAL_LINE_CLAIM : INTERNAL_LINE;
 export async function run(argv, cwd = process.cwd()) {
-  try { return await runInner(argv, cwd); } catch { return {outcome: "RECOVERABLE_FAILURE", exit: EXIT.RECOVERABLE_FAILURE, line: INTERNAL_LINE}; }
+  try { return await runInner(argv, cwd); } catch { return {outcome: "RECOVERABLE_FAILURE", exit: EXIT.RECOVERABLE_FAILURE, line: internalLine(argv)}; }
 }
+// Lease modules are trusted repo code, but anything they write to console/stdout/stderr is discarded while they run so the one-line stdout contract holds.
+// (A module writing straight to fd 1 via fs.writeSync is out of reach: that is why the modules must be trusted.)
+const MUTE = ["log", "info", "debug", "warn", "error", "trace", "dir", "table"];
+function muteStart() {
+  const saved = {c: {}, out: process.stdout.write, err: process.stderr.write};
+  for (const k of MUTE) { saved.c[k] = console[k]; console[k] = () => {}; }
+  process.stdout.write = (...a) => { const cb = a.find(x => typeof x === "function"); if (cb) cb(); return true; };
+  process.stderr.write = process.stdout.write;
+  return saved;
+}
+function muteEnd(saved) { for (const k of MUTE) console[k] = saved.c[k]; process.stdout.write = saved.out; process.stderr.write = saved.err; }
+const quiet = fn => { const sv = muteStart(); try { return fn(); } finally { muteEnd(sv); } };
+const quietAsync = async fn => { const sv = muteStart(); try { return await fn(); } finally { muteEnd(sv); } };
 
 async function runInner(argv, cwd) {
   let o;
@@ -254,14 +276,15 @@ async function runInner(argv, cwd) {
     try {
       const top = git(["rev-parse", "--show-toplevel"]).stdout.trim();
       const base = top && fs.existsSync(path.join(top, "automation/lib/task-lease.mjs")) ? top : path.resolve(HERE, "../..");
-      leaseApi = await import(pathToFileURL(path.join(base, "automation/lib/task-lease.mjs")).href);
-      const S = await import(pathToFileURL(path.join(base, "automation/lib/task-lease-git-store.mjs")).href);
-      const raw = S.createRemoteRefStore({runGit: git, remote: o.remote});
+      const imp = f => quietAsync(() => import(pathToFileURL(path.join(base, f)).href));
+      leaseApi = await imp("automation/lib/task-lease.mjs");
+      const S = await imp("automation/lib/task-lease-git-store.mjs");
+      const raw = quiet(() => S.createRemoteRefStore({runGit: git, remote: o.remote}));
       // Observe the store's fail-closed "created:false, current:null" (write rejected / unreadable) signal.
       store = {...raw, createIfAbsent: (id, rec) => { const c = raw.createIfAbsent(id, rec); if (!c.created && !c.current) leaseFlag.unavail = true; return c; }};
     } catch { leaseApi = null; store = null; }
   }
-  const readLease = id => { try { return store ? store.read(id) : null; } catch { return null; } };
+  const readLease = id => { try { return store ? quiet(() => store.read(id)) : null; } catch { return null; } };
 
   let baseSha = heads.get(o.baseBranch) ?? null;
   if (baseSha && git(["cat-file", "-e", `${baseSha}^{commit}`]).status !== 0) {
@@ -276,11 +299,11 @@ async function runInner(argv, cwd) {
   }
   const reclaimable = staleReport(git, o.remote, baseSha, claimedList, env.openPrs, o.staleHours, readLease, Date.now());
   for (const r of reclaimable) if (r.state === "RECLAIMABLE") flat.push(`${r.taskId}:RECLAIMABLE`);
-  const extras = {perTask, reclaimable, mode: o.claim ? "CLAIM" : "DRY_RUN", owner: o.owner};
+  const extras = {perTask, reclaimable, mode: o.claim ? "CLAIM" : "DRY_RUN", owner: safeOwnerArg(o.owner)};
 
   if (!first) return fin("NO_ACTION", flat.length ? flat : ["EMPTY_BACKLOG"], extras);
   if (!o.claim) return fin("START", flat, {...extras, taskId: first.id, branch: claimBranchOf(first.id), claimRef: `refs/heads/${claimBranchOf(first.id)}`, claimed: false});
-  if (!baseSha) return fin("RECOVERABLE_FAILURE", [...flat, `BASE_UNAVAILABLE:${o.remote}/${o.baseBranch}`], extras);
+  if (!baseSha) return fin("RECOVERABLE_FAILURE", [...flat, `BASE_UNAVAILABLE:${o.remote}/${safeBaseEcho(o.baseBranch)}`], extras);
 
   // Claim loop: a lost race (or held lease) falls through to the next selectable task.
   const lost = [];
@@ -288,7 +311,7 @@ async function runInner(argv, cwd) {
   const pushFailed = [];
   const skipNext = (id, reason) => { env.skip.set(id, reason); return select(tasks, env).chosen; };
   const next = id => { env.claimedHeads.add(claimBranchOf(id)); return select(tasks, env).chosen; };
-  const releaseGrant = (lid, grant) => { if (grant) { try { leaseApi.release(store, {...lid, token: grant.token}); } catch { /* best effort */ } } };
+  const releaseGrant = (lid, grant) => { if (grant) { try { quiet(() => leaseApi.release(store, {...lid, token: grant.token})); } catch { /* best effort */ } } };
   let chosen = first;
   for (let guard = 0; guard <= tasks.length && chosen; guard++) {
     const id = chosen.id, br = claimBranchOf(id), ref = `refs/heads/${br}`;
@@ -297,7 +320,7 @@ async function runInner(argv, cwd) {
     if (store) {
       leaseFlag.unavail = false;
       try {
-        const g = leaseApi.claim(store, {...lid, headSha: baseSha, now: Date.now(), ttlMs: Math.max(o.staleHours, 0.001) * 36e5});
+        const g = quiet(() => leaseApi.claim(store, {...lid, headSha: baseSha, now: Date.now(), ttlMs: Math.max(o.staleHours, 0.001) * 36e5}));
         const gs = g.status, rec = g.record;
         if (gs === "GRANTED") {
           grant = rec;
@@ -336,11 +359,16 @@ async function runInner(argv, cwd) {
     const sha = c.stdout.trim();
     // create-only: --force-with-lease=<ref>: (empty expectation) means "ref must not exist".
     const p = git(["push", "--quiet", o.remote, `${sha}:${ref}`, `--force-with-lease=${ref}:`]);
-    if (p.status === 0) {
+    let ours = p.status === 0, again = null;
+    if (!ours) {
+      // A non-zero status does not prove the push failed (the ref may have been created before the client died/hook/network error): re-list.
+      again = remoteHeads(git, o.remote);
+      if (again && again.get(br) === sha) { ours = true; pushFailed.push(`${id}:PUSH_STATUS_NONZERO_CLAIM_VERIFIED`); }
+    }
+    if (ours) {
       return fin("START", [...flat, ...lost, ...pushFailed], {...extras, taskId: id, branch: br, claimRef: ref, claimSha: sha, baseSha, claimed: true, lease: leaseInfo});
     }
     releaseGrant(lid, grant);
-    const again = remoteHeads(git, o.remote);
     if (!again) return fin("RECOVERABLE_FAILURE", [...flat, ...lost, ...pushFailed, `${id}:PUSH_FAILED_REMOTE_UNREACHABLE`], extras);
     if (!again.has(br)) {
       // Non-race failure for this task only (e.g. hook rejection, ref conflict): record and continue with the next task.
@@ -357,7 +385,7 @@ async function runInner(argv, cwd) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   let r;
-  try { r = await run(process.argv.slice(2)); } catch { r = {exit: EXIT.RECOVERABLE_FAILURE, line: INTERNAL_LINE}; }
+  try { r = await run(process.argv.slice(2)); } catch { r = {exit: EXIT.RECOVERABLE_FAILURE, line: internalLine(process.argv.slice(2))}; }
   process.stdout.write(r.line + "\n");
   process.exitCode = r.exit;
 }
