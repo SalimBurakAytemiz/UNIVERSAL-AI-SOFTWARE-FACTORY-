@@ -13,6 +13,7 @@ import {mapPostureWorkRuns,mapPostureReviews,mapPostureEvidence} from "./posture
 import {PROJECTS_PATH,mapMatrixProjects,mapMatrixMissions,mapMatrixWorkRuns,mapMatrixCockpit} from "./matrix-core.js";
 import {CONTROL_PATH,RUNS_PATH,mapOperationsControl,mapOperationsRuns,mapOperationsAttention} from "./operations-core.js";
 import {INSTALL_PATH,PHASE0_PATH,mapInstallReport,mapPhase0Report} from "./install-core.js";
+import {CAPABILITIES_PATH,ADAPTERS_PATH,FABRICS_PATH,mapCapabilities,mapAdapters,mapFabrics} from "./integrations-core.js";
 import {RUNS_PATH as AUDIT_RUNS_PATH,EVIDENCE_PATH as AUDIT_EVIDENCE_PATH,runEventsPath,mapAuditRuns,mapAuditEvents,mapAuditEvidence} from "./audit-core.js";
 
 const TTL_MS=3000;
@@ -174,6 +175,10 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async auditRuns(){const r=await get(AUDIT_RUNS_PATH);return r.ok?mapAuditRuns(r.data):{state:r.state,runs:null,message:r.message}},
     async auditRunEvents(runId){const p=runEventsPath(runId);if(!p)return {state:"ERROR",runId,events:null};const r=await get(p);return r.ok?mapAuditEvents(runId,r.data):{state:r.state,runId,events:null,message:r.message}},
     async auditEvidence(){const r=await get(AUDIT_EVIDENCE_PATH);return r.ok?mapAuditEvidence(r.data):{state:r.state,evidence:null,message:r.message}},
+    // //TR: FA-V2-PRODUCT (UI-078): Uzantılar ve Entegrasyonlar salt-okunur kayıt defteri okumaları; GET /v1/capabilities, GET /v1/adapters ve GET /v1/fabrics control-boundary allow-list'inde zaten vardır (yeni uç nokta, sorgu dizesi ve POST yok). Başarılıysa integrations-core eşleyicileriyle fail-closed sanitize edilir (değerler AYNEN); okuma başarısızsa ayrık dürüst durum döner ve sayı uydurulmaz.
+    async integrationsCapabilities(){const r=await get(CAPABILITIES_PATH);return r.ok?mapCapabilities(r.data):{state:r.state,registry:null,message:r.message}},
+    async integrationsAdapters(){const r=await get(ADAPTERS_PATH);return r.ok?mapAdapters(r.data):{state:r.state,registry:null,message:r.message}},
+    async integrationsFabrics(){const r=await get(FABRICS_PATH);return r.ok?mapFabrics(r.data):{state:r.state,registry:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }

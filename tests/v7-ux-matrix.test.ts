@@ -1001,7 +1001,7 @@ describe("Matrix — route delegation (app.js VIEWS unchanged)", () => {
     expect(routes.routeFromHash("#/matrix/")).toBe("matrix");
     expect(routes.routeFromHash("#/matrixx")).toBe(routes.DEFAULT_ROUTE);
     expect(routes.routeFromHash("#/Matrix")).toBe(routes.DEFAULT_ROUTE);
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-12)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-13)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "integrations", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("matrix");
     expect(routes.ROUTES.filter((x: any) => x.factory).length).toBe(8);
     // Eski rotalar etkilenmez.
@@ -1033,5 +1033,176 @@ describe("Matrix — route delegation (app.js VIEWS unchanged)", () => {
     for (const lang of ["en", "tr"]) for (const r of routes.ROUTES) expect(i18n.translate(lang, `area.${r.id}.title`), `${lang}/${r.id}`).not.toBe(`area.${r.id}.title`);
     expect(i18n.translate("tr", "area.matrix.title")).toBe("Çoklu Proje Komuta Matrisi");
     expect(i18n.translate("en", "area.matrix.desc")).toContain("Read-only.");
+  });
+});
+
+// //TR: UI-078 Uzantılar ve Entegrasyonlar (#/integrations) — yetenek/adaptör/fabrika kayıt defterlerinin salt-okunur listesi; fixture'lar GERÇEK registries/*.json dosyalarından gelir (sunucu bu dosyaları aynen döndürür). REGISTERED/NOT_IMPLEMENTED değerleri AYNEN gösterilir ("bağlı/etkin" ima edilmez), okunamayan kaynağın sayısı "—"dir (0 değil), hiçbir denetim/düğme/POST yoktur ve route app.js (korumalı) değişmeden planned.js üzerinden erişilir.
+const regFile = (f: string): any => JSON.parse(fs.readFileSync(path.join(root, "registries", f), "utf8"));
+const REG = {capabilities: regFile("capabilities.json"), adapters: regFile("tool-adapters.json"), fabrics: regFile("execution-fabrics.json")};
+const INTEG_PATHS = {capabilities: "/v1/capabilities", adapters: "/v1/adapters", fabrics: "/v1/fabrics"};
+const integServe = (over: Record<string, any> = {}) => (p: string) => {
+  const m: Record<string, any> = {"/v1/capabilities": REG.capabilities, "/v1/adapters": REG.adapters, "/v1/fabrics": REG.fabrics, ...over};
+  if (!(p in m)) throw new Error(`${p}: HTTP 404`);
+  const v = m[p];
+  if (v instanceof Error) throw v;
+  return v;
+};
+const boom = (msg: string) => new Error(msg);
+async function renderInteg(getFn: (p: string) => any, lang = "en") {
+  const view = await load("views", "integrations.js");
+  const posts: string[] = [];
+  const m = await mkCtx(getFn, lang, (p: string) => { posts.push(p); throw new Error("POST must never be called"); });
+  const rootNode: N = await view.render(m.ctx);
+  return {root: rootNode, posts, ...m};
+}
+const integCount = (r: N, k: string) => all(allData(r, "integCount", k)[0]).find(n => cls(n, "kpi-value"))!.textContent;
+const lines = (r: N) => all(r).map(n => n._text).filter(Boolean).join("\n");
+const integItems =(r: N) => allData(r, "integItem").filter(n => n.tagName === "LI");
+
+describe("Integrations UI-078 — route, reachability and allow-list", () => {
+  it("routes.js maps #/integrations to the planned host (component 'integrations', no plannedPackage), after audit and before settings, with an existing icon; reachable via the ROUTES-driven nav and palette without touching protected files", async () => {
+    const routes = await load("routes.js"), icons = await load("icons.js");
+    const r = routes.routeById("integrations");
+    expect(r).toMatchObject({id: "integrations", hash: "#/integrations", view: "planned", component: "integrations", factory: false});
+    expect(r.plannedPackage).toBeUndefined();
+    expect(icons.ICON_NAMES).toContain(r.icon);
+    expect(routes.routeFromHash("#/integrations")).toBe("integrations");
+    expect(routes.routeFromHash("#/integrationsx")).toBe(routes.DEFAULT_ROUTE);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-3)).toEqual(["audit", "integrations", "settings"]);
+    expect(routes.FACTORY_AREA_ORDER).not.toContain("integrations");
+    expect(read("views", "planned.js")).toContain('import * as integrations from "./integrations.js"');
+    expect(read("views", "planned.js")).toMatch(/Object\.freeze\(\{[^}]*integrations[^}]*\}\)/);
+    expect(read("shell.js")).toContain("syncNav(doc,el(\"navList\"),ROUTES");
+    expect(read("shell.js")).toContain("ROUTES.map(r=>({kind:\"action\",action:\"goto\"");
+    expect(read("app.js")).toContain("const VIEWS={home,projects,work,workforce,assurance,planned,tower,inbox,settings};");
+    expect(read("app.js")).not.toMatch(/integrations/);
+    const i18n = await load("i18n.js");
+    for (const lang of ["en", "tr"]) expect(i18n.translate(lang, "area.integrations.title")).not.toBe("area.integrations.title");
+    expect(i18n.translate("en", "area.integrations.title")).toBe("Extensions & Integrations");
+  });
+  it("the three registry GET paths are already admitted by the desktop allow-list; nothing else under those names is", async () => {
+    const extra = new Function(`${blockOf("B4-ALLOWLIST")}\nreturn desktopExtraGetPathAllowed;`)() as (v: unknown) => boolean;
+    const boundary = await import(pathToFileURL(path.join(root, "automation", "lib", "control-boundary.mjs")).href);
+    const allowed = (v: string) => boundary.desktopGetPathAllowed(v) || extra(v);
+    const core = await load("integrations-core.js");
+    for (const p of Object.values(INTEG_PATHS)) expect(allowed(p), p).toBe(true);
+    expect([core.CAPABILITIES_PATH, core.ADAPTERS_PATH, core.FABRICS_PATH]).toEqual(Object.values(INTEG_PATHS));
+    for (const p of ["/v1/capabilities?x=1", "/v1/adapters/x", "/v1/fabrics/enable", "/v1/integrations", "/v1/adapters/install"]) expect(allowed(p), p).toBe(false);
+  });
+});
+
+describe("Integrations UI-078 — strict mapping of the real registry shapes", () => {
+  it("maps the real registries/*.json files (counts, ids, verbatim REGISTERED / NOT_IMPLEMENTED values)", async () => {
+    const core = await load("integrations-core.js");
+    const c = core.mapCapabilities(REG.capabilities), a = core.mapAdapters(REG.adapters), f = core.mapFabrics(REG.fabrics);
+    for (const x of [c, a, f]) expect(x.state).toBe("VERIFIED");
+    expect(c.registry.count).toBe(REG.capabilities.count);
+    expect(a.registry.count).toBe(REG.adapters.count);
+    expect(f.registry.count).toBe(REG.fabrics.count);
+    expect(c.registry.items[0]).toMatchObject({id: "UASCO-CAP-001", name: "Mission OS", status: "REGISTERED", implementation: "NOT_IMPLEMENTED", activation: "ON_DEMAND"});
+    expect(a.registry.items[0]).toMatchObject({id: "playwright", category: "BROWSER", status: "REGISTERED", implementation: "NOT_IMPLEMENTED", requiresCertification: true});
+    expect(c.registry.byStatus).toEqual([{value: "REGISTERED", count: REG.capabilities.count}]);
+    expect(a.registry.byImplementation).toEqual([{value: "NOT_IMPLEMENTED", count: REG.adapters.count}]);
+  });
+  it("rejects contradictory or malformed responses wholesale (count mismatch, duplicate id, bad enum, missing name, wrong list key, non-boolean flag, over the cap)", async () => {
+    const core = await load("integrations-core.js");
+    const cap = (over: Record<string, any> = {}) => ({id: "UASCO-CAP-901", name: "X", status: "REGISTERED", activation: "ON_DEMAND", implementation: "NOT_IMPLEMENTED", ...over});
+    const bads: Array<[string, any]> = [
+      ["count", {count: 2, capabilities: [cap()]}], ["dup", {count: 2, capabilities: [cap(), cap()]}], ["enum", {count: 1, capabilities: [cap({status: "registered"})]}],
+      ["impl", {count: 1, capabilities: [cap({implementation: 5})]}], ["name", {count: 1, capabilities: [cap({name: ""})]}], ["key", {count: 1, fabrics: [cap()]}],
+      ["null", null], ["arr", []], ["row", {count: 1, capabilities: ["x"]}], ["cap", {count: 501, capabilities: Array.from({length: 501}, (_, i) => cap({id: `UASCO-CAP-${1000 + i}`}))}]
+    ];
+    for (const [label, raw] of bads) { const m = core.mapCapabilities(raw); expect(m.state, label).toBe("ERROR"); expect(m.registry, label).toBeNull(); }
+    expect(core.mapAdapters({count: 1, adapters: [{id: "x1", category: "BROWSER", status: "REGISTERED", implementation: "NOT_IMPLEMENTED", requiresCertification: "yes"}]}).state).toBe("ERROR");
+    expect(core.mapAdapters({count: 1, adapters: [{id: "x1", status: "REGISTERED", implementation: "NOT_IMPLEMENTED"}]}).state).toBe("ERROR");
+    // An unknown-but-well-formed value is carried verbatim, never promoted or translated.
+    const odd = core.mapCapabilities({count: 1, capabilities: [cap({status: "ACTIVE", implementation: "IMPLEMENTED"})]});
+    expect(odd.registry.items[0]).toMatchObject({status: "ACTIVE", implementation: "IMPLEMENTED"});
+  });
+  it("buildIntegrations reports a null count for an unreadable source (never 0) and lists it as unreadable", async () => {
+    const core = await load("integrations-core.js");
+    const out = core.buildIntegrations({capabilities: core.mapCapabilities(REG.capabilities), adapters: {state: "OFFLINE", registry: null}, fabrics: undefined});
+    expect(out.counts).toEqual({capabilities: REG.capabilities.count, adapters: null, fabrics: null});
+    expect(out.unreadable).toEqual(["adapters", "fabrics"]);
+    expect(out.sources.adapters.state).toBe("OFFLINE");
+    expect(out.complete).toBe(false);
+  });
+});
+
+describe("Integrations UI-078 — rendering (read-only, verbatim values, honest states)", () => {
+  it("renders every registry entry with verbatim status / implementation values, exact counts, no controls, no writes, no 'connected/active' claims", async () => {
+    const {root, posts, calls} = await renderInteg(integServe());
+    expect(cls(root, "view-integrations")).toBe(true);
+    expect(byId(root, "view-title")!.textContent).toBe("Extensions & Integrations");
+    expect(integItems(root).length).toBe(REG.capabilities.count + REG.adapters.count + REG.fabrics.count);
+    expect(integCount(root, "capabilities")).toBe(String(REG.capabilities.count));
+    expect(integCount(root, "adapters")).toBe(String(REG.adapters.count));
+    expect(integCount(root, "fabrics")).toBe(String(REG.fabrics.count));
+    for (const li of integItems(root)) { expect(li.dataset.status).toBe("REGISTERED"); expect(li.dataset.implementation).toBe("NOT_IMPLEMENTED"); }
+    const first = integItems(root).find(n => n.dataset.integItem === "UASCO-CAP-001")!;
+    expect(lines(first)).toContain("REGISTERED");
+    expect(lines(first)).toContain("NOT_IMPLEMENTED");
+    expect(lines(first)).toContain("Mission OS");
+    expect(allData(root, "field", "requiresCertification").length).toBe(REG.adapters.count);
+    expect(allData(root, "tally").length).toBe(6);
+    // Read-only: no buttons/links/inputs, no POSTs, exactly the three GETs.
+    expect(all(root).filter(n => ["BUTTON", "A", "INPUT", "SELECT", "FORM"].includes(n.tagName)).length).toBe(0);
+    expect(all(root).some(n => n.ls.size > 0)).toBe(false);
+    expect(posts).toEqual([]);
+    expect([...calls].sort()).toEqual(Object.values(INTEG_PATHS).sort());
+    expect(surface(root)).not.toContain(FORBIDDEN);
+    // Item rows never use state pills (no active/connected/verified iconography); only plain badges carry the recorded text.
+    expect(allData(integItems(root)[0], "pill").length).toBe(0);
+    // Only the entry rows are scanned (explanatory notes may name these words in the negative).
+    for (const li of integItems(root)) expect(lines(li)).not.toMatch(/\b(connected|active|enabled|installed|ready|healthy)\b/i);
+  });
+  it("server text is written as text only (markup in a name stays literal)", async () => {
+    const evil = "<img src=x onerror=alert(1)>";
+    const caps = {...REG.capabilities, count: 1, capabilities: [{id: "UASCO-CAP-777", name: evil, status: "REGISTERED", activation: "ON_DEMAND", implementation: "NOT_IMPLEMENTED"}]};
+    const {root} = await renderInteg(integServe({"/v1/capabilities": caps}));
+    const li = integItems(root).find(n => n.dataset.integItem === "UASCO-CAP-777")!;
+    expect(all(li).some(n => n.textContent === evil)).toBe(true);
+    expect(all(li).every(n => n.tagName !== "IMG")).toBe(true);
+  });
+  it("a read failure shows an honest state and a dash count for THAT registry only (never 0, never an empty list); the others still render", async () => {
+    for (const err of [boom("fetch failed"), boom("HTTP 404"), boom("HTTP 500")]) {
+      const {root} = await renderInteg(integServe({"/v1/adapters": err}));
+      expect(integCount(root, "adapters")).toBe("—");
+      expect(integCount(root, "capabilities")).toBe(String(REG.capabilities.count));
+      expect(byData(root, "integWithheld", "adapters")).toBeTruthy();
+      expect(byData(root, "integEmpty", "adapters")).toBeUndefined();
+      expect(byData(root, "integState")).toBeTruthy();
+      expect(byData(root, "integPartial")!.dataset.integPartial).toBe("adapters");
+      expect(integItems(root).length).toBe(REG.capabilities.count + REG.fabrics.count);
+    }
+    const allDown = await renderInteg(integServe({"/v1/capabilities": boom("fetch failed"), "/v1/adapters": boom("fetch failed"), "/v1/fabrics": boom("fetch failed")}));
+    for (const k of ["capabilities", "adapters", "fabrics"]) expect(integCount(allDown.root, k)).toBe("—");
+    expect(integItems(allDown.root).length).toBe(0);
+    expect(allData(allDown.root, "integEmpty").length).toBe(0);
+    expect(byData(allDown.root, "integPartial")!.dataset.integPartial).toBe("capabilities,adapters,fabrics");
+  });
+  it("a malformed registry (count mismatch) is rejected as a read failure, not rendered partially or as zero", async () => {
+    const {root} = await renderInteg(integServe({"/v1/fabrics": {...REG.fabrics, count: REG.fabrics.count + 1}}));
+    expect(integCount(root, "fabrics")).toBe("—");
+    expect(byData(root, "integState", "ERROR")).toBeTruthy();
+    expect(byData(root, "integWithheld", "fabrics")).toBeTruthy();
+  });
+  it("a genuinely empty readable registry says only that it returned no entries, and its count is a real 0", async () => {
+    const {root} = await renderInteg(integServe({"/v1/fabrics": {schemaVersion: "1.0.0", count: 0, fabrics: []}}));
+    expect(integCount(root, "fabrics")).toBe("0");
+    expect(byData(root, "integEmpty", "fabrics")!.textContent).toBe("The fabric registry returned no entries.");
+  });
+  it("EN and TR render without raw i18n keys; integrations.* locale keys have exact EN/TR parity", async () => {
+    for (const lang of ["en", "tr"]) {
+      for (const over of [{}, {"/v1/capabilities": boom("fetch failed")}, {"/v1/adapters": boom("HTTP 404")}, {"/v1/fabrics": {count: 9, fabrics: []}}]) {
+        const {root} = await renderInteg(integServe(over), lang);
+        expect(surface(root), lang).not.toMatch(/\b(integrations|area)\.[a-z][A-Za-z.]*\b/);
+      }
+    }
+    const en = (await load("locales", "en.js")).default, tr = (await load("locales", "tr.js")).default;
+    const keys = (o: Record<string, string>) => Object.keys(o).filter(k => k.startsWith("integrations.") || k === "area.integrations.title" || k === "area.integrations.desc").sort();
+    expect(keys(en).length).toBeGreaterThan(50);
+    expect(keys(tr)).toEqual(keys(en));
+    for (const k of keys(en)) expect(tr[k].length, k).toBeGreaterThan(0);
   });
 });

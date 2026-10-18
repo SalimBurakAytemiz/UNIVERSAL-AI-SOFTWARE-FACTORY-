@@ -12,8 +12,9 @@ import * as matrix from "./matrix.js";
 import * as operations from "./operations.js";
 import * as install from "./install.js";
 import * as audit from "./audit.js";
+import * as integrations from "./integrations.js";
 
-const REAL=Object.freeze({company,delivery,academy,journey,executive,queue,readiness,posture,matrix,operations,install,audit});
+const REAL=Object.freeze({company,delivery,academy,journey,executive,queue,readiness,posture,matrix,operations,install,audit,integrations});
 export async function render(ctx,route){
   const real=REAL[route.component];
   if(real)return real.render(ctx,route);

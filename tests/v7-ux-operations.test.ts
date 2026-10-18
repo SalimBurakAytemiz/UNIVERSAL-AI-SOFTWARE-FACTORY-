@@ -1014,7 +1014,7 @@ describe("Operations — route delegation (app.js VIEWS unchanged)", () => {
     expect(routes.routeFromHash("#/operations/")).toBe("operations");
     expect(routes.routeFromHash("#/operationss")).toBe(routes.DEFAULT_ROUTE);
     expect(routes.routeFromHash("#/Operations")).toBe(routes.DEFAULT_ROUTE);
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-12)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-13)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "integrations", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("operations");
     expect(routes.ROUTES.filter((x: any) => x.factory).length).toBe(8);
     // Eski rotalar etkilenmez.
@@ -1112,7 +1112,7 @@ describe("Audit Trail UI-070 — route, reachability and allow-list", () => {
     expect(icons.ICON_NAMES).toContain(r.icon);
     expect(routes.routeFromHash("#/audit")).toBe("audit");
     expect(routes.routeFromHash("#/auditx")).toBe(routes.DEFAULT_ROUTE);
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-3)).toEqual(["install", "audit", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-3)).toEqual(["audit", "integrations", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("audit");
     expect(read("views", "planned.js")).toContain('import * as audit from "./audit.js"');
     expect(read("views", "planned.js")).toMatch(/Object\.freeze\(\{[^}]*audit[^}]*\}\)/);
