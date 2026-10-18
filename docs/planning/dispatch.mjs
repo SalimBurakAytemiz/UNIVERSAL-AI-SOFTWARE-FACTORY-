@@ -173,41 +173,30 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
 export const leaseRefAbsent = lr => !!lr && lr.status === 0 && String(lr.stdout ?? "").trim() === "";
 export const leaseCheckFailed = lr => !lr || lr.status !== 0;
 
-// Redact secrets, URLs and paths from untrusted server/hook text (defence in depth; never throws).
-// Layers: (0) bound + normalise, (1) quoted/unquoted paths, (2) URLs/scp remotes, (3) known token shapes,
-// (4) credential keywords and Authorization/Cookie headers, (5) userinfo before "@", (6) cap + printable-ASCII allowlist.
-const RAW_MAX = 8192, REASON_MAX = 240;
-const RX_TOKENS = [
-  /gh[pousr]_[A-Za-z0-9_]{20,}/g, /github_pat_[A-Za-z0-9_]{20,}/g, /glpat-[A-Za-z0-9_-]{16,}/g, /AKIA[0-9A-Z]{16}/g,
-  /xox[abprs]-[A-Za-z0-9-]{10,}/g, /eyJ[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+){0,2}/g, /[A-Za-z0-9+\/_=-]{32,}/g,
+// Closed-vocabulary classifier for untrusted server/hook/lease-module error text. The text is NEVER echoed: it is matched
+// against fixed patterns and only a CODE from FAIL_CODES can leave this function (so no substring of it reaches any output).
+// Patterns are simple (no nested quantifiers, bounded input) so matching is linear. First match wins.
+export const FAIL_CODES = Object.freeze(["NON_FAST_FORWARD", "REF_CONFLICT_REMOTE", "REF_LOCKED", "PROTECTED_BRANCH", "AUTH_FAILED", "PERMISSION_DENIED", "HOOK_DECLINED", "NETWORK", "REMOTE_REJECTED", "UNKNOWN"]);
+const CLASSIFIERS = [
+  ["NON_FAST_FORWARD", /non-fast-forward|\(fetch first\)|tip of your current branch is behind|stale info/],
+  ["REF_CONFLICT_REMOTE", /exists; cannot create|exists; cannot be created|directory\/file conflict/],
+  ["REF_LOCKED", /cannot lock ref|failed to lock|unable to lock|\.lock' exists/],
+  ["PROTECTED_BRANCH", /protected branch|branch protection|gh006|gh013|repository rule violations/],
+  ["AUTH_FAILED", /authentication failed|could not read (?:username|password)|(?:username|password) for |terminal prompts disabled|bad credentials|invalid credentials|requires authentication/],
+  ["PERMISSION_DENIED", /permission denied|access denied|permission to [^ ]+ denied|write access to repository not granted|not permitted/],
+  ["HOOK_DECLINED", /hook declined|hook exited|hook failed|hook returned|pre-receive|update hook|post-receive/],
+  ["NETWORK", /could not resolve host|unable to access|connection (?:refused|timed out|reset|closed)|network is unreachable|timed out|early eof|remote end hung up|ssl|tls|could not read from remote/],
+  ["REMOTE_REJECTED", /remote rejected|failed to push|rejected/],
 ];
-const redactLine = raw => {
-  let t = raw.replace(/\s+/g, " ").trim();
-  t = t.replace(/(["'`])(?:[A-Za-z]:[\\/]|\.{0,2}\/)[^\n]{0,400}?\1/g, "<path>");   // quote-delimited path (may contain spaces)
-  t = t.replace(/(^|[\s'"`(=])(?:[A-Za-z]:[\\/]|\.{0,2}\/)[^\n]*$/, "$1<path>");     // unquoted path start: redact to end of line
-  t = t.replace(/\b[a-zA-Z][a-zA-Z0-9+.-]*:\/\/\S+/g, "<url>").replace(/\b[\w.-]+@[\w.-]+:\S+/g, "<url>");
-  for (const rx of RX_TOKENS) t = t.replace(rx, "<redacted>");
-  t = t.replace(/\b(?:proxy-)?authorization\b.*$/i, "<redacted>").replace(/\b(?:set-)?cookie\b.*$/i, "<redacted>");
-  t = t.replace(/(?:\b(?:bearer|basic)\b|x-access-token|token|password|passwd|secret|api[_-]?key)s?\s?[:=]?\s?(?:"[^"]*"|'[^']*'|\S+)/gi, "<redacted>");
-  t = t.replace(/[^\s@"'<>]{1,200}@(?=[A-Za-z0-9])/g, "<redacted>@");
-  return t;
-};
-export function redactRemote(t) {
+export function classifyFailure(text) {
   try {
-    let s = String(t ?? "");
-    if (s.length > RAW_MAX) s = s.slice(0, RAW_MAX).replace(/\S+$/, "");   // drop a possibly-cut trailing word
-    const out = s.split(/[\r\n\0\u2028\u2029]+/).map(redactLine).filter(Boolean).join(" ");
-    return out.replace(/[^\x20-\x7e]/g, "?").slice(0, REASON_MAX);
-  } catch { return "<redaction-failed>"; }
+    const t = String(text ?? "").slice(0, 65536).toLowerCase();
+    for (const [code, rx] of CLASSIFIERS) if (rx.test(t)) return code;
+  } catch { /* fall through */ }
+  return "UNKNOWN";
 }
-// Reason text for a failed push: prefer "remote: ..." and "! [remote rejected]" lines, else the last stderr line.
-export function pushFailReason(stderr) {
-  try {
-    const lines = String(stderr ?? "").slice(0, 65536).split(/[\r\n\0]+/).map(x => x.trim()).filter(Boolean);
-    const pick = lines.filter(x => /^remote:/.test(x) || /^!\s*\[remote rejected\]/.test(x));
-    return redactRemote(pick.length ? pick.join("\n") : (lines.at(-1) ?? "unknown"));
-  } catch { return "<redaction-failed>"; }
-}
+export const pushFailReason = stderr => classifyFailure(stderr);
+export const leaseErrorCode = e => `LEASE_ERROR:${classifyFailure(e?.message ?? e)}`;
 
 function fin(outcome, reasons, extra = {}) {
   const out = {outcome, taskId: null, branch: null, claimRef: null, reasons, ...extra};
@@ -289,8 +278,8 @@ export async function run(argv, cwd = process.cwd()) {
         }
       } catch (e) {
         // Same ls-remote gating as above: only a SUCCESSFUL empty ls-remote means "store unavailable"; a failed one is fail-closed,
-        // and a lease ref that exists (unreadable here) is treated as held. The error text is redacted (it is untrusted).
-        const why = redactRemote(String(e?.message ?? e)).slice(0, 120);
+        // and a lease ref that exists (unreadable here) is treated as held. The error text is untrusted: only a LEASE_ERROR:<CODE> classification is reported.
+        const why = leaseErrorCode(e);
         let lr = null; try { lr = git(["ls-remote", o.remote, `refs/uasco/claims/${id}`]); } catch { /* stays null => check failed */ }
         leaseInfo = leaseCheckFailed(lr) ? {status: "LEASE_CHECK_FAILED", error: why}
           : leaseRefAbsent(lr) ? {status: "LEASE_STORE_UNAVAILABLE", error: why} : {status: "HELD", error: why};
