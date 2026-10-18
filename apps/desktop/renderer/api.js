@@ -1,5 +1,6 @@
 // //TR: Bu modül renderer veri erişiminin tek kapısıdır: yalnız preload köprüsü (window.uasco.apiGet / apiPost) üzerinden GET ve sabit allow-list'li JSON POST yapar, token'ı hiç görmez; sonuçları epoch'lu önbellekte tutar, aynı anda gelen istekleri birleştirir ve eski epoch yanıtlarını atar.
 import {classifyFailure,mapRolesPage,mapRoleCatalogPage,mapRoleDetail,mapCockpit,emptyCockpit,mapProjects,mapMissions,mapControlStatus,mapEvents,mapAttention} from "./model.js";
+import {SCHEDULER_PATH,mapScheduler} from "./scheduler-core.js";
 import {MISSION_ID_RE,SAFE_ID_RE,mapMissionDetail,mapWorkRuns,mapWorkRunDetail,mapEvidenceList,mapEvidenceDetail} from "./work-core.js";
 import {devrunPath,filesPath,filePath,gitLogPath,gitDiffPath,exportsPath,exportItemPath,EXECUTORS_PATH,mapDevRun,mapFileList,mapFileContent,mapGitLog,mapGitDiff,mapExports,mapExecutors} from "./project-core.js";
 import {deliveriesPath,deliveryPath,mapDeliveries,mapDelivery} from "./delivery-core.js";
@@ -169,6 +170,8 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     // //TR: FA-V2-PRODUCT (UI-248): İlk Çalıştırma Kurulum Doğrulaması salt-okunur okumaları; GET /v1/install ve GET /v1/phase0 main allow-list'inde zaten vardır (yeni uç nokta yok, sorgu dizesi yok). GET /v1/system/executors için mevcut executors() erişimcisi YENİDEN kullanılır (kopya yok). Başarılıysa install-core eşleyicileriyle fail-closed sanitize edilir (bozuk yanıt dürüst ERROR), okuma hatası ayrık dürüst durum olarak döner.
     async installInstall(){const r=await get(INSTALL_PATH);return r.ok?mapInstallReport(r.data):{state:r.state,install:null,message:r.message}},
     async installPhase0(){const r=await get(PHASE0_PATH);return r.ok?mapPhase0Report(r.data):{state:r.state,phase0:null,message:r.message}},
+    // //TR: FA-V2-PRODUCT (UI-BUILD-SCHEDULER): Derleme Zamanlayıcı salt-okunur okuması; GET /v1/scheduler control-boundary allow-list'inde zaten vardır (yeni uç nokta, sorgu dizesi ve POST yok). Başarılıysa scheduler-core eşleyicisiyle fail-closed sanitize edilir; sunucu doğrulaması VERIFIED değilse faz uydurulmaz, okunamazsa sayılar null'dır (0 değil).
+    async scheduler(){const r=await get(SCHEDULER_PATH);return r.ok?mapScheduler(r.data):{state:r.state,scheduler:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }

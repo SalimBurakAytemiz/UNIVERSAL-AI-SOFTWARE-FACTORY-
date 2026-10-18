@@ -1014,7 +1014,7 @@ describe("Operations — route delegation (app.js VIEWS unchanged)", () => {
     expect(routes.routeFromHash("#/operations/")).toBe("operations");
     expect(routes.routeFromHash("#/operationss")).toBe(routes.DEFAULT_ROUTE);
     expect(routes.routeFromHash("#/Operations")).toBe(routes.DEFAULT_ROUTE);
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-11)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-12)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "scheduler", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("operations");
     expect(routes.ROUTES.filter((x: any) => x.factory).length).toBe(8);
     // Eski rotalar etkilenmez.
