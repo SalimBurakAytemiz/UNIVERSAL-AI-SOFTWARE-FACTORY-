@@ -36,6 +36,7 @@
    - `timeout-minutes: 90`.
    - `scripts/ci/ci-evidence.mjs --require` runs on `if: always()`. It writes `CI_EVIDENCE.json` bound to `GITHUB_SHA` and the PR head SHA, plus the run id/attempt and `RUNNER_ENVIRONMENT`, which proves `github-hosted`. It fails closed.
    - Artifact upload uses a pinned `upload-artifact` v4.6.2 SHA, `include-hidden-files`, and **14-day retention** to bound artifact storage. The npm cache stays the setup-node default.
+   - The artifact contains **only** `CI_EVIDENCE.json`: step id, status and duration, plus the SHA binding. No stdout/stderr, no step logs and no `VALIDATION_REPORT.json` go into a public artifact (Founder condition 7).
    - Pinned checkout/setup-node SHAs, `persist-credentials: false` and `permissions: contents: read` are unchanged.
 4. **Acceptance:** `scripts/phase0-acceptance.mjs` gets `"tests-2"` … `"tests-8"` added to its required-step list. The change is strictly stronger.
 

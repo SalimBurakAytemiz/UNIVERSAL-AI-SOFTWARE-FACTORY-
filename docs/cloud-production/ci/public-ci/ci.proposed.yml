@@ -1,4 +1,4 @@
-# //TR: ONERILEN korunan .github/workflows/ci.yml (maintainer trust-root reseal ile uygulanir; builder bu dosyayi .github/workflows altina KENDISI kopyalamaz). Repo PUBLIC oldugu icin standart GitHub-hosted ubuntu-latest + windows-latest ucretsizdir; larger/ucretli runner veya self-hosted runner YOKTUR. Kapsam aynidir: lockfile, ensure-dependencies, canonical run-validation (bolunmus tests kabuklari dahil), secret-sanity, bootstrap kernel self-test. Eklenenler: gereksiz ikili tetiklemeyi onleyen tetikleyici + concurrency, is zaman asimi, SHA'ya bagli fail-closed CI kaniti ve 14 gun saklanan artifact. Check adlari degismez: "validate (ubuntu-latest)" ve "validate (windows-latest)".
+# //TR: ONERILEN korunan .github/workflows/ci.yml (maintainer trust-root reseal ile uygulanir; builder bu dosyayi .github/workflows altina KENDISI kopyalamaz). Repo PUBLIC oldugu icin standart GitHub-hosted ubuntu-latest + windows-latest ucretsizdir; larger/ucretli runner veya self-hosted runner YOKTUR. Kapsam aynidir: lockfile, ensure-dependencies, canonical run-validation (bolunmus tests kabuklari dahil), secret-sanity, bootstrap kernel self-test. Eklenenler: gereksiz ikili tetiklemeyi onleyen tetikleyici + concurrency, is zaman asimi, SHA'ya bagli fail-closed CI kaniti ve 14 gun saklanan artifact (YALNIZ CI_EVIDENCE.json: adim kimligi/durum/sure; stdout/stderr, calisma loglari ve VALIDATION_REPORT.json public artifact'a YUKLENMEZ). Check adlari degismez: "validate (ubuntu-latest)" ve "validate (windows-latest)".
 name: CI
 on:
   push:
@@ -44,10 +44,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ci-evidence-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            .ai/runtime/CI_EVIDENCE.json
-            .ai/runtime/VALIDATION_REPORT.json
-            .ai/runtime/validation-*.log
+          path: .ai/runtime/CI_EVIDENCE.json
           include-hidden-files: true
           retention-days: 14
           if-no-files-found: warn
