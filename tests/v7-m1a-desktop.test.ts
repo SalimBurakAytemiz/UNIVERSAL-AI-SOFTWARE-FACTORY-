@@ -1,5 +1,7 @@
 // //TR: Bu test V7-PKG-M1A-MODE (cycle 2: D-M1A-STATE-MODEL-2026-10-15 + D-M1A-ACCEPTANCE-CONDITIONS-2026-10-15) masaüstü yüzeylerini gerçek görünüm modülleri + sahte DOM ile doğrular: koşu/görev/teslim/export yüzeylerinde "Testler çalıştırılmadı — NOT_VERIFIED (sandbox doğrulanmadı)" rozeti yalnız test yürütme kanıtı yoksa görünür (sahte veri yok), Ayarlar "Sandbox: UNAVAILABLE — M1a modu" ve ayrı UASCO profillerinin giriş gerekli durumunu gösterir, COMPLETE akışı NOT_EXECUTED beyanını ve değişen test/harness listesini gösterir, her onay için ayrı kutu ister (işaretsizse istek gönderilmez) ve kesin onay nesnelerini gönderir; klavye odağı hiçbir adımda BODY'ye düşmez (focus.js settleFocus).
-import {describe, it, expect, beforeEach} from "vitest";
+import {describe, it, expect, beforeEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import path from "node:path";
 import {pathToFileURL} from "node:url";

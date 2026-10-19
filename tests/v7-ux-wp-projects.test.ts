@@ -267,3 +267,133 @@ describe("UX WP-PROJECTS static safety and wiring", () => {
     expect(block).toContain("forced-colors");
   });
 });
+
+// //TR: test+states: projects (functional/negative/a11y) — aşağıdaki bloklar bozuk/eksik yanıtlarda uydurma değer olmadığını, kısmi okuma hatasının kartları yanıltmadığını, erişilebilirlik sözleşmesini (h1 tabindex, tipli düğmeler, etiketler) ve görünümün kullandığı tüm anahtarların TR/EN eşitliğini doğrular.
+describe("test+states projects: negative (malformed and partial reads)", () => {
+  it("treats a malformed /v1/projects payload as ERROR: em-dash KPIs, no cards, no verified pill, no invented numbers", async () => {
+    // //TR: Bozuk gövdeler (dizi değil, null, dizi yerine nesne) doğrulanmış sayılmaz.
+    const view = await load("views", "projects.js");
+    for (const bad of [{projects: "x"}, {projects: {a: 1}}, null, [], {}]) {
+      const {ctx} = await mkCtx(fromFix({"/v1/projects": bad, "/v1/missions": MISSIONS, "/v1/work-runs": RUNS}));
+      const root = await view.render(ctx);
+      expect(cards(root).length, JSON.stringify(bad)).toBe(0);
+      expect(kpiValue(root, "pf-projects"), JSON.stringify(bad)).toBe("—");
+      expect(kpiValue(root, "pf-environments")).toBe("—");
+      expect(pills(kpi(root, "pf-projects"))).not.toContain("VERIFIED");
+      expect(byId(root, "project-form")).not.toBeNull();
+    }
+  });
+  it("drops project rows without a projectId instead of fabricating a card, and shows missing fields as an em-dash", async () => {
+    const view = await load("views", "projects.js");
+    const {ctx} = await mkCtx(fromFix({"/v1/projects": {projects: [{name: "Kimliksiz"}, 7, null, {projectId: P1}]}, "/v1/missions": {missions: []}, "/v1/work-runs": {workRuns: []}}));
+    const root = await view.render(ctx);
+    expect(cards(root).length).toBe(1);
+    expect(root.textContent).not.toContain("Kimliksiz");
+    const dds = all(cardFor(root, P1)).filter(n => n.tagName === "DD").map(n => n.textContent);
+    expect(dds.filter(t => t === "—").length).toBeGreaterThanOrEqual(3);
+    expect(kpiValue(root, "pf-environments")).toBe("0");
+  });
+  it("keeps run data honest when only /v1/work-runs fails: mission strips stay real, no run id or run pill is invented", async () => {
+    const view = await load("views", "projects.js");
+    const {ctx} = await mkCtx(fromFix({"/v1/projects": PROJECTS, "/v1/missions": MISSIONS}));
+    const root = await view.render(ctx);
+    expect(kpiValue(root, "pf-missions")).toBe("5");
+    expect(kpiValue(root, "pf-runs")).toBe("—");
+    expect(pills(kpi(root, "pf-runs"))).toEqual(["UNAVAILABLE"]);
+    const c1 = cardFor(root, P1);
+    expect(cls(c1, "pf-runline").length).toBe(0);
+    expect(c1.textContent).toContain("Koşu verisi canlı değil");
+    expect(c1.textContent).not.toContain("run_p1");
+    expect(byId(root, `pf-strip-${P1}`)).not.toBeNull();
+  });
+  it("keeps mission data honest when only /v1/missions fails: no portfolio strip, runs are not attributed to projects", async () => {
+    const view = await load("views", "projects.js");
+    const {ctx} = await mkCtx(fromFix({"/v1/projects": PROJECTS, "/v1/work-runs": RUNS}));
+    const root = await view.render(ctx);
+    expect(byId(root, "projects-journey-strip")).toBeNull();
+    expect(kpiValue(root, "pf-missions")).toBe("—");
+    for (const c of cards(root)) { expect(cls(c, "pf-runline").length).toBe(0); expect(c.textContent).not.toContain("run_p"); }
+  });
+  it("never renders a Verified/Connected claim anywhere when every read fails", async () => {
+    // //TR: Hiçbir okuma yokken "Doğrulandı/Bağlı" gibi ifadeler görünmez.
+    const view = await load("views", "projects.js");
+    for (const lang of ["tr", "en"]) {
+      const {ctx} = await mkCtx(() => { throw new Error("x: HTTP 404"); }, lang);
+      const root = await view.render(ctx);
+      expect(all(root).filter(n => n.dataset.pill === "VERIFIED").length).toBe(0);
+      expect(root.textContent, lang).not.toMatch(lang === "tr" ? /Doğrulandı|Bağlı\b/ : /\bVerified\b|\bConnected\b/);
+    }
+  });
+  it("renders project text as text (never markup) and does not POST on render", async () => {
+    const view = await load("views", "projects.js");
+    const {ctx, calls} = await mkCtx(fromFix({"/v1/projects": {projects: [{projectId: P1, name: "<img src=x onerror=1>", repository: {path: "<b>x</b>"}}]}, "/v1/missions": {missions: []}, "/v1/work-runs": {workRuns: []}}));
+    const root = await view.render(ctx);
+    expect(cardFor(root, P1).textContent).toContain("<img src=x onerror=1>");
+    expect(all(root).some(n => n.tagName === "IMG" || n.tagName === "B")).toBe(false);
+    expect(calls.every(c => c.startsWith("/v1/"))).toBe(true);
+  });
+  it("every button in the rendered view has an explicit type (no accidental form submit)", async () => {
+    const view = await load("views", "projects.js");
+    for (const fix of [FULL, {}] as Array<Record<string, any>>) {
+      const {ctx} = await mkCtx(fromFix(fix));
+      const root = await view.render(ctx);
+      const btns = all(root).filter(n => n.tagName === "BUTTON");
+      expect(btns.length).toBeGreaterThan(0);
+      for (const b of btns) expect(["button", "submit"], b.id || b.textContent).toContain(b.getAttribute("type"));
+      expect(byId(root, "project-submit")!.getAttribute("type")).toBe("submit");
+    }
+  });
+});
+
+describe("test+states projects: accessibility", () => {
+  it("h1 is the programmatic focus target (tabindex -1), unique and non-empty", async () => {
+    const view = await load("views", "projects.js");
+    const {ctx} = await mkCtx(fromFix(FULL));
+    const root = await view.render(ctx);
+    const h1s = all(root).filter(n => n.tagName === "H1");
+    expect(h1s.length).toBe(1);
+    expect(h1s[0].id).toBe("view-title");
+    expect(h1s[0].getAttribute("tabindex")).toBe("-1");
+    expect(h1s[0].textContent.length).toBeGreaterThan(0);
+  });
+  it("state notes expose role=status, the project form has an accessible name and inputs are labelled", async () => {
+    const view = await load("views", "projects.js");
+    const {ctx} = await mkCtx(() => { throw new Error("x: HTTP 404"); });
+    const root = await view.render(ctx);
+    const notes = all(root).filter(n => n.className.includes("note-unavailable"));
+    expect(notes.length).toBeGreaterThan(0);
+    for (const n of notes) expect(n.getAttribute("role")).toBe("status");
+    expect(byId(root, "project-form")!.getAttribute("aria-labelledby")).toBe("project-form-t");
+    expect(byId(root, "project-form-t")!.tagName).toBe("SUMMARY");
+    for (const id of ["project-name", "project-repo", "project-env"]) {
+      const lab = all(root).find(n => n.tagName === "LABEL" && n.getAttribute("for") === id);
+      expect(lab, id).toBeDefined();
+      expect(lab!.textContent.length).toBeGreaterThan(0);
+    }
+  });
+  it("English renders the accessible group labels in English", async () => {
+    const view = await load("views", "projects.js");
+    const {ctx} = await mkCtx(fromFix(FULL), "en");
+    const root = await view.render(ctx);
+    const group = all(root).find(n => n.getAttribute("role") === "group" && n.className.includes("kpi-row"))!;
+    expect(group.getAttribute("aria-label")).not.toBe("Portföy özeti");
+    expect(group.getAttribute("aria-label")!.length).toBeGreaterThan(0);
+    expect(byId(root, "projects-journey-strip")!.getAttribute("aria-label")).not.toContain("Portföy");
+  });
+});
+
+describe("test+states projects: EN/TR parity for every key the view uses", () => {
+  it("tr and en have identical key sets and placeholder parity; every literal key in projects.js exists in both", async () => {
+    // //TR: Görünümün kullandığı tüm sabit anahtarlar iki sözlükte vardır ve yer tutucuları eşittir.
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    expect(Object.keys(en).sort()).toEqual(Object.keys(tr).sort());
+    const src = read("views", "projects.js");
+    const keys = new Set<string>();
+    for (const m of src.matchAll(/(?:\bt\(|labelKey:|titleKey:|hintKey:|itemLabelKey:|addKey:|removeKey:)\s*"([a-zA-Z0-9_.]+)"/g)) keys.add(m[1]);
+    expect(keys.size).toBeGreaterThan(10);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of keys) { expect(k in tr && k in en, k).toBe(true); expect(ph(en[k]), k).toBe(ph(tr[k])); expect(tr[k].trim().length, k).toBeGreaterThan(0); expect(en[k].trim().length, k).toBeGreaterThan(0); }
+    for (const c of ["IDLE", "WAITING", "ACTIVE", "ATTENTION", "BLOCKED", "FAILED", "DONE", "STOPPED", "NEUTRAL"]) expect(`pill.${c}` in tr && `pill.${c}` in en, c).toBe(true);
+    for (const s of ["VERIFIED", "STALE", "UNAVAILABLE", "OFFLINE", "ERROR"]) expect(`state.${s}` in tr && `state.${s}` in en, s).toBe(true);
+  });
+});

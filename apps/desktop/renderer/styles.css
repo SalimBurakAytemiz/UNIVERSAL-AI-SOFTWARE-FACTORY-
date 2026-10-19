@@ -187,6 +187,7 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .spill-active,.spill-loading{color:var(--accent)}.spill-loading .icon{animation:pulse 1.4s ease-in-out infinite}
 .spill-stale,.spill-waiting,.spill-attention{color:var(--warn)}
 .spill-not_verified{color:var(--warn);border-style:dashed}
+.spill-recovering{color:var(--warn)}
 .spill-failed{color:var(--danger);border-width:2px}
 .spill-blocked{color:var(--danger);border-style:dashed;border-width:2px}
 .spill-denied{color:var(--purple);border-width:2px}
@@ -407,6 +408,16 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .money-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
 .money-list .money{font-weight:700}
 .company-money{display:grid;gap:var(--space-1)}
+/* //TR: UI-113 "Onay gerekli" paneli yalnız mevcut token'ları kullanır (yeni renk yok); forced-colors altında sınırlar CanvasText'e düşer, odak halkası Highlight olur. */
+.required-row{display:grid;gap:var(--space-2)}
+.required-row[data-high-risk="1"]{border-color:var(--warn)}
+.required-row[data-irreversible="1"]{border-style:dashed}
+.required-row time{font-variant-numeric:tabular-nums}
+#inbox-required :focus-visible,.view-inbox [id^="ap-card-"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (forced-colors:active){
+  .required-row{border:1px solid CanvasText;forced-color-adjust:auto}
+  #inbox-required :focus-visible,.view-inbox [id^="ap-card-"]:focus-visible{outline:3px solid Highlight}
+}
 /* //TR: UX WP-DELIVERY: Teslimat & SRE görünümü mevcut token tabanını kullanır (palet değişmez); yalnız bölüm aralığı, sağlık olguları ve Founder kapılı bölümlerin ayrık görseli eklenir. */
 .view-delivery{container-type:inline-size;display:grid;gap:var(--space-4)}
 .delivery-section{display:grid;gap:var(--space-3)}
@@ -453,6 +464,22 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 @media (forced-colors:active){
   .evidence-item{border:1px solid CanvasText;forced-color-adjust:auto}
 }
+/* //TR: UI-023 Görev Kanban Panosu: yatay kaydırılabilir yaşam-döngüsü sütunları; yalnız mevcut token'lar (yeni renk yok), dar kapsayıcıda tek sütun, forced-colors'da kenarlık korunur. */
+.layout-toggle{margin:0 0 var(--space-3)}
+.kanban{display:grid;gap:var(--space-3)}
+.kanban-cols{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(14rem,1fr);gap:var(--space-3);overflow-x:auto;padding-bottom:var(--space-2)}
+.kanban-col{display:grid;align-content:start;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-2);min-width:0}
+.kanban-col-title{margin:0;display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);font-size:var(--fs-label)}
+.kanban-col-count{font-variant-numeric:tabular-nums;font-weight:800}
+.kanban-cards{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2)}
+.kanban-card{display:grid;gap:.2rem;padding:var(--space-2) var(--space-3);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)}
+.kanban-card[data-selected="1"]{border-color:var(--focus)}
+.kanban-card-meta,.kanban-card-raw,.kanban-card-badges{margin:0;font-size:var(--fs-caption);color:var(--muted)}
+@media (max-width:40rem){.kanban-cols{grid-auto-flow:row;grid-auto-columns:auto}}
+@media (forced-colors:active){
+  .kanban-col,.kanban-card{border:1px solid CanvasText;forced-color-adjust:auto}
+  .kanban-card[data-selected="1"]{outline:2px solid Highlight}
+}
 /* //TR: UX WP-AGENTS: Rol kataloğu premium katmanı mevcut WP2/WP3 token tabanını kullanır (palet değişmez, yeni renk token'ı yok): genel bakış istatistikleri + küme dağılımı (minibars) + süzgeçli gözatma tablosu + rol tanımı ayrıntısı. Vurgu yalnız mevcut --accent/--glow/--border token'larından gelir; forced-colors altında sınırlar CanvasText'e düşer, reduced-motion global kuralla korunur. */
 .view-workforce{display:grid;gap:var(--space-4)}
 .wf-catalog,.wf-browse,.wf-detail{display:grid;gap:var(--space-3)}
@@ -482,6 +509,19 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 @media (forced-colors:active){
   .wf-stat,.wf-cat-table tr[data-selected="1"]{border:1px solid CanvasText;forced-color-adjust:auto}
 }
+/* //TR: UI-030 işçi filosu ızgarası: yalnız mevcut token'lar (yeni renk yok); kartlar durum kovalarına göre gruplanır, forced-colors altında sınırlar CanvasText'e düşer. */
+.wf-fleet,.wf-fleet-group{display:grid;gap:var(--space-3)}
+.wf-fleet-h{margin:0;font-size:var(--fs-label);color:var(--muted);font-weight:700}
+.wf-fleet-list{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:var(--space-3)}
+.wf-fleet-card{display:grid;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-2)}
+.wf-fleet-id{overflow-wrap:anywhere}
+.wf-fleet-kv{margin:0;display:grid;gap:.15rem;font-size:var(--fs-caption)}
+.wf-fleet-kv dt{color:var(--muted)}
+.wf-fleet-kv dd{margin:0}
+.wf-fleet-unknown{color:var(--muted)}
+@media (forced-colors:active){
+  .wf-fleet-card{border:1px solid CanvasText;forced-color-adjust:auto}
+}
 /* //TR: UX WP-QA-SEC Güvence (QA + Güvenlik) görünümü: WP2 token/bileşenlerini yeniden kullanır, YENİ renk token'ı eklemez; renk tek başına anlam taşımaz (ikon+metin+desen). */
 .qa-stats{margin:var(--space-2) 0}
 .qa-stat[data-tone="ok"] .wf-stat-num{color:var(--ok)}
@@ -500,6 +540,15 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .qa-foundernote{margin-top:var(--space-2)}
 .qa-foundernote summary{cursor:pointer;color:var(--muted);font-size:var(--fs-label)}
 .qa-sec-table td,.qa-dyn-table td{vertical-align:top}
+.as-reviews-table td{vertical-align:top}
+.as-reviews-head{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2)}
+.as-reviews-kv dd{overflow-wrap:anywhere}
+.as-lineage-list{list-style:none;margin:.2rem 0 0;padding-left:1.1rem;display:grid;gap:.3rem;border-left:1px solid var(--border-ui)}
+.as-lineage-root{padding-left:0;border-left:0}
+.as-lineage-leaf{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem;overflow-wrap:anywhere}
+.as-lineage-ungrouped{margin-top:var(--space-2)}
+.as-testrep-table td{vertical-align:top}
+.as-testrep-head{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2)}
 @media (forced-colors:active){
   .qa-stat,.qa-code,.qa-sec-table tr[class~="row-selected"]{border:1px solid CanvasText;forced-color-adjust:auto}
 }

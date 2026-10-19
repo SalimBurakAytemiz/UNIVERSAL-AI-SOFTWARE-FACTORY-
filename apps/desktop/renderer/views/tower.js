@@ -21,11 +21,11 @@ export async function render(ctx){
   const logText=h(doc,"pre",{id:"logText",class:"log",tabindex:"0","aria-label":ctx.t("tower.logs"),text:ctx.t("tower.pickLog")});
   const logButtons=h(doc,"div",{id:"logButtons",class:"btn-row"});const selected=h(doc,"p",{id:"selectedRun",class:"mono",text:MISSING});
   async function loadRun(runId){
-    selected.textContent=runId;
+    selected.textContent=runId;eventsEl.textContent=ctx.t("tower.loading");logText.textContent=ctx.t("tower.pickLog");logButtons.replaceChildren(h(doc,"span",{class:"note",role:"status",text:ctx.t("tower.loading")}));
     const [events,logs]=await Promise.all([api.raw(`/v1/runs/${encodeURIComponent(runId)}/events`),api.raw(`/v1/runs/${encodeURIComponent(runId)}/logs`)]);
     eventsEl.textContent=events.ok?((events.data.events??[]).slice(-200).map(x=>`${x.timestamp??""} [${x.severity??"INFO"}] ${x.stage??""}/${x.event??""} ${JSON.stringify(x.details??{})}`).join("\n")||ctx.t("tower.noEvents")):ctx.t(`state.${events.state}`);
     const nodes=logs.ok?(logs.data.logs??[]).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:async()=>{const y=await api.raw(`/v1/runs/${encodeURIComponent(runId)}/logs/${encodeURIComponent(x.name)}`);logText.textContent=y.ok?(y.data.truncated?`${ctx.t("tower.truncated")}\n`:"")+y.data.text:ctx.t(`state.${y.state}`)}},text:`${x.name} (${ctx.t("tower.bytes",{n:x.size})})`})):[];
-    logButtons.replaceChildren(...(nodes.length?nodes:[doc.createTextNode(ctx.t("tower.noLogs"))]));
+    logButtons.replaceChildren(...(nodes.length?nodes:[logs.ok?doc.createTextNode(ctx.t("tower.noLogs")):stateNote(ctx,logs.state)]));
   }
   const runList=runs.runs.slice(0,20).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:()=>loadRun(x.runId)},text:`${x.runId} · ${statusLabel(ctx,x.summary?.status??x.manifest?.status??"RUNNING")}`}));
   const attention=h(doc,"div",{id:"attention"});ctx.renderAttention(attention,att);

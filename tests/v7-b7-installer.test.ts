@@ -1,11 +1,13 @@
 // //TR: Bu test B7 Windows kurulum paketini gerçek kurulum yapmadan doğrular: electron-builder ayarı (kullanıcı başına, dizin seçimi, kısayollar, oneClick yok, provisioned electronDist, artifact adı), NSIS include'daki boş alan/ağ sürücüsü kontrolleri ve varsayılan kapalı "kullanıcı verilerini de sil" seçeneği, kurulu mod yol eşlemesinin bütün değişken veriyi userData altına koyması, token'ın argv/env/log'a girmemesi, tek örnek kilidi ve geliştirme modunun değişmemesi.
-import {describe, it, expect} from "vitest";
+import {describe, it, expect, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import {PassThrough} from "node:stream";
 import {pathToFileURL} from "node:url";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const root = path.resolve(__dirname, "..");
 const desk = path.join(root, "apps", "desktop");

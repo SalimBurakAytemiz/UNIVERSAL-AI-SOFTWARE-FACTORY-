@@ -1,12 +1,13 @@
 // //TR: Bu görünüm AI İş Gücü alanıdır. Üst bölüm (DEĞİŞMEDİ): kayıtlı roller (GET /v1/agents kanonik sayı), hedef rol, sertifikalı sayı, aktif çalışan koşular (GET /v1/cockpit) ve canlı koşular (GET /v1/work-runs) ayrı gösterilir; "599 hedef rol kataloğu ≠ çalışan ajan" notu açıktır.
 // //TR: UX WP-AGENTS: Alt bölüm canlı /v1/roles rol KATALOĞUNA bağlı referans-sınıf premium katmandır: katalog genel bakışı (gerçek toplam + küme/loncaya göre dağılım), küme/lonca/başlık süzgeciyle gözatma ve rol tanımı ayrıntısı (sorumluluklar/uzmanlık/yasak eylemler/değerlendirme şartnameleri GET /v1/roles/:roleId'den). Her değer GERÇEK veridendir; api.roleCatalog() tam-ya-da-boş döner (asla kısmi); katalog yüklü değilse dürüst sayı-ya-da-boş gösterilir, 599 uydurulmaz.
 // //TR: DÜRÜST ROL ANLAMI (FD-NIHAI): 599 kayıt rol TANIMLARI kataloğudur; 599 canlı/aktif ajan DEĞİLDİR ve sertifikalı işçi DEĞİLDİR. runtimeStatus (UNKNOWN) ve proficiencyStatus (NOT_EVALUATED / 0 sertifikalı) dürüst ve belirgin gösterilir; asla N aktif ajan / N sertifikalı işçi / canlı ajan etkinliği ima edilmez. API verisi HTML olarak yorumlanmaz (yalnız h()/textContent).
-import {h,panel,chip,stateNote,emptyNote,statusPill,statePill,miniBars} from "../components.js";
+import {h,panel,chip,stateNote,emptyNote,statusPill,statusLabel,statePill,miniBars} from "../components.js";
 import {formatCount,MISSING} from "../model.js";
 import {liveRuns,formatDateTime} from "../work-core.js";
 import {selection} from "../forms.js";
 import {notVerifiedBadge,runNotVerified} from "../m1a.js";
 import {buildTaxonomy} from "../workforce-taxonomy-core.js";
+import {fleetGroups,fleetCard} from "../fleet-core.js";
 
 // //TR: Katalog gözatma seçimi (süzgeç + seçili rol) görünüm ömrü boyunca korunur; periyodik yenileme seçimi bozmaz.
 const catState={cluster:"ALL",guild:"ALL",q:"",roleId:null};
@@ -24,6 +25,30 @@ function liveRunsBody(ctx,runs){
     h(doc,"tbody",{},live.map(r=>h(doc,"tr",{dataset:{runId:r.runId}},
       h(doc,"td",{class:"mono",text:r.runId}),h(doc,"td",{text:r.role??MISSING}),h(doc,"td",{},statusPill(ctx,r.status),runNotVerified(r)?[" ",notVerifiedBadge(ctx,"run")]:null),h(doc,"td",{text:formatDateTime(r.heartbeatAt,ctx.i18n.lang)}),
       h(doc,"td",{},r.missionId?h(doc,"button",{type:"button",class:"link-btn",id:`wf-open-${r.runId}`,dataset:{focusKey:`wf-open-${r.runId}`},on:{click:()=>{selection.missionId=r.missionId;ctx.navigate("work")}},text:ctx.t("workforce.live.open")}):MISSING))))));
+}
+
+// //TR: UI-030 işçi filosu ızgarası: GET /v1/work-runs'tan yalnız canlı koşular, durum kovalarına göre kart; okuma başarısızsa dürüst durum notu ızgaranın yerini alır (asla 0). Olmayan alanlar BİLİNMİYOR; en çok 50 kart + "X / Y" notu.
+function fleetBody(ctx,runs){
+  const doc=ctx.doc;
+  if(runs.state!=="VERIFIED")return stateNote(ctx,runs.state,runs.state==="UNAVAILABLE"?"run.unavailable":undefined);
+  const f=fleetGroups(runs.items);
+  if(!f.total)return emptyNote(ctx,"workforce.fleet.none");
+  const unknown=()=>h(doc,"span",{class:"wf-fleet-unknown",dataset:{unknown:"1"},text:ctx.t("workforce.fleet.unknown")});
+  const card=run=>{
+    const c=fleetCard(run);
+    return h(doc,"li",{class:"wf-fleet-card",dataset:{fleetRunId:c.runId,status:c.status}},
+      h(doc,"span",{class:"mono wf-fleet-id",text:c.runId}),statusPill(ctx,c.status),runNotVerified(run)?notVerifiedBadge(ctx,"run"):null,
+      h(doc,"dl",{class:"wf-fleet-kv"},
+        h(doc,"div",{},h(doc,"dt",{text:ctx.t("workforce.fleet.role")}),h(doc,"dd",{},c.role?h(doc,"span",{text:c.role}):unknown())),
+        h(doc,"div",{},h(doc,"dt",{text:ctx.t("workforce.fleet.updated")}),h(doc,"dd",{},c.updatedAt?h(doc,"time",{datetime:c.updatedAt,text:formatDateTime(c.updatedAt,ctx.i18n.lang)}):unknown()))),
+      c.missionId?h(doc,"button",{type:"button",class:"link-btn",id:`wf-fleet-open-${c.runId}`,dataset:{focusKey:`wf-fleet-open-${c.runId}`},"aria-label":ctx.t("workforce.fleet.open",{id:c.missionId}),on:{click:()=>{selection.missionId=c.missionId;ctx.navigate("work")}},text:ctx.t("workforce.live.open")}):null);
+  };
+  return h(doc,"div",{class:"wf-fleet",role:"region","aria-label":ctx.t("workforce.fleet.label")},
+    h(doc,"p",{class:"note",text:ctx.t("workforce.fleet.lead")}),
+    f.groups.map(g=>h(doc,"section",{class:"wf-fleet-group",dataset:{bucket:g.status},"aria-label":ctx.t("workforce.fleet.group",{status:statusLabel(ctx,g.status),n:String(g.count)})},
+      h(doc,"h3",{class:"wf-fleet-h",text:ctx.t("workforce.fleet.group",{status:statusLabel(ctx,g.status),n:String(g.count)})}),
+      h(doc,"ul",{class:"wf-fleet-list"},g.items.map(card)))),
+    f.truncated?h(doc,"p",{class:"note",dataset:{truncated:"1"},text:ctx.t("workforce.fleet.showing",{shown:String(f.shown),total:String(f.total)})}):null);
 }
 
 // //TR: Ham durum (UNKNOWN/NOT_EVALUATED/NOT_EXECUTED vb.) yükseltilmeden nötr rozet olarak gösterilir; renk tek başına anlam taşımaz, metin ham değerdir.
@@ -195,6 +220,7 @@ export async function render(ctx,route){
         legacy!==null?h(doc,"p",{class:"note",dataset:{legacyReference:"LEGACY_REFERENCE_ONLY"},text:ctx.t("workforce.registryLegacy",{n:formatCount(legacy)})}):null),
       panel(ctx,{titleKey:"workforce.active",id:"wf-act",className:"panel-active"},
         h(doc,"p",{class:"kpi-value",text:formatCount(w.activeWorkerRuns)}),h(doc,"p",{class:"duo-sub",text:ctx.t("workforce.activeNote")}),chip(ctx,activeBlock))),
+    panel(ctx,{titleKey:"workforce.fleet.title",id:"wf-fleet"},fleetBody(ctx,runs)),
     panel(ctx,{titleKey:"workforce.live.title",id:"wf-live"},liveRunsBody(ctx,runs)),
     ...catalogSection(ctx,catalog,detail));
 }
