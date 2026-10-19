@@ -24,8 +24,10 @@ const p4d=()=>node(["scripts/validate-paste4d-release-truth.mjs"]),p4c=()=>node(
 function mutate(f:string,fn:(s:string)=>string,check:()=>void){const orig=rd(f);try{wr(f,fn(orig));check()}finally{wr(f,orig)}}
 // //TR: Geçici dosya ve onun için oluşturulan dizin (ör. .ai/runtime) geri alınır; ağaç temiz export olarak kalır.
 function withFile(f:string,content:string,check:()=>void){const dir=path.dirname(path.join(tree,f)),existed=fs.existsSync(dir);try{fs.mkdirSync(dir,{recursive:true});wr(f,content);check()}finally{fs.rmSync(path.join(tree,f),{force:true});if(!existed)fs.rmSync(dir,{recursive:true,force:true})}}
-beforeAll(()=>{fs.mkdirSync(tree);copyTree(repo,tree)});
-afterAll(()=>{fs.rmSync(base,{recursive:true,force:true})});
+// //TR: Tam ağaç kopyası ve silinmesi gerçek dosya G/Ç'sidir; yavaş Windows runner'da varsayılan 10 sn kanca sınırını aşabilir (23db1fe: afterAll zaman aşımı, tüm testler PASS). Kanca yine tamamlanmak zorundadır.
+const HOOK_MS=180_000;
+beforeAll(()=>{fs.mkdirSync(tree);copyTree(repo,tree)},HOOK_MS);
+afterAll(()=>{fs.rmSync(base,{recursive:true,force:true})},HOOK_MS);
 describe("release truth modes (PKGR-F1)",()=>{
   it("the current tree passes both truth validators",()=>{expect(node(["scripts/validate-paste4d-release-truth.mjs"],repo).status).toBe(0);expect(node(["scripts/validate-paste4c-doc-truth.mjs"],repo).status).toBe(0)});
   it("pre-seal mode keeps the old absence rules",()=>{setMode("PRE_SEAL");const d=p4d();expect(d.status,d.out).toBe(0);expect(d.out).toContain("mode=PRE_SEAL");expect(p4c().status).toBe(0);const m=mech();expect(m.status,m.out).toBe(0);

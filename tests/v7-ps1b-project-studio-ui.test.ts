@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
+import {logicalTestFiles} from "./support/validation-test-shards.js";
 
 const root = path.resolve(__dirname, "..");
 const desk = path.join(root, "apps", "desktop");
@@ -608,7 +609,7 @@ describe("PS-1B workspace tabs (fake DOM)", () => {
     expect(text(root)).toContain("CLAUDE_REVIEWER");
     expect(text(byId(root, "studio-ov-security")!)).toContain("1 kanıt");
     const routes = await load(rend, "routes.js");
-    expect(routes.ROUTES.map((r: any) => r.id)).toEqual(["home", "projects", "work", "workforce", "assurance", "delivery", "tower", "inbox", "company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "settings"]);
+    expect(routes.ROUTES.map((r: any) => r.id)).toEqual(["home", "projects", "work", "workforce", "assurance", "delivery", "tower", "inbox", "company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "settings"]);
   });
   it("overview never claims review or security state the server did not report", async () => {
     const {root} = await openWs({get: projectsGet({[`/v1/missions?projectId=${PID}`]: {missions: [{missionId: MID, projectId: PID, title: "G1", status: "EXECUTING", riskLevel: "R1"}]}, "/v1/work-runs": {workRuns: [{runId: "run_aaaaaa", missionId: MID, status: "RUNNING", startedAt: "2026-10-15T00:00:00Z"}]}, "/v1/evidence?runId=run_aaaaaa": {evidence: []}})});
@@ -897,7 +898,8 @@ describe("PS-1B static safety and wiring", () => {
   });
   it("validation.json appends this test at the very end of the tests step and nothing else changed there", () => {
     const cfg = JSON.parse(read(root, "config", "validation.json"));
-    const step = cfg.steps.find((s: any) => s.id === "tests");
+    // PUBLIC-CI: "tests" adımı sıralı tests, tests-2..tests-N kabuklarına bölünebilir; bitişiklik/sıra kuralı kabukların birleşimi olan mantıksal liste üzerinde aynen geçerlidir.
+    const step = {command: logicalTestFiles(cfg)};
     // c2: PS1B-C1-001 testi PS-1B UI testinin hemen ardından; V7-PKG-M1A-MODE (merge-tool sözleşmesi) m1a-* testlerini, UX paketleri de ux-* testlerini bu çiftin sonrasına ekler.
     const j = step.command.indexOf("tests/v7-ps1b-project-studio-ui.test.ts");
     expect(step.command.slice(j, j + 2)).toEqual(["tests/v7-ps1b-project-studio-ui.test.ts", "tests/v7-ps1b-relpath-canonical.test.ts"]);

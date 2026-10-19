@@ -1,0 +1,31 @@
+{
+  "//TR": "Bu checkpoint, PR #10 (pkg-lease1) için Founder'ın dar kapsamlı korunan-dosya yetkisini kaydeder; wiring kapsam dışıdır.",
+  "schemaVersion": "1.0.0",
+  "checkpoint": "V7-PKG-LEASE1-AUTHORIZATION",
+  "date": "2026-10-18",
+  "pr": 10,
+  "branch": "claude/atomic-lease-and-sha-verdict",
+  "reviewedHeadAtAuthorization": "23e0eb06135b12d536030e84aa30d9b26fb9fa47",
+  "status": "AUTHORIZATION RECORD ONLY: not clean; independent review and merge gate still required",
+  "founderAuthorization": {
+    "decisionId": "FA-LEASE1-2026-10-18",
+    "decision": "Founder decision 2026-10-18 (Local session chat, AskUserQuestion): 'Approve PR10 only'.",
+    "rule": "Only the listed protected files may change. New files only under automation/lib for the lease mechanism. config/validation.json: only add tests/uasco-atomic-lease.test.ts to the existing tests step; never remove or weaken a step. config/trust-root-manifest.json: reseal only.",
+    "protectedFiles": [
+      "automation/lib/task-lease.mjs",
+      "automation/lib/task-lease.d.mts",
+      "automation/lib/task-lease-git-store.mjs",
+      "automation/lib/task-lease-git-store.d.mts",
+      "automation/lib/lease-verdict.mjs",
+      "automation/lib/lease-verdict.d.mts",
+      "config/validation.json",
+      "config/trust-root-manifest.json"
+    ],
+    "excluded": [
+      "Atomic Lease wiring: orchestrator-engine.mjs, validateControl, review-pipeline.mjs and any other existing protected/core file",
+      "creating live refs/uasco/claims/* on origin",
+      "merge to master, force-push, release, signing"
+    ],
+    "recordedBefore": "the Local reseal of PR #10"
+  }
+}
