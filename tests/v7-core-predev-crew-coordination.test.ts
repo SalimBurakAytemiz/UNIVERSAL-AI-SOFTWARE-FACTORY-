@@ -1,5 +1,5 @@
 // //TR: Bu test CORE-5 crew/koordinasyon katmanını GERÇEK ürün kodundan geçirir: GERÇEK PreDevDriver (driver.ts), GERÇEK doğrulayıcılar (validateArtifactContent) ve GERÇEK WorkOsStore/journal; yalnız BuilderPort (TaskHub fixture'ı döndüren) ve ReworkDecider enjekte edilir. Driver/validator/store YENİDEN YAZILMAZ veya stub'lanmaz. Tam BA->Req->Plan->Arch->UX crew koşusu GERÇEK rol kimliklerini atar, YALNIZ bağımsız onay sonrası ilerler, koordinasyon ledger'ını (gerçek kayıtlardan türetilmiş) üretir ve sınırlı downstream rework döngüsünü (bir downstream rework talebi üst fazı yeniden açar, artefaktı supersede eder, yeniden onaylar, yeniden ilerler) VE rework sınırının aşılmasının fail-closed olduğunu doğrular. Dürüst: bu yalnız kaynak düzeyinde koordinasyon katmanıdır; üretilen hiçbir kod yürütülmez; hiçbir mission PRODUCT_VERIFIED'a ulaşmaz.
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +12,8 @@ import {TASKHUB_BRIEF} from "../core/workos/predev/fixtures/taskhub-brief.js";
 import {TASKHUB_ARTIFACTS} from "../core/workos/predev/fixtures/taskhub/index.js";
 import {buildCrewPlan, bindingForKind, canAssignmentTransition, advanceAssignment, newAssignment, TASK_ASSIGNMENT_STATES} from "../core/workos/crew/assignment.js";
 import {CrewCoordinator, CrewCoordinatorError, type ReworkDecider, type ReworkDecisionInput, type CrewStore} from "../core/workos/crew/coordinator.js";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const SCOPE = {tenantId: "t-crew-core5"};
 const RECORDER = "implementer@local.invalid";

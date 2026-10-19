@@ -1,5 +1,7 @@
 // //TR: Bu test REL-FX-3 risk düzeyi kabulünü doğrular: R3/R4 run başlatma 409 RISK_REQUIRES_FOUNDER_DECISION_AND_OS_SANDBOX ile reddedilir ve journal değişmez, hedef metindeki sahte onay/düzey ifadesi kapıyı açmaz (REL-AT-021), store da reddeder, journal'a enjekte edilmiş R4 run'ı runner WORKSPACE adımında klon ve alt süreç olmadan BLOCKED olur; R0-R2 davranışı değişmez ve yürütme bildirimi yanıtta görünür (V7-PKG-M1A-MODE: yürütme yalnız sandbox içinde, ana makinede asla; sandbox yoksa test/önizleme NOT_EXECUTED).
 import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import path from "node:path";
 import cp from "node:child_process";

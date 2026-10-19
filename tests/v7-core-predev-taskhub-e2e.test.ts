@@ -1,5 +1,5 @@
 // //TR: Bu test, TaskHub referans projesinin GERÇEK pre-dev artefakt setini (core/workos/predev/fixtures/taskhub/ altında, her biri ilgili UASCO role-builder rolünün gerçek çıktısı) GERÇEK ürün kodundan geçirir: GERÇEK PreDevDriver (driver.ts), GERÇEK doğrulayıcılar (validateArtifactContent) ve GERÇEK WorkOsStore/journal. Driver/validator/store YENİDEN YAZILMAZ veya stub'lanmaz; yalnız BuilderPort enjekte edilir ve produce(kind) ilgili fixture'ı döndürür. Beş faz uçtan uca sürülür (start -> produce=DRAFT -> submit(recorder) -> approve(bağımsız approver, boş olmayan evidenceRefs) -> advance); faz YALNIZ APPROVED sonrası ilerler ve dizi PRE_DEV'in sonuna (UxSpec APPROVED -> PRE_DEV_COMPLETE) ulaşır. İzlenebilirliği bilerek bozulmuş bir varyant GERÇEK doğrulayıcıca REJECTED olur ve İLERLEMEZ; alt rol yalnız ONAYLI üst artefaktları görür; journal replay eşitliği doğrulanır. Dönen hiçbir kod yürütülmez; bu yalnız PRE-DEV fazıdır.
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,6 +14,8 @@ import {TASKHUB_BRIEF} from "../core/workos/predev/fixtures/taskhub-brief.js";
 import {
   TASKHUB_ARTIFACTS, TASKHUB_BUSINESS_ANALYSIS, TASKHUB_REQUIREMENTS, TASKHUB_PLAN
 } from "../core/workos/predev/fixtures/taskhub/index.js";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const SCOPE = {tenantId: "t-taskhub-e2e"};
 const RECORDER = "implementer@local.invalid"; // kaydeden (recorder) kimliği; submit bu kimlikten yapılır.

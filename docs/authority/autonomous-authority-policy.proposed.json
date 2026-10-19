@@ -1,0 +1,76 @@
+{
+  "//TR": "ONERILEN genesis politikasi (henuz YETKI KAYNAGI DEGIL). Autonomous Authority Engine bunu ancak config/autonomous-authority-policy.json yolunda trust-root manifestinde SEALED ve hash'i eslesir durumdayken kabul eder; o zamana kadar her istek BLOCKED_BY_POLICY:POLICY_NOT_SEALED olur. Rutin 15 islem sinifi rol/dal/base/zaman/risk sinirlariyla verilir; harcama, ucretli servis, hukuki/finansal, uretim, yikici, gizli bilgi, politika/guvenlik kapisi degisikligi, GitHub APPROVE, master ve force-push hicbir grant ile verilemez.",
+  "schemaVersion": "1.0.0",
+  "policyId": "UASCO-AUTONOMOUS-AUTHORITY",
+  "policyVersion": 1,
+  "issuer": {
+    "principal": "FOUNDER",
+    "identityId": "founder:salimburakaytemiz",
+    "decisionRef": "FD-AUTONOMY-2026-10-19 (UASCO MASTER V2 - AUTONOMOUS AUTHORITY, ZERO ROUTINE APPROVAL & GOVERNED EXECUTION)"
+  },
+  "trustedFounderIdentityIds": ["founder:salimburakaytemiz"],
+  "repository": "SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY-",
+  "grants": [
+    {
+      "grantId": "G-ROUTINE-BUILD",
+      "actionClasses": ["REQUIREMENT_ANALYSIS", "ARCHITECTURE_DESIGN", "SOURCE_CHANGE", "TEST_CHANGE", "FAILURE_REPAIR", "BRANCH_CREATE", "FEATURE_BRANCH_PUSH", "PR_UPDATE", "REVIEW_DISPATCH", "CI_FAILURE_REPAIR", "EVIDENCE_ARCHIVE", "STATUS_REPORT"],
+      "roles": ["BUILDER"],
+      "branches": ["claude/*"],
+      "baseBranches": ["v7/integration"],
+      "paths": ["**"],
+      "pathsDeny": [],
+      "maxRisk": 3,
+      "notBefore": "2026-10-19T00:00:00Z",
+      "expiresAt": "2026-11-30T23:59:59Z"
+    },
+    {
+      "grantId": "G-REVIEW",
+      "actionClasses": ["EVIDENCE_ARCHIVE", "STATUS_REPORT"],
+      "roles": ["REVIEWER"],
+      "branches": ["claude/*"],
+      "baseBranches": ["v7/integration"],
+      "paths": ["docs/**"],
+      "pathsDeny": [],
+      "maxRisk": 1,
+      "notBefore": "2026-10-19T00:00:00Z",
+      "expiresAt": "2026-11-30T23:59:59Z"
+    },
+    {
+      "grantId": "G-MAINTAINER-PROTECTED-NARROW",
+      "actionClasses": ["TEST_REGISTRATION_APPEND", "TRUST_ROOT_RESEAL", "FEATURE_BRANCH_PUSH"],
+      "roles": ["MAINTAINER"],
+      "branches": ["claude/*"],
+      "baseBranches": ["v7/integration"],
+      "paths": ["**"],
+      "pathsDeny": [],
+      "maxRisk": 3,
+      "notBefore": "2026-10-19T00:00:00Z",
+      "expiresAt": "2026-11-30T23:59:59Z"
+    },
+    {
+      "grantId": "G-SUPERVISOR-FLOW",
+      "actionClasses": ["GOVERNED_MERGE", "NEXT_TASK_CLAIM", "TASK_RECOVERY", "REVIEW_DISPATCH", "STATUS_REPORT"],
+      "roles": ["SUPERVISOR", "DISPATCHER"],
+      "branches": ["claude/*"],
+      "baseBranches": ["v7/integration"],
+      "paths": ["**"],
+      "pathsDeny": [],
+      "maxRisk": 3,
+      "notBefore": "2026-10-19T00:00:00Z",
+      "expiresAt": "2026-11-30T23:59:59Z"
+    }
+  ],
+  "mergeRequirements": {
+    "baseBranch": "v7/integration",
+    "ciContexts": ["validate (ubuntu-latest)", "validate (windows-latest)"],
+    "ciAppSlug": "github-actions",
+    "requireIndependentReview": true,
+    "requireTrustRootPass": true,
+    "requireBranchProtection": true,
+    "blockingSeverities": ["P0", "P1"]
+  },
+  "retry": {
+    "maxAttempts": 3,
+    "backoffBaseMs": 60000
+  }
+}

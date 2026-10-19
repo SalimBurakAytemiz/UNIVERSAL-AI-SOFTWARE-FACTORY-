@@ -1,5 +1,7 @@
 // //TR: Bu test PS-1A c2 düzeltmelerini gerçek geçici dizin/git ve gerçek alt süreçlerle doğrular (ağ yok, AI sağlayıcı yok): PS1A-C1-F1 (yönetilmeyen/veri dizinine işaret eden repository.path ile tenant izolasyonunun aşılamaması), PS1A-C1-F2 (start beklerken stop/stopAll/GLOBAL_STOP gelirse süreç başlatılmaz, sızıntı yok) ve PS1A-C1-F3 (sahip API pid'i yeniden kullanılmışsa sahip canlı sayılmaz; dosyadan okunan önizleme maskelenir).
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 // SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
 import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
 import fs from "node:fs";
@@ -107,7 +109,8 @@ describe("PS1A-C1-F1: Studio routes only act on the project's own managed reposi
     expect(own.statusCode, own.body).toBe(200);
     // Doğrudan modül seviyesi: managedRepoRoot yalnız <dataDir>/projects/<id>/repo'yu kabul eder.
     const studio = new ProjectStudio({dataDir: b.dataDir, envPolicyFile: ENV_POLICY});
-    expect(studio.managedRepoRoot(pb).toLowerCase()).toBe(fs.realpathSync(bRepo).toLowerCase());
+    // //TR: Windows'ta os.tmpdir() 8.3 kisa adla (RUNNER~1) donebilir; JS fs.realpathSync kisa adi acmaz, realpathSync.native acar. Urun sozlesmesi uzun-ad kanonik yoldur; beklenen deger de ayni kanonik bicimde hesaplanir.
+    expect(studio.managedRepoRoot(pb).toLowerCase()).toBe(fs.realpathSync.native(bRepo).toLowerCase());
     expect(() => studio.managedRepoRoot({...pb, projectId: pForeign.projectId})).toThrow(StudioError);
     expect(() => studio.managedRepoRoot({...pb, repository: {path: bRepo}})).toThrow(/REPOSITORY_NOT_MANAGED/);
   }, T);
