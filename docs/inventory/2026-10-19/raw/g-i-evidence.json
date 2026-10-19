@@ -1,0 +1,1956 @@
+{
+ "//TR": "G/I denetim kaniti: e12dbdd icin yerel (CI olmayan) test kosusu ozeti, yeniden uretim betikleri ve ciktilari, rota-test eslemesi / G/I audit evidence: local (non-CI) test run summary for e12dbdd, repro scripts+outputs, route-to-test map.",
+ "schemaVersion": "1.0.0",
+ "generatedAt": "2026-10-19",
+ "subject": "origin/v7/integration@e12dbdd (git worktree /home/user/uasco-inventory, branch claude/master-work-inventory)",
+ "notCi": "This is NOT CI evidence. It was executed in the auditor's cloud container (Linux x64, root user) on a git-archive export of e12dbdd; it is not bound to any GitHub check and not Windows.",
+ "environment": {
+  "node": "v24.22.0",
+  "install": "npm ci --ignore-scripts (ELECTRON_SKIP_BINARY_DOWNLOAD=1), 294 packages",
+  "vitest": "4.1.11",
+  "fullSuiteWindowUtc": "2026-10-19T03:50:36Z..2026-10-19T04:03:10Z",
+  "note": "first full run used a git repo without HEAD; the 5 failing files were rerun after a local snapshot commit; aut2 and r1 then passed"
+ },
+ "fullSuite": {
+  "numTotalTestSuites": 487,
+  "numPassedTestSuites": 477,
+  "numFailedTestSuites": 10,
+  "numPendingTestSuites": 0,
+  "numTotalTests": 1540,
+  "numPassedTests": 1513,
+  "numFailedTests": 5,
+  "numPendingTests": 22,
+  "numTodoTests": 0
+ },
+ "failingAfterRerun": [
+  {
+   "file": "pkg-aut1-orchestrator.test.ts",
+   "test": "passes every orchestrator selftest scenario",
+   "message": "AssertionError: { \"results\": { \"e2e-implement-review-clean-integrate-next-package-release\": \"PASS\", \"codex-quota-persist-retry-resume-no-cycle-consumed-independent-work-continues\": \"PASS\", \"interruption-restart-resumes-exact-checkpoint-without-duplicate-provider-call\": \"PASS\", \"duplicate-scheduler-invocation-single-active-worker\": \"PASS\", \"blocked-review-remediation-rereview-and-lane-isolation\": \"PASS\", \"unknown-or-unsafe-command-fails-closed\": \"PASS\", \"cloud-unavailable-policy-aware-fallback\": \"PASS\", \"host-only-signing-never-routes-to-cloud\": \"PASS\", \"github-protection-unavailable-reports-cl"
+  },
+  {
+   "file": "pkg-t3-omniroute-install-compat.test.ts",
+   "test": "passes or honestly skips when OmniRoute is not installed",
+   "message": "AssertionError: { \"status\": \"FAIL\", \"reason\": \"NPM_ROOT_UNAVAILABLE\", \"detail\": \"NOT_FOUND\", \"npmRoot\": null } OMNIROUTE_INSTALL_COMPAT: FAIL NPM_ROOT_UNAVAILABLE reason=NOT_FOUND : expected 1 to be +0 // Object.is equality at /tmp/claude-0/-home-user-UNIVERSAL-AI-SOFTWARE-FACTORY-/2b112f87-31d8-5a52-96d5-8b4fa41b948c/scratchpad/g-i-run/src/tests/pkg-t3-omniroute-install-compat.test.ts:8:227 at file:///tmp/claude-0/-home-user-UNIVERSAL-AI-SOFTWARE-FACTORY-/2b112f87-31d8-5a52-96d5-8b4fa41b948c/scratchpad/g-i-run/src/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11 at file:///tmp/claude"
+  },
+  {
+   "file": "v7-b10a-evidence.test.ts",
+   "test": "no absolute user path appears in any list, detail or error response body",
+   "message": "AssertionError: absolute path leaked: /root: expected true to be false // Object.is equality at assertNoAbsolute (/tmp/claude-0/-home-user-UNIVERSAL-AI-SOFTWARE-FACTORY-/2b112f87-31d8-5a52-96d5-8b4fa41b948c/scratchpad/g-i-run/src/tests/v7-b10a-evidence.test.ts:82:117) at /tmp/claude-0/-home-user-UNIVERSAL-AI-SOFTWARE-FACTORY-/2b112f87-31d8-5a52-96d5-8b4fa41b948c/scratchpad/g-i-run/src/tests/v7-b10a-evidence.test.ts:461:7 at processTicksAndRejections (node:internal/process/task_queues:104:5) at file:///tmp/claude-0/-home-user-UNIVERSAL-AI-SOFTWARE-FACTORY-/2b112f87-31d8-5a52-96d5-8b4fa41b948c/s"
+  }
+ ],
+ "perFileAfterRerun": {
+  "action-gateway.test.ts": {
+   "status": "passed",
+   "passed": 11,
+   "failed": 0,
+   "skipped": 0
+  },
+  "certification.test.ts": {
+   "status": "passed",
+   "passed": 3,
+   "failed": 0,
+   "skipped": 0
+  },
+  "data-routing.test.ts": {
+   "status": "passed",
+   "passed": 4,
+   "failed": 0,
+   "skipped": 0
+  },
+  "dlp.test.ts": {
+   "status": "passed",
+   "passed": 3,
+   "failed": 0,
+   "skipped": 0
+  },
+  "lease-manager.test.ts": {
+   "status": "passed",
+   "passed": 2,
+   "failed": 0,
+   "skipped": 0
+  },
+  "mission-state.test.ts": {
+   "status": "passed",
+   "passed": 4,
+   "failed": 0,
+   "skipped": 0
+  },
+  "model-router.test.ts": {
+   "status": "passed",
+   "passed": 3,
+   "failed": 0,
+   "skipped": 0
+  },
+  "npm-invocation.test.ts": {
+   "status": "passed",
+   "passed": 7,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-aut1-orchestrator.test.ts": {
+   "status": "failed",
+   "passed": 5,
+   "failed": 1,
+   "skipped": 0
+  },
+  "pkg-aut2-autonomy-hardening.test.ts": {
+   "status": "passed",
+   "passed": 4,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-bs1-autonomy-bootstrap-a.test.ts": {
+   "status": "passed",
+   "passed": 1,
+   "failed": 0,
+   "skipped": 1
+  },
+  "pkg-bs1-autonomy-bootstrap-b.test.ts": {
+   "status": "passed",
+   "passed": 0,
+   "failed": 0,
+   "skipped": 1
+  },
+  "pkg-bs1-autonomy-bootstrap-c.test.ts": {
+   "status": "passed",
+   "passed": 0,
+   "failed": 0,
+   "skipped": 1
+  },
+  "pkg-bs1-autonomy-bootstrap-d.test.ts": {
+   "status": "passed",
+   "passed": 0,
+   "failed": 0,
+   "skipped": 1
+  },
+  "pkg-bs1-autonomy-bootstrap-e.test.ts": {
+   "status": "passed",
+   "passed": 0,
+   "failed": 0,
+   "skipped": 1
+  },
+  "pkg-bs1-autonomy-bootstrap-f.test.ts": {
+   "status": "passed",
+   "passed": 0,
+   "failed": 0,
+   "skipped": 1
+  },
+  "pkg-c-lf-electron-smoke.test.ts": {
+   "status": "passed",
+   "passed": 9,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-d-standalone-provenance.test.ts": {
+   "status": "passed",
+   "passed": 10,
+   "failed": 0,
+   "skipped": 1
+  },
+  "pkg-dr1-dual-review.test.ts": {
+   "status": "passed",
+   "passed": 2,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-dr2-release-audit.test.ts": {
+   "status": "passed",
+   "passed": 2,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-e-electron-provision.test.ts": {
+   "status": "passed",
+   "passed": 30,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-e2-tr-scan.test.ts": {
+   "status": "passed",
+   "passed": 4,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-f-validation-scripts-protected.test.ts": {
+   "status": "passed",
+   "passed": 4,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-g-preflight-physical-memory.test.ts": {
+   "status": "passed",
+   "passed": 4,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-gov1-claude-only-review-gate.test.ts": {
+   "status": "passed",
+   "passed": 3,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-gov2-codex-retirement.test.ts": {
+   "status": "passed",
+   "passed": 9,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-lv1-liveness.test.ts": {
+   "status": "passed",
+   "passed": 1,
+   "failed": 0,
+   "skipped": 1
+  },
+  "pkg-q1-claude-limit-detection.test.ts": {
+   "status": "passed",
+   "passed": 5,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-q2-retry-time-grace.test.ts": {
+   "status": "passed",
+   "passed": 9,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-r1-release-mode.test.ts": {
+   "status": "passed",
+   "passed": 7,
+   "failed": 0,
+   "skipped": 1
+  },
+  "pkg-r3-phase0-fixes.test.ts": {
+   "status": "passed",
+   "passed": 3,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-r4-init-private-git.test.ts": {
+   "status": "passed",
+   "passed": 0,
+   "failed": 0,
+   "skipped": 4
+  },
+  "pkg-t1-windows-crash-resume.test.ts": {
+   "status": "passed",
+   "passed": 1,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-t2-orchestrator-executor-integration.test.ts": {
+   "status": "passed",
+   "passed": 1,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-t3-omniroute-install-compat.test.ts": {
+   "status": "failed",
+   "passed": 7,
+   "failed": 1,
+   "skipped": 0
+  },
+  "pkg-t4-powershell-safety.test.ts": {
+   "status": "passed",
+   "passed": 0,
+   "failed": 0,
+   "skipped": 1
+  },
+  "pkg-vs-validation-sharding.test.ts": {
+   "status": "passed",
+   "passed": 9,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-x1-execution-routing.test.ts": {
+   "status": "passed",
+   "passed": 9,
+   "failed": 0,
+   "skipped": 0
+  },
+  "release-supply-chain-platform-optional.test.ts": {
+   "status": "passed",
+   "passed": 21,
+   "failed": 0,
+   "skipped": 0
+  },
+  "resource-registry.test.ts": {
+   "status": "passed",
+   "passed": 3,
+   "failed": 0,
+   "skipped": 0
+  },
+  "review-governance.test.ts": {
+   "status": "passed",
+   "passed": 4,
+   "failed": 0,
+   "skipped": 0
+  },
+  "schema-inference.test.ts": {
+   "status": "passed",
+   "passed": 1,
+   "failed": 0,
+   "skipped": 0
+  },
+  "strict-json-validator.test.ts": {
+   "status": "passed",
+   "passed": 2,
+   "failed": 0,
+   "skipped": 0
+  },
+  "technology-decision.test.ts": {
+   "status": "passed",
+   "passed": 2,
+   "failed": 0,
+   "skipped": 0
+  },
+  "technology-discovery.test.ts": {
+   "status": "passed",
+   "passed": 2,
+   "failed": 0,
+   "skipped": 0
+  },
+  "uasco-atomic-lease.test.ts": {
+   "status": "passed",
+   "passed": 18,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-b1-workos.test.ts": {
+   "status": "passed",
+   "passed": 12,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-b10a-evidence.test.ts": {
+   "status": "failed",
+   "passed": 17,
+   "failed": 1,
+   "skipped": 0
+  },
+  "v7-b11a-company-os.test.ts": {
+   "status": "passed",
+   "passed": 21,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-b2-workos-hardening.test.ts": {
+   "status": "passed",
+   "passed": 21,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-b3a-c3-builder-commit.test.ts": {
+   "status": "passed",
+   "passed": 9,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-b3a-recovery-budget.test.ts": {
+   "status": "passed",
+   "passed": 4,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-b3a-runner.test.ts": {
+   "status": "passed",
+   "passed": 24,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-b3c-security-stage.test.ts": {
+   "status": "passed",
+   "passed": 26,
+   "failed": 0,
+   "skipped": 5
+  },
+  "v7-b4-desktop-shell.test.ts": {
+   "status": "passed",
+   "passed": 38,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-b5-work-screens.test.ts": {
+   "status": "passed",
+   "passed": 55,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-b6a-control-tower.test.ts": {
+   "status": "passed",
+   "passed": 14,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-b7-installer.test.ts": {
+   "status": "passed",
+   "passed": 29,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-b9-target-catalog.test.ts": {
+   "status": "passed",
+   "passed": 8,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-core-predev-contracts.test.ts": {
+   "status": "passed",
+   "passed": 14,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-core-predev-crew-api.test.ts": {
+   "status": "passed",
+   "passed": 14,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-core-predev-crew-coordination.test.ts": {
+   "status": "passed",
+   "passed": 9,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-core-predev-crew-dev-review.test.ts": {
+   "status": "passed",
+   "passed": 5,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-core-predev-driver.test.ts": {
+   "status": "passed",
+   "passed": 7,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-core-predev-taskhub-codegen.test.ts": {
+   "status": "passed",
+   "passed": 4,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-core-predev-taskhub-e2e.test.ts": {
+   "status": "passed",
+   "passed": 5,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-core-predev-team-composer.test.ts": {
+   "status": "passed",
+   "passed": 11,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-int-r3-desktop.test.ts": {
+   "status": "passed",
+   "passed": 7,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-int-r3-sbx-gate.test.ts": {
+   "status": "passed",
+   "passed": 10,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-m1a-c2-delivery.test.ts": {
+   "status": "passed",
+   "passed": 8,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-m1a-c2-test-variant.test.ts": {
+   "status": "passed",
+   "passed": 5,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-m1a-desktop.test.ts": {
+   "status": "passed",
+   "passed": 16,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-m1a-mode.test.ts": {
+   "status": "passed",
+   "passed": 10,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ps1a-c2-remediation.test.ts": {
+   "status": "passed",
+   "passed": 3,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ps1a-c3-remediation.test.ts": {
+   "status": "passed",
+   "passed": 4,
+   "failed": 0,
+   "skipped": 3
+  },
+  "v7-ps1a-project-studio.test.ts": {
+   "status": "passed",
+   "passed": 14,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ps1b-project-studio-ui.test.ts": {
+   "status": "passed",
+   "passed": 76,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ps1b-relpath-canonical.test.ts": {
+   "status": "passed",
+   "passed": 5,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-relfx-1-completion.test.ts": {
+   "status": "passed",
+   "passed": 9,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-relfx-2-test-surface.test.ts": {
+   "status": "passed",
+   "passed": 9,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-relfx-3-risk-admission.test.ts": {
+   "status": "passed",
+   "passed": 5,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-relfx-4-interruption.test.ts": {
+   "status": "passed",
+   "passed": 9,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-relfx-c2-remediation.test.ts": {
+   "status": "passed",
+   "passed": 34,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-relfx-c3-remediation.test.ts": {
+   "status": "passed",
+   "passed": 21,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-relfx-c4-remediation.test.ts": {
+   "status": "passed",
+   "passed": 43,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-relfx-c5-remediation.test.ts": {
+   "status": "passed",
+   "passed": 9,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-sbx8-agent-config.test.ts": {
+   "status": "passed",
+   "passed": 18,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-sbx8-broker.test.ts": {
+   "status": "passed",
+   "passed": 8,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-sbx8-claude-profiles.test.ts": {
+   "status": "passed",
+   "passed": 10,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-sbx8-reviewer.test.ts": {
+   "status": "passed",
+   "passed": 11,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-academy.test.ts": {
+   "status": "passed",
+   "passed": 17,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-company-allowlist.test.ts": {
+   "status": "passed",
+   "passed": 8,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-delivery.test.ts": {
+   "status": "passed",
+   "passed": 9,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-executive.test.ts": {
+   "status": "passed",
+   "passed": 40,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-firstrun.test.ts": {
+   "status": "passed",
+   "passed": 9,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-inbox.test.ts": {
+   "status": "passed",
+   "passed": 10,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-install.test.ts": {
+   "status": "passed",
+   "passed": 27,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-journey.test.ts": {
+   "status": "passed",
+   "passed": 30,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-matrix.test.ts": {
+   "status": "passed",
+   "passed": 43,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-operations.test.ts": {
+   "status": "passed",
+   "passed": 47,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-posture.test.ts": {
+   "status": "passed",
+   "passed": 38,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-queue.test.ts": {
+   "status": "passed",
+   "passed": 37,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-readiness.test.ts": {
+   "status": "passed",
+   "passed": 45,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-reviews-api.test.ts": {
+   "status": "passed",
+   "passed": 20,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-settings.test.ts": {
+   "status": "passed",
+   "passed": 12,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-shell.test.ts": {
+   "status": "passed",
+   "passed": 14,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-vp-visual-parity.test.ts": {
+   "status": "passed",
+   "passed": 10,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-wp-agents.test.ts": {
+   "status": "passed",
+   "passed": 12,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-wp-projects.test.ts": {
+   "status": "passed",
+   "passed": 13,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-wp-qasec.test.ts": {
+   "status": "passed",
+   "passed": 13,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-wp-workos.test.ts": {
+   "status": "passed",
+   "passed": 16,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-wp2-cockpit.test.ts": {
+   "status": "passed",
+   "passed": 14,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-wp3-company.test.ts": {
+   "status": "passed",
+   "passed": 20,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-ux-wp4-tower.test.ts": {
+   "status": "passed",
+   "passed": 13,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-wfr03-role-registry.test.ts": {
+   "status": "passed",
+   "passed": 44,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-wfr04a-c2-remediation.test.ts": {
+   "status": "passed",
+   "passed": 13,
+   "failed": 0,
+   "skipped": 0
+  },
+  "v7-wfr04a-skill-academy.test.ts": {
+   "status": "passed",
+   "passed": 21,
+   "failed": 0,
+   "skipped": 0
+  }
+ },
+ "rerunFiles": {
+  "pkg-aut1-orchestrator.test.ts": {
+   "status": "failed",
+   "passed": 5,
+   "failed": 1,
+   "skipped": 0
+  },
+  "pkg-aut2-autonomy-hardening.test.ts": {
+   "status": "passed",
+   "passed": 4,
+   "failed": 0,
+   "skipped": 0
+  },
+  "pkg-r1-release-mode.test.ts": {
+   "status": "passed",
+   "passed": 7,
+   "failed": 0,
+   "skipped": 1
+  },
+  "pkg-t3-omniroute-install-compat.test.ts": {
+   "status": "failed",
+   "passed": 7,
+   "failed": 1,
+   "skipped": 0
+  },
+  "v7-b10a-evidence.test.ts": {
+   "status": "failed",
+   "passed": 17,
+   "failed": 1,
+   "skipped": 0
+  }
+ },
+ "schemaCatalog": {
+  "validate-schema-catalog": "SCHEMA_CATALOG_VALIDATION: PASS exact-count=152",
+  "validate-schema-strictness": "SCHEMA_STRICTNESS_VALIDATION: PASS schemas=152 openExceptions=242 typedMaps=2"
+ },
+ "repro": {
+  "exportDelivery": {
+   "script": "repro-export-scrub.mjs",
+   "source": "// Reproduce: main.mjs apiPost sanitizes 2xx bodies with scrubText, which rewrites absolute paths to \"[path]\";\n// uasco:export-delivery then feeds the sanitized body.path to deliveryExportCheck -> realpath fails.\nimport fs from \"node:fs\";\nimport path from \"node:path\";\nimport os from \"node:os\";\nimport crypto from \"node:crypto\";\nconst main = fs.readFileSync(process.argv[2], \"utf8\");\nconst scrub = /(function scrubText[\\s\\S]*?)async function apiPost/.exec(main)[1];\nconst exp = /(const DELIVERY_RUN_ID_RE[\\s\\S]*?)\\/\\/ M1A-C2-END/.exec(main)[1];\nconst {sanitizePostBody, deliveryExportCheck} = new Function(\"token\", `${scrub}\\n${exp}\\nreturn {sanitizePostBody, deliveryExportCheck};`)(\"tok\");\nconst root = fs.mkdtempSync(path.join(os.tmpdir(), \"uasco-scrub-\"));\nconst runId = \"run_\" + \"a\".repeat(24), bytes = Buffer.from(\"zipbytes\"), hash = crypto.createHash(\"sha256\").update(bytes).digest(\"hex\");\nconst deliveries = path.join(root, \"deliveries\"); fs.mkdirSync(path.join(deliveries, runId), {recursive: true});\nconst file = path.join(deliveries, runId, `${hash}.zip`); fs.writeFileSync(file, bytes);\nconst body = {artifact: {runId, exportArtifactHash: hash, artifactPath: `deliveries/${runId}/${hash}.zip`}, sha256: hash, size: bytes.length, fileState: \"VERIFIED\", path: file};\nconst raw = deliveryExportCheck(body, runId, deliveries, fs, path, crypto);\nconst sanitized = sanitizePostBody(200, body);\nconst viaBridge = deliveryExportCheck(sanitized, runId, deliveries, fs, path, crypto);\nconst winSample = sanitizePostBody(200, {path: \"C:\\\\Users\\\\salim\\\\AppData\\\\Roaming\\\\UASCO\\\\workos\\\\deliveries\\\\x.zip\"}).path;\nconsole.log(JSON.stringify({rawBodyCheck: raw.ok ? \"OK\" : raw.reason, sanitizedPath: sanitized.path, bridgeCheck: viaBridge.ok ? \"OK\" : viaBridge.reason, windowsPathAfterScrub: winSample}));\nfs.rmSync(root, {recursive: true, force: true});\n",
+   "stdout": "{\"rawBodyCheck\":\"OK\",\"sanitizedPath\":\"[path]\",\"bridgeCheck\":\"DELIVERY_ARTIFACT_MISSING\",\"windowsPathAfterScrub\":\"[path]\"}",
+   "exitCode": 0
+  },
+  "showExport": {
+   "script": "repro-show-export.mjs",
+   "source": "// Reproduce: uasco:show-export reads path/filePath/exportPath/archivePath from GET /v1/projects/:id/exports/:exportId body; server returns only relative export.file.\nimport fs from \"node:fs\";\nconst main = fs.readFileSync(process.argv[2], \"utf8\");\nconst blk = /(function psExportPathFromBody[\\s\\S]*?)\\/\\/ PS1B-NATIVE-END/.exec(main)[1];\nconst {psExportPathFromBody} = new Function(`${blk}\\nreturn {psExportPathFromBody};`)();\nconst serverShape = {export: {exportId: \"exp_\" + \"a\".repeat(24), projectId: \"prj_\" + \"b\".repeat(24), commit: \"c\".repeat(40), sha256: \"d\".repeat(64), size: 10, file: \"exports/exp_x.zip\"}, fileState: \"PRESENT\"};\nconsole.log(JSON.stringify({candidatePath: psExportPathFromBody(serverShape)}));\n",
+   "stdout": "{\"candidatePath\":null}",
+   "exitCode": 0
+  }
+ },
+ "routeTestMap": {
+  "method": "path-literal heuristic over tests/*.ts; serverTests = files that build/inject the server and reference the route outside allow-list snapshot strings; allowlistTests = files that reference desktop allow-list code",
+  "routes": [
+   {
+    "method": "GET",
+    "path": "/health",
+    "line": 104,
+    "serverTests": [],
+    "allowlistTests": [
+     "v7-b5-work-screens.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ux-settings.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/factory",
+    "line": 105,
+    "serverTests": [],
+    "allowlistTests": [
+     "v7-ux-settings.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/phase0",
+    "line": 106,
+    "serverTests": [
+     "v7-ux-install.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-install.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/install",
+    "line": 107,
+    "serverTests": [
+     "v7-ux-install.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-install.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/scheduler",
+    "line": 108,
+    "serverTests": [],
+    "allowlistTests": []
+   },
+   {
+    "method": "GET",
+    "path": "/v1/agents",
+    "line": 110,
+    "serverTests": [
+     "v7-b7-installer.test.ts",
+     "v7-wfr03-role-registry.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b5-work-screens.test.ts",
+     "v7-b7-installer.test.ts",
+     "v7-ux-wp-agents.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/capabilities",
+    "line": 114,
+    "serverTests": [],
+    "allowlistTests": []
+   },
+   {
+    "method": "GET",
+    "path": "/v1/fabrics",
+    "line": 115,
+    "serverTests": [],
+    "allowlistTests": []
+   },
+   {
+    "method": "GET",
+    "path": "/v1/adapters",
+    "line": 116,
+    "serverTests": [],
+    "allowlistTests": []
+   },
+   {
+    "method": "GET",
+    "path": "/v1/domains",
+    "line": 117,
+    "serverTests": [],
+    "allowlistTests": []
+   },
+   {
+    "method": "GET",
+    "path": "/v1/control/status",
+    "line": 120,
+    "serverTests": [
+     "v7-relfx-4-interruption.test.ts",
+     "v7-ux-operations.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-operations.test.ts",
+     "v7-ux-settings.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/retry",
+    "line": 121,
+    "serverTests": [],
+    "allowlistTests": []
+   },
+   {
+    "method": "GET",
+    "path": "/v1/founder-attention",
+    "line": 122,
+    "serverTests": [
+     "v7-ux-executive.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-queue.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b5-work-screens.test.ts",
+     "v7-m1a-desktop.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-queue.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/runs",
+    "line": 124,
+    "serverTests": [
+     "v7-b3a-runner.test.ts",
+     "v7-ux-operations.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-operations.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/runs/:runId/events",
+    "line": 129,
+    "serverTests": [],
+    "allowlistTests": []
+   },
+   {
+    "method": "GET",
+    "path": "/v1/runs/:runId/logs",
+    "line": 133,
+    "serverTests": [],
+    "allowlistTests": []
+   },
+   {
+    "method": "GET",
+    "path": "/v1/runs/:runId/logs/:name",
+    "line": 137,
+    "serverTests": [],
+    "allowlistTests": []
+   },
+   {
+    "method": "POST",
+    "path": "/v1/control/stop",
+    "line": 142,
+    "serverTests": [
+     "v7-ps1a-project-studio.test.ts",
+     "v7-ux-operations.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b4-desktop-shell.test.ts",
+     "v7-b5-work-screens.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ux-operations.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/control/resume",
+    "line": 146,
+    "serverTests": [
+     "v7-ux-operations.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b4-desktop-shell.test.ts",
+     "v7-b5-work-screens.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ux-operations.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/control/retry-blocked",
+    "line": 147,
+    "serverTests": [],
+    "allowlistTests": [
+     "v7-b5-work-screens.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/projects",
+    "line": 194,
+    "serverTests": [
+     "v7-b1-workos.test.ts",
+     "v7-b11a-company-os.test.ts",
+     "v7-b2-workos-hardening.test.ts",
+     "v7-ps1a-c2-remediation.test.ts",
+     "v7-ps1a-c3-remediation.test.ts",
+     "v7-ps1a-project-studio.test.ts",
+     "v7-ux-matrix.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b4-desktop-shell.test.ts",
+     "v7-b5-work-screens.test.ts",
+     "v7-m1a-desktop.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/projects",
+    "line": 195,
+    "serverTests": [
+     "v7-b1-workos.test.ts",
+     "v7-b11a-company-os.test.ts",
+     "v7-b2-workos-hardening.test.ts",
+     "v7-b3a-runner.test.ts",
+     "v7-core-predev-taskhub-codegen.test.ts",
+     "v7-int-r3-sbx-gate.test.ts",
+     "v7-m1a-c2-delivery.test.ts",
+     "v7-m1a-mode.test.ts",
+     "v7-ps1a-c2-remediation.test.ts",
+     "v7-ps1a-c3-remediation.test.ts",
+     "v7-ps1a-project-studio.test.ts",
+     "v7-sbx8-agent-config.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-wfr03-role-registry.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b4-desktop-shell.test.ts",
+     "v7-b5-work-screens.test.ts",
+     "v7-m1a-desktop.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/missions",
+    "line": 207,
+    "serverTests": [
+     "v7-b1-workos.test.ts",
+     "v7-relfx-4-interruption.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b4-desktop-shell.test.ts",
+     "v7-b5-work-screens.test.ts",
+     "v7-m1a-desktop.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-journey.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/missions",
+    "line": 211,
+    "serverTests": [
+     "v7-b1-workos.test.ts",
+     "v7-b2-workos-hardening.test.ts",
+     "v7-b3a-runner.test.ts",
+     "v7-core-predev-taskhub-codegen.test.ts",
+     "v7-m1a-c2-delivery.test.ts",
+     "v7-m1a-mode.test.ts",
+     "v7-ps1a-project-studio.test.ts",
+     "v7-relfx-4-interruption.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b4-desktop-shell.test.ts",
+     "v7-b5-work-screens.test.ts",
+     "v7-m1a-desktop.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-journey.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/missions/:id",
+    "line": 217,
+    "serverTests": [
+     "v7-b1-workos.test.ts",
+     "v7-b3a-runner.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b4-desktop-shell.test.ts",
+     "v7-b5-work-screens.test.ts",
+     "v7-m1a-desktop.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/missions/:id/transition",
+    "line": 221,
+    "serverTests": [
+     "v7-b1-workos.test.ts",
+     "v7-b2-workos-hardening.test.ts",
+     "v7-core-predev-taskhub-codegen.test.ts",
+     "v7-m1a-c2-delivery.test.ts",
+     "v7-m1a-mode.test.ts",
+     "v7-ps1a-project-studio.test.ts",
+     "v7-relfx-1-completion.test.ts",
+     "v7-relfx-2-test-surface.test.ts",
+     "v7-relfx-c4-remediation.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-readiness.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b4-desktop-shell.test.ts",
+     "v7-b5-work-screens.test.ts",
+     "v7-m1a-desktop.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-readiness.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/missions/:id/runs",
+    "line": 260,
+    "serverTests": [
+     "v7-b3a-runner.test.ts",
+     "v7-int-r3-sbx-gate.test.ts",
+     "v7-relfx-3-risk-admission.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b5-work-screens.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/work-runs",
+    "line": 274,
+    "serverTests": [
+     "v7-b3a-runner.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b5-work-screens.test.ts",
+     "v7-m1a-desktop.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts",
+     "v7-ux-wp-agents.test.ts",
+     "v7-ux-wp-qasec.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/work-runs/:id",
+    "line": 278,
+    "serverTests": [
+     "v7-b3a-runner.test.ts",
+     "v7-b3c-security-stage.test.ts",
+     "v7-int-r3-sbx-gate.test.ts",
+     "v7-m1a-mode.test.ts",
+     "v7-relfx-1-completion.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b5-work-screens.test.ts",
+     "v7-m1a-desktop.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/deliveries",
+    "line": 287,
+    "serverTests": [
+     "v7-m1a-c2-delivery.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-m1a-desktop.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/work-runs/:id/delivery",
+    "line": 291,
+    "serverTests": [
+     "v7-core-predev-taskhub-codegen.test.ts",
+     "v7-m1a-c2-delivery.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-m1a-desktop.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/work-runs/:id/delivery/prepare",
+    "line": 295,
+    "serverTests": [
+     "v7-core-predev-taskhub-codegen.test.ts",
+     "v7-m1a-c2-delivery.test.ts",
+     "v7-m1a-mode.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-readiness.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-m1a-desktop.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-readiness.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/work-runs/:id/delivery/accept",
+    "line": 305,
+    "serverTests": [
+     "v7-m1a-c2-delivery.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-readiness.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-m1a-desktop.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-readiness.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/work-runs/:id/delivery/export",
+    "line": 316,
+    "serverTests": [
+     "v7-m1a-c2-delivery.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-m1a-desktop.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/projects/:id/import",
+    "line": 344,
+    "serverTests": [
+     "v7-ps1a-c3-remediation.test.ts",
+     "v7-ps1a-project-studio.test.ts",
+     "v7-sbx8-agent-config.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ps1b-project-studio-ui.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/projects/:id/devrun",
+    "line": 367,
+    "serverTests": [
+     "v7-int-r3-sbx-gate.test.ts",
+     "v7-ps1a-c2-remediation.test.ts",
+     "v7-ps1a-c3-remediation.test.ts",
+     "v7-ps1a-project-studio.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ps1b-project-studio-ui.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/projects/:id/devrun/start",
+    "line": 369,
+    "serverTests": [
+     "v7-int-r3-sbx-gate.test.ts",
+     "v7-m1a-mode.test.ts",
+     "v7-ps1a-c2-remediation.test.ts",
+     "v7-ps1a-c3-remediation.test.ts",
+     "v7-ps1a-project-studio.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ps1b-project-studio-ui.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/projects/:id/devrun/stop",
+    "line": 369,
+    "serverTests": [
+     "v7-int-r3-sbx-gate.test.ts",
+     "v7-ps1a-c2-remediation.test.ts",
+     "v7-ps1a-c3-remediation.test.ts",
+     "v7-ps1a-project-studio.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ps1b-project-studio-ui.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/projects/:id/devrun/restart",
+    "line": 369,
+    "serverTests": [
+     "v7-int-r3-sbx-gate.test.ts",
+     "v7-ps1a-project-studio.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ps1b-project-studio-ui.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/projects/:id/files",
+    "line": 382,
+    "serverTests": [
+     "v7-ps1a-c3-remediation.test.ts",
+     "v7-ps1a-project-studio.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ps1b-relpath-canonical.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/projects/:id/file",
+    "line": 387,
+    "serverTests": [
+     "v7-ps1a-c2-remediation.test.ts",
+     "v7-ps1a-c3-remediation.test.ts",
+     "v7-ps1a-project-studio.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ps1b-relpath-canonical.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/projects/:id/git/log",
+    "line": 392,
+    "serverTests": [
+     "v7-ps1a-project-studio.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ps1b-project-studio-ui.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/projects/:id/git/diff",
+    "line": 398,
+    "serverTests": [
+     "v7-ps1a-project-studio.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ps1b-project-studio-ui.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/projects/:id/export",
+    "line": 405,
+    "serverTests": [
+     "v7-m1a-mode.test.ts",
+     "v7-ps1a-c3-remediation.test.ts",
+     "v7-ps1a-project-studio.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ps1b-project-studio-ui.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/projects/:id/exports",
+    "line": 415,
+    "serverTests": [
+     "v7-ps1a-c2-remediation.test.ts",
+     "v7-ps1a-project-studio.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ps1b-project-studio-ui.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/projects/:id/exports/:exportId",
+    "line": 416,
+    "serverTests": [
+     "v7-ps1a-project-studio.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ps1b-project-studio-ui.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/system/executors",
+    "line": 426,
+    "serverTests": [
+     "v7-int-r3-sbx-gate.test.ts",
+     "v7-ps1a-project-studio.test.ts",
+     "v7-sbx8-claude-profiles.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-m1a-desktop.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-settings.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/system/executors/local-claude/enable",
+    "line": 427,
+    "serverTests": [
+     "v7-ps1a-project-studio.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ps1b-project-studio-ui.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/evidence",
+    "line": 440,
+    "serverTests": [
+     "v7-b10a-evidence.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b5-work-screens.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts",
+     "v7-ux-wp-qasec.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/evidence/:evidenceId",
+    "line": 454,
+    "serverTests": [
+     "v7-b10a-evidence.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b5-work-screens.test.ts",
+     "v7-ux-wp-qasec.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/company/accounts",
+    "line": 466,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/company/accounts",
+    "line": 467,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/company/contacts",
+    "line": 472,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-company-allowlist.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/company/contacts",
+    "line": 475,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-company-allowlist.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/company/opportunities",
+    "line": 480,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/company/opportunities",
+    "line": 483,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/company/opportunities/:id/stage",
+    "line": 488,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": []
+   },
+   {
+    "method": "GET",
+    "path": "/v1/company/invoices",
+    "line": 493,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/company/invoices",
+    "line": 496,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/company/invoices/:id/issue",
+    "line": 502,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": []
+   },
+   {
+    "method": "POST",
+    "path": "/v1/company/invoices/:id/void",
+    "line": 507,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": []
+   },
+   {
+    "method": "GET",
+    "path": "/v1/company/payments",
+    "line": 512,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-company-allowlist.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/company/payments",
+    "line": 515,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-company-allowlist.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/company/contracts",
+    "line": 523,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/company/contracts",
+    "line": 526,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/company/contracts/:id/transition",
+    "line": 531,
+    "serverTests": [
+     "v7-b11a-company-os.test.ts"
+    ],
+    "allowlistTests": []
+   },
+   {
+    "method": "GET",
+    "path": "/v1/roles",
+    "line": 549,
+    "serverTests": [
+     "v7-wfr03-role-registry.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-m1a-desktop.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts",
+     "v7-ux-wp-agents.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/roles/:roleId",
+    "line": 565,
+    "serverTests": [
+     "v7-wfr03-role-registry.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-m1a-desktop.test.ts",
+     "v7-ux-shell.test.ts",
+     "v7-ux-wp-agents.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/academy",
+    "line": 577,
+    "serverTests": [
+     "v7-ux-academy.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-academy.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/academy/:id",
+    "line": 579,
+    "serverTests": [
+     "v7-ux-academy.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-academy.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/predev/:missionId",
+    "line": 587,
+    "serverTests": [
+     "v7-core-predev-crew-api.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-core-predev-crew-api.test.ts",
+     "v7-ux-journey.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/crew/:missionId",
+    "line": 592,
+    "serverTests": [
+     "v7-core-predev-crew-api.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-core-predev-crew-api.test.ts",
+     "v7-ux-journey.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/reviews",
+    "line": 637,
+    "serverTests": [
+     "v7-ux-posture.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-reviews-api.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-posture.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-reviews-api.test.ts"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/v1/reviews/:reviewId",
+    "line": 651,
+    "serverTests": [
+     "v7-ux-posture.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-reviews-api.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-ux-posture.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-reviews-api.test.ts"
+    ]
+   },
+   {
+    "method": "POST",
+    "path": "/v1/system/workos/journal/repair-torn-tail",
+    "line": 661,
+    "serverTests": [
+     "v7-relfx-4-interruption.test.ts"
+    ],
+    "allowlistTests": []
+   },
+   {
+    "method": "GET",
+    "path": "/v1/cockpit",
+    "line": 728,
+    "serverTests": [
+     "v7-b10a-evidence.test.ts",
+     "v7-b2-workos-hardening.test.ts",
+     "v7-b3a-runner.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-wfr03-role-registry.test.ts"
+    ],
+    "allowlistTests": [
+     "v7-b4-desktop-shell.test.ts",
+     "v7-b5-work-screens.test.ts",
+     "v7-ps1b-project-studio-ui.test.ts",
+     "v7-ux-executive.test.ts",
+     "v7-ux-firstrun.test.ts",
+     "v7-ux-install.test.ts",
+     "v7-ux-matrix.test.ts",
+     "v7-ux-operations.test.ts",
+     "v7-ux-posture.test.ts",
+     "v7-ux-queue.test.ts",
+     "v7-ux-readiness.test.ts",
+     "v7-ux-settings.test.ts",
+     "v7-ux-shell.test.ts",
+     "v7-ux-wp-agents.test.ts",
+     "v7-ux-wp-qasec.test.ts"
+    ]
+   }
+  ]
+ }
+}
