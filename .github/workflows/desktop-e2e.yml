@@ -1,0 +1,45 @@
+# //TR: Bu workflow gerçek Electron Desktop'ı gerçek Control API'ye karşı GitHub-hosted Linux (xvfb) ve Windows runner'larında başlatır, rotaları kullanıcı gibi gezen E2E harness'ini çalıştırır ve yalnız E2E_EVIDENCE.json + PNG ekran görüntülerini artifact olarak yükler; secret yok, log/stdout yüklenmez, self-hosted runner kullanılmaz.
+name: Desktop E2E
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  desktop-e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: node scripts/ensure-dependencies.mjs
+      - name: Provision verified Electron binary
+        run: node scripts/provision-electron.mjs
+      - name: Desktop E2E (Linux, xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/e2e/desktop-e2e.mjs
+      - name: Desktop E2E (Windows)
+        if: runner.os == 'Windows'
+        run: node scripts/e2e/desktop-e2e.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: desktop-e2e-evidence-${{ matrix.os }}
+          path: |
+            .ai/runtime/e2e/E2E_EVIDENCE.json
+            .ai/runtime/e2e/*.png
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: warn
