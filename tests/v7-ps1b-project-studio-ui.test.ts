@@ -1,9 +1,12 @@
 // //TR: Bu test PS-1B masaüstü Project Studio'yu doğrular: main.mjs GET/POST allow-list eklemeleri (tam eşleşme + traversal/yöntem/boyut negatifleri), yalnız ana süreçte çözülen içe aktarma yolu / önizleme URL'si / dışa aktarma klasörü kuralları, IPC işleyicilerinin renderer'dan yol ya da URL almaması, sihirbaz ve diğer istek gövdeleri (argv dizileri), önizleme düğmesinin yalnız AVAILABLE iken etkin olması, gizli bilgi sansürü, tr/en eşitliği ve sahte DOM ile gerçek görünüm modülleri; mevcut B4/B5/B7 testleri ayrıca çalışır.
 import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
+import {logicalTestFiles} from "./support/validation-test-shards.js";
 
 const root = path.resolve(__dirname, "..");
 const desk = path.join(root, "apps", "desktop");
@@ -897,7 +900,8 @@ describe("PS-1B static safety and wiring", () => {
   });
   it("validation.json appends this test at the very end of the tests step and nothing else changed there", () => {
     const cfg = JSON.parse(read(root, "config", "validation.json"));
-    const step = cfg.steps.find((s: any) => s.id === "tests");
+    // PUBLIC-CI: "tests" adımı sıralı tests, tests-2..tests-N kabuklarına bölünebilir; bitişiklik/sıra kuralı kabukların birleşimi olan mantıksal liste üzerinde aynen geçerlidir.
+    const step = {command: logicalTestFiles(cfg)};
     // c2: PS1B-C1-001 testi PS-1B UI testinin hemen ardından; V7-PKG-M1A-MODE (merge-tool sözleşmesi) m1a-* testlerini, UX paketleri de ux-* testlerini bu çiftin sonrasına ekler.
     const j = step.command.indexOf("tests/v7-ps1b-project-studio-ui.test.ts");
     expect(step.command.slice(j, j + 2)).toEqual(["tests/v7-ps1b-project-studio-ui.test.ts", "tests/v7-ps1b-relpath-canonical.test.ts"]);
@@ -1303,5 +1307,71 @@ describe("SBX-8 G: Settings shows the UASCO Claude profile status and the login 
     const settings = await load(rend, "views", "settings.js");
     const {ctx, doc} = await mkCtx({get: p => p === "/v1/system/executors" ? {executors: [{id: "LOCAL_CLAUDE", state: "READY"}]} : undefined});
     expect(byId(mount(doc, await settings.render(ctx)), "settings-claude-profiles")).toBeNull();
+  });
+});
+
+// //TR: UX hardening — AI Yürütücüleri paneli: boş liste, başarısız etkinleştirme, bilinmeyen durum, FAKE için eylem yok, erişilebilirlik ve EN/TR eşitliği (dürüst durum; READY uydurulmaz).
+describe("UX hardening: executors panel functional / negative / a11y", () => {
+  const EX = "/v1/system/executors";
+  const run = async (opts: any) => {
+    const settings = await load(rend, "views", "settings.js");
+    const c = await mkCtx(opts);
+    return {...c, root: mount(c.doc, await settings.render(c.ctx))};
+  };
+  it("shows the empty note for an empty executor list and no enable button", async () => {
+    const {root} = await run({get: (p: string) => p === EX ? {executors: []} : undefined});
+    expect(text(byId(root, "settings-executors")!)).toContain("Sunucu hiç yürütücü bildirmedi");
+    expect(byId(root, "exec-enable")).toBeNull();
+  });
+  it("shows an unreadable payload as an error state, never as a ready executor", async () => {
+    const {root} = await run({get: (p: string) => p === EX ? {executors: "x"} : undefined});
+    const panel = byId(root, "settings-executors")!;
+    expect(all(panel).some(n => n.attrs.get("role") === "status")).toBe(true);
+    expect(all(panel).filter(n => n.className.includes("badge-ok")).length).toBe(0);
+    expect(byId(root, "exec-enable")).toBeNull();
+  });
+  it("renders a missing state as Unknown (no ready badge) and offers no enable", async () => {
+    const {root} = await run({lang: "en", get: (p: string) => p === EX ? {executors: [{id: "LOCAL_CLAUDE"}]} : undefined});
+    const panel = byId(root, "settings-executors")!;
+    expect(text(panel)).toContain("Unknown");
+    expect(all(panel).filter(n => n.className.includes("badge-ok")).length).toBe(0);
+    expect(byId(root, "exec-enable")).toBeNull();
+  });
+  it("never offers enable for the test-only FAKE executor even when NOT_CONFIGURED", async () => {
+    const {root} = await run({lang: "en", get: (p: string) => p === EX ? {executors: [{id: "FAKE", state: "NOT_CONFIGURED"}]} : undefined});
+    expect(byId(root, "exec-enable")).toBeNull();
+    expect(text(byId(root, "settings-executors")!)).toContain("test only");
+  });
+  it("announces a failed enable request as an error and does not claim it was enabled", async () => {
+    for (const status of [403, 503]) {
+      const {root, ctx} = await run({lang: "en", get: (p: string) => p === EX ? {executors: [{id: "LOCAL_CLAUDE", state: "NOT_CONFIGURED"}]} : undefined, post: () => ({status, body: {}}), confirm: () => true});
+      byId(root, "exec-enable")!.fire("click"); await tick();
+      expect(forms.drafts.status.executors.ok, String(status)).toBe(false);
+      expect(forms.drafts.status.executors.key).not.toBe("exec.enabled");
+      expect(ctx.t(forms.drafts.status.executors.key, forms.drafts.status.executors.vars)).not.toMatch(/accepted/);
+    }
+  });
+  it("announces a bridge exception on enable as an error", async () => {
+    const {root} = await run({get: (p: string) => p === EX ? {executors: [{id: "LOCAL_CLAUDE", state: "NOT_CONFIGURED"}]} : undefined, post: () => { throw new Error("BRIDGE_DOWN"); }, confirm: () => true});
+    byId(root, "exec-enable")!.fire("click"); await tick();
+    expect(forms.drafts.status.executors.ok).toBe(false);
+  });
+  it("is accessible: typed button, live status region, labelled section, headings", async () => {
+    const {root} = await run({lang: "en", get: (p: string) => p === EX ? {executors: [{id: "LOCAL_CLAUDE", state: "NOT_CONFIGURED"}], claudeProfiles: {implementer: {state: "LOGIN_REQUIRED", reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"}}} : undefined});
+    const panel = byId(root, "settings-executors")!;
+    expect(panel.getAttribute("aria-labelledby")).toBeTruthy();
+    expect(byId(root, "exec-enable")!.getAttribute("type")).toBe("button");
+    expect(all(panel).some(n => n.id === "executors-status" && n.getAttribute("aria-live") === "polite")).toBe(true);
+    expect(all(panel).filter(n => n.tagName === "H3").length).toBeGreaterThan(0);
+    expect(all(byId(root, "settings-claude-profiles")!).filter(n => n.tagName === "H3" || n.tagName === "H4").length).toBeGreaterThan(1);
+  });
+  it("has identical en/tr exec.* key sets and placeholders, and every exec key used by the panel exists", async () => {
+    const tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>, en = (await load(rend, "locales", "en.js")).default as Record<string, string>;
+    const keys = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("exec.")).sort();
+    expect(keys(tr)).toEqual(keys(en));
+    const ph = (s: string) => (s.match(/\{[A-Za-z0-9_]+\}/g) ?? []).sort();
+    for (const k of keys(en)) expect(ph(tr[k]), k).toEqual(ph(en[k]));
+    const used = [...fs.readFileSync(path.join(rend, "views", "executors-panel.js"), "utf8").matchAll(/"(exec\.[A-Za-z0-9_.]+)"/g)].map(m => m[1]);
+    expect(used.filter(k => !(k in tr && k in en))).toEqual([]);
   });
 });

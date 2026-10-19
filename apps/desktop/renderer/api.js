@@ -10,6 +10,7 @@ import {COCKPIT_PATH,MISSIONS_PATH,WORK_RUNS_PATH,ATTENTION_PATH,mapExecCockpit,
 import {mapQueueMissions,mapQueueWorkRuns,mapQueueAttention} from "./queue-core.js";
 import {REVIEWS_PATH,mapReadinessWorkRuns,mapReadinessReviews,mapReadinessEvidence} from "./readiness-core.js";
 import {mapPostureWorkRuns,mapPostureReviews,mapPostureEvidence} from "./posture-core.js";
+import {REVIEW_ID_RE,mapReviewDetail} from "./assurance-core.js";
 import {PROJECTS_PATH,mapMatrixProjects,mapMatrixMissions,mapMatrixWorkRuns,mapMatrixCockpit} from "./matrix-core.js";
 import {CONTROL_PATH,RUNS_PATH,mapOperationsControl,mapOperationsRuns,mapOperationsAttention} from "./operations-core.js";
 import {INSTALL_PATH,PHASE0_PATH,mapInstallReport,mapPhase0Report} from "./install-core.js";
@@ -174,6 +175,9 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async auditRuns(){const r=await get(AUDIT_RUNS_PATH);return r.ok?mapAuditRuns(r.data):{state:r.state,runs:null,message:r.message}},
     async auditRunEvents(runId){const p=runEventsPath(runId);if(!p)return {state:"ERROR",runId,events:null};const r=await get(p);return r.ok?mapAuditEvents(runId,r.data):{state:r.state,runId,events:null,message:r.message}},
     async auditEvidence(){const r=await get(AUDIT_EVIDENCE_PATH);return r.ok?mapAuditEvidence(r.data):{state:r.state,evidence:null,message:r.message}},
+    // //TR: UI-049: Güvence Reviews paneli; /v1/reviews ve /v1/reviews/:evd_id main allow-list'inde zaten vardır (yeni uç nokta yok, yazma yok). Liste readiness-core ile fail-closed eşlenir; detay kimliği kanonik evd_+24 hex değilse istek yapılmaz.
+    async assuranceReviews(){const r=await get(REVIEWS_PATH);return r.ok?mapReadinessReviews(r.data):{state:r.state,reviews:null,message:r.message}},
+    async assuranceReview(id){if(!REVIEW_ID_RE.test(String(id)))return {state:"ERROR",review:null};const r=await get(`${REVIEWS_PATH}/${id}`);return r.ok?mapReviewDetail(r.data,id):{state:r.state,review:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }

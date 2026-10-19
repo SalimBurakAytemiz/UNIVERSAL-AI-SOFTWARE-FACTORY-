@@ -12,6 +12,9 @@ function controlKind(r){return r.state==="VERIFIED"?(r.active?"STOPPED":"VERIFIE
 function attentionKind(r){return r.state==="VERIFIED"?(r.blocked.length?"ATTENTION":"VERIFIED"):failKind(r.state)}
 function runsKind(r){return r.state==="VERIFIED"?"VERIFIED":failKind(r.state)}
 
+const nonEmpty=v=>typeof v==="string"&&v.length>0;
+function validHealth(d){return d!==null&&typeof d==="object"&&nonEmpty(d.status)&&nonEmpty(d.system)&&nonEmpty(d.serverIdentity)}
+
 function header(ctx){
   const doc=ctx.doc;
   return h(doc,"div",{class:"hero"},
@@ -96,7 +99,9 @@ function srePanel(ctx){
 
 export async function render(ctx){
   const doc=ctx.doc,api=ctx.api;
-  const [health,control,attention,runs]=await Promise.all([api.health(),api.control(),api.attention(),api.workRuns()]);
+  const [healthRaw,control,attention,runs]=await Promise.all([api.health(),api.control(),api.attention(),api.workRuns()]);
+  // //TR: api.health() her başarılı HTTP yanıtını VERIFIED sayar; gövde beklenen biçimde değilse ("undefined · undefined" gibi) sağlıklı gösterilmez, dürüstçe FAILED olur.
+  const health=healthRaw&&healthRaw.state==="VERIFIED"&&!validHealth(healthRaw.data)?{state:"ERROR",data:null,message:"HEALTH_PAYLOAD_INVALID"}:healthRaw;
   const kinds={health:healthKind(health),control:controlKind(control),attention:attentionKind(attention),runs:runsKind(runs)};
   return h(doc,"div",{class:"view view-delivery"},
     header(ctx),

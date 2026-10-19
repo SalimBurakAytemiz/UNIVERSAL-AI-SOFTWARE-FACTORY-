@@ -1,5 +1,7 @@
 // //TR: Bu test paste4d/paste4c'nin mühür öncesi ve SEALED release-candidate modlarını, release SHA256SUMS üreticisini, deterministik ZIP'i ve taze extract doğrulamasını geçici bir kopya ağaçta adversarial olarak doğrular (PKGR-F1); gerçek repo dosyalarını değiştirmez.
-import {describe,it,expect,beforeAll,afterAll} from "vitest";
+import {describe,it,expect,beforeAll,afterAll,vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -24,8 +26,10 @@ const p4d=()=>node(["scripts/validate-paste4d-release-truth.mjs"]),p4c=()=>node(
 function mutate(f:string,fn:(s:string)=>string,check:()=>void){const orig=rd(f);try{wr(f,fn(orig));check()}finally{wr(f,orig)}}
 // //TR: Geçici dosya ve onun için oluşturulan dizin (ör. .ai/runtime) geri alınır; ağaç temiz export olarak kalır.
 function withFile(f:string,content:string,check:()=>void){const dir=path.dirname(path.join(tree,f)),existed=fs.existsSync(dir);try{fs.mkdirSync(dir,{recursive:true});wr(f,content);check()}finally{fs.rmSync(path.join(tree,f),{force:true});if(!existed)fs.rmSync(dir,{recursive:true,force:true})}}
-beforeAll(()=>{fs.mkdirSync(tree);copyTree(repo,tree)});
-afterAll(()=>{fs.rmSync(base,{recursive:true,force:true})});
+// //TR: Tam ağaç kopyası ve silinmesi gerçek dosya G/Ç'sidir; yavaş Windows runner'da varsayılan 10 sn kanca sınırını aşabilir (23db1fe: afterAll zaman aşımı, tüm testler PASS). Kanca yine tamamlanmak zorundadır.
+const HOOK_MS=180_000;
+beforeAll(()=>{fs.mkdirSync(tree);copyTree(repo,tree)},HOOK_MS);
+afterAll(()=>{fs.rmSync(base,{recursive:true,force:true})},HOOK_MS);
 describe("release truth modes (PKGR-F1)",()=>{
   it("the current tree passes both truth validators",()=>{expect(node(["scripts/validate-paste4d-release-truth.mjs"],repo).status).toBe(0);expect(node(["scripts/validate-paste4c-doc-truth.mjs"],repo).status).toBe(0)});
   it("pre-seal mode keeps the old absence rules",()=>{setMode("PRE_SEAL");const d=p4d();expect(d.status,d.out).toBe(0);expect(d.out).toContain("mode=PRE_SEAL");expect(p4c().status).toBe(0);const m=mech();expect(m.status,m.out).toBe(0);

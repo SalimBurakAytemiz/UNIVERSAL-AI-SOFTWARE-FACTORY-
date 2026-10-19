@@ -1,10 +1,12 @@
 // //TR: Bu test ikinci gerçek Phase0 denemesindeki git-baseline hatasının (PHASE0-F4) regresyonunu Windows PowerShell 5.1 ile gerçek geçici depo ve yerel bare remote üzerinde doğrular: host hatayı üretir (negatif kontrol), origin yokken betik NativeCommandError ile düşmez, push edip uzak SHA'yı doğrular, ikinci çalıştırmada set-url yolunu izler ve -AllowUnverifiedRemote olmadan push etmeden reddeder. Windows dışında dürüstçe atlanır.
-import {describe,it,expect} from "vitest";
+import {describe,it,expect,vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import cp from "node:child_process";
 import {isolatedGitArgs,isolatedGitEnv} from "../automation/lib/git-isolation.mjs";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 const win=process.platform==="win32",ps=path.join(process.env.SystemRoot??"C:\\Windows","System32","WindowsPowerShell","v1.0","powershell.exe");
 // //TR: GH_REPO gibi host ayarları gh'nin başka bir depoyu doğrulamasına yol açmasın diye alt süreçlerden çıkarılır.
 function childEnv():NodeJS.ProcessEnv{const env:NodeJS.ProcessEnv={...process.env,GH_PROMPT_DISABLED:"1"};for(const k of ["GH_REPO","GIT_DIR","GIT_WORK_TREE","GIT_INDEX_FILE"])delete env[k];return env}
