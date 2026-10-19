@@ -18,6 +18,7 @@ export const PROTECTED_FLOOR_EXACT = Object.freeze(["claude.md", "agents.md"]);
 export const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 export const CI_EVENTS = Object.freeze(["pull_request", "push", "workflow_dispatch"]);
 // GitHub PR files API statuses. Anything else is fail-closed. renamed/copied must carry previous_filename.
+export const MAX_LISTED_FILES = 3000;
 export const DIFF_STATUSES = Object.freeze(["added", "modified", "removed", "renamed", "copied", "changed", "unchanged"]);
 const SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 // GitHub logins (an App's bot account carries a "[bot]" suffix). Compared case-insensitively, never echoed.
@@ -26,8 +27,9 @@ const LOGIN_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:\[bot\])?$/;
 export const BINDING_RE = /^VERDICT-BINDING: verdict=([A-Z_]{1,32}) head=([0-9a-f]{40}|[0-9a-f]{64}) base=([0-9a-f]{40}|[0-9a-f]{64}) reviewer-session=([A-Za-z0-9._:-]{1,128})$/;
 const BINDING_LIKE_RE = /verdict-binding/i;
 // Zero-width and bidi controls: a line carrying any of them can never be a binding.
-const INVISIBLE_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/;
-const INVISIBLE_G = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/g;
+const INVISIBLES = "\u00AD\u034F\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF";
+const INVISIBLE_RE = new RegExp(`[${INVISIBLES}]`);
+const INVISIBLE_G = new RegExp(`[${INVISIBLES}]`, "g");
 const FENCE_RE = /^ {0,3}(?:```|~~~)/;
 const QUOTE_RE = /^\s*(?:>|&gt;)/;
 const VERDICT_STATES = new Set(["COMMENTED", "APPROVED"]);
@@ -52,14 +54,16 @@ export function parseBinding(body) {
   if (!isStr(body)) return {code: "VERDICT_BINDING_MALFORMED"};
   const lines = [];
   let fenced = false;
-  for (const l of body.split(/\r?\n/)) {
-    if (FENCE_RE.test(l.replace(INVISIBLE_G, ""))) { fenced = !fenced; continue; }
-    if (fenced || QUOTE_RE.test(l.replace(INVISIBLE_G, ""))) continue;
-    if (BINDING_LIKE_RE.test(l.replace(INVISIBLE_G, ""))) lines.push(l);
+  const all = body.split(/\r?\n/);
+  // Any line that mentions verdict-binding once invisibles are removed, and carries one, is MALFORMED wherever it sits (fenced and quoted included).
+  if (all.some(l => INVISIBLE_RE.test(l) && BINDING_LIKE_RE.test(l.replace(INVISIBLE_G, "")))) return {code: "VERDICT_BINDING_MALFORMED"};
+  for (const l of all) {
+    if (FENCE_RE.test(l)) { fenced = !fenced; continue; }
+    if (fenced || QUOTE_RE.test(l)) continue;
+    if (BINDING_LIKE_RE.test(l)) lines.push(l);
   }
   if (lines.length === 0) return null;
   if (lines.length > 1) return {code: "VERDICT_BINDING_AMBIGUOUS"};
-  if (INVISIBLE_RE.test(lines[0])) return {code: "VERDICT_BINDING_MALFORMED"};
   const m = BINDING_RE.exec(lines[0]);
   if (!m) return {code: "VERDICT_BINDING_MALFORMED"};
   return {verdict: m[1], head: m[2], base: m[3], session: m[4]};
@@ -108,9 +112,12 @@ function checkVerdict(ev, headSha, baseSha, allowed, r) {
   const cands = [], changes = [];
   let older = false;
   for (const rv of reviews) {
-    if (!isObj(rv) || !isObj(rv.user) || !isStr(rv.user.login)) continue;
-    // CHANGES_REQUESTED on this head counts from ANY author, binding or not (a maintainer clears it by dismissing the review).
-    if (rv.state === "CHANGES_REQUESTED" && rv.commit_id === headSha) changes.push({t: timeOf(rv.submitted_at), login: lc(rv.user.login)});
+    if (!isObj(rv)) { r.push("EVIDENCE_MALFORMED:reviews"); continue; }
+    const login = isObj(rv.user) && isStr(rv.user.login) && LOGIN_RE.test(rv.user.login) ? lc(rv.user.login) : null;
+    // CHANGES_REQUESTED on this head counts from ANY author, binding or not, including a deleted/ghost account (user null: a null login never
+    // matches the CLEAN's author, so it always blocks). A maintainer clears it by dismissing the review.
+    if (rv.state === "CHANGES_REQUESTED" && rv.commit_id === headSha) changes.push({t: timeOf(rv.submitted_at), login});
+    if (login === null) continue;
     if (!allowed.has(lc(rv.user.login))) continue;
     const b = parseBinding(rv.body);
     if (b === null) continue;
@@ -139,8 +146,9 @@ function checkVerdict(ev, headSha, baseSha, allowed, r) {
   // Any non-CLEAN binding review on this head at or after the latest CLEAN (or with no usable time) supersedes it.
   const later = cands.filter(c => c.code !== null && !(c.t < last.t));
   if (later.length) { ok = false; r.push("VERDICT_SUPERSEDED_BY_LATER_REVIEW"); for (const c of later) r.push(c.code); }
-  // A non-CLEAN verdict is cleared only by a strictly later CLEAN from the SAME reviewer-session.
-  for (const c of cands) if (c.code === "VERDICT_NOT_CLEAN" && c.t < last.t && !clean.some(k => k.session === c.session && k.t > c.t)) { ok = false; r.push("VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_SESSION"); }
+  // A non-CLEAN verdict is cleared only by a strictly later CLEAN with the SAME reviewer-session AND the SAME review author login
+  // (a session string is just text in a body: any account can quote it).
+  for (const c of cands) if (c.code === "VERDICT_NOT_CLEAN" && c.t < last.t && !clean.some(k => k.session === c.session && lc(k.login) === lc(c.login) && k.t > c.t)) { ok = false; r.push("VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_REVIEWER"); }
   // CHANGES_REQUESTED blocks when at or after the latest CLEAN, or earlier from an account other than the CLEAN's author.
   for (const c of changes) if (!(c.t < last.t) || c.login !== lc(last.login)) { ok = false; r.push("REVIEW_CHANGES_REQUESTED"); }
   return ok ? last.login : null;
@@ -151,6 +159,10 @@ function checkPaths(ev, r) {
   if (!isObj(pp) || !Array.isArray(pp.exactPaths) || !Array.isArray(pp.protectedPrefixes) || pp.exactPaths.length === 0 || pp.protectedPrefixes.length === 0
     || !pp.exactPaths.every(isStr) || !pp.protectedPrefixes.every(isStr)) { r.push("EVIDENCE_MALFORMED:protectedPaths"); return; }
   if (!Array.isArray(ev.diffFiles)) { r.push("EVIDENCE_MALFORMED:diffFiles"); return; }
+  // Completeness: the list must hold exactly pr.changed_files entries, and the PR files API lists at most 3000 files.
+  const cf = isObj(ev.pr) ? ev.pr.changed_files : undefined;
+  if (!Number.isSafeInteger(cf) || cf < 0) r.push("EVIDENCE_MALFORMED:pr.changed_files");
+  else if (ev.diffFiles.length !== cf || cf > MAX_LISTED_FILES) r.push("DIFF_INCOMPLETE");
   const exact = new Set([...PROTECTED_FLOOR_EXACT, ...pp.exactPaths.map(normPath).filter(Boolean)]);
   const prefixes = [...PROTECTED_FLOOR, ...pp.protectedPrefixes].map(p => lc(p.replace(/\\/g, "/")).replace(/^(?:\.\/|\/)+/, "")).filter(Boolean);
   const hit = n => exact.has(n) || prefixes.some(p => n.startsWith(p));

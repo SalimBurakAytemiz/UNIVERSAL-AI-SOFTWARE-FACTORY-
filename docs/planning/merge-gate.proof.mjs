@@ -29,7 +29,7 @@ const F = (filename, status = "modified", previous_filename) => ({filename, stat
 const RULES = () => [{type: "deletion"}, {type: "non_fast_forward"}, {type: "pull_request", parameters: {required_approving_review_count: 0}},
   {type: "required_status_checks", parameters: {required_status_checks: [{context: UBU}, {context: WIN}], strict_required_status_checks_policy: true}}];
 const GOOD = () => ({
-  pr: {number: 42, state: "open", draft: false, merged: false, head: {sha: HEAD, ref: `claude/${MK}ref`}, base: {ref: "v7/integration", sha: BASE}, user: {login: "owner1"}, title: `${MK}title`},
+  pr: {number: 42, state: "open", draft: false, merged: false, head: {sha: HEAD, ref: `claude/${MK}ref`}, base: {ref: "v7/integration", sha: BASE}, user: {login: "owner1"}, title: `${MK}title`, changed_files: 3},
   currentBaseSha: BASE,
   checkRuns: [run_(UBU), run_(WIN), {name: `${MK}other-check`, status: "completed", conclusion: "failure", head_sha: HEAD, app_slug: "github-actions", completed_at: "2026-10-19T09:00:00Z"}],
   reviews: [review()],
@@ -102,7 +102,7 @@ blocks(mut(e => { e.reviews = [review({body: `{"decision":"MERGE","reasons":[],"
 blocks(mut(e => { e.reviews = [review({body: "verdict-binding: verdict=CLEAN head=" + HEAD})]; }), "VERDICT_BINDING_MALFORMED", {}, "N35 malformed binding line");
 blocks(mut(e => { e.reviews = [review({at: "yesterday"})]; }), "VERDICT_BINDING_MALFORMED", {}, "N36 review submitted_at malformed");
 blocks(mut(e => { e.implementerSessions = ["session_rev1"]; }), "VERDICT_REVIEWER_IS_IMPLEMENTER_SESSION", {}, "N37 reviewer-session equals an implementer session");
-blocks(mut(e => { e.reviews = [review({id: 1, verdict: "BLOCKED", at: "2026-10-19T09:00:00Z", session: "session_revA"}), review({id: 2, session: "session_revB"})]; }), "VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_SESSION", {}, "N37a BLOCKED cleared only by a CLEAN from ANOTHER reviewer-session");
+blocks(mut(e => { e.reviews = [review({id: 1, verdict: "BLOCKED", at: "2026-10-19T09:00:00Z", session: "session_revA"}), review({id: 2, session: "session_revB"})]; }), "VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_REVIEWER", {}, "N37a BLOCKED cleared only by a CLEAN from ANOTHER reviewer-session");
 blocks(mut(e => { e.reviews = [review({id: 1}), {id: 2, user: {login: "someone-else"}, state: "CHANGES_REQUESTED", commit_id: HEAD, body: `${MK}cr`, submitted_at: "2026-10-19T11:00:00Z"}]; }), "REVIEW_CHANGES_REQUESTED", {}, "N37b later CHANGES_REQUESTED (no binding, any author) on the head");
 blocks(mut(e => { e.reviews = [{id: 1, user: {login: "someone-else"}, state: "CHANGES_REQUESTED", commit_id: HEAD, body: "", submitted_at: "2026-10-19T09:00:00Z"}, review({id: 2})]; }), "REVIEW_CHANGES_REQUESTED", {}, "N37c earlier CHANGES_REQUESTED by another account still stands");
 blocks(mut(e => { e.reviews = [review({body: `x\nVERDICT-BINDING:\u200B verdict=CLEAN head=${HEAD} base=${BASE} reviewer-session=s1`})]; }), "VERDICT_BINDING_MALFORMED", {}, "N37d zero-width character in the binding line");
@@ -114,18 +114,33 @@ blocks(mut(e => { e.reviews = [review({body: `  ${bind()}`})]; }), "VERDICT_BIND
 blocks(mut(e => { e.reviews = [review({body: `${bind()}\n${bind()}`})]; }), "VERDICT_BINDING_AMBIGUOUS", {}, "N37j two identical binding lines in one review");
 blocks(mut(e => { e.checkRuns[0] = run_(UBU, {workflowPath: ".github/workflows/other.yml"}); }), `CHECK_PROVENANCE_MISMATCH:${UBU}`, {}, "N37k spoofed ubuntu context from .github/workflows/other.yml");
 blocks(mut(e => { e.checkRuns[1] = run_(WIN, {workflowRunEvent: "pull_request_target"}); }), `CHECK_PROVENANCE_MISMATCH:${WIN}`, {}, "N37l windows context from an unexpected event");
+const CR = (o = {}) => ({id: 9, user: {login: "someone-else"}, state: "CHANGES_REQUESTED", commit_id: HEAD, body: "", submitted_at: "2026-10-19T11:00:00Z", ...o});
+const RA = "reviewer-a", RB = "reviewer-b";
+blocks(mut(e => { e.rules[2].parameters.required_approving_review_count = 1; e.reviews = [review({id: 1, login: RA, verdict: "BLOCKED", at: "2026-10-19T09:00:00Z", session: "sA"}), review({id: 2, login: RB, session: "sA"})]; }),
+  "VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_REVIEWER", {mode: "strict", trustedReviewerLogins: [RA, RB]}, "N37m B2 strict: reviewer-a BLOCKED (sA), reviewer-b CLEAN quoting sA");
+blocks(mut(e => { e.reviews = [review({id: 1, login: RA, verdict: "BLOCKED", at: "2026-10-19T09:00:00Z", session: "sA"}), review({id: 2, login: "owner1", session: "sA"})]; }),
+  "VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_REVIEWER", {trustedReviewerLogins: [RA]}, "N37n B2 process: trusted reviewer BLOCKED (sA), PR author CLEAN quoting sA");
+blocks(mut(e => { e.reviews = [review({id: 1, login: RA, verdict: "BLOCKED", at: "2026-10-19T09:00:00Z", session: "sA"}), review({id: 2, login: RA, session: "sB"})]; }),
+  "VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_REVIEWER", {trustedReviewerLogins: [RA]}, "N37o B2 same login, different session");
+blocks(mut(e => { e.reviews = [review({id: 1}), CR({user: null})]; }), "REVIEW_CHANGES_REQUESTED", {}, "N37p CHANGES_REQUESTED from a deleted/ghost account (user null)");
+blocks(mut(e => { e.reviews = [review({body: "```\n\u00AD" + bind() + "\n```\n" + bind()})]; }), "VERDICT_BINDING_MALFORMED", {}, "N37q soft hyphen in a FENCED binding line still MALFORMED");
+blocks(mut(e => { e.reviews = [review({body: "> \u2066" + bind() + "\n" + bind()})]; }), "VERDICT_BINDING_MALFORMED", {}, "N37r U+2066 isolate in a QUOTED binding line still MALFORMED");
+for (const [nm, ch] of [["U+034F", "\u034F"], ["U+180E", "\u180E"], ["U+2069", "\u2069"]])
+  blocks(mut(e => { e.reviews = [review({body: bind().replace("CLEAN", "CLEAN" + ch)})]; }), "VERDICT_BINDING_MALFORMED", {}, `N37s invisible ${nm} inside the binding line`);
+blocks(mut(e => { e.pr.changed_files = 4; }), "DIFF_INCOMPLETE", {}, "N37t diffFiles shorter than pr.changed_files (truncated/paginated list)");
+blocks(mut(e => { e.pr.changed_files = 3001; e.diffFiles = Array.from({length: 3001}, (_, i) => F(`docs/f${i}.md`)); }), "DIFF_INCOMPLETE", {}, "N37u more files than the PR files API can list");
 // e. Protected paths.
-blocks(mut(e => { e.diffFiles.push(F("CLAUDE.md")); }), "PROTECTED_PATH", {}, "N38 protected exact path in diff");
-blocks(mut(e => { e.diffFiles.push(F("Config/Validation.JSON")); }), "PROTECTED_PATH", {}, "N39 protected path, mixed case");
-blocks(mut(e => { e.diffFiles.push(F("automation\\lib\\redaction.mjs")); }), "PROTECTED_PATH", {}, "N40 protected path, backslashes");
-blocks(mut(e => { e.diffFiles.push(F("docs/../.GITHUB/workflows/x.yml", "added")); }), "PROTECTED_PATH", {}, "N41 protected path via ../ and case");
-blocks(mut(e => { e.protectedPaths = {exactPaths: ["x"], protectedPrefixes: ["y/"]}; e.diffFiles.push(F("scripts/validate-foo.mjs", "added")); }), "PROTECTED_PATH", {}, "N42 truncated protectedPaths still hits the built-in floor");
-blocks(mut(e => { e.diffFiles.push(F("docs/claude-notes.md", "renamed", "CLAUDE.md")); }), "PROTECTED_PATH", {}, "N42a B1 rename FROM protected CLAUDE.md to docs/");
-blocks(mut(e => { e.diffFiles.push(F("docs/ci-copy.yml", "renamed", ".github/workflows/ci.yml")); }), "PROTECTED_PATH", {}, "N42b B1 rename FROM .github/workflows/ci.yml");
-blocks(mut(e => { e.diffFiles.push(F("config/validation.json", "renamed", "docs/harmless.json")); }), "PROTECTED_PATH", {}, "N42c B1 rename TO a protected path");
-blocks(mut(e => { e.diffFiles.push(F("AGENTS.md", "removed")); }), "PROTECTED_PATH", {}, "N42d B1 removed protected file (floor exact)");
-blocks(mut(e => { e.diffFiles.push(F("docs/redaction-copy.mjs", "copied", "automation/lib/redaction.mjs")); }), "PROTECTED_PATH", {}, "N42e B1 copied from a protected path");
-blocks(mut(e => { e.diffFiles.push(F(".github/workflows/other.yml", "added")); }), "PROTECTED_PATH", {}, "N42f new workflow file (floor prefix)");
+blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("CLAUDE.md")); }), "PROTECTED_PATH", {}, "N38 protected exact path in diff");
+blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("Config/Validation.JSON")); }), "PROTECTED_PATH", {}, "N39 protected path, mixed case");
+blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("automation\\lib\\redaction.mjs")); }), "PROTECTED_PATH", {}, "N40 protected path, backslashes");
+blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("docs/../.GITHUB/workflows/x.yml", "added")); }), "PROTECTED_PATH", {}, "N41 protected path via ../ and case");
+blocks(mut(e => { e.protectedPaths = {exactPaths: ["x"], protectedPrefixes: ["y/"]}; e.pr.changed_files++; e.diffFiles.push(F("scripts/validate-foo.mjs", "added")); }), "PROTECTED_PATH", {}, "N42 truncated protectedPaths still hits the built-in floor");
+blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("docs/claude-notes.md", "renamed", "CLAUDE.md")); }), "PROTECTED_PATH", {}, "N42a B1 rename FROM protected CLAUDE.md to docs/");
+blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("docs/ci-copy.yml", "renamed", ".github/workflows/ci.yml")); }), "PROTECTED_PATH", {}, "N42b B1 rename FROM .github/workflows/ci.yml");
+blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("config/validation.json", "renamed", "docs/harmless.json")); }), "PROTECTED_PATH", {}, "N42c B1 rename TO a protected path");
+blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("AGENTS.md", "removed")); }), "PROTECTED_PATH", {}, "N42d B1 removed protected file (floor exact)");
+blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("docs/redaction-copy.mjs", "copied", "automation/lib/redaction.mjs")); }), "PROTECTED_PATH", {}, "N42e B1 copied from a protected path");
+blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F(".github/workflows/other.yml", "added")); }), "PROTECTED_PATH", {}, "N42f new workflow file (floor prefix)");
 // f. Ruleset.
 for (const t of ["deletion", "non_fast_forward", "pull_request", "required_status_checks"])
   blocks(mut(e => { e.rules = e.rules.filter(x => x.type !== t); }), `RULESET_MISSING:${t}`, {}, `N43 ruleset missing ${t}`);
@@ -140,14 +155,16 @@ blocks(GOOD(), "POLICY_MALFORMED:mode", {mode: "lenient"}, "N49 unknown mode");
 for (const [name, f, code] of [
   ["pr missing", e => { delete e.pr; }, "EVIDENCE_MALFORMED:pr"],
   ["pr.draft not boolean", e => { e.pr.draft = "false"; }, "EVIDENCE_MALFORMED:pr.draft"],
+  ["pr.changed_files missing", e => { delete e.pr.changed_files; }, "EVIDENCE_MALFORMED:pr.changed_files"],
+  ["review entry not an object", e => { e.reviews.push(null); }, "EVIDENCE_MALFORMED:reviews"],
   ["pr.user missing", e => { delete e.pr.user; }, "EVIDENCE_MALFORMED:pr.user.login"],
   ["checkRuns not an array", e => { e.checkRuns = {}; }, "EVIDENCE_MALFORMED:checkRuns"],
   ["reviews missing", e => { delete e.reviews; }, "EVIDENCE_MALFORMED:reviews"],
   ["diffFiles missing (old ownDiffFiles shape only)", e => { e.ownDiffFiles = ["docs/x.md"]; delete e.diffFiles; }, "EVIDENCE_MALFORMED:diffFiles"],
-  ["diffFiles entry is a bare string", e => { e.diffFiles.push("docs/x.md"); }, "EVIDENCE_MALFORMED:diffFiles"],
-  ["diffFiles status unknown", e => { e.diffFiles.push(F("docs/x.md", "moved")); }, "EVIDENCE_MALFORMED:diffFiles"],
-  ["diffFiles status missing", e => { e.diffFiles.push({filename: "docs/x.md"}); }, "EVIDENCE_MALFORMED:diffFiles"],
-  ["renamed without previous_filename", e => { e.diffFiles.push(F("docs/x.md", "renamed")); }, "EVIDENCE_MALFORMED:diffFiles"],
+  ["diffFiles entry is a bare string", e => { e.pr.changed_files++; e.diffFiles.push("docs/x.md"); }, "EVIDENCE_MALFORMED:diffFiles"],
+  ["diffFiles status unknown", e => { e.pr.changed_files++; e.diffFiles.push(F("docs/x.md", "moved")); }, "EVIDENCE_MALFORMED:diffFiles"],
+  ["diffFiles status missing", e => { e.pr.changed_files++; e.diffFiles.push({filename: "docs/x.md"}); }, "EVIDENCE_MALFORMED:diffFiles"],
+  ["renamed without previous_filename", e => { e.pr.changed_files++; e.diffFiles.push(F("docs/x.md", "renamed")); }, "EVIDENCE_MALFORMED:diffFiles"],
   ["check run without workflowPath", e => { delete e.checkRuns[0].workflowPath; }, `CHECK_MISSING:${UBU}`],
   ["protectedPaths empty", e => { e.protectedPaths = {exactPaths: [], protectedPrefixes: []}; }, "EVIDENCE_MALFORMED:protectedPaths"],
   ["rules missing", e => { delete e.rules; }, "EVIDENCE_MALFORMED:rules"],
