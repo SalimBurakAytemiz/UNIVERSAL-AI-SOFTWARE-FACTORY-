@@ -16,13 +16,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-selfhosted-${{ github.ref }}
+  group: ci-selfhosted-${{ github.ref }}-${{ inputs.target || 'push' }}
   cancel-in-progress: true
 
 jobs:
   validate-windows:
     name: validate (windows)
     # Job-level `if` may only use github/needs/vars/inputs contexts (not matrix).
+    # These conditions are ADVISORY (they live in a file anyone with write access could edit);
+    # the real control is the runner's isolation (standard account UASCO-CI). See runbook.
     if: ${{ github.event_name == 'push' || inputs.target == 'windows' || inputs.target == 'both' }}
     runs-on: [self-hosted, windows, uasco-ci]
     timeout-minutes: 120
@@ -48,9 +50,9 @@ jobs:
         run: node scripts/secret-sanity.mjs
       - name: Bootstrap trust-kernel self-test
         run: node scripts/bootstrap-kernel-selftest.mjs
-      - name: Per-step durations vs the 600s per-step cap
+      - name: Per-step durations + fail-closed evidence check (600s cap, NOT_RUN, coverage)
         if: always()
-        run: node scripts/ci-runner/ci-report-durations.mjs
+        run: node scripts/ci-runner/ci-report-durations.mjs --require --leg windows
 
   validate-linux:
     name: validate (linux)
@@ -80,6 +82,6 @@ jobs:
         run: node scripts/secret-sanity.mjs
       - name: Bootstrap trust-kernel self-test
         run: node scripts/bootstrap-kernel-selftest.mjs
-      - name: Per-step durations vs the 600s per-step cap
+      - name: Per-step durations + fail-closed evidence check (600s cap, NOT_RUN, coverage)
         if: always()
-        run: node scripts/ci-runner/ci-report-durations.mjs
+        run: node scripts/ci-runner/ci-report-durations.mjs --require --leg linux
