@@ -428,3 +428,37 @@ describe("UI-132 closure and handover checklist", () => {
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgb\(/);
   });
 });
+
+describe("UI-132 closure honest-state follow-ups", () => {
+  const st = (c: any[], id: string) => c.find(x => x.id === id).state;
+  const ok = (items: any[]) => ({state: "VERIFIED", items});
+  const mis = (id: string, status: string) => ({missionId: id, projectId: P1, status});
+  const del = ok([{projectId: P1, sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE"}, productVerification: {state: "NOT_VERIFIED"}}]);
+  it("does not report noFailed MET when the project has zero missions", async () => {
+    // //TR: Görev yokken noFailed boş-doğru MET olmaz.
+    const {buildClosure} = await load("closure-core.js");
+    const c = buildClosure({projectId: P1, missions: ok([]), runs: ok([]), deliveries: del});
+    expect(st(c, "noFailed")).toBe("UNKNOWN");
+    expect(st(c, "hasMissions")).toBe("OPEN");
+  });
+  it("treats STALE and other non-VERIFIED reads as UNKNOWN, never MET", async () => {
+    const {buildClosure} = await load("closure-core.js");
+    for (const bad of ["STALE", "OFFLINE", "UNAVAILABLE", "ERROR"]) {
+      const m = {state: bad, items: [mis(M1, "COMPLETE")]}, r = {state: bad, items: []}, d = {state: bad, items: del.items};
+      const a = buildClosure({projectId: P1, missions: m, runs: ok([]), deliveries: del});
+      for (const id of ["hasMissions", "missionsDone", "noFailed", "noActiveRuns"]) expect(st(a, id), `${bad} ${id}`).toBe("UNKNOWN");
+      expect(st(buildClosure({projectId: P1, missions: ok([mis(M1, "COMPLETE")]), runs: r, deliveries: del}), "noActiveRuns"), bad).toBe("UNKNOWN");
+      const b = buildClosure({projectId: P1, missions: ok([mis(M1, "COMPLETE")]), runs: ok([]), deliveries: d});
+      expect(st(b, "sourceDelivery")).toBe("UNKNOWN");
+      expect(st(b, "productVerified")).toBe("UNKNOWN");
+    }
+  });
+  it("makes noActiveRuns UNKNOWN when the runs list hit the 500 cap, MET just below it", async () => {
+    const {buildClosure, RUNS_CAP} = await load("closure-core.js");
+    expect(RUNS_CAP).toBe(500);
+    const runs = (n: number) => ok(Array.from({length: n}, (_, i) => ({runId: `r${i}`, missionId: `other${i}`, status: "COMPLETE"})));
+    const m = ok([mis(M1, "COMPLETE")]);
+    expect(st(buildClosure({projectId: P1, missions: m, runs: runs(500), deliveries: del}), "noActiveRuns")).toBe("UNKNOWN");
+    expect(st(buildClosure({projectId: P1, missions: m, runs: runs(499), deliveries: del}), "noActiveRuns")).toBe("MET");
+  });
+});
