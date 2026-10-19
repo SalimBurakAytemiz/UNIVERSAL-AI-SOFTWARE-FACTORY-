@@ -1,0 +1,47 @@
+# //TR: Self-hosted Windows runner icin GUVENLI smoke testi: repo kodu CHECKOUT EDILMEZ, GITHUB_TOKEN yetkisi yoktur (permissions: {}), secret kullanilmaz; yalniz salt-okunur kimlik/izin yoklamasi yapar. Yalniz 'uasco-ci' etiketli YENI runner'i hedefler (eski runner bu isi almaz). Tetikleyiciler: elle workflow_dispatch (varsayilan branch'te) veya yalniz 'ci/selfhosted-smoke' branch'ine push; PR olaylarinda CALISMAZ. Basari kosulu: hesap UASCO-CI, yonetici DEGIL, diger kullanici profilleri OKUNAMAZ.
+name: Runner smoke (self-hosted, safe)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ci/selfhosted-smoke]
+
+permissions: {}
+
+concurrency:
+  group: runner-smoke-selfhosted
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: runner smoke (windows, uasco-ci)
+    runs-on: [self-hosted, windows, uasco-ci]
+    timeout-minutes: 10
+    env:
+      UASCO_EXPECTED_RUNNER_ACCOUNT: UASCO-CI
+    steps:
+      - name: Identity, least-privilege and profile-isolation probe (no checkout, no secrets, read-only)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+          $isAdmin = (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+          $acct = $id.Name.Split('\')[-1]
+          Write-Output "runnerAccount=$acct isSystem=$($id.IsSystem) isAdministrator=$isAdmin"
+          $own = $env:USERPROFILE
+          $skip = @('Public', 'Default', 'Default User', 'All Users')
+          $denied = 0; $allowed = 0
+          foreach ($d in (Get-ChildItem -LiteralPath 'C:\Users' -Directory -Force -ErrorAction SilentlyContinue)) {
+            if ($d.FullName -ieq $own -or $skip -contains $d.Name) { continue }
+            try { Get-ChildItem -LiteralPath $d.FullName -Force -ErrorAction Stop | Out-Null; $allowed++ } catch { $denied++ }
+          }
+          Write-Output "otherUserProfiles: readDenied=$denied readAllowed=$allowed"
+          if (Get-Command node -ErrorAction SilentlyContinue) { Write-Output "node=$(node --version)" } else { Write-Output 'node: not on PATH (setup-node provides Node 24 in validate jobs)' }
+          if (Get-Command git -ErrorAction SilentlyContinue) { Write-Output "git=$(git --version)" } else { Write-Output 'git: NOT on PATH (install Git for Windows machine-wide for actions/checkout)' }
+          $fail = @()
+          if ($acct -ne $env:UASCO_EXPECTED_RUNNER_ACCOUNT) { $fail += "runner account is '$acct', expected '$($env:UASCO_EXPECTED_RUNNER_ACCOUNT)'" }
+          if ($id.IsSystem) { $fail += 'runner runs as LocalSystem' }
+          if ($isAdmin) { $fail += 'runner token has Administrator rights' }
+          if ($allowed -gt 0) { $fail += "runner can read $allowed other user profile(s)" }
+          if ($fail.Count) { $fail | ForEach-Object { Write-Output "RUNNER_SMOKE_FAIL: $_" }; exit 1 }
+          Write-Output 'RUNNER_SMOKE: PASS (account UASCO-CI, not admin, not SYSTEM, other user profiles not readable)'

@@ -1,47 +1,40 @@
-<!-- //TR: Ucretsiz self-hosted CI entegrasyonu: guvenlik modeli (guvenilmeyen PR kodunu kisisel runner'da OTOMATIK kosturmama), runner sertlestirme, 600sn Windows timeout analizi, Linux ucretsiz secenekleri, zorunlu test kapsami + branch protection + SHA-bound bagimsiz review korunumu, ve kademeli rollout. GitHub-hosted kota 2000/2000 dolu; ek ucret YASAK. Korunan .github/workflows/ci.yml'i degistirmez; ci-selfhosted'i AYRI dosya olarak ekler. -->
+<!-- //TR: Ucretsiz self-hosted CI entegrasyonu (VM yok, ek ucret yok): runner UASCO-CI standart Windows hesabi altinda calisir; kurulum betigi resmi paketi SHA-256 + Authenticode ile dogrular; token/parola gizli istemle alinir ve hicbir yere yazilmaz. Guvenilmeyen PR kodu otomatik CALISMAZ (pull_request tetikleyicisi yok). Bu belge PR #30'daki iki yanlis varsayimi duzeltir (varsayilan branch master; Free planda environment onay kapisi yok) ve kalan riskleri durustce listeler. -->
 
-# Free self-hosted CI integration (quota 2000/2000 exhausted; no extra billing)
+# Free self-hosted CI — UASCO-CI runner (no VM, no extra billing)
 
-GitHub-hosted Actions minutes are exhausted, so every `ci.yml` run dies in ~3–6s at startup. A Windows self-hosted runner is now registered (runner smoke test SUCCEEDED). This integrates **free** self-hosted CI **safely** — without running untrusted PR code on the personal machine, without extra billing, and without weakening any gate.
+GitHub-hosted Actions minutes are exhausted (2000/2000 → GitHub **Free** plan), so `ci.yml` dies in ~3–6 s at startup. This integrates **free** self-hosted CI on the Founder's Windows machine with the runner running as the **standard local account `UASCO-CI`** — no VM, no paid service, no weakened gate.
 
-## Security model — the #1 risk and how it's closed
-A self-hosted runner executes workflow code **on the host machine**. If an untrusted PR ever triggers a self-hosted job, its code runs on the personal Windows box (full-compromise risk). This integration closes that:
+## Corrections to the first version of PR #30 (found on re-review)
+1. **Default branch is `master`.** `workflow_dispatch` only triggers workflows that exist on the default branch, so a dispatch-only workflow merged into `v7/integration` could never be started. Both workflows now also trigger on a **push to a dedicated branch** (`ci/selfhosted-smoke`, `ci/selfhosted-run`), which uses that branch's workflow file — no change to `master` needed.
+2. **Free plan has no environment protection rules for private repos.** The earlier claim "every run is gated by an `environment` required reviewer" was **wrong for this plan** and the `environment:` reference was removed. The human gate is the deliberate trigger itself (dispatch or a push to the dedicated branch); both require repo write access.
+3. **Job-level `if` cannot read `matrix`** (only `github/needs/vars/inputs`), so the old matrix workflow would not have loaded. It is now two explicit jobs, `validate (windows)` and `validate (linux)`.
+4. **`shell: bash` steps** would fail if Git Bash is not on the service account's PATH; they moved to cross-platform Node helpers in `scripts/ci-runner/`.
 
-1. **`validate-selfhosted.yml` triggers on `workflow_dispatch` ONLY.** No `pull_request`, no `push`. Adding the file is **inert** — opening this PR runs nothing on the runner. It executes only when a human clicks "Run workflow."
-2. **`environment: self-hosted-ci` with a required reviewer.** Every run pauses for one-click Founder approval before any code executes on the runner. Create it first (below).
-3. **Least privilege:** `permissions: contents: read`, no secrets exposed to the job, `persist-credentials: false`, `clean: true`, `submodules: false`.
-4. **Runner-side isolation (Founder machine — do before enabling PR triggers):**
-   - Run the runner as a **dedicated low-privilege local account**, not your user/admin.
-   - Prefer an **ephemeral** runner (`./config.cmd --ephemeral`) so each job gets a fresh registration (no cross-job persistence).
-   - Prefer a **throwaway VM or Windows container** for the runner so a hostile job cannot touch your real machine; snapshot/revert between jobs.
-   - Restrict outbound network to what validation needs; block the runner from your LAN/secrets.
-   - GitHub repo **Settings → Actions → General**: set "Require approval for all outside collaborators" (defense in depth; the environment gate is the real control for same-repo branches).
+## Security model
+- **Isolation by standard account (Founder's choice, no VM):** the runner service runs as `UASCO-CI` — not Administrator, not SYSTEM, not the Founder's account. Default Windows profile ACLs keep other users' profiles unreadable to it; the smoke test proves this from the runner's real identity.
+- **No automatic PR execution:** no workflow added here triggers on `pull_request`. Jobs are pinned to the label `uasco-ci`, so the old runner never receives them.
+- **Least privilege in workflows:** smoke = `permissions: {}`, no checkout, no secrets; validate = `contents: read`, `persist-credentials: false`, no secrets.
+- **Secrets never persisted:** `setup-uasco-ci-runner.ps1` reads the registration/removal token and the `UASCO-CI` password via `Read-Host -AsSecureString`, redacts them from captured output, never reads `.credentials*`, never starts a transcript.
+- **Official package only:** latest `actions/runner` release, `actions-runner-win-x64-<ver>.zip`; SHA-256 must match the release-notes hash and/or the API asset digest (both must agree if both exist; none → refuse); `Runner.Listener.exe` Authenticode must be Valid (GitHub/Microsoft).
 
-**Do NOT** use `pull_request_target` (runs with base secrets — worse). PR coverage is added later only behind the environment gate (Phase 3).
+### Residual risks (honest)
+- **Any branch with write access can add its own workflow** with `runs-on: [self-hosted, ...]` and `on: push`, and it would run as `UASCO-CI` on this machine. A personal-account repo cannot restrict which workflows use a repo-level runner (runner groups with workflow allow-lists need an organization). The blast radius is bounded by the standard account (no admin, no other profiles, no stored secrets). Optional hardening: set the runner service to **Manual** start and start it only for CI windows.
+- **Process command lines:** the token/password are passed to `Runner.Listener.exe configure` on its command line for a moment; with command-line process auditing enabled, an admin-readable event log could capture them. The registration token is single-use and expires in 1 hour; change the `UASCO-CI` password afterwards if that auditing is on.
+- **github-hosted `ci.yml` (protected)** runs on every push/PR. When the monthly quota resets, the ~20 open cloud PRs will burn it quickly again. Fix (maintainer, protected edit + reseal): retarget `ci.yml` to self-hosted labels or add `branches-ignore`.
 
-## Required test coverage — preserved
-The workflow runs the exact canonical set from `ci.yml`: `ensure-dependencies` → `run-validation.mjs` → `secret-sanity.mjs` → `bootstrap-kernel-selftest.mjs`, on Node 24. `run-validation.mjs` already **platform-filters** (Windows-only steps report `NOT_RUN_PLATFORM`, never PASS), so **full coverage needs both a Windows and a Linux self-hosted runner** — same as the old `ubuntu+windows` matrix.
+## Procedure (run in a Claude session ON the Windows machine; no VM)
+Human-only points are marked **[YOU]**; everything else the local session runs itself.
+1. `powershell -ExecutionPolicy Bypass -File scripts\ci-runner\setup-uasco-ci-runner.ps1` — **audit, read-only**: lists existing `actions.runner.*` services and the account each runs as, confirms `UASCO-CI` exists and is **not** in Administrators (by SID, locale-independent), checks git/node, checks the invoking user's profile ACL.
+2. **[YOU]** Repo **Settings → Actions → Runners → New self-hosted runner** → copy the registration token (keep it out of chat).
+3. **[YOU, UAC]** elevated: `...\setup-uasco-ci-runner.ps1 -Install` → paste the token and the `UASCO-CI` password into the hidden prompts. The script downloads + verifies the package, installs it in `C:\uasco-ci\actions-runner` (ACL: Administrators/SYSTEM full, `UASCO-CI` modify, nobody else), registers `uasco-ci-win` with labels `self-hosted,Windows,X64,uasco-ci` as a service running as `.\UASCO-CI`, and verifies the service account.
+4. **Smoke:** `git push origin claude/ci-selfhosted-integration:ci/selfhosted-smoke` → "Runner smoke (self-hosted, safe)" must print `RUNNER_SMOKE: PASS (account UASCO-CI, not admin, not SYSTEM, other user profiles not readable)`.
+5. **Full validation:** `git push origin <branch-to-validate>:ci/selfhosted-run` → `validate (windows)` runs the canonical set on Node 24 and prints per-step durations against the 600 s cap. **No CLEAN/MERGED before this is green.**
+6. **[YOU, approval + UAC]** only after step 4 PASS: **Settings → Actions → Runners → old runner → Remove** → copy the removal token → `...\setup-uasco-ci-runner.ps1 -RemoveOld -OldRunnerDir <old runner folder>`. The script refuses unless the new `UASCO-CI` runner is installed and running. The old folder is not deleted automatically.
 
-## Windows 600s timeout (directive #4)
-The per-step cap is **hardcoded** at `timeoutMs: 600000` in `scripts/run-validation.mjs:6` (protected; not env-tunable). On github-hosted `windows-latest` (slow) the `tests` step overran it → `VALIDATION_STEP_TIMEOUT`. A real self-hosted Windows machine is typically much faster, so the **expected fix is simply running on the faster runner** — the workflow's final step prints every step's `durationMs` and flags any within 60s of the cap. **Honest:** this is confirmed only when a real self-hosted run shows the `tests` step under 600s. If it still overruns, the fix is to **shard that step in `config/validation.json`** (protected → maintainer edit + trust-root reseal) or raise the constant in `run-validation.mjs` (protected). Neither is a builder step.
+## Coverage, 600 s, Linux
+- Coverage is unchanged: `ensure-dependencies` → `run-validation.mjs` → `secret-sanity.mjs` → `bootstrap-kernel-selftest.mjs`. `run-validation.mjs` platform-filters (Windows-only steps `NOT_RUN_PLATFORM` on Linux, never PASS), so full coverage still needs a Linux leg.
+- **600 s** is hardcoded (`timeoutMs: 600000`, protected `scripts/run-validation.mjs:6`). A real machine is usually much faster than github-hosted `windows-latest`; `ci-report-durations.mjs` shows each step against the cap. If `tests` still overruns, sharding it in `config/validation.json` is a **maintainer edit + trust-root reseal** (not a builder step).
+- **Linux (free):** a second runner inside **WSL2 Ubuntu** on the same machine (label `self-hosted,linux,uasco-ci`, its own unprivileged Linux user), or a spare Linux box. Until then, Linux evidence is the cloud CP-CI result, which is **not** a governance verdict.
 
-## Linux free options (directive #5)
-The Founder has a Windows runner; the Linux leg needs a free Linux runner. In order of preference, all **free**:
-1. **WSL2 Linux self-hosted runner on the same Windows machine** — install a second runner inside WSL2 Ubuntu, label it `[self-hosted, linux]`. Zero extra cost/hardware.
-2. **Linux container on the Windows runner** (Docker Desktop + WSL2 backend) — run the Linux leg in a container job.
-3. **A spare/old Linux box or a free-tier VM** you already own (no new paid subscription).
-4. **Interim:** until a Linux runner exists, Linux validation continues as the cloud **CP-CI** evidence (`docs/cloud-production/ci-equivalent.*`), which is explicitly **not** a governance verdict — so a merge still needs a real Linux check before CLEAN.
-
-## Branch protection + SHA-bound review — preserved (directive #7)
-- The merge gate (`scripts/merge-via-gate.mjs`), the governed SHA/session/identity-bound independent review, and branch protection are **unchanged**. This only changes **where** the validate jobs run.
-- Required status-check contexts are named `validate (windows-latest)` / `validate (ubuntu-latest)` (the dead github-hosted matrix). The self-hosted jobs are named `validate (windows)` / `validate (linux)`. To make merges satisfy branch protection, an **admin** updates the required-check contexts to the self-hosted job names once they're proven green. The coded merge gate + independent CLEAN verdict remain mandatory.
-
-## Rollout phases (prepare safe runner → then run real CI; directive "run after safe")
-- **Phase 0 (this PR):** add `validate-selfhosted.yml` (dispatch-only, inert) + this runbook on branch `claude/ci-selfhosted-integration`. Nothing runs on the runner.
-- **Phase 1 (Founder, machine-side):** harden the runner (dedicated account + ephemeral + VM/container + network limits), confirm Node ≥24 on it, add labels `self-hosted,windows` (and a `self-hosted,linux` runner per the Linux options). Create the `self-hosted-ci` **Environment** with yourself as a **required reviewer**.
-- **Phase 2 (merge this PR):** land the workflow (infra; non-protected new file). `workflow_dispatch` becomes available on the default branch.
-- **Phase 3 (run real CI):** dispatch `CI (self-hosted)` → approve the environment gate → it runs validation on the runner(s). Read the per-step durations (600s check). Iterate until **green on both legs**. Only then is a CLEAN verdict + merge honest — **do not declare CLEAN/MERGED before this**.
-- **Phase 4 (admin):** point branch-protection required checks at the self-hosted contexts; optionally disable the dead github-hosted `ci.yml` (a protected-file change → maintainer + reseal) to stop it producing failing required checks.
-
-## No extra billing (directive #8)
-Self-hosted runners are **free** (your hardware). This adds **no** GitHub billing, no subscription, no paid action. The exhausted github-hosted minutes are not used by self-hosted jobs.
+## Branch protection and review — unchanged
+The coded merge gate, the SHA-bound independent review and branch protection are untouched. Making self-hosted results count for merges requires an **admin** to switch the required-check contexts to `validate (windows)` / `validate (linux)` once they are green, plus the open items already recorded (second approver identity, protection apply).
