@@ -392,3 +392,26 @@
 1. Dispatch tooling (claude-code-remote list_sessions/create_session) unavailable: UI-132 is claimable but cannot be built by this fire.
 2. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned); BACKLOG-SOURCE-REBASELINE (Founder choice).
 3. Canonical backlog: remaining entries NOT_READY (NO_AUTHORIZED_BY / REQUIRES_NEW_AUTHORITY / UNMET_DEP:pkg-lease1-wiring, BACKLOG-SOURCE-REBASELINE).
+
+## 2026-10-19 heartbeat #30 (queue read from claude/cloud-production-engine@ed5cfb9; fired 23:20Z; on-demand coordinator fire, chain test)
+
+**Queue (step 1):** parsed OK. READY tasks: 0. Task states unchanged. DONE: 0. Step 2 dispatched: 0 (create_session unavailable).
+
+**Step 2b (canonical backlog):** v7/integration = d2ba4f0; dispatch.mjs and BACKLOG_CHECKPOINT.json present. Dry run outcome START UI-132. Capacity guard (list_sessions unavailable, fallback method): the dry run lists claims UI-030 and UI-113 as HAS_WORK_COMMITS without an open PR, but both branches (claude/ui-030, claude/ui-113) are verified ancestors of v7/integration (git merge-base --is-ancestor), i.e. already delivered, not in flight. ACTIVE = 0 (not counting those two). Open-PR head list passed: 7 claude/ heads that target v7/integration at d2ba4f0 or its predecessors (#71, #70, #69, #68, #67, #66, #65). **CLAIM made:** `node docs/planning/dispatch.mjs --claim --owner heartbeat --no-lease` returned START, claimed:true, taskId UI-132, branch claude/ui-132, claim commit sha c03cc9cccaf7d1c827515360ec3e796d73a899d1, base d2ba4f07825a3b66ae5d69f0493a7583bf4f6775 (ls-remote confirms refs/heads/claude/ui-132 = c03cc9c).
+
+CLAIMED_AWAITING_BUILDER UI-132 claude/ui-132 c03cc9cccaf7d1c827515360ec3e796d73a899d1
+
+create_session is unavailable in this fire, so no builder was dispatched; no retry and no second claim. The coordinator session must provision exactly one builder (template: lane-a-builder, model claude-sonnet-5-5, source_revision claude/ui-132) for this claim.
+
+**Open PRs: 21** (single page; the PR listing returned #8, #11, #15, #20, #22, #23, #27, #28, #31-#33, #39, #44, #46, #48, #50, #65-#71): new since #29: #71 integration wave B1a. Mergeable state and CI: UNKNOWN (mergeable_state not returned in the listing). No PR carries a uasco-cloud-production label. uasco-needs-fix on #68 and #50. Draft: #69, #67, #66, #65, #50.
+
+**Active implementer/builder sessions:** UNKNOWN (list_sessions unavailable); claim-branch fallback count of undelivered claims = 1 (claude/ui-132, just claimed).
+
+**Merged PRs / tasks completed:** UNKNOWN as PR-merge counts; verified by git ancestry: claude/ui-030 and claude/ui-113 are merged into v7/integration. Queue tasks DONE: 0.
+
+**Current failures:** uasco-needs-fix on #68 and #50. Repo-wide Actions CI red per queue (not independently verified).
+
+**Top blockers:**
+1. claude-code-remote create_session unavailable: UI-132 claim has no builder yet.
+2. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned); BACKLOG-SOURCE-REBASELINE (Founder choice).
+3. Canonical backlog: other entries NOT_READY (NO_AUTHORIZED_BY / REQUIRES_NEW_AUTHORITY / UNMET_DEP).
