@@ -1,5 +1,13 @@
 # //TR: Bu dependency-free PowerShell verifier Node/npm kurulmadan önce ZIP'ten çıkan dosyaları SHA256SUMS manifestine karşı doğrular; eksik/değişmiş tracked artifact ile installer çalışmasını engeller.
 $ErrorActionPreference="Stop";Set-Location (Split-Path -Parent $PSScriptRoot)
+# //TR: pwsh 7'den baslatilan bir oturumdan miras kalan PSModulePath, Windows PowerShell 5.1'in in-box modullerini (Get-FileHash vb.) PS7 surumleriyle golgeler; yalniz Desktop (5.1) oturumunda 5.1 varsayilan modul yolu geri yuklenir, Core'da hicbir sey degismez.
+if ($PSVersionTable.PSEdition -eq "Desktop") {
+  $env:PSModulePath = @(
+    (Join-Path ([Environment]::GetFolderPath("MyDocuments")) "WindowsPowerShell\Modules"),
+    (Join-Path $env:ProgramFiles "WindowsPowerShell\Modules"),
+    (Join-Path $PSHOME "Modules")
+  ) -join ";"
+}
 if(-not (Test-Path "SHA256SUMS.txt")){throw "SHA256SUMS.txt missing"}
 $errors=[System.Collections.Generic.List[string]]::new()
 $manifestEntries=[System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)

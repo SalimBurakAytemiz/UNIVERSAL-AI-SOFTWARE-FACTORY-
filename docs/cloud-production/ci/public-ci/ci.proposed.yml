@@ -1,0 +1,50 @@
+# //TR: ONERILEN korunan .github/workflows/ci.yml (maintainer trust-root reseal ile uygulanir; builder bu dosyayi .github/workflows altina KENDISI kopyalamaz). Repo PUBLIC oldugu icin standart GitHub-hosted ubuntu-latest + windows-latest ucretsizdir; larger/ucretli runner veya self-hosted runner YOKTUR. Kapsam aynidir: lockfile, ensure-dependencies, canonical run-validation (bolunmus tests kabuklari dahil), secret-sanity, bootstrap kernel self-test. Eklenenler: gereksiz ikili tetiklemeyi onleyen tetikleyici + concurrency, is zaman asimi, SHA'ya bagli fail-closed CI kaniti ve 14 gun saklanan artifact (YALNIZ CI_EVIDENCE.json: adim kimligi/durum/sure; stdout/stderr, calisma loglari ve VALIDATION_REPORT.json public artifact'a YUKLENMEZ). Check adlari degismez: "validate (ubuntu-latest)" ve "validate (windows-latest)".
+name: CI
+on:
+  push:
+    branches: [master, v7/integration]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      UASCO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Require lockfile
+        shell: bash
+        run: test -f package-lock.json || (echo "package-lock.json missing; run install/bootstrap once and commit lockfile" && exit 1)
+      - run: node scripts/ensure-dependencies.mjs
+      - run: node scripts/run-validation.mjs
+      - run: node scripts/secret-sanity.mjs
+      - name: Bootstrap trust-kernel self-test
+        run: node scripts/bootstrap-kernel-selftest.mjs
+      - name: CI evidence (SHA-bound, fail-closed; one platform only)
+        if: always()
+        run: node scripts/ci/ci-evidence.mjs --require --leg ${{ runner.os }}
+      - name: Upload CI evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-evidence-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .ai/runtime/CI_EVIDENCE.json
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: warn
