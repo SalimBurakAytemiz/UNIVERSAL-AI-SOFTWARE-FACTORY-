@@ -3,7 +3,10 @@
 import fs from "node:fs";import path from "node:path";import crypto from "node:crypto";import zlib from "node:zlib";
 import {ARTIFACT_MANIFEST,ARTIFACT_EXCLUDED_DIRS,verifySha256Sums,writeDeterministicZip,readZipCentralDirectory,crc32,sha256File} from "../automation/lib/release-artifact.mjs";
 import {verifyTrustRoot} from "../automation/lib/trust-root.mjs";
-const fail=(code,detail="")=>{console.error(`RELEASE_ZIP: FAIL ${code}${detail?` ${detail}`:""}`);process.exit(1)};
+// //TR: process.exit() kullanilmaz: Linux CI'da agir dosya hash'lemesinden hemen sonra process.exit(1), Node 24 kapanisinda ana is parcacigini V8 platform is parcacigina pthread_join ile kilitliyordu (ci/diagnose-shards: takilan surec futex/pthread_join; exitCode + dogal sonlanma A/B 0/16 takilma vs 2/8). Cikis kodu (1) ve cikti ayni; yalniz sonlanma yolu degisir.
+class ReleaseFail extends Error{}
+const fail=(code,detail="")=>{console.error(`RELEASE_ZIP: FAIL ${code}${detail?` ${detail}`:""}`);process.exitCode=1;throw new ReleaseFail(code)};
+function main(){
 const args=process.argv.slice(2),ci=args.indexOf("--source-commit");let sourceCommit=null;if(ci!==-1){sourceCommit=args[ci+1]??"";args.splice(ci,2);if(!/^[0-9a-f]{40}$/.test(sourceCommit))fail("SOURCE_COMMIT_NOT_FULL_SHA")}
 const [dirArg,zipArg]=args;if(!dirArg||!zipArg)fail("USAGE","node scripts/build-release-zip.mjs <exportDir> <outZip> [--source-commit <sha>]");
 const dir=path.resolve(dirArg),out=path.resolve(zipArg),sidecar=`${out}.release.json`;
@@ -22,3 +25,5 @@ for(let i=0;i<cd.length;i++){const c=cd[i],e=entries[i];if(c.name!==e.name||c.us
 fs.mkdirSync(path.dirname(out),{recursive:true});fs.writeFileSync(out,zip,{flag:"wx"});
 const report={"//TR":"Bu sidecar deterministik final ZIP'in kapsamını ve hash'lerini kaydeder; authenticity iddiası değildir, ZIP ve SHA256SUMS Founder'ın harici anahtarıyla ayrıca imzalanmalıdır.",schemaVersion:"1.0.0",zipFile:path.basename(out),zipSha256:crypto.createHash("sha256").update(zip).digest("hex"),zipBytes:zip.length,entries:entries.length,sha256SumsSha256:sha256File(path.join(dir,ARTIFACT_MANIFEST)),trustRootManifestSha256:manifestSha,trustRootProtectedFiles:JSON.parse(fs.readFileSync(path.join(dir,"config/trust-root-manifest.json"),"utf8")).files.length,sourceCommitDeclared:sourceCommit,deterministic:{timestamp:"1980-01-01T00:00:00 (DOS)",order:"byte order",compression:"raw DEFLATE level 9 when smaller, else STORE",node:process.version,zlib:process.versions.zlib},releaseAuthenticity:"EXTERNAL_DETACHED_SIGNATURE_REQUIRED"};
 fs.writeFileSync(sidecar,JSON.stringify(report,null,2)+"\n",{flag:"wx"});console.log(JSON.stringify(report,null,2));
+}
+try{main()}catch(e){if(!(e instanceof ReleaseFail))throw e}

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
+import {logicalTestFiles} from "./support/validation-test-shards.js";
 
 const root = path.resolve(__dirname, "..");
 const desk = path.join(root, "apps", "desktop");
@@ -897,7 +898,8 @@ describe("PS-1B static safety and wiring", () => {
   });
   it("validation.json appends this test at the very end of the tests step and nothing else changed there", () => {
     const cfg = JSON.parse(read(root, "config", "validation.json"));
-    const step = cfg.steps.find((s: any) => s.id === "tests");
+    // PUBLIC-CI: "tests" adımı sıralı tests, tests-2..tests-N kabuklarına bölünebilir; bitişiklik/sıra kuralı kabukların birleşimi olan mantıksal liste üzerinde aynen geçerlidir.
+    const step = {command: logicalTestFiles(cfg)};
     // c2: PS1B-C1-001 testi PS-1B UI testinin hemen ardından; V7-PKG-M1A-MODE (merge-tool sözleşmesi) m1a-* testlerini, UX paketleri de ux-* testlerini bu çiftin sonrasına ekler.
     const j = step.command.indexOf("tests/v7-ps1b-project-studio-ui.test.ts");
     expect(step.command.slice(j, j + 2)).toEqual(["tests/v7-ps1b-project-studio-ui.test.ts", "tests/v7-ps1b-relpath-canonical.test.ts"]);

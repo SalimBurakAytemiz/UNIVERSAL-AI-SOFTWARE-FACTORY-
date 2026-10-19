@@ -1,5 +1,5 @@
 // //TR: Bu test PRE_DEV driver'ının PRE_DEV fazını YÜRÜTÜLEBİLİR kıldığını kanıtlar: enjekte edilen bir MOCK BuilderPort'tan (KAYITLI yanıtlar; canlı model/ağ/shell YOK) tipli artefakt istenir, MEVCUT doğrulayıcılarla doğrulanır, DRAFT kaydedilir ve YALNIZ APPROVED olduğunda faz ilerler. TaskHub referans özeti üzerinde beş fazın tamamı uçtan uca sürülür; geçersiz/izlenemez yanıt mevcut doğrulayıcılarca REJECTED olur ve İLERLEMEZ; alt rol yalnız ONAYLI üst artefaktları görür; replay eşitliği ve mevcut mission akışları + tüm kapılar sağlam kalır. Kayıtlı yanıtlar test-yazımı yapısal içeriktir (uydurma ürün verisi değil) ve dönen hiçbir kod yürütülmez.
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,6 +9,8 @@ import {ROLE_PROMPTS, composeRolePrompt} from "../core/workos/predev/role-prompt
 import {PRE_DEV_ROLE_IDS, PRE_DEV_ROLE_MAP, ARTIFACT_KINDS} from "../core/workos/predev/types.js";
 import type {ArtifactKind} from "../core/workos/predev/types.js";
 import {TASKHUB_BRIEF} from "../core/workos/predev/fixtures/taskhub-brief.js";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const SCOPE = {tenantId: "t-predev-driver"};
 const IMPL = "impl@local.invalid";
