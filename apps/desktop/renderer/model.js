@@ -109,7 +109,7 @@ export function kpiTrend(samples){
 }
 /** İşaretli delta metni: +3, −2, ±0 (gerçek eksi işareti). */
 export function formatDelta(delta){return !Number.isSafeInteger(delta)?MISSING:delta>0?`+${delta}`:delta<0?`−${Math.abs(delta)}`:"±0"}
-export const PILL_KINDS=Object.freeze(["LOADING","EMPTY","VERIFIED","STALE","OFFLINE","FAILED","BLOCKED","DENIED","NOT_CONNECTED","UNAVAILABLE","NOT_EXECUTED","NOT_VERIFIED","PRODUCT_VERIFIED"]);
+export const PILL_KINDS=Object.freeze(["LOADING","EMPTY","VERIFIED","STALE","OFFLINE","FAILED","BLOCKED","DENIED","NOT_CONNECTED","UNAVAILABLE","NOT_EXECUTED","NOT_VERIFIED","PRODUCT_VERIFIED","RECOVERING"]);
 /** //TR: UX WP2: veri bloğu durumunu ayrık durum rozeti türüne çevirir; ERROR=FAILED, UNAVAILABLE ayrı kalır, tek yeşil/kırmızıya indirgenmez. */
 export function pillKindFor(block){
   if(!block||block.loading===true)return "LOADING";

@@ -213,12 +213,12 @@ describe("UX WP2 model and components", () => {
     expect(m.missionPillKind("BLOCKED")).toBe("BLOCKED");
     expect(m.missionPillKind("FAILED")).toBe("FAILED");
     expect(m.missionPillKind("SOMETHING_NEW")).toBe("NEUTRAL");
-    expect(m.PILL_KINDS).toEqual(expect.arrayContaining(["FAILED", "BLOCKED", "DENIED", "STALE", "OFFLINE", "NOT_CONNECTED", "UNAVAILABLE", "NOT_EXECUTED", "NOT_VERIFIED", "PRODUCT_VERIFIED"]));
+    expect(m.PILL_KINDS).toEqual(expect.arrayContaining(["FAILED", "BLOCKED", "DENIED", "STALE", "OFFLINE", "NOT_CONNECTED", "UNAVAILABLE", "NOT_EXECUTED", "NOT_VERIFIED", "PRODUCT_VERIFIED", "RECOVERING"]));
   });
-  it("each status pill has an icon and its own text; the ten distinct kinds never share a label or an icon path", async () => {
+  it("each status pill has an icon and its own text; the eleven distinct kinds never share a label or an icon path", async () => {
     const comp = await load("components.js"), icons = await load("icons.js");
     const {ctx} = await mkCtx(() => undefined);
-    const kinds = ["FAILED", "BLOCKED", "DENIED", "STALE", "OFFLINE", "NOT_CONNECTED", "UNAVAILABLE", "NOT_EXECUTED", "NOT_VERIFIED", "PRODUCT_VERIFIED"];
+    const kinds = ["FAILED", "BLOCKED", "DENIED", "STALE", "OFFLINE", "NOT_CONNECTED", "UNAVAILABLE", "NOT_EXECUTED", "NOT_VERIFIED", "PRODUCT_VERIFIED", "RECOVERING"];
     const labels = new Set<string>(), paths = new Set<string>();
     for (const k of kinds) {
       const p = comp.statePill(ctx, k);
@@ -230,6 +230,7 @@ describe("UX WP2 model and components", () => {
     expect(labels.size).toBe(kinds.length);
     expect(paths.size).toBe(kinds.length);
     expect(labels.has("PRODUCT_VERIFIED")).toBe(true);
+    expect(labels.has("Toparlanıyor")).toBe(true);
     expect(icons.ICON_NAMES).toEqual(expect.arrayContaining(["ban", "lock", "plug", "wifioff", "help", "dashedcircle", "xcircle"]));
   });
   it("timeline items carry time, project attribution only when given, and a status pill", async () => {
@@ -247,7 +248,7 @@ describe("UX WP2 model and components", () => {
     const src = ["views/home.js", "components.js", "shell.js"].map(f => read(...f.split("/"))).join("\n");
     const need = new Set<string>();
     for (const m of src.matchAll(/"((?:kpi|pill|home|feed)\.[A-Za-z0-9_.]+)"/g)) need.add(m[1]);
-    for (const k of ["FAILED", "BLOCKED", "DENIED", "STALE", "OFFLINE", "NOT_CONNECTED", "UNAVAILABLE", "NOT_EXECUTED", "NOT_VERIFIED", "PRODUCT_VERIFIED", "LOADING", "EMPTY", "VERIFIED", "ACTIVE", "WAITING", "ATTENTION", "DONE", "STOPPED", "IDLE", "NEUTRAL"]) need.add(`pill.${k}`);
+    for (const k of ["FAILED", "BLOCKED", "DENIED", "STALE", "OFFLINE", "NOT_CONNECTED", "UNAVAILABLE", "NOT_EXECUTED", "NOT_VERIFIED", "PRODUCT_VERIFIED", "RECOVERING", "LOADING", "EMPTY", "VERIFIED", "ACTIVE", "WAITING", "ATTENTION", "DONE", "STOPPED", "IDLE", "NEUTRAL"]) need.add(`pill.${k}`);
     expect([...need].filter(k => !/[${]/.test(k) && !(k in tr && k in en))).toEqual([]);
     expect(src).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|\bstyle\s*:|setAttribute\(\s*["']style/);
     expect(read("styles.css")).toMatch(/\.kpi-risk\{[^}]*glow-risk/);

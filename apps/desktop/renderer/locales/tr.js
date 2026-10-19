@@ -1093,6 +1093,7 @@ export default {
   "pill.NOT_EXECUTED":"NOT_EXECUTED",
   "pill.NOT_VERIFIED":"NOT_VERIFIED",
   "pill.PRODUCT_VERIFIED":"PRODUCT_VERIFIED",
+  "pill.RECOVERING":"Toparlanıyor",
   "pill.ACTIVE":"Aktif",
   "pill.WAITING":"Bekliyor",
   "pill.ATTENTION":"Dikkat",

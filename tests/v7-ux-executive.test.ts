@@ -375,6 +375,9 @@ describe("Executive — pure mappers are fail-closed and never elevate state", (
     expect([...core.RUN_STATUSES].sort()).toEqual([...CORE_RUN_STATUSES].sort());
     expect([...core.RUN_STEPS]).toEqual([...CORE_RUN_STEPS]);
     for (const s of CORE_RUN_STATUSES) expect(core.PILL_FOR_RUN_STATUS[s], s).toBeTruthy();
+    expect(core.PILL_FOR_RUN_STATUS.RECOVERING).toBe("RECOVERING");
+    expect(core.PILL_FOR_RUN_STATUS.RECOVERY_FAILED).toBe("FAILED");
+    expect(core.PILL_FOR_RUN_STATUS.CHECKPOINTING).toBe("ACTIVE");
   });
   it("mapExecCockpit accepts the contract shape, carries honest non-live blocks without numbers, and uses ONLY the canonical role count", async () => {
     const core = await load("executive-core.js");
