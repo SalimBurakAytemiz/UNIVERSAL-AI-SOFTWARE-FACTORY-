@@ -11,10 +11,17 @@ import * as posture from "./posture.js";
 import * as matrix from "./matrix.js";
 import * as operations from "./operations.js";
 import * as install from "./install.js";
+import {recoveryPanel} from "../recovery-panel.js";
 
 const REAL=Object.freeze({company,delivery,academy,journey,executive,queue,readiness,posture,matrix,operations,install});
 export async function render(ctx,route){
   const real=REAL[route.component];
-  if(real)return real.render(ctx,route);
+  // //TR: UI-251: yerel görünüm render hatası app.js'te yalnız düz bir hata notuna iner; bu sınır, hata mesajı/yığın izi göstermeden Recovery Center panelini (yeniden dene + ana sayfa) gösterir. Sağlık durumu yalnız GET /health okumasıdır.
+  if(real){
+    try{return await real.render(ctx,route)}catch{
+      let health="UNKNOWN";try{health=(await ctx.api.health()).state}catch{/* sağlık okunamadı: UNKNOWN (fail-closed) */}
+      return h(ctx.doc,"div",{class:"view"},recoveryPanel(ctx,{routeId:route.id,health,reason:"VIEW_FAILED",titleId:"view-title"}));
+    }
+  }
   return h(ctx.doc,"div",{class:"view"},h(ctx.doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t(`area.${route.id}.title`)}),h(ctx.doc,"p",{class:"hero-sub",text:ctx.t(`area.${route.id}.desc`)}),plannedPanel(ctx,route));
 }
