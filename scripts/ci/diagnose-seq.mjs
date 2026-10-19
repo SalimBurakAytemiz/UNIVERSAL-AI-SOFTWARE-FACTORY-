@@ -19,7 +19,7 @@ else if (pre === "tests") { const s = cfg.steps.find((x) => x.id === "tests"); a
 else if (pre !== "none") { const s = cfg.steps.find((x) => x.id === "tests"); await run(process.execPath, [s.command[1], s.command[2], pre], 600000, "pre-" + path.basename(pre)); }
 snapshot(pre);
 let done = false;
-for (const t of [60, 150]) setTimeout(() => { if (done) return; console.log(`\n===== HANG SAMPLE @${t}s =====`); console.log(sh("ps -eo pid,ppid,pgid,stat,etime,wchan:25,args --forest | grep -E 'node|git|sh ' | grep -v ' ps -eo' | cut -c1-240 | tail -60")); try { console.log(fs.readFileSync(".ai/runtime/diag-tests-2.log", "utf8").replace(/\x1b\[[0-9;]*m/g, "").slice(-2500)); } catch {} }, t * 1000).unref();
+for (const t of [90]) setTimeout(() => { if (done) return; console.log(sh("bash scripts/ci/diagnose-stuck.sh")); console.log(`\n===== HANG SAMPLE @${t}s =====`); console.log(sh("ps -eo pid,ppid,pgid,stat,etime,wchan:25,args --forest | grep -E 'node|git|sh ' | grep -v ' ps -eo' | cut -c1-240 | tail -60")); try { console.log(fs.readFileSync(".ai/runtime/diag-tests-2.log", "utf8").replace(/\x1b\[[0-9;]*m/g, "").slice(-2500)); } catch {} }, t * 1000).unref();
 const s2 = cfg.steps.find((x) => x.id === "tests-2");
 const r = await run(process.execPath, s2.command.slice(1), 240000, "tests-2");
 done = true;

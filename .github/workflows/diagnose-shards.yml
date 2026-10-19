@@ -12,19 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {pre: "none"}
-          - {pre: "static"}
           - {pre: "tests"}
-          - {pre: "tests/action-gateway.test.ts"}
-          - {pre: "tests/certification.test.ts"}
-          - {pre: "tests/data-routing.test.ts"}
-          - {pre: "tests/dlp.test.ts"}
-          - {pre: "tests/lease-manager.test.ts"}
-          - {pre: "tests/mission-state.test.ts"}
-          - {pre: "tests/model-router.test.ts"}
-          - {pre: "tests/npm-invocation.test.ts"}
-          - {pre: "tests/pkg-aut1-orchestrator.test.ts"}
-          - {pre: "tests/pkg-aut2-autonomy-hardening.test.ts"}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
