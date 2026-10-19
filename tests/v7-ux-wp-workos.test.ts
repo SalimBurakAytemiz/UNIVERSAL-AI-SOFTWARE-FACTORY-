@@ -76,7 +76,7 @@ async function mkCtx(get: (p: string) => any, lang = "tr") {
 }
 
 let forms: any;
-beforeEach(async () => { forms = await load("forms.js"); forms.resetAllForms(); (await load("studio-state.js")).resetStudio(); });
+beforeEach(async () => { forms = await load("forms.js"); forms.resetAllForms(); (await load("studio-state.js")).resetStudio(); (await load("kanban-core.js")).resetBoard(); });
 
 describe("UX WP-WORKOS honest states (no data)", () => {
   it("shows UNAVAILABLE em-dash KPIs, honest overview note and no lifecycle strip when every read 404s; keeps the mission form", async () => {
@@ -222,6 +222,126 @@ describe("UX WP-WORKOS mission detail: run flow timeline and evidence linking", 
     const {ctx} = await mkCtx(fromFix(detailFix({evidence: []})));
     const root = await view.render(ctx);
     expect(byId(root, "work-detail")!.textContent).toContain("Bu mission için henüz kanıt kaydı yok.");
+  });
+});
+
+// //TR: UI-023 Görev Kanban Panosu: pano yalnız mevcut GET /v1/missions satırlarını yaşam-döngüsü sütunlarına dağıtır; varsayılan düzen liste kalır, tanınmayan durum atılmaz, geçiş panodan yapılmaz (mission ayrıntısı açılır).
+const boardRender = async (fix: Record<string, any> = FULL, lang = "en") => {
+  const view = await load("views", "work.js");
+  const m = await mkCtx(fromFix(fix), lang);
+  let reruns = 0; m.ctx.rerender = async () => { reruns++; };
+  const root = await view.render(m.ctx);
+  return {view, root, ...m, reruns: () => reruns};
+};
+const columns = (root: N) => byData(root, "boardColumn").map(n => `${n.dataset.boardColumn}:${n.dataset.count}`);
+
+describe("UI-023 mission Kanban board (renderer-only, honest columns)", () => {
+  it("core: lifecycle columns always shown (0 when empty), off-path statuses only when present, unrecognised statuses kept in their own last column; every mission placed exactly once", async () => {
+    const kb = await load("kanban-core.js"), wc = await load("work-core.js");
+    const cols = kb.boardColumns(MISSIONS.missions);
+    expect(cols.map((c: any) => c.status)).toEqual([...wc.MISSION_PATH, "BLOCKED", "FOUNDER_ATTENTION_REQUIRED", "UNRECOGNIZED"]);
+    expect(cols.reduce((n: number, c: any) => n + c.count, 0)).toBe(MISSIONS.missions.length);
+    expect(cols.find((c: any) => c.status === "UNRECOGNIZED")).toMatchObject({known: false, count: 1});
+    expect(cols.find((c: any) => c.status === "UNRECOGNIZED").items[0].status).toBe("WEIRD_STATE");
+    expect(cols.filter((c: any) => c.known && wc.MISSION_PATH.includes(c.status) && c.count === 0).length).toBe(wc.MISSION_PATH.length - 3);
+    expect(kb.boardColumns([]).map((c: any) => c.status)).toEqual([...wc.MISSION_PATH]);
+    expect(kb.boardColumns(null).every((c: any) => c.count === 0)).toBe(true);
+    expect(kb.OFF_PATH_STATUSES.every((s: string) => wc.MISSION_STATUSES.includes(s) && !wc.MISSION_PATH.includes(s))).toBe(true);
+    const many = Array.from({length: 55}, (_, i) => ({missionId: `msn_${hex(100 + i)}`, projectId: "prj", title: `T${i}`, status: "EXECUTING", riskLevel: "R1", createdAt: tm(1)}));
+    const ex = kb.boardColumns(many).find((c: any) => c.status === "EXECUTING");
+    expect([ex.count, ex.items.length, ex.truncated]).toEqual([55, kb.MAX_CARDS_PER_COLUMN, true]);
+    expect(kb.boardLayout()).toBe("list");
+    expect(kb.setBoardLayout("grid")).toBe(false);
+    expect(kb.boardLayout()).toBe("list");
+    expect(kb.setBoardLayout("board")).toBe(true);
+    kb.resetBoard();
+    expect(kb.boardLayout()).toBe("list");
+  });
+
+  it("the default layout is still the list (filter bar + table); the layout toggle is a labelled group of pressed-state buttons", async () => {
+    const {root} = await boardRender();
+    expect(byData(root, "filter")[0].dataset.filter).toBe("ALL");
+    expect(byData(root, "missionId").length).toBe(6);
+    expect(byId(root, "work-board")).toBeNull();
+    const toggle = all(root).find(n => cls(n, "layout-toggle").length === 0 && n.className.includes("layout-toggle"))!;
+    expect([toggle.getAttribute("role"), toggle.getAttribute("aria-label")]).toEqual(["group", "Mission layout"]);
+    expect(byData(root, "layout").map(n => [n.dataset.layout, n.getAttribute("aria-pressed"), n.getAttribute("type"), n.textContent])).toEqual([["list", "true", "button", "List"], ["board", "false", "button", "Board"]]);
+  });
+
+  it("switching to Board re-renders into lifecycle columns with real counts; list-only controls disappear; unrecognised status keeps its raw value", async () => {
+    const first = await boardRender();
+    byData(first.root, "layout", "board")[0].fire("click");
+    expect(first.reruns()).toBe(1);
+    const {root} = await boardRender();
+    expect(byData(root, "filter").length).toBe(0);
+    expect(byData(root, "missionId").length).toBe(0);
+    expect(columns(root)).toEqual(["DRAFT:1", "PREFLIGHT:0", "AUTHORIZED:0", "PLANNED:0", "EXECUTING:1", "VERIFYING:0", "REVIEWING:0", "REGRESSION:0", "REPORTING:0", "COMPLETE:1", "BLOCKED:1", "FOUNDER_ATTENTION_REQUIRED:1", "UNRECOGNIZED:1"]);
+    expect(byData(root, "boardMission").map(n => n.dataset.boardMission).sort()).toEqual([M1, M2, M3, M4, M5, M6].sort());
+    const odd = byData(root, "boardColumn", "UNRECOGNIZED")[0];
+    expect(odd.textContent).toContain("Unrecognised status");
+    expect(odd.textContent).toContain("WEIRD_STATE");
+    expect(byData(root, "layout", "board")[0].getAttribute("aria-pressed")).toBe("true");
+    expect(byData(root, "note", "board-honesty")[0].textContent).toContain("mission detail");
+    for (const bad of FORBIDDEN) expect(root.textContent, bad).not.toContain(bad);
+  });
+
+  it("a card opens the existing mission detail (selection + re-render); the board itself issues no POST and no extra GET", async () => {
+    (await load("kanban-core.js")).setBoardLayout("board");
+    const {root, calls, reruns} = await boardRender();
+    expect([...new Set(calls)].sort()).toEqual(["/v1/missions", "/v1/projects", "/v1/work-runs"]);
+    const card = byData(root, "boardMission", M1)[0];
+    const btn = all(card).find(n => n.tagName === "BUTTON")!;
+    expect([btn.getAttribute("type"), btn.textContent, btn.dataset.focusKey]).toEqual(["button", "G1", `kb-${M1}`]);
+    btn.fire("click");
+    expect(forms.selection.missionId).toBe(M1);
+    expect(reruns()).toBe(1);
+    const again = await boardRender();
+    expect(byData(again.root, "boardMission", M1)[0].dataset.selected).toBe("1");
+    expect(all(byData(again.root, "boardMission", M1)[0]).find(n => n.tagName === "BUTTON")!.getAttribute("aria-current")).toBe("true");
+  });
+
+  it("accessibility: labelled board group, sections labelled by their h3, labelled card lists, machine-readable times, empty columns say so in text", async () => {
+    (await load("kanban-core.js")).setBoardLayout("board");
+    const {root} = await boardRender();
+    const board = byId(root, "work-board")!;
+    expect([board.getAttribute("role"), board.getAttribute("aria-label")]).toEqual(["group", "Mission board by lifecycle status, 6 missions"]);
+    for (const sec of byData(root, "boardColumn")) {
+      expect(sec.tagName).toBe("SECTION");
+      const head = byId(root, sec.getAttribute("aria-labelledby")!)!;
+      expect(head.tagName).toBe("H3");
+      expect(head.textContent).toContain(sec.dataset.count!);
+      const list = all(sec).find(n => n.tagName === "UL");
+      if (Number(sec.dataset.count)) { expect(list!.getAttribute("aria-label")).toMatch(/: \d+ missions$/); }
+      else { expect(list).toBeUndefined(); expect(sec.textContent).toContain("No missions."); }
+    }
+    for (const t of all(board).filter(n => n.tagName === "TIME")) expect(t.getAttribute("datetime")).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const tr = await boardRender(FULL, "tr");
+    expect(byId(tr.root, "work-board")!.getAttribute("aria-label")).toBe("Yaşam döngüsü durumuna göre görev panosu, 6 görev");
+  });
+
+  it("honest states win over the board: unreadable missions show the state note, an empty list shows the empty note", async () => {
+    (await load("kanban-core.js")).setBoardLayout("board");
+    const down = await boardRender({"/v1/projects": {projects: []}, "/v1/work-runs": RUNS});
+    expect(byId(down.root, "work-board")).toBeNull();
+    expect(byData(down.root, "boardColumn").length).toBe(0);
+    const empty = await boardRender({...FULL, "/v1/missions": {missions: []}});
+    expect(byId(empty.root, "work-board")).toBeNull();
+  });
+
+  it("locale keys exist in TR and EN with identical placeholders; the core has no network, storage, randomness or HTML sinks; CSS uses tokens and has a forced-colors fallback", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const keys = Object.keys(en).filter(k => k.startsWith("work.board."));
+    expect(keys.sort()).toEqual(Object.keys(tr).filter(k => k.startsWith("work.board.")).sort());
+    expect(keys.length).toBe(9);
+    for (const k of keys) { expect(tr[k], k).toBeTruthy(); expect((en[k].match(/\{\w+\}/g) ?? []).sort().join(","), k).toBe((tr[k].match(/\{\w+\}/g) ?? []).sort().join(",")); }
+    const core = read("kanban-core.js");
+    expect(core.startsWith("// //TR:")).toBe(true);
+    expect(core.split(/\r?\n/).filter(l => !l.startsWith("//")).join("\n")).not.toMatch(/innerHTML|fetch\(|XMLHttpRequest|localStorage|sessionStorage|Math\.random|Date\.now|apiPost|\bpost\(/);
+    const css = read("styles.css"), block = css.slice(css.indexOf("UI-023 Görev Kanban Panosu"), css.indexOf("UX WP-AGENTS"));
+    expect(block.length).toBeGreaterThan(200);
+    expect(block).toContain(".kanban-cols{");
+    expect(block).toContain("forced-colors");
+    expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/);
   });
 });
 
