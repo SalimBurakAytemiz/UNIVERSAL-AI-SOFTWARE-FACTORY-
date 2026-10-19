@@ -21,7 +21,7 @@ export function tooltipText(ctx,block){
   return ctx.t("tile.tooltip",{source:block?.source??MISSING,asOf:block?.asOf?formatTime(block.asOf,ctx.i18n.lang):MISSING});
 }
 const PILL_ICON=Object.freeze({LOADING:"clock",EMPTY:"minus",VERIFIED:"check",STALE:"clock",OFFLINE:"wifioff",FAILED:"xcircle",BLOCKED:"ban",DENIED:"lock",NOT_CONNECTED:"plug",UNAVAILABLE:"minuscircle",NOT_EXECUTED:"dashedcircle",NOT_VERIFIED:"help",PRODUCT_VERIFIED:"shield",
-  ACTIVE:"pulse",WAITING:"clock",ATTENTION:"alert",DONE:"check",STOPPED:"ban",IDLE:"minus",NEUTRAL:"minus"});
+  RECOVERING:"recover",ACTIVE:"pulse",WAITING:"clock",ATTENTION:"alert",DONE:"check",STOPPED:"ban",IDLE:"minus",NEUTRAL:"minus"});
 /** //TR: UX WP2: ayrık durum rozeti (ikon + metin, renk tek başına anlam taşımaz); FAILED/BLOCKED/DENIED/STALE/OFFLINE/NOT_CONNECTED/UNAVAILABLE/NOT_EXECUTED/NOT_VERIFIED/PRODUCT_VERIFIED ayrı etiketlerdir. label verilmezse pill.<KIND> sözlüğünden gelir. */
 export function statePill(ctx,kind,{label}={}){
   const doc=ctx.doc,k=PILL_ICON[kind]?kind:"NEUTRAL";

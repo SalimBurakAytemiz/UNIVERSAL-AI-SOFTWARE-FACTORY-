@@ -1,5 +1,7 @@
 // //TR: Bu test BS1 bootstrap selftest'inin "f" kabuğundaki senaryolarını çalıştırır (tests/support/bs1-shard.ts); her senaryo PASS olmalıdır, kabuklar birlikte tam senaryo listesini kapsar (kapsam denetimi tests/pkg-vs-validation-sharding.test.ts).
-import {describe,it,expect} from "vitest";
+import {describe,it,expect,vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import cp from "node:child_process";
 import {BS1_PARTITION,BS1_REAL_AUT1B_SCENARIO,AUT1B_COMMIT,runBs1Shard} from "./support/bs1-shard.js";
 describe("one-time autonomy bootstrap (BS1) shard f",{timeout:1_800_000},()=>{

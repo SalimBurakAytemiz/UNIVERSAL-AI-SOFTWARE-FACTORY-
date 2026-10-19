@@ -58,7 +58,12 @@ function areaCards(ctx,c){
     case "tower":return val(c.orchestrator,"map.packages");
     case "assurance":return ctx.t("map.assurance");
     case "inbox":return val(c.approvals,"map.count");
-    default:return ctx.t("map.planned",{pkg:ROUTES.find(r=>r.id===id)?.plannedPackage??MISSING});
+    case "delivery":return ctx.t("map.delivery");
+    default:{
+      // //TR: Home alan kartı: yalnız gerçekten plannedPackage'ı olan rota "Planlı paket" yazar; `component` ile gerçek görünüme devreden rota için uydurma "—" paket basılmaz, alan açıklaması gösterilir.
+      const r=ROUTES.find(x=>x.id===id),pkg=r?.plannedPackage;
+      return pkg?ctx.t("map.planned",{pkg}):ctx.t(`area.${id}.desc`);
+    }
   }};
   return h(doc,"ul",{class:"area-map"},FACTORY_AREA_ORDER.map(id=>{
     const r=ROUTES.find(x=>x.id===id);
@@ -90,7 +95,9 @@ function homeHeader(ctx,{asOf=null,tenant=null}={}){
 export async function render(ctx){
   const doc=ctx.doc,[res,prj]=await Promise.all([ctx.api.cockpit(),ctx.api.projects()]),c=res.data;
   const tenant=prj.state==="VERIFIED"?(prj.items.find(p=>p.projectId===ctx.store.projectId)??prj.items[0])?.tenantId??null:null;
-  const note=res.state==="OK"?null:h(doc,"p",{class:`note note-${res.state.toLowerCase()}`,role:"status",text:ctx.t(res.state==="UNAVAILABLE"?"cockpit.unavailable":"cockpit.failed")});
+  // //TR: Başarılı HTTP ama bozuk gövde (tüm bloklar ERROR) de açıklayıcı hata notu gösterir; sessiz boş ekran olmaz.
+  const state=res.state==="OK"&&c.projects?.state==="ERROR"&&c.missions?.state==="ERROR"?"ERROR":res.state;
+  const note=state==="OK"?null:h(doc,"p",{class:`note note-${state.toLowerCase()}`,role:"status",text:ctx.t(state==="UNAVAILABLE"?"cockpit.unavailable":"cockpit.failed")});
   return h(doc,"div",{class:"view view-home"},homeHeader(ctx,{asOf:c.generatedAt,tenant}),note,tiles(ctx,c),
     panel(ctx,{titleKey:"home.map",id:"home-map",className:"panel-map"},areaCards(ctx,c)),
     h(doc,"div",{class:"two-col"},orchestratorPanel(ctx,c.orchestrator),

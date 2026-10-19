@@ -7,6 +7,8 @@ import {syncNav,syncTabs} from "./nav.js";
 import {keepFocus} from "./focus.js";
 import {selection} from "./forms.js";
 import {maybeOpenFirstRun} from "./views/firstrun.js";
+import {recoveryPanel} from "./recovery-panel.js";
+import {shouldShowApiRecovery} from "./recovery-core.js";
 import {createInspector,isInspectableRef} from "./inspector.js";
 
 export const PRINCIPAL="FOUNDER_LOCAL";
@@ -73,6 +75,8 @@ export function createShell(ctx){
       body.append(h(doc,"dl",{class:"kv"},h(doc,"dt",{text:t("feed.api")}),h(doc,"dd",{},statePill(ctx,data.health.state==="VERIFIED"?"VERIFIED":data.health.state==="OFFLINE"?"OFFLINE":data.health.state==="LOADING"?"LOADING":"FAILED")),
         h(doc,"dt",{text:t("feed.orchestrator")}),h(doc,"dd",{},statePill(ctx,o?pillKindFor(o):"LOADING"),h(doc,"span",{text:` ${o?formatCount(o.value):MISSING}`})),
         h(doc,"dt",{text:t("feed.workforce")}),h(doc,"dd",{},statePill(ctx,c?pillKindFor(c.workforce):"LOADING"))));
+      // //TR: UI-251: control API erişilemezken (OFFLINE/ERROR/…) sağlık sekmesinde Recovery Center paneli gösterilir; LOADING/VERIFIED'da gösterilmez.
+      if(shouldShowApiRecovery(data.health.state))body.append(recoveryPanel(ctx,{routeId:ctx.currentRouteId(),health:data.health.state,reason:"API_DOWN"}));
     }else{
       const a=data.cockpit?.approvals,items=a?.items??[];
       if(!a)body.append(chip(ctx,null,{kind:"LOADING"}));

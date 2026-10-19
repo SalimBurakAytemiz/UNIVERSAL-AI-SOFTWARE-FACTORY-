@@ -1,5 +1,5 @@
 // //TR: Bu test Skill Academy çekirdeğini (WFR-04a) gerçek geçici Work OS journal'ı ve store API'si ile doğrular: allowlist yaşam döngüsü, yalnız bağımsız reviewer + sabitlenmiş kanıtla terfi, kendi kendini onay/kanıtsız/sha uyuşmazlığı/permissionDelta reddi, güvenilmeyen kaynak, prompt-injection etkisizliği (WFR-AT-010), tenant sızıntısı yok (WFR-AT-011), drift STALE/RECERTIFY_REQUIRED/REVOKED zinciri (WFR-AT-016), §5.3 metrikleri ve rol kaydının bayt-bayt değişmemesi.
-import {describe, it, expect, beforeAll, afterAll, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,6 +13,8 @@ import {screenSourceText} from "../core/academy/rules.js";
 import type {LearningRecord} from "../core/academy/types.js";
 // @ts-expect-error TS7016: atomic-json.mjs tip bildirimi yok (test geçerli hash zincirli sahte journal satırı üretir)
 import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const canonicalSha = sha256Untyped as (v: unknown) => string;
 const sha = (b: string | Buffer) => crypto.createHash("sha256").update(b).digest("hex");
@@ -266,7 +268,8 @@ describe("WFR-04a tenant isolation (WFR-AT-011)", () => {
     expect(mB.labPassRate).toBeNull();
     expect(mB.gapDetect?.total).toBe(1);
   });
-  it("global promotion needs global:true + anonymized + GLOBAL reviewer evidence + global sources; others see only a generalized projection", () => {
+  // //TR: Gercek disk G/C'li bu test Windows CI'da varsayilan 5 sn vitest sinirini asabiliyor (iddia degil yalniz sure); kardes gercek-G/C testleriyle ayni acik sure butcesi verilir.
+  it("global promotion needs global:true + anonymized + GLOBAL reviewer evidence + global sources; others see only a generalized projection", { timeout: 180_000 }, () => {
     const gSrc = source(A, {global: true});
     expect(() => source(A, {global: true, url: null, localRef: "docs/x.md"})).toThrow(/WORKOS_INVALID_INPUT/);
     const rec = toReview(A, {sources: [{id: gSrc.sourceId, text: OFFICIAL_TEXT}]});
@@ -308,7 +311,8 @@ describe("WFR-04a drift monitor (WFR-AT-016)", () => {
     expect(d2.map(x => [x.learningId, x.to, x.reasons])).toEqual([[p2.learningId, "RECERTIFY_REQUIRED", ["MODEL_VERSION_CHANGED", "TOOL_ADAPTER_CHANGED:node"]]]);
     expect(academy.getLearning(A, p1.learningId)?.status).toBe("RECERTIFY_REQUIRED");
   });
-  it("source revocation marks REVOKED and cascades to dependent learning records; in-flight dependents cannot promote", () => {
+  // //TR: Gercek disk G/C'li bu test Windows CI'da varsayilan 5 sn vitest sinirini asabiliyor (iddia degil yalniz sure); kardes gercek-G/C testleriyle ayni acik sure butcesi verilir.
+  it("source revocation marks REVOKED and cascades to dependent learning records; in-flight dependents cannot promote", { timeout: 180_000 }, () => {
     const s1 = source(A);
     const l1 = promote(toReview(A, {sources: [{id: s1.sourceId, text: OFFICIAL_TEXT}]}));
     const l2 = promote(toReview(A, {dependsOn: [l1.learningId]}));

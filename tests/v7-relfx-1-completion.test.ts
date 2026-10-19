@@ -1,5 +1,7 @@
 // //TR: Bu test REL-FX-1 kanıta bağlı tamamlamayı doğrular: kanıtsız/run'sız COMPLETE 409 ve journal değişmez (REL-AT-005), başka commit'in kanıtı kapıyı açmaz (REL-AT-003), BLOCKED güvenlik 409, kabul tek journal girdisinde run'ı SUCCEEDED + mission'ı COMPLETE yapar ve replay aynı sonucu verir, sahte birleşik girdi replay'de tamper sayılır; deriveOutcomes dürüst NOT_EXECUTED/UNKNOWN döner (REL-AT-001).
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import {WorkOsStore} from "../core/workos/store.js";
 import {FakeExecutors} from "../core/workos/executors.js";
