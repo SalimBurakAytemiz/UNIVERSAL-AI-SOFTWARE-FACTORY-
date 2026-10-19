@@ -25,16 +25,17 @@ export const BS1_PARTITION:Record<Bs1Shard,string[][]>={
     ["bootstrap-task-registration-succeeds-or-rolls-back-without-a-runnable-task"],
     ["bootstrap-task-first-run-failure-stops-and-rolls-back-the-task"]
   ],
+  // //TR: e kabuğu (10 senaryo) Windows CI'da 600 sn adım sınırına dayandığı için (yavaş runner'da TIMED OUT) iki grup yerine dört paralel gruba bölünür; senaryo kümesi ve adım aynıdır (checkBs1Partition her senaryonun tam bir kez atandığını doğrular).
   e: [
     ["bootstrap-repairs-an-inactive-half-cloned-plane-and-replaces-a-dangling-link",
      "entry-delegates-to-a-governed-plane-entry-and-to-the-launcher",
-     "entry-heartbeat-watch-needs-two-stale-polls-ignores-suspend-and-reads-the-backup",
-     "entry-heals-an-interrupted-link-switch-and-refuses-broken-or-unproven-planes",
+     "entry-heartbeat-watch-needs-two-stale-polls-ignores-suspend-and-reads-the-backup"],
+    ["entry-heals-an-interrupted-link-switch-and-refuses-broken-or-unproven-planes",
      "entry-loops-the-pre-launcher-tick-writes-passive-status-and-honours-global-stop",
      "entry-records-the-top-level-tick-status-and-keeps-the-bootstrap-record-in-its-mirror"],
     ["entry-kills-a-hung-supervisor-whose-heartbeat-is-frozen",
-     "entry-refuses-an-old-plane-release-lane-and-honours-global-stop",
-     "entry-kills-the-whole-tick-process-tree-on-timeout-and-clears-its-lock",
+     "entry-refuses-an-old-plane-release-lane-and-honours-global-stop"],
+    ["entry-kills-the-whole-tick-process-tree-on-timeout-and-clears-its-lock",
      "entry-clears-only-provably-stale-locks-and-replaces-a-dangling-link"]
   ],
   f: [
@@ -110,8 +111,12 @@ function runDirect(env:NodeJS.ProcessEnv):Promise<{code:number|null;out:string}>
 // //TR: Bir kabuğun grupları ayrı alt süreçlerde paralel çalışır; her alt süreç selftest'i yalnız kendi senaryo adlarıyla (UASCO_BS1_ONLY) çağırır ve çıktıdaki her gerekli senaryonun PASS olması beklenir.
 export async function runBs1Shard(shard:Bs1Shard):Promise<{ok:boolean;detail:string;line:string[];stdout:string}>{
   const groups=BS1_PARTITION[shard],lua=bs1DeElevate(process.platform,process.env,isElevatedWindows);
-  // //TR: Yükseltilmemiş çalıştırma geçen koşularda da görünür biçimde bildirilir (yalnız hata mesajında değil).
-  const note=lua?`BS1_DE_ELEVATED shard=${shard}: selftest ran via runas /trustlevel:0x20000 (Basic User) on an elevated github-hosted runner\n`:"";if(note)console.log(note.trim());
-  const outs=await Promise.all(groups.map(g=>lua?runDeElevated(childEnv(g)):runDirect(childEnv(g))));
+  // //TR: Yükseltilmemiş çalıştırma geçen koşularda da görünür biçimde bildirilir (yalnız hata mesajında değil); vitest 4 geçen testlerin console.log çıktısını göstermediği için doğrudan process.stdout'a yazılır.
+  const note=lua?`BS1_DE_ELEVATED shard=${shard}: selftest ran via runas /trustlevel:0x20000 (Basic User) on an elevated github-hosted runner\n`:"";if(note)process.stdout.write(note);
+  const t0=Date.now();
+  const outs=await Promise.all(groups.map(async g=>{const s0=Date.now(),o=await (lua?runDeElevated(childEnv(g)):runDirect(childEnv(g)));return {...o,ms:Date.now()-s0}}));
+  // //TR: Süre kanıtı her koşuda (geçen koşularda da) yazılır: grup duvar süresi ve selftest'in kendi senaryo süreleri; adım 600 sn sınırına yaklaşınca hangi grubun/senaryonun pahalı olduğu CI günlüğünden ölçülür. Yalnız süre sayıları yazılır.
+  outs.forEach((o,i)=>{const tm=o.out.match(/^BOOTSTRAP_AUTONOMY_SELFTEST_TIMINGS (\{.*\})\s*$/m);process.stdout.write(`BS1_TIMING shard=${shard} group=${i+1}/${groups.length} exit=${o.code} wallMs=${o.ms} scenarioMs=${tm?tm[1]:"MISSING"}\n`)});
+  process.stdout.write(`BS1_TIMING shard=${shard} total wallMs=${Date.now()-t0}\n`);
   return {ok:outs.every(o=>o.code===0),detail:note+outs.map(o=>"exit="+o.code+" "+o.out.slice(-2500)).join("\n---\n"),line:outs.map(o=>o.out.trim().split(/\r?\n/).pop()??""),stdout:outs.map(o=>o.out).join("\n")};
 }
