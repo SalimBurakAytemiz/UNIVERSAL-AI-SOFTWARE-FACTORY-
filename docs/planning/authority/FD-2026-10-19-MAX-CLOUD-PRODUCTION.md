@@ -7,7 +7,7 @@
 - **What makes it binding:**
   1. The Founder confirms it through a channel an agent cannot produce: a direct message to the independent reviewer session, or a Founder action in the GitHub UI.
   2. The independent reviewer records that confirmation.
-- **Until then**, every `authorizedBy` that cites this record is `UNCONFIRMED`.
+- **Status:** D-2026-10-19-A was CONFIRMED by the Founder (see the confirmation section below). The rest of this record stays directive-level.
 
 ## Verbatim excerpts (Turkish original)
 
@@ -37,3 +37,30 @@
 ## Process note
 
 The coordinator claimed UI-030 and UI-113 (20:37Z) from the unmerged backlog of PR #62. It relied on item 11.4 above directly, not on the backlog. The independent reviewer correctly recorded this as a process finding. Builds #61 and #63 therefore also wait on the Founder confirmation.
+
+## Founder confirmation of decision D-2026-10-19-A (verbatim)
+
+- **When:** 2026-10-19, after 20:57Z.
+- **Channel:** received as a Founder (user) turn in the coordinator session `session_01DmTHw4gBA3wvY1tKM9bk2e`.
+- **Relay:** the coordinator relayed the text verbatim to the independent reviewer. The coordinator cannot prove the sender's identity beyond that channel.
+
+> UASCO FOUNDER AUTHORITY CONFIRMATION — Decision: D-2026-10-19-A
+>
+> 19 Ekim 2026 tarihli MAXIMUM CLOUD PRODUCTION direktifinin tarafımdan verildiğini doğruluyorum.
+>
+> Yalnızca mevcut ekran envanterinde yeni yetki gerektirmediği doğrulanan, korunmayan dosyaları değiştiren, salt arayüz katmanındaki bağımsız UI/UX görevlerinin READY yapılmasına onay veriyorum.
+>
+> Bu görevlerde atomik, create-only branch-ref claim yöntemi geçici görev sahipliği mekanizması olarak kullanılabilir.
+>
+> Bu karar FA-LEASE2'nin güvenlik bakımından eşdeğeri olduğu anlamına gelmez. Genel lease ve authority politikalarını değiştirmez.
+>
+> Bu onay yalnızca söz konusu düşük riskli görev sınıfını kapsar. Protected file, güvenlik politikası, trust-root, yeni endpoint, yetki genişlemesi veya toplu AUTHORITY_REQUIRED görev onayı içermez.
+
+**Resulting rule (scope D-2026-10-19-A):**
+- A task may be READY under this record only if ALL of these hold:
+  1. It is independent and touches the UI/UX renderer layer only (`apps/desktop/renderer/**`, its registered tests and its `docs/ux/` record).
+  2. The 2026-10-19 screen inventory verifies `authority_needed = none` for its screen.
+  3. It changes only non-protected files.
+  4. `requiresNewAuthority:false` and `protectedEdit:false`.
+- Ownership: the dispatch.mjs create-only branch-ref claim, as a **temporary** ownership mechanism. It is NOT FA-LEASE2-equivalent.
+- Unchanged: the general lease and authority policies.
