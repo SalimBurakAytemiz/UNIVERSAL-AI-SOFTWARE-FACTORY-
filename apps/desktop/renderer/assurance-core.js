@@ -115,4 +115,50 @@ export function evidenceIntegrity(evBlock){
   return {state:b?b.state:"UNAVAILABLE",live:Boolean(live),total:n("total"),verified:n("verified"),mismatch:n("mismatch"),missing:n("missing"),unverifiable:n("unverifiable")};
 }
 
+// //TR: UI-049: GET /v1/reviews/:evd_id yanıtının fail-closed eşlemesi. Karar sunucudan AYNEN taşınır (yükseltilmez); biçim bozuksa {state:"ERROR",review:null}. Serbest metin yalnız sınırlı uzunlukta alınır ve textContent ile çizilir.
+export const REVIEW_ID_RE=/^evd_[0-9a-f]{24}$/;
+const REVIEW_VERDICT_SET=Object.freeze(["CLEAN","BLOCKED","NO_VERDICT"]);
+const RUN_RE_R=/^run_[0-9a-f]{24}$/;
+const isoOrNull=x=>typeof x==="string"&&x.length>0&&!Number.isNaN(new Date(x).getTime())?x:null;
+/** //TR: CLEAN kararı yalnız TÜM koşullar sağlanırsa doğrulanmış sayılır: bağımsızlık kanıtlı, incelenen commit boş değil ve AYNI yanıttaki koşunun head'ine eşit, kayıt koşunun son review'u, geçersiz kılınmamış ve kayıtlı ham karar boş ya da karara eşit. Aksi halde STALE (asla VERIFIED). */
+export function reviewCleanVerified(x){
+  if(!isObj(x)||x.verdict!=="CLEAN")return false;
+  return x.independent===true&&x.currentHead===true&&typeof x.reviewedCommit==="string"&&SHA_RE.test(x.reviewedCommit)
+    &&typeof x.headSha==="string"&&x.reviewedCommit===x.headSha
+    &&typeof x.reviewId==="string"&&x.latestReviewId===x.reviewId
+    &&!x.invalidated&&(x.recordedVerdict===null||x.recordedVerdict===undefined||x.recordedVerdict===x.verdict);
+}
+/** //TR: Liste satırı için aynı kural: koşu özeti (runs) AYNI liste yanıtından gelir; eşleşen koşu yoksa doğrulanmış sayılmaz (liste kaydı invalidated/recordedVerdict taşımaz; bunlar yalnız detayda kontrol edilir). */
+export function reviewRowVerified(rec,runs){
+  if(!isObj(rec)||!Array.isArray(runs))return false;
+  const run=runs.find(r=>isObj(r)&&r.runId===rec.runId);
+  return run?reviewCleanVerified({...rec,headSha:run.headSha,latestReviewId:run.latestReviewId}):false;
+}
+export function mapReviewDetail(raw,requestedId){
+  const bad={state:"ERROR",review:null};
+  if(!isObj(raw)||raw.source!=="WORK_OS_JOURNAL_RUN_EVIDENCE"||!isObj(raw.review)||!isObj(raw.run))return bad;
+  const r=raw.review,ev=r.evidence,run=raw.run;
+  if(!REVIEW_ID_RE.test(String(r.reviewId))||!RUN_RE_R.test(String(r.runId))||!MSN_RE.test(String(r.missionId))||!REVIEW_VERDICT_SET.includes(r.verdict)||!isObj(r.reviewer)||!isObj(r.implementer)||!isObj(ev)||typeof r.currentHead!=="boolean"||safeInt(r.cycle)===null)return bad;
+  if(requestedId!==undefined&&r.reviewId!==requestedId)return bad;
+  if(r.independent!==null&&typeof r.independent!=="boolean")return bad;
+  const commit=r.reviewedCommit===null||r.reviewedCommit===undefined?null:SHA_RE.test(String(r.reviewedCommit))?r.reviewedCommit:undefined;
+  if(commit===undefined)return bad;
+  // //TR: Koşu özeti aynı yanıttan; kimlik uyuşmazlığı ya da bozuk head/son review kimliği okumayı reddeder.
+  if(run.runId!==r.runId)return bad;
+  const headSha=run.headSha===null||run.headSha===undefined?null:typeof run.headSha==="string"&&SHA_RE.test(run.headSha)?run.headSha:undefined;
+  const latestReviewId=run.latestReviewId===null||run.latestReviewId===undefined?null:typeof run.latestReviewId==="string"&&REVIEW_ID_RE.test(run.latestReviewId)?run.latestReviewId:undefined;
+  if(headSha===undefined||latestReviewId===undefined)return bad;
+  // //TR: Bozuk sayaç/çıkış kodu/kayıtlı karar okumayı başarısız kılar (sessizce null + VERIFIED olmaz).
+  const fc=ev.findingsCount,ec=ev.exitCode;
+  if(fc!==null&&fc!==undefined&&safeInt(fc)===null)return bad;
+  if(ec!==null&&ec!==undefined&&!Number.isSafeInteger(ec))return bad;
+  if(ev.recordedVerdict!==null&&ev.recordedVerdict!==undefined&&!REVIEW_VERDICT_SET.includes(ev.recordedVerdict))return bad;
+  const findings=Array.isArray(ev.findings)?ev.findings.filter(f=>typeof f==="string").slice(0,20).map(f=>f.slice(0,300)):null;
+  const out={reviewId:r.reviewId,runId:r.runId,missionId:r.missionId,cycle:r.cycle,verdict:r.verdict,independent:r.independent===true?true:r.independent===false?false:null,
+    reviewer:str(r.reviewer.identity,120),implementer:str(r.implementer.identity,120),reviewedCommit:commit,currentHead:r.currentHead,timestamp:isoOrNull(r.timestamp),
+    recordedVerdict:ev.recordedVerdict??null,invalidated:str(ev.invalidated,60),findingsCount:fc??null,findings,
+    exitCode:ec??null,timedOut:ev.timedOut===true,note:str(ev.note,200),runHeadSha:headSha,latestReviewId};
+  out.verified=reviewCleanVerified({...out,headSha});
+  return {state:"VERIFIED",review:out};
+}
 export {MISSING};

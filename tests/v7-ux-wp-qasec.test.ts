@@ -76,7 +76,20 @@ const COCKPIT = {generatedAt: "2026-10-16T00:00:00.000Z",
 const EVI_ID = `evi_${"a".repeat(32)}`;
 const EVIDENCE = {evidence: [{evidenceId: EVI_ID, kind: "WORK_RUN_STEP", verification: "VERIFIED", sourcePath: "work-os/x", sha256: "f".repeat(64), createdAt: "2026-10-16T00:00:00.000Z", missionId: `msn_${"0".repeat(24)}`}], nextCursor: null};
 
-interface Feed { cockpit?: "ok" | "unavail"; workRuns?: "ok" | "off"; evidence?: "ok" | "off" }
+// UI-049: real-shaped GET /v1/reviews fixtures (CLEAN independent @head, BLOCKED, CLEAN but NOT independent).
+const PRJ = `prj_${"0".repeat(24)}`, MSN = `msn_${"0".repeat(24)}`;
+const rid = (c: string) => `evd_${c.repeat(24)}`;
+const rrec = (c: string, runC: string, verdict: string, independent: boolean | null, currentHead: boolean) => ({reviewId: rid(c), runId: runId(runC), missionId: MSN, projectId: PRJ, cycle: 1, step: "REVIEW",
+  reviewer: {identity: independent === null ? null : "codex"}, implementer: {identity: "claude"}, independent, reviewedCommit: HEAD1, reviewedRange: {baseSha: "0".repeat(40), headSha: HEAD1}, currentHead,
+  verdict, startedAt: "2026-10-16T00:00:00.000Z", timestamp: "2026-10-16T00:0" + c.charCodeAt(0) % 10 + ":00.000Z", evidence: {findingsCount: verdict === "BLOCKED" ? 2 : 0}});
+const rrun = (runC: string, reviewState: string, latest: string | null) => ({runId: runId(runC), missionId: MSN, projectId: PRJ, status: "AWAITING_APPROVAL", step: "REVIEW", headSha: latest ? HEAD1 : null, reviewState, latestReviewId: latest, reviewCount: latest ? 1 : 0});
+const REVIEWS = {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", notice: "n",
+  summary: {runs: 3, reviews: 3, runsByReviewState: {CLEAN: 1, BLOCKED: 1, INDEPENDENCE_UNVERIFIED: 1}, reviewsByVerdict: {CLEAN: 2, BLOCKED: 1}, truncated: false},
+  reviews: [rrec("a", "a", "CLEAN", true, true), rrec("b", "b", "BLOCKED", true, true), rrec("c", "c", "CLEAN", false, true)],
+  runs: [rrun("a", "CLEAN", rid("a")), rrun("b", "BLOCKED", rid("b")), rrun("c", "INDEPENDENCE_UNVERIFIED", rid("c"))]};
+const REVIEWS_EMPTY = {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", notice: "n", summary: {runs: 0, reviews: 0, runsByReviewState: {}, reviewsByVerdict: {}, truncated: false}, reviews: [], runs: []};
+
+interface Feed { cockpit?: "ok" | "unavail"; workRuns?: "ok" | "off"; evidence?: "ok" | "off"; reviews?: "ok" | "off" | "empty" | "bad"; mutate?: (kind: "list" | "detail", payload: any) => any }
 async function mkCtx(feed: Feed = {}, lang = "tr") {
   const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
   const doc = new D(), store = st.createStore(null), calls: string[] = [];
@@ -84,6 +97,14 @@ async function mkCtx(feed: Feed = {}, lang = "tr") {
     calls.push(p);
     if (p === "/v1/cockpit") { if (feed.cockpit === "unavail") throw new Error(`${p}: HTTP 404`); return COCKPIT; }
     if (p === "/v1/work-runs") { if (feed.workRuns === "off") throw new Error(`${p}: HTTP 404`); return WORK_RUNS; }
+    if (p === "/v1/reviews" || p.startsWith("/v1/reviews/")) {
+      if (feed.reviews === "off") throw new Error(`${p}: HTTP 404`);
+      if (p === "/v1/reviews") return feed.reviews === "empty" ? REVIEWS_EMPTY : feed.reviews === "bad" ? {source: "WRONG"} : (feed.mutate ? feed.mutate("list", structuredClone(REVIEWS)) : REVIEWS);
+      const rec = REVIEWS.reviews.find(r => p === `/v1/reviews/${r.reviewId}`);
+      if (!rec) throw new Error(`${p}: HTTP 404`);
+      const det = {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", notice: "n", review: {...rec, evidence: {recordedVerdict: rec.verdict === "NO_VERDICT" ? null : rec.verdict, invalidated: null, findingsCount: rec.verdict === "BLOCKED" ? 2 : 0, findings: rec.verdict === "BLOCKED" ? ["<img src=x onerror=alert(1)> finding one", "finding two"] : null, exitCode: 0, timedOut: false, logSha256: null, note: null}}, run: REVIEWS.runs.find(x => x.runId === rec.runId)};
+      return feed.mutate ? feed.mutate("detail", structuredClone(det)) : det;
+    }
     if (p.startsWith("/v1/evidence/")) return {evidence: EVIDENCE.evidence[0], summary: {}, tail: null, tailWithheld: null};
     if (p.startsWith("/v1/evidence")) { if (feed.evidence === "off") throw new Error(`${p}: HTTP 404`); return EVIDENCE; }
     throw new Error(`${p}: HTTP 404`);
@@ -169,7 +190,7 @@ describe("UX WP-QA-SEC assurance view (real data, honest states)", () => {
     // semgrep NOT_INSTALLED surfaced verbatim.
     const semgrep = byData(node, "tool", "semgrep").find(n => n.dataset.toolStatus === "NOT_INSTALLED");
     expect(semgrep).toBeTruthy();
-    expect(calls.sort()).toEqual(["/v1/cockpit", "/v1/evidence?limit=100", "/v1/work-runs"]);
+    expect(calls.sort()).toEqual(["/v1/cockpit", "/v1/evidence?limit=100", "/v1/reviews", "/v1/work-runs"]);
   });
   it("opens a per-run security detail with gitleaks/trivy/gaps, honestly", async () => {
     const {ctx} = await mkCtx();
@@ -197,6 +218,149 @@ describe("UX WP-QA-SEC assurance view (real data, honest states)", () => {
     expect(byId(node, "qa-evidence")!.textContent.length).toBeGreaterThan(0);
     // No security rows are rendered when the work-runs read fails.
     expect(byData(node, "runId").length).toBe(0);
+  });
+});
+
+describe("UI-049 assurance Reviews panel (real verdicts, honest states)", () => {
+  beforeEach(async () => { (await load("views", "assurance.js")).resetAssuranceView(); const f = (await load("forms.js")); f.selection.evidenceId = null; f.selection.missionId = null; });
+
+  it("lists real verdicts with run and mission, never upgrading a non-independent CLEAN", async () => {
+    const {ctx} = await mkCtx({}, "en");
+    const {node} = await renderAssurance(ctx);
+    const panel = byId(node, "as-reviews")!;
+    const rows = byData(panel, "reviewId");
+    expect(rows.map(r => r.dataset.verdict).sort()).toEqual(["BLOCKED", "CLEAN", "CLEAN"]);
+    const rowA = byData(panel, "reviewId", rid("a"))[0], rowC = byData(panel, "reviewId", rid("c"))[0];
+    expect(text(rowA)).toContain(runId("a")); expect(text(rowA)).toContain(MSN);
+    expect(byData(rowA, "pill", "VERIFIED").length).toBe(1);
+    // CLEAN but independence not proven: must NOT be a verified pill.
+    expect(byData(rowC, "pill", "VERIFIED").length).toBe(0);
+    expect(byData(rowC, "pill", "STALE").length).toBe(1);
+    expect(byData(byData(panel, "reviewId", rid("b"))[0], "pill", "BLOCKED").length).toBe(1);
+  });
+  it("opens the detail from GET /v1/reviews/:id and renders findings as text, not HTML", async () => {
+    const {ctx, calls} = await mkCtx({}, "en");
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `rev-${rid("b")}`) as N).fire("click");
+    const {node} = await renderAssurance(ctx);
+    expect(calls).toContain(`/v1/reviews/${rid("b")}`);
+    const d = byId(node, "as-reviews-detail")!;
+    expect(text(d)).toContain(rid("b"));
+    expect(byData(d, "verdict", "BLOCKED").length).toBe(1);
+    const li = byTag(byData(d, "findings")[0], "li");
+    expect(li.length).toBe(2);
+    expect(text(li[0])).toContain("<img src=x");
+    expect(byTag(d, "img").length).toBe(0);
+  });
+  it("shows an honest empty state and invents no verdict", async () => {
+    const {ctx} = await mkCtx({reviews: "empty"}, "en");
+    const {node} = await renderAssurance(ctx);
+    const panel = byId(node, "as-reviews")!;
+    expect(byData(panel, "reviewId").length).toBe(0);
+    expect(byData(panel, "verdict").length).toBe(0);
+    expect(text(panel)).toContain("No independent review has been recorded yet.");
+  });
+  it("shows UNAVAILABLE and ERROR states instead of rows", async () => {
+    for (const reviews of ["off", "bad"] as const) {
+      const {ctx} = await mkCtx({reviews}, "en");
+      const {node} = await renderAssurance(ctx);
+      const panel = byId(node, "as-reviews")!;
+      expect(byData(panel, "reviewId").length, reviews).toBe(0);
+      expect(byTag(panel, "table").length, reviews).toBe(0);
+      expect(panel.textContent.length).toBeGreaterThan(0);
+    }
+  });
+  it("mapReviewDetail fails closed on malformed or foreign payloads", async () => {
+    const core = await load("assurance-core.js");
+    expect(core.mapReviewDetail(null).state).toBe("ERROR");
+    expect(core.mapReviewDetail({source: "X", review: {}}).state).toBe("ERROR");
+    const good = {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", review: {...REVIEWS.reviews[0], evidence: {findings: null}}, run: REVIEWS.runs[0]};
+    expect(core.mapReviewDetail(good).state).toBe("VERIFIED");
+    expect(core.mapReviewDetail({...good, review: {...good.review, verdict: "PASS"}}).state).toBe("ERROR");
+    expect(core.mapReviewDetail({...good, review: {...good.review, reviewId: "evd_zz"}}).state).toBe("ERROR");
+  });
+  it("assuranceReview refuses non-canonical ids without calling the bridge", async () => {
+    const {api, calls} = await mkCtx({}, "en");
+    expect((await api.assuranceReview("../x")).state).toBe("ERROR");
+    expect(calls.filter((c: string) => c.startsWith("/v1/reviews"))).toEqual([]);
+  });
+  it("only a fully-bound latest independent CLEAN gets the VERIFIED reviewed-commit pill (list)", async () => {
+    const core = await load("assurance-core.js");
+    const ok = core.reviewRowVerified(REVIEWS.reviews[0], REVIEWS.runs);
+    expect(ok).toBe(true);
+    const rec = REVIEWS.reviews[0];
+    expect(core.reviewRowVerified({...rec, currentHead: false}, REVIEWS.runs)).toBe(false);
+    expect(core.reviewRowVerified({...rec, reviewedCommit: OTHER}, REVIEWS.runs)).toBe(false);
+    expect(core.reviewRowVerified({...rec, reviewedCommit: null}, REVIEWS.runs)).toBe(false);
+    expect(core.reviewRowVerified(rec, REVIEWS.runs.map(r => ({...r, headSha: OTHER})))).toBe(false);
+    expect(core.reviewRowVerified(rec, REVIEWS.runs.map(r => ({...r, latestReviewId: rid("z")})))).toBe(false);
+    expect(core.reviewRowVerified(rec, [])).toBe(false);
+  });
+  it("list view: an older CLEAN record of the same run (non-latest) shows STALE not VERIFIED", async () => {
+    const add = (p: any) => { p.reviews.push(rrec("d", "a", "CLEAN", true, true)); p.summary.reviews = 4; p.summary.reviewsByVerdict.CLEAN = 3; return p; };
+    const {ctx} = await mkCtx({mutate: (k, p) => k === "list" ? add(p) : p}, "en");
+    const {node} = await renderAssurance(ctx);
+    const panel = byId(node, "as-reviews")!;
+    expect(byData(byData(panel, "reviewId", rid("a"))[0], "pill", "VERIFIED").length).toBe(1);
+    const old = byData(panel, "reviewId", rid("d"))[0];
+    expect(byData(old, "pill", "VERIFIED").length).toBe(0);
+    expect(byData(old, "pill", "STALE").length).toBe(1);
+  });
+  it("detail view: stale or contradictory CLEAN records never show VERIFIED", async () => {
+    const cases: Array<[string, (p: any) => any]> = [
+      ["currentHead false", p => { p.review.currentHead = false; return p; }],
+      ["reviewedCommit != head", p => { p.review.reviewedCommit = OTHER; return p; }],
+      ["reviewedCommit null", p => { p.review.reviewedCommit = null; return p; }],
+      ["invalidated", p => { p.review.evidence.invalidated = "REVIEW_INVALID"; return p; }],
+      ["recordedVerdict differs", p => { p.review.evidence.recordedVerdict = "BLOCKED"; return p; }],
+      ["non-latest", p => { p.run.latestReviewId = rid("z"); return p; }]
+    ];
+    for (const [name, fn] of cases) {
+      const {ctx} = await mkCtx({mutate: (k, p) => k === "detail" ? fn(p) : p}, "en");
+      const first = await renderAssurance(ctx);
+      (byId(first.node, `rev-${rid("a")}`) as N).fire("click");
+      const {node} = await renderAssurance(ctx);
+      const d = byId(node, "as-reviews-detail")!;
+      expect(byData(d, "pill", "VERIFIED").length, name).toBe(0);
+    }
+    // control: untouched payload IS verified.
+    const {ctx} = await mkCtx({}, "en");
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `rev-${rid("a")}`) as N).fire("click");
+    const d = byId((await renderAssurance(ctx)).node, "as-reviews-detail")!;
+    expect(byData(d, "pill", "VERIFIED").length).toBe(1);
+  });
+  it("mapReviewDetail: requested-id mismatch and malformed counters fail the read", async () => {
+    const core = await load("assurance-core.js");
+    const good = () => ({source: "WORK_OS_JOURNAL_RUN_EVIDENCE", review: {...REVIEWS.reviews[0], evidence: {recordedVerdict: "CLEAN", invalidated: null, findingsCount: 0, findings: null, exitCode: 0, timedOut: false}}, run: REVIEWS.runs[0]});
+    expect(core.mapReviewDetail(good(), rid("a")).review.verified).toBe(true);
+    expect(core.mapReviewDetail(good(), rid("b")).state).toBe("ERROR");
+    for (const [k, v] of [["findingsCount", "2"], ["findingsCount", -1], ["findingsCount", 1.5], ["exitCode", "0"], ["exitCode", 1.5], ["recordedVerdict", "PASS"]] as const) {
+      const g: any = good(); g.review.evidence[k] = v;
+      expect(core.mapReviewDetail(g, rid("a")).state, `${k}=${String(v)}`).toBe("ERROR");
+    }
+    const noRun: any = good(); delete noRun.run;
+    expect(core.mapReviewDetail(noRun, rid("a")).state).toBe("ERROR");
+    const otherRun: any = good(); otherRun.run = REVIEWS.runs[1];
+    expect(core.mapReviewDetail(otherRun, rid("a")).state).toBe("ERROR");
+  });
+  it("assuranceReview passes the requested id so a foreign record is ERROR", async () => {
+    const {api} = await mkCtx({mutate: (k, p) => k === "detail" ? {...p, review: {...p.review, reviewId: rid("b")}} : p}, "en");
+    expect((await api.assuranceReview(rid("a"))).state).toBe("ERROR");
+  });
+  it("review routes are already allow-listed read-only GETs (no new route)", () => {
+    const ok = loadGet();
+    for (const p of ["/v1/reviews", `/v1/reviews/${rid("a")}`]) expect(ok(p), p).toBe(true);
+    expect(ok(`/v1/reviews/${rid("a")}/`)).toBe(false);
+  });
+  it("assurance.reviews.* keys exist in EN and TR with matching placeholders", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const ks = Object.keys(en).filter(k => k.startsWith("assurance.reviews."));
+    expect(ks.length).toBeGreaterThan(30);
+    expect(ks.sort()).toEqual(Object.keys(tr).filter(k => k.startsWith("assurance.reviews.")).sort());
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of ks) expect(ph(en[k]), k).toBe(ph(tr[k]));
   });
 });
 
