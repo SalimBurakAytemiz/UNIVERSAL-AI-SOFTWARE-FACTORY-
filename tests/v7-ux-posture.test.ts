@@ -1,5 +1,5 @@
 // //TR: Bu test FA-V2-PRODUCT UI-037+046 "Güvence Komuta Merkezi ve Güvenlik Duruşu" salt-okunur dikey kesitini doğrular: (1) GERÇEK control-api — gerçek tohumlanmış Work OS verisinden (koşu, kanıt, bağımsız inceleme kararları, gerçek git + kaynak teslimi) dönen GET /v1/work-runs + /v1/reviews + /v1/cockpit gövdeleri saf eşleyicilerden (posture-core.js) ve görünümden (views/posture.js) geçer. (2) İZİN LİSTESİ — üç GET zaten izinlidir (main.mjs/server.ts/app.js/control-boundary.mjs DEĞİŞMEZ, EXTRA_GET_ROUTES büyümez, yeni uç nokta yok), görünüm yalnız bu üç GET'i okur, hiçbir yazma/köprü çağrısı yapmaz. (3) SAF EŞLEYİCİLER — bozuk kimlik/enum/biçim/sayı/çelişki fail-closed ERROR olur (kısmi görünüm yok), inceleme kararı AYNEN taşınır. (4) DURUŞ DÜRÜSTLÜĞÜ — genel duruş yalnız dört sütunun HEPSİ sağlandığında ASSURED olur; QA NOT_EXECUTED, güvenlik PASSED değil, inceleme temiz değil ya da kanıt doğrulanmamış/eksik/okunamıyorsa HİÇBİR koşulda ASSURED olmaz; okunamayan kaynak UNKNOWN'dır, sayıları 0 değil "—" olur. (5) GÖRÜNÜM DÜRÜSTLÜĞÜ — kaynak başına OFFLINE/UNAVAILABLE/ERROR, eksikler adıyla listelenir, ürün doğrulandı sabiti ASLA. (6) ERİŞİLEBİLİRLİK, (7) YEREL AYNALIK (TR/EN birebir) ve (8) ROTA (planned.js devri, app.js VIEWS değişmez).
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,6 +9,8 @@ import {buildServer} from "../apps/control-api/src/server.js";
 import {ExecutionGate} from "../core/workos/execution-gate.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import {T, setup, okScript, runner, api as relfxApi, HDR as RELFX_HDR, tmpRoot, rmTmp} from "./support/relfx.js";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const root = path.resolve(__dirname, "..");

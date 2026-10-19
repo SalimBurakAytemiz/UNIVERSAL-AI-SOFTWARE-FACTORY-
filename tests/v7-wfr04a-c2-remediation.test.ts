@@ -1,5 +1,5 @@
 // //TR: Bu test WFR-04a c2 düzeltmelerini gerçek geçici Work OS journal'ı ile doğrular: F1 kanonik kimlik (ayırıcısız, camel-case, Unicode tire, sıfır genişlikli ve homoglif varyantlarla kendi kendini onay reddi), F2 yaşam döngüsü aktörlerinin (lab'ı yazan öğrenen dahil) reviewer/terfi aktörü olamaması, F3 TTL sınırında enjekte saatle ön-deneme ve kalıcı girdinin aynı zamanı kullanması (journal bozulmaz), F4 global kaynağın diğer tenant'a yalnız izdüşümle görünmesi (WFR-AT-011) ve belgelenmiş çapraz-tenant iptal etkisi.
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +12,8 @@ import {distinctIdentity, identityKey, sameIdentity} from "../core/academy/rules
 import type {LearningRecord} from "../core/academy/types.js";
 // @ts-expect-error TS7016: atomic-json.mjs tip bildirimi yok (test geçerli hash zincirli sahte journal satırı üretir)
 import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const canonicalSha = sha256Untyped as (v: unknown) => string;
 const sha = (b: string | Buffer) => crypto.createHash("sha256").update(b).digest("hex");

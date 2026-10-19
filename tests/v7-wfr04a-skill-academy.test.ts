@@ -1,5 +1,5 @@
 // //TR: Bu test Skill Academy çekirdeğini (WFR-04a) gerçek geçici Work OS journal'ı ve store API'si ile doğrular: allowlist yaşam döngüsü, yalnız bağımsız reviewer + sabitlenmiş kanıtla terfi, kendi kendini onay/kanıtsız/sha uyuşmazlığı/permissionDelta reddi, güvenilmeyen kaynak, prompt-injection etkisizliği (WFR-AT-010), tenant sızıntısı yok (WFR-AT-011), drift STALE/RECERTIFY_REQUIRED/REVOKED zinciri (WFR-AT-016), §5.3 metrikleri ve rol kaydının bayt-bayt değişmemesi.
-import {describe, it, expect, beforeAll, afterAll, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,6 +13,8 @@ import {screenSourceText} from "../core/academy/rules.js";
 import type {LearningRecord} from "../core/academy/types.js";
 // @ts-expect-error TS7016: atomic-json.mjs tip bildirimi yok (test geçerli hash zincirli sahte journal satırı üretir)
 import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const canonicalSha = sha256Untyped as (v: unknown) => string;
 const sha = (b: string | Buffer) => crypto.createHash("sha256").update(b).digest("hex");
