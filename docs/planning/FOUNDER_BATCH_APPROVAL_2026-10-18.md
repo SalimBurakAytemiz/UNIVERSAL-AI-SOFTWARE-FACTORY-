@@ -2,7 +2,7 @@
 
 # Founder batch approval request — 2026-10-18
 
-**Status 2026-10-18: Founder APPROVED all four lanes (in-session); now IN_PROGRESS, see BACKLOG_CHECKPOINT.json.**
+**Status 2026-10-18: Founder gave an in-session DIRECTIVE covering the four lanes (directive-level, not a per-item or per-lane approval; no per-lane FOUNDER-APPROVAL record exists); now IN_PROGRESS, see BACKLOG_CHECKPOINT.json.**
 
 Source: stale `SCREEN_TRACEABILITY_252_PLUS.csv` (data only) cross-checked against `v7/integration @ e12dbdd` by three read-only audits (47 rows examined). **Nothing below is READY**; approval = Founder writes "APPROVED: <lane ids>" and the dispatcher records `authorizedBy`.
 

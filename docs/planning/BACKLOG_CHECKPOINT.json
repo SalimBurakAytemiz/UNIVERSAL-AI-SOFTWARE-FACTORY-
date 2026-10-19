@@ -337,7 +337,7 @@
       "title": "Home shows true Delivery state (replace stale planned line)",
       "owner": "CLOUD",
       "status": "IN_REVIEW",
-      "authorizedBy": "FOUNDER-AUTHORIZATION:2026-10-18 in-session (Home Delivery state + planned scaffolding cleanup)",
+      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-18 in-session directive (directive-level, not a per-item approval; Home Delivery state + planned scaffolding cleanup)",
       "dependsOn": [],
       "requiresNewAuthority": false,
       "protectedEdit": false,
@@ -350,7 +350,7 @@
       "title": "Remove unused plannedPanel partial scaffolding + orphan locale keys",
       "owner": "CLOUD",
       "status": "IN_REVIEW",
-      "authorizedBy": "FOUNDER-AUTHORIZATION:2026-10-18 in-session (Home Delivery state + planned scaffolding cleanup)",
+      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-18 in-session directive (directive-level, not a per-item approval; Home Delivery state + planned scaffolding cleanup)",
       "dependsOn": [],
       "requiresNewAuthority": false,
       "protectedEdit": false,
@@ -373,7 +373,7 @@
       ],
       "testFile": "tests/v7-ux-wp-agents.test.ts",
       "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN.",
-      "authorizedBy": "FOUNDER-APPROVAL:2026-10-18 in-session message (scope-limited; no protected edit, no new backend, no spend, no reseal)",
+      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-18 in-session directive (directive-level, not a per-item approval; scope-limited; no protected edit, no new backend, no spend, no reseal)",
       "branches": [
         "claude/l-workforce-ui197"
       ],
@@ -399,7 +399,7 @@
       ],
       "testFile": "tests/v7-ux-wp4-tower.test.ts",
       "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN.",
-      "authorizedBy": "FOUNDER-APPROVAL:2026-10-18 in-session message (scope-limited; no protected edit, no new backend, no spend, no reseal)",
+      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-18 in-session directive (directive-level, not a per-item approval; scope-limited; no protected edit, no new backend, no spend, no reseal)",
       "branches": [
         "claude/l-tower-trace-ui226"
       ],
@@ -426,7 +426,7 @@
       ],
       "testFile": "tests/v7-ux-wp-qasec.test.ts",
       "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN.",
-      "authorizedBy": "FOUNDER-APPROVAL:2026-10-18 in-session message (scope-limited; no protected edit, no new backend, no spend, no reseal)",
+      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-18 in-session directive (directive-level, not a per-item approval; scope-limited; no protected edit, no new backend, no spend, no reseal)",
       "branches": [
         "claude/l-assurance-ui049",
         "claude/l-assurance-ui050",
@@ -461,7 +461,7 @@
       ],
       "testFile": "tests/v7-ux-operations.test.ts",
       "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN.",
-      "authorizedBy": "FOUNDER-APPROVAL:2026-10-18 in-session message (scope-limited; no protected edit, no new backend, no spend, no reseal)",
+      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-18 in-session directive (directive-level, not a per-item approval; scope-limited; no protected edit, no new backend, no spend, no reseal)",
       "branches": [
         "claude/l-routes-ui070",
         "claude/l-routes-ui078"
