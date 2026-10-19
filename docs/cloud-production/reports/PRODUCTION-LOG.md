@@ -82,7 +82,7 @@
 
 ## 2026-10-18 heartbeat #5 (queue read from claude/cloud-production-engine@ed5cfb9)
 
-**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. DONE: 0.
+**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0 (steady state). DONE: 0.
 
 **Open PRs: 24** (#8, #11-#33), same set as heartbeat #4. uasco-needs-fix now on #11, #13, #14 and #30 (#30 newly observed with the label).
 
@@ -335,3 +335,22 @@
 1. FA-LEASE2: needs sealed D3 authority record + trust-root reseal; blocked on CP-GOV being built and proven. Not actionable by builder.
 2. ACTIONS-CI-RESTORE: Actions billing/runner outage (admin-owned); blocks merge of all PRs.
 3. BACKLOG-SOURCE-REBASELINE: Founder must choose authoritative backlog source (depends on FA-LEASE2).
+
+## 2026-10-19 heartbeat #27 (queue read from claude/cloud-production-engine@ed5cfb9; fired 21:12Z)
+
+**Queue (step 1):** parsed OK. READY tasks: 0. Task states unchanged (PENDING_REVIEW: CP-QUEUE, CP-REPORT, CP-CI; IN_PROGRESS: CP-DISPATCH, CP-RECOVERY, CP-GOV; BLOCKED: FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED). DONE: 0. Step 2 dispatched: 0.
+
+**Step 2b (canonical backlog):** docs/planning/dispatch.mjs and BACKLOG_CHECKPOINT.json present on v7/integration@d38f87c. Dry run (--no-lease, 13 open head branches passed) outcome NO_ACTION, reclaimable: []. Dispatched/claimed/resumed: 0. The ACTIVE-session capacity guard could not be evaluated (list_sessions unavailable) and create_session is unavailable, so no dispatch was possible regardless; no claim was made.
+
+**Open PRs: 43** (page 1 = 30, page 2 = 13; targeting v7/integration except #8 on an older base). CHANGE vs #26: new #61 UI-030 (draft), #62 cloud-loop-activation, #63 UI-113 (draft), #64 integration wave A (22 PRs, plain merges); #57 absent. #49/#51/#52 not open. Draft PRs: #50, #53-#56, #58-#61, #63. Mergeable state and CI: UNKNOWN (not returned by listing). No PR carries a uasco-cloud-production label. uasco-needs-fix on #50 (draft).
+
+**Active implementer/builder sessions:** UNKNOWN (claude-code-remote list_sessions/create_session tools not available in this fire).
+
+**Merged PRs / tasks completed:** UNKNOWN / queue tasks DONE: 0.
+
+**Current failures:** needs-fix on #50. Repo-wide Actions CI red per queue (not independently verified).
+
+**Top blockers:**
+1. Queue: FA-LEASE2 (needs sealed D3 record + trust-root reseal; blocked on CP-GOV proven; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned; blocks all merges); BACKLOG-SOURCE-REBASELINE (Founder choice).
+2. Canonical backlog (dry run): no task READY; all remaining entries show NOT_READY (DONE / BLOCKED / DRAFT_NOT_READY) with NO_AUTHORIZED_BY, REQUIRES_NEW_AUTHORITY or UNMET_DEP:pkg-lease1-wiring.
+3. Dispatch tooling (claude-code-remote) unavailable in this session.
