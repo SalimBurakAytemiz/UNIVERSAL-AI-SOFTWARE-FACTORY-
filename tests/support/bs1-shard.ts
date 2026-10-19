@@ -57,35 +57,40 @@ export function checkBs1Partition(partition:Record<string,string[][]>,source:str
 }
 // //TR: GitHub-hosted Windows runner işi yükseltilmiş (Administrator) çalıştırır; bootstrap bunu ürün kuralı olarak reddeder (MUST_RUN_UNELEVATED). Yalnız bu geçici runner'da selftest aynı kullanıcının yükseltilmemiş "Basic User" belirteciyle (runas /trustlevel:0x20000) çalıştırılır: bootstrap ve selftest değişmez, kontrol gevşetilmez, hiçbir senaryo atlanmaz. Geliştirici makinesinde veya self-hosted runner'da yükseltilmiş oturum dürüstçe başarısız olur.
 export const deElevateOnHostedRunner=(env:NodeJS.ProcessEnv=process.env)=>env.GITHUB_ACTIONS==="true"&&env.RUNNER_ENVIRONMENT==="github-hosted";
-const PS51=path.join(process.env.SystemRoot??"C:/Windows","System32","WindowsPowerShell","v1.0","powershell.exe");
+// //TR: Tek karar noktası (saf, test edilir): yalnız win32 + GitHub-hosted + gerçekten yükseltilmiş süreç; yükseltme sorgusu yalnız ilk iki koşul sağlanınca çalışır.
+export const bs1DeElevate=(platform:string,env:NodeJS.ProcessEnv,elevated:()=>boolean)=>platform==="win32"&&deElevateOnHostedRunner(env)&&elevated();
+const SYS32=path.join(process.env.SystemRoot??"C:/Windows","System32"),PS51=path.join(SYS32,"WindowsPowerShell","v1.0","powershell.exe");
+// //TR: runas mutlak System32 yolundan çalıştırılır; yükseltilmiş süreç çalışma dizinindeki (PR checkout'u) bir runas.exe/.com'u asla bulmaz.
+export const RUNAS=path.join(SYS32,"runas.exe");
+export const runasArgv=(node:string,wrap:string,job:string)=>["/trustlevel:0x20000",`"${node}" "${wrap}" "${job}"`];
 export function isElevatedWindows():boolean{
   if(process.platform!=="win32")return false;const env={...process.env};delete env.PSModulePath;
   const r=cp.spawnSync(PS51,["-NoProfile","-NonInteractive","-Command","([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)"],{encoding:"utf8",windowsHide:true,env});
   return r.status===0&&r.stdout.trim()==="True";
 }
-// //TR: 8.3 kısa TEMP yolu (ör. C:\Users\RUNNER~1) PS 5.1'in uzun yola açan GetFullPath'i ile Node'un path.resolve'u arasında kontrol kökü uyuşmazlığı üretir; alt sürece TEMP/TMP'nin gerçek uzun yolu verilir.
-function childEnv(g:string[]):NodeJS.ProcessEnv{
-  const env:NodeJS.ProcessEnv={...process.env,UASCO_BS1_SHARDS:"",UASCO_BS1_ONLY:g.join(",")};
-  if(process.platform==="win32"){const t=fs.realpathSync.native(os.tmpdir());env.TEMP=t;env.TMP=t}
-  return env;
+const childEnv=(g:string[]):NodeJS.ProcessEnv=>({...process.env,UASCO_BS1_SHARDS:"",UASCO_BS1_ONLY:g.join(",")});
+// //TR: Diske yazılan iş ortamı: gizli değer taşıyabilecek adlar (depo redaksiyon sözlüğüyle uyumlu) aktarılmaz; checkout Administrators'a ait olduğundan git'e yalnız bu checkout için komut kapsamlı safe.directory verilir (global/sistem yapılandırması değişmez);
+// //TR: 8.3 kısa TEMP yolu (ör. C:\Users\RUNNER~1) PS 5.1'in uzun yola açan GetFullPath'i ile Node'un path.resolve'u arasında kontrol kökü uyuşmazlığı ürettiğinden TEMP/TMP gerçek uzun yola çevrilir.
+export const BS1_SECRET_NAME=/TOKEN|SECRET|PASSW(OR)?D|PWD|CREDENTIAL|API_?KEY|_KEY$|PRIVATE|AUTH|(^|_)PAT$/i;
+export function deElevatedJobEnv(env:NodeJS.ProcessEnv,checkout:string):NodeJS.ProcessEnv{
+  const e:NodeJS.ProcessEnv={};for(const [k,v] of Object.entries(env))if(v!==undefined&&!BS1_SECRET_NAME.test(k))e[k]=v;
+  const n=Number(e.GIT_CONFIG_COUNT??0)||0;e.GIT_CONFIG_COUNT=String(n+1);e[`GIT_CONFIG_KEY_${n}`]="safe.directory";e[`GIT_CONFIG_VALUE_${n}`]=checkout.replace(/\\/g,"/");
+  const t=fs.realpathSync.native(os.tmpdir());e.TEMP=t;e.TMP=t;return e;
 }
-// //TR: runas çıktıyı yakalamaz ve hemen döner; küçük sarmalayıcı selftest'i verilen ortamla çalıştırır, çıktıyı dosyaya yazar ve bitişi atomik bir işaret dosyasıyla bildirir.
+// //TR: runas çıktıyı yakalamaz ve hemen döner; küçük sarmalayıcı iş dosyasını okuyup hemen siler, selftest'i verilen ortamla çalıştırır, çıktıyı dosyaya yazar ve bitişi atomik bir işaret dosyasıyla bildirir.
 const WRAPPER=`import cp from "node:child_process";import fs from "node:fs";
-const j=JSON.parse(fs.readFileSync(process.argv[2],"utf8")),fd=fs.openSync(j.out,"w");
+const j=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));fs.rmSync(process.argv[2],{force:true});const fd=fs.openSync(j.out,"w");
 const r=cp.spawnSync(j.node,j.args,{cwd:j.cwd,env:j.env,stdio:["ignore",fd,fd],windowsHide:true});
 if(r.error)fs.writeSync(fd,"\\nWRAPPER_SPAWN_ERROR "+r.error.message+"\\n");fs.closeSync(fd);
 fs.writeFileSync(j.done+".tmp",String(r.status??1));fs.renameSync(j.done+".tmp",j.done);
 `;
 function runDeElevated(env:NodeJS.ProcessEnv):Promise<{code:number|null;out:string}>{
-  const dir=fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()),"uasco-bs1-lua-")),e:NodeJS.ProcessEnv={};
-  // //TR: Gizli değer taşıyabilecek adlar aktarılmaz; checkout Administrators'a ait olduğundan git'e yalnız bu checkout için komut kapsamlı safe.directory verilir (global/sistem yapılandırması değişmez).
-  for(const [k,v] of Object.entries(env))if(v!==undefined&&!/TOKEN|SECRET|PASSWORD|CREDENTIAL/i.test(k))e[k]=v;
-  const n=Number(e.GIT_CONFIG_COUNT??0)||0;e.GIT_CONFIG_COUNT=String(n+1);e[`GIT_CONFIG_KEY_${n}`]="safe.directory";e[`GIT_CONFIG_VALUE_${n}`]=process.cwd().replace(/\\/g,"/");
-  const job={node:process.execPath,args:["scripts/bootstrap-autonomy-selftest.mjs"],cwd:process.cwd(),env:e,out:path.join(dir,"out.txt"),done:path.join(dir,"done.txt")},jobFile=path.join(dir,"job.json"),wrap=path.join(dir,"wrap.mjs");
+  const dir=fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()),"uasco-bs1-lua-"));
+  const job={node:process.execPath,args:["scripts/bootstrap-autonomy-selftest.mjs"],cwd:process.cwd(),env:deElevatedJobEnv(env,process.cwd()),out:path.join(dir,"out.txt"),done:path.join(dir,"done.txt")},jobFile=path.join(dir,"job.json"),wrap=path.join(dir,"wrap.mjs");
   fs.writeFileSync(jobFile,JSON.stringify(job));fs.writeFileSync(wrap,WRAPPER);
   const finish=(code:number|null,out:string)=>{fs.rmSync(dir,{recursive:true,force:true});return {code,out}};
   return new Promise(res=>{
-    const r=cp.spawn("runas",["/trustlevel:0x20000",`"${process.execPath}" "${wrap}" "${jobFile}"`],{windowsHide:true,stdio:"ignore"});
+    const r=cp.spawn(RUNAS,runasArgv(process.execPath,wrap,jobFile),{windowsHide:true,stdio:"ignore"});
     r.on("error",err=>res(finish(null,"RUNAS_SPAWN_ERROR "+err.message)));
     r.on("close",rc=>{
       if(rc!==0)return res(finish(rc,"RUNAS_FAILED exit="+rc));
@@ -104,8 +109,9 @@ function runDirect(env:NodeJS.ProcessEnv):Promise<{code:number|null;out:string}>
 }
 // //TR: Bir kabuğun grupları ayrı alt süreçlerde paralel çalışır; her alt süreç selftest'i yalnız kendi senaryo adlarıyla (UASCO_BS1_ONLY) çağırır ve çıktıdaki her gerekli senaryonun PASS olması beklenir.
 export async function runBs1Shard(shard:Bs1Shard):Promise<{ok:boolean;detail:string;line:string[];stdout:string}>{
-  const groups=BS1_PARTITION[shard],lua=process.platform==="win32"&&deElevateOnHostedRunner()&&isElevatedWindows();
+  const groups=BS1_PARTITION[shard],lua=bs1DeElevate(process.platform,process.env,isElevatedWindows);
+  // //TR: Yükseltilmemiş çalıştırma geçen koşularda da görünür biçimde bildirilir (yalnız hata mesajında değil).
+  const note=lua?`BS1_DE_ELEVATED shard=${shard}: selftest ran via runas /trustlevel:0x20000 (Basic User) on an elevated github-hosted runner\n`:"";if(note)console.log(note.trim());
   const outs=await Promise.all(groups.map(g=>lua?runDeElevated(childEnv(g)):runDirect(childEnv(g))));
-  const note=lua?"BS1_DE_ELEVATED: runas /trustlevel:0x20000 on an elevated github-hosted runner\n":"";
   return {ok:outs.every(o=>o.code===0),detail:note+outs.map(o=>"exit="+o.code+" "+o.out.slice(-2500)).join("\n---\n"),line:outs.map(o=>o.out.trim().split(/\r?\n/).pop()??""),stdout:outs.map(o=>o.out).join("\n")};
 }
