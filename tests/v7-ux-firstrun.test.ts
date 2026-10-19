@@ -242,3 +242,60 @@ describe("WP-FIRSTRUN locale parity", () => {
     expect(sub(tr)).toEqual(sub(en));
   });
 });
+
+// //TR: UX hardening — ilk-açılış sihirbazı: yükleme durumu, boş profil, adım sınırları, kurtarma (tekrar doğrula) ve erişilebilir düğmeler; "bağlı" asla uydurulmaz.
+describe("UX hardening: firstrun loading, empty, retry and a11y", () => {
+  it("shows a LOADING status (not profiles, not Connected) before the executors read completes", async () => {
+    const fr = await load("views", "firstrun.js");
+    const {ctx} = await mkCtx({}, "en");
+    const c = fr.createFirstRunController(ctx, {storage: makeFakeStorage()});
+    c.goTo(1);
+    const t0 = text(c.dialog);
+    expect(t0).toContain(ctx.t("state.LOADING"));
+    expect(within(c.dialog).filter(n => "frProfile" in n.dataset).length).toBe(0);
+    expect(t0).not.toContain("Connected");
+  });
+  it("with no profiles the connection step says none and the verify step is NOT_CONNECTED (an empty list is not 'all connected')", async () => {
+    const fr = await load("views", "firstrun.js");
+    const {ctx} = await mkCtx({profiles: {}}, "en");
+    const c = fr.createFirstRunController(ctx, {storage: makeFakeStorage()});
+    await c.start(); c.goTo(1);
+    expect(text(c.dialog)).toContain(ctx.t("settings.conn.none"));
+    c.goTo(2);
+    expect(within(c.dialog).find(n => n.dataset.frVerify)!.dataset.frVerify).toBe("NOT_CONNECTED");
+  });
+  it("clamps step navigation to the valid range and keeps Back off the first step and Finish only on the last", async () => {
+    const fr = await load("views", "firstrun.js");
+    const {ctx} = await mkCtx({}, "en");
+    const c = fr.createFirstRunController(ctx, {storage: makeFakeStorage()});
+    await c.start();
+    c.goTo(-5); expect(c.step).toBe(0); expect(byId(c.dialog, "firstRunBack")).toBeNull(); expect(byId(c.dialog, "firstRunFinish")).toBeNull();
+    c.goTo(99); expect(c.step).toBe(fr.FIRSTRUN_STEPS.length - 1);
+    expect(byId(c.dialog, "firstRunFinish")).not.toBeNull(); expect(byId(c.dialog, "firstRunNext")).toBeNull(); expect(byId(c.dialog, "firstRunSkip")).toBeNull();
+  });
+  it("recovers: after the backend comes back, 'verify again' replaces UNAVAILABLE with the real state", async () => {
+    const fr = await load("views", "firstrun.js"), apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    let up = false;
+    const doc = new D(), store = st.createStore(null);
+    const api = apiMod.createApi({store, bridge: {apiGet: async (p: string) => { if (up && p === "/v1/system/executors") return execResponse({profiles: {implementer: {state: "READY"}, reviewer: {state: "READY"}}}); throw new Error(`${p}: HTTP 503`); }}});
+    const t = (k: string, v?: any) => i18n.translate("en", k, v);
+    const ctx: any = {doc, store, api, i18n: {lang: "en", t, setLang: () => {}}, t, navigate: () => {}, principal: "FOUNDER_LOCAL"};
+    const c = fr.createFirstRunController(ctx, {storage: makeFakeStorage()});
+    await c.start(); c.goTo(2);
+    expect(within(c.dialog).find(n => n.dataset.frVerify)!.dataset.frVerify).toBe("UNAVAILABLE");
+    up = true;
+    byId(c.dialog, "firstRunVerify")!.fire("click"); await new Promise(r => setTimeout(r, 0)); await new Promise(r => setTimeout(r, 0));
+    expect(within(c.dialog).find(n => n.dataset.frVerify)!.dataset.frVerify).toBe("CONNECTED");
+  });
+  it("every footer control is a typed button and each step is a labelled section", async () => {
+    const fr = await load("views", "firstrun.js");
+    const {ctx} = await mkCtx({}, "en");
+    const c = fr.createFirstRunController(ctx, {storage: makeFakeStorage()});
+    await c.start();
+    for (let i = 0; i < fr.FIRSTRUN_STEPS.length; i++) {
+      c.goTo(i);
+      for (const b of within(c.dialog).filter(n => n.tagName === "BUTTON")) expect(b.getAttribute("type")).toBe("button");
+      expect(within(c.dialog).find(n => n.tagName === "SECTION")!.getAttribute("aria-labelledby")).toBe("firstRunStepTitle");
+    }
+  });
+});
