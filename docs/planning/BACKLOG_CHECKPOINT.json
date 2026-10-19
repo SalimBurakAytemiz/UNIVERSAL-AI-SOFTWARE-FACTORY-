@@ -1,6 +1,6 @@
 {
   "//TR": "Kanonik görev envanteri: yalnız Founder yetki kaydı (authorizedBy) taşıyan, yeni yetki ve korunan dosya gerektirmeyen görevler READY olabilir; sahiplik docs/planning/dispatch.mjs --claim atomik dal-ref talebidir (FA-LEASE2 bağlı değildir); DONE yalnız v7/integration birleştirmesidir.",
-  "_doc": "CANONICAL SOURCE (honest state). A task is READY only with a Founder authority record in authorizedBy (directive-level records are marked as such) AND requiresNewAuthority=false AND protectedEdit=false. Ownership is the atomic branch-ref claim of docs/planning/dispatch.mjs --claim (create-only refs/heads/claude/<id-lowercase>; the git server guarantees one winner); FA-LEASE2 / the refs/uasco lease is NOT wired and is not claimed here. Routines reading this file exit NO_ACTION (not BLOCKED) while no task is eligible. DONE means merged to v7/integration (merge SHA in notes); review verdicts are not re-verified here. Write-back of DONE is done by the integration coordinator after each merge. See docs/planning/README.md and DISPATCH.md.",
+  "_doc": "CANONICAL SOURCE (honest state). A task is READY only with a Founder authority record in authorizedBy (directive-level records are marked as such) AND requiresNewAuthority=false AND protectedEdit=false. Ownership (Founder decision D-2026-10-19-A, confirmation PENDING; see docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md) is the atomic branch-ref claim of docs/planning/dispatch.mjs --claim (create-only refs/heads/claude/<id-lowercase>; the git server guarantees one winner); FA-LEASE2 / the refs/uasco lease is NOT wired and is not claimed here. Routines reading this file exit NO_ACTION (not BLOCKED) while no task is eligible. DONE means merged to v7/integration (merge SHA in notes); review verdicts are not re-verified here. Write-back of DONE is done by the integration coordinator after each merge. See docs/planning/README.md and DISPATCH.md.",
   "generatedAt": "2026-10-19T20:45:00Z",
   "head": "e12dbdd",
   "source": "RCA wmcrvq9w6 inventory + merged-state verification",
@@ -636,7 +636,7 @@
     {
       "owner": "CLOUD",
       "status": "READY",
-      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-19 MAXIMUM CLOUD PRODUCTION, CONTINUOUS AUTONOMY & THROUGHPUT RECOVERY (§4 LANE A Desktop UI builders, §11 first execution round; directive-level, not a per-item approval; screen inventory docs/inventory/2026-10-19 authority_needed=none; no new endpoint, allow-list, IPC, policy or protected file)",
+      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-19 MAXIMUM CLOUD PRODUCTION (record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md §4 LANE A, §11.4/11.6; directive-level, not a per-item approval; confirmation of decision D-2026-10-19-A PENDING; inventory authority_needed=none; no new endpoint, allow-list, IPC, policy or protected file)",
       "dependsOn": [],
       "riskLevel": 2,
       "requiresNewAuthority": false,
@@ -659,7 +659,7 @@
     {
       "owner": "CLOUD",
       "status": "READY",
-      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-19 MAXIMUM CLOUD PRODUCTION, CONTINUOUS AUTONOMY & THROUGHPUT RECOVERY (§4 LANE A Desktop UI builders, §11 first execution round; directive-level, not a per-item approval; screen inventory docs/inventory/2026-10-19 authority_needed=none; no new endpoint, allow-list, IPC, policy or protected file)",
+      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-19 MAXIMUM CLOUD PRODUCTION (record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md §4 LANE A, §11.4/11.6; directive-level, not a per-item approval; confirmation of decision D-2026-10-19-A PENDING; inventory authority_needed=none; no new endpoint, allow-list, IPC, policy or protected file)",
       "dependsOn": [],
       "riskLevel": 2,
       "requiresNewAuthority": false,
@@ -682,7 +682,7 @@
     {
       "owner": "CLOUD",
       "status": "READY",
-      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-19 MAXIMUM CLOUD PRODUCTION, CONTINUOUS AUTONOMY & THROUGHPUT RECOVERY (§4 LANE A Desktop UI builders, §11 first execution round; directive-level, not a per-item approval; screen inventory docs/inventory/2026-10-19 authority_needed=none; no new endpoint, allow-list, IPC, policy or protected file)",
+      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-19 MAXIMUM CLOUD PRODUCTION (record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md §4 LANE A, §11.4/11.6; directive-level, not a per-item approval; confirmation of decision D-2026-10-19-A PENDING; inventory authority_needed=none; no new endpoint, allow-list, IPC, policy or protected file)",
       "dependsOn": [],
       "riskLevel": 2,
       "requiresNewAuthority": false,
@@ -705,7 +705,7 @@
     {
       "owner": "CLOUD",
       "status": "READY",
-      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-19 MAXIMUM CLOUD PRODUCTION, CONTINUOUS AUTONOMY & THROUGHPUT RECOVERY (§4 LANE A Desktop UI builders, §11 first execution round; directive-level, not a per-item approval; screen inventory docs/inventory/2026-10-19 authority_needed=none; no new endpoint, allow-list, IPC, policy or protected file)",
+      "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-19 MAXIMUM CLOUD PRODUCTION (record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md §4 LANE A, §11.4/11.6; directive-level, not a per-item approval; confirmation of decision D-2026-10-19-A PENDING; inventory authority_needed=none; no new endpoint, allow-list, IPC, policy or protected file)",
       "dependsOn": [
         "UI-030"
       ],
