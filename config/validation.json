@@ -1,6 +1,29 @@
 {
   "//TR": "Bu protected config package.json scriptlerine güvenmeden canonical deterministic validation adımlarını sabitler; mechanical closure + dependency-free kernel self-test typecheck/test öncesinde çalışır ve builder normal milestone sırasında bu listeyi değiştiremez.",
   "schemaVersion": "2.0.0",
+  "shardPlan": {
+    "//TR": "CI-PARALLEL: yalnız Windows CI için uzun adımların 3 kabuğa en-uzun-önce dengesi (ölçüm: run 39330751647); listelenmeyen adımlar 1. kabuktadır. Kabuklama hiçbir adımı, 600 sn limitini veya kapsamı azaltmaz; validate-shards birleştiricisi tüm adımların tam bir kez PASS olmasını ister.",
+    "win32": {
+      "count": 3,
+      "assign": {
+        "tests": 1,
+        "tests-bs1-a": 1,
+        "tests-8": 1,
+        "tests-2": 1,
+        "tests-7": 1,
+        "tests-bs1-d": 2,
+        "tests-bs1-e": 2,
+        "tests-bs1-f": 2,
+        "tests-6": 2,
+        "tests-lv1": 2,
+        "tests-bs1-b": 3,
+        "tests-bs1-c": 3,
+        "tests-4": 3,
+        "tests-3": 3,
+        "tests-5": 3
+      }
+    }
+  },
   "steps": [
     {
       "id": "registries",
@@ -316,7 +339,8 @@
         "tests/uasco-atomic-lease.test.ts",
         "tests/v7-b1-workos.test.ts",
         "tests/v7-b2-workos-hardening.test.ts",
-        "tests/v7-b9-target-catalog.test.ts"
+        "tests/v7-b9-target-catalog.test.ts",
+        "tests/ci-validation-shards.test.ts"
       ],
       "requiresDependencies": true
     },
