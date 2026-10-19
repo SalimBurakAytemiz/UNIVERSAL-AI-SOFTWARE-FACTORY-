@@ -254,3 +254,48 @@ describe("UX WP2 model and components", () => {
     expect(read("styles.css")).toMatch(/\.kpi-risk\{[^}]*glow-risk/);
   });
 });
+
+// //TR: UX hardening — Ana Sayfa: bozuk (ERROR) cockpit yanıtı, canlı olmayan orkestratör/iş gücü, erişilebilirlik (başlık, alan kartları, KPI grubu) ve home.js anahtarları için EN/TR eşitliği; sayı uydurulmaz.
+describe("UX hardening: home negative states and a11y", () => {
+  it("a malformed cockpit payload shows the failed note (role=status) and no KPI is VERIFIED", async () => {
+    const home = await load("views", "home.js");
+    const {ctx} = await mkCtx(p => (p === "/v1/cockpit" ? "not-an-object" : undefined));
+    const root = await home.render(ctx, {id: "home"});
+    const notes = all(root).filter(n => n.attrs.get("role") === "status" && n.className.includes("note"));
+    expect(notes.map(n => n.textContent)).toContain(ctx.t("cockpit.failed"));
+    for (const c of kpis(root)) expect(c.dataset.state, c.dataset.kpi).not.toBe("VERIFIED");
+  });
+  it("a cockpit without data renders no numeric orchestrator bars and no progress elements", async () => {
+    const home = await load("views", "home.js");
+    const {ctx} = await mkCtx(() => undefined);
+    const root = await home.render(ctx, {id: "home"});
+    expect(all(root).filter(n => n.tagName === "PROGRESS").length).toBe(0);
+    const wf = kpi(root, "workforce");
+    expect(wf.dataset.state).not.toBe("VERIFIED");
+    expect(cls(wf, "kpi-value").every(n => n.textContent === "—" || n.textContent === "–" || !/\d/.test(n.textContent))).toBe(true);
+  });
+  it("is accessible: single focusable h1, labelled KPI group, area cards are real links, orchestrator bars carry aria-labels", async () => {
+    const home = await load("views", "home.js");
+    const {ctx} = await mkCtx(p => (p === "/v1/cockpit" ? REAL : undefined), "en");
+    const root = await home.render(ctx, {id: "home"});
+    const h1 = all(root).filter(n => n.tagName === "H1");
+    expect(h1.length).toBe(1);
+    expect(h1[0].getAttribute("tabindex")).toBe("-1");
+    expect(all(root).some(n => n.attrs.get("role") === "group" && !!n.getAttribute("aria-label"))).toBe(true);
+    const cards = all(root).filter(n => n.dataset.area);
+    expect(cards.length).toBeGreaterThan(3);
+    for (const a of cards) { expect(a.tagName).toBe("A"); expect(a.getAttribute("href")).toMatch(/^#/); }
+    const progress = all(root).filter(n => n.tagName === "PROGRESS");
+    expect(progress.length).toBeGreaterThan(0);
+    for (const p of progress) expect(p.getAttribute("aria-label")).toMatch(/: \d+$/);
+    for (const k of kpis(root)) expect(k.getAttribute("aria-labelledby") || k.getAttribute("aria-label"), k.dataset.kpi).toBeTruthy();
+  });
+  it("has en/tr parity (keys and placeholders) for every literal key used by home.js", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const used = [...new Set([...read("views", "home.js").matchAll(/"((?:home|kpi|map|workforce|cockpit|tile)\.[A-Za-z0-9_.]+)"/g)].map(m => m[1]))];
+    expect(used.length).toBeGreaterThan(15);
+    expect(used.filter(k => !(k in tr && k in en))).toEqual([]);
+    const ph = (s: string) => (s.match(/\{[A-Za-z0-9_]+\}/g) ?? []).sort();
+    for (const k of used) expect(ph(tr[k]), k).toEqual(ph(en[k]));
+  });
+});
