@@ -216,3 +216,119 @@ describe("UX WP-SETTINGS locale parity", () => {
     for (const pre of ["settings.conn.", "settings.gov.", "settings.app."]) expect(sub(tr, pre), pre).toEqual(sub(en, pre));
   });
 });
+
+// //TR: test+states: settings (functional/negative/a11y) — bozuk profil/sağlık yanıtlarında asla CONNECTED/VERIFIED gösterilmediğini, tüm okumalar düşünce dürüst durumları, dil düğmelerinin klavye/aria sözleşmesini (h1 tabindex, tipli düğmeler, aria-pressed) ve görünümün kullandığı tüm anahtarların TR/EN eşitliğini doğrular.
+describe("test+states settings: negative (no fabricated Connected/Verified)", () => {
+  it("malformed or unknown claudeProfiles never produce a CONNECTED card", async () => {
+    // //TR: Küçük harfli/yanlış biçimli durumlar, dizi ve null profiller bağlı sayılmaz.
+    const feeds: Array<Record<string, any> | null> = [
+      null, {}, {implementer: null, reviewer: 7},
+      {implementer: {state: "ready"}, reviewer: {state: "Connected"}},
+      {implementer: {state: "READY_BUT_NOT"}, reviewer: {}},
+      {implementer: {state: {x: 1}}, reviewer: {state: ["READY"]}}
+    ];
+    for (const profiles of feeds) {
+      const {ctx} = await mkCtx({profiles: profiles as any}, "en");
+      const node = await renderView(ctx);
+      const conn = byId(node, "settings-connection")!;
+      expect(within(conn).filter(n => n.dataset.conn === "CONNECTED").length, JSON.stringify(profiles)).toBe(0);
+      expect(text(conn), JSON.stringify(profiles)).not.toContain("Connected");
+    }
+  });
+  it("when every read fails: no VERIFIED/Connected anywhere, fail-closed gate is UNAVAILABLE, build facts are em-dashes", async () => {
+    for (const lang of ["tr", "en"]) {
+      const {ctx} = await mkCtx({execOff: true, controlOff: true, healthOff: true, factoryOff: true}, lang);
+      const node = await renderView(ctx);
+      expect(within(node).filter(n => n.dataset.pill === "VERIFIED").length, lang).toBe(0);
+      expect(within(node).filter(n => n.dataset.conn === "CONNECTED").length, lang).toBe(0);
+      expect(within(node).find(n => "autonomy" in n.dataset)!.dataset.autonomy).toBe("UNAVAILABLE");
+      expect(within(node).find(n => "gate" in n.dataset && n.tagName === "DIV")!.dataset.gate).toBe("UNAVAILABLE");
+      const app = text(byId(node, "settings-app")!);
+      expect(app).not.toContain("UNIVERSAL-AI-SOFTWARE-COMPANY-OS");
+      expect(app).not.toContain("1.2.0");
+      expect(byId(node, "settings-lang")).not.toBeNull(); // dil ve kısayollar yine kullanılabilir
+      expect(byId(node, "settings-principal")).not.toBeNull();
+    }
+  });
+  it("healthy /health but failed /v1/factory still shows the verified identity, with the build state and schema as em-dashes", async () => {
+    const {ctx} = await mkCtx({factoryOff: true}, "en");
+    const node = await renderView(ctx);
+    const kv = within(byId(node, "settings-app")!).filter(n => n.tagName === "DD" && n.className.includes("mono")).map(n => text(n));
+    expect(kv).toContain("UNIVERSAL-AI-SOFTWARE-COMPANY-OS");
+    expect(kv.filter(t => t === "—").length).toBe(2);
+  });
+  it("a fail-closed sandbox is never presented as an available gate even when the executor read is healthy", async () => {
+    const {ctx} = await mkCtx({sandbox: {state: "UNAVAILABLE", reason: "M1A_MODE"}}, "en");
+    const node = await renderView(ctx);
+    const gates = within(node).filter(n => n.dataset.gate !== undefined);
+    expect(gates.length).toBeGreaterThan(0);
+    for (const g of gates) expect(g.dataset.gate).toBe("NOT_VERIFIED");
+  });
+  it("renders API-provided text as text only (no markup nodes)", async () => {
+    const {ctx} = await mkCtx({controlActive: true, profiles: {implementer: {state: "<img src=x>"}, reviewer: {state: "READY"}}}, "en");
+    const node = await renderView(ctx);
+    expect(within(node).some(n => n.tagName === "IMG" || n.tagName === "SCRIPT")).toBe(false);
+  });
+});
+
+describe("test+states settings: accessibility and keyboard", () => {
+  it("h1 is unique and the programmatic focus target (tabindex -1)", async () => {
+    const {ctx} = await mkCtx();
+    const node = await renderView(ctx);
+    const h1s = within(node).filter(n => n.tagName === "H1");
+    expect(h1s.length).toBe(1);
+    expect(h1s[0].id).toBe("view-title");
+    expect(h1s[0].getAttribute("tabindex")).toBe("-1");
+    expect(text(h1s[0]).length).toBeGreaterThan(0);
+  });
+  it("language buttons are typed buttons in a labelled group with aria-pressed matching the active language, and click switches language", async () => {
+    for (const lang of ["tr", "en"]) {
+      const {ctx} = await mkCtx({}, lang);
+      const picked: string[] = [];
+      ctx.i18n.setLang = (l: string) => { picked.push(l); };
+      const node = await renderView(ctx);
+      const group = within(byId(node, "settings-lang")!).find(n => n.getAttribute("role") === "group")!;
+      expect(group.getAttribute("aria-label")!.length).toBeGreaterThan(0);
+      const btns = within(group).filter(n => n.tagName === "BUTTON");
+      expect(btns.length).toBe(2);
+      for (const b of btns) {
+        expect(b.getAttribute("type")).toBe("button");
+        expect(b.getAttribute("aria-pressed")).toBe(b.dataset.lang === lang ? "true" : "false");
+        expect(text(b).length).toBeGreaterThan(0);
+      }
+      const other = btns.find(b => b.dataset.lang !== lang)!;
+      for (const l of (other as any).ls.get("click") ?? []) l({});
+      expect(picked).toEqual([other.dataset.lang]);
+    }
+  });
+  it("status notes in degraded states expose role=status and every button on the page is explicitly typed", async () => {
+    const {ctx} = await mkCtx({execOff: true, controlOff: true, healthOff: true});
+    const node = await renderView(ctx);
+    const notes = within(node).filter(n => n.className.includes("note-unavailable") || n.className.includes("note-error") || n.className.includes("note-offline"));
+    expect(notes.length).toBeGreaterThan(0);
+    for (const n of notes) expect(n.getAttribute("role")).toBe("status");
+    for (const b of within(node).filter(n => n.tagName === "BUTTON")) expect(["button", "submit"], b.id || text(b)).toContain(b.getAttribute("type"));
+  });
+  it("keyboard shortcuts are rendered as kbd elements inside a definition list", async () => {
+    const {ctx} = await mkCtx();
+    const node = await renderView(ctx);
+    const keys = within(byId(node, "settings-keys")!);
+    expect(keys.filter(n => n.tagName === "KBD").map(text)).toEqual(expect.arrayContaining(["Ctrl+K", "Esc", "Tab"]));
+    expect(keys.some(n => n.tagName === "DL")).toBe(true);
+  });
+});
+
+describe("test+states settings: EN/TR parity for every key the view uses", () => {
+  it("whole dictionaries have identical key sets, and every literal settings.js key exists in both with equal placeholders", async () => {
+    // //TR: Görünümde geçen tüm sabit anahtarlar iki dilde de tanımlıdır, yer tutucular eşittir.
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    expect(Object.keys(en).sort()).toEqual(Object.keys(tr).sort());
+    const src = fs.readFileSync(path.join(rend, "views", "settings.js"), "utf8");
+    const keys = new Set<string>();
+    for (const m of src.matchAll(/(?:\bt\(|titleKey:)\s*"([a-zA-Z0-9_.]+)"/g)) keys.add(m[1]);
+    keys.add("area.settings.title"); keys.add("lang.tr"); keys.add("lang.en"); keys.add("state.UNAVAILABLE"); keys.add("pill.NOT_CONNECTED"); keys.add("pill.NOT_VERIFIED");
+    expect(keys.size).toBeGreaterThan(15);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of keys) { expect(k in tr && k in en, k).toBe(true); expect(ph(en[k]), k).toBe(ph(tr[k])); expect(tr[k].trim().length, k).toBeGreaterThan(0); expect(en[k].trim().length, k).toBeGreaterThan(0); }
+  });
+});
