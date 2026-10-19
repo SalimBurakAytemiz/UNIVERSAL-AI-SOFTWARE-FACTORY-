@@ -228,3 +228,139 @@ describe("UX WP-INBOX-APPROVAL — read-only surface + dictionary parity", () =>
     }
   });
 });
+
+// //TR: Aşağıdaki bloklar Gelen Kutusu için negatif (bozuk/404 yanıt => uydurma yok), erişilebilirlik ve EN/TR eşitlik testlerini ekler.
+const sourceStripLabel = (root: N) => all(root).find(n => n.tagName === "UL" && (n.attrs.get("aria-label") ?? "").length > 0)?.attrs.get("aria-label");
+
+describe("test+states: inbox — negative (no fabricated values)", () => {
+  // //TR: Mission listesi 404 ise karar kuyruğu uydurulmaz; dürüst durum gösterilir, karar kartı yoktur.
+  it("missions endpoint failing yields no decision cards and a non-VERIFIED decisions source", async () => {
+    const inbox = await load("views", "inbox.js");
+    const fix = liveFix(); delete fix["/v1/missions"];
+    const {ctx} = await mkCtx({get: fromFix(fix), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(byData(root, "decisionMission").length).toBe(0);
+    expect(sourceState(root, "decisions")).not.toBe("VERIFIED");
+    expect(sourceState(root, "decisions")).not.toBe("WAITING");
+  });
+
+  // //TR: Work-runs okunamazsa teslim kararı (COMPLETE) sunulmaz; yalnız dikkat kararı kalır.
+  it("work-runs failing never offers a delivery decision or COMPLETE", async () => {
+    const inbox = await load("views", "inbox.js");
+    const fix = liveFix(); delete fix["/v1/work-runs"];
+    const {ctx} = await mkCtx({get: fromFix(fix), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(byData(root, "decision", "DELIVERY_DECISION").length).toBe(0);
+    expect(all(root).some(n => n.id.startsWith("ib-COMPLETE-"))).toBe(false);
+    expect(byId(root, "inbox-decisions")!.textContent).toContain(ctx.t("inbox.runsUnavailable"));
+  });
+
+  // //TR: Run ayrıntısı NOT_VERIFIED ise kabul (COMPLETE) düğmesi yoktur ve açıklama gösterilir.
+  it("a NOT_VERIFIED run hides COMPLETE and explains why (never Verified without proof)", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({get: fromFix(liveFix({[`/v1/work-runs/${RUN}`]: pvDetail("NOT_VERIFIED")})), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(byId(root, `ib-COMPLETE-${MID}`)).toBeNull();
+    expect(byId(root, `ib-complete-na-${MID}`)).not.toBeNull();
+  });
+
+  // //TR: Run ayrıntısı 404 ise de COMPLETE sunulmaz.
+  it("run detail 404 never offers COMPLETE", async () => {
+    const inbox = await load("views", "inbox.js");
+    const fix = liveFix(); delete fix[`/v1/work-runs/${RUN}`];
+    const {ctx} = await mkCtx({get: fromFix(fix), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(byId(root, `ib-COMPLETE-${MID}`)).toBeNull();
+  });
+
+  // //TR: founder-attention 404 ise kuyruk kalemi uydurulmaz ve kaynak VERIFIED değildir.
+  it("founder-attention 404 shows no items and is not VERIFIED", async () => {
+    const inbox = await load("views", "inbox.js");
+    const fix = liveFix(); delete fix["/v1/founder-attention"];
+    const {ctx} = await mkCtx({get: fromFix(fix), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(byData(byId(root, "inbox-attention-queue")!, "attentionItem").length).toBe(0);
+    expect(sourceState(root, "attention")).not.toBe("VERIFIED");
+    expect(sourceState(root, "attention")).not.toBe("ATTENTION");
+  });
+
+  // //TR: Cockpit bozuk (eksik awaitingApproval) ise onay sayısı uydurulmaz.
+  it("malformed cockpit payload does not fabricate approvals or alert counts", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/cockpit": {generatedAt: "x", globalStop: "garbage", missions: "nope"}})), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(byData(byId(root, "inbox-approvals")!, "approval").length).toBe(0);
+    expect(sourceState(root, "approvals")).not.toBe("WAITING");
+    expect(sourceState(root, "alerts")).not.toBe("ATTENTION");
+    expect(byId(root, "inbox-alerts-status")?.dataset.alertsTotal ?? "—").toBe("—");
+  });
+
+  // //TR: Cockpit onay bekleyen listesi doluysa kart açılır ve düğme gezinir.
+  it("approvals list renders a typed open button that navigates to work", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx, calls} = await mkCtx({get: fromFix(liveFix()), lang: "en"});
+    const root = await inbox.render(ctx);
+    const b = byId(root, `ap-open-${MID3}`)!;
+    expect(b.attrs.get("type")).toBe("button");
+    b.fire("click");
+    expect(calls.navigate).toEqual(["work"]);
+    expect(calls.post).toEqual([]);
+  });
+
+  // //TR: HTML içeren API metni düğüm olarak yorumlanmaz; yalnız metin olarak görünür.
+  it("API strings containing markup stay inert text", async () => {
+    const inbox = await load("views", "inbox.js");
+    const evil = "<img src=x onerror=alert(1)>";
+    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/founder-attention": {blocked: [{packageId: evil, phase: 1, kind: "K", reason: evil, at: "2026-10-15T09:00:00.000Z", retryable: false}], schedulerVerification: "VERIFIED"}})), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(all(root).some(n => n.tagName === "IMG")).toBe(false);
+    expect(byId(root, "inbox-attention-queue")!.textContent).toContain(evil);
+  });
+});
+
+describe("test+states: inbox — accessibility", () => {
+  // //TR: h1 odaklanabilir (tabindex=-1), tüm düğmeler type=button, gruplar etiketli, durum alanları role=status.
+  it("h1 is focusable, every button is typed, groups are labelled and status regions announce", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({get: fromFix(liveFix()), lang: "en"});
+    const root = await inbox.render(ctx);
+    const h1s = all(root).filter(n => n.tagName === "H1");
+    expect(h1s.length).toBe(1);
+    expect(h1s[0].attrs.get("tabindex")).toBe("-1");
+    expect(h1s[0].id).toBe("view-title");
+    const buttons = all(root).filter(n => n.tagName === "BUTTON");
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const b of buttons) expect(b.attrs.get("type"), b.id).toBe("button");
+    const groups = all(root).filter(n => n.attrs.get("role") === "group");
+    expect(groups.length).toBeGreaterThan(0);
+    for (const g of groups) expect((g.attrs.get("aria-label") ?? "").length, "group label").toBeGreaterThan(0);
+    expect(sourceStripLabel(root)).toBeTruthy();
+    expect(byId(root, "inbox-alerts-status")!.attrs.get("role")).toBe("status");
+  });
+
+  // //TR: Düğmeler yerel <button> öğesidir (Enter/Space yerel click üretir); odak anahtarları kararlıdır.
+  it("action buttons are native buttons with stable focus keys (keyboard activation is native)", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({get: fromFix(liveFix()), lang: "en"});
+    const root = await inbox.render(ctx);
+    for (const b of all(root).filter(n => n.tagName === "BUTTON")) expect(b.dataset.focusKey, b.id).toBe(b.id);
+  });
+});
+
+describe("test+states: inbox — EN/TR parity for every key the view uses", () => {
+  // //TR: Görünüm kaynağındaki tüm inbox.* anahtarları ve inbox.* sözlük kümesi EN ve TR'de aynıdır; yer tutucular eşittir.
+  it("inbox.* key sets are identical in EN and TR and every literal key used by the view exists with placeholder parity", async () => {
+    const en = (await load("locales", "en.js")).default, tr = (await load("locales", "tr.js")).default;
+    const pick = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("inbox.")).sort();
+    expect(pick(tr)).toEqual(pick(en));
+    const src = read("views", "inbox.js");
+    const used = [...new Set([...src.matchAll(/["']((?:inbox|area\.inbox|attention|work\.transition|m1a\.complete)\.[\w.]+)["']/g)].map(m => m[1]))];
+    expect(used.length).toBeGreaterThan(10);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of used) {
+      expect(typeof en[k], `en ${k}`).toBe("string");
+      expect(typeof tr[k], `tr ${k}`).toBe("string");
+      expect(ph(tr[k]), `placeholders ${k}`).toBe(ph(en[k]));
+    }
+  });
+});
