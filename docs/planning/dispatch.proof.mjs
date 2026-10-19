@@ -30,18 +30,29 @@ function mkEnv(tasks, backlogRaw) {
   G(work, ["push", "-q", "origin", "v7/integration"]);
   return {dir, bare, work, bl};
 }
-const T = (id, extra = {}) => ({id, status: "READY", owner: "CLOUD", authorizedBy: "FOUNDER:test", dependsOn: [], protectedEdit: false, requiresNewAuthority: false, ...extra});
+// Authority gating is opt-in: eligible tasks carry protectedEdit:false AND requiresNewAuthority:false explicitly, so T() keeps both defaults
+// (every case below that expects a selectable task stays meaningful). Pass ABSENT to leave a key out of the backlog entry altogether.
+const ABSENT = Symbol("ABSENT");
+const T = (id, extra = {}) => Object.fromEntries(Object.entries({id, status: "READY", owner: "CLOUD", authorizedBy: "FOUNDER:test", dependsOn: [], protectedEdit: false, requiresNewAuthority: false, ...extra}).filter(([, v]) => v !== ABSENT));
+// The lease modules are resolved relative to the SCRIPT (import.meta.url), not the cwd. A case that plants stub lease modules in a temp clone
+// therefore runs a copy of dispatch.mjs from inside that clone (docs/planning/), so the stubs stay the modules under test.
+const LOCAL_SCRIPT = new Map();
+function useLocalScript(work) {
+  const dst = path.join(work, "docs/planning/dispatch.mjs");
+  fs.mkdirSync(path.dirname(dst), {recursive: true}); fs.copyFileSync(DISPATCH, dst); LOCAL_SCRIPT.set(work, dst);
+}
+const scriptFor = cwd => LOCAL_SCRIPT.get(cwd) ?? DISPATCH;
 const heads = bare => G(bare, ["for-each-ref", "--format=%(refname)", "refs/heads/claude/"]).split("\n").filter(Boolean);
 const ALL_RAW = []; // every stdout captured from any dispatch.mjs run in this proof (scanned globally at the end)
 const dispatchSync = (cwd, args, env, nodeArgs = []) => {
-  const r = spawnSync("node", [...nodeArgs, DISPATCH, ...args], {cwd, encoding: "utf8", ...(env ? {env: {...process.env, ...env}} : {})});
+  const r = spawnSync("node", [...nodeArgs, scriptFor(cwd), ...args], {cwd, encoding: "utf8", ...(env ? {env: {...process.env, ...env}} : {})});
   ALL_RAW.push(r.stdout);
   const line = r.stdout.trim().split("\n").filter(Boolean).pop() ?? "";
   let j = null; try { j = JSON.parse(line); } catch { /* keep null */ }
   return {code: r.status, j, raw: r.stdout, err: r.stderr};
 };
 const dispatchAsync = (cwd, args) => new Promise(res => {
-  const c = spawn("node", [DISPATCH, ...args], {cwd}); let out = "";
+  const c = spawn("node", [scriptFor(cwd), ...args], {cwd}); let out = "";
   c.stdout.on("data", d => out += d); c.on("close", code => { ALL_RAW.push(out); let j = null; try { j = JSON.parse(out.trim().split("\n").pop()); } catch { /* null */ } res({code, j, raw: out}); });
 });
 
@@ -106,6 +117,44 @@ for (const mode of [[], ["--no-lease"]]) {
   G(e4.work, ["push", "-q", "origin", "HEAD:refs/heads/claude/b-1-work"]);
   const r4 = dispatchSync(e4.work, ["--backlog", e4.bl, "--open-prs", "claude/b-3"]);
   check("existing task branch (B-1) and open PR (B-3) skipped; B-2 selected", r4.j.taskId === "B-2" && r4.j.reasons.includes("B-1:BRANCH_EXISTS:claude/b-1-work") && r4.j.reasons.includes("B-3:OPEN_PR:claude/b-3"), r4.raw);
+}
+// 3b. Authority gating is opt-in: protectedEdit AND requiresNewAuthority must both be present and exactly the boolean false.
+{
+  const MP = "MISSING_PROTECTED_EDIT", MR = "MISSING_REQUIRES_NEW_AUTHORITY", XP = "MALFORMED_PROTECTED_EDIT", XR = "MALFORMED_REQUIRES_NEW_AUTHORITY";
+  const cases = [
+    ["AG-ABS-BOTH", {protectedEdit: ABSENT, requiresNewAuthority: ABSENT}, [MP, MR]],
+    ["AG-ABS-PE", {protectedEdit: ABSENT}, [MP]],
+    ["AG-ABS-RNA", {requiresNewAuthority: ABSENT}, [MR]],
+    ["AG-NULL-BOTH", {protectedEdit: null, requiresNewAuthority: null}, [XP, XR]],
+    ["AG-NULL-PE", {protectedEdit: null}, [XP]],
+    ["AG-NULL-RNA", {requiresNewAuthority: null}, [XR]],
+    ["AG-STR-BOTH", {protectedEdit: "false", requiresNewAuthority: "false"}, [XP, XR]],
+    ["AG-STR-PE", {protectedEdit: "false"}, [XP]],
+    ["AG-STR-RNA", {requiresNewAuthority: "false"}, [XR]],
+    ["AG-ZERO-BOTH", {protectedEdit: 0, requiresNewAuthority: 0}, [XP, XR]],
+  ];
+  const tasks = cases.map(([id, extra]) => T(id, extra));
+  const e = mkEnv(tasks);
+  const onDisk = JSON.parse(fs.readFileSync(e.bl, "utf8")).tasks;
+  check("authority-gating fixture really omits the keys (absent, not undefined/false) and carries null / \"false\" literally",
+    !("protectedEdit" in onDisk[0]) && !("requiresNewAuthority" in onDisk[0]) && !("protectedEdit" in onDisk[1]) && onDisk[1].requiresNewAuthority === false && !("requiresNewAuthority" in onDisk[2]) && onDisk[2].protectedEdit === false
+      && onDisk[3].protectedEdit === null && onDisk[6].protectedEdit === "false" && onDisk[6].requiresNewAuthority === "false", JSON.stringify(onDisk.slice(0, 7)));
+  const r = dispatchSync(e.work, ["--claim", "--backlog", e.bl]);
+  check("flags absent / null / \"false\" / 0 (alone or in either position) => NO_ACTION, nothing claimed", r.code === 0 && r.j?.outcome === "NO_ACTION" && heads(e.bare).length === 0, r.raw.slice(0, 400));
+  const bad = cases.filter(([id, , want]) => {
+    const got = (r.j?.reasons ?? []).filter(x => x.startsWith(`${id}:`)).map(x => x.slice(id.length + 1)).sort();
+    return got.join() !== [...want].sort().join();
+  }).map(c => c[0]);
+  check("each ineligible task carries exactly its clear reason (MISSING_* for absent, MALFORMED_* for null / \"false\" / 0), none of them silently eligible", bad.length === 0, `${bad.join(",")} :: ${JSON.stringify(r.j?.reasons)}`);
+  const e2 = mkEnv([...tasks, T("AG-OK")]);
+  const r2 = dispatchSync(e2.work, ["--claim", "--backlog", e2.bl]);
+  check("only the task with both flags explicitly false (AG-OK) is claimed among the flag-less / malformed ones", r2.j?.outcome === "START" && r2.j.taskId === "AG-OK" && heads(e2.bare).join() === "refs/heads/claude/ag-ok", r2.raw.slice(0, 400));
+  const amod = await import(path.join(HERE, "dispatch.mjs"));
+  const aenv = {tasks: [], claimedHeads: new Set(), remoteHeads: new Set(), openPrs: new Set()};
+  check("evaluateTask: explicit false/false => eligible (no reasons); true => PROTECTED_EDIT / REQUIRES_NEW_AUTHORITY; absent => MISSING_*",
+    amod.evaluateTask(T("AG-U"), aenv).length === 0
+    && amod.evaluateTask(T("AG-U", {protectedEdit: true, requiresNewAuthority: true}), aenv).join() === "PROTECTED_EDIT,REQUIRES_NEW_AUTHORITY"
+    && amod.evaluateTask(T("AG-U", {protectedEdit: ABSENT, requiresNewAuthority: ABSENT}), aenv).join() === `${MP},${MR}`);
 }
 // 4. BLOCKED paths.
 {
@@ -317,7 +366,7 @@ const writeHook = (bare, body) => { fs.mkdirSync(path.join(bare, "hooks"), {recu
 // 10e. Lease-module-throws path uses the same ls-remote gating (stub lease modules live in the temp work clone only).
 {
   const stub = work => {
-    const d = path.join(work, "automation/lib"); fs.mkdirSync(d, {recursive: true});
+    const d = path.join(work, "automation/lib"); fs.mkdirSync(d, {recursive: true}); useLocalScript(work);
     fs.writeFileSync(path.join(d, "task-lease.mjs"), 'export function claim() { throw new Error("boom gh\x70_abcdefghijklmnopqrstuvwxyz0123456789"); }\nexport function release() {}\n');
     fs.writeFileSync(path.join(d, "task-lease-git-store.mjs"), "export function createRemoteRefStore() { return {createIfAbsent() { return {created: false, current: null}; }, read() { return null; }}; }\n");
   };
@@ -366,7 +415,7 @@ const writeHook = (bare, body) => { fs.mkdirSync(path.join(bare, "hooks"), {recu
 const FK = s => "gh" + "p_" + s; // fake token-shaped marker assembled at runtime. NB: "_" is a legal id/ref/token character, so id/dep/branch fixtures add a space to be genuinely invalid.
 const MARKERS = ["STATUSLEAK", "TOKENLEAK", "EPOCHLEAK", "SHALEAK", "IDLEAK", "OWNERLEAK", "DEPLEAK", "BRANCHLEAK", "PRLEAK", "DUPLEAK", "INTERNALLEAK", "GETTERLEAK", "ARGLEAK", "HEADLEAK", "OWNERLEAK2", "BASELEAK"].map(FK);
 const stubLease = (work, {claimBody, releaseLog}) => {
-  const d = path.join(work, "automation/lib"); fs.mkdirSync(d, {recursive: true});
+  const d = path.join(work, "automation/lib"); fs.mkdirSync(d, {recursive: true}); useLocalScript(work);
   fs.writeFileSync(path.join(d, "task-lease.mjs"), `import fs from "node:fs";\nexport function claim() { ${claimBody} }\nexport function release() { fs.appendFileSync(${JSON.stringify(releaseLog)}, "released\\n"); return {status: "RELEASED"}; }\n`);
   fs.writeFileSync(path.join(d, "task-lease-git-store.mjs"), "export function createRemoteRefStore() { return {createIfAbsent() { return {created: true, current: null}; }, read() { return null; }}; }\n");
 };
@@ -480,12 +529,24 @@ const mod13 = await import(path.join(HERE, "dispatch.mjs"));
   // F4: a lease module that prints to console/stdout/stderr (top level, claim, store) cannot add output lines.
   const f5 = mkEnv([T("MU-1")]);
   const MK = FK("MUTELEAK"); MARKERS.push(MK);
-  const dd = path.join(f5.work, "automation/lib"); fs.mkdirSync(dd, {recursive: true});
+  const dd = path.join(f5.work, "automation/lib"); fs.mkdirSync(dd, {recursive: true}); useLocalScript(f5.work);
   fs.writeFileSync(path.join(dd, "task-lease.mjs"), `console.log(${JSON.stringify(MK + "-top")});\nexport function claim() { console.log(${JSON.stringify(MK + "-claim")}); process.stdout.write(${JSON.stringify(MK + "-w\n")}); console.error(${JSON.stringify(MK + "-err")}); process.stderr.write(${JSON.stringify(MK + "-e2\n")}); return {status: "GRANTED", record: {token: "abc.DEF:1", epoch: 3}}; }\nexport function release() { console.log(${JSON.stringify(MK + "-rel")}); }\n`);
   fs.writeFileSync(path.join(dd, "task-lease-git-store.mjs"), `export function createRemoteRefStore() { console.log(${JSON.stringify(MK + "-store")}); return {createIfAbsent() { return {created: true, current: null}; }, read() { console.log(${JSON.stringify(MK + "-read")}); return null; }}; }\n`);
   const rm = dispatchSync(f5.work, ["--claim", "--backlog", f5.bl]);
   check("F4 lease module printing to console.log/stdout/stderr: stdout is exactly one JSON line without the marker, stderr free of it, claim still START with lease GRANTED",
     rm.raw.trim().split("\n").length === 1 && rm.j?.outcome === "START" && rm.j.lease?.status === "GRANTED" && !rm.raw.includes("MUTELEAK") && !rm.err.includes("MUTELEAK"), rm.raw + rm.err.slice(0, 200));
+}
+// 13b. N1: the lease modules come from the script's OWN repo (import.meta.url), never from the cwd repo being operated on.
+{
+  const e = mkEnv([T("CWD-1")]);
+  const planted = path.join(e.dir, "planted.log");
+  const d = path.join(e.work, "automation/lib"); fs.mkdirSync(d, {recursive: true});
+  fs.writeFileSync(path.join(d, "task-lease.mjs"), `import fs from "node:fs";\nexport function claim() { fs.appendFileSync(${JSON.stringify(planted)}, "claim\\n"); return {status: "GRANTED", record: {token: "planted.cwd:1", epoch: 99}}; }\nexport function release() {}\n`);
+  fs.writeFileSync(path.join(d, "task-lease-git-store.mjs"), `import fs from "node:fs";\nexport function createRemoteRefStore() { fs.appendFileSync(${JSON.stringify(planted)}, "store\\n"); return {createIfAbsent() { return {created: true, current: null}; }, read() { return null; }}; }\n`);
+  const r = dispatchSync(e.work, ["--claim", "--backlog", e.bl]); // the REAL dispatch.mjs, cwd = a repo that carries planted lease modules
+  check("N1 cwd repo with its own automation/lib/task-lease*.mjs: those planted modules are NOT loaded (token/epoch not theirs, no planted marker), the script's own lease modules record the claim",
+    r.j?.outcome === "START" && r.j.lease?.status === "GRANTED" && r.j.lease.token !== "planted.cwd:1" && r.j.lease.epoch !== 99 && !fs.existsSync(planted)
+    && /^cloud-dispatch:\d+:/.test(r.j.lease.token ?? "") && G(e.bare, ["for-each-ref", "refs/uasco/claims/"]).includes("refs/uasco/claims/CWD-1"), r.raw.slice(0, 500) + (fs.existsSync(planted) ? " [planted module ran]" : ""));
 }
 // 14. Global proof: every stdout produced by every scenario above is a single JSON line and holds none of the fake secret markers.
 {

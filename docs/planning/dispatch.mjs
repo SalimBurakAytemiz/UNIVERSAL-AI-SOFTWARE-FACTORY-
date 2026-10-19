@@ -104,8 +104,9 @@ export function evaluateTask(t, env) {
     const dep = env.tasks.find(x => x && isStr(x.id) && x.id === d);
     if (!dep || dep.status !== "DONE") r.push(`UNMET_DEP:${safeId(d)}`);
   }
-  if (t.protectedEdit !== undefined && t.protectedEdit !== false) r.push(t.protectedEdit === true ? "PROTECTED_EDIT" : "MALFORMED_PROTECTED_EDIT");
-  if (t.requiresNewAuthority !== undefined && t.requiresNewAuthority !== false) r.push(t.requiresNewAuthority === true ? "REQUIRES_NEW_AUTHORITY" : "MALFORMED_REQUIRES_NEW_AUTHORITY");
+  // Authority gating is opt-IN: both flags must be present AND the boolean false. Absent, null, "false", 0, ... are never eligible.
+  if (t.protectedEdit !== false) r.push(t.protectedEdit === true ? "PROTECTED_EDIT" : Object.hasOwn(t, "protectedEdit") ? "MALFORMED_PROTECTED_EDIT" : "MISSING_PROTECTED_EDIT");
+  if (t.requiresNewAuthority !== false) r.push(t.requiresNewAuthority === true ? "REQUIRES_NEW_AUTHORITY" : Object.hasOwn(t, "requiresNewAuthority") ? "MALFORMED_REQUIRES_NEW_AUTHORITY" : "MISSING_REQUIRES_NEW_AUTHORITY");
   const cb = claimBranchOf(t.id);
   if (env.claimedHeads.has(cb)) r.push("ALREADY_CLAIMED");
   // Directory/file ref conflicts: a head under claude/<id>/ or a head equal to a directory prefix of the claim ref cannot coexist with it.
@@ -269,13 +270,13 @@ async function runInner(argv, cwd) {
   const {chosen: first, perTask} = select(tasks, env);
   const flat = perTask.flatMap(p => p.reasons.map(x => `${p.taskId ?? "?"}:${x}`));
 
-  // Lease modules are imported read-only; a load failure only disables the optional lease record.
+  // Lease modules are imported read-only from THIS script's own repo (import.meta.url), never from the caller's cwd/git toplevel
+  // (a cwd repo could otherwise plant its own automation/lib/task-lease*.mjs); a load failure only disables the optional lease record.
   let leaseApi = null, store = null;
   const leaseFlag = {unavail: false};
   if (o.lease) {
     try {
-      const top = git(["rev-parse", "--show-toplevel"]).stdout.trim();
-      const base = top && fs.existsSync(path.join(top, "automation/lib/task-lease.mjs")) ? top : path.resolve(HERE, "../..");
+      const base = path.resolve(HERE, "../..");
       const imp = f => quietAsync(() => import(pathToFileURL(path.join(base, f)).href));
       leaseApi = await imp("automation/lib/task-lease.mjs");
       const S = await imp("automation/lib/task-lease-git-store.mjs");
