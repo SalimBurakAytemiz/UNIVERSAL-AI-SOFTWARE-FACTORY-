@@ -141,3 +141,24 @@
 1. FA-LEASE2: needs sealed D3 authority record + trust-root reseal; blocked on CP-GOV built and proven. Not actionable by builder.
 2. ACTIONS-CI-RESTORE: Actions billing/runner outage (admin-owned); blocks merge of all PRs.
 3. BACKLOG-SOURCE-REBASELINE: Founder must choose authoritative backlog source (depends on FA-LEASE2).
+
+## 2026-10-19 heartbeat #8 (queue read from claude/cloud-production-engine@ed5cfb9)
+
+**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0 (steady state; no READY task exists).
+
+**Queue task states (observed):** unchanged. PENDING_REVIEW: CP-QUEUE (#14), CP-REPORT (#13), CP-CI (#12). IN_PROGRESS: CP-DISPATCH, CP-RECOVERY, CP-GOV. BLOCKED: FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED. DONE: 0.
+
+**CORRECTION to heartbeat #7:** #7 read only page 1 of the open-PR listing (30 per page). With page 2 included, **open PRs: 39** (#8, #11-#48). #8 and #11-#18 are still open; they were not closed. The "no longer in the open list" claim in #7 was a pagination error. Mergeable state and CI: UNKNOWN (not returned by listing). No PR carries a uasco-cloud-production label.
+- Cloud-production related open: #12 CP-CI, #13 CP-REPORT (needs-fix), #14 CP-QUEUE (needs-fix), #15 engine contract+queue, #17 CP-QUEUE remediation, #18 CP-REPORT remediation, #21 Node24 env, #29 CP-DISPATCH-IMPL, #30 self-hosted CI (needs-fix), #31 CP-GOV scaffold.
+- uasco-needs-fix label observed on: #11, #13, #14, #30, #38.
+
+**Active implementer sessions:** UNKNOWN (claude-code-remote list_sessions/create_session unavailable in this fire).
+
+**Merged PRs / tasks completed:** UNKNOWN / 0 (closed PRs #1-#7, #9, #10 report merged=false; no queue task DONE).
+
+**Current failures:** needs-fix on #11, #13, #14, #30, #38. Repo-wide Actions CI red per queue (not independently verified).
+
+**Top blockers:**
+1. FA-LEASE2: needs sealed D3 authority record + trust-root reseal; blocked on CP-GOV built and proven. Not actionable by builder.
+2. ACTIONS-CI-RESTORE: Actions billing/runner outage (admin-owned); blocks merge of all PRs.
+3. BACKLOG-SOURCE-REBASELINE: Founder must choose authoritative backlog source (depends on FA-LEASE2).
