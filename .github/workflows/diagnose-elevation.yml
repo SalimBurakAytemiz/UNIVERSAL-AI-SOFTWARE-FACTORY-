@@ -18,15 +18,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: node scripts/ensure-dependencies.mjs
-      - name: BS1 shards a-f through the patched harness (de-elevated via runas on this hosted runner)
+      - name: PID reuse probe
+        run: node scripts/ci/diag-pid-reuse.mjs
+      - name: LV1 original (protected) selftest x2 and fixture-patched diagnostic copy x3
         shell: pwsh
         run: |
-          $fail = 0
-          foreach ($s in 'a','b','c','d','e','f') {
-            $sw = [Diagnostics.Stopwatch]::StartNew()
-            node node_modules/vitest/vitest.mjs run "tests/pkg-bs1-autonomy-bootstrap-$s.test.ts" 2>&1 | Select-Object -Last 40
-            $rc = $LASTEXITCODE; if ($rc -ne 0) { $fail++ }
-            "BS1_SHARD $s exit=$rc seconds=" + [int]$sw.Elapsed.TotalSeconds
-          }
-          node node_modules/vitest/vitest.mjs run tests/pkg-vs-validation-sharding.test.ts 2>&1 | Select-Object -Last 8
-          "BS1_DIAG failures=$fail"
+          foreach ($i in 1,2) { node scripts/liveness-selftest.mjs 2>&1 | Select-Object -Last 1; "LV1_ORIGINAL run=$i exit=$LASTEXITCODE" }
+          foreach ($i in 1,2,3) { node scripts/diag-liveness-selftest-fixture.mjs 2>&1 | Select-Object -Last 1; "LV1_PATCHED run=$i exit=$LASTEXITCODE" }
+      - name: Bootstrap trust-kernel self-test (post-validation CI step)
+        run: node scripts/bootstrap-kernel-selftest.mjs
