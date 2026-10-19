@@ -21,6 +21,11 @@ export const CI_EXECUTED_FLOOR = Object.freeze([
   ["package.json", "npm-manifest", false],
   ["package-lock.json", "npm-lockfile", false],
   ["scripts/ci/", "ci-scripts", true],
+  ["npm-shrinkwrap.json", "npm-shrinkwrap", false],
+  [".npmrc", "npmrc", false],
+  // Already protected in config/protected-paths.json; repeated here as defence in depth because CI runs them.
+  ["scripts/secret-sanity.mjs", "secret-sanity", false],
+  ["scripts/bootstrap-kernel-selftest.mjs", "bootstrap-kernel-selftest", false],
 ]);
 // The required contexts are trusted only from this workflow file (any diff under .github/workflows/ is PROTECTED_PATH) and these run events.
 export const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
@@ -34,11 +39,12 @@ const LOGIN_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:\[bot\])?$/;
 // The one machine line a reviewer posts in a PR REVIEW body. The whole trimmed line must match; anything else starting with the prefix is malformed.
 export const BINDING_RE = /^VERDICT-BINDING: verdict=([A-Z_]{1,32}) head=([0-9a-f]{40}|[0-9a-f]{64}) base=([0-9a-f]{40}|[0-9a-f]{64}) reviewer-session=([A-Za-z0-9._:-]{1,128})$/;
 const BINDING_LIKE_RE = /verdict-binding/i;
-// Zero-width and bidi controls: a line carrying any of them can never be a binding.
-const INVISIBLES = "\u00AD\u034F\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF";
-const INVISIBLE_RE = new RegExp(`[${INVISIBLES}]`);
-const INVISIBLE_G = new RegExp(`[${INVISIBLES}]`, "g");
-const FENCE_RE = /^ {0,3}(?:```|~~~)/;
+// Invisible characters: every format control (Cf) and every default-ignorable code point. A line carrying any of them can never be a binding.
+export const INVISIBLE_RE = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/u;
+const INVISIBLE_G = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu;
+// CommonMark-style fences: an opening run of 3+ "`" or "~" is closed only by a run of the SAME character at least as long, with nothing after it.
+const FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})/;
+const FENCE_CLOSE_RE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
 const QUOTE_RE = /^\s*(?:>|&gt;)/;
 const VERDICT_STATES = new Set(["COMMENTED", "APPROVED"]);
 
@@ -61,13 +67,20 @@ export function normPath(p) {
 export function parseBinding(body) {
   if (!isStr(body)) return {code: "VERDICT_BINDING_MALFORMED"};
   const lines = [];
-  let fenced = false;
+  let fence = null;
   const all = body.split(/\r?\n/);
   // Any line that mentions verdict-binding once invisibles are removed, and carries one, is MALFORMED wherever it sits (fenced and quoted included).
   if (all.some(l => INVISIBLE_RE.test(l) && BINDING_LIKE_RE.test(l.replace(INVISIBLE_G, "")))) return {code: "VERDICT_BINDING_MALFORMED"};
   for (const l of all) {
-    if (FENCE_RE.test(l)) { fenced = !fenced; continue; }
-    if (fenced || QUOTE_RE.test(l)) continue;
+    if (fence === null) {
+      const m = FENCE_OPEN_RE.exec(l);
+      if (m) { fence = {ch: m[1][0], len: m[1].length}; continue; }
+    } else {
+      const m = FENCE_CLOSE_RE.exec(l);
+      if (m && m[1][0] === fence.ch && m[1].length >= fence.len) fence = null;
+      continue;
+    }
+    if (QUOTE_RE.test(l)) continue;
     if (BINDING_LIKE_RE.test(l)) lines.push(l);
   }
   if (lines.length === 0) return null;
@@ -124,7 +137,7 @@ function checkVerdict(ev, headSha, baseSha, allowed, r) {
     const login = isObj(rv.user) && isStr(rv.user.login) && LOGIN_RE.test(rv.user.login) ? lc(rv.user.login) : null;
     // CHANGES_REQUESTED on this head counts from ANY author, binding or not, including a deleted/ghost account (user null: a null login never
     // matches the CLEAN's author, so it always blocks). A maintainer clears it by dismissing the review.
-    if (rv.state === "CHANGES_REQUESTED" && rv.commit_id === headSha) changes.push({t: timeOf(rv.submitted_at), login});
+    if (rv.state === "CHANGES_REQUESTED" && rv.commit_id === headSha) changes.push({t: timeOf(rv.submitted_at), login, session: undefined});
     if (login === null) continue;
     if (!allowed.has(lc(rv.user.login))) continue;
     const b = parseBinding(rv.body);
@@ -139,7 +152,7 @@ function checkVerdict(ev, headSha, baseSha, allowed, r) {
     else if (b.base !== baseSha) code = "VERDICT_BASE_MISMATCH";
     else if (!VERDICT_STATES.has(rv.state)) code = "VERDICT_REVIEW_STATE_INVALID";
     else if (implSessions.has(b.session)) code = "VERDICT_REVIEWER_IS_IMPLEMENTER_SESSION";
-    cands.push({t, code, login: rv.user.login, id: rv.id, session: b.session});
+    cands.push({t, code, login, id: rv.id, session: b.session});
   }
   const clean = cands.filter(c => c.code === null).sort((a, b) => a.t - b.t || (Number(a.id) || 0) - (Number(b.id) || 0));
   if (clean.length === 0) {
@@ -151,14 +164,15 @@ function checkVerdict(ev, headSha, baseSha, allowed, r) {
   }
   const last = clean[clean.length - 1];
   let ok = true;
-  // Any non-CLEAN binding review on this head at or after the latest CLEAN (or with no usable time) supersedes it.
-  const later = cands.filter(c => c.code !== null && !(c.t < last.t));
-  if (later.length) { ok = false; r.push("VERDICT_SUPERSEDED_BY_LATER_REVIEW"); for (const c of later) r.push(c.code); }
-  // A non-CLEAN verdict is cleared only by a strictly later CLEAN with the SAME reviewer-session AND the SAME review author login
-  // (a session string is just text in a body: any account can quote it).
-  for (const c of cands) if (c.code === "VERDICT_NOT_CLEAN" && c.t < last.t && !clean.some(k => k.session === c.session && lc(k.login) === lc(c.login) && k.t > c.t)) { ok = false; r.push("VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_REVIEWER"); }
-  // CHANGES_REQUESTED blocks when at or after the latest CLEAN, or earlier from an account other than the CLEAN's author.
-  for (const c of changes) if (!(c.t < last.t) || c.login !== lc(last.login)) { ok = false; r.push("REVIEW_CHANGES_REQUESTED"); }
+  // EVERY non-CLEAN item on this head (a non-CLEAN, malformed, ambiguous or mismatched binding, or CHANGES_REQUESTED) blocks until a strictly
+  // later valid CLEAN from the SAME login clears it. When the item's reviewer-session is known it must match too (a session string is just
+  // text: any account can quote it). An item at or after the latest CLEAN, a ghost account (login null) or an unusable time is never cleared.
+  const cleared = c => c.login !== null && Number.isFinite(c.t) && clean.some(k => k.login === c.login && k.t > c.t && (c.session === undefined || k.session === c.session));
+  for (const c of cands) if (c.code !== null && !cleared(c)) {
+    ok = false;
+    r.push(!(c.t < last.t) ? "VERDICT_SUPERSEDED_BY_LATER_REVIEW" : "VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_REVIEWER", c.code);
+  }
+  for (const c of changes) if (!cleared(c)) { ok = false; r.push("REVIEW_CHANGES_REQUESTED"); }
   return ok ? last.login : null;
 }
 
@@ -171,6 +185,9 @@ function checkPaths(ev, r) {
   const cf = isObj(ev.pr) ? ev.pr.changed_files : undefined;
   if (!Number.isSafeInteger(cf) || cf < 0) r.push("EVIDENCE_MALFORMED:pr.changed_files");
   else if (ev.diffFiles.length !== cf || cf > MAX_LISTED_FILES) r.push("DIFF_INCOMPLETE");
+  // Duplicates would let a padded list match the count while hiding a file: every normalised filename must be unique, and so must every
+  // normalised previous_filename. (A filename may equal another entry's previous_filename: a rename plus a re-added file is legitimate.)
+  const seenNew = new Set(), seenOld = new Set();
   const exact = new Set([...PROTECTED_FLOOR_EXACT, ...pp.exactPaths.map(normPath).filter(Boolean)]);
   const prefixes = [...PROTECTED_FLOOR, ...pp.protectedPrefixes].map(p => lc(p.replace(/\\/g, "/")).replace(/^(?:\.\/|\/)+/, "")).filter(Boolean);
   const hit = n => exact.has(n) || prefixes.some(p => n.startsWith(p));
@@ -180,6 +197,7 @@ function checkPaths(ev, r) {
     const names = [f.filename];
     if (f.status === "renamed" || f.status === "copied") names.push(f.previous_filename);
     else if (f.previous_filename !== undefined && f.previous_filename !== null) names.push(f.previous_filename);
+    names.forEach((x, i) => { const n = normPath(x), seen = i === 0 ? seenNew : seenOld; if (n !== null) { if (seen.has(n)) r.push("DIFF_INCOMPLETE"); seen.add(n); } });
     for (const x of names) {
       const n = normPath(x);
       if (n === null) r.push("EVIDENCE_MALFORMED:diffFiles");

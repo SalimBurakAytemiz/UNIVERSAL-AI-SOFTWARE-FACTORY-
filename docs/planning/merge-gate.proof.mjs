@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
-import {evaluateMergeGate, verifyPostMerge, REQUIRED_CONTEXTS} from "./merge-gate.mjs";
+import {evaluateMergeGate, verifyPostMerge, parseBinding, REQUIRED_CONTEXTS, INVISIBLE_RE} from "./merge-gate.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GATE = path.join(HERE, "merge-gate.mjs");
@@ -129,6 +129,37 @@ for (const [nm, ch] of [["U+034F", "\u034F"], ["U+180E", "\u180E"], ["U+2069", "
   blocks(mut(e => { e.reviews = [review({body: bind().replace("CLEAN", "CLEAN" + ch)})]; }), "VERDICT_BINDING_MALFORMED", {}, `N37s invisible ${nm} inside the binding line`);
 blocks(mut(e => { e.pr.changed_files = 4; }), "DIFF_INCOMPLETE", {}, "N37t diffFiles shorter than pr.changed_files (truncated/paginated list)");
 blocks(mut(e => { e.pr.changed_files = 3001; e.diffFiles = Array.from({length: 3001}, (_, i) => F(`docs/f${i}.md`)); }), "DIFF_INCOMPLETE", {}, "N37u more files than the PR files API can list");
+// B3: a malformed/ambiguous BLOCKED from reviewer A is never lifted by ANOTHER login's CLEAN.
+{
+  const A = "reviewer-a", P = {trustedReviewerLogins: [A]};
+  const blockedA = body => review({id: 1, login: A, at: "2026-10-19T09:00:00Z", session: "sA", body});
+  blocks(mut(e => { e.reviews = [blockedA(`${bind({verdict: "BLOCKED", session: "sA"})}\nsee the verdict-binding rules`), review({id: 2})]; }), "VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_REVIEWER", P, "N37v B3 AMBIGUOUS BLOCKED (binding + prose) from A, CLEAN from the PR author");
+  blocks(mut(e => { e.reviews = [blockedA(`${bind({verdict: "BLOCKED", session: "sA"})} `), review({id: 2})]; }), "VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_REVIEWER", P, "N37w B3 MALFORMED BLOCKED (trailing space) from A, CLEAN from the PR author");
+  blocks(mut(e => { e.reviews = [blockedA(`${bind({verdict: "BLOCKED", session: "sA"})}\u061C`), review({id: 2})]; }), "VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_REVIEWER", P, "N37x B3 MALFORMED BLOCKED (U+061C) from A, CLEAN from the PR author");
+  blocks(mut(e => { e.rules[2].parameters.required_approving_review_count = 1; e.reviews = [blockedA(`${bind({verdict: "BLOCKED", session: "sA"})} `), review({id: 2, login: "reviewer-b", session: "sA"})]; }),
+    "VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_REVIEWER", {mode: "strict", trustedReviewerLogins: [A, "reviewer-b"]}, "N37y B3 strict: MALFORMED BLOCKED from A, CLEAN from trusted reviewer-b");
+  const ok = run(mut(e => { e.reviews = [blockedA(`${bind({verdict: "BLOCKED", session: "sA"})} `), review({id: 2, login: A, session: "sB"})]; }), P);
+  check("P7 B3 MALFORMED BLOCKED from A (session unparseable), later well-formed CLEAN from the SAME login A -> MERGE", ok.decision === "MERGE", JSON.stringify(ok));
+}
+// B4: duplicate diffFiles cannot pad the completeness count.
+blocks(mut(e => { e.pr.changed_files = 3; e.diffFiles = [F("docs/x.md"), F("docs/x.md"), F("docs/y.md")]; }), "DIFF_INCOMPLETE", {}, "N37z B4 the same file listed twice (count matches, a file is hidden)");
+blocks(mut(e => { e.pr.changed_files = 3; e.diffFiles = [F("docs/X.md"), F("docs\\x.md"), F("docs/y.md")]; }), "DIFF_INCOMPLETE", {}, "N37za B4 duplicate after normalisation (case, backslash)");
+blocks(mut(e => { e.pr.changed_files = 3; e.diffFiles = [F("docs/a.md", "renamed", "docs/old.md"), F("docs/b.md", "renamed", "docs/old.md"), F("docs/y.md")]; }), "DIFF_INCOMPLETE", {}, "N37zb B4 duplicate previous_filename");
+{
+  const rr = run(mut(e => { e.pr.changed_files = 2; e.diffFiles = [F("docs/new.md", "renamed", "docs/a.md"), F("docs/a.md", "added")]; }));
+  check("P8 rename a->new plus a re-added a (filename equals another entry's previous_filename) -> MERGE", rr.decision === "MERGE", JSON.stringify(rr));
+}
+// Nit 3: fences of different characters or shorter runs do not close each other.
+check("F1 ~~~ does not close a ``` fence: a binding inside stays ignored", parseBinding("```\n~~~\n" + bind() + "\n```") === null);
+check("F2 a shorter ``` run does not close a ```` fence", parseBinding("````\n```\n" + bind() + "\n````") === null);
+check("F3 a ``` fence closed by ``` makes the following binding count", parseBinding("```\nx\n```\n" + bind())?.verdict === "CLEAN");
+// Nit 1: the Unicode property class covers the whole earlier hand list.
+{
+  const old = [0x00AD, 0x034F, 0x180E, 0xFEFF];
+  for (const [a, b] of [[0x200B, 0x200F], [0x202A, 0x202E], [0x2060, 0x2064], [0x2066, 0x2069]]) for (let c = a; c <= b; c++) old.push(c);
+  const missed = old.filter(c => !INVISIBLE_RE.test(String.fromCodePoint(c)));
+  check(`I1 INVISIBLE_RE covers all ${old.length} code points of the earlier hand list (+ U+061C)`, missed.length === 0 && INVISIBLE_RE.test("\u061C"), missed.map(c => c.toString(16)).join(","));
+}
 // e. Protected paths.
 blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("CLAUDE.md")); }), "PROTECTED_PATH", {}, "N38 protected exact path in diff");
 blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("Config/Validation.JSON")); }), "PROTECTED_PATH", {}, "N39 protected path, mixed case");
@@ -141,7 +172,8 @@ blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("config/validation.js
 blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("AGENTS.md", "removed")); }), "PROTECTED_PATH", {}, "N42d B1 removed protected file (floor exact)");
 blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("docs/redaction-copy.mjs", "copied", "automation/lib/redaction.mjs")); }), "PROTECTED_PATH", {}, "N42e B1 copied from a protected path");
 blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F(".github/workflows/other.yml", "added")); }), "PROTECTED_PATH", {}, "N42f new workflow file (floor prefix)");
-for (const [file, cat] of [["scripts/ensure-dependencies.mjs", "ensure-dependencies"], ["package.json", "npm-manifest"], ["package-lock.json", "npm-lockfile"], ["scripts/ci/ci-evidence.mjs", "ci-scripts"]]) {
+for (const [file, cat] of [["scripts/ensure-dependencies.mjs", "ensure-dependencies"], ["package.json", "npm-manifest"], ["package-lock.json", "npm-lockfile"], ["scripts/ci/ci-evidence.mjs", "ci-scripts"],
+  ["npm-shrinkwrap.json", "npm-shrinkwrap"], [".npmrc", "npmrc"], ["scripts/secret-sanity.mjs", "secret-sanity"], ["scripts/bootstrap-kernel-selftest.mjs", "bootstrap-kernel-selftest"]]) {
   const code = `CI_EXECUTED_PATH:${cat}`;
   blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F(file.toUpperCase().replace(/\//g, "\\"))); }), code, {}, `N42g modified ${file} (upper case, backslashes)`);
   blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F(file, "renamed", "docs/staged-file.txt")); }), code, {}, `N42h rename INTO ${file}`);
