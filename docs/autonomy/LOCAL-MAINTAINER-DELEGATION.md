@@ -12,7 +12,7 @@ running. The fix script is prepared and non-protected; **applying** it needs an 
 
 ```
 # Local, authenticated gh with admin on the private repo:
-UASCO_INTEGRATION_BRANCH=v7/integration node scripts/configure-integration-branch-protection.mjs
+UASCO_INTEGRATION_BRANCH=v7/integration node scripts/configure-integration-branch-protection.mjs --apply   # without --apply it only prints a DRY_RUN report
 # Expect: .ai/runtime/INTEGRATION_BRANCH_PROTECTION.json status = PASS
 # Verify:
 gh api repos/<owner>/<repo>/branches/v7%2Fintegration/protection \

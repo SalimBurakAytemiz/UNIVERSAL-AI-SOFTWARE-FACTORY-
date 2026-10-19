@@ -19,7 +19,7 @@
 
 **Apply (Local/admin, private origin + authenticated `gh`):**
 ```
-UASCO_INTEGRATION_BRANCH=v7/integration node scripts/configure-integration-branch-protection.mjs
+UASCO_INTEGRATION_BRANCH=v7/integration node scripts/configure-integration-branch-protection.mjs --apply   # without --apply it only prints a DRY_RUN report
 # writes .ai/runtime/INTEGRATION_BRANCH_PROTECTION.json; status PASS when configured
 ```
 If `gh`/admin is unavailable it reports `LOCAL_ONLY` and the coded gate `merge-via-gate.mjs` (Local) remains the enforcer — which must itself refuse to merge unless both required checks are `success` on the exact head SHA. **Do not grant Cloud this admin/re-seal authority.**

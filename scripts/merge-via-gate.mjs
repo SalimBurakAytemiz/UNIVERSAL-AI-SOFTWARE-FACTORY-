@@ -3,6 +3,7 @@ import cp from "node:child_process";
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 import { verifyVerdict } from "../automation/lib/lease-verdict.mjs";
+import { redactCliText } from "../automation/lib/github-cli-env.mjs";
 
 // Only check-runs posted by this GitHub App are trusted; a same-named "success"
 // from any other app must not satisfy a required context (overridable via --check-app).
@@ -23,6 +24,9 @@ export function implementerSessionFromCommit(message) {
 // The expectation is derived ONLY from independent evidence: the required --task (bound to the PR), the live head SHA,
 // and the head commit's trailer/author as read from git. The verdict file contributes the review record alone;
 // any `expectation` it carries is ignored, so a self-consistent fabricated file cannot vouch for itself.
+// Limits (honest): the review record itself is UNSIGNED, so its provenance still relies on the operator supplying the
+// governed reviewer's record; and independence is checked against the head commit's implementer session only, not every
+// implementer session in merge-base..head. Signed verdicts and full-range independence are follow-ups.
 export function resolveVerdict(record, { task, headSha, commitMessage, authorName }) {
   const implementerSessionId = implementerSessionFromCommit(commitMessage);
   const v = record && typeof record === "object" ? record.verdict : null;
@@ -119,6 +123,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
   const apply = process.argv.includes("--apply");
   const owner = arg("--owner"), repo = arg("--repo"), headSha = arg("--head"), baseBranch = arg("--base-branch", DEFAULT_BASE_BRANCH), baseRef = arg("--base", `origin/${baseBranch}`), verdictFile = arg("--verdict"), task = arg("--task"), prNum = arg("--pr"), checkApp = arg("--check-app", DEFAULT_CHECK_APP);
+  // Validate the SHA before any git/gh call so an option-like value can never reach git as a flag.
+  if (headSha && !/^[0-9a-f]{40}$/.test(headSha)) { console.error("HEAD_SHA_INVALID: --head must be a 40-hex commit SHA"); process.exit(2); }
   if (!owner || !repo || !headSha || !task || !prNum) { console.error("usage: merge-via-gate.mjs --owner O --repo R --pr N --task <task id> --head <40-hex SHA> [--base-branch v7/integration] [--base ref] [--verdict review-record.json] [--check-app slug] [--apply]"); process.exit(2); }
   const result = gatherAndEvaluate({ owner, repo, headSha, baseBranch, baseRef, verdictFile, task, prNum, checkApp });
   console.log(JSON.stringify({ "//TR": "coded merge gate karari; REFUSE => hicbir merge yapilmaz", ...result, headSha, apply }, null, 2));
@@ -129,6 +135,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   // `--match-head-commit` refuses if head moved since the gate evaluated this exact SHA. Cloud does not run this path.
   // The gate above already bound this PR's live base branch + head SHA (PR_BASE_MISMATCH / PR_HEAD_MISMATCH).
   const m = prNum ? sh("gh", ["pr", "merge", prNum, "--merge", "--match-head-commit", headSha]) : { status: 1, stderr: "no --pr given for apply" };
-  if (m.status !== 0) { console.error(`MERGE_APPLY_FAILED: ${m.stderr.slice(-400)}`); process.exit(1); }
+  if (m.status !== 0) { console.error(`MERGE_APPLY_FAILED: ${redactCliText(m.stderr).slice(-400)}`); process.exit(1); }
   console.log("MERGED");
 }
