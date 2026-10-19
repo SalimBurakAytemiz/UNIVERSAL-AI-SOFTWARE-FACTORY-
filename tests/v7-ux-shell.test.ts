@@ -308,3 +308,72 @@ describe("WP-SHELL-REFINE: no new GET route, static safety, and locale parity", 
     for (const k of used) { expect(tr[k], `tr ${k}`).toBeTruthy(); expect(en[k], `en ${k}`).toBeTruthy(); }
   });
 });
+
+describe("UI-251 Recovery Center: fail-closed core, honest alert panel, retry/home actions, boundary wiring, locale parity", () => {
+  const KNOWN = ["home", "work", "delivery"];
+  it("core: whitelists route and health, never trusts free text, unknown health is not healthy (fail-closed)", async () => {
+    const c = await load("recovery-core.js");
+    const m = c.recoveryModel({ reason: "API_DOWN", routeId: "C:\\Users\\x\\secret", health: "weird", knownRouteIds: KNOWN });
+    expect(m.routeId).toBe("unknown"); expect(m.health).toBe("UNKNOWN"); expect(m.apiDown).toBe(true); expect(m.pill).toBe("NOT_VERIFIED");
+    expect(c.recoveryModel({ reason: "nope", routeId: "work", health: "OFFLINE", knownRouteIds: KNOWN })).toMatchObject({ reason: "VIEW_FAILED", routeId: "work", pill: "OFFLINE", apiDown: true });
+    expect(c.recoveryModel({}).routeId).toBe("unknown");
+    expect(c.shouldShowApiRecovery("VERIFIED")).toBe(false); expect(c.shouldShowApiRecovery("LOADING")).toBe(false);
+    for (const s of ["OFFLINE", "ERROR", "FAILED", "UNAVAILABLE", "garbage", undefined]) expect(c.shouldShowApiRecovery(s), String(s)).toBe(true);
+  });
+  it("panel: role=alert labelled region, names the failure, diagnostics = route id + health only, buttons have text", async () => {
+    const { recoveryPanel } = await load("recovery-panel.js");
+    const { ctx, doc } = await mkCtx();
+    const p = recoveryPanel(ctx, { routeId: "delivery", health: "OFFLINE", reason: "VIEW_FAILED", titleId: "view-title" });
+    doc.body.append(p);
+    expect(p.getAttribute("role")).toBe("alert");
+    const title = doc.getElementById("view-title")!;
+    expect(p.getAttribute("aria-labelledby")).toBe("view-title"); expect(title.tagName).toBe("H2"); expect(title.getAttribute("tabindex")).toBe("-1");
+    const txt = text(p);
+    expect(txt).toContain("delivery"); expect(txt).toContain("Çevrimdışı");
+    expect(within(p).some(n => n.className.startsWith("spill"))).toBe(true);
+    const btn = within(p).find(n => n.tagName === "BUTTON")!, link = within(p).find(n => n.tagName === "A")!;
+    expect(text(btn).length).toBeGreaterThan(0); expect(text(link).length).toBeGreaterThan(0);
+    expect(link.getAttribute("href")).toBe("#/home");
+    expect(txt).not.toMatch(/Error:|\bat .*\(|token|\/home\//i);
+  });
+  it("retry uses ctx.rerender for view failures and ctx.refreshAll for API-down; keyboard-focusable native button", async () => {
+    const { recoveryPanel } = await load("recovery-panel.js");
+    const { ctx, doc } = await mkCtx();
+    const calls: string[] = [];
+    ctx.rerender = () => { calls.push("rerender"); }; ctx.refreshAll = (o: any) => { calls.push(`refresh:${o?.force}`); };
+    for (const [reason, want] of [["VIEW_FAILED", "rerender"], ["API_DOWN", "refresh:true"]] as const) {
+      const p = recoveryPanel(ctx, { routeId: "home", health: "ERROR", reason }); doc.body.append(p);
+      const btn = within(p).find(n => n.tagName === "BUTTON")!;
+      expect(btn.getAttribute("type")).toBe("button"); btn.focus(); expect(doc.focused).toBe(btn);
+      btn.fire("click"); expect(calls.pop()).toBe(want);
+    }
+  });
+  it("planned.js boundary: a throwing view yields the Recovery panel (view-title focus target) instead of propagating", async () => {
+    const planned = await load("views", "planned.js");
+    const { ctx } = await mkCtx();
+    ctx.doc.createElement = ctx.doc.createElement.bind(ctx.doc);
+    const node = await planned.render({ ...ctx, api: { health: async () => ({ state: "OFFLINE" }) } }, { id: "delivery", component: "delivery" });
+    const alert = within(node).find(n => n.getAttribute("role") === "alert");
+    expect(alert).toBeTruthy(); expect(within(node).some(n => n.id === "view-title")).toBe(true);
+    expect(text(node)).toContain("delivery");
+  });
+  it("shell.js shows the panel only through shouldShowApiRecovery; sources avoid innerHTML and the forbidden claim", () => {
+    expect(readRend("shell.js")).toContain("shouldShowApiRecovery(data.health.state)");
+    for (const f of ["recovery-core.js", "recovery-panel.js"]) {
+      const src = readRend(f);
+      expect(src).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|\beval\s*\(|\bfetch\s*\(|window\.uasco|apiPost/);
+      expect(src).not.toMatch(/PRODUCT_VERIFIED|product verified/i);
+      expect(src.split("\n")[0].startsWith("// //TR:")).toBe(true);
+    }
+  });
+  it("recovery.* keys are identical in TR and EN with identical placeholders; every static key used exists", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const sub = (d: Record<string, string>) => flat(d).filter(k => k.startsWith("recovery."));
+    expect(sub(tr)).toEqual(sub(en)); expect(sub(tr).length).toBeGreaterThan(10);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join();
+    for (const k of sub(tr)) expect(ph(tr[k]), k).toBe(ph(en[k]));
+    for (const r of ["VIEW_FAILED", "API_DOWN"]) for (const p of ["title", "desc"]) expect(tr[`recovery.${p}.${r}`]).toBeTruthy();
+    for (const s of ["VERIFIED", "LOADING", "OFFLINE", "ERROR", "FAILED", "UNAVAILABLE", "UNKNOWN"]) expect(tr[`recovery.health.${s}`]).toBeTruthy();
+  });
+});
