@@ -1,5 +1,7 @@
 // //TR: Bu test PS-1B masaüstü Project Studio'yu doğrular: main.mjs GET/POST allow-list eklemeleri (tam eşleşme + traversal/yöntem/boyut negatifleri), yalnız ana süreçte çözülen içe aktarma yolu / önizleme URL'si / dışa aktarma klasörü kuralları, IPC işleyicilerinin renderer'dan yol ya da URL almaması, sihirbaz ve diğer istek gövdeleri (argv dizileri), önizleme düğmesinin yalnız AVAILABLE iken etkin olması, gizli bilgi sansürü, tr/en eşitliği ve sahte DOM ile gerçek görünüm modülleri; mevcut B4/B5/B7 testleri ayrıca çalışır.
 import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

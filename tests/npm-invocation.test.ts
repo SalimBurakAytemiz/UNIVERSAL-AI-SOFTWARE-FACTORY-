@@ -1,5 +1,7 @@
 // //TR: Bu test Windows npm.cmd EINVAL regresyonuna karşı npm'in shell'siz node + bundled npm-cli.js ile çağrıldığını, eksik veya düzenli dosya olmayan CLI'nin fail-closed reddedildiğini ve trusted kaynakta npm.cmd spawn'ı kalmadığını doğrular.
-import {describe,it,expect} from "vitest";
+import {describe,it,expect,vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import path from "node:path";
 import cp from "node:child_process";

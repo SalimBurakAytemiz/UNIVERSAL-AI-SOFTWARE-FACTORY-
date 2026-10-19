@@ -1,5 +1,7 @@
 // //TR: Bu test canonical doğrulamanın bölünmüş test adımlarının kapsamını mekanik olarak kilitler: tests/*.test.ts dosyalarının tamamı vitest adımlarında tam bir kez yer alır, BS1 selftest senaryolarının her biri tam bir kabukta atanmıştır ve adım başına 600 sn sınırı yükseltilmemiştir.
-import {describe,it,expect} from "vitest";
+import {describe,it,expect,vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
