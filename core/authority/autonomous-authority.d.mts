@@ -22,11 +22,17 @@ export interface Decision {
   decidedAt: string | null; decisionDigest: string;
 }
 export interface SealStatus { ok: boolean; reason: string; policySha256?: string; expected?: string; actual?: string }
+// //TR: Dar korunan-degisiklik girdisi; icerikler cagiran oturum tarafindan degerlendirilen SHA'daki git blob'larindan okunur, motor kararlari kendisi yeniden hesaplar.
+export interface ProtectedChangeInput {
+  classId: string; file: string; baseText: string; headText: string;
+  headFileExists?: (path: string) => boolean; headFileBytes?: (path: string) => Buffer | Uint8Array | string | null;
+}
 export interface DecideContext {
-  policy: any; seal: SealStatus; now: Date; protectedPaths?: any; lease?: any; protectedChangeDecisions?: any[];
+  policy: any; seal: SealStatus; now: Date; protectedPaths?: any; lease?: any; protectedChanges?: ProtectedChangeInput[];
 }
 export declare function digestOf(value: unknown): string;
 export declare function matchPattern(pattern: string, value: string): boolean;
+export declare function isCanonicalPath(file: unknown): boolean;
 export declare function isProtectedPath(protectedPaths: any, file: string): boolean;
 export declare function validatePolicy(policy: any): string[];
 export declare function policySealStatus(input: { policyText: string | null; manifestText: string | null }): SealStatus;

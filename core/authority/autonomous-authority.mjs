@@ -36,8 +36,10 @@ export const POLICY_CORE_PATHS = Object.freeze([
 // //TR: Dar korunan-degisiklik siniflarinin tek hedef dosyalari; bu dosyalar POLICY_CORE degildir ama yalniz ilgili sinifla degisebilir.
 const PROTECTED_CHANGE_TARGET = Object.freeze({TEST_REGISTRATION_APPEND: "config/validation.json", TRUST_ROOT_RESEAL: MANIFEST_PATH});
 const TASK_BOUND = new Set(["SOURCE_CHANGE", "TEST_CHANGE", "FAILURE_REPAIR", "FEATURE_BRANCH_PUSH", "PR_UPDATE", "CI_FAILURE_REPAIR", "TASK_RECOVERY", "TEST_REGISTRATION_APPEND", "TRUST_ROOT_RESEAL"]);
-// //TR: Korunan dosyayi tasiyan dali itebilen/PR'i guncelleyebilen siniflar (degisikligin kendisi ayni SHA'ya bagli AUTO yapisal kararla yetkili olmali).
-const CARRIES_PROTECTED_CHANGE = new Set(["FEATURE_BRANCH_PUSH", "PR_UPDATE"]);
+// //TR: Korunan dosyayi tasiyan dali itebilen/PR'i guncelleyebilen/merge edebilen siniflar (degisikligin kendisi ayni SHA'da yeniden hesaplanan AUTO yapisal kararla yetkili olmali).
+const CARRIES_PROTECTED_CHANGE = new Set(["FEATURE_BRANCH_PUSH", "PR_UPDATE", "GOVERNED_MERGE"]);
+// //TR: Yalniz bu ciddiyetler engellemez; bilinmeyen, kucuk harfli veya bos ciddiyet engeller (fail-closed).
+const NON_BLOCKING_SEVERITIES = new Set(["P2", "P3", "NIT", "INFO"]);
 const CHANGE_CLASSES = new Set(["SOURCE_CHANGE", "TEST_CHANGE", "FAILURE_REPAIR", "CI_FAILURE_REPAIR", "FEATURE_BRANCH_PUSH", "PR_UPDATE", "TEST_REGISTRATION_APPEND", "TRUST_ROOT_RESEAL"]);
 const SHA_RE = /^[0-9a-f]{40}$/;
 const MAX_AUTO_RISK = 3;
@@ -56,10 +58,18 @@ export function matchPattern(pattern, value) {
   return pattern === value;
 }
 const matchesAny = (patterns, value) => Array.isArray(patterns) && patterns.some((p) => matchPattern(p, value));
+// //TR: Kanonik goreli yol: bos, bosluklu, ters bolu, NUL, bas/son "/", bos segment, "." veya ".." yok. "./x", "a//b" gibi esdeger yazimlar cekirdek/korunan kontrolunu atlatamasin.
+export function isCanonicalPath(f) {
+  if (!nonEmpty(f) || f !== f.trim() || f.includes("\\") || f.includes("\0") || f.startsWith("/") || f.endsWith("/")) return false;
+  return f.split("/").every((s) => s.length > 0 && s !== "." && s !== "..");
+}
+// //TR: Cekirdek ve korunan yol karsilastirmasi buyuk/kucuk harf duyarsizdir (Windows/macOS dosya sistemlerinde "Config/X" ayni dosyadir); fazla koruma fail-closed'dur.
+const isPolicyCore = (f) => typeof f === "string" && POLICY_CORE_PATHS.some((p) => matchPattern(p.toLowerCase(), f.toLowerCase()));
 export function isProtectedPath(protectedPaths, file) {
   if (!protectedPaths || typeof file !== "string") return true;
-  if ((protectedPaths.exactPaths ?? []).includes(file)) return true;
-  return (protectedPaths.protectedPrefixes ?? []).some((p) => file === p || file.startsWith(p.endsWith("/") ? p : `${p}/`));
+  const lf = file.toLowerCase();
+  if ((protectedPaths.exactPaths ?? []).some((p) => typeof p === "string" && p.toLowerCase() === lf)) return true;
+  return (protectedPaths.protectedPrefixes ?? []).some((p) => { if (typeof p !== "string") return false; const lp = p.toLowerCase(); return lf === lp || lf.startsWith(lp.endsWith("/") ? lp : `${lp}/`); });
 }
 
 // //TR: Politika belgesinin semantik dogrulamasi. Bir politika NEVER_AUTO sinif veremez, politika cekirdegini kapsayan yol izni veremez, bagimsiz review / trust-root / branch-protection / iki-OS CI zorunlulugunu kapatamaz.
@@ -144,7 +154,7 @@ function requestShapeErrors(req) {
   if (!nonEmpty(req.taskId)) e.push("TASK_ID");
   if (!Number.isInteger(req.riskLevel) || req.riskLevel < 0 || req.riskLevel > 5) e.push("RISK_LEVEL");
   if (CHANGE_CLASSES.has(req.actionClass) || req.actionClass === "GOVERNED_MERGE") { if (!SHA_RE.test(req.headSha ?? "")) e.push("HEAD_SHA"); }
-  if (CHANGE_CLASSES.has(req.actionClass) && (!Array.isArray(req.changedFiles) || req.changedFiles.some((f) => !nonEmpty(f) || f.includes("..") || f.startsWith("/") || f.includes("\\")))) e.push("CHANGED_FILES");
+  if ((CHANGE_CLASSES.has(req.actionClass) || req.changedFiles !== undefined) && (!Array.isArray(req.changedFiles) || !req.changedFiles.every(isCanonicalPath))) e.push("CHANGED_FILES");
   return e;
 }
 
@@ -169,7 +179,20 @@ function grantReasonsFor(g, req, nowMs) {
 }
 
 /**
- * //TR: Tek karar noktasi. ctx = {policy, seal, protectedPaths, now, lease, protectedChangeDecisions}.
+ * //TR: Dar korunan-degisiklik girdilerinden ({classId, file, baseText, headText, headFileExists, headFileBytes}) kararlari bu oturumda YENIDEN hesaplar.
+ * headSha her zaman cagiranin degerlendirdigi SHA'dir; reseal yalniz once yapisal olarak AUTO cikan dar hedef dosyalari yeniden muhurleyebilir.
+ * Icerikler cagiran tarafindan git'ten (o SHA'daki base/head blob'lari) okunmalidir; motor saf fonksiyondur ve I/O yapmaz.
+ */
+function recomputeProtectedChanges(inputs, headSha) {
+  const list = (Array.isArray(inputs) ? inputs : []).filter((x) => x && typeof x === "object");
+  const first = list.filter((x) => x.classId !== "TRUST_ROOT_RESEAL").map((x) => evaluateProtectedChange({...x, headSha}));
+  const authorized = first.filter((d) => d.status === AUTO).map((d) => d.file);
+  const reseals = list.filter((x) => x.classId === "TRUST_ROOT_RESEAL").map((x) => evaluateProtectedChange({...x, headSha, authorizedChangedProtectedPaths: authorized}));
+  return [...first, ...reseals];
+}
+
+/**
+ * //TR: Tek karar noktasi. ctx = {policy, seal, protectedPaths, now, lease, protectedChanges}.
  * Donus: {status, reasons, grantId, policyId, policyVersion, policySha256, requestDigest, boundTo, decisionDigest, decidedAt}.
  */
 export function decide(req, ctx = {}) {
@@ -194,22 +217,25 @@ export function decide(req, ctx = {}) {
       if (req.repository !== policy.repository) reasons.push("REPOSITORY_OUT_OF_SCOPE");
       if (req.branch === "master" || req.baseBranch === "master") reasons.push("MASTER_OUT_OF_SCOPE");
       if (req.riskLevel > MAX_AUTO_RISK) reasons.push(`RISK_ABOVE_AUTO_LIMIT:${req.riskLevel}`);
+      // //TR: Grant secimi: rol/dal/base/zaman/risk kontrollerini gecen adaylar arasindan, degisen (cekirdek ve korunan disi) TUM yollari kapsayan ilk grant secilir.
+      const pathMisses = (g) => (req.changedFiles ?? []).filter((f) => !isPolicyCore(f) && !isProtectedPath(ctx.protectedPaths, f) && (!matchesAny(g.paths, f) || matchesAny(g.pathsDeny ?? [], f)));
       const candidates = policy.grants.map((g) => ({g, why: grantReasonsFor(g, req, nowMs)})).filter((x) => x.why[0] !== "CLASS");
-      const ok = candidates.find((x) => !x.why.length);
+      const eligible = candidates.filter((x) => !x.why.length);
+      const ok = eligible.find((x) => !pathMisses(x.g).length);
       if (ok) grantId = ok.g.grantId;
+      else if (eligible.length) reasons.push(...pathMisses(eligible[0].g).map((f) => `PATH_OUT_OF_GRANT:${f}`));
       else reasons.push(candidates.length ? `NO_MATCHING_GRANT:${candidates.map((x) => `${x.g.grantId}(${x.why.join("+")})`).join(",")}` : "NO_GRANT_FOR_CLASS");
-      const grant = ok?.g;
-      // //TR: Yol kapsami: politika cekirdegi asla; korunan yol yalniz dar korunan-degisiklik sinifiyla ve ayni SHA'ya bagli AUTO yapisal kararla.
+      // //TR: Yol kapsami: politika cekirdegi asla; korunan yol yalniz dar korunan-degisiklik sinifiyla ve bu oturumun ayni SHA'da git iceriginden YENIDEN HESAPLADIGI AUTO yapisal kararla.
+      // //TR: Hazir karar nesneleri (ctx.protectedChangeDecisions) kabul edilmez: digest imza degildir, herkes AUTO gorunen nesne uretebilir.
+      const pcds = recomputeProtectedChanges(ctx.protectedChanges, req.headSha);
       for (const f of req.changedFiles ?? []) {
-        if (matchesAny(POLICY_CORE_PATHS, f)) { reasons.push(`POLICY_SELF_CHANGE:${f}`); continue; }
+        if (isPolicyCore(f)) { reasons.push(`POLICY_SELF_CHANGE:${f}`); continue; }
         if (isProtectedPath(ctx.protectedPaths, f)) {
-          // //TR: ctx.protectedChangeDecisions cagiran oturum tarafindan evaluateProtectedChange ile git iceriginden YENIDEN HESAPLANMIS olmalidir; baska oturumdan gelen karar nesnesi kimlik belgesi degildir.
-          const pcd = (ctx.protectedChangeDecisions ?? []).find((d) => d?.file === f && d?.headSha === req.headSha && d?.status === AUTO && PROTECTED_CHANGE_TARGET[d?.classId] === f);
+          const pcd = pcds.find((d) => d.status === AUTO && d.file === f && PROTECTED_CHANGE_TARGET[d.classId] === f);
           if (!(pcd && (req.actionClass === pcd.classId || CARRIES_PROTECTED_CHANGE.has(req.actionClass)))) reasons.push(`PROTECTED_PATH_NOT_AUTHORIZED:${f}`);
           continue;
         }
-        if (PROTECTED_CHANGE_CLASSES.includes(req.actionClass)) { reasons.push(`PROTECTED_CHANGE_CLASS_TOUCHES_OTHER_FILE:${f}`); continue; }
-        if (grant && (!matchesAny(grant.paths, f) || matchesAny(grant.pathsDeny ?? [], f))) reasons.push(`PATH_OUT_OF_GRANT:${f}`);
+        if (PROTECTED_CHANGE_CLASSES.includes(req.actionClass)) reasons.push(`PROTECTED_CHANGE_CLASS_TOUCHES_OTHER_FILE:${f}`);
       }
       // //TR: Gorev sahipligi task-lease kaydindan dogrulanir (atomik git-ref kirasi); sohbet iddiasi degil.
       if (TASK_BOUND.has(req.actionClass)) {
@@ -286,6 +312,8 @@ export function evaluateRequiredChecks(policy, checkRuns, sha) {
 export function evaluateMerge(ev = {}, ctx = {}) {
   const reasons = [];
   const policy = ctx.policy;
+  const nowMs = ctx.now instanceof Date ? ctx.now.getTime() : NaN;
+  if (!Number.isFinite(nowMs)) reasons.push("EVALUATION_TIME_INVALID");
   const policyErrors = validatePolicy(policy);
   if (!ctx.seal?.ok) reasons.push(`POLICY_NOT_SEALED:${ctx.seal?.reason ?? "UNKNOWN"}`);
   if (policyErrors.length) reasons.push(...policyErrors.map((x) => `POLICY_INVALID:${x}`));
@@ -296,6 +324,8 @@ export function evaluateMerge(ev = {}, ctx = {}) {
   if (!policyErrors.length && pr.baseRef !== policy.mergeRequirements.baseBranch) reasons.push(`BASE_NOT_ALLOWED:${pr.baseRef}`);
   if (pr.isDraft !== false) reasons.push("PR_IS_DRAFT_OR_UNKNOWN");
   if (pr.mergeable !== true) reasons.push("PR_NOT_MERGEABLE");
+  // //TR: Dal guncel olmali: cagiran git ile base ucunun head'in atasi oldugunu dogrular (merge-base --is-ancestor); bilinmiyorsa engeller.
+  if (pr.upToDate !== true) reasons.push("BRANCH_NOT_UP_TO_DATE");
   if (!policyErrors.length) reasons.push(...evaluateRequiredChecks(policy, ev.checkRuns, sha));
   const exp = ev.expectation ?? {};
   const vv = verifyVerdict(ev.verdict, {expectedTaskId: exp.taskId, expectedHeadSha: sha, implementerSessionId: exp.implementerSessionId, builderIdentity: exp.builderIdentity});
@@ -303,17 +333,46 @@ export function evaluateMerge(ev = {}, ctx = {}) {
   // //TR: Merge'i yapan oturum, kodu yazan oturum olamaz (builder kendi PR'ini entegre etmez).
   if (!nonEmpty(ev.mergerSessionId) || ev.mergerSessionId === exp.implementerSessionId) reasons.push("MERGE_BY_IMPLEMENTER_OR_UNKNOWN");
   if (ev.trustRoot?.ok !== true) reasons.push("TRUST_ROOT_NOT_VERIFIED");
-  for (const f of ev.changedFiles ?? []) {
-    if (matchesAny(POLICY_CORE_PATHS, f)) reasons.push(`POLICY_SELF_CHANGE:${f}`);
-    else if (isProtectedPath(ctx.protectedPaths, f) && !(ev.protectedChangeDecisions ?? []).some((d) => d?.file === f && d?.headSha === sha && d?.status === AUTO)) reasons.push(`PROTECTED_PATH_NOT_AUTHORIZED:${f}`);
+  // //TR: Korunan yol yalniz bu oturumun ayni SHA'da git iceriginden yeniden hesapladigi AUTO dar-sinif karariyla ve sinifin tek hedef dosyasi icin yetkilidir.
+  const files = Array.isArray(ev.changedFiles) ? ev.changedFiles : null;
+  if (!files) reasons.push("CHANGED_FILES_UNKNOWN");
+  else if (!files.every(isCanonicalPath)) reasons.push("CHANGED_FILES_INVALID");
+  else {
+    const pcds = recomputeProtectedChanges(ev.protectedChanges, sha);
+    for (const f of files) {
+      if (isPolicyCore(f)) reasons.push(`POLICY_SELF_CHANGE:${f}`);
+      else if (isProtectedPath(ctx.protectedPaths, f) && !pcds.some((d) => d.status === AUTO && d.file === f && PROTECTED_CHANGE_TARGET[d.classId] === f)) reasons.push(`PROTECTED_PATH_NOT_AUTHORIZED:${f}`);
+    }
   }
-  if (!Array.isArray(ev.changedFiles)) reasons.push("CHANGED_FILES_UNKNOWN");
+  // //TR: Engellemeyen ciddiyetler disindaki (bilinmeyen dahil) her cozulmemis bulgu engeller.
   const blocking = policyErrors.length ? ["P0", "P1"] : policy.mergeRequirements.blockingSeverities;
-  const open = (ev.openFindings ?? []).filter((f) => blocking.includes(f?.severity) && f?.resolved !== true);
+  const open = (Array.isArray(ev.openFindings) ? ev.openFindings : []).filter((f) => f?.resolved !== true && (blocking.includes(f?.severity) || !NON_BLOCKING_SEVERITIES.has(f?.severity)));
   if (open.length) reasons.push(`OPEN_BLOCKERS:${open.length}`);
   if (!Array.isArray(ev.openFindings)) reasons.push("FINDINGS_UNKNOWN");
+  // //TR: Uygulayici ve kira merge aninda baglanir: beklenen uygulayici atomik kiranin sahibi olmali, merge eden kira sahibi olamaz, kira suresi dolmamis olmali.
   if (!isValidLeaseRecord(ev.lease)) reasons.push("LEASE_MISSING");
-  else { if (ev.lease.taskId !== exp.taskId) reasons.push("LEASE_TASK_MISMATCH"); if (ev.lease.headSha && ev.lease.headSha !== sha) reasons.push("LEASE_HEAD_MISMATCH"); }
+  else {
+    if (ev.lease.taskId !== exp.taskId) reasons.push("LEASE_TASK_MISMATCH");
+    if (ev.lease.headSha && ev.lease.headSha !== sha) reasons.push("LEASE_HEAD_MISMATCH");
+    if (exp.implementerSessionId !== ev.lease.sessionId) reasons.push("IMPLEMENTER_NOT_LEASE_HOLDER");
+    if (ev.mergerSessionId === ev.lease.sessionId) reasons.push("MERGE_BY_LEASE_HOLDER");
+    if (!Number.isFinite(nowMs) || isExpired(ev.lease, nowMs)) reasons.push("LEASE_EXPIRED");
+  }
+  // //TR: Merge'in kendisi de bir GOVERNED_MERGE karari olarak decide() ile ayni SHA, oturum, gorev ve dosya listesine bagli AUTO olmalidir (grant/yol/rol kontrolu).
+  const mr = ev.mergeRequest;
+  if (!mr || typeof mr !== "object") reasons.push("MERGE_REQUEST_MISSING");
+  else {
+    const mm = [];
+    if (mr.actionClass !== "GOVERNED_MERGE") mm.push("actionClass");
+    if (mr.headSha !== sha) mm.push("headSha");
+    if (mr.principal?.sessionId !== ev.mergerSessionId) mm.push("principal");
+    if (mr.taskId !== exp.taskId) mm.push("taskId");
+    if (mr.baseBranch !== pr.baseRef) mm.push("baseBranch");
+    if (!nonEmpty(pr.headRef) || mr.branch !== pr.headRef) mm.push("branch");
+    if (!files || !Array.isArray(mr.changedFiles) || stableStringify([...mr.changedFiles].sort()) !== stableStringify([...files].sort())) mm.push("changedFiles");
+    if (mm.length) reasons.push(`MERGE_REQUEST_MISMATCH:${mm.join("+")}`);
+    else { const md = decide(mr, {...ctx, lease: ev.lease, protectedChanges: ev.protectedChanges}); if (md.status !== AUTO) reasons.push(`MERGE_REQUEST_BLOCKED:${md.reasons.join("|")}`); }
+  }
   const bp = ev.branchProtection ?? {};
   if (bp.active !== true) reasons.push("BRANCH_PROTECTION_NOT_ACTIVE");
   else if (!policyErrors.length && !policy.mergeRequirements.ciContexts.every((c) => (bp.requiredContexts ?? []).includes(c))) reasons.push("BRANCH_PROTECTION_MISSING_REQUIRED_CONTEXTS");
@@ -369,12 +428,16 @@ export function evaluateProtectedChange(input = {}) {
   const {files: bf, generatedAt: _bg, ...bRest} = base ?? {}, {files: hf, generatedAt: _hg, ...hRest} = head ?? {};
   if (!deepEqual(bRest, hRest)) reasons.push("MANIFEST_FIELDS_CHANGED");
   if (!Array.isArray(bf) || !Array.isArray(hf) || bf.length !== hf.length) { reasons.push("MANIFEST_ENTRY_COUNT_CHANGED"); return done(); }
-  const allowed = new Set(Array.isArray(authorizedChangedProtectedPaths) ? authorizedChangedProtectedPaths : []);
+  // //TR: Yeniden muhurlenebilecek dosyalar yalniz dar siniflarin hedefleridir (manifest kendisi haric); cagiranin verdigi baska yol yok sayilir.
+  const narrowTargets = new Set(Object.values(PROTECTED_CHANGE_TARGET).filter((t) => t !== MANIFEST_PATH));
+  const allowed = new Set((Array.isArray(authorizedChangedProtectedPaths) ? authorizedChangedProtectedPaths : []).filter((p) => narrowTargets.has(p)));
   for (let i = 0; i < bf.length; i++) {
     const be = bf[i], he = hf[i];
-    if (be?.path !== he?.path) { reasons.push(`MANIFEST_ORDER_OR_PATH_CHANGED:${be?.path}`); continue; }
+    if (!be || !he || typeof be !== "object" || typeof he !== "object" || be.path !== he.path) { reasons.push(`MANIFEST_ORDER_OR_PATH_CHANGED:${be?.path}`); continue; }
+    const {sha256: _bs, ...bOther} = be, {sha256: _hs, ...hOther} = he;
+    if (!deepEqual(bOther, hOther)) { reasons.push(`MANIFEST_ENTRY_FIELDS_CHANGED:${he.path}`); continue; }
     if (be.sha256 === he.sha256) continue;
-    if (matchesAny(POLICY_CORE_PATHS, he.path)) { reasons.push(`RESEAL_OF_POLICY_CORE:${he.path}`); continue; }
+    if (isPolicyCore(he.path)) { reasons.push(`RESEAL_OF_POLICY_CORE:${he.path}`); continue; }
     if (!allowed.has(he.path)) { reasons.push(`RESEAL_NOT_AUTHORIZED:${he.path}`); continue; }
     const bytes = typeof headFileBytes === "function" ? headFileBytes(he.path) : null;
     if (!bytes || sha256(bytes) !== he.sha256) reasons.push(`RESEAL_HASH_NOT_FROM_CONTENT:${he.path}`);

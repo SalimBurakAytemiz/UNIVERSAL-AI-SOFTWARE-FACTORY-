@@ -12,7 +12,7 @@
 |---|---|
 | `decide(request, ctx)` | `AUTO_AUTHORIZED_BY_POLICY` or `BLOCKED_BY_POLICY` with concrete reasons, bound to class/repo/branch/base/task/headSha/principal/files by `requestDigest` |
 | `verifyDecision(decision, request, ctx)` | **Recomputes** the decision from the sealed policy the verifier itself loaded. A decision object received from another session is never trusted, because a digest is not a signature |
-| `evaluateProtectedChange(...)` | Structural checks for the two narrow protected classes: `TEST_REGISTRATION_APPEND` and `TRUST_ROOT_RESEAL`, the latter recomputing hashes from the real file bytes |
+| `evaluateProtectedChange(...)` | Structural checks for the two narrow protected classes: `TEST_REGISTRATION_APPEND` and `TRUST_ROOT_RESEAL`, the latter recomputing hashes from the real file bytes. `decide`/`evaluateMerge` never accept decision objects: they take the **inputs** (`protectedChanges`: class, file, base/head text read from git at the evaluated SHA) and recompute. A reseal can only cover narrow-class targets that were themselves recomputed as AUTO |
 | `evaluateMerge(evidence, ctx)` | All merge conditions at once; any missing condition gives `BLOCKED` |
 | `evaluateRequiredChecks(...)` | One canonical "both CI contexts success on this SHA from the pinned app" check |
 | `loadSealedPolicy` / `policySealStatus` | The policy counts only if `config/autonomous-authority-policy.json` is listed in the SEALED trust-root manifest with matching bytes |
@@ -54,26 +54,29 @@ Each grant is limited by:
 Also blocked:
 - Any change touching the policy core: the policy file, `core/authority/**`, the engine's tests, `lease-verdict`, `task-lease`, `review-governance`, `merge-via-gate`, `protected-paths.json`, `action-policy.json`, `run-validation.mjs` and `.github/workflows/**`. The policy can never widen its own authority.
 - A request from an agent with role `FOUNDER` or a founder identity.
-- A protected path not covered by a recomputed narrow-class decision on the same SHA.
+- A protected path not covered by a recomputed narrow-class decision on the same SHA, for that class's single target file.
+- A non-canonical path (`./x`, `a//b`, `a/./b`, `..`, backslash, leading/trailing `/` or whitespace). Policy-core and protected-path matching is case-insensitive.
 
 These go to Founder exception handling: `BLOCKED_BY_POLICY` with evidence. Independent tasks continue.
 
 ## Merge conditions (all at once, otherwise `BLOCKED`)
 1. The current head equals the evaluated SHA.
-2. The base is `v7/integration`.
+2. The base is `v7/integration`, and the branch is up to date: the caller verifies with git that the base tip is an ancestor of the head (`pr.upToDate`). Unknown counts as not up to date.
 3. The PR is not a draft and is mergeable.
 4. Both `validate (ubuntu-latest)` and `validate (windows-latest)` from `github-actions` are completed/success on that SHA. PENDING, FAILURE, CANCELLED, missing, another app or another SHA all block.
 5. `verifyVerdict` passes: CLEAN, same task and SHA, independent session and identity.
-6. The merging session is not the implementer.
+6. The merging session is not the implementer. The implementer is **bound to the atomic lease**: the expected implementer must be the lease holder, the merger must not be the lease holder, and the lease must not be expired at evaluation time. A spoofed `implementerSessionId` cannot make a self-review look independent.
 7. The trust root is verified.
 8. Every protected path is authorized by a narrow-class decision on that SHA, and no policy-core path is touched.
-9. There are no open P0/P1 findings.
+9. There are no open blocking findings. Only `P2`, `P3`, `NIT` and `INFO` are non-blocking; any other or unknown severity blocks until resolved.
 10. The lease is consistent with the task and head.
 11. **GitHub branch protection is actually active** and requires both contexts.
 12. There is no self-APPROVED review. COMMENTED never counts as approval, and bots never approve.
+13. The merge itself is a `GOVERNED_MERGE` request that `decide` authorizes (role, grant, path scope) for the same SHA, branch, base, task, merging session and file list.
 
 ## Trust model (honest)
 - **Authority comes from bytes in the trust root, not from chat.** Every session loads the sealed policy itself and recomputes the decision. This fixes the PR #49 stall, where a maintainer correctly refused authority relayed as a peer message: it can now verify a narrow-class change on its own.
+- **Caller-supplied facts:** the engine is pure and does no I/O. `changedFiles`, `riskLevel`, CI check runs, branch protection, `upToDate` and the base/head texts are facts the calling session must read itself from git and the GitHub API, never from another session's message. `decide` cannot detect a caller that lies about its own inputs; that is why every consumer recomputes and the merge gate gathers its own evidence.
 - **Gaps:**
   - The trust root is a SHA-256 manifest guarded by protected-path rules, independent review and CI. It is **not** a cryptographic Founder signature. CP-GOV phase 1 (KMS/genesis key) is still open.
   - All sessions share one GitHub identity, so GitHub cannot enforce a distinct approver. Independence is enforced at session/identity level by `verifyVerdict`, and by branch protection once it is applied.
@@ -81,10 +84,10 @@ These go to Founder exception handling: `BLOCKED_BY_POLICY` with evidence. Indep
 ## Readiness: real state
 | Prerequisite | State |
 |---|---|
-| Engine + types + 25 tests (21 AAE scenarios incl. the 18 required + 4 existing), mutation-checked | DONE in this PR (Linux local). The Windows run comes with CI |
+| Engine + types + 28 tests (24 AAE scenarios incl. the 18 required + 4 existing), mutation-checked (13 targeted mutants after review a3d7eea: 12 killed; the survivor is a redundant class→target guard already enforced in `evaluateProtectedChange`) | DONE in this PR (Linux local). The Windows run comes with CI |
 | Genesis: seal `config/autonomous-authority-policy.json` (= `docs/authority/autonomous-authority-policy.proposed.json`) in the trust root | **Needs one Founder genesis act**: a protected config file + manifest reseal by a separate maintainer, typed by the Founder in that maintainer session. This is the last manual approval; afterwards the narrow classes self-serve |
 | Add the engine files to `config/protected-paths.json` exactPaths | Same genesis reseal |
 | PR #49 (sharded CI) merged; this branch rebased by merge | Pending (#49 waits on the record-B maintainer step) |
-| GitHub branch protection / ruleset on `v7/integration` with both contexts | **Founder/admin action.** This session's GitHub integration cannot write protection (403). Until it exists, every auto-merge is `BLOCKED_BY_POLICY:BRANCH_PROTECTION_NOT_ACTIVE`, by design |
+| GitHub branch protection / ruleset on `v7/integration` with both contexts (the proposed ruleset has `strict: false`; the engine enforces up-to-date itself) | **Founder/admin action.** This session's GitHub integration cannot write protection (403). Until it exists, every auto-merge is `BLOCKED_BY_POLICY:BRANCH_PROTECTION_NOT_ACTIVE`, by design |
 | Wiring: merge gate (#11), dispatcher (#29), supervisor, control-api `GET /v1/authority/decisions` + Cockpit view | After #49/#11/#29 merge. The control-api route and the desktop GET allow-list are protected (`server.ts`, `main.mjs`) |
 | End-to-end chain (Founder-authorized task → policy decision → builder → independent reviewer → real CI → safe merge → next task) | **NOT_VERIFIED**. It cannot run before genesis + branch protection + #49 |
