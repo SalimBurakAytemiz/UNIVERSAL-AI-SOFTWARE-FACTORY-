@@ -1,6 +1,6 @@
 //TR: CP-REPORT standalone proof for report.mjs
 import fs from "node:fs";
-import { buildReport, renderMarkdown, STATUSES } from "./report.mjs";
+import { buildReport, renderMarkdown, redactSecrets, STATUSES } from "./report.mjs";
 
 let passed = 0, failed = 0;
 const check = (name, ok) => {
@@ -322,7 +322,75 @@ const hugeTasks = new Array(2 ** 28);
   check("redaction applies to blocker field too", buildReport({ ...base, queue: { tasks: [{ id: "S", status: "BLOCKED", blocker: fakes.ghp }] } }).bottlenecks[0].blocker === "[redacted]");
   check("token straddling the 200-char cap is redacted, not half-leaked", !bt("a".repeat(190) + " " + fakes.ghp).includes("gh" + "p_"));
   check("plain blocker text untouched", bt("waiting for review of PR 12") === "waiting for review of PR 12");
-  check("redaction regexes run in linear-ish time on hostile 1e6-char input", (() => { const t = Date.now(); bt("token".repeat(2e5)); bt("a-".repeat(5e5)); return Date.now() - t < 1000; })());
+  // Review remediation 3 (ReDoS): deterministic hostile-input proofs. Each probe is a fixed worst-case string for one pattern.
+  // The budget is generous and fixed (50 ms per call, first of up to 3 attempts to be under it so a scheduler hiccup cannot
+  // fail the run) against ~870 ms measured before the fix for "token".repeat(400) at the old 2000-char cap, so it does not flake.
+  const PER_CALL_MS = 50;
+  const fastest = (fn) => { let ms = Infinity; for (let i = 0; i < 3 && ms >= PER_CALL_MS; i++) { const t = process.hrtime.bigint(); fn(); ms = Number(process.hrtime.bigint() - t) / 1e6; } return ms; };
+  const hostile = {
+    "token x10000": "token".repeat(10000),
+    "passwordtokensecret x5000": "passwordtokensecret".repeat(5000),
+    "Authorization x4000": "Authorization".repeat(4000),
+    "passwd x8000": "passwd".repeat(8000),
+    "secret_ x8000": "secret_".repeat(8000),
+    "token+spaces x500": ("token" + " ".repeat(20)).repeat(500),
+    "token=bearer x5000": "token=bearer ".repeat(5000),
+    "64-char runs around token": ("x".repeat(64) + "token" + "y".repeat(64) + " ").repeat(100),
+    "a- x5e5": "a-".repeat(5e5),
+    "eyJ x5000": "eyJ".repeat(5000),
+    "ghp_ x5000": "ghp_".repeat(5000),
+    "github_pat_ x3000": "github_pat_".repeat(3000),
+    "xoxb- x5000": "xox" + "b-".repeat(5000),
+    "AKIA x5000": "AKIA".repeat(5000),
+  };
+  for (const [name, text] of Object.entries(hostile)) {
+    const direct = fastest(() => redactSecrets(text));
+    const viaBlocker = fastest(() => bt(text));
+    const viaRender = fastest(() => renderMarkdown(buildReport({ ...base, runFacts: { activeImplementers: 1, failures: [text] } })));
+    check(`ReDoS: hostile '${name}' stays under ${PER_CALL_MS} ms per call (redactSecrets / blocker / failures render)`,
+      direct < PER_CALL_MS && viaBlocker < PER_CALL_MS && viaRender < PER_CALL_MS);
+  }
+  check("ReDoS: 'token'.repeat(400) at the formerly slow size is now fast", fastest(() => redactSecrets("token".repeat(400))) < PER_CALL_MS);
+  check("redaction still masks a real 'token=abc' and 'Authorization: Bearer x'",
+    redactSecrets("token=abc") === "[redacted]" && redactSecrets("Authorization: Bearer x") === "[redacted]");
+  check("redaction still works after a hostile run of keywords inside the scan window",
+    (() => { const o = redactSecrets("token".repeat(8) + " token=abc"); return o.endsWith(" [redacted]") && !o.includes("abc"); })() &&
+    (() => { const o = redactSecrets("passwordtokensecret".repeat(5) + " Authorization: Bearer x"); return o.endsWith(" [redacted]") && !o.includes("Bearer x"); })());
+  check("redaction: quoted key/value forms (password=\"v\", JSON-style) are masked",
+    redactSecrets("password=\"hunter2\" ok") === "[redacted]\" ok" && !redactSecrets("{\"token\":\"abc\",\"n\":1}").includes("abc") && !redactSecrets("{\"Authorization\":\"Bearer zzz\"}").includes("zzz"));
+  check("redaction: identifier runs up to 64 chars around the keyword are still masked",
+    redactSecrets("MY_" + "X".repeat(40) + "_TOKEN_" + "Y".repeat(40) + "=v1") === "[redacted]");
+  check("scan window is capped at 256 chars (nothing past it is emitted)", redactSecrets("a b ".repeat(200)).length <= 256);
+  {
+    // After an early secret shrinks the text, a token cut by the 256-char scan window must not leave a fragment in the output.
+    const head = fakes.ghp.replace(A, "A".repeat(100)) + " ";
+    const tail = "gh" + "p_" + "B".repeat(30);
+    const text = head + "w ".repeat(67) + " " + tail;
+    const out = bt(text);
+    check("fragment of a token cut by the scan window is dropped, not half-leaked", text.indexOf(tail) === 240 && out.startsWith("[redacted] w w") && !out.includes("BBBB") && !out.includes("gh" + "p_B"));
+  }
+  check("blocker/notes are read and redacted only for BLOCKED tasks",
+    (() => {
+      let hits = 0; let n = 0;
+      const lazy = (status) => ({ id: "L" + status, status, get blocker() { hits++; return "token=abc"; }, get notes() { hits++; return "token=abc"; } });
+      const flip = { id: "F", get status() { return n++ === 0 ? "BLOCKED" : "DONE"; }, blocker: "token=abc" };
+      const o = buildReport({ ...base, queue: { tasks: [lazy("DONE"), lazy("COMPLETED"), lazy("IN_REVIEW"), lazy("READY"), flip] } });
+      return hits === 0 && n === 1 && o.completedTasks === 2 && o.bottlenecks.length === 1 && o.bottlenecks[0].id === "F" && o.bottlenecks[0].blocker === "[redacted]";
+    })());
+
+  // The failures items rendered into the report are free text too: they are redacted before the cap.
+  {
+    const fmd = renderMarkdown(buildReport({ ...base, runFacts: { activeImplementers: 1, failures: [
+      "boom " + fakes.ghp, "token=sEcReT123 failed", "Authorization: Bearer zQ9", { password: "hunter2", step: 3 },
+      "a".repeat(190) + " " + fakes.pat, "plain failure text", "gh" + "p_" + "A".repeat(200),
+    ] } }));
+    const line = fmd.split("\n").find((l) => l.startsWith("- Failures:")) || "";
+    check("failures items: token shapes, key=value pairs and JSON-style objects are redacted",
+      line.startsWith("- Failures: 7 (") && ![fakes.ghp, fakes.pat, "sEcReT123", "zQ9", "hunter2", "gh" + "p_", "github" + "_pat_"].some((x) => line.includes(x)) && line.includes("[redacted]"));
+    check("failures items: non-secret text and structure are preserved", line.includes("\"plain failure text\"") && line.includes("\"boom [redacted]\"") && line.includes("\"step\""));
+    const only = renderMarkdown(buildReport({ ...base, runFacts: { activeImplementers: 1, failures: ["gh" + "p_" + "A".repeat(200)] } }));
+    check("failures items: shrunk item is exactly \"[redacted]\" with no truncation marker", only.includes("- Failures: 1 (\"[redacted]\")"));
+  }
 }
 
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);

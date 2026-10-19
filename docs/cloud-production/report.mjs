@@ -59,9 +59,12 @@ const toMs = (v) => {
 // SECURITY NOTE: blocker/notes are free text and MUST NOT contain secrets. Authors must never put credentials in them.
 // As a last line of defence only, redactSecrets() masks a few well-known token shapes and key=value credential pairs.
 // This is a BEST-EFFORT DENYLIST, NOT A GUARANTEE: unknown token formats, split/encoded values and prose secrets pass through.
-// It is intentionally simple (linear-time regexes, applied to at most 2000 chars) and applies to notes/blocker only.
+// It is intentionally simple and bounded: the scan window is at most REDACT_SCAN_CAP (256) chars and the key=value pattern
+// limits both identifier runs around the keyword to {0,64} chars, so the work per call is O(cap * 64^2) at worst,
+// independent of the input length (an unbounded run around a repeatable keyword was cubic: "token".repeat(400) took ~870 ms).
+// It applies to blocker/notes (BLOCKED tasks only, the only place they are emitted) and to the rendered failures items.
 const BLOCKER_CAP = 200;
-const REDACT_SCAN_CAP = 2000;
+const REDACT_SCAN_CAP = 256; // >= BLOCKER_CAP and SAFE_CAP, so redaction always sees everything that can be emitted
 const SECRET_PATTERNS = [
   /gh[pousr]_[A-Za-z0-9_]{20,}/g,
   /github_pat_[A-Za-z0-9_]{20,}/g,
@@ -69,10 +72,21 @@ const SECRET_PATTERNS = [
   /AKIA[0-9A-Z]{16}/g,
   /xox[abprs]-[A-Za-z0-9-]{10,}/g,
   /eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g,
-  /[A-Za-z0-9_-]*(?:authorization|password|passwd|secret|token)[A-Za-z0-9_-]*[ \t]*[:=][ \t]*(?:(?:bearer|basic)[ \t]+)?[^\s,;"']+/gi,
+  // key=value / "key":"value" pairs; the optional quotes also cover JSON-rendered failure objects.
+  /[A-Za-z0-9_-]{0,64}(?:authorization|password|passwd|secret|token)[A-Za-z0-9_-]{0,64}["']?[ \t]*[:=][ \t]*["']?(?:(?:bearer|basic)[ \t]+)?[^\s,;"']+/gi,
 ];
 export const redactSecrets = (v) => {
-  let out = v.length > REDACT_SCAN_CAP ? v.slice(0, REDACT_SCAN_CAP) : v;
+  let out = v;
+  if (v.length > REDACT_SCAN_CAP) {
+    out = v.slice(0, REDACT_SCAN_CAP);
+    // The cut may split a token into a fragment too short to match (and, after earlier matches shrink the text, that
+    // fragment could land inside the emitted part): drop the trailing partial word when there is whitespace to cut at.
+    if (!/\s/.test(v[REDACT_SCAN_CAP])) {
+      let i = out.length - 1;
+      while (i >= 0 && !/\s/.test(out[i])) i--;
+      if (i >= 0) out = out.slice(0, i);
+    }
+  }
   for (const re of SECRET_PATTERNS) out = out.replace(re, "[redacted]");
   return out;
 };
@@ -156,9 +170,13 @@ export function buildReport(input) {
     // Snapshot each task exactly once (hostile getters/proxies must not throw or change between reads).
     let snap = null;
     try {
-      snap = (qtasks || []).map((t) => (t && typeof t === "object"
-        ? { id: t.id, status: t.status, blocker: blockerText(t) }
-        : null));
+      // The blocker text is only ever emitted for BLOCKED tasks (bottlenecks), so it is read and redacted only for those.
+      snap = (qtasks || []).map((t) => {
+        if (!t || typeof t !== "object") return null;
+        const id = t.id;
+        const status = t.status;
+        return { id, status, blocker: status === "BLOCKED" ? blockerText(t) : undefined };
+      });
     } catch { snap = null; }
     const bad = qtasks === undefined || snap === null || snap.some(
       (t) => t === null || typeof t.status !== "string" || !STATUS_SET.has(t.status) || typeof t.id !== "string" || t.id.length === 0,
@@ -209,18 +227,26 @@ const guard = (f) => { try { return f(); } catch { return "[unrenderable]"; } };
 const show = (v, f = String) => guard(() => (v === UNKNOWN ? "UNKNOWN (not observed)" : f(v)));
 
 // Escapes any value to a single-line JSON token, capped at SAFE_CAP chars; never throws (circular, BigInt, ...).
+// With redact=true the JSON text is passed through redactSecrets() BEFORE the cap (REDACT_SCAN_CAP >= SAFE_CAP), so a secret
+// straddling the cap is not half-leaked; used for free-text items (failures) that did not go through blockerText().
 const SAFE_CAP = 200;
 const MAX_RENDER_ITEMS = 1000;
-const safe = (v) => {
+const safe = (v, redact = false) => {
   try {
     let j = JSON.stringify(v);
     if (typeof j !== "string") return "[unserializable]";
+    let cut = false;
+    if (redact) {
+      cut = j.length > REDACT_SCAN_CAP; // redactSecrets() drops everything beyond its scan window
+      j = redactSecrets(j);
+    }
     if (j.length > SAFE_CAP) {
       j = j.slice(0, SAFE_CAP);
       const last = j.charCodeAt(j.length - 1);
       if (last >= 0xd800 && last <= 0xdbff) j = j.slice(0, -1); // do not leave a lone high surrogate
-      j += "...(truncated)";
+      cut = true;
     }
+    if (cut) j += "...(truncated)";
     // U+2028/U+2029 (line separators), '<' and '&' are escaped so the token cannot break lines or inject HTML.
     return j.replace(/[\u2028\u2029<&]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
   } catch {
@@ -254,7 +280,7 @@ function renderMarkdownUnsafe(r) {
     `- Completed tasks: ${show(r.completedTasks)}`,
     `- New PRs: ${show(r.newPrs)}`,
     `- Active implementers: ${show(r.activeImplementers)}`,
-    `- Failures: ${show(r.failures, (a) => { const n = items(a).length; return `${n}${n ? " (" + list(a, safe) + ")" : ""}`; })}`,
+    `- Failures: ${show(r.failures, (a) => { const n = items(a).length; return `${n}${n ? " (" + list(a, (x) => safe(x, true)) + ")" : ""}`; })}`,
     `- Bottlenecks: ${show(r.bottlenecks, (a) => list(a, (b) => `${safe(b.id)}: ${safe(b.blocker)}`))}`,
     `- Unknowns: ${guard(() => (items(r.unknowns).length ? cut(items(r.unknowns), capStr, ", ") : "none"))}`,
     "",
