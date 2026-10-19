@@ -171,3 +171,78 @@ describe("UX WP-DELIVERY — routing + dictionary", () => {
     expect([...new Set(calls)].sort()).toEqual(["/health", "/v1/control/status", "/v1/founder-attention", "/v1/work-runs"]);
   });
 });
+
+// //TR: Ek sertleştirme: 500/bozuk yanıt/boş koşu listesi hiçbir sahte "sağlıklı" ya da koşu üretmez; h1 odaklanabilir, düğme yoktur (kapılar sahte buton içermez), tablo caption + scope=col taşır; delivery.* anahtarları EN/TR'de birebir ve yer tutucular eşleşir.
+describe("UX WP-DELIVERY — negative paths, accessibility and locale parity", () => {
+  it("HTTP 500 on every source is FAILED (not UNAVAILABLE, not VERIFIED) with no rows and no health claim", async () => {
+    const delivery = await load("views", "delivery.js");
+    const {ctx} = await mkCtx((p: string) => { throw new Error(`${p}: HTTP 500`); });
+    const root = await delivery.render(ctx);
+    for (const k of ["health", "control", "attention", "runs"]) expect(sourceState(root, k), k).toBe("FAILED");
+    expect(rows(root).length).toBe(0);
+    expect(all(root).some(n => n.dataset.health === "VERIFIED" || n.dataset.product === "PRODUCT_VERIFIED")).toBe(false);
+    expect(root.textContent).not.toContain("HEALTHY");
+  });
+  it("malformed payloads never render a verified health line, a running claim or run rows", async () => {
+    const delivery = await load("views", "delivery.js");
+    for (const bad of ["garbage", null, 5, [], {}]) {
+      const {ctx} = await mkCtx(() => bad);
+      const root = await delivery.render(ctx);
+      const tag = JSON.stringify(bad);
+      expect(rows(root).length, tag).toBe(0);
+      expect(all(root).some(n => n.dataset.health === "VERIFIED"), tag).toBe(false);
+      expect(all(root).some(n => n.dataset.product === "PRODUCT_VERIFIED"), tag).toBe(false);
+      // Kapılar bozuk veride de dürüst kalır.
+      expect(pillsIn(all(root).find(n => n.dataset.gate === "deploy")), tag).toEqual(["BLOCKED"]);
+    }
+  });
+  it("an empty but verified run list shows the honest empty note (no table, no rows)", async () => {
+    const delivery = await load("views", "delivery.js");
+    const {ctx} = await mkCtx(fromFix(liveFix({"/v1/work-runs": {workRuns: []}})));
+    const root = await delivery.render(ctx);
+    expect(sourceState(root, "runs")).toBe("VERIFIED");
+    expect(rows(root).length).toBe(0);
+    expect(all(root).filter(n => n.tagName === "TABLE").length).toBe(0);
+    expect(root.textContent).toContain(ctx.t("delivery.release.none"));
+  });
+  it("a run whose test evidence is not execution evidence is never PRODUCT_VERIFIED (TR and EN)", async () => {
+    const delivery = await load("views", "delivery.js");
+    for (const lang of ["en", "tr"]) {
+      const fix = liveFix({"/v1/work-runs": {workRuns: [{runId: RUN, missionId: "msn_" + "ab".repeat(12), status: "COMPLETE", startedAt: "2026-10-15T10:00:00.000Z", evidence: [{kind: "IMPLEMENT"}, {kind: "SECURITY_REPORT"}]}]}});
+      const {ctx} = await mkCtx(fromFix(fix), lang);
+      const root = await delivery.render(ctx);
+      const r = rows(root);
+      expect(r.length, lang).toBe(1);
+      expect(r[0].dataset.product, lang).toBe("NOT_VERIFIED");
+    }
+  });
+  it("is accessible: single focusable h1, no buttons (gates are not fake actions), labelled source list, table caption and scope=col, in EN and TR", async () => {
+    const delivery = await load("views", "delivery.js");
+    for (const lang of ["en", "tr"]) {
+      const {ctx} = await mkCtx(fromFix(liveFix()), lang);
+      const root = await delivery.render(ctx);
+      const h1 = all(root).filter(n => n.tagName === "H1");
+      expect(h1.length, lang).toBe(1);
+      expect(h1[0].getAttribute("tabindex"), lang).toBe("-1");
+      expect(h1[0].id).toBe("view-title");
+      expect(all(root).filter(n => n.tagName === "BUTTON").length, lang).toBe(0);
+      const ul = all(root).find(n => n.tagName === "UL" && n.getAttribute("aria-label"))!;
+      expect(ul.getAttribute("aria-label")!.length).toBeGreaterThan(0);
+      const t = all(root).find(n => n.tagName === "TABLE")!;
+      expect(t.children.some(c => c.tagName === "CAPTION" && c.textContent.length > 0), lang).toBe(true);
+      for (const th of all(t).filter(n => n.tagName === "TH")) expect(th.getAttribute("scope"), lang).toBe("col");
+      // Her panel başlığı bölümü etiketler.
+      for (const s of all(root).filter(n => n.tagName === "SECTION")) expect(s.getAttribute("aria-labelledby"), s.id).toBe(`${s.id}-t`);
+    }
+  });
+  it("delivery.* and area.delivery.* have identical key sets and {placeholders} in EN and TR", async () => {
+    const en = (await load("locales", "en.js")).default as Record<string, string>, tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const pick = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("delivery.") || k.startsWith("area.delivery.")).sort();
+    expect(pick(tr)).toEqual(pick(en));
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of pick(en)) expect(ph(tr[k]), k).toBe(ph(en[k]));
+    // Görünümün dinamik kullandığı durum anahtarları da iki dilde vardır.
+    const src = read("views", "delivery.js");
+    for (const m of src.matchAll(/\bt\("([a-zA-Z0-9_.]+)"/g)) { expect(en[m[1]], m[1]).toBeTruthy(); expect(tr[m[1]], m[1]).toBeTruthy(); }
+  });
+});

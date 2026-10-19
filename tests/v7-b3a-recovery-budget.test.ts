@@ -1,5 +1,7 @@
 // //TR: Bu test F-B3A-001 düzeltmesini doğrular: süresi dolan lease'in tekrar tekrar devralınması sınırsız döngü yaratmaz; aynı checkpoint konumunda maxRecoveries aşılınca run RECOVERY_FAILED, mission BLOCKED (RECOVERY_BUDGET_EXHAUSTED) olur, executor/klon çağrıları sınırlı kalır, bütçe ilerleme (checkpoint) sonrası sıfırlanır ve lease adım başında/uzun senkron işlerden sonra yenilenir. Gerçek sağlayıcı çağrılmaz.
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 // SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
 import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
 import fs from "node:fs";

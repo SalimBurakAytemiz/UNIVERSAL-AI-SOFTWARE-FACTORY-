@@ -1,5 +1,7 @@
 // //TR: Bu test GOV2 Codex review emekliliğinin fail-closed kurallarını doğrular: eski ürün supervisor'ı hiçbir şey yapmadan 64 koduyla çıkar, sarmalayıcı/otomatik başlatma betikleri ve control-api hiçbir inceleme yolu başlatmaz, etkin kapı yokken gerekli reviewer yoktur ve hiçbir şey CLEAN olmaz, provenance final'i yalnız Claude'a bağlıdır, execution routing bağımsız reviewer kimliğinin üretici kimliklerinden farklı olmasını ister.
-import {describe,expect,it} from "vitest";
+import {describe,expect,it,vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import cp from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";

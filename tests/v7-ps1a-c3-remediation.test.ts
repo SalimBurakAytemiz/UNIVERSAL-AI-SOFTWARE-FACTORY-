@@ -1,5 +1,7 @@
 // //TR: Bu test PS-1A c3 düzeltmelerini gerçek geçici dizin/git, gerçek Windows 8.3 kısa adları, junction'lar ve gerçek alt süreçlerle doğrular (ağ yok, AI sağlayıcı yok): PS1A-C2-F1 (kanonik yol: 8.3 kısa ad/junction/UNC/aygıt takma adlarıyla veri dizini, projects kökü veya başka tenant'ın yönetilen deposu proje oluşturma, import, Studio route'ları ve runner klonunda kabul edilmez; kendi yönetilen proje uçtan uca çalışır) ve PS1A-C2-F2 (dev süreci çöktüğünde ayrık torun süreçler hayatta kalmaz).
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 // SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
 import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
 import fs from "node:fs";

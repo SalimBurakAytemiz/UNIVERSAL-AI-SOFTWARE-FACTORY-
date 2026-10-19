@@ -1,5 +1,7 @@
 // //TR: Bu test PS-1A Project Studio arka ucunu gerçek geçici dizin/git ve gerçek alt süreçlerle doğrular (ağ yok, AI sağlayıcı yok): şablonla yönetilen depo, yerel git/ZIP içe aktarma (zip-slip/symlink/boyut reddi), dev-run + gerçek HTTP önizleme, çökme/yeniden başlatma/tek örnek, GLOBAL_STOP, API yeniden başlangıcında orphan kurtarma, dosya/git görünümü güvenliği ve redaksiyonu, export içeriği ve secret engeli, executor kurulumu (sahte provenance yakalayıcı) ve her yeni route için tenant izolasyonu.
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 // SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
 import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
 import fs from "node:fs";

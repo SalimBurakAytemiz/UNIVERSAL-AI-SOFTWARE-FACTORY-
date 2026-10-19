@@ -1,5 +1,7 @@
 // //TR: Bu test release-supply-chain gate'inin yalnız lock'ta optional olup os/cpu/libc kısıtı host'u kanıtlanabilir biçimde dışlayan kurulmamış bileşenleri kabul ettiğini, bunlar için integrity/registry/lisans istediğini ve diğer tüm eksik bileşenlerde fail-closed kaldığını doğrular.
-import {describe,it,expect,afterEach} from "vitest";
+import {describe,it,expect,afterEach,vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

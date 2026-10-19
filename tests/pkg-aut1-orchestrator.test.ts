@@ -1,5 +1,7 @@
 // //TR: Bu test gözetimsiz orkestratör selftest senaryolarının tamamının geçtiğini ve Founder kısıtlarının kodda kilitli olduğunu doğrular: tek örnek/yetkisiz Task Scheduler kaydı, doğrulanmış kontrol düzlemi şartı, Global Stop ve kilit, dar komut sözleşmeleri (keyfi kabuk, silme, force push, credential export yok), özel imza anahtarına erişimsiz ssh-agent imzası ve dürüst GitHub/cloud durumu.
-import {describe,it,expect} from "vitest";
+import {describe,it,expect,vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import cp from "node:child_process";
 describe("unattended orchestration (AUT1)",{timeout:180000},()=>{

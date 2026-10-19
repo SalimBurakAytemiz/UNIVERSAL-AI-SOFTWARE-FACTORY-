@@ -29,6 +29,7 @@ const PATHS=Object.freeze({
   minuscircle:"M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM8 12h8",
   dashedcircle:"M12 3a9 9 0 0 1 3 .5M19.5 9A9 9 0 0 1 21 12M20 16a9 9 0 0 1-2.2 3.5M14 20.5A9 9 0 0 1 12 21M8 20a9 9 0 0 1-3-3M3.5 14A9 9 0 0 1 3 12M4.5 8A9 9 0 0 1 7 5",
   pulse:"M3 12h4l2-6 4 12 2-6h6",
+  recover:"M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5",
   arrowup:"M12 19V5M6 11l6-6 6 6",
   arrowdown:"M12 5v14M6 13l6 6 6-6",
   minus:"M5 12h14",

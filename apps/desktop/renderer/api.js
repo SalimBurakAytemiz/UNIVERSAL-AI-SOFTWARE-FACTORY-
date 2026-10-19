@@ -10,6 +10,7 @@ import {COCKPIT_PATH,MISSIONS_PATH,WORK_RUNS_PATH,ATTENTION_PATH,mapExecCockpit,
 import {mapQueueMissions,mapQueueWorkRuns,mapQueueAttention} from "./queue-core.js";
 import {REVIEWS_PATH,mapReadinessWorkRuns,mapReadinessReviews,mapReadinessEvidence} from "./readiness-core.js";
 import {mapPostureWorkRuns,mapPostureReviews,mapPostureEvidence} from "./posture-core.js";
+import {REVIEW_ID_RE,mapReviewDetail} from "./assurance-core.js";
 import {PROJECTS_PATH,mapMatrixProjects,mapMatrixMissions,mapMatrixWorkRuns,mapMatrixCockpit} from "./matrix-core.js";
 import {CONTROL_PATH,RUNS_PATH,mapOperationsControl,mapOperationsRuns,mapOperationsAttention} from "./operations-core.js";
 import {INSTALL_PATH,PHASE0_PATH,mapInstallReport,mapPhase0Report} from "./install-core.js";
@@ -169,6 +170,9 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     // //TR: FA-V2-PRODUCT (UI-248): İlk Çalıştırma Kurulum Doğrulaması salt-okunur okumaları; GET /v1/install ve GET /v1/phase0 main allow-list'inde zaten vardır (yeni uç nokta yok, sorgu dizesi yok). GET /v1/system/executors için mevcut executors() erişimcisi YENİDEN kullanılır (kopya yok). Başarılıysa install-core eşleyicileriyle fail-closed sanitize edilir (bozuk yanıt dürüst ERROR), okuma hatası ayrık dürüst durum olarak döner.
     async installInstall(){const r=await get(INSTALL_PATH);return r.ok?mapInstallReport(r.data):{state:r.state,install:null,message:r.message}},
     async installPhase0(){const r=await get(PHASE0_PATH);return r.ok?mapPhase0Report(r.data):{state:r.state,phase0:null,message:r.message}},
+    // //TR: UI-049: Güvence Reviews paneli; /v1/reviews ve /v1/reviews/:evd_id main allow-list'inde zaten vardır (yeni uç nokta yok, yazma yok). Liste readiness-core ile fail-closed eşlenir; detay kimliği kanonik evd_+24 hex değilse istek yapılmaz.
+    async assuranceReviews(){const r=await get(REVIEWS_PATH);return r.ok?mapReadinessReviews(r.data):{state:r.state,reviews:null,message:r.message}},
+    async assuranceReview(id){if(!REVIEW_ID_RE.test(String(id)))return {state:"ERROR",review:null};const r=await get(`${REVIEWS_PATH}/${id}`);return r.ok?mapReviewDetail(r.data,id):{state:r.state,review:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }
