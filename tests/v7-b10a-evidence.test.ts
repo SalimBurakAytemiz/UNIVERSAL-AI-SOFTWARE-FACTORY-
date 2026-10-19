@@ -1,5 +1,7 @@
 // //TR: Bu test B10A Evidence Center'ı gerçek geçici git deposu, geçici veri dizini ve store API'siyle tohumlanmış Work OS journal ile doğrular: hash yeniden hesabı VERIFIED, bozulmuş dosya MISMATCH, silinmiş dosya MISSING, kayıtlı hash yok UNVERIFIABLE, yol/symlink kaçışı reddi, tenant izolasyonu, kararlı sayfalama, log kuyruğunda secret redaksiyonu, cockpit evidence bloğu ve yanıtlarda mutlak yol olmaması.
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

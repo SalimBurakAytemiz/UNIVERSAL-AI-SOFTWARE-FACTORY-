@@ -1,6 +1,8 @@
 // //TR: Bu test SBX-8 B'yi (D-SBX-11 b) doğrular: implementer/reviewer UASCO Claude profilleri kontrol kökü altında ayrı dizinlerdir; UASCO yalnız kendi settings.json dosyasını yazar (hook/MCP/statusLine/apiKeyHelper yok, araç yasakları, reviewer ek olarak yazamaz), kimlik deposu yalnız varlıkla kontrol edilir (yoksa LOGIN_REQUIRED),
 // //TR: kişisel ~/.claude, ev dizini, proje çalışma alanı ve git çalışma ağacı içindeki profil yolları reddedilir ve hiçbir şey yazılmaz; GET /v1/system/executors durum ve Founder giriş komutunu döner. Gerçek Claude CLI çalıştırılmaz; kişisel profil okunmaz.
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
