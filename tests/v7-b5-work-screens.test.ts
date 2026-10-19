@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import {pathToFileURL} from "node:url";
+import {logicalTestFiles} from "./support/validation-test-shards.js";
 
 const root = path.resolve(__dirname, "..");
 const desk = path.join(root, "apps", "desktop");
@@ -1023,7 +1024,8 @@ describe("B5 static safety, routes and wiring", () => {
   });
   it("validation.json appends this test at the end of the tests step and nothing else changed there", () => {
     const cfg = JSON.parse(read(root, "config", "validation.json"));
-    const step = cfg.steps.find((s: any) => s.id === "tests");
+    // PUBLIC-CI: "tests" adımı sıralı tests, tests-2..tests-N kabuklarına bölünebilir; sıra kuralı kabukların birleşimi olan mantıksal liste üzerinde aynen geçerlidir.
+    const step = {command: logicalTestFiles(cfg)};
     // B7: later V7 packages append their own test after this one; B5 must stay directly after B4 and only later v7 package tests (b6+ or product-studio ps<N>) may follow it.
     const i = step.command.indexOf("tests/v7-b5-work-screens.test.ts");
     expect(step.command[i - 1]).toBe("tests/v7-b4-desktop-shell.test.ts");

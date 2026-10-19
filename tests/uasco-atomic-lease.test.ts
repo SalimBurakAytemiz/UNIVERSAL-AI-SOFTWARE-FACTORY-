@@ -1,5 +1,5 @@
 // //TR: Bu test ortamlar arası atomik görev kirasının kanıtıdır: 16 gerçek worker_thread aynı task'ı gerçek git ref store üzerinden yarıştırır ve tam 1 GRANTED / 15 HELD beklenir; ayrıca TTL/takeover, renew/release, fake remote CAS ve SHA+session bağlı verdict reddi doğrulanır.
-import {describe,it,expect,beforeAll,afterAll} from "vitest";
+import {describe,it,expect,beforeAll,afterAll,vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,6 +9,8 @@ import {Worker} from "node:worker_threads";
 import {claim,renew,release,isExpired,type LeaseStore} from "../automation/lib/task-lease.mjs";
 import {createLocalGitRefStore,createRemoteRefStore} from "../automation/lib/task-lease-git-store.mjs";
 import {bindVerdict,verifyVerdict} from "../automation/lib/lease-verdict.mjs";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 const LIB=(f:string)=>pathToFileURL(path.resolve("automation/lib",f)).href;
 const mkRepo=()=>{const d=fs.mkdtempSync(path.join(os.tmpdir(),"uasco-lease-"));cp.execFileSync("git",["init","-q"],{cwd:d});return d};
 const A=(o:Record<string,unknown>={})=>({taskId:"T-1",environment:"cloud-linux",workerId:"w-a",sessionId:"s-a",headSha:"a".repeat(40),now:1000,ttlMs:100,...o}) as any;

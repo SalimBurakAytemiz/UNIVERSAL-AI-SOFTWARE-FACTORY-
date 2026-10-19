@@ -1,5 +1,5 @@
 // //TR: Bu test FA-V2-PRODUCT (CORE-8) pre-dev + crew salt-okunur okuma API'sinin dikey kesitini doğrular: (1) CONTROL-API — GET /v1/predev/:missionId GERÇEK CORE-2 pre-dev okuma-modelini (faz + artefakt başına durum) döner; dizi yoksa dürüst NOT_STARTED/boş, GERÇEK crew koşusundan sonra kayıttan AYNEN APPROVED (yükseltme/uydurma yok); GET /v1/crew/:missionId GERÇEK CORE-5 koordinasyon ledger'ını (pre-dev artefaktlarından) + CORE-6 dev/review zaman çizelgesini (mission run'larından) döner; pre-dev/run yoksa dürüst tüm-ASSIGNED/boş. İkisi de geçersiz kimlikte 400, bilinmeyen/başka tenant mission'da 404, token yoksa 403 ve POST'ta 404 (yazma yok). (2) ALLOW-LIST — apps/desktop/main.mjs B4-ALLOWLIST izole değerlendirilir ve saldırgan girdilere karşı fail-closed: yalnız kanonik msn_ + 24 hex kimliği kabul; sorgu, sondaki eğik çizgi, alt yol, yanlış önek/büyük-küçük/uzunluk, non-hex reddedilir; her POST reddedilir; EXTRA_GET_ROUTES kümesi büyümez (ux-shell/firstrun güvenlik anlık görüntüsü korunur). (3) DÜRÜSTLÜK — endpoint'ler yalnız journal'dan türetilmiş GERÇEK okuma-modellerini sunar; hiçbir pre-dev artefaktı, crew aktivitesi, onay veya verdict UYDURULMAZ ve hiçbir alan PRODUCT_VERIFIED ima etmez.
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,6 +11,8 @@ import {buildCrewPlan} from "../core/workos/crew/assignment.js";
 import {TASKHUB_BRIEF} from "../core/workos/predev/fixtures/taskhub-brief.js";
 import {TASKHUB_ARTIFACTS} from "../core/workos/predev/fixtures/taskhub/index.js";
 import type {ArtifactKind} from "../core/workos/predev/types.js";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const TOKEN = "t".repeat(32);
 const hdr = {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210"};

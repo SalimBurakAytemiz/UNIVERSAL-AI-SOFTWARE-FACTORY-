@@ -1,5 +1,5 @@
 // //TR: Bu test FA-V2-PRODUCT UI-236 "Kurucu Yönetim Özeti ve İcra Defteri" salt-okunur dikey kesitini doğrular: (1) GERÇEK control-api — gerçek tohumlanmış Work OS verisinden (proje, mission, koşu, kanıt, gerçek git + kaynak teslimi hazırlama/kabulü) dönen GET /v1/cockpit + /v1/missions + /v1/work-runs + /v1/founder-attention gövdeleri saf eşleyicilerden (executive-core.js) ve görünümden (views/executive.js) geçer. (2) İZİN LİSTESİ — dört GET zaten izinlidir (main.mjs/control-boundary/server.ts/app.js DEĞİŞMEZ, EXTRA_GET_ROUTES büyümez), görünüm yalnız bu dört GET'i okur, hiçbir yazma/köprü çağrısı yapmaz. (3) SAF EŞLEYİCİLER — bozuk kimlik/enum/biçim/sayı fail-closed ERROR olur (kısmi görünüm yok), durumlar yükseltilmez, sıralama yeni-önce. (4) GÖRÜNÜM DÜRÜSTLÜĞÜ — kaynak başına OFFLINE/UNAVAILABLE/ERROR, boş durumlar, okunamayan göstergede 0 değil "—", teslim yalnız kaynak düzeyi (NOT_VERIFIED), ürün doğrulandı sabiti ASLA, uydurma yok. (5) ERİŞİLEBİLİRLİK, (6) YEREL AYNALIK (TR/EN birebir) ve (7) ROTA (planned.js devri, app.js VIEWS değişmez).
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +10,8 @@ import {RUN_STATUSES as CORE_RUN_STATUSES, RUN_STEPS as CORE_RUN_STEPS} from "..
 import {ExecutionGate} from "../core/workos/execution-gate.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import {T, setup, okScript, runner, api as relfxApi, HDR as RELFX_HDR, tmpRoot, rmTmp} from "./support/relfx.js";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const root = path.resolve(__dirname, "..");
