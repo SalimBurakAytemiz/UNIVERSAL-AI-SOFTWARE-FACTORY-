@@ -145,6 +145,8 @@ for (const [file, cat] of [["scripts/ensure-dependencies.mjs", "ensure-dependenc
   const code = `CI_EXECUTED_PATH:${cat}`;
   blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F(file.toUpperCase().replace(/\//g, "\\"))); }), code, {}, `N42g modified ${file} (upper case, backslashes)`);
   blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F(file, "renamed", "docs/staged-file.txt")); }), code, {}, `N42h rename INTO ${file}`);
+  blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F(file, "added")); }), code, {}, `N42k added ${file}`);
+  blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F(file, "removed")); }), code, {}, `N42l removed ${file}`);
   blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("docs/moved-away.txt", "renamed", file)); }), code, {}, `N42i rename OUT OF ${file}`);
 }
 blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("scripts/ci/new-helper.mjs", "added")); }), "CI_EXECUTED_PATH:ci-scripts", {}, "N42j new file under scripts/ci/");
