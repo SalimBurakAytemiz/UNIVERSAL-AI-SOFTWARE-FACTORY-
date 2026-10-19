@@ -72,7 +72,7 @@ const M = (() => {
   add(T("W-MERGED"), () => { const c = claim(e, "W-MERGED"); work(e, c.branch); merge(e, c.branch); });
   add(T("W-NOTES", {status: "IN_PROGRESS", notes: "Earlier note."}), () => { const c = claim(e, "W-NOTES"); work(e, c.branch, 2); merge(e, c.branch); });
   add(T("W-READY", {status: "READY"}), () => { const c = claim(e, "W-READY"); work(e, c.branch); merge(e, c.branch); });
-  add(T("W-CUSTOM", {branch: "claude/w-custom-work"}), () => { const c = claim(e, "W-CUSTOM", "claude/w-custom-work"); work(e, c.branch); merge(e, c.branch); });
+  add(T("W-CUSTOM", {branch: "claude/w-custom"}), () => { const c = claim(e, "W-CUSTOM"); work(e, c.branch); merge(e, c.branch); });
   add(T("W-CLAIMONLY"), () => { const c = claim(e, "W-CLAIMONLY"); merge(e, c.branch); }); // merged, but no work: only rule (c) can reject
   add(T("W-IMPORT"), () => { // claim-only branch that merged newer base commits in: imported commits are not work
     const c = claim(e, "W-IMPORT");
@@ -101,6 +101,12 @@ const M = (() => {
   });
   add(T("W-FFCLAIM"), () => { const c = claim(e, "W-FFCLAIM"); G(e.work, ["fetch", "-q", "origin"]); G(e.work, ["checkout", "-q", "-B", "v7/integration", "origin/v7/integration"]); G(e.work, ["merge", "-q", "--ff-only", c.sha]); G(e.work, ["push", "-q", "origin", "v7/integration"]); });
   const mkOther = (id, br) => () => { const c = claim(e, id, br); work(e, br); merge(e, br); };
+  add(T("W-X30"), () => { // reviewer B2: claim-only branch ff'd into base, X31 claims from that tip, does real work, merged; X30's ref is then moved to X31's head
+    const c0 = claim(e, "W-X30"); G(e.work, ["fetch", "-q", "origin"]); G(e.work, ["checkout", "-q", "-B", "v7/integration", "origin/v7/integration"]); G(e.work, ["merge", "-q", "--ff-only", c0.sha]); G(e.work, ["push", "-q", "origin", "v7/integration"]);
+    const c1 = claim(e, "W-X31"); work(e, c1.branch); merge(e, c1.branch); G(e.work, ["push", "-q", "-f", "origin", `${G(e.work, ["rev-parse", `origin/${c1.branch}`])}:refs/heads/claude/w-x30`]);
+  });
+  add(T("W-X31"));
+  add(T("W-X30B", {branch: "claude/w-x31"}));
   add(T("W-TBBASE", {branch: "v7/integration"}));
   add(T("W-TBREFS", {branch: "refs/heads/claude/w-tbrefs"}), mkOther("W-TBREFS", "claude/w-tbrefs"));
   add(T("W-TBFEAT", {branch: "feat/w-tbfeat"}), mkOther("W-TBFEAT", "feat/w-tbfeat"));
@@ -118,7 +124,7 @@ const M = (() => {
   const {e, raw, doc} = M;
   const dry = wb(e);
   const ids = (dry.j?.changes ?? []).map(c => c.taskId).sort();
-  check("dry run: exactly the merged work tasks (incl. READY, IN_PROGRESS, custom task.branch) are proposed", dry.j?.outcome === "CHANGES" && ids.join() === "W-CUSTOM,W-MERGED,W-NOTES,W-READY", dry.raw);
+  check("dry run: exactly the merged work tasks (incl. READY, IN_PROGRESS, task.branch equal to the own claim branch) are proposed", dry.j?.outcome === "CHANGES" && ids.join() === "W-CUSTOM,W-MERGED,W-NOTES,W-READY,W-X31", dry.raw);
   check("dry run writes nothing (file byte-identical) and reports written:false", fs.readFileSync(e.bl, "utf8") === raw && dry.j.written === false && dry.j.mode === "DRY_RUN");
   const ch = Object.fromEntries(dry.j.changes.map(c => [c.taskId, c]));
   check("change records carry from/to/branchHead (full sha of the remote head) and baseSha is the remote base tip",
@@ -131,8 +137,10 @@ const M = (() => {
   check("missing branch => NO_BRANCH; branch without a claim commit => NO_CLAIM_COMMIT (fail-closed)", why("W-MISSING:") === "W-MISSING:NO_BRANCH" && why("W-NOCLAIM:") === "W-NOCLAIM:NO_CLAIM_COMMIT", JSON.stringify(dry.j.reasons));
   check("reviewer repro (claim-only ff'd into base, unrelated base commit, claim branch repointed at base tip, IN_PROGRESS) => not DONE: HEAD_ON_BASE_CHAIN", why("W-REPRO:") === "W-REPRO:HEAD_ON_BASE_CHAIN" && !ids.includes("W-REPRO"), JSON.stringify(dry.j.reasons));
   check("fast-forwarded claim-only branch (head on the base chain) => HEAD_ON_BASE_CHAIN", why("W-FFCLAIM:") === "W-FFCLAIM:HEAD_ON_BASE_CHAIN", JSON.stringify(dry.j.reasons));
-  check("branch = unrelated base commit + empty commit, merged by a merge commit: base commits are not work => NO_WORK_COMMITS", why("W-REBASED:") === "W-REBASED:NO_WORK_COMMITS", JSON.stringify(dry.j.reasons));
-  check("task.branch = base branch / master / refs/heads/... / feat/... => BRANCH_NOT_ALLOWED, never DONE", ["W-TBBASE", "W-TBMASTER", "W-TBREFS", "W-TBFEAT"].every(i => why(`${i}:`) === `${i}:BRANCH_NOT_ALLOWED` && !ids.includes(i)), JSON.stringify(dry.j.reasons));
+  check("branch = unrelated base commit + empty commit, merged by a merge commit: its claim is already in base, so no valid claim => NO_CLAIM_COMMIT", why("W-REBASED:") === "W-REBASED:NO_CLAIM_COMMIT", JSON.stringify(dry.j.reasons));
+  check("task.branch = base branch / master / refs/heads/... / feat/... => BRANCH_MISMATCH, never DONE", ["W-TBBASE", "W-TBMASTER", "W-TBREFS", "W-TBFEAT"].every(i => why(`${i}:`) === `${i}:BRANCH_MISMATCH` && !ids.includes(i)), JSON.stringify(dry.j.reasons));
+  check("reviewer B2: a claim commit already on the base chain is not a valid claim; X30's ref moved to X31's head => NO_CLAIM_COMMIT, task.branch=claude/<other task> => BRANCH_MISMATCH; only X31 (its own branch) is DONE",
+    why("W-X30:") === "W-X30:NO_CLAIM_COMMIT" && why("W-X30B:") === "W-X30B:BRANCH_MISMATCH" && ids.includes("W-X31") && !ids.includes("W-X30") && !ids.includes("W-X30B"), JSON.stringify(dry.j.reasons));
   check("empty-commit \"work\" branch (merged) => NO_WORK_COMMITS", why("W-EMPTY:") === "W-EMPTY:NO_WORK_COMMITS", JSON.stringify(dry.j.reasons));
   check("forged claim message (prefix only with a changed tree; or empty + prefix whose parent is off the base chain) => NO_CLAIM_COMMIT", why("W-FORGED1:") === "W-FORGED1:NO_CLAIM_COMMIT" && why("W-FORGED2:") === "W-FORGED2:NO_CLAIM_COMMIT", JSON.stringify(dry.j.reasons));
   check("DONE / BLOCKED / AUTHORITY_REQUIRED / DRAFT_NOT_READY tasks (even with merged work) are never proposed or mentioned",
