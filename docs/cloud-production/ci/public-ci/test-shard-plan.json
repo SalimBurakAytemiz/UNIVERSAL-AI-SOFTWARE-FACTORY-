@@ -1,0 +1,173 @@
+{
+  "//TR": "Canonical tests adiminin 600 sn adim limiti icin ONERILEN sirali, bitisik kabuk plani. Kabuklarin birlesimi config/validation.json icindeki mevcut tests listesine sira dahil BIREBIR esittir (kapsam azalmaz). Sure olcumu: Linux 4 vCPU, Node 24.22.0, vitest 4.1.11, v7/integration e12dbdd; GitHub-hosted Windows yaklasik 2-3.5 kat daha yavas olctu. Yeni test dosyalari SON kabuga eklenir.",
+  "schemaVersion": "1.0.0",
+  "sourceCommit": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0",
+  "measuredOn": {
+    "os": "linux",
+    "cpus": 4,
+    "node": "v24.22.0",
+    "vitest": "4.1.11",
+    "wallMsUnsharded": 253000
+  },
+  "shardCount": 8,
+  "shards": [
+    {
+      "id": "tests",
+      "files": [
+        "tests/action-gateway.test.ts",
+        "tests/certification.test.ts",
+        "tests/data-routing.test.ts",
+        "tests/dlp.test.ts",
+        "tests/lease-manager.test.ts",
+        "tests/mission-state.test.ts",
+        "tests/model-router.test.ts",
+        "tests/npm-invocation.test.ts",
+        "tests/pkg-aut1-orchestrator.test.ts",
+        "tests/pkg-aut2-autonomy-hardening.test.ts"
+      ],
+      "measuredFileSumMs": 76793
+    },
+    {
+      "id": "tests-2",
+      "files": [
+        "tests/pkg-c-lf-electron-smoke.test.ts",
+        "tests/pkg-d-standalone-provenance.test.ts",
+        "tests/pkg-dr1-dual-review.test.ts",
+        "tests/pkg-dr2-release-audit.test.ts",
+        "tests/pkg-e-electron-provision.test.ts",
+        "tests/pkg-e2-tr-scan.test.ts",
+        "tests/pkg-f-validation-scripts-protected.test.ts",
+        "tests/pkg-g-preflight-physical-memory.test.ts",
+        "tests/pkg-gov1-claude-only-review-gate.test.ts",
+        "tests/pkg-gov2-codex-retirement.test.ts",
+        "tests/pkg-q1-claude-limit-detection.test.ts",
+        "tests/pkg-q2-retry-time-grace.test.ts",
+        "tests/pkg-r1-release-mode.test.ts",
+        "tests/pkg-r3-phase0-fixes.test.ts",
+        "tests/pkg-r4-init-private-git.test.ts",
+        "tests/pkg-t1-windows-crash-resume.test.ts",
+        "tests/pkg-t2-orchestrator-executor-integration.test.ts",
+        "tests/pkg-t3-omniroute-install-compat.test.ts",
+        "tests/pkg-t4-powershell-safety.test.ts",
+        "tests/pkg-vs-validation-sharding.test.ts",
+        "tests/pkg-x1-execution-routing.test.ts",
+        "tests/release-supply-chain-platform-optional.test.ts",
+        "tests/resource-registry.test.ts",
+        "tests/review-governance.test.ts",
+        "tests/schema-inference.test.ts",
+        "tests/strict-json-validator.test.ts",
+        "tests/technology-decision.test.ts",
+        "tests/technology-discovery.test.ts",
+        "tests/uasco-atomic-lease.test.ts",
+        "tests/v7-b1-workos.test.ts",
+        "tests/v7-b2-workos-hardening.test.ts",
+        "tests/v7-b9-target-catalog.test.ts"
+      ],
+      "measuredFileSumMs": 76186
+    },
+    {
+      "id": "tests-3",
+      "files": [
+        "tests/v7-b3a-runner.test.ts",
+        "tests/v7-b3a-recovery-budget.test.ts",
+        "tests/v7-b3a-c3-builder-commit.test.ts"
+      ],
+      "measuredFileSumMs": 80528
+    },
+    {
+      "id": "tests-4",
+      "files": [
+        "tests/v7-b3c-security-stage.test.ts"
+      ],
+      "measuredFileSumMs": 84029
+    },
+    {
+      "id": "tests-5",
+      "files": [
+        "tests/v7-ps1a-project-studio.test.ts",
+        "tests/v7-ps1a-c2-remediation.test.ts",
+        "tests/v7-ps1a-c3-remediation.test.ts",
+        "tests/v7-b10a-evidence.test.ts",
+        "tests/v7-b11a-company-os.test.ts",
+        "tests/v7-wfr03-role-registry.test.ts",
+        "tests/v7-wfr04a-skill-academy.test.ts",
+        "tests/v7-wfr04a-c2-remediation.test.ts",
+        "tests/v7-int-r3-desktop.test.ts",
+        "tests/v7-int-r3-sbx-gate.test.ts",
+        "tests/v7-sbx8-claude-profiles.test.ts",
+        "tests/v7-sbx8-broker.test.ts"
+      ],
+      "measuredFileSumMs": 72515
+    },
+    {
+      "id": "tests-6",
+      "files": [
+        "tests/v7-sbx8-reviewer.test.ts",
+        "tests/v7-sbx8-agent-config.test.ts",
+        "tests/v7-relfx-1-completion.test.ts",
+        "tests/v7-relfx-3-risk-admission.test.ts",
+        "tests/v7-relfx-4-interruption.test.ts",
+        "tests/v7-relfx-2-test-surface.test.ts"
+      ],
+      "measuredFileSumMs": 81851
+    },
+    {
+      "id": "tests-7",
+      "files": [
+        "tests/v7-relfx-c2-remediation.test.ts",
+        "tests/v7-relfx-c3-remediation.test.ts",
+        "tests/v7-relfx-c4-remediation.test.ts",
+        "tests/v7-relfx-c5-remediation.test.ts",
+        "tests/v7-b6a-control-tower.test.ts",
+        "tests/v7-b4-desktop-shell.test.ts",
+        "tests/v7-b5-work-screens.test.ts",
+        "tests/v7-b7-installer.test.ts",
+        "tests/v7-ps1b-project-studio-ui.test.ts",
+        "tests/v7-ps1b-relpath-canonical.test.ts",
+        "tests/v7-m1a-mode.test.ts",
+        "tests/v7-m1a-desktop.test.ts"
+      ],
+      "measuredFileSumMs": 71404
+    },
+    {
+      "id": "tests-8",
+      "files": [
+        "tests/v7-m1a-c2-delivery.test.ts",
+        "tests/v7-m1a-c2-test-variant.test.ts",
+        "tests/v7-core-predev-contracts.test.ts",
+        "tests/v7-core-predev-driver.test.ts",
+        "tests/v7-core-predev-taskhub-e2e.test.ts",
+        "tests/v7-core-predev-taskhub-codegen.test.ts",
+        "tests/v7-ux-wp2-cockpit.test.ts",
+        "tests/v7-ux-wp4-tower.test.ts",
+        "tests/v7-ux-wp3-company.test.ts",
+        "tests/v7-ux-delivery.test.ts",
+        "tests/v7-ux-company-allowlist.test.ts",
+        "tests/v7-ux-wp-projects.test.ts",
+        "tests/v7-ux-wp-workos.test.ts",
+        "tests/v7-ux-wp-agents.test.ts",
+        "tests/v7-ux-settings.test.ts",
+        "tests/v7-ux-inbox.test.ts",
+        "tests/v7-ux-wp-qasec.test.ts",
+        "tests/v7-ux-firstrun.test.ts",
+        "tests/v7-ux-shell.test.ts",
+        "tests/v7-ux-academy.test.ts",
+        "tests/v7-core-predev-crew-coordination.test.ts",
+        "tests/v7-core-predev-crew-dev-review.test.ts",
+        "tests/v7-core-predev-team-composer.test.ts",
+        "tests/v7-ux-vp-visual-parity.test.ts",
+        "tests/v7-core-predev-crew-api.test.ts",
+        "tests/v7-ux-journey.test.ts",
+        "tests/v7-ux-executive.test.ts",
+        "tests/v7-ux-reviews-api.test.ts",
+        "tests/v7-ux-queue.test.ts",
+        "tests/v7-ux-readiness.test.ts",
+        "tests/v7-ux-posture.test.ts",
+        "tests/v7-ux-matrix.test.ts",
+        "tests/v7-ux-operations.test.ts",
+        "tests/v7-ux-install.test.ts"
+      ],
+      "measuredFileSumMs": 91251
+    }
+  ]
+}

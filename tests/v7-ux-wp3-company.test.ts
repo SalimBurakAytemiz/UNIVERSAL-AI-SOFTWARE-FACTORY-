@@ -1,8 +1,10 @@
 // //TR: Bu test UX WP3 Company OS (SC-15) görünümünün dürüstlüğünü gerçek görünüm modülleriyle doğrular: gerçek /v1/company/* verisi CRM/Finans/Hukuk tablolarına ve KPI'lara bağlanır; veri yokken (köprü reddi, 404/503, ağ, 500) ayrık EMPTY/UNAVAILABLE/NOT_CONNECTED/OFFLINE/FAILED/STALE durumları gösterilir; referans görseldeki uydurma adlar, taslak faturanın ödenmiş ve fırsatın imzalı görünmesi, para birimlerinin karışması ve eksik kanıtlı "imzalı" sözleşmenin sayılması engellenir; sekme/klavye/süzgeç ve TR/EN sözlük kapsamı kontrol edilir.
-import {describe, it, expect, beforeEach} from "vitest";
+import {describe, it, expect, beforeEach, vi} from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const load = async (...p: string[]): Promise<any> => import(pathToFileURL(path.join(rend, ...p)).href);

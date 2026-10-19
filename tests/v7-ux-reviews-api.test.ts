@@ -1,5 +1,5 @@
 // //TR: Bu test UI-049 salt-okunur bağımsız review kararı API'sini doğrular: (1) GERÇEK MissionRunner + FakeExecutors (gerçek git, gerçek Work OS journal) bir run'ı BLOCKED->CLEAN remediation, reviewer-çalışma-alanı-değişti ve review'a hiç ulaşmayan senaryolarla koşturur; GET /v1/reviews ve GET /v1/reviews/:reviewId bu journal'dan türetilen kararları AYNEN döner, review yoksa NOT_REVIEWED der ve geçersiz kılınan review'ı asla CLEAN saymaz. (2) Tohumlanmış journal ile dürüst durumlar (boş, eski commit'te CLEAN, bağımsızlığı kanıtsız, karar yok), redaksiyon/kırpma, sıkı kimlik doğrulaması (400/404), tenant izolasyonu, token/Host kapısı, yazma yokluğu ve journal'ın değişmemesi. (3) Desktop GET allow-list'i yalnız kanonik review yollarını regex ile kabul eder ve EXTRA_GET_ROUTES kümesi BÜYÜMEZ.
-import {describe, it, expect, beforeAll, afterAll, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,6 +14,8 @@ import type {FakeScript} from "../core/workos/executors.js";
 import type {WorkRun, RunEvidence} from "../core/workos/types.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 import {testExecutionGate} from "./support/test-sandbox.js";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const TOKEN = "t".repeat(32);
 const hdr = {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210"};
