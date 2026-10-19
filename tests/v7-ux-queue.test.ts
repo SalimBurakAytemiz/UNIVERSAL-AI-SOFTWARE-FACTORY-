@@ -1,11 +1,13 @@
 // //TR: Bu test FA-V2-PRODUCT UI-211 "İnsan Onayı Bekleyen İş Kuyruğu" salt-okunur dikey kesitini doğrular: (1) GERÇEK control-api — gerçek tohumlanmış Work OS verisinden (PREFLIGHT, FOUNDER_ATTENTION_REQUIRED, REPORTING + AWAITING_APPROVAL koşusu, mission'ı REPORTING olmayan AWAITING_APPROVAL koşusu) dönen GET /v1/missions + /v1/work-runs + /v1/founder-attention yanıtları eşleyicilerden ve görünümden geçer; kuyruk öğeleri, öncelik düzeyleri ve bekleme süreleri gerçek zaman damgalarından türer; (2) yalnız zaten izinli üç GET kullanılır, yeni uç nokta/POST/toplu eylem yoktur ve korumalı dosyalar değişmez; (3) saf eşleyiciler fail-closed'dır (bozuk kimlik/enum/biçim/zaman damgası/yinelenen kimlik tüm okumayı ERROR yapar) ve durumları yükseltmez; (4) kuyruk türetimi kayıtlı durumdan yapılır, öncelik/bekleme sıralaması belirleyicidir, SLA değeri uydurulmaz; (5) görünüm dürüstlüğü: okunamayan kaynak varsa sayılar gösterilmez ve kuyruk "boş" denmez, boş kuyruk dürüst boş durumdur, yasak ürün-doğrulandı sabiti hiçbir senaryoda üretilmez, HTML yorumlanmaz; (6) erişilebilirlik; (7) TR/EN anahtar eşitliği; (8) rota delegasyonu (app.js VIEWS değişmez).
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
 import {WorkOsStore} from "../core/workos/store.js";
 import {buildServer} from "../apps/control-api/src/server.js";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const root = path.resolve(__dirname, "..");

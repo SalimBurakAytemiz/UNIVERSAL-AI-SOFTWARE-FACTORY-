@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-18T04:55:18.016Z",
+  "generatedAt": "2026-10-19T06:37:51.774Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -10,7 +10,7 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "b5af965e526d31fc0f2e65ab5009ecb05c9e9108c3b10c4e89907fa14d3173c2"
+      "sha256": "a714f59ca12bee1a8cca9cbb671c95bca44e4d623521ccbc626dcf01692d2caa"
     },
     {
       "path": ".gitignore",
@@ -454,7 +454,7 @@
     },
     {
       "path": "config/validation.json",
-      "sha256": "82177ae0fff536d985de73e4b74796af47bef38646a9bc5fcbb8482e57250b26"
+      "sha256": "e335736b90f527e8259180551231196776273a7f340b7c4f56e1b77df0bfe34f"
     },
     {
       "path": "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
@@ -1170,7 +1170,7 @@
     },
     {
       "path": "scripts/bootstrap-uasco-autonomy.ps1",
-      "sha256": "14f44d07696d1d114885138e024f250742de26af481b3dc8593590438e4e32b3"
+      "sha256": "0c82e5c4bd9474bb113ca5eddaa84a28a06a249d5df60e1e5183c4a8edefeb15"
     },
     {
       "path": "scripts/bootstrap.ps1",
@@ -1178,7 +1178,7 @@
     },
     {
       "path": "scripts/build-release-zip.mjs",
-      "sha256": "611766cfb77898ad0bc7b4f0943a43786f19316ef6dda10813d41085a3500f82"
+      "sha256": "ec447cd6ffd321ca0005ff29912bd7c51886f1b1581096c10a4041297ab7b8cb"
     },
     {
       "path": "scripts/builder-boundary-smoke.mjs",
@@ -1250,7 +1250,7 @@
     },
     {
       "path": "scripts/phase0-acceptance.mjs",
-      "sha256": "41f10019c563d79607c246862a0b2fea69d9c275267a035eb4c06b66ad1ae8e4"
+      "sha256": "b1823e9613a78fffd5bda87e452eb9d63b916e911e8b47ae4dba47c288c51ace"
     },
     {
       "path": "scripts/preflight.mjs",
@@ -1470,7 +1470,7 @@
     },
     {
       "path": "scripts/verify-release-extract.mjs",
-      "sha256": "dd7b60b22e1bd0de350775aac6f7d896ce370c706957205db87b7b036077b0d8"
+      "sha256": "d7e809c0176c216f3ad71008ec3da632480b6501e3ab889ae8b0d38484b078ae"
     },
     {
       "path": "scripts/verify-remote-protection.mjs",

@@ -1,5 +1,5 @@
 // //TR: Bu test REL-FX-4 kesinti kurtarma minimumunu doğrular: gerçek bir yarım (sonlandırılmamış) son satır geçerli zincir üzerinde TORN_TAIL olur (salt-okunur açılış, karantina kopyası, durum route'u, yalnız token + tam kuyruk hash onayıyla kesme), zincir ortası bozulma ve uyuşmayan kuyruk tamper kalır; ENOSPC append'i DISK_FULL ile reddeder ve yarım satır bırakmaz, asla PASS üretmez; sağlayıcı QUOTA_EXHAUSTED/RATE_LIMIT retry bütçesini tüketmeden run'ı BLOCKED(PROVIDER_QUOTA) yapar.
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -7,6 +7,8 @@ import {WorkOsStore} from "../core/workos/store.js";
 import type {WorkOsStoreOptions} from "../core/workos/store.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import {HDR, T, api, drive, journalFile, missionOf, okScript, rmTmp, runOf, runner, setup, startRun, tmpRoot} from "./support/relfx.js";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 let tmp = "";
 beforeEach(() => { tmp = tmpRoot("uasco-relfx4-"); });

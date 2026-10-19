@@ -1,6 +1,6 @@
 // //TR: Bu test SBX-8 D'yi doğrular: LOCAL_CLAUDE reviewer'ı yalnız okuma araçları ve builder ile aynı yalıtım bayraklarıyla, ayrı reviewer profiliyle (CLAUDE_CONFIG_DIR) çalışır; profil oturum açılmamışsa review geçersizdir (BLOCKED CLAUDE_PROFILE_LOGIN_REQUIRED, süreç başlamaz);
 // //TR: review sonrası çalışma alanı bayt düzeyinde aynı değilse (dosya, yok sayılan dosya, .git, HEAD) review GEÇERSİZ olur ve asla CLEAN sayılmaz; runner bu nedenleri ve implementer profil reddini BLOCK nedeni olarak korur. Gerçek Claude CLI çalıştırılmaz (enjekte edilen sahte reviewer süreci).
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,6 +14,8 @@ import {WorkOsStore} from "../core/workos/store.js";
 import {MissionRunner} from "../core/workos/runner.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {testExecutionGate} from "./support/test-sandbox.js";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const REPO = path.resolve(import.meta.dirname, "..");
 const ENV_POLICY = path.join(REPO, "config", "environment-policy.json");
