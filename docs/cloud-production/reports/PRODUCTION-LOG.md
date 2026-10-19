@@ -67,7 +67,7 @@
 
 **Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0 (steady state; no READY task exists).
 
-**Queue task states (observed):** unchanged. PENDING_REVIEW: CP-QUEUE (#14), CP-REPORT (#13), CP-CI (#12). IN_PROGRESS: CP-DISPATCH, CP-RECOVERY, CP-GOV. BLOCKED: FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED. DONE: 0.
+**Queue task states (observed):** unchanged. DONE: 0.
 
 **Open PRs: 24** (#8, #11-#33). New since #3: #30 self-hosted CI integration, #31 CP-GOV scaffold, #32 UI-DOMAIN-PACKS, #33 UI-BUILD-SCHEDULER. Mergeable state and CI: UNKNOWN (not returned by listing). No PR carries a uasco-cloud-production label. uasco-needs-fix still on #11, #13, #14.
 - Cloud-production related: #12, #13, #14, #15, #17, #18, #21, #29, #30, #31.
@@ -78,69 +78,45 @@
 
 **Current failures:** needs-fix on #11, #13, #14. Repo-wide Actions CI red per queue (not independently verified).
 
-**Top blockers:**
-1. FA-LEASE2: needs sealed D3 authority record + trust-root reseal; blocked on CP-GOV built and proven. Not actionable by builder.
-2. ACTIONS-CI-RESTORE: Actions billing/runner outage (admin-owned); blocks merge of all PRs.
-3. BACKLOG-SOURCE-REBASELINE: Founder must choose authoritative backlog source (depends on FA-LEASE2).
+**Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged).
 
 ## 2026-10-18 heartbeat #5 (queue read from claude/cloud-production-engine@ed5cfb9)
 
-**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0 (steady state; no READY task exists).
+**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. DONE: 0.
 
-**Queue task states (observed):** unchanged. DONE: 0.
+**Open PRs: 24** (#8, #11-#33), same set as heartbeat #4. uasco-needs-fix now on #11, #13, #14 and #30 (#30 newly observed with the label).
 
-**Open PRs: 24** (#8, #11-#33), same set as heartbeat #4. Mergeable state and CI: UNKNOWN (not returned by listing). No PR carries a uasco-cloud-production label. uasco-needs-fix now on #11, #13, #14 and #30 (#30 newly observed with the label).
-- Cloud-production related: #12, #13, #14, #15, #17, #18, #21, #29, #30, #31.
+**Active implementer sessions:** UNKNOWN. **Merged / completed:** UNKNOWN / 0.
 
-**Active implementer sessions:** UNKNOWN (claude-code-remote list_sessions/create_session unavailable in this fire).
-
-**Merged PRs / tasks completed:** UNKNOWN / 0 (no queue task DONE).
-
-**Current failures:** needs-fix on #11, #13, #14, #30. Repo-wide Actions CI red per queue (not independently verified).
-
-**Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged; see heartbeat #4).
+**Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged).
 
 ## 2026-10-19 heartbeat #6 (queue read from claude/cloud-production-engine@ed5cfb9)
 
-**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0 (steady state; no READY task exists). Task states unchanged; DONE: 0.
+**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. DONE: 0.
 
-**Open PRs: 24** (#8, #11-#33), same set as heartbeat #5. Mergeable state and CI: UNKNOWN. No PR carries a uasco-cloud-production label. uasco-needs-fix on #11, #13, #14, #30.
+**Open PRs: 24** (#8, #11-#33), same set as heartbeat #5. uasco-needs-fix on #11, #13, #14, #30.
 
-**Active implementer sessions:** UNKNOWN (claude-code-remote list_sessions/create_session unavailable in this fire).
-
-**Merged PRs / tasks completed:** UNKNOWN / 0 (no queue task DONE).
-
-**Current failures:** needs-fix on #11, #13, #14, #30. Repo-wide Actions CI red per queue (not independently verified).
+**Active implementer sessions:** UNKNOWN. **Merged / completed:** UNKNOWN / 0.
 
 **Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged).
 
 ## 2026-10-19 heartbeat #7 (queue read from claude/cloud-production-engine@ed5cfb9)
 
-**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. Task states unchanged; DONE: 0.
+**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. DONE: 0.
 
-**Open PRs: 30** (#19-#48) — see CORRECTION in heartbeat #8 (pagination error; page 1 only). Mergeable state and CI: UNKNOWN. No PR carries a uasco-cloud-production label. uasco-needs-fix on #30 and #38 as observed on that page.
+**Open PRs: 30** (#19-#48) — see CORRECTION in heartbeat #8 (pagination error; page 1 only). uasco-needs-fix on #30 and #38 as observed on that page.
 
-**Active implementer sessions:** UNKNOWN (claude-code-remote list_sessions/create_session unavailable in this fire).
-
-**Merged PRs / tasks completed:** UNKNOWN / 0 (no queue task DONE).
-
-**Current failures:** needs-fix on #30, #38. Repo-wide Actions CI red per queue (not independently verified).
+**Active implementer sessions:** UNKNOWN. **Merged / completed:** UNKNOWN / 0.
 
 **Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged).
 
 ## 2026-10-19 heartbeat #8 (queue read from claude/cloud-production-engine@ed5cfb9)
 
-**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. Task states unchanged; DONE: 0.
+**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. DONE: 0.
 
-**CORRECTION to heartbeat #7:** #7 read only page 1 of the open-PR listing (30 per page). With page 2 included, **open PRs: 39** (#8, #11-#48). #8 and #11-#18 are still open; they were not closed.
-- Cloud-production related open: #12, #13 (needs-fix), #14 (needs-fix), #15, #17, #18, #21, #29, #30 (needs-fix), #31.
-- uasco-needs-fix label observed on: #11, #13, #14, #30, #38.
+**CORRECTION to heartbeat #7:** #7 read only page 1 of the open-PR listing. With page 2 included, **open PRs: 39** (#8, #11-#48). uasco-needs-fix label observed on: #11, #13, #14, #30, #38.
 
-**Active implementer sessions:** UNKNOWN (list_sessions unavailable in this fire).
-
-**Merged PRs / tasks completed:** UNKNOWN / 0 (closed PRs #1-#7, #9, #10 report merged=false; no queue task DONE).
-
-**Current failures:** needs-fix on #11, #13, #14, #30, #38. Repo-wide Actions CI red per queue (not independently verified).
+**Active implementer sessions:** UNKNOWN. **Merged / completed:** UNKNOWN / 0.
 
 **Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged).
 
@@ -148,13 +124,9 @@
 
 **Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. DONE: 0.
 
-**Open PRs: 39** (#8, #11-#48), same set as heartbeat #8. Mergeable state and CI: UNKNOWN. No PR carries a uasco-cloud-production label. uasco-needs-fix on #11, #13, #14, #30, #38.
+**Open PRs: 39** (#8, #11-#48), same set as heartbeat #8. uasco-needs-fix on #11, #13, #14, #30, #38.
 
-**Active implementer sessions:** UNKNOWN (list_sessions unavailable in this fire).
-
-**Merged PRs / tasks completed:** UNKNOWN / 0.
-
-**Current failures:** needs-fix on #11, #13, #14, #30, #38. Repo-wide Actions CI red per queue (not independently verified).
+**Active implementer sessions:** UNKNOWN. **Merged / completed:** UNKNOWN / 0.
 
 **Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged).
 
@@ -162,13 +134,9 @@
 
 **Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. DONE: 0.
 
-**Open PRs: 38** (#8, #11, #12, #15-#29, #31-#50). CHANGE vs #9: #13, #14 and #30 no longer open; new #49 (public GitHub-hosted Cloud CI, draft) and #50 (e2e Desktop verification, draft). Mergeable state and CI: UNKNOWN. No PR carries a uasco-cloud-production label. uasco-needs-fix now on #11 and #38 only.
+**Open PRs: 38** (#8, #11, #12, #15-#29, #31-#50). CHANGE vs #9: #13, #14 and #30 no longer open; new #49 and #50. uasco-needs-fix now on #11 and #38 only.
 
-**Active implementer sessions:** UNKNOWN (list_sessions unavailable in this fire).
-
-**Merged PRs / tasks completed:** UNKNOWN / 0 (merge of #13/#14/#30 not verified).
-
-**Current failures:** needs-fix on #11, #38. Repo-wide Actions CI red per queue (not independently verified).
+**Active implementer sessions:** UNKNOWN. **Merged / completed:** UNKNOWN / 0 (merge of #13/#14/#30 not verified).
 
 **Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged).
 
@@ -176,25 +144,19 @@
 
 **Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. DONE: 0.
 
-**Open PRs: 38**, same set as heartbeat #10. #13, #14, #30 are state=closed with merged=false (closed unmerged, not completed); queue PENDING_REVIEW refs to #13/#14 remain unreconciled. Mergeable state and CI: UNKNOWN. uasco-needs-fix on open #11 and #50.
+**Open PRs: 38**, same set as heartbeat #10. #13, #14, #30 are closed with merged=false (closed unmerged, not completed). uasco-needs-fix on open #11 and #50.
 
-**Active implementer sessions:** UNKNOWN (list_sessions unavailable in this fire).
-
-**Merged PRs / tasks completed:** 0 observed merged / queue tasks DONE: 0.
-
-**Current failures:** needs-fix on #11, #50. Repo-wide Actions CI red per queue (not independently verified).
+**Active implementer sessions:** UNKNOWN. **Merged / completed:** 0 observed / 0.
 
 **Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged).
 
-## 2026-10-19 heartbeat #12 (queue read from claude/cloud-production-engine@ed5cfb9; fired 06:21Z)
+## 2026-10-19 heartbeat #12 (fired 06:21Z)
 
 **Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. DONE: 0.
 
-**Open PRs: 39** (#8, #11, #12, #15-#29, #31-#51). CHANGE vs #11: new #51 (master work inventory docs). Mergeable state and CI: UNKNOWN. uasco-needs-fix on open #11 and #50.
+**Open PRs: 39** (#8, #11, #12, #15-#29, #31-#51). New: #51. uasco-needs-fix on open #11 and #50.
 
-**Active implementer sessions:** UNKNOWN (list_sessions unavailable in this fire).
-
-**Merged PRs / tasks completed:** 0 observed merged / queue tasks DONE: 0.
+**Active implementer sessions:** UNKNOWN. **Merged / completed:** 0 observed / 0.
 
 **Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged).
 
@@ -202,7 +164,7 @@
 
 **Queue:** parsed OK. READY tasks: 0. Dispatched: 0. DONE: 0.
 
-**Open PRs: 40** (#8, #11, #12, #15-#29, #31-#52). CHANGE vs #12: new #52 (Autonomous Authority Engine). Mergeable state and CI: UNKNOWN. uasco-needs-fix on open #11 and #50.
+**Open PRs: 40** (#8, #11, #12, #15-#29, #31-#52). New: #52. uasco-needs-fix on #11 and #50.
 
 **Active implementer sessions:** UNKNOWN. **Merged / completed:** UNKNOWN / 0.
 
@@ -212,7 +174,7 @@
 
 **Queue:** parsed OK. READY tasks: 0. Dispatched: 0. DONE: 0.
 
-**Open PRs: 40**, same set as #13. Closed unmerged: #13, #14, #30. uasco-needs-fix on #11, #50.
+**Open PRs: 40**, same set as #13. uasco-needs-fix on #11, #50.
 
 **Active implementer sessions:** UNKNOWN. **Merged / completed:** 0 observed / 0.
 
@@ -222,7 +184,7 @@
 
 **Queue:** parsed OK. READY tasks: 0. Dispatched: 0.
 
-**Open PRs:** UNKNOWN total this fire (only one page of 30 PRs, all states, was read). No new PR numbers beyond #52. uasco-needs-fix on #11, #50. Most recently updated: #49 (08:45Z), #51 (07:40Z), #52 (07:13Z).
+**Open PRs:** UNKNOWN total this fire (only one page read). uasco-needs-fix on #11, #50.
 
 **Active implementer sessions:** UNKNOWN. **Merged / completed:** 0 observed / 0.
 
@@ -242,7 +204,7 @@
 
 **Queue:** parsed OK. READY tasks: 0. Dispatched: 0.
 
-**Open PRs: 40** (#8, #11, #12, #15-#29, #31-#52), same set as #16. uasco-needs-fix on #11, #50. Most recently updated: #49 (10:42Z).
+**Open PRs: 40** (#8, #11, #12, #15-#29, #31-#52), same set as #16. uasco-needs-fix on #11, #50.
 
 **Active implementer sessions:** UNKNOWN. **Merged / completed:** UNKNOWN / 0.
 
@@ -252,68 +214,55 @@
 
 ## 2026-10-19 heartbeat #18 (queue read from claude/cloud-production-engine@ed5cfb9; fired 12:21Z)
 
-**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0 (steady state; no READY task exists).
+**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0 (steady state; no READY task exists). DONE: 0.
 
-**Queue task states (observed):** PENDING_REVIEW: CP-QUEUE (#14), CP-REPORT (#13), CP-CI (#12). IN_PROGRESS: CP-DISPATCH, CP-RECOVERY, CP-GOV. BLOCKED: FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED. DONE: 0.
+**Open PRs: 39 observed.** Mergeable state and CI: UNKNOWN. No PR carries a uasco-cloud-production label. uasco-needs-fix on #11 and #50.
 
-**Open PRs: 39 observed** (page 1: #21-#52 minus #30; page 2: #8, #11, #12, #15-#20). Mergeable state and CI: UNKNOWN (not returned by listing). No PR carries a uasco-cloud-production label. uasco-needs-fix on #11 and #50.
+**Active implementer sessions:** UNKNOWN. **Merged / completed:** UNKNOWN / 0.
 
-**Active implementer sessions:** UNKNOWN (claude-code-remote list_sessions/create_session unavailable in this fire).
+**Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged).
 
-**Merged PRs / tasks completed:** UNKNOWN (merged state not queried) / queue tasks DONE: 0.
+## 2026-10-19 heartbeat #19 (fired 13:16Z)
 
-**Current failures:** needs-fix on #11, #50. Repo-wide Actions CI red per queue (not independently verified).
+**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. DONE: 0.
 
-**Top blockers:**
-1. FA-LEASE2: needs sealed D3 authority record + trust-root reseal; blocked on CP-GOV built and proven. Not actionable by builder.
-2. ACTIONS-CI-RESTORE: Actions billing/runner outage (admin-owned); blocks merge of all PRs.
-3. BACKLOG-SOURCE-REBASELINE: Founder must choose authoritative backlog source (depends on FA-LEASE2).
+**Open PRs: 38.** #49 and #51 not in open list (closed; merged=false reported with merged_at populated, conflicting API fields; not counted as completed). #13, #14, #30 remain closed unmerged. uasco-needs-fix on #11 and #50.
 
-## 2026-10-19 heartbeat #19 (queue read from claude/cloud-production-engine@ed5cfb9; fired 13:16Z)
+**Active implementer sessions:** UNKNOWN. **Merged / completed:** UNKNOWN / 0.
 
-**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0 (steady state; no READY task exists). Task states unchanged; DONE: 0.
+**Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged).
 
-**Open PRs: 38** (page 1: #20-#29, #31-#48, #50, #52; page 2: #8, #11, #12, #15-#19). Mergeable state and CI: UNKNOWN (not returned by listing). No PR carries a uasco-cloud-production label. uasco-needs-fix on #11 and #50. #49 and #51 are not in the open list (closed; merged=false reported, merged_at populated, conflicting API fields; not counted as completed). #13, #14, #30 remain closed unmerged.
+## 2026-10-19 heartbeat #20 (fired 14:17Z)
 
-**Active implementer sessions:** UNKNOWN (claude-code-remote list_sessions/create_session unavailable in this fire).
+**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. DONE: 0.
 
-**Merged PRs / tasks completed:** UNKNOWN / queue tasks DONE: 0.
+**Open PRs: 37.** #52 no longer in the open list (state change not verified). uasco-needs-fix on #11 and #50.
 
-**Current failures:** needs-fix on #11, #50. Repo-wide Actions CI red per queue (not independently verified).
+**Active implementer sessions:** UNKNOWN. **Merged / completed:** UNKNOWN / 0.
 
-**Top blockers:**
-1. FA-LEASE2: needs sealed D3 authority record + trust-root reseal; blocked on CP-GOV built and proven. Not actionable by builder.
-2. ACTIONS-CI-RESTORE: Actions billing/runner outage (admin-owned); blocks merge of all PRs.
-3. BACKLOG-SOURCE-REBASELINE: Founder must choose authoritative backlog source (depends on FA-LEASE2).
+**Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged).
 
-## 2026-10-19 heartbeat #20 (queue read from claude/cloud-production-engine@ed5cfb9; fired 14:17Z)
+## 2026-10-19 heartbeat #21 (fired 15:15Z)
 
-**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0 (steady state; no READY task exists). Task states unchanged; DONE: 0.
+**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0. DONE: 0.
 
-**Open PRs: 37** (page 1: #19-#29, #31-#48, #50; page 2: #8, #11, #12, #15-#18). Mergeable state and CI: UNKNOWN (not returned by listing). No PR carries a uasco-cloud-production label. uasco-needs-fix on #11 and #50. #52 no longer in the open list (state change not verified).
+**Open PRs: 36.** #18 closed 15:04Z, merged=false (conflicting API fields; not counted as completed). uasco-needs-fix on #11 and #50.
 
-**Active implementer sessions:** UNKNOWN (claude-code-remote list_sessions/create_session unavailable in this fire).
+**Active implementer sessions:** UNKNOWN. **Merged / completed:** UNKNOWN / 0.
 
-**Merged PRs / tasks completed:** UNKNOWN / queue tasks DONE: 0.
+**Top blockers:** FA-LEASE2; ACTIONS-CI-RESTORE; BACKLOG-SOURCE-REBASELINE (unchanged).
 
-**Current failures:** needs-fix on #11, #50. Repo-wide Actions CI red per queue (not independently verified).
+## 2026-10-19 heartbeat #22 (queue read from claude/cloud-production-engine@ed5cfb9; fired 16:13Z)
 
-**Top blockers:**
-1. FA-LEASE2: needs sealed D3 authority record + trust-root reseal; blocked on CP-GOV built and proven. Not actionable by builder.
-2. ACTIONS-CI-RESTORE: Actions billing/runner outage (admin-owned); blocks merge of all PRs.
-3. BACKLOG-SOURCE-REBASELINE: Founder must choose authoritative backlog source (depends on FA-LEASE2).
+**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0 (steady state; no READY task exists). Task states unchanged (PENDING_REVIEW: CP-QUEUE, CP-REPORT, CP-CI; IN_PROGRESS: CP-DISPATCH, CP-RECOVERY, CP-GOV; BLOCKED: FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED). DONE: 0.
 
-## 2026-10-19 heartbeat #21 (queue read from claude/cloud-production-engine@ed5cfb9; fired 15:15Z)
-
-**Queue:** parsed OK. READY tasks: 0. Dispatched this fire: 0 (steady state; no READY task exists). Task states unchanged; DONE: 0.
-
-**Open PRs: 36** (page 1: #19-#29, #31-#48, #50; page 2: #8, #11, #12, #15, #16, #17). CHANGE vs #20: #18 (CP-REPORT remediation) now closed 15:04Z, merged=false (merged_at populated; conflicting API fields; not counted as completed). Mergeable state and CI: UNKNOWN (not returned by listing). No PR carries a uasco-cloud-production label. uasco-needs-fix on #11 and #50.
+**Open PRs: 36** (#8, #11, #12, #15-#17, #19-#29, #31-#48, #50), same set as heartbeat #21. Mergeable state and CI: UNKNOWN (not returned by listing). No PR carries a uasco-cloud-production label. uasco-needs-fix on #50 (draft); #11 shows no label this fire.
 
 **Active implementer sessions:** UNKNOWN (claude-code-remote list_sessions/create_session unavailable in this fire).
 
 **Merged PRs / tasks completed:** UNKNOWN / queue tasks DONE: 0.
 
-**Current failures:** needs-fix on #11, #50. Repo-wide Actions CI red per queue (not independently verified).
+**Current failures:** needs-fix on #50. Repo-wide Actions CI red per queue (not independently verified).
 
 **Top blockers:**
 1. FA-LEASE2: needs sealed D3 authority record + trust-root reseal; blocked on CP-GOV built and proven. Not actionable by builder.
