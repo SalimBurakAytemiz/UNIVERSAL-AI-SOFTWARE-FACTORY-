@@ -55,7 +55,7 @@ Also blocked:
 - Any change touching the policy core: the policy file, `core/authority/**`, the engine's tests, `lease-verdict`, `task-lease`, `review-governance`, `merge-via-gate`, `protected-paths.json`, `action-policy.json`, `run-validation.mjs` and `.github/workflows/**`. The policy can never widen its own authority.
 - A request from an agent with role `FOUNDER` or a founder identity.
 - A protected path not covered by a recomputed narrow-class decision on the same SHA, for that class's single target file.
-- A non-canonical path (`./x`, `a//b`, `a/./b`, `..`, backslash, leading/trailing `/` or whitespace). Policy-core and protected-path matching is case-insensitive.
+- A non-canonical path (`./x`, `a//b`, `a/./b`, `..`, backslash, leading/trailing `/` or whitespace) or an NTFS alias (a segment ending in `.` or a space, `:` streams, `~1` short names). Policy-core, protected-path and grant `paths`/`pathsDeny` matching is case-insensitive.
 
 These go to Founder exception handling: `BLOCKED_BY_POLICY` with evidence. Independent tasks continue.
 
@@ -65,7 +65,7 @@ These go to Founder exception handling: `BLOCKED_BY_POLICY` with evidence. Indep
 3. The PR is not a draft and is mergeable.
 4. Both `validate (ubuntu-latest)` and `validate (windows-latest)` from `github-actions` are completed/success on that SHA. PENDING, FAILURE, CANCELLED, missing, another app or another SHA all block.
 5. `verifyVerdict` passes: CLEAN, same task and SHA, independent session and identity.
-6. The merging session is not the implementer. The implementer is **bound to the atomic lease**: the expected implementer must be the lease holder, the merger must not be the lease holder, and the lease must not be expired at evaluation time. A spoofed `implementerSessionId` cannot make a self-review look independent.
+6. The merging session is not the implementer. The implementer is **bound to the atomic lease**: the expected implementer must be the lease holder, the merger must not be the lease holder, and the lease must not be expired at evaluation time. A spoofed `implementerSessionId` cannot make a self-review look independent. The implementer (or its supervisor) must keep renewing the lease heartbeat through `task-lease` until the merge; an expired lease blocks the merge, and a dead implementer is handled by `TASK_RECOVERY`, not by merging over its lease.
 7. The trust root is verified.
 8. Every protected path is authorized by a narrow-class decision on that SHA, and no policy-core path is touched.
 9. There are no open blocking findings. Only `P2`, `P3`, `NIT` and `INFO` are non-blocking; any other or unknown severity blocks until resolved.

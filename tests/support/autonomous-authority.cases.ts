@@ -272,7 +272,7 @@ export function registerAutonomousAuthorityCases() {
       expectBlocked(A.evaluateMerge(mergeEv(), ctx({now: undefined})), /EVALUATION_TIME_INVALID/);
     });
     it("review a3d7eea nits: canonical/case-variant paths, unknown severities, the merge's own GOVERNED_MERGE decision, stale branch, grant selection by path cover", () => {
-      for (const f of ["./config/autonomous-authority-policy.json", "core//authority/x.mjs", "core/authority/./x.mjs", " core/authority/x.mjs", "core/authority/"]) {
+      for (const f of ["./config/autonomous-authority-policy.json", "core//authority/x.mjs", "core/authority/./x.mjs", " core/authority/x.mjs", "core/authority/", "scripts/merge-via-gate.mjs.", "core/authority./x.mjs", "core/authority /x.mjs", "config/protected-paths.json:x", "SCRIPT~1/merge-via-gate.mjs"]) {
         expectBlocked(A.decide(req({changedFiles: [f]}), ctx()), /REQUEST_INVALID:CHANGED_FILES/, f);
         expectBlocked(A.evaluateMerge(mergeEv({changedFiles: [f]}), ctx()), /CHANGED_FILES_INVALID/, f);
       }
@@ -291,6 +291,9 @@ export function registerAutonomousAuthorityCases() {
       const p = pol(); p.grants.unshift({...p.grants[0], grantId: "G-DOCS-ONLY", actionClasses: ["SOURCE_CHANGE"], paths: ["docs/**"]});
       const text = JSON.stringify(p), seal = A.policySealStatus({policyText: text, manifestText: manifestFor(text)});
       expect(A.decide(req(), ctx({policy: p, seal}))).toMatchObject({status: A.AUTO, grantId: "G-ROUTINE-BUILD"});
+      const d = pol(); d.grants[0].pathsDeny = ["docs/private/**"];
+      const dText = JSON.stringify(d), dSeal = A.policySealStatus({policyText: dText, manifestText: manifestFor(dText)});
+      expectBlocked(A.decide(req({changedFiles: ["Docs/Private/x.md"]}), ctx({policy: d, seal: dSeal})), /PATH_OUT_OF_GRANT:Docs\/Private\/x\.md/);
       expectBlocked(A.decide(req({changedFiles: ["core/workos/store.ts"]}), ctx({policy: {...p, grants: [p.grants[0]]}, seal: A.policySealStatus({policyText: JSON.stringify({...p, grants: [p.grants[0]]}), manifestText: manifestFor(JSON.stringify({...p, grants: [p.grants[0]]}))})})), /PATH_OUT_OF_GRANT:core\/workos\/store\.ts/);
     });
   });

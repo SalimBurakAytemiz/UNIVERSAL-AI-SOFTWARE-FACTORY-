@@ -58,10 +58,13 @@ export function matchPattern(pattern, value) {
   return pattern === value;
 }
 const matchesAny = (patterns, value) => Array.isArray(patterns) && patterns.some((p) => matchPattern(p, value));
+// //TR: Grant yol izinleri ve yasaklari buyuk/kucuk harf duyarsiz eslesir (pathsDeny "Docs/X" yazimiyla atlatilamaz).
+const matchesAnyCI = (patterns, value) => typeof value === "string" && Array.isArray(patterns) && patterns.some((p) => typeof p === "string" && matchPattern(p.toLowerCase(), value.toLowerCase()));
 // //TR: Kanonik goreli yol: bos, bosluklu, ters bolu, NUL, bas/son "/", bos segment, "." veya ".." yok. "./x", "a//b" gibi esdeger yazimlar cekirdek/korunan kontrolunu atlatamasin.
+// //TR: NTFS takma adlari da reddedilir: "." veya bosluk ile biten segment ("x.mjs." == "x.mjs"), ":" (alternatif veri akisi) ve "~<rakam>" (8.3 kisa ad).
 export function isCanonicalPath(f) {
-  if (!nonEmpty(f) || f !== f.trim() || f.includes("\\") || f.includes("\0") || f.startsWith("/") || f.endsWith("/")) return false;
-  return f.split("/").every((s) => s.length > 0 && s !== "." && s !== "..");
+  if (!nonEmpty(f) || f !== f.trim() || f.includes("\\") || f.includes("\0") || f.includes(":") || f.startsWith("/") || f.endsWith("/")) return false;
+  return f.split("/").every((s) => s.length > 0 && s !== "." && s !== ".." && !/[. ]$/.test(s) && !/~\d/.test(s));
 }
 // //TR: Cekirdek ve korunan yol karsilastirmasi buyuk/kucuk harf duyarsizdir (Windows/macOS dosya sistemlerinde "Config/X" ayni dosyadir); fazla koruma fail-closed'dur.
 const isPolicyCore = (f) => typeof f === "string" && POLICY_CORE_PATHS.some((p) => matchPattern(p.toLowerCase(), f.toLowerCase()));
@@ -218,7 +221,7 @@ export function decide(req, ctx = {}) {
       if (req.branch === "master" || req.baseBranch === "master") reasons.push("MASTER_OUT_OF_SCOPE");
       if (req.riskLevel > MAX_AUTO_RISK) reasons.push(`RISK_ABOVE_AUTO_LIMIT:${req.riskLevel}`);
       // //TR: Grant secimi: rol/dal/base/zaman/risk kontrollerini gecen adaylar arasindan, degisen (cekirdek ve korunan disi) TUM yollari kapsayan ilk grant secilir.
-      const pathMisses = (g) => (req.changedFiles ?? []).filter((f) => !isPolicyCore(f) && !isProtectedPath(ctx.protectedPaths, f) && (!matchesAny(g.paths, f) || matchesAny(g.pathsDeny ?? [], f)));
+      const pathMisses = (g) => (req.changedFiles ?? []).filter((f) => !isPolicyCore(f) && !isProtectedPath(ctx.protectedPaths, f) && (!matchesAnyCI(g.paths, f) || matchesAnyCI(g.pathsDeny ?? [], f)));
       const candidates = policy.grants.map((g) => ({g, why: grantReasonsFor(g, req, nowMs)})).filter((x) => x.why[0] !== "CLASS");
       const eligible = candidates.filter((x) => !x.why.length);
       const ok = eligible.find((x) => !pathMisses(x.g).length);
