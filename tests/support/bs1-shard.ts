@@ -1,5 +1,8 @@
 // //TR: Bu yardımcı BS1 selftest senaryolarını doğrulama adımlarına bölen tek kaynaktır: her senaryo tam olarak bir kabukta (shard) yer alır, kabuk içindeki gruplar en çok iki eşzamanlı alt süreç olarak çalışır ve kabuğun her senaryosu PASS olmak zorundadır. Kapsam bütünlüğünü tests/pkg-vs-validation-sharding.test.ts denetler.
 import cp from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 export type Bs1Shard="a"|"b"|"c"|"d"|"e"|"f";
 export const BS1_PARTITION:Record<Bs1Shard,string[][]>={
   a: [
@@ -52,12 +55,57 @@ export function checkBs1Partition(partition:Record<string,string[][]>,source:str
   for(const a of all)for(const b of all)if(a!==b&&b.startsWith(a))errors.push("scenario-name-is-prefix-of-another:"+a);
   return errors;
 }
+// //TR: GitHub-hosted Windows runner işi yükseltilmiş (Administrator) çalıştırır; bootstrap bunu ürün kuralı olarak reddeder (MUST_RUN_UNELEVATED). Yalnız bu geçici runner'da selftest aynı kullanıcının yükseltilmemiş "Basic User" belirteciyle (runas /trustlevel:0x20000) çalıştırılır: bootstrap ve selftest değişmez, kontrol gevşetilmez, hiçbir senaryo atlanmaz. Geliştirici makinesinde veya self-hosted runner'da yükseltilmiş oturum dürüstçe başarısız olur.
+export const deElevateOnHostedRunner=(env:NodeJS.ProcessEnv=process.env)=>env.GITHUB_ACTIONS==="true"&&env.RUNNER_ENVIRONMENT==="github-hosted";
+const PS51=path.join(process.env.SystemRoot??"C:/Windows","System32","WindowsPowerShell","v1.0","powershell.exe");
+export function isElevatedWindows():boolean{
+  if(process.platform!=="win32")return false;const env={...process.env};delete env.PSModulePath;
+  const r=cp.spawnSync(PS51,["-NoProfile","-NonInteractive","-Command","([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)"],{encoding:"utf8",windowsHide:true,env});
+  return r.status===0&&r.stdout.trim()==="True";
+}
+// //TR: 8.3 kısa TEMP yolu (ör. C:\Users\RUNNER~1) PS 5.1'in uzun yola açan GetFullPath'i ile Node'un path.resolve'u arasında kontrol kökü uyuşmazlığı üretir; alt sürece TEMP/TMP'nin gerçek uzun yolu verilir.
+function childEnv(g:string[]):NodeJS.ProcessEnv{
+  const env:NodeJS.ProcessEnv={...process.env,UASCO_BS1_SHARDS:"",UASCO_BS1_ONLY:g.join(",")};
+  if(process.platform==="win32"){const t=fs.realpathSync.native(os.tmpdir());env.TEMP=t;env.TMP=t}
+  return env;
+}
+// //TR: runas çıktıyı yakalamaz ve hemen döner; küçük sarmalayıcı selftest'i verilen ortamla çalıştırır, çıktıyı dosyaya yazar ve bitişi atomik bir işaret dosyasıyla bildirir.
+const WRAPPER=`import cp from "node:child_process";import fs from "node:fs";
+const j=JSON.parse(fs.readFileSync(process.argv[2],"utf8")),fd=fs.openSync(j.out,"w");
+const r=cp.spawnSync(j.node,j.args,{cwd:j.cwd,env:j.env,stdio:["ignore",fd,fd],windowsHide:true});
+if(r.error)fs.writeSync(fd,"\\nWRAPPER_SPAWN_ERROR "+r.error.message+"\\n");fs.closeSync(fd);
+fs.writeFileSync(j.done+".tmp",String(r.status??1));fs.renameSync(j.done+".tmp",j.done);
+`;
+function runDeElevated(env:NodeJS.ProcessEnv):Promise<{code:number|null;out:string}>{
+  const dir=fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()),"uasco-bs1-lua-")),e:NodeJS.ProcessEnv={};
+  // //TR: Gizli değer taşıyabilecek adlar aktarılmaz; checkout Administrators'a ait olduğundan git'e yalnız bu checkout için komut kapsamlı safe.directory verilir (global/sistem yapılandırması değişmez).
+  for(const [k,v] of Object.entries(env))if(v!==undefined&&!/TOKEN|SECRET|PASSWORD|CREDENTIAL/i.test(k))e[k]=v;
+  const n=Number(e.GIT_CONFIG_COUNT??0)||0;e.GIT_CONFIG_COUNT=String(n+1);e[`GIT_CONFIG_KEY_${n}`]="safe.directory";e[`GIT_CONFIG_VALUE_${n}`]=process.cwd().replace(/\\/g,"/");
+  const job={node:process.execPath,args:["scripts/bootstrap-autonomy-selftest.mjs"],cwd:process.cwd(),env:e,out:path.join(dir,"out.txt"),done:path.join(dir,"done.txt")},jobFile=path.join(dir,"job.json"),wrap=path.join(dir,"wrap.mjs");
+  fs.writeFileSync(jobFile,JSON.stringify(job));fs.writeFileSync(wrap,WRAPPER);
+  const finish=(code:number|null,out:string)=>{fs.rmSync(dir,{recursive:true,force:true});return {code,out}};
+  return new Promise(res=>{
+    const r=cp.spawn("runas",["/trustlevel:0x20000",`"${process.execPath}" "${wrap}" "${jobFile}"`],{windowsHide:true,stdio:"ignore"});
+    r.on("error",err=>res(finish(null,"RUNAS_SPAWN_ERROR "+err.message)));
+    r.on("close",rc=>{
+      if(rc!==0)return res(finish(rc,"RUNAS_FAILED exit="+rc));
+      const t0=Date.now(),iv=setInterval(()=>{
+        if(fs.existsSync(job.done)){clearInterval(iv);const code=Number(fs.readFileSync(job.done,"utf8").trim());res(finish(Number.isInteger(code)?code:null,fs.readFileSync(job.out,"utf8")))}
+        else if(Date.now()-t0>1_700_000){clearInterval(iv);res(finish(null,"DE_ELEVATED_SELFTEST_TIMEOUT "+(fs.existsSync(job.out)?fs.readFileSync(job.out,"utf8").slice(-2500):"")))}
+      },1000);
+    });
+  });
+}
+function runDirect(env:NodeJS.ProcessEnv):Promise<{code:number|null;out:string}>{
+  return new Promise(res=>{
+    const c=cp.spawn(process.execPath,["scripts/bootstrap-autonomy-selftest.mjs"],{cwd:process.cwd(),env,windowsHide:true,stdio:["ignore","pipe","pipe"]});
+    let out="";c.stdout.on("data",d=>{out+=d});c.stderr.on("data",d=>{out+=d});c.on("close",code=>res({code,out}));
+  });
+}
 // //TR: Bir kabuğun grupları ayrı alt süreçlerde paralel çalışır; her alt süreç selftest'i yalnız kendi senaryo adlarıyla (UASCO_BS1_ONLY) çağırır ve çıktıdaki her gerekli senaryonun PASS olması beklenir.
 export async function runBs1Shard(shard:Bs1Shard):Promise<{ok:boolean;detail:string;line:string[];stdout:string}>{
-  const groups=BS1_PARTITION[shard];
-  const outs=await Promise.all(groups.map(g=>new Promise<{code:number|null;out:string}>(res=>{
-    const c=cp.spawn(process.execPath,["scripts/bootstrap-autonomy-selftest.mjs"],{cwd:process.cwd(),env:{...process.env,UASCO_BS1_SHARDS:"",UASCO_BS1_ONLY:g.join(",")},windowsHide:true,stdio:["ignore","pipe","pipe"]});
-    let out="";c.stdout.on("data",d=>{out+=d});c.stderr.on("data",d=>{out+=d});c.on("close",code=>res({code,out}));
-  })));
-  return {ok:outs.every(o=>o.code===0),detail:outs.map(o=>"exit="+o.code+" "+o.out.slice(-2500)).join("\n---\n"),line:outs.map(o=>o.out.trim().split(/\r?\n/).pop()??""),stdout:outs.map(o=>o.out).join("\n")};
+  const groups=BS1_PARTITION[shard],lua=process.platform==="win32"&&deElevateOnHostedRunner()&&isElevatedWindows();
+  const outs=await Promise.all(groups.map(g=>lua?runDeElevated(childEnv(g)):runDirect(childEnv(g))));
+  const note=lua?"BS1_DE_ELEVATED: runas /trustlevel:0x20000 on an elevated github-hosted runner\n":"";
+  return {ok:outs.every(o=>o.code===0),detail:note+outs.map(o=>"exit="+o.code+" "+o.out.slice(-2500)).join("\n---\n"),line:outs.map(o=>o.out.trim().split(/\r?\n/).pop()??""),stdout:outs.map(o=>o.out).join("\n")};
 }

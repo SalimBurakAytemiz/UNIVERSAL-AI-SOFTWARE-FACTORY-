@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import cp from "node:child_process";
-import {BS1_PARTITION,checkBs1Partition,bs1Scenarios} from "./support/bs1-shard.js";
+import {BS1_PARTITION,checkBs1Partition,bs1Scenarios,deElevateOnHostedRunner,isElevatedWindows} from "./support/bs1-shard.js";
 import {checkTestShards,isTestShardId,logicalTestFiles,testShardSteps} from "./support/validation-test-shards.js";
 const cfg=JSON.parse(fs.readFileSync("config/validation.json","utf8")),selftest=fs.readFileSync("scripts/bootstrap-autonomy-selftest.mjs","utf8");
 const vitestSteps=(cfg.steps as {id:string;command:string[]}[]).filter(s=>s.command.some(a=>a.includes("vitest")));
@@ -64,6 +64,15 @@ describe("validation test sharding coverage",()=>{
     expect(checkBs1Partition(dup,selftest).some((e:string)=>e.startsWith("scenario-assigned-twice:"))).toBe(true);
     const stale=structuredClone(BS1_PARTITION) as Record<string,string[][]>;stale[first].push(["zz-removed-scenario"]);
     expect(checkBs1Partition(stale,selftest)).toContain("assigned-scenario-not-in-selftest:zz-removed-scenario");
+  });
+  // //TR: BS1 selftest'i yalnız GitHub-hosted runner'da yükseltilmemiş belirteçle çalıştırılır; başka hiçbir ortamda (yerel, self-hosted, CI dışı) bootstrap'ın yükseltilmiş oturum reddi değişmeden devrededir.
+  it("de-elevates the BS1 selftest only on a GitHub-hosted runner and never relaxes the bootstrap's elevation refusal",()=>{
+    expect(deElevateOnHostedRunner({GITHUB_ACTIONS:"true",RUNNER_ENVIRONMENT:"github-hosted"})).toBe(true);
+    for(const env of [{},{GITHUB_ACTIONS:"true"},{GITHUB_ACTIONS:"true",RUNNER_ENVIRONMENT:"self-hosted"},{RUNNER_ENVIRONMENT:"github-hosted"},{GITHUB_ACTIONS:"1",RUNNER_ENVIRONMENT:"github-hosted"}])expect(deElevateOnHostedRunner(env)).toBe(false);
+    if(process.platform!=="win32")expect(isElevatedWindows()).toBe(false);
+    const ps=fs.readFileSync("scripts/bootstrap-uasco-autonomy.ps1","utf8");
+    expect(ps).toMatch(/if \(\$elevated\) \{ Stop-Bootstrap "MUST_RUN_UNELEVATED"/);
+    expect(fs.readFileSync("tests/support/bs1-shard.ts","utf8")).toContain('"/trustlevel:0x20000"');
   });
   it("keeps the 600 s per-step limit unchanged",()=>{expect(fs.readFileSync("scripts/run-validation.mjs","utf8")).toContain("timeoutMs:600000")});
   it("declares platforms on exactly the seven Windows-only shards, always as [\"win32\"], and on no other step",()=>{
