@@ -1,8 +1,15 @@
-# //TR: Bu workflow Linux + Windows üzerinde deterministic lockfile install, full canonical/mechanical validation ve baseline secret scan çalıştırarak Windows Founder ortamına özgü script/path hatalarının yalnız Linux CI'da saklanmasını engeller.
+# //TR: Bu korunan workflow (public repo, ucretsiz standart GitHub-hosted runner'lar) Linux + Windows uzerinde deterministic lockfile install, canonical/mechanical validation (600 sn adim limiti altinda sirali tests kabuklari dahil), baseline secret scan ve trust-kernel self-test calistirir; yalniz master/v7/integration push'unda, PR'larda ve elle tetiklenir (cift tetikleme yok), PR'da eskiyen kosu iptal edilir, sonuc commit SHA'sina bagli CI_EVIDENCE.json (yalniz adim kimligi/durum/sure) olarak 14 gun saklanir; self-hosted, larger veya ucretli runner kullanmaz. Yetki: FD-PUBLIC-CI-2026-10-19 (yalniz PR #49).
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    branches: [master, v7/integration]
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   validate:
     strategy:
@@ -10,6 +17,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      UASCO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -26,3 +36,15 @@ jobs:
       - run: node scripts/secret-sanity.mjs
       - name: Bootstrap trust-kernel self-test
         run: node scripts/bootstrap-kernel-selftest.mjs
+      - name: CI evidence (SHA-bound, fail-closed; one platform only)
+        if: always()
+        run: node scripts/ci/ci-evidence.mjs --require --leg ${{ runner.os }}
+      - name: Upload CI evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-evidence-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .ai/runtime/CI_EVIDENCE.json
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: warn
