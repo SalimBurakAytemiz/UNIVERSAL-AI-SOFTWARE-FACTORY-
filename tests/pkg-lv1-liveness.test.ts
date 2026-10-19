@@ -1,5 +1,7 @@
 // //TR: Bu test LV1 canlılık selftest'inin tamamının geçtiğini ve canlılık katmanının sabit kurallarının kodda kilitli olduğunu doğrular: iki sabit görev adı, watchdog görevi bu kullanıcı için parola saklamadan Interactive/Limited, 5 dakikalık periyot, IgnoreNew ve 15 dakika süre sınırıyla pencere açmayan sarmalayıcıdan çalışır; watchdog tek-worker kilidini, lease'i ve geçiş günlüğünü kullanmaz; yükseltme yalnız güvenli anda yapılır; kurulu giriş 2. nesildir; yeni dosyalar korumalı yollardadır.
-import {describe,it,expect} from "vitest";
+import {describe,it,expect,vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import cp from "node:child_process";
 describe("liveness hardening (LV1)",{timeout:540_000},()=>{

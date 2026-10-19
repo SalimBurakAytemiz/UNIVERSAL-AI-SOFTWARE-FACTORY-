@@ -1,6 +1,8 @@
 // //TR: Bu test V7-CORE-TASKHUB-CODEGEN dilimidir: TaskHub "tasks" domaini için ÜRETİLEN gerçek kaynak dikey dilimini (tests/fixtures/taskhub-generated) GERÇEK UASCO ürün kod yollarından geçirir ama ÜRETİLEN KODU HİÇ ÇALIŞTIRMAZ (FD-REL-1).
 // //TR: Doğrulanan davranışlar: (1) üretilen dilim gerçek deterministik teslim koduyla (ProjectStudio.prepareRunDelivery, M1A-MODE) paketlenir; aynı girdi -> aynı exportArtifactHash ve artefakt runId + sourceCommit + hash'e bağlıdır; (2) gerçek secret-scan (core/workos/secret-scan.findSecretKinds) üretilen kaynakta sızıntı bulmaz ve gerçek security-tools (discoverSecurityTools/evaluateSecurityPolicy, gitleaks/trivy) durumu DÜRÜSTÇE (INSTALLED/NOT_INSTALLED/PARTIAL) kaydedilir — sahte PASS yoktur; (3) koşu durumu SOURCE_GENERATION_COMPLETE ve productVerification NOT_VERIFIED'dir (PRODUCT_VERIFIED DEĞİL), execution-gate her yürütme türü için BLOCKED(SANDBOX_UNAVAILABLE) kalır ve paketleme sırasında üretilen kodun hiçbir süreci başlatılmaz.
 import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import path from "node:path";
 import cp from "node:child_process";
