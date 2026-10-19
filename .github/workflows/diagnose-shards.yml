@@ -1,35 +1,32 @@
-# //TR: YALNIZ TANI workflow'u (merge edilmez; yalniz ci/diagnose-shards dalina push ile calisir): Linux'ta yalniz run-validation (runCommand: detached + pipe) altinda takilan tests-2 kabugunu dosya araliklarina bolerek ayni runCommand ile calistirir ve takilma aninda surec agacini yazdirir. GitHub-hosted, secret yok, contents:read, artifact yok. Governance kaniti veya PASS DEGILDIR.
-name: Diagnose runCommand hang (diagnosis only)
+# //TR: YALNIZ TANI workflow'u (merge edilmez; yalniz ci/diagnose-shards dalina push ile calisir): Linux'ta tests-2 takilmasinin onceki adimlardan (statik adimlar veya tests kabugunun dosyalari) kalan durumdan kaynaklanip kaynaklanmadigini runCommand ile sirali calistirarak sinar. GitHub-hosted, secret yok, contents:read, artifact yok. Governance kaniti veya PASS DEGILDIR.
+name: Diagnose tests-2 hang after earlier steps (diagnosis only)
 on:
   push:
     branches: [ci/diagnose-shards]
 permissions:
   contents: read
 jobs:
-  range:
-    name: runcmd tests-2 ${{ matrix.r }} ${{ matrix.x }}
+  seq:
+    name: seq pre=${{ matrix.pre }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - {r: "0 32", x: ""}
-          - {r: "0 32", x: "--no-file-parallelism"}
-          - {r: "0 16", x: ""}
-          - {r: "16 32", x: ""}
-          - {r: "0 8", x: ""}
-          - {r: "8 16", x: ""}
-          - {r: "16 24", x: ""}
-          - {r: "24 32", x: ""}
-          - {r: "0 4", x: ""}
-          - {r: "4 8", x: ""}
-          - {r: "8 12", x: ""}
-          - {r: "12 16", x: ""}
-          - {r: "16 20", x: ""}
-          - {r: "20 24", x: ""}
-          - {r: "24 28", x: ""}
-          - {r: "28 32", x: ""}
+          - {pre: "none"}
+          - {pre: "static"}
+          - {pre: "tests"}
+          - {pre: "tests/action-gateway.test.ts"}
+          - {pre: "tests/certification.test.ts"}
+          - {pre: "tests/data-routing.test.ts"}
+          - {pre: "tests/dlp.test.ts"}
+          - {pre: "tests/lease-manager.test.ts"}
+          - {pre: "tests/mission-state.test.ts"}
+          - {pre: "tests/model-router.test.ts"}
+          - {pre: "tests/npm-invocation.test.ts"}
+          - {pre: "tests/pkg-aut1-orchestrator.test.ts"}
+          - {pre: "tests/pkg-aut2-autonomy-hardening.test.ts"}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -39,4 +36,4 @@ jobs:
           node-version: 24
           cache: npm
       - run: node scripts/ensure-dependencies.mjs
-      - run: node scripts/ci/diagnose-runcmd.mjs tests-2 ${{ matrix.r }} ${{ matrix.x }}
+      - run: node scripts/ci/diagnose-seq.mjs "${{ matrix.pre }}"
