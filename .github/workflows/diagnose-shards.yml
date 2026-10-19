@@ -7,12 +7,19 @@ permissions:
   contents: read
 jobs:
   seq:
-    name: seq pre=${{ matrix.pre }}
+    name: seq pre=${{ matrix.pre }} #${{ matrix.n }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - {pre: "tests"}
+          - {pre: "tests", n: 1}
+          - {pre: "tests", n: 2}
+          - {pre: "tests", n: 3}
+          - {pre: "tests", n: 4}
+          - {pre: "tests", n: 5}
+          - {pre: "tests", n: 6}
+          - {pre: "tests", n: 7}
+          - {pre: "tests", n: 8}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
