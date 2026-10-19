@@ -468,3 +468,59 @@ describe("UX WP3 wiring and static safety", () => {
     expect(block).toContain("forced-colors");
   });
 });
+
+// //TR: Ek sertleştirme: ctx.api.company() fırlatsa bile sahte veri yok; h1 odaklanabilir; tüm düğmeler type=button; durum blokları role=status; tablolar caption + scope=col; company.* anahtarları EN/TR'de birebir.
+describe("UX WP3 hardening: negative, accessibility and locale parity", () => {
+  it("renders an honest ERROR for every source when the api layer itself throws, with no rows and no em-dash replaced by numbers", async () => {
+    const company = await load("views", "company.js");
+    const {ctx} = await mkCtx(fromFix(FIX));
+    ctx.api = {company: async () => { throw new Error("boom"); }};
+    const root = await company.render(ctx, {id: "company"});
+    for (const k of ["accounts", "contacts", "opportunities", "invoices", "payments", "contracts"]) expect(sourceState(root, k), k).toBe("ERROR");
+    expect(all(root).filter(n => n.tagName === "TR").length).toBe(0);
+    for (const id of ["company-accounts", "company-opportunities", "company-receivables", "company-contracts"]) expect(kpiValue(root, id), id).toBe("—");
+    for (const bad of FAKE_REFERENCE) expect(root.textContent, bad).not.toContain(bad);
+  });
+  it("a payload that is not an object for any resource never produces rows or a signed/paid claim", async () => {
+    const company = await load("views", "company.js");
+    for (const bad of ["x", null, 7, [], {accounts: "no"}]) {
+      const {ctx} = await mkCtx(() => bad);
+      const root = await company.render(ctx, {id: "company"});
+      expect(all(root).filter(n => n.tagName === "TR").length, JSON.stringify(bad)).toBe(0);
+      expect(all(root).some(n => n.dataset.evidence === "complete"), JSON.stringify(bad)).toBe(false);
+    }
+  });
+  it("h1 is focusable, every button is typed, state blocks are announced via role=status, tables have caption and scope=col (all tabs, TR and EN)", async () => {
+    const company = await load("views", "company.js");
+    for (const lang of ["tr", "en"]) {
+      for (const [name, get] of [["real", fromFix(FIX)], ["failing", () => { throw new Error("x: HTTP 500"); }]] as const) {
+        for (const tab of ["crm", "finance", "legal"]) {
+          company.resetCompanyView();
+          const {ctx} = await mkCtx(get as any, lang);
+          const first = await company.render(ctx, {id: "company"});
+          const tabBtn = all(first).find(n => n.id === `company-tab-${tab}`)!;
+          tabBtn.fire("click");
+          await new Promise(r => setTimeout(r, 0));
+          const root = await company.render(ctx, {id: "company"});
+          const where = `${lang}/${name}/${tab}`;
+          const h1 = all(root).filter(n => n.tagName === "H1");
+          expect(h1.length, where).toBe(1);
+          expect(h1[0].getAttribute("tabindex"), where).toBe("-1");
+          for (const b of all(root).filter(n => n.tagName === "BUTTON")) expect(b.getAttribute("type"), where).toBe("button");
+          for (const s of all(root).filter(n => n.dataset.companyState)) expect(s.getAttribute("role"), where).toBe("status");
+          for (const t of all(root).filter(n => n.tagName === "TABLE")) {
+            expect(t.children.some(c => c.tagName === "CAPTION" && c.textContent.length > 0), where).toBe(true);
+            for (const th of all(t).filter(n => n.tagName === "TH")) expect(th.getAttribute("scope"), where).toBe("col");
+          }
+          for (const g of all(root).filter(n => n.getAttribute("role") === "group")) expect((g.getAttribute("aria-label") ?? "").length, where).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+  it("company.* and area.company.* have identical key sets in TR and EN", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const pick = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("company.") || k.startsWith("area.company.")).sort();
+    expect(pick(tr)).toEqual(pick(en));
+    for (const k of pick(en)) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); }
+  });
+});

@@ -142,6 +142,13 @@ class N {
   get id() { return this.attrs.get("id") ?? ""; }
   get textContent(): string { return this._text + this.children.map(c => c.textContent).join(""); }
   set textContent(v: string) { this.children = []; this._text = String(v); }
+  // Gerçek DOM gibi: innerHTML etiketleri ayrıştırıp eleman düğümü üretir (savunma testinin mutasyonda gerçekten kırılması için).
+  set innerHTML(v: string) {
+    this.children = []; this._text = "";
+    const re = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)[^>]*>/g; let last = 0, m: RegExpExecArray | null;
+    while ((m = re.exec(String(v)))) { if (m.index > last) this.append(String(v).slice(last, m.index)); if (!m[1]) this.append(new N(this.doc, m[2])); last = re.lastIndex; }
+    if (last < String(v).length) this.append(String(v).slice(last));
+  }
   append(...n: Array<N | string>) { for (const c of n) { const node = typeof c === "string" ? this.doc.createTextNode(c) : c; node.parent = this; this.children.push(node); } }
   appendChild(n: N) { this.append(n); return n; }
   replaceChildren(...n: Array<N | string>) { this.children = []; this._text = ""; this.append(...n); }
@@ -240,5 +247,97 @@ describe("WP-ACADEMY — academy.* locale parity (TR/EN identical)", () => {
     expect(sub(tr)).toEqual(sub(en));
     expect(sub(tr).length).toBeGreaterThan(20);
     for (const k of sub(tr)) { expect(tr[k], `tr ${k}`).toBeTruthy(); expect(en[k], `en ${k}`).toBeTruthy(); }
+  });
+});
+
+// ---------------- (5) negative / a11y / parity hardening ----------------
+// //TR: Olumsuz yollar: 404/5xx/ağ hatası/bozuk yanıt hiçbir sahte değer üretmez; sertifikalı KPI'sı yalnız doğrulanmış okumada 0, aksi halde asla sayı değil.
+describe("WP-ACADEMY — negative paths never fabricate or claim verification", () => {
+  const kinds: Array<[string, (p: string) => any, string]> = [
+    ["HTTP 404", p => { throw new Error(`${p}: HTTP 404`); }, "UNAVAILABLE"],
+    ["HTTP 500", p => { throw new Error(`${p}: HTTP 500`); }, "ERROR"],
+    ["network failure", () => { throw new Error("fetch failed"); }, "OFFLINE"],
+    ["malformed (string)", () => "not-an-object", "ERROR"],
+    ["malformed (null)", () => null, "ERROR"]
+  ];
+  for (const [name, fn, state] of kinds) {
+    it(`${name} -> ${state}: no rows, no metrics, certified KPI is not a verified 0`, async () => {
+      const academy = await load("views", "academy.js");
+      const {ctx} = await mkCtx(fn);
+      const root = await academy.render(ctx);
+      const st = all(root).filter(n => n.dataset.academyState);
+      expect(st.length).toBeGreaterThan(0);
+      for (const s of st) expect(s.dataset.academyState).toBe(state);
+      expect(all(root).some(n => n.dataset.learning || n.dataset.source || n.dataset.knowledge)).toBe(false);
+      expect(byData(root, "academyMetrics")).toBeUndefined();
+      expect(all(root).some(n => /^(Verified)$/.test(n.textContent.trim()) && n.className.includes("pill"))).toBe(false);
+      expect(kpi(root, "academy-certified")!.dataset.state).not.toBe("VERIFIED");
+      // Dürüstlük notu hata durumunda da görünür; proficiency daima NOT_EVALUATED.
+      expect(byData(root, "honesty")).toBeTruthy();
+      expect(byData(root, "proficiency", "NOT_EVALUATED")).toBeTruthy();
+    });
+  }
+  it("a live read with some malformed records drops them instead of inventing fields", async () => {
+    const academy = await load("views", "academy.js");
+    const {ctx} = await mkCtx(() => liveAcademy({learnings: [PROMOTED, {learningId: "bad"}, null, 5]}));
+    const root = await academy.render(ctx);
+    const rows = all(root).filter(n => n.dataset.learning);
+    expect(rows.map(r => r.dataset.learning)).toEqual([PROMOTED.learningId]);
+  });
+  it("hostile text in API data is rendered as text, never as markup", async () => {
+    const academy = await load("views", "academy.js");
+    // Görünüm API verisini birebir yalnız hata mesajında (stateBlock → res.message) gösterir; yük gerçek api.js yolundan (bridge hatası) geçer.
+    const payloads = ["<img src=x onerror=alert(1)>", "<script>alert(1)</script>", "<iframe src=javascript:alert(1)></iframe>", `"quoted" & 'single' &amp; <b>`];
+    for (const payload of payloads) {
+      const {ctx} = await mkCtx(() => { throw new Error(payload); });
+      const root = await academy.render(ctx);
+      const carriers = all(root).filter(n => n.textContent === payload);
+      expect(carriers.length, `payload reaches DOM verbatim: ${payload}`).toBeGreaterThan(0);
+      expect(all(root).filter(n => ["IMG", "SCRIPT", "IFRAME"].includes(n.tagName)).map(n => n.tagName)).toEqual([]);
+    }
+  });
+});
+
+// //TR: Erişilebilirlik: h1 odaklanabilir, tablolar caption+scope=col taşır, durum bloğu role=status, KPI grubu etiketli, düğme yok/yazılı.
+describe("WP-ACADEMY — accessibility", () => {
+  it("h1 is focusable, KPI group and note regions are labelled, tables have caption and col headers", async () => {
+    const academy = await load("views", "academy.js");
+    const {ctx} = await mkCtx(() => liveAcademy());
+    const root = await academy.render(ctx);
+    const h1s = all(root).filter(n => n.tagName === "H1");
+    expect(h1s.length).toBe(1);
+    expect(h1s[0].getAttribute("tabindex")).toBe("-1");
+    const grp = all(root).find(n => n.getAttribute("role") === "group")!;
+    expect((grp.getAttribute("aria-label") ?? "").length).toBeGreaterThan(0);
+    expect(byData(root, "honesty")!.getAttribute("role")).toBe("note");
+    const tables = all(root).filter(n => n.tagName === "TABLE");
+    expect(tables.length).toBe(3);
+    for (const t of tables) {
+      const cap = t.children.find(c => c.tagName === "CAPTION")!;
+      expect(cap.textContent.length).toBeGreaterThan(0);
+      const ths = all(t).filter(n => n.tagName === "TH");
+      expect(ths.length).toBeGreaterThan(0);
+      for (const th of ths) expect(th.getAttribute("scope")).toBe("col");
+    }
+  });
+  it("failure state is announced via role=status and any button is explicitly type=button", async () => {
+    const academy = await load("views", "academy.js");
+    const {ctx} = await mkCtx(() => fail("/v1/academy"));
+    const root = await academy.render(ctx);
+    for (const s of all(root).filter(n => n.dataset.academyState)) expect(s.getAttribute("role")).toBe("status");
+    for (const b of all(root).filter(n => n.tagName === "BUTTON")) expect(b.getAttribute("type")).toBe("button");
+  });
+});
+
+// //TR: EN/TR eşitliği: görünümün kullandığı anahtarların yer tutucuları ({x}) iki dilde aynıdır.
+describe("WP-ACADEMY — placeholder parity", () => {
+  it("every academy.* key has identical {placeholder} sets in EN and TR, and state/hint keys exist for every failure state", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const ph = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort();
+    for (const k of Object.keys(en).filter(k => k.startsWith("academy."))) expect(ph(tr[k]), k).toEqual(ph(en[k]));
+    for (const s of ["UNAVAILABLE", "OFFLINE", "ERROR"]) {
+      for (const d of [tr, en]) { expect(d[`academy.state.${s}`], s).toBeTruthy(); expect(d[`academy.hint.${s}`], s).toContain("{source}"); }
+    }
   });
 });
