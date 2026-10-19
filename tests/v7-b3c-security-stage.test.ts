@@ -1,5 +1,7 @@
 // //TR: Bu test V7 B3C mission pipeline güvenlik aşamasını doğrular: araç keşfi (PATH -> mutlak yol, sürüm, sha256), SECURITY adımı (taze klonlarda gitleaks + trivy çevrimdışı; SAST dürüstçe NOT_AVAILABLE), politika (SECRET_DETECTED / VULNERABLE_DEPENDENCY BLOCKED, DB yok -> PARTIAL, araç yok -> NOT_INSTALLED), taze klon (workspace .gitattributes/.git/config gizleyemez), secret sızıntısı yok, GLOBAL_STOP ve idempotent yeniden giriş. Testler host araçlarına bağlı değildir (sahte tarayıcı enjekte edilir); host'ta gitleaks kuruluysa bir GERÇEK gitleaks çalıştırması da vardır. Gerçek sağlayıcı çağrılmaz.
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 // SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
 import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
 import fs from "node:fs";

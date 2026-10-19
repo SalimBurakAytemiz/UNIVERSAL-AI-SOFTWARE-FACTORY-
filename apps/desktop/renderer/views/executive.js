@@ -3,6 +3,7 @@ import {h,panel,statePill,kpiTile,miniBars,emptyNote} from "../components.js";
 import {MISSING,topEntries} from "../model.js";
 import {formatDateTime} from "../work-core.js";
 import {EXECUTIVE_SOURCES,EXECUTIVE_SOURCE_PATHS,PILL_FOR_RUN_STATUS,MAX_LEDGER_ROWS,executiveSummary,shortSha} from "../executive-core.js";
+import {returnPanel} from "./return-summary.js";
 
 const isOk=res=>Boolean(res)&&res.state==="VERIFIED";
 /** Okuma hatasının ayrık dürüst durumu; uydurma yok. */
@@ -178,5 +179,6 @@ export async function render(ctx){
   ]);
   // executiveSummary dört okumayı {cockpit,missions,runs,attention} adlarıyla bekler; ledger/kaynak şeridi workRuns adını kullanır.
   const res={cockpit,missions,workRuns,attention,runs:workRuns};
-  return h(doc,"div",{class:"view view-executive"},header(ctx),summaryPanel(ctx,res),ledgerPanel(ctx,res));
+  // UI-003 Dönüş Özeti ayrı modüldedir (yalnız cihaz-içi işaret yazar); bu görünüm kendisi hiçbir şey yazmaz.
+  return h(doc,"div",{class:"view view-executive"},header(ctx),returnPanel(ctx,res),summaryPanel(ctx,res),ledgerPanel(ctx,res));
 }

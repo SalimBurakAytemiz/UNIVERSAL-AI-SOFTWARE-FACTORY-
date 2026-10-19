@@ -6,6 +6,7 @@ import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordP
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
 import {notVerifiedBadge,runNotVerified,missionNotVerified,axisBadges} from "../m1a.js";
 import {canOfferComplete} from "../delivery-core.js";
+import {BOARD_LAYOUTS,boardLayout,setBoardLayout,boardColumns} from "../kanban-core.js";
 
 const FORM="mission";
 const RUN_DETAIL_LIMIT=5;
@@ -134,6 +135,38 @@ function missionTable(ctx,items,projectNames,allRuns){
         h(doc,"td",{text:projectNames.get(m.projectId)??MISSING}),h(doc,"td",{},statusPill(ctx,m.status),missionNotVerified(allRuns,m.missionId)?[" ",notVerifiedBadge(ctx,"mission")]:null),h(doc,"td",{text:m.riskLevel}),h(doc,"td",{text:formatTime(m.createdAt,ctx.i18n.lang)}));
     }))));
 }
+// ---------- UI-023 Görev Kanban Panosu (liste/pano düzeni) ----------
+/** //TR: Düzen seçici: liste (varsayılan, mevcut filtre+tablo) ya da pano; yalnız bellek-içi oturum durumu, depo/ağ yok. */
+function layoutToggle(ctx){
+  const doc=ctx.doc,cur=boardLayout();
+  return h(doc,"div",{class:"btn-row layout-toggle",role:"group","aria-label":ctx.t("work.board.layout")},BOARD_LAYOUTS.map(k=>h(doc,"button",{type:"button",class:"btn",id:`wl-${k}`,dataset:{layout:k,focusKey:`wl-${k}`},"aria-pressed":cur===k?"true":"false",
+    on:{click:()=>{if(setBoardLayout(k))ctx.rerender()}},text:ctx.t(`work.board.layout.${k}`)})));
+}
+/** //TR: Pano kartı: başlık düğmesi mission ayrıntısını açar (geçişler orada, mevcut onay kurallarıyla); tanınmayan durum ham değeriyle rozetlenir. */
+function boardCard(ctx,m,known,projectNames,allRuns){
+  const doc=ctx.doc,sel=selection.missionId===m.missionId;
+  return h(doc,"li",{class:"kanban-card",dataset:{boardMission:m.missionId,selected:sel?"1":"0"}},
+    h(doc,"button",{type:"button",class:"link-btn kanban-card-title",dataset:{focusKey:`kb-${m.missionId}`},"aria-current":sel?"true":null,on:{click:()=>{selection.missionId=m.missionId;ctx.rerender()}},text:m.title??MISSING}),
+    h(doc,"p",{class:"kanban-card-meta"},h(doc,"span",{text:projectNames.get(m.projectId)??MISSING})," · ",h(doc,"span",{class:"badge",text:m.riskLevel??MISSING})," · ",
+      h(doc,"time",{datetime:m.createdAt??undefined,text:formatTime(m.createdAt,ctx.i18n.lang)})),
+    known?null:h(doc,"p",{class:"kanban-card-raw"},statusPill(ctx,m.status)),
+    missionNotVerified(allRuns,m.missionId)?h(doc,"p",{class:"kanban-card-badges"},notVerifiedBadge(ctx,"mission")):null);
+}
+function boardColumn(ctx,c,projectNames,allRuns){
+  const doc=ctx.doc,id=`kb-col-${c.status.toLowerCase()}`,label=c.known?statusLabel(ctx,c.status):ctx.t("work.board.unrecognized");
+  return h(doc,"section",{class:"kanban-col","aria-labelledby":`${id}-t`,dataset:{boardColumn:c.status,count:String(c.count)}},
+    h(doc,"h3",{class:"kanban-col-title",id:`${id}-t`},h(doc,"span",{text:label})," ",h(doc,"span",{class:"kanban-col-count",text:String(c.count)})),
+    c.truncated?h(doc,"p",{class:"note",dataset:{note:"truncated"},text:ctx.t("work.board.shown",{shown:c.items.length,total:c.count})}):null,
+    c.count?h(doc,"ul",{class:"kanban-cards","aria-label":ctx.t("work.board.colAria",{status:label,count:c.count})},c.items.map(m=>boardCard(ctx,m,c.known,projectNames,allRuns)))
+      :h(doc,"p",{class:"note kanban-empty",text:ctx.t("work.board.colEmpty")}));
+}
+/** //TR: Görev panosu: sütunlar yaşam döngüsü sırasındadır; her mission tam bir sütunda, tanınmayan durumlar ayrı sütunda (atılmaz). */
+function missionBoard(ctx,items,projectNames,allRuns){
+  const doc=ctx.doc;
+  return h(doc,"div",{class:"kanban",id:"work-board",role:"group","aria-label":ctx.t("work.board.aria",{total:items.length})},
+    h(doc,"p",{class:"note",dataset:{note:"board-honesty"},text:ctx.t("work.board.lead")}),
+    h(doc,"div",{class:"kanban-cols"},boardColumns(items).map(c=>boardColumn(ctx,c,projectNames,allRuns))));
+}
 /** Durum zaman çizelgesi: mutlu yol sırası; geçilmiş adımlar yalnız yaşam döngüsü sırasından çıkarılır, yol dışı durum ayrıca vurgulanır. */
 export function statusTimeline(ctx,status){
   const doc=ctx.doc,idx=MISSION_PATH.indexOf(status),offPath=idx<0;
@@ -225,7 +258,7 @@ export async function render(ctx){
   let body;
   if(res.state!=="VERIFIED")body=stateNote(ctx,res.state);
   else if(!res.items.length)body=emptyNote(ctx,"work.empty");
-  else body=h(doc,"div",{},filterBar(ctx,res.items),missionTable(ctx,res.items,names,allRuns));
+  else body=h(doc,"div",{},layoutToggle(ctx),...(boardLayout()==="board"?[missionBoard(ctx,res.items,names,allRuns)]:[filterBar(ctx,res.items),missionTable(ctx,res.items,names,allRuns)]));
   let detailNode=null;
   if(selection.missionId){
     const [detail,runsRes,evRes]=await Promise.all([ctx.api.missionDetail(selection.missionId),ctx.api.workRuns({missionId:selection.missionId}),ctx.api.evidenceList({missionId:selection.missionId,limit:EVIDENCE_LIMIT})]);

@@ -1,5 +1,7 @@
 // //TR: Bu test autonomy-hardening selftest'inin (A-K ve yaşam döngüsü) tamamının geçtiğini ve Founder kısıtlarının kodda kilitli olduğunu doğrular: UASCO-Autonomous-Supervisor görevi yalnız dar başlatıcıyı, yönetici yetkisi olmadan, tek örnek ve süresiz çalıştırır; açılış tetikleyicisi parola saklamaz; başlatıcı sabit daemon komutundan başka bir şey çalıştıramaz; kurulu sistemin otomatik başlatması ayrı adla kaydedilir; rutin yalnız isteğe bağlı gözlemcidir.
-import {describe,it,expect} from "vitest";
+import {describe,it,expect,vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import cp from "node:child_process";
 describe("autonomy hardening (AUT2)",{timeout:600000},()=>{

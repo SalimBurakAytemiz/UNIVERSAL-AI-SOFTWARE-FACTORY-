@@ -213,12 +213,12 @@ describe("UX WP2 model and components", () => {
     expect(m.missionPillKind("BLOCKED")).toBe("BLOCKED");
     expect(m.missionPillKind("FAILED")).toBe("FAILED");
     expect(m.missionPillKind("SOMETHING_NEW")).toBe("NEUTRAL");
-    expect(m.PILL_KINDS).toEqual(expect.arrayContaining(["FAILED", "BLOCKED", "DENIED", "STALE", "OFFLINE", "NOT_CONNECTED", "UNAVAILABLE", "NOT_EXECUTED", "NOT_VERIFIED", "PRODUCT_VERIFIED"]));
+    expect(m.PILL_KINDS).toEqual(expect.arrayContaining(["FAILED", "BLOCKED", "DENIED", "STALE", "OFFLINE", "NOT_CONNECTED", "UNAVAILABLE", "NOT_EXECUTED", "NOT_VERIFIED", "PRODUCT_VERIFIED", "RECOVERING"]));
   });
-  it("each status pill has an icon and its own text; the ten distinct kinds never share a label or an icon path", async () => {
+  it("each status pill has an icon and its own text; the eleven distinct kinds never share a label or an icon path", async () => {
     const comp = await load("components.js"), icons = await load("icons.js");
     const {ctx} = await mkCtx(() => undefined);
-    const kinds = ["FAILED", "BLOCKED", "DENIED", "STALE", "OFFLINE", "NOT_CONNECTED", "UNAVAILABLE", "NOT_EXECUTED", "NOT_VERIFIED", "PRODUCT_VERIFIED"];
+    const kinds = ["FAILED", "BLOCKED", "DENIED", "STALE", "OFFLINE", "NOT_CONNECTED", "UNAVAILABLE", "NOT_EXECUTED", "NOT_VERIFIED", "PRODUCT_VERIFIED", "RECOVERING"];
     const labels = new Set<string>(), paths = new Set<string>();
     for (const k of kinds) {
       const p = comp.statePill(ctx, k);
@@ -230,6 +230,7 @@ describe("UX WP2 model and components", () => {
     expect(labels.size).toBe(kinds.length);
     expect(paths.size).toBe(kinds.length);
     expect(labels.has("PRODUCT_VERIFIED")).toBe(true);
+    expect(labels.has("Toparlanıyor")).toBe(true);
     expect(icons.ICON_NAMES).toEqual(expect.arrayContaining(["ban", "lock", "plug", "wifioff", "help", "dashedcircle", "xcircle"]));
   });
   it("timeline items carry time, project attribution only when given, and a status pill", async () => {
@@ -242,14 +243,75 @@ describe("UX WP2 model and components", () => {
     const without = comp.timelineItem(ctx, {time: "10:00:00", title: "Görev B", pill: comp.missionPill(ctx, "EXECUTING")});
     expect(cls(without, "tl-attr").length).toBe(0);
   });
+  it("home area map shows an honest Delivery line, never a bogus 'Planned package' dash for component routes", async () => {
+    // //TR: Teslimat gerçek görünümdür (component:"delivery", plannedPackage yok); Home alan kartı "Planlı paket: —" yazmamalı, salt-okunur durum etiketini göstermelidir.
+    const home = await load("views", "home.js");
+    const routes = await load("routes.js");
+    for (const lang of ["en", "tr"]) {
+      const {ctx} = await mkCtx(() => undefined, lang);
+      const root = await home.render(ctx, {id: "home"});
+      const lines = new Map(all(root).filter(n => n.dataset.area).map(n => [n.dataset.area, cls(n, "area-line")[0].textContent]));
+      expect(lines.get("delivery"), lang).toBe(ctx.t("map.delivery"));
+      expect(lines.get("delivery"), lang).not.toMatch(/—|Planned package|Planlı paket/);
+      for (const id of routes.FACTORY_AREA_ORDER) {
+        const r = routes.ROUTES.find((x: any) => x.id === id);
+        if (r.component || !r.plannedPackage) expect(lines.get(id), `${lang}:${id}`).not.toMatch(/Planned package|Planlı paket/);
+      }
+    }
+  });
   it("both languages have every new key and the renderer sources use no inline style or HTML injection", async () => {
     const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
     const src = ["views/home.js", "components.js", "shell.js"].map(f => read(...f.split("/"))).join("\n");
     const need = new Set<string>();
     for (const m of src.matchAll(/"((?:kpi|pill|home|feed)\.[A-Za-z0-9_.]+)"/g)) need.add(m[1]);
-    for (const k of ["FAILED", "BLOCKED", "DENIED", "STALE", "OFFLINE", "NOT_CONNECTED", "UNAVAILABLE", "NOT_EXECUTED", "NOT_VERIFIED", "PRODUCT_VERIFIED", "LOADING", "EMPTY", "VERIFIED", "ACTIVE", "WAITING", "ATTENTION", "DONE", "STOPPED", "IDLE", "NEUTRAL"]) need.add(`pill.${k}`);
+    for (const k of ["FAILED", "BLOCKED", "DENIED", "STALE", "OFFLINE", "NOT_CONNECTED", "UNAVAILABLE", "NOT_EXECUTED", "NOT_VERIFIED", "PRODUCT_VERIFIED", "RECOVERING", "LOADING", "EMPTY", "VERIFIED", "ACTIVE", "WAITING", "ATTENTION", "DONE", "STOPPED", "IDLE", "NEUTRAL"]) need.add(`pill.${k}`);
     expect([...need].filter(k => !/[${]/.test(k) && !(k in tr && k in en))).toEqual([]);
     expect(src).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|\bstyle\s*:|setAttribute\(\s*["']style/);
     expect(read("styles.css")).toMatch(/\.kpi-risk\{[^}]*glow-risk/);
+  });
+});
+
+// //TR: UX hardening — Ana Sayfa: bozuk (ERROR) cockpit yanıtı, canlı olmayan orkestratör/iş gücü, erişilebilirlik (başlık, alan kartları, KPI grubu) ve home.js anahtarları için EN/TR eşitliği; sayı uydurulmaz.
+describe("UX hardening: home negative states and a11y", () => {
+  it("a malformed cockpit payload shows the failed note (role=status) and no KPI is VERIFIED", async () => {
+    const home = await load("views", "home.js");
+    const {ctx} = await mkCtx(p => (p === "/v1/cockpit" ? "not-an-object" : undefined));
+    const root = await home.render(ctx, {id: "home"});
+    const notes = all(root).filter(n => n.attrs.get("role") === "status" && n.className.includes("note"));
+    expect(notes.map(n => n.textContent)).toContain(ctx.t("cockpit.failed"));
+    for (const c of kpis(root)) expect(c.dataset.state, c.dataset.kpi).not.toBe("VERIFIED");
+  });
+  it("a cockpit without data renders no numeric orchestrator bars and no progress elements", async () => {
+    const home = await load("views", "home.js");
+    const {ctx} = await mkCtx(() => undefined);
+    const root = await home.render(ctx, {id: "home"});
+    expect(all(root).filter(n => n.tagName === "PROGRESS").length).toBe(0);
+    const wf = kpi(root, "workforce");
+    expect(wf.dataset.state).not.toBe("VERIFIED");
+    expect(cls(wf, "kpi-value").every(n => n.textContent === "—" || n.textContent === "–" || !/\d/.test(n.textContent))).toBe(true);
+  });
+  it("is accessible: single focusable h1, labelled KPI group, area cards are real links, orchestrator bars carry aria-labels", async () => {
+    const home = await load("views", "home.js");
+    const {ctx} = await mkCtx(p => (p === "/v1/cockpit" ? REAL : undefined), "en");
+    const root = await home.render(ctx, {id: "home"});
+    const h1 = all(root).filter(n => n.tagName === "H1");
+    expect(h1.length).toBe(1);
+    expect(h1[0].getAttribute("tabindex")).toBe("-1");
+    expect(all(root).some(n => n.attrs.get("role") === "group" && !!n.getAttribute("aria-label"))).toBe(true);
+    const cards = all(root).filter(n => n.dataset.area);
+    expect(cards.length).toBeGreaterThan(3);
+    for (const a of cards) { expect(a.tagName).toBe("A"); expect(a.getAttribute("href")).toMatch(/^#/); }
+    const progress = all(root).filter(n => n.tagName === "PROGRESS");
+    expect(progress.length).toBeGreaterThan(0);
+    for (const p of progress) expect(p.getAttribute("aria-label")).toMatch(/: \d+$/);
+    for (const k of kpis(root)) expect(k.getAttribute("aria-labelledby") || k.getAttribute("aria-label"), k.dataset.kpi).toBeTruthy();
+  });
+  it("has en/tr parity (keys and placeholders) for every literal key used by home.js", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const used = [...new Set([...read("views", "home.js").matchAll(/"((?:home|kpi|map|workforce|cockpit|tile)\.[A-Za-z0-9_.]+)"/g)].map(m => m[1]))];
+    expect(used.length).toBeGreaterThan(15);
+    expect(used.filter(k => !(k in tr && k in en))).toEqual([]);
+    const ph = (s: string) => (s.match(/\{[A-Za-z0-9_]+\}/g) ?? []).sort();
+    for (const k of used) expect(ph(tr[k]), k).toEqual(ph(en[k]));
   });
 });

@@ -228,3 +228,146 @@ describe("UX WP-INBOX-APPROVAL — read-only surface + dictionary parity", () =>
     }
   });
 });
+
+// UI-113 — "Approval required" state panel (self-contained block; renderer-only, no new action).
+describe("UI-113 — Approval required panel on #/inbox", () => {
+  const NOW = Date.parse("2026-10-16T10:00:00.000Z");
+  const apItems = (n: number) => Array.from({length: n}, (_, i) => ({missionId: "msn_" + i.toString(16).padStart(24, "0"), projectId: PID, title: `M${i}`, riskLevel: "R2"}));
+  const cockpit = (items: any[], extra: any = {}) => ({generatedAt: "2026-10-15T10:00:00.000Z", globalStop: {active: false, reason: null}, missions: {state: "VERIFIED", total: 1, byStatus: {}}, awaitingApproval: {state: "VERIFIED", items}, ...extra});
+  const fix = (items: any[], over: Record<string, any> = {}) => liveFix({"/v1/cockpit": cockpit(items), ...over});
+  const panelOf = (root: N) => byId(root, "inbox-required")!;
+
+  it("core: derives risk, run, age, approve/reject outcomes from existing transition rules; impact is UNKNOWN", async () => {
+    const core = await load("approval-core.js");
+    const res = core.deriveApprovalRequired({
+      cockpit: {state: "OK", data: {approvals: {state: "VERIFIED", items: [{missionId: MID, title: "Görev A", riskLevel: "R2"}]}}},
+      missions: {state: "VERIFIED", items: [{missionId: MID, status: "REPORTING", riskLevel: "R2", createdAt: "2026-10-14T10:00:00.000Z"}]},
+      runs: {state: "VERIFIED", items: [{runId: RUN, missionId: MID, status: "AWAITING_APPROVAL", startedAt: "2026-10-16T08:30:00.000Z"}]}, now: NOW});
+    expect(res.state).toBe("READY");
+    const r = res.rows[0];
+    expect(r.run).toEqual({runId: RUN, status: "AWAITING_APPROVAL"});
+    expect(r.age).toEqual({days: 0, hours: 1, minutes: 30});
+    expect(r.sinceBasis).toBe("RUN_STARTED");
+    expect(r.outcome.approve).toEqual([{to: "COMPLETE", highRisk: true, irreversible: true}]);
+    expect(r.outcome.reject.map((x: any) => x.to)).toEqual(["BLOCKED"]); // REPORTING allows COMPLETE and BLOCKED only
+    expect(r.impact).toBe("UNKNOWN");
+  });
+
+  it("core: flags match work-core (AUTHORIZED high-risk but reversible; unknown status stays UNKNOWN)", async () => {
+    const core = await load("approval-core.js"), wc = await load("work-core.js");
+    const o = core.transitionOutcome("PREFLIGHT");
+    expect(o.approve).toEqual([{to: "AUTHORIZED", highRisk: wc.requiresConfirm("AUTHORIZED"), irreversible: false}]);
+    expect(core.transitionOutcome("REPORTING").approve[0].irreversible).toBe(wc.allowedNext("COMPLETE").length === 0);
+    expect(core.transitionOutcome("EXECUTING").approve).toEqual([]);
+    expect(core.transitionOutcome(null).known).toBe(false);
+    expect(core.transitionOutcome("NOPE").known).toBe(false);
+    expect(core.ageOf("not-a-date", NOW)).toBeNull();
+    expect(core.ageOf("2030-01-01T00:00:00.000Z", NOW)).toBeNull();
+  });
+
+  it("renders irreversible/high-risk text, run + status, <time datetime>, approve/reject text and UNKNOWN impact", async () => {
+    const inbox = await load("views", "inbox.js");
+    const f = fix([{missionId: MID, projectId: PID, title: "Görev A", riskLevel: "R2"}]);
+    const {ctx, calls} = await mkCtx({lang: "en", get: fromFix(f)});
+    const root = await inbox.render(ctx);
+    const row = byData(panelOf(root), "required", MID)[0];
+    expect(row.dataset.irreversible).toBe("1");
+    expect(row.dataset.highRisk).toBe("1");
+    const fact = (k: string) => byData(row, "fact", k)[0].textContent;
+    expect(fact("transition")).toContain("Irreversible");
+    expect(fact("transition")).toContain("High risk");
+    expect(fact("run")).toContain(RUN);
+    expect(fact("approve")).toContain("→");
+    expect(fact("reject")).toContain("→");
+    expect(fact("impact")).toContain("UNKNOWN");
+    const time = all(row).find(n => n.tagName === "TIME")!;
+    expect(time.getAttribute("datetime")).toBe("2026-10-14T09:00:00.000Z");
+    expect(calls.post).toEqual([]);
+  });
+
+  it("a cockpit approval whose mission/run is not readable shows UNKNOWN, not a guess", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({lang: "en", get: fromFix(fix(apItems(1), {"/v1/work-runs": {workRuns: []}}))});
+    const row = byData(panelOf(await inbox.render(ctx)), "required")[0];
+    expect(byData(row, "fact", "transition")[0].textContent).toContain("UNKNOWN");
+    expect(byData(row, "fact", "run")[0].textContent).toContain("No linked work run");
+    expect(all(row).some(n => n.tagName === "TIME")).toBe(false);
+    const {ctx: c2} = await mkCtx({lang: "en", get: (p: string) => { if (p === "/v1/work-runs") throw new Error("HTTP 500"); return fromFix(fix(apItems(1)))(p); }});
+    expect(byData(byData(panelOf(await inbox.render(c2)), "required")[0], "fact", "run")[0].textContent).toContain("UNKNOWN");
+  });
+
+  it("caps at 50 rows with a 'showing X of Y' note", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({lang: "en", get: fromFix(fix(apItems(60)))});
+    const p = panelOf(await inbox.render(ctx));
+    expect(byData(p, "required").length).toBe(50);
+    expect(byData(p, "requiredTruncated")[0].textContent).toContain("50 of 60");
+    const {ctx: c2} = await mkCtx({lang: "en", get: fromFix(fix(apItems(3)))});
+    const p2 = panelOf(await inbox.render(c2));
+    expect(byData(p2, "required").length).toBe(3);
+    expect(byData(p2, "requiredTruncated")).toEqual([]);
+  });
+
+  it("empty is explicit; OFFLINE / ERROR read failures use the honest state note, never a 0", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({lang: "en", get: fromFix(fix([]))});
+    const p = panelOf(await inbox.render(ctx));
+    expect(p.textContent).toContain("Nothing awaits your approval");
+    expect(byData(p, "required")).toEqual([]);
+    const off = await mkCtx({lang: "en", get: () => { throw new Error("CONTROL_API_UNREACHABLE"); }});
+    const po = panelOf(await inbox.render(off.ctx));
+    expect(byData(po, "required")).toEqual([]);
+    expect(all(po).some(n => n.tagName === "P" && n.getAttribute("role") === "status")).toBe(true);
+    expect(po.textContent).not.toContain("awaiting approval.");
+    const core = await load("approval-core.js");
+    expect(core.deriveApprovalRequired({cockpit: {state: "OK", data: {approvals: {state: "ERROR", items: []}}}}).state).toBe("ERROR");
+    expect(core.deriveApprovalRequired({cockpit: {state: "OFFLINE", data: {approvals: {state: "UNAVAILABLE", items: []}}}}).state).toBe("OFFLINE");
+  });
+
+  it("performs no POST: buttons only focus the existing approval card; request list unchanged", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx, doc, calls} = await mkCtx({get: fromFix(fix([{missionId: MID3, projectId: PID, title: "Needs approval", riskLevel: "R3"}])), post: () => ({status: 200, body: {}})});
+    const root = await inbox.render(ctx);
+    doc.body.append(root);
+    const getsBefore = [...calls.get];
+    byId(root, `req-goto-${MID3}`)!.fire("click");
+    expect(doc.focused).toBe(byId(root, `ap-card-${MID3}`));
+    expect(calls.post).toEqual([]);
+    expect(calls.confirm).toEqual([]);
+    expect(calls.get).toEqual(getsBefore);
+    const src = code(read("approval-core.js")) + code(read("views", "inbox.js"));
+    expect(src).not.toMatch(/innerHTML|\.post\(|localStorage|sessionStorage|fetch\(/);
+  });
+
+  it("a11y: labelled region, h2/h3 headings, labelled list, focusable target card and labelled goto button", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({lang: "en", get: fromFix(fix([{missionId: MID3, projectId: PID, title: "Needs approval", riskLevel: "R3"}]))});
+    const root = await inbox.render(ctx), p = panelOf(root);
+    expect(p.tagName).toBe("SECTION");
+    expect(p.getAttribute("aria-labelledby")).toBe("inbox-required-t");
+    expect(byId(p, "inbox-required-t")!.tagName).toBe("H2");
+    expect(all(p).filter(n => n.tagName === "H3").length).toBe(1);
+    expect(all(p).find(n => n.tagName === "UL")!.getAttribute("aria-label")).toBe("Approval required");
+    expect(byId(root, `ap-card-${MID3}`)!.getAttribute("tabindex")).toBe("-1");
+    const btn = byId(p, `req-goto-${MID3}`)!;
+    expect(btn.tagName).toBe("BUTTON");
+    expect(btn.getAttribute("type")).toBe("button");
+    expect(btn.getAttribute("aria-label")).toContain("Needs approval");
+    const idx = (id: string) => all(root).findIndex(n => n.id === id);
+    expect(idx("inbox-required")).toBeLessThan(idx("inbox-approvals"));
+  });
+
+  it("every inbox.required.* key exists in EN and TR with identical placeholders", async () => {
+    const en = (await load("locales", "en.js")).default, tr = (await load("locales", "tr.js")).default;
+    const keys = Object.keys(en).filter(k => k === "inbox.required" || k.startsWith("inbox.required."));
+    const trKeys = Object.keys(tr).filter(k => k === "inbox.required" || k.startsWith("inbox.required."));
+    expect(keys.length).toBeGreaterThan(20);
+    expect(trKeys.sort()).toEqual([...keys].sort());
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of keys) {
+      expect(en[k].length, k).toBeGreaterThan(0);
+      expect(ph(tr[k]), k).toBe(ph(en[k]));
+      if (!["inbox.required.transitionValue", "inbox.required.runValue"].includes(k)) expect(tr[k], `tr differs ${k}`).not.toBe(en[k]);
+    }
+  });
+});

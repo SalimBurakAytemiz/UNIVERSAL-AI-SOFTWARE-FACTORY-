@@ -1,8 +1,10 @@
 // //TR: Bu test UX WP3 Company OS (SC-15) görünümünün dürüstlüğünü gerçek görünüm modülleriyle doğrular: gerçek /v1/company/* verisi CRM/Finans/Hukuk tablolarına ve KPI'lara bağlanır; veri yokken (köprü reddi, 404/503, ağ, 500) ayrık EMPTY/UNAVAILABLE/NOT_CONNECTED/OFFLINE/FAILED/STALE durumları gösterilir; referans görseldeki uydurma adlar, taslak faturanın ödenmiş ve fırsatın imzalı görünmesi, para birimlerinin karışması ve eksik kanıtlı "imzalı" sözleşmenin sayılması engellenir; sekme/klavye/süzgeç ve TR/EN sözlük kapsamı kontrol edilir.
-import {describe, it, expect, beforeEach} from "vitest";
+import {describe, it, expect, beforeEach, vi} from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const load = async (...p: string[]): Promise<any> => import(pathToFileURL(path.join(rend, ...p)).href);
@@ -464,5 +466,61 @@ describe("UX WP3 wiring and static safety", () => {
     const block = css.slice(css.indexOf("UX WP3: Company OS"));
     expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(block).toContain("forced-colors");
+  });
+});
+
+// //TR: Ek sertleştirme: ctx.api.company() fırlatsa bile sahte veri yok; h1 odaklanabilir; tüm düğmeler type=button; durum blokları role=status; tablolar caption + scope=col; company.* anahtarları EN/TR'de birebir.
+describe("UX WP3 hardening: negative, accessibility and locale parity", () => {
+  it("renders an honest ERROR for every source when the api layer itself throws, with no rows and no em-dash replaced by numbers", async () => {
+    const company = await load("views", "company.js");
+    const {ctx} = await mkCtx(fromFix(FIX));
+    ctx.api = {company: async () => { throw new Error("boom"); }};
+    const root = await company.render(ctx, {id: "company"});
+    for (const k of ["accounts", "contacts", "opportunities", "invoices", "payments", "contracts"]) expect(sourceState(root, k), k).toBe("ERROR");
+    expect(all(root).filter(n => n.tagName === "TR").length).toBe(0);
+    for (const id of ["company-accounts", "company-opportunities", "company-receivables", "company-contracts"]) expect(kpiValue(root, id), id).toBe("—");
+    for (const bad of FAKE_REFERENCE) expect(root.textContent, bad).not.toContain(bad);
+  });
+  it("a payload that is not an object for any resource never produces rows or a signed/paid claim", async () => {
+    const company = await load("views", "company.js");
+    for (const bad of ["x", null, 7, [], {accounts: "no"}]) {
+      const {ctx} = await mkCtx(() => bad);
+      const root = await company.render(ctx, {id: "company"});
+      expect(all(root).filter(n => n.tagName === "TR").length, JSON.stringify(bad)).toBe(0);
+      expect(all(root).some(n => n.dataset.evidence === "complete"), JSON.stringify(bad)).toBe(false);
+    }
+  });
+  it("h1 is focusable, every button is typed, state blocks are announced via role=status, tables have caption and scope=col (all tabs, TR and EN)", async () => {
+    const company = await load("views", "company.js");
+    for (const lang of ["tr", "en"]) {
+      for (const [name, get] of [["real", fromFix(FIX)], ["failing", () => { throw new Error("x: HTTP 500"); }]] as const) {
+        for (const tab of ["crm", "finance", "legal"]) {
+          company.resetCompanyView();
+          const {ctx} = await mkCtx(get as any, lang);
+          const first = await company.render(ctx, {id: "company"});
+          const tabBtn = all(first).find(n => n.id === `company-tab-${tab}`)!;
+          tabBtn.fire("click");
+          await new Promise(r => setTimeout(r, 0));
+          const root = await company.render(ctx, {id: "company"});
+          const where = `${lang}/${name}/${tab}`;
+          const h1 = all(root).filter(n => n.tagName === "H1");
+          expect(h1.length, where).toBe(1);
+          expect(h1[0].getAttribute("tabindex"), where).toBe("-1");
+          for (const b of all(root).filter(n => n.tagName === "BUTTON")) expect(b.getAttribute("type"), where).toBe("button");
+          for (const s of all(root).filter(n => n.dataset.companyState)) expect(s.getAttribute("role"), where).toBe("status");
+          for (const t of all(root).filter(n => n.tagName === "TABLE")) {
+            expect(t.children.some(c => c.tagName === "CAPTION" && c.textContent.length > 0), where).toBe(true);
+            for (const th of all(t).filter(n => n.tagName === "TH")) expect(th.getAttribute("scope"), where).toBe("col");
+          }
+          for (const g of all(root).filter(n => n.getAttribute("role") === "group")) expect((g.getAttribute("aria-label") ?? "").length, where).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+  it("company.* and area.company.* have identical key sets in TR and EN", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const pick = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("company.") || k.startsWith("area.company.")).sort();
+    expect(pick(tr)).toEqual(pick(en));
+    for (const k of pick(en)) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); }
   });
 });

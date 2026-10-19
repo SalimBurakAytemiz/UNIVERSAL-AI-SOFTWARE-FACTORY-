@@ -261,3 +261,112 @@ describe("UX WP4 feed and markup units", () => {
     expect([...used].filter(k => !(k in trD && k in enD))).toEqual([]);
   });
 });
+
+// //TR: UX hardening — Day-0 bölümü (health/stop/runs/events/logs) için fonksiyonel, negatif ve erişilebilirlik testleri; veri yoksa uydurma değer yok, hata durumu "Log yok" diye gizlenmez.
+type Routes = Record<string, any>;
+async function mkDay0(routes: Routes, lang = "en") {
+  const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+  const doc = new D(), store = st.createStore(null), calls: string[] = [];
+  const bridge = {apiGet: async (p: string) => {
+    calls.push(p);
+    const r = routes[p];
+    if (r instanceof Error) throw r;
+    if (r === undefined) throw new Error(`${p}: HTTP 404`);
+    return typeof r === "function" ? r() : r;
+  }};
+  const api = apiMod.createApi({bridge, store}), t = (k: string, v?: any) => i18n.translate(lang, k, v);
+  const stops: string[] = [];
+  const ctx: any = {doc, store, api, i18n: {lang, t}, t, navigate() {}, principal: "FOUNDER_LOCAL", renderAttention() {}, requestStop() { stops.push("stop"); }, resume() { stops.push("resume"); }};
+  const tower = await load("views", "tower.js");
+  const view: N = await tower.render(ctx);
+  return {ctx, view, calls, stops, t};
+}
+const byId = (v: N, id: string) => all(v).find(n => n.id === id)!;
+const flush = () => new Promise(r => setTimeout(r, 0));
+
+describe("UX hardening: tower day-0 functional", () => {
+  const RUN = "RUN-ABC-1";
+  const base: Routes = {
+    "/health": {status: "ok", system: "uasco"},
+    "/v1/runs": {runs: [{runId: RUN, summary: {status: "COMPLETED"}}]},
+    [`/v1/runs/${RUN}/events`]: {events: [{timestamp: "t1", severity: "INFO", stage: "s", event: "e", details: {a: 1}}]},
+    [`/v1/runs/${RUN}/logs`]: {logs: [{name: "a.log", size: 12}]},
+    [`/v1/runs/${RUN}/logs/a.log`]: {text: "hello-log", truncated: false},
+  };
+  it("shows verified health and wires Stop/Resume buttons to the context", async () => {
+    const m = await mkDay0(base);
+    expect(byId(m.view, "health").textContent).toBe("ok · uasco");
+    byId(m.view, "towerStop").fire("click"); byId(m.view, "towerResume").fire("click");
+    expect(m.stops).toEqual(["stop", "resume"]);
+  });
+  it("loads events and a log on click and shows loading text first", async () => {
+    const m = await mkDay0(base);
+    const runBtn = byId(m.view, "tower-runs").children.flatMap(c => all(c)).find(n => n.tagName === "BUTTON")!;
+    runBtn.fire("click");
+    expect(byId(m.view, "events").textContent).toBe(m.t("tower.loading"));
+    await flush(); await flush();
+    expect(byId(m.view, "selectedRun").textContent).toBe(RUN);
+    expect(byId(m.view, "events").textContent).toContain("[INFO] s/e");
+    const logBtn = byTag(byId(m.view, "logButtons"), "button")[0];
+    expect(logBtn.textContent).toContain("a.log");
+    logBtn.fire("click"); await flush(); await flush();
+    expect(byId(m.view, "logText").textContent).toBe("hello-log");
+  });
+});
+
+describe("UX hardening: tower day-0 negative / honest states", () => {
+  it("never invents values when every endpoint fails", async () => {
+    const m = await mkDay0({});
+    expect(byId(m.view, "health").textContent).not.toMatch(/ok|uasco/);
+    const facts = all(m.view).filter(n => n.dataset.fact);
+    expect(facts.length).toBeGreaterThanOrEqual(7);
+    const model = await load("model.js");
+    for (const f of facts.filter(x => x.dataset.fact !== "tower.retry")) expect(f.textContent).toContain(model.MISSING);
+    expect(byId(m.view, "tower-runs").textContent).not.toMatch(/RUN-/);
+  });
+  it("shows the empty note for zero runs and the state note (not the empty note) for a failed run feed", async () => {
+    const empty = await mkDay0({"/v1/runs": {runs: []}});
+    expect(byId(empty.view, "tower-runs").textContent).toContain(empty.t("tower.noRuns"));
+    const failed = await mkDay0({});
+    expect(byId(failed.view, "tower-runs").textContent).not.toContain(failed.t("tower.noRuns"));
+    expect(all(byId(failed.view, "tower-runs")).some(n => n.attrs.get("role") === "status")).toBe(true);
+  });
+  it("reports a failed log list as an error state, not as 'no logs'", async () => {
+    const m = await mkDay0({"/v1/runs": {runs: [{runId: "RUN-X"}]}});
+    byTag(byId(m.view, "tower-runs"), "button")[0].fire("click"); await flush(); await flush();
+    const lb = byId(m.view, "logButtons");
+    expect(lb.textContent).not.toContain(m.t("tower.noLogs"));
+    expect(all(lb).some(n => n.attrs.get("role") === "status")).toBe(true);
+  });
+  it("reports an empty log list as 'no logs' and a failed events fetch as a state", async () => {
+    const m = await mkDay0({"/v1/runs": {runs: [{runId: "RUN-Y"}]}, "/v1/runs/RUN-Y/logs": {logs: []}});
+    byTag(byId(m.view, "tower-runs"), "button")[0].fire("click"); await flush(); await flush();
+    expect(byId(m.view, "logButtons").textContent).toContain(m.t("tower.noLogs"));
+    expect(byId(m.view, "events").textContent).not.toBe(m.t("tower.loading"));
+    expect(byId(m.view, "events").textContent).not.toContain("[INFO]");
+  });
+  it("marks a stopped system from /v1/control/status", async () => {
+    const m = await mkDay0({"/v1/control/status": {globalStop: {active: true, reason: "because"}}});
+    expect(byId(m.view, "stopState").textContent).toContain("because");
+  });
+});
+
+describe("UX hardening: tower accessibility and locale parity", () => {
+  it("exposes a focusable heading, labelled scrollable logs and typed buttons", async () => {
+    const m = await mkDay0({"/v1/runs": {runs: [{runId: "RUN-Z"}]}});
+    expect(byId(m.view, "view-title").tagName).toBe("H1");
+    expect(byId(m.view, "view-title").getAttribute("tabindex")).toBe("-1");
+    for (const id of ["events", "logText"]) { const n = byId(m.view, id); expect(n.getAttribute("tabindex")).toBe("0"); expect((n.getAttribute("aria-label") ?? "").length).toBeGreaterThan(0); }
+    for (const b of byTag(m.view, "button")) expect(b.getAttribute("type")).toBe("button");
+    for (const s of byTag(m.view, "section")) expect(s.getAttribute("aria-labelledby") ?? s.getAttribute("aria-label")).toBeTruthy();
+  });
+  it("has identical en/tr key sets for tower.* and equal placeholders", async () => {
+    const trD = (await load("locales", "tr.js")).default as Record<string, string>, enD = (await load("locales", "en.js")).default as Record<string, string>;
+    const ph = (s: string) => (s.match(/\{[A-Za-z0-9_]+\}/g) ?? []).sort();
+    const keys = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("tower.")).sort();
+    expect(keys(trD)).toEqual(keys(enD));
+    for (const k of keys(enD)) expect(ph(trD[k])).toEqual(ph(enD[k]));
+    const used = [...read("views", "tower.js").matchAll(/"(tower\.[A-Za-z0-9_.]+)"/g)].map(m => m[1]);
+    expect(used.filter(k => !(k in trD && k in enD))).toEqual([]);
+  });
+});

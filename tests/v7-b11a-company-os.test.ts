@@ -1,5 +1,5 @@
 // //TR: Bu test Company OS çekirdek alanlarını (CRM, Finans fatura/ödeme, Hukuk sözleşme) gerçek geçici journal ve gerçek API ile doğrular: durum makineleri, "fatura kesildi ödeme alındı değildir", append-only ödeme/ters kayıt, imza kanıtı, tenant izolasyonu, idempotency, Global Stop 423, tamper fail-closed ve ikinci store olmaması.
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,6 +11,8 @@ import {LegalDomain} from "../core/company/legal.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 // @ts-expect-error TS7016: atomic-json.mjs tip bildirimi yok (test geçerli hash zincirli sahte journal satırı üretir)
 import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const sha256 = sha256Untyped as (v: unknown) => string;
 const TOKEN = "t".repeat(32);

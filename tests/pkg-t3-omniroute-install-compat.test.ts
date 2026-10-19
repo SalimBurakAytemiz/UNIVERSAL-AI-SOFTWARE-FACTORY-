@@ -1,5 +1,7 @@
 // //TR: Bu test hedef makinede kurulu OmniRoute uyum selftest'inin salt okunur geçtiğini (kurulu değilse dürüstçe atladığını) ve sürüm aralığı yardımcısının tanınmayan ifadeyi PASS saymadığını doğrular.
-import {describe,it,expect,beforeAll,afterAll} from "vitest";
+import {describe,it,expect,beforeAll,afterAll,vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import cp from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";

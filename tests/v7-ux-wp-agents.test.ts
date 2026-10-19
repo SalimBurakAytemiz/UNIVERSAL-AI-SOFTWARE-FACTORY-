@@ -458,3 +458,93 @@ describe("test+states workforce: unique DOM ids (regression: duplicate wf-detail
     view.resetWorkforceView();
   });
 });
+
+describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN)", () => {
+  const run = (i: number, status: string, extra: any = {}) => ({runId: `run-${String(i).padStart(4, "0")}`, status, ...extra});
+  async function fleetCtx(feed: "ok" | "off" | "err", runs: any[] = []) {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    const doc = new D(), store = st.createStore(null), navigated: string[] = [];
+    const bridge = {apiGet: async (p: string) => {
+      if (p === "/v1/cockpit") return COCKPIT;
+      if (p === "/v1/agents") return AGENTS;
+      if (p === "/v1/work-runs") { if (feed === "off") throw new Error("Failed to fetch"); if (feed === "err") return {workRuns: "bad"}; return {workRuns: runs}; }
+      throw new Error(`${p}: HTTP 404`);
+    }};
+    const t = (k: string, v?: any) => i18n.translate("en", k, v);
+    const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang: "en", t}, t, navigate: (id: string) => navigated.push(id), rerender: () => {}, settleFocus: () => {}, principal: "FOUNDER_LOCAL"};
+    const view = await load("views", "workforce.js"); view.resetWorkforceView();
+    return {node: (await view.render(ctx, ROUTE)) as N, navigated};
+  }
+  const fleetNode = (n: N) => byId(n, "wf-fleet")!;
+
+  it("core groups only live runs by status bucket, drops terminal runs and keeps API order", async () => {
+    const core = await load("fleet-core.js");
+    const g = core.fleetGroups([run(1, "RUNNING"), run(2, "COMPLETED"), run(3, "QUEUED"), run(4, "RUNNING"), null, run(5, "FAILED")]);
+    expect(g.total).toBe(3); expect(g.shown).toBe(3); expect(g.truncated).toBe(false);
+    expect(g.groups.map((x: any) => [x.status, x.count])).toEqual([["QUEUED", 1], ["RUNNING", 2]]);
+    expect(g.groups[1].items.map((r: any) => r.runId)).toEqual(["run-0001", "run-0004"]);
+    expect(core.fleetGroups(undefined).total).toBe(0);
+  });
+  it("core caps at 50 cards while bucket counts and total stay real", async () => {
+    const core = await load("fleet-core.js");
+    const g = core.fleetGroups(Array.from({length: 70}, (_, i) => run(i, i < 40 ? "RUNNING" : "QUEUED")));
+    expect(core.MAX_FLEET_CARDS).toBe(50);
+    expect(g.total).toBe(70); expect(g.shown).toBe(50); expect(g.truncated).toBe(true);
+    expect(g.groups.reduce((n: number, x: any) => n + x.items.length, 0)).toBe(50);
+    expect(g.groups.reduce((n: number, x: any) => n + x.count, 0)).toBe(70);
+  });
+  it("core card carries only real fields; absent ones are null, never invented", async () => {
+    const core = await load("fleet-core.js");
+    expect(core.fleetCard(run(1, "RUNNING"))).toEqual({runId: "run-0001", status: "RUNNING", role: null, missionId: null, updatedAt: null});
+  });
+  it("renders a labelled region, grouped list semantics, <time>, UNKNOWN fields and a keyboard-reachable mission link", async () => {
+    const {node, navigated} = await fleetCtx("ok", [run(1, "RUNNING", {role: "ROLE.X", missionId: "msn_0123456789abcdef01234567", heartbeatAt: "2026-10-19T10:00:00.000Z"}), run(2, "QUEUED"), run(3, "COMPLETED")]);
+    const region = fleetNode(node);
+    expect(byId(node, "wf-fleet")!.tagName).toBe("SECTION");
+    const body = all(region).find(n => n.attrs.get("role") === "region")!;
+    expect(body.attrs.get("aria-label")).toBeTruthy();
+    expect(byTag(region, "ul").length).toBe(2);
+    expect(byTag(region, "li").map(li => li.dataset.fleetRunId).sort()).toEqual(["run-0001", "run-0002"]);
+    expect(byTag(region, "h3").map(text)).toEqual(["Queued (1)", "Running (1)"]);
+    const t = byTag(region, "time"); expect(t.length).toBe(1); expect(t[0].attrs.get("datetime")).toBe("2026-10-19T10:00:00.000Z");
+    expect(byData(region, "unknown", "1").length).toBe(2);
+    const btn = byTag(region, "button"); expect(btn.length).toBe(1);
+    expect(btn[0].attrs.get("type")).toBe("button"); expect(btn[0].attrs.get("aria-label")).toContain("msn_0123456789abcdef01234567"); expect(btn[0].attrs.has("tabindex")).toBe(false);
+    btn[0].fire("click"); expect(navigated).toEqual(["work"]);
+    expect(text(region)).toContain("not live agents");
+  });
+  it("shows the showing X of Y note only when truncated and invents no counts", async () => {
+    const few = await fleetCtx("ok", [run(1, "RUNNING")]);
+    expect(byData(fleetNode(few.node), "truncated").length).toBe(0);
+    const many = await fleetCtx("ok", Array.from({length: 60}, (_, i) => run(i, "RUNNING")));
+    const note = byData(fleetNode(many.node), "truncated"); expect(note.length).toBe(1);
+    expect(text(note[0])).toBe("Showing 50 of 60 live runs.");
+    expect(byTag(fleetNode(many.node), "li").length).toBe(50);
+  });
+  it("read failure replaces the grid with the honest state note, never a 0; empty gives an explicit note", async () => {
+    const off = await fleetCtx("off"); const r1 = fleetNode(off.node);
+    expect(byTag(r1, "ul").length).toBe(0); expect(all(r1).some(n => n.attrs.get("role") === "status")).toBe(true); expect(text(r1)).not.toMatch(/\b0\b/);
+    const err = await fleetCtx("err"); const r2 = fleetNode(err.node);
+    expect(byTag(r2, "ul").length).toBe(0); expect(all(r2).some(n => n.attrs.get("role") === "status")).toBe(true);
+    const empty = await fleetCtx("ok", [run(1, "COMPLETED")]);
+    expect(text(fleetNode(empty.node))).toContain("There are no live work runs");
+    expect(byTag(fleetNode(empty.node), "li").length).toBe(0);
+  });
+  it("workforce.fleet.* keys are identical in EN and TR with the same placeholders", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const keys = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("workforce.fleet.")).sort();
+    expect(keys(tr)).toEqual(keys(en)); expect(keys(en).length).toBeGreaterThanOrEqual(10);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
+    for (const k of keys(en)) { expect(ph(tr[k]), k).toEqual(ph(en[k])); expect(tr[k]).toBeTruthy(); }
+    expect(tr["workforce.fleet.unknown"]).not.toBe(en["workforce.fleet.unknown"]);
+  });
+});
+
+describe("UI-030 fleet card does not collide with live-run rows", () => {
+  it("fleet cards use data-fleet-run-id so data-run-id stays unique to the live-runs table", async () => {
+    const src = fs.readFileSync(path.join(rend, "views", "workforce.js"), "utf8");
+    const fleet = src.slice(src.indexOf("function fleetBody"), src.indexOf("const statusChip"));
+    expect(fleet).toContain("fleetRunId");
+    expect(fleet).not.toMatch(/dataset:\{runId/);
+  });
+});
