@@ -1,28 +1,35 @@
-# //TR: YALNIZ TANI workflow'u (merge edilmez; yalniz ci/diagnose-shards dalina push ile calisir): her canonical vitest adimini iki isletim sisteminde ayri isle dogrudan calistirarak run-validation'in ilk hatada durmasi yuzunden gizli kalan tum hatalari tek turda gosterir. GitHub-hosted, secret yok, contents:read, artifact yok. Governance kaniti veya PASS DEGILDIR; canonical kapi ci.yml'dir.
-name: Diagnose canonical test steps (diagnosis only)
+# //TR: YALNIZ TANI workflow'u (merge edilmez; yalniz ci/diagnose-shards dalina push ile calisir): Linux'ta yalniz run-validation (runCommand: detached + pipe) altinda takilan tests-2 kabugunu dosya araliklarina bolerek ayni runCommand ile calistirir ve takilma aninda surec agacini yazdirir. GitHub-hosted, secret yok, contents:read, artifact yok. Governance kaniti veya PASS DEGILDIR.
+name: Diagnose runCommand hang (diagnosis only)
 on:
   push:
     branches: [ci/diagnose-shards]
 permissions:
   contents: read
 jobs:
-  step:
-    name: diag ${{ matrix.step }} (${{ matrix.os }})
+  range:
+    name: runcmd tests-2 ${{ matrix.r }} ${{ matrix.x }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        step: [tests, tests-2, tests-3, tests-4, tests-5, tests-6, tests-7, tests-8, tests-bs1-a, tests-bs1-b, tests-bs1-c, tests-bs1-d, tests-bs1-e, tests-bs1-f, tests-lv1, post]
-        exclude:
-          - {os: ubuntu-latest, step: tests-bs1-a}
-          - {os: ubuntu-latest, step: tests-bs1-b}
-          - {os: ubuntu-latest, step: tests-bs1-c}
-          - {os: ubuntu-latest, step: tests-bs1-d}
-          - {os: ubuntu-latest, step: tests-bs1-e}
-          - {os: ubuntu-latest, step: tests-bs1-f}
-          - {os: ubuntu-latest, step: tests-lv1}
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+        include:
+          - {r: "0 32", x: ""}
+          - {r: "0 32", x: "--no-file-parallelism"}
+          - {r: "0 16", x: ""}
+          - {r: "16 32", x: ""}
+          - {r: "0 8", x: ""}
+          - {r: "8 16", x: ""}
+          - {r: "16 24", x: ""}
+          - {r: "24 32", x: ""}
+          - {r: "0 4", x: ""}
+          - {r: "4 8", x: ""}
+          - {r: "8 12", x: ""}
+          - {r: "12 16", x: ""}
+          - {r: "16 20", x: ""}
+          - {r: "20 24", x: ""}
+          - {r: "24 28", x: ""}
+          - {r: "28 32", x: ""}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -32,4 +39,4 @@ jobs:
           node-version: 24
           cache: npm
       - run: node scripts/ensure-dependencies.mjs
-      - run: node scripts/ci/diagnose-step.mjs ${{ matrix.step }}
+      - run: node scripts/ci/diagnose-runcmd.mjs tests-2 ${{ matrix.r }} ${{ matrix.x }}
