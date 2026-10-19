@@ -275,7 +275,16 @@
         "tests/model-router.test.ts",
         "tests/npm-invocation.test.ts",
         "tests/pkg-aut1-orchestrator.test.ts",
-        "tests/pkg-aut2-autonomy-hardening.test.ts",
+        "tests/pkg-aut2-autonomy-hardening.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests-2",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
         "tests/pkg-c-lf-electron-smoke.test.ts",
         "tests/pkg-d-standalone-provenance.test.ts",
         "tests/pkg-dr1-dual-review.test.ts",
@@ -307,11 +316,38 @@
         "tests/uasco-atomic-lease.test.ts",
         "tests/v7-b1-workos.test.ts",
         "tests/v7-b2-workos-hardening.test.ts",
-        "tests/v7-b9-target-catalog.test.ts",
+        "tests/v7-b9-target-catalog.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests-3",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
         "tests/v7-b3a-runner.test.ts",
         "tests/v7-b3a-recovery-budget.test.ts",
-        "tests/v7-b3a-c3-builder-commit.test.ts",
-        "tests/v7-b3c-security-stage.test.ts",
+        "tests/v7-b3a-c3-builder-commit.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests-4",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/v7-b3c-security-stage.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests-5",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
         "tests/v7-ps1a-project-studio.test.ts",
         "tests/v7-ps1a-c2-remediation.test.ts",
         "tests/v7-ps1a-c3-remediation.test.ts",
@@ -323,13 +359,31 @@
         "tests/v7-int-r3-desktop.test.ts",
         "tests/v7-int-r3-sbx-gate.test.ts",
         "tests/v7-sbx8-claude-profiles.test.ts",
-        "tests/v7-sbx8-broker.test.ts",
+        "tests/v7-sbx8-broker.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests-6",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
         "tests/v7-sbx8-reviewer.test.ts",
         "tests/v7-sbx8-agent-config.test.ts",
         "tests/v7-relfx-1-completion.test.ts",
         "tests/v7-relfx-3-risk-admission.test.ts",
         "tests/v7-relfx-4-interruption.test.ts",
-        "tests/v7-relfx-2-test-surface.test.ts",
+        "tests/v7-relfx-2-test-surface.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests-7",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
         "tests/v7-relfx-c2-remediation.test.ts",
         "tests/v7-relfx-c3-remediation.test.ts",
         "tests/v7-relfx-c4-remediation.test.ts",
@@ -341,7 +395,16 @@
         "tests/v7-ps1b-project-studio-ui.test.ts",
         "tests/v7-ps1b-relpath-canonical.test.ts",
         "tests/v7-m1a-mode.test.ts",
-        "tests/v7-m1a-desktop.test.ts",
+        "tests/v7-m1a-desktop.test.ts"
+      ],
+      "requiresDependencies": true
+    },
+    {
+      "id": "tests-8",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
         "tests/v7-m1a-c2-delivery.test.ts",
         "tests/v7-m1a-c2-test-variant.test.ts",
         "tests/v7-core-predev-contracts.test.ts",
