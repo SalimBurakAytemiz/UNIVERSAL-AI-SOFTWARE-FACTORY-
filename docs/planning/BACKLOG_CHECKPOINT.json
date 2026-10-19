@@ -1,7 +1,7 @@
 {
-  "//TR": "TASLAK gorev envanteri (v7/integration@e12dbdd'den turetildi); yetkisiz hicbir gorev READY degildir, atomic lease aktiflesmeden Cloud Developer A bu dosyayla uretime alinmaz.",
-  "_doc": "CANONICAL SOURCE (bootstrap, honest state). Two Founder-authorized tasks (see authorizedBy) are IN_REVIEW; no task is READY. A task becomes READY only via a Founder/Local authority record plus an active FA-LEASE2 lease. Routines reading this file must exit NO_ACTION (not BLOCKED) while no task is READY. Derived from docs/autonomy/backlog-drafts (PR #11); see docs/planning/README.md.",
-  "generatedAt": "2026-10-18",
+  "//TR": "Kanonik görev envanteri: yalnız Founder yetki kaydı (authorizedBy) taşıyan, yeni yetki ve korunan dosya gerektirmeyen görevler READY olabilir; sahiplik docs/planning/dispatch.mjs --claim atomik dal-ref talebidir (FA-LEASE2 bağlı değildir); DONE yalnız v7/integration birleştirmesidir.",
+  "_doc": "CANONICAL SOURCE (honest state). General rule (unchanged): a task becomes READY only via a Founder/Local authority record plus an active FA-LEASE2 lease. Exception, Founder decision D-2026-10-19-A (confirmed; see docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md): an independent, renderer-only UI/UX task that changes only non-protected files and whose screen the 2026-10-19 inventory verifies as authority_needed=none may be READY with that decision in authorizedBy, requiresNewAuthority=false and protectedEdit=false; its ownership is the temporary create-only branch-ref claim of docs/planning/dispatch.mjs --claim (not FA-LEASE2-equivalent; FA-LEASE2/refs/uasco stay unwired). The exception covers no protected file, security policy, trust-root, new endpoint, authority expansion or bulk AUTHORITY_REQUIRED approval. Routines reading this file exit NO_ACTION (not BLOCKED) while no task is eligible. DONE means merged to v7/integration (merge SHA in notes); review verdicts are not re-verified here. Write-back of DONE is done by the integration coordinator after each merge.",
+  "generatedAt": "2026-10-19T20:45:00Z",
   "head": "e12dbdd",
   "source": "RCA wmcrvq9w6 inventory + merged-state verification",
   "tasks": [
@@ -609,7 +609,7 @@
       "id": "CP-DISPATCH-IMPL",
       "title": "Cloud-only dispatcher with claim refs + lease record",
       "owner": "CLOUD",
-      "status": "IN_REVIEW",
+      "status": "DONE",
       "dependsOn": [],
       "requiresNewAuthority": false,
       "protectedEdit": false,
@@ -617,7 +617,7 @@
       "prs": [
         29
       ],
-      "notes": "Not the atomic lease / not FA-LEASE2 wiring. Five review rounds; closed-vocabulary output; final delta awaiting independent re-review. Not CLEAN."
+      "notes": "Not the atomic lease / not FA-LEASE2 wiring. Five review rounds; closed-vocabulary output; final delta awaiting independent re-review. Not CLEAN. Write-back 2026-10-19: PR #29 merged to v7/integration as 1372526 (governed merge)."
     },
     {
       "id": "CP-NODE24-ENV",
@@ -632,6 +632,99 @@
         21
       ],
       "notes": "Permanence also requires the environment setup-script setting (owner action)."
+    },
+    {
+      "owner": "CLOUD",
+      "status": "READY",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "id": "UI-030",
+      "title": "Active worker fleet grid on #/workforce (renderer-only, existing GETs)",
+      "package": "WP-AGENTS",
+      "files": [
+        "apps/desktop/renderer/views/workforce.js",
+        "apps/desktop/renderer/fleet-core.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "apps/desktop/renderer/styles.css",
+        "tests/v7-ux-wp-agents.test.ts",
+        "docs/ux/UI-030-WORKER-FLEET.md"
+      ],
+      "testFile": "tests/v7-ux-wp-agents.test.ts",
+      "notes": "Per-run worker cards derived only from GET /v1/work-runs and GET /v1/cockpit, which the view already reads. Unknown runtime status stays UNKNOWN; 599-role catalog is not live agents. Overlaps open PRs #22/#48 on workforce.js (resolved at integration)."
+    },
+    {
+      "owner": "CLOUD",
+      "status": "READY",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "id": "UI-113",
+      "title": "Approval-required state panel with risk and reversibility context on #/inbox (renderer-only)",
+      "package": "WP-INBOX-APPROVAL",
+      "files": [
+        "apps/desktop/renderer/views/inbox.js",
+        "apps/desktop/renderer/approval-core.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "apps/desktop/renderer/styles.css",
+        "tests/v7-ux-inbox.test.ts",
+        "docs/ux/UI-113-APPROVAL-REQUIRED.md"
+      ],
+      "testFile": "tests/v7-ux-inbox.test.ts",
+      "notes": "Uses only the cockpit approvals block, missions and work-runs the view already reads. No new action: decisions stay the existing confirmed transitions. Unknown blast radius is shown as UNKNOWN, never guessed. Overlaps open PR #39 (test file)."
+    },
+    {
+      "owner": "CLOUD",
+      "status": "READY",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "id": "UI-132",
+      "title": "Read-only project closure and handover checklist on #/projects (renderer-only)",
+      "package": "WP-PROJECTS",
+      "files": [
+        "apps/desktop/renderer/views/projects.js",
+        "apps/desktop/renderer/closure-core.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "apps/desktop/renderer/styles.css",
+        "tests/v7-ux-wp-projects.test.ts",
+        "docs/ux/UI-132-CLOSURE-CHECKLIST.md"
+      ],
+      "testFile": "tests/v7-ux-wp-projects.test.ts",
+      "notes": "Checklist items derived from existing project, mission, run and source-delivery reads; delivery stays NOT_VERIFIED (source level); no sign-off action (would need a new endpoint). Overlaps open PR #40 (test file)."
+    },
+    {
+      "owner": "CLOUD",
+      "status": "READY",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "dependsOn": [
+        "UI-030"
+      ],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "id": "UI-032",
+      "title": "Worker detail panel from the fleet grid on #/workforce (renderer-only)",
+      "package": "WP-AGENTS",
+      "files": [
+        "apps/desktop/renderer/views/workforce.js",
+        "apps/desktop/renderer/fleet-core.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "apps/desktop/renderer/styles.css",
+        "tests/v7-ux-wp-agents.test.ts"
+      ],
+      "testFile": "tests/v7-ux-wp-agents.test.ts",
+      "notes": "Depends on UI-030 (same files). Run-level detail only; no live agent telemetry exists, shown as UNKNOWN."
     }
   ],
   "relations": [
