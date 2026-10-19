@@ -140,6 +140,40 @@ function recoveryPanel(ctx,a){
     body);
 }
 
+// ---------- (B2) Kurtarma başarısız -> güvenli dur (UI-186) ----------
+function safeStopPanel(ctx,a){
+  const doc=ctx.doc,t=ctx.t,S=a.safeStop;
+  const unread=source=>h(doc,"p",{class:"note",role:"status",dataset:{rfUnknown:"1",source,reason:failState(a.sources[source].state)},text:t("ops.rf.unreadable",{source:t(`ops.srcShort.${source}`),state:t(`ops.state.${failState(a.sources[source].state)}`)})});
+  const stopBlock=S.stop===null?unread("control"):h(doc,"dl",{class:"ops-facts"},
+    h(doc,"dt",{text:t("ops.rf.stop")}),
+    h(doc,"dd",{dataset:{field:"safeStop",value:S.stop.active?(S.stop.failClosed?"failClosed":"active"):"inactive"}},statePill(ctx,S.stop.active?"STOPPED":"VERIFIED",{label:t(S.stop.active?(S.stop.failClosed?"ops.stop.failClosed":"ops.stop.active"):"ops.stop.inactive")})),
+    S.stop.active?h(doc,"dt",{text:t("ops.field.reason")}):null,
+    S.stop.active?h(doc,"dd",{dataset:{field:"safeStopReason"}},mono(doc,S.stop.reason)):null);
+  let runsBlock;
+  if(S.failedRuns===null)runsBlock=unread("runs");
+  else if(!S.failedRuns.length)runsBlock=h(doc,"p",{class:"note",role:"status",dataset:{opsEmpty:"recoveryFailed"},text:t("ops.rf.none")});
+  else{
+    const shown=S.failedRuns.slice(0,MAX_OPS_ROWS);
+    runsBlock=h(doc,"ul",{class:"cards ops-list ops-recovery-failed","aria-label":t("ops.rf.list.aria"),dataset:{opsRecoveryFailed:String(shown.length)}},shown.map(r=>
+      h(doc,"li",{class:"card ops-item",dataset:{opsRecoveryFailedItem:r.runId}},
+        h(doc,"h3",{text:r.runId}),
+        h(doc,"dl",{class:"ops-facts"},
+          h(doc,"dt",{text:t("ops.field.run")}),h(doc,"dd",{dataset:{field:"status"}},statePill(ctx,"ATTENTION",{label:t("ops.rf.status")})," ",mono(doc,r.status)),
+          h(doc,"dt",{text:t("ops.field.finished")}),h(doc,"dd",{dataset:{field:"finished"}},timeEl(ctx,r.finishedAt)),
+          h(doc,"dt",{text:t("ops.field.package")}),h(doc,"dd",{dataset:{field:"package"}},mono(doc,r.packageId)),
+          h(doc,"dt",{text:t("ops.field.error")}),h(doc,"dd",{dataset:{field:"error"}},dash(r.error))))));
+  }
+  const blocked=S.blockedPackages===null?unread("attention"):h(doc,"p",{class:"note",dataset:{note:"blocked-count"},text:t("ops.rf.blocked",{n:S.blockedPackages})});
+  const nextKey=S.stop!==null&&S.stop.active?"ops.rf.next.stopActive":S.failedRuns!==null&&S.failedRuns.length?"ops.rf.next.failed":S.stop===null||S.failedRuns===null?"ops.rf.next.unknown":"ops.rf.next.none";
+  return panel(ctx,{titleKey:"ops.rf.title",id:"ops-safe-stop",className:"ops-section"},
+    h(doc,"p",{class:"note",text:t("ops.rf.lead")}),
+    h(doc,"h3",{class:"ops-sub",text:t("ops.rf.stopTitle")}),stopBlock,
+    h(doc,"h3",{class:"ops-sub",text:t("ops.rf.runsTitle")}),runsBlock,
+    blocked,
+    h(doc,"h3",{class:"ops-sub",text:t("ops.rf.nextTitle")}),
+    h(doc,"p",{class:"note",role:"status",dataset:{note:"safe-next",next:nextKey.split(".").pop()},text:t(nextKey)}));
+}
+
 // ---------- (C) Mevcut denetimler (salt-okunur) ----------
 /** Bir denetimin dürüst durumu: {kind,text,state}. Hiçbir denetim burada tetiklenmez; durum yalnız gerçek okumalardan. */
 function controlStates(ctx,a){
@@ -300,5 +334,5 @@ export async function render(ctx){
   // Şimdiki zaman yalnız takılma/bekleme türetmek içindir; geçerli bir sayı değilse hiçbir süre/işaret türetilmez.
   const nowMs=typeof ctx.now==="function"?Number(ctx.now()):Date.now();
   const a=buildOperations(res,nowMs);
-  return h(doc,"div",{class:"view view-operations"},header(ctx),summaryPanel(ctx,res,a),recoveryPanel(ctx,a),controlsPanel(ctx,a),planePanel(ctx,a),runsPanel(ctx,a));
+  return h(doc,"div",{class:"view view-operations"},header(ctx),summaryPanel(ctx,res,a),recoveryPanel(ctx,a),safeStopPanel(ctx,a),controlsPanel(ctx,a),planePanel(ctx,a),runsPanel(ctx,a));
 }
