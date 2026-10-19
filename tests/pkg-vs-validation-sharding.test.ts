@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import cp from "node:child_process";
-import {BS1_PARTITION,checkBs1Partition,bs1Scenarios,deElevateOnHostedRunner,bs1DeElevate,deElevatedJobEnv,runasArgv,RUNAS,BS1_SECRET_NAME} from "./support/bs1-shard.js";
+import {BS1_PARTITION,checkBs1Partition,bs1Scenarios,deElevateOnHostedRunner,bs1DeElevate,deElevatedJobEnv,runasArgv,RUNAS,BS1_SECRET_NAME,bs1TemplateBuilder,parseBs1Template,BS1_SELFTEST} from "./support/bs1-shard.js";
 import {checkTestShards,isTestShardId,logicalTestFiles,testShardSteps} from "./support/validation-test-shards.js";
 const cfg=JSON.parse(fs.readFileSync("config/validation.json","utf8")),selftest=fs.readFileSync("scripts/bootstrap-autonomy-selftest.mjs","utf8");
 const vitestSteps=(cfg.steps as {id:string;command:string[]}[]).filter(s=>s.command.some(a=>a.includes("vitest")));
@@ -85,6 +85,30 @@ describe("validation test sharding coverage",()=>{
     const ps=fs.readFileSync("scripts/bootstrap-uasco-autonomy.ps1","utf8");
     expect(ps).toMatch(/\$elevated = \(\[Security\.Principal\.WindowsPrincipal\]\$identity\)\.IsInRole\(\[Security\.Principal\.WindowsBuiltInRole\]::Administrator\)/);
     expect(ps).toMatch(/if \(\$elevated\) \{ Stop-Bootstrap "MUST_RUN_UNELEVATED"/);
+  });
+  // //TR: Paylaşılan şablon kurucusu korunan selftest'in kendi satırlarından birebir oluşur (kopya kod yok) ve gerçekten çalışır: SKIP dizinleri kopyalanmaz, bildirilen HEAD şablonun HEAD'idir; bozuk veya yanlış yerdeki bildirim reddedilir.
+  it("builds the shard's shared fixture template with the selftest's own makeTemplate code, verbatim, and accepts only a well-formed template under TEMP",()=>{
+    expect(BS1_SELFTEST).toBe("scripts/bootstrap-autonomy-selftest.mjs");
+    const prog=bs1TemplateBuilder(selftest),progLines=prog.split("\n"),lines=selftest.split(/\r?\n/);
+    for(const re of [/^const gitIn=/,/^const SKIP=new Set\(/,/^function copyTree\(/,/^function makeTemplate\(\)\{/]){const l=lines.filter(x=>re.test(x));expect(l.length,String(re)).toBe(1);expect(progLines).toContain(l[0])}
+    for(const [re,what] of [[/^function makeTemplate\(\)\{.*$/m,"makeTemplate"],[/^const SKIP=new Set\(.*$/m,"SKIP"]] as const)expect(()=>bs1TemplateBuilder(selftest.replace(re,""))).toThrow("BS1_TEMPLATE_BUILDER_SOURCE_MISSING:"+what);
+    const src=fs.mkdtempSync(path.join(os.tmpdir(),"bs1-tpl-src-")),base=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),"bs1-tpl-base-")));
+    try{
+      for(const f of ["a.txt","dir/b.txt","node_modules/x.js",".ai/cache/c.json",".ai/keep.json","coverage/r.txt",".git/HEAD"]){fs.mkdirSync(path.dirname(path.join(src,f)),{recursive:true});fs.writeFileSync(path.join(src,f),f)}
+      const r=cp.spawnSync(process.execPath,["--input-type=module","-e",prog],{cwd:src,encoding:"utf8",env:{...process.env,TMPDIR:base,TEMP:base,TMP:base}});
+      expect(r.status,r.stderr).toBe(0);
+      const json=r.stdout.match(/^BS1_TEMPLATE (\{.*\})$/m)?.[1]??"",t=parseBs1Template(json,base);
+      expect(t,r.stdout).not.toBeNull();if(!t)return;
+      expect(cp.spawnSync("git",["-C",t.repo,"ls-files"],{encoding:"utf8"}).stdout.trim().split(/\r?\n/).sort()).toEqual([".ai/keep.json","a.txt","dir/b.txt"]);
+      expect(cp.spawnSync("git",["-C",t.repo,"rev-parse","HEAD"],{encoding:"utf8"}).stdout.trim()).toBe(t.full);
+      expect(cp.spawnSync("git",["-C",t.repo,"status","--porcelain"],{encoding:"utf8"}).stdout.trim()).toBe("");
+      const o=JSON.parse(json);
+      for(const bad of ["","{",JSON.stringify({...o,full:"x"}),JSON.stringify({...o,repo:path.join(o.dir,"other")}),JSON.stringify({...o,dir:path.join(base,"elsewhere-tpl"),repo:path.join(base,"elsewhere-tpl","template repo")}),JSON.stringify({...o,dir:path.join(base,"x","uasco-bs1-tpl-1"),repo:path.join(base,"x","uasco-bs1-tpl-1","template repo")})])expect(parseBs1Template(bad,base),bad).toBeNull();
+      expect(parseBs1Template(json,src)).toBeNull();
+    }finally{for(const d of [src,base])fs.rmSync(d,{recursive:true,force:true})}
+    const runner=fs.readFileSync("tests/support/bs1-shard.ts","utf8");
+    expect(runner).toContain("UASCO_BS1_TEMPLATE_REPO:tpl?.repo??\"\",UASCO_BS1_TEMPLATE_HEAD:tpl?.full??\"\"");
+    expect(runner).toContain("}finally{if(tpl)fs.rmSync(tpl.dir,");
   });
   it("keeps the 600 s per-step limit unchanged",()=>{expect(fs.readFileSync("scripts/run-validation.mjs","utf8")).toContain("timeoutMs:600000")});
   it("declares platforms on exactly the seven Windows-only shards, always as [\"win32\"], and on no other step",()=>{

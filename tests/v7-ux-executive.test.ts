@@ -337,7 +337,8 @@ describe("Executive — only already-allow-listed read-only GETs are used (prote
       expect(src).not.toContain(FORBIDDEN);
     }
     const imports = [...read("views", "executive.js").matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1]).sort();
-    expect(imports).toEqual(["../components.js", "../executive-core.js", "../model.js", "../work-core.js"]);
+    // UI-003: tek ek içe aktarma Dönüş Özeti panelidir; onun tek (cihaz-içi) yazımı aşağıdaki ayrı testte sabitlenir.
+    expect(imports).toEqual(["../components.js", "../executive-core.js", "../model.js", "../work-core.js", "./return-summary.js"]);
     expect([...read("executive-core.js").matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1])).toEqual(["./work-core.js"]);
     for (const m of ["execCockpit", "execMissions", "execWorkRuns", "execAttention"]) expect(read("views", "executive.js")).toContain(`api.${m}(`);
     // api.js: yalnız bu dört GET sabit yoldan okunur; yeni POST yolu eklenmez (tek apiPost çağrısı korunur).
@@ -375,6 +376,9 @@ describe("Executive — pure mappers are fail-closed and never elevate state", (
     expect([...core.RUN_STATUSES].sort()).toEqual([...CORE_RUN_STATUSES].sort());
     expect([...core.RUN_STEPS]).toEqual([...CORE_RUN_STEPS]);
     for (const s of CORE_RUN_STATUSES) expect(core.PILL_FOR_RUN_STATUS[s], s).toBeTruthy();
+    expect(core.PILL_FOR_RUN_STATUS.RECOVERING).toBe("RECOVERING");
+    expect(core.PILL_FOR_RUN_STATUS.RECOVERY_FAILED).toBe("FAILED");
+    expect(core.PILL_FOR_RUN_STATUS.CHECKPOINTING).toBe("ACTIVE");
   });
   it("mapExecCockpit accepts the contract shape, carries honest non-live blocks without numbers, and uses ONLY the canonical role count", async () => {
     const core = await load("executive-core.js");
@@ -553,7 +557,7 @@ describe("Executive — view honesty", () => {
   it("renders section A (executive summary) before section B (execution ledger) with real KPI values from the four sources", async () => {
     const {root, calls} = await renderView(serve());
     expect(calls.slice().sort()).toEqual(FOUR);
-    expect(root.children.map(c => c.id || c.className)).toEqual(["hero", "executive-summary", "executive-ledger"]);
+    expect(root.children.map(c => c.id || c.className)).toEqual(["hero", "executive-return", "executive-summary", "executive-ledger"]);
     expect(cls(root, "view-executive")).toBe(true);
     expect(["projects", "missions", "inProgress", "runs", "approvals", "blocked", "deliveries", "evidence"].map(k => [k, kpiValue(root, k)])).toEqual([["projects", "3"], ["missions", "3"], ["inProgress", "2"], ["runs", "3"], ["approvals", "1"], ["blocked", "2"], ["deliveries", "1"], ["evidence", "8"]]);
     expect(kpi(root, "runs").textContent).toContain("1 open · 1 awaiting Founder decision · 1 ended.");
@@ -755,14 +759,14 @@ describe("Executive — view honesty", () => {
 
 // ---------------- (5) accessibility ----------------
 describe("Executive — accessibility", () => {
-  it("single labelled h1, exactly two labelled sections (summary, ledger), a labelled KPI group and a labelled ordered ledger with machine-readable times", async () => {
+  it("single labelled h1, exactly three labelled sections (return summary, summary, ledger), a labelled KPI group and a labelled ordered ledger with machine-readable times", async () => {
     const {root} = await renderView(serve());
     const h1 = all(root).filter(n => n.tagName === "H1");
     expect(h1.length).toBe(1);
     expect(h1[0].id).toBe("view-title");
     expect(h1[0].getAttribute("tabindex")).toBe("-1");
-    expect(all(root).filter(n => n.tagName === "SECTION").map(n => n.id)).toEqual(["executive-summary", "executive-ledger"]);
-    for (const id of ["executive-summary", "executive-ledger"]) {
+    expect(all(root).filter(n => n.tagName === "SECTION").map(n => n.id)).toEqual(["executive-return", "executive-summary", "executive-ledger"]);
+    for (const id of ["executive-return", "executive-summary", "executive-ledger"]) {
       const sec = byId(root, id)!;
       expect(sec.tagName, id).toBe("SECTION");
       expect(byId(root, sec.getAttribute("aria-labelledby")!), id).toBeTruthy();
@@ -886,5 +890,279 @@ describe("Executive — route delegation (app.js VIEWS unchanged)", () => {
     const routes = await load("routes.js"), i18n = await load("i18n.js");
     for (const lang of ["en", "tr"]) for (const r of routes.ROUTES) expect(i18n.translate(lang, `area.${r.id}.title`), `${lang}/${r.id}`).not.toBe(`area.${r.id}.title`);
     expect(i18n.translate("tr", "area.executive.title")).toBe("Kurucu Yönetim Özeti ve İcra Defteri");
+  });
+});
+
+// ---------------- (8) UI-003 Dönüş Özeti (son ziyaretten beri) ----------------
+// //TR: UI-003 testleri: işaret yalnız bu cihazda ve SUNUCU zaman damgasıyla (filigran) tutulur; istemci saati hiç kullanılmaz, okunamayan kaynak 0 değil dürüst durum gösterir, gruplama koşunun güncel durumuna göredir.
+class MemStorage { m = new Map<string, string>(); getItem(k: string) { return this.m.has(k) ? this.m.get(k)! : null; } setItem(k: string, v: string) { this.m.set(k, String(v)); } }
+const deniedStorage = {getItem() { throw new Error("denied"); }, setItem() { throw new Error("denied"); }};
+const readOnlyStorage = (v: string | null) => ({getItem: () => v, setItem() { throw new Error("quota"); }});
+const WATERMARK = "2026-10-16T05:00:00.000Z"; // RUN2.updatedAt: fikstürdeki en yeni sunucu kaydı
+async function renderReturn(getFn: (p: string) => any, storage: any, lang = "en") {
+  const executive = await load("views", "executive.js");
+  const m = await mkCtx(getFn, lang);
+  m.ctx.storage = storage;
+  m.ctx.rerender = vi.fn(async () => {});
+  const root: N = await executive.render(m.ctx);
+  return {root, sec: byId(root, "executive-return")!, ...m};
+}
+const seeded = async (seen: string | null) => { const s = new MemStorage(); const core = await load("return-summary-core.js"); if (seen !== null) s.setItem(core.RETURN_SEEN_STORAGE_KEY, seen); return s; };
+const click = async (n: N) => { for (const fn of n.ls.get("click") ?? []) await fn({}); };
+const countOf = (sec: N, key: string) => { const dt = all(sec).find(n => n.tagName === "DT" && n.dataset.returnCount === key)!; const dd = dt.parent!.children[dt.parent!.children.indexOf(dt) + 1]; return {text: all(dd).find(n => cls(n, "mono"))!.textContent, pills: pills(dd)}; };
+
+describe("Executive — UI-003 return summary core (pure, server-time watermark, fail-closed)", () => {
+  it("the marker is accepted only in canonical toISOString form; storage failures never throw", async () => {
+    const core = await load("return-summary-core.js");
+    expect(core.canonicalSeen("2026-10-16T03:00:00.000Z")).toBe("2026-10-16T03:00:00.000Z");
+    for (const bad of ["2026-10-16", "2026-10-16T03:00:00Z", "2026-10-16T03:00:00.000+00:00", "yesterday", "", "2026-13-01T00:00:00.000Z", 0, null, undefined, {}]) expect(core.canonicalSeen(bad), String(bad)).toBeNull();
+    expect(core.readSeen(null)).toEqual({storage: "UNAVAILABLE", seen: null, invalid: false});
+    expect(core.readSeen(deniedStorage)).toEqual({storage: "UNAVAILABLE", seen: null, invalid: false});
+    expect(core.readSeen(new MemStorage())).toEqual({storage: "AVAILABLE", seen: null, invalid: false});
+    expect(core.readSeen(readOnlyStorage("last tuesday"))).toEqual({storage: "AVAILABLE", seen: null, invalid: true});
+    expect(core.readSeen(readOnlyStorage("2026-10-16T03:00:00.000Z"))).toEqual({storage: "AVAILABLE", seen: "2026-10-16T03:00:00.000Z", invalid: false});
+    const s = new MemStorage();
+    expect(core.storeSeen(s, "2026-10-16")).toBe(false);
+    expect(s.m.size).toBe(0);
+    expect(core.storeSeen(deniedStorage, WATERMARK)).toBe(false);
+    expect(core.storeSeen(null, WATERMARK)).toBe(false);
+    expect(core.storeSeen(s, WATERMARK)).toBe(true);
+    expect(s.getItem(core.RETURN_SEEN_STORAGE_KEY)).toBe(WATERMARK);
+    expect(core.RETURN_SEEN_STORAGE_KEY).toBe("uasco.executive.returnSeenAt");
+  });
+  it("the watermark is the newest SERVER timestamp (runs, accepted deliveries, missions) and ignores the client clock", async () => {
+    const core = await load("return-summary-core.js"), ex = await load("executive-core.js");
+    const runs = ex.mapExecWorkRuns(RUNS), missions = ex.mapExecMissions(MISSIONS);
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2031-01-01T00:00:00.000Z"));
+    try {
+      expect(core.returnWatermark(runs, missions)).toBe(WATERMARK);
+      // Yalnız kabul edilen teslim daha yeniyse filigran odur.
+      const late = ex.mapExecWorkRuns({runs: [runRow(RUN1, MSN1, {updatedAt: "2026-10-16T03:00:00.000Z", deliveryArtifact: artifact(RUN1, MSN1), sourceDelivery: accepted(RUN1, MSN1, {acceptedAt: "2026-10-17T00:00:00.000Z"})})]});
+      expect(core.returnWatermark(late, missions)).toBe("2026-10-17T00:00:00.000Z");
+      expect(core.returnWatermark({state: "VERIFIED", runs: {items: []}}, {state: "VERIFIED", missions: {items: []}})).toBeNull();
+      // Bir kaynak okunamıyorsa filigran yoktur: okunamayan kaynağın kayıtları "görüldü" sayılamaz (B1).
+      expect(core.returnWatermark({state: "ERROR", runs: null}, missions)).toBeNull();
+      expect(core.returnWatermark(runs, {state: "ERROR", missions: null})).toBeNull();
+      expect(core.returnWatermark(late, {state: "OFFLINE", missions: null})).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+  it("a failed work-runs read is carried as its honest state; no marker means FIRST_VISIT (nothing is counted as new)", async () => {
+    const core = await load("return-summary-core.js"), ex = await load("executive-core.js");
+    const missions = ex.mapExecMissions(MISSIONS);
+    for (const st of ["OFFLINE", "UNAVAILABLE", "ERROR"]) {
+      const r = core.returnSummary({runs: {state: st, runs: null}, missions}, "2026-10-16T03:00:00.000Z");
+      expect(r).toMatchObject({state: st, groups: null, total: null, nothingNew: false, watermark: null});
+    }
+    expect(core.returnSummary({runs: {state: "WEIRD"}, missions}, null).state).toBe("ERROR");
+    const first = core.returnSummary({runs: ex.mapExecWorkRuns(RUNS), missions}, null);
+    expect(first).toMatchObject({state: "FIRST_VISIT", since: null, watermark: WATERMARK, groups: null, total: null, nothingNew: false});
+    // Bozuk işaret de FIRST_VISIT'tir (tahmin yok).
+    expect(core.returnSummary({runs: ex.mapExecWorkRuns(RUNS), missions}, "2026-10-16").state).toBe("FIRST_VISIT");
+  });
+  it("counts only records strictly AFTER the marker, grouped by current run status; equal timestamps are already seen", async () => {
+    const core = await load("return-summary-core.js"), ex = await load("executive-core.js");
+    const res = {runs: ex.mapExecWorkRuns(RUNS), missions: ex.mapExecMissions(MISSIONS)};
+    const r = core.returnSummary(res, "2026-10-16T03:00:00.000Z");
+    expect(r.state).toBe("VERIFIED");
+    expect(Object.fromEntries(core.RETURN_GROUPS.map((g: string) => [g, r.groups[g].items.map((x: any) => x.runId)]))).toEqual({awaiting: [], failed: [RUN3], blocked: [], completed: [], stopped: [], active: [RUN2]});
+    expect(r.deliveries.items.map((x: any) => x.runId)).toEqual([RUN1]);
+    expect(r.missions).toMatchObject({state: "VERIFIED", count: 0});
+    expect([r.total, r.nothingNew, r.since, r.watermark]).toEqual([3, false, "2026-10-16T03:00:00.000Z", WATERMARK]);
+    const older = core.returnSummary(res, "2026-10-15T12:00:00.000Z");
+    expect(older.groups.awaiting.items.map((x: any) => x.runId)).toEqual([RUN1]);
+    expect(older.missions.items.map((x: any) => x.missionId)).toEqual([MSN1]);
+    expect(older.total).toBe(5);
+    const none = core.returnSummary(res, WATERMARK);
+    expect([none.state, none.total, none.nothingNew]).toEqual(["VERIFIED", 0, true]);
+  });
+  it("an unreadable missions source makes the summary PARTIAL: new missions are null (never 0) and 'nothing new' is never claimed", async () => {
+    const core = await load("return-summary-core.js"), ex = await load("executive-core.js");
+    for (const st of ["OFFLINE", "ERROR"]) {
+      const r = core.returnSummary({runs: ex.mapExecWorkRuns(RUNS), missions: {state: st, missions: null}}, WATERMARK);
+      expect(r.state).toBe("PARTIAL");
+      expect(r.missions).toEqual({state: st, count: null, items: [], truncated: false});
+      expect([r.total, r.nothingNew, r.watermark]).toEqual([0, false, null]);
+    }
+  });
+  it("every run status maps into a known group; lists are capped with an explicit truncation flag", async () => {
+    const core = await load("return-summary-core.js"), ex = await load("executive-core.js");
+    for (const st of ex.RUN_STATUSES) expect(core.RETURN_GROUPS, st).toContain(core.groupForStatus(st));
+    expect(["AWAITING_APPROVAL", "FAILED", "RECOVERY_FAILED", "BLOCKED", "QUARANTINED", "SUCCEEDED", "CANCELLED", "CANCELLING", "RUNNING", "RETRY_SCHEDULED"].map(core.groupForStatus))
+      .toEqual(["awaiting", "failed", "failed", "blocked", "blocked", "completed", "stopped", "stopped", "active", "active"]);
+    const many = {runs: Array.from({length: 60}, (_, i) => runRow("run_" + i.toString(16).padStart(24, "0"), MSN1, {status: "FAILED", updatedAt: new Date(Date.UTC(2026, 9, 17, 0, i)).toISOString(), evidence: []}))};
+    const r = core.returnSummary({runs: ex.mapExecWorkRuns(many), missions: ex.mapExecMissions(MISSIONS)}, "2026-10-16T00:00:00.000Z");
+    expect([r.groups.failed.count, r.groups.failed.items.length, r.groups.failed.truncated, r.truncated]).toEqual([60, core.MAX_RETURN_ROWS, true, true]);
+    expect(core.returnSummary({runs: ex.mapExecWorkRuns(RUNS), missions: ex.mapExecMissions(MISSIONS)}, "2026-10-15T12:00:00.000Z").truncated).toBe(false);
+    expect(core.MAX_RETURN_ROWS).toBe(50);
+  });
+  it("the marker never moves backwards: nextSeen keeps the later of the stored marker and the new watermark", async () => {
+    const core = await load("return-summary-core.js");
+    expect(core.nextSeen(null, WATERMARK)).toBe(WATERMARK);
+    expect(core.nextSeen("2026-10-15T00:00:00.000Z", WATERMARK)).toBe(WATERMARK);
+    expect(core.nextSeen("2026-10-20T00:00:00.000Z", WATERMARK)).toBe("2026-10-20T00:00:00.000Z");
+    expect(core.nextSeen("garbage", WATERMARK)).toBe(WATERMARK);
+    expect(core.nextSeen(WATERMARK, null)).toBeNull();
+    expect(core.nextSeen(WATERMARK, "2026-10-16")).toBeNull();
+  });
+});
+
+describe("Executive — UI-003 return summary never reaches the server; its only write is one device-local key", () => {
+  it("return-summary.js / return-summary-core.js: no post, bridge, fetch/XHR, eval, HTML sinks, sessionStorage; no own API read; fixed imports", () => {
+    const view = read("views", "return-summary.js"), core = read("return-summary-core.js");
+    for (const src of [view, core]) {
+      expect(src).not.toMatch(/\.post\(|window\.uasco|\bbridge\b|apiPost|apiGet|\bfetch\(|XMLHttpRequest|\beval\(|innerHTML|outerHTML|insertAdjacentHTML|new Function|sessionStorage|\bctx\.api\b|\bapi\./);
+      expect(src).not.toContain(FORBIDDEN);
+      expect(src.split("\n")[0]).toMatch(/^\/\/ \/\/TR: /);
+    }
+    expect([...view.matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1]).sort()).toEqual(["../components.js", "../executive-core.js", "../model.js", "../return-summary-core.js", "../work-core.js"]);
+    expect([...core.matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1])).toEqual(["./executive-core.js"]);
+    // Cihaz deposuna tek erişim noktası (try/catch) ve tek yazım (storeSeen, tek anahtar).
+    const code = (src: string) => src.split("\n").filter(l => !/^\s*(\/\/|\/\*\*|\*)/.test(l)).join("\n");
+    expect(code(view).match(/localStorage/g)?.length).toBe(1);
+    expect(view).toMatch(/function deviceStorage\(ctx\)\{if\(ctx\.storage!==undefined\)return ctx\.storage;try\{return globalThis\.window\?\.localStorage\?\?null\}catch\{return null\}\}/);
+    expect(core).not.toMatch(/localStorage/);
+    expect((view + core).match(/setItem\(/g)?.length).toBe(1);
+    expect(core).toContain("storage.setItem(RETURN_SEEN_STORAGE_KEY,v)");
+    expect(view).not.toMatch(/setItem|removeItem|clear\(/);
+  });
+  it("rendering the executive view issues exactly the same four GETs with or without the return summary marker", async () => {
+    for (const storage of [null, await seeded(null), await seeded("2026-10-16T03:00:00.000Z")]) {
+      const {calls} = await renderReturn(serve(), storage);
+      expect([...calls].sort()).toEqual(FOUR);
+    }
+  });
+});
+
+describe("Executive — UI-003 return summary view (device-only marker, honest states)", () => {
+  it("first visit: no counts, an explicit first-visit note and a mark button that stores the SERVER watermark (not the client clock) and re-renders", async () => {
+    vi.useFakeTimers({toFake: ["Date"]}); vi.setSystemTime(new Date("2031-01-01T00:00:00.000Z"));
+    try {
+      const storage = await seeded(null);
+      const {root, sec, ctx} = await renderReturn(serve(), storage);
+      expect(root.children.map(c => c.id || c.className)).toEqual(["hero", "executive-return", "executive-summary", "executive-ledger"]);
+      expect(byData(sec, "returnState")!.dataset.returnState).toBe("FIRST_VISIT");
+      expect(sec.textContent).toContain("nothing is counted as new");
+      expect(allData(sec, "returnCount").length).toBe(0);
+      const btn = byId(sec, "executive-return-mark")!;
+      expect([btn.tagName, btn.getAttribute("type"), btn.getAttribute("disabled"), btn.textContent]).toEqual(["BUTTON", "button", null, "Mark all as seen"]);
+      await click(btn);
+      expect(storage.getItem("uasco.executive.returnSeenAt")).toBe(WATERMARK);
+      expect(ctx.rerender).toHaveBeenCalledTimes(1);
+      expect(byData(sec, "returnStatus")!.textContent).toBe("Marked as seen.");
+    } finally { vi.useRealTimers(); }
+  });
+  it("with a marker: per-group counts (pill + number), lists in fixed group order, source-only deliveries; the ledger is unchanged", async () => {
+    const {root, sec} = await renderReturn(serve(), await seeded("2026-10-16T03:00:00.000Z"));
+    expect(byData(sec, "returnState", "VERIFIED")).toBeTruthy();
+    expect(all(sec).find(n => n.tagName === "TIME")!.getAttribute("datetime")).toBe("2026-10-16T03:00:00.000Z");
+    expect(["awaiting", "failed", "blocked", "completed", "stopped", "active", "missions", "deliveries"].map(k => [k, countOf(sec, k).text])).toEqual([["awaiting", "0"], ["failed", "1"], ["blocked", "0"], ["completed", "0"], ["stopped", "0"], ["active", "1"], ["missions", "0"], ["deliveries", "1"]]);
+    expect(countOf(sec, "failed").pills).toEqual(["FAILED"]);
+    expect(countOf(sec, "deliveries").pills).toEqual(["NOT_VERIFIED"]);
+    expect(allData(sec, "returnGroup").map(n => n.dataset.returnGroup)).toEqual(["failed", "active", "deliveries"]);
+    expect(allData(sec, "returnRun").map(n => n.dataset.returnRun)).toEqual([RUN3, RUN2]);
+    expect(allData(sec, "returnDelivery").map(n => n.dataset.returnDelivery)).toEqual([RUN1]);
+    expect(byData(sec, "note", "source-only")).toBeTruthy();
+    expect(byData(sec, "note", "grouping")).toBeTruthy();
+    expect(rows(root).map(n => n.dataset.run)).toEqual([RUN2, RUN3, RUN1]);
+    expect(allData(root, "executiveState").length).toBe(0);
+    expect(byId(sec, "executive-return-mark")!.getAttribute("disabled")).toBeNull();
+  });
+  it("marker at the newest server record: 'Nothing new since your last visit.' and no lists", async () => {
+    const {sec} = await renderReturn(serve(), await seeded(WATERMARK));
+    expect(sec.textContent).toContain("Nothing new since your last visit.");
+    expect(allData(sec, "returnGroup").length).toBe(0);
+    expect(countOf(sec, "failed").text).toBe("0");
+  });
+  it("no device storage: an honest note, no counts and no mark button (the ledger still renders)", async () => {
+    for (const storage of [null, deniedStorage]) {
+      const {root, sec} = await renderReturn(serve(), storage);
+      expect(byData(sec, "returnState")!.dataset.returnState).toBe("NO_STORAGE");
+      expect(byId(sec, "executive-return-mark")).toBeUndefined();
+      expect(allData(sec, "returnCount").length).toBe(0);
+      expect(rows(root).length).toBe(3);
+    }
+    // Varsayılan (ctx.storage yok, Node'da window yok) da aynı dürüst durumdur.
+    const {root} = await renderView(serve());
+    expect(byData(byId(root, "executive-return")!, "returnState")!.dataset.returnState).toBe("NO_STORAGE");
+  });
+  it("a failed save changes nothing, does not re-render and says so in the status region", async () => {
+    const storage = readOnlyStorage(null);
+    const {sec, ctx} = await renderReturn(serve(), storage);
+    await click(byId(sec, "executive-return-mark")!);
+    expect(ctx.rerender).not.toHaveBeenCalled();
+    expect(byData(sec, "returnStatus")!.textContent).toBe("The marker could not be saved on this device. Nothing was changed.");
+  });
+  it("an unreadable stored marker is ignored with a note (first-visit behaviour, no guessed window)", async () => {
+    const {sec} = await renderReturn(serve(), readOnlyStorage("2026-10-16"));
+    expect(byData(sec, "note", "invalid-marker")).toBeTruthy();
+    expect(byData(sec, "returnState")!.dataset.returnState).toBe("FIRST_VISIT");
+  });
+  it("work-runs unreadable: a status block names the source; nothing is shown as new or zero and there is no mark button", async () => {
+    for (const [getFn, st] of [[serve({"/v1/work-runs": {runs: [{runId: "bad"}]}}), "ERROR"], [(p: string) => (p === "/v1/work-runs" ? (() => { throw new Error("fetch failed"); })() : serve()(p)), "OFFLINE"]] as const) {
+      const {sec} = await renderReturn(getFn as any, await seeded("2026-10-16T03:00:00.000Z"));
+      const blk = byData(sec, "returnState")!;
+      expect([blk.dataset.returnState, blk.getAttribute("role")]).toEqual([st, "status"]);
+      expect(blk.textContent).toContain("GET /v1/work-runs");
+      expect(allData(sec, "returnCount").length).toBe(0);
+      expect(byId(sec, "executive-return-mark")).toBeUndefined();
+    }
+  });
+  it("missions unreadable: PARTIAL note, the new-missions count is — (not 0), and NO mark is offered so unseen missions cannot be hidden (B1)", async () => {
+    const storage = await seeded("2026-10-15T12:00:00.000Z");
+    const {sec} = await renderReturn(serve({"/v1/missions": {missions: [{missionId: "nope"}]}}), storage);
+    expect(byData(sec, "returnState", "PARTIAL")).toBeTruthy();
+    expect(byData(sec, "note", "partial")!.textContent).toContain("GET /v1/missions");
+    expect(countOf(sec, "missions")).toEqual({text: "—", pills: ["FAILED"]});
+    expect(sec.textContent).not.toContain("Nothing new since your last visit.");
+    expect(byId(sec, "executive-return-mark")).toBeUndefined();
+    expect(byData(sec, "returnStatus")).toBeUndefined();
+    const blocked = byData(sec, "note", "mark-blocked")!;
+    expect([blocked.getAttribute("role"), blocked.textContent]).toEqual(["note", "GET /v1/missions could not be read, so nothing can be marked as seen until it is readable again (unseen missions must not be hidden)."]);
+    expect(storage.getItem("uasco.executive.returnSeenAt")).toBe("2026-10-15T12:00:00.000Z");
+    // İlk ziyarette de aynı: mission okunamıyorsa işaretleme sunulmaz.
+    const first = await renderReturn(serve({"/v1/missions": {missions: [{missionId: "nope"}]}}), await seeded(null));
+    expect(byData(first.sec, "returnState")!.dataset.returnState).toBe("FIRST_VISIT");
+    expect(byId(first.sec, "executive-return-mark")).toBeUndefined();
+    expect(byData(first.sec, "note", "mark-blocked")).toBeTruthy();
+  });
+  it("marking never moves the stored marker backwards, and truncated lists say the hidden items are covered too", async () => {
+    const ahead = await seeded("2026-10-20T00:00:00.000Z");
+    const {sec} = await renderReturn(serve(), ahead);
+    await click(byId(sec, "executive-return-mark")!);
+    expect(ahead.getItem("uasco.executive.returnSeenAt")).toBe("2026-10-20T00:00:00.000Z");
+    expect(byData(sec, "note", "mark-truncated")).toBeUndefined();
+    const many = {runs: Array.from({length: 60}, (_, i) => runRow("run_" + i.toString(16).padStart(24, "0"), MSN1, {status: "FAILED", updatedAt: new Date(Date.UTC(2026, 9, 17, 0, i)).toISOString(), evidence: []}))};
+    const big = await renderReturn(serve({"/v1/work-runs": many}), await seeded("2026-10-16T00:00:00.000Z"));
+    expect(byData(big.sec, "note", "mark-truncated")!.textContent).toContain("also covers the items not shown");
+  });
+  it("accessibility: labelled section, labelled lists and count list, well-formed dl, polite status region, machine-readable times; Turkish renders", async () => {
+    const {sec} = await renderReturn(serve(), await seeded("2026-10-15T12:00:00.000Z"));
+    expect(byId(sec, sec.getAttribute("aria-labelledby")!)!.textContent).toBe("Since your last visit");
+    for (const ol of all(sec).filter(n => n.tagName === "OL")) expect(ol.getAttribute("aria-label")).toBeTruthy();
+    const dl = all(sec).find(n => n.tagName === "DL")!;
+    expect(dl.getAttribute("aria-label")).toBe("Return summary counts");
+    expect(dl.children.length).toBe(16);
+    dl.children.forEach((c, i) => expect(c.tagName).toBe(i % 2 === 0 ? "DT" : "DD"));
+    const st = byData(sec, "returnStatus")!;
+    expect([st.getAttribute("role"), st.getAttribute("aria-live")]).toEqual(["status", "polite"]);
+    for (const t of all(sec).filter(n => n.tagName === "TIME")) expect(t.getAttribute("datetime")).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    for (const p of allData(sec, "pill")) expect(p.textContent.trim().length, p.dataset.pill).toBeGreaterThan(0);
+    for (const text of [surface(sec), sec.textContent]) { expect(text).not.toContain(FORBIDDEN); expect(text).not.toMatch(/product[\s_-]*verified/i); }
+    const tr = await renderReturn(serve(), await seeded("2026-10-15T12:00:00.000Z"), "tr");
+    expect(byId(tr.sec, tr.sec.getAttribute("aria-labelledby")!)!.textContent).toBe("Dönüş Özeti");
+    expect(byId(tr.sec, "executive-return-mark")!.textContent).toBe("Tümünü görüldü olarak işaretle");
+  });
+  it("every executive.return.* key used by the view (literal or per group) exists in TR and EN; the core reads no endpoint of its own", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const core = await load("return-summary-core.js");
+    const src = read("views", "return-summary.js");
+    const need = new Set<string>([...src.matchAll(/"(executive\.return\.[A-Za-z0-9_.]+)"/g)].map(m => m[1]));
+    for (const g of core.RETURN_GROUPS) need.add(`executive.return.group.${g}`);
+    expect(need.size).toBeGreaterThan(25);
+    for (const k of need) { expect(en[k], `en ${k}`).toBeTruthy(); expect(tr[k], `tr ${k}`).toBeTruthy(); }
+    const coreSrc = read("return-summary-core.js");
+    expect(coreSrc.split("\n")[0]).toMatch(/^\/\/ \/\/TR: /);
+    expect(coreSrc).not.toMatch(/fetch\(|apiGet|\bapi\.|Date\.now\(|new Date\(\)/);
   });
 });
