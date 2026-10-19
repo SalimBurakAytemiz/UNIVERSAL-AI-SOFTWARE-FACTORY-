@@ -279,3 +279,178 @@ describe("UX WP-WORKOS a11y and static safety", () => {
     expect(block).toContain("forced-colors");
   });
 });
+
+// //TR: test+states: work (functional/negative/a11y) — Görevler / Work OS: bozuk görev/koşu yanıtlarında uydurma sayı/satır yok, görev ayrıntısı okunamazsa ayrıntı uydurulmaz, proje yokken görev oluşturma kapalıdır, başarısız POST başarı bildirmez; filtre çubuğu/tablo/geçiş kontrolleri erişilebilir (h1 tabindex, tipli düğmeler, aria-pressed, caption/scope) ve görünümün kullandığı tüm anahtarlar TR/EN eşittir.
+describe("test+states work: negative (malformed and partial reads)", () => {
+  const detail = (extra: Record<string, any> = {}) => ({
+    ...FULL,
+    [`/v1/missions/${M1}`]: {mission: {missionId: M1, projectId: "prj", title: "G1", objective: "Hedef", acceptanceCriteria: ["k1"], riskLevel: "R1", status: "EXECUTING", createdAt: tm(1)}, tasks: []},
+    ...extra
+  });
+  it("malformed /v1/missions payloads are ERROR: em-dash KPIs, no table, no filter bar, no lifecycle strip, no invented count", async () => {
+    // //TR: Bozuk görev yanıtı doğrulanmış sayılmaz.
+    const view = await load("views", "work.js");
+    for (const bad of [{missions: "x"}, {missions: {a: 1}}, null, [], {}]) {
+      const {ctx} = await mkCtx(fromFix({...FULL, "/v1/missions": bad}));
+      const root = await view.render(ctx);
+      expect(kpiValue(root, "wk-missions"), JSON.stringify(bad)).toBe("—");
+      expect(kpiValue(root, "wk-attention")).toBe("—");
+      expect(pills(kpi(root, "wk-missions"))).not.toContain("VERIFIED");
+      expect(all(root).filter(n => n.tagName === "TABLE").length).toBe(0);
+      expect(byId(root, "work-overview-strip")).toBeNull();
+      expect(all(root).some(n => n.className.includes("filter-bar"))).toBe(false);
+      expect(byId(root, "mission-form")).not.toBeNull();
+    }
+  });
+  it("when only /v1/work-runs fails, mission KPIs stay real while run KPIs are em-dash with UNAVAILABLE and no mission is marked verified", async () => {
+    const view = await load("views", "work.js");
+    const {ctx} = await mkCtx(fromFix({"/v1/missions": MISSIONS, "/v1/projects": {projects: []}}));
+    const root = await view.render(ctx);
+    expect(kpiValue(root, "wk-missions")).toBe("6");
+    for (const id of ["wk-active", "wk-verified"]) { expect(kpiValue(root, id), id).toBe("—"); expect(pills(kpi(root, id)), id).toEqual(["UNAVAILABLE"]); }
+  });
+  it("malformed work-runs never produce an active or verified run count", async () => {
+    const view = await load("views", "work.js");
+    const {ctx} = await mkCtx(fromFix({...FULL, "/v1/work-runs": {workRuns: "nope"}}));
+    const root = await view.render(ctx);
+    expect(kpiValue(root, "wk-active")).toBe("—");
+    expect(kpiValue(root, "wk-verified")).toBe("—");
+    expect(pills(kpi(root, "wk-active"))).not.toContain("VERIFIED");
+  });
+  it("with no listed projects the new-mission submit button is disabled and nothing is posted", async () => {
+    const view = await load("views", "work.js");
+    const {ctx, doc} = await mkCtx(fromFix(FULL));
+    const root = await view.render(ctx);
+    doc.body.replaceChildren(root);
+    expect(byId(root, "mission-submit")!.hasAttribute("disabled")).toBe(true);
+  });
+  it("a selected mission whose detail read fails shows an honest state note and invents no title, objective, criteria or transitions", async () => {
+    forms.selection.missionId = M1;
+    const view = await load("views", "work.js");
+    const {ctx} = await mkCtx(fromFix({...FULL, [`/v1/work-runs?missionId=${M1}`]: {workRuns: []}}));
+    const root = await view.render(ctx);
+    const panel = byId(root, "work-detail")!;
+    expect(panel).not.toBeNull();
+    expect(panel.textContent).toContain("Kullanılamıyor");
+    expect(byId(root, "run-start")).toBeNull();
+    expect(all(panel).filter(n => n.id.startsWith("tr-")).length).toBe(0);
+    expect(byId(root, "work-run-timeline")).toBeNull();
+  });
+  it("a selected mission with failing runs and evidence keeps the detail but shows honest notes: no run card, no timeline, no evidence item", async () => {
+    forms.selection.missionId = M1;
+    const view = await load("views", "work.js");
+    const {ctx} = await mkCtx(fromFix(detail()));
+    const root = await view.render(ctx);
+    const panel = byId(root, "work-detail")!;
+    expect(panel.textContent).toContain("G1");
+    expect(all(panel).filter(n => n.className.split(" ").includes("run-card")).length).toBe(0);
+    expect(byId(root, "work-run-timeline")).toBeNull();
+    expect(byId(root, "work-evidence-list")).toBeNull();
+    expect(all(panel).filter(n => n.dataset.pill === "VERIFIED").length).toBe(0);
+  });
+  it("renders API text (titles, objectives) as text only", async () => {
+    forms.selection.missionId = M1;
+    const view = await load("views", "work.js");
+    const fix = detail({"/v1/missions": {missions: [{missionId: M1, projectId: "prj", title: "<img src=x onerror=1>", status: "DRAFT", riskLevel: "R1", createdAt: tm(1)}]},
+      [`/v1/missions/${M1}`]: {mission: {missionId: M1, projectId: "prj", title: "<script>1</script>", objective: "<b>x</b>", acceptanceCriteria: [], riskLevel: "R1", status: "DRAFT", createdAt: tm(1)}, tasks: []}});
+    const {ctx} = await mkCtx(fromFix(fix));
+    const root = await view.render(ctx);
+    expect(root.textContent).toContain("<img src=x onerror=1>");
+    expect(all(root).some(n => ["IMG", "SCRIPT", "B"].includes(n.tagName))).toBe(false);
+  });
+  it("a failed mission POST records a non-success status, keeps the draft and never selects a mission", async () => {
+    const view = await load("views", "work.js");
+    const posts: any[] = [];
+    const {ctx} = await mkCtx(fromFix({...FULL, "/v1/projects": {projects: [{projectId: "prj_" + "ab12".repeat(6), name: "P"}]}}));
+    ctx.api.post = async (p: string, b: any) => { posts.push([p, b]); return {status: 503, body: {error: "X"}}; };
+    const root = await view.render(ctx);
+    byId(root, "mission-title")!.value = "Yeni görev"; byId(root, "mission-title")!.fire("input");
+    byId(root, "mission-objective")!.value = "Hedef"; byId(root, "mission-objective")!.fire("input");
+    byId(root, "mission-criteria-0")!.value = "kabul"; byId(root, "mission-criteria-0")!.fire("input");
+    byId(root, "mission-form")!.fire("submit"); await new Promise(r => setTimeout(r, 0));
+    expect(posts.length).toBe(1);
+    expect(forms.drafts.status.mission.ok).toBe(false);
+    expect(forms.drafts.mission.title).toBe("Yeni görev");
+    expect(forms.selection.missionId).toBeFalsy();
+    expect(forms.drafts.busy.mission).toBe(false);
+  });
+});
+
+describe("test+states work: accessibility and keyboard", () => {
+  it("h1 is unique with tabindex -1; every button is explicitly typed with and without data; filter bar is a labelled group with aria-pressed", async () => {
+    // //TR: h1 odak hedefidir; tüm düğmeler tiplidir; filtre düğmeleri aria-pressed taşır.
+    const view = await load("views", "work.js");
+    for (const fix of [FULL, {}] as Array<Record<string, any>>) {
+      const {ctx} = await mkCtx(fromFix(fix));
+      const root = await view.render(ctx);
+      const h1s = all(root).filter(n => n.tagName === "H1");
+      expect(h1s.length).toBe(1);
+      expect(h1s[0].id).toBe("view-title");
+      expect(h1s[0].getAttribute("tabindex")).toBe("-1");
+      const btns = all(root).filter(n => n.tagName === "BUTTON");
+      expect(btns.length).toBeGreaterThan(0);
+      for (const b of btns) expect(["button", "submit"], b.id || b.textContent).toContain(b.getAttribute("type"));
+    }
+    const {ctx} = await mkCtx(fromFix(FULL));
+    const root = await view.render(ctx);
+    const bar = all(root).find(n => n.className.includes("filter-bar"))!;
+    expect(bar.getAttribute("role")).toBe("group");
+    expect(bar.getAttribute("aria-label")!.length).toBeGreaterThan(0);
+    const fb = all(bar).filter(n => n.tagName === "BUTTON");
+    expect(fb.length).toBeGreaterThan(1);
+    expect(fb.filter(b => b.getAttribute("aria-pressed") === "true").length).toBe(1);
+    for (const b of fb) expect(["true", "false"]).toContain(b.getAttribute("aria-pressed"));
+  });
+  it("the mission table has a caption, column-scoped headers and a titled link button per row; selecting a row marks it aria-current", async () => {
+    const view = await load("views", "work.js");
+    const {ctx} = await mkCtx(fromFix(FULL));
+    const root = await view.render(ctx);
+    const table = all(root).find(n => n.tagName === "TABLE")!;
+    expect(all(table).some(n => n.tagName === "CAPTION" && n.textContent.length > 0)).toBe(true);
+    const ths = all(table).filter(n => n.tagName === "TH");
+    expect(ths.length).toBe(5);
+    for (const th of ths) expect(th.getAttribute("scope")).toBe("col");
+    const rowBtns = all(table).filter(n => n.tagName === "BUTTON" && n.dataset.missionId);
+    expect(rowBtns.length).toBe(6);
+    for (const b of rowBtns) expect(b.textContent.length).toBeGreaterThan(0);
+    forms.selection.missionId = M1;
+    const root2 = await view.render((await mkCtx(fromFix(FULL))).ctx);
+    expect(all(root2).filter(n => n.dataset.missionId === M1 && n.tagName === "BUTTON")[0].getAttribute("aria-current")).toBe("true");
+  });
+  it("detail view: status timeline and transition controls are labelled, the run button describes its hint, and statuses are text not colour alone", async () => {
+    forms.selection.missionId = M1;
+    const view = await load("views", "work.js");
+    const fix = {...FULL, [`/v1/missions/${M1}`]: {mission: {missionId: M1, projectId: "prj", title: "G1", objective: "Hedef", acceptanceCriteria: ["k1"], riskLevel: "R1", status: "AUTHORIZED", createdAt: tm(1)}, tasks: []}};
+    const {ctx} = await mkCtx(fromFix(fix));
+    const root = await view.render(ctx);
+    const tl = all(root).find(n => n.className.includes("status-timeline"))!;
+    expect(tl.getAttribute("aria-label")!.length).toBeGreaterThan(0);
+    expect(all(tl).filter(n => n.getAttribute("aria-current") === "step").length).toBe(1);
+    const run = byId(root, "run-start")!;
+    expect(run.getAttribute("aria-describedby")).toBe("run-start-hint");
+    expect(byId(root, "run-start-hint")!.textContent.length).toBeGreaterThan(0);
+    const group = all(root).find(n => n.className.includes("btn-row") && n.getAttribute("role") === "group" && all(n).some(x => x.id.startsWith("tr-")))!;
+    expect(group.getAttribute("aria-label")!.length).toBeGreaterThan(0);
+    for (const p of all(root).filter(n => "pill" in n.dataset)) expect(p.textContent.length, p.dataset.pill).toBeGreaterThan(0);
+  });
+});
+
+describe("test+states work: EN/TR parity for every key the view uses", () => {
+  it("whole dictionaries match and every literal key in work.js exists in both locales with equal placeholders", async () => {
+    // //TR: work.js içinde geçen tüm sabit anahtarlar iki dilde vardır.
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    expect(Object.keys(en).sort()).toEqual(Object.keys(tr).sort());
+    const src = read("views", "work.js");
+    const core = await load("work-core.js");
+    const keys = new Set<string>();
+    for (const m of src.matchAll(/(?:\bt\(|labelKey:|titleKey:|hintKey:|itemLabelKey:|addKey:|removeKey:|emptyNote\(ctx,|stateNote\(ctx,[^,]+,)\s*"([a-zA-Z0-9_.-]+)"/g)) keys.add(m[1]);
+    for (const m of src.matchAll(/"((?:work|run|risk|everif|evidence|m1a|pill)\.[A-Za-z0-9_.-]+)"/g)) keys.add(m[1]);
+    for (const r of core.RISK_LEVELS) { keys.add(`risk.${r}.name`); keys.add(`risk.${r}.desc`); }
+    for (const s of core.MISSION_STATUSES) keys.add(`mstatus.${s}`);
+    for (const c of ["IDLE", "WAITING", "ACTIVE", "ATTENTION", "BLOCKED", "FAILED", "DONE", "STOPPED", "NEUTRAL"]) keys.add(`pill.${c}`);
+    const real = [...keys].filter(k => !/[${}]/.test(k));
+    expect(real.length).toBeGreaterThan(50);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of real) { expect(k in tr && k in en, k).toBe(true); expect(ph(en[k]), k).toBe(ph(tr[k])); expect(tr[k].trim().length, k).toBeGreaterThan(0); expect(en[k].trim().length, k).toBeGreaterThan(0); }
+  });
+});
