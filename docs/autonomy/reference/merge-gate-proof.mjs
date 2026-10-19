@@ -1,5 +1,5 @@
 //TR: scripts/merge-via-gate.mjs saf karar fonksiyonunun (evaluateMergeGate) fail-closed davranisinin yurutulebilir kaniti: her zorunlu kapi (CI context'leri head SHA'da success, governed verdict SHA+oturum+kimlik bagli CLEAN, strict/FF, conflict yok) ihlal edildiginde REFUSE, hepsi saglaninca MERGE. Ag/merge yapmaz; yalniz karar mantigini test eder. Run (Node 24): node docs/autonomy/reference/merge-gate-proof.mjs
-import { evaluateMergeGate, REQUIRED_CONTEXTS } from "../../../scripts/merge-via-gate.mjs";
+import { evaluateMergeGate, resolveVerdict, REQUIRED_CONTEXTS } from "../../../scripts/merge-via-gate.mjs";
 import { bindVerdict } from "../../../automation/lib/lease-verdict.mjs";
 
 let passed = 0, failed = 0;
@@ -8,7 +8,7 @@ const HEAD = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"; // 40-hex
 const greenChecks = REQUIRED_CONTEXTS.map((name) => ({ name, status: "completed", conclusion: "success" }));
 const vbase = { taskId: "T", reviewedSha: HEAD, reviewerSessionId: "sess-rev", implementerSessionId: "sess-impl", result: "CLEAN", reviewerIdentity: "claude-reviewer", builderIdentity: "claude-builder" };
 const expect = { expectedTaskId: "T", expectedHeadSha: HEAD, implementerSessionId: "sess-impl", builderIdentity: "claude-builder" };
-const GOOD = () => ({ headSha: HEAD, checkRuns: greenChecks.map((c) => ({ ...c })), baseIsAncestorOfHead: true, hasConflict: false, verdict: bindVerdict(vbase), verdictExpectation: { ...expect } });
+const GOOD = () => ({ headSha: HEAD, checkRuns: greenChecks.map((c) => ({ ...c })), baseIsAncestorOfHead: true, hasConflict: false, verdict: bindVerdict(vbase), verdictExpectation: { ...expect }, baseFetched: true, expectedBaseBranch: "v7/integration", pr: { baseRefName: "v7/integration", headRefOid: HEAD } });
 const refusedFor = (ev, needle) => { const r = evaluateMergeGate(ev); return r.decision === "REFUSE" && r.reasons.some((x) => x.includes(needle)); };
 
 console.log("== merge-via-gate evaluateMergeGate — fail-closed decision");
@@ -44,6 +44,24 @@ ok(refusedFor({ ...GOOD(), verdict: bindVerdict({ ...vbase, reviewerSessionId: "
 ok(refusedFor({ ...GOOD(), verdict: bindVerdict({ ...vbase, reviewerIdentity: "claude-builder" }) }, "SAME_IDENTITY"), "reviewer identity == builder -> REFUSE SAME_IDENTITY");
 ok(refusedFor({ ...GOOD(), verdict: bindVerdict({ ...vbase, taskId: "OTHER" }) }, "TASK_MISMATCH"), "verdict for another task -> REFUSE TASK_MISMATCH");
 ok(refusedFor({ ...GOOD(), verdict: bindVerdict({ ...vbase, result: "BLOCKED" }) }, "NOT_CLEAN"), "non-CLEAN verdict -> REFUSE NOT_CLEAN");
+
+// (B4a) verdict provenance: expectation derived from git (task + head commit trailer), never from the verdict file
+const commitMessage = "feat: x\n\nClaude-Session: https://claude.ai/code/session_REAL1";
+const derive = (record) => { const d = resolveVerdict(record, { task: "T", headSha: HEAD, commitMessage, authorName: "claude-builder" }); return evaluateMergeGate({ ...GOOD(), ...d }); };
+const fabricated = { verdict: { ...vbase, reviewerSessionId: "made-up", implementerSessionId: "me", reviewerIdentity: "other", builderIdentity: "me" }, expectation: { expectedTaskId: "T", expectedHeadSha: HEAD, implementerSessionId: "me", builderIdentity: "me" } };
+{ const r = derive(fabricated); ok(r.decision === "REFUSE" && r.reasons.some((x) => x.includes("GOVERNED_VERDICT_REJECTED")), "self-consistent fabricated verdict+expectation file -> REFUSE (file expectation ignored)", r); }
+{ const r = derive({ verdict: { ...vbase, implementerSessionId: "session_REAL1", reviewerSessionId: "session_REV9" }, expectation: fabricated.expectation }); ok(r.decision === "MERGE", "review record matching git-derived implementer session, distinct reviewer, live head -> MERGE", r); }
+{ const r = derive({ verdict: { ...vbase, taskId: "OTHER", implementerSessionId: "session_REAL1", reviewerSessionId: "session_REV9" } }); ok(r.decision === "REFUSE" && r.reasons.some((x) => x.includes("TASK_MISMATCH")), "verdict for a task other than the required --task -> REFUSE", r); }
+{ const r = derive({ verdict: { ...vbase, reviewedSha: "b".repeat(40), implementerSessionId: "session_REAL1", reviewerSessionId: "session_REV9" } }); ok(r.decision === "REFUSE" && r.reasons.some((x) => x.includes("STALE_SHA")), "review record for a non-head SHA -> REFUSE", r); }
+{ const r = derive({ verdict: { ...vbase, implementerSessionId: "session_REAL1", reviewerSessionId: "session_REAL1" } }); ok(r.decision === "REFUSE" && r.reasons.some((x) => x.includes("NOT_INDEPENDENT")), "reviewer session == git-read implementer session -> REFUSE", r); }
+{ const d = resolveVerdict({ verdict: vbase }, { task: "T", headSha: HEAD, commitMessage: "no trailer", authorName: "claude-builder" }); const r = evaluateMergeGate({ ...GOOD(), ...d }); ok(r.decision === "REFUSE" && r.reasons.includes("VERDICT_EXPECTATION_MISSING"), "head commit without Claude-Session trailer -> REFUSE", r); }
+{ const d = resolveVerdict({ verdict: vbase }, { task: undefined, headSha: HEAD, commitMessage, authorName: "claude-builder" }); const r = evaluateMergeGate({ ...GOOD(), ...d }); ok(r.decision === "REFUSE", "missing --task -> REFUSE", r); }
+
+// (B4b) --apply binding: PR base + head + fetched base
+ok(refusedFor({ ...GOOD(), pr: { baseRefName: "master", headRefOid: HEAD } }, "PR_BASE_MISMATCH"), "PR targets another base (master) -> REFUSE");
+ok(refusedFor({ ...GOOD(), pr: { baseRefName: "v7/integration", headRefOid: "d".repeat(40) } }, "PR_HEAD_MISMATCH"), "PR live head != evaluated head -> REFUSE");
+ok(refusedFor({ ...GOOD(), pr: null }, "PR_VIEW_MISSING"), "PR view unavailable -> REFUSE");
+ok(refusedFor({ ...GOOD(), baseFetched: false }, "BASE_NOT_FETCHED"), "base fetch failed (stale base ref) -> REFUSE");
 
 // accumulates multiple reasons, never silently passes
 { const r = evaluateMergeGate({ headSha: HEAD, checkRuns: [], baseIsAncestorOfHead: false, hasConflict: true, verdict: null, verdictExpectation: null }); ok(r.decision === "REFUSE" && r.reasons.length >= 4, "many simultaneous failures -> REFUSE with all reasons", r.reasons); }
