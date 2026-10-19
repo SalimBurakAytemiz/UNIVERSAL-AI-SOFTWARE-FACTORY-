@@ -140,6 +140,13 @@ class N {
   get id() { return this.attrs.get("id") ?? ""; }
   get textContent(): string { return this._text + this.children.map(c => c.textContent).join(""); }
   set textContent(v: string) { this.children = []; this._text = String(v); }
+  // Gerçek DOM gibi: innerHTML etiketleri ayrıştırıp eleman düğümü üretir (savunma testinin mutasyonda gerçekten kırılması için).
+  set innerHTML(v: string) {
+    this.children = []; this._text = "";
+    const re = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)[^>]*>/g; let last = 0, m: RegExpExecArray | null;
+    while ((m = re.exec(String(v)))) { if (m.index > last) this.append(String(v).slice(last, m.index)); if (!m[1]) this.append(new N(this.doc, m[2])); last = re.lastIndex; }
+    if (last < String(v).length) this.append(String(v).slice(last));
+  }
   append(...n: Array<N | string>) { for (const c of n) { const node = typeof c === "string" ? this.doc.createTextNode(c) : c; node.parent = this; this.children.push(node); } }
   appendChild(n: N) { this.append(n); return n; }
   replaceChildren(...n: Array<N | string>) { this.children = []; this._text = ""; this.append(...n); }
@@ -277,9 +284,15 @@ describe("WP-ACADEMY — negative paths never fabricate or claim verification", 
   });
   it("hostile text in API data is rendered as text, never as markup", async () => {
     const academy = await load("views", "academy.js");
-    const {ctx} = await mkCtx(() => liveAcademy());
-    const root = await academy.render(ctx);
-    expect(all(root).every(n => !["SCRIPT", "IFRAME", "IMG"].includes(n.tagName))).toBe(true);
+    // Görünüm API verisini birebir yalnız hata mesajında (stateBlock → res.message) gösterir; yük gerçek api.js yolundan (bridge hatası) geçer.
+    const payloads = ["<img src=x onerror=alert(1)>", "<script>alert(1)</script>", "<iframe src=javascript:alert(1)></iframe>", `"quoted" & 'single' &amp; <b>`];
+    for (const payload of payloads) {
+      const {ctx} = await mkCtx(() => { throw new Error(payload); });
+      const root = await academy.render(ctx);
+      const carriers = all(root).filter(n => n.textContent === payload);
+      expect(carriers.length, `payload reaches DOM verbatim: ${payload}`).toBeGreaterThan(0);
+      expect(all(root).filter(n => ["IMG", "SCRIPT", "IFRAME"].includes(n.tagName)).map(n => n.tagName)).toEqual([]);
+    }
   });
 });
 
