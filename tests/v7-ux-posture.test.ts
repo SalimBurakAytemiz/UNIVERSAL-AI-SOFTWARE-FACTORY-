@@ -1142,6 +1142,23 @@ describe("Build Scheduler — strict mapping", () => {
     expect(m.scheduler).toMatchObject({total: 3, completed: 1, activeCount: 1, blockedCount: 1});
     expect(m.scheduler.phases[0]).toMatchObject({status: "COMPLETED", completedCommit: SHA, lastRunId: "RUN-1", evidenceRefs: ["evd_abc"]});
   });
+  it("accepts the real supervisor formats: .ai/runtime attestation refs and the PHASE0_INSTALL_BASELINE commit marker", async () => {
+    const core = await load("scheduler-core.js");
+    const ok = (over: Record<string, any> = {}) => ({...SCHED_OK, ...over});
+    const refs = [".ai/runtime/evidence-ledger/packages/PKG-001/" + SHA + ".json", ".ai/runtime/evidence-ledger/packages/PKG-001/" + SHA + "-review-bundle.json", ".ai/runtime/runs/RUN-2026-10-18T10-00-00-000Z-1a2b3c4d/events.jsonl", ".ai/runtime/runs/RUN-1/evidence/PKG-001-review-attestation.json"];
+    const m = core.mapScheduler(ok({phases: [schedPhase(0, {status: "COMPLETED", completedCommit: "PHASE0_INSTALL_BASELINE"}), schedPhase(1, {status: "COMPLETED", completedCommit: SHA, evidenceRefs: refs})]}));
+    expect(m.state).toBe("VERIFIED");
+    expect(m.scheduler.phases.map((p: any) => p.completedCommit)).toEqual(["PHASE0_INSTALL_BASELINE", SHA]);
+    expect(m.scheduler.phases[1].evidenceRefs).toEqual(refs);
+  });
+  it("still rejects traversal, absolute, backslash, drive and unknown-marker values", async () => {
+    const core = await load("scheduler-core.js");
+    const ok = (over: Record<string, any> = {}) => ({...SCHED_OK, ...over});
+    for (const ref of ["../.ai/runtime/x.json", ".ai/../../etc/passwd", ".ai/runtime/../x", "/.ai/runtime/x.json", "/etc/passwd", "C:/x/y.json", ".ai\\runtime\\x.json", "./.ai/x", ".ai//x", ".ai/runtime/", "..", ".", ".ai/runtime/x y", "a".repeat(161)])
+      expect(core.mapScheduler(ok({phases: [schedPhase(1, {evidenceRefs: [ref]})]})).state, ref).toBe("ERROR");
+    for (const c of ["phase0_install_baseline", "PHASE0_INSTALL_BASELINE2", "PHASE0 INSTALL", "../PHASE0_INSTALL_BASELINE"])
+      expect(core.mapScheduler(ok({phases: [schedPhase(1, {completedCommit: c})]})).state, c).toBe("ERROR");
+  });
   it("PENDING / REJECTED server verification never yields phases or counts (null, not 0)", async () => {
     const core = await load("scheduler-core.js");
     const p = core.buildScheduler(core.mapScheduler({status: "NOT_INITIALIZED", verification: "PENDING"}));

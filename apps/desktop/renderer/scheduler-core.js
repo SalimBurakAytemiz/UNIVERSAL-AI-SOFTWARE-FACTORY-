@@ -5,8 +5,13 @@ export const PHASE_STATUSES=Object.freeze(["PENDING","ACTIVE","COMPLETED","RETRY
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 const ENUM_RE=/^[A-Z][A-Z0-9_]{0,39}$/;
 const RUN_RE=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
-const SHA_RE=/^[0-9a-f]{7,64}$/;
-const REF_RE=/^[A-Za-z0-9][A-Za-z0-9._:\/-]{0,159}$/;
+// completedCommit: a git sha, or the literal baseline marker automation/lib/scheduler.mjs writes for phase 0 (markPhase0Complete: phase0Commit??"PHASE0_INSTALL_BASELINE").
+const SHA_RE=/^(?:[0-9a-f]{7,64}|PHASE0_INSTALL_BASELINE)$/;
+// evidenceRefs: repo-relative POSIX paths as the supervisor writes them (automation/factory-supervisor.mjs), e.g.
+// ".ai/runtime/evidence-ledger/packages/<pkg>/<sha>.json" or ".ai/runtime/runs/<runId>/events.jsonl", plus plain ids ("evd_abc").
+// A segment may start with a single "." (".ai"); "", "." and ".." segments, absolute paths, backslashes and ":" are rejected.
+const REF_SEG_RE=/^\.?[A-Za-z0-9_][A-Za-z0-9._-]*$/;
+const REF_RE={test:v=>typeof v==="string"&&v.length>0&&v.length<=160&&v.split("/").every(seg=>REF_SEG_RE.test(seg)&&!seg.includes(".."))};
 const ISO_RE=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const iso=x=>typeof x==="string"&&ISO_RE.test(x)&&Number.isFinite(Date.parse(x))?x:null;
 const failState=s=>s==="OFFLINE"||s==="UNAVAILABLE"?s:"ERROR";
