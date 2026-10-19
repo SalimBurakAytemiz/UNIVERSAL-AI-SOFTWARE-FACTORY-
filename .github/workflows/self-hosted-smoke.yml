@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   runner-test:
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: [runs-on: [self-hosted, Windows, X64]]
     timeout-minutes: 5
 
     steps:
