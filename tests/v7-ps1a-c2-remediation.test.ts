@@ -107,7 +107,8 @@ describe("PS1A-C1-F1: Studio routes only act on the project's own managed reposi
     expect(own.statusCode, own.body).toBe(200);
     // Doğrudan modül seviyesi: managedRepoRoot yalnız <dataDir>/projects/<id>/repo'yu kabul eder.
     const studio = new ProjectStudio({dataDir: b.dataDir, envPolicyFile: ENV_POLICY});
-    expect(studio.managedRepoRoot(pb).toLowerCase()).toBe(fs.realpathSync(bRepo).toLowerCase());
+    // //TR: Windows'ta os.tmpdir() 8.3 kisa adla (RUNNER~1) donebilir; JS fs.realpathSync kisa adi acmaz, realpathSync.native acar. Urun sozlesmesi uzun-ad kanonik yoldur; beklenen deger de ayni kanonik bicimde hesaplanir.
+    expect(studio.managedRepoRoot(pb).toLowerCase()).toBe(fs.realpathSync.native(bRepo).toLowerCase());
     expect(() => studio.managedRepoRoot({...pb, projectId: pForeign.projectId})).toThrow(StudioError);
     expect(() => studio.managedRepoRoot({...pb, repository: {path: bRepo}})).toThrow(/REPOSITORY_NOT_MANAGED/);
   }, T);

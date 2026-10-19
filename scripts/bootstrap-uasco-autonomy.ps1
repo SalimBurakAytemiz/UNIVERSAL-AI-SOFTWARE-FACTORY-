@@ -17,6 +17,14 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+# //TR: pwsh 7'den baslatilan bir oturumdan miras kalan PSModulePath, Windows PowerShell 5.1'in in-box modullerini (Get-FileHash vb.) PS7 surumleriyle golgeler ve 5.1 bunlari yukleyemez; yalniz Windows PowerShell (Desktop) oturumunda 5.1 varsayilan modul yolu geri yuklenir, Core'da hicbir sey degismez.
+if ($PSVersionTable.PSEdition -eq "Desktop") {
+  $env:PSModulePath = @(
+    (Join-Path ([Environment]::GetFolderPath("MyDocuments")) "WindowsPowerShell\Modules"),
+    (Join-Path $env:ProgramFiles "WindowsPowerShell\Modules"),
+    (Join-Path $PSHOME "Modules")
+  ) -join ";"
+}
 $TaskName = "UASCO-Autonomous-Supervisor"
 $WatchdogTaskName = "UASCO-Supervisor-Watchdog"
 $script:SupervisorDisabledForUpgrade = $false
