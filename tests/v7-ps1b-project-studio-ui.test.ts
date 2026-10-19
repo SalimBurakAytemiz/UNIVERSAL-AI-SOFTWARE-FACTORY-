@@ -1305,3 +1305,69 @@ describe("SBX-8 G: Settings shows the UASCO Claude profile status and the login 
     expect(byId(mount(doc, await settings.render(ctx)), "settings-claude-profiles")).toBeNull();
   });
 });
+
+// //TR: UX hardening — AI Yürütücüleri paneli: boş liste, başarısız etkinleştirme, bilinmeyen durum, FAKE için eylem yok, erişilebilirlik ve EN/TR eşitliği (dürüst durum; READY uydurulmaz).
+describe("UX hardening: executors panel functional / negative / a11y", () => {
+  const EX = "/v1/system/executors";
+  const run = async (opts: any) => {
+    const settings = await load(rend, "views", "settings.js");
+    const c = await mkCtx(opts);
+    return {...c, root: mount(c.doc, await settings.render(c.ctx))};
+  };
+  it("shows the empty note for an empty executor list and no enable button", async () => {
+    const {root} = await run({get: (p: string) => p === EX ? {executors: []} : undefined});
+    expect(text(byId(root, "settings-executors")!)).toContain("Sunucu hiç yürütücü bildirmedi");
+    expect(byId(root, "exec-enable")).toBeNull();
+  });
+  it("shows an unreadable payload as an error state, never as a ready executor", async () => {
+    const {root} = await run({get: (p: string) => p === EX ? {executors: "x"} : undefined});
+    const panel = byId(root, "settings-executors")!;
+    expect(all(panel).some(n => n.attrs.get("role") === "status")).toBe(true);
+    expect(all(panel).filter(n => n.className.includes("badge-ok")).length).toBe(0);
+    expect(byId(root, "exec-enable")).toBeNull();
+  });
+  it("renders a missing state as Unknown (no ready badge) and offers no enable", async () => {
+    const {root} = await run({lang: "en", get: (p: string) => p === EX ? {executors: [{id: "LOCAL_CLAUDE"}]} : undefined});
+    const panel = byId(root, "settings-executors")!;
+    expect(text(panel)).toContain("Unknown");
+    expect(all(panel).filter(n => n.className.includes("badge-ok")).length).toBe(0);
+    expect(byId(root, "exec-enable")).toBeNull();
+  });
+  it("never offers enable for the test-only FAKE executor even when NOT_CONFIGURED", async () => {
+    const {root} = await run({lang: "en", get: (p: string) => p === EX ? {executors: [{id: "FAKE", state: "NOT_CONFIGURED"}]} : undefined});
+    expect(byId(root, "exec-enable")).toBeNull();
+    expect(text(byId(root, "settings-executors")!)).toContain("test only");
+  });
+  it("announces a failed enable request as an error and does not claim it was enabled", async () => {
+    for (const status of [403, 503]) {
+      const {root, ctx} = await run({lang: "en", get: (p: string) => p === EX ? {executors: [{id: "LOCAL_CLAUDE", state: "NOT_CONFIGURED"}]} : undefined, post: () => ({status, body: {}}), confirm: () => true});
+      byId(root, "exec-enable")!.fire("click"); await tick();
+      expect(forms.drafts.status.executors.ok, String(status)).toBe(false);
+      expect(forms.drafts.status.executors.key).not.toBe("exec.enabled");
+      expect(ctx.t(forms.drafts.status.executors.key, forms.drafts.status.executors.vars)).not.toMatch(/accepted/);
+    }
+  });
+  it("announces a bridge exception on enable as an error", async () => {
+    const {root} = await run({get: (p: string) => p === EX ? {executors: [{id: "LOCAL_CLAUDE", state: "NOT_CONFIGURED"}]} : undefined, post: () => { throw new Error("BRIDGE_DOWN"); }, confirm: () => true});
+    byId(root, "exec-enable")!.fire("click"); await tick();
+    expect(forms.drafts.status.executors.ok).toBe(false);
+  });
+  it("is accessible: typed button, live status region, labelled section, headings", async () => {
+    const {root} = await run({lang: "en", get: (p: string) => p === EX ? {executors: [{id: "LOCAL_CLAUDE", state: "NOT_CONFIGURED"}], claudeProfiles: {implementer: {state: "LOGIN_REQUIRED", reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"}}} : undefined});
+    const panel = byId(root, "settings-executors")!;
+    expect(panel.getAttribute("aria-labelledby")).toBeTruthy();
+    expect(byId(root, "exec-enable")!.getAttribute("type")).toBe("button");
+    expect(all(panel).some(n => n.id === "executors-status" && n.getAttribute("aria-live") === "polite")).toBe(true);
+    expect(all(panel).filter(n => n.tagName === "H3").length).toBeGreaterThan(0);
+    expect(all(byId(root, "settings-claude-profiles")!).filter(n => n.tagName === "H3" || n.tagName === "H4").length).toBeGreaterThan(1);
+  });
+  it("has identical en/tr exec.* key sets and placeholders, and every exec key used by the panel exists", async () => {
+    const tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>, en = (await load(rend, "locales", "en.js")).default as Record<string, string>;
+    const keys = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("exec.")).sort();
+    expect(keys(tr)).toEqual(keys(en));
+    const ph = (s: string) => (s.match(/\{[A-Za-z0-9_]+\}/g) ?? []).sort();
+    for (const k of keys(en)) expect(ph(tr[k]), k).toEqual(ph(en[k]));
+    const used = [...fs.readFileSync(path.join(rend, "views", "executors-panel.js"), "utf8").matchAll(/"(exec\.[A-Za-z0-9_.]+)"/g)].map(m => m[1]);
+    expect(used.filter(k => !(k in tr && k in en))).toEqual([]);
+  });
+});
