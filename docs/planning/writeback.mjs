@@ -17,18 +17,30 @@ export const EXIT = {CHANGES: 0, NO_CHANGES: 0, RECOVERABLE_FAILURE: 3};
 const isStr = v => typeof v === "string";
 class Fail extends Error { constructor(code) { super(code); this.code = code; } }
 
-// Pure core. probe = {baseSha, headOf(branch)->sha|undefined, hasWork(branch, task)->true|false|null (null = no claim commit found), merged(branch, sha)->bool}.
-// Never mutates tasks. Rule (all must hold): status READY|IN_PROGRESS|IN_REVIEW, branch exists, real work commit, head ancestor of base tip.
+// Branch the task is judged on: its own claim branch, or task.branch when that is a claude/* ref (never the base, master, refs/*, feat/*).
+export function branchFor(t, baseBranch) {
+  const own = claimBranchOf(t.id);
+  if (t.branch === undefined) return {branch: own};
+  if (!isStr(t.branch) || t.branch.trim() === "" || !refNameOk(t.branch.trim())) return {code: "MALFORMED_BRANCH"};
+  const b = t.branch.trim();
+  return b === own || (b.startsWith("claude/") && b !== baseBranch) ? {branch: b} : {code: "BRANCH_NOT_ALLOWED"};
+}
+
+// Pure core. probe = {baseBranch, baseSha, headOf(branch)->sha|undefined, onBaseChain(sha)->bool (sha is on the base first-parent chain),
+// hasWork(branch, task)->true|false|null (null = no valid claim commit found), merged(branch, sha)->bool}.
+// Never mutates tasks. Rule (all must hold): status READY|IN_PROGRESS|IN_REVIEW, allowed branch exists, head NOT on the base first-parent chain
+// (a fast-forwarded or base-pointing branch never qualifies), real work commit, head ancestor of base tip.
 export function computeWriteback(tasks, probe) {
   const changes = [], reasons = [];
   for (const t of tasks) {
     if (!t || typeof t !== "object" || Array.isArray(t) || !CANDIDATE.has(t.status)) continue;
     if (!validId(t.id)) { reasons.push("?:MALFORMED_ID"); continue; }
     const id = safeId(t.id), tag = c => reasons.push(`${id}:${c}`);
-    let branch = claimBranchOf(t.id);
-    if (t.branch !== undefined) { if (isStr(t.branch) && t.branch.trim() !== "" && refNameOk(t.branch.trim())) branch = t.branch.trim(); else { tag("MALFORMED_BRANCH"); continue; } }
-    const head = probe.headOf(branch);
+    const bf = branchFor(t, probe.baseBranch);
+    if (bf.code) { tag(bf.code); continue; }
+    const branch = bf.branch, head = probe.headOf(branch);
     if (!head || !SHA_RE.test(head)) { tag("NO_BRANCH"); continue; }
+    if (probe.onBaseChain(head)) { tag("HEAD_ON_BASE_CHAIN"); continue; }
     const work = probe.hasWork(branch, t);
     if (work === null) { tag("NO_CLAIM_COMMIT"); continue; }
     if (!work) { tag("NO_WORK_COMMITS"); continue; }
@@ -98,24 +110,32 @@ function runInner(argv, cwd, now) {
   // One fetch for the base tip and every candidate branch head, so the objects exist locally (no refs are written).
   const want = new Set([o.baseBranch]);
   for (const t of tasks) if (t && typeof t === "object" && CANDIDATE.has(t.status) && validId(t.id)) {
-    const b = isStr(t.branch) && t.branch.trim() && refNameOk(t.branch.trim()) ? t.branch.trim() : claimBranchOf(t.id);
-    if (heads.has(b)) want.add(b);
+    const bf = branchFor(t, o.baseBranch);
+    if (bf.branch && heads.has(bf.branch)) want.add(bf.branch);
   }
   const f = git(["fetch", "--no-tags", "--no-write-fetch-head", o.remote, ...[...want].map(b => `refs/heads/${b}`)]);
   if (f.status !== 0) throw new Fail("FETCH_FAILED");
   const ok = (r, accept = [0]) => { if (!accept.includes(r.status)) throw new Fail("GIT_FAILED"); return r; };
   ok(git(["cat-file", "-e", `${baseSha}^{commit}`]));
+  let chain = null;
+  const onBaseChain = sha => (chain ??= new Set(ok(git(["rev-list", "--first-parent", baseSha])).stdout.split("\n").filter(Boolean))).has(sha);
+  const treeOf = rev => { const r = git(["rev-parse", "--verify", "-q", `${rev}^{tree}`]); return r.status === 0 ? r.stdout.trim() : null; };
   const probe = {
+    baseBranch: o.baseBranch,
     baseSha,
     headOf: b => heads.get(b),
-    // Real work = non-merge commits on the branch's first-parent chain above this task's own claim commit(s) that are not themselves claim commits.
+    onBaseChain,
+    // A claim commit has the dispatcher's exact shape: subject prefix + this task's id, exactly one parent, tree identical to the parent's tree,
+    // parent on the base first-parent chain. Real work = non-merge commits on the branch's first-parent chain above the claim's parent that are
+    // not on the base chain and change the tree (empty commits are not work).
     hasWork(b, t) {
       const h = heads.get(b);
-      const c = ok(git(["log", "--first-parent", "--fixed-strings", `--grep=${CLAIM_SUBJECT} ${t.id} `, "--format=%H%x09%s", h]));
-      const claims = c.stdout.split("\n").filter(Boolean).map(x => x.split("\t")).filter(r => SHA_RE.test(r[0]) && (r[1] ?? "").startsWith(`${CLAIM_SUBJECT} ${t.id} `)).map(r => r[0]);
+      const c = ok(git(["log", "--first-parent", "--fixed-strings", `--grep=${CLAIM_SUBJECT} ${t.id} `, "--format=%H%x09%P%x09%s", h]));
+      const claims = c.stdout.split("\n").filter(Boolean).map(x => x.split("\t")).filter(r => SHA_RE.test(r[0]) && SHA_RE.test(r[1] ?? "") && (r[2] ?? "").startsWith(`${CLAIM_SUBJECT} ${t.id} `)
+        && treeOf(r[0]) !== null && treeOf(r[0]) === treeOf(r[1]) && onBaseChain(r[1]));
       if (!claims.length) return null;
-      const l = ok(git(["log", "--first-parent", "--no-merges", "--format=%H%x09%s", h, "--not", ...claims]));
-      return l.stdout.split("\n").filter(Boolean).some(x => !(x.split("\t")[1] ?? "").startsWith(CLAIM_SUBJECT));
+      const l = ok(git(["log", "--first-parent", "--no-merges", "--format=%H%x09%P", h, "--not", ...claims.map(r => r[1])]));
+      return l.stdout.split("\n").filter(Boolean).map(x => x.split("\t")).some(r => !onBaseChain(r[0]) && SHA_RE.test(r[1] ?? "") && treeOf(r[0]) !== null && treeOf(r[0]) !== treeOf(r[1]));
     },
     merged: (b, h) => ok(git(["merge-base", "--is-ancestor", h, baseSha]), [0, 1]).status === 0,
   };
@@ -127,7 +147,7 @@ function runInner(argv, cwd, now) {
     const date = now().toISOString().slice(0, 10);
     const text = applyChanges(doc, changes, c => noteFor(date, o.baseBranch, c.branchHead, baseSha));
     const tmp = `${file}.writeback-${process.pid}.tmp`;
-    fs.writeFileSync(tmp, text); fs.renameSync(tmp, file);
+    try { fs.writeFileSync(tmp, text); fs.renameSync(tmp, file); } catch { try { fs.rmSync(tmp, {force: true}); } catch { /* best effort */ } throw new Fail("WRITE_FAILED"); }
     written = true;
   }
   return fin(changes.length ? "CHANGES" : "NO_CHANGES", reasons, {baseSha, changes: changes.map(c => ({...c, taskId: safeId(c.taskId), from: safeStatus(c.from)})), mode: o.write ? "WRITE" : "DRY_RUN", written});

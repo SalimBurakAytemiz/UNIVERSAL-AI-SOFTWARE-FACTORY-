@@ -72,7 +72,7 @@ const M = (() => {
   add(T("W-MERGED"), () => { const c = claim(e, "W-MERGED"); work(e, c.branch); merge(e, c.branch); });
   add(T("W-NOTES", {status: "IN_PROGRESS", notes: "Earlier note."}), () => { const c = claim(e, "W-NOTES"); work(e, c.branch, 2); merge(e, c.branch); });
   add(T("W-READY", {status: "READY"}), () => { const c = claim(e, "W-READY"); work(e, c.branch); merge(e, c.branch); });
-  add(T("W-CUSTOM", {branch: "feat/w-custom"}), () => { const c = claim(e, "W-CUSTOM", "feat/w-custom"); work(e, c.branch); merge(e, c.branch); });
+  add(T("W-CUSTOM", {branch: "claude/w-custom-work"}), () => { const c = claim(e, "W-CUSTOM", "claude/w-custom-work"); work(e, c.branch); merge(e, c.branch); });
   add(T("W-CLAIMONLY"), () => { const c = claim(e, "W-CLAIMONLY"); merge(e, c.branch); }); // merged, but no work: only rule (c) can reject
   add(T("W-IMPORT"), () => { // claim-only branch that merged newer base commits in: imported commits are not work
     const c = claim(e, "W-IMPORT");
@@ -82,7 +82,29 @@ const M = (() => {
   });
   add(T("W-UNMERGED"), () => { const c = claim(e, "W-UNMERGED"); work(e, c.branch); });
   add(T("W-MISSING"));
-  add(T("W-NOCLAIM"), () => { G(e.work, ["fetch", "-q", "origin"]); G(e.work, ["push", "-q", "origin", `origin/v7/integration:refs/heads/claude/w-noclaim`]); });
+  const rawBranch = (name, mk) => { G(e.work, ["fetch", "-q", "origin"]); G(e.work, ["checkout", "-q", "-B", name, "origin/v7/integration"]); mk(); G(e.work, ["push", "-q", "origin", name]); merge(e, name); };
+  const commitFile = (f, msg) => { fs.writeFileSync(path.join(e.work, f), "w"); G(e.work, ["add", "-A"]); G(e.work, ["commit", "-q", "-m", msg]); };
+  add(T("W-NOCLAIM"), () => rawBranch("claude/w-noclaim", () => commitFile("nc.txt", "work without any claim commit")));
+  add(T("W-FORGED1"), () => rawBranch("claude/w-forged1", () => commitFile("f1.txt", "dispatch-claim: W-FORGED1 owner=x at=x nonce=1"))); // prefix only, tree differs from parent
+  add(T("W-FORGED2"), () => rawBranch("claude/w-forged2", () => { commitFile("side.txt", "side work"); G(e.work, ["commit", "-q", "--allow-empty", "-m", "dispatch-claim: W-FORGED2 owner=x at=x nonce=1"]); })); // empty + prefix, but parent not on the base chain
+  add(T("W-EMPTY"), () => { const c = claim(e, "W-EMPTY"); G(e.work, ["fetch", "-q", "origin"]); G(e.work, ["checkout", "-q", "-B", c.branch, `origin/${c.branch}`]); G(e.work, ["commit", "-q", "--allow-empty", "-m", "empty work"]); G(e.work, ["push", "-q", "origin", c.branch]); merge(e, c.branch); });
+  add(T("W-REBASED"), () => { // claim fast-forwarded into base, unrelated base commit N lands, branch = N + an empty commit, merged: base commits are not work
+    const c = claim(e, "W-REBASED"); G(e.work, ["fetch", "-q", "origin"]); G(e.work, ["checkout", "-q", "-B", "v7/integration", "origin/v7/integration"]);
+    G(e.work, ["merge", "-q", "--ff-only", c.sha]); commitFile("n1.txt", "unrelated base commit N"); G(e.work, ["push", "-q", "origin", "v7/integration"]);
+    G(e.work, ["commit", "-q", "--allow-empty", "-m", "empty on top"]); G(e.work, ["push", "-q", "origin", "HEAD:refs/heads/claude/w-rebased"]); G(e.work, ["reset", "-q", "--hard", "HEAD~1"]);
+    G(e.work, ["fetch", "-q", "origin"]); G(e.work, ["merge", "-q", "--no-ff", "-m", "Merge w-rebased", "origin/claude/w-rebased"]); G(e.work, ["push", "-q", "origin", "v7/integration"]);
+  });
+  add(T("W-REPRO", {status: "IN_PROGRESS"}), () => { // reviewer repro: claim-only fast-forwarded into base, unrelated base commit lands, claim branch repointed at the base tip
+    const c = claim(e, "W-REPRO"); G(e.work, ["fetch", "-q", "origin"]); G(e.work, ["checkout", "-q", "-B", "v7/integration", "origin/v7/integration"]);
+    G(e.work, ["merge", "-q", "--ff-only", c.sha]); commitFile("n2.txt", "unrelated base commit"); G(e.work, ["push", "-q", "origin", "v7/integration"]);
+    G(e.work, ["push", "-q", "-f", "origin", "HEAD:refs/heads/claude/w-repro"]);
+  });
+  add(T("W-FFCLAIM"), () => { const c = claim(e, "W-FFCLAIM"); G(e.work, ["fetch", "-q", "origin"]); G(e.work, ["checkout", "-q", "-B", "v7/integration", "origin/v7/integration"]); G(e.work, ["merge", "-q", "--ff-only", c.sha]); G(e.work, ["push", "-q", "origin", "v7/integration"]); });
+  const mkOther = (id, br) => () => { const c = claim(e, id, br); work(e, br); merge(e, br); };
+  add(T("W-TBBASE", {branch: "v7/integration"}));
+  add(T("W-TBREFS", {branch: "refs/heads/claude/w-tbrefs"}), mkOther("W-TBREFS", "claude/w-tbrefs"));
+  add(T("W-TBFEAT", {branch: "feat/w-tbfeat"}), mkOther("W-TBFEAT", "feat/w-tbfeat"));
+  add(T("W-TBMASTER", {branch: "master"}));
   for (const st of ["DONE", "BLOCKED", "AUTHORITY_REQUIRED", "DRAFT_NOT_READY"]) add(T(`W-${st}`, {status: st}), () => { const c = claim(e, `W-${st}`); work(e, c.branch); merge(e, c.branch); });
   add(T("W-BADBRANCH", {branch: `bad branch ${SECRET}`}));
   add(T(`W-BAD/../${SECRET}`));
@@ -107,6 +129,12 @@ const M = (() => {
   check("claim-only branch that merged newer base commits is still not work (first-parent rule)", why("W-IMPORT:") === "W-IMPORT:NO_WORK_COMMITS", JSON.stringify(dry.j.reasons));
   check("work branch not merged => NOT_MERGED, unchanged", why("W-UNMERGED:") === "W-UNMERGED:NOT_MERGED", JSON.stringify(dry.j.reasons));
   check("missing branch => NO_BRANCH; branch without a claim commit => NO_CLAIM_COMMIT (fail-closed)", why("W-MISSING:") === "W-MISSING:NO_BRANCH" && why("W-NOCLAIM:") === "W-NOCLAIM:NO_CLAIM_COMMIT", JSON.stringify(dry.j.reasons));
+  check("reviewer repro (claim-only ff'd into base, unrelated base commit, claim branch repointed at base tip, IN_PROGRESS) => not DONE: HEAD_ON_BASE_CHAIN", why("W-REPRO:") === "W-REPRO:HEAD_ON_BASE_CHAIN" && !ids.includes("W-REPRO"), JSON.stringify(dry.j.reasons));
+  check("fast-forwarded claim-only branch (head on the base chain) => HEAD_ON_BASE_CHAIN", why("W-FFCLAIM:") === "W-FFCLAIM:HEAD_ON_BASE_CHAIN", JSON.stringify(dry.j.reasons));
+  check("branch = unrelated base commit + empty commit, merged by a merge commit: base commits are not work => NO_WORK_COMMITS", why("W-REBASED:") === "W-REBASED:NO_WORK_COMMITS", JSON.stringify(dry.j.reasons));
+  check("task.branch = base branch / master / refs/heads/... / feat/... => BRANCH_NOT_ALLOWED, never DONE", ["W-TBBASE", "W-TBMASTER", "W-TBREFS", "W-TBFEAT"].every(i => why(`${i}:`) === `${i}:BRANCH_NOT_ALLOWED` && !ids.includes(i)), JSON.stringify(dry.j.reasons));
+  check("empty-commit \"work\" branch (merged) => NO_WORK_COMMITS", why("W-EMPTY:") === "W-EMPTY:NO_WORK_COMMITS", JSON.stringify(dry.j.reasons));
+  check("forged claim message (prefix only with a changed tree; or empty + prefix whose parent is off the base chain) => NO_CLAIM_COMMIT", why("W-FORGED1:") === "W-FORGED1:NO_CLAIM_COMMIT" && why("W-FORGED2:") === "W-FORGED2:NO_CLAIM_COMMIT", JSON.stringify(dry.j.reasons));
   check("DONE / BLOCKED / AUTHORITY_REQUIRED / DRAFT_NOT_READY tasks (even with merged work) are never proposed or mentioned",
     !ids.some(i => /DONE|BLOCKED|AUTHORITY|DRAFT/.test(i)) && !dry.j.reasons.some(r => /W-(DONE|BLOCKED|AUTHORITY_REQUIRED|DRAFT_NOT_READY):/.test(r)), JSON.stringify(dry.j.reasons));
   check("malformed branch / malformed id / non-string notes are skipped with fixed codes", why("W-BADBRANCH:") === "W-BADBRANCH:MALFORMED_BRANCH" && dry.j.reasons.includes("?:MALFORMED_ID") && why("W-NOTESOBJ:") === "W-NOTESOBJ:NOTES_MALFORMED", JSON.stringify(dry.j.reasons));
