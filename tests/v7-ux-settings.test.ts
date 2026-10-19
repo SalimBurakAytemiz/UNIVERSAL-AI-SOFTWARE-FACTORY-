@@ -19,6 +19,13 @@ class N {
   get id() { return this.attrs.get("id") ?? ""; }
   get textContent(): string { return this._text + this.children.map(c => c.textContent).join(""); }
   set textContent(v: string) { this.children = []; this._text = String(v); }
+  // Real-DOM-like: innerHTML parses tags into element nodes so a markup-injecting renderer is actually caught.
+  set innerHTML(v: string) {
+    this.children = []; this._text = "";
+    const re = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)[^>]*>/g; let last = 0, m: RegExpExecArray | null;
+    while ((m = re.exec(String(v)))) { if (m.index > last) this.append(String(v).slice(last, m.index)); if (!m[1]) this.append(new N(this.doc, m[2])); last = re.lastIndex; }
+    if (last < String(v).length) this.append(String(v).slice(last));
+  }
   append(...n: Array<N | string>) { for (const c of n) { const node = typeof c === "string" ? this.doc.createTextNode(c) : c; node.parent = this; this.children.push(node); } }
   appendChild(n: N) { this.append(n); return n; }
   replaceChildren(...n: Array<N | string>) { this.children = []; this._text = ""; this.append(...n); }
@@ -45,7 +52,7 @@ const FACTORY = {schemaVersion: "1.2.0", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-
 const LOGIN = "$env:CLAUDE_CONFIG_DIR='C:/Users/u/.uasco/impl'; claude";
 
 interface Feed {
-  execOff?: boolean; profiles?: Record<string, any> | null; controlActive?: boolean | null; controlOff?: boolean; healthOff?: boolean; factoryOff?: boolean; sandbox?: any;
+  execOff?: boolean; profiles?: Record<string, any> | null; controlActive?: boolean | null; controlReason?: string; controlOff?: boolean; healthOff?: boolean; factoryOff?: boolean; sandbox?: any;
 }
 function execResponse(feed: Feed) {
   const profiles = feed.profiles === undefined
@@ -59,7 +66,7 @@ async function mkCtx(feed: Feed = {}, lang = "tr") {
   const bridge = {apiGet: async (p: string) => {
     calls.push(p);
     if (p === "/v1/system/executors") { if (feed.execOff) throw new Error(`${p}: HTTP 503`); return execResponse(feed); }
-    if (p === "/v1/control/status") { if (feed.controlOff) throw new Error(`${p}: HTTP 503`); return {globalStop: {active: feed.controlActive === true, reason: feed.controlActive ? "FOUNDER_STOP" : null}, workos: {ok: true}}; }
+    if (p === "/v1/control/status") { if (feed.controlOff) throw new Error(`${p}: HTTP 503`); return {globalStop: {active: feed.controlActive === true, reason: feed.controlActive ? (feed.controlReason ?? "FOUNDER_STOP") : null}, workos: {ok: true}}; }
     if (p === "/health") { if (feed.healthOff) throw new Error(`${p}: HTTP 503`); return HEALTH; }
     if (p === "/v1/factory") { if (feed.factoryOff) throw new Error(`${p}: HTTP 503`); return FACTORY; }
     throw new Error(`${p}: HTTP 404`);
@@ -265,9 +272,14 @@ describe("test+states settings: negative (no fabricated Connected/Verified)", ()
     for (const g of gates) expect(g.dataset.gate).toBe("NOT_VERIFIED");
   });
   it("renders API-provided text as text only (no markup nodes)", async () => {
-    const {ctx} = await mkCtx({controlActive: true, profiles: {implementer: {state: "<img src=x>"}, reviewer: {state: "READY"}}}, "en");
-    const node = await renderView(ctx);
-    expect(within(node).some(n => n.tagName === "IMG" || n.tagName === "SCRIPT")).toBe(false);
+    // Global-stop reason is the API string the view renders verbatim (governance panel), via the real api.js mapping path.
+    const payloads = ["<img src=x onerror=alert(1)>", "<script>alert(1)</script>", "<iframe src=javascript:alert(1)></iframe>", `"quoted" & 'single' &amp; <b>`];
+    for (const payload of payloads) {
+      const {ctx} = await mkCtx({controlActive: true, controlReason: payload}, "en");
+      const node = await renderView(ctx);
+      expect(within(node).filter(n => n.textContent === ` ${payload}`).length, `payload reaches DOM verbatim: ${payload}`).toBeGreaterThan(0);
+      expect(within(node).filter(n => ["IMG", "SCRIPT", "IFRAME"].includes(n.tagName)).map(n => n.tagName)).toEqual([]);
+    }
   });
 });
 
