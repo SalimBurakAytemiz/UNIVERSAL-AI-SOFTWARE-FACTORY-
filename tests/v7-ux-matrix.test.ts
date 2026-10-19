@@ -1,5 +1,5 @@
 // //TR: Bu test FA-V2-PRODUCT UI-205 "Çoklu Proje Komuta Matrisi" salt-okunur dikey kesitini doğrular: (1) GERÇEK control-api — gerçek tohumlanmış Work OS verisinden (birden çok proje, mission, koşu, kanıt, bağımsız inceleme kararları, gerçek git) dönen GET /v1/projects + /v1/missions + /v1/work-runs + /v1/cockpit gövdeleri saf eşleyicilerden (matrix-core.js) ve görünümden (views/matrix.js) geçer; (2) yalnız zaten izinli dört salt-okunur GET kullanılır (yeni uç nokta yok, EXTRA_GET_ROUTES kümesi değişmez, korumalı dosyalara dokunulmaz); (3) eşleyiciler fail-closed'dır (tek bozuk kayıt tüm okumayı ERROR yapar); (4) matris DÜRÜSTTÜR: proje durumu sağlık iddiası değildir, hiçbir projeye gerçek kanıt olmadan doğrulanmış/yeşil durum verilmez, okunamayan kaynağın sayıları 0 değil "—" olur, inceleme kararı AYNEN gösterilir, teslim NOT_VERIFIED kalır, ürün doğrulaması asla gösterilmez; (5) erişilebilirlik; (6) EN/TR sözlük eşitliği; (7) rota devri (app.js VIEWS değişmez).
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,6 +9,8 @@ import {buildServer} from "../apps/control-api/src/server.js";
 import {ExecutionGate} from "../core/workos/execution-gate.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import {T, setup, okScript, runner, api as relfxApi, HDR as RELFX_HDR, tmpRoot, rmTmp} from "./support/relfx.js";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const root = path.resolve(__dirname, "..");
@@ -219,7 +221,8 @@ async function seedRealStore() {
 }
 
 describe("Matrix — GENUINE control-api read-models flow through mappers, aggregation and view", () => {
-  it("real seeded multi-project Work OS: per-project counts, attention grouping, verbatim review verdicts, source-only delivery and a real cockpit cross-check", async () => {
+  // //TR: Gercek disk G/C'li bu test Windows CI'da varsayilan 5 sn vitest sinirini asabiliyor (iddia degil yalniz sure); kardes gercek-G/C testleriyle ayni acik sure butcesi verilir.
+  it("real seeded multi-project Work OS: per-project counts, attention grouping, verbatim review verdicts, source-only delivery and a real cockpit cross-check", { timeout: T }, async () => {
     const s = await seedRealStore();
     const app = mkApp();
     const core = await load("matrix-core.js");

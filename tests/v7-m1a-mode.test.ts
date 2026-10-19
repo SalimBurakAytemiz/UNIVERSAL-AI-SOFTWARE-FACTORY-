@@ -1,5 +1,7 @@
 // //TR: Bu test V7-PKG-M1A-MODE'u (Founder kararları D-SBX1-PATH-2026-10-15 + D-SBX1-PATH-CONDITIONS-2026-10-15) doğrular: doğrulanmış sandbox sağlayıcısı yokken VERIFY/REGRESSION hiçbir şey çalıştırmaz (işaret dosyası yok, test komutu için çocuk süreç yok), NOT_EXECUTED kanıtı yazılır ve run statik SECURITY -> bağımsız REVIEW (istem "testler çalıştırılmadı" der, TEST_SURFACE listesi verilir) -> REPORT -> AWAITING_APPROVAL ile sürer; COMPLETE kesin NOT_EXECUTED onayı ister (eksik/bayat/eşleşmeyen/fazladan onay 409 ve journal değişmez, BLOCKED asla), kabul aynı journal yazısında kaydedilir ve replay birebir türetir; export VERIFICATION_STATUS.json NOT_VERIFIED taşır; dev-run 409 kalır; test sağlayıcısı enjekte edilince eski yürütme yolu değişmez. Yalnız sahte executor'lar ve testin kendi sabit fikstürleri kullanılır (AI üretimi kod ana makinede asla çalışmaz).
 import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import path from "node:path";
 import cp from "node:child_process";
