@@ -1,5 +1,7 @@
 // //TR: Bu test çift yürütme dokusunu (LOCAL_CLAUDE + CLAUDE_CLOUD_SESSION) doğrular: host'a bağlı işler LOCAL_ONLY kalır, cloud'a uygun işler cloud'a gidebilir, erişilemeyen cloud politikaya göre fail-closed kuyruğa girer veya yerel fallback yapar, özel imza işi asla cloud'a gitmez ve cloud çıktısı bağımsız governed CLAUDE_REVIEWER review ve merge kapısı olmadan birleşemez.
-import {describe,it,expect} from "vitest";
+import {describe,it,expect,vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import path from "node:path";
 import cp from "node:child_process";
