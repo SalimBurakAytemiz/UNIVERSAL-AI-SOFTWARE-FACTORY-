@@ -174,6 +174,11 @@ function validateTasks(tasks, err) {
   }
 }
 
+// SELECTS, DOES NOT CLAIM. This returns a deep copy of the first eligible READY task; it takes no lease, writes no state and
+// does not mark anything IN_PROGRESS. heldLeaseTaskIds / openPrTaskIds are a point-in-time snapshot supplied by the caller,
+// so two concurrent callers (or one caller twice) can be handed the same task. The caller MUST take the lease atomically
+// AFTER selection (e.g. compare-and-set / exclusive create in the lease store) and treat a lost race as "select again",
+// never as "dispatched".
 export function nextDispatchable(queue, heldLeaseTaskIds = [], openPrTaskIds = [], owner = 'CLOUD') {
   // loadQueue validates a snapshot and returns that snapshot's tasks; dispatch uses only those.
   const loaded = loadQueue(queue);

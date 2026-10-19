@@ -232,10 +232,12 @@ check('authorizedBy containing a placeholder word within real text still accepte
   check('dependsOn sparse length 2**32-1: no throw, < 1 s, DEPS_INVALID',
     !threw && Date.now() - t0 < 1000 && r.ok === false && r.errors.some((e) => e.code === 'DEPS_INVALID'));
   const dense = new Array(5e6).fill('A');
-  t0 = Date.now(); threw = false;
+  threw = false;
   try { r = loadQueue({ tasks: [T({ id: 'A', status: 'DONE' }), T({ id: 'B', dependsOn: dense })] }); } catch { threw = true; }
-  check('dependsOn dense 5e6 strings: < 1 s, DEPS_INVALID (cap checked before iteration)',
-    !threw && Date.now() - t0 < 1000 && r.ok === false && r.errors.some((e) => e.code === 'DEPS_INVALID'));
+  // No wall-clock assertion here (it was load-sensitive: the structuredClone of 5e6 elements alone takes ~0.5 s). That the cap
+  // bounds the validator's work is asserted deterministically by counting index reads in "Review remediation 3" below.
+  check('dependsOn dense 5e6 strings: no throw, DEPS_INVALID',
+    !threw && r.ok === false && r.errors.some((e) => e.code === 'DEPS_INVALID'));
   check('dependsOn exactly 1000 accepted, 1001 rejected',
     loadQueue({ tasks: [T({ id: 'A', status: 'DONE' }), T({ id: 'B', dependsOn: new Array(1000).fill('A') })] }).ok === true &&
     has({ tasks: [T({ id: 'A', status: 'DONE' }), T({ id: 'B', dependsOn: new Array(1001).fill('A') })] }, 'DEPS_INVALID'));
@@ -247,6 +249,37 @@ check('authorizedBy containing a placeholder word within real text still accepte
   check('1e5 invalid tasks: errors <= 1000, final ERRORS_TRUNCATED, < 2 s',
     Date.now() - t0 < 2000 && r.ok === false && r.errors.length <= 1000 && r.errors[r.errors.length - 1].code === 'ERRORS_TRUNCATED');
   check('few errors: no ERRORS_TRUNCATED entry', !has({ tasks: [T({ id: 'X', owner: 'BAD' })] }, 'ERRORS_TRUNCATED'));
+}
+
+// Review remediation 3 (independent review N1): deterministic bound on dependsOn work, replacing a wall-clock assertion.
+// loadQueue validates a structuredClone snapshot, and a Proxy is not cloneable, so the validator's element reads cannot be
+// observed through a Proxy on the input. Holes in a sparse dependsOn fall through to Array.prototype instead, so a counting
+// Proxy installed as Array.prototype's prototype sees exactly the validator's index reads (the native clone enumerates own
+// keys only and never reads holes). Kept LAST in this file and restored in `finally` so it cannot affect the timed checks above.
+{
+  const INDEX = /^(0|[1-9]\d*)$/;
+  const probe = (len) => {
+    let reads = 0;
+    const q = { tasks: [T({ id: 'A', status: 'DONE' }), T({ id: 'B', dependsOn: Object.assign([], { length: len }) })] };
+    Object.setPrototypeOf(Array.prototype, new Proxy(Object.prototype, {
+      get(target, key, receiver) {
+        if (typeof key === 'string' && INDEX.test(key)) { reads++; return 'A'; }
+        return Reflect.get(target, key, receiver);
+      },
+    }));
+    let r = null;
+    try { r = loadQueue(q); } catch { /* r stays null: the checks below fail */ } finally { Object.setPrototypeOf(Array.prototype, Object.prototype); }
+    return { reads, r };
+  };
+  const atCap = probe(1000);
+  check('dependsOn work bound: probe is live (length 1000 => exactly 1000 index reads) and the queue is accepted',
+    atCap.reads === 1000 && atCap.r !== null && atCap.r.ok === true);
+  for (const len of [1001, 5e6, 2 ** 32 - 1]) {
+    const p = probe(len);
+    check(`dependsOn work bound: declared length ${len} => 0 index reads, DEPS_INVALID`,
+      p.reads === 0 && p.r !== null && p.r.ok === false && p.r.errors.some((e) => e.code === 'DEPS_INVALID'));
+  }
+  check('dependsOn work bound: Array.prototype restored', Object.getPrototypeOf(Array.prototype) === Object.prototype);
 }
 
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
