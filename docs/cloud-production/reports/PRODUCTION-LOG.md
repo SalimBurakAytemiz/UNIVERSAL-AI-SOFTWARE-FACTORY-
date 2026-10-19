@@ -354,3 +354,22 @@
 1. Queue: FA-LEASE2 (needs sealed D3 record + trust-root reseal; blocked on CP-GOV proven; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned; blocks all merges); BACKLOG-SOURCE-REBASELINE (Founder choice).
 2. Canonical backlog (dry run): no task READY; all remaining entries show NOT_READY (DONE / BLOCKED / DRAFT_NOT_READY) with NO_AUTHORIZED_BY, REQUIRES_NEW_AUTHORITY or UNMET_DEP:pkg-lease1-wiring.
 3. Dispatch tooling (claude-code-remote) unavailable in this session.
+
+## 2026-10-19 heartbeat #28 (queue read from claude/cloud-production-engine@ed5cfb9; fired 22:12Z)
+
+**Queue (step 1):** parsed OK. READY tasks: 0. Task states unchanged (PENDING_REVIEW: CP-QUEUE, CP-REPORT, CP-CI; IN_PROGRESS: CP-DISPATCH, CP-RECOVERY, CP-GOV; BLOCKED: FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED). DONE: 0. Step 2 dispatched: 0.
+
+**Step 2b (canonical backlog):** dispatch.mjs and BACKLOG_CHECKPOINT.json present on v7/integration@d38f87c. Dry run (--no-lease) outcome NO_ACTION, reclaimable: []. Per-task reasons: DONE / BLOCKED / DRAFT_NOT_READY / AUTHORITY_REQUIRED / IN_REVIEW; CP-DISPATCH-IMPL ALREADY_CLAIMED; HOME-DELIVERY-STATE and PLANNED-SCAFFOLD-CLEANUP BRANCH_EXISTS; 2 entries MALFORMED_ID. Note: the OPEN list passed to the dry run held only the claude/ and ci/ head branches seen on listing page 1 (15 names); page 2 heads were not read. This does not alter the outcome (no task READY). Dispatched/claimed/resumed: 0. The ACTIVE-session capacity guard could not be evaluated (list_sessions unavailable) and create_session is unavailable, so no claim was made (a claim without the ability to dispatch would orphan the branch ref).
+
+**Open PRs: 46** (page 1 = 30, page 2 = 16; all target v7/integration except #8 on an older base). CHANGE vs #27: new drafts #65 CP-MERGE-GATE, #66 E2E-DESKTOP, #67 CP-BACKLOG-WRITEBACK; #64 integration wave A now carries uasco-needs-fix; #12 and #17 absent from the open list (state change not verified). Mergeable state and CI: UNKNOWN (not returned by listing). No PR carries a uasco-cloud-production label.
+
+**Active implementer/builder sessions:** UNKNOWN (claude-code-remote list_sessions/create_session tools not available in this fire).
+
+**Merged PRs / tasks completed:** UNKNOWN / queue tasks DONE: 0 (backlog checkpoint marks several UI tasks DONE; merge not independently verified here).
+
+**Current failures:** uasco-needs-fix on #64 and #50 (draft). Repo-wide Actions CI red per queue (not independently verified).
+
+**Top blockers:**
+1. Queue: FA-LEASE2 (needs sealed D3 record + trust-root reseal; blocked on CP-GOV proven; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned; blocks all merges); BACKLOG-SOURCE-REBASELINE (Founder choice).
+2. Canonical backlog (dry run): no task READY; remaining entries NOT_READY with NO_AUTHORIZED_BY, REQUIRES_NEW_AUTHORITY or UNMET_DEP:pkg-lease1-wiring / BACKLOG-SOURCE-REBASELINE.
+3. Dispatch tooling (claude-code-remote list_sessions/create_session) unavailable in this session.
