@@ -18,6 +18,9 @@
   - It is written only when the Founder presses "Mark all as seen". The panel writes nothing else.
   - The stored value is the newest **server** timestamp in the data (the watermark), not the client clock, so client clock skew cannot hide or invent changes.
   - Only records strictly after the marker count as new.
+  - Marking is offered only when BOTH sources were read. If missions are unreadable (PARTIAL), there is no mark button, so unseen missions can never be hidden (review finding B1 on `9315dba`).
+  - The marker never moves backwards: the later of the stored marker and the new watermark is kept.
+  - When a list is truncated, a note next to the button says that marking also covers the items not shown.
 
 ## Honesty rules (tested)
 
@@ -35,9 +38,9 @@
 - `apps/desktop/renderer/return-summary-core.js` (new): the pure core (marker read/write, watermark, summary).
 - `apps/desktop/renderer/views/return-summary.js` (new): the panel. The read-only `executive.js` delegates to it, and `executive.js` itself still touches no storage.
 - `apps/desktop/renderer/views/executive.js`: one import and the panel placement.
-- `apps/desktop/renderer/locales/en.js` and `tr.js`: 29 `executive.return.*` keys in each, with identical keys and placeholders.
+- `apps/desktop/renderer/locales/en.js` and `tr.js`: 31 `executive.return.*` keys in each, with identical keys and placeholders.
 - `tests/v7-ux-executive.test.ts`: already registered in `config/validation.json`, so no protected registration change was needed.
-  - 18 new tests.
+  - 20 new tests.
   - Two existing section-order assertions were extended to include the new section.
   - The import guard now lists the new module, and a new guard pins its only write.
 
@@ -45,8 +48,8 @@
 
 | Command | Result |
 |---|---|
-| `npx vitest run tests/v7-ux-executive.test.ts` | 58/58 passed |
-| `npx vitest run tests/v7-ux-*.test.ts tests/v7-b4-*.test.ts` (25 files) | 573/573 passed |
+| `npx vitest run tests/v7-ux-executive.test.ts` | 60/60 passed |
+| `npx vitest run tests/v7-ux-*.test.ts tests/v7-b4-*.test.ts` (25 files) | 575/575 passed |
 | `npx vitest run` on the 7 other test files that reference the renderer | 202/202 passed |
 | `node scripts/validate-tr-comments.mjs` | TR_VALIDATION: PASS |
 

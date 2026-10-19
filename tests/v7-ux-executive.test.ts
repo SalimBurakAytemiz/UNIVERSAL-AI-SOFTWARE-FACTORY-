@@ -935,9 +935,12 @@ describe("Executive — UI-003 return summary core (pure, server-time watermark,
       expect(core.returnWatermark(runs, missions)).toBe(WATERMARK);
       // Yalnız kabul edilen teslim daha yeniyse filigran odur.
       const late = ex.mapExecWorkRuns({runs: [runRow(RUN1, MSN1, {updatedAt: "2026-10-16T03:00:00.000Z", deliveryArtifact: artifact(RUN1, MSN1), sourceDelivery: accepted(RUN1, MSN1, {acceptedAt: "2026-10-17T00:00:00.000Z"})})]});
-      expect(core.returnWatermark(late, {state: "ERROR", missions: null})).toBe("2026-10-17T00:00:00.000Z");
+      expect(core.returnWatermark(late, missions)).toBe("2026-10-17T00:00:00.000Z");
       expect(core.returnWatermark({state: "VERIFIED", runs: {items: []}}, {state: "VERIFIED", missions: {items: []}})).toBeNull();
-      expect(core.returnWatermark({state: "ERROR", runs: null}, missions)).toBe("2026-10-16T01:00:00.000Z");
+      // Bir kaynak okunamıyorsa filigran yoktur: okunamayan kaynağın kayıtları "görüldü" sayılamaz (B1).
+      expect(core.returnWatermark({state: "ERROR", runs: null}, missions)).toBeNull();
+      expect(core.returnWatermark(runs, {state: "ERROR", missions: null})).toBeNull();
+      expect(core.returnWatermark(late, {state: "OFFLINE", missions: null})).toBeNull();
     } finally { vi.useRealTimers(); }
   });
   it("a failed work-runs read is carried as its honest state; no marker means FIRST_VISIT (nothing is counted as new)", async () => {
@@ -975,7 +978,7 @@ describe("Executive — UI-003 return summary core (pure, server-time watermark,
       const r = core.returnSummary({runs: ex.mapExecWorkRuns(RUNS), missions: {state: st, missions: null}}, WATERMARK);
       expect(r.state).toBe("PARTIAL");
       expect(r.missions).toEqual({state: st, count: null, items: [], truncated: false});
-      expect([r.total, r.nothingNew]).toEqual([0, false]);
+      expect([r.total, r.nothingNew, r.watermark]).toEqual([0, false, null]);
     }
   });
   it("every run status maps into a known group; lists are capped with an explicit truncation flag", async () => {
@@ -985,8 +988,18 @@ describe("Executive — UI-003 return summary core (pure, server-time watermark,
       .toEqual(["awaiting", "failed", "failed", "blocked", "blocked", "completed", "stopped", "stopped", "active", "active"]);
     const many = {runs: Array.from({length: 60}, (_, i) => runRow("run_" + i.toString(16).padStart(24, "0"), MSN1, {status: "FAILED", updatedAt: new Date(Date.UTC(2026, 9, 17, 0, i)).toISOString(), evidence: []}))};
     const r = core.returnSummary({runs: ex.mapExecWorkRuns(many), missions: ex.mapExecMissions(MISSIONS)}, "2026-10-16T00:00:00.000Z");
-    expect([r.groups.failed.count, r.groups.failed.items.length, r.groups.failed.truncated]).toEqual([60, core.MAX_RETURN_ROWS, true]);
+    expect([r.groups.failed.count, r.groups.failed.items.length, r.groups.failed.truncated, r.truncated]).toEqual([60, core.MAX_RETURN_ROWS, true, true]);
+    expect(core.returnSummary({runs: ex.mapExecWorkRuns(RUNS), missions: ex.mapExecMissions(MISSIONS)}, "2026-10-15T12:00:00.000Z").truncated).toBe(false);
     expect(core.MAX_RETURN_ROWS).toBe(50);
+  });
+  it("the marker never moves backwards: nextSeen keeps the later of the stored marker and the new watermark", async () => {
+    const core = await load("return-summary-core.js");
+    expect(core.nextSeen(null, WATERMARK)).toBe(WATERMARK);
+    expect(core.nextSeen("2026-10-15T00:00:00.000Z", WATERMARK)).toBe(WATERMARK);
+    expect(core.nextSeen("2026-10-20T00:00:00.000Z", WATERMARK)).toBe("2026-10-20T00:00:00.000Z");
+    expect(core.nextSeen("garbage", WATERMARK)).toBe(WATERMARK);
+    expect(core.nextSeen(WATERMARK, null)).toBeNull();
+    expect(core.nextSeen(WATERMARK, "2026-10-16")).toBeNull();
   });
 });
 
@@ -1091,12 +1104,33 @@ describe("Executive — UI-003 return summary view (device-only marker, honest s
       expect(byId(sec, "executive-return-mark")).toBeUndefined();
     }
   });
-  it("missions unreadable: PARTIAL note and the new-missions count is — (not 0)", async () => {
-    const {sec} = await renderReturn(serve({"/v1/missions": {missions: [{missionId: "nope"}]}}), await seeded(WATERMARK));
+  it("missions unreadable: PARTIAL note, the new-missions count is — (not 0), and NO mark is offered so unseen missions cannot be hidden (B1)", async () => {
+    const storage = await seeded("2026-10-15T12:00:00.000Z");
+    const {sec} = await renderReturn(serve({"/v1/missions": {missions: [{missionId: "nope"}]}}), storage);
     expect(byData(sec, "returnState", "PARTIAL")).toBeTruthy();
     expect(byData(sec, "note", "partial")!.textContent).toContain("GET /v1/missions");
     expect(countOf(sec, "missions")).toEqual({text: "—", pills: ["FAILED"]});
     expect(sec.textContent).not.toContain("Nothing new since your last visit.");
+    expect(byId(sec, "executive-return-mark")).toBeUndefined();
+    expect(byData(sec, "returnStatus")).toBeUndefined();
+    const blocked = byData(sec, "note", "mark-blocked")!;
+    expect([blocked.getAttribute("role"), blocked.textContent]).toEqual(["note", "GET /v1/missions could not be read, so nothing can be marked as seen until it is readable again (unseen missions must not be hidden)."]);
+    expect(storage.getItem("uasco.executive.returnSeenAt")).toBe("2026-10-15T12:00:00.000Z");
+    // İlk ziyarette de aynı: mission okunamıyorsa işaretleme sunulmaz.
+    const first = await renderReturn(serve({"/v1/missions": {missions: [{missionId: "nope"}]}}), await seeded(null));
+    expect(byData(first.sec, "returnState")!.dataset.returnState).toBe("FIRST_VISIT");
+    expect(byId(first.sec, "executive-return-mark")).toBeUndefined();
+    expect(byData(first.sec, "note", "mark-blocked")).toBeTruthy();
+  });
+  it("marking never moves the stored marker backwards, and truncated lists say the hidden items are covered too", async () => {
+    const ahead = await seeded("2026-10-20T00:00:00.000Z");
+    const {sec} = await renderReturn(serve(), ahead);
+    await click(byId(sec, "executive-return-mark")!);
+    expect(ahead.getItem("uasco.executive.returnSeenAt")).toBe("2026-10-20T00:00:00.000Z");
+    expect(byData(sec, "note", "mark-truncated")).toBeUndefined();
+    const many = {runs: Array.from({length: 60}, (_, i) => runRow("run_" + i.toString(16).padStart(24, "0"), MSN1, {status: "FAILED", updatedAt: new Date(Date.UTC(2026, 9, 17, 0, i)).toISOString(), evidence: []}))};
+    const big = await renderReturn(serve({"/v1/work-runs": many}), await seeded("2026-10-16T00:00:00.000Z"));
+    expect(byData(big.sec, "note", "mark-truncated")!.textContent).toContain("also covers the items not shown");
   });
   it("accessibility: labelled section, labelled lists and count list, well-formed dl, polite status region, machine-readable times; Turkish renders", async () => {
     const {sec} = await renderReturn(serve(), await seeded("2026-10-15T12:00:00.000Z"));

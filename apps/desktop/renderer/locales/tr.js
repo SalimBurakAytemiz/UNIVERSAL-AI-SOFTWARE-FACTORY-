@@ -1516,6 +1516,8 @@ export default {
   "executive.return.markNone":"Görüldü olarak işaretlenecek bir sunucu kaydı henüz yok.",
   "executive.return.saved":"Görüldü olarak işaretlendi.",
   "executive.return.saveFailed":"İşaret bu cihaza kaydedilemedi. Hiçbir şey değişmedi.",
+  "executive.return.markBlocked":"{source} okunamadığı için yeniden okunabilene kadar hiçbir şey görüldü olarak işaretlenemez (görülmemiş mission'lar gizlenmemeli).",
+  "executive.return.markTruncated":"Bazı listeler yalnız ilk kayıtlarını gösterir; görüldü olarak işaretlemek gösterilmeyen kayıtları da kapsar.",
   "area.queue.title":"İnsan Onayı Bekleyen İş Kuyruğu",
   "area.queue.desc":"İnsan kararı bekleyen her şey — önceliğe göre gruplu ve her öğenin gerçekten ne kadar beklediğiyle. Salt okunur.",
   "queue.eyebrow":"İnsan Onayı Kuyruğu · Öncelik · Bekleme süresi · Salt okunur",

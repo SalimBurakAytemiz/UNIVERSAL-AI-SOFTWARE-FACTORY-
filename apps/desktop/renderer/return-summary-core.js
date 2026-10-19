@@ -36,15 +36,24 @@ export function storeSeen(storage,iso){
 }
 
 /**
- * Filigran: okunabilen kaynaklardaki EN YENİ sunucu zaman damgası (koşu updatedAt/createdAt, kabul edilen teslim acceptedAt, mission createdAt).
+ * Filigran: iki kaynaktaki EN YENİ sunucu zaman damgası (koşu updatedAt/createdAt, kabul edilen teslim acceptedAt, mission createdAt).
  * İstemci saati hiç kullanılmaz; hiçbir kayıt yoksa null (işaretlenecek bir şey yok).
+ * Kaynaklardan BİRİ bile okunamıyorsa null'dır: okunamayan kaynağın kayıtları "görüldü" sayılamaz (aksi halde görülmemiş bir mission sonsuza dek gizlenirdi).
  */
 export function returnWatermark(runs,missions){
+  if(!isOk(runs)||!runs.runs||!isOk(missions)||!missions.missions)return null;
   let best=null,bestT=-Infinity;
   const see=x=>{const t=ts(x);if(t!==null&&t>bestT){bestT=t;best=new Date(t).toISOString()}};
   if(isOk(runs)&&runs.runs)for(const r of runs.runs.items){see(r.updatedAt);see(r.createdAt);if(r.delivery&&r.delivery.accepted)see(r.delivery.accepted.acceptedAt)}
   if(isOk(missions)&&missions.missions)for(const m of missions.missions.items)see(m.createdAt);
   return best;
+}
+
+/** İşaret asla geri gitmez: yeni değer eski işaretten daha eskiyse (kayıt silinmiş/saat kayması) eski işaret korunur. Geçersiz girdi null. */
+export function nextSeen(prev,watermark){
+  const w=canonicalSeen(watermark);if(w===null)return null;
+  const p=canonicalSeen(prev);
+  return p!==null&&Date.parse(p)>Date.parse(w)?p:w;
 }
 
 const capped=items=>({count:items.length,items:items.slice(0,MAX_RETURN_ROWS),truncated:items.length>MAX_RETURN_ROWS});
@@ -70,5 +79,6 @@ export function returnSummary({runs,missions},seen){
   const msOk=isOk(missions)&&missions.missions;
   const newMissions=msOk?{state:"VERIFIED",...capped(missions.missions.items.filter(m=>after(m.createdAt)))}:{state:failState(missions?.state),count:null,items:[],truncated:false};
   const total=changed.length+deliveries.count+(newMissions.count??0);
-  return {state:msOk?"VERIFIED":"PARTIAL",since,watermark,groups,missions:newMissions,deliveries,total,nothingNew:msOk&&total===0};
+  const truncated=RETURN_GROUPS.some(g=>groups[g].truncated)||deliveries.truncated||newMissions.truncated;
+  return {state:msOk?"VERIFIED":"PARTIAL",since,watermark,groups,missions:newMissions,deliveries,total,nothingNew:msOk&&total===0,truncated};
 }

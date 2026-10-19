@@ -3,7 +3,7 @@ import {h,panel,statePill,emptyNote} from "../components.js";
 import {MISSING} from "../model.js";
 import {formatDateTime} from "../work-core.js";
 import {EXECUTIVE_SOURCE_PATHS,PILL_FOR_RUN_STATUS,shortSha} from "../executive-core.js";
-import {RETURN_GROUPS,readSeen,storeSeen,returnSummary} from "../return-summary-core.js";
+import {RETURN_GROUPS,readSeen,storeSeen,nextSeen,returnSummary} from "../return-summary-core.js";
 
 const isOk=res=>Boolean(res)&&res.state==="VERIFIED";
 const failKind=state=>state==="OFFLINE"?"OFFLINE":state==="UNAVAILABLE"?"UNAVAILABLE":"FAILED";
@@ -58,16 +58,19 @@ function returnDetails(ctx,sum,res){
   return out;
 }
 /** "Görüldü" düğmesi: istemci saatini değil sunucu filigranını yazar; yazılamazsa hiçbir şey değişmez ve durum bölgesi bunu söyler. */
-function markControl(ctx,storage,watermark){
-  const doc=ctx.doc,t=ctx.t;
+function markControl(ctx,storage,sum,prevSeen,missionsOk){
+  const doc=ctx.doc,t=ctx.t,watermark=sum.watermark;
+  // Mission kaynağı okunamıyorsa işaretleme SUNULMAZ: görülmemiş mission'lar "görüldü" sayılamaz.
+  if(!missionsOk)return h(doc,"div",{class:"executive-return-mark"},h(doc,"p",{class:"note",role:"note",dataset:{note:"mark-blocked"},text:t("executive.return.markBlocked",{source:`GET ${EXECUTIVE_SOURCE_PATHS.missions}`})}));
   const status=h(doc,"p",{class:"note",role:"status","aria-live":"polite",dataset:{returnStatus:"1"}});
   const btn=h(doc,"button",{type:"button",class:"btn",id:"executive-return-mark",dataset:{focusKey:"executive-return-mark"},disabled:watermark?undefined:true,on:{click:async()=>{
-    if(!storeSeen(storage,watermark)){status.textContent=t("executive.return.saveFailed");return}
+    if(!storeSeen(storage,nextSeen(prevSeen,watermark))){status.textContent=t("executive.return.saveFailed");return}
     status.textContent=t("executive.return.saved");
     await ctx.rerender();
   }}},t("executive.return.mark"));
   return h(doc,"div",{class:"executive-return-mark"},
-    h(doc,"p",{class:"note",dataset:{note:"mark-hint"},text:watermark?t("executive.return.markHint",{time:formatDateTime(watermark,ctx.i18n.lang)}):t("executive.return.markNone")}),btn,status);
+    h(doc,"p",{class:"note",dataset:{note:"mark-hint"},text:watermark?t("executive.return.markHint",{time:formatDateTime(watermark,ctx.i18n.lang)}):t("executive.return.markNone")}),
+    sum.truncated?h(doc,"p",{class:"note",dataset:{note:"mark-truncated"},text:t("executive.return.markTruncated")}):null,btn,status);
 }
 export function returnPanel(ctx,res){
   const doc=ctx.doc,t=ctx.t,storage=deviceStorage(ctx),seen=readSeen(storage);
@@ -90,7 +93,7 @@ export function returnPanel(ctx,res){
       if(sum.nothingNew)body.push(emptyNote(ctx,"executive.return.nothingNew"));
       else body.push(h(doc,"p",{class:"note",dataset:{note:"grouping"},text:t("executive.return.grouping")}),...returnDetails(ctx,sum,res));
     }
-    body.push(markControl(ctx,storage,sum.watermark));
+    body.push(markControl(ctx,storage,sum,seen.seen,isOk(res.missions)&&Boolean(res.missions.missions)));
   }
   return panel(ctx,{titleKey:"executive.return.title",id:"executive-return",className:"executive-section"},h(doc,"p",{class:"note",text:t("executive.return.lead")}),body);
 }

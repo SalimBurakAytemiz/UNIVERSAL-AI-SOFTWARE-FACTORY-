@@ -1516,6 +1516,8 @@ export default {
   "executive.return.markNone":"There is no server record to mark as seen yet.",
   "executive.return.saved":"Marked as seen.",
   "executive.return.saveFailed":"The marker could not be saved on this device. Nothing was changed.",
+  "executive.return.markBlocked":"{source} could not be read, so nothing can be marked as seen until it is readable again (unseen missions must not be hidden).",
+  "executive.return.markTruncated":"Some lists show only their first items; marking as seen also covers the items not shown.",
   "area.queue.title":"Human-Approval Queue",
   "area.queue.desc":"Everything that is waiting for a human decision — grouped by priority, with the real time each item has waited. Read-only.",
   "queue.eyebrow":"Human-Approval Queue · Priority · Waiting time · Read-only",
