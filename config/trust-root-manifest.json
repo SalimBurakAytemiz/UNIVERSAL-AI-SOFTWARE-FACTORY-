@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-18T04:55:18.016Z",
+  "generatedAt": "2026-10-19T03:34:53.866Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -10,7 +10,7 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "b5af965e526d31fc0f2e65ab5009ecb05c9e9108c3b10c4e89907fa14d3173c2"
+      "sha256": "a714f59ca12bee1a8cca9cbb671c95bca44e4d623521ccbc626dcf01692d2caa"
     },
     {
       "path": ".gitignore",
@@ -454,7 +454,7 @@
     },
     {
       "path": "config/validation.json",
-      "sha256": "82177ae0fff536d985de73e4b74796af47bef38646a9bc5fcbb8482e57250b26"
+      "sha256": "e335736b90f527e8259180551231196776273a7f340b7c4f56e1b77df0bfe34f"
     },
     {
       "path": "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
@@ -1250,7 +1250,7 @@
     },
     {
       "path": "scripts/phase0-acceptance.mjs",
-      "sha256": "41f10019c563d79607c246862a0b2fea69d9c275267a035eb4c06b66ad1ae8e4"
+      "sha256": "b1823e9613a78fffd5bda87e452eb9d63b916e911e8b47ae4dba47c288c51ace"
     },
     {
       "path": "scripts/preflight.mjs",
