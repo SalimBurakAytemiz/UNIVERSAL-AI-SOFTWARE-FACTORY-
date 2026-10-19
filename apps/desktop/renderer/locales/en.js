@@ -1117,6 +1117,7 @@ export default {
   "pill.NOT_EXECUTED":"NOT_EXECUTED",
   "pill.NOT_VERIFIED":"NOT_VERIFIED",
   "pill.PRODUCT_VERIFIED":"PRODUCT_VERIFIED",
+  "pill.RECOVERING":"Recovering",
   "pill.ACTIVE":"Active",
   "pill.WAITING":"Waiting",
   "pill.ATTENTION":"Attention",

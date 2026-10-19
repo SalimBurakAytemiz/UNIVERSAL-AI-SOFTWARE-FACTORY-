@@ -187,6 +187,7 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .spill-active,.spill-loading{color:var(--accent)}.spill-loading .icon{animation:pulse 1.4s ease-in-out infinite}
 .spill-stale,.spill-waiting,.spill-attention{color:var(--warn)}
 .spill-not_verified{color:var(--warn);border-style:dashed}
+.spill-recovering{color:var(--warn)}
 .spill-failed{color:var(--danger);border-width:2px}
 .spill-blocked{color:var(--danger);border-style:dashed;border-width:2px}
 .spill-denied{color:var(--purple);border-width:2px}
