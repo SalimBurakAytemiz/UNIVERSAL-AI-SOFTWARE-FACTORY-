@@ -149,8 +149,8 @@ function securityPanel(ctx,scans){
 }
 function securityDetail(ctx,scans){
   const doc=ctx.doc;
-  const base=(...kids)=>panel(ctx,{titleKey:"qa.security.detail.title",id:"qa-secdetail",className:"qa-secdetail"},
-    h(doc,"h3",{id:"qa-secdetail-t",tabindex:"-1",class:"sr-only",text:ctx.t("qa.security.detail.title")}),...kids);
+  // //TR: panel() zaten id="qa-secdetail-t" başlığını üretir; yinelenen id yerine bu başlığı odaklanabilir (tabindex=-1) yaparız.
+  const base=(...kids)=>{const p=panel(ctx,{titleKey:"qa.security.detail.title",id:"qa-secdetail",className:"qa-secdetail"},...kids);const t=p.children[0];if(t)t.setAttribute("tabindex","-1");return p};
   if(!secState.runId)return base(emptyNote(ctx,"qa.security.detail.none"));
   const r=scans.state==="VERIFIED"?scans.runs.find(x=>x.runId===secState.runId):null;
   if(!r)return base(stateNote(ctx,"UNAVAILABLE","qa.security.detail.gone"));

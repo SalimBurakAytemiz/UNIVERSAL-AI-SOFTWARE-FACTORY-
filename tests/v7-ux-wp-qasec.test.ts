@@ -236,3 +236,119 @@ describe("UX WP-QA-SEC allow-list and i18n", () => {
     for (const k of qa) { expect(en[k], k).toBeTruthy(); expect(ph(en[k]), k).toBe(ph(tr[k])); }
   });
 });
+
+// ---------------- negative / a11y / parity hardening ----------------
+// //TR: Olumsuz yollar: kanıt listesi/cockpit/work-runs okuması 404 veya bozuk olduğunda hiçbir sayı, koşu ya da "doğrulandı" uydurulmaz.
+describe("UX WP-QA-SEC negative paths (no fabricated counts, runs or verification)", () => {
+  beforeEach(async () => { (await load("views", "assurance.js")).resetAssuranceView(); const f = (await load("forms.js")); f.selection.evidenceId = null; f.selection.missionId = null; });
+
+  it("every read failing: no stats, no security rows, no evidence rows, no VERIFIED chips; page still renders h1 and dynamic QA gate", async () => {
+    const {ctx} = await mkCtx({cockpit: "unavail", workRuns: "off", evidence: "off"});
+    const {node} = await renderAssurance(ctx);
+    expect(byData(node, "stat").length).toBe(0);
+    expect(byData(node, "runId").length).toBe(0);
+    expect(all(node).some(n => n.id.startsWith("ev-evi_"))).toBe(false);
+    expect(byData(node, "chip", "VERIFIED").length).toBe(0);
+    expect(byData(node, "scan", "PASSED").length).toBe(0);
+    expect(byTag(node, "h1").length).toBe(1);
+    expect(byId(node, "qa-dynamic")).toBeTruthy();
+    // Güvenlik duruşu özeti (posture) okunamayan veriden üretilmez.
+    expect(byData(node, "posture").length).toBe(0);
+  });
+  it("evidence list failing alone leaves the overview and security scan honest and intact", async () => {
+    const {ctx} = await mkCtx({evidence: "off"});
+    const {node} = await renderAssurance(ctx);
+    expect(all(byId(node, "assurance-list")!).some(n => n.id.startsWith("ev-evi_"))).toBe(false);
+    expect(byData(node, "runId").length).toBe(5);
+  });
+  it("malformed work-runs payloads never produce scan rows or a posture summary", async () => {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    for (const bad of ["garbage", null, {workRuns: "x"}, 42]) {
+      const doc = new D(), store = st.createStore(null);
+      const bridge = {apiGet: async (p: string) => { if (p === "/v1/work-runs") return bad; if (p === "/v1/cockpit") return COCKPIT; return EVIDENCE; }};
+      const t = (k: string, v?: any) => i18n.translate("en", k, v);
+      const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang: "en", t}, t, navigate: () => {}, rerender: () => {}, settleFocus: () => {}};
+      const {node} = await renderAssurance(ctx);
+      expect(byData(node, "scan", "PASSED").length, JSON.stringify(bad)).toBe(0);
+      expect(byData(node, "posture").length, JSON.stringify(bad)).toBe(0);
+    }
+  });
+  it("a selected run that vanishes shows no stale detail", async () => {
+    const {ctx} = await mkCtx();
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `sec-${runId("c")}`) as N).fire("click");
+    const off = await mkCtx({workRuns: "off"});
+    const {node} = await renderAssurance(off.ctx);
+    const detail = byId(node, "qa-secdetail")!;
+    expect(text(detail)).not.toContain("SECRET_DETECTED");
+    expect(byData(detail, "scan").length).toBe(0);
+  });
+  it("STALE and NOT_EXECUTED runs never carry a PASSED/verified pill, in either language", async () => {
+    for (const lang of ["en", "tr"]) {
+      const {ctx} = await mkCtx({}, lang);
+      const {node} = await renderAssurance(ctx);
+      for (const idc of ["d", "e"]) expect(byData(byData(node, "runId", runId(idc))[0], "scan", "PASSED").length, `${lang}${idc}`).toBe(0);
+    }
+  });
+});
+
+// //TR: Erişilebilirlik: h1 odaklanabilir, tüm düğmeler type=button, koşu düğmeleri etiketli, tablolar caption + scope=col, gruplar etiketli, dinamik QA'da düğme yok.
+describe("UX WP-QA-SEC accessibility", () => {
+  beforeEach(async () => { (await load("views", "assurance.js")).resetAssuranceView(); const f = (await load("forms.js")); f.selection.evidenceId = null; f.selection.missionId = null; });
+
+  it("h1 is focusable, buttons are typed and labelled, tables have captions and column headers, groups are labelled", async () => {
+    const {ctx} = await mkCtx();
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `sec-${runId("a")}`) as N).fire("click"); // open detail so the close button is also covered
+    const {node} = await renderAssurance(ctx);
+    expect(byId(node, "view-title")!.getAttribute("tabindex")).toBe("-1");
+    expect(byTag(node, "h1").length).toBe(1);
+    const buttons = byTag(node, "button");
+    expect(buttons.length).toBeGreaterThan(5);
+    for (const b of buttons) expect(b.getAttribute("type"), b.id).toBe("button");
+    for (const b of buttons.filter(b => b.id.startsWith("sec-"))) expect((b.getAttribute("aria-label") ?? "").length).toBeGreaterThan(0);
+    expect(byId(node, "qa-secdetail-close")).toBeTruthy();
+    for (const t of byTag(node, "table")) {
+      expect(t.children.some(c => c.tagName === "CAPTION" && c.textContent.length > 0)).toBe(true);
+      for (const th of all(t).filter(n => n.tagName === "TH")) expect(th.getAttribute("scope")).toBe("col");
+    }
+    for (const g of all(node).filter(n => n.getAttribute("role") === "group")) expect((g.getAttribute("aria-label") ?? "").length).toBeGreaterThan(0);
+    expect(byTag(byId(node, "qa-dynamic")!, "button").length).toBe(0);
+  });
+  it("keyboard: selecting a run and closing the detail use real buttons and request focus settling", async () => {
+    const settle: any[] = [];
+    const {ctx} = await mkCtx();
+    ctx.settleFocus = (o: any) => settle.push(o);
+    const first = await renderAssurance(ctx);
+    const btn = byId(first.node, `sec-${runId("b")}`) as N;
+    expect(btn.tagName).toBe("BUTTON");
+    btn.fire("click");
+    expect(settle.length).toBe(1);
+    const {node} = await renderAssurance(ctx);
+    expect(byId(node, `sec-${runId("b")}`)!.getAttribute("aria-current")).toBe("true");
+    expect(byId(node, "qa-secdetail-t")!.getAttribute("tabindex")).toBe("-1");
+    (byId(node, "qa-secdetail-close") as N).fire("click");
+    expect(settle.length).toBe(2);
+  });
+});
+
+// //TR: EN/TR eşitliği: görünümün kullandığı assurance.*, everif.*, area.assurance.* anahtarları iki dilde aynıdır ve yer tutucular eşleşir.
+describe("UX WP-QA-SEC assurance/everif locale parity", () => {
+  it("assurance.*, everif.* and area.assurance.* keys have identical key sets and placeholders", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const pick = (d: Record<string, string>) => Object.keys(d).filter(k => /^(assurance\.|everif\.|area\.assurance\.)/.test(k)).sort();
+    expect(pick(tr)).toEqual(pick(en));
+    expect(pick(en).length).toBeGreaterThan(15);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of pick(en)) { expect(tr[k], k).toBeTruthy(); expect(ph(en[k]), k).toBe(ph(tr[k])); }
+  });
+  it("every static t(\"...\") key the view uses exists in both locales", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const src = fs.readFileSync(path.join(rend, "views", "assurance.js"), "utf8");
+    const keys = [...new Set([...src.matchAll(/\bt\("([a-zA-Z0-9_.]+)"/g)].map(m => m[1]))];
+    expect(keys.length).toBeGreaterThan(30);
+    for (const k of keys) { expect(en[k], `en ${k}`).toBeTruthy(); expect(tr[k], `tr ${k}`).toBeTruthy(); }
+  });
+});
