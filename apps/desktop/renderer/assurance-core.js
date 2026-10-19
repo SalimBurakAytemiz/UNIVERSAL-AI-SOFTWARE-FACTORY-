@@ -1,5 +1,6 @@
 // //TR: Bu modül Güvence (QA + Güvenlik) görünümünün saf (DOM'suz) çekirdeğidir: GET /v1/work-runs ham kayıtlarındaki SECURITY_REPORT kanıtının (core/workos security-tools.ts aşama özeti) güvenli, DÜRÜST eşlemesi. Hiçbir durum YÜKSELTİLMEZ: yalnız sunucunun bildirdiği gitleaks/trivy/semgrep durumu (INSTALLED/NOT_INSTALLED/ERROR), secret-scan ve SCA durumu taşınır; araç yoksa NOT_INSTALLED, kapsam eksikse PARTIAL, kanıt yoksa NOT_EXECUTED gösterilir; sahte "temiz/geçti" asla üretilmez ve SOURCE_GENERATION_COMPLETE asla PRODUCT_VERIFIED sayılmaz. Veri HTML olarak yorumlanmaz; bu modül yalnız salt-okunur veri üretir.
 import {MISSING} from "./model.js";
+import {mapReadinessWorkRuns} from "./readiness-core.js";
 
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 const str=(x,max=200)=>typeof x==="string"&&x.length?x.slice(0,max):null;
@@ -185,5 +186,34 @@ export function buildLineage(items){
     missions:[...missions.values()].sort((a,b)=>cmp(a.missionId,b.missionId)).map(m=>({missionId:m.missionId,noRun:m.noRun,runs:[...m.runs.entries()].sort((a,b)=>cmp(a[0],b[0])).map(([runId,evidence])=>({runId,evidence}))})),
     orphanRuns:[...orphanRuns.entries()].sort((a,b)=>cmp(a[0],b[0])).map(([runId,evidence])=>({runId,evidence})),
     ungrouped};
+}
+// //TR: UI-051: koşu başına test raporu GET /v1/work-runs ham kanıt kayıtlarından (VERIFY_TESTS, REGRESSION_TESTS, *_NOT_EXECUTED, TEST_SURFACE) türetilir; anlamı readiness-core testsOf ile aynıdır ve yalnız GÜNCEL head'e (run.headSha) bağlı kayıt sayılır. EXECUTED yalnız iki test kaydı da exit 0, sandbox tanıklı ve yürütülen test sayısı > 0 iken; kayıt yoksa NOT_EXECUTED. Hiçbir durum yükseltilmez, "geçti" üretilmez.
+export const TEST_REPORT_STATES=Object.freeze(["EXECUTED","FAILED","BLOCKED","NOT_EXECUTED","UNVERIFIED"]);
+const TEST_KINDS=Object.freeze(["VERIFY_TESTS","REGRESSION_TESTS","VERIFY_TESTS_NOT_EXECUTED","REGRESSION_TESTS_NOT_EXECUTED","TEST_SURFACE"]);
+const lastOf=(list,pred)=>{for(let i=list.length-1;i>=0;i--)if(pred(list[i]))return list[i];return null};
+function mapTestRecord(e,head){
+  if(!isObj(e)||!TEST_KINDS.includes(e.kind))return null;
+  const sha=typeof e.commitSha==="string"&&SHA_RE.test(e.commitSha)?e.commitSha:null,ts=isObj(e.testSurface)?e.testSurface:null;
+  return {evidenceId:typeof e.evidenceId==="string"&&e.evidenceId.length<=80?e.evidenceId:null,kind:e.kind,cycle:safeInt(e.cycle),commitSha:sha,atHead:head!==null&&sha===head,
+    exitCode:Number.isSafeInteger(e.exitCode)?e.exitCode:null,attested:typeof e.sandboxProviderId==="string"&&e.sandboxProviderId.length>0,
+    acceptance:ts&&typeof ts.functionalAcceptance==="string"?str(ts.functionalAcceptance,40):null,executedTests:ts?safeInt(ts.executedTests):null};
+}
+// //TR: Durum (EXECUTED/FAILED/...) readiness-core'un testsOf'u ile BİREBİR aynı kaynaktan gelir: tüm liste önce mapReadinessWorkRuns ile fail-closed doğrulanır (bozuk kanıt öğesi, biçimsiz commit/exitCode/sağlayıcı/kabul, yinelenen runId, bozuk koşu satırı => TÜM okuma ERROR) ve satır başına `tests` değeri oradan alınır; burada ikinci bir kural kopyası YOKTUR. Kayıtlar yalnız doğrulanmış ham öğelerden gösterim için türetilir.
+export const TEST_ROWS_MAX=500;
+export function mapTestReports(r){
+  const bad=state=>({state,runs:[],total:0,truncated:false});
+  if(!isObj(r)||r.ok!==true)return bad(isObj(r)&&typeof r.state==="string"?r.state:"ERROR");
+  const data=r.data;
+  const list=isObj(data)?(Array.isArray(data.workRuns)?data.workRuns:Array.isArray(data.runs)?data.runs:Array.isArray(data.items)?data.items:null):null;
+  if(!list)return bad("ERROR");
+  const rd=mapReadinessWorkRuns({runs:list});
+  if(rd.state!=="VERIFIED"||!rd.runs||rd.runs.items.length!==list.length)return bad("ERROR");
+  const runs=list.slice(0,TEST_ROWS_MAX).map((x,i)=>{
+    const row=rd.runs.items[i],head=row.headSha;
+    const records=x.evidence.map(e=>mapTestRecord(e,head)).filter(Boolean);
+    const surface=lastOf(records.filter(q=>q.atHead),q=>q.kind==="TEST_SURFACE"&&q.acceptance!==null);
+    return {runId:row.runId,missionId:row.missionId,headSha:head,state:row.tests,records,executedTests:surface?surface.executedTests:null};
+  });
+  return {state:"VERIFIED",runs,total:list.length,truncated:list.length>TEST_ROWS_MAX};
 }
 export {MISSING};

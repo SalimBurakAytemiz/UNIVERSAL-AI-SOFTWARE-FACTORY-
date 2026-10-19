@@ -4,19 +4,20 @@
 // (3) Kanıt yüzeyi (DEĞİŞMEDİ): GET /v1/evidence listesi doğrulama çipleriyle (VERIFIED/MISMATCH/MISSING/UNVERIFIABLE) + detay (kaynak yolu, sha256, redakte log);
 // (3b) UI-049 Reviews: GET /v1/reviews (+ /:evd_id) bağımsız review kararları AYNEN, yükseltilmeden; veri yoksa dürüst boş/UNAVAILABLE/ERROR durumu;
 // (3c) UI-050 Soyağacı: GET /v1/evidence liste alanlarından (missionId, runId) mission->run->evidence; eksik alan gruplanmamış, bağ çıkarımı yok;
+// (3d) UI-051 Test raporu: GET /v1/work-runs test kanıt kayıtlarından koşu başına durum (+ GET /v1/evidence?runId= çapraz doğrulama); kanıt yoksa NOT_EXECUTED, "geçti" asla üretilmez;
 // (4) Dinamik QA — Founder kapısı (BLOCKED): testleri çalıştırma, görsel/API/web/mobil/masaüstü yürütme, cihaz farmı, canlı önizleme FD-REL-1 (yürütme) + ücretli cihaz farmı kapısındadır; bu yüzey ASLA sahte koş/geçti/kapsam göstermez, "koş" düğmesi yoktur ve SOURCE_GENERATION_COMPLETE asla PRODUCT_VERIFIED sayılmaz. 404 => UNAVAILABLE; veri yalnız h()/textContent ile çizilir, HTML olarak yorumlanmaz.
 import {h,panel,stateNote,emptyNote,chip,verificationChip,statePill,miniBars,badge} from "../components.js";
 import {MISSING,formatCount} from "../model.js";
 import {VERIFICATION_STATES,filterEvidence,formatDateTime} from "../work-core.js";
 import {drafts,selection,field} from "../forms.js";
-import {mapSecurityScans,evidenceIntegrity,buildLineage,reviewRowVerified} from "../assurance-core.js";
+import {mapSecurityScans,evidenceIntegrity,buildLineage,reviewRowVerified,mapTestReports} from "../assurance-core.js";
 import {icon} from "../icons.js";
 
 const PAGE_LIMIT=100;
 const SCAN_LIMIT=150;
 // //TR: Seçili güvenlik tarama koşusu görünüm ömrü boyunca korunur (periyodik yenileme seçimi bozmaz).
 const secState={runId:null};
-export function resetAssuranceView(){secState.runId=null;revState.id=null}
+export function resetAssuranceView(){secState.runId=null;revState.id=null;trState.runId=null}
 
 // //TR: Dinamik QA yetenekleri Founder kapısındadır; her satır dürüst BLOCKED/NOT_EXECUTED taşır, hiçbiri yürütme tetiklemez.
 const DYNAMIC_QA=Object.freeze([
@@ -278,6 +279,69 @@ function lineagePanel(ctx,res){
     L.ungrouped.length?h(doc,"div",{class:"as-lineage-ungrouped",dataset:{lineage:"ungrouped"}},h(doc,"h4",{class:"qa-def-title",text:ctx.t("assurance.lineage.ungrouped")}),h(doc,"p",{class:"note",text:ctx.t("assurance.lineage.ungroupedNote")}),h(doc,"ul",{class:"as-lineage-list"},L.ungrouped.map(e=>lineageLeaf(ctx,e)))):null);
 }
 
+// ---------- (7) UI-051: Koşu başına test raporu (GET /v1/work-runs kanıt kayıtları + GET /v1/evidence?runId=) ----------
+// //TR: Durum yalnız kayıtlı test kanıtından türetilir (VERIFY_TESTS + REGRESSION_TESTS, güncel head, sandbox tanıklı, yürütülen test > 0); kayıt yoksa NOT_EXECUTED. Hiçbir yerde "geçti" üretilmez: EXECUTED yalnız "kanıtla yürütüldü" demektir ve PRODUCT_VERIFIED anlamına gelmez. Test kaydı kimliği kanıt indeksinde (evidence?runId=) birebir eşleşirse doğrulama çipi eklenir; eşleşmezse "indekste yok" yazılır.
+const trState={runId:null};
+const TEST_PILL=Object.freeze({EXECUTED:"NEUTRAL",FAILED:"FAILED",BLOCKED:"BLOCKED",UNVERIFIED:"STALE",NOT_EXECUTED:"NOT_EXECUTED"});
+function testPill(ctx,state){
+  const p=statePill(ctx,TEST_PILL[state]??"NOT_EXECUTED",{label:ctx.t(`assurance.testreport.state.${state}`)});p.dataset.testState=state;return p;
+}
+function testRow(ctx,r){
+  const doc=ctx.doc,on=trState.runId===r.runId;
+  return h(doc,"tr",{class:on?"row-selected":null,dataset:{testRun:r.runId,testState:r.state}},
+    h(doc,"td",{},h(doc,"button",{type:"button",class:"link-btn mono",id:`tr-${r.runId}`,dataset:{focusKey:`tr-${r.runId}`},"aria-current":on?"true":null,"aria-label":ctx.t("assurance.testreport.select",{id:r.runId}),
+      on:{click:()=>{trState.runId=r.runId;if(typeof ctx.rerender==="function")ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys:["id:as-testrep-detail-h",`id:tr-${r.runId}`]})}},text:r.runId})),
+    h(doc,"td",{},testPill(ctx,r.state)),
+    h(doc,"td",{text:r.executedTests===null?MISSING:formatCount(r.executedTests)}),
+    h(doc,"td",{text:formatCount(r.records.length)}),
+    h(doc,"td",{class:"mono",text:r.headSha?r.headSha.slice(0,12):MISSING}));
+}
+function testReportPanel(ctx,reports){
+  const doc=ctx.doc,mk=(...k)=>panel(ctx,{titleKey:"assurance.testreport.title",id:"as-testrep",className:"as-testrep"},h(doc,"p",{class:"note",text:ctx.t("assurance.testreport.lead")}),...k,h(doc,"p",{class:"note mono",text:ctx.t("assurance.testreport.source")}));
+  if(reports.state!=="VERIFIED")return mk(stateNote(ctx,reports.state));
+  if(!reports.runs.length)return mk(emptyNote(ctx,"assurance.testreport.none"));
+  const page=reports.runs.slice(0,SCAN_LIMIT),cols=["assurance.testreport.col.run","assurance.testreport.col.state","assurance.testreport.col.executed","assurance.testreport.col.records","assurance.testreport.col.head"];
+  return mk(
+    h(doc,"p",{class:"note",dataset:{results:"testreport"},text:ctx.t("assurance.testreport.results",{shown:String(page.length),total:String(reports.total)})}),
+    h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table as-testrep-table"},
+      h(doc,"caption",{class:"sr-only",text:ctx.t("assurance.testreport.caption")}),
+      h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
+      h(doc,"tbody",{},page.map(r=>testRow(ctx,r))))),
+    h(doc,"p",{class:"note",text:ctx.t("assurance.testreport.note")}));
+}
+async function testReportDetail(ctx,reports){
+  const doc=ctx.doc;
+  const base=(...kids)=>panel(ctx,{titleKey:"assurance.testreport.detail.title",id:"as-testrep-detail",className:"as-testrep"},h(doc,"h3",{id:"as-testrep-detail-h",tabindex:"-1",class:"sr-only",text:ctx.t("assurance.testreport.detail.title")}),...kids);
+  if(!trState.runId)return base(emptyNote(ctx,"assurance.testreport.detail.none"));
+  const r=reports.state==="VERIFIED"?reports.runs.find(x=>x.runId===trState.runId):null;
+  if(!r)return base(stateNote(ctx,"UNAVAILABLE","assurance.testreport.detail.gone"));
+  const idx=await ctx.api.evidenceList({runId:r.runId,limit:PAGE_LIMIT});
+  const byId=idx.state==="VERIFIED"?new Map(idx.items.map(e=>[e.evidenceId,e])):null;
+  const close=h(doc,"button",{type:"button",class:"btn btn-small",id:"as-testrep-close",dataset:{focusKey:"as-testrep-close"},text:ctx.t("assurance.testreport.detail.close"),
+    on:{click:()=>{const id=r.runId;trState.runId=null;if(typeof ctx.rerender==="function")ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys:[`id:tr-${id}`,"id:as-testrep-t"]})}}});
+  const head=h(doc,"div",{class:"as-testrep-head"},h(doc,"span",{class:"mono",text:r.runId}),testPill(ctx,r.state),close);
+  const idxCell=rec=>{
+    if(!rec.evidenceId)return h(doc,"span",{class:"note",text:MISSING});
+    if(byId===null)return h(doc,"span",{class:"note",dataset:{indexState:idx.state},text:ctx.t(`state.${idx.state}`)});
+    const hit=byId.get(rec.evidenceId);
+    // //TR: Doğrulama çipi yalnız indeks kaydı AYNI koşuya ve AYNI türe aitse gösterilir; aksi halde "indekste yok".
+    return hit&&hit.runId===r.runId&&hit.kind===rec.kind?verificationChip(ctx,hit.verification):h(doc,"span",{class:"note",dataset:{indexState:"NOT_INDEXED"},text:ctx.t("assurance.testreport.notIndexed")});
+  };
+  const cols=["assurance.testreport.rec.id","assurance.testreport.rec.kind","assurance.testreport.rec.cycle","assurance.testreport.rec.head","assurance.testreport.rec.exit","assurance.testreport.rec.attested","assurance.testreport.rec.index"];
+  return base(head,
+    r.state==="NOT_EXECUTED"?h(doc,"p",{class:"note note-blocked",role:"note",dataset:{testNotExecuted:"1"},text:ctx.t(r.records.length?"assurance.testreport.detail.notExecutedRecords":"assurance.testreport.detail.notExecuted")}):null,
+    r.state==="UNVERIFIED"?h(doc,"p",{class:"note note-stale",role:"note",text:ctx.t("assurance.testreport.detail.unverified")}):null,
+    r.records.length?h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table as-testrep-table"},
+      h(doc,"caption",{class:"sr-only",text:ctx.t("assurance.testreport.detail.caption")}),
+      h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
+      h(doc,"tbody",{},r.records.map(rec=>h(doc,"tr",{dataset:{testRecord:rec.kind,atHead:rec.atHead?"1":"0"}},
+        h(doc,"td",{class:"mono",text:rec.evidenceId??MISSING}),h(doc,"td",{text:rec.kind}),h(doc,"td",{text:rec.cycle===null?MISSING:String(rec.cycle)}),
+        h(doc,"td",{class:"mono",text:rec.commitSha?`${rec.commitSha.slice(0,12)}${rec.atHead?"":` (${ctx.t("assurance.testreport.notHead")})`}`:MISSING}),
+        h(doc,"td",{class:"mono",text:rec.exitCode===null?MISSING:String(rec.exitCode)}),
+        h(doc,"td",{text:ctx.t(rec.attested?"assurance.testreport.yes":"assurance.testreport.no")}),
+        h(doc,"td",{},idxCell(rec))))))):emptyNote(ctx,"assurance.testreport.detail.noRecords"));
+}
+
 // ---------- (3) Kanıt yüzeyi (mevcut davranış) ----------
 function filters(ctx,items){
   const doc=ctx.doc,f=drafts.evidence,kinds=[...new Set(items.map(e=>e.kind).filter(Boolean))].sort();
@@ -338,7 +402,7 @@ export async function render(ctx){
     ctx.api.raw("/v1/work-runs"),
     ctx.api.assuranceReviews()
   ]);
-  const scans=mapSecurityScans(scansRaw),ev=evidenceIntegrity(cockpit?.data?.evidence);
+  const scans=mapSecurityScans(scansRaw),tests=mapTestReports(scansRaw),ev=evidenceIntegrity(cockpit?.data?.evidence);
   if(res.state==="VERIFIED"&&f.kind!=="ALL"&&!res.items.some(e=>e.kind===f.kind))f.kind="ALL";
   const shown=res.state==="VERIFIED"?filterEvidence(res.items,{verification:f.verification,kind:f.kind}):[];
   const detail=selection.evidenceId?panel(ctx,{titleKey:"assurance.detail",id:"assurance-detail"},await detailBody(ctx)):null;
@@ -349,6 +413,8 @@ export async function render(ctx){
     dynamicQaPanel(ctx),
     securityPanel(ctx,scans),
     securityDetail(ctx,scans),
+    testReportPanel(ctx,tests),
+    await testReportDetail(ctx,tests),
     reviewsPanel(ctx,revRes),
     await reviewDetailPanel(ctx),
     h(doc,"p",{class:"panel-meta"},chip(ctx,{state:res.state,value:res.items?.length??null}),h(doc,"span",{text:ctx.t("assurance.source")})),
