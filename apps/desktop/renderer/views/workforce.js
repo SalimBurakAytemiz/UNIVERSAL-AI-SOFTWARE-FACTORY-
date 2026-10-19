@@ -97,7 +97,7 @@ function roleList(ctx,items){
       const on=catState.roleId===r.roleId;
       return h(doc,"tr",{dataset:{roleId:r.roleId,selected:on?"1":""}},
         h(doc,"td",{class:"mono"},h(doc,"button",{type:"button",class:"link-btn",dataset:{focusKey:`wf-role-${r.roleId}`,roleBtn:r.roleId},"aria-current":on?"true":null,"aria-label":ctx.t("workforce.cat.select",{id:r.roleId,title:r.title}),
-          on:{click:()=>{catState.roleId=r.roleId;if(typeof ctx.rerender==="function")ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys:["id:wf-detail-t",`id:wf-role-${r.roleId}`]})}},text:r.roleId})),
+          on:{click:()=>{catState.roleId=r.roleId;if(typeof ctx.rerender==="function")ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys:["id:wf-detail-h",`id:wf-role-${r.roleId}`]})}},text:r.roleId})),
         h(doc,"td",{text:r.title}),h(doc,"td",{class:"mono",text:r.guildId}),h(doc,"td",{class:"mono",text:r.clusterId}),h(doc,"td",{text:r.priority??MISSING}),
         h(doc,"td",{},statusChip(ctx,r.runtimeStatus)),h(doc,"td",{},statusChip(ctx,r.proficiencyStatus)));
     }))));
@@ -115,16 +115,16 @@ const defList=(ctx,titleKey,values)=>{
 function detailPanel(ctx,detail){
   const doc=ctx.doc;
   if(!catState.roleId)return panel(ctx,{titleKey:"workforce.cat.detail.title",id:"wf-detail",className:"wf-detail"},
-    h(doc,"h3",{id:"wf-detail-t",tabindex:"-1",class:"sr-only",text:ctx.t("workforce.cat.detail.title")}),emptyNote(ctx,"workforce.cat.detail.none"));
+    h(doc,"h3",{id:"wf-detail-h",tabindex:"-1",class:"sr-only",text:ctx.t("workforce.cat.detail.title")}),emptyNote(ctx,"workforce.cat.detail.none"));
   if(!detail||detail.state!=="VERIFIED"||!detail.role)return panel(ctx,{titleKey:"workforce.cat.detail.title",id:"wf-detail",className:"wf-detail"},
-    h(doc,"h3",{id:"wf-detail-t",tabindex:"-1",class:"sr-only",text:ctx.t("workforce.cat.detail.title")}),stateNote(ctx,detail?detail.state:"ERROR"),
+    h(doc,"h3",{id:"wf-detail-h",tabindex:"-1",class:"sr-only",text:ctx.t("workforce.cat.detail.title")}),stateNote(ctx,detail?detail.state:"ERROR"),
     h(doc,"p",{class:"note mono",text:ctx.t("workforce.cat.srcDetail",{id:catState.roleId})}));
   const r=detail.role,g=detail.guild,c=detail.cluster;
   const kv=(labelKey,value)=>h(doc,"div",{},h(doc,"dt",{text:ctx.t(labelKey)}),h(doc,"dd",{text:value??MISSING}));
   const evalBody=r.evaluationSpecs.length?h(doc,"ul",{class:"wf-def-list"},r.evaluationSpecs.map(e=>h(doc,"li",{},h(doc,"span",{class:"mono",text:`${e.evaluationId} · ${e.kind} · `}),statusChip(ctx,e.status)))):h(doc,"p",{class:"note",text:ctx.t("workforce.cat.detail.empty")});
   return panel(ctx,{titleKey:"workforce.cat.detail.title",id:"wf-detail",className:"wf-detail"},
     h(doc,"div",{class:"wf-detail-head"},
-      h(doc,"h3",{id:"wf-detail-t",tabindex:"-1",class:"wf-detail-name",dataset:{roleId:r.roleId},text:r.title}),
+      h(doc,"h3",{id:"wf-detail-h",tabindex:"-1",class:"wf-detail-name",dataset:{roleId:r.roleId},text:r.title}),
       h(doc,"span",{class:"mono wf-detail-id",text:r.roleId}),
       h(doc,"button",{type:"button",class:"btn btn-small",id:"wf-detail-close",dataset:{focusKey:"wf-detail-close"},text:ctx.t("workforce.cat.detail.close"),
         on:{click:()=>{const id=catState.roleId;catState.roleId=null;if(typeof ctx.rerender==="function")ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys:[`id:wf-role-${id}`,"id:wf-catalog-t"]})}}})),
