@@ -11,14 +11,25 @@ export const REQUIRED_CONTEXTS = Object.freeze(["validate (ubuntu-latest)", "val
 export const CHECK_APP = "github-actions";
 export const DEFAULT_BASE_REF = "v7/integration";
 export const REQUIRED_RULES = Object.freeze(["deletion", "non_fast_forward", "pull_request", "required_status_checks"]);
-// Floor of protected prefixes that always applies, so an evidence file whose protectedPaths was emptied or truncated cannot open them.
+// Floor that always applies, so an evidence file whose protectedPaths was emptied or truncated cannot open these.
 export const PROTECTED_FLOOR = Object.freeze([".github/workflows/", "automation/lib/", "scripts/validate-", "scripts/run-validation.mjs", "config/", "prompts/"]);
+export const PROTECTED_FLOOR_EXACT = Object.freeze(["claude.md", "agents.md"]);
+// The required contexts are trusted only from this workflow file (any diff under .github/workflows/ is PROTECTED_PATH) and these run events.
+export const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
+export const CI_EVENTS = Object.freeze(["pull_request", "push", "workflow_dispatch"]);
+// GitHub PR files API statuses. Anything else is fail-closed. renamed/copied must carry previous_filename.
+export const DIFF_STATUSES = Object.freeze(["added", "modified", "removed", "renamed", "copied", "changed", "unchanged"]);
 const SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 // GitHub logins (an App's bot account carries a "[bot]" suffix). Compared case-insensitively, never echoed.
 const LOGIN_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:\[bot\])?$/;
 // The one machine line a reviewer posts in a PR REVIEW body. The whole trimmed line must match; anything else starting with the prefix is malformed.
 export const BINDING_RE = /^VERDICT-BINDING: verdict=([A-Z_]{1,32}) head=([0-9a-f]{40}|[0-9a-f]{64}) base=([0-9a-f]{40}|[0-9a-f]{64}) reviewer-session=([A-Za-z0-9._:-]{1,128})$/;
-const BINDING_PREFIX_RE = /^\s*verdict-binding\b/i;
+const BINDING_LIKE_RE = /verdict-binding/i;
+// Zero-width and bidi controls: a line carrying any of them can never be a binding.
+const INVISIBLE_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/;
+const INVISIBLE_G = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/g;
+const FENCE_RE = /^ {0,3}(?:```|~~~)/;
+const QUOTE_RE = /^\s*(?:>|&gt;)/;
 const VERDICT_STATES = new Set(["COMMENTED", "APPROVED"]);
 
 const isStr = v => typeof v === "string";
@@ -35,13 +46,21 @@ export function normPath(p) {
   return lc(n);
 }
 
-// Parse every binding line of one review body. Fail-closed: exactly one well-formed line, else a fixed code.
+// Parse the binding line of one review body. Lines inside code fences and quoted lines are never bindings.
+// Fail-closed: any other line mentioning verdict-binding must be exactly one well-formed line starting at column 0, else a fixed code.
 export function parseBinding(body) {
   if (!isStr(body)) return {code: "VERDICT_BINDING_MALFORMED"};
-  const lines = body.split(/\r?\n/).filter(l => BINDING_PREFIX_RE.test(l));
+  const lines = [];
+  let fenced = false;
+  for (const l of body.split(/\r?\n/)) {
+    if (FENCE_RE.test(l.replace(INVISIBLE_G, ""))) { fenced = !fenced; continue; }
+    if (fenced || QUOTE_RE.test(l.replace(INVISIBLE_G, ""))) continue;
+    if (BINDING_LIKE_RE.test(l.replace(INVISIBLE_G, ""))) lines.push(l);
+  }
   if (lines.length === 0) return null;
   if (lines.length > 1) return {code: "VERDICT_BINDING_AMBIGUOUS"};
-  const m = BINDING_RE.exec(lines[0].trim());
+  if (INVISIBLE_RE.test(lines[0])) return {code: "VERDICT_BINDING_MALFORMED"};
+  const m = BINDING_RE.exec(lines[0]);
   if (!m) return {code: "VERDICT_BINDING_MALFORMED"};
   return {verdict: m[1], head: m[2], base: m[3], session: m[4]};
 }
@@ -61,11 +80,14 @@ function checkCi(checkRuns, headSha, r) {
   if (!Array.isArray(checkRuns)) { r.push("EVIDENCE_MALFORMED:checkRuns"); return; }
   for (const ctx of REQUIRED_CONTEXTS) {
     const named = checkRuns.filter(c => isObj(c) && c.name === ctx);
-    const runs = named.filter(c => c.head_sha === headSha && c.app_slug === CHECK_APP);
+    const onHead = named.filter(c => c.head_sha === headSha && c.app_slug === CHECK_APP);
+    // Provenance: any workflow file can name a job "validate (...)", so only runs of the protected CI workflow count.
+    const runs = onHead.filter(c => c.workflowPath === CI_WORKFLOW_PATH && CI_EVENTS.includes(c.workflowRunEvent));
     if (runs.length === 0) {
       r.push(`CHECK_MISSING:${ctx}`);
       if (named.some(c => c.head_sha !== headSha)) r.push(`CHECK_ON_OTHER_SHA:${ctx}`);
       if (named.some(c => c.head_sha === headSha && c.app_slug !== CHECK_APP)) r.push(`CHECK_FROM_OTHER_APP:${ctx}`);
+      if (onHead.length) r.push(`CHECK_PROVENANCE_MISMATCH:${ctx}`);
       continue;
     }
     // Any unfinished run on this head means the context is not settled, whatever an earlier run said.
@@ -83,10 +105,13 @@ function checkVerdict(ev, headSha, baseSha, allowed, r) {
   const {reviews} = ev;
   if (!Array.isArray(reviews)) { r.push("EVIDENCE_MALFORMED:reviews"); return null; }
   const implSessions = Array.isArray(ev.implementerSessions) ? new Set(ev.implementerSessions.filter(isStr)) : new Set();
-  const cands = [];
+  const cands = [], changes = [];
   let older = false;
   for (const rv of reviews) {
-    if (!isObj(rv) || !isObj(rv.user) || !isStr(rv.user.login) || !allowed.has(lc(rv.user.login))) continue;
+    if (!isObj(rv) || !isObj(rv.user) || !isStr(rv.user.login)) continue;
+    // CHANGES_REQUESTED on this head counts from ANY author, binding or not (a maintainer clears it by dismissing the review).
+    if (rv.state === "CHANGES_REQUESTED" && rv.commit_id === headSha) changes.push({t: timeOf(rv.submitted_at), login: lc(rv.user.login)});
+    if (!allowed.has(lc(rv.user.login))) continue;
     const b = parseBinding(rv.body);
     if (b === null) continue;
     if (rv.commit_id !== headSha) { older = true; continue; } // a verdict on any other commit is void
@@ -99,33 +124,47 @@ function checkVerdict(ev, headSha, baseSha, allowed, r) {
     else if (b.base !== baseSha) code = "VERDICT_BASE_MISMATCH";
     else if (!VERDICT_STATES.has(rv.state)) code = "VERDICT_REVIEW_STATE_INVALID";
     else if (implSessions.has(b.session)) code = "VERDICT_REVIEWER_IS_IMPLEMENTER_SESSION";
-    cands.push({t, code, login: rv.user.login, id: rv.id});
+    cands.push({t, code, login: rv.user.login, id: rv.id, session: b.session});
   }
   const clean = cands.filter(c => c.code === null).sort((a, b) => a.t - b.t || (Number(a.id) || 0) - (Number(b.id) || 0));
   if (clean.length === 0) {
     r.push("VERDICT_MISSING");
     if (older) r.push("VERDICT_ONLY_ON_OTHER_COMMIT");
     for (const c of cands) r.push(c.code);
+    for (const _ of changes) r.push("REVIEW_CHANGES_REQUESTED");
     return null;
   }
   const last = clean[clean.length - 1];
+  let ok = true;
   // Any non-CLEAN binding review on this head at or after the latest CLEAN (or with no usable time) supersedes it.
   const later = cands.filter(c => c.code !== null && !(c.t < last.t));
-  if (later.length) { r.push("VERDICT_SUPERSEDED_BY_LATER_REVIEW"); for (const c of later) r.push(c.code); return null; }
-  return last.login;
+  if (later.length) { ok = false; r.push("VERDICT_SUPERSEDED_BY_LATER_REVIEW"); for (const c of later) r.push(c.code); }
+  // A non-CLEAN verdict is cleared only by a strictly later CLEAN from the SAME reviewer-session.
+  for (const c of cands) if (c.code === "VERDICT_NOT_CLEAN" && c.t < last.t && !clean.some(k => k.session === c.session && k.t > c.t)) { ok = false; r.push("VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_SESSION"); }
+  // CHANGES_REQUESTED blocks when at or after the latest CLEAN, or earlier from an account other than the CLEAN's author.
+  for (const c of changes) if (!(c.t < last.t) || c.login !== lc(last.login)) { ok = false; r.push("REVIEW_CHANGES_REQUESTED"); }
+  return ok ? last.login : null;
 }
 
 function checkPaths(ev, r) {
   const pp = ev.protectedPaths;
   if (!isObj(pp) || !Array.isArray(pp.exactPaths) || !Array.isArray(pp.protectedPrefixes) || pp.exactPaths.length === 0 || pp.protectedPrefixes.length === 0
     || !pp.exactPaths.every(isStr) || !pp.protectedPrefixes.every(isStr)) { r.push("EVIDENCE_MALFORMED:protectedPaths"); return; }
-  if (!Array.isArray(ev.ownDiffFiles)) { r.push("EVIDENCE_MALFORMED:ownDiffFiles"); return; }
-  const exact = new Set(pp.exactPaths.map(normPath).filter(Boolean));
+  if (!Array.isArray(ev.diffFiles)) { r.push("EVIDENCE_MALFORMED:diffFiles"); return; }
+  const exact = new Set([...PROTECTED_FLOOR_EXACT, ...pp.exactPaths.map(normPath).filter(Boolean)]);
   const prefixes = [...PROTECTED_FLOOR, ...pp.protectedPrefixes].map(p => lc(p.replace(/\\/g, "/")).replace(/^(?:\.\/|\/)+/, "")).filter(Boolean);
-  for (const f of ev.ownDiffFiles) {
-    const n = normPath(f);
-    if (n === null) { r.push("EVIDENCE_MALFORMED:ownDiffFiles"); continue; }
-    if (exact.has(n) || prefixes.some(p => n.startsWith(p))) r.push("PROTECTED_PATH");
+  const hit = n => exact.has(n) || prefixes.some(p => n.startsWith(p));
+  for (const f of ev.diffFiles) {
+    if (!isObj(f) || !DIFF_STATUSES.includes(f.status)) { r.push("EVIDENCE_MALFORMED:diffFiles"); continue; }
+    // Both sides of a rename/copy are checked: moving a protected file away is as much a change to it as editing it.
+    const names = [f.filename];
+    if (f.status === "renamed" || f.status === "copied") names.push(f.previous_filename);
+    else if (f.previous_filename !== undefined && f.previous_filename !== null) names.push(f.previous_filename);
+    for (const x of names) {
+      const n = normPath(x);
+      if (n === null) r.push("EVIDENCE_MALFORMED:diffFiles");
+      else if (hit(n)) r.push("PROTECTED_PATH");
+    }
   }
 }
 

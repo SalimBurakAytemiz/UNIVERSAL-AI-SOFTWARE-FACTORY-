@@ -14,9 +14,9 @@ It prints exactly one JSON line: `{decision, expectedHeadSha, expectedBaseSha, r
 - **Evidence** (gathered by the coordinator with GitHub tools):
   - `pr {number,state,draft,merged,head:{sha,ref},base:{ref,sha},user:{login}}`;
   - `currentBaseSha`, read just before merging;
-  - `checkRuns [{name,status,conclusion,head_sha,app_slug,completed_at}]`;
+  - `checkRuns [{name,status,conclusion,head_sha,app_slug,completed_at,workflowPath,workflowRunEvent}]`. `workflowPath` is the check suite's workflow run `path` (for example `.github/workflows/ci.yml`), and `workflowRunEvent` is that run's `event`;
   - `reviews [{id,user:{login},state,commit_id,body,submitted_at}]`;
-  - `ownDiffFiles []`;
+  - `diffFiles [{filename, previous_filename?, status}]`, in the GitHub PR files API shape. `status` must be one of `added`, `modified`, `removed`, `renamed`, `copied`, `changed` or `unchanged`. `renamed` and `copied` must carry `previous_filename`. The old `ownDiffFiles` field is no longer accepted;
   - `protectedPaths {exactPaths,protectedPrefixes}`, the contents of `config/protected-paths.json`;
   - `rules []`, from `GET /repos/{o}/{r}/rules/branches/{base}`.
   - Optional: `implementerSessions []`. A verdict whose `reviewer-session` is in this list is rejected.
@@ -28,9 +28,9 @@ It prints exactly one JSON line: `{decision, expectedHeadSha, expectedBaseSha, r
 |---|---|---|
 | a | The PR is open, not a draft, not merged, and `base.ref` equals `expectedBaseRef`. | `PR_NOT_OPEN`, `PR_DRAFT`, `PR_ALREADY_MERGED`, `BASE_REF_MISMATCH` |
 | b | The head and base SHAs are 40/64 lowercase hex, and `currentBaseSha == pr.base.sha`. | `EVIDENCE_MALFORMED:<field>`, `BASE_DRIFT` |
-| c | For `validate (ubuntu-latest)` and `validate (windows-latest)`, take the runs with `head_sha == pr.head.sha` and `app_slug == github-actions`. None may be unfinished, and the latest completed run must be `success`. If runs tie on `completed_at`, all of them must be `success`. | `CHECK_MISSING:<ctx>` (with `CHECK_ON_OTHER_SHA:<ctx>` or `CHECK_FROM_OTHER_APP:<ctx>` as hints), `CHECK_PENDING:<ctx>`, `CHECK_FAILED:<ctx>`, `CHECK_MALFORMED:<ctx>` |
-| d | The verdict is a binding CLEAN PR **review** (see below) on `commit_id == pr.head.sha`, and no review at the same time or later carries a non-CLEAN binding. | `VERDICT_MISSING`, `VERDICT_ONLY_ON_OTHER_COMMIT`, `VERDICT_NOT_CLEAN`, `VERDICT_HEAD_MISMATCH`, `VERDICT_BASE_MISMATCH`, `VERDICT_BINDING_MALFORMED`, `VERDICT_BINDING_AMBIGUOUS`, `VERDICT_REVIEW_STATE_INVALID`, `VERDICT_REVIEWER_IS_IMPLEMENTER_SESSION`, `VERDICT_SUPERSEDED_BY_LATER_REVIEW` |
-| e | No `ownDiffFiles` entry is a protected exact path or under a protected prefix. Paths are compared case-insensitively, with `\` turned into `/` and `.`/`..` resolved. A built-in floor (`.github/workflows/`, `automation/lib/`, `scripts/validate-`, `scripts/run-validation.mjs`, `config/`, `prompts/`) always applies. There is no authority-record bypass. | `PROTECTED_PATH` |
+| c | For `validate (ubuntu-latest)` and `validate (windows-latest)`, take the runs with `head_sha == pr.head.sha`, `app_slug == github-actions`, `workflowPath == .github/workflows/ci.yml` and `workflowRunEvent` in `pull_request`, `push` or `workflow_dispatch`. The workflow check matters because any workflow file can name a job `validate (...)`; `ci.yml` itself is trusted only because a diff under `.github/workflows/` is `PROTECTED_PATH`. None may be unfinished, and the latest completed run must be `success`. If runs tie on `completed_at`, all of them must be `success`. | `CHECK_MISSING:<ctx>` (with `CHECK_ON_OTHER_SHA:<ctx>` or `CHECK_FROM_OTHER_APP:<ctx>` or `CHECK_PROVENANCE_MISMATCH:<ctx>` as hints), `CHECK_PENDING:<ctx>`, `CHECK_FAILED:<ctx>`, `CHECK_MALFORMED:<ctx>` |
+| d | The verdict is a binding CLEAN PR **review** (see below) on `commit_id == pr.head.sha`. No review at the same time or later may carry a non-CLEAN binding. An earlier non-CLEAN verdict is cleared only by a strictly later CLEAN from the **same** `reviewer-session`. A `CHANGES_REQUESTED` review on the head, from any author and with or without a binding, blocks if it is at the same time or later than the CLEAN, or if it is earlier but from an account other than the CLEAN's author. A maintainer clears it by dismissing the review. | `VERDICT_MISSING`, `VERDICT_ONLY_ON_OTHER_COMMIT`, `VERDICT_NOT_CLEAN`, `VERDICT_HEAD_MISMATCH`, `VERDICT_BASE_MISMATCH`, `VERDICT_BINDING_MALFORMED`, `VERDICT_BINDING_AMBIGUOUS`, `VERDICT_REVIEW_STATE_INVALID`, `VERDICT_REVIEWER_IS_IMPLEMENTER_SESSION`, `VERDICT_SUPERSEDED_BY_LATER_REVIEW`, `VERDICT_NOT_CLEAN_NOT_CLEARED_BY_SAME_SESSION`, `REVIEW_CHANGES_REQUESTED` |
+| e | No `diffFiles` entry touches a protected path, under any status. Both `filename` and `previous_filename` are checked, so renaming a protected file away, renaming onto a protected path, removing one or copying one all block. Paths are compared case-insensitively, with `\` turned into `/` and `.`/`..` resolved. A built-in floor always applies, whatever `protectedPaths` says: the exact files `CLAUDE.md` and `AGENTS.md`, and the prefixes `.github/workflows/`, `automation/lib/`, `scripts/validate-`, `scripts/run-validation.mjs`, `config/` and `prompts/`. There is no authority-record bypass. | `PROTECTED_PATH`, `EVIDENCE_MALFORMED:diffFiles` (unknown or missing status, `renamed`/`copied` without `previous_filename`) |
 | f | `rules` holds `deletion`, `non_fast_forward`, `pull_request` and `required_status_checks`, and the status-check rule lists both contexts. In strict mode, `pull_request.required_approving_review_count` must also be at least 1. | `RULESET_MISSING:<rule>`, `RULESET_MISSING:required_status_checks:<ctx>`, `RULESET_MISSING:required_approving_review_count` |
 | g | Strict mode needs `identityIndependence == DISTINCT_ACCOUNT`. | `REVIEWER_NOT_INDEPENDENT_IDENTITY` |
 
@@ -48,7 +48,9 @@ VERDICT-BINDING: verdict=CLEAN head=<pr head sha> base=<current base sha> review
 - `verdict` is `[A-Z_]+`. Only `CLEAN` passes, and any other value blocks the merge if it is at the same time or later.
 - `reviewer-session` is `[A-Za-z0-9._:-]{1,128}`.
 - A body with more than one `VERDICT-BINDING` line is `AMBIGUOUS`.
-- A body with a line that starts with the prefix but does not match exactly is `MALFORMED`.
+- The line must start at column 0 with exactly `VERDICT-BINDING: `. Any other line that mentions `verdict-binding` (in any case, indented, or with trailing text) is `MALFORMED`.
+- A line that contains a zero-width or bidi control character (U+200B–U+200F, U+202A–U+202E, U+2060–U+2064, U+FEFF) is `MALFORMED`.
+- Quoted lines (starting with `>` or `&gt;`) and lines inside code fences never count as bindings.
 - Free text and JSON elsewhere in the body are ignored.
 - A verdict on an older commit is void.
 - `UASCO-LOOP-RECORD ... result CLEAN` issue comments never count.
@@ -56,7 +58,8 @@ VERDICT-BINDING: verdict=CLEAN head=<pr head sha> base=<current base sha> review
 **Whose reviews count.**
 - In process mode, a review counts if it comes from the PR author's account or from a login in `trustedReviewerLogins`.
 - In strict mode, only trusted logins other than the PR author count.
-- Reviews from anyone else are ignored, so an outsider can neither pass nor block the gate.
+- Binding lines in reviews from anyone else are ignored, so an outsider cannot pass the gate.
+- The one exception is `CHANGES_REQUESTED`: it blocks from any author, and the cure is dismissing the review.
 
 ## Modes and the trust statement
 - **Identity.** `identityIndependence` is `DISTINCT_ACCOUNT` only when the verdict author is not the PR author and is in `trustedReviewerLogins`. Otherwise it is `SAME_ACCOUNT`.
@@ -80,7 +83,8 @@ Until this is done, only process mode can pass, and it carries `PROCESS_ONLY_SAM
    - the PR (`pull_request_read`);
    - the check runs for the head SHA, with `app.slug` mapped to `app_slug`;
    - the PR reviews (not issue comments);
-   - the PR file list, as `ownDiffFiles`;
+   - the PR file list, as `diffFiles` (`filename`, `previous_filename`, `status`);
+  - for each check run, its check suite's workflow run, which gives `path` as `workflowPath` and `event` as `workflowRunEvent`;
    - `config/protected-paths.json` from the base;
    - the branch rules for `v7/integration`.
 
