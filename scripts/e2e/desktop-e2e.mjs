@@ -1,5 +1,5 @@
 // //TR: Bu E2E harness gerçek Control API'yi ve gerçek Electron Desktop'ı (apps/desktop/main.mjs + preload.mjs) aynı rastgele token ile başlatır; Electron'u yalnız doğrulanmış binary ile (shell yok, electron.cmd yok, örtük indirme yok) --remote-debugging-port ile açar, Node'un yerleşik WebSocket'i üzerinden Chrome DevTools Protocol ile gerçek renderer rotalarını (routes.js) kullanıcı gibi gezer ve rota başına dürüst kanıtı (yüklendi mi, dürüst-durum doğrulamaları, konsol hataları, süre, ekran görüntüsü, commit SHA) .ai/runtime/e2e/E2E_EVIDENCE.json içine yazar; doğrulanamayan rota asla PASS yazılmaz, NOT_VERIFIED + sebep olur.
-import cp from "node:child_process";import fs from "node:fs";import path from "node:path";import crypto from "node:crypto";import {pathToFileURL} from "node:url";
+import cp from "node:child_process";import fs from "node:fs";import path from "node:path";import crypto from "node:crypto";import {pathToFileURL} from "node:url";import {computeStatus,exitCodeFor,resolveCommitSha} from "./desktop-e2e-logic.mjs";
 import {safeChildEnv} from "../../automation/lib/env-policy.mjs";import {controlChallengeProof,secureStringEqual} from "../../automation/lib/control-boundary.mjs";import {verifyProvisionedElectron} from "../../automation/lib/electron-provision.mjs";
 // //TR: Electron binary yalnız scripts/provision-electron.mjs ile açıkça temin edilir; bu harness da smoke'lar gibi mühürlü arşive bağlı binary'yi doğrular ve eksikse indirme yapmadan fail-closed durur.
 const root=process.cwd(),outDir=path.join(root,".ai","runtime","e2e"),evidenceFile=path.join(outDir,"E2E_EVIDENCE.json");
@@ -10,16 +10,16 @@ fs.rmSync(outDir,{recursive:true,force:true});fs.mkdirSync(outDir,{recursive:tru
 const env={...safeChildEnv("config/environment-policy.json",{provider:"DETERMINISTIC"}),CONTROL_API_PORT:String(apiPort),UASCO_CONTROL_TOKEN:token};
 // //TR: Linux'ta ekran sunucusu (xvfb) için yalnız DISPLAY/XAUTHORITY aktarılır; başka hiçbir ortam değişkeni sızdırılmaz.
 if(process.platform==="linux")for(const k of ["DISPLAY","XAUTHORITY"])if(process.env[k])env[k]=process.env[k];
-const evidence={"//TR":"Bu runtime kanıtı gerçek Electron Desktop + gerçek Control API üzerinde rota başına gözlenen dürüst durumu kaydeder; PASS yalnız harness'in gerçekten doğruladığı şeyi ifade eder, ürün-doğrulama (PRODUCT_VERIFIED) iddiası DEĞİLDİR ve bağımsız inceleme gerektirir.",schemaVersion:"1.0.0",generatedAt:new Date().toISOString(),commitSha:process.env.GITHUB_SHA??cp.spawnSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).stdout.trim()??"UNKNOWN",platform:process.platform,node:process.version,setup:{controlApi:"NOT_VERIFIED",desktop:"NOT_VERIFIED",cdp:"NOT_VERIFIED",firstRunWizard:"NOT_VERIFIED"},routes:[]};
+const evidence={"//TR":"Bu runtime kanıtı gerçek Electron Desktop + gerçek Control API üzerinde rota başına gözlenen dürüst durumu kaydeder; PASS yalnız harness'in gerçekten doğruladığı şeyi ifade eder, ürün-doğrulama (PRODUCT_VERIFIED) iddiası DEĞİLDİR ve bağımsız inceleme gerektirir.",schemaVersion:"1.0.0",generatedAt:new Date().toISOString(),commitSha:resolveCommitSha(process.env,cp.spawnSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).stdout),platform:process.platform,node:process.version,setup:{controlApi:"NOT_VERIFIED",desktop:"NOT_VERIFIED",cdp:"NOT_VERIFIED",firstRunWizard:"NOT_VERIFIED"},routes:[]};
 const procs=[];
 function killAll(){for(const c of procs){if(process.platform==="win32")cp.spawnSync("taskkill",["/PID",String(c.pid),"/T","/F"],{stdio:"ignore"});else try{c.kill("SIGTERM")}catch{}}}
 function finish(fatal){
   killAll();
   const rs=evidence.routes,fail=rs.filter(r=>r.status==="FAIL").length,nv=rs.filter(r=>r.status==="NOT_VERIFIED").length,pass=rs.filter(r=>r.status==="PASS").length;
-  evidence.summary={routes:rs.length,pass,fail,notVerified:nv,fatal:fatal??null};evidence.status=fatal||fail>0?"FAIL":nv>0?"PARTIAL":"PASS";
+  evidence.summary={routes:rs.length,pass,fail,notVerified:nv,fatal:fatal??null};evidence.status=computeStatus(rs,fatal);
   fs.writeFileSync(evidenceFile,JSON.stringify(evidence,null,2)+"\n");
   console.log(JSON.stringify({status:evidence.status,...evidence.summary,routes:rs.map(r=>`${r.id}:${r.status}`)}));
-  process.exit(fatal||fail>0?1:0);
+  process.exit(exitCodeFor(evidence.status));
 }
 // //TR: Minimal CDP istemcisi: Node 24 yerleşik WebSocket'i; yeni bağımlılık yoktur.
 function cdpConnect(url){return new Promise((resolve,reject)=>{const ws=new WebSocket(url),pending=new Map(),handlers=[];let id=0;
