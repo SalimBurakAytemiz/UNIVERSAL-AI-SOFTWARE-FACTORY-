@@ -203,7 +203,12 @@ for (const mode of [[], ["--no-lease"]]) {
   else {
     const e2 = mkEnv([], rr.stdout);
     const r2 = dispatchSync(e2.work, ["--backlog", e2.bl]);
-    check("real backlog from origin/v7/integration evaluates without BLOCKED (dry-run)", r2.code === 0 && ["START", "NO_ACTION"].includes(r2.j?.outcome), r2.raw.slice(0, 300));
+    // The expectation is derived from the real backlog itself: with no READY task the only honest result is NO_ACTION (a START would mean something non-READY was selected).
+    let realTasks = null;
+    try { realTasks = JSON.parse(rr.stdout).tasks; } catch { realTasks = null; }
+    const anyReady = Array.isArray(realTasks) && realTasks.some(t => t && typeof t === "object" && t.status === "READY");
+    if (anyReady) check("real backlog from origin/v7/integration (has READY tasks) evaluates without BLOCKED (dry-run)", r2.code === 0 && ["START", "NO_ACTION"].includes(r2.j?.outcome), r2.raw.slice(0, 300));
+    else check(`real backlog from origin/v7/integration with 0 READY tasks (${Array.isArray(realTasks) ? realTasks.length : "?"} total) => NO_ACTION, never START (dry-run)`, r2.code === 0 && r2.j?.outcome === "NO_ACTION" && Array.isArray(realTasks), r2.raw.slice(0, 300));
   }
 }
 // 7. Hostile ids and the a.LOCK queue-not-halted case.
