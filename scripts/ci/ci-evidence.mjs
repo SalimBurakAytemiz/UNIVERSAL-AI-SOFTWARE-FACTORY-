@@ -31,8 +31,14 @@ const binding = {
 let report = null;
 if (!fs.existsSync(reportFile)) reasons.push("validation report missing (validation did not run or stopped before writing it)");
 else {
-  try { report = JSON.parse(fs.readFileSync(reportFile, "utf8")); }
+  let parsed = false;
+  try { report = JSON.parse(fs.readFileSync(reportFile, "utf8")); parsed = true; }
   catch (e) { reasons.push(`validation report unreadable: ${e.message}`); }
+  // //TR: Gecerli JSON ama nesne olmayan rapor (null, dizi, sayi, metin) kanit degildir; denetimler atlanmasin diye fail-closed reddedilir.
+  if (parsed && (report === null || typeof report !== "object" || Array.isArray(report))) {
+    reasons.push(`validation report is not a JSON object (${report === null ? "null" : Array.isArray(report) ? "array" : typeof report})`);
+    report = null;
+  }
 }
 
 const steps = Array.isArray(report?.steps) ? report.steps : [];

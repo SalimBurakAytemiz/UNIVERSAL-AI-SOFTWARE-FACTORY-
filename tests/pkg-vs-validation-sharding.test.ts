@@ -140,7 +140,7 @@ describe("CI evidence binder (fail-closed, SHA-bound)",()=>{
     expect(r.status,r.stdout).toBe(0);expect(r.stdout).toContain("NOT_RUN on this platform (filtered, never a PASS): w");
   });
   it("fails closed on a missing, unreadable, empty, failing or timed-out report",()=>{
-    for(const [report,why] of [[undefined,"validation report missing"],["{not json","validation report unreadable"],[{status:"PASS",steps:[]},"report has no steps"],[{status:"FAIL",steps:[ok("a"),{id:"tests",status:"FAIL",durationMs:600034,timedOut:true}]},"validation status FAIL"],[{status:"PASS",steps:[ok("a"),{id:"b",status:"BLOCKED",durationMs:0}]},"non-PASS step status: b=BLOCKED"]] as [unknown,string][]){
+    for(const [report,why] of [[undefined,"validation report missing"],["{not json","validation report unreadable"],["null","validation report is not a JSON object (null)"],["[]","validation report is not a JSON object (array)"],["0","validation report is not a JSON object (number)"],['"PASS"',"validation report is not a JSON object (string)"],[{status:"PASS",steps:[]},"report has no steps"],[{status:"FAIL",steps:[ok("a"),{id:"tests",status:"FAIL",durationMs:600034,timedOut:true}]},"validation status FAIL"],[{status:"PASS",steps:[ok("a"),{id:"b",status:"BLOCKED",durationMs:0}]},"non-PASS step status: b=BLOCKED"]] as [unknown,string][]){
       const r=run(report);expect(r.status,why).toBe(1);expect(r.evidence.verdict,why).toBe("CI_EVIDENCE_FAIL");expect(r.evidence.reasons.join("|"),why).toContain(why);
     }
     const t=run({status:"FAIL",steps:[{id:"tests",status:"FAIL",durationMs:600034,timedOut:true}]});expect(t.stdout).toContain("TIMED OUT at the 600s per-step cap");
