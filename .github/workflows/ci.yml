@@ -97,14 +97,10 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      # //TR: Birlestirici isi PR-kontrollu npm bagimliliklarini KURMAZ (paket yoneticisi calismaz, paket onbellegi yok); validate-shards, secret-sanity, kernel self-test ve ci-evidence yalniz Node yerlesik modulleriyle calisir.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-          cache: npm
-      - name: Require lockfile
-        shell: bash
-        run: test -f package-lock.json || (echo "package-lock.json missing; run install/bootstrap once and commit lockfile" && exit 1)
-      - run: node scripts/ensure-dependencies.mjs
       - name: Download shard reports (this run attempt only)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -113,7 +109,7 @@ jobs:
           path: .ai/runtime/shards
       - name: Aggregate shards (fail-closed)
         shell: bash
-        run: node scripts/validate-shards.mjs --count 3 --sha "$UASCO_HEAD_SHA" --platform win32 --dir .ai/runtime/shards
+        run: node scripts/validate-shards.mjs --count 3 --sha "$UASCO_HEAD_SHA" --platform win32 --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --dir .ai/runtime/shards
       - run: node scripts/secret-sanity.mjs
       - name: Bootstrap trust-kernel self-test
         run: node scripts/bootstrap-kernel-selftest.mjs

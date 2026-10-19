@@ -9,13 +9,16 @@ import cp from "node:child_process";
 import crypto from "node:crypto";
 
 const runner=path.resolve("scripts/run-validation.mjs"),aggregator=path.resolve("scripts/validate-shards.mjs");
-const SHA="c".repeat(40),host=process.platform,other=host==="win32"?"linux":"win32";
+const SHA="c".repeat(40),RUN_ID="77",RUN_ATTEMPT="2",host=process.platform,other=host==="win32"?"linux":"win32";
 type Step={id:string;command:string[];parallelGroup?:string;platforms?:string[]};
 const ok=(id:string,x:Partial<Step>={}):Step=>({id,command:[process.execPath,"-e","process.exit(0)"],...x});
 const withDir=<T>(fn:(dir:string)=>T):T=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),"uasco-shard-"));try{return fn(dir)}finally{fs.rmSync(dir,{recursive:true,force:true})}};
 const writeCfg=(dir:string,cfg:object)=>{fs.mkdirSync(path.join(dir,"config"),{recursive:true});fs.writeFileSync(path.join(dir,"config","validation.json"),JSON.stringify(cfg,null,2)+"\n");return crypto.createHash("sha256").update(fs.readFileSync(path.join(dir,"config","validation.json"))).digest("hex")};
-const runRunner=(dir:string,args:string[])=>cp.spawnSync(process.execPath,[runner,...args],{cwd:dir,encoding:"utf8",timeout:120000,env:{...process.env,UASCO_HEAD_SHA:SHA}});
-const runAgg=(dir:string,args:string[]=["--count","3","--sha",SHA])=>{const r=cp.spawnSync(process.execPath,[aggregator,...args],{cwd:dir,encoding:"utf8",timeout:60000});return {status:r.status,out:r.stdout+r.stderr,reasons:[...(r.stdout+r.stderr).matchAll(/^SHARD_AGGREGATION_REASON (.+)$/gm)].map(m=>m[1].trim())}};
+const runRunner=(dir:string,args:string[])=>cp.spawnSync(process.execPath,[runner,...args],{cwd:dir,encoding:"utf8",timeout:120000,env:{...process.env,UASCO_HEAD_SHA:SHA,GITHUB_RUN_ID:RUN_ID,GITHUB_RUN_ATTEMPT:RUN_ATTEMPT}});
+const RUN=["--run-id",RUN_ID,"--run-attempt",RUN_ATTEMPT];
+// //TR: Birleştirici ortamdan run id/attempt okuyabildiği için test kendi CI koşusunun GITHUB_RUN_* değerlerini sızdırmaz.
+const aggEnv=()=>{const e={...process.env};delete e.GITHUB_RUN_ID;delete e.GITHUB_RUN_ATTEMPT;return e};
+const runAgg=(dir:string,args:string[]=["--count","3","--sha",SHA,...RUN])=>{const r=cp.spawnSync(process.execPath,[aggregator,...args],{cwd:dir,encoding:"utf8",timeout:60000,env:aggEnv()});return {status:r.status,out:r.stdout+r.stderr,reasons:[...(r.stdout+r.stderr).matchAll(/^SHARD_AGGREGATION_REASON (.+)$/gm)].map(m=>m[1].trim())}};
 const readJson=(f:string)=>JSON.parse(fs.readFileSync(f,"utf8"));
 
 // //TR: Sabit sentetik config: üç kabuk, paralel grup, atanmamış adım (1. kabuk), yalnız host'a özgü ve yalnız başka platforma özgü adım.
@@ -31,7 +34,7 @@ describe("run-validation --shard selection",()=>{
     for(const again of runs.slice(1))expect(again.map(rep=>rep.steps.map((s:{id:string})=>s.id))).toEqual(ids);
     const union=ids.flat();expect([...union].sort()).toEqual(hostSteps.map(s=>s.id).sort());expect(new Set(union).size).toBe(union.length);
     const r1=runs[0][0];
-    expect(r1).toMatchObject({sha:SHA,shard:{index:1,count:3},platform:host,status:"PASS_PLATFORM_FILTERED",configSha256:writeCfg(dir,hostCfg)});
+    expect(r1).toMatchObject({sha:SHA,runId:RUN_ID,runAttempt:RUN_ATTEMPT,shard:{index:1,count:3},platform:host,status:"PASS_PLATFORM_FILTERED",configSha256:writeCfg(dir,hostCfg)});
     expect(r1.steps.find((s:{id:string})=>s.id==="e")).toEqual({id:"e",status:"NOT_RUN_PLATFORM",durationMs:0,timedOut:false});
   }));
   it("rejects a missing plan, a count mismatch, an invalid shard, an unknown step or an out-of-range assignment (fail-closed)",()=>withDir(dir=>{
@@ -63,16 +66,50 @@ describe("run-validation --shard selection",()=>{
   }));
 });
 
+// //TR: B1: kabuk modu kısmi bir geçiştir; canonical VALIDATION_REPORT.json'ı asla yazmaz ve bayat olanı siler, böylece onu okuyan tüketiciler (factory-supervisor, review-pipeline, phase0, install-report, ci-evidence) kabuk-yalnız bir PASS göremez.
+const canonical=(dir:string)=>path.join(dir,".ai","runtime","VALIDATION_REPORT.json");
+const seedStalePass=(dir:string)=>{fs.mkdirSync(path.dirname(canonical(dir)),{recursive:true});fs.writeFileSync(canonical(dir),JSON.stringify({status:"PASS",platform:host,steps:[{id:"a",status:"PASS",durationMs:1,timedOut:false}]}))};
+describe("shard mode never produces a canonical PASS report (B1)",()=>{
+  it("a passing shard run writes only VALIDATION_SHARD_<i>.json and no canonical report, and prints no CANONICAL_VALIDATION line",()=>withDir(dir=>{
+    writeCfg(dir,hostCfg);for(const i of [1,2,3]){const r=runRunner(dir,["--shard",`${i}/3`]);expect(r.status,r.stdout+r.stderr).toBe(0);expect(r.stdout).not.toMatch(/CANONICAL_VALIDATION/);expect(r.stdout).toContain(`VALIDATION_SHARD ${i}/3`)}
+    expect(fs.existsSync(canonical(dir)),"no canonical report after shard runs").toBe(false);
+    expect(fs.readdirSync(path.dirname(canonical(dir))).filter(f=>f.endsWith(".json")).sort()).toEqual(["VALIDATION_SHARD_1.json","VALIDATION_SHARD_2.json","VALIDATION_SHARD_3.json"]);
+  }));
+  it("removes a stale canonical PASS report on a passing, a failing and an invalid shard run",()=>withDir(dir=>{
+    writeCfg(dir,hostCfg);seedStalePass(dir);expect(runRunner(dir,["--shard","1/3"]).status).toBe(0);expect(fs.existsSync(canonical(dir)),"passing shard").toBe(false);
+    seedStalePass(dir);expect(runRunner(dir,["--shard","9/3"]).status).toBe(1);expect(fs.existsSync(canonical(dir)),"invalid shard").toBe(false);
+    writeCfg(dir,{...hostCfg,steps:hostSteps.map(s=>s.id==="c"?{...s,command:[process.execPath,"-e","process.exit(5)"]}:s)});seedStalePass(dir);
+    expect(runRunner(dir,["--shard","2/3"]).status).toBe(1);expect(fs.existsSync(canonical(dir)),"failing shard").toBe(false);
+  }));
+  it("ci-evidence after shard-only runs fails closed (report missing), never a shard-only PASS",()=>withDir(dir=>{
+    writeCfg(dir,hostCfg);seedStalePass(dir);for(const i of [1,2,3])expect(runRunner(dir,["--shard",`${i}/3`]).status).toBe(0);
+    const r=cp.spawnSync(process.execPath,[path.resolve("scripts/ci/ci-evidence.mjs"),"--require","--leg","Windows"],{cwd:dir,encoding:"utf8",timeout:60000,env:{...process.env,GITHUB_SHA:SHA,UASCO_HEAD_SHA:SHA}});
+    expect(r.status,r.stdout+r.stderr).toBe(1);const ev=readJson(path.join(dir,".ai","runtime","CI_EVIDENCE.json"));expect(ev.verdict).toBe("CI_EVIDENCE_FAIL");expect(ev.reasons.join("|")).toContain("validation report missing");
+  }));
+  it("every canonical-report consumer reads only .ai/runtime/VALIDATION_REPORT.json and no consumer but the aggregator reads shard reports",()=>{
+    const consumers=["automation/factory-supervisor.mjs","automation/lib/review-pipeline.mjs","automation/lib/phase0-contract.mjs","scripts/phase0-acceptance.mjs","scripts/install-report.mjs","scripts/ci/ci-evidence.mjs"];
+    for(const f of consumers){const src=fs.readFileSync(f,"utf8");expect(src,`${f} reads the canonical report`).toMatch(/VALIDATION_REPORT\.json/);expect(src,`${f} must not read shard reports`).not.toMatch(/VALIDATION_SHARD/)}
+    const walk=(d:string):string[]=>fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>e.isDirectory()?(["node_modules",".git",".ai"].includes(e.name)?[]:walk(path.join(d,e.name))):[path.join(d,e.name)]);
+    const readers=["automation","scripts","apps","packages"].filter(d=>fs.existsSync(d)).flatMap(walk).filter(f=>/\.(mjs|js|ts|cjs)$/.test(f)&&fs.readFileSync(f,"utf8").includes("VALIDATION_SHARD")).map(f=>f.replaceAll("\\","/")).sort();
+    expect(readers,"only the runner (writer) and the aggregator touch shard reports").toEqual(["scripts/run-validation.mjs","scripts/validate-shards.mjs"]);
+  });
+  it("the shard-mode branch never writes the canonical report (source lock)",()=>{
+    const src=fs.readFileSync("scripts/run-validation.mjs","utf8");
+    expect(src).toContain('if(!shard)fs.writeFileSync(path.join(runtime,"VALIDATION_REPORT.json")');
+    expect(src.match(/VALIDATION_REPORT\.json"\),JSON\.stringify/g),"exactly one canonical write").toHaveLength(1);
+  });
+});
+
 // //TR: Birleştirici negatifleri win32 adına sentetik raporlarla sınanır (CI'daki gerçek platform); w yalnız win32, l yalnız linux, x/y platformsuz.
 const winSteps=[ok("x"),ok("w",{platforms:["win32"]}),ok("l",{platforms:["linux"]}),ok("y")];
 const winCfg={steps:winSteps,shardPlan:{win32:{count:3,assign:{w:2,y:3}}}};
-type Rep={sha:string;configSha256:string;shard:{index:number;count:number};platform:string;status:string;steps:{id:string;status:string;durationMs:number;timedOut:boolean}[]};
+type Rep={sha:string;runId:string|null;runAttempt:string|null;configSha256:string;shard:{index:number;count:number};platform:string;status:string;steps:{id:string;status:string;durationMs:number;timedOut:boolean}[]};
 const good=(digest:string):Rep[]=>[
-  {sha:SHA,configSha256:digest,shard:{index:1,count:3},platform:"win32",status:"PASS_PLATFORM_FILTERED",steps:[{id:"x",status:"PASS",durationMs:5,timedOut:false},{id:"l",status:"NOT_RUN_PLATFORM",durationMs:0,timedOut:false}]},
-  {sha:SHA,configSha256:digest,shard:{index:2,count:3},platform:"win32",status:"PASS",steps:[{id:"w",status:"PASS",durationMs:7,timedOut:false}]},
-  {sha:SHA,configSha256:digest,shard:{index:3,count:3},platform:"win32",status:"PASS",steps:[{id:"y",status:"PASS",durationMs:9,timedOut:false}]},
+  {sha:SHA,runId:RUN_ID,runAttempt:RUN_ATTEMPT,configSha256:digest,shard:{index:1,count:3},platform:"win32",status:"PASS_PLATFORM_FILTERED",steps:[{id:"x",status:"PASS",durationMs:5,timedOut:false},{id:"l",status:"NOT_RUN_PLATFORM",durationMs:0,timedOut:false}]},
+  {sha:SHA,runId:RUN_ID,runAttempt:RUN_ATTEMPT,configSha256:digest,shard:{index:2,count:3},platform:"win32",status:"PASS",steps:[{id:"w",status:"PASS",durationMs:7,timedOut:false}]},
+  {sha:SHA,runId:RUN_ID,runAttempt:RUN_ATTEMPT,configSha256:digest,shard:{index:3,count:3},platform:"win32",status:"PASS",steps:[{id:"y",status:"PASS",durationMs:9,timedOut:false}]},
 ];
-const WIN=["--count","3","--sha",SHA,"--platform","win32","--dir","shards"];
+const WIN=["--count","3","--sha",SHA,...RUN,"--platform","win32","--dir","shards"];
 function aggregate(mutate:(reps:Rep[],dir:string)=>void=()=>{},cfg:object=winCfg){
   return withDir(dir=>{const digest=writeCfg(dir,cfg);const reps=good(digest);fs.mkdirSync(path.join(dir,"shards"));mutate(reps,dir);
     reps.forEach((r,i)=>{if(r)fs.writeFileSync(path.join(dir,"shards",`VALIDATION_SHARD_${i+1}.json`),JSON.stringify(r))});
@@ -93,6 +130,9 @@ describe("validate-shards aggregator (fail-closed)",()=>{
     ["missing step",reps=>{reps[2].steps=[]},"MISSING_STEP:y"],
     ["extra step",reps=>{reps[1].steps.push({id:"zz",status:"PASS",durationMs:1,timedOut:false})},"EXTRA_STEP:zz"],
     ["step in the wrong shard",reps=>{reps[1].steps.push(...reps[2].steps);reps[2].steps=[]},"STEP_WRONG_SHARD:y:2!=3"],
+    ["run id mismatch (another run)",reps=>{reps[0].runId="78"},'RUN_MISMATCH:shard1:"78"/"2"'],
+    ["run attempt mismatch (earlier attempt)",reps=>{reps[2].runAttempt="1"},'RUN_MISMATCH:shard3:"77"/"1"'],
+    ["missing run binding",reps=>{reps[1].runId=null;reps[1].runAttempt=null},"RUN_MISMATCH:shard2:null/null"],
     ["sha mismatch",reps=>{reps[1].sha="d".repeat(40)},"SHA_MISMATCH:shard2"],
     ["digest mismatch",reps=>{reps[0].configSha256="0".repeat(64)},"DIGEST_MISMATCH:shard1"],
     ["FAIL status",reps=>{reps[2].steps[0].status="FAIL"},'STEP_NOT_PASS:y:"FAIL"'],
@@ -117,13 +157,15 @@ describe("validate-shards aggregator (fail-closed)",()=>{
   it("FAILS on missing or invalid arguments, a missing report directory, and deletes a stale merged report",()=>withDir(dir=>{
     writeCfg(dir,winCfg);
     expect(runAgg(dir,["--count","3"]).reasons).toContain('INVALID_ARG_SHA:""');
-    expect(runAgg(dir,["--count","x","--sha",SHA]).reasons).toContain('INVALID_ARG_COUNT:"x"');
+    expect(runAgg(dir,["--count","x","--sha",SHA,...RUN]).reasons).toContain('INVALID_ARG_COUNT:"x"');
+    expect(runAgg(dir,["--count","3","--sha",SHA]).reasons).toEqual(['INVALID_ARG_RUN_ID:""','INVALID_ARG_RUN_ATTEMPT:""']);
+    expect(runAgg(dir,["--count","3","--sha",SHA,"--run-id","0","--run-attempt","a"]).reasons).toEqual(['INVALID_ARG_RUN_ID:"0"','INVALID_ARG_RUN_ATTEMPT:"a"']);
     fs.mkdirSync(path.join(dir,".ai","runtime"),{recursive:true});const stale=path.join(dir,".ai","runtime","VALIDATION_REPORT.json");fs.writeFileSync(stale,JSON.stringify({status:"PASS",steps:[{id:"x",status:"PASS"}]}));
     const r=runAgg(dir,[...WIN.slice(0,-1),"nope"]);expect(r.status).toBe(1);expect(r.reasons.some(x=>x.startsWith("DIR_UNREADABLE:"))).toBe(true);expect(fs.existsSync(stale),"stale PASS report removed").toBe(false);
   }));
   it("end to end: real --shard runs on this host aggregate to PASS",()=>withDir(dir=>{
     writeCfg(dir,hostCfg);for(const i of [1,2,3])expect(runRunner(dir,["--shard",`${i}/3`]).status).toBe(0);
-    const r=runAgg(dir,["--count","3","--sha",SHA]);expect(r.status,r.out).toBe(0);expect(r.out).toContain("SHARD_AGGREGATION: PASS_PLATFORM_FILTERED shards=3 steps=6");
+    const r=runAgg(dir);expect(r.status,r.out).toBe(0);expect(r.out).toContain("SHARD_AGGREGATION: PASS_PLATFORM_FILTERED shards=3 steps=6");
   }));
 });
 
@@ -142,6 +184,10 @@ describe("canonical shard plan and CI wiring",()=>{
     expect(ci.match(/name: validate \(windows-latest\)/g)).toHaveLength(1);
     expect(ci).toMatch(/validate-windows:\n {4}name: validate \(windows-latest\)\n {4}needs: validate-windows-shard\n {4}if: always\(\)/);
     expect(ci).toContain('test "$SHARDS_RESULT" = "success"');
+    // //TR: S1: birleştirici işi PR-kontrollü bağımlılık kurmaz; yalnız Node yerleşikleriyle çalışır. S2: run id/attempt bağlanır.
+    const agg=ci.slice(ci.indexOf("\n  validate-windows:\n"));expect(agg.length).toBeGreaterThan(100);
+    for(const banned of ["ensure-dependencies","npm ci","npm install","cache: npm","node_modules"])expect(agg,`aggregator job must not use ${banned}`).not.toContain(banned);
+    expect(agg).toContain('--run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"');
     expect(ci).toContain('node scripts/validate-shards.mjs --count 3 --sha "$UASCO_HEAD_SHA" --platform win32');
     for(const s of ["node scripts/secret-sanity.mjs","node scripts/bootstrap-kernel-selftest.mjs","node scripts/ci/ci-evidence.mjs --require --leg ${{ runner.os }}"])expect(ci.split(s).length-1,s).toBe(2);
     expect(ci).toContain("permissions:\n  contents: read");expect(ci).not.toMatch(/persist-credentials: true/);
@@ -149,4 +195,11 @@ describe("canonical shard plan and CI wiring",()=>{
   });
 });
 // //TR: Dosya-adı öneki koruma sağlamaz (no-overmatch); birleştirici CI kapısıdır ve açıkça protected trust-root'ta olmalıdır.
-describe("aggregator protection",()=>{it("lists scripts/validate-shards.mjs in protected exactPaths",()=>{expect(readJson("config/protected-paths.json").exactPaths).toContain("scripts/validate-shards.mjs")})});
+describe("aggregator protection",()=>{
+  it("the aggregator and the scripts its CI job runs import Node built-ins only (no npm dependencies)",()=>{
+    const seen=new Set<string>(),ext:string[]=[];
+    const walk=(f:string)=>{if(seen.has(f))return;seen.add(f);const src=fs.readFileSync(f,"utf8");if(/\brequire\(/.test(src))ext.push(`require in ${f}`);for(const m of src.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+)["']([^"']+)["']/gm)){const sp=m[1];if(sp.startsWith("."))walk(path.resolve(path.dirname(f),sp));else if(!sp.startsWith("node:"))ext.push(`${sp} <- ${f}`)}};
+    for(const f of ["scripts/validate-shards.mjs","scripts/secret-sanity.mjs","scripts/bootstrap-kernel-selftest.mjs","scripts/ci/ci-evidence.mjs"])walk(path.resolve(f));
+    expect(ext).toEqual([]);expect(seen.size).toBeGreaterThanOrEqual(4);
+  });
+  it("lists scripts/validate-shards.mjs in protected exactPaths",()=>{expect(readJson("config/protected-paths.json").exactPaths).toContain("scripts/validate-shards.mjs")})});

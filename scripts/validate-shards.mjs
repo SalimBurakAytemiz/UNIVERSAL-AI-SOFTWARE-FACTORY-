@@ -1,4 +1,4 @@
-//TR: CI-PARALLEL fail-closed kabuk birleştiricisi: tüm VALIDATION_SHARD_<i>.json raporlarını okur ve yalnız tam n rapor, aynı beklenen commit SHA'sı, checkout edilmiş config/validation.json ile aynı sha256 özeti, her adımın tam bir kez ve doğru kabukta raporlanması, platformda zorunlu her adımın PASS (yalnız başka platforma ait adımın NOT_RUN_PLATFORM) olması ve hiçbir zaman aşımı olmaması halinde PASS verir; aksi halde neden kodlarını yazar ve çıkış 1. PASS'ta ci-evidence için birleşik VALIDATION_REPORT.json yazar, FAIL'de bayat raporu siler. Hiçbir PASS uydurmaz.
+//TR: CI-PARALLEL fail-closed kabuk birleştiricisi: tüm VALIDATION_SHARD_<i>.json raporlarını okur ve yalnız tam n rapor, aynı beklenen commit SHA'sı ve aynı GitHub run id/attempt, checkout edilmiş config/validation.json ile aynı sha256 özeti, her adımın tam bir kez ve doğru kabukta raporlanması, platformda zorunlu her adımın PASS (yalnız başka platforma ait adımın NOT_RUN_PLATFORM) olması ve hiçbir zaman aşımı olmaması halinde PASS verir; aksi halde neden kodlarını yazar ve çıkış 1. PASS'ta ci-evidence için birleşik VALIDATION_REPORT.json yazar, FAIL'de bayat raporu siler. Hiçbir PASS uydurmaz.
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -7,6 +7,8 @@ const argv = process.argv.slice(2);
 const opt = (name, def) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : def; };
 const count = Number(opt("--count", ""));
 const expectedSha = opt("--sha", "");
+const runId = opt("--run-id", process.env.GITHUB_RUN_ID ?? "");
+const runAttempt = opt("--run-attempt", process.env.GITHUB_RUN_ATTEMPT ?? "");
 const platform = opt("--platform", process.platform);
 const dir = opt("--dir", ".ai/runtime");
 const out = opt("--out", ".ai/runtime/VALIDATION_REPORT.json");
@@ -24,6 +26,8 @@ function finish() {
 
 if (!Number.isInteger(count) || count < 1) fail(`INVALID_ARG_COUNT:${JSON.stringify(opt("--count", null))}`);
 if (!/^[0-9a-f]{40}$/.test(expectedSha ?? "")) fail(`INVALID_ARG_SHA:${JSON.stringify(expectedSha ?? null)}`);
+if (!/^[1-9]\d*$/.test(runId ?? "")) fail(`INVALID_ARG_RUN_ID:${JSON.stringify(runId ?? null)}`);
+if (!/^[1-9]\d*$/.test(runAttempt ?? "")) fail(`INVALID_ARG_RUN_ATTEMPT:${JSON.stringify(runAttempt ?? null)}`);
 finish();
 
 let cfgRaw, cfg;
@@ -60,6 +64,7 @@ for (let i = 1; i <= count; i++) if (!byIndex.has(i)) fail(`MISSING_SHARD:${i}`)
 const seen = new Map();
 for (const [idx, r] of [...byIndex].sort((a, b) => a[0] - b[0])) {
   if (r.sha !== expectedSha) fail(`SHA_MISMATCH:shard${idx}:${JSON.stringify(r.sha ?? null)}`);
+  if (r.runId !== runId || r.runAttempt !== runAttempt) fail(`RUN_MISMATCH:shard${idx}:${JSON.stringify(r.runId ?? null)}/${JSON.stringify(r.runAttempt ?? null)}`);
   if (r.configSha256 !== digest) fail(`DIGEST_MISMATCH:shard${idx}`);
   if (r.platform !== platform) fail(`PLATFORM_MISMATCH:shard${idx}:${JSON.stringify(r.platform ?? null)}`);
   if (r.status !== "PASS" && r.status !== "PASS_PLATFORM_FILTERED") fail(`SHARD_STATUS:shard${idx}:${JSON.stringify(r.status ?? null)}`);
@@ -88,6 +93,6 @@ const merged = steps.map((step) => { const s = seen.get(step.id); return {id: st
 const platformFiltered = merged.filter((s) => s.status === "NOT_RUN_PLATFORM").map((s) => s.id);
 const status = platformFiltered.length ? "PASS_PLATFORM_FILTERED" : "PASS";
 fs.mkdirSync(path.dirname(out), {recursive: true});
-fs.writeFileSync(out, JSON.stringify({"//TR": "Bu birleşik rapor validate-shards tarafından tüm kabuklar tam, tek, SHA/config özetine bağlı ve PASS olduğunda yazılır; ci-evidence bunu tek platform kanıtı olarak okur.", schemaVersion: "1.1.0", platform, sha: expectedSha, configSha256: digest, shards: count, steps: merged, platformFiltered, status}, null, 2) + "\n");
+fs.writeFileSync(out, JSON.stringify({"//TR": "Bu birleşik rapor validate-shards tarafından tüm kabuklar tam, tek, SHA/config özetine bağlı ve PASS olduğunda yazılır; ci-evidence bunu tek platform kanıtı olarak okur.", schemaVersion: "1.1.0", platform, sha: expectedSha, runId, runAttempt, configSha256: digest, shards: count, steps: merged, platformFiltered, status}, null, 2) + "\n");
 const perShard = [...byIndex].sort((a, b) => a[0] - b[0]).map(([i, r]) => `${i}:${r.steps.reduce((t, s) => t + (Number(s.durationMs) || 0), 0)}ms`).join(",");
 console.log(`SHARD_AGGREGATION: ${status} shards=${count} steps=${merged.length} sha=${expectedSha} stepTime=${perShard}`);
