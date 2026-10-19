@@ -61,7 +61,9 @@ const disp = (e, args = []) => {
   let j = null; try { j = JSON.parse(r.stdout.trim().split("\n").pop()); } catch { /* null */ }
   return {code: r.status, j, raw: r.stdout};
 };
-const SECRET = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+// Fake token-shaped marker assembled at runtime so the SOURCE holds no token-shaped literal (same technique as dispatch.proof.mjs).
+const FK = x => "gh" + "p_" + x;
+const LEAK = FK("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
 
 console.log(`node ${process.version}`);
 // 1. Main matrix: one remote, many tasks, every rule exercised in isolation.
@@ -112,9 +114,9 @@ const M = (() => {
   add(T("W-TBFEAT", {branch: "feat/w-tbfeat"}), mkOther("W-TBFEAT", "feat/w-tbfeat"));
   add(T("W-TBMASTER", {branch: "master"}));
   for (const st of ["DONE", "BLOCKED", "AUTHORITY_REQUIRED", "DRAFT_NOT_READY"]) add(T(`W-${st}`, {status: st}), () => { const c = claim(e, `W-${st}`); work(e, c.branch); merge(e, c.branch); });
-  add(T("W-BADBRANCH", {branch: `bad branch ${SECRET}`}));
-  add(T(`W-BAD/../${SECRET}`));
-  add(T("W-NOTESOBJ", {notes: {marker: SECRET}}), () => { const c = claim(e, "W-NOTESOBJ"); work(e, c.branch); merge(e, c.branch); });
+  add(T("W-BADBRANCH", {branch: `bad branch ${LEAK}`}));
+  add(T(`W-BAD/../${LEAK}`));
+  add(T("W-NOTESOBJ", {notes: {marker: LEAK}}), () => { const c = claim(e, "W-NOTESOBJ"); work(e, c.branch); merge(e, c.branch); });
   const doc = {"//TR": "t", _doc: "d", generatedAt: "2026-10-19", head: "abc", tasks: spec, relations: [{a: 1, b: [2, 3]}]};
   const raw = canon(doc);
   fs.writeFileSync(e.bl, raw);
@@ -181,8 +183,8 @@ const M = (() => {
   check("git failure (remote unreachable) => RECOVERABLE_FAILURE REMOTE_UNREACHABLE, file untouched", r1.code === 3 && r1.j.reasons[0] === "REMOTE_UNREACHABLE" && fs.readFileSync(e.bl, "utf8") === content, r1.raw);
   const r2 = wb(e, ["--write", "--base-branch", "no-such-base"]);
   check("missing base branch => RECOVERABLE_FAILURE BASE_UNAVAILABLE, file untouched", r2.code === 3 && r2.j.reasons[0] === "BASE_UNAVAILABLE" && fs.readFileSync(e.bl, "utf8") === content, r2.raw);
-  const r3 = wb(e, ["--bogus"]), r4 = wb(e, ["--remote", SECRET]);
-  check("bad arguments => RECOVERABLE_FAILURE with fixed codes (no echo of the value)", r3.j?.reasons[0] === "ARG_UNKNOWN:--bogus" && r4.j?.reasons[0] === "ARG_INVALID:--remote" && !r4.raw.includes(SECRET), r3.raw + r4.raw);
+  const r3 = wb(e, ["--bogus"]), r4 = wb(e, ["--remote", LEAK]);
+  check("bad arguments => RECOVERABLE_FAILURE with fixed codes (no echo of the value)", r3.j?.reasons[0] === "ARG_UNKNOWN:--bogus" && r4.j?.reasons[0] === "ARG_INVALID:--remote" && !r4.raw.includes(LEAK), r3.raw + r4.raw);
   const odd = JSON.stringify({tasks: [T("G-1")]}); fs.writeFileSync(e.bl, odd);
   const r5 = wb(e, ["--write"]);
   check("non-canonical backlog formatting + --write => refused (BACKLOG_FORMAT_NOT_CANONICAL), file untouched; dry run still reports", r5.j?.reasons[0] === "BACKLOG_FORMAT_NOT_CANONICAL" && fs.readFileSync(e.bl, "utf8") === odd && wb(e).j.outcome === "CHANGES");
@@ -209,7 +211,7 @@ const M = (() => {
 }
 // 4. No-echo scan: hostile ids/branches/notes/args never reach any stdout; every stdout is exactly one JSON line.
 {
-  const markers = [SECRET, "remote.git", "/tmp/", "marker"];
+  const markers = [LEAK, "remote.git", "/tmp/", "marker"];
   const lines = ALL_RAW.filter(x => x && x.trim());
   const oneLine = lines.filter(x => x.trim().split("\n").length === 1 && (() => { try { JSON.parse(x); return true; } catch { return false; } })()).length;
   const hit = [];
