@@ -322,6 +322,7 @@ export default {
   "tower.pickLog":"Bir log seçin.",
   "tower.noEvents":"Olay yok.",
   "tower.noLogs":"Log yok.",
+  "tower.loading":"Yükleniyor…",
   "tower.truncated":"[SON KISIM / KISALTILMIŞ]",
   "settings.language":"Dil",
   "settings.languageNote":"Seçiminiz bu cihazda saklanır.",
