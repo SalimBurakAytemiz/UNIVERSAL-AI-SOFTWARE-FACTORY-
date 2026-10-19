@@ -478,6 +478,19 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 @media (forced-colors:active){
   .wf-stat,.wf-cat-table tr[data-selected="1"]{border:1px solid CanvasText;forced-color-adjust:auto}
 }
+/* //TR: UI-030 işçi filosu ızgarası: yalnız mevcut token'lar (yeni renk yok); kartlar durum kovalarına göre gruplanır, forced-colors altında sınırlar CanvasText'e düşer. */
+.wf-fleet,.wf-fleet-group{display:grid;gap:var(--space-3)}
+.wf-fleet-h{margin:0;font-size:var(--fs-label);color:var(--muted);font-weight:700}
+.wf-fleet-list{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:var(--space-3)}
+.wf-fleet-card{display:grid;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-2)}
+.wf-fleet-id{overflow-wrap:anywhere}
+.wf-fleet-kv{margin:0;display:grid;gap:.15rem;font-size:var(--fs-caption)}
+.wf-fleet-kv dt{color:var(--muted)}
+.wf-fleet-kv dd{margin:0}
+.wf-fleet-unknown{color:var(--muted)}
+@media (forced-colors:active){
+  .wf-fleet-card{border:1px solid CanvasText;forced-color-adjust:auto}
+}
 /* //TR: UX WP-QA-SEC Güvence (QA + Güvenlik) görünümü: WP2 token/bileşenlerini yeniden kullanır, YENİ renk token'ı eklemez; renk tek başına anlam taşımaz (ikon+metin+desen). */
 .qa-stats{margin:var(--space-2) 0}
 .qa-stat[data-tone="ok"] .wf-stat-num{color:var(--ok)}
