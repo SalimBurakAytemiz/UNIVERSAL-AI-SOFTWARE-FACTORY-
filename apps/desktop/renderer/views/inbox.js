@@ -7,6 +7,7 @@ import {performTransition,actionStatusId} from "../work-actions.js";
 import {notVerifiedBadge,runNotVerified} from "../m1a.js";
 import {canOfferComplete} from "../delivery-core.js";
 import {completeNotOffered} from "./work.js";
+import {deriveApprovalRequired} from "../approval-core.js";
 
 // //TR: Metin alanlarını güvenli biçimde sınırlar (API verisi asla sayı/HTML'e dönüştürülmez; boş/geçersiz => null, görünüm "—" veya dürüst durum gösterir).
 const str=(v,max=300)=>typeof v==="string"&&v.length?v.slice(0,max):null;
@@ -133,12 +134,50 @@ function attentionPanel(ctx,att){
     h(doc,"p",{class:"note",text:ctx.t("inbox.attention.lead")}),body);
 }
 
+// //TR: UI-113 "Onay gerekli" paneli: onay bekleyen her mission için yalnız var olan olguları (risk, bekleyen geçişin geri alınamaz/yüksek riskli olması, bağlı koşu, bekleme süresi, onay/ret sonucu) gösterir; etki/patlama yarıçapı veride yoksa UNKNOWN. Düğmeler yalnız mevcut onay kartına odaklanır/kaydırır; yeni eylem, POST veya depolama yoktur, hiçbir şey otomatik onaylanmaz.
+const transitionsText=(ctx,o,list,noneKey)=>!o.known?ctx.t("inbox.required.unknown"):list.length?list.map(x=>ctx.t("inbox.required.transitionValue",{from:statusLabel(ctx,o.from),to:statusLabel(ctx,x.to)})).join("; "):ctx.t(noneKey);
+function requiredRow(ctx,r){
+  const doc=ctx.doc,o=r.outcome,flags=new Set();
+  for(const x of o.approve){if(x.irreversible)flags.add(ctx.t("inbox.required.irreversible"));if(x.highRisk)flags.add(ctx.t("inbox.required.highRisk"))}
+  const gate=!o.known||!o.approve.length?transitionsText(ctx,o,o.approve,"inbox.required.noApprove"):`${transitionsText(ctx,o,o.approve,"inbox.required.noApprove")} — ${flags.size?[...flags].join("; "):ctx.t("inbox.required.noFlags")}`;
+  const run=r.run?ctx.t("inbox.required.runValue",{run:r.run.runId,status:statusLabel(ctx,r.run.status)}):r.runKnown?ctx.t("inbox.required.noRun"):ctx.t("inbox.required.runUnknown");
+  let since=MISSING;
+  if(r.since){
+    const age=r.age?ctx.t("inbox.required.age",{d:r.age.days,h:r.age.hours,m:r.age.minutes}):null;
+    since=h(doc,"span",{},h(doc,"time",{datetime:r.since,text:formatDateTime(r.since,ctx.i18n.lang)}),h(doc,"span",{text:` (${[age,ctx.t(r.sinceBasis==="RUN_STARTED"?"inbox.required.sinceRun":"inbox.required.sinceMission")].filter(Boolean).join(", ")})`}));
+  }
+  return h(doc,"li",{class:"card required-row",dataset:{required:r.missionId,irreversible:o.approve.some(x=>x.irreversible)?"1":"0",highRisk:o.approve.some(x=>x.highRisk)?"1":"0"}},
+    h(doc,"h3",{text:r.title}),
+    h(doc,"p",{class:"panel-meta"},badge(ctx,r.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:r.missionId})),
+    h(doc,"div",{class:"facts"},
+      factRow(ctx,"risk","inbox.required.risk",r.riskLevel),
+      factRow(ctx,"transition","inbox.required.transition",gate),
+      factRow(ctx,"run","inbox.required.run",run),
+      factRow(ctx,"since","inbox.required.since",since),
+      factRow(ctx,"approve","inbox.required.onApprove",transitionsText(ctx,o,o.approve,"inbox.required.noApprove")),
+      factRow(ctx,"reject","inbox.required.onReject",transitionsText(ctx,o,o.reject,"inbox.required.noReject")),
+      factRow(ctx,"impact","inbox.required.impact",ctx.t("inbox.required.unknown"))),
+    h(doc,"button",{type:"button",class:"btn",id:`req-goto-${r.missionId}`,dataset:{focusKey:`req-goto-${r.missionId}`},"aria-label":ctx.t("inbox.required.gotoLabel",{title:r.title}),
+      on:{click:()=>{const card=doc.getElementById(`ap-card-${r.missionId}`);if(!card)return;if(typeof card.scrollIntoView==="function")card.scrollIntoView({block:"nearest"});card.focus()}},text:ctx.t("inbox.required.goto")}));
+}
+function requiredPanel(ctx,res){
+  const doc=ctx.doc;
+  let body;
+  if(res.state==="EMPTY")body=emptyNote(ctx,"inbox.required.empty");
+  else if(res.state!=="READY")body=stateNote(ctx,res.state);
+  else body=h(doc,"div",{},
+    h(doc,"p",{class:"panel-meta",role:"status",dataset:{requiredCount:String(res.total)}},h(doc,"span",{text:ctx.t("inbox.required.count",{n:res.total})}),
+      res.shown<res.total?h(doc,"span",{class:"note",dataset:{requiredTruncated:"1"},text:` ${ctx.t("inbox.required.showing",{shown:res.shown,total:res.total})}`}):null),
+    h(doc,"ul",{class:"cards","aria-label":ctx.t("inbox.required")},res.rows.map(r=>requiredRow(ctx,r))));
+  return panel(ctx,{titleKey:"inbox.required",id:"inbox-required",className:"inbox-section"},h(doc,"p",{class:"note",text:ctx.t("inbox.required.lead")}),body);
+}
+
 export async function render(ctx){
   const doc=ctx.doc,[c,att,missions,runs]=await Promise.all([ctx.api.cockpit(),ctx.api.attention(),ctx.api.allMissions(),ctx.api.workRuns()]),a=c.data.approvals;
   let approvals;
   if(a.state==="UNAVAILABLE"||a.state==="ERROR"||c.state!=="OK")approvals=stateNote(ctx,c.state==="OK"?a.state:c.state);
   else if(!a.items.length)approvals=emptyNote(ctx,"inbox.empty");
-  else approvals=h(doc,"ul",{class:"cards"},a.items.map(x=>h(doc,"li",{class:"card",dataset:{approval:x.missionId}},h(doc,"h3",{text:x.title??x.missionId}),badge(ctx,x.riskLevel??"—","badge-risk"),h(doc,"p",{class:"mono",text:x.missionId}),
+  else approvals=h(doc,"ul",{class:"cards"},a.items.map(x=>h(doc,"li",{class:"card",id:`ap-card-${x.missionId}`,tabindex:"-1",dataset:{approval:x.missionId}},h(doc,"h3",{text:x.title??x.missionId}),badge(ctx,x.riskLevel??"—","badge-risk"),h(doc,"p",{class:"mono",text:x.missionId}),
     h(doc,"button",{type:"button",class:"btn",dataset:{focusKey:`ap-open-${x.missionId}`},id:`ap-open-${x.missionId}`,on:{click:()=>{selection.missionId=x.missionId;ctx.navigate("work")}},text:ctx.t("inbox.open")}))));
   const legacy=h(doc,"div",{id:"inbox-attention"});ctx.renderAttention(legacy,att);
   // M1a c2: teslim kararı bekleyen koşuların ayrıntısı (iki eksen + teslim görünümü) yalnız sunucudan okunur.
@@ -150,6 +189,7 @@ export async function render(ctx){
     sourceStrip(ctx,kinds),
     alertsPanel(ctx,c),
     panel(ctx,{titleKey:"inbox.decisions",id:"inbox-decisions",className:"inbox-section"},decisionsBody(ctx,missions,runs,runDetails)),
+    requiredPanel(ctx,deriveApprovalRequired({cockpit:c,missions,runs})),
     panel(ctx,{titleKey:"inbox.approvals",id:"inbox-approvals",className:"inbox-section"},h(doc,"p",{class:"panel-meta"},chip(ctx,a)),approvals),
     attentionPanel(ctx,att),
     panel(ctx,{titleKey:"inbox.legacy",id:"inbox-legacy-p",className:"inbox-section"},h(doc,"p",{class:"note",text:ctx.t("inbox.legacyNote")}),legacy));
