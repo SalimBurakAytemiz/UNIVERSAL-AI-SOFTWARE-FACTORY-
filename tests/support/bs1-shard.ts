@@ -1,13 +1,17 @@
-// //TR: Bu yardımcı BS1 selftest senaryolarını doğrulama adımlarına bölen tek kaynaktır: her senaryo tam olarak bir kabukta (shard) yer alır, kabuk içindeki gruplar paralel alt süreçler olarak çalışır (e kabuğunda dört, diğerlerinde en çok iki), Windows'ta tek paylaşılan fikstür şablonunu kullanır ve kabuğun her senaryosu PASS olmak zorundadır. Kapsam bütünlüğünü tests/pkg-vs-validation-sharding.test.ts denetler.
+// //TR: Bu yardımcı BS1 selftest senaryolarını doğrulama adımlarına bölen tek kaynaktır: her senaryo tam olarak bir kabukta (shard) yer alır, kabuk içindeki gruplar paralel alt süreçler olarak çalışır (e kabuğunda dört, a kabuğunda üç, diğerlerinde en çok iki), Windows'ta tek paylaşılan fikstür şablonunu kullanır ve kabuğun her senaryosu PASS olmak zorundadır. Kapsam bütünlüğünü tests/pkg-vs-validation-sharding.test.ts denetler.
 import cp from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 export type Bs1Shard="a"|"b"|"c"|"d"|"e"|"f";
 export const BS1_PARTITION:Record<Bs1Shard,string[][]>={
+  // //TR: a kabuğunda boş zaman vardır (gerçek AUT1B senaryosu geçmişsiz CI checkout'ta dürüstçe atlanır); e kabuğunun en ağır gruplarından taşınan üç hafif senaryo (ölçülen ~22+26+41 sn) üçüncü paralel grup olarak burada çalışır. Senaryolar ve PASS koşulu aynıdır.
   a: [
     ["bootstrap-task-rollback-falls-back-to-disable-and-reports-an-unsafe-result"],
-    ["entry-runs-the-tick-loop-timeout-cleanup-and-governed-upgrade-on-the-real-aut1b-plane"]
+    ["entry-runs-the-tick-loop-timeout-cleanup-and-governed-upgrade-on-the-real-aut1b-plane"],
+    ["entry-loops-the-pre-launcher-tick-writes-passive-status-and-honours-global-stop",
+     "entry-records-the-top-level-tick-status-and-keeps-the-bootstrap-record-in-its-mirror",
+     "entry-refuses-an-old-plane-release-lane-and-honours-global-stop"]
   ],
   b: [
     ["entry-never-runs-the-old-tick-once-master-has-the-launcher-and-upgrades-only-when-governed"],
@@ -25,16 +29,13 @@ export const BS1_PARTITION:Record<Bs1Shard,string[][]>={
     ["bootstrap-task-registration-succeeds-or-rolls-back-without-a-runnable-task"],
     ["bootstrap-task-first-run-failure-stops-and-rolls-back-the-task"]
   ],
-  // //TR: e kabuğu (10 senaryo) Windows CI'da 600 sn adım sınırına dayandığı için (yavaş runner'da TIMED OUT) iki grup yerine dört paralel gruba bölünür; senaryo kümesi ve adım aynıdır (checkBs1Partition her senaryonun tam bir kez atandığını doğrular).
+  // //TR: e kabuğu (7 senaryo) Windows CI ölçümüne göre dört paralel gruba bölünür: en ağır iki senaryo (entry-heals ~229 sn, kills-a-hung ~220 sn) tek başına bir grupta çalışır; hafif üç senaryo a kabuğuna taşınmıştır. Adım süresi en ağır grup + şablon kurulumu kadardır; checkBs1Partition her senaryonun tam bir kez atandığını doğrular.
   e: [
     ["bootstrap-repairs-an-inactive-half-cloned-plane-and-replaces-a-dangling-link",
      "entry-delegates-to-a-governed-plane-entry-and-to-the-launcher",
      "entry-heartbeat-watch-needs-two-stale-polls-ignores-suspend-and-reads-the-backup"],
-    ["entry-heals-an-interrupted-link-switch-and-refuses-broken-or-unproven-planes",
-     "entry-loops-the-pre-launcher-tick-writes-passive-status-and-honours-global-stop",
-     "entry-records-the-top-level-tick-status-and-keeps-the-bootstrap-record-in-its-mirror"],
-    ["entry-kills-a-hung-supervisor-whose-heartbeat-is-frozen",
-     "entry-refuses-an-old-plane-release-lane-and-honours-global-stop"],
+    ["entry-heals-an-interrupted-link-switch-and-refuses-broken-or-unproven-planes"],
+    ["entry-kills-a-hung-supervisor-whose-heartbeat-is-frozen"],
     ["entry-kills-the-whole-tick-process-tree-on-timeout-and-clears-its-lock",
      "entry-clears-only-provably-stale-locks-and-replaces-a-dangling-link"]
   ],
