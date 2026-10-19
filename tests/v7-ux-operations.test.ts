@@ -1,5 +1,5 @@
 // //TR: Bu test FA-V2-PRODUCT UI-071 "Operasyon ve Kurtarma" salt-okunur dikey kesitini doğrular: (1) GERÇEK control-api — gerçek tohumlanmış çalışma zamanından (gerçek global stop dosyası, gerçek RunLedger koşu dizinleri, gerçek zamanlayıcı durumu + engelli paketler, yeniden deneme kaydı, checkpoint, gerçek Work OS günlüğü) dönen GET /v1/control/status + /v1/runs + /v1/founder-attention gövdeleri saf eşleyicilerden (operations-core.js) ve görünümden (views/operations.js) geçer. (2) İZİN LİSTESİ — üç GET zaten izinlidir (main.mjs/server.ts/app.js/control-boundary.mjs DEĞİŞMEZ, EXTRA_GET_ROUTES büyümez, yeni uç nokta ve yeni POST yok), görünüm yalnız bu üç GET'i okur; mevcut Stop/Resume/Retry denetimlerini YENİDEN UYGULAMAZ ve tetiklemez. (3) SAF EŞLEYİCİLER — bozuk kimlik/enum/zaman damgası/çelişkili alan TÜM okumayı ERROR yapar, durumlar yükseltilmez, boş neden gerçek bir stop'u gizlemez. (4) TÜRETİM — "takıldı" yalnız gerçek zaman damgasından ve belgelenmiş eşiklerden türer; genel durum (NO_ISSUES_RECORDED) YALNIZ gerçek kanıtla verilir: tek bir kırık koşul bile onu engeller; okunamayan kaynağın sayıları null'dır (0 değil). (5) GÖRÜNÜM — dürüst boş/OFFLINE/UNAVAILABLE/ERROR durumları, kurtarma kontrol listesi gerçek durumu yansıtır, ürün doğrulama sabiti hiçbir yerde üretilmez, API metni HTML değil metin olarak render edilir. (6) ERİŞİLEBİLİRLİK, TR/EN sözlük eşitliği ve rota devri (app.js VIEWS değişmez).
-import {describe, it, expect, beforeEach, afterEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +7,8 @@ import crypto from "node:crypto";
 import {pathToFileURL} from "node:url";
 import {WorkOsStore} from "../core/workos/store.js";
 import {buildServer} from "../apps/control-api/src/server.js";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const root = path.resolve(__dirname, "..");
