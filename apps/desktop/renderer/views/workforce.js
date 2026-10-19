@@ -35,8 +35,8 @@ function fleetBody(ctx,runs){
   const unknown=()=>h(doc,"span",{class:"wf-fleet-unknown",dataset:{unknown:"1"},text:ctx.t("workforce.fleet.unknown")});
   const card=run=>{
     const c=fleetCard(run);
-    return h(doc,"li",{class:"wf-fleet-card",dataset:{runId:c.runId,status:c.status}},
-      h(doc,"span",{class:"mono wf-fleet-id",text:c.runId}),statusPill(ctx,c.status),
+    return h(doc,"li",{class:"wf-fleet-card",dataset:{fleetRunId:c.runId,status:c.status}},
+      h(doc,"span",{class:"mono wf-fleet-id",text:c.runId}),statusPill(ctx,c.status),runNotVerified(run)?notVerifiedBadge(ctx,"run"):null,
       h(doc,"dl",{class:"wf-fleet-kv"},
         h(doc,"div",{},h(doc,"dt",{text:ctx.t("workforce.fleet.role")}),h(doc,"dd",{},c.role?h(doc,"span",{text:c.role}):unknown())),
         h(doc,"div",{},h(doc,"dt",{text:ctx.t("workforce.fleet.updated")}),h(doc,"dd",{},c.updatedAt?h(doc,"time",{datetime:c.updatedAt,text:formatDateTime(c.updatedAt,ctx.i18n.lang)}):unknown()))),

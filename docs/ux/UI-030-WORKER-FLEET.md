@@ -22,14 +22,15 @@
 - `apps/desktop/renderer/views/workforce.js`: fleet panel.
 - `apps/desktop/renderer/styles.css`: a token-only block inside the existing workforce section.
 - `apps/desktop/renderer/locales/{en,tr}.js`: 10 `workforce.fleet.*` keys, with identical keys and placeholders.
-- `tests/v7-ux-wp-agents.test.ts`: 7 new tests in a new `describe` block (19/19 in the file).
+- `tests/v7-ux-wp-agents.test.ts`: 7 new tests in a new `describe` block (20/20 in the file; 8 tests incl. a collision guard).
 
 ## Evidence (local, Linux, Node v22.22.0, vitest)
 
 | Command | Result |
 |---|---|
-| `npx vitest run tests/v7-ux-wp-agents.test.ts` | 19/19 passed (7 new) |
-| `npx vitest run tests/v7-ux-*.test.ts tests/v7-b4-*.test.ts` | 25 files, 562/562 passed |
+| `npx vitest run tests/v7-ux-wp-agents.test.ts` | 20/20 passed (8 new) |
+| `npx vitest run tests/v7-b5-work-screens.test.ts tests/v7-ux-*.test.ts tests/v7-b4-*.test.ts` | 26 files, 618/618 passed |
+| `npx vitest run $(grep -l "desktop/renderer" tests/*.test.ts)` | 8 files, 101/101 passed |
 | `npx tsc --noEmit` | exit 0, no output |
 | `node scripts/validate-tr-comments.mjs` | TR_VALIDATION: PASS |
 

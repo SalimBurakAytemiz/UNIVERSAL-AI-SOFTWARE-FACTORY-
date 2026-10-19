@@ -290,7 +290,7 @@ describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN
     const body = all(region).find(n => n.attrs.get("role") === "region")!;
     expect(body.attrs.get("aria-label")).toBeTruthy();
     expect(byTag(region, "ul").length).toBe(2);
-    expect(byTag(region, "li").map(li => li.dataset.runId).sort()).toEqual(["run-0001", "run-0002"]);
+    expect(byTag(region, "li").map(li => li.dataset.fleetRunId).sort()).toEqual(["run-0001", "run-0002"]);
     expect(byTag(region, "h3").map(text)).toEqual(["Queued (1)", "Running (1)"]);
     const t = byTag(region, "time"); expect(t.length).toBe(1); expect(t[0].attrs.get("datetime")).toBe("2026-10-19T10:00:00.000Z");
     expect(byData(region, "unknown", "1").length).toBe(2);
@@ -323,5 +323,14 @@ describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN
     const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
     for (const k of keys(en)) { expect(ph(tr[k]), k).toEqual(ph(en[k])); expect(tr[k]).toBeTruthy(); }
     expect(tr["workforce.fleet.unknown"]).not.toBe(en["workforce.fleet.unknown"]);
+  });
+});
+
+describe("UI-030 fleet card does not collide with live-run rows", () => {
+  it("fleet cards use data-fleet-run-id so data-run-id stays unique to the live-runs table", async () => {
+    const src = fs.readFileSync(path.join(rend, "views", "workforce.js"), "utf8");
+    const fleet = src.slice(src.indexOf("function fleetBody"), src.indexOf("const statusChip"));
+    expect(fleet).toContain("fleetRunId");
+    expect(fleet).not.toMatch(/dataset:\{runId/);
   });
 });

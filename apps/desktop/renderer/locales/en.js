@@ -703,7 +703,7 @@ export default {
   "workforce.live.open":"Open mission",
   "workforce.fleet.title":"Worker fleet",
   "workforce.fleet.label":"Live worker runs by status",
-  "workforce.fleet.lead":"One card per live work run. Runtime and heartbeat details missing from the data stay UNKNOWN; the role catalog is not live agents.",
+  "workforce.fleet.lead":"One card per live work run. A role or heartbeat missing from the data stays UNKNOWN; the role catalog is not live agents.",
   "workforce.fleet.none":"There are no live work runs, so the fleet grid is empty.",
   "workforce.fleet.group":"{status} ({n})",
   "workforce.fleet.showing":"Showing {shown} of {total} live runs.",

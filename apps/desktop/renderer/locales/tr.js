@@ -703,7 +703,7 @@ export default {
   "workforce.live.open":"Mission'ı aç",
   "workforce.fleet.title":"İşçi filosu",
   "workforce.fleet.label":"Duruma göre canlı işçi koşuları",
-  "workforce.fleet.lead":"Her canlı iş koşusu için bir kart. Veride olmayan runtime ve kalp atışı ayrıntıları BİLİNMİYOR kalır; rol kataloğu canlı ajan değildir.",
+  "workforce.fleet.lead":"Her canlı iş koşusu için bir kart. Veride olmayan rol veya kalp atışı BİLİNMİYOR kalır; rol kataloğu canlı ajan değildir.",
   "workforce.fleet.none":"Canlı iş koşusu yok; filo ızgarası boş.",
   "workforce.fleet.group":"{status} ({n})",
   "workforce.fleet.showing":"{total} canlı koşunun {shown} tanesi gösteriliyor.",
