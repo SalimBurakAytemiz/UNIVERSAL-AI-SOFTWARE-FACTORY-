@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import cp from "node:child_process";
-import {BS1_PARTITION,checkBs1Partition,bs1Scenarios} from "./support/bs1-shard.js";
+import {BS1_PARTITION,checkBs1Partition,bs1Scenarios,deElevateOnHostedRunner,bs1DeElevate,deElevatedJobEnv,runasArgv,RUNAS,BS1_SECRET_NAME} from "./support/bs1-shard.js";
 import {checkTestShards,isTestShardId,logicalTestFiles,testShardSteps} from "./support/validation-test-shards.js";
 const cfg=JSON.parse(fs.readFileSync("config/validation.json","utf8")),selftest=fs.readFileSync("scripts/bootstrap-autonomy-selftest.mjs","utf8");
 const vitestSteps=(cfg.steps as {id:string;command:string[]}[]).filter(s=>s.command.some(a=>a.includes("vitest")));
@@ -64,6 +64,25 @@ describe("validation test sharding coverage",()=>{
     expect(checkBs1Partition(dup,selftest).some((e:string)=>e.startsWith("scenario-assigned-twice:"))).toBe(true);
     const stale=structuredClone(BS1_PARTITION) as Record<string,string[][]>;stale[first].push(["zz-removed-scenario"]);
     expect(checkBs1Partition(stale,selftest)).toContain("assigned-scenario-not-in-selftest:zz-removed-scenario");
+  });
+  // //TR: BS1 selftest'i yalnız GitHub-hosted runner'da yükseltilmemiş belirteçle çalıştırılır; başka hiçbir ortamda (yerel, self-hosted, CI dışı) bootstrap'ın yükseltilmiş oturum reddi değişmeden devrededir.
+  it("de-elevates the BS1 selftest only on an elevated GitHub-hosted Windows runner and never relaxes the bootstrap's elevation refusal",()=>{
+    const hosted={GITHUB_ACTIONS:"true",RUNNER_ENVIRONMENT:"github-hosted"},yes=()=>true,no=()=>false;
+    expect(bs1DeElevate("win32",hosted,yes)).toBe(true);
+    expect(bs1DeElevate("win32",hosted,no)).toBe(false);
+    for(const env of [{},{GITHUB_ACTIONS:"true"},{GITHUB_ACTIONS:"true",RUNNER_ENVIRONMENT:"self-hosted"},{RUNNER_ENVIRONMENT:"github-hosted"},{GITHUB_ACTIONS:"1",RUNNER_ENVIRONMENT:"github-hosted"}]){expect(deElevateOnHostedRunner(env)).toBe(false);expect(bs1DeElevate("win32",env,yes)).toBe(false)}
+    for(const p of ["linux","darwin"])expect(bs1DeElevate(p,hosted,yes)).toBe(false);
+    let asked=0;bs1DeElevate("win32",{},()=>{asked++;return true});expect(asked).toBe(0);
+    expect(runasArgv("C:\\n\\node.exe","C:\\t d\\wrap.mjs","C:\\t d\\job.json")).toEqual(["/trustlevel:0x20000",'"C:\\n\\node.exe" "C:\\t d\\wrap.mjs" "C:\\t d\\job.json"']);
+    expect(RUNAS).toMatch(/System32[\\/]runas\.exe$/i);if(process.platform==="win32")expect(path.isAbsolute(RUNAS)).toBe(true);
+    const env=deElevatedJobEnv({PATH:"p",SystemRoot:"C:\\Windows",GITHUB_TOKEN:"x",NPM_TOKEN:"x",FOO_API_KEY:"x",SSH_PRIVATE_KEY:"x",MY_SECRET:"x",DB_PASSWORD:"x",GH_PAT:"x",GIT_CONFIG_COUNT:"1",GIT_CONFIG_KEY_0:"core.x",GIT_CONFIG_VALUE_0:"y"},"D:\\a\\repo");
+    for(const k of ["GITHUB_TOKEN","NPM_TOKEN","FOO_API_KEY","SSH_PRIVATE_KEY","MY_SECRET","DB_PASSWORD","GH_PAT"])expect(env[k],k).toBeUndefined();
+    expect(env).toMatchObject({PATH:"p",SystemRoot:"C:\\Windows",GIT_CONFIG_COUNT:"2",GIT_CONFIG_KEY_0:"core.x",GIT_CONFIG_VALUE_0:"y",GIT_CONFIG_KEY_1:"safe.directory",GIT_CONFIG_VALUE_1:"D:/a/repo",TEMP:fs.realpathSync.native(os.tmpdir()),TMP:fs.realpathSync.native(os.tmpdir())});
+    for(const k of ["PATH","PATHEXT","SystemRoot","USERPROFILE","LOCALAPPDATA","GIT_CONFIG_KEY_0","UASCO_BS1_ONLY","RUNNER_TRACKING_ID"])expect(BS1_SECRET_NAME.test(k),k).toBe(false);
+    expect(fs.readFileSync("tests/support/bs1-shard.ts","utf8")).toContain("lua=bs1DeElevate(process.platform,process.env,isElevatedWindows)");
+    const ps=fs.readFileSync("scripts/bootstrap-uasco-autonomy.ps1","utf8");
+    expect(ps).toMatch(/\$elevated = \(\[Security\.Principal\.WindowsPrincipal\]\$identity\)\.IsInRole\(\[Security\.Principal\.WindowsBuiltInRole\]::Administrator\)/);
+    expect(ps).toMatch(/if \(\$elevated\) \{ Stop-Bootstrap "MUST_RUN_UNELEVATED"/);
   });
   it("keeps the 600 s per-step limit unchanged",()=>{expect(fs.readFileSync("scripts/run-validation.mjs","utf8")).toContain("timeoutMs:600000")});
   it("declares platforms on exactly the seven Windows-only shards, always as [\"win32\"], and on no other step",()=>{
