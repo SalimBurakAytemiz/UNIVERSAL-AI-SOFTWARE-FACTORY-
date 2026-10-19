@@ -58,7 +58,12 @@ function areaCards(ctx,c){
     case "tower":return val(c.orchestrator,"map.packages");
     case "assurance":return ctx.t("map.assurance");
     case "inbox":return val(c.approvals,"map.count");
-    default:return ctx.t("map.planned",{pkg:ROUTES.find(r=>r.id===id)?.plannedPackage??MISSING});
+    case "delivery":return ctx.t("map.delivery");
+    default:{
+      // //TR: Home alan kartı: yalnız gerçekten plannedPackage'ı olan rota "Planlı paket" yazar; `component` ile gerçek görünüme devreden rota için uydurma "—" paket basılmaz, alan açıklaması gösterilir.
+      const r=ROUTES.find(x=>x.id===id),pkg=r?.plannedPackage;
+      return pkg?ctx.t("map.planned",{pkg}):ctx.t(`area.${id}.desc`);
+    }
   }};
   return h(doc,"ul",{class:"area-map"},FACTORY_AREA_ORDER.map(id=>{
     const r=ROUTES.find(x=>x.id===id);

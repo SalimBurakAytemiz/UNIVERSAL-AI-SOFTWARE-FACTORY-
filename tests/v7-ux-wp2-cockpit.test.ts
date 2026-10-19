@@ -243,6 +243,22 @@ describe("UX WP2 model and components", () => {
     const without = comp.timelineItem(ctx, {time: "10:00:00", title: "Görev B", pill: comp.missionPill(ctx, "EXECUTING")});
     expect(cls(without, "tl-attr").length).toBe(0);
   });
+  it("home area map shows an honest Delivery line, never a bogus 'Planned package' dash for component routes", async () => {
+    // //TR: Teslimat gerçek görünümdür (component:"delivery", plannedPackage yok); Home alan kartı "Planlı paket: —" yazmamalı, salt-okunur durum etiketini göstermelidir.
+    const home = await load("views", "home.js");
+    const routes = await load("routes.js");
+    for (const lang of ["en", "tr"]) {
+      const {ctx} = await mkCtx(() => undefined, lang);
+      const root = await home.render(ctx, {id: "home"});
+      const lines = new Map(all(root).filter(n => n.dataset.area).map(n => [n.dataset.area, cls(n, "area-line")[0].textContent]));
+      expect(lines.get("delivery"), lang).toBe(ctx.t("map.delivery"));
+      expect(lines.get("delivery"), lang).not.toMatch(/—|Planned package|Planlı paket/);
+      for (const id of routes.FACTORY_AREA_ORDER) {
+        const r = routes.ROUTES.find((x: any) => x.id === id);
+        if (r.component || !r.plannedPackage) expect(lines.get(id), `${lang}:${id}`).not.toMatch(/Planned package|Planlı paket/);
+      }
+    }
+  });
   it("both languages have every new key and the renderer sources use no inline style or HTML injection", async () => {
     const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
     const src = ["views/home.js", "components.js", "shell.js"].map(f => read(...f.split("/"))).join("\n");
