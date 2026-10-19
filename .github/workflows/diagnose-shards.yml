@@ -20,6 +20,14 @@ jobs:
           - {pre: "tests", n: 6}
           - {pre: "tests", n: 7}
           - {pre: "tests", n: 8}
+          - {pre: "tests", n: 9}
+          - {pre: "tests", n: 10}
+          - {pre: "tests", n: 11}
+          - {pre: "tests", n: 12}
+          - {pre: "tests", n: 13}
+          - {pre: "tests", n: 14}
+          - {pre: "tests", n: 15}
+          - {pre: "tests", n: 16}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

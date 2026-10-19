@@ -55,10 +55,10 @@ describe("release truth modes (PKGR-F1)",()=>{
     mutate("SHA256SUMS.txt",s=>s.replace(/^[0-9a-f]{64}(  config\/trust-root-manifest\.json)$/m,"0".repeat(64)+"$1"),()=>{expect(p4d().out).toContain("sealed-sha256sums-not-bound-to-sealed-manifest")});
     mutate("SHA256SUMS.txt",s=>s.replace(/^[0-9a-f]{64}(  scripts\/verify-trust-root\.mjs)$/m,"0".repeat(64)+"$1"),()=>{expect(p4d().out).toContain("sealed-sha256sums-trust-root-entry-mismatch")})},600000);
   it("builds a byte-identical ZIP twice and refuses a tampered export",()=>{const a=path.join(base,"a.zip"),b=path.join(base,"b.zip");
-    const r1=node(["scripts/build-release-zip.mjs",tree,a]);expect(r1.status,r1.out).toBe(0);expect(node(["scripts/build-release-zip.mjs",tree,b]).status).toBe(0);
+    const r1=node(["scripts/diag-build-release-zip-exitcode.mjs",tree,a]);expect(r1.status,r1.out).toBe(0);expect(node(["scripts/diag-build-release-zip-exitcode.mjs",tree,b]).status).toBe(0);
     const h=(f:string)=>crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");expect(h(a)).toBe(h(b));expect(JSON.parse(fs.readFileSync(`${a}.release.json`,"utf8")).zipSha256).toBe(h(a));
-    expect(node(["scripts/build-release-zip.mjs",tree,a]).out).toContain("OUTPUT_ALREADY_EXISTS");
-    mutate("README.md",s=>s+"\ntamper\n",()=>{const r=node(["scripts/build-release-zip.mjs",tree,path.join(base,"c.zip")]);expect(r.status).not.toBe(0);expect(r.out).toContain("SHA256SUMS_DOES_NOT_MATCH_EXPORT")})},600000);
+    expect(node(["scripts/diag-build-release-zip-exitcode.mjs",tree,a]).out).toContain("OUTPUT_ALREADY_EXISTS");
+    mutate("README.md",s=>s+"\ntamper\n",()=>{const r=node(["scripts/diag-build-release-zip-exitcode.mjs",tree,path.join(base,"c.zip")]);expect(r.status).not.toBe(0);expect(r.out).toContain("SHA256SUMS_DOES_NOT_MATCH_EXPORT")})},600000);
   it.skipIf(process.platform!=="win32")("verifies a fresh Windows extract and rejects a ZIP with an unlisted entry",()=>{const a=path.join(base,"a.zip"),dest=path.join(base,"extract");
     const v=node(["scripts/verify-release-extract.mjs",a,dest]);expect(v.status,v.out).toBe(0);const rep=JSON.parse(fs.readFileSync(`${dest}.verify.json`,"utf8"));expect(rep.final).toBe("PASS");for(const k of ["expandArchive","postExtractSha256Sums","verifyArtifactPowerShell","verifyArtifactNode","verifyTrustRoot"])expect(rep.checks[k].status).toBe("PASS");
     expect(node(["scripts/verify-release-extract.mjs",a,dest]).out).toContain("EXTRACT_DIR_NOT_FRESH");
