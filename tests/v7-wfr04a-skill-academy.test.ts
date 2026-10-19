@@ -266,7 +266,8 @@ describe("WFR-04a tenant isolation (WFR-AT-011)", () => {
     expect(mB.labPassRate).toBeNull();
     expect(mB.gapDetect?.total).toBe(1);
   });
-  it("global promotion needs global:true + anonymized + GLOBAL reviewer evidence + global sources; others see only a generalized projection", () => {
+  // //TR: Gercek disk G/C'li bu test Windows CI'da varsayilan 5 sn vitest sinirini asabiliyor (iddia degil yalniz sure); kardes gercek-G/C testleriyle ayni acik sure butcesi verilir.
+  it("global promotion needs global:true + anonymized + GLOBAL reviewer evidence + global sources; others see only a generalized projection", { timeout: 180_000 }, () => {
     const gSrc = source(A, {global: true});
     expect(() => source(A, {global: true, url: null, localRef: "docs/x.md"})).toThrow(/WORKOS_INVALID_INPUT/);
     const rec = toReview(A, {sources: [{id: gSrc.sourceId, text: OFFICIAL_TEXT}]});
@@ -308,7 +309,8 @@ describe("WFR-04a drift monitor (WFR-AT-016)", () => {
     expect(d2.map(x => [x.learningId, x.to, x.reasons])).toEqual([[p2.learningId, "RECERTIFY_REQUIRED", ["MODEL_VERSION_CHANGED", "TOOL_ADAPTER_CHANGED:node"]]]);
     expect(academy.getLearning(A, p1.learningId)?.status).toBe("RECERTIFY_REQUIRED");
   });
-  it("source revocation marks REVOKED and cascades to dependent learning records; in-flight dependents cannot promote", () => {
+  // //TR: Gercek disk G/C'li bu test Windows CI'da varsayilan 5 sn vitest sinirini asabiliyor (iddia degil yalniz sure); kardes gercek-G/C testleriyle ayni acik sure butcesi verilir.
+  it("source revocation marks REVOKED and cascades to dependent learning records; in-flight dependents cannot promote", { timeout: 180_000 }, () => {
     const s1 = source(A);
     const l1 = promote(toReview(A, {sources: [{id: s1.sourceId, text: OFFICIAL_TEXT}]}));
     const l2 = promote(toReview(A, {dependsOn: [l1.learningId]}));

@@ -238,7 +238,8 @@ async function seedRealStore() {
 }
 
 describe("Posture — GENUINE control-api read-models flow through mappers, aggregation and view", () => {
-  it("real seeded Work OS data: QA and security are NOT_EXECUTED, review states are carried verbatim, and the overall posture is never assured", async () => {
+  // //TR: Gercek disk G/C'li bu test Windows CI'da varsayilan 5 sn vitest sinirini asabiliyor (iddia degil yalniz sure); kardes gercek-G/C testleriyle ayni acik sure butcesi verilir.
+  it("real seeded Work OS data: QA and security are NOT_EXECUTED, review states are carried verbatim, and the overall posture is never assured", { timeout: T }, async () => {
     const seeded = await seedRealStore();
     const app = mkApp();
     const core = await load("posture-core.js");

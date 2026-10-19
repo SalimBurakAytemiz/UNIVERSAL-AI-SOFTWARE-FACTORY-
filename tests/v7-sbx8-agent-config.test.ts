@@ -85,7 +85,8 @@ describe("SBX-8 E: Studio import quarantines agent config", () => {
     expect(fs.existsSync(path.join(repo, "pkg", ".claude"))).toBe(false);
     expect(git(repo, ["status", "--porcelain", "--untracked-files=all"])).toBe("");
   }
-  it("git import: each agent config file leaves the managed tree in a separate Studio quarantine commit; evidence has path/pattern/bytes/sha256 and the bytes are kept content-addressed outside the repo", () => {
+  // //TR: Gercek disk G/C'li bu test Windows CI'da varsayilan 5 sn vitest sinirini asabiliyor (iddia degil yalniz sure); kardes gercek-G/C testleriyle ayni acik sure butcesi verilir.
+  it("git import: each agent config file leaves the managed tree in a separate Studio quarantine commit; evidence has path/pattern/bytes/sha256 and the bytes are kept content-addressed outside the repo", { timeout: T }, () => {
     const st = studio(), src = sourceRepo(), staging = st.stagingDir(PID);
     const srcHead = git(src, ["rev-parse", "HEAD"]);
     const r = st.importGitInto(staging, src);

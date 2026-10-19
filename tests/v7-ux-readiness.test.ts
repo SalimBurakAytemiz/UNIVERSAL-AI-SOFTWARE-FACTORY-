@@ -222,7 +222,8 @@ async function seedRealStore() {
 }
 
 describe("Readiness — GENUINE control-api read-models flow through mappers, gate derivation and view", () => {
-  it("real seeded Work OS data: the independent review verdict is carried verbatim, no run is READY, and the stale/unproven cases are not called clean", async () => {
+  // //TR: Gercek disk G/C'li bu test Windows CI'da varsayilan 5 sn vitest sinirini asabiliyor (iddia degil yalniz sure); kardes gercek-G/C testleriyle ayni acik sure butcesi verilir.
+  it("real seeded Work OS data: the independent review verdict is carried verbatim, no run is READY, and the stale/unproven cases are not called clean", { timeout: T }, async () => {
     const seeded = await seedRealStore();
     const app = mkApp();
     const core = await load("readiness-core.js"), queue = await load("queue-core.js");

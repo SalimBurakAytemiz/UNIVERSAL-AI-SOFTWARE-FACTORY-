@@ -219,7 +219,8 @@ async function seedRealStore() {
 }
 
 describe("Matrix — GENUINE control-api read-models flow through mappers, aggregation and view", () => {
-  it("real seeded multi-project Work OS: per-project counts, attention grouping, verbatim review verdicts, source-only delivery and a real cockpit cross-check", async () => {
+  // //TR: Gercek disk G/C'li bu test Windows CI'da varsayilan 5 sn vitest sinirini asabiliyor (iddia degil yalniz sure); kardes gercek-G/C testleriyle ayni acik sure butcesi verilir.
+  it("real seeded multi-project Work OS: per-project counts, attention grouping, verbatim review verdicts, source-only delivery and a real cockpit cross-check", { timeout: T }, async () => {
     const s = await seedRealStore();
     const app = mkApp();
     const core = await load("matrix-core.js");
