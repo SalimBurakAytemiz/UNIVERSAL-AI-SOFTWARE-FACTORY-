@@ -2298,5 +2298,20 @@ export default {
   "ops.live.FINISHED":"Bitti",
   "ops.live.IN_PROGRESS":"Bitmemiş (eşik içinde)",
   "ops.live.STALLED":"Takılmış",
-  "ops.live.UNDETERMINED":"Sınıflandırılamıyor"
+  "ops.live.UNDETERMINED":"Sınıflandırılamıyor",
+  "ops.rf.title":"Kurtarma başarısız → güvenli dur",
+  "ops.rf.lead":"Kayıtlı durumu RECOVERY_FAILED olan koşular, kontrol düzleminin bildirdiği global stop ve Kurucu'nun sonraki güvenli adımı. Salt-okunur; yalnız bu ekranda zaten okunan üç kaynaktan oluşturulur.",
+  "ops.rf.stopTitle":"Global stop",
+  "ops.rf.stop":"Global stop",
+  "ops.rf.runsTitle":"Kurtarması başarısız olan koşular",
+  "ops.rf.list.aria":"Kayıtlı durumu RECOVERY_FAILED olan koşular",
+  "ops.rf.status":"Kurtarma başarısız",
+  "ops.rf.none":"Okunan listedeki hiçbir koşunun kayıtlı durumu RECOVERY_FAILED değil. Bu, okunan liste dışındaki koşular hakkında bir şey söylemez.",
+  "ops.rf.unreadable":"{source} okunamadı ({state}); bu bölüm bilinmiyor — sıfır ya da durdu/durmadı olarak gösterilmez.",
+  "ops.rf.blocked":"Zamanlayıcının kaydettiği engelli paket sayısı: {n}. Bunlar yukarıda listelenir; kurtarma başarısızlığı oldukları İDDİA EDİLMEZ.",
+  "ops.rf.nextTitle":"Sonra güvenle ne yapabilirsiniz",
+  "ops.rf.next.stopActive":"Global stop aktif. Kaldırılana kadar hiçbir şey çalışmaz. Yukarıdaki nedeni inceleyin, güvenli olduğuna karar verdiğinizde Control Tower'daki mevcut Devam Et denetimini kullanın. Bu ekran hiçbir şeyi devam ettirmez.",
+  "ops.rf.next.failed":"En az bir koşu RECOVERY_FAILED olarak kayıtlı. Olduğu gibi bırakın, koşuyu ve hatasını Control Tower'da inceleyin; güvenli dur isterseniz oradaki mevcut Durdur denetimini kullanın. Bu ekran hiçbir şeyi durdurmaz ya da yeniden denemez.",
+  "ops.rf.next.unknown":"Bir kaynak okunamadı; güvenli durum bilinmiyor. Güvenli varsaymayın: Control API bağlantısını kontrol edip yeniden yükleyin.",
+  "ops.rf.next.none":"Okunan listede kurtarması başarısız koşu kaydı yok ve global stop aktif değil. Burada yapılacak bir şey yok."
 };

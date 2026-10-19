@@ -2298,5 +2298,20 @@ export default {
   "ops.live.FINISHED":"Finished",
   "ops.live.IN_PROGRESS":"Unfinished (within threshold)",
   "ops.live.STALLED":"Stalled",
-  "ops.live.UNDETERMINED":"Cannot be classified"
+  "ops.live.UNDETERMINED":"Cannot be classified",
+  "ops.rf.title":"Recovery failed → safe stop",
+  "ops.rf.lead":"Runs whose recorded status is RECOVERY_FAILED, the global stop as the control plane reports it, and what the Founder can do next. Read-only; built only from the three sources already read on this screen.",
+  "ops.rf.stopTitle":"Global stop",
+  "ops.rf.stop":"Global stop",
+  "ops.rf.runsTitle":"Runs whose recovery failed",
+  "ops.rf.list.aria":"Runs whose recorded status is RECOVERY_FAILED",
+  "ops.rf.status":"Recovery failed",
+  "ops.rf.none":"No run in the read list has the recorded status RECOVERY_FAILED. This says nothing about runs outside the read list.",
+  "ops.rf.unreadable":"{source} could not be read ({state}), so this part is unknown — it is not shown as zero or as stopped/not stopped.",
+  "ops.rf.blocked":"Blocked packages recorded by the scheduler: {n}. These are listed above; they are not claimed to be recovery failures.",
+  "ops.rf.nextTitle":"What you can safely do next",
+  "ops.rf.next.stopActive":"Global stop is active. Nothing runs until it is lifted. Review the reason above, then use the existing Resume control in Control Tower when you decide it is safe. This screen does not resume anything.",
+  "ops.rf.next.failed":"At least one run is recorded as RECOVERY_FAILED. Leave it as is, inspect the run and its error in Control Tower, and use the existing Stop control there if you want a safe stop. This screen does not stop or retry anything.",
+  "ops.rf.next.unknown":"A source could not be read, so the safe state is unknown. Do not assume it is safe: check the Control API connection and reload.",
+  "ops.rf.next.none":"No recovery-failed run is recorded in the read list and global stop is not active. Nothing needs to be done here."
 };

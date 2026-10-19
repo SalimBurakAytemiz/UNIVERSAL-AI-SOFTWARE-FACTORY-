@@ -642,7 +642,7 @@ describe("Operations — view honesty", () => {
   it("renders summary, recovery checklist, controls, control plane and runs in that order, from the recorded state", async () => {
     const {root: r, calls} = await renderView(busy());
     expect(cls(r, "view-operations")).toBe(true);
-    expect(all(r).filter(n => n.tagName === "SECTION").map(n => n.id)).toEqual(["ops-summary", "ops-recovery", "ops-controls", "ops-plane", "ops-runs"]);
+    expect(all(r).filter(n => n.tagName === "SECTION").map(n => n.id)).toEqual(["ops-summary", "ops-recovery", "ops-safe-stop", "ops-controls", "ops-plane", "ops-runs"]);
     expect(byId(r, "view-title")!.textContent).toBe("Operations & Recovery");
     expect(calls.sort()).toEqual([...THREE].sort());
     expect(byData(r, "readonly", "1")!.textContent).toContain("GET /v1/control/status");
@@ -876,13 +876,13 @@ describe("Operations — view honesty", () => {
 
 // ---------------- (6) accessibility ----------------
 describe("Operations — accessibility", () => {
-  it("single labelled h1, exactly five labelled sections, a labelled KPI group, labelled lists and machine-readable times", async () => {
+  it("single labelled h1, exactly six labelled sections, a labelled KPI group, labelled lists and machine-readable times", async () => {
     const {root: r} = await renderView(busy());
     const h1 = all(r).filter(n => n.tagName === "H1");
     expect(h1.length).toBe(1);
     expect(h1[0].id).toBe("view-title");
     expect(h1[0].getAttribute("tabindex")).toBe("-1");
-    const ids5 = ["ops-summary", "ops-recovery", "ops-controls", "ops-plane", "ops-runs"];
+    const ids5 = ["ops-summary", "ops-recovery", "ops-safe-stop", "ops-controls", "ops-plane", "ops-runs"];
     expect(all(r).filter(n => n.tagName === "SECTION").map(n => n.id)).toEqual(ids5);
     for (const id of ids5) expect(byId(r, byId(r, id)!.getAttribute("aria-labelledby")!), id).toBeTruthy();
     const group = all(r).find(n => n.getAttribute("role") === "group" && cls(n, "ops-kpis"))!;
@@ -1071,5 +1071,82 @@ describe("Operations — regression: newest-run selection and retry-phase honest
     expect(out.queue.retry.phase).toBe("UNDETERMINED");
     expect(out.steps.map((x: any) => x.id)).toContain("RETRY_UNDETERMINED");
     expect(out.tier).not.toBe("NO_ISSUES_RECORDED");
+  });
+});
+
+// //TR: UI-186 "Kurtarma başarısız -> güvenli dur" paneli: yalnız mevcut üç izinli GET'ten türer; saf çekirdek fail-closed, görünüm dürüst, erişilebilir ve yeni denetim/yazma yolu yok.
+describe("Operations — UI-186 recovery failed → safe stop panel", () => {
+  const rfRun = (id: string, over: Record<string, any> = {}) => finishedRun(id, "RECOVERY_FAILED", 3 * H, {error: "recovery exhausted", ...over});
+  it("core maps ONLY runs whose recorded status is RECOVERY_FAILED; other terminal statuses are never promoted", async () => {
+    const {out} = await assess({"/v1/runs": runsBody([rfRun(RID("03")), finishedRun(RID("02"), "FATAL"), finishedRun(RID("01"), "COMPLETE")])});
+    expect(out.safeStop.failedRuns.map((r: any) => r.runId)).toEqual([RID("03")]);
+    expect(out.safeStop.failedRuns[0].status).toBe("RECOVERY_FAILED");
+    expect(out.safeStop.stop.active).toBe(false);
+    expect(out.safeStop.blockedPackages).toBe(0);
+  });
+  it("core is fail-closed: an unreadable/malformed source yields null (unknown), never 0 / empty / 'not stopped'", async () => {
+    const {out} = await assess({"/v1/control/status": fail("HTTP 500"), "/v1/runs": {count: 2, runs: []}, "/v1/founder-attention": fail("HTTP 404")});
+    expect(out.safeStop.stop).toBeNull();
+    expect(out.safeStop.failedRuns).toBeNull();
+    expect(out.safeStop.blockedPackages).toBeNull();
+  });
+  it("core reports the global stop exactly as the source does (active + fail-closed)", async () => {
+    const {out} = await assess({"/v1/control/status": ctlBody({globalStop: {active: true, reason: "GLOBAL_STOP_STATE_UNSAFE", actor: "founder"}})});
+    expect(out.safeStop.stop.active).toBe(true);
+    expect(out.safeStop.stop.failClosed).toBe(true);
+    expect(out.safeStop.stop.reason).toBe("GLOBAL_STOP_STATE_UNSAFE");
+  });
+  it("view lists recovery-failed runs with label+pill, a global-stop dd, text next step, time datetime, labelled section, and no action buttons or POSTs", async () => {
+    const {root: r, posts} = await renderView(serve({"/v1/runs": runsBody([rfRun(RID("03")), finishedRun(RID("01"))]), "/v1/control/status": ctlBody({globalStop: {active: true, reason: "founder halt", actor: "founder", activatedAt: ago(H)}})}));
+    const sec = byId(r, "ops-safe-stop")!;
+    expect(sec).toBeTruthy();
+    expect(sec.tagName).toBe("SECTION");
+    const list = byData(sec, "opsRecoveryFailed")!;
+    expect(list.tagName).toBe("UL");
+    expect(list.getAttribute("aria-label")).toBeTruthy();
+    expect(allData(sec, "opsRecoveryFailedItem").map(n => n.dataset.opsRecoveryFailedItem)).toEqual([RID("03")]);
+    expect(allData(sec, "opsRecoveryFailedItem")[0].dataset.opsRecoveryFailedItem).not.toBe(RID("01"));
+    const item = allData(sec, "opsRecoveryFailedItem")[0];
+    expect(all(item).filter(n => n.tagName === "DT").length).toBe(all(item).filter(n => n.tagName === "DD").length);
+    expect(all(item).some(n => n.tagName === "TIME" && n.getAttribute("datetime"))).toBe(true);
+    expect(field(item, "status")!.textContent).toContain("Recovery failed");
+    expect(field(item, "error")!.textContent).toContain("recovery exhausted");
+    expect(byData(sec, "field", "safeStop")!.dataset.value).toBe("active");
+    const next = byData(sec, "note", "safe-next")!;
+    expect(next.dataset.next).toBe("stopActive");
+    expect(next.getAttribute("role")).toBe("status");
+    expect(next.textContent).toContain("Resume");
+    expect(all(sec).filter(n => n.tagName === "BUTTON")).toEqual([]);
+    expect(posts).toEqual([]);
+    expect(surface(r)).not.toContain(FORBIDDEN);
+    expect(r.textContent).not.toMatch(/product[\s_-]*verified/i);
+  });
+  it("view shows honest unknown states (never zero / 'not stopped') when sources are unreadable, and an honest empty state when readable", async () => {
+    const bad = (await renderView(serve({"/v1/control/status": fail("down"), "/v1/runs": fail("HTTP 404")}))).root;
+    const sec = byId(bad, "ops-safe-stop")!;
+    expect(allData(sec, "rfUnknown").length).toBeGreaterThanOrEqual(2);
+    expect(allData(sec, "rfUnknown").every(n => n.getAttribute("role") === "status")).toBe(true);
+    expect(byData(sec, "field", "safeStop")).toBeUndefined();
+    expect(byData(sec, "note", "safe-next")!.dataset.next).toBe("unknown");
+    expect(byData(sec, "opsEmpty")).toBeUndefined();
+    const okRoot = (await renderView(serve())).root;
+    const ok = byId(okRoot, "ops-safe-stop")!;
+    expect(byData(ok, "opsEmpty", "recoveryFailed")!.getAttribute("role")).toBe("status");
+    expect(byData(ok, "field", "safeStop")!.dataset.value).toBe("inactive");
+    expect(byData(ok, "note", "safe-next")!.dataset.next).toBe("none");
+  });
+  it("renders API text as text (no markup interpretation) in TR as well", async () => {
+    const {root: r} = await renderView(serve({"/v1/runs": runsBody([rfRun(RID("03"), {error: "<img src=x onerror=alert(1)>"})])}), "tr");
+    const item = allData(byId(r, "ops-safe-stop")!, "opsRecoveryFailedItem")[0];
+    expect(field(item, "error")!.textContent).toBe("<img src=x onerror=alert(1)>");
+    expect(byId(r, "ops-safe-stop")!.textContent).toContain("Kurtarma başarısız");
+  });
+  it("adds only ops.rf.* locale keys, identical in TR/EN, and no new route/endpoint is introduced", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const rf = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("ops.rf.")).sort();
+    expect(rf(tr)).toEqual(rf(en));
+    expect(rf(tr).length).toBeGreaterThanOrEqual(12);
+    const view = read("views", "operations.js"), core = read("operations-core.js");
+    for (const src of [view, core]) expect(src).not.toMatch(/innerHTML|apiPost|\.stop\(|\.resume\(|retryBlocked\(/);
   });
 });

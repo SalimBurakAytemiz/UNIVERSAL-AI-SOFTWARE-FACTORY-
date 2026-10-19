@@ -33,6 +33,8 @@ export const STEP_IDS=Object.freeze({
   UNKNOWN:Object.freeze(["SOURCE_UNREADABLE"]),
   UNVERIFIED:Object.freeze(["SCHEDULER_NOT_VERIFIED","JOURNAL_ABSENT","JOURNAL_NOT_REPORTED","NO_RUNS_RECORDED","RUN_UNDETERMINED","RETRY_UNDETERMINED"]),
   WATCH:Object.freeze(["RETRY_WAITING","RETRY_DUE","RUN_IN_PROGRESS"])});
+/** UI-186: kayıtlı koşu durumu RECOVERY_FAILED olan koşular "kurtarma başarısız" sayılır (core/workos/run-state.ts uç durumu); başka hiçbir durum bu gruba yükseltilmez. */
+export const RECOVERY_FAILED_STATUS="RECOVERY_FAILED";
 export const UNKNOWN_DETAILS=Object.freeze(["OFFLINE","UNAVAILABLE","ERROR"]);
 /** Mevcut IPC denetimi bu paket kimliği biçimi dışında yeniden denemeyi reddeder (main.mjs'teki retry-blocked IPC kuralı ile aynı). */
 export const RETRY_PACKAGE_RE=/^PKG-\d{3}$/;
@@ -187,6 +189,15 @@ function deriveControl(C,nowMs){
   return {active:C.active,reason:C.reason,actor:C.actor,activatedAt:C.activatedAt,activeForMs:C.active?waitMs:null,failClosed,verification:C.verification,journal:C.journal};
 }
 
+// //TR: UI-186 "kurtarma başarısız -> güvenli dur" türetimi (salt-okunur, yeni veri yok): koşular YALNIZ kayıtlı durumu RECOVERY_FAILED olanlardır; global stop kaynağın bildirdiği gibidir (okunamıyorsa null = bilinmiyor, asla "aktif değil" değil); engelli paket sayısı yalnız bilgi içindir, paketlerin "kurtarma başarısız" olduğu iddia EDİLMEZ. Okunamayan kaynağın alanı null'dır.
+export function deriveSafeStop(control,runs,queue){
+  return {
+    stop:control===null?null:{active:control.active,failClosed:control.failClosed,reason:control.reason,actor:control.actor,activatedAt:control.activatedAt},
+    failedRuns:runs===null?null:runs.items.filter(r=>r.status===RECOVERY_FAILED_STATUS).map(r=>({runId:r.runId,status:r.status,finishedAt:r.finishedAt,packageId:r.packageId,error:r.error})),
+    blockedPackages:queue===null?null:queue.total
+  };
+}
+
 /**
  * Üç okuma sonucundan ({control,runs,attention}: mapOperations* çıktıları) çalışma durumunu ve kurtarma kontrol listesini türetir (nowMs: şimdiki zaman, ms).
  * Sayılar yalnız ilgili kaynak okunabiliyorsa vardır (aksi halde null, asla 0). Her bulgu kayıtlı bir durumdan türer; "takıldı" yalnız gerçek zaman damgasından.
@@ -244,5 +255,5 @@ export function buildOperations(res,nowMs){
   const unknownStates=unreadable.map(k=>sources[k].state);
   const unknownState=unknownStates.includes("OFFLINE")?"OFFLINE":unknownStates.includes("ERROR")?"ERROR":unknownStates.length?"UNAVAILABLE":null;
   const counts=Object.fromEntries(SEVERITIES.map(s=>[s,steps.filter(x=>x.severity===s).length]));
-  return {sources,unreadable,unknownState,schedulerRejected:rejected,control,runs,queue,steps,counts,tier};
+  return {sources,unreadable,unknownState,schedulerRejected:rejected,control,runs,queue,steps,counts,tier,safeStop:deriveSafeStop(control,runs,queue)};
 }
