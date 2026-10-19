@@ -516,6 +516,10 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .as-reviews-table td{vertical-align:top}
 .as-reviews-head{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2)}
 .as-reviews-kv dd{overflow-wrap:anywhere}
+.as-lineage-list{list-style:none;margin:.2rem 0 0;padding-left:1.1rem;display:grid;gap:.3rem;border-left:1px solid var(--border-ui)}
+.as-lineage-root{padding-left:0;border-left:0}
+.as-lineage-leaf{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem;overflow-wrap:anywhere}
+.as-lineage-ungrouped{margin-top:var(--space-2)}
 @media (forced-colors:active){
   .qa-stat,.qa-code,.qa-sec-table tr[class~="row-selected"]{border:1px solid CanvasText;forced-color-adjust:auto}
 }
