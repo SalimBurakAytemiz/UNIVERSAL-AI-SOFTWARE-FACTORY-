@@ -14,6 +14,14 @@ export const REQUIRED_RULES = Object.freeze(["deletion", "non_fast_forward", "pu
 // Floor that always applies, so an evidence file whose protectedPaths was emptied or truncated cannot open these.
 export const PROTECTED_FLOOR = Object.freeze([".github/workflows/", "automation/lib/", "scripts/validate-", "scripts/run-validation.mjs", "config/", "prompts/"]);
 export const PROTECTED_FLOOR_EXACT = Object.freeze(["claude.md", "agents.md"]);
+// Files CI executes from the PR head that config/protected-paths.json does not protect: a PR could make validate pass vacuously through them.
+// Fail-closed until a Founder authority path exists for dependency/CI-script changes. [match, category, isPrefix]
+export const CI_EXECUTED_FLOOR = Object.freeze([
+  ["scripts/ensure-dependencies.mjs", "ensure-dependencies", false],
+  ["package.json", "npm-manifest", false],
+  ["package-lock.json", "npm-lockfile", false],
+  ["scripts/ci/", "ci-scripts", true],
+]);
 // The required contexts are trusted only from this workflow file (any diff under .github/workflows/ is PROTECTED_PATH) and these run events.
 export const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 export const CI_EVENTS = Object.freeze(["pull_request", "push", "workflow_dispatch"]);
@@ -175,7 +183,10 @@ function checkPaths(ev, r) {
     for (const x of names) {
       const n = normPath(x);
       if (n === null) r.push("EVIDENCE_MALFORMED:diffFiles");
-      else if (hit(n)) r.push("PROTECTED_PATH");
+      else {
+        if (hit(n)) r.push("PROTECTED_PATH");
+        for (const [m, cat, pre] of CI_EXECUTED_FLOOR) if (pre ? n.startsWith(m) : n === m) r.push(`CI_EXECUTED_PATH:${cat}`);
+      }
     }
   }
 }

@@ -141,6 +141,13 @@ blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("config/validation.js
 blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("AGENTS.md", "removed")); }), "PROTECTED_PATH", {}, "N42d B1 removed protected file (floor exact)");
 blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("docs/redaction-copy.mjs", "copied", "automation/lib/redaction.mjs")); }), "PROTECTED_PATH", {}, "N42e B1 copied from a protected path");
 blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F(".github/workflows/other.yml", "added")); }), "PROTECTED_PATH", {}, "N42f new workflow file (floor prefix)");
+for (const [file, cat] of [["scripts/ensure-dependencies.mjs", "ensure-dependencies"], ["package.json", "npm-manifest"], ["package-lock.json", "npm-lockfile"], ["scripts/ci/ci-evidence.mjs", "ci-scripts"]]) {
+  const code = `CI_EXECUTED_PATH:${cat}`;
+  blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F(file.toUpperCase().replace(/\//g, "\\"))); }), code, {}, `N42g modified ${file} (upper case, backslashes)`);
+  blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F(file, "renamed", "docs/staged-file.txt")); }), code, {}, `N42h rename INTO ${file}`);
+  blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("docs/moved-away.txt", "renamed", file)); }), code, {}, `N42i rename OUT OF ${file}`);
+}
+blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("scripts/ci/new-helper.mjs", "added")); }), "CI_EXECUTED_PATH:ci-scripts", {}, "N42j new file under scripts/ci/");
 // f. Ruleset.
 for (const t of ["deletion", "non_fast_forward", "pull_request", "required_status_checks"])
   blocks(mut(e => { e.rules = e.rules.filter(x => x.type !== t); }), `RULESET_MISSING:${t}`, {}, `N43 ruleset missing ${t}`);
