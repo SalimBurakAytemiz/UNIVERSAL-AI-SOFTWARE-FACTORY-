@@ -315,7 +315,7 @@ async function testReportDetail(ctx,reports){
   if(!trState.runId)return base(emptyNote(ctx,"assurance.testreport.detail.none"));
   const r=reports.state==="VERIFIED"?reports.runs.find(x=>x.runId===trState.runId):null;
   if(!r)return base(stateNote(ctx,"UNAVAILABLE","assurance.testreport.detail.gone"));
-  const idx=await ctx.api.evidenceList({runId:r.runId,limit:500});
+  const idx=await ctx.api.evidenceList({runId:r.runId,limit:PAGE_LIMIT});
   const byId=idx.state==="VERIFIED"?new Map(idx.items.map(e=>[e.evidenceId,e])):null;
   const close=h(doc,"button",{type:"button",class:"btn btn-small",id:"as-testrep-close",dataset:{focusKey:"as-testrep-close"},text:ctx.t("assurance.testreport.detail.close"),
     on:{click:()=>{const id=r.runId;trState.runId=null;if(typeof ctx.rerender==="function")ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys:[`id:tr-${id}`,"id:as-testrep-t"]})}}});

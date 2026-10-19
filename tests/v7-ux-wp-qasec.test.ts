@@ -126,7 +126,7 @@ async function mkCtx(feed: Feed = {}, lang = "tr") {
       return feed.mutate ? feed.mutate("detail", structuredClone(det)) : det;
     }
     if (p.startsWith("/v1/evidence/")) return {evidence: EVIDENCE.evidence[0], summary: {}, tail: null, tailWithheld: null};
-    if (p.startsWith("/v1/evidence")) { if (feed.evidence === "off") throw new Error(`${p}: HTTP 404`); if (p.includes("runId=")) return {evidence: [lev("7", {runId: runId("f"), kind: "VERIFY_TESTS"}), lev("8", {runId: runId("a"), kind: "REGRESSION_TESTS"}), lev("9", {runId: runId("f"), kind: "WORK_RUN_STEP"})], nextCursor: null}; return feed.evidence === "lineage" ? LINEAGE_EVIDENCE : EVIDENCE; }
+    if (p.startsWith("/v1/evidence")) { if (feed.evidence === "off") throw new Error(`${p}: HTTP 404`); const lim = new URLSearchParams(p.split("?")[1] ?? "").get("limit"); if (lim !== null && (!/^[0-9]{1,3}$/.test(lim) || Number(lim) < 1 || Number(lim) > 100)) throw new Error(`${p}: HTTP 400 INVALID_LIMIT`); /* mirrors apps/control-api/src/server.ts GET /v1/evidence: limit 1..100 */ if (p.includes("runId=")) return {evidence: [lev("7", {runId: runId("f"), kind: "VERIFY_TESTS"}), lev("8", {runId: runId("a"), kind: "REGRESSION_TESTS"}), lev("9", {runId: runId("f"), kind: "WORK_RUN_STEP"})], nextCursor: null}; return feed.evidence === "lineage" ? LINEAGE_EVIDENCE : EVIDENCE; }
     throw new Error(`${p}: HTTP 404`);
   }};
   const api = apiMod.createApi({bridge, store});
