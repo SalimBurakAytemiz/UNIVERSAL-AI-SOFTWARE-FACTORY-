@@ -307,6 +307,7 @@ export default {
   "tower.pickLog":"Select a log.",
   "tower.noEvents":"No events.",
   "tower.noLogs":"No logs.",
+  "tower.loading":"Loading…",
   "tower.truncated":"[TAIL / TRUNCATED]",
   "settings.language":"Language",
   "settings.languageNote":"Your choice is stored on this device.",
