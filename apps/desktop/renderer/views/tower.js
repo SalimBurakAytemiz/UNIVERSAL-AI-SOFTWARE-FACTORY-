@@ -2,6 +2,8 @@
 import {confirmAndResume} from "../resume-confirm.js";
 import {h,panel,chip,stateNote,emptyNote,statusLabel} from "../components.js";
 import {formatCount,MISSING} from "../model.js";
+import {validateRetryRecord,classifyRetryPhase} from "../operations-core.js";
+import {waitParts} from "../queue-core.js";
 import {buildCampusInput} from "../control-tower/feed.js";
 import {mountCampus} from "../control-tower/mount.js";
 
@@ -38,9 +40,22 @@ export async function render(ctx){
     panel(ctx,{titleKey:"tower.health",id:"tower-health"},h(doc,"p",{id:"health",text:healthText}),
       h(doc,"div",{class:"facts"},fact("tower.install",okData(install)?.phase0Final??MISSING),fact("tower.phase0",okData(phase0)?.final??MISSING),
         fact("tower.scheduler",Array.isArray(s?.phases)?`${completed}/${s.phases.length}`:(s?.status??MISSING)),fact("tower.agents",roles(agents)),fact("tower.caps",cnt(caps)),fact("tower.tools",cnt(tools)),
-        fact("tower.retry",retryData&&retryData.packageId?`${retryData.packageId} ${(retryData.phaseIds??[]).join(",")} @ ${retryData.retryAt}`:ctx.t("tower.noRetry")))),
+        retryFact(ctx,retry,fact))),
     stopCard,
     panel(ctx,{titleKey:"tower.attention",id:"tower-attention"},attention),
     panel(ctx,{titleKey:"tower.runs",id:"tower-runs"},runs.state!=="VERIFIED"?stateNote(ctx,runs.state):runList.length?h(doc,"div",{class:"btn-row"},runList):emptyNote(ctx,"tower.noRuns")),
     panel(ctx,{titleKey:"tower.selected",id:"tower-selected"},selected,h(doc,"h3",{text:ctx.t("tower.events")}),eventsEl,h(doc,"h3",{text:ctx.t("tower.logs")}),logButtons,logText));
+}
+// //TR: UI-194: yeniden deneme olgusu dürüst durum gösterir; okuma hatası "bekleyen yok" sayılmaz, geçersiz kayıt paket/zaman yazdırmaz, geçerli kayıt Operasyon ile AYNI işlevle sınıflanır; serbest metin neden gösterilmez.
+function retryFact(ctx,retry,fact){
+  const doc=ctx.doc,mk=(state,text)=>{const f=fact("tower.retry",text);f.dataset.retryState=state;return f};
+  if(!retry.ok)return mk(retry.state,`${MISSING} · ${ctx.t(`state.${retry.state}`)}`);
+  const d=retry.data;
+  if(d===null)return mk("NONE",ctx.t("tower.noRetry"));
+  const rec=d&&typeof d==="object"&&d.status!=="INVALID"?validateRetryRecord(d):null;
+  if(!rec)return mk("INVALID",ctx.t("tower.retry.invalid"));
+  const nowMs=typeof ctx.now==="function"?ctx.now():Date.now(),c=classifyRetryPhase(rec,nowMs);
+  const p=waitParts(c.phase==="WAITING"?c.remainingMs:c.overdueMs);
+  const dur=!p?MISSING:p.d>0?ctx.t("tower.retry.dur.dh",{d:p.d,h:p.h}):p.h>0?ctx.t("tower.retry.dur.hm",{h:p.h,m:p.m}):p.m>0?ctx.t("tower.retry.dur.m",{m:p.m}):ctx.t("tower.retry.dur.lt1m");
+  return mk(c.phase,ctx.t(`tower.retry.${c.phase}`,{pkg:c.packageId??MISSING,phases:c.phaseIds.length?c.phaseIds.join(","):MISSING,at:c.retryAt,dur}));
 }

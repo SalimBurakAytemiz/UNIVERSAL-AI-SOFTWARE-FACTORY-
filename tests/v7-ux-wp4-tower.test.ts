@@ -264,7 +264,7 @@ describe("UX WP4 feed and markup units", () => {
 
 // //TR: UX hardening — Day-0 bölümü (health/stop/runs/events/logs) için fonksiyonel, negatif ve erişilebilirlik testleri; veri yoksa uydurma değer yok, hata durumu "Log yok" diye gizlenmez.
 type Routes = Record<string, any>;
-async function mkDay0(routes: Routes, lang = "en", confirmAnswer: boolean | "missing" = true) {
+async function mkDay0(routes: Routes, lang = "en", confirmAnswer: boolean | "missing" = true, now?: number) {
   const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
   const doc = new D(), store = st.createStore(null), calls: string[] = [];
   const bridge = {apiGet: async (p: string) => {
@@ -278,6 +278,7 @@ async function mkDay0(routes: Routes, lang = "en", confirmAnswer: boolean | "mis
   const stops: string[] = [];
   const confirms: any[] = [];
   const ctx: any = {doc, store, api, i18n: {lang, t}, t, navigate() {}, principal: "FOUNDER_LOCAL", renderAttention() {}, requestStop() { stops.push("stop"); }, resume() { stops.push("resume"); }};
+  if (now !== undefined) ctx.now = () => now;
   if (confirmAnswer !== "missing") ctx.confirm = async (o: any) => { confirms.push(o); return confirmAnswer; };
   const tower = await load("views", "tower.js");
   const view: N = await tower.render(ctx);
@@ -334,8 +335,59 @@ describe("UX hardening: tower day-0 negative / honest states", () => {
     const facts = all(m.view).filter(n => n.dataset.fact);
     expect(facts.length).toBeGreaterThanOrEqual(7);
     const model = await load("model.js");
-    for (const f of facts.filter(x => x.dataset.fact !== "tower.retry")) expect(f.textContent).toContain(model.MISSING);
+    for (const f of facts) expect(f.textContent).toContain(model.MISSING);
     expect(byId(m.view, "tower-runs").textContent).not.toMatch(/RUN-/);
+  });
+  it("tower.retry shows the honest read-failure state, never 'No pending retry' (UI-194)", async () => {
+    const m = await mkDay0({});
+    const f = all(m.view).find(n => n.dataset.fact === "tower.retry")!;
+    expect(["OFFLINE", "UNAVAILABLE", "ERROR"]).toContain(f.dataset.retryState);
+    expect(f.textContent).toContain(m.t(`state.${f.dataset.retryState}`));
+    expect(f.textContent).not.toContain(m.t("tower.noRetry"));
+  });
+  const retryFact = async (data: any, now = Date.parse("2026-10-20T12:00:00Z")) => {
+    const m = await mkDay0({"/v1/retry": data}, "en", true, now);
+    return {m, f: all(m.view).find(n => n.dataset.fact === "tower.retry")!};
+  };
+  it("tower.retry: null is NONE; INVALID payloads and bad records print no package or time (UI-194)", async () => {
+    const none = await retryFact(null);
+    expect(none.f.dataset.retryState).toBe("NONE");
+    expect(none.f.textContent).toContain(none.m.t("tower.noRetry"));
+    for (const bad of [{status: "INVALID", error: "SUPERVISOR_RETRY_STATE_UNSAFE"}, {packageId: "PKG-001", phaseIds: [1], retryAt: "nope"}, {packageId: "bad id!", retryAt: "2026-10-20T13:00:00Z"}, {packageId: "PKG-001", phaseIds: ["x"], retryAt: "2026-10-20T13:00:00Z"}, "text", []]) {
+      const {m, f} = await retryFact(bad);
+      expect(f.dataset.retryState, JSON.stringify(bad)).toBe("INVALID");
+      expect(f.textContent).toContain(m.t("tower.retry.invalid"));
+      expect(f.textContent).not.toMatch(/PKG-001|2026-|nope/);
+      expect(f.textContent).not.toContain(m.t("tower.noRetry"));
+    }
+  });
+  it("tower.retry classifies a valid record with the Operations function and never claims recovery (UI-194)", async () => {
+    const ops = await load("operations-core.js");
+    const rec = (retryAt: string) => ({packageId: "PKG-007", phaseIds: [3, 4], retryAt, reason: "SECRET-FREE-TEXT"});
+    const cases: Array<[string, string]> = [["2026-10-20T13:30:00Z", "WAITING"], ["2026-10-20T11:55:00Z", "DUE"], ["2026-10-20T11:00:00Z", "OVERDUE"]];
+    for (const [at, phase] of cases) {
+      const now = Date.parse("2026-10-20T12:00:00Z");
+      expect(ops.classifyRetryPhase(ops.validateRetryRecord(rec(at)), now).phase).toBe(phase);
+      const {m, f} = await retryFact(rec(at), now);
+      expect(f.dataset.retryState).toBe(phase);
+      expect(f.textContent).toContain("PKG-007");
+      expect(f.textContent).toContain("3,4");
+      expect(f.textContent).toContain(at);
+      expect(f.textContent).not.toContain("SECRET-FREE-TEXT");
+      expect(f.textContent).not.toMatch(/recovered|healthy|resumed|circuit|429|SLA|provider/i);
+      expect(m.calls.filter(c => c === "/v1/retry")).toHaveLength(1);
+    }
+    expect((await retryFact(rec("2026-10-20T13:30:00Z"))).f.textContent).toContain("1 h 30 min");
+    expect(ops.classifyRetryPhase(ops.validateRetryRecord(rec("2026-10-20T13:30:00Z")), NaN).phase).toBe("UNDETERMINED");
+  });
+  it("tower retry locale keys keep identical placeholders in en and tr (UI-194)", async () => {
+    const trD = (await load("locales", "tr.js")).default as Record<string, string>, enD = (await load("locales", "en.js")).default as Record<string, string>;
+    const keys = Object.keys(enD).filter(k => k.startsWith("tower.retry."));
+    expect(keys.length).toBeGreaterThanOrEqual(9);
+    expect(Object.keys(trD).filter(k => k.startsWith("tower.retry.")).sort()).toEqual(keys.sort());
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join();
+    for (const k of keys) expect(ph(trD[k]), k).toBe(ph(enD[k]));
+    expect(read("operations-core.js")).not.toMatch(/confirm\(|apiPost|\.post\(|bridge\./);
   });
   it("shows the empty note for zero runs and the state note (not the empty note) for a failed run feed", async () => {
     const empty = await mkDay0({"/v1/runs": {runs: []}});

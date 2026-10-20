@@ -116,6 +116,20 @@ export function mapOperationsRuns(raw){
 }
 
 // ---------- GET /v1/founder-attention ----------
+/** UI-194: yeniden deneme kaydının (SUPERVISOR_RETRY.json) doğrulaması; Operasyon ve Control Tower AYNI işlevi kullanır. Geçersizse null. */
+export function validateRetryRecord(r){
+  if(!isObj(r)||iso(r.retryAt)===null)return null;
+  const pk=opt(r.packageId,v=>matches(PKG_RE,v)),reason=optText(r.reason,300),secs=opt(r.retryAfterSeconds,v=>Number.isSafeInteger(v)&&v>=0),upd=optIso(r.updatedAt);
+  const phases=opt(r.phaseIds,v=>Array.isArray(v)&&v.length<=200&&v.every(n=>Number.isSafeInteger(n)&&n>=0));
+  if([pk,reason,secs,upd,phases].includes(undefined))return null;
+  return {packageId:pk,phaseIds:phases??[],reason,retryAfterSeconds:secs,retryAt:r.retryAt,updatedAt:upd};
+}
+/** UI-194: doğrulanmış kayıt için WAITING/DUE/OVERDUE/UNDETERMINED sınıflaması; kalan/geçen süre yalnız retryAt ile nowMs farkından gelir. */
+export function classifyRetryPhase(retry,nowMs){
+  const t=Date.parse(retry.retryAt),finite=Number.isFinite(nowMs)&&!Number.isNaN(t);
+  const phase=!finite?"UNDETERMINED":t>nowMs?"WAITING":nowMs-t<=RETRY_OVERDUE_AFTER_MS?"DUE":"OVERDUE";
+  return {...retry,phase,remainingMs:finite&&t>nowMs?t-nowMs:null,overdueMs:finite&&t<=nowMs?nowMs-t:null};
+}
 /**
  * GET /v1/founder-attention -> {state:"VERIFIED",attention:{total,items,schedulerVerification,retryableKinds,retry,checkpoint}} | {state:"UNAVAILABLE",attention:null,schedulerRejected:true} | {state:"ERROR",attention:null}.
  * Engelli paket satırları kuyruk ekranıyla AYNI katı eşleyiciden geçer (tek sahiplik); ek olarak retry (yeniden deneme kaydı) ve checkpoint ayrı ayrı doğrulanır. Tek bozuk öğe TÜM okumayı ERROR yapar.
@@ -132,12 +146,8 @@ export function mapOperationsAttention(raw){
   }
   let retry=null;
   if(raw.retry!==undefined&&raw.retry!==null){
-    const r=raw.retry;
-    if(!isObj(r)||iso(r.retryAt)===null)return bad;
-    const pk=opt(r.packageId,v=>matches(PKG_RE,v)),reason=optText(r.reason,300),secs=opt(r.retryAfterSeconds,v=>Number.isSafeInteger(v)&&v>=0),upd=optIso(r.updatedAt);
-    const phases=opt(r.phaseIds,v=>Array.isArray(v)&&v.length<=200&&v.every(n=>Number.isSafeInteger(n)&&n>=0));
-    if([pk,reason,secs,upd,phases].includes(undefined))return bad;
-    retry={packageId:pk,phaseIds:phases??[],reason,retryAfterSeconds:secs,retryAt:r.retryAt,updatedAt:upd};
+    retry=validateRetryRecord(raw.retry);
+    if(retry===null)return bad;
   }
   let checkpoint=null;
   if(raw.checkpoint!==undefined&&raw.checkpoint!==null){
@@ -175,9 +185,7 @@ function deriveQueue(A,nowMs){
   const retryUsable=items.filter(x=>x.retryNow).length,retryable=items.filter(x=>x.retryable===true).length,notRetryable=items.filter(x=>x.retryable===false).length,unknownRetry=items.filter(x=>x.retryable===null).length;
   let retry=null;
   if(A.retry){
-    const t=Date.parse(A.retry.retryAt),finite=Number.isFinite(nowMs)&&!Number.isNaN(t);
-    const phase=!finite?"UNDETERMINED":t>nowMs?"WAITING":nowMs-t<=RETRY_OVERDUE_AFTER_MS?"DUE":"OVERDUE";
-    retry={...A.retry,phase,remainingMs:finite&&t>nowMs?t-nowMs:null,overdueMs:finite&&t<=nowMs?nowMs-t:null};
+    retry=classifyRetryPhase(A.retry,nowMs);
   }
   let checkpoint=null;
   if(A.checkpoint){const {waitMs}=waitSince(A.checkpoint.updatedAt,nowMs);checkpoint={...A.checkpoint,ageMs:waitMs,stale:waitMs!==null&&waitMs>CHECKPOINT_STALE_AFTER_MS}}
