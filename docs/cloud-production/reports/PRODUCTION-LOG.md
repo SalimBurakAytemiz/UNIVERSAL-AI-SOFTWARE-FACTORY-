@@ -694,3 +694,35 @@ ACTIVE (list_sessions unavailable; fallback = LIVE claim branches with no open P
 **Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) Canonical backlog: remaining rows DRAFT_NOT_READY / AUTHORITY_REQUIRED / BLOCKED; #87 awaits merge (write-back). (3) create_session/list_sessions unavailable.
 
 Note: written as one local single-file commit with a plain push (as in #39/#40), since the ~60 KB log is too large to re-transmit through create_or_update_file without transcription risk.
+
+## Heartbeat #42 (2026-10-20 07:17Z)
+
+**Queue (docs/cloud-production/QUEUE.json @ claude/cloud-production-engine):** parsed; READY tasks: 0 (CP-QUEUE/CP-REPORT/CP-CI PENDING_REVIEW; CP-DISPATCH/CP-RECOVERY/CP-GOV IN_PROGRESS; FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED BLOCKED). Step 2: nothing to dispatch (also create_session unavailable in this fire).
+
+**Step 2b (canonical backlog):** v7/integration @ 1d34db7. Open PR heads passed as --open-prs. Dry run: START UI-233. ACTIVE (list_sessions unavailable; fallback = LIVE claim branches with no open PR): 0. Claim run: `--claim --max-active 2` -> outcome START, claimed:true, UI-233, branch claude/ui-233, claim SHA 78ba87f039102e6d258250da9af88bf7a629641d.
+
+CLAIMED_AWAITING_BUILDER UI-233 claude/ui-233 78ba87f039102e6d258250da9af88bf7a629641d
+
+MERGED_AWAITING_WRITEBACK CP-DISPATCH-IMPL 8e8f03283c26
+MERGED_AWAITING_WRITEBACK UI-030 a994d4b1819f
+MERGED_AWAITING_WRITEBACK UI-113 2e3e75f7abea
+MERGED_AWAITING_WRITEBACK UI-132 d1e0ba1ac92c
+MERGED_AWAITING_WRITEBACK UI-032 f9f5aa5404f4
+MERGED_AWAITING_WRITEBACK UI-026 68b25426bd48
+MERGED_AWAITING_WRITEBACK UI-025 056727551e79
+MERGED_AWAITING_WRITEBACK UI-133 33c6770e8407
+MERGED_AWAITING_WRITEBACK UI-047 b620ffaf9359
+MERGED_AWAITING_WRITEBACK UI-201 efc04b3003b1
+No RECLAIMABLE_AWAITING_BUILDER or ABANDONED_WITH_WORK_AWAITING_COORDINATOR. Claims with open PR (draft): UI-002 #90, UI-007 #89, UI-125 #92, UI-109 #91, UI-146 #95, UI-182 #94.
+
+**Open PRs: 19** (none labelled uasco-cloud-production; mergeable state/CI UNKNOWN): #95, #94, #93 (integration wave B6), #92, #91, #90, #89, #88, #69 (protected, do-not-merge), #66, #46, #33, #32, #31, #28, #23, #15, #11, #8.
+
+**Active sessions:** UNKNOWN (list_sessions unavailable); LIVE claim-branch list: claude/ui-233 (new claim, no builder yet).
+
+**Tasks completed (merged):** the 10 claim branches above are ancestors of v7/integration (DONE write-back pending). Queue tasks DONE: 0.
+
+**Current failures:** none newly observed; Actions CI red per queue (not independently verified). A builder for UI-233 is needed (coordinator).
+
+**Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) Many draft UI PRs await review/merge. (3) create_session/list_sessions unavailable.
+
+Note: written as one local single-file commit with a plain push (as in #39-#41), since the ~62 KB log is too large to re-transmit through create_or_update_file without transcription risk.
