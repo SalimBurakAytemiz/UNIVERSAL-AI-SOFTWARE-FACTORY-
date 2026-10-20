@@ -7,6 +7,7 @@ import crypto from "node:crypto";
 import {pathToFileURL} from "node:url";
 import {WorkOsStore} from "../core/workos/store.js";
 import {buildServer} from "../apps/control-api/src/server.js";
+import {scanImports, moduleSpecifiers, disallowedImports, expectOnlyAllowedImports, relativeImportClosure, NON_LITERAL} from "./support/static-imports.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -366,9 +367,10 @@ describe("Operations — only already-allow-listed read-only GETs are used (prot
       expect(src).not.toContain(FORBIDDEN);
       expect(src).not.toMatch(/transition|performTransition|work-actions/);
     }
-    const imports = [...read("views", "operations.js").matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1]).sort();
+    // SEC-IMPORT-GUARD: içe aktarmalar satır regex'i yerine AST ile çıkarılır (çok satırlı import artık kaçamaz). retry-core.js bağımlılığı UI-194'ün koordinatör onaylı kapsam farkıdır.
+    const imports = moduleSpecifiers({source: read("views", "operations.js")}).sort();
     expect(imports).toEqual(["../components.js", "../model.js", "../operations-core.js", "../work-core.js"]);
-    expect([...read("operations-core.js").matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1]).sort()).toEqual(["./queue-core.js"]);
+    expect(moduleSpecifiers({source: read("operations-core.js")}).sort()).toEqual(["./queue-core.js", "./retry-core.js"]);
     for (const m of ["operationsControl", "operationsRuns", "operationsAttention"]) expect(read("views", "operations.js")).toContain(`api.${m}(`);
     // api.js: tek apiPost çağrısı korunur (yeni POST yolu eklenmez); operasyon erişimcileri yalnız sabit GET yollarını okur.
     expect(read("api.js").match(/bridge\.apiPost\(/g)?.length).toBe(1);
@@ -1436,5 +1438,109 @@ describe("Operations — UI-186 recovery failed → safe stop panel", () => {
     expect(rf(tr).length).toBeGreaterThanOrEqual(12);
     const view = read("views", "operations.js"), core = read("operations-core.js");
     for (const src of [view, core]) expect(src).not.toMatch(/innerHTML|apiPost|\.stop\(|\.resume\(|retryBlocked\(/);
+  });
+});
+
+// //TR: SEC-IMPORT-GUARD — içe aktarma bekçisi sözdizimi değişikliğiyle atlatılamaz: AST tabanlı çıkarıcı (tests/support/static-imports.ts) gerçek modüllerde sabitlenir ve bellekteki kaynak dizeleriyle (çalışma ağacına yasak import YAZILMAZ) olumsuz durumlarda başarısız olduğu kanıtlanır.
+describe("SEC-IMPORT-GUARD — AST import guard for the Operations modules", () => {
+  const OLD_RE = /^import .* from "([^"]+)";$/gm;
+  const oldRegex = (src: string) => [...src.matchAll(OLD_RE)].map(m => m[1]);
+  const ALLOWED = ["./queue-core.js", "./retry-core.js"];
+  const guard = (source: string, allowed: readonly string[] = ALLOWED) => expectOnlyAllowedImports({source, name: "fixture.js"}, allowed);
+
+  it("real modules: operations-core.js has exactly queue-core + retry-core, views/operations.js its four modules, retry-core.js is a pure leaf", () => {
+    expectOnlyAllowedImports(path.join(rend, "operations-core.js"), ALLOWED);
+    expect(scanImports(path.join(rend, "operations-core.js"))).toEqual([{kind: "static", specifier: "./queue-core.js"}, {kind: "static", specifier: "./retry-core.js"}]);
+    expectOnlyAllowedImports(path.join(rend, "views", "operations.js"), ["../components.js", "../model.js", "../operations-core.js", "../work-core.js"]);
+    expect(scanImports(path.join(rend, "retry-core.js"))).toEqual([]);
+  });
+  it("real modules: none of operations-core.js, views/operations.js, retry-core.js has a dynamic import, re-export-from or require", () => {
+    for (const f of [["operations-core.js"], ["views", "operations.js"], ["retry-core.js"]]) {
+      const kinds = scanImports(path.join(rend, ...f)).map(r => r.kind);
+      expect(kinds.filter(k => k !== "static")).toEqual([]);
+    }
+  });
+  it("real modules: the transitive relative-import closure of operations-core.js is pinned (queue-core.js, retry-core.js and queue-core.js's own graph)", () => {
+    const queueClosure = relativeImportClosure(path.join(rend, "queue-core.js"), rend);
+    expect(queueClosure).toEqual(["delivery-core.js", "executive-core.js", "model.js", "work-core.js"]);
+    expect(relativeImportClosure(path.join(rend, "operations-core.js"), rend)).toEqual([...new Set(["queue-core.js", "retry-core.js", ...queueClosure])].sort());
+    expect(relativeImportClosure(path.join(rend, "operations-core.js"), rend)).toEqual(["delivery-core.js", "executive-core.js", "model.js", "queue-core.js", "retry-core.js", "work-core.js"]);
+  });
+  it("real modules: tower.js and inbox.js import neither operations-core.js nor views/operations.js, directly or transitively", () => {
+    for (const f of ["tower.js", "inbox.js"]) {
+      const closure = relativeImportClosure(path.join(rend, "views", f), rend);
+      expect(closure.length).toBeGreaterThan(0);
+      expect(closure).not.toContain("operations-core.js");
+      expect(closure).not.toContain("views/operations.js");
+    }
+  });
+  it("a. allowed single-line import passes", () => {
+    expect(() => guard(`import {ATTENTION_PATH} from "./queue-core.js";\n`)).not.toThrow();
+  });
+  it("b. allowed multi-line import passes (the operations-core.js:4-6 shape and a 5+-line trailing-comma variant)", () => {
+    expect(() => guard(`import {\n  RETRY_OVERDUE_AFTER_MS,validateRetryRecord,classifyRetryPhase\n} from "./retry-core.js";\n`)).not.toThrow();
+    expect(() => guard(`import {\n  ATTENTION_PATH,\n  mapQueueAttention,\n  waitSince,\n  waitParts,\n} from "./queue-core.js";\n`)).not.toThrow();
+  });
+  it("c. disallowed single-line import fails, naming the specifier", () => {
+    expect(() => guard(`import {x} from "./evil-core.js";\n`)).toThrow(/static \.\/evil-core\.js/);
+  });
+  it("d. disallowed multi-line import fails, and the OLD single-line regex provably misses it", () => {
+    const src = `import {ATTENTION_PATH} from "./queue-core.js";\nimport {\n  stop,\n  resume\n} from "./evil-core.js";\n`;
+    expect(oldRegex(src)).toEqual(["./queue-core.js"]);
+    expect(oldRegex(src)).not.toContain("./evil-core.js");
+    expect(moduleSpecifiers({source: src})).toContain("./evil-core.js");
+    expect(() => guard(src)).toThrow(/static \.\/evil-core\.js/);
+  });
+  it("e. dynamic import(\"./x.js\") and non-literal import(name) fail", () => {
+    expect(() => guard(`const m = await import("./x.js");\n`)).toThrow(/dynamic \.\/x\.js/);
+    expect(() => guard(`const m = await import("./queue-core.js");\n`)).toThrow(/dynamic \.\/queue-core\.js/);
+    expect(() => guard(`const name = "./x.js";\nconst m = await import(name);\n`)).toThrow(/dynamic <NON_LITERAL>/);
+    expect(scanImports({source: `import(a + b);`})).toEqual([{kind: "dynamic", specifier: NON_LITERAL}]);
+    expect(disallowedImports({source: `import(name);`}, [NON_LITERAL], {allowDynamic: true})).toEqual([`dynamic ${NON_LITERAL}`]);
+  });
+  it("f. export * from / export {a} from / export * as ns from re-exports fail", () => {
+    expect(() => guard(`export * from "./x.js";\n`)).toThrow(/reexport \.\/x\.js/);
+    expect(() => guard(`export {a} from "./x.js";\n`)).toThrow(/reexport \.\/x\.js/);
+    expect(() => guard(`export * as ns from "./x.js";\n`)).toThrow(/reexport \.\/x\.js/);
+    expect(() => guard(`export {a} from "./queue-core.js";\n`)).toThrow(/reexport \.\/queue-core\.js/);
+    expect(() => guard(`const a = 1;\nexport {a};\n`)).not.toThrow();
+  });
+  it("f2. require(\"./x.js\") and import x = require(\"./x.js\") fail", () => {
+    expect(() => guard(`const x = require("./x.js");\n`)).toThrow(/require \.\/x\.js/);
+    expect(() => guard(`import x = require("./x.js");\n`)).toThrow(/import-equals \.\/x\.js/);
+  });
+  const SYNTAX_VARIANTS: Array<[string, string]> = [
+    ["irregular whitespace and tabs", `import\t {  a ,\tb }   from\t\t"./x.js"  ;\n`],
+    ["single quotes", `import {a} from './x.js';\n`],
+    ["no semicolon", `import {a} from "./x.js"\nconst y = 1\n`],
+    ["braces and from split across lines", `import {\n a,\n b\n} from\n "./x.js"\n`],
+    ["namespace import", `import * as ns from "./x.js";\n`],
+    ["default plus named import", `import def, {a, b as c} from "./x.js";\n`],
+    ["side-effect import", `import "./x.js";\n`],
+    ["comments between tokens", `import /* a */ {a} /* b */ from /* c */ "./x.js" // d\n;\n`],
+    ["indented import", `   import {a} from "./x.js";\n`],
+  ];
+  it.each(SYNTAX_VARIANTS)("g. syntax variation is still caught: %s", (_label, src) => {
+    expect(moduleSpecifiers({source: src})).toEqual(["./x.js"]);
+    expect(() => guard(src)).toThrow(/static \.\/x\.js/);
+    expect(() => guard(src, ["./x.js"])).not.toThrow();
+  });
+  const NOT_IMPORTS: Array<[string, string]> = [
+    ["block comment", `/*\nimport {a} from "./x.js";\n*/\nexport const k = 1;\n`],
+    ["line comment", `// import {a} from "./x.js";\nexport const k = 1;\n`],
+    ["string literal", `export const s = "import {a} from \\"./x.js\\";";\nexport const t = 'import("./x.js")';\n`],
+    ["template literal", "export const s = `\nimport {a} from \"./x.js\";\nrequire(\"./x.js\")\n`;\n"],
+  ];
+  it.each(NOT_IMPORTS)("g. import-looking text inside a %s is not counted", (_label, src) => {
+    expect(scanImports({source: src})).toEqual([]);
+    expect(() => guard(src, [])).not.toThrow();
+  });
+  it("h. mutation check on the REAL operations-core.js text: an appended disallowed multi-line import (in memory only) fails; the unmodified file passes", () => {
+    const real = read("operations-core.js");
+    expect(() => guard(real)).not.toThrow();
+    const mutated = `${real}\nimport {\n  requestStop,\n} from "./work-actions.js";\n`;
+    expect(oldRegex(mutated).sort()).toEqual(["./queue-core.js"]);
+    expect(() => guard(mutated)).toThrow(/static \.\/work-actions\.js/);
+    expect(read("operations-core.js")).toBe(real);
   });
 });
