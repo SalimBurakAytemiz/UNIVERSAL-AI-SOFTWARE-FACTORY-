@@ -1,4 +1,5 @@
 // //TR: Bu görünüm Control Tower alanıdır: en üstte gerçek okuma modelinden (cockpit global stop, /v1/roles katalogu, /v1/work-runs) beslenen 2B operasyon haritası ve eşdeğer erişilebilir listesi (UX WP4, 3B yok), altında eski Day-0 görünürlüğü korunur: health/Phase-0/install/scheduler/registry sayıları, retry beklemesi, Global Stop/Resume kartı, founder blocker listesi, run listesi, event ve redacted log görüntüleme; hepsi preload GET köprüsünden okunur.
+import {confirmAndResume} from "../resume-confirm.js";
 import {h,panel,chip,stateNote,emptyNote,statusLabel} from "../components.js";
 import {formatCount,MISSING} from "../model.js";
 import {buildCampusInput} from "../control-tower/feed.js";
@@ -31,7 +32,7 @@ export async function render(ctx){
   const attention=h(doc,"div",{id:"attention"});ctx.renderAttention(attention,att);
   const stopCard=h(doc,"div",{class:"panel panel-critical"},h(doc,"h2",{class:"panel-title",text:ctx.t("stop.title")}),
     h(doc,"p",{id:"stopState",text:control.active?ctx.t("stop.activeLine",{reason:control.reason??""}):ctx.t(control.state==="VERIFIED"?"stop.running":`state.${control.state}`)}),
-    h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-danger",id:"towerStop",on:{click:()=>ctx.requestStop()},text:ctx.t("stop.button")}),h(doc,"button",{type:"button",class:"btn",id:"towerResume",on:{click:()=>ctx.resume()},text:ctx.t("stop.resume")})));
+    h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-danger",id:"towerStop",on:{click:()=>ctx.requestStop()},text:ctx.t("stop.button")}),h(doc,"button",{type:"button",class:"btn",id:"towerResume",on:{click:()=>confirmAndResume(ctx,{onCancel:typeof ctx.announce==="function"?ctx.announce:undefined})},text:ctx.t("stop.resume")})));
   return h(doc,"div",{class:"view"},h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.tower.title")}),
     panel(ctx,{titleKey:"tower.map.title",id:"tower-map"},campus),
     panel(ctx,{titleKey:"tower.health",id:"tower-health"},h(doc,"p",{id:"health",text:healthText}),
