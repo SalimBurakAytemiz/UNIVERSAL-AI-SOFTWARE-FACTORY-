@@ -313,3 +313,15 @@ export function deriveInbox(missions,runs){
 }
 export function filterMissions(items,status){return status==="ALL"||!status?items:items.filter(m=>m.status===status)}
 export function liveRuns(runs){return (runs??[]).filter(r=>RUN_ACTIVE_STATES.includes(r.status))}
+
+// //TR: UI-026 salt-okunur görev denetçisi: yalnız GET /v1/missions/:id (görevler) ve GET /v1/work-runs okumalarından türetilir. Okuma VERIFIED değilse (STALE dahil) olumlu değer yoktur → UNKNOWN; API'nin vermediği alanlar (atanan, bitiş, bağımlılık, açıklama) asla uydurulmaz ve koşu-görev bağı sunucuda olmadığından bağ UNKNOWN kalır.
+export const TASK_UNKNOWN_FIELDS=Object.freeze(["assignee","dueAt","dependencies","description"]);
+export function deriveTaskInspector(detailRes,runsRes,taskId){
+  if(detailRes?.state!=="VERIFIED"||!detailRes.mission)return {state:"UNKNOWN",task:null};
+  const m=detailRes.mission,t=(m.tasks??[]).find(x=>x.taskId===taskId);
+  if(!t)return {state:"EMPTY",task:null};
+  const runsKnown=runsRes?.state==="VERIFIED"&&Array.isArray(runsRes.items),byStatus={};
+  if(runsKnown)for(const r of runsRes.items)byStatus[r.status]=(byStatus[r.status]??0)+1;
+  return {state:"VERIFIED",task:{taskId:t.taskId,title:t.title,status:t.status,missionId:m.missionId,missionTitle:m.title,missionStatus:m.status,riskLevel:m.riskLevel,
+    runs:runsKnown?{known:true,count:runsRes.items.length,byStatus}:{known:false,count:null,byStatus:{}},unknownFields:[...TASK_UNKNOWN_FIELDS]}};
+}
