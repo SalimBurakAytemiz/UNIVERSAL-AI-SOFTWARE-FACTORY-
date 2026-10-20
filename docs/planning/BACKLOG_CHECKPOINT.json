@@ -184,7 +184,7 @@
       "title": "Read-only mission/run status board (kanban) in #/work",
       "package": "WP-WORKOS",
       "owner": "CLOUD",
-      "status": "DRAFT_NOT_READY",
+      "status": "DONE",
       "dependsOn": [
         "pkg-lease1-wiring",
         "BACKLOG-SOURCE-REBASELINE"
@@ -192,7 +192,7 @@
       "riskLevel": 2,
       "requiresNewAuthority": false,
       "specFile": "docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv [row UI-023, P0 PARTIAL] @ origin/v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph@9dbb708 (NOT on v7/integration)",
-      "notes": "[INV-07] Only task shown to be a real, still-missing, renderer-only, cloud-independent gap: Work view is a mission/run list and the renderer has no board/column/lane construct (git grep kanban in renderer: 0 matches at e12dbdd). A READ-ONLY board needs only already allow-listed GET /v1/missions and GET /v1/work-runs; drag-and-drop transitions would use the allow-listed POST /v1/missions/:id/transition (a write/approval action) and would leave the cloud-independent definition, so they are out of scope. NOT ready: no canonical backlog entry or verified ownership; only source is a stale CSV saying 'verify vs design'; reference design images are not in the repo (scope/parity unverifiable); needs a test registered in sealed config/validation.json so a Local reseal follows; would join the sealed-line conflict set, so serialize behind UI-074 landing (recommendation)."
+      "notes": "[INV-07] Only task shown to be a real, still-missing, renderer-only, cloud-independent gap: Work view is a mission/run list and the renderer has no board/column/lane construct (git grep kanban in renderer: 0 matches at e12dbdd). A READ-ONLY board needs only already allow-listed GET /v1/missions and GET /v1/work-runs; drag-and-drop transitions would use the allow-listed POST /v1/missions/:id/transition (a write/approval action) and would leave the cloud-independent definition, so they are out of scope. NOT ready: no canonical backlog entry or verified ownership; only source is a stale CSV saying 'verify vs design'; reference design images are not in the repo (scope/parity unverifiable); needs a test registered in sealed config/validation.json so a Local reseal follows; would join the sealed-line conflict set, so serialize behind UI-074 landing (recommendation). [Coordinator reconciliation 2026-10-20 (Founder POST-AUDIT SAFE RESUME): status set from git ancestry of the merged PR head(s) on v7/integration 0d0b2b9 (git merge-base --is-ancestor = yes); DONE means merged, NOT product-verified. Delivered by PR #56 (branch claude/ui-023-mission-kanban head 041d3cc, read-only List/Board layout on #/work, GET-only) merged in wave A d2ba4f0. The planning prerequisites listed in dependsOn were not completed first; this records what was merged, not a dependency waiver.]"
     },
     {
       "id": "UI-016",
@@ -267,6 +267,19 @@
       "notes": "[INV-13] CANONICAL-STATUS.md (sealed) still lists the next gate as RELEASE_PACKAGING_SIGNATURE_THEN_TARGET_MACHINE_PHASE0 with target Windows Phase0 = PENDING (re-read at e12dbdd). Chain: git archive, SHA256SUMS, deterministic ZIP, verify-release-extract, Founder detached signature with the external private key, then install.ps1 on a target Windows machine. Signing keys are Founder-only and never cloud inputs. Caveat: the doc is demonstrably stale elsewhere (see DOC-TRUTH-CANONICAL-STATUS), so currency rests on the doc alone; no checkpoint claims Phase0 acceptance, consistent with PENDING but not proof. Also requires Local Windows (owner set to FOUNDER because new authority is the first gate)."
     },
     {
+      "id": "DESIGN-EVIDENCE-UNAVAILABLE",
+      "title": "P0 blocker: approved UI/UX design reference package is not available in the repository or the cloud environment",
+      "package": "DESIGN",
+      "owner": "FOUNDER",
+      "status": "BLOCKED",
+      "priority": "P0",
+      "dependsOn": [],
+      "riskLevel": 3,
+      "requiresNewAuthority": true,
+      "specFile": "docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv (design columns); read-only master status audit 2026-10-20",
+      "notes": "Recorded by Founder directive POST-AUDIT SAFE RESUME (2026-10-20, item 7). Evidence at v7/integration 0d0b2b9: git ls-files has no PNG/SVG/JPG/PDF/Figma design files and no design directory; docs/ux/ holds only 6 text specs (UI-003, UI-023, UI-026, UI-030, UI-113, UI-132); the package UASCO_NEON_252_EKRAN_TAM_PAKET_2026-10-16 is referenced by inventory rows but exists only on the Founder PC (C:/Users/salim/Downloads/...), so all 252 screen rows are REFERENCE_UNAVAILABLE. Effect: stage C (design approved) and stage J (visually verified) cannot be reached for any screen. Until the Founder supplies the approved references (or a non-sensitive export with a per-screen ID mapping) through a governed PR, no agent may produce design-accuracy, design-parity, visual-verification or Founder-design-approval claims. Authorized renderer work continues with honest states only. Unblock: Founder provides the package and states which screens are approved."
+    },
+    {
       "id": "DOC-TRUTH-CANONICAL-STATUS",
       "title": "CANONICAL-STATUS.md is stale on package states (X1/R3/AUT1 listed pending/held but already in integration history)",
       "package": "GOVERNANCE-DOC-TRUTH",
@@ -336,33 +349,33 @@
       "id": "HOME-DELIVERY-STATE",
       "title": "Home shows true Delivery state (replace stale planned line)",
       "owner": "CLOUD",
-      "status": "IN_REVIEW",
+      "status": "DONE",
       "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-18 in-session directive (directive-level, not a per-item approval; Home Delivery state + planned scaffolding cleanup)",
       "dependsOn": [],
       "requiresNewAuthority": false,
       "protectedEdit": false,
       "branch": "claude/home-delivery-status",
       "pr": 19,
-      "notes": "Implemented by a cloud implementer; PR open, awaiting independent review/CI (Actions down). Not CLEAN."
+      "notes": "Implemented by a cloud implementer; PR open, awaiting independent review/CI (Actions down). Not CLEAN. [Coordinator reconciliation 2026-10-20 (Founder POST-AUDIT SAFE RESUME): status set from git ancestry of the merged PR head(s) on v7/integration 0d0b2b9 (git merge-base --is-ancestor = yes); DONE means merged, NOT product-verified. PR #19 head d6cc46c merged in wave A d2ba4f0.]"
     },
     {
       "id": "PLANNED-SCAFFOLD-CLEANUP",
       "title": "Remove unused plannedPanel partial scaffolding + orphan locale keys",
       "owner": "CLOUD",
-      "status": "IN_REVIEW",
+      "status": "DONE",
       "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-18 in-session directive (directive-level, not a per-item approval; Home Delivery state + planned scaffolding cleanup)",
       "dependsOn": [],
       "requiresNewAuthority": false,
       "protectedEdit": false,
       "branch": "claude/cleanup-planned-scaffolding",
       "pr": 20,
-      "notes": "Implemented by a cloud implementer; PR open, awaiting independent review/CI (Actions down). Not CLEAN."
+      "notes": "Implemented by a cloud implementer; PR open, awaiting independent review/CI (Actions down). Not CLEAN. [Coordinator reconciliation 2026-10-20 (Founder POST-AUDIT SAFE RESUME): status set from git ancestry of the merged PR head(s) on v7/integration 0d0b2b9 (git merge-base --is-ancestor = yes); DONE means merged, NOT product-verified. PR #20 head 8ab7738 merged in wave B2 052077a.]"
     },
     {
       "id": "L-WORKFORCE",
       "title": "UI-197 cluster->guild taxonomy",
       "owner": "CLOUD",
-      "status": "IN_REVIEW",
+      "status": "DONE",
       "dependsOn": [],
       "requiresNewAuthority": false,
       "protectedEdit": false,
@@ -372,7 +385,7 @@
         "styles.css"
       ],
       "testFile": "tests/v7-ux-wp-agents.test.ts",
-      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN.",
+      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN. [Coordinator reconciliation 2026-10-20 (Founder POST-AUDIT SAFE RESUME): status set from git ancestry of the merged PR head(s) on v7/integration 0d0b2b9 (git merge-base --is-ancestor = yes); DONE means merged, NOT product-verified. PR #22 head 408fad5 (UI-197) merged in wave B2 052077a.]",
       "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-18 in-session directive (directive-level, not a per-item approval; scope-limited; no protected edit, no new backend, no spend, no reseal)",
       "branches": [
         "claude/l-workforce-ui197"
@@ -413,7 +426,7 @@
       "id": "L-ASSURANCE",
       "title": "UI-049 -> UI-050 -> UI-051 (sequential)",
       "owner": "CLOUD",
-      "status": "IN_REVIEW",
+      "status": "DONE",
       "dependsOn": [],
       "requiresNewAuthority": false,
       "protectedEdit": false,
@@ -425,7 +438,7 @@
         "styles.css"
       ],
       "testFile": "tests/v7-ux-wp-qasec.test.ts",
-      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN.",
+      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN. [Coordinator reconciliation 2026-10-20 (Founder POST-AUDIT SAFE RESUME): status set from git ancestry of the merged PR head(s) on v7/integration 0d0b2b9 (git merge-base --is-ancestor = yes); DONE means merged, NOT product-verified. PRs #24 2238a68 (UI-049), #25 adc6da7 (UI-050), #26 0a60c14 (UI-051) merged in wave A d2ba4f0.]",
       "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-18 in-session directive (directive-level, not a per-item approval; scope-limited; no protected edit, no new backend, no spend, no reseal)",
       "branches": [
         "claude/l-assurance-ui049",
@@ -460,7 +473,7 @@
         "styles.css"
       ],
       "testFile": "tests/v7-ux-operations.test.ts",
-      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN.",
+      "notes": "Verified at dispatch: tests registered in config/validation.json; /v1/capabilities|adapters|fabrics = registries (items REGISTERED/NOT_IMPLEMENTED); stop+BLOCK on protected edit. PRs open, awaiting independent review/CI (Actions down). Not CLEAN. [Coordinator reconciliation 2026-10-20 (Founder POST-AUDIT SAFE RESUME): checked against git ancestry of the merged PR head(s) on v7/integration 0d0b2b9 (git merge-base --is-ancestor = yes); DONE means merged, NOT product-verified. UI-070 part: PR #27 head 2de0bb0 merged in wave B2 052077a. UI-078 part: PR #28 head 2f77502 still OPEN with red CI on its stale base; status stays IN_REVIEW until #28 lands.]",
       "authorizedBy": "FOUNDER-DIRECTIVE:2026-10-18 in-session directive (directive-level, not a per-item approval; scope-limited; no protected edit, no new backend, no spend, no reseal)",
       "branches": [
         "claude/l-routes-ui070",
@@ -483,7 +496,8 @@
       "protectedEdit": false,
       "riskLevel": 3,
       "type": "UI",
-      "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY."
+      "notes": "Verified at e12dbdd by read-only audit; see docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md. No authorizedBy: not READY. [DUPLICATE of UI-023 (same feature: read-only mission/run status board in #/work), delivered by PR #56 and recorded once under UI-023. Not separate work; do not count it as pending or completed.]",
+      "duplicateOf": "UI-023"
     },
     {
       "id": "B2-UI-124",
@@ -623,7 +637,7 @@
       "id": "CP-NODE24-ENV",
       "title": ".nvmrc + Node 24 setup script",
       "owner": "CLOUD",
-      "status": "IN_REVIEW",
+      "status": "DONE",
       "dependsOn": [],
       "requiresNewAuthority": false,
       "protectedEdit": false,
@@ -631,7 +645,7 @@
       "prs": [
         21
       ],
-      "notes": "Permanence also requires the environment setup-script setting (owner action)."
+      "notes": "Permanence also requires the environment setup-script setting (owner action). [Coordinator reconciliation 2026-10-20 (Founder POST-AUDIT SAFE RESUME): status set from git ancestry of the merged PR head(s) on v7/integration 0d0b2b9 (git merge-base --is-ancestor = yes); DONE means merged, NOT product-verified. PR #21 head 1c64ce6 merged in wave A d2ba4f0.]"
     },
     {
       "owner": "CLOUD",
@@ -800,7 +814,7 @@
     },
     {
       "owner": "CLOUD",
-      "status": "READY",
+      "status": "DONE",
       "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
       "dependsOn": [],
       "riskLevel": 2,
@@ -819,11 +833,11 @@
         "docs/ux/UI-047-SECURITY-FINDING-DETAIL.md"
       ],
       "testFile": "tests/v7-ux-wp-qasec.test.ts",
-      "notes": "Inventory priority P1. Inventory 2026-10-19 UI-047 (P1, authority_needed=none): the server's SECURITY_REPORT evidence already carries sca.findings[] (package, version, id, severity, fixedVersion, target; up to 50 kept, with a truncated flag) and secrets.gitleaks.items[] (ruleId, file, line, commit; never secret values; up to 100). Both arrive in run.evidence on GET /v1/work-runs, which is already served and allow-listed (main.mjs EXTRA_GET_ROUTES) and already read by views/assurance.js through ctx.api.raw('/v1/work-runs'). assurance-core.js mapRunSecurity currently drops both arrays. Build: (a) Map them into sanitised, capped arrays: severity must be an uppercase code or becomes UNKNOWN; commit must be 40-hex or null; line must be a safe int; malformed entries are dropped and the dropped count is reported; scaTruncated is carried through. (b) Missing or non-array fields become [] with a 'findings not recorded' state, never 'clean'. (c) In #qa-secdetail, add two read-only tables rendered as text only, with per-row data-* attributes and no new ids. Show an honest empty note, a truncation note when truncated=true or the aggregate count is higher than the list length, NOT_EXECUTED/UNKNOWN when there is no scan, and keep the STALE banner when the scan is not bound to the run head. (d) EN/TR keys at parity. Tests in tests/v7-ux-wp-qasec.test.ts (already registered in config/validation.json) cover mapping, caps, truncation, malformed-entry drop, text-only rendering, empty and NOT_EXECUTED states, and a no-new-route assertion. No fix, remediation, resolved or accepted state. SAST stays NOT_AVAILABLE as served. No POST, no new endpoint, no api.js or main.mjs change, no IPC or storage. No product verification claim; no design parity claim (design package is UNKNOWN_SOURCE). Overlap: only the shared en.js/tr.js/styles.css with open PRs and READY tasks. No open PR touches assurance.js, assurance-core.js or the test file. Caveat: backlog L-ASSURANCE still shows IN_REVIEW and lists assurance.js/assurance-core.js, but its PRs #24/#25/#26 are already merged into v7/integration (a5e0a0b/113715f/ae99540) and only the write-back is pending. The supervisor should reconcile L-ASSURANCE to DONE before or when this is claimed. Classification note: the 2026-10-19 inventory row marks UI-047 status=DUPLICATE (\"fold into UI-046\", dependencies UI-046). UI-046 is already integrated (#/posture, UI-037+046 DONE); this task is an enhancement inside the existing #qa-secdetail panel (no new screen or route), closing the row s own missing_functions gap \"no security-finding-specific detail fields\"."
+      "notes": "Inventory priority P1. Inventory 2026-10-19 UI-047 (P1, authority_needed=none): the server's SECURITY_REPORT evidence already carries sca.findings[] (package, version, id, severity, fixedVersion, target; up to 50 kept, with a truncated flag) and secrets.gitleaks.items[] (ruleId, file, line, commit; never secret values; up to 100). Both arrive in run.evidence on GET /v1/work-runs, which is already served and allow-listed (main.mjs EXTRA_GET_ROUTES) and already read by views/assurance.js through ctx.api.raw('/v1/work-runs'). assurance-core.js mapRunSecurity currently drops both arrays. Build: (a) Map them into sanitised, capped arrays: severity must be an uppercase code or becomes UNKNOWN; commit must be 40-hex or null; line must be a safe int; malformed entries are dropped and the dropped count is reported; scaTruncated is carried through. (b) Missing or non-array fields become [] with a 'findings not recorded' state, never 'clean'. (c) In #qa-secdetail, add two read-only tables rendered as text only, with per-row data-* attributes and no new ids. Show an honest empty note, a truncation note when truncated=true or the aggregate count is higher than the list length, NOT_EXECUTED/UNKNOWN when there is no scan, and keep the STALE banner when the scan is not bound to the run head. (d) EN/TR keys at parity. Tests in tests/v7-ux-wp-qasec.test.ts (already registered in config/validation.json) cover mapping, caps, truncation, malformed-entry drop, text-only rendering, empty and NOT_EXECUTED states, and a no-new-route assertion. No fix, remediation, resolved or accepted state. SAST stays NOT_AVAILABLE as served. No POST, no new endpoint, no api.js or main.mjs change, no IPC or storage. No product verification claim; no design parity claim (design package is UNKNOWN_SOURCE). Overlap: only the shared en.js/tr.js/styles.css with open PRs and READY tasks. No open PR touches assurance.js, assurance-core.js or the test file. Caveat: backlog L-ASSURANCE still shows IN_REVIEW and lists assurance.js/assurance-core.js, but its PRs #24/#25/#26 are already merged into v7/integration (a5e0a0b/113715f/ae99540) and only the write-back is pending. The supervisor should reconcile L-ASSURANCE to DONE before or when this is claimed. Classification note: the 2026-10-19 inventory row marks UI-047 status=DUPLICATE (\"fold into UI-046\", dependencies UI-046). UI-046 is already integrated (#/posture, UI-037+046 DONE); this task is an enhancement inside the existing #qa-secdetail panel (no new screen or route), closing the row s own missing_functions gap \"no security-finding-specific detail fields\". Write-back 2026-10-20: merged into v7/integration (branch head b620ffa ancestor of 0d0b2b9)"
     },
     {
       "owner": "CLOUD",
-      "status": "READY",
+      "status": "DONE",
       "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
       "dependsOn": [],
       "riskLevel": 2,
@@ -842,7 +856,7 @@
         "docs/ux/UI-201-LEARNING-EVIDENCE-LIBRARY.md"
       ],
       "testFile": "tests/v7-ux-academy.test.ts",
-      "notes": "Inventory priority P2. Inventory 2026-10-19 UI-201 (authority_needed=none): 'evidence linkage per learning not verified'. GET /v1/academy is already served and allow-listed (ACADEMY_LIST_RE) and already called by api.academy(). It returns full learning records with sourceIds, labRunRefs, negativeEvalRefs, labResult, promotion.reviewerEvidence, supportingSourceIds, reviewerRunRef, drift[] and reuse events. academy-core.js mapLearning reduces all of this to hasReviewerEvidence plus a reuse count. Build: (1) Extend mapLearning with a fail-closed, bounded evidence block: src_ ids regex-checked and capped at 50; refs bounded and capped at 50; labResult {passed boolean|null, testRefCount, recordedAt}; the reviewerEvidence ref must match audit/evidence/skill-academy/<lrn>/REVIEWER.json#sha256=<hex>, otherwise null; short sha256; drift count. Map reuses into bounded items and keep the existing count field. (2) Add an 'Evidence library' panel with one details/summary per learning. Each linked source is cross-referenced to the mapped sources list, showing UNKNOWN when missing. Show lab result, negative evals, reviewer ref and the reuse events that cite the learning. Missing data shows MISSING/UNKNOWN. Render with h()/textContent only. (3) Every linkage carries a NOT_VERIFIED pill. There is no sha256 re-verification and no certification; certified=0, authorityEffect NONE and executable false stay unchanged. (4) EN/TR keys at parity under academy.evidence.*. (5) Tests in tests/v7-ux-academy.test.ts (validation.json step tests-8) cover hostile/malformed mapping, empty, list and failure rendering, the UNKNOWN cross-ref and the NOT_VERIFIED presence. The existing assertion that the view calls only ['/v1/academy'] must stay green, so do not call /v1/academy/:id. No POST, no new endpoint or allow-list entry, no IPC or storage, no design parity claim (UI-201 PNG is UNKNOWN_SOURCE). Overlap: only the shared en.js/tr.js/styles.css with open PRs and READY tasks (including UI-074). No open PR touches the academy view, core or test (#38 merged 99cf72a). Independent of UI-047: no shared view or core file."
+      "notes": "Inventory priority P2. Inventory 2026-10-19 UI-201 (authority_needed=none): 'evidence linkage per learning not verified'. GET /v1/academy is already served and allow-listed (ACADEMY_LIST_RE) and already called by api.academy(). It returns full learning records with sourceIds, labRunRefs, negativeEvalRefs, labResult, promotion.reviewerEvidence, supportingSourceIds, reviewerRunRef, drift[] and reuse events. academy-core.js mapLearning reduces all of this to hasReviewerEvidence plus a reuse count. Build: (1) Extend mapLearning with a fail-closed, bounded evidence block: src_ ids regex-checked and capped at 50; refs bounded and capped at 50; labResult {passed boolean|null, testRefCount, recordedAt}; the reviewerEvidence ref must match audit/evidence/skill-academy/<lrn>/REVIEWER.json#sha256=<hex>, otherwise null; short sha256; drift count. Map reuses into bounded items and keep the existing count field. (2) Add an 'Evidence library' panel with one details/summary per learning. Each linked source is cross-referenced to the mapped sources list, showing UNKNOWN when missing. Show lab result, negative evals, reviewer ref and the reuse events that cite the learning. Missing data shows MISSING/UNKNOWN. Render with h()/textContent only. (3) Every linkage carries a NOT_VERIFIED pill. There is no sha256 re-verification and no certification; certified=0, authorityEffect NONE and executable false stay unchanged. (4) EN/TR keys at parity under academy.evidence.*. (5) Tests in tests/v7-ux-academy.test.ts (validation.json step tests-8) cover hostile/malformed mapping, empty, list and failure rendering, the UNKNOWN cross-ref and the NOT_VERIFIED presence. The existing assertion that the view calls only ['/v1/academy'] must stay green, so do not call /v1/academy/:id. No POST, no new endpoint or allow-list entry, no IPC or storage, no design parity claim (UI-201 PNG is UNKNOWN_SOURCE). Overlap: only the shared en.js/tr.js/styles.css with open PRs and READY tasks (including UI-074). No open PR touches the academy view, core or test (#38 merged 99cf72a). Independent of UI-047: no shared view or core file. Write-back 2026-10-20: merged into v7/integration (branch head efc04b3 ancestor of 0d0b2b9)"
     }
   ],
   "relations": [
