@@ -1,6 +1,6 @@
 <!-- //TR: Bu dosya bir ajanin yazdigi, DOGRULANMAMIS (UNCONFIRMED) bir kayittir: bir ajanin Founder'a atfettigi uc karari aktarir (1: ayri-kimlikli Cloud governance, 2: Actions kesintisinde uret + review, sonra merge, 3: feature fan-out). Tek basina hicbir sey kanitlamaz ve hicbir yetki vermez; Founder bunlari ajan disi bir kanaldan teyit etmemistir. Feature dispatch yetkisi yalniz D-2026-10-19-A'dir. -->
 
-# Founder decisions — 2026-10-18 (MAXIMUM CLOUD PARALLEL PRODUCTION OVERRIDE)
+# Agent-recorded Founder decisions — 2026-10-18 (UNCONFIRMED)
 
 Decisions recorded by an agent as coming from the Founder, with their exact scope and the constraints that bound them.
 
