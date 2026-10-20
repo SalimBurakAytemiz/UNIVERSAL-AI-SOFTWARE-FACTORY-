@@ -1,7 +1,11 @@
 // //TR: Bu modül Operasyon ve Kurtarma görünümünün saf (DOM'suz) çekirdeğidir (FA-V2-PRODUCT, UI-071): yalnız üç salt-okunur ve zaten izinli GET (GET /v1/control/status, GET /v1/runs, GET /v1/founder-attention; üçü de sorgusuz sabit yoldur) yanıtını güvenli, sınırlı alanlara eşler ve bunlardan bir kurtarma kontrol listesi türetir. HİÇBİR veri uydurulmaz: kimlik/enum/biçim/zaman damgası bozuksa ya da iki alan birbiriyle çelişiyorsa okuma KISMEN değil tümden ERROR olur (fail-closed), eksik alan tahmin edilmez, durumlar kayıttan AYNEN taşınır (yükseltme yok). "Takıldı/durdu" (STALLED) YALNIZ gerçek kayıtlı zaman damgasından (koşu başlangıcı, yeniden deneme zamanı, checkpoint güncelleme) ve açıkça belgelenmiş görüntü eşiklerinden (kontrol düzleminde SLA/zaman aşımı kaydı YOKTUR; eşikler yalnız görüntü sınıflamasıdır) türetilir; zaman damgası yoksa/gelecekteyse sınıflama yapılmaz (UNDETERMINED). Okunamayan kaynağın sayıları null'dır (0 değil). Genel durum (NO_ISSUES_RECORDED) yalnız üç kaynağın HEPSİ okunabilir ve doğrulanmışsa, global stop aktif değilse, Work OS günlüğü OK ise, zamanlayıcı doğrulanmışsa, en az bir koşu kayıtlıysa ve kayıtlı hiçbir sorun yoksa verilir; aksi halde ASLA. Mevcut Stop/Resume/Retry kontrolleri BURADA yeniden uygulanmaz ve tetiklenmez; yalnız dürüst durumları gösterilir. Bu modül ürün doğrulamasını hesaplamaz ve ilgili sabit değer bu dosyada hiç yer almaz.
 import {ATTENTION_PATH,mapQueueAttention,waitSince,waitParts} from "./queue-core.js";
 
-export {ATTENTION_PATH,waitSince,waitParts};
+import {
+  RETRY_OVERDUE_AFTER_MS,validateRetryRecord,classifyRetryPhase
+} from "./retry-core.js";
+
+export {ATTENTION_PATH,waitSince,waitParts,RETRY_OVERDUE_AFTER_MS,validateRetryRecord,classifyRetryPhase};
 export const CONTROL_PATH="/v1/control/status";
 export const RUNS_PATH="/v1/runs";
 /** Görünümün okuyabildiği TÜM kaynaklar (sıra sabit); üçü de salt-okunur ve önceden izinlidir, yeni uç nokta yoktur. */
@@ -18,7 +22,6 @@ export const GROUP_OF_STATUS=Object.freeze({FATAL:"ATTENTION",FOUNDER_ATTENTION_
 export const LIVENESS=Object.freeze(["FINISHED","IN_PROGRESS","STALLED","UNDETERMINED"]);
 /** GÖRÜNTÜ eşikleri (kayıtlı SLA/zaman aşımı DEĞİL): özeti olmayan bir koşu başlangıcından bu yana bu süreyi aştıysa STALLED; yeniden deneme zamanı bu tolerans kadar geçtiyse ve kayıt hâlâ duruyorsa OVERDUE; checkpoint bu süredir temizlenmediyse bayattır. */
 export const RUN_STALL_AFTER_MS=6*3600000;
-export const RETRY_OVERDUE_AFTER_MS=10*60000;
 export const CHECKPOINT_STALE_AFTER_MS=RUN_STALL_AFTER_MS;
 /** /v1/runs sunucuda en yeni 100 koşuyla sınırlıdır; tam bu sayıda satır gelirse liste kısaltılmış olabilir. */
 export const SERVER_RUNS_CAP=100;
@@ -116,20 +119,6 @@ export function mapOperationsRuns(raw){
 }
 
 // ---------- GET /v1/founder-attention ----------
-/** UI-194: yeniden deneme kaydının (SUPERVISOR_RETRY.json) doğrulaması; Operasyon ve Control Tower AYNI işlevi kullanır. Geçersizse null. */
-export function validateRetryRecord(r){
-  if(!isObj(r)||iso(r.retryAt)===null)return null;
-  const pk=opt(r.packageId,v=>matches(PKG_RE,v)),reason=optText(r.reason,300),secs=opt(r.retryAfterSeconds,v=>Number.isSafeInteger(v)&&v>=0),upd=optIso(r.updatedAt);
-  const phases=opt(r.phaseIds,v=>Array.isArray(v)&&v.length<=200&&v.every(n=>Number.isSafeInteger(n)&&n>=0));
-  if([pk,reason,secs,upd,phases].includes(undefined))return null;
-  return {packageId:pk,phaseIds:phases??[],reason,retryAfterSeconds:secs,retryAt:r.retryAt,updatedAt:upd};
-}
-/** UI-194: doğrulanmış kayıt için WAITING/DUE/OVERDUE/UNDETERMINED sınıflaması; kalan/geçen süre yalnız retryAt ile nowMs farkından gelir. */
-export function classifyRetryPhase(retry,nowMs){
-  const t=Date.parse(retry.retryAt),finite=Number.isFinite(nowMs)&&!Number.isNaN(t);
-  const phase=!finite?"UNDETERMINED":t>nowMs?"WAITING":nowMs-t<=RETRY_OVERDUE_AFTER_MS?"DUE":"OVERDUE";
-  return {...retry,phase,remainingMs:finite&&t>nowMs?t-nowMs:null,overdueMs:finite&&t<=nowMs?nowMs-t:null};
-}
 /**
  * GET /v1/founder-attention -> {state:"VERIFIED",attention:{total,items,schedulerVerification,retryableKinds,retry,checkpoint}} | {state:"UNAVAILABLE",attention:null,schedulerRejected:true} | {state:"ERROR",attention:null}.
  * Engelli paket satırları kuyruk ekranıyla AYNI katı eşleyiciden geçer (tek sahiplik); ek olarak retry (yeniden deneme kaydı) ve checkpoint ayrı ayrı doğrulanır. Tek bozuk öğe TÜM okumayı ERROR yapar.
