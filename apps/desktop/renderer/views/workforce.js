@@ -158,8 +158,29 @@ const defList=(ctx,titleKey,values)=>{
     values.length?h(doc,"ul",{class:"wf-def-list"},values.map(v=>h(doc,"li",{text:v}))):h(doc,"p",{class:"note",text:ctx.t("workforce.cat.detail.empty")}));
 };
 
+// //TR: UI-133 salt-okunur ajan kimlik kartı: yalnız VERIFIED rol ayrıntısı (GET /v1/roles/:roleId) + GET /v1/agents kayıt sayılarından; "sertifikalı" yalnız proficiencyStatus=CERTIFIED + certifiedScope + değerlendirme kanıt izi hepsi varsa gösterilir, kanıt izi yoksa BİLİNMİYOR; rol tanımı canlı ajan değildir, yeni uç nokta/yazma yoktur.
+function identityCard(ctx,r,agents){
+  const doc=ctx.doc,specs=r.evaluationSpecs,hasTrail=specs.length>0;
+  const certified=r.proficiencyStatus==="CERTIFIED"&&!!r.certifiedScope&&hasTrail;
+  const unk=()=>h(doc,"span",{class:"wf-idcard-unknown",dataset:{identityUnknown:"1"},text:ctx.t("workforce.idcard.unknown")});
+  const row=(labelKey,body)=>h(doc,"div",{},h(doc,"dt",{text:ctx.t(labelKey)}),h(doc,"dd",{},body));
+  const reg=agents&&agents.state==="VERIFIED"&&agents.registeredRoles!==null;
+  return h(doc,"section",{class:"wf-idcard",dataset:{identityCardFor:r.roleId},"aria-label":ctx.t("workforce.idcard.title")},
+    h(doc,"h4",{class:"wf-def-title",text:ctx.t("workforce.idcard.title")}),
+    h(doc,"p",{class:"note",role:"note",text:ctx.t("workforce.idcard.definitionOnly")}),
+    h(doc,"dl",{class:"kv wf-idcard-kv"},
+      row("workforce.idcard.role",h(doc,"span",{class:"mono",text:r.roleId})),
+      row("workforce.idcard.runtime",r.runtimeStatus&&r.runtimeStatus!=="UNKNOWN"?statusChip(ctx,r.runtimeStatus):unk()),
+      row("workforce.idcard.proficiency",statusChip(ctx,r.proficiencyStatus)),
+      row("workforce.idcard.certification",certified?h(doc,"span",{dataset:{identityCertified:"1"},text:ctx.t("workforce.idcard.certified")}):h(doc,"span",{dataset:{identityCertified:"0"},text:ctx.t("workforce.idcard.notCertified")})),
+      row("workforce.idcard.scope",r.certifiedScope?h(doc,"span",{text:r.certifiedScope}):unk()),
+      row("workforce.idcard.evidence",hasTrail?h(doc,"span",{dataset:{identityEvidence:String(specs.length)},text:ctx.t("workforce.idcard.evidenceCount",{n:formatCount(specs.length)})}):h(doc,"span",{class:"wf-idcard-unknown",dataset:{identityEvidence:"UNKNOWN"},text:ctx.t("workforce.idcard.evidenceUnknown")})),
+      row("workforce.idcard.registry",reg?h(doc,"span",{text:ctx.t("workforce.idcard.registryCounts",{r:formatCount(agents.registeredRoles),k:agents.certified===null?MISSING:formatCount(agents.certified)})}):unk())),
+    h(doc,"p",{class:"note mono",text:ctx.t("workforce.idcard.source")}));
+}
+
 // //TR: Rol tanımı ayrıntısı: GET /v1/roles/:roleId'den sorumluluklar/uzmanlık/yasak eylemler/değerlendirme şartnameleri + dürüst runtime/yeterlilik durumu; hiçbir durum yükseltilmez, "canlı ajan/sertifikalı işçi değildir" notu açıktır.
-function detailPanel(ctx,detail){
+function detailPanel(ctx,detail,agents){
   const doc=ctx.doc;
   if(!catState.roleId)return panel(ctx,{titleKey:"workforce.cat.detail.title",id:"wf-detail",className:"wf-detail"},
     h(doc,"h3",{id:"wf-detail-h",tabindex:"-1",class:"sr-only",text:ctx.t("workforce.cat.detail.title")}),emptyNote(ctx,"workforce.cat.detail.none"));
@@ -176,6 +197,7 @@ function detailPanel(ctx,detail){
       h(doc,"button",{type:"button",class:"btn btn-small",id:"wf-detail-close",dataset:{focusKey:"wf-detail-close"},text:ctx.t("workforce.cat.detail.close"),
         on:{click:()=>{const id=catState.roleId;catState.roleId=null;if(typeof ctx.rerender==="function")ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys:[`id:wf-role-${id}`,"id:wf-catalog-t"]})}}})),
     h(doc,"p",{class:"note",dataset:{notRuntime:"1"},role:"note",text:ctx.t("workforce.cat.detail.notRuntime")}),
+    identityCard(ctx,r,agents),
     h(doc,"dl",{class:"kv wf-detail-kv"},
       kv("workforce.cat.detail.guild",g?`${g.name??g.guildId} (${g.guildId})`:r.guildId),
       kv("workforce.cat.detail.cluster",c?`${c.name??c.clusterId} (${c.clusterId})`:r.clusterId),
@@ -215,11 +237,11 @@ function taxonomySection(ctx,catalog){
     h(doc,"p",{class:"note mono",text:ctx.t("workforce.cat.source")}));
 }
 
-function catalogSection(ctx,catalog,detail){
+function catalogSection(ctx,catalog,detail,agents){
   const doc=ctx.doc;
   const browse=catalog.state==="VERIFIED"?panel(ctx,{titleKey:"workforce.cat.browseTitle",id:"wf-browse",className:"wf-browse"},
     catalog.items.length?[filterBar(ctx,catalog.items),...[roleList(ctx,catalog.items)].flat()]:emptyNote(ctx,"workforce.cat.empty")):null;
-  return [overview(ctx,catalog),taxonomySection(ctx,catalog),browse,detailPanel(ctx,detail)].filter(Boolean);
+  return [overview(ctx,catalog),taxonomySection(ctx,catalog),browse,detailPanel(ctx,detail,agents)].filter(Boolean);
 }
 
 export async function render(ctx,route){
@@ -243,5 +265,5 @@ export async function render(ctx,route){
         h(doc,"p",{class:"kpi-value",text:formatCount(w.activeWorkerRuns)}),h(doc,"p",{class:"duo-sub",text:ctx.t("workforce.activeNote")}),chip(ctx,activeBlock))),
     panel(ctx,{titleKey:"workforce.fleet.title",id:"wf-fleet"},fleetBody(ctx,runs)),
     panel(ctx,{titleKey:"workforce.live.title",id:"wf-live"},liveRunsBody(ctx,runs)),
-    ...catalogSection(ctx,catalog,detail));
+    ...catalogSection(ctx,catalog,detail,agents));
 }

@@ -709,3 +709,64 @@ describe("UI-032 worker detail panel from the fleet grid (run-level only, UNKNOW
     expect(fn).not.toMatch(/innerHTML/);
   });
 });
+
+describe("UI-133 agent identity card on role detail (UNKNOWN without evidence, never certified by default)", () => {
+  const open = async (detailOver?: (p: string) => any, agents: any = AGENTS) => {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    const doc = new D(), store = st.createStore(null), id = REG[0].roleId;
+    const bridge = {apiGet: async (p: string) => {
+      if (p === "/v1/cockpit") return COCKPIT;
+      if (p === "/v1/agents") { if (agents === "404") throw new Error(`${p}: HTTP 404`); return agents; }
+      if (p === "/v1/work-runs") return {workRuns: []};
+      if (p.startsWith("/v1/roles/")) { const d = detailOver ? detailOver(p) : roleDetail(p.slice("/v1/roles/".length)); if (!d) throw new Error(`${p}: HTTP 404`); return d; }
+      if (p.startsWith("/v1/roles")) return rolesPage(p);
+      throw new Error(`${p}: HTTP 404`);
+    }};
+    const t = (k: string, v?: any) => i18n.translate("en", k, v);
+    const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang: "en", t}, t, navigate: () => {}, rerender: () => {}, settleFocus: () => {}, principal: "FOUNDER_LOCAL"};
+    const view = await load("views", "workforce.js"); view.resetWorkforceView();
+    const first = (await view.render(ctx, ROUTE)) as N;
+    byData(first, "roleBtn", id)[0].fire("click");
+    return {node: (await view.render(ctx, ROUTE)) as N, id, view};
+  };
+  it("shows the card with UNKNOWN evidence and not-certified for a NOT_EVALUATED role", async () => {
+    const {node, id, view} = await open();
+    const card = byData(node, "identityCardFor", id);
+    expect(card.length).toBe(1);
+    expect(byData(card[0], "identityCertified", "0").length).toBe(1);
+    expect(byData(card[0], "identityCertified", "1").length).toBe(0);
+    expect(text(card[0])).toContain("not a live agent");
+    view.resetWorkforceView();
+  });
+  it("a CERTIFIED proficiency without a scope and evidence trail is still not shown as certified", async () => {
+    const {node, id, view} = await open(p => { const d = JSON.parse(JSON.stringify(roleDetail(p.slice("/v1/roles/".length)))); d.role.proficiencyStatus = "CERTIFIED"; d.role.certifiedScope = null; d.role.evaluationSpecs = []; return d; });
+    const card = byData(node, "identityCardFor", id)[0];
+    expect(byData(card, "identityCertified", "1").length).toBe(0);
+    expect(byData(card, "identityEvidence", "UNKNOWN").length).toBe(1);
+    expect(byData(card, "identityUnknown", "1").length).toBeGreaterThanOrEqual(1);
+    view.resetWorkforceView();
+  });
+  it("certified shows only with CERTIFIED + scope + evidence trail from a verified read", async () => {
+    const {node, id, view} = await open(p => { const d = JSON.parse(JSON.stringify(roleDetail(p.slice("/v1/roles/".length)))); d.role.proficiencyStatus = "CERTIFIED"; d.role.certifiedScope = "SCOPE.X"; d.role.evaluationSpecs = [{evaluationId: "EV.1", kind: "K", status: "PASSED"}]; return d; });
+    const card = byData(node, "identityCardFor", id)[0];
+    expect(byData(card, "identityCertified", "1").length).toBe(1);
+    expect(byData(card, "identityEvidence", "1").length).toBe(1);
+    view.resetWorkforceView();
+  });
+  it("a failed /v1/agents read shows registry as UNKNOWN, never a count", async () => {
+    const {node, id, view} = await open(undefined, "404");
+    const card = byData(node, "identityCardFor", id)[0];
+    expect(text(card)).not.toContain("registered roles");
+    view.resetWorkforceView();
+  });
+  it("workforce.idcard.* keys are identical in EN and TR with the same placeholders and feature-unique data attributes", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const keys = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("workforce.idcard.")).sort();
+    expect(keys(tr)).toEqual(keys(en)); expect(keys(en).length).toBe(16);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
+    for (const k of keys(en)) { expect(ph(tr[k]), k).toEqual(ph(en[k])); expect(tr[k]).toBeTruthy(); }
+    const src = fs.readFileSync(path.join(rend, "views", "workforce.js"), "utf8");
+    const fn = src.slice(src.indexOf("function identityCard"), src.indexOf("// //TR: Rol tanımı ayrıntısı"));
+    expect(fn).not.toMatch(/innerHTML|dataset:\{(runId|fleetRunId)/);
+  });
+});
