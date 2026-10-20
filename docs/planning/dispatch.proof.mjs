@@ -733,6 +733,98 @@ const writeHook = (bare, body) => { fs.mkdirSync(path.join(bare, "hooks"), {recu
     const cap = dispatchSync(e.work, ["--claim", "--backlog", e.bl, "--no-lease"], {UASCO_DISPATCH_HISTORY_WALK: "5"});
     check("N3 (+): a truncated history walk (bound lowered to 5 commits) without a hit fails closed: CLAIM_HISTORY_CHECK_FAILED, nothing claimed", cap.j.outcome === "NO_ACTION" && cap.j.reasons.includes("Q-1:CLAIM_HISTORY_CHECK_FAILED"), cap.raw.slice(0, 400));
   }
+  // ---- CP-DISPATCH-HARDENING-2 ----
+  // A claim commit in the exact format the dispatcher writes, and a tree-changing commit with a chosen subject.
+  const realClaimC = (e, parent, id, ts) => G(e.work, ["commit-tree", G(e.work, ["rev-parse", `${parent}^{tree}`]), "-p", parent, "-m", `dispatch-claim: ${id} owner=cloud-x at=2026-01-01T00:00:00.000Z nonce=${globalThis.crypto.randomUUID()}`], dt(ts));
+  const workS = (e, parent, ts, subj) => G(e.work, ["commit-tree", G(e.work, ["rev-parse", `${workC(e, parent, ts, `s${seq}`)}^{tree}`]), "-p", parent, "-m", subj], dt(ts));
+  // R (regression): dates forged to @0/@1, directly or through an imitation "dispatch-claim:" work commit, stay UNKNOWN and keep their slot.
+  {
+    const ids = ["R-1", "R-2", "R-3", "R-4", "receivepack-1", "uploadpack-1"];
+    const e = mkEnv([...ids.map(i => T(i)), T("R-FREE")]); const b = baseOf(e);
+    push(e, workS(e, realClaimC(e, b.sha, "R-1", now()), "@1", "dispatch-claim: wip"), "claude/r-1"); // DBYP2
+    push(e, workC(e, workS(e, realClaimC(e, b.sha, "R-2", now()), "@1", "dispatch-claim: wip"), FRESH, "r2"), "claude/r-2"); // DBYP (intermediate @1)
+    push(e, realClaimC(e, b.sha, "R-3", "@0"), "claude/r-3");
+    push(e, realClaimC(e, b.sha, "R-4", "@1"), "claude/r-4");
+    push(e, realClaimC(e, b.sha, "receivepack-1", "@1"), "claude/receivepack-1");
+    push(e, realClaimC(e, b.sha, "uploadpack-1", "@0"), "claude/uploadpack-1");
+    const r = dispatchSync(e.work, ["--backlog", e.bl]), st = states(r);
+    check("H2-R (+): DBYP2, DBYP, pure claims @0/@1 and receivepack/uploadpack-named refs => all UNKNOWN CLAIM_AGE_OUT_OF_RANGE, counted active (active=6)", ids.every(i => st[i]?.state === "UNKNOWN" && st[i].why === "CLAIM_AGE_OUT_OF_RANGE") && r.j.active === 6, JSON.stringify(r.j.reclaimable));
+    const cap = dispatchSync(e.work, ["--claim", "--max-active", "6", "--backlog", e.bl, "--no-lease"]);
+    check("H2-R (+): --max-active 6 with those six => CAPACITY_FULL:6/6, no ref created", cap.j.outcome === "NO_ACTION" && cap.j.reasons.includes("CAPACITY_FULL:6/6") && heads(e.bare).length === 6, cap.raw.slice(0, 300));
+    const ok = dispatchSync(e.work, ["--claim", "--max-active", "7", "--backlog", e.bl, "--no-lease"]);
+    check("H2-R (-): one slot more (--max-active 7) => R-FREE is claimed", ok.j.outcome === "START" && ok.j.taskId === "R-FREE", ok.raw.slice(0, 300));
+  }
+  // F2: only PURE claim rows (exact claim subject for this id, one parent, empty tree change) date the claim.
+  {
+    const e = mkEnv([T("F-1"), T("F-2"), T("F-3"), T("F-4")]); const b = baseOf(e); const twoDays = now() - 2 * 86400;
+    push(e, workS(e, realClaimC(e, b.sha, "F-1", FRESH), twoDays, `dispatch-claim: F-1 owner=cloud-x at=2026-01-01T00:00:00.000Z nonce=${globalThis.crypto.randomUUID()}`), "claude/f-1"); // head copies the exact claim subject but changes the tree
+    push(e, workC(e, workS(e, realClaimC(e, b.sha, "F-2", FRESH), twoDays, "dispatch-claim: wip"), twoDays, "f2"), "claude/f-2"); // imitation in the middle
+    push(e, workC(e, realClaimC(e, b.sha, "F-3", OLD), OLD, "f3"), "claude/f-3"); // genuine old claim + old work
+    const r = dispatchSync(e.work, ["--backlog", e.bl]), st = states(r);
+    check("H2-F2 (+): a work head (or intermediate) whose subject imitates 'dispatch-claim:' cannot lower the claim time => UNKNOWN CLAIM_AGE_OUT_OF_RANGE (not ABANDONED_WITH_WORK)", ["F-1", "F-2"].every(i => st[i]?.state === "UNKNOWN" && st[i].why === "CLAIM_AGE_OUT_OF_RANGE"), JSON.stringify([st["F-1"], st["F-2"]]));
+    check("H2-F2 (-): a genuine old claim with consistent old work still ages to ABANDONED_WITH_WORK", st["F-3"]?.state === "ABANDONED_WITH_WORK", JSON.stringify(st["F-3"]));
+    const cap = dispatchSync(e.work, ["--claim", "--max-active", "2", "--backlog", e.bl, "--no-lease"]);
+    check("H2-F2 (+): the two imitation branches keep their slots: --max-active 2 => CAPACITY_FULL:2/2, F-4 not claimed", cap.j.reasons.includes("CAPACITY_FULL:2/2") && !heads(e.bare).includes("refs/heads/claude/f-4"), cap.raw.slice(0, 300));
+  }
+  // F1: the whole lease step has one time budget; a stalled remote during the lease read retries fails closed fast.
+  {
+    const e = mkEnv([T("L-1")]);
+    const blob = spawnSync("git", ["hash-object", "-w", "--stdin"], {cwd: e.bare, input: "{}", encoding: "utf8"}).stdout.trim();
+    G(e.bare, ["update-ref", "refs/uasco/claims/L-1", blob]); // the lease ref exists, so the store goes to its read-retry loop
+    const w = path.join(e.dir, "up.sh"), cnt = `${w}.n`; // first upload-pack (the heads listing) works, every later one stalls
+    fs.writeFileSync(w, `#!/bin/sh\nn=$(cat "${cnt}" 2>/dev/null || echo 0)\necho $((n+1)) > "${cnt}"\n[ "$n" -ge 1 ] && exec sleep 600\nexec git upload-pack "$@"\n`, {mode: 0o755});
+    G(e.work, ["config", "remote.origin.uploadpack", w]);
+    const t = Date.now();
+    const r = dispatchSync(e.work, ["--claim", "--backlog", e.bl], {UASCO_DISPATCH_LEASE_BUDGET_MS: "2000"}); // per-call fetch timeout stays 120 s
+    check("H2-F1 (+): stalled lease reads (40 retries x 120 s before) are cut by the lease budget: RECOVERABLE_FAILURE L-1:LEASE_BUDGET_EXCEEDED in < 30 s, no claim branch", r.code === 3 && r.j.reasons.includes("L-1:LEASE_BUDGET_EXCEEDED") && Date.now() - t < 30000 && heads(e.bare).length === 0, `${Date.now() - t}ms ${r.raw.slice(0, 300)}`);
+    const e2 = mkEnv([T("L-2")]);
+    const ok = dispatchSync(e2.work, ["--claim", "--backlog", e2.bl], {UASCO_DISPATCH_LEASE_BUDGET_MS: "20000"});
+    check("H2-F1 (-): a healthy remote completes the lease step inside the budget (lease GRANTED, START)", ok.j.outcome === "START" && ok.j.lease?.status === "GRANTED", ok.raw.slice(0, 300));
+  }
+  // N5: one wall-clock deadline over every git call of a run.
+  {
+    const e = mkEnv([T("DL-1")]);
+    fs.writeFileSync(path.join(e.bare, "hooks/pre-receive"), "#!/bin/sh\nexec sleep 600\n", {mode: 0o755});
+    let t = Date.now();
+    const r = dispatchSync(e.work, ["--claim", "--no-lease", "--backlog", e.bl], {UASCO_DISPATCH_RUN_DEADLINE_MS: "4000"}); // per-call timeout stays 120 s
+    check("H2-N5 (+): a push stalled past the run deadline => RECOVERABLE_FAILURE RUN_DEADLINE_EXCEEDED in < 30 s, no task offered, no claim ref", r.code === 3 && r.j.reasons.includes("RUN_DEADLINE_EXCEEDED") && r.j.taskId === null && Date.now() - t < 30000 && heads(e.bare).length === 0, `${Date.now() - t}ms ${r.raw.slice(0, 300)}`);
+    t = Date.now();
+    const d = dispatchSync(e.work, ["--backlog", e.bl], {UASCO_DISPATCH_RUN_DEADLINE_MS: "1"});
+    check("H2-N5 (+): a dry run past its deadline does not offer a task: RECOVERABLE_FAILURE RUN_DEADLINE_EXCEEDED", d.code === 3 && d.j.outcome === "RECOVERABLE_FAILURE" && d.j.reasons.includes("RUN_DEADLINE_EXCEEDED") && d.j.taskId === null, d.raw.slice(0, 300));
+    const e2 = mkEnv([T("DL-2")]);
+    const ok = dispatchSync(e2.work, ["--claim", "--backlog", e2.bl], {UASCO_DISPATCH_RUN_DEADLINE_MS: "60000"});
+    check("H2-N5 (-): a healthy run inside the deadline claims normally, no deadline reason", ok.j.outcome === "START" && ok.j.taskId === "DL-2" && !ok.j.reasons.includes("RUN_DEADLINE_EXCEEDED"), ok.raw.slice(0, 300));
+  }
+  // N6: no 100k cliff; the base history is read once per run and reused for every task.
+  {
+    const ids = Array.from({length: 40}, (_, i) => `BH-${i + 1}`);
+    const e = mkEnv(ids.map(i => T(i)));
+    G(e.work, ["reset", "-q", "--hard", fastChain(e, "PAD", 100050, FRESH, "pad")]);
+    for (const i of ids.slice(0, 39)) mergeClaim(e, i);
+    const realGit = spawnSync("sh", ["-c", "command -v git"], {encoding: "utf8"}).stdout.trim();
+    const shim = path.join(e.dir, "shim"), log = path.join(e.dir, "git.log"); fs.mkdirSync(shim);
+    fs.writeFileSync(path.join(shim, "git"), `#!/bin/sh\necho "$*" >> "${log}"\nexec "${realGit}" "$@"\n`, {mode: 0o755});
+    const t = Date.now();
+    const r = dispatchSync(e.work, ["--claim", "--backlog", e.bl, "--no-lease"], {PATH: `${shim}${path.delimiter}${process.env.PATH}`});
+    const ms = Date.now() - t, walks = fs.readFileSync(log, "utf8").split("\n").filter(l => l.startsWith("log ") && l.includes("--grep=")).length;
+    check("H2-N6 (+): > 100000 base commits no longer brick dispatch: 39 claims found in history, BH-40 claimed", r.j.outcome === "START" && r.j.taskId === "BH-40" && ids.slice(0, 39).every(i => r.j.reasons.includes(`${i}:CLAIM_IN_BASE_HISTORY`)), r.raw.slice(0, 300));
+    check(`H2-N6 (+): the history is walked once for all 40 tasks (walks=${walks}, ${ms} ms)`, walks === 1, String(walks));
+    const lo = dispatchSync(e.work, ["--backlog", e.bl], {UASCO_DISPATCH_HISTORY_WALK: "1000"});
+    check("H2-N6 (+): above the commit bound (lowered to 1000) the check fails closed: CLAIM_HISTORY_CHECK_FAILED, no task offered", lo.j.outcome === "NO_ACTION" && ids.slice(0, 39).every(i => lo.j.reasons.includes(`${i}:CLAIM_HISTORY_CHECK_FAILED`)), lo.raw.slice(0, 300));
+  }
+  // N7: output larger than the buffer is a fail-closed failure, never a crash and never "no data".
+  {
+    const e = mkEnv([T("OV-1")]);
+    const r = dispatchSync(e.work, ["--claim", "--backlog", e.bl, "--no-lease"], {UASCO_DISPATCH_MAX_BUFFER: "32"});
+    check("H2-N7 (+): overflowing ls-remote => RECOVERABLE_FAILURE REMOTE_UNREACHABLE + GIT_OUTPUT_OVERFLOW, no claim, no crash", r.code === 3 && r.j.reasons.includes("REMOTE_UNREACHABLE") && r.j.reasons.includes("GIT_OUTPUT_OVERFLOW") && !r.raw.includes("INTERNAL_ERROR") && heads(e.bare).length === 0, r.raw.slice(0, 300));
+    const e2 = mkEnv([T("OV-2")]);
+    for (let i = 0; i < 150; i++) G(e2.work, ["commit", "-q", "--allow-empty", "-m", `dispatch-claim: filler-${i} ${"y".repeat(60)}`]);
+    G(e2.work, ["push", "-q", "origin", "v7/integration"]);
+    const h = dispatchSync(e2.work, ["--claim", "--backlog", e2.bl, "--no-lease"], {UASCO_DISPATCH_MAX_BUFFER: "4096"});
+    check("H2-N7 (+): overflowing history output => OV-2:CLAIM_HISTORY_CHECK_FAILED + GIT_OUTPUT_OVERFLOW, nothing claimed", h.j.outcome === "NO_ACTION" && h.j.reasons.includes("OV-2:CLAIM_HISTORY_CHECK_FAILED") && h.j.reasons.includes("GIT_OUTPUT_OVERFLOW") && heads(e2.bare).length === 0, h.raw.slice(0, 300));
+    const ok = dispatchSync(e2.work, ["--claim", "--backlog", e2.bl, "--no-lease"]);
+    check("H2-N7 (-): with the default buffer the same history is read and OV-2 is claimed", ok.j.outcome === "START" && ok.j.taskId === "OV-2" && !ok.j.reasons.includes("GIT_OUTPUT_OVERFLOW"), ok.raw.slice(0, 300));
+  }
 }
 // 13. Output sinks: stdout holds only fixed codes / validated tokens. Token-like fixtures are built at runtime (fake values; the repo secret scanner stays unchanged).
 const FK = s => "gh" + "p_" + s; // fake token-shaped marker assembled at runtime. NB: "_" is a legal id/ref/token character, so id/dep/branch fixtures add a space to be genuinely invalid.
