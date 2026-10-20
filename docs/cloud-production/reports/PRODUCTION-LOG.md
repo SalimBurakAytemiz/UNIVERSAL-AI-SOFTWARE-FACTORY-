@@ -863,3 +863,23 @@ No CLAIMED_AWAITING_BUILDER, RECLAIMABLE_AWAITING_BUILDER, MERGED_AWAITING_WRITE
 **Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) MOB-11+ need Founder authority. (3) create_session/list_sessions unavailable.
 
 Note: written as one local single-file commit with a plain push (as in #39-#47), since the log is too large to re-transmit through create_or_update_file without transcription risk.
+
+## Heartbeat #49 (2026-10-20 14:16Z)
+
+**Queue:** read from claude/cloud-production-engine@ed5cfb9; parsed OK. READY tasks: 0 (CP-QUEUE/CP-REPORT/CP-CI PENDING_REVIEW; CP-DISPATCH/CP-RECOVERY/CP-GOV IN_PROGRESS; FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED BLOCKED). Step 2: nothing to dispatch; create_session/list_sessions unavailable in this fire.
+
+**Step 2b (canonical backlog):** v7/integration @ 7ee55d9. Dry run: NO_ACTION, active=0. No claim run. ACTIVE (list_sessions unavailable; fallback = LIVE claim branches with no open PR): 0. Claims with open PR (draft): MOB-6 #112, MOB-7 #113.
+
+MERGED_AWAITING_WRITEBACK (dispatcher reclaimable list, 27 claim branches whose heads are merged): UI-002, UI-007, UI-125, UI-109, UI-146, UI-182, UI-233, UI-194, UI-035, MOB-1, MOB-2, MOB-3, MOB-4, MOB-5, MOB-8, MOB-9, CP-DISPATCH-IMPL, UI-030, UI-113, UI-132, UI-032, UI-026, UI-025, UI-133, UI-047, UI-201 (head SHAs not individually recorded). No CLAIMED_AWAITING_BUILDER, RECLAIMABLE_AWAITING_BUILDER or ABANDONED_WITH_WORK_AWAITING_COORDINATOR.
+
+**Open PRs: 10** (none labelled uasco-cloud-production; mergeable state/CI UNKNOWN): #115, #113, #112, #66, #46, #33, #32, #28, #23, #8.
+
+**Active sessions:** UNKNOWN (list_sessions unavailable).
+
+**Tasks completed (merged):** queue tasks DONE: 0; backlog write-backs pending for the MERGED_AWAITING_WRITEBACK list above.
+
+**Current failures:** none newly observed.
+
+**Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) MOB-11+ need Founder authority. (3) create_session/list_sessions unavailable.
+
+Note: written as one local single-file commit with a plain push (as in #39-#48), since the log is too large to re-transmit through create_or_update_file without transcription risk.
