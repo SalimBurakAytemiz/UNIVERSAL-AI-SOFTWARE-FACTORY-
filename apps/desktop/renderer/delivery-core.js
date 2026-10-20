@@ -43,6 +43,13 @@ export const isSourceComplete=d=>d?.sourceGeneration?.state==="SOURCE_GENERATION
 export const canOfferComplete=run=>run?.productVerification==="PRODUCT_VERIFIED";
 /** Onay kutusu durumunun anahtarı: bunlardan biri değişirse (başka run/commit/artefakt/test yüzeyi) önceki işaretler geçersizdir. */
 export function deliveryAckKey(d){return [d?.runId??"-",d?.missionId??"-",d?.sourceCommit??"-",d?.artifact?.exportArtifactHash??"-",d?.testChanges?.testSurfaceSha256??"-"].join("|")}
+/** Hazırlanan paket ile koşunun güncel head'i (d.sourceCommit, renderer'ın zaten okuduğu veri) karşılaştırması; yalnız iki geçerli 40-hex eşitse VALID, doğrulanmış okuma olmadan olumlu iddia yok. */
+export function deliverySourceState(d){
+  if(!d?.artifact)return "NOT_PREPARED";
+  const head=d.sourceCommit,prep=d.artifact.sourceCommit;
+  if(!SHA_RE.test(String(head??""))||!SHA_RE.test(String(prep??"")))return "UNKNOWN";
+  return head===prep?"VALID":"STALE";
+}
 export function buildPrepareRequest(d){
   const errors={};
   if(!d||!RUN_RE.test(String(d.runId)))errors.runId="err.runInvalid";
@@ -55,6 +62,7 @@ export function buildAcceptanceRequest(d,checks){
   const errors={};
   const a=d?.artifact;
   if(!d||!RUN_RE.test(String(d.runId))||!MSN_RE.test(String(d.missionId)))errors.acknowledgement="err.ackDataMissing";
+  else if(a&&deliverySourceState(d)==="STALE"&&a.runId===d.runId&&a.missionId===d.missionId)errors.acknowledgement="err.deliveryStale";
   else if(!a||!SHA256_RE.test(String(a.exportArtifactHash))||!SHA_RE.test(String(d.sourceCommit))||a.sourceCommit!==d.sourceCommit||a.runId!==d.runId||a.missionId!==d.missionId)errors.acknowledgement="err.deliveryNotPrepared";
   else if(d.accepted)errors.acknowledgement="err.deliveryAlreadyAccepted";
   else if(!checks||checks.key!==deliveryAckKey(d))errors.acknowledgement="err.ackStale";
