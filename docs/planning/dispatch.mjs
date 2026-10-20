@@ -172,13 +172,16 @@ export function ensureFullHistory(git, remote, baseBranch) {
   const sh = git(["rev-parse", "--is-shallow-repository"]);
   if (sh.status !== 0) return false;
   if (sh.stdout.trim() === "false") return true;
-  git(["fetch", "--no-tags", "--unshallow", remote, `refs/heads/${baseBranch}`], undefined, undefined, {timeout: 120000});
+  git(["fetch", "--no-tags", "--unshallow", remote, `refs/heads/${baseBranch}`], undefined, undefined, {timeout: FETCH_TIMEOUT_MS});
   const again = git(["rev-parse", "--is-shallow-repository"]);
   return again.status === 0 && again.stdout.trim() === "false";
 }
 
 // A committer date is usable only when it is a finite integer no later than one day in the future (and not before 1970). Never throws.
 const DAY_MS = 864e5;
+const MAX_BRANCH_COMMITS = 1000;
+// Fetch bound (ms); the env var can only LOWER it (the proof uses that to exercise the timeout path).
+const FETCH_TIMEOUT_MS = Math.min(120000, Number(process.env.UASCO_DISPATCH_FETCH_TIMEOUT_MS) > 0 ? Number(process.env.UASCO_DISPATCH_FETCH_TIMEOUT_MS) : 120000);
 const ctOk = (ct, now) => Number.isSafeInteger(ct) && ct >= 0 && ct * 1000 <= now + DAY_MS;
 
 // Pure claim = every commit beyond merge-base(branch, base) is a "dispatch-claim:" commit with exactly one parent and the same tree as that
@@ -192,7 +195,7 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
     const claimRef = `refs/heads/${branch}`;
     if (openPrs.has(branch)) { out.push({taskId, claimRef, state: "OPEN_PR"}); continue; }
     if (!baseSha) { out.push({taskId, claimRef, state: "UNKNOWN", why: "BASE_UNAVAILABLE"}); continue; }
-    if (git(["cat-file", "-e", `${sha}^{commit}`]).status !== 0 && git(["fetch", "--no-tags", remote, claimRef]).status !== 0) {
+    if (git(["cat-file", "-e", `${sha}^{commit}`]).status !== 0 && git(["fetch", "--no-tags", remote, claimRef], undefined, undefined, {timeout: FETCH_TIMEOUT_MS}).status !== 0) {
       out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_REF_NOT_FETCHABLE"}); continue;
     }
     // A positive ancestry answer is trustworthy even in a shallow clone; a negative one is not.
@@ -201,36 +204,40 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
     if (!fullHistory) { out.push({taskId, claimRef, state: "UNKNOWN", why: "SHALLOW_HISTORY"}); continue; }
     if (anc.status !== 1) { out.push({taskId, claimRef, state: "UNKNOWN", why: "ANCESTRY_CHECK_FAILED"}); continue; }
     const mb = git(["merge-base", sha, baseSha]);
-    if (mb.status !== 0 || !SHA_RE.test(mb.stdout.trim())) { out.push({taskId, claimRef, state: "UNKNOWN", why: "MERGE_BASE_FAILED"}); continue; }
-    // %x00 separators: a tab (or any text) inside a subject cannot shift the parent list.
-    const l = git(["log", "-z", "--format=%ct%x00%P%x00%s", `${mb.stdout.trim()}..${sha}`]);
+    const mbSha = mb.stdout.trim();
+    if (mb.status !== 0 || !SHA_RE.test(mbSha)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "MERGE_BASE_FAILED"}); continue; }
+    // Bound the work per branch: a branch with an absurd number of commits is UNKNOWN (counted active), never parsed.
+    const cnt = git(["rev-list", "--count", `${mbSha}..${sha}`]);
+    const total = /^[0-9]{1,12}$/.test(cnt.stdout.trim()) ? Number(cnt.stdout.trim()) : NaN;
+    if (cnt.status !== 0 || !Number.isSafeInteger(total)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "LOG_FAILED"}); continue; }
+    if (total > MAX_BRANCH_COMMITS) { out.push({taskId, claimRef, state: "UNKNOWN", why: "TOO_MANY_COMMITS"}); continue; }
+    // One log call; %x00 separators (a tab or any text inside a subject cannot shift fields); -z terminates each record with NUL too.
+    const l = git(["log", "-z", "--format=%H%x00%T%x00%P%x00%ct%x00%s", `${mbSha}..${sha}`]);
     if (l.status !== 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "LOG_FAILED"}); continue; }
     const f = l.stdout.split("\0"); if (f[f.length - 1] === "") f.pop();
-    if (f.length % 3 !== 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "LOG_FAILED"}); continue; }
-    const rows = [];
-    for (let k = 0; k < f.length; k += 3) rows.push([f[k], f[k + 1], f[k + 2]]);
+    if (f.length % 5 !== 0 || f.length / 5 !== total) { out.push({taskId, claimRef, state: "UNKNOWN", why: "LOG_FAILED"}); continue; }
+    const rows = [], treeOf = new Map();
+    for (let k = 0; k < f.length; k += 5) { rows.push({h: f[k], t: f[k + 1], parents: f[k + 2].split(" ").filter(Boolean), ct: f[k + 3], s: f[k + 4]}); treeOf.set(f[k], f[k + 1]); }
     let pure = true;
-    for (const r of rows) {
-      const parents = (r[1] || "").split(" ").filter(Boolean);
-      if (!(r[2] || "").startsWith(CLAIM_SUBJECT) || parents.length !== 1) { pure = false; break; }
-    }
+    for (const r of rows) if (!r.s.startsWith(CLAIM_SUBJECT) || r.parents.length !== 1) { pure = false; break; }
     if (pure) {
-      const commits = git(["rev-list", `${mb.stdout.trim()}..${sha}`]);
-      if (commits.status !== 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "TREE_COMPARE_FAILED"}); continue; }
       // A claim commit that changed the tree relative to its own parent is not a pure claim, whatever its subject says.
-      for (const c of commits.stdout.split("\n").filter(Boolean)) {
-        const t = git(["rev-parse", `${c}^{tree}`, `${c}^1^{tree}`]);
-        const [a, b] = t.stdout.trim().split("\n");
-        if (t.status !== 0 || !a || !b) { out.push({taskId, claimRef, state: "UNKNOWN", why: "TREE_COMPARE_FAILED"}); pure = null; break; }
-        if (a !== b) { pure = false; break; }
+      for (const r of rows) {
+        let pt = treeOf.get(r.parents[0]);
+        if (pt === undefined) { const t = git(["rev-parse", `${r.parents[0]}^{tree}`]); pt = t.status === 0 ? t.stdout.trim() : null; }
+        if (!pt) { out.push({taskId, claimRef, state: "UNKNOWN", why: "TREE_COMPARE_FAILED"}); pure = null; break; }
+        if (pt !== r.t) { pure = false; break; }
       }
       if (pure === null) continue;
     }
     if (!pure) {
-      const h = git(["log", "-1", "--format=%ct", sha]);
-      const raw = h.stdout.trim(), ct = /^-?[0-9]{1,16}$/.test(raw) ? Number(raw) : NaN;
-      if (h.status !== 0 || !Number.isSafeInteger(ct) || ct < 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
+      const raw = rows.length ? rows[0].ct : "", ct = /^[0-9]{1,16}$/.test(raw) ? Number(raw) : NaN;
+      if (!Number.isSafeInteger(ct)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
       if (ct * 1000 > now + DAY_MS) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_FUTURE_DATED"}); continue; }
+      // A head dated before the branch's own oldest claim commit (clock skew, e.g. 1970) cannot be trusted: UNKNOWN, counted active.
+      const claimCts = rows.filter(r => r.s.startsWith(CLAIM_SUBJECT)).map(r => Number(r.ct)).filter(Number.isSafeInteger);
+      let oldestClaim = Infinity; for (const c of claimCts) if (c < oldestClaim) oldestClaim = c;
+      if (claimCts.length && ct < oldestClaim) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
       const ageMs = now - ct * 1000;
       const rec = {taskId, claimRef, state: "HAS_WORK_COMMITS", lastActivityAt: new Date(ct * 1000).toISOString()};
       if (ageMs < 0) { out.push({...rec, why: "ACTIVITY_FUTURE_DATED"}); continue; }
@@ -240,10 +247,11 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
     }
     let ageMs = null, extra = null;
     if (rows.length) {
-      const cts = rows.map(r => /^[0-9]{1,16}$/.test(r[0]) ? Number(r[0]) : NaN);
+      const cts = rows.map(r => /^[0-9]{1,16}$/.test(r.ct) ? Number(r.ct) : NaN);
       if (cts.some(c => !Number.isSafeInteger(c))) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
       if (cts.some(c => !ctOk(c, now))) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_FUTURE_DATED"}); continue; }
-      ageMs = now - Math.max(...cts) * 1000;
+      let newest = 0; for (const c of cts) if (c > newest) newest = c;
+      ageMs = now - newest * 1000;
     } else { const le = readLease(taskId); if (le && Number.isFinite(le.acquiredAt)) { ageMs = now - le.acquiredAt; extra = "age from lease acquiredAt"; } }
     if (ageMs === null || !Number.isFinite(ageMs)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_UNKNOWN"}); continue; }
     if (ageMs < 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_NEGATIVE_FUTURE_DATED"}); continue; }
@@ -263,11 +271,12 @@ function claimInBaseHistory(git, baseSha, id, fullHistory = true) {
   if (!fullHistory) return null;
   const lim = Math.min(HIST_WALK, Number(process.env.UASCO_DISPATCH_HISTORY_WALK) > 0 ? Number(process.env.UASCO_DISPATCH_HISTORY_WALK) : HIST_WALK);
   const prefix = `${CLAIM_SUBJECT} ${id} `.toLowerCase();
-  const r = git(["log", "--format=%s", `--max-count=${lim}`, baseSha]);
+  // -z: one NUL-terminated record per commit, so empty-message commits are counted (a truncated walk can never look complete).
+  const r = git(["log", "-z", "--format=%s", `--max-count=${lim}`, baseSha]);
   if (r.status !== 0) return null;
-  const subjects = r.stdout.split("\n");
+  const subjects = r.stdout.split("\0"); if (subjects[subjects.length - 1] === "") subjects.pop();
   if (subjects.some(s => s.toLowerCase().startsWith(prefix))) return true;
-  return subjects.filter(Boolean).length >= lim ? null : false;
+  return subjects.length >= lim ? null : false;
 }
 
 // Pure decision: the lease store is "unavailable" (not held) ONLY when ls-remote SUCCEEDED and printed nothing.
@@ -364,7 +373,7 @@ async function runInner(argv, cwd) {
 
   let baseSha = heads.get(o.baseBranch) ?? null;
   if (baseSha && git(["cat-file", "-e", `${baseSha}^{commit}`]).status !== 0) {
-    git(["fetch", "--no-tags", o.remote, `refs/heads/${o.baseBranch}`]);
+    git(["fetch", "--no-tags", o.remote, `refs/heads/${o.baseBranch}`], undefined, undefined, {timeout: FETCH_TIMEOUT_MS});
     if (git(["cat-file", "-e", `${baseSha}^{commit}`]).status !== 0) baseSha = null;
   }
   const claimedList = [];

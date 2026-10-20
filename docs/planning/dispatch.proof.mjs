@@ -614,6 +614,66 @@ const writeHook = (bare, body) => { fs.mkdirSync(path.join(bare, "hooks"), {recu
     const y = states(dispatchSync(e2.work, ["--backlog", e2.bl]))["N-2"];
     check("N1 (-): a single-parent claim whose subject contains a TAB is still a pure claim (FRESH)", y?.state === "FRESH", JSON.stringify(y));
   }
+  // B4: a claim branch with a huge number of commits must not crash or stall a run; bounded per branch => UNKNOWN (counted active).
+  const fastChain = (e, id, n, ts, subjPrefix = "dispatch-claim") => { // n chained tree-neutral commits on top of base, via fast-import
+    const b = baseOf(e); let st = `commit refs/heads/chain-${id}\ncommitter c <c@x> ${ts} +0000\ndata ${Buffer.byteLength(`${subjPrefix}: ${id} n=0`)}\n${subjPrefix}: ${id} n=0\nfrom ${b.sha}\n\n`;
+    for (let i = 1; i < n; i++) { const m = `${subjPrefix}: ${id} n=${i}`; st += `commit refs/heads/chain-${id}\ncommitter c <c@x> ${ts} +0000\ndata ${Buffer.byteLength(m)}\n${m}\n\n`; }
+    const r = spawnSync("git", ["fast-import", "--quiet"], {cwd: e.work, input: st, encoding: "utf8", maxBuffer: 1 << 28}); if (r.status !== 0) throw new Error(r.stderr);
+    return G(e.work, ["rev-parse", `refs/heads/chain-${id}`]);
+  };
+  {
+    const e = mkEnv([T("BIG-1"), T("BIG-2"), T("BIG-3")]);
+    push(e, fastChain(e, "BIG-1", 140000, FRESH), "claude/big-1"); // far beyond what the old Math.max(...cts) survived
+    push(e, fastChain(e, "BIG-2", 900, FRESH), "claude/big-2"); // below the bound: still a pure FRESH claim
+    const r = dispatchSync(e.work, ["--backlog", e.bl]), st = states(r);
+    check("B4 (+): 140000-commit claim branch => no INTERNAL_ERROR, UNKNOWN TOO_MANY_COMMITS, counted active", r.code === 0 && !r.raw.includes("INTERNAL_ERROR") && st["BIG-1"]?.state === "UNKNOWN" && st["BIG-1"].why === "TOO_MANY_COMMITS" && r.j.active === 2, r.raw.slice(0, 300));
+    check("B4 (-): a 900-commit pure claim chain (below the bound) is still FRESH", st["BIG-2"]?.state === "FRESH", JSON.stringify(st["BIG-2"]));
+    const c = dispatchSync(e.work, ["--claim", "--backlog", e.bl, "--no-lease"]);
+    check("B4 (+): --claim survives the huge branch (claims BIG-3)", c.j.outcome === "START" && c.j.taskId === "BIG-3", c.raw.slice(0, 300));
+  }
+  // N3b: empty-message commits must not make a truncated history walk look complete.
+  {
+    const e = mkEnv([T("E-1")]);
+    mergeClaim(e, "E-1");
+    for (let i = 0; i < 12; i++) G(e.work, ["commit", "-q", "--allow-empty", ...(i === 5 ? ["--allow-empty-message", "-m", ""] : ["-m", `n${i}`])]);
+    G(e.work, ["push", "-q", "origin", "v7/integration"]);
+    const r = dispatchSync(e.work, ["--claim", "--backlog", e.bl, "--no-lease"], {UASCO_DISPATCH_HISTORY_WALK: "10"});
+    check("N3b (+): truncated walk (bound 10) with an empty-message commit in it fails closed: CLAIM_HISTORY_CHECK_FAILED, nothing claimed", r.j.outcome === "NO_ACTION" && r.j.reasons.includes("E-1:CLAIM_HISTORY_CHECK_FAILED") && heads(e.bare).length === 0, r.raw.slice(0, 300));
+    const ok = dispatchSync(e.work, ["--claim", "--backlog", e.bl, "--no-lease"]);
+    check("N3b (-): untruncated walk finds the claim: CLAIM_IN_BASE_HISTORY", ok.j.reasons.includes("E-1:CLAIM_IN_BASE_HISTORY") && heads(e.bare).length === 0, ok.raw.slice(0, 300));
+  }
+  // T1: hung fetches are bounded and fail closed.
+  {
+    const hang = (e, clone) => {
+      const w = path.join(e.dir, `hang${++seq}.sh`), cnt = `${w}.n`;
+      fs.writeFileSync(w, `#!/bin/sh\nn=$(cat "${cnt}" 2>/dev/null || echo 0)\necho $((n+1)) > "${cnt}"\n[ "$n" -ge 1 ] && exec sleep 60\nexec git upload-pack "$@"\n`, {mode: 0o755});
+      G(clone, ["config", "remote.origin.uploadpack", w]);
+    };
+    const TO = {UASCO_DISPATCH_FETCH_TIMEOUT_MS: "1500"};
+    const e = mkEnv([T("H-1"), T("H-2")]);
+    mergeClaim(e, "H-1"); pad(e, 60);
+    const sh = shallowOf(e); hang(e, sh);
+    const t0 = Date.now();
+    const r = dispatchSync(sh, ["--claim", "--backlog", path.join(sh, BLS), "--no-lease"], TO);
+    check("T1 (+): hung unshallow fetch is cut off (<30s) and fails closed: CLAIM_HISTORY_CHECK_FAILED, nothing claimed", Date.now() - t0 < 30000 && r.j.outcome === "NO_ACTION" && r.j.reasons.includes("H-1:CLAIM_HISTORY_CHECK_FAILED") && heads(e.bare).length === 0, `${Date.now() - t0}ms ${r.raw.slice(0, 300)}`);
+    const e2 = mkEnv([T("H-3")]);
+    const cl = path.join(e2.dir, "full"); G(e2.dir, ["clone", "-q", `file://${e2.bare}`, cl]);
+    advanceBase(e2); hang(e2, cl); // the clone now lacks the new base tip => base fetch is needed and hangs
+    const t1 = Date.now();
+    const b = dispatchSync(cl, ["--claim", "--backlog", path.join(cl, BLS), "--no-lease"], TO);
+    check("T1 (+): hung base fetch is cut off (<30s): RECOVERABLE_FAILURE BASE_UNAVAILABLE, nothing claimed", Date.now() - t1 < 30000 && b.j.outcome === "RECOVERABLE_FAILURE" && b.j.reasons.some(x => x.startsWith("BASE_UNAVAILABLE")) && heads(e2.bare).length === 0, `${Date.now() - t1}ms ${b.raw.slice(0, 300)}`);
+  }
+  // D1: a head dated before the branch's own claim commit (clock skew / 1970) is UNKNOWN, not ABANDONED (it must not free a slot).
+  {
+    const e = mkEnv([T("Y-1"), T("Y-2")]); const b = baseOf(e);
+    const cl = claimC(e, b.sha, "Y-1", FRESH);
+    push(e, workC(e, cl, "@86400", "y1"), "claude/y-1"); // work commit dated 1970-01-02
+    const cl2 = claimC(e, b.sha, "Y-2", OLD);
+    push(e, workC(e, cl2, OLD, "y2"), "claude/y-2"); // genuinely old, consistent with its claim
+    const r = dispatchSync(e.work, ["--backlog", e.bl, "--stale-hours", "0"]), st = states(r);
+    check("D1 (+): work head dated 1970 (earlier than its own claim commit) => UNKNOWN CLAIM_AGE_OUT_OF_RANGE, counted active (not ABANDONED_WITH_WORK)", st["Y-1"]?.state === "UNKNOWN" && st["Y-1"].why === "CLAIM_AGE_OUT_OF_RANGE" && r.j.active >= 1, JSON.stringify(st["Y-1"]));
+    check("D1 (-): consistent old work head (same date as its claim) still ages to ABANDONED_WITH_WORK", st["Y-2"]?.state === "ABANDONED_WITH_WORK", JSON.stringify(st["Y-2"]));
+  }
   // N2 + N3: case-insensitive exact id; many newer mentions cannot hide the claim; the walk is bounded by commits and fails closed.
   {
     const e = mkEnv([T("Q-1"), T("Q-2"), T("Q-3")]);
