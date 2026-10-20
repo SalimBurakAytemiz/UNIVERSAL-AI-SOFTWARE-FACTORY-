@@ -19,7 +19,7 @@
 
 | Fact | Evidence |
 |---|---|
-| The control plane listens on `127.0.0.1` only | `server.ts:739` (`app.listen({host:"127.0.0.1",port})`); `apps/control-api/src/packaged-entry.ts:79` per D-MOB, not re-read (**UNVERIFIED** here) |
+| The control plane listens on `127.0.0.1` only | `server.ts:738` (`app.listen({host:"127.0.0.1",port})`); `apps/control-api/src/packaged-entry.ts:79` per D-MOB, not re-read (**UNVERIFIED** here) |
 | Every request with a Host other than exactly `127.0.0.1:<port>` gets 421 `CONTROL_HOST_REJECTED` | `server.ts:97-98`; `automation/lib/control-boundary.mjs:29` |
 | `/v1/*` needs the single shared `x-uasco-control-token`; missing token config 503, wrong token 403 `FORBIDDEN` | `server.ts:77`, `:100-101` |
 | Every request runs as `FOUNDER_LOCAL` in tenant `local` | `server.ts:156` |
@@ -29,7 +29,7 @@
 | Contract states in the renderer: the same four | `apps/desktop/renderer/model.js:2` (`CONTRACT_STATES`) |
 | Journal health: `OK`, `ABSENT`, `TORN_TAIL`, `TAMPERED`, `UNAVAILABLE` | `core/workos/store.ts:134-140` |
 | Journal sequence exists but is not exposed by any route | `core/workos/store.ts:131` (`lastSeq` getter) |
-| Known Work OS errors return fixed bodies; tampered/unavailable journal is 503; unknown errors are a generic 500 | `server.ts:169-183` |
+| Known Work OS errors return fixed bodies; tampered/unavailable journal is 503; unknown errors are a generic 500 | `server.ts:169-184` |
 | The renderer reaches the API only through main-process allow-lists (static set and regexes) | `main.mjs:36` (`EXTRA_GET_ROUTES`), `main.mjs:103-107`, `main.mjs:265`; `control-boundary.mjs:9-11`, `:30-36` |
 
 Consequence: **a phone cannot reach any of this today**, and the mobile contract is not "the desktop API over TLS". It is a separate, purpose-built, allow-listed projection set served by a future gateway that never presents or forwards the control token and never forges the loopback Host (SC-1, SC-17; MOB-2 G-4, G-5).
@@ -68,7 +68,7 @@ Every 200 response uses one envelope so the app can render honest states without
 }
 ```
 
-- `state` is the route-level state. `data` blocks carry their own `state` where sources differ (as `/v1/cockpit` already does per block, `server.ts:675-687`, `:709-722`, `:724-727`).
+- `state` is the route-level state. `data` blocks carry their own `state` where sources differ (as `/v1/cockpit` already does per block, `server.ts:675-688`, `:710-722`, `:724-727`).
 - `journal.state` is copied from `journalHealth()` (`store.ts:134-140`). `journal.seq` is `lastSeq` (`store.ts:131`); exposing it is new (FA-MOB-5).
 - `page` appears only on list routes.
 - `notice` is a fixed server string (like `REVIEWS_NOTICE`, `server.ts:646`), never free text from data.
@@ -79,7 +79,7 @@ Every 200 response uses one envelope so the app can render honest states without
 |---|---|---|---|
 | `VERIFIED` | read from the authoritative source on this request | values | `CockpitState` (`server.ts:669`) |
 | `STALE` | the source answered, but its own freshness marker is old (for example an expired orchestrator lease, `server.ts:703-704`); **or**, on the phone only, a cached copy shown while the desktop is unreachable, with its fetch time | values plus a STALE badge and age | server and phone (SC-7) |
-| `UNAVAILABLE` | the source does not exist in this installation (for example no journal yet: `server.ts:678`, `:719`) | `—`, never `0` | `CockpitState` |
+| `UNAVAILABLE` | the source does not exist in this installation (for example no journal yet: `server.ts:678`, `:718`) | `—`, never `0` | `CockpitState` |
 | `UNKNOWN` | **new in this contract.** The server cannot compute the value with the data it holds (for example worker liveness, cloud sessions, GitHub CI). Distinct from `UNAVAILABLE`, which means the source is missing | `UNKNOWN`, never a guess | PROPOSED |
 | `ERROR` | the source exists but could not be read or failed validation | `—` plus error | `CockpitState` |
 
@@ -103,11 +103,11 @@ Rules:
 | String fields | titles capped at 200 characters, reasons at 300, ids by their canonical regex; all marked untrusted text (SC-10) | `scrubText` 300 chars in `main.mjs:211-214` |
 | Never included | absolute paths, tokens, secrets, stack traces, raw evidence bodies, log tails, file content, diffs | MOB-2 G-13; SC-3 |
 
-ETag caveat (**UNVERIFIED**): several sources are not in the journal (`GLOBAL_STOP.json` at `server.ts:674`, orchestrator state `server.ts:689-707`, role registry files `server.ts:715-716`). An ETag based on `lastSeq` alone would miss their changes, so the digest of those inputs must be part of the ETag. Whether that is cheap enough on every request is unmeasured.
+ETag caveat (**UNVERIFIED**): several sources are not in the journal (`GLOBAL_STOP.json` at `server.ts:674`, orchestrator state `server.ts:689-706`, role registry files `server.ts:714-717`). An ETag based on `lastSeq` alone would miss their changes, so the digest of those inputs must be part of the ETag. Whether that is cheap enough on every request is unmeasured.
 
 ### 3.5 Error codes
 
-Every error body is `{"error":"<CODE>"}` plus at most a fixed `reason` code, like the existing `workosFail` (`server.ts:169-183`). No message text, path or stack.
+Every error body is `{"error":"<CODE>"}` plus at most a fixed `reason` code, like the existing `workosFail` (`server.ts:169-184`). No message text, path or stack.
 
 | HTTP | Code | When | Status of the code |
 |---|---|---|---|
@@ -146,7 +146,7 @@ All routes: method `GET` (and `HEAD`), scope `MOBILE_READ`, envelope of section 
 
 | Source endpoint | Server evidence | Renderer use |
 |---|---|---|
-| `GET /v1/cockpit` | `server.ts:728-731` (blocks from `cockpitStop` `:674`, `cockpitWorkos` `:675-687`, `cockpitOrchestrator` `:689-707`, `cockpitWorkforce` `:710-722`, `cockpitEvidence` `:724-727`) | `api.js:47`; `executive-core.js:4` (`COCKPIT_PATH`) |
+| `GET /v1/cockpit` | `server.ts:728-731` (blocks from `cockpitStop` `:674`, `cockpitWorkos` `:675-688`, `cockpitOrchestrator` `:689-706`, `cockpitWorkforce` `:710-722`, `cockpitEvidence` `:724-727`) | `api.js:47`; `executive-core.js:4` (`COCKPIT_PATH`) |
 | `GET /v1/control/status` | `server.ts:119-120` | `api.js:50`; `operations-core.js:5` |
 
 Response `data`:
@@ -159,7 +159,7 @@ Response `data`:
 | `missions.total`, `missions.byStatus` | int, map | `:682` | same |
 | `awaitingApproval.count` | int or null | `:683` (missions in `PREFLIGHT` or `FOUNDER_ATTENTION_REQUIRED`) | count only; **no items and no action descriptors in release 1** (section 5) |
 | `workforce.activeWorkerRuns`, `workforce.canonicalRoles` | int or null | `:710-722` | `UNAVAILABLE`/`ERROR` as the cockpit block |
-| `orchestrator.state`, `orchestrator.asOf`, `orchestrator.packagesByStatus` | state, time, map | `:689-707` | `STALE` on expired lease (`:703-704`); probably `UNAVAILABLE` in the installed app (D-MOB, **UNVERIFIED**) |
+| `orchestrator.state`, `orchestrator.asOf`, `orchestrator.packagesByStatus` | state, time, map | `:689-706` | `STALE` on expired lease (`:703-704`); probably `UNAVAILABLE` in the installed app (D-MOB, **UNVERIFIED**) |
 | `evidence.total/verified/mismatch/missing/unverifiable` | int or null | `:724-727` | nulls on `ERROR` (`:726`) |
 | `runsByStatus` | map or `UNKNOWN` | not served today (D-MOB F1 gap) | `UNKNOWN` until a store count exists |
 | `legacy` | omitted | `:730` legacy scheduler snapshot is not authority | — |
@@ -185,7 +185,7 @@ Item shape: `{projectId, name (untrusted), state, missions:{total, byStatus}, ac
 | Source endpoint | Server evidence | Renderer use |
 |---|---|---|
 | `GET /v1/agents` | `server.ts:110-113` (503 `ROLE_REGISTRY_UNAVAILABLE` at `:111`) | `api.js:89` |
-| `GET /v1/roles?cursor&limit` | `server.ts:549-562` | `api.js:90` (pages of 100) |
+| `GET /v1/roles?cursor&limit` | `server.ts:549-563` | `api.js:91` (pages of 100) |
 | `cockpit.workforce` | `server.ts:710-722` | via `api.js:47` |
 | run lease fields | `core/workos/types.ts:131-143` per D-MOB (**UNVERIFIED** here) | — |
 
@@ -193,19 +193,19 @@ Item shape: `{runId, missionId, projectId, status, executorRole, leaseExpiresAt,
 
 - `liveness` is `UNKNOWN` in release 1: no heartbeat or stuck-lease flag exists (D-MOB F3 gap). A lease past `leaseExpiresAt` may be shown as `STALE`, not as "stuck" (**UNVERIFIED**: lease field names not re-read).
 - Cloud sessions are not visible to the desktop; they are reported as `UNKNOWN`, not as zero.
-- **Excluded:** `GET /v1/system/executors` (`server.ts:426`). D-MOB and the inventory report that this GET writes `settings.json` (FRONTEND_BACKEND_MATRIX line 142); not re-traced here (**UNVERIFIED**), so it is excluded on either reading (SC-3, SC-19).
+- **Excluded:** `GET /v1/system/executors` (`server.ts:426`). D-MOB and the inventory report that this GET writes `settings.json` (`docs/inventory/2026-10-19/FRONTEND_BACKEND_MATRIX.csv` line 142); not re-traced here (**UNVERIFIED**), so it is excluded on either reading (SC-3, SC-19).
 
 ### 4.4 `GET /v1/mobile/runs?missionId&status&cursor&limit` (F4; UI-099)
 
 | Source endpoint | Server evidence | Renderer use |
 |---|---|---|
-| `GET /v1/work-runs?missionId` | `server.ts:274-277` (`listRuns`, `store.ts:740`) | `api.js:62-63`; `executive-core.js:4` (`WORK_RUNS_PATH`) |
+| `GET /v1/work-runs?missionId` | `server.ts:274-277` (`listRuns`, `store.ts:740`) | `api.js:60-63`; `executive-core.js:4` (`WORK_RUNS_PATH`) |
 | `GET /v1/work-runs/:id` | `server.ts:278-282` (`deriveOutcomes`, `deliveryView`) | `api.js:64` |
 | `GET /v1/runs` (supervisor runs, top 100) | `server.ts:124-128` | `api.js:53`; `operations-core.js:6` |
 
 Item shape: `{runId, missionId, projectId, status, startedAt, updatedAt, outcome:{state, code}, delivery:{state}, evidence:{count, byKind}}`.
 
-- The source returns full run objects including evidence (D-MOB, MATRIX line 146); the projection returns counts by kind, never evidence bodies or log tails.
+- The source returns full run objects including evidence (D-MOB, `docs/inventory/2026-10-19/FRONTEND_BACKEND_MATRIX.csv` line 146); the projection returns counts by kind, never evidence bodies or log tails.
 - `status` filter accepts only values of the run status enum (**UNVERIFIED**: enum file not re-read; D-MOB cites `types.ts:67-69` for recovery statuses).
 - Detail route `GET /v1/mobile/runs/:runId` returns the same item plus `outcomes` (codes only) from `server.ts:281`. 404 `WORKOS_NOT_FOUND` for another tenant's or a missing run, like `server.ts:281`.
 
@@ -219,7 +219,7 @@ Item shape: `{runId, missionId, projectId, status, startedAt, updatedAt, outcome
 
 Response: `{mission:{missionId, projectId, title (untrusted), status, riskLevel}, events:[{at, kind, fromStatus, toStatus, actorClass}]}`.
 
-- `tasks[]` is always empty today (D-MOB: `store.ts:570`, MATRIX line 59; **UNVERIFIED** here), so the contract does not promise tasks.
+- `tasks[]` is always empty today (D-MOB: `store.ts:570`, `docs/inventory/2026-10-19/FRONTEND_BACKEND_MATRIX.csv` line 59; **UNVERIFIED** here), so the contract does not promise tasks.
 - Transition `reason` text is free text: shown as untrusted with provenance (SC-10), capped at 300 characters, never parsed.
 - `actorClass` is `FOUNDER_LOCAL`, `RUNNER` or `MOBILE_DEVICE` (later), never a token or a session id.
 - Whether a per-mission event history can be projected from the journal without a new store index is **UNVERIFIED**.
@@ -229,7 +229,7 @@ Response: `{mission:{missionId, projectId, title (untrusted), status, riskLevel}
 | Source endpoint | Server evidence | Renderer use |
 |---|---|---|
 | `GET /v1/reviews` | `server.ts:637-649` (capped at `REVIEWS_MAX=500`, `:606`) | `api.js:155`; `readiness-core.js:6` |
-| `GET /v1/evidence?kind&missionId&runId&cursor&limit` | `server.ts:440-453` | `api.js:66-73`; `audit-core.js:6` |
+| `GET /v1/evidence?kind&missionId&runId&cursor&limit` | `server.ts:440-453` | `api.js:66-74`; `audit-core.js:6` |
 | `cockpit.evidence` | `server.ts:724-727` | via `api.js:47` |
 
 Response: `{reviews:{byVerdict, runsByReviewState, items:[{reviewId, runId, verdict, at}]}, evidence:{total, verified, mismatch, missing, unverifiable}, ci:{state:"UNKNOWN"}}`.
@@ -269,7 +269,7 @@ Response: `{globalStop:{active, reason}, journal:{state, reason}, supervisorRuns
 
 ### 4.10 Routes not proposed for release 1
 
-- `GET /v1/mobile/inbox`: the approval inbox is derived only in the renderer today (`apps/desktop/renderer/work-core.js:294-313`, `deriveInbox`, which emits accept/reject action descriptors). It belongs to F5 (FA-MOB-7) and is not in the FA-MOB-5 read set (D-MOB section 9). Release 1 shows only `awaitingApproval.count` in `summary`. A later read-only inbox must be a server-side projection, never re-derived on the phone (ADR-MOB-001 section 6).
+- `GET /v1/mobile/inbox`: the approval inbox is derived only in the renderer today (`apps/desktop/renderer/work-core.js:300-320`, `deriveInbox`, which emits accept/reject action descriptors). It belongs to F5 (FA-MOB-7) and is not in the FA-MOB-5 read set (D-MOB section 9). Release 1 shows only `awaitingApproval.count` in `summary`. A later read-only inbox must be a server-side projection, never re-derived on the phone (ADR-MOB-001 section 6).
 - Project Memory: none, until the desktop/backend defines it (DESIGN_ONLY, D-MOB section 4).
 
 ## 5. OUT OF SCOPE for release 1
@@ -280,15 +280,15 @@ None of these is on the release-1 allow-list. Through the gateway every one answ
 
 | Existing route | Evidence | Mobile status | Gate before it could ever be considered |
 |---|---|---|---|
-| `POST /v1/missions/:id/transition` | `server.ts:221-224` | OUT | PT-035 fixed (`server.ts:164-167`); FA-MOB-7 (signed single-use approvals, SC-4, SC-5); FA-MOB-4 scope `MOBILE_APPROVE`; MOB-4 design |
+| `POST /v1/missions/:id/transition` | `server.ts:221-230` | OUT | PT-035 fixed (`server.ts:164-167`); FA-MOB-7 (signed single-use approvals, SC-4, SC-5); FA-MOB-4 scope `MOBILE_APPROVE`; MOB-4 design |
 | `POST /v1/work-runs/:id/delivery/prepare`, `/accept` | `server.ts:295-315` | OUT | same as above; delivery acceptance stays desktop-only unless the Founder grants otherwise (SC-5) |
-| `POST /v1/work-runs/:id/delivery/export` | `server.ts:316-320` | OUT, also SC-3 export | not planned |
+| `POST /v1/work-runs/:id/delivery/export` | `server.ts:316-325` | OUT, also SC-3 export | not planned |
 | `POST /v1/control/stop` | `server.ts:142-145` | OUT | FA-MOB-8; step-up and required reason (SC-6); scope `MOBILE_STOP`; MOB-4/MOB-25; "local only, not Cloud production" notice |
 | `POST /v1/control/resume` | `server.ts:146` | OUT, **desktop-only** in every phase | Founder decision only (FD-2026-10-20-MOB-PHASE0) |
 | `POST /v1/control/retry-blocked` | `server.ts:147-152` | OUT | not planned; would need its own grant |
-| `POST /v1/missions` (accepts `testCommand`) | `server.ts:211-215`; `core/workos/schemas.ts:36-40` per SC-3 | OUT | FA-MOB-16/17 drafts only; `testCommand` forbidden (SC-3, SC-9) |
-| `POST /v1/missions/:id/runs` | `server.ts:260-272` | OUT | not planned |
-| `POST /v1/projects` | `server.ts:195-205` | OUT | not planned |
+| `POST /v1/missions` (accepts `testCommand`) | `server.ts:211-216`; `core/workos/schemas.ts:36-40` per SC-3 | OUT | FA-MOB-16/17 drafts only; `testCommand` forbidden (SC-3, SC-9) |
+| `POST /v1/missions/:id/runs` | `server.ts:260-273` | OUT | not planned |
+| `POST /v1/projects` | `server.ts:195-206` | OUT | not planned |
 | PROPOSED `POST /v1/mobile/approvals/challenge`, `/approvals/:itemId/decision` | D-MOB F5 | OUT | FA-MOB-4, FA-MOB-6, FA-MOB-7, FA-MOB-9; PT-035 |
 | PROPOSED `POST /v1/mobile/control/stop` | D-MOB F9 | OUT | FA-MOB-6, FA-MOB-8 |
 | PROPOSED push-token register/delete | D-MOB F6 | OUT | FA-MOB-15 (no FCM in release 1) |
@@ -307,9 +307,9 @@ None of these is on the release-1 allow-list. Through the gateway every one answ
 | `GET /v1/system/executors`; `POST .../local-claude/enable` | `server.ts:426-427` | executor settings; reported write on GET (**UNVERIFIED**) |
 | `GET /v1/projects/:id/devrun`; `POST .../devrun/*` | `server.ts:367`, `:369` | dev-runs |
 | `POST /v1/system/workos/journal/repair-torn-tail` | `server.ts:661` | journal repair, desktop-only |
-| `/v1/company/*` reads and writes | `server.ts:466-531` | finance/legal; writes excluded by SC-3, reads not in the FA-MOB-5 set |
+| `/v1/company/*` reads and writes | `server.ts:466-535` | finance/legal; writes excluded by SC-3, reads not in the FA-MOB-5 set |
 | `GET /health` | `server.ts:104` | token-derived proof oracle (SC-2) |
-| `GET /v1/factory`, `/phase0`, `/install`, `/scheduler`, `/capabilities`, `/fabrics`, `/adapters`, `/domains`, `/academy*`, `/retry` | `server.ts:105-121`, `:577-579` | not needed for release-1 monitoring; default deny |
+| `GET /v1/factory`, `/phase0`, `/install`, `/scheduler`, `/capabilities`, `/fabrics`, `/adapters`, `/domains`, `/academy*`, `/retry` | `server.ts:105-121`, `:577-584` | not needed for release-1 monitoring; default deny |
 
 ## 6. Reuse table (route → existing endpoint → store/server function)
 
@@ -317,10 +317,10 @@ None of these is on the release-1 allow-list. Through the gateway every one answ
 |---|---|---|---|
 | `summary` | `/v1/cockpit`, `/v1/control/status` | `cockpitStop` `server.ts:674`; `cockpitWorkos` `:675`; `cockpitWorkforce` `:710` (`countActiveWorkerRuns` `store.ts:744`); `cockpitEvidence` `:724`; `journalHealth` `store.ts:134` | `api.js:47`, `:50` |
 | `projects` | `/v1/projects`, `/v1/missions`, `/v1/deliveries` | `listProjects` `store.ts:874`; `listMissions` `store.ts:876`; `listRuns` `store.ts:740` | `api.js:48-49`, `:85` |
-| `workers` | `/v1/agents`, `/v1/roles`, `cockpit.workforce` | role registry summary `server.ts:111`; `countActiveWorkerRuns` `store.ts:744` | `api.js:89-90` |
+| `workers` | `/v1/agents`, `/v1/roles`, `cockpit.workforce` | role registry summary `server.ts:111`; `countActiveWorkerRuns` `store.ts:744` | `api.js:89`, `:91` |
 | `runs` | `/v1/work-runs`, `/v1/work-runs/:id`, `/v1/runs` | `listRuns` `store.ts:740`; `deriveOutcomes`/`deliveryView` `server.ts:281` | `api.js:53`, `:62-64` |
 | `missions/:id/timeline` | `/v1/missions/:id`, `/v1/predev/:id`, `/v1/crew/:id` | `getMission` `server.ts:219`; `preDevReadModel` `:590`; crew ledger `:595-600` | `api.js:59`, `:142-143` |
-| `reports` | `/v1/reviews`, `/v1/evidence`, `cockpit.evidence` | `reviewRecord`/`runReviewSummary` `server.ts:643-645`; `EvidenceIndex` `:438` | `api.js:66-73`, `:155` |
+| `reports` | `/v1/reviews`, `/v1/evidence`, `cockpit.evidence` | `reviewRecord`/`runReviewSummary` `server.ts:643-645`; `EvidenceIndex` `:438` | `api.js:66-74`, `:155` |
 | `ops` | `/v1/control/status`, `/v1/runs`, `/v1/founder-attention` | `globalStopState`, `workosHealth` `server.ts:119-120`; `schedulerView` `:122` | `api.js:50-53` |
 | `changes` | none | `lastSeq` `store.ts:131` (new exposure) | — |
 | `notifications` | none | derived from the rows above | — |
@@ -378,7 +378,7 @@ Acceptance tests that an implementation (MOB-16, MOB-18) would need, derived fro
 ## 9. UNVERIFIED items
 
 - `packaged-entry.ts:79` loopback bind and `package.json:38-42` dependency list: cited from D-MOB, not re-read.
-- `GET /v1/system/executors` writing `settings.json`: cited from D-MOB and FRONTEND_BACKEND_MATRIX line 142, not re-traced. Excluded regardless.
+- `GET /v1/system/executors` writing `settings.json`: cited from D-MOB and `docs/inventory/2026-10-19/FRONTEND_BACKEND_MATRIX.csv` line 142, not re-traced. Excluded regardless.
 - `tasks[]` always empty (`store.ts:570`), run lease fields (`core/workos/types.ts:131-143`), run status enum (`types.ts:67-69`), `testCommand` in `schemas.ts:36-40`: cited from D-MOB / SC-3, not re-read.
 - Orchestrator block `UNAVAILABLE` in the installed app.
 - Cost of per-request projections: per-project rollups over `listRuns`, the non-journal ETag digest, per-mission timeline from the journal, evidence re-hash.
