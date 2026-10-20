@@ -637,3 +637,29 @@ create_session is unavailable, so no builder was dispatched; no retry, no second
 3. Canonical backlog: everything else NOT_READY after UI-133 claim.
 
 Note: this block was written with a local git commit and plain push (single commit, single file) because the full 54 KB log was too large to re-transmit through create_or_update_file without transcription risk.
+
+## 2026-10-20 05:13Z heartbeat #40 (queue read from claude/cloud-production-engine@ed5cfb9; v7/integration@0d0b2b9)
+
+**Queue:** parsed OK. READY tasks: 0 (CP-QUEUE/REPORT/CI PENDING_REVIEW; CP-DISPATCH/RECOVERY/GOV IN_PROGRESS; FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED BLOCKED). Step 2 dispatched: 0 (nothing READY; create_session also unavailable in this fire).
+
+**Step 2b (canonical backlog):** dispatch.mjs and BACKLOG_CHECKPOINT.json present. Recovery dry run (open PR heads passed quoted): outcome NO_ACTION; no claim made, no resume. READY rows: UI-025 (open PR #83), UI-133 (open PR #84), UI-047 and UI-201 (claim heads are ancestors of origin/v7/integration).
+- MERGED_AWAITING_WRITEBACK UI-047 b620ffaf935935e250cc6b716844116b065c42d0
+- MERGED_AWAITING_WRITEBACK UI-201 efc04b3003b1d49c93cc1c13c0ccb1138a66fa8c
+- No CLAIMED_AWAITING_BUILDER (the UI-133 claim from #39 now has draft PR #84, head 33c6770), no RECLAIMABLE_AWAITING_BUILDER, no ABANDONED_WITH_WORK_AWAITING_COORDINATOR.
+
+ACTIVE (list_sessions unavailable; fallback = LIVE claim branches with no open PR): 0. Not at cap, but dispatcher found nothing claimable.
+
+**Open PRs: 18** (none carries a uasco-cloud-production label; mergeable state and CI UNKNOWN, not returned by the listing): #86 integration wave B5, #85 backlog write-back 5, #84 UI-133 (draft), #83 UI-025 (draft), #75 CP-DISPATCH-RECOVERY (draft), #69 CI-PARALLEL proposal (draft, protected, do-not-merge), #68 wave B1 (uasco-needs-fix), #66 (draft), #50 (draft, uasco-needs-fix), #46, #33, #32, #31, #28, #23, #15, #11, #8.
+
+**Active implementer/builder sessions:** UNKNOWN (list_sessions unavailable); LIVE claim-branch list with no open PR: none.
+
+**Tasks completed (merged):** UI-047, UI-201 (git ancestry). Queue tasks DONE: 0.
+
+**Current failures:** uasco-needs-fix on #68 and #50. Repo-wide Actions CI red per queue (not independently verified).
+
+**Top blockers:**
+1. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned); BACKLOG-SOURCE-REBASELINE (Founder choice).
+2. Canonical backlog: all non-READY rows are DRAFT_NOT_READY, AUTHORITY_REQUIRED or BLOCKED; #85/#86 await merge (write-back for UI-047/UI-201).
+3. create_session/list_sessions unavailable in this fire.
+
+Note: written with a local single-file commit and plain push (as in #39) because the ~58 KB log is too large to re-transmit through create_or_update_file without transcription risk.
