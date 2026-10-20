@@ -56,7 +56,7 @@ const sec = (o: any) => ({schemaVersion: 1, status: o.status, blockReason: o.blo
   sbom: {status: "NOT_AVAILABLE", reason: "NOT_IMPLEMENTED"},
   gaps: o.gaps ?? ["SAST:TOOL_NOT_INSTALLED", "SBOM:NOT_IMPLEMENTED"], tools: o.tools ?? [], founderNote: o.note ?? "note"});
 const secEvidence = (s: any, commitSha: string, cycle = 1) => ({evidenceId: `evi_${"1".repeat(32)}`, step: "SECURITY", cycle, kind: "SECURITY_REPORT", argv: [], startedAt: "", endedAt: "", exitCode: 0, logPath: null, logSha256: null, commitSha, security: s});
-const mkRun = (idc: string, headSha: string | null, evidence: any[], status = "AWAITING_APPROVAL") => ({runId: runId(idc), missionId: `msn_${"0".repeat(24)}`, status, headSha, evidence});
+const mkRun = (idc: string, headSha: string | null, evidence: any[], status = "AWAITING_APPROVAL") => ({runId: runId(idc), missionId: `msn_${"0".repeat(24)}`, projectId: `prj_${"0".repeat(24)}`, status, step: "REVIEW", createdAt: "2026-10-16T00:00:00.000Z", updatedAt: "2026-10-16T00:00:00.000Z", remediationCycle: 0, baseSha: null, headSha, evidence});
 
 // A: PASSED bound to head; gitleaks+trivy INSTALLED, semgrep NOT_INSTALLED
 const RUN_A = mkRun("a", HEAD1, [secEvidence(sec({status: "PASSED", headSha: HEAD1, tools: [tool("gitleaks", "INSTALLED", "8.30.1"), tool("trivy", "INSTALLED", "0.5"), tool("semgrep", "NOT_INSTALLED")]}), HEAD1)]);
@@ -76,16 +76,57 @@ const COCKPIT = {generatedAt: "2026-10-16T00:00:00.000Z",
 const EVI_ID = `evi_${"a".repeat(32)}`;
 const EVIDENCE = {evidence: [{evidenceId: EVI_ID, kind: "WORK_RUN_STEP", verification: "VERIFIED", sourcePath: "work-os/x", sha256: "f".repeat(64), createdAt: "2026-10-16T00:00:00.000Z", missionId: `msn_${"0".repeat(24)}`}], nextCursor: null};
 
-interface Feed { cockpit?: "ok" | "unavail"; workRuns?: "ok" | "off"; evidence?: "ok" | "off" }
+// UI-049: real-shaped GET /v1/reviews fixtures (CLEAN independent @head, BLOCKED, CLEAN but NOT independent).
+const PRJ = `prj_${"0".repeat(24)}`, MSN = `msn_${"0".repeat(24)}`;
+const rid = (c: string) => `evd_${c.repeat(24)}`;
+const rrec = (c: string, runC: string, verdict: string, independent: boolean | null, currentHead: boolean) => ({reviewId: rid(c), runId: runId(runC), missionId: MSN, projectId: PRJ, cycle: 1, step: "REVIEW",
+  reviewer: {identity: independent === null ? null : "codex"}, implementer: {identity: "claude"}, independent, reviewedCommit: HEAD1, reviewedRange: {baseSha: "0".repeat(40), headSha: HEAD1}, currentHead,
+  verdict, startedAt: "2026-10-16T00:00:00.000Z", timestamp: "2026-10-16T00:0" + c.charCodeAt(0) % 10 + ":00.000Z", evidence: {findingsCount: verdict === "BLOCKED" ? 2 : 0}});
+const rrun = (runC: string, reviewState: string, latest: string | null) => ({runId: runId(runC), missionId: MSN, projectId: PRJ, status: "AWAITING_APPROVAL", step: "REVIEW", headSha: latest ? HEAD1 : null, reviewState, latestReviewId: latest, reviewCount: latest ? 1 : 0});
+const REVIEWS = {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", notice: "n",
+  summary: {runs: 3, reviews: 3, runsByReviewState: {CLEAN: 1, BLOCKED: 1, INDEPENDENCE_UNVERIFIED: 1}, reviewsByVerdict: {CLEAN: 2, BLOCKED: 1}, truncated: false},
+  reviews: [rrec("a", "a", "CLEAN", true, true), rrec("b", "b", "BLOCKED", true, true), rrec("c", "c", "CLEAN", false, true)],
+  runs: [rrun("a", "CLEAN", rid("a")), rrun("b", "BLOCKED", rid("b")), rrun("c", "INDEPENDENCE_UNVERIFIED", rid("c"))]};
+const REVIEWS_EMPTY = {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", notice: "n", summary: {runs: 0, reviews: 0, runsByReviewState: {}, reviewsByVerdict: {}, truncated: false}, reviews: [], runs: []};
+
+// UI-050: evidence list with mission+run, mission only, run only, and neither (real list fields only).
+const MSN2 = `msn_${"1".repeat(24)}`;
+const lev = (c: string, extra: Record<string, unknown>) => ({evidenceId: `evi_${c.repeat(32)}`, kind: "WORK_RUN_STEP", verification: "VERIFIED", sourcePath: "work-os/x", sha256: "f".repeat(64), createdAt: "2026-10-16T00:00:00.000Z", ...extra});
+const LINEAGE_EVIDENCE = {evidence: [
+  lev("1", {missionId: MSN, runId: runId("a")}), lev("2", {missionId: MSN, runId: runId("a")}), lev("3", {missionId: MSN, runId: runId("b")}),
+  lev("4", {missionId: MSN2}), lev("5", {runId: runId("a")}), lev("6", {})], nextCursor: null};
+
+// UI-051: work runs carrying real-shaped test evidence (f=EXECUTED, g=FAILED, h=UNVERIFIED, i=tests bound to another commit, j=surface BLOCKED, k=NOT_EXECUTED record, e=no test evidence).
+const tev = (id: string, kind: string, commitSha: string, o: any = {}) => ({evidenceId: `evi_${id.repeat(32)}`, step: "VERIFY", cycle: 1, kind, argv: [], startedAt: "", endedAt: "", exitCode: 0, logPath: null, logSha256: null, commitSha, ...o});
+const tsurf = (id: string, commitSha: string, acceptance: string, n: number | null) => tev(id, "TEST_SURFACE", commitSha, {testSurface: {functionalAcceptance: acceptance, executedTests: n}});
+const SBX = {sandboxProviderId: "docker-local"};
+const TEST_RUNS = {runs: [
+  mkRun("f", HEAD1, [tev("7", "VERIFY_TESTS", HEAD1, SBX), tev("8", "REGRESSION_TESTS", HEAD1, SBX), tsurf("9", HEAD1, "UNVERIFIED_ORACLE", 12)]),
+  mkRun("1", HEAD1, [tev("a", "VERIFY_TESTS", HEAD1, {...SBX, exitCode: 1}), tev("b", "REGRESSION_TESTS", HEAD1, SBX), tsurf("c", HEAD1, "UNVERIFIED_ORACLE", 5)]),
+  mkRun("2", HEAD1, [tev("d", "VERIFY_TESTS", HEAD1), tev("e", "REGRESSION_TESTS", HEAD1), tsurf("1", HEAD1, "UNVERIFIED_ORACLE", 3)]),
+  mkRun("3", HEAD2, [tev("2", "VERIFY_TESTS", HEAD1, SBX), tev("3", "REGRESSION_TESTS", HEAD1, SBX), tsurf("4", HEAD1, "UNVERIFIED_ORACLE", 9)]),
+  mkRun("4", HEAD1, [tev("5", "VERIFY_TESTS", HEAD1, SBX), tev("6", "REGRESSION_TESTS", HEAD1, SBX), tsurf("7", HEAD1, "BLOCKED", 4)]),
+  mkRun("5", HEAD1, [tev("8", "VERIFY_TESTS_NOT_EXECUTED", HEAD1, {exitCode: null})]),
+  RUN_E]};
+
+interface Feed { cockpit?: "ok" | "unavail"; workRuns?: "ok" | "off" | "tests"; workRunsData?: any; evidence?: "ok" | "off" | "lineage"; reviews?: "ok" | "off" | "empty" | "bad"; mutate?: (kind: "list" | "detail", payload: any) => any }
 async function mkCtx(feed: Feed = {}, lang = "tr") {
   const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
   const doc = new D(), store = st.createStore(null), calls: string[] = [];
   const bridge = {apiGet: async (p: string) => {
     calls.push(p);
     if (p === "/v1/cockpit") { if (feed.cockpit === "unavail") throw new Error(`${p}: HTTP 404`); return COCKPIT; }
-    if (p === "/v1/work-runs") { if (feed.workRuns === "off") throw new Error(`${p}: HTTP 404`); return WORK_RUNS; }
+    if (p === "/v1/work-runs") { if (feed.workRuns === "off") throw new Error(`${p}: HTTP 404`); if (feed.workRunsData) return feed.workRunsData; return feed.workRuns === "tests" ? TEST_RUNS : WORK_RUNS; }
+    if (p === "/v1/reviews" || p.startsWith("/v1/reviews/")) {
+      if (feed.reviews === "off") throw new Error(`${p}: HTTP 404`);
+      if (p === "/v1/reviews") return feed.reviews === "empty" ? REVIEWS_EMPTY : feed.reviews === "bad" ? {source: "WRONG"} : (feed.mutate ? feed.mutate("list", structuredClone(REVIEWS)) : REVIEWS);
+      const rec = REVIEWS.reviews.find(r => p === `/v1/reviews/${r.reviewId}`);
+      if (!rec) throw new Error(`${p}: HTTP 404`);
+      const det = {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", notice: "n", review: {...rec, evidence: {recordedVerdict: rec.verdict === "NO_VERDICT" ? null : rec.verdict, invalidated: null, findingsCount: rec.verdict === "BLOCKED" ? 2 : 0, findings: rec.verdict === "BLOCKED" ? ["<img src=x onerror=alert(1)> finding one", "finding two"] : null, exitCode: 0, timedOut: false, logSha256: null, note: null}}, run: REVIEWS.runs.find(x => x.runId === rec.runId)};
+      return feed.mutate ? feed.mutate("detail", structuredClone(det)) : det;
+    }
     if (p.startsWith("/v1/evidence/")) return {evidence: EVIDENCE.evidence[0], summary: {}, tail: null, tailWithheld: null};
-    if (p.startsWith("/v1/evidence")) { if (feed.evidence === "off") throw new Error(`${p}: HTTP 404`); return EVIDENCE; }
+    if (p.startsWith("/v1/evidence")) { if (feed.evidence === "off") throw new Error(`${p}: HTTP 404`); const lim = new URLSearchParams(p.split("?")[1] ?? "").get("limit"); if (lim !== null && (!/^[0-9]{1,3}$/.test(lim) || Number(lim) < 1 || Number(lim) > 100)) throw new Error(`${p}: HTTP 400 INVALID_LIMIT`); /* mirrors apps/control-api/src/server.ts GET /v1/evidence: limit 1..100 */ if (p.includes("runId=")) return {evidence: [lev("7", {runId: runId("f"), kind: "VERIFY_TESTS"}), lev("8", {runId: runId("a"), kind: "REGRESSION_TESTS"}), lev("9", {runId: runId("f"), kind: "WORK_RUN_STEP"})], nextCursor: null}; return feed.evidence === "lineage" ? LINEAGE_EVIDENCE : EVIDENCE; }
     throw new Error(`${p}: HTTP 404`);
   }};
   const api = apiMod.createApi({bridge, store});
@@ -169,7 +210,7 @@ describe("UX WP-QA-SEC assurance view (real data, honest states)", () => {
     // semgrep NOT_INSTALLED surfaced verbatim.
     const semgrep = byData(node, "tool", "semgrep").find(n => n.dataset.toolStatus === "NOT_INSTALLED");
     expect(semgrep).toBeTruthy();
-    expect(calls.sort()).toEqual(["/v1/cockpit", "/v1/evidence?limit=100", "/v1/work-runs"]);
+    expect(calls.sort()).toEqual(["/v1/cockpit", "/v1/evidence?limit=100", "/v1/reviews", "/v1/work-runs"]);
   });
   it("opens a per-run security detail with gitleaks/trivy/gaps, honestly", async () => {
     const {ctx} = await mkCtx();
@@ -197,6 +238,367 @@ describe("UX WP-QA-SEC assurance view (real data, honest states)", () => {
     expect(byId(node, "qa-evidence")!.textContent.length).toBeGreaterThan(0);
     // No security rows are rendered when the work-runs read fails.
     expect(byData(node, "runId").length).toBe(0);
+  });
+});
+
+describe("UI-049 assurance Reviews panel (real verdicts, honest states)", () => {
+  beforeEach(async () => { (await load("views", "assurance.js")).resetAssuranceView(); const f = (await load("forms.js")); f.selection.evidenceId = null; f.selection.missionId = null; });
+
+  it("lists real verdicts with run and mission, never upgrading a non-independent CLEAN", async () => {
+    const {ctx} = await mkCtx({}, "en");
+    const {node} = await renderAssurance(ctx);
+    const panel = byId(node, "as-reviews")!;
+    const rows = byData(panel, "reviewId");
+    expect(rows.map(r => r.dataset.verdict).sort()).toEqual(["BLOCKED", "CLEAN", "CLEAN"]);
+    const rowA = byData(panel, "reviewId", rid("a"))[0], rowC = byData(panel, "reviewId", rid("c"))[0];
+    expect(text(rowA)).toContain(runId("a")); expect(text(rowA)).toContain(MSN);
+    expect(byData(rowA, "pill", "VERIFIED").length).toBe(1);
+    // CLEAN but independence not proven: must NOT be a verified pill.
+    expect(byData(rowC, "pill", "VERIFIED").length).toBe(0);
+    expect(byData(rowC, "pill", "STALE").length).toBe(1);
+    expect(byData(byData(panel, "reviewId", rid("b"))[0], "pill", "BLOCKED").length).toBe(1);
+  });
+  it("opens the detail from GET /v1/reviews/:id and renders findings as text, not HTML", async () => {
+    const {ctx, calls} = await mkCtx({}, "en");
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `rev-${rid("b")}`) as N).fire("click");
+    const {node} = await renderAssurance(ctx);
+    expect(calls).toContain(`/v1/reviews/${rid("b")}`);
+    const d = byId(node, "as-reviews-detail")!;
+    expect(text(d)).toContain(rid("b"));
+    expect(byData(d, "verdict", "BLOCKED").length).toBe(1);
+    const li = byTag(byData(d, "findings")[0], "li");
+    expect(li.length).toBe(2);
+    expect(text(li[0])).toContain("<img src=x");
+    expect(byTag(d, "img").length).toBe(0);
+  });
+  it("shows an honest empty state and invents no verdict", async () => {
+    const {ctx} = await mkCtx({reviews: "empty"}, "en");
+    const {node} = await renderAssurance(ctx);
+    const panel = byId(node, "as-reviews")!;
+    expect(byData(panel, "reviewId").length).toBe(0);
+    expect(byData(panel, "verdict").length).toBe(0);
+    expect(text(panel)).toContain("No independent review has been recorded yet.");
+  });
+  it("shows UNAVAILABLE and ERROR states instead of rows", async () => {
+    for (const reviews of ["off", "bad"] as const) {
+      const {ctx} = await mkCtx({reviews}, "en");
+      const {node} = await renderAssurance(ctx);
+      const panel = byId(node, "as-reviews")!;
+      expect(byData(panel, "reviewId").length, reviews).toBe(0);
+      expect(byTag(panel, "table").length, reviews).toBe(0);
+      expect(panel.textContent.length).toBeGreaterThan(0);
+    }
+  });
+  it("mapReviewDetail fails closed on malformed or foreign payloads", async () => {
+    const core = await load("assurance-core.js");
+    expect(core.mapReviewDetail(null).state).toBe("ERROR");
+    expect(core.mapReviewDetail({source: "X", review: {}}).state).toBe("ERROR");
+    const good = {source: "WORK_OS_JOURNAL_RUN_EVIDENCE", review: {...REVIEWS.reviews[0], evidence: {findings: null}}, run: REVIEWS.runs[0]};
+    expect(core.mapReviewDetail(good).state).toBe("VERIFIED");
+    expect(core.mapReviewDetail({...good, review: {...good.review, verdict: "PASS"}}).state).toBe("ERROR");
+    expect(core.mapReviewDetail({...good, review: {...good.review, reviewId: "evd_zz"}}).state).toBe("ERROR");
+  });
+  it("assuranceReview refuses non-canonical ids without calling the bridge", async () => {
+    const {api, calls} = await mkCtx({}, "en");
+    expect((await api.assuranceReview("../x")).state).toBe("ERROR");
+    expect(calls.filter((c: string) => c.startsWith("/v1/reviews"))).toEqual([]);
+  });
+  it("only a fully-bound latest independent CLEAN gets the VERIFIED reviewed-commit pill (list)", async () => {
+    const core = await load("assurance-core.js");
+    const ok = core.reviewRowVerified(REVIEWS.reviews[0], REVIEWS.runs);
+    expect(ok).toBe(true);
+    const rec = REVIEWS.reviews[0];
+    expect(core.reviewRowVerified({...rec, currentHead: false}, REVIEWS.runs)).toBe(false);
+    expect(core.reviewRowVerified({...rec, reviewedCommit: OTHER}, REVIEWS.runs)).toBe(false);
+    expect(core.reviewRowVerified({...rec, reviewedCommit: null}, REVIEWS.runs)).toBe(false);
+    expect(core.reviewRowVerified(rec, REVIEWS.runs.map(r => ({...r, headSha: OTHER})))).toBe(false);
+    expect(core.reviewRowVerified(rec, REVIEWS.runs.map(r => ({...r, latestReviewId: rid("z")})))).toBe(false);
+    expect(core.reviewRowVerified(rec, [])).toBe(false);
+  });
+  it("list view: an older CLEAN record of the same run (non-latest) shows STALE not VERIFIED", async () => {
+    const add = (p: any) => { p.reviews.push(rrec("d", "a", "CLEAN", true, true)); p.summary.reviews = 4; p.summary.reviewsByVerdict.CLEAN = 3; return p; };
+    const {ctx} = await mkCtx({mutate: (k, p) => k === "list" ? add(p) : p}, "en");
+    const {node} = await renderAssurance(ctx);
+    const panel = byId(node, "as-reviews")!;
+    expect(byData(byData(panel, "reviewId", rid("a"))[0], "pill", "VERIFIED").length).toBe(1);
+    const old = byData(panel, "reviewId", rid("d"))[0];
+    expect(byData(old, "pill", "VERIFIED").length).toBe(0);
+    expect(byData(old, "pill", "STALE").length).toBe(1);
+  });
+  it("detail view: stale or contradictory CLEAN records never show VERIFIED", async () => {
+    const cases: Array<[string, (p: any) => any]> = [
+      ["currentHead false", p => { p.review.currentHead = false; return p; }],
+      ["reviewedCommit != head", p => { p.review.reviewedCommit = OTHER; return p; }],
+      ["reviewedCommit null", p => { p.review.reviewedCommit = null; return p; }],
+      ["invalidated", p => { p.review.evidence.invalidated = "REVIEW_INVALID"; return p; }],
+      ["recordedVerdict differs", p => { p.review.evidence.recordedVerdict = "BLOCKED"; return p; }],
+      ["non-latest", p => { p.run.latestReviewId = rid("z"); return p; }]
+    ];
+    for (const [name, fn] of cases) {
+      const {ctx} = await mkCtx({mutate: (k, p) => k === "detail" ? fn(p) : p}, "en");
+      const first = await renderAssurance(ctx);
+      (byId(first.node, `rev-${rid("a")}`) as N).fire("click");
+      const {node} = await renderAssurance(ctx);
+      const d = byId(node, "as-reviews-detail")!;
+      expect(byData(d, "pill", "VERIFIED").length, name).toBe(0);
+    }
+    // control: untouched payload IS verified.
+    const {ctx} = await mkCtx({}, "en");
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `rev-${rid("a")}`) as N).fire("click");
+    const d = byId((await renderAssurance(ctx)).node, "as-reviews-detail")!;
+    expect(byData(d, "pill", "VERIFIED").length).toBe(1);
+  });
+  it("mapReviewDetail: requested-id mismatch and malformed counters fail the read", async () => {
+    const core = await load("assurance-core.js");
+    const good = () => ({source: "WORK_OS_JOURNAL_RUN_EVIDENCE", review: {...REVIEWS.reviews[0], evidence: {recordedVerdict: "CLEAN", invalidated: null, findingsCount: 0, findings: null, exitCode: 0, timedOut: false}}, run: REVIEWS.runs[0]});
+    expect(core.mapReviewDetail(good(), rid("a")).review.verified).toBe(true);
+    expect(core.mapReviewDetail(good(), rid("b")).state).toBe("ERROR");
+    for (const [k, v] of [["findingsCount", "2"], ["findingsCount", -1], ["findingsCount", 1.5], ["exitCode", "0"], ["exitCode", 1.5], ["recordedVerdict", "PASS"]] as const) {
+      const g: any = good(); g.review.evidence[k] = v;
+      expect(core.mapReviewDetail(g, rid("a")).state, `${k}=${String(v)}`).toBe("ERROR");
+    }
+    const noRun: any = good(); delete noRun.run;
+    expect(core.mapReviewDetail(noRun, rid("a")).state).toBe("ERROR");
+    const otherRun: any = good(); otherRun.run = REVIEWS.runs[1];
+    expect(core.mapReviewDetail(otherRun, rid("a")).state).toBe("ERROR");
+  });
+  it("assuranceReview passes the requested id so a foreign record is ERROR", async () => {
+    const {api} = await mkCtx({mutate: (k, p) => k === "detail" ? {...p, review: {...p.review, reviewId: rid("b")}} : p}, "en");
+    expect((await api.assuranceReview(rid("a"))).state).toBe("ERROR");
+  });
+  it("review routes are already allow-listed read-only GETs (no new route)", () => {
+    const ok = loadGet();
+    for (const p of ["/v1/reviews", `/v1/reviews/${rid("a")}`]) expect(ok(p), p).toBe(true);
+    expect(ok(`/v1/reviews/${rid("a")}/`)).toBe(false);
+  });
+  it("assurance.reviews.* keys exist in EN and TR with matching placeholders", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const ks = Object.keys(en).filter(k => k.startsWith("assurance.reviews."));
+    expect(ks.length).toBeGreaterThan(30);
+    expect(ks.sort()).toEqual(Object.keys(tr).filter(k => k.startsWith("assurance.reviews.")).sort());
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of ks) expect(ph(en[k]), k).toBe(ph(tr[k]));
+  });
+});
+
+describe("UI-050 evidence lineage (mission -> run -> evidence from list fields only)", () => {
+  beforeEach(async () => { (await load("views", "assurance.js")).resetAssuranceView(); const f = (await load("forms.js")); f.selection.evidenceId = null; f.selection.missionId = null; });
+
+  it("buildLineage creates edges only from present fields and never infers", async () => {
+    const {buildLineage} = await load("assurance-core.js");
+    const L = buildLineage(LINEAGE_EVIDENCE.evidence);
+    expect(L.total).toBe(6);
+    const m1 = L.missions.find((m: any) => m.missionId === MSN), m2 = L.missions.find((m: any) => m.missionId === MSN2);
+    expect(m1.runs.map((r: any) => [r.runId, r.evidence.length])).toEqual([[runId("a"), 2], [runId("b"), 1]]);
+    // mission-only item stays on the mission with NO run; it is not attached to any run.
+    expect(m2.runs).toEqual([]); expect(m2.noRun.map((e: any) => e.evidenceId)).toEqual([`evi_${"4".repeat(32)}`]);
+    // run-only item is NOT adopted by MSN even though run a belongs to MSN elsewhere.
+    expect(L.orphanRuns.map((r: any) => [r.runId, r.evidence.length])).toEqual([[runId("a"), 1]]);
+    expect(m1.runs[0].evidence.map((e: any) => e.evidenceId)).not.toContain(`evi_${"5".repeat(32)}`);
+    expect(L.ungrouped.map((e: any) => e.evidenceId)).toEqual([`evi_${"6".repeat(32)}`]);
+    expect(buildLineage(null).total).toBe(0);
+  });
+  it("renders the grouped tree and shows missing ids as ungrouped", async () => {
+    const {ctx} = await mkCtx({evidence: "lineage"}, "en");
+    const {node} = await renderAssurance(ctx);
+    const p = byId(node, "as-lineage")!;
+    expect(byData(p, "lineage", "mission").length).toBe(2);
+    const m1 = byData(p, "missionId", MSN).find(n => n.dataset.lineage === "mission")!;
+    expect(byData(m1, "lineage", "run").length).toBe(2);
+    expect(byData(m1, "lineage", "evidence").length).toBe(3);
+    expect(byData(p, "lineage", "orphanRuns").length).toBe(1);
+    const un = byData(p, "lineage", "ungrouped")[0];
+    expect(byData(un, "lineage", "evidence").length).toBe(1);
+    expect(text(byData(p, "lineageScope")[0])).toContain("6");
+  });
+  it("skips repeated evidenceId so DOM ids stay unique, and discloses the count", async () => {
+    const {buildLineage} = await load("assurance-core.js");
+    const dup = [...LINEAGE_EVIDENCE.evidence, LINEAGE_EVIDENCE.evidence[0], {...LINEAGE_EVIDENCE.evidence[2], runId: runId("a")}];
+    const L = buildLineage(dup);
+    expect(L.total).toBe(6); expect(L.duplicates).toBe(2);
+    const m1 = L.missions.find((m: any) => m.missionId === MSN);
+    expect(m1.runs.map((r: any) => [r.runId, r.evidence.length])).toEqual([[runId("a"), 2], [runId("b"), 1]]);
+    const {ctx} = await mkCtx({evidence: "lineage"}, "en");
+    const orig = LINEAGE_EVIDENCE.evidence.slice();
+    LINEAGE_EVIDENCE.evidence.push(orig[0], orig[0]);
+    try {
+      const {node} = await renderAssurance(ctx);
+      const p = byId(node, "as-lineage")!;
+      const ids = all(p).map(n => n.id).filter(Boolean);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(byData(p, "lineage", "evidence").length).toBe(6);
+      expect(text(byData(p, "lineageDuplicates")[0])).toContain("2");
+    } finally { LINEAGE_EVIDENCE.evidence.length = orig.length; }
+  });
+  it("keeps the same runId under two missions separate and treats a __proto__ mission id as data", async () => {
+    const {buildLineage} = await load("assurance-core.js");
+    const L = buildLineage([lev("7", {missionId: MSN, runId: runId("a")}), lev("8", {missionId: MSN2, runId: runId("a")}), lev("9", {missionId: "__proto__", runId: "__proto__"}), lev("a", {missionId: "__proto__"})]);
+    expect(L.missions.map((m: any) => m.missionId).sort()).toEqual(["__proto__", MSN, MSN2].sort());
+    for (const id of [MSN, MSN2]) expect(L.missions.find((m: any) => m.missionId === id).runs.map((r: any) => r.evidence.length)).toEqual([1]);
+    const pm = L.missions.find((m: any) => m.missionId === "__proto__");
+    expect(pm.runs.map((r: any) => r.runId)).toEqual(["__proto__"]); expect(pm.noRun.length).toBe(1);
+    expect(({} as any).runs).toBeUndefined(); expect(Object.prototype.hasOwnProperty.call(Object.prototype, "runs")).toBe(false);
+  });
+  it("clicking a lineage leaf selects that evidence", async () => {
+    const {ctx} = await mkCtx({evidence: "lineage"}, "en");
+    const forms = await load("forms.js");
+    const {node} = await renderAssurance(ctx);
+    expect(forms.selection.evidenceId).toBeNull();
+    const target = `evi_${"3".repeat(32)}`;
+    (byId(node, `lin-${target}`) as N).fire("click");
+    expect(forms.selection.evidenceId).toBe(target);
+  });
+  it("honest empty and unavailable states, no invented groups", async () => {
+    const empty = await mkCtx({}, "en");
+    const a = await renderAssurance(empty.ctx);
+    // default fixture has one mission-only item: one mission, no runs invented.
+    expect(byData(byId(a.node, "as-lineage")!, "lineage", "run").length).toBe(0);
+    expect(byData(byId(a.node, "as-lineage")!, "lineage", "norun").length).toBe(1);
+    const off = await mkCtx({evidence: "off"}, "en");
+    const b = await renderAssurance(off.ctx);
+    expect(byData(byId(b.node, "as-lineage")!, "lineage").length).toBe(0);
+  });
+  it("assurance.lineage.* keys have EN/TR parity", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const ks = Object.keys(en).filter(k => k.startsWith("assurance.lineage."));
+    expect(ks.length).toBeGreaterThanOrEqual(9);
+    expect(ks.sort()).toEqual(Object.keys(tr).filter(k => k.startsWith("assurance.lineage.")).sort());
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of ks) expect(ph(en[k]), k).toBe(ph(tr[k]));
+  });
+});
+
+describe("UI-051 per-run test report (recorded evidence else NOT_EXECUTED, never a pass without evidence)", () => {
+  beforeEach(async () => { (await load("views", "assurance.js")).resetAssuranceView(); const f = (await load("forms.js")); f.selection.evidenceId = null; f.selection.missionId = null; });
+  const stateOf = (node: N, c: string) => byData(node, "testRun", runId(c))[0]?.dataset.testState;
+
+  it("testStateOf/mapTestReports derive status only from head-bound attested evidence", async () => {
+    const core = await load("assurance-core.js");
+    const m = core.mapTestReports({ok: true, data: TEST_RUNS});
+    const st = (c: string) => m.runs.find((r: any) => r.runId === runId(c)).state;
+    expect([st("f"), st("1"), st("2"), st("3"), st("4"), st("5"), st("e")]).toEqual(["EXECUTED", "FAILED", "UNVERIFIED", "NOT_EXECUTED", "BLOCKED", "NOT_EXECUTED", "NOT_EXECUTED"]);
+    expect(m.runs.find((r: any) => r.runId === runId("f")).executedTests).toBe(12);
+    // Run with no test evidence has zero records and is NOT_EXECUTED.
+    expect(m.runs.find((r: any) => r.runId === runId("e")).records).toEqual([]);
+    expect(core.mapTestReports({ok: false, state: "UNAVAILABLE"})).toMatchObject({state: "UNAVAILABLE", runs: [], total: 0});
+    expect(core.mapTestReports({ok: true, data: {}}).state).toBe("ERROR");
+  });
+  // Differential: the per-run test status must equal readiness-core's (shared, fail-closed) result on adversarial input.
+  const hexRun = (n: number) => `run_${n.toString(16).padStart(24, "0")}`;
+  const goodRun = (id: string, extra: any[] = []) => ({...mkRun("f", HEAD1, [tev("7", "VERIFY_TESTS", HEAD1, SBX), tev("8", "REGRESSION_TESTS", HEAD1, SBX), tsurf("9", HEAD1, "UNVERIFIED_ORACLE", 12), ...extra]), runId: id});
+  const DIFF_CASES: Array<[string, () => any[]]> = [
+    ["control", () => [goodRun(hexRun(1))]],
+    ["extra VERIFY_TESTS exit 1 with commitSha zz", () => [goodRun(hexRun(1), [tev("a", "VERIFY_TESTS", "zz", {...SBX, exitCode: 1})])]],
+    ["uppercase sha", () => [goodRun(hexRun(1), [tev("a", "VERIFY_TESTS", "A".repeat(40), SBX)])]],
+    ["g x40 sha", () => [goodRun(hexRun(1), [tev("a", "VERIFY_TESTS", "g".repeat(40), SBX)])]],
+    ["element {kind:5}", () => [goodRun(hexRun(1), [{kind: 5}])]],
+    ["element 'x'", () => [goodRun(hexRun(1), ["x"])]],
+    ["functionalAcceptance FOO", () => [goodRun(hexRun(1), [tsurf("a", HEAD1, "FOO", 3)])]],
+    ["sandboxProviderId 'bad id!'", () => [goodRun(hexRun(1), [tev("a", "REGRESSION_TESTS", HEAD1, {sandboxProviderId: "bad id!"})])]],
+    ["exitCode string '0'", () => [goodRun(hexRun(1), [tev("a", "VERIFY_TESTS", HEAD1, {...SBX, exitCode: "0"})])]],
+    ["executedTests negative", () => [goodRun(hexRun(1), [tsurf("a", HEAD1, "UNVERIFIED_ORACLE", -1)])]],
+    ["duplicate runId", () => [goodRun(hexRun(1)), goodRun(hexRun(1))]],
+    ["malformed run row (no projectId)", () => [{...goodRun(hexRun(1)), projectId: undefined}]],
+    ["600 runs", () => Array.from({length: 600}, (_, i) => goodRun(hexRun(i + 1)))]
+  ];
+  it("DIFFERENTIAL: mapTestReports equals readiness-core mapReadinessWorkRuns on adversarial evidence", async () => {
+    const core = await load("assurance-core.js"), rd = await load("readiness-core.js");
+    for (const [name, mk] of DIFF_CASES) {
+      const runs = mk();
+      const want = rd.mapReadinessWorkRuns({runs}), got = core.mapTestReports({ok: true, data: {runs}});
+      expect(got.state, name).toBe(want.state);
+      if (want.state === "VERIFIED") {
+        expect(got.total, name).toBe(want.runs.total);
+        got.runs.forEach((g: any, i: number) => { expect(g.runId, name).toBe(want.runs.items[i].runId); expect(g.state, name).toBe(want.runs.items[i].tests); });
+      } else {
+        expect(got.runs, name).toEqual([]);
+      }
+    }
+    // Premise: the malformed cases really are rejected by readiness-core (so ERROR, never EXECUTED).
+    for (const name of ["extra VERIFY_TESTS exit 1 with commitSha zz", "uppercase sha", "g x40 sha", "element {kind:5}", "element 'x'", "functionalAcceptance FOO", "sandboxProviderId 'bad id!'", "exitCode string '0'", "duplicate runId"]) {
+      expect(core.mapTestReports({ok: true, data: {runs: DIFF_CASES.find(c => c[0] === name)![1]()}}).state, name).toBe("ERROR");
+    }
+  });
+  it("discloses truncation at 500 as shown N of M total (M = original count)", async () => {
+    const core = await load("assurance-core.js");
+    const runs = DIFF_CASES.find(c => c[0] === "600 runs")![1]();
+    const m = core.mapTestReports({ok: true, data: {runs}});
+    expect(m.state).toBe("VERIFIED"); expect(m.runs.length).toBe(500); expect(m.total).toBe(600); expect(m.truncated).toBe(true);
+    const {ctx} = await mkCtx({workRunsData: {runs}}, "en");
+    const {node} = await renderAssurance(ctx);
+    expect(text(byData(byId(node, "as-testrep")!, "results", "testreport")[0])).toBe("Showing 150 of 600 runs.");
+  });
+  it("a malformed test evidence element makes the panel ERROR with no run rows and no EXECUTED", async () => {
+    const runs = [goodRun(hexRun(1)), goodRun(hexRun(2), [tev("a", "VERIFY_TESTS", "zz", {...SBX, exitCode: 1})])];
+    const {ctx} = await mkCtx({workRunsData: {runs}}, "en");
+    const {node} = await renderAssurance(ctx);
+    const p = byId(node, "as-testrep")!;
+    expect(byData(p, "testRun").length).toBe(0);
+    expect(byData(p, "testState", "EXECUTED").length).toBe(0);
+    expect(byTag(p, "table").length).toBe(0);
+  });
+  it("EXECUTED is styled neutrally, never as the VERIFIED pill", async () => {
+    const {ctx} = await mkCtx({workRuns: "tests"}, "en");
+    const {node} = await renderAssurance(ctx);
+    const row = byData(byId(node, "as-testrep")!, "testRun", runId("f"))[0];
+    expect(byData(row, "pill", "VERIFIED").length).toBe(0);
+    expect(byData(row, "pill", "NEUTRAL").length).toBe(1);
+  });
+  it("renders EXECUTED only for the evidenced run; stale/missing/zero-count never read as executed", async () => {
+    const {ctx} = await mkCtx({workRuns: "tests"}, "en");
+    const {node} = await renderAssurance(ctx);
+    const p = byId(node, "as-testrep")!;
+    expect(byData(p, "testRun").length).toBe(7);
+    expect(stateOf(p, "f")).toBe("EXECUTED");
+    for (const c of ["3", "5", "e"]) expect(stateOf(p, c), c).toBe("NOT_EXECUTED");
+    expect(stateOf(p, "1")).toBe("FAILED");
+    expect(stateOf(p, "2")).toBe("UNVERIFIED");
+    expect(byData(p, "testState", "EXECUTED").filter(n => n.tagName === "TR").length).toBe(1);
+    // The word PASS/PASSED is never produced by this panel.
+    expect(/\bPASS(ED)?\b/.test(text(p))).toBe(false);
+  });
+  it("detail lists the recorded test evidence and cross-checks the evidence index by exact id", async () => {
+    const {ctx, calls} = await mkCtx({workRuns: "tests"}, "en");
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `tr-${runId("f")}`) as N).fire("click");
+    const {node} = await renderAssurance(ctx);
+    expect(calls.some((c: string) => c.startsWith("/v1/evidence?") && c.includes(`runId=${runId("f")}`))).toBe(true);
+    const d = byId(node, "as-testrep-detail")!;
+    expect(byData(d, "testRecord", "VERIFY_TESTS").length).toBe(1);
+    expect(byData(d, "testRecord", "REGRESSION_TESTS").length).toBe(1);
+    // Only evi_7 matches the index by id AND runId AND kind; evi_8 is indexed under another run and evi_9 under another kind, so both read as not indexed.
+    expect(byData(d, "chip", "VERIFIED").length).toBe(1);
+    // evi_8 (indexed under another run) and evi_9 (indexed under another kind) must NOT earn a chip.
+    expect(byData(d, "indexState", "NOT_INDEXED").length).toBe(2);
+  });
+  it("a run with no test evidence shows NOT_EXECUTED and no records in detail", async () => {
+    const {ctx} = await mkCtx({workRuns: "tests"}, "en");
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `tr-${runId("e")}`) as N).fire("click");
+    const {node} = await renderAssurance(ctx);
+    const d = byId(node, "as-testrep-detail")!;
+    expect(byData(d, "testState", "NOT_EXECUTED").length).toBeGreaterThan(0);
+    expect(byData(d, "testNotExecuted").length).toBe(1);
+    expect(byData(d, "testRecord").length).toBe(0);
+  });
+  it("shows honest UNAVAILABLE and empty states", async () => {
+    const off = await mkCtx({workRuns: "off"}, "en");
+    const a = await renderAssurance(off.ctx);
+    expect(byData(byId(a.node, "as-testrep")!, "testRun").length).toBe(0);
+    expect(byTag(byId(a.node, "as-testrep")!, "table").length).toBe(0);
+  });
+  it("assurance.testreport.* keys have EN/TR parity", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const ks = Object.keys(en).filter(k => k.startsWith("assurance.testreport."));
+    expect(ks.length).toBeGreaterThan(30);
+    expect(ks.sort()).toEqual(Object.keys(tr).filter(k => k.startsWith("assurance.testreport.")).sort());
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of ks) expect(ph(en[k]), k).toBe(ph(tr[k]));
   });
 });
 
@@ -234,5 +636,230 @@ describe("UX WP-QA-SEC allow-list and i18n", () => {
     expect(qa.sort()).toEqual(Object.keys(en).filter(k => k.startsWith("qa.")).sort());
     const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
     for (const k of qa) { expect(en[k], k).toBeTruthy(); expect(ph(en[k]), k).toBe(ph(tr[k])); }
+  });
+});
+
+// ---------------- negative / a11y / parity hardening ----------------
+// //TR: Olumsuz yollar: kanıt listesi/cockpit/work-runs okuması 404 veya bozuk olduğunda hiçbir sayı, koşu ya da "doğrulandı" uydurulmaz.
+describe("UX WP-QA-SEC negative paths (no fabricated counts, runs or verification)", () => {
+  beforeEach(async () => { (await load("views", "assurance.js")).resetAssuranceView(); const f = (await load("forms.js")); f.selection.evidenceId = null; f.selection.missionId = null; });
+
+  it("every read failing: no stats, no security rows, no evidence rows, no VERIFIED chips; page still renders h1 and dynamic QA gate", async () => {
+    const {ctx} = await mkCtx({cockpit: "unavail", workRuns: "off", evidence: "off"});
+    const {node} = await renderAssurance(ctx);
+    expect(byData(node, "stat").length).toBe(0);
+    expect(byData(node, "runId").length).toBe(0);
+    expect(all(node).some(n => n.id.startsWith("ev-evi_"))).toBe(false);
+    expect(byData(node, "chip", "VERIFIED").length).toBe(0);
+    expect(byData(node, "scan", "PASSED").length).toBe(0);
+    expect(byTag(node, "h1").length).toBe(1);
+    expect(byId(node, "qa-dynamic")).toBeTruthy();
+    // Güvenlik duruşu özeti (posture) okunamayan veriden üretilmez.
+    expect(byData(node, "posture").length).toBe(0);
+  });
+  it("evidence list failing alone leaves the overview and security scan honest and intact", async () => {
+    const {ctx} = await mkCtx({evidence: "off"});
+    const {node} = await renderAssurance(ctx);
+    expect(all(byId(node, "assurance-list")!).some(n => n.id.startsWith("ev-evi_"))).toBe(false);
+    expect(byData(node, "runId").length).toBe(5);
+  });
+  it("malformed work-runs payloads never produce scan rows or a posture summary", async () => {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    for (const bad of ["garbage", null, {workRuns: "x"}, 42]) {
+      const doc = new D(), store = st.createStore(null);
+      const bridge = {apiGet: async (p: string) => { if (p === "/v1/work-runs") return bad; if (p === "/v1/cockpit") return COCKPIT; return EVIDENCE; }};
+      const t = (k: string, v?: any) => i18n.translate("en", k, v);
+      const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang: "en", t}, t, navigate: () => {}, rerender: () => {}, settleFocus: () => {}};
+      const {node} = await renderAssurance(ctx);
+      expect(byData(node, "scan", "PASSED").length, JSON.stringify(bad)).toBe(0);
+      expect(byData(node, "posture").length, JSON.stringify(bad)).toBe(0);
+    }
+  });
+  it("a selected run that vanishes shows no stale detail", async () => {
+    const {ctx} = await mkCtx();
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `sec-${runId("c")}`) as N).fire("click");
+    const off = await mkCtx({workRuns: "off"});
+    const {node} = await renderAssurance(off.ctx);
+    const detail = byId(node, "qa-secdetail")!;
+    expect(text(detail)).not.toContain("SECRET_DETECTED");
+    expect(byData(detail, "scan").length).toBe(0);
+  });
+  it("STALE and NOT_EXECUTED runs never carry a PASSED/verified pill, in either language", async () => {
+    for (const lang of ["en", "tr"]) {
+      const {ctx} = await mkCtx({}, lang);
+      const {node} = await renderAssurance(ctx);
+      for (const idc of ["d", "e"]) expect(byData(byData(node, "runId", runId(idc))[0], "scan", "PASSED").length, `${lang}${idc}`).toBe(0);
+    }
+  });
+});
+
+// //TR: Erişilebilirlik: h1 odaklanabilir, tüm düğmeler type=button, koşu düğmeleri etiketli, tablolar caption + scope=col, gruplar etiketli, dinamik QA'da düğme yok.
+describe("UX WP-QA-SEC accessibility", () => {
+  beforeEach(async () => { (await load("views", "assurance.js")).resetAssuranceView(); const f = (await load("forms.js")); f.selection.evidenceId = null; f.selection.missionId = null; });
+
+  it("h1 is focusable, buttons are typed and labelled, tables have captions and column headers, groups are labelled", async () => {
+    const {ctx} = await mkCtx();
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `sec-${runId("a")}`) as N).fire("click"); // open detail so the close button is also covered
+    const {node} = await renderAssurance(ctx);
+    expect(byId(node, "view-title")!.getAttribute("tabindex")).toBe("-1");
+    expect(byTag(node, "h1").length).toBe(1);
+    const buttons = byTag(node, "button");
+    expect(buttons.length).toBeGreaterThan(5);
+    for (const b of buttons) expect(b.getAttribute("type"), b.id).toBe("button");
+    for (const b of buttons.filter(b => b.id.startsWith("sec-"))) expect((b.getAttribute("aria-label") ?? "").length).toBeGreaterThan(0);
+    expect(byId(node, "qa-secdetail-close")).toBeTruthy();
+    for (const t of byTag(node, "table")) {
+      expect(t.children.some(c => c.tagName === "CAPTION" && c.textContent.length > 0)).toBe(true);
+      for (const th of all(t).filter(n => n.tagName === "TH")) expect(th.getAttribute("scope")).toBe("col");
+    }
+    for (const g of all(node).filter(n => n.getAttribute("role") === "group")) expect((g.getAttribute("aria-label") ?? "").length).toBeGreaterThan(0);
+    expect(byTag(byId(node, "qa-dynamic")!, "button").length).toBe(0);
+  });
+  it("keyboard: selecting a run and closing the detail use real buttons and request focus settling", async () => {
+    const settle: any[] = [];
+    const {ctx} = await mkCtx();
+    ctx.settleFocus = (o: any) => settle.push(o);
+    const first = await renderAssurance(ctx);
+    const btn = byId(first.node, `sec-${runId("b")}`) as N;
+    expect(btn.tagName).toBe("BUTTON");
+    btn.fire("click");
+    expect(settle.length).toBe(1);
+    const {node} = await renderAssurance(ctx);
+    expect(byId(node, `sec-${runId("b")}`)!.getAttribute("aria-current")).toBe("true");
+    expect(byId(node, "qa-secdetail-t")!.getAttribute("tabindex")).toBe("-1");
+    (byId(node, "qa-secdetail-close") as N).fire("click");
+    expect(settle.length).toBe(2);
+  });
+});
+
+// //TR: EN/TR eşitliği: görünümün kullandığı assurance.*, everif.*, area.assurance.* anahtarları iki dilde aynıdır ve yer tutucular eşleşir.
+describe("UX WP-QA-SEC assurance/everif locale parity", () => {
+  it("assurance.*, everif.* and area.assurance.* keys have identical key sets and placeholders", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const pick = (d: Record<string, string>) => Object.keys(d).filter(k => /^(assurance\.|everif\.|area\.assurance\.)/.test(k)).sort();
+    expect(pick(tr)).toEqual(pick(en));
+    expect(pick(en).length).toBeGreaterThan(15);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of pick(en)) { expect(tr[k], k).toBeTruthy(); expect(ph(en[k]), k).toBe(ph(tr[k])); }
+  });
+  it("every static t(\"...\") key the view uses exists in both locales", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const src = fs.readFileSync(path.join(rend, "views", "assurance.js"), "utf8");
+    const keys = [...new Set([...src.matchAll(/\bt\("([a-zA-Z0-9_.]+)"/g)].map(m => m[1]))];
+    expect(keys.length).toBeGreaterThan(30);
+    for (const k of keys) { expect(en[k], `en ${k}`).toBeTruthy(); expect(tr[k], `tr ${k}`).toBeTruthy(); }
+  });
+});
+
+// //TR: UI-047: güvenlik bulgu ayrıntı tabloları — eşleme, üst sınırlar, kesilme, bozuk girdi atma, yalnız-metin çizim, boş/NOT_EXECUTED durumları, yeni rota yok.
+describe("UX WP-QA-SEC UI-047 security finding detail", () => {
+  const C40 = "e".repeat(40);
+  const withFindings = (scaF: any, items: any, extra: any = {}) => {
+    const s: any = sec({status: "PASSED", headSha: HEAD1});
+    if (scaF !== undefined) s.sca.findings = scaF; else delete s.sca.findings;
+    if (items !== undefined) s.secrets.gitleaks.items = items; else delete s.secrets.gitleaks.items;
+    Object.assign(s.sca, extra);
+    return {...mkRun("a", HEAD1, [secEvidence(s, HEAD1)])};
+  };
+  it("maps sanitised findings, drops malformed entries, never carries secret values or fixedVersion", async () => {
+    const core = await load("assurance-core.js");
+    const r = core.mapRunSecurity(withFindings(
+      [{package: "lodash", version: "4.0.0", id: "CVE-1", severity: "HIGH", fixedVersion: "4.17.21", target: "package-lock.json"}, {package: "x", id: "CVE-2", severity: "<b>bad</b>"}, "junk", {id: "no-pkg"}],
+      [{ruleId: "aws-key", file: "a.env", line: 3, commit: C40, secret: "AKIASECRETVALUE", match: "AKIASECRETVALUE"}, {ruleId: "r", file: "f", line: -1, commit: "zz"}, null]));
+    expect(r.scaFindings.items).toHaveLength(2);
+    expect(r.scaFindings.dropped).toBe(2);
+    expect(r.scaFindings.items[1].severity).toBe("UNKNOWN");
+    expect(JSON.stringify(r)).not.toContain("4.17.21");
+    expect(r.secretFindings.items[0]).toEqual({ruleId: "aws-key", file: "a.env", line: 3, commit: C40});
+    expect(r.secretFindings.items[1]).toMatchObject({line: null, commit: null});
+    expect(r.secretFindings.dropped).toBe(1);
+    expect(JSON.stringify(r)).not.toContain("AKIASECRETVALUE");
+  });
+  it("caps lists (50 sca / 100 secrets), carries scaTruncated, and treats missing fields as not recorded", async () => {
+    const core = await load("assurance-core.js");
+    const many = Array.from({length: 120}, (_, i) => ({package: `p${i}`, id: `CVE-${i}`, severity: "LOW"}));
+    const items = Array.from({length: 150}, (_, i) => ({ruleId: "r", file: `f${i}`, line: i, commit: null}));
+    const r = core.mapRunSecurity(withFindings(many, items, {truncated: true}));
+    expect(r.scaFindings.items).toHaveLength(50);
+    expect(r.scaFindings.overCap).toBe(true);
+    expect(r.secretFindings.items).toHaveLength(100);
+    expect(r.scaTruncated).toBe(true);
+    const m = core.mapRunSecurity(withFindings(undefined, "not-array"));
+    expect(m.scaFindings).toMatchObject({recorded: false, items: []});
+    expect(m.secretFindings).toMatchObject({recorded: false, items: []});
+    const none = core.mapRunSecurity(RUN_E);
+    expect(none.scaFindings.recorded).toBe(false);
+  });
+  const renderDetail = async (run: any) => {
+    const {ctx} = await mkCtx();
+    const raw = ctx.api.raw;
+    ctx.api.raw = async (p: string, ...a: any[]) => p.startsWith("/v1/work-runs") ? {ok: true, data: {workRuns: [run]}} : raw(p, ...a);
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `sec-${run.runId}`) as N).fire("click");
+    return byId((await renderAssurance(ctx)).node, "qa-secdetail")!;
+  };
+  it("renders text-only tables, a truncation note and no fixed/resolved/accepted state", async () => {
+    const run = withFindings([{package: "<img src=x onerror=alert(1)>", id: "CVE-9", severity: "HIGH", fixedVersion: "9.9.9"}], [{ruleId: "r1", file: "src/a.js", line: 7, commit: C40}], {truncated: true});
+    const d = await renderDetail(run);
+    expect(byData(d, "findKind", "sca")).toHaveLength(1);
+    expect(byData(d, "findKind", "secret")).toHaveLength(1);
+    expect(text(d)).toContain("<img src=x onerror=alert(1)>");
+    expect(all(d).some(n => n.tagName === "IMG")).toBe(false);
+    expect(byData(d, "findTruncated", "sca")).toHaveLength(1);
+    expect(text(d)).toContain("src/a.js");
+    expect(text(d)).not.toContain("9.9.9");
+    expect(text(d).toLowerCase()).not.toMatch(/resolved|accepted|remediated/);
+    expect(all(d).filter(n => n.tagName === "BUTTON").map(n => n.id)).toEqual(["qa-secdetail-close"]);
+  });
+  it("shows honest empty and not-recorded states, and NOT_EXECUTED shows no tables", async () => {
+    const empty = await renderDetail(withFindings([], []));
+    expect(byData(empty, "findState", "EMPTY")).toHaveLength(2);
+    const unk = await renderDetail(withFindings(undefined, undefined));
+    expect(byData(unk, "findState", "UNKNOWN")).toHaveLength(2);
+    const ne = await renderDetail(RUN_E);
+    expect(byData(ne, "findList")).toHaveLength(0);
+    expect(text(ne)).toContain("NOT_EXECUTED");
+  });
+  it("keeps the STALE banner when the scan is not bound to the run head", async () => {
+    const d = await renderDetail(mkRun("d", OTHER, [secEvidence(sec({status: "PASSED", headSha: HEAD1}), HEAD1)]));
+    expect(byData(d, "scan", "STALE").length).toBeGreaterThan(0);
+    expect(d.textContent.length).toBeGreaterThan(0);
+  });
+  it("empty list shows 'no findings' only for CLEAN/FINDINGS tool status; ERROR/PARTIAL stay UNKNOWN", async () => {
+    const en = (await load("locales", "tr.js")).default as Record<string, string>; // //TR: test bağlamı TR çizer
+    const mk = (st: string) => { const r: any = withFindings([], []); r.evidence[0].security.sca.status = st; r.evidence[0].security.secrets.gitleaks.status = st; return r; };
+    for (const st of ["ERROR", "PARTIAL"]) {
+      const d = await renderDetail(mk(st));
+      expect(byData(d, "findState", "UNKNOWN")).toHaveLength(2);
+      expect(byData(d, "findState", "EMPTY")).toHaveLength(0);
+      expect(text(d)).not.toContain(en["qa.security.find.empty"]);
+    }
+    const ok = await renderDetail(mk("CLEAN"));
+    expect(byData(ok, "findState", "EMPTY")).toHaveLength(2);
+    expect(text(ok)).toContain(en["qa.security.find.empty"]);
+  });
+  it("secret rows carry no severity attribute and severity uses a fixed allow-list", async () => {
+    const d = await renderDetail(withFindings([{package: "a", id: "1", severity: "MEDIUM"}, {package: "b", id: "2", severity: "SEVERE"}, {package: "c", id: "3", severity: "high"}], [{ruleId: "r", file: "f", line: 1, commit: null}]));
+    const secretRow = byData(d, "findKind", "secret")[0];
+    expect("findSeverity" in secretRow.dataset).toBe(false);
+    expect(all(d).some(n => Object.values(n.dataset).includes("null"))).toBe(false);
+    expect(byData(d, "findSeverity").map(n => n.dataset.findSeverity)).toEqual(["MEDIUM", "UNKNOWN", "UNKNOWN"]);
+  });
+  it("adds no new route, endpoint, POST, storage or IPC", () => {
+    const v = fs.readFileSync(path.join(rend, "views", "assurance.js"), "utf8");
+    const c = fs.readFileSync(path.join(rend, "assurance-core.js"), "utf8");
+    for (const src of [v, c]) { expect(src).not.toMatch(/method\s*:\s*["']POST|localStorage|sessionStorage|ipcRenderer|innerHTML/); }
+    expect([...v.matchAll(/["'](\/v1\/[a-z-]+)/g)].map(m => m[1]).sort()).toEqual([...new Set([...v.matchAll(/["'](\/v1\/[a-z-]+)/g)].map(m => m[1]))].sort());
+  });
+  it("EN/TR qa.security.find.* keys are at parity with equal placeholders", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const pick = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("qa.security.find.")).sort();
+    expect(pick(tr)).toEqual(pick(en));
+    expect(pick(en).length).toBe(17);
   });
 });

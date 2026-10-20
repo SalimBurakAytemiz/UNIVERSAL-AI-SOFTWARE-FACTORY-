@@ -3,6 +3,7 @@ import {h,panel,stateNote,emptyNote,chip,kpiTile,statePill,missionPill,badge} fr
 import {formatTime,MISSING,missionPillKind} from "../model.js";
 import {buildProjectRequest} from "../work-core.js";
 import {latestRunFor} from "../project-core.js";
+import {buildClosure} from "../closure-core.js";
 import {drafts,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetProjectDraft,focusResult,settle} from "../forms.js";
 import {studio,openProject,closeProject} from "../studio-state.js";
 import {wizardPanel,importPanel} from "./studio-wizard.js";
@@ -129,6 +130,24 @@ function matrixPanel(ctx,prj,miss,runs){
     h(doc,"p",{class:"note",text:ctx.t("projects.matrix.lead")}),body);
 }
 
+/** //TR: UI-132 salt-okunur kapanış/devir kontrol listesi: proje başına maddeler yalnız mevcut okumalardan türetilir (closure-core); veri canlı değilse UNKNOWN, teslim NOT_VERIFIED kalır, imza/onay eylemi yoktur. */
+function closurePanel(ctx,prj,miss,runs,dels){
+  const doc=ctx.doc;
+  let body;
+  if(!LIVE(prj))body=stateNote(ctx,prj.state);
+  else if(!prj.items.length)body=emptyNote(ctx,"projects.empty");
+  else body=h(doc,"ul",{class:"cards closure-list"},prj.items.map(p=>{
+    const items=buildClosure({projectId:p.projectId,missions:miss,runs,deliveries:dels.get(p.projectId)});
+    return h(doc,"li",{class:"card closure-card",dataset:{closureProject:p.projectId}},h(doc,"h3",{text:p.name}),
+      h(doc,"ul",{class:"closure-items"},items.map(it=>h(doc,"li",{class:`closure-item closure-${it.state.toLowerCase()}`,dataset:{closureItem:it.id,closureState:it.state}},
+        badge(ctx,ctx.t(`projects.closure.state.${it.state}`),it.state==="MET"?"badge-ok":it.state==="OPEN"?"badge-risk":"badge-notverified"),
+        h(doc,"span",{class:"closure-label",text:ctx.t(`projects.closure.item.${it.id}`)}),
+        it.count===null?null:h(doc,"span",{class:"mono closure-count",text:String(it.count)})))));
+  }));
+  return panel(ctx,{titleKey:"projects.closure.title",id:"projects-closure",className:"closure-panel"},
+    h(doc,"p",{class:"note",text:ctx.t("projects.closure.lead")}),body);
+}
+
 function header(ctx,prj,miss,runs){
   const doc=ctx.doc;
   return h(doc,"div",{class:"hero"},
@@ -147,6 +166,8 @@ export async function render(ctx){
   }
   // Portföy katmanı için görev ve koşu okumaları (salt-okunur, allow-list'li, önbellekli); canlı değilse dürüst durum gösterilir, sayı uydurulmaz.
   const [miss,runs]=await Promise.all([ctx.api.allMissions(),ctx.api.workRuns()]);
+  const dels=new Map();
+  if(LIVE(res))await Promise.all(res.items.map(async p=>dels.set(p.projectId,await ctx.api.deliveries(p.projectId))));
   return h(doc,"div",{class:"view view-projects"},
     header(ctx,res,miss,runs),
     summaryTiles(ctx,res,miss,runs),
@@ -154,5 +175,6 @@ export async function render(ctx){
     wizardPanel(ctx),
     importPanel(ctx,{projects:res.state==="VERIFIED"?res.items:[]}),
     matrixPanel(ctx,res,miss,runs),
+    closurePanel(ctx,res,miss,runs,dels),
     projectForm(ctx));
 }

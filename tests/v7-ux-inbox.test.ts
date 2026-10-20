@@ -228,3 +228,282 @@ describe("UX WP-INBOX-APPROVAL — read-only surface + dictionary parity", () =>
     }
   });
 });
+
+// //TR: Aşağıdaki bloklar Gelen Kutusu için negatif (bozuk/404 yanıt => uydurma yok), erişilebilirlik ve EN/TR eşitlik testlerini ekler.
+const sourceStripLabel = (root: N) => all(root).find(n => n.tagName === "UL" && (n.attrs.get("aria-label") ?? "").length > 0)?.attrs.get("aria-label");
+
+describe("test+states: inbox — negative (no fabricated values)", () => {
+  // //TR: Mission listesi 404 ise karar kuyruğu uydurulmaz; dürüst durum gösterilir, karar kartı yoktur.
+  it("missions endpoint failing yields no decision cards and a non-VERIFIED decisions source", async () => {
+    const inbox = await load("views", "inbox.js");
+    const fix = liveFix(); delete fix["/v1/missions"];
+    const {ctx} = await mkCtx({get: fromFix(fix), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(byData(root, "decisionMission").length).toBe(0);
+    expect(sourceState(root, "decisions")).not.toBe("VERIFIED");
+    expect(sourceState(root, "decisions")).not.toBe("WAITING");
+  });
+
+  // //TR: Work-runs okunamazsa teslim kararı (COMPLETE) sunulmaz; yalnız dikkat kararı kalır.
+  it("work-runs failing never offers a delivery decision or COMPLETE", async () => {
+    const inbox = await load("views", "inbox.js");
+    const fix = liveFix(); delete fix["/v1/work-runs"];
+    const {ctx} = await mkCtx({get: fromFix(fix), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(byData(root, "decision", "DELIVERY_DECISION").length).toBe(0);
+    expect(all(root).some(n => n.id.startsWith("ib-COMPLETE-"))).toBe(false);
+    expect(byId(root, "inbox-decisions")!.textContent).toContain(ctx.t("inbox.runsUnavailable"));
+  });
+
+  // //TR: Run ayrıntısı NOT_VERIFIED ise kabul (COMPLETE) düğmesi yoktur ve açıklama gösterilir.
+  it("a NOT_VERIFIED run hides COMPLETE and explains why (never Verified without proof)", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({get: fromFix(liveFix({[`/v1/work-runs/${RUN}`]: pvDetail("NOT_VERIFIED")})), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(byId(root, `ib-COMPLETE-${MID}`)).toBeNull();
+    expect(byId(root, `ib-complete-na-${MID}`)).not.toBeNull();
+  });
+
+  // //TR: Run ayrıntısı 404 ise de COMPLETE sunulmaz.
+  it("run detail 404 never offers COMPLETE", async () => {
+    const inbox = await load("views", "inbox.js");
+    const fix = liveFix(); delete fix[`/v1/work-runs/${RUN}`];
+    const {ctx} = await mkCtx({get: fromFix(fix), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(byId(root, `ib-COMPLETE-${MID}`)).toBeNull();
+  });
+
+  // //TR: founder-attention 404 ise kuyruk kalemi uydurulmaz ve kaynak VERIFIED değildir.
+  it("founder-attention 404 shows no items and is not VERIFIED", async () => {
+    const inbox = await load("views", "inbox.js");
+    const fix = liveFix(); delete fix["/v1/founder-attention"];
+    const {ctx} = await mkCtx({get: fromFix(fix), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(byData(byId(root, "inbox-attention-queue")!, "attentionItem").length).toBe(0);
+    expect(sourceState(root, "attention")).not.toBe("VERIFIED");
+    expect(sourceState(root, "attention")).not.toBe("ATTENTION");
+  });
+
+  // //TR: Cockpit bozuk (eksik awaitingApproval) ise onay sayısı uydurulmaz.
+  it("malformed cockpit payload does not fabricate approvals or alert counts", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/cockpit": {generatedAt: "x", globalStop: "garbage", missions: "nope"}})), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(byData(byId(root, "inbox-approvals")!, "approval").length).toBe(0);
+    expect(sourceState(root, "approvals")).not.toBe("WAITING");
+    expect(sourceState(root, "alerts")).not.toBe("ATTENTION");
+    expect(byId(root, "inbox-alerts-status")?.dataset.alertsTotal ?? "—").toBe("—");
+  });
+
+  // //TR: Cockpit onay bekleyen listesi doluysa kart açılır ve düğme gezinir.
+  it("approvals list renders a typed open button that navigates to work", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx, calls} = await mkCtx({get: fromFix(liveFix()), lang: "en"});
+    const root = await inbox.render(ctx);
+    const b = byId(root, `ap-open-${MID3}`)!;
+    expect(b.attrs.get("type")).toBe("button");
+    b.fire("click");
+    expect(calls.navigate).toEqual(["work"]);
+    expect(calls.post).toEqual([]);
+  });
+
+  // //TR: HTML içeren API metni düğüm olarak yorumlanmaz; yalnız metin olarak görünür.
+  it("API strings containing markup stay inert text", async () => {
+    const inbox = await load("views", "inbox.js");
+    const evil = "<img src=x onerror=alert(1)>";
+    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/founder-attention": {blocked: [{packageId: evil, phase: 1, kind: "K", reason: evil, at: "2026-10-15T09:00:00.000Z", retryable: false}], schedulerVerification: "VERIFIED"}})), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(all(root).some(n => n.tagName === "IMG")).toBe(false);
+    expect(byId(root, "inbox-attention-queue")!.textContent).toContain(evil);
+  });
+});
+
+describe("test+states: inbox — accessibility", () => {
+  // //TR: h1 odaklanabilir (tabindex=-1), tüm düğmeler type=button, gruplar etiketli, durum alanları role=status.
+  it("h1 is focusable, every button is typed, groups are labelled and status regions announce", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({get: fromFix(liveFix()), lang: "en"});
+    const root = await inbox.render(ctx);
+    const h1s = all(root).filter(n => n.tagName === "H1");
+    expect(h1s.length).toBe(1);
+    expect(h1s[0].attrs.get("tabindex")).toBe("-1");
+    expect(h1s[0].id).toBe("view-title");
+    const buttons = all(root).filter(n => n.tagName === "BUTTON");
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const b of buttons) expect(b.attrs.get("type"), b.id).toBe("button");
+    const groups = all(root).filter(n => n.attrs.get("role") === "group");
+    expect(groups.length).toBeGreaterThan(0);
+    for (const g of groups) expect((g.attrs.get("aria-label") ?? "").length, "group label").toBeGreaterThan(0);
+    expect(sourceStripLabel(root)).toBeTruthy();
+    expect(byId(root, "inbox-alerts-status")!.attrs.get("role")).toBe("status");
+  });
+
+  // //TR: Düğmeler yerel <button> öğesidir (Enter/Space yerel click üretir); odak anahtarları kararlıdır.
+  it("action buttons are native buttons with stable focus keys (keyboard activation is native)", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({get: fromFix(liveFix()), lang: "en"});
+    const root = await inbox.render(ctx);
+    for (const b of all(root).filter(n => n.tagName === "BUTTON")) expect(b.dataset.focusKey, b.id).toBe(b.id);
+  });
+});
+
+describe("test+states: inbox — EN/TR parity for every key the view uses", () => {
+  // //TR: Görünüm kaynağındaki tüm inbox.* anahtarları ve inbox.* sözlük kümesi EN ve TR'de aynıdır; yer tutucular eşittir.
+  it("inbox.* key sets are identical in EN and TR and every literal key used by the view exists with placeholder parity", async () => {
+    const en = (await load("locales", "en.js")).default, tr = (await load("locales", "tr.js")).default;
+    const pick = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("inbox.")).sort();
+    expect(pick(tr)).toEqual(pick(en));
+    const src = read("views", "inbox.js");
+    const used = [...new Set([...src.matchAll(/["']((?:inbox|area\.inbox|attention|work\.transition|m1a\.complete)\.[\w.]+)["']/g)].map(m => m[1]))];
+    expect(used.length).toBeGreaterThan(10);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of used) {
+      expect(typeof en[k], `en ${k}`).toBe("string");
+      expect(typeof tr[k], `tr ${k}`).toBe("string");
+      expect(ph(tr[k]), `placeholders ${k}`).toBe(ph(en[k]));
+    }
+  });
+});
+
+// UI-113 — "Approval required" state panel (self-contained block; renderer-only, no new action).
+describe("UI-113 — Approval required panel on #/inbox", () => {
+  const NOW = Date.parse("2026-10-16T10:00:00.000Z");
+  const apItems = (n: number) => Array.from({length: n}, (_, i) => ({missionId: "msn_" + i.toString(16).padStart(24, "0"), projectId: PID, title: `M${i}`, riskLevel: "R2"}));
+  const cockpit = (items: any[], extra: any = {}) => ({generatedAt: "2026-10-15T10:00:00.000Z", globalStop: {active: false, reason: null}, missions: {state: "VERIFIED", total: 1, byStatus: {}}, awaitingApproval: {state: "VERIFIED", items}, ...extra});
+  const fix = (items: any[], over: Record<string, any> = {}) => liveFix({"/v1/cockpit": cockpit(items), ...over});
+  const panelOf = (root: N) => byId(root, "inbox-required")!;
+
+  it("core: derives risk, run, age, approve/reject outcomes from existing transition rules; impact is UNKNOWN", async () => {
+    const core = await load("approval-core.js");
+    const res = core.deriveApprovalRequired({
+      cockpit: {state: "OK", data: {approvals: {state: "VERIFIED", items: [{missionId: MID, title: "Görev A", riskLevel: "R2"}]}}},
+      missions: {state: "VERIFIED", items: [{missionId: MID, status: "REPORTING", riskLevel: "R2", createdAt: "2026-10-14T10:00:00.000Z"}]},
+      runs: {state: "VERIFIED", items: [{runId: RUN, missionId: MID, status: "AWAITING_APPROVAL", startedAt: "2026-10-16T08:30:00.000Z"}]}, now: NOW});
+    expect(res.state).toBe("READY");
+    const r = res.rows[0];
+    expect(r.run).toEqual({runId: RUN, status: "AWAITING_APPROVAL"});
+    expect(r.age).toEqual({days: 0, hours: 1, minutes: 30});
+    expect(r.sinceBasis).toBe("RUN_STARTED");
+    expect(r.outcome.approve).toEqual([{to: "COMPLETE", highRisk: true, irreversible: true}]);
+    expect(r.outcome.reject.map((x: any) => x.to)).toEqual(["BLOCKED"]); // REPORTING allows COMPLETE and BLOCKED only
+    expect(r.impact).toBe("UNKNOWN");
+  });
+
+  it("core: flags match work-core (AUTHORIZED high-risk but reversible; unknown status stays UNKNOWN)", async () => {
+    const core = await load("approval-core.js"), wc = await load("work-core.js");
+    const o = core.transitionOutcome("PREFLIGHT");
+    expect(o.approve).toEqual([{to: "AUTHORIZED", highRisk: wc.requiresConfirm("AUTHORIZED"), irreversible: false}]);
+    expect(core.transitionOutcome("REPORTING").approve[0].irreversible).toBe(wc.allowedNext("COMPLETE").length === 0);
+    expect(core.transitionOutcome("EXECUTING").approve).toEqual([]);
+    expect(core.transitionOutcome(null).known).toBe(false);
+    expect(core.transitionOutcome("NOPE").known).toBe(false);
+    expect(core.ageOf("not-a-date", NOW)).toBeNull();
+    expect(core.ageOf("2030-01-01T00:00:00.000Z", NOW)).toBeNull();
+  });
+
+  it("renders irreversible/high-risk text, run + status, <time datetime>, approve/reject text and UNKNOWN impact", async () => {
+    const inbox = await load("views", "inbox.js");
+    const f = fix([{missionId: MID, projectId: PID, title: "Görev A", riskLevel: "R2"}]);
+    const {ctx, calls} = await mkCtx({lang: "en", get: fromFix(f)});
+    const root = await inbox.render(ctx);
+    const row = byData(panelOf(root), "required", MID)[0];
+    expect(row.dataset.irreversible).toBe("1");
+    expect(row.dataset.highRisk).toBe("1");
+    const fact = (k: string) => byData(row, "fact", k)[0].textContent;
+    expect(fact("transition")).toContain("Irreversible");
+    expect(fact("transition")).toContain("High risk");
+    expect(fact("run")).toContain(RUN);
+    expect(fact("approve")).toContain("→");
+    expect(fact("reject")).toContain("→");
+    expect(fact("impact")).toContain("UNKNOWN");
+    const time = all(row).find(n => n.tagName === "TIME")!;
+    expect(time.getAttribute("datetime")).toBe("2026-10-14T09:00:00.000Z");
+    expect(calls.post).toEqual([]);
+  });
+
+  it("a cockpit approval whose mission/run is not readable shows UNKNOWN, not a guess", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({lang: "en", get: fromFix(fix(apItems(1), {"/v1/work-runs": {workRuns: []}}))});
+    const row = byData(panelOf(await inbox.render(ctx)), "required")[0];
+    expect(byData(row, "fact", "transition")[0].textContent).toContain("UNKNOWN");
+    expect(byData(row, "fact", "run")[0].textContent).toContain("No linked work run");
+    expect(all(row).some(n => n.tagName === "TIME")).toBe(false);
+    const {ctx: c2} = await mkCtx({lang: "en", get: (p: string) => { if (p === "/v1/work-runs") throw new Error("HTTP 500"); return fromFix(fix(apItems(1)))(p); }});
+    expect(byData(byData(panelOf(await inbox.render(c2)), "required")[0], "fact", "run")[0].textContent).toContain("UNKNOWN");
+  });
+
+  it("caps at 50 rows with a 'showing X of Y' note", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({lang: "en", get: fromFix(fix(apItems(60)))});
+    const p = panelOf(await inbox.render(ctx));
+    expect(byData(p, "required").length).toBe(50);
+    expect(byData(p, "requiredTruncated")[0].textContent).toContain("50 of 60");
+    const {ctx: c2} = await mkCtx({lang: "en", get: fromFix(fix(apItems(3)))});
+    const p2 = panelOf(await inbox.render(c2));
+    expect(byData(p2, "required").length).toBe(3);
+    expect(byData(p2, "requiredTruncated")).toEqual([]);
+  });
+
+  it("empty is explicit; OFFLINE / ERROR read failures use the honest state note, never a 0", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({lang: "en", get: fromFix(fix([]))});
+    const p = panelOf(await inbox.render(ctx));
+    expect(p.textContent).toContain("Nothing awaits your approval");
+    expect(byData(p, "required")).toEqual([]);
+    const off = await mkCtx({lang: "en", get: () => { throw new Error("CONTROL_API_UNREACHABLE"); }});
+    const po = panelOf(await inbox.render(off.ctx));
+    expect(byData(po, "required")).toEqual([]);
+    expect(all(po).some(n => n.tagName === "P" && n.getAttribute("role") === "status")).toBe(true);
+    expect(po.textContent).not.toContain("awaiting approval.");
+    const core = await load("approval-core.js");
+    expect(core.deriveApprovalRequired({cockpit: {state: "OK", data: {approvals: {state: "ERROR", items: []}}}}).state).toBe("ERROR");
+    expect(core.deriveApprovalRequired({cockpit: {state: "OFFLINE", data: {approvals: {state: "UNAVAILABLE", items: []}}}}).state).toBe("OFFLINE");
+  });
+
+  it("performs no POST: buttons only focus the existing approval card; request list unchanged", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx, doc, calls} = await mkCtx({get: fromFix(fix([{missionId: MID3, projectId: PID, title: "Needs approval", riskLevel: "R3"}])), post: () => ({status: 200, body: {}})});
+    const root = await inbox.render(ctx);
+    doc.body.append(root);
+    const getsBefore = [...calls.get];
+    byId(root, `req-goto-${MID3}`)!.fire("click");
+    expect(doc.focused).toBe(byId(root, `ap-card-${MID3}`));
+    expect(calls.post).toEqual([]);
+    expect(calls.confirm).toEqual([]);
+    expect(calls.get).toEqual(getsBefore);
+    const src = code(read("approval-core.js")) + code(read("views", "inbox.js"));
+    expect(src).not.toMatch(/innerHTML|\.post\(|localStorage|sessionStorage|fetch\(/);
+  });
+
+  it("a11y: labelled region, h2/h3 headings, labelled list, focusable target card and labelled goto button", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({lang: "en", get: fromFix(fix([{missionId: MID3, projectId: PID, title: "Needs approval", riskLevel: "R3"}]))});
+    const root = await inbox.render(ctx), p = panelOf(root);
+    expect(p.tagName).toBe("SECTION");
+    expect(p.getAttribute("aria-labelledby")).toBe("inbox-required-t");
+    expect(byId(p, "inbox-required-t")!.tagName).toBe("H2");
+    expect(all(p).filter(n => n.tagName === "H3").length).toBe(1);
+    expect(all(p).find(n => n.tagName === "UL")!.getAttribute("aria-label")).toBe("Approval required");
+    expect(byId(root, `ap-card-${MID3}`)!.getAttribute("tabindex")).toBe("-1");
+    const btn = byId(p, `req-goto-${MID3}`)!;
+    expect(btn.tagName).toBe("BUTTON");
+    expect(btn.getAttribute("type")).toBe("button");
+    expect(btn.getAttribute("aria-label")).toContain("Needs approval");
+    const idx = (id: string) => all(root).findIndex(n => n.id === id);
+    expect(idx("inbox-required")).toBeLessThan(idx("inbox-approvals"));
+  });
+
+  it("every inbox.required.* key exists in EN and TR with identical placeholders", async () => {
+    const en = (await load("locales", "en.js")).default, tr = (await load("locales", "tr.js")).default;
+    const keys = Object.keys(en).filter(k => k === "inbox.required" || k.startsWith("inbox.required."));
+    const trKeys = Object.keys(tr).filter(k => k === "inbox.required" || k.startsWith("inbox.required."));
+    expect(keys.length).toBeGreaterThan(20);
+    expect(trKeys.sort()).toEqual([...keys].sort());
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of keys) {
+      expect(en[k].length, k).toBeGreaterThan(0);
+      expect(ph(tr[k]), k).toBe(ph(en[k]));
+      if (!["inbox.required.transitionValue", "inbox.required.runValue"].includes(k)) expect(tr[k], `tr differs ${k}`).not.toBe(en[k]);
+    }
+  });
+});

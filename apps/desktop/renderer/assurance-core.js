@@ -1,5 +1,6 @@
 // //TR: Bu modül Güvence (QA + Güvenlik) görünümünün saf (DOM'suz) çekirdeğidir: GET /v1/work-runs ham kayıtlarındaki SECURITY_REPORT kanıtının (core/workos security-tools.ts aşama özeti) güvenli, DÜRÜST eşlemesi. Hiçbir durum YÜKSELTİLMEZ: yalnız sunucunun bildirdiği gitleaks/trivy/semgrep durumu (INSTALLED/NOT_INSTALLED/ERROR), secret-scan ve SCA durumu taşınır; araç yoksa NOT_INSTALLED, kapsam eksikse PARTIAL, kanıt yoksa NOT_EXECUTED gösterilir; sahte "temiz/geçti" asla üretilmez ve SOURCE_GENERATION_COMPLETE asla PRODUCT_VERIFIED sayılmaz. Veri HTML olarak yorumlanmaz; bu modül yalnız salt-okunur veri üretir.
 import {MISSING} from "./model.js";
+import {mapReadinessWorkRuns} from "./readiness-core.js";
 
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 const str=(x,max=200)=>typeof x==="string"&&x.length?x.slice(0,max):null;
@@ -28,6 +29,29 @@ function toolView(t){
   return {tool,status:toolStatus(t.status),version:str(t.version,80),reason:str(t.reason,80)};
 }
 
+
+// //TR: UI-047: SECURITY_REPORT sca.findings[] ve secrets.gitleaks.items[] için sınırlı, temizlenmiş eşleme. Yalnız beyaz listedeki alanlar taşınır (gizli DEĞER asla alınmaz; fixedVersion bilerek DÜŞÜRÜLÜR ki "düzeltildi" durumu çıkarılamasın). Bozuk girdi atılır ve sayılır; alan yok/dizi değilse boş + RECORDED=false (asla "temiz" değil).
+export const SEC_FINDINGS_SCA_CAP=50;
+export const SEC_FINDINGS_SECRET_CAP=100;
+const SEV_ALLOW=Object.freeze(["CRITICAL","HIGH","MEDIUM","LOW","INFO","UNKNOWN"]);
+const textField=(x,max)=>typeof x==="string"&&x.length&&!/[\u0000-\u001f\u007f]/.test(x)?x.slice(0,max):null;
+function mapFindingList(raw,cap,mapOne){
+  if(!Array.isArray(raw))return {recorded:false,items:[],dropped:0,overCap:false};
+  const items=[];let dropped=0;
+  for(const e of raw.slice(0,cap)){const m=mapOne(e);if(m)items.push(m);else dropped+=1}
+  return {recorded:true,items,dropped,overCap:raw.length>cap};
+}
+const scaFinding=e=>{
+  if(!isObj(e))return null;
+  const pkg=textField(e.package,120),id=textField(e.id,60);if(!pkg||!id)return null;
+  return {package:pkg,version:textField(e.version,60),id,severity:SEV_ALLOW.includes(e.severity)?e.severity:"UNKNOWN",target:textField(e.target,160)};
+};
+const secretFinding=e=>{
+  if(!isObj(e))return null;
+  const ruleId=textField(e.ruleId,80),file=textField(e.file,200);if(!ruleId||!file)return null;
+  return {ruleId,file,line:Number.isSafeInteger(e.line)&&e.line>=0?e.line:null,commit:typeof e.commit==="string"&&SHA_RE.test(e.commit)?e.commit:null};
+};
+
 /** //TR: Koşunun en son SECURITY_REPORT kanıtı (en yüksek cycle, eşitlikte dizideki son); yalnız .security taşıyan kayıt. */
 function latestSecurityEvidence(evidence){
   let best=null,bestCycle=-1;
@@ -54,6 +78,7 @@ export function mapRunSecurity(run){
       secrets:{builtin:{status:"UNKNOWN",hits:null},gitleaks:{status:"UNKNOWN",findings:null,reason:null}},
       sca:{status:"UNKNOWN",blocking:null,counts:{},reason:null},
       sast:{status:"NOT_AVAILABLE",reason:"NO_SECURITY_EVIDENCE"},sbom:{status:"NOT_AVAILABLE",reason:"NO_SECURITY_EVIDENCE"},
+      scaFindings:mapFindingList(undefined,0,scaFinding),secretFindings:mapFindingList(undefined,0,secretFinding),scaTruncated:false,
       tools:[],gaps:[]};
   }
   const sec=ev.security,commitSha=typeof ev.commitSha==="string"&&SHA_RE.test(ev.commitSha)?ev.commitSha:null;
@@ -75,6 +100,7 @@ export function mapRunSecurity(run){
     secrets:{builtin:{status:code(builtin.status),hits:safeInt(builtin.hits)},gitleaks:{status:code(gitleaks.status),findings:safeInt(gitleaks.findings),reason:str(gitleaks.reason,80)}},
     sca:{status:code(sca.status),blocking:safeInt(sca.blocking),counts,reason:str(sca.reason,80)},
     sast:{status:code(sast.status),reason:str(sast.reason,80)},sbom:{status:code(sbom.status),reason:str(sbom.reason,80)},
+    scaFindings:mapFindingList(sca.findings,SEC_FINDINGS_SCA_CAP,scaFinding),secretFindings:mapFindingList(gitleaks.items,SEC_FINDINGS_SECRET_CAP,secretFinding),scaTruncated:sca.truncated===true,
     tools:(Array.isArray(sec.tools)?sec.tools:[]).slice(0,10).map(toolView).filter(Boolean),
     gaps:(Array.isArray(sec.gaps)?sec.gaps:[]).filter(g=>typeof g==="string").slice(0,30).map(g=>g.slice(0,120))
   };
@@ -115,4 +141,104 @@ export function evidenceIntegrity(evBlock){
   return {state:b?b.state:"UNAVAILABLE",live:Boolean(live),total:n("total"),verified:n("verified"),mismatch:n("mismatch"),missing:n("missing"),unverifiable:n("unverifiable")};
 }
 
+// //TR: UI-049: GET /v1/reviews/:evd_id yanıtının fail-closed eşlemesi. Karar sunucudan AYNEN taşınır (yükseltilmez); biçim bozuksa {state:"ERROR",review:null}. Serbest metin yalnız sınırlı uzunlukta alınır ve textContent ile çizilir.
+export const REVIEW_ID_RE=/^evd_[0-9a-f]{24}$/;
+const REVIEW_VERDICT_SET=Object.freeze(["CLEAN","BLOCKED","NO_VERDICT"]);
+const RUN_RE_R=/^run_[0-9a-f]{24}$/;
+const isoOrNull=x=>typeof x==="string"&&x.length>0&&!Number.isNaN(new Date(x).getTime())?x:null;
+/** //TR: CLEAN kararı yalnız TÜM koşullar sağlanırsa doğrulanmış sayılır: bağımsızlık kanıtlı, incelenen commit boş değil ve AYNI yanıttaki koşunun head'ine eşit, kayıt koşunun son review'u, geçersiz kılınmamış ve kayıtlı ham karar boş ya da karara eşit. Aksi halde STALE (asla VERIFIED). */
+export function reviewCleanVerified(x){
+  if(!isObj(x)||x.verdict!=="CLEAN")return false;
+  return x.independent===true&&x.currentHead===true&&typeof x.reviewedCommit==="string"&&SHA_RE.test(x.reviewedCommit)
+    &&typeof x.headSha==="string"&&x.reviewedCommit===x.headSha
+    &&typeof x.reviewId==="string"&&x.latestReviewId===x.reviewId
+    &&!x.invalidated&&(x.recordedVerdict===null||x.recordedVerdict===undefined||x.recordedVerdict===x.verdict);
+}
+/** //TR: Liste satırı için aynı kural: koşu özeti (runs) AYNI liste yanıtından gelir; eşleşen koşu yoksa doğrulanmış sayılmaz (liste kaydı invalidated/recordedVerdict taşımaz; bunlar yalnız detayda kontrol edilir). */
+export function reviewRowVerified(rec,runs){
+  if(!isObj(rec)||!Array.isArray(runs))return false;
+  const run=runs.find(r=>isObj(r)&&r.runId===rec.runId);
+  return run?reviewCleanVerified({...rec,headSha:run.headSha,latestReviewId:run.latestReviewId}):false;
+}
+export function mapReviewDetail(raw,requestedId){
+  const bad={state:"ERROR",review:null};
+  if(!isObj(raw)||raw.source!=="WORK_OS_JOURNAL_RUN_EVIDENCE"||!isObj(raw.review)||!isObj(raw.run))return bad;
+  const r=raw.review,ev=r.evidence,run=raw.run;
+  if(!REVIEW_ID_RE.test(String(r.reviewId))||!RUN_RE_R.test(String(r.runId))||!MSN_RE.test(String(r.missionId))||!REVIEW_VERDICT_SET.includes(r.verdict)||!isObj(r.reviewer)||!isObj(r.implementer)||!isObj(ev)||typeof r.currentHead!=="boolean"||safeInt(r.cycle)===null)return bad;
+  if(requestedId!==undefined&&r.reviewId!==requestedId)return bad;
+  if(r.independent!==null&&typeof r.independent!=="boolean")return bad;
+  const commit=r.reviewedCommit===null||r.reviewedCommit===undefined?null:SHA_RE.test(String(r.reviewedCommit))?r.reviewedCommit:undefined;
+  if(commit===undefined)return bad;
+  // //TR: Koşu özeti aynı yanıttan; kimlik uyuşmazlığı ya da bozuk head/son review kimliği okumayı reddeder.
+  if(run.runId!==r.runId)return bad;
+  const headSha=run.headSha===null||run.headSha===undefined?null:typeof run.headSha==="string"&&SHA_RE.test(run.headSha)?run.headSha:undefined;
+  const latestReviewId=run.latestReviewId===null||run.latestReviewId===undefined?null:typeof run.latestReviewId==="string"&&REVIEW_ID_RE.test(run.latestReviewId)?run.latestReviewId:undefined;
+  if(headSha===undefined||latestReviewId===undefined)return bad;
+  // //TR: Bozuk sayaç/çıkış kodu/kayıtlı karar okumayı başarısız kılar (sessizce null + VERIFIED olmaz).
+  const fc=ev.findingsCount,ec=ev.exitCode;
+  if(fc!==null&&fc!==undefined&&safeInt(fc)===null)return bad;
+  if(ec!==null&&ec!==undefined&&!Number.isSafeInteger(ec))return bad;
+  if(ev.recordedVerdict!==null&&ev.recordedVerdict!==undefined&&!REVIEW_VERDICT_SET.includes(ev.recordedVerdict))return bad;
+  const findings=Array.isArray(ev.findings)?ev.findings.filter(f=>typeof f==="string").slice(0,20).map(f=>f.slice(0,300)):null;
+  const out={reviewId:r.reviewId,runId:r.runId,missionId:r.missionId,cycle:r.cycle,verdict:r.verdict,independent:r.independent===true?true:r.independent===false?false:null,
+    reviewer:str(r.reviewer.identity,120),implementer:str(r.implementer.identity,120),reviewedCommit:commit,currentHead:r.currentHead,timestamp:isoOrNull(r.timestamp),
+    recordedVerdict:ev.recordedVerdict??null,invalidated:str(ev.invalidated,60),findingsCount:fc??null,findings,
+    exitCode:ec??null,timedOut:ev.timedOut===true,note:str(ev.note,200),runHeadSha:headSha,latestReviewId};
+  out.verified=reviewCleanVerified({...out,headSha});
+  return {state:"VERIFIED",review:out};
+}
+// //TR: UI-050: kanıt soyağacı YALNIZ GET /v1/evidence liste alanlarından (missionId, runId) kurulur. Kenar yalnız alan mevcutsa vardır: ikisi de varsa mission->run->evidence; yalnız missionId varsa mission altında "koşu kaydı yok"; yalnız runId varsa görev bağı olmayan koşu; ikisi de yoksa gruplanmamış. Hiçbir bağ başka kanıtlardan ÇIKARILMAZ (aynı runId'li başka kayıttan missionId ödünç alınmaz).
+export function buildLineage(items){
+  // //TR: Tekrarlanan evidenceId (aynı kanıtın iki kez gelmesi) atlanır; DOM kimlikleri benzersiz kalır ve atlanan sayı açıkça bildirilir.
+  const list=[],seenIds=new Set();let duplicates=0;
+  for(const e of (Array.isArray(items)?items:[])){
+    if(!isObj(e)||typeof e.evidenceId!=="string")continue;
+    if(seenIds.has(e.evidenceId)){duplicates+=1;continue}
+    seenIds.add(e.evidenceId);list.push(e);
+  }
+  const missions=new Map(),orphanRuns=new Map(),ungrouped=[];
+  const mission=id=>{let m=missions.get(id);if(!m){m={missionId:id,runs:new Map(),noRun:[]};missions.set(id,m)}return m};
+  for(const e of list){
+    const mid=typeof e.missionId==="string"&&e.missionId?e.missionId:null,rid=typeof e.runId==="string"&&e.runId?e.runId:null;
+    if(mid&&rid){const m=mission(mid);if(!m.runs.has(rid))m.runs.set(rid,[]);m.runs.get(rid).push(e)}
+    else if(mid)mission(mid).noRun.push(e);
+    else if(rid){if(!orphanRuns.has(rid))orphanRuns.set(rid,[]);orphanRuns.get(rid).push(e)}
+    else ungrouped.push(e);
+  }
+  const cmp=(a,b)=>a<b?-1:a>b?1:0;
+  return {
+    total:list.length,duplicates,
+    missions:[...missions.values()].sort((a,b)=>cmp(a.missionId,b.missionId)).map(m=>({missionId:m.missionId,noRun:m.noRun,runs:[...m.runs.entries()].sort((a,b)=>cmp(a[0],b[0])).map(([runId,evidence])=>({runId,evidence}))})),
+    orphanRuns:[...orphanRuns.entries()].sort((a,b)=>cmp(a[0],b[0])).map(([runId,evidence])=>({runId,evidence})),
+    ungrouped};
+}
+// //TR: UI-051: koşu başına test raporu GET /v1/work-runs ham kanıt kayıtlarından (VERIFY_TESTS, REGRESSION_TESTS, *_NOT_EXECUTED, TEST_SURFACE) türetilir; anlamı readiness-core testsOf ile aynıdır ve yalnız GÜNCEL head'e (run.headSha) bağlı kayıt sayılır. EXECUTED yalnız iki test kaydı da exit 0, sandbox tanıklı ve yürütülen test sayısı > 0 iken; kayıt yoksa NOT_EXECUTED. Hiçbir durum yükseltilmez, "geçti" üretilmez.
+export const TEST_REPORT_STATES=Object.freeze(["EXECUTED","FAILED","BLOCKED","NOT_EXECUTED","UNVERIFIED"]);
+const TEST_KINDS=Object.freeze(["VERIFY_TESTS","REGRESSION_TESTS","VERIFY_TESTS_NOT_EXECUTED","REGRESSION_TESTS_NOT_EXECUTED","TEST_SURFACE"]);
+const lastOf=(list,pred)=>{for(let i=list.length-1;i>=0;i--)if(pred(list[i]))return list[i];return null};
+function mapTestRecord(e,head){
+  if(!isObj(e)||!TEST_KINDS.includes(e.kind))return null;
+  const sha=typeof e.commitSha==="string"&&SHA_RE.test(e.commitSha)?e.commitSha:null,ts=isObj(e.testSurface)?e.testSurface:null;
+  return {evidenceId:typeof e.evidenceId==="string"&&e.evidenceId.length<=80?e.evidenceId:null,kind:e.kind,cycle:safeInt(e.cycle),commitSha:sha,atHead:head!==null&&sha===head,
+    exitCode:Number.isSafeInteger(e.exitCode)?e.exitCode:null,attested:typeof e.sandboxProviderId==="string"&&e.sandboxProviderId.length>0,
+    acceptance:ts&&typeof ts.functionalAcceptance==="string"?str(ts.functionalAcceptance,40):null,executedTests:ts?safeInt(ts.executedTests):null};
+}
+// //TR: Durum (EXECUTED/FAILED/...) readiness-core'un testsOf'u ile BİREBİR aynı kaynaktan gelir: tüm liste önce mapReadinessWorkRuns ile fail-closed doğrulanır (bozuk kanıt öğesi, biçimsiz commit/exitCode/sağlayıcı/kabul, yinelenen runId, bozuk koşu satırı => TÜM okuma ERROR) ve satır başına `tests` değeri oradan alınır; burada ikinci bir kural kopyası YOKTUR. Kayıtlar yalnız doğrulanmış ham öğelerden gösterim için türetilir.
+export const TEST_ROWS_MAX=500;
+export function mapTestReports(r){
+  const bad=state=>({state,runs:[],total:0,truncated:false});
+  if(!isObj(r)||r.ok!==true)return bad(isObj(r)&&typeof r.state==="string"?r.state:"ERROR");
+  const data=r.data;
+  const list=isObj(data)?(Array.isArray(data.workRuns)?data.workRuns:Array.isArray(data.runs)?data.runs:Array.isArray(data.items)?data.items:null):null;
+  if(!list)return bad("ERROR");
+  const rd=mapReadinessWorkRuns({runs:list});
+  if(rd.state!=="VERIFIED"||!rd.runs||rd.runs.items.length!==list.length)return bad("ERROR");
+  const runs=list.slice(0,TEST_ROWS_MAX).map((x,i)=>{
+    const row=rd.runs.items[i],head=row.headSha;
+    const records=x.evidence.map(e=>mapTestRecord(e,head)).filter(Boolean);
+    const surface=lastOf(records.filter(q=>q.atHead),q=>q.kind==="TEST_SURFACE"&&q.acceptance!==null);
+    return {runId:row.runId,missionId:row.missionId,headSha:head,state:row.tests,records,executedTests:surface?surface.executedTests:null};
+  });
+  return {state:"VERIFIED",runs,total:list.length,truncated:list.length>TEST_ROWS_MAX};
+}
 export {MISSING};

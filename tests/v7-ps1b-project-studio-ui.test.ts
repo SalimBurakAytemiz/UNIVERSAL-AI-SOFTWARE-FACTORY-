@@ -1,9 +1,12 @@
 // //TR: Bu test PS-1B masaüstü Project Studio'yu doğrular: main.mjs GET/POST allow-list eklemeleri (tam eşleşme + traversal/yöntem/boyut negatifleri), yalnız ana süreçte çözülen içe aktarma yolu / önizleme URL'si / dışa aktarma klasörü kuralları, IPC işleyicilerinin renderer'dan yol ya da URL almaması, sihirbaz ve diğer istek gövdeleri (argv dizileri), önizleme düğmesinin yalnız AVAILABLE iken etkin olması, gizli bilgi sansürü, tr/en eşitliği ve sahte DOM ile gerçek görünüm modülleri; mevcut B4/B5/B7 testleri ayrıca çalışır.
 import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+// //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
+import {logicalTestFiles} from "./support/validation-test-shards.js";
 
 const root = path.resolve(__dirname, "..");
 const desk = path.join(root, "apps", "desktop");
@@ -608,7 +611,7 @@ describe("PS-1B workspace tabs (fake DOM)", () => {
     expect(text(root)).toContain("CLAUDE_REVIEWER");
     expect(text(byId(root, "studio-ov-security")!)).toContain("1 kanıt");
     const routes = await load(rend, "routes.js");
-    expect(routes.ROUTES.map((r: any) => r.id)).toEqual(["home", "projects", "work", "workforce", "assurance", "delivery", "tower", "inbox", "company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "settings"]);
+    expect(routes.ROUTES.map((r: any) => r.id)).toEqual(["home", "projects", "work", "workforce", "assurance", "delivery", "tower", "inbox", "company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "settings"]);
   });
   it("overview never claims review or security state the server did not report", async () => {
     const {root} = await openWs({get: projectsGet({[`/v1/missions?projectId=${PID}`]: {missions: [{missionId: MID, projectId: PID, title: "G1", status: "EXECUTING", riskLevel: "R1"}]}, "/v1/work-runs": {workRuns: [{runId: "run_aaaaaa", missionId: MID, status: "RUNNING", startedAt: "2026-10-15T00:00:00Z"}]}, "/v1/evidence?runId=run_aaaaaa": {evidence: []}})});
@@ -897,7 +900,8 @@ describe("PS-1B static safety and wiring", () => {
   });
   it("validation.json appends this test at the very end of the tests step and nothing else changed there", () => {
     const cfg = JSON.parse(read(root, "config", "validation.json"));
-    const step = cfg.steps.find((s: any) => s.id === "tests");
+    // PUBLIC-CI: "tests" adımı sıralı tests, tests-2..tests-N kabuklarına bölünebilir; bitişiklik/sıra kuralı kabukların birleşimi olan mantıksal liste üzerinde aynen geçerlidir.
+    const step = {command: logicalTestFiles(cfg)};
     // c2: PS1B-C1-001 testi PS-1B UI testinin hemen ardından; V7-PKG-M1A-MODE (merge-tool sözleşmesi) m1a-* testlerini, UX paketleri de ux-* testlerini bu çiftin sonrasına ekler.
     const j = step.command.indexOf("tests/v7-ps1b-project-studio-ui.test.ts");
     expect(step.command.slice(j, j + 2)).toEqual(["tests/v7-ps1b-project-studio-ui.test.ts", "tests/v7-ps1b-relpath-canonical.test.ts"]);
@@ -1303,5 +1307,237 @@ describe("SBX-8 G: Settings shows the UASCO Claude profile status and the login 
     const settings = await load(rend, "views", "settings.js");
     const {ctx, doc} = await mkCtx({get: p => p === "/v1/system/executors" ? {executors: [{id: "LOCAL_CLAUDE", state: "READY"}]} : undefined});
     expect(byId(mount(doc, await settings.render(ctx)), "settings-claude-profiles")).toBeNull();
+  });
+});
+
+// //TR: test+states: studio-wizard (functional/negative/a11y) — Yeni Proje sihirbazı ve İçe Aktar paneli: başarısız/ağ hatalı gönderimde başarı uydurulmadığını, geçersiz proje kimliğinin "oluşturuldu" durumu kurmadığını, yerel diyalog hatasında dürüst durum gösterildiğini, proje yokken içe aktarma gönderiminin kapalı kaldığını ve erişilebilirlik sözleşmesini (fieldset/legend, aria-describedby/invalid, tipli düğmeler, role=alert) doğrular.
+describe("test+states studio-wizard: negative (no fabricated success)", () => {
+  const fillValid = (root: N) => { byId(root, "studio-name")!.value = "Yeni"; byId(root, "studio-name")!.fire("input"); };
+  it("a network failure (bridge throws) records an error status, keeps the draft and never reports success or sets lastCreated", async () => {
+    // //TR: Köprü hata fırlatınca başarı bildirilmez, taslak korunur.
+    const {ctx, doc, calls} = await mkCtx({get: projectsGet()}); // post tanımsız: CONTROL_API_UNREACHABLE
+    const root = mount(doc, await projectsView.render(ctx));
+    fillValid(root);
+    byId(root, "studio-wizard-form")!.fire("submit"); await tick();
+    expect(calls.post.length).toBe(1);
+    const status = forms.drafts.status["studio-wizard"];
+    expect(status.ok).toBe(false);
+    expect(st.studio.lastCreated).toBeFalsy();
+    expect(st.wizard.name).toBe("Yeni");
+    expect(forms.drafts.busy["studio-wizard"]).toBe(false);
+    const root2 = mount(doc, await projectsView.render(ctx));
+    expect(byId(root2, "studio-wizard-status")!.getAttribute("role")).toBe("alert");
+    expect(byId(root2, "studio-open-created")).toBeNull();
+  });
+  it("HTTP 4xx/5xx never marks success; a 201 without a valid prj_ id succeeds without a fabricated open-created shortcut", async () => {
+    for (const code of [400, 403, 409, 500]) {
+      forms.resetAllForms(); st.resetStudio();
+      const {ctx, doc} = await mkCtx({get: projectsGet(), post: () => ({status: code, body: {error: "NOPE"}})});
+      const root = mount(doc, await projectsView.render(ctx));
+      fillValid(root);
+      byId(root, "studio-wizard-form")!.fire("submit"); await tick();
+      expect(forms.drafts.status["studio-wizard"].ok, String(code)).toBe(false);
+      expect(st.studio.lastCreated, String(code)).toBeFalsy();
+      expect(st.wizard.name, String(code)).toBe("Yeni");
+    }
+    forms.resetAllForms(); st.resetStudio();
+    const {ctx, doc} = await mkCtx({get: projectsGet(), post: () => ({status: 201, body: {project: {projectId: "not-an-id", name: "X"}}})});
+    const root = mount(doc, await projectsView.render(ctx));
+    fillValid(root);
+    byId(root, "studio-wizard-form")!.fire("submit"); await tick();
+    expect(st.studio.lastCreated).toBeFalsy(); // geçersiz kimlik ile sahte "Aç" kısayolu kurulmaz
+    const root2 = mount(doc, await projectsView.render(ctx));
+    expect(byId(root2, "studio-open-created")).toBeNull();
+  });
+  it("invalid input sends nothing and flags the offending field with aria-invalid and a described error", async () => {
+    const {ctx, doc, calls} = await mkCtx({get: projectsGet()});
+    let root = mount(doc, await projectsView.render(ctx));
+    byId(root, "studio-wizard-form")!.fire("submit"); await tick(); // ad boş
+    expect(calls.post).toEqual([]);
+    root = mount(doc, await projectsView.render(ctx));
+    const name = byId(root, "studio-name")!;
+    expect(name.getAttribute("aria-invalid")).toBe("true");
+    const err = byId(root, "studio-name-err")!;
+    expect(text(err).length).toBeGreaterThan(0);
+    expect(name.getAttribute("aria-describedby") ?? "").toContain("studio-name-err");
+  });
+  it("a native dialog that throws shows the honest dialogFailed status and keeps the path empty", async () => {
+    const native = {pickImportPath: async () => { throw new Error("boom"); }};
+    const {ctx, doc} = await mkCtx({get: projectsGet(), native});
+    const root = mount(doc, await projectsView.render(ctx));
+    byId(root, "studio-import-pick")!.fire("click"); await tick();
+    expect(forms.drafts.status["studio-import"].key).toBe("studio.import.dialogFailed");
+    expect(forms.drafts.status["studio-import"].ok).toBe(false);
+    expect(st.importDraft.path).toBe("");
+  });
+  it("import POST failure does not clear the chosen path and reports a non-success status", async () => {
+    const native = {pickImportPath: async (kind: string) => ({cancelled: false, path: "C:\\Projeler\\app", kind})};
+    const {ctx, doc, calls} = await mkCtx({get: projectsGet(), native, post: () => ({status: 500, body: {error: "X"}})});
+    let root = mount(doc, await projectsView.render(ctx));
+    byId(root, "studio-import-pick")!.fire("click"); await tick();
+    root = mount(doc, await projectsView.render(ctx));
+    byId(root, "studio-import-form")!.fire("submit"); await tick();
+    expect(calls.post.length).toBe(1);
+    expect(forms.drafts.status["studio-import"].ok).toBe(false);
+    expect(st.importDraft.path).toBe("C:\\Projeler\\app");
+  });
+  it("with no listed projects (projects read failed) the import form cannot be submitted even after a path is picked", async () => {
+    const native = {pickImportPath: async (kind: string) => ({cancelled: false, path: "C:\\x", kind})};
+    const {ctx, doc, calls} = await mkCtx({get: () => undefined, native, post: () => ({status: 202, body: {}})});
+    let root = mount(doc, await projectsView.render(ctx));
+    byId(root, "studio-import-pick")!.fire("click"); await tick();
+    root = mount(doc, await projectsView.render(ctx));
+    expect(byId(root, "studio-import-submit")!.hasAttribute("disabled")).toBe(true);
+    byId(root, "studio-import-form")!.fire("submit"); await tick();
+    expect(calls.post).toEqual([]);
+  });
+});
+
+describe("test+states studio-wizard: accessibility", () => {
+  it("template and OS choices are fieldsets with legends and labelled inputs (radio group shares one name)", async () => {
+    const {ctx, doc} = await mkCtx({get: projectsGet()});
+    const root = mount(doc, await projectsView.render(ctx));
+    for (const id of ["studio-template", "studio-os"]) {
+      const fs_ = byId(root, id)!;
+      expect(fs_.tagName).toBe("FIELDSET");
+      const legend = fs_.children.find(c => c.tagName === "LEGEND")!;
+      expect(text(legend).length).toBeGreaterThan(0);
+      const inputs = all(fs_).filter(n => n.tagName === "INPUT");
+      expect(inputs.length).toBeGreaterThan(1);
+      for (const i of inputs) expect(all(fs_).some(l => l.tagName === "LABEL" && l.getAttribute("for") === i.id), i.id).toBe(true);
+    }
+    const radios = all(byId(root, "studio-template")!).filter(n => n.tagName === "INPUT");
+    expect(new Set(radios.map(r => r.attrs.get("name"))).size).toBe(1);
+    expect(byId(root, "studio-template")!.getAttribute("aria-describedby")).toContain("studio-template-hint");
+  });
+  it("forms are named by their summary, every button is explicitly typed, and the submit buttons are type=submit", async () => {
+    const {ctx, doc} = await mkCtx({get: projectsGet()});
+    const root = mount(doc, await projectsView.render(ctx));
+    expect(byId(root, "studio-wizard-form")!.getAttribute("aria-labelledby")).toBe("studio-wizard-t");
+    expect(byId(root, "studio-import-form")!.getAttribute("aria-labelledby")).toBe("studio-import-t");
+    expect(byId(root, "studio-wizard-t")!.tagName).toBe("SUMMARY");
+    expect(byId(root, "studio-import-t")!.tagName).toBe("SUMMARY");
+    expect(byId(root, "studio-wizard-submit")!.getAttribute("type")).toBe("submit");
+    expect(byId(root, "studio-import-submit")!.getAttribute("type")).toBe("submit");
+    for (const sc of ["studio-wizard", "studio-import"]) for (const b of all(byId(root, sc)!).filter(n => n.tagName === "BUTTON")) expect(["button", "submit"], b.id || text(b)).toContain(b.getAttribute("type"));
+  });
+  it("the chosen import path is a polite live region labelled by its field label, and shows the honest none-chosen text first", async () => {
+    const {ctx, doc} = await mkCtx({get: projectsGet()});
+    const root = mount(doc, await projectsView.render(ctx));
+    const p = byId(root, "studio-import-path")!;
+    expect(p.getAttribute("aria-live")).toBe("polite");
+    expect(p.getAttribute("aria-labelledby")).toBe("studio-import-path-l");
+    expect(byId(root, "studio-import-path-l")!.tagName).toBe("SPAN");
+    expect(text(p).length).toBeGreaterThan(0);
+    expect(text(p)).not.toMatch(/^[A-Za-z]:\\|^\//); // yol seçilmeden bir yol gösterilmez
+  });
+  it("keyboard: the submit button is disabled while a submission is in flight, so Enter/Space cannot double-post", async () => {
+    let release: (v: any) => void = () => {};
+    const pending = new Promise(r => { release = r; });
+    const {ctx, doc, calls} = await mkCtx({get: projectsGet()});
+    (ctx.api as any).post = async (p: string, b: any) => { calls.post.push({path: p, body: b}); return pending; };
+    let root = mount(doc, await projectsView.render(ctx));
+    byId(root, "studio-name")!.value = "Yeni"; byId(root, "studio-name")!.fire("input");
+    byId(root, "studio-wizard-form")!.fire("submit"); await tick();
+    expect(forms.drafts.busy["studio-wizard"]).toBe(true);
+    byId(root, "studio-wizard-form")!.fire("submit"); await tick(); // ikinci Enter
+    expect(calls.post.length).toBe(1);
+    root = mount(doc, await projectsView.render(ctx));
+    expect(byId(root, "studio-wizard-submit")!.hasAttribute("disabled")).toBe(true);
+    release({status: 500, body: {}}); await tick();
+    expect(forms.drafts.busy["studio-wizard"]).toBe(false);
+  });
+});
+
+describe("test+states studio-wizard: EN/TR parity and English rendering", () => {
+  it("every literal key in studio-wizard.js, every template/OS/import-kind label exists in both locales with equal placeholders", async () => {
+    // //TR: Sihirbazın kullandığı tüm anahtarlar iki dilde tanımlıdır.
+    const tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>, en = (await load(rend, "locales", "en.js")).default as Record<string, string>;
+    expect(Object.keys(en).sort()).toEqual(Object.keys(tr).sort());
+    const pc = await load(rend, "project-core.js");
+    const src = fs.readFileSync(path.join(rend, "views", "studio-wizard.js"), "utf8");
+    const keys = new Set<string>();
+    for (const m of src.matchAll(/(?:\bt\(|labelKey:|titleKey:|hintKey:|itemLabelKey:|addKey:|removeKey:|legendKey:)\s*"([a-zA-Z0-9_.-]+)"/g)) keys.add(m[1]);
+    for (const t of pc.TEMPLATES) { keys.add(`studio.template.${t}`); keys.add(`studio.template.${t}.desc`); }
+    for (const o of pc.TARGET_OS) keys.add(`studio.os.${o}`);
+    for (const k of pc.IMPORT_KINDS) keys.add(`studio.import.kind.${k}`);
+    expect(keys.size).toBeGreaterThan(25);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of keys) { expect(k in tr && k in en, k).toBe(true); expect(ph(en[k]), k).toBe(ph(tr[k])); expect(en[k].trim().length, k).toBeGreaterThan(0); }
+  });
+  it("renders the wizard and import panels in English without Turkish UI copy", async () => {
+    const {ctx, doc} = await mkCtx({get: projectsGet(), lang: "en"});
+    const root = mount(doc, await projectsView.render(ctx));
+    const tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>, en = (await load(rend, "locales", "en.js")).default as Record<string, string>;
+    expect(text(byId(root, "studio-wizard-t")!)).toBe(en["studio.wizard.title"]);
+    expect(text(byId(root, "studio-wizard-t")!)).not.toBe(tr["studio.wizard.title"]);
+    expect(text(byId(root, "studio-import-t")!)).toBe(en["studio.import.title"]);
+    expect(text(byId(root, "studio-wizard-submit")!)).toBe(en["studio.wizard.submit"]);
+  });
+});
+
+// //TR: UX hardening — AI Yürütücüleri paneli: boş liste, başarısız etkinleştirme, bilinmeyen durum, FAKE için eylem yok, erişilebilirlik ve EN/TR eşitliği (dürüst durum; READY uydurulmaz).
+describe("UX hardening: executors panel functional / negative / a11y", () => {
+  const EX = "/v1/system/executors";
+  const run = async (opts: any) => {
+    const settings = await load(rend, "views", "settings.js");
+    const c = await mkCtx(opts);
+    return {...c, root: mount(c.doc, await settings.render(c.ctx))};
+  };
+  it("shows the empty note for an empty executor list and no enable button", async () => {
+    const {root} = await run({get: (p: string) => p === EX ? {executors: []} : undefined});
+    expect(text(byId(root, "settings-executors")!)).toContain("Sunucu hiç yürütücü bildirmedi");
+    expect(byId(root, "exec-enable")).toBeNull();
+  });
+  it("shows an unreadable payload as an error state, never as a ready executor", async () => {
+    const {root} = await run({get: (p: string) => p === EX ? {executors: "x"} : undefined});
+    const panel = byId(root, "settings-executors")!;
+    expect(all(panel).some(n => n.attrs.get("role") === "status")).toBe(true);
+    expect(all(panel).filter(n => n.className.includes("badge-ok")).length).toBe(0);
+    expect(byId(root, "exec-enable")).toBeNull();
+  });
+  it("renders a missing state as Unknown (no ready badge) and offers no enable", async () => {
+    const {root} = await run({lang: "en", get: (p: string) => p === EX ? {executors: [{id: "LOCAL_CLAUDE"}]} : undefined});
+    const panel = byId(root, "settings-executors")!;
+    expect(text(panel)).toContain("Unknown");
+    expect(all(panel).filter(n => n.className.includes("badge-ok")).length).toBe(0);
+    expect(byId(root, "exec-enable")).toBeNull();
+  });
+  it("never offers enable for the test-only FAKE executor even when NOT_CONFIGURED", async () => {
+    const {root} = await run({lang: "en", get: (p: string) => p === EX ? {executors: [{id: "FAKE", state: "NOT_CONFIGURED"}]} : undefined});
+    expect(byId(root, "exec-enable")).toBeNull();
+    expect(text(byId(root, "settings-executors")!)).toContain("test only");
+  });
+  it("announces a failed enable request as an error and does not claim it was enabled", async () => {
+    for (const status of [403, 503]) {
+      const {root, ctx} = await run({lang: "en", get: (p: string) => p === EX ? {executors: [{id: "LOCAL_CLAUDE", state: "NOT_CONFIGURED"}]} : undefined, post: () => ({status, body: {}}), confirm: () => true});
+      byId(root, "exec-enable")!.fire("click"); await tick();
+      expect(forms.drafts.status.executors.ok, String(status)).toBe(false);
+      expect(forms.drafts.status.executors.key).not.toBe("exec.enabled");
+      expect(ctx.t(forms.drafts.status.executors.key, forms.drafts.status.executors.vars)).not.toMatch(/accepted/);
+    }
+  });
+  it("announces a bridge exception on enable as an error", async () => {
+    const {root} = await run({get: (p: string) => p === EX ? {executors: [{id: "LOCAL_CLAUDE", state: "NOT_CONFIGURED"}]} : undefined, post: () => { throw new Error("BRIDGE_DOWN"); }, confirm: () => true});
+    byId(root, "exec-enable")!.fire("click"); await tick();
+    expect(forms.drafts.status.executors.ok).toBe(false);
+  });
+  it("is accessible: typed button, live status region, labelled section, headings", async () => {
+    const {root} = await run({lang: "en", get: (p: string) => p === EX ? {executors: [{id: "LOCAL_CLAUDE", state: "NOT_CONFIGURED"}], claudeProfiles: {implementer: {state: "LOGIN_REQUIRED", reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"}}} : undefined});
+    const panel = byId(root, "settings-executors")!;
+    expect(panel.getAttribute("aria-labelledby")).toBeTruthy();
+    expect(byId(root, "exec-enable")!.getAttribute("type")).toBe("button");
+    expect(all(panel).some(n => n.id === "executors-status" && n.getAttribute("aria-live") === "polite")).toBe(true);
+    expect(all(panel).filter(n => n.tagName === "H3").length).toBeGreaterThan(0);
+    expect(all(byId(root, "settings-claude-profiles")!).filter(n => n.tagName === "H3" || n.tagName === "H4").length).toBeGreaterThan(1);
+  });
+  it("has identical en/tr exec.* key sets and placeholders, and every exec key used by the panel exists", async () => {
+    const tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>, en = (await load(rend, "locales", "en.js")).default as Record<string, string>;
+    const keys = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("exec.")).sort();
+    expect(keys(tr)).toEqual(keys(en));
+    const ph = (s: string) => (s.match(/\{[A-Za-z0-9_]+\}/g) ?? []).sort();
+    for (const k of keys(en)) expect(ph(tr[k]), k).toEqual(ph(en[k]));
+    const used = [...fs.readFileSync(path.join(rend, "views", "executors-panel.js"), "utf8").matchAll(/"(exec\.[A-Za-z0-9_.]+)"/g)].map(m => m[1]);
+    expect(used.filter(k => !(k in tr && k in en))).toEqual([]);
   });
 });

@@ -21,7 +21,7 @@ export function tooltipText(ctx,block){
   return ctx.t("tile.tooltip",{source:block?.source??MISSING,asOf:block?.asOf?formatTime(block.asOf,ctx.i18n.lang):MISSING});
 }
 const PILL_ICON=Object.freeze({LOADING:"clock",EMPTY:"minus",VERIFIED:"check",STALE:"clock",OFFLINE:"wifioff",FAILED:"xcircle",BLOCKED:"ban",DENIED:"lock",NOT_CONNECTED:"plug",UNAVAILABLE:"minuscircle",NOT_EXECUTED:"dashedcircle",NOT_VERIFIED:"help",PRODUCT_VERIFIED:"shield",
-  ACTIVE:"pulse",WAITING:"clock",ATTENTION:"alert",DONE:"check",STOPPED:"ban",IDLE:"minus",NEUTRAL:"minus"});
+  RECOVERING:"recover",ACTIVE:"pulse",WAITING:"clock",ATTENTION:"alert",DONE:"check",STOPPED:"ban",IDLE:"minus",NEUTRAL:"minus"});
 /** //TR: UX WP2: ayrık durum rozeti (ikon + metin, renk tek başına anlam taşımaz); FAILED/BLOCKED/DENIED/STALE/OFFLINE/NOT_CONNECTED/UNAVAILABLE/NOT_EXECUTED/NOT_VERIFIED/PRODUCT_VERIFIED ayrı etiketlerdir. label verilmezse pill.<KIND> sözlüğünden gelir. */
 export function statePill(ctx,kind,{label}={}){
   const doc=ctx.doc,k=PILL_ICON[kind]?kind:"NEUTRAL";
@@ -98,11 +98,11 @@ export function statusLabel(ctx,status){
 }
 export function statusPill(ctx,status){return h(ctx.doc,"span",{class:"pill",dataset:{status},text:statusLabel(ctx,status)})}
 /** Henüz uygulanmamış alan için dürüst panel: planlı paket + içerecekleri. */
-export function plannedPanel(ctx,route,{partial=false}={}){
+export function plannedPanel(ctx,route){
   const doc=ctx.doc,id=`planned-${route.id}`;
   return h(doc,"section",{class:"panel planned",id,"aria-labelledby":`${id}-t`,dataset:{planned:route.plannedPackage??""}},
-    h(doc,"h2",{class:"panel-title",id:`${id}-t`,text:ctx.t(partial?"planned.partial.title":"planned.title",{pkg:route.plannedPackage})}),
-    h(doc,"p",{class:"note",text:ctx.t(partial?"planned.partial.lead":"planned.lead",{pkg:route.plannedPackage})}),
+    h(doc,"h2",{class:"panel-title",id:`${id}-t`,text:ctx.t("planned.title",{pkg:route.plannedPackage})}),
+    h(doc,"p",{class:"note",text:ctx.t("planned.lead",{pkg:route.plannedPackage})}),
     h(doc,"h3",{class:"planned-sub",text:ctx.t("planned.contains")}),
     h(doc,"ul",{class:"planned-list"},[1,2,3].map(i=>h(doc,"li",{text:ctx.t(`area.${route.id}.plan${i}`)}))));
 }

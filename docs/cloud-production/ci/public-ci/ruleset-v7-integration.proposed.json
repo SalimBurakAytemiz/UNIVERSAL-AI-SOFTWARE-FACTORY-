@@ -1,0 +1,38 @@
+{
+  "//TR": "ONERILEN GitHub ruleset govdesi (POST /repos/SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY-/rulesets). Public repo + GitHub Free'de rulesets kullanilabilir. bypass_actors bos: admin dahil kimse atlayamaz. Zorunlu check'ler GitHub Actions uygulamasindan (integration_id 15368) gelen iki canonical context'tir; PR zorunlu, force-push ve silme engelli. Onay sayisi 0'dir cunku tek GitHub kimligi kendi PR'ini onaylayamaz; SHA'ya bagli bagimsiz review GitHub tarafinda AYRI kimlik olmadan zorlanamaz (merge-via-gate + reviewer verdict surec kontroludur, bkz README). YALNIZ pilot CI iki platformda yesil olduktan sonra Founder/admin tarafindan uygulanir.",
+  "name": "uasco-v7-integration-protection",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/v7/integration"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {"type": "deletion"},
+    {"type": "non_fast_forward"},
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": true
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {"context": "validate (ubuntu-latest)", "integration_id": 15368},
+          {"context": "validate (windows-latest)", "integration_id": 15368}
+        ]
+      }
+    }
+  ]
+}
