@@ -6,6 +6,7 @@ import path from "node:path";
 import {pathToFileURL} from "node:url";
 import {WorkOsStore} from "../core/workos/store.js";
 import {buildServer} from "../apps/control-api/src/server.js";
+import {moduleSpecifiers} from "./support/static-imports.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -269,9 +270,9 @@ describe("Queue — only already-allow-listed read-only GETs are used (protected
       expect(src).not.toContain(FORBIDDEN);
       expect(src).not.toMatch(/transition|performTransition|work-actions/);
     }
-    const imports = [...read("views", "queue.js").matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1]).sort();
+    const imports = moduleSpecifiers({source: read("views", "queue.js")}).sort();
     expect(imports).toEqual(["../components.js", "../forms.js", "../model.js", "../queue-core.js", "../work-core.js"]);
-    expect([...read("queue-core.js").matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1]).sort()).toEqual(["./executive-core.js", "./work-core.js"]);
+    expect(moduleSpecifiers({source: read("queue-core.js")}).sort()).toEqual(["./executive-core.js", "./work-core.js"]);
     for (const m of ["queueAttention", "queueMissions", "queueWorkRuns"]) expect(read("views", "queue.js")).toContain(`api.${m}(`);
     // api.js: tek apiPost çağrısı korunur (yeni POST yolu eklenmez); kuyruk erişimcileri yalnız sabit GET yollarını okur.
     expect(read("api.js").match(/bridge\.apiPost\(/g)?.length).toBe(1);

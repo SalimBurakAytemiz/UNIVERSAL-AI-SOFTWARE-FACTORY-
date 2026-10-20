@@ -10,6 +10,7 @@ import {RUN_STATUSES as CORE_RUN_STATUSES, RUN_STEPS as CORE_RUN_STEPS} from "..
 import {ExecutionGate} from "../core/workos/execution-gate.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import {T, setup, okScript, runner, api as relfxApi, HDR as RELFX_HDR, tmpRoot, rmTmp} from "./support/relfx.js";
+import {moduleSpecifiers} from "./support/static-imports.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -336,10 +337,10 @@ describe("Executive — only already-allow-listed read-only GETs are used (prote
       expect(src).not.toMatch(/\.post\(|window\.uasco|\bbridge\b|apiPost|apiGet|\bfetch\(|XMLHttpRequest|\beval\(|innerHTML|outerHTML|insertAdjacentHTML|new Function|localStorage|sessionStorage/);
       expect(src).not.toContain(FORBIDDEN);
     }
-    const imports = [...read("views", "executive.js").matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1]).sort();
+    const imports = moduleSpecifiers({source: read("views", "executive.js")}).sort();
     // UI-003: tek ek içe aktarma Dönüş Özeti panelidir; onun tek (cihaz-içi) yazımı aşağıdaki ayrı testte sabitlenir.
     expect(imports).toEqual(["../components.js", "../executive-core.js", "../model.js", "../work-core.js", "./return-summary.js"]);
-    expect([...read("executive-core.js").matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1])).toEqual(["./work-core.js"]);
+    expect(moduleSpecifiers({source: read("executive-core.js")})).toEqual(["./work-core.js"]);
     for (const m of ["execCockpit", "execMissions", "execWorkRuns", "execAttention"]) expect(read("views", "executive.js")).toContain(`api.${m}(`);
     // api.js: yalnız bu dört GET sabit yoldan okunur; yeni POST yolu eklenmez (tek apiPost çağrısı korunur).
     expect(read("api.js").match(/bridge\.apiPost\(/g)?.length).toBe(1);
@@ -1014,8 +1015,8 @@ describe("Executive — UI-003 return summary never reaches the server; its only
       expect(src).not.toContain(FORBIDDEN);
       expect(src.split("\n")[0]).toMatch(/^\/\/ \/\/TR: /);
     }
-    expect([...view.matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1]).sort()).toEqual(["../components.js", "../executive-core.js", "../model.js", "../return-summary-core.js", "../work-core.js"]);
-    expect([...core.matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1])).toEqual(["./executive-core.js"]);
+    expect(moduleSpecifiers({source: view}).sort()).toEqual(["../components.js", "../executive-core.js", "../model.js", "../return-summary-core.js", "../work-core.js"]);
+    expect(moduleSpecifiers({source: core})).toEqual(["./executive-core.js"]);
     // Cihaz deposuna tek erişim noktası (try/catch) ve tek yazım (storeSeen, tek anahtar).
     const code = (src: string) => src.split("\n").filter(l => !/^\s*(\/\/|\/\*\*|\*)/.test(l)).join("\n");
     expect(code(view).match(/localStorage/g)?.length).toBe(1);
