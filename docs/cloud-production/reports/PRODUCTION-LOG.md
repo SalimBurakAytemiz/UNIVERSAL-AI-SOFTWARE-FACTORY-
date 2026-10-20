@@ -607,3 +607,33 @@ create_session is unavailable in this fire, so no builder was dispatched; no ret
 1. claude-code-remote create_session unavailable: UI-025 claim has no builder yet.
 2. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned; blocks merges); BACKLOG-SOURCE-REBASELINE (Founder choice).
 3. Canonical backlog: UI-133 READY but unclaimed this fire (1 claim cap); everything else NOT_READY.
+
+## 2026-10-20 04:19Z heartbeat #39 (on-demand fire; v7/integration@0d0b2b9)
+
+**Queue (step 1):** QUEUE.json read from claude/cloud-production-engine@ed5cfb9, parsed OK. READY tasks: 0. Step 2 dispatch: nothing READY; also create_session/list_sessions are unavailable in this fire (claude-code-remote exposes only PR subscribe tools).
+
+**Step 2b:** dry run on base 0d0b2b9 returned START UI-133. Claim branches of READY tasks with no open PR: UI-047 and UI-201 (both heads are ancestors of origin/v7/integration). UI-025 has open PR #83 (head 0567275, draft).
+- MERGED_AWAITING_WRITEBACK UI-047 b620ffa (ancestor of origin/v7/integration)
+- MERGED_AWAITING_WRITEBACK UI-201 efc04b3003b1d49c93cc1c13c0ccb1138a66fa8c (ancestor of origin/v7/integration)
+- No ABANDONED_WITH_WORK, no RECLAIMABLE_AWAITING_BUILDER.
+
+ACTIVE (capacity guard, fallback method because list_sessions is unavailable): LIVE claim branches with no open PR = 0 (UI-025 has PR #83). Coordinator note says 1 builder globally (#75), not independently verifiable. ACTIVE < 2. **CLAIM made:** `dispatch.mjs --claim --owner heartbeat --no-lease` returned START, claimed:true, taskId UI-133, branch claude/ui-133, claim sha f18bd93dc062beccb00583b4ceff17452ff892db, base 0d0b2b93bd020a025b9e847658f33471b8d1e871 (ls-remote confirms refs/heads/claude/ui-133 = f18bd93).
+
+CLAIMED_AWAITING_BUILDER UI-133 claude/ui-133 f18bd93dc062beccb00583b4ceff17452ff892db
+
+create_session is unavailable, so no builder was dispatched; no retry, no second claim. The coordinator must provision exactly one builder (lane-a-builder, model claude-sonnet-5-5, source_revision claude/ui-133) for this claim.
+
+**Open PRs: 15** (none carries a uasco-cloud-production label; mergeable state and CI UNKNOWN, not returned by the listing): #83 UI-025 (draft), #75 CP-DISPATCH-RECOVERY (draft), #69 CI-PARALLEL proposal (draft, protected, do-not-merge), #68 integration wave B1 (uasco-needs-fix), #66 (draft), #50 (draft, uasco-needs-fix), #46, #33, #32, #31, #28, #23, #15, #11, #8.
+
+**Active implementer/builder sessions:** UNKNOWN (list_sessions unavailable); fallback LIVE claim-branch list with no open PR: claude/ui-133 (just claimed).
+
+**Tasks completed (merged):** UI-047, UI-201 (git ancestry). Queue tasks DONE: 0.
+
+**Current failures:** uasco-needs-fix on #68 and #50. Repo-wide Actions CI red per queue (not independently verified).
+
+**Top blockers:**
+1. create_session unavailable: UI-133 claim has no builder yet.
+2. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned); BACKLOG-SOURCE-REBASELINE (Founder choice).
+3. Canonical backlog: everything else NOT_READY after UI-133 claim.
+
+Note: this block was written with a local git commit and plain push (single commit, single file) because the full 54 KB log was too large to re-transmit through create_or_update_file without transcription risk.
