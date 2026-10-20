@@ -532,3 +532,22 @@ create_session is unavailable in this fire, so no builder was dispatched; no ret
 1. claude-code-remote create_session unavailable: UI-201 claim has no builder yet.
 2. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned; blocks merges); BACKLOG-SOURCE-REBASELINE (Founder choice).
 3. Canonical backlog: UI-025/UI-133 wait on open draft PRs #74/#73; everything else NOT_READY.
+
+## 2026-10-20 heartbeat #36 (queue read from claude/cloud-production-engine@ed5cfb9; fired 02:11Z)
+
+**Queue (step 1):** parsed OK. READY tasks: 0. Task states unchanged (PENDING_REVIEW: CP-QUEUE, CP-REPORT, CP-CI; IN_PROGRESS: CP-DISPATCH, CP-RECOVERY, CP-GOV; BLOCKED: FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED). DONE: 0. Step 2 dispatched: 0 (nothing READY; claude-code-remote create_session/list_sessions unavailable in this fire).
+
+**Step 2b (canonical backlog):** v7/integration = 052077a; dispatch.mjs and BACKLOG_CHECKPOINT.json present. Open-PR head list passed: 19 head branches of the open PRs. Dry run outcome NO_ACTION; no claim made, nothing dispatched. READY in checkpoint: UI-032 (PR #73), UI-026 (PR #74), UI-047 (PR #78), UI-201 (PR #79) all ALREADY_CLAIMED with OPEN_PR; UI-025 UNMET_DEP:UI-026; UI-133 UNMET_DEP:UI-032. No claim branch of a READY task lacks an open PR, so no MERGED_AWAITING_WRITEBACK, ABANDONED_WITH_WORK_AWAITING_COORDINATOR, RECLAIMABLE_AWAITING_BUILDER or CLAIMED_AWAITING_BUILDER lines this fire. ACTIVE (capacity guard, fallback method because list_sessions is unavailable): LIVE claim branches with no open PR = 0 (claude/ui-032, ui-026, ui-047, ui-201 all have open PRs).
+
+**Open PRs: 19** (all target v7/integration except #8 on an older base): #80 integration wave B3 (#73 + #74; non-draft), #79 UI-201 (draft), #78 UI-047 (draft), #75 CP-DISPATCH-RECOVERY (draft), #74 UI-026 (draft), #73 UI-032 (draft), #69 CI-PARALLEL proposal (draft, protected, do-not-merge), #68 integration wave B1 (uasco-needs-fix), #66 E2E-DESKTOP (draft), #50 (draft, uasco-needs-fix), #46, #33, #32, #31, #28, #23, #15, #11, #8. CHANGE vs #35: new #78, #79 (builder PRs for the UI-047/UI-201 claims) and #80. Mergeable state and CI: UNKNOWN (not returned by listing). No PR carries a uasco-cloud-production label. uasco-needs-fix on #68 and #50.
+
+**Active implementer/builder sessions:** UNKNOWN (list_sessions unavailable); fallback LIVE claim-branch count = 0.
+
+**Tasks completed (merged):** UI-132 (ancestry-verified earlier). Queue tasks DONE: 0.
+
+**Current failures:** uasco-needs-fix on #68 and #50. Repo-wide Actions CI red per queue (not independently verified).
+
+**Top blockers:**
+1. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned; blocks merges); BACKLOG-SOURCE-REBASELINE (Founder choice).
+2. Canonical backlog: no claimable task; all four READY tasks are in open PRs awaiting review/merge; UI-025/UI-133 wait on #74/#73 merging.
+3. claude-code-remote dispatch tooling unavailable in this session.
