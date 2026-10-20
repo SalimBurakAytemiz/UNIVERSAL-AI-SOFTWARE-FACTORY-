@@ -663,3 +663,34 @@ ACTIVE (list_sessions unavailable; fallback = LIVE claim branches with no open P
 3. create_session/list_sessions unavailable in this fire.
 
 Note: written with a local single-file commit and plain push (as in #39) because the ~58 KB log is too large to re-transmit through create_or_update_file without transcription risk.
+
+## 2026-10-20 06:17Z heartbeat #41 (queue read from claude/cloud-production-engine@ed5cfb9; v7/integration@b3103e7)
+
+**Queue:** parsed; 0 tasks READY (CP-QUEUE/CP-REPORT/CP-CI PENDING_REVIEW, CP-DISPATCH/CP-RECOVERY/CP-GOV IN_PROGRESS, FA-LEASE2/BACKLOG-SOURCE-REBASELINE/ACTIONS-CI-RESTORE/FEATURE-BACKLOG-GATED BLOCKED). Step 2: nothing to dispatch; create_session unavailable in this fire.
+
+**Step 2b:** dispatch.mjs and BACKLOG_CHECKPOINT.json present. Dry run (`--open-prs` = 14 open PR heads): outcome NO_ACTION, active 0. No claim made.
+MERGED_AWAITING_WRITEBACK CP-DISPATCH-IMPL 8e8f03283c26
+MERGED_AWAITING_WRITEBACK UI-030 a994d4b1819f
+MERGED_AWAITING_WRITEBACK UI-113 2e3e75f7abea
+MERGED_AWAITING_WRITEBACK UI-132 d1e0ba1ac92c
+MERGED_AWAITING_WRITEBACK UI-032 f9f5aa5404f4
+MERGED_AWAITING_WRITEBACK UI-026 68b25426bd48
+MERGED_AWAITING_WRITEBACK UI-025 056727551e79
+MERGED_AWAITING_WRITEBACK UI-133 33c6770e8407
+MERGED_AWAITING_WRITEBACK UI-047 b620ffaf9359
+MERGED_AWAITING_WRITEBACK UI-201 efc04b3003b1
+No CLAIMED_AWAITING_BUILDER, RECLAIMABLE_AWAITING_BUILDER or ABANDONED_WITH_WORK_AWAITING_COORDINATOR.
+
+ACTIVE (list_sessions unavailable; fallback = LIVE claim branches with no open PR): 0.
+
+**Open PRs: 14** (none labelled uasco-cloud-production; mergeable state/CI UNKNOWN): #87 backlog write-back 6, #69 CI-PARALLEL (draft, protected, do-not-merge), #68 wave B1 (uasco-needs-fix), #66 (draft), #50 (draft, uasco-needs-fix), #46, #33, #32, #31, #28, #23, #15, #11, #8.
+
+**Active sessions:** UNKNOWN (list_sessions unavailable); LIVE claim-branch list: none.
+
+**Tasks completed (merged):** the 10 claim branches above are ancestors of v7/integration. Queue tasks DONE: 0.
+
+**Current failures:** uasco-needs-fix on #68 and #50. Actions CI red per queue (not independently verified).
+
+**Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) Canonical backlog: remaining rows DRAFT_NOT_READY / AUTHORITY_REQUIRED / BLOCKED; #87 awaits merge (write-back). (3) create_session/list_sessions unavailable.
+
+Note: written as one local single-file commit with a plain push (as in #39/#40), since the ~60 KB log is too large to re-transmit through create_or_update_file without transcription risk.
