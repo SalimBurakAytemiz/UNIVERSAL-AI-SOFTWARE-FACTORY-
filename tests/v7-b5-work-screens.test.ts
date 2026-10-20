@@ -5,6 +5,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import {pathToFileURL} from "node:url";
 import {logicalTestFiles} from "./support/validation-test-shards.js";
+import {moduleSpecifiers} from "./support/static-imports.js";
 
 const root = path.resolve(__dirname, "..");
 const desk = path.join(root, "apps", "desktop");
@@ -1196,7 +1197,7 @@ describe("UI-111 #/work run-card retry facts", () => {
   });
   it("work-core.js keeps exactly its two relative imports and views/work.js/work-core.js use no indexedDB, Math.random, Date.now or new Date(", () => {
     const core = read(rend, "work-core.js"), view = read(rend, "views", "work.js");
-    expect([...core.matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1])).toEqual(["./model.js", "./delivery-core.js"]);
+    expect(moduleSpecifiers({source: core}).sort()).toEqual(["./delivery-core.js", "./model.js"]);
     for (const [n, s] of [["work-core.js", core], ["views/work.js", view]]) expect(s, n).not.toMatch(/indexedDB|Math\.random/);
     expect(view).not.toMatch(/Date\.now|new Date\(/);
   });
