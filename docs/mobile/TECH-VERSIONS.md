@@ -46,7 +46,7 @@ No dependency was installed. The two npm tarballs (`@react-native-community/temp
 |---|---|---|---|---|
 | 1 | React Native | 0.88.0, 2026-10-15 | 0.88.0, npm publish 2026-10-15 | VERIFIED |
 | 2 | React (pinned by RN) | not stated | RN peer `^19.3.0`; template pins 19.3.0; npm latest 19.3.1 (2026-10-14) | VERIFIED |
-| 3 | Hermes engine | not stated | RN 0.88.0 depends on `hermes-compiler` 260318099.0.4, but the npm `latest` tag is 250829098.0.19 | CONFLICTING |
+| 3 | Hermes engine | not stated | RN 0.88.0 depends on `hermes-compiler` 260318099.0.4, which is the npm `latest-v1` dist-tag (2026-09-27); the separate `latest` tag (250829098.0.19) is the other Hermes line | VERIFIED (dist-tag layout, no version disagreement) |
 | 4 | TypeScript | not stated | 7.0.2 (2026-07-08); template uses `^6.0.3` (6.0.3, 2026-04-16) | VERIFIED |
 | 5 | Node (tooling) | `^22.13 \|\| ^24.3` | 24.22.0 LTS "Krypton" (2026-10-14); 26.12.0 Current (2026-10-14) | VERIFIED (engines field differs from baseline) |
 | 6 | JDK | 17 | JDK 17 required by the RN Gradle plugin and by AGP 9.4.0 | VERIFIED |
@@ -72,21 +72,25 @@ No dependency was installed. The two npm tarballs (`@react-native-community/temp
 | 23 | QR scanning: react-native-vision-camera | not stated | 5.2.3 (2026-08-20); peers `react-native-nitro-modules`, `react-native-nitro-image` | VERIFIED |
 | 24 | QR scanning: react-native-camera-kit | not stated | 18.0.1 (2026-08-03) | VERIFIED (version) |
 | 24a | react-native-camera-kit QR/barcode capability in 18.x | not stated | not read from an official source today | UNVERIFIED |
-| 25 | EncryptedSharedPreferences deprecation | claim in the baseline | not re-checked | UNVERIFIED |
+| 25 | EncryptedSharedPreferences deprecation | claim in the baseline | deprecated in `androidx.security:security-crypto` 1.1.0 (developer.android.com reference) | VERIFIED |
 | 26 | CI runner: `ubuntu-latest` moves to 26.04 (default JDK 25) in November 2026 | claim in the baseline | not re-checked | UNVERIFIED |
-| 27 | Security advisories (npm advisory DB) | not stated | none returned for the queried versions (see section 4) | VERIFIED (npm DB only) |
+| 27 | Security advisories, npm packages | not stated | **negative result from the npm registry advisory endpoint only**: no advisory returned for the queried versions (section 4). This is not proof that no vulnerability exists, and covers no non-npm component | VERIFIED (npm registry only) |
 | 28 | Advisory history of `@react-native-community/cli` (dev-server command injection, CVE-2025-11953) | not stated | known from training knowledge only; the npm bulk query did not confirm it | UNVERIFIED |
+| 29 | FCM (Firebase Cloud Messaging). **NOT in release 1** (Founder: no FCM; push needs a separate grant, FA-MOB-15) | baseline: needs a Firebase project, `google-services.json` and an HTTP v1 credential | official Firebase docs (`firebase.google.com`) not reached (proxy refused). Community RN binding `@react-native-firebase/messaging` 27.0.0 (2026-10-19, Apache-2.0) on npm; not an official Google source | UNVERIFIED |
+| 30 | UnifiedPush Android connector. **NOT in release 1** (push needs a separate grant, FA-MOB-15) | not stated | `org.unifiedpush.android:connector` 3.3.5 on Maven Central (lastUpdated 2026-08-22); `unifiedpush.org` not reached | VERIFIED (Maven Central version only) |
+| 30a | UnifiedPush React Native binding. **NOT in release 1** | baseline: "no maintained RN binding was found" | not re-checked against an official source | UNVERIFIED |
+| 31 | Android SpeechRecognizer. **NOT in release 1** (voice needs a separate grant, FA-MOB-16/FA-MOB-17) | baseline: may stream audio to remote servers; on-device recognizer from API 31 | developer.android.com reference: "likely to stream audio to remote servers"; `createOnDeviceSpeechRecognizer` and `isOnDeviceRecognitionAvailable` added in API 31; needs `RECORD_AUDIO` | VERIFIED |
 
 ### Counts
 
 | Status | Rows |
 |---|---|
-| VERIFIED | 21 (rows 1, 2, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 27) |
-| VERIFIED (version only) | 1 (row 24; its capability is row 24a) |
-| CONFLICTING | 1 (row 3) |
-| UNVERIFIED | 9 (rows 6a, 9, 13a, 19a, 20, 24a, 25, 26, 28) |
+| VERIFIED | 24 (rows 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 27, 31) |
+| VERIFIED (version only) | 2 (row 24, whose capability is row 24a; row 30, whose RN binding is row 30a) |
+| CONFLICTING | 0 |
+| UNVERIFIED | 10 (rows 6a, 9, 13a, 19a, 20, 24a, 26, 28, 29, 30a) |
 
-Totals: **22 VERIFIED** (row 24 included), **1 CONFLICTING**, **9 UNVERIFIED**, 32 rows.
+Totals: **26 VERIFIED** (rows 24 and 30 included), **0 CONFLICTING**, **10 UNVERIFIED**, 36 rows.
 
 ## 3. Per-technology detail
 
@@ -120,11 +124,11 @@ Totals: **22 VERIFIED** (row 24 included), **1 CONFLICTING**, **9 UNVERIFIED**, 
 
 - **Facts (npm):**
   - `react-native@0.88.0` depends on `hermes-compiler: 260318099.0.4`;
-  - the `hermes-compiler` npm `latest` tag is 250829098.0.19 (published 2026-09-07; document modified 2026-09-27);
+  - the `hermes-compiler` npm dist-tags are `latest` = 250829098.0.19 (2026-09-07), **`latest-v1` = 260318099.0.4 (2026-09-27)**, `latest-v0` = 0.17.0 (2026-05-05) and `nightly`;
   - the template sets `hermesEnabled=true` and `newArchEnabled=true` in `android/gradle.properties`.
-- **Status: CONFLICTING.** The version RN pins and the package's `latest` dist-tag are on different numbering lines. The official Hermes release notes (`hermes-lang.org`, `github.com/facebook/hermes`) were not reachable, so the meaning of the two lines (for example a "Hermes V1" line) is UNVERIFIED.
+- **Status: VERIFIED (re-labelled from CONFLICTING).** There is no version disagreement. The package publishes parallel lines under separate dist-tags, and the version RN 0.88.0 pins is exactly the `latest-v1` tag. The plain `latest` tag points at another line, so "npm latest" is the wrong question for Hermes. What distinguishes the lines (for example "Hermes V1" vs the legacy engine) is described in the official Hermes release notes (`hermes-lang.org`, `github.com/facebook/hermes`), which were not reachable; that description stays UNVERIFIED.
 - **License:** MIT (npm).
-- **Phase-1 recommendation:** do not pick Hermes on its own. Use exactly the Hermes that the chosen RN version bundles, with Hermes enabled (the template default). Never take the `hermes-compiler` `latest` tag.
+- **Phase-1 recommendation:** do not pick Hermes on its own. Use exactly the Hermes that the chosen RN version bundles, with Hermes enabled (the template default). Never take the `hermes-compiler` `latest` tag; if Hermes is ever pinned on its own, use the `latest-v1` line that RN pins.
 
 ### 3.4 TypeScript
 
@@ -198,7 +202,7 @@ Totals: **22 VERIFIED** (row 24 included), **1 CONFLICTING**, **9 UNVERIFIED**, 
   - **targetSdk 36**, which meets the current Play rule even though phase 1 is not distributed through Play (FA-MOB-20);
   - **compileSdk 37**, as the template sets;
   - **minSdk 24**, as the template sets; the decision record allows raising it.
-  - Note for MOB-1/MOB-5: an on-device speech recognizer exists from API 31 (baseline claim, UNVERIFIED today), so a higher minSdk may be preferable for F7. That decision belongs to MOB-5, not to this record.
+  - Note for MOB-1/MOB-5: an on-device speech recognizer exists from API 31 (VERIFIED, row 31), so a higher minSdk may be preferable for F7. That decision belongs to MOB-5, not to this record.
 
 ### 3.10 Secure storage
 
@@ -271,7 +275,28 @@ Totals: **22 VERIFIED** (row 24 included), **1 CONFLICTING**, **9 UNVERIFIED**, 
   - Use vision-camera 5.x only if Nitro modules are admitted under FA-MOB-12.
   - Either way, the scanned payload is untrusted input and must be validated by the pairing protocol (MOB-2).
 
+### 3.15 Push, voice and storage facts outside release 1
+
+None of these is in release 1. The Founder decided no FCM in the first release; push (FA-MOB-15) and voice (FA-MOB-16, FA-MOB-17) each need a separate grant. They are recorded here only so the task's coverage list is complete.
+
+- **FCM (row 29, UNVERIFIED):**
+  - The official Firebase documentation (`https://firebase.google.com/docs/cloud-messaging`) was not reachable: the agent proxy refused the connection. The baseline's requirements (Firebase project, `google-services.json`, HTTP v1 service credential) stay UNVERIFIED.
+  - npm shows the community binding `@react-native-firebase/messaging` 27.0.0 (2026-10-19, Apache-2.0; https://registry.npmjs.org/@react-native-firebase/messaging). It is not a Google source and does not verify FCM itself.
+- **UnifiedPush (rows 30 and 30a):**
+  - Android connector: `org.unifiedpush.android:connector` 3.3.5, Maven Central `latest`/`release`, lastUpdated 2026-08-22 (https://repo1.maven.org/maven2/org/unifiedpush/android/connector/maven-metadata.xml). VERIFIED for the version only.
+  - `https://unifiedpush.org` was not reachable, so the project's own library list and any React Native binding stay UNVERIFIED.
+- **Android SpeechRecognizer (row 31, VERIFIED):** source https://developer.android.com/reference/android/speech/SpeechRecognizer.
+  - The page says: "The implementation of this API is likely to stream audio to remote servers to perform speech recognition."
+  - It also says the app "must have Manifest.permission.RECORD_AUDIO permission to use this class".
+  - `createOnDeviceSpeechRecognizer` and `isOnDeviceRecognitionAvailable` were added in API level 31.
+- **EncryptedSharedPreferences (row 25, VERIFIED):** source https://developer.android.com/reference/androidx/security/crypto/EncryptedSharedPreferences.
+  - The page says: "Artifact: androidx.security:security-crypto … Added in 1.0.0 Deprecated in 1.1.0 … This class is deprecated. Use android.content.SharedPreferences instead."
+  - This supports the baseline's advice not to use it for secrets. Section 3.10 already recommends Android Keystore.
+
 ## 4. Security advisories
+
+**Scope of this result:** everything below is a **negative result from the npm registry advisory endpoint only**. It is not proof that no vulnerability exists. It does not cover any non-npm component (JDK, AGP, Gradle, Kotlin, NDK, Hermes native code, Maestro, Android platform).
+
 
 - **Query:** `POST https://registry.npmjs.org/-/npm/v1/security/advisories/bulk` (npm's advisory DB, mirrored from the GitHub Advisory Database). It returned **no advisories** for:
   - react-native 0.88.0 and 0.87.1;
@@ -299,11 +324,11 @@ Totals: **22 VERIFIED** (row 24 included), **1 CONFLICTING**, **9 UNVERIFIED**, 
 3. **RN release date:** npm publish is 2026-10-15 (matches the baseline); the official blog URL is dated 2026-10-19.
 4. **AGP 9.2.1 / Gradle 9.4.1:** correct as RN-pinned values, but the latest stable are AGP 9.4.0 and Gradle 9.8.2.
 5. **NDK:** the template has 27.1.12297006 (matches the baseline); the AGP 9.4.0 default is 28.2.13676358.
-6. **Hermes:** not in the baseline. The version RN pins conflicts with the npm `latest` tag (row 3).
+6. **Hermes:** not in the baseline. The version RN pins is the npm `latest-v1` dist-tag, not `latest` (row 3).
 7. **TypeScript:** not in the baseline. The template uses 6.0.x, npm `latest` is 7.0.2, and the repository root is on 5.9.3.
 8. **RNTL 14.1.0:** peers on `test-renderer ^1.0.0`, while the template ships `react-test-renderer`.
 9. **react-native-keychain 10.0.0:** the version matches the baseline, but its last release is 2025-03-23. The baseline does not note this maintenance gap.
-10. **Claims not re-verified today (stay UNVERIFIED):** the template ships `ios/` and a public `debug.keystore`; the Detox 0.77-0.84 range; EncryptedSharedPreferences deprecation; the `ubuntu-latest` → 26.04 change; the UnifiedPush binding gap; the WorkManager 15-minute minimum; SpeechRecognizer behaviour. The template's `android/` contents were read, but `ios/` and keystore files were not inspected.
+10. **Claims not re-verified today (stay UNVERIFIED):** the template ships `ios/` and a public `debug.keystore`; the Detox 0.77-0.84 range; the `ubuntu-latest` → 26.04 change; the UnifiedPush RN binding gap; the FCM requirements; the WorkManager 15-minute minimum. Now VERIFIED today: the EncryptedSharedPreferences deprecation (row 25) and the SpeechRecognizer remote-streaming warning and API 31 on-device recognizer (row 31). The template's `android/` contents were read, but `ios/` and keystore files were not inspected.
 
 ## 6. Hand-off
 
