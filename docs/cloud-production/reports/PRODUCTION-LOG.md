@@ -800,3 +800,26 @@ No CLAIMED_AWAITING_BUILDER, RECLAIMABLE_AWAITING_BUILDER or ABANDONED_WITH_WORK
 **Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) MOB-3/4/6/7/8 wait on open MOB-1/2/5/9 PRs; other MOB tasks need Founder authority. (3) UI-194 blocked on operations guard test. (4) create_session/list_sessions unavailable.
 
 Note: written as one local single-file commit with a plain push (as in #39-#44), since the ~69 KB log is too large to re-transmit through create_or_update_file without transcription risk.
+
+## Heartbeat #46 (2026-10-20 10:31Z)
+
+**Queue:** read from claude/cloud-production-engine@ed5cfb9; parsed OK. READY tasks: 0 (CP-QUEUE/CP-REPORT/CP-CI PENDING_REVIEW; CP-DISPATCH/CP-RECOVERY/CP-GOV IN_PROGRESS; FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED BLOCKED). Step 2: nothing to dispatch; create_session/list_sessions unavailable in this fire.
+
+**Step 2b (canonical backlog):** v7/integration @ cd109ac (#69 Windows CI sharding merged 10:27:29Z, per coordinator context). Dry run: NO_ACTION. No claim run (dry run shows nothing startable; at most 0 claims). ACTIVE (list_sessions unavailable; fallback = LIVE claim branches with no open PR): 1 = claude/ui-194 (work commit 50f560e, 2 commits ahead of v7/integration, head 08:15Z, ~2.3 h old, LIVE). Below cap of 2, nothing claimable. No claim, no dispatch.
+
+Coordinator note: MOB-3, MOB-4, MOB-8 stay UNMET_DEP (MOB-2/MOB-1/MOB-5/MOB-9) until wave B8b (#105) merges; not READY-eligible now.
+
+No MERGED_AWAITING_WRITEBACK delta observed beyond heartbeat #45 (dispatcher state: UI-002, UI-007, UI-125, UI-109, UI-146, UI-182, UI-233, UI-035 report ALREADY_CLAIMED/DONE).
+No CLAIMED_AWAITING_BUILDER, RECLAIMABLE_AWAITING_BUILDER or ABANDONED_WITH_WORK_AWAITING_COORDINATOR. Claims with open PR (draft): MOB-1 #100, MOB-2 #99, MOB-5 #102, MOB-9 #103.
+
+**Open PRs: 13** (none labelled uasco-cloud-production; mergeable state/CI UNKNOWN): #105 (wave B8b, supersedes #104), #104 (wave B8), #103, #102, #100, #99, #66, #46, #33, #32, #28, #23, #8. (#69 now merged.)
+
+**Active sessions:** UNKNOWN (list_sessions unavailable); LIVE claim-branch list used: claude/ui-194.
+
+**Tasks completed (merged):** #69 merged as cd109ac. Queue tasks DONE: 0.
+
+**Current failures:** none newly observed; UI-194 previously reported blocked on an operations guard test (not re-verified).
+
+**Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) MOB-3/4/6/7/8 wait on wave B8b (#105) / open MOB PRs; other MOB tasks need Founder authority. (3) UI-194 blocked on operations guard test. (4) create_session/list_sessions unavailable.
+
+Note: written as one local single-file commit with a plain push (as in #39-#45), since the log is too large to re-transmit through create_or_update_file without transcription risk.
