@@ -2,7 +2,7 @@
 
 # Separate-identity Cloud governance mechanism (CP-GOV)
 
-**Authority:** Founder decision 2026-10-18 ("Separate-identity Cloud governance") — see `../DECISIONS-2026-10-18.md`. **Agent-recorded. This proves nothing on its own and has not been confirmed by the Founder through a non-agent channel** (UNCONFIRMED). Enables cloud-independent trust-root **seal/re-seal** and issuance of the **FA-LEASE2 D3** authority record, so authority no longer depends on Local.
+**Authority:** an agent-recorded (UNCONFIRMED) report of a Founder decision dated 2026-10-18 ("Separate-identity Cloud governance") — see `../DECISIONS-2026-10-18.md`. **Agent-recorded. This proves nothing on its own and has not been confirmed by the Founder through a non-agent channel** (UNCONFIRMED). The mechanism is designed to enable cloud-independent trust-root **seal/re-seal** and issuance of the **FA-LEASE2 D3** authority record, so authority no longer depends on Local.
 
 **Status:** this document is the **Phase-0 design + (coming) non-protected scaffold**. It installs no key, performs no seal, issues no D3, and edits no protected path. It was produced by three independent design agents (KMS-custody split, M-of-N quorum, attested session) and then **adversarially verified**; every design returned `NEEDS_FIX`, and the fixes below are folded in as first-class requirements.
 
