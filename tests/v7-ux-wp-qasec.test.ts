@@ -863,3 +863,81 @@ describe("UX WP-QA-SEC UI-047 security finding detail", () => {
     expect(pick(en).length).toBe(17);
   });
 });
+
+// //TR: UI-146: yeniden-tarama geçmişi — cycle sırası, tek tarama, kanıtsız koşu, bozuk girdi, STALE, "düzeltildi" metni yok, okuma hatası.
+describe("UX WP-QA-SEC UI-146 security re-scan history", () => {
+  const ev = (cycle: any, o: any = {}, commit: string | null = HEAD1) => ({...secEvidence(sec({status: "PASSED", headSha: HEAD1, ...o}), commit as string, cycle), cycle});
+  const histRun = (evs: any[]) => mkRun("a", HEAD1, evs);
+  const detail = async (run: any, lang = "en") => {
+    const {ctx} = await mkCtx({}, lang);
+    const raw = ctx.api.raw;
+    ctx.api.raw = async (p: string, ...a: any[]) => p.startsWith("/v1/work-runs") ? {ok: true, data: {workRuns: [run]}} : raw(p, ...a);
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `sec-${run.runId}`) as N).fire("click");
+    return byId((await renderAssurance(ctx)).node, "qa-secdetail")!;
+  };
+  const rows = (d: N) => byData(d, "histRow").map(r => r.children.map(c => text(c)));
+  it("maps a two-cycle run in cycle order with null cycles last", async () => {
+    const core = await load("assurance-core.js");
+    const r = core.mapRunSecurity(histRun([ev(2, {gitleaksFindings: 0}), ev(null), ev(1, {status: "BLOCKED", blockReason: "SECRET_DETECTED", gitleaksFindings: 3}, OTHER)]));
+    expect(r.scanHistory.map((e: any) => e.cycle)).toEqual([1, 2, null]);
+    expect(r.scanHistory[0]).toMatchObject({stageStatus: "BLOCKED", commitSha: OTHER, commitBound: false, gitleaksFindings: 3, blockReason: "SECRET_DETECTED"});
+    expect(r.scanHistory[1].commitBound).toBe(true);
+    expect(r.scanStatus).toBe("PASSED");
+    const many = core.mapRunSecurity(histRun(Array.from({length: 25}, (_, i) => ev(i))));
+    expect(many.scanHistory).toHaveLength(20);
+  });
+  it("renders a two-cycle run as an ordered table", async () => {
+    const d = await detail(histRun([ev(2, {gitleaksFindings: 0}), ev(1, {status: "BLOCKED", blockReason: "SECRET_DETECTED", gitleaksFindings: 3})]));
+    const t = byData(d, "histSection")[0];
+    expect(byTag(t, "caption")).toHaveLength(1);
+    expect(byTag(t, "th").every(th => th.attrs.get("scope") === "col")).toBe(true);
+    const rs = rows(d);
+    expect(rs).toHaveLength(2);
+    expect(rs[0][0]).toBe("1"); expect(rs[1][0]).toBe("2");
+    expect(rs[0][2]).toBe(HEAD1.slice(0, 8)); expect(rs[0][3]).toBe("3");
+  });
+  it("shows a note for a single scan and nothing for a run without security evidence", async () => {
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const one = await detail(histRun([ev(1)]));
+    expect(byData(one, "histRow")).toHaveLength(0);
+    expect(text(byData(one, "histSingle")[0])).toBe(en["qa.security.hist.single"]);
+    const none = await detail(RUN_E);
+    expect(byData(none, "histSection")).toHaveLength(0);
+    expect(text(none)).toContain(en["qa.security.detail.notScanned"]);
+  });
+  it("drops malformed entries and renders missing counts as the dash, never 0", async () => {
+    const core = await load("assurance-core.js");
+    const bad = {...ev(3), security: "junk"};
+    const noCounts = ev(4); delete (noCounts.security.secrets.gitleaks as any).findings; (noCounts.security.sca as any).blocking = "7";
+    const run = histRun([ev(1), bad, null, {kind: "OTHER", security: {}}, noCounts]);
+    expect(core.mapRunSecurity(run).scanHistory.map((e: any) => e.cycle)).toEqual([1, 4]);
+    const d = await detail(run);
+    expect(rows(d)[1].slice(3)).toEqual(["—", "—"]);
+  });
+  it("labels a PASSED/PARTIAL row on another commit STALE, never a current pass", async () => {
+    const d = await detail(histRun([ev(1, {}, OTHER), ev(2, {status: "PARTIAL"}, OTHER), ev(3)]));
+    const pills = byData(d, "histRow").map(r => byData(r, "scan")[0].dataset.scan);
+    expect(pills).toEqual(["STALE", "STALE", "PASSED"]);
+  });
+  it("computes no fixed/resolved/delta text and states that nothing is asserted fixed", async () => {
+    const d = await detail(histRun([ev(1, {gitleaksFindings: 3}), ev(2, {gitleaksFindings: 0})]));
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const hist = byData(d, "histSection")[0];
+    expect(text(byData(hist, "histNote")[0])).toBe(en["qa.security.hist.note"]);
+    expect(text(hist).replace(en["qa.security.hist.note"], "")).not.toMatch(/fixed|resolved|clean again|[↑↓▲▼→]|[+-]\d/i);
+  });
+  it("renders no history when the work-runs read fails", async () => {
+    const {ctx} = await mkCtx({workRuns: "off"});
+    const res = await renderAssurance(ctx);
+    expect(byData(res.node, "histSection")).toHaveLength(0);
+  });
+  it("EN/TR qa.security.hist.* keys are at parity with equal placeholders", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const pick = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("qa.security.hist.")).sort();
+    expect(pick(tr)).toEqual(pick(en));
+    expect(pick(en).length).toBe(9);
+    for (const k of pick(en)) expect(en[k].match(/\{\w+\}/g)).toEqual(tr[k].match(/\{\w+\}/g));
+  });
+});
