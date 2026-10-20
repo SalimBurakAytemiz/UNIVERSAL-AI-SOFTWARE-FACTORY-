@@ -340,4 +340,49 @@ describe("WP-ACADEMY — placeholder parity", () => {
       for (const d of [tr, en]) { expect(d[`academy.state.${s}`], s).toBeTruthy(); expect(d[`academy.hint.${s}`], s).toContain("{source}"); }
     }
   });
+  describe("UI-201 evidence library", () => {
+    const LRN = PROMOTED.learningId, SRC = "src_" + "33".repeat(12), GONE = "src_" + "99".repeat(12);
+    const evLearning = {...PROMOTED, sourceIds: [SRC, GONE, "evil<script>", SRC], labRunRefs: ["run-1", 5, null], negativeEvalRefs: ["neg-1"], reviewerRunRef: "rr-1",
+      labResult: {passed: true, deterministicTestRefs: ["t1", "t2"], recordedAt: "2026-10-14T00:00:00.000Z"}, drift: [{}],
+      promotion: {...PROMOTED.promotion, supportingSourceIds: [SRC], reviewerEvidence: {ref: `audit/evidence/skill-academy/${LRN}/REVIEWER.json#sha256=${"a".repeat(64)}`, sha256: "a".repeat(64)}}};
+    const reuse = {reuseId: "ru1", learningId: LRN, outcome: "SUCCESS", missionRef: "m-1", evidenceRef: "e", at: "2026-10-16T00:00:00.000Z"};
+    it("maps hostile/malformed evidence fail-closed and bounded", async () => {
+      const core = await load("academy-core.js");
+      const bad = core.mapAcademy({learnings: [{...PROMOTED, sourceIds: Array.from({length: 80}, (_, i) => "src_" + i.toString(16).padStart(24, "0")).concat(["<img>"]), labRunRefs: Array(80).fill("r".repeat(999)),
+        labResult: {passed: "yes", deterministicTestRefs: "x"}, promotion: {...PROMOTED.promotion, reviewerEvidence: {ref: "../../etc/passwd#sha256=" + "a".repeat(64), sha256: "a".repeat(64)}}}], reuses: [reuse, {learningId: "bad"}, null]});
+      const e = bad.learnings[0].evidence;
+      expect(e.sourceIds.length).toBe(50); expect(e.labRunRefs.length).toBe(50); expect(e.labRunRefs[0].length).toBe(200);
+      expect(e.labResult).toEqual({passed: null, testRefCount: 0, recordedAt: null}); expect(e.reviewerRef).toBeNull(); expect(e.linkage).toBe("NOT_VERIFIED");
+      expect(bad.reuseEvents.length).toBe(1);
+      const ok = core.mapAcademy({learnings: [evLearning], reuses: [reuse]}).learnings[0];
+      expect(ok.evidence.sourceIds).toEqual([SRC, GONE]); expect(ok.evidence.labRunRefs).toEqual(["run-1"]); expect(ok.evidence.reviewerRef.sha256Short).toBe("a".repeat(12));
+      expect(ok.evidence.driftCount).toBe(1); expect([ok.executable, ok.authorityEffect]).toEqual([false, "NONE"]);
+      expect(core.mapAcademy(null).reuseEvents).toEqual([]);
+    });
+    it("renders per-learning details with UNKNOWN cross-ref, reuse events and NOT_VERIFIED, calling only /v1/academy", async () => {
+      const academy = await load("views", "academy.js");
+      const {ctx, calls} = await mkCtx(p => (p === "/v1/academy" ? liveAcademy({learnings: [evLearning, OPEN], reuses: [reuse]}) : fail(p)));
+      const root = await academy.render(ctx);
+      expect(calls).toEqual(["/v1/academy"]);
+      const items = all(root).filter(n => n.tagName === "DETAILS" && "evidenceLearning" in n.dataset);
+      expect(items.length).toBe(2);
+      const xr = all(root).filter(n => "evidenceXref" in n.dataset).map(n => n.dataset.evidenceXref);
+      expect(xr).toContain("FOUND"); expect(xr).toContain("UNKNOWN");
+      expect(all(root).filter(n => "evidenceReuse" in n.dataset).length).toBe(1);
+      expect(all(root).filter(n => n.dataset.evidenceLinkage === "NOT_VERIFIED").length).toBe(2);
+      expect(all(root).some(n => n.tagName === "SUMMARY")).toBe(true);
+    });
+    it("renders failure and empty states honestly and keeps certified 0", async () => {
+      const academy = await load("views", "academy.js");
+      const f = await mkCtx(p => fail(p)); const rf = await academy.render(f.ctx);
+      expect(all(rf).filter(n => "evidenceLearning" in n.dataset).length).toBe(0); expect(byId(rf, "academy-evidence")).toBeTruthy();
+      const e = await mkCtx(p => (p === "/v1/academy" ? liveAcademy({learnings: []}) : fail(p))); const re = await academy.render(e.ctx);
+      expect(all(re).filter(n => "evidenceLearning" in n.dataset).length).toBe(0);
+    });
+    it("has EN/TR parity for academy.evidence.*", async () => {
+      const en = (await load("locales", "en.js")).default ?? (await load("locales", "en.js")); const tr = (await load("locales", "tr.js")).default ?? (await load("locales", "tr.js"));
+      const keys = (d: any) => Object.keys(d).filter(k => k.startsWith("academy.evidence.")).sort();
+      expect(keys(en).length).toBeGreaterThan(10); expect(keys(tr)).toEqual(keys(en));
+    });
+  });
 });

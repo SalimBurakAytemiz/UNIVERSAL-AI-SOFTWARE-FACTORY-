@@ -794,3 +794,12 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   .ops-step,.ops-item,.ops-control{border:1px solid CanvasText;border-left-width:4px}
   .ops-section :focus-visible{outline:3px solid Highlight}
 }
+
+.evidence-library{display:grid;gap:var(--space-2)}
+.evidence-item{padding:var(--space-3);border:1px solid var(--border-ui);border-radius:var(--radius-md);background:var(--surface)}
+.evidence-item>summary{cursor:pointer;display:flex;gap:var(--space-2);align-items:center;font-size:var(--fs-body)}
+.evidence-item>summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.evidence-dl{display:grid;grid-template-columns:minmax(8rem,14rem) 1fr;gap:var(--space-1) var(--space-3);margin:var(--space-3) 0}
+.evidence-dl dt{color:var(--muted);font-size:var(--fs-label)}
+.evidence-dl dd{margin:0;font-size:var(--fs-body);overflow-wrap:anywhere}
+.evidence-list{margin:0;padding-left:var(--space-4)}
