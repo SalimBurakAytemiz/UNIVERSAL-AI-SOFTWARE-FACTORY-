@@ -9,6 +9,7 @@ import {buildServer} from "../apps/control-api/src/server.js";
 import {ExecutionGate} from "../core/workos/execution-gate.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import {T, setup, okScript, runner, api as relfxApi, HDR as RELFX_HDR, tmpRoot, rmTmp} from "./support/relfx.js";
+import {moduleSpecifiers} from "./support/static-imports.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -374,9 +375,9 @@ describe("Posture — only already-allow-listed read-only GETs are used (protect
       expect(src).not.toContain(FORBIDDEN);
       expect(src).not.toMatch(/transition|performTransition|work-actions/);
     }
-    const imports = [...read("views", "posture.js").matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1]).sort();
+    const imports = moduleSpecifiers({source: read("views", "posture.js")}).sort();
     expect(imports).toEqual(["../components.js", "../model.js", "../posture-core.js", "../work-core.js"]);
-    expect([...read("posture-core.js").matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1]).sort()).toEqual(["./readiness-core.js"]);
+    expect(moduleSpecifiers({source: read("posture-core.js")}).sort()).toEqual(["./readiness-core.js"]);
     for (const m of ["commandCenterWorkRuns", "commandCenterReviews", "commandCenterEvidence"]) expect(read("views", "posture.js")).toContain(`api.${m}(`);
     // api.js: tek apiPost çağrısı korunur (yeni POST yolu eklenmez); duruş erişimcileri yalnız sabit GET yollarını okur.
     expect(read("api.js").match(/bridge\.apiPost\(/g)?.length).toBe(1);

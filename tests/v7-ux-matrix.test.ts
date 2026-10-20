@@ -9,6 +9,7 @@ import {buildServer} from "../apps/control-api/src/server.js";
 import {ExecutionGate} from "../core/workos/execution-gate.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import {T, setup, okScript, runner, api as relfxApi, HDR as RELFX_HDR, tmpRoot, rmTmp} from "./support/relfx.js";
+import {moduleSpecifiers} from "./support/static-imports.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -353,9 +354,9 @@ describe("Matrix — only already-allow-listed read-only GETs are used (protecte
       expect(src).not.toContain(FORBIDDEN);
       expect(src).not.toMatch(/transition|performTransition|work-actions|createMission|startRun/);
     }
-    const imports = [...read("views", "matrix.js").matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1]).sort();
+    const imports = moduleSpecifiers({source: read("views", "matrix.js")}).sort();
     expect(imports).toEqual(["../components.js", "../forms.js", "../matrix-core.js", "../model.js", "../work-core.js"]);
-    expect([...read("matrix-core.js").matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1]).sort()).toEqual(["./executive-core.js", "./work-core.js"]);
+    expect(moduleSpecifiers({source: read("matrix-core.js")}).sort()).toEqual(["./executive-core.js", "./work-core.js"]);
     for (const m of ["matrixProjects", "matrixMissions", "matrixWorkRuns", "matrixCockpit"]) expect(read("views", "matrix.js")).toContain(`api.${m}(`);
     // api.js: tek apiPost çağrısı korunur (yeni POST yolu eklenmez); matris erişimcileri yalnız sabit GET yollarını okur.
     expect(read("api.js").match(/bridge\.apiPost\(/g)?.length).toBe(1);
