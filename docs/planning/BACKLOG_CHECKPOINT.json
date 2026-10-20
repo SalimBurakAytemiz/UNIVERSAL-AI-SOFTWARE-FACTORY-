@@ -797,6 +797,52 @@
       ],
       "testFile": "tests/v7-ux-wp-agents.test.ts",
       "notes": "Inventory 2026-10-19 UI-133 (P1, authority_needed=none): role catalog and role detail with certifiedScope/proficiencyStatus exist; no per-agent identity card. Card derived only from GET /v1/roles, GET /v1/roles/:roleId and GET /v1/agents (served and allow-listed); a missing certification evidence trail is shown as UNKNOWN, never as certified. Depends on UI-032 (same files). Overlaps open PRs #22/#48 on workforce.js and the wp-agents test (resolved at integration)."
+    },
+    {
+      "owner": "CLOUD",
+      "status": "READY",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "id": "UI-047",
+      "title": "Read-only security finding detail list in the #/assurance security detail panel (renderer-only)",
+      "package": "WP-QA-SEC",
+      "files": [
+        "apps/desktop/renderer/assurance-core.js",
+        "apps/desktop/renderer/views/assurance.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "apps/desktop/renderer/styles.css",
+        "tests/v7-ux-wp-qasec.test.ts",
+        "docs/ux/UI-047-SECURITY-FINDING-DETAIL.md"
+      ],
+      "testFile": "tests/v7-ux-wp-qasec.test.ts",
+      "notes": "Inventory priority P1. Inventory 2026-10-19 UI-047 (P1, authority_needed=none): the server's SECURITY_REPORT evidence already carries sca.findings[] (package, version, id, severity, fixedVersion, target; up to 50 kept, with a truncated flag) and secrets.gitleaks.items[] (ruleId, file, line, commit; never secret values; up to 100). Both arrive in run.evidence on GET /v1/work-runs, which is already served and allow-listed (main.mjs EXTRA_GET_ROUTES) and already read by views/assurance.js through ctx.api.raw('/v1/work-runs'). assurance-core.js mapRunSecurity currently drops both arrays. Build: (a) Map them into sanitised, capped arrays: severity must be an uppercase code or becomes UNKNOWN; commit must be 40-hex or null; line must be a safe int; malformed entries are dropped and the dropped count is reported; scaTruncated is carried through. (b) Missing or non-array fields become [] with a 'findings not recorded' state, never 'clean'. (c) In #qa-secdetail, add two read-only tables rendered as text only, with per-row data-* attributes and no new ids. Show an honest empty note, a truncation note when truncated=true or the aggregate count is higher than the list length, NOT_EXECUTED/UNKNOWN when there is no scan, and keep the STALE banner when the scan is not bound to the run head. (d) EN/TR keys at parity. Tests in tests/v7-ux-wp-qasec.test.ts (already registered in config/validation.json) cover mapping, caps, truncation, malformed-entry drop, text-only rendering, empty and NOT_EXECUTED states, and a no-new-route assertion. No fix, remediation, resolved or accepted state. SAST stays NOT_AVAILABLE as served. No POST, no new endpoint, no api.js or main.mjs change, no IPC or storage. No product verification claim; no design parity claim (design package is UNKNOWN_SOURCE). Overlap: only the shared en.js/tr.js/styles.css with open PRs and READY tasks. No open PR touches assurance.js, assurance-core.js or the test file. Caveat: backlog L-ASSURANCE still shows IN_REVIEW and lists assurance.js/assurance-core.js, but its PRs #24/#25/#26 are already merged into v7/integration (a5e0a0b/113715f/ae99540) and only the write-back is pending. The supervisor should reconcile L-ASSURANCE to DONE before or when this is claimed."
+    },
+    {
+      "owner": "CLOUD",
+      "status": "READY",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "dependsOn": [],
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "id": "UI-201",
+      "title": "Read-only per-learning evidence library on #/academy (renderer-only)",
+      "package": "WP-ACADEMY",
+      "files": [
+        "apps/desktop/renderer/views/academy.js",
+        "apps/desktop/renderer/academy-core.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "apps/desktop/renderer/styles.css",
+        "tests/v7-ux-academy.test.ts",
+        "docs/ux/UI-201-LEARNING-EVIDENCE-LIBRARY.md"
+      ],
+      "testFile": "tests/v7-ux-academy.test.ts",
+      "notes": "Inventory priority P2. Inventory 2026-10-19 UI-201 (authority_needed=none): 'evidence linkage per learning not verified'. GET /v1/academy is already served and allow-listed (ACADEMY_LIST_RE) and already called by api.academy(). It returns full learning records with sourceIds, labRunRefs, negativeEvalRefs, labResult, promotion.reviewerEvidence, supportingSourceIds, reviewerRunRef, drift[] and reuse events. academy-core.js mapLearning reduces all of this to hasReviewerEvidence plus a reuse count. Build: (1) Extend mapLearning with a fail-closed, bounded evidence block: src_ ids regex-checked and capped at 50; refs bounded and capped at 50; labResult {passed boolean|null, testRefCount, recordedAt}; the reviewerEvidence ref must match audit/evidence/skill-academy/<lrn>/REVIEWER.json#sha256=<hex>, otherwise null; short sha256; drift count. Map reuses into bounded items and keep the existing count field. (2) Add an 'Evidence library' panel with one details/summary per learning. Each linked source is cross-referenced to the mapped sources list, showing UNKNOWN when missing. Show lab result, negative evals, reviewer ref and the reuse events that cite the learning. Missing data shows MISSING/UNKNOWN. Render with h()/textContent only. (3) Every linkage carries a NOT_VERIFIED pill. There is no sha256 re-verification and no certification; certified=0, authorityEffect NONE and executable false stay unchanged. (4) EN/TR keys at parity under academy.evidence.*. (5) Tests in tests/v7-ux-academy.test.ts (validation.json step tests-8) cover hostile/malformed mapping, empty, list and failure rendering, the UNKNOWN cross-ref and the NOT_VERIFIED presence. The existing assertion that the view calls only ['/v1/academy'] must stay green, so do not call /v1/academy/:id. No POST, no new endpoint or allow-list entry, no IPC or storage, no design parity claim (UI-201 PNG is UNKNOWN_SOURCE). Overlap: only the shared en.js/tr.js/styles.css with open PRs and READY tasks (including UI-074). No open PR touches the academy view, core or test (#38 merged 99cf72a). Independent of UI-047: no shared view or core file."
     }
   ],
   "relations": [
