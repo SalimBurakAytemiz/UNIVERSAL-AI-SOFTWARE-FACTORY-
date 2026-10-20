@@ -379,6 +379,24 @@ describe("WP-ACADEMY — placeholder parity", () => {
       const e = await mkCtx(p => (p === "/v1/academy" ? liveAcademy({learnings: []}) : fail(p))); const re = await academy.render(e.ctx);
       expect(all(re).filter(n => "evidenceLearning" in n.dataset).length).toBe(0);
     });
+    it("adds only feature-unique academy-evidence-* classes that no other view uses", async () => {
+      const css = fs.readFileSync(path.join(rend, "styles.css"), "utf8");
+      const mine = [...new Set([...css.matchAll(/\.(academy-evidence-[a-z0-9-]+)/g)].map(m => m[1]))];
+      expect(mine.length).toBeGreaterThanOrEqual(4);
+      const viewDir = path.join(rend, "views");
+      for (const c of mine) {
+        // Base kuralları .evidence-* ile çakışmamalı: aynı seçici yalnız academy-evidence ön ekiyle var.
+        expect(css.split(new RegExp("\\." + c + "(?![a-z0-9-])")).length - 1, c).toBeGreaterThan(0);
+        for (const f of fs.readdirSync(viewDir).filter(n => n.endsWith(".js") && n !== "academy.js")) {
+          expect(fs.readFileSync(path.join(viewDir, f), "utf8").includes(c), `${f} uses ${c}`).toBe(false);
+        }
+      }
+      const acad = fs.readFileSync(path.join(viewDir, "academy.js"), "utf8");
+      expect(/class:"evidence-/.test(acad)).toBe(false);
+      for (const c of mine) expect(acad.includes(c), c).toBe(true);
+      // Taban .evidence-item/.evidence-list kuralları dokunulmamış kalır (taban 4 seçici: list, item, item:hover, forced-colors).
+      expect((css.match(/(^|[^-\w])\.evidence-(item|list)\b/gm) ?? []).length).toBe(4);
+    });
     it("has EN/TR parity for academy.evidence.*", async () => {
       const en = (await load("locales", "en.js")).default ?? (await load("locales", "en.js")); const tr = (await load("locales", "tr.js")).default ?? (await load("locales", "tr.js"));
       const keys = (d: any) => Object.keys(d).filter(k => k.startsWith("academy.evidence.")).sort();

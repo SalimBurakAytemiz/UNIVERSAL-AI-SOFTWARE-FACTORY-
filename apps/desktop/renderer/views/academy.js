@@ -148,14 +148,14 @@ function evidenceItem(ctx,res,l){
   const lab=e.labResult;
   const labText=!lab?ctx.t("academy.evidence.missing"):`${lab.passed===null?ctx.t("academy.evidence.unknown"):ctx.t(lab.passed?"academy.evidence.labPassed":"academy.evidence.labFailed")} · ${ctx.t("academy.evidence.testRefs",{n:lab.testRefCount})}${lab.recordedAt?` · ${lab.recordedAt}`:""}`;
   const mine=res.reuseEvents.filter(r=>r.learningId===l.learningId);
-  const reuseRows=mine.length?h(doc,"ul",{class:"evidence-list"},mine.map(r=>h(doc,"li",{dataset:{evidenceReuse:r.reuseId||""}},
+  const reuseRows=mine.length?h(doc,"ul",{class:"academy-evidence-list"},mine.map(r=>h(doc,"li",{dataset:{evidenceReuse:r.reuseId||""}},
     mono(doc,r.outcome||ctx.t("academy.evidence.unknown"))," ",r.missionRef?mono(doc,r.missionRef):MISSING," ",r.at?mono(doc,r.at):MISSING))):h(doc,"span",{class:"note",text:ctx.t("academy.evidence.noReuse")});
   const rv=e.reviewerRef;
-  return h(doc,"details",{class:"evidence-item",dataset:{evidenceLearning:l.learningId}},
+  return h(doc,"details",{class:"academy-evidence-item",dataset:{evidenceLearning:l.learningId}},
     h(doc,"summary",{},mono(doc,l.learningId)," ",notVerified(ctx)),
-    h(doc,"dl",{class:"evidence-dl"},
-      dd(doc,"academy.evidence.sources",ctx,e.sourceIds.length?h(doc,"ul",{class:"evidence-list"},e.sourceIds.map(srcRow)):h(doc,"span",{class:"note",text:ctx.t("academy.evidence.missing")})),
-      dd(doc,"academy.evidence.supporting",ctx,e.supportingSourceIds.length?h(doc,"ul",{class:"evidence-list"},e.supportingSourceIds.map(srcRow)):h(doc,"span",{class:"note",text:ctx.t("academy.evidence.missing")})),
+    h(doc,"dl",{class:"academy-evidence-dl"},
+      dd(doc,"academy.evidence.sources",ctx,e.sourceIds.length?h(doc,"ul",{class:"academy-evidence-list"},e.sourceIds.map(srcRow)):h(doc,"span",{class:"note",text:ctx.t("academy.evidence.missing")})),
+      dd(doc,"academy.evidence.supporting",ctx,e.supportingSourceIds.length?h(doc,"ul",{class:"academy-evidence-list"},e.supportingSourceIds.map(srcRow)):h(doc,"span",{class:"note",text:ctx.t("academy.evidence.missing")})),
       dd(doc,"academy.evidence.lab",ctx,h(doc,"span",{dataset:{evidenceLab:"1"},text:labText})),
       dd(doc,"academy.evidence.labRuns",ctx,monoList(ctx,e.labRunRefs)),
       dd(doc,"academy.evidence.negative",ctx,monoList(ctx,e.negativeEvalRefs)),
@@ -170,7 +170,7 @@ function evidencePanel(ctx,res){
   let body;
   if(!isLive(res))body=stateBlock(ctx,res);
   else if(!res.learnings.length)body=emptyNote(ctx,"academy.evidence.empty");
-  else body=h(doc,"div",{class:"evidence-library",dataset:{evidenceLibrary:"1"}},res.learnings.slice(0,200).map(l=>evidenceItem(ctx,res,l)));
+  else body=h(doc,"div",{class:"academy-evidence-library",dataset:{evidenceLibrary:"1"}},res.learnings.slice(0,200).map(l=>evidenceItem(ctx,res,l)));
   return panel(ctx,{titleKey:"academy.evidence.title",id:"academy-evidence",className:"academy-section"},
     h(doc,"p",{class:"note",text:ctx.t("academy.evidence.lead")}),body);
 }
