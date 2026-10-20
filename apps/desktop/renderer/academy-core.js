@@ -13,6 +13,36 @@ const SOURCE_STATUSES=Object.freeze(["ACTIVE","REVOKED","POISONED"]);
 const num=x=>Number.isFinite(x)?x:null;
 const ratio=x=>isObj(x)&&Number.isFinite(x.numerator)&&Number.isFinite(x.denominator)&&Number.isFinite(x.rate)?{numerator:x.numerator,denominator:x.denominator,rate:x.rate}:null;
 
+const REV_RE=/^audit\/evidence\/skill-academy\/(lrn_[0-9a-f]{24})\/REVIEWER\.json#sha256=([0-9a-f]{64})$/;
+const SHA_RE=/^[0-9a-f]{64}$/,CAP=50;
+// //TR: Sınırlı kimlik listesi: yalnız regex'e uyan, tekilleştirilmiş, en çok 50 öğe.
+const ids=(x,re)=>[...new Set(arr(x,CAP).filter(v=>typeof v==="string"&&re.test(v)))];
+// //TR: Sınırlı referans listesi: yalnız kısa, boş olmayan metinler, en çok 50 öğe.
+const refs=x=>arr(x,CAP).map(v=>text(v,200)).filter(Boolean);
+// //TR: Kanıt bloğu başarısız-kapalıdır: biçim bozuksa alan null/boş olur; hiçbir bağ doğrulanmış sayılmaz (sha256 yeniden hesaplanmaz).
+function mapEvidence(x,pr){
+  const lab=isObj(x.labResult)?x.labResult:null;
+  const rev=pr&&isObj(pr.reviewerEvidence)?pr.reviewerEvidence:null;
+  const m=rev&&typeof rev.ref==="string"?REV_RE.exec(rev.ref):null;
+  const reviewerRef=m&&m[1]===x.learningId?{ref:m[0].split("#")[0],sha256Short:m[2].slice(0,12),sha256Matches:rev.sha256===m[2]&&SHA_RE.test(rev.sha256)}:null;
+  return {
+    sourceIds:ids(x.sourceIds,SRC_RE),
+    supportingSourceIds:ids(pr&&pr.supportingSourceIds,SRC_RE),
+    labRunRefs:refs(x.labRunRefs),
+    negativeEvalRefs:refs(x.negativeEvalRefs),
+    labResult:lab?{passed:typeof lab.passed==="boolean"?lab.passed:null,testRefCount:arr(lab.deterministicTestRefs,CAP).length,recordedAt:text(lab.recordedAt,40)}:null,
+    reviewerRef,
+    reviewerRunRef:text(x.reviewerRunRef,200),
+    driftCount:arr(x.drift,CAP).length,
+    // Hiçbir bağ doğrulanmaz.
+    linkage:"NOT_VERIFIED"
+  };
+}
+// //TR: Tek reuse olayını sınırlı biçime indirger; learningId'si geçersizse atılır.
+function mapReuse(x){
+  if(!isObj(x)||!LRN_RE.test(String(x.learningId)))return null;
+  return {reuseId:text(x.reuseId,80),learningId:x.learningId,outcome:x.outcome==="SUCCESS"||x.outcome==="FAILURE"?x.outcome:null,missionRef:text(x.missionRef,120),evidenceRef:text(x.evidenceRef,200),at:text(x.at,40)};
+}
 // //TR: Tek öğrenme kaydını güvenli görünüme indirger; terfi varsa YALNIZ çalıştırılamaz bilgi durumu + NONE yetki etkisi taşınır (çalıştırılabilirlik/yetki ASLA türetilmez).
 function mapLearning(x){
   if(!isObj(x)||!LRN_RE.test(String(x.learningId))||!LEARNING_STATUSES.includes(x.status))return null;
@@ -31,7 +61,8 @@ function mapLearning(x){
     executable:false,
     authorityEffect:"NONE",
     hasReviewerEvidence:!!(pr&&isObj(pr.reviewerEvidence)&&typeof pr.reviewerEvidence.sha256==="string"),
-    promotedAt:pr?text(pr.promotedAt,40):null
+    promotedAt:pr?text(pr.promotedAt,40):null,
+    evidence:mapEvidence(x,pr)
   };
 }
 function mapSource(x){
@@ -83,10 +114,11 @@ export function countByStatus(learnings){
  * certified her zaman 0'dır (akademi sertifikalamaz); promotedKnowledge yalnız READONLY/NOT_EXECUTABLE bilgidir.
  */
 export function mapAcademy(raw){
-  if(!isObj(raw))return {state:"ERROR",learnings:[],sources:[],reuses:0,globalKnowledge:[],byStatus:countByStatus([]),metrics:null};
+  if(!isObj(raw))return {state:"ERROR",learnings:[],sources:[],reuses:0,reuseEvents:[],globalKnowledge:[],byStatus:countByStatus([]),metrics:null};
   const learnings=arr(raw.learnings).map(mapLearning).filter(Boolean);
   const sources=arr(raw.sources).map(mapSource).filter(Boolean);
   const globalKnowledge=arr(raw.globalKnowledge).map(mapGlobalKnowledge).filter(Boolean);
   const reuses=arr(raw.reuses).filter(isObj).length;
-  return {state:"VERIFIED",learnings,sources,reuses,globalKnowledge,byStatus:countByStatus(learnings),metrics:mapMetrics(raw.metrics)};
+  const reuseEvents=arr(raw.reuses,200).map(mapReuse).filter(Boolean);
+  return {state:"VERIFIED",learnings,sources,reuses,reuseEvents,globalKnowledge,byStatus:countByStatus(learnings),metrics:mapMetrics(raw.metrics)};
 }
