@@ -156,7 +156,12 @@ function ledgerPanel(ctx,res){
   const doc=ctx.doc,runs=res.workRuns;
   let body;
   if(!isOk(runs))body=stateBlock(ctx,runs,"workRuns");
-  else if(!runs.runs.total)body=emptyNote(ctx,"executive.ledger.empty");
+  else if(!runs.runs.total){
+    body=[emptyNote(ctx,"executive.ledger.empty")];
+    if(typeof ctx.navigate==="function")body.push(h(doc,"div",{class:"btn-row",dataset:{emptyNext:"executive-ledger"}},
+      h(doc,"p",{class:"note",text:ctx.t("executive.ledger.emptyNext")}),
+      h(doc,"button",{type:"button",class:"btn",id:"executive-empty-open-work",dataset:{focusKey:"executive-empty-open-work",navigate:"work"},on:{click:()=>ctx.navigate("work")},text:ctx.t("executive.ledger.openWork")})));
+  }
   else{
     // Mission başlığı yalnız mission listesi okunabiliyorsa eşlenir; okunamıyorsa yalnız kimlik gösterilir (uydurma başlık yok).
     const titles=isOk(res.missions)&&res.missions.missions?new Map(res.missions.missions.items.map(m=>[m.missionId,m.title])):null;
