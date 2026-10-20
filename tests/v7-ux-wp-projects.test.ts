@@ -397,3 +397,68 @@ describe("test+states projects: EN/TR parity for every key the view uses", () =>
     for (const s of ["VERIFIED", "STALE", "UNAVAILABLE", "OFFLINE", "ERROR"]) expect(`state.${s}` in tr && `state.${s}` in en, s).toBe(true);
   });
 });
+
+describe("UI-132 closure and handover checklist", () => {
+  const items = (root: N, pid: string) => Object.fromEntries(all(root).filter(n => n.dataset.closureItem && all(root).find(c => c.dataset.closureProject === pid && all(c).includes(n))).map(n => [n.dataset.closureItem, n.dataset.closureState]));
+  it("marks everything UNKNOWN (never MET) when mission, run and delivery reads are unavailable", async () => {
+    // //TR: Okumalar yokken hiçbir madde MET sayılmaz.
+    const view = await load("views", "projects.js");
+    const {ctx} = await mkCtx(fromFix({"/v1/projects": PROJECTS}));
+    const root = await view.render(ctx);
+    const it = items(root, P1);
+    expect(Object.keys(it).sort()).toEqual(["hasMissions", "missionsDone", "noActiveRuns", "noFailed", "productVerified", "sourceDelivery"]);
+    expect(Object.values(it).every(s => s === "UNKNOWN")).toBe(true);
+  });
+  it("derives states from real reads; product verification stays OPEN without a server PRODUCT_VERIFIED", async () => {
+    const view = await load("views", "projects.js");
+    const del = {deliveries: [{runId: `run_${hex(1)}`, missionId: M2, projectId: P1, status: "COMPLETE", sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE"}, productVerification: {state: "NOT_VERIFIED"}}]};
+    const {ctx} = await mkCtx(fromFix({...FULL, [`/v1/deliveries?projectId=${P1}`]: del, [`/v1/deliveries?projectId=${P2}`]: {deliveries: []}}));
+    const root = await view.render(ctx);
+    expect(items(root, P1)).toMatchObject({hasMissions: "MET", missionsDone: "OPEN", noActiveRuns: "OPEN", noFailed: "MET", sourceDelivery: "MET", productVerified: "OPEN"});
+    expect(items(root, P2)).toMatchObject({noFailed: "OPEN", sourceDelivery: "OPEN", productVerified: "OPEN"});
+    expect(all(root).some(n => n.tagName === "BUTTON" && n.dataset.closureItem)).toBe(false);
+  });
+  it("has TR/EN closure keys and token-only styles", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const core = await load("closure-core.js");
+    for (const id of core.CLOSURE_ITEM_IDS) expect(`projects.closure.item.${id}` in tr && `projects.closure.item.${id}` in en, id).toBe(true);
+    for (const s of core.CLOSURE_STATES) expect(`projects.closure.state.${s}` in tr && `projects.closure.state.${s}` in en, s).toBe(true);
+    expect(read("closure-core.js").split("\n")[0]).toContain("//TR:");
+    const css = read("styles.css").split("\n").filter(l => l.startsWith(".closure-")).join("\n");
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgb\(/);
+  });
+});
+
+describe("UI-132 closure honest-state follow-ups", () => {
+  const st = (c: any[], id: string) => c.find(x => x.id === id).state;
+  const ok = (items: any[]) => ({state: "VERIFIED", items});
+  const mis = (id: string, status: string) => ({missionId: id, projectId: P1, status});
+  const del = ok([{projectId: P1, sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE"}, productVerification: {state: "NOT_VERIFIED"}}]);
+  it("does not report noFailed MET when the project has zero missions", async () => {
+    // //TR: Görev yokken noFailed boş-doğru MET olmaz.
+    const {buildClosure} = await load("closure-core.js");
+    const c = buildClosure({projectId: P1, missions: ok([]), runs: ok([]), deliveries: del});
+    expect(st(c, "noFailed")).toBe("UNKNOWN");
+    expect(st(c, "hasMissions")).toBe("OPEN");
+  });
+  it("treats STALE and other non-VERIFIED reads as UNKNOWN, never MET", async () => {
+    const {buildClosure} = await load("closure-core.js");
+    for (const bad of ["STALE", "OFFLINE", "UNAVAILABLE", "ERROR"]) {
+      const m = {state: bad, items: [mis(M1, "COMPLETE")]}, r = {state: bad, items: []}, d = {state: bad, items: del.items};
+      const a = buildClosure({projectId: P1, missions: m, runs: ok([]), deliveries: del});
+      for (const id of ["hasMissions", "missionsDone", "noFailed", "noActiveRuns"]) expect(st(a, id), `${bad} ${id}`).toBe("UNKNOWN");
+      expect(st(buildClosure({projectId: P1, missions: ok([mis(M1, "COMPLETE")]), runs: r, deliveries: del}), "noActiveRuns"), bad).toBe("UNKNOWN");
+      const b = buildClosure({projectId: P1, missions: ok([mis(M1, "COMPLETE")]), runs: ok([]), deliveries: d});
+      expect(st(b, "sourceDelivery")).toBe("UNKNOWN");
+      expect(st(b, "productVerified")).toBe("UNKNOWN");
+    }
+  });
+  it("makes noActiveRuns UNKNOWN when the runs list hit the 500 cap, MET just below it", async () => {
+    const {buildClosure, RUNS_CAP} = await load("closure-core.js");
+    expect(RUNS_CAP).toBe(500);
+    const runs = (n: number) => ok(Array.from({length: n}, (_, i) => ({runId: `r${i}`, missionId: `other${i}`, status: "COMPLETE"})));
+    const m = ok([mis(M1, "COMPLETE")]);
+    expect(st(buildClosure({projectId: P1, missions: m, runs: runs(500), deliveries: del}), "noActiveRuns")).toBe("UNKNOWN");
+    expect(st(buildClosure({projectId: P1, missions: m, runs: runs(499), deliveries: del}), "noActiveRuns")).toBe("MET");
+  });
+});
