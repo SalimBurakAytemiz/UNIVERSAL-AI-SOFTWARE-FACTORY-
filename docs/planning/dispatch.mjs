@@ -142,9 +142,9 @@ export function select(tasks, env) {
 }
 
 function makeGit(cwd) {
-  return (args, input, extraEnv) => {
+  return (args, input, extraEnv, opts = {}) => {
     const a = args[0] === "fetch" ? ["fetch", "--no-write-fetch-head", ...args.slice(1)] : args;
-    const r = spawnSync("git", a, {cwd, input, encoding: "utf8", windowsHide: true,
+    const r = spawnSync("git", a, {cwd, input, encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024, ...opts,
       env: {...process.env, GIT_TERMINAL_PROMPT: "0", ...extraEnv}});
     return {status: r.status ?? 1, stdout: r.stdout ?? "", stderr: r.stderr ?? ""};
   };
@@ -166,10 +166,26 @@ function remoteHeads(git, remote) {
   return m;
 }
 
-// Pure claim = every commit beyond merge-base(branch, base) is a "dispatch-claim:" commit with exactly one parent whose tree equals that
-// parent's tree (independent of base movement). A head that is an ancestor of the base tip is MERGED_AWAITING_WRITEBACK.
-// Work branches: HAS_WORK_COMMITS while their head commit is newer than staleHours, else ABANDONED_WITH_WORK (reported only; never deleted/reclaimed).
-function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLease, now) {
+// Shallow clones hide ancestry (merge-base fails, old claim commits sit behind the boundary). Try to unshallow once (bounded, nothing echoed);
+// return true only when the history is verifiably complete. Everything history-dependent fails closed when this is false.
+export function ensureFullHistory(git, remote, baseBranch) {
+  const sh = git(["rev-parse", "--is-shallow-repository"]);
+  if (sh.status !== 0) return false;
+  if (sh.stdout.trim() === "false") return true;
+  git(["fetch", "--no-tags", "--unshallow", remote, `refs/heads/${baseBranch}`], undefined, undefined, {timeout: 120000});
+  const again = git(["rev-parse", "--is-shallow-repository"]);
+  return again.status === 0 && again.stdout.trim() === "false";
+}
+
+// A committer date is usable only when it is a finite integer no later than one day in the future (and not before 1970). Never throws.
+const DAY_MS = 864e5;
+const ctOk = (ct, now) => Number.isSafeInteger(ct) && ct >= 0 && ct * 1000 <= now + DAY_MS;
+
+// Pure claim = every commit beyond merge-base(branch, base) is a "dispatch-claim:" commit with exactly one parent and the same tree as that
+// parent (independent of base movement). A head that is an ancestor of the base tip is MERGED_AWAITING_WRITEBACK.
+// Work branches: HAS_WORK_COMMITS while their head commit is newer than staleHours, else ABANDONED_WITH_WORK (reported only).
+// Anything git cannot establish (shallow history, bad dates, git errors) is UNKNOWN, which counts as ACTIVE (the cap fails closed).
+function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLease, now, fullHistory = true) {
   const out = [];
   const hoursOf = ms => Math.round(ms / 36e5 * 100) / 100;
   for (const {taskId, branch, sha} of claimed) {
@@ -179,18 +195,24 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
     if (git(["cat-file", "-e", `${sha}^{commit}`]).status !== 0 && git(["fetch", "--no-tags", remote, claimRef]).status !== 0) {
       out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_REF_NOT_FETCHABLE"}); continue;
     }
+    // A positive ancestry answer is trustworthy even in a shallow clone; a negative one is not.
     const anc = git(["merge-base", "--is-ancestor", sha, baseSha]);
     if (anc.status === 0) { out.push({taskId, claimRef, state: "MERGED_AWAITING_WRITEBACK"}); continue; }
+    if (!fullHistory) { out.push({taskId, claimRef, state: "UNKNOWN", why: "SHALLOW_HISTORY"}); continue; }
     if (anc.status !== 1) { out.push({taskId, claimRef, state: "UNKNOWN", why: "ANCESTRY_CHECK_FAILED"}); continue; }
     const mb = git(["merge-base", sha, baseSha]);
     if (mb.status !== 0 || !SHA_RE.test(mb.stdout.trim())) { out.push({taskId, claimRef, state: "UNKNOWN", why: "MERGE_BASE_FAILED"}); continue; }
-    const l = git(["log", "--format=%ct%x09%s%x09%P", `${mb.stdout.trim()}..${sha}`]);
+    // %x00 separators: a tab (or any text) inside a subject cannot shift the parent list.
+    const l = git(["log", "-z", "--format=%ct%x00%P%x00%s", `${mb.stdout.trim()}..${sha}`]);
     if (l.status !== 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "LOG_FAILED"}); continue; }
-    const rows = l.stdout.split("\n").filter(Boolean).map(x => x.split("\t"));
+    const f = l.stdout.split("\0"); if (f[f.length - 1] === "") f.pop();
+    if (f.length % 3 !== 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "LOG_FAILED"}); continue; }
+    const rows = [];
+    for (let k = 0; k < f.length; k += 3) rows.push([f[k], f[k + 1], f[k + 2]]);
     let pure = true;
     for (const r of rows) {
-      const parents = (r[2] || "").split(" ").filter(Boolean);
-      if (!(r[1] || "").startsWith(CLAIM_SUBJECT) || parents.length !== 1) { pure = false; break; }
+      const parents = (r[1] || "").split(" ").filter(Boolean);
+      if (!(r[2] || "").startsWith(CLAIM_SUBJECT) || parents.length !== 1) { pure = false; break; }
     }
     if (pure) {
       const commits = git(["rev-list", `${mb.stdout.trim()}..${sha}`]);
@@ -206,8 +228,9 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
     }
     if (!pure) {
       const h = git(["log", "-1", "--format=%ct", sha]);
-      const ct = Number(h.stdout.trim());
-      if (h.status !== 0 || !Number.isFinite(ct)) { out.push({taskId, claimRef, state: "HAS_WORK_COMMITS"}); continue; }
+      const raw = h.stdout.trim(), ct = /^-?[0-9]{1,16}$/.test(raw) ? Number(raw) : NaN;
+      if (h.status !== 0 || !Number.isSafeInteger(ct) || ct < 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
+      if (ct * 1000 > now + DAY_MS) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_FUTURE_DATED"}); continue; }
       const ageMs = now - ct * 1000;
       const rec = {taskId, claimRef, state: "HAS_WORK_COMMITS", lastActivityAt: new Date(ct * 1000).toISOString()};
       if (ageMs < 0) { out.push({...rec, why: "ACTIVITY_FUTURE_DATED"}); continue; }
@@ -216,8 +239,12 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
       out.push(rec); continue;
     }
     let ageMs = null, extra = null;
-    if (rows.length) ageMs = now - Math.max(...rows.map(r => Number(r[0]))) * 1000;
-    else { const le = readLease(taskId); if (le && Number.isFinite(le.acquiredAt)) { ageMs = now - le.acquiredAt; extra = "age from lease acquiredAt"; } }
+    if (rows.length) {
+      const cts = rows.map(r => /^[0-9]{1,16}$/.test(r[0]) ? Number(r[0]) : NaN);
+      if (cts.some(c => !Number.isSafeInteger(c))) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
+      if (cts.some(c => !ctOk(c, now))) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_FUTURE_DATED"}); continue; }
+      ageMs = now - Math.max(...cts) * 1000;
+    } else { const le = readLease(taskId); if (le && Number.isFinite(le.acquiredAt)) { ageMs = now - le.acquiredAt; extra = "age from lease acquiredAt"; } }
     if (ageMs === null || !Number.isFinite(ageMs)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_UNKNOWN"}); continue; }
     if (ageMs < 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_NEGATIVE_FUTURE_DATED"}); continue; }
     const ageHours = hoursOf(ageMs);
@@ -228,13 +255,19 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
   return out;
 }
 
-// True when a commit reachable from the base tip has a subject starting with exactly "dispatch-claim: <id> " (claimed AND merged earlier,
-// possibly with the claim branch deleted since). null = could not be determined (fail-closed). Fixed-string, bounded, subjects never echoed.
-function claimInBaseHistory(git, baseSha, id) {
-  const prefix = `${CLAIM_SUBJECT} ${id} `;
-  const r = git(["log", "--format=%s", "--fixed-strings", `--grep=${prefix}`, "--max-count=200", baseSha]);
+// True when a commit reachable from the base tip has a SUBJECT starting with "dispatch-claim: <id> " (id matched case-insensitively, like the
+// lowercase claim-branch identity). The subjects of at most HIST_WALK newest commits are scanned (bounded by commits walked, not by matches);
+// a truncated walk without a hit, a shallow history or any git error is null (fail-closed). Subjects are never echoed.
+export const HIST_WALK = 100000;
+function claimInBaseHistory(git, baseSha, id, fullHistory = true) {
+  if (!fullHistory) return null;
+  const lim = Math.min(HIST_WALK, Number(process.env.UASCO_DISPATCH_HISTORY_WALK) > 0 ? Number(process.env.UASCO_DISPATCH_HISTORY_WALK) : HIST_WALK);
+  const prefix = `${CLAIM_SUBJECT} ${id} `.toLowerCase();
+  const r = git(["log", "--format=%s", `--max-count=${lim}`, baseSha]);
   if (r.status !== 0) return null;
-  return r.stdout.split("\n").some(s => s.startsWith(prefix));
+  const subjects = r.stdout.split("\n");
+  if (subjects.some(s => s.toLowerCase().startsWith(prefix))) return true;
+  return subjects.filter(Boolean).length >= lim ? null : false;
 }
 
 // Pure decision: the lease store is "unavailable" (not held) ONLY when ls-remote SUCCEEDED and printed nothing.
@@ -340,9 +373,10 @@ async function runInner(argv, cwd) {
     const b = claimBranchOf(t.id);
     if (claimedHeads.has(b)) claimedList.push({taskId: t.id, branch: b, sha: heads.get(b)});
   }
-  const reclaimable = staleReport(git, o.remote, baseSha, claimedList, env.openPrs, o.staleHours, readLease, Date.now());
+  const fullHistory = baseSha ? ensureFullHistory(git, o.remote, o.baseBranch) : false;
+  const reclaimable = staleReport(git, o.remote, baseSha, claimedList, env.openPrs, o.staleHours, readLease, Date.now(), fullHistory);
   for (const r of reclaimable) if (r.state === "RECLAIMABLE") flat.push(`${r.taskId}:RECLAIMABLE`);
-  const active = reclaimable.filter(r => (r.state === "FRESH" || r.state === "HAS_WORK_COMMITS") && !env.openPrs.has(claimBranchOf(r.taskId))).length;
+  const active = reclaimable.filter(r => (r.state === "FRESH" || r.state === "HAS_WORK_COMMITS" || r.state === "UNKNOWN") && !env.openPrs.has(claimBranchOf(r.taskId))).length;
   const extras = {perTask, reclaimable, active, mode: o.claim ? "CLAIM" : "DRY_RUN", owner: safeOwnerArg(o.owner)};
 
   const skipNext = (id, reason) => { env.skip.set(id, reason); return select(tasks, env).chosen; };
@@ -351,7 +385,7 @@ async function runInner(argv, cwd) {
     // Dry run mirrors the claim loop: a task whose claim is already in the base history is not offered (reserves nothing either way).
     let pick = first;
     while (pick && baseSha) {
-      const h = claimInBaseHistory(git, baseSha, pick.id);
+      const h = claimInBaseHistory(git, baseSha, pick.id, fullHistory);
       if (h === false) break;
       const code = h === null ? "CLAIM_HISTORY_CHECK_FAILED" : "CLAIM_IN_BASE_HISTORY";
       flat.push(`${pick.id}:${code}`); pick = skipNext(pick.id, code);
@@ -371,7 +405,7 @@ async function runInner(argv, cwd) {
   let chosen = first;
   for (let guard = 0; guard <= tasks.length && chosen; guard++) {
     const id = chosen.id, br = claimBranchOf(id), ref = `refs/heads/${br}`;
-    const inHist = claimInBaseHistory(git, baseSha, id);
+    const inHist = claimInBaseHistory(git, baseSha, id, fullHistory);
     if (inHist !== false) {
       const code = inHist === null ? "CLAIM_HISTORY_CHECK_FAILED" : "CLAIM_IN_BASE_HISTORY";
       lost.push(`${id}:${code}`); chosen = skipNext(id, code); continue;
