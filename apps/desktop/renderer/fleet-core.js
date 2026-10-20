@@ -24,3 +24,12 @@ export function fleetGroups(runs,max=MAX_FLEET_CARDS){
 export function fleetCard(run){
   return {runId:run.runId,status:run.status,role:run.role??null,missionId:run.missionId??null,updatedAt:run.heartbeatAt??null};
 }
+
+/**
+ * UI-032: seçili canlı koşunun ayrıntısı. Koşu artık canlı değilse (listede yok) null döner; canlı ajan telemetrisi YOK, o alan her zaman null (UNKNOWN).
+ */
+export function fleetDetail(runs,runId){
+  if(typeof runId!=="string"||!runId)return null;
+  const run=fleetGroups(runs,Number.MAX_SAFE_INTEGER).groups.flatMap(g=>g.items).find(r=>r.runId===runId);
+  return run?{...fleetCard(run),telemetry:null}:null;
+}
