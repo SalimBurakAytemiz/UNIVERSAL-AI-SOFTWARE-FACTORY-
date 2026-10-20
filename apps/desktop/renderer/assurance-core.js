@@ -33,7 +33,7 @@ function toolView(t){
 // //TR: UI-047: SECURITY_REPORT sca.findings[] ve secrets.gitleaks.items[] için sınırlı, temizlenmiş eşleme. Yalnız beyaz listedeki alanlar taşınır (gizli DEĞER asla alınmaz; fixedVersion bilerek DÜŞÜRÜLÜR ki "düzeltildi" durumu çıkarılamasın). Bozuk girdi atılır ve sayılır; alan yok/dizi değilse boş + RECORDED=false (asla "temiz" değil).
 export const SEC_FINDINGS_SCA_CAP=50;
 export const SEC_FINDINGS_SECRET_CAP=100;
-const SEV_RE=/^[A-Z][A-Z0-9_]{0,19}$/;
+const SEV_ALLOW=Object.freeze(["CRITICAL","HIGH","MEDIUM","LOW","INFO","UNKNOWN"]);
 const textField=(x,max)=>typeof x==="string"&&x.length&&!/[\u0000-\u001f\u007f]/.test(x)?x.slice(0,max):null;
 function mapFindingList(raw,cap,mapOne){
   if(!Array.isArray(raw))return {recorded:false,items:[],dropped:0,overCap:false};
@@ -44,7 +44,7 @@ function mapFindingList(raw,cap,mapOne){
 const scaFinding=e=>{
   if(!isObj(e))return null;
   const pkg=textField(e.package,120),id=textField(e.id,60);if(!pkg||!id)return null;
-  return {package:pkg,version:textField(e.version,60),id,severity:typeof e.severity==="string"&&SEV_RE.test(e.severity)?e.severity:"UNKNOWN",target:textField(e.target,160)};
+  return {package:pkg,version:textField(e.version,60),id,severity:SEV_ALLOW.includes(e.severity)?e.severity:"UNKNOWN",target:textField(e.target,160)};
 };
 const secretFinding=e=>{
   if(!isObj(e))return null;

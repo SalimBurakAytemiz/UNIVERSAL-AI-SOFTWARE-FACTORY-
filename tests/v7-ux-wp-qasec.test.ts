@@ -829,6 +829,26 @@ describe("UX WP-QA-SEC UI-047 security finding detail", () => {
     expect(byData(d, "scan", "STALE").length).toBeGreaterThan(0);
     expect(d.textContent.length).toBeGreaterThan(0);
   });
+  it("empty list shows 'no findings' only for CLEAN/FINDINGS tool status; ERROR/PARTIAL stay UNKNOWN", async () => {
+    const en = (await load("locales", "tr.js")).default as Record<string, string>; // //TR: test bağlamı TR çizer
+    const mk = (st: string) => { const r: any = withFindings([], []); r.evidence[0].security.sca.status = st; r.evidence[0].security.secrets.gitleaks.status = st; return r; };
+    for (const st of ["ERROR", "PARTIAL"]) {
+      const d = await renderDetail(mk(st));
+      expect(byData(d, "findState", "UNKNOWN")).toHaveLength(2);
+      expect(byData(d, "findState", "EMPTY")).toHaveLength(0);
+      expect(text(d)).not.toContain(en["qa.security.find.empty"]);
+    }
+    const ok = await renderDetail(mk("CLEAN"));
+    expect(byData(ok, "findState", "EMPTY")).toHaveLength(2);
+    expect(text(ok)).toContain(en["qa.security.find.empty"]);
+  });
+  it("secret rows carry no severity attribute and severity uses a fixed allow-list", async () => {
+    const d = await renderDetail(withFindings([{package: "a", id: "1", severity: "MEDIUM"}, {package: "b", id: "2", severity: "SEVERE"}, {package: "c", id: "3", severity: "high"}], [{ruleId: "r", file: "f", line: 1, commit: null}]));
+    const secretRow = byData(d, "findKind", "secret")[0];
+    expect("findSeverity" in secretRow.dataset).toBe(false);
+    expect(all(d).some(n => Object.values(n.dataset).includes("null"))).toBe(false);
+    expect(byData(d, "findSeverity").map(n => n.dataset.findSeverity)).toEqual(["MEDIUM", "UNKNOWN", "UNKNOWN"]);
+  });
   it("adds no new route, endpoint, POST, storage or IPC", () => {
     const v = fs.readFileSync(path.join(rend, "views", "assurance.js"), "utf8");
     const c = fs.readFileSync(path.join(rend, "assurance-core.js"), "utf8");
