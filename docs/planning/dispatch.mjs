@@ -14,6 +14,8 @@ const SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 // "_" is deliberately not allowed in --owner/--remote names so token-shaped secrets (ghp_..., sk_...) can never be accepted or echoed.
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9.-]{0,63}$/;
 const CLAIM_SUBJECT = "dispatch-claim:";
+// The exact subject the claim loop below writes: "dispatch-claim: <id> owner=<name> at=<ISO-8601 ms Z> nonce=<uuid v4>".
+const CLAIM_MSG_RE = /^dispatch-claim: ([A-Za-z0-9][A-Za-z0-9._-]{0,127}) owner=[A-Za-z0-9][A-Za-z0-9.-]{0,63} at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z nonce=[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const EXIT = {START: 0, NO_ACTION: 0, BLOCKED: 2, RECOVERABLE_FAILURE: 3};
 
 const isStr = v => typeof v === "string";
@@ -143,18 +145,29 @@ export function select(tasks, env) {
 
 // Every git NETWORK call (fetch, push, ls-remote; this includes the lease store's injected runGit) runs under a bounded timeout. A timeout is
 // a non-zero status with timedOut=true (and g.timeouts counts them), so callers fail closed.
+// On top of that, EVERY git call is capped by the run deadline (RUN_DEADLINE_MS, whole run) and, while one is open, by a phase budget
+// (g.phase(ms), used for the lease step). A call that would start past either limit is not spawned at all: it returns status 1 with
+// timedOut=true (counted in g.timeouts) and sets g.deadlineHit / g.budgetHit. Output above GIT_MAX_BUFFER kills the call: status 1,
+// overflow=true, g.overflows counts it. A per-call timeout is only ever LOWERED by these caps, never raised.
 const NET_CMDS = new Set(["fetch", "push", "ls-remote"]);
-function makeGit(cwd) {
-  let timeouts = 0;
+function makeGit(cwd, runEnd = Date.now() + RUN_DEADLINE_MS) {
+  let timeouts = 0, overflows = 0, deadlineHit = false, budgetHit = false, phaseEnd = Infinity;
   const g = (args, input, extraEnv, opts = {}) => {
     const a = args[0] === "fetch" ? ["fetch", "--no-write-fetch-head", ...args.slice(1)] : args;
-    const r = spawnSync("git", a, {cwd, input, encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024, ...(NET_CMDS.has(args[0]) ? {timeout: FETCH_TIMEOUT_MS} : {}), ...opts,
+    const t = Date.now(), byRun = runEnd <= phaseEnd, end = Math.min(runEnd, phaseEnd);
+    const own = opts.timeout ?? (NET_CMDS.has(args[0]) ? FETCH_TIMEOUT_MS : Infinity);
+    if (t >= end) { timeouts++; if (byRun) deadlineHit = true; else budgetHit = true; return {status: 1, stdout: "", stderr: "", timedOut: true, refused: true}; }
+    const cap = end - t < own;
+    const r = spawnSync("git", a, {cwd, input, encoding: "utf8", windowsHide: true, ...opts, maxBuffer: GIT_MAX_BUFFER, timeout: Math.max(1, Math.min(own, end - t)),
       env: {...process.env, GIT_TERMINAL_PROMPT: "0", ...extraEnv}});
-    const timedOut = r.error?.code === "ETIMEDOUT";
-    if (timedOut) timeouts++;
-    return {status: r.status ?? 1, stdout: r.stdout ?? "", stderr: r.stderr ?? "", timedOut};
+    const timedOut = r.error?.code === "ETIMEDOUT", overflow = r.error?.code === "ENOBUFS";
+    if (timedOut) { timeouts++; if (cap) { if (byRun) deadlineHit = true; else budgetHit = true; } }
+    if (overflow) overflows++;
+    return {status: overflow || r.error ? 1 : r.status ?? 1, stdout: overflow ? "" : r.stdout ?? "", stderr: overflow ? "" : r.stderr ?? "", timedOut, overflow};
   };
-  Object.defineProperty(g, "timeouts", {get: () => timeouts});
+  // phase(ms): open a budget for the calls that follow (closed with phase(null)); the run deadline still applies inside it.
+  g.phase = ms => { phaseEnd = ms === null ? Infinity : Date.now() + ms; budgetHit = ms === null ? budgetHit : false; };
+  for (const [k, get] of Object.entries({timeouts: () => timeouts, overflows: () => overflows, deadlineHit: () => deadlineHit, budgetHit: () => budgetHit})) Object.defineProperty(g, k, {get});
   return g;
 }
 
@@ -189,8 +202,12 @@ export function ensureFullHistory(git, remote, baseBranch) {
 const DAY_MS = 864e5;
 const MAX_BRANCH_COMMITS = 1000;
 const SKEW_TOLERANCE_S = 3600; // a branch commit may be dated at most this much before its fork point (committer clock skew)
-// Fetch bound (ms); the env var can only LOWER it (the proof uses that to exercise the timeout path).
-const FETCH_TIMEOUT_MS = Math.min(120000, Number(process.env.UASCO_DISPATCH_FETCH_TIMEOUT_MS) > 0 ? Number(process.env.UASCO_DISPATCH_FETCH_TIMEOUT_MS) : 120000);
+// Bounds (ms / bytes); each env var can only LOWER its constant (the proof uses that to exercise the fail-closed paths).
+const lowerOnly = (max, v) => Math.min(max, Number(v) > 0 ? Number(v) : max);
+const FETCH_TIMEOUT_MS = lowerOnly(120000, process.env.UASCO_DISPATCH_FETCH_TIMEOUT_MS); // one network call
+const LEASE_BUDGET_MS = lowerOnly(180000, process.env.UASCO_DISPATCH_LEASE_BUDGET_MS); // the whole lease step, all its retries included
+const RUN_DEADLINE_MS = lowerOnly(900000, process.env.UASCO_DISPATCH_RUN_DEADLINE_MS); // every git call of one run
+const GIT_MAX_BUFFER = lowerOnly(64 * 1024 * 1024, process.env.UASCO_DISPATCH_MAX_BUFFER); // stdout/stderr of one git call
 
 // Pure claim = every commit beyond merge-base(branch, base) is a "dispatch-claim:" commit with exactly one parent and the same tree as that
 // parent (independent of base movement). A head that is an ancestor of the base tip is MERGED_AWAITING_WRITEBACK.
@@ -237,13 +254,17 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
     if (mbd.status !== 0 || !Number.isSafeInteger(mbCt)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
     let lowest = Infinity; for (const c of cts) if (c < lowest) lowest = c;
     if (lowest < mbCt - SKEW_TOLERANCE_S) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
+    const parentTree = r => { // tree of a single-parent row's parent; null when git cannot tell
+      let pt = treeOf.get(r.parents[0]);
+      if (pt === undefined) { const t = git(["rev-parse", `${r.parents[0]}^{tree}`]); pt = t.status === 0 ? t.stdout.trim() : null; treeOf.set(r.parents[0], pt); }
+      return pt;
+    };
     let pure = true;
     for (const r of rows) if (!r.s.startsWith(CLAIM_SUBJECT) || r.parents.length !== 1) { pure = false; break; }
     if (pure) {
       // A claim commit that changed the tree relative to its own parent is not a pure claim, whatever its subject says.
       for (const r of rows) {
-        let pt = treeOf.get(r.parents[0]);
-        if (pt === undefined) { const t = git(["rev-parse", `${r.parents[0]}^{tree}`]); pt = t.status === 0 ? t.stdout.trim() : null; }
+        const pt = parentTree(r);
         if (!pt) { out.push({taskId, claimRef, state: "UNKNOWN", why: "TREE_COMPARE_FAILED"}); pure = null; break; }
         if (pt !== r.t) { pure = false; break; }
       }
@@ -253,7 +274,10 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
       const hi = rows.findIndex(r => r.h === sha), ct = hi >= 0 ? cts[hi] : NaN; // the branch head's own date
       if (!Number.isSafeInteger(ct)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
       // A head dated before the branch's own oldest claim commit (clock skew, e.g. 1970) cannot be trusted: UNKNOWN, counted active.
-      const claimCts = rows.filter(r => r.s.startsWith(CLAIM_SUBJECT)).map(r => Number(r.ct)).filter(Number.isSafeInteger);
+      // Only PURE claim rows date the claim: the exact claim subject for THIS task id, one parent, and the parent's tree (an empty commit);
+      // they already passed the date checks above. A work commit whose subject merely imitates "dispatch-claim:" never sets the claim time.
+      const pureClaim = r => r.parents.length === 1 && CLAIM_MSG_RE.exec(r.s)?.[1].toLowerCase() === taskId.toLowerCase() && parentTree(r) === r.t;
+      const claimCts = rows.filter(pureClaim).map(r => Number(r.ct)).filter(Number.isSafeInteger);
       let oldestClaim = Infinity; for (const c of claimCts) if (c < oldestClaim) oldestClaim = c;
       if (claimCts.length && ct < oldestClaim) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
       const ageMs = now - ct * 1000;
@@ -278,20 +302,37 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
   return out;
 }
 
-// True when a commit reachable from the base tip has a SUBJECT starting with "dispatch-claim: <id> " (id matched case-insensitively, like the
-// lowercase claim-branch identity). The subjects of at most HIST_WALK newest commits are scanned (bounded by commits walked, not by matches);
-// a truncated walk without a hit, a shallow history or any git error is null (fail-closed). Subjects are never echoed.
-export const HIST_WALK = 100000;
-function claimInBaseHistory(git, baseSha, id, fullHistory = true) {
-  if (!fullHistory) return null;
-  const lim = Math.min(HIST_WALK, Number(process.env.UASCO_DISPATCH_HISTORY_WALK) > 0 ? Number(process.env.UASCO_DISPATCH_HISTORY_WALK) : HIST_WALK);
-  const prefix = `${CLAIM_SUBJECT} ${id} `.toLowerCase();
-  // -z: one NUL-terminated record per commit, so empty-message commits are counted (a truncated walk can never look complete).
-  const r = git(["log", "-z", "--format=%s", `--max-count=${lim}`, baseSha]);
-  if (r.status !== 0) return null;
+// Base-history claim index, built ONCE per run and reused for every task. lookup(id) is true when a commit reachable from the base tip has a
+// SUBJECT starting with "dispatch-claim: <id> " (id matched case-insensitively, like the lowercase claim-branch identity), false when the
+// whole history was searched without a hit, and null (fail-closed) otherwise. Bounds (DISPATCH.md "History bound"):
+//  - commits: at most HIST_WALK (counted with rev-list --max-count, so counting itself stops at the bound); a longer history is null;
+//  - output: git filters with --grep, so only commits that mention "dispatch-claim:" are printed, at most HIST_MATCH_CAP of them, and the
+//    output is capped by GIT_MAX_BUFFER (overflow => null);
+//  - time: each call is capped by FETCH_TIMEOUT_MS and by the run deadline (timeout => null).
+// A shallow history or any git error is null. Subjects are never echoed.
+export const HIST_WALK = 5000000;
+export const HIST_MATCH_CAP = 200000;
+function baseClaimIndex(git, baseSha, fullHistory = true) {
+  const no = {lookup: () => null};
+  if (!fullHistory || !baseSha) return no;
+  const lim = lowerOnly(HIST_WALK, process.env.UASCO_DISPATCH_HISTORY_WALK);
+  const cnt = git(["rev-list", "--count", `--max-count=${lim + 1}`, baseSha], undefined, undefined, {timeout: FETCH_TIMEOUT_MS});
+  const total = /^[0-9]{1,12}$/.test(cnt.stdout.trim()) ? Number(cnt.stdout.trim()) : NaN;
+  if (cnt.status !== 0 || !Number.isSafeInteger(total) || total > lim) return no;
+  // -z: one NUL-terminated record per printed commit. --grep matches the whole message; the subject is checked below.
+  const r = git(["log", "-z", "--format=%s", "--fixed-strings", "--regexp-ignore-case", `--grep=${CLAIM_SUBJECT}`, `--max-count=${HIST_MATCH_CAP}`, baseSha],
+    undefined, undefined, {timeout: FETCH_TIMEOUT_MS});
+  if (r.status !== 0) return no;
   const subjects = r.stdout.split("\0"); if (subjects[subjects.length - 1] === "") subjects.pop();
-  if (subjects.some(s => s.toLowerCase().startsWith(prefix))) return true;
-  return subjects.length >= lim ? null : false;
+  const ids = new Set(), pre = `${CLAIM_SUBJECT} `;
+  for (const s of subjects) {
+    const l = s.toLowerCase();
+    if (!l.startsWith(pre)) continue;
+    const sp = l.indexOf(" ", pre.length);
+    if (sp > pre.length) ids.add(l.slice(pre.length, sp));
+  }
+  const complete = subjects.length < HIST_MATCH_CAP;
+  return {lookup: id => ids.has(id.toLowerCase()) ? true : complete ? false : null};
 }
 
 // Pure decision: the lease store is "unavailable" (not held) ONLY when ls-remote SUCCEEDED and printed nothing.
@@ -362,6 +403,19 @@ async function runInner(argv, cwd) {
   let tasks;
   try { tasks = loadBacklog(path.resolve(cwd, o.backlog)); } catch (e) { return fin("BLOCKED", [e.code || "BACKLOG_ERROR"]); }
   const git = makeGit(cwd);
+  return guardRun(await runWithGit(o, tasks, git), git);
+}
+// Run-level fail-closed guard. Output overflow is reported (each overflowed call already failed closed). A run that hit its deadline ends
+// RECOVERABLE_FAILURE with no task offered; only a claim that verifiably exists (START, claimed:true) is still reported as such.
+function guardRun(res, git) {
+  const add = [...(git.overflows > 0 ? ["GIT_OUTPUT_OVERFLOW"] : []), ...(git.deadlineHit ? ["RUN_DEADLINE_EXCEEDED"] : [])];
+  if (!add.length) return res;
+  const {outcome, reasons, ...rest} = JSON.parse(res.line);
+  if (!git.deadlineHit || (outcome === "START" && rest.claimed === true)) return fin(outcome, [...reasons, ...add], rest);
+  delete rest.claimed;
+  return fin("RECOVERABLE_FAILURE", [...reasons, ...add], {...rest, taskId: null, branch: null, claimRef: null});
+}
+async function runWithGit(o, tasks, git) {
   const heads = remoteHeads(git, o.remote);
   if (!heads) return fin("RECOVERABLE_FAILURE", ["REMOTE_UNREACHABLE"]);
   const claimedHeads = new Set([...heads.keys()].filter(n => n.startsWith("claude/")));
@@ -398,6 +452,8 @@ async function runInner(argv, cwd) {
     if (claimedHeads.has(b)) claimedList.push({taskId: t.id, branch: b, sha: heads.get(b)});
   }
   const fullHistory = baseSha ? ensureFullHistory(git, o.remote, o.baseBranch) : false;
+  let hist = null; // built lazily, once, on first use
+  const claimInBaseHistory = id => (hist ??= baseClaimIndex(git, baseSha, fullHistory)).lookup(id);
   const reclaimable = staleReport(git, o.remote, baseSha, claimedList, env.openPrs, o.staleHours, readLease, Date.now(), fullHistory);
   for (const r of reclaimable) if (r.state === "RECLAIMABLE") flat.push(`${r.taskId}:RECLAIMABLE`);
   const active = reclaimable.filter(r => (r.state === "FRESH" || r.state === "HAS_WORK_COMMITS" || r.state === "UNKNOWN") && !env.openPrs.has(claimBranchOf(r.taskId))).length;
@@ -409,7 +465,7 @@ async function runInner(argv, cwd) {
     // Dry run mirrors the claim loop: a task whose claim is already in the base history is not offered (reserves nothing either way).
     let pick = first;
     while (pick && baseSha) {
-      const h = claimInBaseHistory(git, baseSha, pick.id, fullHistory);
+      const h = claimInBaseHistory(pick.id);
       if (h === false) break;
       const code = h === null ? "CLAIM_HISTORY_CHECK_FAILED" : "CLAIM_IN_BASE_HISTORY";
       flat.push(`${pick.id}:${code}`); pick = skipNext(pick.id, code);
@@ -429,7 +485,7 @@ async function runInner(argv, cwd) {
   let chosen = first;
   for (let guard = 0; guard <= tasks.length && chosen; guard++) {
     const id = chosen.id, br = claimBranchOf(id), ref = `refs/heads/${br}`;
-    const inHist = claimInBaseHistory(git, baseSha, id, fullHistory);
+    const inHist = claimInBaseHistory(id);
     if (inHist !== false) {
       const code = inHist === null ? "CLAIM_HISTORY_CHECK_FAILED" : "CLAIM_IN_BASE_HISTORY";
       lost.push(`${id}:${code}`); chosen = skipNext(id, code); continue;
@@ -439,6 +495,7 @@ async function runInner(argv, cwd) {
     const t0 = git.timeouts;
     if (store) {
       leaseFlag.unavail = false;
+      git.phase(LEASE_BUDGET_MS); // one budget for the whole lease step (claim, its read retries, the ls-remote gate)
       try {
         const g = quiet(() => leaseApi.claim(store, {...lid, headSha: baseSha, now: Date.now(), ttlMs: Math.max(o.staleHours, 0.001) * 36e5}));
         const gs = g.status, rec = g.record;
@@ -468,12 +525,17 @@ async function runInner(argv, cwd) {
           : leaseRefAbsent(lr) ? {status: "LEASE_STORE_UNAVAILABLE", error: why} : {status: "HELD", error: why};
       }
       // A hung network call during the lease step: nothing was claimed; give back what we obtained (best effort, itself bounded) and stop.
-      if (git.timeouts > t0) { releaseGrant(lid, grant); return fin("RECOVERABLE_FAILURE", [...flat, ...lost, `${id}:LEASE_NETWORK_TIMEOUT`], extras); }
+      git.phase(null);
+      if (git.timeouts > t0) {
+        const why = git.deadlineHit ? "RUN_DEADLINE_EXCEEDED" : git.budgetHit ? "LEASE_BUDGET_EXCEEDED" : "LEASE_NETWORK_TIMEOUT";
+        releaseGrant(lid, grant); return fin("RECOVERABLE_FAILURE", [...flat, ...lost, `${id}:${why}`], extras);
+      }
       if (leaseInfo.status === "LEASE_ERROR_UNKNOWN_STATUS") { lost.push(`${id}:LEASE_ERROR:UNKNOWN`); chosen = skipNext(id, "LEASE_ERROR:UNKNOWN"); continue; }
       if (leaseInfo.status === "LEASE_STORE_UNAVAILABLE") lost.push(`${id}:LEASE_STORE_UNAVAILABLE`);
       if (leaseInfo.status === "LEASE_CHECK_FAILED") { lost.push(`${id}:LEASE_CHECK_FAILED`); chosen = skipNext(id, "LEASE_CHECK_FAILED"); continue; }
       if (leaseInfo.status === "HELD") { lost.push(`${id}:LEASE_HELD`); chosen = skipNext(id, "LEASE_HELD"); continue; }
     }
+    if (git.deadlineHit) { releaseGrant(lid, grant); return fin("RECOVERABLE_FAILURE", [...flat, ...lost, ...pushFailed, `${id}:NOT_CLAIMED`], extras); }
     const msg = `${CLAIM_SUBJECT} ${id} owner=${o.owner} at=${new Date().toISOString()} nonce=${crypto.randomUUID()}`;
     const ident = {GIT_AUTHOR_NAME: "dispatch", GIT_AUTHOR_EMAIL: "dispatch@invalid", GIT_COMMITTER_NAME: "dispatch", GIT_COMMITTER_EMAIL: "dispatch@invalid"};
     const c = git(["commit-tree", `${baseSha}^{tree}`, "-p", baseSha, "-m", msg], undefined, ident);
