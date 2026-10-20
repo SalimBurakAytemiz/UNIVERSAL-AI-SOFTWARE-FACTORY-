@@ -450,6 +450,7 @@ export default {
   "post.ok":"Done.",
   "post.err.400":"The server rejected the request in schema validation (HTTP 400). Check the fields.",
   "post.err.auth":"Authorization denied (HTTP {status}). Local authentication or action policy does not allow this.",
+  "post.err.denied":"Denied by the server action policy (HTTP {status}, reason {reason}). Nothing was changed.",
   "post.err.unavailable":"This capability is not yet available on the server (HTTP {status}); Lane B integration is pending. Nothing was changed.",
   "post.err.409.SANDBOX_UNAVAILABLE":"Refused (SANDBOX_UNAVAILABLE): no verified sandbox is available, so project code was not started. Project code never runs directly on this computer.",
   "post.err.409":"Conflict (HTTP 409): the record does not accept this change in its current state, or the idempotency key was already used with a different request.",

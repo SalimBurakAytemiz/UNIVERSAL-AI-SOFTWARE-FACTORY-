@@ -450,6 +450,7 @@ export default {
   "post.ok":"İşlem tamamlandı.",
   "post.err.400":"Sunucu isteği şema doğrulamasında reddetti (HTTP 400). Alanları kontrol edin.",
   "post.err.auth":"Yetki reddedildi (HTTP {status}). Yerel kimlik doğrulaması veya eylem politikası bu işleme izin vermiyor.",
+  "post.err.denied":"Sunucu eylem politikası tarafından reddedildi (HTTP {status}, neden {reason}). Hiçbir değişiklik yapılmadı.",
   "post.err.unavailable":"Bu özellik sunucuda henüz kullanılamıyor (HTTP {status}); Lane B entegrasyonu bekleniyor. Hiçbir değişiklik yapılmadı.",
   "post.err.409.SANDBOX_UNAVAILABLE":"Reddedildi (SANDBOX_UNAVAILABLE): doğrulanmış bir sandbox yok; proje kodu başlatılmadı. Proje kodu bu bilgisayarda doğrudan asla çalıştırılmaz.",
   "post.err.409":"Çakışma (HTTP 409): kayıt bu durumda değişikliği kabul etmiyor veya aynı idempotency anahtarı farklı bir istekle kullanıldı.",
