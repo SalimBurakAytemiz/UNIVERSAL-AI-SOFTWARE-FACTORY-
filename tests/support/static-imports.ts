@@ -1,4 +1,4 @@
-// //TR: Bu yardımcı renderer içe aktarma bekçi testlerinin ortak, AST tabanlı statik bağımlılık çıkarıcısıdır (SEC-IMPORT-GUARD): satır biçimine bağlı regex yerine TypeScript derleyici API'si (ScriptKind.JS) ile statik import (yan etkili dahil), export…from yeniden dışa aktarımı, dinamik import() (dize olmayan argüman ayrı NON_LITERAL işaretiyle), require() ve import x = require() kayıtlarını çıkarır; yorum ve dize içindeki "import … from" metni AST gereği sayılmaz. İzin listesi denetimi her izinsiz bağımlılığı adıyla listeleyerek başarısız olur; isteğe bağlı geçişli kapanış yalnız göreli belirteçleri kök dizin içinde izler, kök dışına çıkış, dize olmayan belirteç ve çıplak belirteç fail-closed hatadır. Saf yardımcıdır: dosyaya yazmaz.
+// //TR: Bu yardımcı renderer içe aktarma bekçi testlerinin ortak, AST tabanlı statik bağımlılık çıkarıcısıdır (SEC-IMPORT-GUARD): satır biçimine bağlı regex yerine TypeScript derleyici API'si (ScriptKind.JS) ile statik import (yan etkili dahil), export…from yeniden dışa aktarımı, dinamik import() (dize olmayan argüman ayrı NON_LITERAL işaretiyle), require() ve import x = require() kayıtlarını çıkarır; yorum ve dize içindeki "import … from" metni AST gereği sayılmaz. İzin listesi denetimi her izinsiz bağımlılığı adıyla listeleyerek başarısız olur; isteğe bağlı geçişli kapanış yalnız göreli belirteçleri kök dizin içinde izler, kök dışına çıkış, dize olmayan belirteç ve çıplak belirteç fail-closed hatadır. Sözdizimi hatalı (kısmi AST) ya da okunamayan kaynak fail-closed hatadır. Saf yardımcıdır: dosyaya yazmaz.
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
@@ -13,14 +13,32 @@ export type ImportInput = string | {source: string; name?: string};
 const literalText = (n: ts.Node | undefined): string | null =>
   n && (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) ? n.text : null;
 
+/** Okunamayan dosya atlanmaz: IMPORT_SOURCE_UNREADABLE ile fırlatılır (fail-closed). */
 function sourceOf(input: ImportInput): {name: string; text: string} {
-  return typeof input === "string" ? {name: input, text: fs.readFileSync(input, "utf8")} : {name: input.name ?? "inline.js", text: input.source};
+  if (typeof input !== "string") return {name: input.name ?? "inline.js", text: input.source};
+  try { return {name: input, text: fs.readFileSync(input, "utf8")}; }
+  catch (e) { throw new Error(`IMPORT_SOURCE_UNREADABLE ${input}: ${e instanceof Error ? e.message : String(e)}`); }
 }
 
-/** Kaynak sırasıyla tüm bağımlılık kayıtları. */
+function parse(name: string, text: string): {sf: ts.SourceFile; diagnostics: string[]} {
+  const sf = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  // createSourceFile hoşgörülüdür: sözdizimi hatasında kısmi AST döner. parseDiagnostics (TS 5.9) yoksa API değişmiştir; sessizce geçilmez.
+  const diags = (sf as unknown as {parseDiagnostics?: readonly ts.Diagnostic[]}).parseDiagnostics;
+  if (!Array.isArray(diags)) throw new Error(`IMPORT_PARSE_DIAGNOSTICS_UNAVAILABLE ${name}`);
+  return {sf, diagnostics: diags.map(d => `${d.start === undefined ? "?" : sf.getLineAndCharacterOfPosition(d.start).line + 1}: ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`)};
+}
+
+/** Sözdizimi (parse) tanılamaları; boş dizi = temiz ayrıştırma. */
+export function syntaxDiagnostics(input: ImportInput): string[] {
+  const {name, text} = sourceOf(input);
+  return parse(name, text).diagnostics;
+}
+
+/** Kaynak sırasıyla tüm bağımlılık kayıtları. Sözdizimi hatası varsa kısmi AST'ye güvenilmez: IMPORT_PARSE_ERROR ile fırlatır (fail-closed). */
 export function scanImports(input: ImportInput): ImportRecord[] {
   const {name, text} = sourceOf(input);
-  const sf = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const {sf, diagnostics} = parse(name, text);
+  if (diagnostics.length) throw new Error(`IMPORT_PARSE_ERROR ${name} line ${diagnostics[0]}`);
   const out: ImportRecord[] = [];
   const visit = (n: ts.Node): void => {
     if (ts.isImportDeclaration(n)) out.push({kind: "static", specifier: literalText(n.moduleSpecifier) ?? NON_LITERAL});

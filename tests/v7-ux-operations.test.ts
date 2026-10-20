@@ -7,7 +7,7 @@ import crypto from "node:crypto";
 import {pathToFileURL} from "node:url";
 import {WorkOsStore} from "../core/workos/store.js";
 import {buildServer} from "../apps/control-api/src/server.js";
-import {scanImports, moduleSpecifiers, disallowedImports, expectOnlyAllowedImports, relativeImportClosure, NON_LITERAL} from "./support/static-imports.js";
+import {scanImports, moduleSpecifiers, disallowedImports, expectOnlyAllowedImports, relativeImportClosure, syntaxDiagnostics, NON_LITERAL} from "./support/static-imports.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -1534,6 +1534,33 @@ describe("SEC-IMPORT-GUARD — AST import guard for the Operations modules", () 
   it.each(NOT_IMPORTS)("g. import-looking text inside a %s is not counted", (_label, src) => {
     expect(scanImports({source: src})).toEqual([]);
     expect(() => guard(src, [])).not.toThrow();
+  });
+  it("c2. a side-effect import of a disallowed module fails", () => {
+    expect(() => guard(`import "./evil-core.js";\n`)).toThrow(/static \.\/evil-core\.js/);
+    expect(() => guard(`import {ATTENTION_PATH} from "./queue-core.js";\nimport\n  "./evil-core.js"\n`)).toThrow(/static \.\/evil-core\.js/);
+  });
+  const SYNTAX_ERRORS: Array<[string, string]> = [
+    ["unclosed import braces", `import {a from "./x.js";\n`],
+    ["unterminated specifier string", `import "./x.js\n`],
+    ["unterminated multi-line import", `import {ATTENTION_PATH} from "./queue-core.js";\nimport {\n  a,\n`],
+    ["broken code before a later import", `const = ;\nimport {a} from "./x.js";\n`],
+  ];
+  it.each(SYNTAX_ERRORS)("i. a source with a syntax error makes the guard THROW (no partial AST is trusted): %s", (_label, src) => {
+    expect(syntaxDiagnostics({source: src}).length).toBeGreaterThan(0);
+    expect(() => scanImports({source: src})).toThrow(/IMPORT_PARSE_ERROR/);
+    expect(() => moduleSpecifiers({source: src})).toThrow(/IMPORT_PARSE_ERROR/);
+    expect(() => guard(src, ["./x.js", "./queue-core.js"])).toThrow(/IMPORT_PARSE_ERROR/);
+  });
+  it("j. a file the helper cannot read fails and is never skipped", () => {
+    const missing = path.join(rend, "does-not-exist-core.js");
+    expect(fs.existsSync(missing)).toBe(false);
+    expect(() => scanImports(missing)).toThrow(/IMPORT_SOURCE_UNREADABLE/);
+    expect(() => expectOnlyAllowedImports(missing, [])).toThrow(/IMPORT_SOURCE_UNREADABLE/);
+    expect(() => syntaxDiagnostics(rend)).toThrow(/IMPORT_SOURCE_UNREADABLE/);
+  });
+  it("k. every real renderer file read by the 7 converted import guards parses with zero syntax diagnostics", () => {
+    const files = ["views/operations.js", "operations-core.js", "retry-core.js", "views/executive.js", "executive-core.js", "views/return-summary.js", "return-summary-core.js", "views/install.js", "install-core.js", "views/matrix.js", "matrix-core.js", "views/posture.js", "posture-core.js", "views/queue.js", "queue-core.js", "views/readiness.js", "readiness-core.js"];
+    for (const f of files) expect([f, syntaxDiagnostics(path.join(rend, f))]).toEqual([f, []]);
   });
   it("h. mutation check on the REAL operations-core.js text: an appended disallowed multi-line import (in memory only) fails; the unmodified file passes", () => {
     const real = read("operations-core.js");
