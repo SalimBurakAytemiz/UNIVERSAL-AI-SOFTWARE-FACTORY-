@@ -464,6 +464,32 @@
       "owner": "CLOUD",
       "status": "DONE",
       "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "dependsOn": [
+        "UI-194"
+      ],
+      "id": "SEC-IMPORT-GUARD",
+      "title": "Import guard hardening: AST-based static import analysis for renderer guard tests (test-only)",
+      "package": "WP-TOWER-2D3D",
+      "files": [
+        "tests/support/static-imports.ts",
+        "tests/v7-ux-operations.test.ts",
+        "tests/v7-ux-executive.test.ts",
+        "tests/v7-ux-install.test.ts",
+        "tests/v7-ux-matrix.test.ts",
+        "tests/v7-ux-posture.test.ts",
+        "tests/v7-ux-queue.test.ts",
+        "tests/v7-ux-readiness.test.ts"
+      ],
+      "testFile": "tests/v7-ux-operations.test.ts",
+      "notes": "Remediation of independent review 5583939063 (BLOCKED, medium) on PR #106 (UI-194): apps/desktop/renderer/operations-core.js:4-6 imported ./retry-core.js with a multi-line import that the single-line regex guard at tests/v7-ux-operations.test.ts:371 could not see, so the guard was bypassed, not updated; the finding was open when wave B9 (#107) merged. Trigger: a chat directive titled \"IMPORT GUARD SECURITY HARDENING\" (2026-10-20), agent-reported by the coordinator session; it is NOT an authority record and is not represented as Founder-confirmed. authority is the UI-194 authority above (test-integrity remediation of UI-194's own merged change; renderer source unchanged; test files only; no protected path; no new dependency). Fix (PR #115): TypeScript-AST import analysis (existing typescript devDependency) in the 7 renderer guard tests; operations-core.js pinned to exactly [\"./queue-core.js\", \"./retry-core.js\"]; static, side-effect, re-export, dynamic (incl. non-literal), require/require-reference, import=require, worker/shared-worker, import.meta.resolve, importScripts and serviceWorker.register are reported; parse errors and unreadable files fail closed; realpath closure; in-memory negative tests and a real-file mutation proof (old guard passes a disallowed multi-line import at 7ee55d9, new guard fails it). Reviews: independent Opus session_01831yAgJdSFGHJcXQDv7ZW7 (5585030158 CLEAN @625be31 plus delta), CLAUDE_REVIEWER pre-reviews. Not dispatcher-claimed (security remediation triggered by the agent-reported directive above), so this record is written by the coordinator in-wave. Write-back 2026-10-20: merged into claude/integration-wave-b12 (branch head 34fc2bb ancestor of faa4338)"
+    },
+    {
+      "owner": "CLOUD",
+      "status": "DONE",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
       "riskLevel": 1,
       "requiresNewAuthority": false,
       "protectedEdit": false,
