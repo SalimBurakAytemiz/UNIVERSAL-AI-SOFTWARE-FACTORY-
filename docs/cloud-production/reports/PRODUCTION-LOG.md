@@ -1052,3 +1052,26 @@ MERGED_AWAITING_WRITEBACK: not recomputed this fire (dispatcher state unchanged 
 **Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) MOB-11+ need Founder authority. (3) create_session/list_sessions unavailable: UI-110 and UI-105 claims still need builders from the coordinator; UI-110 is past the 6 h reclaim threshold at ~23:13Z, UI-105 at ~00:12Z.
 
 Note: written as one local single-file commit with a plain push (precedent #39-#56); log too large to re-transmit via create_or_update_file.
+
+## Heartbeat #58 (2026-10-20 23:12Z)
+
+**Step 1:** QUEUE.json read from claude/cloud-production-engine; parses. READY tasks: 0 (CP-QUEUE/CP-REPORT/CP-CI PENDING_REVIEW; CP-DISPATCH/CP-RECOVERY/CP-GOV IN_PROGRESS; FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED BLOCKED). **Step 2:** nothing to dispatch; create_session/list_sessions unavailable in this fire.
+
+**Step 2b (v7/integration@a910883):** ACTIVE (list_sessions unavailable; fallback = LIVE claim branches with no open PR): 2 (claude/ui-110 claim 17:13Z, ~5.98 h; claude/ui-105 claim 18:12Z, ~5 h; both claim-only, 1 commit ahead = claim commit, not merged, head younger than 6 h = LIVE) = cap. Claim and dispatch skipped (ACTIVE >= 2). Dispatcher outcome NO_ACTION (recovery dry run, no claim). No RECLAIMABLE yet; UI-110 crosses the 6 h threshold within minutes, UI-105 at ~00:12Z.
+
+CLAIMED_AWAITING_BUILDER UI-110 claude/ui-110 b775f2848a49f4c587c470bd5308caf236dea886
+CLAIMED_AWAITING_BUILDER UI-105 claude/ui-105 8195904ad967aab2a34ef7cc47e21fa1586809f0
+MERGED_AWAITING_WRITEBACK: 35 claim branches (dispatcher dry run state MERGED_AWAITING_WRITEBACK): UI-002, UI-007, UI-125, UI-109, UI-146, UI-182, UI-233, UI-194, SEC-IMPORT-GUARD, SEC-IMPORT-GUARD-2, UI-035, MOB-1..MOB-9, CP-DISPATCH-IMPL, UI-030, UI-113, UI-132, UI-032, UI-026, UI-025, UI-133, UI-047, UI-201, UI-111, UI-114, UI-028, UI-106 (head SHAs not individually recorded this fire; coordinator ships DONE write-back).
+ABANDONED_WITH_WORK_AWAITING_COORDINATOR: none.
+
+**Open PRs: 7** (none labelled uasco-cloud-production; mergeable state/CI UNKNOWN): #66 (draft), #46, #33, #32, #28, #23, #8.
+
+**Active sessions:** UNKNOWN (list_sessions unavailable). LIVE claim branches counted: claude/ui-110, claude/ui-105.
+
+**Tasks completed (merged):** queue tasks DONE: 0.
+
+**Current failures:** none observed. Dispatcher reports 2 MALFORMED_ID backlog rows.
+
+**Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) MOB-11+ need Founder authority. (3) create_session/list_sessions unavailable: UI-110 and UI-105 claims still have no builder; coordinator must provision one each.
+
+Note: written as one local single-file commit with a plain push (precedent #39-#57); log too large to re-transmit via create_or_update_file.
