@@ -1,6 +1,7 @@
 // //TR: Bu modül kalıcı shell'i yönetir: sol navigasyon (8 Factory alanı + Company OS + Ayarlar), bağlam çubuğu (şirket/proje/ortam/principal/API durumu/son yenileme), Ctrl+K arama, bildirim, ACİL DURDUR onay penceresi, sağ görev akışı ve alt canlı aktivite şeridi; tüm veri api.js üzerinden gelir; periyodik yenileme nav/sekme düğümlerini yerinde günceller ve yeniden kurulan alt ağaçlarda odağı korur.
 import {h,chip,badge,statusLabel,statePill,missionPill,timelineItem} from "./components.js";
 import {icon} from "./icons.js";
+import {confirmAndResume} from "./resume-confirm.js";
 import {ROUTES,routeById} from "./routes.js";
 import {formatCount,formatTime,MISSING,pushSample,searchEntries,pillKindFor} from "./model.js";
 import {syncNav,syncTabs} from "./nav.js";
@@ -200,7 +201,7 @@ export function createShell(ctx){
     el("stopCancel").addEventListener("click",closeStopDialog);
     el("stopDialog").addEventListener("keydown",e=>{if(e.key==="Escape"){e.preventDefault();closeStopDialog()}});
     el("stopConfirm").addEventListener("click",async()=>{closeStopDialog();await ctx.stop()});
-    el("resumeBtn").addEventListener("click",()=>ctx.resume());
+    el("resumeBtn").addEventListener("click",()=>confirmAndResume(ctx,{onCancel:announce}));
     el("refreshBtn").addEventListener("click",()=>ctx.refreshAll({force:true}));
     el("notifyBtn").addEventListener("click",()=>ctx.navigate("inbox"));
     el("langBtn").addEventListener("click",()=>ctx.i18n.setLang(ctx.i18n.lang==="tr"?"en":"tr"));
