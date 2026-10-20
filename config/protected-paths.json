@@ -130,6 +130,7 @@
     "scripts/validate-runtime-resilience.mjs",
     "scripts/validate-schema-catalog.mjs",
     "scripts/validate-schema-strictness.mjs",
+    "scripts/validate-shards.mjs",
     "scripts/validate-technology-graph.mjs",
     "scripts/validate-tr-comments.mjs",
     "scripts/validate-woven-model.mjs",

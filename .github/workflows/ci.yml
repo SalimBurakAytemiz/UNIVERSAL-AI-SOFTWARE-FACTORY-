@@ -1,4 +1,5 @@
 # //TR: Bu korunan workflow (public repo, ucretsiz standart GitHub-hosted runner'lar) Linux + Windows uzerinde deterministic lockfile install, canonical/mechanical validation (600 sn adim limiti altinda sirali tests kabuklari dahil), baseline secret scan ve trust-kernel self-test calistirir; yalniz master/v7/integration push'unda, PR'larda ve elle tetiklenir (cift tetikleme yok), PR'da eskiyen kosu iptal edilir, sonuc commit SHA'sina bagli CI_EVIDENCE.json (yalniz adim kimligi/durum/sure) olarak 14 gun saklanir; self-hosted, larger veya ucretli runner kullanmaz. Yetki: FD-PUBLIC-CI-2026-10-19 (yalniz PR #49).
+# //TR: CI-PARALLEL (oneri, Founder yetkisi gerekir): Linux validate tek is olarak degismez; Windows dogrulamasi config/validation.json shardPlan.win32 ile ayni adimlari, ayni 600 sn limitini koruyarak 3 kabuga (validate-windows-shard (1..3)) bolunur ve zorunlu 'validate (windows-latest)' baglami fail-closed scripts/validate-shards.mjs birlestiricisidir (eksik/fazla/tekrar/SHA/ozet/FAIL/zaman asimi = FAIL); secret-sanity, kernel self-test ve ci-evidence orada calisir.
 name: CI
 on:
   push:
@@ -15,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     env:
@@ -33,6 +34,82 @@ jobs:
         run: test -f package-lock.json || (echo "package-lock.json missing; run install/bootstrap once and commit lockfile" && exit 1)
       - run: node scripts/ensure-dependencies.mjs
       - run: node scripts/run-validation.mjs
+      - run: node scripts/secret-sanity.mjs
+      - name: Bootstrap trust-kernel self-test
+        run: node scripts/bootstrap-kernel-selftest.mjs
+      - name: CI evidence (SHA-bound, fail-closed; one platform only)
+        if: always()
+        run: node scripts/ci/ci-evidence.mjs --require --leg ${{ runner.os }}
+      - name: Upload CI evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-evidence-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .ai/runtime/CI_EVIDENCE.json
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: warn
+  validate-windows-shard:
+    name: validate-windows-shard (${{ matrix.shard }})
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      UASCO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Require lockfile
+        shell: bash
+        run: test -f package-lock.json || (echo "package-lock.json missing; run install/bootstrap once and commit lockfile" && exit 1)
+      - run: node scripts/ensure-dependencies.mjs
+      - run: node scripts/run-validation.mjs --shard ${{ matrix.shard }}/3
+      - name: Upload shard report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: validation-shard-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: .ai/runtime/VALIDATION_SHARD_${{ matrix.shard }}.json
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: error
+  validate-windows:
+    name: validate (windows-latest)
+    needs: validate-windows-shard
+    if: always()
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      UASCO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      SHARDS_RESULT: ${{ needs.validate-windows-shard.result }}
+    steps:
+      - name: Require every Windows shard job to succeed
+        shell: bash
+        run: test "$SHARDS_RESULT" = "success" || (echo "validate-windows-shard result=$SHARDS_RESULT (expected success)" && exit 1)
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      # //TR: Birlestirici isi PR-kontrollu npm bagimliliklarini KURMAZ (paket yoneticisi calismaz, paket onbellegi yok); validate-shards, secret-sanity, kernel self-test ve ci-evidence yalniz Node yerlesik modulleriyle calisir.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - name: Download shard reports (this run attempt only)
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: validation-shard-${{ github.run_id }}-${{ github.run_attempt }}-*
+          merge-multiple: true
+          path: .ai/runtime/shards
+      - name: Aggregate shards (fail-closed)
+        shell: bash
+        run: node scripts/validate-shards.mjs --count 3 --sha "$UASCO_HEAD_SHA" --platform win32 --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --dir .ai/runtime/shards
       - run: node scripts/secret-sanity.mjs
       - name: Bootstrap trust-kernel self-test
         run: node scripts/bootstrap-kernel-selftest.mjs
