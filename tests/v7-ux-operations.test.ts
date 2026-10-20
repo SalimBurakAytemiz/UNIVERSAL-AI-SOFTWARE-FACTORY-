@@ -1636,6 +1636,51 @@ describe("SEC-IMPORT-GUARD — AST import guard for the Operations modules", () 
     const all = [...new Set([...guarded, ...guarded.flatMap(f => relativeImportClosure(path.join(rend, f), rend))])].sort();
     for (const f of all) expect([f, scanImports(path.join(rend, f)).filter(r => r.kind === "module-load-reference" || r.kind === "require-reference")]).toEqual([f, []]);
   });
+  it("t. createElement with a literal \"script\" tag (any receiver, literal-key access, any case, createElementNS) is a script-element record that fails unless allowWorkers", () => {
+    expect(scanImports({source: `document.createElement("script");\ndoc["createElement"]('SCRIPT');\ncreateElement(\`Script\`);\ndocument.createElementNS("http://www.w3.org/2000/svg", "script");\n`})).toEqual([
+      {kind: "script-element", specifier: "script"}, {kind: "script-element", specifier: "script"}, {kind: "script-element", specifier: "script"}, {kind: "script-element", specifier: "script"}]);
+    expect(() => guard(`const s = document.createElement("script");\n`)).toThrow(/script-element script/);
+    expect(() => guard(`const s = document.createElement("script");\n`, ["script"])).toThrow(/script-element script/);
+    expect(disallowedImports({source: `document.createElement("script");`}, ["script"], {allowWorkers: true})).toEqual([]);
+    expect(scanImports({source: `document.createElement("div");\nconst t = "script";\nel.createElement;\n// document.createElement("script")\n`})).toEqual([]);
+  });
+  it("t2. .src / .text assignment on a script element (bound name, re-assigned name, or the createElement call itself) is reported; .text is always NON_LITERAL", () => {
+    expect(scanImports({source: `const s = document.createElement("script");\ns.src = "./model.js";\n`})).toEqual([{kind: "script-element", specifier: "script"}, {kind: "script-src", specifier: "./model.js"}]);
+    expect(scanImports({source: `let s;\ns = document.createElement("script");\ns["src"] = url;\ns.text = code;\n`})).toEqual([
+      {kind: "script-element", specifier: "script"}, {kind: "script-src", specifier: NON_LITERAL}, {kind: "script-text", specifier: NON_LITERAL}]);
+    expect(scanImports({source: `document.createElement("script").src = "./x.js";\n`})).toEqual([{kind: "script-src", specifier: "./x.js"}, {kind: "script-element", specifier: "script"}]);
+    expect(() => guard(`const s = document.createElement("script");\ns.src = "./queue-core.js";\n`)).toThrow(/script-element script, script-src \.\/queue-core\.js/);
+    expect(() => guard(`const s = document.createElement("script");\ns.text = "1";\n`, ["script"])).toThrow(/script-text <NON_LITERAL>/);
+    expect(disallowedImports({source: `const s = document.createElement("script");\ns.src = "./m.js";\n`}, ["script", "./m.js"], {allowWorkers: true})).toEqual([]);
+    expect(disallowedImports({source: `const s = document.createElement("script");\ns.text = c;\n`}, ["script", NON_LITERAL], {allowWorkers: true})).toEqual([`script-text ${NON_LITERAL}`]);
+    expect(scanImports({source: `const img = document.createElement("img");\nimg.src = "./a.png";\nnode.text = "x";\n`})).toEqual([]);
+  });
+  it("u. Worklet .addModule(...) on audioWorklet / paintWorklet / animationWorklet / any receiver (literal, literal-key, NON_LITERAL) is a worklet-module record that fails unless allowWorkers", () => {
+    expect(scanImports({source: `ctx.audioWorklet.addModule("./a.js");\nCSS.paintWorklet.addModule(url);\nCSS.animationWorklet["addModule"]("./n.js");\nanything.addModule();\n`})).toEqual([
+      {kind: "worklet-module", specifier: "./a.js"}, {kind: "worklet-module", specifier: NON_LITERAL}, {kind: "worklet-module", specifier: "./n.js"}, {kind: "worklet-module", specifier: NON_LITERAL}]);
+    expect(() => guard(`CSS.paintWorklet.addModule("./queue-core.js");\n`)).toThrow(/worklet-module \.\/queue-core\.js/);
+    expect(() => guard(`ctx.audioWorklet.addModule(u);\n`)).toThrow(/worklet-module <NON_LITERAL>/);
+    expect(disallowedImports({source: `CSS.paintWorklet.addModule("./p.js");`}, ["./p.js"], {allowWorkers: true})).toEqual([]);
+    expect(disallowedImports({source: `CSS.paintWorklet.addModule(u);`}, [NON_LITERAL], {allowWorkers: true})).toEqual([`worklet-module ${NON_LITERAL}`]);
+    expect(disallowedImports({source: `const am = CSS.paintWorklet.addModule;\n`}, [])).toEqual(["module-load-reference addModule"]);
+    expect(disallowedImports({source: `const {addModule} = ctx.audioWorklet;\n`}, [])).toEqual(["module-load-reference addModule"]);
+  });
+  it("v. the new kinds are module-load kinds, and the real guarded renderer modules and their closures have zero script-element / script-src / script-text / worklet-module records", () => {
+    const NEW_KINDS = ["script-element", "script-src", "script-text", "worklet-module"] as const;
+    for (const k of NEW_KINDS) expect(MODULE_LOAD_KINDS).toContain(k);
+    const guarded = ["views/operations.js", "operations-core.js", "retry-core.js", "views/executive.js", "executive-core.js", "views/return-summary.js", "return-summary-core.js", "views/install.js", "install-core.js", "views/matrix.js", "matrix-core.js", "views/posture.js", "posture-core.js", "views/queue.js", "queue-core.js", "views/readiness.js", "readiness-core.js", "views/tower.js", "views/inbox.js"];
+    const all = [...new Set([...guarded, ...guarded.flatMap(f => relativeImportClosure(path.join(rend, f), rend))])].sort();
+    expect(all.length).toBeGreaterThan(guarded.length);
+    for (const f of all) expect([f, scanImports(path.join(rend, f)).filter(r => (NEW_KINDS as readonly string[]).includes(r.kind))]).toEqual([f, []]);
+  });
+  it("KNOWN LIMIT (documented, pinned): code-string evaluation and computed non-literal names/tags are NOT detected; Operations modules forbid eval/new Function/HTML sinks statically; sandbox and CSP are the runtime control", () => {
+    expect(scanImports({source: `eval("import('./x.js')");\n`})).toEqual([]);
+    expect(scanImports({source: `new Function("return import('./x.js')")();\n`})).toEqual([]);
+    expect(scanImports({source: `setTimeout("new Worker('./w.js')", 0);\nsetInterval("importScripts('./a.js')", 10);\n`})).toEqual([]);
+    expect(scanImports({source: `const tag = "script";\nconst s = document.createElement(tag);\ns.src = "./x.js";\n`})).toEqual([]);
+    for (const f of [["operations-core.js"], ["views", "operations.js"]]) expect(read(...f)).not.toMatch(/\beval\(|new Function|innerHTML|outerHTML|insertAdjacentHTML/);
+    expect(read("index.html")).not.toContain("unsafe-eval");
+  });
   it("KNOWN LIMIT (documented, pinned): computed non-literal names cannot be resolved statically and are NOT detected; the renderer sandbox and CSP are the runtime control", () => {
     // Bilinen sınır: tests/support/static-imports.ts başındaki açıklamaya bakın (main.mjs:306 webPreferences, renderer/index.html:7 CSP). Bu iddia sınırı
     // dürüstçe sabitler; bir gün yakalanırsa bu test bilinçli olarak güncellenmelidir.

@@ -41,7 +41,12 @@ function missionSelector(ctx,mres,selectedId){
   const doc=ctx.doc;
   let body;
   if(!isLive(mres))body=stateBlock(ctx,mres,"/v1/missions");
-  else if(!mres.items.length)body=emptyNote(ctx,"journey.missions.empty");
+  else if(!mres.items.length){
+    body=[emptyNote(ctx,"journey.missions.empty")];
+    if(typeof ctx.navigate==="function")body.push(h(doc,"div",{class:"btn-row",dataset:{emptyNext:"journey-missions"}},
+      h(doc,"p",{class:"note",text:ctx.t("journey.empty.next")}),
+      h(doc,"button",{type:"button",class:"btn",id:"journey-empty-open-work",dataset:{focusKey:"journey-empty-open-work",navigate:"work"},on:{click:()=>ctx.navigate("work")},text:ctx.t("journey.empty.openWork")})));
+  }
   else{
     const select=h(doc,"select",{id:"journey-mission",dataset:{focusKey:"journey-mission"},"aria-describedby":"journey-mission-hint",
       on:{change:async e=>{const v=e.target.value;selection.missionId=MISSION_ID_RE.test(v)?v:null;await ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys:["id:journey-mission"]})}}},
@@ -215,7 +220,7 @@ export async function render(ctx){
   const root=h(doc,"div",{class:"view view-journey"},header(ctx),missionSelector(ctx,mres,id));
   if(!id){
     root.append(h(doc,"section",{class:"panel journey-empty",id:"journey-none","aria-labelledby":"journey-none-t",dataset:{journey:"no-mission"}},
-      h(doc,"h2",{class:"panel-title",id:"journey-none-t",text:ctx.t("journey.chain.title")}),emptyNote(ctx,"journey.noMission")));
+      h(doc,"h2",{class:"panel-title",id:"journey-none-t",text:ctx.t("journey.chain.title")}),emptyNote(ctx,isLive(mres)&&!mres.items.length?"journey.noMission.none":"journey.noMission")));
     return root;
   }
   let pre,crew;

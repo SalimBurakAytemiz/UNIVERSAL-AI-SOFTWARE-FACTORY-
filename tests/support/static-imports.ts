@@ -1,16 +1,21 @@
-// //TR: Bu yardımcı renderer içe aktarma bekçi testlerinin ortak, AST tabanlı statik bağımlılık çıkarıcısıdır (SEC-IMPORT-GUARD): satır biçimine bağlı regex yerine TypeScript derleyici API'si (ScriptKind.JS) ile statik import (yan etkili dahil), export…from yeniden dışa aktarımı, dinamik import() (dize olmayan argüman ayrı NON_LITERAL işaretiyle), require() import x = require(), require'a her başvuru ve import dışı modül yüklemeleri (Worker/SharedWorker, import.meta.resolve, importScripts, serviceWorker.register) kayıtlarını çıkarır; yorum ve dize içindeki "import … from" metni AST gereği sayılmaz. İzin listesi denetimi her izinsiz bağımlılığı adıyla listeleyerek başarısız olur; isteğe bağlı geçişli kapanış yalnız göreli belirteçleri kök dizin içinde izler, kök dışına çıkış, dize olmayan belirteç ve çıplak belirteç fail-closed hatadır. Sözdizimi hatalı (kısmi AST) ya da okunamayan kaynak fail-closed hatadır. Saf yardımcıdır: dosyaya yazmaz.
+// //TR: Bu yardımcı renderer içe aktarma bekçi testlerinin ortak, AST tabanlı statik bağımlılık çıkarıcısıdır (SEC-IMPORT-GUARD): satır biçimine bağlı regex yerine TypeScript derleyici API'si (ScriptKind.JS) ile statik import (yan etkili dahil), export…from yeniden dışa aktarımı, dinamik import() (dize olmayan argüman ayrı NON_LITERAL işaretiyle), require() import x = require(), require'a her başvuru ve import dışı modül yüklemeleri (Worker/SharedWorker, import.meta.resolve, importScripts, serviceWorker.register, değişmez "script" etiketli createElement ve böyle bir öğeye .src/.text ataması, Worklet .addModule) kayıtlarını çıkarır; yorum ve dize içindeki "import … from" metni AST gereği sayılmaz. İzin listesi denetimi her izinsiz bağımlılığı adıyla listeleyerek başarısız olur; isteğe bağlı geçişli kapanış yalnız göreli belirteçleri kök dizin içinde izler, kök dışına çıkış, dize olmayan belirteç ve çıplak belirteç fail-closed hatadır. Sözdizimi hatalı (kısmi AST) ya da okunamayan kaynak fail-closed hatadır. Saf yardımcıdır: dosyaya yazmaz.
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 
-export type ImportKind = "static" | "reexport" | "dynamic" | "require" | "import-equals" | "require-reference" | "worker" | "shared-worker" | "import-meta-resolve" | "import-scripts" | "service-worker" | "module-load-reference";
-/** import dışı modül yüklemeleri (Worker/SharedWorker, import.meta.resolve, importScripts, serviceWorker.register); allowWorkers olmadan reddedilir. */
-export const MODULE_LOAD_KINDS: readonly ImportKind[] = ["worker", "shared-worker", "import-meta-resolve", "import-scripts", "service-worker", "module-load-reference"];
+export type ImportKind = "static" | "reexport" | "dynamic" | "require" | "import-equals" | "require-reference" | "worker" | "shared-worker" | "import-meta-resolve" | "import-scripts" | "service-worker" | "module-load-reference" | "script-element" | "script-src" | "script-text" | "worklet-module";
+/** import dışı modül yüklemeleri (Worker/SharedWorker, import.meta.resolve, importScripts, serviceWorker.register, script öğesi ve .src/.text ataması, Worklet addModule); allowWorkers olmadan reddedilir. */
+export const MODULE_LOAD_KINDS: readonly ImportKind[] = ["worker", "shared-worker", "import-meta-resolve", "import-scripts", "service-worker", "module-load-reference", "script-element", "script-src", "script-text", "worklet-module"];
 /** Takma adla kullanılabilecek yükleme adları; bunlara her başvuru module-load-reference olur. */
-const MODULE_LOAD_NAMES = new Set(["Worker", "SharedWorker", "importScripts", "serviceWorker"]);
+const MODULE_LOAD_NAMES = new Set(["Worker", "SharedWorker", "importScripts", "serviceWorker", "addModule"]);
 /*
- * BİLİNEN SINIR (statik analiz): hesaplanan, değişmez olmayan adlar (globalThis["Wor" + "ker"], globalThis[k], eval benzeri dolaylı yollar) statik olarak
- * çözülemez ve bu yardımcı tarafından YAKALANMAZ; testte bilinen sınır olarak sabitlenir. Bunun çalışma zamanı denetimi renderer kum havuzu ve CSP'dir:
+ * BİLİNEN SINIR (statik analiz): bu yardımcı yalnız sözdiziminde görünen değişmez adları ve belirteçleri tanır. Şunlar statik olarak çözülemez ve
+ * YAKALANMAZ; testte bilinen sınır olarak sabitlenir:
+ *  - kod-dizesi değerlendirmesi: eval("…"), new Function("…"), dize argümanlı setTimeout("…")/setInterval("…") (dizenin içi ayrıştırılmaz);
+ *  - hesaplanan, değişmez olmayan adlar ve etiketler: globalThis["Wor" + "ker"], globalThis[k], document.createElement(tag), takma adlı createElement;
+ *  - script öğesine .src/.text dışında yazım (setAttribute, Object.assign, textContent, append); bunlarda createElement("script") kaydı tek başına reddedilir.
+ * eval, new Function ve innerHTML/outerHTML/insertAdjacentHTML HTML sinkleri Operations modülleri (views/operations.js, operations-core.js) için
+ * tests/v7-ux-operations.test.ts içindeki statik iddialarla zaten yasaktır. Bunun çalışma zamanı denetimi renderer kum havuzu ve CSP'dir:
  * apps/desktop/main.mjs:306 BrowserWindow webPreferences {contextIsolation:true, nodeIntegration:false, sandbox:true, webSecurity:true,
  * allowRunningInsecureContent:false, webviewTag:false} ve apps/desktop/renderer/index.html:7 CSP "default-src 'self'; style-src 'self';
  * script-src 'self'; img-src 'self' data:" (worker-src yoktur, default-src 'self'e düşer: betik ve worker yalnız uygulama kökeninden; 'unsafe-eval' yok).
@@ -25,7 +30,6 @@ export type ImportInput = string | {source: string; name?: string};
 const literalText = (n: ts.Node | undefined): string | null =>
   n && (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) ? n.text : null;
 
-/** Okunamayan dosya atlanmaz: IMPORT_SOURCE_UNREADABLE ile fırlatılır (fail-closed). */
 /** Erişilen özellik adı: a.b ve a["b"] için "b"; aksi halde null. */
 const accessedName = (n: ts.Node): string | null =>
   ts.isPropertyAccessExpression(n) ? n.name.text : ts.isElementAccessExpression(n) ? literalText(n.argumentExpression) : null;
@@ -50,7 +54,26 @@ function workerSpecifier(arg: ts.Expression | undefined): string {
   }
   return NON_LITERAL;
 }
+/** createElement("script") / createElementNS(ns, "script") çağrısı mı (etiket değişmez, büyük/küçük harf duyarsız; ad değişmez erişimle de tanınır). */
+function isScriptCreate(n: ts.Node): boolean {
+  if (!ts.isCallExpression(n)) return false;
+  const name = calleeName(n.expression);
+  const tag = name === "createElement" ? literalText(n.arguments[0]) : name === "createElementNS" ? literalText(n.arguments[1]) : null;
+  return tag !== null && tag.toLowerCase() === "script";
+}
+/** Script öğesine bağlanan adlar (const s = createElement("script") ya da s = createElement("script")); kapsam çözümlemesi yoktur, aynı adlı her .src/.text yazımı raporlanır (fail-closed). */
+function scriptElementNames(sf: ts.SourceFile): Set<string> {
+  const names = new Set<string>();
+  const visit = (n: ts.Node): void => {
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && isScriptCreate(n.initializer)) names.add(n.name.text);
+    else if (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(n.left) && isScriptCreate(n.right)) names.add(n.left.text);
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return names;
+}
 
+/** Okunamayan dosya atlanmaz: IMPORT_SOURCE_UNREADABLE ile fırlatılır (fail-closed). */
 function sourceOf(input: ImportInput): {name: string; text: string} {
   if (typeof input !== "string") return {name: input.name ?? "inline.js", text: input.source};
   try { return {name: input, text: fs.readFileSync(input, "utf8")}; }
@@ -77,6 +100,7 @@ export function scanImports(input: ImportInput): ImportRecord[] {
   const {sf, diagnostics} = parse(name, text);
   if (diagnostics.length) throw new Error(`IMPORT_PARSE_ERROR ${name} line ${diagnostics[0]}`);
   const out: ImportRecord[] = [];
+  const scriptNames = scriptElementNames(sf);
   const visit = (n: ts.Node): void => {
     // Çağrı biçimli yükleme kaydedildikten sonra adın kendisi ikinci kez *-reference sayılmaz; yalnız nesne kısmı ve argümanlar gezilir.
     const visitRest = (obj: ts.Node | undefined, args: readonly ts.Node[] | undefined): void => { if (obj) visit(obj); args?.forEach(visit); };
@@ -102,6 +126,17 @@ export function scanImports(input: ImportInput): ImportRecord[] {
         out.push({kind: "service-worker", specifier: literalText(n.arguments[0]) ?? NON_LITERAL});
         return visitRest(objectOf(objectOf(callee)!), n.arguments);
       }
+      // Worklet modülü: audioWorklet/paintWorklet/animationWorklet ve HER alıcının .addModule(...) çağrısı.
+      else if (accessedName(callee) === "addModule") {
+        out.push({kind: "worklet-module", specifier: literalText(n.arguments[0]) ?? NON_LITERAL});
+        return visitRest(objectOf(callee), n.arguments);
+      }
+      else if (isScriptCreate(n)) out.push({kind: "script-element", specifier: "script"});
+    }
+    // Script öğesine .src (değişmez belirteç ya da NON_LITERAL) ve .text (kod dizesi, her zaman NON_LITERAL) ataması.
+    else if (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.EqualsToken && (accessedName(n.left) === "src" || accessedName(n.left) === "text")
+      && (isScriptCreate(objectOf(n.left)!) || (ts.isIdentifier(objectOf(n.left)!) && scriptNames.has((objectOf(n.left) as ts.Identifier).text)))) {
+      out.push(accessedName(n.left) === "src" ? {kind: "script-src", specifier: literalText(n.right) ?? NON_LITERAL} : {kind: "script-text", specifier: NON_LITERAL});
     }
     else if (ts.isNewExpression(n) && (calleeName(n.expression) === "Worker" || calleeName(n.expression) === "SharedWorker")) {
       out.push({kind: calleeName(n.expression) === "Worker" ? "worker" : "shared-worker", specifier: workerSpecifier(n.arguments?.[0])});
@@ -131,7 +166,7 @@ export function scanImports(input: ImportInput): ImportRecord[] {
   return out;
 }
 
-/** Her türden bağımlılığın belirteçleri (kaynak sırası); eski regex'in yerine geçer ama import…from dışındaki türleri de içerir, böylece yeni bir bağımlılık hiçbir sözdizimiyle listeden kaçamaz. */
+/** Her türden bağımlılığın belirteçleri (kaynak sırası); eski regex'in yerine geçer ama import…from dışındaki türleri de içerir; yalnız başlıktaki BİLİNEN SINIR'da sayılan statik olarak çözülemeyen yollar kapsam dışıdır. */
 export function moduleSpecifiers(input: ImportInput): string[] {
   return scanImports(input).map(r => r.specifier);
 }

@@ -1,6 +1,6 @@
 // //TR: Bu görünüm Görevler / Work OS alanıdır ve UX WP-WORKOS ile Kurucu-Kokpiti sınıfı premium katmana yükseltilmiştir: üstte gerçek /v1/missions + /v1/work-runs okumalarından beslenen görev/koşu özeti (KPI karoları: toplam mission, etkin koşu, Kurucu dikkati bekleyen, gerçekten doğrulanmış koşu) ve yaşam-döngüsü dağılım şeridi vardır. Alt kısımda "Yeni Görev" formu (proje, başlık, hedef, kabul kriterleri listesi, R0–R4 risk açıklamaları, isteğe bağlı argv test komutu), mission listesi (durum filtreli), mission detayı (durum/faz/risk, izinli geçişler, yüksek riskli geçişlerde onay, Çalıştır), /v1/work-runs koşu zaman çizelgesi + koşu kartları ve /v1/evidence kanıt bağlama bölümü korunur/eklenir. WP2/WP-PROJECTS token ve bileşenleri (kpiTile/statePill/missionPill/timelineItem) yeniden kullanılır (palet değişmez, yeni token yok). Hiçbir sayı/durum uydurulmaz: veri canlı değilse dürüst UNAVAILABLE/OFFLINE, boşsa dürüst boş metin; koşu yalnız gerçek test-yürütme kanıtı varsa doğrulanmış sayılır (FD-REL-1; SOURCE_GENERATION_COMPLETE != PRODUCT_VERIFIED), aksi halde NOT_VERIFIED dürüstçe gösterilir. API verisi asla HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
 import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip,kpiTile,statePill,missionPill,timelineItem} from "../components.js";
-import {formatTime,MISSING,missionPillKind} from "../model.js";
+import {formatTime,formatCount,MISSING,missionPillKind} from "../model.js";
 import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline} from "../work-core.js";
 import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
@@ -196,6 +196,11 @@ export function runCard(ctx,run){
       h(doc,"dt",{text:ctx.t("run.lease")}),h(doc,"dd",{text:formatDateTime(run.leaseExpiresAt,lang)}),
       h(doc,"dt",{text:ctx.t("run.reviewer")}),h(doc,"dd",{text:run.reviewer?.identity??ctx.t("run.reviewerNone")}),
       h(doc,"dt",{text:ctx.t("run.verdict")}),h(doc,"dd",{text:run.reviewer?.verdict?statusLabel(ctx,run.reviewer.verdict):ctx.t("run.verdictNone")}),
+      // UI-111: sunucunun kaydettiği olgular; toplam/azami/kalan/geri sayım yok. Zamanlanmış yeniden deneme yalnız RETRY_SCHEDULED durumunda gösterilir (başka durumda retryAt eskimiş olabilir).
+      h(doc,"dt",{text:ctx.t("run.retriesInStep")}),h(doc,"dd",{dataset:{runRetryCount:run.retryCount??""},text:formatCount(run.retryCount)}),
+      h(doc,"dt",{text:ctx.t("run.remediationCycles")}),h(doc,"dd",{dataset:{runRemediationCycle:run.remediationCycle??""},text:formatCount(run.remediationCycle)}),
+      h(doc,"dt",{text:ctx.t("run.leaseAttempts")}),h(doc,"dd",{dataset:{runAttempt:run.attempt??""},text:formatCount(run.attempt)}),
+      ...(run.status==="RETRY_SCHEDULED"?[h(doc,"dt",{text:ctx.t("run.retryScheduledFor")}),h(doc,"dd",{dataset:{runRetryAt:run.retryAt??""},text:formatDateTime(run.retryAt,lang)})]:[]),
       // SBX-GATE: BLOCKED/FAILED nedeni dürüstçe gösterilir; SANDBOX_UNAVAILABLE için kodun yanında açıklama vardır.
       ...(run.reason?[h(doc,"dt",{text:ctx.t("run.reason")}),h(doc,"dd",{dataset:{runReason:run.reason},text:run.reason==="SANDBOX_UNAVAILABLE"?`SANDBOX_UNAVAILABLE — ${ctx.t("run.reason.SANDBOX_UNAVAILABLE")}`:run.reason})]:[])),
     h(doc,"h6",{text:ctx.t("run.checkpoints")}),cps,h(doc,"h6",{text:ctx.t("run.evidence")}),ev);

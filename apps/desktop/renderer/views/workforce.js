@@ -10,9 +10,9 @@ import {buildTaxonomy} from "../workforce-taxonomy-core.js";
 import {fleetGroups,fleetCard,fleetDetail} from "../fleet-core.js";
 
 // //TR: Katalog gözatma seçimi (süzgeç + seçili rol) görünüm ömrü boyunca korunur; periyodik yenileme seçimi bozmaz.
-const catState={cluster:"ALL",guild:"ALL",q:"",roleId:null};
+const catState={cluster:"ALL",guild:"ALL",q:"",roleId:null,page:0};
 const fleetSel={runId:null};
-export function resetWorkforceView(){fleetSel.runId=null;catState.cluster="ALL";catState.guild="ALL";catState.q="";catState.roleId=null}
+export function resetWorkforceView(){fleetSel.runId=null;catState.cluster="ALL";catState.guild="ALL";catState.q="";catState.roleId=null;catState.page=0}
 const DISPLAY_LIMIT=150;
 
 function liveRunsBody(ctx,runs){
@@ -102,9 +102,9 @@ function overview(ctx,catalog){
 // //TR: Süzgeç: küme/lonca açılır menüleri (katalogdaki gerçek kimlikler + sayı) ve başlık/rol araması; değişimde seçim modül durumunda tutulur, görünüm yeniden çizilir ve odak süzgece döner (change ile; tuş-başı yeniden çizim yoktur).
 function filterBar(ctx,items){
   const doc=ctx.doc;
-  if(catState.cluster!=="ALL"&&!items.some(r=>r.clusterId===catState.cluster))catState.cluster="ALL";
+  if(catState.cluster!=="ALL"&&!items.some(r=>r.clusterId===catState.cluster)){catState.cluster="ALL";catState.page=0}
   const clusterItems=catState.cluster==="ALL"?items:items.filter(r=>r.clusterId===catState.cluster);
-  if(catState.guild!=="ALL"&&!clusterItems.some(r=>r.guildId===catState.guild))catState.guild="ALL";
+  if(catState.guild!=="ALL"&&!clusterItems.some(r=>r.guildId===catState.guild)){catState.guild="ALL";catState.page=0}
   const clusterCounts=countBy(items,"clusterId"),guildCounts=countBy(clusterItems,"guildId");
   const sel=(id,labelKey,value,opts,onChange)=>{
     const control=h(doc,"select",{id,dataset:{focusKey:id},"aria-label":ctx.t(labelKey),on:{change:e=>onChange(e.target.value)}},
@@ -116,13 +116,13 @@ function filterBar(ctx,items){
   const guildOpts=distinctSorted(clusterItems,"guildId").map(g=>({value:g,label:`${g} (${guildCounts.get(g)})`}));
   const apply=keys=>{if(typeof ctx.rerender==="function")ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys})};
   const search=h(doc,"input",{id:"wf-q",type:"search",autocomplete:"off",spellcheck:"false",value:catState.q,"aria-label":ctx.t("workforce.cat.filter.search"),"aria-describedby":"wf-q-hint",dataset:{focusKey:"wf-q"},
-    on:{change:e=>{catState.q=String(e.target.value??"").slice(0,200);apply(["id:wf-q"])}}});
+    on:{change:e=>{catState.q=String(e.target.value??"").slice(0,200);catState.page=0;apply(["id:wf-q"])}}});
   return h(doc,"div",{class:"filter-row wf-filter",role:"group","aria-label":ctx.t("workforce.cat.filterLabel")},
-    sel("wf-f-cluster","workforce.cat.filter.cluster",catState.cluster,clusterOpts,v=>{catState.cluster=v;catState.guild="ALL";apply(["id:wf-f-cluster"])}),
-    sel("wf-f-guild","workforce.cat.filter.guild",catState.guild,guildOpts,v=>{catState.guild=v;apply(["id:wf-f-guild"])}),
+    sel("wf-f-cluster","workforce.cat.filter.cluster",catState.cluster,clusterOpts,v=>{catState.cluster=v;catState.guild="ALL";catState.page=0;apply(["id:wf-f-cluster"])}),
+    sel("wf-f-guild","workforce.cat.filter.guild",catState.guild,guildOpts,v=>{catState.guild=v;catState.page=0;apply(["id:wf-f-guild"])}),
     h(doc,"div",{class:"field"},h(doc,"label",{for:"wf-q",text:ctx.t("workforce.cat.filter.search")}),search,h(doc,"p",{class:"field-hint",id:"wf-q-hint",text:ctx.t("workforce.cat.filter.searchHint")})),
     catState.cluster!=="ALL"||catState.guild!=="ALL"||catState.q?h(doc,"button",{type:"button",class:"btn btn-small",id:"wf-f-clear",dataset:{focusKey:"wf-f-clear"},text:ctx.t("workforce.cat.filter.clear"),
-      on:{click:()=>{catState.cluster="ALL";catState.guild="ALL";catState.q="";apply(["id:wf-q"])}}}):null);
+      on:{click:()=>{catState.cluster="ALL";catState.guild="ALL";catState.q="";catState.page=0;apply(["id:wf-q"])}}}):null);
 }
 
 function filtered(items){
@@ -131,11 +131,13 @@ function filtered(items){
     (!q||`${r.roleId} ${r.title} ${r.guildId} ${r.clusterId}`.toLocaleLowerCase("tr").includes(q)));
 }
 
-// //TR: Rol listesi: gerçek katalog satırları (roleId/başlık/lonca/küme/öncelik/runtime/yeterlilik); satır düğmesi rol tanımını seçer. Görüntü sınırı aşılırsa dürüst "ilk N / M" notu; gizli sayı uydurulmaz.
+// //TR: Rol listesi: gerçek katalog satırları (roleId/başlık/lonca/küme/öncelik/runtime/yeterlilik); satır düğmesi rol tanımını seçer. Görüntü sınırı aşılırsa önceki/sonraki sayfa denetimi ve gerçek süzülmüş diziden "A–B / M" aralık notu; sayı uydurulmaz.
 function roleList(ctx,items){
   const doc=ctx.doc,shown=filtered(items);
   if(!shown.length)return emptyNote(ctx,"workforce.cat.filter.none");
-  const page=shown.slice(0,DISPLAY_LIMIT);
+  const lastPage=Math.max(0,Math.ceil(shown.length/DISPLAY_LIMIT)-1),pageIdx=Math.min(Math.max(0,catState.page),lastPage);
+  catState.page=pageIdx;
+  const page=shown.slice(pageIdx*DISPLAY_LIMIT,(pageIdx+1)*DISPLAY_LIMIT);
   const cols=["workforce.cat.col.role","workforce.cat.col.title","workforce.cat.col.guild","workforce.cat.col.cluster","workforce.cat.col.priority","workforce.cat.col.runtime","workforce.cat.col.proficiency"];
   const table=h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table wf-cat-table"},
     h(doc,"caption",{class:"sr-only",text:ctx.t("workforce.cat.caption")}),
@@ -148,8 +150,14 @@ function roleList(ctx,items){
         h(doc,"td",{text:r.title}),h(doc,"td",{class:"mono",text:r.guildId}),h(doc,"td",{class:"mono",text:r.clusterId}),h(doc,"td",{text:r.priority??MISSING}),
         h(doc,"td",{},statusChip(ctx,r.runtimeStatus)),h(doc,"td",{},statusChip(ctx,r.proficiencyStatus)));
     }))));
-  return [h(doc,"p",{class:"note",dataset:{results:"1"},text:ctx.t("workforce.cat.filter.results",{shown:String(page.length),total:String(shown.length)})}),table,
-    shown.length>DISPLAY_LIMIT?h(doc,"p",{class:"note",dataset:{truncated:"1"},text:ctx.t("workforce.cat.filter.more",{n:String(shown.length-DISPLAY_LIMIT)})}):null];
+  if(shown.length<=DISPLAY_LIMIT)return [h(doc,"p",{class:"note",dataset:{results:"1"},text:ctx.t("workforce.cat.filter.results",{shown:String(page.length),total:String(shown.length)})}),table];
+  const range=h(doc,"p",{class:"note",dataset:{catPage:String(pageIdx+1)},text:ctx.t("workforce.cat.page.range",{from:String(pageIdx*DISPLAY_LIMIT+1),to:String(pageIdx*DISPLAY_LIMIT+page.length),total:String(shown.length)})});
+  // //TR: Sayfa değişimi: indeks yalnız modül belleğinde; önce yeniden çizim beklenir, sonra odak [basılan, kardeş] sırasıyla yerleşir (devre dışı kalan düğmeden odak kaybolmaz).
+  const go=async(n,keys)=>{catState.page=n;if(typeof ctx.rerender==="function")await ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys})};
+  const pager=h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("workforce.cat.page.label"),dataset:{catPager:"1"}},
+    h(doc,"button",{type:"button",class:"btn btn-small",id:"wf-cat-prev",dataset:{focusKey:"wf-cat-prev"},disabled:pageIdx===0,"aria-label":ctx.t("workforce.cat.page.prevLabel"),on:{click:()=>go(pageIdx-1,["id:wf-cat-prev","id:wf-cat-next"])},text:ctx.t("workforce.cat.page.prev")}),
+    h(doc,"button",{type:"button",class:"btn btn-small",id:"wf-cat-next",dataset:{focusKey:"wf-cat-next"},disabled:pageIdx===lastPage,"aria-label":ctx.t("workforce.cat.page.nextLabel"),on:{click:()=>go(pageIdx+1,["id:wf-cat-next","id:wf-cat-prev"])},text:ctx.t("workforce.cat.page.next")}));
+  return [range,table,pager];
 }
 
 const defList=(ctx,titleKey,values)=>{

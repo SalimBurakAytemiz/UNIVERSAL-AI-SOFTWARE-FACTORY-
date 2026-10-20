@@ -344,3 +344,74 @@ describe("test+states settings: EN/TR parity for every key the view uses", () =>
     for (const k of keys) { expect(k in tr && k in en, k).toBe(true); expect(ph(en[k]), k).toBe(ph(tr[k])); expect(tr[k].trim().length, k).toBeGreaterThan(0); expect(en[k].trim().length, k).toBeGreaterThan(0); }
   });
 });
+
+describe("UI-114 settings state legend (static, state-free)", () => {
+  const legendOf = (node: N) => within(node).find(n => n.attrs.get("id") === "settings-legend")!;
+  const FORBIDDEN_DATA = ["pill", "state", "gate", "autonomy", "conn", "connProfile", "profile", "posture", "chip", "verification"];
+  // //TR: Açıklama paneli yapı olarak PILL_KINDS sırasını izler; her dt bir örnek rozet, her dd tanım taşır.
+  it("structure: one dl, one dt/dd pair per PILL_KINDS entry in order, keyed by data-legend-kind", async () => {
+    const {PILL_KINDS} = await load("model.js");
+    for (const lang of ["tr", "en"]) {
+      const {ctx} = await mkCtx({}, lang);
+      const lg = legendOf(await renderView(ctx));
+      expect(lg, lang).toBeTruthy();
+      const nodes = within(lg);
+      expect(nodes.filter(n => n.tagName === "DL").length).toBe(1);
+      expect(nodes.filter(n => n.tagName === "DT").length).toBe(PILL_KINDS.length);
+      expect(nodes.filter(n => n.tagName === "DD").length).toBe(PILL_KINDS.length);
+      expect(nodes.filter(n => n.dataset.legendKind !== undefined).map(n => n.dataset.legendKind)).toEqual([...PILL_KINDS]);
+      expect((nodes.find(n => n.tagName === "DL")!.getAttribute("aria-label") ?? "").length).toBeGreaterThan(0);
+    }
+  });
+  it("honesty: no live-state dataset keys, no title/H1/controls inside the legend", async () => {
+    for (const lang of ["tr", "en"]) {
+      const {ctx} = await mkCtx({}, lang);
+      const lg = legendOf(await renderView(ctx));
+      for (const n of within(lg)) {
+        for (const k of FORBIDDEN_DATA) expect(k in n.dataset, `${lang} ${k}`).toBe(false);
+        expect(n.getAttribute("title"), lang).toBeFalsy();
+        expect(["H1", "INPUT", "SELECT", "TEXTAREA", "BUTTON"]).not.toContain(n.tagName);
+      }
+      const note = within(lg).find(n => n.tagName === "P" && n.className.includes("note"))!;
+      expect(note.getAttribute("role")).toBeFalsy();
+      expect(note.className).not.toMatch(/note-/);
+    }
+  });
+  it("state-free: identical between healthy and all-reads-fail feeds; no digits, no raw key, no 'Connected'", async () => {
+    for (const lang of ["tr", "en"]) {
+      const a = legendOf(await renderView((await mkCtx({}, lang)).ctx));
+      const b = legendOf(await renderView((await mkCtx({execOff: true, controlOff: true, healthOff: true, factoryOff: true}, lang)).ctx));
+      expect(text(a), lang).toBe(text(b));
+      expect(within(a).map(n => n.dataset.legendKind)).toEqual(within(b).map(n => n.dataset.legendKind));
+      expect(text(a)).not.toMatch(/\d/);
+      expect(text(a)).not.toContain("settings.legend.");
+      if (lang === "en") expect(text(a)).not.toContain("Connected");
+    }
+  });
+  it("locale parity: exactly 16 settings.legend.* keys per locale, non-empty, no placeholders", async () => {
+    const {PILL_KINDS} = await load("model.js");
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const want = ["settings.legend.lead", "settings.legend.title", ...PILL_KINDS.map((k: string) => `settings.legend.${k}`)].sort();
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const d of [en, tr]) expect(Object.keys(d).filter(k => k.startsWith("settings.legend.")).sort()).toEqual(want);
+    for (const k of want) {
+      expect(en[k].trim().length, k).toBeGreaterThan(0); expect(tr[k].trim().length, k).toBeGreaterThan(0);
+      expect(ph(en[k]), k).toBe(ph(tr[k])); expect(ph(en[k]), k).toBe("");
+    }
+  });
+  it("semantics: VERIFIED, NOT_VERIFIED, NOT_EXECUTED and PRODUCT_VERIFIED stay distinct", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const e = (k: string) => en[`settings.legend.${k}`];
+    expect(e("PRODUCT_VERIFIED")).toContain("verified sandbox"); expect(e("PRODUCT_VERIFIED")).toContain("passed");
+    expect(e("NOT_EXECUTED")).toContain("not run");
+    expect(e("NOT_VERIFIED")).toContain("not verified");
+    expect(e("VERIFIED")).toContain("not product verification");
+    expect(en["settings.legend.lead"]).toContain("reference");
+    expect(tr["settings.legend.PRODUCT_VERIFIED"]).toContain("sandbox");
+    expect(new Set(["VERIFIED", "NOT_VERIFIED", "NOT_EXECUTED", "PRODUCT_VERIFIED"].map(e)).size).toBe(4);
+  });
+  it("settings.js source stays free of innerHTML, web storage, randomness and timers", () => {
+    const src = fs.readFileSync(path.join(rend, "views", "settings.js"), "utf8");
+    for (const w of ["innerHTML", "localStorage", "sessionStorage", "indexedDB", "Math.random", "setTimeout", "setInterval"]) expect(src.includes(w), w).toBe(false);
+  });
+});

@@ -1,6 +1,7 @@
 // //TR: Bu görünüm Ayarlar alanıdır (UX WP-SETTINGS): referans-sınıf premium, yalnız gerçek veriye bağlı dürüst bölümler — (1) Claude bağlantı durumu (iki ayrı UASCO profili: uygulayıcı + salt-okunur denetçi; CONNECTED yalnız gerçek giriş sinyalinden, K-1; aksi NOT_CONNECTED/NOT_VERIFIED), (2) Otonomi/yönetişim politikası SALT-OKUNUR gösterimi (Global Stop otonomi anahtarı ve fail-closed yürütme kapısı gerçek sinyallerden; korumalı politika Founder yönetiminde, burada DÜZENLENEMEZ), (3) Uygulama/sürüm + güvenlik duruşu (imzasız geliştirme yapısı, fail-closed kapı). Ayrıca mevcut dil/kısayol/AI yürütücüleri/yerel kimlik panelleri korunur. WP2 token/bileşenleri yeniden kullanılır; yalnız h()/textContent; durum/politika değeri asla uydurulmaz; hiçbir korumalı/yönetilen dosyayı yazan kontrol yoktur.
 import {h,panel,stateNote,emptyNote,badge,statePill} from "../components.js";
 import {LANGS} from "../i18n.js";
+import {PILL_KINDS} from "../model.js";
 import {executorsPanel} from "./executors-panel.js";
 
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
@@ -102,6 +103,19 @@ function appPanel(ctx,health,factory,sandbox){
     posture);
 }
 
+// //TR: Statik durum açıklamaları (UI-114): 14 PILL_KINDS rozetini tanımlar; veri okumaz, güncel durum iddia etmez; örnek rozetlerin data-pill'i kaldırılır (dürüstlük testleri gerçek rozetleri sayar).
+function legendPanel(ctx){
+  const doc=ctx.doc;
+  const dl=h(doc,"dl",{class:"kv","aria-label":ctx.t("settings.legend.title")});
+  for(const k of PILL_KINDS){
+    const pill=statePill(ctx,k);
+    delete pill.dataset.pill;
+    pill.dataset.legendKind=k;
+    dl.append(h(doc,"dt",{},pill),h(doc,"dd",{text:ctx.t(`settings.legend.${k}`)}));
+  }
+  return panel(ctx,{titleKey:"settings.legend.title",id:"settings-legend"},h(doc,"p",{class:"note",text:ctx.t("settings.legend.lead")}),dl);
+}
+
 export async function render(ctx){
   const doc=ctx.doc;
   const [exec,control,health,factory]=await Promise.all([ctx.api.executors(),ctx.api.control(),ctx.api.health(),ctx.api.raw("/v1/factory")]);
@@ -112,6 +126,7 @@ export async function render(ctx){
     await executorsPanel(ctx),
     governancePanel(ctx,control,sandbox),
     appPanel(ctx,health,factory,sandbox),
+    legendPanel(ctx),
     panel(ctx,{titleKey:"settings.language",id:"settings-lang"},langs,h(doc,"p",{class:"note",text:ctx.t("settings.languageNote")})),
     panel(ctx,{titleKey:"settings.shortcuts",id:"settings-keys"},h(doc,"dl",{class:"kv"},h(doc,"dt",{},h(doc,"kbd",{text:"Ctrl+K"})),h(doc,"dd",{text:ctx.t("shortcut.search")}),h(doc,"dt",{},h(doc,"kbd",{text:"Esc"})),h(doc,"dd",{text:ctx.t("shortcut.esc")}),h(doc,"dt",{},h(doc,"kbd",{text:"Tab"})),h(doc,"dd",{text:ctx.t("shortcut.tab")}))),
     panel(ctx,{titleKey:"settings.principal",id:"settings-principal"},h(doc,"p",{class:"mono",text:ctx.principal}),h(doc,"p",{class:"note",text:ctx.t("settings.principalNote")})));
