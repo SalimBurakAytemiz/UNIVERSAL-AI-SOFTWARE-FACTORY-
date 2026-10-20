@@ -1084,3 +1084,41 @@ describe("UI-026 task inspector", () => {
     expect(keys("en.js")).toEqual(keys("tr.js"));
   });
 });
+
+describe("UI-025 task and work-run timeline", () => {
+  const RUN = {runId: "run_tl000001", missionId: MID, status: "RUNNING", startedAt: "2026-10-14T10:00:00.000Z", checkpoints: [{name: "PLAN", at: "2026-10-14T10:05:00.000Z"}, {name: "NOTIME"}]};
+  const getT = (runs: any[] = [RUN]) => (p: string) => {
+    const t: Record<string, any> = {"/v1/projects": {projects: [project()]}, "/v1/missions": {missions: [mission()]}, "/v1/work-runs": {workRuns: runs},
+      [`/v1/missions/${MID}`]: {mission: mission(), tasks: []}};
+    for (const k of Object.keys(t)) if (p === k || p.startsWith(k + "?")) return t[k];
+    return undefined;
+  };
+  it("renders mission, run and checkpoint events in time order with UNKNOWN for a missing timestamp, read-only", async () => {
+    const {ctx, doc, calls} = await mkCtx({get: getT()});
+    const view = await load(rend, "views", "work.js");
+    forms.selection.missionId = MID;
+    const root = mount(doc, await view.render(ctx));
+    const tl = byId(root, "work-wtl")!;
+    expect(tl.dataset.wtlState).toBe("VERIFIED");
+    const items = byData(root, "wtlKind", "mission").concat(byData(root, "wtlKind", "run"), byData(root, "wtlKind", "checkpoint"));
+    expect(items.length).toBe(4);
+    expect(byData(root, "wtlAt", "UNKNOWN").length).toBe(1);
+    expect(text(byData(root, "wtlAt", "UNKNOWN")[0])).toContain("UNKNOWN");
+    expect(calls.post).toEqual([]);
+  });
+  it("derive is UNKNOWN for non-VERIFIED mission (incl. STALE), omits runs when unreadable, and orders unknown times last", async () => {
+    const core = await load(rend, "work-core.js");
+    const det = {state: "VERIFIED", mission: {missionId: MID, title: "T", status: "PLANNED", createdAt: "2026-10-14T09:00:00.000Z", tasks: []}};
+    expect(core.deriveWorkTimeline({...det, state: "STALE"}, {state: "VERIFIED", items: []})).toEqual({state: "UNKNOWN", runsKnown: false, events: []});
+    const noRuns = core.deriveWorkTimeline(det, {state: "UNAVAILABLE", items: []});
+    expect(noRuns.runsKnown).toBe(false);
+    expect(noRuns.events.map((e: any) => e.kind)).toEqual(["mission"]);
+    const d = core.deriveWorkTimeline(det, {state: "VERIFIED", items: [{runId: "run_a", startedAt: null, status: "RUNNING", checkpoints: []}, {runId: "run_b", startedAt: "2026-10-14T08:00:00.000Z", status: "DONE", checkpoints: []}]});
+    expect(d.events.map((e: any) => e.id)).toEqual(["run_b", MID, "run_a"]);
+  });
+  it("locales carry the same timeline keys in en and tr", async () => {
+    const keys = (f: string) => [...read(rend, "locales", f).matchAll(/"(work\.wtl\.[^"]+)"/g)].map(m => m[1]).sort();
+    expect(keys("en.js").length).toBeGreaterThan(6);
+    expect(keys("en.js")).toEqual(keys("tr.js"));
+  });
+});
