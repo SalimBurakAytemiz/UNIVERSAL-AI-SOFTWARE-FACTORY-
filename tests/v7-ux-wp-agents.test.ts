@@ -787,3 +787,241 @@ describe("UI-133 agent identity card on role detail (UNKNOWN without evidence, n
     expect(fn).not.toMatch(/innerHTML|dataset:\{(runId|fleetRunId)/);
   });
 });
+
+// //TR: UI-028 rol kataloğu sayfalama: 150'den fazla süzülmüş rolde önceki/sonraki sayfa denetimi ve gerçek diziden "A–B / M" aralık notu; sayfa indeksi yalnız modül belleğinde, süzgeç/yedek/sıfırlamada 0'a döner, kısaltılmış katalogda kırpılır; yeni API yolu/yazma yok; yalnız DOĞRULANMIŞ okumada görünür; odak yeniden çizimden sonra [basılan, kardeş] sırasıyla yerleşir; TR/EN eşit.
+describe("UI-028 role catalogue paging (renderer-only, honest ranges)", () => {
+  const ids = (n: N) => byData(n, "roleBtn").map(b => b.dataset.roleBtn);
+  const REG_IDS = REG.map(r => r.roleId);
+  // Focus-capable adapter (test-local): activeElement, contains, querySelectorAll, disabled from the attribute.
+  class FN extends N {
+    get disabled() { return this.attrs.has("disabled"); }
+    get isConnected() { return true; }
+    // a detached (replaced) subtree is not contained: every ancestor link must still list the child
+    contains(n: N | null): boolean { for (let x: N | null = n; x; x = x.parent) { if (x === this) return true; if (!x.parent?.children.includes(x)) return false; } return false; }
+    querySelectorAll(_s: string): N[] { return all(this).filter(n => n.id !== "" || "focusKey" in n.dataset); }
+    focus() { if (!this.disabled) this.doc.focused = this; }
+  }
+  class FD extends D {
+    get activeElement(): N { return this.focused ?? this.body; }
+    createElement(t: string) { return new FN(this, t); }
+    createTextNode(s: string) { const n = new FN(this, "#text"); n._text = s; return n; }
+  }
+  const mk = async (rolesFn?: (p: string) => any, lang = "en", docCls: new () => D = D) => {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    const doc = new docCls(), store = st.createStore(null), calls: string[] = [];
+    const bridge = {apiGet: async (p: string) => {
+      calls.push(p);
+      if (p.startsWith("/v1/roles/")) { const d = roleDetail(p.slice("/v1/roles/".length)); if (!d) throw new Error(`${p}: HTTP 404`); return d; }
+      if (p.startsWith("/v1/roles")) { if (rolesFn) { const v = rolesFn(p); if (v === "404") throw new Error(`${p}: HTTP 404`); if (v === "off") throw new Error("fetch failed"); return v; } return rolesPage(p); }
+      if (p === "/v1/cockpit") return COCKPIT;
+      if (p === "/v1/agents") return AGENTS;
+      if (p === "/v1/work-runs") return {workRuns: []};
+      throw new Error(`${p}: HTTP 404`);
+    }};
+    const api = apiMod.createApi({bridge, store}), t = (k: string, v?: any) => i18n.translate(lang, k, v);
+    const ctx: any = {doc, store, api, i18n: {lang, t}, t, navigate: () => {}, rerender: () => {}, settleFocus: () => {}, principal: "FOUNDER_LOCAL"};
+    return {ctx, doc, calls};
+  };
+  const view = async () => load("views", "workforce.js");
+  const synth = (n: number, cluster: string, start = 1000) => Array.from({length: n}, (_, i) => ({roleId: `UASCO-${start + i}`, title: `Synth ${start + i}`, guildId: "G01", clusterId: cluster, priority: "P1", runtimeStatus: "UNKNOWN", proficiencyStatus: "NOT_EVALUATED"}));
+  const synthPage = (items: any[]) => (p: string) => { const u = new URL("http://x" + p), cur = u.searchParams.get("cursor"), lim = Number(u.searchParams.get("limit")); const after = cur ? items.filter(r => r.roleId > cur) : items, pg = after.slice(0, lim); return {total: items.length, items: pg, nextCursor: after.length > lim ? pg[pg.length - 1].roleId : null}; };
+  const click = (n: N, id: string) => byId(n, id)!.fire("click");
+
+  it("unfiltered 599-role catalogue: exactly one labelled pager, pages 1-4 in registry order with real ranges, no truncated note", async () => {
+    const v = await view(); v.resetWorkforceView();
+    const {ctx} = await mk();
+    let node = (await v.render(ctx, ROUTE)) as N;
+    const pagers = byData(node, "catPager");
+    expect(pagers.length).toBe(1);
+    expect(pagers[0].getAttribute("role")).toBe("group");
+    expect(pagers[0].getAttribute("aria-label")).toBe(ctx.t("workforce.cat.page.label"));
+    expect(pagers[0].className).toBe("btn-row");
+    for (const id of ["wf-cat-prev", "wf-cat-next"]) { const b = byId(node, id)!; expect(b.getAttribute("type")).toBe("button"); expect(b.className).toBe("btn btn-small"); }
+    expect(byId(node, "wf-cat-prev")!.getAttribute("aria-label")).toBe(ctx.t("workforce.cat.page.prevLabel"));
+    expect(byId(node, "wf-cat-next")!.getAttribute("aria-label")).toBe(ctx.t("workforce.cat.page.nextLabel"));
+    const browse = byId(node, "wf-browse")!;
+    expect(byData(browse, "results").length).toBe(0);
+    expect(byData(browse, "truncated").length).toBe(0);
+    expect(ids(node)[0]).toBe(REG_IDS[0]);
+    expect(byData(node, "catPage")[0].dataset.catPage).toBe("1");
+    expect(byId(node, "wf-cat-prev")!.attrs.has("disabled")).toBe(true);
+    const want = [[150, 300], [300, 450], [450, 599]];
+    for (let i = 0; i < 3; i++) {
+      click(node, "wf-cat-next");
+      node = (await v.render(ctx, ROUTE)) as N;
+      const got = ids(node);
+      expect(got[0]).toBe(REG_IDS[want[i][0]]);
+      expect(got[got.length - 1]).toBe(REG_IDS[want[i][1] - 1]);
+      const note = byData(node, "catPage");
+      expect(note.length).toBe(1);
+      expect(note[0].dataset.catPage).toBe(String(i + 2));
+      expect(text(note[0])).toBe(ctx.t("workforce.cat.page.range", {from: String(want[i][0] + 1), to: String(want[i][1]), total: "599"}));
+      expect(byData(byId(node, "wf-browse")!, "truncated").length).toBe(0);
+    }
+    expect(byId(node, "wf-cat-next")!.attrs.has("disabled")).toBe(true);
+    expect(byId(node, "wf-cat-prev")!.attrs.has("disabled")).toBe(false);
+    click(node, "wf-cat-prev");
+    node = (await v.render(ctx, ROUTE)) as N;
+    expect(ids(node)[0]).toBe(REG_IDS[300]);
+    v.resetWorkforceView();
+  });
+
+  it("150 roles or fewer (single cluster): no pager, no range note, the existing results note is unchanged", async () => {
+    const v = await view(); v.resetWorkforceView();
+    const {ctx} = await mk();
+    const cl = REG[0].clusterId, n = REG.filter(r => r.clusterId === cl).length;
+    expect(n).toBeLessThanOrEqual(150);
+    let node = (await v.render(ctx, ROUTE)) as N;
+    const sel = byId(node, "wf-f-cluster")!; sel.value = cl; sel.fire("change");
+    node = (await v.render(ctx, ROUTE)) as N;
+    expect(byData(node, "catPager").length).toBe(0);
+    expect(byData(node, "catPage").length).toBe(0);
+    expect(text(byData(node, "results")[0])).toBe(ctx.t("workforce.cat.filter.results", {shown: String(n), total: String(n)}));
+    v.resetWorkforceView();
+  });
+
+  it("page index resets on every filter handler, resetWorkforceView and the cluster fallback; the clamp never shows an empty page; roleId is kept", async () => {
+    const v = await view(); v.resetWorkforceView();
+    const A = synth(200, "CL07");
+    const a = await mk(synthPage(A));
+    let node = (await v.render(a.ctx, ROUTE)) as N;
+    click(node, "wf-cat-next"); node = (await v.render(a.ctx, ROUTE)) as N;
+    expect(text(byData(node, "catPage")[0])).toBe(a.ctx.t("workforce.cat.page.range", {from: "151", to: "200", total: "200"}));
+    // clamp: same module state, catalogue shrank to 160 → still a valid last page, never empty
+    const small = await mk(synthPage(synth(160, "CL07")));
+    node = (await v.render(small.ctx, ROUTE)) as N;
+    expect(text(byData(node, "catPage")[0])).toBe(small.ctx.t("workforce.cat.page.range", {from: "151", to: "160", total: "160"}));
+    expect(ids(node).length).toBe(10);
+    // select a role, page, selection is kept
+    click(node, "wf-cat-prev"); node = (await v.render(small.ctx, ROUTE)) as N;
+    byData(node, "roleBtn")[0].fire("click"); node = (await v.render(small.ctx, ROUTE)) as N;
+    const picked = byId(node, "wf-detail-h")?.dataset.roleId ?? byData(node, "roleId").find(x => x.id === "wf-detail-h")?.dataset.roleId;
+    click(node, "wf-cat-next"); node = (await v.render(small.ctx, ROUTE)) as N;
+    expect(byId(node, "wf-detail-h")?.dataset.roleId).toBe(picked);
+    v.resetWorkforceView();
+    // fallback: filter to CL07 on page 2, then a catalogue that lacks CL07 but still has >150 roles must be on page 1 at its first role
+    node = (await v.render(a.ctx, ROUTE)) as N;
+    const cs = byId(node, "wf-f-cluster")!; cs.value = "CL07"; cs.fire("change");
+    node = (await v.render(a.ctx, ROUTE)) as N;
+    click(node, "wf-cat-next"); node = (await v.render(a.ctx, ROUTE)) as N;
+    expect(byData(node, "catPage")[0].dataset.catPage).toBe("2");
+    const B = synth(170, "CL08", 2000);
+    const b = await mk(synthPage(B));
+    node = (await v.render(b.ctx, ROUTE)) as N;
+    expect(byData(node, "catPage")[0].dataset.catPage).toBe("1");
+    expect(ids(node)[0]).toBe("UASCO-2000");
+    // each filter handler and Clear reset to page 1
+    for (const act of [
+      (n: N) => { const s = byId(n, "wf-q")!; s.value = "Synth"; s.fire("change"); },
+      (n: N) => { const s = byId(n, "wf-f-cluster")!; s.value = "ALL"; s.fire("change"); },
+      (n: N) => { const s = byId(n, "wf-f-guild")!; s.value = "ALL"; s.fire("change"); },
+      (n: N) => { n && byId(n, "wf-f-clear")?.fire("click"); },
+    ]) {
+      node = (await v.render(b.ctx, ROUTE)) as N;
+      if (byData(node, "catPage")[0].dataset.catPage !== "2") { click(node, "wf-cat-next"); node = (await v.render(b.ctx, ROUTE)) as N; }
+      expect(byData(node, "catPage")[0].dataset.catPage).toBe("2");
+      act(node);
+      node = (await v.render(b.ctx, ROUTE)) as N;
+      expect(byData(node, "catPage")[0].dataset.catPage).toBe("1");
+    }
+    click(node, "wf-cat-next"); node = (await v.render(b.ctx, ROUTE)) as N;
+    v.resetWorkforceView();
+    node = (await v.render(b.ctx, ROUTE)) as N;
+    expect(byData(node, "catPage")[0].dataset.catPage).toBe("1");
+    v.resetWorkforceView();
+  });
+
+  it("paging adds no API route or query key; the click handler calls no ctx.api method; source uses only the allowed api methods", async () => {
+    const v = await view(); v.resetWorkforceView();
+    const {ctx, calls} = await mk();
+    let node = (await v.render(ctx, ROUTE)) as N;
+    const before = calls.length;
+    click(node, "wf-cat-next");
+    expect(calls.length).toBe(before);
+    node = (await v.render(ctx, ROUTE)) as N;
+    byData(node, "roleBtn")[0].fire("click");
+    node = (await v.render(ctx, ROUTE)) as N;
+    click(node, "wf-cat-next"); node = (await v.render(ctx, ROUTE)) as N;
+    const okPath = /^(\/v1\/cockpit|\/v1\/agents|\/v1\/work-runs|\/v1\/roles\?limit=100|\/v1\/roles\?limit=100&cursor=UASCO-\d{4}|\/v1\/roles\/UASCO-\d{4})$/;
+    for (const p of calls) { expect(p, p).toMatch(okPath); expect(p).not.toMatch(/page|offset/i); }
+    const src = fs.readFileSync(path.join(rend, "views", "workforce.js"), "utf8");
+    expect([...new Set([...src.matchAll(/ctx\.api\.(\w+)/g)].map(m => m[1]))].sort()).toEqual(["agentCount", "cockpit", "roleCatalog", "roleDetail", "workRuns"]);
+    expect(src).not.toMatch(/apiPost|window\.uasco|localStorage|sessionStorage|Math\.random|innerHTML/);
+    expect(src).not.toContain("workforce.cat.filter.more");
+    v.resetWorkforceView();
+  });
+
+  it("each pager click sets the page, awaits rerender, then settles focus with [pressed, sibling]; Next onto the last page leaves focus on the enabled Previous", async () => {
+    const v = await view(); v.resetWorkforceView();
+    const {ctx, doc: d0} = await mk(undefined, "en", FD), doc = d0 as FD;
+    const container = doc.createElement("main"); doc.body.append(container);
+    const events: string[] = [], keysSeen: string[][] = [];
+    let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+    let node = (await v.render(ctx, ROUTE)) as N;
+    const mount = async () => { node = (await v.render(ctx, ROUTE)) as N; container.replaceChildren(node); };
+    ctx.rerender = async () => { events.push("rerender-start"); await gate; await mount(); events.push("rerender-done"); };
+    ctx.settleFocus = ({keys}: {keys: string[]}) => { events.push("settle"); keysSeen.push(keys); return (settle as any)(doc, container, {keys}); };
+    const {settleFocus: settle} = await load("focus.js");
+    await mount();
+    const p1 = byId(node, "wf-cat-next")!; p1.fire("click");
+    expect(events).toEqual(["rerender-start"]);
+    release(); await new Promise(r => setTimeout(r, 0));
+    expect(events).toEqual(["rerender-start", "rerender-done", "settle"]);
+    expect(keysSeen[0]).toEqual(["id:wf-cat-next", "id:wf-cat-prev"]);
+    // go to page 3 then press Next onto page 4 (last): Next becomes disabled, focus must land on Previous
+    ctx.rerender = async () => { await mount(); };
+    for (let i = 0; i < 2; i++) { byId(node, "wf-cat-next")!.fire("click"); await new Promise(r => setTimeout(r, 0)); }
+    expect(byId(node, "wf-cat-next")!.attrs.has("disabled")).toBe(true);
+    expect(doc.activeElement.id).toBe("wf-cat-prev");
+    byId(node, "wf-cat-prev")!.fire("click"); await new Promise(r => setTimeout(r, 0));
+    expect(keysSeen[keysSeen.length - 1]).toEqual(["id:wf-cat-prev", "id:wf-cat-next"]);
+    v.resetWorkforceView();
+  });
+
+  it("honest state: no pager or range for a 404, offline, malformed or partial catalogue, or a no-match search; no NaN/undefined in any range", async () => {
+    const v = await view();
+    for (const roles of ["404", "off", {items: "x", total: 3}, {total: 600, items: [], nextCursor: null}] as any[]) {
+      v.resetWorkforceView();
+      const {ctx} = await mk(() => roles);
+      const node = (await v.render(ctx, ROUTE)) as N;
+      expect(byId(node, "wf-browse")).toBeNull();
+      expect(byData(node, "catPager").length).toBe(0);
+      expect(byData(node, "catPage").length).toBe(0);
+    }
+    v.resetWorkforceView();
+    const {ctx} = await mk();
+    let node = (await v.render(ctx, ROUTE)) as N;
+    const q = byId(node, "wf-q")!; q.value = "zzzz-no-such-role"; q.fire("change");
+    node = (await v.render(ctx, ROUTE)) as N;
+    expect(byData(node, "catPager").length).toBe(0);
+    expect(text(byId(node, "wf-browse")!)).toContain(ctx.t("workforce.cat.filter.none"));
+    v.resetWorkforceView();
+    node = (await v.render(ctx, ROUTE)) as N;
+    expect(text(byData(node, "catPage")[0])).not.toMatch(/NaN|undefined/);
+    v.resetWorkforceView();
+  });
+
+  it("default render has no duplicate ids (pager included) and uses only feature-unique data attributes", async () => {
+    const v = await view(); v.resetWorkforceView();
+    const {ctx} = await mk();
+    const node = (await v.render(ctx, ROUTE)) as N;
+    const idl = all(node).map(n => n.id).filter(Boolean);
+    expect(new Set(idl).size).toBe(idl.length);
+    for (const el of [...byData(node, "catPager"), ...byData(node, "catPage")]) { expect("truncated" in el.dataset || "results" in el.dataset || "runId" in el.dataset).toBe(false); }
+    v.resetWorkforceView();
+  });
+
+  it("locales: new keys are EN/TR-identical in placeholders, TR differs from EN, labels contain the visible text, filter.more is removed", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const keys = ["label", "prev", "next", "prevLabel", "nextLabel", "range"].map(k => `workforce.cat.page.${k}`);
+    const ph = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort();
+    for (const k of keys) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); expect(tr[k]).not.toBe(en[k]); expect(ph(tr[k])).toEqual(ph(en[k])); }
+    expect(ph(en["workforce.cat.page.range"])).toEqual(["from", "to", "total"]);
+    for (const d of [en, tr]) {
+      expect(d["workforce.cat.page.prevLabel"]).toContain(d["workforce.cat.page.prev"]);
+      expect(d["workforce.cat.page.nextLabel"]).toContain(d["workforce.cat.page.next"]);
+      expect("workforce.cat.filter.more" in d).toBe(false);
+    }
+  });
+});
