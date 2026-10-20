@@ -1,7 +1,7 @@
 // //TR: Bu görünüm Skill Academy'dir (Öğrenme & Yetkinlik; FA-V2-PRODUCT): YALNIZ salt-okunur GET /v1/academy gerçek okuma-modelinden okunur ve HİÇBİR veri uydurulmaz. KRİTİK DÜRÜSTLÜK: bu bir öğrenme/yetkinlik KATALOĞUDUR; hiçbir rolün sertifikalı ya da hiçbir ajanın eğitilmiş olduğunun KANITI DEĞİLDİR. Terfi etmiş öğrenme yalnız READONLY_KNOWLEDGE / SKILL_CANDIDATE_NOT_EXECUTABLE'dır (çalıştırılabilir değil), authorityEffect NONE'dır; sertifikalı sayısı daima 0 gösterilir ve proficiency NOT_EVALUATED olarak dürüstçe belirtilir. Backend verisi yoksa dürüst EMPTY/UNAVAILABLE gösterilir. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
 import {h,panel,statePill,kpiTile,badge,stateNote,emptyNote} from "../components.js";
 import {MISSING} from "../model.js";
-import {ACADEMY_PATH,PROMOTED_STATUSES} from "../academy-core.js";
+import {ACADEMY_PATH,PROMOTED_STATUSES,LEARNING_STATUSES} from "../academy-core.js";
 
 const isLive=res=>res&&res.state==="VERIFIED";
 /** Okuma hatasının ayrık dürüst durumu; uydurma yok. */
@@ -55,6 +55,22 @@ function learningStatusPill(ctx,l){
   const promoted=l.promoted;
   return h(ctx.doc,"span",{},statePill(ctx,promoted?"NOT_VERIFIED":"NOT_EXECUTED",{label:l.status}),
     promoted?badge(ctx,ctx.t("academy.readonlyBadge"),"badge-notverified"):null);
+}
+
+/** //TR: Yaşam döngüsü durum sayımları: yalnız DOĞRULANMIŞ okumada res.byStatus'tan; okunamazsa sayı (0 dahil) gösterilmez, boşsa 14 sıfır satırı yerine boş not. */
+function lifecyclePanel(ctx,res){
+  const doc=ctx.doc;
+  let body;
+  if(!isLive(res))body=stateBlock(ctx,res);
+  else if(!res.learnings.length)body=emptyNote(ctx,"academy.lifecycle.empty");
+  else{
+    const rows=LEARNING_STATUSES.map(s=>h(doc,"tr",{dataset:{academyLifecycleStatus:s,academyLifecycleCount:String(res.byStatus[s]||0),academyLifecyclePromoted:PROMOTED_STATUSES.includes(s)?"1":"0"}},
+      h(doc,"td",{},mono(doc,s),PROMOTED_STATUSES.includes(s)?[" ",badge(ctx,ctx.t("academy.readonlyBadge"),"badge-notverified")]:null),
+      h(doc,"td",{class:"mono",text:String(res.byStatus[s]||0)})));
+    body=tableWrap(ctx,"academy-lifecycle-table","academy.lifecycle.title",["academy.lifecycle.colStatus","academy.lifecycle.colCount"],rows);
+  }
+  return panel(ctx,{titleKey:"academy.lifecycle.title",id:"academy-lifecycle",className:"academy-section"},
+    h(doc,"p",{class:"note",text:ctx.t("academy.lifecycle.lead")}),body);
 }
 
 function learningsPanel(ctx,res){
@@ -192,6 +208,7 @@ export async function render(ctx){
     header(ctx),
     kpis(ctx,res),
     proficiencyPanel(ctx),
+    lifecyclePanel(ctx,res),
     learningsPanel(ctx,res),
     knowledgePanel(ctx,res),
     evidencePanel(ctx,res),

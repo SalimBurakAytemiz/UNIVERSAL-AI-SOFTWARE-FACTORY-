@@ -310,8 +310,9 @@ describe("WP-ACADEMY — accessibility", () => {
     const grp = all(root).find(n => n.getAttribute("role") === "group")!;
     expect((grp.getAttribute("aria-label") ?? "").length).toBeGreaterThan(0);
     expect(byData(root, "honesty")!.getAttribute("role")).toBe("note");
+    // UI-035: yaşam döngüsü tablosu eklendi (3→4); aynı caption/th scope=col denetimleri yeni tabloya da uygulanır.
     const tables = all(root).filter(n => n.tagName === "TABLE");
-    expect(tables.length).toBe(3);
+    expect(tables.length).toBe(4);
     for (const t of tables) {
       const cap = t.children.find(c => c.tagName === "CAPTION")!;
       expect(cap.textContent.length).toBeGreaterThan(0);
@@ -402,5 +403,46 @@ describe("WP-ACADEMY — placeholder parity", () => {
       const keys = (d: any) => Object.keys(d).filter(k => k.startsWith("academy.evidence.")).sort();
       expect(keys(en).length).toBeGreaterThan(10); expect(keys(tr)).toEqual(keys(en));
     });
+  });
+});
+
+describe("UI-035 learning lifecycle counts", () => {
+  const rows = (root: N) => all(root).filter(n => "academyLifecycleStatus" in n.dataset);
+  it("lists all 14 statuses in core order with counts summing to learnings.length (verified)", async () => {
+    const academy = await load("views", "academy.js"), core = await load("academy-core.js");
+    const {ctx, calls} = await mkCtx(p => (p === "/v1/academy" ? liveAcademy({learnings: [PROMOTED, OPEN, {...OPEN, learningId: "lrn_" + "44".repeat(12)}, {learningId: "bad"}]}) : fail(p)));
+    const root = await academy.render(ctx);
+    expect(calls).toEqual(["/v1/academy"]);
+    const rs = rows(root);
+    expect(rs.map(r => r.dataset.academyLifecycleStatus)).toEqual([...core.LEARNING_STATUSES]);
+    expect(rs.length).toBe(14);
+    expect(rs.reduce((a, r) => a + Number(r.dataset.academyLifecycleCount), 0)).toBe(3);
+    expect(rs.find(r => r.dataset.academyLifecycleStatus === "GAP_DETECTED")!.dataset.academyLifecycleCount).toBe("2");
+    expect(rs.find(r => r.dataset.academyLifecycleStatus === "REVOKED")!.dataset.academyLifecycleCount).toBe("0");
+    const panel = byId(root, "academy-lifecycle")!;
+    expect(all(panel).some(n => ["BUTTON", "A", "FORM"].includes(n.tagName))).toBe(false);
+    expect(all(panel).find(n => n.tagName === "CAPTION")).toBeTruthy();
+    expect(all(panel).filter(n => n.tagName === "TH").every(n => n.getAttribute("scope") === "col")).toBe(true);
+    expect(panel.textContent).not.toMatch(/academy\.lifecycle\./);
+    expect(panel.textContent).not.toMatch(/certified|trained/i);
+    expect(kpi(root, "academy-certified")!.textContent).toContain("0");
+    expect(kpi(root, "academy-certified")!.textContent).toContain("NOT_VERIFIED");
+    expect(rs.filter(r => r.dataset.academyLifecyclePromoted === "1").map(r => r.dataset.academyLifecycleStatus)).toEqual(core.PROMOTED_STATUSES);
+  });
+  it("shows state block and no counts when not verified; empty note on zero learnings", async () => {
+    const academy = await load("views", "academy.js");
+    for (const fn of [() => { throw new Error("fetch failed"); }, () => fail("/v1/academy"), () => null]) {
+      const {ctx} = await mkCtx(fn); const root = await academy.render(ctx);
+      expect(rows(root).length).toBe(0);
+      expect(all(byId(root, "academy-lifecycle")!).some(n => n.getAttribute("role") === "status")).toBe(true);
+    }
+    const {ctx} = await mkCtx(() => liveAcademy({learnings: []})); const root = await academy.render(ctx);
+    expect(rows(root).length).toBe(0);
+    expect(byId(root, "academy-lifecycle")!.textContent).not.toMatch(/academy\.lifecycle\./);
+  });
+  it("has EN/TR parity for academy.lifecycle.*", async () => {
+    const en = (await load("locales", "en.js")).default, tr = (await load("locales", "tr.js")).default;
+    const ks = (d: any) => Object.keys(d).filter(k => k.startsWith("academy.lifecycle.")).sort();
+    expect(ks(en).length).toBe(5); expect(ks(tr)).toEqual(ks(en));
   });
 });
