@@ -2,7 +2,7 @@
 import {h,panel,stateNote,emptyNote,statusPill,badge} from "../components.js";
 import {drafts,statusBlock,setStatus,focusResult,settle} from "../forms.js";
 import {describePostResult} from "../work-core.js";
-import {buildPrepareRequest,buildAcceptanceRequest,isSourceComplete} from "../delivery-core.js";
+import {buildPrepareRequest,buildAcceptanceRequest,isSourceComplete,deliverySourceState} from "../delivery-core.js";
 import {axisBadges,axisLabel,deliveryAckBlock,deliveryAckState,resetDeliveryAcks} from "../m1a.js";
 
 export const deliveryStatusId=runId=>`dl-${runId}`;
@@ -54,24 +54,35 @@ export async function exportDelivery(ctx,d){
   setStatus(sid,msg);await ctx.rerender();focusResult(ctx,sid,[`id:dl-export-${d.runId}`]);return {ok:msg.ok};
 }
 
+/** Kaynak durumu notu (metin + etiket, yalnız renk değil); VALID yalnız "güncel head'den üretildi" der, doğrulanmış ürün iddiası yok. */
+function sourceStateNote(ctx,d,src){
+  const doc=ctx.doc,vars={prepared:d.artifact?.sourceCommit??"—",head:d.sourceCommit??"—"};
+  const earlier=d.accepted&&d.sourceCommit&&d.accepted.sourceCommit!==d.sourceCommit;
+  if(src==="NOT_PREPARED"&&!earlier)return null;
+  return h(doc,"div",{class:"note",role:"note",dataset:{sourceStateNote:src}},
+    src==="NOT_PREPARED"?null:[badge(ctx,ctx.t(`m1a.delivery.srcState.${src}`),src==="VALID"?"badge-notverified":"badge-risk")," ",h(doc,"span",{text:ctx.t(`m1a.delivery.srcNote.${src}`,vars)})],
+    earlier?h(doc,"p",{dataset:{sourceAcceptedEarlier:"true"},text:ctx.t("m1a.delivery.srcAcceptedEarlier",{accepted:d.accepted.sourceCommit,head:d.sourceCommit})}):null);
+}
 function deliveryCard(ctx,d){
   const doc=ctx.doc,sid=deliveryStatusId(d.runId),busy=drafts.busy[sid]===true,prepared=!!d.artifact,accepted=!!d.accepted;
   const fact=(k,v,cls="mono")=>[h(doc,"dt",{text:ctx.t(k)}),h(doc,"dd",{class:cls,text:v})];
-  const btn=(id,key,on,primary=false)=>h(doc,"button",{type:"button",class:`btn${primary?" btn-primary":""}`,id,dataset:{focusKey:id},disabled:busy,text:ctx.t(key),on:{click:on}});
+  const src=deliverySourceState(d),blocked=src==="STALE"||src==="UNKNOWN";
+  const btn=(id,key,on,primary=false,off=false)=>h(doc,"button",{type:"button",class:`btn${primary?" btn-primary":""}`,id,dataset:{focusKey:id},disabled:busy||off,text:ctx.t(key),on:{click:on}});
   const buttons=[];
   if(!accepted)buttons.push(btn(`dl-prep-${d.runId}`,"m1a.delivery.prepare",()=>prepareDelivery(ctx,d),!prepared));
-  if(prepared&&!accepted&&!dialogOpen(d.runId))buttons.push(btn(`dl-open-${d.runId}`,"m1a.delivery.openAccept",()=>openAcceptance(ctx,d),true));
+  if(prepared&&!accepted&&!blocked&&!dialogOpen(d.runId))buttons.push(btn(`dl-open-${d.runId}`,"m1a.delivery.openAccept",()=>openAcceptance(ctx,d),true));
   if(prepared&&accepted)buttons.push(btn(`dl-export-${d.runId}`,"m1a.delivery.export",()=>exportDelivery(ctx,d),true));
   const dialog=prepared&&!accepted&&dialogOpen(d.runId)?h(doc,"section",{class:"delivery-dialog",id:`dl-dialog-${d.runId}`,role:"group","aria-labelledby":`dl-dialog-t-${d.runId}`,dataset:{deliveryDialog:d.runId}},
     h(doc,"h4",{id:`dl-dialog-t-${d.runId}`,text:ctx.t("m1a.delivery.dialogTitle")}),
     deliveryAckBlock(ctx,d),
-    h(doc,"div",{class:"btn-row"},btn(`dl-accept-${d.runId}`,"m1a.delivery.accept",()=>acceptDelivery(ctx,d),true),btn(`dl-cancel-${d.runId}`,"m1a.delivery.cancel",()=>closeAcceptance(ctx,d)))):null;
-  return h(doc,"li",{class:"card delivery-card",dataset:{deliveryRun:d.runId,deliveryState:accepted?"ACCEPTED":prepared?"PREPARED":"NOT_PREPARED"}},
+    h(doc,"div",{class:"btn-row"},btn(`dl-accept-${d.runId}`,"m1a.delivery.accept",()=>acceptDelivery(ctx,d),true,blocked),btn(`dl-cancel-${d.runId}`,"m1a.delivery.cancel",()=>closeAcceptance(ctx,d)))):null;
+  return h(doc,"li",{class:"card delivery-card",dataset:{deliveryRun:d.runId,sourceState:src,deliveryState:accepted?"ACCEPTED":prepared?"PREPARED":"NOT_PREPARED"}},
     h(doc,"h3",{class:"mono",text:d.runId}),
     h(doc,"p",{class:"panel-meta"},axisBadges(ctx,d.sourceGeneration,d.productVerification,"delivery"),accepted?[" ",badge(ctx,ctx.t("m1a.delivery.acceptedLabel"),"badge-notverified")]:null),
     h(doc,"dl",{class:"kv"},...fact("m1a.delivery.mission",d.missionId),...fact("m1a.delivery.commit",d.sourceCommit??"—"),
       ...fact("m1a.delivery.hash",d.artifact?.exportArtifactHash??ctx.t("m1a.delivery.notPrepared"),d.artifact?"mono":""),
       ...(prepared?fact("m1a.delivery.fileState",d.fileState?ctx.t(`m1a.delivery.file.${d.fileState}`):"—",""):[])),
+    sourceStateNote(ctx,d,src),
     h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("m1a.delivery.actions",{run:d.runId})},buttons),
     dialog,
     statusBlock(ctx,sid));
