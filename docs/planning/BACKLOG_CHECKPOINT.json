@@ -280,64 +280,265 @@
       "notes": "Recorded by Founder directive POST-AUDIT SAFE RESUME (2026-10-20, item 7). Evidence at v7/integration 0d0b2b9: git ls-files has no PNG/SVG/JPG/PDF/Figma design files and no design directory; docs/ux/ holds only 6 text specs (UI-003, UI-023, UI-026, UI-030, UI-113, UI-132); the package UASCO_NEON_252_EKRAN_TAM_PAKET_2026-10-16 is referenced by inventory rows but exists only on the Founder PC (C:/Users/salim/Downloads/...), so all 252 screen rows are REFERENCE_UNAVAILABLE. Effect: stage C (design approved) and stage J (visually verified) cannot be reached for any screen. Until the Founder supplies the approved references (or a non-sensitive export with a per-screen ID mapping) through a governed PR, no agent may produce design-accuracy, design-parity, visual-verification or Founder-design-approval claims. Authorized renderer work continues with honest states only. Unblock: Founder provides the package and states which screens are approved."
     },
     {
+      "owner": "CLOUD",
+      "status": "DONE",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "dependsOn": [],
+      "id": "UI-002",
+      "title": "First-run wizard Verify step: show the install report and Phase-0 verdicts (read-only, GET /v1/install and /v1/phase0) (renderer-only)",
+      "package": "WP-FIRSTRUN",
+      "files": [
+        "apps/desktop/renderer/views/firstrun.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "tests/v7-ux-firstrun.test.ts"
+      ],
+      "testFile": "tests/v7-ux-firstrun.test.ts",
+      "notes": "Inventory 2026-10-19 UI-002 (P0, authority_needed=none); batch-4 triage + independent verification 2026-10-20 on wave B5 (ffc396f). Gap: The wizard's Verify step reads only GET /v1/system/executors. The install report and Phase-0 verdicts appear only on #/install, and the wizard never mentions them. The inventory states this gap: SCREEN_AUDIT_252.csv row 3 says 'install facts (/v1/install,/v1/phase0) live on #/install not in wizard'. Only this GET-only slice is taken. The POST local-claude/enable part and the 'no route' part are excluded. GET only: GET /v1/system/executors, GET /v1/install, GET /v1/phase0 (served and allow-listed); no new endpoint, POST, IPC or storage. Acceptance: (1) Entering the Verify step, and pressing 'Verify connection again', reads GET /v1/install and GET /v1/phase0 through the existing ctx.api.installInstall() and ctx.api.installPhase0(). The reads are lazy: start() and the welcome and connection steps still issue only /v1/system/executors (assertion at tests/v7-ux-firstrun.test.ts:159 unchanged). Each read is isolated with try/catch, and a failure of one never changes the executors-based CONNECTED or NOT_CONNECTED summary (data-fr-verify). (2) An 'Installation check' block lists two rows, the install report and Phase-0 acceptance, derived through install-core buildInstall(). Each row shows the server verification (VERIFIED, PENDING or REJECTED) and phase0Final or final verbatim. A VERIFIED pill appears only when the mapped read is usable and verification==='VERIFIED'. PENDING shows a waiting pill and REJECTED a blocked pill, each labelled with the raw value. (3) If a read is OFFLINE, UNAVAILABLE or ERROR (including a malformed body that the install-core mappers turn into ERROR), its row shows that discrete state and the MISSING dash. It never shows a VERIFIED pill, a 0, or the words Verified or Connected. (4) If both reads are usable and install.phase0Final !== phase0.final, both values are shown with a mismatch note taken from buildInstall().reconcile, without reconciling them. (5) An 'Open full installation check' button calls done() (marks the preference seen and closes the dialog), then ctx.navigate('install'). The wizard stays non-gating: skip, Esc and finish behave as before, and firstrun.js contains no .post(, no window.uasco and no innerHTML. (6) The new firstrun.install.* keys exist non-empty in en.js and tr.js with identical placeholders. The test at tests/v7-ux-firstrun.test.ts:214 is renamed, and after a Verify step it asserts the exact unique GET set ['/v1/system/executors','/v1/install','/v1/phase0'], each of which passes desktopGetPathAllowed. This replaces a single-path claim with an exact-set claim and does not weaken the test. The EXTRA_GET_ROUTES snapshot assertion stays unchanged. Write-back 2026-10-20: merged into claude/integration-wave-b6 (branch head 8b1cb5e ancestor of 7ad415f)"
+    },
+    {
+      "owner": "CLOUD",
+      "status": "DONE",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "dependsOn": [],
+      "id": "UI-007",
+      "title": "Require an explicit confirmation before Resume (shell stop banner and Control Tower) (renderer-only)",
+      "package": "WP-SHELL",
+      "files": [
+        "apps/desktop/renderer/shell.js",
+        "apps/desktop/renderer/views/tower.js",
+        "apps/desktop/renderer/resume-confirm.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "tests/v7-ux-shell.test.ts",
+        "tests/v7-ux-wp4-tower.test.ts"
+      ],
+      "testFile": "tests/v7-ux-shell.test.ts",
+      "notes": "Inventory 2026-10-19 UI-007 (P0, authority_needed=none); batch-4 triage + independent verification 2026-10-20 on wave B5 (ffc396f). Gap: Emergency STOP opens a confirmation dialog. Resume, which lifts the global stop and restarts autonomous work, fires ctx.resume() immediately from both the shell banner button and the Control Tower button. Meanwhile the Operations copy tells the Founder that each control runs 'with its own confirmation', which is false for Resume. This matches the inventory phrase 'resume confirmation flow not product-exercised'. The fix reuses the existing ctx.confirm dialog. There is no IPC, endpoint or POST change. GET only:  (served and allow-listed); no new endpoint, POST, IPC or storage. File notes: apps/desktop/renderer/resume-confirm.js: NEW tiny shared helper, e.g. confirmAndResume(ctx); must not be placed in operations.js or operations-core.js. Acceptance: (1) Clicking the shell #resumeBtn or the Control Tower #towerResume first awaits ctx.confirm({title, body, action, target, confirmLabel}) with Resume-specific copy whose body states that autonomous work restarts. ctx.resume() is not called before the dialog resolves true. (2) If ctx.confirm resolves false (Cancel or Esc), or ctx.confirm is not a function (fail-closed), ctx.resume is never called. The shell announces the existing confirm.cancelled text in its live region, and the stop banner stays active. (3) If ctx.confirm resolves true, ctx.resume() is called exactly once, and the existing failure path (app.js:32 stop.failed alert) is unchanged. A second click while the dialog is pending opens no second dialog and never calls resume twice (re-entry guard). (4) Both entry points call one shared helper, so the behaviour cannot drift. The stop dialog flow (shell.js:199-202) is unchanged. app.js, index.html, main.mjs and preload.mjs are byte-identical. (5) The new resume-confirm keys exist non-empty in en.js and tr.js with identical placeholders. The ops.controls.lead statement becomes true without a copy change. (6) The expectation at tests/v7-ux-wp4-tower.test.ts:296-300 is updated: the test supplies ctx.confirm and covers confirm-true (one resume), confirm-false (none) and missing-confirm (none). The shell tests use mkShell with a ctx.confirm stub and cover the same three cases plus the re-entry guard. Overlaps open PR #23 (L-TOWER-TRACE) on views/tower.js and the tower test (outside its hunks; resolved at integration). Write-back 2026-10-20: merged into claude/integration-wave-b6 (branch head a874abf ancestor of 7ad415f)"
+    },
+    {
+      "owner": "CLOUD",
+      "status": "DONE",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "dependsOn": [],
+      "id": "UI-125",
+      "title": "Brownfield import: show the server's specific rejection and failure codes instead of misleading generic errors (renderer-only)",
+      "package": "WP-PROJECTS",
+      "files": [
+        "apps/desktop/renderer/project-core.js",
+        "apps/desktop/renderer/views/studio-wizard.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "tests/v7-ps1b-project-studio-ui.test.ts",
+        "docs/ux/UI-125-BROWNFIELD-IMPORT.md"
+      ],
+      "testFile": "tests/v7-ps1b-project-studio-ui.test.ts",
+      "notes": "Inventory 2026-10-19 UI-125 (P0, authority_needed=none); batch-4 triage + independent verification 2026-10-20 on wave B5 (ffc396f). Gap: submitImport classifies the response with the generic describePostResult. A 400 IMPORT_REJECTED (path, source or ZIP problems) is shown as 'schema validation (HTTP 400). Check the fields', and a 422 IMPORT_FAILED as a generic action failure. The 409 responses PROJECT_REPOSITORY_ALREADY_MANAGED, DEVRUN_ACTIVE and WORKOS_CONFLICT/RUN_ALREADY_ACTIVE are shown as a generic conflict. The server sends fixed reason codes, and main.mjs passes error and reason through. Only response classification changes. The request builder, POST body and allow-list are untouched. GET only:  (served and allow-listed); no new endpoint, POST, IPC or storage. File notes: docs/ux/UI-125-BROWNFIELD-IMPORT.md: optional. Acceptance: (1) A pure describeImportResult(res) in project-core.js maps 400 {error:'IMPORT_REJECTED', reason:R}, for R in the closed set (IMPORT_PATH_INVALID, IMPORT_REMOTE_NOT_SUPPORTED, IMPORT_PATH_NOT_ABSOLUTE, IMPORT_SOURCE_FORBIDDEN, IMPORT_SOURCE_NOT_FOUND, IMPORT_SOURCE_NOT_A_REPOSITORY, and the 12 ZipRejectCode values), to static keys present in en and tr. The ZIP_* codes may share grouped messages, but each message prints the exact code. An unknown R matching /^[A-Z][A-Z0-9_]{1,63}$/ gets a generic 'import rejected: {code}' key, and a missing or unsafe R gets a generic key with no code. The 'schema validation' text (post.err.400) is never used for IMPORT_REJECTED. (2) 422 {error:'IMPORT_FAILED'} with GIT_CLONE_FAILED, IMPORT_SOURCE_EMPTY or AGENT_CONFIG_QUARANTINE_FAILED maps to specific keys, and an unknown safe reason maps to a generic 'import failed: {code}' key. 409 PROJECT_REPOSITORY_ALREADY_MANAGED, 409 DEVRUN_ACTIVE and 409 {error:'WORKOS_CONFLICT', reason:'RUN_ALREADY_ACTIVE'} map to specific keys. (3) Every other response (2xx, 401/403, 404, 423, 503, other 409, thrown or OFFLINE, null) delegates to describePostResult. The tests assert equality with describePostResult(res), not a hard-coded key, so that a parallel change to describePostResult (UI-109) cannot break them. ok:true and studio.import.done occur only on 2xx. (4) A failed import never resets importDraft, so the chosen path stays available for a retry. The POST path and body stay exactly as today ({kind,path}; assertions at tests/v7-ps1b-project-studio-ui.test.ts:565-567 pass). (5) After a failed import, #studio-import-status (role=alert) shows the specific text and focusResult places focus on it. A test drives the panel with post() returning 400/IMPORT_REJECTED/ZIP_TOO_LARGE, 422/IMPORT_FAILED/GIT_CLONE_FAILED and 409/PROJECT_REPOSITORY_ALREADY_MANAGED, and asserts forms.drafts.status['studio-import'].key for each. (6) Messages state only what the server reported. They make no claim that data was or was not changed and suggest no unsupported action such as typing a path or a remote URL. The reason is inserted only via textContent. en/tr key sets and placeholders stay identical (existing parity test), and all keys are static literals, so the key-usage scan covers them. Open PRs #8/#28/#32/#33/#46 touch tests/v7-ps1b-project-studio-ui.test.ts (append conflicts only). Assert equality with describePostResult(res), not hard-coded keys, so the test stays valid if UI-109 lands first. Write-back 2026-10-20: merged into claude/integration-wave-b7 (branch head 63b71f1 ancestor of abf957a)"
+    },
+    {
+      "owner": "CLOUD",
+      "status": "DONE",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "riskLevel": 1,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "dependsOn": [
+        "UI-025"
+      ],
+      "id": "UI-109",
+      "title": "Show the server's ACTION_DENIED reason code with a DENIED pill on POST 403 (renderer-only)",
+      "package": "WP-WORKOS",
+      "files": [
+        "apps/desktop/renderer/work-core.js",
+        "apps/desktop/renderer/forms.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "tests/v7-b5-work-screens.test.ts",
+        "docs/ux/UI-109-PERMISSION-DENIED.md"
+      ],
+      "testFile": "tests/v7-b5-work-screens.test.ts",
+      "notes": "Inventory 2026-10-19 UI-109 (P1, authority_needed=none); batch-4 triage + independent verification 2026-10-20 on wave B5 (ffc396f). Gap: describePostResult maps every 401/403 to the generic post.err.auth text and drops the {error:'ACTION_DENIED', reason:<code>} body that control-api sends on an action-policy denial. main.mjs already passes error and reason through. The DENIED pill kind and its lock icon exist but are rendered nowhere. Scope is the reason code only. Escalation and approve controls are out of scope, because they would need authority or a POST. GET only:  (served and allow-listed); no new endpoint, POST, IPC or storage. File notes: docs/ux/UI-109-PERMISSION-DENIED.md: optional. Acceptance: (1) describePostResult({status:403, body:{error:'ACTION_DENIED', reason:'BUDGET_DENIED'}}) returns {ok:false, key:'post.err.denied', vars:{status:403, reason:'BUDGET_DENIED'}}. The key exists non-empty in en and tr with identical placeholders, and the rendered text contains both the HTTP status and the code. (2) The reason is first cut at its first ':' (so APPROVAL_INVALID:<text> shows only APPROVAL_INVALID) and is used only if it then matches /^[A-Z][A-Z0-9_]{1,63}$/. The key post.err.auth is kept, and no reason is invented, for any 401, for a 403 without a body, for an error other than ACTION_DENIED, and for a missing or malformed reason. The existing assertions at tests/v7-b5-work-screens.test.ts:249 pass unchanged. (3) statusBlock for a status whose key is post.err.denied renders role=alert with a DENIED state pill (data-pill='DENIED', icon plus text) before the message. Every other status renders byte-identically to today, with no pill. (4) The mappings for 2xx, 400, 404/501, 409 (all variants), 423, 503, thrown/OFFLINE and null are unchanged (existing assertions at tests/v7-b5-work-screens.test.ts:243-256 pass). A denial never produces a positive or VERIFIED state. (5) The reason is inserted only via textContent through h(). No new control, POST, IPC or storage is added. en/tr key sets and placeholders stay identical. Depends on UI-025 (DONE, wave B5: same work-core.js and tests/v7-b5-work-screens.test.ts). Write-back 2026-10-20: merged into claude/integration-wave-b7 (branch head f382693 ancestor of abf957a)"
+    },
+    {
+      "owner": "CLOUD",
+      "status": "DONE",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "dependsOn": [],
+      "id": "UI-146",
+      "title": "Security re-scan history by remediation cycle in the #qa-secdetail panel (read-only) (renderer-only)",
+      "package": "WP-QA-SEC",
+      "files": [
+        "apps/desktop/renderer/assurance-core.js",
+        "apps/desktop/renderer/views/assurance.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "tests/v7-ux-wp-qasec.test.ts",
+        "docs/ux/UI-146-SECURITY-RESCAN-HISTORY.md"
+      ],
+      "testFile": "tests/v7-ux-wp-qasec.test.ts",
+      "notes": "Inventory 2026-10-19 UI-146 (P1, authority_needed=none); batch-4 triage + independent verification 2026-10-20 on wave B5 (ffc396f). Gap: Each remediation cycle appends its own SECURITY_REPORT evidence, stamped with run.remediationCycle, to run.evidence. The renderer keeps only the latest entry, so earlier scans of the same run are invisible. Only this slice is delivered: a read-only, ordered per-cycle scan history for the selected run. The finding-to-fix link and the split diff are explicitly out of scope: there is no backing field, and the inventory says a finding lifecycle endpoint would be needed. GET only: GET /v1/work-runs (served and allow-listed); no new endpoint, POST, IPC or storage. File notes: docs/ux/UI-146-SECURITY-RESCAN-HISTORY.md: optional. Acceptance: (1) mapRunSecurity additionally returns scanHistory, built from all SECURITY_REPORT entries that carry a security object. Each entry is {cycle (safe integer or null), stageStatus (PASSED, PARTIAL or BLOCKED, otherwise null), commitSha (40-hex or null), commitBound (commitSha === run.headSha), gitleaksFindings and scaBlocking (safe integers or null), blockReason (CODE_RE or null)}. Entries are sorted by cycle ascending (null cycles last, array order kept on ties) and capped at 20. Malformed entries are dropped. The existing latest-entry fields and the headline scanStatus are unchanged (existing tests stay green). (2) securityDetail shows a 'Re-scan history' section for the selected run. With at least 2 entries it is a table (caption, th scope=col) with cycle, stage status, short scanned commit, gitleaks findings and SCA blocking, in cycle order. With exactly 1 entry it is a note that a single scan is recorded and no re-scan is recorded. With 0 entries (a NOT_EXECUTED run) there is no history section, and the existing notScanned note stays. (3) Values are shown as recorded per cycle. No delta, arrow, 'fixed', 'resolved' or 'clean again' text is computed or shown, and a visible note states that the history does not assert any finding was fixed. A PASSED or PARTIAL row whose commit is not the run head is labelled STALE, never a current pass. (4) Missing or non-numeric counts render the MISSING dash, never 0. An unreadable /v1/work-runs read keeps the existing UNAVAILABLE or ERROR note and renders no history. (5) EN and TR keys exist with identical key sets and placeholders. All dynamic text uses h()/textContent. The page performs no POST, IPC or storage and adds no new GET. (6) New tests cover: a two-cycle run in order, a single-cycle run, a run without security evidence, a malformed entry being dropped, a stale-commit row labelled STALE, the absence of fixed/resolved text, and a read failure. Write-back 2026-10-20: merged into claude/integration-wave-b7 (branch head 8d5e931 ancestor of abf957a)"
+    },
+    {
+      "owner": "CLOUD",
+      "status": "DONE",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "dependsOn": [],
+      "id": "UI-182",
+      "title": "Delivery card: explicit stale-versus-valid state when the prepared package no longer matches the run head commit (renderer-only)",
+      "package": "WP-DELIVERY",
+      "files": [
+        "apps/desktop/renderer/delivery-core.js",
+        "apps/desktop/renderer/views/delivery-panel.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "tests/v7-m1a-desktop.test.ts",
+        "docs/ux/UI-182-DELIVERY-SOURCE-DRIFT.md"
+      ],
+      "testFile": "tests/v7-m1a-desktop.test.ts",
+      "notes": "Inventory 2026-10-19 UI-182 (P1, authority_needed=none); batch-4 triage + independent verification 2026-10-20 on wave B5 (ffc396f). Gap: The Project Studio delivery card prints the run's current head (d.sourceCommit) and the artifact hash, but it never compares artifact.sourceCommit with the head. When they differ, the server rejects acceptance with DELIVERY_ACCEPTANCE_MISMATCH. The renderer already blocks this case, but it uses the misleading key err.deliveryNotPrepared ('prepare the delivery package first'), and the Accept button stays offered. Re-preparing records a new artifact. GET only: GET /v1/deliveries?projectId=prj_*, GET /v1/work-runs/:id/delivery (served and allow-listed); no new endpoint, POST, IPC or storage. File notes: docs/ux/UI-182-DELIVERY-SOURCE-DRIFT.md: optional. Acceptance: (1) delivery-core.js exports a pure deliverySourceState(d) that returns: NOT_PREPARED when d.artifact is null; VALID only when d.sourceCommit and d.artifact.sourceCommit are both 40-hex and equal; STALE when both are valid 40-hex and differ; UNKNOWN when an artifact exists but d.sourceCommit is null or invalid. All four outcomes are unit-tested. (2) Each delivery card carries data-source-state and shows an accessible note (role=note, text plus pill, not colour only). For STALE it names the prepared commit and the current head in full and says that the package must be prepared again. For UNKNOWN it says the head cannot be read, so validity is not claimed. For VALID it says only that the package was built from the current run head, never PRODUCT_VERIFIED or COMPLETE wording. (3) For STALE or UNKNOWN, the 'Accept the source delivery' open button is not rendered, and if the dialog is already open its accept button is disabled. The prepare button stays enabled as the re-prepare path. The export button logic is unchanged. (4) If an accepted record's sourceCommit differs from the current head, the card shows a read-only note that the acceptance belongs to an earlier commit. No action is added. (5) buildAcceptanceRequest returns the new key err.deliveryStale (present in EN and TR) instead of err.deliveryNotPrepared only when the state is STALE. The artifact:null case keeps err.deliveryNotPrepared (tests/v7-m1a-desktop.test.ts:308). The prepare and accept request paths and bodies are byte-identical to today, which the tests assert. (6) When the delivery read is not VERIFIED, the existing stateNote (OFFLINE, UNAVAILABLE or ERROR) is kept, and no stale or valid claim is rendered. No new endpoint, allow-list entry, POST, IPC or storage is added. Write-back 2026-10-20: merged into claude/integration-wave-b7 (branch head 1db3e42 ancestor of abf957a)"
+    },
+    {
+      "owner": "CLOUD",
+      "status": "DONE",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "dependsOn": [],
+      "id": "UI-233",
+      "title": "Company OS CRM tab: per-account exposure and overdue-receivable signals table (recorded facts, no health score) (renderer-only)",
+      "package": "WP-COMPANY",
+      "files": [
+        "apps/desktop/renderer/company-core.js",
+        "apps/desktop/renderer/views/company.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "apps/desktop/renderer/styles.css",
+        "tests/v7-ux-wp3-company.test.ts",
+        "docs/ux/UI-233-ACCOUNT-EXPOSURE.md"
+      ],
+      "testFile": "tests/v7-ux-wp3-company.test.ts",
+      "notes": "Inventory 2026-10-19 UI-233 (P1, authority_needed=none); batch-4 triage + independent verification 2026-10-20 on wave B5 (ffc396f). Gap: Company OS shows per-account record counts and global KPI totals only. It never shows, per account, the open pipeline, the outstanding invoice balance or any overdue signal: the invoices table prints the raw due date, and no KPI counts overdue invoices. This task adds one read-only, derived exposure table built from the four sources the view already reads. The 'health/risk scoring' wording of the inventory is deliberately NOT implemented, because a score would be invented. GET only: GET /v1/company/accounts, GET /v1/company/opportunities, GET /v1/company/invoices, GET /v1/company/contracts (served and allow-listed); no new endpoint, POST, IPC or storage. File notes: apps/desktop/renderer/styles.css: only if a new class is needed; token colours and a forced-colors fallback; docs/ux/UI-233-ACCOUNT-EXPOSURE.md: optional. Acceptance: (1) A pure company-core function and an 'Account exposure' table on the CRM tab (caption, th scope=col, unique id and class prefix) show one row per account and honour the account filter. Columns: open pipeline (OPEN_STAGES only), outstanding balance (ISSUED and PARTIALLY_PAID balanceMinor), overdue invoice count, due-date-unknown count, and contracts awaiting signature (SENT). Amounts are listed per currency and are never summed across currencies, and values equal hand-computed fixture values. (2) An invoice is overdue only if its status is ISSUED or PARTIALLY_PAID, its balance is a valid positive integer, and its dueDate is a valid YYYY-MM-DD calendar date strictly before the current UTC date (ctx.now() with a Date.now fallback). Invoices with a missing or invalid dueDate, or an unreadable balance, are counted as due-date-unknown and never as overdue or on time. DRAFT, PAID and VOID are never counted. If the clock is not finite, the overdue column shows the MISSING dash. (3) A cell whose source is NOT_CONNECTED, UNAVAILABLE, OFFLINE or ERROR shows the MISSING dash plus that source's honest pill, never 0. A STALE source still shows its figures, with a STALE marker and its as-of time. An EMPTY accounts list renders the existing EMPTY block and no table. A numeric 0 appears only when the source is live. (4) No composite score, rating or label such as healthy, at-risk or low-risk is produced. A visible note says these are recorded signals, not a health assessment, and that overdue is judged on the UTC calendar date. Account names come from the accounts record; if the name is missing, the raw account id is shown. (5) The existing static-safety test still passes: no new api method, route, allow-list entry, POST, IPC, storage, innerHTML or randomness. New company.* keys exist in TR and EN with identical placeholders. Any new CSS uses tokens only and has a forced-colors fallback. Write-back 2026-10-20: merged into claude/integration-wave-b7 (branch head 503d62b ancestor of abf957a)"
+    },
+    {
+      "owner": "CLOUD",
+      "status": "READY",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "riskLevel": 2,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "dependsOn": [
+        "UI-007"
+      ],
+      "id": "UI-194",
+      "title": "Control Tower retry fact: honest read-failure and INVALID state, plus the existing Operations retry phase (no new derivation) (renderer-only)",
+      "package": "WP-TOWER-2D3D",
+      "files": [
+        "apps/desktop/renderer/views/tower.js",
+        "apps/desktop/renderer/operations-core.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "tests/v7-ux-wp4-tower.test.ts",
+        "docs/ux/UI-194-TOWER-RETRY-STATE.md"
+      ],
+      "testFile": "tests/v7-ux-wp4-tower.test.ts",
+      "notes": "Inventory 2026-10-19 UI-194 (P1, authority_needed=none); batch-4 triage + independent verification 2026-10-20 on wave B5 (ffc396f). Gap: views/tower.js:40 shows 'No pending retry' whenever okData(retry) is null or has no packageId. That covers a failed read (OFFLINE, UNAVAILABLE or ERROR) and the server's {status:'INVALID', error:'SUPERVISOR_RETRY_STATE_UNSAFE'} payload, so a failure reads as 'nothing pending'. The existing test exempts this fact from the 'never invents values' rule. The backing-off versus due phase and the remaining time already exist on #/operations (UI-071, merged) for the same SUPERVISOR_RETRY.json record, so the Tower must REUSE that derivation, not build a second one. Circuit-breaker and backoff-timeline features have no backing data and are not claimed. GET only: GET /v1/retry (served and allow-listed); no new endpoint, POST, IPC or storage. File notes: apps/desktop/renderer/operations-core.js: additive pure export of the existing retry-record validation and phase derivation; buildOperations output unchanged; docs/ux/UI-194-TOWER-RETRY-STATE.md: optional. Acceptance: (1) If the GET /v1/retry read is not ok (OFFLINE, UNAVAILABLE or ERROR), the retry fact shows the MISSING dash plus the honest state text, with data-retry-state set to that state, and never 'No pending retry'. The exemption at tests/v7-ux-wp4-tower.test.ts:324 is removed, so the 'every endpoint fails' rule also covers tower.retry. (2) If the read is ok and the data is null, the fact shows 'No pending retry' with data-retry-state='NONE'. If data.status==='INVALID', or the record fails the same validation that operations-core applies to the retry record, the fact shows an ERROR or INVALID state and prints no package and no time. (3) A valid record is classified by the same function #/operations uses (exported from operations-core.js, not copied): WAITING, DUE, OVERDUE or UNDETERMINED, with data-retry-state set to the phase. The fact shows the package id, the phase ids and retryAt. Remaining or overdue time comes only from retryAt minus now (ctx.now() with a Date.now fallback). DUE and OVERDUE wording never says recovered, healthy or resumed. (4) buildOperations output and all tests/v7-ux-operations.test.ts assertions are unchanged. operations-core.js still contains no post, stop, resume or confirm( strings. (5) The free-text reason is not rendered in the Tower. No circuit-breaker, provider, HTTP 429 or SLA wording is added. tower.js issues exactly the same GET calls as today. EN and TR key sets and placeholders are identical, and text is set via textContent only. Depends on UI-007 (same views/tower.js and tests/v7-ux-wp4-tower.test.ts). Overlaps open PR #23 (L-TOWER-TRACE) on views/tower.js near lines 6, 18-29, 41+ (resolved at integration)."
+    },
+    {
+      "owner": "CLOUD",
+      "status": "DONE",
+      "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "riskLevel": 1,
+      "requiresNewAuthority": false,
+      "protectedEdit": false,
+      "dependsOn": [],
+      "id": "UI-035",
+      "title": "Academy: read-only learning lifecycle status counts (byStatus from the verified read) (renderer-only)",
+      "package": "WP-ACADEMY",
+      "files": [
+        "apps/desktop/renderer/views/academy.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "apps/desktop/renderer/styles.css",
+        "tests/v7-ux-academy.test.ts",
+        "docs/ux/UI-035-LEARNING-LIFECYCLE.md"
+      ],
+      "testFile": "tests/v7-ux-academy.test.ts",
+      "notes": "Inventory 2026-10-19 UI-035 (P1, authority_needed=none); batch-4 triage + independent verification 2026-10-20 on wave B5 (ffc396f). Gap: mapAcademy already computes byStatus over the 14 LEARNING_STATUSES, but views/academy.js never renders it. A viewer cannot see how many learnings sit in each lifecycle stage. The learnings table shows a per-row status but caps the table at 200 rows. GET only: GET /v1/academy (served and allow-listed); no new endpoint, POST, IPC or storage. File notes: apps/desktop/renderer/styles.css: only if a new unique class is needed; docs/ux/UI-035-LEARNING-LIFECYCLE.md: optional. Acceptance: (1) When api.academy() is VERIFIED with at least 1 learning, a new read-only panel (unique id and an academy-lifecycle-* class or data prefix) lists all 14 LEARNING_STATUSES in the fixed academy-core order, each with its verbatim code and its count from res.byStatus. A zero is shown as 0 because the read is verified, and the test asserts that the counts sum to learnings.length. (2) When the read is OFFLINE, UNAVAILABLE or ERROR, the panel renders the existing stateBlock (role=status) and no counts (not 0). When it is VERIFIED with zero learnings, the panel renders an empty note and not 14 zero rows. Malformed learnings dropped by mapLearning (academy-core.js:48) are not counted. (3) PROMOTED_KNOWLEDGE and PROMOTED_SKILL_CANDIDATE keep the read-only, non-executable marking. No status is labelled certified or trained. The certified KPI stays 0 with NOT_VERIFIED (regression assertion), and no VERIFIED or DONE pill is used for the counts. (4) The panel is read-only: no buttons, links or POST. The observed GET set stays exactly ['/v1/academy']. Text is built only with h()/textContent, and a table, if used, has a caption and th scope=col. (5) All new academy.lifecycle.* keys exist in EN and TR with identical placeholders, and no raw i18n key renders. No design-parity, visual or product-verification claim is made. Write-back 2026-10-20: merged into claude/integration-wave-b7 (branch head 83b36e4 ancestor of abf957a)"
+    },
+    {
       "id": "MOB-1",
       "title": "Mobile threat model and pre-coding security conditions",
       "package": "MOBILE-ANDROID",
-      "owner": "FOUNDER",
-      "status": "DRAFT_NOT_READY",
+      "owner": "CLOUD",
+      "status": "READY",
       "dependsOn": [],
       "riskLevel": 1,
-      "requiresNewAuthority": true,
+      "requiresNewAuthority": false,
       "protectedEdit": false,
       "files": [
         "docs/mobile/THREAT-MODEL.md",
         "docs/mobile/SECURITY-CONDITIONS.md"
       ],
-      "requiresAuthority": [],
       "screens": [],
       "specFile": "docs/planning/authority/D-2026-10-20-MOBILE-ANDROID.md (sections 9-11)",
-      "notes": "D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Design document only. Threats:\n- stolen phone\n- token theft (/health as HMAC proof oracle, server.ts:104)\n- replay of approvals (approval.ts:19-38 has no nonce or lifetime)\n- prompt injection via voice and repo text\n- push payload leakage\n- impersonating the Founder by free text\n- LAN co-tenants\n- supply chain of the RN and Gradle trees\nIt turns SC-1..SC-16 into testable acceptance criteria, lists which files form the new security boundary (input to MOB-15), and states that STOP is local only (CLOUD_MIGRATION_MANIFEST.md:22). Tests: No code. TR-comment and secret-sanity must pass. Review checklist: every condition maps to an existing code fact (file:line) or is marked PROPOSED/UNVERIFIED. In-flight conflicts: None (new docs/mobile/ tree)."
+      "notes": "[FD-2026-10-20-MOB-PHASE0 applied 2026-10-20: READY as a docs-only phase 0 package; dependencies re-tiered for parallel documents (tier 1). Founder answers to carry: connectivity A first (same-LAN QR pairing + TLS), remote target B (user-managed VPN/overlay), no open tunnel, no second backend; first release read-only monitoring; no mobile approvals before PT-035; mobile STOP and signed approvals evaluated separately; RESUME desktop-only; no FCM, paid LLM or new external account in the first release.] D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Design document only. Threats:\n- stolen phone\n- token theft (/health as HMAC proof oracle, server.ts:104)\n- replay of approvals (approval.ts:19-38 has no nonce or lifetime)\n- prompt injection via voice and repo text\n- push payload leakage\n- impersonating the Founder by free text\n- LAN co-tenants\n- supply chain of the RN and Gradle trees\nIt turns SC-1..SC-16 into testable acceptance criteria, lists which files form the new security boundary (input to MOB-15), and states that STOP is local only (CLOUD_MIGRATION_MANIFEST.md:22). Tests: No code. TR-comment and secret-sanity must pass. Review checklist: every condition maps to an existing code fact (file:line) or is marked PROPOSED/UNVERIFIED. In-flight conflicts: None (new docs/mobile/ tree).",
+      "authorizedBy": "FOUNDER-DECISION:FD-2026-10-20-MOB-PHASE0 (in-session 2026-10-20 ~05:10Z; record docs/planning/authority/FD-2026-10-20-MOB-PHASE0.md). Scope: documentation, research, screen requirements, UI/UX design specifications, architecture ADR and test strategy ONLY, files under docs/mobile/** only. Not granted: React Native code, dependencies, new API, listener, auth change, protected files, CI/ruleset, reseal, paid service, new external account. Ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "testFile": "none (docs-only): node scripts/validate-tr-comments.mjs and node scripts/secret-sanity.mjs must PASS"
     },
     {
       "id": "MOB-2",
       "title": "Connectivity, pairing and device-session design",
       "package": "MOBILE-ANDROID",
-      "owner": "FOUNDER",
-      "status": "DRAFT_NOT_READY",
-      "dependsOn": [
-        "MOB-1"
-      ],
+      "owner": "CLOUD",
+      "status": "READY",
+      "dependsOn": [],
       "riskLevel": 1,
-      "requiresNewAuthority": true,
+      "requiresNewAuthority": false,
       "protectedEdit": false,
       "files": [
         "docs/mobile/CONNECTIVITY-AND-PAIRING.md"
       ],
-      "requiresAuthority": [],
       "screens": [
         "UI-173",
         "UI-249",
         "UI-104"
       ],
       "specFile": "docs/planning/authority/D-2026-10-20-MOBILE-ANDROID.md (sections 9-11)",
-      "notes": "D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Design document only.\n- Compares option A (LAN + pinned TLS), option B (user-run VPN), option C (public tunnel, not recommended) and option D (cloud relay, excluded).\n- Pairing protocol: desktop QR, single-use secret of at least 128 bits, certificate fingerprint, device public key.\n- Session model: short-lived, scoped MOBILE_READ, MOBILE_STOP or MOBILE_APPROVE, with revocation and the device id as audit actor.\n- Gateway lifecycle tied to the desktop app (packaged-entry.ts:74-77) versus a headless mode.\n- Behaviour while the PC is off: STALE cache only.\nIt recommends, but does not choose, the FA-MOB-2 option. Tests: No code. TR-comment and secret-sanity must pass. Reviewer check: no external-service claim is presented as verified. In-flight conflicts: None."
+      "notes": "[FD-2026-10-20-MOB-PHASE0 applied 2026-10-20: READY as a docs-only phase 0 package; dependencies re-tiered for parallel documents (tier 1). Founder answers to carry: connectivity A first (same-LAN QR pairing + TLS), remote target B (user-managed VPN/overlay), no open tunnel, no second backend; first release read-only monitoring; no mobile approvals before PT-035; mobile STOP and signed approvals evaluated separately; RESUME desktop-only; no FCM, paid LLM or new external account in the first release.] D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Design document only.\n- Compares option A (LAN + pinned TLS), option B (user-run VPN), option C (public tunnel, not recommended) and option D (cloud relay, excluded).\n- Pairing protocol: desktop QR, single-use secret of at least 128 bits, certificate fingerprint, device public key.\n- Session model: short-lived, scoped MOBILE_READ, MOBILE_STOP or MOBILE_APPROVE, with revocation and the device id as audit actor.\n- Gateway lifecycle tied to the desktop app (packaged-entry.ts:74-77) versus a headless mode.\n- Behaviour while the PC is off: STALE cache only.\nIt recommends, but does not choose, the FA-MOB-2 option. Tests: No code. TR-comment and secret-sanity must pass. Reviewer check: no external-service claim is presented as verified. In-flight conflicts: None.",
+      "authorizedBy": "FOUNDER-DECISION:FD-2026-10-20-MOB-PHASE0 (in-session 2026-10-20 ~05:10Z; record docs/planning/authority/FD-2026-10-20-MOB-PHASE0.md). Scope: documentation, research, screen requirements, UI/UX design specifications, architecture ADR and test strategy ONLY, files under docs/mobile/** only. Not granted: React Native code, dependencies, new API, listener, auth change, protected files, CI/ruleset, reseal, paid service, new external account. Ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "testFile": "none (docs-only): node scripts/validate-tr-comments.mjs and node scripts/secret-sanity.mjs must PASS"
     },
     {
       "id": "MOB-3",
       "title": "Mobile API contract specification (PROPOSED endpoints)",
       "package": "MOBILE-ANDROID",
-      "owner": "FOUNDER",
-      "status": "DRAFT_NOT_READY",
+      "owner": "CLOUD",
+      "status": "READY",
       "dependsOn": [
         "MOB-2"
       ],
       "riskLevel": 1,
-      "requiresNewAuthority": true,
+      "requiresNewAuthority": false,
       "protectedEdit": false,
       "files": [
         "docs/mobile/API-CONTRACT.md"
       ],
-      "requiresAuthority": [],
       "screens": [
         "UI-097",
         "UI-098",
@@ -350,66 +551,66 @@
         "UI-180"
       ],
       "specFile": "docs/planning/authority/D-2026-10-20-MOBILE-ANDROID.md (sections 9-11)",
-      "notes": "D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Specification only. Every endpoint is marked PROPOSED, not implemented.\n- Each /v1/mobile/* route gets request/response schemas, cursor and limit rules, ETag/since semantics on store.lastSeq, size budgets, error and denied states, and the required session scope.\n- Read projections: summary, projects, workers, runs, timeline, inbox, ops, reports, changes, notifications.\n- Write routes: challenge, decision, stop, push-token, drafts.\n- A reuse table maps each route to the existing endpoint and store function it projects (e.g. cockpit server.ts:728-731, countActiveWorkerRuns store.ts:744).\n- An explicit exclusion list: file content, git diff, raw logs, exports, import, executor settings (the GET has a write side effect, MATRIX line 142), devrun, journal repair, finance/legal writes, testCommand. Tests: No code. TR-comment and secret-sanity must pass. The reviewer cross-checks every 'existing' reference against server.ts at the base SHA. In-flight conflicts: None. It describes, but does not edit, the protected server.ts."
+      "notes": "[FD-2026-10-20-MOB-PHASE0 applied 2026-10-20: READY as a docs-only phase 0 package; dependencies re-tiered for parallel documents (tier 2). Founder answers to carry: connectivity A first (same-LAN QR pairing + TLS), remote target B (user-managed VPN/overlay), no open tunnel, no second backend; first release read-only monitoring; no mobile approvals before PT-035; mobile STOP and signed approvals evaluated separately; RESUME desktop-only; no FCM, paid LLM or new external account in the first release.] D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Specification only. Every endpoint is marked PROPOSED, not implemented.\n- Each /v1/mobile/* route gets request/response schemas, cursor and limit rules, ETag/since semantics on store.lastSeq, size budgets, error and denied states, and the required session scope.\n- Read projections: summary, projects, workers, runs, timeline, inbox, ops, reports, changes, notifications.\n- Write routes: challenge, decision, stop, push-token, drafts.\n- A reuse table maps each route to the existing endpoint and store function it projects (e.g. cockpit server.ts:728-731, countActiveWorkerRuns store.ts:744).\n- An explicit exclusion list: file content, git diff, raw logs, exports, import, executor settings (the GET has a write side effect, MATRIX line 142), devrun, journal repair, finance/legal writes, testCommand. Tests: No code. TR-comment and secret-sanity must pass. The reviewer cross-checks every 'existing' reference against server.ts at the base SHA. In-flight conflicts: None. It describes, but does not edit, the protected server.ts.",
+      "authorizedBy": "FOUNDER-DECISION:FD-2026-10-20-MOB-PHASE0 (in-session 2026-10-20 ~05:10Z; record docs/planning/authority/FD-2026-10-20-MOB-PHASE0.md). Scope: documentation, research, screen requirements, UI/UX design specifications, architecture ADR and test strategy ONLY, files under docs/mobile/** only. Not granted: React Native code, dependencies, new API, listener, auth change, protected files, CI/ruleset, reseal, paid service, new external account. Ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "testFile": "none (docs-only): node scripts/validate-tr-comments.mjs and node scripts/secret-sanity.mjs must PASS"
     },
     {
       "id": "MOB-4",
       "title": "Approval, attestation and STOP design",
       "package": "MOBILE-ANDROID",
-      "owner": "FOUNDER",
-      "status": "DRAFT_NOT_READY",
+      "owner": "CLOUD",
+      "status": "READY",
       "dependsOn": [
-        "MOB-1",
-        "MOB-3"
+        "MOB-1"
       ],
       "riskLevel": 1,
-      "requiresNewAuthority": true,
+      "requiresNewAuthority": false,
       "protectedEdit": false,
       "files": [
         "docs/mobile/APPROVAL-AND-STOP.md"
       ],
-      "requiresAuthority": [],
       "screens": [
         "UI-098",
         "UI-175",
         "UI-176"
       ],
       "specFile": "docs/planning/authority/D-2026-10-20-MOBILE-ANDROID.md (sections 9-11)",
-      "notes": "D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Design document only.\n- Server-created ApprovalRequest in the Work OS journal carrying actionDigest, targetDigest and a nonce.\n- Device-signed decision over canonical JSON, APPROVE or REJECT.\n- Server-enforced maximum lifetime and single-use consumption.\n- Mapping to the existing transition and delivery-accept logic.\n- The PT-035 prerequisite (server.ts:164-167).\n- A decision-class matrix for the Founder to fill: FOUNDER_ATTENTION_REQUIRED retry/reject, PREFLIGHT to AUTHORIZED, delivery accept, retry-blocked, R3/R4, COMPLETE, finance/legal.\n- STOP with step-up and RESUME desktop-only by default.\n- The rule that voice or notification actions can never approve. Tests: No code. TR-comment and secret-sanity must pass. Reviewer check: the design never relies on the current unsigned transition body (schemas.ts:49-52) for mobile decisions. In-flight conflicts: None."
+      "notes": "[FD-2026-10-20-MOB-PHASE0 applied 2026-10-20: READY as a docs-only phase 0 package; dependencies re-tiered for parallel documents (tier 2). Founder answers to carry: connectivity A first (same-LAN QR pairing + TLS), remote target B (user-managed VPN/overlay), no open tunnel, no second backend; first release read-only monitoring; no mobile approvals before PT-035; mobile STOP and signed approvals evaluated separately; RESUME desktop-only; no FCM, paid LLM or new external account in the first release.] D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Design document only.\n- Server-created ApprovalRequest in the Work OS journal carrying actionDigest, targetDigest and a nonce.\n- Device-signed decision over canonical JSON, APPROVE or REJECT.\n- Server-enforced maximum lifetime and single-use consumption.\n- Mapping to the existing transition and delivery-accept logic.\n- The PT-035 prerequisite (server.ts:164-167).\n- A decision-class matrix for the Founder to fill: FOUNDER_ATTENTION_REQUIRED retry/reject, PREFLIGHT to AUTHORIZED, delivery accept, retry-blocked, R3/R4, COMPLETE, finance/legal.\n- STOP with step-up and RESUME desktop-only by default.\n- The rule that voice or notification actions can never approve. Tests: No code. TR-comment and secret-sanity must pass. Reviewer check: the design never relies on the current unsigned transition body (schemas.ts:49-52) for mobile decisions. In-flight conflicts: None.",
+      "authorizedBy": "FOUNDER-DECISION:FD-2026-10-20-MOB-PHASE0 (in-session 2026-10-20 ~05:10Z; record docs/planning/authority/FD-2026-10-20-MOB-PHASE0.md). Scope: documentation, research, screen requirements, UI/UX design specifications, architecture ADR and test strategy ONLY, files under docs/mobile/** only. Not granted: React Native code, dependencies, new API, listener, auth change, protected files, CI/ruleset, reseal, paid service, new external account. Ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "testFile": "none (docs-only): node scripts/validate-tr-comments.mjs and node scripts/secret-sanity.mjs must PASS"
     },
     {
       "id": "MOB-5",
       "title": "React Native Android architecture ADR",
       "package": "MOBILE-ANDROID",
-      "owner": "FOUNDER",
-      "status": "DRAFT_NOT_READY",
-      "dependsOn": [
-        "MOB-1",
-        "MOB-2"
-      ],
+      "owner": "CLOUD",
+      "status": "READY",
+      "dependsOn": [],
       "riskLevel": 1,
-      "requiresNewAuthority": true,
+      "requiresNewAuthority": false,
       "protectedEdit": false,
       "files": [
         "docs/mobile/ADR-MOB-001-REACT-NATIVE-ANDROID.md"
       ],
-      "requiresAuthority": [],
       "screens": [],
       "specFile": "docs/planning/authority/D-2026-10-20-MOBILE-ANDROID.md (sections 9-11)",
-      "notes": "D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: ADR only. It records:\n- bare RN CLI with local Gradle; no EAS; Android-only (ios/ and iOS tooling removed);\n- a self-contained apps/mobile/ with its own package.json, exact-pinned lockfile, .npmrc mirroring root, and nested .gitignore/.gitattributes;\n- .tsx/.js-only sources until FA-MOB-10;\n- tests under apps/mobile/__tests__ with mob- names, never under tests/;\n- Keystore secure storage and a custom Kotlin TurboModule for biometric CryptoObject signing;\n- Network Security Config pinning and a debug-only cleartext config;\n- allowBackup=false and FLAG_SECURE;\n- a read-only STALE cache and no second store;\n- the honest-state rules of renderer model.js (missing data shows '—' or UNAVAILABLE, never a number);\n- a vendor-with-parity-test versus import decision for the pure renderer cores.\nVersions are left as UNVERIFIED until MOB-9. Tests: No code. TR-comment and secret-sanity must pass. Reviewer check: no version is presented as pinned or certified (knowledge/technologies/react-native.json:118). In-flight conflicts: None. It reads apps/desktop/renderer cores as reference only."
+      "notes": "[FD-2026-10-20-MOB-PHASE0 applied 2026-10-20: READY as a docs-only phase 0 package; dependencies re-tiered for parallel documents (tier 1). Founder answers to carry: connectivity A first (same-LAN QR pairing + TLS), remote target B (user-managed VPN/overlay), no open tunnel, no second backend; first release read-only monitoring; no mobile approvals before PT-035; mobile STOP and signed approvals evaluated separately; RESUME desktop-only; no FCM, paid LLM or new external account in the first release.] D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: ADR only. It records:\n- bare RN CLI with local Gradle; no EAS; Android-only (ios/ and iOS tooling removed);\n- a self-contained apps/mobile/ with its own package.json, exact-pinned lockfile, .npmrc mirroring root, and nested .gitignore/.gitattributes;\n- .tsx/.js-only sources until FA-MOB-10;\n- tests under apps/mobile/__tests__ with mob- names, never under tests/;\n- Keystore secure storage and a custom Kotlin TurboModule for biometric CryptoObject signing;\n- Network Security Config pinning and a debug-only cleartext config;\n- allowBackup=false and FLAG_SECURE;\n- a read-only STALE cache and no second store;\n- the honest-state rules of renderer model.js (missing data shows '—' or UNAVAILABLE, never a number);\n- a vendor-with-parity-test versus import decision for the pure renderer cores.\nVersions are left as UNVERIFIED until MOB-9. Tests: No code. TR-comment and secret-sanity must pass. Reviewer check: no version is presented as pinned or certified (knowledge/technologies/react-native.json:118). In-flight conflicts: None. It reads apps/desktop/renderer cores as reference only.",
+      "authorizedBy": "FOUNDER-DECISION:FD-2026-10-20-MOB-PHASE0 (in-session 2026-10-20 ~05:10Z; record docs/planning/authority/FD-2026-10-20-MOB-PHASE0.md). Scope: documentation, research, screen requirements, UI/UX design specifications, architecture ADR and test strategy ONLY, files under docs/mobile/** only. Not granted: React Native code, dependencies, new API, listener, auth change, protected files, CI/ruleset, reseal, paid service, new external account. Ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "testFile": "none (docs-only): node scripts/validate-tr-comments.mjs and node scripts/secret-sanity.mjs must PASS"
     },
     {
       "id": "MOB-6",
       "title": "Screen specifications: monitoring and read screens",
       "package": "MOBILE-ANDROID",
-      "owner": "FOUNDER",
-      "status": "DRAFT_NOT_READY",
+      "owner": "CLOUD",
+      "status": "READY",
       "dependsOn": [
         "MOB-3",
         "MOB-5"
       ],
       "riskLevel": 1,
-      "requiresNewAuthority": true,
+      "requiresNewAuthority": false,
       "protectedEdit": false,
       "files": [
         "docs/mobile/screens/UI-097-MOBILE-HOME.md",
@@ -422,7 +623,6 @@
         "docs/mobile/screens/UI-249-MOBILE-SESSION-RESUME.md",
         "docs/mobile/screens/F8-MOBILE-REPORTS.md"
       ],
-      "requiresAuthority": [],
       "screens": [
         "UI-097",
         "UI-099",
@@ -434,20 +634,22 @@
         "UI-249"
       ],
       "specFile": "docs/planning/authority/D-2026-10-20-MOBILE-ANDROID.md (sections 9-11)",
-      "notes": "D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Spec only. Each screen gets: purpose, target function, data source (existing endpoint or MOB-3 PROPOSED route), fields, and loading, empty, error, OFFLINE, STALE, UNAVAILABLE and denied states. Actions are listed but all read-only. Also included:\n- a mapping note that F8 reports have no mobile screen ID (a new inventory ID is requested);\n- UI-177 offline behaviour without an offline write queue;\n- UI-180 as client-side scope, because the server has no scope concept. Tests: No code. TR-comment and secret-sanity must pass. Reviewer check: each data field traces to an existing endpoint (file:line) or a MOB-3 PROPOSED route. In-flight conflicts: None. Written under docs/mobile/, not docs/ux/, which renderer lanes edit."
+      "notes": "[FD-2026-10-20-MOB-PHASE0 applied 2026-10-20: READY as a docs-only phase 0 package; dependencies re-tiered for parallel documents (tier 3). Founder answers to carry: connectivity A first (same-LAN QR pairing + TLS), remote target B (user-managed VPN/overlay), no open tunnel, no second backend; first release read-only monitoring; no mobile approvals before PT-035; mobile STOP and signed approvals evaluated separately; RESUME desktop-only; no FCM, paid LLM or new external account in the first release.] D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Spec only. Each screen gets: purpose, target function, data source (existing endpoint or MOB-3 PROPOSED route), fields, and loading, empty, error, OFFLINE, STALE, UNAVAILABLE and denied states. Actions are listed but all read-only. Also included:\n- a mapping note that F8 reports have no mobile screen ID (a new inventory ID is requested);\n- UI-177 offline behaviour without an offline write queue;\n- UI-180 as client-side scope, because the server has no scope concept. Tests: No code. TR-comment and secret-sanity must pass. Reviewer check: each data field traces to an existing endpoint (file:line) or a MOB-3 PROPOSED route. In-flight conflicts: None. Written under docs/mobile/, not docs/ux/, which renderer lanes edit.",
+      "authorizedBy": "FOUNDER-DECISION:FD-2026-10-20-MOB-PHASE0 (in-session 2026-10-20 ~05:10Z; record docs/planning/authority/FD-2026-10-20-MOB-PHASE0.md). Scope: documentation, research, screen requirements, UI/UX design specifications, architecture ADR and test strategy ONLY, files under docs/mobile/** only. Not granted: React Native code, dependencies, new API, listener, auth change, protected files, CI/ruleset, reseal, paid service, new external account. Ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "testFile": "none (docs-only): node scripts/validate-tr-comments.mjs and node scripts/secret-sanity.mjs must PASS"
     },
     {
       "id": "MOB-7",
       "title": "Screen specifications: action, security, voice and lab screens",
       "package": "MOBILE-ANDROID",
-      "owner": "FOUNDER",
-      "status": "DRAFT_NOT_READY",
+      "owner": "CLOUD",
+      "status": "READY",
       "dependsOn": [
         "MOB-4",
         "MOB-5"
       ],
       "riskLevel": 1,
-      "requiresNewAuthority": true,
+      "requiresNewAuthority": false,
       "protectedEdit": false,
       "files": [
         "docs/mobile/screens/UI-098-MOBILE-APPROVAL-INBOX.md",
@@ -462,7 +664,6 @@
         "docs/mobile/screens/UI-176-MOBILE-STOP-ALL.md",
         "docs/mobile/screens/UI-144-MOBILE-REAL-DEVICE-RUN.md"
       ],
-      "requiresAuthority": [],
       "screens": [
         "UI-098",
         "UI-175",
@@ -477,55 +678,50 @@
         "UI-144"
       ],
       "specFile": "docs/planning/authority/D-2026-10-20-MOBILE-ANDROID.md (sections 9-11)",
-      "notes": "D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Spec only. Covers approval inbox and detail, notifications, voice draft, voice privacy and permission, voice command and pending draft, secure profile, device pairing, biometric lock, the STOP_ALL flow, and real-device runs. Each screen lists its authority dependency (FA-MOB ids), step-up points, the SC conditions it must satisfy, and the denied and expired states. UI-144 is specified as lab-only and out of v1 unless FA-MOB-22 is granted. Tests: No code. TR-comment and secret-sanity must pass. Reviewer check: no screen offers a free-text or voice approval path (SC-9, SC-10). In-flight conflicts: None."
+      "notes": "[FD-2026-10-20-MOB-PHASE0 applied 2026-10-20: READY as a docs-only phase 0 package; dependencies re-tiered for parallel documents (tier 3). Founder answers to carry: connectivity A first (same-LAN QR pairing + TLS), remote target B (user-managed VPN/overlay), no open tunnel, no second backend; first release read-only monitoring; no mobile approvals before PT-035; mobile STOP and signed approvals evaluated separately; RESUME desktop-only; no FCM, paid LLM or new external account in the first release.] D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Spec only. Covers approval inbox and detail, notifications, voice draft, voice privacy and permission, voice command and pending draft, secure profile, device pairing, biometric lock, the STOP_ALL flow, and real-device runs. Each screen lists its authority dependency (FA-MOB ids), step-up points, the SC conditions it must satisfy, and the denied and expired states. UI-144 is specified as lab-only and out of v1 unless FA-MOB-22 is granted. Tests: No code. TR-comment and secret-sanity must pass. Reviewer check: no screen offers a free-text or voice approval path (SC-9, SC-10). In-flight conflicts: None.",
+      "authorizedBy": "FOUNDER-DECISION:FD-2026-10-20-MOB-PHASE0 (in-session 2026-10-20 ~05:10Z; record docs/planning/authority/FD-2026-10-20-MOB-PHASE0.md). Scope: documentation, research, screen requirements, UI/UX design specifications, architecture ADR and test strategy ONLY, files under docs/mobile/** only. Not granted: React Native code, dependencies, new API, listener, auth change, protected files, CI/ruleset, reseal, paid service, new external account. Ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "testFile": "none (docs-only): node scripts/validate-tr-comments.mjs and node scripts/secret-sanity.mjs must PASS"
     },
     {
       "id": "MOB-8",
       "title": "Test, build and release strategy",
       "package": "MOBILE-ANDROID",
-      "owner": "FOUNDER",
-      "status": "DRAFT_NOT_READY",
+      "owner": "CLOUD",
+      "status": "READY",
       "dependsOn": [
-        "MOB-5"
+        "MOB-5",
+        "MOB-9"
       ],
       "riskLevel": 1,
-      "requiresNewAuthority": true,
+      "requiresNewAuthority": false,
       "protectedEdit": false,
       "files": [
         "docs/mobile/TEST-AND-BUILD.md"
       ],
-      "requiresAuthority": [],
       "screens": [],
       "specFile": "docs/planning/authority/D-2026-10-20-MOBILE-ANDROID.md (sections 9-11)",
-      "notes": "D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Strategy document only.\n- Test stack: Jest plus RN Testing Library for units and components; Maestro on a KVM emulator for end-to-end; Fastify inject contract tests for new routes, following the existing 33 inject-based test files.\n- Mobile CI job design: ubuntu-24.04, JDK 17, SHA-pinned actions, setup-gradle with basic cache, reduced ABIs.\n- APK builds: debug and release-type variants.\n- Signing pattern: Founder-held key, protected Environment, never on pull_request.\n- Gradle supply chain: dependency verification and wrapper checksum.\n- The repository collision list with the exact protected change each collision needs (tsconfig.json:17-22; validate-tr-comments.mjs:5,7; secret-sanity.mjs:13,16; supply-chain.mjs:14; merge-gate.mjs:10,15).\n- Merge-gating rule: mobile tests do not gate any merge until MOB-14 exists. Tests: No code. TR-comment and secret-sanity must pass. Reviewer check: external tooling facts are marked UNVERIFIED or carry a dated source. In-flight conflicts: None."
+      "notes": "[FD-2026-10-20-MOB-PHASE0 applied 2026-10-20: READY as a docs-only phase 0 package; dependencies re-tiered for parallel documents (tier 2). Founder answers to carry: connectivity A first (same-LAN QR pairing + TLS), remote target B (user-managed VPN/overlay), no open tunnel, no second backend; first release read-only monitoring; no mobile approvals before PT-035; mobile STOP and signed approvals evaluated separately; RESUME desktop-only; no FCM, paid LLM or new external account in the first release.] D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Strategy document only.\n- Test stack: Jest plus RN Testing Library for units and components; Maestro on a KVM emulator for end-to-end; Fastify inject contract tests for new routes, following the existing 33 inject-based test files.\n- Mobile CI job design: ubuntu-24.04, JDK 17, SHA-pinned actions, setup-gradle with basic cache, reduced ABIs.\n- APK builds: debug and release-type variants.\n- Signing pattern: Founder-held key, protected Environment, never on pull_request.\n- Gradle supply chain: dependency verification and wrapper checksum.\n- The repository collision list with the exact protected change each collision needs (tsconfig.json:17-22; validate-tr-comments.mjs:5,7; secret-sanity.mjs:13,16; supply-chain.mjs:14; merge-gate.mjs:10,15).\n- Merge-gating rule: mobile tests do not gate any merge until MOB-14 exists. Tests: No code. TR-comment and secret-sanity must pass. Reviewer check: external tooling facts are marked UNVERIFIED or carry a dated source. In-flight conflicts: None.",
+      "authorizedBy": "FOUNDER-DECISION:FD-2026-10-20-MOB-PHASE0 (in-session 2026-10-20 ~05:10Z; record docs/planning/authority/FD-2026-10-20-MOB-PHASE0.md). Scope: documentation, research, screen requirements, UI/UX design specifications, architecture ADR and test strategy ONLY, files under docs/mobile/** only. Not granted: React Native code, dependencies, new API, listener, auth change, protected files, CI/ruleset, reseal, paid service, new external account. Ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "testFile": "none (docs-only): node scripts/validate-tr-comments.mjs and node scripts/secret-sanity.mjs must PASS"
     },
     {
       "id": "MOB-9",
       "title": "Technology knowledge research for the RN/Android stack",
       "package": "MOBILE-ANDROID",
-      "owner": "FOUNDER",
-      "status": "DRAFT_NOT_READY",
-      "dependsOn": [
-        "MOB-5",
-        "MOB-8"
-      ],
+      "owner": "CLOUD",
+      "status": "READY",
+      "dependsOn": [],
       "riskLevel": 1,
-      "requiresNewAuthority": true,
+      "requiresNewAuthority": false,
       "protectedEdit": false,
       "files": [
-        "knowledge/technologies/react-native.json",
-        "knowledge/technologies/android-sdk.json",
-        "knowledge/technologies/android-gradle-plugin.json",
-        "knowledge/technologies/gradle.json",
-        "knowledge/technologies/hermes.json",
-        "knowledge/technologies/jest.json",
-        "knowledge/technologies/maestro.json",
-        "registries/technologies.json"
+        "docs/mobile/TECH-VERSIONS.md"
       ],
-      "requiresAuthority": [],
       "screens": [],
       "specFile": "docs/planning/authority/D-2026-10-20-MOBILE-ANDROID.md (sections 9-11)",
-      "notes": "D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Research the existing seed entries and record evidence for them: react-native, android-sdk, android-gradle-plugin, gradle, hermes, jest, testing-library, maestro, okhttp, kotlin, java. Add missing entries: FCM, UnifiedPush, Android Keystore, BiometricPrompt, SpeechRecognizer, Network Security Config, react-native-keychain. Record official source refs, a candidate pinned version, freshness date, license and security notes. Promote nothing to CERTIFIED unless all seven evidence kinds persist (registries/technology-certification-policy.json, requiredCertificationEvidence). The Founder picks the version (open question). Tests: The supervisor's validation must pass scripts/validate-technology-graph.mjs and the //TR key convention for JSON. Which validation step runs the graph validator is UNVERIFIED. Reviewer check: no CERTIFIED state without complete evidence. In-flight conflicts: No in-flight lane is recorded on these files. This is UNVERIFIED: the coordinator must supply the live open-PR list."
+      "notes": "[FD-2026-10-20-MOB-PHASE0 applied 2026-10-20: READY as a docs-only phase 0 package; dependencies re-tiered for parallel documents (tier 1); files outside docs/mobile/** removed from scope: knowledge/technologies/react-native.json, knowledge/technologies/android-sdk.json, knowledge/technologies/android-gradle-plugin.json, knowledge/technologies/gradle.json, knowledge/technologies/hermes.json, knowledge/technologies/jest.json, knowledge/technologies/maestro.json, registries/technologies.json. Founder answers to carry: connectivity A first (same-LAN QR pairing + TLS), remote target B (user-managed VPN/overlay), no open tunnel, no second backend; first release read-only monitoring; no mobile approvals before PT-035; mobile STOP and signed approvals evaluated separately; RESUME desktop-only; no FCM, paid LLM or new external account in the first release.] D-2026-10-20-MOBILE-ANDROID (Android-only React Native + TypeScript Mobile Companion, apps/mobile/). Registered as non-READY by the coordinator; no agent may start it before the listed FA-MOB grants exist (docs-only: needs a Founder READY rule for docs/mobile, see open question 15). Scope: Research the existing seed entries and record evidence for them: react-native, android-sdk, android-gradle-plugin, gradle, hermes, jest, testing-library, maestro, okhttp, kotlin, java. Add missing entries: FCM, UnifiedPush, Android Keystore, BiometricPrompt, SpeechRecognizer, Network Security Config, react-native-keychain. Record official source refs, a candidate pinned version, freshness date, license and security notes. Promote nothing to CERTIFIED unless all seven evidence kinds persist (registries/technology-certification-policy.json, requiredCertificationEvidence). The Founder picks the version (open question). Tests: The supervisor's validation must pass scripts/validate-technology-graph.mjs and the //TR key convention for JSON. Which validation step runs the graph validator is UNVERIFIED. Reviewer check: no CERTIFIED state without complete evidence. In-flight conflicts: No in-flight lane is recorded on these files. This is UNVERIFIED: the coordinator must supply the live open-PR list.",
+      "authorizedBy": "FOUNDER-DECISION:FD-2026-10-20-MOB-PHASE0 (in-session 2026-10-20 ~05:10Z; record docs/planning/authority/FD-2026-10-20-MOB-PHASE0.md). Scope: documentation, research, screen requirements, UI/UX design specifications, architecture ADR and test strategy ONLY, files under docs/mobile/** only. Not granted: React Native code, dependencies, new API, listener, auth change, protected files, CI/ruleset, reseal, paid service, new external account. Ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
+      "testFile": "none (docs-only): node scripts/validate-tr-comments.mjs and node scripts/secret-sanity.mjs must PASS"
     },
     {
       "id": "MOB-11",
@@ -1713,7 +1909,7 @@
     },
     {
       "owner": "CLOUD",
-      "status": "READY",
+      "status": "DONE",
       "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
       "riskLevel": 2,
       "requiresNewAuthority": false,
@@ -1734,11 +1930,11 @@
         "docs/ux/UI-025-TASK-TIMELINE.md"
       ],
       "testFile": "tests/v7-b5-work-screens.test.ts",
-      "notes": "Inventory 2026-10-19 UI-025 (P1, authority_needed=none): work-run data exists, no timeline rendering. Depends on UI-026 (same files). Timeline built only from existing GET /v1/work-runs and GET /v1/missions reads; events without a timestamp shown as UNKNOWN, never invented; no zoom state persisted."
+      "notes": "Inventory 2026-10-19 UI-025 (P1, authority_needed=none): work-run data exists, no timeline rendering. Depends on UI-026 (same files). Timeline built only from existing GET /v1/work-runs and GET /v1/missions reads; events without a timestamp shown as UNKNOWN, never invented; no zoom state persisted. Write-back 2026-10-20: merged into claude/integration-wave-b5 (branch head 0567275 ancestor of ffc396f)"
     },
     {
       "owner": "CLOUD",
-      "status": "READY",
+      "status": "DONE",
       "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
       "riskLevel": 2,
       "requiresNewAuthority": false,
@@ -1758,7 +1954,7 @@
         "docs/ux/UI-133-AGENT-IDENTITY-CARD.md"
       ],
       "testFile": "tests/v7-ux-wp-agents.test.ts",
-      "notes": "Inventory 2026-10-19 UI-133 (P1, authority_needed=none): role catalog and role detail with certifiedScope/proficiencyStatus exist; no per-agent identity card. Card derived only from GET /v1/roles, GET /v1/roles/:roleId and GET /v1/agents (served and allow-listed); a missing certification evidence trail is shown as UNKNOWN, never as certified. Depends on UI-032 (same files). Overlaps open PRs #22/#48 on workforce.js and the wp-agents test (resolved at integration)."
+      "notes": "Inventory 2026-10-19 UI-133 (P1, authority_needed=none): role catalog and role detail with certifiedScope/proficiencyStatus exist; no per-agent identity card. Card derived only from GET /v1/roles, GET /v1/roles/:roleId and GET /v1/agents (served and allow-listed); a missing certification evidence trail is shown as UNKNOWN, never as certified. Depends on UI-032 (same files). Overlaps open PRs #22/#48 on workforce.js and the wp-agents test (resolved at integration). Write-back 2026-10-20: merged into claude/integration-wave-b5 (branch head 33c6770 ancestor of ffc396f)"
     },
     {
       "owner": "CLOUD",

@@ -264,7 +264,7 @@ describe("UX WP4 feed and markup units", () => {
 
 // //TR: UX hardening — Day-0 bölümü (health/stop/runs/events/logs) için fonksiyonel, negatif ve erişilebilirlik testleri; veri yoksa uydurma değer yok, hata durumu "Log yok" diye gizlenmez.
 type Routes = Record<string, any>;
-async function mkDay0(routes: Routes, lang = "en") {
+async function mkDay0(routes: Routes, lang = "en", confirmAnswer: boolean | "missing" = true) {
   const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
   const doc = new D(), store = st.createStore(null), calls: string[] = [];
   const bridge = {apiGet: async (p: string) => {
@@ -276,10 +276,12 @@ async function mkDay0(routes: Routes, lang = "en") {
   }};
   const api = apiMod.createApi({bridge, store}), t = (k: string, v?: any) => i18n.translate(lang, k, v);
   const stops: string[] = [];
+  const confirms: any[] = [];
   const ctx: any = {doc, store, api, i18n: {lang, t}, t, navigate() {}, principal: "FOUNDER_LOCAL", renderAttention() {}, requestStop() { stops.push("stop"); }, resume() { stops.push("resume"); }};
+  if (confirmAnswer !== "missing") ctx.confirm = async (o: any) => { confirms.push(o); return confirmAnswer; };
   const tower = await load("views", "tower.js");
   const view: N = await tower.render(ctx);
-  return {ctx, view, calls, stops, t};
+  return {ctx, view, calls, stops, t, confirms};
 }
 const byId = (v: N, id: string) => all(v).find(n => n.id === id)!;
 const flush = () => new Promise(r => setTimeout(r, 0));
@@ -297,7 +299,18 @@ describe("UX hardening: tower day-0 functional", () => {
     const m = await mkDay0(base);
     expect(byId(m.view, "health").textContent).toBe("ok · uasco");
     byId(m.view, "towerStop").fire("click"); byId(m.view, "towerResume").fire("click");
+    expect(m.stops).toEqual(["stop"]);
+    await flush();
     expect(m.stops).toEqual(["stop", "resume"]);
+    expect(m.confirms).toHaveLength(1);
+    expect(m.confirms[0].body).toBe(m.t("resume.confirm.body"));
+  });
+  it("Resume is not called when confirm resolves false or ctx.confirm is missing (fail-closed)", async () => {
+    for (const ans of [false, "missing"] as const) {
+      const m = await mkDay0(base, "en", ans);
+      byId(m.view, "towerResume").fire("click"); await flush();
+      expect(m.stops).toEqual([]);
+    }
   });
   it("loads events and a log on click and shows loading text first", async () => {
     const m = await mkDay0(base);

@@ -163,6 +163,12 @@ const KNOWN_409=new Set(["EXECUTOR_NOT_CONFIGURED","SANDBOX_UNAVAILABLE","NO_GEN
 // D-M1A-STATE-MODEL-2026-10-15: COMPLETE PRODUCT_VERIFIED ister; kaynak teslimi kabul kapısı da {error:"WORKOS_CONFLICT", reason} ile reddeder.
 const KNOWN_COMPLETION_409=new Set(["COMPLETION_PRODUCT_NOT_VERIFIED","COMPLETION_FUNCTIONAL_ACCEPTANCE_BLOCKED","SOURCE_GENERATION_NOT_COMPLETE","NO_GENERATED_SOURCE","DELIVERY_ACCEPTANCE_MISMATCH","DELIVERY_ALREADY_ACCEPTED",
   "DELIVERY_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT","DELIVERY_ARTIFACT_NOT_PREPARED","DELIVERY_NOT_LATEST_RUN","DELIVERY_MISSION_NOT_REPORTING","DELIVERY_RUN_NOT_AWAITING_APPROVAL","DELIVERY_PRODUCT_VERIFIED_USE_COMPLETE"]);
+/** //TR: UI-109: ACTION_DENIED nedeni ilk ':' öncesine kesilir; yalnız sabit kod biçimine uyuyorsa gösterilir, yoksa "" (neden uydurulmaz). */
+function denialReason(raw){
+  if(typeof raw!=="string")return "";
+  const code=raw.split(":")[0];
+  return /^[A-Z][A-Z0-9_]{1,63}$/.test(code)?code:"";
+}
 /** Köprü POST yanıtını {ok, key, vars} olarak sınıflar; key bir sözlük anahtarıdır (post.*). */
 export function describePostResult(res){
   if(!res)return {ok:false,key:"post.err.generic",vars:{status:MISSING}};
@@ -170,6 +176,7 @@ export function describePostResult(res){
   const s=res.status,err=typeof res.body?.error==="string"?res.body.error:"";
   if(s>=200&&s<300)return {ok:true,key:"post.ok",vars:{}};
   if(s===400)return {ok:false,key:"post.err.400",vars:{status:s}};
+  if(s===403&&err==="ACTION_DENIED"){const reason=denialReason(res.body?.reason);if(reason)return {ok:false,key:"post.err.denied",vars:{status:s,reason}}}
   if(s===401||s===403)return {ok:false,key:"post.err.auth",vars:{status:s}};
   if(s===404||s===501)return {ok:false,key:"post.err.unavailable",vars:{status:s}};
   if(s===409&&err==="WORKOS_CONFLICT"&&KNOWN_COMPLETION_409.has(res.body?.reason))return {ok:false,key:`post.err.409.${res.body.reason}`,vars:{status:s}};

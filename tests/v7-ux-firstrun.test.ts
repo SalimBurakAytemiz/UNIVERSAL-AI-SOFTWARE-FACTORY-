@@ -1,4 +1,4 @@
-// //TR: Bu test UX WP-FIRSTRUN ilk-açılış kurulum/onboarding sihirbazını (apps/desktop/renderer/views/firstrun.js) doğrular: (1) güvenli per-user tercih kapısı — "görülmedi" ise açılır, "görüldü" ise açılmaz, depo yoksa dürüst varsayılan; (2) adımlar (welcome/connection/verify/ready) ve ileri/geri/atla/bitir gezinmesi; (3) bağlantı durumu YALNIZ gerçek sunucu sinyalinden (WP-SETTINGS claudeConnectionState) — profil READY ise CONNECTED, LOGIN_REQUIRED/REFUSED ise NOT_CONNECTED, bilinmeyen/eksikse NOT_VERIFIED; gerçek giriş sinyali olmadan CONNECTED/"Connected"/"Bağlı" ASLA gösterilmez (K-1); arka uç yok/doğrulanmamışsa dürüst UNAVAILABLE; (4) doğrulama adımı durumu yeniden okur ve CONNECTED yalnız tüm profiller READY iken; (5) güvenlik — sihirbaz giriş YAPMAZ (window.uasco yok, .post yok), yalnız giriş komutunu metin olarak gösterir, korumalı/yönetilen dosya yazmaz, yalnız zaten allow-list'li GET /v1/system/executors okur, yeni GET eklenmez (main.mjs EXTRA_GET_ROUTES değişmez); (6) kapı değildir — atla/Esc/bitir güvenli tercihi işaretler ve dialog'u kapatır, uygulamayı engellemez; (7) a11y (modal dialog rol/aria, odaklanabilir adım başlığı, odak adım değişiminde başlığa gider); (8) firstrun.* sözlüğü EN/TR'de birebirdir.
+// //TR: Bu test UX WP-FIRSTRUN ilk-açılış kurulum/onboarding sihirbazını (apps/desktop/renderer/views/firstrun.js) doğrular: (1) güvenli per-user tercih kapısı — "görülmedi" ise açılır, "görüldü" ise açılmaz, depo yoksa dürüst varsayılan; (2) adımlar (welcome/connection/verify/ready) ve ileri/geri/atla/bitir gezinmesi; (3) bağlantı durumu YALNIZ gerçek sunucu sinyalinden (WP-SETTINGS claudeConnectionState) — profil READY ise CONNECTED, LOGIN_REQUIRED/REFUSED ise NOT_CONNECTED, bilinmeyen/eksikse NOT_VERIFIED; gerçek giriş sinyali olmadan CONNECTED/"Connected"/"Bağlı" ASLA gösterilmez (K-1); arka uç yok/doğrulanmamışsa dürüst UNAVAILABLE; (4) doğrulama adımı durumu yeniden okur ve CONNECTED yalnız tüm profiller READY iken; (5) güvenlik — sihirbaz giriş YAPMAZ (window.uasco yok, .post yok), yalnız giriş komutunu metin olarak gösterir, korumalı/yönetilen dosya yazmaz, yalnız zaten allow-list'li GET /v1/system/executors (+ doğrulama adımında /v1/install, /v1/phase0) okur, yeni GET eklenmez (main.mjs EXTRA_GET_ROUTES değişmez); (6) kapı değildir — atla/Esc/bitir güvenli tercihi işaretler ve dialog'u kapatır, uygulamayı engellemez; (7) a11y (modal dialog rol/aria, odaklanabilir adım başlığı, odak adım değişiminde başlığa gider); (8) firstrun.* sözlüğü EN/TR'de birebirdir.
 import {describe, it, expect} from "vitest";
 import fs from "node:fs";
 import path from "node:path";
@@ -44,9 +44,13 @@ const all = (n: N): N[] => n.children.flatMap(c => [c, ...all(c)]);
 const within = (r: N | null) => (r ? all(r) : []);
 const byId = (r: N, id: string) => all(r).find(n => n.id === id) ?? null;
 const text = (n: N) => n.textContent;
+const SHA = "a".repeat(40);
+const instOk = (final = "CLEAN") => ({verification: "VERIFIED", phase0Final: final, installId: "INSTALL-1", generatedAt: "2026-10-01T00:00:00Z", schemaVersion: "1", components: {core: {present: true, status: "OK"}}});
+const p0Ok = (final = "CLEAN") => ({verification: "VERIFIED", final, installId: "INSTALL-1", generatedAt: "2026-10-01T00:00:00Z", schemaVersion: "1", sourceCommit: SHA, sealSignature: "sig", checks: {a: "PASS"}});
+const rows = (c: any) => within(c.dialog).filter(n => "frInstallRow" in n.dataset);
 const LOGIN = "$env:CLAUDE_CONFIG_DIR='C:/Users/u/.uasco/impl'; claude";
 
-interface Feed { execOff?: boolean; profiles?: Record<string, any> | null; }
+interface Feed { execOff?: boolean; profiles?: Record<string, any> | null; install?: any; phase0?: any; }
 function execResponse(feed: Feed) {
   const profiles = feed.profiles === undefined
     ? {implementer: {state: "READY", reason: null, loginCommand: LOGIN}, reviewer: {state: "LOGIN_REQUIRED", reason: "LOGIN_REQUIRED", loginCommand: LOGIN}}
@@ -61,7 +65,7 @@ async function mkCtx(feed: Feed = {}, lang = "tr") {
   const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
   const doc = new D(), store = st.createStore(null), calls: string[] = [];
   const bridge = {
-    apiGet: async (p: string) => { calls.push(p); if (p === "/v1/system/executors") { if (feed.execOff) throw new Error(`${p}: HTTP 503`); return execResponse(feed); } throw new Error(`${p}: HTTP 404`); },
+    apiGet: async (p: string) => { calls.push(p); if (p === "/v1/system/executors") { if (feed.execOff) throw new Error(`${p}: HTTP 503`); return execResponse(feed); } if (p === "/v1/install" && feed.install !== undefined) return feed.install; if (p === "/v1/phase0" && feed.phase0 !== undefined) return feed.phase0; throw new Error(`${p}: HTTP 404`); },
     apiPost: async () => { throw new Error("NO_POST_IN_FIRSTRUN"); },
   };
   const api = apiMod.createApi({bridge, store});
@@ -159,6 +163,17 @@ describe("WP-FIRSTRUN connection + verify show ONLY real sign-in state (K-1, no 
     expect([...new Set(calls)]).toEqual(["/v1/system/executors"]);
     expect(desktopGetPathAllowed("/v1/system/executors") || loadGet()("/v1/system/executors")).toBe(true);
   });
+  it("verify step reads exactly the allow-listed GET set [executors, install, phase0] lazily (none of the extras before the verify step)", async () => {
+    const fr = await load("views", "firstrun.js");
+    const {ctx, calls} = await mkCtx({install: instOk(), phase0: p0Ok()}, "en");
+    const c = fr.createFirstRunController(ctx, {storage: makeFakeStorage()});
+    await c.start(); c.goTo(1);
+    expect([...new Set(calls)]).toEqual(["/v1/system/executors"]);
+    c.goTo(2);
+    await new Promise(r => setTimeout(r, 0)); await new Promise(r => setTimeout(r, 0));
+    expect([...new Set(calls)]).toEqual(["/v1/system/executors", "/v1/install", "/v1/phase0"]);
+    for (const p of new Set(calls)) expect(desktopGetPathAllowed(p) || loadGet()(p)).toBe(true);
+  });
   it("verify step reports CONNECTED only when ALL profiles are READY; otherwise NOT_CONNECTED; honest UNAVAILABLE when the backend is down (never 'Connected')", async () => {
     const fr = await load("views", "firstrun.js");
     // Karışık: biri READY biri değil -> NOT_CONNECTED
@@ -191,6 +206,78 @@ describe("WP-FIRSTRUN connection + verify show ONLY real sign-in state (K-1, no 
     expect(text(c.dialog)).not.toContain("Connected");
     c.goTo(2);
     expect(within(c.dialog).find(n => n.dataset.frVerify)!.dataset.frVerify).toBe("NOT_CONNECTED");
+  });
+});
+
+describe("WP-FIRSTRUN verify step: Installation check (UI-002, read-only)", () => {
+  const settle = async () => { for (let i = 0; i < 4; i++) await new Promise(r => setTimeout(r, 0)); };
+  it("shows server verdicts verbatim; VERIFIED pill only for usable VERIFIED reads, PENDING/REJECTED get their own pills", async () => {
+    const fr = await load("views", "firstrun.js");
+    const ok = await mkCtx({install: instOk("CLEAN_LOCAL_ONLY"), phase0: p0Ok("CLEAN_LOCAL_ONLY")}, "en");
+    const c = fr.createFirstRunController(ok.ctx, {storage: makeFakeStorage()});
+    await c.start(); c.goTo(2); await settle();
+    const r = rows(c);
+    expect(r.map(n => n.dataset.frInstallRow)).toEqual(["install", "phase0"]);
+    for (const n of r) { expect(n.dataset.frInstallVerdict).toBe("VERIFIED"); expect(text(n)).toContain("VERIFIED"); expect(text(n)).toContain("CLEAN_LOCAL_ONLY"); }
+    expect(within(c.dialog).some(n => "frInstallMismatch" in n.dataset)).toBe(false);
+    const pend = await mkCtx({install: {verification: "PENDING", phase0Final: "NOT_RUN", components: {}}, phase0: {verification: "REJECTED", final: "BLOCKED", errors: ["BAD_THING"]}}, "en");
+    const c2 = fr.createFirstRunController(pend.ctx, {storage: makeFakeStorage()});
+    await c2.start(); c2.goTo(2); await settle();
+    const [a, b] = rows(c2);
+    expect(a.dataset.frInstallVerdict).toBe("PENDING"); expect(text(a)).toContain("PENDING"); expect(text(a)).not.toContain("VERIFIED");
+    expect(b.dataset.frInstallVerdict).toBe("REJECTED"); expect(text(b)).toContain("REJECTED"); expect(text(b)).not.toContain("VERIFIED");
+  });
+  it("an unreadable or malformed read shows its discrete state + dash, never VERIFIED/0/Connected, and never changes the executors summary", async () => {
+    const fr = await load("views", "firstrun.js");
+    const feed = {profiles: {implementer: {state: "READY"}, reviewer: {state: "READY"}}, phase0: {verification: "VERIFIED", final: "CLEAN"}};
+    const {ctx} = await mkCtx(feed, "en");
+    const c = fr.createFirstRunController(ctx, {storage: makeFakeStorage()});
+    await c.start(); c.goTo(2); await settle();
+    const [inst, p0] = rows(c);
+    expect(inst.dataset.frInstallState).not.toBe("VERIFIED"); // /v1/install -> 404
+    expect(p0.dataset.frInstallState).toBe("ERROR"); // malformed body -> ERROR
+    for (const n of [inst, p0]) { expect(text(n)).toContain("—"); expect(text(n)).not.toContain("VERIFIED"); expect(text(n)).not.toMatch(/(^|\s)0(\s|$)/); }
+    expect(within(c.dialog).find(n => n.dataset.frVerify)!.dataset.frVerify).toBe("CONNECTED");
+    // Executors down + install reads up: summary stays UNAVAILABLE.
+    const down = await mkCtx({execOff: true, install: instOk(), phase0: p0Ok()}, "en");
+    const c2 = fr.createFirstRunController(down.ctx, {storage: makeFakeStorage()});
+    await c2.start(); c2.goTo(2); await settle();
+    expect(within(c2.dialog).find(n => n.dataset.frVerify)!.dataset.frVerify).toBe("UNAVAILABLE");
+  });
+  it("shows both values with a mismatch note when the reports disagree, without reconciling", async () => {
+    const fr = await load("views", "firstrun.js");
+    const {ctx} = await mkCtx({install: instOk("CLEAN"), phase0: p0Ok("CLEAN_LOCAL_ONLY")}, "en");
+    const c = fr.createFirstRunController(ctx, {storage: makeFakeStorage()});
+    await c.start(); c.goTo(2); await settle();
+    const note = within(c.dialog).find(n => "frInstallMismatch" in n.dataset)!;
+    expect(text(note)).toContain("CLEAN"); expect(text(note)).toContain("CLEAN_LOCAL_ONLY");
+    const [inst, p0] = rows(c);
+    expect(text(inst)).toContain("CLEAN"); expect(text(p0)).toContain("CLEAN_LOCAL_ONLY");
+  });
+  it("'Verify connection again' re-reads install + phase0; the open button marks seen, closes, then navigates to install", async () => {
+    const fr = await load("views", "firstrun.js");
+    const {ctx, calls} = await mkCtx({install: instOk(), phase0: p0Ok()}, "en");
+    const nav: string[] = [];
+    ctx.navigate = (r: string) => { nav.push(r); };
+    const storage = makeFakeStorage();
+    const c = fr.createFirstRunController(ctx, {storage});
+    await c.start(); c.goTo(2); await settle();
+    calls.length = 0;
+    byId(c.dialog, "firstRunVerify")!.fire("click"); await settle();
+    expect(calls).toEqual(expect.arrayContaining(["/v1/system/executors", "/v1/install", "/v1/phase0"]));
+    const open = byId(c.dialog, "firstRunOpenInstall")!;
+    open.fire("click");
+    expect(fr.firstRunSeen(storage)).toBe(true);
+    expect(c.dialog.open).toBe(false);
+    expect(nav).toEqual(["install"]);
+  });
+  it("firstrun.install.* keys exist non-empty in EN and TR with identical placeholders", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const keys = Object.keys(en).filter(k => k.startsWith("firstrun.install."));
+    expect(keys.length).toBeGreaterThanOrEqual(7);
+    const ph = (v: string) => [...v.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort();
+    for (const k of keys) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); expect(ph(tr[k]), k).toEqual(ph(en[k])); }
   });
 });
 
