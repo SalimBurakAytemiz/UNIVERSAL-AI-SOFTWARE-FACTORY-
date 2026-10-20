@@ -95,7 +95,7 @@ Nothing here is added to `.github/**`. Any workflow change needs FA-MOB-13 and i
 
 ### 3.3 What must not change
 
-- **Windows shards are untouched:** `validate-windows-shard (1..3)` and the `validate (windows-latest)` aggregator (`ci.yml:52-96`) and `config/validation.json` `shardPlan` (`config/validation.json:4`) keep their steps, limits and order.
+- **Windows shards are untouched:** `validate-windows-shard (1..3)` and the `validate (windows-latest)` aggregator (`ci.yml:52-127`) and `config/validation.json` `shardPlan` (`config/validation.json:4`) keep their steps, limits and order.
 - **Linux `validate` is untouched:** the mobile job adds no step to `validate (ubuntu-latest)` (`ci.yml:15-51`).
 - **No self-hosted, larger or paid runner** (`ci.yml:1`, REPO; `FD-PUBLIC-CI-2026-10-19`).
 - The mobile job never needs or reads a secret on `pull_request`.
