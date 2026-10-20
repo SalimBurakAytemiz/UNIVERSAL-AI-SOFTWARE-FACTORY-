@@ -530,7 +530,7 @@ create_session is unavailable in this fire, so no builder was dispatched; no ret
 
 **Top blockers:**
 1. claude-code-remote create_session unavailable: UI-201 claim has no builder yet.
-2. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned; blocks merges); BACKLOG-SOURCE-REBASELINE (Founder choice).
+2. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned); BACKLOG-SOURCE-REBASELINE (Founder choice).
 3. Canonical backlog: UI-025/UI-133 wait on open draft PRs #74/#73; everything else NOT_READY.
 
 ## 2026-10-20 heartbeat #36 (queue read from claude/cloud-production-engine@ed5cfb9; fired 02:11Z)
@@ -577,3 +577,33 @@ ACTIVE (capacity guard, fallback method because list_sessions is unavailable): L
 1. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned; blocks merges); BACKLOG-SOURCE-REBASELINE (Founder choice).
 2. Canonical backlog: no claimable task; UI-047/UI-201 wait on #82; UI-025/UI-133 wait on the UI-032/UI-026 DONE write-back (#81/#82).
 3. claude-code-remote dispatch tooling unavailable in this session.
+
+## 2026-10-20 heartbeat #38 (queue read from claude/cloud-production-engine@ed5cfb9; fired 04:12Z)
+
+**Queue (step 1):** parsed OK. READY tasks: 0. Task states unchanged (PENDING_REVIEW: CP-QUEUE, CP-REPORT, CP-CI; IN_PROGRESS: CP-DISPATCH, CP-RECOVERY, CP-GOV; BLOCKED: FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED). DONE: 0. Step 2 dispatched: 0 (nothing READY; claude-code-remote create_session/list_sessions not available in this fire).
+
+**Step 2b (canonical backlog):** v7/integration = 0d0b2b9 (Merge integration wave B4 #82); dispatch.mjs and BACKLOG_CHECKPOINT.json present. Open-PR head list passed: 14 head branches of the open PRs. Dry run outcome START UI-025 (UI-025 and UI-133 are now claimable; their UI-026/UI-032 deps are DONE). Dry run reclaimable: UI-047 and UI-201 HAS_WORK_COMMITS (TREE_DIFFERS_FROM_BASE).
+
+Classification (git directly, claim branches of READY tasks with no open PR):
+- MERGED_AWAITING_WRITEBACK UI-047 b620ffaf935935e250cc6b716844116b065c42d0 (ancestor of origin/v7/integration)
+- MERGED_AWAITING_WRITEBACK UI-201 efc04b3003b1d49c93cc1c13c0ccb1138a66fa8c (ancestor of origin/v7/integration)
+- No ABANDONED_WITH_WORK, no RECLAIMABLE_AWAITING_BUILDER.
+
+ACTIVE (capacity guard, fallback method because list_sessions is unavailable): LIVE claim branches with no open PR = 0 (UI-047 and UI-201 merged; no other claim without a PR). ACTIVE = 0 < 2. **CLAIM made:** `node docs/planning/dispatch.mjs --claim --owner heartbeat --no-lease` returned START, claimed:true, taskId UI-025, branch claude/ui-025, claim commit sha 06442a01e8e44331550edda866bc197513828227, base 0d0b2b93bd020a025b9e847658f33471b8d1e871 (ls-remote confirms refs/heads/claude/ui-025 = 06442a0).
+
+CLAIMED_AWAITING_BUILDER UI-025 claude/ui-025 06442a01e8e44331550edda866bc197513828227
+
+create_session is unavailable in this fire, so no builder was dispatched; no retry and no second claim. The coordinator session must provision exactly one builder (template: lane-a-builder, model claude-sonnet-5-5, source_revision claude/ui-025) for this claim. UI-133 stays READY and unclaimed (at most 1 claim per fire).
+
+**Open PRs: 14** (all target v7/integration except #8 on an older base): #75 CP-DISPATCH-RECOVERY (draft), #69 CI-PARALLEL proposal (draft, protected, do-not-merge), #68 integration wave B1 (uasco-needs-fix), #66 E2E-DESKTOP (draft), #50 E2E harness (draft, uasco-needs-fix), #46, #33, #32, #31, #28, #23, #15, #11, #8. CHANGE vs #37: #78, #79, #81, #82 no longer open (merged per git ancestry, v7/integration head 0d0b2b9). Mergeable state and CI: UNKNOWN (mergeable_state not returned in the listing). No PR carries a uasco-cloud-production label. uasco-needs-fix on #68 and #50.
+
+**Active implementer/builder sessions:** UNKNOWN (list_sessions unavailable); fallback LIVE claim-branch count = 1 after this fire (claude/ui-025, just claimed).
+
+**Tasks completed (merged):** UI-132, UI-032, UI-026, UI-047, UI-201 (git ancestry on v7/integration). Queue tasks DONE: 0.
+
+**Current failures:** uasco-needs-fix on #68 and #50. Repo-wide Actions CI red per queue (not independently verified).
+
+**Top blockers:**
+1. claude-code-remote create_session unavailable: UI-025 claim has no builder yet.
+2. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned; blocks merges); BACKLOG-SOURCE-REBASELINE (Founder choice).
+3. Canonical backlog: UI-133 READY but unclaimed this fire (1 claim cap); everything else NOT_READY.
