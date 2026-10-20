@@ -136,6 +136,45 @@ function knowledgePanel(ctx,res){
     h(doc,"p",{class:"note",text:ctx.t("academy.knowledge.lead")}),body);
 }
 
+const dd=(doc,kt,ctx,...kids)=>[h(doc,"dt",{text:ctx.t(kt)}),h(doc,"dd",{},...kids)];
+const notVerified=ctx=>statePill(ctx,"NOT_VERIFIED");
+const monoList=(ctx,xs)=>xs.length?h(ctx.doc,"span",{},xs.flatMap(v=>[mono(ctx.doc,v)," "])):h(ctx.doc,"span",{class:"note",text:ctx.t("academy.evidence.missing")});
+/** //TR: Tek öğrenmenin kanıt satırı (details/summary); her bağ NOT_VERIFIED, sha256 yeniden doğrulanmaz. */
+function evidenceItem(ctx,res,l){
+  const doc=ctx.doc,e=l.evidence;
+  const known=new Set(res.sources.map(s=>s.sourceId));
+  const srcRow=id=>h(doc,"li",{dataset:{evidenceSource:id,evidenceXref:known.has(id)?"FOUND":"UNKNOWN"}},mono(doc,id)," ",
+    known.has(id)?h(doc,"span",{class:"note",text:ctx.t("academy.evidence.xrefFound")}):statePill(ctx,"UNAVAILABLE",{label:ctx.t("academy.evidence.unknown")}));
+  const lab=e.labResult;
+  const labText=!lab?ctx.t("academy.evidence.missing"):`${lab.passed===null?ctx.t("academy.evidence.unknown"):ctx.t(lab.passed?"academy.evidence.labPassed":"academy.evidence.labFailed")} · ${ctx.t("academy.evidence.testRefs",{n:lab.testRefCount})}${lab.recordedAt?` · ${lab.recordedAt}`:""}`;
+  const mine=res.reuseEvents.filter(r=>r.learningId===l.learningId);
+  const reuseRows=mine.length?h(doc,"ul",{class:"academy-evidence-list"},mine.map(r=>h(doc,"li",{dataset:{evidenceReuse:r.reuseId||""}},
+    mono(doc,r.outcome||ctx.t("academy.evidence.unknown"))," ",r.missionRef?mono(doc,r.missionRef):MISSING," ",r.at?mono(doc,r.at):MISSING))):h(doc,"span",{class:"note",text:ctx.t("academy.evidence.noReuse")});
+  const rv=e.reviewerRef;
+  return h(doc,"details",{class:"academy-evidence-item",dataset:{evidenceLearning:l.learningId}},
+    h(doc,"summary",{},mono(doc,l.learningId)," ",notVerified(ctx)),
+    h(doc,"dl",{class:"academy-evidence-dl"},
+      dd(doc,"academy.evidence.sources",ctx,e.sourceIds.length?h(doc,"ul",{class:"academy-evidence-list"},e.sourceIds.map(srcRow)):h(doc,"span",{class:"note",text:ctx.t("academy.evidence.missing")})),
+      dd(doc,"academy.evidence.supporting",ctx,e.supportingSourceIds.length?h(doc,"ul",{class:"academy-evidence-list"},e.supportingSourceIds.map(srcRow)):h(doc,"span",{class:"note",text:ctx.t("academy.evidence.missing")})),
+      dd(doc,"academy.evidence.lab",ctx,h(doc,"span",{dataset:{evidenceLab:"1"},text:labText})),
+      dd(doc,"academy.evidence.labRuns",ctx,monoList(ctx,e.labRunRefs)),
+      dd(doc,"academy.evidence.negative",ctx,monoList(ctx,e.negativeEvalRefs)),
+      dd(doc,"academy.evidence.reviewer",ctx,rv?h(doc,"span",{},mono(doc,rv.ref)," ",mono(doc,rv.sha256Short)):h(doc,"span",{class:"note",text:ctx.t("academy.evidence.missing")})),
+      dd(doc,"academy.evidence.reviewerRun",ctx,e.reviewerRunRef?mono(doc,e.reviewerRunRef):MISSING),
+      dd(doc,"academy.evidence.drift",ctx,h(doc,"span",{class:"mono",text:String(e.driftCount)})),
+      dd(doc,"academy.evidence.reuse",ctx,reuseRows)),
+    h(doc,"p",{class:"note",dataset:{evidenceLinkage:"NOT_VERIFIED"},text:ctx.t("academy.evidence.note")}));
+}
+function evidencePanel(ctx,res){
+  const doc=ctx.doc;
+  let body;
+  if(!isLive(res))body=stateBlock(ctx,res);
+  else if(!res.learnings.length)body=emptyNote(ctx,"academy.evidence.empty");
+  else body=h(doc,"div",{class:"academy-evidence-library",dataset:{evidenceLibrary:"1"}},res.learnings.slice(0,200).map(l=>evidenceItem(ctx,res,l)));
+  return panel(ctx,{titleKey:"academy.evidence.title",id:"academy-evidence",className:"academy-section"},
+    h(doc,"p",{class:"note",text:ctx.t("academy.evidence.lead")}),body);
+}
+
 /** Yetkinlik/sertifika dürüstlük paneli: akademi sertifikalamaz; proficiency NOT_EVALUATED, 0 sertifikalı. */
 function proficiencyPanel(ctx){
   const doc=ctx.doc;
@@ -147,14 +186,15 @@ function proficiencyPanel(ctx){
 
 export async function render(ctx){
   const doc=ctx.doc;
-  let res;try{res=await ctx.api.academy()}catch{res={state:"ERROR",learnings:[],sources:[],reuses:0,globalKnowledge:[],byStatus:{},metrics:null}}
-  if(!res||typeof res.state!=="string")res={state:"UNAVAILABLE",learnings:[],sources:[],reuses:0,globalKnowledge:[],byStatus:{},metrics:null};
+  let res;try{res=await ctx.api.academy()}catch{res={state:"ERROR",learnings:[],sources:[],reuses:0,reuseEvents:[],globalKnowledge:[],byStatus:{},metrics:null}}
+  if(!res||typeof res.state!=="string")res={state:"UNAVAILABLE",learnings:[],sources:[],reuses:0,reuseEvents:[],globalKnowledge:[],byStatus:{},metrics:null};
   return h(doc,"div",{class:"view view-academy"},
     header(ctx),
     kpis(ctx,res),
     proficiencyPanel(ctx),
     learningsPanel(ctx,res),
     knowledgePanel(ctx,res),
+    evidencePanel(ctx,res),
     sourcesPanel(ctx,res),
     metricsPanel(ctx,res));
 }

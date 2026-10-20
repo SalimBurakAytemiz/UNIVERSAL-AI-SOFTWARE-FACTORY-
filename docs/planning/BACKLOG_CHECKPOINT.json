@@ -704,7 +704,7 @@
     },
     {
       "owner": "CLOUD",
-      "status": "READY",
+      "status": "DONE",
       "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
       "dependsOn": [
         "UI-030"
@@ -724,11 +724,11 @@
         "tests/v7-ux-wp-agents.test.ts"
       ],
       "testFile": "tests/v7-ux-wp-agents.test.ts",
-      "notes": "Depends on UI-030 (same files). Run-level detail only; no live agent telemetry exists, shown as UNKNOWN."
+      "notes": "Depends on UI-030 (same files). Run-level detail only; no live agent telemetry exists, shown as UNKNOWN. Write-back 2026-10-20: merged into v7/integration (branch head f9f5aa5 ancestor of f12918f)"
     },
     {
       "owner": "CLOUD",
-      "status": "READY",
+      "status": "DONE",
       "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
       "riskLevel": 2,
       "requiresNewAuthority": false,
@@ -747,7 +747,7 @@
         "docs/ux/UI-026-TASK-INSPECTOR.md"
       ],
       "testFile": "tests/v7-b5-work-screens.test.ts",
-      "notes": "Inventory 2026-10-19 UI-026 (P0, authority_needed=none): mission and work-run detail exist, tasks only embedded. Inspector derived only from GET /v1/missions/:id and GET /v1/work-runs/:id, which are already allow-listed and read by the view; missing fields shown as UNKNOWN; no POST, no new endpoint, no new route. Product verification stays NOT_VERIFIED."
+      "notes": "Inventory 2026-10-19 UI-026 (P0, authority_needed=none): mission and work-run detail exist, tasks only embedded. Inspector derived only from GET /v1/missions/:id and GET /v1/work-runs/:id, which are already allow-listed and read by the view; missing fields shown as UNKNOWN; no POST, no new endpoint, no new route. Product verification stays NOT_VERIFIED. Write-back 2026-10-20: merged into v7/integration (branch head 68b2542 ancestor of f12918f)"
     },
     {
       "owner": "CLOUD",
@@ -819,7 +819,7 @@
         "docs/ux/UI-047-SECURITY-FINDING-DETAIL.md"
       ],
       "testFile": "tests/v7-ux-wp-qasec.test.ts",
-      "notes": "Inventory priority P1. Inventory 2026-10-19 UI-047 (P1, authority_needed=none): the server's SECURITY_REPORT evidence already carries sca.findings[] (package, version, id, severity, fixedVersion, target; up to 50 kept, with a truncated flag) and secrets.gitleaks.items[] (ruleId, file, line, commit; never secret values; up to 100). Both arrive in run.evidence on GET /v1/work-runs, which is already served and allow-listed (main.mjs EXTRA_GET_ROUTES) and already read by views/assurance.js through ctx.api.raw('/v1/work-runs'). assurance-core.js mapRunSecurity currently drops both arrays. Build: (a) Map them into sanitised, capped arrays: severity must be an uppercase code or becomes UNKNOWN; commit must be 40-hex or null; line must be a safe int; malformed entries are dropped and the dropped count is reported; scaTruncated is carried through. (b) Missing or non-array fields become [] with a 'findings not recorded' state, never 'clean'. (c) In #qa-secdetail, add two read-only tables rendered as text only, with per-row data-* attributes and no new ids. Show an honest empty note, a truncation note when truncated=true or the aggregate count is higher than the list length, NOT_EXECUTED/UNKNOWN when there is no scan, and keep the STALE banner when the scan is not bound to the run head. (d) EN/TR keys at parity. Tests in tests/v7-ux-wp-qasec.test.ts (already registered in config/validation.json) cover mapping, caps, truncation, malformed-entry drop, text-only rendering, empty and NOT_EXECUTED states, and a no-new-route assertion. No fix, remediation, resolved or accepted state. SAST stays NOT_AVAILABLE as served. No POST, no new endpoint, no api.js or main.mjs change, no IPC or storage. No product verification claim; no design parity claim (design package is UNKNOWN_SOURCE). Overlap: only the shared en.js/tr.js/styles.css with open PRs and READY tasks. No open PR touches assurance.js, assurance-core.js or the test file. Caveat: backlog L-ASSURANCE still shows IN_REVIEW and lists assurance.js/assurance-core.js, but its PRs #24/#25/#26 are already merged into v7/integration (a5e0a0b/113715f/ae99540) and only the write-back is pending. The supervisor should reconcile L-ASSURANCE to DONE before or when this is claimed."
+      "notes": "Inventory priority P1. Inventory 2026-10-19 UI-047 (P1, authority_needed=none): the server's SECURITY_REPORT evidence already carries sca.findings[] (package, version, id, severity, fixedVersion, target; up to 50 kept, with a truncated flag) and secrets.gitleaks.items[] (ruleId, file, line, commit; never secret values; up to 100). Both arrive in run.evidence on GET /v1/work-runs, which is already served and allow-listed (main.mjs EXTRA_GET_ROUTES) and already read by views/assurance.js through ctx.api.raw('/v1/work-runs'). assurance-core.js mapRunSecurity currently drops both arrays. Build: (a) Map them into sanitised, capped arrays: severity must be an uppercase code or becomes UNKNOWN; commit must be 40-hex or null; line must be a safe int; malformed entries are dropped and the dropped count is reported; scaTruncated is carried through. (b) Missing or non-array fields become [] with a 'findings not recorded' state, never 'clean'. (c) In #qa-secdetail, add two read-only tables rendered as text only, with per-row data-* attributes and no new ids. Show an honest empty note, a truncation note when truncated=true or the aggregate count is higher than the list length, NOT_EXECUTED/UNKNOWN when there is no scan, and keep the STALE banner when the scan is not bound to the run head. (d) EN/TR keys at parity. Tests in tests/v7-ux-wp-qasec.test.ts (already registered in config/validation.json) cover mapping, caps, truncation, malformed-entry drop, text-only rendering, empty and NOT_EXECUTED states, and a no-new-route assertion. No fix, remediation, resolved or accepted state. SAST stays NOT_AVAILABLE as served. No POST, no new endpoint, no api.js or main.mjs change, no IPC or storage. No product verification claim; no design parity claim (design package is UNKNOWN_SOURCE). Overlap: only the shared en.js/tr.js/styles.css with open PRs and READY tasks. No open PR touches assurance.js, assurance-core.js or the test file. Caveat: backlog L-ASSURANCE still shows IN_REVIEW and lists assurance.js/assurance-core.js, but its PRs #24/#25/#26 are already merged into v7/integration (a5e0a0b/113715f/ae99540) and only the write-back is pending. The supervisor should reconcile L-ASSURANCE to DONE before or when this is claimed. Classification note: the 2026-10-19 inventory row marks UI-047 status=DUPLICATE (\"fold into UI-046\", dependencies UI-046). UI-046 is already integrated (#/posture, UI-037+046 DONE); this task is an enhancement inside the existing #qa-secdetail panel (no new screen or route), closing the row s own missing_functions gap \"no security-finding-specific detail fields\"."
     },
     {
       "owner": "CLOUD",

@@ -543,6 +543,9 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .qa-secdetail-head{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2)}
 .qa-secdetail-id{font-size:var(--fs-label)}
 .qa-secdetail-kv dd{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem}
+.qa-find-wrap{display:grid;gap:var(--space-2);margin-top:var(--space-2)}
+.qa-find .table-wrap{overflow-x:auto}
+.qa-find-table td{font-size:var(--fs-caption);overflow-wrap:anywhere}
 .qa-gaps{margin:.2rem 0 0;padding-left:1.1rem;display:grid;gap:.2rem;font-size:var(--fs-caption)}
 .qa-foundernote{margin-top:var(--space-2)}
 .qa-foundernote summary{cursor:pointer;color:var(--muted);font-size:var(--fs-label)}
@@ -796,6 +799,15 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   .ops-step,.ops-item,.ops-control{border:1px solid CanvasText;border-left-width:4px}
   .ops-section :focus-visible{outline:3px solid Highlight}
 }
+
+.academy-evidence-library{display:grid;gap:var(--space-2)}
+.academy-evidence-item{padding:var(--space-3);border:1px solid var(--border-ui);border-radius:var(--radius-md);background:var(--surface)}
+.academy-evidence-item>summary{cursor:pointer;display:flex;gap:var(--space-2);align-items:center;font-size:var(--fs-body)}
+.academy-evidence-item>summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.academy-evidence-dl{display:grid;grid-template-columns:minmax(8rem,14rem) 1fr;gap:var(--space-1) var(--space-3);margin:var(--space-3) 0}
+.academy-evidence-dl dt{color:var(--muted);font-size:var(--fs-label)}
+.academy-evidence-dl dd{margin:0;font-size:var(--fs-body);overflow-wrap:anywhere}
+.academy-evidence-list{margin:0;padding-left:var(--space-4)}
 /* UI-026 görev denetçisi: yalnız token */
 .task-list{list-style:none;margin:0 0 var(--space-2);padding:0;display:grid;gap:var(--space-1)}
 .task-inspector{margin:var(--space-2) 0;padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-2)}

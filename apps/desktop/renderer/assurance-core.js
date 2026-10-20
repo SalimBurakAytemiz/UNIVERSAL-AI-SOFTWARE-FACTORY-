@@ -29,6 +29,29 @@ function toolView(t){
   return {tool,status:toolStatus(t.status),version:str(t.version,80),reason:str(t.reason,80)};
 }
 
+
+// //TR: UI-047: SECURITY_REPORT sca.findings[] ve secrets.gitleaks.items[] için sınırlı, temizlenmiş eşleme. Yalnız beyaz listedeki alanlar taşınır (gizli DEĞER asla alınmaz; fixedVersion bilerek DÜŞÜRÜLÜR ki "düzeltildi" durumu çıkarılamasın). Bozuk girdi atılır ve sayılır; alan yok/dizi değilse boş + RECORDED=false (asla "temiz" değil).
+export const SEC_FINDINGS_SCA_CAP=50;
+export const SEC_FINDINGS_SECRET_CAP=100;
+const SEV_ALLOW=Object.freeze(["CRITICAL","HIGH","MEDIUM","LOW","INFO","UNKNOWN"]);
+const textField=(x,max)=>typeof x==="string"&&x.length&&!/[\u0000-\u001f\u007f]/.test(x)?x.slice(0,max):null;
+function mapFindingList(raw,cap,mapOne){
+  if(!Array.isArray(raw))return {recorded:false,items:[],dropped:0,overCap:false};
+  const items=[];let dropped=0;
+  for(const e of raw.slice(0,cap)){const m=mapOne(e);if(m)items.push(m);else dropped+=1}
+  return {recorded:true,items,dropped,overCap:raw.length>cap};
+}
+const scaFinding=e=>{
+  if(!isObj(e))return null;
+  const pkg=textField(e.package,120),id=textField(e.id,60);if(!pkg||!id)return null;
+  return {package:pkg,version:textField(e.version,60),id,severity:SEV_ALLOW.includes(e.severity)?e.severity:"UNKNOWN",target:textField(e.target,160)};
+};
+const secretFinding=e=>{
+  if(!isObj(e))return null;
+  const ruleId=textField(e.ruleId,80),file=textField(e.file,200);if(!ruleId||!file)return null;
+  return {ruleId,file,line:Number.isSafeInteger(e.line)&&e.line>=0?e.line:null,commit:typeof e.commit==="string"&&SHA_RE.test(e.commit)?e.commit:null};
+};
+
 /** //TR: Koşunun en son SECURITY_REPORT kanıtı (en yüksek cycle, eşitlikte dizideki son); yalnız .security taşıyan kayıt. */
 function latestSecurityEvidence(evidence){
   let best=null,bestCycle=-1;
@@ -55,6 +78,7 @@ export function mapRunSecurity(run){
       secrets:{builtin:{status:"UNKNOWN",hits:null},gitleaks:{status:"UNKNOWN",findings:null,reason:null}},
       sca:{status:"UNKNOWN",blocking:null,counts:{},reason:null},
       sast:{status:"NOT_AVAILABLE",reason:"NO_SECURITY_EVIDENCE"},sbom:{status:"NOT_AVAILABLE",reason:"NO_SECURITY_EVIDENCE"},
+      scaFindings:mapFindingList(undefined,0,scaFinding),secretFindings:mapFindingList(undefined,0,secretFinding),scaTruncated:false,
       tools:[],gaps:[]};
   }
   const sec=ev.security,commitSha=typeof ev.commitSha==="string"&&SHA_RE.test(ev.commitSha)?ev.commitSha:null;
@@ -76,6 +100,7 @@ export function mapRunSecurity(run){
     secrets:{builtin:{status:code(builtin.status),hits:safeInt(builtin.hits)},gitleaks:{status:code(gitleaks.status),findings:safeInt(gitleaks.findings),reason:str(gitleaks.reason,80)}},
     sca:{status:code(sca.status),blocking:safeInt(sca.blocking),counts,reason:str(sca.reason,80)},
     sast:{status:code(sast.status),reason:str(sast.reason,80)},sbom:{status:code(sbom.status),reason:str(sbom.reason,80)},
+    scaFindings:mapFindingList(sca.findings,SEC_FINDINGS_SCA_CAP,scaFinding),secretFindings:mapFindingList(gitleaks.items,SEC_FINDINGS_SECRET_CAP,secretFinding),scaTruncated:sca.truncated===true,
     tools:(Array.isArray(sec.tools)?sec.tools:[]).slice(0,10).map(toolView).filter(Boolean),
     gaps:(Array.isArray(sec.gaps)?sec.gaps:[]).filter(g=>typeof g==="string").slice(0,30).map(g=>g.slice(0,120))
   };
