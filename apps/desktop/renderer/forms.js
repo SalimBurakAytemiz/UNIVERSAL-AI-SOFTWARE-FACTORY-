@@ -1,5 +1,5 @@
 // //TR: Bu modül B5 ekranlarının paylaşılan form durumunu (taslaklar, seçim, idempotency izleyicileri) ve erişilebilir form bileşenlerini (etiketli alan, argv/kriter liste editörü, durum mesajı) içerir; taslaklar yenilemede kaybolmaz, veri HTML olarak yorumlanmaz ve token hiç görülmez.
-import {h} from "./components.js";
+import {h,statePill} from "./components.js";
 import {createIdempotencyTracker,describePostResult} from "./work-core.js";
 
 const freshProject=()=>({name:"",repositoryPath:"",environmentId:"",testCommand:[""]});
@@ -57,7 +57,8 @@ export function statusBlock(ctx,formId){
   if(!st)return h(doc,"div",{class:"form-status",id,role:"status","aria-live":"polite",tabindex:"-1"});
   if(st.errors&&Object.keys(st.errors).length)return h(doc,"div",{class:"form-status form-status-error",id,role:"alert",tabindex:"-1",dataset:{result:"invalid"}},
     h(doc,"p",{class:"form-status-title",text:ctx.t("form.invalid")}),h(doc,"ul",{},Object.entries(st.errors).map(([f,k])=>h(doc,"li",{text:`${ctx.t(`form.field.${f}`)}: ${ctx.t(k)}`}))));
-  return h(doc,"div",{class:`form-status ${st.ok?"form-status-ok":"form-status-error"}`,id,role:st.ok?"status":"alert",tabindex:"-1",dataset:{result:st.ok?"ok":"error"}},h(doc,"p",{text:ctx.t(st.key,st.vars)}));
+  return h(doc,"div",{class:`form-status ${st.ok?"form-status-ok":"form-status-error"}`,id,role:st.ok?"status":"alert",tabindex:"-1",dataset:{result:st.ok?"ok":"error"}},
+    !st.ok&&st.key==="post.err.denied"?statePill(ctx,"DENIED"):null,h(doc,"p",{text:ctx.t(st.key,st.vars)}));
 }
 export function setStatus(formId,value){drafts.status[formId]=value}
 /** POST sonucunu sınıflar ve form durumuna yazar; {ok} döner. */

@@ -1122,3 +1122,35 @@ describe("UI-025 task and work-run timeline", () => {
     expect(keys("en.js")).toEqual(keys("tr.js"));
   });
 });
+
+describe("UI-109 ACTION_DENIED reason code with DENIED pill", () => {
+  const dn = (status: number, body?: any) => load(rend, "work-core.js").then(c => c.describePostResult({ok: false, status, body}));
+  it("maps a 403 ACTION_DENIED with a valid reason to post.err.denied; both locales carry identical placeholders", async () => {
+    expect(await dn(403, {error: "ACTION_DENIED", reason: "BUDGET_DENIED"})).toEqual({ok: false, key: "post.err.denied", vars: {status: 403, reason: "BUDGET_DENIED"}});
+    const ph = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort();
+    const en = (await load(rend, "locales", "en.js")).default, tr = (await load(rend, "locales", "tr.js")).default;
+    expect(en["post.err.denied"]).toBeTruthy(); expect(tr["post.err.denied"]).toBeTruthy();
+    expect(ph(en["post.err.denied"])).toEqual(["reason", "status"]); expect(ph(tr["post.err.denied"])).toEqual(ph(en["post.err.denied"]));
+  });
+  it("cuts the reason at the first ':' and never invents one", async () => {
+    expect((await dn(403, {error: "ACTION_DENIED", reason: "APPROVAL_INVALID:some text"})).vars.reason).toBe("APPROVAL_INVALID");
+    for (const body of [undefined, {}, {error: "OTHER", reason: "BUDGET_DENIED"}, {error: "ACTION_DENIED"}, {error: "ACTION_DENIED", reason: "bad code"}, {error: "ACTION_DENIED", reason: ":X"}, {error: "ACTION_DENIED", reason: 5}, {error: "ACTION_DENIED", reason: "A"}, {error: "ACTION_DENIED", reason: "A".repeat(65)}]) expect((await dn(403, body)).key, JSON.stringify(body)).toBe("post.err.auth");
+    expect((await dn(401, {error: "ACTION_DENIED", reason: "BUDGET_DENIED"})).key).toBe("post.err.auth");
+  });
+  it("statusBlock renders a DENIED pill before the message with status and code, and no pill for other statuses", async () => {
+    const {ctx, doc} = await mkCtx({get: () => undefined});
+    forms.setStatus("f109", {ok: false, key: "post.err.denied", vars: {status: 403, reason: "BUDGET_DENIED"}, errors: null});
+    const b = forms.statusBlock(ctx, "f109");
+    expect(b.attrs.get("role")).toBe("alert");
+    const pill = byData(b, "pill", "DENIED");
+    expect(pill.length).toBe(1);
+    expect(b.children[0]).toBe(pill[0]);
+    expect(text(pill[0])).toContain("DENIED");
+    expect(text(b)).toContain("403"); expect(text(b)).toContain("BUDGET_DENIED");
+    for (const key of ["post.err.auth", "post.err.generic", "post.err.409"]) {
+      forms.setStatus("f109", {ok: false, key, vars: {status: 403}, errors: null});
+      expect(byData(forms.statusBlock(ctx, "f109"), "pill").length, key).toBe(0);
+    }
+    void doc;
+  });
+});
