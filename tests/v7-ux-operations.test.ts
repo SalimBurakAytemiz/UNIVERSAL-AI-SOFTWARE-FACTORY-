@@ -1599,6 +1599,52 @@ describe("SEC-IMPORT-GUARD — AST import guard for the Operations modules", () 
     expect(all.length).toBeGreaterThan(guarded.length);
     for (const f of all) expect([f, scanImports(path.join(rend, f)).filter(r => r.kind === "require-reference" || MODULE_LOAD_KINDS.includes(r.kind))]).toEqual([f, []]);
   });
+  const ALIAS_FORMS: Array<[string, string, string]> = [
+    ["const W = Worker; new W(...)", `const W = Worker;\nnew W("./w.js");\n`, "module-load-reference Worker"],
+    ["new (Worker)(...)", `new (Worker)("./w.js");\n`, "module-load-reference Worker"],
+    ["Reflect.construct(Worker, [...])", `Reflect.construct(Worker, ["./w.js"]);\n`, "module-load-reference Worker"],
+    ["const {Worker: W} = globalThis", `const {Worker: W} = globalThis;\nnew W("./w.js");\n`, "module-load-reference Worker"],
+    ["const {SharedWorker} = self", `const {SharedWorker} = self;\n`, "module-load-reference SharedWorker"],
+    ["const sw = navigator.serviceWorker; sw.register(...)", `const sw = navigator.serviceWorker;\nsw.register("./sw.js");\n`, "module-load-reference serviceWorker"],
+    ["const {serviceWorker: s} = navigator", `const {serviceWorker: s} = navigator;\n`, "module-load-reference serviceWorker"],
+    ["const m = import.meta; m.resolve(...)", `const m = import.meta;\nm.resolve("./x.js");\n`, "module-load-reference import.meta"],
+    ["const i = importScripts; i(...)", `const i = importScripts;\ni("./x.js");\n`, "module-load-reference importScripts"],
+    ["globalThis[\"Worker\"] literal element access", `const W = globalThis["Worker"];\n`, "module-load-reference Worker"],
+    ["self['SharedWorker'] literal element access", `const S = self['SharedWorker'];\n`, "module-load-reference SharedWorker"],
+    ["self[\"importScripts\"](...) literal element-access call (call shape keeps its specifier)", `self["importScripts"]("./a.js");\n`, "import-scripts ./a.js"],
+    ["const i = self[\"importScripts\"] literal element access", `const i = self["importScripts"];\n`, "module-load-reference importScripts"],
+    ["navigator[\"serviceWorker\"] literal element access", `const sw = navigator["serviceWorker"];\n`, "module-load-reference serviceWorker"],
+    ["globalThis[\"require\"] literal element access", `const r = globalThis["require"];\n`, "require-reference require"],
+    ["const {\"Worker\": W} = globalThis string-key binding", `const {"Worker": W} = globalThis;\n`, "module-load-reference Worker"],
+    ["const {[\"serviceWorker\"]: s} = navigator computed-literal binding", `const {["serviceWorker"]: s} = navigator;\n`, "module-load-reference serviceWorker"],
+    ["import.meta[\"url\"] (not the exact member expression)", `const u = import.meta["url"];\n`, "module-load-reference import.meta"],
+    ["bare import.meta passed on", `console.log(import.meta);\n`, "module-load-reference import.meta"],
+  ];
+  it.each(ALIAS_FORMS)("s. aliased / literal-key module load is reported and fails unless allowed: %s", (_label, src, violation) => {
+    expect(disallowedImports({source: src}, ["./w.js", "./sw.js", "./x.js", "./a.js"])).toContain(violation);
+    expect(() => guard(src, ["./w.js", "./sw.js", "./x.js", "./a.js"])).toThrow(new RegExp(violation.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  });
+  it("s2. module-load-reference is gated by allowWorkers (default false); import.meta.url as the exact member expression is not a reference", () => {
+    expect(disallowedImports({source: `const W = Worker;\n`}, ["Worker"])).toEqual(["module-load-reference Worker"]);
+    expect(disallowedImports({source: `const W = Worker;\n`}, ["Worker"], {allowWorkers: true})).toEqual([]);
+    expect(disallowedImports({source: `const W = Worker;\n`}, [], {allowWorkers: true})).toEqual(["module-load-reference Worker"]);
+    expect(scanImports({source: `const u = new URL("./a.png", import.meta.url);\nconst v = import.meta.url;\n`})).toEqual([]);
+    expect(scanImports({source: `new Worker("./w.js");\nnavigator.serviceWorker.register("./sw.js");\nimport.meta.resolve("./x.js");\nimportScripts("./a.js");\n`}).map(r => r.kind)).toEqual(["worker", "service-worker", "import-meta-resolve", "import-scripts"]);
+  });
+  it("s3. the real guarded renderer modules and their closures have zero module-load-reference / require-reference records", () => {
+    const guarded = ["views/operations.js", "operations-core.js", "retry-core.js", "views/executive.js", "executive-core.js", "views/return-summary.js", "return-summary-core.js", "views/install.js", "install-core.js", "views/matrix.js", "matrix-core.js", "views/posture.js", "posture-core.js", "views/queue.js", "queue-core.js", "views/readiness.js", "readiness-core.js", "views/tower.js", "views/inbox.js"];
+    const all = [...new Set([...guarded, ...guarded.flatMap(f => relativeImportClosure(path.join(rend, f), rend))])].sort();
+    for (const f of all) expect([f, scanImports(path.join(rend, f)).filter(r => r.kind === "module-load-reference" || r.kind === "require-reference")]).toEqual([f, []]);
+  });
+  it("KNOWN LIMIT (documented, pinned): computed non-literal names cannot be resolved statically and are NOT detected; the renderer sandbox and CSP are the runtime control", () => {
+    // Bilinen sınır: tests/support/static-imports.ts başındaki açıklamaya bakın (main.mjs:306 webPreferences, renderer/index.html:7 CSP). Bu iddia sınırı
+    // dürüstçe sabitler; bir gün yakalanırsa bu test bilinçli olarak güncellenmelidir.
+    expect(scanImports({source: `const W = globalThis["Wor" + "ker"];\n`})).toEqual([]);
+    expect(scanImports({source: `const k = "Worker";\nconst W = globalThis[k];\n`})).toEqual([]);
+    expect(scanImports({source: `const n = "Worker";\nnew globalThis[n]("./w.js");\n`})).toEqual([]);
+    expect(mainSrc).toContain("webPreferences:{contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true,allowRunningInsecureContent:false,webviewTag:false");
+    expect(read("index.html")).toContain(`content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:"`);
+  });
   describe("r. relativeImportClosure resolves symlinks with realpath (fixtures only under os.tmpdir())", () => {
     let tmp = "";
     beforeEach(() => { tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "uasco-sec-import-"))); });

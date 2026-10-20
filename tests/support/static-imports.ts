@@ -3,9 +3,19 @@ import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 
-export type ImportKind = "static" | "reexport" | "dynamic" | "require" | "import-equals" | "require-reference" | "worker" | "shared-worker" | "import-meta-resolve" | "import-scripts" | "service-worker";
+export type ImportKind = "static" | "reexport" | "dynamic" | "require" | "import-equals" | "require-reference" | "worker" | "shared-worker" | "import-meta-resolve" | "import-scripts" | "service-worker" | "module-load-reference";
 /** import dışı modül yüklemeleri (Worker/SharedWorker, import.meta.resolve, importScripts, serviceWorker.register); allowWorkers olmadan reddedilir. */
-export const MODULE_LOAD_KINDS: readonly ImportKind[] = ["worker", "shared-worker", "import-meta-resolve", "import-scripts", "service-worker"];
+export const MODULE_LOAD_KINDS: readonly ImportKind[] = ["worker", "shared-worker", "import-meta-resolve", "import-scripts", "service-worker", "module-load-reference"];
+/** Takma adla kullanılabilecek yükleme adları; bunlara her başvuru module-load-reference olur. */
+const MODULE_LOAD_NAMES = new Set(["Worker", "SharedWorker", "importScripts", "serviceWorker"]);
+/*
+ * BİLİNEN SINIR (statik analiz): hesaplanan, değişmez olmayan adlar (globalThis["Wor" + "ker"], globalThis[k], eval benzeri dolaylı yollar) statik olarak
+ * çözülemez ve bu yardımcı tarafından YAKALANMAZ; testte bilinen sınır olarak sabitlenir. Bunun çalışma zamanı denetimi renderer kum havuzu ve CSP'dir:
+ * apps/desktop/main.mjs:306 BrowserWindow webPreferences {contextIsolation:true, nodeIntegration:false, sandbox:true, webSecurity:true,
+ * allowRunningInsecureContent:false, webviewTag:false} ve apps/desktop/renderer/index.html:7 CSP "default-src 'self'; style-src 'self';
+ * script-src 'self'; img-src 'self' data:" (worker-src yoktur, default-src 'self'e düşer: betik ve worker yalnız uygulama kökeninden; 'unsafe-eval' yok).
+ * Bunlar böyle bir yüklemenin erişimini sınırlar; statik bekçiyi tamamlamaz.
+ */
 export interface ImportRecord { kind: ImportKind; specifier: string }
 /** Dinamik import()/require() argümanı dize değişmezi değilse belirteç yerine bu işaret raporlanır; hiçbir izin listesi bunu kabul etmez. */
 export const NON_LITERAL = "<NON_LITERAL>";
@@ -19,8 +29,17 @@ const literalText = (n: ts.Node | undefined): string | null =>
 /** Erişilen özellik adı: a.b ve a["b"] için "b"; aksi halde null. */
 const accessedName = (n: ts.Node): string | null =>
   ts.isPropertyAccessExpression(n) ? n.name.text : ts.isElementAccessExpression(n) ? literalText(n.argumentExpression) : null;
+/** a.b / a["b"] için nesne kısmı a; aksi halde undefined. */
+const objectOf = (n: ts.Node): ts.Expression | undefined => ts.isPropertyAccessExpression(n) || ts.isElementAccessExpression(n) ? n.expression : undefined;
+/** Değişmez anahtar: "x", `x` ya da ["x"] hesaplanan adı; aksi halde null. */
+const literalKey = (n: ts.Node): string | null => ts.isComputedPropertyName(n) ? literalText(n.expression) : literalText(n);
+/** Bağlama/nesne anahtarı dize ya da hesaplanan değişmezse ({"Worker": W}, {["require"]: r}) değeri; tanımlayıcı anahtarlar zaten tanımlayıcı kuralıyla yakalanır. */
+const stringKeyOf = (n: ts.Node): string | null => {
+  const key = ts.isBindingElement(n) ? n.propertyName : ts.isPropertyAssignment(n) || ts.isMethodDeclaration(n) ? n.name : undefined;
+  return key === undefined || ts.isIdentifier(key) ? null : literalKey(key);
+};
 const calleeName = (n: ts.Expression): string | null => ts.isIdentifier(n) ? n.text : accessedName(n);
-const isImportMeta = (n: ts.Node) => ts.isMetaProperty(n) && n.keywordToken === ts.SyntaxKind.ImportKeyword && n.name.text === "meta";
+const isImportMeta = (n: ts.Node | undefined): n is ts.MetaProperty => n !== undefined && ts.isMetaProperty(n) && n.keywordToken === ts.SyntaxKind.ImportKeyword && n.name.text === "meta";
 /** Worker betiği: dize değişmezi ya da new URL("<lit>", import.meta.url); başka her şey NON_LITERAL. */
 function workerSpecifier(arg: ts.Expression | undefined): string {
   const lit = literalText(arg);
@@ -59,6 +78,8 @@ export function scanImports(input: ImportInput): ImportRecord[] {
   if (diagnostics.length) throw new Error(`IMPORT_PARSE_ERROR ${name} line ${diagnostics[0]}`);
   const out: ImportRecord[] = [];
   const visit = (n: ts.Node): void => {
+    // Çağrı biçimli yükleme kaydedildikten sonra adın kendisi ikinci kez *-reference sayılmaz; yalnız nesne kısmı ve argümanlar gezilir.
+    const visitRest = (obj: ts.Node | undefined, args: readonly ts.Node[] | undefined): void => { if (obj) visit(obj); args?.forEach(visit); };
     if (ts.isImportDeclaration(n)) out.push({kind: "static", specifier: literalText(n.moduleSpecifier) ?? NON_LITERAL});
     else if (ts.isExportDeclaration(n) && n.moduleSpecifier) out.push({kind: "reexport", specifier: literalText(n.moduleSpecifier) ?? NON_LITERAL});
     else if (ts.isImportEqualsDeclaration(n) && ts.isExternalModuleReference(n.moduleReference)) out.push({kind: "import-equals", specifier: literalText(n.moduleReference.expression) ?? NON_LITERAL});
@@ -67,19 +88,43 @@ export function scanImports(input: ImportInput): ImportRecord[] {
       if (callee.kind === ts.SyntaxKind.ImportKeyword) out.push({kind: "dynamic", specifier: n.arguments.length === 1 || n.arguments.length === 2 ? literalText(n.arguments[0]) ?? NON_LITERAL : NON_LITERAL});
       else if (ts.isIdentifier(callee) && callee.text === "require") {
         out.push({kind: "require", specifier: n.arguments.length === 1 ? literalText(n.arguments[0]) ?? NON_LITERAL : NON_LITERAL});
-        n.arguments.forEach(visit); // çağrılan require tanımlayıcısı require-reference olarak ikinci kez sayılmaz
-        return;
+        return visitRest(undefined, n.arguments);
       }
-      else if (accessedName(callee) === "resolve" && isImportMeta((callee as ts.PropertyAccessExpression | ts.ElementAccessExpression).expression)) out.push({kind: "import-meta-resolve", specifier: literalText(n.arguments[0]) ?? NON_LITERAL});
-      else if (calleeName(callee) === "importScripts") for (const a of n.arguments.length ? n.arguments : [undefined]) out.push({kind: "import-scripts", specifier: literalText(a) ?? NON_LITERAL});
-      else if (accessedName(callee) === "register" && accessedName((callee as ts.PropertyAccessExpression | ts.ElementAccessExpression).expression) === "serviceWorker") out.push({kind: "service-worker", specifier: literalText(n.arguments[0]) ?? NON_LITERAL});
+      else if (accessedName(callee) === "resolve" && isImportMeta(objectOf(callee)!)) {
+        out.push({kind: "import-meta-resolve", specifier: literalText(n.arguments[0]) ?? NON_LITERAL});
+        return visitRest(undefined, n.arguments);
+      }
+      else if (calleeName(callee) === "importScripts") {
+        for (const a of n.arguments.length ? n.arguments : [undefined]) out.push({kind: "import-scripts", specifier: literalText(a) ?? NON_LITERAL});
+        return visitRest(objectOf(callee), n.arguments);
+      }
+      else if (accessedName(callee) === "register" && accessedName(objectOf(callee)!) === "serviceWorker") {
+        out.push({kind: "service-worker", specifier: literalText(n.arguments[0]) ?? NON_LITERAL});
+        return visitRest(objectOf(objectOf(callee)!), n.arguments);
+      }
     }
-    else if (ts.isNewExpression(n) && (calleeName(n.expression) === "Worker" || calleeName(n.expression) === "SharedWorker")) out.push({kind: calleeName(n.expression) === "Worker" ? "worker" : "shared-worker", specifier: workerSpecifier(n.arguments?.[0])});
-    // require'a çağrı dışı HER başvuru (globalThis.require, const r = require, window["require"]) bağımlılıktır; dize/yorum metni AST gereği sayılmaz.
-    else if ((ts.isIdentifier(n) && n.text === "require") || (ts.isElementAccessExpression(n) && literalText(n.argumentExpression) === "require")) {
-      out.push({kind: "require-reference", specifier: "require"});
-      if (ts.isElementAccessExpression(n)) { visit(n.expression); return; }
+    else if (ts.isNewExpression(n) && (calleeName(n.expression) === "Worker" || calleeName(n.expression) === "SharedWorker")) {
+      out.push({kind: calleeName(n.expression) === "Worker" ? "worker" : "shared-worker", specifier: workerSpecifier(n.arguments?.[0])});
+      return visitRest(objectOf(n.expression), n.arguments);
     }
+    // Takma adla atlatma (const W = Worker; new (Worker)(…); Reflect.construct(Worker, …); const {Worker: W} = globalThis; const sw = navigator.serviceWorker;
+    // const i = importScripts) kapatılır: bu adlara HER tanımlayıcı başvurusu (özellik adı, nesne anahtarı ve gölgeleyen yerel bildirim dahil; gölgeleme
+    // çözümlemesi yapılmaz, fail-closed) module-load-reference'tır. require için de aynı kural geçerlidir: x.require gibi ilgisiz özellik adları da
+    // require-reference sayılır; bu bilinçli fazla raporlamadır (fail-closed) ve gevşetilmez.
+    else if (ts.isIdentifier(n) && (n.text === "require" || MODULE_LOAD_NAMES.has(n.text))) out.push(n.text === "require" ? {kind: "require-reference", specifier: "require"} : {kind: "module-load-reference", specifier: n.text});
+    // Değişmez anahtarlı erişim ve bağlama: x["Worker"], globalThis["require"], const {"serviceWorker": s} = navigator, {["importScripts"]: i}.
+    else if (ts.isElementAccessExpression(n) && literalKey(n.argumentExpression) !== null) {
+      const key = literalKey(n.argumentExpression)!;
+      if (key === "require") out.push({kind: "require-reference", specifier: "require"});
+      else if (MODULE_LOAD_NAMES.has(key)) out.push({kind: "module-load-reference", specifier: key});
+    }
+    else if (stringKeyOf(n) !== null) {
+      const key = stringKeyOf(n)!;
+      if (key === "require") out.push({kind: "require-reference", specifier: "require"});
+      else if (MODULE_LOAD_NAMES.has(key)) out.push({kind: "module-load-reference", specifier: key});
+    }
+    // import.meta yalnız tam olarak import.meta.url üye ifadesi olarak serbesttir; const m = import.meta, import.meta["url"] ve diğer her kullanım raporlanır.
+    else if (isImportMeta(n) && !(ts.isPropertyAccessExpression(n.parent) && n.parent.expression === n && n.parent.name.text === "url")) out.push({kind: "module-load-reference", specifier: "import.meta"});
     ts.forEachChild(n, visit);
   };
   visit(sf);
