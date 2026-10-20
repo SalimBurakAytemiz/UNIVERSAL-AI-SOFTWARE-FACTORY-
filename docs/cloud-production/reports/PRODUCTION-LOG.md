@@ -758,3 +758,24 @@ No CLAIMED_AWAITING_BUILDER, RECLAIMABLE_AWAITING_BUILDER or ABANDONED_WITH_WORK
 **Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) Builder capacity at cap (2 live claims UI-194, MOB-5); many draft UI PRs await review/merge (#101 wave B7). (3) create_session/list_sessions unavailable.
 
 Note: written as one local single-file commit with a plain push (as in #39-#42), since the ~65 KB log is too large to re-transmit through create_or_update_file without transcription risk.
+
+## Heartbeat #44 (2026-10-20 09:12Z)
+
+**Queue:** read from claude/cloud-production-engine@ed5cfb9; parsed OK. READY tasks: 0 (CP-QUEUE/CP-REPORT/CP-CI PENDING_REVIEW; CP-DISPATCH/CP-RECOVERY/CP-GOV IN_PROGRESS; FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED BLOCKED). Step 2: nothing to dispatch; create_session also unavailable in this fire.
+
+**Step 2b (canonical backlog):** v7/integration @ 0ac765f. Dry run: NO_ACTION (no READY task is startable). ACTIVE (list_sessions unavailable; fallback = LIVE claim branches with no open PR): 1 = claude/ui-194 (claim 406dd64, work commit 50f560e "WIP UI-194 ... blocked: operations guard test", 0.95 h old, LIVE). Below cap of 2, but nothing claimable. No claim, no dispatch.
+
+MERGED_AWAITING_WRITEBACK: UI-002, UI-007, UI-125, UI-109, UI-146, UI-182, UI-233, UI-035, CP-DISPATCH-IMPL, UI-030, UI-113, UI-132, UI-032, UI-026, UI-025, UI-133, UI-047, UI-201 (dispatcher state; heads are ancestors of v7/integration).
+No CLAIMED_AWAITING_BUILDER, RECLAIMABLE_AWAITING_BUILDER or ABANDONED_WITH_WORK_AWAITING_COORDINATOR. Claims with open PR (draft): MOB-1 #100, MOB-2 #99, MOB-5 #102, MOB-9 #103.
+
+**Open PRs: 12** (none labelled uasco-cloud-production; mergeable state/CI UNKNOWN): #103, #102, #100, #99, #69 (protected, do-not-merge), #66, #46, #33, #32, #28, #23, #8.
+
+**Active sessions:** UNKNOWN (list_sessions unavailable); LIVE claim-branch list used: claude/ui-194.
+
+**Tasks completed (merged):** the 18 claim branches above are merged (DONE write-back pending). Queue tasks DONE: 0.
+
+**Current failures:** none newly observed; UI-194 builder reported blocked on an operations guard test (WIP commit message; not verified).
+
+**Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) MOB-3/4/6/7/8 wait on open MOB-1/2/5/9 PRs; other MOB tasks need Founder authority. (3) UI-194 blocked on operations guard test. (4) create_session/list_sessions unavailable.
+
+Note: written as one local single-file commit with a plain push (as in #39-#43), since the ~67 KB log is too large to re-transmit through create_or_update_file without transcription risk.
