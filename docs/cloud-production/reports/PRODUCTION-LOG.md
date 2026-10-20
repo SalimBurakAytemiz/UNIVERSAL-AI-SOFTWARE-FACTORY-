@@ -415,3 +415,26 @@ create_session is unavailable in this fire, so no builder was dispatched; no ret
 1. claude-code-remote create_session unavailable: UI-132 claim has no builder yet.
 2. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned); BACKLOG-SOURCE-REBASELINE (Founder choice).
 3. Canonical backlog: other entries NOT_READY (NO_AUTHORIZED_BY / REQUIRES_NEW_AUTHORITY / UNMET_DEP).
+
+## 2026-10-20 heartbeat #31 (queue read from claude/cloud-production-engine@ed5cfb9; fired 00:12Z)
+
+**Queue (step 1):** parsed OK. READY tasks: 0. Task states unchanged (PENDING_REVIEW: CP-QUEUE, CP-REPORT, CP-CI; IN_PROGRESS: CP-DISPATCH, CP-RECOVERY, CP-GOV; BLOCKED: FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED). DONE: 0. Step 2 dispatched: 0 (nothing READY; create_session also unavailable).
+
+**Step 2b (canonical backlog):** v7/integration = e784c61 (wave B1a merge #71); dispatch.mjs and BACKLOG_CHECKPOINT.json present. Open-PR head list passed: 20 head branches of the open PRs. Dry run outcome START UI-032. Reclaimable list: UI-132 in state OPEN_PR only (delivered: PR #72 "UI-132" is now open, so the claim from #30 was built by a builder). ACTIVE (capacity guard, fallback method because list_sessions is unavailable): claim branches in state FRESH or HAS_WORK_COMMITS with no open PR = 0, so ACTIVE = 0 < 2. No RECLAIMABLE entry needing recovery. **CLAIM made:** `node docs/planning/dispatch.mjs --claim --owner heartbeat --no-lease` returned START, claimed:true, taskId UI-032, branch claude/ui-032, claim commit sha e80060b9e1b34aad8ce89a027be8055d8862ac31, base e784c6153cb0a0319866faa076145a5f0ebe9c2a (ls-remote confirms refs/heads/claude/ui-032 = e80060b).
+
+CLAIMED_AWAITING_BUILDER UI-032 claude/ui-032 e80060b9e1b34aad8ce89a027be8055d8862ac31
+
+create_session is unavailable in this fire, so no builder was dispatched; no retry and no second claim. The coordinator session must provision exactly one builder (template: lane-a-builder, model claude-sonnet-5-5, source_revision claude/ui-032) for this claim. Note: UI-133 depends on UI-032 (UNMET_DEP).
+
+**Open PRs: 20** (listing returned #8, #11 absent?, see list: #8, #15, #20, #22, #23, #27, #28, #31-#33, #39, #44, #46, #48, #50, #66, #68, #69, #72; plus #65/#67/#70/#71 not in the open list this fire). CHANGE vs #30: new #72 UI-132 (non-draft, claude/ui-132); #65, #67, #70, #71 and #11 no longer open (state changes not verified). Mergeable state and CI: UNKNOWN (mergeable_state not returned in the listing). No PR carries a uasco-cloud-production label. uasco-needs-fix on #68 and #50. Draft: #69, #66, #50.
+
+**Active implementer/builder sessions:** UNKNOWN (list_sessions unavailable); claim-branch fallback count of undelivered claims = 1 (claude/ui-032, just claimed).
+
+**Merged PRs / tasks completed:** UNKNOWN as PR-merge counts; queue tasks DONE: 0.
+
+**Current failures:** uasco-needs-fix on #68 and #50. Repo-wide Actions CI red per queue (not independently verified).
+
+**Top blockers:**
+1. claude-code-remote create_session unavailable: UI-032 claim has no builder yet.
+2. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned); BACKLOG-SOURCE-REBASELINE (Founder choice).
+3. Canonical backlog: other entries NOT_READY (NO_AUTHORIZED_BY / REQUIRES_NEW_AUTHORITY / UNMET_DEP).
