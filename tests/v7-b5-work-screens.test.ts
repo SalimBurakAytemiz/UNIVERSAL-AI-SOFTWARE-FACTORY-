@@ -1154,3 +1154,114 @@ describe("UI-109 ACTION_DENIED reason code with DENIED pill", () => {
     void doc;
   });
 });
+
+// ---------- UI-111: #/work koşu kartı yeniden deneme olguları ----------
+describe("UI-111 #/work run-card retry facts", () => {
+  const RETRY_AT = "2026-10-14T11:11:11.000Z";
+  const base = {runId: RUN, missionId: MID, status: "RUNNING", startedAt: "2026-10-14T08:00:00.000Z", heartbeatAt: "2026-10-14T10:00:00.000Z", lease: {expiresAt: "2026-10-14T10:05:00.000Z"}, checkpoints: [{name: "cp", at: "2026-10-14T09:00:00.000Z", status: "COMPLETED"}]};
+  const getWith = (over: Record<string, any>) => {
+    const run = {...base, ...over};
+    return {[`/v1/work-runs?missionId=${MID}`]: {workRuns: [run]}, [`/v1/work-runs/${RUN}`]: {workRun: run}} as Record<string, any>;
+  };
+  const baseGet = (extra: Record<string, any>) => (p: string) => {
+    if (p in extra) return extra[p];
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission()]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission(), tasks: []};
+    return undefined;
+  };
+  const renderCard = async (over: Record<string, any>) => {
+    const {ctx, doc, calls} = await mkCtx({get: baseGet(getWith(over))});
+    const view = await load(rend, "views", "work.js");
+    forms.selection.missionId = MID;
+    const root = mount(doc, await view.render(ctx));
+    return {root, card: byData(root, "runId", RUN)[0], calls, ctx};
+  };
+
+  it("mapWorkRun keeps counters only as non-negative safe integers and retryAt only when parseable", async () => {
+    const c = await load(rend, "work-core.js");
+    const bare = c.mapWorkRun({runId: RUN, status: "RUNNING"});
+    expect([bare.retryCount, bare.remediationCycle, bare.attempt, bare.retryAt]).toEqual([null, null, null, null]);
+    for (const f of ["retryCount", "remediationCycle", "attempt"]) {
+      for (const bad of [-1, 1.5, "2", true, null]) expect(c.mapWorkRun({runId: RUN, status: "RUNNING", [f]: bad})[f], `${f}=${String(bad)}`).toBeNull();
+      expect(c.mapWorkRun({runId: RUN, status: "RUNNING", [f]: 0})[f]).toBe(0);
+      expect(c.mapWorkRun({runId: RUN, status: "RUNNING", [f]: 7})[f]).toBe(7);
+    }
+    for (const bad of [5, "", "not-a-date", null, {}]) expect(c.mapWorkRun({runId: RUN, status: "RUNNING", retryAt: bad}).retryAt, String(bad)).toBeNull();
+    expect(c.mapWorkRun({runId: RUN, status: "RETRY_SCHEDULED", retryAt: RETRY_AT}).retryAt).toBe(RETRY_AT);
+    // iso() davranışı sabitlenir: Date'in ayrıştırabildiği ISO olmayan dize olduğu gibi tutulur.
+    expect(c.mapWorkRun({runId: RUN, status: "RETRY_SCHEDULED", retryAt: "Oct 14, 2026 11:11:11 UTC"}).retryAt).toBe("Oct 14, 2026 11:11:11 UTC");
+    const d = c.mapWorkRunDetail({workRun: {runId: RUN, status: "RUNNING", retryCount: 1, remediationCycle: 2, attempt: 3, retryAt: RETRY_AT}});
+    expect([d.run.retryCount, d.run.remediationCycle, d.run.attempt, d.run.retryAt]).toEqual([1, 2, 3, RETRY_AT]);
+  });
+  it("work-core.js keeps exactly its two relative imports and views/work.js/work-core.js use no indexedDB, Math.random, Date.now or new Date(", () => {
+    const core = read(rend, "work-core.js"), view = read(rend, "views", "work.js");
+    expect([...core.matchAll(/^import .* from "([^"]+)";$/gm)].map(m => m[1])).toEqual(["./model.js", "./delivery-core.js"]);
+    for (const [n, s] of [["work-core.js", core], ["views/work.js", view]]) expect(s, n).not.toMatch(/indexedDB|Math\.random/);
+    expect(view).not.toMatch(/Date\.now|new Date\(/);
+  });
+  it("renders retries/cycles/attempts as exactly the integer, with the data value; a bare run shows the dash and an empty data value", async () => {
+    const {card} = await renderCard({retryCount: 1, remediationCycle: 2, attempt: 3});
+    for (const [k, v] of [["runRetryCount", "1"], ["runRemediationCycle", "2"], ["runAttempt", "3"]]) {
+      const dd = byData(card, k);
+      expect(dd.length, k).toBe(1);
+      expect(dd[0].dataset[k]).toBe(v);
+      expect(text(dd[0])).toBe(v);
+    }
+    const bare = await renderCard({});
+    for (const k of ["runRetryCount", "runRemediationCycle", "runAttempt"]) {
+      const dd = byData(bare.card, k);
+      expect(dd.length, k).toBe(1);
+      expect(dd[0].dataset[k]).toBe("");
+      expect(text(dd[0])).toBe("—");
+    }
+    expect(byData(bare.card, "runRetryAt").length).toBe(0);
+    const t = text(bare.card);
+    expect(t).not.toMatch(/%|progress/i);
+    expect(byData(card, "runRetryCount").concat(byData(card, "runRemediationCycle"), byData(card, "runAttempt")).map(text).join("")).not.toMatch(/[\/]|total|toplam/i);
+  });
+  it("shows the retry-time row only for RETRY_SCHEDULED, as the recorded time; the pill keeps the raw status code in data-status", async () => {
+    const {card, ctx} = await renderCard({status: "RETRY_SCHEDULED", retryCount: 1, retryAt: RETRY_AT});
+    const core = await load(rend, "work-core.js");
+    const dd = byData(card, "runRetryAt");
+    expect(dd.length).toBe(1);
+    expect(dd[0].dataset.runRetryAt).toBe(RETRY_AT);
+    expect(text(dd[0])).toBe(core.formatDateTime(RETRY_AT, ctx.i18n.lang));
+    const pill = byData(card, "status", "RETRY_SCHEDULED")[0];
+    expect(pill).toBeTruthy();
+    const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+    expect(text(pill)).toBe((ctx.i18n.lang === "en" ? en : tr)["mstatus.RETRY_SCHEDULED"]);
+    const missing = await renderCard({status: "RETRY_SCHEDULED"});
+    expect(text(byData(missing.card, "runRetryAt")[0])).toBe("—");
+    expect(byData(missing.card, "runRetryAt")[0].dataset.runRetryAt).toBe("");
+    // eskimiş retryAt: başka durumlarda düğüm ve biçimli zaman görünmez
+    for (const status of ["FAILED", "RUNNING", "BLOCKED"]) {
+      const r = await renderCard({status, retryCount: 1, retryAt: RETRY_AT});
+      expect(byData(r.card, "runRetryAt").length, status).toBe(0);
+      expect(text(r.card), status).not.toContain(core.formatDateTime(RETRY_AT, r.ctx.i18n.lang));
+    }
+  });
+  it("a FAILED *_RETRY_EXHAUSTED run keeps reason and retry count in the same dl.kv and shows no retry time", async () => {
+    const {card} = await renderCard({status: "FAILED", reason: "TEST_RETRY_EXHAUSTED", retryCount: 2, retryAt: RETRY_AT});
+    const reason = byData(card, "runReason", "TEST_RETRY_EXHAUSTED")[0], cnt = byData(card, "runRetryCount", "2")[0];
+    expect(text(reason)).toBe("TEST_RETRY_EXHAUSTED");
+    expect(text(cnt)).toBe("2");
+    expect(reason.parent).toBe(cnt.parent);
+    expect(reason.parent?.className).toBe("kv");
+    expect(byData(card, "runRetryAt").length).toBe(0);
+  });
+  it("every path read passes the real main.mjs allow-list, no POST happens, and the five new keys exist in en and tr without placeholders or digits", async () => {
+    const ok = loadGet();
+    const {calls} = await renderCard({status: "RETRY_SCHEDULED", retryCount: 1, remediationCycle: 1, attempt: 1, retryAt: RETRY_AT});
+    expect(calls.get.length).toBeGreaterThan(0);
+    for (const p of calls.get) expect(ok(p), p).toBe(true);
+    expect(calls.post).toEqual([]);
+    const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+    const keys = ["run.retriesInStep", "run.remediationCycles", "run.leaseAttempts", "run.retryScheduledFor", "mstatus.RETRY_SCHEDULED"];
+    for (const k of keys) for (const d of [en, tr]) { expect(typeof d[k], k).toBe("string"); expect(d[k].trim().length, k).toBeGreaterThan(0); expect(d[k], k).not.toMatch(/\{|\}/); }
+    for (const k of keys.slice(0, 4)) { expect(en[k], k).not.toMatch(/[\d\/%]|total|max|remaining|lifetime|next|upcoming/i); expect(tr[k], k).not.toMatch(/[\d\/%]|toplam|azami|kalan|sonraki|yaklaşan/i); }
+    expect(en["run.retriesInStep"]).toContain("step"); expect(tr["run.retriesInStep"]).toContain("adım");
+    for (const k of ["run.remediationCycles", "run.leaseAttempts"]) { expect(en[k]).toContain("run"); expect(tr[k]).toContain("koşu"); }
+    expect(en["run.retryScheduledFor"]).toBe("Retry scheduled for");
+  });
+});

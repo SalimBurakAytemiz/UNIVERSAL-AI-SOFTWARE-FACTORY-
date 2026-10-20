@@ -1,5 +1,5 @@
 // //TR: Bu modül B5 iş ekranlarının saf (DOM'suz) çekirdeğidir: mission durum makinesinin salt-okunur kopyası (core/mission/state-machine.ts ile test eşleşir), yalnız izinli sonraki geçişler, yüksek riskli geçiş onayı, proje/mission/geçiş/koşu istek gövdesi kurucuları (argv dizisi, idempotency anahtarı, doğrulama), POST sonuç sınıflandırması, work-run/evidence eşleyicileri ve Gelen Kutusu türetimi; eksik veri asla uydurulmaz.
-import {MISSING} from "./model.js";
+import {MISSING,safeCount} from "./model.js";
 import {mapDelivery} from "./delivery-core.js";
 
 /** core/mission/state-machine.ts içindeki transitions tablosunun kopyası; tests/v7-b5-work-screens.test.ts eşitliği doğrular. */
@@ -246,6 +246,8 @@ export function mapWorkRun(x){
     checkpointsReported:Array.isArray(x.checkpoints),
     // SBX-GATE: koşunun durma/engellenme nedeni (ör. SANDBOX_UNAVAILABLE) sunucunun verdiği haliyle, kısaltılmış metin olarak taşınır.
     reason:str(x.reason,300),
+    // UI-111: sunucunun kaydettiği yeniden deneme olguları (core/workos/types.ts WorkRun); geçersiz tür null kalır, 0 uydurulmaz. retryCount adım içindir, remediationCycle/attempt koşu boyuncadır.
+    retryCount:safeCount(x.retryCount),remediationCycle:safeCount(x.remediationCycle),attempt:safeCount(x.attempt),retryAt:iso(x.retryAt),
     // M1a: test yürütme kanıtı (VERIFY_TESTS/REGRESSION_TESTS) yalnız doğrulanmış sandbox'ta oluşur; yoksa koşu NOT_VERIFIED rozetini taşır.
     testsExecuted:arr(x.evidence,100).some(e=>isObj(e)&&(e.kind==="VERIFY_TESTS"||e.kind==="REGRESSION_TESTS")),
     testsNotExecuted:arr(x.evidence,100).some(e=>isObj(e)&&(e.kind==="VERIFY_TESTS_NOT_EXECUTED"||e.kind==="REGRESSION_TESTS_NOT_EXECUTED")),
