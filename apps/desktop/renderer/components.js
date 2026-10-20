@@ -98,11 +98,11 @@ export function statusLabel(ctx,status){
 }
 export function statusPill(ctx,status){return h(ctx.doc,"span",{class:"pill",dataset:{status},text:statusLabel(ctx,status)})}
 /** Henüz uygulanmamış alan için dürüst panel: planlı paket + içerecekleri. */
-export function plannedPanel(ctx,route,{partial=false}={}){
+export function plannedPanel(ctx,route){
   const doc=ctx.doc,id=`planned-${route.id}`;
   return h(doc,"section",{class:"panel planned",id,"aria-labelledby":`${id}-t`,dataset:{planned:route.plannedPackage??""}},
-    h(doc,"h2",{class:"panel-title",id:`${id}-t`,text:ctx.t(partial?"planned.partial.title":"planned.title",{pkg:route.plannedPackage})}),
-    h(doc,"p",{class:"note",text:ctx.t(partial?"planned.partial.lead":"planned.lead",{pkg:route.plannedPackage})}),
+    h(doc,"h2",{class:"panel-title",id:`${id}-t`,text:ctx.t("planned.title",{pkg:route.plannedPackage})}),
+    h(doc,"p",{class:"note",text:ctx.t("planned.lead",{pkg:route.plannedPackage})}),
     h(doc,"h3",{class:"planned-sub",text:ctx.t("planned.contains")}),
     h(doc,"ul",{class:"planned-list"},[1,2,3].map(i=>h(doc,"li",{text:ctx.t(`area.${route.id}.plan${i}`)}))));
 }

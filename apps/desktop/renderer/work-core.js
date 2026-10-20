@@ -313,3 +313,29 @@ export function deriveInbox(missions,runs){
 }
 export function filterMissions(items,status){return status==="ALL"||!status?items:items.filter(m=>m.status===status)}
 export function liveRuns(runs){return (runs??[]).filter(r=>RUN_ACTIVE_STATES.includes(r.status))}
+
+// //TR: UI-026 salt-okunur görev denetçisi: yalnız GET /v1/missions/:id (görevler) ve GET /v1/work-runs okumalarından türetilir. Okuma VERIFIED değilse (STALE dahil) olumlu değer yoktur → UNKNOWN; API'nin vermediği alanlar (atanan, bitiş, bağımlılık, açıklama) asla uydurulmaz ve koşu-görev bağı sunucuda olmadığından bağ UNKNOWN kalır.
+export const TASK_UNKNOWN_FIELDS=Object.freeze(["assignee","dueAt","dependencies","description"]);
+export function deriveTaskInspector(detailRes,runsRes,taskId){
+  if(detailRes?.state!=="VERIFIED"||!detailRes.mission)return {state:"UNKNOWN",task:null};
+  const m=detailRes.mission,t=(m.tasks??[]).find(x=>x.taskId===taskId);
+  if(!t)return {state:"EMPTY",task:null};
+  const runsKnown=runsRes?.state==="VERIFIED"&&Array.isArray(runsRes.items),byStatus={};
+  if(runsKnown)for(const r of runsRes.items)byStatus[r.status]=(byStatus[r.status]??0)+1;
+  return {state:"VERIFIED",task:{taskId:t.taskId,title:t.title,status:t.status,missionId:m.missionId,missionTitle:m.title,missionStatus:m.status,riskLevel:m.riskLevel,
+    runs:runsKnown?{known:true,count:runsRes.items.length,byStatus}:{known:false,count:null,byStatus:{}},unknownFields:[...TASK_UNKNOWN_FIELDS]}};
+}
+
+// //TR: UI-025 salt-okunur görev/koşu zaman çizelgesi: yalnız GET /v1/missions/:id ve GET /v1/work-runs okumalarından türetilir. Zaman damgası olmayan olay UNKNOWN sırada sona konur, zaman uydurulmaz; mission okuması VERIFIED değilse (STALE dahil) UNKNOWN; koşu okuması VERIFIED değilse koşu olayları yoktur ve runsKnown=false döner.
+export function deriveWorkTimeline(detailRes,runsRes){
+  if(detailRes?.state!=="VERIFIED"||!detailRes.mission)return {state:"UNKNOWN",runsKnown:false,events:[]};
+  const m=detailRes.mission,runsKnown=runsRes?.state==="VERIFIED"&&Array.isArray(runsRes.items);
+  const ev=[{kind:"mission",id:m.missionId,label:m.title,at:m.createdAt??null,status:m.status}];
+  if(runsKnown)for(const r of runsRes.items){
+    ev.push({kind:"run",id:r.runId,label:r.runId,at:r.startedAt??null,status:r.status});
+    for(const c of r.checkpoints??[])ev.push({kind:"checkpoint",id:r.runId,label:c.name,at:c.at??null,status:c.status??null});
+  }
+  const key=e=>e.at===null?Infinity:Date.parse(e.at);
+  const sorted=ev.map((e,i)=>({e,i})).sort((a,b)=>{const ka=key(a.e),kb=key(b.e);return ka===kb?a.i-b.i:ka<kb?-1:1}).map(x=>x.e);
+  return {state:"VERIFIED",runsKnown,events:sorted};
+}

@@ -224,6 +224,116 @@ describe("UX WP-AGENTS workforce catalog view (honest semantics, real data only)
   });
 });
 
+// //TR: UI-197 Uzman Rol Taksonomisi testleri: ağaç yalnız /v1/roles alanlarından türetilir, sıralama deterministiktir, VERIFIED olmayan katalogda ağaç yerine dürüst not vardır, genom uydurulmaz, taksonomi anahtarları EN/TR'de birebirdir.
+describe("UI-197 workforce taxonomy (cluster > guild, derived only from /v1/roles fields)", () => {
+  beforeEach(async () => { (await load("views", "workforce.js")).resetWorkforceView(); });
+  it("pure core sorts deterministically and counts only existing fields", async () => {
+    const {buildTaxonomy} = await load("workforce-taxonomy-core.js");
+    const items = [
+      {roleId: "R3", clusterId: "C2", guildId: "G9", proficiencyStatus: "NOT_EVALUATED"},
+      {roleId: "R1", clusterId: "C10", guildId: "G2", proficiencyStatus: "CERTIFIED"},
+      {roleId: "R2", clusterId: "C2", guildId: "G1", proficiencyStatus: "NOT_EVALUATED"},
+      {roleId: "R4", clusterId: "C2", guildId: "G1", proficiencyStatus: "NOT_EVALUATED"},
+    ];
+    const a = buildTaxonomy(items), b = buildTaxonomy([...items].reverse());
+    expect(a).toEqual(b);
+    expect(a.clusters.map((c: any) => c.clusterId)).toEqual(["C10", "C2"]);
+    expect(a.clusters[1].guilds.map((g: any) => `${g.guildId}:${g.roles}`)).toEqual(["G1:2", "G9:1"]);
+    expect([a.clusterCount, a.guildCount, a.roleCount]).toEqual([2, 3, 4]);
+    expect(a.clusters[0].certified).toBe(1);
+    expect(JSON.stringify(a).toLowerCase()).not.toContain("genome");
+  });
+  it("renders the read-only tree from the live catalog with real totals", async () => {
+    const {ctx} = await mkCtx();
+    const {node} = await renderWf(ctx);
+    const tx = byId(node, "wf-taxonomy")!;
+    expect(tx).not.toBeNull();
+    const clusters = new Set(REG.map(r => r.clusterId)), guilds = new Set(REG.map(r => `${r.clusterId}/${r.guildId}`));
+    expect(byData(tx, "clusterId").length).toBe(clusters.size);
+    expect(byData(tx, "guildId").length).toBe(guilds.size);
+    expect(text(byData(tx, "taxonomySummary")[0])).toContain(String(REG.length));
+    const ids = byData(tx, "clusterId").map(n => n.dataset.clusterId);
+    expect(ids).toEqual([...ids].sort());
+    expect(byTag(tx, "button").length).toBe(0);
+    expect(byTag(tx, "input").length).toBe(0);
+  });
+  it("shows an honest state note and no tree when the catalog is not VERIFIED", async () => {
+    const {ctx} = await mkCtx({roles: "off"});
+    const {node} = await renderWf(ctx);
+    const tx = byId(node, "wf-taxonomy")!;
+    expect(tx).not.toBeNull();
+    expect(byData(tx, "clusterId").length).toBe(0);
+    expect(byData(tx, "taxonomyState").length).toBe(1);
+    // Doğrudan: küme/lonca düğümü yok ve tam olarak TEK durum notu (role=status) var.
+    expect(byData(tx, "clusterId").length).toBe(0);
+    expect(byData(tx, "guildId").length).toBe(0);
+    expect(byData(tx, "taxonomySummary").length).toBe(0);
+    expect(all(tx).filter(n => n.attrs.get("role") === "status").length).toBe(1);
+    // Yalnız lead + tek durum notu: yinelenen durum mesajı yok.
+    expect(byTag(tx, "p").length).toBe(2);
+  });
+  it("core reports skippedCount for malformed items and never throws", async () => {
+    const {buildTaxonomy} = await load("workforce-taxonomy-core.js");
+    const ok = {clusterId: "C1", guildId: "G1", proficiencyStatus: "NOT_EVALUATED"};
+    const t = buildTaxonomy([ok, null, 5, "x", {clusterId: "C1"}, {guildId: "G1"}, {clusterId: 1, guildId: "G1"}, undefined]);
+    expect([t.skippedCount, t.totalCount, t.roleCount]).toEqual([7, 8, 1]);
+    const bad = buildTaxonomy([null, 3, {clusterId: "C1"}]);
+    expect(bad.clusters).toEqual([]);
+    expect([bad.skippedCount, bad.totalCount]).toEqual([3, 3]);
+    for (const x of [null, undefined, "x", 3, {}]) expect(buildTaxonomy(x)).toMatchObject({clusters: [], skippedCount: 0, totalCount: 0});
+  });
+  it("core counts only exact CERTIFIED and keeps case/whitespace ids distinct", async () => {
+    const {buildTaxonomy} = await load("workforce-taxonomy-core.js");
+    const t = buildTaxonomy([
+      {clusterId: "C1", guildId: "G1", proficiencyStatus: "certified"},
+      {clusterId: "C1", guildId: "G1", proficiencyStatus: "CERTIFIED"},
+      {clusterId: "c1", guildId: "G1", proficiencyStatus: "NOT_EVALUATED"},
+      {clusterId: "C1 ", guildId: "G1", proficiencyStatus: "NOT_EVALUATED"},
+    ]);
+    expect(t.clusters.find((c: any) => c.clusterId === "C1").certified).toBe(1);
+    expect(t.clusterCount).toBe(3);
+    expect(t.clusters.map((c: any) => c.clusterId).sort()).toEqual(["C1", "C1 ", "c1"]);
+  });
+  it("core merges duplicate cluster/guild keys and separates pair count from distinct guild ids", async () => {
+    const {buildTaxonomy} = await load("workforce-taxonomy-core.js");
+    const t = buildTaxonomy([{clusterId: "C1", guildId: "G1"}, {clusterId: "C1", guildId: "G1"}, {clusterId: "C2", guildId: "G1"}]);
+    expect(t.clusters[0].guilds).toEqual([{guildId: "G1", roles: 2, certified: 0}]);
+    expect([t.guildCount, t.distinctGuildCount, t.roleCount]).toEqual([2, 1, 3]);
+  });
+  it("view shows a skipped note with numbers, and 'unclassified' (never 'empty') when nothing is classifiable", async () => {
+    const mk = async (items: any[]) => { const {ctx} = await mkCtx(); ctx.api.roleCatalog = async () => ({state: "VERIFIED", total: items.length, items}); const {node} = await renderWf(ctx); return byId(node, "wf-taxonomy")!; };
+    const good = {roleId: "R1", title: "t", clusterId: "C1", guildId: "G1", proficiencyStatus: "NOT_EVALUATED"};
+    const tx1 = await mk([good, {roleId: "R2", title: "t", clusterId: "C1"}]);
+    const sk = byData(tx1, "taxonomySkipped");
+    expect(sk.length).toBe(1);
+    expect(text(sk[0])).toContain("1");
+    expect(text(sk[0])).toContain("2");
+    expect(text(byData(tx1, "taxonomySummary")[0])).toContain("1");
+    const tx0 = await mk([good]);
+    expect(byData(tx0, "taxonomySkipped").length).toBe(0);
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const tx2 = await mk([{roleId: "R2", title: "t", clusterId: "C1"}, {roleId: "R3", title: "t"}]);
+    expect(byData(tx2, "clusterId").length).toBe(0);
+    expect(byData(tx2, "taxonomyUnclassified").length).toBe(1);
+    expect(text(tx2)).not.toContain("no role definitions");
+    expect(text(tx2)).not.toContain(en["workforce.cat.empty"]);
+    const tx3 = await mk([]);
+    expect(byData(tx3, "taxonomyUnclassified").length).toBe(0);
+  });
+  it("taxonomy locale keys exist in TR and EN with identical key sets", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const tk = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("workforce.taxonomy.")).sort();
+    expect(tk(en).length).toBeGreaterThan(3);
+    expect(tk(tr)).toEqual(tk(en));
+    // Yer tutucu paritesi: her anahtarda {c},{g},{d},{r},{k},{s},{t} kümeleri EN ve TR'de aynıdır.
+    const ph = (v: string) => [...v.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort().join(",");
+    for (const k of tk(en)) expect(ph(tr[k]), k).toBe(ph(en[k]));
+    expect(ph(en["workforce.taxonomy.summary"])).toBe("c,d,g,r");
+    expect(ph(en["workforce.taxonomy.counts"])).toBe("g,k,r");
+  });
+});
+
 describe("UX WP-AGENTS locale parity and route", () => {
   it("every new workforce.cat.* key exists in both TR and EN", async () => {
     const tr = (await load("locales", "tr.js")).default as Record<string, string>;
@@ -242,6 +352,220 @@ describe("UX WP-AGENTS locale parity and route", () => {
     const r = routes.ROUTES.find((x: any) => x.id === "workforce");
     expect(r.view).toBe("workforce");
     expect("plannedPackage" in r).toBe(false);
+  });
+});
+
+// //TR: test+states: workforce (functional/negative/a11y) — AI İş Gücü: kokpit/ajan/koşu/katalog okumaları tek tek düştüğünde sayı uydurulmadığını (599 canlı ajan değildir, 0 sertifikalı), rol ayrıntısı okunamazsa ayrıntı uydurulmadığını, eşleşmeyen süzgecin dürüst boş metin verdiğini ve erişilebilirlik sözleşmesini (h1 tabindex, tipli düğmeler, etiketli seçiciler, tablo başlıkları, role=note/status) ve görünümün kullandığı tüm anahtarların TR/EN eşitliğini doğrular.
+describe("test+states workforce: negative (independent read failures, no invented figures)", () => {
+  // Her okuma bağımsız denetlenir: get(path) undefined dönerse 404, "off" ağ hatası.
+  const mkWf = async (over: Record<string, any> = {}, lang = "tr") => {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    const doc = new D(), store = st.createStore(null), calls: string[] = [];
+    const bridge = {apiGet: async (p: string) => {
+      calls.push(p);
+      const key = p.startsWith("/v1/roles/") ? "detail" : p.startsWith("/v1/roles") ? "roles" : p === "/v1/cockpit" ? "cockpit" : p === "/v1/agents" ? "agents" : p === "/v1/work-runs" ? "runs" : "other";
+      if (key in over) { const v = over[key]; if (v === "off") throw new Error("fetch failed"); if (v === "404") throw new Error(`${p}: HTTP 404`); return typeof v === "function" ? v(p) : v; }
+      if (key === "detail") { const d = roleDetail(p.slice("/v1/roles/".length)); if (!d) throw new Error(`${p}: HTTP 404`); return d; }
+      if (key === "roles") return rolesPage(p);
+      if (key === "cockpit") return COCKPIT;
+      if (key === "agents") return AGENTS;
+      if (key === "runs") return {workRuns: []};
+      throw new Error(`${p}: HTTP 404`);
+    }};
+    const api = apiMod.createApi({bridge, store});
+    const t = (k: string, v?: any) => i18n.translate(lang, k, v);
+    const ctx: any = {doc, store, api, i18n: {lang, t}, t, navigate: () => {}, rerender: () => {}, settleFocus: () => {}, principal: "FOUNDER_LOCAL"};
+    return {ctx, doc, calls};
+  };
+  const render = async (over: Record<string, any> = {}, lang = "tr") => { const w = await mkWf(over, lang); const view = await load("views", "workforce.js"); view.resetWorkforceView(); return {...w, view, node: (await view.render(w.ctx, ROUTE)) as N}; };
+
+  it("when cockpit, agents and catalog all fail: em-dash counts, no VERIFIED claim, no role rows, no invented 599", async () => {
+    // //TR: Tüm okumalar düşünce hiçbir sayı/rol uydurulmaz.
+    const {node} = await render({cockpit: "404", agents: "404", roles: "404", runs: "404"});
+    expect(text(byId(node, "wf-reg")!)).toContain("—");
+    expect(text(byId(node, "wf-act")!)).toContain("—");
+    expect(text(byId(node, "wf-reg")!)).not.toContain("599");
+    expect(byData(node, "roleBtn").length).toBe(0);
+    expect(byId(node, "wf-browse")).toBeNull();
+    expect(text(byId(node, "wf-catalog")!)).not.toContain("599");
+    expect(byData(node, "pill", "VERIFIED").length).toBe(0);
+    expect(byData(byId(node, "wf-reg")!, "certified").length).toBe(0); // sertifikalı sayısı bilinmiyorsa satır yok
+  });
+  it("offline (network) failures are distinct from 404 and still invent nothing", async () => {
+    const {node} = await render({cockpit: "off", agents: "off", roles: "off", runs: "off"});
+    expect(text(byId(node, "wf-reg")!)).toContain("—");
+    expect(byData(node, "roleBtn").length).toBe(0);
+    expect(byData(node, "runId").length).toBe(0);
+  });
+  it("a failed /v1/agents keeps the cockpit-derived count labelled and drops the certified line (never 0 certified invented)", async () => {
+    const {node} = await render({agents: "404"});
+    expect(byData(byId(node, "wf-reg")!, "certified").length).toBe(0);
+    expect(byId(node, "wf-reg")).not.toBeNull();
+  });
+  it("malformed agents payload (negative / non-integer counts) is not shown as a count", async () => {
+    const {node} = await render({agents: {registeredRoles: -5, certified: "x", legacyRoles: 1.5}});
+    expect(text(byId(node, "wf-reg")!)).not.toContain("-5");
+    expect(byData(byId(node, "wf-reg")!, "certified").length).toBe(0);
+  });
+  it("a malformed or partial role catalog page shows no rows and no partial total (complete-or-empty)", async () => {
+    for (const bad of [{items: "x", total: 3}, {total: 600, items: [], nextCursor: null}, null]) {
+      const {node} = await render({roles: bad});
+      expect(byData(node, "roleBtn").length, JSON.stringify(bad)).toBe(0);
+      expect(byId(node, "wf-browse")).toBeNull();
+      expect(byData(node, "stat", "roles").length).toBe(0);
+    }
+  });
+  it("an empty (but readable) catalog says so honestly and shows zero stats instead of a table", async () => {
+    const {node} = await render({roles: {status: "X", total: 0, items: [], nextCursor: null}});
+    expect(byData(node, "roleBtn").length).toBe(0);
+    expect(all(node).filter(n => n.tagName === "TABLE" && n.className.includes("wf-cat-table")).length).toBe(0);
+  });
+  it("selecting a role whose definition read fails shows an honest state and invents no responsibilities", async () => {
+    const view = await load("views", "workforce.js");
+    const first = REG[0].roleId;
+    const w = await mkWf({detail: "404"});
+    view.resetWorkforceView();
+    let node = (await view.render(w.ctx, ROUTE)) as N;
+    byData(node, "roleBtn", first)[0].fire("click");
+    node = (await view.render(w.ctx, ROUTE)) as N;
+    const detail = byId(node, "wf-detail")!;
+    expect(detail.textContent).toContain("Kullanılamıyor");
+    expect(all(detail).filter(n => n.className.includes("wf-def")).length).toBe(0);
+    expect(byId(node, "wf-detail-close")).toBeNull();
+    view.resetWorkforceView();
+  });
+  it("a search that matches nothing shows the honest no-match text, no table and no results count above zero", async () => {
+    const view = await load("views", "workforce.js");
+    const w = await mkWf();
+    view.resetWorkforceView();
+    let node = (await view.render(w.ctx, ROUTE)) as N;
+    const q = byId(node, "wf-q")!; q.value = "zzzz-yok-boyle-rol-zzzz"; q.fire("change", {target: q});
+    node = (await view.render(w.ctx, ROUTE)) as N;
+    expect(byData(node, "roleBtn").length).toBe(0);
+    expect(byId(node, "wf-f-clear")).not.toBeNull(); // süzgeç temizlenebilir
+    view.resetWorkforceView();
+  });
+  it("renders role text from the API as text only (no markup nodes)", async () => {
+    const hostile = {...rolesPage("/v1/roles?limit=100"), total: 1, nextCursor: null, items: [{...roleItem(REG[0]), title: "<img src=x onerror=1>"}]};
+    const {node} = await render({roles: hostile});
+    expect(text(node)).toContain("<img src=x onerror=1>");
+    expect(all(node).some(n => n.tagName === "IMG" || n.tagName === "SCRIPT")).toBe(false);
+  });
+});
+
+describe("test+states workforce: accessibility and keyboard", () => {
+  it("h1 is unique with tabindex -1; every button is typed; honesty notes carry role=note", async () => {
+    // //TR: h1 odak hedefidir; tüm düğmeler tiplidir; anlam notları role=note taşır.
+    const {ctx} = await mkCtx();
+    const {node} = await renderWf(ctx);
+    const h1s = byTag(node, "h1");
+    expect(h1s.length).toBe(1);
+    expect(h1s[0].id).toBe("view-title");
+    expect(h1s[0].getAttribute("tabindex")).toBe("-1");
+    const btns = byTag(node, "button");
+    expect(btns.length).toBeGreaterThan(0);
+    for (const b of btns) expect(["button", "submit"], b.id || text(b)).toContain(b.getAttribute("type"));
+    const notes = all(node).filter(n => n.className.includes("note-catalog"));
+    expect(notes.length).toBeGreaterThan(0);
+    for (const n of notes) expect(n.getAttribute("role")).toBe("note");
+  });
+  it("filter controls are a labelled group; selects and the search input have labels and an aria-label; the search hint is described-by", async () => {
+    const {ctx} = await mkCtx();
+    const {node} = await renderWf(ctx);
+    const group = all(node).find(n => n.className.includes("wf-filter"))!;
+    expect(group.getAttribute("role")).toBe("group");
+    expect(group.getAttribute("aria-label")!.length).toBeGreaterThan(0);
+    for (const id of ["wf-f-cluster", "wf-f-guild", "wf-q"]) {
+      const c = byId(node, id)!;
+      expect(c.getAttribute("aria-label")!.length, id).toBeGreaterThan(0);
+      expect(all(node).some(n => n.tagName === "LABEL" && n.getAttribute("for") === id), id).toBe(true);
+    }
+    expect(byId(node, "wf-q")!.getAttribute("aria-describedby")).toBe("wf-q-hint");
+    expect(byId(node, "wf-q-hint")).not.toBeNull();
+  });
+  it("catalog and live-run tables carry captions and column-scoped headers; row buttons have an accessible name and aria-current on the selected role", async () => {
+    const view = await load("views", "workforce.js");
+    const {ctx} = await mkCtx();
+    view.resetWorkforceView();
+    let node = (await view.render(ctx, ROUTE)) as N;
+    const table = all(node).find(n => n.tagName === "TABLE" && n.className.includes("wf-cat-table"))!;
+    expect(all(table).some(n => n.tagName === "CAPTION" && text(n).length > 0)).toBe(true);
+    const ths = all(table).filter(n => n.tagName === "TH");
+    expect(ths.length).toBe(7);
+    for (const th of ths) expect(th.getAttribute("scope")).toBe("col");
+    const btn = byData(node, "roleBtn")[0];
+    expect(btn.getAttribute("aria-label")!.length).toBeGreaterThan(0);
+    expect(btn.getAttribute("aria-current")).toBeNull();
+    btn.fire("click");
+    node = (await view.render(ctx, ROUTE)) as N;
+    expect(byData(node, "roleBtn", btn.dataset.roleBtn)[0].getAttribute("aria-current")).toBe("true");
+    const close = byId(node, "wf-detail-close")!;
+    expect(close.getAttribute("type")).toBe("button");
+    expect(byId(node, "wf-detail-h")!.getAttribute("tabindex")).toBe("-1");
+    // //TR: Aynı kimlik iki öğede bulunmaz (panel başlığı wf-detail-t, ayrıntı başlığı wf-detail-h).
+    const ids = all(node).map(n => n.id).filter(Boolean);
+    expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
+    close.fire("click");
+    node = (await view.render(ctx, ROUTE)) as N;
+    expect(byId(node, "wf-detail-close")).toBeNull();
+    view.resetWorkforceView();
+  });
+  it("live runs table is labelled and the status messages for degraded reads are role=status", async () => {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    const doc = new D(), store = st.createStore(null);
+    const live = {workRuns: [{runId: "run_live_0001", missionId: "msn_" + "ab12".repeat(6), status: "RUNNING", role: "qa-engineer", heartbeatAt: "2026-10-16T00:00:00.000Z"}]};
+    const bridge = {apiGet: async (p: string) => { if (p === "/v1/work-runs") return live; if (p === "/v1/cockpit") return COCKPIT; if (p === "/v1/agents") return AGENTS; throw new Error(`${p}: HTTP 404`); }};
+    const t = (k: string, v?: any) => i18n.translate("tr", k, v);
+    const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang: "tr", t}, t, navigate: () => {}, rerender: () => {}, settleFocus: () => {}, principal: "FOUNDER_LOCAL"};
+    const view = await load("views", "workforce.js"); view.resetWorkforceView();
+    const node = (await view.render(ctx, ROUTE)) as N;
+    const liveTable = all(byId(node, "wf-live")!).find(n => n.tagName === "TABLE")!;
+    expect(all(liveTable).some(n => n.tagName === "CAPTION")).toBe(true);
+    for (const th of all(liveTable).filter(n => n.tagName === "TH")) expect(th.getAttribute("scope")).toBe("col");
+    const degraded = all(node).filter(n => n.className.includes("note-unavailable") || n.className.includes("note-error"));
+    expect(degraded.length).toBeGreaterThan(0); // katalog 404
+    for (const n of degraded) expect(n.getAttribute("role")).toBe("status");
+  });
+});
+
+describe("test+states workforce: EN/TR parity for every key the view uses", () => {
+  it("whole dictionaries match and every literal key in workforce.js exists in both locales with equal placeholders; English differs from Turkish", async () => {
+    // //TR: workforce.js içindeki tüm sabit anahtarlar iki dilde vardır.
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    expect(Object.keys(en).sort()).toEqual(Object.keys(tr).sort());
+    const src = fs.readFileSync(path.join(rend, "views", "workforce.js"), "utf8");
+    const keys = new Set<string>();
+    for (const m of src.matchAll(/(?:\bt\(|labelKey:|titleKey:|emptyNote\(ctx,|defList\(ctx,)\s*"([a-zA-Z0-9_.-]+)"/g)) keys.add(m[1]);
+    for (const m of src.matchAll(/"((?:workforce|run|area\.workforce)\.[A-Za-z0-9_.-]+)"/g)) keys.add(m[1]);
+    const real = [...keys].filter(k => !/[${}]/.test(k));
+    expect(real.length).toBeGreaterThan(40);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of real) { expect(k in tr && k in en, k).toBe(true); expect(ph(en[k]), k).toBe(ph(tr[k])); expect(tr[k].trim().length, k).toBeGreaterThan(0); expect(en[k].trim().length, k).toBeGreaterThan(0); }
+    expect(en["workforce.cat.title"]).not.toBe(tr["workforce.cat.title"]);
+  });
+  it("English rendering shows the honest-semantics note in English and does not call role definitions live agents", async () => {
+    const { ctx } = await mkCtx({roles: "ok", detail: true}, "en");
+    const {node} = await renderWf(ctx);
+    const sem = byData(node, "semantics", "TARGET_DEFINITIONS")[0];
+    expect(sem).toBeDefined();
+    expect(text(sem)).toContain("NOT a count of live/active agents");
+    expect(text(sem)).not.toMatch(/canlı|çalışan ajan/i);
+  });
+});
+
+describe("test+states workforce: unique DOM ids (regression: duplicate wf-detail-t)", () => {
+  it("no id appears twice in the default and no-catalog renders, and the detail heading has its own id", async () => {
+    // //TR: Panel başlığı ile ayrıntı başlığı aynı kimliği paylaşmaz (aria-labelledby belirsizliği olmaz).
+    const view = await load("views", "workforce.js");
+    for (const feed of [{roles: "ok", detail: true}, {roles: "off", detail: false}] as Feed[]) {
+      const {ctx} = await mkCtx(feed);
+      view.resetWorkforceView();
+      const node = (await view.render(ctx, ROUTE)) as N;
+      const ids = all(node).map(n => n.id).filter(Boolean);
+      expect(ids.filter((id, i) => ids.indexOf(id) !== i), JSON.stringify(feed)).toEqual([]);
+      expect(byId(node, "wf-detail-h")).not.toBeNull();
+    }
+    view.resetWorkforceView();
   });
 });
 
@@ -294,7 +618,7 @@ describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN
     expect(byTag(region, "h3").map(text)).toEqual(["Queued (1)", "Running (1)"]);
     const t = byTag(region, "time"); expect(t.length).toBe(1); expect(t[0].attrs.get("datetime")).toBe("2026-10-19T10:00:00.000Z");
     expect(byData(region, "unknown", "1").length).toBe(2);
-    const btn = byTag(region, "button"); expect(btn.length).toBe(1);
+    const btn = byTag(region, "button").filter(b => b.attrs.get("id") === "wf-fleet-open-run-0001"); expect(btn.length).toBe(1);
     expect(btn[0].attrs.get("type")).toBe("button"); expect(btn[0].attrs.get("aria-label")).toContain("msn_0123456789abcdef01234567"); expect(btn[0].attrs.has("tabindex")).toBe(false);
     btn[0].fire("click"); expect(navigated).toEqual(["work"]);
     expect(text(region)).toContain("not live agents");
@@ -332,5 +656,134 @@ describe("UI-030 fleet card does not collide with live-run rows", () => {
     const fleet = src.slice(src.indexOf("function fleetBody"), src.indexOf("const statusChip"));
     expect(fleet).toContain("fleetRunId");
     expect(fleet).not.toMatch(/dataset:\{runId/);
+  });
+});
+
+describe("UI-032 worker detail panel from the fleet grid (run-level only, UNKNOWN stays UNKNOWN)", () => {
+  const run = (i: number, status: string, extra: any = {}) => ({runId: `run-${String(i).padStart(4, "0")}`, status, ...extra});
+  it("fleetDetail resolves only live runs and always reports telemetry as null", async () => {
+    const core = await load("fleet-core.js");
+    const runs = [run(1, "RUNNING", {role: "ROLE.X"}), run(2, "COMPLETED")];
+    expect(core.fleetDetail(runs, "run-0001")).toEqual({runId: "run-0001", status: "RUNNING", role: "ROLE.X", missionId: null, updatedAt: null, telemetry: null});
+    expect(core.fleetDetail(runs, "run-0002")).toBeNull();
+    expect(core.fleetDetail(runs, "nope")).toBeNull();
+    expect(core.fleetDetail(runs, null)).toBeNull();
+    expect(core.fleetDetail(undefined, "run-0001")).toBeNull();
+  });
+  it("toggle opens a detail panel with UNKNOWN telemetry, keeps data-fleet-detail-for unique, and toggles closed", async () => {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    const doc = new D(), store = st.createStore(null);
+    const bridge = {apiGet: async (p: string) => {
+      if (p === "/v1/cockpit") return COCKPIT; if (p === "/v1/agents") return AGENTS;
+      if (p === "/v1/work-runs") return {workRuns: [run(1, "RUNNING", {role: "ROLE.X"}), run(2, "QUEUED")]};
+      throw new Error(`${p}: HTTP 404`);
+    }};
+    const t = (k: string, v?: any) => i18n.translate("en", k, v);
+    const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang: "en", t}, t, navigate: () => {}, rerender: () => {}, settleFocus: () => {}, principal: "FOUNDER_LOCAL"};
+    const view = await load("views", "workforce.js"); view.resetWorkforceView();
+    const before = (await view.render(ctx, ROUTE)) as N;
+    expect(byData(before, "fleetDetailFor").length).toBe(0);
+    const toggle = byId(before, "wf-fleet-detail-run-0001")!; expect(toggle.attrs.get("aria-expanded")).toBe("false");
+    toggle.fire("click");
+    const open = (await view.render(ctx, ROUTE)) as N;
+    const panel = byData(open, "fleetDetailFor"); expect(panel.length).toBe(1);
+    expect(panel[0].dataset.fleetDetailFor).toBe("run-0001");
+    expect(text(panel[0])).toContain("No live agent telemetry");
+    expect(byData(panel[0], "unknown", "1").length).toBeGreaterThanOrEqual(3);
+    expect(byId(open, "wf-fleet-detail-run-0001")!.attrs.get("aria-expanded")).toBe("true");
+    byId(open, "wf-fleet-detail-run-0001")!.fire("click");
+    expect(byData((await view.render(ctx, ROUTE)) as N, "fleetDetailFor").length).toBe(0);
+  });
+  it("workforce.fleet.detail.* keys are identical in EN and TR with the same placeholders", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const keys = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("workforce.fleet.detail.")).sort();
+    expect(keys(tr)).toEqual(keys(en)); expect(keys(en).length).toBe(6);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
+    for (const k of keys(en)) { expect(ph(tr[k]), k).toEqual(ph(en[k])); expect(tr[k]).toBeTruthy(); }
+  });
+  it("detail uses a feature-unique data attribute and no forbidden reuse", async () => {
+    const src = fs.readFileSync(path.join(rend, "views", "workforce.js"), "utf8");
+    const fn = src.slice(src.indexOf("function fleetDetailPanel"), src.indexOf("function fleetBody"));
+    expect(fn).toContain("fleetDetailFor");
+    expect(fn).not.toMatch(/dataset:\{(runId|fleetRunId)/);
+    expect(fn).not.toMatch(/innerHTML/);
+  });
+});
+
+describe("UI-133 agent identity card on role detail (UNKNOWN without evidence, never certified by default)", () => {
+  const open = async (detailOver?: (p: string) => any, agents: any = AGENTS) => {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    const doc = new D(), store = st.createStore(null), id = REG[0].roleId;
+    const bridge = {apiGet: async (p: string) => {
+      if (p === "/v1/cockpit") return COCKPIT;
+      if (p === "/v1/agents") { if (agents === "404") throw new Error(`${p}: HTTP 404`); return agents; }
+      if (p === "/v1/work-runs") return {workRuns: []};
+      if (p.startsWith("/v1/roles/")) { const d = detailOver ? detailOver(p) : roleDetail(p.slice("/v1/roles/".length)); if (!d) throw new Error(`${p}: HTTP 404`); return d; }
+      if (p.startsWith("/v1/roles")) return rolesPage(p);
+      throw new Error(`${p}: HTTP 404`);
+    }};
+    const t = (k: string, v?: any) => i18n.translate("en", k, v);
+    const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang: "en", t}, t, navigate: () => {}, rerender: () => {}, settleFocus: () => {}, principal: "FOUNDER_LOCAL"};
+    const view = await load("views", "workforce.js"); view.resetWorkforceView();
+    const first = (await view.render(ctx, ROUTE)) as N;
+    byData(first, "roleBtn", id)[0].fire("click");
+    return {node: (await view.render(ctx, ROUTE)) as N, id, view};
+  };
+  it("shows the card with UNKNOWN evidence and not-certified for a NOT_EVALUATED role", async () => {
+    const {node, id, view} = await open();
+    const card = byData(node, "identityCardFor", id);
+    expect(card.length).toBe(1);
+    expect(byData(card[0], "identityCertified", "0").length).toBe(1);
+    expect(byData(card[0], "identityCertified", "1").length).toBe(0);
+    expect(text(card[0])).toContain("not a live agent");
+    view.resetWorkforceView();
+  });
+  it("a CERTIFIED proficiency without a scope and evidence trail is still not shown as certified", async () => {
+    const {node, id, view} = await open(p => { const d = JSON.parse(JSON.stringify(roleDetail(p.slice("/v1/roles/".length)))); d.role.proficiencyStatus = "CERTIFIED"; d.role.certifiedScope = null; d.role.evaluationSpecs = []; return d; });
+    const card = byData(node, "identityCardFor", id)[0];
+    expect(byData(card, "identityCertified", "1").length).toBe(0);
+    expect(byData(card, "identityEvidence", "UNKNOWN").length).toBe(1);
+    expect(byData(card, "identityUnknown", "1").length).toBeGreaterThanOrEqual(1);
+    view.resetWorkforceView();
+  });
+  it("certified shows only with CERTIFIED + scope + evidence trail from a verified read", async () => {
+    const {node, id, view} = await open(p => { const d = JSON.parse(JSON.stringify(roleDetail(p.slice("/v1/roles/".length)))); d.role.proficiencyStatus = "CERTIFIED"; d.role.certifiedScope = "SCOPE.X"; d.role.evaluationSpecs = [{evaluationId: "EV.1", kind: "K", status: "PASSED"}]; return d; });
+    const card = byData(node, "identityCardFor", id)[0];
+    expect(byData(card, "identityCertified", "1").length).toBe(1);
+    expect(byData(card, "identityEvidence", "1").length).toBe(1);
+    view.resetWorkforceView();
+  });
+  it("CERTIFIED with a scope but only UNKNOWN/NOT_EXECUTED specs is not certified, evidence is UNKNOWN and the scope is labelled declared", async () => {
+    const {node, id, view} = await open(p => { const d = JSON.parse(JSON.stringify(roleDetail(p.slice("/v1/roles/".length)))); d.role.proficiencyStatus = "CERTIFIED"; d.role.certifiedScope = "SCOPE.X"; d.role.evaluationSpecs = [{evaluationId: "EV.1", kind: "K", status: "UNKNOWN"}, {evaluationId: "EV.2", kind: "K", status: "NOT_EXECUTED"}]; return d; });
+    const card = byData(node, "identityCardFor", id)[0];
+    expect(byData(card, "identityCertified", "1").length).toBe(0);
+    expect(byData(card, "identityEvidence", "UNKNOWN").length).toBe(1);
+    expect(byData(card, "identityScope", "declared").length).toBe(1);
+    expect(byData(card, "identityScope", "verified").length).toBe(0);
+    expect(text(card)).toContain("Declared scope (unverified)");
+    view.resetWorkforceView();
+  });
+  it("a certified role shows the scope as verified with a passing-of-total evidence count", async () => {
+    const {node, id, view} = await open(p => { const d = JSON.parse(JSON.stringify(roleDetail(p.slice("/v1/roles/".length)))); d.role.proficiencyStatus = "CERTIFIED"; d.role.certifiedScope = "SCOPE.X"; d.role.evaluationSpecs = [{evaluationId: "EV.1", kind: "K", status: "PASSED"}, {evaluationId: "EV.2", kind: "K", status: "UNKNOWN"}]; return d; });
+    const card = byData(node, "identityCardFor", id)[0];
+    expect(byData(card, "identityScope", "verified").length).toBe(1);
+    expect(text(card)).toContain("1 of 2 evaluation spec(s) passed");
+    view.resetWorkforceView();
+  });
+  it("a failed /v1/agents read shows registry as UNKNOWN, never a count", async () => {
+    const {node, id, view} = await open(undefined, "404");
+    const card = byData(node, "identityCardFor", id)[0];
+    expect(text(card)).not.toContain("registered roles");
+    view.resetWorkforceView();
+  });
+  it("workforce.idcard.* keys are identical in EN and TR with the same placeholders and feature-unique data attributes", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const keys = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("workforce.idcard.")).sort();
+    expect(keys(tr)).toEqual(keys(en)); expect(keys(en).length).toBe(17);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
+    for (const k of keys(en)) { expect(ph(tr[k]), k).toEqual(ph(en[k])); expect(tr[k]).toBeTruthy(); }
+    const src = fs.readFileSync(path.join(rend, "views", "workforce.js"), "utf8");
+    const fn = src.slice(src.indexOf("function identityCard"), src.indexOf("// //TR: Rol tanımı ayrıntısı"));
+    expect(fn).not.toMatch(/innerHTML|dataset:\{(runId|fleetRunId)/);
   });
 });

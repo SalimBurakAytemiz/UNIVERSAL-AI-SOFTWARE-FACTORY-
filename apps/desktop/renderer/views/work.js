@@ -1,7 +1,7 @@
 // //TR: Bu görünüm Görevler / Work OS alanıdır ve UX WP-WORKOS ile Kurucu-Kokpiti sınıfı premium katmana yükseltilmiştir: üstte gerçek /v1/missions + /v1/work-runs okumalarından beslenen görev/koşu özeti (KPI karoları: toplam mission, etkin koşu, Kurucu dikkati bekleyen, gerçekten doğrulanmış koşu) ve yaşam-döngüsü dağılım şeridi vardır. Alt kısımda "Yeni Görev" formu (proje, başlık, hedef, kabul kriterleri listesi, R0–R4 risk açıklamaları, isteğe bağlı argv test komutu), mission listesi (durum filtreli), mission detayı (durum/faz/risk, izinli geçişler, yüksek riskli geçişlerde onay, Çalıştır), /v1/work-runs koşu zaman çizelgesi + koşu kartları ve /v1/evidence kanıt bağlama bölümü korunur/eklenir. WP2/WP-PROJECTS token ve bileşenleri (kpiTile/statePill/missionPill/timelineItem) yeniden kullanılır (palet değişmez, yeni token yok). Hiçbir sayı/durum uydurulmaz: veri canlı değilse dürüst UNAVAILABLE/OFFLINE, boşsa dürüst boş metin; koşu yalnız gerçek test-yürütme kanıtı varsa doğrulanmış sayılır (FD-REL-1; SOURCE_GENERATION_COMPLETE != PRODUCT_VERIFIED), aksi halde NOT_VERIFIED dürüstçe gösterilir. API verisi asla HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
 import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip,kpiTile,statePill,missionPill,timelineItem} from "../components.js";
 import {formatTime,MISSING,missionPillKind} from "../model.js";
-import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime} from "../work-core.js";
+import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline} from "../work-core.js";
 import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
 import {notVerifiedBadge,runNotVerified,missionNotVerified,axisBadges} from "../m1a.js";
@@ -14,6 +14,7 @@ const RUN_TIMELINE_LIMIT=8;
 const EVIDENCE_LIMIT=12;
 // //TR: Görev durumu kategorilerinin yaşam-döngüsü sırası (soldan sağa); yalnız gerçekten mission bulunan kategoriler şeritte gösterilir. Bu, arka ucun bildirmediği bir "aşama" icat etmez, yalnız gerçek mission durumlarını kategoriye göre toplar (WP-PROJECTS ile aynı sıra).
 const CATEGORY_ORDER=Object.freeze(["IDLE","WAITING","ACTIVE","ATTENTION","BLOCKED","FAILED","DONE","STOPPED","NEUTRAL"]);
+let inspectedTask=null;
 const LIVE=r=>r&&(r.state==="VERIFIED"||r.state==="STALE");
 const inputOf=()=>({projectId:drafts.mission.projectId,title:drafts.mission.title,objective:drafts.mission.objective,acceptanceCriteria:drafts.mission.criteria,riskLevel:drafts.mission.riskLevel,testCommand:drafts.mission.testCommand});
 
@@ -233,6 +234,53 @@ function transitionControls(ctx,mission,awaiting){
     h(doc,"p",{class:"field-hint",id:"run-start-hint",text:ctx.t(startable?"work.run.hintOk":"work.run.hintNot")}),
     statusBlock(ctx,sid));
 }
+/** //TR: UI-026 görev denetçisi (salt okunur): seçili görevin yalnız mission okumasından gelen alanlarını gösterir; eksik alan UNKNOWN, okuma canlı değilse UNKNOWN durum notu. Hiçbir POST/depolama yoktur; seçim yalnız bellekte tutulur. */
+export function taskInspector(ctx,detail,runsRes,missionId){
+  const doc=ctx.doc,sel=inspectedTask&&inspectedTask.missionId===missionId?inspectedTask.taskId:null;
+  const inner=[h(doc,"p",{class:"note",text:ctx.t("work.task.lead")})];
+  if(!sel)inner.push(h(doc,"p",{class:"note note-empty",role:"status",text:ctx.t("work.task.none")}));
+  else{
+    const d=deriveTaskInspector(detail,runsRes,sel);
+    if(d.state==="UNKNOWN")inner.push(h(doc,"p",{class:"note note-unknown",role:"status",text:ctx.t("work.task.unknownRead")}));
+    else if(d.state==="EMPTY")inner.push(h(doc,"p",{class:"note note-empty",role:"status",text:ctx.t("work.task.notFound")}));
+    else{
+      const t=d.task,unk=(k)=>h(doc,"dd",{class:"task-unknown",dataset:{taskField:k},text:ctx.t("work.task.unknown")});
+      const runsText=t.runs.known?ctx.t("work.task.runsCount",{n:t.runs.count}):null;
+      inner.push(h(doc,"dl",{class:"kv"},
+        h(doc,"dt",{text:ctx.t("work.task.id")}),h(doc,"dd",{class:"mono",dataset:{taskField:"taskId"},text:t.taskId}),
+        h(doc,"dt",{text:ctx.t("work.task.name")}),h(doc,"dd",{dataset:{taskField:"title"},text:t.title}),
+        h(doc,"dt",{text:ctx.t("work.task.status")}),h(doc,"dd",{dataset:{taskField:"status"}},statusPill(ctx,t.status)),
+        h(doc,"dt",{text:ctx.t("work.task.mission")}),h(doc,"dd",{dataset:{taskField:"mission"},text:`${t.missionTitle} · ${statusLabel(ctx,t.missionStatus)} · ${t.riskLevel}`}),
+        h(doc,"dt",{text:ctx.t("work.task.runs")}),runsText?h(doc,"dd",{dataset:{taskField:"runs"},text:runsText}):unk("runs"),
+        h(doc,"dt",{text:ctx.t("work.task.runLink")}),unk("runLink"),
+        ...t.unknownFields.flatMap(k=>[h(doc,"dt",{text:ctx.t(`work.task.f.${k}`)}),unk(k)])));
+    }
+  }
+  return h(doc,"div",{class:"task-inspector",id:"task-inspector",role:"region","aria-label":ctx.t("work.task.title"),dataset:{taskInspector:sel?"open":"closed"}},h(doc,"h4",{text:ctx.t("work.task.title")}),inner);
+}
+/** //TR: UI-025 görev/koşu zaman çizelgesi (salt okunur): mission oluşturma, koşu başlangıcı ve kontrol noktaları; zaman damgası olmayan olay UNKNOWN gösterilir, uydurulmaz. POST/depolama/yakınlaştırma durumu yoktur. */
+export function workTimeline(ctx,detail,runsRes){
+  const doc=ctx.doc,d=deriveWorkTimeline(detail,runsRes),lang=ctx.i18n.lang;
+  const inner=[h(doc,"p",{class:"note",text:ctx.t("work.wtl.lead")})];
+  if(d.state==="UNKNOWN")inner.push(h(doc,"p",{class:"note note-unknown",role:"status",text:ctx.t("work.wtl.unknownRead")}));
+  else{
+    if(!d.runsKnown)inner.push(h(doc,"p",{class:"note note-unknown",role:"status",text:ctx.t("work.wtl.runsUnknown")}));
+    inner.push(h(doc,"ol",{class:"wtl-list","aria-label":ctx.t("work.wtl.title")},d.events.map(e=>h(doc,"li",{class:`wtl-item wtl-${e.kind}`,dataset:{wtlKind:e.kind,wtlAt:e.at===null?"UNKNOWN":e.at}},
+      h(doc,"span",{class:e.at===null?"wtl-time wtl-unknown":"wtl-time",text:e.at===null?ctx.t("work.wtl.unknown"):formatDateTime(e.at,lang)})," ",
+      h(doc,"span",{class:"wtl-kind",text:ctx.t(`work.wtl.k.${e.kind}`)})," ",
+      h(doc,"span",{class:e.kind==="run"?"mono":"",text:e.label})," ",
+      e.status?statusPill(ctx,e.status):null))));
+  }
+  return h(doc,"div",{class:"wtl",id:"work-wtl",role:"region","aria-label":ctx.t("work.wtl.title"),dataset:{wtlState:d.state}},h(doc,"h4",{text:ctx.t("work.wtl.title")}),inner);
+}
+function taskList(ctx,tasks,missionId){
+  const doc=ctx.doc;
+  return h(doc,"ul",{class:"task-list"},tasks.map(t=>{
+    const on=inspectedTask?.missionId===missionId&&inspectedTask.taskId===t.taskId;
+    return h(doc,"li",{},h(doc,"button",{type:"button",class:"link-btn",dataset:{taskInspect:t.taskId,focusKey:`task-${t.taskId}`},"aria-pressed":on?"true":"false","aria-controls":"task-inspector",
+      on:{click:()=>{inspectedTask=on?null:{missionId,taskId:t.taskId};ctx.rerender()}},text:t.title})," ",statusPill(ctx,t.status));
+  }));
+}
 function detailPanel(ctx,detail,runsRes,runDetails,evRes){
   const doc=ctx.doc;
   if(detail.state!=="VERIFIED")return panel(ctx,{titleKey:"work.detail",id:"work-detail"},stateNote(ctx,detail.state));
@@ -243,7 +291,8 @@ function detailPanel(ctx,detail,runsRes,runDetails,evRes){
     h(doc,"p",{class:"panel-meta"},statusPill(ctx,m.status),badge(ctx,m.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:m.missionId}),missionNotVerified(runsRes.state==="VERIFIED"?runsRes.items:[],m.missionId)?notVerifiedBadge(ctx,"mission"):null),
     h(doc,"p",{text:m.objective}),
     h(doc,"h4",{text:ctx.t("work.detail.criteria")}),m.acceptanceCriteria.length?h(doc,"ul",{},m.acceptanceCriteria.map(c=>h(doc,"li",{text:c}))):emptyNote(ctx,"work.detail.noCriteria"),
-    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"ul",{},m.tasks.map(t=>h(doc,"li",{},t.title," ",statusPill(ctx,t.status))))):null,
+    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId)):null,
+    workTimeline(ctx,detail,runsRes),
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),
     transitionControls(ctx,m,awaitingRun(runsRes,runDetails)),
     tl?[h(doc,"h4",{text:ctx.t("work.runtl.title")}),h(doc,"p",{class:"note",text:ctx.t("work.runtl.lead")}),tl]:null,

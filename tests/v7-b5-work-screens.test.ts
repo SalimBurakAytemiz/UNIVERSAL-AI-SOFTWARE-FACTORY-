@@ -1043,3 +1043,82 @@ describe("B5 static safety, routes and wiring", () => {
     expect(crypto.createHash("sha256").update("x").digest("hex")).toHaveLength(64);
   });
 });
+
+describe("UI-026 task inspector", () => {
+  const getT = (over: Record<string, any> = {}) => (p: string) => {
+    const t: Record<string, any> = {"/v1/projects": {projects: [project()]}, "/v1/missions": {missions: [mission()]}, "/v1/work-runs": {workRuns: []},
+      [`/v1/missions/${MID}`]: {mission: mission(), tasks: [{taskId: "tsk_alpha01", title: "Alt görev", status: "PENDING"}]}, ...over};
+    for (const k of Object.keys(t)) if (p === k || p.startsWith(k + "?")) return t[k];
+    return undefined;
+  };
+  it("opens read-only on click, shows API fields and UNKNOWN for missing ones, toggles closed, and sends no POST", async () => {
+    const {ctx, doc, calls} = await mkCtx({get: getT()});
+    const view = await load(rend, "views", "work.js");
+    forms.selection.missionId = MID;
+    let root = mount(doc, await view.render(ctx));
+    expect(byId(root, "task-inspector")!.dataset.taskInspector).toBe("closed");
+    byData(root, "taskInspect", "tsk_alpha01")[0].fire("click");
+    root = mount(doc, await view.render(ctx));
+    expect(byId(root, "task-inspector")!.dataset.taskInspector).toBe("open");
+    expect(text(byData(root, "taskField", "taskId")[0])).toBe("tsk_alpha01");
+    expect(text(byData(root, "taskField", "title")[0])).toBe("Alt görev");
+    for (const k of ["assignee", "dueAt", "dependencies", "description", "runLink"]) expect(text(byData(root, "taskField", k)[0])).toBe("UNKNOWN");
+    expect(text(byData(root, "taskField", "runs")[0])).toContain("0");
+    byData(root, "taskInspect", "tsk_alpha01")[0].fire("click");
+    root = mount(doc, await view.render(ctx));
+    expect(byId(root, "task-inspector")!.dataset.taskInspector).toBe("closed");
+    expect(calls.post).toEqual([]);
+    expect(calls.get.every(p => !p.includes("tasks"))).toBe(true);
+  });
+  it("run count is UNKNOWN when work-runs are unreadable; derive gives UNKNOWN for non-VERIFIED (incl. STALE) and EMPTY for a missing task", async () => {
+    const core = await load(rend, "work-core.js");
+    const det = {state: "VERIFIED", mission: {missionId: MID, title: "T", status: "PLANNED", riskLevel: "R1", tasks: [{taskId: "tsk_a", title: "x", status: "PENDING"}]}};
+    expect(core.deriveTaskInspector(det, {state: "UNAVAILABLE", items: []}, "tsk_a").task.runs).toEqual({known: false, count: null, byStatus: {}});
+    expect(core.deriveTaskInspector({...det, state: "STALE"}, {state: "VERIFIED", items: []}, "tsk_a")).toEqual({state: "UNKNOWN", task: null});
+    expect(core.deriveTaskInspector({state: "OFFLINE", mission: null}, null, "tsk_a").state).toBe("UNKNOWN");
+    expect(core.deriveTaskInspector(det, {state: "VERIFIED", items: []}, "tsk_zz").state).toBe("EMPTY");
+  });
+  it("locales carry the same task-inspector keys in en and tr", async () => {
+    const keys = (f: string) => [...read(rend, "locales", f).matchAll(/"(work\.task\.[^"]+)"/g)].map(m => m[1]).sort();
+    expect(keys("en.js").length).toBeGreaterThan(10);
+    expect(keys("en.js")).toEqual(keys("tr.js"));
+  });
+});
+
+describe("UI-025 task and work-run timeline", () => {
+  const RUN = {runId: "run_tl000001", missionId: MID, status: "RUNNING", startedAt: "2026-10-14T10:00:00.000Z", checkpoints: [{name: "PLAN", at: "2026-10-14T10:05:00.000Z"}, {name: "NOTIME"}]};
+  const getT = (runs: any[] = [RUN]) => (p: string) => {
+    const t: Record<string, any> = {"/v1/projects": {projects: [project()]}, "/v1/missions": {missions: [mission()]}, "/v1/work-runs": {workRuns: runs},
+      [`/v1/missions/${MID}`]: {mission: mission(), tasks: []}};
+    for (const k of Object.keys(t)) if (p === k || p.startsWith(k + "?")) return t[k];
+    return undefined;
+  };
+  it("renders mission, run and checkpoint events in time order with UNKNOWN for a missing timestamp, read-only", async () => {
+    const {ctx, doc, calls} = await mkCtx({get: getT()});
+    const view = await load(rend, "views", "work.js");
+    forms.selection.missionId = MID;
+    const root = mount(doc, await view.render(ctx));
+    const tl = byId(root, "work-wtl")!;
+    expect(tl.dataset.wtlState).toBe("VERIFIED");
+    const items = byData(root, "wtlKind", "mission").concat(byData(root, "wtlKind", "run"), byData(root, "wtlKind", "checkpoint"));
+    expect(items.length).toBe(4);
+    expect(byData(root, "wtlAt", "UNKNOWN").length).toBe(1);
+    expect(text(byData(root, "wtlAt", "UNKNOWN")[0])).toContain("UNKNOWN");
+    expect(calls.post).toEqual([]);
+  });
+  it("derive is UNKNOWN for non-VERIFIED mission (incl. STALE), omits runs when unreadable, and orders unknown times last", async () => {
+    const core = await load(rend, "work-core.js");
+    const det = {state: "VERIFIED", mission: {missionId: MID, title: "T", status: "PLANNED", createdAt: "2026-10-14T09:00:00.000Z", tasks: []}};
+    expect(core.deriveWorkTimeline({...det, state: "STALE"}, {state: "VERIFIED", items: []})).toEqual({state: "UNKNOWN", runsKnown: false, events: []});
+    const noRuns = core.deriveWorkTimeline(det, {state: "UNAVAILABLE", items: []});
+    expect(noRuns.runsKnown).toBe(false);
+    expect(noRuns.events.map((e: any) => e.kind)).toEqual(["mission"]);
+    const d = core.deriveWorkTimeline(det, {state: "VERIFIED", items: [{runId: "run_a", startedAt: null, status: "RUNNING", checkpoints: []}, {runId: "run_b", startedAt: "2026-10-14T08:00:00.000Z", status: "DONE", checkpoints: []}]});
+    expect(d.events.map((e: any) => e.id)).toEqual(["run_b", MID, "run_a"]);
+  });
+  it("locales carry the same timeline keys in en and tr", async () => {
+    const keys = (f: string) => [...read(rend, "locales", f).matchAll(/"(work\.wtl\.[^"]+)"/g)].map(m => m[1]).sort();
+    expect(keys("en.js").length).toBeGreaterThan(6);
+    expect(keys("en.js")).toEqual(keys("tr.js"));
+  });
+});

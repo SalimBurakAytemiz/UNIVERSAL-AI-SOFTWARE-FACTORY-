@@ -754,3 +754,112 @@ describe("UX WP-QA-SEC assurance/everif locale parity", () => {
     for (const k of keys) { expect(en[k], `en ${k}`).toBeTruthy(); expect(tr[k], `tr ${k}`).toBeTruthy(); }
   });
 });
+
+// //TR: UI-047: güvenlik bulgu ayrıntı tabloları — eşleme, üst sınırlar, kesilme, bozuk girdi atma, yalnız-metin çizim, boş/NOT_EXECUTED durumları, yeni rota yok.
+describe("UX WP-QA-SEC UI-047 security finding detail", () => {
+  const C40 = "e".repeat(40);
+  const withFindings = (scaF: any, items: any, extra: any = {}) => {
+    const s: any = sec({status: "PASSED", headSha: HEAD1});
+    if (scaF !== undefined) s.sca.findings = scaF; else delete s.sca.findings;
+    if (items !== undefined) s.secrets.gitleaks.items = items; else delete s.secrets.gitleaks.items;
+    Object.assign(s.sca, extra);
+    return {...mkRun("a", HEAD1, [secEvidence(s, HEAD1)])};
+  };
+  it("maps sanitised findings, drops malformed entries, never carries secret values or fixedVersion", async () => {
+    const core = await load("assurance-core.js");
+    const r = core.mapRunSecurity(withFindings(
+      [{package: "lodash", version: "4.0.0", id: "CVE-1", severity: "HIGH", fixedVersion: "4.17.21", target: "package-lock.json"}, {package: "x", id: "CVE-2", severity: "<b>bad</b>"}, "junk", {id: "no-pkg"}],
+      [{ruleId: "aws-key", file: "a.env", line: 3, commit: C40, secret: "AKIASECRETVALUE", match: "AKIASECRETVALUE"}, {ruleId: "r", file: "f", line: -1, commit: "zz"}, null]));
+    expect(r.scaFindings.items).toHaveLength(2);
+    expect(r.scaFindings.dropped).toBe(2);
+    expect(r.scaFindings.items[1].severity).toBe("UNKNOWN");
+    expect(JSON.stringify(r)).not.toContain("4.17.21");
+    expect(r.secretFindings.items[0]).toEqual({ruleId: "aws-key", file: "a.env", line: 3, commit: C40});
+    expect(r.secretFindings.items[1]).toMatchObject({line: null, commit: null});
+    expect(r.secretFindings.dropped).toBe(1);
+    expect(JSON.stringify(r)).not.toContain("AKIASECRETVALUE");
+  });
+  it("caps lists (50 sca / 100 secrets), carries scaTruncated, and treats missing fields as not recorded", async () => {
+    const core = await load("assurance-core.js");
+    const many = Array.from({length: 120}, (_, i) => ({package: `p${i}`, id: `CVE-${i}`, severity: "LOW"}));
+    const items = Array.from({length: 150}, (_, i) => ({ruleId: "r", file: `f${i}`, line: i, commit: null}));
+    const r = core.mapRunSecurity(withFindings(many, items, {truncated: true}));
+    expect(r.scaFindings.items).toHaveLength(50);
+    expect(r.scaFindings.overCap).toBe(true);
+    expect(r.secretFindings.items).toHaveLength(100);
+    expect(r.scaTruncated).toBe(true);
+    const m = core.mapRunSecurity(withFindings(undefined, "not-array"));
+    expect(m.scaFindings).toMatchObject({recorded: false, items: []});
+    expect(m.secretFindings).toMatchObject({recorded: false, items: []});
+    const none = core.mapRunSecurity(RUN_E);
+    expect(none.scaFindings.recorded).toBe(false);
+  });
+  const renderDetail = async (run: any) => {
+    const {ctx} = await mkCtx();
+    const raw = ctx.api.raw;
+    ctx.api.raw = async (p: string, ...a: any[]) => p.startsWith("/v1/work-runs") ? {ok: true, data: {workRuns: [run]}} : raw(p, ...a);
+    const first = await renderAssurance(ctx);
+    (byId(first.node, `sec-${run.runId}`) as N).fire("click");
+    return byId((await renderAssurance(ctx)).node, "qa-secdetail")!;
+  };
+  it("renders text-only tables, a truncation note and no fixed/resolved/accepted state", async () => {
+    const run = withFindings([{package: "<img src=x onerror=alert(1)>", id: "CVE-9", severity: "HIGH", fixedVersion: "9.9.9"}], [{ruleId: "r1", file: "src/a.js", line: 7, commit: C40}], {truncated: true});
+    const d = await renderDetail(run);
+    expect(byData(d, "findKind", "sca")).toHaveLength(1);
+    expect(byData(d, "findKind", "secret")).toHaveLength(1);
+    expect(text(d)).toContain("<img src=x onerror=alert(1)>");
+    expect(all(d).some(n => n.tagName === "IMG")).toBe(false);
+    expect(byData(d, "findTruncated", "sca")).toHaveLength(1);
+    expect(text(d)).toContain("src/a.js");
+    expect(text(d)).not.toContain("9.9.9");
+    expect(text(d).toLowerCase()).not.toMatch(/resolved|accepted|remediated/);
+    expect(all(d).filter(n => n.tagName === "BUTTON").map(n => n.id)).toEqual(["qa-secdetail-close"]);
+  });
+  it("shows honest empty and not-recorded states, and NOT_EXECUTED shows no tables", async () => {
+    const empty = await renderDetail(withFindings([], []));
+    expect(byData(empty, "findState", "EMPTY")).toHaveLength(2);
+    const unk = await renderDetail(withFindings(undefined, undefined));
+    expect(byData(unk, "findState", "UNKNOWN")).toHaveLength(2);
+    const ne = await renderDetail(RUN_E);
+    expect(byData(ne, "findList")).toHaveLength(0);
+    expect(text(ne)).toContain("NOT_EXECUTED");
+  });
+  it("keeps the STALE banner when the scan is not bound to the run head", async () => {
+    const d = await renderDetail(mkRun("d", OTHER, [secEvidence(sec({status: "PASSED", headSha: HEAD1}), HEAD1)]));
+    expect(byData(d, "scan", "STALE").length).toBeGreaterThan(0);
+    expect(d.textContent.length).toBeGreaterThan(0);
+  });
+  it("empty list shows 'no findings' only for CLEAN/FINDINGS tool status; ERROR/PARTIAL stay UNKNOWN", async () => {
+    const en = (await load("locales", "tr.js")).default as Record<string, string>; // //TR: test bağlamı TR çizer
+    const mk = (st: string) => { const r: any = withFindings([], []); r.evidence[0].security.sca.status = st; r.evidence[0].security.secrets.gitleaks.status = st; return r; };
+    for (const st of ["ERROR", "PARTIAL"]) {
+      const d = await renderDetail(mk(st));
+      expect(byData(d, "findState", "UNKNOWN")).toHaveLength(2);
+      expect(byData(d, "findState", "EMPTY")).toHaveLength(0);
+      expect(text(d)).not.toContain(en["qa.security.find.empty"]);
+    }
+    const ok = await renderDetail(mk("CLEAN"));
+    expect(byData(ok, "findState", "EMPTY")).toHaveLength(2);
+    expect(text(ok)).toContain(en["qa.security.find.empty"]);
+  });
+  it("secret rows carry no severity attribute and severity uses a fixed allow-list", async () => {
+    const d = await renderDetail(withFindings([{package: "a", id: "1", severity: "MEDIUM"}, {package: "b", id: "2", severity: "SEVERE"}, {package: "c", id: "3", severity: "high"}], [{ruleId: "r", file: "f", line: 1, commit: null}]));
+    const secretRow = byData(d, "findKind", "secret")[0];
+    expect("findSeverity" in secretRow.dataset).toBe(false);
+    expect(all(d).some(n => Object.values(n.dataset).includes("null"))).toBe(false);
+    expect(byData(d, "findSeverity").map(n => n.dataset.findSeverity)).toEqual(["MEDIUM", "UNKNOWN", "UNKNOWN"]);
+  });
+  it("adds no new route, endpoint, POST, storage or IPC", () => {
+    const v = fs.readFileSync(path.join(rend, "views", "assurance.js"), "utf8");
+    const c = fs.readFileSync(path.join(rend, "assurance-core.js"), "utf8");
+    for (const src of [v, c]) { expect(src).not.toMatch(/method\s*:\s*["']POST|localStorage|sessionStorage|ipcRenderer|innerHTML/); }
+    expect([...v.matchAll(/["'](\/v1\/[a-z-]+)/g)].map(m => m[1]).sort()).toEqual([...new Set([...v.matchAll(/["'](\/v1\/[a-z-]+)/g)].map(m => m[1]))].sort());
+  });
+  it("EN/TR qa.security.find.* keys are at parity with equal placeholders", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const pick = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("qa.security.find.")).sort();
+    expect(pick(tr)).toEqual(pick(en));
+    expect(pick(en).length).toBe(17);
+  });
+});
