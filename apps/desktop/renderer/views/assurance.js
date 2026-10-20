@@ -173,6 +173,29 @@ function findingTables(ctx,r){
   const sec=findingTable(ctx,"secret",r.secretFindings,["rule","file","line","commit"],f=>[f.ruleId,f.file,f.line,f.commit],r.secrets.gitleaks.findings,false,r.secrets.gitleaks.status);
   return h(doc,"div",{class:"qa-find-wrap",dataset:{findWrap:"1"}},sca,sec);
 }
+// //TR: UI-146: salt-okunur yeniden-tarama geçmişi. Değerler kayıtlı olduğu gibi; fark/ok/"düzeltildi" ÜRETİLMEZ. PASSED/PARTIAL ama run.headSha'ya bağlı olmayan satır STALE etiketlenir; eksik sayı MISSING tire.
+function historyStatusCell(ctx,e){
+  const st=e.stageStatus===null?null:e.stageStatus==="BLOCKED"?"BLOCKED":e.commitBound?e.stageStatus:"STALE";
+  return st===null?codeChip(ctx,"UNKNOWN"):scanPill(ctx,st);
+}
+function historySection(ctx,r){
+  const doc=ctx.doc,hist=r.scanHistory;
+  if(!hist.length)return null;
+  const hd=h(doc,"h4",{class:"qa-def-title",text:ctx.t("qa.security.hist.title")});
+  if(hist.length===1)return h(doc,"section",{class:"qa-hist",dataset:{histSection:"1"}},hd,h(doc,"p",{class:"note",dataset:{histSingle:"1"},text:ctx.t("qa.security.hist.single")}));
+  const num=v=>v===null?MISSING:String(v),cols=["cycle","stage","commit","gitleaks","sca"];
+  return h(doc,"section",{class:"qa-hist",dataset:{histSection:"1"}},hd,
+    h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table qa-hist-table"},
+      h(doc,"caption",{class:"sr-only",text:ctx.t("qa.security.hist.caption")}),
+      h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(`qa.security.hist.col.${k}`)})))),
+      h(doc,"tbody",{},hist.map(e=>h(doc,"tr",{dataset:{histRow:"1"}},
+        h(doc,"td",{class:"mono",text:num(e.cycle)}),
+        h(doc,"td",{},historyStatusCell(ctx,e)),
+        h(doc,"td",{class:"mono",text:e.commitSha?e.commitSha.slice(0,8):MISSING}),
+        h(doc,"td",{class:"mono",text:num(e.gitleaksFindings)}),
+        h(doc,"td",{class:"mono",text:num(e.scaBlocking)})))))),
+    h(doc,"p",{class:"note",role:"note",dataset:{histNote:"1"},text:ctx.t("qa.security.hist.note")}));
+}
 function securityDetail(ctx,scans){
   const doc=ctx.doc;
   // //TR: panel() zaten id="qa-secdetail-t" başlığını üretir; yinelenen id yerine bu başlığı odaklanabilir (tabindex=-1) yaparız.
@@ -199,6 +222,7 @@ function securityDetail(ctx,scans){
       kv("qa.security.detail.sast",h(doc,"span",{},codeChip(ctx,r.sast.status)," ",r.sast.reason?codeChip(ctx,r.sast.reason):"")),
       kv("qa.security.detail.sbom",h(doc,"span",{},codeChip(ctx,r.sbom.status)," ",r.sbom.reason?codeChip(ctx,r.sbom.reason):""))),
     findingTables(ctx,r),
+    historySection(ctx,r),
     h(doc,"h4",{class:"qa-def-title",text:ctx.t("qa.security.detail.tools")}),
     r.tools.length?h(doc,"div",{class:"qa-tool-row"},r.tools.map(t=>toolPill(ctx,t))):emptyNote(ctx,"qa.security.noTools"),
     h(doc,"h4",{class:"qa-def-title",text:ctx.t("qa.security.detail.gaps")}),gaps,

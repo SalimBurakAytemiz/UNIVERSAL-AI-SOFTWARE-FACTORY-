@@ -63,6 +63,20 @@ function latestSecurityEvidence(evidence){
   return best;
 }
 
+/** //TR: UI-146: koşunun TÜM SECURITY_REPORT (.security taşıyan) kanıtlarından cycle sırasına göre (null cycle sonda, eşitlikte dizi sırası) en çok 20 girdilik salt-okunur tarama geçmişi. Değerler kayıtlı olduğu gibi taşınır; fark/"düzeltildi" türetilmez, bozuk kayıt atılır. */
+export const SCAN_HISTORY_CAP=20;
+function scanHistory(evidence,headSha){
+  const out=[];
+  for(const e of (Array.isArray(evidence)?evidence:[])){
+    if(!isObj(e)||e.kind!=="SECURITY_REPORT"||!isObj(e.security))continue;
+    const sec=e.security,commitSha=typeof e.commitSha==="string"&&SHA_RE.test(e.commitSha)?e.commitSha:null;
+    const secrets=isObj(sec.secrets)?sec.secrets:{},gl=isObj(secrets.gitleaks)?secrets.gitleaks:{},sca=isObj(sec.sca)?sec.sca:{};
+    out.push({cycle:Number.isSafeInteger(e.cycle)?e.cycle:null,stageStatus:stageStatus(sec.status),commitSha,commitBound:Boolean(headSha&&commitSha&&headSha===commitSha),
+      gitleaksFindings:safeInt(gl.findings),scaBlocking:safeInt(sca.blocking),blockReason:typeof sec.blockReason==="string"&&CODE_RE.test(sec.blockReason)?sec.blockReason:null});
+  }
+  return out.map((v,i)=>({v,i})).sort((a,b)=>(a.v.cycle===null)-(b.v.cycle===null)||(a.v.cycle!==null&&b.v.cycle!==null&&a.v.cycle!==b.v.cycle?a.v.cycle-b.v.cycle:0)||a.i-b.i).slice(0,SCAN_HISTORY_CAP).map(x=>x.v);
+}
+
 /** //TR: Tek bir ham work-run kaydını güvenli güvenlik görünümüne eşler; kanıt yoksa dürüst NOT_EXECUTED. Geçersiz kimlik => null (satır üretilmez). */
 export function mapRunSecurity(run){
   if(!isObj(run))return null;
@@ -74,7 +88,7 @@ export function mapRunSecurity(run){
   const ev=latestSecurityEvidence(run.evidence);
   if(!ev){
     return {runId,missionId,runStatus:status,headSha,commitSha:null,commitBound:false,scanned:false,
-      scanStatus:"NOT_EXECUTED",stageStatus:null,blockReason:null,cycle:null,founderNote:null,
+      scanStatus:"NOT_EXECUTED",stageStatus:null,blockReason:null,cycle:null,founderNote:null,scanHistory:[],
       secrets:{builtin:{status:"UNKNOWN",hits:null},gitleaks:{status:"UNKNOWN",findings:null,reason:null}},
       sca:{status:"UNKNOWN",blocking:null,counts:{},reason:null},
       sast:{status:"NOT_AVAILABLE",reason:"NO_SECURITY_EVIDENCE"},sbom:{status:"NOT_AVAILABLE",reason:"NO_SECURITY_EVIDENCE"},
@@ -94,7 +108,7 @@ export function mapRunSecurity(run){
   const sbom=isObj(sec.sbom)?sec.sbom:{};
   const counts={};if(isObj(sca.counts))for(const [k,v] of Object.entries(sca.counts)){const n=safeInt(v);if(n!==null&&/^[A-Z_]{1,20}$/.test(k))counts[k]=n}
   return {
-    runId,missionId,runStatus:status,headSha,commitSha,commitBound,scanned:true,
+    runId,missionId,runStatus:status,headSha,commitSha,commitBound,scanned:true,scanHistory:scanHistory(run.evidence,headSha),
     scanStatus,stageStatus:st,blockReason:typeof sec.blockReason==="string"&&CODE_RE.test(sec.blockReason)?sec.blockReason:null,
     cycle:Number.isSafeInteger(ev.cycle)?ev.cycle:null,founderNote:str(sec.founderNote,600),
     secrets:{builtin:{status:code(builtin.status),hits:safeInt(builtin.hits)},gitleaks:{status:code(gitleaks.status),findings:safeInt(gitleaks.findings),reason:str(gitleaks.reason,80)}},

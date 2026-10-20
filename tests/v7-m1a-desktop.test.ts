@@ -309,6 +309,56 @@ describe("M1a c2 Studio > Delivery: run deliveries (prepare, bound acceptance di
     expect(dc.mapDelivery({...deliveryOf(), sourceGeneration: {state: "COMPLETE"}})).toBeNull();
     expect(dc.mapDelivery({...deliveryOf(), runId: "run_x"})).toBeNull();
   });
+  it("UI-182: deliverySourceState classifies NOT_PREPARED / VALID / STALE / UNKNOWN from data already read; buildAcceptanceRequest returns err.deliveryStale only for STALE", async () => {
+    const dc = await load(rend, "delivery-core.js");
+    const HEAD2 = "4".repeat(40);
+    const d = dc.mapDelivery(deliveryOf());
+    expect(dc.deliverySourceState({...d, artifact: null})).toBe("NOT_PREPARED");
+    expect(dc.deliverySourceState(d)).toBe("VALID");
+    expect(dc.deliverySourceState({...d, sourceCommit: HEAD2})).toBe("STALE");
+    expect(dc.deliverySourceState({...d, sourceCommit: null})).toBe("UNKNOWN");
+    expect(dc.deliverySourceState({...d, sourceCommit: "zz"})).toBe("UNKNOWN");
+    const stale = {...d, sourceCommit: HEAD2};
+    expect(dc.buildAcceptanceRequest(stale, {key: dc.deliveryAckKey(stale), notExecuted: true})).toEqual({ok: false, errors: {acknowledgement: "err.deliveryStale"}});
+    expect(dc.buildAcceptanceRequest({...d, artifact: null}, null)).toMatchObject({errors: {acknowledgement: "err.deliveryNotPrepared"}});
+    expect(dc.buildPrepareRequest(d)).toEqual({ok: true, path: `/v1/work-runs/${RUN}/delivery/prepare`, body: {}});
+    const en = (await load(rend, "locales", "en.js")).default, tr = (await load(rend, "locales", "tr.js")).default;
+    for (const k of Object.keys(en).filter(k => k.startsWith("m1a.delivery.src") || k === "err.deliveryStale")) {
+      expect(typeof tr[k], k).toBe("string");
+      expect((en[k].match(/\{\w+\}/g) ?? []).sort(), k).toEqual((tr[k].match(/\{\w+\}/g) ?? []).sort());
+    }
+  });
+  it("UI-182: the card carries data-source-state with a role=note; STALE/UNKNOWN hide the open-accept button, keep prepare, VALID claims no verification; an earlier-commit acceptance is a read-only note", async () => {
+    const HEAD2 = "4".repeat(40);
+    const valid = await panelCtx({deliveries: () => listOf(deliveryOf())});
+    const vc = byData(valid.root, "deliveryRun", RUN)[0];
+    expect(vc.dataset.sourceState).toBe("VALID");
+    const vn = all(vc).find(n => n.attrs.get("role") === "note")!;
+    expect(vn.textContent).toContain("güncel koşu head");
+    expect(vn.textContent).not.toMatch(/PRODUCT_VERIFIED|COMPLETE|PASS/);
+    expect(byId(valid.root, `dl-open-${RUN}`)).not.toBeNull();
+    const stale = await panelCtx({deliveries: () => listOf(deliveryOf({sourceCommit: HEAD2}))});
+    const sc = byData(stale.root, "deliveryRun", RUN)[0];
+    expect(sc.dataset.sourceState).toBe("STALE");
+    const sn = all(sc).find(n => n.attrs.get("role") === "note")!;
+    expect(sn.textContent).toContain(HEAD);
+    expect(sn.textContent).toContain(HEAD2);
+    expect(sn.textContent).toContain("yeniden hazırlayın");
+    expect(byId(stale.root, `dl-open-${RUN}`)).toBeNull();
+    expect(byId(stale.root, `dl-prep-${RUN}`)!.attrs.has("disabled")).toBe(false);
+    const unk = await panelCtx({deliveries: () => listOf(deliveryOf({sourceCommit: null}))});
+    const uc = byData(unk.root, "deliveryRun", RUN)[0];
+    expect(uc.dataset.sourceState).toBe("UNKNOWN");
+    expect(all(uc).find(n => n.attrs.get("role") === "note")!.textContent).toContain("okunamıyor");
+    expect(byId(unk.root, `dl-open-${RUN}`)).toBeNull();
+    const acc = await panelCtx({deliveries: () => listOf(deliveryOf({sourceCommit: HEAD2, accepted: {runId: RUN, missionId: MID, sourceCommit: HEAD, exportArtifactHash: H1, acceptedAt: "2026-10-15T10:00:00.000Z", acknowledgements: {}}}))});
+    expect(byData(acc.root, "sourceAcceptedEarlier", "true")).toHaveLength(1);
+    expect(byId(acc.root, `dl-open-${RUN}`)).toBeNull();
+    const none = await panelCtx({deliveries: () => ({deliveries: [deliveryOf({artifact: null})]})});
+    expect(byData(none.root, "deliveryRun", RUN)[0].dataset.sourceState).toBe("NOT_PREPARED");
+    const off = await panelCtx({deliveries: () => ({})});
+    expect(byData(off.root, "sourceState")).toHaveLength(0);
+  });
   it("after acceptance: the accepted label, no prepare/accept actions, and 'Teslim paketini dışa aktar' calls the main-process bridge with the run id only (success, mismatch, no bridge)", async () => {
     const accepted = deliveryOf({accepted: {runId: RUN, missionId: MID, sourceCommit: HEAD, exportArtifactHash: H1, acceptedAt: "2026-10-15T10:00:00.000Z", acknowledgements: {}}});
     const native = {calls: [] as any[], next: {exported: true, sha256: H1, fileName: "UASCO-teslim.zip", savedTo: "C:\\x\\UASCO-teslim.zip"} as any, async exportDelivery(id: string) { native.calls.push(id); return native.next; }};

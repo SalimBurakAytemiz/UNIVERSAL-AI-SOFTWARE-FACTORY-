@@ -2,7 +2,7 @@
 import {h,panel,statePill,kpiTile} from "../components.js";
 import {MISSING} from "../model.js";
 import {formatDateTime} from "../work-core.js";
-import {COMPANY_KEYS,COMPANY_PATHS,COMPANY_TABS,TAB_SOURCES,OPEN_STAGES,isLive,companyPillKind,formatMoney,sumByCurrency,invoiceIntegrity,contractIntegrity,accountName,forAccount,emptyResource} from "../company-core.js";
+import {COMPANY_KEYS,COMPANY_PATHS,COMPANY_TABS,TAB_SOURCES,OPEN_STAGES,isLive,companyPillKind,formatMoney,sumByCurrency,invoiceIntegrity,contractIntegrity,accountName,forAccount,emptyResource,accountExposure} from "../company-core.js";
 
 /** Görünüm seçimi (sekme + hesap süzgeci) görünüm ömrü boyunca korunur; periyodik yenileme seçimi bozmaz. */
 const sel={tab:"crm",accountId:null};
@@ -110,6 +110,31 @@ function accountsSection(ctx,res){
     build:rows=>table(ctx,"company-accounts-table","company.accounts.title",cols,rows.map(a=>({id:a.id,cells:[dash(a.name),mono(doc,a.id),when(ctx,a.createdAt),
       count(res.contacts,c=>c.accountId===a.id),count(res.opportunities,o=>o.accountId===a.id),count(res.contracts,c=>c.accountId===a.id),count(res.invoices,i=>i.accountId===a.id)]})))});
 }
+/** Hesap maruziyeti: yalnız kayıtlı gerçekler; skor/etiket yok. Canlı olmayan kaynak hücresi "—" + dürüst rozet (0 değil); STALE rozet + as-of ile eski rakamı gösterir. */
+function exposureSection(ctx,res){
+  const doc=ctx.doc,nowMs=typeof ctx.now==="function"?ctx.now():Date.now();
+  const cols=[{key:"company.col.name"},{key:"company.col.pipelineOpen",num:true},{key:"company.col.outstanding",num:true},{key:"company.col.overdue",num:true},{key:"company.col.dueUnknown",num:true},{key:"company.col.awaitingSig",num:true}];
+  const rows=accountExposure(res,sel.accountId,nowMs);
+  const cell=(src,render)=>{
+    const r=res[src];
+    if(!isLive(r))return h(doc,"span",{dataset:{exposureCell:"missing",source:src}},MISSING," ",statePill(ctx,companyPillKind(r)));
+    const v=render();
+    if(v===null)return MISSING;
+    return h(doc,"span",{dataset:{exposureCell:r.state==="STALE"?"stale":"live",source:src}},v,
+      r.state==="STALE"?h(doc,"span",{class:"company-exposure-stale"}," ",statePill(ctx,"STALE")," ",h(doc,"span",{class:"note",text:formatDateTime(r.asOf,ctx.i18n.lang)})):null);
+  };
+  const amounts=s=>{
+    if(!s.totals.length&&!s.skipped)return "0";
+    return h(doc,"span",{},s.totals.length?h(doc,"ul",{class:"money-list"},s.totals.map(t=>h(doc,"li",{dataset:{currency:t.currency}},h(doc,"span",{class:"money",text:formatMoney(t.minor,t.currency,ctx.i18n.lang)})))):null,
+      s.skipped?h(doc,"p",{class:"kpi-qual",text:ctx.t("company.kpi.skipped",{n:s.skipped})}):null);
+  };
+  const node=section(ctx,{id:"company-exposure",key:"accounts",titleKey:"company.exposure.title",res:res.accounts,filtered:rows,
+    build:rs=>[h(doc,"p",{class:"note",dataset:{note:"exposure-recorded"},text:ctx.t("company.exposure.note")}),
+      table(ctx,"company-exposure-table","company.exposure.title",cols,rs.map(r=>({id:r.id,cells:[r.name?h(doc,"span",{text:r.name}):mono(doc,r.id),
+        cell("opportunities",()=>amounts(r.pipeline)),cell("invoices",()=>amounts(r.outstanding)),
+        cell("invoices",()=>r.overdue===null?null:String(r.overdue)),cell("invoices",()=>String(r.dueUnknown)),cell("contracts",()=>String(r.awaitingSignature))]})))]});
+  return node;
+}
 function contactsSection(ctx,res){
   const doc=ctx.doc,cols=[{key:"company.col.name"},{key:"company.col.role"},{key:"company.col.email"},{key:"company.col.account"},{key:"company.col.created"}];
   return section(ctx,{id:"company-contacts",key:"contacts",titleKey:"company.contacts.title",res:res.contacts,filtered:forAccount(res.contacts.items,sel.accountId),
@@ -153,7 +178,7 @@ function contractsSection(ctx,res){
       table(ctx,"company-contracts-table","company.contracts.title",cols,rows.map(c=>({id:c.id,cells:[dash(c.title),acct(ctx,res,c.accountId),contractPill(ctx,c),evidenceCell(ctx,c),when(ctx,c.sentAt)]})))]});
 }
 const TAB_BODY={
-  crm:(ctx,res)=>[accountsSection(ctx,res),opportunitiesSection(ctx,res),contactsSection(ctx,res)],
+  crm:(ctx,res)=>[accountsSection(ctx,res),exposureSection(ctx,res),opportunitiesSection(ctx,res),contactsSection(ctx,res)],
   finance:(ctx,res)=>[invoicesSection(ctx,res),paymentsSection(ctx,res)],
   legal:(ctx,res)=>[contractsSection(ctx,res)]
 };

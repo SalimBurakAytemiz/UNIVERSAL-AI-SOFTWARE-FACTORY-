@@ -1,8 +1,7 @@
 // //TR: Bu görünüm parçası Project Studio'nun "Yeni Proje" sihirbazı ve "İçe Aktar" panelidir: şablon (boş dahil), ad, tür/teknoloji/hedef işletim sistemi, kabul kriterleri, bütçe ve dev/test komutları (argv listesi) project-core kurucusuyla doğrulanır, her gönderim için idempotency anahtarı üretilir; içe aktarma yolu renderer'a yazdırılmaz, yalnız ana süreçteki yerel dosya diyaloğundan dönen yol gösterilir ve geri gönderilir. Hiçbir otomatik gönderim yoktur.
 import {h} from "../components.js";
-import {buildWizardRequest,buildImportRequest,TEMPLATES,TARGET_OS,IMPORT_KINDS} from "../project-core.js";
+import {buildWizardRequest,buildImportRequest,describeImportResult,TEMPLATES,TARGET_OS,IMPORT_KINDS} from "../project-core.js";
 import {drafts,field,listEditor,statusBlock,setStatus,recordPost,focusResult,settle} from "../forms.js";
-import {describePostResult} from "../work-core.js";
 import {studio,wizard,importDraft,studioTrackers,studioUi,resetWizard,resetImport,openProject} from "../studio-state.js";
 
 export const WIZARD_FORM="studio-wizard";
@@ -81,7 +80,7 @@ export async function submitImport(ctx){
   if(!req.ok){setStatus(IMPORT_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:false,validation:true}}
   drafts.busy[IMPORT_FORM]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[IMPORT_FORM]=false}
-  const d=describePostResult(res);
+  const d=describeImportResult(res);
   setStatus(IMPORT_FORM,{ok:d.ok,key:d.ok?"studio.import.done":d.key,vars:d.ok?{}:d.vars,errors:null});
   if(d.ok)resetImport();
   await ctx.refreshAll({force:true});focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:d.ok,status:res?.status??null};
