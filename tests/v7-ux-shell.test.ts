@@ -404,3 +404,80 @@ describe("UI-007 Resume confirmation in the shell stop banner", () => {
     expect(env.resumed).toEqual([]);
   });
 });
+
+describe("UI-106 empty-state next step: journey zero-mission and executive empty ledger (navigation only)", () => {
+  const all2 = (n: N) => within(n);
+  const render = async (view: string, over: Record<string, (p: string) => any>, opts: { noNav?: boolean; lang?: string } = {}) => {
+    const spec = makeBridge(over);
+    const env = await mkCtx(spec, opts.lang ?? "en");
+    if (opts.noNav) delete env.ctx.navigate;
+    const forms = await load("forms.js"); forms.selection.missionId = null;
+    const mod = await load("views", view);
+    const root: N = await mod.render(env.ctx);
+    return { ...env, root, forms };
+  };
+  const btn = (r: N, id: string) => all2(r).filter(n => n.tagName === "BUTTON" && n.id === id);
+  const nextBlocks = (r: N, v: string) => all2(r).filter(n => n.dataset.emptyNext === v);
+  const EMPTY_M = { "/v1/missions": () => ({ missions: [] }) };
+  const EMPTY_R = { "/v1/work-runs": () => ({ runs: [] }) };
+
+  it("journey: empty list adds one next-step block + button -> navigate('work') once, selection unchanged, no reads/writes", async () => {
+    const e = await render("journey.js", EMPTY_M);
+    expect(nextBlocks(e.root, "journey-missions")).toHaveLength(1);
+    const b = btn(e.root, "journey-empty-open-work"); expect(b).toHaveLength(1);
+    expect(b[0].dataset.navigate).toBe("work"); expect(b[0].dataset.focusKey).toBe("journey-empty-open-work");
+    expect(text(b[0])).toBe(e.ctx.t("journey.empty.openWork"));
+    expect(text(e.root)).toContain(e.ctx.t("journey.missions.empty"));
+    const none = all2(e.root).find(n => n.dataset.journey === "no-mission")!;
+    expect(text(none)).not.toContain("Pick a mission above"); expect(text(none)).toContain(e.ctx.t("journey.noMission.none"));
+    const before = e.calls.length;
+    b[0].fire("click");
+    expect(e.nav).toEqual(["work"]); expect(e.forms.selection.missionId).toBeNull();
+    expect(e.calls.length).toBe(before); expect(e.posts).toEqual([]);
+    for (const p of e.calls) expect(allowGet(p), p).toBe(true);
+    expect(e.calls).toEqual(["/v1/missions"]);
+  });
+  it("journey: non-empty list unchanged; failed list keeps journey.noMission and renders no next step", async () => {
+    const ok = await render("journey.js", { "/v1/missions": () => ({ missions: [{ missionId: MSN, projectId: PRJ, title: "M", objective: "o", status: "EXECUTING", riskLevel: "R2", createdAt: "2026-10-16T09:00:00.000Z", updatedAt: "2026-10-16T09:00:00.000Z" }] }) });
+    expect(nextBlocks(ok.root, "journey-missions")).toHaveLength(0);
+    expect(text(all2(ok.root).find(n => n.dataset.journey === "no-mission")!)).toContain("No mission selected. Pick a mission above");
+    const bad = await render("journey.js", { "/v1/missions": () => { throw new Error("fetch failed"); } });
+    expect(nextBlocks(bad.root, "journey-missions")).toHaveLength(0); expect(btn(bad.root, "journey-empty-open-work")).toHaveLength(0);
+    expect(text(all2(bad.root).find(n => n.dataset.journey === "no-mission")!)).toContain(bad.ctx.t("journey.noMission"));
+  });
+  it("executive: empty ledger adds one next-step block + button -> navigate('work') once; sections unchanged; GETs allow-listed", async () => {
+    const e = await render("executive.js", EMPTY_R);
+    expect(nextBlocks(e.root, "executive-ledger")).toHaveLength(1);
+    expect(nextBlocks(e.root, "executive-ledger")[0].tagName).toBe("DIV");
+    const b = btn(e.root, "executive-empty-open-work"); expect(b).toHaveLength(1);
+    expect(b[0].dataset.navigate).toBe("work"); expect(b[0].dataset.focusKey).toBe("executive-empty-open-work");
+    expect(text(e.root)).toContain("No work runs have been recorded yet.");
+    expect(all2(e.root).filter(n => n.tagName === "SECTION").map(n => n.id)).toEqual(["executive-return", "executive-summary", "executive-ledger"]);
+    const before = e.calls.length;
+    b[0].fire("click");
+    expect(e.nav).toEqual(["work"]); expect(e.calls.length).toBe(before); expect(e.posts).toEqual([]);
+    for (const p of e.calls) expect(allowGet(p), p).toBe(true);
+  });
+  it("executive: failed or non-empty ledger renders no next step", async () => {
+    const bad = await render("executive.js", { "/v1/work-runs": () => { throw new Error("fetch failed"); } });
+    expect(nextBlocks(bad.root, "executive-ledger")).toHaveLength(0); expect(btn(bad.root, "executive-empty-open-work")).toHaveLength(0);
+  });
+  it("without ctx.navigate: note text renders but no dead button", async () => {
+    const j = await render("journey.js", EMPTY_M, { noNav: true });
+    expect(text(j.root)).toContain(j.ctx.t("journey.missions.empty")); expect(btn(j.root, "journey-empty-open-work")).toHaveLength(0);
+    expect(nextBlocks(j.root, "journey-missions")).toHaveLength(0);
+    const x = await render("executive.js", EMPTY_R, { noNav: true });
+    expect(text(x.root)).toContain("No work runs have been recorded yet."); expect(btn(x.root, "executive-empty-open-work")).toHaveLength(0);
+  });
+  it("new keys: en/tr parity, identical placeholders, no PRODUCT_VERIFIED, no raw key leak in tr", async () => {
+    const en = (await load("locales", "en.js")).default ?? (await load("locales", "en.js")).en, tr = (await load("locales", "tr.js")).default ?? (await load("locales", "tr.js")).tr;
+    const keys = ["journey.noMission.none", "journey.empty.next", "journey.empty.openWork", "executive.ledger.emptyNext", "executive.ledger.openWork"];
+    for (const k of keys) {
+      expect(typeof en[k], k).toBe("string"); expect(typeof tr[k], k).toBe("string");
+      expect((en[k].match(/\{\w+\}/g) ?? []).sort()).toEqual((tr[k].match(/\{\w+\}/g) ?? []).sort());
+      expect(en[k] + tr[k]).not.toContain("PRODUCT_VERIFIED");
+    }
+    const j = await render("journey.js", EMPTY_M, { lang: "tr" }), x = await render("executive.js", EMPTY_R, { lang: "tr" });
+    expect(text(j.root)).not.toMatch(/journey\.[a-z]+\./); expect(text(x.root)).not.toMatch(/executive\.ledger\./);
+  });
+});
