@@ -243,10 +243,10 @@ None of these is granted by this document or by FD-2026-10-20-MOB-PHASE0. IDs ar
 | FA-MOB-4 | Pairing, device registry, scopes incl. `MOBILE_STOP`/`MOBILE_APPROVE`, revocation | yes | yes |
 | FA-MOB-6 | Protected `server.ts` route registration, per-request principal, allow-list, reseal | yes | yes |
 | FA-MOB-7 | **Signed single-use approvals**: extend `approval.ts`; fix PT-035; server inbox with `expectedStatus`/`itemDigest`; the mobile decision-class set (4.6); Founder identity in `trustedApproverIdentityIds` | yes | no |
-| FA-MOB-8 | **Remote STOP** from the phone; confirmation that RESUME stays desktop-only | no | yes |
+| FA-MOB-8 | **Remote STOP** from the phone, and whether RESUME is allowed from it (D-MOB wording; this design and FD-c keep RESUME desktop-only) | no | yes |
 | FA-MOB-9 | Protect `approval.ts`, `policy.ts`, `packaged-entry.ts` and new modules; reseal | yes | yes |
-| FA-MOB-12 | Supply-chain admission for any native module used for Keystore/biometric signing | yes | yes |
-| FA-MOB-23 | Desktop UI for approve-key registration, fingerprint confirmation and revocation | yes | yes (revocation) |
+| FA-MOB-12 | Supply-chain governance for the `apps/mobile` lockfile and admission of the RN dependency tree (D-MOB wording); here it would cover any third-party library used for Keystore/biometric signing. Whether an in-repo Kotlin TurboModule (ADR-MOB-001) also falls under it is UNVERIFIED | yes | yes |
+| FA-MOB-23 (extended: PROPOSED, not in D-MOB) | D-MOB defines FA-MOB-23 as the desktop pairing QR and device management UI in protected `main.mjs`, `preload.mjs`, `renderer/app.js` and `index.html` (D-MOB `:257`). Device revocation fits that grant. Approve-key registration, fingerprint confirmation and approve-key revocation do not, so they are a proposed extension the Founder would have to grant explicitly | yes | yes (device revocation only) |
 
 Order: FA-MOB-1 → FA-MOB-9 (protect) → PT-035 fix under FA-MOB-7/FA-MOB-6 (G0) → approval centre (MOB-23) → client (MOB-24). Mobile STOP (MOB-25) needs FA-MOB-8 and the transport grants but not G0.
 
