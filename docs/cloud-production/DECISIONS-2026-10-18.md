@@ -2,11 +2,17 @@
 
 # Founder decisions — 2026-10-18 (MAXIMUM CLOUD PARALLEL PRODUCTION OVERRIDE)
 
-Two decisions recorded from the Founder, with their exact scope and the constraints that bound them.
+Decisions recorded by an agent as coming from the Founder, with their exact scope and the constraints that bound them.
+
+> **Provenance caveat:** Agent-recorded. This proves nothing on its own and has not been confirmed by the Founder through a non-agent channel. All agents share one GitHub account, so an agent-written Founder decision is not evidence of a Founder decision (compare `docs/planning/authority/FD-*.md`).
 
 ## Decision 1 — Seal authority: **Separate-identity Cloud governance**
 
-The Founder authorized establishing a **distinct, non-implementer Cloud governance identity** that will hold trust-root seal/re-seal authority and issue the **FA-LEASE2 D3** authority record, so authority no longer depends on Local.
+> **Provenance caveat:** Agent-recorded. This proves nothing on its own and has not been confirmed by the Founder through a non-agent channel.
+
+**UNCONFIRMED:** the seal/re-seal authority and the FA-LEASE2 D3 issuance claims in this decision are agent-recorded and UNCONFIRMED. They grant nothing until the Founder confirms them through a non-agent channel.
+
+(UNCONFIRMED) The Founder authorized establishing a **distinct, non-implementer Cloud governance identity** that will hold trust-root seal/re-seal authority and issue the **FA-LEASE2 D3** authority record, so authority no longer depends on Local.
 
 **Exact scope of what this authorizes now:**
 - DESIGN + build the separate-identity Cloud governance **mechanism** (non-protected design + scaffold) and the controlled **transfer plan**.
@@ -22,6 +28,8 @@ The Founder authorized establishing a **distinct, non-implementer Cloud governan
 
 ## Decision 2 — Actions CI: **Build + review, merge later**
 
+> **Provenance caveat:** Agent-recorded. This proves nothing on its own and has not been confirmed by the Founder through a non-agent channel.
+
 GitHub Actions is down for the repo (all jobs die in ~3s at runner startup; admin-owned billing/runner issue). The Founder chose: **keep producing and independently reviewing cloud PRs in parallel; batch-merge once Actions is restored.**
 
 - **No gate is weakened.** The required CI checks and the independent governed review remain the merge conditions. Merges simply **wait** for real green CI.
@@ -29,11 +37,18 @@ GitHub Actions is down for the repo (all jobs die in ~3s at runner startup; admi
 - Production is **not** stopped by the outage (directive #10): implementers keep building and the governed reviewer keeps reviewing; only the final merge step is deferred.
 
 ## Effect on the queue
+
+> **Provenance caveat:** Agent-recorded. This proves nothing on its own and has not been confirmed by the Founder through a non-agent channel. The CP-GOV and FA-LEASE2 effects below depend on the UNCONFIRMED Decision 1.
+
 - New authorized work item **CP-GOV** (owner CLOUD, orchestrator-owned, security-critical): design + non-protected scaffold for the separate-identity Cloud governance mechanism per Decision 1. Not dispatched to a routine implementer because of its criticality.
-- `FA-LEASE2` keystone now has an **authorized path** (the separate-identity governance, once built + proven) rather than being indefinitely blocked on Local — but it is not yet unblocked: the mechanism must be built and proven first.
+- (UNCONFIRMED) `FA-LEASE2` keystone now has an **authorized path** (the separate-identity governance, once built + proven) rather than being indefinitely blocked on Local — but it is not yet unblocked: the mechanism must be built and proven first.
 - Merge posture across all cloud-production PRs: **build + review now, merge after Actions is restored** (Decision 2).
 
 ## Decision 3 — Feature fan-out: **Continue (directive-derived authority, honest provenance)**
+
+> **Provenance caveat:** Agent-recorded. This proves nothing on its own and has not been confirmed by the Founder through a non-agent channel.
+
+**UNCONFIRMED:** this decision is agent-recorded and UNCONFIRMED. For the Founder-confirmed rule on dispatching work, see D-2026-10-19-A in `docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md`.
 
 The Founder confirmed (2026-10-18, in-session) that the autonomous production may **continue building read-only feature screens** under the MAXIMUM-CLOUD-PARALLEL directive's "maximum production within current authority" scope.
 

@@ -2,7 +2,7 @@
 
 # Separate-identity Cloud governance mechanism (CP-GOV)
 
-**Authority:** Founder decision 2026-10-18 ("Separate-identity Cloud governance") — see `../DECISIONS-2026-10-18.md`. Enables cloud-independent trust-root **seal/re-seal** and issuance of the **FA-LEASE2 D3** authority record, so authority no longer depends on Local.
+**Authority:** Founder decision 2026-10-18 ("Separate-identity Cloud governance") — see `../DECISIONS-2026-10-18.md`. **Agent-recorded. This proves nothing on its own and has not been confirmed by the Founder through a non-agent channel** (UNCONFIRMED). Enables cloud-independent trust-root **seal/re-seal** and issuance of the **FA-LEASE2 D3** authority record, so authority no longer depends on Local.
 
 **Status:** this document is the **Phase-0 design + (coming) non-protected scaffold**. It installs no key, performs no seal, issues no D3, and edits no protected path. It was produced by three independent design agents (KMS-custody split, M-of-N quorum, attested session) and then **adversarially verified**; every design returned `NEEDS_FIX`, and the fixes below are folded in as first-class requirements.
 
@@ -12,7 +12,7 @@
 3. **No premature removal of old controls** — the existing Local seal/re-seal/merge controls stay fully active in parallel until the new mechanism is independently **PROVEN**; retired controls are kept warm as break-glass, never deleted.
 
 ## The governing adversarial finding (why a naive design self-defeats)
-A natural first design puts the new verifier (`verifyGovernanceQuorum` / `governance-attestation.mjs` / a hardened `verifyTrustRoot` / `merge-via-gate.mjs`) in **non-protected** code. That is fatal: a builder/implementer can land an ordinary **non-protected** PR that edits the verifier to `return {ok:true}` (or lists its own key as a principal), self-sealing **without touching any protected path** — so `verifyTrustRoot` still passes and no reseal fires. **The enforcement point must itself be protected and sealed before anything relies on it.** Every requirement below flows from this.
+A natural first design puts the new verifier (`verifyGovernanceQuorum` / `governance-attestation.mjs` / a hardened `verifyTrustRoot` / the merge gate `docs/planning/merge-gate.mjs`) in **non-protected** code. That is fatal: a builder/implementer can land an ordinary **non-protected** PR that edits the verifier to `return {ok:true}` (or lists its own key as a principal), self-sealing **without touching any protected path** — so `verifyTrustRoot` still passes and no reseal fires. **The enforcement point must itself be protected and sealed before anything relies on it.** Every requirement below flows from this.
 
 ## Synthesized mechanism (layered; each layer fail-closed)
 
@@ -54,4 +54,4 @@ The real **key instantiation and the first real seal / D3 issuance are performed
 
 ## What this PR (Phase 0) delivers vs. what remains gated
 - **Delivered now (non-protected, buildable by the builder):** this design; and (next, as scaffold) the reference verifier + JSON schemas + the adversarial negative-test suite as **proposals**, dry-run against **throwaway test keys only**, with standalone Node ≥24 proofs.
-- **Gated (Founder / distinct identity / maintainer — not the builder):** KMS key + governance SA + attestation verifier provisioning; the Founder-hardware-rooted genesis; promotion of the verifier/anchor/registry into protected + sealed config; the real first seal; the first D3. Landing `scripts/merge-via-gate.mjs` (currently non-protected, on unmerged PR #11) into protected scope is a prerequisite for leaning on it in dual-control.
+- **Gated (Founder / distinct identity / maintainer — not the builder):** KMS key + governance SA + attestation verifier provisioning; the Founder-hardware-rooted genesis; promotion of the verifier/anchor/registry into protected + sealed config; the real first seal; the first D3. Landing the merge gate `docs/planning/merge-gate.mjs` (currently non-protected; a merge happens only on a gate MERGE) into protected scope is a prerequisite for leaning on it in dual-control.
