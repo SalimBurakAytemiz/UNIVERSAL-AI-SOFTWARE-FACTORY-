@@ -56,6 +56,8 @@ Never shown or stored: the desktop control token (SC-1), the pairing secret, the
 | Wipe cache | deletes the encrypted STALE cache |
 | Change idle timeout | local; opens UI-174 settings |
 
+"Unpair this phone" (and the revoke it requests) is a **pairing-plane** action on the device registry (MOB-2 5.5-5.6, FA-MOB-4). It is not a session-plane action and not a run-control action: it never stops, approves or changes any mission or run.
+
 No action raises scope. Revoking other devices, approve-key management and gateway enable live on the desktop only.
 
 ## 7. Step-up authentication points

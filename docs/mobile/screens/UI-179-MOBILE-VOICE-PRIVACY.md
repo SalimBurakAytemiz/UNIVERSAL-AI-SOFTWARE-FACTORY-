@@ -28,7 +28,7 @@ FA-MOB-16 (voice privacy). Draft creation behind it needs FA-MOB-17. FA-MOB-18 i
 |---|---|---|
 | Android permission state (`RECORD_AUDIO`) | platform, local | `TECH-VERSIONS.md` 3.15 |
 | On-device recognizer availability (`isOnDeviceRecognitionAvailable`, API 31+) | platform, local | `TECH-VERSIONS.md` 3.15 |
-| Data-routing rule `PII: ["LOCAL"]` | exists | `core/policy/data-routing.ts:9` |
+| Data-routing rule `PII: ["LOCAL"]` | exists | `core/policy/data-routing.ts:10` |
 | Server | **none**; this screen calls no route | — |
 
 ## 5. Fields (fixed text, not configurable)
@@ -37,7 +37,7 @@ FA-MOB-16 (voice privacy). Draft creation behind it needs FA-MOB-17. FA-MOB-18 i
 |---|---|
 | "Speech is converted to text **on this phone only**. If that is not possible, voice is off." | SC-9 |
 | "No audio is recorded or stored." | FA-MOB-16 |
-| "Transcripts stay on this phone until you save a draft." | SC-9; `data-routing.ts:9` |
+| "Transcripts stay on this phone until you save a draft." | SC-9; `data-routing.ts:10` |
 | "Voice can only create drafts. It cannot approve, run, STOP or RESUME anything." | SC-9, SC-10; MOB-4 AT-F3 |
 | Permission state pill | `GRANTED` / `NOT GRANTED` / `PERMANENTLY DENIED` |
 | Recognizer pill | `ON-DEVICE AVAILABLE` / `UNAVAILABLE` |

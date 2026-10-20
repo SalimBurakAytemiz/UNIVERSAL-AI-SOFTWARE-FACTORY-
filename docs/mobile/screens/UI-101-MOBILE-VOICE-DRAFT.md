@@ -36,7 +36,7 @@ FA-MOB-16 (voice privacy: `RECORD_AUDIO`, on-device STT only, no audio storage, 
 
 | Field | Notes |
 |---|---|
-| Live transcript | local only; untrusted PII (`core/policy/data-routing.ts:9`, `PII: ["LOCAL"]`) |
+| Live transcript | local only; untrusted PII (`core/policy/data-routing.ts:10`, `PII: ["LOCAL"]`) |
 | Editable draft title / note | typed edit allowed before saving; length caps per MOB-3 3.4 |
 | Provenance label | "Voice draft — not an instruction" on every draft |
 | STT mode pill | `ON-DEVICE` or `UNAVAILABLE`; never "cloud" |

@@ -38,7 +38,7 @@ The phone must not call `/v1/missions` or `/v1/work-runs` to rebuild the list; t
 
 | Field | Source | Notes |
 |---|---|---|
-| `itemId`, `kind` (`DELIVERY_DECISION`, `FOUNDER_ATTENTION`) | PROPOSED inbox; kinds from `work-core.js:311`, `:315` | fixed enum |
+| `itemId`, `kind` (`DELIVERY_DECISION`, `FOUNDER_ATTENTION`) | PROPOSED inbox; kinds from `work-core.js:312`, `:316` | fixed enum |
 | `title` | `missions[].title` (`server.ts:683`) | untrusted text with provenance label (SC-10), max 200 chars (MOB-3 3.4) |
 | `riskLevel` | `missions[].riskLevel` (`server.ts:683`) | missing → `—`, never guessed |
 | `decisionClass` | PROPOSED (MOB-4 4.6) | rows marked DESKTOP-ONLY show "Decide on the desktop" and no control |

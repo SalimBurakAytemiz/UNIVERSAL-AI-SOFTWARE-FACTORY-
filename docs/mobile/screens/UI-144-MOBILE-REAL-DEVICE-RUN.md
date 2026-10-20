@@ -20,6 +20,8 @@ Evidence: `file:line` on `origin/v7/integration` `7ee55d9`. **PROPOSED** / **UNV
 | Default test path | Maestro on a KVM **emulator** in CI; real devices and device farms are out of scope (`TEST-AND-BUILD.md` 2.2, `:53`) |
 | Build package | MOB-31 |
 
+No CI job runs real-device tests. Any device run is lab-only, gated by FA-MOB-22, and outside merge gating (`TEST-AND-BUILD.md` sections 2.2 and 7).
+
 ## 3. Authority dependency
 
 FA-MOB-22 (physical-device or paid device-farm testing). Showing results inside the phone app would also need FA-MOB-5 and FA-MOB-6 for a read route; a CI-side report needs FA-MOB-13 and FA-MOB-19. A paid farm or new account is excluded in the first release by the Founder decision. None granted.
