@@ -753,6 +753,23 @@ describe("UI-133 agent identity card on role detail (UNKNOWN without evidence, n
     expect(byData(card, "identityEvidence", "1").length).toBe(1);
     view.resetWorkforceView();
   });
+  it("CERTIFIED with a scope but only UNKNOWN/NOT_EXECUTED specs is not certified, evidence is UNKNOWN and the scope is labelled declared", async () => {
+    const {node, id, view} = await open(p => { const d = JSON.parse(JSON.stringify(roleDetail(p.slice("/v1/roles/".length)))); d.role.proficiencyStatus = "CERTIFIED"; d.role.certifiedScope = "SCOPE.X"; d.role.evaluationSpecs = [{evaluationId: "EV.1", kind: "K", status: "UNKNOWN"}, {evaluationId: "EV.2", kind: "K", status: "NOT_EXECUTED"}]; return d; });
+    const card = byData(node, "identityCardFor", id)[0];
+    expect(byData(card, "identityCertified", "1").length).toBe(0);
+    expect(byData(card, "identityEvidence", "UNKNOWN").length).toBe(1);
+    expect(byData(card, "identityScope", "declared").length).toBe(1);
+    expect(byData(card, "identityScope", "verified").length).toBe(0);
+    expect(text(card)).toContain("Declared scope (unverified)");
+    view.resetWorkforceView();
+  });
+  it("a certified role shows the scope as verified with a passing-of-total evidence count", async () => {
+    const {node, id, view} = await open(p => { const d = JSON.parse(JSON.stringify(roleDetail(p.slice("/v1/roles/".length)))); d.role.proficiencyStatus = "CERTIFIED"; d.role.certifiedScope = "SCOPE.X"; d.role.evaluationSpecs = [{evaluationId: "EV.1", kind: "K", status: "PASSED"}, {evaluationId: "EV.2", kind: "K", status: "UNKNOWN"}]; return d; });
+    const card = byData(node, "identityCardFor", id)[0];
+    expect(byData(card, "identityScope", "verified").length).toBe(1);
+    expect(text(card)).toContain("1 of 2 evaluation spec(s) passed");
+    view.resetWorkforceView();
+  });
   it("a failed /v1/agents read shows registry as UNKNOWN, never a count", async () => {
     const {node, id, view} = await open(undefined, "404");
     const card = byData(node, "identityCardFor", id)[0];
@@ -762,7 +779,7 @@ describe("UI-133 agent identity card on role detail (UNKNOWN without evidence, n
   it("workforce.idcard.* keys are identical in EN and TR with the same placeholders and feature-unique data attributes", async () => {
     const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
     const keys = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("workforce.idcard.")).sort();
-    expect(keys(tr)).toEqual(keys(en)); expect(keys(en).length).toBe(16);
+    expect(keys(tr)).toEqual(keys(en)); expect(keys(en).length).toBe(17);
     const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
     for (const k of keys(en)) { expect(ph(tr[k]), k).toEqual(ph(en[k])); expect(tr[k]).toBeTruthy(); }
     const src = fs.readFileSync(path.join(rend, "views", "workforce.js"), "utf8");

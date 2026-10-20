@@ -158,9 +158,9 @@ const defList=(ctx,titleKey,values)=>{
     values.length?h(doc,"ul",{class:"wf-def-list"},values.map(v=>h(doc,"li",{text:v}))):h(doc,"p",{class:"note",text:ctx.t("workforce.cat.detail.empty")}));
 };
 
-// //TR: UI-133 salt-okunur ajan kimlik kartı: yalnız VERIFIED rol ayrıntısı (GET /v1/roles/:roleId) + GET /v1/agents kayıt sayılarından; "sertifikalı" yalnız proficiencyStatus=CERTIFIED + certifiedScope + değerlendirme kanıt izi hepsi varsa gösterilir, kanıt izi yoksa BİLİNMİYOR; rol tanımı canlı ajan değildir, yeni uç nokta/yazma yoktur.
+// //TR: UI-133 salt-okunur ajan kimlik kartı: yalnız VERIFIED rol ayrıntısı (GET /v1/roles/:roleId) + GET /v1/agents kayıt sayılarından; "sertifikalı" yalnız proficiencyStatus=CERTIFIED + certifiedScope + en az bir GEÇEN (PASSED/VERIFIED) değerlendirme sonucu hepsi varsa; sertifikalı değilse kapsam "beyan edilmiş, doğrulanmamış" etiketiyle gösterilir, kanıt izi yoksa BİLİNMİYOR; rol tanımı canlı ajan değildir, yeni uç nokta/yazma yoktur.
 function identityCard(ctx,r,agents){
-  const doc=ctx.doc,specs=r.evaluationSpecs,hasTrail=specs.length>0;
+  const doc=ctx.doc,specs=r.evaluationSpecs,passing=specs.filter(e=>e.status==="PASSED"||e.status==="VERIFIED").length,hasTrail=passing>0;
   const certified=r.proficiencyStatus==="CERTIFIED"&&!!r.certifiedScope&&hasTrail;
   const unk=()=>h(doc,"span",{class:"wf-idcard-unknown",dataset:{identityUnknown:"1"},text:ctx.t("workforce.idcard.unknown")});
   const row=(labelKey,body)=>h(doc,"div",{},h(doc,"dt",{text:ctx.t(labelKey)}),h(doc,"dd",{},body));
@@ -173,8 +173,8 @@ function identityCard(ctx,r,agents){
       row("workforce.idcard.runtime",r.runtimeStatus&&r.runtimeStatus!=="UNKNOWN"?statusChip(ctx,r.runtimeStatus):unk()),
       row("workforce.idcard.proficiency",statusChip(ctx,r.proficiencyStatus)),
       row("workforce.idcard.certification",certified?h(doc,"span",{dataset:{identityCertified:"1"},text:ctx.t("workforce.idcard.certified")}):h(doc,"span",{dataset:{identityCertified:"0"},text:ctx.t("workforce.idcard.notCertified")})),
-      row("workforce.idcard.scope",r.certifiedScope?h(doc,"span",{text:r.certifiedScope}):unk()),
-      row("workforce.idcard.evidence",hasTrail?h(doc,"span",{dataset:{identityEvidence:String(specs.length)},text:ctx.t("workforce.idcard.evidenceCount",{n:formatCount(specs.length)})}):h(doc,"span",{class:"wf-idcard-unknown",dataset:{identityEvidence:"UNKNOWN"},text:ctx.t("workforce.idcard.evidenceUnknown")})),
+      row(certified?"workforce.idcard.scope":"workforce.idcard.scopeDeclared",r.certifiedScope?h(doc,"span",{dataset:{identityScope:certified?"verified":"declared"},text:r.certifiedScope}):unk()),
+      row("workforce.idcard.evidence",hasTrail?h(doc,"span",{dataset:{identityEvidence:String(passing)},text:ctx.t("workforce.idcard.evidenceCount",{p:formatCount(passing),n:formatCount(specs.length)})}):h(doc,"span",{class:"wf-idcard-unknown",dataset:{identityEvidence:"UNKNOWN"},text:ctx.t("workforce.idcard.evidenceUnknown")})),
       row("workforce.idcard.registry",reg?h(doc,"span",{text:ctx.t("workforce.idcard.registryCounts",{r:formatCount(agents.registeredRoles),k:agents.certified===null?MISSING:formatCount(agents.certified)})}):unk())),
     h(doc,"p",{class:"note mono",text:ctx.t("workforce.idcard.source")}));
 }
