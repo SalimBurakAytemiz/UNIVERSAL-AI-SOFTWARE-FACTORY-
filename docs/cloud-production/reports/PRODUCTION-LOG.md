@@ -726,3 +726,35 @@ No RECLAIMABLE_AWAITING_BUILDER or ABANDONED_WITH_WORK_AWAITING_COORDINATOR. Cla
 **Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) Many draft UI PRs await review/merge. (3) create_session/list_sessions unavailable.
 
 Note: written as one local single-file commit with a plain push (as in #39-#41), since the ~62 KB log is too large to re-transmit through create_or_update_file without transcription risk.
+
+## Heartbeat #43 (2026-10-20 08:13Z)
+
+**Queue (docs/cloud-production/QUEUE.json @ claude/cloud-production-engine):** parsed; READY tasks: 0 (unchanged: CP-QUEUE/CP-REPORT/CP-CI PENDING_REVIEW; CP-DISPATCH/CP-RECOVERY/CP-GOV IN_PROGRESS; FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED BLOCKED). Step 2: nothing to dispatch (create_session also unavailable in this fire).
+
+**Step 2b (canonical backlog):** v7/integration @ 6d52476. Open PR heads passed as --open-prs. Dry run: START MOB-9 (not claimed). ACTIVE (list_sessions unavailable; fallback = LIVE claim branches with no open PR): 2 = claude/ui-194 (claim 406dd64, FRESH 0.02 h), claude/mob-5 (claim 8e64574, FRESH 0.02 h). ACTIVE >= 2, so NO claim and NO dispatch this fire. Outcome: NO_ACTION (capacity cap). Both live claims carry no builder confirmation (coordinator-owned; builder provisioning is the coordinator's).
+
+MERGED_AWAITING_WRITEBACK UI-002 8b1cb5e
+MERGED_AWAITING_WRITEBACK UI-007 a874abf
+MERGED_AWAITING_WRITEBACK CP-DISPATCH-IMPL 8e8f032
+MERGED_AWAITING_WRITEBACK UI-030 a994d4b
+MERGED_AWAITING_WRITEBACK UI-113 2e3e75f
+MERGED_AWAITING_WRITEBACK UI-132 d1e0ba1
+MERGED_AWAITING_WRITEBACK UI-032 f9f5aa5
+MERGED_AWAITING_WRITEBACK UI-026 68b2542
+MERGED_AWAITING_WRITEBACK UI-025 0567275
+MERGED_AWAITING_WRITEBACK UI-133 33c6770
+MERGED_AWAITING_WRITEBACK UI-047 b620ffa
+MERGED_AWAITING_WRITEBACK UI-201 efc04b3
+No CLAIMED_AWAITING_BUILDER, RECLAIMABLE_AWAITING_BUILDER or ABANDONED_WITH_WORK_AWAITING_COORDINATOR. Claims with open PR (draft): UI-125 #92, UI-109 #91, UI-146 #95, UI-182 #94, UI-233 #98, UI-035 #97, MOB-1 #100, MOB-2 #99.
+
+**Open PRs: 21** (none labelled uasco-cloud-production; mergeable state/CI UNKNOWN): #101 (integration wave B7), #100, #99, #98, #97, #96 (FA-LEASE2 request, docs only), #95, #94, #92, #91, #69 (protected, do-not-merge), #66, #46, #33, #32, #31, #28, #23, #15, #11, #8.
+
+**Active sessions:** UNKNOWN (list_sessions unavailable); LIVE claim-branch list used for ACTIVE: claude/ui-194, claude/mob-5.
+
+**Tasks completed (merged):** the 12 claim branches above are ancestors of v7/integration (DONE write-back pending). Queue tasks DONE: 0.
+
+**Current failures:** none newly observed; Actions CI red per queue (not independently verified).
+
+**Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) Builder capacity at cap (2 live claims UI-194, MOB-5); many draft UI PRs await review/merge (#101 wave B7). (3) create_session/list_sessions unavailable.
+
+Note: written as one local single-file commit with a plain push (as in #39-#42), since the ~65 KB log is too large to re-transmit through create_or_update_file without transcription risk.
