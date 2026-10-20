@@ -43,10 +43,10 @@ export const safeId = id => validId(id) ? id : "?";
 export const safeStatus = s => isStr(s) && STATUS_ENUM.has(s) ? s : "malformed";
 export const safeOwner = o => isStr(o) && OWNER_ENUM.has(o) ? o : "malformed";
 export const refNameOk = b => isStr(b) && REF_RE.test(b) && !b.includes("..") && !b.endsWith(".") && !/\.lock$/i.test(b);
-export const safeBranch = b => refNameOk(b) && b.length <= 120 ? b : "BRANCH_INVALID";
+export const safeBranch = b => refNameOk(b) && b.length <= 120 && !b.includes("_") ? b : "BRANCH_INVALID"; // "_" excluded like --owner/--remote so token-shaped names (ghp_..., sk_...) are never echoed
 // argv values: owner is echoed only if it passes the TOKEN_RE-style check (no "_"), the base branch only as a valid "_"-free ref name.
 export const safeOwnerArg = o => isStr(o) && /^[A-Za-z0-9.:-]{1,256}$/.test(o) ? o : "?";
-export const safeBaseEcho = b => isStr(b) && !b.includes("_") ? safeBranch(b) : "BRANCH_INVALID";
+export const safeBaseEcho = b => safeBranch(b);
 const safeArg = a => isStr(a) && /^--?[A-Za-z0-9][A-Za-z0-9-]{0,39}$/.test(a) ? a : "?";
 
 class Blocked extends Error { constructor(code) { super(code); this.code = code; } }
@@ -141,13 +141,21 @@ export function select(tasks, env) {
   return {chosen, perTask};
 }
 
+// Every git NETWORK call (fetch, push, ls-remote; this includes the lease store's injected runGit) runs under a bounded timeout. A timeout is
+// a non-zero status with timedOut=true (and g.timeouts counts them), so callers fail closed.
+const NET_CMDS = new Set(["fetch", "push", "ls-remote"]);
 function makeGit(cwd) {
-  return (args, input, extraEnv, opts = {}) => {
+  let timeouts = 0;
+  const g = (args, input, extraEnv, opts = {}) => {
     const a = args[0] === "fetch" ? ["fetch", "--no-write-fetch-head", ...args.slice(1)] : args;
-    const r = spawnSync("git", a, {cwd, input, encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024, ...opts,
+    const r = spawnSync("git", a, {cwd, input, encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024, ...(NET_CMDS.has(args[0]) ? {timeout: FETCH_TIMEOUT_MS} : {}), ...opts,
       env: {...process.env, GIT_TERMINAL_PROMPT: "0", ...extraEnv}});
-    return {status: r.status ?? 1, stdout: r.stdout ?? "", stderr: r.stderr ?? ""};
+    const timedOut = r.error?.code === "ETIMEDOUT";
+    if (timedOut) timeouts++;
+    return {status: r.status ?? 1, stdout: r.stdout ?? "", stderr: r.stderr ?? "", timedOut};
   };
+  Object.defineProperty(g, "timeouts", {get: () => timeouts});
+  return g;
 }
 
 function remoteHeads(git, remote) {
@@ -180,9 +188,9 @@ export function ensureFullHistory(git, remote, baseBranch) {
 // A committer date is usable only when it is a finite integer no later than one day in the future (and not before 1970). Never throws.
 const DAY_MS = 864e5;
 const MAX_BRANCH_COMMITS = 1000;
+const SKEW_TOLERANCE_S = 3600; // a branch commit may be dated at most this much before its fork point (committer clock skew)
 // Fetch bound (ms); the env var can only LOWER it (the proof uses that to exercise the timeout path).
 const FETCH_TIMEOUT_MS = Math.min(120000, Number(process.env.UASCO_DISPATCH_FETCH_TIMEOUT_MS) > 0 ? Number(process.env.UASCO_DISPATCH_FETCH_TIMEOUT_MS) : 120000);
-const ctOk = (ct, now) => Number.isSafeInteger(ct) && ct >= 0 && ct * 1000 <= now + DAY_MS;
 
 // Pure claim = every commit beyond merge-base(branch, base) is a "dispatch-claim:" commit with exactly one parent and the same tree as that
 // parent (independent of base movement). A head that is an ancestor of the base tip is MERGED_AWAITING_WRITEBACK.
@@ -218,6 +226,17 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
     if (f.length % 5 !== 0 || f.length / 5 !== total) { out.push({taskId, claimRef, state: "UNKNOWN", why: "LOG_FAILED"}); continue; }
     const rows = [], treeOf = new Map();
     for (let k = 0; k < f.length; k += 5) { rows.push({h: f[k], t: f[k + 1], parents: f[k + 2].split(" ").filter(Boolean), ct: f[k + 3], s: f[k + 4]}); treeOf.set(f[k], f[k + 1]); }
+    // Date sanity for EVERY commit beyond the fork point (both the pure-claim and the work path): finite, not more than a day ahead, and not
+    // dated before the merge-base commit (minus a small skew tolerance). A past-dated branch (e.g. 1970) can otherwise look ancient and
+    // free a capacity slot; such a branch is UNKNOWN (counted active) instead.
+    const cts = rows.map(r => /^[0-9]{1,16}$/.test(r.ct) ? Number(r.ct) : NaN);
+    if (cts.some(c => !Number.isSafeInteger(c))) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
+    if (cts.some(c => c * 1000 > now + DAY_MS)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_FUTURE_DATED"}); continue; }
+    const mbd = git(["log", "-1", "--format=%ct", mbSha]);
+    const mbCt = /^[0-9]{1,16}$/.test(mbd.stdout.trim()) ? Number(mbd.stdout.trim()) : NaN;
+    if (mbd.status !== 0 || !Number.isSafeInteger(mbCt)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
+    let lowest = Infinity; for (const c of cts) if (c < lowest) lowest = c;
+    if (lowest < mbCt - SKEW_TOLERANCE_S) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
     let pure = true;
     for (const r of rows) if (!r.s.startsWith(CLAIM_SUBJECT) || r.parents.length !== 1) { pure = false; break; }
     if (pure) {
@@ -231,9 +250,8 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
       if (pure === null) continue;
     }
     if (!pure) {
-      const raw = rows.length ? rows[0].ct : "", ct = /^[0-9]{1,16}$/.test(raw) ? Number(raw) : NaN;
+      const hi = rows.findIndex(r => r.h === sha), ct = hi >= 0 ? cts[hi] : NaN; // the branch head's own date
       if (!Number.isSafeInteger(ct)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
-      if (ct * 1000 > now + DAY_MS) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_FUTURE_DATED"}); continue; }
       // A head dated before the branch's own oldest claim commit (clock skew, e.g. 1970) cannot be trusted: UNKNOWN, counted active.
       const claimCts = rows.filter(r => r.s.startsWith(CLAIM_SUBJECT)).map(r => Number(r.ct)).filter(Number.isSafeInteger);
       let oldestClaim = Infinity; for (const c of claimCts) if (c < oldestClaim) oldestClaim = c;
@@ -247,9 +265,6 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
     }
     let ageMs = null, extra = null;
     if (rows.length) {
-      const cts = rows.map(r => /^[0-9]{1,16}$/.test(r.ct) ? Number(r.ct) : NaN);
-      if (cts.some(c => !Number.isSafeInteger(c))) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
-      if (cts.some(c => !ctOk(c, now))) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_FUTURE_DATED"}); continue; }
       let newest = 0; for (const c of cts) if (c > newest) newest = c;
       ageMs = now - newest * 1000;
     } else { const le = readLease(taskId); if (le && Number.isFinite(le.acquiredAt)) { ageMs = now - le.acquiredAt; extra = "age from lease acquiredAt"; } }
@@ -421,6 +436,7 @@ async function runInner(argv, cwd) {
     }
     const lid = {taskId: id, environment: "CLOUD", workerId: o.owner, sessionId};
     let leaseInfo = {status: "SKIPPED"}, grant = null;
+    const t0 = git.timeouts;
     if (store) {
       leaseFlag.unavail = false;
       try {
@@ -451,6 +467,8 @@ async function runInner(argv, cwd) {
         leaseInfo = leaseCheckFailed(lr) ? {status: "LEASE_CHECK_FAILED", error: why}
           : leaseRefAbsent(lr) ? {status: "LEASE_STORE_UNAVAILABLE", error: why} : {status: "HELD", error: why};
       }
+      // A hung network call during the lease step: nothing was claimed; give back what we obtained (best effort, itself bounded) and stop.
+      if (git.timeouts > t0) { releaseGrant(lid, grant); return fin("RECOVERABLE_FAILURE", [...flat, ...lost, `${id}:LEASE_NETWORK_TIMEOUT`], extras); }
       if (leaseInfo.status === "LEASE_ERROR_UNKNOWN_STATUS") { lost.push(`${id}:LEASE_ERROR:UNKNOWN`); chosen = skipNext(id, "LEASE_ERROR:UNKNOWN"); continue; }
       if (leaseInfo.status === "LEASE_STORE_UNAVAILABLE") lost.push(`${id}:LEASE_STORE_UNAVAILABLE`);
       if (leaseInfo.status === "LEASE_CHECK_FAILED") { lost.push(`${id}:LEASE_CHECK_FAILED`); chosen = skipNext(id, "LEASE_CHECK_FAILED"); continue; }
@@ -463,6 +481,7 @@ async function runInner(argv, cwd) {
     const sha = c.stdout.trim();
     // create-only: --force-with-lease=<ref>: (empty expectation) means "ref must not exist".
     const p = git(["push", "--quiet", o.remote, `${sha}:${ref}`, `--force-with-lease=${ref}:`]);
+    if (p.timedOut) { releaseGrant(lid, grant); return fin("RECOVERABLE_FAILURE", [...flat, ...lost, ...pushFailed, `${id}:PUSH_TIMEOUT_CLAIM_MAY_EXIST_CHECK_REMOTE`], extras); }
     let ours = p.status === 0, again = null;
     if (!ours) {
       // A non-zero status does not prove the push failed (the ref may have been created before the client died/hook/network error): re-list.

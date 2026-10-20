@@ -26,7 +26,7 @@ function mkEnv(tasks, backlogRaw) {
   fs.mkdirSync(path.join(work, "docs/planning"), {recursive: true});
   const bl = path.join(work, "docs/planning/BACKLOG_CHECKPOINT.json");
   if (backlogRaw !== null) fs.writeFileSync(bl, backlogRaw ?? JSON.stringify({tasks}));
-  fs.writeFileSync(path.join(work, "README"), "x"); G(work, ["add", "-A"]); G(work, ["commit", "-q", "-m", "base"]);
+  fs.writeFileSync(path.join(work, "README"), "x"); G(work, ["add", "-A"]); G(work, ["commit", "-q", "-m", "base"], {GIT_COMMITTER_DATE: `${Math.floor(Date.now() / 1000) - 30 * 86400} +0000`, GIT_AUTHOR_DATE: `${Math.floor(Date.now() / 1000) - 30 * 86400} +0000`}); // old fork point: backdated claims stay AFTER it
   G(work, ["push", "-q", "origin", "v7/integration"]);
   return {dir, bare, work, bl};
 }
@@ -673,6 +673,52 @@ const writeHook = (bare, body) => { fs.mkdirSync(path.join(bare, "hooks"), {recu
     const r = dispatchSync(e.work, ["--backlog", e.bl, "--stale-hours", "0"]), st = states(r);
     check("D1 (+): work head dated 1970 (earlier than its own claim commit) => UNKNOWN CLAIM_AGE_OUT_OF_RANGE, counted active (not ABANDONED_WITH_WORK)", st["Y-1"]?.state === "UNKNOWN" && st["Y-1"].why === "CLAIM_AGE_OUT_OF_RANGE" && r.j.active >= 1, JSON.stringify(st["Y-1"]));
     check("D1 (-): consistent old work head (same date as its claim) still ages to ABANDONED_WITH_WORK", st["Y-2"]?.state === "ABANDONED_WITH_WORK", JSON.stringify(st["Y-2"]));
+  }
+  // B6: past-dated branches (dated before their fork point) must not look ancient and free a capacity slot.
+  {
+    const e = mkEnv([T("K-1"), T("K-2"), T("C-4"), T("K-3"), T("K-4"), T("K-5")]); advanceBase(e); const b = baseOf(e); // fork point dated NOW
+    push(e, workC(e, claimC(e, b.sha, "K-1", "@100"), "@200", "k1"), "claude/k-1");
+    push(e, claimC(e, b.sha, "K-2", "@100"), "claude/k-2");
+    push(e, workC(e, b.sha, "@5", "c4"), "claude/c-4"); // single work commit, no claim commit
+    push(e, claimC(e, b.sha, "K-4", now() - 1800), "claude/k-4"); // 30 min before the fork point: within the skew tolerance
+    push(e, claimC(e, b.sha, "K-5", now() - 7200), "claude/k-5"); // 2 h before the fork point: beyond it
+    const r = dispatchSync(e.work, ["--backlog", e.bl, "--stale-hours", "0"]), st = states(r);
+    check("B6 (+): K-1 (claim @100 + work @200) => UNKNOWN CLAIM_AGE_OUT_OF_RANGE (not ABANDONED_WITH_WORK)", st["K-1"]?.state === "UNKNOWN" && st["K-1"].why === "CLAIM_AGE_OUT_OF_RANGE", JSON.stringify(st["K-1"]));
+    check("B6 (+): K-2 (pure claim @100) => UNKNOWN (not RECLAIMABLE); C-4 (work @5, no claim commit) => UNKNOWN (not ABANDONED_WITH_WORK)", st["K-2"]?.state === "UNKNOWN" && st["K-2"].why === "CLAIM_AGE_OUT_OF_RANGE" && st["C-4"]?.state === "UNKNOWN" && st["C-4"].why === "CLAIM_AGE_OUT_OF_RANGE", JSON.stringify([st["K-2"], st["C-4"]]));
+    check("B6 (-): clock skew within the 1 h tolerance (K-4) is still classified normally; 2 h before the fork point (K-5) is UNKNOWN", st["K-4"]?.state === "RECLAIMABLE" && st["K-5"]?.state === "UNKNOWN", JSON.stringify([st["K-4"], st["K-5"]]));
+    check("B6 (+): the UNKNOWN branches are counted ACTIVE (active=4: K-1, K-2, C-4, K-5)", r.j.active === 4, String(r.j.active));
+    const e2 = mkEnv([T("K-1"), T("K-3")]); advanceBase(e2); const b2 = baseOf(e2);
+    push(e2, claimC(e2, b2.sha, "K-1", "@100"), "claude/k-1");
+    const cap = dispatchSync(e2.work, ["--claim", "--max-active", "1", "--backlog", e2.bl, "--no-lease"]);
+    check("B6 (+): a past-dated live branch keeps its slot: --max-active 1 => CAPACITY_FULL:1/1, K-3 NOT claimed", cap.j.outcome === "NO_ACTION" && cap.j.reasons.includes("CAPACITY_FULL:1/1") && !heads(e2.bare).includes("refs/heads/claude/k-3"), cap.raw.slice(0, 300));
+  }
+  // B5: every git network call is bounded and fails closed with RECOVERABLE_FAILURE (exit 3), no claim created.
+  {
+    const TO = {UASCO_DISPATCH_FETCH_TIMEOUT_MS: "1500"};
+    const hangHook = e => { const h = path.join(e.bare, "hooks/pre-receive"); fs.writeFileSync(h, "#!/bin/sh\nexec sleep 100000\n", {mode: 0o755}); };
+    const e = mkEnv([T("NET-1")]); hangHook(e);
+    let t = Date.now();
+    const a = dispatchSync(e.work, ["--claim", "--no-lease", "--backlog", e.bl], TO);
+    check("B5 (+): hanging pre-receive on the claim push => RECOVERABLE_FAILURE exit 3 within 30 s, no claim ref created", a.code === 3 && a.j.outcome === "RECOVERABLE_FAILURE" && Date.now() - t < 30000 && heads(e.bare).length === 0 && a.j.reasons.some(x => x.startsWith("NET-1:PUSH_TIMEOUT")), `${Date.now() - t}ms ${a.raw.slice(0, 300)}`);
+    t = Date.now();
+    const l = dispatchSync(e.work, ["--claim", "--backlog", e.bl], TO);
+    check("B5 (+): with the lease on, the hanging lease push is bounded too: RECOVERABLE_FAILURE, no claim branch, no lease ref", l.code === 3 && l.j.outcome === "RECOVERABLE_FAILURE" && Date.now() - t < 60000 && heads(e.bare).length === 0 && G(e.bare, ["for-each-ref", "refs/uasco/claims/"]) === "", `${Date.now() - t}ms ${l.raw.slice(0, 300)}`);
+    const e2 = mkEnv([T("NET-2")]);
+    const w = path.join(e2.dir, "lsr.sh"); fs.writeFileSync(w, "#!/bin/sh\nexec sleep 100000\n", {mode: 0o755}); G(e2.work, ["config", "remote.origin.uploadpack", w]);
+    t = Date.now();
+    const h = dispatchSync(e2.work, ["--claim", "--no-lease", "--backlog", e2.bl], TO);
+    check("B5 (+): hanging ls-remote => RECOVERABLE_FAILURE REMOTE_UNREACHABLE within 30 s, nothing claimed", h.code === 3 && h.j.reasons.includes("REMOTE_UNREACHABLE") && Date.now() - t < 30000 && heads(e2.bare).length === 0, `${Date.now() - t}ms ${h.raw.slice(0, 300)}`);
+    const e3 = mkEnv([T("NET-3")]);
+    const ok = dispatchSync(e3.work, ["--claim", "--backlog", e3.bl], TO);
+    check("B5 (-): with the same lowered timeout a healthy remote still claims normally (lease GRANTED)", ok.j.outcome === "START" && ok.j.lease?.status === "GRANTED", ok.raw.slice(0, 300));
+  }
+  // N4: token-shaped branch names are not echoed ("_" excluded from safeBranch, like --owner/--remote).
+  {
+    const e = mkEnv([T("TK-1", {branch: "feat/tok_abc123"}), T("TK-2", {branch: "feat/plain-name"})]);
+    G(e.work, ["push", "-q", "origin", "HEAD:refs/heads/feat/tok_abc123"]); G(e.work, ["push", "-q", "origin", "HEAD:refs/heads/feat/plain-name"]);
+    const r = dispatchSync(e.work, ["--backlog", e.bl, "--open-prs", "feat/tok_zzz999"]);
+    check("N4 (+): a branch name containing '_' is reported as BRANCH_INVALID, never echoed", r.j.reasons.includes("TK-1:BRANCH_EXISTS:BRANCH_INVALID") && !r.raw.includes("tok_abc123") && !r.raw.includes("tok_zzz999"), r.raw.slice(0, 300));
+    check("N4 (-): a normal branch name is still echoed", r.j.reasons.includes("TK-2:BRANCH_EXISTS:feat/plain-name"), r.raw.slice(0, 300));
   }
   // N2 + N3: case-insensitive exact id; many newer mentions cannot hide the claim; the walk is bounded by commits and fails closed.
   {
