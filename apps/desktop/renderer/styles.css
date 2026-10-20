@@ -541,6 +541,9 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .qa-secdetail-head{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2)}
 .qa-secdetail-id{font-size:var(--fs-label)}
 .qa-secdetail-kv dd{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem}
+.qa-find-wrap{display:grid;gap:var(--space-2);margin-top:var(--space-2)}
+.qa-find .table-wrap{overflow-x:auto}
+.qa-find-table td{font-size:var(--fs-caption);overflow-wrap:anywhere}
 .qa-gaps{margin:.2rem 0 0;padding-left:1.1rem;display:grid;gap:.2rem;font-size:var(--fs-caption)}
 .qa-foundernote{margin-top:var(--space-2)}
 .qa-foundernote summary{cursor:pointer;color:var(--muted);font-size:var(--fs-label)}
