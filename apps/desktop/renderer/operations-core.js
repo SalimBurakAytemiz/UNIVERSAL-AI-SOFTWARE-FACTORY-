@@ -1,7 +1,11 @@
 // //TR: Bu modül Operasyon ve Kurtarma görünümünün saf (DOM'suz) çekirdeğidir (FA-V2-PRODUCT, UI-071): yalnız üç salt-okunur ve zaten izinli GET (GET /v1/control/status, GET /v1/runs, GET /v1/founder-attention; üçü de sorgusuz sabit yoldur) yanıtını güvenli, sınırlı alanlara eşler ve bunlardan bir kurtarma kontrol listesi türetir. HİÇBİR veri uydurulmaz: kimlik/enum/biçim/zaman damgası bozuksa ya da iki alan birbiriyle çelişiyorsa okuma KISMEN değil tümden ERROR olur (fail-closed), eksik alan tahmin edilmez, durumlar kayıttan AYNEN taşınır (yükseltme yok). "Takıldı/durdu" (STALLED) YALNIZ gerçek kayıtlı zaman damgasından (koşu başlangıcı, yeniden deneme zamanı, checkpoint güncelleme) ve açıkça belgelenmiş görüntü eşiklerinden (kontrol düzleminde SLA/zaman aşımı kaydı YOKTUR; eşikler yalnız görüntü sınıflamasıdır) türetilir; zaman damgası yoksa/gelecekteyse sınıflama yapılmaz (UNDETERMINED). Okunamayan kaynağın sayıları null'dır (0 değil). Genel durum (NO_ISSUES_RECORDED) yalnız üç kaynağın HEPSİ okunabilir ve doğrulanmışsa, global stop aktif değilse, Work OS günlüğü OK ise, zamanlayıcı doğrulanmışsa, en az bir koşu kayıtlıysa ve kayıtlı hiçbir sorun yoksa verilir; aksi halde ASLA. Mevcut Stop/Resume/Retry kontrolleri BURADA yeniden uygulanmaz ve tetiklenmez; yalnız dürüst durumları gösterilir. Bu modül ürün doğrulamasını hesaplamaz ve ilgili sabit değer bu dosyada hiç yer almaz.
 import {ATTENTION_PATH,mapQueueAttention,waitSince,waitParts} from "./queue-core.js";
 
-export {ATTENTION_PATH,waitSince,waitParts};
+import {
+  RETRY_OVERDUE_AFTER_MS,validateRetryRecord,classifyRetryPhase
+} from "./retry-core.js";
+
+export {ATTENTION_PATH,waitSince,waitParts,RETRY_OVERDUE_AFTER_MS,validateRetryRecord,classifyRetryPhase};
 export const CONTROL_PATH="/v1/control/status";
 export const RUNS_PATH="/v1/runs";
 /** Görünümün okuyabildiği TÜM kaynaklar (sıra sabit); üçü de salt-okunur ve önceden izinlidir, yeni uç nokta yoktur. */
@@ -18,7 +22,6 @@ export const GROUP_OF_STATUS=Object.freeze({FATAL:"ATTENTION",FOUNDER_ATTENTION_
 export const LIVENESS=Object.freeze(["FINISHED","IN_PROGRESS","STALLED","UNDETERMINED"]);
 /** GÖRÜNTÜ eşikleri (kayıtlı SLA/zaman aşımı DEĞİL): özeti olmayan bir koşu başlangıcından bu yana bu süreyi aştıysa STALLED; yeniden deneme zamanı bu tolerans kadar geçtiyse ve kayıt hâlâ duruyorsa OVERDUE; checkpoint bu süredir temizlenmediyse bayattır. */
 export const RUN_STALL_AFTER_MS=6*3600000;
-export const RETRY_OVERDUE_AFTER_MS=10*60000;
 export const CHECKPOINT_STALE_AFTER_MS=RUN_STALL_AFTER_MS;
 /** /v1/runs sunucuda en yeni 100 koşuyla sınırlıdır; tam bu sayıda satır gelirse liste kısaltılmış olabilir. */
 export const SERVER_RUNS_CAP=100;
@@ -132,12 +135,8 @@ export function mapOperationsAttention(raw){
   }
   let retry=null;
   if(raw.retry!==undefined&&raw.retry!==null){
-    const r=raw.retry;
-    if(!isObj(r)||iso(r.retryAt)===null)return bad;
-    const pk=opt(r.packageId,v=>matches(PKG_RE,v)),reason=optText(r.reason,300),secs=opt(r.retryAfterSeconds,v=>Number.isSafeInteger(v)&&v>=0),upd=optIso(r.updatedAt);
-    const phases=opt(r.phaseIds,v=>Array.isArray(v)&&v.length<=200&&v.every(n=>Number.isSafeInteger(n)&&n>=0));
-    if([pk,reason,secs,upd,phases].includes(undefined))return bad;
-    retry={packageId:pk,phaseIds:phases??[],reason,retryAfterSeconds:secs,retryAt:r.retryAt,updatedAt:upd};
+    retry=validateRetryRecord(raw.retry);
+    if(retry===null)return bad;
   }
   let checkpoint=null;
   if(raw.checkpoint!==undefined&&raw.checkpoint!==null){
@@ -175,9 +174,7 @@ function deriveQueue(A,nowMs){
   const retryUsable=items.filter(x=>x.retryNow).length,retryable=items.filter(x=>x.retryable===true).length,notRetryable=items.filter(x=>x.retryable===false).length,unknownRetry=items.filter(x=>x.retryable===null).length;
   let retry=null;
   if(A.retry){
-    const t=Date.parse(A.retry.retryAt),finite=Number.isFinite(nowMs)&&!Number.isNaN(t);
-    const phase=!finite?"UNDETERMINED":t>nowMs?"WAITING":nowMs-t<=RETRY_OVERDUE_AFTER_MS?"DUE":"OVERDUE";
-    retry={...A.retry,phase,remainingMs:finite&&t>nowMs?t-nowMs:null,overdueMs:finite&&t<=nowMs?nowMs-t:null};
+    retry=classifyRetryPhase(A.retry,nowMs);
   }
   let checkpoint=null;
   if(A.checkpoint){const {waitMs}=waitSince(A.checkpoint.updatedAt,nowMs);checkpoint={...A.checkpoint,ageMs:waitMs,stale:waitMs!==null&&waitMs>CHECKPOINT_STALE_AFTER_MS}}
