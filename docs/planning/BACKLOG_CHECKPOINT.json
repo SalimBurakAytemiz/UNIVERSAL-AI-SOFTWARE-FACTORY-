@@ -681,7 +681,7 @@
     },
     {
       "owner": "CLOUD",
-      "status": "READY",
+      "status": "DONE",
       "authorizedBy": "FOUNDER-DECISION:D-2026-10-19-A (CONFIRMED by the Founder in-session 2026-10-19; record docs/planning/authority/FD-2026-10-19-MAX-CLOUD-PRODUCTION.md). Scope: independent renderer-only UI/UX task, non-protected files, screen inventory 2026-10-19 authority_needed=none; ownership = temporary create-only branch-ref claim (not FA-LEASE2-equivalent)",
       "dependsOn": [],
       "riskLevel": 2,
@@ -700,7 +700,7 @@
         "docs/ux/UI-132-CLOSURE-CHECKLIST.md"
       ],
       "testFile": "tests/v7-ux-wp-projects.test.ts",
-      "notes": "Checklist items derived from existing project, mission, run and source-delivery reads; delivery stays NOT_VERIFIED (source level); no sign-off action (would need a new endpoint). Overlaps open PR #40 (test file)."
+      "notes": "Checklist items derived from existing project, mission, run and source-delivery reads; delivery stays NOT_VERIFIED (source level); no sign-off action (would need a new endpoint). Overlaps open PR #40 (test file). Write-back 2026-10-20: merged into v7/integration (branch head d1e0ba1 ancestor of ce3f1ef)"
     },
     {
       "owner": "CLOUD",
