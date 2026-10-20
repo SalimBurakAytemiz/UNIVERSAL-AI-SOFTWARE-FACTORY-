@@ -150,6 +150,29 @@ function securityPanel(ctx,scans){
     h(doc,"p",{class:"note",text:ctx.t("qa.tool.installedNote")}),
     h(doc,"p",{class:"note mono",text:ctx.t("qa.security.source")}));
 }
+// //TR: UI-047: yalnız-metin, salt-okunur bulgu tabloları. Düzeltildi/çözüldü/kabul edildi durumu YOK; tarama yok/bağlı değilse UNKNOWN/NOT_EXECUTED/STALE dürüstçe belirtilir.
+// //TR: Boş liste yalnız araç durumu tam olarak CLEAN/FINDINGS ise "bulgu yok" gösterir; ERROR/PARTIAL/diğer durumda "kaydedilmedi" (UNKNOWN) gösterilir, yumuşak "temiz" izlenimi verilmez.
+function findingTable(ctx,kind,list,cols,rowCells,aggregate,truncatedFlag,toolStatus){
+  const doc=ctx.doc,lbl=k=>ctx.t(`qa.security.find.${k}`);
+  const trunc=truncatedFlag||list.overCap||(aggregate!==null&&aggregate>list.items.length+list.dropped);
+  const noneOk=toolStatus==="CLEAN"||toolStatus==="FINDINGS";
+  const body=!list.recorded||(!list.items.length&&!noneOk)?h(doc,"p",{class:"note",dataset:{findState:"UNKNOWN"},text:lbl("notRecorded")})
+    :!list.items.length?h(doc,"p",{class:"note",dataset:{findState:"EMPTY"},text:lbl("empty")})
+    :h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table qa-find-table"},
+      h(doc,"caption",{class:"sr-only",text:lbl(`${kind}.caption`)}),
+      h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:lbl(`${kind}.col.${k}`)})))),
+      h(doc,"tbody",{},list.items.map(it=>h(doc,"tr",{dataset:it.severity?{findKind:kind,findSeverity:it.severity}:{findKind:kind}},rowCells(it).map(c=>h(doc,"td",{class:"mono",text:c===null||c===undefined?MISSING:String(c)})))))));
+  return h(doc,"section",{class:"qa-find",dataset:{findList:kind}},
+    h(doc,"h4",{class:"qa-def-title",text:lbl(`${kind}.title`)}),body,
+    list.dropped?h(doc,"p",{class:"note",dataset:{findDropped:String(list.dropped)},text:ctx.t("qa.security.find.dropped",{n:String(list.dropped)})}):null,
+    trunc?h(doc,"p",{class:"note note-stale",role:"note",dataset:{findTruncated:kind},text:lbl("truncated")}):null);
+}
+function findingTables(ctx,r){
+  const doc=ctx.doc;
+  const sca=findingTable(ctx,"sca",r.scaFindings,["package","version","id","severity","target"],f=>[f.package,f.version,f.id,f.severity,f.target],Object.keys(r.sca.counts).length?Object.values(r.sca.counts).reduce((a,b)=>a+b,0):null,r.scaTruncated,r.sca.status);
+  const sec=findingTable(ctx,"secret",r.secretFindings,["rule","file","line","commit"],f=>[f.ruleId,f.file,f.line,f.commit],r.secrets.gitleaks.findings,false,r.secrets.gitleaks.status);
+  return h(doc,"div",{class:"qa-find-wrap",dataset:{findWrap:"1"}},sca,sec);
+}
 function securityDetail(ctx,scans){
   const doc=ctx.doc;
   // //TR: panel() zaten id="qa-secdetail-t" başlığını üretir; yinelenen id yerine bu başlığı odaklanabilir (tabindex=-1) yaparız.
@@ -175,6 +198,7 @@ function securityDetail(ctx,scans){
       kv("qa.security.detail.sca",h(doc,"span",{},codeChip(ctx,r.sca.status)," ",r.sca.blocking!==null?ctx.t("qa.security.detail.blocking",{n:String(r.sca.blocking)}):""," ",h(doc,"span",{class:"mono",text:sevText}))),
       kv("qa.security.detail.sast",h(doc,"span",{},codeChip(ctx,r.sast.status)," ",r.sast.reason?codeChip(ctx,r.sast.reason):"")),
       kv("qa.security.detail.sbom",h(doc,"span",{},codeChip(ctx,r.sbom.status)," ",r.sbom.reason?codeChip(ctx,r.sbom.reason):""))),
+    findingTables(ctx,r),
     h(doc,"h4",{class:"qa-def-title",text:ctx.t("qa.security.detail.tools")}),
     r.tools.length?h(doc,"div",{class:"qa-tool-row"},r.tools.map(t=>toolPill(ctx,t))):emptyNote(ctx,"qa.security.noTools"),
     h(doc,"h4",{class:"qa-def-title",text:ctx.t("qa.security.detail.gaps")}),gaps,
