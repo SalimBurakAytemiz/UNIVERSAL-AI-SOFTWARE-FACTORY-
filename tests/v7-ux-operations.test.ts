@@ -7,7 +7,7 @@ import crypto from "node:crypto";
 import {pathToFileURL} from "node:url";
 import {WorkOsStore} from "../core/workos/store.js";
 import {buildServer} from "../apps/control-api/src/server.js";
-import {scanImports, moduleSpecifiers, disallowedImports, expectOnlyAllowedImports, relativeImportClosure, syntaxDiagnostics, NON_LITERAL} from "./support/static-imports.js";
+import {scanImports, moduleSpecifiers, disallowedImports, expectOnlyAllowedImports, relativeImportClosure, syntaxDiagnostics, NON_LITERAL, MODULE_LOAD_KINDS} from "./support/static-imports.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -1561,6 +1561,64 @@ describe("SEC-IMPORT-GUARD — AST import guard for the Operations modules", () 
   it("k. every real renderer file read by the 7 converted import guards parses with zero syntax diagnostics", () => {
     const files = ["views/operations.js", "operations-core.js", "retry-core.js", "views/executive.js", "executive-core.js", "views/return-summary.js", "return-summary-core.js", "views/install.js", "install-core.js", "views/matrix.js", "matrix-core.js", "views/posture.js", "posture-core.js", "views/queue.js", "queue-core.js", "views/readiness.js", "readiness-core.js"];
     for (const f of files) expect([f, syntaxDiagnostics(path.join(rend, f))]).toEqual([f, []]);
+  });
+  it("l. new Worker / new SharedWorker (literal, new URL(lit, import.meta.url), non-literal) are reported and fail unless allowWorkers", () => {
+    expect(scanImports({source: `new Worker("./w.js");\nnew SharedWorker(new URL("./s.js", import.meta.url), {type: "module"});\nnew window.Worker(name);\nnew Worker(new URL("./u.js"));\n`})).toEqual([
+      {kind: "worker", specifier: "./w.js"}, {kind: "shared-worker", specifier: "./s.js"}, {kind: "worker", specifier: NON_LITERAL}, {kind: "worker", specifier: NON_LITERAL}]);
+    expect(() => guard(`const w = new Worker("./w.js");\n`, ["./w.js"])).toThrow(/worker \.\/w\.js/);
+    expect(() => guard(`const w = new SharedWorker(new URL("./w.js", import.meta.url));\n`, ["./w.js"])).toThrow(/shared-worker \.\/w\.js/);
+    expect(() => guard(`const w = new Worker(scriptUrl);\n`)).toThrow(/worker <NON_LITERAL>/);
+    expect(disallowedImports({source: `new Worker("./w.js");`}, ["./w.js"], {allowWorkers: true})).toEqual([]);
+    expect(disallowedImports({source: `new Worker(u);`}, [NON_LITERAL], {allowWorkers: true})).toEqual([`worker ${NON_LITERAL}`]);
+  });
+  it("m. import.meta.resolve(literal) and import.meta.resolve(non-literal) are reported and fail", () => {
+    expect(scanImports({source: `import.meta.resolve("./x.js");\nimport.meta["resolve"](name);\n`})).toEqual([{kind: "import-meta-resolve", specifier: "./x.js"}, {kind: "import-meta-resolve", specifier: NON_LITERAL}]);
+    expect(() => guard(`const u = import.meta.resolve("./queue-core.js");\n`)).toThrow(/import-meta-resolve \.\/queue-core\.js/);
+    expect(() => guard(`const u = import.meta.resolve(name);\n`)).toThrow(/import-meta-resolve <NON_LITERAL>/);
+  });
+  it("n. importScripts(...) is reported per argument (non-literal and empty as NON_LITERAL) and fails", () => {
+    expect(scanImports({source: `importScripts("./a.js", "./b.js");\nself.importScripts(x);\nimportScripts();\n`})).toEqual([
+      {kind: "import-scripts", specifier: "./a.js"}, {kind: "import-scripts", specifier: "./b.js"}, {kind: "import-scripts", specifier: NON_LITERAL}, {kind: "import-scripts", specifier: NON_LITERAL}]);
+    expect(() => guard(`importScripts("./queue-core.js");\n`)).toThrow(/import-scripts \.\/queue-core\.js/);
+  });
+  it("o. navigator.serviceWorker.register(...) is reported and fails", () => {
+    expect(scanImports({source: `navigator.serviceWorker.register("./sw.js");\nwindow.navigator["serviceWorker"].register(u);\n`})).toEqual([{kind: "service-worker", specifier: "./sw.js"}, {kind: "service-worker", specifier: NON_LITERAL}]);
+    expect(() => guard(`navigator.serviceWorker.register("./sw.js");\n`, ["./sw.js"])).toThrow(/service-worker \.\/sw\.js/);
+  });
+  it("p. any non-call reference to require (globalThis.require, const r = require, window[\"require\"], require.resolve) is a REQUIRE_REFERENCE that fails; strings and comments are not counted", () => {
+    for (const src of [`const r = globalThis.require;\n`, `const r = require;\n`, `window["require"]("./x.js");\n`, `const p = require.resolve("./x.js");\n`, `function f(require) { return 1; }\n`]) {
+      expect(scanImports({source: src}).map(r => r.kind)).toContain("require-reference");
+      expect(() => guard(src, ["./x.js", "require"])).toThrow(/require-reference require/);
+    }
+    expect(scanImports({source: `require("./x.js");\n`})).toEqual([{kind: "require", specifier: "./x.js"}]);
+    expect(scanImports({source: `const s = "require";\n// globalThis.require\nconst t = \`require\`;\n`})).toEqual([]);
+  });
+  it("q. no real guarded renderer module (nor anything in their import closures) uses a Worker / import.meta.resolve / importScripts / serviceWorker load or references require", () => {
+    const guarded = ["views/operations.js", "operations-core.js", "retry-core.js", "views/executive.js", "executive-core.js", "views/return-summary.js", "return-summary-core.js", "views/install.js", "install-core.js", "views/matrix.js", "matrix-core.js", "views/posture.js", "posture-core.js", "views/queue.js", "queue-core.js", "views/readiness.js", "readiness-core.js", "views/tower.js", "views/inbox.js"];
+    const all = [...new Set([...guarded, ...guarded.flatMap(f => relativeImportClosure(path.join(rend, f), rend))])].sort();
+    expect(all.length).toBeGreaterThan(guarded.length);
+    for (const f of all) expect([f, scanImports(path.join(rend, f)).filter(r => r.kind === "require-reference" || MODULE_LOAD_KINDS.includes(r.kind))]).toEqual([f, []]);
+  });
+  describe("r. relativeImportClosure resolves symlinks with realpath (fixtures only under os.tmpdir())", () => {
+    let tmp = "";
+    beforeEach(() => { tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "uasco-sec-import-"))); });
+    afterEach(() => { if (tmp) fs.rmSync(tmp, {recursive: true, force: true}); tmp = ""; });
+    const mk = (f: string, src: string) => { fs.mkdirSync(path.dirname(f), {recursive: true}); fs.writeFileSync(f, src); };
+    it("a symlinked directory inside the root whose real path is OUTSIDE the root fails with CLOSURE_ESCAPES_ROOT", () => {
+      const root = path.join(tmp, "root"), outside = path.join(tmp, "outside");
+      mk(path.join(outside, "b.js"), `export const b = 1;\n`);
+      mk(path.join(root, "a.js"), `import {b} from "./link/b.js";\n`);
+      fs.symlinkSync(outside, path.join(root, "link"), "junction");
+      expect(fs.existsSync(path.join(root, "link", "b.js"))).toBe(true);
+      expect(() => relativeImportClosure(path.join(root, "a.js"), root)).toThrow(/CLOSURE_ESCAPES_ROOT in a\.js: \.\/link\/b\.js/);
+    });
+    it("positive control: a symlink whose real path stays inside the root is followed to its real file", () => {
+      const root = path.join(tmp, "root");
+      mk(path.join(root, "inner", "c.js"), `export const c = 1;\n`);
+      mk(path.join(root, "a.js"), `import {c} from "./alias/c.js";\n`);
+      fs.symlinkSync(path.join(root, "inner"), path.join(root, "alias"), "junction");
+      expect(relativeImportClosure(path.join(root, "a.js"), root)).toEqual(["inner/c.js"]);
+    });
   });
   it("h. mutation check on the REAL operations-core.js text: an appended disallowed multi-line import (in memory only) fails; the unmodified file passes", () => {
     const real = read("operations-core.js");
