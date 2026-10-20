@@ -330,6 +330,8 @@ Phases run in this order. A package starts only when its grants exist and its de
 
 ## 14. Open questions for the Founder
 
+> **Update 2026-10-20:** the Founder answered questions 1, 3, 4, 5, 8, 10 and 15 in `docs/planning/authority/FD-2026-10-20-MOB-PHASE0.md`, which also authorises MOB-1..MOB-9 as documentation-only work. The remaining questions stay open.
+
 Questions 1, 2, 3, 4, 5, 8, 9, 10, 12 and 15 decide the order of work.
 
 1. Connectivity for v1: same-Wi-Fi LAN pairing only (no outside service), a user-run VPN (which provider, or self-hosted WireGuard), or nothing beyond USB/emulator development? A cloud relay is excluded by your decision.
