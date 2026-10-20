@@ -524,3 +524,112 @@ describe("UX WP3 hardening: negative, accessibility and locale parity", () => {
     for (const k of pick(en)) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); }
   });
 });
+
+// //TR: UI-233 Hesap maruziyeti tablosu: el ile hesaplanmış fixture değerleri, UTC takvim günü ile gecikme, vadesi bilinmeyen sayımı, kaynak durumlarında "—"+rozet (asla 0), STALE işareti, hesap süzgeci ve skor/etiket üretilmemesi.
+describe("UI-233 account exposure table", () => {
+  const EXP = "company-exposure-table";
+  const cells = (r: N) => all(r).filter(n => n.tagName === "TD").map(n => n.textContent);
+  const NOW = Date.UTC(2026, 11, 1, 12, 0, 0); // 2026-12-01 UTC
+  const withInv = (invoices: any[]) => ({...FIX, "/v1/company/invoices": {invoices}});
+  const inv = (n: number, over: any) => ({recordKind: "invoice", invoiceId: id("inv", n), tenantId: "t1", accountId: A1, currency: "TRY", lineItems: [], totalMinor: 1000, paidMinor: 0, balanceMinor: 1000, status: "ISSUED", number: `INV-X${n}`, issuedAt: t(1), voidedAt: null, createdAt: t(1), createdBy: "x", ...over});
+  const run = async (fix: Record<string, any> | ((p: string) => any), now = NOW, lang = "en") => {
+    const company = await load("views", "company.js");
+    const m = await mkCtx(typeof fix === "function" ? (fix as (p: string) => any) : fromFix(fix), lang);
+    m.ctx.now = () => now;
+    return {...m, root: await company.render(m.ctx, {id: "company"}) as N};
+  };
+
+  it("lists one row per account with hand-computed per-currency pipeline, outstanding, overdue, unknown and awaiting-signature values", async () => {
+    const {root} = await run(FIX);
+    expect(rowsOf(root, EXP).length).toBe(2);
+    const tbl = table(root, EXP)!;
+    expect(all(tbl).some(n => n.tagName === "CAPTION")).toBe(true);
+    expect(all(tbl).filter(n => n.tagName === "TH").every(n => n.getAttribute("scope") === "col")).toBe(true);
+    // A1: open TRY 1.000,00 + 2.500,50 = 3,500.50 ; ISSUED 1,000.00 due 2026-11-01 < 2026-12-01 -> 1 overdue ; SENT 1
+    expect(cells(rowFor(root, EXP, A1))).toEqual(["Fixture Account One", "3,500.50 TRY", "1,000.00 TRY", "1", "0", "1"]);
+    // A2: open USD 50.00 ; PARTIALLY_PAID 150.00 USD with no dueDate -> unknown ; no SENT
+    expect(cells(rowFor(root, EXP, A2))).toEqual(["Fixture Account Two", "50.00 USD", "150.00 USD", "0", "1", "0"]);
+  });
+
+  it("judges overdue on the UTC calendar date and counts unreadable due dates/balances as unknown, never overdue or on time", async () => {
+    const fix = withInv([
+      inv(1, {dueDate: "2026-11-30"}), inv(2, {dueDate: "2026-12-01"}), inv(3, {dueDate: "2026-12-02"}),
+      inv(4, {dueDate: "2026-02-30"}), inv(5, {dueDate: undefined}), inv(6, {dueDate: "2026-11-01", balanceMinor: null, totalMinor: null, paidMinor: null}),
+      inv(7, {dueDate: "2026-01-01", status: "DRAFT"}), inv(8, {dueDate: "2026-01-01", status: "PAID", balanceMinor: 0, paidMinor: 1000}), inv(9, {dueDate: "2026-01-01", status: "VOID"}),
+      inv(10, {dueDate: "2026-11-01", status: "PARTIALLY_PAID", balanceMinor: 500})]);
+    const {root} = await run(fix, Date.UTC(2026, 11, 1, 23, 59, 59));
+    const c = cells(rowFor(root, EXP, A1));
+    expect(c[3]).toBe("2"); // inv1 + inv10 (inv2 is due today, not before)
+    expect(c[4]).toBe("3"); // inv4 invalid calendar date, inv5 missing, inv6 unreadable balance
+    const early = await run(fix, Date.UTC(2026, 10, 30, 23, 59, 59));
+    expect(cells(rowFor(early.root, EXP, A1))[3]).toBe("1"); // due 2026-11-30 is "today" (not before it); only inv10 (2026-11-01) is overdue
+  });
+
+  it("falls back to Date.now when ctx.now is absent and shows the dash for overdue when the clock is not finite", async () => {
+    const company = await load("views", "company.js");
+    const m = await mkCtx(fromFix(withInv([inv(1, {dueDate: "2000-01-01"}), inv(2, {dueDate: "9999-12-31"})])));
+    const root = await company.render(m.ctx, {id: "company"}) as N;
+    expect(cells(rowFor(root, EXP, A1))[3]).toBe("1"); // real clock: 2000 is past, 9999 is not
+    const bad = await run(FIX, Number.NaN);
+    const c = cells(rowFor(bad.root, EXP, A1));
+    expect(c[3]).toBe("—");
+    expect(c[4]).toBe("0");
+  });
+
+  it("shows the dash plus the honest source pill (never 0) when a source is not live, and a STALE marker with as-of time for stale data", async () => {
+    const fail = (key: string, err: string) => (p: string) => { if (p === `/v1/company/${key}`) throw new Error(err); return FIX[p]; };
+    for (const [err, pill] of [["INVALID_API_PATH", "NOT_CONNECTED"], ["/v1/company/invoices: HTTP 503", "UNAVAILABLE"], ["fetch failed", "OFFLINE"], ["/v1/company/invoices: HTTP 500", "FAILED"]] as const) {
+      const {root} = await run(fail("invoices", err));
+      const c = cells(rowFor(root, EXP, A1));
+      expect(c[2], err).toContain("—"); expect(c[3], err).toContain("—"); expect(c[4], err).toContain("—");
+      expect(c[2]).not.toMatch(/\b0\b/);
+      expect(c[1]).toBe("3,500.50 TRY"); expect(c[5]).toBe("1");
+      const row = rowFor(root, EXP, A1);
+      expect(all(row).filter(n => n.dataset.exposureCell === "missing" && n.dataset.source === "invoices").length).toBe(3);
+      expect(pills(row)).toContain(pill);
+    }
+    const {ctx} = await mkCtx(fromFix(FIX), "en");
+    ctx.now = () => NOW;
+    const company = await load("views", "company.js");
+    const stale: any = await (await mkCtx(fromFix(FIX), "en")).ctx.api.company();
+    stale.invoices = {...stale.invoices, state: "STALE", asOf: t(3), cause: "OFFLINE"};
+    ctx.api.company = async () => stale;
+    const root = await company.render(ctx, {id: "company"}) as N;
+    const row = rowFor(root, EXP, A1);
+    expect(cells(row)[2]).toContain("1,000.00 TRY");
+    expect(all(row).some(n => n.dataset.exposureCell === "stale" && n.dataset.source === "invoices")).toBe(true);
+    expect(pills(row)).toContain("STALE");
+  });
+
+  it("renders no exposure table for EMPTY or non-live accounts and honours the account filter", async () => {
+    const empty = await run(EMPTY_FIX);
+    expect(table(empty.root, EXP)).toBeUndefined();
+    const off = await run(() => { throw new Error("fetch failed"); });
+    expect(table(off.root, EXP)).toBeUndefined();
+    const company = await load("views", "company.js");
+    const m = await mkCtx(fromFix(FIX)); m.ctx.now = () => NOW;
+    let root = await company.render(m.ctx, {id: "company"}) as N;
+    const select = all(root).find(n => n.id === "company-account-filter")!;
+    select.fire("change", {target: {value: A2}});
+    root = await company.render(m.ctx, {id: "company"}) as N;
+    expect(rowsOf(root, EXP).map(r => r.dataset.recordId)).toEqual([A2]);
+  });
+
+  it("falls back to the raw account id when the name is missing, and produces no score, rating or health label (TR and EN)", async () => {
+    const fix = {...FIX, "/v1/company/accounts": {accounts: [{recordKind: "account", accountId: A1, tenantId: "t1", createdAt: t(1), createdBy: "x"}]}};
+    for (const lang of ["en", "tr"]) {
+      const {root} = await run(fix, NOW, lang);
+      expect(cells(rowFor(root, EXP, A1))[0]).toBe(A1);
+      const text = all(root).filter(n => n.dataset.note === "exposure-recorded").map(n => n.textContent).join("");
+      expect(text.length).toBeGreaterThan(20);
+      const tblText = table(root, EXP)!.textContent;
+      expect(tblText).not.toMatch(/healthy|at[- ]risk|low[- ]risk|score|rating|sağlıklı|riskli|skor/i);
+    }
+  });
+
+  it("defines every exposure key in TR and EN with identical placeholders", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const keys = ["company.exposure.title", "company.exposure.note", ...["pipelineOpen", "outstanding", "overdue", "dueUnknown", "awaitingSig"].map(k => `company.col.${k}`)];
+    for (const k of keys) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); expect((en[k].match(/\{\w+\}/g) ?? []).join(), k).toBe((tr[k].match(/\{\w+\}/g) ?? []).join()); }
+  });
+});

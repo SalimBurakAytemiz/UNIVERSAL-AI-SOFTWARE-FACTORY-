@@ -138,3 +138,41 @@ export function accountName(accounts,id){
 }
 /** Seçili hesaba göre süzer (null = tümü); hesaba bağlı olmayan kayıt (accountId yok) süzülmüş görünümde yer almaz. */
 export function forAccount(items,accountId){return accountId?items.filter(x=>x.accountId===accountId):items}
+
+// ---------- Hesap maruziyeti (yalnız kayıtlı gerçekler; skor/etiket yok) ----------
+const OWED_STATUSES=Object.freeze(["ISSUED","PARTIALLY_PAID"]);
+/** //TR: Takvim geçerli YYYY-MM-DD (ör. 2026-02-30 geçersiz) ise aynı metni, değilse null döndürür. */
+export function calendarDate(x){
+  if(typeof x!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(x))return null;
+  const d=new Date(`${x}T00:00:00.000Z`);
+  return !Number.isNaN(d.getTime())&&d.toISOString().slice(0,10)===x?x:null;
+}
+/** //TR: Fatura alacak (ISSUED/PARTIALLY_PAID) ise vade durumunu sınıflar: OVERDUE yalnız bakiye geçerli pozitif tamsayı ve vade geçerli takvim tarihi olup UTC bugününden kesin önceyse; vade/bakiye okunamıyorsa UNKNOWN (asla gecikmiş/zamanında sayılmaz); diğerleri ON_TIME; alacak olmayan fatura null. todayUtc geçersizse OVERDUE belirlenemez (yalnız UNKNOWN/NOT_JUDGED). */
+export function invoiceDueClass(inv,todayUtc){
+  if(!OWED_STATUSES.includes(inv.status))return null;
+  const due=calendarDate(inv.dueDate),bal=inv.balanceMinor;
+  if(due===null||!Number.isSafeInteger(bal)||bal<0)return "UNKNOWN";
+  if(!(Number.isSafeInteger(bal)&&bal>0)||todayUtc===null)return "ON_TIME";
+  return due<todayUtc?"OVERDUE":"ON_TIME";
+}
+/**
+ * //TR: Hesap başına kayıtlı maruziyet satırları: açık hat (OPEN_STAGES), açık bakiye (para birimi bazlı, asla toplanmaz), gecikmiş/vadesi bilinmeyen fatura sayısı, imza bekleyen (SENT) sözleşme. Kaynak canlı değilse ilgili hücre null'dır (0 değildir). Saat sonlu değilse gecikmiş sayısı null'dır.
+ * res: {accounts,opportunities,invoices,contracts}; accountId: süzgeç (null=tümü); nowMs: ctx.now() değeri.
+ */
+export function accountExposure(res,accountId,nowMs){
+  const clockOk=Number.isFinite(nowMs),today=clockOk?new Date(nowMs).toISOString().slice(0,10):null;
+  const accounts=res.accounts&&isLive(res.accounts)?forAccount(res.accounts.items.map(a=>({...a,accountId:a.id})),accountId):[];
+  return accounts.map(a=>{
+    const opps=isLive(res.opportunities)?res.opportunities.items.filter(o=>o.accountId===a.id&&OPEN_STAGES.includes(o.stage)):null;
+    const owed=isLive(res.invoices)?res.invoices.items.filter(i=>i.accountId===a.id&&OWED_STATUSES.includes(i.status)):null;
+    const cls=owed&&owed.map(i=>invoiceDueClass(i,today));
+    return {
+      id:a.id,name:a.name,
+      pipeline:opps&&sumByCurrency(opps,o=>o.amountMinor),
+      outstanding:owed&&sumByCurrency(owed,i=>i.balanceMinor),
+      overdue:cls&&clockOk?cls.filter(c=>c==="OVERDUE").length:null,
+      dueUnknown:cls?cls.filter(c=>c==="UNKNOWN").length:null,
+      awaitingSignature:isLive(res.contracts)?res.contracts.items.filter(c=>c.accountId===a.id&&c.status==="SENT").length:null
+    };
+  });
+}
