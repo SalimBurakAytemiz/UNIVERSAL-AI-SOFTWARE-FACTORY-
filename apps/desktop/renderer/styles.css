@@ -524,8 +524,10 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .wf-fleet-kv dt{color:var(--muted)}
 .wf-fleet-kv dd{margin:0}
 .wf-fleet-unknown{color:var(--muted)}
+/* //TR: UI-032 işçi ayrıntı paneli: yalnız mevcut token'lar. */
+.wf-fleet-detail{display:grid;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-2)}
 @media (forced-colors:active){
-  .wf-fleet-card{border:1px solid CanvasText;forced-color-adjust:auto}
+  .wf-fleet-card,.wf-fleet-detail{border:1px solid CanvasText;forced-color-adjust:auto}
 }
 /* //TR: UX WP-QA-SEC Güvence (QA + Güvenlik) görünümü: WP2 token/bileşenlerini yeniden kullanır, YENİ renk token'ı eklemez; renk tek başına anlam taşımaz (ikon+metin+desen). */
 .qa-stats{margin:var(--space-2) 0}
