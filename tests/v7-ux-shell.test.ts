@@ -168,7 +168,7 @@ function mountHost(doc: D) {
   for (const id of HOST_IDS) { const n = new N(doc, id === "projectSelect" ? "select" : id === "searchInput" ? "input" : id === "stopDialog" ? "dialog" : id === "searchResults" ? "ul" : "button"); n.setAttribute("id", id); doc.body.append(n); }
   // stopBtn needs a .stop-text child only if renderStop runs; palette path does not call renderStop.
 }
-async function mkShell(lang = "tr") {
+async function mkShell(lang = "tr", confirmImpl?: (o: any) => Promise<boolean>) {
   const shellMod = await load("shell.js"), apiMod = await load("api.js"), i18n = await load("i18n.js"), forms = await load("forms.js");
   const doc = new D(); mountHost(doc);
   const store: any = { projectId: null, epoch: 0, cache: new Map(), samples: new Map(), lastRefreshAt: null, markRefreshed() {} };
@@ -177,7 +177,9 @@ async function mkShell(lang = "tr") {
   const t = (k: string, v?: any) => i18n.translate(lang, k, v);
   const nav: string[] = [], sel: Array<string | null> = [];
   const ctx: any = { doc, store, api, i18n: { lang, t, setLang() {}, onChange() { return () => {}; } }, t, principal: "FOUNDER_LOCAL",
-    navigate: (id: string) => nav.push(id), selectProject: (id: string | null) => { sel.push(id); }, currentRouteId: () => "home" };
+    navigate: (id: string) => nav.push(id), selectProject: (id: string | null) => { sel.push(id); }, currentRouteId: () => "home", resume: async () => { resumed.push(1); } };
+  const resumed: number[] = [];
+  if (confirmImpl) ctx.confirm = confirmImpl;
   // window seeded as "firstrun seen" so maybeOpenFirstRun does nothing during wireStatic.
   const prevWindow = (globalThis as any).window;
   (globalThis as any).window = { localStorage: { getItem: () => "1", setItem() {}, removeItem() {} } };
@@ -186,7 +188,7 @@ async function mkShell(lang = "tr") {
   shell.data.missions = { state: "VERIFIED", items: [{ missionId: MSN, projectId: PRJ, title: "Mission Bir", status: "EXECUTING" }] };
   shell.wireStatic();
   (globalThis as any).window = prevWindow;
-  return { shell, doc, ctx, nav, sel, calls, posts, forms, routes: await load("routes.js"), t };
+  return { resumed, shell, doc, ctx, nav, sel, calls, posts, forms, routes: await load("routes.js"), t };
 }
 const options = (doc: D) => within(doc.getElementById("searchResults")).filter(n => n.getAttribute("role") === "option");
 const groups = (doc: D) => within(doc.getElementById("searchResults")).filter(n => n.className === "search-group");
@@ -375,5 +377,30 @@ describe("UI-251 Recovery Center: fail-closed core, honest alert panel, retry/ho
     for (const k of sub(tr)) expect(ph(tr[k]), k).toBe(ph(en[k]));
     for (const r of ["VIEW_FAILED", "API_DOWN"]) for (const p of ["title", "desc"]) expect(tr[`recovery.${p}.${r}`]).toBeTruthy();
     for (const s of ["VERIFIED", "LOADING", "OFFLINE", "ERROR", "FAILED", "UNAVAILABLE", "UNKNOWN"]) expect(tr[`recovery.health.${s}`]).toBeTruthy();
+  });
+});
+
+describe("UI-007 Resume confirmation in the shell stop banner", () => {
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  it("confirm=true: resume called once only after the dialog resolves; re-entry guard blocks a second click", async () => {
+    let release!: (v: boolean) => void; const asked: any[] = [];
+    const env = await mkShell("en", o => { asked.push(o); return new Promise(r => { release = r; }); });
+    const btn = env.doc.getElementById("resumeBtn")!;
+    btn.fire("click"); btn.fire("click"); await tick();
+    expect(asked).toHaveLength(1); expect(env.resumed).toEqual([]);
+    expect(asked[0].body).toBe(env.t("resume.confirm.body"));
+    release(true); await tick();
+    expect(env.resumed).toEqual([1]);
+  });
+  it("confirm=false: no resume and confirm.cancelled is announced", async () => {
+    const env = await mkShell("en", async () => false);
+    env.doc.getElementById("resumeBtn")!.fire("click"); await tick();
+    expect(env.resumed).toEqual([]);
+    expect(env.doc.getElementById("status")!.textContent).toBe(env.t("confirm.cancelled"));
+  });
+  it("missing ctx.confirm: fails closed, no resume", async () => {
+    const env = await mkShell("en");
+    env.doc.getElementById("resumeBtn")!.fire("click"); await tick();
+    expect(env.resumed).toEqual([]);
   });
 });
