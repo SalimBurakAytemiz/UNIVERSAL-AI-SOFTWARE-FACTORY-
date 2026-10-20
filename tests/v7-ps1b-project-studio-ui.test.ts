@@ -1541,3 +1541,86 @@ describe("UX hardening: executors panel functional / negative / a11y", () => {
     expect(used.filter(k => !(k in tr && k in en))).toEqual([]);
   });
 });
+
+describe("UI-125: brownfield import shows the server's specific rejection and failure codes", () => {
+  const ZIP = ["ZIP_INVALID", "ZIP_UNSUPPORTED_FEATURE", "ZIP_PATH_TRAVERSAL", "ZIP_INVALID_NAME", "ZIP_FORBIDDEN_PATH", "ZIP_SYMLINK_REJECTED", "ZIP_SPECIAL_FILE_REJECTED", "ZIP_DUPLICATE_ENTRY", "ZIP_TOO_LARGE", "ZIP_TOO_MANY_FILES", "ZIP_CRC_MISMATCH", "ZIP_EMPTY"];
+  const REJ = ["IMPORT_PATH_INVALID", "IMPORT_REMOTE_NOT_SUPPORTED", "IMPORT_PATH_NOT_ABSOLUTE", "IMPORT_SOURCE_FORBIDDEN", "IMPORT_SOURCE_NOT_FOUND", "IMPORT_SOURCE_NOT_A_REPOSITORY", ...ZIP];
+  const ph = (s: string) => (s.match(/\{[A-Za-z0-9_]+\}/g) ?? []).sort();
+  const load2 = async () => ({pc: await load(rend, "project-core.js"), wc: await load(rend, "work-core.js"), en: (await load(rend, "locales", "en.js")).default as Record<string, string>, tr: (await load(rend, "locales", "tr.js")).default as Record<string, string>});
+  const r = (status: number, body: unknown) => ({status, body});
+
+  it("every closed-set rejection code maps to a static key that prints the exact code, never post.err.400", async () => {
+    const {pc, en, tr} = await load2();
+    for (const code of REJ) {
+      const d = pc.describeImportResult(r(400, {error: "IMPORT_REJECTED", reason: code}));
+      expect(d.ok).toBe(false);
+      expect(d.key).not.toBe("post.err.400");
+      expect(d.key).toMatch(/^studio\.import\.err\./);
+      expect(d.vars).toEqual({status: 400, code});
+      expect(en[d.key]).toContain("{code}"); expect(tr[d.key]).toContain("{code}");
+    }
+  });
+  it("unknown safe codes get the generic code keys; missing or unsafe codes get a generic key without a code", async () => {
+    const {pc, en, tr} = await load2();
+    expect(pc.describeImportResult(r(400, {error: "IMPORT_REJECTED", reason: "SOMETHING_NEW"}))).toEqual({ok: false, key: "studio.import.err.rejectedCode", vars: {status: 400, code: "SOMETHING_NEW"}});
+    expect(pc.describeImportResult(r(422, {error: "IMPORT_FAILED", reason: "SOMETHING_NEW"}))).toEqual({ok: false, key: "studio.import.err.failedCode", vars: {status: 422, code: "SOMETHING_NEW"}});
+    for (const reason of [undefined, null, 5, "lower", "A", "X".repeat(65), "BAD CODE", "<b>X_Y</b>"]) {
+      const d = pc.describeImportResult(r(400, {error: "IMPORT_REJECTED", reason}));
+      expect(d.key).toBe("studio.import.err.rejected"); expect(d.vars).toEqual({status: 400});
+      expect(pc.describeImportResult(r(422, {error: "IMPORT_FAILED", reason})).key).toBe("studio.import.err.failed");
+    }
+    for (const k of ["studio.import.err.rejected", "studio.import.err.failed"]) expect(en[k]).not.toContain("{code}");
+    expect(tr["studio.import.err.rejectedCode"]).toContain("{code}");
+  });
+  it("422 specific reasons and the three 409 variants map to specific keys", async () => {
+    const {pc} = await load2();
+    const keys = new Set<string>();
+    for (const code of ["GIT_CLONE_FAILED", "IMPORT_SOURCE_EMPTY", "AGENT_CONFIG_QUARANTINE_FAILED"]) {
+      const d = pc.describeImportResult(r(422, {error: "IMPORT_FAILED", reason: code}));
+      expect(d.vars).toEqual({status: 422, code}); expect(d.key).not.toBe("studio.import.err.failedCode"); keys.add(d.key);
+    }
+    expect(keys.size).toBe(3);
+    for (const b of [{error: "PROJECT_REPOSITORY_ALREADY_MANAGED"}, {error: "DEVRUN_ACTIVE"}, {error: "WORKOS_CONFLICT", reason: "RUN_ALREADY_ACTIVE"}]) {
+      const d = pc.describeImportResult(r(409, b));
+      expect(d.ok).toBe(false); expect(d.key).toMatch(/^studio\.import\.err\./); keys.add(d.key);
+    }
+    expect(keys.size).toBe(6);
+  });
+  it("every other response delegates to describePostResult unchanged; ok only on 2xx", async () => {
+    const {pc, wc} = await load2();
+    const cases: unknown[] = [r(202, {}), r(200, {error: "IMPORT_REJECTED"}), r(400, {error: "OTHER"}), r(400, null), r(401, {}), r(403, {error: "ACTION_DENIED", reason: "X_Y"}), r(404, {}), r(409, {error: "SOMETHING"}), r(409, {error: "WORKOS_CONFLICT", reason: "OTHER_REASON"}), r(423, {}), r(503, {}), r(500, {error: "IMPORT_FAILED", reason: "GIT_CLONE_FAILED"}), r(422, {error: "OTHER"}), {thrown: true, state: "OFFLINE"}, {thrown: true}, null, undefined];
+    for (const c of cases) expect(pc.describeImportResult(c)).toEqual(wc.describePostResult(c));
+    expect(pc.describeImportResult(r(202, {})).ok).toBe(true);
+    expect(pc.describeImportResult(r(400, {error: "IMPORT_REJECTED", reason: "ZIP_EMPTY"})).ok).toBe(false);
+  });
+  it("en/tr: all UI-125 keys exist, are non-empty and keep identical placeholders; messages make no unsupported claims", async () => {
+    const {pc, en, tr} = await load2();
+    const ks = Object.keys(en).filter(k => k.startsWith("studio.import.err."));
+    expect(ks.length).toBeGreaterThanOrEqual(19);
+    for (const k of ks) { expect(en[k].length).toBeGreaterThan(0); expect(tr[k], k).toBeTruthy(); expect(ph(tr[k]), k).toEqual(ph(en[k])); expect(en[k]).not.toMatch(/\b(type|paste|enter)\b.*\b(path|URL)\b/i); }
+    for (const code of REJ) expect(ks).toContain(pc.describeImportResult(r(400, {error: "IMPORT_REJECTED", reason: code})).key);
+  });
+  it("panel: a failed import shows the specific key, keeps the chosen path for retry and focuses the alert; 2xx still resets", async () => {
+    const cases: Array<[number, any, string]> = [[400, {error: "IMPORT_REJECTED", reason: "ZIP_TOO_LARGE"}, "zip"], [422, {error: "IMPORT_FAILED", reason: "GIT_CLONE_FAILED"}, "git"], [409, {error: "PROJECT_REPOSITORY_ALREADY_MANAGED"}, "git"]];
+    for (const [status, body, kind] of cases) {
+      const native = {pickImportPath: async (k: string) => ({cancelled: false, path: k === "zip" ? "C:\\z\\a.zip" : "C:\\Projeler\\app", kind: k})};
+      const {ctx, doc, calls} = await mkCtx({get: projectsGet(), post: () => ({status, body}), native});
+      let root = mount(doc, await projectsView.render(ctx));
+      if (kind === "zip") { const sel = byId(root, "studio-import-kind")!; sel.value = "zip"; sel.fire("change"); await tick(); root = mount(doc, await projectsView.render(ctx)); }
+      byId(root, "studio-import-pick")!.fire("click"); await tick();
+      root = mount(doc, await projectsView.render(ctx));
+      const expected = (await load(rend, "project-core.js")).describeImportResult({status, body});
+      byId(root, "studio-import-form")!.fire("submit"); await tick();
+      expect(calls.post.length).toBe(1);
+      expect(Object.keys(calls.post[0].body)).toEqual(["kind", "path"]);
+      expect(forms.drafts.status["studio-import"].ok).toBe(false);
+      expect(forms.drafts.status["studio-import"].key).toBe(expected.key);
+      expect(forms.drafts.status["studio-import"].key).not.toBe("post.err.400");
+      expect(st.importDraft.path).not.toBe("");
+      root = mount(doc, await projectsView.render(ctx));
+      const alert = byId(root, "studio-import-status");
+      expect(alert).not.toBeNull(); expect(alert!.attrs.get("role")).toBe("alert");
+      expect(text(alert!)).not.toContain("schema validation");
+    }
+  });
+});

@@ -1,6 +1,6 @@
 // //TR: Bu modül PS-1B Project Studio'nun saf (DOM'suz) çekirdeğidir: sihirbaz/içe aktarma/dev-run/dışa aktarma/yürütücü istek gövdesi kurucuları (argv dizisi, idempotency), main allow-list ile aynı kurallı GET yol kurucuları, dev-run/dosya/git/dışa aktarma/yürütücü eşleyicileri, renderer tarafı gizli bilgi sansürü (backend sansürüne ek savunma), boyut sınırları ve önizleme kapısı; eksik veri asla uydurulmaz, 404 dürüst UNAVAILABLE olarak kalır.
 import {MISSING} from "./model.js";
-import {normalizeArgv,validatePath,IDEMPOTENCY_KEY_RE,PROJECT_ID_RE,SAFE_ID_RE,MAX_BODY_BYTES,MAX_CRITERIA} from "./work-core.js";
+import {describePostResult,normalizeArgv,validatePath,IDEMPOTENCY_KEY_RE,PROJECT_ID_RE,SAFE_ID_RE,MAX_BODY_BYTES,MAX_CRITERIA} from "./work-core.js";
 
 export const TEMPLATES=Object.freeze(["web-node","node-lib","empty"]);
 export const TARGET_OS=Object.freeze(["windows","macos","linux"]);
@@ -134,6 +134,32 @@ export function buildWizardRequest(input,{key}={}){
   if(key!==undefined)body.idempotencyKey=String(key);
   if(!Object.keys(errors).length&&bodyBytes(body)>MAX_BODY_BYTES)errors.form="err.tooLarge";
   return result("/v1/projects",body,errors);
+}
+/** İçe aktarma yanıtı sınıflaması: sunucunun sabit ret/hata kodlarını belirli anahtarlara eşler; diğer her yanıt describePostResult'a devredilir. */
+const IMPORT_CODE_RE=/^[A-Z][A-Z0-9_]{1,63}$/;
+const IMPORT_REJECT_KEYS=Object.freeze({
+  IMPORT_PATH_INVALID:"studio.import.err.pathInvalid",IMPORT_REMOTE_NOT_SUPPORTED:"studio.import.err.remote",IMPORT_PATH_NOT_ABSOLUTE:"studio.import.err.notAbsolute",
+  IMPORT_SOURCE_FORBIDDEN:"studio.import.err.forbidden",IMPORT_SOURCE_NOT_FOUND:"studio.import.err.notFound",IMPORT_SOURCE_NOT_A_REPOSITORY:"studio.import.err.notRepo",
+  ZIP_INVALID:"studio.import.err.zipInvalid",ZIP_CRC_MISMATCH:"studio.import.err.zipInvalid",ZIP_UNSUPPORTED_FEATURE:"studio.import.err.zipInvalid",
+  ZIP_PATH_TRAVERSAL:"studio.import.err.zipPath",ZIP_INVALID_NAME:"studio.import.err.zipPath",ZIP_FORBIDDEN_PATH:"studio.import.err.zipPath",ZIP_SYMLINK_REJECTED:"studio.import.err.zipPath",ZIP_SPECIAL_FILE_REJECTED:"studio.import.err.zipPath",
+  ZIP_TOO_LARGE:"studio.import.err.zipLimit",ZIP_TOO_MANY_FILES:"studio.import.err.zipLimit",ZIP_DUPLICATE_ENTRY:"studio.import.err.zipContent",ZIP_EMPTY:"studio.import.err.zipContent"});
+const IMPORT_FAILED_KEYS=Object.freeze({GIT_CLONE_FAILED:"studio.import.err.cloneFailed",IMPORT_SOURCE_EMPTY:"studio.import.err.sourceEmpty",AGENT_CONFIG_QUARANTINE_FAILED:"studio.import.err.quarantine"});
+export function describeImportResult(res){
+  const s=res?.status,b=res&&!res.thrown&&res.body&&typeof res.body==="object"?res.body:null,err=typeof b?.error==="string"?b.error:"",r=b?.reason,code=typeof r==="string"&&IMPORT_CODE_RE.test(r)?r:null;
+  if(s===400&&err==="IMPORT_REJECTED"){
+    if(code&&Object.hasOwn(IMPORT_REJECT_KEYS,code))return {ok:false,key:IMPORT_REJECT_KEYS[code],vars:{status:s,code}};
+    return code?{ok:false,key:"studio.import.err.rejectedCode",vars:{status:s,code}}:{ok:false,key:"studio.import.err.rejected",vars:{status:s}};
+  }
+  if(s===422&&err==="IMPORT_FAILED"){
+    if(code&&Object.hasOwn(IMPORT_FAILED_KEYS,code))return {ok:false,key:IMPORT_FAILED_KEYS[code],vars:{status:s,code}};
+    return code?{ok:false,key:"studio.import.err.failedCode",vars:{status:s,code}}:{ok:false,key:"studio.import.err.failed",vars:{status:s}};
+  }
+  if(s===409){
+    if(err==="PROJECT_REPOSITORY_ALREADY_MANAGED")return {ok:false,key:"studio.import.err.alreadyManaged",vars:{status:s}};
+    if(err==="DEVRUN_ACTIVE")return {ok:false,key:"studio.import.err.devrunActive",vars:{status:s}};
+    if(err==="WORKOS_CONFLICT"&&r==="RUN_ALREADY_ACTIVE")return {ok:false,key:"studio.import.err.runActive",vars:{status:s}};
+  }
+  return describePostResult(res);
 }
 /** İçe aktarma: yol yalnız ana süreçteki dosya diyaloğundan gelir; renderer burada yalnız biçimi doğrular. */
 export function buildImportRequest({projectId,kind,path}){
