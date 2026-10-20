@@ -5,7 +5,7 @@ Authority: UNVERIFIED reference. This note cites a "Founder directive 2026-10-18
 
 ```
 node docs/planning/dispatch.mjs [--claim] [--owner <id>] [--backlog <path>] [--remote <name>]
-                                [--base-branch v7/integration] [--stale-hours 6] [--open-prs a,b] [--no-lease]
+                                [--base-branch v7/integration] [--stale-hours 6] [--open-prs a,b] [--max-active N] [--no-lease]
 ```
 
 Prints one JSON line `{outcome, taskId, branch, claimRef, reasons[], ...}`. Exit: 0 START/NO_ACTION, 2 BLOCKED, 3 RECOVERABLE_FAILURE.
@@ -46,7 +46,20 @@ Exactly one JSON line. Every string in it is either (a) a fixed code written in 
 Failure codes are ADVISORY LABELS. They come from pattern-matching text that the remote, a server hook or a lease module controls, and the order is first match wins; a hook can therefore make its rejection look like another code (for example `NETWORK` or `PERMISSION_DENIED`). Use them to help a human triage; never gate a decision on one. `timed out`, `ssl` and `tls` match only as whole words.
 
 ## Recovery
-A claim is `RECLAIMABLE` (reported only, never deleted) when its ref has no commits beyond base other than `dispatch-claim` commits, the claim commit tree equals the base tree, the newest claim commit is older than `--stale-hours`, and its branch is not in `--open-prs`. A claim whose tree differs from base is `HAS_WORK_COMMITS`. A future-dated claim (negative age) is `UNKNOWN` (`CLAIM_AGE_NEGATIVE_FUTURE_DATED`), never `FRESH`. States also reported: `FRESH`, `OPEN_PR`, `UNKNOWN`. An operator must delete the ref (and `refs/uasco/claims/<id>`) by hand to release it.
+Every claim branch of a backlog task (any status) is classified, reported only, and never deleted, reclaimed or re-selected:
+- `OPEN_PR`: branch is in `--open-prs` (wins over every other state).
+- `MERGED_AWAITING_WRITEBACK`: the branch head is an ancestor of the base tip (merged), whatever the backlog status. Not active; waiting for write-back.
+- Pure claim: every commit beyond `merge-base(branch, base)` is a `dispatch-claim:` commit with exactly one parent and the same tree as that parent. This does not depend on the current base tree, so a base advance never turns a pure claim into work. Pure + newest claim commit older than `--stale-hours` => `RECLAIMABLE`, otherwise `FRESH`. A future-dated pure claim is `UNKNOWN` (`CLAIM_AGE_NEGATIVE_FUTURE_DATED`).
+- Anything else is work: `HAS_WORK_COMMITS` with `lastActivityAt` (head commit committer date) and `ageHours`; when `ageHours` exceeds `--stale-hours` it is `ABANDONED_WITH_WORK` (a crashed builder's branch; an operator decides; it no longer holds a capacity slot). A future-dated head stays `HAS_WORK_COMMITS` with `why: ACTIVITY_FUTURE_DATED` and no `ageHours`.
+- `UNKNOWN` with a fixed `why` when git cannot decide.
+
+An operator must delete the ref (and `refs/uasco/claims/<id>`) by hand to release a claim. Ages depend on the committer clock.
+
+Claim already in base history: before claiming (and before offering `START` in a dry run) task `X`, `git log --fixed-strings --grep="dispatch-claim: X " --max-count=200 <baseSha>` is checked for a reachable commit whose subject starts with exactly `dispatch-claim: X ` (exact id; `X-1` never matches `X-10`). A hit means the claim was already made and merged (its branch may be deleted): nothing is claimed, reason `X:CLAIM_IN_BASE_HISTORY`. If the check itself fails the task is skipped with `X:CLAIM_HISTORY_CHECK_FAILED` (fail-closed). Subjects are never echoed.
+
+Capacity cap: `--max-active N` (integer 1..16, else `ARG_INVALID:--max-active`). `active` (always in the output) = claim branches in `FRESH` or `HAS_WORK_COMMITS` and not in `--open-prs` (not `ABANDONED_WITH_WORK`, `MERGED_AWAITING_WRITEBACK`, `RECLAIMABLE`, `UNKNOWN`). With `--claim`, `active >= N` claims nothing: `NO_ACTION` with reason `CAPACITY_FULL:<active>/<N>`. The cap applies to `--claim` only (a dry run still reports `active`). It is NOT atomic across overlapping processes (each counts, then claims, so two racing dispatchers can both pass the check); the per-task create-only claim ref stays the only atomic guarantee.
+
+`--open-prs`: an explicit empty value (`--open-prs ""`) means no open PRs. A flag with no following argument (or followed by another `--flag`) stays fail-closed: `ARG_MISSING_VALUE:--open-prs`.
 
 ## Exact limitations
 - What IS atomic: the git server's create-if-absent on the single claim ref. Two concurrent dispatchers can never both create it; the loser sees a rejected push. Likewise the lease ref create.

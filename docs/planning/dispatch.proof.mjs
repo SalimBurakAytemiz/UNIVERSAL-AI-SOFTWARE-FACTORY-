@@ -181,7 +181,7 @@ for (const mode of [[], ["--no-lease"]]) {
   const mk = (subj, ts) => G(e.work, ["commit-tree", tree, "-p", base, "-m", subj], {GIT_COMMITTER_DATE: `${ts} +0000`, GIT_AUTHOR_DATE: `${ts} +0000`});
   G(e.work, ["push", "-q", "origin", `${mk("dispatch-claim: S-1 owner=dead", old)}:refs/heads/claude/s-1`]);
   G(e.work, ["push", "-q", "origin", `${mk("dispatch-claim: S-2 owner=dead", old)}:refs/heads/claude/s-2`]);
-  G(e.work, ["push", "-q", "origin", `${mk("real work", old)}:refs/heads/claude/s-3`]);
+  G(e.work, ["push", "-q", "origin", `${mk("real work", fresh)}:refs/heads/claude/s-3`]);
   G(e.work, ["push", "-q", "origin", `${mk("dispatch-claim: S-4 owner=ok", fresh)}:refs/heads/claude/s-4`]);
   const before = heads(e.bare).length;
   const r = dispatchSync(e.work, ["--backlog", e.bl, "--open-prs", "claude/s-2"]);
@@ -411,10 +411,121 @@ const writeHook = (bare, body) => { fs.mkdirSync(path.join(bare, "hooks"), {recu
   G(e.work, ["push", "-q", "origin", `${G(e.work, ["commit-tree", tree, "-p", base, "-m", "dispatch-claim: U-1 owner=x"], d(future))}:refs/heads/claude/u-1`]);
   fs.writeFileSync(path.join(e.work, "extra"), "y"); G(e.work, ["add", "-A"]); G(e.work, ["commit", "-q", "-m", "tmp"]);
   const tree2 = G(e.work, ["rev-parse", "HEAD^{tree}"]);
-  G(e.work, ["push", "-q", "origin", `${G(e.work, ["commit-tree", tree2, "-p", base, "-m", "dispatch-claim: U-2 owner=x"], d(old))}:refs/heads/claude/u-2`]);
+  G(e.work, ["push", "-q", "origin", `${G(e.work, ["commit-tree", tree2, "-p", base, "-m", "dispatch-claim: U-2 owner=x"], d(Math.floor(Date.now() / 1000) - 3600))}:refs/heads/claude/u-2`]);
   const r = dispatchSync(e.work, ["--backlog", e.bl]);
   const st = Object.fromEntries((r.j?.reclaimable ?? []).map(x => [x.taskId, x.state]));
   check("future-dated claim => UNKNOWN (not FRESH); claim with changed tree => HAS_WORK_COMMITS (not RECLAIMABLE)", st["U-1"] === "UNKNOWN" && st["U-2"] === "HAS_WORK_COMMITS", JSON.stringify(r.j?.reclaimable));
+}
+// 12b. CP-DISPATCH-RECOVERY: aging of work branches, base-advance-proof pure claims, merged heads, claim in base history, capacity cap, --open-prs "".
+{
+  const now = () => Math.floor(Date.now() / 1000);
+  const dt = ts => ({GIT_COMMITTER_DATE: `${ts} +0000`, GIT_AUTHOR_DATE: `${ts} +0000`});
+  const baseOf = e => ({sha: G(e.work, ["rev-parse", "origin/v7/integration"]), tree: G(e.work, ["rev-parse", "origin/v7/integration^{tree}"])});
+  const claimC = (e, parent, id, ts, tree) => G(e.work, ["commit-tree", tree ?? G(e.work, ["rev-parse", `${parent}^{tree}`]), "-p", parent, "-m", `dispatch-claim: ${id} owner=x`], dt(ts));
+  const workC = (e, parent, ts, file) => { // a tree-changing commit on top of parent
+    const idx = path.join(e.dir, `idx${++seq}`);
+    const env = {GIT_INDEX_FILE: idx};
+    G(e.work, ["read-tree", parent], env);
+    const blob = G(e.work, ["hash-object", "-w", "--stdin"], env).length ? null : null; void blob;
+    fs.writeFileSync(path.join(e.dir, "w.txt"), `w${seq}`);
+    const b = G(e.work, ["hash-object", "-w", path.join(e.dir, "w.txt")]);
+    G(e.work, ["update-index", "--add", "--cacheinfo", `100644,${b},${file}`], env);
+    return G(e.work, ["commit-tree", G(e.work, ["write-tree"], env), "-p", parent, "-m", "real work"], dt(ts));
+  };
+  const push = (e, sha, br) => G(e.work, ["push", "-q", "origin", `${sha}:refs/heads/${br}`]);
+  const advanceBase = e => { fs.writeFileSync(path.join(e.work, `adv${++seq}`), "z"); G(e.work, ["add", "-A"]); G(e.work, ["commit", "-q", "-m", "advance"]); G(e.work, ["push", "-q", "origin", "v7/integration"]); };
+  const states = r => Object.fromEntries((r.j?.reclaimable ?? []).map(x => [x.taskId, x]));
+  const OLD = now() - 10 * 3600, FRESH = now() - 600;
+
+  // Item 1: HAS_WORK_COMMITS ages to ABANDONED_WITH_WORK (reported only).
+  {
+    const e = mkEnv([T("A-1"), T("A-2"), T("A-3"), T("A-4")]); const b = baseOf(e);
+    push(e, workC(e, claimC(e, b.sha, "A-1", OLD), OLD, "f1"), "claude/a-1");
+    push(e, workC(e, claimC(e, b.sha, "A-2", FRESH), FRESH, "f2"), "claude/a-2");
+    push(e, workC(e, claimC(e, b.sha, "A-3", OLD), OLD, "f3"), "claude/a-3");
+    push(e, workC(e, claimC(e, b.sha, "A-4", FRESH), FRESH, "f4"), "claude/a-4");
+    const before = heads(e.bare).length;
+    const r = dispatchSync(e.work, ["--backlog", e.bl, "--open-prs", "claude/a-3"]), st = states(r);
+    check("item1 (+): backdated work branch A-1 => ABANDONED_WITH_WORK with lastActivityAt + ageHours", st["A-1"]?.state === "ABANDONED_WITH_WORK" && st["A-1"].ageHours >= 9.9 && /^\d{4}-\d\d-\d\dT/.test(st["A-1"].lastActivityAt), JSON.stringify(st["A-1"]));
+    check("item1 (-): fresh work branch A-2 stays HAS_WORK_COMMITS (with ageHours, lastActivityAt)", st["A-2"]?.state === "HAS_WORK_COMMITS" && st["A-2"].ageHours < 1 && !!st["A-2"].lastActivityAt, JSON.stringify(st["A-2"]));
+    check("item1 (-): an open PR wins over age (old A-3 => OPEN_PR, not ABANDONED)", st["A-3"]?.state === "OPEN_PR", JSON.stringify(st["A-3"]));
+    check("item1: reported only (nothing deleted, abandoned task not re-selected: still ALREADY_CLAIMED)", heads(e.bare).length === before && r.j.outcome === "NO_ACTION" && r.j.reasons.includes("A-1:ALREADY_CLAIMED"), r.raw.slice(0, 300));
+    const r0 = dispatchSync(e.work, ["--backlog", e.bl, "--stale-hours", "0"]), s0 = states(r0);
+    check("item1 (+): --stale-hours 0 => even the fresh work branch A-4 becomes ABANDONED_WITH_WORK", s0["A-4"]?.state === "ABANDONED_WITH_WORK", JSON.stringify(s0["A-4"]));
+  }
+  // Item 2: pure claim detection survives a base advance.
+  {
+    const e = mkEnv([T("P-1"), T("P-2"), T("P-3"), T("P-4")]); const b = baseOf(e);
+    push(e, claimC(e, b.sha, "P-1", OLD), "claude/p-1");
+    push(e, claimC(e, b.sha, "P-2", FRESH), "claude/p-2");
+    const c3 = claimC(e, b.sha, "P-3", OLD); push(e, claimC(e, c3, "P-3", OLD + 60), "claude/p-3"); // two stacked claim commits
+    const w = workC(e, b.sha, OLD, "pf"); push(e, claimC(e, b.sha, "P-4", OLD, G(e.work, ["rev-parse", `${w}^{tree}`])), "claude/p-4"); // "claim" that changes the tree
+    advanceBase(e); advanceBase(e);
+    const st = states(dispatchSync(e.work, ["--backlog", e.bl]));
+    check("item2 (+): after the base advanced twice, old pure claim P-1 is still RECLAIMABLE and fresh P-2 still FRESH", st["P-1"]?.state === "RECLAIMABLE" && st["P-2"]?.state === "FRESH", JSON.stringify([st["P-1"], st["P-2"]]));
+    check("item2 (+): two stacked claim commits (P-3) are still a pure claim after the base advance", st["P-3"]?.state === "RECLAIMABLE", JSON.stringify(st["P-3"]));
+    check("item2 (-): a dispatch-claim-subject commit that changes its parent's tree (P-4) is NOT a pure claim", st["P-4"]?.state === "ABANDONED_WITH_WORK" || st["P-4"]?.state === "HAS_WORK_COMMITS", JSON.stringify(st["P-4"]));
+  }
+  // Item 3 + 4 + capacity setup: merged branches.
+  {
+    const e = mkEnv([T("M-1", {status: "IN_PROGRESS"}), T("M-3"), T("M-10", {status: "DONE"}), T("M-4")]); const b = baseOf(e);
+    const mergeIn = (id, ts) => { // claim + work, merged into base with a merge commit
+      const w = workC(e, claimC(e, b.sha, id, ts), ts, `m-${id}`);
+      G(e.work, ["fetch", "-q", "origin"]); push(e, w, `claude/${id.toLowerCase()}`);
+      G(e.work, ["merge", "-q", "--no-ff", "-m", `merge ${id}`, w]); G(e.work, ["push", "-q", "origin", "v7/integration"]);
+    };
+    mergeIn("M-1", FRESH); mergeIn("M-10", FRESH); mergeIn("M-3", FRESH);
+    G(e.work, ["push", "-q", "origin", "--delete", "claude/m-3"]); // merged AND branch deleted
+    const wun = workC(e, b.sha, FRESH, "unmerged"); push(e, claimC(e, wun, "M-4", FRESH), "claude/m-4"); // not merged
+    const r = dispatchSync(e.work, ["--backlog", e.bl]), st = states(r);
+    check("item3 (+): merged head M-1 (backlog IN_PROGRESS) => MERGED_AWAITING_WRITEBACK, not active work", st["M-1"]?.state === "MERGED_AWAITING_WRITEBACK" && st["M-10"]?.state === "MERGED_AWAITING_WRITEBACK", JSON.stringify([st["M-1"], st["M-10"]]));
+    check("item3 (-): an unmerged work branch (M-4) is not reported merged", st["M-4"]?.state !== "MERGED_AWAITING_WRITEBACK" && ["HAS_WORK_COMMITS", "ABANDONED_WITH_WORK"].includes(st["M-4"]?.state), JSON.stringify(st["M-4"]));
+    check("item5 (-): merged branches are not counted active (only M-4 is): active=1", r.j.active === 1, String(r.j.active));
+    // Item 4: M-3's claim branch is deleted but its claim is in base history.
+    const c = dispatchSync(e.work, ["--claim", "--backlog", e.bl]);
+    check("item4 (+): deleted merged claim M-3 is NOT re-dispatched: CLAIM_IN_BASE_HISTORY, no claim/branch created for it", !heads(e.bare).includes("refs/heads/claude/m-3") && c.j.reasons.includes("M-3:CLAIM_IN_BASE_HISTORY") && c.j.taskId !== "M-3", c.raw.slice(0, 400));
+    check("item4: no remote commit subject/owner text is echoed", !c.raw.includes("owner=x") && !c.raw.includes("merge M-3"), c.raw.slice(0, 300));
+    const dry = dispatchSync(e.work, ["--backlog", e.bl]);
+    check("item4: dry run does not offer M-3 either and reserves nothing", dry.j.taskId !== "M-3" && dry.j.claimed !== true && dry.j.reasons.includes("M-3:CLAIM_IN_BASE_HISTORY"), dry.raw.slice(0, 300));
+  }
+  {
+    const e = mkEnv([T("X-1"), T("X-10", {dependsOn: []})]); const b = baseOf(e);
+    const w = workC(e, claimC(e, b.sha, "X-10", FRESH), FRESH, "x10"); G(e.work, ["merge", "-q", "--no-ff", "-m", "m", w]); G(e.work, ["push", "-q", "origin", "v7/integration"]);
+    const c = dispatchSync(e.work, ["--claim", "--backlog", e.bl]);
+    check("item4 (-): claim of X-10 in history does NOT block X-1 (exact id, trailing-space prefix); X-1 is claimed", c.j.outcome === "START" && c.j.taskId === "X-1", c.raw.slice(0, 400));
+  }
+  // Item 5: --max-active.
+  {
+    const e = mkEnv([T("C-1"), T("C-2"), T("C-3"), T("C-4")]);
+    const r1 = dispatchSync(e.work, ["--claim", "--max-active", "2", "--backlog", e.bl, "--no-lease"]);
+    const r2 = dispatchSync(e.work, ["--claim", "--max-active", "2", "--backlog", e.bl, "--no-lease"]);
+    check("item5 (+): below the cap (active 0 then 1 of 2) claims C-1 then C-2", r1.j.outcome === "START" && r1.j.taskId === "C-1" && r1.j.active === 0 && r2.j.outcome === "START" && r2.j.taskId === "C-2" && r2.j.active === 1, r1.raw.slice(0, 200) + r2.raw.slice(0, 200));
+    const r3 = dispatchSync(e.work, ["--claim", "--max-active", "2", "--backlog", e.bl, "--no-lease"]);
+    check("item5 (+): at the cap => NO_ACTION CAPACITY_FULL:2/2, nothing claimed, active=2", r3.j.outcome === "NO_ACTION" && r3.j.reasons.includes("CAPACITY_FULL:2/2") && r3.j.active === 2 && heads(e.bare).length === 2, r3.raw.slice(0, 300));
+    const r4 = dispatchSync(e.work, ["--claim", "--backlog", e.bl, "--no-lease"]);
+    check("item5 (-): without --max-active there is no cap (C-3 is claimed)", r4.j.outcome === "START" && r4.j.taskId === "C-3", r4.raw.slice(0, 200));
+    const r5 = dispatchSync(e.work, ["--claim", "--max-active", "3", "--backlog", e.bl, "--open-prs", "claude/c-1,claude/c-2", "--no-lease"]);
+    check("item5 (-): claim branches with an open PR are not active (3 claimed, 2 with PR => active 1 < 3 => C-4 claimed)", r5.j.outcome === "START" && r5.j.taskId === "C-4" && r5.j.active === 1, r5.raw.slice(0, 300));
+    const dry = dispatchSync(e.work, ["--max-active", "1", "--backlog", e.bl]);
+    check("item5: dry run is not capped and reports active", dry.j.active === 4, dry.raw.slice(0, 200));
+    for (const bad of ["0", "17", "abc", "1.5", "-1", ""]) {
+      const x = dispatchSync(e.work, ["--max-active", bad, "--backlog", e.bl]);
+      check(`item5 (-): --max-active ${JSON.stringify(bad)} => BLOCKED`, x.code === 2 && x.j.outcome === "BLOCKED", x.raw.slice(0, 160));
+    }
+    check("item5 (-): --max-active with no value => BLOCKED ARG_MISSING_VALUE", dispatchSync(e.work, ["--backlog", e.bl, "--max-active"]).j?.reasons?.[0] === "ARG_MISSING_VALUE:--max-active");
+    const ok = [1, 16].map(v => dispatchSync(e.work, ["--max-active", String(v), "--backlog", e.bl]).j.outcome);
+    check("item5 (+): boundaries 1 and 16 accepted", ok.every(o => o !== "BLOCKED"), ok.join());
+  }
+  // Item 6: --open-prs "".
+  {
+    const e = mkEnv([T("O-1")]);
+    const empty = dispatchSync(e.work, ["--backlog", e.bl, "--open-prs", ""]);
+    check('item6 (+): explicit empty --open-prs "" is accepted as no open PRs (START O-1)', empty.code === 0 && empty.j.outcome === "START" && empty.j.taskId === "O-1", empty.raw.slice(0, 200));
+    const trail = dispatchSync(e.work, ["--backlog", e.bl, "--open-prs"]);
+    check("item6 (-): trailing --open-prs with no argument => BLOCKED ARG_MISSING_VALUE:--open-prs", trail.code === 2 && trail.j.reasons[0] === "ARG_MISSING_VALUE:--open-prs", trail.raw.slice(0, 200));
+    const flagNext = dispatchSync(e.work, ["--open-prs", "--backlog", e.bl]);
+    check("item6 (-): --open-prs followed by another flag => BLOCKED ARG_MISSING_VALUE", flagNext.code === 2 && flagNext.j.reasons[0] === "ARG_MISSING_VALUE:--open-prs", flagNext.raw.slice(0, 200));
+  }
 }
 // 13. Output sinks: stdout holds only fixed codes / validated tokens. Token-like fixtures are built at runtime (fake values; the repo secret scanner stays unchanged).
 const FK = s => "gh" + "p_" + s; // fake token-shaped marker assembled at runtime. NB: "_" is a legal id/ref/token character, so id/dep/branch fixtures add a space to be genuinely invalid.

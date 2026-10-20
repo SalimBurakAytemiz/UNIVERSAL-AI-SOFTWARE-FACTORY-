@@ -1,5 +1,5 @@
 // //TR: Bu betik Cloud-only deterministik sonraki-görev dağıtıcısıdır: BACKLOG_CHECKPOINT.json'u fail-closed doğrular, ilk seçilebilir görevi seçer ve --claim ile git branch-ref (create-only) üzerinden talep eder; bu, birleştirilmiş atomik lease ya da FA-LEASE2 bağlantısı DEĞİLDİR (bkz. DISPATCH.md).
-// Usage: node docs/planning/dispatch.mjs [--claim] [--owner <id>] [--backlog <path>] [--remote <name>] [--base-branch <b>] [--stale-hours <n>] [--open-prs a,b] [--no-lease]
+// Usage: node docs/planning/dispatch.mjs [--claim] [--owner <id>] [--backlog <path>] [--remote <name>] [--base-branch <b>] [--stale-hours <n>] [--open-prs a,b] [--max-active <1..16>] [--no-lease]
 // Exit: 0 START|NO_ACTION, 2 BLOCKED, 3 RECOVERABLE_FAILURE. Prints exactly one JSON line on stdout.
 import fs from "node:fs";
 import path from "node:path";
@@ -53,7 +53,7 @@ class Blocked extends Error { constructor(code) { super(code); this.code = code;
 
 export function parseArgs(argv) {
   const o = {claim: false, owner: "cloud-dispatch", backlog: "docs/planning/BACKLOG_CHECKPOINT.json", remote: "origin",
-    baseBranch: "v7/integration", staleHours: 6, openPrs: [], lease: true};
+    baseBranch: "v7/integration", staleHours: 6, openPrs: [], maxActive: null, lease: true};
   const val = (i, f) => { if (i + 1 >= argv.length || argv[i + 1].startsWith("--")) throw new Blocked(`ARG_MISSING_VALUE:${f}`); return argv[i + 1]; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -64,6 +64,8 @@ export function parseArgs(argv) {
     else if (a === "--remote") o.remote = val(i++, a);
     else if (a === "--base-branch") o.baseBranch = val(i++, a);
     else if (a === "--stale-hours") { const n = Number(val(i++, a)); if (!Number.isFinite(n) || n < 0) throw new Blocked("ARG_INVALID:--stale-hours"); o.staleHours = n; }
+    else if (a === "--max-active") { const v = val(i++, a); const n = /^[0-9]{1,3}$/.test(v) ? Number(v) : NaN; if (!(n >= 1 && n <= 16)) throw new Blocked("ARG_INVALID:--max-active"); o.maxActive = n; }
+    // An explicit empty value ("--open-prs ''") means "no open PRs"; a flag with NO following argument stays ARG_MISSING_VALUE (fail-closed).
     else if (a === "--open-prs") o.openPrs = val(i++, a).split(",").map(s => s.trim()).filter(Boolean);
     else throw new Blocked(`ARG_UNKNOWN:${safeArg(a)}`);
   }
@@ -164,9 +166,12 @@ function remoteHeads(git, remote) {
   return m;
 }
 
-// Stale = claim ref exists, only dispatch-claim commits beyond base, newest such commit (else lease acquiredAt) older than staleHours, not in open PRs.
+// Pure claim = every commit beyond merge-base(branch, base) is a "dispatch-claim:" commit with exactly one parent whose tree equals that
+// parent's tree (independent of base movement). A head that is an ancestor of the base tip is MERGED_AWAITING_WRITEBACK.
+// Work branches: HAS_WORK_COMMITS while their head commit is newer than staleHours, else ABANDONED_WITH_WORK (reported only; never deleted/reclaimed).
 function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLease, now) {
   const out = [];
+  const hoursOf = ms => Math.round(ms / 36e5 * 100) / 100;
   for (const {taskId, branch, sha} of claimed) {
     const claimRef = `refs/heads/${branch}`;
     if (openPrs.has(branch)) { out.push({taskId, claimRef, state: "OPEN_PR"}); continue; }
@@ -174,25 +179,62 @@ function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLea
     if (git(["cat-file", "-e", `${sha}^{commit}`]).status !== 0 && git(["fetch", "--no-tags", remote, claimRef]).status !== 0) {
       out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_REF_NOT_FETCHABLE"}); continue;
     }
-    const l = git(["log", "--format=%ct%x09%s", `${baseSha}..${sha}`]);
+    const anc = git(["merge-base", "--is-ancestor", sha, baseSha]);
+    if (anc.status === 0) { out.push({taskId, claimRef, state: "MERGED_AWAITING_WRITEBACK"}); continue; }
+    if (anc.status !== 1) { out.push({taskId, claimRef, state: "UNKNOWN", why: "ANCESTRY_CHECK_FAILED"}); continue; }
+    const mb = git(["merge-base", sha, baseSha]);
+    if (mb.status !== 0 || !SHA_RE.test(mb.stdout.trim())) { out.push({taskId, claimRef, state: "UNKNOWN", why: "MERGE_BASE_FAILED"}); continue; }
+    const l = git(["log", "--format=%ct%x09%s%x09%P", `${mb.stdout.trim()}..${sha}`]);
     if (l.status !== 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "LOG_FAILED"}); continue; }
     const rows = l.stdout.split("\n").filter(Boolean).map(x => x.split("\t"));
-    if (rows.some(r => !(r[1] || "").startsWith(CLAIM_SUBJECT))) { out.push({taskId, claimRef, state: "HAS_WORK_COMMITS"}); continue; }
-    // A claim commit that changed the tree is not a pure claim, whatever its subject says.
-    const tc = git(["rev-parse", `${sha}^{tree}`]), tb = git(["rev-parse", `${baseSha}^{tree}`]);
-    if (tc.status !== 0 || tb.status !== 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "TREE_COMPARE_FAILED"}); continue; }
-    if (tc.stdout.trim() !== tb.stdout.trim()) { out.push({taskId, claimRef, state: "HAS_WORK_COMMITS", why: "TREE_DIFFERS_FROM_BASE"}); continue; }
+    let pure = true;
+    for (const r of rows) {
+      const parents = (r[2] || "").split(" ").filter(Boolean);
+      if (!(r[1] || "").startsWith(CLAIM_SUBJECT) || parents.length !== 1) { pure = false; break; }
+    }
+    if (pure) {
+      const commits = git(["rev-list", `${mb.stdout.trim()}..${sha}`]);
+      if (commits.status !== 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "TREE_COMPARE_FAILED"}); continue; }
+      // A claim commit that changed the tree relative to its own parent is not a pure claim, whatever its subject says.
+      for (const c of commits.stdout.split("\n").filter(Boolean)) {
+        const t = git(["rev-parse", `${c}^{tree}`, `${c}^1^{tree}`]);
+        const [a, b] = t.stdout.trim().split("\n");
+        if (t.status !== 0 || !a || !b) { out.push({taskId, claimRef, state: "UNKNOWN", why: "TREE_COMPARE_FAILED"}); pure = null; break; }
+        if (a !== b) { pure = false; break; }
+      }
+      if (pure === null) continue;
+    }
+    if (!pure) {
+      const h = git(["log", "-1", "--format=%ct", sha]);
+      const ct = Number(h.stdout.trim());
+      if (h.status !== 0 || !Number.isFinite(ct)) { out.push({taskId, claimRef, state: "HAS_WORK_COMMITS"}); continue; }
+      const ageMs = now - ct * 1000;
+      const rec = {taskId, claimRef, state: "HAS_WORK_COMMITS", lastActivityAt: new Date(ct * 1000).toISOString()};
+      if (ageMs < 0) { out.push({...rec, why: "ACTIVITY_FUTURE_DATED"}); continue; }
+      rec.ageHours = hoursOf(ageMs);
+      if (ageMs > staleHours * 36e5) { rec.state = "ABANDONED_WITH_WORK"; rec.note = "reported only; never auto-deleted or auto-reclaimed; an operator decides"; }
+      out.push(rec); continue;
+    }
     let ageMs = null, extra = null;
     if (rows.length) ageMs = now - Math.max(...rows.map(r => Number(r[0]))) * 1000;
     else { const le = readLease(taskId); if (le && Number.isFinite(le.acquiredAt)) { ageMs = now - le.acquiredAt; extra = "age from lease acquiredAt"; } }
     if (ageMs === null || !Number.isFinite(ageMs)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_UNKNOWN"}); continue; }
     if (ageMs < 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_NEGATIVE_FUTURE_DATED"}); continue; }
-    const ageHours = Math.round(ageMs / 36e5 * 100) / 100;
+    const ageHours = hoursOf(ageMs);
     out.push(ageMs > staleHours * 36e5
       ? {taskId, claimRef, state: "RECLAIMABLE", ageHours, note: "reported only; never auto-deleted; an operator must delete the ref", ...(extra ? {extra} : {})}
       : {taskId, claimRef, state: "FRESH", ageHours});
   }
   return out;
+}
+
+// True when a commit reachable from the base tip has a subject starting with exactly "dispatch-claim: <id> " (claimed AND merged earlier,
+// possibly with the claim branch deleted since). null = could not be determined (fail-closed). Fixed-string, bounded, subjects never echoed.
+function claimInBaseHistory(git, baseSha, id) {
+  const prefix = `${CLAIM_SUBJECT} ${id} `;
+  const r = git(["log", "--format=%s", "--fixed-strings", `--grep=${prefix}`, "--max-count=200", baseSha]);
+  if (r.status !== 0) return null;
+  return r.stdout.split("\n").some(s => s.startsWith(prefix));
 }
 
 // Pure decision: the lease store is "unavailable" (not held) ONLY when ls-remote SUCCEEDED and printed nothing.
@@ -294,28 +336,46 @@ async function runInner(argv, cwd) {
   }
   const claimedList = [];
   for (const t of tasks) {
-    if (!t || !validId(t.id) || t.status !== "READY") continue;
+    if (!t || !validId(t.id)) continue;
     const b = claimBranchOf(t.id);
     if (claimedHeads.has(b)) claimedList.push({taskId: t.id, branch: b, sha: heads.get(b)});
   }
   const reclaimable = staleReport(git, o.remote, baseSha, claimedList, env.openPrs, o.staleHours, readLease, Date.now());
   for (const r of reclaimable) if (r.state === "RECLAIMABLE") flat.push(`${r.taskId}:RECLAIMABLE`);
-  const extras = {perTask, reclaimable, mode: o.claim ? "CLAIM" : "DRY_RUN", owner: safeOwnerArg(o.owner)};
+  const active = reclaimable.filter(r => (r.state === "FRESH" || r.state === "HAS_WORK_COMMITS") && !env.openPrs.has(claimBranchOf(r.taskId))).length;
+  const extras = {perTask, reclaimable, active, mode: o.claim ? "CLAIM" : "DRY_RUN", owner: safeOwnerArg(o.owner)};
 
+  const skipNext = (id, reason) => { env.skip.set(id, reason); return select(tasks, env).chosen; };
   if (!first) return fin("NO_ACTION", flat.length ? flat : ["EMPTY_BACKLOG"], extras);
-  if (!o.claim) return fin("START", flat, {...extras, taskId: first.id, branch: claimBranchOf(first.id), claimRef: `refs/heads/${claimBranchOf(first.id)}`, claimed: false});
+  if (!o.claim) {
+    // Dry run mirrors the claim loop: a task whose claim is already in the base history is not offered (reserves nothing either way).
+    let pick = first;
+    while (pick && baseSha) {
+      const h = claimInBaseHistory(git, baseSha, pick.id);
+      if (h === false) break;
+      const code = h === null ? "CLAIM_HISTORY_CHECK_FAILED" : "CLAIM_IN_BASE_HISTORY";
+      flat.push(`${pick.id}:${code}`); pick = skipNext(pick.id, code);
+    }
+    if (!pick) return fin("NO_ACTION", flat, extras);
+    return fin("START", flat, {...extras, taskId: pick.id, branch: claimBranchOf(pick.id), claimRef: `refs/heads/${claimBranchOf(pick.id)}`, claimed: false});
+  }
+  if (o.maxActive !== null && active >= o.maxActive) return fin("NO_ACTION", [...flat, `CAPACITY_FULL:${active}/${o.maxActive}`], extras);
   if (!baseSha) return fin("RECOVERABLE_FAILURE", [...flat, `BASE_UNAVAILABLE:${o.remote}/${safeBaseEcho(o.baseBranch)}`], extras);
 
   // Claim loop: a lost race (or held lease) falls through to the next selectable task.
   const lost = [];
   const sessionId = `${o.owner}:${process.pid}:${crypto.randomUUID()}`;
   const pushFailed = [];
-  const skipNext = (id, reason) => { env.skip.set(id, reason); return select(tasks, env).chosen; };
   const next = id => { env.claimedHeads.add(claimBranchOf(id)); return select(tasks, env).chosen; };
   const releaseGrant = (lid, grant) => { if (grant) { try { quiet(() => leaseApi.release(store, {...lid, token: grant.token})); } catch { /* best effort */ } } };
   let chosen = first;
   for (let guard = 0; guard <= tasks.length && chosen; guard++) {
     const id = chosen.id, br = claimBranchOf(id), ref = `refs/heads/${br}`;
+    const inHist = claimInBaseHistory(git, baseSha, id);
+    if (inHist !== false) {
+      const code = inHist === null ? "CLAIM_HISTORY_CHECK_FAILED" : "CLAIM_IN_BASE_HISTORY";
+      lost.push(`${id}:${code}`); chosen = skipNext(id, code); continue;
+    }
     const lid = {taskId: id, environment: "CLOUD", workerId: o.owner, sessionId};
     let leaseInfo = {status: "SKIPPED"}, grant = null;
     if (store) {
