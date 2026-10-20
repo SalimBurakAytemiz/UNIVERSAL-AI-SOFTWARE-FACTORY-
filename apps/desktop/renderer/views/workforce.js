@@ -7,11 +7,12 @@ import {liveRuns,formatDateTime} from "../work-core.js";
 import {selection} from "../forms.js";
 import {notVerifiedBadge,runNotVerified} from "../m1a.js";
 import {buildTaxonomy} from "../workforce-taxonomy-core.js";
-import {fleetGroups,fleetCard} from "../fleet-core.js";
+import {fleetGroups,fleetCard,fleetDetail} from "../fleet-core.js";
 
 // //TR: Katalog gözatma seçimi (süzgeç + seçili rol) görünüm ömrü boyunca korunur; periyodik yenileme seçimi bozmaz.
 const catState={cluster:"ALL",guild:"ALL",q:"",roleId:null};
-export function resetWorkforceView(){catState.cluster="ALL";catState.guild="ALL";catState.q="";catState.roleId=null}
+const fleetSel={runId:null};
+export function resetWorkforceView(){fleetSel.runId=null;catState.cluster="ALL";catState.guild="ALL";catState.q="";catState.roleId=null}
 const DISPLAY_LIMIT=150;
 
 function liveRunsBody(ctx,runs){
@@ -28,6 +29,23 @@ function liveRunsBody(ctx,runs){
 }
 
 // //TR: UI-030 işçi filosu ızgarası: GET /v1/work-runs'tan yalnız canlı koşular, durum kovalarına göre kart; okuma başarısızsa dürüst durum notu ızgaranın yerini alır (asla 0). Olmayan alanlar BİLİNMİYOR; en çok 50 kart + "X / Y" notu.
+// //TR: UI-032 işçi ayrıntı paneli: yalnız seçili canlı koşunun mevcut alanları; koşu artık canlı değilse panel görünmez. Canlı ajan telemetrisi yoktur, UNKNOWN gösterilir.
+function fleetDetailPanel(ctx,items){
+  const doc=ctx.doc,d=fleetDetail(items,fleetSel.runId);
+  if(!d)return null;
+  const unknown=()=>h(doc,"span",{class:"wf-fleet-unknown",dataset:{unknown:"1"},text:ctx.t("workforce.fleet.unknown")});
+  const row=(k,v)=>h(doc,"div",{},h(doc,"dt",{text:ctx.t(k)}),h(doc,"dd",{},v));
+  return h(doc,"section",{class:"wf-fleet-detail",id:"wf-fleet-detail",dataset:{fleetDetailFor:d.runId},"aria-label":ctx.t("workforce.fleet.detail.title",{id:d.runId})},
+    h(doc,"h3",{class:"wf-fleet-h",text:ctx.t("workforce.fleet.detail.title",{id:d.runId})}),
+    h(doc,"dl",{class:"wf-fleet-kv"},
+      row("workforce.fleet.detail.status",statusPill(ctx,d.status)),
+      row("workforce.fleet.role",d.role?h(doc,"span",{text:d.role}):unknown()),
+      row("workforce.fleet.detail.mission",d.missionId?h(doc,"span",{class:"mono",text:d.missionId}):unknown()),
+      row("workforce.fleet.updated",d.updatedAt?h(doc,"time",{datetime:d.updatedAt,text:formatDateTime(d.updatedAt,ctx.i18n.lang)}):unknown()),
+      row("workforce.fleet.detail.telemetry",unknown())),
+    h(doc,"p",{class:"note",text:ctx.t("workforce.fleet.detail.note")}));
+}
+
 function fleetBody(ctx,runs){
   const doc=ctx.doc;
   if(runs.state!=="VERIFIED")return stateNote(ctx,runs.state,runs.state==="UNAVAILABLE"?"run.unavailable":undefined);
@@ -41,6 +59,8 @@ function fleetBody(ctx,runs){
       h(doc,"dl",{class:"wf-fleet-kv"},
         h(doc,"div",{},h(doc,"dt",{text:ctx.t("workforce.fleet.role")}),h(doc,"dd",{},c.role?h(doc,"span",{text:c.role}):unknown())),
         h(doc,"div",{},h(doc,"dt",{text:ctx.t("workforce.fleet.updated")}),h(doc,"dd",{},c.updatedAt?h(doc,"time",{datetime:c.updatedAt,text:formatDateTime(c.updatedAt,ctx.i18n.lang)}):unknown()))),
+      h(doc,"button",{type:"button",class:"link-btn",id:`wf-fleet-detail-${c.runId}`,dataset:{focusKey:`wf-fleet-detail-${c.runId}`},"aria-expanded":fleetSel.runId===c.runId?"true":"false","aria-controls":"wf-fleet-detail",
+        on:{click:()=>{fleetSel.runId=fleetSel.runId===c.runId?null:c.runId;if(typeof ctx.rerender==="function")ctx.rerender();if(typeof ctx.settleFocus==="function")ctx.settleFocus({keys:[`id:wf-fleet-detail-${c.runId}`]})}},text:ctx.t("workforce.fleet.detail.toggle")}),
       c.missionId?h(doc,"button",{type:"button",class:"link-btn",id:`wf-fleet-open-${c.runId}`,dataset:{focusKey:`wf-fleet-open-${c.runId}`},"aria-label":ctx.t("workforce.fleet.open",{id:c.missionId}),on:{click:()=>{selection.missionId=c.missionId;ctx.navigate("work")}},text:ctx.t("workforce.live.open")}):null);
   };
   return h(doc,"div",{class:"wf-fleet",role:"region","aria-label":ctx.t("workforce.fleet.label")},
@@ -48,6 +68,7 @@ function fleetBody(ctx,runs){
     f.groups.map(g=>h(doc,"section",{class:"wf-fleet-group",dataset:{bucket:g.status},"aria-label":ctx.t("workforce.fleet.group",{status:statusLabel(ctx,g.status),n:String(g.count)})},
       h(doc,"h3",{class:"wf-fleet-h",text:ctx.t("workforce.fleet.group",{status:statusLabel(ctx,g.status),n:String(g.count)})}),
       h(doc,"ul",{class:"wf-fleet-list"},g.items.map(card)))),
+    fleetDetailPanel(ctx,runs.items),
     f.truncated?h(doc,"p",{class:"note",dataset:{truncated:"1"},text:ctx.t("workforce.fleet.showing",{shown:String(f.shown),total:String(f.total)})}):null);
 }
 

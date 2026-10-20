@@ -618,7 +618,7 @@ describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN
     expect(byTag(region, "h3").map(text)).toEqual(["Queued (1)", "Running (1)"]);
     const t = byTag(region, "time"); expect(t.length).toBe(1); expect(t[0].attrs.get("datetime")).toBe("2026-10-19T10:00:00.000Z");
     expect(byData(region, "unknown", "1").length).toBe(2);
-    const btn = byTag(region, "button"); expect(btn.length).toBe(1);
+    const btn = byTag(region, "button").filter(b => b.attrs.get("id") === "wf-fleet-open-run-0001"); expect(btn.length).toBe(1);
     expect(btn[0].attrs.get("type")).toBe("button"); expect(btn[0].attrs.get("aria-label")).toContain("msn_0123456789abcdef01234567"); expect(btn[0].attrs.has("tabindex")).toBe(false);
     btn[0].fire("click"); expect(navigated).toEqual(["work"]);
     expect(text(region)).toContain("not live agents");
@@ -656,5 +656,56 @@ describe("UI-030 fleet card does not collide with live-run rows", () => {
     const fleet = src.slice(src.indexOf("function fleetBody"), src.indexOf("const statusChip"));
     expect(fleet).toContain("fleetRunId");
     expect(fleet).not.toMatch(/dataset:\{runId/);
+  });
+});
+
+describe("UI-032 worker detail panel from the fleet grid (run-level only, UNKNOWN stays UNKNOWN)", () => {
+  const run = (i: number, status: string, extra: any = {}) => ({runId: `run-${String(i).padStart(4, "0")}`, status, ...extra});
+  it("fleetDetail resolves only live runs and always reports telemetry as null", async () => {
+    const core = await load("fleet-core.js");
+    const runs = [run(1, "RUNNING", {role: "ROLE.X"}), run(2, "COMPLETED")];
+    expect(core.fleetDetail(runs, "run-0001")).toEqual({runId: "run-0001", status: "RUNNING", role: "ROLE.X", missionId: null, updatedAt: null, telemetry: null});
+    expect(core.fleetDetail(runs, "run-0002")).toBeNull();
+    expect(core.fleetDetail(runs, "nope")).toBeNull();
+    expect(core.fleetDetail(runs, null)).toBeNull();
+    expect(core.fleetDetail(undefined, "run-0001")).toBeNull();
+  });
+  it("toggle opens a detail panel with UNKNOWN telemetry, keeps data-fleet-detail-for unique, and toggles closed", async () => {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    const doc = new D(), store = st.createStore(null);
+    const bridge = {apiGet: async (p: string) => {
+      if (p === "/v1/cockpit") return COCKPIT; if (p === "/v1/agents") return AGENTS;
+      if (p === "/v1/work-runs") return {workRuns: [run(1, "RUNNING", {role: "ROLE.X"}), run(2, "QUEUED")]};
+      throw new Error(`${p}: HTTP 404`);
+    }};
+    const t = (k: string, v?: any) => i18n.translate("en", k, v);
+    const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang: "en", t}, t, navigate: () => {}, rerender: () => {}, settleFocus: () => {}, principal: "FOUNDER_LOCAL"};
+    const view = await load("views", "workforce.js"); view.resetWorkforceView();
+    const before = (await view.render(ctx, ROUTE)) as N;
+    expect(byData(before, "fleetDetailFor").length).toBe(0);
+    const toggle = byId(before, "wf-fleet-detail-run-0001")!; expect(toggle.attrs.get("aria-expanded")).toBe("false");
+    toggle.fire("click");
+    const open = (await view.render(ctx, ROUTE)) as N;
+    const panel = byData(open, "fleetDetailFor"); expect(panel.length).toBe(1);
+    expect(panel[0].dataset.fleetDetailFor).toBe("run-0001");
+    expect(text(panel[0])).toContain("No live agent telemetry");
+    expect(byData(panel[0], "unknown", "1").length).toBeGreaterThanOrEqual(3);
+    expect(byId(open, "wf-fleet-detail-run-0001")!.attrs.get("aria-expanded")).toBe("true");
+    byId(open, "wf-fleet-detail-run-0001")!.fire("click");
+    expect(byData((await view.render(ctx, ROUTE)) as N, "fleetDetailFor").length).toBe(0);
+  });
+  it("workforce.fleet.detail.* keys are identical in EN and TR with the same placeholders", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    const keys = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("workforce.fleet.detail.")).sort();
+    expect(keys(tr)).toEqual(keys(en)); expect(keys(en).length).toBe(6);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
+    for (const k of keys(en)) { expect(ph(tr[k]), k).toEqual(ph(en[k])); expect(tr[k]).toBeTruthy(); }
+  });
+  it("detail uses a feature-unique data attribute and no forbidden reuse", async () => {
+    const src = fs.readFileSync(path.join(rend, "views", "workforce.js"), "utf8");
+    const fn = src.slice(src.indexOf("function fleetDetailPanel"), src.indexOf("function fleetBody"));
+    expect(fn).toContain("fleetDetailFor");
+    expect(fn).not.toMatch(/dataset:\{(runId|fleetRunId)/);
+    expect(fn).not.toMatch(/innerHTML/);
   });
 });
