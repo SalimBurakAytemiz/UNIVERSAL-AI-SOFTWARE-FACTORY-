@@ -551,3 +551,29 @@ create_session is unavailable in this fire, so no builder was dispatched; no ret
 1. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned; blocks merges); BACKLOG-SOURCE-REBASELINE (Founder choice).
 2. Canonical backlog: no claimable task; all four READY tasks are in open PRs awaiting review/merge; UI-025/UI-133 wait on #74/#73 merging.
 3. claude-code-remote dispatch tooling unavailable in this session.
+
+## 2026-10-20 heartbeat #37 (queue read from claude/cloud-production-engine@ed5cfb9; fired 03:12Z)
+
+**Queue (step 1):** parsed OK. READY tasks: 0. Task states unchanged (PENDING_REVIEW: CP-QUEUE, CP-REPORT, CP-CI; IN_PROGRESS: CP-DISPATCH, CP-RECOVERY, CP-GOV; BLOCKED: FA-LEASE2, BACKLOG-SOURCE-REBASELINE, ACTIONS-CI-RESTORE, FEATURE-BACKLOG-GATED). DONE: 0. Step 2 dispatched: 0 (nothing READY; claude-code-remote create_session/list_sessions unavailable in this fire; only subscribe/unsubscribe_pr_activity were exposed).
+
+**Step 2b (canonical backlog):** v7/integration = f12918f (Merge integration wave B3 #80); dispatch.mjs and BACKLOG_CHECKPOINT.json present. Open-PR head list passed: 18 head branches of the open PRs. Dry run outcome NO_ACTION; no claim made, nothing dispatched. READY in checkpoint: UI-032, UI-026, UI-047, UI-201 (all ALREADY_CLAIMED) plus UI-025 (UNMET_DEP:UI-026) and UI-133 (UNMET_DEP:UI-032). Dry run reclaimable: UI-032 and UI-026 HAS_WORK_COMMITS (TREE_DIFFERS_FROM_BASE), UI-047 and UI-201 OPEN_PR (#78, #79).
+
+Classification (git directly, claim branches of READY tasks with no open PR):
+- MERGED_AWAITING_WRITEBACK UI-032 f9f5aa5404f4b18adfbefd58d47bb1f5bae08434 (ancestor of origin/v7/integration; DONE write-back is in open PRs #81/#82)
+- MERGED_AWAITING_WRITEBACK UI-026 68b25426bd488310db3b4f7e1bd74ab4f3ecb655 (ancestor of origin/v7/integration; DONE write-back is in open PRs #81/#82)
+- No ABANDONED_WITH_WORK, no RECLAIMABLE_AWAITING_BUILDER, no CLAIMED_AWAITING_BUILDER this fire.
+
+ACTIVE (capacity guard, fallback method because list_sessions is unavailable): LIVE claim branches with no open PR = 0 (UI-032 and UI-026 merged; UI-047 and UI-201 have open draft PRs #78/#79). ACTIVE = 0 < 2, but no claimable task exists (UI-025/UI-133 stay blocked until the write-back lands).
+
+**Open PRs: 18** (all target v7/integration except #8 on an older base): #82 integration wave B4 (#78 + #79 + #81; non-draft), #81 backlog write-back 4 UI-032/UI-026 DONE (non-draft), #79 UI-201 (draft), #78 UI-047 (draft), #75 CP-DISPATCH-RECOVERY (draft), #69 CI-PARALLEL proposal (draft, protected, do-not-merge), #68 integration wave B1 (uasco-needs-fix), #66 E2E-DESKTOP (draft), #50 E2E harness (draft, uasco-needs-fix), #46, #33, #32, #31, #28, #23, #15, #11, #8. CHANGE vs #36: #73, #74, #80 no longer open (merged per git ancestry, wave B3 merge f12918f); new #81 and #82. Mergeable state and CI: UNKNOWN (not returned by listing). No PR carries a uasco-cloud-production label. uasco-needs-fix on #68 and #50.
+
+**Active implementer/builder sessions:** UNKNOWN (list_sessions unavailable); fallback LIVE claim-branch count = 0.
+
+**Tasks completed (merged):** UI-132, UI-032, UI-026 (git ancestry on v7/integration). Queue tasks DONE: 0.
+
+**Current failures:** uasco-needs-fix on #68 and #50. Repo-wide Actions CI red per queue (not independently verified).
+
+**Top blockers:**
+1. Queue: FA-LEASE2 (D3 record + reseal; not builder-actionable); ACTIONS-CI-RESTORE (admin-owned; blocks merges); BACKLOG-SOURCE-REBASELINE (Founder choice).
+2. Canonical backlog: no claimable task; UI-047/UI-201 wait on #82; UI-025/UI-133 wait on the UI-032/UI-026 DONE write-back (#81/#82).
+3. claude-code-remote dispatch tooling unavailable in this session.
