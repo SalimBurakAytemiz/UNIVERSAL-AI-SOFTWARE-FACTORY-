@@ -49,6 +49,8 @@ No token, session id, secret, control token or certificate body is ever displaye
 | Pair again | open the pairing scanner (UI-173, MOB-7); the Founder confirms on the desktop |
 | Unpair this phone | local wipe of key and cache plus best-effort revoke (MOB-2 5.5); affects only this device's own credential, no factory state |
 
+"Revoke" on this screen is a **session-plane** action: it ends this phone's mobile app session and its device token, per MOB-2 5.4-5.5. It is not a pairing-plane action (creating or confirming a pairing stays on the desktop, MOB-2 5.1) and not a run-control action (no GLOBAL_STOP, STOP or RESUME).
+
 No approve, STOP, RESUME, retry or any `/v1/control/*` call. Nothing is queued while disconnected (SC-7).
 
 ## 6. States

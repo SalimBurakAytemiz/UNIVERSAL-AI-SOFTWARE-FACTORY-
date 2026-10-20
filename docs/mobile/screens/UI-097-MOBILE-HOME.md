@@ -39,7 +39,7 @@ The phone never calls the upstream routes; they show that every field projects a
 | `journal.state` | health pill: OK, ABSENT, TORN_TAIL, TAMPERED, UNAVAILABLE | `journalHealth` `store.ts:134-140`; `server.ts:119-120` | `UNAVAILABLE` pill |
 | `projects.count` | count tile | `cockpitWorkos` `server.ts:675-688` | `—` with `UNAVAILABLE` when no journal (`server.ts:676-678`) |
 | `missions.total`, `missions.byStatus` | tile + status chips | `server.ts:675-688` | `—` |
-| `awaitingApproval.count` | "N waiting, decide on the desktop" | `server.ts:683` (PREFLIGHT or FOUNDER_ATTENTION_REQUIRED) | `—`; **no items, no titles, no buttons** in R1 (MOB-3 4.1, Q-1) |
+| `awaitingApproval.count` | "N waiting, decide on the desktop" | **DERIVED**: no upstream count field; computed as the length of `awaitingApproval.items` (`server.ts:683`), as the desktop does client-side (`apps/desktop/renderer/model.js:54-55`); items are missions in PREFLIGHT or FOUNDER_ATTENTION_REQUIRED | `—`; **no items, no titles, no buttons** in R1 (MOB-3 4.1, Q-1) |
 | `workforce.activeWorkerRuns`, `workforce.canonicalRoles` | tile | `cockpitWorkforce` `server.ts:710-722` | `—` with block state |
 | `orchestrator.state`, `orchestrator.asOf` | small status line | `server.ts:689-706`; STALE on expired lease `:703-704` | probably `UNAVAILABLE` in the installed app (**UNVERIFIED**, D-MOB section 5) |
 | `evidence.total/verified/mismatch/missing/unverifiable` | evidence tile | `cockpitEvidence` `server.ts:724-727` | nulls on `ERROR` (`server.ts:726`) shown as `—` |

@@ -42,7 +42,8 @@ Follow work from mission to run: which missions exist, in which status, which ru
 
 | Field | Upstream | Rule |
 |---|---|---|
-| `runId`, `missionId`, `projectId`, `status`, `startedAt`, `updatedAt` | `listRuns` via `server.ts:276` | status values per run enum (**UNVERIFIED**, MOB-3 4.4) |
+| `runId`, `missionId`, `projectId`, `status`, `createdAt`, `updatedAt` | `listRuns` via `server.ts:276`; `WorkRun` `createdAt`/`updatedAt` at `core/workos/types.ts:137` (interface `:131`) | status values per run enum (**UNVERIFIED**, MOB-3 4.4) |
+| `startedAt` (named in MOB-3 4.4) | no upstream field on `WorkRun` (`core/workos/types.ts:131-137`) | **UNAVAILABLE**: shown as `—`; `createdAt` is used instead |
 | `outcome.state`, `outcome.code` | `deriveOutcomes` `server.ts:281` | codes only |
 | `delivery.state` | `deliveryView` `server.ts:281` | state only; no prepare/accept control |
 | `evidence.count`, `evidence.byKind` | run evidence (MOB-3 4.4) | counts only, never bodies or log tails |
@@ -89,3 +90,4 @@ Approval inbox (F5, MOB-7), raw run events and logs (`server.ts:129-137`, exclud
 - Per-mission event history from the journal without a new index: **UNVERIFIED** (MOB-3 section 9).
 - Run status enum and `tasks[]` always empty: **UNVERIFIED** here.
 - MOB-3 Q-9: show supervisor runs (`/v1/runs`) at all, or only Work OS runs?
+- MOB-3 follow-up (PROPOSED): the run item shape in MOB-3 4.4 names `startedAt`, which `WorkRun` does not carry (`core/workos/types.ts:137` has `createdAt`/`updatedAt`). Replace it with `createdAt`, or define a source for a real start time.

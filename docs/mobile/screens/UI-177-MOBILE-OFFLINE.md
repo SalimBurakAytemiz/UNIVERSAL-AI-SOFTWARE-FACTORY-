@@ -71,7 +71,7 @@ Write-shaped controls do not exist in R1 (SC-25). SC-7 acceptance test 1 still a
 ## 8. Desktop reuse (honest-state rules)
 
 - `classifyFailure` maps network errors to `OFFLINE` (`apps/desktop/renderer/model.js:15`); chip kinds include `OFFLINE` and `STALE` (`model.js:3`).
-- Desktop counterpart for the cache pattern: `apps/desktop/renderer/state.js:5` keeps an in-memory `cache` and `lastRefreshAt` (no persistence); the phone adds encryption and the STALE label.
+- Desktop counterpart for the cache pattern: `apps/desktop/renderer/state.js:5` keeps an in-memory `cache` and `lastRefreshAt`. The phone rule is stricter and exact: one read-only STALE cache as in `docs/mobile/ADR-MOB-001-REACT-NATIVE-ANDROID.md` section 5 (encrypted with a Keystore-held key, excluded from backup, wiped on unpair or revocation), no write queue, no second store (SC-7).
 
 ## 9. UNVERIFIED and open questions
 

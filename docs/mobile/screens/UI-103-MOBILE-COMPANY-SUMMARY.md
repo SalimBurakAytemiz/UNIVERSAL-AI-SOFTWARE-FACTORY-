@@ -31,12 +31,12 @@ A portfolio view across projects: how many missions each project has by status, 
 
 | Field | Upstream | Rule |
 |---|---|---|
-| totals: `projects.count`, `missions.total`, `awaitingApproval.count` | `server.ts:675-688`, `:683` | `—` when `UNAVAILABLE` |
+| totals: `projects.count`, `missions.total`, `awaitingApproval.count` | `server.ts:675-688`; `awaitingApproval.count` is **DERIVED**: no upstream count field; computed as the length of `awaitingApproval.items` (`server.ts:683`), as the desktop does client-side (`apps/desktop/renderer/model.js:54-55`) | `—` when `UNAVAILABLE` |
 | item `projectId` | `listProjects` via `server.ts:194` | canonical id |
 | item `name` | `server.ts:194` | untrusted text, capped 200 chars (SC-10) |
 | item `state` | `server.ts:194` | chip |
 | item `missions.total`, `missions.byStatus` | `listMissions` `server.ts:209` | per-project rollup is new (D-MOB F2 gap) |
-| item `awaitingApproval` | `server.ts:683` grouped by `projectId` | count only; no action |
+| item `awaitingApproval` | **DERIVED** count: `awaitingApproval.items` (`server.ts:683`) grouped by `projectId`; no upstream per-project count field | count only; no action |
 | item `activeRuns` | `listRuns` (MOB-3 4.2) | `UNKNOWN` until the store offers it |
 | item `lastActivityAt` | MOB-3 4.2 | `—` if absent |
 | never shown | repository path, `repository` object (`server.ts:361`), template detail | MOB-3 4.2 |

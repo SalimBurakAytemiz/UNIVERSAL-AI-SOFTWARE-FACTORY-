@@ -47,7 +47,7 @@ The selected id is not a second store: it lives in app state, and at most as par
 |---|---|---|
 | "All projects" | client constant | default |
 | item `projectId`, `name`, `state` | `server.ts:194` via MOB-3 4.2 | name untrusted, capped (SC-10) |
-| item `awaitingApproval`, `missions.total` | MOB-3 4.2 | badge; `—` if unknown |
+| item `awaitingApproval` (**DERIVED** count from `awaitingApproval.items`, `server.ts:683`, grouped by `projectId`), `missions.total` | MOB-3 4.2 | badge; `—` if unknown |
 | current scope chip | client state | shown on every scoped screen header |
 
 ## 6. Actions (all read-only)
