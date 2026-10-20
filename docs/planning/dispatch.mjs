@@ -1,5 +1,5 @@
 // //TR: Bu betik Cloud-only deterministik sonraki-görev dağıtıcısıdır: BACKLOG_CHECKPOINT.json'u fail-closed doğrular, ilk seçilebilir görevi seçer ve --claim ile git branch-ref (create-only) üzerinden talep eder; bu, birleştirilmiş atomik lease ya da FA-LEASE2 bağlantısı DEĞİLDİR (bkz. DISPATCH.md).
-// Usage: node docs/planning/dispatch.mjs [--claim] [--owner <id>] [--backlog <path>] [--remote <name>] [--base-branch <b>] [--stale-hours <n>] [--open-prs a,b] [--no-lease]
+// Usage: node docs/planning/dispatch.mjs [--claim] [--owner <id>] [--backlog <path>] [--remote <name>] [--base-branch <b>] [--stale-hours <n>] [--open-prs a,b] [--max-active <1..16>] [--no-lease]
 // Exit: 0 START|NO_ACTION, 2 BLOCKED, 3 RECOVERABLE_FAILURE. Prints exactly one JSON line on stdout.
 import fs from "node:fs";
 import path from "node:path";
@@ -43,17 +43,17 @@ export const safeId = id => validId(id) ? id : "?";
 export const safeStatus = s => isStr(s) && STATUS_ENUM.has(s) ? s : "malformed";
 export const safeOwner = o => isStr(o) && OWNER_ENUM.has(o) ? o : "malformed";
 export const refNameOk = b => isStr(b) && REF_RE.test(b) && !b.includes("..") && !b.endsWith(".") && !/\.lock$/i.test(b);
-export const safeBranch = b => refNameOk(b) && b.length <= 120 ? b : "BRANCH_INVALID";
+export const safeBranch = b => refNameOk(b) && b.length <= 120 && !b.includes("_") ? b : "BRANCH_INVALID"; // "_" excluded like --owner/--remote so token-shaped names (ghp_..., sk_...) are never echoed
 // argv values: owner is echoed only if it passes the TOKEN_RE-style check (no "_"), the base branch only as a valid "_"-free ref name.
 export const safeOwnerArg = o => isStr(o) && /^[A-Za-z0-9.:-]{1,256}$/.test(o) ? o : "?";
-export const safeBaseEcho = b => isStr(b) && !b.includes("_") ? safeBranch(b) : "BRANCH_INVALID";
+export const safeBaseEcho = b => safeBranch(b);
 const safeArg = a => isStr(a) && /^--?[A-Za-z0-9][A-Za-z0-9-]{0,39}$/.test(a) ? a : "?";
 
 class Blocked extends Error { constructor(code) { super(code); this.code = code; } }
 
 export function parseArgs(argv) {
   const o = {claim: false, owner: "cloud-dispatch", backlog: "docs/planning/BACKLOG_CHECKPOINT.json", remote: "origin",
-    baseBranch: "v7/integration", staleHours: 6, openPrs: [], lease: true};
+    baseBranch: "v7/integration", staleHours: 6, openPrs: [], maxActive: null, lease: true};
   const val = (i, f) => { if (i + 1 >= argv.length || argv[i + 1].startsWith("--")) throw new Blocked(`ARG_MISSING_VALUE:${f}`); return argv[i + 1]; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -64,6 +64,8 @@ export function parseArgs(argv) {
     else if (a === "--remote") o.remote = val(i++, a);
     else if (a === "--base-branch") o.baseBranch = val(i++, a);
     else if (a === "--stale-hours") { const n = Number(val(i++, a)); if (!Number.isFinite(n) || n < 0) throw new Blocked("ARG_INVALID:--stale-hours"); o.staleHours = n; }
+    else if (a === "--max-active") { const v = val(i++, a); const n = /^[0-9]{1,3}$/.test(v) ? Number(v) : NaN; if (!(n >= 1 && n <= 16)) throw new Blocked("ARG_INVALID:--max-active"); o.maxActive = n; }
+    // An explicit empty value ("--open-prs ''") means "no open PRs"; a flag with NO following argument stays ARG_MISSING_VALUE (fail-closed).
     else if (a === "--open-prs") o.openPrs = val(i++, a).split(",").map(s => s.trim()).filter(Boolean);
     else throw new Blocked(`ARG_UNKNOWN:${safeArg(a)}`);
   }
@@ -139,13 +141,21 @@ export function select(tasks, env) {
   return {chosen, perTask};
 }
 
+// Every git NETWORK call (fetch, push, ls-remote; this includes the lease store's injected runGit) runs under a bounded timeout. A timeout is
+// a non-zero status with timedOut=true (and g.timeouts counts them), so callers fail closed.
+const NET_CMDS = new Set(["fetch", "push", "ls-remote"]);
 function makeGit(cwd) {
-  return (args, input, extraEnv) => {
+  let timeouts = 0;
+  const g = (args, input, extraEnv, opts = {}) => {
     const a = args[0] === "fetch" ? ["fetch", "--no-write-fetch-head", ...args.slice(1)] : args;
-    const r = spawnSync("git", a, {cwd, input, encoding: "utf8", windowsHide: true,
+    const r = spawnSync("git", a, {cwd, input, encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024, ...(NET_CMDS.has(args[0]) ? {timeout: FETCH_TIMEOUT_MS} : {}), ...opts,
       env: {...process.env, GIT_TERMINAL_PROMPT: "0", ...extraEnv}});
-    return {status: r.status ?? 1, stdout: r.stdout ?? "", stderr: r.stderr ?? ""};
+    const timedOut = r.error?.code === "ETIMEDOUT";
+    if (timedOut) timeouts++;
+    return {status: r.status ?? 1, stdout: r.stdout ?? "", stderr: r.stderr ?? "", timedOut};
   };
+  Object.defineProperty(g, "timeouts", {get: () => timeouts});
+  return g;
 }
 
 function remoteHeads(git, remote) {
@@ -164,35 +174,124 @@ function remoteHeads(git, remote) {
   return m;
 }
 
-// Stale = claim ref exists, only dispatch-claim commits beyond base, newest such commit (else lease acquiredAt) older than staleHours, not in open PRs.
-function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLease, now) {
+// Shallow clones hide ancestry (merge-base fails, old claim commits sit behind the boundary). Try to unshallow once (bounded, nothing echoed);
+// return true only when the history is verifiably complete. Everything history-dependent fails closed when this is false.
+export function ensureFullHistory(git, remote, baseBranch) {
+  const sh = git(["rev-parse", "--is-shallow-repository"]);
+  if (sh.status !== 0) return false;
+  if (sh.stdout.trim() === "false") return true;
+  git(["fetch", "--no-tags", "--unshallow", remote, `refs/heads/${baseBranch}`], undefined, undefined, {timeout: FETCH_TIMEOUT_MS});
+  const again = git(["rev-parse", "--is-shallow-repository"]);
+  return again.status === 0 && again.stdout.trim() === "false";
+}
+
+// A committer date is usable only when it is a finite integer no later than one day in the future (and not before 1970). Never throws.
+const DAY_MS = 864e5;
+const MAX_BRANCH_COMMITS = 1000;
+const SKEW_TOLERANCE_S = 3600; // a branch commit may be dated at most this much before its fork point (committer clock skew)
+// Fetch bound (ms); the env var can only LOWER it (the proof uses that to exercise the timeout path).
+const FETCH_TIMEOUT_MS = Math.min(120000, Number(process.env.UASCO_DISPATCH_FETCH_TIMEOUT_MS) > 0 ? Number(process.env.UASCO_DISPATCH_FETCH_TIMEOUT_MS) : 120000);
+
+// Pure claim = every commit beyond merge-base(branch, base) is a "dispatch-claim:" commit with exactly one parent and the same tree as that
+// parent (independent of base movement). A head that is an ancestor of the base tip is MERGED_AWAITING_WRITEBACK.
+// Work branches: HAS_WORK_COMMITS while their head commit is newer than staleHours, else ABANDONED_WITH_WORK (reported only).
+// Anything git cannot establish (shallow history, bad dates, git errors) is UNKNOWN, which counts as ACTIVE (the cap fails closed).
+function staleReport(git, remote, baseSha, claimed, openPrs, staleHours, readLease, now, fullHistory = true) {
   const out = [];
+  const hoursOf = ms => Math.round(ms / 36e5 * 100) / 100;
   for (const {taskId, branch, sha} of claimed) {
     const claimRef = `refs/heads/${branch}`;
     if (openPrs.has(branch)) { out.push({taskId, claimRef, state: "OPEN_PR"}); continue; }
     if (!baseSha) { out.push({taskId, claimRef, state: "UNKNOWN", why: "BASE_UNAVAILABLE"}); continue; }
-    if (git(["cat-file", "-e", `${sha}^{commit}`]).status !== 0 && git(["fetch", "--no-tags", remote, claimRef]).status !== 0) {
+    if (git(["cat-file", "-e", `${sha}^{commit}`]).status !== 0 && git(["fetch", "--no-tags", remote, claimRef], undefined, undefined, {timeout: FETCH_TIMEOUT_MS}).status !== 0) {
       out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_REF_NOT_FETCHABLE"}); continue;
     }
-    const l = git(["log", "--format=%ct%x09%s", `${baseSha}..${sha}`]);
+    // A positive ancestry answer is trustworthy even in a shallow clone; a negative one is not.
+    const anc = git(["merge-base", "--is-ancestor", sha, baseSha]);
+    if (anc.status === 0) { out.push({taskId, claimRef, state: "MERGED_AWAITING_WRITEBACK"}); continue; }
+    if (!fullHistory) { out.push({taskId, claimRef, state: "UNKNOWN", why: "SHALLOW_HISTORY"}); continue; }
+    if (anc.status !== 1) { out.push({taskId, claimRef, state: "UNKNOWN", why: "ANCESTRY_CHECK_FAILED"}); continue; }
+    const mb = git(["merge-base", sha, baseSha]);
+    const mbSha = mb.stdout.trim();
+    if (mb.status !== 0 || !SHA_RE.test(mbSha)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "MERGE_BASE_FAILED"}); continue; }
+    // Bound the work per branch: a branch with an absurd number of commits is UNKNOWN (counted active), never parsed.
+    const cnt = git(["rev-list", "--count", `${mbSha}..${sha}`]);
+    const total = /^[0-9]{1,12}$/.test(cnt.stdout.trim()) ? Number(cnt.stdout.trim()) : NaN;
+    if (cnt.status !== 0 || !Number.isSafeInteger(total)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "LOG_FAILED"}); continue; }
+    if (total > MAX_BRANCH_COMMITS) { out.push({taskId, claimRef, state: "UNKNOWN", why: "TOO_MANY_COMMITS"}); continue; }
+    // One log call; %x00 separators (a tab or any text inside a subject cannot shift fields); -z terminates each record with NUL too.
+    const l = git(["log", "-z", "--format=%H%x00%T%x00%P%x00%ct%x00%s", `${mbSha}..${sha}`]);
     if (l.status !== 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "LOG_FAILED"}); continue; }
-    const rows = l.stdout.split("\n").filter(Boolean).map(x => x.split("\t"));
-    if (rows.some(r => !(r[1] || "").startsWith(CLAIM_SUBJECT))) { out.push({taskId, claimRef, state: "HAS_WORK_COMMITS"}); continue; }
-    // A claim commit that changed the tree is not a pure claim, whatever its subject says.
-    const tc = git(["rev-parse", `${sha}^{tree}`]), tb = git(["rev-parse", `${baseSha}^{tree}`]);
-    if (tc.status !== 0 || tb.status !== 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "TREE_COMPARE_FAILED"}); continue; }
-    if (tc.stdout.trim() !== tb.stdout.trim()) { out.push({taskId, claimRef, state: "HAS_WORK_COMMITS", why: "TREE_DIFFERS_FROM_BASE"}); continue; }
+    const f = l.stdout.split("\0"); if (f[f.length - 1] === "") f.pop();
+    if (f.length % 5 !== 0 || f.length / 5 !== total) { out.push({taskId, claimRef, state: "UNKNOWN", why: "LOG_FAILED"}); continue; }
+    const rows = [], treeOf = new Map();
+    for (let k = 0; k < f.length; k += 5) { rows.push({h: f[k], t: f[k + 1], parents: f[k + 2].split(" ").filter(Boolean), ct: f[k + 3], s: f[k + 4]}); treeOf.set(f[k], f[k + 1]); }
+    // Date sanity for EVERY commit beyond the fork point (both the pure-claim and the work path): finite, not more than a day ahead, and not
+    // dated before the merge-base commit (minus a small skew tolerance). A past-dated branch (e.g. 1970) can otherwise look ancient and
+    // free a capacity slot; such a branch is UNKNOWN (counted active) instead.
+    const cts = rows.map(r => /^[0-9]{1,16}$/.test(r.ct) ? Number(r.ct) : NaN);
+    if (cts.some(c => !Number.isSafeInteger(c))) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
+    if (cts.some(c => c * 1000 > now + DAY_MS)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_FUTURE_DATED"}); continue; }
+    const mbd = git(["log", "-1", "--format=%ct", mbSha]);
+    const mbCt = /^[0-9]{1,16}$/.test(mbd.stdout.trim()) ? Number(mbd.stdout.trim()) : NaN;
+    if (mbd.status !== 0 || !Number.isSafeInteger(mbCt)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
+    let lowest = Infinity; for (const c of cts) if (c < lowest) lowest = c;
+    if (lowest < mbCt - SKEW_TOLERANCE_S) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
+    let pure = true;
+    for (const r of rows) if (!r.s.startsWith(CLAIM_SUBJECT) || r.parents.length !== 1) { pure = false; break; }
+    if (pure) {
+      // A claim commit that changed the tree relative to its own parent is not a pure claim, whatever its subject says.
+      for (const r of rows) {
+        let pt = treeOf.get(r.parents[0]);
+        if (pt === undefined) { const t = git(["rev-parse", `${r.parents[0]}^{tree}`]); pt = t.status === 0 ? t.stdout.trim() : null; }
+        if (!pt) { out.push({taskId, claimRef, state: "UNKNOWN", why: "TREE_COMPARE_FAILED"}); pure = null; break; }
+        if (pt !== r.t) { pure = false; break; }
+      }
+      if (pure === null) continue;
+    }
+    if (!pure) {
+      const hi = rows.findIndex(r => r.h === sha), ct = hi >= 0 ? cts[hi] : NaN; // the branch head's own date
+      if (!Number.isSafeInteger(ct)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
+      // A head dated before the branch's own oldest claim commit (clock skew, e.g. 1970) cannot be trusted: UNKNOWN, counted active.
+      const claimCts = rows.filter(r => r.s.startsWith(CLAIM_SUBJECT)).map(r => Number(r.ct)).filter(Number.isSafeInteger);
+      let oldestClaim = Infinity; for (const c of claimCts) if (c < oldestClaim) oldestClaim = c;
+      if (claimCts.length && ct < oldestClaim) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_OUT_OF_RANGE"}); continue; }
+      const ageMs = now - ct * 1000;
+      const rec = {taskId, claimRef, state: "HAS_WORK_COMMITS", lastActivityAt: new Date(ct * 1000).toISOString()};
+      if (ageMs < 0) { out.push({...rec, why: "ACTIVITY_FUTURE_DATED"}); continue; }
+      rec.ageHours = hoursOf(ageMs);
+      if (ageMs > staleHours * 36e5) { rec.state = "ABANDONED_WITH_WORK"; rec.note = "reported only; never auto-deleted or auto-reclaimed; an operator decides"; }
+      out.push(rec); continue;
+    }
     let ageMs = null, extra = null;
-    if (rows.length) ageMs = now - Math.max(...rows.map(r => Number(r[0]))) * 1000;
-    else { const le = readLease(taskId); if (le && Number.isFinite(le.acquiredAt)) { ageMs = now - le.acquiredAt; extra = "age from lease acquiredAt"; } }
+    if (rows.length) {
+      let newest = 0; for (const c of cts) if (c > newest) newest = c;
+      ageMs = now - newest * 1000;
+    } else { const le = readLease(taskId); if (le && Number.isFinite(le.acquiredAt)) { ageMs = now - le.acquiredAt; extra = "age from lease acquiredAt"; } }
     if (ageMs === null || !Number.isFinite(ageMs)) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_UNKNOWN"}); continue; }
     if (ageMs < 0) { out.push({taskId, claimRef, state: "UNKNOWN", why: "CLAIM_AGE_NEGATIVE_FUTURE_DATED"}); continue; }
-    const ageHours = Math.round(ageMs / 36e5 * 100) / 100;
+    const ageHours = hoursOf(ageMs);
     out.push(ageMs > staleHours * 36e5
       ? {taskId, claimRef, state: "RECLAIMABLE", ageHours, note: "reported only; never auto-deleted; an operator must delete the ref", ...(extra ? {extra} : {})}
       : {taskId, claimRef, state: "FRESH", ageHours});
   }
   return out;
+}
+
+// True when a commit reachable from the base tip has a SUBJECT starting with "dispatch-claim: <id> " (id matched case-insensitively, like the
+// lowercase claim-branch identity). The subjects of at most HIST_WALK newest commits are scanned (bounded by commits walked, not by matches);
+// a truncated walk without a hit, a shallow history or any git error is null (fail-closed). Subjects are never echoed.
+export const HIST_WALK = 100000;
+function claimInBaseHistory(git, baseSha, id, fullHistory = true) {
+  if (!fullHistory) return null;
+  const lim = Math.min(HIST_WALK, Number(process.env.UASCO_DISPATCH_HISTORY_WALK) > 0 ? Number(process.env.UASCO_DISPATCH_HISTORY_WALK) : HIST_WALK);
+  const prefix = `${CLAIM_SUBJECT} ${id} `.toLowerCase();
+  // -z: one NUL-terminated record per commit, so empty-message commits are counted (a truncated walk can never look complete).
+  const r = git(["log", "-z", "--format=%s", `--max-count=${lim}`, baseSha]);
+  if (r.status !== 0) return null;
+  const subjects = r.stdout.split("\0"); if (subjects[subjects.length - 1] === "") subjects.pop();
+  if (subjects.some(s => s.toLowerCase().startsWith(prefix))) return true;
+  return subjects.length >= lim ? null : false;
 }
 
 // Pure decision: the lease store is "unavailable" (not held) ONLY when ls-remote SUCCEEDED and printed nothing.
@@ -289,35 +388,55 @@ async function runInner(argv, cwd) {
 
   let baseSha = heads.get(o.baseBranch) ?? null;
   if (baseSha && git(["cat-file", "-e", `${baseSha}^{commit}`]).status !== 0) {
-    git(["fetch", "--no-tags", o.remote, `refs/heads/${o.baseBranch}`]);
+    git(["fetch", "--no-tags", o.remote, `refs/heads/${o.baseBranch}`], undefined, undefined, {timeout: FETCH_TIMEOUT_MS});
     if (git(["cat-file", "-e", `${baseSha}^{commit}`]).status !== 0) baseSha = null;
   }
   const claimedList = [];
   for (const t of tasks) {
-    if (!t || !validId(t.id) || t.status !== "READY") continue;
+    if (!t || !validId(t.id)) continue;
     const b = claimBranchOf(t.id);
     if (claimedHeads.has(b)) claimedList.push({taskId: t.id, branch: b, sha: heads.get(b)});
   }
-  const reclaimable = staleReport(git, o.remote, baseSha, claimedList, env.openPrs, o.staleHours, readLease, Date.now());
+  const fullHistory = baseSha ? ensureFullHistory(git, o.remote, o.baseBranch) : false;
+  const reclaimable = staleReport(git, o.remote, baseSha, claimedList, env.openPrs, o.staleHours, readLease, Date.now(), fullHistory);
   for (const r of reclaimable) if (r.state === "RECLAIMABLE") flat.push(`${r.taskId}:RECLAIMABLE`);
-  const extras = {perTask, reclaimable, mode: o.claim ? "CLAIM" : "DRY_RUN", owner: safeOwnerArg(o.owner)};
+  const active = reclaimable.filter(r => (r.state === "FRESH" || r.state === "HAS_WORK_COMMITS" || r.state === "UNKNOWN") && !env.openPrs.has(claimBranchOf(r.taskId))).length;
+  const extras = {perTask, reclaimable, active, mode: o.claim ? "CLAIM" : "DRY_RUN", owner: safeOwnerArg(o.owner)};
 
+  const skipNext = (id, reason) => { env.skip.set(id, reason); return select(tasks, env).chosen; };
   if (!first) return fin("NO_ACTION", flat.length ? flat : ["EMPTY_BACKLOG"], extras);
-  if (!o.claim) return fin("START", flat, {...extras, taskId: first.id, branch: claimBranchOf(first.id), claimRef: `refs/heads/${claimBranchOf(first.id)}`, claimed: false});
+  if (!o.claim) {
+    // Dry run mirrors the claim loop: a task whose claim is already in the base history is not offered (reserves nothing either way).
+    let pick = first;
+    while (pick && baseSha) {
+      const h = claimInBaseHistory(git, baseSha, pick.id, fullHistory);
+      if (h === false) break;
+      const code = h === null ? "CLAIM_HISTORY_CHECK_FAILED" : "CLAIM_IN_BASE_HISTORY";
+      flat.push(`${pick.id}:${code}`); pick = skipNext(pick.id, code);
+    }
+    if (!pick) return fin("NO_ACTION", flat, extras);
+    return fin("START", flat, {...extras, taskId: pick.id, branch: claimBranchOf(pick.id), claimRef: `refs/heads/${claimBranchOf(pick.id)}`, claimed: false});
+  }
+  if (o.maxActive !== null && active >= o.maxActive) return fin("NO_ACTION", [...flat, `CAPACITY_FULL:${active}/${o.maxActive}`], extras);
   if (!baseSha) return fin("RECOVERABLE_FAILURE", [...flat, `BASE_UNAVAILABLE:${o.remote}/${safeBaseEcho(o.baseBranch)}`], extras);
 
   // Claim loop: a lost race (or held lease) falls through to the next selectable task.
   const lost = [];
   const sessionId = `${o.owner}:${process.pid}:${crypto.randomUUID()}`;
   const pushFailed = [];
-  const skipNext = (id, reason) => { env.skip.set(id, reason); return select(tasks, env).chosen; };
   const next = id => { env.claimedHeads.add(claimBranchOf(id)); return select(tasks, env).chosen; };
   const releaseGrant = (lid, grant) => { if (grant) { try { quiet(() => leaseApi.release(store, {...lid, token: grant.token})); } catch { /* best effort */ } } };
   let chosen = first;
   for (let guard = 0; guard <= tasks.length && chosen; guard++) {
     const id = chosen.id, br = claimBranchOf(id), ref = `refs/heads/${br}`;
+    const inHist = claimInBaseHistory(git, baseSha, id, fullHistory);
+    if (inHist !== false) {
+      const code = inHist === null ? "CLAIM_HISTORY_CHECK_FAILED" : "CLAIM_IN_BASE_HISTORY";
+      lost.push(`${id}:${code}`); chosen = skipNext(id, code); continue;
+    }
     const lid = {taskId: id, environment: "CLOUD", workerId: o.owner, sessionId};
     let leaseInfo = {status: "SKIPPED"}, grant = null;
+    const t0 = git.timeouts;
     if (store) {
       leaseFlag.unavail = false;
       try {
@@ -348,6 +467,8 @@ async function runInner(argv, cwd) {
         leaseInfo = leaseCheckFailed(lr) ? {status: "LEASE_CHECK_FAILED", error: why}
           : leaseRefAbsent(lr) ? {status: "LEASE_STORE_UNAVAILABLE", error: why} : {status: "HELD", error: why};
       }
+      // A hung network call during the lease step: nothing was claimed; give back what we obtained (best effort, itself bounded) and stop.
+      if (git.timeouts > t0) { releaseGrant(lid, grant); return fin("RECOVERABLE_FAILURE", [...flat, ...lost, `${id}:LEASE_NETWORK_TIMEOUT`], extras); }
       if (leaseInfo.status === "LEASE_ERROR_UNKNOWN_STATUS") { lost.push(`${id}:LEASE_ERROR:UNKNOWN`); chosen = skipNext(id, "LEASE_ERROR:UNKNOWN"); continue; }
       if (leaseInfo.status === "LEASE_STORE_UNAVAILABLE") lost.push(`${id}:LEASE_STORE_UNAVAILABLE`);
       if (leaseInfo.status === "LEASE_CHECK_FAILED") { lost.push(`${id}:LEASE_CHECK_FAILED`); chosen = skipNext(id, "LEASE_CHECK_FAILED"); continue; }
@@ -360,6 +481,7 @@ async function runInner(argv, cwd) {
     const sha = c.stdout.trim();
     // create-only: --force-with-lease=<ref>: (empty expectation) means "ref must not exist".
     const p = git(["push", "--quiet", o.remote, `${sha}:${ref}`, `--force-with-lease=${ref}:`]);
+    if (p.timedOut) { releaseGrant(lid, grant); return fin("RECOVERABLE_FAILURE", [...flat, ...lost, ...pushFailed, `${id}:PUSH_TIMEOUT_CLAIM_MAY_EXIST_CHECK_REMOTE`], extras); }
     let ours = p.status === 0, again = null;
     if (!ours) {
       // A non-zero status does not prove the push failed (the ref may have been created before the client died/hook/network error): re-list.

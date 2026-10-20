@@ -813,3 +813,14 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .task-inspector{margin:var(--space-2) 0;padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-2)}
 .task-inspector .task-unknown{color:var(--muted);font-style:italic}
 .task-list .link-btn[aria-pressed="true"]{font-weight:700;color:var(--text)}
+
+/* UI-025 görev/koşu zaman çizelgesi: yalnız token */
+.wtl{margin:var(--space-2) 0;padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-2)}
+.wtl-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
+.wtl-item{border-left:2px solid var(--border);padding-left:var(--space-2)}
+.wtl-time{color:var(--muted)}
+.wtl-unknown{font-style:italic}
+/* UI-133 ajan kimlik kartı: yalnız token */
+.wf-idcard{display:grid;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-2)}
+.wf-idcard-kv{margin:0}
+.wf-idcard-unknown{color:var(--muted);font-style:italic}
