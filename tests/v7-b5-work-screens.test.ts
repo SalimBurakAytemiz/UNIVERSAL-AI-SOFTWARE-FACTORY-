@@ -1531,3 +1531,39 @@ describe("COORD run expert selection", () => {
     expect(tr["work.run.expertHint"]).toMatch(/sertifikalı değildir/);
   });
 });
+
+// //TR: COORD-FIRST-DELIVERY-WIRING: masaüstü allow-list'i ilk teslim yollarını yalnız tam eşleşmeyle kabul eder; yakın-ıskalar (sorgu, sondaki eğik çizgi, büyük harf, uzunluk, önek, alt yol, kodlama, yanlış yöntem) reddedilir ve renderer'ın kurduğu yollar birebir kabul edilir.
+describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
+  const H = (c: string) => c.repeat(24);
+  const ITK = `itk_${H("a")}`, TSK = `tsk_${H("b")}`, MSN = `msn_${H("c")}`, PRJ = `prj_${H("d")}`;
+  const GETS = ["/v1/intakes", `/v1/intakes/${ITK}`, `/v1/missions/${MSN}/tasks`, `/v1/projects/${PRJ}/flow`, `/v1/tasks/${TSK}`];
+  const POSTS = ["/v1/intakes", `/v1/missions/${MSN}/plan`, `/v1/tasks/${TSK}/transition`];
+  const nearMisses = (p: string) => [p + "/", p + "?x=1", p + "#", p.toUpperCase(), p.replace(/[0-9a-f]{24}/, H("a").slice(0, 23)), p.replace(/[0-9a-f]{24}/, H("a") + "a"),
+    p.replace(/[0-9a-f]{24}/, H("A")), p.replace("/v1/", "/v1//"), p.replace("/v1/", "/v2/"), p + "/x", p.replace(/\//g, "%2F"), " " + p].filter(m => m !== p);
+  it("admits exactly the five first-delivery reads and the three writes", () => {
+    const get = loadGet(), {desktopPostPathAllowed: post} = loadPost();
+    for (const p of GETS) expect(get(p), p).toBe(true);
+    for (const p of POSTS) expect(post(p), p).toBe(true);
+  });
+  it("refuses every near miss and the wrong method", () => {
+    const get = loadGet(), {desktopPostPathAllowed: post} = loadPost();
+    for (const p of GETS) for (const m of nearMisses(p)) expect(get(m), m).toBe(false);
+    for (const p of POSTS) for (const m of nearMisses(p)) expect(post(m), m).toBe(false);
+    for (const p of [`/v1/intakes/${ITK}`, `/v1/missions/${MSN}/tasks`, `/v1/projects/${PRJ}/flow`, `/v1/tasks/${TSK}`]) expect(post(p), `POST ${p}`).toBe(false);
+    for (const p of [`/v1/missions/${MSN}/plan`, `/v1/tasks/${TSK}/transition`]) expect(get(p), `GET ${p}`).toBe(false);
+    for (const p of [`/v1/intakes/itk_${H("a")}/x`, `/v1/intakes/prj_${H("a")}`, `/v1/tasks/msn_${H("a")}`, `/v1/tasks/${TSK}/transition/x`, `/v1/missions/${MSN}/tasks/${TSK}`]) { expect(get(p), p).toBe(false); expect(post(p), p).toBe(false); }
+  });
+  it("admits the exact paths the renderer builds, and the write body keeps the 32 KB bridge limit", async () => {
+    const get = loadGet(), {desktopPostPathAllowed: post, desktopPostBodyCheck: check, POST_MAX_BODY_BYTES} = loadPost();
+    const work = await load(rend, "work-core.js");
+    expect(post(work.planPath(MSN))).toBe(true);
+    expect(post(work.taskTransitionPath(TSK))).toBe(true);
+    const intakeSrc = read(rend, "intake-core.js"), projectSrc = read(rend, "project-core.js");
+    expect(intakeSrc).toContain('"/v1/intakes"'); expect(intakeSrc).toContain("`/v1/intakes/${id}`");
+    expect(projectSrc).toContain("`/v1/projects/${id}/flow`");
+    expect(get(`/v1/intakes/${ITK}`) && get(`/v1/projects/${PRJ}/flow`)).toBe(true);
+    expect(POST_MAX_BODY_BYTES).toBe(32768);
+    expect(check({idea: "x".repeat(32768)}).error).toBe("API_BODY_TOO_LARGE");
+    expect(check({idea: "x".repeat(1000)}).ok).toBe(true);
+  });
+});

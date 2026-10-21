@@ -1,7 +1,13 @@
 <!-- //TR: Koordinatör yetki paketi: ilk teslim akışının (fikir -> proje -> plan -> görev durumu -> akış) route kayıtlarını ve masaüstü allow-list girdilerini tek Founder kararında toplar. -->
 # COORD-FIRST-DELIVERY-WIRING: one Founder decision that turns the first-delivery chain on in the app
 
-**Status:** request only. Nothing here is applied. Both files are protected: `apps/control-api/src/server.ts` (trust-root sealed) and `apps/desktop/main.mjs`.
+**Status:** APPROVED IN PRINCIPLE by the Founder (2026-10-21) and APPLIED on branch `claude/coord-first-delivery-wiring` for independent review. Not merged. Both files are protected: `apps/control-api/src/server.ts` (trust-root sealed) and `apps/desktop/main.mjs`.
+
+**Scope of the approval:** the route registrations below, the Desktop allow-list entries, the trust-root reseal they require, and their tests. Nothing else in a protected file.
+
+**Corrections made against the code before applying (Founder instruction):**
+1. Two GET routes served by the modules were missing from the Desktop allow-list: `/v1/intakes/:id` (`itk_` + 24 hex) and `/v1/tasks/:id` (`tsk_` + 24 hex). Both are now admitted by exact, anchored patterns.
+2. Body limit: the server's global Fastify `bodyLimit` is 64 KB, but the Desktop bridge caps POST bodies at 32 KB. The three new write routes now carry a per-route `bodyLimit` of 32 KB (`LANE_WRITE_BODY_LIMIT` in `routes/deps.ts`). A test pins it equal to `POST_MAX_BODY_BYTES` in `main.mjs`. The global 64 KB limit is unchanged for existing routes.
 
 **Replaces:** LANE-B-intake.md, LANE-B-plan.md, LANE-B-flow.md and LANE-A-intake-allowlist.md, plus the task-status route.
 
@@ -40,16 +46,20 @@ Every write route keeps the existing gates: control token, Global Stop 423, acti
 ```diff
  // B4-ALLOWLIST-BEGIN
 +const INTAKES_LIST_RE=/^\/v1\/intakes$/;
++const INTAKE_DETAIL_RE=/^\/v1\/intakes\/itk_[0-9a-f]{24}$/;
 +const MISSION_TASKS_RE=/^\/v1\/missions\/msn_[0-9a-f]{24}\/tasks$/;
 +const PROJECT_FLOW_RE=/^\/v1\/projects\/prj_[0-9a-f]{24}\/flow$/;
-@@ function desktopExtraGetPathAllowed(value): extend the final return chain with
-+||INTAKES_LIST_RE.test(value)||MISSION_TASKS_RE.test(value)||PROJECT_FLOW_RE.test(value)
++const TASK_DETAIL_RE=/^\/v1\/tasks\/tsk_[0-9a-f]{24}$/;
++const FIRST_DELIVERY_GET_RES=[INTAKES_LIST_RE,INTAKE_DETAIL_RE,MISSION_TASKS_RE,PROJECT_FLOW_RE,TASK_DETAIL_RE];
+@@ function desktopExtraGetPathAllowed(value): the return chain gains
++||FIRST_DELIVERY_GET_RES.some(re=>re.test(value))
  // B5-POST-ALLOWLIST-BEGIN
 -const POST_ROUTE_RES=[/^\/v1\/projects$/,/^\/v1\/missions$/,
 +const POST_ROUTE_RES=[/^\/v1\/projects$/,/^\/v1\/missions$/,/^\/v1\/intakes$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/plan$/,/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/transition$/,
 ```
 
-- **Body limit:** the existing 32 KB POST limit applies to all three new writes.
+- **Body limit:** 32 KB on both sides for all three new writes (Desktop bridge `POST_MAX_BODY_BYTES`, server per-route `bodyLimit`).
+- **Unchanged:** `EXTRA_GET_ROUTES` does not grow; no query string, trailing slash, extra segment, other prefix or case is admitted.
 - **Unchanged:** no new IPC channel, no storage, and the token stays in the main process.
 
 ## 3. Evidence (Linux; Windows and Electron NOT_EXECUTED here)
@@ -63,6 +73,12 @@ Every write route keeps the existing gates: control token, Global Stop 423, acti
 | Desktop allow-list shape (exact paths accepted, near-misses refused) | `tests/v7-ps1b-project-studio-ui.test.ts` (claude/lane-a-intake-ui), to be extended to the plan, tasks and flow paths when this is applied |
 | Cross-lane chain through the real modules | claude/coord-integration-l1 end-to-end test |
 
-## 4. Founder decision
+## 4. Applied evidence (branch `claude/coord-first-delivery-wiring`)
 
-Reply **"COORD-FIRST-DELIVERY-WIRING onaylıyorum"**. An agent then applies exactly these lines on a separate authority branch, reseals the trust root, runs the suite, and opens a PR for the Independent Review. Merging stays with the Founder.
+- `tests/v7-b1-workos.test.ts` "COORD first-delivery wiring through the real server": the whole chain over HTTP through the real `buildServer` (intake, plan, tasks, dependency-gated task status, flow, reads, audit); token 403, Host 421, Global Stop 423 on every write while reads are served, policy 403, tenant isolation 404, nothing written on refusal; 413 above 32 KB on the three writes.
+- `tests/v7-b5-work-screens.test.ts` "COORD first-delivery Desktop allow-list": the 5 reads and 3 writes are admitted exactly; 12 near-miss shapes per path and wrong-method use are refused; the renderer's own paths pass.
+- `config/trust-root-manifest.json` resealed: only the two hashes for `server.ts` and `main.mjs` (and `generatedAt`) change; `verify-trust-root` PASS.
+
+## 5. Founder decision
+
+Approved in principle on 2026-10-21. The PR goes to the Independent Review; if the review fails it is not merged. Merging stays with the Founder.

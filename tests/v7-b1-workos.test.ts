@@ -688,3 +688,93 @@ describe("LANE-B task transition routes", () => {
     expect((await other.app.inject({method: "GET", url: `/v1/tasks/${t1.taskId}`, headers: hdr})).statusCode).toBe(404);
   });
 });
+
+// //TR: COORD-FIRST-DELIVERY-WIRING: ilk teslim zinciri GERÇEK server.ts üzerinden (buildServer) — intake, plan, görevler, görev geçişi, akış ve okumalar; token/Host/Global Stop/politika/tenant kapıları ve masaüstü köprüsüyle aynı 32 KB yazma sınırı.
+describe("COORD first-delivery wiring through the real server", () => {
+  const token = crypto.randomBytes(16).toString("hex");
+  const hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const IDEA = "A small web app where I can track my daily reading with a streak counter";
+  const mkApp = (extra: Record<string, unknown> = {}) => {
+    const runtime = path.join(tmp, "runtime");
+    fs.mkdirSync(runtime, {recursive: true});
+    return {runtime, app: buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false, ...extra})};
+  };
+  const req = (app: any, method: string, url: string, payload?: unknown, headers: any = hdr) => app.inject({method, url, headers, ...(payload === undefined ? {} : {payload: payload as any})});
+  const seed = async (app: any) => {
+    const i = await req(app, "POST", "/v1/intakes", {idea: IDEA});
+    expect(i.statusCode).toBe(201);
+    const intake = i.json().intake;
+    const p = await req(app, "POST", `/v1/missions/${intake.missionId}/plan`, {tasks: [{title: "Giriş ekranı"}, {title: "API", dependsOn: [0]}]});
+    expect(p.statusCode, p.body).toBeLessThan(300);
+    const tasks = (await req(app, "GET", `/v1/missions/${intake.missionId}/tasks`)).json().tasks;
+    return {intake, tasks};
+  };
+
+  it("serves the whole chain over HTTP: intake, plan, tasks, dependency-gated task status, flow and reads, with audit", async () => {
+    const {runtime, app} = mkApp();
+    const {intake, tasks} = await seed(app);
+    expect(intake.intakeId).toMatch(/^itk_[0-9a-f]{24}$/);
+    expect((await req(app, "GET", "/v1/intakes")).json().intakes).toHaveLength(1);
+    expect((await req(app, "GET", `/v1/intakes/${intake.intakeId}`)).json().intake.projectId).toBe(intake.projectId);
+    expect(tasks.map((t: any) => [t.title, t.status])).toEqual([["Giriş ekranı", "PENDING"], ["API", "PENDING"]]);
+    const [t1, t2] = tasks;
+    expect(t2.dependsOn).toEqual([t1.taskId]);
+    const tr = (id: string, to: string) => req(app, "POST", `/v1/tasks/${id}/transition`, {to, reason: `to ${to}`});
+    const gated = await tr(t2.taskId, "IN_PROGRESS");
+    expect([gated.statusCode, gated.json().reason]).toEqual([409, "TASK_DEPENDENCIES_NOT_DONE"]);
+    for (const to of ["IN_PROGRESS", "DONE"]) expect((await tr(t1.taskId, to)).json().task.status).toBe(to);
+    expect((await tr(t2.taskId, "IN_PROGRESS")).statusCode).toBe(200);
+    expect((await req(app, "GET", `/v1/tasks/${t1.taskId}`)).json().task.status).toBe("DONE");
+    const detail = (await req(app, "GET", `/v1/missions/${intake.missionId}`)).json();
+    expect(detail.tasks.map((t: any) => t.status)).toEqual(["DONE", "IN_PROGRESS"]);
+    const flow = await req(app, "GET", `/v1/projects/${intake.projectId}/flow`);
+    expect(flow.statusCode).toBe(200);
+    expect(flow.json().projectId ?? flow.json().flow?.projectId).toBe(intake.projectId);
+    const events = fs.readFileSync(path.join(runtime, "control-api-events.jsonl"), "utf8");
+    for (const e of ["WORKOS_INTAKE_CREATED", "WORKOS_TASK_TRANSITIONED"]) expect(events).toContain(e);
+    await app.close();
+  });
+  it("keeps every gate on the new routes: token 403, Host 421, Global Stop 423 (reads still served), policy 403, tenant isolation", async () => {
+    const {runtime, app} = mkApp();
+    const {intake, tasks} = await seed(app);
+    const t1 = tasks[0].taskId;
+    const reads = ["/v1/intakes", `/v1/intakes/${intake.intakeId}`, `/v1/missions/${intake.missionId}/tasks`, `/v1/projects/${intake.projectId}/flow`, `/v1/tasks/${t1}`];
+    const writes: Array<[string, unknown]> = [["/v1/intakes", {idea: IDEA + " again"}], [`/v1/missions/${intake.missionId}/plan`, {tasks: [{title: "x"}]}], [`/v1/tasks/${t1}/transition`, {to: "BLOCKED", reason: "x"}]];
+    for (const u of reads) {
+      expect((await req(app, "GET", u, undefined, {host: "127.0.0.1:3210"})).statusCode, u).toBe(403);
+      expect((await req(app, "GET", u, undefined, {...hdr, host: "evil.example:3210"})).statusCode, u).toBe(421);
+    }
+    for (const [u, b] of writes) expect((await req(app, "POST", u, b, {...hdr, "x-uasco-control-token": "wrong"})).statusCode, u).toBe(403);
+    fs.writeFileSync(path.join(runtime, "GLOBAL_STOP.json"), JSON.stringify({active: true, reason: "test", actor: "TEST"}));
+    for (const [u, b] of writes) expect((await req(app, "POST", u, b)).json().error, u).toBe("GLOBAL_STOP_ACTIVE");
+    for (const u of reads) expect((await req(app, "GET", u)).statusCode, u).toBe(200);
+    fs.rmSync(path.join(runtime, "GLOBAL_STOP.json"));
+    await app.close();
+    const denied = mkApp({policyContext: {scopeAllowed: false}}).app;
+    for (const [u, b] of writes) { const r = await req(denied, "POST", u, b); expect([r.statusCode, r.json().error], u).toEqual([403, "ACTION_DENIED"]); }
+    await denied.close();
+    const other = mkApp({tenantId: "tB"}).app;
+    for (const u of reads.slice(1)) expect((await req(other, "GET", u)).statusCode, u).toBe(404);
+    expect((await req(other, "GET", "/v1/intakes")).json().intakes).toEqual([]);
+    expect((await req(other, "POST", `/v1/tasks/${t1}/transition`, {to: "BLOCKED", reason: "x"})).statusCode).toBe(404);
+    await other.close();
+    const again = mkApp().app;
+    expect((await req(again, "GET", `/v1/tasks/${t1}`)).json().task.status).toBe("PENDING"); // hiçbir ret yazmadı
+    await again.close();
+  });
+  it("caps the three new writes at the Desktop bridge's 32 KB while the legacy global 64 KB limit stays as it was", async () => {
+    const {app} = mkApp();
+    const {intake, tasks} = await seed(app);
+    const big = (n: number) => JSON.stringify({idea: "x".repeat(n)});
+    const json = {...hdr, "content-type": "application/json"};
+    for (const u of ["/v1/intakes", `/v1/missions/${intake.missionId}/plan`, `/v1/tasks/${tasks[0].taskId}/transition`]) {
+      expect((await req(app, "POST", u, big(33 * 1024), json)).statusCode, u).toBe(413);
+      expect((await req(app, "POST", u, big(30 * 1024), json)).statusCode, u).toBe(400); // sınır içinde: şema karar verir
+    }
+    expect((await req(app, "POST", "/v1/projects", big(40 * 1024), json)).statusCode).toBe(400); // eski rota: genel 64 KB değişmedi
+    const {LANE_WRITE_BODY_LIMIT} = await import("../apps/control-api/src/routes/deps.js");
+    const main = fs.readFileSync(path.join(__dirname, "..", "apps", "desktop", "main.mjs"), "utf8");
+    expect(LANE_WRITE_BODY_LIMIT).toBe(Number(/const POST_MAX_BODY_BYTES=(\d+);/.exec(main)![1]));
+    await app.close();
+  });
+});

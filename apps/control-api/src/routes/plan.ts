@@ -1,4 +1,5 @@
 //TR: Bu dosya mission görev planı route'larını sağlar (POST /v1/missions/:id/plan, GET /v1/missions/:id/tasks); server.ts'e tek satırlık kayıt gerekir (docs/authority-requests/LANE-B-plan.md).
+import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
 import type {RouteDeps} from "./deps.js";
 import {submitPlan, validatePlanCreate, PlanError} from "../../../../core/workos/plan.js";
 
@@ -16,7 +17,7 @@ export function registerPlanRoutes(app: any, d: RouteDeps): void {
     if (!d.getStore().getMission(d.scope, req.params.id)) return reply.code(404).send({error: "WORKOS_NOT_FOUND"});
     return {tasks: d.getStore().listTasks(d.scope, req.params.id)};
   }));
-  app.post("/v1/missions/:id/plan", guard(async (req: any, reply: any) => {
+  app.post("/v1/missions/:id/plan", {bodyLimit: LANE_WRITE_BODY_LIMIT}, guard(async (req: any, reply: any) => {
     if (!validMissionId(req.params.id)) return reply.code(400).send({error: "INVALID_MISSION_ID"});
     const body = req.body ?? {};
     if (d.workosStopped()) return reply.code(423).send({error: "GLOBAL_STOP_ACTIVE"});

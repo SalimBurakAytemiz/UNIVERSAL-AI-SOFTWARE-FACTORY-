@@ -1,5 +1,6 @@
 //TR: Bu dosya görev durum geçişi route'unu sağlar (POST /v1/tasks/:id/transition, GET /v1/tasks/:id); server.ts'e tek satırlık kayıt gerekir (docs/authority-requests/LANE-B-task-status.md).
 import AjvModule from "ajv";
+import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
 import type {RouteDeps} from "./deps.js";
 
 const Ajv = AjvModule.default;
@@ -19,7 +20,7 @@ export function registerTaskRoutes(app: any, d: RouteDeps): void {
     const t = d.getStore().getTask(d.scope, req.params.id);
     return t ? {task: t} : reply.code(404).send({error: "WORKOS_NOT_FOUND"});
   }));
-  app.post("/v1/tasks/:id/transition", guard(async (req: any, reply: any) => {
+  app.post("/v1/tasks/:id/transition", {bodyLimit: LANE_WRITE_BODY_LIMIT}, guard(async (req: any, reply: any) => {
     if (!validTaskId(req.params.id)) return reply.code(400).send({error: "INVALID_TASK_ID"});
     const body = req.body ?? {};
     if (d.workosStopped()) return reply.code(423).send({error: "GLOBAL_STOP_ACTIVE"});

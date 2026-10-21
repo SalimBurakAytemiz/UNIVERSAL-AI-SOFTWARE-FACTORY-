@@ -2,6 +2,9 @@
 import type {WorkOsStore} from "../../../../core/workos/store.js";
 import type {Scope} from "../../../../core/workos/types.js";
 
+// //TR: COORD-FIRST-DELIVERY-WIRING: modüler yazma route'larının gövde sınırı masaüstü köprüsünün POST sınırıyla (apps/desktop/main.mjs POST_MAX_BODY_BYTES) aynıdır; sunucunun genel 64 KB sınırı yalnız eski rotalar için kalır.
+export const LANE_WRITE_BODY_LIMIT = 32 * 1024;
+
 export interface RouteDeps {
   getStore: () => WorkOsStore; scope: Scope; orgId: string; actor: string;
   audit: (event: string, details?: Record<string, unknown>) => void;

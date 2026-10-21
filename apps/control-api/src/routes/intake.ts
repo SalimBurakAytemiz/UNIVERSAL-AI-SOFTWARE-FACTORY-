@@ -1,4 +1,5 @@
 //TR: Bu dosya proje intake route'larını (fikir -> doğrulanmış kayıt -> proje + ilk mission) sağlar; server.ts'e tek satırlık kayıt gerekir (docs/authority-requests/LANE-B-intake.md).
+import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
 import type {RouteDeps} from "./deps.js";
 import {submitIntake, listIntakes, getIntake, validateIntakeCreate, IntakeError} from "../../../../core/workos/intake.js";
 
@@ -22,7 +23,7 @@ export function registerIntakeRoutes(app: any, d: RouteDeps): void {
     const r = getIntake(d.getStore().dataDir, d.scope, req.params.id);
     return r ? {intake: r} : reply.code(404).send({error: "INTAKE_NOT_FOUND"});
   }));
-  app.post("/v1/intakes", guard(async (req: any, reply: any) => {
+  app.post("/v1/intakes", {bodyLimit: LANE_WRITE_BODY_LIMIT}, guard(async (req: any, reply: any) => {
     const body = req.body ?? {};
     if (d.workosStopped()) return reply.code(423).send({error: "GLOBAL_STOP_ACTIVE"});
     const decision = d.workosPolicy("workos.intake.create", "NONE", body);
