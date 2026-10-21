@@ -826,6 +826,18 @@
         "UASCO Reviewer App private key environment secret re-added",
         "real Reviewer workflow re-run for PR #136"
       ]
+    },
+    "secondRealRun": {
+      "run": 39619436696,
+      "attempt": 2,
+      "pr": 136,
+      "head": "3a1ba9a",
+      "base": "bd5ce9b",
+      "checkRunId": 119300170500,
+      "result": "App check posted by the UASCO reviewer App (key now valid): conclusion failure, blocking VERDICT_MISSING (evidence digest 9822295f...). ai-review step: reviewer process returned is_error after 305 ms, 1 turn, 0 tokens, no structured_output; gate failed closed as designed. No approval.",
+      "likelyCause": "reviewer credential rejected (CLAUDE_CODE_OAUTH_TOKEN in the review environment invalid or expired); full output hidden by design, not proven",
+      "founderFix": "regenerate the reviewer token (claude setup-token) into the review environment secret, then re-run the review for #136",
+      "observedAt": "2026-10-21T15:40Z"
     }
   },
   "baseCi": {
@@ -847,8 +859,23 @@
     },
     "COORD-INTEGRATION-L1": {
       "branch": "claude/coord-integration-l1",
-      "status": "IN_PROGRESS",
-      "note": "lane branches merged + cross-lane E2E first-delivery test (workflow w20p3ft4e)"
+      "head": "55d6a39",
+      "status": "PUSHED_UNVERIFIED",
+      "note": "9 lane merges (601361e) + cross-lane first-delivery E2E test; coordinator verification pending (workflow w20p3ft4e)"
+    },
+    "COORD-TASK-UI": {
+      "branch": "claude/coord-task-ui",
+      "head": "3b7b5ac",
+      "status": "TESTED",
+      "tests": "v7-b5-work-screens 80/80 (6 new); 30 renderer test files 1173/1173; tsc/TR/secret/architecture PASS; 2 mutations caught",
+      "note": "Desktop task status controls in mission detail (POST /v1/tasks/:id/transition); route unreachable until COORD-FIRST-DELIVERY-WIRING"
+    },
+    "LANE-B-TASK-ROUTES": {
+      "branch": "claude/lane-b-task-routes",
+      "head": "ebce3c3",
+      "status": "TESTED",
+      "tests": "v7-b1-workos 18/18; tsc/TR/secret PASS; 2 mutations caught (Global Stop 423, body schema)",
+      "verifiedBy": "coordinator"
     }
   }
 }
