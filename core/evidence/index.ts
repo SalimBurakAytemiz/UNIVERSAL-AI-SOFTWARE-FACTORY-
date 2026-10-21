@@ -60,7 +60,8 @@ const PC = String.raw`\p{L}\p{N}._~\-`;
 const LB = String.raw`(?=[\\/])(?:(?<![${PC}\\/])|(?<=\x1b\[[0-9;:?]*[A-Za-z])|(?<=\\u001[bB]\[[0-9;:?]*[A-Za-z])|(?<=(?:^|[\s"'=,;(])-[A-Za-z]))`;
 const BR = `(?![${PC}])`, RUN = String.raw`(?<![\\/])`;
 const SEP = String.raw`[\\/]+`, PSEP = String.raw`(?:\\?/)+`, BSEP = String.raw`\\+`;
-const NAME_P = String.raw`[^\\/\s"'\x60]+`;
+// Kabukta kaçışlı boşluk ("/Users/John\ Smith") adın parçasıdır.
+const NAME_P = String.raw`(?:[^\\/\s"'\x60]|\\ )+`;
 // Windows profil adı boşluk içerebilir ("John Smith"): boşluklu ad en çok 20 karakterdir (Windows hesap adı sınırı) ve bir ayraç, tırnak veya satır sonunda biter;
 // yoksa boşluksuz parça alınır, böylece "C:\Users\bob is not a git repository" iletisinin geri kalanı korunur.
 const NAME_W = String.raw`(?:[^\\/"<>|:*?\r\n\t]{1,20}(?=[\\/"'\r\n]|$)|[^\\/\s"<>|:*?]+)`;
@@ -87,7 +88,8 @@ function pathPattern(abs: string, bounded: boolean): RegExp | null {
   const t = abs.replace(/[\\/]+$/, ""), lead = /^[\\/]/.test(t), segs = t.split(/[\\/]+/).filter(Boolean);
   const drive = segs.length > 0 && /^[A-Za-z]:$/.test(segs[0]);
   if (segs.length - (drive ? 1 : 0) < 1) return null;
-  const body = (lead ? SEP : "") + segs.map(escapeRe).join(SEP);
+  // Boşluklu bir bileşen kabukta kaçışlı ("odd\ home") veya URL kodlu ("odd%20home") da yazılabilir.
+  const body = (lead ? SEP : "") + segs.map(x => escapeRe(x).split(" ").join(String.raw`(?:\\ | |%20)`)).join(SEP);
   return new RegExp(bounded ? (lead ? LB : "") + body + BR : (lead ? RUN : "") + body, "giu");
 }
 // Gerçek kullanıcı dizini değerleri: os.homedir(), hesap kaydı, HOME ve USERPROFILE; her birinin realpath'i (Windows'ta native: 8.3 kısa ad açılır).

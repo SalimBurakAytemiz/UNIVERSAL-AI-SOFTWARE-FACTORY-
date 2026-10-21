@@ -498,6 +498,7 @@ describe("PQ-006: no user-directory path leaves the Evidence API", () => {
     [String.raw`wsl \\wsl$\Ubuntu\root\x`, String.raw`wsl <USER_PATH>\x`],
     [String.raw`/home/alice/project/a.ts`, String.raw`<USER_PATH>/project/a.ts`],
     [String.raw`/Users/Bob/Documents`, String.raw`<USER_PATH>/Documents`],
+    [String.raw`cd /Users/John\ Smith/proj`, String.raw`cd <USER_PATH>/proj`],
     [String.raw`wsl /mnt/c/users/bob/x`, String.raw`wsl <USER_PATH>/x`],
     [String.raw`bash /c/Users/runneradmin/x`, String.raw`bash <USER_PATH>/x`],
     [String.raw`{"p":"\/home\/alice\/x"}`, String.raw`{"p":"<USER_PATH>\/x"}`],
@@ -552,6 +553,21 @@ describe("PQ-006: no user-directory path leaves the Evidence API", () => {
         expect(line.toLowerCase(), positive[i]).not.toContain("carol");
       }
       expect(lines.slice(positive.length, positive.length + negative.length)).toEqual(negative);
+    } finally {
+      for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  });
+
+  it("a home directory with a space is masked plain, shell-escaped and URL-encoded", { timeout: T }, async () => {
+    const saved = {HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE};
+    const home = process.platform === "win32" ? String.raw`D:\uasco home\dana` : "/srv/uasco home/dana";
+    process.env.HOME = home; process.env.USERPROFILE = home;
+    try {
+      const fwd = home.split("\\").join("/");
+      const positive = [`plain ${home}/x`, `cd ${fwd.split(" ").join("\\ ")}/x`, `url file://${fwd.split(" ").join("%20")}/x`];
+      const c = setup();
+      const {lines} = await tailOf(c, "spacehome-nnnnnn", positive.join("\n") + "\n");
+      for (const [i, line] of lines.slice(0, positive.length).entries()) { expect(line, positive[i]).toContain("<USER_PATH>"); expect(line, positive[i]).not.toContain("dana"); }
     } finally {
       for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
     }
