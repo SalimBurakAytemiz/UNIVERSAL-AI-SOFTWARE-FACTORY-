@@ -186,12 +186,20 @@ const diagRec = code => ({code, isError: true, turns: 1, durationMs: 305, modelU
 const miss = D({verdict: null}), missA = D({verdict: null, diag: diagRec("REVIEWER_AUTH_REJECTED")});
 check("G40 no verdict + AUTH diagnosis => failure: VERDICT_MISSING and every other reason kept in order, REVIEWER_AUTH_REJECTED appended after them",
   missA.conclusion === "failure" && JSON.stringify(missA.reasons) === JSON.stringify([...miss.reasons, "REVIEWER_AUTH_REJECTED"]) && miss.reasons.includes("VERDICT_MISSING") && missA.digest !== miss.digest);
-const FAILING_VERDICTS = [null, {rejected: "VERDICT_UNREADABLE", negative: true}, {malformed: true}, verdict({summary: ""}), "CLEAN", verdict({result: "BLOCKED"})];
-check("G41 every failure code is added for a missing, unreadable, malformed or negative verdict; REVIEWER_OK never is (the decision equals the one without it)",
-  FAIL_CODES.every(c => FAILING_VERDICTS.every(fv => has(D({verdict: fv, diag: diagRec(c)}), c)))
-  && FAILING_VERDICTS.every(fv => !has(D({verdict: fv, diag: diagRec("REVIEWER_OK")}), "REVIEWER_OK") && D({verdict: fv, diag: diagRec("REVIEWER_OK")}).digest === D({verdict: fv}).digest));
 const JUNK_DIAG = [{code: "REVIEWER_PASS"}, {code: "reviewer_auth_rejected"}, {code: " REVIEWER_AUTH_REJECTED"}, {code: ["REVIEWER_AUTH_REJECTED"]}, {code: 1}, "REVIEWER_AUTH_REJECTED",
   ["REVIEWER_AUTH_REJECTED"], null, {}, {code: "VERDICT_MISSING"}, {code: "toString"}, {code: "SUCCESS"}, {code: "REVIEWER_IS_IMPLEMENTER"}];
+// No verdict delivered: nothing (VERDICT_MISSING) or the unreadable placeholder. Everything else is a delivered verdict, which a diagnosis never annotates.
+const NO_VERDICT = [null, {rejected: "VERDICT_UNREADABLE", negative: true}];
+const BLOCKED_V = verdict({result: "BLOCKED", findings: [{id: "F-1", severity: "P1", classification: "BLOCKER", file: "core/x.ts", line: 1, title: "fail-open", evidence: "e"}],
+  checks: {security: "FAIL", tests: "PASS", ciEvidence: "PASS", scope: "PASS"}});
+const DELIVERED = [verdict(), BLOCKED_V, verdict({result: "BLOCKED"}), verdict({result: "INCONCLUSIVE"}), verdict({checks: {security: "PASS", tests: "INSUFFICIENT", ciEvidence: "PASS", scope: "PASS"}}),
+  verdict({reviewedHeadSha: OTHER}), {malformed: true}, verdict({summary: ""}), verdict({extra: 1}), "CLEAN", verdict({result: "BLOCKED", summary: `echo ${FAKE.github}`}),
+  {rejected: "VERDICT_CONTAINS_SECRET_PATTERN", negative: true}, {rejected: "VERDICT_CONTAINS_SECRET_PATTERN", negative: false}];
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+check("G41 each failure code is appended only when no verdict was delivered (missing or unreadable); for a malformed, credential-shaped or valid (positive or negative) verdict the decision, reasons, order and digest equal those without a diagnosis; REVIEWER_OK is never added",
+  FAIL_CODES.every(c => NO_VERDICT.every(fv => same(D({verdict: fv, diag: diagRec(c)}).reasons, [...D({verdict: fv}).reasons, c])))
+  && [...REVIEWER_DIAGNOSTIC_CODES.map(diagRec), ...JUNK_DIAG].every(dg => DELIVERED.every(fv => same(D({verdict: fv, diag: dg}), D({verdict: fv}))))
+  && NO_VERDICT.every(fv => same(D({verdict: fv, diag: diagRec("REVIEWER_OK")}), D({verdict: fv}))) && DELIVERED.length === 13);
 check("G42 an unknown or malformed diagnosis is ignored (treated as absent)", JUNK_DIAG.every(j => reviewerFailureCode(j) === null && D({verdict: null, diag: j}).digest === miss.digest));
 check("G43 a valid positive verdict is never affected by any diagnosis (same success, same record and digest), also with Founder authority",
   [...REVIEWER_DIAGNOSTIC_CODES.map(diagRec), ...JUNK_DIAG].every(dg => { const x = D({diag: dg}); return x.conclusion === "success" && x.reasons.length === 0 && x.digest === ok.digest; })
@@ -207,9 +215,17 @@ check("G43b a valid positive verdict whose decision fails for another reason (st
         const a = D({verdict: fv, ev: evo}), b = D({verdict: fv, ev: evo, diag: dg});
         combos++;
         if (b.conclusion !== a.conclusion || JSON.stringify(b.reasons.slice(0, a.reasons.length)) !== JSON.stringify(a.reasons) || b.reasons.length > a.reasons.length + 1
-          || (b.reasons.length > a.reasons.length && !FAIL_CODES.includes(b.reasons.at(-1))) || negativeVerdict(b) !== negativeVerdict(a)) never = false;
+          || (b.reasons.length > a.reasons.length && (!FAIL_CODES.includes(b.reasons.at(-1)) || !(fv === null || fv.rejected === "VERDICT_UNREADABLE")))
+          || negativeVerdict(b) !== negativeVerdict(a)) never = false;
       }
-  check("G44 a diagnosis never produces a pass, never removes or reorders a reason, adds at most one fixed code, and never changes the negative-verdict record", never && combos >= 500);
+  check("G44 a diagnosis never produces a pass, never removes or reorders a reason, adds at most one fixed code (only when no verdict was delivered), and never changes the negative-verdict record", never && combos >= 500);
+}
+{
+  // The defect this pins: a real rejection plus an oversized execution file (REVIEWER_OUTPUT_UNREADABLE) must not gain a "may not have started" remedy.
+  const base = D({verdict: BLOCKED_V}), withDiag = [...REVIEWER_DIAGNOSTIC_CODES.map(diagRec), ...JUNK_DIAG].map(dg => D({verdict: BLOCKED_V, diag: dg}));
+  check("G48 a valid BLOCKED verdict with any diagnosis (REVIEWER_OUTPUT_UNREADABLE and every other code) keeps exactly its reasons, digest and negative record; no remedy line",
+    base.conclusion === "failure" && negativeVerdict(base) && has(base, "VERDICT_BLOCKED") && withDiag.every(x => same(x, base) && !renderSummary(x).includes("Reviewer diagnosis"))
+    && same(D({verdict: BLOCKED_V, diag: diagRec("REVIEWER_OUTPUT_UNREADABLE")}).reasons, base.reasons));
 }
 {
   const sm = renderSummary(missA);
@@ -218,7 +234,7 @@ check("G43b a valid positive verdict whose decision fails for another reason (st
     && FAIL_CODES.every(c => (t => typeof t === "string")(REVIEWER_REMEDIES[c]) && renderSummary(D({verdict: null, diag: diagRec(c)})).includes(REVIEWER_REMEDIES[c]))
     && !renderSummary(miss).includes("Reviewer diagnosis") && !renderSummary(ok).includes("Reviewer diagnosis") && JSON.stringify(Object.keys(REVIEWER_REMEDIES)) === JSON.stringify(FAIL_CODES)
     && Object.values(REVIEWER_REMEDIES).every(t => !/[@|<>`\r\n]/.test(t)));
-  check("G46 the schema-refusal remedy points at the schema in scripts/ci/uasco-review and says no credential change is needed; the code is added only to a failed verdict",
+  check("G46 the schema-refusal remedy points at the schema in scripts/ci/uasco-review and says no credential change is needed; the code is added only when no verdict was delivered",
     /refused the verdict schema/.test(REVIEWER_REMEDIES.REVIEWER_SCHEMA_REJECTED) && REVIEWER_REMEDIES.REVIEWER_SCHEMA_REJECTED.includes("scripts/ci/uasco-review")
     && /no credential change is needed/.test(REVIEWER_REMEDIES.REVIEWER_SCHEMA_REJECTED) && !REVIEWER_REMEDIES.REVIEWER_SCHEMA_REJECTED.includes("CLAUDE_CODE_OAUTH_TOKEN")
     && JSON.stringify(D({verdict: null, diag: diagRec("REVIEWER_SCHEMA_REJECTED")}).reasons) === JSON.stringify([...miss.reasons, "REVIEWER_SCHEMA_REJECTED"])
@@ -708,6 +724,16 @@ const green = [{name: UBU, status: "completed", conclusion: "success"}, {name: W
   made.push(...junk);
   check("E21f an unknown code, a malformed or an oversized diagnostics file is ignored (the decision equals the one without any diagnosis)",
     junk.every(u => u.concluded?.conclusion === "failure" && JSON.stringify(dec(u)) === JSON.stringify(dec(m0)) && !u.concluded.output.summary.includes("Reviewer diagnosis")));
+  // The defect end to end: the real reviewer-diagnose phase on an oversized execution file, then a real BLOCKED verdict through decide and finish.
+  const odir = path.join(tmp, "out-over-blocked");
+  const ro = await runPhase("reviewer-diagnose", {EXECUTION_FILE: cases.oversized, UASCO_VERDICT_DIR: odir, GITHUB_STEP_SUMMARY: ""});
+  const overDiag = fs.readFileSync(path.join(odir, "reviewer-diagnostics.json"), "utf8");
+  const b0 = await e2e({ci: green, verdictObj: BLOCKED_V}), b1 = await e2e({ci: green, verdictObj: BLOCKED_V, diagnostics: overDiag});
+  made.push(b0, b1);
+  check("E21h oversized execution file + a valid BLOCKED verdict through the real phases: the diagnosis is UNREADABLE, yet the check has no diagnosis line and the decision record is unchanged",
+    ro.code === 0 && overDiag.trim() === UNREADABLE_REC && b1.concluded?.conclusion === "failure" && same(dec(b1), dec(b0)) && dec(b1).reasons.includes("VERDICT_BLOCKED")
+    && !dec(b1).reasons.includes("REVIEWER_OUTPUT_UNREADABLE") && !b1.concluded.output.summary.includes("Reviewer diagnosis") && b1.concluded.output.summary === b0.concluded?.output.summary
+    && /^v2:1:/.test(b1.concluded.external_id ?? "") && b1.concluded.external_id === b0.concluded?.external_id);
   for (const x of [tmp, ...made.map(r => r.dir)]) fs.rmSync(x, {recursive: true, force: true});
 }
 {

@@ -100,7 +100,7 @@ export function preGate(evidence) {
   return {blockers: kept.filter(x => !AUTHORITY_CODE.test(x)), authority: kept.filter(x => AUTHORITY_CODE.test(x)), headSha: mg.expectedHeadSha, baseSha: mg.expectedBaseSha};
 }
 
-// //TR: Reviewer teşhisi: claude-code-action'ın yürütme kaydındaki son "result" mesajı yalnız bellekte, sabit desenlerle tek bir sabit koda sınıflandırılır; kaydın hiçbir metni (PR içeriği, prompt injection veya sır taşıyabilir) kopyalanmaz, yazılmaz ya da yayımlanmaz. Teşhis yalnız geçmeyen bir karara ek bir blokaj nedeni ve sabit bir çözüm cümlesi ekler; hiçbir nedeni silemez, geçerli olumlu bir kararı etkilemez ve bir başarısızlığı asla başarıya çeviremez.
+// //TR: Reviewer teşhisi: claude-code-action'ın yürütme kaydındaki son "result" mesajı yalnız bellekte, sabit desenlerle tek bir sabit koda sınıflandırılır; kaydın hiçbir metni (PR içeriği, prompt injection veya sır taşıyabilir) kopyalanmaz, yazılmaz ya da yayımlanmaz. Teşhis yalnız hiç karar teslim edilmediğinde (karar yok veya okunamadı) ek bir blokaj nedeni ve sabit bir çözüm cümlesi ekler; teslim edilmiş bir kararı (olumlu, olumsuz, bozuk veya sır içeren) asla etkilemez, hiçbir nedeni silemez ve bir başarısızlığı asla başarıya çeviremez.
 // Reviewer diagnosis: why the reviewer step gave no usable verdict, as one fixed code. Only these codes and the remedies below are ever written or published;
 // no text of the execution record leaves memory. REVIEWER_OK is never a blocking reason.
 export const REVIEWER_DIAGNOSTIC_CODES = Object.freeze(["REVIEWER_OK", "REVIEWER_AUTH_REJECTED", "REVIEWER_MODEL_UNAVAILABLE", "REVIEWER_QUOTA_OR_RATE_LIMIT",
@@ -158,7 +158,7 @@ export function diagnoseReviewerOutput(raw) {
 export const reviewerFailureCode = d => isObj(d) && isStr(d.code) && d.code !== "REVIEWER_OK" && REVIEWER_DIAGNOSTIC_CODES.includes(d.code) ? d.code : null;
 
 // Final decision. input = {evidence, verdict, currentHeadSha, approvals, policy:{founderLogin, reviewerSession}, reviewerDiagnostics?}.
-// reviewerDiagnostics (the ai-review job's fixed-shape record) only adds its failure code after the other reasons when the verdict did not pass.
+// reviewerDiagnostics (the ai-review job's fixed-shape record) only adds its failure code, after every other reason, when no verdict was delivered.
 export function decide(input) {
   try {
     const r = [];
@@ -175,9 +175,12 @@ export function decide(input) {
     // The App's own earlier check on this head or tree ended in a negative verdict (collected from App-written external_id). Unknown is fail-closed.
     if (ev.priorNegativeVerdict !== true && ev.priorNegativeVerdict !== false) r.push("PRIOR_VERDICT_UNKNOWN");
     else if (ev.priorNegativeVerdict && !founderAuthorityOk(input.approvals, pol.founderLogin)) r.push("FOUNDER_AUTHORITY_REQUIRED", "PRIOR_NEGATIVE_VERDICT");
-    const v = input.verdict, verdictFrom = r.length;
-    if (v === null || v === undefined) r.push("VERDICT_MISSING");
-    else if (isObj(v) && REJECTED_VERDICTS.includes(v.rejected)) r.push(v.rejected, ...(v.negative === true ? ["VERDICT_REJECTED_NEGATIVE"] : []));
+    // noVerdictDelivered: the reviewer handed over nothing usable (no verdict, or the unreadable placeholder). Only then can a diagnosis explain the
+    // failure; a delivered verdict (valid, negative, malformed or credential-shaped) speaks for itself and is never annotated.
+    const v = input.verdict;
+    let noVerdictDelivered = false;
+    if (v === null || v === undefined) { r.push("VERDICT_MISSING"); noVerdictDelivered = true; }
+    else if (isObj(v) && REJECTED_VERDICTS.includes(v.rejected)) { r.push(v.rejected, ...(v.negative === true ? ["VERDICT_REJECTED_NEGATIVE"] : [])); noVerdictDelivered = v.rejected === "VERDICT_UNREADABLE"; }
     else if (carriesSecret(v)) { r.push("VERDICT_CONTAINS_SECRET_PATTERN", ...(verdictIsNegative(v) ? ["VERDICT_REJECTED_NEGATIVE"] : [])); input = {...input, verdict: null}; }
     else {
       const bad = validateVerdict(v);
@@ -192,14 +195,13 @@ export function decide(input) {
         for (const k of CHECK_KEYS) if (!["PASS", "NOT_APPLICABLE"].includes(v.checks[k])) r.push(`VERDICT_CHECK_NOT_PASS:${k}`);
       }
     }
-    // Did the verdict itself fail (missing, unreadable, rejected, malformed, unbound or negative)? Only then may a diagnosis add its code.
-    const verdictFailed = r.length > verdictFrom;
     // The reviewer must not be one of the PR's implementer sessions (taken from the commits' Claude-Session trailers).
     const impl = new Set(Array.isArray(ev.implementerSessions) ? ev.implementerSessions.filter(isStr) : []);
     if (!isStr(pol.reviewerSession) || !SESSION_RE.test(pol.reviewerSession)) r.push("REVIEWER_SESSION_UNKNOWN");
     else if (impl.has(pol.reviewerSession)) r.push("REVIEWER_IS_IMPLEMENTER");
-    // Append-only: the code goes after every other reason, so it can neither remove a reason nor reach a decision that already passed the verdict.
-    const diag = verdictFailed ? reviewerFailureCode(input.reviewerDiagnostics) : null;
+    // Append-only: the code goes after every other reason, and only when no verdict was delivered (which already fails as VERDICT_MISSING or
+    // VERDICT_UNREADABLE), so it can neither remove a reason, nor reach a passing decision, nor change how a delivered verdict is recorded.
+    const diag = noVerdictDelivered ? reviewerFailureCode(input.reviewerDiagnostics) : null;
     if (diag !== null) r.push(diag);
     return finish([...new Set(r)], headSha, baseSha, input);
   } catch {
