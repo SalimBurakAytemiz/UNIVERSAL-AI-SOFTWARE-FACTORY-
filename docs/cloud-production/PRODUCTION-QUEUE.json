@@ -920,6 +920,14 @@
       "status": "TESTED",
       "tests": "44/44 related; tsc/TR/secret PASS; 2 mutations caught",
       "verifiedBy": "coordinator"
+    },
+    "COORD-INTAKE-TEST-COMMAND": {
+      "branch": "claude/coord-intake-test-command",
+      "head": "57a6f4d",
+      "base": "f121b01 (PR #143 head)",
+      "status": "TESTED_BRANCH_ONLY",
+      "tests": "coordinator re-run: b1 + ps1b + b5 251/251; tsc/TR/secret/architecture/trust-root PASS; builder: 6 mutations caught",
+      "note": "optional testCommand on POST /v1/intakes (same schema + testCommandAllowed policy as projects; idempotency includes it); intake-created project no longer blocks at TEST_COMMAND_NOT_CONFIGURED; adversarial review workflow running; outside the #143 approval scope, so separate"
     }
   },
   "prCapacityRule": "Single limit (Founder 2026-10-21: remove the 10/12 contradiction): maxOpenPrs = 10 open agent PRs to v7/integration from claude/pq-*, claude/lane-*, claude/coord-* and claude/ui-* branches, drafts included; legacy PRs (wipRule list) are not counted; PRs the Founder explicitly requested are listed in founderRequestedPrs and are not counted. The former lane rule of fewer than 12 draft PRs is retired. At capacity: BRANCH_ONLY. Builders keep claiming, building, testing and pushing to their branches with evidence recorded here (coordinatorBuild / lane records); code production never stops. A PR opens when a slot frees, oldest TESTED first. A lane PR whose head is an ancestor of an open integration PR is SUPERSEDED_BY_INTEGRATION and is proposed for closing with a pointer comment.",
