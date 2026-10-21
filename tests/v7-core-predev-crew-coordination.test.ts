@@ -11,6 +11,7 @@ import type {ArtifactKind} from "../core/workos/predev/types.js";
 import {TASKHUB_BRIEF} from "../core/workos/predev/fixtures/taskhub-brief.js";
 import {TASKHUB_ARTIFACTS} from "../core/workos/predev/fixtures/taskhub/index.js";
 import {buildCrewPlan, bindingForKind, canAssignmentTransition, advanceAssignment, newAssignment, TASK_ASSIGNMENT_STATES} from "../core/workos/crew/assignment.js";
+import {selectNextTask, ACTIVE_WINDOW_MS, type QueueTask, type Observed} from "../core/workos/task-selector.js";
 import {CrewCoordinator, CrewCoordinatorError, type ReworkDecider, type ReworkDecisionInput, type CrewStore} from "../core/workos/crew/coordinator.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
@@ -268,5 +269,92 @@ describe("CrewCoordinator over the REAL driver/validators/store with a mock Buil
     const driver = new PreDevDriver({store, brief: TASKHUB_BRIEF, builder: new TaskHubFixtureBuilder()});
     expect(() => new CrewCoordinator({store: store as unknown as CrewStore, driver, plan: buildCrewPlan(), brief: TASKHUB_BRIEF, builder: new TaskHubFixtureBuilder(), decider: new AcceptAllDecider(), maxReworkPerPhase: 1, recorder: RECORDER, approver: RECORDER, now}))
       .toThrow(CrewCoordinatorError);
+  });
+});
+
+// //TR: LANE-A PQ-012: saf sonraki-görev seçici (core/workos/task-selector.ts): capacityRule, taban, yetki, hat dengesi ve fail-closed BLOCKED kuralları.
+describe("PQ-012 selectNextTask (pure next-task selector)", () => {
+  const NOW = Date.parse("2026-10-21T12:00:00Z");
+  const hoursAgo = (h: number) => new Date(NOW - h * 3600_000).toISOString();
+  const obs = (o: Partial<Observed> = {}): Observed => ({now: NOW, openPrBranches: [], claimBranches: [], ...o});
+  const t = (id: string, o: Partial<QueueTask> = {}): QueueTask => ({id, status: "QUEUED", base: "v7/integration", lane: "A", ...o});
+  const q = (tasks: QueueTask[], builderCap = 3) => ({builderCap, tasks});
+  const taken = (id: string, lane: string, h: number, extra: Partial<QueueTask> = {}) => t(id, {status: "IN_PROGRESS", lane, branch: `claude/${id.toLowerCase()}`, startedAt: hoursAgo(h), ...extra});
+
+  it("selects the first eligible QUEUED task in queue order and is deterministic", () => {
+    const queue = q([t("PQ-1"), t("PQ-2")]);
+    const r = selectNextTask(queue, obs());
+    expect(r).toEqual({action: "SELECT", taskId: "PQ-1", lane: "A", active: 0, builderCap: 3});
+    expect(selectNextTask(queue, obs())).toEqual(r);
+    expect(selectNextTask(q([t("PQ-2", {status: "HOLD_CAPACITY"})]), obs())).toMatchObject({action: "SELECT", taskId: "PQ-2"});
+  });
+  it("capacity: fresh in-progress tasks without an open PR count; ACTIVE >= builderCap gives NO_ACTION CAPACITY", () => {
+    const tasks = [taken("PQ-7", "B", 1), taken("PQ-8", "C", 2), taken("PQ-9", "A", 5.9), t("PQ-10")];
+    expect(selectNextTask(q(tasks), obs())).toEqual({action: "NO_ACTION", reason: "CAPACITY", active: 3, builderCap: 3});
+    expect(selectNextTask(q(tasks, 4), obs())).toMatchObject({action: "SELECT", taskId: "PQ-10", active: 3});
+  });
+  it("a task with an open PR or older than 6 h no longer holds a slot (boundary: exactly 6 h is stale)", () => {
+    const tasks = [taken("PQ-7", "B", 1), taken("PQ-8", "C", 2), taken("PQ-9", "A", 6), t("PQ-10")];
+    expect(ACTIVE_WINDOW_MS).toBe(6 * 3600_000);
+    expect(selectNextTask(q(tasks), obs())).toMatchObject({action: "SELECT", active: 2});
+    const withPr = [taken("PQ-7", "B", 1), taken("PQ-8", "C", 2), taken("PQ-9", "A", 3), t("PQ-10")];
+    expect(selectNextTask(q(withPr), obs({openPrBranches: ["claude/pq-9"]}))).toMatchObject({action: "SELECT", active: 2});
+  });
+  it("live claim branches count unless they have an open PR, are older than 6 h, or belong to a task already counted", () => {
+    const base = [t("PQ-10")];
+    const claims = [{branch: "claude/x1", headAt: NOW - 3600_000}, {branch: "claude/x2", headAt: NOW - 7200_000}, {branch: "claude/x3", headAt: NOW - 1000}];
+    expect(selectNextTask(q(base), obs({claimBranches: claims}))).toEqual({action: "NO_ACTION", reason: "CAPACITY", active: 3, builderCap: 3});
+    expect(selectNextTask(q(base), obs({claimBranches: claims, openPrBranches: ["claude/x3"]}))).toMatchObject({action: "SELECT", active: 2});
+    expect(selectNextTask(q(base), obs({claimBranches: [{branch: "claude/x1", headAt: NOW - 6 * 3600_000}]}))).toMatchObject({action: "SELECT", active: 0});
+    const dup = [taken("PQ-7", "B", 1), t("PQ-10")];
+    expect(selectNextTask(q(dup), obs({claimBranches: [{branch: "claude/pq-7", headAt: NOW - 1000}, {branch: "claude/pq-7", headAt: NOW - 500}]}))).toMatchObject({action: "SELECT", active: 1});
+  });
+  it("base: integration bases and satisfied dependencies are eligible; unmet ones are skipped without a selection", () => {
+    const stacked = t("PQ-3", {base: "claude/ui-105@632a774 (stacked; draft PR #125 open)"});
+    expect(selectNextTask(q([stacked]), obs())).toEqual({action: "NO_ACTION", reason: "NO_ELIGIBLE_TASK", active: 0, builderCap: 3});
+    expect(selectNextTask(q([stacked]), obs({openPrBranches: ["claude/ui-105"]}))).toMatchObject({action: "SELECT", taskId: "PQ-3"});
+    expect(selectNextTask(q([t("PQ-4", {base: "a910883"})]), obs())).toMatchObject({action: "SELECT"});
+    const after = t("PQ-5", {base: "after PQ-4 (settings.js overlap)"});
+    expect(selectNextTask(q([t("PQ-4", {status: "IN_PROGRESS", startedAt: hoursAgo(1), branch: "claude/pq-4"}), after]), obs({openPrBranches: []}))).toMatchObject({action: "NO_ACTION", reason: "NO_ELIGIBLE_TASK"});
+    expect(selectNextTask(q([t("PQ-4", {status: "TESTED"}), after]), obs())).toMatchObject({action: "SELECT", taskId: "PQ-5"});
+    expect(selectNextTask(q([after]), obs())).toMatchObject({action: "NO_ACTION", reason: "NO_ELIGIBLE_TASK"}); // bilinmeyen bağımlılık karşılanmış sayılmaz
+  });
+  it("authority / founder-only / non-selectable statuses are never selected", () => {
+    const tasks = [t("PQ-1", {authority: "package-lock.json is protected"}), t("PQ-2", {founderOnly: true}), t("PQ-3", {status: "FOUNDER_QUEUE"}), t("PQ-4", {status: "BLOCKED"}), t("PQ-5", {status: "WAITING_BASE"}), t("PQ-6", {status: "TESTED"})];
+    expect(selectNextTask(q(tasks), obs())).toMatchObject({action: "NO_ACTION", reason: "NO_ELIGIBLE_TASK"});
+    expect(selectNextTask(q([...tasks, t("PQ-7")]), obs())).toMatchObject({action: "SELECT", taskId: "PQ-7"});
+    expect(selectNextTask(q([t("PQ-8", {authority: "  "})]), obs())).toMatchObject({action: "SELECT", taskId: "PQ-8"});
+  });
+  it("lane balance prefers the lane with the fewest active tasks, then queue order", () => {
+    const tasks = [taken("PQ-7", "A (Lane A builder)", 1), t("PQ-1", {lane: "A (Lane A builder)"}), t("PQ-2", {lane: "B"}), t("PQ-3", {lane: "C"})];
+    expect(selectNextTask(q(tasks), obs())).toMatchObject({action: "SELECT", taskId: "PQ-2", lane: "B"});
+    const tie = [t("PQ-1", {lane: "C"}), t("PQ-2", {lane: "B"})];
+    expect(selectNextTask(q(tie), obs())).toMatchObject({taskId: "PQ-1"});
+  });
+  it("fails closed with a code on malformed queue, cap, observation, ids, statuses, lanes, bases and timestamps", () => {
+    const code = (queue: unknown, o: unknown = obs()) => (selectNextTask(queue as any, o as any) as any).code;
+    expect(code(null)).toBe("QUEUE_INVALID");
+    expect(code({builderCap: 3, tasks: "x"})).toBe("QUEUE_INVALID");
+    for (const cap of [0, -1, 1.5, "3", undefined]) expect(code({builderCap: cap, tasks: []})).toBe("BUILDER_CAP_INVALID");
+    expect(code(q([]), {now: "x", openPrBranches: [], claimBranches: []})).toBe("OBSERVED_INVALID");
+    expect(code(q([]), {now: NOW, openPrBranches: [""], claimBranches: []})).toBe("OBSERVED_INVALID");
+    expect(code(q([]), {now: NOW, openPrBranches: [], claimBranches: [{branch: "claude/a", headAt: "x"}]})).toBe("OBSERVED_INVALID");
+    expect(code(q([{id: "", status: "QUEUED"} as any]))).toBe("TASK_INVALID");
+    expect(code(q([null as any]))).toBe("TASK_INVALID");
+    expect(code(q([t("PQ-1"), t("PQ-1")]))).toBe("TASK_ID_DUPLICATE");
+    expect(code(q([t("PQ-1", {status: "DONE"})]))).toBe("TASK_STATUS_UNKNOWN");
+    expect(code(q([t("PQ-1", {lane: undefined})]))).toBe("TASK_LANE_INVALID");
+    expect(code(q([t("PQ-1", {lane: "lane a"})]))).toBe("TASK_LANE_INVALID");
+    expect(code(q([t("PQ-1", {base: undefined})]))).toBe("TASK_BASE_INVALID");
+    expect(code(q([t("PQ-1", {base: "somewhere else"})]))).toBe("TASK_BASE_INVALID");
+    expect(code(q([taken("PQ-1", "A", 1, {startedAt: "not-a-date"})]))).toBe("TASK_STARTED_AT_INVALID");
+    expect(code(q([taken("PQ-1", "A", 1, {startedAt: null})]))).toBe("TASK_STARTED_AT_INVALID");
+    expect(selectNextTask(q([t("PQ-1", {lane: undefined})]), obs())).toMatchObject({action: "BLOCKED", taskId: "PQ-1"});
+  });
+  it("is pure: does not mutate its inputs", () => {
+    const queue = q([taken("PQ-7", "B", 1), t("PQ-1")]), o = obs({claimBranches: [{branch: "claude/x", headAt: NOW}]});
+    const before = JSON.stringify([queue, o]);
+    selectNextTask(queue, o);
+    expect(JSON.stringify([queue, o])).toBe(before);
   });
 });

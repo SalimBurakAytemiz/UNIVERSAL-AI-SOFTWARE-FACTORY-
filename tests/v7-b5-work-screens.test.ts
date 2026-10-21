@@ -645,7 +645,8 @@ describe("B5 Görevler / Work OS screen", () => {
     const root = mount(doc, await view.render(ctx));
     const keys: string[] = [];
     for (let n = 0; n < 4; n++) { byId(root, "run-start")!.fire("click"); await new Promise(r => setTimeout(r, 0)); keys.push(forms.drafts.status[`act-${MID}`].key); }
-    expect(calls.post.every(c => c.path === `/v1/missions/${MID}/runs` && Object.keys(c.body).length === 0)).toBe(true);
+    // //TR: COORD-RUN-EXPERT: gövde varsayılan uzman geliştirici rolünü taşır; şekil hâlâ birebir denetlenir (başka alan yok).
+    expect(calls.post.every(c => c.path === `/v1/missions/${MID}/runs` && JSON.stringify(c.body) === JSON.stringify({roleId: "UASCO-0085"}))).toBe(true);
     expect(keys).toEqual(["post.err.409.EXECUTOR_NOT_CONFIGURED", "post.err.423", "post.err.503", "run.startAccepted"]);
     const tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
     expect(tr["post.err.409.EXECUTOR_NOT_CONFIGURED"]).toMatch(/yürütücü/);
@@ -1264,5 +1265,334 @@ describe("UI-111 #/work run-card retry facts", () => {
     expect(en["run.retriesInStep"]).toContain("step"); expect(tr["run.retriesInStep"]).toContain("adım");
     for (const k of ["run.remediationCycles", "run.leaseAttempts"]) { expect(en[k]).toContain("run"); expect(tr[k]).toContain("koşu"); }
     expect(en["run.retryScheduledFor"]).toBe("Retry scheduled for");
+  });
+});
+
+// //TR: LANE-A first-delivery: Görevleri planla formu (POST /v1/missions/:id/plan, Lane B) — sıkı gövde kurucusu, yalnız kullanıcı satırları, dürüst hata durumları.
+describe("LANE-A mission plan form", () => {
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const planGet = (status = "AUTHORIZED", tasks: any[] = []) => (p: string) => {
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission({status})]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission({status}), tasks};
+    if (p.startsWith("/v1/work-runs")) return {workRuns: []};
+    if (p.startsWith("/v1/evidence")) return {evidence: []};
+    return undefined;
+  };
+  const open = async (o: CtxOpts, status = "AUTHORIZED", tasks: any[] = []) => {
+    const c = await mkCtx({...o, get: planGet(status, tasks)});
+    forms.selection.missionId = MID;
+    const view = await load(rend, "views", "work.js"), pf = await load(rend, "views", "plan-form.js");
+    pf.resetPlanDraft(null);
+    return {...c, view, pf, root: mount(c.doc, await view.render(c.ctx))};
+  };
+  const type = (root: N, id: string, v: string) => { byId(root, id)!.value = v; byId(root, id)!.fire("input"); };
+
+  it("builds a strict body: titles trimmed, 1-based earlier-task dependencies become 0-based indexes, no extra fields", async () => {
+    const c = await load(rend, "work-core.js");
+    expect(c.planPath(MID)).toBe(`/v1/missions/${MID}/plan`);
+    expect(c.planPath("x")).toBeNull();
+    const ok = c.buildPlanRequest({missionId: MID, rows: [{title: " A ", deps: ""}, {title: "B", deps: "1"}, {title: "C", deps: "1, 2"}, {title: "", deps: ""}]});
+    expect(ok).toMatchObject({ok: true, path: `/v1/missions/${MID}/plan`, body: {tasks: [{title: "A"}, {title: "B", dependsOn: [0]}, {title: "C", dependsOn: [0, 1]}]}});
+    const bad = (rows: any[]) => c.buildPlanRequest({missionId: MID, rows});
+    expect(bad([]).errors.tasks).toBe("plan.err.none");
+    expect(bad([{title: "", deps: ""}]).errors.tasks).toBe("plan.err.none");
+    expect(bad([{title: "A", deps: "1"}]).rowErrors[0]).toBe("plan.err.deps"); // kendine bağımlılık
+    expect(bad([{title: "A", deps: ""}, {title: "B", deps: "3"}]).rowErrors[1]).toBe("plan.err.deps"); // ileri bağımlılık
+    expect(bad([{title: "A", deps: ""}, {title: "B", deps: "1,1"}]).rowErrors[1]).toBe("plan.err.deps"); // tekrar
+    expect(bad([{title: "A", deps: ""}, {title: "B", deps: "x"}]).rowErrors[1]).toBe("plan.err.deps");
+    expect(bad([{title: "", deps: "1"}]).rowErrors[0]).toBe("plan.err.title");
+    expect(bad([{title: "A", deps: ""}, {title: "", deps: ""}, {title: "C", deps: ""}]).rowErrors[1]).toBe("plan.err.title"); // ortadaki boş satır numaralamayı kaydırmaz
+    expect(bad([{title: "x".repeat(201), deps: ""}]).rowErrors[0]).toBe("plan.err.titleLong");
+    expect(bad(Array.from({length: 51}, () => ({title: "t", deps: ""}))).errors.tasks).toBe("plan.err.many");
+    expect(bad([{title: "A", deps: ""}]).body).toMatchObject({tasks: [{title: "A"}]});
+    expect(Object.keys(ok.body)).toEqual(["tasks"]);
+    expect(c.canPlan("AUTHORIZED", 0)).toBe(true);
+    for (const s of ["EXECUTING", "COMPLETE", "BLOCKED"]) expect(c.canPlan(s, 0)).toBe(false);
+    expect(c.canPlan("AUTHORIZED", 2)).toBe(false);
+  });
+  it("shows the form only for a plannable mission without tasks, and submits exactly the typed rows once", async () => {
+    const {ctx, calls, root, pf} = await open({post: (_p, b) => ({status: 201, body: {tasks: b.tasks.map((t: any, i: number) => ({taskId: "tsk_" + String(i).repeat(24), title: t.title}))}})});
+    expect(byId(root, "plan-form")).not.toBeNull();
+    expect(calls.post).toEqual([]); // render hiçbir şey göndermez
+    type(root, "plan-title-0", "Giriş ekranı");
+    byId(root, "plan-add")!.fire("click");
+    type(root, "plan-title-1", "API"); type(root, "plan-deps-1", "1");
+    byId(root, "plan-form")!.fire("submit"); await tick();
+    expect(calls.post.length).toBe(1);
+    expect(calls.post[0]).toEqual({path: `/v1/missions/${MID}/plan`, body: {tasks: [{title: "Giriş ekranı"}, {title: "API", dependsOn: [0]}]}});
+    expect(forms.drafts.status["mission-plan"].ok).toBe(true);
+    expect(pf.planDraft.rows).toEqual([{title: "", deps: ""}]);
+    expect(calls.refresh).toBe(1);
+    for (const [st, tasks] of [["EXECUTING", []], ["COMPLETE", []], ["AUTHORIZED", [{taskId: "tsk_" + "1".repeat(24), title: "t", status: "PENDING"}]]] as const) {
+      const o = await open({}, st, tasks as any);
+      expect(byId(o.root, "plan-form"), st).toBeNull();
+    }
+  });
+  it("validation errors send nothing; server refusals (409 plan exists / not plannable / 403 / unreachable) never report success and keep the draft", async () => {
+    const v = await open({});
+    byId(v.root, "plan-form")!.fire("submit"); await tick();
+    expect(v.calls.post).toEqual([]); expect(forms.drafts.status["mission-plan"].ok).toBe(false);
+    const cases: Array<[any, string]> = [[{status: 409, body: {error: "PLAN_ALREADY_EXISTS"}}, "post.err.409.PLAN_ALREADY_EXISTS"], [{status: 409, body: {error: "MISSION_NOT_PLANNABLE"}}, "post.err.409.MISSION_NOT_PLANNABLE"],
+      [{status: 403, body: {error: "FORBIDDEN"}}, "post.err.auth"], [{status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}, "post.err.423"], [{status: 404, body: {error: "NOT_FOUND"}}, "post.err.unavailable"]];
+    for (const [resp, key] of cases) {
+      forms.resetAllForms();
+      const o = await open({post: () => resp});
+      type(o.root, "plan-title-0", "Bir");
+      byId(o.root, "plan-form")!.fire("submit"); await tick();
+      expect(forms.drafts.status["mission-plan"], key).toMatchObject({ok: false, key});
+      expect(o.pf.planDraft.rows[0].title).toBe("Bir");
+    }
+    forms.resetAllForms();
+    const net = await open({}); // post tanımsız: köprü hatası
+    type(net.root, "plan-title-0", "Bir");
+    byId(net.root, "plan-form")!.fire("submit"); await tick();
+    expect(forms.drafts.status["mission-plan"].ok).toBe(false);
+    expect(forms.drafts.busy["mission-plan"]).toBe(false);
+  });
+  it("scopes the last result to its mission: a success or row errors recorded for one mission never show on another mission's empty plan form", async () => {
+    const OTHER = "msn_" + "b".repeat(24), otherMission = {missionId: OTHER, status: "AUTHORIZED", tasks: []};
+    // 1) A'da kaydedilen başarı B'nin boş formunda görünmez.
+    forms.resetAllForms();
+    const ok = await open({post: (_p, b) => ({status: 201, body: {tasks: b.tasks.map((t: any, i: number) => ({taskId: "tsk_" + String(i).repeat(24), title: t.title}))}})});
+    type(ok.root, "plan-title-0", "Bir");
+    byId(ok.root, "plan-form")!.fire("submit"); await tick();
+    expect(forms.drafts.status["mission-plan"].ok).toBe(true);
+    const afterOk = mount(ok.doc, ok.pf.planFormPanel(ok.ctx, otherMission)!);
+    expect(forms.drafts.status["mission-plan"]).toBeUndefined();
+    expect(byId(afterOk, "mission-plan-status")!.dataset.result).toBeUndefined();
+    expect(text(byId(afterOk, "mission-plan-status")!)).toBe("");
+    // 2) A'daki doğrulama/satır hataları B'nin satırını geçersiz işaretlemez.
+    forms.resetAllForms();
+    const bad = await open({});
+    type(bad.root, "plan-deps-0", "1");
+    byId(bad.root, "plan-form")!.fire("submit"); await tick();
+    expect(forms.drafts.status["mission-plan"].rowErrors[0]).toBe("plan.err.title");
+    const same = mount(bad.doc, bad.pf.planFormPanel(bad.ctx, {missionId: MID, status: "AUTHORIZED", tasks: []})!);
+    expect(byId(same, "plan-err-0")).not.toBeNull(); // sanity: hata kendi mission'ında görünür
+    const afterBad = mount(bad.doc, bad.pf.planFormPanel(bad.ctx, otherMission)!);
+    expect(byId(afterBad, "plan-err-0")).toBeNull();
+    expect(byId(afterBad, "plan-title-0")!.attrs.get("aria-invalid")).toBeUndefined();
+    expect(byId(afterBad, "mission-plan-status")!.dataset.result).toBeUndefined();
+    // 3) Aynı mission'da başarılı gönderimden sonra başarı mesajı korunur (yalnız mission DEĞİŞİNCE silinir).
+    expect(forms.drafts.status["mission-plan"]).toBeUndefined();
+  });
+  it("plan strings exist in en and tr", async () => {
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+    const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("plan.") || k === "post.err.409.PLAN_ALREADY_EXISTS" || k === "post.err.409.MISSION_NOT_PLANNABLE");
+    expect(keys.length).toBe(17);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
+  });
+});
+
+// //TR: COORD-TASK-UI: seçili görevin durum denetimi (POST /v1/tasks/:id/transition) — sunucu durum makinesinin aynası, bağımlılık kapısı, donuk COMPLETE mission, sıkı gövde ve dürüst retler.
+describe("COORD task status controls", () => {
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const T1 = "tsk_" + "1".repeat(24), T2 = "tsk_" + "2".repeat(24);
+  const tasksOf = (s1 = "PENDING", s2 = "PENDING") => [{taskId: T1, missionId: MID, title: "Giriş ekranı", status: s1, dependsOn: []}, {taskId: T2, missionId: MID, title: "API", status: s2, dependsOn: [T1]}];
+  const getFor = (status: string, tasks: any[]) => (p: string) => {
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission({status})]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission({status}), tasks};
+    if (p.startsWith("/v1/work-runs")) return {workRuns: []};
+    if (p.startsWith("/v1/evidence")) return {evidence: []};
+    return undefined;
+  };
+  const open = async (o: CtxOpts, status: string, tasks: any[], taskId: string) => {
+    const c = await mkCtx({...o, get: getFor(status, tasks)});
+    forms.selection.missionId = MID;
+    const view = await load(rend, "views", "work.js"), ts = await load(rend, "views", "task-status.js");
+    ts.resetTaskStatusDraft(null);
+    let root = mount(c.doc, await view.render(c.ctx));
+    if (byId(root, "task-status")?.dataset.taskStatus !== taskId) { byData(root, "taskInspect", taskId)[0].fire("click"); root = mount(c.doc, await view.render(c.ctx)); }
+    expect(byId(root, "task-status")!.dataset.taskStatus).toBe(taskId);
+    return {...c, view, ts, root};
+  };
+  const targets = (root: N) => byData(root, "taskTo").map(n => n.dataset.taskTo);
+
+  it("mirrors the server task state machine exactly and gates IN_PROGRESS on done dependencies", async () => {
+    const c = await load(rend, "work-core.js"), server = await load(root, "core", "workos", "types.ts");
+    expect(JSON.parse(JSON.stringify(c.TASK_TRANSITIONS))).toEqual(JSON.parse(JSON.stringify(server.TASK_TRANSITIONS)));
+    const [t1, t2] = tasksOf();
+    expect(c.allowedTaskTargets(t2, [t1, t2], "PLANNED")).toEqual({targets: ["BLOCKED"], blockedBy: [T1]});
+    expect(c.allowedTaskTargets(t2, [{...t1, status: "DONE"}, t2], "PLANNED")).toEqual({targets: ["IN_PROGRESS", "BLOCKED"], blockedBy: []});
+    expect(c.allowedTaskTargets(t2, [t2], "PLANNED").blockedBy).toEqual([T1]); // listede olmayan bağımlılık bitmiş sayılmaz
+    expect(c.allowedTaskTargets({...t1, status: "IN_PROGRESS"}, [t1], "EXECUTING").targets).toEqual(["DONE", "BLOCKED", "PENDING"]);
+    expect(c.allowedTaskTargets({...t1, status: "BLOCKED"}, [t1], "EXECUTING").targets).toEqual(["PENDING"]);
+    expect(c.allowedTaskTargets({...t1, status: "DONE"}, [t1], "EXECUTING").targets).toEqual([]);
+    expect(c.allowedTaskTargets(t1, [t1], "COMPLETE")).toEqual({targets: [], blockedBy: []});
+    expect(c.allowedTaskTargets({...t1, status: "LATER"}, [t1], "PLANNED").targets).toEqual([]);
+    expect(c.allowedTaskTargets({...t2, dependsOn: null}, [t2], "PLANNED").targets).toEqual(["IN_PROGRESS", "BLOCKED"]); // okunamayan bağımlılıkta karar sunucuda
+  });
+  it("builds a strict {to, reason} body and refuses what the server would refuse", async () => {
+    const c = await load(rend, "work-core.js"), [t1, t2] = tasksOf();
+    const req = (o: any) => c.buildTaskTransitionRequest({task: t1, tasks: [t1, t2], missionStatus: "PLANNED", ...o});
+    expect(req({to: "IN_PROGRESS", reason: ""})).toEqual({ok: true, path: `/v1/tasks/${T1}/transition`, body: {to: "IN_PROGRESS", reason: "PENDING -> IN_PROGRESS (UASCO Desktop)"}});
+    expect(req({to: "BLOCKED", reason: "  tasarım bekleniyor "}).body).toEqual({to: "BLOCKED", reason: "tasarım bekleniyor"});
+    expect(req({to: "IN_PROGRESS", reason: "r".repeat(1000)}).ok).toBe(true);
+    expect(req({to: "IN_PROGRESS", reason: "r".repeat(1001)}).errors).toEqual({reason: "taskst.err.reasonLong"});
+    expect(req({to: "BLOCKED", reason: "   "}).errors).toEqual({reason: "err.reasonRequired"});
+    expect(req({to: "DONE"}).errors).toEqual({to: "err.transitionNotAllowed"});
+    expect(req({to: "IN_PROGRESS", task: t2}).errors).toEqual({to: "taskst.err.deps"});
+    expect(req({to: "BLOCKED", reason: "x", missionStatus: "COMPLETE"}).errors).toEqual({to: "taskst.err.frozen"});
+    expect(req({to: "IN_PROGRESS", task: {...t1, taskId: "tsk_alpha01"}}).errors).toEqual({task: "taskst.err.task"});
+    const mapped = c.mapMissionDetail({mission: mission(), tasks: [{taskId: T2, title: "API", status: "PENDING", dependsOn: [T1, "../x", 5]}, {taskId: T1, title: "A", status: "DONE"}]});
+    expect(mapped.mission.tasks.map((t: any) => t.dependsOn)).toEqual([[T1], null]);
+    for (const reason of ["TASK_DEPENDENCIES_NOT_DONE", "MISSION_COMPLETE"]) expect(c.describePostResult({status: 409, body: {error: "WORKOS_CONFLICT", reason}}).key).toBe(`post.err.409.${reason}`);
+  });
+  it("offers only allowed targets, explains waiting dependencies, and posts one exact request", async () => {
+    const blocked = await open({}, "PLANNED", tasksOf(), T2);
+    expect(targets(blocked.root)).toEqual(["BLOCKED"]);
+    expect(text(byData(blocked.root, "taskstNote", "deps")[0])).toContain("Giriş ekranı");
+    expect(text(byData(blocked.root, "taskField", "dependencies")[0])).toContain("Giriş ekranı");
+    const o = await open({post: (_p, b) => ({status: 200, body: {task: {taskId: T1, status: b.to}}})}, "PLANNED", tasksOf(), T1);
+    expect(targets(o.root)).toEqual(["IN_PROGRESS", "BLOCKED"]);
+    expect(o.calls.post).toEqual([]); // render hiçbir şey göndermez
+    byId(o.root, "taskst-IN_PROGRESS")!.fire("click"); await tick();
+    expect(o.calls.post).toEqual([{path: `/v1/tasks/${T1}/transition`, body: {to: "IN_PROGRESS", reason: "PENDING -> IN_PROGRESS (UASCO Desktop)"}}]);
+    expect(forms.drafts.status["task-status"]).toMatchObject({ok: true, key: "taskst.done"});
+    expect(byId(mount(o.doc, await o.view.render(o.ctx)), "task-status-status")!.dataset.result).toBe("ok"); // E2E "shows the result" kontrolünün dayandığı işaret
+    expect(o.calls.refresh).toBe(1);
+    const r = await open({post: () => ({status: 200, body: {}})}, "EXECUTING", tasksOf("IN_PROGRESS"), T1);
+    expect(targets(r.root)).toEqual(["DONE", "BLOCKED", "PENDING"]);
+    byId(r.root, "taskst-reason")!.value = " kabul testi geçti "; byId(r.root, "taskst-reason")!.fire("input");
+    byId(r.root, "taskst-DONE")!.fire("click"); await tick();
+    expect(r.calls.post[0].body).toEqual({to: "DONE", reason: "kabul testi geçti"});
+    expect(r.ts.taskStatusDraft.reason).toBe("");
+  });
+  it("sends nothing when the request is invalid, frozen, terminal or the task ID is unknown", async () => {
+    const b = await open({post: () => ({status: 200, body: {}})}, "PLANNED", tasksOf(), T1);
+    byId(b.root, "taskst-BLOCKED")!.fire("click"); await tick();
+    expect(b.calls.post).toEqual([]);
+    expect(forms.drafts.status["task-status"]).toMatchObject({ok: false, errors: {reason: "err.reasonRequired"}});
+    for (const [st, tasks, note] of [["COMPLETE", tasksOf("DONE", "DONE"), "frozen"], ["EXECUTING", tasksOf("DONE"), "terminal"]] as const) {
+      const o = await open({}, st, tasks as any, T1);
+      expect(targets(o.root), st).toEqual([]);
+      expect(byData(o.root, "taskstNote", note).length, st).toBe(1);
+    }
+    const u = await open({}, "PLANNED", [{taskId: "tsk_alpha01", title: "Eski", status: "PENDING"}], "tsk_alpha01");
+    expect(targets(u.root)).toEqual([]);
+    expect(byData(u.root, "taskstNote", "id").length).toBe(1);
+  });
+  it("server and bridge refusals never report success and keep the typed reason", async () => {
+    const cases: Array<[any, string]> = [[{status: 409, body: {error: "WORKOS_CONFLICT", reason: "TASK_DEPENDENCIES_NOT_DONE"}}, "post.err.409.TASK_DEPENDENCIES_NOT_DONE"],
+      [{status: 409, body: {error: "WORKOS_CONFLICT", reason: "MISSION_COMPLETE"}}, "post.err.409.MISSION_COMPLETE"], [{status: 409, body: {error: "WORKOS_INVALID_TRANSITION"}}, "post.err.409"],
+      [{status: 403, body: {error: "ACTION_DENIED", reason: "POLICY_DENY: x"}}, "post.err.denied"], [{status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}, "post.err.423"],
+      [{status: 404, body: {error: "NOT_FOUND"}}, "post.err.unavailable"], [{status: 400, body: {error: "INVALID_BODY"}}, "post.err.400"]];
+    for (const [resp, key] of cases) {
+      forms.resetAllForms();
+      const o = await open({post: () => resp}, "PLANNED", tasksOf(), T1);
+      byId(o.root, "taskst-reason")!.value = "neden"; byId(o.root, "taskst-reason")!.fire("input");
+      byId(o.root, "taskst-IN_PROGRESS")!.fire("click"); await tick();
+      expect(forms.drafts.status["task-status"], key).toMatchObject({ok: false, key});
+      expect(byId(mount(o.doc, await o.view.render(o.ctx)), "task-status-status")!.dataset.result, key).toBe("error"); // hata asla "ok" olarak işaretlenmez
+      expect(o.ts.taskStatusDraft.reason, key).toBe("neden");
+    }
+    forms.resetAllForms();
+    const net = await open({}, "PLANNED", tasksOf(), T1); // post tanımsız: köprü hatası
+    byId(net.root, "taskst-IN_PROGRESS")!.fire("click"); await tick();
+    expect(forms.drafts.status["task-status"].ok).toBe(false);
+    expect(forms.drafts.busy["task-status"]).toBe(false);
+  });
+  it("task status strings exist in en and tr, including every key the view uses", async () => {
+    const en = (await load(rend, "locales", "en.js")).default, tr = (await load(rend, "locales", "tr.js")).default;
+    const keys = (o: Record<string, string>) => Object.keys(o).filter(k => k.startsWith("taskst.")).sort();
+    expect(keys(en).length).toBe(16);
+    expect(keys(en)).toEqual(keys(tr));
+    const used = new Set([...read(rend, "views", "task-status.js").matchAll(/"(taskst\.[A-Za-z.]+)"/g), ...read(rend, "work-core.js").matchAll(/"(taskst\.[A-Za-z.]+)"/g)].map(m => m[1]));
+    for (const k of [...used, "form.field.task", "work.task.noDeps", "post.err.409.TASK_DEPENDENCIES_NOT_DONE", "post.err.409.MISSION_COMPLETE"]) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); }
+  });
+});
+
+// //TR: COORD-RUN-EXPERT: koşuyu yürütecek uzman geliştirici seçimi — çekirdek ilk-teslim bağlamalarının aynası, yalnız listedeki rol gönderilir, sunucu runner kapısı rolü yeniden denetler.
+describe("COORD run expert selection", () => {
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const getFor = (status: string) => (p: string) => {
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission({status})]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission({status}), tasks: []};
+    if (p.startsWith("/v1/work-runs")) return {workRuns: []};
+    if (p.startsWith("/v1/evidence")) return {evidence: []};
+    return undefined;
+  };
+  it("mirrors the core developer bindings, and every listed expert passes the runner's developer gate", async () => {
+    const c = await load(rend, "work-core.js"), fdb = await load(root, "core", "agents", "first-delivery-bindings.ts");
+    const core = fdb.FIRST_DELIVERY_BINDINGS.filter((b: any) => b.function === "developer").map((b: any) => ({roleId: b.roleId, function: b.function, capabilities: [...b.capabilities]}));
+    expect(JSON.parse(JSON.stringify(c.RUN_EXPERTS))).toEqual(core);
+    for (const e of c.RUN_EXPERTS) expect(fdb.assertRoleExecutes(e.roleId, "developer").roleId).toBe(e.roleId);
+    const tester = fdb.FIRST_DELIVERY_BINDINGS.find((b: any) => b.function === "tester");
+    expect(() => fdb.assertRoleExecutes(tester.roleId, "developer")).toThrow(/BINDING_ROLE_MISMATCH/);
+    expect(c.isRunExpert(tester.roleId)).toBe(false);
+  });
+  it("builds {roleId} only for a listed expert, {} without a role, and refuses any other role", async () => {
+    const c = await load(rend, "work-core.js"), run = (roleId?: string) => c.buildRunRequest({missionId: MID, status: "PLANNED", roleId});
+    expect(run("UASCO-0085")).toEqual({ok: true, path: `/v1/missions/${MID}/runs`, body: {roleId: "UASCO-0085"}});
+    expect(run("")).toEqual({ok: true, path: `/v1/missions/${MID}/runs`, body: {}});
+    expect(run(undefined).body).toEqual({});
+    for (const bad of ["UASCO-0313", "UASCO-9999", "../x", " UASCO-0085"]) expect(run(bad).errors, bad).toEqual({roleId: "err.roleNotExecutable"});
+  });
+  it("offers the expert picker only for a startable mission and posts the chosen role exactly once", async () => {
+    const {ctx, doc, calls} = await mkCtx({get: getFor("AUTHORIZED"), post: () => ({status: 202, body: {}})});
+    const view = await load(rend, "views", "work.js");
+    forms.selection.missionId = MID;
+    let root2 = mount(doc, await view.render(ctx));
+    const sel = byId(root2, "run-expert")!;
+    expect(sel.tagName).toBe("SELECT");
+    expect(sel.value).toBe("UASCO-0085");
+    expect(sel.children.map(o => o.attrs.get("value") ?? (o as any).value)).toEqual(["UASCO-0085", ""]);
+    expect(calls.post).toEqual([]);
+    byId(root2, "run-start")!.fire("click"); await tick();
+    expect(calls.post).toEqual([{path: `/v1/missions/${MID}/runs`, body: {roleId: "UASCO-0085"}}]);
+    root2 = mount(doc, await view.render(ctx));
+    byId(root2, "run-expert")!.value = ""; byId(root2, "run-expert")!.fire("change");
+    byId(root2, "run-start")!.fire("click"); await tick();
+    expect(calls.post[1]).toEqual({path: `/v1/missions/${MID}/runs`, body: {}});
+    forms.resetAllForms();
+    const x = await mkCtx({get: getFor("EXECUTING")});
+    forms.selection.missionId = MID;
+    const r3 = mount(x.doc, await view.render(x.ctx));
+    expect(byId(r3, "run-expert")).toBeNull();
+  });
+  it("expert strings exist in en and tr", async () => {
+    const en = (await load(rend, "locales", "en.js")).default, tr = (await load(rend, "locales", "tr.js")).default;
+    for (const k of ["work.run.expert", "work.run.expertHint", "work.run.expertOpt", "work.run.expertNone", "work.run.fn.developer", "err.roleNotExecutable", "form.field.roleId"]) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); }
+    expect(tr["work.run.expertHint"]).toMatch(/sertifikalı değildir/);
+  });
+});
+
+// //TR: COORD-FIRST-DELIVERY-WIRING: masaüstü allow-list'i ilk teslim yollarını yalnız tam eşleşmeyle kabul eder; yakın-ıskalar (sorgu, sondaki eğik çizgi, büyük harf, uzunluk, önek, alt yol, kodlama, yanlış yöntem) reddedilir ve renderer'ın kurduğu yollar birebir kabul edilir.
+describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
+  const H = (c: string) => c.repeat(24);
+  const ITK = `itk_${H("a")}`, TSK = `tsk_${H("b")}`, MSN = `msn_${H("c")}`, PRJ = `prj_${H("d")}`;
+  const GETS = ["/v1/intakes", `/v1/intakes/${ITK}`, `/v1/missions/${MSN}/tasks`, `/v1/projects/${PRJ}/flow`, `/v1/tasks/${TSK}`];
+  const POSTS = ["/v1/intakes", `/v1/missions/${MSN}/plan`, `/v1/tasks/${TSK}/transition`];
+  const nearMisses = (p: string) => [p + "/", p + "?x=1", p + "#", p.toUpperCase(), p.replace(/[0-9a-f]{24}/, H("a").slice(0, 23)), p.replace(/[0-9a-f]{24}/, H("a") + "a"),
+    p.replace(/[0-9a-f]{24}/, H("A")), p.replace("/v1/", "/v1//"), p.replace("/v1/", "/v2/"), p + "/x", p.replace(/\//g, "%2F"), " " + p].filter(m => m !== p);
+  it("admits exactly the five first-delivery reads and the three writes", () => {
+    const get = loadGet(), {desktopPostPathAllowed: post} = loadPost();
+    for (const p of GETS) expect(get(p), p).toBe(true);
+    for (const p of POSTS) expect(post(p), p).toBe(true);
+  });
+  it("refuses every near miss and the wrong method", () => {
+    const get = loadGet(), {desktopPostPathAllowed: post} = loadPost();
+    for (const p of GETS) for (const m of nearMisses(p)) expect(get(m), m).toBe(false);
+    for (const p of POSTS) for (const m of nearMisses(p)) expect(post(m), m).toBe(false);
+    for (const p of [`/v1/intakes/${ITK}`, `/v1/missions/${MSN}/tasks`, `/v1/projects/${PRJ}/flow`, `/v1/tasks/${TSK}`]) expect(post(p), `POST ${p}`).toBe(false);
+    for (const p of [`/v1/missions/${MSN}/plan`, `/v1/tasks/${TSK}/transition`]) expect(get(p), `GET ${p}`).toBe(false);
+    for (const p of [`/v1/intakes/itk_${H("a")}/x`, `/v1/intakes/prj_${H("a")}`, `/v1/tasks/msn_${H("a")}`, `/v1/tasks/${TSK}/transition/x`, `/v1/missions/${MSN}/tasks/${TSK}`]) { expect(get(p), p).toBe(false); expect(post(p), p).toBe(false); }
+  });
+  it("admits the exact paths the renderer builds, and the write body keeps the 32 KB bridge limit", async () => {
+    const get = loadGet(), {desktopPostPathAllowed: post, desktopPostBodyCheck: check, POST_MAX_BODY_BYTES} = loadPost();
+    const work = await load(rend, "work-core.js");
+    expect(post(work.planPath(MSN))).toBe(true);
+    expect(post(work.taskTransitionPath(TSK))).toBe(true);
+    const intakeSrc = read(rend, "intake-core.js"), projectSrc = read(rend, "project-core.js");
+    expect(intakeSrc).toContain('"/v1/intakes"'); expect(intakeSrc).toContain("`/v1/intakes/${id}`");
+    expect(projectSrc).toContain("`/v1/projects/${id}/flow`");
+    expect(get(`/v1/intakes/${ITK}`) && get(`/v1/projects/${PRJ}/flow`)).toBe(true);
+    expect(POST_MAX_BODY_BYTES).toBe(32768);
+    expect(check({idea: "x".repeat(32768)}).error).toBe("API_BODY_TOO_LARGE");
+    expect(check({idea: "x".repeat(1000)}).ok).toBe(true);
   });
 });
