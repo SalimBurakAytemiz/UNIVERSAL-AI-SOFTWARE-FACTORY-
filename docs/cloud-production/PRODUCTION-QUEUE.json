@@ -901,7 +901,8 @@
       "tests": "b1 + b5 + ps1b 255/255 (coordinator re-run at de3c6fb); tsc/TR/secret/architecture/trust-root PASS; real Electron E2E Linux PASS 12/12: 3x at f121b01, 3x at 675a441, 2x at de3c6fb; Windows Electron NOT_EXECUTED",
       "note": "Founder approval in principle 2026-10-21; protected server.ts + main.mjs + trust-root reseal; founder-authority on hold by Founder; merge only after Independent Review passes",
       "preReview": "coordinator adversarial pre-review (NOT the Independent Review): 17 candidates, 10 confirmed + 2 split, all fixed in 675a441 (mutation-proven); verification of 675a441 confirmed 3 more (flow REVIEW DONE for an invalidated/stale CLEAN; quarantine copy not durable before truncate) + 1 weak test, fixed in de3c6fb",
-      "review": "Independent Review run 39637757470 on f121b01 failed closed (STALE_HEAD, FOUNDER_AUTHORITY_REQUIRED, PROTECTED_PATH, VERDICT_MISSING from the old reviewer); re-review after #144 merges"
+      "review": "Independent Review run 39637757470 on f121b01 failed closed (STALE_HEAD, FOUNDER_AUTHORITY_REQUIRED, PROTECTED_PATH, VERDICT_MISSING from the old reviewer); re-review after #144 merges",
+      "ci": "de3c6fb run 39657065337: Linux + shards 1/2 green; shard 3 failed once in untouched tests/v7-ps1a-project-studio.test.ts:215 (Windows dev-run restart pidAlive, likely PID reuse), green on the one re-run; aggregator then fails closed (attempt-scoped shard artifacts, COORD-001; ci.yml protected). Fresh full CI comes with the next code push (base merge after #144). PR comment 6324391036"
     },
     "COORD-REVIEWER-DIAGNOSTICS": {
       "branch": "claude/coord-reviewer-diagnostics",
@@ -938,12 +939,12 @@
     },
     "LANE-A-TASK-DONE-CONFIRM": {
       "branch": "claude/lane-a-task-done-confirm",
-      "head": "009ef90",
-      "base": "675a441",
-      "status": "DEFECTS_RETURNED",
+      "head": "8933a6f",
+      "base": "de3c6fb",
+      "status": "TESTED_BRANCH_ONLY",
       "owner": "lane-a",
-      "tests": "coordinator: b5 + ps1b 212/212, b1 43/43, validators PASS, mutation caught; real Electron E2E 11/12 (base 12/12)",
-      "note": "defect: the DONE confirm dialog breaks the E2E 'Mark as Done' step; fix = click #confirmOk in scripts/e2e-first-delivery-electron.mjs; returned to Lane A 2026-10-21"
+      "tests": "coordinator: b1 + b5 + ps1b 259/259; validators PASS; real Electron E2E 13/13 x2 (confirm dialog opens, task stays IN_PROGRESS until #confirmOk)",
+      "note": "DONE confirm dialog; E2E script updated to accept it; earlier defect fixed"
     },
     "COORD-INTAKE-TEMPLATE": {
       "branch": "claude/coord-intake-template",
@@ -955,12 +956,12 @@
     },
     "LANE-A-FLOW-DETAIL": {
       "branch": "claude/lane-a-flow-detail",
-      "head": "0f8a77a",
-      "base": "675a441",
-      "status": "DEFECTS_RETURNED",
+      "head": "3878b2f",
+      "base": "de3c6fb",
+      "status": "TESTED_BRANCH_ONLY",
       "owner": "lane-a",
-      "tests": "coordinator: ps1b 122/122, 30 renderer files 1186/1186, validators PASS, 2 mutations caught",
-      "note": "defect: MISSION.COMPLETE detail described as all-complete while the stage is ACTIVE (state ignored); returned to Lane A 2026-10-21"
+      "tests": "coordinator: b1 + b5 + ps1b 258/258; tsc/TR/secret/architecture/trust-root PASS; coordinator mutation (state ignored) caught",
+      "note": "state-aware flow details (MISSION.COMPLETE only at DONE; mismatched codes shown raw); earlier defect fixed"
     },
     "LANE-B-TASK-RUN-LINK": {
       "branch": "claude/lane-b-task-run-link",
@@ -968,6 +969,24 @@
       "status": "IN_PROGRESS",
       "owner": "lane-b",
       "note": "task -> run link (runs currently tied to a mission); not yet reported or verified"
+    },
+    "LANE-A-RUN-READINESS": {
+      "branch": "claude/lane-a-run-readiness",
+      "head": "bfeeed9",
+      "base": "de3c6fb",
+      "status": "TESTED_BRANCH_ONLY",
+      "owner": "lane-a",
+      "tests": "coordinator: b1 + b5 + ps1b 260/260, 11 more desktop suites 312/312, validators PASS, mutation caught, real Electron E2E 12/12",
+      "note": "'Before you start a run' note from records only (repository / remote repo / test command; never promises success); run cards explain known block codes; only booleans mapped (no URL or command)"
+    },
+    "LANE-A-RUN-STEPS": {
+      "branch": "claude/lane-a-run-steps",
+      "head": "0c98c0b",
+      "base": "bfeeed9 (stacked on LANE-A-RUN-READINESS)",
+      "status": "TESTED_BRANCH_ONLY",
+      "owner": "lane-a",
+      "tests": "coordinator: b1 + b5 + ps1b 264/264, 30 renderer files 1193/1193, validators PASS, mutation caught, real Electron E2E 12/12",
+      "note": "run steps table from the run's own evidence records; nulls stay '—'; exit code is not a verification result"
     }
   },
   "prCapacityRule": "Single limit (Founder 2026-10-21: remove the 10/12 contradiction): maxOpenPrs = 10 open agent PRs to v7/integration from claude/pq-*, claude/lane-*, claude/coord-* and claude/ui-* branches, drafts included; legacy PRs (wipRule list) are not counted; PRs the Founder explicitly requested are listed in founderRequestedPrs and are not counted. The former lane rule of fewer than 12 draft PRs is retired. At capacity: BRANCH_ONLY. Builders keep claiming, building, testing and pushing to their branches with evidence recorded here (coordinatorBuild / lane records); code production never stops. A PR opens when a slot frees, oldest TESTED first. A lane PR whose head is an ancestor of an open integration PR is SUPERSEDED_BY_INTEGRATION and is proposed for closing with a pointer comment.",
@@ -990,7 +1009,7 @@
         142
       ]
     },
-    "note": "the six lane PRs are content-contained in #143 (ancestors; #142 adds only a base merge); proposed for closing once the Founder confirms; 2026-10-21T18:50Z: #143 head de3c6fb, #144 head ba3415a",
+    "note": "the six lane PRs are content-contained in #143 (ancestors; #142 adds only a base merge); proposed for closing once the Founder confirms; 2026-10-21T18:50Z: #143 head de3c6fb, #144 head ba3415a; 2026-10-21T19:45Z: 4 lane-a deliverables TESTED branch-only",
     "supersededBranches": {
       "claude/lane-a-task-status-ui": {
         "head": "f0c7f04",
