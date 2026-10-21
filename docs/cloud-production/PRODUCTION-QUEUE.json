@@ -360,7 +360,7 @@
       "lane": "C",
       "source": "Review rejection of PR #129 (finding 2, confirmed against docs/mobile/CONNECTIVITY-AND-PAIRING.md:250,:256)",
       "title": "Repair PQ-008: no cached data after device revocation, re-auth or pin mismatch; ordered refresh",
-      "status": "REPAIR_QUEUED",
+      "status": "IN_PROGRESS",
       "branch": "claude/pq-008",
       "base": "claude/pq-008@0c212ce (repair on the PR branch, same PR #129)",
       "files": [
@@ -378,7 +378,9 @@
         "Tests for each item, including negatives; no existing assertion weakened."
       ],
       "attempt": 1,
-      "maxAttempts": 3
+      "maxAttempts": 3,
+      "owner": "original PQ-008 builder session_017zUA52c5FbrSUVyK6EhdRz (has the branch context)",
+      "startedAt": "2026-10-21T04:46:41.416Z"
     },
     {
       "id": "PQ-013",
@@ -389,9 +391,10 @@
       "branch": "claude/uasco-independent-review",
       "base": "claude/pq-009 (stacked on #128)",
       "pr": 131,
-      "finalSha": "873a160",
+      "finalSha": "e72ed71",
       "verifiedBy": "coordinator 2026-10-21: review-gate.proof 76/76, 8 mutations caught, live read-only dry run on #128, vitest 45/45, tsc 0, TR/secret/architecture/registries/trust-root PASS",
-      "authority": "FOUNDER: .github/workflows/ (PROTECTED_FLOOR) and scripts/ci/ (CI_EXECUTED_FLOOR). Inactive until the Founder creates the reviewer App, environments and secrets; ruleset change last."
+      "authority": "FOUNDER: .github/workflows/ (PROTECTED_FLOOR) and scripts/ci/ (CI_EXECUTED_FLOOR). Inactive until the Founder creates the reviewer App, environments and secrets; ruleset change last.",
+      "note": "approval split into its own token and step; proof 80/80; marked ready for review (still stacked on claude/pq-009)"
     }
   ],
   "founderQueue": [
@@ -406,12 +409,6 @@
       "priority": 0,
       "kind": "FOUNDER_ONLY",
       "action": "Merge #128 (lockfile-only vite fix, CI 5/5 green, integrity verified). Today require_last_push_approval blocks every PR pushed by the shared account until an approval from another identity exists (reviewer App approval via UASCO_REVIEW_SUBMIT_APPROVAL, or a Founder ruleset decision)."
-    },
-    {
-      "id": "FQ-ROUTINE-ACCESS",
-      "priority": 1,
-      "kind": "FOUNDER_ONLY",
-      "action": "Production Builder routine trig_01BiCMimhXYFpRs3wFSbknSD: add the repository to its sources with push access (its config has sources: [] -> git proxy 403), then enable it."
     },
     {
       "id": "FQ-ROUTINE-CLEANUP",
@@ -500,5 +497,11 @@
     "ciFailed": "Classify (CODE_DEFECT, TEST_FAILURE, DEPENDENCY_FAILURE, INFRA_FAILURE, ACCESS_DENIED, QUOTA_EXHAUSTED, GOVERNANCE_BLOCKED, UNKNOWN). Base-wide failures get one shared fix PR (example PQ-009), never per-PR patches. At most 3 repair attempts per task, then BLOCKED permanent.",
     "accessDenied": "Routine reports ENGINE_BLOCKED (NO_REPO_ACCESS) and changes nothing; Founder attaches the repository source.",
     "quota": "On rate-limit rejection no new sessions start; leases age out; resume after the reported reset time. Never work around quota."
+  },
+  "engine": {
+    "builder": "persistent worker session_01K2PYQ7AYbpfo8EPiKciSAQ (repository source attached; access verified 04:46Z: fetch OK, push dry-run accepted, PR listing OK) woken hourly at :47 by trigger trig_01HJfvsZWCh5QKihm7iRZHFw",
+    "oldRoutine": "trig_01BiCMimhXYFpRs3wFSbknSD PAUSED (fired sessions have sources: [] -> git proxy 403); kept for the Founder to re-enable after attaching the repository, never both at once",
+    "heartbeat": "trig_01QEwrSwCvd8UCbKFn97MiHh report-only every 3 h",
+    "reviewer": "UASCO Independent Review workflow (PR #131, activates after merge) + interim cloud reviewer routine trig_01NJCi2PSTJxh6rMMLewLvGM"
   }
 }
