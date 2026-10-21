@@ -927,7 +927,13 @@
       "base": "f121b01 (PR #143 head)",
       "status": "TESTED_BRANCH_ONLY",
       "tests": "coordinator re-run: b1 + ps1b + b5 251/251; tsc/TR/secret/architecture/trust-root PASS; builder: 6 mutations caught",
-      "note": "optional testCommand on POST /v1/intakes (same schema + testCommandAllowed policy as projects; idempotency includes it); intake-created project no longer blocks at TEST_COMMAND_NOT_CONFIGURED; adversarial review workflow running; outside the #143 approval scope, so separate"
+      "note": "optional testCommand on POST /v1/intakes (same schema + testCommandAllowed policy as projects; idempotency includes it); intake-created project no longer blocks at TEST_COMMAND_NOT_CONFIGURED; adversarial review workflow running; outside the #143 approval scope, so separate",
+      "review": "adversarial review workflow: 2 finders, 0 findings"
+    },
+    "LANE-A-TASK-DONE-CONFIRM": {
+      "status": "PLANNED_AFTER_143",
+      "owner": "lane-a",
+      "note": "ctx.confirm before DONE (terminal) in views/task-status.js + tests; branch-only"
     }
   },
   "prCapacityRule": "Single limit (Founder 2026-10-21: remove the 10/12 contradiction): maxOpenPrs = 10 open agent PRs to v7/integration from claude/pq-*, claude/lane-*, claude/coord-* and claude/ui-* branches, drafts included; legacy PRs (wipRule list) are not counted; PRs the Founder explicitly requested are listed in founderRequestedPrs and are not counted. The former lane rule of fewer than 12 draft PRs is retired. At capacity: BRANCH_ONLY. Builders keep claiming, building, testing and pushing to their branches with evidence recorded here (coordinatorBuild / lane records); code production never stops. A PR opens when a slot frees, oldest TESTED first. A lane PR whose head is an ancestor of an open integration PR is SUPERSEDED_BY_INTEGRATION and is proposed for closing with a pointer comment.",
@@ -950,6 +956,27 @@
         142
       ]
     },
-    "note": "the six lane PRs are content-contained in #143 (ancestors; #142 adds only a base merge); proposed for closing once the Founder confirms"
+    "note": "the six lane PRs are content-contained in #143 (ancestors; #142 adds only a base merge); proposed for closing once the Founder confirms",
+    "supersededBranches": {
+      "claude/lane-a-task-status-ui": {
+        "head": "f0c7f04",
+        "status": "SUPERSEDED_BY_143",
+        "note": "same work.js/work-core.js regions as COORD-TASK-UI in #143; never merge"
+      }
+    },
+    "containmentCheck": {
+      "at": "2026-10-21T17:12Z",
+      "integrationHead": "f121b01",
+      "tool": "commit reachability + added-line presence per PR",
+      "result": {
+        "136": "CONTAINED (1 line extended by task-status wiring: pure insertion)",
+        "137": "CONTAINED (app.post line extended with bodyLimit: pure insertion)",
+        "138": "CONTAINED",
+        "139": "CONTAINED (app.post line extended with bodyLimit: pure insertion)",
+        "140": "CONTAINED",
+        "142": "CONTENT CONTAINED; merge commit 09b6986 (v7/integration into lane, no extra content) not reachable"
+      },
+      "note": "re-run against v7/integration after #143 merges; close only with Founder approval"
+    }
   }
 }
