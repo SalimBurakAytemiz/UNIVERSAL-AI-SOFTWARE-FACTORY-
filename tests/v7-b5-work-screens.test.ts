@@ -1596,3 +1596,88 @@ describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
     expect(check({idea: "x".repeat(1000)}).ok).toBe(true);
   });
 });
+
+// //TR: LANE-A first-delivery: koşu hazırlığı ve bloklu koşu nedenleri — kayıttan okunan eksikler kesin uyarıdır, "kayıtlı" garanti vermez, okunamayan kayıt UNKNOWN der; bilinen BLOK nedenleri açıklanır.
+describe("LANE-A run readiness and block reasons", () => {
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const get = (proj: any, mis: any, runs: any[] = []) => (p: string) => {
+    if (p === "/v1/projects") return {projects: proj === null ? [] : [proj]};
+    if (p === "/v1/missions") return {missions: [mis]};
+    if (p === `/v1/missions/${MID}`) return {mission: mis, tasks: []};
+    if (p.startsWith("/v1/work-runs/")) { const r = runs.find(x => p === `/v1/work-runs/${x.runId}`); return r ? {workRun: r} : undefined; }
+    if (p.startsWith("/v1/work-runs")) return {workRuns: runs};
+    if (p.startsWith("/v1/evidence")) return {evidence: []};
+    return undefined;
+  };
+  const render = async (proj: any, mis: any, runs: any[] = []) => {
+    const c = await mkCtx({get: get(proj, mis, runs), lang: "en"});
+    forms.selection.missionId = MID;
+    const view = await load(rend, "views", "work.js");
+    return {...c, root: mount(c.doc, await view.render(c.ctx))};
+  };
+  const readiness = (root: N) => byId(root, "run-readiness");
+
+  it("runReadiness: missing repository / remote url / missing test command are definite blockers; recorded makes no promise; unreadable is UNKNOWN", async () => {
+    const c = await load(rend, "work-core.js");
+    const P = (x: any = {}) => ({repositoryPath: "C:\\r", remoteRepository: false, testCommandSet: false, ...x});
+    expect(c.runReadiness({project: P(), mission: {testCommandSet: true}})).toEqual({repository: "RECORDED", testCommand: "RECORDED", blockers: []});
+    expect(c.runReadiness({project: P({testCommandSet: true}), mission: {testCommandSet: false}}).testCommand).toBe("RECORDED"); // proje komutu da sayılır (runner mission ?? project)
+    expect(c.runReadiness({project: P({repositoryPath: null}), mission: {testCommandSet: true}})).toEqual({repository: "MISSING", testCommand: "RECORDED", blockers: ["REPOSITORY_NOT_CONFIGURED"]});
+    expect(c.runReadiness({project: P({repositoryPath: null, remoteRepository: true}), mission: {testCommandSet: true}}).blockers).toEqual(["REMOTE_REPO_NOT_SUPPORTED_YET"]);
+    expect(c.runReadiness({project: P(), mission: {testCommandSet: false}}).blockers).toEqual(["TEST_COMMAND_NOT_CONFIGURED"]);
+    expect(c.runReadiness({project: P({repositoryPath: null}), mission: {testCommandSet: false}}).blockers).toEqual(["REPOSITORY_NOT_CONFIGURED", "TEST_COMMAND_NOT_CONFIGURED"]);
+    expect(c.runReadiness({project: null, mission: {testCommandSet: true}})).toEqual({repository: "UNKNOWN", testCommand: "RECORDED", blockers: []});
+    expect(c.runReadiness({project: null, mission: {testCommandSet: false}})).toEqual({repository: "UNKNOWN", testCommand: "UNKNOWN", blockers: []}); // proje okunamadı: test komutu yokluğu kesin değil
+    expect(c.runReadiness({project: P(), mission: null})).toEqual({repository: "RECORDED", testCommand: "UNKNOWN", blockers: []});
+    expect(c.runReasonHintKey("REPOSITORY_NOT_CONFIGURED")).toBe("run.reason.REPOSITORY_NOT_CONFIGURED");
+    for (const k of ["TEST_COMMAND_NOT_CONFIGURED", "REMOTE_REPO_NOT_SUPPORTED_YET", "PROJECT_NOT_FOUND", "MISSION_NOT_FOUND"]) expect(c.runReasonHintKey(k), k).toBe(`run.reason.${k}`);
+    for (const k of ["SANDBOX_UNAVAILABLE", "SOMETHING_ELSE", "", null, undefined, 5, "__proto__"]) expect(c.runReasonHintKey(k as any), String(k)).toBeNull();
+  });
+  it("mappers carry only booleans for the test command and remote repository, never the command or URL", async () => {
+    const m = await load(rend, "model.js"), c = await load(rend, "work-core.js");
+    const p = m.mapProjects({projects: [{projectId: PID, name: "A", repository: {url: "https://x/y.git"}, testCommand: ["node", "--test"]}, {projectId: "prj_" + "b".repeat(24), name: "B", repository: {path: "C:\\r"}}]}).items;
+    expect(p[0]).toMatchObject({repositoryPath: null, remoteRepository: true, testCommandSet: true});
+    expect(p[1]).toMatchObject({repositoryPath: "C:\\r", remoteRepository: false, testCommandSet: false});
+    expect(JSON.stringify(p)).not.toContain("--test"); expect(JSON.stringify(p)).not.toContain("x/y.git");
+    expect(c.mapMissionDetail({mission: mission({testCommand: ["npm", "test"]}), tasks: []}).mission.testCommandSet).toBe(true);
+    expect(c.mapMissionDetail({mission: mission({testCommand: []}), tasks: []}).mission.testCommandSet).toBe(false);
+    expect(c.mapMissionDetail({mission: mission(), tasks: []}).mission.testCommandSet).toBe(false);
+  });
+  it("shows the missing repository and test command before a run, only for startable missions, without sending anything", async () => {
+    const noRepo = await render(project({repository: null}), mission({status: "AUTHORIZED"}));
+    expect(readiness(noRepo.root)!.dataset.runReadiness).toBe("BLOCKERS");
+    expect(readiness(noRepo.root)!.dataset.runBlockers).toBe("REPOSITORY_NOT_CONFIGURED,TEST_COMMAND_NOT_CONFIGURED");
+    expect(text(readiness(noRepo.root)!)).toContain("A run would stop at REPOSITORY_NOT_CONFIGURED");
+    expect(text(readiness(noRepo.root)!)).toContain("A run would stop at TEST_COMMAND_NOT_CONFIGURED");
+    expect(noRepo.calls.post).toEqual([]);
+    const ok = await render(project(), mission({status: "AUTHORIZED", testCommand: ["node", "--test"]}));
+    expect(readiness(ok.root)!.dataset.runReadiness).toBe("RECORDED");
+    expect(text(readiness(ok.root)!)).toContain("does not guarantee");
+    expect(text(readiness(ok.root)!)).not.toContain("--test");
+    const unk = await render(null, mission({status: "AUTHORIZED"}));
+    expect(readiness(unk.root)!.dataset.runReadiness).toBe("UNKNOWN");
+    expect(text(readiness(unk.root)!)).toContain("readiness is unknown");
+    const draft = await render(project({repository: null}), mission({status: "DRAFT"}));
+    expect(readiness(draft.root)).toBeNull(); // başlatılamayan mission'da not yok
+    const remote = await render(project({repository: {url: "https://x/y.git"}}), mission({status: "AUTHORIZED", testCommand: ["node"]}));
+    expect(readiness(remote.root)!.dataset.runBlockers).toBe("REMOTE_REPO_NOT_SUPPORTED_YET");
+  });
+  it("run cards explain known block reasons next to the code, keep the sandbox text, and show unknown reasons verbatim", async () => {
+    const mk = (reason: string) => [{runId: RUN, missionId: MID, status: "BLOCKED", reason}];
+    for (const [reason, expected] of [["REPOSITORY_NOT_CONFIGURED", "no code repository attached"], ["TEST_COMMAND_NOT_CONFIGURED", "no usable test command"], ["REMOTE_REPO_NOT_SUPPORTED_YET", "remote repository address"], ["SANDBOX_UNAVAILABLE", "no verified sandbox"]] as const) {
+      const o = await render(project(), mission({status: "EXECUTING"}), mk(reason));
+      const cell = byData(o.root, "runReason", reason)[0];
+      expect(cell, reason).toBeDefined();
+      expect(text(cell), reason).toContain(`${reason} —`); expect(text(cell), reason).toContain(expected);
+    }
+    const unk = await render(project(), mission({status: "EXECUTING"}), mk("SOMETHING_NEW"));
+    expect(text(byData(unk.root, "runReason", "SOMETHING_NEW")[0])).toBe("SOMETHING_NEW");
+  });
+  it("readiness and reason strings exist in en and tr", async () => {
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+    const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("run.ready.") || /^run\.reason\.(REPOSITORY|TEST_COMMAND|REMOTE|PROJECT|MISSION)/.test(k));
+    expect(keys.length).toBe(11);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
+  });
+});
