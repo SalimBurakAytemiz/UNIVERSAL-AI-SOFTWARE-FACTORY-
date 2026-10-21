@@ -5,32 +5,259 @@
   "basis": "Founder chat directives of 2026-10-21 (SECURE RECOVERY Stage 7; CONTINUOUS REAL PRODUCTION sections 2-6), as reported by the coordinator. The coordinator's account is not an authority record. Work is limited to unprotected files under the existing builder rules of D-2026-10-19-A, with no new endpoints, allow-list entries, POST, IPC or storage, no protected paths and no security-critical runtime files.",
   "integrationBase": "v7/integration@a910883d5e37823bcf133834529826de8eef3f9a",
   "mergeLane": "SUSPENDED (Founder): finished work stays on its branch with a DRAFT PR until the secure merge process (independent reviewer identity, GitHub-enforced approval, required checks) exists.",
-  "builderCap": 2,
-  "statusVocabulary": ["QUEUED", "WAITING_BASE", "CLAIMED", "IN_PROGRESS", "CODE_IMPLEMENTED", "TESTED", "INTEGRATED", "PRODUCT_ACCEPTED", "BLOCKED", "FOUNDER_QUEUE"],
+  "builderCap": 3,
+  "statusVocabulary": [
+    "QUEUED",
+    "WAITING_BASE",
+    "CLAIMED",
+    "IN_PROGRESS",
+    "CODE_IMPLEMENTED",
+    "TESTED",
+    "INTEGRATED",
+    "PRODUCT_ACCEPTED",
+    "BLOCKED",
+    "FOUNDER_QUEUE"
+  ],
   "statusNotes": "DESIGN_ONLY, CODE_IMPLEMENTED, TESTED, INTEGRATED and PRODUCT_ACCEPTED are separate states. A finished builder task is at most TESTED: unit/renderer tests ran, Linux only, Windows NOT_EXECUTED. INTEGRATED needs a merge. PRODUCT_ACCEPTED needs real operational evidence.",
   "claimRule": "Before any work, create the branch claude/<id lowercased> as a create-only ref (git push origin <base sha>:refs/heads/claude/<id>; if the ref already exists, the task is owned, so skip it). Never force-push. Never delete a claude/* branch.",
   "capacityRule": "LIVE = claude/* claim branches whose head is younger than 6 h and that have no open PR. If LIVE >= builderCap, start nothing.",
   "tasks": [
-    {"id": "UI-110", "source": "BACKLOG_CHECKPOINT (READY)", "status": "IN_PROGRESS", "branch": "claude/ui-110", "base": "a910883", "owner": "coordinator-provisioned builder session_013dxuNPUg5TKwZhEiF7WhAX (2026-10-21T01:32Z)", "pr": null},
-    {"id": "UI-105", "source": "BACKLOG_CHECKPOINT (READY)", "status": "IN_PROGRESS", "branch": "claude/ui-105", "base": "a910883", "owner": "coordinator-provisioned builder session_01DQmUqiu7bxNuCTYerqQXbq (2026-10-21T01:32Z)", "pr": null},
-    {"id": "PQ-001", "source": "UASCO-AUD-072 (P2)", "title": "Renderer product-verification honesty: show PRODUCT_VERIFIED only on the server's exact rule", "status": "QUEUED", "base": "v7/integration", "files": ["apps/desktop/renderer/work-core.js", "apps/desktop/renderer/views/delivery.js", "apps/desktop/renderer/m1a.js", "apps/desktop/renderer/locales/en.js", "apps/desktop/renderer/locales/tr.js", "tests/v7-ux-delivery.test.ts", "tests/v7-b5-work-screens.test.ts"], "testFile": "tests/v7-ux-delivery.test.ts", "acceptance": ["Read core/workos/outcomes.ts productVerificationOf (around :93-110) and mirror it exactly in work-core.js. PRODUCT_VERIFIED needs both VERIFY_TESTS and REGRESSION_TESTS evidence for the run's head SHA, exit 0, sandbox attestation and an executed test count above 0. A non-zero exit gives FAILED; missing, non-head or partial evidence gives NOT_VERIFIED.", "delivery.js and m1a.js use only that function. views/work.js belongs to UI-105 until that merges: fix its badge through the shared work-core helper, and if work.js itself must change, STOP and report.", "Update tests/v7-ux-delivery.test.ts:74-85 to expect the stricter behaviour, and add negative cases for a failing exit, a non-head SHA, one suite only, a zero executed count and no attestation. No other assertion may be weakened.", "GET-only: no new endpoint, POST, IPC or storage."]},
-    {"id": "PQ-002", "source": "UASCO-AUD-129 (P3)", "title": "Asserting test for the Tower scheduler fact (UI-206)", "status": "QUEUED", "base": "v7/integration", "files": ["tests/v7-ux-wp4-tower.test.ts"], "testFile": "tests/v7-ux-wp4-tower.test.ts", "acceptance": ["Render the Tower view with stub ctx data and assert the scheduler fact for the VERIFIED, UNAVAILABLE, ERROR and missing-data cases (honest '—' or pill, never a fabricated number).", "Mutation check: removing the scheduler fact from the view must make the new test fail; record the command and the output.", "Test-only change: no renderer source edits."]},
-    {"id": "PQ-003", "source": "UASCO-AUD-065 / inventory UI-050 (PARTIAL)", "title": "Evidence lineage as a navigable graph view in #/assurance (read-only)", "status": "WAITING_BASE", "base": "claude/ui-105 head once its draft PR is open (stacked; assurance.js overlap)", "files": ["apps/desktop/renderer/views/assurance.js", "apps/desktop/renderer/assurance-core.js", "apps/desktop/renderer/locales/en.js", "apps/desktop/renderer/locales/tr.js", "apps/desktop/renderer/styles.css", "tests/v7-ux-wp-qasec.test.ts"], "testFile": "tests/v7-ux-wp-qasec.test.ts", "acceptance": ["Build the mission → run → evidence lineage from the existing GET data as a keyboard-navigable node/edge view, with an accessible list fallback. No new reads.", "Honest states for missing links; never infer a link that is not in the data.", "Unique data-* names, token-only CSS, h()/textContent only."]},
-    {"id": "PQ-004", "source": "UASCO-AUD-065 / inventory UI-246 (DESIGN parity UNVERIFIED)", "title": "Theme contrast lab in #/settings: WCAG contrast preview built from the existing tokens", "status": "WAITING_BASE", "base": "claude/ui-105 head once its draft PR is open (stacked; settings.js overlap)", "files": ["apps/desktop/renderer/views/settings.js", "apps/desktop/renderer/locales/en.js", "apps/desktop/renderer/locales/tr.js", "apps/desktop/renderer/styles.css", "tests/v7-ux-settings.test.ts"], "testFile": "tests/v7-ux-settings.test.ts", "acceptance": ["List the token pairs with their computed contrast ratio and AA/AAA result. The ratios are computed from the token values in the stylesheet, never typed in by hand.", "No storage, no POST, no new endpoint; read-only."]},
-    {"id": "PQ-005", "source": "UASCO-AUD-065 / inventory UI-034 (PARTIAL)", "title": "Provider & model routing view (read-only) from the existing executors/capabilities/adapters GETs", "status": "WAITING_BASE", "base": "after PQ-004 (settings.js overlap)", "files": ["apps/desktop/renderer/views/settings.js", "apps/desktop/renderer/views/executors-panel.js", "apps/desktop/renderer/locales/en.js", "apps/desktop/renderer/locales/tr.js", "tests/v7-ux-settings.test.ts"], "testFile": "tests/v7-ux-settings.test.ts", "acceptance": ["Show which executor, provider and capability would route a task, using only values returned by existing allow-listed GETs. Registry values are carried verbatim, never promoted to active/connected.", "No new POST: the existing local-claude enable action stays where it is."]},
-    {"id": "PQ-006", "source": "UASCO-AUD-130 (P3)", "title": "Make the two host-sensitive tests robust without weakening them", "status": "QUEUED", "base": "v7/integration", "files": ["tests/v7-b10a-evidence.test.ts", "tests/v7-b2-workos-hardening.test.ts"], "testFile": "tests/v7-b10a-evidence.test.ts", "acceptance": ["Replace the substring home-path leak check with a precise absolute-path check that still fails on any real leak. Prove this with a deliberate leak (mutation) that must fail.", "Make the unix-socket test independent of a long TMPDIR by using a short dedicated temp root. Never skip it and never raise timeouts.", "Both files pass with HOME=/root and with a long TMPDIR. The pass/fail count before and after is recorded."]}
+    {
+      "id": "UI-110",
+      "source": "BACKLOG_CHECKPOINT (READY)",
+      "status": "IN_PROGRESS",
+      "branch": "claude/ui-110",
+      "base": "a910883",
+      "owner": "coordinator-provisioned builder session_013dxuNPUg5TKwZhEiF7WhAX (2026-10-21T01:32Z)",
+      "pr": null
+    },
+    {
+      "id": "UI-105",
+      "source": "BACKLOG_CHECKPOINT (READY)",
+      "status": "IN_PROGRESS",
+      "branch": "claude/ui-105",
+      "base": "a910883",
+      "owner": "coordinator-provisioned builder session_01DQmUqiu7bxNuCTYerqQXbq (2026-10-21T01:32Z)",
+      "pr": null
+    },
+    {
+      "id": "PQ-007",
+      "lane": "B",
+      "source": "Inventory I-DP-039 Project Memory (DESIGN_ONLY) / WS-SC-14 (AUTHORITY_REQUIRED for integration); UASCO-AUD-029",
+      "title": "Project Memory core module: persistent per-project decision/fact/source memory with provenance, revisions, tamper evidence and query (not wired to the API)",
+      "status": "IN_PROGRESS",
+      "branch": "claude/pq-007",
+      "base": "v7/integration",
+      "files": [
+        "core/knowledge/project-memory.ts",
+        "core/knowledge/project-memory-types.ts",
+        "tests/technology-discovery.test.ts",
+        "docs/knowledge/PROJECT-MEMORY.md"
+      ],
+      "testFile": "tests/technology-discovery.test.ts",
+      "owner": "coordinator-provisioned builder (Opus)",
+      "integrationPending": "API endpoints (apps/control-api/src/server.ts, protected) and desktop allow-list (apps/desktop/main.mjs, protected): prepared as a separate patch only, not applied"
+    },
+    {
+      "id": "PQ-001",
+      "source": "UASCO-AUD-072 (P2)",
+      "title": "Renderer product-verification honesty: show PRODUCT_VERIFIED only on the server's exact rule",
+      "status": "QUEUED",
+      "base": "v7/integration",
+      "files": [
+        "apps/desktop/renderer/work-core.js",
+        "apps/desktop/renderer/views/delivery.js",
+        "apps/desktop/renderer/m1a.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "tests/v7-ux-delivery.test.ts",
+        "tests/v7-b5-work-screens.test.ts"
+      ],
+      "testFile": "tests/v7-ux-delivery.test.ts",
+      "acceptance": [
+        "Read core/workos/outcomes.ts productVerificationOf (around :93-110) and mirror it exactly in work-core.js. PRODUCT_VERIFIED needs both VERIFY_TESTS and REGRESSION_TESTS evidence for the run's head SHA, exit 0, sandbox attestation and an executed test count above 0. A non-zero exit gives FAILED; missing, non-head or partial evidence gives NOT_VERIFIED.",
+        "delivery.js and m1a.js use only that function. views/work.js belongs to UI-105 until that merges: fix its badge through the shared work-core helper, and if work.js itself must change, STOP and report.",
+        "Update tests/v7-ux-delivery.test.ts:74-85 to expect the stricter behaviour, and add negative cases for a failing exit, a non-head SHA, one suite only, a zero executed count and no attestation. No other assertion may be weakened.",
+        "GET-only: no new endpoint, POST, IPC or storage."
+      ]
+    },
+    {
+      "id": "PQ-002",
+      "source": "UASCO-AUD-129 (P3)",
+      "title": "Asserting test for the Tower scheduler fact (UI-206)",
+      "status": "QUEUED",
+      "base": "v7/integration",
+      "files": [
+        "tests/v7-ux-wp4-tower.test.ts"
+      ],
+      "testFile": "tests/v7-ux-wp4-tower.test.ts",
+      "acceptance": [
+        "Render the Tower view with stub ctx data and assert the scheduler fact for the VERIFIED, UNAVAILABLE, ERROR and missing-data cases (honest '—' or pill, never a fabricated number).",
+        "Mutation check: removing the scheduler fact from the view must make the new test fail; record the command and the output.",
+        "Test-only change: no renderer source edits."
+      ]
+    },
+    {
+      "id": "PQ-003",
+      "source": "UASCO-AUD-065 / inventory UI-050 (PARTIAL)",
+      "title": "Evidence lineage as a navigable graph view in #/assurance (read-only)",
+      "status": "WAITING_BASE",
+      "base": "claude/ui-105 head once its draft PR is open (stacked; assurance.js overlap)",
+      "files": [
+        "apps/desktop/renderer/views/assurance.js",
+        "apps/desktop/renderer/assurance-core.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "apps/desktop/renderer/styles.css",
+        "tests/v7-ux-wp-qasec.test.ts"
+      ],
+      "testFile": "tests/v7-ux-wp-qasec.test.ts",
+      "acceptance": [
+        "Build the mission → run → evidence lineage from the existing GET data as a keyboard-navigable node/edge view, with an accessible list fallback. No new reads.",
+        "Honest states for missing links; never infer a link that is not in the data.",
+        "Unique data-* names, token-only CSS, h()/textContent only."
+      ]
+    },
+    {
+      "id": "PQ-004",
+      "source": "UASCO-AUD-065 / inventory UI-246 (DESIGN parity UNVERIFIED)",
+      "title": "Theme contrast lab in #/settings: WCAG contrast preview built from the existing tokens",
+      "status": "WAITING_BASE",
+      "base": "claude/ui-105 head once its draft PR is open (stacked; settings.js overlap)",
+      "files": [
+        "apps/desktop/renderer/views/settings.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "apps/desktop/renderer/styles.css",
+        "tests/v7-ux-settings.test.ts"
+      ],
+      "testFile": "tests/v7-ux-settings.test.ts",
+      "acceptance": [
+        "List the token pairs with their computed contrast ratio and AA/AAA result. The ratios are computed from the token values in the stylesheet, never typed in by hand.",
+        "No storage, no POST, no new endpoint; read-only."
+      ]
+    },
+    {
+      "id": "PQ-005",
+      "source": "UASCO-AUD-065 / inventory UI-034 (PARTIAL)",
+      "title": "Provider & model routing view (read-only) from the existing executors/capabilities/adapters GETs",
+      "status": "WAITING_BASE",
+      "base": "after PQ-004 (settings.js overlap)",
+      "files": [
+        "apps/desktop/renderer/views/settings.js",
+        "apps/desktop/renderer/views/executors-panel.js",
+        "apps/desktop/renderer/locales/en.js",
+        "apps/desktop/renderer/locales/tr.js",
+        "tests/v7-ux-settings.test.ts"
+      ],
+      "testFile": "tests/v7-ux-settings.test.ts",
+      "acceptance": [
+        "Show which executor, provider and capability would route a task, using only values returned by existing allow-listed GETs. Registry values are carried verbatim, never promoted to active/connected.",
+        "No new POST: the existing local-claude enable action stays where it is."
+      ]
+    },
+    {
+      "id": "PQ-006",
+      "source": "UASCO-AUD-130 (P3)",
+      "title": "Make the two host-sensitive tests robust without weakening them",
+      "status": "QUEUED",
+      "base": "v7/integration",
+      "files": [
+        "tests/v7-b10a-evidence.test.ts",
+        "tests/v7-b2-workos-hardening.test.ts"
+      ],
+      "testFile": "tests/v7-b10a-evidence.test.ts",
+      "acceptance": [
+        "Replace the substring home-path leak check with a precise absolute-path check that still fails on any real leak. Prove this with a deliberate leak (mutation) that must fail.",
+        "Make the unix-socket test independent of a long TMPDIR by using a short dedicated temp root. Never skip it and never raise timeouts.",
+        "Both files pass with HOME=/root and with a long TMPDIR. The pass/fail count before and after is recorded."
+      ]
+    },
+    {
+      "id": "PQ-008",
+      "lane": "C",
+      "source": "docs/mobile/screens MOB-6 (UI-097, UI-099, UI-102, UI-177) + ADR-MOB-001 (read-only STALE cache) + API-CONTRACT (PROPOSED routes)",
+      "title": "Mobile Companion core: read-only monitoring state store, view models and STALE/OFFLINE cache rules in pure TypeScript (no dependencies, no network, no privileged actions)",
+      "status": "QUEUED",
+      "base": "v7/integration",
+      "files": [
+        "apps/mobile/src/core/monitoring-store.ts",
+        "apps/mobile/src/core/view-models.ts",
+        "apps/mobile/src/core/stale-cache.ts",
+        "apps/mobile/src/core/types.ts",
+        "apps/mobile/src/core/monitoring.test.ts",
+        "apps/mobile/README.md"
+      ],
+      "testFile": "apps/mobile/src/core/monitoring.test.ts (colocated; run locally with npx vitest run <path>; CI registration pending)",
+      "acceptance": [
+        "Implement the screen data rules of the MOB-6 specs (home, task flow, agent tracking, offline) as pure functions and a small store; every field maps to a MOB-3 PROPOSED route name and is marked NOT_CONNECTED until that route exists.",
+        "No React Native or other dependency, no fetch/WebSocket, no storage API: an injected reader interface only. No approval, STOP or RESUME action.",
+        "Honest states (LOADING, EMPTY, ERROR, OFFLINE, STALE with age, UNAVAILABLE, DENIED); a STALE read is never shown as fresh.",
+        "Unit tests including negative cases; record exact counts. Status at most TESTED (local); not INTEGRATED."
+      ]
+    }
   ],
   "founderQueue": [
-    {"item": "UASCO-AUD-003 self-hosted runner removal + fork-PR approval", "why": "GitHub admin + PC access"},
-    {"item": "UASCO-AUD-133 remove the pull_request trigger of the 'UASCO Independent Cloud Reviewer' routine", "why": "routine owner setting"},
-    {"item": "UASCO-AUD-001 builder/reviewer identities, ruleset (approvals, CODEOWNERS, last-push), Actions approval setting off", "why": "GitHub admin"},
-    {"item": "UASCO-AUD-004 API-001 fix (server.ts + validation.json + reseal) via private security advisory fork or recorded grant; Founder approval/merge", "why": "protected files"},
-    {"item": "UASCO-AUD-002 protected-paths extension + gate floor + reseal", "why": "protected files"},
-    {"item": "Backend/central-brain work that needs new endpoints or POST allow-list (Project Memory, knowledge, planning, Company OS writes, approval actions)", "why": "server.ts and main.mjs are protected; new API authority"},
-    {"item": "core/workos/store.ts read-clone fix (UASCO-AUD-109) and journal performance/versioning (UASCO-AUD-087/093)", "why": "integrity-critical journal store: needs explicit confirmation before builders touch it"},
-    {"item": "Mobile implementation MOB-11..31 (React Native code, dependency installs)", "why": "AUTHORITY_REQUIRED (FD-2026-10-20-MOB-PHASE0 is docs-only)"},
-    {"item": "UASCO-AUD-005 sandbox substrate decision", "why": "hardware/OS/licence choice"},
-    {"item": "Raise the 2-builder cap", "why": "explicit Founder limit"}
+    {
+      "item": "UASCO-AUD-003 self-hosted runner removal + fork-PR approval",
+      "why": "GitHub admin + PC access"
+    },
+    {
+      "item": "UASCO-AUD-133 remove the pull_request trigger of the 'UASCO Independent Cloud Reviewer' routine",
+      "why": "routine owner setting"
+    },
+    {
+      "item": "UASCO-AUD-001 builder/reviewer identities, ruleset (approvals, CODEOWNERS, last-push), Actions approval setting off",
+      "why": "GitHub admin"
+    },
+    {
+      "item": "UASCO-AUD-004 API-001 fix (server.ts + validation.json + reseal) via private security advisory fork or recorded grant; Founder approval/merge",
+      "why": "protected files"
+    },
+    {
+      "item": "UASCO-AUD-002 protected-paths extension + gate floor + reseal",
+      "why": "protected files"
+    },
+    {
+      "item": "Backend/central-brain work that needs new endpoints or POST allow-list (Project Memory, knowledge, planning, Company OS writes, approval actions)",
+      "why": "server.ts and main.mjs are protected; new API authority"
+    },
+    {
+      "item": "core/workos/store.ts read-clone fix (UASCO-AUD-109) and journal performance/versioning (UASCO-AUD-087/093)",
+      "why": "integrity-critical journal store: needs explicit confirmation before builders touch it"
+    },
+    {
+      "item": "Mobile implementation MOB-11..31 (React Native code, dependency installs)",
+      "why": "AUTHORITY_REQUIRED (FD-2026-10-20-MOB-PHASE0 is docs-only)"
+    },
+    {
+      "item": "UASCO-AUD-005 sandbox substrate decision",
+      "why": "hardware/OS/licence choice"
+    },
+    {
+      "item": "Raise the 2-builder cap",
+      "why": "explicit Founder limit"
+    },
+    {
+      "item": "Register new test files in config/validation.json (e.g. apps/mobile colocated tests) and reseal",
+      "why": "protected path; without it CI cannot run new test files"
+    },
+    {
+      "item": "React Native / Android dependencies and build for the Mobile Companion",
+      "why": "FD-2026-10-20-MOB-PHASE0 excludes dependency installs; supply-chain decision"
+    }
   ],
-  "checkpoint": {"at": "2026-10-21T01:50Z", "by": "coordinator", "integrationHead": "a910883", "next": "PQ-001 when a builder slot frees"}
+  "checkpoint": {
+    "at": "2026-10-21T01:45:02.473Z",
+    "by": "coordinator",
+    "integrationHead": "a910883",
+    "next": "PQ-001 (lane A) when a slot frees; PQ-008 (lane C) after"
+  },
+  "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
+  "lanes": {
+    "A": "Desktop UI/UX and functions (renderer, Sonnet)",
+    "B": "Backend, central brain, agent infrastructure (unprotected core modules, Opus)",
+    "C": "Mobile app core logic and independent QA (no new dependencies, Sonnet)"
+  },
+  "testRule": "New tests go into an EXISTING registered tests/*.test.ts file. A new tests/*.test.ts would fail tests/pkg-vs-validation-sharding.test.ts until it is registered in protected config/validation.json. Exception: code without a registered test home (mobile) uses colocated *.test.ts outside tests/, run locally; CI registration stays in the founderQueue."
 }
