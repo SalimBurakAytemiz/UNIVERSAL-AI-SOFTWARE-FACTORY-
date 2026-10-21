@@ -9,9 +9,10 @@ import {fileURLToPath} from "node:url";
 import {createRequire} from "node:module";
 import {REQUIRED_CONTEXTS} from "../../../docs/planning/merge-gate.mjs";
 import {decide, preGate, validateVerdict, renderSummary, founderAuthorityOk, carriesSecret, negativeVerdict, verdictIsNegative, VERDICT_RESULTS, SEVERITIES, CLASSIFICATIONS, CHECK_KEYS, CHECK_NAME, FOUNDER_ENVIRONMENT,
+  VERDICT_KEYS, FINDING_KEYS, canonical,
   diagnoseReviewerOutput, reviewerFailureCode, REVIEWER_DIAGNOSTIC_CODES, REVIEWER_DIAGNOSTIC_KEYS, REVIEWER_REMEDIES, EXECUTION_FILE_MAX_BYTES} from "./review-gate.mjs";
 import {client, waitForCi, ciCheckRuns, diffPaths, sameChange, prDiff, priorNegativeVerdicts} from "./github.mjs";
-import {reviewerSchema, modelArg} from "./run.mjs";
+import {reviewerSchema, modelArg, apiSchema, API_UNSUPPORTED_KEYWORDS} from "./run.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "../../..");
@@ -232,6 +233,52 @@ check("S1 schema enums equal the gate's enums", JSON.stringify(schema.properties
   && JSON.stringify(schema.properties.checks.required) === JSON.stringify(CHECK_KEYS));
 check("S2 the schema is safe inside a single-quoted CLI argument", !/['\r\n]/.test(reviewerSchema()) && !reviewerSchema().includes("$comment"));
 check("S3 a schema-valid sample verdict passes validateVerdict", validateVerdict(verdict()).length === 0);
+// //TR: Kapı şemanın her kısıtını kendisi uygular (bilinmeyen anahtar, boş id); reviewer'a giden API şeması desteklenmeyen anahtar sözcükleri taşımaz, yalnız bunları kaybeder ve çıkarılan her kısıtı kapı yine reddeder.
+check("S1b the schema's property names and required lists equal the gate's key lists (verdict, finding)", JSON.stringify(Object.keys(schema.properties)) === JSON.stringify(VERDICT_KEYS)
+  && JSON.stringify(schema.required) === JSON.stringify(VERDICT_KEYS) && JSON.stringify(Object.keys(schema.properties.findings.items.properties)) === JSON.stringify(FINDING_KEYS)
+  && JSON.stringify(schema.properties.findings.items.required) === JSON.stringify(FINDING_KEYS) && schema.additionalProperties === false
+  && schema.properties.findings.items.additionalProperties === false && schema.properties.checks.additionalProperties === false);
+const f0 = verdict().findings[0], withF = o => verdict({findings: [{...f0, ...o}]});
+const protoKey = JSON.parse(JSON.stringify(verdict()).replace("{", '{"__proto__":{"x":1},'));
+check("G47 the gate rejects unknown keys at the top level, in a finding and in checks (additionalProperties: false), __proto__ included",
+  validateVerdict(verdict({extra: 1})).includes("VERDICT_MALFORMED:unknownKey") && validateVerdict(protoKey).includes("VERDICT_MALFORMED:unknownKey")
+  && validateVerdict(withF({note: "x"})).includes("VERDICT_MALFORMED:finding") && validateVerdict(verdict({checks: {...verdict().checks, perf: "PASS"}})).includes("VERDICT_MALFORMED:checks")
+  && D({v: {extra: 1}}).conclusion === "failure" && has(D({v: {result: "BLOCKED", extra: 1}}), "VERDICT_REJECTED_NEGATIVE"));
+check("G47b the gate rejects an empty or blank finding id (minLength 1, non-blank); well-formed verdicts (no findings, null line, every known key) still pass",
+  validateVerdict(withF({id: ""})).includes("VERDICT_MALFORMED:finding") && validateVerdict(withF({id: "   "})).includes("VERDICT_MALFORMED:finding")
+  && validateVerdict(verdict({findings: []})).length === 0 && validateVerdict(withF({line: null})).length === 0 && validateVerdict(withF({file: ""})).length === 0
+  && Object.keys(verdict()).every(k => VERDICT_KEYS.includes(k)) && D().conclusion === "success");
+const srcSchema = (({$comment, ...x}) => x)(schema), apiS = JSON.parse(reviewerSchema());
+const keywordsOf = (x, out = []) => { if (Array.isArray(x)) x.forEach(y => keywordsOf(y, out)); else if (x && typeof x === "object") for (const [k, v] of Object.entries(x)) {
+  if (k === "properties") Object.values(v).forEach(y => keywordsOf(y, out)); else { out.push(k); keywordsOf(v, out); } } return out; };
+const dropKeys = (x, drop) => Array.isArray(x) ? x.map(y => dropKeys(y, drop)) : x && typeof x === "object" ? Object.fromEntries(Object.entries(x).filter(([k]) => !drop.includes(k))
+  .map(([k, v]) => [k, k === "properties" ? Object.fromEntries(Object.entries(v).map(([p, sub]) => [p, dropKeys(sub, drop)])) : dropKeys(v, drop)])) : x;
+check("S4 the schema emitted for --json-schema has no keyword the API does not support (no minLength, maxLength, minimum, maxItems); only those were removed and only descriptions added",
+  !keywordsOf(apiS).some(k => API_UNSUPPORTED_KEYWORDS.includes(k)) && ["minLength", "maxLength", "minimum", "maxItems"].every(k => API_UNSUPPORTED_KEYWORDS.includes(k))
+  && [...new Set(keywordsOf(apiS))].every(k => ["type", "additionalProperties", "required", "properties", "enum", "pattern", "items", "description"].includes(k))
+  && canonical(dropKeys(apiS, ["description"])) === canonical(dropKeys(srcSchema, API_UNSUPPORTED_KEYWORDS))
+  && apiS.properties.reviewedHeadSha.pattern === "^[0-9a-f]{40}$" && apiS.properties.checks.additionalProperties === false && apiS.properties.findings.items.additionalProperties === false
+  && JSON.stringify(apiSchema({properties: {minimum: {type: "string", maxLength: 3}}})) === '{"properties":{"minimum":{"type":"string","description":"At most 3 characters."}}}');
+const removed = [];
+(function walk(x, at) { for (const [k, v] of Object.entries(x)) { if (k === "properties") for (const [p, sub] of Object.entries(v)) walk(sub, `${at}.${p}`); else if (k === "items") walk(v, `${at}[]`);
+  else if (API_UNSUPPORTED_KEYWORDS.includes(k)) removed.push(`${at}:${k}=${v}`); } })(srcSchema, "$");
+const VIOLATE = {"$.summary:minLength=1": verdict({summary: ""}), "$.summary:maxLength=4000": verdict({summary: "x".repeat(4001)}),
+  "$.findings:maxItems=50": verdict({findings: Array.from({length: 51}, (_, i) => ({...f0, id: `F-${i}`}))}), "$.findings[].id:minLength=1": withF({id: ""}),
+  "$.findings[].id:maxLength=32": withF({id: "x".repeat(33)}), "$.findings[].file:maxLength=400": withF({file: "x".repeat(401)}), "$.findings[].line:minimum=0": withF({line: -1}),
+  "$.findings[].title:maxLength=2000": withF({title: "x".repeat(2001)}), "$.findings[].evidence:maxLength=2000": withF({evidence: "x".repeat(2001)})};
+check("S5 every constraint removed from the emitted schema is pinned and stated in its field's description",
+  JSON.stringify([...removed].sort()) === JSON.stringify(Object.keys(VIOLATE).sort()) && apiS.properties.summary.description === "Non-empty, at most 4000 characters."
+  && apiS.properties.findings.description === "At most 50 items." && apiS.properties.findings.items.properties.id.description === "Non-empty, at most 32 characters."
+  && apiS.properties.findings.items.properties.file.description === "At most 400 characters." && apiS.properties.findings.items.properties.line.description === "At least 0."
+  && apiS.properties.findings.items.properties.title.description === "At most 2000 characters." && apiS.properties.findings.items.properties.evidence.description === "At most 2000 characters.");
+// Real JSON Schema validation (ajv is a direct dependency in package-lock.json). Unavailable fails the proof.
+let ajvApi = null, ajvSrc = null;
+try { const Ajv = createRequire(import.meta.url)("ajv/dist/2020").default; const a = new Ajv({strict: true, allErrors: true}); ajvApi = a.compile(apiS); ajvSrc = a.compile(srcSchema); } catch { ajvApi = ajvSrc = null; }
+check("S6 the gate rejects each removed constraint even though the emitted schema no longer says so (the full source schema still does); the sample verdict passes all three",
+  ajvApi !== null && ajvApi(verdict()) && ajvSrc(verdict()) && validateVerdict(verdict()).length === 0
+  && Object.values(VIOLATE).every(x => ajvApi(x) && !ajvSrc(x) && validateVerdict(x).length > 0 && D({verdict: x}).conclusion === "failure"));
+check("S7 the emitted schema is valid JSON Schema (2020-12, strict) with an object top level, and still refuses unknown keys and bad enums",
+  ajvApi !== null && apiS.type === "object" && !ajvApi(verdict({extra: 1})) && !ajvApi(withF({note: "x"})) && !ajvApi(verdict({result: "APPROVED"})) && !ajvApi(verdict({reviewedHeadSha: "abc"})));
 
 // ---- Workflow trust boundaries (static) ----
 const wf = fs.readFileSync(path.join(ROOT, ".github/workflows/uasco-independent-review.yml"), "utf8");

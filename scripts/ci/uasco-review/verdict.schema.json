@@ -1,5 +1,5 @@
 {
-  "$comment": "//TR: Bu şema bağımsız Claude Reviewer'ın yapılandırılmış kararını tanımlar; alan, enum ve uzunluk kurallarını review-gate.mjs validateVerdict ile paylaşır (görünmez karakter yasağı yalnız validateVerdict tarafından uygulanır) ve kararı incelenen head ve base commit SHA değerine bağlar.",
+  "$comment": "//TR: Bu şema bağımsız Claude Reviewer'ın yapılandırılmış kararını tanımlar; alan, enum ve uzunluk kurallarını review-gate.mjs validateVerdict ile paylaşır (görünmez karakter yasağı yalnız validateVerdict tarafından uygulanır) ve kararı incelenen head ve base commit SHA değerine bağlar. Reviewer API'sine giden şema run.mjs apiSchema ile türetilir: API'nin desteklemediği uzunluk, sayı aralığı ve dizi boyutu anahtar sözcükleri çıkarılıp description metnine yazılır; bu dosyadaki her kısıtı validateVerdict bağımsız olarak uygular.",
   "type": "object",
   "additionalProperties": false,
   "required": ["result", "reviewedHeadSha", "reviewedBaseSha", "summary", "findings", "checks"],

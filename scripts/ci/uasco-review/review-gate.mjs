@@ -12,6 +12,10 @@ export const CHECK_KEYS = Object.freeze(["security", "tests", "ciEvidence", "sco
 // "tests" may not be NOT_APPLICABLE: a code change without test evidence is never an independent CLEAN.
 const CHECK_VALUES = Object.freeze({security: ["PASS", "FAIL", "NOT_APPLICABLE"], tests: ["PASS", "FAIL", "INSUFFICIENT"], ciEvidence: ["PASS", "FAIL"], scope: ["PASS", "FAIL"]});
 export const LIMITS = Object.freeze({findings: 50, summary: 4000, text: 2000, file: 400, id: 32});
+// The only keys a verdict, a finding and the checks object may carry (the schema's additionalProperties: false, enforced here independently).
+export const VERDICT_KEYS = Object.freeze(["result", "reviewedHeadSha", "reviewedBaseSha", "summary", "findings", "checks"]);
+export const FINDING_KEYS = Object.freeze(["id", "severity", "classification", "file", "line", "title", "evidence"]);
+const knownKeysOnly = (o, keys) => Object.keys(o).every(k => keys.includes(k));
 
 const SHA_RE = /^[0-9a-f]{40}$/;
 const SESSION_RE = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -57,21 +61,24 @@ export function canonical(v) {
 }
 export const sha256 = s => crypto.createHash("sha256").update(s).digest("hex");
 
-// Structural verdict check. Returns a list of fixed codes; empty means the verdict is well formed.
+// //TR: Kapı şemaya güvenmez: reviewer'a giden API şeması desteklenmeyen uzunluk/sayı/dizi boyutu anahtar sözcüklerini taşımadığı için şemanın her kısıtı (bilinmeyen anahtar yasağı, boş olmayan id ve özet, uzunluk ve sayı sınırları, satır >= 0) burada bağımsız olarak uygulanır.
+// Structural verdict check. Returns a list of fixed codes; empty means the verdict is well formed. It enforces every constraint of verdict.schema.json itself
+// (unknown keys, lengths, counts, ranges, patterns), because the schema sent to the reviewer API omits the keywords the API does not support.
 export function validateVerdict(v) {
   const r = [];
   if (!isObj(v)) return ["VERDICT_MALFORMED:root"];
+  if (!knownKeysOnly(v, VERDICT_KEYS)) r.push("VERDICT_MALFORMED:unknownKey");
   if (!VERDICT_RESULTS.includes(v.result)) r.push("VERDICT_MALFORMED:result");
   if (!isSha(v.reviewedHeadSha)) r.push("VERDICT_MALFORMED:reviewedHeadSha");
   if (!isSha(v.reviewedBaseSha)) r.push("VERDICT_MALFORMED:reviewedBaseSha");
   if (!okText(v.summary, LIMITS.summary) || v.summary.trim() === "") r.push("VERDICT_MALFORMED:summary");
   if (!Array.isArray(v.findings) || v.findings.length > LIMITS.findings) r.push("VERDICT_MALFORMED:findings");
   else for (const f of v.findings) {
-    if (!isObj(f) || !okText(f.id, LIMITS.id) || !SEVERITIES.includes(f.severity) || !CLASSIFICATIONS.includes(f.classification)
+    if (!isObj(f) || !knownKeysOnly(f, FINDING_KEYS) || !okText(f.id, LIMITS.id) || f.id.trim() === "" || !SEVERITIES.includes(f.severity) || !CLASSIFICATIONS.includes(f.classification)
       || !okText(f.file, LIMITS.file) || !okText(f.title, LIMITS.text) || !okText(f.evidence, LIMITS.text)
       || !(f.line === null || (Number.isSafeInteger(f.line) && f.line >= 0))) { r.push("VERDICT_MALFORMED:finding"); break; }
   }
-  if (!isObj(v.checks)) r.push("VERDICT_MALFORMED:checks");
+  if (!isObj(v.checks) || !knownKeysOnly(v.checks, CHECK_KEYS)) r.push("VERDICT_MALFORMED:checks");
   else for (const k of CHECK_KEYS) if (!CHECK_VALUES[k].includes(v.checks[k])) r.push(`VERDICT_MALFORMED:checks.${k}`);
   return r;
 }

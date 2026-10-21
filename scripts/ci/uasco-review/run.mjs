@@ -116,10 +116,32 @@ async function collect() {
 // An optional model alias from a repository variable. Anything outside a plain alias is dropped, so a variable can never add CLI flags.
 export const modelArg = m => typeof m === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(m) ? `--model ${m}` : "";
 
+// //TR: verdict.schema.json tam sözleşmedir; reviewer API'sinin yapılandırılmış çıktısı uzunluk, sayı aralığı ve dizi boyutu anahtar sözcüklerini desteklemediği için collect bunları API şemasından çıkarır ve her birini alanın description metnine yazar. Gerçek uygulama validateVerdict'tedir; kapı API şemasına hiç bağlı değildir.
+// Keywords the API's structured outputs do not support (string length, numeric range, array size). The emitted schema drops each one and states it in the
+// field's description; validateVerdict (review-gate.mjs) enforces every one of them itself, so nothing is loosened. type, properties, required, enum,
+// additionalProperties: false and pattern are kept.
+export const API_UNSUPPORTED_KEYWORDS = Object.freeze(["minLength", "maxLength", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minItems", "maxItems", "uniqueItems"]);
+const SAY = {minLength: n => n === 1 ? "non-empty" : `at least ${n} characters`, maxLength: n => `at most ${n} characters`, minimum: n => `at least ${n}`, maximum: n => `at most ${n}`,
+  exclusiveMinimum: n => `greater than ${n}`, exclusiveMaximum: n => `less than ${n}`, multipleOf: n => `a multiple of ${n}`, minItems: n => `at least ${n} items`,
+  maxItems: n => `at most ${n} items`, uniqueItems: b => b ? "no duplicate items" : "duplicates allowed"};
+export function apiSchema(node) {
+  if (Array.isArray(node)) return node.map(apiSchema);
+  if (node === null || typeof node !== "object") return node;
+  const out = {}, said = [];
+  for (const [k, v] of Object.entries(node)) {
+    // Property names are data, not keywords: a property called "minimum" stays.
+    if (k === "properties") out[k] = Object.fromEntries(Object.entries(v).map(([p, sub]) => [p, apiSchema(sub)]));
+    else if (API_UNSUPPORTED_KEYWORDS.includes(k)) said.push(SAY[k](v));
+    else out[k] = apiSchema(v);
+  }
+  if (said.length) { const text = said.join(", "); out.description = [out.description, `${text[0].toUpperCase()}${text.slice(1)}.`].filter(Boolean).join(" "); }
+  return out;
+}
+
 // The schema travels inside a single-quoted CLI argument: one line, no "$comment", and never a quote character that could end the argument.
 export function reviewerSchema() {
   const {$comment, ...schema} = JSON.parse(fs.readFileSync(path.join(HERE, "verdict.schema.json"), "utf8"));
-  const s = JSON.stringify(schema);
+  const s = JSON.stringify(apiSchema(schema));
   if (/['\r\n]/.test(s)) throw new Error("SCHEMA_NOT_ARGUMENT_SAFE");
   return s;
 }
