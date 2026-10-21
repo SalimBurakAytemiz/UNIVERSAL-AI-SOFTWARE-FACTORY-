@@ -80,8 +80,11 @@ const by = (items: EvidenceItem[], pred: (i: EvidenceItem) => boolean) => { cons
 const byPath = (items: EvidenceItem[], suffix: string) => by(items, i => i.source.path?.endsWith(suffix) === true);
 function assertNoAbsolute(body: string) {
   const forms = (p: string) => [p, p.split("\\").join("/"), p.split("/").join("\\"), JSON.stringify(p).slice(1, -1)];
+  // //TR: Kök yol yalnızca tam bir mutlak yol olarak (öncesinde/sonrasında yol karakteri olmadan) aranır; "/root" gibi kısa HOME değerleri "/rootfs" veya "x/root" içinde yanlış pozitif vermez, gerçek sızıntı ("/root/x", "/root") yine yakalanır.
+  const pathChar = "A-Za-z0-9._~-", esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const leaks = (text: string, f: string) => new RegExp(`(?<![${pathChar}])${esc(f.replace(/[\\/]+$/, ""))}(?![${pathChar}])`, "i").test(text);
   for (const root of [tmp, os.homedir(), path.resolve(import.meta.dirname, ".."), os.tmpdir()])
-    for (const f of forms(root)) expect(body.toLowerCase().includes(f.toLowerCase()), `absolute path leaked: ${f}`).toBe(false);
+    for (const f of forms(root)) if (f.replace(/[\\/]+$/, "").length > 0) expect(leaks(body, f), `absolute path leaked: ${f}`).toBe(false);
   expect(/\b[A-Za-z]:(?:\\|\/)/.test(body), "drive-letter path").toBe(false);
   expect(/(?:^|[^A-Za-z0-9.])\/(?:home|Users|tmp|var)\//.test(body), "posix absolute path").toBe(false);
 }
