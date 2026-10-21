@@ -439,6 +439,63 @@ describe("LANE-B project intake", () => {
       expect(r.statusCode, name).toBe(503); expect(r.json().error, name).toBe("INTAKE_STORE_CORRUPT");
     }
   });
+  // Yırtık kuyruk karantinası, kaynak dosya kesilmeden ÖNCE kalıcı olmalı: tmp fsync -> rename -> karantina dizini fsync -> ancak sonra truncate. fs çağrıları gerçek uygulamaya devredilerek sıralanır.
+  const tailTrace = async (inject?: (op: "open" | "fsync", target: string) => NodeJS.ErrnoException | undefined, preQuarantined = false) => {
+    const {appendJsonlRecord} = await import("../core/workos/jsonl-tail.js");
+    const dir = path.join(tmp, "tail"), f = path.join(dir, "intakes.jsonl"), start = '{"intakeId":"';
+    fs.mkdirSync(dir, {recursive: true});
+    const good = JSON.stringify({intakeId: "itk_a", n: 1}) + "\n", torn = JSON.stringify({intakeId: "itk_b", n: 2}).slice(0, 16);
+    fs.writeFileSync(f, good + torn);
+    if (preQuarantined) { // önceki yarım kalmış denemeden kalan, bayt bayt aynı karantina kopyası (kalıcılığı bilinmez)
+      fs.mkdirSync(path.join(dir, "quarantine"));
+      fs.writeFileSync(path.join(dir, "quarantine", `intakes-torn-${crypto.createHash("sha256").update(torn).digest("hex").slice(0, 16)}.tail`), torn);
+    }
+    const label = (x: string) => x === f ? "source" : x === path.join(dir, "quarantine") ? "quarantine-dir" : x.startsWith(path.join(dir, "quarantine") + path.sep) ? (x.endsWith(".tmp") ? "quarantine-tmp" : "quarantine-file") : x;
+    const fdPath = new Map<number, string>(), ev: string[] = [];
+    const realOpen = fs.openSync.bind(fs), realFsync = fs.fsyncSync.bind(fs), realRename = fs.renameSync.bind(fs), realTrunc = fs.ftruncateSync.bind(fs);
+    const spies = [
+      vi.spyOn(fs, "openSync").mockImplementation(((x: any, ...a: any[]) => { const bad = inject?.("open", label(String(x))); if (bad) throw bad; const fd = (realOpen as any)(x, ...a); fdPath.set(fd, String(x)); return fd; }) as any),
+      vi.spyOn(fs, "fsyncSync").mockImplementation(((fd: number) => { const t = label(fdPath.get(fd) ?? `fd${fd}`); ev.push(`fsync ${t}`); const bad = inject?.("fsync", t); if (bad) throw bad; return realFsync(fd); }) as any),
+      vi.spyOn(fs, "renameSync").mockImplementation(((a: any, b: any) => { ev.push(`rename ${label(String(a))} -> ${label(String(b))}`); return realRename(a, b); }) as any),
+      vi.spyOn(fs, "ftruncateSync").mockImplementation(((fd: number, n?: number) => { ev.push(`truncate ${label(fdPath.get(fd) ?? `fd${fd}`)}`); return realTrunc(fd, n); }) as any),
+    ];
+    let error: unknown;
+    try { appendJsonlRecord(f, {intakeId: "itk_c", n: 3}, start); } catch (e) { error = e; } finally { for (const sp of spies) sp.mockRestore(); }
+    return {ev, error, f, good, torn, dir};
+  };
+  it("makes the quarantine copy durable (tmp fsync, rename, quarantine-dir fsync) strictly before the torn tail is truncated off the source", async () => {
+    const t = await tailTrace();
+    expect(t.error).toBeUndefined();
+    const upToTruncate = t.ev.slice(0, t.ev.indexOf("truncate source") + 1);
+    expect(upToTruncate).toEqual(["fsync quarantine-tmp", "rename quarantine-tmp -> quarantine-file", "fsync quarantine-dir", "truncate source"]);
+    expect(fs.readFileSync(t.f, "utf8")).toBe(t.good + JSON.stringify({intakeId: "itk_c", n: 3}) + "\n");
+    const q = fs.readdirSync(path.join(t.dir, "quarantine"));
+    expect(q).toHaveLength(1); expect(fs.readFileSync(path.join(t.dir, "quarantine", q[0]), "utf8")).toBe(t.torn);
+    // Karantina kopyası zaten varsa (yeniden deneme) yeniden yazılmaz ama o da truncate'ten önce fsync edilir.
+    fs.rmSync(t.dir, {recursive: true, force: true});
+    const again = await tailTrace(undefined, true);
+    expect(again.error).toBeUndefined();
+    expect(again.ev.slice(0, again.ev.indexOf("truncate source") + 1)).toEqual(["fsync quarantine-file", "fsync quarantine-dir", "truncate source"]);
+  });
+  it("leaves the source untouched when the quarantine cannot be made durable, and tolerates only EPERM/EISDIR from directory fsync (Windows)", async () => {
+    const err = (code: string) => Object.assign(new Error(code), {code});
+    const eio = await tailTrace((op, target) => op === "fsync" && target === "quarantine-dir" ? err("EIO") : undefined);
+    expect(eio.error).toMatchObject({name: "JsonlTailError", reason: "QUARANTINE_FAILED"});
+    expect(eio.ev).not.toContain("truncate source");
+    expect(fs.readFileSync(eio.f, "utf8")).toBe(eio.good + eio.torn);
+    fs.rmSync(eio.dir, {recursive: true, force: true});
+    const tmpFail = await tailTrace((op, target) => op === "fsync" && target === "quarantine-tmp" ? err("EIO") : undefined);
+    expect(tmpFail.error).toMatchObject({reason: "QUARANTINE_FAILED"});
+    expect(tmpFail.ev).not.toContain("truncate source");
+    expect(fs.readFileSync(tmpFail.f, "utf8")).toBe(tmpFail.good + tmpFail.torn);
+    expect(fs.readdirSync(path.join(tmpFail.dir, "quarantine"))).toEqual([]); // başarısız tmp temizlenir, yarım karantina dosyası kalmaz
+    for (const [op, code] of [["fsync", "EPERM"], ["open", "EISDIR"], ["open", "EPERM"]] as const) {
+      fs.rmSync(tmpFail.dir, {recursive: true, force: true});
+      const win = await tailTrace((o, target) => o === op && target === "quarantine-dir" ? err(code) : undefined);
+      expect(win.error, `${op} ${code}`).toBeUndefined();
+      expect(win.ev, `${op} ${code}`).toContain("truncate source");
+    }
+  });
   it("fails closed with 503 on a corrupt intake file", async () => {
     const {app} = await mkApp();
     fs.mkdirSync(path.join(tmp, "data"), {recursive: true}); fs.writeFileSync(path.join(tmp, "data", "intakes.jsonl"), "{torn");
@@ -601,6 +658,77 @@ describe("LANE-B project flow", () => {
     for (const run of [{...awaiting, deliveryArtifact: artifact}, {...awaiting, deliveryArtifact: artifact, sourceDelivery: accepted}]) expect(st(run).DELIVERY).not.toBe("DONE");
     const done = {...awaiting, status: "SUCCEEDED", deliveryArtifact: artifact, completion: {productVerification: {state: "PRODUCT_VERIFIED"}}};
     expect(st(done)).toMatchObject({RUN: "DONE", REVIEW: "DONE", DELIVERY: "DONE"});
+  });
+  it("reads REVIEW as DONE for a non-succeeded run only when the runner accepted a CLEAN review for the current head (REGRESSION/REPORT step, no invalidation note)", async () => {
+    const {deriveProjectFlow} = await import("../core/workos/flow.js");
+    const mk = (run: any) => ({getProject: () => ({}), listMissions: () => [{missionId: "m", status: "PLANNED"}], listTasks: () => [{status: "DONE"}], listRuns: () => [{projectId: "p", createdAt: "2026-01-01", ...run}]}) as any;
+    const review = (run: any) => deriveProjectFlow(mk(run), {tenantId: "tA"}, "p")!.stages.find(x => x.stage === "REVIEW")!;
+    const H = "a".repeat(40), OLD = "b".repeat(40);
+    const clean = (note?: string, commitSha = H) => [{kind: "REVIEW", verdict: "CLEAN", commitSha, ...(note === undefined ? {} : {note})}];
+    // Runner CLEAN'i kabul etti: BLOCKED/REGRESSION (onarım bütçesi tükendi) ve AWAITING_APPROVAL/REPORT (mevcut davranış) DONE'dır.
+    expect(review({runId: "r", status: "BLOCKED", step: "REGRESSION", reason: "REGRESSION_FAILED_REMEDIATION_EXHAUSTED", remediationCycle: 0, headSha: H, evidence: clean()})).toMatchObject({state: "DONE", detail: "CLEAN_REVIEW_FOR_HEAD"});
+    expect(review({runId: "r", status: "AWAITING_APPROVAL", step: "REPORT", headSha: H, evidence: clean()})).toMatchObject({state: "DONE", detail: "CLEAN_REVIEW_FOR_HEAD"});
+    expect(review({runId: "r", status: "RUNNING", step: "REGRESSION", headSha: H, evidence: clean("provider limit note")}).state).toBe("DONE"); // invalidation olmayan not CLEAN'i bozmaz
+    // Runner'ın reddettiği CLEAN (REVIEW_CLONE_MUTATED / REVIEW_INVALID): kayıtlı karar CLEAN olsa da DONE değildir (server.ts reviewRecord NO_VERDICT kuralı).
+    for (const note of ["REVIEW_CLONE_MUTATED", "REVIEW_INVALID REVIEW_WORKSPACE_MODIFIED"]) {
+      expect(review({runId: "r", status: "BLOCKED", step: "REVIEW", reason: "REVIEWER_MUTATED_CLONE", headSha: H, evidence: clean(note)}), note).toMatchObject({state: "ACTIVE", detail: "REVIEW"});
+      expect(review({runId: "r", status: "BLOCKED", step: "REGRESSION", headSha: H, evidence: clean(note)}).state, `${note} @REGRESSION`).not.toBe("DONE");
+      expect(review({runId: "r", status: "AWAITING_APPROVAL", step: "REPORT", headSha: H, evidence: clean(note)}).state, `${note} @REPORT`).not.toBe("DONE");
+    }
+    expect(review({runId: "r", status: "RUNNING", step: "REGRESSION", headSha: H, evidence: clean("REVIEW_INVALIDATED_X")}).state).toBe("DONE"); // kelime sınırı: yalnız tam önek geçersizliktir
+    // Onarım için IMPLEMENT'e dönmüş koşu: eldeki CLEAN yerine geçilen head'e aittir, DONE değil (önceki davranış: inceleme adımında değil -> NOT_STARTED).
+    expect(review({runId: "r", status: "RUNNING", step: "IMPLEMENT", remediationCycle: 1, headSha: H, evidence: clean()})).toMatchObject({state: "NOT_STARTED", detail: null});
+    // Runner henüz kabul etmedi (REVIEW adımı: kanıt yazıldı ama checkpoint/geçiş yok) veya adım review öncesi: DONE değil.
+    expect(review({runId: "r", status: "RUNNING", step: "REVIEW", headSha: H, evidence: clean()})).toMatchObject({state: "ACTIVE", detail: "REVIEW"});
+    expect(review({runId: "r", status: "RUNNING", step: "VERIFY", headSha: H, evidence: clean()}).state).toBe("NOT_STARTED");
+    // En son REVIEW kanıtı belirleyicidir: aynı head'de önce CLEAN, sonra geçersiz CLEAN/BLOCKED -> DONE değil; eski commit'in CLEAN'i hiç sayılmaz.
+    expect(review({runId: "r", status: "BLOCKED", step: "REGRESSION", headSha: H, evidence: [...clean(), {kind: "REVIEW", verdict: "BLOCKED", commitSha: H}]}).state).toBe("ACTIVE");
+    expect(review({runId: "r", status: "BLOCKED", step: "REGRESSION", headSha: H, evidence: [...clean(), ...clean("REVIEW_CLONE_MUTATED")]}).state).toBe("ACTIVE");
+    expect(review({runId: "r", status: "BLOCKED", step: "REGRESSION", headSha: H, evidence: clean(undefined, OLD)}).state).toBe("ACTIVE");
+    expect(review({runId: "r", status: "BLOCKED", step: "REGRESSION", headSha: H, evidence: clean("REVIEW_CLONE_MUTATED", OLD).concat(clean())}).state).toBe("DONE"); // başka commit'in geçersiz kaydı head'in CLEAN'ini gölgelemez
+    // SUCCEEDED ve FAILED kuralları değişmez.
+    expect(review({runId: "r", status: "SUCCEEDED", step: "REPORT", headSha: H, evidence: []}).state).toBe("DONE");
+    expect(review({runId: "r", status: "FAILED", step: "REGRESSION", headSha: H, evidence: clean()}).state).toBe("UNKNOWN");
+  });
+  it("derives REVIEW from real MissionRunner outcomes: mutated-clone CLEAN and a CLEAN being replaced by remediation are not DONE; an accepted CLEAN is DONE (REGRESSION-blocked and AWAITING_APPROVAL/REPORT)", async () => {
+    const sp = (cwd: string, args: string[]) => { const r = spawnGitSync(cwd, args); if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`); return String(r.stdout).trim(); };
+    const S = {tenantId: "tA"}, ENV = path.join(path.resolve(import.meta.dirname, ".."), "config", "environment-policy.json");
+    const store = new WorkOsStore(path.join(tmp, "data")), runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
+    const {deriveProjectFlow} = await import("../core/workos/flow.js");
+    const scenario = async (name: string, script: ConstructorParameters<typeof FakeExecutors>[0], extra: Record<string, unknown> = {}) => {
+      const repo = path.join(tmp, `src-${name}`), counter = path.join(tmp, `counter-${name}.txt`); fs.mkdirSync(repo, {recursive: true});
+      sp(repo, ["init", "-q", "-b", "main"]);
+      // 1. çağrı (VERIFY) geçer, 2. çağrı (REGRESSION) düşer.
+      fs.writeFileSync(path.join(repo, "test.mjs"), `import fs from "node:fs";\nconst f=${JSON.stringify(counter)};\nconst n=(fs.existsSync(f)?Number(fs.readFileSync(f,"utf8")):0)+1;\nfs.writeFileSync(f,String(n));\nprocess.exit(n===2?1:0);\n`);
+      fs.writeFileSync(path.join(repo, "README.txt"), "base\n");
+      sp(repo, ["add", "-A"]); sp(repo, ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "commit", "-q", "-m", "seed"]);
+      const p = store.createProject({tenantId: "tA", orgId: "o1", name: name, environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: ["node", "test.mjs"]});
+      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: name, objective: "feature.txt must say ok", acceptanceCriteria: ["tests pass"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(S, m.missionId, to, "test", "FOUNDER_LOCAL");
+      const pair = new FakeExecutors(script).pair();
+      const run = store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
+      const runner = new MissionRunner({executionGate: testExecutionGate(), store, dataDir: store.dataDir, globalStopFile: path.join(runtime, "GLOBAL_STOP.json"), envPolicyFile: ENV, executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(path.join(tmp, `sec-${name}`)).options, ...extra});
+      const reviewNow = () => deriveProjectFlow(store, S, p.projectId)!.stages.find(x => x.stage === "REVIEW")!.state;
+      return {run, runner, reviewNow, final: async () => { await runner.tick(); return {r: store.getRun(S, run.runId)!, review: reviewNow()}; }};
+    };
+    // A) Reviewer CLEAN der ama salt-okunur klonu değiştirir: runner reddeder (REVIEWER_MUTATED_CLONE, REVIEW_CLONE_MUTATED notu) -> DONE değil.
+    const a = await scenario("mutated", {implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN", mutate: true})});
+    const fa = await a.final();
+    expect(fa.r).toMatchObject({status: "BLOCKED", step: "REVIEW", reason: "REVIEWER_MUTATED_CLONE"});
+    expect(fa.r.evidence.filter(e => e.kind === "REVIEW").map(e => [e.verdict, e.commitSha === fa.r.headSha, e.note])).toEqual([["CLEAN", true, "REVIEW_CLONE_MUTATED"]]);
+    expect(fa.review).toBe("ACTIVE");
+    // B) CLEAN kabul edildi, REGRESSION düştü, onarım IMPLEMENT'te iken CLEAN eski head'e aittir -> DONE değil; yeni commit + yeni CLEAN + REPORT sonunda DONE.
+    let during = "UNSET";
+    const b: Awaited<ReturnType<typeof scenario>> = await scenario("remediate", {implement: (n: number) => { if (n === 2) during = b.reviewNow(); return {files: {"feature.txt": "ok\n", [`r${n}.txt`]: `v${n}\n`}}; }, review: () => ({verdict: "CLEAN"})});
+    const fb = await b.final();
+    expect(during).toBe("NOT_STARTED");
+    expect(fb.r).toMatchObject({status: "AWAITING_APPROVAL", step: "REPORT", remediationCycle: 1});
+    expect(fb.review).toBe("DONE");
+    // C) CLEAN kabul edildi, REGRESSION düştü, onarım bütçesi 0 -> BLOCKED/REGRESSION; CLEAN kabul edildiği ve head hâlâ aynı olduğu için DONE.
+    const c = await scenario("exhausted", {implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"})}, {maxRemediations: 0});
+    const fc = await c.final();
+    expect(fc.r).toMatchObject({status: "BLOCKED", step: "REGRESSION", reason: "REGRESSION_FAILED_REMEDIATION_EXHAUSTED"});
+    expect(fc.review).toBe("DONE");
   });
   it("marks plan BLOCKED when a task is blocked and never claims DONE for review/delivery without a succeeded run", async () => {
     const {app, store} = await mkApp();
@@ -898,24 +1026,26 @@ describe.skipIf(process.platform !== "linux")("COORD first-delivery Electron E2E
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
   const waitFor = async <T>(fn: () => T | undefined | false, ms = 20_000): Promise<T> => { const end = Date.now() + ms; for (;;) { const v = fn(); if (v) return v as T; if (Date.now() > end) throw new Error("WAIT_TIMEOUT"); await sleep(50); } };
   const alive = (pid: number) => { try { return !/^Z/.test(fs.readFileSync(`/proc/${pid}/stat`, "utf8").replace(/^.*\) /, "")); } catch { return false; } };
+  const pgrpOf = (pid: number) => Number(fs.readFileSync(`/proc/${pid}/stat`, "utf8").replace(/^.*\) /, "").split(" ")[2]);
   const stage = () => {
     const w = path.join(tmp, "repo");
     for (const d of ["automation/lib", "config", "node_modules/tsx/dist"]) fs.mkdirSync(path.join(w, d), {recursive: true});
     fs.writeFileSync(path.join(w, "automation/lib/env-policy.mjs"), "export const safeChildEnv = () => ({PATH: process.env.PATH ?? ''});\n");
     fs.writeFileSync(path.join(w, "config/environment-policy.json"), "{}\n");
-    fs.writeFileSync(path.join(w, "node_modules/tsx/dist/cli.mjs"), `import fs from "node:fs"; fs.writeFileSync(${JSON.stringify(path.join(tmp, "child.json"))}, JSON.stringify({pid: process.pid, home: process.env.HOME, data: process.env.UASCO_DATA_DIR})); setInterval(() => {}, 1000);\n`);
+    // Sahte API süreci (grup lideri) kendi süreç grubunda ayrılmamış bir torun başlatır (gerçek API'nin tsx/electron alt süreçleri gibi): yalnız lider PID'i öldüren bir betik torunu sahipsiz bırakır ve testte yakalanır.
+    fs.writeFileSync(path.join(w, "node_modules/tsx/dist/cli.mjs"), `import fs from "node:fs"; import cp from "node:child_process"; const g = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {stdio: "ignore"}); fs.writeFileSync(${JSON.stringify(path.join(tmp, "child.json"))}, JSON.stringify({pid: process.pid, gpid: g.pid, home: process.env.HOME, data: process.env.UASCO_DATA_DIR})); setInterval(() => {}, 1000);\n`);
     return w;
   };
-  const run = async (env: Record<string, string>, body: (h: {proc: import("node:child_process").ChildProcess; child: {pid: number; home: string; data: string}; exited: Promise<number | null>; out: string}) => Promise<void>) => {
+  const run = async (env: Record<string, string>, body: (h: {proc: import("node:child_process").ChildProcess; child: {pid: number; gpid: number; home: string; data: string}; exited: Promise<number | null>; out: string}) => Promise<void>) => {
     const w = stage(), out = path.join(tmp, "report.json");
     const proc = cp.spawn(process.execPath, [script, w, out, path.join(tmp, "no-electron")], {env: {...process.env, ...env}, stdio: "ignore"});
     const exited = new Promise<number | null>(res => proc.on("exit", code => res(code)));
-    let child: {pid: number; home: string; data: string} | undefined;
+    let child: {pid: number; gpid: number; home: string; data: string} | undefined;
     try {
       child = await waitFor(() => { try { return JSON.parse(fs.readFileSync(path.join(tmp, "child.json"), "utf8")); } catch { return undefined; } });
       await body({proc, child: child!, exited, out});
     } finally {
-      if (child && alive(child.pid)) { try { process.kill(-child.pid, "SIGKILL"); } catch { /* zaten bitti */ } }
+      if (child) { try { process.kill(-child.pid, "SIGKILL"); } catch { /* grup zaten bitti */ } } // lider ölmüş olsa da torun grupta kalmış olabilir
       if (proc.exitCode === null) proc.kill("SIGKILL");
     }
   };
@@ -941,10 +1071,11 @@ describe.skipIf(process.platform !== "linux")("COORD first-delivery Electron E2E
     const home = path.join(tmp, "home-b");
     fs.mkdirSync(home);
     await run({HOME: home, UASCO_E2E_HOME: ""}, async ({proc, child, exited, out}) => {
-      expect(alive(child.pid)).toBe(true);
+      expect(alive(child.pid)).toBe(true); expect(alive(child.gpid)).toBe(true);
+      expect(pgrpOf(child.pid)).toBe(child.pid); expect(pgrpOf(child.gpid)).toBe(child.pid); // torun liderin grubunda: grup öldürme (-pgid) gerekir, lider PID'i yetmez
       proc.kill(sig);
       const exitCode = await exited;
-      await waitFor(() => !alive(child.pid), 5_000); // WAIT_TIMEOUT = sahipsiz kalan süreç grubu
+      await waitFor(() => !alive(child.pid) && !alive(child.gpid), 5_000); // WAIT_TIMEOUT = sahipsiz kalan süreç grubu / torun
       expect(exitCode).toBe(code);
       const report = JSON.parse(fs.readFileSync(out, "utf8"));
       expect(report.status).toBe("FAIL");
