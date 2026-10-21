@@ -205,3 +205,67 @@ describe("Work OS API", () => {
     await app.close();
   });
 });
+
+// //TR: LANE-B plan: mission görev planı (sıralı görevler + bağımlılıklar) route modülü ve kalıcılık testleri.
+describe("LANE-B mission task plan", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const mkApp = async (stopped = false, allowed = true, tenantId = "tA") => {
+    const [{default: Fastify}, {registerPlanRoutes}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/plan.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const audits: string[] = [];
+    registerPlanRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string) => { audits.push(e); },
+      workosStopped: () => stopped, workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"},
+      workosFail: (r: any, e: any) => r.code(e?.code === "WORKOS_IDEMPOTENCY_CONFLICT" ? 409 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
+    const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
+    return {app, store, audits, m};
+  };
+  const PLAN = {tasks: [{title: "Scaffold"}, {title: "Feature", dependsOn: [0]}, {title: "Tests", dependsOn: [0, 1]}]};
+  const post = (app: any, id: string, body: unknown, headers: any = hdr) => app.inject({method: "POST", url: `/v1/missions/${id}/plan`, headers, payload: body as any});
+
+  it("persists an ordered plan with resolved dependencies, readable after restart; replay is idempotent", async () => {
+    const {app, store, audits, m} = await mkApp();
+    const r = await post(app, m.missionId, PLAN);
+    expect(r.statusCode).toBe(201);
+    const t = r.json().tasks;
+    expect(t.map((x: any) => x.title)).toEqual(["Scaffold", "Feature", "Tests"]);
+    expect(t[2].dependsOn).toEqual([t[0].taskId, t[1].taskId]);
+    const again = await post(app, m.missionId, {tasks: [PLAN.tasks[0], PLAN.tasks[1], {title: "Tests", dependsOn: [1, 0]}]});
+    expect(again.statusCode).toBe(200); expect(again.json().tasks).toEqual(t);
+    expect(store.listTasks({tenantId: "tA"}, m.missionId)).toHaveLength(3);
+    expect(audits).toEqual(["WORKOS_PLAN_CREATED", "WORKOS_IDEMPOTENT_REPLAY"]);
+    const { app: app2 } = await mkApp().catch(() => ({app: app}));
+    expect((await app2.inject({method: "GET", url: `/v1/missions/${m.missionId}/tasks`, headers: hdr})).json().tasks).toHaveLength(3);
+  });
+  it("rejects a different second plan, forward/self dependencies, bad bodies and non-plannable missions", async () => {
+    const {app, store, m} = await mkApp();
+    expect((await post(app, m.missionId, PLAN)).statusCode).toBe(201);
+    const other = await post(app, m.missionId, {tasks: [{title: "Other"}]});
+    expect(other.statusCode).toBe(409); expect(other.json().error).toBe("PLAN_ALREADY_EXISTS");
+    const m2 = store.createMission(msn(m.projectId));
+    for (const bad of [{}, {tasks: []}, {tasks: [{title: "a", dependsOn: [0]}]}, {tasks: [{title: "a"}, {title: "b", dependsOn: [1]}]}, {tasks: [{title: "a"}, {title: "b", dependsOn: [0, 0]}]}, {tasks: [{title: " "}]}, {tasks: [{title: "a", x: 1}]}])
+      expect((await post(app, m2.missionId, bad)).statusCode).toBe(400);
+    store.transitionMission({tenantId: "tA"}, m2.missionId, "BLOCKED", "stop", "FOUNDER_LOCAL");
+    const np = await post(app, m2.missionId, {tasks: [{title: "a"}]});
+    expect(np.statusCode).toBe(409); expect(np.json().error).toBe("MISSION_NOT_PLANNABLE");
+    expect(store.listTasks({tenantId: "tA"}, m2.missionId)).toEqual([]);
+  });
+  it("enforces token, Global Stop, policy, id format, unknown mission and tenant isolation", async () => {
+    const {app, m} = await mkApp();
+    expect((await post(app, m.missionId, PLAN, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    expect((await post(app, "bad", PLAN)).statusCode).toBe(400);
+    expect((await post(app, "msn_" + "0".repeat(24), PLAN)).statusCode).toBe(404);
+    expect((await (await mkApp(true)).app.inject({method: "POST", url: `/v1/missions/${m.missionId}/plan`, headers: hdr, payload: PLAN})).statusCode).toBe(423);
+    expect((await (await mkApp(false, false)).app.inject({method: "POST", url: `/v1/missions/${m.missionId}/plan`, headers: hdr, payload: PLAN})).statusCode).toBe(403);
+    expect((await app.inject({method: "GET", url: "/v1/missions/bad/tasks", headers: hdr})).statusCode).toBe(400);
+    const b = await mkApp(false, true, "tB");
+    expect((await post(b.app, m.missionId, PLAN)).statusCode).toBe(404);
+  });
+  it("fails closed with 503 on a corrupt plan file", async () => {
+    const {app, m} = await mkApp();
+    fs.writeFileSync(path.join(tmp, "data", "plans.jsonl"), "{torn");
+    const r = await post(app, m.missionId, PLAN);
+    expect(r.statusCode).toBe(503); expect(r.json().error).toBe("PLAN_STORE_CORRUPT");
+  });
+});
