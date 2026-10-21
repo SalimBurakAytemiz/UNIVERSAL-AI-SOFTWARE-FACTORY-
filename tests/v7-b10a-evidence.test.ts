@@ -80,10 +80,13 @@ const by = (items: EvidenceItem[], pred: (i: EvidenceItem) => boolean) => { cons
 const byPath = (items: EvidenceItem[], suffix: string) => by(items, i => i.source.path?.endsWith(suffix) === true);
 function assertNoAbsolute(body: string) {
   const forms = (p: string) => [p, p.split("\\").join("/"), p.split("/").join("\\"), JSON.stringify(p).slice(1, -1)];
+  // //TR: PQ-006: alt dize kontrolü olduğu gibi korunur (zayıflatılmaz); HOME=/root başarısızlığı yanlış pozitif değil gerçek bir ürün sızıntısıydı ve ürün düzeltildi. Yalnız "/" gibi boş kalan biçim atlanır (her gövdede bulunur).
   for (const root of [tmp, os.homedir(), path.resolve(import.meta.dirname, ".."), os.tmpdir()])
-    for (const f of forms(root)) expect(body.toLowerCase().includes(f.toLowerCase()), `absolute path leaked: ${f}`).toBe(false);
+    for (const f of forms(root)) if (f.replace(/[\\/]+$/, "").length > 0) expect(body.toLowerCase().includes(f.toLowerCase()), `absolute path leaked: ${f}`).toBe(false);
   expect(/\b[A-Za-z]:(?:\\|\/)/.test(body), "drive-letter path").toBe(false);
   expect(/(?:^|[^A-Za-z0-9.])\/(?:home|Users|tmp|var)\//.test(body), "posix absolute path").toBe(false);
+  // //TR: PQ-006: root kullanıcısının ev dizini (/root, macOS /var/root) HOME ne olursa olsun yakalanır; "/rootfs" veya göreli "x/root" sızıntı sayılmaz.
+  expect(/(?<![A-Za-z0-9._~-])\/(?:var\/)?root(?![A-Za-z0-9._~-])/i.test(body), "root home path").toBe(false);
 }
 
 describe("B10A core: verified evidence read-model", () => {
@@ -465,5 +468,266 @@ describe("B10A API", () => {
     for (const u of ["/v1/evidence?kind=x", "/v1/evidence/not-an-id", `/v1/evidence/evi_${"2".repeat(32)}`, "/v1/evidence?cursor=zzzz"]) assertNoAbsolute((await app.inject({method: "GET", url: u, headers: hdr})).body);
     assertNoAbsolute((await app.inject({method: "GET", url: "/v1/cockpit", headers: hdr})).body);
     await app.close();
+  });
+});
+
+// //TR: PQ-006 (Founder kapsam genişletmesi): Evidence API yanıtında gerçek mutlak kullanıcı dizini yolu görünmez. Linux, macOS ve Windows yazımları (ayraç, büyük/küçük harf, JSON kaçışı, 8.3 kısa ad) maskelenir; benzer görünen ama kullanıcı dizini olmayan metin olduğu gibi kalır.
+describe("PQ-006: no user-directory path leaves the Evidence API", () => {
+  const base = {step: "VERIFY" as const, cycle: 0, kind: "PATHS", argv: [], startedAt: "2026-10-14T10:00:00.000Z", endedAt: "2026-10-14T10:00:01.000Z", exitCode: 0};
+  async function tailOf(c: Ctx, name: string, text: string) {
+    const rel = `runs/${c.runId}/logs/verify-c0-a1-${name}.log`;
+    put(path.join(c.dataDir, rel), text);
+    c.store.addRunEvidence(c.runId, c.leaseId, {...base, logPath: rel, logSha256: sha(text)}, "ENGINE");
+    const app = server(c);
+    try {
+      const list = (await app.inject({method: "GET", url: "/v1/evidence?kind=WORK_RUN_LOG&limit=100", headers: hdr})).json().evidence as EvidenceItem[];
+      const res = await app.inject({method: "GET", url: `/v1/evidence/${byPath(list, `${name}.log`).evidenceId}`, headers: hdr});
+      expect(res.statusCode).toBe(200);
+      return {body: res.body, lines: (res.json().tail.text as string).split("\n")};
+    } finally { await app.close(); }
+  }
+  // [log satırı, API'de beklenen tam satır]
+  const POSITIVE: [string, string][] = [
+    [String.raw`home=/root`, String.raw`home=<USER_PATH>`],
+    [String.raw`key /root/.ssh/id_ed25519`, String.raw`key <USER_PATH>/.ssh/id_ed25519`],
+    [String.raw`PATH=/usr/bin:/root/bin`, String.raw`PATH=/usr/bin:<USER_PATH>/bin`],
+    [String.raw`{"cwd":"/root/work"}`, String.raw`{"cwd":"<USER_PATH>/work"}`],
+    [String.raw`open file:///root/notes.txt`, String.raw`open file:<USER_PATH>/notes.txt`],
+    [String.raw`mac /var/root/Library/x`, String.raw`mac <USER_PATH>/Library/x`],
+    [String.raw`mac /private/var/root/Library`, String.raw`mac /private<USER_PATH>/Library`],
+    [String.raw`wsl \\wsl$\Ubuntu\root\x`, String.raw`wsl <USER_PATH>\x`],
+    [String.raw`/home/alice/project/a.ts`, String.raw`<USER_PATH>/project/a.ts`],
+    [String.raw`/Users/Bob/Documents`, String.raw`<USER_PATH>/Documents`],
+    [String.raw`cd /Users/John\ Smith/proj`, String.raw`cd <USER_PATH>/proj`],
+    [String.raw`wsl /mnt/c/users/bob/x`, String.raw`wsl <USER_PATH>/x`],
+    [String.raw`bash /c/Users/runneradmin/x`, String.raw`bash <USER_PATH>/x`],
+    [String.raw`{"p":"\/home\/alice\/x"}`, String.raw`{"p":"<USER_PATH>\/x"}`],
+    [String.raw`C:\Users\bob\AppData\x`, String.raw`<USER_PATH>\AppData\x`],
+    [String.raw`c:\users\bob\x`, String.raw`<USER_PATH>\x`],
+    [String.raw`C:/Users/bob/x`, String.raw`<USER_PATH>/x`],
+    [String.raw`{"p":"C:\\Users\\bob\\x"}`, String.raw`{"p":"<USER_PATH>\\x"}`],
+    [String.raw`\\?\C:\Users\bob\x`, String.raw`\\?\<USER_PATH>\x`],
+    [String.raw`file:///C:/Users/bob/x`, String.raw`file:///<USER_PATH>/x`],
+    [String.raw`D:\Documents and Settings\bob\x`, String.raw`<USER_PATH>\x`],
+    [String.raw`tmp C:\Users\RUNNER~1\AppData\Local\Temp\x`, String.raw`tmp <USER_PATH>\AppData\Local\Temp\x`],
+    [String.raw`C:\Users\John Smith\Desktop\x`, String.raw`<USER_PATH>\Desktop\x`],
+    [String.raw`share \\localhost\c$\Users\bob\x`, String.raw`share \\localhost\<USER_PATH>\x`],
+    [String.raw`svc C:\WINDOWS\system32\config\systemprofile\x`, String.raw`svc <USER_PATH>\x`],
+    [String.raw`old C:\DOCUME~1\alice\x`, String.raw`old <USER_PATH>\x`],
+    [String.raw`wsl \\wsl$\Ubuntu\home\alice\x`, String.raw`wsl <USER_PATH>\x`],
+    [String.raw`cwd=C:\Users\John Smith`, String.raw`cwd=<USER_PATH>`],
+    [String.raw`warning: C:\Users\bob is not a git repository`, String.raw`warning: <USER_PATH> is not a git repository`],
+    // ANSI renk kodu veya kısa bayrak hemen önde olsa da (CI logları, derleyici satırları) yol maskelenir.
+    ["\u001b[90m/root/.ssh/id_rsa\u001b[39m", "\u001b[90m<USER_PATH>/.ssh/id_rsa\u001b[39m"],
+    ["\u001b[36mc:\\users\\alice\\proj", "\u001b[36m<USER_PATH>\\proj"],
+    [String.raw`gcc -I/root/include -L/root/lib`, String.raw`gcc -I<USER_PATH>/include -L<USER_PATH>/lib`],
+    [String.raw`docker run -v/root/data:/data`, String.raw`docker run -v<USER_PATH>/data:/data`],
+    [String.raw`cl /Ic:\users\bob\inc`, String.raw`cl /I<USER_PATH>\inc`],
+  ];
+  // Kullanıcı dizini olmayan, benzer görünen metin: maskelenirse kayıt bozulur.
+  const NEGATIVE = [String.raw`rel=src/root/x`, String.raw`/rootfs/data`, String.raw`/rooted/y`, String.raw`dir x/root`, String.raw`the word root stays`,
+    String.raw`https://example.com/root/page`, String.raw`https://example.com/rootkit`, String.raw`https://api.github.com/users/octocat`, String.raw`/home`, String.raw`/Users`,
+    String.raw`~/root and ../root/x`, String.raw`/root.bak /rootä`, String.raw`src\home\Home.tsx(12,5): error TS2322`, String.raw`pages\Users\List.vue`];
+
+  it("Linux, macOS and Windows user-directory spellings are masked exactly; look-alikes are kept verbatim", { timeout: T }, async () => {
+    const c = setup();
+    const {body, lines} = await tailOf(c, "spellings-ffffff", [...POSITIVE.map(p => p[0]), ...NEGATIVE].join("\n") + "\n");
+    expect(lines.slice(0, POSITIVE.length)).toEqual(POSITIVE.map(p => p[1]));
+    expect(lines.slice(POSITIVE.length, POSITIVE.length + NEGATIVE.length)).toEqual(NEGATIVE);
+    for (const name of ["alice", "bob", "RUNNER~1", "runneradmin", "smith", "systemprofile"]) expect(body.toLowerCase()).not.toContain(name.toLowerCase());
+  });
+
+  it("the real home directory is masked whatever its value (HOME / USERPROFILE), in every spelling", { timeout: T }, async () => {
+    const saved = {HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE};
+    const home = process.platform === "win32" ? String.raw`D:\uasco-home\carol` : "/srv/uasco-home/carol";
+    process.env.HOME = home; process.env.USERPROFILE = home;
+    try {
+      expect(os.homedir()).toBe(home);
+      const fwd = home.split("\\").join("/"), back = home.split("/").join("\\"), json = back.split("\\").join("\\\\");
+      const positive = [`h=${home}`, `${home}/.config/x`, `fwd ${fwd}/x`, `back ${back}\\x`, `json {"h":"${json}\\\\x"}`, `upper ${home.toUpperCase()}`];
+      const negative = [`sibling ${home}yn/x`, `parent ${path.dirname(home)}/other`];
+      const c = setup();
+      const {lines} = await tailOf(c, "home-gggggg", [...positive, ...negative].join("\n") + "\n");
+      for (const [i, line] of lines.slice(0, positive.length).entries()) {
+        expect(line, positive[i]).toContain("<USER_PATH>");
+        expect(line.toLowerCase(), positive[i]).not.toContain("carol");
+      }
+      expect(lines.slice(positive.length, positive.length + negative.length)).toEqual(negative);
+    } finally {
+      for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  });
+
+  it("a home directory with a space is masked plain, shell-escaped and URL-encoded", { timeout: T }, async () => {
+    const saved = {HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE};
+    const home = process.platform === "win32" ? String.raw`D:\uasco home\dana` : "/srv/uasco home/dana";
+    process.env.HOME = home; process.env.USERPROFILE = home;
+    try {
+      const fwd = home.split("\\").join("/");
+      const positive = [`plain ${home}/x`, `cd ${fwd.split(" ").join("\\ ")}/x`, `url file://${fwd.split(" ").join("%20")}/x`];
+      const c = setup();
+      const {lines} = await tailOf(c, "spacehome-nnnnnn", positive.join("\n") + "\n");
+      for (const [i, line] of lines.slice(0, positive.length).entries()) { expect(line, positive[i]).toContain("<USER_PATH>"); expect(line, positive[i]).not.toContain("dana"); }
+    } finally {
+      for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  });
+
+  it("text in the detail summary (review reviewerIdentity) is scrubbed the same way", { timeout: T }, async () => {
+    const c = setup();
+    put(path.join(c.repo, ".ai", "cache", "review", "evidence", "REV-PATHS.json"), reviewRecord({reviewerIdentity: String.raw`REVIEWER /root/.claude C:\Users\bob\x`}));
+    const app = server(c);
+    try {
+      const list = (await app.inject({method: "GET", url: "/v1/evidence?kind=REVIEW_EVIDENCE&limit=100", headers: hdr})).json().evidence as EvidenceItem[];
+      const res = await app.inject({method: "GET", url: `/v1/evidence/${byPath(list, "REV-PATHS.json").evidenceId}`, headers: hdr});
+      expect(res.statusCode).toBe(200);
+      expect(res.json().summary.reviewerIdentity).toBe(String.raw`REVIEWER <USER_PATH>/.claude <USER_PATH>\x`);
+      assertNoAbsolute(res.body);
+      const plain = await app.inject({method: "GET", url: `/v1/evidence/${byPath(list, "REV-ONE.json").evidenceId}`, headers: hdr});
+      expect(plain.json().summary.reviewerIdentity).toBe("CLAUDE_REVIEWER");
+    } finally { await app.close(); }
+  });
+
+  it("journal-derived summary text (run evidence kind) is scrubbed in WORK_RUN_LOG and WORK_RUN_STEP details", { timeout: T }, async () => {
+    const c = setup();
+    const kind = String.raw`K /home/alice/x C:\Users\bob\y`, masked = String.raw`K <USER_PATH>/x <USER_PATH>\y`;
+    const rel = `runs/${c.runId}/logs/verify-c0-a1-kind-jjjjjj.log`;
+    put(path.join(c.dataDir, rel), "ok\n");
+    c.store.addRunEvidence(c.runId, c.leaseId, {...base, kind, logPath: rel, logSha256: sha("ok\n")}, "ENGINE");
+    const app = server(c);
+    try {
+      const list = (await app.inject({method: "GET", url: "/v1/evidence?limit=100", headers: hdr})).json().evidence as EvidenceItem[];
+      const details = await Promise.all(list.filter(i => i.kind === "WORK_RUN_LOG" || i.kind === "WORK_RUN_STEP")
+        .map(async i => (await app.inject({method: "GET", url: `/v1/evidence/${i.evidenceId}`, headers: hdr}))));
+      const withKind = details.filter(d => d.json().summary.evidenceKind === masked);
+      expect(withKind.map(d => d.json().evidence.kind).sort()).toEqual(["WORK_RUN_LOG", "WORK_RUN_STEP"]);
+      for (const d of details) { expect(d.body).not.toContain("alice"); assertNoAbsolute(d.body); }
+    } finally { await app.close(); }
+  });
+
+  it("a path cut at the start of the tail window never shows (the partial first line is dropped)", { timeout: T }, async () => {
+    const c = setup();
+    // Pencere başı (boyut - 4096 - 512 lookback) gizli satırın 2. baytına düşer; kök satırları maskelenince kısalır ve pencere başı çıktıya girer.
+    const lead = "x".repeat(10_000) + "\n", secretLine = String.raw`C:\Users\alicesecret\keys` + "\n", rootLine = `cwd=${c.dataDir}/src\n`;
+    const restBytes = TAIL_BYTES + 512 + 2 - Buffer.byteLength(secretLine);
+    let rest = "";
+    while (Buffer.byteLength(rest + rootLine) < restBytes - 20) rest += rootLine;
+    rest += "p".repeat(restBytes - Buffer.byteLength(rest) - 1) + "\n";
+    const text = lead + secretLine + rest;
+    expect(Buffer.byteLength(text) - TAIL_BYTES - 512).toBe(Buffer.byteLength(lead) + 2);
+    const {body, lines} = await tailOf(c, "window-hhhhhh", text);
+    expect(body).not.toContain("alicesecret");
+    expect(lines[0].startsWith("cwd=<ROOT>")).toBe(true);
+    assertNoAbsolute(body);
+  });
+
+  it("the 4 KB output cut is aligned to a line start: a relative path is never cut into an absolute-looking one", { timeout: T }, async () => {
+    const c = setup();
+    // Son 4096 bayt kesimi "see src/root/config.json" satırının içine düşer; hizalanmazsa kuyruk "/root/config.json" ile başlardı.
+    const line = (i: number) => `line ${String(i).padStart(4, "0")} ${"g".repeat(60)}\n`;
+    let after = "";
+    for (let i = 0; Buffer.byteLength(after + line(i)) <= 4078 - 30; i++) after += line(i);
+    after += "h".repeat(4078 - Buffer.byteLength(after) - 1) + "\n";
+    const text = "short\n".repeat(200) + "see src/root/config.json\n" + after;
+    expect(Buffer.byteLength(after)).toBe(4078);
+    const {body, lines} = await tailOf(c, "cut-kkkkkk", text);
+    expect(lines[0]).toBe(line(0).trimEnd());
+    expect(body).not.toContain("/root/config.json");
+    assertNoAbsolute(body);
+  });
+
+  it("masking that makes the text longer still keeps the tail within 4 KB and reports truncated", { timeout: T }, async () => {
+    const c = setup();
+    const text = "/root\n".repeat(500);
+    expect(Buffer.byteLength(text)).toBeLessThan(TAIL_BYTES);
+    const rel = `runs/${c.runId}/logs/verify-c0-a1-grow-llllll.log`;
+    put(path.join(c.dataDir, rel), text);
+    c.store.addRunEvidence(c.runId, c.leaseId, {...base, logPath: rel, logSha256: sha(text)}, "ENGINE");
+    const app = server(c);
+    try {
+      const list = (await app.inject({method: "GET", url: "/v1/evidence?kind=WORK_RUN_LOG&limit=100", headers: hdr})).json().evidence as EvidenceItem[];
+      const tail = (await app.inject({method: "GET", url: `/v1/evidence/${byPath(list, "grow-llllll.log").evidenceId}`, headers: hdr})).json().tail;
+      expect(Buffer.byteLength(tail.text, "utf8")).toBeLessThanOrEqual(TAIL_BYTES);
+      expect(tail.truncated).toBe(true);
+      expect((tail.text as string).split("\n").filter(Boolean).every(l => l === "<USER_PATH>")).toBe(true);
+    } finally { await app.close(); }
+  });
+
+  it("a window with no line break at all is one partial line: the tail is empty and truncated", { timeout: T }, async () => {
+    const c = setup();
+    const {lines, body} = await tailOf(c, "oneline-mmmmmm", "x".repeat(3000) + String.raw`C:\Users\bobsecret` + "y".repeat(3000));
+    expect(lines).toEqual([""]);
+    expect(body).not.toContain("bobsecret");
+    expect(JSON.parse(body).tail.truncated).toBe(true);
+  });
+
+  it("multi-line log: a secret straddling the 4 KB cut is redacted in full, no fragment shows", { timeout: T }, async () => {
+    const c = setup();
+    const filler = (n: number) => Array.from({length: n}, (_, i) => `line ${String(i).padStart(4, "0")} ${"f".repeat(80)}`).join("\n") + "\n";
+    const after = filler(44);
+    const text = filler(30) + `token=${FAKE_GH}\n` + after;
+    // 4 KB kesimi maskeleme sonrası metinde token satırının içine düşecek kadar sonrası vardır.
+    expect(Buffer.byteLength(after)).toBeLessThan(TAIL_BYTES);
+    const {body} = await tailOf(c, "straddle-iiiiii", text);
+    expect(body).not.toContain(FAKE_GH);
+    expect(body).not.toContain(FAKE_GH.slice(4, 24));
+    expect(body).not.toContain(FAKE_GH.slice(-12));
+  });
+
+  it("an 80-character reviewerIdentity cut cannot split a path out of the mask", { timeout: T }, async () => {
+    const c = setup();
+    put(path.join(c.repo, ".ai", "cache", "review", "evidence", "REV-CUT.json"), reviewRecord({reviewerIdentity: "R".repeat(70) + String.raw` C:\Users\bobsecret`}));
+    const app = server(c);
+    try {
+      const list = (await app.inject({method: "GET", url: "/v1/evidence?kind=REVIEW_EVIDENCE&limit=100", headers: hdr})).json().evidence as EvidenceItem[];
+      const res = await app.inject({method: "GET", url: `/v1/evidence/${byPath(list, "REV-CUT.json").evidenceId}`, headers: hdr});
+      expect(res.json().summary.reviewerIdentity).toBe("R".repeat(70) + " <USER_PAT");
+      assertNoAbsolute(res.body);
+    } finally { await app.close(); }
+  });
+
+  it("createdAt is ISO-8601 only: a path-bearing string that Date.parse accepts becomes null", { timeout: T }, async () => {
+    const c = setup();
+    expect(Number.isFinite(Date.parse("/root/.ssh 2020"))).toBe(true);
+    put(path.join(c.repo, ".ai", "cache", "review", "evidence", "REV-DATE.json"), reviewRecord({runManifest: {startedAt: "/root/.ssh 2020"}}));
+    const app = server(c);
+    try {
+      const res = await app.inject({method: "GET", url: "/v1/evidence?kind=REVIEW_EVIDENCE&limit=100", headers: hdr});
+      const items = res.json().evidence as EvidenceItem[];
+      expect(byPath(items, "REV-DATE.json").createdAt).toBeNull();
+      expect(byPath(items, "REV-ONE.json").createdAt).toBe("2026-10-14T10:00:00.000Z");
+      assertNoAbsolute(res.body);
+    } finally { await app.close(); }
+  });
+
+  it("a recorded log path with a drive segment (runs/<id>/C:/Users/<u>/...) is rejected, never echoed", { timeout: T }, async () => {
+    const c = setup();
+    c.store.addRunEvidence(c.runId, c.leaseId, {...base, logPath: `runs/${c.runId}/C:/Users/alice/missing.log`, logSha256: null}, "ENGINE");
+    const app = server(c);
+    try {
+      const res = await app.inject({method: "GET", url: "/v1/evidence?kind=WORK_RUN_LOG&limit=100", headers: hdr});
+      const rejected = by(res.json().evidence as EvidenceItem[], i => i.source.path === null);
+      expect(rejected.verification).toMatchObject({status: "UNVERIFIABLE", reason: "PATH_REJECTED"});
+      expect(res.body).not.toContain("alice");
+      assertNoAbsolute(res.body);
+    } finally { await app.close(); }
+  });
+
+  it("the absolute-path checker itself fails on real leaks and passes on look-alikes", () => {
+    // Ana makinenin gerçek HOME'u (ör. /root) "/rootfs" gibi benzerlerde alt dize eşleşmesi verir; kontrol bu yüzden genel kalıpların dışındaki nötr bir HOME ile sınanır.
+    // Böylece hem genel /root kontrolü hem gerçek ev dizini alt dize kontrolü, ana makineden bağımsız olarak kendi başına kanıtlanır.
+    const saved = {HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE};
+    const home = process.platform === "win32" ? String.raw`\\fileserver\uasco-home\carol` : "/srv/uasco-home/carol";
+    process.env.HOME = home; process.env.USERPROFILE = home;
+    try {
+      expect(os.homedir()).toBe(home);
+      const leaks = [String.raw`{"p":"/root/x"}`, String.raw`{"t":"home=/root"}`, String.raw`{"p":"/var/root/x"}`, String.raw`{"p":"C:\\Users\\bob"}`, String.raw`{"p":"/home/alice/x"}`,
+        JSON.stringify({p: path.join(home, "x")}), JSON.stringify({p: path.join(tmp, "x")})];
+      for (const b of leaks) expect(() => assertNoAbsolute(b), b).toThrow();
+      const clean = [String.raw`{"p":"/rootfs/x"}`, String.raw`{"p":"src/root/x"}`, String.raw`{"p":"<ROOT>/x"}`, String.raw`{"p":"<USER_PATH>\\x"}`, String.raw`{"u":"https://example.com/rootkit"}`];
+      for (const b of clean) expect(() => assertNoAbsolute(b), b).not.toThrow();
+    } finally {
+      for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
   });
 });
