@@ -288,4 +288,16 @@ describe("LANE-C role execution resolver", () => {
     expect(() => crewDevExecutors("UASCO-0252", "UASCO-0085", port, port, "x")).toThrow("BINDING_ROLE_MISMATCH");
     expect(() => assertRoleExecutes("UASCO-0085", "developer", [{...FIRST_DELIVERY_BINDINGS[2], allowedTools: ["Bash"]}])).toThrow("TOOL_NOT_ALLOWED");
   });
+  it("team summary reports per-role executability without implying live agents or certification", () => {
+    const sum = summarizeProposedTeam(composeTeam(TASKHUB_BRIEF, INPUTS, CATALOG), CATALOG);
+    expect(sum.executability.length).toBe(sum.selections.length);
+    const bound = new Set(FIRST_DELIVERY_BINDINGS.map(b => b.roleId));
+    for (const e of sum.executability) {
+      if (bound.has(e.roleId)) expect(e).toEqual({roleId: e.roleId, status: "EXECUTABLE"});
+      else expect(e).toEqual({roleId: e.roleId, status: "NOT_EXECUTABLE", reason: "ROLE_HAS_NO_BINDING"});
+    }
+    expect(sum.executableRoleDefinitionCount).toBe(sum.selections.filter(x => bound.has(x.roleId)).length);
+    expect(sum.liveAgentCount).toBe(0);
+    expect(sum.certifiedWorkerCount).toBe(0);
+  });
 });
