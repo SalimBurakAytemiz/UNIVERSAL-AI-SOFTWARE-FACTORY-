@@ -510,3 +510,126 @@ describe("LANE-B project flow", () => {
     expect((await get((await mkApp("tB")).app, p.projectId)).statusCode).toBe(404);
   });
 });
+
+// //TR: COORD-INTEGRATION-L1 uçtan uca ilk-teslim zinciri GERÇEK modüllerle (test edilen modüllerin sahtesi yok, geçici veri dizini): Kurucu fikri -> intake (proje + ilk mission) -> plan (sıralı, bağımlı görevler) -> flow okuma modeli -> rol çözümleyici (developer/security-reviewer EXECUTABLE, bağlamasız rol NOT_EXECUTABLE) -> runner rol kapısı (depodaki FAKE executor; model çağrısı yok). Intake/plan/flow route modülleri korunan server.ts'e kayıtlı DEĞİLDİR; burada tek bir Fastify örneğine ortak RouteDeps ile doğrudan kaydedilir, uygulamadaki HTTP zinciri iddia edilmez.
+import type {RouteDeps} from "../apps/control-api/src/routes/deps.js";
+import {validateIntakeCreate} from "../core/workos/intake.js";
+import {validatePlanCreate} from "../core/workos/plan.js";
+import {resolveRoleExecution} from "../core/agents/role-execution.js";
+import {FIRST_DELIVERY_BINDINGS, bindingForFunction, assertRoleExecutes} from "../core/agents/first-delivery-bindings.js";
+import {MissionRunner} from "../core/workos/runner.js";
+import {FakeExecutors} from "../core/workos/executors.js";
+import {fakeSecurity} from "../core/workos/security-tools.js";
+import {testExecutionGate} from "./support/test-sandbox.js";
+import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
+
+describe("COORD-INTEGRATION-L1 first-delivery chain (real modules, temp data dir)", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const IDEA = "A small web app where I can track my daily reading with a streak counter";
+  const scope = {tenantId: "tA"}, ACTOR = "FOUNDER_LOCAL", UNBOUND = "UASCO-0001";
+  const ENV_POLICY = path.join(path.resolve(import.meta.dirname, ".."), "config", "environment-policy.json");
+  const CATALOG = JSON.parse(fs.readFileSync(path.join(process.cwd(), "registries", "role-definitions.json"), "utf8")).roles as {roleId: string; title: string; guildId: string}[];
+  const gitRun = (cwd: string, args: string[]) => { const r = spawnGitSync(cwd, args); if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`); return String(r.stdout).trim(); };
+  const mkChain = async () => {
+    const [{default: Fastify}, {registerIntakeRoutes}, {registerPlanRoutes}, {registerFlowRoutes}] = await Promise.all([
+      import("fastify"), import("../apps/control-api/src/routes/intake.js"), import("../apps/control-api/src/routes/plan.js"), import("../apps/control-api/src/routes/flow.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const audits: string[] = [];
+    const deps: RouteDeps = {getStore: () => store, scope, orgId: "o1", actor: ACTOR, audit: (e: string) => { audits.push(e); },
+      workosStopped: () => false, workosPolicy: () => ({allowed: true}), workosFail: (r: any, e: any) => r.code(500).send({error: e?.code ?? "INTERNAL_ERROR"})};
+    registerIntakeRoutes(app, deps); registerPlanRoutes(app, deps); registerFlowRoutes(app, deps);
+    return {app, store, audits};
+  };
+  const flowOf = async (app: any, projectId: string) => { const r = await app.inject({method: "GET", url: `/v1/projects/${projectId}/flow`, headers: hdr}); expect(r.statusCode).toBe(200); return r.json().flow; };
+  const states = (f: any) => Object.fromEntries(f.stages.map((s: any) => [s.stage, s.state]));
+  const authorize = (store: WorkOsStore, missionId: string) => { for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(scope, missionId, to, "founder go", ACTOR); };
+
+  it("idea -> intake -> plan -> flow -> role resolution -> role-gated run, with the negative links", async () => {
+    const {app, store, audits} = await mkChain();
+    // 1) Geçersiz fikir hiçbir kayıt üretmez.
+    for (const bad of [{idea: "short"}, {idea: IDEA, riskLevel: "R4"}, {idea: IDEA, extra: 1}, {}]) {
+      const r = await app.inject({method: "POST", url: "/v1/intakes", headers: hdr, payload: bad});
+      expect(r.statusCode).toBe(400); expect(r.json().error).toBe("INVALID_BODY");
+    }
+    expect(validateIntakeCreate({idea: "short"}).ok).toBe(false);
+    expect(store.listProjects(scope)).toEqual([]); expect(store.listMissions(scope)).toEqual([]);
+
+    // 2) Intake: proje + ilk mission (DRAFT), flow MISSION ACTIVE, geri kalan NOT_STARTED.
+    const ir = await app.inject({method: "POST", url: "/v1/intakes", headers: hdr, payload: {idea: IDEA, riskLevel: "R1"}});
+    expect(ir.statusCode).toBe(201);
+    const intake = ir.json().intake;
+    const project = store.getProject(scope, intake.projectId)!, first = store.getMission(scope, intake.missionId)!;
+    expect(project.name).toBe(IDEA.slice(0, 80).trim());
+    expect(first).toMatchObject({projectId: project.projectId, objective: IDEA, status: "DRAFT", riskLevel: "R1"});
+    expect(store.listMissions(scope, project.projectId).map(m => m.missionId)).toEqual([first.missionId]);
+    let flow = await flowOf(app, project.projectId);
+    expect(states(flow)).toEqual({MISSION: "ACTIVE", PLAN: "NOT_STARTED", RUN: "NOT_STARTED", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+    expect(flow.stages[0].detail).toBe("DRAFT"); expect(flow.missionCount).toBe(1); expect(flow.taskCount).toBe(0);
+
+    // 3) Plan: ileri bağımlılık reddedilir ve görev yazılmaz; geçerli plan sıralı görevleri gerçek taskId bağımlılıklarıyla yazar.
+    const fwdBody = {tasks: [{title: "Streak counter", dependsOn: [1]}, {title: "Scaffold"}]};
+    expect(validatePlanCreate(fwdBody)).toEqual({ok: false, errors: "tasks[0].dependsOn must reference an earlier task"});
+    const fwd = await app.inject({method: "POST", url: `/v1/missions/${first.missionId}/plan`, headers: hdr, payload: fwdBody});
+    expect(fwd.statusCode).toBe(400); expect(fwd.json().detail).toContain("must reference an earlier task");
+    expect(store.listTasks(scope, first.missionId)).toEqual([]);
+    const pr = await app.inject({method: "POST", url: `/v1/missions/${first.missionId}/plan`, headers: hdr,
+      payload: {tasks: [{title: "Scaffold"}, {title: "Streak counter", dependsOn: [0]}, {title: "Tests", dependsOn: [0, 1]}]}});
+    expect(pr.statusCode).toBe(201);
+    const tasks = pr.json().tasks;
+    expect(tasks.map((t: any) => t.title)).toEqual(["Scaffold", "Streak counter", "Tests"]);
+    expect(tasks.map((t: any) => t.dependsOn)).toEqual([[], [tasks[0].taskId], [tasks[0].taskId, tasks[1].taskId]]);
+    for (const t of tasks) expect(t).toMatchObject({missionId: first.missionId, projectId: project.projectId, status: "PENDING"});
+    flow = await flowOf(app, project.projectId);
+    expect(states(flow)).toEqual({MISSION: "ACTIVE", PLAN: "ACTIVE", RUN: "NOT_STARTED", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+    expect(flow.stages[1].detail).toBe("0/3 DONE"); expect(flow.taskCount).toBe(3); expect(flow.latestRunId).toBeNull();
+    expect(audits).toEqual(["WORKOS_INTAKE_CREATED", "WORKOS_PLAN_CREATED"]);
+
+    // 4) Rol çözümleyici (gerçek 599 rollük katalog): developer ve security-reviewer EXECUTABLE (certified değil), bağlamasız rol NOT_EXECUTABLE.
+    const dev = bindingForFunction("developer"), sec = bindingForFunction("security-reviewer");
+    for (const b of [dev, sec]) expect(resolveRoleExecution(b.roleId, CATALOG, FIRST_DELIVERY_BINDINGS)).toMatchObject({status: "EXECUTABLE", roleId: b.roleId, certification: "NOT_CERTIFIED"});
+    expect(CATALOG.some(r => r.roleId === UNBOUND)).toBe(true);
+    expect(resolveRoleExecution(UNBOUND, CATALOG, FIRST_DELIVERY_BINDINGS)).toMatchObject({status: "NOT_EXECUTABLE", reason: "ROLE_HAS_NO_BINDING", certification: "NOT_CERTIFIED"});
+    expect(() => assertRoleExecutes(sec.roleId, "developer")).toThrow("BINDING_ROLE_MISMATCH");
+
+    // 5) Runner: intake projesine yönetilen depo bağlanır (server.ts içe aktarma route'unun yaptığı aynı store çağrısı), mission yetkilendirilir, developer rolüne bağlı run FAKE executor ile sürülür.
+    const repo = path.join(store.dataDir, "projects", project.projectId, "repo");
+    fs.mkdirSync(repo, {recursive: true});
+    gitRun(repo, ["init", "-q", "-b", "main"]);
+    fs.writeFileSync(path.join(repo, "README.txt"), "reading tracker\n");
+    gitRun(repo, ["add", "-A"]);
+    gitRun(repo, ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "commit", "-q", "-m", "seed"]);
+    store.setProjectRepository(scope, project.projectId, {path: repo, managed: true}, ACTOR, {kind: "git", headSha: gitRun(repo, ["rev-parse", "HEAD"])});
+    authorize(store, first.missionId);
+    const fake = new FakeExecutors({implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"})});
+    const pair = fake.pair();
+    const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
+    const mkRunner = () => new MissionRunner({executionGate: testExecutionGate(), store, dataDir: store.dataDir, globalStopFile: path.join(runtime, "GLOBAL_STOP.json"), envPolicyFile: ENV_POLICY,
+      executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(path.join(tmp, "sec")).options});
+    const newRun = (missionId: string, roleId: string) => store.createRun({tenantId: "tA", missionId, roleId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: ACTOR});
+    const bound = newRun(first.missionId, dev.roleId);
+    await mkRunner().tick();
+    const br = store.getRun(scope, bound.runId)!;
+    // Rol kapısı bağlı developer'ı implementer'a geçirir; intake projesi test komutu kaydetmediği için VERIFY dürüstçe BLOCKED olur (review/teslim yok).
+    expect(fake.calls.implement).toBe(1);
+    expect(br).toMatchObject({roleId: dev.roleId, status: "BLOCKED", step: "VERIFY", reason: "TEST_COMMAND_NOT_CONFIGURED"});
+    expect(fake.calls.review).toBe(0);
+    flow = await flowOf(app, project.projectId);
+    expect(states(flow)).toEqual({MISSION: "BLOCKED", PLAN: "ACTIVE", RUN: "BLOCKED", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+    expect(flow.latestRunId).toBe(bound.runId); expect(flow.stages[2].detail).toBe("BLOCKED/VERIFY");
+
+    // 6) Negatif rol kapısı: aynı projenin ikinci yetkili mission'ında bağlamasız rol, implementer çağrılmadan BLOCKED olur.
+    const second = store.createMission({tenantId: "tA", projectId: project.projectId, title: "Second delivery", objective: "o", acceptanceCriteria: ["c"], riskLevel: "R1", createdBy: ACTOR});
+    authorize(store, second.missionId);
+    const unbound = newRun(second.missionId, UNBOUND);
+    await mkRunner().tick();
+    expect(store.getRun(scope, unbound.runId)).toMatchObject({roleId: UNBOUND, status: "BLOCKED", step: "IMPLEMENT", reason: `ROLE_NOT_EXECUTABLE:ROLE_HAS_NO_BINDING:${UNBOUND}`});
+    expect(fake.calls.implement).toBe(1);
+    expect(store.getMission(scope, second.missionId)!.status).toBe("BLOCKED");
+    flow = await flowOf(app, project.projectId);
+    expect(flow.latestRunId).toBe(unbound.runId); expect(flow.missionCount).toBe(2);
+    expect(states(flow)).toMatchObject({RUN: "BLOCKED", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+    await app.close();
+  });
+});
