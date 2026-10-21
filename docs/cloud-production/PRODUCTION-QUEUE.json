@@ -261,7 +261,9 @@
         "followUp": "advisory 2 fixed in 20ad4f5 (b10a 32/32, 2 mutations caught); advisories 1,3,4,5 recorded as known limits in PR #135"
       },
       "head": "d893c0f",
-      "note": "v7/integration (with #128) merged in at d893c0f; CI re-run pending."
+      "note": "Marked ready for review by the coordinator (setup step 8). Independent review blocked by the App key secret (Founder).",
+      "ci": "green at d893c0f (run 39608214759)",
+      "readyForReview": "2026-10-21T13:51:30.633Z"
     },
     {
       "id": "PQ-008",
@@ -532,7 +534,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T13:29:50.593Z",
+    "at": "2026-10-21T13:51:30.633Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -548,7 +550,7 @@
       134,
       135
     ],
-    "next": "Post-merge CI on bd5ce9b; #135 CI on d893c0f; first real UASCO Independent Review run when a PR is marked ready.",
+    "next": "Founder: fix UASCO_REVIEW_APP_PRIVATE_KEY, then Run workflow 135; coordinator: post-merge CI on bd5ce9b.",
     "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
@@ -784,6 +786,14 @@
     "reviewedHead": "0ae75d0 (review-system files identical in bd5ce9b)",
     "defaultBranch": "v7/integration (observed 2026-10-21T13:29Z)",
     "remainingFounderSteps": "per docs/governance/UASCO-INDEPENDENT-REVIEW.md: step 1 (master ruleset target) and 3 (Actions policy) unverified by agents; 4 App permissions; 6 Actions may not approve; 7 re-tick last-push approval; 8 first real run; 10 required check pinned to the App + strict mode",
-    "note": "Not merged by an agent. Post-merge push CI on bd5ce9b to be checked by the coordinator."
+    "note": "Not merged by an agent. Post-merge push CI on bd5ce9b to be checked by the coordinator.",
+    "firstRealRun": {
+      "run": 39611421257,
+      "pr": 135,
+      "head": "d893c0f",
+      "result": "FAILED_CLOSED at scope / create-github-app-token: Invalid keyData (UASCO_REVIEW_APP_PRIVATE_KEY is not a valid PEM private key). No App check, no approval, reviewer not run.",
+      "founderFix": "Regenerate the App private key and paste the full .pem into the uasco-review environment secret UASCO_REVIEW_APP_PRIVATE_KEY; then Run workflow with 135.",
+      "at": "2026-10-21T13:51:30.633Z"
+    }
   }
 }
