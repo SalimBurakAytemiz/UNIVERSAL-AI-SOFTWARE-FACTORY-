@@ -1,0 +1,41 @@
+{
+  "$comment": "//TR: Bu şema bağımsız Claude Reviewer'ın yapılandırılmış kararını tanımlar; alan, enum ve uzunluk kurallarını review-gate.mjs validateVerdict ile paylaşır (görünmez karakter yasağı yalnız validateVerdict tarafından uygulanır) ve kararı incelenen head ve base commit SHA değerine bağlar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["result", "reviewedHeadSha", "reviewedBaseSha", "summary", "findings", "checks"],
+  "properties": {
+    "result": {"type": "string", "enum": ["CLEAN", "BLOCKED", "INCONCLUSIVE"]},
+    "reviewedHeadSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "reviewedBaseSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "summary": {"type": "string", "minLength": 1, "maxLength": 4000},
+    "findings": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "severity", "classification", "file", "line", "title", "evidence"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1, "maxLength": 32},
+          "severity": {"type": "string", "enum": ["P0", "P1", "P2", "P3"]},
+          "classification": {"type": "string", "enum": ["BLOCKER", "ADVISORY"]},
+          "file": {"type": "string", "maxLength": 400},
+          "line": {"type": ["integer", "null"], "minimum": 0},
+          "title": {"type": "string", "maxLength": 2000},
+          "evidence": {"type": "string", "maxLength": 2000}
+        }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security", "tests", "ciEvidence", "scope"],
+      "properties": {
+        "security": {"type": "string", "enum": ["PASS", "FAIL", "NOT_APPLICABLE"]},
+        "tests": {"type": "string", "enum": ["PASS", "FAIL", "INSUFFICIENT"]},
+        "ciEvidence": {"type": "string", "enum": ["PASS", "FAIL"]},
+        "scope": {"type": "string", "enum": ["PASS", "FAIL"]}
+      }
+    }
+  }
+}
