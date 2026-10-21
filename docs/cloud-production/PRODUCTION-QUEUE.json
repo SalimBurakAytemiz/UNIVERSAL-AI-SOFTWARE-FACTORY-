@@ -350,7 +350,7 @@
       "lane": "B",
       "source": "Central brain: command -> task intake (Founder sprint P0-B); builds on core/mission/state-machine.ts and core/mission/types.ts",
       "title": "Command intake core: Founder text command -> validated mission DRAFT proposal with conservative risk and authority flags (pure, never authorizes)",
-      "status": "IN_REVIEW_PENDING_VERIFY",
+      "status": "TESTED",
       "base": "v7/integration",
       "files": [
         "core/mission/command-intake.ts",
@@ -366,7 +366,10 @@
       ],
       "pr": 134,
       "branch": "claude/pq-011",
-      "note": "Opened by the queue worker; coordinator verification pending."
+      "claimSha": "58fedd6",
+      "finalSha": "2891eae",
+      "owner": "production-builder worker (queue tick 06:48Z)",
+      "evidence": "Coordinator re-ran at 2891eae: tests/mission-state.test.ts 12/12; tsc 0; TR PASS; secret-sanity PASS; diff = core/mission/command-intake.ts + tests/mission-state.test.ts only; mutation authorityRequired=false -> 2 tests fail."
     },
     {
       "id": "PQ-012",
@@ -504,7 +507,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T07:23:41.498Z",
+    "at": "2026-10-21T07:34:24.714Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -517,6 +520,7 @@
       131,
       132,
       133,
+      134,
       135
     ],
     "next": "Lanes A/B/C building; coordinator: #131 review fixes, PQ-011 (#134) verification, PQ-006 (#135) independent review.",
