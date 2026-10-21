@@ -1898,11 +1898,93 @@ describe("LANE-A first-delivery flow stepper (fake DOM)", () => {
     expect(all(bad.panel!).filter(n => n.dataset.flowStage).length).toBe(0);
     expect(text(bad.panel!)).not.toContain("Bitti");
   });
+  it("describeFlowDetail maps known codes only with the matching stage state, parses PLAN/RUN shapes, and shows anything else verbatim", async () => {
+    const core = await load(rend, "project-core.js");
+    const d = core.describeFlowDetail;
+    expect(d("PLAN", null, "NOT_STARTED")).toBeNull(); expect(d("PLAN", "", "ACTIVE")).toBeNull(); expect(d("RUN", undefined, "ACTIVE")).toBeNull();
+    expect(d("PLAN", "2/5 DONE", "ACTIVE")).toEqual({kind: "key", key: "flow.detail.PLAN.progress", vars: {done: "2", total: "5"}});
+    expect(d("PLAN", "5/5 DONE", "DONE").vars).toEqual({done: "5", total: "5"});
+    expect(d("PLAN", "6/5 DONE", "ACTIVE")).toEqual({kind: "raw", text: "6/5 DONE"}); // sayısal olarak imkansız: çevrilmez
+    expect(d("PLAN", "DONE", "ACTIVE")).toEqual({kind: "raw", text: "DONE"});
+    expect(d("RUN", "RUNNING/IMPLEMENT", "ACTIVE")).toEqual({kind: "key", key: "flow.detail.RUN.status", vars: {status: "RUNNING", step: "IMPLEMENT"}});
+    expect(d("RUN", "running/x", "ACTIVE")).toEqual({kind: "raw", text: "running/x"});
+    const ok = (stage: string, code: string, state: string) => expect(d(stage, code, state), `${stage}.${code}@${state}`).toEqual({kind: "key", key: `flow.detail.${stage}.${code}`, vars: {}});
+    ok("MISSION", "COMPLETE", "DONE"); ok("MISSION", "BLOCKED", "BLOCKED");
+    ok("REVIEW", "CLEAN_REVIEW_GATE_PASSED", "DONE"); ok("REVIEW", "CLEAN_REVIEW_FOR_HEAD", "DONE"); ok("REVIEW", "RUN_NOT_SUCCEEDED", "UNKNOWN");
+    for (const c of ["REVIEW", "REGRESSION", "REPORT"]) ok("REVIEW", c, "ACTIVE");
+    ok("DELIVERY", "PRODUCT_VERIFIED", "DONE"); ok("DELIVERY", "NOT_VERIFIED", "DONE");
+    ok("DELIVERY", "SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED", "ACTIVE"); ok("DELIVERY", "ARTIFACT_PREPARED_NOT_VERIFIED", "ACTIVE");
+    // Sunucu ACTIVE mission aşamasına son mission'ın durumunu yazar: [EXECUTING, COMPLETE] -> ACTIVE + COMPLETE. "Tüm mission'lar tamamlandı" DENMEZ.
+    expect(d("MISSION", "COMPLETE", "ACTIVE")).toEqual({kind: "status", status: "COMPLETE"});
+    expect(d("MISSION", "BLOCKED", "ACTIVE")).toEqual({kind: "status", status: "BLOCKED"});
+    expect(d("MISSION", "COMPLETE", "BLOCKED")).toEqual({kind: "status", status: "COMPLETE"});
+    expect(d("MISSION", "EXECUTING", "ACTIVE")).toEqual({kind: "status", status: "EXECUTING"});
+    expect(d("MISSION", "not a status", "ACTIVE")).toEqual({kind: "raw", text: "not a status"});
+    // Diğer aşamalarda yanlış durumla gelen bilinen kod çevrilmez; ham ve "beklenmeyen" işaretli
+    expect(d("REVIEW", "CLEAN_REVIEW_FOR_HEAD", "ACTIVE")).toEqual({kind: "raw", text: "CLEAN_REVIEW_FOR_HEAD", mismatch: true});
+    expect(d("REVIEW", "CLEAN_REVIEW_GATE_PASSED", "UNKNOWN")).toEqual({kind: "raw", text: "CLEAN_REVIEW_GATE_PASSED", mismatch: true});
+    expect(d("REVIEW", "REPORT", "DONE")).toEqual({kind: "raw", text: "REPORT", mismatch: true});
+    expect(d("DELIVERY", "PRODUCT_VERIFIED", "ACTIVE")).toEqual({kind: "raw", text: "PRODUCT_VERIFIED", mismatch: true});
+    expect(d("DELIVERY", "ARTIFACT_PREPARED_NOT_VERIFIED", "DONE")).toEqual({kind: "raw", text: "ARTIFACT_PREPARED_NOT_VERIFIED", mismatch: true});
+    // Durum verilmezse (bilinmiyorsa) olumlu anlam verilmez
+    expect(d("REVIEW", "CLEAN_REVIEW_FOR_HEAD")).toEqual({kind: "raw", text: "CLEAN_REVIEW_FOR_HEAD", mismatch: true});
+    expect(d("MISSION", "COMPLETE")).toEqual({kind: "status", status: "COMPLETE"});
+    // Kodlar yalnız kendi aşamasında geçerlidir
+    expect(d("DELIVERY", "CLEAN_REVIEW_FOR_HEAD", "DONE")).toEqual({kind: "raw", text: "CLEAN_REVIEW_FOR_HEAD"});
+    expect(d("REVIEW", "PRODUCT_VERIFIED", "DONE")).toEqual({kind: "raw", text: "PRODUCT_VERIFIED"});
+    expect(d("RUN", "CLEAN_REVIEW_GATE_PASSED", "ACTIVE")).toEqual({kind: "raw", text: "CLEAN_REVIEW_GATE_PASSED"});
+    expect(d("REVIEW", "__proto__", "DONE")).toEqual({kind: "raw", text: "__proto__"});
+    expect(d("REVIEW", "constructor", "DONE")).toEqual({kind: "raw", text: "constructor"});
+  });
+  it("ACTIVE mission stage carrying COMPLETE (missions [EXECUTING, COMPLETE]) never says all missions are complete", async () => {
+    const mk = (state: string, detail: string) => ({flow: {projectId: PID, stages: ["MISSION", "PLAN", "RUN", "REVIEW", "DELIVERY"].map((stage, i) => ({stage, state: i === 0 ? state : "NOT_STARTED", detail: i === 0 ? detail : null})), missionCount: 2, taskCount: 0, latestRunId: null}});
+    const active = await openWs({get: projectsGet({[FLOW]: mk("ACTIVE", "COMPLETE")}), lang: "en"});
+    const am = all(byId(active.root, "studio-ov-flow")!).find(n => n.dataset.flowStage === "MISSION")!;
+    expect(text(am)).not.toContain("every mission"); expect(text(am)).not.toContain("recorded as complete");
+    expect(all(am).some(n => n.dataset.flowDetail === "COMPLETE" && n.dataset.flowDetailKind === "status")).toBe(true);
+    const done = await openWs({get: projectsGet({[FLOW]: mk("DONE", "COMPLETE")}), lang: "en"});
+    expect(text(all(byId(done.root, "studio-ov-flow")!).find(n => n.dataset.flowStage === "MISSION")!)).toContain("every mission of this project is recorded as complete");
+    // Başka aşamada yanlış durumla gelen bilinen kod: ham gösterilir ve "durumla uyuşmuyor" diye işaretlenir, olumlu anlam verilmez
+    const bad = { flow: { projectId: PID, stages: ["MISSION", "PLAN", "RUN", "REVIEW", "DELIVERY"].map((stage, i) => ({ stage, state: i === 3 ? "ACTIVE" : "NOT_STARTED", detail: i === 3 ? "CLEAN_REVIEW_FOR_HEAD" : null })), missionCount: 1, taskCount: 0, latestRunId: null } };
+    const mis = await openWs({get: projectsGet({[FLOW]: bad}), lang: "en"});
+    const rv = text(all(byId(mis.root, "studio-ov-flow")!).find(n => n.dataset.flowStage === "REVIEW")!);
+    expect(rv).toContain("CLEAN_REVIEW_FOR_HEAD (code does not match this stage's state)");
+    expect(rv).not.toContain("clean independent review is recorded");
+    const odd = await openWs({get: projectsGet({[FLOW]: mk("ACTIVE", "BLOCKED")}), lang: "en"});
+    expect(text(all(byId(odd.root, "studio-ov-flow")!).find(n => n.dataset.flowStage === "MISSION")!)).not.toContain("at least one mission is blocked");
+  });
+  it("renders readable details with 'NOT verified' wording for delivery, never as done-and-verified, and raw unknown codes marked unrecognised", async () => {
+    const mk = (details: Array<string | null>, states = ["DONE", "ACTIVE", "ACTIVE", "DONE", "ACTIVE"]) => ({flow: {projectId: PID, stages: ["MISSION", "PLAN", "RUN", "REVIEW", "DELIVERY"].map((stage, i) => ({stage, state: states[i], detail: details[i]})), missionCount: 1, taskCount: 5, latestRunId: null}});
+    const body = mk(["EXECUTING", "2/5 DONE", "AWAITING_APPROVAL/REPORT", "CLEAN_REVIEW_FOR_HEAD", "ARTIFACT_PREPARED_NOT_VERIFIED"]);
+    const c = await openWs({get: projectsGet({[FLOW]: body}), lang: "en"});
+    const panel = byId(c.root, "studio-ov-flow")!;
+    const det = (stage: string) => all(panel).find(n => n.dataset.flowStage === stage)!;
+    const t = (stage: string) => text(det(stage));
+    expect(t("PLAN")).toContain("2 of 5 planned tasks recorded as done");
+    expect(t("REVIEW")).toContain("clean independent review is recorded for the run's current head; the run itself is not finished");
+    expect(t("DELIVERY")).toContain("NOT verified");
+    expect(t("DELIVERY")).toContain("not accepted");
+    expect(all(det("DELIVERY")).some(n => n.dataset.flowDetail === "ARTIFACT_PREPARED_NOT_VERIFIED" && n.dataset.flowDetailKind === "key")).toBe(true);
+    expect(det("DELIVERY").dataset.flowState).toBe("ACTIVE");
+    expect(t("RUN")).toContain("step REPORT");
+    // Kabul edilmiş NOT_VERIFIED teslim de "doğrulandı" demez
+    const acc = await openWs({get: projectsGet({[FLOW]: mk([null, null, null, null, "SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED"])}), lang: "en"});
+    const dt = text(all(byId(acc.root, "studio-ov-flow")!).find(n => n.dataset.flowStage === "DELIVERY")!);
+    expect(dt).toContain("accepted by you"); expect(dt).toContain("NOT verified");
+    // Bilinmeyen kod aynen ve işaretli
+    const unk = await openWs({get: projectsGet({[FLOW]: mk([null, null, null, "SOMETHING_NEW", null])}), lang: "en"});
+    const rv = all(byId(unk.root, "studio-ov-flow")!).find(n => n.dataset.flowStage === "REVIEW")!;
+    expect(text(rv)).toContain("SOMETHING_NEW (unrecognised code)");
+    expect(all(rv).some(n => n.dataset.flowDetailKind === "raw")).toBe(true);
+    // Ayrıntısı olmayan aşamada hiçbir şey eklenmez
+    const none = await openWs({get: projectsGet({[FLOW]: mk([null, null, null, null, null], ["NOT_STARTED", "NOT_STARTED", "NOT_STARTED", "NOT_STARTED", "NOT_STARTED"])}), lang: "en"});
+    expect(all(byId(none.root, "studio-ov-flow")!).some(n => "flowDetail" in n.dataset)).toBe(false);
+  });
   it("flow strings exist in en and tr", async () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
     const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("flow."));
-    expect(keys.length).toBe(17);
+    expect(keys.length).toBe(33);
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });

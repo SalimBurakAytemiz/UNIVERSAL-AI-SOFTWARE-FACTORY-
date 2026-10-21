@@ -1,5 +1,6 @@
 // //TR: Bu dosya Evidence Center'ın doğrulanmış salt-okunur read-model'ini uygular: Work OS journal run kanıtları, orchestrator review evidence dosyaları ve audit checkpoint'leri hash'i baytlardan yeniden hesaplanarak VERIFIED/MISMATCH/MISSING/UNVERIFIABLE olarak indekslenir; yeni gerçek üretmez, hiçbir şey yazmaz, yalnız izinli kökler içinde okur ve API çıktısına mutlak yol koymaz.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import readline from "node:readline";
@@ -50,6 +51,59 @@ const MAX_LIMIT = 100;
 const SAFE_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.json$/;
 const HEX40 = /^[0-9a-f]{40}$/;
 const JOURNAL = "journal.jsonl";
+// Kullanıcı dizini yolları API çıktısında görünmez (PQ-006). Kalıplar: Windows <sürücü>:\Users\<u>, yönetim paylaşımı (c$) ve 8.3 kısa adı DOCUME~1; POSIX
+// bağlama noktası (/mnt/c/users/<u>, /cygdrive/c/..., /c/Users/<u>); /home/<u> ve /Users/<u>; macOS /var/root; Linux /root; WSL \\wsl$\<dağıtım>\root ve
+// \home\<u>; Windows hizmet profilleri. Ayraçlar esnektir (\, /, JSON kaçışlı \\ ve \/). Sol sınır "/root"u "/rootfs", "x/root", "~/root" içinde maskelemez;
+// ANSI renk kodundan (\x1b[..m) veya kısa bir bayraktan (-I/root, -v/root) hemen sonra gelen yol yine maskelenir. Eşleşme yalnız bir ayraç dizisinin başında
+// başlar ve sol sınır yalnız ayraç önünde denenir, böylece uzun "////" veya rakam dizilerinde de süre doğrusaldır.
+const PC = String.raw`\p{L}\p{N}._~\-`;
+const LB = String.raw`(?=[\\/])(?:(?<![${PC}\\/])|(?<=\x1b\[[0-9;:?]*[A-Za-z])|(?<=\\u001[bB]\[[0-9;:?]*[A-Za-z])|(?<=(?:^|[\s"'=,;(])-[A-Za-z]))`;
+const BR = `(?![${PC}])`, RUN = String.raw`(?<![\\/])`;
+const SEP = String.raw`[\\/]+`, PSEP = String.raw`(?:\\?/)+`, BSEP = String.raw`\\+`;
+// Kabukta kaçışlı boşluk ("/Users/John\ Smith") adın parçasıdır.
+const NAME_P = String.raw`(?:[^\\/\s"'\x60]|\\ )+`;
+// Windows profil adı boşluk içerebilir ("John Smith"): boşluklu ad en çok 20 karakterdir (Windows hesap adı sınırı) ve bir ayraç, tırnak veya satır sonunda biter;
+// yoksa boşluksuz parça alınır, böylece "C:\Users\bob is not a git repository" iletisinin geri kalanı korunur.
+const NAME_W = String.raw`(?:[^\\/"<>|:*?\r\n\t]{1,20}(?=[\\/"'\r\n]|$)|[^\\/\s"<>|:*?]+)`;
+const DRIVE = String.raw`[A-Za-z][:$]`, PROFILES = String.raw`(?:users|documents and settings|docume~\d)`;
+const USER_DIR_PATTERNS: readonly RegExp[] = [
+  new RegExp(`${DRIVE}${SEP}${PROFILES}${SEP}${NAME_W}`, "giu"),
+  new RegExp(`${LB}(?:${PSEP}(?:mnt|cygdrive))?${PSEP}[A-Za-z]${PSEP}${PROFILES}${PSEP}${NAME_W}`, "giu"),
+  new RegExp(`${RUN}${PSEP}(?:home|Users)${SEP}${NAME_P}`, "gu"),
+  new RegExp(`${LB}${BSEP}(?:home|Users)${SEP}${NAME_P}`, "gu"),
+  new RegExp(`${RUN}${PSEP}var${PSEP}root${BR}`, "gu"),
+  new RegExp(`${LB}${PSEP}root${BR}`, "gu"),
+  new RegExp(`${RUN}${SEP}wsl(?:\\$|\\.localhost)${SEP}${NAME_P}${SEP}(?:root${BR}|home${SEP}${NAME_P})`, "giu"),
+  new RegExp(`${DRIVE}${SEP}windows${SEP}(?:system32${SEP}config${SEP}systemprofile|serviceprofiles${SEP}${NAME_W})`, "giu"),
+];
+// Bir tamponun ilk satır sonundan (\n, \r veya \r\n) sonrası; satır sonu yoksa boş tampon: yarım satır hiç gösterilmez.
+const afterFirstBreak = (b: Buffer): Buffer => {
+  for (let i = 0; i < b.length; i++) if (b[i] === 0x0a || b[i] === 0x0d) return b.subarray(b[i] === 0x0d && b[i + 1] === 0x0a ? i + 2 : i + 1);
+  return b.subarray(b.length);
+};
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// Mutlak bir yolun esnek ayraçlı, büyük/küçük harf duyarsız kalıbı. Ev dizini iki yandan sınırlıdır; kök önek olarak maskelenir (önceki split/join anlamı).
+// "/" veya "C:\" gibi yalnız kök olan değer hiç maskelenmez (null).
+function pathPattern(abs: string, bounded: boolean): RegExp | null {
+  const t = abs.replace(/[\\/]+$/, ""), lead = /^[\\/]/.test(t), segs = t.split(/[\\/]+/).filter(Boolean);
+  const drive = segs.length > 0 && /^[A-Za-z]:$/.test(segs[0]);
+  if (segs.length - (drive ? 1 : 0) < 1) return null;
+  // Boşluklu bir bileşen kabukta kaçışlı ("odd\ home") veya URL kodlu ("odd%20home") da yazılabilir.
+  const body = (lead ? SEP : "") + segs.map(x => escapeRe(x).split(" ").join(String.raw`(?:\\ | |%20)`)).join(SEP);
+  return new RegExp(bounded ? (lead ? LB : "") + body + BR : (lead ? RUN : "") + body, "giu");
+}
+// Gerçek kullanıcı dizini değerleri: os.homedir(), hesap kaydı, HOME ve USERPROFILE; her birinin realpath'i (Windows'ta native: 8.3 kısa ad açılır).
+function userHomes(): string[] {
+  const out = new Set<string>();
+  for (const read of [() => os.homedir(), () => os.userInfo().homedir, () => process.env.HOME, () => process.env.USERPROFILE]) {
+    let h: unknown;
+    try { h = read(); } catch { h = undefined; }
+    if (typeof h !== "string" || h.length === 0) continue;
+    out.add(h);
+    for (const rp of [fs.realpathSync, fs.realpathSync.native]) { try { out.add(rp(h)); } catch { /* yok veya okunamaz: ham değer yeterli */ } }
+  }
+  return [...out];
+}
 
 interface Outcome { sha256: string | null; sizeBytes: number | null; status: VerificationStatus; basis: string; reason: string | null }
 interface Candidate {
@@ -60,7 +114,9 @@ type Resolved = {ok: true; real: string; size: number} | {ok: false; code: "MISS
 interface GitInfo { ok: boolean; blobs: Map<string, string>; last: Map<string, {commit: string; at: string | null}> }
 
 const isObj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
-const isoOrNull = (x: unknown): string | null => typeof x === "string" && x.length <= 40 && Number.isFinite(Date.parse(x)) ? x : null;
+// Yalnız ISO-8601 zaman damgası: Date.parse "/root/.ssh 2020" gibi yol taşıyan metni de kabul ettiğinden biçim ayrıca doğrulanır.
+const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+const isoOrNull = (x: unknown): string | null => typeof x === "string" && x.length <= 40 && ISO_8601.test(x) && Number.isFinite(Date.parse(x)) ? x : null;
 const evidenceId = (parts: unknown[]): string => `evi_${crypto.createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 32)}`;
 const posix = (p: string): string => p.split(path.sep).join("/");
 const underRoot = (root: string, p: string): boolean => { const rel = path.relative(root, p); return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel)); };
@@ -70,7 +126,8 @@ const noScope: EvidenceScope = {tenantId: null, projectId: null, missionId: null
 function resolveUnder(rootReal: string, rel: unknown, requiredPrefix?: string): Resolved {
   if (typeof rel !== "string" || rel.length === 0 || rel.length > 512 || rel.includes("\0") || rel.includes("\\") || path.isAbsolute(rel) || /^[A-Za-z]:/.test(rel)) return {ok: false, code: "REJECTED"};
   const segs = rel.split("/");
-  if (segs.some(s => s === "" || s === "." || s === "..")) return {ok: false, code: "REJECTED"};
+  // ":" içeren bileşen (sürücü "C:" veya Windows akışı) geçersizdir: "runs/<id>/C:/Users/<u>/x.log" gibi gömülü mutlak yol API'ye yansımaz.
+  if (segs.some(s => s === "" || s === "." || s === ".." || s.includes(":"))) return {ok: false, code: "REJECTED"};
   if (requiredPrefix !== undefined && !rel.startsWith(requiredPrefix)) return {ok: false, code: "REJECTED"};
   const abs = path.join(rootReal, ...segs);
   if (!underRoot(rootReal, abs)) return {ok: false, code: "REJECTED"};
@@ -111,6 +168,7 @@ export class EvidenceIndex {
   private readonly repoReal: string;
   private readonly dataReal: string | null;
   private readonly roots: string[];
+  private readonly pathMasks: {re: RegExp; tag: string}[];
   private readonly maxHash: number; private readonly maxJson: number; private readonly now: () => number;
   constructor(private readonly o: EvidenceIndexOptions) {
     this.repoReal = fs.realpathSync(path.resolve(o.repoRoot));
@@ -118,6 +176,9 @@ export class EvidenceIndex {
     try { dataReal = fs.realpathSync(path.resolve(o.dataDir)); } catch { dataReal = null; }
     this.dataReal = dataReal;
     this.roots = [o.repoRoot, this.repoReal, o.dataDir, dataReal ?? o.dataDir].map(r => path.resolve(r)).filter((r, i, a) => r.length > 3 && a.indexOf(r) === i).sort((a, b) => b.length - a.length);
+    // Kökler <ROOT>, ev dizinleri <USER_PATH>; en uzun yol önce (ev içindeki depo <ROOT> olur).
+    this.pathMasks = [...this.roots.map(p => ({p, tag: "<ROOT>", re: pathPattern(p, false)})), ...userHomes().map(p => ({p, tag: "<USER_PATH>", re: pathPattern(p, true)}))]
+      .filter((m): m is {p: string; tag: string; re: RegExp} => m.re !== null).sort((x, y) => y.p.length - x.p.length).map(m => ({re: m.re, tag: m.tag}));
     this.maxHash = o.maxHashBytes ?? DEFAULT_MAX_HASH_BYTES;
     this.maxJson = Math.min(o.maxJsonBytes ?? DEFAULT_MAX_JSON_BYTES, this.maxHash);
     this.now = o.now ?? Date.now;
@@ -149,7 +210,7 @@ export class EvidenceIndex {
       if (item.verification.status === "VERIFIED" || item.verification.status === "UNVERIFIABLE") { try { tail = await c.tail(); } catch { tailWithheld = "TAIL_UNREADABLE"; } }
       else tailWithheld = `VERIFICATION_${item.verification.status}`;
     }
-    return {item, summary: c.summary, tail, tailWithheld};
+    return {item, summary: this.scrubValue(c.summary) as Record<string, unknown>, tail, tailWithheld};
   }
 
   async summary(): Promise<EvidenceSummary> {
@@ -283,16 +344,31 @@ export class EvidenceIndex {
       let got = 0;
       while (got < want) { const {bytesRead} = await fh.read(buf, got, want - got, start + got); if (bytesRead === 0) break; got += bytesRead; }
       // Önce redaksiyon, sonra son 4 KB: sınırda kesilen token'ın görünür kalan parçası lookback ile tam eşleşir.
-      let out = Buffer.from(this.scrub(buf.subarray(0, got).toString("utf8")), "utf8");
-      if (out.length > TAIL_BYTES) out = out.subarray(out.length - TAIL_BYTES);
-      return {text: out.toString("utf8").replace(/^\uFFFD+/, ""), truncated: start > 0 || got > TAIL_BYTES, redacted: true};
+      // Pencere dosyanın ortasında başlıyorsa ilk (yarım) satır atılır: maskeleme metni kısalttığında pencere başı çıktıya girer ve yarım bir yol
+      // ("sers\<kullanıcı>\...") hiçbir kalıba uymaz. Satır sonu yoksa pencerenin tamamı yarım satırdır ve kuyruk boş döner (truncated: true).
+      // Maskeleme metni uzatabilir ("/root" -> "<USER_PATH>"); son 4 KB kesimi de satır başına hizalanır ve kesim truncated olarak bildirilir.
+      let raw: Buffer = buf.subarray(0, got);
+      if (start > 0) raw = afterFirstBreak(raw);
+      let out: Buffer = Buffer.from(this.scrub(raw.toString("utf8")), "utf8");
+      const cut = out.length > TAIL_BYTES;
+      if (cut) out = afterFirstBreak(out.subarray(out.length - TAIL_BYTES));
+      return {text: out.toString("utf8").replace(/^\uFFFD+/, ""), truncated: start > 0 || got > TAIL_BYTES || cut, redacted: true};
     } finally { await fh.close(); }
   }
   // Mevcut secret redaksiyonuna ek olarak bilinen kök yolları ve kullanıcı dizini yolları maskelenir (API gövdesinde mutlak yol olmaz).
   private scrub(text: string): string {
     let s = redactSecrets(text);
-    for (const r of this.roots) for (const v of new Set([r, r.split("\\").join("/"), r.split("/").join("\\")])) s = s.split(v).join("<ROOT>");
-    return s.replace(/[A-Za-z]:[\\/](?:Users|Documents and Settings)[\\/][^\\/\s"'`]+/g, "<USER_PATH>").replace(/\/(?:home|Users)\/[^/\s"'`]+/g, "<USER_PATH>");
+    for (const m of this.pathMasks) s = s.replace(m.re, m.tag);
+    for (const re of USER_DIR_PATTERNS) s = s.replace(re, "<USER_PATH>");
+    return s;
+  }
+  // Özet değerleri de journal/dosya içeriğinden gelir (step, kind, verdict, reviewerIdentity): metinleri aynı redaksiyondan geçer; aşırı derin yapı null olur.
+  private scrubValue(v: unknown, depth = 0): unknown {
+    if (typeof v === "string") return this.scrub(v);
+    if (v === null || typeof v !== "object") return v;
+    if (depth >= 8) return null;
+    if (Array.isArray(v)) return v.map(x => this.scrubValue(x, depth + 1));
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, this.scrubValue(x, depth + 1)]));
   }
 
   // (b) Orchestrator review evidence: config/orchestrator-policy.json stateFile dizini + "evidence".
@@ -336,7 +412,8 @@ export class EvidenceIndex {
               commit = typeof rec.reviewedCommit === "string" && HEX40.test(rec.reviewedCommit) ? rec.reviewedCommit : null;
               const m = isObj(rec.runManifest) ? rec.runManifest : {};
               createdAt = isoOrNull(m.startedAt) ?? isoOrNull(m.createdAt) ?? isoOrNull(m.finishedAt);
-              summary = {reviewerIdentity: typeof rec.reviewerIdentity === "string" ? rec.reviewerIdentity.slice(0, 80) : null, cycle: Number.isSafeInteger(rec.cycle) ? rec.cycle : null, recordedHashPresent: recorded !== null};
+              // Önce redaksiyon (girdinin ilk 4096 karakteri), sonra 80 karakter: kesilmiş yarım bir yol kalıplardan kaçamaz.
+              summary = {reviewerIdentity: typeof rec.reviewerIdentity === "string" ? this.scrub(rec.reviewerIdentity.slice(0, 4096)).slice(0, 80) : null, cycle: Number.isSafeInteger(rec.cycle) ? rec.cycle : null, recordedHashPresent: recorded !== null};
               const fb = isObj(rec.frozenBundle) ? rec.frozenBundle : null;
               const bundleOk = fb === null || typeof rec.bundleDigest !== "string" || fb.bundleDigest === rec.bundleDigest;
               if (recorded === null || typeof rec.reviewResultText !== "string") outcome = {sha256: h.sha256, sizeBytes: h.bytes, status: "UNVERIFIABLE", basis, reason: "NO_RECORDED_HASH"};
