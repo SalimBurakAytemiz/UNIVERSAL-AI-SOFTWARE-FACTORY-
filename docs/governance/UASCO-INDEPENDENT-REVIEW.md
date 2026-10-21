@@ -93,23 +93,48 @@ Do the steps in this order. Steps 1–6 can be done before any merge.
 
 ## Troubleshooting: the reviewer gave no verdict
 
-<!-- //TR: Reviewer karar üretmediğinde (ör. VERDICT_MISSING) nedeni gösteren sabit teşhis kodları ve her birinin çözümü; teşhis yalnız ek blokaj nedenidir, kontrolü asla geçirmez. -->
-The reviewer's full output stays hidden (`show_full_output` is off: it can hold PR content or secrets). Instead the `reviewer-diagnose` step in `ai-review` reads the last `result` message of the action's execution file (at most 4 MiB) in memory and writes only `{code, isError, turns, durationMs, modelUsed}` to `uasco-verdict/reviewer-diagnostics.json`, plus one fixed line in the job summary. No text of that output is copied anywhere. The step never fails the job.
+<!-- //TR: Reviewer karar üretmediğinde (ör. VERDICT_MISSING) nedeni gösteren sabit teşhis kodları ve her birinin çözümü; kod önce yürütme kaydının izinli listedeki tipli alanlarından (HTTP durumu, hata türü, anahtar kaynağı), ancak bunlar karar vermezse sabit metin desenlerinden belirlenir; hiçbir metin kopyalanmaz; teşhis yalnız ek blokaj nedenidir, kontrolü asla geçirmez. -->
+The reviewer's full output stays hidden (`show_full_output` is off: it can hold PR content or secrets). Instead the `reviewer-diagnose` step in `ai-review` reads the action's execution file (at most 4 MiB) in memory and writes only a fixed-shape record to `uasco-verdict/reviewer-diagnostics.json`, plus one fixed line in the job summary (`UASCO reviewer diagnosis: <code>`). No text of that output is copied anywhere. The step never fails the job.
+
+The record has exactly these keys, in this order (`REVIEWER_DIAGNOSTIC_KEYS` in `scripts/ci/uasco-review/review-gate.mjs`):
+
+| Key | Value | Source |
+|---|---|---|
+| `code` | one of the codes below | the classification |
+| `isError` | boolean | last `result` message, `is_error === true` |
+| `numTurns`, `durationMs` | integer 0..10^12 or `null` | last `result` message, `num_turns`, `duration_ms` |
+| `modelUsed` | boolean | last `result` message: non-empty `modelUsage` or a cost above 0 |
+| `apiErrorStatus` | integer 100..599 or `null` | last `result` message, `api_error_status`; any other value (text, fraction, huge or negative number) is `null` |
+| `errorKind` | allow-listed enum, `"OTHER"` or `null` | `error` of the last `assistant` message of that turn (SDK `SDKAssistantMessageError`) |
+| `terminalReason` | allow-listed enum, `"OTHER"` or `null` | last `result` message, `terminal_reason` (SDK `TerminalReason`) |
+| `apiKeySource` | allow-listed enum, `"OTHER"` or `null` | `apiKeySource` of the last `system`/`init` message (SDK `ApiKeySource`) |
+| `apiError` | allow-listed enum, `"OTHER"` or `null` | last `result` message, `api_error` (CLI result schema) |
+| `apiErrorOrigin` | `"first_party"`, `"OTHER"` or `null` | last `result` message, `api_error_origin` (CLI result schema) |
+
+The typed fields are read only as own properties with these names. An absent or `null` field is `null`; any value that is not a member of the field's allow-list (an unknown member, text, a number, an object) becomes `"OTHER"`, so no text can pass through. The allow-lists (`REVIEWER_TYPED_ALLOW_LISTS`) are copied from `@anthropic-ai/claude-agent-sdk` 0.3.304 `sdk.d.ts` (identical in 0.3.306) and, for the internal `api_error` and `api_error_origin` fields, from the result schema of the pinned Claude Code CLI 2.1.304 (identical in 2.1.306).
+
+The code is decided from the typed fields first, only for a run whose record says `is_error`, in this order: `oauth_org_not_allowed`; `account_on_hold`, `verification_required` or `billing_error`; `invalid_credential_header` without a status; status 401; status 403; `authentication_failed` without status or `api_error` and with `apiKeySource` `none`. When none of these applies, the fixed text patterns of CLI and API error messages decide exactly as before (auth, then model, then quota, then a run that used the model, then schema, then unclassified). The text-only `REVIEWER_AUTH_REJECTED` is therefore weaker evidence than the typed codes.
 
 Only when no verdict was delivered (`VERDICT_MISSING`, or the `VERDICT_UNREADABLE` placeholder) does `finish` add the code after the other blocking reasons, with its remedy in the check summary. A delivered verdict (CLEAN or negative, malformed, or rejected for credential-shaped text) is never annotated: its decision, reasons and digest stay exactly as without a diagnosis. A diagnosis can only add a reason: it never removes one and never turns a failure into success. An unknown or malformed code is ignored. A missing verdict is not a rejection, so the next review needs no Founder approval.
 
-| Code | Meaning | Remedy |
-|---|---|---|
-| `REVIEWER_AUTH_REJECTED` | The credential was rejected (invalid key, expired or revoked OAuth token, 401, "please run /login"). | Regenerate the reviewer token (`claude setup-token`) into the `uasco-review` environment secret `CLAUDE_CODE_OAUTH_TOKEN`, then start a new review. |
-| `REVIEWER_MODEL_UNAVAILABLE` | The requested model was not found or is not available to the credential. | Correct or clear the repository variable `UASCO_REVIEW_MODEL`, then start a new review. |
-| `REVIEWER_QUOTA_OR_RATE_LIMIT` | Usage limit, quota, credit balance, rate limit (429) or overload (529). | Wait until the limit resets, then start a new review. |
-| `REVIEWER_SCHEMA_REJECTED` | The API refused the verdict schema passed with `--json-schema` (for example an immediate 400 `invalid_request_error`, with no model usage). Matched only on an error, after the three causes above, and never for a run that used the model. | Fix the schema in `scripts/ci/uasco-review` (`verdict.schema.json`) and merge the fix (the workflow runs from the default branch); no credential change is needed. Then start a new review. |
-| `REVIEWER_NO_STRUCTURED_OUTPUT` | The reviewer ran but returned no schema-valid verdict (for example it reached its turn limit). | Start a new review; if it repeats, split the PR. |
-| `REVIEWER_ERROR_UNCLASSIFIED` | An error that matches none of the above. | Check the `ai-review` job log of the run, then start a new review. |
-| `REVIEWER_OUTPUT_UNREADABLE` | The execution file was missing, empty, oversized, malformed or had no `result` message (the reviewer may not have started). | Check the `ai-review` job log of the run, then start a new review. |
-| `REVIEWER_OK` | The reviewer returned structured output. Never a blocking reason. | None. |
+| Code | Typed trigger (or text) | Meaning | Remedy |
+|---|---|---|---|
+| `REVIEWER_AUTH_HTTP_401` | `apiErrorStatus` 401 (usually with `errorKind` `authentication_failed`) | The request reached the Anthropic API and the credential was refused with HTTP 401. A revoked or wrongly stored token gives this too; for a `claude setup-token` OAuth token in claude-code-action it is the open upstream issue anthropics/claude-code-action#1613. | Regenerating the setup-token did not fix #1613, so another regeneration is not expected to help. The alternatives are Founder decisions: a Console API key (`ANTHROPIC_API_KEY`, billed per token) or workload identity federation. No secret value is needed for the diagnosis. Then start a new review. |
+| `REVIEWER_AUTH_HTTP_403` | `apiErrorStatus` 403 | The credential was recognised but this request is not allowed (for example no entitlement to Claude Code or to the model in `UASCO_REVIEW_MODEL`). | A new token does not change an entitlement. Check the account's plan and access, or correct or clear `UASCO_REVIEW_MODEL`, then start a new review. |
+| `REVIEWER_OAUTH_ORG_DISABLED` | `errorKind` `oauth_org_not_allowed` (any status) | The account's organization disabled Claude subscription (OAuth) access for Claude Code. | A new token cannot fix it. An organization admin enables the access, or the Founder decides on a Console API key; then start a new review. |
+| `REVIEWER_CREDENTIAL_MALFORMED` | `apiError` `invalid_credential_header` and no status | The CLI rejected the credential locally: it is not a valid HTTP header value, so no request was sent (for example a line break or space copied into the secret). | Store `CLAUDE_CODE_OAUTH_TOKEN` again from standard input without surrounding whitespace (`gh secret set CLAUDE_CODE_OAUTH_TOKEN --env uasco-review`), then start a new review. |
+| `REVIEWER_NOT_LOGGED_IN` | `errorKind` `authentication_failed`, no status, no `apiError`, `apiKeySource` `none` | No usable credential reached the CLI: authentication failed before any HTTP response, with no API key in use. | Check that the `uasco-review` environment defines `CLAUDE_CODE_OAUTH_TOKEN` and that `ai-review` runs in it (the value is never needed for the diagnosis), then start a new review. |
+| `REVIEWER_ACCOUNT_BLOCKED` | `errorKind` `account_on_hold`, `verification_required` or `billing_error` (any status) | The account is on hold, needs organization verification, or has a billing problem. | A new token cannot fix it. The account owner resolves it in the Claude or Anthropic Console account settings, then start a new review. |
+| `REVIEWER_AUTH_REJECTED` | text only: an authentication-related error text, no typed rule applied | Some auth-family failure (invalid key, expired or revoked OAuth token, "please run /login"), not proven by a typed field. | If the token was not regenerated yet, store a new one (`claude setup-token`) into the `uasco-review` environment secret `CLAUDE_CODE_OAUTH_TOKEN`, then start a new review. |
+| `REVIEWER_MODEL_UNAVAILABLE` | text | The requested model was not found or is not available to the credential. | Correct or clear the repository variable `UASCO_REVIEW_MODEL`, then start a new review. |
+| `REVIEWER_QUOTA_OR_RATE_LIMIT` | text | Usage limit, quota, credit balance, rate limit (429) or overload (529). | Wait until the limit resets, then start a new review. |
+| `REVIEWER_SCHEMA_REJECTED` | text | The API refused the verdict schema passed with `--json-schema` (for example an immediate 400 `invalid_request_error`, with no model usage). Matched only on an error, after the three text causes above, and never for a run that used the model. | Fix the schema in `scripts/ci/uasco-review` (`verdict.schema.json`) and merge the fix (the workflow runs from the default branch); no credential change is needed. Then start a new review. |
+| `REVIEWER_NO_STRUCTURED_OUTPUT` | no error, or a run that used the model | The reviewer ran but returned no schema-valid verdict (for example it reached its turn limit). | Start a new review; if it repeats, split the PR. |
+| `REVIEWER_ERROR_UNCLASSIFIED` | an error matching none of the above | An error that matches none of the above (the record's typed fields still show what is known). | Check the `ai-review` job log of the run, then start a new review. |
+| `REVIEWER_OUTPUT_UNREADABLE` | no usable record | The execution file was missing, empty, oversized, malformed or had no `result` message (the reviewer may not have started). | Check the `ai-review` job log of the run, then start a new review. |
+| `REVIEWER_OK` | no error and structured output | The reviewer returned structured output. Never a blocking reason. | None. |
 
-"Start a new review" means "Re-run all jobs" or "Run workflow" with the PR number (a concluded check is never changed). The classification only uses fixed text patterns of CLI and API error messages, and only when the record says the run ended in an error; it explains a failure, it does not make the reviewer succeed.
+"Start a new review" means "Re-run all jobs" or "Run workflow" with the PR number (a concluded check is never changed). The classification explains a failure; it does not make the reviewer succeed. No remedy ever asks for a secret value.
 
 ## Limits and residual risks (honest)
 

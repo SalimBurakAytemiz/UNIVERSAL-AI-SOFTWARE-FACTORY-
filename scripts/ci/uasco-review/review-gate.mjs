@@ -100,16 +100,60 @@ export function preGate(evidence) {
   return {blockers: kept.filter(x => !AUTHORITY_CODE.test(x)), authority: kept.filter(x => AUTHORITY_CODE.test(x)), headSha: mg.expectedHeadSha, baseSha: mg.expectedBaseSha};
 }
 
-// //TR: Reviewer teşhisi: claude-code-action'ın yürütme kaydındaki son "result" mesajı yalnız bellekte, sabit desenlerle tek bir sabit koda sınıflandırılır; kaydın hiçbir metni (PR içeriği, prompt injection veya sır taşıyabilir) kopyalanmaz, yazılmaz ya da yayımlanmaz. Teşhis yalnız hiç karar teslim edilmediğinde (karar yok veya okunamadı) ek bir blokaj nedeni ve sabit bir çözüm cümlesi ekler; teslim edilmiş bir kararı (olumlu, olumsuz, bozuk veya sır içeren) asla etkilemez, hiçbir nedeni silemez ve bir başarısızlığı asla başarıya çeviremez.
-// Reviewer diagnosis: why the reviewer step gave no usable verdict, as one fixed code. Only these codes and the remedies below are ever written or published;
-// no text of the execution record leaves memory. REVIEWER_OK is never a blocking reason.
-export const REVIEWER_DIAGNOSTIC_CODES = Object.freeze(["REVIEWER_OK", "REVIEWER_AUTH_REJECTED", "REVIEWER_MODEL_UNAVAILABLE", "REVIEWER_QUOTA_OR_RATE_LIMIT",
-  "REVIEWER_SCHEMA_REJECTED", "REVIEWER_NO_STRUCTURED_OUTPUT", "REVIEWER_ERROR_UNCLASSIFIED", "REVIEWER_OUTPUT_UNREADABLE"]);
-export const REVIEWER_DIAGNOSTIC_KEYS = Object.freeze(["code", "isError", "turns", "durationMs", "modelUsed"]);
+// //TR: Reviewer teşhisi: claude-code-action'ın yürütme kaydı yalnız bellekte okunur. Önce yalnız izinli listedeki tipli alanlar alınır (son "result" mesajından api_error_status 100..599 tam sayısı, terminal_reason, api_error, api_error_origin; son "assistant" mesajından error; "init" mesajından apiKeySource); liste dışı her değer "OTHER", yok olan null olur, hiçbir serbest metin kopyalanmaz. Kod önce bu tipli alanlardan (401, 403, OAuth org kapalı, bozuk kimlik başlığı, giriş yok, hesap engelli), ancak hiçbiri uymazsa eski sabit metin desenlerinden belirlenir. Kaydın hiçbir metni (PR içeriği, prompt injection veya sır taşıyabilir) yazılmaz ya da yayımlanmaz. Teşhis yalnız hiç karar teslim edilmediğinde (karar yok veya okunamadı) ek bir blokaj nedeni ve sabit bir çözüm cümlesi ekler; teslim edilmiş bir kararı (olumlu, olumsuz, bozuk veya sır içeren) asla etkilemez, hiçbir nedeni silemez ve bir başarısızlığı asla başarıya çeviremez.
+// Reviewer diagnosis: why the reviewer step gave no usable verdict, as one fixed code. Only these codes, the remedies below and allow-listed typed values
+// (an HTTP status integer and enum members, or "OTHER") are ever written or published; no text of the execution record leaves memory. REVIEWER_OK is never a blocking reason.
+export const REVIEWER_DIAGNOSTIC_CODES = Object.freeze(["REVIEWER_OK", "REVIEWER_AUTH_HTTP_401", "REVIEWER_AUTH_HTTP_403", "REVIEWER_OAUTH_ORG_DISABLED", "REVIEWER_CREDENTIAL_MALFORMED",
+  "REVIEWER_NOT_LOGGED_IN", "REVIEWER_ACCOUNT_BLOCKED", "REVIEWER_AUTH_REJECTED", "REVIEWER_MODEL_UNAVAILABLE", "REVIEWER_QUOTA_OR_RATE_LIMIT", "REVIEWER_SCHEMA_REJECTED",
+  "REVIEWER_NO_STRUCTURED_OUTPUT", "REVIEWER_ERROR_UNCLASSIFIED", "REVIEWER_OUTPUT_UNREADABLE"]);
+// The fixed record shape, in this order: code (one of the codes above), isError (boolean), numTurns and durationMs (integer or null), modelUsed (boolean),
+// apiErrorStatus (integer 100..599 or null), errorKind, terminalReason, apiKeySource, apiError, apiErrorOrigin (a member of its allow-list, "OTHER" or null).
+export const REVIEWER_DIAGNOSTIC_KEYS = Object.freeze(["code", "isError", "numTurns", "durationMs", "modelUsed", "apiErrorStatus", "errorKind", "terminalReason", "apiKeySource",
+  "apiError", "apiErrorOrigin"]);
+// Allow-lists of the typed fields, copied from @anthropic-ai/claude-agent-sdk 0.3.304 sdk.d.ts (identical in 0.3.306): SDKAssistantMessageError (line 3757),
+// TerminalReason (line 9925), ApiKeySource (line 135). api_error and api_error_origin are @internal result fields, so they are taken from the zod schema in the
+// pinned Claude Code 2.1.304 CLI (identical in 2.1.306). Any other value becomes "OTHER": an unknown member is never copied, so no text can pass through.
+export const REVIEWER_TYPED_ALLOW_LISTS = Object.freeze({
+  errorKind: Object.freeze(["authentication_failed", "oauth_org_not_allowed", "account_on_hold", "verification_required", "billing_error", "rate_limit", "overloaded",
+    "invalid_request", "model_not_found", "server_error", "unknown", "max_output_tokens", "cloud_credential_error"]),
+  terminalReason: Object.freeze(["blocking_limit", "rapid_refill_breaker", "prompt_too_long", "image_error", "model_error", "api_error", "malformed_tool_use_exhausted",
+    "aborted_streaming", "aborted_tools", "stop_hook_prevented", "hook_stopped", "tool_deferred", "max_turns", "background_requested", "completed", "budget_exhausted",
+    "structured_output_retry_exhausted", "tool_deferred_unavailable", "turn_setup_failed"]),
+  apiKeySource: Object.freeze(["ANTHROPIC_API_KEY", "apiKeyHelper", "/login managed key", "none", "user", "project", "org", "temporary", "oauth"]),
+  apiError: Object.freeze(["max_output_tokens", "dlp_request_denied", "claude_code_version_too_old", "safety_monitor_blocked", "effort_requires_thinking", "advisor_incompatible",
+    "tool_history_mismatch", "autocompact_thrashing", "pdf_too_large", "pdf_password_protected", "media_removed", "no_response", "tls_untrusted_ca", "gateway_content_type",
+    "provider_credentials", "gateway_signin_required", "gateway_session_expired", "api_key_auth_disabled", "org_disabled_credential", "invalid_credential_header",
+    "model_requires_usage_credits", "long_context_credits_required", "consent_unanswered", "no_allowed_fallback", "model_substitution_disabled", "field_not_granted",
+    "usage_limit_reached"]),
+  apiErrorOrigin: Object.freeze(["first_party"])});
+// The account-level refusals of SDKAssistantMessageError: no credential change can fix them.
+const ACCOUNT_BLOCKED_KINDS = Object.freeze(["account_on_hold", "verification_required", "billing_error"]);
 export const EXECUTION_FILE_MAX_BYTES = 4 * 1024 * 1024;
 const RERUN = "then start a new review (Re-run all jobs, or Run workflow with the PR number).";
 export const REVIEWER_REMEDIES = Object.freeze({
-  REVIEWER_AUTH_REJECTED: `The reviewer credential was rejected. Regenerate the reviewer token (claude setup-token) into the review environment secret CLAUDE_CODE_OAUTH_TOKEN, ${RERUN}`,
+  REVIEWER_AUTH_HTTP_401: "The Anthropic API refused the reviewer credential with HTTP 401 (a typed status in the execution record: the request was sent and answered). "
+    + "A revoked or wrongly stored token gives this status too, but for a claude setup-token OAuth token in claude-code-action it is the known open upstream issue "
+    + "anthropics/claude-code-action#1613, where regenerating the setup-token did not fix it, so another regeneration is not expected to help. "
+    + "The alternatives are Founder decisions: a Console API key (ANTHROPIC_API_KEY, billed per token) or workload identity federation. "
+    + `No secret value is needed for this diagnosis. After the decision, ${RERUN}`,
+  REVIEWER_AUTH_HTTP_403: "The Anthropic API refused the reviewer request with HTTP 403 (a typed status): the credential was recognised but is not allowed this request, "
+    + "for example the account or organization is not entitled to Claude Code or to the model in UASCO_REVIEW_MODEL. A new token does not change an entitlement. "
+    + `Check the account's plan and access, or correct or clear the repository variable UASCO_REVIEW_MODEL, ${RERUN}`,
+  REVIEWER_OAUTH_ORG_DISABLED: "The reviewer account's organization has disabled Claude subscription (OAuth) access for Claude Code (typed error oauth_org_not_allowed). "
+    + "A new token cannot fix this. An organization admin must enable that access, or the Founder decides on a Console API key (ANTHROPIC_API_KEY) instead; "
+    + RERUN,
+  REVIEWER_CREDENTIAL_MALFORMED: "The CLI rejected the reviewer credential locally because it is not a valid HTTP header value (typed api_error invalid_credential_header; "
+    + "no request was sent). The stored secret CLAUDE_CODE_OAUTH_TOKEN most likely holds a line break, a space or another character picked up when it was copied. "
+    + `Store it again from standard input without surrounding whitespace (gh secret set CLAUDE_CODE_OAUTH_TOKEN --env uasco-review), ${RERUN}`,
+  REVIEWER_NOT_LOGGED_IN: "No usable credential reached the reviewer CLI: authentication failed before any HTTP response, with no API key in use "
+    + "(typed error authentication_failed, no status, apiKeySource none). Check that the uasco-review environment defines the secret CLAUDE_CODE_OAUTH_TOKEN and that "
+    + `the ai-review job runs in that environment (the value itself is never needed for this diagnosis), ${RERUN}`,
+  REVIEWER_ACCOUNT_BLOCKED: "The reviewer account cannot be used: it is on hold, needs organization verification, or has a billing problem (typed error account_on_hold, "
+    + "verification_required or billing_error). A new token cannot fix this. The account owner must resolve it in the Claude or Anthropic Console account settings, "
+    + RERUN,
+  REVIEWER_AUTH_REJECTED: "The reviewer failed with an authentication-related error text but without a typed HTTP status or error kind, so the cause is not proven "
+    + "(a rejected, missing or malformed credential all look alike here). If the token was not regenerated yet, store a new one (claude setup-token) into the review "
+    + `environment secret CLAUDE_CODE_OAUTH_TOKEN, ${RERUN}`,
   REVIEWER_MODEL_UNAVAILABLE: `The requested reviewer model is not available to this credential. Correct or clear the repository variable UASCO_REVIEW_MODEL, ${RERUN}`,
   REVIEWER_QUOTA_OR_RATE_LIMIT: `The reviewer hit a usage, quota or rate limit, or the service was overloaded. Wait until the limit resets, ${RERUN}`,
   // The workflow runs from the default branch, so the schema fix must be merged into v7/integration before a new review can use it.
@@ -117,8 +161,8 @@ export const REVIEWER_REMEDIES = Object.freeze({
   REVIEWER_NO_STRUCTURED_OUTPUT: "The reviewer ran but returned no schema-valid verdict (for example it reached its turn limit). Start a new review; if this repeats, split the PR into smaller changes.",
   REVIEWER_ERROR_UNCLASSIFIED: `The reviewer failed with an error that matches no known cause. Check the ai-review job log of this run (the reviewer output itself is never published), ${RERUN}`,
   REVIEWER_OUTPUT_UNREADABLE: `The reviewer's execution record was missing or unreadable (the reviewer may not have started). Check the ai-review job log of this run, ${RERUN}`});
-// Error texts of the CLI and the API. They are matched only when the record says is_error: the final text of a run without an error is the model's own
-// output (shaped by the reviewed PR), so it is never used. Every quantifier is bounded.
+// Error texts of the CLI and the API: the fallback when no typed field decides. They are matched only when the record says is_error: the final text of a run
+// without an error is the model's own output (shaped by the reviewed PR), so it is never used. Every quantifier is bounded.
 const AUTH_RE = /invalid[ _-]?(?:api[ _-]?key|x-api-key|bearer|token|credential|auth)|authenticat|unauthori[sz]ed|\b401\b|oauth|token (?:has )?(?:expired|been revoked|revoked)|(?:expired|revoked) (?:oauth )?token|\/login\b|\blog ?in\b|not logged in/i;
 const MODEL_RE = /\bmodel\b[^\n]{0,160}?(?:not[ _]found|not available|unavailable|does(?: not|n't) exist|may not exist|not supported|unsupported|not have access)|(?:unknown|invalid|unsupported|unavailable) model\b|issue with the selected model|not_found_error[\s\S]{0,300}?\bmodel\b|\bmodel\b[\s\S]{0,300}?not_found_error|\b404\b[\s\S]{0,300}?\bmodel\b|\bmodel\b[\s\S]{0,300}?\b404\b/i;
 const QUOTA_RE = /credit balance|\bquota\b|usage limit|rate[ _-]?limit|\b429\b|overloaded|\b529\b|too many requests|limit reached/i;
@@ -126,8 +170,28 @@ const QUOTA_RE = /credit balance|\bquota\b|usage limit|rate[ _-]?limit|\b429\b|o
 const SCHEMA_TERM = "(?:json[ _-]?schema|input_schema|output_format|structured[ _-]?output)", SCHEMA_REFUSAL = "(?:invalid|not supported|unsupported|not allowed|rejected|error)";
 const SCHEMA_RE = new RegExp(`${SCHEMA_TERM}[\\s\\S]{0,200}?${SCHEMA_REFUSAL}|${SCHEMA_REFUSAL}[\\s\\S]{0,200}?${SCHEMA_TERM}`, "i");
 const count = v => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1e12 ? Math.round(v) : null;
-const diagnosis = (code, isError, turns, durationMs, modelUsed) => ({code, isError, turns, durationMs, modelUsed});
-// raw = the execution file's text (a JSON array of SDK messages) or null. The LAST {"type":"result"} message is classified. Never throws.
+// Only own properties are read (never anything inherited), and only these field names.
+const own = (o, k) => isObj(o) && Object.hasOwn(o, k) ? o[k] : undefined;
+// An HTTP status is kept only as an integer 100..599; anything else (text, fractions, huge or negative numbers) is null.
+const httpStatus = v => Number.isSafeInteger(v) && v >= 100 && v <= 599 ? v : null;
+// An enum field: absent or null stays null; an allow-listed string is kept; any other value (unknown member, text, number, object) is "OTHER".
+const member = (v, list) => v === undefined || v === null ? null : isStr(v) && list.includes(v) ? v : "OTHER";
+const NO_TYPED = Object.freeze({apiErrorStatus: null, errorKind: null, terminalReason: null, apiKeySource: null, apiError: null, apiErrorOrigin: null});
+const diagnosis = (code, isError, numTurns, durationMs, modelUsed, t = NO_TYPED) => ({code, isError, numTurns, durationMs, modelUsed, apiErrorStatus: t.apiErrorStatus,
+  errorKind: t.errorKind, terminalReason: t.terminalReason, apiKeySource: t.apiKeySource, apiError: t.apiError, apiErrorOrigin: t.apiErrorOrigin});
+// The code the typed fields alone decide, or null (then the fixed text patterns are the fallback). Most specific first: an account-level refusal or a local
+// header refusal outranks the status it came with; a typed 401 or 403 outranks any text.
+function typedCode(t) {
+  if (t.errorKind === "oauth_org_not_allowed") return "REVIEWER_OAUTH_ORG_DISABLED";
+  if (ACCOUNT_BLOCKED_KINDS.includes(t.errorKind)) return "REVIEWER_ACCOUNT_BLOCKED";
+  if (t.apiError === "invalid_credential_header" && t.apiErrorStatus === null) return "REVIEWER_CREDENTIAL_MALFORMED";
+  if (t.apiErrorStatus === 401) return "REVIEWER_AUTH_HTTP_401";
+  if (t.apiErrorStatus === 403) return "REVIEWER_AUTH_HTTP_403";
+  if (t.errorKind === "authentication_failed" && t.apiErrorStatus === null && t.apiError === null && t.apiKeySource === "none") return "REVIEWER_NOT_LOGGED_IN";
+  return null;
+}
+// raw = the execution file's text (a JSON array of SDK messages) or null. The LAST {"type":"result"} message is classified, with the last assistant message of
+// its turn and the last init message before it. Never throws.
 export function diagnoseReviewerOutput(raw) {
   const unreadable = diagnosis("REVIEWER_OUTPUT_UNREADABLE", true, null, null, false);
   try {
@@ -135,13 +199,29 @@ export function diagnoseReviewerOutput(raw) {
     let msgs;
     try { msgs = JSON.parse(raw); } catch { return unreadable; }
     if (!Array.isArray(msgs)) return unreadable;
-    let res = null;
-    for (let i = msgs.length - 1; i >= 0 && res === null; i--) if (isObj(msgs[i]) && msgs[i].type === "result") res = msgs[i];
-    if (res === null) return unreadable;
+    let ri = -1;
+    for (let i = msgs.length - 1; i >= 0 && ri < 0; i--) if (isObj(msgs[i]) && msgs[i].type === "result") ri = i;
+    if (ri < 0) return unreadable;
+    const res = msgs[ri];
+    // The assistant message must belong to the turn this result concludes (none after an earlier result); the init message may come from any earlier turn.
+    let asst = null, init = null, sameTurn = true;
+    for (let i = ri - 1; i >= 0 && (asst === null || init === null); i--) {
+      const m = msgs[i];
+      if (!isObj(m)) continue;
+      if (m.type === "result") sameTurn = false;
+      else if (asst === null && sameTurn && m.type === "assistant") asst = m;
+      else if (init === null && m.type === "system" && m.subtype === "init") init = m;
+    }
+    const L = REVIEWER_TYPED_ALLOW_LISTS;
+    const t = {apiErrorStatus: httpStatus(own(res, "api_error_status")), errorKind: member(own(asst, "error"), L.errorKind),
+      terminalReason: member(own(res, "terminal_reason"), L.terminalReason), apiKeySource: member(own(init, "apiKeySource"), L.apiKeySource),
+      apiError: member(own(res, "api_error"), L.apiError), apiErrorOrigin: member(own(res, "api_error_origin"), L.apiErrorOrigin)};
     const isError = res.is_error === true;
     const modelUsed = (isObj(res.modelUsage) && Object.keys(res.modelUsage).length > 0) || (typeof res.total_cost_usd === "number" && res.total_cost_usd > 0);
-    const at = code => diagnosis(code, isError, count(res.num_turns), count(res.duration_ms), modelUsed);
+    const at = code => diagnosis(code, isError, count(res.num_turns), count(res.duration_ms), modelUsed, t);
     if (!isError) return at(res.subtype === "success" && res.structured_output !== undefined && res.structured_output !== null ? "REVIEWER_OK" : "REVIEWER_NO_STRUCTURED_OUTPUT");
+    const typed = typedCode(t);
+    if (typed !== null) return at(typed);
     const text = [res.result, ...(Array.isArray(res.errors) ? res.errors : [])].filter(isStr).join("\n").slice(0, 65536);
     if (AUTH_RE.test(text)) return at("REVIEWER_AUTH_REJECTED");
     if (MODEL_RE.test(text)) return at("REVIEWER_MODEL_UNAVAILABLE");

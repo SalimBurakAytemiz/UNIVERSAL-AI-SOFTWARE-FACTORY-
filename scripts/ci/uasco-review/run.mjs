@@ -166,9 +166,10 @@ async function verdictUnreadableStep() {
   fs.writeFileSync(path.join(dir, "verdict.json"), JSON.stringify({rejected: "VERDICT_UNREADABLE", negative: true}));
 }
 
-// //TR: reviewer-diagnose: reviewer adımının yürütme kaydı (yalnız EXECUTION_FILE ortam değişkenindeki yol, argv metni asla) en fazla 4 MiB okunur ve yalnız bellekte sabit bir koda sınıflandırılır; diske yalnız beş sabit anahtarlı kayıt, adım özetine yalnız tek sabit satır yazılır ve bu adım işi hiçbir koşulda başarısız yapmaz.
-// ai-review, always after the reviewer step: why did it give (or not give) a verdict? Only the fixed five-key record and one fixed summary line are written;
-// no text of the execution record leaves memory (it can hold PR content, prompt injection or secrets). This step never fails the job.
+// //TR: reviewer-diagnose: reviewer adımının yürütme kaydı (yalnız EXECUTION_FILE ortam değişkenindeki yol, argv metni asla) en fazla 4 MiB okunur ve yalnız bellekte sabit bir koda sınıflandırılır; diske yalnız sabit anahtarlı kayıt (sabit kod, sayaçlar ve izinli listeden tipli değerler; hiçbir metin), adım özetine yalnız tek sabit satır yazılır ve bu adım işi hiçbir koşulda başarısız yapmaz.
+// ai-review, always after the reviewer step: why did it give (or not give) a verdict? Only the fixed-key record (REVIEWER_DIAGNOSTIC_KEYS: the code, counts and
+// allow-listed typed values) and one fixed summary line are written; no text of the execution record leaves memory (it can hold PR content, prompt injection
+// or secrets). This step never fails the job.
 async function reviewerDiagnoseStep() {
   let d;
   try { d = diagnoseReviewerOutput(readCapped(env("EXECUTION_FILE"), EXECUTION_FILE_MAX_BYTES)); } catch { d = diagnoseReviewerOutput(null); }
