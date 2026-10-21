@@ -212,18 +212,28 @@
       "id": "PQ-006",
       "source": "UASCO-AUD-130 (P3)",
       "title": "Make the two host-sensitive tests robust without weakening them",
-      "status": "HOLD_CAPACITY",
+      "status": "IN_PROGRESS",
       "base": "v7/integration",
       "files": [
         "tests/v7-b10a-evidence.test.ts",
-        "tests/v7-b2-workos-hardening.test.ts"
+        "tests/v7-b2-workos-hardening.test.ts",
+        "core/evidence/index.ts"
       ],
       "testFile": "tests/v7-b10a-evidence.test.ts",
       "acceptance": [
         "Replace the substring home-path leak check with a precise absolute-path check that still fails on any real leak. Prove this with a deliberate leak (mutation) that must fail.",
         "Make the unix-socket test independent of a long TMPDIR by using a short dedicated temp root. Never skip it and never raise timeouts.",
-        "Both files pass with HOME=/root and with a long TMPDIR. The pass/fail count before and after is recorded."
-      ]
+        "Both files pass with HOME=/root and with a long TMPDIR. The pass/fail count before and after is recorded.",
+        "Product fix (Founder scope extension 2026-10-21): the Evidence API never returns a real absolute user-directory path, including /root, /home/<u>, /Users/<u>, the real os.homedir() and Windows C:\\Users\\<u> in any spelling (case, forward slashes, JSON-escaped backslashes).",
+        "Positive and negative tests for Linux and Windows path forms; a mutation of the scrubber must fail them; related evidence regression tests stay green; no existing test weakened or skipped."
+      ],
+      "branch": "claude/pq-006",
+      "claimSha": "e80061a373397e47581c972c4c6078cc60c99c02",
+      "startedAt": "2026-10-21T05:49:22.000Z",
+      "wipSha": "2d9827c4d4d6bfab61d7ba8dbb5401873b740c6f",
+      "blockedHistory": "Worker 05:51Z: BLOCKED, core/evidence/index.ts outside files; the scrubber masks only /home/* and /Users/*, so HOME=/root leaks home=/root. WIP 2d9827c kept.",
+      "scopeExtension": "Founder 2026-10-21 (in the coordinator session): core/evidence/index.ts added to PQ-006; product fix required; keep the WIP commit; finish on the same branch; draft PR; independent review; no merge.",
+      "owner": "coordinator https://claude.ai/code/session_01DmTHw4gBA3wvY1tKM9bk2e (completing the worker WIP)"
     },
     {
       "id": "PQ-008",
@@ -482,7 +492,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T05:01:21.637Z",
+    "at": "2026-10-21T06:24:30.148Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -496,7 +506,7 @@
       132,
       133
     ],
-    "next": "Worker next tick: PQ-006, then PQ-011, PQ-012 (queue WIP 8/10).",
+    "next": "Worker next tick: PQ-011, then PQ-012. PQ-006 is completed by the coordinator on claude/pq-006.",
     "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
