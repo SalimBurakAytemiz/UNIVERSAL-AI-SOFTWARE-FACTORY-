@@ -845,7 +845,8 @@
       "status": "OPEN_FOR_REVIEW",
       "change": "API-compatible verdict schema (unsupported minLength/maxLength/maxItems/minimum stripped, gate enforces all of them) + fixed-code reviewer diagnosis; proof 170/170",
       "note": "cause of run 39619436696 unproven until a real run; takes effect only after a Founder merge (workflow runs from the default branch); no auto-merge until the App check passes and is required"
-    }
+    },
+    "reviewerFix": "PR #144 merged 467b52d; first new-reviewer run pending Founder founder-authority on #143 (run 39668010636)"
   },
   "baseCi": {
     "head": "bd5ce9b",
@@ -895,24 +896,26 @@
     },
     "COORD-FIRST-DELIVERY-WIRING": {
       "branch": "claude/coord-first-delivery-wiring",
-      "head": "de3c6fb",
+      "head": "abf4738",
       "status": "PR_OPEN",
       "pr": 143,
       "tests": "b1 + b5 + ps1b 255/255 (coordinator re-run at de3c6fb); tsc/TR/secret/architecture/trust-root PASS; real Electron E2E Linux PASS 12/12: 3x at f121b01, 3x at 675a441, 2x at de3c6fb; Windows Electron NOT_EXECUTED",
       "note": "Founder approval in principle 2026-10-21; protected server.ts + main.mjs + trust-root reseal; founder-authority on hold by Founder; merge only after Independent Review passes",
       "preReview": "coordinator adversarial pre-review (NOT the Independent Review): 17 candidates, 10 confirmed + 2 split, all fixed in 675a441 (mutation-proven); verification of 675a441 confirmed 3 more (flow REVIEW DONE for an invalidated/stale CLEAN; quarantine copy not durable before truncate) + 1 weak test, fixed in de3c6fb",
-      "review": "Independent Review run 39637757470 on f121b01 failed closed (STALE_HEAD, FOUNDER_AUTHORITY_REQUIRED, PROTECTED_PATH, VERDICT_MISSING from the old reviewer); re-review after #144 merges",
-      "ci": "de3c6fb run 39657065337: Linux + shards 1/2 green; shard 3 failed once in untouched tests/v7-ps1a-project-studio.test.ts:215 (Windows dev-run restart pidAlive, likely PID reuse), green on the one re-run; aggregator then fails closed (attempt-scoped shard artifacts, COORD-001; ci.yml protected). Fresh full CI comes with the next code push (base merge after #144). PR comment 6324391036"
+      "review": "first run with the new reviewer: 39668010636 on abf4738, waiting on founder-authority (Founder hold); earlier runs on f121b01/675a441/de3c6fb failed closed (stale head / hold / old reviewer)",
+      "ci": "abf4738 (merge of v7/integration 467b52d) CI 5/5 green; local: b1 + b5 + ps1b + review-governance 284/284, review proof 172/172, validators + trust-root PASS"
     },
     "COORD-REVIEWER-DIAGNOSTICS": {
       "branch": "claude/coord-reviewer-diagnostics",
       "head": "ba3415a",
-      "status": "READY_FOR_FOUNDER_BOOTSTRAP",
+      "status": "MERGED",
       "pr": 144,
       "tests": "review-gate.proof 172/172; review-governance 29/29; 14 mutations caught; CI 5/5 green at ba3415a",
       "preReview": "coordinator pre-review (NOT the Independent Review): 1 low correctness finding (diagnosis appended to a delivered verdict) fixed in ba3415a; final pass at ba3415a (3 lenses x 2 skeptics): 4 candidates, 0 confirmed; low follow-ups: E2BIG placeholder remedy wording, >4 MiB execution-file diagnosis, pre-existing summary Markdown/bidi",
       "review": "Independent Review not passed: run 39637850876 (f9fc5ca) VERDICT_MISSING from the old reviewer; the fix only takes effect after merge",
-      "note": "bootstrap = governance doc step 7 (Founder unticks last-push approval, merges ba3415a with a merge commit, re-ticks); no agent merge"
+      "note": "bootstrap = governance doc step 7 (Founder unticks last-push approval, merges ba3415a with a merge commit, re-ticks); no agent merge",
+      "mergedAs": "467b52d (Founder merge in the GitHub UI, 2026-10-21T20:06:51Z; parents bd5ce9b + ba3415a; tree identical to ba3415a)",
+      "postMerge": "push CI on 467b52d 5/5 green; reviewer-diagnose step and noVerdictDelivered live on v7/integration; ruleset require_last_push_approval observed false at 20:25Z (Founder re-enable pending)"
     },
     "COORD-SCOPE-GRANTS": {
       "branch": "claude/coord-scope-grants",
@@ -944,7 +947,8 @@
       "status": "TESTED_BRANCH_ONLY",
       "owner": "lane-a",
       "tests": "coordinator: b1 + b5 + ps1b 259/259; validators PASS; real Electron E2E 13/13 x2 (confirm dialog opens, task stays IN_PROGRESS until #confirmOk)",
-      "note": "DONE confirm dialog; E2E script updated to accept it; earlier defect fixed"
+      "note": "DONE confirm dialog; E2E script updated to accept it; earlier defect fixed",
+      "mergedHead": "ae5e899 (merged #143 abf4738; builder: 30 renderer files pass; coordinator re-verify pending)"
     },
     "COORD-INTAKE-TEMPLATE": {
       "branch": "claude/coord-intake-template",
@@ -961,14 +965,15 @@
       "status": "TESTED_BRANCH_ONLY",
       "owner": "lane-a",
       "tests": "coordinator: b1 + b5 + ps1b 258/258; tsc/TR/secret/architecture/trust-root PASS; coordinator mutation (state ignored) caught",
-      "note": "state-aware flow details (MISSION.COMPLETE only at DONE; mismatched codes shown raw); earlier defect fixed"
+      "note": "state-aware flow details (MISSION.COMPLETE only at DONE; mismatched codes shown raw); earlier defect fixed",
+      "mergedHead": "3e810e4 (merged #143 abf4738; builder: 30 renderer files pass; coordinator re-verify pending)"
     },
     "LANE-B-TASK-RUN-LINK": {
       "branch": "claude/lane-b-task-run-link",
-      "head": "5f41a37",
+      "head": "71964cf",
       "status": "IN_PROGRESS",
       "owner": "lane-b",
-      "note": "task -> run link (runs currently tied to a mission); not yet reported or verified"
+      "note": "task -> run link; not yet reported to the coordinator"
     },
     "LANE-A-RUN-READINESS": {
       "branch": "claude/lane-a-run-readiness",
@@ -977,7 +982,8 @@
       "status": "TESTED_BRANCH_ONLY",
       "owner": "lane-a",
       "tests": "coordinator: b1 + b5 + ps1b 260/260, 11 more desktop suites 312/312, validators PASS, mutation caught, real Electron E2E 12/12",
-      "note": "'Before you start a run' note from records only (repository / remote repo / test command; never promises success); run cards explain known block codes; only booleans mapped (no URL or command)"
+      "note": "'Before you start a run' note from records only (repository / remote repo / test command; never promises success); run cards explain known block codes; only booleans mapped (no URL or command)",
+      "mergedHead": "7a33083 (merged #143 abf4738; builder: 30 renderer files pass; coordinator re-verify pending)"
     },
     "LANE-A-RUN-STEPS": {
       "branch": "claude/lane-a-run-steps",
@@ -986,7 +992,16 @@
       "status": "TESTED_BRANCH_ONLY",
       "owner": "lane-a",
       "tests": "coordinator: b1 + b5 + ps1b 264/264, 30 renderer files 1193/1193, validators PASS, mutation caught, real Electron E2E 12/12",
-      "note": "run steps table from the run's own evidence records; nulls stay '—'; exit code is not a verification result"
+      "note": "run steps table from the run's own evidence records; nulls stay '—'; exit code is not a verification result",
+      "mergedHead": "163c9a1 (merged #143 abf4738; builder: 30 renderer files pass; coordinator re-verify pending)"
+    },
+    "LANE-A-TASK-RUNS-UI": {
+      "branch": "claude/lane-a-task-runs-ui",
+      "head": "a1b5611",
+      "base": "abf4738",
+      "status": "BUILDER_REPORTED",
+      "owner": "lane-a",
+      "note": "task inspector 'Runs for this task' + flow taskRuns summary on Lane B's task-run-link contract; needs main.mjs allow-list (docs/authority-requests/LANE-A-task-runs-allowlist.md, Founder decision); coordinator verification pending"
     }
   },
   "prCapacityRule": "Single limit (Founder 2026-10-21: remove the 10/12 contradiction): maxOpenPrs = 10 open agent PRs to v7/integration from claude/pq-*, claude/lane-*, claude/coord-* and claude/ui-* branches, drafts included; legacy PRs (wipRule list) are not counted; PRs the Founder explicitly requested are listed in founderRequestedPrs and are not counted. The former lane rule of fewer than 12 draft PRs is retired. At capacity: BRANCH_ONLY. Builders keep claiming, building, testing and pushing to their branches with evidence recorded here (coordinatorBuild / lane records); code production never stops. A PR opens when a slot frees, oldest TESTED first. A lane PR whose head is an ancestor of an open integration PR is SUPERSEDED_BY_INTEGRATION and is proposed for closing with a pointer comment.",
