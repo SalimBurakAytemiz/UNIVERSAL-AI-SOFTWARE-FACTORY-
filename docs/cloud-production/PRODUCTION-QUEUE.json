@@ -3,7 +3,10 @@
   "schemaVersion": "2.0",
   "purpose": "Persistent production queue and checkpoint for builder work while the merge lane is suspended. It is NOT an authority record. It grants no protected-file, endpoint, POST, IPC, storage, mobile, or merge authority.",
   "basis": "Founder chat directives of 2026-10-21 (SECURE RECOVERY Stage 7; CONTINUOUS REAL PRODUCTION sections 2-6), as reported by the coordinator. The coordinator's account is not an authority record. Work is limited to unprotected files under the existing builder rules of D-2026-10-19-A, with no new endpoints, allow-list entries, POST, IPC or storage, no protected paths and no security-critical runtime files.",
-  "integrationBase": "v7/integration@a910883d5e37823bcf133834529826de8eef3f9a",
+  "integrationBase": {
+    "head": "bd5ce9b",
+    "note": "v7/integration after #128 (430e6c4) and #131 (bd5ce9b); push CI 39608152458 success"
+  },
   "mergeLane": "SUSPENDED (Founder): finished work stays on its branch with a DRAFT PR until the secure merge process (independent reviewer identity, GitHub-enforced approval, required checks) exists.",
   "builderCap": 3,
   "statusVocabulary": [
@@ -534,7 +537,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T14:25:15.397Z",
+    "at": "2026-10-21T15:10:15.267Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -550,7 +553,7 @@
       134,
       135
     ],
-    "next": "Founder: fix UASCO_REVIEW_APP_PRIVATE_KEY, then Run workflow 135. Lanes continue branch-only.",
+    "next": "Verify #136 review result; integration L1; first-delivery orchestrator on L1; lanes continue.",
     "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
@@ -794,11 +797,11 @@
   },
   "independentReview": {
     "pr": 131,
-    "status": "MERGED",
+    "status": "MERGED_ACTIVE",
     "mergedAs": "bd5ce9b (merge by the Founder in the GitHub UI, 2026-10-21T13:27:23Z)",
     "reviewedHead": "0ae75d0 (review-system files identical in bd5ce9b)",
     "defaultBranch": "v7/integration (observed 2026-10-21T13:29Z)",
-    "remainingFounderSteps": "per docs/governance/UASCO-INDEPENDENT-REVIEW.md: step 1 (master ruleset target) and 3 (Actions policy) unverified by agents; 4 App permissions; 6 Actions may not approve; 7 re-tick last-push approval; 8 first real run; 10 required check pinned to the App + strict mode",
+    "remainingFounderSteps": "per docs/governance/UASCO-INDEPENDENT-REVIEW.md: step 1 (master ruleset target) and 3 (Actions policy) not verified by agents; 10 required check pinned to the App + strict mode (after a real App check exists)",
     "note": "Not merged by an agent. Post-merge push CI on bd5ce9b to be checked by the coordinator.",
     "firstRealRun": {
       "run": 39611421257,
@@ -806,7 +809,23 @@
       "head": "d893c0f",
       "result": "FAILED_CLOSED at scope / create-github-app-token: Invalid keyData (UASCO_REVIEW_APP_PRIVATE_KEY is not a valid PEM private key). No App check, no approval, reviewer not run.",
       "founderFix": "Regenerate the App private key and paste the full .pem into the uasco-review environment secret UASCO_REVIEW_APP_PRIVATE_KEY; then Run workflow with 135.",
-      "at": "2026-10-21T13:51:30.633Z"
+      "at": "2026-10-21T13:51:30.633Z",
+      "supersededBy": {
+        "run": 39619436696,
+        "pr": 136,
+        "head": "3a1ba9a",
+        "attempt": 2,
+        "status": "queued at 2026-10-21T15:10Z (result not yet verified)"
+      }
+    },
+    "founderReported": {
+      "at": "2026-10-21T15:10:15.267Z",
+      "items": [
+        "#128 and #131 merged into v7/integration",
+        "last-push approval protection re-enabled on v7/integration",
+        "UASCO Reviewer App private key environment secret re-added",
+        "real Reviewer workflow re-run for PR #136"
+      ]
     }
   },
   "baseCi": {
@@ -817,5 +836,19 @@
   "laneBaseMerges": {
     "note": "Lane branches merged v7/integration after #128/#131 (no lane code change in those merges): contrast-lab 3c1501d, idea-first-mission 3a1ba9a, task-selector 72aeeea, lane-b-intake b04675b, lane-b-plan ad0f989, lane-b-flow 333dac3, lane-b-task-status b2507ec, lane-c-role-resolver e685406.",
     "at": "2026-10-21T14:25:15.397Z"
+  },
+  "coordinatorBuild": {
+    "COORD-TASK-STATUS": {
+      "branch": "claude/coord-task-status",
+      "head": "d72159d",
+      "status": "TESTED",
+      "tests": "v7-b1-workos 15/15; related 77/77; 6 mutations caught",
+      "note": "Store-owned task status transitions; route (Lane B) and Desktop controls (Lane A) next; registration needs protected server.ts"
+    },
+    "COORD-INTEGRATION-L1": {
+      "branch": "claude/coord-integration-l1",
+      "status": "IN_PROGRESS",
+      "note": "lane branches merged + cross-lane E2E first-delivery test (workflow w20p3ft4e)"
+    }
   }
 }
