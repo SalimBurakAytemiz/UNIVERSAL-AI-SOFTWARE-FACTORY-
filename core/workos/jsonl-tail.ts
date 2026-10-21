@@ -26,20 +26,35 @@ export function readJsonlRecords<T>(file: string, recordStart: string): T[] {
   return buf.subarray(0, cut).toString("utf8").split("\n").filter(Boolean).map(l => JSON.parse(l) as T);
 }
 
-// Yırtık kuyruk silinmeden önce karantina dizinine bayt bayt kopyalanır (adı kuyruğun sha256'sından); kopya doğrulanamazsa dosyaya dokunulmaz.
+// Dizin fsync'i POSIX'te rename'in kalıcılığı içindir; Windows dizin açmaya/fsync'e izin vermez (EPERM/EISDIR) ve yalnız bu iki hata tolere edilir (repodaki atomik yazıcılarla aynı sözleşme), diğer hatalar fırlar.
+const DIR_FSYNC_UNSUPPORTED = new Set(["EPERM", "EISDIR"]);
+function fsyncDir(dir: string): void {
+  let fd: number;
+  try { fd = fs.openSync(dir, "r"); } catch (e) { if (DIR_FSYNC_UNSUPPORTED.has((e as NodeJS.ErrnoException).code ?? "")) return; throw e; }
+  try { fs.fsyncSync(fd); } catch (e) { if (!DIR_FSYNC_UNSUPPORTED.has((e as NodeJS.ErrnoException).code ?? "")) throw e; } finally { fs.closeSync(fd); }
+}
+function fsyncFile(file: string): void {
+  const fd = fs.openSync(file, "r+"); // Windows'ta salt-okunur tanıtıcı fsync edilemez
+  try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+}
+
+// Yırtık kuyruk silinmeden önce karantina dizinine bayt bayt kopyalanır (adı kuyruğun sha256'sından) ve KALICI yapılır: tmp dosyası yazılıp fsync edilir, rename edilir, karantina dizini fsync edilir; kopya doğrulanamazsa veya kalıcılaştırılamazsa dosyaya dokunulmaz (kesme yalnız bundan sonra).
 function discardTornTail(file: string, recordStart: string): void {
   if (!fs.existsSync(file)) return;
   const buf = fs.readFileSync(file), {cut, tail} = split(buf, recordStart);
   if (tail.length === 0) return;
   const tailSha = hex(tail), q = path.join(path.dirname(file), "quarantine", `${path.basename(file, ".jsonl")}-torn-${tailSha.slice(0, 16)}.tail`);
+  const tmp = `${q}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`;
   try {
     fs.mkdirSync(path.dirname(q), {recursive: true});
     if (!fs.existsSync(q) || hex(fs.readFileSync(q)) !== tailSha) {
-      const tmp = `${q}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`;
-      fs.writeFileSync(tmp, tail); fs.renameSync(tmp, q);
-    }
+      const wfd = fs.openSync(tmp, "w");
+      try { fs.writeFileSync(wfd, tail); fs.fsyncSync(wfd); } finally { fs.closeSync(wfd); }
+      fs.renameSync(tmp, q);
+    } else fsyncFile(q); // önceki yarım kalmış denemeden kalan kopya da kalıcı olmalı
+    fsyncDir(path.dirname(q));
     if (hex(fs.readFileSync(q)) !== tailSha) throw new Error("QUARANTINE_MISMATCH");
-  } catch { throw new JsonlTailError("QUARANTINE_FAILED"); }
+  } catch { try { fs.rmSync(tmp, {force: true}); } catch { /* en iyi çaba */ } throw new JsonlTailError("QUARANTINE_FAILED"); }
   if (fs.statSync(file).size !== buf.length) throw new JsonlTailError("FILE_CHANGED");
   const fd = fs.openSync(file, "r+");
   try { fs.ftruncateSync(fd, cut); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
