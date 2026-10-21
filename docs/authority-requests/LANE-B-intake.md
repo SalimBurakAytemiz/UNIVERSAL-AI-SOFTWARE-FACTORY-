@@ -1,3 +1,4 @@
+<!-- //TR: Lane B yetki talebi: proje intake route kaydı için server.ts yaması ve test kanıtı -->
 # LANE-B-intake: register intake routes in server.ts (protected)
 
 Why: `apps/control-api/src/server.ts` is trust-root sealed. The intake routes live in `apps/control-api/src/routes/intake.ts`; they need one registration call. Consumer screen: UI-126 Project Intake (SCREEN_AUDIT_252). The Electron GET/POST allow-lists (apps/desktop/main.mjs) must also allow `/v1/intakes` and `/v1/intakes/itk_<24hex>` (GET) and `/v1/intakes` (POST, body <= 64 KiB) before the renderer can call them; Lane A needs that bridge entry, which is also protected.

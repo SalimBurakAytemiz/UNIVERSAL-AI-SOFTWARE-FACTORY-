@@ -1,3 +1,4 @@
+<!-- //TR: Lane B haritası: ilk teslim akışının backend halkaları, durumları ve doğrulayan testleri -->
 # LANE-B MAP: first-delivery flow, backend half
 
 Status legend: VERIFIED = a test proves the link; MISSING; BROKEN; UNVERIFIED = code exists, not yet traced to a proving test by this lane (to be checked next, not assumed).
