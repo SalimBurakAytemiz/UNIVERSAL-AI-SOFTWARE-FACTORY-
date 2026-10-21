@@ -1,0 +1,164 @@
+# //TR: Bu korunan workflow "UASCO Independent Review" zorunlu kontrolünü üretir: pull_request_target ile her zaman base dalındaki güvenilir sürümden çalışır, PR kodunu asla checkout etmez veya çalıştırmaz, CI'ın aynı head SHA'da yeşil bitmesini bekler, ayrı bir işte yalnız okuma araçlarıyla bağımsız Claude Reviewer'ı çalıştırır ve kontrolü yalnız reviewer GitHub App anahtarıyla, deterministik kapıdan geçen karara göre yazar.
+# //TR: Güven modeli: ruleset'teki zorunlu kontrol bu App'in integration_id'sine sabitlenmelidir; App anahtarı ve Claude OAuth token'ı yalnız v7/integration'a izin veren 'uasco-review' environment'ındadır, bu yüzden PR'a eklenen bir workflow onlara erişemez ve aynı adlı sahte bir kontrol (GitHub Actions kaynaklı) zorunluluğu karşılamaz.
+name: UASCO Independent Review
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [v7/integration]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Pull request number to (re)review"
+        required: true
+permissions: {}
+concurrency:
+  group: uasco-independent-review-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+jobs:
+  scope:
+    # Same-repository pull requests only; a fork PR gets no review check and therefore cannot satisfy the required check.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: uasco-review
+    timeout-minutes: 10
+    permissions: {contents: read, pull-requests: read, checks: read, actions: read}
+    outputs:
+      head_sha: ${{ steps.scope.outputs.head_sha }}
+      check_id: ${{ steps.scope.outputs.check_id }}
+      needs_founder: ${{ steps.scope.outputs.needs_founder }}
+    steps:
+      # Trusted code only: the base-branch commit this workflow file comes from. persist-credentials false keeps no token on disk.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: {node-version: "24"}
+      - id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.UASCO_REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.UASCO_REVIEW_APP_PRIVATE_KEY }}
+          permission-checks: write
+      - id: scope
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
+          REVIEW_APP_TOKEN: ${{ steps.app.outputs.token }}
+        run: node scripts/ci/uasco-review/run.mjs scope
+
+  founder-authority:
+    # Protected or CI-executed paths need the Founder: this job waits until the Founder approves the deployment in the GitHub UI.
+    needs: scope
+    if: needs.scope.outputs.needs_founder == 'true'
+    runs-on: ubuntu-latest
+    environment: uasco-founder-authority
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - env: {HEAD_SHA: "${{ needs.scope.outputs.head_sha }}"}
+        run: echo "Founder authority approved for head $HEAD_SHA"
+
+  collect:
+    needs: scope
+    if: needs.scope.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions: {contents: read, pull-requests: read, checks: read, actions: read}
+    outputs:
+      proceed: ${{ steps.collect.outputs.proceed }}
+      schema: ${{ steps.collect.outputs.schema }}
+      model_arg: ${{ steps.collect.outputs.model_arg }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: {node-version: "24"}
+      - id: collect
+        continue-on-error: true
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.scope.outputs.head_sha }}
+          CI_WAIT_MINUTES: "100"
+          # Validated in run.mjs (strict pattern) before it can reach the reviewer's command line.
+          REVIEW_MODEL: ${{ vars.UASCO_REVIEW_MODEL }}
+        run: node scripts/ci/uasco-review/run.mjs collect
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with: {name: "uasco-review-input-${{ github.run_attempt }}", path: .uasco-review/, include-hidden-files: true, retention-days: 90, if-no-files-found: warn}
+
+  ai-review:
+    # The only job that runs Claude. It holds no GitHub write credential and no App key: a prompt injection in the diff cannot post a check.
+    needs: [scope, founder-authority, collect]
+    if: always() && needs.collect.outputs.proceed == 'true' && (needs.founder-authority.result == 'success' || needs.founder-authority.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: uasco-review
+    timeout-minutes: 30
+    permissions: {contents: read, pull-requests: read}
+    outputs:
+      session_id: ${{ steps.claude.outputs.session_id }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with: {name: "uasco-review-input-${{ github.run_attempt }}", path: .uasco-review}
+      - id: claude
+        continue-on-error: true
+        uses: anthropics/claude-code-action@db77d4d3c98f3f6380e7cd45ffba2342a3dbde3c # v1.0.254
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: "Read .uasco-review/review-input/INSTRUCTIONS.md and follow it exactly. Return only the JSON verdict required by the schema."
+          settings: '{"permissions":{"deny":["Read(//proc/**)","Read(//etc/**)","Read(//root/**)","Read(//home/**/.*)","Read(//tmp/**)"]}}'
+          claude_args: "--json-schema '${{ needs.collect.outputs.schema }}' --allowedTools Read,Glob,Grep --disallowedTools Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task --max-turns 60 ${{ needs.collect.outputs.model_arg }}"
+      - if: always()
+        env: {VERDICT_JSON: "${{ steps.claude.outputs.structured_output }}"}
+        run: mkdir -p .uasco-verdict && printf '%s' "$VERDICT_JSON" > .uasco-verdict/verdict.json
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with: {name: "uasco-review-verdict-${{ github.run_attempt }}", path: .uasco-verdict/, include-hidden-files: true, retention-days: 90, if-no-files-found: warn}
+
+  finish:
+    # Deterministic decision and the only check write. Runs whatever happened before, so a crash or skip concludes the check as failure.
+    needs: [scope, founder-authority, collect, ai-review]
+    if: always() && needs.scope.result == 'success'
+    runs-on: ubuntu-latest
+    environment: uasco-review
+    timeout-minutes: 10
+    permissions: {contents: read, pull-requests: read, checks: read, actions: read}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: {node-version: "24"}
+      - continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with: {name: "uasco-review-input-${{ github.run_attempt }}", path: .uasco-review}
+      - continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with: {name: "uasco-review-verdict-${{ github.run_attempt }}", path: .uasco-review}
+      - continue-on-error: true
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
+          NEEDS_FOUNDER: ${{ needs.scope.outputs.needs_founder }}
+          FOUNDER_LOGIN: ${{ vars.UASCO_FOUNDER_LOGIN }}
+          REVIEWER_SESSION: ${{ needs.ai-review.outputs.session_id || format('gha-{0}-{1}', github.run_id, github.run_attempt) }}
+        run: node scripts/ci/uasco-review/run.mjs decide
+      - id: app
+        if: always()
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.UASCO_REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.UASCO_REVIEW_APP_PRIVATE_KEY }}
+          permission-checks: write
+          permission-pull-requests: ${{ vars.UASCO_REVIEW_SUBMIT_APPROVAL == 'true' && 'write' || 'read' }}
+      - if: always()
+        env:
+          REVIEW_APP_TOKEN: ${{ steps.app.outputs.token }}
+          CHECK_ID: ${{ needs.scope.outputs.check_id }}
+          HEAD_SHA: ${{ needs.scope.outputs.head_sha }}
+          SUBMIT_APPROVAL: ${{ vars.UASCO_REVIEW_SUBMIT_APPROVAL }}
+        run: node scripts/ci/uasco-review/run.mjs finish
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with: {name: "uasco-review-evidence-${{ github.run_attempt }}", path: .uasco-review/, include-hidden-files: true, retention-days: 90, if-no-files-found: warn}
