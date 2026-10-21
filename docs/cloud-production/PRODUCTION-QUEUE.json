@@ -20,7 +20,7 @@
   ],
   "statusNotes": "DESIGN_ONLY, CODE_IMPLEMENTED, TESTED, INTEGRATED and PRODUCT_ACCEPTED are separate states. A finished builder task is at most TESTED: unit/renderer tests ran, Linux only, Windows NOT_EXECUTED. INTEGRATED needs a merge. PRODUCT_ACCEPTED needs real operational evidence.",
   "claimRule": "Before any work, create the branch claude/<id lowercased> as a create-only ref (git push origin <base sha>:refs/heads/claude/<id>; if the ref already exists, the task is owned, so skip it). Never force-push. Never delete a claude/* branch.",
-  "capacityRule": "ACTIVE = (tasks in this file with status IN_PROGRESS or CLAIMED) + (remote claude/* branches whose head is younger than 6 h, have no open PR and are not already counted). If ACTIVE >= builderCap, start nothing. HOLD_CAPACITY means queued but held until a slot is free.",
+  "capacityRule": "ACTIVE = (tasks with status IN_PROGRESS or CLAIMED whose branch has no open PR and whose startedAt is younger than 6 h) + (remote claude/* branches whose head is younger than 6 h, have no open PR and are not already counted). If ACTIVE >= builderCap, start nothing. A task whose branch has an open PR, or that is older than 6 h, no longer holds a slot.",
   "tasks": [
     {
       "id": "UI-110",
@@ -29,7 +29,8 @@
       "branch": "claude/ui-110",
       "base": "a910883",
       "owner": "coordinator-provisioned builder session_013dxuNPUg5TKwZhEiF7WhAX (2026-10-21T01:32Z)",
-      "pr": null
+      "pr": null,
+      "startedAt": "2026-10-21T01:32:21Z"
     },
     {
       "id": "UI-105",
@@ -38,7 +39,8 @@
       "branch": "claude/ui-105",
       "base": "a910883",
       "owner": "coordinator-provisioned builder session_01DQmUqiu7bxNuCTYerqQXbq (2026-10-21T01:32Z)",
-      "pr": null
+      "pr": null,
+      "startedAt": "2026-10-21T01:32:22Z"
     },
     {
       "id": "PQ-007",
@@ -56,7 +58,8 @@
       ],
       "testFile": "tests/technology-discovery.test.ts",
       "owner": "coordinator-provisioned builder (Opus)",
-      "integrationPending": "API endpoints (apps/control-api/src/server.ts, protected) and desktop allow-list (apps/desktop/main.mjs, protected): prepared as a separate patch only, not applied"
+      "integrationPending": "API endpoints (apps/control-api/src/server.ts, protected) and desktop allow-list (apps/desktop/main.mjs, protected): prepared as a separate patch only, not applied",
+      "startedAt": "2026-10-21T01:45:47Z"
     },
     {
       "id": "PQ-001",
