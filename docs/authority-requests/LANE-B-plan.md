@@ -1,3 +1,4 @@
+<!-- //TR: Lane B yetki talebi: görev planı route kaydı için server.ts yaması ve test kanıtı -->
 # LANE-B-plan: register mission plan routes in server.ts (protected)
 
 Why: `server.ts` is trust-root sealed; no HTTP route could create tasks even though `WorkOsStore.createTask` exists, so "tasks are planned" had no API. Routes live in `apps/control-api/src/routes/plan.ts` (`POST /v1/missions/:id/plan`, `GET /v1/missions/:id/tasks`). Desktop `main.mjs` GET/POST allow-lists also need these two paths (Lane A / Founder).
