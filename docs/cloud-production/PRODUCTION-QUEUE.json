@@ -203,7 +203,7 @@
       "id": "PQ-005",
       "source": "UASCO-AUD-065 / inventory UI-034 (PARTIAL)",
       "title": "Provider & model routing view (read-only) from the existing executors/capabilities/adapters GETs",
-      "status": "TESTED_TEST_GAP",
+      "status": "TESTED",
       "base": "after PQ-004 (settings.js overlap)",
       "files": [
         "apps/desktop/renderer/views/settings.js",
@@ -219,7 +219,7 @@
       ],
       "lane": "A (Lane A builder session_01MApoJPisUKhZdWpTJmcnY3)",
       "branch": "claude/lane-a-routing-view",
-      "head": "f278e6c",
+      "head": "d5188a3",
       "pr": null,
       "note": "Lane A deliverable, coordinator-verified (Linux) 2026-10-21T12:45Z; branch only (PR limit); not integrated."
     },
@@ -534,7 +534,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T13:51:30.633Z",
+    "at": "2026-10-21T14:25:15.397Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -550,7 +550,7 @@
       134,
       135
     ],
-    "next": "Founder: fix UASCO_REVIEW_APP_PRIVATE_KEY, then Run workflow 135; coordinator: post-merge CI on bd5ce9b.",
+    "next": "Founder: fix UASCO_REVIEW_APP_PRIVATE_KEY, then Run workflow 135. Lanes continue branch-only.",
     "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
@@ -730,16 +730,15 @@
       "LANE-A-routing-view (PQ-005)": {
         "pr": "branch only (PR limit)",
         "branch": "claude/lane-a-routing-view",
-        "head": "f278e6c",
-        "status": "TESTED_TEST_GAP",
-        "verifiedAt": "2026-10-21T12:45:55.809Z",
+        "head": "d5188a3",
+        "status": "TESTED",
+        "verifiedAt": "2026-10-21T14:25:15.397Z",
         "verifiedBy": "coordinator (Linux)",
-        "tests": "v7-ux-settings + v7-ux-wp2-cockpit 61/61",
+        "tests": "v7-ux-settings + v7-ux-wp2-cockpit 63/63",
         "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
         "forbiddenFiles": 0,
-        "mutation": "activation check removed -> 0 failures (TEST GAP); name check removed -> 1 failure",
+        "mutation": "activation, status, implementation checks each removed -> 2, 3, 2 failures (test gap closed)",
         "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED",
-        "fixRequired": "negative tests for invalid activation/status/implementation (sent to Lane A)",
         "stackedOn": "claude/lane-a-contrast-lab @dc0f006 (#141)"
       },
       "LANE-B-flow": {
@@ -768,6 +767,20 @@
         "mutation": "n/a (no code)",
         "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED",
         "note": "docs/authority-requests for task status transitions (needs core/workos/store.ts change, forbidden to lanes)"
+      },
+      "LANE-A-intake-ui (UI-126)": {
+        "pr": "branch only (PR limit)",
+        "branch": "claude/lane-a-intake-ui",
+        "head": "69e0881",
+        "status": "TESTED",
+        "verifiedAt": "2026-10-21T14:25:15.397Z",
+        "verifiedBy": "coordinator (Linux)",
+        "tests": "v7-ps1b-project-studio-ui 108/108",
+        "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
+        "forbiddenFiles": 0,
+        "mutation": "idea-length, project-type and risk checks each removed -> 2, 1, 1 failures",
+        "authorityRequest": "docs/authority-requests/LANE-A-intake-allowlist.md (main.mjs allow-list for /v1/intakes; depends on Lane B intake route registration)",
+        "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED"
       }
     },
     "notes": [
@@ -795,5 +808,14 @@
       "founderFix": "Regenerate the App private key and paste the full .pem into the uasco-review environment secret UASCO_REVIEW_APP_PRIVATE_KEY; then Run workflow with 135.",
       "at": "2026-10-21T13:51:30.633Z"
     }
+  },
+  "baseCi": {
+    "head": "bd5ce9b",
+    "run": 39608152458,
+    "result": "success (push CI after the Founder merged #128 and #131)"
+  },
+  "laneBaseMerges": {
+    "note": "Lane branches merged v7/integration after #128/#131 (no lane code change in those merges): contrast-lab 3c1501d, idea-first-mission 3a1ba9a, task-selector 72aeeea, lane-b-intake b04675b, lane-b-plan ad0f989, lane-b-flow 333dac3, lane-b-task-status b2507ec, lane-c-role-resolver e685406.",
+    "at": "2026-10-21T14:25:15.397Z"
   }
 }
