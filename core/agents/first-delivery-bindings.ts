@@ -39,3 +39,12 @@ export function assertRoleExecutes(roleId: string, fn: FirstDeliveryFunction, bi
   if (d) throw new Error(`ROLE_NOT_EXECUTABLE:${d.reason}:${roleId}`);
   return p;
 }
+
+// //TR: IMPLEMENT adımını sürebilen (dosya yazan, CLAUDE_IMPLEMENTER rotalı) fonksiyonlar: developer ve tester. Reviewer/pre-dev rolleri bu adımı sürmez.
+export const IMPLEMENTER_FUNCTIONS: readonly FirstDeliveryFunction[] = ["developer", "tester"];
+export function assertImplementerRole(roleId: string, bindings: readonly RoleExecutionProfile[] = FIRST_DELIVERY_BINDINGS): RoleExecutionProfile {
+  const p = bindings.find(b => b.roleId === roleId);
+  if (!p) throw new Error(`ROLE_NOT_EXECUTABLE:ROLE_HAS_NO_BINDING:${roleId}`);
+  if (!IMPLEMENTER_FUNCTIONS.includes(p.function) || p.providerRoute !== "CLAUDE_IMPLEMENTER") throw new Error(`ROLE_NOT_EXECUTABLE:BINDING_ROLE_MISMATCH:${roleId}:implementer`);
+  return assertRoleExecutes(roleId, p.function, bindings);
+}

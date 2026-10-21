@@ -201,7 +201,7 @@ describe("CORE-7 Agent Team Composer scale derivation", () => {
 // //TR: LANE-C: rol tanımı -> RoleExecutionProfile çözümleyicisi (GERÇEK 599 katalog; hiçbir rol certified değil).
 import {resolveRoleExecution, instantiateAgent, advanceAgent, authorizeToolUse, agentTraceEnvelope, profileDefect, evaluationState, BUILDER_ALLOWED_TOOLS, claudeProfileRoleOf, AgentError} from "../core/agents/role-execution.js";
 import type {RoleExecutionProfile} from "../core/agents/role-execution.js";
-import {FIRST_DELIVERY_BINDINGS, FIRST_DELIVERY_FUNCTIONS, assertRoleExecutes} from "../core/agents/first-delivery-bindings.js";
+import {FIRST_DELIVERY_BINDINGS, FIRST_DELIVERY_FUNCTIONS, assertRoleExecutes, assertImplementerRole} from "../core/agents/first-delivery-bindings.js";
 import {routeReadiness, checkpointAgent, restoreAgent} from "../core/agents/agent-routing.js";
 import os from "node:os";
 
@@ -336,6 +336,14 @@ describe("LANE-C agent routing readiness and checkpoint/restore", () => {
     const broken = {...bind("developer"), allowedTools: ["Bash"]};
     const a2 = {...a, profile: broken as never};
     expect(() => restoreAgent(checkpointAgent(a2), [broken])).toThrow("AGENT_RESTORE_NOT_EXECUTABLE:TOOL_NOT_ALLOWED");
+  });
+  it("implementer gate accepts developer and tester only; reviewer, pre-dev, delivery and unbound roles are refused", () => {
+    expect(assertImplementerRole("UASCO-0085").function).toBe("developer");
+    expect(assertImplementerRole("UASCO-0313").function).toBe("tester");
+    for (const id of ["UASCO-0252", "UASCO-0019", "UASCO-0043", "UASCO-0232"]) expect(() => assertImplementerRole(id)).toThrow("BINDING_ROLE_MISMATCH");
+    expect(() => assertImplementerRole("UASCO-0001")).toThrow("ROLE_HAS_NO_BINDING");
+    const tester = FIRST_DELIVERY_BINDINGS.find(b => b.function === "tester")!;
+    expect(() => assertImplementerRole("UASCO-0313", [{...tester, allowedTools: [...tester.allowedTools, "Bash"]}])).toThrow("TOOL_NOT_ALLOWED");
   });
 });
 

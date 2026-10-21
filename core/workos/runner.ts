@@ -17,7 +17,7 @@ import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from ".
 // INT-R4: runProcess (REL-FX ana-makine test çalıştırıcısı) ARTIK kullanılmaz; yürütme yalnız execution-gate sağlayıcısı (gate.provider.run) üzerinden gider, ana makinede asla.
 import {assertIndependentExecutors} from "./executors.js";
 import {ExecutionGate} from "./execution-gate.js";
-import {assertRoleExecutes} from "../agents/first-delivery-bindings.js";
+import {assertImplementerRole} from "../agents/first-delivery-bindings.js";
 import {advanceAgent, agentTraceEnvelope, instantiateAgent} from "../agents/role-execution.js";
 import type {GateDecision, ProjectExecutionKind} from "./execution-gate.js";
 import {M1A_NOT_VERIFIED_LABEL, productVerificationOf, reviewAndSecurityFor} from "./outcomes.js";
@@ -418,9 +418,9 @@ export class MissionRunner {
 
   // IMPLEMENT yeniden girişte idempotenttir: workspace önce döngü başlangıç commit'ine sıfırlanır (kör tekrar yok).
   private async stepImplement(run: WorkRun, leaseId: string, abort: () => boolean): Promise<Outcome> {
-    // //TR: Run'a bir rol atanmışsa (roleId != null) o rol TANIMI developer olarak yürütülebilir olmalıdır; değilse run yazmadan BLOCKED (ROLE_NOT_EXECUTABLE:<neden>). roleId null = rol atanmamış eski/rolsüz run (davranış değişmez).
+    // //TR: Run'a bir rol atanmışsa (roleId != null) o rol TANIMI implementer rotalı (developer/tester) yürütülebilir olmalıdır; değilse run yazmadan BLOCKED (ROLE_NOT_EXECUTABLE:<neden>). roleId null = rol atanmamış eski/rolsüz run (davranış değişmez).
     if (run.roleId !== null) {
-      try { assertRoleExecutes(run.roleId, "developer"); } catch (e) { return {kind: "BLOCK", reason: (e as Error).message.slice(0, 200)}; }
+      try { assertImplementerRole(run.roleId); } catch (e) { return {kind: "BLOCK", reason: (e as Error).message.slice(0, 200)}; }
     }
     const work = path.join(this.runDir(run.runId), "work"), branch = run.workBranch ?? `uasco/run/${run.runId}`;
     const start = run.remediationCycle === 0 ? run.baseSha : (run.headSha ?? run.baseSha);
@@ -439,7 +439,7 @@ export class MissionRunner {
       ...(limit ? {note: limitNote(limit)} : r.blockReason ? {note: r.blockReason.slice(0, 200)} : {})});
     // //TR: Rol atanmış run için izlenebilir ajan kaydı: rol tanımı kimliği ile ajan örneği kimliği ayrı; araç izinleri profilden gelir. Çağrı-başına araç izi bu adapter'dan GÖZLENEMEZ (araç kısıtı claude bayraklarıyla uygulanır) — bu açıkça yazılır, uydurma sayaç yok.
     if (run.roleId !== null) {
-      const profile = assertRoleExecutes(run.roleId, "developer");
+      const profile = assertImplementerRole(run.roleId);
       const agent = instantiateAgent({status: "EXECUTABLE", roleId: run.roleId, profile, certification: "NOT_CERTIFIED", evaluation: {executed: 0, total: 0}}, run.runId, `agent-${run.runId}-c${run.remediationCycle}`);
       advanceAgent(agent, "RUNNING"); advanceAgent(agent, r.aborted ? "ABORTED" : produced ? "COMPLETED" : "FAILED");
       const env = {...agentTraceEnvelope(agent), allowedTools: profile.allowedTools, perCallToolTrace: "NOT_OBSERVABLE_FROM_ADAPTER", certification: "NOT_CERTIFIED"};
