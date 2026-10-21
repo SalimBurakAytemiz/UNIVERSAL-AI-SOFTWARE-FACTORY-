@@ -77,6 +77,12 @@ Every write route keeps the existing gates: control token, Global Stop 423, acti
 
 - `tests/v7-b1-workos.test.ts` "COORD first-delivery wiring through the real server": the whole chain over HTTP through the real `buildServer` (intake, plan, tasks, dependency-gated task status, flow, reads, audit); token 403, Host 421, Global Stop 423 on every write while reads are served, policy 403, tenant isolation 404, nothing written on refusal; 413 above 32 KB on the three writes.
 - `tests/v7-b5-work-screens.test.ts` "COORD first-delivery Desktop allow-list": the 5 reads and 3 writes are admitted exactly; 12 near-miss shapes per path and wrong-method use are refused; the renderer's own paths pass.
+- Real Electron end-to-end (Linux, `scripts/e2e-first-delivery-electron.mjs`, 3 consecutive runs PASS 12/12): the real Control API (`server.ts`) and the real Electron app (`main.mjs`, preload, renderer, Electron 44.4.5 provisioned and checksum-verified by `scripts/provision-electron.mjs` after a verified `ensure-dependencies` install). The app runs as a non-root user, so the Chromium sandbox stays on. The renderer is driven over CDP:
+  - the main process proves the Control API identity (forced challenge-proof);
+  - intake, intake reads, plan, mission tasks, the dependency gate (409), task 1 PENDING→IN_PROGRESS→DONE, task 2 start, task and flow reads, all through the real preload bridge, IPC, `main.mjs` allow-list and token;
+  - the bridge refuses near misses, wrong method and a body over 32 KB before any HTTP call;
+  - UI: Görevler (`#/work`) shows the mission, the tasks and the task status panel with exactly the allowed targets, and a real click on "Mark as Done" moves task 2 to DONE.
+- NOT_EXECUTED here: Windows Electron (no Windows host in this environment). Linux and Windows unit/integration tests run in CI on the PR.
 - `config/trust-root-manifest.json` resealed: only the two hashes for `server.ts` and `main.mjs` (and `generatedAt`) change; `verify-trust-root` PASS.
 
 ## 5. Founder decision
