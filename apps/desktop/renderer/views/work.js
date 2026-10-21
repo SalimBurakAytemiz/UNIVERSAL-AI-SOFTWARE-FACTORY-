@@ -4,6 +4,7 @@ import {formatTime,formatCount,MISSING,missionPillKind} from "../model.js";
 import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline} from "../work-core.js";
 import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
+import {taskTransitionControls} from "./task-actions.js";
 import {notVerifiedBadge,runNotVerified,missionNotVerified,axisBadges} from "../m1a.js";
 import {canOfferComplete} from "../delivery-core.js";
 import {BOARD_LAYOUTS,boardLayout,setBoardLayout,boardColumns} from "../kanban-core.js";
@@ -259,6 +260,7 @@ export function taskInspector(ctx,detail,runsRes,missionId){
         h(doc,"dt",{text:ctx.t("work.task.runs")}),runsText?h(doc,"dd",{dataset:{taskField:"runs"},text:runsText}):unk("runs"),
         h(doc,"dt",{text:ctx.t("work.task.runLink")}),unk("runLink"),
         ...t.unknownFields.flatMap(k=>[h(doc,"dt",{text:ctx.t(`work.task.f.${k}`)}),unk(k)])));
+      inner.push(taskTransitionControls(ctx,t,detail.mission.tasks));
     }
   }
   return h(doc,"div",{class:"task-inspector",id:"task-inspector",role:"region","aria-label":ctx.t("work.task.title"),dataset:{taskInspector:sel?"open":"closed"}},h(doc,"h4",{text:ctx.t("work.task.title")}),inner);

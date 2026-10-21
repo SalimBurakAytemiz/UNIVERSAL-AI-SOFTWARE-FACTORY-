@@ -134,6 +134,21 @@ export function buildMissionRequest(input,{key}={}){
   if(!Object.keys(errors).length&&bodyBytes(body)>MAX_BODY_BYTES)errors.form="err.tooLarge";
   return result("/v1/missions",body,errors);
 }
+// ---------- Görev durum geçişi (POST /v1/tasks/:id/transition, Lane B) ----------
+// //TR: LANE-A: Görev durum makinesinin istemci kopyası (Lane B/koordinatör TASK_TRANSITIONS ile aynı: PENDING->IN_PROGRESS|BLOCKED, IN_PROGRESS->DONE|BLOCKED|PENDING, BLOCKED->PENDING, DONE son durum). IN_PROGRESS için bağımlılıkların DONE olması şartını sunucu uygular; istemci yalnız izinli hedefleri sunar. Gövde yalnız {to,reason}.
+export const TASK_ID_RE=/^tsk_[0-9a-f]{24}$/;
+export const TASK_TRANSITIONS=Object.freeze({PENDING:Object.freeze(["IN_PROGRESS","BLOCKED"]),IN_PROGRESS:Object.freeze(["DONE","BLOCKED","PENDING"]),BLOCKED:Object.freeze(["PENDING"]),DONE:Object.freeze([])});
+export const taskTransitionPath=id=>TASK_ID_RE.test(String(id))?`/v1/tasks/${id}/transition`:null;
+export const allowedTaskNext=status=>Object.hasOwn(TASK_TRANSITIONS,status)?TASK_TRANSITIONS[status]:[];
+export function buildTaskTransitionRequest({taskId,from,to,reason}){
+  const errors={},r=trim(reason);
+  if(!taskTransitionPath(taskId))errors.taskId="task.err.id";
+  if(!allowedTaskNext(from).includes(to))errors.to="task.err.notAllowed";
+  if(!r)errors.reason="task.err.reason";else if(r.length>1000)errors.reason="task.err.reasonLong";
+  const ok=!Object.keys(errors).length;
+  return {ok,path:taskTransitionPath(taskId),body:ok?{to,reason:r}:null,errors};
+}
+
 /** Durum geçişi isteği; yalnız durum makinesinin izin verdiği hedefler, yüksek riskli hedeflerde confirmed===true şart.
  *  D-M1A-STATE-MODEL-2026-10-15: geçiş gövdesi hiçbir onay alanı taşımaz (COMPLETE yalnız PRODUCT_VERIFIED kanıtıyla olur); onay verilmeye çalışılırsa istek kurulmaz. */
 export function buildTransitionRequest({missionId,from,to,reason,confirmed,acknowledgements}){
@@ -200,7 +215,7 @@ export function formatDateTime(isoString,lang="tr"){
 export function mapMissionDetail(raw){
   const m=isObj(raw)&&isObj(raw.mission)?raw.mission:null;
   if(!m||!MISSION_ID_RE.test(String(m.missionId??"")))return {state:"ERROR",mission:null};
-  const tasks=arr(raw.tasks,200).filter(isObj).map(t=>({taskId:str(t.taskId,80),title:str(t.title,200)??MISSING,status:statusStr(t.status)??MISSING})).filter(t=>t.taskId);
+  const tasks=arr(raw.tasks,200).filter(isObj).map(t=>({taskId:str(t.taskId,80),title:str(t.title,200)??MISSING,status:statusStr(t.status)??MISSING,dependsOn:arr(t.dependsOn,50).filter(d=>typeof d==="string"&&TASK_ID_RE.test(d))})).filter(t=>t.taskId);
   return {state:"VERIFIED",mission:{
     missionId:m.missionId,projectId:str(m.projectId,80),title:str(m.title,200)??MISSING,objective:str(m.objective,4000)??MISSING,
     acceptanceCriteria:arr(m.acceptanceCriteria,50).filter(c=>typeof c==="string").map(c=>c.slice(0,4000)),
@@ -331,7 +346,7 @@ export function deriveTaskInspector(detailRes,runsRes,taskId){
   if(!t)return {state:"EMPTY",task:null};
   const runsKnown=runsRes?.state==="VERIFIED"&&Array.isArray(runsRes.items),byStatus={};
   if(runsKnown)for(const r of runsRes.items)byStatus[r.status]=(byStatus[r.status]??0)+1;
-  return {state:"VERIFIED",task:{taskId:t.taskId,title:t.title,status:t.status,missionId:m.missionId,missionTitle:m.title,missionStatus:m.status,riskLevel:m.riskLevel,
+  return {state:"VERIFIED",task:{taskId:t.taskId,title:t.title,status:t.status,dependsOn:t.dependsOn??[],missionId:m.missionId,missionTitle:m.title,missionStatus:m.status,riskLevel:m.riskLevel,
     runs:runsKnown?{known:true,count:runsRes.items.length,byStatus}:{known:false,count:null,byStatus:{}},unknownFields:[...TASK_UNKNOWN_FIELDS]}};
 }
 
