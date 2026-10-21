@@ -223,7 +223,7 @@
       "lane": "C",
       "source": "CI root cause on #125/#126/#127: npm audit advisories on transitive vite 8.3.1",
       "title": "Bump transitive vite 8.3.1 -> 8.3.4 in package-lock.json (lockfile-only security update)",
-      "status": "IN_PROGRESS",
+      "status": "TESTED",
       "branch": "claude/pq-009",
       "base": "v7/integration",
       "files": [
@@ -232,8 +232,10 @@
       "testFile": "full vitest suite + npm audit",
       "owner": "coordinator",
       "startedAt": "2026-10-21T02:05:51Z",
-      "pr": null,
-      "authority": "package-lock.json is in the merge-gate CI_EXECUTED_FLOOR: merge needs the Founder (dependency-change authority). Unblocks CI on every open PR."
+      "pr": 128,
+      "authority": "package-lock.json is in the merge-gate CI_EXECUTED_FLOOR: merge needs the Founder (dependency-change authority). Unblocks CI on every open PR.",
+      "finalSha": "a3b911e",
+      "verifiedBy": "coordinator: npm audit 0 vulnerabilities; npm ci OK (vite 8.3.4); tsc 0; full vitest 2004 passed / 3 failed / 22 skipped, the 3 identical on base a910883 with vite 8.3.1 (sandbox env)"
     },
     {
       "id": "PQ-010",
@@ -263,6 +265,12 @@
     }
   ],
   "founderQueue": [
+    {
+      "id": "FQ-PQ-009",
+      "priority": 0,
+      "action": "Review and merge PR #128 (lockfile-only vite 8.3.1 -> 8.3.4). package-lock.json is in the merge-gate CI_EXECUTED_FLOOR, so only the Founder may merge it. It turns CI green for every open PR.",
+      "kind": "FOUNDER_ONLY"
+    },
     {
       "item": "UASCO-AUD-003 self-hosted runner removal + fork-PR approval",
       "why": "GitHub admin + PC access"
