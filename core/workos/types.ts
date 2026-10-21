@@ -7,6 +7,11 @@ import type {PreDevJournalType} from "./predev/types.js";
 
 export type RiskLevel = "R0" | "R1" | "R2" | "R3" | "R4";
 export type TaskStatus = "PENDING" | "IN_PROGRESS" | "DONE" | "BLOCKED";
+// //TR: Görev durum makinesi (tek kaynak: journal'daki TASK_TRANSITIONED). DONE son durumdur; IN_PROGRESS yalnız tüm bağımlılıklar DONE iken açılır (store uygular).
+export const TASK_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = Object.freeze({
+  PENDING: ["IN_PROGRESS", "BLOCKED"], IN_PROGRESS: ["DONE", "BLOCKED", "PENDING"], BLOCKED: ["PENDING"], DONE: []
+});
+export const isTaskStatus = (x: unknown): x is TaskStatus => typeof x === "string" && Object.hasOwn(TASK_TRANSITIONS, x);
 export interface Scope { tenantId: string }
 export interface Project {
   projectId: string; orgId: string; tenantId: string; customerId?: string; name: string;
@@ -36,7 +41,7 @@ export interface WorkMission {
 export interface WorkTask {
   taskId: string; missionId: string; projectId: string; tenantId: string; title: string; status: TaskStatus; dependsOn: string[];
 }
-export type JournalType = "PROJECT_CREATED" | "MISSION_CREATED" | "TASK_CREATED" | "MISSION_TRANSITIONED"
+export type JournalType = "PROJECT_CREATED" | "MISSION_CREATED" | "TASK_CREATED" | "TASK_TRANSITIONED" | "MISSION_TRANSITIONED"
   | "RUN_CREATED" | "RUN_LEASE" | "RUN_TRANSITION" | "RUN_CHECKPOINT" | "RUN_EVIDENCE"
   | "PROJECT_REPOSITORY_SET" | "PROJECT_EXPORT_RECORDED"
   // //TR: M1a c2 (D-M1A-ACCEPTANCE-CONDITIONS-2026-10-15): gerçek koşu çıktısının deterministik teslim artefaktı ve ona bağlı tek kullanımlık NOT_VERIFIED kaynak teslimi kabulü (COMPLETE değildir).
