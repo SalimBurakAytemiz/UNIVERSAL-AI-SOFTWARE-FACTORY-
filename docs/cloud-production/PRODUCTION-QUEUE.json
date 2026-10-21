@@ -127,7 +127,7 @@
       "id": "PQ-002",
       "source": "UASCO-AUD-129 (P3)",
       "title": "Asserting test for the Tower scheduler fact (UI-206)",
-      "status": "IN_PROGRESS",
+      "status": "TESTED",
       "base": "v7/integration",
       "files": [
         "tests/v7-ux-wp4-tower.test.ts"
@@ -142,7 +142,12 @@
       "claimSha": "20741edd61522f9d0ae9b41dbecc8e764baf54b6",
       "startedAt": "2026-10-21T04:51:55.000Z",
       "owner": "production-builder worker https://claude.ai/code/session_01K2PYQ7AYbpfo8EPiKciSAQ",
-      "recordedBy": "coordinator (the worker session may not push the queue branch)"
+      "recordedBy": "coordinator (the worker session may not push the queue branch)",
+      "pr": 133,
+      "finalSha": "f66600f0ed42ed231f19e7e1a6bdd060764c7c76",
+      "completedAt": "2026-10-21T04:58:07Z",
+      "evidence": "Coordinator re-ran at f66600f: tests/v7-ux-wp4-tower.test.ts 32/32; UX+b4+b5+renderer+sharding group 28 files 1036/1036; tsc --noEmit 0; TR PASS; secret-sanity PASS. Diff v7/integration..f66600f = tests/v7-ux-wp4-tower.test.ts only (+42). Mutations of apps/desktop/renderer/views/tower.js (file restored): remove the scheduler fact -> 6 fail; fabricate 0/0 for missing data -> 4 fail; wrong completed count -> 1 fail.",
+      "notExecuted": "Windows; full run-validation (CI runs them)."
     },
     {
       "id": "PQ-003",
@@ -477,7 +482,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T04:55:19.087Z",
+    "at": "2026-10-21T05:01:21.637Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -488,10 +493,11 @@
       129,
       130,
       131,
-      132
+      132,
+      133
     ],
-    "next": "PQ-002 building (worker, claim 20741ed); then PQ-006, PQ-011, PQ-012.",
-    "engine": "Worker tick 04:51Z: access OK, wipRule applied (7 queue PRs < 10, ACTIVE 0 < 3), claimed PQ-002; its queue push was denied in the worker session, hence the queueWriter rule."
+    "next": "Worker next tick: PQ-006, then PQ-011, PQ-012 (queue WIP 8/10).",
+    "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
   "lanes": {
