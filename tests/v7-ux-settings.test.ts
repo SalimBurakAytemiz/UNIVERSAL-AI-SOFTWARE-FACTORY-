@@ -52,7 +52,7 @@ const FACTORY = {schemaVersion: "1.2.0", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-
 const LOGIN = "$env:CLAUDE_CONFIG_DIR='C:/Users/u/.uasco/impl'; claude";
 
 interface Feed {
-  execOff?: boolean; profiles?: Record<string, any> | null; controlActive?: boolean | null; controlReason?: string; controlOff?: boolean; healthOff?: boolean; factoryOff?: boolean; sandbox?: any;
+  caps?: any; adapters?: any; execOff?: boolean; profiles?: Record<string, any> | null; controlActive?: boolean | null; controlReason?: string; controlOff?: boolean; healthOff?: boolean; factoryOff?: boolean; sandbox?: any;
 }
 function execResponse(feed: Feed) {
   const profiles = feed.profiles === undefined
@@ -69,6 +69,8 @@ async function mkCtx(feed: Feed = {}, lang = "tr") {
     if (p === "/v1/control/status") { if (feed.controlOff) throw new Error(`${p}: HTTP 503`); return {globalStop: {active: feed.controlActive === true, reason: feed.controlActive ? (feed.controlReason ?? "FOUNDER_STOP") : null}, workos: {ok: true}}; }
     if (p === "/health") { if (feed.healthOff) throw new Error(`${p}: HTTP 503`); return HEALTH; }
     if (p === "/v1/factory") { if (feed.factoryOff) throw new Error(`${p}: HTTP 503`); return FACTORY; }
+    if (p === "/v1/capabilities" && feed.caps !== undefined) return feed.caps;
+    if (p === "/v1/adapters" && feed.adapters !== undefined) return feed.adapters;
     throw new Error(`${p}: HTTP 404`);
   }, apiPost: async () => { throw new Error("NO_POST_IN_TEST"); }};
   const api = apiMod.createApi({bridge, store});
@@ -191,7 +193,7 @@ describe("UX WP-SETTINGS reads only already-allow-listed GETs (no new GET route 
     await renderView(ctx);
     const extra = loadGet();
     const gets = [...new Set(calls)];
-    expect(gets.sort()).toEqual(["/health", "/v1/control/status", "/v1/factory", "/v1/system/executors"]);
+    expect(gets.sort()).toEqual(["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors"]); // PQ-005: iki kayıt okuması (zaten allow-list'te) eklendi; aşağıdaki allow-list doğrulaması bunları da kapsar
     for (const p of gets) expect(desktopGetPathAllowed(p) || extra(p), p).toBe(true);
     // Dürüstlük: settings.js hiçbir yazma (POST) çağrısı yapmaz.
     const src = fs.readFileSync(path.join(rend, "views", "settings.js"), "utf8");
@@ -483,5 +485,63 @@ describe("PQ-004 theme contrast lab (read-only)", () => {
     expect(keys.length).toBeGreaterThanOrEqual(13);
     const trAll = tr.default ?? tr.TR ?? tr;
     for (const k of keys) expect(trAll[k], k).toBeTruthy();
+  });
+});
+
+// //TR: LANE-A PQ-005: sağlayıcı/model yönlendirme görünümü — yalnız mevcut GET'ler; kayıt değerleri aynen, etkin/bağlı yükseltmesi yok, model uydurulmaz.
+describe("PQ-005 provider & model routing view (read-only)", () => {
+  const CAPS = {capabilities: [{id: "UASCO-CAP-001", name: "Mission OS", status: "REGISTERED", activation: "ON_DEMAND", implementation: "NOT_IMPLEMENTED"}, {id: "UASCO-CAP-002", name: "Intake", status: "REGISTERED", activation: "ON_DEMAND", implementation: "PARTIAL"}]};
+  const ADS = {adapters: [{id: "playwright", category: "BROWSER", status: "REGISTERED", implementation: "NOT_IMPLEMENTED", requiresCertification: true}, {id: "x-tool", category: "BUILD", status: "REGISTERED", implementation: "NOT_IMPLEMENTED"}]};
+  const panelOf = async (feed: Feed) => { const {ctx, calls} = await mkCtx(feed, "en"); const m = await load("views", "executors-panel.js"); return {node: (await m.routingPanel(ctx)) as N, calls}; };
+
+  it("maps registries strictly: valid entries verbatim, any malformed entry or shape makes the whole read ERROR", async () => {
+    const c = await load("routing-core.js");
+    expect(c.mapCapabilities(CAPS)).toMatchObject({state: "VERIFIED", total: 2});
+    expect(c.mapAdapters(ADS).items[1].requiresCertification).toBeNull();
+    for (const bad of [null, {}, {capabilities: "x"}, {capabilities: [{...CAPS.capabilities[0], status: "registered"}]}, {capabilities: [{...CAPS.capabilities[0], id: "../x"}]}, {capabilities: [CAPS.capabilities[0], null]}, {capabilities: [{...CAPS.capabilities[0], name: ""}]}]) expect(c.mapCapabilities(bad).state).toBe("ERROR");
+    for (const bad of [null, {adapters: {}}, {adapters: [{...ADS.adapters[0], category: "browser"}]}]) expect(c.mapAdapters(bad).state).toBe("ERROR");
+    expect(c.countBy(c.mapCapabilities(CAPS).items, "implementation")).toEqual([{value: "NOT_IMPLEMENTED", count: 1}, {value: "PARTIAL", count: 1}]);
+  });
+  it("routing rows carry reported states verbatim and list blockers; READY everywhere is 'none reported', never 'active'", async () => {
+    const c = await load("routing-core.js");
+    const exec = {state: "VERIFIED", items: [{id: "LOCAL_CLAUDE", state: "READY"}], sandbox: {state: "AVAILABLE"}, profiles: [{role: "implementer", state: "READY"}, {role: "reviewer", state: "LOGIN_REQUIRED"}]};
+    const rows = c.buildRoutingRows(exec);
+    expect(rows.map((r: any) => [r.role, r.blockers])).toEqual([["implementer", []], ["reviewer", ["PROFILE_LOGIN_REQUIRED"]]]);
+    expect(rows.every((r: any) => r.model === null)).toBe(true);
+    const none = c.buildRoutingRows({state: "VERIFIED", items: [], sandbox: null, profiles: []});
+    expect(none[0].blockers).toEqual(["EXECUTOR_NOT_REPORTED", "PROFILE_NOT_REPORTED", "SANDBOX_UNKNOWN"]);
+    expect(c.buildRoutingRows({state: "UNAVAILABLE"})).toEqual([]);
+  });
+  it("renders routes and both registries from the existing GETs only, with no POST and no promotion of registry values", async () => {
+    const {node, calls} = await panelOf({caps: CAPS, adapters: ADS});
+    expect(node.id).toBe("settings-routing");
+    const roles = within(node).filter(n => n.dataset.routingRole);
+    expect(roles.map(n => n.dataset.routingRole)).toEqual(["implementer", "reviewer"]);
+    expect(text(roles[1])).toContain("LOGIN_REQUIRED");
+    expect(within(node).filter(n => n.dataset.registryRow).length).toBe(4);
+    const t = text(node);
+    expect(t).toContain("NOT_IMPLEMENTED"); expect(t).toContain("REGISTERED");
+    expect(/\b(ACTIVE|CONNECTED)\b/.test(t)).toBe(false);
+    expect(new Set(calls)).toEqual(new Set(["/v1/system/executors", "/v1/capabilities", "/v1/adapters"]));
+    const src = fs.readFileSync(path.join(rend, "views", "executors-panel.js"), "utf8");
+    expect(src.split("export async function routingPanel")[1].includes(".post(")).toBe(false);
+  });
+  it("shows honest states when the registry reads fail or are malformed, and caps long tables with a disclosed count", async () => {
+    const off = await panelOf({});
+    expect(within(off.node).filter(n => n.dataset.routingBlock).length).toBe(2);
+    expect(within(off.node).filter(n => n.dataset.registryRow).length).toBe(0);
+    const bad = await panelOf({caps: {capabilities: [{id: "x"}]}, adapters: ADS});
+    expect(within(bad.node).filter(n => n.dataset.registryRow).length).toBe(2); // yalnız bağdaştırıcılar; yetenekler ERROR notu
+    const many = {capabilities: Array.from({length: 75}, (_, i) => ({id: `CAP-${i}`, name: `n${i}`, status: "REGISTERED", activation: "ON_DEMAND", implementation: "NOT_IMPLEMENTED"}))};
+    const big = await panelOf({caps: many, adapters: ADS});
+    expect(within(big.node).filter(n => n.dataset.registryRow && n.dataset.registryRow.startsWith("CAP-")).length).toBe(60);
+    expect(text(big.node)).toContain("Showing 60 of 75");
+  });
+  it("routing strings exist in en and tr", async () => {
+    const en = await load("locales", "en.js"), tr = await load("locales", "tr.js");
+    const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("routing."));
+    expect(keys.length).toBe(27);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
