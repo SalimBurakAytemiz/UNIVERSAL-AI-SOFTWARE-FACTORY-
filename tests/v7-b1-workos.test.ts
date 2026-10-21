@@ -308,3 +308,58 @@ describe("Work OS API", () => {
     await app.close();
   });
 });
+
+// //TR: LANE-B task routes: görev durum geçişi route modülü (strict gövde, 423/403/400/404/409, tenant izolasyonu, audit, restart sonrası kalıcılık).
+describe("LANE-B task transition routes", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const mkApp = async (stopped = false, allowed = true, tenantId = "tA") => {
+    const [{default: Fastify}, {registerTaskRoutes}, {WorkOsError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/tasks.js"), import("../core/workos/types.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const audits: any[] = [];
+    // server.ts workosFail ile aynı eşleme: NOT_FOUND 404, INVALID_TRANSITION/CONFLICT 409, diğer WorkOsError 400.
+    const fail = (r: any, e: any) => e instanceof WorkOsError ? r.code(e.code === "WORKOS_NOT_FOUND" ? 404 : e.code === "WORKOS_INVALID_TRANSITION" || e.code === "WORKOS_CONFLICT" ? 409 : 400).send({error: e.code}) : r.code(500).send({error: "INTERNAL_ERROR"});
+    registerTaskRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string, x?: any) => { audits.push({e, x}); },
+      workosStopped: () => stopped, workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"}, workosFail: fail});
+    const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
+    const t1 = store.createTask({tenantId: "tA", missionId: m.missionId, title: "a", actor: "FOUNDER_LOCAL"});
+    const t2 = store.createTask({tenantId: "tA", missionId: m.missionId, title: "b", dependsOn: [t1.taskId], actor: "FOUNDER_LOCAL"});
+    return {app, store, audits, t1, t2};
+  };
+  const tr = (app: any, id: string, body: unknown, headers: any = hdr) => app.inject({method: "POST", url: `/v1/tasks/${id}/transition`, headers, payload: body as any});
+
+  it("walks PENDING -> IN_PROGRESS -> DONE with audit, honours the dependency gate and survives restart", async () => {
+    const {app, audits, t1, t2} = await mkApp();
+    const blocked = await tr(app, t2.taskId, {to: "IN_PROGRESS", reason: "start"});
+    expect(blocked.statusCode).toBe(409);
+    expect((await tr(app, t1.taskId, {to: "IN_PROGRESS", reason: "start"})).json().task.status).toBe("IN_PROGRESS");
+    expect((await tr(app, t1.taskId, {to: "DONE", reason: "done"})).json().task.status).toBe("DONE");
+    expect((await tr(app, t2.taskId, {to: "IN_PROGRESS", reason: "start"})).statusCode).toBe(200);
+    expect(audits.map(a => a.e)).toEqual(["WORKOS_TASK_TRANSITIONED", "WORKOS_TASK_TRANSITIONED", "WORKOS_TASK_TRANSITIONED"]);
+    expect(audits[0].x).toMatchObject({from: "PENDING", to: "IN_PROGRESS"});
+    const again = new WorkOsStore(path.join(tmp, "data"));
+    expect(again.getTask({tenantId: "tA"}, t1.taskId)!.status).toBe("DONE");
+    expect((await app.inject({method: "GET", url: `/v1/tasks/${t2.taskId}`, headers: hdr})).json().task.status).toBe("IN_PROGRESS");
+  });
+  it("rejects illegal transitions (409), strict-body violations (400), bad ids and unknown tasks (400/404)", async () => {
+    const {app, t1} = await mkApp();
+    expect((await tr(app, t1.taskId, {to: "DONE", reason: "skip"})).statusCode).toBe(409);
+    for (const bad of [{}, {to: "DONE"}, {reason: "x"}, {to: "NOPE", reason: "x"}, {to: "BLOCKED", reason: "  "}, {to: "BLOCKED", reason: "x", extra: 1}, {to: "BLOCKED", reason: "x".repeat(1001)}])
+      expect((await tr(app, t1.taskId, bad)).statusCode).toBe(400);
+    expect((await tr(app, "bad", {to: "BLOCKED", reason: "x"})).statusCode).toBe(400);
+    expect((await tr(app, "tsk_" + "0".repeat(24), {to: "BLOCKED", reason: "x"})).statusCode).toBe(404);
+    expect((await app.inject({method: "GET", url: "/v1/tasks/bad", headers: hdr})).statusCode).toBe(400);
+  });
+  it("enforces token, Global Stop, policy and tenant isolation; leaves the task unchanged on every refusal", async () => {
+    const {app, store, t1} = await mkApp();
+    expect((await tr(app, t1.taskId, {to: "BLOCKED", reason: "x"}, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    const stop = await mkApp(true), deny = await mkApp(false, false);
+    expect((await tr(stop.app, stop.t1.taskId, {to: "BLOCKED", reason: "x"})).statusCode).toBe(423);
+    expect((await tr(deny.app, deny.t1.taskId, {to: "BLOCKED", reason: "x"})).statusCode).toBe(403);
+    expect(store.getTask({tenantId: "tA"}, t1.taskId)!.status).toBe("PENDING");
+    const other = await mkApp(false, true, "tB");
+    expect((await tr(other.app, t1.taskId, {to: "BLOCKED", reason: "x"})).statusCode).toBe(404);
+    expect((await other.app.inject({method: "GET", url: `/v1/tasks/${t1.taskId}`, headers: hdr})).statusCode).toBe(404);
+  });
+});
