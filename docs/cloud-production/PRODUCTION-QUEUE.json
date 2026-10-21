@@ -1,6 +1,6 @@
 {
   "//TR": "Kalıcı üretim kuyruğu ve kontrol noktası: merge hattı askıdayken korumasız dosyalarda gerçek kod üreten Builder görevlerini, durumlarını ve dal/PR bilgisini saklar. Yetki kaydı DEĞİLDİR; hiçbir korunan dosya, yeni endpoint, POST, IPC veya depolama yetkisi vermez.",
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "2.0",
   "purpose": "Persistent production queue and checkpoint for builder work while the merge lane is suspended. It is NOT an authority record. It grants no protected-file, endpoint, POST, IPC, storage, mobile, or merge authority.",
   "basis": "Founder chat directives of 2026-10-21 (SECURE RECOVERY Stage 7; CONTINUOUS REAL PRODUCTION sections 2-6), as reported by the coordinator. The coordinator's account is not an authority record. Work is limited to unprotected files under the existing builder rules of D-2026-10-19-A, with no new endpoints, allow-list entries, POST, IPC or storage, no protected paths and no security-critical runtime files.",
   "integrationBase": "v7/integration@a910883d5e37823bcf133834529826de8eef3f9a",
@@ -16,10 +16,12 @@
     "INTEGRATED",
     "PRODUCT_ACCEPTED",
     "BLOCKED",
-    "FOUNDER_QUEUE"
+    "FOUNDER_QUEUE",
+    "REVIEW_REJECTED",
+    "REPAIR_QUEUED"
   ],
   "statusNotes": "DESIGN_ONLY, CODE_IMPLEMENTED, TESTED, INTEGRATED and PRODUCT_ACCEPTED are separate states. A finished builder task is at most TESTED: unit/renderer tests ran, Linux only, Windows NOT_EXECUTED. INTEGRATED needs a merge. PRODUCT_ACCEPTED needs real operational evidence.",
-  "claimRule": "Before any work, create the branch claude/<id lowercased> as a create-only ref (git push origin <base sha>:refs/heads/claude/<id>; if the ref already exists, the task is owned, so skip it). Never force-push. Never delete a claude/* branch.",
+  "claimRule": "Race-safe claim (same format as docs/planning/dispatch.mjs): push a unique commit-tree claim commit \"dispatch-claim: <ID> owner=<who> at=<ISO ms Z> nonce=<uuid>\" to refs/heads/claude/<id lower>, then git ls-remote must return exactly that commit. Pushing the bare base SHA is forbidden: verified 2026-10-21 that two claimants pushing the same SHA both exit 0 (Everything up-to-date).",
   "capacityRule": "ACTIVE = (tasks with status IN_PROGRESS or CLAIMED whose branch has no open PR and whose startedAt is younger than 6 h) + (remote claude/* branches whose head is younger than 6 h, have no open PR and are not already counted). If ACTIVE >= builderCap, start nothing. A task whose branch has an open PR, or that is older than 6 h, no longer holds a slot.",
   "tasks": [
     {
@@ -33,7 +35,12 @@
       "startedAt": "2026-10-21T01:32:21Z",
       "finalSha": "0c510bc",
       "verifiedBy": "coordinator local re-run: 28 files 1035/1035, tsc/TR/secret/trust-root PASS",
-      "ciNote": "CI red on validate (ubuntu) and windows shard 1: dependency-supply-chain DEPENDENCY_AUDIT_BLOCKERS from npm advisories on transitive vite 8.3.1 (GHSA-587h-7wmj-h5pm high, GHSA-698v-4r3x-3vcv and GHSA-r825-w8mm-5pxw moderate). Not this PR code: fixed by PQ-009."
+      "ciNote": "CI red on validate (ubuntu) and windows shard 1: dependency-supply-chain DEPENDENCY_AUDIT_BLOCKERS from npm advisories on transitive vite 8.3.1 (GHSA-587h-7wmj-h5pm high, GHSA-698v-4r3x-3vcv and GHSA-r825-w8mm-5pxw moderate). Not this PR code: fixed by PQ-009.",
+      "review": {
+        "at": "2026-10-21T01:38Z",
+        "head": "0c510bc9798270598ddac3634d264aa3a5c8d12e",
+        "result": "CLEAN_PRELIMINARY (static, same account)"
+      }
     },
     {
       "id": "UI-105",
@@ -46,7 +53,12 @@
       "startedAt": "2026-10-21T01:32:22Z",
       "finalSha": "632a774",
       "verifiedBy": "coordinator local re-run: 28 files 1035/1035, tsc/TR/secret/trust-root PASS",
-      "ciNote": "CI red on validate (ubuntu) and windows shard 1: dependency-supply-chain DEPENDENCY_AUDIT_BLOCKERS from npm advisories on transitive vite 8.3.1 (GHSA-587h-7wmj-h5pm high, GHSA-698v-4r3x-3vcv and GHSA-r825-w8mm-5pxw moderate). Not this PR code: fixed by PQ-009."
+      "ciNote": "CI red on validate (ubuntu) and windows shard 1: dependency-supply-chain DEPENDENCY_AUDIT_BLOCKERS from npm advisories on transitive vite 8.3.1 (GHSA-587h-7wmj-h5pm high, GHSA-698v-4r3x-3vcv and GHSA-r825-w8mm-5pxw moderate). Not this PR code: fixed by PQ-009.",
+      "review": {
+        "at": "2026-10-21T01:38Z",
+        "head": "632a774b875fc0836a26673e9b9eeebec778b922",
+        "result": "CLEAN_PRELIMINARY (static, same account)"
+      }
     },
     {
       "id": "PQ-007",
@@ -69,13 +81,16 @@
       "pr": 127,
       "finalSha": "7fd94e4",
       "verifiedBy": "coordinator local re-run: 3 files 40/40, tsc/TR/secret/trust-root PASS",
-      "ciNote": "CI red on validate (ubuntu) and windows shard 1: dependency-supply-chain DEPENDENCY_AUDIT_BLOCKERS from npm advisories on transitive vite 8.3.1 (GHSA-587h-7wmj-h5pm high, GHSA-698v-4r3x-3vcv and GHSA-r825-w8mm-5pxw moderate). Not this PR code: fixed by PQ-009."
+      "ciNote": "CI red on validate (ubuntu) and windows shard 1: dependency-supply-chain DEPENDENCY_AUDIT_BLOCKERS from npm advisories on transitive vite 8.3.1 (GHSA-587h-7wmj-h5pm high, GHSA-698v-4r3x-3vcv and GHSA-r825-w8mm-5pxw moderate). Not this PR code: fixed by PQ-009.",
+      "review": {
+        "result": "NOT_REVIEWED (reviewer skipped it on 02:38Z)"
+      }
     },
     {
       "id": "PQ-001",
       "source": "UASCO-AUD-072 (P2)",
       "title": "Renderer product-verification honesty: show PRODUCT_VERIFIED only on the server's exact rule",
-      "status": "IN_PROGRESS",
+      "status": "BLOCKED",
       "base": "v7/integration",
       "files": [
         "apps/desktop/renderer/work-core.js",
@@ -84,7 +99,8 @@
         "apps/desktop/renderer/locales/en.js",
         "apps/desktop/renderer/locales/tr.js",
         "tests/v7-ux-delivery.test.ts",
-        "tests/v7-b5-work-screens.test.ts"
+        "tests/v7-b5-work-screens.test.ts",
+        "tests/v7-m1a-desktop.test.ts"
       ],
       "testFile": "tests/v7-ux-delivery.test.ts",
       "acceptance": [
@@ -97,7 +113,8 @@
       "branch": "claude/pq-001",
       "owner": "coordinator-provisioned builder (Sonnet)",
       "startedAt": "2026-10-21T02:05:51Z",
-      "pr": null
+      "pr": null,
+      "blockedReason": "Mirroring the server rule makes tests/v7-m1a-desktop.test.ts fail (its execRun() fixture lacks full evidence); that file was outside the task files. Coordinator scope decision 2026-10-21T02:46Z: add it (fixture only, no assertion weakened). The builder correctly declined a peer-session instruction and waits for the Founder in session_01Hjip6sVVWac463YegY3Wp1. Its edits (work-core.js, delivery.js, m1a.js) are UNCOMMITTED in that container."
     },
     {
       "id": "PQ-002",
@@ -196,7 +213,7 @@
       "lane": "C",
       "source": "docs/mobile/screens MOB-6 (UI-097, UI-099, UI-102, UI-177) + ADR-MOB-001 (read-only STALE cache) + API-CONTRACT (PROPOSED routes)",
       "title": "Mobile Companion core: read-only monitoring state store, view models and STALE/OFFLINE cache rules in pure TypeScript (no dependencies, no network, no privileged actions)",
-      "status": "IN_PROGRESS",
+      "status": "REVIEW_REJECTED",
       "base": "v7/integration",
       "files": [
         "apps/mobile/src/core/monitoring-store.ts",
@@ -216,7 +233,21 @@
       "branch": "claude/pq-008",
       "owner": "coordinator-provisioned builder (Sonnet)",
       "startedAt": "2026-10-21T02:05:51Z",
-      "pr": null
+      "pr": 129,
+      "finalSha": "0c212ce",
+      "verifiedBy": "coordinator local re-run 2026-10-21: 44/44 (colocated 28 + sharding 16), tsc 0, TR/secret/architecture PASS, diff = 6 listed files",
+      "ciNote": "CI red only at dependency-supply-chain (vite advisories), fixed by PQ-009/#128; not this PR.",
+      "review": {
+        "at": "2026-10-21T02:38Z",
+        "reviewer": "UASCO Independent Cloud Reviewer routine (static, same account, preliminary)",
+        "head": "0c212ce50faf78dcc1d778897ecbef3701a335aa",
+        "result": "BLOCKED",
+        "coordinatorTriage": [
+          "finding 1 (CI evidence SHA mismatch) = FALSE POSITIVE: the Linux job failed only at dependency-supply-chain; sha 034f865 is the PR merge commit, normal for pull_request runs",
+          "finding 2 (STALE cache still shown after DEVICE_REVOKED, REAUTH_REQUIRED, PIN_MISMATCH) = CONFIRMED against docs/mobile/CONNECTIVITY-AND-PAIRING.md:250 and :256 (revoked => wipe session and cache; pin mismatch => hard stop)",
+          "findings 3-5 low/nit: carried into the repair task"
+        ]
+      }
     },
     {
       "id": "PQ-009",
@@ -235,14 +266,20 @@
       "pr": 128,
       "authority": "package-lock.json is in the merge-gate CI_EXECUTED_FLOOR: merge needs the Founder (dependency-change authority). Unblocks CI on every open PR.",
       "finalSha": "a3b911e",
-      "verifiedBy": "coordinator: npm audit 0 vulnerabilities; npm ci OK (vite 8.3.4); tsc 0; full vitest 2004 passed / 3 failed / 22 skipped, the 3 identical on base a910883 with vite 8.3.1 (sandbox env)"
+      "verifiedBy": "coordinator: npm audit 0 vulnerabilities; npm ci OK (vite 8.3.4); tsc 0; full vitest 2004 passed / 3 failed / 22 skipped, the 3 identical on base a910883 with vite 8.3.1 (sandbox env)",
+      "review": {
+        "at": "2026-10-21T02:38Z",
+        "head": "a3b911e49b3d4c3e7d6418d5cfce849c1b49f4f4",
+        "result": "CLEAN_PRELIMINARY (static, same account)"
+      },
+      "ciNote": "CI 5/5 success on a3b911e (Linux 39 steps incl. dependency-supply-chain PASS; Windows shards 1-3 + aggregator). Lock integrity 20/20 match registry. merge-gate: BLOCK VERDICT_MISSING + CI_EXECUTED_PATH:npm-lockfile. GitHub mergeable_state=blocked (ruleset 2026-10-21 02:44Z: require_last_push_approval, 0 reviews)."
     },
     {
       "id": "PQ-010",
       "lane": "B",
       "source": "Central brain: model routing (Founder sprint P0-B); builds on core/policy/data-routing.ts and core/workos/risk-admission.ts",
       "title": "Model routing decision core: pure fail-closed choice of model class and cost tier per task (risk, data class, complexity, role, paid authority, reviewer independence)",
-      "status": "IN_PROGRESS",
+      "status": "TESTED",
       "branch": "claude/pq-010",
       "base": "v7/integration",
       "files": [
@@ -252,7 +289,7 @@
       "testFile": "tests/data-routing.test.ts",
       "owner": "coordinator-provisioned builder (Opus)",
       "startedAt": "2026-10-21T02:05:51Z",
-      "pr": null,
+      "pr": 130,
       "acceptance": [
         "Pure function routeModel(request, catalog): no I/O, no network, no new dependency. Unknown or missing input fields give REFUSE (fail-closed).",
         "R3/R4 refused with RISK_REFUSAL through riskAdmitted (core/workos/risk-admission.ts); data class gates cost tiers only through canRouteData (core/policy/data-routing.ts).",
@@ -261,7 +298,15 @@
         "Role REVIEWER must not share the builder executor id or session: else REFUSE (REVIEWER_NOT_INDEPENDENT).",
         "Decision carries decision ROUTE|REFUSE, code, modelClass, tier, modelId, reasons[]. Deterministic tie-break.",
         "Tests in tests/data-routing.test.ts: positive and negative cases for every rule; no existing assertion weakened. Not wired to executors.ts or the API (integration is a later, separate task)."
-      ]
+      ],
+      "finalSha": "400e999",
+      "verifiedBy": "coordinator local re-run 2026-10-21: 31/31 (data-routing 15 + sharding 16), tsc 0, TR/secret/architecture PASS, diff = 2 listed files, 0 removed test lines",
+      "ciNote": "CI red only at dependency-supply-chain (vite advisories), fixed by PQ-009/#128; not this PR.",
+      "review": {
+        "at": "2026-10-21T02:38Z",
+        "head": "400e9993c4c1593431ffeb0f5a2553346c2f45e4",
+        "result": "CLEAN_PRELIMINARY (static, same account)"
+      }
     },
     {
       "id": "PQ-011",
@@ -302,14 +347,76 @@
         "Missing or malformed fields fail closed (BLOCKED with a code), never a selection.",
         "Tests in the testFile: positive and negative cases for every rule; no existing assertion weakened. Not wired to dispatch.mjs (protected-adjacent; integration is separate)."
       ]
+    },
+    {
+      "id": "PQ-008-R1",
+      "lane": "C",
+      "source": "Review rejection of PR #129 (finding 2, confirmed against docs/mobile/CONNECTIVITY-AND-PAIRING.md:250,:256)",
+      "title": "Repair PQ-008: no cached data after device revocation, re-auth or pin mismatch; ordered refresh",
+      "status": "REPAIR_QUEUED",
+      "branch": "claude/pq-008",
+      "base": "claude/pq-008@0c212ce (repair on the PR branch, same PR #129)",
+      "files": [
+        "apps/mobile/src/core/monitoring-store.ts",
+        "apps/mobile/src/core/view-models.ts",
+        "apps/mobile/src/core/stale-cache.ts",
+        "apps/mobile/src/core/monitoring.test.ts"
+      ],
+      "testFile": "apps/mobile/src/core/monitoring.test.ts",
+      "acceptance": [
+        "DEVICE_REVOKED, REAUTH_REQUIRED and PIN_MISMATCH drop the cached frame: the view shows DENIED or OFFLINE with the reason and no cached data (spec: wipe session and cache; pin mismatch is a hard stop).",
+        "Concurrent refresh calls on one route cannot let an older response overwrite a newer snapshot (sequence guard).",
+        "A cache entry whose route or key differs from the request is ignored.",
+        "Remove the unused liveState helper.",
+        "Tests for each item, including negatives; no existing assertion weakened."
+      ],
+      "attempt": 1,
+      "maxAttempts": 3
+    },
+    {
+      "id": "PQ-013",
+      "lane": "B",
+      "source": "Founder decision 2026-10-21: no human reviewer; GitHub-enforced Claude review",
+      "title": "UASCO Independent Review: fail-closed, App-pinned required review check",
+      "status": "TESTED",
+      "branch": "claude/uasco-independent-review",
+      "base": "claude/pq-009 (stacked on #128)",
+      "pr": 131,
+      "finalSha": "873a160",
+      "verifiedBy": "coordinator 2026-10-21: review-gate.proof 76/76, 8 mutations caught, live read-only dry run on #128, vitest 45/45, tsc 0, TR/secret/architecture/registries/trust-root PASS",
+      "authority": "FOUNDER: .github/workflows/ (PROTECTED_FLOOR) and scripts/ci/ (CI_EXECUTED_FLOOR). Inactive until the Founder creates the reviewer App, environments and secrets; ruleset change last."
     }
   ],
   "founderQueue": [
     {
+      "id": "FQ-REVIEW-SETUP",
+      "priority": 0,
+      "kind": "FOUNDER_ONLY",
+      "action": "Set up UASCO Independent Review (docs/governance/UASCO-INDEPENDENT-REVIEW.md in PR #131): create the reviewer GitHub App, environments uasco-review (v7/integration only; secrets UASCO_REVIEW_APP_PRIVATE_KEY, CLAUDE_CODE_OAUTH_TOKEN; variable UASCO_REVIEW_APP_CLIENT_ID) and uasco-founder-authority (Founder as required reviewer), repo variable UASCO_FOUNDER_LOGIN; confirm the Claude GitHub App has no Administration, Environments, Secrets, Variables or Deployments write; merge #131 (protected paths); after a real App check appears, pin the required check to the App in the ruleset."
+    },
+    {
       "id": "FQ-PQ-009",
       "priority": 0,
-      "action": "Review and merge PR #128 (lockfile-only vite 8.3.1 -> 8.3.4). package-lock.json is in the merge-gate CI_EXECUTED_FLOOR, so only the Founder may merge it. It turns CI green for every open PR.",
-      "kind": "FOUNDER_ONLY"
+      "kind": "FOUNDER_ONLY",
+      "action": "Merge #128 (lockfile-only vite fix, CI 5/5 green, integrity verified). Today require_last_push_approval blocks every PR pushed by the shared account until an approval from another identity exists (reviewer App approval via UASCO_REVIEW_SUBMIT_APPROVAL, or a Founder ruleset decision)."
+    },
+    {
+      "id": "FQ-PQ-001",
+      "priority": 1,
+      "kind": "FOUNDER_ONLY",
+      "action": "In session_01Hjip6sVVWac463YegY3Wp1 answer option 2 (push WIP to uasco/wip/pq-001) and option 1 (approve the coordinator scope decision), so the uncommitted PQ-001 work is not lost."
+    },
+    {
+      "id": "FQ-ROUTINE-ACCESS",
+      "priority": 1,
+      "kind": "FOUNDER_ONLY",
+      "action": "Production Builder routine trig_01BiCMimhXYFpRs3wFSbknSD: add the repository to its sources with push access (its config has sources: [] -> git proxy 403), then enable it."
+    },
+    {
+      "id": "FQ-ROUTINE-CLEANUP",
+      "priority": 2,
+      "kind": "FOUNDER_ONLY",
+      "action": "Disable routine UASCO Cloud Development trig_018vLbG82sUcp6ncPhRurka5 (created via http_api; agents cannot change it): NO_ACTION by design every hour."
     },
     {
       "item": "UASCO-AUD-003 self-hosted runner removal + fork-PR approval",
@@ -361,11 +468,20 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T02:05:51Z",
+    "at": "2026-10-21T03:17:52Z",
     "by": "coordinator",
     "integrationHead": "a910883",
-    "next": "PQ-003 / PQ-004 (stacked on claude/ui-105) or PQ-002 / PQ-006 when a slot frees",
-    "engine": "Production Builder routine fires and reasons correctly (01:47Z NO_ACTION CAPACITY) but its fired session gets GitHub 403: it cannot open PRs (ENGINE_BLOCKED for DELIVER). The coordinator session provisions builders directly."
+    "openProductionPrs": [
+      125,
+      126,
+      127,
+      128,
+      129,
+      130,
+      131
+    ],
+    "next": "PQ-008-R1 (repair on #129) when a builder slot and session access exist; then PQ-011, PQ-012, PQ-003.",
+    "engine": "Production Builder PAUSED until FQ-ROUTINE-ACCESS; heartbeat report-only every 3 h; dispatch by coordinator only meanwhile."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
   "lanes": {
@@ -373,5 +489,14 @@
     "B": "Backend, central brain, agent infrastructure (unprotected core modules, Opus)",
     "C": "Mobile app core logic and independent QA (no new dependencies, Sonnet)"
   },
-  "testRule": "New tests go into an EXISTING registered tests/*.test.ts file. A new tests/*.test.ts would fail tests/pkg-vs-validation-sharding.test.ts until it is registered in protected config/validation.json. Exception: code without a registered test home (mobile) uses colocated *.test.ts outside tests/, run locally; CI registration stays in the founderQueue."
+  "testRule": "New tests go into an EXISTING registered tests/*.test.ts file. A new tests/*.test.ts would fail tests/pkg-vs-validation-sharding.test.ts until it is registered in protected config/validation.json. Exception: code without a registered test home (mobile) uses colocated *.test.ts outside tests/, run locally; CI registration stays in the founderQueue.",
+  "maxOpenPrs": 10,
+  "recoveryRules": {
+    "builderBlocked": "Builder commits WIP to its claim branch (WIP(<id>): blocked: <reason>) before stopping, so work survives container loss; task -> BLOCKED with reason; coordinator decides scope.",
+    "sessionLost": "IN_PROGRESS without PR and head older than 6 h is STALE (heartbeat reports it); the coordinator resumes on the same branch, never a second builder.",
+    "reviewRejected": "Task -> REVIEW_REJECTED; a repair task <id>-R<n> is queued on the PR branch; the new head needs a fresh review (SHA-bound).",
+    "ciFailed": "Classify (CODE_DEFECT, TEST_FAILURE, DEPENDENCY_FAILURE, INFRA_FAILURE, ACCESS_DENIED, QUOTA_EXHAUSTED, GOVERNANCE_BLOCKED, UNKNOWN). Base-wide failures get one shared fix PR (example PQ-009), never per-PR patches. At most 3 repair attempts per task, then BLOCKED permanent.",
+    "accessDenied": "Routine reports ENGINE_BLOCKED (NO_REPO_ACCESS) and changes nothing; Founder attaches the repository source.",
+    "quota": "On rate-limit rejection no new sessions start; leases age out; resume after the reported reset time. Never work around quota."
+  }
 }
