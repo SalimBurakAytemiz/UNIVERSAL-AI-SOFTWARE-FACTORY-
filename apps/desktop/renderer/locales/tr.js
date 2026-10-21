@@ -1153,6 +1153,7 @@ export default {
   "intake.notSet":"Ayarlanmadı",
   "intake.criteriaHint":"İsteğe bağlı. Hiç girmezseniz varsayılan bir ölçüt kaydedilir ve varsayılan olarak işaretlenir.",
   "intake.riskHint":"İsteğe bağlı. Seçmezseniz varsayılan risk kaydedilir ve varsayılan olarak işaretlenir.",
+  "intake.testCommandHint":"İsteğe bağlı. Her satır tek bir argv belirtecidir (ilk satır yürütülebilir dosya); kabuk dizgesi değildir. Girmezseniz bu projenin ilk koşusu, test komutu tanımlanana kadar doğrulama aşamasında durur.",
   "intake.submit":"Projeyi ve ilk mission'ı oluştur",
   "intake.created":"Fikrinizden oluşturuldu: {title}. Proje ve ilk mission'ı artık var; hiçbir görev planlanmadı, hiçbir koşu başlatılmadı.",
   "intake.source.FOUNDER":"Siz girdiniz",

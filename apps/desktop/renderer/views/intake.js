@@ -1,4 +1,4 @@
-// //TR: Bu görünüm parçası Projeler ekranındaki "Fikirden başla" (Proje Intake, UI-126) panelidir: Kurucu serbest metin proje fikrini (ve isteğe bağlı başlık/tür/teknoloji/hedef işletim sistemi/kabul kriteri/risk) yazar, POST /v1/intakes tek adımda projeyi ve ilk mission'ı oluşturur; sonuçta her alanın kaynağı (Kurucu / varsayılan / fikirden türetilmiş) açıkça gösterilir. Önceki intake'ler GET /v1/intakes ile listelenir; uç nokta masaüstü allow-list'inde yoksa dürüst UNAVAILABLE gösterilir. Görev üretilmez, koşu başlatılmaz.
+// //TR: Bu görünüm parçası Projeler ekranındaki "Fikirden başla" (Proje Intake, UI-126) panelidir: Kurucu serbest metin proje fikrini (ve isteğe bağlı başlık/tür/teknoloji/hedef işletim sistemi/kabul kriteri/risk/test komutu) yazar, POST /v1/intakes tek adımda projeyi ve ilk mission'ı oluşturur; sonuçta her alanın kaynağı (Kurucu / varsayılan / fikirden türetilmiş) açıkça gösterilir. Önceki intake'ler GET /v1/intakes ile listelenir; uç nokta masaüstü allow-list'inde yoksa dürüst UNAVAILABLE gösterilir. Görev üretilmez, koşu başlatılmaz.
 import {h,panel,stateNote,emptyNote,badge} from "../components.js";
 import {drafts,selection,field,listEditor,statusBlock,setStatus,recordPost,focusResult,settle} from "../forms.js";
 import {createIdempotencyTracker} from "../work-core.js";
@@ -7,13 +7,13 @@ import {buildIntakeRequest,mapIntake,mapIntakes,INTAKES_PATH,INTAKE_PROJECT_TYPE
 
 export const INTAKE_FORM="intake";
 const KEYS=["id:intake-submit","id:intake-t"];
-const fresh=()=>({idea:"",title:"",projectType:"",techStack:[""],targetOS:[],acceptanceCriteria:[""],riskLevel:""});
+const fresh=()=>({idea:"",title:"",projectType:"",techStack:[""],targetOS:[],acceptanceCriteria:[""],riskLevel:"",testCommand:[""]});
 export const intakeDraft=fresh();
 export const intakeUi={open:false,last:null};
 const tracker=createIdempotencyTracker();
 export function resetIntake(){Object.assign(intakeDraft,fresh());tracker.reset()}
 export function resetIntakeAll(){resetIntake();intakeUi.open=false;intakeUi.last=null}
-const input=()=>({idea:intakeDraft.idea,title:intakeDraft.title,projectType:intakeDraft.projectType,techStack:intakeDraft.techStack,targetOS:intakeDraft.targetOS,acceptanceCriteria:intakeDraft.acceptanceCriteria,riskLevel:intakeDraft.riskLevel});
+const input=()=>({idea:intakeDraft.idea,title:intakeDraft.title,projectType:intakeDraft.projectType,techStack:intakeDraft.techStack,targetOS:intakeDraft.targetOS,acceptanceCriteria:intakeDraft.acceptanceCriteria,riskLevel:intakeDraft.riskLevel,testCommand:intakeDraft.testCommand});
 
 export async function submitIntake(ctx){
   const check=buildIntakeRequest(input());
@@ -70,6 +70,8 @@ export async function intakePanel(ctx){
       })),errs.targetOS?h(doc,"p",{class:"field-error",id:"intake-os-err",text:ctx.t(errs.targetOS)}):null),
     listEditor(ctx,{id:"intake-criteria",labelKey:"form.field.acceptanceCriteria",itemLabelKey:"work.form.criterionN",addKey:"work.form.criterionAdd",removeKey:"work.form.criterionRemove",items:d.acceptanceCriteria,errorKey:errs.acceptanceCriteria,multiline:true,hintKey:"intake.criteriaHint"}),
     field(ctx,{id:"intake-risk",labelKey:"form.field.riskLevel",value:d.riskLevel,onInput:v=>{d.riskLevel=v},errorKey:errs.riskLevel,hintKey:"intake.riskHint",options:[{value:"",label:ctx.t("intake.notSet")},...INTAKE_RISKS.map(r=>({value:r,label:`${r} — ${ctx.t(`risk.${r}.name`)}`}))]}),
+    // Test komutu isteğe bağlıdır; girilmezse ilk koşu VERIFY aşamasında komut tanımlanana kadar bloklanır (alan, proje formundaki argv satır düzenleyicisiyle aynıdır).
+    listEditor(ctx,{id:"intake-test",labelKey:"form.testCommand",itemLabelKey:"form.argvToken",addKey:"form.argvAdd",removeKey:"form.argvRemove",items:d.testCommand,errorKey:errs.testCommand,hintKey:"intake.testCommandHint",preview:true}),
     statusBlock(ctx,INTAKE_FORM),
     intakeUi.last?resultCard(ctx,intakeUi.last):null,
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"submit",class:"btn btn-primary",id:"intake-submit",dataset:{focusKey:"intake-submit"},disabled:drafts.busy[INTAKE_FORM]===true,text:ctx.t("intake.submit")})));

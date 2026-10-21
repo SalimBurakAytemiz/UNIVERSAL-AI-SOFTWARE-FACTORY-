@@ -1153,6 +1153,7 @@ export default {
   "intake.notSet":"Not set",
   "intake.criteriaHint":"Optional. Without any, a default criterion is recorded and marked as a default.",
   "intake.riskHint":"Optional. Without a choice the default risk is recorded and marked as a default.",
+  "intake.testCommandHint":"Optional. Each row is one argv token (the first row is the executable); not a shell string. Without it, the first run of this project stops at verification until a test command is set.",
   "intake.submit":"Create project and first mission",
   "intake.created":"Created from your idea: {title}. The project and its first mission now exist; no task was planned and no run started.",
   "intake.source.FOUNDER":"You entered",

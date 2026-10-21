@@ -1,4 +1,5 @@
-// //TR: Bu modül Proje Intake (UI-126) görünümünün saf (DOM'suz) çekirdeğidir: Kurucunun serbest metin fikrini POST /v1/intakes gövdesine (sunucu şemasıyla birebir: idea 10-4000, isteğe bağlı title/projectType/techStack/targetOS/acceptanceCriteria/riskLevel R0-R3) çevirir ve GET /v1/intakes yanıtlarını güvenli, sınırlı alanlara eşler. Alan kaynakları (FOUNDER/DEFAULT/DERIVED) sunucudan AYNEN taşınır; girilmeyen alan Kurucudan gelmiş gibi gösterilmez. Bozuk kayıt tüm okumayı ERROR yapar.
+// //TR: Bu modül Proje Intake (UI-126) görünümünün saf (DOM'suz) çekirdeğidir: Kurucunun serbest metin fikrini POST /v1/intakes gövdesine (sunucu şemasıyla birebir: idea 10-4000, isteğe bağlı title/projectType/techStack/targetOS/acceptanceCriteria/riskLevel R0-R3/testCommand argv listesi) çevirir ve GET /v1/intakes yanıtlarını güvenli, sınırlı alanlara eşler. Alan kaynakları (FOUNDER/DEFAULT/DERIVED) sunucudan AYNEN taşınır; girilmeyen alan Kurucudan gelmiş gibi gösterilmez. Bozuk kayıt tüm okumayı ERROR yapar.
+import {normalizeArgv} from "./work-core.js";
 export const INTAKE_ID_RE=/^itk_[0-9a-f]{24}$/;
 export const INTAKES_PATH="/v1/intakes";
 export const intakePath=id=>INTAKE_ID_RE.test(String(id))?`/v1/intakes/${id}`:null;
@@ -25,6 +26,9 @@ export function buildIntakeRequest(input,{key}={}){
   const crit=(Array.isArray(input?.acceptanceCriteria)?input.acceptanceCriteria:[]).map(trim).filter(Boolean);
   if(crit.length>50||crit.some(c=>c.length>4000))errors.acceptanceCriteria="intake.err.criteria";
   if(risk&&!INTAKE_RISKS.includes(risk))errors.riskLevel="intake.err.risk";
+  // Test komutu proje formuyla aynı kurallarla (normalizeArgv) denetlenir; hata varsa istek hiç gönderilmez.
+  const argv=normalizeArgv(input?.testCommand);
+  if(!argv.ok)errors.testCommand=argv.error;
   if(key!==undefined&&!KEY_RE.test(String(key)))errors.idempotencyKey="intake.err.key";
   const body={idea};
   if(title)body.title=title;
@@ -33,6 +37,7 @@ export function buildIntakeRequest(input,{key}={}){
   if(os.length)body.targetOS=[...os];
   if(crit.length)body.acceptanceCriteria=crit;
   if(risk)body.riskLevel=risk;
+  if(argv.ok&&argv.argv.length)body.testCommand=argv.argv;
   if(key!==undefined)body.idempotencyKey=String(key);
   const ok=!Object.keys(errors).length;
   return {ok,path:INTAKES_PATH,body:ok?body:null,errors};

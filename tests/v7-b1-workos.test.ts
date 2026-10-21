@@ -382,6 +382,96 @@ describe("LANE-B project intake", () => {
     const r = await app.inject({method: "GET", url: "/v1/intakes", headers: hdr});
     expect(r.statusCode).toBe(503); expect(r.json().error).toBe("INTAKE_STORE_CORRUPT");
   });
+
+  // //TR: COORD-INTAKE-TEST-COMMAND: intake, projeler gibi isteğe bağlı testCommand (argv) kabul eder; komut projeye yazılır, runner mission yoksa projeden okur, böylece ilk koşu TEST_COMMAND_NOT_CONFIGURED ile bloklanmaz.
+  describe("optional testCommand (same schema and allowlist policy as projects)", () => {
+    const TC = ["node", "--test", "tests/"];
+    const intakesFile = () => path.join(tmp, "data", "intakes.jsonl");
+    const journalSize = () => fs.existsSync(path.join(tmp, "data", "journal.jsonl")) ? journalLines(path.join(tmp, "data")).length : 0;
+
+    it("creates a project whose testCommand equals the request; the first mission inherits it through the project; it is durable across restart", async () => {
+      const {app, store, audits} = await mkApp();
+      const r = await post(app, {idea: IDEA, testCommand: TC});
+      expect(r.statusCode).toBe(201);
+      const i = r.json().intake;
+      expect(i.testCommand).toEqual(TC);
+      expect(i.testCommandSha256).toBe(crypto.createHash("sha256").update(JSON.stringify(TC)).digest("hex"));
+      expect(store.getProject({tenantId: "tA"}, i.projectId)!.testCommand).toEqual(TC);
+      // Proje route deseni: komut yalnız projeye yazılır; mission kendi komutunu taşımaz (runner mission ?? proje okur).
+      expect(store.getMission({tenantId: "tA"}, i.missionId)!.testCommand).toBeUndefined();
+      expect(audits.map(a => a.e)).toEqual(["WORKOS_INTAKE_CREATED"]);
+      const {app: app2, store: store2} = await mkApp();
+      expect((await app2.inject({method: "GET", url: `/v1/intakes/${i.intakeId}`, headers: hdr})).json().intake).toEqual(i);
+      expect(store2.getProject({tenantId: "tA"}, i.projectId)!.testCommand).toEqual(TC);
+      // Girdi dizisi aynen kopyalanır: istek gövdesindeki dizi sonradan değişse de kayıt değişmez.
+      const arr = [...TC]; const r2 = await post(app, {idea: IDEA, testCommand: arr, idempotencyKey: "copy1"}); arr[0] = "bash";
+      expect(store.getProject({tenantId: "tA"}, r2.json().intake.projectId)!.testCommand).toEqual(TC);
+    });
+    it("refuses a disallowed or malformed command with the same 400 INVALID_BODY as the project route, and writes nothing", async () => {
+      const {app, store, audits} = await mkApp();
+      const before = journalSize();
+      const bad: unknown[] = [["bash", "-c", "rm -rf /"], ["sh", "x"], ["/usr/bin/node", "x.js"], ["./node"], ["C:/node.exe"], ["node.exe", "x"], ["NODE", "x"], "node t.mjs", [], [""], ["node", ""],
+        ["node", "a\nb"], ["node", "a\rb"], ["node", "a\u0000b"], ["node", "x".repeat(1001)], Array.from({length: 33}, () => "node"), ["node", 1], {0: "node"}, null];
+      for (const tc of bad) {
+        const r = await post(app, {idea: IDEA, testCommand: tc});
+        expect([r.statusCode, r.json().error], JSON.stringify(tc)?.slice(0, 60)).toEqual([400, "INVALID_BODY"]);
+      }
+      // İzin verilen yürütülebilir listesi dışındaki ilk öğe, proje route'uyla aynı açıklamayı taşır.
+      expect((await post(app, {idea: IDEA, testCommand: ["bash", "-c", "x"]})).json().detail).toBe("testCommand[0] must be one of node,npm,npx,pnpm,yarn,python,pytest,go,cargo,dotnet,mvn,gradle");
+      expect(store.listProjects({tenantId: "tA"})).toEqual([]); expect(store.listMissions({tenantId: "tA"})).toEqual([]);
+      expect(journalSize()).toBe(before); expect(fs.existsSync(intakesFile())).toBe(false); expect(audits).toEqual([]);
+      for (const [n, ok] of [["node", "t.mjs"], ["npm", "test"], ["pytest"], ["go", "test", "./..."], ["gradle", "test"]].entries()) expect((await post(app, {idea: IDEA, testCommand: ok, idempotencyKey: `ok${n}`})).statusCode, ok.join(" ")).toBe(201);
+      // submitIntake'i doğrudan çağıran da allowlist dışı komutla hiçbir şey yazdıramaz (ikinci savunma).
+      const {submitIntake, validateIntakeCreate} = await import("../core/workos/intake.js");
+      const n = journalSize(), lines = fs.readFileSync(intakesFile(), "utf8");
+      expect(() => submitIntake({store, scope: {tenantId: "tA"}, orgId: "o1", actor: "FOUNDER_LOCAL"}, {idea: IDEA, testCommand: ["bash", "-c", "x"], idempotencyKey: "direct1"})).toThrow("WORKOS_INVALID_INPUT");
+      expect(journalSize()).toBe(n); expect(fs.readFileSync(intakesFile(), "utf8")).toBe(lines);
+      expect(validateIntakeCreate({idea: IDEA, testCommand: ["bash"]})).toEqual({ok: false, errors: "testCommand[0] must be one of node,npm,npx,pnpm,yarn,python,pytest,go,cargo,dotnet,mvn,gradle"});
+      expect(validateIntakeCreate({idea: IDEA, testCommand: TC})).toEqual({ok: true});
+    });
+    it("replays an idempotent retry without duplicates; the same key with a different command (or one side absent) is a 409 conflict that writes nothing", async () => {
+      const {app, store} = await mkApp();
+      const body = {idea: IDEA, testCommand: TC, idempotencyKey: "tc1"};
+      const a = await post(app, body), b = await post(app, body);
+      expect([a.statusCode, b.statusCode]).toEqual([201, 200]);
+      expect(b.json().intake).toEqual(a.json().intake);
+      expect(store.listProjects({tenantId: "tA"})).toHaveLength(1); expect(store.listMissions({tenantId: "tA"})).toHaveLength(1);
+      const before = journalSize(), file = fs.readFileSync(intakesFile(), "utf8");
+      for (const other of [["node", "--test"], ["node", "tests/", "--test"], ["npm", "test"], ["node", "--test", "tests/", "extra"]]) {
+        const c = await post(app, {...body, testCommand: other});
+        expect([c.statusCode, c.json().error], other.join(" ")).toEqual([409, "INTAKE_IDEMPOTENCY_CONFLICT"]);
+      }
+      const dropped = await post(app, {idea: IDEA, idempotencyKey: "tc1"});
+      expect([dropped.statusCode, dropped.json().error]).toEqual([409, "INTAKE_IDEMPOTENCY_CONFLICT"]);
+      // Komutsuz kayıt + sonradan komutlu istek de farklı istektir.
+      expect((await post(app, {idea: IDEA, idempotencyKey: "tc2"})).statusCode).toBe(201);
+      const added = await post(app, {idea: IDEA, idempotencyKey: "tc2", testCommand: TC});
+      expect([added.statusCode, added.json().error]).toEqual([409, "INTAKE_IDEMPOTENCY_CONFLICT"]);
+      expect(fs.readFileSync(intakesFile(), "utf8").split("\n").filter(Boolean)).toHaveLength(2);
+      expect(fs.readFileSync(intakesFile(), "utf8").startsWith(file)).toBe(true);
+      expect(journalSize()).toBeGreaterThan(before); // yalnız tc2 projesi + mission'ı eklendi
+      expect(store.listProjects({tenantId: "tA"})).toHaveLength(2);
+    });
+    it("keeps the previous behaviour when testCommand is absent: no new record fields, no project command, unchanged project idempotency digest, replay still matches", async () => {
+      const {app, store} = await mkApp();
+      const body = {idea: IDEA, title: "Reading tracker", idempotencyKey: "plain1"};
+      const a = await post(app, body);
+      expect(a.statusCode).toBe(201);
+      const i = a.json().intake;
+      expect(Object.keys(i).sort()).toEqual(["acceptanceCriteria", "createdAt", "createdBy", "idea", "ideaSha256", "intakeId", "missionId", "projectId", "riskLevel", "sources", "status", "tenantId", "title"]);
+      const proj = store.getProject({tenantId: "tA"}, i.projectId)!;
+      expect(proj.testCommand).toBeUndefined(); expect("testCommand" in proj).toBe(false);
+      expect(JSON.parse(fs.readFileSync(intakesFile(), "utf8").trim())).toEqual(i);
+      // Proje, testCommand olmadan eskiden hesaplanan özetle yazılmıştır: aynı alanlarla doğrudan yeniden oluşturma ESKİ özetle eşleşir (replayed).
+      const direct = store.createProjectDetailed({tenantId: "tA", orgId: "o1", name: "Reading tracker", environmentId: "local", createdBy: "FOUNDER_LOCAL", idempotencyKey: `${i.intakeId}.p`, acceptanceCriteria: [...i.acceptanceCriteria]});
+      expect(direct.replayed).toBe(true); expect(direct.entity.projectId).toBe(i.projectId);
+      const b = await post(app, body);
+      expect([b.statusCode, b.json().intake]).toEqual([200, i]);
+      // Eski biçimli (testCommand alanı olmayan) bir kayıt, komutsuz tekrar istekle hâlâ eşleşir; komutlu istek çakışır.
+      expect((await post(app, {...body, testCommand: TC})).statusCode).toBe(409);
+      expect(store.listProjects({tenantId: "tA"})).toHaveLength(1);
+    });
+  });
 });
 
 // //TR: LANE-B plan: mission görev planı (sıralı görevler + bağımlılıklar) route modülü ve kalıcılık testleri.
@@ -776,5 +866,60 @@ describe("COORD first-delivery wiring through the real server", () => {
     const main = fs.readFileSync(path.join(__dirname, "..", "apps", "desktop", "main.mjs"), "utf8");
     expect(LANE_WRITE_BODY_LIMIT).toBe(Number(/const POST_MAX_BODY_BYTES=(\d+);/.exec(main)![1]));
     await app.close();
+  });
+  // //TR: COORD-INTAKE-TEST-COMMAND: gerçek server.ts üzerinden POST /v1/intakes testCommand ile çalışır (allowlist dışı 400, replay 200, farklı komut 409); intake projesine yönetilen depo bağlanıp mission'ın rol-bağlı koşusu sürülünce VERIFY artık TEST_COMMAND_NOT_CONFIGURED ile bloklanmaz, kayıtlı komut gerçekten çalıştırılır (model çağrısı yok, FAKE executor).
+  it("accepts testCommand on POST /v1/intakes end to end, and a role-bound run of that intake's mission no longer blocks with TEST_COMMAND_NOT_CONFIGURED", async () => {
+    const {app} = mkApp();
+    const TC = ["node", "test.mjs"];
+    const refused = await req(app, "POST", "/v1/intakes", {idea: IDEA, testCommand: ["bash", "-c", "rm -rf /"]});
+    expect([refused.statusCode, refused.json().error]).toEqual([400, "INVALID_BODY"]);
+    expect((await req(app, "GET", "/v1/intakes")).json().intakes).toEqual([]);
+    expect((await req(app, "GET", "/v1/projects")).json().projects).toEqual([]);
+    const body = {idea: IDEA, testCommand: TC, idempotencyKey: "real-tc-1"};
+    const made = await req(app, "POST", "/v1/intakes", body);
+    expect(made.statusCode).toBe(201);
+    const intake = made.json().intake;
+    expect(intake.testCommand).toEqual(TC);
+    const replay = await req(app, "POST", "/v1/intakes", body);
+    expect([replay.statusCode, replay.json().intake]).toEqual([200, intake]);
+    const conflict = await req(app, "POST", "/v1/intakes", {...body, testCommand: ["node", "other.mjs"]});
+    expect([conflict.statusCode, conflict.json().error]).toEqual([409, "INTAKE_IDEMPOTENCY_CONFLICT"]);
+    const projects = (await req(app, "GET", "/v1/projects")).json().projects;
+    expect(projects.map((p: any) => [p.projectId, p.testCommand])).toEqual([[intake.projectId, TC]]);
+    expect((await req(app, "GET", `/v1/intakes/${intake.intakeId}`)).json().intake).toEqual(intake);
+    await app.close();
+
+    // Runner: aynı veri dizinindeki gerçek store; intake projesine yönetilen depo bağlanır, mission yetkilendirilir, developer rolüne bağlı koşu FAKE executor ile sürülür.
+    const scope = {tenantId: "local"}, ACTOR = "FOUNDER_LOCAL";
+    const git = (cwd: string, args: string[]) => { const r = spawnGitSync(cwd, args); if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`); return String(r.stdout).trim(); };
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    expect(store.getProject(scope, intake.projectId)!.testCommand).toEqual(TC);
+    expect(store.getMission(scope, intake.missionId)!.testCommand).toBeUndefined(); // komut yalnız projede; runner mission ?? proje okur
+    const repo = path.join(store.dataDir, "projects", intake.projectId, "repo");
+    fs.mkdirSync(repo, {recursive: true});
+    git(repo, ["init", "-q", "-b", "main"]);
+    fs.writeFileSync(path.join(repo, "test.mjs"), `import fs from "node:fs";\nprocess.exit(fs.existsSync("feature.txt") && fs.readFileSync("feature.txt", "utf8").trim() === "ok" ? 0 : 1);\n`);
+    fs.writeFileSync(path.join(repo, "README.txt"), "reading tracker\n");
+    git(repo, ["add", "-A"]);
+    git(repo, ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "commit", "-q", "-m", "seed"]);
+    store.setProjectRepository(scope, intake.projectId, {path: repo, managed: true}, ACTOR, {kind: "git", headSha: git(repo, ["rev-parse", "HEAD"])});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(scope, intake.missionId, to, "founder go", ACTOR);
+    const fake = new FakeExecutors({implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"})});
+    const pair = fake.pair();
+    const runtime = path.join(tmp, "runtime-run"); fs.mkdirSync(runtime, {recursive: true});
+    const dev = bindingForFunction("developer");
+    const run = store.createRun({tenantId: scope.tenantId, missionId: intake.missionId, roleId: dev.roleId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: ACTOR});
+    await new MissionRunner({executionGate: testExecutionGate(), store, dataDir: store.dataDir, globalStopFile: path.join(runtime, "GLOBAL_STOP.json"), envPolicyFile: path.join(path.resolve(import.meta.dirname, ".."), "config", "environment-policy.json"),
+      executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(path.join(tmp, "sec")).options}).tick();
+    const done = store.getRun(scope, run.runId)!;
+    // Dürüst iddia: VERIFY artık komut yapılandırılmadığı için bloklanmaz; sonraki adımlar başka sebeplerle durabilir/ilerleyebilir.
+    expect(fake.calls.implement).toBe(1);
+    expect(done.roleId).toBe(dev.roleId);
+    expect(done.reason).not.toBe("TEST_COMMAND_NOT_CONFIGURED");
+    expect(JSON.stringify(done.evidence)).not.toContain("TEST_COMMAND_NOT_CONFIGURED");
+    const verify = done.evidence.find(e => e.kind === "VERIFY_TESTS");
+    expect(verify, `run ${done.status}/${done.step}/${done.reason}`).toBeDefined(); // kayıtlı komut gerçekten çalıştırıldı ve kanıt yazıldı
+    // Fake executor + kayıtlı komut: koşu VERIFY'yi geçip REPORT'ta Founder teslim kararını bekler (bu bir doğrulama/CLEAN iddiası değildir).
+    expect([done.status, done.step]).toEqual(["AWAITING_APPROVAL", "REPORT"]);
   });
 });

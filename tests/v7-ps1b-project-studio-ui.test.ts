@@ -1798,8 +1798,113 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
     const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("intake.") || k === "form.field.idea");
-    expect(keys.length).toBe(34);
+    expect(keys.length).toBe(35); // 34 + intake.testCommandHint
     for (const k of keys) expect(T[k], k).toBeTruthy();
+  });
+
+  // //TR: COORD-INTAKE-TEST-COMMAND: intake formundaki isteğe bağlı Test komutu alanı proje formuyla aynı satır düzenleyicisini ve aynı normalizeArgv kurallarını kullanır; yalnız dolu olduğunda gövdeye girer.
+  describe("optional test command field (same argv rules as the project form)", () => {
+    const sendOk = async (o: CtxOpts = {}) => open({post: (p, b) => p === "/v1/intakes" ? {status: 201, body: {intake: rec({title: b.title ?? "Kitap Kulübü"})}} : {status: 404, body: {}}, ...o});
+    const submit = async (c: Awaited<ReturnType<typeof open>>) => { byId(c.root, "intake-form")!.fire("submit"); await tick(); };
+
+    it("renders an optional argv row editor with label, hint, preview and add/remove, empty by default", async () => {
+      const c = await sendOk();
+      for (const id of ["intake-test-0", "intake-test-add", "intake-test-preview", "intake-test-hint"]) expect(byId(c.root, id), id).not.toBeNull();
+      expect(byId(c.root, "intake-test-1")).toBeNull();
+      expect(byId(c.root, "intake-test-0")!.value).toBe("");
+      expect(text(byId(c.root, "intake")!)).toContain("Test command (argv token list)");
+      expect(text(byId(c.root, "intake-test-hint")!)).toBe(c.ctx.t("intake.testCommandHint")); expect(text(byId(c.root, "intake-test-hint")!)).toContain("Optional");
+      expect(text(byId(c.root, "intake-test-preview")!)).toContain("[]");
+      expect(byId(c.root, "intake-test-0")!.getAttribute?.("required") ?? null).toBeNull();
+      byId(c.root, "intake-test-add")!.fire("click");
+      expect(byId(c.root, "intake-test-1")).not.toBeNull();
+      type(c.root, "intake-test-0", "node"); type(c.root, "intake-test-1", "--test");
+      expect(text(byId(c.root, "intake-test-preview")!)).toContain('["node","--test"]');
+      byId(c.root, "intake-test-rm-0")!.fire("click");
+      expect(byId(c.root, "intake-test-1")).toBeNull(); expect(byId(c.root, "intake-test-0")!.value).toBe("--test");
+      expect(c.calls.post).toEqual([]); // alan yazmak hiçbir şey göndermez
+    });
+    it("sends the typed tokens exactly (trimmed, blank rows dropped, order kept) in testCommand and clears the field after a created intake", async () => {
+      const c = await sendOk();
+      type(c.root, "intake-idea", IDEA);
+      type(c.root, "intake-test-0", "  node ");
+      byId(c.root, "intake-test-add")!.fire("click"); type(c.root, "intake-test-1", "--test");
+      byId(c.root, "intake-test-add")!.fire("click"); type(c.root, "intake-test-2", "   ");
+      byId(c.root, "intake-test-add")!.fire("click"); type(c.root, "intake-test-3", "tests/a b.test.ts");
+      await submit(c);
+      expect(c.calls.post.length).toBe(1);
+      expect(c.calls.post[0].path).toBe("/v1/intakes");
+      expect(c.calls.post[0].body.testCommand).toEqual(["node", "--test", "tests/a b.test.ts"]);
+      expect(Object.keys(c.calls.post[0].body).sort()).toEqual(["idea", "idempotencyKey", "testCommand"]);
+      expect(forms.drafts.status.intake.ok).toBe(true);
+      expect(c.m.intakeDraft.testCommand).toEqual([""]);
+      expect(byId(mount(c.doc, await projectsView.render(c.ctx)), "intake-test-0")!.value).toBe("");
+    });
+    it("refuses invalid argv with no POST, shows the error on the field, and keeps the draft", async () => {
+      const cases: Array<[string[], string]> = [[["node --test"], "err.argvShellString"], [["node", "a\nb"], "err.argvControl"], [["node", "x".repeat(501)], "err.argvLong"],
+        [Array.from({length: 33}, () => "node"), "err.argvMany"], [["/usr/bin/node -x"], "err.argvShellString"], [["C:\\Program Files\\nodejs\\node.exe --test"], "err.argvShellString"]];
+      for (const [tokens, key] of cases) {
+        forms.resetAllForms();
+        const c = await sendOk();
+        type(c.root, "intake-idea", IDEA);
+        c.m.intakeDraft.testCommand.splice(0, 1, ...tokens);
+        const root = mount(c.doc, await projectsView.render(c.ctx));
+        type(root, "intake-idea", IDEA);
+        byId(root, "intake-form")!.fire("submit"); await tick();
+        expect(c.calls.post, key).toEqual([]);
+        expect(forms.drafts.status.intake, key).toMatchObject({ok: false, errors: {testCommand: key}});
+        const again = mount(c.doc, await projectsView.render(c.ctx));
+        expect(text(byId(again, "intake-test-err")!), key).toBe(c.ctx.t(key));
+        expect(byId(again, "intake-test-0")!.value).toBe(tokens[0]); // taslak korunur
+        expect(c.m.intakeDraft.idea).toBe(IDEA);
+      }
+    });
+    it("applies exactly the project form's rules: buildIntakeRequest and buildProjectRequest agree on every command", async () => {
+      const ic = await load(rend, "intake-core.js"), wc = await load(rend, "work-core.js");
+      const probes: unknown[] = [undefined, null, [], [""], ["   "], ["node"], [" node ", "", "--test", "x"], ["node --test"], ["node", "a\u0000b"], ["node", "a\rb"], ["node", "x".repeat(500)], ["node", "x".repeat(501)],
+        Array.from({length: 32}, () => "node"), Array.from({length: 33}, () => "node"), "node --test", {0: "node"}, [1], ["/usr/bin/node"], ["/usr/bin/node -x"], ["bash", "-c", "x"]];
+      for (const tc of probes) {
+        const a = ic.buildIntakeRequest({idea: IDEA, testCommand: tc}), b = wc.buildProjectRequest({name: "n", repositoryPath: "/srv/app", testCommand: tc});
+        const label = JSON.stringify(tc)?.slice(0, 50);
+        expect(a.errors.testCommand, label).toBe(b.errors?.testCommand);
+        expect(a.body?.testCommand, label).toEqual(b.body?.testCommand);
+      }
+      // Yalnız şekil denetimi istemcide yapılır; yürütülebilir allowlist'i sunucuda (proje formuyla aynı): burada izinli olmayan ilk belirteç de gövdeye girer.
+      expect(ic.buildIntakeRequest({idea: IDEA, testCommand: ["bash", "-c", "x"]}).body.testCommand).toEqual(["bash", "-c", "x"]);
+    });
+    it("leaves the body unchanged when the field is empty: no testCommand key at all", async () => {
+      const ic = await load(rend, "intake-core.js");
+      for (const tc of [undefined, [], [""], ["  ", ""]]) {
+        const r = ic.buildIntakeRequest({idea: IDEA, testCommand: tc}, {key: "ui-abc"});
+        expect(r, JSON.stringify(tc)).toEqual({ok: true, path: "/v1/intakes", errors: {}, body: {idea: IDEA, idempotencyKey: "ui-abc"}});
+        expect("testCommand" in r.body).toBe(false);
+      }
+      const c = await sendOk();
+      type(c.root, "intake-idea", IDEA); type(c.root, "intake-test-0", "   ");
+      await submit(c);
+      expect(c.calls.post.length).toBe(1);
+      expect("testCommand" in c.calls.post[0].body).toBe(false);
+      expect(Object.keys(c.calls.post[0].body).sort()).toEqual(["idea", "idempotencyKey"]);
+    });
+    it("a changed command is a different request (new idempotency key) while an unchanged retry reuses the key", async () => {
+      const c = await open({post: () => ({status: 503, body: {error: "INTAKE_STORE_CORRUPT"}})});
+      type(c.root, "intake-idea", IDEA); type(c.root, "intake-test-0", "npm");
+      await submit(c); await submit(c);
+      type(c.root, "intake-test-0", "pnpm");
+      await submit(c);
+      const keys = c.calls.post.map((x: any) => x.body.idempotencyKey);
+      expect(c.calls.post.map((x: any) => x.body.testCommand)).toEqual([["npm"], ["npm"], ["pnpm"]]);
+      expect(keys[0]).toBe(keys[1]); expect(keys[2]).not.toBe(keys[0]);
+    });
+    it("testCommand strings exist in both locales with the same keys the project form uses", async () => {
+      const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+      const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+      for (const k of ["intake.testCommandHint", "form.testCommand", "form.argvToken", "form.argvAdd", "form.argvRemove", "form.argvPreview", "form.field.testCommand", "err.argvInvalid", "err.argvControl", "err.argvLong", "err.argvMany", "err.argvShellString"]) {
+        expect(E[k], `en ${k}`).toBeTruthy(); expect(T[k], `tr ${k}`).toBeTruthy();
+      }
+      expect(E["intake.testCommandHint"]).not.toBe(T["intake.testCommandHint"]);
+      expect(Object.keys(E).filter(k => k.startsWith("intake.")).sort()).toEqual(Object.keys(T).filter(k => k.startsWith("intake.")).sort());
+    });
   });
 });
 
