@@ -952,3 +952,67 @@ describe.skipIf(process.platform !== "linux")("COORD first-delivery Electron E2E
     });
   });
 });
+
+// //TR: LANE-B task-run link: görevi aynı mission'daki gerçek koşuya bağlayan route modülü; doğrulama, idempotency, yırtık kuyruk, tenant ve geçit testleri.
+describe("LANE-B task-run link routes", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const mkApp = async (stopped = false, allowed = true, tenantId = "tA") => {
+    const [{default: Fastify}, {registerTaskRunRoutes}, {WorkOsError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/task-runs.js"), import("../core/workos/types.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const audits: string[] = [];
+    registerTaskRunRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string) => { audits.push(e); }, workosStopped: () => stopped,
+      workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"}, workosFail: (r: any, e: any) => r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
+    const p = store.createProject(proj()), m = store.createMission(msn(p.projectId)), m2 = store.createMission(msn(p.projectId));
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) { store.transitionMission({tenantId: "tA"}, m.missionId, to, "go", "FOUNDER_LOCAL"); store.transitionMission({tenantId: "tA"}, m2.missionId, to, "go", "FOUNDER_LOCAL"); }
+    const run = store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: "FOUNDER_LOCAL"});
+    const otherRun = store.createRun({tenantId: "tA", missionId: m2.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: "FOUNDER_LOCAL"});
+    const task = store.createTask({tenantId: "tA", missionId: m.missionId, title: "t", actor: "FOUNDER_LOCAL"});
+    return {app, store, audits, run, otherRun, task};
+  };
+  const link = (app: any, id: string, body: unknown, headers: any = hdr) => app.inject({method: "POST", url: `/v1/tasks/${id}/runs`, headers, payload: body as any});
+
+  it("links a task to a same-mission run, replays idempotently, lists both directions and survives restart", async () => {
+    const {app, audits, run, task} = await mkApp();
+    const a = await link(app, task.taskId, {runId: run.runId}), b = await link(app, task.taskId, {runId: run.runId});
+    expect([a.statusCode, b.statusCode]).toEqual([201, 200]);
+    expect(b.json().link).toEqual(a.json().link);
+    expect(audits).toEqual(["WORKOS_TASK_RUN_LINKED", "WORKOS_IDEMPOTENT_REPLAY"]);
+    const { app: app2 } = await mkApp().catch(() => ({app}));
+    const l = (await app2.inject({method: "GET", url: `/v1/tasks/${task.taskId}/runs`, headers: hdr})).json().runs;
+    expect(l).toHaveLength(1); expect(l[0].run.runId).toBe(run.runId); expect(l[0].run.status).toBe("QUEUED");
+    const back = (await app.inject({method: "GET", url: `/v1/work-runs/${run.runId}/tasks`, headers: hdr})).json().links;
+    expect(back.map((x: any) => x.taskId)).toEqual([task.taskId]);
+    expect(JSON.stringify(a.json())).not.toContain(tmp);
+  });
+  it("refuses a run of another mission, unknown ids, a DONE task and bad bodies; writes nothing on refusal", async () => {
+    const {app, store, otherRun, run, task} = await mkApp();
+    expect((await link(app, task.taskId, {runId: otherRun.runId})).json().error).toBe("RUN_MISSION_MISMATCH");
+    expect((await link(app, task.taskId, {runId: "run_" + "0".repeat(24)})).statusCode).toBe(404);
+    expect((await link(app, "tsk_" + "0".repeat(24), {runId: run.runId})).statusCode).toBe(404);
+    for (const bad of [{}, {runId: "x"}, {runId: run.runId, extra: 1}]) expect((await link(app, task.taskId, bad)).statusCode).toBe(400);
+    expect((await link(app, "bad", {runId: run.runId})).statusCode).toBe(400);
+    for (const to of ["IN_PROGRESS", "DONE"] as const) store.transitionTask({tenantId: "tA"}, task.taskId, to, "x", "FOUNDER_LOCAL");
+    const done = await link(app, task.taskId, {runId: run.runId});
+    expect(done.statusCode).toBe(409); expect(done.json().error).toBe("TASK_NOT_LINKABLE");
+    expect((await app.inject({method: "GET", url: `/v1/tasks/${task.taskId}/runs`, headers: hdr})).json().runs).toEqual([]);
+  });
+  it("enforces token, Global Stop, policy and tenant isolation; tolerates a torn tail and fails closed on a corrupt middle", async () => {
+    const {app, run, task} = await mkApp();
+    expect((await link(app, task.taskId, {runId: run.runId}, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    const stop = await mkApp(true), deny = await mkApp(false, false);
+    expect((await link(stop.app, stop.task.taskId, {runId: stop.run.runId})).statusCode).toBe(423);
+    expect((await link(deny.app, deny.task.taskId, {runId: deny.run.runId})).statusCode).toBe(403);
+    const other = await mkApp(false, true, "tB");
+    expect((await link(other.app, task.taskId, {runId: run.runId})).statusCode).toBe(404);
+    const f = path.join(tmp, "data", "task-run-links.jsonl");
+    expect(fs.existsSync(f)).toBe(false);
+    fs.writeFileSync(f, '{"taskId":"tsk_tor');
+    expect((await link(app, task.taskId, {runId: run.runId})).statusCode).toBe(201);
+    expect(fs.readFileSync(f, "utf8").endsWith("\n")).toBe(true);
+    fs.writeFileSync(f, "{bad}\n" + fs.readFileSync(f, "utf8"));
+    const r = await app.inject({method: "GET", url: `/v1/tasks/${task.taskId}/runs`, headers: hdr});
+    expect(r.statusCode).toBe(503); expect(r.json().error).toBe("LINK_STORE_CORRUPT");
+  });
+});
