@@ -130,7 +130,7 @@
       "id": "PQ-002",
       "source": "UASCO-AUD-129 (P3)",
       "title": "Asserting test for the Tower scheduler fact (UI-206)",
-      "status": "TESTED",
+      "status": "INTEGRATED",
       "base": "v7/integration",
       "files": [
         "tests/v7-ux-wp4-tower.test.ts"
@@ -150,7 +150,14 @@
       "finalSha": "f66600f0ed42ed231f19e7e1a6bdd060764c7c76",
       "completedAt": "2026-10-21T04:58:07Z",
       "evidence": "Coordinator re-ran at f66600f: tests/v7-ux-wp4-tower.test.ts 32/32; UX+b4+b5+renderer+sharding group 28 files 1036/1036; tsc --noEmit 0; TR PASS; secret-sanity PASS. Diff v7/integration..f66600f = tests/v7-ux-wp4-tower.test.ts only (+42). Mutations of apps/desktop/renderer/views/tower.js (file restored): remove the scheduler fact -> 6 fail; fabricate 0/0 for missing data -> 4 fail; wrong completed count -> 1 fail.",
-      "notExecuted": "Windows; full run-validation (CI runs them)."
+      "notExecuted": "Windows; full run-validation (CI runs them).",
+      "integration": {
+        "pr": 133,
+        "mergeCommit": "3a97aa5",
+        "mergedAt": "2026-10-21T23:42:00Z",
+        "method": "GitHub auto-merge (MERGE) after required validate (ubuntu-latest) + validate (windows-latest) green; no manual Founder merge",
+        "mergedBy": "SalimBurakAytemiz (auto-merge enabled by the coordinator session)"
+      }
     },
     {
       "id": "PQ-003",
@@ -230,7 +237,7 @@
       "id": "PQ-006",
       "source": "UASCO-AUD-130 (P3)",
       "title": "Make the two host-sensitive tests robust without weakening them",
-      "status": "TESTED",
+      "status": "INTEGRATED",
       "base": "v7/integration",
       "files": [
         "tests/v7-b10a-evidence.test.ts",
@@ -266,7 +273,14 @@
       "head": "d893c0f",
       "note": "Marked ready for review by the coordinator (setup step 8). Independent review blocked by the App key secret (Founder).",
       "ci": "green at d893c0f (run 39608214759)",
-      "readyForReview": "2026-10-21T13:51:30.633Z"
+      "readyForReview": "2026-10-21T13:51:30.633Z",
+      "integration": {
+        "pr": 135,
+        "mergeCommit": "318461c",
+        "mergedAt": "2026-10-21T23:42:29Z",
+        "method": "GitHub auto-merge (MERGE) after required validate (ubuntu-latest) + validate (windows-latest) green; no manual Founder merge",
+        "mergedBy": "SalimBurakAytemiz (auto-merge enabled by the coordinator session)"
+      }
     },
     {
       "id": "PQ-008",
@@ -342,7 +356,7 @@
       "lane": "B",
       "source": "Central brain: model routing (Founder sprint P0-B); builds on core/policy/data-routing.ts and core/workos/risk-admission.ts",
       "title": "Model routing decision core: pure fail-closed choice of model class and cost tier per task (risk, data class, complexity, role, paid authority, reviewer independence)",
-      "status": "TESTED",
+      "status": "INTEGRATED",
       "branch": "claude/pq-010",
       "base": "v7/integration",
       "files": [
@@ -369,6 +383,13 @@
         "at": "2026-10-21T02:38Z",
         "head": "400e9993c4c1593431ffeb0f5a2553346c2f45e4",
         "result": "CLEAN_PRELIMINARY (static, same account)"
+      },
+      "integration": {
+        "pr": 130,
+        "mergeCommit": "01c7739",
+        "mergedAt": "2026-10-21T23:24:08Z",
+        "method": "GitHub auto-merge (MERGE) after required validate (ubuntu-latest) + validate (windows-latest) green; no manual Founder merge",
+        "mergedBy": "SalimBurakAytemiz (auto-merge enabled by the coordinator session)"
       }
     },
     {
@@ -376,7 +397,7 @@
       "lane": "B",
       "source": "Central brain: command -> task intake (Founder sprint P0-B); builds on core/mission/state-machine.ts and core/mission/types.ts",
       "title": "Command intake core: Founder text command -> validated mission DRAFT proposal with conservative risk and authority flags (pure, never authorizes)",
-      "status": "TESTED",
+      "status": "INTEGRATED",
       "base": "v7/integration",
       "files": [
         "core/mission/command-intake.ts",
@@ -395,7 +416,14 @@
       "claimSha": "58fedd6",
       "finalSha": "2891eae",
       "owner": "production-builder worker (queue tick 06:48Z)",
-      "evidence": "Coordinator re-ran at 2891eae: tests/mission-state.test.ts 12/12; tsc 0; TR PASS; secret-sanity PASS; diff = core/mission/command-intake.ts + tests/mission-state.test.ts only; mutation authorityRequired=false -> 2 tests fail."
+      "evidence": "Coordinator re-ran at 2891eae: tests/mission-state.test.ts 12/12; tsc 0; TR PASS; secret-sanity PASS; diff = core/mission/command-intake.ts + tests/mission-state.test.ts only; mutation authorityRequired=false -> 2 tests fail.",
+      "integration": {
+        "pr": 134,
+        "mergeCommit": "65e8e45",
+        "mergedAt": "2026-10-21T23:42:03Z",
+        "method": "GitHub auto-merge (MERGE) after required validate (ubuntu-latest) + validate (windows-latest) green; no manual Founder merge",
+        "mergedBy": "SalimBurakAytemiz (auto-merge enabled by the coordinator session)"
+      }
     },
     {
       "id": "PQ-012",
@@ -537,7 +565,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T15:10:15.267Z",
+    "at": "2026-10-21T23:46:00Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -554,7 +582,8 @@
       135
     ],
     "next": "Verify #136 review result; integration L1; first-delivery orchestrator on L1; lanes continue.",
-    "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified."
+    "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified.",
+    "note": "Founder auto-merge policy live: 5 PRs auto-merged on required CI (145,130,133,134,135). In flight with auto-merge: 147,148,149,150 (Lane A), 151,152 (Lane B). #146 (Windows installer CI + installed-app IPC fix) green incl. real install test; merge held: safety layer requires review for the coordinator own protected-path change."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
   "lanes": {
@@ -1270,5 +1299,33 @@
       "D10: resume the Founder-suspended merge lane for the PQ queue items (#127, #129, #130), and give per-PR merge permission at each release.",
       "D11: the open agent PR cap. 24 PRs are open now. After #143 merges and the 6 closes, 17 remain, still above the cap of 10. Confirm that the three Builders only update existing PR branches (rebases and fixes) and open no new PRs until 10 or fewer are open, or adjust the cap."
     ]
-  }
+  },
+  "autoMergeEvidence": [
+    {
+      "pr": 145,
+      "mergeCommit": "2bdaaa3",
+      "mergedAt": "2026-10-21T23:03:47Z",
+      "what": "SEC vitest 4.1.12 (base-wide dependency-supply-chain fix)"
+    },
+    {
+      "pr": 130,
+      "mergeCommit": "01c7739",
+      "mergedAt": "2026-10-21T23:24:08Z"
+    },
+    {
+      "pr": 133,
+      "mergeCommit": "3a97aa5",
+      "mergedAt": "2026-10-21T23:42:00Z"
+    },
+    {
+      "pr": 134,
+      "mergeCommit": "65e8e45",
+      "mergedAt": "2026-10-21T23:42:03Z"
+    },
+    {
+      "pr": 135,
+      "mergeCommit": "318461c",
+      "mergedAt": "2026-10-21T23:42:29Z"
+    }
+  ]
 }
