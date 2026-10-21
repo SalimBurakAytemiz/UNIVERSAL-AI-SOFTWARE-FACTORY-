@@ -220,7 +220,7 @@
       "lane": "C",
       "source": "docs/mobile/screens MOB-6 (UI-097, UI-099, UI-102, UI-177) + ADR-MOB-001 (read-only STALE cache) + API-CONTRACT (PROPOSED routes)",
       "title": "Mobile Companion core: read-only monitoring state store, view models and STALE/OFFLINE cache rules in pure TypeScript (no dependencies, no network, no privileged actions)",
-      "status": "REVIEW_REJECTED",
+      "status": "TESTED",
       "base": "v7/integration",
       "files": [
         "apps/mobile/src/core/monitoring-store.ts",
@@ -254,7 +254,8 @@
           "finding 2 (STALE cache still shown after DEVICE_REVOKED, REAUTH_REQUIRED, PIN_MISMATCH) = CONFIRMED against docs/mobile/CONNECTIVITY-AND-PAIRING.md:250 and :256 (revoked => wipe session and cache; pin mismatch => hard stop)",
           "findings 3-5 low/nit: carried into the repair task"
         ]
-      }
+      },
+      "note": "Review finding 2 repaired by PQ-008-R1 at 3d2e1d3; needs a fresh independent review on that head."
     },
     {
       "id": "PQ-009",
@@ -360,7 +361,7 @@
       "lane": "C",
       "source": "Review rejection of PR #129 (finding 2, confirmed against docs/mobile/CONNECTIVITY-AND-PAIRING.md:250,:256)",
       "title": "Repair PQ-008: no cached data after device revocation, re-auth or pin mismatch; ordered refresh",
-      "status": "IN_PROGRESS",
+      "status": "TESTED",
       "branch": "claude/pq-008",
       "base": "claude/pq-008@0c212ce (repair on the PR branch, same PR #129)",
       "files": [
@@ -380,7 +381,12 @@
       "attempt": 1,
       "maxAttempts": 3,
       "owner": "original PQ-008 builder session_017zUA52c5FbrSUVyK6EhdRz (has the branch context)",
-      "startedAt": "2026-10-21T04:46:41.416Z"
+      "startedAt": "2026-10-21T04:46:41.416Z",
+      "pr": 129,
+      "finalSha": "3d2e1d3c6d14bba4c6ae72b11930e11dd48be113",
+      "evidence": "Coordinator re-ran at 3d2e1d3: apps/mobile/src/core/monitoring.test.ts 37/37, tsc --noEmit 0, TR PASS, secret-sanity PASS; diff 0c212ce..3d2e1d3 touches only the 4 listed files; the one changed assertion is the DEVICE_REVOKED expectation the acceptance requires, the old last-sync assertion moved to a new UNREACHABLE test.",
+      "ci": "Run 39545952327 on 3d2e1d3: Linux FAIL only at dependency-supply-chain (DEPENDENCY_AUDIT_BLOCKERS:1, the vite advisory); every other step PASS. Not this task: the lockfile fix is PR #128. Re-run after #128 merges and v7/integration is merged into claude/pq-008.",
+      "completedAt": "2026-10-21T04:51:14.191Z"
     },
     {
       "id": "PQ-013",
@@ -466,7 +472,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T03:36:58.968Z",
+    "at": "2026-10-21T04:51:14.191Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -479,8 +485,8 @@
       131,
       132
     ],
-    "next": "PQ-008-R1 (repair on #129) when a builder slot and session access exist; then PQ-011, PQ-012, PQ-003.",
-    "engine": "Production Builder PAUSED until FQ-ROUTINE-ACCESS; heartbeat report-only every 3 h; dispatch by coordinator only meanwhile."
+    "next": "Worker: PQ-002, then PQ-006, PQ-011, PQ-012 (3 queue WIP slots free). Merges wait for the Founder bootstrap of #128 and #131.",
+    "engine": "Builder worker tick 04:48Z ran (access OK) and returned NO_ACTION WIP_LIMIT because it counted 13 claude/* PRs including 6 legacy ones; wipRule added and sent to the worker."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
   "lanes": {
@@ -503,5 +509,6 @@
     "oldRoutine": "trig_01BiCMimhXYFpRs3wFSbknSD PAUSED (fired sessions have sources: [] -> git proxy 403); kept for the Founder to re-enable after attaching the repository, never both at once",
     "heartbeat": "trig_01QEwrSwCvd8UCbKFn97MiHh report-only every 3 h",
     "reviewer": "UASCO Independent Review workflow (PR #131, activates after merge) + interim cloud reviewer routine trig_01NJCi2PSTJxh6rMMLewLvGM"
-  }
+  },
+  "wipRule": "maxOpenPrs counts open PRs to v7/integration whose head branch belongs to a queue task (the branch of any task in tasks[]). Legacy claude/* PRs from before the queue (#23, #28, #32, #33, #46, #66) are not queue WIP and are not counted; they stay open for the Founder to keep or close."
 }
