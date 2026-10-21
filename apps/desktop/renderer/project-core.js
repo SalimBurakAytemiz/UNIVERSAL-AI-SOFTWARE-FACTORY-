@@ -346,3 +346,30 @@ export function mapFlow(raw){
   const rid=typeof f.latestRunId==="string"&&/^[A-Za-z0-9_-]{6,64}$/.test(f.latestRunId)?f.latestRunId:null;
   return {state:"VERIFIED",flow:{projectId:f.projectId,stages,missionCount:cnt(f.missionCount),taskCount:cnt(f.taskCount),latestRunId:rid}};
 }
+
+// //TR: LANE-A: Akış aşamasının `detail` kodunu okunur anlama eşler (yalnız bilinen kodlar çevrilir; bilinmeyen kod AYNEN ham gösterilir, "tanınmadı" diye işaretlenir). Olumlu anlam eklenmez: ürün doğrulandı demeyen kodlar (…_NOT_VERIFIED, CLEAN_REVIEW_FOR_HEAD) bunu açıkça söyler.
+export const FLOW_DETAIL_CODES=Object.freeze({
+  MISSION:Object.freeze(["COMPLETE","BLOCKED"]),
+  PLAN:Object.freeze([]),
+  RUN:Object.freeze([]),
+  REVIEW:Object.freeze(["CLEAN_REVIEW_GATE_PASSED","CLEAN_REVIEW_FOR_HEAD","RUN_NOT_SUCCEEDED","REVIEW","REGRESSION","REPORT"]),
+  DELIVERY:Object.freeze(["PRODUCT_VERIFIED","NOT_VERIFIED","SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED","ARTIFACT_PREPARED_NOT_VERIFIED"])
+});
+const FLOW_STATUS_RE=/^[A-Z][A-Z0-9_]{0,39}$/;
+/** {kind:"key",key,vars} | {kind:"status",status} | {kind:"raw",text} | null (detay yok). PLAN "n/m DONE" ve RUN "STATUS/STEP" biçimleri sayı/durum olarak ayrıştırılır. */
+export function describeFlowDetail(stage,detail){
+  if(typeof detail!=="string"||!detail)return null;
+  if(stage==="PLAN"){
+    const m=/^(\d{1,6})\/(\d{1,6}) DONE$/.exec(detail);
+    if(m&&Number(m[1])<=Number(m[2]))return {kind:"key",key:"flow.detail.PLAN.progress",vars:{done:m[1],total:m[2]}};
+    return {kind:"raw",text:detail};
+  }
+  if(stage==="RUN"){
+    const m=/^([A-Z][A-Z0-9_]{0,39})\/([A-Z][A-Z0-9_]{0,39})$/.exec(detail);
+    if(m)return {kind:"key",key:"flow.detail.RUN.status",vars:{status:m[1],step:m[2]}};
+    return {kind:"raw",text:detail};
+  }
+  if((FLOW_DETAIL_CODES[stage]??[]).includes(detail))return {kind:"key",key:`flow.detail.${stage}.${detail}`,vars:{}};
+  if(stage==="MISSION"&&FLOW_STATUS_RE.test(detail))return {kind:"status",status:detail};
+  return {kind:"raw",text:detail};
+}
