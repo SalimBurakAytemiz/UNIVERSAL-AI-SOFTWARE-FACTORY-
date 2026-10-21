@@ -583,7 +583,7 @@
   "productionLanes": {
     "decision": "Founder directive 2026-10-21 (UASCO MASTER V2 full-scope parallel product development): the main priority is real product code; #131 and owned work continue; three parallel lanes within builderCap 3.",
     "capacity": "builderCap 3 = Lane A + Lane B + Lane C. The queue worker (trig_01HJfvsZWCh5QKihm7iRZHFw) is paused so the cap holds; its remaining small UI tasks (PQ-012, PQ-003, PQ-004, PQ-005) belong to Lane A.",
-    "prLimit": "Lanes open a draft PR only while fewer than 12 claude/pq-* or claude/lane-* draft PRs are open; otherwise the work stays on the pushed branch (branch only) and is not lost.",
+    "prLimit": "Lanes follow prCapacityRule (single limit maxOpenPrs; at capacity BRANCH_ONLY).",
     "queueWriter": "Coordinator only. Lanes report branch, SHA, PR and test counts; the coordinator records them here.",
     "lanes": {
       "A": {
@@ -838,6 +838,13 @@
       "likelyCause": "reviewer credential rejected (CLAUDE_CODE_OAUTH_TOKEN in the review environment invalid or expired); full output hidden by design, not proven",
       "founderFix": "regenerate the reviewer token (claude setup-token) into the review environment secret, then re-run the review for #136",
       "observedAt": "2026-10-21T15:40Z"
+    },
+    "structuredOutputFix": {
+      "pr": 144,
+      "head": "f9fc5ca",
+      "status": "OPEN_FOR_REVIEW",
+      "change": "API-compatible verdict schema (unsupported minLength/maxLength/maxItems/minimum stripped, gate enforces all of them) + fixed-code reviewer diagnosis; proof 170/170",
+      "note": "cause of run 39619436696 unproven until a real run; takes effect only after a Founder merge (workflow runs from the default branch); no auto-merge until the App check passes and is required"
     }
   },
   "baseCi": {
@@ -860,8 +867,9 @@
     "COORD-INTEGRATION-L1": {
       "branch": "claude/coord-integration-l1",
       "head": "55d6a39",
-      "status": "PUSHED_UNVERIFIED",
-      "note": "9 lane merges (601361e) + cross-lane first-delivery E2E test; coordinator verification pending (workflow w20p3ft4e)"
+      "status": "VERIFIED",
+      "tests": "adversarial verify PASS a-e; 1167/1167 renderer; full suite 3 env-only failures identical on base",
+      "note": "integrated into PR #143"
     },
     "COORD-TASK-UI": {
       "branch": "claude/coord-task-ui",
@@ -875,7 +883,65 @@
       "head": "ebce3c3",
       "status": "TESTED",
       "tests": "v7-b1-workos 18/18; tsc/TR/secret PASS; 2 mutations caught (Global Stop 423, body schema)",
+      "verifiedBy": "coordinator",
+      "note": "integrated into PR #143"
+    },
+    "COORD-RUN-EXPERT": {
+      "branch": "claude/coord-run-expert",
+      "head": "72510d4",
+      "status": "TESTED",
+      "tests": "v7-b5 84/84; 33 files 1250/1250; 2 mutations caught",
+      "note": "expert developer picker on run start (roleId UASCO-0085); integrated into PR #143"
+    },
+    "COORD-FIRST-DELIVERY-WIRING": {
+      "branch": "claude/coord-first-delivery-wiring",
+      "head": "f121b01",
+      "status": "PR_OPEN",
+      "pr": 143,
+      "tests": "b1 35/35; b5 87/87; full suite 2078 pass / 3 env-only fail (identical on base); real Electron E2E Linux 3x PASS 12/12; Windows Electron NOT_EXECUTED",
+      "note": "Founder approval in principle 2026-10-21; protected server.ts + main.mjs + trust-root reseal; merge only after Independent Review passes"
+    },
+    "COORD-REVIEWER-DIAGNOSTICS": {
+      "branch": "claude/coord-reviewer-diagnostics",
+      "head": "f9fc5ca",
+      "status": "PR_OPEN",
+      "pr": 144
+    },
+    "COORD-SCOPE-GRANTS": {
+      "branch": "claude/coord-scope-grants",
+      "head": "39fb3b4",
+      "status": "TESTED_BRANCH_ONLY",
+      "tests": "97 new (review-governance 126/126); 7 mutations caught; dry-run vs #143: SCOPE_GRANT_CHECK PASS (exactly server.ts, main.mjs, manifest)",
+      "note": "governance proposal (PROPOSED grant, effective only by Founder merge); branch-only at capacity"
+    },
+    "LANE-C-PREDEV-ROLE-BINDINGS": {
+      "branch": "claude/lane-c-predev-role-bindings",
+      "head": "d371902",
+      "status": "TESTED",
+      "tests": "44/44 related; tsc/TR/secret PASS; 2 mutations caught",
       "verifiedBy": "coordinator"
     }
+  },
+  "prCapacityRule": "Single limit (Founder 2026-10-21: remove the 10/12 contradiction): maxOpenPrs = 10 open agent PRs to v7/integration from claude/pq-*, claude/lane-*, claude/coord-* and claude/ui-* branches, drafts included; legacy PRs (wipRule list) are not counted; PRs the Founder explicitly requested are listed in founderRequestedPrs and are not counted. The former lane rule of fewer than 12 draft PRs is retired. At capacity: BRANCH_ONLY. Builders keep claiming, building, testing and pushing to their branches with evidence recorded here (coordinatorBuild / lane records); code production never stops. A PR opens when a slot frees, oldest TESTED first. A lane PR whose head is an ancestor of an open integration PR is SUPERSEDED_BY_INTEGRATION and is proposed for closing with a pointer comment.",
+  "prCapacity": {
+    "observedAt": "2026-10-21T16:50Z",
+    "openAgentPrs": 16,
+    "limit": 10,
+    "state": "AT_CAPACITY_BRANCH_ONLY",
+    "founderRequestedPrs": [
+      143,
+      144
+    ],
+    "supersededByIntegration": {
+      "pr143": [
+        136,
+        137,
+        138,
+        139,
+        140,
+        142
+      ]
+    },
+    "note": "the six lane PRs are content-contained in #143 (ancestors; #142 adds only a base merge); proposed for closing once the Founder confirms"
   }
 }
