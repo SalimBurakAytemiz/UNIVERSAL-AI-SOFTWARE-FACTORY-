@@ -25,29 +25,35 @@
     {
       "id": "UI-110",
       "source": "BACKLOG_CHECKPOINT (READY)",
-      "status": "IN_PROGRESS",
+      "status": "TESTED",
       "branch": "claude/ui-110",
       "base": "a910883",
       "owner": "coordinator-provisioned builder session_013dxuNPUg5TKwZhEiF7WhAX (2026-10-21T01:32Z)",
-      "pr": null,
-      "startedAt": "2026-10-21T01:32:21Z"
+      "pr": 126,
+      "startedAt": "2026-10-21T01:32:21Z",
+      "finalSha": "0c510bc",
+      "verifiedBy": "coordinator local re-run: 28 files 1035/1035, tsc/TR/secret/trust-root PASS",
+      "ciNote": "CI red on validate (ubuntu) and windows shard 1: dependency-supply-chain DEPENDENCY_AUDIT_BLOCKERS from npm advisories on transitive vite 8.3.1 (GHSA-587h-7wmj-h5pm high, GHSA-698v-4r3x-3vcv and GHSA-r825-w8mm-5pxw moderate). Not this PR code: fixed by PQ-009."
     },
     {
       "id": "UI-105",
       "source": "BACKLOG_CHECKPOINT (READY)",
-      "status": "IN_PROGRESS",
+      "status": "TESTED",
       "branch": "claude/ui-105",
       "base": "a910883",
       "owner": "coordinator-provisioned builder session_01DQmUqiu7bxNuCTYerqQXbq (2026-10-21T01:32Z)",
-      "pr": null,
-      "startedAt": "2026-10-21T01:32:22Z"
+      "pr": 125,
+      "startedAt": "2026-10-21T01:32:22Z",
+      "finalSha": "632a774",
+      "verifiedBy": "coordinator local re-run: 28 files 1035/1035, tsc/TR/secret/trust-root PASS",
+      "ciNote": "CI red on validate (ubuntu) and windows shard 1: dependency-supply-chain DEPENDENCY_AUDIT_BLOCKERS from npm advisories on transitive vite 8.3.1 (GHSA-587h-7wmj-h5pm high, GHSA-698v-4r3x-3vcv and GHSA-r825-w8mm-5pxw moderate). Not this PR code: fixed by PQ-009."
     },
     {
       "id": "PQ-007",
       "lane": "B",
       "source": "Inventory I-DP-039 Project Memory (DESIGN_ONLY) / WS-SC-14 (AUTHORITY_REQUIRED for integration); UASCO-AUD-029",
       "title": "Project Memory core module: persistent per-project decision/fact/source memory with provenance, revisions, tamper evidence and query (not wired to the API)",
-      "status": "IN_PROGRESS",
+      "status": "TESTED",
       "branch": "claude/pq-007",
       "base": "v7/integration",
       "files": [
@@ -59,13 +65,17 @@
       "testFile": "tests/technology-discovery.test.ts",
       "owner": "coordinator-provisioned builder (Opus)",
       "integrationPending": "API endpoints (apps/control-api/src/server.ts, protected) and desktop allow-list (apps/desktop/main.mjs, protected): prepared as a separate patch only, not applied",
-      "startedAt": "2026-10-21T01:45:47Z"
+      "startedAt": "2026-10-21T01:45:47Z",
+      "pr": 127,
+      "finalSha": "7fd94e4",
+      "verifiedBy": "coordinator local re-run: 3 files 40/40, tsc/TR/secret/trust-root PASS",
+      "ciNote": "CI red on validate (ubuntu) and windows shard 1: dependency-supply-chain DEPENDENCY_AUDIT_BLOCKERS from npm advisories on transitive vite 8.3.1 (GHSA-587h-7wmj-h5pm high, GHSA-698v-4r3x-3vcv and GHSA-r825-w8mm-5pxw moderate). Not this PR code: fixed by PQ-009."
     },
     {
       "id": "PQ-001",
       "source": "UASCO-AUD-072 (P2)",
       "title": "Renderer product-verification honesty: show PRODUCT_VERIFIED only on the server's exact rule",
-      "status": "HOLD_CAPACITY",
+      "status": "IN_PROGRESS",
       "base": "v7/integration",
       "files": [
         "apps/desktop/renderer/work-core.js",
@@ -82,7 +92,12 @@
         "delivery.js and m1a.js use only that function. views/work.js belongs to UI-105 until that merges: fix its badge through the shared work-core helper, and if work.js itself must change, STOP and report.",
         "Update tests/v7-ux-delivery.test.ts:74-85 to expect the stricter behaviour, and add negative cases for a failing exit, a non-head SHA, one suite only, a zero executed count and no attestation. No other assertion may be weakened.",
         "GET-only: no new endpoint, POST, IPC or storage."
-      ]
+      ],
+      "lane": "A",
+      "branch": "claude/pq-001",
+      "owner": "coordinator-provisioned builder (Sonnet)",
+      "startedAt": "2026-10-21T02:05:51Z",
+      "pr": null
     },
     {
       "id": "PQ-002",
@@ -104,8 +119,8 @@
       "id": "PQ-003",
       "source": "UASCO-AUD-065 / inventory UI-050 (PARTIAL)",
       "title": "Evidence lineage as a navigable graph view in #/assurance (read-only)",
-      "status": "WAITING_BASE",
-      "base": "claude/ui-105 head once its draft PR is open (stacked; assurance.js overlap)",
+      "status": "QUEUED",
+      "base": "claude/ui-105@632a774 (stacked; draft PR #125 open)",
       "files": [
         "apps/desktop/renderer/views/assurance.js",
         "apps/desktop/renderer/assurance-core.js",
@@ -125,8 +140,8 @@
       "id": "PQ-004",
       "source": "UASCO-AUD-065 / inventory UI-246 (DESIGN parity UNVERIFIED)",
       "title": "Theme contrast lab in #/settings: WCAG contrast preview built from the existing tokens",
-      "status": "WAITING_BASE",
-      "base": "claude/ui-105 head once its draft PR is open (stacked; settings.js overlap)",
+      "status": "QUEUED",
+      "base": "claude/ui-105@632a774 (stacked; draft PR #125 open)",
       "files": [
         "apps/desktop/renderer/views/settings.js",
         "apps/desktop/renderer/locales/en.js",
@@ -181,7 +196,7 @@
       "lane": "C",
       "source": "docs/mobile/screens MOB-6 (UI-097, UI-099, UI-102, UI-177) + ADR-MOB-001 (read-only STALE cache) + API-CONTRACT (PROPOSED routes)",
       "title": "Mobile Companion core: read-only monitoring state store, view models and STALE/OFFLINE cache rules in pure TypeScript (no dependencies, no network, no privileged actions)",
-      "status": "HOLD_CAPACITY",
+      "status": "IN_PROGRESS",
       "base": "v7/integration",
       "files": [
         "apps/mobile/src/core/monitoring-store.ts",
@@ -197,6 +212,53 @@
         "No React Native or other dependency, no fetch/WebSocket, no storage API: an injected reader interface only. No approval, STOP or RESUME action.",
         "Honest states (LOADING, EMPTY, ERROR, OFFLINE, STALE with age, UNAVAILABLE, DENIED); a STALE read is never shown as fresh.",
         "Unit tests including negative cases; record exact counts. Status at most TESTED (local); not INTEGRATED."
+      ],
+      "branch": "claude/pq-008",
+      "owner": "coordinator-provisioned builder (Sonnet)",
+      "startedAt": "2026-10-21T02:05:51Z",
+      "pr": null
+    },
+    {
+      "id": "PQ-009",
+      "lane": "C",
+      "source": "CI root cause on #125/#126/#127: npm audit advisories on transitive vite 8.3.1",
+      "title": "Bump transitive vite 8.3.1 -> 8.3.4 in package-lock.json (lockfile-only security update)",
+      "status": "IN_PROGRESS",
+      "branch": "claude/pq-009",
+      "base": "v7/integration",
+      "files": [
+        "package-lock.json"
+      ],
+      "testFile": "full vitest suite + npm audit",
+      "owner": "coordinator",
+      "startedAt": "2026-10-21T02:05:51Z",
+      "pr": null,
+      "authority": "package-lock.json is in the merge-gate CI_EXECUTED_FLOOR: merge needs the Founder (dependency-change authority). Unblocks CI on every open PR."
+    },
+    {
+      "id": "PQ-010",
+      "lane": "B",
+      "source": "Central brain: model routing (Founder sprint P0-B); builds on core/policy/data-routing.ts and core/workos/risk-admission.ts",
+      "title": "Model routing decision core: pure fail-closed choice of model class and cost tier per task (risk, data class, complexity, role, paid authority, reviewer independence)",
+      "status": "IN_PROGRESS",
+      "branch": "claude/pq-010",
+      "base": "v7/integration",
+      "files": [
+        "core/policy/model-routing.ts",
+        "tests/data-routing.test.ts"
+      ],
+      "testFile": "tests/data-routing.test.ts",
+      "owner": "coordinator-provisioned builder (Opus)",
+      "startedAt": "2026-10-21T02:05:51Z",
+      "pr": null,
+      "acceptance": [
+        "Pure function routeModel(request, catalog): no I/O, no network, no new dependency. Unknown or missing input fields give REFUSE (fail-closed).",
+        "R3/R4 refused with RISK_REFUSAL through riskAdmitted (core/workos/risk-admission.ts); data class gates cost tiers only through canRouteData (core/policy/data-routing.ts).",
+        "PAID only when the request carries explicit paidAuthority true; otherwise refuse or fall back to an allowed tier, never silently PAID.",
+        "Complexity MECHANICAL->CHEAP, ROUTINE->STANDARD, CRITICAL->SENIOR. CRITICAL is never downgraded: if no permitted SENIOR model exists, REFUSE (NO_PERMITTED_MODEL). Lower classes may escalate upward only, and the decision lists the reason.",
+        "Role REVIEWER must not share the builder executor id or session: else REFUSE (REVIEWER_NOT_INDEPENDENT).",
+        "Decision carries decision ROUTE|REFUSE, code, modelClass, tier, modelId, reasons[]. Deterministic tie-break.",
+        "Tests in tests/data-routing.test.ts: positive and negative cases for every rule; no existing assertion weakened. Not wired to executors.ts or the API (integration is a later, separate task)."
       ]
     }
   ],
@@ -251,10 +313,11 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T01:45:02.473Z",
+    "at": "2026-10-21T02:05:51Z",
     "by": "coordinator",
     "integrationHead": "a910883",
-    "next": "PQ-001 (lane A) when a slot frees; PQ-008 (lane C) after"
+    "next": "PQ-003 / PQ-004 (stacked on claude/ui-105) or PQ-002 / PQ-006 when a slot frees",
+    "engine": "Production Builder routine fires and reasons correctly (01:47Z NO_ACTION CAPACITY) but its fired session gets GitHub 403: it cannot open PRs (ENGINE_BLOCKED for DELIVER). The coordinator session provisions builders directly."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
   "lanes": {
