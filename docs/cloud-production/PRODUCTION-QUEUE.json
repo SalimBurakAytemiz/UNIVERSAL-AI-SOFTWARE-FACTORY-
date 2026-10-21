@@ -902,7 +902,7 @@
       "tests": "b1 + b5 + ps1b 255/255 (coordinator re-run at de3c6fb); tsc/TR/secret/architecture/trust-root PASS; real Electron E2E Linux PASS 12/12: 3x at f121b01, 3x at 675a441, 2x at de3c6fb; Windows Electron NOT_EXECUTED",
       "note": "Founder approval in principle 2026-10-21; protected server.ts + main.mjs + trust-root reseal; founder-authority on hold by Founder; merge only after Independent Review passes",
       "preReview": "coordinator adversarial pre-review (NOT the Independent Review): 17 candidates, 10 confirmed + 2 split, all fixed in 675a441 (mutation-proven); verification of 675a441 confirmed 3 more (flow REVIEW DONE for an invalidated/stale CLEAN; quarantine copy not durable before truncate) + 1 weak test, fixed in de3c6fb",
-      "review": "first run with the new reviewer: 39668010636 on abf4738, waiting on founder-authority (Founder hold); earlier runs on f121b01/675a441/de3c6fb failed closed (stale head / hold / old reviewer)",
+      "review": "new reviewer: run 39668010636 (20:42Z) and 39674259669 (20:55Z) FAIL VERDICT_MISSING + REVIEWER_AUTH_REJECTED (check by App 5405762 uasco-reviewer, bound to abf4738/467b52d); run 39676568418 (21:10Z) failed at App token creation (Invalid keyData: UASCO_REVIEW_APP_PRIVATE_KEY not a valid PEM); root-cause research running; E2E 12/12 x2 at abf4738",
       "ci": "abf4738 (merge of v7/integration 467b52d) CI 5/5 green; local: b1 + b5 + ps1b + review-governance 284/284, review proof 172/172, validators + trust-root PASS"
     },
     "COORD-REVIEWER-DIAGNOSTICS": {
@@ -1046,5 +1046,229 @@
       },
       "note": "re-run against v7/integration after #143 merges; close only with Founder approval"
     }
+  },
+  "integrationQueue": {
+    "builtAt": "2026-10-21T21:17Z",
+    "base": "467b52d",
+    "integrationHead": "abf4738 (#143)",
+    "method": "8-agent read-only analysis: containment vs base and #143 (commit reachability + added lines + patch-id), git merge-tree conflicts, protected/CI-executed paths, CI on head, dependencies; then dependency-ordered synthesis",
+    "releaseRule": "one PR at a time: base merge -> fresh full CI -> UASCO Independent Review (App) -> Founder merge permission",
+    "order": [
+      {
+        "pos": 1,
+        "pr": 143,
+        "action": "MERGE_FIRST, after the reviewer is repaired. Re-run UASCO Independent Review on abf4738. Require a CLEAN check posted by app 'uasco-reviewer' and a GitHub APPRO",
+        "blocker": "Verified 21:17Z. The UASCO Independent Review check on abf4738 is FAILURE: 'VERDICT_MISSING' and 'REVIEWER_AUTH_REJECTED' (run 39674259669, completed 20:55:52Z, posted by app slug uasco-reviewer). A l",
+        "founder": "yes. (a) Repair the Founder-owned review secrets: regenerate CLAUDE_CODE_OAUTH_TOKEN (claude setup-token) in the review environment, and fix UASCO_REVIEW_APP_PR"
+      },
+      {
+        "pos": 2,
+        "pr": 136,
+        "action": "CLOSE_SUPERSEDED by #143, right after #143 merges",
+        "blocker": "#143 has not merged yet. Closing needs Founder approval.",
+        "founder": "yes. Approve closing as superseded."
+      },
+      {
+        "pos": 3,
+        "pr": 137,
+        "action": "CLOSE_SUPERSEDED by #143, right after #143 merges",
+        "blocker": "#143 has not merged yet. Closing needs Founder approval.",
+        "founder": "yes. Approve closing as superseded. Acknowledge the 3 deliberate behaviour changes in #143: a whole-request idempotency 409, a 32 KB per-route bodyLimit, and to"
+      },
+      {
+        "pos": 4,
+        "pr": 138,
+        "action": "CLOSE_SUPERSEDED by #143, right after #143 merges",
+        "blocker": "#143 has not merged yet. Closing needs Founder approval.",
+        "founder": "yes. Approve closing as superseded."
+      },
+      {
+        "pos": 5,
+        "pr": 139,
+        "action": "CLOSE_SUPERSEDED by #143, right after #143 merges",
+        "blocker": "#143 has not merged yet. Closing needs Founder approval.",
+        "founder": "yes. Approve closing as superseded."
+      },
+      {
+        "pos": 6,
+        "pr": 140,
+        "action": "CLOSE_SUPERSEDED by #143, right after #143 merges",
+        "blocker": "#143 has not merged yet. Closing needs Founder approval.",
+        "founder": "yes. Approve closing as superseded."
+      },
+      {
+        "pos": 7,
+        "pr": 142,
+        "action": "CLOSE_SUPERSEDED by #143, right after #143 merges",
+        "blocker": "#143 has not merged yet. Closing needs Founder approval.",
+        "founder": "yes. Approve closing as superseded."
+      },
+      {
+        "pos": 8,
+        "pr": 135,
+        "action": "MERGE_BASE_THEN_REVIEW: merge v7/integration (with #143) into claude/pq-006, run full CI on both OSes, run the governed UASCO Independent Review (the PR is alre",
+        "blocker": "No reviewer verdict has ever been given. Run 39611421257 failed at App-token creation ('Invalid keyData'). There is no approval. The head is 12 commits behind the base, including the #144 workflow cha",
+        "founder": "no path authority needed. yes: merge permission only."
+      },
+      {
+        "pos": 9,
+        "pr": 134,
+        "action": "MERGE_BASE_THEN_REVIEW: sync with v7/integration, re-run CI, mark ready for review, run the governed review, get last-push approval, then the Founder merges.",
+        "blocker": "CI is red on 2891eae, caused only by the stale-base vite dependency-supply-chain advisory that #128 fixed in the base. It is a draft with no review.",
+        "founder": "no path authority needed. yes: merge permission only."
+      },
+      {
+        "pos": 10,
+        "pr": 46,
+        "action": "NEEDS_FIX, then review: rebase onto v7/integration after #143 keeping both appended blocks, run the sharded CI, run the governed review, get last-push approval,",
+        "blocker": "One trivial append-append conflict in tests/v7-ps1b-project-studio-ui.test.ts against both the base and #143. CI never executed (billing startup-death). No governed review.",
+        "founder": "no path authority needed. yes: merge permission only."
+      },
+      {
+        "pos": 11,
+        "pr": 126,
+        "action": "MERGE_BASE_THEN_REVIEW: sync, re-run CI, mark ready, run the governed review, get last-push approval, then the Founder merges.",
+        "blocker": "CI is red only because of the inherited vite advisory. It is a draft with no review.",
+        "founder": "no path authority needed. yes: merge permission only."
+      },
+      {
+        "pos": 12,
+        "pr": 125,
+        "action": "MERGE_BASE_THEN_REVIEW: sync, re-run CI, mark ready, run the governed review, get last-push approval, then the Founder merges.",
+        "blocker": "CI is red only because of the inherited vite advisory. It is a draft with no review.",
+        "founder": "yes: choose to land #125 on its own before #141 (recommended) rather than through #141. Merge permission."
+      },
+      {
+        "pos": 13,
+        "pr": 132,
+        "action": "MERGE_BASE_THEN_REVIEW: sync after #143 and #125, re-run CI, mark ready, run the governed review, get last-push approval, then the Founder merges.",
+        "blocker": "CI is red only because of the inherited vite advisory. It is a draft with no review. Its work-core.js changes overlap semantically with #143's, so CI must run on the merged result.",
+        "founder": "no path authority needed. yes: merge permission only."
+      },
+      {
+        "pos": 14,
+        "pr": 133,
+        "action": "MERGE_BASE_THEN_REVIEW: sync, re-run CI, mark ready, run the governed review, get last-push approval, then the Founder merges.",
+        "blocker": "CI is red only because of the inherited vite advisory. It is a draft with no review.",
+        "founder": "no path authority needed. yes: merge permission only."
+      },
+      {
+        "pos": 15,
+        "pr": 23,
+        "action": "MERGE_BASE_THEN_REVIEW: sync with v7/integration keeping both sides in en.js, tr.js and v7-ux-wp4-tower.test.ts, get the first real CI run on both required cont",
+        "blocker": "Three additive conflicts against both trees. CI never executed (billing-blocked). The UASCO review was INCONCLUSIVE and bound to a stale head.",
+        "founder": "no path authority needed. yes: merge permission only."
+      },
+      {
+        "pos": 16,
+        "pr": 130,
+        "action": "MERGE_BASE_THEN_REVIEW: sync, re-run the full CI workflow, mark ready, run the governed review, get last-push approval, then the Founder merges.",
+        "blocker": "CI is red because of the stale-base vite advisory plus the known lv1 Windows liveness flake on shard 2 (in a protected file this PR does not touch). CLEAN_PRELIMINARY is a same-account static pass and",
+        "founder": "no path authority needed. yes: merge permission and resuming the suspended merge lane."
+      },
+      {
+        "pos": 17,
+        "pr": 141,
+        "action": "WAIT_FOR_DEPENDENCY (#125). Then sync, run a fresh full CI run (not a single-shard re-run), mark ready, run the governed review, get last-push approval, then th",
+        "blocker": "It is stacked on draft #125, so its diff contains all of #125. validate (windows-latest) is red: the attempt-2 aggregator failed closed (SHARD_AGGREGATION FAIL reasons=45) after the lv1 flake. It is a",
+        "founder": "yes: confirm the stacking order (#125 first, after which #141 only carries PQ-004). Merge permission."
+      },
+      {
+        "pos": 18,
+        "pr": 127,
+        "action": "NEEDS_FIX (minor), then MERGE_BASE_THEN_REVIEW: refresh or drop docs/knowledge/PROJECT-MEMORY-INTEGRATION.proposed.patch, sync, re-run CI, mark ready, run the g",
+        "blocker": "The proposed patch fails git apply --check at abf4738 (server.ts:53, main.mjs:103). CI is red on the stale base. There is no review. The merge lane is Founder-suspended.",
+        "founder": "no for the module itself. Any later wiring into protected server.ts or main.mjs needs separate Founder authority. yes: merge permission."
+      },
+      {
+        "pos": 19,
+        "pr": 129,
+        "action": "MERGE_BASE_THEN_REVIEW after a Founder evidence decision: sync, re-run CI, run a fresh governed review of 3d2e1d3+ (R1 is unreviewed), get last-push approval, t",
+        "blocker": "CI does not run apps/mobile/src/core/monitoring.test.ts because it is not registered in config/validation.json, so green CI would not show its 37 tests pass. The only review (at 0c212ce) was BLOCKED, ",
+        "founder": "yes: either register the test in protected config/validation.json and reseal the trust root (serialized after #143), or explicitly accept locally re-run test ev"
+      },
+      {
+        "pos": 20,
+        "pr": 28,
+        "action": "MERGE_BASE_THEN_REVIEW: sync with v7/integration keeping both sides in api.js and views/planned.js, get the first real CI run on both required contexts, run the",
+        "blocker": "Two additive conflicts against both trees. CI never executed (billing-blocked). There is no App review.",
+        "founder": "no path authority needed. yes: merge permission only."
+      },
+      {
+        "pos": 21,
+        "pr": 32,
+        "action": "NEEDS_FIX: after #143 and #28 land, rebase, re-derive the route-order assertions in all 8 tests plus the routes.js and planned.js wiring, run the sharded CI, ru",
+        "blocker": "16 conflict hunks in 15 files against both the base and #143. CI never executed. No governed review.",
+        "founder": "optional product decision: is a #/domains screen still wanted? If not, close it as obsolete (a product rejection, not containment). Otherwise merge permission o"
+      },
+      {
+        "pos": 22,
+        "pr": 33,
+        "action": "NEEDS_FIX: after #28 and #32 land, rebase, re-derive the route-order assertions, run the sharded CI on both OSes and confirm the Windows failure is gone, run th",
+        "blocker": "16 conflict hunks in 15 files against both trees. Windows validation failed on the old unsharded CI, and the failing test is UNKNOWN. The 'scoped CLEAN COMMENT' came from the retired loop and is not b",
+        "founder": "optional product decision: is a dedicated #/scheduler screen still wanted, or is the Tower scheduler fact (UI-206, #133) enough? If enough, close as obsolete. O"
+      },
+      {
+        "pos": 23,
+        "pr": 66,
+        "action": "FOUNDER_AUTHORITY first. If accepted: sync (clean per merge-tree), re-run validate on both OSes plus desktop-e2e on the new head, mark ready, run the governed r",
+        "blocker": "It adds the new protected and CI-executed .github/workflows/desktop-e2e.yml, a pull_request workflow that runs PR-head code on ubuntu and windows for every PR, plus scripts/e2e/*. The green CI is from",
+        "founder": "yes: an authority decision on FD-E2E-DESKTOP-66 (accept or reject a new PR-triggered workflow and its runner-minute cost), together with the pending request to "
+      },
+      {
+        "pos": 24,
+        "pr": 8,
+        "action": "FOUNDER_AUTHORITY first. Then either (a) rebuild on 467b52d after #143 and the route cluster with a Founder-granted validation.json and trust-root reseal, or (b",
+        "blocker": "17 conflicted files against both trees, 399 commits behind. The builder edited and resealed protected config/validation.json and config/trust-root-manifest.json itself, which is not allowed in build m",
+        "founder": "yes: grant a trust-root reseal for validation.json and trust-root-manifest.json (PT-029 / RESEAL-SERIALIZATION, serialized after #143), or order the scope-reduc"
+      }
+    ],
+    "closeProposals": [
+      {
+        "pr": 136,
+        "reason": "FULLY_SUPERSEDED by #143. Close after #143 merges, with Founder approval."
+      },
+      {
+        "pr": 137,
+        "reason": "FULLY_SUPERSEDED by #143. Close after #143 merges, with Founder approval."
+      },
+      {
+        "pr": 138,
+        "reason": "FULLY_SUPERSEDED by #143. Close after #143 merges, with Founder approval."
+      },
+      {
+        "pr": 139,
+        "reason": "FULLY_SUPERSEDED by #143. Close after #143 merges, with Founder approval."
+      },
+      {
+        "pr": 140,
+        "reason": "FULLY_SUPERSEDED by #143. Close after #143 merges, with Founder approval."
+      },
+      {
+        "pr": 142,
+        "reason": "FULLY_SUPERSEDED by #143. Close after #143 merges, with Founder approval."
+      }
+    ],
+    "containmentVs143": {
+      "136": "FULLY_SUPERSEDED",
+      "137": "FULLY_SUPERSEDED",
+      "138": "FULLY_SUPERSEDED",
+      "139": "FULLY_SUPERSEDED",
+      "140": "FULLY_SUPERSEDED",
+      "142": "FULLY_SUPERSEDED"
+    },
+    "founderDecisions": [
+      "D1 (blocks everything): repair the Founder-owned UASCO review secrets. On abf4738, run 39674259669 (20:55Z) ended in VERDICT_MISSING plus REVIEWER_AUTH_REJECTED: regenerate CLAUDE_CODE_OAUTH_TOKEN with claude setup-token in the review environment. The later dispatch run 39676568418 (21:10Z) failed a",
+      "D2: merge permission for #143, given only after a real CLEAN check from app 'uasco-reviewer' on abf4738 and a GitHub APPROVE after the last push. At 21:17Z #143 has 0 reviews.",
+      "D3: approve closing #136, #137, #138, #139, #140 and #142 as superseded by #143, right after #143 merges.",
+      "D4 (ruleset, needs Founder permission): make 'UASCO Independent Review' a required check with strict up-to-date branches, but only after the first real CLEAN. The queue assumes one release at a time from position 8 on: base merge -> CI -> Independent Review -> last-push approval -> Founder merge.",
+      "D5: #125/#141 stacking. Recommended: land #125 on its own first (it is also the base for claude/lane-a-lineage-graph, which does not contain #141). The alternative is to land #125 through #141 and then close #125 as contained.",
+      "D6: #129 test evidence. Either register apps/mobile/src/core/monitoring.test.ts in protected config/validation.json with a trust-root reseal (after #143), or explicitly accept locally re-run evidence.",
+      "D7: #66 (FD-E2E-DESKTOP-66). Accept or reject the new protected, CI-executed .github/workflows/desktop-e2e.yml (it runs PR-head code on ubuntu and windows for every PR), together with the pending request to protect .github/workflows/** and scripts/ci/**. Also decide whether it should land before the",
+      "D8: #8. Either grant a trust-root reseal for config/validation.json and config/trust-root-manifest.json (PT-029, serialized after #143 and the route cluster), or order a scope-reduced rebuild without config edits on PR #8's branch.",
+      "D9 (optional product decisions): are the #/domains screen (#32) and the dedicated #/scheduler screen (#33, versus the Tower fact in #133) still wanted? If not, they close as obsolete. The mechanical evidence does not support closing them.",
+      "D10: resume the Founder-suspended merge lane for the PQ queue items (#127, #129, #130), and give per-PR merge permission at each release.",
+      "D11: the open agent PR cap. 24 PRs are open now. After #143 merges and the 6 closes, 17 remain, still above the cap of 10. Confirm that the three Builders only update existing PR branches (rebases and fixes) and open no new PRs until 10 or fewer are open, or adjust the cap."
+    ]
   }
 }
