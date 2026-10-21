@@ -12,6 +12,10 @@ export const CHECK_KEYS = Object.freeze(["security", "tests", "ciEvidence", "sco
 // "tests" may not be NOT_APPLICABLE: a code change without test evidence is never an independent CLEAN.
 const CHECK_VALUES = Object.freeze({security: ["PASS", "FAIL", "NOT_APPLICABLE"], tests: ["PASS", "FAIL", "INSUFFICIENT"], ciEvidence: ["PASS", "FAIL"], scope: ["PASS", "FAIL"]});
 export const LIMITS = Object.freeze({findings: 50, summary: 4000, text: 2000, file: 400, id: 32});
+// The only keys a verdict, a finding and the checks object may carry (the schema's additionalProperties: false, enforced here independently).
+export const VERDICT_KEYS = Object.freeze(["result", "reviewedHeadSha", "reviewedBaseSha", "summary", "findings", "checks"]);
+export const FINDING_KEYS = Object.freeze(["id", "severity", "classification", "file", "line", "title", "evidence"]);
+const knownKeysOnly = (o, keys) => Object.keys(o).every(k => keys.includes(k));
 
 const SHA_RE = /^[0-9a-f]{40}$/;
 const SESSION_RE = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -57,21 +61,24 @@ export function canonical(v) {
 }
 export const sha256 = s => crypto.createHash("sha256").update(s).digest("hex");
 
-// Structural verdict check. Returns a list of fixed codes; empty means the verdict is well formed.
+// //TR: Kapı şemaya güvenmez: reviewer'a giden API şeması desteklenmeyen uzunluk/sayı/dizi boyutu anahtar sözcüklerini taşımadığı için şemanın her kısıtı (bilinmeyen anahtar yasağı, boş olmayan id ve özet, uzunluk ve sayı sınırları, satır >= 0) burada bağımsız olarak uygulanır.
+// Structural verdict check. Returns a list of fixed codes; empty means the verdict is well formed. It enforces every constraint of verdict.schema.json itself
+// (unknown keys, lengths, counts, ranges, patterns), because the schema sent to the reviewer API omits the keywords the API does not support.
 export function validateVerdict(v) {
   const r = [];
   if (!isObj(v)) return ["VERDICT_MALFORMED:root"];
+  if (!knownKeysOnly(v, VERDICT_KEYS)) r.push("VERDICT_MALFORMED:unknownKey");
   if (!VERDICT_RESULTS.includes(v.result)) r.push("VERDICT_MALFORMED:result");
   if (!isSha(v.reviewedHeadSha)) r.push("VERDICT_MALFORMED:reviewedHeadSha");
   if (!isSha(v.reviewedBaseSha)) r.push("VERDICT_MALFORMED:reviewedBaseSha");
   if (!okText(v.summary, LIMITS.summary) || v.summary.trim() === "") r.push("VERDICT_MALFORMED:summary");
   if (!Array.isArray(v.findings) || v.findings.length > LIMITS.findings) r.push("VERDICT_MALFORMED:findings");
   else for (const f of v.findings) {
-    if (!isObj(f) || !okText(f.id, LIMITS.id) || !SEVERITIES.includes(f.severity) || !CLASSIFICATIONS.includes(f.classification)
+    if (!isObj(f) || !knownKeysOnly(f, FINDING_KEYS) || !okText(f.id, LIMITS.id) || f.id.trim() === "" || !SEVERITIES.includes(f.severity) || !CLASSIFICATIONS.includes(f.classification)
       || !okText(f.file, LIMITS.file) || !okText(f.title, LIMITS.text) || !okText(f.evidence, LIMITS.text)
       || !(f.line === null || (Number.isSafeInteger(f.line) && f.line >= 0))) { r.push("VERDICT_MALFORMED:finding"); break; }
   }
-  if (!isObj(v.checks)) r.push("VERDICT_MALFORMED:checks");
+  if (!isObj(v.checks) || !knownKeysOnly(v.checks, CHECK_KEYS)) r.push("VERDICT_MALFORMED:checks");
   else for (const k of CHECK_KEYS) if (!CHECK_VALUES[k].includes(v.checks[k])) r.push(`VERDICT_MALFORMED:checks.${k}`);
   return r;
 }
@@ -93,7 +100,65 @@ export function preGate(evidence) {
   return {blockers: kept.filter(x => !AUTHORITY_CODE.test(x)), authority: kept.filter(x => AUTHORITY_CODE.test(x)), headSha: mg.expectedHeadSha, baseSha: mg.expectedBaseSha};
 }
 
-// Final decision. input = {evidence, verdict, currentHeadSha, approvals, policy:{founderLogin, reviewerSession}}.
+// //TR: Reviewer teşhisi: claude-code-action'ın yürütme kaydındaki son "result" mesajı yalnız bellekte, sabit desenlerle tek bir sabit koda sınıflandırılır; kaydın hiçbir metni (PR içeriği, prompt injection veya sır taşıyabilir) kopyalanmaz, yazılmaz ya da yayımlanmaz. Teşhis yalnız hiç karar teslim edilmediğinde (karar yok veya okunamadı) ek bir blokaj nedeni ve sabit bir çözüm cümlesi ekler; teslim edilmiş bir kararı (olumlu, olumsuz, bozuk veya sır içeren) asla etkilemez, hiçbir nedeni silemez ve bir başarısızlığı asla başarıya çeviremez.
+// Reviewer diagnosis: why the reviewer step gave no usable verdict, as one fixed code. Only these codes and the remedies below are ever written or published;
+// no text of the execution record leaves memory. REVIEWER_OK is never a blocking reason.
+export const REVIEWER_DIAGNOSTIC_CODES = Object.freeze(["REVIEWER_OK", "REVIEWER_AUTH_REJECTED", "REVIEWER_MODEL_UNAVAILABLE", "REVIEWER_QUOTA_OR_RATE_LIMIT",
+  "REVIEWER_SCHEMA_REJECTED", "REVIEWER_NO_STRUCTURED_OUTPUT", "REVIEWER_ERROR_UNCLASSIFIED", "REVIEWER_OUTPUT_UNREADABLE"]);
+export const REVIEWER_DIAGNOSTIC_KEYS = Object.freeze(["code", "isError", "turns", "durationMs", "modelUsed"]);
+export const EXECUTION_FILE_MAX_BYTES = 4 * 1024 * 1024;
+const RERUN = "then start a new review (Re-run all jobs, or Run workflow with the PR number).";
+export const REVIEWER_REMEDIES = Object.freeze({
+  REVIEWER_AUTH_REJECTED: `The reviewer credential was rejected. Regenerate the reviewer token (claude setup-token) into the review environment secret CLAUDE_CODE_OAUTH_TOKEN, ${RERUN}`,
+  REVIEWER_MODEL_UNAVAILABLE: `The requested reviewer model is not available to this credential. Correct or clear the repository variable UASCO_REVIEW_MODEL, ${RERUN}`,
+  REVIEWER_QUOTA_OR_RATE_LIMIT: `The reviewer hit a usage, quota or rate limit, or the service was overloaded. Wait until the limit resets, ${RERUN}`,
+  // The workflow runs from the default branch, so the schema fix must be merged into v7/integration before a new review can use it.
+  REVIEWER_SCHEMA_REJECTED: "The reviewer API refused the verdict schema passed with --json-schema. Fix the schema in scripts/ci/uasco-review (verdict.schema.json) and merge the fix; no credential change is needed. Then start a new review (Re-run all jobs, or Run workflow with the PR number).",
+  REVIEWER_NO_STRUCTURED_OUTPUT: "The reviewer ran but returned no schema-valid verdict (for example it reached its turn limit). Start a new review; if this repeats, split the PR into smaller changes.",
+  REVIEWER_ERROR_UNCLASSIFIED: `The reviewer failed with an error that matches no known cause. Check the ai-review job log of this run (the reviewer output itself is never published), ${RERUN}`,
+  REVIEWER_OUTPUT_UNREADABLE: `The reviewer's execution record was missing or unreadable (the reviewer may not have started). Check the ai-review job log of this run, ${RERUN}`});
+// Error texts of the CLI and the API. They are matched only when the record says is_error: the final text of a run without an error is the model's own
+// output (shaped by the reviewed PR), so it is never used. Every quantifier is bounded.
+const AUTH_RE = /invalid[ _-]?(?:api[ _-]?key|x-api-key|bearer|token|credential|auth)|authenticat|unauthori[sz]ed|\b401\b|oauth|token (?:has )?(?:expired|been revoked|revoked)|(?:expired|revoked) (?:oauth )?token|\/login\b|\blog ?in\b|not logged in/i;
+const MODEL_RE = /\bmodel\b[^\n]{0,160}?(?:not[ _]found|not available|unavailable|does(?: not|n't) exist|may not exist|not supported|unsupported|not have access)|(?:unknown|invalid|unsupported|unavailable) model\b|issue with the selected model|not_found_error[\s\S]{0,300}?\bmodel\b|\bmodel\b[\s\S]{0,300}?not_found_error|\b404\b[\s\S]{0,300}?\bmodel\b|\bmodel\b[\s\S]{0,300}?\b404\b/i;
+const QUOTA_RE = /credit balance|\bquota\b|usage limit|rate[ _-]?limit|\b429\b|overloaded|\b529\b|too many requests|limit reached/i;
+// The request's verdict schema refused by the API (for example 400 invalid_request_error on the JSON schema): a schema term near a refusal word.
+const SCHEMA_TERM = "(?:json[ _-]?schema|input_schema|output_format|structured[ _-]?output)", SCHEMA_REFUSAL = "(?:invalid|not supported|unsupported|not allowed|rejected|error)";
+const SCHEMA_RE = new RegExp(`${SCHEMA_TERM}[\\s\\S]{0,200}?${SCHEMA_REFUSAL}|${SCHEMA_REFUSAL}[\\s\\S]{0,200}?${SCHEMA_TERM}`, "i");
+const count = v => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1e12 ? Math.round(v) : null;
+const diagnosis = (code, isError, turns, durationMs, modelUsed) => ({code, isError, turns, durationMs, modelUsed});
+// raw = the execution file's text (a JSON array of SDK messages) or null. The LAST {"type":"result"} message is classified. Never throws.
+export function diagnoseReviewerOutput(raw) {
+  const unreadable = diagnosis("REVIEWER_OUTPUT_UNREADABLE", true, null, null, false);
+  try {
+    if (!isStr(raw) || raw.trim() === "" || raw.length > EXECUTION_FILE_MAX_BYTES) return unreadable;
+    let msgs;
+    try { msgs = JSON.parse(raw); } catch { return unreadable; }
+    if (!Array.isArray(msgs)) return unreadable;
+    let res = null;
+    for (let i = msgs.length - 1; i >= 0 && res === null; i--) if (isObj(msgs[i]) && msgs[i].type === "result") res = msgs[i];
+    if (res === null) return unreadable;
+    const isError = res.is_error === true;
+    const modelUsed = (isObj(res.modelUsage) && Object.keys(res.modelUsage).length > 0) || (typeof res.total_cost_usd === "number" && res.total_cost_usd > 0);
+    const at = code => diagnosis(code, isError, count(res.num_turns), count(res.duration_ms), modelUsed);
+    if (!isError) return at(res.subtype === "success" && res.structured_output !== undefined && res.structured_output !== null ? "REVIEWER_OK" : "REVIEWER_NO_STRUCTURED_OUTPUT");
+    const text = [res.result, ...(Array.isArray(res.errors) ? res.errors : [])].filter(isStr).join("\n").slice(0, 65536);
+    if (AUTH_RE.test(text)) return at("REVIEWER_AUTH_REJECTED");
+    if (MODEL_RE.test(text)) return at("REVIEWER_MODEL_UNAVAILABLE");
+    if (QUOTA_RE.test(text)) return at("REVIEWER_QUOTA_OR_RATE_LIMIT");
+    // A run that used the model or hit a retry/turn limit got as far as answering: its failure is the missing output, never a refused schema.
+    if (modelUsed || (isStr(res.subtype) && res.subtype.startsWith("error_max"))) return at("REVIEWER_NO_STRUCTURED_OUTPUT");
+    if (SCHEMA_RE.test(text)) return at("REVIEWER_SCHEMA_REJECTED");
+    return at("REVIEWER_ERROR_UNCLASSIFIED");
+  } catch {
+    return unreadable;
+  }
+}
+// The failure code a diagnostics record carries, or null: an unknown, malformed or REVIEWER_OK code counts as no diagnosis.
+export const reviewerFailureCode = d => isObj(d) && isStr(d.code) && d.code !== "REVIEWER_OK" && REVIEWER_DIAGNOSTIC_CODES.includes(d.code) ? d.code : null;
+
+// Final decision. input = {evidence, verdict, currentHeadSha, approvals, policy:{founderLogin, reviewerSession}, reviewerDiagnostics?}.
+// reviewerDiagnostics (the ai-review job's fixed-shape record) only adds its failure code, after every other reason, when no verdict was delivered.
 export function decide(input) {
   try {
     const r = [];
@@ -110,9 +175,12 @@ export function decide(input) {
     // The App's own earlier check on this head or tree ended in a negative verdict (collected from App-written external_id). Unknown is fail-closed.
     if (ev.priorNegativeVerdict !== true && ev.priorNegativeVerdict !== false) r.push("PRIOR_VERDICT_UNKNOWN");
     else if (ev.priorNegativeVerdict && !founderAuthorityOk(input.approvals, pol.founderLogin)) r.push("FOUNDER_AUTHORITY_REQUIRED", "PRIOR_NEGATIVE_VERDICT");
+    // noVerdictDelivered: the reviewer handed over nothing usable (no verdict, or the unreadable placeholder). Only then can a diagnosis explain the
+    // failure; a delivered verdict (valid, negative, malformed or credential-shaped) speaks for itself and is never annotated.
     const v = input.verdict;
-    if (v === null || v === undefined) r.push("VERDICT_MISSING");
-    else if (isObj(v) && REJECTED_VERDICTS.includes(v.rejected)) r.push(v.rejected, ...(v.negative === true ? ["VERDICT_REJECTED_NEGATIVE"] : []));
+    let noVerdictDelivered = false;
+    if (v === null || v === undefined) { r.push("VERDICT_MISSING"); noVerdictDelivered = true; }
+    else if (isObj(v) && REJECTED_VERDICTS.includes(v.rejected)) { r.push(v.rejected, ...(v.negative === true ? ["VERDICT_REJECTED_NEGATIVE"] : [])); noVerdictDelivered = v.rejected === "VERDICT_UNREADABLE"; }
     else if (carriesSecret(v)) { r.push("VERDICT_CONTAINS_SECRET_PATTERN", ...(verdictIsNegative(v) ? ["VERDICT_REJECTED_NEGATIVE"] : [])); input = {...input, verdict: null}; }
     else {
       const bad = validateVerdict(v);
@@ -131,6 +199,10 @@ export function decide(input) {
     const impl = new Set(Array.isArray(ev.implementerSessions) ? ev.implementerSessions.filter(isStr) : []);
     if (!isStr(pol.reviewerSession) || !SESSION_RE.test(pol.reviewerSession)) r.push("REVIEWER_SESSION_UNKNOWN");
     else if (impl.has(pol.reviewerSession)) r.push("REVIEWER_IS_IMPLEMENTER");
+    // Append-only: the code goes after every other reason, and only when no verdict was delivered (which already fails as VERDICT_MISSING or
+    // VERDICT_UNREADABLE), so it can neither remove a reason, nor reach a passing decision, nor change how a delivered verdict is recorded.
+    const diag = noVerdictDelivered ? reviewerFailureCode(input.reviewerDiagnostics) : null;
+    if (diag !== null) r.push(diag);
     return finish([...new Set(r)], headSha, baseSha, input);
   } catch {
     return finish(["INTERNAL_ERROR"], null, null, input);
@@ -153,6 +225,8 @@ export function renderSummary(d, runUrl) {
     `Evidence digest (sha256 of the canonical decision record): \`${d.digest}\``];
   if (isStr(runUrl) && /^https:\/\/github\.com\/[^\s)]+$/.test(runUrl)) lines.push(`Run and evidence artifact: ${runUrl}`);
   lines.push("", d.reasons.length ? `Blocking reasons: ${d.reasons.map(x => `\`${x}\``).join(", ")}` : "Blocking reasons: none.");
+  // A reviewer diagnosis among the reasons gets its fixed remedy sentence (never any text of the reviewer's output).
+  for (const c of d.reasons.filter(x => isStr(x) && Object.hasOwn(REVIEWER_REMEDIES, x))) lines.push("", `Reviewer diagnosis \`${c}\`: ${REVIEWER_REMEDIES[c]}`);
   if (d.verdict && Array.isArray(d.verdict.findings)) {
     lines.push("", `Reviewer result: ${flat(d.verdict.result, 20)}. ${flat(d.verdict.summary ?? "", 1500)}`);
     if (d.verdict.findings.length) {
