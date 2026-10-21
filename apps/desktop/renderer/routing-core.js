@@ -1,6 +1,8 @@
 // //TR: Bu modül Ayarlar > Sağlayıcı ve model yönlendirme görünümünün saf (DOM'suz) çekirdeğidir (PQ-005): mevcut GET /v1/system/executors, /v1/capabilities ve /v1/adapters yanıtlarını güvenli, sınırlı alanlara eşler. Kayıt değerleri (status, activation, implementation) AYNEN taşınır; hiçbiri etkin/bağlı/çalışıyor durumuna YÜKSELTİLMEZ. Yanıtta model alanı yoktur: model "—" kalır. Bozuk kayıt tüm okumayı ERROR yapar (kısmi görünüm yok).
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 const ID_RE=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/,WORD_RE=/^[A-Z][A-Z0-9_]{0,39}$/;
+// //TR: Kimlik ve sözcük alanları yalnız gerçek string olabilir (String() zorlaması 5 veya ["A"] gibi değerleri geçirirdi).
+const isId=x=>typeof x==="string"&&ID_RE.test(x),isWord=x=>typeof x==="string"&&WORD_RE.test(x);
 const text=(x,max=120)=>typeof x==="string"&&x.length&&x.length<=max&&!/[\u0000-\u001f]/.test(x)?x:null;
 export const ROUTING_LIST_LIMIT=60;
 
@@ -10,7 +12,7 @@ export function mapCapabilities(raw){
   const list=isObj(raw)?raw.capabilities:null;if(!Array.isArray(list))return bad;
   const items=[];
   for(const x of list){
-    if(!isObj(x)||!ID_RE.test(String(x.id))||text(x.name)===null||!WORD_RE.test(String(x.status))||!WORD_RE.test(String(x.activation))||!WORD_RE.test(String(x.implementation)))return bad;
+    if(!isObj(x)||!isId(x.id)||text(x.name)===null||!isWord(x.status)||!isWord(x.activation)||!isWord(x.implementation))return bad;
     items.push({id:x.id,name:x.name,status:x.status,activation:x.activation,implementation:x.implementation});
   }
   return {state:"VERIFIED",items,total:items.length};
@@ -21,7 +23,7 @@ export function mapAdapters(raw){
   const list=isObj(raw)?raw.adapters:null;if(!Array.isArray(list))return bad;
   const items=[];
   for(const x of list){
-    if(!isObj(x)||!ID_RE.test(String(x.id))||!WORD_RE.test(String(x.category))||!WORD_RE.test(String(x.status))||!WORD_RE.test(String(x.implementation)))return bad;
+    if(!isObj(x)||!isId(x.id)||!isWord(x.category)||!isWord(x.status)||!isWord(x.implementation))return bad;
     items.push({id:x.id,category:x.category,status:x.status,implementation:x.implementation,requiresCertification:typeof x.requiresCertification==="boolean"?x.requiresCertification:null});
   }
   return {state:"VERIFIED",items,total:items.length};
