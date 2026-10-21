@@ -1016,3 +1016,24 @@ describe("LANE-B task-run link routes", () => {
     expect(r.statusCode).toBe(503); expect(r.json().error).toBe("LINK_STORE_CORRUPT");
   });
 });
+
+// //TR: LANE-B flow + task-run link: akış okuması görev-koşu bağı sayısını yalnız doğrulanmış bağ kaydından türetir; bağ dosyası bozuksa null (UNKNOWN) döner.
+describe("LANE-B flow task-run summary", () => {
+  it("counts linked tasks, stays 0 without links, null for a stub store and for a corrupt link file", async () => {
+    const [{deriveProjectFlow}, {linkTaskRun}] = await Promise.all([import("../core/workos/flow.js"), import("../core/workos/task-run-link.js")]);
+    const store = new WorkOsStore(path.join(tmp, "data")), sc = {tenantId: "tA"};
+    const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(sc, m.missionId, to, "go", "FOUNDER_LOCAL");
+    const t1 = store.createTask({tenantId: "tA", missionId: m.missionId, title: "a", actor: "FOUNDER_LOCAL"});
+    store.createTask({tenantId: "tA", missionId: m.missionId, title: "b", actor: "FOUNDER_LOCAL"});
+    expect(deriveProjectFlow(store, sc, p.projectId)!.taskRuns).toEqual({tasksWithRuns: 0, tasks: 2});
+    const run = store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: "FOUNDER_LOCAL"});
+    linkTaskRun(store, sc, "FOUNDER_LOCAL", t1.taskId, run.runId);
+    expect(deriveProjectFlow(store, sc, p.projectId)!.taskRuns).toEqual({tasksWithRuns: 1, tasks: 2});
+    expect(deriveProjectFlow(store, {tenantId: "tB"}, p.projectId)).toBeUndefined();
+    const stub = {getProject: () => ({}), listMissions: () => [], listTasks: () => [], listRuns: () => []} as any;
+    expect(deriveProjectFlow(stub, sc, "p")!.taskRuns).toBeNull();
+    fs.writeFileSync(path.join(tmp, "data", "task-run-links.jsonl"), "{bad}\n" + fs.readFileSync(path.join(tmp, "data", "task-run-links.jsonl"), "utf8"));
+    expect(deriveProjectFlow(store, sc, p.projectId)!.taskRuns).toBeNull();
+  });
+});

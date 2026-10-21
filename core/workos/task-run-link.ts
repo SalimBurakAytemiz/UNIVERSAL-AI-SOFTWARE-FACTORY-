@@ -38,3 +38,8 @@ export function tasksForRun(store: WorkOsStore, scope: Scope, runId: string): Ta
   if (!store.getRun(scope, runId)) return undefined;
   return readLinks(store.dataDir).filter(l => l.tenantId === scope.tenantId && l.runId === runId);
 }
+
+/** Koşuya bağlı görev kimlikleri; bağ dosyası okunamazsa undefined (çağıran UNKNOWN yazar). */
+export function linkedTaskIds(dataDir: string, scope: Scope): Set<string> | undefined {
+  try { return new Set(readLinks(dataDir).filter(l => l.tenantId === scope.tenantId).map(l => l.taskId)); } catch { return undefined; }
+}

@@ -1,11 +1,14 @@
 //TR: Bu dosya bir projenin ilk-teslim akışı durumunu (görev planı, koşu, review, teslim) yalnız Work OS store'daki doğrulanmış kayıtlardan türetir; kayıt yoksa NOT_STARTED, bilinmeyende UNKNOWN yazar, hiçbir olumlu durum uydurmaz.
 import type {Scope, WorkRun} from "./types.js";
 import type {WorkOsStore} from "./store.js";
+import {linkedTaskIds} from "./task-run-link.js";
 
 export type FlowStageName = "MISSION" | "PLAN" | "RUN" | "REVIEW" | "DELIVERY";
 export type FlowState = "NOT_STARTED" | "ACTIVE" | "DONE" | "BLOCKED" | "FAILED" | "UNKNOWN";
 export interface FlowStage { stage: FlowStageName; state: FlowState; detail: string | null }
-export interface ProjectFlow { projectId: string; stages: FlowStage[]; missionCount: number; taskCount: number; latestRunId: string | null }
+export interface ProjectFlow { projectId: string; stages: FlowStage[]; missionCount: number; taskCount: number; latestRunId: string | null;
+  // Görev-koşu bağı özeti (LANE-B task-run-link): bağ dosyası okunamazsa null (UNKNOWN), 0 uydurulmaz.
+  taskRuns: { tasksWithRuns: number; tasks: number } | null }
 
 const RUN_FAILED = new Set(["FAILED", "RECOVERY_FAILED", "CANCELLED", "QUARANTINED"]);
 const RUN_BLOCKED = new Set(["BLOCKED", "AWAITING_APPROVAL", "HANDOFF_PENDING", "DEGRADED"]);
@@ -47,5 +50,11 @@ export function deriveProjectFlow(store: WorkOsStore, scope: Scope, projectId: s
     : latest.completion ? {stage: "DELIVERY", state: "DONE", detail: latest.completion.productVerification.state}
     : latest.sourceDelivery ? {stage: "DELIVERY", state: "ACTIVE", detail: "SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED"}
     : latest.deliveryArtifact ? {stage: "DELIVERY", state: "ACTIVE", detail: "ARTIFACT_PREPARED_NOT_VERIFIED"} : {stage: "DELIVERY", state: "NOT_STARTED", detail: null};
-  return {projectId, stages: [mission, plan, run, review, delivery], missionCount: missions.length, taskCount: tasks.length, latestRunId: latest?.runId ?? null};
+  return {projectId, stages: [mission, plan, run, review, delivery], missionCount: missions.length, taskCount: tasks.length, latestRunId: latest?.runId ?? null, taskRuns: taskRuns(store, scope, tasks.map(t => t.taskId))};
+}
+
+function taskRuns(store: WorkOsStore, scope: Scope, taskIds: string[]): { tasksWithRuns: number; tasks: number } | null {
+  if (typeof store.dataDir !== "string") return null;
+  const linked = linkedTaskIds(store.dataDir, scope);
+  return linked ? { tasksWithRuns: taskIds.filter(id => linked.has(id)).length, tasks: taskIds.length } : null;
 }
