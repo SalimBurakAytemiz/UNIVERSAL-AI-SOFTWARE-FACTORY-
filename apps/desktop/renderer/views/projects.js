@@ -178,3 +178,4 @@ export async function render(ctx){
     closurePanel(ctx,res,miss,runs,dels),
     projectForm(ctx));
 }
+export {viewSkeleton as skeleton} from "../components.js";

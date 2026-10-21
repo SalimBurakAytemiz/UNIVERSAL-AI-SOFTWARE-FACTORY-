@@ -26,3 +26,4 @@ export async function render(ctx,route){
   }
   return h(ctx.doc,"div",{class:"view"},h(ctx.doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t(`area.${route.id}.title`)}),h(ctx.doc,"p",{class:"hero-sub",text:ctx.t(`area.${route.id}.desc`)}),plannedPanel(ctx,route));
 }
+export {viewSkeleton as skeleton} from "../components.js";
