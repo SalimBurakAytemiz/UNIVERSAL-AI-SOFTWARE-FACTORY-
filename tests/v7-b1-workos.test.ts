@@ -923,3 +923,382 @@ describe("COORD first-delivery wiring through the real server", () => {
     expect([done.status, done.step]).toEqual(["AWAITING_APPROVAL", "REPORT"]);
   });
 });
+
+// //TR: COORD-INTAKE-TEMPLATE: intake'in yönetilen şablon deposu kurması (core/workos/project-provisioner.ts + intake.ts) önce çekirdek düzeyinde gerçek dosya sistemi ve git ile, sonra gerçek server.ts üzerinden sınanır. Testler intake ile POST /v1/projects'in aynı depoyu ürettiğini, çökme sonrası tekrarın ikinci depo kurmadığını, her reddin hiçbir şey yazmadığını ve runner'ın elle tohumlama olmadan VERIFY'ye ulaştığını kanıtlar.
+import {submitIntake} from "../core/workos/intake.js";
+import {IntakeError} from "../core/workos/intake.js";
+import {APP_ENV_POLICY_FILE, TemplateProvisioner, templateProjectFields} from "../core/workos/project-provisioner.js";
+import {ProjectStudio, StudioError} from "../core/workos/project-studio.js";
+import {renderTemplate} from "../core/workos/project-templates.js";
+import {managedRepoCanonical} from "../core/workos/path-guard.js";
+import {ExecutionGate} from "../core/workos/execution-gate.js";
+import {WorkOsError} from "../core/workos/types.js";
+import type {ProjectTemplate} from "../core/workos/types.js";
+
+const TPL_IDEA = "A small web app where I can track my daily reading with a streak counter";
+const tplGit = (cwd: string, args: string[]) => { const r = spawnGitSync(cwd, args); if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`); return String(r.stdout).trim(); };
+const tplData = () => path.join(tmp, "data");
+const tplJournalN = (dir = tplData()) => fs.existsSync(path.join(dir, "journal.jsonl")) ? journalLines(dir).length : 0;
+const tplIntakes = (dir = tplData()) => path.join(dir, "intakes.jsonl");
+const tplIntakeLines = (dir = tplData()) => fs.existsSync(tplIntakes(dir)) ? fs.readFileSync(tplIntakes(dir), "utf8").split("\n").filter(Boolean) : [];
+const tplPrjDirs = (dir = tplData()) => { const p = path.join(dir, "projects"); return fs.existsSync(p) && fs.statSync(p).isDirectory() ? fs.readdirSync(p).filter(n => n.startsWith("prj_")).sort() : []; };
+const tplAuthorSubject = (repo: string) => tplGit(repo, ["log", "--format=%an <%ae>|%s"]);
+
+describe("COORD-INTAKE-TEMPLATE core provisioner (real fs and git, temp data dir)", () => {
+  const scope = {tenantId: "tA"}, ACTOR = "FOUNDER_LOCAL";
+  const REPO_ROOT = path.resolve(import.meta.dirname, "..");
+  const deps = (store: WorkOsStore, studio?: unknown) => ({store, scope, orgId: "o1", actor: ACTOR, ...(studio ? {studio: studio as any} : {})});
+  const studioErr = (fn: () => unknown): unknown[] => {
+    try { fn(); } catch (e) { expect(e).toBeInstanceOf(StudioError); const s = e as StudioError; return [s.code, s.status, s.reason]; }
+    throw new Error("expected a StudioError");
+  };
+  // Gerçek ProjectStudio'yu saran casus: createTemplateRepository çağrılarını (projectId, template, ad) kaydeder.
+  const spyStudio = (dir = tplData()) => {
+    const real = new ProjectStudio({dataDir: dir, envPolicyFile: APP_ENV_POLICY_FILE});
+    const calls: Array<[string, ProjectTemplate, string]> = [];
+    return {calls, studio: {dataDir: real.dataDir, createTemplateRepository: (id: string, t: ProjectTemplate, name: string) => { calls.push([id, t, name]); return real.createTemplateRepository(id, t, name); }}};
+  };
+
+  it("U1 resolves the environment policy file exactly as buildServer does (repoRoot/config/environment-policy.json), and the file exists", () => {
+    expect(APP_ENV_POLICY_FILE).toBe(path.join(REPO_ROOT, "config", "environment-policy.json"));
+    expect(fs.statSync(APP_ENV_POLICY_FILE).isFile()).toBe(true);
+    const policy = JSON.parse(fs.readFileSync(APP_ENV_POLICY_FILE, "utf8"));
+    expect(policy !== null && typeof policy === "object" && !Array.isArray(policy)).toBe(true);
+  });
+  it("U2 templateProjectFields: the Founder value wins over the template value, a missing value is an absent key (never []), and arrays are copies", () => {
+    expect(templateProjectFields("web-node", "N")).toEqual({template: "web-node", projectType: "web", testCommand: ["node", "test.js"], devCommand: ["node", "server.js"]});
+    expect(templateProjectFields("node-lib", "N")).toEqual({template: "node-lib", projectType: "library", testCommand: ["node", "test.js"]});
+    const e = templateProjectFields("empty", "N");
+    expect(e).toEqual({template: "empty", projectType: "other"}); expect("testCommand" in e).toBe(false); expect("devCommand" in e).toBe(false);
+    expect(templateProjectFields("web-node", "N", {projectType: "api", testCommand: ["npm", "test"]})).toEqual({template: "web-node", projectType: "api", testCommand: ["npm", "test"], devCommand: ["node", "server.js"]});
+    expect(templateProjectFields("node-lib", "N", {devCommand: ["node", "watch.js"]})).toEqual({template: "node-lib", projectType: "library", testCommand: ["node", "test.js"], devCommand: ["node", "watch.js"]});
+    expect(templateProjectFields("empty", "N", {testCommand: ["node", "t.js"], projectType: "cli"})).toEqual({template: "empty", projectType: "cli", testCommand: ["node", "t.js"]});
+    const tc = ["node", "x.js"], f = templateProjectFields("node-lib", "N", {testCommand: tc});
+    expect(f.testCommand).not.toBe(tc); tc[0] = "bash"; expect(f.testCommand).toEqual(["node", "x.js"]);
+    // server.ts POST /v1/projects kuralı (b.x ?? tpl?.x) ile her şablonda birebir aynı.
+    for (const t of ["web-node", "node-lib", "empty"] as const) {
+      const spec = renderTemplate(t, "N");
+      expect(templateProjectFields(t, "N"), t).toEqual({template: t, projectType: spec.projectType, ...(spec.testCommand ? {testCommand: spec.testCommand} : {}), ...(spec.devCommand ? {devCommand: spec.devCommand} : {})});
+    }
+  });
+  it("U3 TemplateProvisioner fails closed with a 500 (never 503) on a foreign data dir or an unreadable policy, and prepare/discard work against a real studio", () => {
+    const foreign = new ProjectStudio({dataDir: path.join(tmp, "other"), envPolicyFile: APP_ENV_POLICY_FILE});
+    expect(studioErr(() => new TemplateProvisioner({dataDir: tplData(), studio: foreign}))).toEqual(["PROJECT_PROVISIONER_MISCONFIGURED", 500, "DATA_DIR_MISMATCH"]);
+    // Aynı dizinin farklı yazımı (göreli yol) kabul edilir.
+    expect(() => new TemplateProvisioner({dataDir: path.relative(process.cwd(), tplData()), studio: new ProjectStudio({dataDir: tplData(), envPolicyFile: APP_ENV_POLICY_FILE})})).not.toThrow();
+    const bad = path.join(tmp, "policy.json");
+    for (const content of [null, "{", "[]", "null", "", "42", "\"x\""]) {
+      if (content === null) fs.rmSync(bad, {force: true}); else fs.writeFileSync(bad, content);
+      expect(studioErr(() => new TemplateProvisioner({dataDir: tplData(), envPolicyFile: bad})), String(content)).toEqual(["PROJECT_PROVISIONER_UNAVAILABLE", 500, "ENV_POLICY_UNREADABLE"]);
+    }
+    expect(fs.existsSync(tplData())).toBe(false); // ön kontrol hiçbir şey oluşturmaz
+    const id = "prj_" + "a1".repeat(12);
+    const made = new TemplateProvisioner({dataDir: tplData()}).prepare("node-lib", "Lib")(id);
+    expect(Object.keys(made).sort()).toEqual(["discard", "path"]);
+    expect(made.path).toBe(path.join(tplData(), "projects", id, "repo"));
+    expect(fs.readdirSync(made.path).sort()).toEqual([".git", ".gitignore", "README.md", "index.js", "package.json", "test.js"]);
+    expect(tplAuthorSubject(made.path)).toBe("UASCO Project Studio <studio@local.invalid>|Initial commit from template node-lib");
+    made.discard();
+    expect(fs.existsSync(path.join(tplData(), "projects", id))).toBe(false);
+    // submitIntake de yabancı veri dizinli studio ile hiçbir şey yazmaz (iki dizinde de).
+    const store = new WorkOsStore(tplData());
+    expect(() => submitIntake(deps(store, foreign), {idea: TPL_IDEA, template: "web-node", idempotencyKey: "u3"})).toThrow("PROJECT_PROVISIONER_MISCONFIGURED");
+    expect([tplJournalN(), tplIntakeLines().length, tplPrjDirs(), tplPrjDirs(path.join(tmp, "other"))]).toEqual([0, 0, [], []]);
+  });
+  it("U4 the studio is called exactly once across the first call and a replay, never for a template-less intake, and a failing studio writes nothing", () => {
+    const store = new WorkOsStore(tplData());
+    const {calls, studio} = spyStudio();
+    const input = {idea: TPL_IDEA, title: "Reading tracker", template: "web-node" as const, idempotencyKey: "u4"};
+    const a = submitIntake(deps(store, studio), input), b = submitIntake(deps(store, studio), input);
+    expect([a.replayed, b.replayed]).toEqual([false, true]); expect(b.intake).toEqual(a.intake);
+    expect(calls).toEqual([[a.intake.projectId, "web-node", "Reading tracker"]]);
+    const plain = submitIntake(deps(store, studio), {idea: TPL_IDEA, idempotencyKey: "u4-plain"});
+    expect(calls).toHaveLength(1);
+    expect(store.getProject(scope, plain.intake.projectId)!.repository).toBeUndefined();
+    // Aynı anahtar + farklı/eksik şablon kayıt düzeyinde çakışmadır; eski şablonsuz kayıt + şablonlu istek de çakışır.
+    for (const other of [{...input, template: "node-lib" as const}, {idea: TPL_IDEA, title: "Reading tracker", idempotencyKey: "u4"}, {idea: TPL_IDEA, idempotencyKey: "u4-plain", template: "empty" as const, testCommand: ["node", "t.js"]}]) {
+      let err: unknown = null;
+      try { submitIntake(deps(store, studio), other); } catch (e) { err = e; }
+      expect(err, JSON.stringify(other)).toBeInstanceOf(IntakeError); expect((err as IntakeError).code).toBe("INTAKE_IDEMPOTENCY_CONFLICT");
+    }
+    expect(calls).toHaveLength(1);
+    const before = [tplJournalN(), tplIntakeLines().length, store.listProjects(scope).length, tplPrjDirs()];
+    const failing = {dataDir: path.resolve(tplData()), createTemplateRepository: () => { throw new StudioError("PROJECT_REPOSITORY_INIT_FAILED", 500); }};
+    expect(() => submitIntake(deps(store, failing), {...input, idempotencyKey: "u4-fail"})).toThrow("PROJECT_REPOSITORY_INIT_FAILED");
+    expect([tplJournalN(), tplIntakeLines().length, store.listProjects(scope).length, tplPrjDirs()]).toEqual(before);
+    const fresh = path.join(tmp, "fresh"), s2 = new WorkOsStore(fresh);
+    expect(() => submitIntake(deps(s2, {...failing, dataDir: path.resolve(fresh)}), input)).toThrow("PROJECT_REPOSITORY_INIT_FAILED");
+    expect([tplJournalN(fresh), fs.existsSync(tplIntakes(fresh)), s2.listProjects(scope)]).toEqual([0, false, []]);
+  });
+  it("U5 crash-resume: a mission failure after the project commit keeps the repository; a changed retry conflicts; the same retry completes with one repository and the same head", () => {
+    const store = new WorkOsStore(tplData());
+    const {calls, studio} = spyStudio();
+    const input = {idea: TPL_IDEA, title: "Reading tracker", template: "web-node" as const, idempotencyKey: "u5"};
+    const orig = store.createMissionDetailed.bind(store);
+    let fail = 1;
+    (store as any).createMissionDetailed = (x: any) => { if (fail-- > 0) throw new WorkOsError("WORKOS_UNAVAILABLE", "INJECTED"); return orig(x); };
+    expect(() => submitIntake(deps(store, studio), input)).toThrow("WORKOS_UNAVAILABLE");
+    const projects = store.listProjects(scope);
+    expect(projects).toHaveLength(1);
+    const p = projects[0], repo = path.join(tplData(), "projects", p.projectId, "repo");
+    expect(p.repository).toEqual({path: repo, managed: true}); // proje kaydından sonra discard yok
+    const head = tplGit(repo, ["rev-parse", "HEAD"]);
+    expect([fs.existsSync(tplIntakes()), store.listMissions(scope)]).toEqual([false, []]);
+    const n = tplJournalN();
+    for (const changed of [{...input, title: "Other title"}, {...input, template: "node-lib" as const}, {idea: TPL_IDEA, title: "Reading tracker", idempotencyKey: "u5"}, {...input, testCommand: ["npm", "test"]}, {...input, projectType: "api" as const}, {...input, riskLevel: "R2" as const, acceptanceCriteria: ["other"]}]) {
+      expect(() => submitIntake(deps(store, studio), changed), JSON.stringify(changed)).toThrow("WORKOS_IDEMPOTENCY_CONFLICT");
+    }
+    expect([tplJournalN(), calls.length, tplPrjDirs()]).toEqual([n, 1, [p.projectId]]);
+    const r = submitIntake(deps(store, studio), input);
+    expect([r.replayed, r.intake.projectId]).toEqual([false, p.projectId]);
+    expect(r.intake.repository).toEqual({kind: "TEMPLATE", template: "web-node", managed: true, testCommandSource: "TEMPLATE"});
+    expect(calls).toHaveLength(1); expect(tplGit(repo, ["rev-parse", "HEAD"])).toBe(head);
+    expect([store.listMissions(scope).length, tplIntakeLines().length, tplPrjDirs()]).toEqual([1, 1, [p.projectId]]);
+    expect(submitIntake(deps(store, studio), input).replayed).toBe(true);
+    expect(calls).toHaveLength(1);
+  });
+  it("U6 a direct caller cannot bypass the route: an unknown template or a template without a key is WORKOS_INVALID_INPUT and nothing is written", () => {
+    const store = new WorkOsStore(tplData());
+    const {calls, studio} = spyStudio();
+    for (const [bad, msg] of [[{idea: TPL_IDEA, template: "rails", idempotencyKey: "u6"}, "template"], [{idea: TPL_IDEA, template: "web-node"}, "template requires idempotencyKey"], [{idea: TPL_IDEA, template: "web-node", idempotencyKey: ""}, "template requires idempotencyKey"], [{idea: TPL_IDEA, template: 7, idempotencyKey: "u6"}, "template"]] as const) {
+      expect(() => submitIntake(deps(store, studio), bad as any), JSON.stringify(bad)).toThrow(`WORKOS_INVALID_INPUT: ${msg}`);
+    }
+    expect([tplJournalN(), fs.existsSync(tplIntakes()), fs.existsSync(path.join(tplData(), "projects")), calls.length]).toEqual([0, false, false, 0]);
+    // Route şeması aynı kuralları uygular (400 INVALID_BODY): istemci repository/path/url/devCommand gönderemez.
+    expect(validateIntakeCreate({idea: TPL_IDEA, template: "web-node"})).toEqual({ok: false, errors: "template requires idempotencyKey"});
+    expect(validateIntakeCreate({idea: TPL_IDEA, template: "web-node", idempotencyKey: "k"})).toEqual({ok: true});
+    for (const t of ["node-lib", "empty"]) expect(validateIntakeCreate({idea: TPL_IDEA, template: t, idempotencyKey: "k"}), t).toEqual({ok: true});
+    for (const extra of [{template: "rails"}, {template: ""}, {template: null}, {template: ["web-node"]}, {repository: {path: "/x"}}, {devCommand: ["node", "x.js"]}, {path: "/x"}, {url: "https://example.invalid/x.git"}]) {
+      expect(validateIntakeCreate({idea: TPL_IDEA, template: "web-node", idempotencyKey: "k", ...extra}).ok, JSON.stringify(extra)).toBe(false);
+    }
+    expect((validateIntakeCreate({idea: TPL_IDEA, template: "web-node", testCommand: ["bash"]}) as {errors: string}).errors).toMatch(/^testCommand\[0\] must be one of /);
+  });
+  it("U7 compatibility: a template-less intake writes no repository block and its project gains no repository, template or command keys", () => {
+    const store = new WorkOsStore(tplData());
+    const r = submitIntake(deps(store), {idea: TPL_IDEA, idempotencyKey: "u7"});
+    expect("repository" in r.intake).toBe(false);
+    expect(Object.keys(JSON.parse(tplIntakeLines()[0]))).not.toContain("repository");
+    const p = store.getProject(scope, r.intake.projectId)!;
+    expect(["repository", "template", "devCommand", "testCommand", "projectType"].filter(k => k in p)).toEqual([]);
+    expect(tplPrjDirs()).toEqual([]);
+    expect(submitIntake(deps(store), {idea: TPL_IDEA, idempotencyKey: "u7"}).replayed).toBe(true);
+  });
+});
+
+describe("COORD-INTAKE-TEMPLATE through the real server", () => {
+  const token = crypto.randomBytes(16).toString("hex");
+  const hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const scope = {tenantId: "local"}, ACTOR = "FOUNDER_LOCAL";
+  const mkApp = (extra: Record<string, unknown> = {}) => {
+    const runtime = path.join(tmp, "runtime");
+    fs.mkdirSync(runtime, {recursive: true});
+    return {runtime, app: buildServer({controlToken: token, runtime, dataDir: tplData(), port: 3210, logger: false, ...extra})};
+  };
+  const req = (app: any, method: string, url: string, payload?: unknown, headers: any = hdr) => app.inject({method, url, headers, ...(payload === undefined ? {} : {payload: payload as any})});
+  const projectOf = async (app: any, id: string) => (await req(app, "GET", "/v1/projects")).json().projects.find((p: any) => p.projectId === id);
+  const events = (runtime: string) => { const f = path.join(runtime, "control-api-events.jsonl"); return fs.existsSync(f) ? fs.readFileSync(f, "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l)) : []; };
+  const intakeEvents = (runtime: string) => events(runtime).filter((e: any) => e.details?.kind === "intake");
+
+  it("S1 web-node: one POST creates the project with a managed starting repository and the template's commands; a replay rebuilds nothing", async () => {
+    const {app} = mkApp();
+    const body = {idea: TPL_IDEA, title: "Reading tracker", template: "web-node", idempotencyKey: "tpl-s1"};
+    const made = await req(app, "POST", "/v1/intakes", body);
+    expect(made.statusCode, made.body).toBe(201);
+    const intake = made.json().intake;
+    expect(intake.repository).toEqual({kind: "TEMPLATE", template: "web-node", managed: true, testCommandSource: "TEMPLATE"});
+    expect(["projectType", "testCommand", "testCommandSha256"].filter(k => k in intake)).toEqual([]); // kayıttaki bu alanlar yalnız Founder değeridir
+    expect(made.body).not.toContain(tmp); expect(made.body).not.toContain("repo\""); // yanıt depo yolu taşımaz
+    const repo = path.join(tplData(), "projects", intake.projectId, "repo");
+    const p = await projectOf(app, intake.projectId);
+    expect(p).toMatchObject({template: "web-node", projectType: "web", testCommand: ["node", "test.js"], devCommand: ["node", "server.js"], repository: {path: repo, managed: true}});
+    expect(managedRepoCanonical(tplData(), intake.projectId, p.repository.path)).not.toBeNull();
+    expect(tplAuthorSubject(repo)).toBe("UASCO Project Studio <studio@local.invalid>|Initial commit from template web-node");
+    expect(tplGit(repo, ["status", "--porcelain"])).toBe("");
+    const files = await req(app, "GET", `/v1/projects/${intake.projectId}/files`);
+    expect(files.statusCode).toBe(200);
+    expect(files.json().entries.map((e: any) => e.name)).toEqual(expect.arrayContaining(["package.json", "server.js", "test.js", "README.md", "public"]));
+    expect((await req(app, "GET", `/v1/missions/${intake.missionId}`)).json().mission.testCommand).toBeUndefined(); // runner mission ?? proje okur
+    const head = tplGit(repo, ["rev-parse", "HEAD"]), n = tplJournalN();
+    const replay = await req(app, "POST", "/v1/intakes", body);
+    expect([replay.statusCode, replay.json().intake]).toEqual([200, intake]);
+    expect([tplPrjDirs(), tplGit(repo, ["rev-parse", "HEAD"]), tplJournalN(), tplIntakeLines().length]).toEqual([[intake.projectId], head, n, 1]);
+    expect((await req(app, "GET", `/v1/intakes/${intake.intakeId}`)).json().intake).toEqual(intake);
+    await app.close();
+  });
+  it("S2 the Founder's test command and project type win over the template defaults (testCommandSource FOUNDER)", async () => {
+    const {app} = mkApp();
+    const r = await req(app, "POST", "/v1/intakes", {idea: TPL_IDEA, template: "web-node", testCommand: ["npm", "test"], projectType: "api", idempotencyKey: "tpl-s2"});
+    expect(r.statusCode, r.body).toBe(201);
+    const i = r.json().intake;
+    expect([i.repository.testCommandSource, i.testCommand, i.projectType]).toEqual(["FOUNDER", ["npm", "test"], "api"]);
+    expect(await projectOf(app, i.projectId)).toMatchObject({template: "web-node", projectType: "api", testCommand: ["npm", "test"], devCommand: ["node", "server.js"]});
+    await app.close();
+  });
+  it("S3 the empty template: a repository without a test command (NONE), or with the Founder's command (FOUNDER)", async () => {
+    const {app} = mkApp();
+    const a = (await req(app, "POST", "/v1/intakes", {idea: TPL_IDEA, template: "empty", idempotencyKey: "tpl-s3a"})).json().intake;
+    expect(a.repository).toEqual({kind: "TEMPLATE", template: "empty", managed: true, testCommandSource: "NONE"});
+    const pa = await projectOf(app, a.projectId);
+    expect(pa).toMatchObject({template: "empty", projectType: "other", repository: {managed: true}});
+    expect(["testCommand", "devCommand"].filter(k => k in pa)).toEqual([]);
+    expect(fs.readdirSync(pa.repository.path).sort()).toEqual([".git", ".gitignore", "README.md"]);
+    const b = (await req(app, "POST", "/v1/intakes", {idea: TPL_IDEA, template: "empty", testCommand: ["node", "t.js"], idempotencyKey: "tpl-s3b"})).json().intake;
+    expect(b.repository.testCommandSource).toBe("FOUNDER");
+    expect((await projectOf(app, b.projectId)).testCommand).toEqual(["node", "t.js"]);
+    await app.close();
+  });
+  it("S4 the same key with another template, or with none, is 409 INTAKE_IDEMPOTENCY_CONFLICT and builds no repository", async () => {
+    const {app} = mkApp();
+    const body = {idea: TPL_IDEA, template: "web-node", idempotencyKey: "tpl-s4"};
+    expect((await req(app, "POST", "/v1/intakes", body)).statusCode).toBe(201);
+    const plain = {idea: TPL_IDEA, idempotencyKey: "tpl-s4-plain"};
+    expect((await req(app, "POST", "/v1/intakes", plain)).statusCode).toBe(201);
+    const n = tplJournalN(), dirs = tplPrjDirs();
+    expect(dirs).toHaveLength(1);
+    for (const other of [{...body, template: "node-lib"}, {...body, template: "empty", testCommand: ["node", "t.js"]}, {idea: TPL_IDEA, idempotencyKey: "tpl-s4"}, {...plain, template: "web-node"}]) {
+      const c = await req(app, "POST", "/v1/intakes", other);
+      expect([c.statusCode, c.json().error], JSON.stringify(other)).toEqual([409, "INTAKE_IDEMPOTENCY_CONFLICT"]);
+    }
+    expect([tplJournalN(), tplPrjDirs(), tplIntakeLines().length]).toEqual([n, dirs, 2]);
+    await app.close();
+  });
+  it("S5 an unknown template, a template without a key, or a template with client repository/command fields is 400 and writes nothing", async () => {
+    const {runtime, app} = mkApp();
+    const bads: unknown[] = [{idea: TPL_IDEA, template: "rails", idempotencyKey: "k"}, {idea: TPL_IDEA, template: "web-node"}, {idea: TPL_IDEA, template: "web-node", idempotencyKey: "k", repository: {path: path.join(tmp, "x")}},
+      {idea: TPL_IDEA, template: "web-node", idempotencyKey: "k", devCommand: ["node", "x.js"]}, {idea: TPL_IDEA, template: ["web-node"], idempotencyKey: "k"}, {idea: TPL_IDEA, template: "", idempotencyKey: "k"}, {idea: TPL_IDEA, template: null, idempotencyKey: "k"}];
+    for (const bad of bads) {
+      const r = await req(app, "POST", "/v1/intakes", bad);
+      expect([r.statusCode, r.json().error], JSON.stringify(bad)).toEqual([400, "INVALID_BODY"]);
+    }
+    expect((await req(app, "POST", "/v1/intakes", {idea: TPL_IDEA, template: "web-node"})).json().detail).toBe("template requires idempotencyKey");
+    expect([fs.existsSync(path.join(tplData(), "projects")), tplJournalN(), fs.existsSync(tplIntakes()), intakeEvents(runtime)]).toEqual([false, 0, false, []]);
+    await app.close();
+  });
+  it("S6 Global Stop (423) and a policy denial (403) refuse a template intake before anything is built", async () => {
+    const {runtime, app} = mkApp();
+    const body = {idea: TPL_IDEA, template: "web-node", idempotencyKey: "tpl-s6"};
+    fs.writeFileSync(path.join(runtime, "GLOBAL_STOP.json"), JSON.stringify({active: true, reason: "test", actor: "TEST"}));
+    const stopped = await req(app, "POST", "/v1/intakes", body);
+    expect([stopped.statusCode, stopped.json().error]).toEqual([423, "GLOBAL_STOP_ACTIVE"]);
+    fs.rmSync(path.join(runtime, "GLOBAL_STOP.json"));
+    await app.close();
+    const denied = mkApp({policyContext: {scopeAllowed: false}});
+    const d = await req(denied.app, "POST", "/v1/intakes", body);
+    expect([d.statusCode, d.json().error]).toEqual([403, "ACTION_DENIED"]);
+    await denied.app.close();
+    expect([fs.existsSync(path.join(tplData(), "projects")), tplJournalN(), fs.existsSync(tplIntakes()), intakeEvents(runtime)]).toEqual([false, 0, false, []]);
+    expect(events(runtime).map((e: any) => e.event)).toContain("WORKOS_WRITE_DENIED");
+  });
+  it("S7 a full disk on the PROJECT_CREATED append is 507 and the store discards the repository it just built", async () => {
+    const {app} = mkApp({workosStoreOptions: {io: {writeSync: () => { throw Object.assign(new Error("x"), {code: "ENOSPC"}); }}}});
+    const body = {idea: TPL_IDEA, template: "web-node", idempotencyKey: "tpl-s7"};
+    const r = await req(app, "POST", "/v1/intakes", body);
+    expect([r.statusCode, r.json().error]).toEqual([507, "WORKOS_DISK_FULL"]);
+    expect([tplPrjDirs(), fs.existsSync(tplIntakes()), tplJournalN()]).toEqual([[], false, 0]);
+    await app.close();
+    const ok = mkApp().app; // aynı anahtarla sonraki deneme tek depo kurar
+    expect((await req(ok, "POST", "/v1/intakes", body)).statusCode).toBe(201);
+    expect(tplPrjDirs()).toHaveLength(1);
+    await ok.close();
+  });
+  it("S8 a repository that cannot be created is 500 PROJECT_REPOSITORY_INIT_FAILED with no project, no record and no journal entry", async () => {
+    fs.mkdirSync(tplData(), {recursive: true});
+    fs.writeFileSync(path.join(tplData(), "projects"), "not a directory");
+    const {app} = mkApp();
+    const r = await req(app, "POST", "/v1/intakes", {idea: TPL_IDEA, template: "node-lib", idempotencyKey: "tpl-s8"});
+    expect([r.statusCode, r.json().error]).toEqual([500, "PROJECT_REPOSITORY_INIT_FAILED"]);
+    expect(r.body).not.toContain(tmp);
+    expect((await req(app, "GET", "/v1/projects")).json().projects).toEqual([]);
+    expect([fs.existsSync(tplIntakes()), tplJournalN()]).toEqual([false, 0]);
+    await app.close();
+  });
+  it("S9 parity with POST /v1/projects for every template: the same fields, the same tree, the same author and subject (also with Founder overrides)", async () => {
+    const {app} = mkApp();
+    const pick = (p: any) => ({template: p.template, projectType: p.projectType, testCommand: p.testCommand, devCommand: p.devCommand, managed: p.repository?.managed});
+    const cases: Array<[string, Record<string, unknown>]> = [["web-node", {}], ["node-lib", {}], ["empty", {}], ["web-node", {testCommand: ["npm", "test"], projectType: "api"}], ["empty", {testCommand: ["node", "t.js"]}]];
+    for (const [i, [t, extra]] of cases.entries()) {
+      const N = `Parity ${t} ${i}`;
+      const viaProject = await req(app, "POST", "/v1/projects", {name: N, environmentId: "local", template: t, ...extra});
+      const viaIntake = await req(app, "POST", "/v1/intakes", {idea: TPL_IDEA, title: N, template: t, idempotencyKey: `parity-${i}`, ...extra});
+      expect([viaProject.statusCode, viaIntake.statusCode], `${t} ${viaProject.body} ${viaIntake.body}`).toEqual([201, 201]);
+      const a = viaProject.json().project, b = await projectOf(app, viaIntake.json().intake.projectId);
+      expect(pick(b), N).toEqual(pick(a));
+      expect(tplGit(b.repository.path, ["rev-parse", "HEAD^{tree}"]), N).toBe(tplGit(a.repository.path, ["rev-parse", "HEAD^{tree}"]));
+      expect(tplAuthorSubject(b.repository.path), N).toBe(tplAuthorSubject(a.repository.path));
+    }
+    await app.close();
+  });
+  it("S10 an intake project's managed repository cannot be replaced by an import (409 PROJECT_REPOSITORY_ALREADY_MANAGED)", async () => {
+    const {app} = mkApp();
+    const i = (await req(app, "POST", "/v1/intakes", {idea: TPL_IDEA, template: "node-lib", idempotencyKey: "tpl-s10"})).json().intake;
+    const src = path.join(tmp, "src"); fs.mkdirSync(src);
+    const r = await req(app, "POST", `/v1/projects/${i.projectId}/import`, {kind: "git", path: src});
+    expect([r.statusCode, r.json().error]).toEqual([409, "PROJECT_REPOSITORY_ALREADY_MANAGED"]);
+    await app.close();
+  });
+  it("S11 tenant isolation: another tenant on the same data dir sees nothing, and the same key there makes a distinct intake, project and repository", async () => {
+    const {app} = mkApp();
+    const body = {idea: TPL_IDEA, template: "web-node", idempotencyKey: "tpl-s11"};
+    const a = (await req(app, "POST", "/v1/intakes", body)).json().intake;
+    await app.close();
+    const other = mkApp({tenantId: "tB"}).app;
+    expect((await req(other, "GET", `/v1/intakes/${a.intakeId}`)).statusCode).toBe(404);
+    expect((await req(other, "GET", "/v1/projects")).json().projects).toEqual([]);
+    expect((await req(other, "GET", `/v1/projects/${a.projectId}/files`)).statusCode).toBe(404);
+    const b = await req(other, "POST", "/v1/intakes", body);
+    expect(b.statusCode).toBe(201);
+    const bi = b.json().intake;
+    expect([bi.intakeId === a.intakeId, bi.projectId === a.projectId]).toEqual([false, false]);
+    expect(tplPrjDirs()).toEqual([a.projectId, bi.projectId].sort());
+    expect((await projectOf(other, bi.projectId)).repository.path).toBe(path.join(tplData(), "projects", bi.projectId, "repo"));
+    await other.close();
+  });
+  it("S12 the control audit names the template on create and replay (no path), and a template-less intake's audit is unchanged", async () => {
+    const {runtime, app} = mkApp();
+    const body = {idea: TPL_IDEA, template: "node-lib", idempotencyKey: "tpl-s12"};
+    await req(app, "POST", "/v1/intakes", body); await req(app, "POST", "/v1/intakes", body);
+    await req(app, "POST", "/v1/intakes", {idea: TPL_IDEA, template: "rails", idempotencyKey: "x"});
+    await req(app, "POST", "/v1/intakes", {idea: TPL_IDEA, idempotencyKey: "tpl-s12-plain"});
+    const ev = intakeEvents(runtime);
+    expect(ev.map((e: any) => [e.event, e.details.template ?? null])).toEqual([["WORKOS_INTAKE_CREATED", "node-lib"], ["WORKOS_IDEMPOTENT_REPLAY", "node-lib"], ["WORKOS_INTAKE_CREATED", null]]);
+    expect("template" in ev[2].details).toBe(false);
+    expect(JSON.stringify(ev)).not.toContain(tmp);
+    await app.close();
+  });
+  it("S13 a web-node intake's mission runs with no manual seeding: VERIFY executes the template test; a template-less intake still blocks; without a sandbox the test is NOT_EXECUTED", async () => {
+    const {app} = mkApp();
+    const post = async (b: unknown) => { const r = await req(app, "POST", "/v1/intakes", b); expect(r.statusCode, r.body).toBe(201); return r.json().intake; };
+    const tpl = await post({idea: TPL_IDEA, template: "web-node", idempotencyKey: "tpl-s13"});
+    const plain = await post({idea: TPL_IDEA + " (plain)", idempotencyKey: "tpl-s13-plain"});
+    const nosbx = await post({idea: TPL_IDEA + " (no sandbox)", template: "node-lib", idempotencyKey: "tpl-s13-nosbx"});
+    await app.close();
+    const store = new WorkOsStore(tplData());
+    const runtime = path.join(tmp, "runtime-run"); fs.mkdirSync(runtime, {recursive: true});
+    const fake = new FakeExecutors({implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"})});
+    const pair = fake.pair(), dev = bindingForFunction("developer");
+    const drive = async (missionId: string, gate: ExecutionGate) => {
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(scope, missionId, to, "founder go", ACTOR);
+      const run = store.createRun({tenantId: scope.tenantId, missionId, roleId: dev.roleId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: ACTOR});
+      await new MissionRunner({executionGate: gate, store, dataDir: store.dataDir, globalStopFile: path.join(runtime, "GLOBAL_STOP.json"), envPolicyFile: APP_ENV_POLICY_FILE,
+        executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(path.join(tmp, "sec")).options}).tick();
+      return store.getRun(scope, run.runId)!;
+    };
+    const done = await drive(tpl.missionId, testExecutionGate());
+    const ev = JSON.stringify(done.evidence);
+    expect(ev).not.toContain("REPOSITORY_NOT_CONFIGURED"); expect(ev).not.toContain("TEST_COMMAND_NOT_CONFIGURED");
+    expect(fake.calls.implement).toBe(1);
+    const verify = done.evidence.find(e => e.kind === "VERIFY_TESTS");
+    expect(verify, `run ${done.status}/${done.step}/${done.reason}`).toBeDefined();
+    // Şablonun testi gerçekten çalıştı ve geçti (runner yürütülebilir dosyayı mutlak yola çözer).
+    expect([path.basename(verify!.argv[0]).replace(/\.exe$/i, ""), verify!.argv.slice(1), verify!.exitCode]).toEqual(["node", ["test.js"], 0]);
+    // Dürüst iddia: FAKE executor ile koşu REPORT'ta Founder kararını bekler; bu bir CLEAN/COMPLETE/doğrulama iddiası değildir.
+    expect([done.status, done.step]).toEqual(["AWAITING_APPROVAL", "REPORT"]);
+    const blocked = await drive(plain.missionId, testExecutionGate());
+    expect([blocked.status, blocked.reason]).toEqual(["BLOCKED", "REPOSITORY_NOT_CONFIGURED"]);
+    // Doğrulanmış sandbox yoksa proje kodu ana makinede çalıştırılmaz: kanıt NOT_EXECUTED (SANDBOX_UNAVAILABLE), asla VERIFY_TESTS değil.
+    const ns = await drive(nosbx.missionId, new ExecutionGate(null));
+    expect(ns.evidence.some(e => e.kind === "VERIFY_TESTS")).toBe(false);
+    expect(ns.evidence.find(e => e.kind === "VERIFY_TESTS_NOT_EXECUTED")?.note).toContain("SANDBOX_UNAVAILABLE");
+    expect(JSON.stringify(ns.evidence)).not.toContain("REPOSITORY_NOT_CONFIGURED");
+  });
+});

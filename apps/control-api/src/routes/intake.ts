@@ -1,4 +1,4 @@
-//TR: Bu dosya proje intake route'larını (fikir -> doğrulanmış kayıt -> proje + ilk mission) sağlar; server.ts'e tek satırlık kayıt gerekir (docs/authority-requests/LANE-B-intake.md).
+//TR: Bu dosya proje intake route'larını (fikir -> doğrulanmış kayıt -> proje + ilk mission) sağlar; server.ts'e tek satırlık kayıt gerekir (docs/authority-requests/LANE-B-intake.md). COORD-INTAKE-TEMPLATE: isteğe bağlı template ile proje yönetilen şablon deposuyla kurulur; kapı sırası aynıdır (423 Global Stop -> 403 politika, özet şablon dahil tüm gövdeyi kapsar -> 400 şema, anahtarsız şablon dahil) ve Studio hataları workosFail ile sabit kod + HTTP durumu olarak döner.
 import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
 import type {RouteDeps} from "./deps.js";
 import {submitIntake, listIntakes, getIntake, validateIntakeCreate, IntakeError} from "../../../../core/workos/intake.js";
@@ -31,7 +31,8 @@ export function registerIntakeRoutes(app: any, d: RouteDeps): void {
     const v = validateIntakeCreate(body);
     if (!v.ok) return reply.code(400).send({error: "INVALID_BODY", detail: v.errors});
     const r = submitIntake({store: d.getStore(), scope: d.scope, orgId: d.orgId, actor: d.actor}, body as any);
-    d.audit(r.replayed ? "WORKOS_IDEMPOTENT_REPLAY" : "WORKOS_INTAKE_CREATED", {actor: d.actor, kind: "intake", intakeId: r.intake.intakeId, projectId: r.intake.projectId, missionId: r.intake.missionId});
+    // //TR: WORKOS_PROJECT_CREATED ile aynı biçimde şablon adı audit'e girer (yol girmez).
+    d.audit(r.replayed ? "WORKOS_IDEMPOTENT_REPLAY" : "WORKOS_INTAKE_CREATED", {actor: d.actor, kind: "intake", intakeId: r.intake.intakeId, projectId: r.intake.projectId, missionId: r.intake.missionId, ...(r.intake.repository ? {template: r.intake.repository.template} : {})});
     return reply.code(r.replayed ? 200 : 201).send({intake: r.intake});
   }));
 }

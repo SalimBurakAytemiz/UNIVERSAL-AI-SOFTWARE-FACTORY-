@@ -1,19 +1,21 @@
-// //TR: Bu görünüm parçası Projeler ekranındaki "Fikirden başla" (Proje Intake, UI-126) panelidir: Kurucu serbest metin proje fikrini (ve isteğe bağlı başlık/tür/teknoloji/hedef işletim sistemi/kabul kriteri/risk/test komutu) yazar, POST /v1/intakes tek adımda projeyi ve ilk mission'ı oluşturur; sonuçta her alanın kaynağı (Kurucu / varsayılan / fikirden türetilmiş) açıkça gösterilir. Önceki intake'ler GET /v1/intakes ile listelenir; uç nokta masaüstü allow-list'inde yoksa dürüst UNAVAILABLE gösterilir. Görev üretilmez, koşu başlatılmaz.
+// //TR: Bu görünüm parçası Projeler ekranındaki "Fikirden başla" (Proje Intake, UI-126) panelidir: Kurucu serbest metin proje fikrini (ve isteğe bağlı başlık/tür/teknoloji/hedef işletim sistemi/kabul kriteri/risk/test komutu) yazar, POST /v1/intakes tek adımda projeyi ve ilk mission'ı oluşturur; sonuçta her alanın kaynağı (Kurucu / varsayılan / fikirden türetilmiş) açıkça gösterilir. Önceki intake'ler GET /v1/intakes ile listelenir; uç nokta masaüstü allow-list'inde yoksa dürüst UNAVAILABLE gösterilir. Görev üretilmez, koşu başlatılmaz. COORD-INTAKE-TEMPLATE: başlangıç şablonu (varsayılan web-node) seçilir; proje yönetilen başlangıç deposuyla kurulur ve sonuç kartı deponun ve test komutunun kaynağını dürüstçe gösterir (sandbox/doğrulama iddiası yok).
 import {h,panel,stateNote,emptyNote,badge} from "../components.js";
 import {drafts,selection,field,listEditor,statusBlock,setStatus,recordPost,focusResult,settle} from "../forms.js";
 import {createIdempotencyTracker} from "../work-core.js";
 import {studio,openProject} from "../studio-state.js";
 import {buildIntakeRequest,mapIntake,mapIntakes,INTAKES_PATH,INTAKE_PROJECT_TYPES,INTAKE_OS,INTAKE_RISKS} from "../intake-core.js";
+import {TEMPLATES} from "../project-core.js";
 
 export const INTAKE_FORM="intake";
 const KEYS=["id:intake-submit","id:intake-t"];
-const fresh=()=>({idea:"",title:"",projectType:"",techStack:[""],targetOS:[],acceptanceCriteria:[""],riskLevel:"",testCommand:[""]});
+// İlk teslim varsayılanı web-node: proje çalıştırılabilir bir başlangıç deposu ve test komutuyla doğar ("" seçilirse eski şablonsuz yol).
+const fresh=()=>({idea:"",title:"",template:"web-node",projectType:"",techStack:[""],targetOS:[],acceptanceCriteria:[""],riskLevel:"",testCommand:[""]});
 export const intakeDraft=fresh();
 export const intakeUi={open:false,last:null};
 const tracker=createIdempotencyTracker();
 export function resetIntake(){Object.assign(intakeDraft,fresh());tracker.reset()}
 export function resetIntakeAll(){resetIntake();intakeUi.open=false;intakeUi.last=null}
-const input=()=>({idea:intakeDraft.idea,title:intakeDraft.title,projectType:intakeDraft.projectType,techStack:intakeDraft.techStack,targetOS:intakeDraft.targetOS,acceptanceCriteria:intakeDraft.acceptanceCriteria,riskLevel:intakeDraft.riskLevel,testCommand:intakeDraft.testCommand});
+const input=()=>({idea:intakeDraft.idea,title:intakeDraft.title,template:intakeDraft.template,projectType:intakeDraft.projectType,techStack:intakeDraft.techStack,targetOS:intakeDraft.targetOS,acceptanceCriteria:intakeDraft.acceptanceCriteria,riskLevel:intakeDraft.riskLevel,testCommand:intakeDraft.testCommand});
 
 export async function submitIntake(ctx){
   const check=buildIntakeRequest(input());
@@ -38,6 +40,9 @@ function resultCard(ctx,rec){
       h(doc,"dt",{text:ctx.t("intake.res.title")}),h(doc,"dd",{},srcBadge(ctx,rec.sources.title)),
       h(doc,"dt",{text:ctx.t("intake.res.criteria")}),h(doc,"dd",{},srcBadge(ctx,rec.sources.acceptanceCriteria)," ",h(doc,"span",{text:ctx.t("intake.res.criteriaN",{n:String(rec.acceptanceCriteria.length)})})),
       h(doc,"dt",{text:ctx.t("intake.res.risk")}),h(doc,"dd",{},srcBadge(ctx,rec.sources.riskLevel)," ",h(doc,"span",{class:"mono",text:rec.riskLevel})),
+      // Depo satırı yalnız sunucu kaydındaki repository bloğundan gelir; blok yoksa REPOSITORY_NOT_CONFIGURED notu gösterilir (başarı uydurulmaz).
+      h(doc,"dt",{text:ctx.t("intake.res.repository")}),h(doc,"dd",{id:"intake-res-repo",text:rec.repository?ctx.t("intake.res.repo.template",{template:ctx.t(`studio.template.${rec.repository.template}`)}):ctx.t("intake.res.repo.none")}),
+      rec.repository?h(doc,"dt",{text:ctx.t("intake.res.testSource")}):null,rec.repository?h(doc,"dd",{id:"intake-res-test",dataset:{testSource:rec.repository.testCommandSource},text:ctx.t(`intake.res.test.${rec.repository.testCommandSource}`)}):null,
       h(doc,"dt",{text:ctx.t("intake.res.project")}),h(doc,"dd",{class:"mono",text:rec.projectId}),
       h(doc,"dt",{text:ctx.t("intake.res.mission")}),h(doc,"dd",{class:"mono",text:rec.missionId})),
     h(doc,"div",{class:"btn-row"},
@@ -60,6 +65,7 @@ export async function intakePanel(ctx){
   const form=h(doc,"form",{id:"intake-form",novalidate:true,"aria-labelledby":"intake-t",on:{submit:e=>{e.preventDefault();if(!drafts.busy[INTAKE_FORM])submitIntake(ctx)}}},
     field(ctx,{id:"intake-idea",labelKey:"intake.idea",value:d.idea,onInput:v=>{d.idea=v},errorKey:errs.idea,required:true,multiline:true,hintKey:"intake.ideaHint"}),
     field(ctx,{id:"intake-title",labelKey:"form.field.title",value:d.title,onInput:v=>{d.title=v},errorKey:errs.title,hintKey:"intake.titleHint"}),
+    field(ctx,{id:"intake-template",labelKey:"intake.template",value:d.template,onInput:v=>{d.template=v},errorKey:errs.template,hintKey:"intake.templateHint",options:[{value:"",label:ctx.t("intake.template.none")},...TEMPLATES.map(v=>({value:v,label:ctx.t(`studio.template.${v}`)}))]}),
     field(ctx,{id:"intake-type",labelKey:"form.field.projectType",value:d.projectType,onInput:v=>{d.projectType=v},errorKey:errs.projectType,options:[{value:"",label:ctx.t("intake.notSet")},...INTAKE_PROJECT_TYPES.map(v=>({value:v,label:v}))]}),
     listEditor(ctx,{id:"intake-tech",labelKey:"form.field.techStack",itemLabelKey:"studio.wizard.techN",addKey:"studio.wizard.techAdd",removeKey:"studio.wizard.techRemove",items:d.techStack,errorKey:errs.techStack}),
     h(doc,"fieldset",{class:"choice-group",id:"intake-os"},h(doc,"legend",{text:ctx.t("form.field.targetOS")}),
@@ -70,7 +76,7 @@ export async function intakePanel(ctx){
       })),errs.targetOS?h(doc,"p",{class:"field-error",id:"intake-os-err",text:ctx.t(errs.targetOS)}):null),
     listEditor(ctx,{id:"intake-criteria",labelKey:"form.field.acceptanceCriteria",itemLabelKey:"work.form.criterionN",addKey:"work.form.criterionAdd",removeKey:"work.form.criterionRemove",items:d.acceptanceCriteria,errorKey:errs.acceptanceCriteria,multiline:true,hintKey:"intake.criteriaHint"}),
     field(ctx,{id:"intake-risk",labelKey:"form.field.riskLevel",value:d.riskLevel,onInput:v=>{d.riskLevel=v},errorKey:errs.riskLevel,hintKey:"intake.riskHint",options:[{value:"",label:ctx.t("intake.notSet")},...INTAKE_RISKS.map(r=>({value:r,label:`${r} — ${ctx.t(`risk.${r}.name`)}`}))]}),
-    // Test komutu isteğe bağlıdır; girilmezse ilk koşu VERIFY aşamasında komut tanımlanana kadar bloklanır (alan, proje formundaki argv satır düzenleyicisiyle aynıdır).
+    // Test komutu isteğe bağlıdır ve şablonun komutunu geçersiz kılar; şablonsuz ya da empty şablonda girilmezse ilk koşu VERIFY aşamasında komut tanımlanana kadar bloklanır (alan, proje formundaki argv satır düzenleyicisiyle aynıdır).
     listEditor(ctx,{id:"intake-test",labelKey:"form.testCommand",itemLabelKey:"form.argvToken",addKey:"form.argvAdd",removeKey:"form.argvRemove",items:d.testCommand,errorKey:errs.testCommand,hintKey:"intake.testCommandHint",preview:true}),
     statusBlock(ctx,INTAKE_FORM),
     intakeUi.last?resultCard(ctx,intakeUi.last):null,

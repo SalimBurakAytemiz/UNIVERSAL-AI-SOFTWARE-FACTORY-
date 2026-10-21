@@ -1748,8 +1748,8 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
     byId(root, "intake-form")!.fire("submit"); await tick();
     expect(calls.post.length).toBe(1);
     expect(calls.post[0].path).toBe("/v1/intakes");
-    expect(calls.post[0].body).toMatchObject({idea: IDEA, title: "Kitap Kulübü"});
-    expect(Object.keys(calls.post[0].body).sort()).toEqual(["idea", "idempotencyKey", "title"]);
+    expect(calls.post[0].body).toMatchObject({idea: IDEA, title: "Kitap Kulübü", template: "web-node"}); // COORD-INTAKE-TEMPLATE: web-node önceden seçilidir
+    expect(Object.keys(calls.post[0].body).sort()).toEqual(["idea", "idempotencyKey", "template", "title"]);
     expect(forms.drafts.status.intake.ok).toBe(true);
     const root2 = mount(doc, await projectsView.render(ctx));
     const res = byId(root2, "intake-result")!;
@@ -1798,7 +1798,7 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
     const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("intake.") || k === "form.field.idea");
-    expect(keys.length).toBe(35); // 34 + intake.testCommandHint
+    expect(keys.length).toBe(46); // 34 + intake.testCommandHint + 11 COORD-INTAKE-TEMPLATE anahtarı
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 
@@ -1835,7 +1835,8 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
       expect(c.calls.post.length).toBe(1);
       expect(c.calls.post[0].path).toBe("/v1/intakes");
       expect(c.calls.post[0].body.testCommand).toEqual(["node", "--test", "tests/a b.test.ts"]);
-      expect(Object.keys(c.calls.post[0].body).sort()).toEqual(["idea", "idempotencyKey", "testCommand"]);
+      expect(Object.keys(c.calls.post[0].body).sort()).toEqual(["idea", "idempotencyKey", "template", "testCommand"]);
+      expect(c.calls.post[0].body.template).toBe("web-node");
       expect(forms.drafts.status.intake.ok).toBe(true);
       expect(c.m.intakeDraft.testCommand).toEqual([""]);
       expect(byId(mount(c.doc, await projectsView.render(c.ctx)), "intake-test-0")!.value).toBe("");
@@ -1884,7 +1885,8 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
       await submit(c);
       expect(c.calls.post.length).toBe(1);
       expect("testCommand" in c.calls.post[0].body).toBe(false);
-      expect(Object.keys(c.calls.post[0].body).sort()).toEqual(["idea", "idempotencyKey"]);
+      expect(Object.keys(c.calls.post[0].body).sort()).toEqual(["idea", "idempotencyKey", "template"]);
+      expect(c.calls.post[0].body.template).toBe("web-node");
     });
     it("a changed command is a different request (new idempotency key) while an unchanged retry reuses the key", async () => {
       const c = await open({post: () => ({status: 503, body: {error: "INTAKE_STORE_CORRUPT"}})});
@@ -1904,6 +1906,142 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
       }
       expect(E["intake.testCommandHint"]).not.toBe(T["intake.testCommandHint"]);
       expect(Object.keys(E).filter(k => k.startsWith("intake.")).sort()).toEqual(Object.keys(T).filter(k => k.startsWith("intake.")).sort());
+    });
+  });
+
+  // //TR: COORD-INTAKE-TEMPLATE: intake formu başlangıç şablonu seçer (varsayılan web-node, proje sihirbazıyla aynı TEMPLATES listesi); empty şablon test komutu olmadan gönderilmez; kaydın repository bloğu sıkı eşlenir ve sonuç kartı deponun/test komutunun kaynağını sunucu kaydından dürüstçe gösterir.
+  describe("starting template (managed repository, honest result rows)", () => {
+    const BLOCK = {kind: "TEMPLATE", template: "web-node", managed: true, testCommandSource: "TEMPLATE"};
+    const submit = async (c: Awaited<ReturnType<typeof open>>) => { byId(c.root, "intake-form")!.fire("submit"); await tick(); };
+    const choose = (root: N, v: string) => { const s = byId(root, "intake-template")!; s.value = v; s.fire("change"); };
+
+    it("buildIntakeRequest: a known template goes into the body, an empty choice is omitted, an unknown one is refused, and empty needs a test command", async () => {
+      const c = await load(rend, "intake-core.js");
+      expect(c.buildIntakeRequest({idea: IDEA, template: "web-node"}, {key: "k1"})).toEqual({ok: true, path: "/v1/intakes", errors: {}, body: {idea: IDEA, template: "web-node", idempotencyKey: "k1"}});
+      expect(c.buildIntakeRequest({idea: IDEA, template: " node-lib "}).body).toEqual({idea: IDEA, template: "node-lib"});
+      for (const none of [undefined, "", "   ", null, 5]) expect("template" in c.buildIntakeRequest({idea: IDEA, template: none}).body, String(none)).toBe(false);
+      for (const bad of ["rails", "WEB-NODE", "web-node "+"x", "../empty"]) {
+        const r = c.buildIntakeRequest({idea: IDEA, template: bad});
+        expect([r.ok, r.body, r.errors.template], bad).toEqual([false, null, "studio.err.template"]);
+      }
+      // empty şablonun komutu yoktur: Founder komutu olmadan ilk mission VERIFY'yi asla geçemez -> istek hiç gönderilmez.
+      for (const tc of [undefined, [], [""], ["  "]]) {
+        const r = c.buildIntakeRequest({idea: IDEA, template: "empty", testCommand: tc});
+        expect([r.ok, r.body, r.errors.template], JSON.stringify(tc)).toEqual([false, null, "intake.err.emptyNeedsTest"]);
+      }
+      expect(c.buildIntakeRequest({idea: IDEA, template: "empty", testCommand: ["node", "--test"]}).body).toEqual({idea: IDEA, template: "empty", testCommand: ["node", "--test"]});
+      // Geçersiz argv'de hata testCommand alanındadır (empty kuralı ikinci bir hata eklemez).
+      expect(c.buildIntakeRequest({idea: IDEA, template: "empty", testCommand: ["node --test"]}).errors).toEqual({testCommand: "err.argvShellString"});
+      for (const t of ["web-node", "node-lib"]) expect(c.buildIntakeRequest({idea: IDEA, template: t}).ok, t).toBe(true);
+      expect((await load(rend, "project-core.js")).TEMPLATES).toEqual(["web-node", "node-lib", "empty"]);
+    });
+    it("mapIntake: a valid repository block maps to {template, testCommandSource}; no block is null; any malformed block rejects the whole record", async () => {
+      const c = await load(rend, "intake-core.js");
+      expect(c.mapIntake(rec()).repository).toBeNull();
+      expect("repository" in c.mapIntake(rec())).toBe(true);
+      for (const t of ["web-node", "node-lib", "empty"]) for (const s of ["FOUNDER", "TEMPLATE", "NONE"]) {
+        expect(c.mapIntake(rec({repository: {...BLOCK, template: t, testCommandSource: s}})).repository, `${t}/${s}`).toEqual({template: t, testCommandSource: s});
+      }
+      // Yol taşınsa bile eşlemeye girmez (kayıt yol taşımaz; taşırsa da gösterilmez).
+      expect(c.mapIntake(rec({repository: {...BLOCK, path: "/tmp/x"}})).repository).toEqual({template: "web-node", testCommandSource: "TEMPLATE"});
+      for (const bad of [null, "web-node", [], 1, {...BLOCK, kind: "X"}, {...BLOCK, kind: undefined}, {...BLOCK, template: "rails"}, {...BLOCK, managed: false}, {...BLOCK, managed: "true"}, {...BLOCK, testCommandSource: "X"}, {...BLOCK, testCommandSource: undefined}]) {
+        expect(c.mapIntake(rec({repository: bad})), JSON.stringify(bad)).toBeNull();
+      }
+      expect(c.mapIntakes({intakes: [rec(), rec({intakeId: "itk_" + "ff".repeat(12), repository: {...BLOCK, managed: false}})]}).state).toBe("ERROR");
+      expect(c.mapIntake(rec({repository: BLOCK})).sources).toEqual({title: "FOUNDER", acceptanceCriteria: "DEFAULT", riskLevel: "DEFAULT"}); // kaynaklar değişmez
+    });
+    it("renders a template select with web-node preselected, sends it, and shows the managed repository and test-source rows from the server record", async () => {
+      const c = await open({post: (p, b) => p === "/v1/intakes" ? {status: 201, body: {intake: rec({repository: {...BLOCK, template: b.template}})}} : {status: 404, body: {}}});
+      const sel = byId(c.root, "intake-template")!;
+      expect(sel.tagName).toBe("SELECT");
+      expect(sel.value).toBe("web-node");
+      expect(sel.children.map(o => o.getAttribute("value"))).toEqual(["", "web-node", "node-lib", "empty"]);
+      expect(sel.children.map(o => text(o))).toEqual(["No repository yet (import later)", "Web app (Node)", "Library (Node)", "Empty project"]);
+      expect(text(byId(c.root, "intake-template-hint")!)).toBe(c.ctx.t("intake.templateHint"));
+      expect(c.calls.post).toEqual([]);
+      type(c.root, "intake-idea", IDEA);
+      await submit(c);
+      expect(c.calls.post.length).toBe(1);
+      expect(c.calls.post[0].body.template).toBe("web-node");
+      expect(typeof c.calls.post[0].body.idempotencyKey).toBe("string"); // şablon sunucuda anahtar ister; görünüm her zaman anahtar gönderir
+      const res = byId(mount(c.doc, await projectsView.render(c.ctx)), "intake-result")!;
+      expect(text(byId(res, "intake-res-repo")!)).toBe("Managed starting repository from the template Web app (Node)");
+      expect(byId(res, "intake-res-test")!.dataset.testSource).toBe("TEMPLATE");
+      expect(text(byId(res, "intake-res-test")!)).toBe(c.ctx.t("intake.res.test.TEMPLATE"));
+      expect(text(res)).not.toMatch(/sandbox|verified|CLEAN/i); // sandbox/doğrulama iddiası yok
+      expect(c.m.intakeDraft.template).toBe("web-node"); // başarılı oluşturmadan sonra varsayılana döner
+    });
+    it("choosing No repository yet sends no template key and the card states REPOSITORY_NOT_CONFIGURED; node-lib and empty+command are sent as chosen", async () => {
+      const c = await open({post: () => ({status: 201, body: {intake: rec()}})});
+      type(c.root, "intake-idea", IDEA); choose(c.root, "");
+      await submit(c);
+      expect("template" in c.calls.post[0].body).toBe(false);
+      expect(Object.keys(c.calls.post[0].body).sort()).toEqual(["idea", "idempotencyKey"]);
+      const res = byId(mount(c.doc, await projectsView.render(c.ctx)), "intake-result")!;
+      expect(text(byId(res, "intake-res-repo")!)).toBe(c.ctx.t("intake.res.repo.none"));
+      expect(text(byId(res, "intake-res-repo")!)).toContain("REPOSITORY_NOT_CONFIGURED");
+      expect(byId(res, "intake-res-test")).toBeNull(); // blok yoksa test kaynağı satırı uydurulmaz
+      forms.resetAllForms();
+      const n = await open({post: (_p, b) => ({status: 201, body: {intake: rec({repository: {...BLOCK, template: b.template, testCommandSource: b.testCommand ? "FOUNDER" : "TEMPLATE"}})}})});
+      type(n.root, "intake-idea", IDEA); choose(n.root, "node-lib");
+      await submit(n);
+      expect(n.calls.post[0].body.template).toBe("node-lib");
+      const r2 = mount(n.doc, await projectsView.render(n.ctx));
+      choose(r2, "empty"); type(r2, "intake-idea", IDEA); type(r2, "intake-test-0", "node");
+      byId(r2, "intake-form")!.fire("submit"); await tick();
+      expect(n.calls.post.map((x: any) => [x.body.template, x.body.testCommand ?? null])).toEqual([["node-lib", null], ["empty", ["node"]]]);
+      expect(byId(mount(n.doc, await projectsView.render(n.ctx)), "intake-res-test")!.dataset.testSource).toBe("FOUNDER");
+    });
+    it("the empty template without a test command sends no POST, shows the error under the select and keeps the draft", async () => {
+      const c = await open({post: () => ({status: 201, body: {intake: rec()}})});
+      type(c.root, "intake-idea", IDEA); choose(c.root, "empty");
+      await submit(c);
+      expect(c.calls.post).toEqual([]);
+      expect(forms.drafts.status.intake).toMatchObject({ok: false, errors: {template: "intake.err.emptyNeedsTest"}});
+      const again = mount(c.doc, await projectsView.render(c.ctx));
+      expect(text(byId(again, "intake-template-err")!)).toBe(c.ctx.t("intake.err.emptyNeedsTest"));
+      expect(byId(again, "intake-template")!.value).toBe("empty");
+      expect(byId(again, "intake-template")!.getAttribute("aria-invalid")).toBe("true");
+      expect(c.m.intakeDraft.idea).toBe(IDEA);
+      expect(byId(again, "intake-result")).toBeNull();
+    });
+    it("a 500 from repository creation shows the generic failure with the status, no card, and keeps the draft", async () => {
+      for (const error of ["PROJECT_REPOSITORY_INIT_FAILED", "PROJECT_PROVISIONER_UNAVAILABLE"]) {
+        forms.resetAllForms();
+        const c = await open({post: () => ({status: 500, body: {error}})});
+        type(c.root, "intake-idea", IDEA);
+        await submit(c);
+        expect(forms.drafts.status.intake, error).toMatchObject({ok: false, key: "post.err.generic", vars: {status: 500}});
+        const again = mount(c.doc, await projectsView.render(c.ctx));
+        expect(byId(again, "intake-result")).toBeNull();
+        expect(byId(again, "intake-idea")!.value).toBe(IDEA); expect(byId(again, "intake-template")!.value).toBe("web-node");
+        expect(text(again)).toContain("(HTTP 500)");
+      }
+    });
+    it("a changed template is a different request (new idempotency key) while an unchanged retry reuses the key", async () => {
+      const c = await open({post: () => ({status: 503, body: {error: "INTAKE_STORE_CORRUPT"}})});
+      type(c.root, "intake-idea", IDEA);
+      await submit(c); await submit(c);
+      choose(c.root, "node-lib");
+      await submit(c);
+      choose(c.root, "");
+      await submit(c);
+      const keys = c.calls.post.map((x: any) => x.body.idempotencyKey);
+      expect(c.calls.post.map((x: any) => x.body.template ?? null)).toEqual(["web-node", "web-node", "node-lib", null]);
+      expect(keys[0]).toBe(keys[1]); expect(new Set(keys).size).toBe(3);
+    });
+    it("template strings exist in both locales; the intake copy claims no sandboxed run and does not reuse the import-afterwards empty description", async () => {
+      const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+      const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+      const NEW = ["intake.template", "intake.templateHint", "intake.template.none", "intake.err.emptyNeedsTest", "intake.res.repository", "intake.res.repo.template", "intake.res.repo.none", "intake.res.testSource", "intake.res.test.FOUNDER", "intake.res.test.TEMPLATE", "intake.res.test.NONE"];
+      for (const k of NEW) { expect(E[k], `en ${k}`).toBeTruthy(); expect(T[k], `tr ${k}`).toBeTruthy(); expect(E[k], k).not.toBe(T[k]); }
+      for (const k of ["intake.res.repo.template"]) { expect(E[k]).toContain("{template}"); expect(T[k]).toContain("{template}"); }
+      for (const L of [E, T]) {
+        expect(L["intake.res.repo.none"]).toContain("REPOSITORY_NOT_CONFIGURED"); expect(L["intake.res.test.NONE"]).toContain("TEST_COMMAND_NOT_CONFIGURED");
+        for (const k of Object.keys(L).filter(x => x.startsWith("intake."))) expect(L[k], k).not.toMatch(/sandbox|korumalı alan/i);
+      }
+      expect(Object.values(E).filter(v => v === E["studio.template.empty.desc"])).toHaveLength(1);
+      expect(E["intake.lead"]).toContain("managed starting repository"); expect(E["intake.testCommandHint"]).toContain("overrides the template");
     });
   });
 });

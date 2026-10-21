@@ -1,5 +1,6 @@
-// //TR: Bu modül Proje Intake (UI-126) görünümünün saf (DOM'suz) çekirdeğidir: Kurucunun serbest metin fikrini POST /v1/intakes gövdesine (sunucu şemasıyla birebir: idea 10-4000, isteğe bağlı title/projectType/techStack/targetOS/acceptanceCriteria/riskLevel R0-R3/testCommand argv listesi) çevirir ve GET /v1/intakes yanıtlarını güvenli, sınırlı alanlara eşler. Alan kaynakları (FOUNDER/DEFAULT/DERIVED) sunucudan AYNEN taşınır; girilmeyen alan Kurucudan gelmiş gibi gösterilmez. Bozuk kayıt tüm okumayı ERROR yapar.
+// //TR: Bu modül Proje Intake (UI-126) görünümünün saf (DOM'suz) çekirdeğidir: Kurucunun serbest metin fikrini POST /v1/intakes gövdesine (sunucu şemasıyla birebir: idea 10-4000, isteğe bağlı title/projectType/techStack/targetOS/acceptanceCriteria/riskLevel R0-R3/testCommand argv listesi) çevirir ve GET /v1/intakes yanıtlarını güvenli, sınırlı alanlara eşler. Alan kaynakları (FOUNDER/DEFAULT/DERIVED) sunucudan AYNEN taşınır; girilmeyen alan Kurucudan gelmiş gibi gösterilmez. Bozuk kayıt tüm okumayı ERROR yapar. COORD-INTAKE-TEMPLATE: isteğe bağlı template (web-node/node-lib/empty) gövdeye girer; empty şablon test komutu olmadan reddedilir (ilk mission VERIFY'yi asla geçemezdi) ve kaydın repository bloğu (şablon + test komutu kaynağı) sıkı eşlenir.
 import {normalizeArgv} from "./work-core.js";
+import {TEMPLATES} from "./project-core.js";
 export const INTAKE_ID_RE=/^itk_[0-9a-f]{24}$/;
 export const INTAKES_PATH="/v1/intakes";
 export const intakePath=id=>INTAKE_ID_RE.test(String(id))?`/v1/intakes/${id}`:null;
@@ -7,6 +8,7 @@ export const INTAKE_PROJECT_TYPES=Object.freeze(["web","api","library","cli","de
 export const INTAKE_OS=Object.freeze(["windows","macos","linux","web","android","ios"]);
 export const INTAKE_RISKS=Object.freeze(["R0","R1","R2","R3"]);
 export const INTAKE_SOURCES=Object.freeze(["FOUNDER","DEFAULT","DERIVED"]);
+export const INTAKE_TEST_SOURCES=Object.freeze(["FOUNDER","TEMPLATE","NONE"]);
 const IDEA_MIN=10,IDEA_MAX=4000,TITLE_MAX=120,TECH_RE=/^[A-Za-z0-9.+#/ _-]+$/,KEY_RE=/^[A-Za-z0-9._-]{1,100}$/;
 const PROJECT_RE=/^prj_[0-9a-f]{24}$/,MISSION_RE=/^msn_[0-9a-f]{24}$/;
 const trim=v=>typeof v==="string"?v.trim():"";
@@ -29,6 +31,10 @@ export function buildIntakeRequest(input,{key}={}){
   // Test komutu proje formuyla aynı kurallarla (normalizeArgv) denetlenir; hata varsa istek hiç gönderilmez.
   const argv=normalizeArgv(input?.testCommand);
   if(!argv.ok)errors.testCommand=argv.error;
+  // Şablon proje sihirbazıyla aynı listeden seçilir; "" şablonsuz (eski içe aktarma yolu). empty + komutsuz: ilk koşu VERIFY'de TEST_COMMAND_NOT_CONFIGURED ile kesin durur, bu yüzden istek hiç gönderilmez.
+  const tpl=trim(input?.template);
+  if(tpl&&!TEMPLATES.includes(tpl))errors.template="studio.err.template";
+  else if(tpl==="empty"&&argv.ok&&!argv.argv.length)errors.template="intake.err.emptyNeedsTest";
   if(key!==undefined&&!KEY_RE.test(String(key)))errors.idempotencyKey="intake.err.key";
   const body={idea};
   if(title)body.title=title;
@@ -37,6 +43,7 @@ export function buildIntakeRequest(input,{key}={}){
   if(os.length)body.targetOS=[...os];
   if(crit.length)body.acceptanceCriteria=crit;
   if(risk)body.riskLevel=risk;
+  if(tpl&&!errors.template)body.template=tpl;
   if(argv.ok&&argv.argv.length)body.testCommand=argv.argv;
   if(key!==undefined)body.idempotencyKey=String(key);
   const ok=!Object.keys(errors).length;
@@ -50,8 +57,15 @@ export function mapIntake(x){
   const s=x.sources;
   if(!isObj(s)||!["title","acceptanceCriteria","riskLevel"].every(k=>INTAKE_SOURCES.includes(s[k])))return null;
   const at=typeof x.createdAt==="string"&&!Number.isNaN(new Date(x.createdAt).getTime())?x.createdAt:null;
+  // repository bloğu yalnız şablonlu intake'te vardır; varsa her alanı bilinen değer olmalıdır, aksi halde kayıt bütünüyle reddedilir (kısmi kayıt yok).
+  let repository=null;
+  if(x.repository!==undefined){
+    const r=x.repository;
+    if(!isObj(r)||r.kind!=="TEMPLATE"||!TEMPLATES.includes(r.template)||r.managed!==true||!INTAKE_TEST_SOURCES.includes(r.testCommandSource))return null;
+    repository={template:r.template,testCommandSource:r.testCommandSource};
+  }
   return {intakeId:x.intakeId,projectId:x.projectId,missionId:x.missionId,idea,title,riskLevel:x.riskLevel,acceptanceCriteria:[...x.acceptanceCriteria],
-    projectType:INTAKE_PROJECT_TYPES.includes(x.projectType)?x.projectType:null,sources:{title:s.title,acceptanceCriteria:s.acceptanceCriteria,riskLevel:s.riskLevel},createdAt:at};
+    projectType:INTAKE_PROJECT_TYPES.includes(x.projectType)?x.projectType:null,sources:{title:s.title,acceptanceCriteria:s.acceptanceCriteria,riskLevel:s.riskLevel},repository,createdAt:at};
 }
 /** GET /v1/intakes -> {state:"VERIFIED",items} | {state:"ERROR",items:[]}. */
 export function mapIntakes(raw){
