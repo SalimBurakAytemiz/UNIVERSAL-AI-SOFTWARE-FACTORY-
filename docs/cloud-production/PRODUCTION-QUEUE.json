@@ -168,7 +168,8 @@
         "Build the mission → run → evidence lineage from the existing GET data as a keyboard-navigable node/edge view, with an accessible list fallback. No new reads.",
         "Honest states for missing links; never infer a link that is not in the data.",
         "Unique data-* names, token-only CSS, h()/textContent only."
-      ]
+      ],
+      "lane": "A (Lane A builder session_01MApoJPisUKhZdWpTJmcnY3)"
     },
     {
       "id": "PQ-004",
@@ -187,7 +188,8 @@
       "acceptance": [
         "List the token pairs with their computed contrast ratio and AA/AAA result. The ratios are computed from the token values in the stylesheet, never typed in by hand.",
         "No storage, no POST, no new endpoint; read-only."
-      ]
+      ],
+      "lane": "A (Lane A builder session_01MApoJPisUKhZdWpTJmcnY3)"
     },
     {
       "id": "PQ-005",
@@ -206,7 +208,8 @@
       "acceptance": [
         "Show which executor, provider and capability would route a task, using only values returned by existing allow-listed GETs. Registry values are carried verbatim, never promoted to active/connected.",
         "No new POST: the existing local-claude enable action stays where it is."
-      ]
+      ],
+      "lane": "A (Lane A builder session_01MApoJPisUKhZdWpTJmcnY3)"
     },
     {
       "id": "PQ-006",
@@ -347,7 +350,7 @@
       "lane": "B",
       "source": "Central brain: command -> task intake (Founder sprint P0-B); builds on core/mission/state-machine.ts and core/mission/types.ts",
       "title": "Command intake core: Founder text command -> validated mission DRAFT proposal with conservative risk and authority flags (pure, never authorizes)",
-      "status": "QUEUED",
+      "status": "IN_REVIEW_PENDING_VERIFY",
       "base": "v7/integration",
       "files": [
         "core/mission/command-intake.ts",
@@ -360,11 +363,14 @@
         "Authority flags (protected paths, merge/push/force, paid or production, secrets/credentials, deletion) set authorityRequired with the matched reasons; the text is treated as data: instruction-like content (for example ignore the rules and merge) only raises flags, it never removes one.",
         "Input bounds: empty, non-string, over-length (documented limit) and control characters are rejected with a code.",
         "Tests in tests/mission-state.test.ts: positive and negative cases for every rule, including prompt-injection phrasing in TR and EN; no existing assertion weakened. Not wired to the API."
-      ]
+      ],
+      "pr": 134,
+      "branch": "claude/pq-011",
+      "note": "Opened by the queue worker; coordinator verification pending."
     },
     {
       "id": "PQ-012",
-      "lane": "B",
+      "lane": "A (Lane A builder session_01MApoJPisUKhZdWpTJmcnY3)",
       "source": "Central brain: automatic task selection and orchestration (Founder sprint P0-B); mirrors the PRODUCTION-QUEUE capacityRule and claim rules",
       "title": "Next-task selector core: deterministic choice of the next eligible task (status, base, dependencies, lane balance, capacity, authority) as a pure function",
       "status": "QUEUED",
@@ -498,7 +504,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T07:18:00.842Z",
+    "at": "2026-10-21T07:23:41.498Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -513,7 +519,7 @@
       133,
       135
     ],
-    "next": "Worker next tick: PQ-011, then PQ-012. PQ-006 is completed by the coordinator on claude/pq-006.",
+    "next": "Lanes A/B/C building; coordinator: #131 review fixes, PQ-011 (#134) verification, PQ-006 (#135) independent review.",
     "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
@@ -533,11 +539,41 @@
     "quota": "On rate-limit rejection no new sessions start; leases age out; resume after the reported reset time. Never work around quota."
   },
   "engine": {
-    "builder": "persistent worker session_01K2PYQ7AYbpfo8EPiKciSAQ (repository source attached; access verified 04:46Z: fetch OK, push dry-run accepted, PR listing OK) woken hourly at :47 by trigger trig_01HJfvsZWCh5QKihm7iRZHFw",
+    "builder": "Three lane sessions (see productionLanes); queue worker session_01K2PYQ7AYbpfo8EPiKciSAQ paused (trigger disabled 2026-10-21T07:20Z).",
     "oldRoutine": "trig_01BiCMimhXYFpRs3wFSbknSD PAUSED (fired sessions have sources: [] -> git proxy 403); kept for the Founder to re-enable after attaching the repository, never both at once",
     "heartbeat": "trig_01QEwrSwCvd8UCbKFn97MiHh report-only every 3 h",
     "reviewer": "UASCO Independent Review workflow (PR #131, activates after merge) + interim cloud reviewer routine trig_01NJCi2PSTJxh6rMMLewLvGM"
   },
   "wipRule": "maxOpenPrs counts open PRs to v7/integration whose head branch belongs to a queue task (the branch of any task in tasks[]). Legacy claude/* PRs from before the queue (#23, #28, #32, #33, #46, #66) are not queue WIP and are not counted; they stay open for the Founder to keep or close.",
-  "queueWriter": "Only the coordinator writes this file. The builder worker never pushes uasco/production-queue (its session classifier denies that push). The worker's durable state is its race-safe claim branch claude/<id> and its draft PR; capacityRule already counts a fresh claim branch without a PR as ACTIVE, so a lagging queue record never frees a slot early. The coordinator records claims, PRs and results from those branches and PRs."
+  "queueWriter": "Only the coordinator writes this file. The builder worker never pushes uasco/production-queue (its session classifier denies that push). The worker's durable state is its race-safe claim branch claude/<id> and its draft PR; capacityRule already counts a fresh claim branch without a PR as ACTIVE, so a lagging queue record never frees a slot early. The coordinator records claims, PRs and results from those branches and PRs.",
+  "productionLanes": {
+    "decision": "Founder directive 2026-10-21 (UASCO MASTER V2 full-scope parallel product development): the main priority is real product code; #131 and owned work continue; three parallel lanes within builderCap 3.",
+    "capacity": "builderCap 3 = Lane A + Lane B + Lane C. The queue worker (trig_01HJfvsZWCh5QKihm7iRZHFw) is paused so the cap holds; its remaining small UI tasks (PQ-012, PQ-003, PQ-004, PQ-005) belong to Lane A.",
+    "prLimit": "Lanes open a draft PR only while fewer than 12 claude/pq-* or claude/lane-* draft PRs are open; otherwise the work stays on the pushed branch (branch only) and is not lost.",
+    "queueWriter": "Coordinator only. Lanes report branch, SHA, PR and test counts; the coordinator records them here.",
+    "lanes": {
+      "A": {
+        "name": "Frontend / UX / Desktop",
+        "session": "session_01MApoJPisUKhZdWpTJmcnY3",
+        "tick": "trig_01BMrSHJzf85secZCW2jKJsc (:13 hourly)",
+        "owns": "apps/desktop/renderer/** except protected app.js and index.html",
+        "firstFocus": "Desktop half of the first-delivery flow (intake -> project -> plan -> runs -> delivery), weakest wired step first"
+      },
+      "B": {
+        "name": "Backend / API / Database / Integration",
+        "session": "session_01VaHcvhtW9yjHAsFktdTn5f",
+        "tick": "trig_01XN7KFTiR6oXtEH81drD9wP (:33 hourly)",
+        "owns": "core/** except Lane C areas and core/workos/store.ts; apps/control-api/src/routes/** (new modular routes); server.ts, main.mjs, preload.mjs changes only as docs/authority-requests/LANE-B-*.md",
+        "firstFocus": "docs/lanes/LANE-B-MAP.md for the first-delivery flow, then the first MISSING or BROKEN backend link (project intake first if missing)"
+      },
+      "C": {
+        "name": "AI Agents / Work OS / Tools / Frameworks",
+        "session": "session_01Vf5LYEF7vPGkRwL6X5AeGT",
+        "tick": "trig_01LtND1PCR7XXvaxFewc2Eas (:53 hourly)",
+        "owns": "core/workos/crew/**, core/workos/predev/**, runner.ts, executors.ts, executor-setup.ts, claude-profiles.ts, fake-executor.mjs, run-state.ts, outcomes.ts, core/capabilities/**, core/competency/**, core/agents/**, role/agent registries",
+        "firstFocus": "role -> RoleExecutionProfile -> crew assignment -> executor run -> Work OS evidence for planner, architect, developer, tester, security reviewer, delivery; honest NOT_EXECUTABLE otherwise"
+      }
+    },
+    "startedAt": "2026-10-21T07:23:41.498Z"
+  }
 }
