@@ -299,8 +299,19 @@ function mapRunEvidence(list){
     if(typeof e==="string")return SAFE_ID_RE.test(e)?{evidenceId:e,kind:null,verification:null}:null;
     if(!isObj(e))return null;
     const id=pick(e.evidenceId,e.id);
-    return {evidenceId:typeof id==="string"&&SAFE_ID_RE.test(id)?id:null,kind:str(e.kind,40),verification:normalizeVerification(e.verification)};
+    return {evidenceId:typeof id==="string"&&SAFE_ID_RE.test(id)?id:null,kind:str(e.kind,40),verification:normalizeVerification(e.verification),
+      // //TR: LANE-A: koşu adımı tablosu için sunucunun kaydettiği olgular (RunEvidence): adım, döngü, çıkış kodu, süre ve zaman aşımı. Geçersiz tür null kalır; 0 veya "başarılı" uydurulmaz.
+      step:/^[A-Z][A-Z_]{0,19}$/.test(String(e.step))?e.step:null,cycle:safeCount(e.cycle),exitCode:Number.isSafeInteger(e.exitCode)?e.exitCode:null,timedOut:e.timedOut===true,startedAt:iso(e.startedAt),endedAt:iso(e.endedAt)};
   }).filter(Boolean);
+}
+/** Kanıt kaydından süre (ms); iki zaman da geçerli ve bitiş >= başlangıç değilse null (uydurulmaz). */
+export function evidenceDurationMs(e){
+  const a=Date.parse(e?.startedAt??""),b=Date.parse(e?.endedAt??"");
+  return Number.isFinite(a)&&Number.isFinite(b)&&b>=a?b-a:null;
+}
+/** Koşu adımı tablosu satırları: yalnız adım bilgisi taşıyan (nesne biçimli ve step/startedAt'ı olan) kanıt kayıtları, kayıt sırasıyla. */
+export function runStepRows(evidence){
+  return (Array.isArray(evidence)?evidence:[]).filter(e=>e&&(e.step||e.startedAt)).map(e=>({evidenceId:e.evidenceId,kind:e.kind,step:e.step,cycle:e.cycle,exitCode:e.exitCode,timedOut:e.timedOut===true,startedAt:e.startedAt,durationMs:evidenceDurationMs(e)}));
 }
 /** En son REVIEW kanıt kaydı (en yüksek cycle, eşitlikte dizideki son); yoksa null. */
 function latestReviewEvidence(list){
