@@ -1121,3 +1121,25 @@ ABANDONED_WITH_WORK_AWAITING_COORDINATOR: none.
 **Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) MOB-11+ need Founder authority. (3) create_session unavailable: UI-110 and UI-105 are READY, claimed, and have no builder; coordinator must provision one each (or an operator reclaim them).
 
 Note: written as one local single-file commit with a plain push (precedent #39-#59); log too large to re-transmit via create_or_update_file.
+
+## Heartbeat #61 (2026-10-21 03:12Z)
+
+**Step 1:** QUEUE.json read from claude/cloud-production-engine; parses. READY tasks: 0. **Step 2:** nothing to dispatch; create_session/list_sessions unavailable in this fire.
+
+**Step 2b (v7/integration@a910883):** ACTIVE (list_sessions unavailable; fallback = LIVE claim branches with no open PR): 0. ui-110 and ui-105 now each have an open draft PR (#126, #125), so they are no longer reclaimable. Dispatcher dry run outcome NO_ACTION. No claim made.
+
+RECLAIMABLE_AWAITING_BUILDER: none.
+MERGED_AWAITING_WRITEBACK: same claim branches as #60 (coordinator ships DONE write-back).
+ABANDONED_WITH_WORK_AWAITING_COORDINATOR: none.
+
+**Open PRs: 13** (none labelled uasco-cloud-production; mergeable/CI UNKNOWN): #130 PQ-010 (draft), #129 PQ-008 (draft), #128 PQ-009, #127 PQ-007 (draft), #126 UI-110 (draft), #125 UI-105 (draft), #66 (draft), #46, #33, #32, #28, #23, #8.
+
+**Active sessions:** UNKNOWN (list_sessions unavailable).
+
+**Tasks completed (merged):** queue tasks DONE: 0.
+
+**Current failures:** none observed. Dispatcher reports 2 MALFORMED_ID backlog rows.
+
+**Top blockers:** (1) FA-LEASE2 D3 + reseal, ACTIONS-CI-RESTORE, BACKLOG-SOURCE-REBASELINE (Founder/admin). (2) MOB-11+ need Founder authority. (3) create_session unavailable.
+
+Note: written as one local single-file commit with a plain push (precedent #39-#60); log too large to re-transmit via create_or_update_file.
