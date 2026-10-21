@@ -205,3 +205,66 @@ describe("Work OS API", () => {
     await app.close();
   });
 });
+
+// //TR: LANE-B flow: proje ilk-teslim akışı durumu yalnız store kayıtlarından türetilir; route modülü ve türetme kuralları test edilir.
+describe("LANE-B project flow", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const mkApp = async (tenantId = "tA") => {
+    const [{default: Fastify}, {registerFlowRoutes}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/flow.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    registerFlowRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}),
+      workosFail: (r: any) => r.code(500).send({error: "INTERNAL_ERROR"})});
+    return {app, store};
+  };
+  const get = (app: any, id: string, headers: any = hdr) => app.inject({method: "GET", url: `/v1/projects/${id}/flow`, headers});
+  const states = (j: any) => Object.fromEntries(j.flow.stages.map((s: any) => [s.stage, s.state]));
+
+  it("reports NOT_STARTED for an empty project and advances honestly as records appear", async () => {
+    const {app, store} = await mkApp();
+    const p = store.createProject(proj());
+    expect(states((await get(app, p.projectId)).json())).toEqual({MISSION: "NOT_STARTED", PLAN: "NOT_STARTED", RUN: "NOT_STARTED", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+    const m = store.createMission(msn(p.projectId));
+    store.createTask({tenantId: "tA", missionId: m.missionId, title: "t1", actor: "FOUNDER_LOCAL"});
+    store.createTask({tenantId: "tA", missionId: m.missionId, title: "t2", actor: "FOUNDER_LOCAL", status: "DONE"});
+    let j = (await get(app, p.projectId)).json();
+    expect(states(j)).toMatchObject({MISSION: "ACTIVE", PLAN: "ACTIVE", RUN: "NOT_STARTED"});
+    expect(j.flow.stages[1].detail).toBe("1/2 DONE"); expect(j.flow.taskCount).toBe(2); expect(j.flow.latestRunId).toBeNull();
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "go", "FOUNDER_LOCAL");
+    const run = store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: "FOUNDER_LOCAL"});
+    j = (await get(app, p.projectId)).json();
+    expect(states(j)).toMatchObject({RUN: "ACTIVE", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+    expect(j.flow.latestRunId).toBe(run.runId);
+    expect(j.flow.stages[2].detail).toMatch(/^[A-Z_]+\/[A-Z]+$/);
+    store.transitionRun(run.runId, null, "BLOCKED", "test", "FOUNDER_LOCAL");
+    j = (await get(app, p.projectId)).json();
+    expect(states(j)).toMatchObject({RUN: "BLOCKED", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+  });
+  it("derives FAILED / SUCCEEDED+completion / REVIEW-step states from run records", async () => {
+    const {deriveProjectFlow} = await import("../core/workos/flow.js");
+    const mk = (run: any) => ({getProject: () => ({}), listMissions: () => [{missionId: "m", status: "COMPLETE"}], listTasks: () => [{status: "DONE"}], listRuns: () => [{projectId: "p", createdAt: "2026-01-01", ...run}]}) as any;
+    const st = (run: any) => Object.fromEntries(deriveProjectFlow(mk(run), {tenantId: "tA"}, "p")!.stages.map(x => [x.stage, x.state]));
+    expect(st({runId: "r", status: "FAILED", step: "IMPLEMENT"})).toMatchObject({MISSION: "DONE", PLAN: "DONE", RUN: "FAILED", REVIEW: "UNKNOWN", DELIVERY: "NOT_STARTED"});
+    expect(st({runId: "r", status: "VERIFYING", step: "REVIEW"})).toMatchObject({RUN: "ACTIVE", REVIEW: "ACTIVE"});
+    expect(st({runId: "r", status: "SUCCEEDED", step: "REPORT", completion: {productVerification: {state: "PRODUCT_VERIFIED"}}})).toMatchObject({RUN: "DONE", REVIEW: "DONE", DELIVERY: "DONE"});
+    expect(st({runId: "r", status: "SUCCEEDED", step: "REPORT"}).DELIVERY).toBe("NOT_STARTED");
+  });
+  it("marks plan BLOCKED when a task is blocked and never claims DONE for review/delivery without a succeeded run", async () => {
+    const {app, store} = await mkApp();
+    const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
+    store.createTask({tenantId: "tA", missionId: m.missionId, title: "t", actor: "FOUNDER_LOCAL", status: "BLOCKED"});
+    const s = states((await get(app, p.projectId)).json());
+    expect(s.PLAN).toBe("BLOCKED"); expect(s.REVIEW).not.toBe("DONE"); expect(s.DELIVERY).not.toBe("DONE");
+  });
+  it("rejects bad ids, wrong token, unknown project and other tenants; leaks no absolute path", async () => {
+    const {app, store} = await mkApp();
+    const p = store.createProject(proj());
+    expect((await get(app, "bad")).statusCode).toBe(400);
+    expect((await get(app, p.projectId, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    expect((await get(app, "prj_" + "0".repeat(24))).statusCode).toBe(404);
+    const r = await get(app, p.projectId);
+    expect(JSON.stringify(r.json())).not.toContain(tmp);
+    expect((await get((await mkApp("tB")).app, p.projectId)).statusCode).toBe(404);
+  });
+});
