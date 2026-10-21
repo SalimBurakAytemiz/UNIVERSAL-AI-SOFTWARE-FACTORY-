@@ -27,8 +27,23 @@ export const SECRET_PATTERNS = Object.freeze([/sk-ant-[A-Za-z0-9_-]{16,}/, /\bgh
 export const carriesSecret = v => SECRET_PATTERNS.some(re => re.test(JSON.stringify(v ?? null)));
 
 // The merge gate's verdict codes judge a PR-review VERDICT-BINDING line; here the independent review verdict replaces them, so they are dropped.
-// Everything else it reports (PR state, base drift, CI, diff completeness, protected paths, ruleset) stays a blocker.
-const MERGE_GATE_VERDICT_CODE = /^(?:VERDICT_|REVIEWER_NOT_INDEPENDENT_IDENTITY$)/;
+// BASE_DRIFT is dropped too: pulls.base.sha only moves on a head push, so it would fail every PR after any merge into the base. The verdict is bound to the
+// base tip read during the run (VERDICT_BASE_MISMATCH), the diff is computed against that SHA, and up-to-date merging is the ruleset's strict mode.
+// Everything else it reports (PR state, base ref, CI, diff completeness, protected paths, ruleset) stays a blocker.
+const MERGE_GATE_VERDICT_CODE = /^(?:VERDICT_|REVIEWER_NOT_INDEPENDENT_IDENTITY$|BASE_DRIFT$)/;
+// A substantive negative verdict. Re-reviewing the same head or the same tree after one needs Founder authority, so a rejection cannot be re-rolled away.
+// INCONCLUSIVE counts (a re-roll could turn it CLEAN), and so does a run that failed only because such a record already exists (the marker stays sticky).
+const NEGATIVE_VERDICT_CODE = /^(?:VERDICT_BLOCKED|VERDICT_INCONCLUSIVE|VERDICT_HAS_BLOCKERS|VERDICT_HIGH_SEVERITY|VERDICT_CHECK_NOT_PASS:.+|VERDICT_REJECTED_NEGATIVE|PRIOR_NEGATIVE_VERDICT|DECISION_MISSING_NEGATIVE_VERDICT)$/;
+export const negativeVerdict = d => isObj(d) && Array.isArray(d.reasons) && d.reasons.some(x => isStr(x) && NEGATIVE_VERDICT_CODE.test(x));
+// Is a raw reviewer verdict negative, even when it can never be accepted (malformed, credential-shaped, or no decision was made)? Used so that losing the
+// decision, or rejecting the verdict text, never lowers the App's negative record. The credential placeholder carries the flag computed before replacement.
+export function verdictIsNegative(v) {
+  if (!isObj(v)) return false;
+  if (v.rejected === "VERDICT_CONTAINS_SECRET_PATTERN") return v.negative === true;
+  if (v.result === "BLOCKED" || v.result === "INCONCLUSIVE") return true;
+  if (Array.isArray(v.findings) && v.findings.some(f => isObj(f) && (f.classification === "BLOCKER" || f.severity === "P0" || f.severity === "P1"))) return true;
+  return isObj(v.checks) && CHECK_KEYS.some(k => isStr(v.checks[k]) && v.checks[k] !== "PASS" && v.checks[k] !== "NOT_APPLICABLE");
+}
 const AUTHORITY_CODE = /^(?:PROTECTED_PATH$|CI_EXECUTED_PATH:)/;
 
 // Canonical JSON (sorted keys) so a digest can be recomputed by anyone from the published evidence file.
@@ -89,9 +104,13 @@ export function decide(input) {
     if (!isSha(input.currentHeadSha)) r.push("EVIDENCE_MALFORMED:currentHeadSha");
     else if (headSha !== null && input.currentHeadSha !== headSha) r.push("STALE_HEAD");
     if (pre.authority.length && !founderAuthorityOk(input.approvals, pol.founderLogin)) r.push("FOUNDER_AUTHORITY_REQUIRED", ...pre.authority);
+    // The App's own earlier check on this head or tree ended in a negative verdict (collected from App-written external_id). Unknown is fail-closed.
+    if (ev.priorNegativeVerdict !== true && ev.priorNegativeVerdict !== false) r.push("PRIOR_VERDICT_UNKNOWN");
+    else if (ev.priorNegativeVerdict && !founderAuthorityOk(input.approvals, pol.founderLogin)) r.push("FOUNDER_AUTHORITY_REQUIRED", "PRIOR_NEGATIVE_VERDICT");
     const v = input.verdict;
     if (v === null || v === undefined) r.push("VERDICT_MISSING");
-    else if (carriesSecret(v)) { r.push("VERDICT_CONTAINS_SECRET_PATTERN"); input = {...input, verdict: null}; }
+    else if (isObj(v) && v.rejected === "VERDICT_CONTAINS_SECRET_PATTERN") r.push("VERDICT_CONTAINS_SECRET_PATTERN", ...(v.negative === true ? ["VERDICT_REJECTED_NEGATIVE"] : []));
+    else if (carriesSecret(v)) { r.push("VERDICT_CONTAINS_SECRET_PATTERN", ...(verdictIsNegative(v) ? ["VERDICT_REJECTED_NEGATIVE"] : [])); input = {...input, verdict: null}; }
     else {
       const bad = validateVerdict(v);
       if (bad.length) r.push(...bad);
@@ -117,7 +136,8 @@ export function decide(input) {
 function finish(reasons, headSha, baseSha, input) {
   const conclusion = reasons.length === 0 ? "success" : "failure";
   const verdict = isObj(input) && isObj(input.verdict) ? input.verdict : null;
-  const record = {check: CHECK_NAME, conclusion, reasons, headSha, baseSha, pr: isObj(input) && isObj(input.evidence) && isObj(input.evidence.pr) ? input.evidence.pr.number ?? null : null,
+  const ev = isObj(input) && isObj(input.evidence) ? input.evidence : null;
+  const record = {check: CHECK_NAME, conclusion, reasons, headSha, baseSha, headTree: ev && isSha(ev.headTree) ? ev.headTree : null, pr: ev && isObj(ev.pr) ? ev.pr.number ?? null : null,
     verdict, reviewerSession: isObj(input) && isObj(input.policy) && isStr(input.policy.reviewerSession) ? input.policy.reviewerSession : null};
   return {...record, digest: sha256(canonical(record))};
 }
@@ -136,6 +156,6 @@ export function renderSummary(d, runUrl) {
       for (const f of d.verdict.findings.slice(0, LIMITS.findings)) lines.push(`| ${flat(f.id, 32)} | ${flat(f.severity, 4)} | ${flat(f.classification, 10)} | ${flat(f.file, 200)}:${f.line ?? "-"} | ${flat(f.title, 300)} |`);
     }
   }
-  lines.push("", "This check is posted only by the UASCO reviewer GitHub App from the base-branch workflow. A new commit has no such check until it is reviewed again.");
+  lines.push("", "This check is posted only by the UASCO reviewer GitHub App from the trusted workflow on the default branch (v7/integration). A new commit has no such check until it is reviewed again.");
   return lines.join("\n").slice(0, 60000);
 }
