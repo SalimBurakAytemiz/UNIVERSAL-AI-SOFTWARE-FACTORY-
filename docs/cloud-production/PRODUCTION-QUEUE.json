@@ -175,7 +175,7 @@
       "id": "PQ-004",
       "source": "UASCO-AUD-065 / inventory UI-246 (DESIGN parity UNVERIFIED)",
       "title": "Theme contrast lab in #/settings: WCAG contrast preview built from the existing tokens",
-      "status": "QUEUED",
+      "status": "TESTED",
       "base": "claude/ui-105@632a774 (stacked; draft PR #125 open)",
       "files": [
         "apps/desktop/renderer/views/settings.js",
@@ -189,7 +189,11 @@
         "List the token pairs with their computed contrast ratio and AA/AAA result. The ratios are computed from the token values in the stylesheet, never typed in by hand.",
         "No storage, no POST, no new endpoint; read-only."
       ],
-      "lane": "A (Lane A builder session_01MApoJPisUKhZdWpTJmcnY3)"
+      "lane": "A (Lane A builder session_01MApoJPisUKhZdWpTJmcnY3)",
+      "pr": 141,
+      "branch": "claude/lane-a-contrast-lab",
+      "head": "dc0f006",
+      "note": "Lane A deliverable, coordinator-verified (Linux) 2026-10-21T08:26Z; not integrated."
     },
     {
       "id": "PQ-005",
@@ -382,7 +386,7 @@
       "lane": "A (Lane A builder session_01MApoJPisUKhZdWpTJmcnY3)",
       "source": "Central brain: automatic task selection and orchestration (Founder sprint P0-B); mirrors the PRODUCTION-QUEUE capacityRule and claim rules",
       "title": "Next-task selector core: deterministic choice of the next eligible task (status, base, dependencies, lane balance, capacity, authority) as a pure function",
-      "status": "QUEUED",
+      "status": "TESTED",
       "base": "v7/integration",
       "files": [
         "core/workos/task-selector.ts",
@@ -395,7 +399,11 @@
         "Only QUEUED/HOLD_CAPACITY tasks whose base is satisfied; a task with authority or founder-only flags is never selected; lane balance prefers the lane with the fewest active tasks, then queue order (stable).",
         "Missing or malformed fields fail closed (BLOCKED with a code), never a selection.",
         "Tests in the testFile: positive and negative cases for every rule; no existing assertion weakened. Not wired to dispatch.mjs (protected-adjacent; integration is separate)."
-      ]
+      ],
+      "pr": 140,
+      "branch": "claude/lane-a-task-selector",
+      "head": "63f504a",
+      "note": "Lane A deliverable, coordinator-verified (Linux) 2026-10-21T08:26Z; not integrated."
     },
     {
       "id": "PQ-008-R1",
@@ -513,7 +521,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T07:44:42.740Z",
+    "at": "2026-10-21T08:26:44.210Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -529,7 +537,7 @@
       134,
       135
     ],
-    "next": "Lane B TR fix; #131 verification workflow result -> commit fixes; next lane deliverables.",
+    "next": "#131 follow-up verification (wpyllw708) then push 80a020b; lanes continue branch-only (PR limit reached).",
     "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
@@ -602,47 +610,78 @@
       "LANE-B-intake": {
         "pr": 137,
         "branch": "claude/lane-b-intake",
-        "head": "93b7c96",
-        "status": "TESTED_FIX_REQUIRED",
-        "verifiedAt": "2026-10-21T07:44:42.740Z",
+        "head": "07b2d0b",
+        "status": "TESTED",
+        "verifiedAt": "2026-10-21T08:26:44.210Z",
         "verifiedBy": "coordinator (Linux)",
         "tests": "v7-b1-workos 17/17",
-        "tscTrSecretArch": "tsc 0; TR FAIL; secret PASS; architecture PASS",
+        "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
         "forbiddenFiles": 0,
         "mutation": "intake idempotency-conflict check removed -> 1 failure",
-        "fixRequired": "TR header missing on docs/lanes/LANE-B-MAP.md and docs/authority-requests/LANE-B-intake.md (sent to Lane B)",
         "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED"
       },
       "LANE-B-plan": {
         "pr": 139,
         "branch": "claude/lane-b-plan",
-        "head": "101a5a6",
-        "status": "TESTED_FIX_REQUIRED",
-        "verifiedAt": "2026-10-21T07:44:42.740Z",
+        "head": "1918d4a",
+        "status": "TESTED",
+        "verifiedAt": "2026-10-21T08:26:44.210Z",
         "verifiedBy": "coordinator (Linux)",
         "tests": "v7-b1-workos 16/16",
-        "tscTrSecretArch": "tsc 0; TR FAIL; secret PASS; architecture PASS",
+        "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
         "forbiddenFiles": 0,
         "mutation": "plan dependsOn earlier-task check relaxed -> 1 failure",
-        "fixRequired": "TR header missing on docs/authority-requests/LANE-B-plan.md (sent to Lane B)",
         "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED"
       },
       "LANE-C-role-resolver": {
         "pr": 138,
         "branch": "claude/lane-c-role-resolver",
-        "head": "6ebb76a",
+        "head": "d4bd613",
         "status": "TESTED",
-        "verifiedAt": "2026-10-21T07:44:42.740Z",
+        "verifiedAt": "2026-10-21T08:26:44.210Z",
         "verifiedBy": "coordinator (Linux)",
-        "tests": "v7-core-predev-team-composer 17/17",
+        "tests": "v7-core-predev-team-composer 18/18",
         "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
         "forbiddenFiles": 0,
-        "mutation": "role-execution ADAPTERS_MISSING check removed -> 1 failure",
+        "mutation": "6ebb76a: ADAPTERS_MISSING check removed -> 1 failure; d4bd613: dev-review role gate removed -> 1 failure",
         "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED"
+      },
+      "LANE-A-task-selector (PQ-012)": {
+        "pr": 140,
+        "branch": "claude/lane-a-task-selector",
+        "head": "63f504a",
+        "status": "TESTED",
+        "verifiedAt": "2026-10-21T08:26:44.210Z",
+        "verifiedBy": "coordinator (Linux)",
+        "tests": "v7-core-predev-crew-coordination 18/18",
+        "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
+        "forbiddenFiles": 0,
+        "mutation": "capacity gate >= -> > : 2 failures",
+        "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED",
+        "crossLane": "core/workos/task-selector.ts (queue assigns PQ-012 to Lane A with this file)"
+      },
+      "LANE-A-contrast-lab (PQ-004)": {
+        "pr": 141,
+        "branch": "claude/lane-a-contrast-lab",
+        "head": "dc0f006",
+        "status": "TESTED",
+        "verifiedAt": "2026-10-21T08:26:44.210Z",
+        "verifiedBy": "coordinator (Linux)",
+        "tests": "v7-ux-settings + v7-ux-wp2-cockpit 56/56",
+        "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
+        "forbiddenFiles": 0,
+        "mutation": "text AA threshold 4.5 -> 3 : 1 failure",
+        "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED",
+        "stackedOn": "claude/ui-105 @632a774 (draft PR #125)"
       }
     },
     "notes": [
       "Lane B routes (apps/control-api/src/routes/intake.ts, plan.ts) are not registered in protected server.ts; authority requests docs/authority-requests/LANE-B-intake.md and LANE-B-plan.md. Both branches add an identical routes/deps.ts."
-    ]
+    ],
+    "prCount": {
+      "openLaneAndQueueDrafts": 13,
+      "limit": 12,
+      "note": "At the limit: lanes keep further work branch-only until drafts close."
+    }
   }
 }
