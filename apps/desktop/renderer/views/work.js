@@ -3,7 +3,7 @@ import {planFormPanel} from "./plan-form.js";
 import {taskStatusControls} from "./task-status.js";
 import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip,kpiTile,statePill,missionPill,timelineItem} from "../components.js";
 import {formatTime,formatCount,MISSING,missionPillKind} from "../model.js";
-import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline,runReadiness,runReasonHintKey} from "../work-core.js";
+import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline,runReadiness,runReasonHintKey,runStepRows} from "../work-core.js";
 import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
 import {notVerifiedBadge,runNotVerified,missionNotVerified,axisBadges} from "../m1a.js";
@@ -185,6 +185,14 @@ export function runCard(ctx,run){
   const ev=run.evidence.length?h(doc,"ul",{class:"evidence-links"},run.evidence.map(e=>h(doc,"li",{},
     e.evidenceId?h(doc,"button",{type:"button",class:"link-btn",dataset:{focusKey:`ev-${run.runId}-${e.evidenceId}`},on:{click:()=>{selection.evidenceId=e.evidenceId;ctx.navigate("assurance")}},text:`${e.kind??ctx.t("evidence.kindUnknown")} · ${e.evidenceId}`}):h(doc,"span",{text:e.kind??MISSING}),
     " ",verificationChip(ctx,e.verification)))):h(doc,"p",{class:"note",text:ctx.t("run.noEvidence")});
+  const stepRows=runStepRows(run.evidence);
+  const steps=stepRows.length?h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table run-steps",dataset:{runSteps:run.runId}},h(doc,"caption",{text:ctx.t("run.steps.caption")}),
+    h(doc,"thead",{},h(doc,"tr",{},["run.steps.col.step","run.steps.col.cycle","run.steps.col.kind","run.steps.col.exit","run.steps.col.at","run.steps.col.duration"].map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
+    h(doc,"tbody",{},stepRows.map(r=>h(doc,"tr",{dataset:{runStepRow:r.evidenceId??r.kind??"",runStepExit:r.exitCode===null?"":String(r.exitCode),runStepTimedOut:r.timedOut?"1":"0"}},
+      h(doc,"td",{class:"mono",text:r.step??MISSING}),h(doc,"td",{class:"mono",text:r.cycle===null?MISSING:String(r.cycle)}),h(doc,"td",{class:"mono",text:r.kind??MISSING}),
+      h(doc,"td",{class:"mono",text:r.timedOut?ctx.t("run.steps.timedOut"):(r.exitCode===null?MISSING:ctx.t("run.steps.exit",{code:String(r.exitCode)}))}),
+      h(doc,"td",{text:formatDateTime(r.startedAt,lang)}),h(doc,"td",{class:"mono",text:r.durationMs===null?MISSING:ctx.t("run.steps.seconds",{s:(r.durationMs/1000).toFixed(1)})}))))),
+    h(doc,"p",{class:"note",text:ctx.t("run.steps.note")})):null;
   const cps=run.checkpoints.length?h(doc,"ol",{class:"checkpoints"},run.checkpoints.map(c=>h(doc,"li",{},h(doc,"span",{text:c.name}),c.status?statusPill(ctx,c.status):null,h(doc,"time",{text:formatDateTime(c.at,lang)})))):h(doc,"p",{class:"note",text:ctx.t(run.checkpointsReported===false?"run.checkpointsNotReported":"run.noCheckpoints")});
   return h(doc,"li",{class:"card run-card",dataset:{runId:run.runId,runStatus:run.status}},
     h(doc,"h5",{},h(doc,"span",{class:"mono",text:run.runId})," ",statusPill(ctx,run.status),runNotVerified(run)?[" ",notVerifiedBadge(ctx,"run")]:null),
@@ -205,7 +213,7 @@ export function runCard(ctx,run){
       ...(run.status==="RETRY_SCHEDULED"?[h(doc,"dt",{text:ctx.t("run.retryScheduledFor")}),h(doc,"dd",{dataset:{runRetryAt:run.retryAt??""},text:formatDateTime(run.retryAt,lang)})]:[]),
       // SBX-GATE: BLOCKED/FAILED nedeni dürüstçe gösterilir; SANDBOX_UNAVAILABLE için kodun yanında açıklama vardır.
       ...(run.reason?[h(doc,"dt",{text:ctx.t("run.reason")}),h(doc,"dd",{dataset:{runReason:run.reason},text:run.reason==="SANDBOX_UNAVAILABLE"?`SANDBOX_UNAVAILABLE — ${ctx.t("run.reason.SANDBOX_UNAVAILABLE")}`:runReasonHintKey(run.reason)?`${run.reason} — ${ctx.t(runReasonHintKey(run.reason))}`:run.reason})]:[])),
-    h(doc,"h6",{text:ctx.t("run.checkpoints")}),cps,h(doc,"h6",{text:ctx.t("run.evidence")}),ev);
+    h(doc,"h6",{text:ctx.t("run.checkpoints")}),cps,steps?h(doc,"h6",{text:ctx.t("run.steps.title")}):null,steps,h(doc,"h6",{text:ctx.t("run.evidence")}),ev);
 }
 function runsSection(ctx,runsRes,details){
   const doc=ctx.doc;
