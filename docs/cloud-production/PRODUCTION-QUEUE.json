@@ -153,7 +153,7 @@
       "id": "PQ-003",
       "source": "UASCO-AUD-065 / inventory UI-050 (PARTIAL)",
       "title": "Evidence lineage as a navigable graph view in #/assurance (read-only)",
-      "status": "QUEUED",
+      "status": "TESTED",
       "base": "claude/ui-105@632a774 (stacked; draft PR #125 open)",
       "files": [
         "apps/desktop/renderer/views/assurance.js",
@@ -169,7 +169,11 @@
         "Honest states for missing links; never infer a link that is not in the data.",
         "Unique data-* names, token-only CSS, h()/textContent only."
       ],
-      "lane": "A (Lane A builder session_01MApoJPisUKhZdWpTJmcnY3)"
+      "lane": "A (Lane A builder session_01MApoJPisUKhZdWpTJmcnY3)",
+      "branch": "claude/lane-a-lineage-graph",
+      "head": "4561648",
+      "pr": null,
+      "note": "Lane A deliverable, coordinator-verified (Linux) 2026-10-21T12:45Z; branch only (PR limit); not integrated."
     },
     {
       "id": "PQ-004",
@@ -199,7 +203,7 @@
       "id": "PQ-005",
       "source": "UASCO-AUD-065 / inventory UI-034 (PARTIAL)",
       "title": "Provider & model routing view (read-only) from the existing executors/capabilities/adapters GETs",
-      "status": "WAITING_BASE",
+      "status": "TESTED_TEST_GAP",
       "base": "after PQ-004 (settings.js overlap)",
       "files": [
         "apps/desktop/renderer/views/settings.js",
@@ -213,7 +217,11 @@
         "Show which executor, provider and capability would route a task, using only values returned by existing allow-listed GETs. Registry values are carried verbatim, never promoted to active/connected.",
         "No new POST: the existing local-claude enable action stays where it is."
       ],
-      "lane": "A (Lane A builder session_01MApoJPisUKhZdWpTJmcnY3)"
+      "lane": "A (Lane A builder session_01MApoJPisUKhZdWpTJmcnY3)",
+      "branch": "claude/lane-a-routing-view",
+      "head": "f278e6c",
+      "pr": null,
+      "note": "Lane A deliverable, coordinator-verified (Linux) 2026-10-21T12:45Z; branch only (PR limit); not integrated."
     },
     {
       "id": "PQ-006",
@@ -521,7 +529,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T08:26:44.210Z",
+    "at": "2026-10-21T12:45:55.809Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -537,7 +545,7 @@
       134,
       135
     ],
-    "next": "#131 follow-up verification (wpyllw708) then push 80a020b; lanes continue branch-only (PR limit reached).",
+    "next": "Founder bootstrap for #131 (CI green @0ae75d0) and #128 merge; Lane A PQ-005 test gap; lanes continue branch-only.",
     "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
@@ -636,14 +644,14 @@
       "LANE-C-role-resolver": {
         "pr": 138,
         "branch": "claude/lane-c-role-resolver",
-        "head": "d4bd613",
+        "head": "eb17038",
         "status": "TESTED",
-        "verifiedAt": "2026-10-21T08:26:44.210Z",
+        "verifiedAt": "2026-10-21T12:45:55.809Z",
         "verifiedBy": "coordinator (Linux)",
-        "tests": "v7-core-predev-team-composer 18/18",
+        "tests": "v7-b3a-runner + v7-core-predev-team-composer 44/44",
         "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
         "forbiddenFiles": 0,
-        "mutation": "6ebb76a: ADAPTERS_MISSING check removed -> 1 failure; d4bd613: dev-review role gate removed -> 1 failure",
+        "mutation": "6ebb76a ADAPTERS_MISSING -> 1; d4bd613 dev-review gate -> 1; eb17038 runner role gate removed -> 1 failure",
         "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED"
       },
       "LANE-A-task-selector (PQ-012)": {
@@ -673,6 +681,88 @@
         "mutation": "text AA threshold 4.5 -> 3 : 1 failure",
         "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED",
         "stackedOn": "claude/ui-105 @632a774 (draft PR #125)"
+      },
+      "LANE-A-flow-stepper": {
+        "pr": "branch only (PR limit)",
+        "branch": "claude/lane-a-flow-stepper",
+        "head": "120eaf6",
+        "status": "TESTED",
+        "verifiedAt": "2026-10-21T12:45:55.809Z",
+        "verifiedBy": "coordinator (Linux)",
+        "tests": "v7-ps1b-project-studio-ui 106/106",
+        "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
+        "forbiddenFiles": 0,
+        "mutation": "flow stage-order check removed -> 1 failure",
+        "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED"
+      },
+      "LANE-A-lineage-graph (PQ-003)": {
+        "pr": "branch only (PR limit)",
+        "branch": "claude/lane-a-lineage-graph",
+        "head": "4561648",
+        "status": "TESTED",
+        "verifiedAt": "2026-10-21T12:45:55.809Z",
+        "verifiedBy": "coordinator (Linux)",
+        "tests": "v7-ux-wp-qasec + v7-ux-wp2-cockpit 97/97",
+        "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
+        "forbiddenFiles": 0,
+        "mutation": "ArrowDown navigation off by one -> 1 failure",
+        "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED",
+        "stackedOn": "claude/ui-105 @632a774 (draft PR #125)"
+      },
+      "LANE-A-plan-form": {
+        "pr": "branch only (PR limit)",
+        "branch": "claude/lane-a-plan-form",
+        "head": "2372ae5",
+        "status": "TESTED",
+        "verifiedAt": "2026-10-21T12:45:55.809Z",
+        "verifiedBy": "coordinator (Linux)",
+        "tests": "v7-b5-work-screens 74/74",
+        "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
+        "forbiddenFiles": 0,
+        "mutation": "canPlan guard removed -> 1 failure",
+        "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED"
+      },
+      "LANE-A-routing-view (PQ-005)": {
+        "pr": "branch only (PR limit)",
+        "branch": "claude/lane-a-routing-view",
+        "head": "f278e6c",
+        "status": "TESTED_TEST_GAP",
+        "verifiedAt": "2026-10-21T12:45:55.809Z",
+        "verifiedBy": "coordinator (Linux)",
+        "tests": "v7-ux-settings + v7-ux-wp2-cockpit 61/61",
+        "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
+        "forbiddenFiles": 0,
+        "mutation": "activation check removed -> 0 failures (TEST GAP); name check removed -> 1 failure",
+        "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED",
+        "fixRequired": "negative tests for invalid activation/status/implementation (sent to Lane A)",
+        "stackedOn": "claude/lane-a-contrast-lab @dc0f006 (#141)"
+      },
+      "LANE-B-flow": {
+        "pr": "branch only (PR limit)",
+        "branch": "claude/lane-b-flow",
+        "head": "d4082d1",
+        "status": "TESTED",
+        "verifiedAt": "2026-10-21T12:45:55.809Z",
+        "verifiedBy": "coordinator (Linux)",
+        "tests": "v7-b1-workos 16/16",
+        "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
+        "forbiddenFiles": 0,
+        "mutation": "SUCCEEDED -> DONE mapping removed -> 1 failure",
+        "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED"
+      },
+      "LANE-B-task-status": {
+        "pr": "branch only (PR limit)",
+        "branch": "claude/lane-b-task-status",
+        "head": "9932b8f",
+        "status": "AUTHORITY_REQUEST",
+        "verifiedAt": "2026-10-21T12:45:55.809Z",
+        "verifiedBy": "coordinator (Linux)",
+        "tests": "docs only (authority request)",
+        "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
+        "forbiddenFiles": 0,
+        "mutation": "n/a (no code)",
+        "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED",
+        "note": "docs/authority-requests for task status transitions (needs core/workos/store.ts change, forbidden to lanes)"
       }
     },
     "notes": [
