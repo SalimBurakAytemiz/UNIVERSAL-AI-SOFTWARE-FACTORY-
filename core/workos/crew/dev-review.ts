@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {agentConfigInWorkspace, commitBuilderOutput, gitControlDigest} from "../builder-output.js";
 import {sourceGenerationOf} from "../outcomes.js";
+import {assertRoleExecutes} from "../../agents/first-delivery-bindings.js";
 import type {ProjectStudio} from "../project-studio.js";
 import type {
   ExecContext, ExecutorPair, ImplementerAdapter, ImplementResult, MissionSpec, ReviewerAdapter, ReviewResult
@@ -139,6 +140,8 @@ function makeDevReviewer(identity: string, reviewer: DevReviewerPort): ReviewerA
 // //TR: Enjekte edilen portlardan bağımsız bir executor çifti kurar (implementer=developer rolü, reviewer=QA/review rolü; store/runner aynı kimliği reddeder). Köprüdür; yeni rol eklemez, hiçbir rolü certified yapmaz.
 export function crewDevExecutors(developerRoleId: string, reviewerRoleId: string, builder: DevBuilderPort, reviewer: DevReviewerPort, envPolicyFile: string): ExecutorPair {
   if (developerRoleId === reviewerRoleId) throw new CrewDevReviewError("CREW_REVIEWER_NOT_INDEPENDENT");
+  // //TR: Rol TANIMI çalışan ajan değildir: yalnız tam yürütme bağlaması olan roller (developer / security-reviewer) executor çiftine girebilir.
+  try { assertRoleExecutes(developerRoleId, "developer"); assertRoleExecutes(reviewerRoleId, "security-reviewer"); } catch (e) { throw new CrewDevReviewError((e as Error).message); }
   return {kind: "FAKE", implementer: makeDevImplementer(developerRoleId, builder, envPolicyFile), reviewer: makeDevReviewer(reviewerRoleId, reviewer)};
 }
 
