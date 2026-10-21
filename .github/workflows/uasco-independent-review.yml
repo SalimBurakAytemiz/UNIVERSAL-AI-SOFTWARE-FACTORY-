@@ -33,6 +33,8 @@ jobs:
       check_id: ${{ steps.scope.outputs.check_id }}
       needs_founder: ${{ steps.scope.outputs.needs_founder }}
       app_slug: ${{ steps.app.outputs.app-slug }}
+      # The attempt that created the check. finish applies only that attempt's verdict, so a partial re-run of ai-review cannot re-roll the check.
+      scope_attempt: "${{ github.run_attempt }}"
     steps:
       # Trusted code only: the default-branch commit this workflow file comes from. persist-credentials false keeps no token on disk.
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -89,6 +91,7 @@ jobs:
           GH_READ_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ needs.scope.outputs.head_sha }}
           APP_SLUG: ${{ needs.scope.outputs.app_slug }}
+          CHECK_ID: ${{ needs.scope.outputs.check_id }}
           CI_WAIT_MINUTES: "100"
           # Validated in run.mjs (strict pattern) before it can reach the reviewer's command line.
           REVIEW_MODEL: ${{ vars.UASCO_REVIEW_MODEL }}
@@ -108,7 +111,6 @@ jobs:
     permissions: {contents: read, pull-requests: read}
     outputs:
       session_id: ${{ steps.claude.outputs.session_id }}
-      verdict_artifact: "uasco-review-verdict-${{ github.run_attempt }}"
     steps:
       # The trusted base at the SHA the verdict is bound to (read from v7/integration during collect).
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -127,9 +129,13 @@ jobs:
           settings: '{"permissions":{"deny":["Read(//proc/**)","Read(//etc/**)","Read(//root/**)","Read(//home/**/.*)","Read(//tmp/**)"]}}'
           claude_args: "--json-schema '${{ needs.collect.outputs.schema }}' --allowedTools Read,Glob,Grep --disallowedTools Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task --max-turns 60 ${{ needs.collect.outputs.model_arg }}"
       # A verdict with a credential shape is replaced before the first upload, so it is never published (the gate rejects the placeholder as malformed).
-      - if: always()
+      - id: verdict
+        if: always()
         env: {VERDICT_JSON: "${{ steps.claude.outputs.structured_output }}"}
         run: node scripts/ci/uasco-review/run.mjs verdict
+      # A verdict that could not be handed over (for example over the 128 KiB environment limit) is unknown, so it counts as negative: never lost silently.
+      - if: always() && steps.verdict.outcome == 'failure'
+        run: node scripts/ci/uasco-review/run.mjs verdict-unreadable
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with: {name: "uasco-review-verdict-${{ github.run_attempt }}", path: uasco-verdict/, retention-days: 90, if-no-files-found: warn}
@@ -154,16 +160,17 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with: {name: "${{ needs.collect.outputs.input_artifact }}", path: uasco-review}
-      - if: always() && needs.ai-review.outputs.verdict_artifact != ''
+      - if: always() && needs.scope.outputs.scope_attempt != ''
         continue-on-error: true
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with: {name: "${{ needs.ai-review.outputs.verdict_artifact }}", path: uasco-review}
+        with: {name: "uasco-review-verdict-${{ needs.scope.outputs.scope_attempt }}", path: uasco-review}
       - if: always()
         continue-on-error: true
         env:
           GH_READ_TOKEN: ${{ github.token }}
           # decide re-reads the App's own earlier verdicts on this head and tree (a partial re-run reuses older evidence).
           APP_SLUG: ${{ needs.scope.outputs.app_slug }}
+          CHECK_ID: ${{ needs.scope.outputs.check_id }}
           NEEDS_FOUNDER: ${{ needs.scope.outputs.needs_founder }}
           FOUNDER_LOGIN: ${{ vars.UASCO_FOUNDER_LOGIN }}
           REVIEWER_SESSION: ${{ needs.ai-review.outputs.session_id || format('gha-{0}-{1}', github.run_id, github.run_attempt) }}

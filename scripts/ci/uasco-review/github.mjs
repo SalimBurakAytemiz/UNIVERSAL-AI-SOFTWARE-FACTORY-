@@ -8,7 +8,8 @@ const SESSION_TRAILER_RE = /^Claude-Session:\s*https:\/\/claude\.ai\/code\/(sess
 export class GitHubError extends Error { constructor(code, status) { super(code); this.code = code; this.status = status; } }
 
 // Minimal REST client. Errors carry a fixed code and the HTTP status only: response bodies are never echoed (they can hold untrusted text).
-export function client({token, repo, fetchImpl = globalThis.fetch, apiUrl = "https://api.github.com", sleep = ms => new Promise(r => setTimeout(r, ms)), retries = 3, now = () => Date.now(), maxWaitMs = 15 * 60_000}) {
+export function client({token, repo, fetchImpl = globalThis.fetch, apiUrl = "https://api.github.com", sleep = ms => new Promise(r => setTimeout(r, ms)), retries = 3, now = () => Date.now(), maxWaitMs = 15 * 60_000, waitBudgetMs = Infinity}) {
+  let waited = 0;
   if (!/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(String(repo))) throw new GitHubError("REPO_INVALID", 0);
   async function req(method, path, {body, accept = "application/vnd.github+json", raw = false} = {}) {
     for (let attempt = 0, waits = 0; ; attempt++) {
@@ -21,9 +22,9 @@ export function client({token, repo, fetchImpl = globalThis.fetch, apiUrl = "htt
         throw new GitHubError("NETWORK", 0);
       }
       // Rate limit (403/429 with retry-after or x-ratelimit-remaining: 0): wait as GitHub asks, at most maxWaitMs (15 min by default; short jobs pass less so a
-      // wait can never outlast their timeout) and twice per request. A plain 403 stays ACCESS_DENIED.
+      // wait can never outlast their timeout), twice per request, and within waitBudgetMs in total for the client. A plain 403 stays ACCESS_DENIED.
       const limited = rateLimitWait(res, now(), maxWaitMs);
-      if (limited !== null && waits < 2) { waits++; attempt--; await sleep(limited); continue; }
+      if (limited !== null && waits < 2 && waited + limited <= waitBudgetMs) { waits++; waited += limited; attempt--; await sleep(limited); continue; }
       if (RETRY_STATUS.has(res.status) && attempt < retries) { await sleep(2000 * 2 ** attempt); continue; }
       if (!res.ok) throw new GitHubError(res.status === 401 || res.status === 403 ? "ACCESS_DENIED" : res.status === 404 ? "NOT_FOUND" : "HTTP_ERROR", res.status);
       return raw ? res.text() : res.status === 204 ? null : res.json();
@@ -111,6 +112,8 @@ export async function collectEvidence(gh, prNumber, {protectedPaths, checkRuns})
   ]);
   const implementerSessions = [...new Set(commits.flatMap(c => [...String(c?.commit?.message ?? "").matchAll(SESSION_TRAILER_RE)].map(m => m[1])))];
   const commitShas = commits.map(c => c?.sha).filter(x => typeof x === "string" && SHA_RE.test(x));
+  // Each commit's tree (the commits listing carries it), so prior verdicts are looked up on exactly the commits with the reviewed content.
+  const commitTrees = commits.filter(c => SHA_RE.test(String(c?.sha))).map(c => ({sha: c.sha, tree: SHA_RE.test(String(c?.commit?.tree?.sha)) ? c.commit.tree.sha : null}));
   return {
     pr: {number: pr.number, state: pr.state, draft: pr.draft, merged: pr.merged, head: {sha: pr.head?.sha, ref: pr.head?.ref, repo: pr.head?.repo?.full_name ?? null},
       base: {ref: baseRef, sha: pr.base?.sha}, user: {login: pr.user?.login}, changed_files: pr.changed_files, commits: pr.commits},
@@ -119,7 +122,7 @@ export async function collectEvidence(gh, prNumber, {protectedPaths, checkRuns})
     reviews: reviews.map(x => ({id: x.id, user: {login: x.user?.login ?? null}, state: x.state, commit_id: x.commit_id, body: x.body ?? "", submitted_at: x.submitted_at})),
     issueComments: issueComments.map(x => ({body: x.body ?? "", user: {login: x.user?.login ?? null}})),
     diffFiles: diffFiles.map(f => ({filename: f.filename, status: f.status, ...(f.previous_filename ? {previous_filename: f.previous_filename} : {})})),
-    protectedPaths, rules, implementerSessions, commitShas,
+    protectedPaths, rules, implementerSessions, commitShas, commitTrees,
   };
 }
 
@@ -138,19 +141,28 @@ const ESC = {"\"": 0x22, "\\": 0x5c, a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 1
 function unquote(s) {
   if (!s.startsWith("\"")) return null;
   const bytes = [];
-  for (let i = 1; i < s.length; i++) {
-    const c = s[i];
-    if (c === "\"") return [Buffer.from(bytes).toString("utf8"), s.slice(i + 1)];
+  // By code point: a raw non-BMP character (quotePath=false output) must not be split into two lone surrogates.
+  for (let i = 1; i < s.length;) {
+    const c = String.fromCodePoint(s.codePointAt(i));
+    i += c.length;
+    if (c === "\"") return [Buffer.from(bytes).toString("utf8"), s.slice(i)];
     if (c !== "\\") { bytes.push(...Buffer.from(c, "utf8")); continue; }
-    const e = s[++i];
-    if (e !== undefined && Object.hasOwn(ESC, e)) bytes.push(ESC[e]);
-    else if (/^[0-3][0-7]{2}$/.test(s.slice(i, i + 3))) { bytes.push(parseInt(s.slice(i, i + 3), 8)); i += 2; }
+    const e = s[i];
+    if (e !== undefined && Object.hasOwn(ESC, e)) { bytes.push(ESC[e]); i++; }
+    else if (/^[0-3][0-7]{2}$/.test(s.slice(i, i + 3))) { bytes.push(parseInt(s.slice(i, i + 3), 8)); i += 3; }
     else return null;
   }
   return null;
 }
 // One path operand: quoted (decoded, nothing may follow) or plain.
 const operand = s => { if (!s.startsWith("\"")) return s; const q = unquote(s); return q && q[1] === "" ? q[0] : null; };
+// Every way to read a "diff --git" header as two path operands (plain names may contain spaces, so each space is a candidate split).
+function headerPairs(h) {
+  const out = [];
+  if (h.startsWith("\"")) { const qa = unquote(h); if (qa && qa[1].startsWith(" ")) { const b = operand(qa[1].slice(1)); if (b !== null) out.push([qa[0], b]); } return out; }
+  for (let i = h.indexOf(" "); i >= 0; i = h.indexOf(" ", i + 1)) { const b = operand(h.slice(i + 1)); if (b !== null) out.push([h.slice(0, i), b]); }
+  return out;
+}
 
 // Paths of a unified git diff: every section's new-side path (headers "diff --git a/X b/X", or the "rename to"/"copy to" line) and every rename or copy
 // with its source. Quoted names are decoded. Returns null when any section cannot be read unambiguously: the caller then fails closed.
@@ -159,20 +171,29 @@ export function diffPaths(text) {
   for (let i = 0; i < lines.length; i++) {
     if (!lines[i].startsWith("diff --git ")) continue;
     const h = lines[i].slice("diff --git ".length);
-    let from = null, to = null, kind = null;
-    // Extended header lines only: they end where the patch body (or a binary marker) begins.
+    let from = null, to = null, kind = null, similarity = false;
+    // Extended header lines only: they end where the patch body (or a binary marker) begins. Names may hold any character (dotAll), and a rename or
+    // similarity line that cannot be read makes the whole diff unreadable rather than silently skipped.
     for (let j = i + 1; j < lines.length && !/^(?:diff --git |@@|--- |\+\+\+ |Binary files )/.test(lines[j]); j++) {
-      const m = /^(rename|copy) (from|to) (.+)$/.exec(lines[j]);
-      if (!m) continue;
-      const p = operand(m[3]);
+      if (/^similarity index /.test(lines[j])) similarity = true;
+      if (!/^(?:rename|copy) /.test(lines[j])) continue;
+      const m = /^(rename|copy) (from|to) (.+)$/s.exec(lines[j]);
+      const p = m ? operand(m[3]) : null;
       if (p === null || (kind !== null && kind !== m[1])) return null;
       kind = m[1];
       if (m[2] === "from") from = p; else to = p;
     }
+    const pairs = headerPairs(h);
     let p = null;
-    if (kind !== null) { if (from === null || to === null) return null; p = to; moves.push({kind, from, to}); oldPaths.add(from); }
-    else if (h.startsWith("\"")) { const qa = unquote(h), qb = qa && qa[1].startsWith(" ") ? operand(qa[1].slice(1)) : null; if (qa && qb !== null && qa[0].startsWith("a/") && qb === `b/${qa[0].slice(2)}`) p = qa[0].slice(2); }
-    else if (h.length % 2 === 1) { const mid = (h.length - 1) / 2, a = h.slice(0, mid), b = h.slice(mid + 1); if (h[mid] === " " && a.startsWith("a/") && b === `b/${a.slice(2)}`) p = a.slice(2); }
+    if (kind !== null) {
+      // The header must name the same two paths as the rename/copy lines.
+      if (from === null || to === null || !pairs.some(([a, b]) => a === `a/${from}` && b === `b/${to}`)) return null;
+      p = to; moves.push({kind, from, to}); oldPaths.add(from);
+    } else {
+      if (similarity) return null;
+      const same = [...new Set(pairs.filter(([a, b]) => a.startsWith("a/") && b === `b/${a.slice(2)}`).map(([a]) => a.slice(2)))];
+      if (same.length === 1) p = same[0];
+    }
     if (p === null || p === "") return null;
     newPaths.add(p);
   }
@@ -194,14 +215,21 @@ export function sameChange(dp, files) {
 export const commitTree = async (gh, sha) => { const t = (await gh.req("GET", `${r(gh)}/git/commits/${sha}`))?.tree?.sha; return SHA_RE.test(String(t)) ? t : null; };
 // Earlier review checks by THIS App (slug) that ended in a substantive negative verdict, on any of the PR's commits. The App alone writes external_id
 // ("v2:<0|1>:<tree>:<digest>"), so a same-named check from another source can neither create nor hide such a record.
-export async function priorNegativeVerdicts(gh, {appSlug, shas}) {
+// A check of this App that never concluded (other than excludeId, the run's own check while it is in progress) is returned as pending: its verdict was never recorded (force-cancel,
+// a crash before the conclusion), so it may hide a rejection. The caller treats it like one.
+export async function priorNegativeVerdicts(gh, {appSlug, shas, excludeId = null}) {
   if (typeof appSlug !== "string" || appSlug === "") throw new GitHubError("APP_SLUG_MISSING", 0);
+  const list = [...new Set(shas)].filter(x => SHA_RE.test(String(x)));
+  if (list.length > 50) throw new GitHubError("PRIOR_LOOKUP_TOO_WIDE", 0);
   const found = [];
-  for (const sha of [...new Set(shas)].filter(x => SHA_RE.test(String(x))).slice(-50)) {
+  for (const sha of list) {
     const runs = await gh.paginate(`${r(gh)}/commits/${sha}/check-runs?check_name=${enc(CHECK_NAME)}&filter=all`, {key: "check_runs", maxPages: 3});
     for (const c of runs) {
+      if (c?.app?.slug !== appSlug) continue;
       const m = /^v2:1:([0-9a-f]{40}):/.exec(String(c?.external_id ?? ""));
-      if (c?.app?.slug === appSlug && c?.conclusion === "failure" && m) found.push({sha, tree: m[1]});
+      // The run's own check is in progress by design; once concluded (a partial re-run), its record counts like any other.
+      if (c?.status !== "completed") { if (excludeId === null || c?.id !== excludeId) found.push({sha, tree: null, pending: true}); }
+      else if (c?.conclusion === "failure" && m) found.push({sha, tree: m[1], pending: false});
     }
   }
   return found;

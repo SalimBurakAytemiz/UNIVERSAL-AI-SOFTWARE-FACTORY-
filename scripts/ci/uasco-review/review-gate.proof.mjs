@@ -105,6 +105,11 @@ check("G30c verdictIsNegative judges a raw verdict that can never be accepted (c
 check("G30d a rejected (credential) verdict is never accepted, and a negative one is still recorded as negative",
   has(D({verdict: {rejected: "VERDICT_CONTAINS_SECRET_PATTERN", negative: true}}), "VERDICT_REJECTED_NEGATIVE") && negativeVerdict(D({verdict: {rejected: "VERDICT_CONTAINS_SECRET_PATTERN", negative: true}}))
   && D({verdict: {rejected: "VERDICT_CONTAINS_SECRET_PATTERN", negative: false}}).conclusion === "failure" && !negativeVerdict(D({verdict: {rejected: "VERDICT_CONTAINS_SECRET_PATTERN", negative: false}})));
+check("G30e a negative verdict refused only for its form (invisible character) is still recorded as negative; a CLEAN one with the same flaw is not",
+  has(D({v: {result: "BLOCKED", summary: "Blocked \u200b."}}), "VERDICT_REJECTED_NEGATIVE") && has(D({v: {result: "BLOCKED", summary: "Blocked \u200b."}}), "VERDICT_MALFORMED:summary")
+  && !has(D({v: {summary: "Fine \u200b."}}), "VERDICT_REJECTED_NEGATIVE") && D({v: {summary: "Fine \u200b."}}).conclusion === "failure");
+check("G30f an unreadable verdict placeholder fails and counts as negative", has(D({verdict: {rejected: "VERDICT_UNREADABLE", negative: true}}), "VERDICT_UNREADABLE")
+  && negativeVerdict(D({verdict: {rejected: "VERDICT_UNREADABLE", negative: true}})) && !has(D({verdict: {rejected: "SOMETHING_ELSE", negative: true}}), "VERDICT_REJECTED_NEGATIVE"));
 check("G31 the decision record carries the head tree (it goes into the App-written external_id)", ok.headTree === TREE && D({ev: {headTree: "x"}}).headTree === null);
 
 // ---- Schema and module agree ----
@@ -134,10 +139,10 @@ check("W8 secret-holding jobs use the base-branch-only environment", jobBlock("s
   && jobBlock("finish").includes("environment: uasco-review") && jobBlock("founder-authority").includes(`environment: ${FOUNDER_ENVIRONMENT}`));
 check("W10 no repository variable is interpolated into the reviewer command line", !/claude_args:[^\n]*vars\./.test(wf) && /REVIEW_MODEL: \$\{\{ vars\.UASCO_REVIEW_MODEL \}\}/.test(wf));
 check("W11 model alias validation rejects flag injection", modelArg("x --allowedTools Bash") === "" && modelArg("--dangerously-skip-permissions") === "" && modelArg("opus") === "--model opus" && modelArg(undefined) === "");
-check("W12 uploads carry the run attempt; downloads use the producing job's recorded artifact name (so 'Re-run failed jobs' finds it)",
+check("W12 uploads carry the run attempt; the input is downloaded by collect's recorded name, the verdict only by the attempt that created the check",
   (wf.match(/name: "uasco-review-(input|verdict|evidence)-\$\{\{ github\.run_attempt \}\}"/g) ?? []).length === 3
-  && (wf.match(/name: "\$\{\{ needs\.collect\.outputs\.input_artifact \}\}"/g) ?? []).length === 2 && (wf.match(/name: "\$\{\{ needs\.ai-review\.outputs\.verdict_artifact \}\}"/g) ?? []).length === 1
-  && /if: always\(\) && needs\.collect\.outputs\.input_artifact != ''/.test(wf) && /if: always\(\) && needs\.ai-review\.outputs\.verdict_artifact != ''/.test(wf));
+  && (wf.match(/name: "\$\{\{ needs\.collect\.outputs\.input_artifact \}\}"/g) ?? []).length === 2 && (wf.match(/name: "uasco-review-verdict-\$\{\{ needs\.scope\.outputs\.scope_attempt \}\}"/g) ?? []).length === 1
+  && /if: always\(\) && needs\.collect\.outputs\.input_artifact != ''/.test(wf) && /if: always\(\) && needs\.scope\.outputs\.scope_attempt != ''/.test(wf) && !/verdict_artifact/.test(wf));
 // Real YAML parse (js-yaml is already in package-lock.json via the dev tree). Unavailable or unparseable fails the proof.
 let doc = null;
 try { doc = createRequire(import.meta.url)("js-yaml").load(wf); } catch { doc = null; }
@@ -165,7 +170,7 @@ check("W17 the reviewer can read its own inputs (not under a denied hidden direc
 check("W18 a cancelled run never spends a review or submits an approval (finish still concludes the check)",
   jobs["ai-review"]?.if === "${{ !cancelled() && needs.collect.outputs.proceed == 'true' && (needs.founder-authority.result == 'success' || needs.founder-authority.result == 'skipped') }}"
   && (wf.match(/if: \$\{\{ !cancelled\(\) && steps\.finish\.outputs\.final == 'success'/g) ?? []).length === 2 && jobs.finish?.if === "always() && needs.scope.result == 'success'");
-check("W19 the verdict passes the secret filter before its first upload", /run: node scripts\/ci\/uasco-review\/run\.mjs verdict\n\s+- if: always\(\)\n\s+uses: actions\/upload-artifact@[0-9a-f]{40} # v4\.6\.2\n\s+with: \{name: "uasco-review-verdict-/.test(wf)
+check("W19 the verdict passes the secret filter before its first upload", /run: node scripts\/ci\/uasco-review\/run\.mjs verdict\n\s+# [^\n]*\n\s+- if: always\(\) && steps\.verdict\.outcome == 'failure'\n\s+run: node scripts\/ci\/uasco-review\/run\.mjs verdict-unreadable\n\s+- if: always\(\)\n\s+uses: actions\/upload-artifact@[0-9a-f]{40} # v4\.6\.2\n\s+with: \{name: "uasco-review-verdict-/.test(wf)
   && !/printf/.test(jobBlock("ai-review")));
 check("W20 the App slug reaches scope and collect (prior-verdict lookup), from the App token step", /APP_SLUG: \$\{\{ steps\.app\.outputs\.app-slug \}\}/.test(jobBlock("scope"))
   && /app_slug: \$\{\{ steps\.app\.outputs\.app-slug \}\}/.test(jobBlock("scope")) && /APP_SLUG: \$\{\{ needs\.scope\.outputs\.app_slug \}\}/.test(jobBlock("collect")));
@@ -174,6 +179,12 @@ check("W21 the workflow documents that pull_request_target runs from the default
   const fs_ = jobs.finish?.steps ?? [], dec = fs_.find(x => /run\.mjs decide/.test(String(x?.run ?? "")));
   check("W22 in finish, checkout, setup-node and decide run always (a cancelled run still records its decision); decide gets the App slug for the live record lookup",
     fs_.slice(0, 2).every(x => /^always\(\)$/.test(String(x?.if ?? ""))) && /^always\(\)$/.test(String(dec?.if ?? "")) && dec?.env?.APP_SLUG === "${{ needs.scope.outputs.app_slug }}");
+}
+{
+  const ai = jobs["ai-review"]?.steps ?? [], col = (jobs.collect?.steps ?? []).find(x => /run\.mjs collect/.test(String(x?.run ?? ""))), dec = (jobs.finish?.steps ?? []).find(x => /run\.mjs decide/.test(String(x?.run ?? "")));
+  const vi = ai.findIndex(x => x?.id === "verdict"), fb = ai[vi + 1];
+  check("W23 scope records its attempt; an unreadable verdict is replaced by a negative placeholder; collect and decide know the run's own check id",
+    jobs.scope?.outputs?.scope_attempt === "${{ github.run_attempt }}" && vi >= 0 && /steps\.verdict\.outcome == 'failure'/.test(String(fb?.if ?? "")) && String(fb?.run ?? "") === "node scripts/ci/uasco-review/run.mjs verdict-unreadable" && col?.env?.CHECK_ID === "${{ needs.scope.outputs.check_id }}" && dec?.env?.CHECK_ID === "${{ needs.scope.outputs.check_id }}");
 }
 check("W9 finish always runs once scope created the check (crash or skip concludes failure)", /finish:[\s\S]*if: always\(\) && needs\.scope\.result == 'success'/.test(wf));
 
@@ -217,7 +228,7 @@ const fakeFetch = routes => async (url, init) => { const u = new URL(url); const
   check("I7 diffPaths reads plain, renamed and spaced paths, with each rename's source",
     JSON.stringify([...dp.newPaths]) === JSON.stringify(["core/x.ts", "new name.ts", "docs/a b c.md"]) && JSON.stringify([...dp.oldPaths]) === JSON.stringify(["old name.ts"])
     && JSON.stringify(dp.moves) === JSON.stringify([{kind: "rename", from: "old name.ts", to: "new name.ts"}]) && diffPaths("").newPaths.size === 0);
-  const q = diffPaths('diff --git "a/\\303\\244" "b/\\303\\244"\nnew file mode 100644\n' + 'diff --git "a/q\\"t.md" "b/q\\"t.md"\n' + 'diff --git a/x b/y\nrename from "con\\146ig/p.json"\nrename to y\n');
+  const q = diffPaths('diff --git "a/\\303\\244" "b/\\303\\244"\nnew file mode 100644\n' + 'diff --git "a/q\\"t.md" "b/q\\"t.md"\n' + 'diff --git "a/con\\146ig/p.json" b/y\nrename from "con\\146ig/p.json"\nrename to y\n');
   check("I7b git-quoted names are decoded (octal UTF-8, escaped quote, quoted rename operand); malformed quoting or an unreadable header fails closed (null)",
     q !== null && JSON.stringify([...q.newPaths]) === JSON.stringify(["\u00e4", 'q"t.md', "y"]) && q.moves[0]?.from === "config/p.json"
     && diffPaths('diff --git "a/x\\q" "b/x\\q"\n') === null && diffPaths('diff --git "a/x" "b/y"\n') === null && diffPaths("diff --git a/x b/y\n") === null
@@ -228,6 +239,13 @@ const fakeFetch = routes => async (url, init) => { const u = new URL(url); const
     && !sameChange(dp, files1.map(x => x.status === "renamed" ? {...x, previous_filename: "config/protected-paths.json"} : x))
     && !sameChange(dp, [...files1, {filename: "extra.ts", status: "added"}]) && !sameChange(null, files1)
     && !sameChange(diffPaths(D1), [{filename: "core/x.ts", status: "renamed", previous_filename: "a.ts"}]) && sameChange(diffPaths(D1), [{filename: "core/x.ts", status: "modified"}]) && !sameChange(diffPaths(D1 + D1), [{filename: "core/x.ts", status: "modified"}, {filename: "core/x.ts", status: "modified"}]));
+  const LS = "\u2028", odd = `docs/${LS}a`, crafted = `config/w.json b/docs/${LS}a b/config/w.json`;
+  const sneaky = diffPaths(`diff --git a/${odd} b/${crafted}\nsimilarity index 100%\nrename from ${odd}\nrename to ${crafted}\n`);
+  const emoji = diffPaths('diff --git "a/x\\\\\u{1F600}" "b/x\\\\\u{1F600}"\nnew file mode 100644\n');
+  check("I7d rename names with U+2028 are read (the crafted header cannot pose as another path); raw non-BMP names in quotes decode; a rename whose header names other paths, or a similarity line without rename lines, fails closed",
+    sneaky !== null && JSON.stringify(sneaky.moves) === JSON.stringify([{kind: "rename", from: odd, to: crafted}]) && emoji !== null && [...emoji.newPaths][0] === "x\\\u{1F600}"
+    && diffPaths("diff --git a/a b/b\nsimilarity index 90%\nrename from a\nrename to c\n") === null && diffPaths("diff --git a/a b/a\nsimilarity index 90%\n") === null
+    && diffPaths("diff --git a/a b/b\nrename from a\n") === null);
   let lookups = 0;
   const lateRun = client({token: "t", repo: "o/r", sleep: async () => {}, fetchImpl: fakeFetch({[`GET /repos/o/r/commits/${HEAD}/check-runs`]: {check_runs: [{name: UBU, status: "completed", conclusion: "success", head_sha: HEAD, check_suite: {id: 5}, app: {slug: "github-actions"}}]},
     "GET /repos/o/r/actions/runs": () => (++lookups === 1 ? {workflow_runs: []} : {workflow_runs: [{path: ".github/workflows/ci.yml", event: "pull_request"}]})})});
@@ -237,18 +255,30 @@ const fakeFetch = routes => async (url, init) => { const u = new URL(url); const
   const capped = []; let rl2 = 0;
   const shortJob = client({token: "t", repo: "o/r", maxWaitMs: 120_000, now: () => 0, sleep: async ms => { capped.push(ms); }, fetchImpl: fakeFetch({"GET /x": () => (++rl2 === 1 ? new Response("rate", {status: 429, headers: {"retry-after": "3600"}}) : {ok: 3})})});
   check("I11 a short job caps the rate-limit wait (an hour asked, 2 min waited), so a wait never outlasts its timeout", JSON.stringify(await shortJob.req("GET", "/x").catch(e => ({error: e.code}))) === '{"ok":3}' && capped[0] === 120_000);
+  const budgeted = []; let rl3 = 0;
+  const tight = client({token: "t", repo: "o/r", retries: 0, maxWaitMs: 120_000, waitBudgetMs: 180_000, now: () => 0, sleep: async ms => { budgeted.push(ms); },
+    fetchImpl: fakeFetch({"GET /x": () => (++rl3 <= 3 ? new Response("rate", {status: 403, headers: {"retry-after": "600"}}) : {ok: 4})})});
+  const a1 = await tight.req("GET", "/x").catch(e => ({error: e.code}));
+  check("I11b all rate-limit waits of one client stay within its budget (3 min): the second 2-min wait is refused and the request fails instead of sleeping past the job",
+    a1.error === "ACCESS_DENIED" && JSON.stringify(budgeted) === JSON.stringify([120_000]));
   const big = client({token: "t", repo: "o/r", sleep: async () => {}, fetchImpl: fakeFetch({[`GET /repos/o/r/compare/${BASE}...${HEAD}`]: () => new Response("too big", {status: 406})})});
   let shaErr = null; try { await prDiff(big, "main", HEAD); } catch (e) { shaErr = e.code; }
   const bd = await prDiff(big, BASE, HEAD).catch(e => ({error: e.code}));
   check("I8 the diff is fetched by SHA (never by branch name); GitHub's 406 (too large) is reported as truncated, not as an empty diff", shaErr === "SHA_INVALID" && bd.truncated === true && bd.text === "");
   const pv = client({token: "t", repo: "o/r", sleep: async () => {}, fetchImpl: fakeFetch({[`GET /repos/o/r/commits/${OLD}/check-runs`]: u => ({check_runs: u.searchParams.get("check_name") !== CHECK_NAME ? [] : [
-    {app: {slug: "uasco-reviewer"}, conclusion: "failure", external_id: `v2:1:${TREE}:0123456789abcdef`},
-    {app: {slug: "github-actions"}, conclusion: "failure", external_id: `v2:1:${OTHER}:0123456789abcdef`},
-    {app: {slug: "uasco-reviewer"}, conclusion: "failure", external_id: `v2:0:${NEWHEAD}:0123456789abcdef`},
-    {app: {slug: "uasco-reviewer"}, conclusion: "success", external_id: `v2:1:${BASE}:0123456789abcdef`}]})})});
+    {id: 1, app: {slug: "uasco-reviewer"}, status: "completed", conclusion: "failure", external_id: `v2:1:${TREE}:0123456789abcdef`},
+    {id: 2, app: {slug: "github-actions"}, status: "completed", conclusion: "failure", external_id: `v2:1:${OTHER}:0123456789abcdef`},
+    {id: 3, app: {slug: "uasco-reviewer"}, status: "completed", conclusion: "failure", external_id: `v2:0:${NEWHEAD}:0123456789abcdef`},
+    {id: 4, app: {slug: "uasco-reviewer"}, status: "completed", conclusion: "success", external_id: `v2:1:${BASE}:0123456789abcdef`},
+    {id: 5, app: {slug: "github-actions"}, status: "in_progress"}, {id: 6, app: {slug: "uasco-reviewer"}, status: "in_progress"}]})})});
   const prior = await priorNegativeVerdicts(pv, {appSlug: "uasco-reviewer", shas: [OLD]});
   let slugErr = null; try { await priorNegativeVerdicts(pv, {appSlug: "", shas: [OLD]}); } catch (e) { slugErr = e.code; }
-  check("I9 prior negative verdicts count only this App's failed checks whose App-written external_id marks a negative verdict", JSON.stringify(prior) === JSON.stringify([{sha: OLD, tree: TREE}]) && slugErr === "APP_SLUG_MISSING");
+  check("I9 prior verdicts: only this App's failed checks marked negative by the App-written external_id, plus this App's unconcluded checks (pending)",
+    JSON.stringify(prior) === JSON.stringify([{sha: OLD, tree: TREE, pending: false}, {sha: OLD, tree: null, pending: true}]) && slugErr === "APP_SLUG_MISSING");
+  const own = await priorNegativeVerdicts(pv, {appSlug: "uasco-reviewer", shas: [OLD], excludeId: 6});
+  let wide = null; try { await priorNegativeVerdicts(pv, {appSlug: "uasco-reviewer", shas: Array.from({length: 51}, (_, i) => i.toString(16).padStart(40, "0"))}); } catch (e) { wide = e.code; }
+  check("I9b the run's own unconcluded check is excluded by id; more than 50 commits to look up is refused, never truncated",
+    JSON.stringify(own) === JSON.stringify([{sha: OLD, tree: TREE, pending: false}]) && wide === "PRIOR_LOOKUP_TOO_WIDE");
 }
 
 // ---- End to end: the real run.mjs phases against a local mock GitHub API ----
@@ -271,10 +301,12 @@ function mockGithub(state) {
       if (p === "/repos/o/r/git/ref/heads/v7%2Fintegration") return json(res, 200, {object: {sha: BASE}});
       if (p === "/repos/o/r/rules/branches/v7%2Fintegration") return json(res, 200, RULES);
       if (p === "/repos/o/r/pulls/7/files") return json(res, 200, list(state.files ?? [{filename: "core/x.ts", status: "added"}]));
-      if (p === "/repos/o/r/pulls/7/commits") return json(res, 200, list([{sha: OLD, commit: {message: "old"}}, {sha: HEAD, commit: {message: "x\n\nClaude-Session: https://claude.ai/code/session_01BUILDERAAAAAAAA"}}]));
+      if (p === "/repos/o/r/pulls/7/commits") return json(res, 200, page === 1 ? (state.commits ?? [{sha: OLD, commit: {message: "old", tree: {sha: TREE}}},
+        {sha: HEAD, commit: {message: "x\n\nClaude-Session: https://claude.ai/code/session_01BUILDERAAAAAAAA", tree: {sha: TREE}}}]) : []);
       const cr = /^\/repos\/o\/r\/commits\/([0-9a-f]{40})\/check-runs$/.exec(p);
       // The App's own concluded checks on the head are listed too, as GitHub would (a later attempt sees an earlier attempt's record).
-      const own = cr && cr[1] === HEAD ? state.checks.filter(c => c.concluded).map(c => ({app: {slug: "uasco-reviewer"}, conclusion: c.concluded.conclusion, external_id: c.concluded.external_id})) : [];
+      const fin = state.checks.find(c => c.concluded)?.concluded;
+      const own = cr && cr[1] === HEAD && state.checks.some(c => c.created) ? [{id: 99, app: {slug: "uasco-reviewer"}, status: fin ? "completed" : "in_progress", conclusion: fin?.conclusion ?? null, external_id: fin?.external_id ?? null}] : [];
       if (cr && u.searchParams.get("check_name") !== null) return json(res, 200, {check_runs: list(u.searchParams.get("check_name") === CHECK_NAME ? [...(state.prior[cr[1]] ?? []), ...own] : [])});
       if (p === "/repos/o/r/pulls/7/reviews" && req.method === "GET") return json(res, 200, list([]));
       if (p === "/repos/o/r/issues/7/comments") return json(res, 200, list([]));
@@ -294,8 +326,8 @@ const runPhase = (phase, envx) => new Promise(resolve => {
   let out = "", err = ""; c.stdout.on("data", d => out += d); c.stderr.on("data", d => err += d); c.on("close", code => resolve({code, out, err}));
 });
 async function e2e({ci, verdictObj, headAfterCollect = HEAD, headAtApprove = headAfterCollect, submitApproval = "false", skipDecision = false, prior = {}, runApprovals = [], diff, prNumber = "7", needsFounder,
-  files, prCommits, checkHead, rerun}) {
-  const state = {log: [], checks: [], approvals: [], ci, phase: "scope", prior, runApprovals, diff, files, prCommits, checkHead};
+  files, prCommits, checkHead, rerun, commits}) {
+  const state = {log: [], checks: [], approvals: [], ci, phase: "scope", prior, runApprovals, diff, files, prCommits: prCommits ?? commits?.length, checkHead, commits};
   state.head = () => state.phase === "approve" ? headAtApprove : ["decide", "finish"].includes(state.phase) ? headAfterCollect : HEAD;
   const srv = mockGithub(state); await new Promise(r => srv.listen(0, "127.0.0.1", r));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-review-"));
@@ -375,7 +407,7 @@ const green = [{name: UBU, status: "completed", conclusion: "success"}, {name: W
   const blocked = verdict({result: "BLOCKED", findings: [{id: "F-1", severity: "P1", classification: "BLOCKER", file: "core/x.ts", line: 1, title: "fail-open", evidence: "e"}]});
   const r = await e2e({ci: green, verdictObj: blocked});
   check("E10 a negative verdict is recorded by the App as external_id v2:1:<tree>", r.concluded?.conclusion === "failure" && new RegExp(`^v2:1:${TREE}:`).test(r.concluded.external_id ?? ""));
-  const priorRun = {app: {slug: "uasco-reviewer"}, conclusion: "failure", external_id: `v2:1:${TREE}:0123456789abcdef`};
+  const priorRun = {id: 7, app: {slug: "uasco-reviewer"}, status: "completed", conclusion: "failure", external_id: `v2:1:${TREE}:0123456789abcdef`};
   const again = await e2e({ci: green, verdictObj: verdict(), prior: {[OLD]: [priorRun]}});
   check("E10b same tree rejected earlier on another commit => scope asks for the Founder; without approval the CLEAN re-roll fails",
     /needs_founder=true/.test(again.out.scope.out) && again.concluded?.conclusion === "failure" && again.concluded.output.summary.includes("PRIOR_NEGATIVE_VERDICT"));
@@ -440,7 +472,28 @@ const green = [{name: UBU, status: "completed", conclusion: "success"}, {name: W
     lost.concluded?.conclusion === "failure" && lost.concluded.output.summary.includes("DECISION_MISSING_NEGATIVE_VERDICT") && new RegExp(`^v2:1:${TREE}:none$`).test(lost.concluded.external_id ?? ""));
   const vdir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-verdict-"));
   await runPhase("verdict", {UASCO_VERDICT_DIR: vdir, VERDICT_JSON: JSON.stringify(verdict({result: "BLOCKED", summary: `echo ${FAKE.github}`}))});
+  const udir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-verdict-")), u = await runPhase("verdict-unreadable", {UASCO_VERDICT_DIR: udir});
+  check("E18d the unreadable-verdict step writes the negative placeholder", u.code === 0 && fs.readFileSync(path.join(udir, "verdict.json"), "utf8") === JSON.stringify({rejected: "VERDICT_UNREADABLE", negative: true}));
   check("E18c the verdict step keeps the negative flag when it replaces a credential-shaped verdict", JSON.stringify(JSON.parse(fs.readFileSync(path.join(vdir, "verdict.json"), "utf8"))) === JSON.stringify({rejected: "VERDICT_CONTAINS_SECRET_PATTERN", negative: true}));
+}
+{
+  const rejected = {[OLD]: [{id: 7, app: {slug: "uasco-reviewer"}, status: "completed", conclusion: "failure", external_id: `v2:1:${TREE}:0123456789abcdef`}]};
+  const empties = Array.from({length: 60}, (_, i) => ({sha: `9${i.toString(16).padStart(39, "0")}`, commit: {message: `e${i}`, tree: {sha: TREE}}}));
+  const deep = [{sha: OLD, commit: {message: "rejected", tree: {sha: TREE}}}, ...empties, {sha: HEAD, commit: {message: "x", tree: {sha: TREE}}}];
+  const r = await e2e({ci: green, verdictObj: verdict(), prior: rejected, commits: deep});
+  check("E19 sixty empty commits on top of a rejected commit do not hide it: more than 50 same-content commits leave the re-review to the Founder",
+    new Set(deep.map(c => c.sha)).size === 62 && /needs_founder=true/.test(r.out.scope.out) && r.concluded?.conclusion === "failure" && r.concluded.output.summary.includes("PRIOR_NEGATIVE_VERDICT"));
+  const approved = await e2e({ci: green, verdictObj: verdict(), prior: rejected, commits: deep, runApprovals: [approval()]});
+  check("E19c with the Founder's approval, that same many-commit re-review may pass (too many to look up is a Founder decision, not a dead end)", approved.concluded?.conclusion === "success");
+  const other = [{sha: OLD, commit: {message: "rejected", tree: {sha: OTHER}}}, ...empties.map(c => ({...c, commit: {...c.commit, tree: {sha: NEWHEAD}}})), {sha: HEAD, commit: {message: "x", tree: {sha: TREE}}}];
+  const ok3 = await e2e({ci: green, verdictObj: verdict(), prior: {[OLD]: [{...rejected[OLD][0], external_id: `v2:1:${OTHER}:0123456789abcdef`}]}, commits: other});
+  check("E19b only commits with the reviewed tree are looked up: 61 commits with other content are not queried, and the review passes",
+    /needs_founder=false/.test(ok3.out.scope.out) && ok3.concluded?.conclusion === "success" && !ok3.state.log.some(x => x.includes(`/commits/${OLD}/check-runs`)));
+  const pending = await e2e({ci: green, verdictObj: verdict(), prior: {[HEAD]: [{id: 98, app: {slug: "uasco-reviewer"}, status: "in_progress"}]}});
+  check("E20 an earlier App check on this head that never concluded (verdict never recorded) leaves the re-review to the Founder; the run's own check does not count",
+    /needs_founder=true/.test(pending.out.scope.out) && pending.concluded?.conclusion === "failure" && pending.concluded.output.summary.includes("FOUNDER_AUTHORITY_REQUIRED"));
+  const reversed = await e2e({ci: green, verdictObj: verdict(), commits: [{sha: HEAD, commit: {message: "x", tree: {sha: TREE}}}, {sha: OLD, commit: {message: "old", tree: {sha: TREE}}}]});
+  check("E17b the head may be anywhere in the (complete) commit list: GitHub does not document its order", reversed.concluded?.conclusion === "success");
 }
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-review-"));

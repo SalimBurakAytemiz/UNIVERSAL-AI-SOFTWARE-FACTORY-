@@ -1,5 +1,5 @@
 // //TR: Bu betik UASCO Independent Review workflow'unun aşama yürütücüsüdür (scope, collect, decide, finish, approve): yalnız varsayılan daldaki (v7/integration) güvenilir koddan çalışır, PR kodunu asla checkout etmez veya çalıştırmaz, kanıtı ve kararı SHA'ya bağlı dosyalara yazar ve her hata yolunda kontrolü failure olarak kapatır.
-// Usage: node scripts/ci/uasco-review/run.mjs <scope|collect|verdict|decide|finish|approve>   (inputs come from env, never from argv text)
+// Usage: node scripts/ci/uasco-review/run.mjs <scope|collect|verdict|verdict-unreadable|decide|finish|approve>   (inputs come from env, never from argv text)
 import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
@@ -20,16 +20,24 @@ const writeJson = (name, v) => { fs.mkdirSync(OUT, {recursive: true}); fs.writeF
 const readJson = name => JSON.parse(fs.readFileSync(path.join(OUT, name), "utf8"));
 // GITHUB_API_URL is set by Actions (https://api.github.com); the proof points it at a local mock server.
 const apiUrl = () => env("GITHUB_API_URL") ?? "https://api.github.com";
-// Short jobs (scope, decide, finish: 10 min) cap a rate-limit wait at 2 min, so a wait can never outlast the job and leave the check in progress.
-const SHORT_WAIT = 2 * 60_000;
-const readGh = (maxWaitMs = SHORT_WAIT) => client({token: env("GH_READ_TOKEN"), repo: env("GITHUB_REPOSITORY"), apiUrl: apiUrl(), maxWaitMs});
-const appGh = () => { const t = env("REVIEW_APP_TOKEN"); if (!t) throw new Error("REVIEW_APP_TOKEN_MISSING"); return client({token: t, repo: env("GITHUB_REPOSITORY"), apiUrl: apiUrl(), maxWaitMs: SHORT_WAIT}); };
+// Short jobs (scope, decide, finish: 10 min) cap a rate-limit wait at 2 min and all waits of one client at 3 min, so waiting can never outlast the job and
+// leave the check in progress. collect (120 min, of which up to 100 min CI wait) keeps the 15-minute cap with a 15-minute budget.
+const SHORT = {maxWaitMs: 2 * 60_000, waitBudgetMs: 3 * 60_000}, LONG = {maxWaitMs: 15 * 60_000, waitBudgetMs: 15 * 60_000};
+const readGh = (limits = SHORT) => client({token: env("GH_READ_TOKEN"), repo: env("GITHUB_REPOSITORY"), apiUrl: apiUrl(), ...limits});
+const appGh = () => { const t = env("REVIEW_APP_TOKEN"); if (!t) throw new Error("REVIEW_APP_TOKEN_MISSING"); return client({token: t, repo: env("GITHUB_REPOSITORY"), apiUrl: apiUrl(), ...SHORT}); };
+const checkId = () => { const id = Number(env("CHECK_ID")); if (!Number.isSafeInteger(id) || id <= 0) throw new Error("CHECK_ID_INVALID"); return id; };
 const protectedPaths = () => JSON.parse(fs.readFileSync(path.join(ROOT, "config/protected-paths.json"), "utf8"));
 
-// Did this App already reject this head, or another commit of the PR with the same tree? (Re-review then needs Founder authority.)
-async function priorNegative(gh, ev, headSha, tree) {
-  const prior = await priorNegativeVerdicts(gh, {appSlug: env("APP_SLUG"), shas: [...(ev.commitShas ?? []), headSha]});
-  return prior.some(p => p.sha === headSha || (tree !== null && p.tree === tree));
+// Did this App already reject this head, or another commit of the PR with the same tree, or leave a check on that content unconcluded? (Re-review then
+// needs Founder authority.) Exactly the head and the PR commits with the head's tree are looked up; more than 50 such commits, or an unknown tree, is
+// left to the Founder rather than truncated. excludeId is the run's own check.
+async function priorNegative(gh, ev, headSha, tree, excludeId = null) {
+  const commits = Array.isArray(ev.commitTrees) ? ev.commitTrees : [];
+  if (tree === null) return true;
+  const shas = [...new Set([headSha, ...commits.filter(c => c?.tree === tree).map(c => c.sha)])];
+  if (shas.length > 50) return true;
+  const prior = await priorNegativeVerdicts(gh, {appSlug: env("APP_SLUG"), shas, excludeId});
+  return prior.some(p => p.pending || p.sha === headSha || p.tree === tree);
 }
 
 // 1. scope: create the in-progress check on the exact head SHA and say whether Founder authority is needed (protected/CI-executed paths, or a re-review
@@ -40,7 +48,8 @@ async function scope() {
   const headSha = ev.pr.head.sha;
   if (!SHA_RE.test(String(headSha))) throw new Error("HEAD_SHA_INVALID");
   const pre = preGate(ev);
-  const again = await priorNegative(gh, ev, headSha, await commitTree(gh, headSha));
+  // A failed lookup here leaves the decision to the Founder (decide looks again and fails closed if it still cannot tell).
+  const again = await commitTree(gh, headSha).then(tree => priorNegative(gh, ev, headSha, tree)).catch(() => true);
   const check = await createCheck(appGh(), {headSha, title: "Waiting for CI and review", summary: `Review of \`${headSha}\` started. CI must finish on this exact commit first.`, detailsUrl: env("RUN_URL")});
   output("head_sha", headSha);
   output("check_id", check.id);
@@ -49,19 +58,19 @@ async function scope() {
 
 // 2. collect: wait for CI on the head, gather evidence, run the deterministic pre-gate. Only a green, complete PR goes to the reviewer.
 async function collect() {
-  const gh = readGh(15 * 60_000), n = prNumber(), headSha = env("HEAD_SHA");
+  const gh = readGh(LONG), n = prNumber(), headSha = env("HEAD_SHA");
   if (!SHA_RE.test(String(headSha))) throw new Error("HEAD_SHA_INVALID");
   const ci = await waitForCi(gh, headSha, {prNumber: n, timeoutMs: Number(env("CI_WAIT_MINUTES") ?? 100) * 60_000});
   const ev = await collectEvidence(gh, n, {protectedPaths: protectedPaths(), checkRuns: ci.checkRuns});
   ev.headTree = await commitTree(gh, headSha);
-  ev.priorNegativeVerdict = await priorNegative(gh, ev, headSha, ev.headTree);
+  ev.priorNegativeVerdict = await priorNegative(gh, ev, headSha, ev.headTree, checkId()).catch(() => null);
   writeJson("evidence.json", ev);
   output("base_sha", SHA_RE.test(String(ev.currentBaseSha)) ? ev.currentBaseSha : "");
   const pre = preGate(ev);
   const blockers = [...pre.blockers, ...(ci.state === "TIMEOUT" ? ["CI_WAIT_TIMEOUT"] : []), ...(ci.state === "MERGE_CONFLICT" ? ["PR_MERGE_CONFLICT"] : []),
     ...(ev.pr.head.sha !== headSha ? ["STALE_HEAD"] : []),
     // The commit list feeds the implementer-session and prior-verdict checks: it must be complete and end at the reviewed head (GitHub lists at most 250).
-    ...(ev.commitShas.length === 0 || ev.commitShas.at(-1) !== headSha || Number(ev.pr.commits) !== ev.commitShas.length ? ["COMMITS_UNVERIFIED"] : [])];
+    ...(!ev.commitShas.includes(headSha) || Number(ev.pr.commits) !== ev.commitShas.length ? ["COMMITS_UNVERIFIED"] : [])];
   // GitHub's diff endpoints stop at 300 files; a PR that large must be split, it is never reviewed from a partial diff.
   if (!blockers.length && (ev.diffFiles.length > 300 || Number(ev.pr.changed_files) > 300)) blockers.push("DIFF_TOO_LARGE_FOR_REVIEW");
   if (blockers.length) { output("proceed", false); writeJson("precheck.json", {blockers}); return; }
@@ -111,6 +120,14 @@ async function verdictStep() {
   fs.writeFileSync(path.join(dir, "verdict.json"), carriesSecret(parsed) || carriesSecret(raw) ? JSON.stringify({rejected: "VERDICT_CONTAINS_SECRET_PATTERN", negative: verdictIsNegative(parsed)}) : raw);
 }
 
+// ai-review, when the verdict step itself failed (for example a verdict over the 128 KiB environment limit): the verdict is unknown, so the placeholder
+// counts as negative and a rejection can never be lost this way.
+async function verdictUnreadableStep() {
+  const dir = path.resolve(env("UASCO_VERDICT_DIR") ?? path.join(ROOT, "uasco-verdict"));
+  fs.mkdirSync(dir, {recursive: true});
+  fs.writeFileSync(path.join(dir, "verdict.json"), JSON.stringify({rejected: "VERDICT_UNREADABLE", negative: true}));
+}
+
 // 3. decide: re-read the head (staleness), the Founder approvals of THIS run, and gate the verdict.
 async function decideStep() {
   const gh = readGh(), n = prNumber();
@@ -124,7 +141,7 @@ async function decideStep() {
   // The App's own records are read again now: a partial re-run reuses an earlier attempt's evidence file, which cannot know that attempt's own verdict.
   // A failed lookup leaves the value unknown (fail-closed in decide).
   if (evidence && typeof evidence === "object" && !Array.isArray(evidence)) {
-    const live = await priorNegative(gh, evidence, evidence.pr?.head?.sha, SHA_RE.test(String(evidence.headTree)) ? evidence.headTree : null).catch(() => null);
+    const live = await priorNegative(gh, evidence, evidence.pr?.head?.sha, SHA_RE.test(String(evidence.headTree)) ? evidence.headTree : null, checkId()).catch(() => null);
     evidence.priorNegativeVerdict = live === null ? null : evidence.priorNegativeVerdict === true || live;
   }
   const runId = env("GITHUB_RUN_ID");
@@ -138,8 +155,7 @@ async function decideStep() {
 
 // 4. finish (always runs): conclude the check from decision.json; anything missing or unreadable concludes failure.
 async function finishStep() {
-  const gh = appGh(), id = Number(env("CHECK_ID"));
-  if (!Number.isSafeInteger(id)) throw new Error("CHECK_ID_INVALID");
+  const gh = appGh(), id = checkId();
   // Write-once: a check this App already concluded is never rewritten. A partial re-run (ai-review, collect or finish alone) therefore cannot flip a failure
   // or erase its v2:1 record; reviewing again needs a full re-run or a new event, which creates a new check that sees the record.
   const cur = await getCheck(gh, id);
@@ -179,9 +195,9 @@ async function approveStep() {
   output("approved", true);
 }
 
-export const phases = {scope, collect, verdict: verdictStep, decide: decideStep, finish: finishStep, approve: approveStep};
+export const phases = {scope, collect, verdict: verdictStep, "verdict-unreadable": verdictUnreadableStep, decide: decideStep, finish: finishStep, approve: approveStep};
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const phase = process.argv[2];
-  if (!Object.hasOwn(phases, phase)) { console.error("USAGE: run.mjs <scope|collect|verdict|decide|finish|approve>"); process.exit(2); }
+  if (!Object.hasOwn(phases, phase)) { console.error("USAGE: run.mjs <scope|collect|verdict|verdict-unreadable|decide|finish|approve>"); process.exit(2); }
   phases[phase]().catch(e => { console.error(`${CHECK_NAME}: ${phase} failed: ${String(e?.code ?? e?.message ?? "ERROR").slice(0, 80)}`); process.exit(1); });
 }

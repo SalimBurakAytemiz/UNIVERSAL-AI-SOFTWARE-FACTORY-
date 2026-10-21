@@ -35,11 +35,14 @@ const MERGE_GATE_VERDICT_CODE = /^(?:VERDICT_|REVIEWER_NOT_INDEPENDENT_IDENTITY$
 // INCONCLUSIVE counts (a re-roll could turn it CLEAN), and so does a run that failed only because such a record already exists (the marker stays sticky).
 const NEGATIVE_VERDICT_CODE = /^(?:VERDICT_BLOCKED|VERDICT_INCONCLUSIVE|VERDICT_HAS_BLOCKERS|VERDICT_HIGH_SEVERITY|VERDICT_CHECK_NOT_PASS:.+|VERDICT_REJECTED_NEGATIVE|PRIOR_NEGATIVE_VERDICT|DECISION_MISSING_NEGATIVE_VERDICT)$/;
 export const negativeVerdict = d => isObj(d) && Array.isArray(d.reasons) && d.reasons.some(x => isStr(x) && NEGATIVE_VERDICT_CODE.test(x));
+// Placeholders the ai-review job writes instead of a verdict it cannot publish or read (credential-shaped text; output it could not hand over). Each carries
+// whether the replaced verdict was negative (unreadable is counted as negative: its content is unknown).
+export const REJECTED_VERDICTS = Object.freeze(["VERDICT_CONTAINS_SECRET_PATTERN", "VERDICT_UNREADABLE"]);
 // Is a raw reviewer verdict negative, even when it can never be accepted (malformed, credential-shaped, or no decision was made)? Used so that losing the
 // decision, or rejecting the verdict text, never lowers the App's negative record. The credential placeholder carries the flag computed before replacement.
 export function verdictIsNegative(v) {
   if (!isObj(v)) return false;
-  if (v.rejected === "VERDICT_CONTAINS_SECRET_PATTERN") return v.negative === true;
+  if (REJECTED_VERDICTS.includes(v.rejected)) return v.negative === true;
   if (v.result === "BLOCKED" || v.result === "INCONCLUSIVE") return true;
   if (Array.isArray(v.findings) && v.findings.some(f => isObj(f) && (f.classification === "BLOCKER" || f.severity === "P0" || f.severity === "P1"))) return true;
   return isObj(v.checks) && CHECK_KEYS.some(k => isStr(v.checks[k]) && v.checks[k] !== "PASS" && v.checks[k] !== "NOT_APPLICABLE");
@@ -109,11 +112,12 @@ export function decide(input) {
     else if (ev.priorNegativeVerdict && !founderAuthorityOk(input.approvals, pol.founderLogin)) r.push("FOUNDER_AUTHORITY_REQUIRED", "PRIOR_NEGATIVE_VERDICT");
     const v = input.verdict;
     if (v === null || v === undefined) r.push("VERDICT_MISSING");
-    else if (isObj(v) && v.rejected === "VERDICT_CONTAINS_SECRET_PATTERN") r.push("VERDICT_CONTAINS_SECRET_PATTERN", ...(v.negative === true ? ["VERDICT_REJECTED_NEGATIVE"] : []));
+    else if (isObj(v) && REJECTED_VERDICTS.includes(v.rejected)) r.push(v.rejected, ...(v.negative === true ? ["VERDICT_REJECTED_NEGATIVE"] : []));
     else if (carriesSecret(v)) { r.push("VERDICT_CONTAINS_SECRET_PATTERN", ...(verdictIsNegative(v) ? ["VERDICT_REJECTED_NEGATIVE"] : [])); input = {...input, verdict: null}; }
     else {
       const bad = validateVerdict(v);
-      if (bad.length) r.push(...bad);
+      // A verdict refused only for its form (an invisible character, an empty summary) still counts as a rejection when its content is negative.
+      if (bad.length) r.push(...bad, ...(verdictIsNegative(v) ? ["VERDICT_REJECTED_NEGATIVE"] : []));
       else {
         if (headSha !== null && v.reviewedHeadSha !== headSha) r.push("VERDICT_HEAD_MISMATCH");
         if (baseSha !== null && v.reviewedBaseSha !== baseSha) r.push("VERDICT_BASE_MISMATCH");
