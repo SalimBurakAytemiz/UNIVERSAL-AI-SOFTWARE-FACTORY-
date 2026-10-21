@@ -132,6 +132,8 @@ check("W14 parsed structure: triggers, empty top permissions, environments and j
 check("W15 the check-write token never carries pull-request write; approval uses its own token, only after a passed check", jobBlock("finish").split("id: approval-token")[0].includes("permission-checks: write")
   && !jobBlock("finish").split("id: approval-token")[0].includes("permission-pull-requests") && /id: approval-token\n\s+if: always\(\) && steps\.finish\.outputs\.final == 'success' && vars\.UASCO_REVIEW_SUBMIT_APPROVAL == 'true'/.test(wf)
   && /permission-pull-requests: write\n/.test(jobBlock("finish").split("id: approval-token")[1] ?? ""));
+check("W16 drafts and fork PRs are never reviewed; ready_for_review starts the review", doc !== null && doc.on.pull_request_target.types.includes("ready_for_review")
+  && jobs.scope?.if === "github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)");
 check("W9 finish always runs once scope created the check (crash or skip concludes failure)", /finish:[\s\S]*if: always\(\) && needs\.scope\.result == 'success'/.test(wf));
 
 // ---- I/O layer against a fake fetch ----

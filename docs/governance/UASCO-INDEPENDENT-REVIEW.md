@@ -14,6 +14,8 @@ Builder (cloud session) → PR → CI (ci.yml, Linux + 3 Windows shards) → UAS
 
 The workflow is `.github/workflows/uasco-independent-review.yml`. It runs on `pull_request_target` (opened, synchronize, reopened, ready_for_review) against `v7/integration`, and on manual dispatch.
 
+Draft PRs are skipped: a draft cannot be merged, so reviewing it would spend a review that the ready-for-review event repeats. Builders open drafts; the coordinator marks a PR ready for review once CI is green on its head, and that event starts the one review of that head.
+
 | Job | Holds | Does |
 |---|---|---|
 | `scope` | reviewer App key (checks:write) | Creates the check **in_progress** on the PR head SHA; decides whether protected or CI-executed paths need Founder authority. |
