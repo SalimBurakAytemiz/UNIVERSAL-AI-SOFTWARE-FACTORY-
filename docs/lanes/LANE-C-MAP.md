@@ -6,4 +6,5 @@
 - Certification: never granted; `EVALUATED_PASS` only if all catalog evaluationSpecs PASSED with evidence (today 0/3594).
 - Tools: only `config/builder-execution-policy.json` allowedTools; reviewer-route read-only; delivery uses no model tools (ProjectStudio).
 - Wired: `crewDevExecutors` (core/workos/crew/dev-review.ts) is fail-closed via `assertRoleExecutes` (developer / security-reviewer). Team summary reports per-role executability (read-only). Runner IMPLEMENT step blocks a run whose roleId has no executable developer binding (roleId null = unchanged). Next: widen guild by guild.
+- Routing/recovery: `core/agents/agent-routing.ts` — read-only provider route readiness (no login => NOT_READY, never personal profile) and agent checkpoint/restore (fail-closed on corruption, missing/changed/incomplete binding).
 - Tests: `tests/v7-core-predev-team-composer.test.ts` ("LANE-C role execution resolver").
