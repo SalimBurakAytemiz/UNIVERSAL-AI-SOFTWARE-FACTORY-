@@ -201,7 +201,7 @@ describe("CORE-7 Agent Team Composer scale derivation", () => {
 // //TR: LANE-C: rol tanımı -> RoleExecutionProfile çözümleyicisi (GERÇEK 599 katalog; hiçbir rol certified değil).
 import {resolveRoleExecution, instantiateAgent, advanceAgent, authorizeToolUse, agentTraceEnvelope, profileDefect, evaluationState, BUILDER_ALLOWED_TOOLS, claudeProfileRoleOf, AgentError} from "../core/agents/role-execution.js";
 import type {RoleExecutionProfile} from "../core/agents/role-execution.js";
-import {FIRST_DELIVERY_BINDINGS, FIRST_DELIVERY_FUNCTIONS} from "../core/agents/first-delivery-bindings.js";
+import {FIRST_DELIVERY_BINDINGS, FIRST_DELIVERY_FUNCTIONS, assertRoleExecutes} from "../core/agents/first-delivery-bindings.js";
 
 describe("LANE-C role execution resolver", () => {
   const resolve = (id: string, b: readonly RoleExecutionProfile[] = FIRST_DELIVERY_BINDINGS) => resolveRoleExecution(id, CATALOG.roles as never, b);
@@ -278,5 +278,14 @@ describe("LANE-C role execution resolver", () => {
     advanceAgent(a, "COMPLETED");
     expect(() => advanceAgent(a, "RUNNING")).toThrow("AGENT_ILLEGAL_TRANSITION");
     expect(authorizeToolUse(a, "Read")).toBe(false);
+  });
+  it("crew dev-review executor pair is fail-closed for unbound or mismatched roles", async () => {
+    const {crewDevExecutors, CrewDevReviewError} = await import("../core/workos/crew/dev-review.js");
+    const port = {build: async () => ({files: {}}), review: async () => ({verdict: "REVIEW_CLEAN" as const})};
+    expect(crewDevExecutors("UASCO-0085", "UASCO-0252", port, port, "x").implementer.identity).toBe("UASCO-0085");
+    expect(() => crewDevExecutors("UASCO-0001", "UASCO-0252", port, port, "x")).toThrow(CrewDevReviewError);
+    expect(() => crewDevExecutors("UASCO-0085", "UASCO-0001", port, port, "x")).toThrow("ROLE_HAS_NO_BINDING");
+    expect(() => crewDevExecutors("UASCO-0252", "UASCO-0085", port, port, "x")).toThrow("BINDING_ROLE_MISMATCH");
+    expect(() => assertRoleExecutes("UASCO-0085", "developer", [{...FIRST_DELIVERY_BINDINGS[2], allowedTools: ["Bash"]}])).toThrow("TOOL_NOT_ALLOWED");
   });
 });

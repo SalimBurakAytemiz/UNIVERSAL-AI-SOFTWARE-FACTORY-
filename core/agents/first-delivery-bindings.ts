@@ -1,5 +1,5 @@
 // //TR: İlk teslim akışının altı fonksiyonu (planner, architect, developer, tester, security reviewer, delivery) için MEVCUT kataloğun gerçek rol kimliklerine veri bağlamaları. Hiçbir rol eklenmez/certified edilmez; araçlar yalnız mevcut builder allow-list'idir; tester için test YÜRÜTME araçları yoktur (doğrulanmış sandbox yok) ve bu dürüstçe değerlendirme ölçütünde belirtilir.
-import {BUILDER_ALLOWED_TOOLS, REVIEWER_ALLOWED_TOOLS} from "./role-execution.js";
+import {BUILDER_ALLOWED_TOOLS, REVIEWER_ALLOWED_TOOLS, profileDefect} from "./role-execution.js";
 import type {FirstDeliveryFunction, RoleExecutionProfile, TaskLimits} from "./role-execution.js";
 
 const KNOWLEDGE = ["config/builder-execution-policy.json", "registries/role-definitions.json", "docs/inventory/2026-10-19/MASTER_WORK_INVENTORY.md"];
@@ -22,3 +22,13 @@ export const FIRST_DELIVERY_BINDINGS: readonly RoleExecutionProfile[] = [
 ];
 export const FIRST_DELIVERY_FUNCTIONS: readonly FirstDeliveryFunction[] = ["planner", "architect", "developer", "tester", "security-reviewer", "delivery"];
 export const bindingForFunction = (fn: FirstDeliveryFunction): RoleExecutionProfile => FIRST_DELIVERY_BINDINGS.find(b => b.function === fn)!;
+
+// //TR: Fail-closed kapı: rol, istenen ilk-teslim fonksiyonuna bağlı ve profili tam değilse çalıştırma başlamaz (NOT_EXECUTABLE nedeni hata mesajına taşınır). Katalog varlığı bağlama verisinin testiyle güvence altındadır.
+export function assertRoleExecutes(roleId: string, fn: FirstDeliveryFunction, bindings: readonly RoleExecutionProfile[] = FIRST_DELIVERY_BINDINGS): RoleExecutionProfile {
+  const p = bindings.find(b => b.roleId === roleId);
+  if (!p) throw new Error(`ROLE_NOT_EXECUTABLE:ROLE_HAS_NO_BINDING:${roleId}`);
+  if (p.function !== fn) throw new Error(`ROLE_NOT_EXECUTABLE:BINDING_ROLE_MISMATCH:${roleId}:${fn}`);
+  const d = profileDefect(p);
+  if (d) throw new Error(`ROLE_NOT_EXECUTABLE:${d.reason}:${roleId}`);
+  return p;
+}
