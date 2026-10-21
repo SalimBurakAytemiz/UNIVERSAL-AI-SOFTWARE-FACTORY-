@@ -211,12 +211,17 @@ export function buildTransitionRequest({missionId,from,to,reason,confirmed,ackno
   const body={to,reason:r||`${from} -> ${to} (UASCO Desktop)`};
   return result(`/v1/missions/${missionId}/transition`,body,errors);
 }
-/** Koşu başlatma isteği: mission AUTHORIZED veya PLANNED olmalı. */
-export function buildRunRequest({missionId,status}){
+// //TR: COORD-RUN-EXPERT: core/agents/first-delivery-bindings.ts içindeki developer bağlamalarının aynası (rol TANIMI; çalışan ajan veya sertifika DEĞİL). Seçilen roleId koşu gövdesine yazılır ve sunucuda runner kapısı (assertRoleExecutes(roleId,"developer")) onu yeniden denetler; burada listede olmayan rol hiç gönderilmez. "" = rol atanmadan (eski davranış).
+export const RUN_EXPERTS=Object.freeze([Object.freeze({roleId:"UASCO-0085",function:"developer",capabilities:Object.freeze(["source-generation","backend-implementation"])})]);
+export const RUN_EXPERT_NONE="";
+export const isRunExpert=id=>RUN_EXPERTS.some(e=>e.roleId===id);
+/** Koşu başlatma isteği: mission AUTHORIZED veya PLANNED olmalı; roleId verilmişse yalnız RUN_EXPERTS'teki bir rol olabilir. */
+export function buildRunRequest({missionId,status,roleId}){
   const errors={};
   if(!MISSION_ID_RE.test(String(missionId??"")))errors.missionId="err.missionInvalid";
   if(!canStartRun(status))errors.status="err.runNotStartable";
-  return result(`/v1/missions/${missionId}/runs`,{},errors);
+  if(roleId!==undefined&&roleId!==RUN_EXPERT_NONE&&!isRunExpert(roleId))errors.roleId="err.roleNotExecutable";
+  return result(`/v1/missions/${missionId}/runs`,isRunExpert(roleId)?{roleId}:{},errors);
 }
 
 // ---------- POST sonucu ----------

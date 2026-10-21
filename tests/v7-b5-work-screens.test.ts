@@ -645,7 +645,8 @@ describe("B5 Görevler / Work OS screen", () => {
     const root = mount(doc, await view.render(ctx));
     const keys: string[] = [];
     for (let n = 0; n < 4; n++) { byId(root, "run-start")!.fire("click"); await new Promise(r => setTimeout(r, 0)); keys.push(forms.drafts.status[`act-${MID}`].key); }
-    expect(calls.post.every(c => c.path === `/v1/missions/${MID}/runs` && Object.keys(c.body).length === 0)).toBe(true);
+    // //TR: COORD-RUN-EXPERT: gövde varsayılan uzman geliştirici rolünü taşır; şekil hâlâ birebir denetlenir (başka alan yok).
+    expect(calls.post.every(c => c.path === `/v1/missions/${MID}/runs` && JSON.stringify(c.body) === JSON.stringify({roleId: "UASCO-0085"}))).toBe(true);
     expect(keys).toEqual(["post.err.409.EXECUTOR_NOT_CONFIGURED", "post.err.423", "post.err.503", "run.startAccepted"]);
     const tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
     expect(tr["post.err.409.EXECUTOR_NOT_CONFIGURED"]).toMatch(/yürütücü/);
@@ -1472,5 +1473,61 @@ describe("COORD task status controls", () => {
     expect(keys(en)).toEqual(keys(tr));
     const used = new Set([...read(rend, "views", "task-status.js").matchAll(/"(taskst\.[A-Za-z.]+)"/g), ...read(rend, "work-core.js").matchAll(/"(taskst\.[A-Za-z.]+)"/g)].map(m => m[1]));
     for (const k of [...used, "form.field.task", "work.task.noDeps", "post.err.409.TASK_DEPENDENCIES_NOT_DONE", "post.err.409.MISSION_COMPLETE"]) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); }
+  });
+});
+
+// //TR: COORD-RUN-EXPERT: koşuyu yürütecek uzman geliştirici seçimi — çekirdek ilk-teslim bağlamalarının aynası, yalnız listedeki rol gönderilir, sunucu runner kapısı rolü yeniden denetler.
+describe("COORD run expert selection", () => {
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const getFor = (status: string) => (p: string) => {
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission({status})]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission({status}), tasks: []};
+    if (p.startsWith("/v1/work-runs")) return {workRuns: []};
+    if (p.startsWith("/v1/evidence")) return {evidence: []};
+    return undefined;
+  };
+  it("mirrors the core developer bindings, and every listed expert passes the runner's developer gate", async () => {
+    const c = await load(rend, "work-core.js"), fdb = await load(root, "core", "agents", "first-delivery-bindings.ts");
+    const core = fdb.FIRST_DELIVERY_BINDINGS.filter((b: any) => b.function === "developer").map((b: any) => ({roleId: b.roleId, function: b.function, capabilities: [...b.capabilities]}));
+    expect(JSON.parse(JSON.stringify(c.RUN_EXPERTS))).toEqual(core);
+    for (const e of c.RUN_EXPERTS) expect(fdb.assertRoleExecutes(e.roleId, "developer").roleId).toBe(e.roleId);
+    const tester = fdb.FIRST_DELIVERY_BINDINGS.find((b: any) => b.function === "tester");
+    expect(() => fdb.assertRoleExecutes(tester.roleId, "developer")).toThrow(/BINDING_ROLE_MISMATCH/);
+    expect(c.isRunExpert(tester.roleId)).toBe(false);
+  });
+  it("builds {roleId} only for a listed expert, {} without a role, and refuses any other role", async () => {
+    const c = await load(rend, "work-core.js"), run = (roleId?: string) => c.buildRunRequest({missionId: MID, status: "PLANNED", roleId});
+    expect(run("UASCO-0085")).toEqual({ok: true, path: `/v1/missions/${MID}/runs`, body: {roleId: "UASCO-0085"}});
+    expect(run("")).toEqual({ok: true, path: `/v1/missions/${MID}/runs`, body: {}});
+    expect(run(undefined).body).toEqual({});
+    for (const bad of ["UASCO-0313", "UASCO-9999", "../x", " UASCO-0085"]) expect(run(bad).errors, bad).toEqual({roleId: "err.roleNotExecutable"});
+  });
+  it("offers the expert picker only for a startable mission and posts the chosen role exactly once", async () => {
+    const {ctx, doc, calls} = await mkCtx({get: getFor("AUTHORIZED"), post: () => ({status: 202, body: {}})});
+    const view = await load(rend, "views", "work.js");
+    forms.selection.missionId = MID;
+    let root2 = mount(doc, await view.render(ctx));
+    const sel = byId(root2, "run-expert")!;
+    expect(sel.tagName).toBe("SELECT");
+    expect(sel.value).toBe("UASCO-0085");
+    expect(sel.children.map(o => o.attrs.get("value") ?? (o as any).value)).toEqual(["UASCO-0085", ""]);
+    expect(calls.post).toEqual([]);
+    byId(root2, "run-start")!.fire("click"); await tick();
+    expect(calls.post).toEqual([{path: `/v1/missions/${MID}/runs`, body: {roleId: "UASCO-0085"}}]);
+    root2 = mount(doc, await view.render(ctx));
+    byId(root2, "run-expert")!.value = ""; byId(root2, "run-expert")!.fire("change");
+    byId(root2, "run-start")!.fire("click"); await tick();
+    expect(calls.post[1]).toEqual({path: `/v1/missions/${MID}/runs`, body: {}});
+    forms.resetAllForms();
+    const x = await mkCtx({get: getFor("EXECUTING")});
+    forms.selection.missionId = MID;
+    const r3 = mount(x.doc, await view.render(x.ctx));
+    expect(byId(r3, "run-expert")).toBeNull();
+  });
+  it("expert strings exist in en and tr", async () => {
+    const en = (await load(rend, "locales", "en.js")).default, tr = (await load(rend, "locales", "tr.js")).default;
+    for (const k of ["work.run.expert", "work.run.expertHint", "work.run.expertOpt", "work.run.expertNone", "work.run.fn.developer", "err.roleNotExecutable", "form.field.roleId"]) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); }
+    expect(tr["work.run.expertHint"]).toMatch(/sertifikalı değildir/);
   });
 });
