@@ -7,6 +7,8 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import {WorkOsStore} from "../core/workos/store.js";
+// @ts-expect-error TS7016: atomic-json.mjs tip bildirimi yok (test yardımcı olarak geçerli hash'li journal satırı üretir)
+import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
 import {buildServer} from "../apps/control-api/src/server.js";
 
 let tmp = "";
@@ -17,6 +19,14 @@ afterEach(() => { fs.rmSync(tmp, {recursive: true, force: true}); });
 const proj = (tenantId = "tA") => ({tenantId, orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL"});
 const msn = (projectId: string, tenantId = "tA") => ({tenantId, projectId, title: "T", objective: "O", acceptanceCriteria: ["c1"], riskLevel: "R1" as const, createdBy: "FOUNDER_LOCAL"});
 const journalLines = (dir: string) => fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8").split("\n").filter(Boolean);
+const sha256 = sha256Untyped as (v: unknown) => string;
+// Appends a correctly hashed and chained entry, so only the store's semantic replay checks can reject it.
+const appendForged = (dir: string, type: string, payload: Record<string, unknown>) => {
+  const lines = journalLines(dir), last = JSON.parse(lines[lines.length - 1]);
+  const body = {seq: last.seq + 1, prevHash: last.hash, type, actor: "FORGED", at: new Date().toISOString(), payload};
+  fs.appendFileSync(path.join(dir, "journal.jsonl"), JSON.stringify({...body, hash: sha256(body)}) + "\n");
+  fs.rmSync(path.join(dir, "snapshot.json"), {force: true});
+};
 
 describe("WorkOsStore", () => {
   it("creates project/mission/task with prefixed ids and rebuilds the snapshot after restart", () => {
@@ -84,6 +94,99 @@ describe("WorkOsStore", () => {
     expect(fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8")).toBe(before);
     expect(s.transitionMission({tenantId: "tA"}, m.missionId, "PREFLIGHT", "go", "FOUNDER_LOCAL").status).toBe("PREFLIGHT");
     expect(new WorkOsStore(dir).getMission({tenantId: "tA"}, m.missionId)?.status).toBe("PREFLIGHT");
+  });
+
+  it("task status transitions: allowlisted, dependency-gated, journaled and replayed after restart", () => {
+    const dir = path.join(tmp, "data");
+    const s = new WorkOsStore(dir), sc = {tenantId: "tA"};
+    const p = s.createProject(proj());
+    const m = s.createMission(msn(p.projectId));
+    const a = s.createTask({tenantId: "tA", missionId: m.missionId, title: "design", actor: "FOUNDER_LOCAL"});
+    const b = s.createTask({tenantId: "tA", missionId: m.missionId, title: "build", dependsOn: [a.taskId], actor: "FOUNDER_LOCAL"});
+    // b depends on a: it cannot start before a is DONE, and nothing is written
+    const before = fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8");
+    expect(() => s.transitionTask(sc, b.taskId, "IN_PROGRESS", "start", "FOUNDER_LOCAL")).toThrow(/WORKOS_CONFLICT: TASK_DEPENDENCIES_NOT_DONE/);
+    expect(fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8")).toBe(before);
+    expect(s.transitionTask(sc, a.taskId, "IN_PROGRESS", "start", "FOUNDER_LOCAL").status).toBe("IN_PROGRESS");
+    expect(() => s.transitionTask(sc, b.taskId, "IN_PROGRESS", "start", "FOUNDER_LOCAL")).toThrow(/TASK_DEPENDENCIES_NOT_DONE/);
+    expect(s.transitionTask(sc, a.taskId, "DONE", "tests pass", "FOUNDER_LOCAL").status).toBe("DONE");
+    expect(s.transitionTask(sc, b.taskId, "IN_PROGRESS", "start", "FOUNDER_LOCAL").status).toBe("IN_PROGRESS");
+    expect(s.transitionTask(sc, b.taskId, "BLOCKED", "waiting on input", "FOUNDER_LOCAL").status).toBe("BLOCKED");
+    expect(s.transitionTask(sc, b.taskId, "PENDING", "input received", "FOUNDER_LOCAL").status).toBe("PENDING");
+    const entries = journalLines(dir).map(l => JSON.parse(l)).filter(e => e.type === "TASK_TRANSITIONED");
+    expect(entries.map(e => [e.payload.taskId === a.taskId ? "a" : "b", e.payload.from, e.payload.to])).toEqual([["a", "PENDING", "IN_PROGRESS"], ["a", "IN_PROGRESS", "DONE"],
+      ["b", "PENDING", "IN_PROGRESS"], ["b", "IN_PROGRESS", "BLOCKED"], ["b", "BLOCKED", "PENDING"]]);
+    expect(entries.every(e => e.payload.tenantId === "tA" && e.actor === "FOUNDER_LOCAL")).toBe(true);
+    // a fresh store replays the same state from the journal alone
+    fs.rmSync(path.join(dir, "snapshot.json"), {force: true});
+    const s2 = new WorkOsStore(dir);
+    expect(s2.listTasks(sc, m.missionId).map(t => [t.title, t.status]).sort()).toEqual([["build", "PENDING"], ["design", "DONE"]]);
+    expect(s2.getTask(sc, a.taskId)?.status).toBe("DONE");
+  });
+
+  it("task status transitions: refused without a write (illegal, terminal, bad input, other tenant, completed mission)", () => {
+    const dir = path.join(tmp, "data");
+    const s = new WorkOsStore(dir), sc = {tenantId: "tA"};
+    const p = s.createProject(proj());
+    const m = s.createMission(msn(p.projectId));
+    const t = s.createTask({tenantId: "tA", missionId: m.missionId, title: "x", actor: "FOUNDER_LOCAL"});
+    const before = fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8");
+    expect(() => s.transitionTask(sc, t.taskId, "DONE", "skip ahead", "a")).toThrow(/WORKOS_INVALID_TRANSITION: PENDING->DONE/);
+    expect(() => s.transitionTask(sc, t.taskId, "IN_PROGRESS", "   ", "a")).toThrow(/WORKOS_INVALID_INPUT: reason/);
+    expect(() => s.transitionTask(sc, t.taskId, "FINISHED" as never, "x", "a")).toThrow(/WORKOS_INVALID_INPUT: to/);
+    expect(() => s.transitionTask({tenantId: "tB"}, t.taskId, "IN_PROGRESS", "x", "a")).toThrow(/WORKOS_NOT_FOUND/);
+    expect(() => s.transitionTask(sc, "tsk_missing", "IN_PROGRESS", "x", "a")).toThrow(/WORKOS_NOT_FOUND/);
+    expect(s.getTask({tenantId: "tB"}, t.taskId)).toBeUndefined();
+    expect(fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8")).toBe(before);
+    // DONE is terminal
+    s.transitionTask(sc, t.taskId, "IN_PROGRESS", "go", "a");
+    s.transitionTask(sc, t.taskId, "DONE", "done", "a");
+    for (const to of ["PENDING", "IN_PROGRESS", "BLOCKED"] as const) expect(() => s.transitionTask(sc, t.taskId, to, "reopen", "a")).toThrow(/WORKOS_INVALID_TRANSITION: DONE->/);
+    // tasks of a completed mission are frozen. The mission walks the real state machine to REPORTING; only the final REPORTING -> COMPLETE entry is
+    // forged (a legacy-shaped plain transition), to reach COMPLETE without a full evidence-backed run.
+    const u = s.createTask({tenantId: "tA", missionId: m.missionId, title: "late", actor: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED", "PLANNED", "EXECUTING", "VERIFYING", "REVIEWING", "REGRESSION", "REPORTING"] as const) s.transitionMission(sc, m.missionId, to, "walk", "a");
+    appendForged(dir, "MISSION_TRANSITIONED", {missionId: m.missionId, from: "REPORTING", to: "COMPLETE", reason: "legacy"});
+    const s2 = new WorkOsStore(dir);
+    expect(s2.isTampered).toBe(false);
+    expect(s2.getMission(sc, m.missionId)?.status).toBe("COMPLETE");
+    const frozen = fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8");
+    expect(() => s2.transitionTask(sc, u.taskId, "IN_PROGRESS", "too late", "a")).toThrow(/WORKOS_CONFLICT: MISSION_COMPLETE/);
+    expect(fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8")).toBe(frozen);
+    // and a forged transition on that frozen task is tamper on replay
+    appendForged(dir, "TASK_TRANSITIONED", {taskId: u.taskId, tenantId: "tA", from: "PENDING", to: "IN_PROGRESS", reason: "forged"});
+    expect(new WorkOsStore(dir).isTampered).toBe(true);
+  });
+
+  it("task status transitions: a well-hashed but inconsistent TASK_TRANSITIONED entry is tamper (fail closed)", () => {
+    const cases: Array<(ids: {a: string; b: string}) => Record<string, unknown>> = [
+      ({a}) => ({taskId: a, tenantId: "tA", from: "IN_PROGRESS", to: "DONE", reason: "wrong from"}),
+      ({a}) => ({taskId: a, tenantId: "tA", from: "PENDING", to: "DONE", reason: "not allowlisted"}),
+      ({a}) => ({taskId: a, tenantId: "tB", from: "PENDING", to: "IN_PROGRESS", reason: "other tenant"}),
+      ({b}) => ({taskId: b, tenantId: "tA", from: "PENDING", to: "IN_PROGRESS", reason: "dependency not done"}),
+      () => ({taskId: "tsk_unknown", tenantId: "tA", from: "PENDING", to: "IN_PROGRESS", reason: "unknown task"}),
+    ];
+    for (const [i, payloadOf] of cases.entries()) {
+      const dir = path.join(tmp, `tamper-${i}`);
+      const s = new WorkOsStore(dir);
+      const p = s.createProject(proj());
+      const m = s.createMission(msn(p.projectId));
+      const a = s.createTask({tenantId: "tA", missionId: m.missionId, title: "a", actor: "FOUNDER_LOCAL"});
+      const b = s.createTask({tenantId: "tA", missionId: m.missionId, title: "b", dependsOn: [a.taskId], actor: "FOUNDER_LOCAL"});
+      appendForged(dir, "TASK_TRANSITIONED", payloadOf({a: a.taskId, b: b.taskId}));
+      const s2 = new WorkOsStore(dir);
+      expect(s2.isTampered, `case ${i}`).toBe(true);
+      expect(() => s2.listTasks({tenantId: "tA"}, m.missionId)).toThrow(/WORKOS_JOURNAL_TAMPERED/);
+      expect(() => s2.transitionTask({tenantId: "tA"}, a.taskId, "IN_PROGRESS", "x", "a")).toThrow(/WORKOS_JOURNAL_TAMPERED/);
+    }
+    // an entry with an unreadable shape is unavailable (not silently skipped)
+    const dir = path.join(tmp, "shape");
+    const s = new WorkOsStore(dir);
+    const p = s.createProject(proj());
+    const m = s.createMission(msn(p.projectId));
+    const a = s.createTask({tenantId: "tA", missionId: m.missionId, title: "a", actor: "FOUNDER_LOCAL"});
+    appendForged(dir, "TASK_TRANSITIONED", {taskId: a.taskId, tenantId: "tA", from: "PENDING", to: "LATER", reason: "x"});
+    expect(new WorkOsStore(dir).isUnavailable).toBe(true);
   });
 
   it("isolates tenants", () => {
