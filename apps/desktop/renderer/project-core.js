@@ -327,3 +327,22 @@ export function securitySummary(evidence){
   const counts={};for(const e of sec){const k=e.verification??"NONE";counts[k]=(counts[k]??0)+1}
   return {seen:sec.length>0,total:sec.length,counts,allVerified:sec.length>0&&sec.every(e=>e.verification==="VERIFIED")};
 }
+
+// ---------- İlk teslim akışı (GET /v1/projects/:id/flow) ----------
+// //TR: LANE-A first-delivery: sunucunun akış okuması (MISSION, PLAN, RUN, REVIEW, DELIVERY) güvenli, sınırlı alanlara eşlenir; aşama sırası, adı ve durumu sabit sözlükten gelmelidir, aksi halde tüm okuma ERROR olur (kısmi görünüm yok). Hiçbir olumlu durum uydurulmaz.
+export const FLOW_STAGES=Object.freeze(["MISSION","PLAN","RUN","REVIEW","DELIVERY"]);
+export const FLOW_STATES=Object.freeze(["NOT_STARTED","ACTIVE","DONE","BLOCKED","FAILED","UNKNOWN"]);
+export const flowPath=id=>pid(id)?`/v1/projects/${id}/flow`:null;
+export function mapFlow(raw){
+  const bad={state:"ERROR",flow:null};
+  const f=isObj(raw)?raw.flow:null;
+  if(!isObj(f)||!pid(f.projectId)||!Array.isArray(f.stages)||f.stages.length!==FLOW_STAGES.length)return bad;
+  const stages=[];
+  for(const [i,s] of f.stages.entries()){
+    if(!isObj(s)||s.stage!==FLOW_STAGES[i]||!FLOW_STATES.includes(s.state))return bad;
+    stages.push({stage:s.stage,state:s.state,detail:str(s.detail,120)});
+  }
+  const cnt=x=>Number.isSafeInteger(x)&&x>=0?x:null;
+  const rid=typeof f.latestRunId==="string"&&/^[A-Za-z0-9_-]{6,64}$/.test(f.latestRunId)?f.latestRunId:null;
+  return {state:"VERIFIED",flow:{projectId:f.projectId,stages,missionCount:cnt(f.missionCount),taskCount:cnt(f.taskCount),latestRunId:rid}};
+}
