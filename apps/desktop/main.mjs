@@ -233,7 +233,8 @@ async function apiPost(pathName,bodyText){
   return {status:r.status,body:sanitizePostBody(r.status,parsed)};
 }
 // //TR: PS-1B: hash yönlendirmesi (#/projects vb.) aynı belgede kalır ve senderFrame.url sonuna "#..." ekler; güvenilir gönderen kontrolü yalnız fragmanı yok sayar, dosya yolu birebir aynı olmalıdır (başka dosya/URL hâlâ reddedilir).
-function trustedSender(event){const u=event.senderFrame?.url;return Boolean(controlWindow)&&event.sender===controlWindow.webContents&&typeof u==="string"&&u.split("#")[0]===rendererUrl}
+// //TR: WIN-INSTALL: Node pathToFileURL "~" karakterini %7E olarak kodlar, Chromium senderFrame.url ise "~" bırakır (ör. 8.3 kısa yol C:\Users\RUNNER~1); bu yüzden metin eşleşmezse yalnız file: şemalı, sorgusuz, aynı host ve yüzde-çözülmüş aynı yol kabul edilir.
+function trustedSender(event){const u=event.senderFrame?.url;if(!(Boolean(controlWindow)&&event.sender===controlWindow.webContents&&typeof u==="string"))return false;const base=u.split("#")[0];if(base===rendererUrl)return true;try{const a=new URL(base),b=new URL(rendererUrl);return a.protocol==="file:"&&a.search===""&&a.host===b.host&&decodeURIComponent(a.pathname)===decodeURIComponent(b.pathname)}catch{return false}}
 function requireTrustedSender(event){if(!trustedSender(event))throw new Error("UNTRUSTED_IPC_SENDER")}
 
 // //TR: PS-1B ana süreç köprüleri: renderer yalnız tür ("git"|"zip"), proje kimliği ve dışa aktarma kimliği verir; yol, URL ve konum ana süreçte çözülür. Önizleme güvenli seçenek olarak varsayılan tarayıcıda açılır (uygulama içi pencere yok): üretilen uygulamanın kodu Electron sürecine/oturumuna hiç girmez, token ve IPC yüzeyine erişemez; URL yine de yalnız backend devrun durumundan, sıkı loopback biçiminde alınır.

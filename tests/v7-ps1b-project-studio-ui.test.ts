@@ -217,6 +217,11 @@ describe("PS-1B IPC wiring (main.mjs, preload.mjs) is static and narrow", () => 
     expect(fn(ev(rendererUrl, {}))).toBe(false);
     expect(fn({sender: win.webContents})).toBe(false);
     expect(mk(null)(ev(rendererUrl))).toBe(false);
+    // Node's pathToFileURL encodes "~" as %7E while Chromium keeps "~" (8.3 short paths such as C:\Users\RUNNER~1).
+    const shortUrl = "file:///C:/Users/RUNNER%7E1/AppData/Local/Temp/UASCO/resources/app/apps/desktop/renderer/index.html";
+    const fnShort = new Function("controlWindow", "rendererUrl", "function trustedSender(event){" + m![1] + "}\nreturn trustedSender;")(win, shortUrl) as (e: any) => boolean;
+    for (const u of [shortUrl, shortUrl.replace("%7E", "~"), shortUrl.replace("%7E", "~") + "#/work"]) expect(fnShort(ev(u)), u).toBe(true);
+    for (const u of [shortUrl.replace("%7E", "~") + "?x=1", shortUrl.replace("RUNNER%7E1", "OTHER~1"), shortUrl.replace("%7E", "~").replace("index.html", "x.html"), "file://evil/C:/Users/RUNNER~1/AppData/Local/Temp/UASCO/resources/app/apps/desktop/renderer/index.html", shortUrl.replace("%7E1", "%E0%A4%A"), "https://evil.invalid/C:/Users/RUNNER~1/AppData/Local/Temp/UASCO/resources/app/apps/desktop/renderer/index.html"]) expect(fnShort(ev(u)), u).toBe(false);
   });
   it("CSP is unchanged and index.html did not change structure", () => {
     const html = read(rend, "index.html");

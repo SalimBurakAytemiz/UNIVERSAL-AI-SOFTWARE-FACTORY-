@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-21T15:50:16.184Z",
+  "generatedAt": "2026-10-21T23:04:38.851Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -70,7 +70,7 @@
     },
     {
       "path": "apps/desktop/main.mjs",
-      "sha256": "590c7cb95b7b92d29c58430f5ee1a2cf1fc3d32e632ce085add75f8cd58aeec4"
+      "sha256": "7391e173fcb9338efa78b2368d7f8dda9155f9f12867749b9f0fde6b7a70fa58"
     },
     {
       "path": "apps/desktop/preload.mjs",
