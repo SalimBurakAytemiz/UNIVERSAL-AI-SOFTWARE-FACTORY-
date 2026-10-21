@@ -128,6 +128,13 @@ jobs:
           prompt: "Read uasco-review/review-input/INSTRUCTIONS.md and follow it exactly. Return only the JSON verdict required by the schema."
           settings: '{"permissions":{"deny":["Read(//proc/**)","Read(//etc/**)","Read(//root/**)","Read(//home/**/.*)","Read(//tmp/**)"]}}'
           claude_args: "--json-schema '${{ needs.collect.outputs.schema }}' --allowedTools Read,Glob,Grep --disallowedTools Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task --max-turns 60 ${{ needs.collect.outputs.model_arg }}"
+      # //TR: Reviewer'ın neden karar üretmediğini yalnız sabit bir kodla kaydeder (çıktı metni asla kopyalanmaz); kod yalnız ek blokaj nedeni olabilir, kontrolü asla geçirmez.
+      # Why the reviewer gave no verdict, as one fixed code in uasco-verdict/reviewer-diagnostics.json (never any text of its output). It never fails the job.
+      - id: reviewer-diagnose
+        if: always()
+        continue-on-error: true
+        env: {EXECUTION_FILE: "${{ steps.claude.outputs.execution_file }}"}
+        run: node scripts/ci/uasco-review/run.mjs reviewer-diagnose
       # A verdict with a credential shape is replaced before the first upload, so it is never published (the gate rejects the placeholder as malformed).
       - id: verdict
         if: always()
