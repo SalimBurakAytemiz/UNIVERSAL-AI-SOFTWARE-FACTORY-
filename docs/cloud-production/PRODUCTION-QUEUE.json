@@ -20,7 +20,7 @@
   ],
   "statusNotes": "DESIGN_ONLY, CODE_IMPLEMENTED, TESTED, INTEGRATED and PRODUCT_ACCEPTED are separate states. A finished builder task is at most TESTED: unit/renderer tests ran, Linux only, Windows NOT_EXECUTED. INTEGRATED needs a merge. PRODUCT_ACCEPTED needs real operational evidence.",
   "claimRule": "Before any work, create the branch claude/<id lowercased> as a create-only ref (git push origin <base sha>:refs/heads/claude/<id>; if the ref already exists, the task is owned, so skip it). Never force-push. Never delete a claude/* branch.",
-  "capacityRule": "LIVE = claude/* claim branches whose head is younger than 6 h and that have no open PR. If LIVE >= builderCap, start nothing.",
+  "capacityRule": "ACTIVE = (tasks in this file with status IN_PROGRESS or CLAIMED) + (remote claude/* branches whose head is younger than 6 h, have no open PR and are not already counted). If ACTIVE >= builderCap, start nothing. HOLD_CAPACITY means queued but held until a slot is free.",
   "tasks": [
     {
       "id": "UI-110",
@@ -62,7 +62,7 @@
       "id": "PQ-001",
       "source": "UASCO-AUD-072 (P2)",
       "title": "Renderer product-verification honesty: show PRODUCT_VERIFIED only on the server's exact rule",
-      "status": "QUEUED",
+      "status": "HOLD_CAPACITY",
       "base": "v7/integration",
       "files": [
         "apps/desktop/renderer/work-core.js",
@@ -85,7 +85,7 @@
       "id": "PQ-002",
       "source": "UASCO-AUD-129 (P3)",
       "title": "Asserting test for the Tower scheduler fact (UI-206)",
-      "status": "QUEUED",
+      "status": "HOLD_CAPACITY",
       "base": "v7/integration",
       "files": [
         "tests/v7-ux-wp4-tower.test.ts"
@@ -160,7 +160,7 @@
       "id": "PQ-006",
       "source": "UASCO-AUD-130 (P3)",
       "title": "Make the two host-sensitive tests robust without weakening them",
-      "status": "QUEUED",
+      "status": "HOLD_CAPACITY",
       "base": "v7/integration",
       "files": [
         "tests/v7-b10a-evidence.test.ts",
@@ -178,7 +178,7 @@
       "lane": "C",
       "source": "docs/mobile/screens MOB-6 (UI-097, UI-099, UI-102, UI-177) + ADR-MOB-001 (read-only STALE cache) + API-CONTRACT (PROPOSED routes)",
       "title": "Mobile Companion core: read-only monitoring state store, view models and STALE/OFFLINE cache rules in pure TypeScript (no dependencies, no network, no privileged actions)",
-      "status": "QUEUED",
+      "status": "HOLD_CAPACITY",
       "base": "v7/integration",
       "files": [
         "apps/mobile/src/core/monitoring-store.ts",
