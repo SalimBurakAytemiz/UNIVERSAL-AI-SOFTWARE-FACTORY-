@@ -1,7 +1,9 @@
 // //TR: Bu görünüm Görevler / Work OS alanıdır ve UX WP-WORKOS ile Kurucu-Kokpiti sınıfı premium katmana yükseltilmiştir: üstte gerçek /v1/missions + /v1/work-runs okumalarından beslenen görev/koşu özeti (KPI karoları: toplam mission, etkin koşu, Kurucu dikkati bekleyen, gerçekten doğrulanmış koşu) ve yaşam-döngüsü dağılım şeridi vardır. Alt kısımda "Yeni Görev" formu (proje, başlık, hedef, kabul kriterleri listesi, R0–R4 risk açıklamaları, isteğe bağlı argv test komutu), mission listesi (durum filtreli), mission detayı (durum/faz/risk, izinli geçişler, yüksek riskli geçişlerde onay, Çalıştır), /v1/work-runs koşu zaman çizelgesi + koşu kartları ve /v1/evidence kanıt bağlama bölümü korunur/eklenir. WP2/WP-PROJECTS token ve bileşenleri (kpiTile/statePill/missionPill/timelineItem) yeniden kullanılır (palet değişmez, yeni token yok). Hiçbir sayı/durum uydurulmaz: veri canlı değilse dürüst UNAVAILABLE/OFFLINE, boşsa dürüst boş metin; koşu yalnız gerçek test-yürütme kanıtı varsa doğrulanmış sayılır (FD-REL-1; SOURCE_GENERATION_COMPLETE != PRODUCT_VERIFIED), aksi halde NOT_VERIFIED dürüstçe gösterilir. API verisi asla HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+import {planFormPanel} from "./plan-form.js";
+import {taskStatusControls} from "./task-status.js";
 import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip,kpiTile,statePill,missionPill,timelineItem} from "../components.js";
 import {formatTime,formatCount,MISSING,missionPillKind} from "../model.js";
-import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline} from "../work-core.js";
+import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline} from "../work-core.js";
 import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
 import {notVerifiedBadge,runNotVerified,missionNotVerified,axisBadges} from "../m1a.js";
@@ -231,11 +233,15 @@ function transitionControls(ctx,mission,awaiting){
     on:{click:()=>performTransition(ctx,{missionId:mission.missionId,title:mission.title,from:mission.status,to,reason:drafts.reasons[mission.missionId]??""})},
     text:requiresConfirm(to)?ctx.t("work.transition.toConfirm",{to:statusLabel(ctx,to)}):ctx.t("work.transition.to",{to:statusLabel(ctx,to)})}));
   const startable=canStartRun(mission.status);
-  const runBtn=h(doc,"button",{type:"button",class:"btn btn-primary",id:"run-start",dataset:{focusKey:"run-start"},disabled:!startable||busy,"aria-describedby":"run-start-hint",on:{click:()=>startRun(ctx,{missionId:mission.missionId,status:mission.status})},text:ctx.t("work.run.start")});
+  // //TR: COORD-RUN-EXPERT: koşuyu yürütecek uzman geliştirici rolü (varsayılan ilk-teslim developer bağlaması); seçim yalnız bellekte, mission başına tutulur.
+  const expert=drafts.runExpert[mission.missionId]??RUN_EXPERTS[0].roleId;
+  const expertField=field(ctx,{id:"run-expert",labelKey:"work.run.expert",value:expert,onInput:v=>{drafts.runExpert[mission.missionId]=v},hintKey:"work.run.expertHint",
+    options:[...RUN_EXPERTS.map(e=>({value:e.roleId,label:ctx.t("work.run.expertOpt",{roleId:e.roleId,fn:ctx.t(`work.run.fn.${e.function}`)})})),{value:RUN_EXPERT_NONE,label:ctx.t("work.run.expertNone")}]});
+  const runBtn=h(doc,"button",{type:"button",class:"btn btn-primary",id:"run-start",dataset:{focusKey:"run-start"},disabled:!startable||busy,"aria-describedby":"run-start-hint",on:{click:()=>startRun(ctx,{missionId:mission.missionId,status:mission.status,roleId:drafts.runExpert[mission.missionId]??RUN_EXPERTS[0].roleId})},text:ctx.t("work.run.start")});
   return h(doc,"div",{class:"transition-controls"},
     h(doc,"h4",{text:ctx.t("work.transition.title")}),
     next.length?h(doc,"div",{},reasonField,hidden?completeNotOffered(ctx,awaiting,`complete-na-${mission.missionId}`):null,h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("work.transition.title")},buttons),h(doc,"p",{class:"field-hint",text:ctx.t("work.transition.confirmNote")})):h(doc,"p",{class:"note",text:ctx.t("work.transition.terminal")}),
-    h(doc,"h4",{text:ctx.t("work.run.title")}),h(doc,"div",{class:"btn-row"},runBtn),
+    h(doc,"h4",{text:ctx.t("work.run.title")}),startable?expertField:null,h(doc,"div",{class:"btn-row"},runBtn),
     h(doc,"p",{class:"field-hint",id:"run-start-hint",text:ctx.t(startable?"work.run.hintOk":"work.run.hintNot")}),
     statusBlock(ctx,sid));
 }
@@ -258,6 +264,7 @@ export function taskInspector(ctx,detail,runsRes,missionId){
         h(doc,"dt",{text:ctx.t("work.task.mission")}),h(doc,"dd",{dataset:{taskField:"mission"},text:`${t.missionTitle} · ${statusLabel(ctx,t.missionStatus)} · ${t.riskLevel}`}),
         h(doc,"dt",{text:ctx.t("work.task.runs")}),runsText?h(doc,"dd",{dataset:{taskField:"runs"},text:runsText}):unk("runs"),
         h(doc,"dt",{text:ctx.t("work.task.runLink")}),unk("runLink"),
+        ...(t.dependencies?[h(doc,"dt",{text:ctx.t("work.task.f.dependencies")}),h(doc,"dd",{dataset:{taskField:"dependencies"}},t.dependencies.length?h(doc,"ul",{},t.dependencies.map(d=>h(doc,"li",{},h(doc,"span",{text:d.title??d.taskId})," ",d.status?statusPill(ctx,d.status):h(doc,"span",{class:"task-unknown",text:ctx.t("work.task.unknown")})))):ctx.t("work.task.noDeps"))]:[]),
         ...t.unknownFields.flatMap(k=>[h(doc,"dt",{text:ctx.t(`work.task.f.${k}`)}),unk(k)])));
     }
   }
@@ -296,8 +303,9 @@ function detailPanel(ctx,detail,runsRes,runDetails,evRes){
     h(doc,"p",{class:"panel-meta"},statusPill(ctx,m.status),badge(ctx,m.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:m.missionId}),missionNotVerified(runsRes.state==="VERIFIED"?runsRes.items:[],m.missionId)?notVerifiedBadge(ctx,"mission"):null),
     h(doc,"p",{text:m.objective}),
     h(doc,"h4",{text:ctx.t("work.detail.criteria")}),m.acceptanceCriteria.length?h(doc,"ul",{},m.acceptanceCriteria.map(c=>h(doc,"li",{text:c}))):emptyNote(ctx,"work.detail.noCriteria"),
-    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId)):null,
+    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
     workTimeline(ctx,detail,runsRes),
+    planFormPanel(ctx,m),
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),
     transitionControls(ctx,m,awaitingRun(runsRes,runDetails)),
     tl?[h(doc,"h4",{text:ctx.t("work.runtl.title")}),h(doc,"p",{class:"note",text:ctx.t("work.runtl.lead")}),tl]:null,

@@ -6,7 +6,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import cp from "node:child_process";
 import {WorkOsStore} from "../core/workos/store.js";
+// @ts-expect-error TS7016: atomic-json.mjs tip bildirimi yok (test yardımcı olarak geçerli hash'li journal satırı üretir)
+import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
 import {buildServer} from "../apps/control-api/src/server.js";
 
 let tmp = "";
@@ -17,6 +20,14 @@ afterEach(() => { fs.rmSync(tmp, {recursive: true, force: true}); });
 const proj = (tenantId = "tA") => ({tenantId, orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL"});
 const msn = (projectId: string, tenantId = "tA") => ({tenantId, projectId, title: "T", objective: "O", acceptanceCriteria: ["c1"], riskLevel: "R1" as const, createdBy: "FOUNDER_LOCAL"});
 const journalLines = (dir: string) => fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8").split("\n").filter(Boolean);
+const sha256 = sha256Untyped as (v: unknown) => string;
+// Appends a correctly hashed and chained entry, so only the store's semantic replay checks can reject it.
+const appendForged = (dir: string, type: string, payload: Record<string, unknown>) => {
+  const lines = journalLines(dir), last = JSON.parse(lines[lines.length - 1]);
+  const body = {seq: last.seq + 1, prevHash: last.hash, type, actor: "FORGED", at: new Date().toISOString(), payload};
+  fs.appendFileSync(path.join(dir, "journal.jsonl"), JSON.stringify({...body, hash: sha256(body)}) + "\n");
+  fs.rmSync(path.join(dir, "snapshot.json"), {force: true});
+};
 
 describe("WorkOsStore", () => {
   it("creates project/mission/task with prefixed ids and rebuilds the snapshot after restart", () => {
@@ -84,6 +95,99 @@ describe("WorkOsStore", () => {
     expect(fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8")).toBe(before);
     expect(s.transitionMission({tenantId: "tA"}, m.missionId, "PREFLIGHT", "go", "FOUNDER_LOCAL").status).toBe("PREFLIGHT");
     expect(new WorkOsStore(dir).getMission({tenantId: "tA"}, m.missionId)?.status).toBe("PREFLIGHT");
+  });
+
+  it("task status transitions: allowlisted, dependency-gated, journaled and replayed after restart", () => {
+    const dir = path.join(tmp, "data");
+    const s = new WorkOsStore(dir), sc = {tenantId: "tA"};
+    const p = s.createProject(proj());
+    const m = s.createMission(msn(p.projectId));
+    const a = s.createTask({tenantId: "tA", missionId: m.missionId, title: "design", actor: "FOUNDER_LOCAL"});
+    const b = s.createTask({tenantId: "tA", missionId: m.missionId, title: "build", dependsOn: [a.taskId], actor: "FOUNDER_LOCAL"});
+    // b depends on a: it cannot start before a is DONE, and nothing is written
+    const before = fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8");
+    expect(() => s.transitionTask(sc, b.taskId, "IN_PROGRESS", "start", "FOUNDER_LOCAL")).toThrow(/WORKOS_CONFLICT: TASK_DEPENDENCIES_NOT_DONE/);
+    expect(fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8")).toBe(before);
+    expect(s.transitionTask(sc, a.taskId, "IN_PROGRESS", "start", "FOUNDER_LOCAL").status).toBe("IN_PROGRESS");
+    expect(() => s.transitionTask(sc, b.taskId, "IN_PROGRESS", "start", "FOUNDER_LOCAL")).toThrow(/TASK_DEPENDENCIES_NOT_DONE/);
+    expect(s.transitionTask(sc, a.taskId, "DONE", "tests pass", "FOUNDER_LOCAL").status).toBe("DONE");
+    expect(s.transitionTask(sc, b.taskId, "IN_PROGRESS", "start", "FOUNDER_LOCAL").status).toBe("IN_PROGRESS");
+    expect(s.transitionTask(sc, b.taskId, "BLOCKED", "waiting on input", "FOUNDER_LOCAL").status).toBe("BLOCKED");
+    expect(s.transitionTask(sc, b.taskId, "PENDING", "input received", "FOUNDER_LOCAL").status).toBe("PENDING");
+    const entries = journalLines(dir).map(l => JSON.parse(l)).filter(e => e.type === "TASK_TRANSITIONED");
+    expect(entries.map(e => [e.payload.taskId === a.taskId ? "a" : "b", e.payload.from, e.payload.to])).toEqual([["a", "PENDING", "IN_PROGRESS"], ["a", "IN_PROGRESS", "DONE"],
+      ["b", "PENDING", "IN_PROGRESS"], ["b", "IN_PROGRESS", "BLOCKED"], ["b", "BLOCKED", "PENDING"]]);
+    expect(entries.every(e => e.payload.tenantId === "tA" && e.actor === "FOUNDER_LOCAL")).toBe(true);
+    // a fresh store replays the same state from the journal alone
+    fs.rmSync(path.join(dir, "snapshot.json"), {force: true});
+    const s2 = new WorkOsStore(dir);
+    expect(s2.listTasks(sc, m.missionId).map(t => [t.title, t.status]).sort()).toEqual([["build", "PENDING"], ["design", "DONE"]]);
+    expect(s2.getTask(sc, a.taskId)?.status).toBe("DONE");
+  });
+
+  it("task status transitions: refused without a write (illegal, terminal, bad input, other tenant, completed mission)", () => {
+    const dir = path.join(tmp, "data");
+    const s = new WorkOsStore(dir), sc = {tenantId: "tA"};
+    const p = s.createProject(proj());
+    const m = s.createMission(msn(p.projectId));
+    const t = s.createTask({tenantId: "tA", missionId: m.missionId, title: "x", actor: "FOUNDER_LOCAL"});
+    const before = fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8");
+    expect(() => s.transitionTask(sc, t.taskId, "DONE", "skip ahead", "a")).toThrow(/WORKOS_INVALID_TRANSITION: PENDING->DONE/);
+    expect(() => s.transitionTask(sc, t.taskId, "IN_PROGRESS", "   ", "a")).toThrow(/WORKOS_INVALID_INPUT: reason/);
+    expect(() => s.transitionTask(sc, t.taskId, "FINISHED" as never, "x", "a")).toThrow(/WORKOS_INVALID_INPUT: to/);
+    expect(() => s.transitionTask({tenantId: "tB"}, t.taskId, "IN_PROGRESS", "x", "a")).toThrow(/WORKOS_NOT_FOUND/);
+    expect(() => s.transitionTask(sc, "tsk_missing", "IN_PROGRESS", "x", "a")).toThrow(/WORKOS_NOT_FOUND/);
+    expect(s.getTask({tenantId: "tB"}, t.taskId)).toBeUndefined();
+    expect(fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8")).toBe(before);
+    // DONE is terminal
+    s.transitionTask(sc, t.taskId, "IN_PROGRESS", "go", "a");
+    s.transitionTask(sc, t.taskId, "DONE", "done", "a");
+    for (const to of ["PENDING", "IN_PROGRESS", "BLOCKED"] as const) expect(() => s.transitionTask(sc, t.taskId, to, "reopen", "a")).toThrow(/WORKOS_INVALID_TRANSITION: DONE->/);
+    // tasks of a completed mission are frozen. The mission walks the real state machine to REPORTING; only the final REPORTING -> COMPLETE entry is
+    // forged (a legacy-shaped plain transition), to reach COMPLETE without a full evidence-backed run.
+    const u = s.createTask({tenantId: "tA", missionId: m.missionId, title: "late", actor: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED", "PLANNED", "EXECUTING", "VERIFYING", "REVIEWING", "REGRESSION", "REPORTING"] as const) s.transitionMission(sc, m.missionId, to, "walk", "a");
+    appendForged(dir, "MISSION_TRANSITIONED", {missionId: m.missionId, from: "REPORTING", to: "COMPLETE", reason: "legacy"});
+    const s2 = new WorkOsStore(dir);
+    expect(s2.isTampered).toBe(false);
+    expect(s2.getMission(sc, m.missionId)?.status).toBe("COMPLETE");
+    const frozen = fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8");
+    expect(() => s2.transitionTask(sc, u.taskId, "IN_PROGRESS", "too late", "a")).toThrow(/WORKOS_CONFLICT: MISSION_COMPLETE/);
+    expect(fs.readFileSync(path.join(dir, "journal.jsonl"), "utf8")).toBe(frozen);
+    // and a forged transition on that frozen task is tamper on replay
+    appendForged(dir, "TASK_TRANSITIONED", {taskId: u.taskId, tenantId: "tA", from: "PENDING", to: "IN_PROGRESS", reason: "forged"});
+    expect(new WorkOsStore(dir).isTampered).toBe(true);
+  });
+
+  it("task status transitions: a well-hashed but inconsistent TASK_TRANSITIONED entry is tamper (fail closed)", () => {
+    const cases: Array<(ids: {a: string; b: string}) => Record<string, unknown>> = [
+      ({a}) => ({taskId: a, tenantId: "tA", from: "IN_PROGRESS", to: "DONE", reason: "wrong from"}),
+      ({a}) => ({taskId: a, tenantId: "tA", from: "PENDING", to: "DONE", reason: "not allowlisted"}),
+      ({a}) => ({taskId: a, tenantId: "tB", from: "PENDING", to: "IN_PROGRESS", reason: "other tenant"}),
+      ({b}) => ({taskId: b, tenantId: "tA", from: "PENDING", to: "IN_PROGRESS", reason: "dependency not done"}),
+      () => ({taskId: "tsk_unknown", tenantId: "tA", from: "PENDING", to: "IN_PROGRESS", reason: "unknown task"}),
+    ];
+    for (const [i, payloadOf] of cases.entries()) {
+      const dir = path.join(tmp, `tamper-${i}`);
+      const s = new WorkOsStore(dir);
+      const p = s.createProject(proj());
+      const m = s.createMission(msn(p.projectId));
+      const a = s.createTask({tenantId: "tA", missionId: m.missionId, title: "a", actor: "FOUNDER_LOCAL"});
+      const b = s.createTask({tenantId: "tA", missionId: m.missionId, title: "b", dependsOn: [a.taskId], actor: "FOUNDER_LOCAL"});
+      appendForged(dir, "TASK_TRANSITIONED", payloadOf({a: a.taskId, b: b.taskId}));
+      const s2 = new WorkOsStore(dir);
+      expect(s2.isTampered, `case ${i}`).toBe(true);
+      expect(() => s2.listTasks({tenantId: "tA"}, m.missionId)).toThrow(/WORKOS_JOURNAL_TAMPERED/);
+      expect(() => s2.transitionTask({tenantId: "tA"}, a.taskId, "IN_PROGRESS", "x", "a")).toThrow(/WORKOS_JOURNAL_TAMPERED/);
+    }
+    // an entry with an unreadable shape is unavailable (not silently skipped)
+    const dir = path.join(tmp, "shape");
+    const s = new WorkOsStore(dir);
+    const p = s.createProject(proj());
+    const m = s.createMission(msn(p.projectId));
+    const a = s.createTask({tenantId: "tA", missionId: m.missionId, title: "a", actor: "FOUNDER_LOCAL"});
+    appendForged(dir, "TASK_TRANSITIONED", {taskId: a.taskId, tenantId: "tA", from: "PENDING", to: "LATER", reason: "x"});
+    expect(new WorkOsStore(dir).isUnavailable).toBe(true);
   });
 
   it("isolates tenants", () => {
@@ -203,5 +307,648 @@ describe("Work OS API", () => {
     expect(w.statusCode).toBe(503);
     expect(w.json().error).toBe("WORKOS_JOURNAL_TAMPERED");
     await app.close();
+  });
+});
+
+// //TR: LANE-B intake: fikir -> doğrulanmış intake kaydı + proje + ilk mission; route modülü server.ts'e dokunmadan Fastify örneğine kaydedilir.
+describe("LANE-B project intake", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const IDEA = "A small web app where I can track my daily reading with a streak counter";
+  const mkApp = async (stopped = false, allowed = true, tenantId = "tA") => {
+    const [{default: Fastify}, {registerIntakeRoutes}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/intake.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const audits: any[] = [];
+    registerIntakeRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string, d?: any) => { audits.push({e, d}); },
+      workosStopped: () => stopped, workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"}, workosFail: (r: any) => r.code(500).send({error: "INTERNAL_ERROR"})});
+    return {app, store, audits};
+  };
+  const post = (app: any, body: unknown, headers: any = hdr) => app.inject({method: "POST", url: "/v1/intakes", headers, payload: body as any});
+
+  it("turns an idea into intake + project + first mission, durable across restart, with honest field sources", async () => {
+    const {app, store, audits} = await mkApp();
+    const r = await post(app, {idea: IDEA});
+    expect(r.statusCode).toBe(201);
+    const i = r.json().intake;
+    expect(i.intakeId).toMatch(/^itk_[0-9a-f]{24}$/);
+    expect(i.sources).toEqual({title: "DERIVED", acceptanceCriteria: "DEFAULT", riskLevel: "DEFAULT"});
+    const m = store.getMission({tenantId: "tA"}, i.missionId)!;
+    expect(m.objective).toBe(IDEA); expect(m.projectId).toBe(i.projectId); expect(m.status).toBe("DRAFT");
+    expect(store.getProject({tenantId: "tA"}, i.projectId)!.name).toBe(IDEA.slice(0, 80).trim());
+    expect(audits.map(a => a.e)).toEqual(["WORKOS_INTAKE_CREATED"]);
+    expect(JSON.stringify(r.json())).not.toContain(tmp);
+    const { app: app2 } = await mkApp();
+    expect((await app2.inject({method: "GET", url: `/v1/intakes/${i.intakeId}`, headers: hdr})).json().intake).toEqual(i);
+    expect((await app2.inject({method: "GET", url: "/v1/intakes", headers: hdr})).json().intakes).toHaveLength(1);
+  });
+  it("marks founder-supplied fields FOUNDER and replays an idempotent retry without duplicates; conflicting reuse is 409", async () => {
+    const {app, store} = await mkApp();
+    const body = {idea: IDEA, title: "Reading tracker", acceptanceCriteria: ["streak shown"], riskLevel: "R2", projectType: "web", idempotencyKey: "k1"};
+    const a = await post(app, body), b = await post(app, body);
+    expect([a.statusCode, b.statusCode]).toEqual([201, 200]);
+    expect(b.json().intake).toEqual(a.json().intake);
+    expect(a.json().intake.sources).toEqual({title: "FOUNDER", acceptanceCriteria: "FOUNDER", riskLevel: "FOUNDER"});
+    expect(store.listProjects({tenantId: "tA"})).toHaveLength(1);
+    expect(store.listMissions({tenantId: "tA"})).toHaveLength(1);
+    const c = await post(app, {...body, idea: IDEA + " with reminders"});
+    expect(c.statusCode).toBe(409); expect(c.json().error).toBe("INTAKE_IDEMPOTENCY_CONFLICT");
+  });
+  it("rejects bad input, wrong token, Global Stop and policy denial; isolates tenants", async () => {
+    const {app} = await mkApp();
+    for (const bad of [{}, {idea: "short"}, {idea: IDEA, extra: 1}, {idea: IDEA, riskLevel: "R4"}, {idea: IDEA, targetOS: ["beos"]}, {idea: "          "}]) expect((await post(app, bad)).statusCode).toBe(400);
+    expect((await post(app, {idea: IDEA}, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    expect((await app.inject({method: "GET", url: "/v1/intakes/bad", headers: hdr})).statusCode).toBe(400);
+    expect((await app.inject({method: "GET", url: "/v1/intakes/itk_" + "0".repeat(24), headers: hdr})).statusCode).toBe(404);
+    expect((await (await mkApp(true)).app.inject({method: "POST", url: "/v1/intakes", headers: hdr, payload: {idea: IDEA}})).statusCode).toBe(423);
+    expect((await (await mkApp(false, false)).app.inject({method: "POST", url: "/v1/intakes", headers: hdr, payload: {idea: IDEA}})).statusCode).toBe(403);
+    const made = (await post(app, {idea: IDEA})).json().intake;
+    const other = (await mkApp(false, true, "tB")).app;
+    expect((await other.inject({method: "GET", url: `/v1/intakes/${made.intakeId}`, headers: hdr})).statusCode).toBe(404);
+    expect((await other.inject({method: "GET", url: "/v1/intakes", headers: hdr})).json().intakes).toEqual([]);
+  });
+  it("resumes after a crash between project and mission without duplicating the project", async () => {
+    const {app, store} = await mkApp();
+    const key = "crash1", { sha256 } = { sha256: (s: string) => crypto.createHash("sha256").update(s).digest("hex") };
+    const id = "itk_" + sha256(`tA\0${key}`).slice(0, 24);
+    store.createProject({tenantId: "tA", orgId: "o1", name: IDEA.slice(0, 80).trim(), environmentId: "local", createdBy: "FOUNDER_LOCAL", idempotencyKey: `${id}.p`, acceptanceCriteria: ["The delivered application starts and its test suite passes"]});
+    const r = await post(app, {idea: IDEA, idempotencyKey: key});
+    expect(r.statusCode).toBe(201);
+    expect(store.listProjects({tenantId: "tA"})).toHaveLength(1);
+    expect(store.listMissions({tenantId: "tA"})).toHaveLength(1);
+  });
+  it("idempotency covers the WHOLE normalized request: a reused key with any different field is 409, an identical retry stays 200 without duplicates", async () => {
+    const {app, store} = await mkApp();
+    const base = {idea: IDEA, title: "Reading tracker", acceptanceCriteria: ["streak shown"], riskLevel: "R3", projectType: "web", techStack: ["React"], targetOS: ["web"], idempotencyKey: "kfull"};
+    expect((await post(app, base)).statusCode).toBe(201);
+    expect((await post(app, {...base})).statusCode).toBe(200);
+    const without = (k: string) => { const {[k]: _drop, ...rest} = base as Record<string, unknown>; return rest; };
+    const variants: Record<string, unknown> = {
+      riskLevel: {...base, riskLevel: "R1"}, title: {...base, title: "Other"}, acceptanceCriteria: {...base, acceptanceCriteria: ["y"]}, projectType: {...base, projectType: "api"},
+      techStack: {...base, techStack: ["Vue"]}, targetOS: {...base, targetOS: ["linux"]}, idea: {...base, idea: IDEA + " plus reminders"},
+      "title omitted": without("title"), "riskLevel omitted": without("riskLevel"), "acceptanceCriteria omitted": without("acceptanceCriteria"),
+      "projectType omitted": without("projectType"), "techStack omitted": without("techStack"), "targetOS omitted": without("targetOS")
+    };
+    for (const [name, body] of Object.entries(variants)) {
+      const r = await post(app, body);
+      expect(r.statusCode, name).toBe(409); expect(r.json().error, name).toBe("INTAKE_IDEMPOTENCY_CONFLICT");
+    }
+    // Varsayılanla açıkça verilen değer farklı bir istektir (alan kaynağı DEFAULT -> FOUNDER): eski kaydı yanlış kaynakla tekrar oynatmak yerine çakışır.
+    const plain = {idea: IDEA, idempotencyKey: "kplain"};
+    expect((await post(app, plain)).statusCode).toBe(201);
+    expect((await post(app, {...plain})).statusCode).toBe(200);
+    expect((await post(app, {...plain, riskLevel: "R1"})).statusCode).toBe(409);
+    expect(store.listProjects({tenantId: "tA"})).toHaveLength(2);
+    expect(store.listMissions({tenantId: "tA"})).toHaveLength(2);
+  });
+  it("an identical retry still succeeds when the process died after the project and mission writes but before the intake append", async () => {
+    const {app, store} = await mkApp();
+    const body = {idea: IDEA, riskLevel: "R2", acceptanceCriteria: ["streak shown"], idempotencyKey: "kcrash2"};
+    const a = await post(app, body);
+    expect(a.statusCode).toBe(201);
+    fs.writeFileSync(path.join(tmp, "data", "intakes.jsonl"), ""); // intakes.jsonl satırı yazılamadan çökme
+    const b = await post(app, body);
+    expect(b.statusCode).toBe(201);
+    expect(b.json().intake.intakeId).toBe(a.json().intake.intakeId); expect(b.json().intake.missionId).toBe(a.json().intake.missionId);
+    expect(store.listProjects({tenantId: "tA"})).toHaveLength(1); expect(store.listMissions({tenantId: "tA"})).toHaveLength(1);
+    const c = await post(app, {...body, riskLevel: "R1"}); // kayıt yeniden yazıldı: farklı gövde artık çakışır
+    expect(c.statusCode).toBe(409); expect(c.json().error).toBe("INTAKE_IDEMPOTENCY_CONFLICT");
+  });
+  it("tolerates a torn trailing intake line like the journal does (ignored, quarantined, rewritten on the identical retry); middle corruption and foreign tails stay fail-closed", async () => {
+    const {app} = await mkApp();
+    const f = path.join(tmp, "data", "intakes.jsonl");
+    const a = await post(app, {idea: IDEA, idempotencyKey: "ta"});
+    expect(a.statusCode).toBe(201);
+    const oneRecord = fs.readFileSync(f, "utf8");
+    const b = await post(app, {idea: IDEA + " second", idempotencyKey: "tb"});
+    expect(b.statusCode).toBe(201);
+    fs.writeFileSync(f, fs.readFileSync(f, "utf8").slice(0, oneRecord.length + 40)); // ikinci kayıt append sırasında yırtıldı (satır sonu yok)
+    const list = await app.inject({method: "GET", url: "/v1/intakes", headers: hdr});
+    expect(list.statusCode).toBe(200); expect(list.json().intakes.map((i: any) => i.intakeId)).toEqual([a.json().intake.intakeId]);
+    const other = await post(app, {idea: IDEA + " third", idempotencyKey: "tc"}); // yırtık kuyruk diğer işleri engellemez
+    expect(other.statusCode).toBe(201);
+    const retry = await post(app, {idea: IDEA + " second", idempotencyKey: "tb"});
+    expect(retry.statusCode).toBe(201);
+    expect(retry.json().intake.missionId).toBe(b.json().intake.missionId);
+    const lines = fs.readFileSync(f, "utf8").split("\n").filter(Boolean);
+    expect(lines).toHaveLength(3); for (const l of lines) JSON.parse(l);
+    expect(fs.readdirSync(path.join(tmp, "data", "quarantine")).filter(n => /^intakes-torn-[0-9a-f]{16}\.tail$/.test(n)).length).toBeGreaterThan(0);
+    for (const [name, content] of [["middle corruption", '{"intakeId":"itk_x"\n' + oneRecord], ["foreign tail", oneRecord + "garbage"]] as const) {
+      fs.writeFileSync(f, content);
+      const r = await app.inject({method: "GET", url: "/v1/intakes", headers: hdr});
+      expect(r.statusCode, name).toBe(503); expect(r.json().error, name).toBe("INTAKE_STORE_CORRUPT");
+    }
+  });
+  it("fails closed with 503 on a corrupt intake file", async () => {
+    const {app} = await mkApp();
+    fs.mkdirSync(path.join(tmp, "data"), {recursive: true}); fs.writeFileSync(path.join(tmp, "data", "intakes.jsonl"), "{torn");
+    const r = await app.inject({method: "GET", url: "/v1/intakes", headers: hdr});
+    expect(r.statusCode).toBe(503); expect(r.json().error).toBe("INTAKE_STORE_CORRUPT");
+  });
+});
+
+// //TR: LANE-B plan: mission görev planı (sıralı görevler + bağımlılıklar) route modülü ve kalıcılık testleri.
+describe("LANE-B mission task plan", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const mkApp = async (stopped = false, allowed = true, tenantId = "tA") => {
+    const [{default: Fastify}, {registerPlanRoutes}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/plan.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const audits: string[] = [];
+    registerPlanRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string) => { audits.push(e); },
+      workosStopped: () => stopped, workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"},
+      workosFail: (r: any, e: any) => r.code(e?.code === "WORKOS_IDEMPOTENCY_CONFLICT" ? 409 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
+    const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
+    return {app, store, audits, m};
+  };
+  const PLAN = {tasks: [{title: "Scaffold"}, {title: "Feature", dependsOn: [0]}, {title: "Tests", dependsOn: [0, 1]}]};
+  const post = (app: any, id: string, body: unknown, headers: any = hdr) => app.inject({method: "POST", url: `/v1/missions/${id}/plan`, headers, payload: body as any});
+
+  it("persists an ordered plan with resolved dependencies, readable after restart; replay is idempotent", async () => {
+    const {app, store, audits, m} = await mkApp();
+    const r = await post(app, m.missionId, PLAN);
+    expect(r.statusCode).toBe(201);
+    const t = r.json().tasks;
+    expect(t.map((x: any) => x.title)).toEqual(["Scaffold", "Feature", "Tests"]);
+    expect(t[2].dependsOn).toEqual([t[0].taskId, t[1].taskId]);
+    const again = await post(app, m.missionId, {tasks: [PLAN.tasks[0], PLAN.tasks[1], {title: "Tests", dependsOn: [1, 0]}]});
+    expect(again.statusCode).toBe(200); expect(again.json().tasks).toEqual(t);
+    expect(store.listTasks({tenantId: "tA"}, m.missionId)).toHaveLength(3);
+    expect(audits).toEqual(["WORKOS_PLAN_CREATED", "WORKOS_IDEMPOTENT_REPLAY"]);
+    const { app: app2 } = await mkApp(); // gerçek yeniden başlatma: başarısız olursa test de başarısız olur (eski uygulamaya geri dönüş yok)
+    expect((await app2.inject({method: "GET", url: `/v1/missions/${m.missionId}/tasks`, headers: hdr})).json().tasks).toHaveLength(3);
+  });
+  it("rejects a different second plan, forward/self dependencies, bad bodies and non-plannable missions", async () => {
+    const {app, store, m} = await mkApp();
+    expect((await post(app, m.missionId, PLAN)).statusCode).toBe(201);
+    const other = await post(app, m.missionId, {tasks: [{title: "Other"}]});
+    expect(other.statusCode).toBe(409); expect(other.json().error).toBe("PLAN_ALREADY_EXISTS");
+    const m2 = store.createMission(msn(m.projectId));
+    for (const bad of [{}, {tasks: []}, {tasks: [{title: "a", dependsOn: [0]}]}, {tasks: [{title: "a"}, {title: "b", dependsOn: [1]}]}, {tasks: [{title: "a"}, {title: "b", dependsOn: [0, 0]}]}, {tasks: [{title: " "}]}, {tasks: [{title: "a", x: 1}]}])
+      expect((await post(app, m2.missionId, bad)).statusCode).toBe(400);
+    store.transitionMission({tenantId: "tA"}, m2.missionId, "BLOCKED", "stop", "FOUNDER_LOCAL");
+    const np = await post(app, m2.missionId, {tasks: [{title: "a"}]});
+    expect(np.statusCode).toBe(409); expect(np.json().error).toBe("MISSION_NOT_PLANNABLE");
+    expect(store.listTasks({tenantId: "tA"}, m2.missionId)).toEqual([]);
+  });
+  it("enforces token, Global Stop, policy, id format, unknown mission and tenant isolation", async () => {
+    const {app, m} = await mkApp();
+    expect((await post(app, m.missionId, PLAN, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    expect((await post(app, "bad", PLAN)).statusCode).toBe(400);
+    expect((await post(app, "msn_" + "0".repeat(24), PLAN)).statusCode).toBe(404);
+    expect((await (await mkApp(true)).app.inject({method: "POST", url: `/v1/missions/${m.missionId}/plan`, headers: hdr, payload: PLAN})).statusCode).toBe(423);
+    expect((await (await mkApp(false, false)).app.inject({method: "POST", url: `/v1/missions/${m.missionId}/plan`, headers: hdr, payload: PLAN})).statusCode).toBe(403);
+    expect((await app.inject({method: "GET", url: "/v1/missions/bad/tasks", headers: hdr})).statusCode).toBe(400);
+    const b = await mkApp(false, true, "tB");
+    expect((await post(b.app, m.missionId, PLAN)).statusCode).toBe(404);
+  });
+  it("tolerates a torn trailing plans.jsonl line: other missions keep planning, the torn plan's identical retry completes without duplicate tasks; middle corruption and foreign tails stay fail-closed", async () => {
+    const {app, store, m} = await mkApp();
+    const m2 = store.createMission(msn(m.projectId)), m3 = store.createMission(msn(m.projectId));
+    const f = path.join(tmp, "data", "plans.jsonl");
+    expect((await post(app, m.missionId, PLAN)).statusCode).toBe(201);
+    const oneRecord = fs.readFileSync(f, "utf8");
+    const first = await post(app, m2.missionId, PLAN);
+    expect(first.statusCode).toBe(201);
+    fs.writeFileSync(f, fs.readFileSync(f, "utf8").slice(0, oneRecord.length + 30)); // m2'nin plan kaydı append sırasında yırtıldı
+    expect((await post(app, m.missionId, PLAN)).statusCode).toBe(200); // tamam kayıt hâlâ okunur
+    expect((await post(app, m3.missionId, PLAN)).statusCode).toBe(201); // yırtık kuyruk başka mission'ı engellemez
+    const retry = await post(app, m2.missionId, PLAN);
+    expect(retry.statusCode).toBe(201);
+    expect(retry.json().tasks.map((t: any) => t.taskId)).toEqual(first.json().tasks.map((t: any) => t.taskId));
+    expect(store.listTasks({tenantId: "tA"}, m2.missionId)).toHaveLength(3);
+    const lines = fs.readFileSync(f, "utf8").split("\n").filter(Boolean);
+    expect(lines).toHaveLength(3); for (const l of lines) JSON.parse(l);
+    expect(fs.readdirSync(path.join(tmp, "data", "quarantine")).filter(n => /^plans-torn-[0-9a-f]{16}\.tail$/.test(n)).length).toBeGreaterThan(0);
+    for (const [name, content] of [["middle corruption", '{"missionId":"msn_x"\n' + oneRecord], ["foreign tail", oneRecord + "garbage"]] as const) {
+      fs.writeFileSync(f, content);
+      const r = await post(app, m.missionId, PLAN);
+      expect(r.statusCode, name).toBe(503); expect(r.json().error, name).toBe("PLAN_STORE_CORRUPT");
+    }
+  });
+  it("fails closed with 503 on a corrupt plan file", async () => {
+    const {app, m} = await mkApp();
+    fs.writeFileSync(path.join(tmp, "data", "plans.jsonl"), "{torn");
+    const r = await post(app, m.missionId, PLAN);
+    expect(r.statusCode).toBe(503); expect(r.json().error).toBe("PLAN_STORE_CORRUPT");
+  });
+});
+
+// //TR: LANE-B flow: proje ilk-teslim akışı durumu yalnız store kayıtlarından türetilir; route modülü ve türetme kuralları test edilir.
+describe("LANE-B project flow", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const mkApp = async (tenantId = "tA") => {
+    const [{default: Fastify}, {registerFlowRoutes}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/flow.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    registerFlowRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}),
+      workosFail: (r: any) => r.code(500).send({error: "INTERNAL_ERROR"})});
+    return {app, store};
+  };
+  const get = (app: any, id: string, headers: any = hdr) => app.inject({method: "GET", url: `/v1/projects/${id}/flow`, headers});
+  const states = (j: any) => Object.fromEntries(j.flow.stages.map((s: any) => [s.stage, s.state]));
+
+  it("reports NOT_STARTED for an empty project and advances honestly as records appear", async () => {
+    const {app, store} = await mkApp();
+    const p = store.createProject(proj());
+    expect(states((await get(app, p.projectId)).json())).toEqual({MISSION: "NOT_STARTED", PLAN: "NOT_STARTED", RUN: "NOT_STARTED", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+    const m = store.createMission(msn(p.projectId));
+    store.createTask({tenantId: "tA", missionId: m.missionId, title: "t1", actor: "FOUNDER_LOCAL"});
+    store.createTask({tenantId: "tA", missionId: m.missionId, title: "t2", actor: "FOUNDER_LOCAL", status: "DONE"});
+    let j = (await get(app, p.projectId)).json();
+    expect(states(j)).toMatchObject({MISSION: "ACTIVE", PLAN: "ACTIVE", RUN: "NOT_STARTED"});
+    expect(j.flow.stages[1].detail).toBe("1/2 DONE"); expect(j.flow.taskCount).toBe(2); expect(j.flow.latestRunId).toBeNull();
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "go", "FOUNDER_LOCAL");
+    const run = store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: "FOUNDER_LOCAL"});
+    j = (await get(app, p.projectId)).json();
+    expect(states(j)).toMatchObject({RUN: "ACTIVE", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+    expect(j.flow.latestRunId).toBe(run.runId);
+    expect(j.flow.stages[2].detail).toMatch(/^[A-Z_]+\/[A-Z]+$/);
+    store.transitionRun(run.runId, null, "BLOCKED", "test", "FOUNDER_LOCAL");
+    j = (await get(app, p.projectId)).json();
+    expect(states(j)).toMatchObject({RUN: "BLOCKED", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+  });
+  it("derives FAILED / SUCCEEDED+completion / REVIEW-step states from run records", async () => {
+    const {deriveProjectFlow} = await import("../core/workos/flow.js");
+    const mk = (run: any) => ({getProject: () => ({}), listMissions: () => [{missionId: "m", status: "COMPLETE"}], listTasks: () => [{status: "DONE"}], listRuns: () => [{projectId: "p", createdAt: "2026-01-01", ...run}]}) as any;
+    const st = (run: any) => Object.fromEntries(deriveProjectFlow(mk(run), {tenantId: "tA"}, "p")!.stages.map(x => [x.stage, x.state]));
+    expect(st({runId: "r", status: "FAILED", step: "IMPLEMENT"})).toMatchObject({MISSION: "DONE", PLAN: "DONE", RUN: "FAILED", REVIEW: "UNKNOWN", DELIVERY: "NOT_STARTED"});
+    expect(st({runId: "r", status: "VERIFYING", step: "REVIEW"})).toMatchObject({RUN: "ACTIVE", REVIEW: "ACTIVE"});
+    expect(st({runId: "r", status: "SUCCEEDED", step: "REPORT", completion: {productVerification: {state: "PRODUCT_VERIFIED"}}})).toMatchObject({RUN: "DONE", REVIEW: "DONE", DELIVERY: "DONE"});
+    expect(st({runId: "r", status: "SUCCEEDED", step: "REPORT"}).DELIVERY).toBe("NOT_STARTED");
+  });
+  it("reflects a CLEAN review at the current head and delivery records honestly: never NOT_STARTED when records exist, never DONE for an unverified delivery", async () => {
+    const {deriveProjectFlow} = await import("../core/workos/flow.js");
+    const mk = (run: any) => ({getProject: () => ({}), listMissions: () => [{missionId: "m", status: "PLANNED"}], listTasks: () => [{status: "DONE"}], listRuns: () => [{projectId: "p", createdAt: "2026-01-01", ...run}]}) as any;
+    const flow = (run: any) => deriveProjectFlow(mk(run), {tenantId: "tA"}, "p")!.stages;
+    const st = (run: any) => Object.fromEntries(flow(run).map(x => [x.stage, x.state]));
+    const detail = (run: any, stage: string) => flow(run).find(x => x.stage === stage)!.detail;
+    const H = "a".repeat(40), OLD = "b".repeat(40);
+    const awaiting = {runId: "r", status: "AWAITING_APPROVAL", step: "REPORT", headSha: H, evidence: [{kind: "REVIEW", verdict: "CLEAN", commitSha: H}]};
+    expect(st(awaiting)).toMatchObject({RUN: "BLOCKED", REVIEW: "DONE", DELIVERY: "NOT_STARTED"});
+    expect(st({...awaiting, evidence: [{kind: "REVIEW", verdict: "CLEAN", commitSha: OLD}]}).REVIEW).toBe("ACTIVE"); // eski commit'in review'u güncel head'i kapsamaz
+    expect(st({...awaiting, evidence: [{kind: "REVIEW", verdict: "BLOCKED", commitSha: H}]}).REVIEW).toBe("ACTIVE");
+    expect(st({...awaiting, evidence: []}).REVIEW).toBe("ACTIVE");
+    expect(st({...awaiting, status: "FAILED"}).REVIEW).toBe("UNKNOWN"); // başarısız koşuda review sonucu bilinmez
+    const artifact = {runId: "r", missionId: "m", sourceCommit: H, treeSha: "c".repeat(40), exportArtifactHash: "d".repeat(64), artifactPath: "deliveries/r/x.zip"};
+    const accepted = {runId: "r", missionId: "m", sourceCommit: H, exportArtifactHash: "d".repeat(64), acknowledgements: {}, acceptedAt: "2026-01-02T00:00:00.000Z"};
+    expect(st({...awaiting, deliveryArtifact: artifact}).DELIVERY).toBe("ACTIVE");
+    expect(detail({...awaiting, deliveryArtifact: artifact}, "DELIVERY")).toBe("ARTIFACT_PREPARED_NOT_VERIFIED");
+    expect(st({...awaiting, deliveryArtifact: artifact, sourceDelivery: accepted}).DELIVERY).toBe("ACTIVE");
+    expect(detail({...awaiting, deliveryArtifact: artifact, sourceDelivery: accepted}, "DELIVERY")).toBe("SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED");
+    for (const run of [{...awaiting, deliveryArtifact: artifact}, {...awaiting, deliveryArtifact: artifact, sourceDelivery: accepted}]) expect(st(run).DELIVERY).not.toBe("DONE");
+    const done = {...awaiting, status: "SUCCEEDED", deliveryArtifact: artifact, completion: {productVerification: {state: "PRODUCT_VERIFIED"}}};
+    expect(st(done)).toMatchObject({RUN: "DONE", REVIEW: "DONE", DELIVERY: "DONE"});
+  });
+  it("marks plan BLOCKED when a task is blocked and never claims DONE for review/delivery without a succeeded run", async () => {
+    const {app, store} = await mkApp();
+    const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
+    store.createTask({tenantId: "tA", missionId: m.missionId, title: "t", actor: "FOUNDER_LOCAL", status: "BLOCKED"});
+    const s = states((await get(app, p.projectId)).json());
+    expect(s.PLAN).toBe("BLOCKED"); expect(s.REVIEW).not.toBe("DONE"); expect(s.DELIVERY).not.toBe("DONE");
+  });
+  it("rejects bad ids, wrong token, unknown project and other tenants; leaks no absolute path", async () => {
+    const {app, store} = await mkApp();
+    const p = store.createProject(proj());
+    expect((await get(app, "bad")).statusCode).toBe(400);
+    expect((await get(app, p.projectId, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    expect((await get(app, "prj_" + "0".repeat(24))).statusCode).toBe(404);
+    const r = await get(app, p.projectId);
+    expect(JSON.stringify(r.json())).not.toContain(tmp);
+    expect((await get((await mkApp("tB")).app, p.projectId)).statusCode).toBe(404);
+  });
+});
+
+// //TR: COORD-INTEGRATION-L1 uçtan uca ilk-teslim zinciri GERÇEK modüllerle (test edilen modüllerin sahtesi yok, geçici veri dizini): Kurucu fikri -> intake (proje + ilk mission) -> plan (sıralı, bağımlı görevler) -> flow okuma modeli -> rol çözümleyici (developer/security-reviewer EXECUTABLE, bağlamasız rol NOT_EXECUTABLE) -> runner rol kapısı (depodaki FAKE executor; model çağrısı yok). Intake/plan/flow route modülleri korunan server.ts'e kayıtlı DEĞİLDİR; burada tek bir Fastify örneğine ortak RouteDeps ile doğrudan kaydedilir, uygulamadaki HTTP zinciri iddia edilmez.
+import type {RouteDeps} from "../apps/control-api/src/routes/deps.js";
+import {validateIntakeCreate} from "../core/workos/intake.js";
+import {validatePlanCreate} from "../core/workos/plan.js";
+import {resolveRoleExecution} from "../core/agents/role-execution.js";
+import {FIRST_DELIVERY_BINDINGS, bindingForFunction, assertRoleExecutes} from "../core/agents/first-delivery-bindings.js";
+import {MissionRunner} from "../core/workos/runner.js";
+import {FakeExecutors} from "../core/workos/executors.js";
+import {fakeSecurity} from "../core/workos/security-tools.js";
+import {testExecutionGate} from "./support/test-sandbox.js";
+import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
+
+describe("COORD-INTEGRATION-L1 first-delivery chain (real modules, temp data dir)", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const IDEA = "A small web app where I can track my daily reading with a streak counter";
+  const scope = {tenantId: "tA"}, ACTOR = "FOUNDER_LOCAL", UNBOUND = "UASCO-0001";
+  const ENV_POLICY = path.join(path.resolve(import.meta.dirname, ".."), "config", "environment-policy.json");
+  const CATALOG = JSON.parse(fs.readFileSync(path.join(process.cwd(), "registries", "role-definitions.json"), "utf8")).roles as {roleId: string; title: string; guildId: string}[];
+  const gitRun = (cwd: string, args: string[]) => { const r = spawnGitSync(cwd, args); if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`); return String(r.stdout).trim(); };
+  const mkChain = async () => {
+    const [{default: Fastify}, {registerIntakeRoutes}, {registerPlanRoutes}, {registerFlowRoutes}] = await Promise.all([
+      import("fastify"), import("../apps/control-api/src/routes/intake.js"), import("../apps/control-api/src/routes/plan.js"), import("../apps/control-api/src/routes/flow.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const audits: string[] = [];
+    const deps: RouteDeps = {getStore: () => store, scope, orgId: "o1", actor: ACTOR, audit: (e: string) => { audits.push(e); },
+      workosStopped: () => false, workosPolicy: () => ({allowed: true}), workosFail: (r: any, e: any) => r.code(500).send({error: e?.code ?? "INTERNAL_ERROR"})};
+    registerIntakeRoutes(app, deps); registerPlanRoutes(app, deps); registerFlowRoutes(app, deps);
+    return {app, store, audits};
+  };
+  const flowOf = async (app: any, projectId: string) => { const r = await app.inject({method: "GET", url: `/v1/projects/${projectId}/flow`, headers: hdr}); expect(r.statusCode).toBe(200); return r.json().flow; };
+  const states = (f: any) => Object.fromEntries(f.stages.map((s: any) => [s.stage, s.state]));
+  const authorize = (store: WorkOsStore, missionId: string) => { for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(scope, missionId, to, "founder go", ACTOR); };
+
+  it("idea -> intake -> plan -> flow -> role resolution -> role-gated run, with the negative links", async () => {
+    const {app, store, audits} = await mkChain();
+    // 1) Geçersiz fikir hiçbir kayıt üretmez.
+    for (const bad of [{idea: "short"}, {idea: IDEA, riskLevel: "R4"}, {idea: IDEA, extra: 1}, {}]) {
+      const r = await app.inject({method: "POST", url: "/v1/intakes", headers: hdr, payload: bad});
+      expect(r.statusCode).toBe(400); expect(r.json().error).toBe("INVALID_BODY");
+    }
+    expect(validateIntakeCreate({idea: "short"}).ok).toBe(false);
+    expect(store.listProjects(scope)).toEqual([]); expect(store.listMissions(scope)).toEqual([]);
+
+    // 2) Intake: proje + ilk mission (DRAFT), flow MISSION ACTIVE, geri kalan NOT_STARTED.
+    const ir = await app.inject({method: "POST", url: "/v1/intakes", headers: hdr, payload: {idea: IDEA, riskLevel: "R1"}});
+    expect(ir.statusCode).toBe(201);
+    const intake = ir.json().intake;
+    const project = store.getProject(scope, intake.projectId)!, first = store.getMission(scope, intake.missionId)!;
+    expect(project.name).toBe(IDEA.slice(0, 80).trim());
+    expect(first).toMatchObject({projectId: project.projectId, objective: IDEA, status: "DRAFT", riskLevel: "R1"});
+    expect(store.listMissions(scope, project.projectId).map(m => m.missionId)).toEqual([first.missionId]);
+    let flow = await flowOf(app, project.projectId);
+    expect(states(flow)).toEqual({MISSION: "ACTIVE", PLAN: "NOT_STARTED", RUN: "NOT_STARTED", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+    expect(flow.stages[0].detail).toBe("DRAFT"); expect(flow.missionCount).toBe(1); expect(flow.taskCount).toBe(0);
+
+    // 3) Plan: ileri bağımlılık reddedilir ve görev yazılmaz; geçerli plan sıralı görevleri gerçek taskId bağımlılıklarıyla yazar.
+    const fwdBody = {tasks: [{title: "Streak counter", dependsOn: [1]}, {title: "Scaffold"}]};
+    expect(validatePlanCreate(fwdBody)).toEqual({ok: false, errors: "tasks[0].dependsOn must reference an earlier task"});
+    const fwd = await app.inject({method: "POST", url: `/v1/missions/${first.missionId}/plan`, headers: hdr, payload: fwdBody});
+    expect(fwd.statusCode).toBe(400); expect(fwd.json().detail).toContain("must reference an earlier task");
+    expect(store.listTasks(scope, first.missionId)).toEqual([]);
+    const pr = await app.inject({method: "POST", url: `/v1/missions/${first.missionId}/plan`, headers: hdr,
+      payload: {tasks: [{title: "Scaffold"}, {title: "Streak counter", dependsOn: [0]}, {title: "Tests", dependsOn: [0, 1]}]}});
+    expect(pr.statusCode).toBe(201);
+    const tasks = pr.json().tasks;
+    expect(tasks.map((t: any) => t.title)).toEqual(["Scaffold", "Streak counter", "Tests"]);
+    expect(tasks.map((t: any) => t.dependsOn)).toEqual([[], [tasks[0].taskId], [tasks[0].taskId, tasks[1].taskId]]);
+    for (const t of tasks) expect(t).toMatchObject({missionId: first.missionId, projectId: project.projectId, status: "PENDING"});
+    flow = await flowOf(app, project.projectId);
+    expect(states(flow)).toEqual({MISSION: "ACTIVE", PLAN: "ACTIVE", RUN: "NOT_STARTED", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+    expect(flow.stages[1].detail).toBe("0/3 DONE"); expect(flow.taskCount).toBe(3); expect(flow.latestRunId).toBeNull();
+    expect(audits).toEqual(["WORKOS_INTAKE_CREATED", "WORKOS_PLAN_CREATED"]);
+
+    // 4) Rol çözümleyici (gerçek 599 rollük katalog): developer ve security-reviewer EXECUTABLE (certified değil), bağlamasız rol NOT_EXECUTABLE.
+    const dev = bindingForFunction("developer"), sec = bindingForFunction("security-reviewer");
+    for (const b of [dev, sec]) expect(resolveRoleExecution(b.roleId, CATALOG, FIRST_DELIVERY_BINDINGS)).toMatchObject({status: "EXECUTABLE", roleId: b.roleId, certification: "NOT_CERTIFIED"});
+    expect(CATALOG.some(r => r.roleId === UNBOUND)).toBe(true);
+    expect(resolveRoleExecution(UNBOUND, CATALOG, FIRST_DELIVERY_BINDINGS)).toMatchObject({status: "NOT_EXECUTABLE", reason: "ROLE_HAS_NO_BINDING", certification: "NOT_CERTIFIED"});
+    expect(() => assertRoleExecutes(sec.roleId, "developer")).toThrow("BINDING_ROLE_MISMATCH");
+
+    // 5) Runner: intake projesine yönetilen depo bağlanır (server.ts içe aktarma route'unun yaptığı aynı store çağrısı), mission yetkilendirilir, developer rolüne bağlı run FAKE executor ile sürülür.
+    const repo = path.join(store.dataDir, "projects", project.projectId, "repo");
+    fs.mkdirSync(repo, {recursive: true});
+    gitRun(repo, ["init", "-q", "-b", "main"]);
+    fs.writeFileSync(path.join(repo, "README.txt"), "reading tracker\n");
+    gitRun(repo, ["add", "-A"]);
+    gitRun(repo, ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "commit", "-q", "-m", "seed"]);
+    store.setProjectRepository(scope, project.projectId, {path: repo, managed: true}, ACTOR, {kind: "git", headSha: gitRun(repo, ["rev-parse", "HEAD"])});
+    authorize(store, first.missionId);
+    const fake = new FakeExecutors({implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"})});
+    const pair = fake.pair();
+    const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
+    const mkRunner = () => new MissionRunner({executionGate: testExecutionGate(), store, dataDir: store.dataDir, globalStopFile: path.join(runtime, "GLOBAL_STOP.json"), envPolicyFile: ENV_POLICY,
+      executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(path.join(tmp, "sec")).options});
+    const newRun = (missionId: string, roleId: string) => store.createRun({tenantId: "tA", missionId, roleId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: ACTOR});
+    const bound = newRun(first.missionId, dev.roleId);
+    await mkRunner().tick();
+    const br = store.getRun(scope, bound.runId)!;
+    // Rol kapısı bağlı developer'ı implementer'a geçirir; intake projesi test komutu kaydetmediği için VERIFY dürüstçe BLOCKED olur (review/teslim yok).
+    expect(fake.calls.implement).toBe(1);
+    expect(br).toMatchObject({roleId: dev.roleId, status: "BLOCKED", step: "VERIFY", reason: "TEST_COMMAND_NOT_CONFIGURED"});
+    expect(fake.calls.review).toBe(0);
+    flow = await flowOf(app, project.projectId);
+    expect(states(flow)).toEqual({MISSION: "BLOCKED", PLAN: "ACTIVE", RUN: "BLOCKED", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+    expect(flow.latestRunId).toBe(bound.runId); expect(flow.stages[2].detail).toBe("BLOCKED/VERIFY");
+
+    // 6) Negatif rol kapısı: aynı projenin ikinci yetkili mission'ında bağlamasız rol, implementer çağrılmadan BLOCKED olur.
+    const second = store.createMission({tenantId: "tA", projectId: project.projectId, title: "Second delivery", objective: "o", acceptanceCriteria: ["c"], riskLevel: "R1", createdBy: ACTOR});
+    authorize(store, second.missionId);
+    const unbound = newRun(second.missionId, UNBOUND);
+    await mkRunner().tick();
+    expect(store.getRun(scope, unbound.runId)).toMatchObject({roleId: UNBOUND, status: "BLOCKED", step: "IMPLEMENT", reason: `ROLE_NOT_EXECUTABLE:ROLE_HAS_NO_BINDING:${UNBOUND}`});
+    expect(fake.calls.implement).toBe(1);
+    expect(store.getMission(scope, second.missionId)!.status).toBe("BLOCKED");
+    flow = await flowOf(app, project.projectId);
+    expect(flow.latestRunId).toBe(unbound.runId); expect(flow.missionCount).toBe(2);
+    expect(states(flow)).toMatchObject({RUN: "BLOCKED", REVIEW: "NOT_STARTED", DELIVERY: "NOT_STARTED"});
+    await app.close();
+  });
+});
+
+// //TR: LANE-B task routes: görev durum geçişi route modülü (strict gövde, 423/403/400/404/409, tenant izolasyonu, audit, restart sonrası kalıcılık).
+describe("LANE-B task transition routes", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const mkApp = async (stopped = false, allowed = true, tenantId = "tA") => {
+    const [{default: Fastify}, {registerTaskRoutes}, {WorkOsError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/tasks.js"), import("../core/workos/types.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const audits: any[] = [];
+    // server.ts workosFail ile aynı eşleme: NOT_FOUND 404, INVALID_TRANSITION/CONFLICT 409, diğer WorkOsError 400.
+    const fail = (r: any, e: any) => e instanceof WorkOsError ? r.code(e.code === "WORKOS_NOT_FOUND" ? 404 : e.code === "WORKOS_INVALID_TRANSITION" || e.code === "WORKOS_CONFLICT" ? 409 : 400).send({error: e.code}) : r.code(500).send({error: "INTERNAL_ERROR"});
+    registerTaskRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string, x?: any) => { audits.push({e, x}); },
+      workosStopped: () => stopped, workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"}, workosFail: fail});
+    const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
+    const t1 = store.createTask({tenantId: "tA", missionId: m.missionId, title: "a", actor: "FOUNDER_LOCAL"});
+    const t2 = store.createTask({tenantId: "tA", missionId: m.missionId, title: "b", dependsOn: [t1.taskId], actor: "FOUNDER_LOCAL"});
+    return {app, store, audits, t1, t2};
+  };
+  const tr = (app: any, id: string, body: unknown, headers: any = hdr) => app.inject({method: "POST", url: `/v1/tasks/${id}/transition`, headers, payload: body as any});
+
+  it("walks PENDING -> IN_PROGRESS -> DONE with audit, honours the dependency gate and survives restart", async () => {
+    const {app, audits, t1, t2} = await mkApp();
+    const blocked = await tr(app, t2.taskId, {to: "IN_PROGRESS", reason: "start"});
+    expect(blocked.statusCode).toBe(409);
+    expect((await tr(app, t1.taskId, {to: "IN_PROGRESS", reason: "start"})).json().task.status).toBe("IN_PROGRESS");
+    expect((await tr(app, t1.taskId, {to: "DONE", reason: "done"})).json().task.status).toBe("DONE");
+    expect((await tr(app, t2.taskId, {to: "IN_PROGRESS", reason: "start"})).statusCode).toBe(200);
+    expect(audits.map(a => a.e)).toEqual(["WORKOS_TASK_TRANSITIONED", "WORKOS_TASK_TRANSITIONED", "WORKOS_TASK_TRANSITIONED"]);
+    expect(audits[0].x).toMatchObject({from: "PENDING", to: "IN_PROGRESS"});
+    const again = new WorkOsStore(path.join(tmp, "data"));
+    expect(again.getTask({tenantId: "tA"}, t1.taskId)!.status).toBe("DONE");
+    expect((await app.inject({method: "GET", url: `/v1/tasks/${t2.taskId}`, headers: hdr})).json().task.status).toBe("IN_PROGRESS");
+  });
+  it("rejects illegal transitions (409), strict-body violations (400), bad ids and unknown tasks (400/404)", async () => {
+    const {app, t1} = await mkApp();
+    expect((await tr(app, t1.taskId, {to: "DONE", reason: "skip"})).statusCode).toBe(409);
+    for (const bad of [{}, {to: "DONE"}, {reason: "x"}, {to: "NOPE", reason: "x"}, {to: "BLOCKED", reason: "  "}, {to: "BLOCKED", reason: "x", extra: 1}, {to: "BLOCKED", reason: "x".repeat(1001)}])
+      expect((await tr(app, t1.taskId, bad)).statusCode).toBe(400);
+    expect((await tr(app, "bad", {to: "BLOCKED", reason: "x"})).statusCode).toBe(400);
+    expect((await tr(app, "tsk_" + "0".repeat(24), {to: "BLOCKED", reason: "x"})).statusCode).toBe(404);
+    expect((await app.inject({method: "GET", url: "/v1/tasks/bad", headers: hdr})).statusCode).toBe(400);
+  });
+  it("enforces token, Global Stop, policy and tenant isolation; leaves the task unchanged on every refusal", async () => {
+    const {app, store, t1} = await mkApp();
+    expect((await tr(app, t1.taskId, {to: "BLOCKED", reason: "x"}, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    const stop = await mkApp(true), deny = await mkApp(false, false);
+    expect((await tr(stop.app, stop.t1.taskId, {to: "BLOCKED", reason: "x"})).statusCode).toBe(423);
+    expect((await tr(deny.app, deny.t1.taskId, {to: "BLOCKED", reason: "x"})).statusCode).toBe(403);
+    expect(store.getTask({tenantId: "tA"}, t1.taskId)!.status).toBe("PENDING");
+    // Global Stop ve politika retleri KENDİ görevlerine yazmamış olmalı (her mkApp ayrı görev üretir): o görevler yeniden okunur.
+    expect(stop.store.getTask({tenantId: "tA"}, stop.t1.taskId)!.status).toBe("PENDING");
+    expect(deny.store.getTask({tenantId: "tA"}, deny.t1.taskId)!.status).toBe("PENDING");
+    const other = await mkApp(false, true, "tB");
+    expect((await tr(other.app, t1.taskId, {to: "BLOCKED", reason: "x"})).statusCode).toBe(404);
+    expect((await other.app.inject({method: "GET", url: `/v1/tasks/${t1.taskId}`, headers: hdr})).statusCode).toBe(404);
+  });
+});
+
+// //TR: COORD-FIRST-DELIVERY-WIRING: ilk teslim zinciri GERÇEK server.ts üzerinden (buildServer) — intake, plan, görevler, görev geçişi, akış ve okumalar; token/Host/Global Stop/politika/tenant kapıları ve masaüstü köprüsüyle aynı 32 KB yazma sınırı.
+describe("COORD first-delivery wiring through the real server", () => {
+  const token = crypto.randomBytes(16).toString("hex");
+  const hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const IDEA = "A small web app where I can track my daily reading with a streak counter";
+  const mkApp = (extra: Record<string, unknown> = {}) => {
+    const runtime = path.join(tmp, "runtime");
+    fs.mkdirSync(runtime, {recursive: true});
+    return {runtime, app: buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false, ...extra})};
+  };
+  const req = (app: any, method: string, url: string, payload?: unknown, headers: any = hdr) => app.inject({method, url, headers, ...(payload === undefined ? {} : {payload: payload as any})});
+  const seed = async (app: any) => {
+    const i = await req(app, "POST", "/v1/intakes", {idea: IDEA});
+    expect(i.statusCode).toBe(201);
+    const intake = i.json().intake;
+    const p = await req(app, "POST", `/v1/missions/${intake.missionId}/plan`, {tasks: [{title: "Giriş ekranı"}, {title: "API", dependsOn: [0]}]});
+    expect(p.statusCode, p.body).toBeLessThan(300);
+    const tasks = (await req(app, "GET", `/v1/missions/${intake.missionId}/tasks`)).json().tasks;
+    return {intake, tasks};
+  };
+
+  it("serves the whole chain over HTTP: intake, plan, tasks, dependency-gated task status, flow and reads, with audit", async () => {
+    const {runtime, app} = mkApp();
+    const {intake, tasks} = await seed(app);
+    expect(intake.intakeId).toMatch(/^itk_[0-9a-f]{24}$/);
+    expect((await req(app, "GET", "/v1/intakes")).json().intakes).toHaveLength(1);
+    expect((await req(app, "GET", `/v1/intakes/${intake.intakeId}`)).json().intake.projectId).toBe(intake.projectId);
+    expect(tasks.map((t: any) => [t.title, t.status])).toEqual([["Giriş ekranı", "PENDING"], ["API", "PENDING"]]);
+    const [t1, t2] = tasks;
+    expect(t2.dependsOn).toEqual([t1.taskId]);
+    const tr = (id: string, to: string) => req(app, "POST", `/v1/tasks/${id}/transition`, {to, reason: `to ${to}`});
+    const gated = await tr(t2.taskId, "IN_PROGRESS");
+    expect([gated.statusCode, gated.json().reason]).toEqual([409, "TASK_DEPENDENCIES_NOT_DONE"]);
+    for (const to of ["IN_PROGRESS", "DONE"]) expect((await tr(t1.taskId, to)).json().task.status).toBe(to);
+    expect((await tr(t2.taskId, "IN_PROGRESS")).statusCode).toBe(200);
+    expect((await req(app, "GET", `/v1/tasks/${t1.taskId}`)).json().task.status).toBe("DONE");
+    const detail = (await req(app, "GET", `/v1/missions/${intake.missionId}`)).json();
+    expect(detail.tasks.map((t: any) => t.status)).toEqual(["DONE", "IN_PROGRESS"]);
+    const flow = await req(app, "GET", `/v1/projects/${intake.projectId}/flow`);
+    expect(flow.statusCode).toBe(200);
+    expect(flow.json().projectId ?? flow.json().flow?.projectId).toBe(intake.projectId);
+    const events = fs.readFileSync(path.join(runtime, "control-api-events.jsonl"), "utf8");
+    for (const e of ["WORKOS_INTAKE_CREATED", "WORKOS_TASK_TRANSITIONED"]) expect(events).toContain(e);
+    await app.close();
+  });
+  it("keeps every gate on the new routes: token 403, Host 421, Global Stop 423 (reads still served), policy 403, tenant isolation", async () => {
+    const {runtime, app} = mkApp();
+    const {intake, tasks} = await seed(app);
+    const t1 = tasks[0].taskId;
+    const reads = ["/v1/intakes", `/v1/intakes/${intake.intakeId}`, `/v1/missions/${intake.missionId}/tasks`, `/v1/projects/${intake.projectId}/flow`, `/v1/tasks/${t1}`];
+    const writes: Array<[string, unknown]> = [["/v1/intakes", {idea: IDEA + " again"}], [`/v1/missions/${intake.missionId}/plan`, {tasks: [{title: "x"}]}], [`/v1/tasks/${t1}/transition`, {to: "BLOCKED", reason: "x"}]];
+    for (const u of reads) {
+      expect((await req(app, "GET", u, undefined, {host: "127.0.0.1:3210"})).statusCode, u).toBe(403);
+      expect((await req(app, "GET", u, undefined, {...hdr, host: "evil.example:3210"})).statusCode, u).toBe(421);
+    }
+    for (const [u, b] of writes) expect((await req(app, "POST", u, b, {...hdr, "x-uasco-control-token": "wrong"})).statusCode, u).toBe(403);
+    fs.writeFileSync(path.join(runtime, "GLOBAL_STOP.json"), JSON.stringify({active: true, reason: "test", actor: "TEST"}));
+    for (const [u, b] of writes) expect((await req(app, "POST", u, b)).json().error, u).toBe("GLOBAL_STOP_ACTIVE");
+    for (const u of reads) expect((await req(app, "GET", u)).statusCode, u).toBe(200);
+    fs.rmSync(path.join(runtime, "GLOBAL_STOP.json"));
+    await app.close();
+    const denied = mkApp({policyContext: {scopeAllowed: false}}).app;
+    for (const [u, b] of writes) { const r = await req(denied, "POST", u, b); expect([r.statusCode, r.json().error], u).toEqual([403, "ACTION_DENIED"]); }
+    await denied.close();
+    const other = mkApp({tenantId: "tB"}).app;
+    for (const u of reads.slice(1)) expect((await req(other, "GET", u)).statusCode, u).toBe(404);
+    expect((await req(other, "GET", "/v1/intakes")).json().intakes).toEqual([]);
+    expect((await req(other, "POST", `/v1/tasks/${t1}/transition`, {to: "BLOCKED", reason: "x"})).statusCode).toBe(404);
+    await other.close();
+    const again = mkApp().app;
+    expect((await req(again, "GET", `/v1/tasks/${t1}`)).json().task.status).toBe("PENDING"); // hiçbir ret yazmadı
+    await again.close();
+  });
+  it("caps the three new writes at the Desktop bridge's 32 KB while the legacy global 64 KB limit stays as it was", async () => {
+    const {app} = mkApp();
+    const {intake, tasks} = await seed(app);
+    const big = (n: number) => JSON.stringify({idea: "x".repeat(n)});
+    const json = {...hdr, "content-type": "application/json"};
+    for (const u of ["/v1/intakes", `/v1/missions/${intake.missionId}/plan`, `/v1/tasks/${tasks[0].taskId}/transition`]) {
+      expect((await req(app, "POST", u, big(33 * 1024), json)).statusCode, u).toBe(413);
+      expect((await req(app, "POST", u, big(30 * 1024), json)).statusCode, u).toBe(400); // sınır içinde: şema karar verir
+    }
+    expect((await req(app, "POST", "/v1/projects", big(40 * 1024), json)).statusCode).toBe(400); // eski rota: genel 64 KB değişmedi
+    const {LANE_WRITE_BODY_LIMIT} = await import("../apps/control-api/src/routes/deps.js");
+    const main = fs.readFileSync(path.join(__dirname, "..", "apps", "desktop", "main.mjs"), "utf8");
+    expect(LANE_WRITE_BODY_LIMIT).toBe(Number(/const POST_MAX_BODY_BYTES=(\d+);/.exec(main)![1]));
+    await app.close();
+  });
+});
+
+// //TR: COORD-FIRST-DELIVERY-WIRING gerçek Electron E2E betiğinin (scripts/e2e-first-delivery-electron.mjs) süreç hijyeni: betik GERÇEK haliyle, ama Electron/Control API yerine kendi pid'ini ve ortamını yazıp bekleyen sahte çocuk süreçle çalıştırılır. Veri dizini/HOME çalışan kullanıcının ev dizininden (veya UASCO_E2E_HOME'dan) türetilir, sabit /home/e2e kullanılmaz; SIGINT/SIGTERM'de ayrı süreç grubundaki çocuklar öldürülür. Yalnız Linux (betik süreç grupları kullanır).
+describe.skipIf(process.platform !== "linux")("COORD first-delivery Electron E2E harness hygiene (stub children)", () => {
+  const script = path.resolve(__dirname, "..", "scripts", "e2e-first-delivery-electron.mjs");
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  const waitFor = async <T>(fn: () => T | undefined | false, ms = 20_000): Promise<T> => { const end = Date.now() + ms; for (;;) { const v = fn(); if (v) return v as T; if (Date.now() > end) throw new Error("WAIT_TIMEOUT"); await sleep(50); } };
+  const alive = (pid: number) => { try { return !/^Z/.test(fs.readFileSync(`/proc/${pid}/stat`, "utf8").replace(/^.*\) /, "")); } catch { return false; } };
+  const stage = () => {
+    const w = path.join(tmp, "repo");
+    for (const d of ["automation/lib", "config", "node_modules/tsx/dist"]) fs.mkdirSync(path.join(w, d), {recursive: true});
+    fs.writeFileSync(path.join(w, "automation/lib/env-policy.mjs"), "export const safeChildEnv = () => ({PATH: process.env.PATH ?? ''});\n");
+    fs.writeFileSync(path.join(w, "config/environment-policy.json"), "{}\n");
+    fs.writeFileSync(path.join(w, "node_modules/tsx/dist/cli.mjs"), `import fs from "node:fs"; fs.writeFileSync(${JSON.stringify(path.join(tmp, "child.json"))}, JSON.stringify({pid: process.pid, home: process.env.HOME, data: process.env.UASCO_DATA_DIR})); setInterval(() => {}, 1000);\n`);
+    return w;
+  };
+  const run = async (env: Record<string, string>, body: (h: {proc: import("node:child_process").ChildProcess; child: {pid: number; home: string; data: string}; exited: Promise<number | null>; out: string}) => Promise<void>) => {
+    const w = stage(), out = path.join(tmp, "report.json");
+    const proc = cp.spawn(process.execPath, [script, w, out, path.join(tmp, "no-electron")], {env: {...process.env, ...env}, stdio: "ignore"});
+    const exited = new Promise<number | null>(res => proc.on("exit", code => res(code)));
+    let child: {pid: number; home: string; data: string} | undefined;
+    try {
+      child = await waitFor(() => { try { return JSON.parse(fs.readFileSync(path.join(tmp, "child.json"), "utf8")); } catch { return undefined; } });
+      await body({proc, child: child!, exited, out});
+    } finally {
+      if (child && alive(child.pid)) { try { process.kill(-child.pid, "SIGKILL"); } catch { /* zaten bitti */ } }
+      if (proc.exitCode === null) proc.kill("SIGKILL");
+    }
+  };
+
+  it("derives the data dir and HOME from the running user's home (or UASCO_E2E_HOME), never a hard-coded /home/e2e", async () => {
+    const home = path.join(tmp, "home-a");
+    fs.mkdirSync(home);
+    await run({HOME: home, UASCO_E2E_HOME: ""}, async ({proc, child}) => {
+      expect(child.home).toBe(home);
+      expect(child.data.startsWith(path.join(home, "fd-data-"))).toBe(true);
+      expect(fs.readdirSync(home).some(n => n.startsWith("fd-data-"))).toBe(true);
+      proc.kill("SIGTERM");
+    });
+    fs.rmSync(path.join(tmp, "child.json"));
+    const ovr = path.join(tmp, "override", "nested");
+    await run({HOME: home, UASCO_E2E_HOME: ovr}, async ({proc, child}) => {
+      expect(child.home).toBe(ovr);
+      expect(child.data.startsWith(path.join(ovr, "fd-data-"))).toBe(true);
+      proc.kill("SIGTERM");
+    });
+  });
+  it.each([["SIGTERM", 143], ["SIGINT", 130]] as const)("kills the detached API/Electron process groups when the harness receives %s, and still writes a FAIL report", async (sig, code) => {
+    const home = path.join(tmp, "home-b");
+    fs.mkdirSync(home);
+    await run({HOME: home, UASCO_E2E_HOME: ""}, async ({proc, child, exited, out}) => {
+      expect(alive(child.pid)).toBe(true);
+      proc.kill(sig);
+      const exitCode = await exited;
+      await waitFor(() => !alive(child.pid), 5_000); // WAIT_TIMEOUT = sahipsiz kalan süreç grubu
+      expect(exitCode).toBe(code);
+      const report = JSON.parse(fs.readFileSync(out, "utf8"));
+      expect(report.status).toBe("FAIL");
+      expect(report.steps.map((x: any) => x.name)).toContain("harness interrupted");
+    });
   });
 });

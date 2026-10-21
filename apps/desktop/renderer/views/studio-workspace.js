@@ -9,6 +9,7 @@ import {STUDIO_TABS,GIT_LOG_LIMIT,buildDevRunRequest,buildExportRequest,previewO
 import {studio,setTab} from "../studio-state.js";
 import {importPanel} from "./studio-wizard.js";
 import {runDeliveriesPanel} from "./delivery-panel.js";
+import {flowPanel} from "./flow-panel.js";
 
 export const DEV_FORM="studio-devrun";
 export const EXPORT_FORM="studio-export";
@@ -68,7 +69,7 @@ async function overviewTab(ctx,project,projects){
       }
     }
   }
-  return h(doc,"div",{class:"studio-grid"},info,missionsPanel,panel(ctx,{titleKey:"studio.ov.lastRun",id:"studio-ov-run"},runBody),panel(ctx,{titleKey:"studio.ov.review",id:"studio-ov-review"},reviewBody),panel(ctx,{titleKey:"studio.ov.security",id:"studio-ov-security"},secBody),importPanel(ctx,{projects,fixedId:id}));
+  return h(doc,"div",{class:"studio-grid"},await flowPanel(ctx,id),info,missionsPanel,panel(ctx,{titleKey:"studio.ov.lastRun",id:"studio-ov-run"},runBody),panel(ctx,{titleKey:"studio.ov.review",id:"studio-ov-review"},reviewBody),panel(ctx,{titleKey:"studio.ov.security",id:"studio-ov-security"},secBody),importPanel(ctx,{projects,fixedId:id}));
 }
 
 // ---------- Çalıştır & Önizle ----------
