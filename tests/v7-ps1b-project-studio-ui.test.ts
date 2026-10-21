@@ -1802,3 +1802,48 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
+
+// //TR: LANE-A first-delivery: proje akış göstergesi (GET /v1/projects/:id/flow) — sıkı eşleme, dürüst UNAVAILABLE/ERROR, olumlu durum uydurulmaz.
+describe("LANE-A first-delivery flow stepper (fake DOM)", () => {
+  const stages = (states: string[]) => ["MISSION", "PLAN", "RUN", "REVIEW", "DELIVERY"].map((stage, i) => ({stage, state: states[i], detail: null}));
+  const flowBody = (states: string[], extra: any = {}) => ({flow: {projectId: PID, stages: stages(states), missionCount: 1, taskCount: 3, latestRunId: null, ...extra}});
+  const FLOW = `/v1/projects/${PID}/flow`;
+  const flowOf = async (get: any) => { const c = await openWs({get: projectsGet(get)}); return {...c, panel: byId(c.root, "studio-ov-flow")}; };
+
+  it("maps strictly: five stages in fixed order with known states; any deviation is ERROR", async () => {
+    const core = await load(rend, "project-core.js");
+    expect(core.flowPath(PID)).toBe(FLOW);
+    expect(core.flowPath("prj_x")).toBeNull();
+    const ok = core.mapFlow(flowBody(["DONE", "ACTIVE", "NOT_STARTED", "NOT_STARTED", "NOT_STARTED"]));
+    expect(ok.state).toBe("VERIFIED"); expect(ok.flow.taskCount).toBe(3);
+    const s5 = ["DONE", "DONE", "DONE", "DONE", "DONE"];
+    for (const bad of [null, {}, {flow: {}}, flowBody(["DONE", "ACTIVE", "NOT_STARTED", "NOT_STARTED"]), flowBody(["DONE", "ACTIVE", "NOT_STARTED", "NOT_STARTED", "WEIRD"]),
+      {flow: {...flowBody(s5).flow, projectId: "x"}}, {flow: {...flowBody(s5).flow, stages: [...stages(s5)].reverse()}}]) expect(core.mapFlow(bad).state).toBe("ERROR");
+    expect(core.mapFlow(flowBody(s5, {taskCount: -1, latestRunId: "../x"})).flow).toMatchObject({taskCount: null, latestRunId: null});
+  });
+  it("renders the five steps with text state labels from the server read and says DONE is not verification", async () => {
+    const {panel, calls} = await flowOf({[FLOW]: flowBody(["DONE", "DONE", "ACTIVE", "NOT_STARTED", "NOT_STARTED"], {latestRunId: "run_" + "a".repeat(24)})});
+    expect(panel).not.toBeNull();
+    const steps = all(panel!).filter(n => n.dataset.flowStage);
+    expect(steps.map(n => [n.dataset.flowStage, n.dataset.flowState])).toEqual([["MISSION", "DONE"], ["PLAN", "DONE"], ["RUN", "ACTIVE"], ["REVIEW", "NOT_STARTED"], ["DELIVERY", "NOT_STARTED"]]);
+    expect(text(steps[2])).toContain("Sürüyor");
+    expect(text(panel!)).toContain("ürünün doğrulandığı"); // tr: DONE doğrulama değildir
+    expect(calls.post).toEqual([]);
+    expect(calls.get).toContain(FLOW);
+  });
+  it("shows an honest UNAVAILABLE note (no steps) when the read is not reachable, and ERROR for malformed data", async () => {
+    const off = await flowOf({});
+    expect(all(off.panel!).filter(n => n.dataset.flowStage).length).toBe(0);
+    expect(text(off.panel!)).toContain("ilerleme gösterilmez");
+    const bad = await flowOf({[FLOW]: {flow: {projectId: PID, stages: []}}});
+    expect(all(bad.panel!).filter(n => n.dataset.flowStage).length).toBe(0);
+    expect(text(bad.panel!)).not.toContain("Bitti");
+  });
+  it("flow strings exist in en and tr", async () => {
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+    const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("flow."));
+    expect(keys.length).toBe(17);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
+  });
+});
