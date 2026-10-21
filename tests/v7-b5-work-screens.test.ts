@@ -1266,3 +1266,94 @@ describe("UI-111 #/work run-card retry facts", () => {
     expect(en["run.retryScheduledFor"]).toBe("Retry scheduled for");
   });
 });
+
+// //TR: LANE-A first-delivery: Görevleri planla formu (POST /v1/missions/:id/plan, Lane B) — sıkı gövde kurucusu, yalnız kullanıcı satırları, dürüst hata durumları.
+describe("LANE-A mission plan form", () => {
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const planGet = (status = "AUTHORIZED", tasks: any[] = []) => (p: string) => {
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission({status})]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission({status}), tasks};
+    if (p.startsWith("/v1/work-runs")) return {workRuns: []};
+    if (p.startsWith("/v1/evidence")) return {evidence: []};
+    return undefined;
+  };
+  const open = async (o: CtxOpts, status = "AUTHORIZED", tasks: any[] = []) => {
+    const c = await mkCtx({...o, get: planGet(status, tasks)});
+    forms.selection.missionId = MID;
+    const view = await load(rend, "views", "work.js"), pf = await load(rend, "views", "plan-form.js");
+    pf.resetPlanDraft(null);
+    return {...c, view, pf, root: mount(c.doc, await view.render(c.ctx))};
+  };
+  const type = (root: N, id: string, v: string) => { byId(root, id)!.value = v; byId(root, id)!.fire("input"); };
+
+  it("builds a strict body: titles trimmed, 1-based earlier-task dependencies become 0-based indexes, no extra fields", async () => {
+    const c = await load(rend, "work-core.js");
+    expect(c.planPath(MID)).toBe(`/v1/missions/${MID}/plan`);
+    expect(c.planPath("x")).toBeNull();
+    const ok = c.buildPlanRequest({missionId: MID, rows: [{title: " A ", deps: ""}, {title: "B", deps: "1"}, {title: "C", deps: "1, 2"}, {title: "", deps: ""}]});
+    expect(ok).toMatchObject({ok: true, path: `/v1/missions/${MID}/plan`, body: {tasks: [{title: "A"}, {title: "B", dependsOn: [0]}, {title: "C", dependsOn: [0, 1]}]}});
+    const bad = (rows: any[]) => c.buildPlanRequest({missionId: MID, rows});
+    expect(bad([]).errors.tasks).toBe("plan.err.none");
+    expect(bad([{title: "", deps: ""}]).errors.tasks).toBe("plan.err.none");
+    expect(bad([{title: "A", deps: "1"}]).rowErrors[0]).toBe("plan.err.deps"); // kendine bağımlılık
+    expect(bad([{title: "A", deps: ""}, {title: "B", deps: "3"}]).rowErrors[1]).toBe("plan.err.deps"); // ileri bağımlılık
+    expect(bad([{title: "A", deps: ""}, {title: "B", deps: "1,1"}]).rowErrors[1]).toBe("plan.err.deps"); // tekrar
+    expect(bad([{title: "A", deps: ""}, {title: "B", deps: "x"}]).rowErrors[1]).toBe("plan.err.deps");
+    expect(bad([{title: "", deps: "1"}]).rowErrors[0]).toBe("plan.err.title");
+    expect(bad([{title: "A", deps: ""}, {title: "", deps: ""}, {title: "C", deps: ""}]).rowErrors[1]).toBe("plan.err.title"); // ortadaki boş satır numaralamayı kaydırmaz
+    expect(bad([{title: "x".repeat(201), deps: ""}]).rowErrors[0]).toBe("plan.err.titleLong");
+    expect(bad(Array.from({length: 51}, () => ({title: "t", deps: ""}))).errors.tasks).toBe("plan.err.many");
+    expect(bad([{title: "A", deps: ""}]).body).toMatchObject({tasks: [{title: "A"}]});
+    expect(Object.keys(ok.body)).toEqual(["tasks"]);
+    expect(c.canPlan("AUTHORIZED", 0)).toBe(true);
+    for (const s of ["EXECUTING", "COMPLETE", "BLOCKED"]) expect(c.canPlan(s, 0)).toBe(false);
+    expect(c.canPlan("AUTHORIZED", 2)).toBe(false);
+  });
+  it("shows the form only for a plannable mission without tasks, and submits exactly the typed rows once", async () => {
+    const {ctx, calls, root, pf} = await open({post: (_p, b) => ({status: 201, body: {tasks: b.tasks.map((t: any, i: number) => ({taskId: "tsk_" + String(i).repeat(24), title: t.title}))}})});
+    expect(byId(root, "plan-form")).not.toBeNull();
+    expect(calls.post).toEqual([]); // render hiçbir şey göndermez
+    type(root, "plan-title-0", "Giriş ekranı");
+    byId(root, "plan-add")!.fire("click");
+    type(root, "plan-title-1", "API"); type(root, "plan-deps-1", "1");
+    byId(root, "plan-form")!.fire("submit"); await tick();
+    expect(calls.post.length).toBe(1);
+    expect(calls.post[0]).toEqual({path: `/v1/missions/${MID}/plan`, body: {tasks: [{title: "Giriş ekranı"}, {title: "API", dependsOn: [0]}]}});
+    expect(forms.drafts.status["mission-plan"].ok).toBe(true);
+    expect(pf.planDraft.rows).toEqual([{title: "", deps: ""}]);
+    expect(calls.refresh).toBe(1);
+    for (const [st, tasks] of [["EXECUTING", []], ["COMPLETE", []], ["AUTHORIZED", [{taskId: "tsk_" + "1".repeat(24), title: "t", status: "PENDING"}]]] as const) {
+      const o = await open({}, st, tasks as any);
+      expect(byId(o.root, "plan-form"), st).toBeNull();
+    }
+  });
+  it("validation errors send nothing; server refusals (409 plan exists / not plannable / 403 / unreachable) never report success and keep the draft", async () => {
+    const v = await open({});
+    byId(v.root, "plan-form")!.fire("submit"); await tick();
+    expect(v.calls.post).toEqual([]); expect(forms.drafts.status["mission-plan"].ok).toBe(false);
+    const cases: Array<[any, string]> = [[{status: 409, body: {error: "PLAN_ALREADY_EXISTS"}}, "post.err.409.PLAN_ALREADY_EXISTS"], [{status: 409, body: {error: "MISSION_NOT_PLANNABLE"}}, "post.err.409.MISSION_NOT_PLANNABLE"],
+      [{status: 403, body: {error: "FORBIDDEN"}}, "post.err.auth"], [{status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}, "post.err.423"], [{status: 404, body: {error: "NOT_FOUND"}}, "post.err.unavailable"]];
+    for (const [resp, key] of cases) {
+      forms.resetAllForms();
+      const o = await open({post: () => resp});
+      type(o.root, "plan-title-0", "Bir");
+      byId(o.root, "plan-form")!.fire("submit"); await tick();
+      expect(forms.drafts.status["mission-plan"], key).toMatchObject({ok: false, key});
+      expect(o.pf.planDraft.rows[0].title).toBe("Bir");
+    }
+    forms.resetAllForms();
+    const net = await open({}); // post tanımsız: köprü hatası
+    type(net.root, "plan-title-0", "Bir");
+    byId(net.root, "plan-form")!.fire("submit"); await tick();
+    expect(forms.drafts.status["mission-plan"].ok).toBe(false);
+    expect(forms.drafts.busy["mission-plan"]).toBe(false);
+  });
+  it("plan strings exist in en and tr", async () => {
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+    const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("plan.") || k === "post.err.409.PLAN_ALREADY_EXISTS" || k === "post.err.409.MISSION_NOT_PLANNABLE");
+    expect(keys.length).toBe(17);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
+  });
+});

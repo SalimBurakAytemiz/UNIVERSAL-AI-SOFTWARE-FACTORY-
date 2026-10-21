@@ -134,6 +134,40 @@ export function buildMissionRequest(input,{key}={}){
   if(!Object.keys(errors).length&&bodyBytes(body)>MAX_BODY_BYTES)errors.form="err.tooLarge";
   return result("/v1/missions",body,errors);
 }
+// ---------- Görev planı (POST /v1/missions/:id/plan, Lane B) ----------
+// //TR: LANE-A: Kurucunun elle girdiği görev planı: her satır bir başlık ve isteğe bağlı bağımlılık (yalnız ÖNCEKİ satır numaraları, 1 tabanlı). Sunucu şeması: tasks[{title<=200,dependsOn[0 tabanlı önceki indeksler]}], en çok 50, gövdede başka alan yoktur.
+export const PLANNABLE_STATUSES=Object.freeze(["DRAFT","PREFLIGHT","AUTHORIZED","PLANNED"]);
+export const PLAN_MAX_TASKS=50;
+export const planPath=id=>MISSION_ID_RE.test(String(id))?`/v1/missions/${id}/plan`:null;
+/** Plan yalnız planlanabilir durumdaki ve henüz görevi olmayan mission için sunulur. */
+export const canPlan=(status,taskCount)=>PLANNABLE_STATUSES.includes(status)&&taskCount===0;
+export function buildPlanRequest({missionId,rows}){
+  const errors={},rowErrors={};
+  if(!planPath(missionId))errors.mission="err.missionInvalid";
+  const list=Array.isArray(rows)?rows.map(r=>({title:trim(r?.title),deps:trim(r?.deps)})):[];
+  while(list.length&&!list[list.length-1].title&&!list[list.length-1].deps)list.pop();
+  if(!list.length)errors.tasks="plan.err.none";
+  else if(list.length>PLAN_MAX_TASKS)errors.tasks="plan.err.many";
+  const tasks=[];
+  list.forEach((r,i)=>{
+    if(!r.title){rowErrors[i]="plan.err.title";return}
+    if(r.title.length>200){rowErrors[i]="plan.err.titleLong";return}
+    let deps=[];
+    if(r.deps){
+      const parts=r.deps.split(/[\s,;]+/).filter(Boolean);
+      if(parts.some(x=>!/^[1-9][0-9]{0,2}$/.test(x)))rowErrors[i]="plan.err.deps";
+      else{
+        const nums=parts.map(Number);
+        if(new Set(nums).size!==nums.length||nums.some(n=>n>=i+1))rowErrors[i]="plan.err.deps";
+        else deps=nums.map(n=>n-1);
+      }
+    }
+    if(rowErrors[i]===undefined){const t={title:r.title};if(deps.length)t.dependsOn=deps;tasks.push(t)}
+  });
+  if(Object.keys(rowErrors).length)errors.tasks=errors.tasks??"plan.err.rows";
+  const ok=!Object.keys(errors).length;
+  return {ok,path:planPath(missionId),body:ok?{tasks}:null,errors,rowErrors};
+}
 /** Durum geçişi isteği; yalnız durum makinesinin izin verdiği hedefler, yüksek riskli hedeflerde confirmed===true şart.
  *  D-M1A-STATE-MODEL-2026-10-15: geçiş gövdesi hiçbir onay alanı taşımaz (COMPLETE yalnız PRODUCT_VERIFIED kanıtıyla olur); onay verilmeye çalışılırsa istek kurulmaz. */
 export function buildTransitionRequest({missionId,from,to,reason,confirmed,acknowledgements}){
@@ -158,7 +192,7 @@ export function buildRunRequest({missionId,status}){
 // ---------- POST sonucu ----------
 // //TR: SBX-GATE: SANDBOX_UNAVAILABLE dürüst bir ret nedenidir (doğrulanmış sandbox yok, proje kodu çalıştırılmadı); genel 409 yerine açık ileti gösterilir.
 // //TR: M1a c2: teslim artefaktı retleri ({error:<kod>}) da açık iletiyle gösterilir (NO_GENERATED_SOURCE, hash uyuşmazlığı vb.).
-const KNOWN_409=new Set(["EXECUTOR_NOT_CONFIGURED","SANDBOX_UNAVAILABLE","NO_GENERATED_SOURCE","SOURCE_GENERATION_NOT_COMPLETE","DELIVERY_ALREADY_ACCEPTED","DELIVERY_ARTIFACT_HASH_MISMATCH","DELIVERY_ARTIFACT_MISSING","DELIVERY_ARTIFACT_NOT_PREPARED","DELIVERY_SOURCE_UNAVAILABLE","EXPORT_BLOCKED_SECRET"]);
+const KNOWN_409=new Set(["EXECUTOR_NOT_CONFIGURED","SANDBOX_UNAVAILABLE","NO_GENERATED_SOURCE","SOURCE_GENERATION_NOT_COMPLETE","DELIVERY_ALREADY_ACCEPTED","DELIVERY_ARTIFACT_HASH_MISMATCH","DELIVERY_ARTIFACT_MISSING","DELIVERY_ARTIFACT_NOT_PREPARED","DELIVERY_SOURCE_UNAVAILABLE","EXPORT_BLOCKED_SECRET","PLAN_ALREADY_EXISTS","MISSION_NOT_PLANNABLE"]);
 // //TR: M1a + FX-1: COMPLETE kanıt kapısı reddi {error:"WORKOS_CONFLICT", reason:<sabit kod>} olarak gelir; onay gerektiren nedenler açık iletiyle gösterilir.
 // D-M1A-STATE-MODEL-2026-10-15: COMPLETE PRODUCT_VERIFIED ister; kaynak teslimi kabul kapısı da {error:"WORKOS_CONFLICT", reason} ile reddeder.
 const KNOWN_COMPLETION_409=new Set(["COMPLETION_PRODUCT_NOT_VERIFIED","COMPLETION_FUNCTIONAL_ACCEPTANCE_BLOCKED","SOURCE_GENERATION_NOT_COMPLETE","NO_GENERATED_SOURCE","DELIVERY_ACCEPTANCE_MISMATCH","DELIVERY_ALREADY_ACCEPTED",
