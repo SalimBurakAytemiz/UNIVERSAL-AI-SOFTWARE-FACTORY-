@@ -1,0 +1,26 @@
+{
+  "//TR": "Bu dosya Founder'in COORD-FIRST-DELIVERY-WIRING kapsami icin verdigi ifadeyi KAYDEDEN bir scope grant ONERISIDIR (status PROPOSED: aktif DEGIL). Onay Coordinator tarafindan yazilmaz; grant yalniz Founder bu degisikligi merge edip status'u ACTIVE yapan bir degisikligi de merge ederse gecerli olur. Kural docs/governance/COORDINATOR-SCOPE-GRANTS.md icindedir.",
+  "schemaVersion": "1.0.0",
+  "grantId": "FIRST-DELIVERY-WIRING",
+  "status": "PROPOSED",
+  "founderStatement": {
+    "quote": "COORD-FIRST-DELIVERY-WIRING.md belgesindeki ilk teslim entegrasyonunu prensipte onaylıyorum. Bu onay yalnızca ilgili API kayıtlarının, gerekli Electron izinlerinin, güven kökü manifestinin ve bunların testlerinin güvenli biçimde uygulanmasını kapsar.",
+    "at": "2026-10-21",
+    "channel": "Founder directive in the coordinator session"
+  },
+  "scope": {
+    "protectedFiles": [
+      {
+        "path": "apps/control-api/src/server.ts",
+        "allowedChange": "register intake, plan, flow and task route modules with the existing deps"
+      },
+      {
+        "path": "apps/desktop/main.mjs",
+        "allowedChange": "exact anchored GET/POST allow-list entries for the first-delivery paths in the B4/B5 blocks"
+      }
+    ],
+    "allowTrustRootReseal": true
+  },
+  "expiresAt": "2026-11-21T00:00:00Z",
+  "reference": "docs/authority-requests/COORD-FIRST-DELIVERY-WIRING.md"
+}
