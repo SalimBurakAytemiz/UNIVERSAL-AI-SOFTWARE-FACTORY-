@@ -1624,3 +1624,68 @@ describe("UI-125: brownfield import shows the server's specific rejection and fa
     }
   });
 });
+
+// //TR: LANE-A first-delivery akışı: yeni proje oluşturulunca Kurucu fikri formu ilk mission'ı gerçek POST /v1/missions ile açar; başarı uydurulmaz, görev yoksa dürüst not gösterilir.
+describe("LANE-A founder idea -> first mission (fake DOM)", () => {
+  const MSN = "msn_" + "ef56".repeat(6);
+  const created = async (post: (p: string, b: any) => {status: number; body: any}) => {
+    const c = await mkCtx({get: projectsGet(), post, lang: "en"});
+    let root = mount(c.doc, await projectsView.render(c.ctx));
+    byId(root, "studio-name")!.value = "Shop"; byId(root, "studio-name")!.fire("input");
+    byId(root, "studio-criteria-0")!.value = "Checkout works"; byId(root, "studio-criteria-0")!.fire("input");
+    byId(root, "studio-wizard-form")!.fire("submit"); await tick();
+    root = mount(c.doc, await projectsView.render(c.ctx));
+    return {...c, root};
+  };
+  const okPost = (p: string, b: any) => p === "/v1/projects" ? {status: 201, body: {project: {projectId: PID, name: "Shop"}}} : {status: 201, body: {mission: {missionId: MSN, title: b.title}}};
+  it("shows no idea form before a project is created and prefills title + criteria after", async () => {
+    const c = await mkCtx({get: projectsGet(), post: okPost, lang: "en"});
+    expect(byId(mount(c.doc, await projectsView.render(c.ctx)), "studio-idea")).toBeNull();
+    const {root} = await created(okPost);
+    expect(byId(root, "studio-idea")!.dataset.ideaProject).toBe(PID);
+    expect(byId(root, "studio-idea-title")!.value).toBe("Shop");
+    expect(byId(root, "studio-idea-criteria-0")!.value).toBe("Checkout works");
+  });
+  it("rejects an empty objective without sending, then POSTs /v1/missions once for the new project and offers Open in Tasks", async () => {
+    const {ctx, doc, calls, root} = await created(okPost);
+    byId(root, "studio-idea-form")!.fire("submit"); await tick();
+    expect(calls.post.filter(p => p.path === "/v1/missions")).toEqual([]);
+    expect(forms.drafts.status["studio-idea"].ok).toBe(false);
+    byId(root, "studio-idea-objective")!.value = "Online shop"; byId(root, "studio-idea-objective")!.fire("input");
+    byId(root, "studio-idea-form")!.fire("submit"); await tick();
+    const m = calls.post.filter(p => p.path === "/v1/missions");
+    expect(m.length).toBe(1);
+    expect(m[0].body).toMatchObject({projectId: PID, title: "Shop", objective: "Online shop", acceptanceCriteria: ["Checkout works"], riskLevel: "R1"});
+    expect(forms.drafts.status["studio-idea"].ok).toBe(true);
+    const root2 = mount(doc, await projectsView.render(ctx));
+    expect(byId(root2, "studio-idea-submit")!.disabled).toBe(true); // ikinci gönderim yok
+    await (async () => { byId(root2, "studio-idea-open")!.fire("click"); })();
+    expect(calls.navigate).toEqual(["work"]);
+    expect((await load(rend, "forms.js")).selection.missionId).toBe(MSN);
+  });
+  it("a server failure records an error, creates no mission link and keeps the draft", async () => {
+    const {ctx, doc, calls, root} = await created((p, b) => p === "/v1/projects" ? okPost(p, b) : {status: 503, body: {error: "WORKOS_UNAVAILABLE"}});
+    byId(root, "studio-idea-objective")!.value = "x"; byId(root, "studio-idea-objective")!.fire("input");
+    byId(root, "studio-idea-form")!.fire("submit"); await tick();
+    expect(forms.drafts.status["studio-idea"].ok).toBe(false);
+    const root2 = mount(doc, await projectsView.render(ctx));
+    expect(byId(root2, "studio-idea-open")).toBeNull();
+    expect(byId(root2, "studio-idea-objective")!.value).toBe("x");
+    expect(calls.navigate).toEqual([]);
+  });
+  it("a 201 without a valid msn_ id succeeds without a fabricated open-mission shortcut", async () => {
+    const {ctx, doc, root} = await created((p, b) => p === "/v1/projects" ? okPost(p, b) : {status: 201, body: {mission: {missionId: "bad", title: "T"}}});
+    byId(root, "studio-idea-objective")!.value = "x"; byId(root, "studio-idea-objective")!.fire("input");
+    byId(root, "studio-idea-form")!.fire("submit"); await tick();
+    expect(byId(mount(doc, await projectsView.render(ctx)), "studio-idea-open")).toBeNull();
+  });
+  it("mission detail shows an honest no-tasks note when the mission has no tasks, never invented tasks", async () => {
+    const work = await load(rend, "views", "work.js");
+    const mission = {missionId: MSN, projectId: PID, title: "Shop", objective: "o", acceptanceCriteria: ["c"], status: "DRAFT", riskLevel: "R1", createdAt: "2026-10-21T00:00:00.000Z"};
+    const get = (p: string) => p === "/v1/projects" ? {projects: [project()]} : p === "/v1/missions" ? {missions: [mission]} : p === `/v1/missions/${MSN}` ? {mission, tasks: []} : p.startsWith("/v1/work-runs") ? {runs: []} : p.startsWith("/v1/evidence") ? {items: []} : undefined;
+    const {ctx, doc} = await mkCtx({get, lang: "en"});
+    (await load(rend, "forms.js")).selection.missionId = MSN;
+    const root = mount(doc, await work.render(ctx));
+    expect(all(root).some(n => n.dataset?.noTasks === MSN)).toBe(true);
+  });
+});
