@@ -1689,3 +1689,116 @@ describe("LANE-A founder idea -> first mission (fake DOM)", () => {
     expect(all(root).some(n => n.dataset?.noTasks === MSN)).toBe(true);
   });
 });
+
+// //TR: LANE-A UI-126 Proje Intake: Kurucu fikri -> POST /v1/intakes (proje + ilk mission tek adımda); sıkı gövde, kaynak etiketleri sunucudan aynen, başarı uydurulmaz.
+describe("LANE-A project intake from an idea (fake DOM)", () => {
+  const ITK = "itk_" + "ab12".repeat(6), MSN = "msn_" + "cd34".repeat(6);
+  const IDEA = "Bir kitap kulübü uygulaması: üyeler kitap önerir ve oylar";
+  const rec = (extra: any = {}) => ({intakeId: ITK, projectId: PID, missionId: MSN, title: "Kitap Kulübü", idea: IDEA, riskLevel: "R1", acceptanceCriteria: ["Uygulama açılır"], status: "CREATED",
+    sources: {title: "FOUNDER", acceptanceCriteria: "DEFAULT", riskLevel: "DEFAULT"}, createdAt: "2026-10-21T10:00:00.000Z", ...extra });
+  const open = async (o: CtxOpts) => { const c = await mkCtx({lang: "en", ...o, get: projectsGet()}); const m = await load(rend, "views", "intake.js"); m.resetIntakeAll(); return {...c, m, root: mount(c.doc, await projectsView.render(c.ctx))}; };
+  const type = (root: N, id: string, v: string) => { byId(root, id)!.value = v; byId(root, id)!.fire("input"); };
+
+  it("builds a strict body from the server schema: idea 10-4000, optional fields only when entered, risk R0-R3, unique OS/tech", async () => {
+    const c = await load(rend, "intake-core.js");
+    const ok = c.buildIntakeRequest({idea: `  ${IDEA} `, title: "", projectType: "", techStack: ["", " React "], targetOS: ["web"], acceptanceCriteria: ["", " a "], riskLevel: ""}, {key: "ui-abc"});
+    expect(ok).toEqual({ok: true, path: "/v1/intakes", errors: {}, body: {idea: IDEA, techStack: ["React"], targetOS: ["web"], acceptanceCriteria: ["a"], idempotencyKey: "ui-abc"}});
+    expect(Object.keys(c.buildIntakeRequest({idea: IDEA}).body)).toEqual(["idea"]);
+    const bad = (i: any) => c.buildIntakeRequest({idea: IDEA, ...i}).errors;
+    expect(c.buildIntakeRequest({idea: "kısa"}).errors.idea).toBe("intake.err.ideaShort");
+    expect(c.buildIntakeRequest({idea: "x".repeat(4001)}).errors.idea).toBe("intake.err.ideaLong");
+    expect(c.buildIntakeRequest({idea: "         "}).errors.idea).toBe("intake.err.ideaShort");
+    expect(bad({title: "t".repeat(121)}).title).toBe("intake.err.titleLong");
+    expect(bad({projectType: "robot"}).projectType).toBe("intake.err.type");
+    expect(bad({techStack: ["a", "a"]}).techStack).toBe("intake.err.tech");
+    expect(bad({techStack: ["a;b"]}).techStack).toBe("intake.err.tech");
+    expect(bad({techStack: Array.from({length: 21}, (_, i) => "t" + i)}).techStack).toBe("intake.err.tech");
+    expect(bad({targetOS: ["web", "web"]}).targetOS).toBe("intake.err.os");
+    expect(bad({targetOS: ["beos"]}).targetOS).toBe("intake.err.os");
+    expect(bad({acceptanceCriteria: Array.from({length: 51}, () => "k")}).acceptanceCriteria).toBe("intake.err.criteria");
+    expect(bad({riskLevel: "R4"}).riskLevel).toBe("intake.err.risk"); // R4 intake ile açılmaz
+    expect(c.buildIntakeRequest({idea: IDEA}, {key: "bad key!"}).errors.idempotencyKey).toBe("intake.err.key");
+    expect(c.buildIntakeRequest({idea: "kısa"}).body).toBeNull();
+    // Sınırlar sunucu şemasıyla birebir: idea 10..4000, title en çok 120.
+    expect(c.buildIntakeRequest({idea: "x".repeat(9)}).errors.idea).toBe("intake.err.ideaShort");
+    expect(c.buildIntakeRequest({idea: "x".repeat(10)}).ok).toBe(true);
+    expect(c.buildIntakeRequest({idea: " ".repeat(5) + "x".repeat(9) + " ".repeat(5)}).errors.idea).toBe("intake.err.ideaShort"); // kırpıldıktan sonra 9
+    expect(c.buildIntakeRequest({idea: "x".repeat(4000)}).ok).toBe(true);
+    expect(c.buildIntakeRequest({idea: IDEA, title: "t".repeat(120)}).ok).toBe(true);
+    expect(c.buildIntakeRequest({idea: IDEA, techStack: ["t".repeat(50)]}).ok).toBe(true);
+    expect(c.buildIntakeRequest({idea: IDEA, techStack: ["t".repeat(51)]}).errors.techStack).toBe("intake.err.tech");
+    expect(c.buildIntakeRequest({idea: IDEA, acceptanceCriteria: ["k".repeat(4000)]}).ok).toBe(true);
+    expect(c.buildIntakeRequest({idea: IDEA, acceptanceCriteria: ["k".repeat(4001)]}).errors.acceptanceCriteria).toBe("intake.err.criteria");
+  });
+  it("maps intake records strictly and carries field sources verbatim; one malformed record makes the list ERROR", async () => {
+    const c = await load(rend, "intake-core.js");
+    expect(c.mapIntake(rec()).sources).toEqual({title: "FOUNDER", acceptanceCriteria: "DEFAULT", riskLevel: "DEFAULT"});
+    for (const bad of [null, rec({intakeId: "itk_x"}), rec({projectId: "p"}), rec({missionId: "m"}), rec({riskLevel: "R9"}), rec({sources: {title: "FOUNDER"}}), rec({sources: {title: "ME", acceptanceCriteria: "DEFAULT", riskLevel: "DEFAULT"}}),
+      rec({acceptanceCriteria: "x"}), rec({idea: ""}), rec({title: 5})]) expect(c.mapIntake(bad), JSON.stringify(bad)?.slice(0, 60)).toBeNull();
+    expect(c.mapIntakes({intakes: [rec(), rec({intakeId: "itk_" + "ff".repeat(12), createdAt: "2026-10-21T11:00:00.000Z"})]}).items[0].intakeId).toBe("itk_" + "ff".repeat(12)); // yeni önce
+    expect(c.mapIntakes({intakes: [rec(), null]}).state).toBe("ERROR");
+    expect(c.mapIntakes({}).state).toBe("ERROR");
+    expect(c.intakePath(ITK)).toBe(`/v1/intakes/${ITK}`); expect(c.intakePath("x")).toBeNull();
+  });
+  it("renders on the Projects screen, sends nothing until submit, then posts the typed idea once and shows server-marked sources with open buttons", async () => {
+    const {ctx, doc, calls, root, m} = await open({post: (p, b) => p === "/v1/intakes" ? {status: 201, body: {intake: rec({title: b.title ?? "Kitap Kulübü"})}} : {status: 404, body: {}}});
+    expect(byId(root, "intake")).not.toBeNull();
+    expect(calls.post).toEqual([]);
+    type(root, "intake-idea", IDEA); type(root, "intake-title", "Kitap Kulübü");
+    byId(root, "intake-form")!.fire("submit"); await tick();
+    expect(calls.post.length).toBe(1);
+    expect(calls.post[0].path).toBe("/v1/intakes");
+    expect(calls.post[0].body).toMatchObject({idea: IDEA, title: "Kitap Kulübü"});
+    expect(Object.keys(calls.post[0].body).sort()).toEqual(["idea", "idempotencyKey", "title"]);
+    expect(forms.drafts.status.intake.ok).toBe(true);
+    const root2 = mount(doc, await projectsView.render(ctx));
+    const res = byId(root2, "intake-result")!;
+    expect(res.dataset.intakeId).toBe(ITK);
+    expect(text(res)).toContain("You entered"); expect(text(res)).toContain("Default, not entered by you");
+    expect(m.intakeDraft.idea).toBe("");
+    byId(root2, "intake-open-mission")!.fire("click");
+    expect(calls.navigate).toEqual(["work"]); expect(forms.selection.missionId).toBe(MSN);
+    byId(root2, "intake-open-project")!.fire("click"); await tick();
+    expect(calls.selected).toEqual([PID]);
+  });
+  it("validation errors send nothing; refusals and an invalid server record never show a result card; the draft is kept", async () => {
+    const v = await open({});
+    type(v.root, "intake-idea", "kısa");
+    byId(v.root, "intake-form")!.fire("submit"); await tick();
+    expect(v.calls.post).toEqual([]); expect(forms.drafts.status.intake.ok).toBe(false);
+    const cases: Array<[any, string]> = [[{status: 409, body: {error: "INTAKE_IDEMPOTENCY_CONFLICT"}}, "post.err.409"], [{status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}, "post.err.423"], [{status: 403, body: {error: "FORBIDDEN"}}, "post.err.auth"],
+      [{status: 404, body: {error: "NOT_FOUND"}}, "post.err.unavailable"], [{status: 503, body: {error: "INTAKE_STORE_CORRUPT"}}, "post.err.503"]];
+    for (const [resp, key] of cases) {
+      forms.resetAllForms();
+      const o = await open({post: () => resp});
+      type(o.root, "intake-idea", IDEA);
+      byId(o.root, "intake-form")!.fire("submit"); await tick();
+      expect(forms.drafts.status.intake, key).toMatchObject({ok: false, key});
+      const r2 = mount(o.doc, await projectsView.render(o.ctx));
+      expect(byId(r2, "intake-result")).toBeNull(); expect(byId(r2, "intake-idea")!.value).toBe(IDEA);
+    }
+    forms.resetAllForms();
+    const odd = await open({post: () => ({status: 201, body: {intake: rec({missionId: "bad"})}})});
+    type(odd.root, "intake-idea", IDEA);
+    byId(odd.root, "intake-form")!.fire("submit"); await tick();
+    expect(forms.drafts.status.intake.ok).toBe(true); // sunucu 201 dedi; kayıt bozuk -> kısayol/kaynak etiketi uydurulmaz
+    expect(byId(mount(odd.doc, await projectsView.render(odd.ctx)), "intake-result")).toBeNull();
+  });
+  it("lists earlier intakes from GET /v1/intakes and shows an honest UNAVAILABLE note when the read is not reachable", async () => {
+    const c = await mkCtx({lang: "en", get: projectsGet({"/v1/intakes": {intakes: [rec()]}})});
+    (await load(rend, "views", "intake.js")).resetIntakeAll();
+    const root = mount(c.doc, await projectsView.render(c.ctx));
+    expect(all(root).filter(n => n.dataset.intakeRow).map(n => n.dataset.intakeRow)).toEqual([ITK]);
+    const off = await open({});
+    expect(all(off.root).filter(n => n.dataset.intakeRow).length).toBe(0);
+    expect(text(byId(off.root, "intake")!)).toContain("not available to the desktop yet");
+    expect(byId(off.root, "intake-form")).not.toBeNull(); // oluşturma listeden bağımsız
+  });
+  it("intake strings exist in en and tr", async () => {
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+    const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("intake.") || k === "form.field.idea");
+    expect(keys.length).toBe(34);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
+  });
+});
