@@ -347,17 +347,17 @@ export function mapFlow(raw){
   return {state:"VERIFIED",flow:{projectId:f.projectId,stages,missionCount:cnt(f.missionCount),taskCount:cnt(f.taskCount),latestRunId:rid}};
 }
 
-// //TR: LANE-A: Akış aşamasının `detail` kodunu okunur anlama eşler (yalnız bilinen kodlar çevrilir; bilinmeyen kod AYNEN ham gösterilir, "tanınmadı" diye işaretlenir). Olumlu anlam eklenmez: ürün doğrulandı demeyen kodlar (…_NOT_VERIFIED, CLEAN_REVIEW_FOR_HEAD) bunu açıkça söyler.
-export const FLOW_DETAIL_CODES=Object.freeze({
-  MISSION:Object.freeze(["COMPLETE","BLOCKED"]),
-  PLAN:Object.freeze([]),
-  RUN:Object.freeze([]),
-  REVIEW:Object.freeze(["CLEAN_REVIEW_GATE_PASSED","CLEAN_REVIEW_FOR_HEAD","RUN_NOT_SUCCEEDED","REVIEW","REGRESSION","REPORT"]),
-  DELIVERY:Object.freeze(["PRODUCT_VERIFIED","NOT_VERIFIED","SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED","ARTIFACT_PREPARED_NOT_VERIFIED"])
+// //TR: LANE-A: Akış aşamasının `detail` kodunu okunur anlama eşler. Anlam YALNIZ aşama durumuyla (state) birlikte geçerlidir: sunucu ACTIVE mission aşamasına son mission'ın durumunu (ör. COMPLETE) yazabilir, bu yüzden "tüm mission'lar tamamlandı" yalnız state=DONE iken söylenir. Bilinen kod yanlış durumla gelirse çevrilmez (MISSION için yalnız düz durum etiketi, diğerleri ham ve "beklenmeyen" notuyla); bilinmeyen kod AYNEN ham ve "tanınmadı" notuyla gösterilir. Olumlu anlam eklenmez.
+export const FLOW_DETAIL_STATES=Object.freeze({
+  MISSION:Object.freeze({COMPLETE:["DONE"],BLOCKED:["BLOCKED"]}),
+  PLAN:Object.freeze({}),
+  RUN:Object.freeze({}),
+  REVIEW:Object.freeze({CLEAN_REVIEW_GATE_PASSED:["DONE"],CLEAN_REVIEW_FOR_HEAD:["DONE"],RUN_NOT_SUCCEEDED:["UNKNOWN"],REVIEW:["ACTIVE"],REGRESSION:["ACTIVE"],REPORT:["ACTIVE"]}),
+  DELIVERY:Object.freeze({PRODUCT_VERIFIED:["DONE"],NOT_VERIFIED:["DONE"],SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED:["ACTIVE"],ARTIFACT_PREPARED_NOT_VERIFIED:["ACTIVE"]})
 });
 const FLOW_STATUS_RE=/^[A-Z][A-Z0-9_]{0,39}$/;
-/** {kind:"key",key,vars} | {kind:"status",status} | {kind:"raw",text} | null (detay yok). PLAN "n/m DONE" ve RUN "STATUS/STEP" biçimleri sayı/durum olarak ayrıştırılır. */
-export function describeFlowDetail(stage,detail){
+/** {kind:"key",key,vars} | {kind:"status",status} | {kind:"raw",text,mismatch?} | null (detay yok). PLAN "n/m DONE" ve RUN "STATUS/STEP" biçimleri sayı/durum olarak ayrıştırılır. */
+export function describeFlowDetail(stage,detail,state){
   if(typeof detail!=="string"||!detail)return null;
   if(stage==="PLAN"){
     const m=/^(\d{1,6})\/(\d{1,6}) DONE$/.exec(detail);
@@ -369,7 +369,12 @@ export function describeFlowDetail(stage,detail){
     if(m)return {kind:"key",key:"flow.detail.RUN.status",vars:{status:m[1],step:m[2]}};
     return {kind:"raw",text:detail};
   }
-  if((FLOW_DETAIL_CODES[stage]??[]).includes(detail))return {kind:"key",key:`flow.detail.${stage}.${detail}`,vars:{}};
+  const codes=FLOW_DETAIL_STATES[stage]??{};
+  if(Object.hasOwn(codes,detail)){
+    if(codes[detail].includes(state))return {kind:"key",key:`flow.detail.${stage}.${detail}`,vars:{}};
+    if(stage==="MISSION")return {kind:"status",status:detail};
+    return {kind:"raw",text:detail,mismatch:true};
+  }
   if(stage==="MISSION"&&FLOW_STATUS_RE.test(detail))return {kind:"status",status:detail};
   return {kind:"raw",text:detail};
 }

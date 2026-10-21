@@ -1193,6 +1193,7 @@ export default {
   "flow.stage.RUN":"Koşu",
   "flow.stage.REVIEW":"İnceleme",
   "flow.stage.DELIVERY":"Teslimat",
+  "flow.detail.unexpected":"kod bu aşamanın durumuyla uyuşmuyor",
   "flow.detail.unrecognised":"tanınmayan kod",
   "flow.detail.PLAN.progress":"planlı {total} görevden {done} tanesi bitti olarak kayıtlı",
   "flow.detail.RUN.status":"son koşu: {status}, adım {step}",

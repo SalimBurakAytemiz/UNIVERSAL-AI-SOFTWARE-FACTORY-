@@ -5,12 +5,12 @@ import {flowPath,mapFlow,describeFlowDetail} from "../project-core.js";
 const KIND={DONE:"badge-notverified",BLOCKED:"badge-risk",FAILED:"badge-risk"};
 /** Aşama ayrıntısı: bilinen kodlar okunur metin (ham kod ayrıca tutulur), bilinmeyen kod aynen ve "tanınmadı" notuyla; ayrıntı yoksa hiçbir şey. */
 function detailNode(ctx,s){
-  const d=describeFlowDetail(s.stage,s.detail),doc=ctx.doc;
+  const d=describeFlowDetail(s.stage,s.detail,s.state),doc=ctx.doc;
   if(!d)return null;
   let text;
   if(d.kind==="key")text=ctx.t(d.key,d.key==="flow.detail.RUN.status"?{status:statusLabel(ctx,d.vars.status),step:d.vars.step}:d.vars);
   else if(d.kind==="status")text=statusLabel(ctx,d.status);
-  else text=`${d.text} (${ctx.t("flow.detail.unrecognised")})`;
+  else text=`${d.text} (${ctx.t(d.mismatch?"flow.detail.unexpected":"flow.detail.unrecognised")})`;
   return h(doc,"span",{class:"note",dataset:{flowDetail:s.detail,flowDetailKind:d.kind},text:` ${text}`});
 }
 export async function flowPanel(ctx,projectId){

@@ -1193,6 +1193,7 @@ export default {
   "flow.stage.RUN":"Run",
   "flow.stage.REVIEW":"Review",
   "flow.stage.DELIVERY":"Delivery",
+  "flow.detail.unexpected":"code does not match this stage's state",
   "flow.detail.unrecognised":"unrecognised code",
   "flow.detail.PLAN.progress":"{done} of {total} planned tasks recorded as done",
   "flow.detail.RUN.status":"latest run: {status}, step {step}",
