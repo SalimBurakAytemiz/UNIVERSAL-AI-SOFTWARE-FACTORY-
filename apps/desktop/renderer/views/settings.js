@@ -2,7 +2,7 @@
 import {h,panel,stateNote,emptyNote,badge,statePill} from "../components.js";
 import {LANGS} from "../i18n.js";
 import {PILL_KINDS} from "../model.js";
-import {executorsPanel} from "./executors-panel.js";
+import {executorsPanel,routingPanel} from "./executors-panel.js";
 import {computeContrastRows,readTokens} from "../contrast-core.js";
 
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
@@ -136,6 +136,7 @@ export async function render(ctx){
   return h(doc,"div",{class:"view"},h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.settings.title")}),
     connectionPanel(ctx,exec),
     await executorsPanel(ctx),
+    await routingPanel(ctx),
     governancePanel(ctx,control,sandbox),
     appPanel(ctx,health,factory,sandbox),
     legendPanel(ctx),
