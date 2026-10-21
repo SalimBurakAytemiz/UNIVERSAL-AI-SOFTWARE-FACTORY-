@@ -168,6 +168,36 @@ export function buildPlanRequest({missionId,rows}){
   const ok=!Object.keys(errors).length;
   return {ok,path:planPath(missionId),body:ok?{tasks}:null,errors,rowErrors};
 }
+// ---------- Görev durumu (POST /v1/tasks/:id/transition, COORD-TASK-STATUS) ----------
+// //TR: COORD-TASK-UI: core/workos/types.ts TASK_TRANSITIONS'ın birebir aynası; yalnız hangi düğmenin sunulacağını belirler, karar sunucudadır. IN_PROGRESS yalnız tüm bağımlılıklar DONE iken sunulur; COMPLETE mission'ın görevleri donuktur. Gövde sunucu şemasıyla aynıdır: {to, reason(1..1000)}.
+export const TASK_TRANSITIONS=Object.freeze({PENDING:Object.freeze(["IN_PROGRESS","BLOCKED"]),IN_PROGRESS:Object.freeze(["DONE","BLOCKED","PENDING"]),BLOCKED:Object.freeze(["PENDING"]),DONE:Object.freeze([])});
+export const TASK_ID_RE=/^tsk_[0-9a-f]{24}$/;
+export const TASK_REASON_MAX=1000;
+export const isTaskStatus=s=>typeof s==="string"&&Object.prototype.hasOwnProperty.call(TASK_TRANSITIONS,s);
+export const taskTransitionPath=id=>TASK_ID_RE.test(String(id))?`/v1/tasks/${id}/transition`:null;
+/** Görevin DONE olmayan (veya listede bulunamayan) bağımlılıkları; dependsOn okunamadıysa (null) boş liste döner ve karar sunucuya kalır. */
+export function pendingTaskDeps(task,tasks){
+  const byId=new Map((Array.isArray(tasks)?tasks:[]).map(t=>[t?.taskId,t]));
+  return (Array.isArray(task?.dependsOn)?task.dependsOn:[]).filter(d=>byId.get(d)?.status!=="DONE");
+}
+/** {targets, blockedBy}: sunulabilecek hedef durumlar ve IN_PROGRESS'i bekleten bağımlılıklar. */
+export function allowedTaskTargets(task,tasks,missionStatus){
+  if(!task||!isTaskStatus(task.status)||missionStatus==="COMPLETE")return {targets:[],blockedBy:[]};
+  const all=TASK_TRANSITIONS[task.status],blockedBy=all.includes("IN_PROGRESS")?pendingTaskDeps(task,tasks):[];
+  return {targets:all.filter(to=>to!=="IN_PROGRESS"||!blockedBy.length),blockedBy};
+}
+/** Görev durum geçişi isteği: yalnız izin verilen hedefler; BLOCKED gerekçe ister, boş gerekçe diğer hedeflerde "FROM -> TO (UASCO Desktop)" olur. */
+export function buildTaskTransitionRequest({task,tasks,missionStatus,to,reason}){
+  const errors={},r=trim(reason),path=taskTransitionPath(task?.taskId);
+  if(!path)errors.task="taskst.err.task";
+  else{
+    const {targets,blockedBy}=allowedTaskTargets(task,tasks,missionStatus);
+    if(!targets.includes(to))errors.to=to==="IN_PROGRESS"&&blockedBy.length?"taskst.err.deps":missionStatus==="COMPLETE"?"taskst.err.frozen":"err.transitionNotAllowed";
+  }
+  if(to==="BLOCKED"&&!r)errors.reason="err.reasonRequired";
+  if(r.length>TASK_REASON_MAX)errors.reason="taskst.err.reasonLong";
+  return result(path,{to,reason:r||`${task?.status} -> ${to} (UASCO Desktop)`},errors);
+}
 /** Durum geçişi isteği; yalnız durum makinesinin izin verdiği hedefler, yüksek riskli hedeflerde confirmed===true şart.
  *  D-M1A-STATE-MODEL-2026-10-15: geçiş gövdesi hiçbir onay alanı taşımaz (COMPLETE yalnız PRODUCT_VERIFIED kanıtıyla olur); onay verilmeye çalışılırsa istek kurulmaz. */
 export function buildTransitionRequest({missionId,from,to,reason,confirmed,acknowledgements}){
@@ -196,7 +226,9 @@ const KNOWN_409=new Set(["EXECUTOR_NOT_CONFIGURED","SANDBOX_UNAVAILABLE","NO_GEN
 // //TR: M1a + FX-1: COMPLETE kanıt kapısı reddi {error:"WORKOS_CONFLICT", reason:<sabit kod>} olarak gelir; onay gerektiren nedenler açık iletiyle gösterilir.
 // D-M1A-STATE-MODEL-2026-10-15: COMPLETE PRODUCT_VERIFIED ister; kaynak teslimi kabul kapısı da {error:"WORKOS_CONFLICT", reason} ile reddeder.
 const KNOWN_COMPLETION_409=new Set(["COMPLETION_PRODUCT_NOT_VERIFIED","COMPLETION_FUNCTIONAL_ACCEPTANCE_BLOCKED","SOURCE_GENERATION_NOT_COMPLETE","NO_GENERATED_SOURCE","DELIVERY_ACCEPTANCE_MISMATCH","DELIVERY_ALREADY_ACCEPTED",
-  "DELIVERY_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT","DELIVERY_ARTIFACT_NOT_PREPARED","DELIVERY_NOT_LATEST_RUN","DELIVERY_MISSION_NOT_REPORTING","DELIVERY_RUN_NOT_AWAITING_APPROVAL","DELIVERY_PRODUCT_VERIFIED_USE_COMPLETE"]);
+  "DELIVERY_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT","DELIVERY_ARTIFACT_NOT_PREPARED","DELIVERY_NOT_LATEST_RUN","DELIVERY_MISSION_NOT_REPORTING","DELIVERY_RUN_NOT_AWAITING_APPROVAL","DELIVERY_PRODUCT_VERIFIED_USE_COMPLETE",
+  // //TR: COORD-TASK-UI: görev geçişi retleri (bağımlılık bitmedi, mission tamamlandı) aynı {error:"WORKOS_CONFLICT", reason} biçimiyle gelir.
+  "TASK_DEPENDENCIES_NOT_DONE","MISSION_COMPLETE"]);
 /** //TR: UI-109: ACTION_DENIED nedeni ilk ':' öncesine kesilir; yalnız sabit kod biçimine uyuyorsa gösterilir, yoksa "" (neden uydurulmaz). */
 function denialReason(raw){
   if(typeof raw!=="string")return "";
@@ -234,7 +266,9 @@ export function formatDateTime(isoString,lang="tr"){
 export function mapMissionDetail(raw){
   const m=isObj(raw)&&isObj(raw.mission)?raw.mission:null;
   if(!m||!MISSION_ID_RE.test(String(m.missionId??"")))return {state:"ERROR",mission:null};
-  const tasks=arr(raw.tasks,200).filter(isObj).map(t=>({taskId:str(t.taskId,80),title:str(t.title,200)??MISSING,status:statusStr(t.status)??MISSING})).filter(t=>t.taskId);
+  // //TR: COORD-TASK-UI: dependsOn yalnız sunucu dizi döndürdüyse ve geçerli görev kimlikleri içeriyorsa okunur; alan yoksa null (bilinmiyor) kalır, uydurulmaz.
+  const tasks=arr(raw.tasks,200).filter(isObj).map(t=>({taskId:str(t.taskId,80),title:str(t.title,200)??MISSING,status:statusStr(t.status)??MISSING,
+    dependsOn:Array.isArray(t.dependsOn)?t.dependsOn.slice(0,50).filter(d=>typeof d==="string"&&TASK_ID_RE.test(d)):null})).filter(t=>t.taskId);
   return {state:"VERIFIED",mission:{
     missionId:m.missionId,projectId:str(m.projectId,80),title:str(m.title,200)??MISSING,objective:str(m.objective,4000)??MISSING,
     acceptanceCriteria:arr(m.acceptanceCriteria,50).filter(c=>typeof c==="string").map(c=>c.slice(0,4000)),
@@ -366,7 +400,9 @@ export function deriveTaskInspector(detailRes,runsRes,taskId){
   const runsKnown=runsRes?.state==="VERIFIED"&&Array.isArray(runsRes.items),byStatus={};
   if(runsKnown)for(const r of runsRes.items)byStatus[r.status]=(byStatus[r.status]??0)+1;
   return {state:"VERIFIED",task:{taskId:t.taskId,title:t.title,status:t.status,missionId:m.missionId,missionTitle:m.title,missionStatus:m.status,riskLevel:m.riskLevel,
-    runs:runsKnown?{known:true,count:runsRes.items.length,byStatus}:{known:false,count:null,byStatus:{}},unknownFields:[...TASK_UNKNOWN_FIELDS]}};
+    // //TR: COORD-TASK-UI: bağımlılıklar yalnız okumada dependsOn dizisi varsa gösterilir (başlık/durum aynı mission'ın görevlerinden); yoksa alan UNKNOWN kalır.
+    dependencies:Array.isArray(t.dependsOn)?t.dependsOn.map(id=>{const d=(m.tasks??[]).find(x=>x.taskId===id);return {taskId:id,title:d?.title??null,status:d?.status??null}}):null,
+    runs:runsKnown?{known:true,count:runsRes.items.length,byStatus}:{known:false,count:null,byStatus:{}},unknownFields:TASK_UNKNOWN_FIELDS.filter(k=>k!=="dependencies"||!Array.isArray(t.dependsOn))}};
 }
 
 // //TR: UI-025 salt-okunur görev/koşu zaman çizelgesi: yalnız GET /v1/missions/:id ve GET /v1/work-runs okumalarından türetilir. Zaman damgası olmayan olay UNKNOWN sırada sona konur, zaman uydurulmaz; mission okuması VERIFIED değilse (STALE dahil) UNKNOWN; koşu okuması VERIFIED değilse koşu olayları yoktur ve runsKnown=false döner.

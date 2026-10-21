@@ -1,5 +1,6 @@
 // //TR: Bu görünüm Görevler / Work OS alanıdır ve UX WP-WORKOS ile Kurucu-Kokpiti sınıfı premium katmana yükseltilmiştir: üstte gerçek /v1/missions + /v1/work-runs okumalarından beslenen görev/koşu özeti (KPI karoları: toplam mission, etkin koşu, Kurucu dikkati bekleyen, gerçekten doğrulanmış koşu) ve yaşam-döngüsü dağılım şeridi vardır. Alt kısımda "Yeni Görev" formu (proje, başlık, hedef, kabul kriterleri listesi, R0–R4 risk açıklamaları, isteğe bağlı argv test komutu), mission listesi (durum filtreli), mission detayı (durum/faz/risk, izinli geçişler, yüksek riskli geçişlerde onay, Çalıştır), /v1/work-runs koşu zaman çizelgesi + koşu kartları ve /v1/evidence kanıt bağlama bölümü korunur/eklenir. WP2/WP-PROJECTS token ve bileşenleri (kpiTile/statePill/missionPill/timelineItem) yeniden kullanılır (palet değişmez, yeni token yok). Hiçbir sayı/durum uydurulmaz: veri canlı değilse dürüst UNAVAILABLE/OFFLINE, boşsa dürüst boş metin; koşu yalnız gerçek test-yürütme kanıtı varsa doğrulanmış sayılır (FD-REL-1; SOURCE_GENERATION_COMPLETE != PRODUCT_VERIFIED), aksi halde NOT_VERIFIED dürüstçe gösterilir. API verisi asla HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
 import {planFormPanel} from "./plan-form.js";
+import {taskStatusControls} from "./task-status.js";
 import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip,kpiTile,statePill,missionPill,timelineItem} from "../components.js";
 import {formatTime,formatCount,MISSING,missionPillKind} from "../model.js";
 import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline} from "../work-core.js";
@@ -259,6 +260,7 @@ export function taskInspector(ctx,detail,runsRes,missionId){
         h(doc,"dt",{text:ctx.t("work.task.mission")}),h(doc,"dd",{dataset:{taskField:"mission"},text:`${t.missionTitle} · ${statusLabel(ctx,t.missionStatus)} · ${t.riskLevel}`}),
         h(doc,"dt",{text:ctx.t("work.task.runs")}),runsText?h(doc,"dd",{dataset:{taskField:"runs"},text:runsText}):unk("runs"),
         h(doc,"dt",{text:ctx.t("work.task.runLink")}),unk("runLink"),
+        ...(t.dependencies?[h(doc,"dt",{text:ctx.t("work.task.f.dependencies")}),h(doc,"dd",{dataset:{taskField:"dependencies"}},t.dependencies.length?h(doc,"ul",{},t.dependencies.map(d=>h(doc,"li",{},h(doc,"span",{text:d.title??d.taskId})," ",d.status?statusPill(ctx,d.status):h(doc,"span",{class:"task-unknown",text:ctx.t("work.task.unknown")})))):ctx.t("work.task.noDeps"))]:[]),
         ...t.unknownFields.flatMap(k=>[h(doc,"dt",{text:ctx.t(`work.task.f.${k}`)}),unk(k)])));
     }
   }
@@ -297,7 +299,7 @@ function detailPanel(ctx,detail,runsRes,runDetails,evRes){
     h(doc,"p",{class:"panel-meta"},statusPill(ctx,m.status),badge(ctx,m.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:m.missionId}),missionNotVerified(runsRes.state==="VERIFIED"?runsRes.items:[],m.missionId)?notVerifiedBadge(ctx,"mission"):null),
     h(doc,"p",{text:m.objective}),
     h(doc,"h4",{text:ctx.t("work.detail.criteria")}),m.acceptanceCriteria.length?h(doc,"ul",{},m.acceptanceCriteria.map(c=>h(doc,"li",{text:c}))):emptyNote(ctx,"work.detail.noCriteria"),
-    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
+    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
     workTimeline(ctx,detail,runsRes),
     planFormPanel(ctx,m),
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),

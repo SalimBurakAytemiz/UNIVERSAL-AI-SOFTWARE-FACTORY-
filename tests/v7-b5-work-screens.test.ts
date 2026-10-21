@@ -1357,3 +1357,120 @@ describe("LANE-A mission plan form", () => {
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
+
+// //TR: COORD-TASK-UI: seçili görevin durum denetimi (POST /v1/tasks/:id/transition) — sunucu durum makinesinin aynası, bağımlılık kapısı, donuk COMPLETE mission, sıkı gövde ve dürüst retler.
+describe("COORD task status controls", () => {
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const T1 = "tsk_" + "1".repeat(24), T2 = "tsk_" + "2".repeat(24);
+  const tasksOf = (s1 = "PENDING", s2 = "PENDING") => [{taskId: T1, missionId: MID, title: "Giriş ekranı", status: s1, dependsOn: []}, {taskId: T2, missionId: MID, title: "API", status: s2, dependsOn: [T1]}];
+  const getFor = (status: string, tasks: any[]) => (p: string) => {
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission({status})]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission({status}), tasks};
+    if (p.startsWith("/v1/work-runs")) return {workRuns: []};
+    if (p.startsWith("/v1/evidence")) return {evidence: []};
+    return undefined;
+  };
+  const open = async (o: CtxOpts, status: string, tasks: any[], taskId: string) => {
+    const c = await mkCtx({...o, get: getFor(status, tasks)});
+    forms.selection.missionId = MID;
+    const view = await load(rend, "views", "work.js"), ts = await load(rend, "views", "task-status.js");
+    ts.resetTaskStatusDraft(null);
+    let root = mount(c.doc, await view.render(c.ctx));
+    if (byId(root, "task-status")?.dataset.taskStatus !== taskId) { byData(root, "taskInspect", taskId)[0].fire("click"); root = mount(c.doc, await view.render(c.ctx)); }
+    expect(byId(root, "task-status")!.dataset.taskStatus).toBe(taskId);
+    return {...c, view, ts, root};
+  };
+  const targets = (root: N) => byData(root, "taskTo").map(n => n.dataset.taskTo);
+
+  it("mirrors the server task state machine exactly and gates IN_PROGRESS on done dependencies", async () => {
+    const c = await load(rend, "work-core.js"), server = await load(root, "core", "workos", "types.ts");
+    expect(JSON.parse(JSON.stringify(c.TASK_TRANSITIONS))).toEqual(JSON.parse(JSON.stringify(server.TASK_TRANSITIONS)));
+    const [t1, t2] = tasksOf();
+    expect(c.allowedTaskTargets(t2, [t1, t2], "PLANNED")).toEqual({targets: ["BLOCKED"], blockedBy: [T1]});
+    expect(c.allowedTaskTargets(t2, [{...t1, status: "DONE"}, t2], "PLANNED")).toEqual({targets: ["IN_PROGRESS", "BLOCKED"], blockedBy: []});
+    expect(c.allowedTaskTargets(t2, [t2], "PLANNED").blockedBy).toEqual([T1]); // listede olmayan bağımlılık bitmiş sayılmaz
+    expect(c.allowedTaskTargets({...t1, status: "IN_PROGRESS"}, [t1], "EXECUTING").targets).toEqual(["DONE", "BLOCKED", "PENDING"]);
+    expect(c.allowedTaskTargets({...t1, status: "BLOCKED"}, [t1], "EXECUTING").targets).toEqual(["PENDING"]);
+    expect(c.allowedTaskTargets({...t1, status: "DONE"}, [t1], "EXECUTING").targets).toEqual([]);
+    expect(c.allowedTaskTargets(t1, [t1], "COMPLETE")).toEqual({targets: [], blockedBy: []});
+    expect(c.allowedTaskTargets({...t1, status: "LATER"}, [t1], "PLANNED").targets).toEqual([]);
+    expect(c.allowedTaskTargets({...t2, dependsOn: null}, [t2], "PLANNED").targets).toEqual(["IN_PROGRESS", "BLOCKED"]); // okunamayan bağımlılıkta karar sunucuda
+  });
+  it("builds a strict {to, reason} body and refuses what the server would refuse", async () => {
+    const c = await load(rend, "work-core.js"), [t1, t2] = tasksOf();
+    const req = (o: any) => c.buildTaskTransitionRequest({task: t1, tasks: [t1, t2], missionStatus: "PLANNED", ...o});
+    expect(req({to: "IN_PROGRESS", reason: ""})).toEqual({ok: true, path: `/v1/tasks/${T1}/transition`, body: {to: "IN_PROGRESS", reason: "PENDING -> IN_PROGRESS (UASCO Desktop)"}});
+    expect(req({to: "BLOCKED", reason: "  tasarım bekleniyor "}).body).toEqual({to: "BLOCKED", reason: "tasarım bekleniyor"});
+    expect(req({to: "IN_PROGRESS", reason: "r".repeat(1000)}).ok).toBe(true);
+    expect(req({to: "IN_PROGRESS", reason: "r".repeat(1001)}).errors).toEqual({reason: "taskst.err.reasonLong"});
+    expect(req({to: "BLOCKED", reason: "   "}).errors).toEqual({reason: "err.reasonRequired"});
+    expect(req({to: "DONE"}).errors).toEqual({to: "err.transitionNotAllowed"});
+    expect(req({to: "IN_PROGRESS", task: t2}).errors).toEqual({to: "taskst.err.deps"});
+    expect(req({to: "BLOCKED", reason: "x", missionStatus: "COMPLETE"}).errors).toEqual({to: "taskst.err.frozen"});
+    expect(req({to: "IN_PROGRESS", task: {...t1, taskId: "tsk_alpha01"}}).errors).toEqual({task: "taskst.err.task"});
+    const mapped = c.mapMissionDetail({mission: mission(), tasks: [{taskId: T2, title: "API", status: "PENDING", dependsOn: [T1, "../x", 5]}, {taskId: T1, title: "A", status: "DONE"}]});
+    expect(mapped.mission.tasks.map((t: any) => t.dependsOn)).toEqual([[T1], null]);
+    for (const reason of ["TASK_DEPENDENCIES_NOT_DONE", "MISSION_COMPLETE"]) expect(c.describePostResult({status: 409, body: {error: "WORKOS_CONFLICT", reason}}).key).toBe(`post.err.409.${reason}`);
+  });
+  it("offers only allowed targets, explains waiting dependencies, and posts one exact request", async () => {
+    const blocked = await open({}, "PLANNED", tasksOf(), T2);
+    expect(targets(blocked.root)).toEqual(["BLOCKED"]);
+    expect(text(byData(blocked.root, "taskstNote", "deps")[0])).toContain("Giriş ekranı");
+    expect(text(byData(blocked.root, "taskField", "dependencies")[0])).toContain("Giriş ekranı");
+    const o = await open({post: (_p, b) => ({status: 200, body: {task: {taskId: T1, status: b.to}}})}, "PLANNED", tasksOf(), T1);
+    expect(targets(o.root)).toEqual(["IN_PROGRESS", "BLOCKED"]);
+    expect(o.calls.post).toEqual([]); // render hiçbir şey göndermez
+    byId(o.root, "taskst-IN_PROGRESS")!.fire("click"); await tick();
+    expect(o.calls.post).toEqual([{path: `/v1/tasks/${T1}/transition`, body: {to: "IN_PROGRESS", reason: "PENDING -> IN_PROGRESS (UASCO Desktop)"}}]);
+    expect(forms.drafts.status["task-status"]).toMatchObject({ok: true, key: "taskst.done"});
+    expect(o.calls.refresh).toBe(1);
+    const r = await open({post: () => ({status: 200, body: {}})}, "EXECUTING", tasksOf("IN_PROGRESS"), T1);
+    expect(targets(r.root)).toEqual(["DONE", "BLOCKED", "PENDING"]);
+    byId(r.root, "taskst-reason")!.value = " kabul testi geçti "; byId(r.root, "taskst-reason")!.fire("input");
+    byId(r.root, "taskst-DONE")!.fire("click"); await tick();
+    expect(r.calls.post[0].body).toEqual({to: "DONE", reason: "kabul testi geçti"});
+    expect(r.ts.taskStatusDraft.reason).toBe("");
+  });
+  it("sends nothing when the request is invalid, frozen, terminal or the task ID is unknown", async () => {
+    const b = await open({post: () => ({status: 200, body: {}})}, "PLANNED", tasksOf(), T1);
+    byId(b.root, "taskst-BLOCKED")!.fire("click"); await tick();
+    expect(b.calls.post).toEqual([]);
+    expect(forms.drafts.status["task-status"]).toMatchObject({ok: false, errors: {reason: "err.reasonRequired"}});
+    for (const [st, tasks, note] of [["COMPLETE", tasksOf("DONE", "DONE"), "frozen"], ["EXECUTING", tasksOf("DONE"), "terminal"]] as const) {
+      const o = await open({}, st, tasks as any, T1);
+      expect(targets(o.root), st).toEqual([]);
+      expect(byData(o.root, "taskstNote", note).length, st).toBe(1);
+    }
+    const u = await open({}, "PLANNED", [{taskId: "tsk_alpha01", title: "Eski", status: "PENDING"}], "tsk_alpha01");
+    expect(targets(u.root)).toEqual([]);
+    expect(byData(u.root, "taskstNote", "id").length).toBe(1);
+  });
+  it("server and bridge refusals never report success and keep the typed reason", async () => {
+    const cases: Array<[any, string]> = [[{status: 409, body: {error: "WORKOS_CONFLICT", reason: "TASK_DEPENDENCIES_NOT_DONE"}}, "post.err.409.TASK_DEPENDENCIES_NOT_DONE"],
+      [{status: 409, body: {error: "WORKOS_CONFLICT", reason: "MISSION_COMPLETE"}}, "post.err.409.MISSION_COMPLETE"], [{status: 409, body: {error: "WORKOS_INVALID_TRANSITION"}}, "post.err.409"],
+      [{status: 403, body: {error: "ACTION_DENIED", reason: "POLICY_DENY: x"}}, "post.err.denied"], [{status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}, "post.err.423"],
+      [{status: 404, body: {error: "NOT_FOUND"}}, "post.err.unavailable"], [{status: 400, body: {error: "INVALID_BODY"}}, "post.err.400"]];
+    for (const [resp, key] of cases) {
+      forms.resetAllForms();
+      const o = await open({post: () => resp}, "PLANNED", tasksOf(), T1);
+      byId(o.root, "taskst-reason")!.value = "neden"; byId(o.root, "taskst-reason")!.fire("input");
+      byId(o.root, "taskst-IN_PROGRESS")!.fire("click"); await tick();
+      expect(forms.drafts.status["task-status"], key).toMatchObject({ok: false, key});
+      expect(o.ts.taskStatusDraft.reason, key).toBe("neden");
+    }
+    forms.resetAllForms();
+    const net = await open({}, "PLANNED", tasksOf(), T1); // post tanımsız: köprü hatası
+    byId(net.root, "taskst-IN_PROGRESS")!.fire("click"); await tick();
+    expect(forms.drafts.status["task-status"].ok).toBe(false);
+    expect(forms.drafts.busy["task-status"]).toBe(false);
+  });
+  it("task status strings exist in en and tr, including every key the view uses", async () => {
+    const en = (await load(rend, "locales", "en.js")).default, tr = (await load(rend, "locales", "tr.js")).default;
+    const keys = (o: Record<string, string>) => Object.keys(o).filter(k => k.startsWith("taskst.")).sort();
+    expect(keys(en).length).toBe(16);
+    expect(keys(en)).toEqual(keys(tr));
+    const used = new Set([...read(rend, "views", "task-status.js").matchAll(/"(taskst\.[A-Za-z.]+)"/g), ...read(rend, "work-core.js").matchAll(/"(taskst\.[A-Za-z.]+)"/g)].map(m => m[1]));
+    for (const k of [...used, "form.field.task", "work.task.noDeps", "post.err.409.TASK_DEPENDENCIES_NOT_DONE", "post.err.409.MISSION_COMPLETE"]) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); }
+  });
+});
