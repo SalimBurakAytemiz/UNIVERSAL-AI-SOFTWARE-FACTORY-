@@ -242,7 +242,13 @@
       "completedAt": "2026-10-21T07:18:00.842Z",
       "evidence": "b10a 31/31 with HOME=/root, HOME=/home/someone, a custom HOME and as non-root user nobody; b2 21/21 with a 104-char TMPDIR; full suite 2042/2018 pass, 2 fail (AUT1/AUT2, identical on base), 22 pending; old scrubber fails 11 tests; 25/25 mutations caught (generic /root rule as non-root); 52/52 catalogue positives masked; tsc/TR/secret/architecture PASS. Windows NOT_EXECUTED locally.",
       "acceptanceNote": "Acceptance item 1 asked to replace the substring leak check. It was kept unchanged instead: the WIP boundary check was weaker on real leaks (ANSI/flag-prefixed paths), and the HOME=/root failure was a product leak, not a false positive. This follows the Founder's 'do not weaken existing tests'.",
-      "review": "Independent review requested 2026-10-21T07:17Z in a separate read-only session session_01J24SF3eNYGBsSmzZt4uwxt (the Founder's reviewer routine cannot be fired by an agent; it also runs hourly)."
+      "review": {
+        "by": "independent reviewer session_01J24SF3eNYGBsSmzZt4uwxt (read-only, separate)",
+        "head": "e3af4a8",
+        "result": "CLEAN_PRELIMINARY, 0 blocking, 7 P3 advisories (analysis only, not an approval)",
+        "followUp": "advisory 2 fixed in 20ad4f5 (b10a 32/32, 2 mutations caught); advisories 1,3,4,5 recorded as known limits in PR #135"
+      },
+      "head": "20ad4f5"
     },
     {
       "id": "PQ-008",
@@ -507,7 +513,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T07:34:24.714Z",
+    "at": "2026-10-21T07:44:42.740Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -523,7 +529,7 @@
       134,
       135
     ],
-    "next": "Lanes A/B/C building; coordinator: #131 review fixes, PQ-011 (#134) verification, PQ-006 (#135) independent review.",
+    "next": "Lane B TR fix; #131 verification workflow result -> commit fixes; next lane deliverables.",
     "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
@@ -578,6 +584,65 @@
         "firstFocus": "role -> RoleExecutionProfile -> crew assignment -> executor run -> Work OS evidence for planner, architect, developer, tester, security reviewer, delivery; honest NOT_EXECUTABLE otherwise"
       }
     },
-    "startedAt": "2026-10-21T07:23:41.498Z"
+    "startedAt": "2026-10-21T07:23:41.498Z",
+    "deliverables": {
+      "LANE-A-idea-first-mission": {
+        "pr": 136,
+        "branch": "claude/lane-a-idea-first-mission",
+        "head": "9358183",
+        "status": "TESTED",
+        "verifiedAt": "2026-10-21T07:44:42.740Z",
+        "verifiedBy": "coordinator (Linux)",
+        "tests": "v7-ps1b-project-studio-ui 107/107",
+        "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
+        "forbiddenFiles": 0,
+        "mutation": "studio-wizard submitIdea validation bypass -> 4 failures",
+        "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED"
+      },
+      "LANE-B-intake": {
+        "pr": 137,
+        "branch": "claude/lane-b-intake",
+        "head": "93b7c96",
+        "status": "TESTED_FIX_REQUIRED",
+        "verifiedAt": "2026-10-21T07:44:42.740Z",
+        "verifiedBy": "coordinator (Linux)",
+        "tests": "v7-b1-workos 17/17",
+        "tscTrSecretArch": "tsc 0; TR FAIL; secret PASS; architecture PASS",
+        "forbiddenFiles": 0,
+        "mutation": "intake idempotency-conflict check removed -> 1 failure",
+        "fixRequired": "TR header missing on docs/lanes/LANE-B-MAP.md and docs/authority-requests/LANE-B-intake.md (sent to Lane B)",
+        "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED"
+      },
+      "LANE-B-plan": {
+        "pr": 139,
+        "branch": "claude/lane-b-plan",
+        "head": "101a5a6",
+        "status": "TESTED_FIX_REQUIRED",
+        "verifiedAt": "2026-10-21T07:44:42.740Z",
+        "verifiedBy": "coordinator (Linux)",
+        "tests": "v7-b1-workos 16/16",
+        "tscTrSecretArch": "tsc 0; TR FAIL; secret PASS; architecture PASS",
+        "forbiddenFiles": 0,
+        "mutation": "plan dependsOn earlier-task check relaxed -> 1 failure",
+        "fixRequired": "TR header missing on docs/authority-requests/LANE-B-plan.md (sent to Lane B)",
+        "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED"
+      },
+      "LANE-C-role-resolver": {
+        "pr": 138,
+        "branch": "claude/lane-c-role-resolver",
+        "head": "6ebb76a",
+        "status": "TESTED",
+        "verifiedAt": "2026-10-21T07:44:42.740Z",
+        "verifiedBy": "coordinator (Linux)",
+        "tests": "v7-core-predev-team-composer 17/17",
+        "tscTrSecretArch": "tsc 0; TR PASS; secret PASS; architecture PASS",
+        "forbiddenFiles": 0,
+        "mutation": "role-execution ADAPTERS_MISSING check removed -> 1 failure",
+        "integration": "NOT INTEGRATED, not PRODUCT_ACCEPTED"
+      }
+    },
+    "notes": [
+      "Lane B routes (apps/control-api/src/routes/intake.ts, plan.ts) are not registered in protected server.ts; authority requests docs/authority-requests/LANE-B-intake.md and LANE-B-plan.md. Both branches add an identical routes/deps.ts."
+    ]
   }
 }
