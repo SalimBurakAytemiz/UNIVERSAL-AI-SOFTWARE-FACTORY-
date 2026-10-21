@@ -127,7 +127,7 @@
       "id": "PQ-002",
       "source": "UASCO-AUD-129 (P3)",
       "title": "Asserting test for the Tower scheduler fact (UI-206)",
-      "status": "HOLD_CAPACITY",
+      "status": "IN_PROGRESS",
       "base": "v7/integration",
       "files": [
         "tests/v7-ux-wp4-tower.test.ts"
@@ -137,7 +137,12 @@
         "Render the Tower view with stub ctx data and assert the scheduler fact for the VERIFIED, UNAVAILABLE, ERROR and missing-data cases (honest '—' or pill, never a fabricated number).",
         "Mutation check: removing the scheduler fact from the view must make the new test fail; record the command and the output.",
         "Test-only change: no renderer source edits."
-      ]
+      ],
+      "branch": "claude/pq-002",
+      "claimSha": "20741edd61522f9d0ae9b41dbecc8e764baf54b6",
+      "startedAt": "2026-10-21T04:51:55.000Z",
+      "owner": "production-builder worker https://claude.ai/code/session_01K2PYQ7AYbpfo8EPiKciSAQ",
+      "recordedBy": "coordinator (the worker session may not push the queue branch)"
     },
     {
       "id": "PQ-003",
@@ -472,7 +477,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T04:51:14.191Z",
+    "at": "2026-10-21T04:55:19.087Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -485,8 +490,8 @@
       131,
       132
     ],
-    "next": "Worker: PQ-002, then PQ-006, PQ-011, PQ-012 (3 queue WIP slots free). Merges wait for the Founder bootstrap of #128 and #131.",
-    "engine": "Builder worker tick 04:48Z ran (access OK) and returned NO_ACTION WIP_LIMIT because it counted 13 claude/* PRs including 6 legacy ones; wipRule added and sent to the worker."
+    "next": "PQ-002 building (worker, claim 20741ed); then PQ-006, PQ-011, PQ-012.",
+    "engine": "Worker tick 04:51Z: access OK, wipRule applied (7 queue PRs < 10, ACTIVE 0 < 3), claimed PQ-002; its queue push was denied in the worker session, hence the queueWriter rule."
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
   "lanes": {
@@ -510,5 +515,6 @@
     "heartbeat": "trig_01QEwrSwCvd8UCbKFn97MiHh report-only every 3 h",
     "reviewer": "UASCO Independent Review workflow (PR #131, activates after merge) + interim cloud reviewer routine trig_01NJCi2PSTJxh6rMMLewLvGM"
   },
-  "wipRule": "maxOpenPrs counts open PRs to v7/integration whose head branch belongs to a queue task (the branch of any task in tasks[]). Legacy claude/* PRs from before the queue (#23, #28, #32, #33, #46, #66) are not queue WIP and are not counted; they stay open for the Founder to keep or close."
+  "wipRule": "maxOpenPrs counts open PRs to v7/integration whose head branch belongs to a queue task (the branch of any task in tasks[]). Legacy claude/* PRs from before the queue (#23, #28, #32, #33, #46, #66) are not queue WIP and are not counted; they stay open for the Founder to keep or close.",
+  "queueWriter": "Only the coordinator writes this file. The builder worker never pushes uasco/production-queue (its session classifier denies that push). The worker's durable state is its race-safe claim branch claude/<id> and its draft PR; capacityRule already counts a fresh claim branch without a PR as ACTIVE, so a lagging queue record never frees a slot early. The coordinator records claims, PRs and results from those branches and PRs."
 }
