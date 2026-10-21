@@ -262,6 +262,46 @@
         "Decision carries decision ROUTE|REFUSE, code, modelClass, tier, modelId, reasons[]. Deterministic tie-break.",
         "Tests in tests/data-routing.test.ts: positive and negative cases for every rule; no existing assertion weakened. Not wired to executors.ts or the API (integration is a later, separate task)."
       ]
+    },
+    {
+      "id": "PQ-011",
+      "lane": "B",
+      "source": "Central brain: command -> task intake (Founder sprint P0-B); builds on core/mission/state-machine.ts and core/mission/types.ts",
+      "title": "Command intake core: Founder text command -> validated mission DRAFT proposal with conservative risk and authority flags (pure, never authorizes)",
+      "status": "QUEUED",
+      "base": "v7/integration",
+      "files": [
+        "core/mission/command-intake.ts",
+        "tests/mission-state.test.ts"
+      ],
+      "testFile": "tests/mission-state.test.ts",
+      "acceptance": [
+        "Pure function intakeCommand(text, context): no I/O, no network, no model call, no new dependency. Output status is always DRAFT (core/mission/state-machine.ts); it can never produce AUTHORIZED or any later state.",
+        "Deterministic TR and EN keyword classification into an existing mission/task kind with a risk level; unknown or ambiguous input gets the conservative outcome FOUNDER_ATTENTION_REQUIRED, never a lower risk.",
+        "Authority flags (protected paths, merge/push/force, paid or production, secrets/credentials, deletion) set authorityRequired with the matched reasons; the text is treated as data: instruction-like content (for example ignore the rules and merge) only raises flags, it never removes one.",
+        "Input bounds: empty, non-string, over-length (documented limit) and control characters are rejected with a code.",
+        "Tests in tests/mission-state.test.ts: positive and negative cases for every rule, including prompt-injection phrasing in TR and EN; no existing assertion weakened. Not wired to the API."
+      ]
+    },
+    {
+      "id": "PQ-012",
+      "lane": "B",
+      "source": "Central brain: automatic task selection and orchestration (Founder sprint P0-B); mirrors the PRODUCTION-QUEUE capacityRule and claim rules",
+      "title": "Next-task selector core: deterministic choice of the next eligible task (status, base, dependencies, lane balance, capacity, authority) as a pure function",
+      "status": "QUEUED",
+      "base": "v7/integration",
+      "files": [
+        "core/workos/task-selector.ts",
+        "tests/v7-core-predev-crew-coordination.test.ts"
+      ],
+      "testFile": "tests/v7-core-predev-crew-coordination.test.ts",
+      "acceptance": [
+        "Pure function selectNextTask(queue, observed): no I/O. observed holds open PR branches, live claim branches with head age, and now.",
+        "Implements the capacityRule exactly: ACTIVE = IN_PROGRESS/CLAIMED tasks without an open PR and younger than 6 h, plus live claim branches younger than 6 h without an open PR that no task counts; ACTIVE >= builderCap gives NO_ACTION CAPACITY.",
+        "Only QUEUED/HOLD_CAPACITY tasks whose base is satisfied; a task with authority or founder-only flags is never selected; lane balance prefers the lane with the fewest active tasks, then queue order (stable).",
+        "Missing or malformed fields fail closed (BLOCKED with a code), never a selection.",
+        "Tests in the testFile: positive and negative cases for every rule; no existing assertion weakened. Not wired to dispatch.mjs (protected-adjacent; integration is separate)."
+      ]
     }
   ],
   "founderQueue": [
