@@ -93,7 +93,58 @@ export function preGate(evidence) {
   return {blockers: kept.filter(x => !AUTHORITY_CODE.test(x)), authority: kept.filter(x => AUTHORITY_CODE.test(x)), headSha: mg.expectedHeadSha, baseSha: mg.expectedBaseSha};
 }
 
-// Final decision. input = {evidence, verdict, currentHeadSha, approvals, policy:{founderLogin, reviewerSession}}.
+// //TR: Reviewer teşhisi: claude-code-action'ın yürütme kaydındaki son "result" mesajı yalnız bellekte, sabit desenlerle tek bir sabit koda sınıflandırılır; kaydın hiçbir metni (PR içeriği, prompt injection veya sır taşıyabilir) kopyalanmaz, yazılmaz ya da yayımlanmaz. Teşhis yalnız geçmeyen bir karara ek bir blokaj nedeni ve sabit bir çözüm cümlesi ekler; hiçbir nedeni silemez, geçerli olumlu bir kararı etkilemez ve bir başarısızlığı asla başarıya çeviremez.
+// Reviewer diagnosis: why the reviewer step gave no usable verdict, as one fixed code. Only these codes and the remedies below are ever written or published;
+// no text of the execution record leaves memory. REVIEWER_OK is never a blocking reason.
+export const REVIEWER_DIAGNOSTIC_CODES = Object.freeze(["REVIEWER_OK", "REVIEWER_AUTH_REJECTED", "REVIEWER_MODEL_UNAVAILABLE", "REVIEWER_QUOTA_OR_RATE_LIMIT",
+  "REVIEWER_NO_STRUCTURED_OUTPUT", "REVIEWER_ERROR_UNCLASSIFIED", "REVIEWER_OUTPUT_UNREADABLE"]);
+export const REVIEWER_DIAGNOSTIC_KEYS = Object.freeze(["code", "isError", "turns", "durationMs", "modelUsed"]);
+export const EXECUTION_FILE_MAX_BYTES = 4 * 1024 * 1024;
+const RERUN = "then start a new review (Re-run all jobs, or Run workflow with the PR number).";
+export const REVIEWER_REMEDIES = Object.freeze({
+  REVIEWER_AUTH_REJECTED: `The reviewer credential was rejected. Regenerate the reviewer token (claude setup-token) into the review environment secret CLAUDE_CODE_OAUTH_TOKEN, ${RERUN}`,
+  REVIEWER_MODEL_UNAVAILABLE: `The requested reviewer model is not available to this credential. Correct or clear the repository variable UASCO_REVIEW_MODEL, ${RERUN}`,
+  REVIEWER_QUOTA_OR_RATE_LIMIT: `The reviewer hit a usage, quota or rate limit, or the service was overloaded. Wait until the limit resets, ${RERUN}`,
+  REVIEWER_NO_STRUCTURED_OUTPUT: "The reviewer ran but returned no schema-valid verdict (for example it reached its turn limit). Start a new review; if this repeats, split the PR into smaller changes.",
+  REVIEWER_ERROR_UNCLASSIFIED: `The reviewer failed with an error that matches no known cause. Check the ai-review job log of this run (the reviewer output itself is never published), ${RERUN}`,
+  REVIEWER_OUTPUT_UNREADABLE: `The reviewer's execution record was missing or unreadable (the reviewer may not have started). Check the ai-review job log of this run, ${RERUN}`});
+// Error texts of the CLI and the API. They are matched only when the record says is_error: the final text of a run without an error is the model's own
+// output (shaped by the reviewed PR), so it is never used. Every quantifier is bounded.
+const AUTH_RE = /invalid[ _-]?(?:api[ _-]?key|x-api-key|bearer|token|credential|auth)|authenticat|unauthori[sz]ed|\b401\b|oauth|token (?:has )?(?:expired|been revoked|revoked)|(?:expired|revoked) (?:oauth )?token|\/login\b|\blog ?in\b|not logged in/i;
+const MODEL_RE = /\bmodel\b[^\n]{0,160}?(?:not[ _]found|not available|unavailable|does(?: not|n't) exist|may not exist|not supported|unsupported|not have access)|(?:unknown|invalid|unsupported|unavailable) model\b|issue with the selected model|not_found_error[\s\S]{0,300}?\bmodel\b|\bmodel\b[\s\S]{0,300}?not_found_error|\b404\b[\s\S]{0,300}?\bmodel\b|\bmodel\b[\s\S]{0,300}?\b404\b/i;
+const QUOTA_RE = /credit balance|\bquota\b|usage limit|rate[ _-]?limit|\b429\b|overloaded|\b529\b|too many requests|limit reached/i;
+const count = v => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1e12 ? Math.round(v) : null;
+const diagnosis = (code, isError, turns, durationMs, modelUsed) => ({code, isError, turns, durationMs, modelUsed});
+// raw = the execution file's text (a JSON array of SDK messages) or null. The LAST {"type":"result"} message is classified. Never throws.
+export function diagnoseReviewerOutput(raw) {
+  const unreadable = diagnosis("REVIEWER_OUTPUT_UNREADABLE", true, null, null, false);
+  try {
+    if (!isStr(raw) || raw.trim() === "" || raw.length > EXECUTION_FILE_MAX_BYTES) return unreadable;
+    let msgs;
+    try { msgs = JSON.parse(raw); } catch { return unreadable; }
+    if (!Array.isArray(msgs)) return unreadable;
+    let res = null;
+    for (let i = msgs.length - 1; i >= 0 && res === null; i--) if (isObj(msgs[i]) && msgs[i].type === "result") res = msgs[i];
+    if (res === null) return unreadable;
+    const isError = res.is_error === true;
+    const modelUsed = (isObj(res.modelUsage) && Object.keys(res.modelUsage).length > 0) || (typeof res.total_cost_usd === "number" && res.total_cost_usd > 0);
+    const at = code => diagnosis(code, isError, count(res.num_turns), count(res.duration_ms), modelUsed);
+    if (!isError) return at(res.subtype === "success" && res.structured_output !== undefined && res.structured_output !== null ? "REVIEWER_OK" : "REVIEWER_NO_STRUCTURED_OUTPUT");
+    const text = [res.result, ...(Array.isArray(res.errors) ? res.errors : [])].filter(isStr).join("\n").slice(0, 65536);
+    if (AUTH_RE.test(text)) return at("REVIEWER_AUTH_REJECTED");
+    if (MODEL_RE.test(text)) return at("REVIEWER_MODEL_UNAVAILABLE");
+    if (QUOTA_RE.test(text)) return at("REVIEWER_QUOTA_OR_RATE_LIMIT");
+    if (modelUsed || (isStr(res.subtype) && res.subtype.startsWith("error_max"))) return at("REVIEWER_NO_STRUCTURED_OUTPUT");
+    return at("REVIEWER_ERROR_UNCLASSIFIED");
+  } catch {
+    return unreadable;
+  }
+}
+// The failure code a diagnostics record carries, or null: an unknown, malformed or REVIEWER_OK code counts as no diagnosis.
+export const reviewerFailureCode = d => isObj(d) && isStr(d.code) && d.code !== "REVIEWER_OK" && REVIEWER_DIAGNOSTIC_CODES.includes(d.code) ? d.code : null;
+
+// Final decision. input = {evidence, verdict, currentHeadSha, approvals, policy:{founderLogin, reviewerSession}, reviewerDiagnostics?}.
+// reviewerDiagnostics (the ai-review job's fixed-shape record) only adds its failure code after the other reasons when the verdict did not pass.
 export function decide(input) {
   try {
     const r = [];
@@ -110,7 +161,7 @@ export function decide(input) {
     // The App's own earlier check on this head or tree ended in a negative verdict (collected from App-written external_id). Unknown is fail-closed.
     if (ev.priorNegativeVerdict !== true && ev.priorNegativeVerdict !== false) r.push("PRIOR_VERDICT_UNKNOWN");
     else if (ev.priorNegativeVerdict && !founderAuthorityOk(input.approvals, pol.founderLogin)) r.push("FOUNDER_AUTHORITY_REQUIRED", "PRIOR_NEGATIVE_VERDICT");
-    const v = input.verdict;
+    const v = input.verdict, verdictFrom = r.length;
     if (v === null || v === undefined) r.push("VERDICT_MISSING");
     else if (isObj(v) && REJECTED_VERDICTS.includes(v.rejected)) r.push(v.rejected, ...(v.negative === true ? ["VERDICT_REJECTED_NEGATIVE"] : []));
     else if (carriesSecret(v)) { r.push("VERDICT_CONTAINS_SECRET_PATTERN", ...(verdictIsNegative(v) ? ["VERDICT_REJECTED_NEGATIVE"] : [])); input = {...input, verdict: null}; }
@@ -127,10 +178,15 @@ export function decide(input) {
         for (const k of CHECK_KEYS) if (!["PASS", "NOT_APPLICABLE"].includes(v.checks[k])) r.push(`VERDICT_CHECK_NOT_PASS:${k}`);
       }
     }
+    // Did the verdict itself fail (missing, unreadable, rejected, malformed, unbound or negative)? Only then may a diagnosis add its code.
+    const verdictFailed = r.length > verdictFrom;
     // The reviewer must not be one of the PR's implementer sessions (taken from the commits' Claude-Session trailers).
     const impl = new Set(Array.isArray(ev.implementerSessions) ? ev.implementerSessions.filter(isStr) : []);
     if (!isStr(pol.reviewerSession) || !SESSION_RE.test(pol.reviewerSession)) r.push("REVIEWER_SESSION_UNKNOWN");
     else if (impl.has(pol.reviewerSession)) r.push("REVIEWER_IS_IMPLEMENTER");
+    // Append-only: the code goes after every other reason, so it can neither remove a reason nor reach a decision that already passed the verdict.
+    const diag = verdictFailed ? reviewerFailureCode(input.reviewerDiagnostics) : null;
+    if (diag !== null) r.push(diag);
     return finish([...new Set(r)], headSha, baseSha, input);
   } catch {
     return finish(["INTERNAL_ERROR"], null, null, input);
@@ -153,6 +209,8 @@ export function renderSummary(d, runUrl) {
     `Evidence digest (sha256 of the canonical decision record): \`${d.digest}\``];
   if (isStr(runUrl) && /^https:\/\/github\.com\/[^\s)]+$/.test(runUrl)) lines.push(`Run and evidence artifact: ${runUrl}`);
   lines.push("", d.reasons.length ? `Blocking reasons: ${d.reasons.map(x => `\`${x}\``).join(", ")}` : "Blocking reasons: none.");
+  // A reviewer diagnosis among the reasons gets its fixed remedy sentence (never any text of the reviewer's output).
+  for (const c of d.reasons.filter(x => isStr(x) && Object.hasOwn(REVIEWER_REMEDIES, x))) lines.push("", `Reviewer diagnosis \`${c}\`: ${REVIEWER_REMEDIES[c]}`);
   if (d.verdict && Array.isArray(d.verdict.findings)) {
     lines.push("", `Reviewer result: ${flat(d.verdict.result, 20)}. ${flat(d.verdict.summary ?? "", 1500)}`);
     if (d.verdict.findings.length) {

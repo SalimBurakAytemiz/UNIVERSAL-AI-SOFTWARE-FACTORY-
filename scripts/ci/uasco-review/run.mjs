@@ -1,10 +1,11 @@
-// //TR: Bu betik UASCO Independent Review workflow'unun aşama yürütücüsüdür (scope, collect, decide, finish, approve): yalnız varsayılan daldaki (v7/integration) güvenilir koddan çalışır, PR kodunu asla checkout etmez veya çalıştırmaz, kanıtı ve kararı SHA'ya bağlı dosyalara yazar ve her hata yolunda kontrolü failure olarak kapatır.
-// Usage: node scripts/ci/uasco-review/run.mjs <scope|collect|verdict|verdict-unreadable|decide|finish|approve>   (inputs come from env, never from argv text)
+// //TR: Bu betik UASCO Independent Review workflow'unun aşama yürütücüsüdür (scope, collect, reviewer-diagnose, decide, finish, approve): yalnız varsayılan daldaki (v7/integration) güvenilir koddan çalışır, PR kodunu asla checkout etmez veya çalıştırmaz, kanıtı ve kararı SHA'ya bağlı dosyalara yazar ve her hata yolunda kontrolü failure olarak kapatır.
+// Usage: node scripts/ci/uasco-review/run.mjs <scope|collect|reviewer-diagnose|verdict|verdict-unreadable|decide|finish|approve>   (inputs come from env, never from argv text)
 import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import {client, collectEvidence, waitForCi, prDiff, diffPaths, sameChange, commitTree, priorNegativeVerdicts, currentHead, runApprovals, createCheck, getCheck, concludeCheck, approve} from "./github.mjs";
-import {CHECK_NAME, preGate, decide, negativeVerdict, verdictIsNegative, carriesSecret, renderSummary, canonical, sha256} from "./review-gate.mjs";
+import {CHECK_NAME, preGate, decide, negativeVerdict, verdictIsNegative, carriesSecret, renderSummary, canonical, sha256, diagnoseReviewerOutput, REVIEWER_DIAGNOSTIC_KEYS,
+  EXECUTION_FILE_MAX_BYTES} from "./review-gate.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "../../..");
@@ -18,6 +19,21 @@ const SHA_RE = /^[0-9a-f]{40}$/;
 const output = (k, v) => { const f = env("GITHUB_OUTPUT"); const line = `${k}=${String(v).replace(/[\r\n]/g, " ")}\n`; if (f) fs.appendFileSync(f, line); else process.stdout.write(line); };
 const writeJson = (name, v) => { fs.mkdirSync(OUT, {recursive: true}); fs.writeFileSync(path.join(OUT, name), JSON.stringify(v, null, 1) + "\n"); };
 const readJson = name => JSON.parse(fs.readFileSync(path.join(OUT, name), "utf8"));
+// A regular file of at most max bytes, as text; anything else (missing, not a regular file, larger, unreadable) is null, never a partial read.
+function readCapped(file, max) {
+  if (typeof file !== "string" || file === "") return null;
+  try {
+    const st = fs.statSync(file);
+    if (!st.isFile() || st.size > max) return null;
+    const fd = fs.openSync(file, "r");
+    try {
+      const buf = Buffer.alloc(max + 1);
+      let len = 0;
+      for (let k = 1; k > 0 && len <= max;) { k = fs.readSync(fd, buf, len, max + 1 - len, null); len += k; }
+      return len > max ? null : buf.toString("utf8", 0, len);
+    } finally { fs.closeSync(fd); }
+  } catch { return null; }
+}
 // GITHUB_API_URL is set by Actions (https://api.github.com); the proof points it at a local mock server.
 const apiUrl = () => env("GITHUB_API_URL") ?? "https://api.github.com";
 // Short jobs (scope, decide, finish: 10 min) cap a rate-limit wait at 2 min and all waits of one client at 3 min, so waiting can never outlast the job and
@@ -128,6 +144,23 @@ async function verdictUnreadableStep() {
   fs.writeFileSync(path.join(dir, "verdict.json"), JSON.stringify({rejected: "VERDICT_UNREADABLE", negative: true}));
 }
 
+// //TR: reviewer-diagnose: reviewer adımının yürütme kaydı (yalnız EXECUTION_FILE ortam değişkenindeki yol, argv metni asla) en fazla 4 MiB okunur ve yalnız bellekte sabit bir koda sınıflandırılır; diske yalnız beş sabit anahtarlı kayıt, adım özetine yalnız tek sabit satır yazılır ve bu adım işi hiçbir koşulda başarısız yapmaz.
+// ai-review, always after the reviewer step: why did it give (or not give) a verdict? Only the fixed five-key record and one fixed summary line are written;
+// no text of the execution record leaves memory (it can hold PR content, prompt injection or secrets). This step never fails the job.
+async function reviewerDiagnoseStep() {
+  let d;
+  try { d = diagnoseReviewerOutput(readCapped(env("EXECUTION_FILE"), EXECUTION_FILE_MAX_BYTES)); } catch { d = diagnoseReviewerOutput(null); }
+  const rec = Object.fromEntries(REVIEWER_DIAGNOSTIC_KEYS.map(k => [k, d[k]]));
+  try {
+    const dir = path.resolve(env("UASCO_VERDICT_DIR") ?? path.join(ROOT, "uasco-verdict"));
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, "reviewer-diagnostics.json"), JSON.stringify(rec) + "\n");
+  } catch { /* a diagnosis that cannot be written is simply absent: decide then works as without it */ }
+  const line = `UASCO reviewer diagnosis: ${rec.code}\n`;
+  try { const f = env("GITHUB_STEP_SUMMARY"); if (f) fs.appendFileSync(f, line); } catch { /* never fails the job */ }
+  try { process.stdout.write(line); } catch { /* never fails the job */ }
+}
+
 // 3. decide: re-read the head (staleness), the Founder approvals of THIS run, and gate the verdict.
 async function decideStep() {
   const gh = readGh(), n = prNumber();
@@ -138,6 +171,9 @@ async function decideStep() {
   let evidence, pre = null;
   try { evidence = readJson("evidence.json"); } catch { evidence = null; }
   try { pre = readJson("precheck.json"); } catch { pre = null; }
+  // The ai-review job's diagnosis (downloaded with the verdict). Unreadable, oversized or malformed counts as absent; it can only add a reason (review-gate.mjs).
+  let reviewerDiagnostics = null;
+  try { const t = readCapped(path.join(OUT, "reviewer-diagnostics.json"), 4096); reviewerDiagnostics = t === null ? null : JSON.parse(t); } catch { reviewerDiagnostics = null; }
   // The App's own records are read again now: a partial re-run reuses an earlier attempt's evidence file, which cannot know that attempt's own verdict.
   // A failed lookup leaves the value unknown (fail-closed in decide).
   if (evidence && typeof evidence === "object" && !Array.isArray(evidence)) {
@@ -146,7 +182,8 @@ async function decideStep() {
   }
   const runId = env("GITHUB_RUN_ID");
   const approvals = (env("NEEDS_FOUNDER") === "true" || evidence?.priorNegativeVerdict === true) && runId ? await runApprovals(gh, runId).catch(() => []) : [];
-  const d = decide({evidence, verdict, currentHeadSha: await currentHead(gh, n), approvals, policy: {founderLogin: env("FOUNDER_LOGIN"), reviewerSession: env("REVIEWER_SESSION")}});
+  const d = decide({evidence, verdict, currentHeadSha: await currentHead(gh, n), approvals, policy: {founderLogin: env("FOUNDER_LOGIN"), reviewerSession: env("REVIEWER_SESSION")},
+    reviewerDiagnostics});
   // Pre-check blockers (CI timeout, oversized diff) are folded in so a skipped review can never read as success.
   if (pre && Array.isArray(pre.blockers) && pre.blockers.length) { d.reasons = [...new Set([...pre.blockers, ...d.reasons])]; d.conclusion = "failure"; const {digest, ...rec} = d; d.digest = sha256(canonical(rec)); }
   writeJson("decision.json", d);
@@ -195,9 +232,9 @@ async function approveStep() {
   output("approved", true);
 }
 
-export const phases = {scope, collect, verdict: verdictStep, "verdict-unreadable": verdictUnreadableStep, decide: decideStep, finish: finishStep, approve: approveStep};
+export const phases = {scope, collect, "reviewer-diagnose": reviewerDiagnoseStep, verdict: verdictStep, "verdict-unreadable": verdictUnreadableStep, decide: decideStep, finish: finishStep, approve: approveStep};
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const phase = process.argv[2];
-  if (!Object.hasOwn(phases, phase)) { console.error("USAGE: run.mjs <scope|collect|verdict|verdict-unreadable|decide|finish|approve>"); process.exit(2); }
+  if (!Object.hasOwn(phases, phase)) { console.error("USAGE: run.mjs <scope|collect|reviewer-diagnose|verdict|verdict-unreadable|decide|finish|approve>"); process.exit(2); }
   phases[phase]().catch(e => { console.error(`${CHECK_NAME}: ${phase} failed: ${String(e?.code ?? e?.message ?? "ERROR").slice(0, 80)}`); process.exit(1); });
 }

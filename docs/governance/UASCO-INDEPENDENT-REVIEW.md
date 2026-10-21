@@ -23,7 +23,7 @@ Draft PRs are skipped: a draft cannot be merged, and reviewing it would spend a 
 | `scope` | reviewer App key (checks:write) | Creates the check **in_progress** on the PR head SHA. Decides whether Founder authority is needed: protected or CI-executed paths, or a re-review after this App already rejected the same head or the same tree (see "Re-review after a rejection"). |
 | `founder-authority` | nothing | Runs only when scope said Founder authority is needed. Waits in the `uasco-founder-authority` environment until the Founder approves the deployment in the GitHub UI. |
 | `collect` | read-only `GITHUB_TOKEN` | Waits (bounded, 100 min) for CI to finish on the same head SHA; a PR with a merge conflict (which gets no CI) ends early as `PR_MERGE_CONFLICT`. Collects evidence, the head tree and the prior-verdict record, and runs the deterministic pre-gate. Fetches the diff as `compare/<base SHA>...<head SHA>` (bound to SHAs, never to the PR's live base) and fails closed if its file list differs from the PR file list used for the protected-path decision (`DIFF_FILES_MISMATCH`). A red, incomplete, conflicted or too-large PR stops here, so no review tokens are spent. |
-| `ai-review` | Claude OAuth token only | Skipped on a cancelled run. Checks out the trusted base at the exact SHA the verdict is bound to. Runs Claude Code with **read-only tools** (Read, Glob, Grep); shell, write and network tools are disabled. Inputs are in `uasco-review/review-input/` (not a dot-directory, so the deny rule for hidden files under `/home`, which also hides `.git/config`, does not hide them). The JSON verdict is validated against `verdict.schema.json`; a verdict with a credential shape is replaced before its first upload and never published. |
+| `ai-review` | Claude OAuth token only | Skipped on a cancelled run. Checks out the trusted base at the exact SHA the verdict is bound to. Runs Claude Code with **read-only tools** (Read, Glob, Grep); shell, write and network tools are disabled. Inputs are in `uasco-review/review-input/` (not a dot-directory, so the deny rule for hidden files under `/home`, which also hides `.git/config`, does not hide them). The JSON verdict is validated against `verdict.schema.json`; a verdict with a credential shape is replaced before its first upload and never published. A `reviewer-diagnose` step then records why the reviewer did or did not give a verdict, as one fixed code (see "Troubleshooting"). |
 | `finish` | reviewer App key | Re-reads the PR head, the Founder approvals of this run, the App's own earlier verdicts on this head and tree (live, not from the evidence file) and the verdict, applies `review-gate.mjs`, and concludes the check **success** or **failure** with a checks-only token. The decision is made even on a cancelled run. It records `external_id` as `v2:<1 if a substantive negative verdict>:<head tree>:<digest prefix>`, written only by the App. A check is concluded once: finish never rewrites a check that is already completed (`CHECK_ALREADY_CONCLUDED`) or that belongs to another commit (`CHECK_HEAD_MISMATCH`), and it applies only the verdict of the run attempt that created the check (a re-run of `ai-review` alone produces a verdict that is never used). If the verdict could not be handed over, a placeholder records it as unreadable and negative. Uploads the evidence artifact (90 days). If `UASCO_REVIEW_SUBMIT_APPROVAL=true` and the check passed, a second token (pull requests write only) submits an APPROVE review pinned to the reviewed commit, after re-checking that the head has not moved. Never on a cancelled run. |
 
 Artifacts are named per run attempt, and later jobs download them by the name the producing job recorded. "Re-run failed jobs" therefore finds the original artifacts, but it can only finish a check that is still in progress (for example after `finish` crashed before concluding), and always with that check's own verdict. A concluded check is never changed. To review again, use "Re-run all jobs" or the re-review path (step 9): that creates a new check, which sees the earlier record.
@@ -44,7 +44,7 @@ Artifacts are named per run attempt, and later jobs download them by the name th
 
 **Evidence:**
 - **Check run:** written by the App, bound to the head SHA. Its `external_id` and summary carry the sha256 digest of the canonical decision record.
-- **Artifacts:** `uasco-review-input-<attempt>`, `uasco-review-verdict-<attempt>` and `uasco-review-evidence-<attempt>` hold `evidence.json`, `verdict.json`, `decision.json`, the diff and the reviewer instructions. Anyone can recompute the digest from the decision record.
+- **Artifacts:** `uasco-review-input-<attempt>`, `uasco-review-verdict-<attempt>` and `uasco-review-evidence-<attempt>` hold `evidence.json`, `verdict.json`, `reviewer-diagnostics.json`, `decision.json`, the diff and the reviewer instructions. Anyone can recompute the digest from the decision record.
 
 ## Why the Builder cannot fake or alter the check
 
@@ -90,6 +90,25 @@ Do the steps in this order. Steps 1–6 can be done before any merge.
   - **Spending control:** the review runs only after CI is green, never for red, incomplete, conflicted, too-large, draft or fork PRs, and never on a cancelled run.
   - **Alternative:** an `ANTHROPIC_API_KEY` (pay per token at current API list prices) can replace the OAuth token. It is not needed.
 - **GitHub Actions:** standard GitHub-hosted runners, free for this public repository. `collect` waits on a runner while CI runs, up to 100 min per push.
+
+## Troubleshooting: the reviewer gave no verdict
+
+<!-- //TR: Reviewer karar üretmediğinde (ör. VERDICT_MISSING) nedeni gösteren sabit teşhis kodları ve her birinin çözümü; teşhis yalnız ek blokaj nedenidir, kontrolü asla geçirmez. -->
+The reviewer's full output stays hidden (`show_full_output` is off: it can hold PR content or secrets). Instead the `reviewer-diagnose` step in `ai-review` reads the last `result` message of the action's execution file (at most 4 MiB) in memory and writes only `{code, isError, turns, durationMs, modelUsed}` to `uasco-verdict/reviewer-diagnostics.json`, plus one fixed line in the job summary. No text of that output is copied anywhere. The step never fails the job.
+
+When the verdict did not pass (missing, unreadable, malformed or negative), `finish` adds the code after the other blocking reasons, and the check summary shows its remedy. A diagnosis can only add a reason: it never removes one, never changes a valid CLEAN verdict's decision, and never turns a failure into success. An unknown or malformed code is ignored. A missing verdict is not a rejection, so the next review needs no Founder approval.
+
+| Code | Meaning | Remedy |
+|---|---|---|
+| `REVIEWER_AUTH_REJECTED` | The credential was rejected (invalid key, expired or revoked OAuth token, 401, "please run /login"). | Regenerate the reviewer token (`claude setup-token`) into the `uasco-review` environment secret `CLAUDE_CODE_OAUTH_TOKEN`, then start a new review. |
+| `REVIEWER_MODEL_UNAVAILABLE` | The requested model was not found or is not available to the credential. | Correct or clear the repository variable `UASCO_REVIEW_MODEL`, then start a new review. |
+| `REVIEWER_QUOTA_OR_RATE_LIMIT` | Usage limit, quota, credit balance, rate limit (429) or overload (529). | Wait until the limit resets, then start a new review. |
+| `REVIEWER_NO_STRUCTURED_OUTPUT` | The reviewer ran but returned no schema-valid verdict (for example it reached its turn limit). | Start a new review; if it repeats, split the PR. |
+| `REVIEWER_ERROR_UNCLASSIFIED` | An error that matches none of the above. | Check the `ai-review` job log of the run, then start a new review. |
+| `REVIEWER_OUTPUT_UNREADABLE` | The execution file was missing, empty, oversized, malformed or had no `result` message (the reviewer may not have started). | Check the `ai-review` job log of the run, then start a new review. |
+| `REVIEWER_OK` | The reviewer returned structured output. Never a blocking reason. | None. |
+
+"Start a new review" means "Re-run all jobs" or "Run workflow" with the PR number (a concluded check is never changed). The classification only uses fixed text patterns of CLI and API error messages, and only when the record says the run ended in an error; it explains a failure, it does not make the reviewer succeed.
 
 ## Limits and residual risks (honest)
 
