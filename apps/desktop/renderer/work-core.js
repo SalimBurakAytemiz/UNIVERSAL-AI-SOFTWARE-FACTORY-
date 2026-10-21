@@ -228,6 +228,29 @@ function checkpointName(c){
   const n=str(pick(c.name,c.id,c.label),120);if(n)return n;
   const st=str(c.step,60);return st?`${st}${Number.isSafeInteger(c.cycle)?` #${c.cycle}`:""}`:null;
 }
+// //TR: core/workos/outcomes.ts productVerificationOf'un birebir yansıması (yalnız kanıttan): PRODUCT_VERIFIED için run.headSha'ya bağlı VERIFY_TESTS VE REGRESSION_TESTS, ikisi exit 0, ikisi de sandbox tanıklı, TEST_SURFACE'te yürütülen test sayısı > 0, BLOCKED test yüzeyi ve onay gerektiren test değişikliği yok. Sıfır çıkışsız kanıt FAILED, eksik/başka-SHA/kısmi kanıt NOT_VERIFIED.
+const HEAD_SHA_RE=/^[0-9a-f]{40}$/,SANDBOX_ID_RE=/^[A-Za-z0-9._:@/-]{1,200}$/;
+const latestEv=(list,pred)=>{for(let i=list.length-1;i>=0;i--)if(isObj(list[i])&&pred(list[i]))return list[i];return undefined};
+const nonEmpty=a=>Array.isArray(a)&&a.length>0;
+export function productVerificationOf(head,evidence){
+  const pv=(state,reason)=>({state,reason});
+  const ev=Array.isArray(evidence)?evidence:[];
+  if(typeof head!=="string"||!HEAD_SHA_RE.test(head))return pv("NOT_VERIFIED","NOT_EXECUTED:NO_HEAD_COMMIT");
+  const ts=latestEv(ev,e=>e.kind==="TEST_SURFACE"&&e.commitSha===head&&isObj(e.testSurface)),surf=ts?.testSurface;
+  if(surf?.functionalAcceptance==="BLOCKED")return pv("NOT_VERIFIED","TEST_SURFACE_BLOCKED");
+  if(ev.some(e=>isObj(e)&&(e.kind==="VERIFY_TESTS_NOT_EXECUTED"||e.kind==="REGRESSION_TESTS_NOT_EXECUTED")&&e.commitSha===head))return pv("NOT_VERIFIED","NOT_EXECUTED:SANDBOX_UNAVAILABLE");
+  const v=latestEv(ev,e=>e.kind==="VERIFY_TESTS"&&e.commitSha===head),g=latestEv(ev,e=>e.kind==="REGRESSION_TESTS"&&e.commitSha===head);
+  if((v&&v.exitCode!==0)||(g&&g.exitCode!==0))return pv("FAILED","TESTS_FAILED");
+  if(!v||!g)return pv("NOT_VERIFIED","NOT_EXECUTED:TESTS_NOT_REACHED");
+  const attested=e=>typeof e.sandboxProviderId==="string"&&SANDBOX_ID_RE.test(e.sandboxProviderId);
+  if(!attested(v)||!attested(g))return pv("NOT_VERIFIED","SANDBOX_ATTESTATION_MISSING");
+  const n=surf?.executedTests;
+  if(!ts||typeof n!=="number"||!Number.isSafeInteger(n)||n<=0)return pv("NOT_VERIFIED",n===0?"ZERO_TESTS_EXECUTED":"EXECUTED_TEST_COUNT_UNKNOWN");
+  if(nonEmpty(surf.modified)||nonEmpty(surf.deleted)||nonEmpty(surf.renamed)||nonEmpty(surf.harness)||nonEmpty(surf.weakened))return pv("NOT_VERIFIED","TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION");
+  return pv("PRODUCT_VERIFIED","TESTS_EXECUTED_IN_VERIFIED_SANDBOX");
+}
+/** Eşlenmiş koşu yalnız sunucunun kesin kuralıyla PRODUCT_VERIFIED ise true; tek başına testsExecuted asla yeterli değildir. */
+export const isProductVerified=run=>run?.evidenceVerification?.state==="PRODUCT_VERIFIED";
 export function mapWorkRun(x){
   if(!isObj(x))return null;
   const idv=pick(x.runId,x.workRunId,x.id);if(typeof idv!=="string"||!SAFE_ID_RE.test(idv))return null;
@@ -252,6 +275,7 @@ export function mapWorkRun(x){
     testsExecuted:arr(x.evidence,100).some(e=>isObj(e)&&(e.kind==="VERIFY_TESTS"||e.kind==="REGRESSION_TESTS")),
     testsNotExecuted:arr(x.evidence,100).some(e=>isObj(e)&&(e.kind==="VERIFY_TESTS_NOT_EXECUTED"||e.kind==="REGRESSION_TESTS_NOT_EXECUTED")),
     headSha:typeof x.headSha==="string"&&/^[0-9a-f]{40}$/.test(x.headSha)?x.headSha:null,
+    evidenceVerification:productVerificationOf(x.headSha,arr(x.evidence,100)),
     evidence:mapRunEvidence(x.evidence),reviewer:identity||verdict?{identity,verdict}:null
   };
 }
