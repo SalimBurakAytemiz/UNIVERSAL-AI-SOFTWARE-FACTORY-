@@ -502,6 +502,45 @@ describe("PQ-005 provider & model routing view (read-only)", () => {
     for (const bad of [null, {adapters: {}}, {adapters: [{...ADS.adapters[0], category: "browser"}]}]) expect(c.mapAdapters(bad).state).toBe("ERROR");
     expect(c.countBy(c.mapCapabilities(CAPS).items, "implementation")).toEqual([{value: "NOT_IMPLEMENTED", count: 1}, {value: "PARTIAL", count: 1}]);
   });
+  it("each capability and adapter field check rejects an invalid value on its own (status, activation, implementation, category, id, name)", async () => {
+    const c = await load("routing-core.js");
+    const cap = CAPS.capabilities[0], ad = ADS.adapters[0];
+    // Her alan tek başına bozulduğunda tüm okuma ERROR olur (kısmi görünüm yok).
+    for (const field of ["status", "activation", "implementation"]) {
+      for (const bad of ["registered", "", "1ABC", "A-B", "A B", 5, null, undefined, "A".repeat(41), ["REGISTERED"], {toString: () => "REGISTERED"}]) {
+        expect(c.mapCapabilities({capabilities: [{...cap, [field]: bad}]}).state, `cap ${field}=${String(bad)}`).toBe("ERROR");
+      }
+      const missing: any = {...cap}; delete missing[field];
+      expect(c.mapCapabilities({capabilities: [missing]}).state, `cap missing ${field}`).toBe("ERROR");
+    }
+    for (const field of ["category", "status", "implementation"]) {
+      for (const bad of ["browser", "", "1ABC", "A-B", 5, null, undefined, "A".repeat(41)]) {
+        expect(c.mapAdapters({adapters: [{...ad, [field]: bad}]}).state, `ad ${field}=${String(bad)}`).toBe("ERROR");
+      }
+      const missing: any = {...ad}; delete missing[field];
+      expect(c.mapAdapters({adapters: [missing]}).state, `ad missing ${field}`).toBe("ERROR");
+    }
+    for (const bad of ["", "-x", "a b", "a/b", 5, null, "x".repeat(81), ["abc"], {toString: () => "abc"}]) {
+      expect(c.mapCapabilities({capabilities: [{...cap, id: bad}]}).state, `cap id=${String(bad)}`).toBe("ERROR");
+      expect(c.mapAdapters({adapters: [{...ad, id: bad}]}).state, `ad id=${String(bad)}`).toBe("ERROR");
+    }
+    for (const bad of ["", 5, null, undefined, "x".repeat(121), "a\u0001b"]) expect(c.mapCapabilities({capabilities: [{...cap, name: bad}]}).state, `cap name=${String(bad)}`).toBe("ERROR");
+    // Geçerli sınır değerleri kabul edilir; bozuk bir kayıt geçerli kayıtları da düşürür (kısmi görünüm yok).
+    expect(c.mapCapabilities({capabilities: [{...cap, status: "A".repeat(40)}]}).state).toBe("VERIFIED");
+    expect(c.mapCapabilities({capabilities: [cap, {...cap, id: "UASCO-CAP-009", activation: "bad"}]}).state).toBe("ERROR");
+    expect(c.mapAdapters({adapters: [{...ad, requiresCertification: "yes"}]}).items[0].requiresCertification).toBeNull();
+    // Görünüm: bozuk activation yalnız o kayıt bloğunu ERROR yapar, satır göstermez.
+  });
+  it("a capability with an invalid activation, status or implementation makes the rendered block an honest non-VERIFIED state with no rows", async () => {
+    for (const field of ["activation", "status", "implementation"]) {
+      const caps = {capabilities: [{...CAPS.capabilities[0], [field]: "not valid"}]};
+      const {node} = await panelOf({caps, adapters: ADS});
+      const rows = within(node).filter(n => n.dataset.registryRow && n.dataset.registryRow.startsWith("UASCO-CAP"));
+      expect(rows.length, field).toBe(0);
+      const block = within(node).find(n => n.dataset.routingBlock === "routing-caps")!;
+      expect(text(block), field).not.toContain("Mission OS");
+    }
+  });
   it("routing rows carry reported states verbatim and list blockers; READY everywhere is 'none reported', never 'active'", async () => {
     const c = await load("routing-core.js");
     const exec = {state: "VERIFIED", items: [{id: "LOCAL_CLAUDE", state: "READY"}], sandbox: {state: "AVAILABLE"}, profiles: [{role: "implementer", state: "READY"}, {role: "reviewer", state: "LOGIN_REQUIRED"}]};
