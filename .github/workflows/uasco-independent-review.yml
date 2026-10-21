@@ -151,14 +151,27 @@ jobs:
           client-id: ${{ vars.UASCO_REVIEW_APP_CLIENT_ID }}
           private-key: ${{ secrets.UASCO_REVIEW_APP_PRIVATE_KEY }}
           permission-checks: write
-          permission-pull-requests: ${{ vars.UASCO_REVIEW_SUBMIT_APPROVAL == 'true' && 'write' || 'read' }}
-      - if: always()
+      - id: finish
+        if: always()
         env:
           REVIEW_APP_TOKEN: ${{ steps.app.outputs.token }}
           CHECK_ID: ${{ needs.scope.outputs.check_id }}
           HEAD_SHA: ${{ needs.scope.outputs.head_sha }}
-          SUBMIT_APPROVAL: ${{ vars.UASCO_REVIEW_SUBMIT_APPROVAL }}
         run: node scripts/ci/uasco-review/run.mjs finish
+      # A separate, narrower token: a missing pull-request permission can never stop the check from concluding.
+      - id: approval-token
+        if: always() && steps.finish.outputs.final == 'success' && vars.UASCO_REVIEW_SUBMIT_APPROVAL == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.UASCO_REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.UASCO_REVIEW_APP_PRIVATE_KEY }}
+          permission-pull-requests: write
+      - if: always() && steps.finish.outputs.final == 'success' && vars.UASCO_REVIEW_SUBMIT_APPROVAL == 'true'
+        env:
+          REVIEW_APP_TOKEN: ${{ steps.approval-token.outputs.token }}
+          HEAD_SHA: ${{ needs.scope.outputs.head_sha }}
+          SUBMIT_APPROVAL: ${{ vars.UASCO_REVIEW_SUBMIT_APPROVAL }}
+        run: node scripts/ci/uasco-review/run.mjs approve
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with: {name: "uasco-review-evidence-${{ github.run_attempt }}", path: .uasco-review/, include-hidden-files: true, retention-days: 90, if-no-files-found: warn}

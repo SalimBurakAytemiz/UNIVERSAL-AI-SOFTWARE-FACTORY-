@@ -20,7 +20,7 @@ The workflow is `.github/workflows/uasco-independent-review.yml`. It runs on `pu
 | `founder-authority` | nothing | Runs only for protected/CI-executed paths. Waits in the `uasco-founder-authority` environment until the Founder approves the deployment in the GitHub UI. |
 | `collect` | read-only `GITHUB_TOKEN` | Waits (bounded, 100 min) for CI to finish on the same head SHA. Collects evidence and runs the deterministic pre-gate. A red or incomplete PR stops here, so no review tokens are spent. |
 | `ai-review` | Claude OAuth token only | Runs Claude Code with **read-only tools** (Read, Glob, Grep). Shell, write and network tools are disabled. Input is the diff and context as data, plus the trusted base checkout. Output is a JSON verdict validated against `verdict.schema.json`. |
-| `finish` | reviewer App key | Re-reads the PR head, the Founder approvals of this run and the verdict, applies `review-gate.mjs`, and concludes the check **success** or **failure**. Uploads the evidence artifact (90 days). |
+| `finish` | reviewer App key | Re-reads the PR head, the Founder approvals of this run and the verdict, applies `review-gate.mjs`, and concludes the check **success** or **failure** with a checks-only token. Uploads the evidence artifact (90 days). If `UASCO_REVIEW_SUBMIT_APPROVAL=true` and the check passed, a second token (pull requests write only) submits an APPROVE review pinned to the reviewed commit, after re-checking that the head has not moved. A missing pull-request permission therefore never stops the check from concluding. |
 
 **Decision core** (`scripts/ci/uasco-review/review-gate.mjs`, pure, no I/O):
 - **Reused merge-gate checks:** it reuses `docs/planning/merge-gate.mjs` for:
@@ -61,6 +61,20 @@ The workflow is `.github/workflows/uasco-independent-review.yml`. It runs on `pu
    - The deterministic gate still requires green CI on the same SHA.
    - Verdict text with credential shapes is rejected and never published.
 6. **Stale reviews:** a new commit has a new head SHA and therefore no review check. The required check is missing until that exact commit is reviewed again. A commit pushed during a review makes that run conclude `STALE_HEAD`.
+
+## Bootstrap (first activation)
+
+The workflow runs from the base branch, so it cannot review anything before it exists on `v7/integration`. That includes this PR and #128.
+
+With `require_last_push_approval` on, a PR pushed by the shared account cannot be merged until another identity (the reviewer App) approves it. The first two merges therefore need one deliberate Founder step:
+
+1. Temporarily turn off "Require approval of the most recent reviewable push" in the ruleset.
+2. Merge #128, then this PR. Required status checks stay enforced throughout.
+3. Turn the setting back on.
+
+From then on, the App reviews and approves.
+
+Manual re-review through `workflow_dispatch` works only once this workflow file also exists on the default branch (`master`). Until then, a new push, reopen or ready-for-review triggers a review.
 
 ## Founder setup (GitHub UI; nothing here is done by an agent)
 

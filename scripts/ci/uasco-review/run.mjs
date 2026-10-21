@@ -1,5 +1,5 @@
 // //TR: Bu betik UASCO Independent Review workflow'unun aşama yürütücüsüdür (scope, collect, decide, finish): yalnız base dalındaki güvenilir koddan çalışır, PR kodunu asla checkout etmez veya çalıştırmaz, kanıtı ve kararı SHA'ya bağlı dosyalara yazar ve her hata yolunda kontrolü failure olarak kapatır.
-// Usage: node scripts/ci/uasco-review/run.mjs <scope|collect|decide|finish>   (inputs come from env, never from argv text)
+// Usage: node scripts/ci/uasco-review/run.mjs <scope|collect|decide|finish|approve>   (inputs come from env, never from argv text)
 import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
@@ -103,13 +103,26 @@ async function finishStep() {
   if (!ok && decision.conclusion === "success") decision.reasons = ["DECISION_INCONSISTENT"];
   await concludeCheck(gh, id, {conclusion: ok ? "success" : "failure", title: ok ? "Independent review passed" : "Independent review did not pass",
     summary: renderSummary({...decision, conclusion: ok ? "success" : "failure"}, env("RUN_URL")), externalId: typeof decision.digest === "string" ? decision.digest.slice(0, 64) : undefined});
-  if (ok && env("SUBMIT_APPROVAL") === "true") await approve(gh, prNumber(), d.headSha, `UASCO Independent Review passed for ${d.headSha}. Evidence digest ${d.digest}.`);
   output("final", ok ? "success" : "failure");
 }
 
-export const phases = {scope, collect, decide: decideStep, finish: finishStep};
+// 5. approve (optional; its own App token with pull_requests:write): an APPROVE review pinned to the reviewed commit, only for a passed
+// decision whose head is still the PR head. It satisfies require_last_push_approval without a human; the next push dismisses it.
+async function approveStep() {
+  if (env("SUBMIT_APPROVAL") !== "true") { output("approved", false); return; }
+  let d = null;
+  try { d = readJson("decision.json"); } catch { d = null; }
+  const ok = d && d.conclusion === "success" && Array.isArray(d.reasons) && d.reasons.length === 0 && SHA_RE.test(String(d.headSha)) && d.headSha === env("HEAD_SHA");
+  if (!ok) { output("approved", false); return; }
+  const gh = appGh(), n = prNumber();
+  if (await currentHead(gh, n) !== d.headSha) { output("approved", false); return; }
+  await approve(gh, n, d.headSha, `UASCO Independent Review passed for ${d.headSha}. Evidence digest ${d.digest}.`);
+  output("approved", true);
+}
+
+export const phases = {scope, collect, decide: decideStep, finish: finishStep, approve: approveStep};
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const phase = process.argv[2];
-  if (!Object.hasOwn(phases, phase)) { console.error("USAGE: run.mjs <scope|collect|decide|finish>"); process.exit(2); }
+  if (!Object.hasOwn(phases, phase)) { console.error("USAGE: run.mjs <scope|collect|decide|finish|approve>"); process.exit(2); }
   phases[phase]().catch(e => { console.error(`${CHECK_NAME}: ${phase} failed: ${String(e?.code ?? e?.message ?? "ERROR").slice(0, 80)}`); process.exit(1); });
 }

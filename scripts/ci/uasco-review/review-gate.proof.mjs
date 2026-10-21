@@ -129,6 +129,9 @@ check("W14 parsed structure: triggers, empty top permissions, environments and j
   && jobs.scope?.environment === "uasco-review" && jobs["ai-review"]?.environment === "uasco-review" && jobs.finish?.environment === "uasco-review"
   && jobs.collect?.environment === undefined && jobs["founder-authority"]?.environment === FOUNDER_ENVIRONMENT
   && JSON.stringify(jobs.finish?.needs) === JSON.stringify(["scope", "founder-authority", "collect", "ai-review"]) && !JSON.stringify(jobs["ai-review"]?.permissions ?? {}).includes("write"));
+check("W15 the check-write token never carries pull-request write; approval uses its own token, only after a passed check", jobBlock("finish").split("id: approval-token")[0].includes("permission-checks: write")
+  && !jobBlock("finish").split("id: approval-token")[0].includes("permission-pull-requests") && /id: approval-token\n\s+if: always\(\) && steps\.finish\.outputs\.final == 'success' && vars\.UASCO_REVIEW_SUBMIT_APPROVAL == 'true'/.test(wf)
+  && /permission-pull-requests: write\n/.test(jobBlock("finish").split("id: approval-token")[1] ?? ""));
 check("W9 finish always runs once scope created the check (crash or skip concludes failure)", /finish:[\s\S]*if: always\(\) && needs\.scope\.result == 'success'/.test(wf));
 
 // ---- I/O layer against a fake fetch ----
@@ -178,16 +181,16 @@ const runPhase = (phase, envx) => new Promise(resolve => {
   const c = spawn(process.execPath, [path.join(HERE, "run.mjs"), phase], {env: {...process.env, ...envx}, stdio: ["ignore", "pipe", "pipe"]});
   let out = "", err = ""; c.stdout.on("data", d => out += d); c.stderr.on("data", d => err += d); c.on("close", code => resolve({code, out, err}));
 });
-async function e2e({ci, verdictObj, headAfterCollect = HEAD, submitApproval = "false", skipDecision = false}) {
+async function e2e({ci, verdictObj, headAfterCollect = HEAD, headAtApprove = headAfterCollect, submitApproval = "false", skipDecision = false}) {
   const state = {log: [], checks: [], approvals: [], ci, phase: "scope"};
-  state.head = () => state.phase === "decide" || state.phase === "finish" ? headAfterCollect : HEAD;
+  state.head = () => state.phase === "approve" ? headAtApprove : ["decide", "finish"].includes(state.phase) ? headAfterCollect : HEAD;
   const srv = mockGithub(state); await new Promise(r => srv.listen(0, "127.0.0.1", r));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-review-"));
   const base = {GITHUB_API_URL: `http://127.0.0.1:${srv.address().port}`, GITHUB_REPOSITORY: "o/r", PR_NUMBER: "7", UASCO_REVIEW_DIR: dir, GH_READ_TOKEN: "read", REVIEW_APP_TOKEN: "app",
     RUN_URL: "https://github.com/o/r/actions/runs/1", GITHUB_RUN_ID: "1", FOUNDER_LOGIN: "SalimBurakAytemiz", REVIEWER_SESSION: "0e9c1f6a-reviewer", HEAD_SHA: HEAD, CHECK_ID: "99",
     CI_WAIT_MINUTES: "0", SUBMIT_APPROVAL: submitApproval, GITHUB_OUTPUT: ""};
   const out = {};
-  for (const ph of ["scope", "collect", "decide", "finish"]) {
+  for (const ph of ["scope", "collect", "decide", "finish", "approve"]) {
     state.phase = ph;
     if (ph === "decide" && verdictObj !== undefined) fs.writeFileSync(path.join(dir, "verdict.json"), verdictObj === null ? "" : JSON.stringify(verdictObj));
     if (ph === "finish" && skipDecision) fs.rmSync(path.join(dir, "decision.json"), {force: true});
@@ -209,6 +212,18 @@ const green = [{name: UBU, status: "completed", conclusion: "success"}, {name: W
 {
   const r = await e2e({ci: green, verdictObj: verdict(), submitApproval: "true"});
   check("E2 with approval enabled, the App submits APPROVE pinned to the reviewed commit", r.state.approvals.length === 1 && r.state.approvals[0].event === "APPROVE" && r.state.approvals[0].commit_id === HEAD);
+}
+{
+  const r = await e2e({ci: green, verdictObj: null, submitApproval: "true"});
+  check("E2b approval enabled but the review failed => no APPROVE is submitted", r.concluded?.conclusion === "failure" && r.state.approvals.length === 0);
+}
+{
+  const r = await e2e({ci: green, verdictObj: verdict(), submitApproval: "true", headAfterCollect: NEWHEAD});
+  check("E2c approval enabled but the head moved => failure and no APPROVE", r.concluded?.conclusion === "failure" && r.state.approvals.length === 0);
+}
+{
+  const r = await e2e({ci: green, verdictObj: verdict(), submitApproval: "true", headAtApprove: NEWHEAD});
+  check("E2d head moves after the check passed but before approval => check success stays on the old SHA, no APPROVE", r.concluded?.conclusion === "success" && r.state.approvals.length === 0);
 }
 {
   const r = await e2e({ci: green, verdictObj: null});
