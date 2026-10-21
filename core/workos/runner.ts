@@ -18,6 +18,7 @@ import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from ".
 import {assertIndependentExecutors} from "./executors.js";
 import {ExecutionGate} from "./execution-gate.js";
 import {assertRoleExecutes} from "../agents/first-delivery-bindings.js";
+import {advanceAgent, agentTraceEnvelope, instantiateAgent} from "../agents/role-execution.js";
 import type {GateDecision, ProjectExecutionKind} from "./execution-gate.js";
 import {M1A_NOT_VERIFIED_LABEL, productVerificationOf, reviewAndSecurityFor} from "./outcomes.js";
 import {RISK_REFUSAL, hostExecutionNotice, riskAdmitted} from "./risk-admission.js";
@@ -436,6 +437,14 @@ export class MissionRunner {
     const limit = r.exitCode !== 0 && !r.aborted && !r.timedOut ? executorLimit(r.exitCode, r.log) : null;
     this.evidence(run, leaseId, {kind: "IMPLEMENT", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, baseSha: start, ...(produced ? {commitSha: produced} : {}), executorIdentity: this.o.executors.implementer.identity,
       ...(limit ? {note: limitNote(limit)} : r.blockReason ? {note: r.blockReason.slice(0, 200)} : {})});
+    // //TR: Rol atanmış run için izlenebilir ajan kaydı: rol tanımı kimliği ile ajan örneği kimliği ayrı; araç izinleri profilden gelir. Çağrı-başına araç izi bu adapter'dan GÖZLENEMEZ (araç kısıtı claude bayraklarıyla uygulanır) — bu açıkça yazılır, uydurma sayaç yok.
+    if (run.roleId !== null) {
+      const profile = assertRoleExecutes(run.roleId, "developer");
+      const agent = instantiateAgent({status: "EXECUTABLE", roleId: run.roleId, profile, certification: "NOT_CERTIFIED", evaluation: {executed: 0, total: 0}}, run.runId, `agent-${run.runId}-c${run.remediationCycle}`);
+      advanceAgent(agent, "RUNNING"); advanceAgent(agent, r.aborted ? "ABORTED" : produced ? "COMPLETED" : "FAILED");
+      const env = {...agentTraceEnvelope(agent), allowedTools: profile.allowedTools, perCallToolTrace: "NOT_OBSERVABLE_FROM_ADAPTER", certification: "NOT_CERTIFIED"};
+      this.evidence(run, leaseId, {kind: "AGENT_TRACE", argv: [], startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, ...this.writeLog(run, "agent-trace", JSON.stringify(env, null, 2) + "\n"), executorIdentity: this.o.executors.implementer.identity, note: `agent=${agent.agentInstanceId} role=${run.roleId} state=${agent.state}`.slice(0, 200)});
+    }
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     // REL-FX-4: sağlayıcı kota/hız sınırı kör retry ile bütçe tüketmez: run BLOCKED(PROVIDER_QUOTA), retryCount değişmez; disk dolu/kotası BLOCKED(DISK_FULL).
     if (limit) return limitBlock(limit);
