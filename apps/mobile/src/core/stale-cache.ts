@@ -1,5 +1,5 @@
 // //TR: STALE/OFFLINE önbellek kuralları (ADR-MOB-001 bölüm 5): önbellekten okunan veri her zaman STALE ve yaşıyla etiketlenir, asla taze gösterilmez.
-import type { CacheEntry, ContractState, Envelope } from "./types.js";
+import type { CacheEntry, Envelope } from "./types.js";
 
 /** Cached copies older than this are dropped to UNAVAILABLE instead of shown. */
 export const MAX_CACHE_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -40,7 +40,6 @@ export function classifyCached(entry: CacheEntry | null, nowMs: number): CachedR
   return { state: "STALE", ageMs: raw, ageLabel: formatAge(raw), fetchedAtMs: entry.fetchedAtMs, envelope: entry.envelope };
 }
 
-/** A live envelope may only be shown as VERIFIED if the server said VERIFIED; STALE/UNKNOWN stay as sent. */
-export function liveState(envelope: Envelope): ContractState {
-  return envelope.state;
-}
+/** Reasons after which cached data must not be shown (CONNECTIVITY-AND-PAIRING: revoked wipes the cache, pin mismatch is a hard stop). */
+export const CACHE_DROPPING_REASONS: readonly string[] = ["DEVICE_REVOKED", "REAUTH_REQUIRED", "PIN_MISMATCH"];
+export const dropsCache = (reason: string): boolean => CACHE_DROPPING_REASONS.includes(reason);

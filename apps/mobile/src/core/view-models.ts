@@ -1,7 +1,7 @@
 // //TR: MOB-6 ekranları (UI-097 ana sayfa, UI-099 görev akışı, UI-102 ajan takibi, UI-177 çevrimdışı) için saf görünüm modeli işlevleri; eksik veri sayı değil null/—, bağlantı NOT_CONNECTED.
 import { ROUTE_CONNECTION, ROUTE_PATHS, type Connection, type MobileRoute, type OfflineReason, type ViewState } from "./types.js";
 import type { Snapshot } from "./monitoring-store.js";
-import type { CachedRead } from "./stale-cache.js";
+import { classifyCached, dropsCache, type CachedRead } from "./stale-cache.js";
 
 export interface Field<T> {
   /** null renders as an em dash, never 0. */
@@ -51,7 +51,7 @@ function rawFrameOf(route: MobileRoute, snap: Snapshot): RawFrame {
       // Server-side STALE (e.g. expired lease) stays STALE; UNKNOWN is not promoted to VERIFIED.
       return { state: env.state === "VERIFIED" ? "VERIFIED" : env.state === "STALE" ? "STALE" : "UNAVAILABLE", staleAgeLabel: null, banner: null, data: d };
     }
-    case "OFFLINE": return fromCache("OFFLINE", snap.reason, snap.cached);
+    case "OFFLINE": return fromCache("OFFLINE", snap.reason, dropsCache(snap.reason) ? classifyCached(null, 0) : snap.cached);
     case "ERROR": return fromCache("ERROR", snap.code, snap.cached);
   }
 }
@@ -176,7 +176,7 @@ export interface OfflineViewModel {
 export function offlineViewModel(snap: Snapshot): OfflineViewModel {
   const base = { queuesWrites: false } as const;
   if (snap.status !== "OFFLINE") return { ...base, offline: false, reason: null, text: null, cachedState: null, lastSyncLabel: null, journalStateAtLastSync: null };
-  const c = snap.cached;
+  const c = dropsCache(snap.reason) ? classifyCached(null, 0) : snap.cached;
   return {
     ...base, offline: true, reason: snap.reason, text: OFFLINE_TEXT[snap.reason], cachedState: c.state,
     lastSyncLabel: c.state === "STALE" ? c.ageLabel : null,

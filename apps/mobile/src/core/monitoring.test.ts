@@ -131,13 +131,64 @@ describe("view-models", () => {
   });
   it("offline view: reason text, last sync age, journal at last sync, never queues writes", () => {
     const o = offlineViewModel({ status: "OFFLINE", reason: "DEVICE_REVOKED", cached: classifyCached(entry("summary", env("summary", SUMMARY), 120_000), NOW) });
-    expect(o.offline).toBe(true); expect(o.reason).toBe("DEVICE_REVOKED"); expect(o.lastSyncLabel).toBe("2 min ago");
-    expect(o.journalStateAtLastSync).toBe("OK"); expect(o.queuesWrites).toBe(false);
+    expect(o.offline).toBe(true); expect(o.reason).toBe("DEVICE_REVOKED"); expect(o.lastSyncLabel).toBeNull();
+    expect(o.journalStateAtLastSync).toBeNull(); expect(o.cachedState).toBe("UNAVAILABLE"); expect(o.queuesWrites).toBe(false);
+  });
+  it("offline view keeps last sync for a recoverable reason", () => {
+    const o = offlineViewModel({ status: "OFFLINE", reason: "UNREACHABLE", cached: classifyCached(entry("summary", env("summary", SUMMARY), 120_000), NOW) });
+    expect(o.lastSyncLabel).toBe("2 min ago"); expect(o.journalStateAtLastSync).toBe("OK");
   });
   it("offline view: no cache -> no last sync; non-offline snapshot -> offline=false", () => {
     const o = offlineViewModel({ status: "OFFLINE", reason: "UNREACHABLE", cached: classifyCached(null, NOW) });
     expect(o.lastSyncLabel).toBeNull(); expect(o.cachedState).toBe("UNAVAILABLE");
     expect(offlineViewModel({ status: "LOADING" }).offline).toBe(false);
+  });
+});
+
+describe("cache drop and ordering", () => {
+  const cached = entry("summary", env("summary", SUMMARY), 1000);
+  for (const reason of ["DEVICE_REVOKED", "REAUTH_REQUIRED", "PIN_MISMATCH"] as const) {
+    it(`${reason} drops the cached frame (store and view)`, async () => {
+      const snap = await store(reader({ kind: "offline", reason }, cached)).refresh("summary");
+      const f = frameOf("summary", snap);
+      expect(f.state).toBe("OFFLINE"); expect(f.banner).toBe(reason); expect(f.staleAgeLabel).toBeNull();
+      expect(homeViewModel(snap).projectsCount.value).toBeNull();
+      // Even a hand-built snapshot carrying a cache is ignored for these reasons.
+      const forced = homeViewModel({ status: "OFFLINE", reason, cached: classifyCached(cached, NOW) });
+      expect(forced.frame.state).toBe("OFFLINE"); expect(forced.projectsCount.value).toBeNull();
+    });
+  }
+  it("UNREACHABLE and DESKTOP_DEGRADED still show STALE cache", async () => {
+    for (const reason of ["UNREACHABLE", "DESKTOP_DEGRADED"] as const)
+      expect(frameOf("summary", await store(reader({ kind: "offline", reason }, cached)).refresh("summary")).state).toBe("STALE");
+  });
+  it("an older slow response never overwrites a newer snapshot", async () => {
+    const gates: Array<(r: LiveResult) => void> = [];
+    const r: MonitoringReader = { readLive: () => new Promise<LiveResult>(res => { gates.push(res); }), readCache: async () => null };
+    const s = store(r);
+    const first = s.refresh("summary"); const second = s.refresh("summary");
+    gates[1]!({ kind: "ok", envelope: env("summary", { projects: { count: 9 } }) });
+    await second;
+    gates[0]!({ kind: "error", code: "OLD" });
+    await first;
+    const snap = s.get("summary");
+    expect(snap.status).toBe("LIVE");
+    expect(homeViewModel(snap).projectsCount.value).toBe(9);
+  });
+  it("sequencing is per route/key: another key is unaffected", async () => {
+    const s = store(reader({ kind: "ok", envelope: env("summary", SUMMARY) }));
+    await s.refresh("summary", "a"); expect(s.get("summary", "b").status).toBe("LOADING");
+  });
+  it("ignores a cache entry for another route or key", async () => {
+    const wrongRoute = entry("runs", env("runs", { items: [] }), 1000);
+    const wrongKey = { ...entry("summary", env("summary", SUMMARY), 1000), key: "other" };
+    for (const c of [wrongRoute, wrongKey])
+      expect(frameOf("summary", await store(reader({ kind: "offline", reason: "UNREACHABLE" }, c)).refresh("summary")).state).toBe("OFFLINE");
+    expect(frameOf("summary", await store(reader({ kind: "offline", reason: "UNREACHABLE" }, cached)).refresh("summary")).state).toBe("STALE");
+  });
+  it("liveState helper is removed", async () => {
+    const m = await import("./stale-cache.js");
+    expect("liveState" in m).toBe(false);
   });
 });
 
