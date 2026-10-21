@@ -205,8 +205,8 @@ import {FIRST_DELIVERY_BINDINGS, FIRST_DELIVERY_FUNCTIONS, assertRoleExecutes} f
 
 describe("LANE-C role execution resolver", () => {
   const resolve = (id: string, b: readonly RoleExecutionProfile[] = FIRST_DELIVERY_BINDINGS) => resolveRoleExecution(id, CATALOG.roles as never, b);
-  it("binds all six first-delivery functions to real catalog roles, executable but NOT certified", () => {
-    expect(FIRST_DELIVERY_FUNCTIONS.length).toBe(6);
+  it("binds all nine first-delivery functions to real catalog roles, executable but NOT certified", () => {
+    expect(FIRST_DELIVERY_FUNCTIONS.length).toBe(9);
     for (const b of FIRST_DELIVERY_BINDINGS) {
       expect(CATALOG_IDS.has(b.roleId)).toBe(true);
       const r = resolve(b.roleId);
@@ -218,11 +218,14 @@ describe("LANE-C role execution resolver", () => {
     const plan = buildCrewPlan();
     expect(plan.roleIds).toContain("UASCO-0019");
     expect(plan.roleIds).toContain("UASCO-0043");
+    // every pre-dev primary role (PRE_DEV_ROLE_MAP[kind][0]) is bound, in the same function order as the crew plan
+    const fnOf: Record<string, string> = {BusinessAnalysis: "business-analyst", Requirements: "requirements-engineer", Plan: "planner", Architecture: "architect", UxSpec: "ux-designer"};
+    for (const ph of plan.phases) expect(FIRST_DELIVERY_BINDINGS.find(b => b.roleId === ph.primaryRoleId)?.function).toBe(fnOf[ph.kind]);
   });
   it("every other catalog role stays NOT_EXECUTABLE with a fixed reason", () => {
     const bound = new Set(FIRST_DELIVERY_BINDINGS.map(b => b.roleId));
     const others = CATALOG.roles.filter(r => !bound.has(r.roleId));
-    expect(others.length).toBe(599 - 6);
+    expect(others.length).toBe(599 - 9);
     for (const r of others) expect(resolve(r.roleId)).toMatchObject({status: "NOT_EXECUTABLE", reason: "ROLE_HAS_NO_BINDING", certification: "NOT_CERTIFIED"});
     expect(resolve("UASCO-9999")).toMatchObject({status: "NOT_EXECUTABLE", reason: "ROLE_NOT_IN_CATALOG"});
   });
@@ -286,7 +289,7 @@ describe("LANE-C role execution resolver", () => {
     expect(() => crewDevExecutors("UASCO-0001", "UASCO-0252", port, port, "x")).toThrow(CrewDevReviewError);
     expect(() => crewDevExecutors("UASCO-0085", "UASCO-0001", port, port, "x")).toThrow("ROLE_HAS_NO_BINDING");
     expect(() => crewDevExecutors("UASCO-0252", "UASCO-0085", port, port, "x")).toThrow("BINDING_ROLE_MISMATCH");
-    expect(() => assertRoleExecutes("UASCO-0085", "developer", [{...FIRST_DELIVERY_BINDINGS[2], allowedTools: ["Bash"]}])).toThrow("TOOL_NOT_ALLOWED");
+    expect(() => assertRoleExecutes("UASCO-0085", "developer", [{...FIRST_DELIVERY_BINDINGS.find(b => b.function === "developer")!, allowedTools: ["Bash"]}])).toThrow("TOOL_NOT_ALLOWED");
   });
   it("team summary reports per-role executability without implying live agents or certification", () => {
     const sum = summarizeProposedTeam(composeTeam(TASKHUB_BRIEF, INPUTS, CATALOG), CATALOG);
