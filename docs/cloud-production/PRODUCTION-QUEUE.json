@@ -212,7 +212,7 @@
       "id": "PQ-006",
       "source": "UASCO-AUD-130 (P3)",
       "title": "Make the two host-sensitive tests robust without weakening them",
-      "status": "IN_PROGRESS",
+      "status": "TESTED",
       "base": "v7/integration",
       "files": [
         "tests/v7-b10a-evidence.test.ts",
@@ -233,7 +233,13 @@
       "wipSha": "2d9827c4d4d6bfab61d7ba8dbb5401873b740c6f",
       "blockedHistory": "Worker 05:51Z: BLOCKED, core/evidence/index.ts outside files; the scrubber masks only /home/* and /Users/*, so HOME=/root leaks home=/root. WIP 2d9827c kept.",
       "scopeExtension": "Founder 2026-10-21 (in the coordinator session): core/evidence/index.ts added to PQ-006; product fix required; keep the WIP commit; finish on the same branch; draft PR; independent review; no merge.",
-      "owner": "coordinator https://claude.ai/code/session_01DmTHw4gBA3wvY1tKM9bk2e (completing the worker WIP)"
+      "owner": "coordinator https://claude.ai/code/session_01DmTHw4gBA3wvY1tKM9bk2e (completing the worker WIP)",
+      "pr": 135,
+      "finalSha": "e3af4a8905672f649d0d9cec320942f1066208a7",
+      "completedAt": "2026-10-21T07:18:00.842Z",
+      "evidence": "b10a 31/31 with HOME=/root, HOME=/home/someone, a custom HOME and as non-root user nobody; b2 21/21 with a 104-char TMPDIR; full suite 2042/2018 pass, 2 fail (AUT1/AUT2, identical on base), 22 pending; old scrubber fails 11 tests; 25/25 mutations caught (generic /root rule as non-root); 52/52 catalogue positives masked; tsc/TR/secret/architecture PASS. Windows NOT_EXECUTED locally.",
+      "acceptanceNote": "Acceptance item 1 asked to replace the substring leak check. It was kept unchanged instead: the WIP boundary check was weaker on real leaks (ANSI/flag-prefixed paths), and the HOME=/root failure was a product leak, not a false positive. This follows the Founder's 'do not weaken existing tests'.",
+      "review": "Independent review requested 2026-10-21T07:17Z in a separate read-only session session_01J24SF3eNYGBsSmzZt4uwxt (the Founder's reviewer routine cannot be fired by an agent; it also runs hourly)."
     },
     {
       "id": "PQ-008",
@@ -492,7 +498,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T06:24:30.148Z",
+    "at": "2026-10-21T07:18:00.842Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -504,7 +510,8 @@
       130,
       131,
       132,
-      133
+      133,
+      135
     ],
     "next": "Worker next tick: PQ-011, then PQ-012. PQ-006 is completed by the coordinator on claude/pq-006.",
     "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified."
