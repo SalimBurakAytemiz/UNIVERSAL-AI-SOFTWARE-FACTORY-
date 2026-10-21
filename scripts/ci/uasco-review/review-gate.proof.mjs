@@ -138,6 +138,22 @@ check("R2 a model error => REVIEWER_MODEL_UNAVAILABLE", MODEL_TEXTS.every(t => c
 const QUOTA_TEXTS = ["Credit balance is too low", "Claude AI usage limit reached|1760000000", 'API Error: 429 {"type":"error","error":{"type":"rate_limit_error"}}',
   'API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}', "quota exceeded", "5-hour limit reached"];
 check("R3 a usage, quota, rate-limit or overload error => REVIEWER_QUOTA_OR_RATE_LIMIT", QUOTA_TEXTS.every(t => codeOf(execFile(errResult(t))) === "REVIEWER_QUOTA_OR_RATE_LIMIT"));
+const SCHEMA_TEXTS = ['API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"output_format.schema: JSON schema is invalid"}}',
+  'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"tools.0.custom.input_schema: unsupported keyword"}}', "Invalid JSON schema passed to --json-schema",
+  "structured output is not supported for this request", "output_format: schema type not allowed"];
+check("R3b the API refusing the verdict schema (the observed shape: error, 1 turn, 305 ms, no model usage) => REVIEWER_SCHEMA_REJECTED",
+  SCHEMA_TEXTS.every(t => codeOf(execFile(errResult(t))) === "REVIEWER_SCHEMA_REJECTED")
+  && JSON.stringify(dx(execFile(errResult(SCHEMA_TEXTS[0])))) === JSON.stringify({code: "REVIEWER_SCHEMA_REJECTED", isError: true, turns: 1, durationMs: 305, modelUsed: false}));
+check("R3c schema refusal ranks after auth, model and quota and after a run that used the model; schema words without a refusal, or in a run without an error, change nothing",
+  codeOf(execFile(errResult("Invalid API key · Please run /login (JSON schema error)"))) === "REVIEWER_AUTH_REJECTED"
+  && codeOf(execFile(errResult("model not found; input_schema invalid"))) === "REVIEWER_MODEL_UNAVAILABLE"
+  && codeOf(execFile(errResult("429 rate limit; json schema invalid"))) === "REVIEWER_QUOTA_OR_RATE_LIMIT"
+  && codeOf(execFile(errResult("structured output failed schema validation: error", {subtype: "error_max_structured_output_retries"}))) === "REVIEWER_NO_STRUCTURED_OUTPUT"
+  && codeOf(execFile(errResult("json schema error", {num_turns: 9, modelUsage: {m: {outputTokens: 3}}}))) === "REVIEWER_NO_STRUCTURED_OUTPUT"
+  && codeOf(execFile(errResult("Loaded the verdict schema from disk"))) === "REVIEWER_ERROR_UNCLASSIFIED"
+  && codeOf(execFile(errResult("--json-schema was provided but Claude did not return structured_output"))) === "REVIEWER_ERROR_UNCLASSIFIED"
+  && codeOf(execFile({...okResult, result: "The JSON schema is invalid and unsupported."})) === "REVIEWER_OK"
+  && codeOf(execFile({subtype: "success", is_error: false, num_turns: 2, result: "The JSON schema is invalid and unsupported."})) === "REVIEWER_NO_STRUCTURED_OUTPUT");
 check("R4 the reviewer ran but gave no structured output (turn limit, no output field, model used then failed) => REVIEWER_NO_STRUCTURED_OUTPUT",
   codeOf(execFile({subtype: "error_max_turns", is_error: false, num_turns: 61, duration_ms: 900000, total_cost_usd: 1.2, modelUsage: {m: {inputTokens: 1}}})) === "REVIEWER_NO_STRUCTURED_OUTPUT"
   && codeOf(execFile({subtype: "success", is_error: false, num_turns: 3, result: "Here is my review."})) === "REVIEWER_NO_STRUCTURED_OUTPUT"
@@ -201,6 +217,11 @@ check("G43b a valid positive verdict whose decision fails for another reason (st
     && FAIL_CODES.every(c => (t => typeof t === "string")(REVIEWER_REMEDIES[c]) && renderSummary(D({verdict: null, diag: diagRec(c)})).includes(REVIEWER_REMEDIES[c]))
     && !renderSummary(miss).includes("Reviewer diagnosis") && !renderSummary(ok).includes("Reviewer diagnosis") && JSON.stringify(Object.keys(REVIEWER_REMEDIES)) === JSON.stringify(FAIL_CODES)
     && Object.values(REVIEWER_REMEDIES).every(t => !/[@|<>`\r\n]/.test(t)));
+  check("G46 the schema-refusal remedy points at the schema in scripts/ci/uasco-review and says no credential change is needed; the code is added only to a failed verdict",
+    /refused the verdict schema/.test(REVIEWER_REMEDIES.REVIEWER_SCHEMA_REJECTED) && REVIEWER_REMEDIES.REVIEWER_SCHEMA_REJECTED.includes("scripts/ci/uasco-review")
+    && /no credential change is needed/.test(REVIEWER_REMEDIES.REVIEWER_SCHEMA_REJECTED) && !REVIEWER_REMEDIES.REVIEWER_SCHEMA_REJECTED.includes("CLAUDE_CODE_OAUTH_TOKEN")
+    && JSON.stringify(D({verdict: null, diag: diagRec("REVIEWER_SCHEMA_REJECTED")}).reasons) === JSON.stringify([...miss.reasons, "REVIEWER_SCHEMA_REJECTED"])
+    && D({diag: diagRec("REVIEWER_SCHEMA_REJECTED")}).digest === ok.digest && renderSummary(D({verdict: null, diag: diagRec("REVIEWER_SCHEMA_REJECTED")})).includes(REVIEWER_REMEDIES.REVIEWER_SCHEMA_REJECTED));
 }
 
 // ---- Schema and module agree ----
@@ -618,6 +639,12 @@ const green = [{name: UBU, status: "completed", conclusion: "success"}, {name: W
   }
   check("E21b missing, unset, directory, oversized (> 4 MiB, even when valid), malformed, empty-array, empty, non-array and result-less files => exit 0 and REVIEWER_OUTPUT_UNREADABLE", allUnreadable);
   const argv = await runPhase("reviewer-diagnose", {EXECUTION_FILE: "", UASCO_VERDICT_DIR: path.join(tmp, "out-argv"), GITHUB_STEP_SUMMARY: ""}, [exf]);
+  const sch = path.join(tmp, "schema.json"), sdir = path.join(tmp, "out-schema");
+  fs.writeFileSync(sch, execFile(errResult(`${INJECT}\n${SCHEMA_TEXTS[0]}`)));
+  const rs = await runPhase("reviewer-diagnose", {EXECUTION_FILE: sch, UASCO_VERDICT_DIR: sdir, GITHUB_STEP_SUMMARY: ""});
+  const srec = fs.readFileSync(path.join(sdir, "reviewer-diagnostics.json"), "utf8");
+  check("E21g a refused schema is written as REVIEWER_SCHEMA_REJECTED with only the five keys; none of the record's text is kept",
+    rs.code === 0 && JSON.parse(srec).code === "REVIEWER_SCHEMA_REJECTED" && onlyKeys(JSON.parse(srec)) && !leakedE(srec) && !srec.includes("invalid_request_error") && !leakedE(rs.out));
   check("E21c the execution file is taken only from EXECUTION_FILE, never from argv", argv.code === 0 && fs.readFileSync(path.join(tmp, "out-argv", "reviewer-diagnostics.json"), "utf8").trim() === UNREADABLE_REC);
   const auth = {code: "REVIEWER_AUTH_REJECTED", isError: true, turns: 1, durationMs: 305, modelUsed: false};
   const dec = r => JSON.parse(fs.readFileSync(path.join(r.dir, "decision.json"), "utf8"));

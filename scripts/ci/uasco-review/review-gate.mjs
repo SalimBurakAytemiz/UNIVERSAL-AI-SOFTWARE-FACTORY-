@@ -97,7 +97,7 @@ export function preGate(evidence) {
 // Reviewer diagnosis: why the reviewer step gave no usable verdict, as one fixed code. Only these codes and the remedies below are ever written or published;
 // no text of the execution record leaves memory. REVIEWER_OK is never a blocking reason.
 export const REVIEWER_DIAGNOSTIC_CODES = Object.freeze(["REVIEWER_OK", "REVIEWER_AUTH_REJECTED", "REVIEWER_MODEL_UNAVAILABLE", "REVIEWER_QUOTA_OR_RATE_LIMIT",
-  "REVIEWER_NO_STRUCTURED_OUTPUT", "REVIEWER_ERROR_UNCLASSIFIED", "REVIEWER_OUTPUT_UNREADABLE"]);
+  "REVIEWER_SCHEMA_REJECTED", "REVIEWER_NO_STRUCTURED_OUTPUT", "REVIEWER_ERROR_UNCLASSIFIED", "REVIEWER_OUTPUT_UNREADABLE"]);
 export const REVIEWER_DIAGNOSTIC_KEYS = Object.freeze(["code", "isError", "turns", "durationMs", "modelUsed"]);
 export const EXECUTION_FILE_MAX_BYTES = 4 * 1024 * 1024;
 const RERUN = "then start a new review (Re-run all jobs, or Run workflow with the PR number).";
@@ -105,6 +105,8 @@ export const REVIEWER_REMEDIES = Object.freeze({
   REVIEWER_AUTH_REJECTED: `The reviewer credential was rejected. Regenerate the reviewer token (claude setup-token) into the review environment secret CLAUDE_CODE_OAUTH_TOKEN, ${RERUN}`,
   REVIEWER_MODEL_UNAVAILABLE: `The requested reviewer model is not available to this credential. Correct or clear the repository variable UASCO_REVIEW_MODEL, ${RERUN}`,
   REVIEWER_QUOTA_OR_RATE_LIMIT: `The reviewer hit a usage, quota or rate limit, or the service was overloaded. Wait until the limit resets, ${RERUN}`,
+  // The workflow runs from the default branch, so the schema fix must be merged into v7/integration before a new review can use it.
+  REVIEWER_SCHEMA_REJECTED: "The reviewer API refused the verdict schema passed with --json-schema. Fix the schema in scripts/ci/uasco-review (verdict.schema.json) and merge the fix; no credential change is needed. Then start a new review (Re-run all jobs, or Run workflow with the PR number).",
   REVIEWER_NO_STRUCTURED_OUTPUT: "The reviewer ran but returned no schema-valid verdict (for example it reached its turn limit). Start a new review; if this repeats, split the PR into smaller changes.",
   REVIEWER_ERROR_UNCLASSIFIED: `The reviewer failed with an error that matches no known cause. Check the ai-review job log of this run (the reviewer output itself is never published), ${RERUN}`,
   REVIEWER_OUTPUT_UNREADABLE: `The reviewer's execution record was missing or unreadable (the reviewer may not have started). Check the ai-review job log of this run, ${RERUN}`});
@@ -113,6 +115,9 @@ export const REVIEWER_REMEDIES = Object.freeze({
 const AUTH_RE = /invalid[ _-]?(?:api[ _-]?key|x-api-key|bearer|token|credential|auth)|authenticat|unauthori[sz]ed|\b401\b|oauth|token (?:has )?(?:expired|been revoked|revoked)|(?:expired|revoked) (?:oauth )?token|\/login\b|\blog ?in\b|not logged in/i;
 const MODEL_RE = /\bmodel\b[^\n]{0,160}?(?:not[ _]found|not available|unavailable|does(?: not|n't) exist|may not exist|not supported|unsupported|not have access)|(?:unknown|invalid|unsupported|unavailable) model\b|issue with the selected model|not_found_error[\s\S]{0,300}?\bmodel\b|\bmodel\b[\s\S]{0,300}?not_found_error|\b404\b[\s\S]{0,300}?\bmodel\b|\bmodel\b[\s\S]{0,300}?\b404\b/i;
 const QUOTA_RE = /credit balance|\bquota\b|usage limit|rate[ _-]?limit|\b429\b|overloaded|\b529\b|too many requests|limit reached/i;
+// The request's verdict schema refused by the API (for example 400 invalid_request_error on the JSON schema): a schema term near a refusal word.
+const SCHEMA_TERM = "(?:json[ _-]?schema|input_schema|output_format|structured[ _-]?output)", SCHEMA_REFUSAL = "(?:invalid|not supported|unsupported|not allowed|rejected|error)";
+const SCHEMA_RE = new RegExp(`${SCHEMA_TERM}[\\s\\S]{0,200}?${SCHEMA_REFUSAL}|${SCHEMA_REFUSAL}[\\s\\S]{0,200}?${SCHEMA_TERM}`, "i");
 const count = v => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1e12 ? Math.round(v) : null;
 const diagnosis = (code, isError, turns, durationMs, modelUsed) => ({code, isError, turns, durationMs, modelUsed});
 // raw = the execution file's text (a JSON array of SDK messages) or null. The LAST {"type":"result"} message is classified. Never throws.
@@ -134,7 +139,9 @@ export function diagnoseReviewerOutput(raw) {
     if (AUTH_RE.test(text)) return at("REVIEWER_AUTH_REJECTED");
     if (MODEL_RE.test(text)) return at("REVIEWER_MODEL_UNAVAILABLE");
     if (QUOTA_RE.test(text)) return at("REVIEWER_QUOTA_OR_RATE_LIMIT");
+    // A run that used the model or hit a retry/turn limit got as far as answering: its failure is the missing output, never a refused schema.
     if (modelUsed || (isStr(res.subtype) && res.subtype.startsWith("error_max"))) return at("REVIEWER_NO_STRUCTURED_OUTPUT");
+    if (SCHEMA_RE.test(text)) return at("REVIEWER_SCHEMA_REJECTED");
     return at("REVIEWER_ERROR_UNCLASSIFIED");
   } catch {
     return unreadable;
