@@ -1,6 +1,7 @@
 // //TR: Bu görünüm Görevler / Work OS alanıdır ve UX WP-WORKOS ile Kurucu-Kokpiti sınıfı premium katmana yükseltilmiştir: üstte gerçek /v1/missions + /v1/work-runs okumalarından beslenen görev/koşu özeti (KPI karoları: toplam mission, etkin koşu, Kurucu dikkati bekleyen, gerçekten doğrulanmış koşu) ve yaşam-döngüsü dağılım şeridi vardır. Alt kısımda "Yeni Görev" formu (proje, başlık, hedef, kabul kriterleri listesi, R0–R4 risk açıklamaları, isteğe bağlı argv test komutu), mission listesi (durum filtreli), mission detayı (durum/faz/risk, izinli geçişler, yüksek riskli geçişlerde onay, Çalıştır), /v1/work-runs koşu zaman çizelgesi + koşu kartları ve /v1/evidence kanıt bağlama bölümü korunur/eklenir. WP2/WP-PROJECTS token ve bileşenleri (kpiTile/statePill/missionPill/timelineItem) yeniden kullanılır (palet değişmez, yeni token yok). Hiçbir sayı/durum uydurulmaz: veri canlı değilse dürüst UNAVAILABLE/OFFLINE, boşsa dürüst boş metin; koşu yalnız gerçek test-yürütme kanıtı varsa doğrulanmış sayılır (FD-REL-1; SOURCE_GENERATION_COMPLETE != PRODUCT_VERIFIED), aksi halde NOT_VERIFIED dürüstçe gösterilir. API verisi asla HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
 import {planFormPanel} from "./plan-form.js";
 import {taskStatusControls} from "./task-status.js";
+import {taskRunsPanel,loadTaskRuns} from "./task-runs.js";
 import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip,kpiTile,statePill,missionPill,timelineItem} from "../components.js";
 import {formatTime,formatCount,MISSING,missionPillKind} from "../model.js";
 import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline} from "../work-core.js";
@@ -293,7 +294,13 @@ function taskList(ctx,tasks,missionId){
       on:{click:()=>{inspectedTask=on?null:{missionId,taskId:t.taskId};ctx.rerender()}},text:t.title})," ",statusPill(ctx,t.status));
   }));
 }
-function detailPanel(ctx,detail,runsRes,runDetails,evRes){
+/** Seçili görevin koşu bölümü (görev seçili ve okuması yapılmışsa); yoksa null. */
+function taskRunsFor(ctx,m,runsRes,taskRuns){
+  if(!taskRuns||inspectedTask?.missionId!==m.missionId||taskRuns.taskId!==inspectedTask.taskId)return null;
+  const task=m.tasks.find(t=>t.taskId===taskRuns.taskId);
+  return task?taskRunsPanel(ctx,{task,linked:taskRuns.res,runsRes}):null;
+}
+function detailPanel(ctx,detail,runsRes,runDetails,evRes,taskRuns=null){
   const doc=ctx.doc;
   if(detail.state!=="VERIFIED")return panel(ctx,{titleKey:"work.detail",id:"work-detail"},stateNote(ctx,detail.state));
   const m=detail.mission;
@@ -303,7 +310,7 @@ function detailPanel(ctx,detail,runsRes,runDetails,evRes){
     h(doc,"p",{class:"panel-meta"},statusPill(ctx,m.status),badge(ctx,m.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:m.missionId}),missionNotVerified(runsRes.state==="VERIFIED"?runsRes.items:[],m.missionId)?notVerifiedBadge(ctx,"mission"):null),
     h(doc,"p",{text:m.objective}),
     h(doc,"h4",{text:ctx.t("work.detail.criteria")}),m.acceptanceCriteria.length?h(doc,"ul",{},m.acceptanceCriteria.map(c=>h(doc,"li",{text:c}))):emptyNote(ctx,"work.detail.noCriteria"),
-    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
+    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null),taskRunsFor(ctx,m,runsRes,taskRuns)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
     workTimeline(ctx,detail,runsRes),
     planFormPanel(ctx,m),
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),
@@ -326,7 +333,8 @@ export async function render(ctx){
     const [detail,runsRes,evRes]=await Promise.all([ctx.api.missionDetail(selection.missionId),ctx.api.workRuns({missionId:selection.missionId}),ctx.api.evidenceList({missionId:selection.missionId,limit:EVIDENCE_LIMIT})]);
     const runDetails=new Map();
     if(runsRes.state==="VERIFIED")await Promise.all([...new Set([...runsRes.items.slice(0,RUN_DETAIL_LIMIT),...runsRes.items.filter(r=>r.status==="AWAITING_APPROVAL")])].map(async r=>{const d=await ctx.api.workRunDetail(r.runId);if(d.state==="VERIFIED"&&d.run)runDetails.set(r.runId,d.run)}));
-    detailNode=detailPanel(ctx,detail,runsRes,runDetails,evRes);
+    const taskRuns=inspectedTask?.missionId===selection.missionId?{taskId:inspectedTask.taskId,res:await loadTaskRuns(ctx,inspectedTask.taskId)}:null;
+    detailNode=detailPanel(ctx,detail,runsRes,runDetails,evRes,taskRuns);
   }
   // //TR: Premium başlık (hero): göz üstü etiket + başlık + alt başlık + dürüst kaynak çipi/kapsam. Mevcut h1#view-title korunur (odak hedefi).
   const header=h(doc,"div",{class:"hero"},

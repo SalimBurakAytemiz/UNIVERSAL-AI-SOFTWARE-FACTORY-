@@ -17,5 +17,6 @@ export async function flowPanel(ctx,projectId){
       KIND[s.state]?badge(ctx,ctx.t(`flow.state.${s.state}`),KIND[s.state]):badge(ctx,ctx.t(`flow.state.${s.state}`)),
       s.detail?h(doc,"span",{class:"note mono",text:` ${s.detail}`}):null))),
     counts?h(doc,"p",{class:"note",dataset:{flowCounts:"1"},text:counts}):null,
+    f.taskRuns===undefined?null:h(doc,"p",{class:"note",dataset:{flowTaskRuns:f.taskRuns===null?"UNKNOWN":"KNOWN"},text:f.taskRuns===null?ctx.t("flow.taskRuns.unknown"):ctx.t("flow.taskRuns",{with:String(f.taskRuns.tasksWithRuns),total:String(f.taskRuns.tasks)})}),
     h(doc,"p",{class:"note",text:ctx.t("flow.doneNote")}));
 }

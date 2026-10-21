@@ -344,5 +344,7 @@ export function mapFlow(raw){
   }
   const cnt=x=>Number.isSafeInteger(x)&&x>=0?x:null;
   const rid=typeof f.latestRunId==="string"&&/^[A-Za-z0-9_-]{6,64}$/.test(f.latestRunId)?f.latestRunId:null;
-  return {state:"VERIFIED",flow:{projectId:f.projectId,stages,missionCount:cnt(f.missionCount),taskCount:cnt(f.taskCount),latestRunId:rid}};
+  // //TR: taskRuns: sunucu alanı yoksa undefined (satır gösterilmez); null = bağ dosyası okunamadı (UNKNOWN); nesne geçerliyse (tasksWithRuns <= tasks) sayılar, aksi halde null.
+  const tr=Object.hasOwn(f,"taskRuns")?(isObj(f.taskRuns)&&cnt(f.taskRuns.tasksWithRuns)!==null&&cnt(f.taskRuns.tasks)!==null&&f.taskRuns.tasksWithRuns<=f.taskRuns.tasks?{tasksWithRuns:f.taskRuns.tasksWithRuns,tasks:f.taskRuns.tasks}:null):undefined;
+  return {state:"VERIFIED",flow:{projectId:f.projectId,stages,missionCount:cnt(f.missionCount),taskCount:cnt(f.taskCount),latestRunId:rid,taskRuns:tr}};
 }

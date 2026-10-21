@@ -1898,11 +1898,29 @@ describe("LANE-A first-delivery flow stepper (fake DOM)", () => {
     expect(all(bad.panel!).filter(n => n.dataset.flowStage).length).toBe(0);
     expect(text(bad.panel!)).not.toContain("Bitti");
   });
+  it("flow taskRuns: absent field shows nothing, null says unknown, a valid summary is shown, an impossible one is treated as unknown", async () => {
+    const core = await load(rend, "project-core.js");
+    const base = flowBody(["DONE", "DONE", "ACTIVE", "NOT_STARTED", "NOT_STARTED"]);
+    const withTr = (taskRuns: any) => ({flow: {...base.flow, ...(taskRuns === "ABSENT" ? {} : {taskRuns})}});
+    expect(core.mapFlow(withTr("ABSENT")).flow.taskRuns).toBeUndefined();
+    expect(core.mapFlow(withTr(null)).flow.taskRuns).toBeNull();
+    expect(core.mapFlow(withTr({tasksWithRuns: 2, tasks: 5})).flow.taskRuns).toEqual({tasksWithRuns: 2, tasks: 5});
+    for (const bad of [{tasksWithRuns: 6, tasks: 5}, {tasksWithRuns: -1, tasks: 5}, {tasksWithRuns: "2", tasks: 5}, {tasks: 5}, 3, "x"]) expect(core.mapFlow(withTr(bad)).flow.taskRuns, JSON.stringify(bad)).toBeNull();
+    const shown = await openWs({get: projectsGet({[FLOW]: withTr({tasksWithRuns: 2, tasks: 5})}), lang: "en"});
+    const row = all(byId(shown.root, "studio-ov-flow")!).find(n => n.dataset.flowTaskRuns)!;
+    expect(row.dataset.flowTaskRuns).toBe("KNOWN"); expect(text(row)).toContain("2 of 5 planned tasks have a linked run");
+    const unk = await openWs({get: projectsGet({[FLOW]: withTr(null)}), lang: "en"});
+    const u = all(byId(unk.root, "studio-ov-flow")!).find(n => n.dataset.flowTaskRuns)!;
+    expect(u.dataset.flowTaskRuns).toBe("UNKNOWN"); expect(text(u)).toContain("unknown");
+    expect(text(u)).not.toMatch(/\b0 of\b/); // bilinmeyen 0 diye gösterilmez
+    const none = await openWs({get: projectsGet({[FLOW]: withTr("ABSENT")}), lang: "en"});
+    expect(all(byId(none.root, "studio-ov-flow")!).some(n => "flowTaskRuns" in n.dataset)).toBe(false);
+  });
   it("flow strings exist in en and tr", async () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
     const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("flow."));
-    expect(keys.length).toBe(17);
+    expect(keys.length).toBe(19);
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });

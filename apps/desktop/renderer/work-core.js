@@ -198,6 +198,39 @@ export function buildTaskTransitionRequest({task,tasks,missionStatus,to,reason})
   if(r.length>TASK_REASON_MAX)errors.reason="taskst.err.reasonLong";
   return result(path,{to,reason:r||`${task?.status} -> ${to} (UASCO Desktop)`},errors);
 }
+// ---------- Görev-koşu bağı (GET/POST /v1/tasks/:id/runs, Lane B) ----------
+// //TR: LANE-A: Koşu bir mission'a açılır; hangi görevi yürüttüğü bu bağla kaydedilir. GET {runs:[{link:{taskId,runId,missionId,linkedAt,...},run|null}]}; POST gövdesi yalnız {runId}. Bozuk kayıt tüm okumayı ERROR yapar; koşu kaydı yoksa durum null kalır (uydurulmaz).
+export const RUN_ID_RE=/^run_[0-9a-f]{24}$/;
+export const taskRunsPath=id=>TASK_ID_RE.test(String(id))?`/v1/tasks/${id}/runs`:null;
+export function mapTaskRuns(raw){
+  const bad={state:"ERROR",items:[]};
+  const list=isObj(raw)?raw.runs:null;if(!Array.isArray(list)||list.length>500)return bad;
+  const items=[];
+  for(const x of list){
+    const l=isObj(x)?x.link:null;
+    if(!isObj(l)||!TASK_ID_RE.test(String(l.taskId))||!RUN_ID_RE.test(String(l.runId))||!MISSION_ID_RE.test(String(l.missionId)))return bad;
+    items.push({taskId:l.taskId,runId:l.runId,missionId:l.missionId,linkedAt:iso(l.linkedAt),status:isObj(x.run)?statusStr(x.run.status):null});
+  }
+  return {state:"VERIFIED",items};
+}
+/** Göreve henüz bağlı olmayan, kanonik kimlikli mission koşuları (kimlik tekrarı elenir). */
+export function linkableRuns(runItems,linkedItems){
+  const linked=new Set((Array.isArray(linkedItems)?linkedItems:[]).map(l=>l.runId)),seen=new Set(),out=[];
+  for(const r of Array.isArray(runItems)?runItems:[]){
+    if(!r||!RUN_ID_RE.test(String(r.runId))||linked.has(r.runId)||seen.has(r.runId))continue;
+    seen.add(r.runId);out.push(r);
+  }
+  return out;
+}
+export function buildLinkRunRequest({taskId,runId,taskStatus}){
+  const errors={},path=taskRunsPath(taskId);
+  if(!path)errors.taskId="taskruns.err.task";
+  if(!RUN_ID_RE.test(String(runId??"")))errors.runId="taskruns.err.run";
+  if(taskStatus==="DONE")errors.taskId="taskruns.err.done";
+  const ok=!Object.keys(errors).length;
+  return {ok,path,body:ok?{runId}:null,errors};
+}
+
 /** Durum geçişi isteği; yalnız durum makinesinin izin verdiği hedefler, yüksek riskli hedeflerde confirmed===true şart.
  *  D-M1A-STATE-MODEL-2026-10-15: geçiş gövdesi hiçbir onay alanı taşımaz (COMPLETE yalnız PRODUCT_VERIFIED kanıtıyla olur); onay verilmeye çalışılırsa istek kurulmaz. */
 export function buildTransitionRequest({missionId,from,to,reason,confirmed,acknowledgements}){
