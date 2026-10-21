@@ -34,11 +34,18 @@ export function deriveProjectFlow(store: WorkOsStore, scope: Scope, projectId: s
     : tasks.some(t => t.status === "BLOCKED") ? {stage: "PLAN", state: "BLOCKED", detail: `${done}/${tasks.length} DONE`}
     : {stage: "PLAN", state: done === tasks.length ? "DONE" : "ACTIVE", detail: `${done}/${tasks.length} DONE`};
   const run: FlowStage = latest ? {stage: "RUN", state: runState(latest), detail: `${latest.status}/${latest.step}`} : {stage: "RUN", state: "NOT_STARTED", detail: null};
-  // REVIEW yalnız koşu SUCCEEDED ise DONE'dır (SUCCEEDED yazısı CLEAN review kanıtını gerektirir); inceleme aşamasına ulaşmış aktif koşu ACTIVE; başarısız koşuda review sonucu bilinmez.
+  // REVIEW: SUCCEEDED koşu DONE'dır (SUCCEEDED yazısı CLEAN review kanıtını gerektirir). SUCCEEDED olmayan koşuda DONE yalnız koşunun GÜNCEL headSha'sına bağlı CLEAN bir REVIEW kanıtı kaydı varsa yazılır
+  // (ör. Founder kararı bekleyen AWAITING_APPROVAL/REPORT koşusu); yoksa inceleme aşamasına ulaşmış aktif koşu ACTIVE; başarısız koşuda review sonucu bilinmez.
+  const headReview = latest?.headSha ? [...(latest.evidence ?? [])].reverse().find(e => e.kind === "REVIEW" && e.commitSha === latest.headSha) : undefined;
   const review: FlowStage = !latest ? {stage: "REVIEW", state: "NOT_STARTED", detail: null}
     : latest.status === "SUCCEEDED" ? {stage: "REVIEW", state: "DONE", detail: "CLEAN_REVIEW_GATE_PASSED"}
     : RUN_FAILED.has(latest.status) ? {stage: "REVIEW", state: "UNKNOWN", detail: "RUN_NOT_SUCCEEDED"}
+    : headReview?.verdict === "CLEAN" ? {stage: "REVIEW", state: "DONE", detail: "CLEAN_REVIEW_FOR_HEAD"}
     : REVIEW_STEPS.has(latest.step) ? {stage: "REVIEW", state: "ACTIVE", detail: latest.step} : {stage: "REVIEW", state: "NOT_STARTED", detail: null};
-  const delivery: FlowStage = latest?.completion ? {stage: "DELIVERY", state: "DONE", detail: latest.completion.productVerification.state} : {stage: "DELIVERY", state: "NOT_STARTED", detail: null};
+  // DELIVERY: DONE yalnız PRODUCT_VERIFIED completion kaydıyla. Teslim artefaktı veya Founder'ın kabul ettiği NOT_VERIFIED kaynak teslimi kaydı varsa NOT_STARTED yazılmaz ama DONE da yazılmaz (ürün doğrulanmadı): ACTIVE + açık sebep.
+  const delivery: FlowStage = !latest ? {stage: "DELIVERY", state: "NOT_STARTED", detail: null}
+    : latest.completion ? {stage: "DELIVERY", state: "DONE", detail: latest.completion.productVerification.state}
+    : latest.sourceDelivery ? {stage: "DELIVERY", state: "ACTIVE", detail: "SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED"}
+    : latest.deliveryArtifact ? {stage: "DELIVERY", state: "ACTIVE", detail: "ARTIFACT_PREPARED_NOT_VERIFIED"} : {stage: "DELIVERY", state: "NOT_STARTED", detail: null};
   return {projectId, stages: [mission, plan, run, review, delivery], missionCount: missions.length, taskCount: tasks.length, latestRunId: latest?.runId ?? null};
 }

@@ -1663,6 +1663,25 @@ describe("LANE-A founder idea -> first mission (fake DOM)", () => {
     expect(calls.navigate).toEqual(["work"]);
     expect((await load(rend, "forms.js")).selection.missionId).toBe(MSN);
   });
+  it("a new project's idea form never shows the previous project's 'First mission created' status", async () => {
+    const PID2 = "prj_" + "9a".repeat(12);
+    let n = 0;
+    const post = (p: string, b: any) => p === "/v1/projects" ? (++n, {status: 201, body: {project: {projectId: n === 1 ? PID : PID2, name: b.name}}}) : {status: 201, body: {mission: {missionId: MSN, title: b.title}}};
+    const {ctx, doc, root} = await created(post);
+    byId(root, "studio-idea-objective")!.value = "Online shop"; byId(root, "studio-idea-objective")!.fire("input");
+    byId(root, "studio-idea-form")!.fire("submit"); await tick();
+    expect(forms.drafts.status["studio-idea"].ok).toBe(true);
+    let root2 = mount(doc, await projectsView.render(ctx));
+    expect(text(byId(root2, "studio-idea-status")!)).toContain("First mission created");
+    byId(root2, "studio-name")!.value = "Beta"; byId(root2, "studio-name")!.fire("input");
+    byId(root2, "studio-wizard-form")!.fire("submit"); await tick();
+    root2 = mount(doc, await projectsView.render(ctx));
+    expect(byId(root2, "studio-idea")!.dataset.ideaProject).toBe(PID2);
+    expect(forms.drafts.status["studio-idea"]).toBeUndefined();
+    expect(byId(root2, "studio-idea-status")!.dataset.result).toBeUndefined();
+    expect(text(byId(root2, "studio-idea-status")!)).toBe("");
+    expect(byId(root2, "studio-idea-open")).toBeNull();
+  });
   it("a server failure records an error, creates no mission link and keeps the draft", async () => {
     const {ctx, doc, calls, root} = await created((p, b) => p === "/v1/projects" ? okPost(p, b) : {status: 503, body: {error: "WORKOS_UNAVAILABLE"}});
     byId(root, "studio-idea-objective")!.value = "x"; byId(root, "studio-idea-objective")!.fire("input");
@@ -1793,6 +1812,46 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
     expect(all(off.root).filter(n => n.dataset.intakeRow).length).toBe(0);
     expect(text(byId(off.root, "intake")!)).toContain("not available to the desktop yet");
     expect(byId(off.root, "intake-form")).not.toBeNull(); // oluşturma listeden bağımsız
+  });
+  it("labels every target-OS checkbox with a real name in en and tr, never a raw i18n key", async () => {
+    const c = await load(rend, "intake-core.js");
+    expect([...c.INTAKE_OS]).toEqual(["windows", "macos", "linux", "web", "android", "ios"]);
+    for (const lang of ["en", "tr"]) {
+      const o = await open({lang});
+      const labels = c.INTAKE_OS.map((v: string) => text(all(o.root).find(n => n.attrs.get("for") === `intake-os-${v}`)!));
+      expect(labels, lang).toEqual(["Windows", "macOS", "Linux", "Web", "Android", "iOS"]);
+    }
+  });
+  it("refuses a body above the bridge/server 32 KB limit with a localized error before any POST; the limit is the bridge constant", async () => {
+    const c = await load(rend, "intake-core.js"), work = await load(rend, "work-core.js");
+    const bridgeLimit = Number(/const POST_MAX_BODY_BYTES=(\d+);/.exec(mainSrc)![1]);
+    expect(work.MAX_BODY_BYTES).toBe(bridgeLimit); // renderer sabiti köprü sabitine sabitlenmiştir
+    const huge = {idea: "x".repeat(4000), acceptanceCriteria: Array.from({length: 8}, () => "y".repeat(4000))};
+    for (const key of [undefined, "ui-abc"]) {
+      const r = c.buildIntakeRequest(huge, key === undefined ? {} : {key});
+      expect(r.ok).toBe(false); expect(r.body).toBeNull(); expect(r.errors).toEqual({form: "err.tooLarge"});
+    }
+    // Sınır: anahtarlı gövde tam sınırda kabul, bir bayt fazlası ret; anahtarsız doğrulama geçişi en uzun anahtar payını ayırır.
+    const KEY = "k".repeat(100), bytes = (o: unknown) => new TextEncoder().encode(JSON.stringify(o)).length;
+    const input = (n: number) => ({idea: "x".repeat(100), acceptanceCriteria: [...Array.from({length: 8}, () => "y".repeat(4000)), "z".repeat(n)]});
+    const body = (n: number) => ({idea: "x".repeat(100), acceptanceCriteria: input(n).acceptanceCriteria, idempotencyKey: KEY});
+    const n = bridgeLimit - bytes(body(0));
+    expect(n).toBeGreaterThan(0); expect(n).toBeLessThanOrEqual(4000);
+    expect(bytes(body(n))).toBe(bridgeLimit);
+    expect(c.buildIntakeRequest(input(n), {key: KEY}).ok).toBe(true);
+    expect(c.buildIntakeRequest(input(n)).ok).toBe(true);
+    expect(c.buildIntakeRequest(input(n + 1), {key: KEY}).errors).toEqual({form: "err.tooLarge"});
+    expect(c.buildIntakeRequest(input(n + 1)).errors).toEqual({form: "err.tooLarge"});
+    // Arayüz: gönderim POST etmez, yerelleştirilmiş sınır hatası gösterilir.
+    const o = await open({post: () => ({status: 201, body: {}})});
+    o.m.intakeDraft.idea = huge.idea; o.m.intakeDraft.acceptanceCriteria = [...huge.acceptanceCriteria];
+    byId(o.root, "intake-form")!.fire("submit"); await tick();
+    expect(o.calls.post).toEqual([]);
+    expect(forms.drafts.status.intake.errors).toEqual({form: "err.tooLarge"});
+    const shown = mount(o.doc, await projectsView.render(o.ctx));
+    expect(text(byId(shown, "intake-status")!)).toContain("The request body exceeds the 32 KB limit.");
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+    expect((tr.default ?? tr)["err.tooLarge"]).toBeTruthy(); expect((en.default ?? en)["err.tooLarge"]).toBeTruthy();
   });
   it("intake strings exist in en and tr", async () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");

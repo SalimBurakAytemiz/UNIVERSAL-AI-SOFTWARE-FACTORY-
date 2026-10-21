@@ -1,10 +1,10 @@
 //TR: Bu dosya Founder'ın proje fikrini doğrulanmış, kalıcı bir intake kaydına çevirir; aynı işlemde projeyi ve ilk mission'ı Work OS store'un genel yöntemleriyle oluşturur (ikinci store yok).
-import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import AjvModule from "ajv";
 import type {Scope, RiskLevel, ProjectType} from "./types.js";
 import type {WorkOsStore} from "./store.js";
+import {readJsonlRecords, appendJsonlRecord, JsonlTailError} from "./jsonl-tail.js";
 
 const Ajv = AjvModule.default;
 const ajv = new Ajv({allErrors: true, strict: true});
@@ -41,10 +41,10 @@ export class IntakeError extends Error { constructor(readonly code: IntakeErrorC
 
 const sha = (x: string) => crypto.createHash("sha256").update(x).digest("hex");
 const file = (dataDir: string) => path.join(dataDir, "intakes.jsonl");
+// Kaydın JSON.stringify başlangıcı (anahtar sırası IntakeRecord literalindeki gibi): yırtık son satır yalnız bunun önekiyse tolere edilir (jsonl-tail.ts).
+const RECORD_START = '{"intakeId":"';
 function readAll(dataDir: string): IntakeRecord[] {
-  const f = file(dataDir);
-  if (!fs.existsSync(f)) return [];
-  try { return fs.readFileSync(f, "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l) as IntakeRecord); }
+  try { return readJsonlRecords<IntakeRecord>(file(dataDir), RECORD_START); }
   catch { throw new IntakeError("INTAKE_STORE_CORRUPT"); }
 }
 export const listIntakes = (dataDir: string, scope: Scope): IntakeRecord[] => readAll(dataDir).filter(r => r.tenantId === scope.tenantId);
@@ -57,6 +57,14 @@ export interface IntakeInput {
 export interface IntakeDeps { store: WorkOsStore; scope: Scope; orgId: string; actor: string; environmentId?: string }
 const firstLine = (s: string) => s.trim().split(/\r?\n/, 1)[0].slice(0, 80).trim();
 
+// //TR: İdempotency karşılaştırması isteğin TAMAMINI kapsar (idea, title, projectType, techStack, targetOS, acceptanceCriteria, riskLevel): aynı anahtarla farklı gövde sessizce eski kaydı döndürmez (INTAKE_IDEMPOTENCY_CONFLICT, store'un WORKOS_IDEMPOTENCY_CONFLICT kuralıyla uyumlu).
+// Özet, kayıtta ayrı bir alan olarak SAKLANMAZ; saklanan kayıttan (alan kaynakları FOUNDER/DEFAULT/DERIVED ile) aynı kuralla yeniden türetilir. Böylece bu alanı yazmayan eski kayıtlar da okunur ve farklı gövdeyi sessizce tekrar oynatamaz.
+interface NormalizedRequest { idea: string; title: string | null; projectType: string | null; techStack: string[] | null; targetOS: string[] | null; acceptanceCriteria: string[] | null; riskLevel: string | null }
+const requestDigest = (n: NormalizedRequest) => sha(JSON.stringify([n.idea, n.title, n.projectType, n.techStack, n.targetOS, n.acceptanceCriteria, n.riskLevel]));
+const requestOf = (i: IntakeInput): NormalizedRequest => ({idea: i.idea.trim(), title: i.title?.trim() || null, projectType: i.projectType ?? null, techStack: i.techStack ?? null, targetOS: i.targetOS ?? null, acceptanceCriteria: i.acceptanceCriteria ?? null, riskLevel: i.riskLevel ?? null});
+const requestOfRecord = (r: IntakeRecord): NormalizedRequest => ({idea: r.idea, title: r.sources?.title === "FOUNDER" ? r.title : null, projectType: r.projectType ?? null, techStack: r.techStack ?? null, targetOS: r.targetOS ?? null,
+  acceptanceCriteria: r.sources?.acceptanceCriteria === "FOUNDER" ? r.acceptanceCriteria : null, riskLevel: r.sources?.riskLevel === "FOUNDER" ? r.riskLevel : null});
+
 // //TR: Proje ve mission Work OS store'un idempotency anahtarlarıyla (intakeId'den türetilir) oluşturulur; proje ile mission arasında çökme olsa bile aynı istek tekrarında kalan adım tamamlanır ve çift kayıt oluşmaz.
 export function submitIntake(deps: IntakeDeps, input: IntakeInput): {intake: IntakeRecord; replayed: boolean} {
   const {store, scope} = deps, dataDir = store.dataDir;
@@ -64,7 +72,7 @@ export function submitIntake(deps: IntakeDeps, input: IntakeInput): {intake: Int
   const intakeId = "itk_" + (input.idempotencyKey ? sha(`${scope.tenantId}\0${input.idempotencyKey}`) : crypto.randomBytes(12).toString("hex")).slice(0, 24);
   const prior = getIntake(dataDir, scope, intakeId);
   if (prior) {
-    if (prior.ideaSha256 !== ideaSha256) throw new IntakeError("INTAKE_IDEMPOTENCY_CONFLICT");
+    if (prior.ideaSha256 !== ideaSha256 || requestDigest(requestOfRecord(prior)) !== requestDigest(requestOf(input))) throw new IntakeError("INTAKE_IDEMPOTENCY_CONFLICT");
     return {intake: prior, replayed: true};
   }
   const title = input.title?.trim() || firstLine(input.idea);
@@ -86,8 +94,7 @@ export function submitIntake(deps: IntakeDeps, input: IntakeInput): {intake: Int
     sources: {title: input.title?.trim() ? "FOUNDER" : "DERIVED", acceptanceCriteria: input.acceptanceCriteria ? "FOUNDER" : "DEFAULT", riskLevel: input.riskLevel ? "FOUNDER" : "DEFAULT"},
     createdAt: new Date().toISOString(), createdBy: deps.actor
   };
-  fs.mkdirSync(dataDir, {recursive: true});
-  const fd = fs.openSync(file(dataDir), "a");
-  try { fs.writeSync(fd, JSON.stringify(intake) + "\n"); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  try { appendJsonlRecord(file(dataDir), intake, RECORD_START); }
+  catch (e) { throw e instanceof JsonlTailError ? new IntakeError("INTAKE_STORE_CORRUPT") : e; }
   return {intake, replayed: false};
 }

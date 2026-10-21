@@ -26,7 +26,7 @@ export async function submitWizard(ctx){
     if(typeof id==="string"&&/^prj_[0-9a-f]{24}$/.test(id)){
       studio.lastCreated={projectId:id,name};importDraft.projectId=id;
       // //TR: Yeni projenin kabul kriterleri, ilk mission (Kurucu fikri) formuna başlangıç olarak aktarılır; yeni proje için fikir taslağı sıfırlanır.
-      resetIdea();const crit=check.body.acceptanceCriteria??[];ideaDraft.criteria=crit.length?[...crit]:[""];ideaDraft.title=name;
+      resetIdea();delete drafts.status[IDEA_FORM];const crit=check.body.acceptanceCriteria??[];ideaDraft.criteria=crit.length?[...crit]:[""];ideaDraft.title=name;
     }
     resetWizard();
   }

@@ -1350,6 +1350,33 @@ describe("LANE-A mission plan form", () => {
     expect(forms.drafts.status["mission-plan"].ok).toBe(false);
     expect(forms.drafts.busy["mission-plan"]).toBe(false);
   });
+  it("scopes the last result to its mission: a success or row errors recorded for one mission never show on another mission's empty plan form", async () => {
+    const OTHER = "msn_" + "b".repeat(24), otherMission = {missionId: OTHER, status: "AUTHORIZED", tasks: []};
+    // 1) A'da kaydedilen başarı B'nin boş formunda görünmez.
+    forms.resetAllForms();
+    const ok = await open({post: (_p, b) => ({status: 201, body: {tasks: b.tasks.map((t: any, i: number) => ({taskId: "tsk_" + String(i).repeat(24), title: t.title}))}})});
+    type(ok.root, "plan-title-0", "Bir");
+    byId(ok.root, "plan-form")!.fire("submit"); await tick();
+    expect(forms.drafts.status["mission-plan"].ok).toBe(true);
+    const afterOk = mount(ok.doc, ok.pf.planFormPanel(ok.ctx, otherMission)!);
+    expect(forms.drafts.status["mission-plan"]).toBeUndefined();
+    expect(byId(afterOk, "mission-plan-status")!.dataset.result).toBeUndefined();
+    expect(text(byId(afterOk, "mission-plan-status")!)).toBe("");
+    // 2) A'daki doğrulama/satır hataları B'nin satırını geçersiz işaretlemez.
+    forms.resetAllForms();
+    const bad = await open({});
+    type(bad.root, "plan-deps-0", "1");
+    byId(bad.root, "plan-form")!.fire("submit"); await tick();
+    expect(forms.drafts.status["mission-plan"].rowErrors[0]).toBe("plan.err.title");
+    const same = mount(bad.doc, bad.pf.planFormPanel(bad.ctx, {missionId: MID, status: "AUTHORIZED", tasks: []})!);
+    expect(byId(same, "plan-err-0")).not.toBeNull(); // sanity: hata kendi mission'ında görünür
+    const afterBad = mount(bad.doc, bad.pf.planFormPanel(bad.ctx, otherMission)!);
+    expect(byId(afterBad, "plan-err-0")).toBeNull();
+    expect(byId(afterBad, "plan-title-0")!.attrs.get("aria-invalid")).toBeUndefined();
+    expect(byId(afterBad, "mission-plan-status")!.dataset.result).toBeUndefined();
+    // 3) Aynı mission'da başarılı gönderimden sonra başarı mesajı korunur (yalnız mission DEĞİŞİNCE silinir).
+    expect(forms.drafts.status["mission-plan"]).toBeUndefined();
+  });
   it("plan strings exist in en and tr", async () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
     const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
@@ -1425,6 +1452,7 @@ describe("COORD task status controls", () => {
     byId(o.root, "taskst-IN_PROGRESS")!.fire("click"); await tick();
     expect(o.calls.post).toEqual([{path: `/v1/tasks/${T1}/transition`, body: {to: "IN_PROGRESS", reason: "PENDING -> IN_PROGRESS (UASCO Desktop)"}}]);
     expect(forms.drafts.status["task-status"]).toMatchObject({ok: true, key: "taskst.done"});
+    expect(byId(mount(o.doc, await o.view.render(o.ctx)), "task-status-status")!.dataset.result).toBe("ok"); // E2E "shows the result" kontrolünün dayandığı işaret
     expect(o.calls.refresh).toBe(1);
     const r = await open({post: () => ({status: 200, body: {}})}, "EXECUTING", tasksOf("IN_PROGRESS"), T1);
     expect(targets(r.root)).toEqual(["DONE", "BLOCKED", "PENDING"]);
@@ -1458,6 +1486,7 @@ describe("COORD task status controls", () => {
       byId(o.root, "taskst-reason")!.value = "neden"; byId(o.root, "taskst-reason")!.fire("input");
       byId(o.root, "taskst-IN_PROGRESS")!.fire("click"); await tick();
       expect(forms.drafts.status["task-status"], key).toMatchObject({ok: false, key});
+      expect(byId(mount(o.doc, await o.view.render(o.ctx)), "task-status-status")!.dataset.result, key).toBe("error"); // hata asla "ok" olarak işaretlenmez
       expect(o.ts.taskStatusDraft.reason, key).toBe("neden");
     }
     forms.resetAllForms();

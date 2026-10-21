@@ -2,12 +2,15 @@
 // Usage (Linux): provision Electron (scripts/provision-electron.mjs after a verified install), then run as a NON-root user so the Chromium sandbox stays on:
 //   xvfb-run -a node scripts/e2e-first-delivery-electron.mjs <repoDir> <report.json> <electronBinary>
 // The --disable-gpu/--disable-dev-shm-usage switches only adapt Chromium to headless containers; UASCO_SMOKE is NOT set (smoke mode quits the app after 500 ms).
-import cp from "node:child_process"; import fs from "node:fs"; import crypto from "node:crypto"; import path from "node:path";
+// Scratch data, HOME and the Electron log live under the running user's home (os.homedir()); set UASCO_E2E_HOME to use another writable directory. SIGINT/SIGTERM/SIGHUP/exit kill the detached API and Electron process groups.
+import cp from "node:child_process"; import fs from "node:fs"; import os from "node:os"; import crypto from "node:crypto"; import path from "node:path";
 const W = path.resolve(process.argv[2]), OUT = path.resolve(process.argv[3]), ELECTRON = path.resolve(process.argv[4]);
 const port = 34000 + crypto.randomInt(0, 2000), cdpPort = 36000 + crypto.randomInt(0, 2000), token = crypto.randomBytes(32).toString("hex");
-const data = fs.mkdtempSync("/home/e2e/fd-data-");
+const HOME_DIR = process.env.UASCO_E2E_HOME ? path.resolve(process.env.UASCO_E2E_HOME) : os.homedir();
+fs.mkdirSync(HOME_DIR, {recursive: true});
+const data = fs.mkdtempSync(path.join(HOME_DIR, "fd-data-"));
 const {safeChildEnv} = await import(path.join(W, "automation/lib/env-policy.mjs"));
-const env = {...safeChildEnv(path.join(W, "config/environment-policy.json"), {provider: "DETERMINISTIC"}), CONTROL_API_PORT: String(port), UASCO_CONTROL_TOKEN: token, UASCO_DATA_DIR: path.join(data, "workos"), HOME: "/home/e2e"};
+const env = {...safeChildEnv(path.join(W, "config/environment-policy.json"), {provider: "DETERMINISTIC"}), CONTROL_API_PORT: String(port), UASCO_CONTROL_TOKEN: token, UASCO_DATA_DIR: path.join(data, "workos"), HOME: HOME_DIR};
 const steps = []; const record = (name, ok, detail = "") => { steps.push({name, ok: !!ok, detail: String(detail).slice(0, 300)}); console.log(`${ok ? "PASS" : "FAIL"} ${name}`); };
 const log = (m) => console.log(`.. ${m}`);
 setTimeout(() => { record("watchdog", false, "TIMEOUT_240S"); finish(1); }, 240000).unref?.();
@@ -16,18 +19,22 @@ const marker = path.join(W, ".ai/runtime/DESKTOP_SMOKE_READY.json"); try { fs.rm
 const api = cp.spawn(process.execPath, ["node_modules/tsx/dist/cli.mjs", "apps/control-api/src/server.ts"], {cwd: W, env, stdio: ["ignore", "pipe", "pipe"], detached: true});
 let apiErr = ""; api.stderr.on("data", d => { apiErr = (apiErr + d).slice(-2000); });
 let desktop = null, ws = null;
+// Both children run in their own process groups (detached), so a Ctrl+C / CI cancel / crash of this harness would not reach them: kill the groups on every way out.
+const killGroups = () => { for (const c of [desktop, api]) { try { if (c?.pid) process.kill(-c.pid, "SIGKILL"); } catch {} } };
 const finish = (code) => {
   const report = {"//TR": "COORD-FIRST-DELIVERY-WIRING gerçek Electron E2E sonucu (token/gövde içeriği yazılmaz).", at: new Date().toISOString(), status: steps.length && steps.every(s => s.ok) ? "PASS" : "FAIL", steps};
   fs.writeFileSync(OUT, JSON.stringify(report, null, 2) + "\n");
-  try { ws?.close(); } catch {} for (const c of [desktop, api]) { try { if (c?.pid) process.kill(-c.pid, "SIGKILL"); } catch {} }
+  try { ws?.close(); } catch {} killGroups();
   setTimeout(() => process.exit(code), 500);
 };
+process.on("exit", killGroups);
+for (const [sig, code] of [["SIGINT", 130], ["SIGTERM", 143], ["SIGHUP", 129]]) process.on(sig, () => { killGroups(); record("harness interrupted", false, sig); finish(code); });
 try {
   let up = false; for (let i = 0; i < 60 && !up; i++) { try { up = (await fetch(`http://127.0.0.1:${port}/health?challenge=${"a".repeat(64)}`)).ok; } catch {} if (!up) await sleep(500); }
   record("control-api started (real server.ts)", up, up ? "" : apiErr.slice(-300)); if (!up) throw new Error("API_DOWN");
   const denv = {...env, ...(process.env.DISPLAY ? {DISPLAY: process.env.DISPLAY} : {}), ...(process.env.XAUTHORITY ? {XAUTHORITY: process.env.XAUTHORITY} : {})};
   desktop = cp.spawn(ELECTRON, [`--remote-debugging-port=${cdpPort}`, "--disable-gpu", "--disable-dev-shm-usage", "apps/desktop/main.mjs"], {cwd: W, env: denv, stdio: ["ignore", "pipe", "pipe"], detached: true});
-  let derr = ""; const dlog = fs.createWriteStream("/home/e2e/fd-electron-stderr.log"); desktop.stderr.on("data", d => { derr = (derr + d).slice(-2000); dlog.write(d); }); desktop.stdout.on("data", d => dlog.write(d));
+  let derr = ""; const dlog = fs.createWriteStream(path.join(HOME_DIR, "fd-electron-stderr.log")); desktop.stderr.on("data", d => { derr = (derr + d).slice(-2000); dlog.write(d); }); desktop.stdout.on("data", d => dlog.write(d));
   log("electron spawned");
   desktop.on("exit", (code, sig) => log(`ELECTRON EXIT code=${code} signal=${sig}`));
   api.on("exit", (code, sig) => log(`API EXIT code=${code} signal=${sig}`));
@@ -40,7 +47,7 @@ try {
   const probe = async () => {
     const t = async (u) => { try { const r = await fetch(u, {signal: AbortSignal.timeout(5000)}); return `${r.status}`; } catch (e) { return `ERR ${e.name}`; } };
     log(`PROBE api /health: ${await t(`http://127.0.0.1:${port}/health?challenge=${"a".repeat(64)}`)}; cdp /json/version: ${await t(`http://127.0.0.1:${cdpPort}/json/version`)}`);
-    const ps = cp.spawnSync("ps", ["-o", "pid,pcpu,stat,wchan:20,args", "-u", "e2e"], {encoding: "utf8"}).stdout.split("\n").filter(l => /server\.ts|electron/.test(l)).map(l => l.slice(0, 140));
+    const ps = cp.spawnSync("ps", ["-o", "pid,pcpu,stat,wchan:20,args", "-u", os.userInfo().username], {encoding: "utf8"}).stdout.split("\n").filter(l => /server\.ts|electron/.test(l)).map(l => l.slice(0, 140));
     log("PROBE ps:\n   " + ps.join("\n   "));
   };
   let health = null; for (let i = 0; i < 40 && !(health?.ok); i++) { health = await ev(`try{return {ok:true,v:await window.uasco.apiGet("/health")}}catch(e){return {ok:false,e:String(e&&e.message||e)}}`); if (!health?.ok) await sleep(500); }
@@ -80,7 +87,8 @@ try {
   const panel = await ev(`const p=document.getElementById("task-status");return p?{task:p.dataset.taskStatus,targets:[...p.querySelectorAll("[data-task-to]")].map(b=>b.dataset.taskTo)}:null`);
   record("UI: #/work shows the mission, the task and its status panel with the allowed targets", opened && panel?.task === t2.taskId && JSON.stringify(panel.targets) === JSON.stringify(["DONE", "BLOCKED", "PENDING"]), JSON.stringify(panel));
   await ev(`const i=document.getElementById("taskst-reason");if(i){i.value="kabul testi gecti";i.dispatchEvent(new Event("input",{bubbles:true}))}document.getElementById("taskst-DONE").click();return true`); await sleep(2000);
-  const after = await bridge("apiGet", `/v1/tasks/${t2.taskId}`), status = await ev(`const s=document.getElementById("task-status-status");return s?s.textContent.slice(0,200):null`);
-  record("UI click 'Mark as Done' moves task 2 to DONE through the real bridge and shows the result", after.ok && JSON.stringify(after.v).includes('"DONE"') && !!status, JSON.stringify({status}));
+  const after = await bridge("apiGet", `/v1/tasks/${t2.taskId}`), status = await ev(`const s=document.getElementById("task-status-status");return s?{result:s.dataset.result??null,text:s.textContent.slice(0,200)}:null`);
+  // "shows the result" = the UI reports SUCCESS (data-result="ok"): an error text or an ev() failure object ({ok:false,e}) must not pass.
+  record("UI click 'Mark as Done' moves task 2 to DONE through the real bridge and shows the result", after.ok && JSON.stringify(after.v).includes('"DONE"') && status?.result === "ok" && typeof status.text === "string" && status.text.length > 0, JSON.stringify({status}));
   finish(steps.every(s => s.ok) ? 0 : 1);
 } catch (e) { record("harness", false, e.message); finish(1); }

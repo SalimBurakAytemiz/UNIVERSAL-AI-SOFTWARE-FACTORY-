@@ -1,10 +1,10 @@
 //TR: Bu dosya bir mission'ın görev planını (sıralı görevler + bağımlılıklar) doğrular ve Work OS store'un genel createTask yöntemiyle kalıcı yazar; mission başına tek plan, aynı gövde tekrarında idempotent.
-import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import AjvModule from "ajv";
 import type {Scope, WorkTask} from "./types.js";
 import type {WorkOsStore} from "./store.js";
+import {readJsonlRecords, appendJsonlRecord, JsonlTailError} from "./jsonl-tail.js";
 
 const Ajv = AjvModule.default;
 const ajv = new Ajv({allErrors: true, strict: true});
@@ -39,9 +39,10 @@ interface PlanRecord { missionId: string; tenantId: string; digest: string; task
 const PLANNABLE = new Set(["DRAFT", "PREFLIGHT", "AUTHORIZED", "PLANNED"]);
 const sha = (x: string) => crypto.createHash("sha256").update(x).digest("hex");
 const file = (dir: string) => path.join(dir, "plans.jsonl");
+// Kaydın JSON.stringify başlangıcı (anahtar sırası PlanRecord literalindeki gibi): yırtık son satır yalnız bunun önekiyse tolere edilir (jsonl-tail.ts).
+const RECORD_START = '{"missionId":"';
 function readPlans(dir: string): PlanRecord[] {
-  if (!fs.existsSync(file(dir))) return [];
-  try { return fs.readFileSync(file(dir), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l) as PlanRecord); } catch { throw new PlanError("PLAN_STORE_CORRUPT"); }
+  try { return readJsonlRecords<PlanRecord>(file(dir), RECORD_START); } catch { throw new PlanError("PLAN_STORE_CORRUPT"); }
 }
 
 export function submitPlan(store: WorkOsStore, scope: Scope, actor: string, missionId: string, input: PlanInput): {tasks: WorkTask[]; replayed: boolean} {
@@ -63,8 +64,7 @@ export function submitPlan(store: WorkOsStore, scope: Scope, actor: string, miss
     created.push(r.entity);
   }
   const rec: PlanRecord = {missionId, tenantId: scope.tenantId, digest, taskIds: created.map(t => t.taskId), createdAt: new Date().toISOString(), createdBy: actor};
-  fs.mkdirSync(store.dataDir, {recursive: true});
-  const fd = fs.openSync(file(store.dataDir), "a");
-  try { fs.writeSync(fd, JSON.stringify(rec) + "\n"); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  try { appendJsonlRecord(file(store.dataDir), rec, RECORD_START); }
+  catch (e) { throw e instanceof JsonlTailError ? new PlanError("PLAN_STORE_CORRUPT") : e; }
   return {tasks: created, replayed: false};
 }

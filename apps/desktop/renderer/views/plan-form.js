@@ -5,9 +5,11 @@ import {buildPlanRequest,canPlan,PLAN_MAX_TASKS} from "../work-core.js";
 
 export const PLAN_FORM="mission-plan";
 const KEYS=["id:plan-submit","id:plan-t"];
-// Taslak yalnız oturum içidir ve mission değişince sıfırlanır.
+// Taslak yalnız oturum içidir ve mission değişince sıfırlanır; son sonuç (başarı/satır hataları) da mission'a bağlıdır, başka mission'a taşınmaz.
 export const planDraft={missionId:null,rows:[{title:"",deps:""}]};
 export function resetPlanDraft(missionId=null){planDraft.missionId=missionId;planDraft.rows=[{title:"",deps:""}]}
+// Başarılı gönderimden sonra aynı mission'da resetPlanDraft çağrılır ve başarı mesajı korunur; durum yalnız mission DEĞİŞİNCE silinir (task-status.js resetTaskStatusDraft örüntüsü).
+function scopePlanDraft(missionId){resetPlanDraft(missionId);delete drafts.status[PLAN_FORM]}
 
 export async function submitPlan(ctx,missionId){
   const req=buildPlanRequest({missionId,rows:planDraft.rows});
@@ -22,7 +24,7 @@ export async function submitPlan(ctx,missionId){
 export function planFormPanel(ctx,mission){
   if(!canPlan(mission.status,mission.tasks.length))return null;
   const doc=ctx.doc;
-  if(planDraft.missionId!==mission.missionId)resetPlanDraft(mission.missionId);
+  if(planDraft.missionId!==mission.missionId)scopePlanDraft(mission.missionId);
   const st=drafts.status[PLAN_FORM],rowErrors=st?.rowErrors??{},rows=planDraft.rows;
   const list=h(doc,"ol",{class:"list-editor plan-rows",id:"plan-rows"});
   const paint=focusId=>{
