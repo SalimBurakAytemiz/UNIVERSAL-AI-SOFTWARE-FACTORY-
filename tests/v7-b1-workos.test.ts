@@ -205,3 +205,78 @@ describe("Work OS API", () => {
     await app.close();
   });
 });
+
+// //TR: LANE-B intake: fikir -> doğrulanmış intake kaydı + proje + ilk mission; route modülü server.ts'e dokunmadan Fastify örneğine kaydedilir.
+describe("LANE-B project intake", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const IDEA = "A small web app where I can track my daily reading with a streak counter";
+  const mkApp = async (stopped = false, allowed = true, tenantId = "tA") => {
+    const [{default: Fastify}, {registerIntakeRoutes}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/intake.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const audits: any[] = [];
+    registerIntakeRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string, d?: any) => { audits.push({e, d}); },
+      workosStopped: () => stopped, workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"}, workosFail: (r: any) => r.code(500).send({error: "INTERNAL_ERROR"})});
+    return {app, store, audits};
+  };
+  const post = (app: any, body: unknown, headers: any = hdr) => app.inject({method: "POST", url: "/v1/intakes", headers, payload: body as any});
+
+  it("turns an idea into intake + project + first mission, durable across restart, with honest field sources", async () => {
+    const {app, store, audits} = await mkApp();
+    const r = await post(app, {idea: IDEA});
+    expect(r.statusCode).toBe(201);
+    const i = r.json().intake;
+    expect(i.intakeId).toMatch(/^itk_[0-9a-f]{24}$/);
+    expect(i.sources).toEqual({title: "DERIVED", acceptanceCriteria: "DEFAULT", riskLevel: "DEFAULT"});
+    const m = store.getMission({tenantId: "tA"}, i.missionId)!;
+    expect(m.objective).toBe(IDEA); expect(m.projectId).toBe(i.projectId); expect(m.status).toBe("DRAFT");
+    expect(store.getProject({tenantId: "tA"}, i.projectId)!.name).toBe(IDEA.slice(0, 80).trim());
+    expect(audits.map(a => a.e)).toEqual(["WORKOS_INTAKE_CREATED"]);
+    expect(JSON.stringify(r.json())).not.toContain(tmp);
+    const { app: app2 } = await mkApp();
+    expect((await app2.inject({method: "GET", url: `/v1/intakes/${i.intakeId}`, headers: hdr})).json().intake).toEqual(i);
+    expect((await app2.inject({method: "GET", url: "/v1/intakes", headers: hdr})).json().intakes).toHaveLength(1);
+  });
+  it("marks founder-supplied fields FOUNDER and replays an idempotent retry without duplicates; conflicting reuse is 409", async () => {
+    const {app, store} = await mkApp();
+    const body = {idea: IDEA, title: "Reading tracker", acceptanceCriteria: ["streak shown"], riskLevel: "R2", projectType: "web", idempotencyKey: "k1"};
+    const a = await post(app, body), b = await post(app, body);
+    expect([a.statusCode, b.statusCode]).toEqual([201, 200]);
+    expect(b.json().intake).toEqual(a.json().intake);
+    expect(a.json().intake.sources).toEqual({title: "FOUNDER", acceptanceCriteria: "FOUNDER", riskLevel: "FOUNDER"});
+    expect(store.listProjects({tenantId: "tA"})).toHaveLength(1);
+    expect(store.listMissions({tenantId: "tA"})).toHaveLength(1);
+    const c = await post(app, {...body, idea: IDEA + " with reminders"});
+    expect(c.statusCode).toBe(409); expect(c.json().error).toBe("INTAKE_IDEMPOTENCY_CONFLICT");
+  });
+  it("rejects bad input, wrong token, Global Stop and policy denial; isolates tenants", async () => {
+    const {app} = await mkApp();
+    for (const bad of [{}, {idea: "short"}, {idea: IDEA, extra: 1}, {idea: IDEA, riskLevel: "R4"}, {idea: IDEA, targetOS: ["beos"]}, {idea: "          "}]) expect((await post(app, bad)).statusCode).toBe(400);
+    expect((await post(app, {idea: IDEA}, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    expect((await app.inject({method: "GET", url: "/v1/intakes/bad", headers: hdr})).statusCode).toBe(400);
+    expect((await app.inject({method: "GET", url: "/v1/intakes/itk_" + "0".repeat(24), headers: hdr})).statusCode).toBe(404);
+    expect((await (await mkApp(true)).app.inject({method: "POST", url: "/v1/intakes", headers: hdr, payload: {idea: IDEA}})).statusCode).toBe(423);
+    expect((await (await mkApp(false, false)).app.inject({method: "POST", url: "/v1/intakes", headers: hdr, payload: {idea: IDEA}})).statusCode).toBe(403);
+    const made = (await post(app, {idea: IDEA})).json().intake;
+    const other = (await mkApp(false, true, "tB")).app;
+    expect((await other.inject({method: "GET", url: `/v1/intakes/${made.intakeId}`, headers: hdr})).statusCode).toBe(404);
+    expect((await other.inject({method: "GET", url: "/v1/intakes", headers: hdr})).json().intakes).toEqual([]);
+  });
+  it("resumes after a crash between project and mission without duplicating the project", async () => {
+    const {app, store} = await mkApp();
+    const key = "crash1", { sha256 } = { sha256: (s: string) => crypto.createHash("sha256").update(s).digest("hex") };
+    const id = "itk_" + sha256(`tA\0${key}`).slice(0, 24);
+    store.createProject({tenantId: "tA", orgId: "o1", name: IDEA.slice(0, 80).trim(), environmentId: "local", createdBy: "FOUNDER_LOCAL", idempotencyKey: `${id}.p`, acceptanceCriteria: ["The delivered application starts and its test suite passes"]});
+    const r = await post(app, {idea: IDEA, idempotencyKey: key});
+    expect(r.statusCode).toBe(201);
+    expect(store.listProjects({tenantId: "tA"})).toHaveLength(1);
+    expect(store.listMissions({tenantId: "tA"})).toHaveLength(1);
+  });
+  it("fails closed with 503 on a corrupt intake file", async () => {
+    const {app} = await mkApp();
+    fs.mkdirSync(path.join(tmp, "data"), {recursive: true}); fs.writeFileSync(path.join(tmp, "data", "intakes.jsonl"), "{torn");
+    const r = await app.inject({method: "GET", url: "/v1/intakes", headers: hdr});
+    expect(r.statusCode).toBe(503); expect(r.json().error).toBe("INTAKE_STORE_CORRUPT");
+  });
+});
