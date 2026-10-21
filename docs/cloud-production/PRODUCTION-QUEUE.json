@@ -895,17 +895,23 @@
     },
     "COORD-FIRST-DELIVERY-WIRING": {
       "branch": "claude/coord-first-delivery-wiring",
-      "head": "f121b01",
+      "head": "de3c6fb",
       "status": "PR_OPEN",
       "pr": 143,
-      "tests": "b1 35/35; b5 87/87; full suite 2078 pass / 3 env-only fail (identical on base); real Electron E2E Linux 3x PASS 12/12; Windows Electron NOT_EXECUTED",
-      "note": "Founder approval in principle 2026-10-21; protected server.ts + main.mjs + trust-root reseal; merge only after Independent Review passes"
+      "tests": "b1 + b5 + ps1b 255/255 (coordinator re-run at de3c6fb); tsc/TR/secret/architecture/trust-root PASS; real Electron E2E Linux PASS 12/12: 3x at f121b01, 3x at 675a441, 2x at de3c6fb; Windows Electron NOT_EXECUTED",
+      "note": "Founder approval in principle 2026-10-21; protected server.ts + main.mjs + trust-root reseal; founder-authority on hold by Founder; merge only after Independent Review passes",
+      "preReview": "coordinator adversarial pre-review (NOT the Independent Review): 17 candidates, 10 confirmed + 2 split, all fixed in 675a441 (mutation-proven); verification of 675a441 confirmed 3 more (flow REVIEW DONE for an invalidated/stale CLEAN; quarantine copy not durable before truncate) + 1 weak test, fixed in de3c6fb",
+      "review": "Independent Review run 39637757470 on f121b01 failed closed (STALE_HEAD, FOUNDER_AUTHORITY_REQUIRED, PROTECTED_PATH, VERDICT_MISSING from the old reviewer); re-review after #144 merges"
     },
     "COORD-REVIEWER-DIAGNOSTICS": {
       "branch": "claude/coord-reviewer-diagnostics",
-      "head": "f9fc5ca",
-      "status": "PR_OPEN",
-      "pr": 144
+      "head": "ba3415a",
+      "status": "READY_FOR_FOUNDER_BOOTSTRAP",
+      "pr": 144,
+      "tests": "review-gate.proof 172/172; review-governance 29/29; 14 mutations caught; CI 5/5 green at ba3415a",
+      "preReview": "coordinator pre-review (NOT the Independent Review): 1 low correctness finding (diagnosis appended to a delivered verdict) fixed in ba3415a; final pass at ba3415a (3 lenses x 2 skeptics): 4 candidates, 0 confirmed; low follow-ups: E2BIG placeholder remedy wording, >4 MiB execution-file diagnosis, pre-existing summary Markdown/bidi",
+      "review": "Independent Review not passed: run 39637850876 (f9fc5ca) VERDICT_MISSING from the old reviewer; the fix only takes effect after merge",
+      "note": "bootstrap = governance doc step 7 (Founder unticks last-push approval, merges ba3415a with a merge commit, re-ticks); no agent merge"
     },
     "COORD-SCOPE-GRANTS": {
       "branch": "claude/coord-scope-grants",
@@ -931,9 +937,37 @@
       "review": "adversarial review workflow: 2 finders, 0 findings"
     },
     "LANE-A-TASK-DONE-CONFIRM": {
-      "status": "PLANNED_AFTER_143",
+      "branch": "claude/lane-a-task-done-confirm",
+      "head": "009ef90",
+      "base": "675a441",
+      "status": "DEFECTS_RETURNED",
       "owner": "lane-a",
-      "note": "ctx.confirm before DONE (terminal) in views/task-status.js + tests; branch-only"
+      "tests": "coordinator: b5 + ps1b 212/212, b1 43/43, validators PASS, mutation caught; real Electron E2E 11/12 (base 12/12)",
+      "note": "defect: the DONE confirm dialog breaks the E2E 'Mark as Done' step; fix = click #confirmOk in scripts/e2e-first-delivery-electron.mjs; returned to Lane A 2026-10-21"
+    },
+    "COORD-INTAKE-TEMPLATE": {
+      "branch": "claude/coord-intake-template",
+      "head": "2eaaff3",
+      "base": "675a441 (merged; PR #143 line)",
+      "status": "TESTED_BRANCH_ONLY",
+      "tests": "coordinator re-run: b1 + ps1b 204/204; builder: 31 renderer files 1268/1268; tsc/TR/secret/architecture/trust-root PASS; 11 + 5 mutations caught; adversarial review: 3 finders, 0 real defects (1 weak test, strengthened)",
+      "note": "managed template repository for intake-created projects (web-node default; empty template needs a test command); idempotency digest covers the whole request incl. template and testCommand; no protected files; outside the #143 approval scope, so separate"
+    },
+    "LANE-A-FLOW-DETAIL": {
+      "branch": "claude/lane-a-flow-detail",
+      "head": "0f8a77a",
+      "base": "675a441",
+      "status": "DEFECTS_RETURNED",
+      "owner": "lane-a",
+      "tests": "coordinator: ps1b 122/122, 30 renderer files 1186/1186, validators PASS, 2 mutations caught",
+      "note": "defect: MISSION.COMPLETE detail described as all-complete while the stage is ACTIVE (state ignored); returned to Lane A 2026-10-21"
+    },
+    "LANE-B-TASK-RUN-LINK": {
+      "branch": "claude/lane-b-task-run-link",
+      "head": "5f41a37",
+      "status": "IN_PROGRESS",
+      "owner": "lane-b",
+      "note": "task -> run link (runs currently tied to a mission); not yet reported or verified"
     }
   },
   "prCapacityRule": "Single limit (Founder 2026-10-21: remove the 10/12 contradiction): maxOpenPrs = 10 open agent PRs to v7/integration from claude/pq-*, claude/lane-*, claude/coord-* and claude/ui-* branches, drafts included; legacy PRs (wipRule list) are not counted; PRs the Founder explicitly requested are listed in founderRequestedPrs and are not counted. The former lane rule of fewer than 12 draft PRs is retired. At capacity: BRANCH_ONLY. Builders keep claiming, building, testing and pushing to their branches with evidence recorded here (coordinatorBuild / lane records); code production never stops. A PR opens when a slot frees, oldest TESTED first. A lane PR whose head is an ancestor of an open integration PR is SUPERSEDED_BY_INTEGRATION and is proposed for closing with a pointer comment.",
@@ -956,7 +990,7 @@
         142
       ]
     },
-    "note": "the six lane PRs are content-contained in #143 (ancestors; #142 adds only a base merge); proposed for closing once the Founder confirms",
+    "note": "the six lane PRs are content-contained in #143 (ancestors; #142 adds only a base merge); proposed for closing once the Founder confirms; 2026-10-21T18:50Z: #143 head de3c6fb, #144 head ba3415a",
     "supersededBranches": {
       "claude/lane-a-task-status-ui": {
         "head": "f0c7f04",
