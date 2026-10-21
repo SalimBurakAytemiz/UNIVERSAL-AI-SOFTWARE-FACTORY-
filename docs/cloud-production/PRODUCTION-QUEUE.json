@@ -90,7 +90,7 @@
       "id": "PQ-001",
       "source": "UASCO-AUD-072 (P2)",
       "title": "Renderer product-verification honesty: show PRODUCT_VERIFIED only on the server's exact rule",
-      "status": "BLOCKED",
+      "status": "TESTED",
       "base": "v7/integration",
       "files": [
         "apps/desktop/renderer/work-core.js",
@@ -113,8 +113,15 @@
       "branch": "claude/pq-001",
       "owner": "coordinator-provisioned builder (Sonnet)",
       "startedAt": "2026-10-21T02:05:51Z",
-      "pr": null,
-      "blockedReason": "Mirroring the server rule makes tests/v7-m1a-desktop.test.ts fail (its execRun() fixture lacks full evidence); that file was outside the task files. Coordinator scope decision 2026-10-21T02:46Z: add it (fixture only, no assertion weakened). The builder correctly declined a peer-session instruction and waits for the Founder in session_01Hjip6sVVWac463YegY3Wp1. Its edits (work-core.js, delivery.js, m1a.js) are UNCOMMITTED in that container."
+      "pr": 132,
+      "finalSha": "5ce69df",
+      "wipCheckpoint": "uasco/wip/pq-001@caa5ecb (not a deliverable)",
+      "scopeExtension": "tests/v7-m1a-desktop.test.ts, approved by the Founder in the builder session (reported by session_01Hjip6sVVWac463YegY3Wp1)",
+      "verifiedBy": "coordinator 2026-10-21T03:36Z: diff = 5 approved files; v7-ux-delivery + v7-b5-work-screens + v7-m1a-desktop + sharding 120/120; tsc 0; TR/secret PASS; old partial fixture kept as NOT_VERIFIED negative, 13 evidence cases added",
+      "ciNote": "Expected red only at dependency-supply-chain until #128 merges.",
+      "review": {
+        "result": "PENDING (cloud reviewer routine; UASCO Independent Review not active yet)"
+      }
     },
     {
       "id": "PQ-002",
@@ -401,12 +408,6 @@
       "action": "Merge #128 (lockfile-only vite fix, CI 5/5 green, integrity verified). Today require_last_push_approval blocks every PR pushed by the shared account until an approval from another identity exists (reviewer App approval via UASCO_REVIEW_SUBMIT_APPROVAL, or a Founder ruleset decision)."
     },
     {
-      "id": "FQ-PQ-001",
-      "priority": 1,
-      "kind": "FOUNDER_ONLY",
-      "action": "In session_01Hjip6sVVWac463YegY3Wp1 answer option 2 (push WIP to uasco/wip/pq-001) and option 1 (approve the coordinator scope decision), so the uncommitted PQ-001 work is not lost."
-    },
-    {
       "id": "FQ-ROUTINE-ACCESS",
       "priority": 1,
       "kind": "FOUNDER_ONLY",
@@ -468,7 +469,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T03:17:52Z",
+    "at": "2026-10-21T03:36:58.968Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -478,7 +479,8 @@
       128,
       129,
       130,
-      131
+      131,
+      132
     ],
     "next": "PQ-008-R1 (repair on #129) when a builder slot and session access exist; then PQ-011, PQ-012, PQ-003.",
     "engine": "Production Builder PAUSED until FQ-ROUTINE-ACCESS; heartbeat report-only every 3 h; dispatch by coordinator only meanwhile."
