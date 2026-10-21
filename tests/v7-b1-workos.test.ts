@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import cp from "node:child_process";
 import {WorkOsStore} from "../core/workos/store.js";
 // @ts-expect-error TS7016: atomic-json.mjs tip bildirimi yok (test yardımcı olarak geçerli hash'li journal satırı üretir)
 import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
@@ -376,6 +377,68 @@ describe("LANE-B project intake", () => {
     expect(store.listProjects({tenantId: "tA"})).toHaveLength(1);
     expect(store.listMissions({tenantId: "tA"})).toHaveLength(1);
   });
+  it("idempotency covers the WHOLE normalized request: a reused key with any different field is 409, an identical retry stays 200 without duplicates", async () => {
+    const {app, store} = await mkApp();
+    const base = {idea: IDEA, title: "Reading tracker", acceptanceCriteria: ["streak shown"], riskLevel: "R3", projectType: "web", techStack: ["React"], targetOS: ["web"], idempotencyKey: "kfull"};
+    expect((await post(app, base)).statusCode).toBe(201);
+    expect((await post(app, {...base})).statusCode).toBe(200);
+    const without = (k: string) => { const {[k]: _drop, ...rest} = base as Record<string, unknown>; return rest; };
+    const variants: Record<string, unknown> = {
+      riskLevel: {...base, riskLevel: "R1"}, title: {...base, title: "Other"}, acceptanceCriteria: {...base, acceptanceCriteria: ["y"]}, projectType: {...base, projectType: "api"},
+      techStack: {...base, techStack: ["Vue"]}, targetOS: {...base, targetOS: ["linux"]}, idea: {...base, idea: IDEA + " plus reminders"},
+      "title omitted": without("title"), "riskLevel omitted": without("riskLevel"), "acceptanceCriteria omitted": without("acceptanceCriteria"),
+      "projectType omitted": without("projectType"), "techStack omitted": without("techStack"), "targetOS omitted": without("targetOS")
+    };
+    for (const [name, body] of Object.entries(variants)) {
+      const r = await post(app, body);
+      expect(r.statusCode, name).toBe(409); expect(r.json().error, name).toBe("INTAKE_IDEMPOTENCY_CONFLICT");
+    }
+    // Varsayılanla açıkça verilen değer farklı bir istektir (alan kaynağı DEFAULT -> FOUNDER): eski kaydı yanlış kaynakla tekrar oynatmak yerine çakışır.
+    const plain = {idea: IDEA, idempotencyKey: "kplain"};
+    expect((await post(app, plain)).statusCode).toBe(201);
+    expect((await post(app, {...plain})).statusCode).toBe(200);
+    expect((await post(app, {...plain, riskLevel: "R1"})).statusCode).toBe(409);
+    expect(store.listProjects({tenantId: "tA"})).toHaveLength(2);
+    expect(store.listMissions({tenantId: "tA"})).toHaveLength(2);
+  });
+  it("an identical retry still succeeds when the process died after the project and mission writes but before the intake append", async () => {
+    const {app, store} = await mkApp();
+    const body = {idea: IDEA, riskLevel: "R2", acceptanceCriteria: ["streak shown"], idempotencyKey: "kcrash2"};
+    const a = await post(app, body);
+    expect(a.statusCode).toBe(201);
+    fs.writeFileSync(path.join(tmp, "data", "intakes.jsonl"), ""); // intakes.jsonl satırı yazılamadan çökme
+    const b = await post(app, body);
+    expect(b.statusCode).toBe(201);
+    expect(b.json().intake.intakeId).toBe(a.json().intake.intakeId); expect(b.json().intake.missionId).toBe(a.json().intake.missionId);
+    expect(store.listProjects({tenantId: "tA"})).toHaveLength(1); expect(store.listMissions({tenantId: "tA"})).toHaveLength(1);
+    const c = await post(app, {...body, riskLevel: "R1"}); // kayıt yeniden yazıldı: farklı gövde artık çakışır
+    expect(c.statusCode).toBe(409); expect(c.json().error).toBe("INTAKE_IDEMPOTENCY_CONFLICT");
+  });
+  it("tolerates a torn trailing intake line like the journal does (ignored, quarantined, rewritten on the identical retry); middle corruption and foreign tails stay fail-closed", async () => {
+    const {app} = await mkApp();
+    const f = path.join(tmp, "data", "intakes.jsonl");
+    const a = await post(app, {idea: IDEA, idempotencyKey: "ta"});
+    expect(a.statusCode).toBe(201);
+    const oneRecord = fs.readFileSync(f, "utf8");
+    const b = await post(app, {idea: IDEA + " second", idempotencyKey: "tb"});
+    expect(b.statusCode).toBe(201);
+    fs.writeFileSync(f, fs.readFileSync(f, "utf8").slice(0, oneRecord.length + 40)); // ikinci kayıt append sırasında yırtıldı (satır sonu yok)
+    const list = await app.inject({method: "GET", url: "/v1/intakes", headers: hdr});
+    expect(list.statusCode).toBe(200); expect(list.json().intakes.map((i: any) => i.intakeId)).toEqual([a.json().intake.intakeId]);
+    const other = await post(app, {idea: IDEA + " third", idempotencyKey: "tc"}); // yırtık kuyruk diğer işleri engellemez
+    expect(other.statusCode).toBe(201);
+    const retry = await post(app, {idea: IDEA + " second", idempotencyKey: "tb"});
+    expect(retry.statusCode).toBe(201);
+    expect(retry.json().intake.missionId).toBe(b.json().intake.missionId);
+    const lines = fs.readFileSync(f, "utf8").split("\n").filter(Boolean);
+    expect(lines).toHaveLength(3); for (const l of lines) JSON.parse(l);
+    expect(fs.readdirSync(path.join(tmp, "data", "quarantine")).filter(n => /^intakes-torn-[0-9a-f]{16}\.tail$/.test(n)).length).toBeGreaterThan(0);
+    for (const [name, content] of [["middle corruption", '{"intakeId":"itk_x"\n' + oneRecord], ["foreign tail", oneRecord + "garbage"]] as const) {
+      fs.writeFileSync(f, content);
+      const r = await app.inject({method: "GET", url: "/v1/intakes", headers: hdr});
+      expect(r.statusCode, name).toBe(503); expect(r.json().error, name).toBe("INTAKE_STORE_CORRUPT");
+    }
+  });
   it("fails closed with 503 on a corrupt intake file", async () => {
     const {app} = await mkApp();
     fs.mkdirSync(path.join(tmp, "data"), {recursive: true}); fs.writeFileSync(path.join(tmp, "data", "intakes.jsonl"), "{torn");
@@ -503,7 +566,7 @@ describe("LANE-B mission task plan", () => {
     expect(again.statusCode).toBe(200); expect(again.json().tasks).toEqual(t);
     expect(store.listTasks({tenantId: "tA"}, m.missionId)).toHaveLength(3);
     expect(audits).toEqual(["WORKOS_PLAN_CREATED", "WORKOS_IDEMPOTENT_REPLAY"]);
-    const { app: app2 } = await mkApp().catch(() => ({app: app}));
+    const { app: app2 } = await mkApp(); // gerçek yeniden başlatma: başarısız olursa test de başarısız olur (eski uygulamaya geri dönüş yok)
     expect((await app2.inject({method: "GET", url: `/v1/missions/${m.missionId}/tasks`, headers: hdr})).json().tasks).toHaveLength(3);
   });
   it("rejects a different second plan, forward/self dependencies, bad bodies and non-plannable missions", async () => {
@@ -529,6 +592,30 @@ describe("LANE-B mission task plan", () => {
     expect((await app.inject({method: "GET", url: "/v1/missions/bad/tasks", headers: hdr})).statusCode).toBe(400);
     const b = await mkApp(false, true, "tB");
     expect((await post(b.app, m.missionId, PLAN)).statusCode).toBe(404);
+  });
+  it("tolerates a torn trailing plans.jsonl line: other missions keep planning, the torn plan's identical retry completes without duplicate tasks; middle corruption and foreign tails stay fail-closed", async () => {
+    const {app, store, m} = await mkApp();
+    const m2 = store.createMission(msn(m.projectId)), m3 = store.createMission(msn(m.projectId));
+    const f = path.join(tmp, "data", "plans.jsonl");
+    expect((await post(app, m.missionId, PLAN)).statusCode).toBe(201);
+    const oneRecord = fs.readFileSync(f, "utf8");
+    const first = await post(app, m2.missionId, PLAN);
+    expect(first.statusCode).toBe(201);
+    fs.writeFileSync(f, fs.readFileSync(f, "utf8").slice(0, oneRecord.length + 30)); // m2'nin plan kaydı append sırasında yırtıldı
+    expect((await post(app, m.missionId, PLAN)).statusCode).toBe(200); // tamam kayıt hâlâ okunur
+    expect((await post(app, m3.missionId, PLAN)).statusCode).toBe(201); // yırtık kuyruk başka mission'ı engellemez
+    const retry = await post(app, m2.missionId, PLAN);
+    expect(retry.statusCode).toBe(201);
+    expect(retry.json().tasks.map((t: any) => t.taskId)).toEqual(first.json().tasks.map((t: any) => t.taskId));
+    expect(store.listTasks({tenantId: "tA"}, m2.missionId)).toHaveLength(3);
+    const lines = fs.readFileSync(f, "utf8").split("\n").filter(Boolean);
+    expect(lines).toHaveLength(3); for (const l of lines) JSON.parse(l);
+    expect(fs.readdirSync(path.join(tmp, "data", "quarantine")).filter(n => /^plans-torn-[0-9a-f]{16}\.tail$/.test(n)).length).toBeGreaterThan(0);
+    for (const [name, content] of [["middle corruption", '{"missionId":"msn_x"\n' + oneRecord], ["foreign tail", oneRecord + "garbage"]] as const) {
+      fs.writeFileSync(f, content);
+      const r = await post(app, m.missionId, PLAN);
+      expect(r.statusCode, name).toBe(503); expect(r.json().error, name).toBe("PLAN_STORE_CORRUPT");
+    }
   });
   it("fails closed with 503 on a corrupt plan file", async () => {
     const {app, m} = await mkApp();
@@ -581,6 +668,29 @@ describe("LANE-B project flow", () => {
     expect(st({runId: "r", status: "VERIFYING", step: "REVIEW"})).toMatchObject({RUN: "ACTIVE", REVIEW: "ACTIVE"});
     expect(st({runId: "r", status: "SUCCEEDED", step: "REPORT", completion: {productVerification: {state: "PRODUCT_VERIFIED"}}})).toMatchObject({RUN: "DONE", REVIEW: "DONE", DELIVERY: "DONE"});
     expect(st({runId: "r", status: "SUCCEEDED", step: "REPORT"}).DELIVERY).toBe("NOT_STARTED");
+  });
+  it("reflects a CLEAN review at the current head and delivery records honestly: never NOT_STARTED when records exist, never DONE for an unverified delivery", async () => {
+    const {deriveProjectFlow} = await import("../core/workos/flow.js");
+    const mk = (run: any) => ({getProject: () => ({}), listMissions: () => [{missionId: "m", status: "PLANNED"}], listTasks: () => [{status: "DONE"}], listRuns: () => [{projectId: "p", createdAt: "2026-01-01", ...run}]}) as any;
+    const flow = (run: any) => deriveProjectFlow(mk(run), {tenantId: "tA"}, "p")!.stages;
+    const st = (run: any) => Object.fromEntries(flow(run).map(x => [x.stage, x.state]));
+    const detail = (run: any, stage: string) => flow(run).find(x => x.stage === stage)!.detail;
+    const H = "a".repeat(40), OLD = "b".repeat(40);
+    const awaiting = {runId: "r", status: "AWAITING_APPROVAL", step: "REPORT", headSha: H, evidence: [{kind: "REVIEW", verdict: "CLEAN", commitSha: H}]};
+    expect(st(awaiting)).toMatchObject({RUN: "BLOCKED", REVIEW: "DONE", DELIVERY: "NOT_STARTED"});
+    expect(st({...awaiting, evidence: [{kind: "REVIEW", verdict: "CLEAN", commitSha: OLD}]}).REVIEW).toBe("ACTIVE"); // eski commit'in review'u güncel head'i kapsamaz
+    expect(st({...awaiting, evidence: [{kind: "REVIEW", verdict: "BLOCKED", commitSha: H}]}).REVIEW).toBe("ACTIVE");
+    expect(st({...awaiting, evidence: []}).REVIEW).toBe("ACTIVE");
+    expect(st({...awaiting, status: "FAILED"}).REVIEW).toBe("UNKNOWN"); // başarısız koşuda review sonucu bilinmez
+    const artifact = {runId: "r", missionId: "m", sourceCommit: H, treeSha: "c".repeat(40), exportArtifactHash: "d".repeat(64), artifactPath: "deliveries/r/x.zip"};
+    const accepted = {runId: "r", missionId: "m", sourceCommit: H, exportArtifactHash: "d".repeat(64), acknowledgements: {}, acceptedAt: "2026-01-02T00:00:00.000Z"};
+    expect(st({...awaiting, deliveryArtifact: artifact}).DELIVERY).toBe("ACTIVE");
+    expect(detail({...awaiting, deliveryArtifact: artifact}, "DELIVERY")).toBe("ARTIFACT_PREPARED_NOT_VERIFIED");
+    expect(st({...awaiting, deliveryArtifact: artifact, sourceDelivery: accepted}).DELIVERY).toBe("ACTIVE");
+    expect(detail({...awaiting, deliveryArtifact: artifact, sourceDelivery: accepted}, "DELIVERY")).toBe("SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED");
+    for (const run of [{...awaiting, deliveryArtifact: artifact}, {...awaiting, deliveryArtifact: artifact, sourceDelivery: accepted}]) expect(st(run).DELIVERY).not.toBe("DONE");
+    const done = {...awaiting, status: "SUCCEEDED", deliveryArtifact: artifact, completion: {productVerification: {state: "PRODUCT_VERIFIED"}}};
+    expect(st(done)).toMatchObject({RUN: "DONE", REVIEW: "DONE", DELIVERY: "DONE"});
   });
   it("marks plan BLOCKED when a task is blocked and never claims DONE for review/delivery without a succeeded run", async () => {
     const {app, store} = await mkApp();
@@ -773,6 +883,9 @@ describe("LANE-B task transition routes", () => {
     expect((await tr(stop.app, stop.t1.taskId, {to: "BLOCKED", reason: "x"})).statusCode).toBe(423);
     expect((await tr(deny.app, deny.t1.taskId, {to: "BLOCKED", reason: "x"})).statusCode).toBe(403);
     expect(store.getTask({tenantId: "tA"}, t1.taskId)!.status).toBe("PENDING");
+    // Global Stop ve politika retleri KENDİ görevlerine yazmamış olmalı (her mkApp ayrı görev üretir): o görevler yeniden okunur.
+    expect(stop.store.getTask({tenantId: "tA"}, stop.t1.taskId)!.status).toBe("PENDING");
+    expect(deny.store.getTask({tenantId: "tA"}, deny.t1.taskId)!.status).toBe("PENDING");
     const other = await mkApp(false, true, "tB");
     expect((await tr(other.app, t1.taskId, {to: "BLOCKED", reason: "x"})).statusCode).toBe(404);
     expect((await other.app.inject({method: "GET", url: `/v1/tasks/${t1.taskId}`, headers: hdr})).statusCode).toBe(404);
@@ -1083,6 +1196,25 @@ describe("COORD-INTAKE-TEMPLATE core provisioner (real fs and git, temp data dir
     expect(tplPrjDirs()).toEqual([]);
     expect(submitIntake(deps(store), {idea: TPL_IDEA, idempotencyKey: "u7"}).replayed).toBe(true);
   });
+  it("U8 the replay compares the whole normalized request digest AND the template: any drifted or dropped field of a template intake conflicts, an identical retry replays, and a template-less record compares through the same digest", () => {
+    const store = new WorkOsStore(tplData());
+    const {calls, studio} = spyStudio();
+    const input = {idea: TPL_IDEA, title: "Reading tracker", template: "web-node" as const, projectType: "web" as const, techStack: ["React"], targetOS: ["web"], acceptanceCriteria: ["streak shown"], riskLevel: "R2" as const, testCommand: ["node", "t.js"], idempotencyKey: "u8"};
+    const a = submitIntake(deps(store, studio), input);
+    const b = submitIntake(deps(store, studio), {...input, techStack: [...input.techStack]});
+    expect([a.replayed, b.replayed, b.intake]).toEqual([false, true, a.intake]);
+    const conflict = (other: object) => { let err: unknown = null; try { submitIntake(deps(store, studio), other as any); } catch (e) { err = e; } expect(err, JSON.stringify(other)).toBeInstanceOf(IntakeError); expect((err as IntakeError).code, JSON.stringify(other)).toBe("INTAKE_IDEMPOTENCY_CONFLICT"); };
+    for (const drift of [{idea: TPL_IDEA + " plus reminders"}, {title: "Other"}, {projectType: "api"}, {techStack: ["Vue"]}, {targetOS: ["linux"]}, {acceptanceCriteria: ["y"]}, {riskLevel: "R1"}, {testCommand: ["node", "u.js"]}, {template: "node-lib"}]) conflict({...input, ...drift});
+    for (const k of ["title", "projectType", "techStack", "targetOS", "acceptanceCriteria", "riskLevel", "testCommand", "template"]) { const {[k]: _drop, ...rest} = input as Record<string, unknown>; conflict(rest); }
+    // Şablonsuz (eski biçimli) kayıt: aynı özet kuralıyla karşılaştırılır; farklı alan ya da eklenen şablon çakışır, birebir tekrar oynatılır.
+    const legacy = {idea: TPL_IDEA, title: "Reading tracker", riskLevel: "R2" as const, idempotencyKey: "u8-legacy"};
+    const l = submitIntake(deps(store, studio), legacy);
+    expect("repository" in l.intake).toBe(false);
+    expect(submitIntake(deps(store, studio), {...legacy}).replayed).toBe(true);
+    for (const drift of [{riskLevel: "R1"}, {title: "Other"}, {techStack: ["React"]}, {template: "web-node"}, {testCommand: ["node", "t.js"]}]) conflict({...legacy, ...drift});
+    conflict({idea: TPL_IDEA, title: "Reading tracker", idempotencyKey: "u8-legacy"});
+    expect([calls, tplIntakeLines().length, store.listProjects(scope).length]).toEqual([[[a.intake.projectId, "web-node", "Reading tracker"]], 2, 2]);
+  });
 });
 
 describe("COORD-INTAKE-TEMPLATE through the real server", () => {
@@ -1300,5 +1432,66 @@ describe("COORD-INTAKE-TEMPLATE through the real server", () => {
     expect(ns.evidence.some(e => e.kind === "VERIFY_TESTS")).toBe(false);
     expect(ns.evidence.find(e => e.kind === "VERIFY_TESTS_NOT_EXECUTED")?.note).toContain("SANDBOX_UNAVAILABLE");
     expect(JSON.stringify(ns.evidence)).not.toContain("REPOSITORY_NOT_CONFIGURED");
+  });
+});
+
+// //TR: COORD-FIRST-DELIVERY-WIRING gerçek Electron E2E betiğinin (scripts/e2e-first-delivery-electron.mjs) süreç hijyeni: betik GERÇEK haliyle, ama Electron/Control API yerine kendi pid'ini ve ortamını yazıp bekleyen sahte çocuk süreçle çalıştırılır. Veri dizini/HOME çalışan kullanıcının ev dizininden (veya UASCO_E2E_HOME'dan) türetilir, sabit /home/e2e kullanılmaz; SIGINT/SIGTERM'de ayrı süreç grubundaki çocuklar öldürülür. Yalnız Linux (betik süreç grupları kullanır).
+describe.skipIf(process.platform !== "linux")("COORD first-delivery Electron E2E harness hygiene (stub children)", () => {
+  const script = path.resolve(__dirname, "..", "scripts", "e2e-first-delivery-electron.mjs");
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  const waitFor = async <T>(fn: () => T | undefined | false, ms = 20_000): Promise<T> => { const end = Date.now() + ms; for (;;) { const v = fn(); if (v) return v as T; if (Date.now() > end) throw new Error("WAIT_TIMEOUT"); await sleep(50); } };
+  const alive = (pid: number) => { try { return !/^Z/.test(fs.readFileSync(`/proc/${pid}/stat`, "utf8").replace(/^.*\) /, "")); } catch { return false; } };
+  const stage = () => {
+    const w = path.join(tmp, "repo");
+    for (const d of ["automation/lib", "config", "node_modules/tsx/dist"]) fs.mkdirSync(path.join(w, d), {recursive: true});
+    fs.writeFileSync(path.join(w, "automation/lib/env-policy.mjs"), "export const safeChildEnv = () => ({PATH: process.env.PATH ?? ''});\n");
+    fs.writeFileSync(path.join(w, "config/environment-policy.json"), "{}\n");
+    fs.writeFileSync(path.join(w, "node_modules/tsx/dist/cli.mjs"), `import fs from "node:fs"; fs.writeFileSync(${JSON.stringify(path.join(tmp, "child.json"))}, JSON.stringify({pid: process.pid, home: process.env.HOME, data: process.env.UASCO_DATA_DIR})); setInterval(() => {}, 1000);\n`);
+    return w;
+  };
+  const run = async (env: Record<string, string>, body: (h: {proc: import("node:child_process").ChildProcess; child: {pid: number; home: string; data: string}; exited: Promise<number | null>; out: string}) => Promise<void>) => {
+    const w = stage(), out = path.join(tmp, "report.json");
+    const proc = cp.spawn(process.execPath, [script, w, out, path.join(tmp, "no-electron")], {env: {...process.env, ...env}, stdio: "ignore"});
+    const exited = new Promise<number | null>(res => proc.on("exit", code => res(code)));
+    let child: {pid: number; home: string; data: string} | undefined;
+    try {
+      child = await waitFor(() => { try { return JSON.parse(fs.readFileSync(path.join(tmp, "child.json"), "utf8")); } catch { return undefined; } });
+      await body({proc, child: child!, exited, out});
+    } finally {
+      if (child && alive(child.pid)) { try { process.kill(-child.pid, "SIGKILL"); } catch { /* zaten bitti */ } }
+      if (proc.exitCode === null) proc.kill("SIGKILL");
+    }
+  };
+
+  it("derives the data dir and HOME from the running user's home (or UASCO_E2E_HOME), never a hard-coded /home/e2e", async () => {
+    const home = path.join(tmp, "home-a");
+    fs.mkdirSync(home);
+    await run({HOME: home, UASCO_E2E_HOME: ""}, async ({proc, child}) => {
+      expect(child.home).toBe(home);
+      expect(child.data.startsWith(path.join(home, "fd-data-"))).toBe(true);
+      expect(fs.readdirSync(home).some(n => n.startsWith("fd-data-"))).toBe(true);
+      proc.kill("SIGTERM");
+    });
+    fs.rmSync(path.join(tmp, "child.json"));
+    const ovr = path.join(tmp, "override", "nested");
+    await run({HOME: home, UASCO_E2E_HOME: ovr}, async ({proc, child}) => {
+      expect(child.home).toBe(ovr);
+      expect(child.data.startsWith(path.join(ovr, "fd-data-"))).toBe(true);
+      proc.kill("SIGTERM");
+    });
+  });
+  it.each([["SIGTERM", 143], ["SIGINT", 130]] as const)("kills the detached API/Electron process groups when the harness receives %s, and still writes a FAIL report", async (sig, code) => {
+    const home = path.join(tmp, "home-b");
+    fs.mkdirSync(home);
+    await run({HOME: home, UASCO_E2E_HOME: ""}, async ({proc, child, exited, out}) => {
+      expect(alive(child.pid)).toBe(true);
+      proc.kill(sig);
+      const exitCode = await exited;
+      await waitFor(() => !alive(child.pid), 5_000); // WAIT_TIMEOUT = sahipsiz kalan süreç grubu
+      expect(exitCode).toBe(code);
+      const report = JSON.parse(fs.readFileSync(out, "utf8"));
+      expect(report.status).toBe("FAIL");
+      expect(report.steps.map((x: any) => x.name)).toContain("harness interrupted");
+    });
   });
 });

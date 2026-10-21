@@ -1,5 +1,5 @@
-// //TR: Bu modül Proje Intake (UI-126) görünümünün saf (DOM'suz) çekirdeğidir: Kurucunun serbest metin fikrini POST /v1/intakes gövdesine (sunucu şemasıyla birebir: idea 10-4000, isteğe bağlı title/projectType/techStack/targetOS/acceptanceCriteria/riskLevel R0-R3/testCommand argv listesi) çevirir ve GET /v1/intakes yanıtlarını güvenli, sınırlı alanlara eşler. Alan kaynakları (FOUNDER/DEFAULT/DERIVED) sunucudan AYNEN taşınır; girilmeyen alan Kurucudan gelmiş gibi gösterilmez. Bozuk kayıt tüm okumayı ERROR yapar. COORD-INTAKE-TEMPLATE: isteğe bağlı template (web-node/node-lib/empty) gövdeye girer; empty şablon test komutu olmadan reddedilir (ilk mission VERIFY'yi asla geçemezdi) ve kaydın repository bloğu (şablon + test komutu kaynağı) sıkı eşlenir.
-import {normalizeArgv} from "./work-core.js";
+// //TR: Bu modül Proje Intake (UI-126) görünümünün saf (DOM'suz) çekirdeğidir: Kurucunun serbest metin fikrini POST /v1/intakes gövdesine (sunucu şemasıyla birebir: idea 10-4000, isteğe bağlı title/projectType/techStack/targetOS/acceptanceCriteria/riskLevel R0-R3/testCommand argv listesi) çevirir ve GET /v1/intakes yanıtlarını güvenli, sınırlı alanlara eşler. Alan kaynakları (FOUNDER/DEFAULT/DERIVED) sunucudan AYNEN taşınır; girilmeyen alan Kurucudan gelmiş gibi gösterilmez. Bozuk kayıt tüm okumayı ERROR yapar. COORD-INTAKE-TEMPLATE: isteğe bağlı template (web-node/node-lib/empty) gövdeye girer; empty şablon test komutu olmadan reddedilir (ilk mission VERIFY'yi asla geçemezdi) ve kaydın repository bloğu (şablon + test komutu kaynağı) sıkı eşlenir. İstek gövdesi (şablon ve test komutu dahil) köprü/sunucu 32 KB sınırını aşarsa hiç gönderilmez.
+import {normalizeArgv,MAX_BODY_BYTES} from "./work-core.js";
 import {TEMPLATES} from "./project-core.js";
 export const INTAKE_ID_RE=/^itk_[0-9a-f]{24}$/;
 export const INTAKES_PATH="/v1/intakes";
@@ -12,6 +12,9 @@ export const INTAKE_TEST_SOURCES=Object.freeze(["FOUNDER","TEMPLATE","NONE"]);
 const IDEA_MIN=10,IDEA_MAX=4000,TITLE_MAX=120,TECH_RE=/^[A-Za-z0-9.+#/ _-]+$/,KEY_RE=/^[A-Za-z0-9._-]{1,100}$/;
 const PROJECT_RE=/^prj_[0-9a-f]{24}$/,MISSION_RE=/^msn_[0-9a-f]{24}$/;
 const trim=v=>typeof v==="string"?v.trim():"";
+const bodyBytes=body=>{try{return new TextEncoder().encode(JSON.stringify(body)).length}catch{return Infinity}};
+// Doğrulama geçişi (anahtarsız) sonraki anahtarlı gövde için en uzun geçerli anahtar payı bırakır: ilk geçiş ok ise anahtarlı gövde de köprü sınırına sığar.
+const RESERVED_KEY="k".repeat(100);
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 const str=(x,max)=>typeof x==="string"&&x.length&&x.length<=max?x:null;
 
@@ -46,6 +49,8 @@ export function buildIntakeRequest(input,{key}={}){
   if(tpl&&!errors.template)body.template=tpl;
   if(argv.ok&&argv.argv.length)body.testCommand=argv.argv;
   if(key!==undefined)body.idempotencyKey=String(key);
+  // Köprü (POST_MAX_BODY_BYTES) ve sunucu (LANE_WRITE_BODY_LIMIT) 32 KB'ı aşan gövdeyi reddeder; sınır work-core.js MAX_BODY_BYTES ile aynıdır (testle köprü sabitine sabitlenmiştir).
+  if(!Object.keys(errors).length&&bodyBytes(key===undefined?{...body,idempotencyKey:RESERVED_KEY}:body)>MAX_BODY_BYTES)errors.form="err.tooLarge";
   const ok=!Object.keys(errors).length;
   return {ok,path:INTAKES_PATH,body:ok?body:null,errors};
 }
