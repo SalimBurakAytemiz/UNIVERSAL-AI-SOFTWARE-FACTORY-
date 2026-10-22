@@ -59,6 +59,10 @@ import {registerPlanRoutes} from "./routes/plan.js";
 import {registerFlowRoutes} from "./routes/flow.js";
 import {registerTaskRoutes} from "./routes/tasks.js";
 import {registerTaskRunRoutes} from "./routes/task-runs.js";
+// //TR: COORD protected batch 3 (LANE-B-memory-api, LANE-B-knowledge-api, LANE-B-error-contract): proje belleği ve bilgi özeti route modülleri ile sabit kodlu çerçeve hata sözleşmesi.
+import {registerMemoryRoutes} from "./routes/memory.js";
+import {registerKnowledgeRoutes} from "./routes/knowledge.js";
+import {registerErrorContract,frameworkErrors} from "./routes/error-contract.js";
 import {bindingForFunction} from "../../../core/agents/first-delivery-bindings.js";
 // //TR: LANE-C: gövdede roleId yoksa run bağlı geliştirici rolüyle (first-delivery bağı) başlar; böylece runner rol kapısı ve AGENT_TRACE ürün akışında da çalışır. Açık roleId her zaman önceliklidir; uygun olmayan rol runner kapısında BLOCKED olur.
 const DEFAULT_RUN_ROLE_ID=bindingForFunction("developer").roleId;
@@ -71,7 +75,9 @@ export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:n
   // //TR: SBX-GATE: sandbox yalnız programatik test enjeksiyonudur (testlerdeki sahte sağlayıcı); env/config/journal/API gövdesi/masaüstü ayarı sağlayıcı kaydedemez. Verilmezse proje kodu yürütmesi her zaman SANDBOX_UNAVAILABLE ile reddedilir.
   sandbox?:SandboxProvider;workosStoreOptions?:WorkOsStoreOptions}
 export function buildServer(opts:BuildServerOptions={}){
-const app=Fastify({logger:opts.logger??true,requestIdHeader:"x-request-id",genReqId:()=>crypto.randomUUID(),bodyLimit:64*1024});
+const app=Fastify({logger:opts.logger??true,requestIdHeader:"x-request-id",genReqId:()=>crypto.randomUUID(),bodyLimit:64*1024,frameworkErrors});
+// //TR: LANE-B-error-contract: Fastify'nin kendi ürettiği hatalar (bozuk JSON, içerik türü, gövde sınırı, bilinmeyen rota) sabit {error:"KOD"} gövdesine çevrilir; route düzeyindeki yanıtlar değişmez.
+registerErrorContract(app);
 const readJson=(p:string)=>JSON.parse(fs.readFileSync(p,"utf8"));
 const readJsonOr=<T>(p:string,fallback:T):T=>fs.existsSync(p)?readJson(p):fallback;
 const repoRoot=opts.repoRoot?path.resolve(opts.repoRoot):process.cwd(),runtime=opts.runtime??".ai/runtime",runsRoot=path.join(runtime,"runs"),port=opts.port??parseControlPort(process.env.CONTROL_API_PORT,3210);
@@ -238,12 +244,15 @@ app.post<{Params:{id:string}}>("/v1/missions/:id/transition",wos(async(req,reply
 }));
 
 // //TR: COORD-FIRST-DELIVERY-WIRING (Founder onayı 2026-10-21): ilk teslim zinciri route modülleri (intake, plan, akış, görev durumu) aynı global token hook'u, aynı yazma kapısı sırası (Global Stop 423 -> politika 403 -> şema 400), aynı tenant kapsamı ve aynı audit ile kaydedilir; yazma gövdeleri masaüstü köprüsüyle aynı 32 KB sınırındadır (LANE_WRITE_BODY_LIMIT).
-const laneDeps={getStore,scope,orgId,actor,audit,workosStopped,workosPolicy,workosFail};
+// //TR: LANE-B-knowledge-api: kanıt dizini tembel sarmalayıcıyla geçer (evidenceIndex aşağıda tanımlıdır; yalnız istek anında, buildServer bittikten sonra çağrılır).
+const laneDeps={getStore,scope,orgId,actor,audit,workosStopped,workosPolicy,workosFail,evidenceIndex:()=>evidenceIndex()};
 registerIntakeRoutes(app,laneDeps);
 registerPlanRoutes(app,laneDeps);
 registerFlowRoutes(app,laneDeps);
 registerTaskRoutes(app,laneDeps);
 registerTaskRunRoutes(app,laneDeps);
+registerMemoryRoutes(app,laneDeps);
+registerKnowledgeRoutes(app,laneDeps);
 
 // //TR: B3a mission runner route'ları: aynı token hook'u ve aynı yazma kapısı sırası (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400). Run'lar aynı Work OS journal'ındadır; eski /v1/runs route'larına dokunulmaz.
 const validWorkRunId=(x:unknown)=>typeof x==="string"&&/^run_[0-9a-f]{24}$/.test(x);

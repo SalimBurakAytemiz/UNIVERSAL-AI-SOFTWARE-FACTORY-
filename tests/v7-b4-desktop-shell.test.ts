@@ -571,3 +571,7 @@ describe("B4 remediation: F-B4-007 no hard-coded UI strings; backend statuses go
     expect(read(rend, "components.js")).toMatch(/text:statusLabel\(ctx,status\)/);
   });
 });
+
+// //TR: COORD korumalı paket 3 (bellek/bilgi/hata sözleşmesi kaydı + izin listesi) senaryoları bu kayıtlı dosyadan çalışır; korunan validation.json kaydı gerektirmez.
+import {registerProtectedBatch3Cases} from "./support/protected-batch-3.cases.js";
+registerProtectedBatch3Cases();
