@@ -461,7 +461,7 @@ describe("UI-113 — Approval required panel on #/inbox", () => {
 // //TR: LANE-A Founder dikkat kuyruğu (GET /v1/attention, Lane B): sıkı eşleme, bozuk öğe atma, sayaç/truncated doğrulaması, eski tüketicilere kayıpsız çeviri.
 describe("LANE-A Founder attention core (GET /v1/attention)", () => {
   const item = (over: Record<string, any> = {}) => ({...ATT_ITEMS[1], ...over});
-  const q = (items: any[], counts: any, truncated = false, over: Record<string, any> = {}) => ({attention: {items, counts, truncated, source: "WORKOS", ...over}});
+  const q = (items: any[], counts: any, truncated: any = false, over: Record<string, any> = {}) => ({attention: {items, counts, truncated, source: "WORKOS", ...over}});
   const c = async () => load("attention-core.js");
   it("exposes the server's severity order and the kind-to-action rule", async () => {
     const m = await c();
