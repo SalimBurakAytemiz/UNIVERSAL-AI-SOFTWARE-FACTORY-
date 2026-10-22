@@ -758,6 +758,28 @@ describe("LANE-C bound role TaskLimits are enforced by the runner (never loosene
     }
   });
 
+  it("REVIEW timeoutMs: bound security-reviewer gets min(run default, 60 min limit); a role cannot raise a lower run timeout; role-less runs get the run default; the reviewer stays read-only", { timeout: T }, async () => {
+    expect(FIRST_DELIVERY_BINDINGS.find(b => b.roleId === "UASCO-0252")!.limits).toEqual({maxCycles: 1, timeoutMs: 60 * 60_000, maxFilesWritten: 0});
+    for (const [roleId, runTimeout, expected] of [["UASCO-0085", 9_000_000, 3_600_000], ["UASCO-0085", 60_000, 60_000], [null, 9_000_000, 9_000_000]] as const) {
+      const c = setup(); const fake = new FakeExecutors(okScript()); const seen: number[] = [];
+      const p = fake.pair();
+      const executors = {...p, reviewer: {...p.reviewer, review: (clone: string, s: MissionSpec, d: string, ctx: {timeoutMs: number; shouldAbort?: () => boolean}) => { seen.push(ctx.timeoutMs); return p.reviewer.review(clone, s, d, ctx); }}};
+      const r = roleRun(c, fake, roleId);
+      await runner(c, fake, {executorTimeoutMs: runTimeout, executors}).tick();
+      expect(runOf(c, r.runId).status).toBe("AWAITING_APPROVAL");
+      expect([roleId, runTimeout, seen]).toEqual([roleId, runTimeout, [expected]]);
+    }
+  });
+
+  it("REVIEW maxCycles 1: a BLOCKED review is one pass per REVIEW step; the remediation loop stays bounded by the implementer's role limit", { timeout: T }, async () => {
+    const c = setup(); const fake = new FakeExecutors(okScript({review: () => ({verdict: "BLOCKED", findings: [{severity: "HIGH", title: "x"}]})}));
+    const r = roleRun(c, fake, "UASCO-0313");
+    await runner(c, fake, {maxRemediations: 5}).tick();
+    const run = runOf(c, r.runId);
+    // tester maxCycles 2 -> 1 remediation: 2 implement passes, exactly 1 review per pass
+    expect([run.status, fake.calls.implement, fake.calls.review]).toEqual(["BLOCKED", 2, 2]);
+  });
+
   it("maxFilesWritten: exactly the limit passes, one more is BLOCKED before VERIFY/REVIEW; the count is cumulative from the base across remediation cycles; role-less runs have no file limit", { timeout: T }, async () => {
     // tester limit = 100: feature.txt + 99 files = 100 passes, + 100 files = 101 is blocked
     for (const [n, ok] of [[99, true], [100, false]] as const) {
