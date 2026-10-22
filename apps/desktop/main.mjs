@@ -58,7 +58,8 @@ const INTAKE_DETAIL_RE=/^\/v1\/intakes\/itk_[0-9a-f]{24}$/;
 const MISSION_TASKS_RE=/^\/v1\/missions\/msn_[0-9a-f]{24}\/tasks$/;
 const PROJECT_FLOW_RE=/^\/v1\/projects\/prj_[0-9a-f]{24}\/flow$/;
 const TASK_DETAIL_RE=/^\/v1\/tasks\/tsk_[0-9a-f]{24}$/;
-const FIRST_DELIVERY_GET_RES=[INTAKES_LIST_RE,INTAKE_DETAIL_RE,MISSION_TASKS_RE,PROJECT_FLOW_RE,TASK_DETAIL_RE];
+const TASK_RUNS_RE=/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/runs$/;
+const FIRST_DELIVERY_GET_RES=[INTAKES_LIST_RE,INTAKE_DETAIL_RE,MISSION_TASKS_RE,PROJECT_FLOW_RE,TASK_DETAIL_RE,TASK_RUNS_RE];
 const QUERY_RULES={missionId:/^msn_[0-9a-f]{24}$/,runId:/^[A-Za-z0-9_-]{6,64}$/,kind:/^[A-Z][A-Z0-9_]{0,39}$/,cursor:/^[A-Za-z0-9_.=:-]{1,128}$/,limit:/^[1-9][0-9]{0,2}$/,accountId:/^acc_[0-9a-f]{24}$/,invoiceId:/^inv_[0-9a-f]{24}$/};
 function listQueryAllowed(value,base,keys){
   if(!value.startsWith(base+"?"))return false;
@@ -123,7 +124,7 @@ const POST_ROUTE_RES=[/^\/v1\/projects$/,/^\/v1\/missions$/,/^\/v1\/missions\/ms
   // M1a c2: teslim paketini hazırla ve NOT_VERIFIED kaynak teslimini kabul et; dışa aktarma yalnız ana süreç köprüsündedir (hash ana süreçte yeniden doğrulanır).
   /^\/v1\/work-runs\/run_[0-9a-f]{24}\/delivery\/(?:prepare|accept)$/,
   // COORD-FIRST-DELIVERY-WIRING (Founder onayı 2026-10-21): fikir -> proje + ilk mission, görev planı ve görev durum geçişi; kimlikler sıkı biçimli, gövde aynı 32 KB sınırında.
-  /^\/v1\/intakes$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/plan$/,/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/transition$/];
+  /^\/v1\/intakes$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/plan$/,/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/transition$/,/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/runs$/];
 function desktopPostPathAllowed(value){
   return typeof value==="string"&&value.length<=128&&POST_ROUTE_RES.some(re=>re.test(value));
 }
