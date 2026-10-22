@@ -942,10 +942,10 @@ describe("UI-028 role catalogue paging (renderer-only, honest ranges)", () => {
     byData(node, "roleBtn")[0].fire("click");
     node = (await v.render(ctx, ROUTE)) as N;
     click(node, "wf-cat-next"); node = (await v.render(ctx, ROUTE)) as N;
-    const okPath = /^(\/v1\/cockpit|\/v1\/agents|\/v1\/work-runs|\/v1\/roles\?limit=100|\/v1\/roles\?limit=100&cursor=UASCO-\d{4}|\/v1\/roles\/UASCO-\d{4})$/;
+    const okPath = /^(\/v1\/cockpit|\/v1\/agents|\/v1\/work-runs|\/v1\/roles\?limit=100|\/v1\/roles\?limit=100&cursor=UASCO-\d{4}|\/v1\/roles\/UASCO-\d{4}|\/v1\/roles\/status-summary)$/;
     for (const p of calls) { expect(p, p).toMatch(okPath); expect(p).not.toMatch(/page|offset/i); }
     const src = fs.readFileSync(path.join(rend, "views", "workforce.js"), "utf8");
-    expect([...new Set([...src.matchAll(/ctx\.api\.(\w+)/g)].map(m => m[1]))].sort()).toEqual(["agentCount", "cockpit", "roleCatalog", "roleDetail", "workRuns"]);
+    expect([...new Set([...src.matchAll(/ctx\.api\.(\w+)/g)].map(m => m[1]))].sort()).toEqual(["agentCount", "cockpit", "roleCatalog", "roleDetail", "rolesStatusSummary", "workRuns"]);
     expect(src).not.toMatch(/apiPost|window\.uasco|localStorage|sessionStorage|Math\.random|innerHTML/);
     expect(src).not.toContain("workforce.cat.filter.more");
     v.resetWorkforceView();
@@ -1023,5 +1023,79 @@ describe("UI-028 role catalogue paging (renderer-only, honest ranges)", () => {
       expect(d["workforce.cat.page.nextLabel"]).toContain(d["workforce.cat.page.next"]);
       expect("workforce.cat.filter.more" in d).toBe(false);
     }
+  });
+});
+
+// //TR: LANE-A Ajan Fabrikası durumu (GET /v1/roles/status-summary): beş sayaç AYRI gösterilir, sıkı eşleme, okunamayan durumda sayı uydurulmaz.
+describe("LANE-A Agent Factory status panel", () => {
+  const SHA = "ab".repeat(32);
+  const guild = (id: string, over: Record<string, any> = {}) => ({guildId: id, registered: 10, implemented: 4, tested: 3, certified: 1, running: 0, ...over});
+  const sum = (over: Record<string, any> = {}, extra: Record<string, any> = {}) => ({statusSummary: {target: 599, registered: 599, implemented: 40, tested: 12, certified: 3, running: 0, byGuild: [guild("zeta"), guild("alpha", {registered: 7})], computedAt: "2026-10-22T03:00:00Z", basis: {roleDefinitionsSha256: SHA, bindingsCount: 25}, ...over}, ...extra});
+  const render = async (res: any, lang = "en") => { const {ctx} = await mkCtx({roles: "ok", detail: true}, lang); ctx.api.rolesStatusSummary = async () => res; return (await renderWf(ctx)).node; };
+
+  it("maps the real shape; the five counters stay separate and by-guild rows are sorted by guild id", async () => {
+    const c = await load("agent-factory-core.js");
+    expect(c.STATUS_SUMMARY_PATH).toBe("/v1/roles/status-summary");
+    expect(c.FACTORY_COUNTERS).toEqual(["registered", "implemented", "tested", "certified", "running"]);
+    const r = c.mapStatusSummary(sum());
+    expect(r.state).toBe("VERIFIED");
+    expect(r.summary).toMatchObject({target: 599, registered: 599, implemented: 40, tested: 12, certified: 3, running: 0, computedAt: "2026-10-22T03:00:00Z", basis: {roleDefinitionsSha256: SHA, bindingsCount: 25}});
+    expect(r.summary.byGuild.map((g: any) => g.guildId)).toEqual(["alpha", "zeta"]);
+    expect(r.summary.byGuild[0].registered).toBe(7);
+    expect(Object.keys(r.summary).sort()).toEqual(["basis", "byGuild", "certified", "computedAt", "implemented", "registered", "running", "target", "tested"]);
+  });
+  it("any missing or wrongly typed field makes the whole read ERROR (no coercion)", async () => {
+    const c = await load("agent-factory-core.js");
+    const bads: any[] = [null, [], {}, {statusSummary: null}, {statusSummary: []}, sum({target: 0}), sum({target: "599"}), sum({target: 1.5}), sum({target: c.MAX_COUNT + 1}), sum({byGuild: "x"}), sum({byGuild: null}),
+      sum({computedAt: "yesterday"}), sum({computedAt: 5}), sum({computedAt: undefined}), sum({basis: null}), sum({basis: {roleDefinitionsSha256: SHA}}), sum({basis: {bindingsCount: 1}}),
+      sum({basis: {roleDefinitionsSha256: "AB".repeat(32), bindingsCount: 1}}), sum({basis: {roleDefinitionsSha256: "ab".repeat(31), bindingsCount: 1}}), sum({basis: {roleDefinitionsSha256: [SHA], bindingsCount: 1}}),
+      sum({basis: {roleDefinitionsSha256: SHA, bindingsCount: -1}}), sum({basis: {roleDefinitionsSha256: SHA, bindingsCount: "1"}}), sum({basis: {roleDefinitionsSha256: SHA, bindingsCount: c.MAX_COUNT + 1}}),
+      sum({byGuild: [guild("a"), guild("a")]}), sum({byGuild: [guild("")]}), sum({byGuild: [guild("-x")]}), sum({byGuild: [guild(["alpha"] as any)]}), sum({byGuild: [null]}), sum({byGuild: [guild("a", {running: undefined})]})];
+    for (const k of c.FACTORY_COUNTERS) { bads.push(sum({[k]: undefined}), sum({[k]: -1}), sum({[k]: 1.5}), sum({[k]: "5"}), sum({[k]: null}), sum({[k]: c.MAX_COUNT + 1}), sum({byGuild: [guild("a", {[k]: "5"})]}), sum({byGuild: [guild("a", {[k]: -1})]})); }
+    bads.forEach((b, i) => { const r = c.mapStatusSummary(b); expect([i, r.state, r.summary]).toEqual([i, "ERROR", null]); });
+  });
+  it("limits are exact: counters 0..MAX_COUNT, target 1..MAX_COUNT, at most MAX_GUILDS guilds, bindings 0, computedAt with milliseconds", async () => {
+    const c = await load("agent-factory-core.js");
+    expect(c.mapStatusSummary(sum({registered: 0, implemented: 0, tested: 0, certified: 0, running: 0, target: 1, byGuild: [], basis: {roleDefinitionsSha256: SHA, bindingsCount: 0}})).state).toBe("VERIFIED");
+    expect(c.mapStatusSummary(sum({registered: c.MAX_COUNT, target: c.MAX_COUNT})).state).toBe("VERIFIED");
+    expect(c.mapStatusSummary(sum({byGuild: Array.from({length: c.MAX_GUILDS}, (_, i) => guild(`g${i}`))})).state).toBe("VERIFIED");
+    expect(c.mapStatusSummary(sum({byGuild: Array.from({length: c.MAX_GUILDS + 1}, (_, i) => guild(`g${i}`))})).state).toBe("ERROR");
+    expect(c.mapStatusSummary(sum({basis: {roleDefinitionsSha256: SHA, bindingsCount: c.MAX_COUNT}})).state).toBe("VERIFIED");
+    expect(c.mapStatusSummary(sum({computedAt: "2026-10-22T03:00:00.123Z"})).state).toBe("VERIFIED");
+    expect(c.mapStatusSummary(sum({computedAt: "2026-10-22T03:00:00"})).state).toBe("ERROR");
+    expect(c.mapStatusSummary(sum({computedAt: "2026-02-30T03:00:00Z"})).state).toBe("ERROR");
+  });
+  it("renders five separate counters, the target, a by-guild table and the basis; nothing is summed", async () => {
+    const node = await render(await (await load("agent-factory-core.js")).mapStatusSummary(sum()));
+    const stats = byData(node, "stat").filter(n => n.dataset.stat.startsWith("factory-"));
+    expect(stats.map(n => [n.dataset.stat, n.dataset.value])).toEqual([["factory-registered", "599"], ["factory-implemented", "40"], ["factory-tested", "12"], ["factory-certified", "3"], ["factory-running", "0"]]);
+    expect(byData(node, "factoryTarget")[0].dataset.factoryTarget).toBe("599");
+    expect(byData(node, "factoryGuild").map(n => n.dataset.factoryGuild)).toEqual(["alpha", "zeta"]);
+    expect(text(byData(node, "factoryBasis")[0])).toContain("abababababab…"); expect(text(byData(node, "factoryBasis")[0])).not.toContain(SHA);
+    expect(text(byData(node, "factoryBasis")[0])).toContain("25 bindings");
+    expect(byData(node, "semantics", "SEPARATE_COUNTERS")).toHaveLength(1);
+    expect(text(byId(node, "wf-factory")!)).toContain("never added up");
+  });
+  it("shows a state note and NO figures when the endpoint is missing (default 404), offline or malformed", async () => {
+    const { ctx } = await mkCtx({roles: "ok", detail: true}, "en");
+    const real = (await renderWf(ctx)).node;
+    for (const node of [real, await render({state: "OFFLINE", summary: null}), await render({state: "ERROR", summary: null}), await render(undefined)]) {
+      const p = byId(node, "wf-factory")!;
+      expect(p).not.toBeNull();
+      expect(byData(p, "stat").filter(n => n.dataset.stat.startsWith("factory-"))).toEqual([]);
+      expect(byData(p, "factoryGuild")).toEqual([]); expect(byData(p, "factoryTarget")).toEqual([]);
+      expect(text(p)).toContain("GET /v1/roles/status-summary");
+    }
+    expect(text(byId(real, "wf-factory")!)).toMatch(/unavailable/i);
+  });
+  it("an empty guild list says so; en and tr have the same factory keys with the same placeholders", async () => {
+    const node = await render((await load("agent-factory-core.js")).mapStatusSummary(sum({byGuild: []})));
+    expect(byData(node, "factoryTable")).toEqual([]); expect(text(byId(node, "wf-factory")!)).toContain("no guild breakdown");
+    const en = (await load("locales", "en.js")).default as Record<string, string>, tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const keys = Object.keys(en).filter(k => k.startsWith("workforce.factory."));
+    expect(keys).toHaveLength(14);
+    const ph = (x: string) => (x.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of keys) { expect(tr[k], k).toBeTruthy(); expect(ph(tr[k]), k).toBe(ph(en[k])); }
+    expect(Object.keys(tr).filter(k => k.startsWith("workforce.factory."))).toHaveLength(14);
   });
 });
