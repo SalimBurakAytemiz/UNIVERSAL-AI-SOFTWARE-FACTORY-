@@ -12,7 +12,7 @@ import {WorkOsError} from "./types.js";
 import type {RunEvidence, RunStatus, RunStep, SecurityStageSummary, WorkRun} from "./types.js";
 import {LEASED_RUN_STATUSES} from "./run-state.js";
 import {testCommandAllowed} from "./schemas.js";
-import {managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
+import {canonicalPath, managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
 import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
 // INT-R4: runProcess (REL-FX ana-makine test çalıştırıcısı) ARTIK kullanılmaz; yürütme yalnız execution-gate sağlayıcısı (gate.provider.run) üzerinden gider, ana makinede asla.
 import {assertIndependentExecutors} from "./executors.js";
@@ -106,6 +106,38 @@ export function repositoryPrecondition(project: {projectId: string; repository?:
   }
   if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) return {ok: false, reason: "REPOSITORY_PATH_NOT_FOUND"};
   return {ok: true, src};
+}
+
+export type RepositoryHead = {ok: true; baseSha: string} | {ok: false; reason: "REPOSITORY_NOT_WORKTREE_ROOT" | "REPOSITORY_HEAD_UNRESOLVED"};
+// //TR: Depo kökü ve HEAD kararı TEK saf fonksiyondur (runner WORKSPACE adımı çağırır; readiness.ts çağıracaktır: LANE-B-REQUEST, #218; sonuç çağıranın ortamına bağlı değildir). `git rev-parse` yukarı doğru keşfeder: düz bir alt dizin üst deponun HEAD'ini çözerdi. Bu yüzden: (1) süreç ortamından YALNIZ sabit bir izin listesi geçer (safeChildEnv'in alwaysAllow'u + TMPDIR): GIT_* (GIT_DIR başka bir depoyu gösterebilir), SUDO_UID (git'in sahiplik kararını değiştirir) ve gizli değerler (API anahtarları) git'e ASLA ulaşmaz; repo-yerel config'in çalıştırabileceği bir komut sırları göremez, çağıran (runner/readiness) sonucu değiştiremez ve çok büyük ortam E2BIG üretmez; keşif GIT_CEILING_DIRECTORIES=<fiziksel üst dizin> ile yukarı çıkamaz, ancak ceiling'e GÜVENİLMEZ (':' içeren yol listeyi böler, göreli yol yok sayılır): kök kararı her kolda bağımsız kanıt ister, (2) kök: `.git` (dizin veya gitfile) src'nin kendisinde VAR ve `--show-toplevel` src'ye EŞİT; veya `--absolute-git-dir` == src/.git (core.bare/core.worktree ayarlı depolar dahil); veya çıplak depo (`--is-bare-repository` ve git dizini src'nin kendisi); karşılaştırma kanonik anahtarla (path-guard), `.git` dizininin kendisi kök değildir, (3) HEAD yalnız bir commit nesnesine çözülmelidir (`HEAD` ile `HEAD^{commit}` aynı 40-hex SHA; etiket nesnesi reddedilir). `ok:true` YALNIZ ceiling'li, GIT_*'siz sondajlardan türer; ceiling'siz sondaj yalnız iki red nedeni arasında seçer (REPOSITORY_NOT_WORKTREE_ROOT: başka bir deponun/.git'in içinde). Her sondaj `protocol.allow=never` ile çalışır (kısmi klonda eksik HEAD nesnesi için tembel fetch repo-yerel config'teki komutları çalıştırır/ağa çıkar), toplam süre sınırlıdır (varsayılan 10 sn, SIGKILL; okunamayan HEAD/config sunucuyu sonsuza dek bloke etmez) ve fonksiyon ASLA fırlatmaz (zararlı girdi = red). Nesne grafiğinin bütünlüğü doğrulanmaz: eksik tree/parent clone adımında WORKSPACE_CLONE_FAILED olur.
+const GIT_PROBE_ENV = new Set(["PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "TMPDIR", "SYSTEMROOT", "COMSPEC", "PATHEXT", "OS", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE"]);
+export function repositoryHead(src: string, opts: {timeoutMs?: number} = {}): RepositoryHead {
+  const refuse: RepositoryHead = {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
+  try {
+    const c = canonicalPath(src);
+    if (!c.ok) return refuse;
+    const root = c.path;
+    const env: NodeJS.ProcessEnv = {GIT_NO_LAZY_FETCH: "1"};
+    for (const [k, v] of Object.entries(process.env)) if (typeof v === "string" && !v.includes("\0") && GIT_PROBE_ENV.has(k.toUpperCase())) env[k] = v;
+    const deadline = Date.now() + (opts.timeoutMs ?? 10_000);
+    let exhausted = false;
+    const probe = (args: string[], ceiling: boolean): string | null => {
+      const left = deadline - Date.now();
+      if (exhausted || left <= 0) { exhausted = true; return null; }
+      try {
+        const r = spawnGitSync(root, ["-c", "protocol.allow=never", ...args], {env: ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, maxBuffer: 1024 * 1024, timeout: left, killSignal: "SIGKILL"});
+        if (r.error) { exhausted = true; return null; }
+        return r.status === 0 ? String(r.stdout ?? "").replace(/\n$/, "") : null;
+      } catch { return null; }
+    };
+    const same = (p: string | null, to: string = root): boolean => { if (!p) return false; const a = canonicalPath(p), b = canonicalPath(to); return a.ok && b.ok && a.key === b.key; };
+    const own = path.join(root, ".git");
+    const isRoot = (fs.existsSync(own) && same(probe(["rev-parse", "--show-toplevel"], true))) || same(probe(["rev-parse", "--absolute-git-dir"], true), own)
+      || (probe(["rev-parse", "--is-bare-repository"], true) === "true" && same(probe(["rev-parse", "--absolute-git-dir"], true)));
+    if (!isRoot) return {ok: false, reason: probe(["rev-parse", "--git-dir"], false) !== null ? "REPOSITORY_NOT_WORKTREE_ROOT" : "REPOSITORY_HEAD_UNRESOLVED"};
+    const ids = (probe(["rev-parse", "HEAD", "HEAD^{commit}"], true) ?? "").split("\n").map(x => x.trim());
+    return ids.length === 2 && SHA.test(ids[0]) && ids[0] === ids[1] ? {ok: true, baseSha: ids[0]} : refuse;
+  } catch { return refuse; }
 }
 
 export class MissionRunner {
@@ -421,8 +453,9 @@ export class MissionRunner {
     const pre = repositoryPrecondition(project, this.o.dataDir);
     if (!pre.ok) return {kind: "BLOCK", reason: pre.reason};
     const src = pre.src;
-    const base = this.gitOk(src, ["rev-parse", "--verify", "HEAD^{commit}"]);
-    if (!base || !SHA.test(base)) return {kind: "BLOCK", reason: "REPOSITORY_HEAD_UNRESOLVED"};
+    const repoHead = repositoryHead(src);
+    if (!repoHead.ok) return {kind: "BLOCK", reason: repoHead.reason};
+    const base = repoHead.baseSha;
     const dir = this.runDir(run.runId), work = path.join(dir, "work"), branch = `uasco/run/${run.runId}`;
     fs.mkdirSync(dir, {recursive: true});
     this.rmUnderRun(run.runId, work);
