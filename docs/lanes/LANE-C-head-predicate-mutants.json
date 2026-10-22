@@ -1,33 +1,40 @@
 {
- "//TR": "C-RUNNER-HEAD-PREDICATE için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/workos/runner.ts içinde TAM 1 kez geçen metni değiştirir; docs/lanes/LANE-C-head-predicate-mutants.mjs hepsini çalıştırır ve repositoryHead test grubunun her birini ÖLDÜRMESİNİ (KILLED) bekler. timeoutMs: sonsuza dek bloke eden mutant (H12) harness zaman aşımıyla yakalanır; sonrasında /tmp/uasco-b3a-* altında kalan yetim git süreçlerini öldürün. H13 (süre bütçesi probe başına) bilerek listede yok: toplam bütçe iki bağımsız mekanizmayla (probe zaman aşımı=kalan süre VE exhausted bayrağı) sağlanır; tek metin değişikliğiyle gözlenemez. H16/H17 tek mutantta birleşti (src koruması ve catch yedekli).",
+ "//TR": "C-RUNNER-HEAD-PREDICATE için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/workos/runner.ts içinde TAM 1 kez geçen metni değiştirir; docs/lanes/LANE-C-head-predicate-mutants.mjs hepsini çalıştırır ve repositoryHead test grubunun her birini ÖLDÜRMESİNİ (KILLED) bekler. timeoutMs: sonsuza dek bloke eden mutant (H12) harness zaman aşımıyla yakalanır; sonrasında /tmp/uasco-b3a-* altında kalan yetim git süreçlerini öldürün. H13 (süre bütçesi probe başına) bilerek listede yok: toplam bütçe iki bağımsız mekanizmayla (probe zaman aşımı=kalan süre VE exhausted bayrağı) sağlanır; tek metin değişikliğiyle gözlenemez. H16/H17 tek mutantta birleşti (src koruması ve catch yedekli). H2b (izin listesinde büyük/küçük harf) POSIX'te gözlenemez (anahtarlar zaten büyük harf), bilerek listede yok.",
  "mutants": [
   {
    "id": "H1",
-   "description": "GIT_* not stripped from the process env",
+   "description": "the whole process env reaches git (no allow-list)",
    "file": "core/workos/runner.ts",
-   "old": " && !/^GIT_/i.test(k) && k.toUpperCase() !== \"SUDO_UID\"",
-   "new": " && k.toUpperCase() !== \"SUDO_UID\""
+   "old": "GIT_PROBE_ENV.has(k.toUpperCase())) env[k] = v;",
+   "new": "true) env[k] = v;"
   },
   {
    "id": "H2",
-   "description": "only GIT_DIR stripped",
+   "description": "only GIT_DIR withheld, everything else passes",
    "file": "core/workos/runner.ts",
-   "old": "!/^GIT_/i.test(k)",
-   "new": "!/^GIT_DIR$/i.test(k)"
-  },
-  {
-   "id": "H2b",
-   "description": "GIT_* strip is case-sensitive",
-   "file": "core/workos/runner.ts",
-   "old": "!/^GIT_/i.test(k)",
-   "new": "!/^GIT_/.test(k)"
+   "old": "GIT_PROBE_ENV.has(k.toUpperCase())) env[k] = v;",
+   "new": "!/^GIT_DIR$/i.test(k)) env[k] = v;"
   },
   {
    "id": "H3",
-   "description": "SUDO_UID passed to git",
+   "description": "GIT_* admitted next to the allow-list",
    "file": "core/workos/runner.ts",
-   "old": " && k.toUpperCase() !== \"SUDO_UID\") env[k] = v;",
-   "new": ") env[k] = v;"
+   "old": "GIT_PROBE_ENV.has(k.toUpperCase())) env[k] = v;",
+   "new": "(GIT_PROBE_ENV.has(k.toUpperCase()) || /^GIT_/i.test(k))) env[k] = v;"
+  },
+  {
+   "id": "H3b",
+   "description": "SUDO_UID admitted next to the allow-list",
+   "file": "core/workos/runner.ts",
+   "old": "GIT_PROBE_ENV.has(k.toUpperCase())) env[k] = v;",
+   "new": "(GIT_PROBE_ENV.has(k.toUpperCase()) || k === \"SUDO_UID\")) env[k] = v;"
+  },
+  {
+   "id": "H3c",
+   "description": "PATH not allow-listed (git cannot be found by name)",
+   "file": "core/workos/runner.ts",
+   "old": "new Set([\"PATH\", \"HOME\",",
+   "new": "new Set([\"HOME\","
   },
   {
    "id": "H4",

@@ -238,11 +238,11 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
     } finally { vi.unstubAllEnvs(); }
   });
 
-  it.skipIf(!POSIX)("every git probe runs with a scrubbed environment and the fixed safety flags: a recording git shim sees no GIT_* except the isolation's own and the ceiling (physical parent of src on the deciding probes, absent on the classification probe), always protocol.allow=never, and unrelated variables still pass; SUDO_UID never reaches git", () => {
+  it.skipIf(!POSIX)("every git probe runs with a scrubbed environment and the fixed safety flags: a recording git shim sees no GIT_* except the isolation's own and the ceiling (physical parent of src on the deciding probes, absent on the classification probe), always protocol.allow=never, only allow-listed variables (a secret-looking variable and SUDO_UID never reach git)", () => {
     const d = mkd(tmp, "shim-root"); initRepo(d, true); const sub = mkd(d, "pkg");
     const bin = mkd(tmp, "shim-bin"), log = path.join(tmp, "shim.log"), real = String(cp.spawnSync("sh", ["-c", "command -v git"], {encoding: "utf8"}).stdout).trim();
     fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\n{ echo "ARGV $*"; env | sort | sed 's/^/ENV /'; echo END; } >> "${log}"\nexec "${real}" "$@"\n`, {mode: 0o755});
-    const run = (dir: string) => { fs.writeFileSync(log, ""); vi.stubEnv("PATH", `${bin}${path.delimiter}${process.env.PATH ?? ""}`); vi.stubEnv("GIT_DIR", path.join(d, "nope")); vi.stubEnv("git_dir", path.join(d, "nope")); vi.stubEnv("GIT_WORK_TREE", tmp); vi.stubEnv("UASCO_SHIM_PASS", "yes"); vi.stubEnv("SUDO_UID", "0"); try { return {result: repositoryHead(dir), calls: fs.readFileSync(log, "utf8").split("END\n").filter(Boolean).map(c => ({argv: /ARGV (.*)/.exec(c)![1], env: Object.fromEntries(c.split("\n").filter(l => l.startsWith("ENV ")).map(l => l.slice(4)).map(l => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]))}))}; } finally { vi.unstubAllEnvs(); } };
+    const run = (dir: string) => { fs.writeFileSync(log, ""); vi.stubEnv("PATH", `${bin}${path.delimiter}${process.env.PATH ?? ""}`); vi.stubEnv("GIT_DIR", path.join(d, "nope")); vi.stubEnv("git_dir", path.join(d, "nope")); vi.stubEnv("GIT_WORK_TREE", tmp); vi.stubEnv("UASCO_SHIM_PASS", "yes"); vi.stubEnv("UASCO_FAKE_API_KEY", "sekret-value"); vi.stubEnv("SUDO_UID", "0"); try { return {result: repositoryHead(dir), calls: fs.readFileSync(log, "utf8").split("END\n").filter(Boolean).map(c => ({argv: /ARGV (.*)/.exec(c)![1], env: Object.fromEntries(c.split("\n").filter(l => l.startsWith("ENV ")).map(l => l.slice(4)).map(l => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]))}))}; } finally { vi.unstubAllEnvs(); } };
     for (const [dir, expected, deciding] of [[d, okAt(headOf(d)), ["rev-parse --show-toplevel", "rev-parse HEAD HEAD^{commit}"]], [sub, NOT_ROOT, ["rev-parse --absolute-git-dir", "rev-parse --is-bare-repository", "rev-parse --git-dir"]]] as const) {
       const {result, calls} = run(dir);
       expect(result).toEqual(expected);
@@ -252,7 +252,9 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
         const gitVars = Object.keys(c.env).filter(k => /^git_/i.test(k)).sort();
         expect(gitVars.filter(k => !["GIT_CEILING_DIRECTORIES", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_SYSTEM", "GIT_NO_LAZY_FETCH", "GIT_TERMINAL_PROMPT"].includes(k))).toEqual([]);
         expect(c.env.GIT_NO_LAZY_FETCH).toBe("1");
-        expect(c.env.UASCO_SHIM_PASS).toBe("yes");
+        expect(c.env.UASCO_SHIM_PASS).toBeUndefined(); // only the fixed allow-list reaches git: unrelated variables and secrets never do
+        expect(JSON.stringify(c.env)).not.toContain("sekret-value");
+        expect(c.env.PATH).toContain(bin); // the allow-listed PATH does (it is how the shim is found)
         expect(c.env.SUDO_UID).toBeUndefined();
         const classification = c.argv.endsWith("rev-parse --git-dir");
         if (classification) expect(c.env.GIT_CEILING_DIRECTORIES).toBeUndefined(); else expect(c.env.GIT_CEILING_DIRECTORIES).toBe(path.dirname(dir));
@@ -278,8 +280,11 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
     spawnGitSync(d, ["rev-parse", "--verify", "HEAD^{commit}"]); // premise: plain git DOES run the hostile command here
     expect(fs.existsSync(marker)).toBe(true);
     fs.rmSync(marker);
+    const packs = () => fs.readdirSync(path.join(d, ".git", "objects"), {recursive: true}).map(String).sort();
+    const before = packs();
     expect(repositoryHead(d)).toEqual(UNRESOLVED);
     expect(fs.existsSync(marker)).toBe(false);
+    expect(packs()).toEqual(before); // read-only: no lazy fetch wrote anything into the repository
   });
 
   it("the runner blocks with the function's reason BEFORE any clone or executor: a plain subdirectory of a repo is REPOSITORY_NOT_WORKTREE_ROOT (no WORKSPACE evidence, no baseSha, implementer never called), not a misleading WORKSPACE_CLONE_FAILED, also through a dot-dot spelling and for a tag-object HEAD; a usable root still runs to AWAITING_APPROVAL with the function's baseSha", { timeout: T }, async () => {
