@@ -133,7 +133,7 @@ async function goldenFile(c: ProcCtx): Promise<ProcedureRun> {
   const spec: MissionSpec = {runId: "run_evaluation", missionId: "msn_evaluation", projectId: "prj_evaluation", title: GOLDEN_FILE.title, objective: GOLDEN_FILE.objective,
     acceptanceCriteria: [...GOLDEN_FILE.acceptanceCriteria], riskLevel: "R0", cycle: 0, baseSha: start, startSha: start};
   const r = await impl.implement(ws, spec, {timeoutMs: c.timeoutMs, ...(c.shouldAbort ? {shouldAbort: c.shouldAbort} : {})});
-  const log = redactSecrets(clip(String(r.log ?? ""), 4000));
+  const log = clip(String(r.log ?? ""), 4000); // redaksiyon artefakt/kanıt yazımında tek noktadan yapılır
   if (r.aborted) return {infra: "ABORTED", checks: [], artifact: {}, identities};
   if (r.timedOut) return {infra: "TIMEOUT", checks: [], artifact: {}, identities};
   if (r.blockReason && !ROLE_BLOCK.test(r.blockReason)) return {infra: `IMPLEMENT_BLOCKED:${r.blockReason.slice(0, 80)}`, checks: [], artifact: {}, identities};
@@ -177,7 +177,7 @@ async function goldenReview(c: ProcCtx): Promise<ProcedureRun> {
     if (r.timedOut || r.transient) return {infra: "TIMEOUT_OR_TRANSIENT", checks: [], artifact: {}, identities};
     const untouched = (gitOut(clone, ["rev-parse", "HEAD"]) ?? "").trim() === head && gitOut(clone, ["status", "--porcelain", "--untracked-files=all"]) === "";
     checks.push({id: `${k.id}.read_only`, passed: untouched && !/^REVIEW_WORKSPACE_/.test(r.invalidReason ?? ""), detail: untouched ? "clone untouched" : "clone modified"});
-    const findings = (r.findings ?? []).slice(0, 20).map(f => ({severity: String(f.severity).slice(0, 20), title: redactSecrets(String(f.title).slice(0, 200))}));
+    const findings = (r.findings ?? []).slice(0, 20).map(f => ({severity: String(f.severity).slice(0, 20), title: String(f.title).slice(0, 200)}));
     if (!r.valid) {
       // //TR: Geçersiz review: sözleşmeye uymayan ama süreç 0 ile bitmiş çıktı rolün hatasıdır; diğer geçersizlikler (profil, yol, çıkış kodu) altyapıdır.
       if (/^REVIEW_WORKSPACE_/.test(r.invalidReason ?? "")) { cases.push({id: k.id, expected: k.expected, valid: false, invalidReason: r.invalidReason}); continue; }
@@ -213,7 +213,7 @@ async function goldenPredev(c: ProcCtx, fn: FirstDeliveryFunction): Promise<Proc
     const v = validateArtifactContent(kind, parsed, toUpstreamContents(kind, approvedUpstream as never));
     checks.push({id: "validators_accept", passed: v.ok, detail: v.ok ? "accepted" : String(v.errors).slice(0, 100)});
   }
-  return {infra: null, checks, artifact: {kind, outputSha256: sha256(out), output: redactSecrets(clip(out, 100_000)), briefLabel: TASKHUB_BRIEF.label}, identities};
+  return {infra: null, checks, artifact: {kind, outputSha256: sha256(out), output: clip(out, 100_000), briefLabel: TASKHUB_BRIEF.label}, identities};
 }
 
 export const EVALUATION_PROCEDURES: readonly Procedure[] = [
