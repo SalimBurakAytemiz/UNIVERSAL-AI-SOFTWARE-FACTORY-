@@ -306,3 +306,54 @@ describe("PreDevDriver: role-prompt templates are honest pure data", () => {
     expect(prompt).toContain("UYDURMA"); // fabrication is forbidden in the prompt text
   });
 });
+
+describe("PreDevDriver: re-drafting after a Founder/reviewer rejection (regression)", () => {
+  it("a rejected draft is superseded by the next draft (v2, supersedes = rejected id), twice in a row; the journal stays valid, replay is clean and the sequence can still advance", async () => {
+    const missionId = authorizedMission();
+    const builder = new RecordedBuilder({BusinessAnalysis: [BA, BA, BA], Requirements: [REQ]});
+    const driver = new PreDevDriver({store, brief: TASKHUB_BRIEF, builder});
+    driver.start(SCOPE, missionId, IMPL);
+
+    const v1 = await driver.produceCurrentPhase(SCOPE, missionId, IMPL);
+    if (v1.status !== "RECORDED") throw new Error("expected RECORDED");
+    expect(v1.version).toBe(1);
+    expect(store.getPreDevArtifact(SCOPE, v1.artifactId)!.supersedes).toBeNull();
+    driver.reject(SCOPE, missionId, v1.artifactId, REV, "needs sharper goals");
+    expect(store.preDevReadModel(SCOPE, missionId).artifacts.BusinessAnalysis.state).toBe("REJECTED");
+
+    const v2 = await driver.produceCurrentPhase(SCOPE, missionId, IMPL); // used to fail: WORKOS_INVALID_INPUT PREDEV_ENTRY_REJECTED:PREDEV_VERSION_INCONSISTENT
+    if (v2.status !== "RECORDED") throw new Error("expected RECORDED");
+    expect(v2.version).toBe(2);
+    expect(store.getPreDevArtifact(SCOPE, v2.artifactId)!.supersedes).toBe(v1.artifactId);
+    expect(store.preDevReadModel(SCOPE, missionId).artifacts.BusinessAnalysis).toMatchObject({state: "DRAFT", artifactId: v2.artifactId, version: 2});
+    driver.reject(SCOPE, missionId, v2.artifactId, REV, "still unclear");
+
+    const v3 = await driver.produceCurrentPhase(SCOPE, missionId, IMPL);
+    if (v3.status !== "RECORDED") throw new Error("expected RECORDED");
+    expect(v3.version).toBe(3);
+    expect(store.getPreDevArtifact(SCOPE, v3.artifactId)!.supersedes).toBe(v2.artifactId);
+    expect(store.journalHealth().state).toBe("OK");
+    expect(new WorkOsStore(tmp).isTampered).toBe(false); // replay re-validates the supersede rule
+
+    const adv = driver.approveAndAdvance(SCOPE, missionId, v3.artifactId, REV, EV);
+    expect(adv.phase).toBe("REQUIREMENTS");
+    const req = await driver.produceCurrentPhase(SCOPE, missionId, IMPL); // a different kind starts at v1 with no supersedes
+    if (req.status !== "RECORDED") throw new Error("expected RECORDED");
+    expect(req.version).toBe(1);
+    expect(store.getPreDevArtifact(SCOPE, req.artifactId)!.supersedes).toBeNull();
+  });
+
+  it("a pending (DRAFT/SUBMITTED) artifact of the current kind is refused BEFORE the builder is called, with a clean driver error; nothing is written", async () => {
+    const missionId = authorizedMission();
+    const builder = new RecordedBuilder({BusinessAnalysis: [BA, BA]});
+    const driver = new PreDevDriver({store, brief: TASKHUB_BRIEF, builder});
+    driver.start(SCOPE, missionId, IMPL);
+    const first = await driver.produceCurrentPhase(SCOPE, missionId, IMPL);
+    if (first.status !== "RECORDED") throw new Error("expected RECORDED");
+    const seqBefore = store.preDevReadModel(SCOPE, missionId);
+    await expect(driver.produceCurrentPhase(SCOPE, missionId, IMPL)).rejects.toThrow("PREDEV_DRIVER_ARTIFACT_PENDING:BusinessAnalysis:DRAFT");
+    expect(builder.calls.filter(c => c.kind === "BusinessAnalysis")).toHaveLength(1); // no second (paid) builder call
+    expect(store.preDevReadModel(SCOPE, missionId)).toEqual(seqBefore);
+    expect(store.journalHealth().state).toBe("OK");
+  });
+});
