@@ -11,7 +11,7 @@ import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
 import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
 import {activateGlobalStop} from "../automation/lib/global-stop.mjs";
 import {WorkOsStore} from "../core/workos/store.js";
-import {MissionRunner} from "../core/workos/runner.js";
+import {MissionRunner, effectiveTestCommand, repositoryPrecondition} from "../core/workos/runner.js";
 import type {RunnerOptions} from "../core/workos/runner.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors, executorsFromEnv, parseReviewOutput} from "../core/workos/executors.js";
@@ -52,12 +52,13 @@ function makeRepo(id: string): {repo: string; head: string} {
 const FAKE_AWS = ["AK", "IA", "Q7ZX3MPLW2RT5VB9"].join("");
 
 interface Ctx { store: WorkOsStore; dataDir: string; runtime: string; stopFile: string; repo: string; head: string; missionId: string; projectId: string }
-function setup(tenantId = "tA", opts: {url?: boolean; testCommand?: string[] | null; clock?: {skewMs: number}} = {}): Ctx {
+function setup(tenantId = "tA", opts: {url?: boolean; testCommand?: string[] | null; clock?: {skewMs: number}; virtualClock?: {ms: number}} = {}): Ctx {
   const id = crypto.randomBytes(4).toString("hex");
   const {repo, head} = makeRepo(id);
   const dataDir = path.join(tmp, `data-${id}`), runtime = path.join(tmp, `runtime-${id}`);
   fs.mkdirSync(runtime, {recursive: true});
-  const store = new WorkOsStore(dataDir, opts.clock ? {now: () => Date.now() + opts.clock!.skewMs} : {});
+  // //TR: virtualClock: store saati YALNIZ testin ilerlettiği sanal zamandır (gerçek süre/yavaş runner lease süresini etkilemez); clock: gerçek zaman + sabit kayma.
+  const store = new WorkOsStore(dataDir, opts.virtualClock ? {now: () => opts.virtualClock!.ms} : opts.clock ? {now: () => Date.now() + opts.clock!.skewMs} : {});
   const tc = opts.testCommand === null ? undefined : (opts.testCommand ?? ["node", "test.mjs"]);
   const p = store.createProject({tenantId, orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: opts.url ? {url: "https://example.invalid/r.git"} : {path: repo}, ...(tc ? {testCommand: tc} : {})});
   const m = store.createMission({tenantId, projectId: p.projectId, title: "Add feature", objective: "feature.txt must say ok", acceptanceCriteria: ["tests pass"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
@@ -472,7 +473,6 @@ describe("LANE-C MissionRunner claim cap (maxConcurrentRuns)", () => {
   };
   const queueRuns = (c: Ctx, pair: ExecutorPair, n: number) => [c.missionId, ...Array.from({length: n - 1}, (_, i) => addMission(c, i + 1))]
     .map(missionId => c.store.createRun({tenantId: "tA", missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}));
-  const sleepFirst = (ms: number) => okScript({implement: n => ({files: {"feature.txt": "ok\n"}, ...(n === 1 && ms ? {sleepMs: ms} : {})})});
   // implementer sarmalayıcı: aynı anda içerideki çağrı sayısını izler; barrier>0 ise o kadar çağrı birlikte içeri girene kadar bekler (deterministik eşzamanlılık kanıtı, süre tahmini yok).
   function tracked(pair: ExecutorPair, barrier = 0) {
     const st = {active: 0, maxActive: 0, arrived: 0, barrierTimedOut: false}; let release!: () => void; const gate = new Promise<void>(r => { release = r; });
@@ -484,22 +484,108 @@ describe("LANE-C MissionRunner claim cap (maxConcurrentRuns)", () => {
     return {st, pair: {...pair, implementer: {...pair.implementer, implement}} as ExecutorPair};
   }
 
-  it("default cap 1: a queued second run gets NO lease while the first runs longer than the lease TTL, so it is never fenced or recovered; the next tick claims it", { timeout: T }, async () => {
-    const c = setup(); const fake = new FakeExecutors(sleepFirst(2500)); const pair = fake.pair();
+  // //TR: Sanal saatli testlerde HİÇBİR bekleme sınırsız değildir: sanal saat donukken zamana bağlı bir yola (RETRY_SCHEDULED/retryAt, lease devri) girilirse tick ilerlemez. Sınır (gerçek süre) aşılırsa test, run durumu / adım / retryAt / leaseExpiresAt / sanal saat ile saniyeler içinde YÜKSEK SESLE düşer (600 s'lik adım zaman aşımı olarak değil); sınır gevşetilmez, test atlanmaz.
+  const runDiag = (c: Ctx, ids: string[], extra: Record<string, unknown> = {}) => JSON.stringify({...extra, runs: ids.map(id => { const r = c.store.engineGetRun(id); return r ? {id: id.slice(0, 12), status: r.status, step: r.step, retryCount: r.retryCount, retryAt: r.retryAt, leaseExpiresAt: r.leaseExpiresAt, hasLease: r.leaseId !== null, attempt: r.attempt} : null; })});
+  const boundedTick = async (mr: MissionRunner, c: Ctx, ids: string[], label: string, ctx: () => Record<string, unknown>, ms = 30_000) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`BOUNDED_TICK_TIMEOUT ${label}: no result after ${ms} ms of real time (virtual clock frozen?) ${runDiag(c, ids, ctx())}`)), ms); });
+    try { return await Promise.race([mr.tick(), timeout]); } finally { clearTimeout(timer); }
+  };
+  // run geçişlerini kaydeder: sanal saat donukken RETRY_SCHEDULED'a girilmemeli (girilirse retryAt sanal saatle geçmez).
+  const watchTransitions = (c: Ctx) => { const seen: string[] = [], orig = c.store.transitionRun.bind(c.store); c.store.transitionRun = (...a: Parameters<typeof orig>) => { seen.push(String(a[2])); return orig(...a); }; return seen; };
+
+  // //TR: Deterministik: lease süresi SANAL saate bağlıdır (store ve runner aynı saati kullanır); gerçek süre, yavaş senkron git adımları veya yüklü runner sonucu değiştirmez. r1'in "TTL'den uzun" çalışması, implementer içinde sanal saatin TTL'den küçük adımlarla ilerletilmesi ve lease'in her adımda RUNNER'IN KENDİ heartbeat'i (executeStep içindeki setInterval) tarafından yenilenmesi beklenerek kurulur (sınırlı gerçek bekleme; sanal zaman bekleme sırasında donuktur, yani bekleme lease'i yarıştıramaz). Test lease'i KENDİSİ yenilemez: heartbeat bozulursa test düşer.
+  it("default cap 1: a queued second run gets NO lease while the first runs longer than the lease TTL (virtual clock), so it is never fenced or recovered; the next tick claims it", { timeout: T }, async () => {
+    const TTL = 1000, clock = {ms: Date.UTC(2026, 9, 22, 12, 0, 0)};
+    const c = setup("tA", {virtualClock: clock}); const fake = new FakeExecutors(okScript()); const pair = fake.pair();
     const [r1, r2] = queueRuns(c, pair, 2);
-    const mr = runner(c, fake, {leaseTtlMs: 1000});
-    const t1 = await mr.tick();
+    const seen: Array<{status: string; leaseId: string | null; attempt: number}> = [];
+    let virtualElapsed = 0, firstCall = true;
+    const hbRenewed: boolean[] = [];
+    let hbFailure = "";
+    const transitions = watchTransitions(c), vctx = () => ({virtualNow: new Date(clock.ms).toISOString(), virtualElapsed, hbRenewed, transitions: transitions.slice(-12)});
+    const longRunning: ExecutorPair = {...pair, implementer: {...pair.implementer, async implement(w, spec, ctx) {
+      if (!firstCall) return pair.implementer.implement(w, spec, ctx); // second tick: r2's own (normal) implementer call
+      firstCall = false;
+      for (let i = 0; i < 4; i++) { // 4 x 900 virtual ms = 3600 > 3 x TTL; after each step the RUNNER's own heartbeat must renew r1's lease (the test never renews it)
+        clock.ms += 900; virtualElapsed += 900;
+        // the clock only moves in this loop and nothing awaits between the increment and `want`, so every renewal after this line (heartbeat or step) writes exactly `want`; the bound only caps the wait (heartbeat period is TTL/3 real ms)
+        const want = new Date(clock.ms + TTL).toISOString(), deadline = Date.now() + 10_000;
+        while (c.store.engineGetRun(r1.runId)!.leaseExpiresAt !== want && Date.now() < deadline) await new Promise(r => setTimeout(r, 10));
+        hbRenewed.push(c.store.engineGetRun(r1.runId)!.leaseExpiresAt === want);
+        if (!hbRenewed[hbRenewed.length - 1]) { hbFailure = `heartbeat did not write ${want} within 10 s: ${runDiag(c, [r1.runId, r2.runId], vctx())}`; break; }
+        const x = runOf(c, r2.runId); seen.push({status: x.status, leaseId: x.leaseId, attempt: x.attempt});
+      }
+      return pair.implementer.implement(w, spec, ctx);
+    }}};
+    const mr = runner(c, fake, {leaseTtlMs: TTL, executors: longRunning, now: () => clock.ms});
+    const t1 = await boundedTick(mr, c, [r1.runId, r2.runId], "cap-1 tick 1", vctx);
+    expect(hbRenewed, hbFailure).toEqual([true, true, true, true]); // the runner's own heartbeat renewed the lease after every 900 virtual ms
+    expect(transitions, runDiag(c, [r1.runId, r2.runId], vctx())).not.toContain("RETRY_SCHEDULED"); // no time-based retry path while the virtual clock is frozen
+    expect(virtualElapsed).toBeGreaterThan(TTL * 3);
     expect(t1.claimed).toEqual([r1.runId]);
     expect(t1.deferred).toEqual([r2.runId]);
     expect(t1.fenced).toEqual([]);
     expect(t1.recovered).toEqual([]);
-    expect(runOf(c, r1.runId).status).toBe("AWAITING_APPROVAL");
+    expect(seen).toEqual(Array(4).fill({status: "QUEUED", leaseId: null, attempt: 0})); // r2 held no lease at any point while r1 outlived the TTL
+    expect(runOf(c, r1.runId).status, runDiag(c, [r1.runId], vctx())).toBe("AWAITING_APPROVAL");
     expect(runOf(c, r2.runId)).toMatchObject({status: "QUEUED", leaseId: null, attempt: 0});
     expect(fake.calls.implement).toBe(1);
-    const t2 = await mr.tick();
+    clock.ms += 5 * TTL; // virtual time passes between ticks: nothing of r2 can expire because r2 has no lease
+    const t2 = await boundedTick(mr, c, [r1.runId, r2.runId], "cap-1 tick 2", vctx);
     expect(t2).toMatchObject({claimed: [r2.runId], deferred: [], fenced: [], recovered: []});
-    expect(runOf(c, r2.runId).status).toBe("AWAITING_APPROVAL");
+    expect(runOf(c, r2.runId).status, runDiag(c, [r2.runId], vctx())).toBe("AWAITING_APPROVAL");
     expect(fake.calls).toEqual({implement: 2, review: 2});
+    expect(transitions, runDiag(c, [r1.runId, r2.runId], vctx())).not.toContain("RETRY_SCHEDULED");
+  });
+
+  // //TR: renew() (adım başında ve uzun senkron işten önce) lease'i uzatır. TTL gerçek heartbeat aralığından (TTL/3 gerçek ms) çok uzun seçilir: heartbeat devreye giremez, lease'i YALNIZ renew() tutar. Her uzun çağrı TTL'nin 0.9'u kadar sanal zaman harcar (toplam 1.8 x TTL): renew() çağrıları olmasaydı lease dolar ve run fence edilirdi.
+  it("renew() keeps the lease alive across long synchronous work: two long calls of 0.9 x TTL each (1.8 x TTL in total, the heartbeat cannot fire) never fence the run (virtual clock)", { timeout: T }, async () => {
+    const TTL = 600_000, clock = {ms: Date.UTC(2026, 9, 22, 12, 0, 0)}, segment = 540_000;
+    const c = setup("tA", {virtualClock: clock}); const fake = new FakeExecutors(okScript()); const pair = fake.pair();
+    const [r1] = queueRuns(c, pair, 1);
+    let advanced = 0;
+    const slow: ExecutorPair = {...pair,
+      implementer: {...pair.implementer, async implement(w, spec, ctx) { clock.ms += segment; advanced += segment; return pair.implementer.implement(w, spec, ctx); }},
+      reviewer: {...pair.reviewer, async review(w, spec, diff, ctx) { clock.ms += segment; advanced += segment; return pair.reviewer.review(w, spec, diff, ctx); }}};
+    const transitions = watchTransitions(c), vctx = () => ({virtualNow: new Date(clock.ms).toISOString(), advanced, transitions: transitions.slice(-12)});
+    const t1 = await boundedTick(runner(c, fake, {leaseTtlMs: TTL, executors: slow, now: () => clock.ms}), c, [r1.runId], "liveness tick", vctx);
+    expect(advanced).toBe(2 * segment);
+    expect(t1, runDiag(c, [r1.runId], vctx())).toMatchObject({claimed: [r1.runId], fenced: [], recovered: []});
+    expect(runOf(c, r1.runId).status, runDiag(c, [r1.runId], vctx())).toBe("AWAITING_APPROVAL");
+    expect(fake.calls).toEqual({implement: 1, review: 1});
+    expect(transitions).not.toContain("RETRY_SCHEDULED");
+  });
+
+  // //TR: Lease, bir renew() çağrısı gelmeden önce dolmuşsa (uzun senkron iş) renew() WORKOS_LEASE_FENCED fırlatır ve paralı implementer çağrısı HİÇ yapılmaz. Sanal saat, IMPLEMENT adımındaki İKİNCİ renewRunLease çağrısında (workspace sıfırlamasından sonra, paralı executor çağrısından hemen önceki renew()) TTL'den fazla ilerletilir; heartbeat (TTL/3 gerçek ms) bu sürede çalışamaz.
+  it("renew() fences an already expired lease before the paid implementer call: the run is reported fenced, the implementer is never called, and the next tick takes the expired lease over and recovers the run to AWAITING_APPROVAL (virtual clock)", { timeout: T }, async () => {
+    const TTL = 600_000, clock = {ms: Date.UTC(2026, 9, 22, 12, 0, 0)};
+    const c = setup("tA", {virtualClock: clock}); const fake = new FakeExecutors(okScript()); const pair = fake.pair();
+    const [r1] = queueRuns(c, pair, 1);
+    const original = c.store.renewRunLease.bind(c.store);
+    let implementRenews = 0, jumped = 0;
+    c.store.renewRunLease = (runId, leaseId, ttlMs, actor) => {
+      // IMPLEMENT's renewals: 1st = step start (drive loop), 2nd = the renew() right after the workspace reset and right before the paid executor call
+      if (c.store.engineGetRun(runId)?.step === "IMPLEMENT" && ++implementRenews === 2) { jumped += 1; clock.ms += TTL + TTL / 2; } // the long synchronous work (git) that happened before this renew()
+      return original(runId, leaseId, ttlMs, actor);
+    };
+    const mr = runner(c, fake, {leaseTtlMs: TTL, executors: pair, now: () => clock.ms});
+    const vctx = () => ({virtualNow: new Date(clock.ms).toISOString(), jumped, implementRenews});
+    const t1 = await boundedTick(mr, c, [r1.runId], "fence tick", vctx);
+    expect(jumped, runDiag(c, [r1.runId], vctx())).toBe(1);
+    expect(t1, runDiag(c, [r1.runId], vctx())).toMatchObject({claimed: [r1.runId], fenced: [r1.runId], recovered: []});
+    expect(fake.calls).toEqual({implement: 0, review: 0}); // fenced BEFORE the paid call
+    // what the next tick sees (runner.ts: a leased, non-terminal run whose lease expiry is <= now is taken over)
+    const left = c.store.engineGetRun(r1.runId)!;
+    expect(left.status).toBe("RUNNING");
+    expect(left.step).toBe("IMPLEMENT");
+    expect(left.leaseId).not.toBeNull();
+    expect(Date.parse(left.leaseExpiresAt ?? "")).toBeLessThanOrEqual(clock.ms);
+    // the recovery path from exactly this state ("fenced right before the paid call"): taken over, workspace re-entered, implementer called ONCE, run reaches AWAITING_APPROVAL
+    const t2 = await boundedTick(mr, c, [r1.runId], "fence recovery tick", vctx);
+    expect(t2.recovered, runDiag(c, [r1.runId], vctx())).toEqual([r1.runId]);
+    expect(runOf(c, r1.runId).status, runDiag(c, [r1.runId], vctx())).toBe("AWAITING_APPROVAL");
+    expect(fake.calls).toEqual({implement: 1, review: 1});
   });
 
   it("cap 2: two queued runs really run together (both implementer calls in flight at once); a third waits; cap 1 never overlaps", { timeout: T }, async () => {
@@ -1074,5 +1160,110 @@ describe("LANE-C run workspace archive + prune (default OFF; archive first, veri
     for (const bad of ["0", "-1", "1.5", "abc", "08", "8761", "99999", " 5", "5h"]) expect([bad, retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: bad})]).toEqual([bad, {enabled: false, reason: "INVALID"}]);
     const c = managedSetup();
     for (const bad of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) expect(() => archiver(c, bad)).toThrow("RUN_ARCHIVE_RETENTION_INVALID");
+  });
+});
+
+// //TR: LANE-C C-RUNNER-EXPORTS: runner'ın test-komutu önceliği ve depo/workspace önkoşulu saf fonksiyonlardır (readiness aynı kuralı içe aktarır). Davranış değişmedi: runner aynı fonksiyonları aynı noktada çağırır; her neden kodu hem saf fonksiyonda hem run BLOCK nedeninde doğrulanır.
+describe("LANE-C runner exports: effectiveTestCommand and repositoryPrecondition (pure; the runner uses the very same functions)", () => {
+  const PID = "prj_" + "a".repeat(24), OTHER = "prj_" + "b".repeat(24);
+  const mkdir = (...p: string[]) => { const d = path.join(...p); fs.mkdirSync(d, {recursive: true}); return d; };
+
+  it("effectiveTestCommand: the mission's command beats the project's (?? not ||: an empty mission array still wins); a missing side falls through; both missing is undefined; inputs are never mutated or copied", () => {
+    const m = ["node", "m.mjs"], p = ["node", "p.mjs"];
+    const table: Array<[string, {testCommand?: string[]} | undefined, {testCommand?: string[]} | undefined, string[] | undefined]> = [
+      ["mission wins", {testCommand: m}, {testCommand: p}, m], ["mission only", {testCommand: m}, {}, m], ["project only", {}, {testCommand: p}, p],
+      ["project when mission command absent", {testCommand: undefined}, {testCommand: p}, p], ["project when mission undefined", undefined, {testCommand: p}, p],
+      ["mission when project undefined", {testCommand: m}, undefined, m], ["both empty objects", {}, {}, undefined], ["both undefined", undefined, undefined, undefined],
+      ["empty mission array still wins", {testCommand: []}, {testCommand: p}, []], ["empty project array is returned when mission has none", {}, {testCommand: []}, []]
+    ];
+    for (const [label, mi, pr, expected] of table) expect([label, effectiveTestCommand(mi, pr)]).toEqual([label, expected]);
+    expect(effectiveTestCommand({testCommand: m}, {testCommand: p})).toBe(m); // same reference: no copy
+    expect(m).toEqual(["node", "m.mjs"]); expect(p).toEqual(["node", "p.mjs"]);
+  });
+
+  it("repositoryPrecondition: every reason code, in the runner's order, plus both ok paths; it is pure (writes nothing under the data dir)", () => {
+    const dataDir = mkdir(tmp, "data"), outside = mkdir(tmp, "outside-repo"), managedDir = mkdir(dataDir, "projects", PID, "repo"), otherManaged = mkdir(dataDir, "projects", OTHER, "repo");
+    const file = path.join(tmp, "a-file.txt"); fs.writeFileSync(file, "x");
+    const before = fs.readdirSync(dataDir, {recursive: true}).map(String).sort();
+    // //TR: Windows'ta tmp yolu 8.3 kısa ad (RUNNER~1) olabilir; fonksiyon kanonik yolu döndürür, beklenen değer de gerçek yoldan (native) kurulur.
+    const real = (x: string) => fs.realpathSync.native(x);
+    const cases: Array<[string, Parameters<typeof repositoryPrecondition>[0], ReturnType<typeof repositoryPrecondition>]> = [
+      ["no repository at all", {projectId: PID}, {ok: false, reason: "REPOSITORY_NOT_CONFIGURED"}],
+      ["empty repository object", {projectId: PID, repository: {}}, {ok: false, reason: "REPOSITORY_NOT_CONFIGURED"}],
+      ["empty path, no url", {projectId: PID, repository: {path: ""}}, {ok: false, reason: "REPOSITORY_NOT_CONFIGURED"}],
+      ["url only", {projectId: PID, repository: {url: "https://example.invalid/r.git"}}, {ok: false, reason: "REMOTE_REPO_NOT_SUPPORTED_YET"}],
+      ["empty path with a url", {projectId: PID, repository: {path: "", url: "https://example.invalid/r.git"}}, {ok: false, reason: "REMOTE_REPO_NOT_SUPPORTED_YET"}],
+      ["managed flag but a foreign path", {projectId: PID, repository: {path: outside, managed: true}}, {ok: false, reason: "REPOSITORY_NOT_MANAGED"}],
+      ["managed flag pointing at another project's managed repo", {projectId: PID, repository: {path: otherManaged, managed: true}}, {ok: false, reason: "REPOSITORY_NOT_MANAGED"}],
+      ["managed flag with a malformed project id", {projectId: "prj_x", repository: {path: managedDir, managed: true}}, {ok: false, reason: "REPOSITORY_NOT_MANAGED"}],
+      ["unmanaged path inside the data dir", {projectId: PID, repository: {path: managedDir}}, {ok: false, reason: "REPOSITORY_PATH_FORBIDDEN"}],
+      ["unmanaged path that contains the data dir", {projectId: PID, repository: {path: tmp}}, {ok: false, reason: "REPOSITORY_PATH_FORBIDDEN"}],
+      ["unmanaged path equal to the data dir", {projectId: PID, repository: {path: dataDir}}, {ok: false, reason: "REPOSITORY_PATH_FORBIDDEN"}],
+      ["unmanaged path that does not exist", {projectId: PID, repository: {path: path.join(outside, "missing")}}, {ok: false, reason: "REPOSITORY_PATH_NOT_FOUND"}],
+      ["unmanaged path that is a file", {projectId: PID, repository: {path: file}}, {ok: false, reason: "REPOSITORY_PATH_NOT_FOUND"}],
+      ["managed repo whose directory is missing", {projectId: "prj_" + "c".repeat(24), repository: {path: path.join(dataDir, "projects", "prj_" + "c".repeat(24), "repo"), managed: true}}, {ok: false, reason: "REPOSITORY_PATH_NOT_FOUND"}],
+      ["ok: unmanaged directory outside the data dir", {projectId: PID, repository: {path: outside}}, {ok: true, src: real(outside)}],
+      ["ok: managed repo at its canonical place", {projectId: PID, repository: {path: managedDir, managed: true}}, {ok: true, src: real(managedDir)}],
+      ["ok: unmanaged path with dot-dot segments returns the CANONICAL src", {projectId: PID, repository: {path: `${outside}${path.sep}x${path.sep}..`}}, {ok: true, src: real(outside)}],
+      ["ok: managed path with dot-dot segments returns the CANONICAL src", {projectId: PID, repository: {path: `${managedDir}${path.sep}..${path.sep}repo`, managed: true}}, {ok: true, src: real(managedDir)}],
+      ["a url never overrides a usable path", {projectId: PID, repository: {path: outside, url: "https://example.invalid/r.git"}}, {ok: true, src: real(outside)}]
+    ];
+    for (const [label, project, expected] of cases) expect([label, repositoryPrecondition(project, dataDir)]).toEqual([label, expected]);
+    expect(fs.readdirSync(dataDir, {recursive: true}).map(String).sort()).toEqual(before);
+  });
+
+  it("the runner blocks a run with exactly the function's reason for each failure, before any executor starts; a usable repository goes on to IMPLEMENT", { timeout: T }, async () => {
+    const mkCtx = (repository: Record<string, unknown> | undefined): {c: Ctx; fake: FakeExecutors} => {
+      const base = setup("tA"), dataDir = path.join(tmp, `data-x-${crypto.randomBytes(3).toString("hex")}`);
+      const store = new WorkOsStore(dataDir);
+      const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", testCommand: ["node", "test.mjs"], ...(repository ? {repository: repository as never} : {})});
+      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+      return {c: {...base, store, dataDir, missionId: m.missionId, projectId: p.projectId}, fake: new FakeExecutors(okScript())};
+    };
+    const outside = fs.mkdtempSync(path.join(tmp, "plain-")), missing = path.join(outside, "missing");
+    const cases: Array<[string, Record<string, unknown> | undefined, string]> = [
+      ["no repository", undefined, "REPOSITORY_NOT_CONFIGURED"], ["url", {url: "https://example.invalid/r.git"}, "REMOTE_REPO_NOT_SUPPORTED_YET"],
+      ["managed flag, foreign path", {path: outside, managed: true}, "REPOSITORY_NOT_MANAGED"], ["missing directory", {path: missing}, "REPOSITORY_PATH_NOT_FOUND"]
+    ];
+    for (const [label, repository, reason] of cases) {
+      const {c, fake} = mkCtx(repository);
+      expect([label, repositoryPrecondition(c.store.getProject({tenantId: "tA"}, c.projectId)!, c.dataDir)]).toEqual([label, {ok: false, reason}]);
+      const r = start(c, fake);
+      await runner(c, fake).tick();
+      expect([label, runOf(c, r.runId).status, runOf(c, r.runId).reason, fake.calls.implement]).toEqual([label, "BLOCKED", reason, 0]);
+    }
+    // forbidden: the unmanaged path lies inside the run's own data dir
+    const f = mkCtx(undefined);
+    const inside = path.join(f.c.dataDir, "inside-repo"); fs.mkdirSync(inside, {recursive: true});
+    const fp = f.c.store.createProject({tenantId: "tA", orgId: "o1", name: "F", environmentId: "dev", createdBy: "FOUNDER_LOCAL", testCommand: ["node", "test.mjs"], repository: {path: inside}});
+    const fm = f.c.store.createMission({tenantId: "tA", projectId: fp.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) f.c.store.transitionMission({tenantId: "tA"}, fm.missionId, to, "test", "FOUNDER_LOCAL");
+    const fr = f.c.store.createRun({tenantId: "tA", missionId: fm.missionId, executor: {implementer: "FAKE_IMPLEMENTER", reviewer: "FAKE_REVIEWER"}, createdBy: "FOUNDER_LOCAL"});
+    await runner(f.c, f.fake).tick();
+    expect([f.c.store.getRun({tenantId: "tA"}, fr.runId)!.reason, f.fake.calls.implement]).toEqual(["REPOSITORY_PATH_FORBIDDEN", 0]);
+    // a usable repository passes the precondition and reaches the executor
+    const ok = setup("tA"), okFake = new FakeExecutors(okScript());
+    expect(repositoryPrecondition(ok.store.getProject({tenantId: "tA"}, ok.projectId)!, ok.dataDir)).toEqual({ok: true, src: fs.realpathSync.native(ok.repo)});
+    const okRun = start(ok, okFake);
+    await runner(ok, okFake).tick();
+    expect(okFake.calls.implement).toBeGreaterThanOrEqual(1);
+    expect(runOf(ok, okRun.runId).status).toBe("AWAITING_APPROVAL");
+  });
+
+  it("the runner verifies with the mission's testCommand when both are set, and with the project's when the mission has none", { timeout: T }, async () => {
+    const dataDir = path.join(tmp, `data-tc-${crypto.randomBytes(3).toString("hex")}`), { repo } = makeRepo(crypto.randomBytes(4).toString("hex"));
+    for (const [label, projectCmd, missionCmd, expected] of [["mission passes, project would fail", ["node", "never.mjs"], ["node", "test.mjs"], "AWAITING_APPROVAL"], ["mission would fail, project passes", ["node", "test.mjs"], ["node", "never.mjs"], "BLOCKED"], ["mission none, project passes", ["node", "test.mjs"], undefined, "AWAITING_APPROVAL"]] as const) {
+      const store = new WorkOsStore(path.join(dataDir, label.replace(/\W+/g, "-"))), runtime = path.join(tmp, `rt-${crypto.randomBytes(3).toString("hex")}`);
+      fs.mkdirSync(runtime, {recursive: true});
+      const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: [...projectCmd]});
+      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL", ...(missionCmd ? {testCommand: [...missionCmd]} : {})});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+      const c: Ctx = {store, dataDir: path.join(dataDir, label.replace(/\W+/g, "-")), runtime, stopFile: path.join(runtime, "GLOBAL_STOP.json"), repo, head: "", missionId: m.missionId, projectId: p.projectId};
+      const fake = new FakeExecutors(okScript());
+      const r = start(c, fake);
+      await runner(c, fake, {maxRemediations: 0}).tick();
+      expect([label, runOf(c, r.runId).status]).toEqual([label, expected]);
+    }
   });
 });

@@ -65,7 +65,7 @@ function upstreamKindsOf(kind: ArtifactKind): ArtifactKind[] {
 }
 
 // Doğrulayıcının istediği üst içerik zarfı; apply.ts'teki upstreamFor ile birebir aynı eşleme (tutarlılık için).
-function toUpstreamContents(kind: ArtifactKind, approved: Partial<Record<ArtifactKind, ArtifactContent>>): UpstreamContents {
+export function toUpstreamContents(kind: ArtifactKind, approved: Partial<Record<ArtifactKind, ArtifactContent>>): UpstreamContents {
   if (kind === "Requirements") return {businessAnalysis: approved.BusinessAnalysis as BusinessAnalysisContent | undefined};
   if (kind === "Plan") return {requirements: approved.Requirements as RequirementsContent | undefined};
   if (kind === "Architecture") return {plan: approved.Plan as PlanContent | undefined};

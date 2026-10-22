@@ -86,6 +86,27 @@ export function providerLimit(exitCode: number | null, log: string): "QUOTA_EXHA
 }
 const limitNote = (l: ExecutorLimit) => (l === "DISK_FULL" ? "RESOURCE_LIMIT: DISK_FULL" : `PROVIDER_LIMIT: ${l}`);
 const limitBlock = (l: ExecutorLimit): Outcome => ({kind: "BLOCK", reason: l === "DISK_FULL" ? "DISK_FULL" : "PROVIDER_QUOTA"});
+// //TR: Test komutu önceliği (mission komutu proje komutunu ezer) ve depo/workspace önkoşulu SAF fonksiyonlardır; runner aynı noktada aynı sırayla çağırır, readiness.ts (salt-okunur) aynı fonksiyonları içe aktarır — ikinci kural yoktur.
+export const effectiveTestCommand = (m: {testCommand?: string[]} | undefined, p: {testCommand?: string[]} | undefined): string[] | undefined => m?.testCommand ?? p?.testCommand;
+export type RepositoryPrecondition = {ok: true; src: string} | {ok: false; reason: string};
+// PS1A-C2-F1 (derinlemesine savunma): yönetilen depo yalnız bu projenin <dataDir>/projects/<id>/repo kanonik yolundan; yönetilmeyen yol ise kanonik biçimi
+// (8.3 kısa ad/junction açılmış) veri dizininin içinde/üstünde olmamalıdır (başka tenant'ın yönetilen deposu, journal). Aksi halde klonlanmaz.
+export function repositoryPrecondition(project: {projectId: string; repository?: {path?: string; url?: string; managed?: boolean}}, dataDir: string): RepositoryPrecondition {
+  const repo = project.repository;
+  if (!repo?.path) return {ok: false, reason: repo?.url ? "REMOTE_REPO_NOT_SUPPORTED_YET" : "REPOSITORY_NOT_CONFIGURED"};
+  let src: string;
+  if (repo.managed === true) {
+    const m = managedRepoCanonical(dataDir, project.projectId, repo.path);
+    if (!m) return {ok: false, reason: "REPOSITORY_NOT_MANAGED"};
+    src = m;
+  } else {
+    const g = pathOverlapsDataDir(repo.path, dataDir);
+    if (g.forbidden) return {ok: false, reason: "REPOSITORY_PATH_FORBIDDEN"};
+    src = g.canonical;
+  }
+  if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) return {ok: false, reason: "REPOSITORY_PATH_NOT_FOUND"};
+  return {ok: true, src};
+}
 
 export class MissionRunner {
   readonly engineId = `engine_${crypto.randomBytes(6).toString("hex")}`;
@@ -339,7 +360,7 @@ export class MissionRunner {
   }
   private rawTestCommand(run: WorkRun): string[] | undefined {
     const m = this.o.store.getMission({tenantId: run.tenantId}, run.missionId), p = this.o.store.getProject({tenantId: run.tenantId}, run.projectId);
-    return m?.testCommand ?? p?.testCommand;
+    return effectiveTestCommand(m, p);
   }
   // REL-FX-2: reviewer'a verilen test yüzeyi, run.headSha için en son TEST_SURFACE kanıtından.
   private reviewerTestSurface(run: WorkRun): ReviewerTestSurface | undefined {
@@ -397,21 +418,9 @@ export class MissionRunner {
     const notice = hostExecutionNotice(mission.riskLevel);
     const project = this.o.store.getProject({tenantId: run.tenantId}, run.projectId);
     if (!project) return {kind: "BLOCK", reason: "PROJECT_NOT_FOUND"};
-    const repo = project.repository;
-    if (!repo?.path) return {kind: "BLOCK", reason: repo?.url ? "REMOTE_REPO_NOT_SUPPORTED_YET" : "REPOSITORY_NOT_CONFIGURED"};
-    // PS1A-C2-F1 (derinlemesine savunma): yönetilen depo yalnız bu projenin <dataDir>/projects/<id>/repo kanonik yolundan; yönetilmeyen yol ise kanonik biçimi
-    // (8.3 kısa ad/junction açılmış) veri dizininin içinde/üstünde olmamalıdır (başka tenant'ın yönetilen deposu, journal). Aksi halde klonlanmaz.
-    let src: string;
-    if (repo.managed === true) {
-      const m = managedRepoCanonical(this.o.dataDir, project.projectId, repo.path);
-      if (!m) return {kind: "BLOCK", reason: "REPOSITORY_NOT_MANAGED"};
-      src = m;
-    } else {
-      const g = pathOverlapsDataDir(repo.path, this.o.dataDir);
-      if (g.forbidden) return {kind: "BLOCK", reason: "REPOSITORY_PATH_FORBIDDEN"};
-      src = g.canonical;
-    }
-    if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) return {kind: "BLOCK", reason: "REPOSITORY_PATH_NOT_FOUND"};
+    const pre = repositoryPrecondition(project, this.o.dataDir);
+    if (!pre.ok) return {kind: "BLOCK", reason: pre.reason};
+    const src = pre.src;
     const base = this.gitOk(src, ["rev-parse", "--verify", "HEAD^{commit}"]);
     if (!base || !SHA.test(base)) return {kind: "BLOCK", reason: "REPOSITORY_HEAD_UNRESOLVED"};
     const dir = this.runDir(run.runId), work = path.join(dir, "work"), branch = `uasco/run/${run.runId}`;
