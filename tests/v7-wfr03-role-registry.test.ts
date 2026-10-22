@@ -1147,9 +1147,11 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     const nl = evaluated(await evaluate(predevPair(() => `{\n${KEY}\n}`), BA));
     for (const f of [nl.artifactFile, nl.evidenceFile]) expect(fs.readFileSync(f, "utf8")).not.toContain(KEY);
     expect(fs.readFileSync(nl.artifactFile, "utf8")).toContain("[REDACTED:AWS_ACCESS_KEY]");
-    const named = evaluated(await evaluate(fakePair({implement: () => ({files: {"greeting.txt": "hello\n", [`a\n${KEY}.txt`]: "x\n"}})}), DEV));
-    expect(JSON.stringify(named)).not.toContain(KEY);
-    for (const f of [named.artifactFile, named.evidenceFile]) expect(fs.readFileSync(f, "utf8")).not.toContain(KEY);
+    if (process.platform !== "win32") { // a file name containing a line break cannot exist on Windows
+      const named = evaluated(await evaluate(fakePair({implement: () => ({files: {"greeting.txt": "hello\n", [`a\n${KEY}.txt`]: "x\n"}})}), DEV));
+      expect(JSON.stringify(named)).not.toContain(KEY);
+      for (const f of [named.artifactFile, named.evidenceFile]) expect(fs.readFileSync(f, "utf8")).not.toContain(KEY);
+    }
     // the evidence hash binds the redacted bytes, so the staged file still verifies when the pair is non-FAKE
     expect(createEvidenceVerifier(path.resolve(path.dirname(path.dirname(path.dirname(path.dirname(path.dirname(dev.evidenceFile)))))))(dev.evidenceRef, DEV, "EV-01", "FAILED")).toBe("FAKE_EVIDENCE");
   });
