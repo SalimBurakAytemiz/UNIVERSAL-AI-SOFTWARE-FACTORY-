@@ -100,7 +100,7 @@ describe("B7 electron-builder configuration (static)", () => {
     const pkg = JSON.parse(read("package.json"));
     expect(pkg.devDependencies["electron-builder"]).toMatch(/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
     expect(pkg.version).toMatch(/^0\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
-    expect(pkg.dependencies).toEqual({"ajv": "8.20.0", "ajv-formats": "3.0.1", "fastify": "5.12.5"});
+    expect(pkg.dependencies).toEqual({"ajv": "8.20.0", "ajv-formats": "3.0.1", "fastify": "5.12.7"});
     expect(pkg.scripts["dist:win"]).toBe("node scripts/build-installer.mjs");
     expect(pkg.scripts.dev).toBe("concurrently -k \"npm:control-api\" \"npm:desktop\"");
     expect(pkg.scripts.desktop).toBe("electron apps/desktop/main.mjs");
