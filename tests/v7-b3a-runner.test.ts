@@ -1099,7 +1099,8 @@ describe("LANE-C runner exports: effectiveTestCommand and repositoryPrecondition
     const dataDir = mkdir(tmp, "data"), outside = mkdir(tmp, "outside-repo"), managedDir = mkdir(dataDir, "projects", PID, "repo"), otherManaged = mkdir(dataDir, "projects", OTHER, "repo");
     const file = path.join(tmp, "a-file.txt"); fs.writeFileSync(file, "x");
     const before = fs.readdirSync(dataDir, {recursive: true}).map(String).sort();
-    const real = (x: string) => fs.realpathSync(x);
+    // //TR: Windows'ta tmp yolu 8.3 kısa ad (RUNNER~1) olabilir; fonksiyon kanonik yolu döndürür, beklenen değer de gerçek yoldan (native) kurulur.
+    const real = (x: string) => fs.realpathSync.native(x);
     const cases: Array<[string, Parameters<typeof repositoryPrecondition>[0], ReturnType<typeof repositoryPrecondition>]> = [
       ["no repository at all", {projectId: PID}, {ok: false, reason: "REPOSITORY_NOT_CONFIGURED"}],
       ["empty repository object", {projectId: PID, repository: {}}, {ok: false, reason: "REPOSITORY_NOT_CONFIGURED"}],
@@ -1157,7 +1158,7 @@ describe("LANE-C runner exports: effectiveTestCommand and repositoryPrecondition
     expect([f.c.store.getRun({tenantId: "tA"}, fr.runId)!.reason, f.fake.calls.implement]).toEqual(["REPOSITORY_PATH_FORBIDDEN", 0]);
     // a usable repository passes the precondition and reaches the executor
     const ok = setup("tA"), okFake = new FakeExecutors(okScript());
-    expect(repositoryPrecondition(ok.store.getProject({tenantId: "tA"}, ok.projectId)!, ok.dataDir)).toEqual({ok: true, src: fs.realpathSync(ok.repo)});
+    expect(repositoryPrecondition(ok.store.getProject({tenantId: "tA"}, ok.projectId)!, ok.dataDir)).toEqual({ok: true, src: fs.realpathSync.native(ok.repo)});
     const okRun = start(ok, okFake);
     await runner(ok, okFake).tick();
     expect(okFake.calls.implement).toBeGreaterThanOrEqual(1);
