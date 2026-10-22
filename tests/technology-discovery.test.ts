@@ -44,7 +44,8 @@ describe("SC-14 Project Memory core",()=>{
     expect(m.get(a.id)).toEqual(a);
     expect(mk(root).all()).toEqual([a,b,c]);
     expect(m.verify()).toMatchObject({state:"OK",reason:null,records:3,lastSeq:3,lastHash:c.hash});
-    expect(m.journalFile).toBe(path.join(fs.realpathSync(root),"projects",PID,"memory","journal.jsonl"));
+    // Çekirdek yolu realpathSync.native ile kanonikleştirir (Windows: 8.3 kısa ad genişler); beklenen değer de aynı çözücüyle üretilir.
+    expect(m.journalFile).toBe(path.join(fs.realpathSync.native(root),"projects",PID,"memory","journal.jsonl"));
   });
   it("reports TAMPERED for edited content and reordered lines, refusing reads and writes without repairing",()=>{
     const root=tmp(),m=mk(root);seed(m);
