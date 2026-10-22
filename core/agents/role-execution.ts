@@ -23,7 +23,7 @@ export interface RoleExecutionProfile {
   readonly knowledgeSources: readonly string[];
   readonly evaluationCriteria: readonly string[];
 }
-export type FirstDeliveryFunction = "planner" | "architect" | "developer" | "tester" | "security-reviewer" | "delivery";
+export type FirstDeliveryFunction = "business-analyst" | "requirements-engineer" | "ux-designer" | "planner" | "architect" | "developer" | "tester" | "security-reviewer" | "delivery";
 
 // //TR: Salt-okunur katalog yüzeyi (registries/role-definitions.json alanları). Hiçbir alan yazılmaz.
 export interface CatalogEvaluationSpec { evaluationId: string; status: string; evaluatorEvidenceRef?: string | null }
