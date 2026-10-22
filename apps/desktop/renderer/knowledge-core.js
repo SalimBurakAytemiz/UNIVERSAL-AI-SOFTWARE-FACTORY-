@@ -1,0 +1,68 @@
+// //TR: Bu modül Proje Bilgi Özeti'nin (GET /v1/projects/:id/knowledge: Proje Belleği + kanıt dizini, Lane B) saf, DOM'suz sıkı eşleyicisidir. Sayılar sunucunun bildirdiği gibi AYNEN taşınır, hiçbir değer türetilmez: TAMPERED bellekte sayı/baş yoktur (null), kanıt örneklenmiş (sampled) bir sayımdır ve bu açıkça belirtilir, kanıt dizini bağlı değilse ya da sorgu başarısızsa 0 UYDURULMAZ. Eksik/yanlış tipli alan, toplamla çelişen sayaç ya da durumla çelişen null kuralı TÜM okumayı ERROR yapar.
+export const MEMORY_KINDS=Object.freeze(["DECISION","FACT","SOURCE","REVISION","NOTE"]);
+export const MEMORY_STATES=Object.freeze(["OK","ABSENT","TAMPERED","TORN_TAIL"]);
+export const EVIDENCE_KINDS=Object.freeze(["WORK_RUN_STEP","WORK_RUN_LOG","REVIEW_EVIDENCE","AUDIT_CHECKPOINT"]);
+export const VERIFICATION_STATUSES=Object.freeze(["VERIFIED","MISMATCH","MISSING","UNVERIFIABLE"]);
+export const KNOWLEDGE_LIMITS=Object.freeze({heads:20,missions:10,latest:10,tags:20});
+const PROJECT_ID_RE=/^prj_[0-9a-f]{24}$/;
+const MEM_ID_RE=/^mem_\d{6,}$/;
+const EVD_ID_RE=/^evd_[0-9a-f]{24}$/;
+const SAFE_ID_RE=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
+const ISO_RE=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
+export const MAX_COUNT=1000000;
+const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
+const cnt=x=>Number.isSafeInteger(x)&&x>=0&&x<=MAX_COUNT;
+const iso=x=>{if(typeof x!=="string"||!ISO_RE.test(x))return null;const t=Date.parse(x);return Number.isFinite(t)&&new Date(t).toISOString().slice(0,10)===x.slice(0,10)?x:null};
+const str=(x,max)=>typeof x==="string"&&x.length>0&&x.length<=max?x:null;
+export const knowledgePath=projectId=>typeof projectId==="string"&&PROJECT_ID_RE.test(projectId)?`/v1/projects/${projectId}/knowledge`:null;
+/** Anahtar kümesi tam eşleşmeli ve her değer sayaç olmalı; toplam döner (yoksa null). */
+function tally(obj,keys){
+  if(!isObj(obj)||Object.keys(obj).length!==keys.length)return null;
+  let sum=0;const out={};
+  for(const k of keys){if(!cnt(obj[k]))return null;out[k]=obj[k];sum+=obj[k]}
+  return {counts:out,sum};
+}
+function mapMemory(m){
+  if(!isObj(m)||!MEMORY_STATES.includes(m.state)||!isObj(m.health)||m.health.state!==m.state)return null;
+  const h=m.health;
+  if(!cnt(h.records)||!cnt(h.lastSeq)||!cnt(h.tornTailBytes)||(h.reason!==null&&str(h.reason,200)===null))return null;
+  const health={state:h.state,reason:h.reason,records:h.records,tornTailBytes:h.tornTailBytes};
+  if(m.state==="TAMPERED"){
+    if(m.total!==null||m.byKind!==null||m.currentHeads!==null)return null;
+    return {state:m.state,health,total:null,byKind:null,currentHeads:null};
+  }
+  const t=tally(m.byKind,MEMORY_KINDS);
+  if(t===null||!cnt(m.total)||t.sum!==m.total||!Array.isArray(m.currentHeads)||m.currentHeads.length>KNOWLEDGE_LIMITS.heads)return null;
+  const heads=[];
+  for(const x of m.currentHeads){
+    if(!isObj(x)||typeof x.id!=="string"||!MEM_ID_RE.test(x.id)||!MEMORY_KINDS.includes(x.kind)||str(x.title,300)===null||iso(x.at)===null)return null;
+    if(!Array.isArray(x.tags)||x.tags.length>KNOWLEDGE_LIMITS.tags||!x.tags.every(g=>str(g,64)!==null))return null;
+    heads.push({id:x.id,kind:x.kind,title:x.title,at:x.at,tags:x.tags.slice()});
+  }
+  if(heads.length>m.total)return null;
+  return {state:m.state,health,total:m.total,byKind:t.counts,currentHeads:heads};
+}
+function mapEvidence(e){
+  if(!isObj(e))return null;
+  if(e.state==="UNAVAILABLE")return e.reason==="EVIDENCE_NOT_WIRED"?{state:"UNAVAILABLE",reason:e.reason}:null;
+  if(e.state==="ERROR")return e.reason==="EVIDENCE_QUERY_FAILED"?{state:"ERROR",reason:e.reason}:null;
+  if(e.state!=="AVAILABLE"||e.sampled!==true||typeof e.truncated!=="boolean"||!Number.isSafeInteger(e.missionsQueried)||e.missionsQueried<0||e.missionsQueried>KNOWLEDGE_LIMITS.missions||!cnt(e.total))return null;
+  const k=tally(e.byKind,EVIDENCE_KINDS),v=tally(e.byVerification,VERIFICATION_STATUSES);
+  if(k===null||v===null||k.sum!==e.total||v.sum!==e.total||!Array.isArray(e.latest)||e.latest.length>KNOWLEDGE_LIMITS.latest||e.latest.length>e.total)return null;
+  const latest=[];
+  for(const x of e.latest){
+    if(!isObj(x)||typeof x.evidenceId!=="string"||!EVD_ID_RE.test(x.evidenceId)||!EVIDENCE_KINDS.includes(x.kind)||!VERIFICATION_STATUSES.includes(x.verification))return null;
+    const at=x.createdAt===null?null:iso(x.createdAt);if(x.createdAt!==null&&at===null)return null;
+    for(const f of ["missionId","runId"])if(x[f]!==null&&(typeof x[f]!=="string"||!SAFE_ID_RE.test(x[f])))return null;
+    latest.push({evidenceId:x.evidenceId,kind:x.kind,verification:x.verification,createdAt:at,missionId:x.missionId,runId:x.runId});
+  }
+  return {state:"AVAILABLE",sampled:true,truncated:e.truncated,missionsQueried:e.missionsQueried,total:e.total,byKind:k.counts,byVerification:v.counts,latest};
+}
+/** GET /v1/projects/:id/knowledge yanıtı -> {state:"VERIFIED",knowledge:{projectId,memory,evidence}} | {state:"ERROR",knowledge:null}. Yanıttaki projectId istenenle aynı olmalıdır. */
+export function mapKnowledge(raw,projectId){
+  const bad={state:"ERROR",knowledge:null};
+  const k=isObj(raw)?raw.knowledge:null;
+  if(!isObj(k)||k.projectId!==projectId||typeof projectId!=="string"||!PROJECT_ID_RE.test(projectId))return bad;
+  const memory=mapMemory(k.memory),evidence=mapEvidence(k.evidence);
+  return memory!==null&&evidence!==null?{state:"VERIFIED",knowledge:{projectId,memory,evidence}}:bad;
+}

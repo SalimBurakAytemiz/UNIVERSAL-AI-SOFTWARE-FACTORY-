@@ -16,6 +16,7 @@ import {CONTROL_PATH,RUNS_PATH,mapOperationsControl,mapOperationsRuns,mapOperati
 import {DOMAINS_PATH,mapDomains} from "./domains-core.js";
 import {SCHEDULER_PATH,mapScheduler} from "./scheduler-core.js";
 import {CAPABILITIES_PATH,ADAPTERS_PATH,FABRICS_PATH,mapCapabilities,mapAdapters,mapFabrics} from "./integrations-core.js";
+import {knowledgePath,mapKnowledge} from "./knowledge-core.js";
 import {INSTALL_PATH,PHASE0_PATH,mapInstallReport,mapPhase0Report} from "./install-core.js";
 import {RUNS_PATH as AUDIT_RUNS_PATH,EVIDENCE_PATH as AUDIT_EVIDENCE_PATH,runEventsPath,mapAuditRuns,mapAuditEvents,mapAuditEvidence} from "./audit-core.js";
 
@@ -189,6 +190,13 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async integrationsFabrics(){const r=await get(FABRICS_PATH);return r.ok?mapFabrics(r.data):{state:r.state,registry:null,message:r.message}},
     // //TR: FA-V2-PRODUCT (UI-BUILD-SCHEDULER): Derleme Zamanlayıcı salt-okunur okuması (GET /v1/scheduler, sorgu dizesi ve POST yok); yol automation/lib/control-boundary.mjs desktopGetPathAllowed listesinde zaten vardır (yeni uç nokta yok). Başarılıysa scheduler-core eşleyicisiyle fail-closed sanitize edilir.
     async scheduler(){const r=await get(SCHEDULER_PATH);return r.ok?mapScheduler(r.data):{state:r.state,scheduler:null,message:r.message}},
+    // //TR: Proje bilgi özeti (GET /v1/projects/:id/knowledge, sorgu dizesi ve POST yok); Ana süreç izin listesi girişi koordinatörün korumalı grubundadır: köprü yolu reddederse (INVALID_API_PATH) durum UNAVAILABLE'dır, hiçbir sayı uydurulmaz.
+    async projectKnowledge(projectId){
+      const p=knowledgePath(projectId);if(!p)return {state:"ERROR",knowledge:null};
+      const r=await get(p);
+      if(!r.ok)return {state:/INVALID_API_PATH/.test(String(r.message??""))?"UNAVAILABLE":r.state,knowledge:null,message:r.message};
+      return mapKnowledge(r.data,projectId);
+    },
     async raw(path){return get(path)}
   };
 }

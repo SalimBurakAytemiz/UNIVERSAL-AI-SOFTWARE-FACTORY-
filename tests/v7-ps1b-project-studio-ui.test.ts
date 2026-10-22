@@ -2187,3 +2187,131 @@ describe("test+states studio-workspace: EN/TR parity", () => {
     for (const k of pc.STUDIO_TABS) expect(en[`studio.tab.${k}`]).not.toBe(tr[`studio.tab.${k}`]);
   });
 });
+
+// //TR: LANE-A Proje bilgisi paneli (GET /v1/projects/:id/knowledge): sıkı eşleme, TAMPERED/TORN_TAIL/kanıt durumları, okunamayan kaynakta sayı uydurulmaz.
+describe("LANE-A project knowledge panel", () => {
+  const MID = "msn_" + "cd34".repeat(6), HEXID = "ef56".repeat(6);
+  const mem = (over: Record<string, any> = {}) => ({state: "OK", health: {state: "OK", reason: null, records: 3, lastSeq: 3, lastHash: "h", tornTailBytes: 0}, total: 3, byKind: {DECISION: 1, FACT: 1, SOURCE: 0, REVISION: 1, NOTE: 0},
+    currentHeads: [{id: "mem_000003", kind: "REVISION", title: "Use SQLite", at: "2026-10-22T03:00:00Z", tags: ["db"]}, {id: "mem_000002", kind: "FACT", title: "Windows first", at: "2026-10-21T03:00:00Z", tags: []}], ...over});
+  const evd = (over: Record<string, any> = {}) => ({state: "AVAILABLE", sampled: true, truncated: false, missionsQueried: 2, total: 3, byKind: {WORK_RUN_STEP: 2, WORK_RUN_LOG: 1, REVIEW_EVIDENCE: 0, AUDIT_CHECKPOINT: 0}, byVerification: {VERIFIED: 2, MISMATCH: 1, MISSING: 0, UNVERIFIABLE: 0},
+    latest: [{evidenceId: "evd_" + HEXID, kind: "WORK_RUN_STEP", verification: "VERIFIED", createdAt: "2026-10-22T03:00:00Z", missionId: MID, runId: "run_" + HEXID}], ...over});
+  const body = (m: any = mem(), e: any = evd(), pid = PID) => ({knowledge: {projectId: pid, memory: m, evidence: e}});
+  const withHealth = (state: string, extra: Record<string, any> = {}) => ({state, health: {state, reason: state === "OK" ? null : "x", records: 3, lastSeq: 3, lastHash: "h", tornTailBytes: 0, ...extra}});
+  const open = async (res: any, lang = "en") => {
+    const c = await mkCtx({get: projectsGet({[`/v1/projects/${PID}/knowledge`]: res}), lang} as any);
+    st.openProject(PID, "overview");
+    return {...c, root: mount(c.doc, await projectsView.render(c.ctx))};
+  };
+  const stats = (root: N, prefix: string) => all(root).filter(n => (n.dataset.stat ?? "").startsWith(prefix)).map(n => [n.dataset.stat, n.dataset.value]);
+
+  it("maps the real shape strictly; the project id must match the request", async () => {
+    const c = await load(rend, "knowledge-core.js");
+    expect(c.knowledgePath(PID)).toBe(`/v1/projects/${PID}/knowledge`); expect(c.knowledgePath("prj_x")).toBeNull(); expect(c.knowledgePath([PID] as any)).toBeNull();
+    const r = c.mapKnowledge(body(), PID);
+    expect(r.state).toBe("VERIFIED");
+    expect(r.knowledge.memory).toMatchObject({state: "OK", total: 3, byKind: {DECISION: 1, FACT: 1, SOURCE: 0, REVISION: 1, NOTE: 0}});
+    expect(r.knowledge.memory.currentHeads.map((x: any) => x.id)).toEqual(["mem_000003", "mem_000002"]);
+    expect(r.knowledge.evidence).toMatchObject({state: "AVAILABLE", sampled: true, total: 3});
+    expect(c.mapKnowledge(body(mem(), evd(), "prj_" + "11".repeat(12)), PID).state).toBe("ERROR");
+    expect(c.mapKnowledge(body(), "prj_x").state).toBe("ERROR");
+  });
+  it("any malformed field, a counter that contradicts its total, or a null rule broken for the state makes the whole read ERROR", async () => {
+    const c = await load(rend, "knowledge-core.js");
+    const bads: any[] = [null, [], {}, {knowledge: null}, {knowledge: {projectId: PID}}, body(null), body(mem(), null), body(mem(), {state: "AVAILABLE"}),
+      body(mem({state: "NOPE", health: {state: "NOPE", reason: null, records: 0, lastSeq: 0, lastHash: "h", tornTailBytes: 0}})),
+      body(mem({health: {state: "ABSENT", reason: null, records: 3, lastSeq: 3, lastHash: "h", tornTailBytes: 0}})),
+      body(mem({health: {state: "OK", reason: "text", records: -1, lastSeq: 3, lastHash: "h", tornTailBytes: 0}})), body(mem({health: {state: "OK", reason: 5, records: 3, lastSeq: 3, lastHash: "h", tornTailBytes: 0}})),
+      body(mem({health: {state: "OK", reason: null, records: 3, lastSeq: "3", lastHash: "h", tornTailBytes: 0}})), body(mem({health: {state: "OK", reason: null, records: 3, lastSeq: 3, lastHash: "h", tornTailBytes: 1.5}})),
+      body(mem({total: 4})), body(mem({total: "3"})), body(mem({total: null})), body(mem({byKind: {DECISION: 1, FACT: 1, SOURCE: 0, REVISION: 1}})), body(mem({byKind: {DECISION: 1, FACT: 1, SOURCE: 0, REVISION: 1, NOTE: 0, EXTRA: 0}})),
+      body(mem({byKind: {DECISION: 1, FACT: 1, SOURCE: 0, REVISION: 1, NOTE: "0"}})), body(mem({byKind: null})), body(mem({currentHeads: null})), body(mem({currentHeads: "x"})),
+      body(mem({currentHeads: Array.from({length: 21}, (_, i) => ({id: `mem_${String(i + 1).padStart(6, "0")}`, kind: "NOTE", title: "t", at: "2026-10-22T03:00:00Z", tags: []})), total: 21, byKind: {DECISION: 0, FACT: 0, SOURCE: 0, REVISION: 0, NOTE: 21}})),
+      body(mem({currentHeads: [{id: "mem_1", kind: "FACT", title: "t", at: "2026-10-22T03:00:00Z", tags: []}]})), body(mem({currentHeads: [{id: "mem_000001", kind: "OTHER", title: "t", at: "2026-10-22T03:00:00Z", tags: []}]})),
+      body(mem({currentHeads: [{id: "mem_000001", kind: "FACT", title: "", at: "2026-10-22T03:00:00Z", tags: []}]})), body(mem({currentHeads: [{id: "mem_000001", kind: "FACT", title: "t", at: "2026-02-30T03:00:00Z", tags: []}]})),
+      body(mem({currentHeads: [{id: "mem_000001", kind: "FACT", title: "t", at: "2026-10-22T03:00:00Z", tags: "db"}]})), body(mem({currentHeads: [{id: "mem_000001", kind: "FACT", title: "t", at: "2026-10-22T03:00:00Z", tags: [5]}]})),
+      body(mem({currentHeads: Array.from({length: 4}, (_, i) => ({id: `mem_00000${i + 1}`, kind: "NOTE", title: "t", at: "2026-10-22T03:00:00Z", tags: []}))})),
+      body(mem({...withHealth("TAMPERED"), total: 3, byKind: null, currentHeads: null})), body(mem({...withHealth("TAMPERED"), total: null, byKind: mem().byKind, currentHeads: null})), body(mem({...withHealth("TAMPERED"), total: null, byKind: null, currentHeads: []})),
+      body(mem(), {state: "UNAVAILABLE", reason: "OTHER"}), body(mem(), {state: "ERROR", reason: "EVIDENCE_NOT_WIRED"}), body(mem(), {state: "WHATEVER", reason: "EVIDENCE_NOT_WIRED"}),
+      body(mem(), evd({sampled: false})), body(mem(), evd({truncated: "no"})), body(mem(), evd({missionsQueried: 11})), body(mem(), evd({missionsQueried: -1})), body(mem(), evd({total: 4})), body(mem(), evd({byKind: {WORK_RUN_STEP: 2, WORK_RUN_LOG: 1, REVIEW_EVIDENCE: 0}})),
+      body(mem(), evd({byVerification: {VERIFIED: 2, MISMATCH: 0, MISSING: 0, UNVERIFIABLE: 0}})), body(mem(), evd({latest: "x"})), body(mem(), evd({latest: Array.from({length: 11}, () => evd().latest[0]), total: 11, byKind: {WORK_RUN_STEP: 11, WORK_RUN_LOG: 0, REVIEW_EVIDENCE: 0, AUDIT_CHECKPOINT: 0}, byVerification: {VERIFIED: 11, MISMATCH: 0, MISSING: 0, UNVERIFIABLE: 0}})),
+      body(mem(), evd({total: 0, byKind: {WORK_RUN_STEP: 0, WORK_RUN_LOG: 0, REVIEW_EVIDENCE: 0, AUDIT_CHECKPOINT: 0}, byVerification: {VERIFIED: 0, MISMATCH: 0, MISSING: 0, UNVERIFIABLE: 0}})),
+      body(mem(), evd({latest: [{...evd().latest[0], evidenceId: "evd_1"}]})), body(mem(), evd({latest: [{...evd().latest[0], kind: "X"}]})), body(mem(), evd({latest: [{...evd().latest[0], verification: "X"}]})), body(mem(), evd({latest: [{...evd().latest[0], createdAt: "yesterday"}]})),
+      body(mem(), evd({latest: [{...evd().latest[0], missionId: 5}]})), body(mem(), evd({latest: [{...evd().latest[0], runId: ""}]}))];
+    bads.forEach((b, i) => { const r = c.mapKnowledge(b, PID); expect([i, r.state, r.knowledge]).toEqual([i, "ERROR", null]); });
+  });
+  it("valid edge shapes are accepted: TAMPERED with nulls, ABSENT empty memory, 20 heads, null dates and ids in the sample, the two evidence-unavailable forms", async () => {
+    const c = await load(rend, "knowledge-core.js");
+    const ok = (b: any) => c.mapKnowledge(b, PID);
+    expect(ok(body({...withHealth("TAMPERED"), total: null, byKind: null, currentHeads: null})).knowledge.memory).toMatchObject({state: "TAMPERED", total: null, byKind: null, currentHeads: null});
+    expect(ok(body({...withHealth("ABSENT", {records: 0, lastSeq: 0}), total: 0, byKind: {DECISION: 0, FACT: 0, SOURCE: 0, REVISION: 0, NOTE: 0}, currentHeads: []})).state).toBe("VERIFIED");
+    const heads = Array.from({length: 20}, (_, i) => ({id: `mem_${String(i + 1).padStart(6, "0")}`, kind: "NOTE", title: "t".repeat(300), at: "2026-10-22T03:00:00.123Z", tags: Array.from({length: 20}, () => "g".repeat(64))}));
+    expect(ok(body(mem({currentHeads: heads, total: 20, byKind: {DECISION: 0, FACT: 0, SOURCE: 0, REVISION: 0, NOTE: 20}}))).state).toBe("VERIFIED");
+    expect(ok(body(mem({currentHeads: [{...heads[0], title: "t".repeat(301)}], total: 1, byKind: {DECISION: 0, FACT: 0, SOURCE: 0, REVISION: 0, NOTE: 1}}))).state).toBe("ERROR");
+    expect(ok(body(mem({currentHeads: [{...heads[0], tags: Array.from({length: 21}, () => "g")}], total: 1, byKind: {DECISION: 0, FACT: 0, SOURCE: 0, REVISION: 0, NOTE: 1}}))).state).toBe("ERROR");
+    expect(ok(body(mem({currentHeads: [{...heads[0], tags: ["g".repeat(65)]}], total: 1, byKind: {DECISION: 0, FACT: 0, SOURCE: 0, REVISION: 0, NOTE: 1}}))).state).toBe("ERROR");
+    expect(ok(body(mem(), evd({latest: [{...evd().latest[0], createdAt: null, missionId: null, runId: null}]}))).knowledge.evidence.latest[0]).toMatchObject({createdAt: null, missionId: null, runId: null});
+    expect(ok(body(mem(), evd({missionsQueried: 10}))).state).toBe("VERIFIED"); expect(ok(body(mem(), evd({missionsQueried: 0}))).state).toBe("VERIFIED");
+    const ten = Array.from({length: 10}, () => evd().latest[0]);
+    expect(ok(body(mem(), evd({latest: ten, total: 10, byKind: {WORK_RUN_STEP: 10, WORK_RUN_LOG: 0, REVIEW_EVIDENCE: 0, AUDIT_CHECKPOINT: 0}, byVerification: {VERIFIED: 10, MISMATCH: 0, MISSING: 0, UNVERIFIABLE: 0}}))).state).toBe("VERIFIED");
+    const big = c.MAX_COUNT ?? 1000000;
+    expect(ok(body(mem({total: big, byKind: {DECISION: big, FACT: 0, SOURCE: 0, REVISION: 0, NOTE: 0}, currentHeads: []}))).state).toBe("VERIFIED");
+    expect(ok(body(mem({total: big + 1, byKind: {DECISION: big + 1, FACT: 0, SOURCE: 0, REVISION: 0, NOTE: 0}, currentHeads: []}))).state).toBe("ERROR");
+    // ids must be real strings (a one-element array is not coerced into an id) and the kind sum must match the total on its own
+    expect(ok(body(mem({currentHeads: [{id: ["mem_000001"], kind: "FACT", title: "t", at: "2026-10-22T03:00:00Z", tags: []}]}))).state).toBe("ERROR");
+    expect(ok(body(mem(), evd({latest: [{...evd().latest[0], evidenceId: ["evd_" + HEXID]}]}))).state).toBe("ERROR");
+    expect(ok(body(mem(), evd({byKind: {WORK_RUN_STEP: 1, WORK_RUN_LOG: 1, REVIEW_EVIDENCE: 0, AUDIT_CHECKPOINT: 0}}))).state).toBe("ERROR");
+    expect(ok(body(mem(), evd({byVerification: {VERIFIED: 1, MISMATCH: 1, MISSING: 0, UNVERIFIABLE: 0}}))).state).toBe("ERROR");
+    expect(ok(body(mem(), {state: "UNAVAILABLE", reason: "EVIDENCE_NOT_WIRED"})).knowledge.evidence).toEqual({state: "UNAVAILABLE", reason: "EVIDENCE_NOT_WIRED"});
+    expect(ok(body(mem(), {state: "ERROR", reason: "EVIDENCE_QUERY_FAILED"})).knowledge.evidence).toEqual({state: "ERROR", reason: "EVIDENCE_QUERY_FAILED"});
+  });
+  it("renders memory counts per kind (separate), current entries, and the evidence sample with its 'sample' wording", async () => {
+    const o = await open(body());
+    const p = byId(o.root, "studio-ov-knowledge")!;
+    expect(stats(p, "memory-")).toEqual([["memory-total", "3"], ["memory-DECISION", "1"], ["memory-FACT", "1"], ["memory-SOURCE", "0"], ["memory-REVISION", "1"], ["memory-NOTE", "0"]]);
+    expect(all(p).filter(n => "memoryId" in n.dataset).map(n => n.dataset.memoryId)).toEqual(["mem_000003", "mem_000002"]);
+    expect(stats(p, "evidence-")).toEqual([["evidence-total", "3"], ["evidence-VERIFIED", "2"], ["evidence-MISMATCH", "1"], ["evidence-MISSING", "0"], ["evidence-UNVERIFIABLE", "0"]]);
+    const s = all(p).find(n => "knowledgeSampled" in n.dataset)!; expect(s.dataset.truncated).toBe("0"); expect(text(s)).toContain("A sample, not the full index");
+    expect(all(p).filter(n => "evidenceId" in n.dataset)).toHaveLength(1);
+    expect(o.calls.get).toContain(`/v1/projects/${PID}/knowledge`); expect(o.calls.post).toEqual([]);
+    const t = await open(body(mem(), evd({truncated: true})));
+    expect(text(all(byId(t.root, "studio-ov-knowledge")!).find(n => "knowledgeSampled" in n.dataset)!)).toContain("More evidence exists");
+  });
+  it("a TAMPERED memory shows NO counts and NO entries; a torn tail says the verified part is shown", async () => {
+    const t = await open(body({...withHealth("TAMPERED"), total: null, byKind: null, currentHeads: null}));
+    const p = byId(t.root, "studio-ov-knowledge")!;
+    expect(stats(p, "memory-")).toEqual([]); expect(all(p).filter(n => "memoryId" in n.dataset)).toEqual([]);
+    expect(text(p)).toContain("failed verification"); expect(stats(p, "evidence-").length).toBe(5);
+    const torn = await open(body(mem({...withHealth("TORN_TAIL", {tornTailBytes: 17})})));
+    const tp = byId(torn.root, "studio-ov-knowledge")!; expect(text(tp)).toContain("17 bytes ignored"); expect(stats(tp, "memory-").length).toBe(6);
+    const empty = await open(body({...withHealth("ABSENT", {records: 0, lastSeq: 0}), total: 0, byKind: {DECISION: 0, FACT: 0, SOURCE: 0, REVISION: 0, NOTE: 0}, currentHeads: []}));
+    expect(text(byId(empty.root, "studio-ov-knowledge")!)).toContain("No memory entries");
+  });
+  it("evidence not wired or failing shows the reason and NO evidence figures (never an invented zero)", async () => {
+    for (const [e, word] of [[{state: "UNAVAILABLE", reason: "EVIDENCE_NOT_WIRED"}, "not connected"], [{state: "ERROR", reason: "EVIDENCE_QUERY_FAILED"}, "could not be queried"]] as const) {
+      const o = await open(body(mem(), e)); const p = byId(o.root, "studio-ov-knowledge")!;
+      expect(stats(p, "evidence-")).toEqual([]); expect(text(p)).toContain(word); expect(stats(p, "memory-").length).toBe(6);
+    }
+  });
+  it("an unreadable endpoint (404, refused by the main process, offline, malformed or another project's answer) shows a state note and no figures", async () => {
+    const miss = await open(undefined);
+    for (const node of [miss.root, (await open({knowledge: {projectId: "prj_" + "11".repeat(12), memory: mem(), evidence: evd()}})).root, (await open({nonsense: true})).root]) {
+      const p = byId(node, "studio-ov-knowledge")!; expect(p).not.toBeNull();
+      expect(stats(p, "memory-")).toEqual([]); expect(stats(p, "evidence-")).toEqual([]); expect(all(p).filter(n => "memoryId" in n.dataset)).toEqual([]);
+      expect(text(p)).toContain(`GET /v1/projects/${PID}/knowledge`);
+    }
+    const refused = await mkCtx({get: (p: string) => { if (p.endsWith("/knowledge")) throw new Error("INVALID_API_PATH"); return projectsGet()(p); }, lang: "en"} as any);
+    st.openProject(PID, "overview");
+    const rp = byId(mount(refused.doc, await projectsView.render(refused.ctx)), "studio-ov-knowledge")!;
+    expect(stats(rp, "memory-")).toEqual([]); expect(text(rp)).toMatch(/unavailable/i);
+  });
+  it("en and tr have the same knowledge keys and placeholders, and every kind and state has a label", async () => {
+    const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+    const keys = Object.keys(en).filter(k => k.startsWith("knowledge."));
+    expect(keys).toHaveLength(35);
+    const ph = (x: string) => (x.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of keys) { expect(tr[k], k).toBeTruthy(); expect(ph(tr[k]), k).toBe(ph(en[k])); }
+    expect(Object.keys(tr).filter(k => k.startsWith("knowledge."))).toHaveLength(35);
+    const c = await load(rend, "knowledge-core.js");
+    for (const k of [...c.MEMORY_KINDS, ...c.EVIDENCE_KINDS]) expect(en[`knowledge.kind.${k}`], k).toBeTruthy();
+    for (const s of c.MEMORY_STATES) { expect(en[`knowledge.mem.state.${s}`], s).toBeTruthy(); expect(en[`knowledge.mem.hint.${s}`], s).toBeTruthy(); }
+  });
+});
