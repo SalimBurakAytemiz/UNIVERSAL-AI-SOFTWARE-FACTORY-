@@ -1117,6 +1117,8 @@ describe("LANE-C runner exports: effectiveTestCommand and repositoryPrecondition
       ["managed repo whose directory is missing", {projectId: "prj_" + "c".repeat(24), repository: {path: path.join(dataDir, "projects", "prj_" + "c".repeat(24), "repo"), managed: true}}, {ok: false, reason: "REPOSITORY_PATH_NOT_FOUND"}],
       ["ok: unmanaged directory outside the data dir", {projectId: PID, repository: {path: outside}}, {ok: true, src: real(outside)}],
       ["ok: managed repo at its canonical place", {projectId: PID, repository: {path: managedDir, managed: true}}, {ok: true, src: real(managedDir)}],
+      ["ok: unmanaged path with dot-dot segments returns the CANONICAL src", {projectId: PID, repository: {path: `${outside}${path.sep}x${path.sep}..`}}, {ok: true, src: real(outside)}],
+      ["ok: managed path with dot-dot segments returns the CANONICAL src", {projectId: PID, repository: {path: `${managedDir}${path.sep}..${path.sep}repo`, managed: true}}, {ok: true, src: real(managedDir)}],
       ["a url never overrides a usable path", {projectId: PID, repository: {path: outside, url: "https://example.invalid/r.git"}}, {ok: true, src: real(outside)}]
     ];
     for (const [label, project, expected] of cases) expect([label, repositoryPrecondition(project, dataDir)]).toEqual([label, expected]);
