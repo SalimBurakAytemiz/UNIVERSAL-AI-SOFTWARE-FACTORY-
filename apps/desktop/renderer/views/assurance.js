@@ -504,3 +504,4 @@ export async function render(ctx){
     lineagePanel(ctx,res),
     detail);
 }
+export {viewSkeleton as skeleton} from "../components.js";
