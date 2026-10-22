@@ -4,6 +4,9 @@ import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
 import type {RouteDeps} from "./deps.js";
 import {PreDevDriver, PreDevDriverError, type ProjectBrief} from "../../../../core/workos/predev/driver.js";
 import {WorkOsError} from "../../../../core/workos/types.js";
+import {briefFromRecords} from "../../../../core/workos/predev/brief.js";
+import {PREDEV_AGENT_ACTOR, PreDevBuilderError} from "../../../../core/workos/predev/claude-builder.js";
+import type {ClaudePreDevBuilder} from "../../../../core/workos/predev/claude-builder.js";
 
 const Ajv = AjvModule.default;
 const ajv = new Ajv({allErrors: true, strict: true});
@@ -21,7 +24,10 @@ const NO_BRIEF: ProjectBrief = {projectName: "", isReference: false, label: "", 
 // Kararlarda builder hiç kullanılmaz (üretim Lane C'nin ajan portundadır); driver yalnız start/approveAndAdvance/reject için kurulur.
 const noBuilder = {produce: async (): Promise<string> => { throw new PreDevDriverError("PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"); }};
 
-export function registerPredevDecisionRoutes(app: any, d: RouteDeps): void {
+// //TR: preDevBuilder (isteğe bağlı): üretim BuilderPort sağlayıcısı. server.ts'te mevcut executor durumundan (getExecutors().pair?.preDevBuilder?.()) beslenir, yani Founder'ın /v1/system/executors/local-claude/enable yolu ve provenance PASS dışında bir yetki yoktur; verilmezse veya null dönerse üretim rotası 409 PREDEV_DRIVER_BUILDER_NOT_CONFIGURED verir (varsayılan davranış).
+export interface PredevRouteDeps extends RouteDeps { preDevBuilder?: () => ClaudePreDevBuilder | null }
+
+export function registerPredevDecisionRoutes(app: any, d: PredevRouteDeps): void {
   const guard = (fn: (req: any, reply: any) => unknown) => async (req: any, reply: any) => {
     try { return await fn(req, reply); }
     catch (e) {
@@ -86,5 +92,40 @@ export function registerPredevDecisionRoutes(app: any, d: RouteDeps): void {
     driver().reject(d.scope, req.params.id, req.params.artifactId, d.actor, (body as {reason: string}).reason);
     d.audit("WORKOS_PREDEV_ARTIFACT_REJECTED", {actor: d.actor, kind: "predev", missionId: req.params.id, artifactId: req.params.artifactId});
     return {predev: model(req.params.id)};
+  }));
+
+  // //TR: C-PREDEV-PRODUCE: mevcut fazın artefaktını bağlı rol (PRE_DEV_ROLE_MAP[kind][0]) üzerinden üretir ve DRAFT kaydeder; ONAYLAMAZ (Founder karar verir). Kapı sırası diğer pre-dev rotalarıyla aynıdır (kimlik 400 -> Global Stop 423 -> politika 403 -> boş gövde 400 -> misyon/tenant 404); sonra builder yoksa 409, aynı misyonda eşzamanlı ikinci çağrı 409 (çift süreç YOK). Faz/bekleyen-taslak kapıları builder çağrılmadan ÖNCE driver'dadır. Üretim idempotent DEĞİLDİR: her başarılı çağrı yeni bir model çağrısıdır.
+  const producing = new Set<string>();
+  app.post("/v1/missions/:id/predev/produce", {bodyLimit: LANE_WRITE_BODY_LIMIT}, guard(async (req: any, reply: any) => {
+    const body = req.body ?? {};
+    const id: string = req.params.id;
+    if (!validMissionId(id)) return reply.code(400).send({error: "INVALID_MISSION_ID"});
+    if (!gate(reply, "workos.predev.produce", id, body, emptyBody)) return reply;
+    if (!missionOr404(req, reply)) return reply;
+    const builder = d.preDevBuilder?.() ?? null;
+    if (!builder) return reply.code(409).send({error: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"});
+    if (producing.has(id)) return reply.code(409).send({error: "PREDEV_PRODUCE_IN_PROGRESS"});
+    producing.add(id);
+    try {
+      const store = d.getStore(), mission = store.getMission(d.scope, id)!, project = store.getProject(d.scope, mission.projectId);
+      if (!project) return reply.code(404).send({error: "WORKOS_NOT_FOUND"});
+      builder.shouldAbort = d.workosStopped;
+      const drv = new PreDevDriver({store, brief: briefFromRecords({project, mission}), builder});
+      const trace = () => builder.lastTrace;
+      const audit = (outcome: "RECORDED" | "REJECTED" | "FAILED", extra: Record<string, unknown>) => d.audit("WORKOS_PREDEV_PRODUCED", {actor: d.actor, kind: "predev", missionId: id, outcome, roleId: trace()?.roleId ?? null, artifactKind: trace()?.kind ?? null, executor: trace()?.identity ?? null, outputSha256: trace()?.outputSha256 ?? null, exitCode: trace()?.exitCode ?? null, durationMs: trace()?.durationMs ?? null, ...extra});
+      let out;
+      try { out = await drv.produceCurrentPhase(d.scope, id, PREDEV_AGENT_ACTOR); }
+      catch (e) {
+        if (e instanceof PreDevBuilderError) { audit("FAILED", {reason: e.code}); return reply.code(502).send({error: "PREDEV_BUILDER_FAILED", reason: e.code}); }
+        throw e;
+      }
+      // //TR: out.reason doğrulayıcının SABİT hata kodudur (PREDEV_DRIVER_INVALID_JSON veya validators.ts kodları); model metni asla yansıtılmaz.
+      if (out.status === "REJECTED") {
+        audit("REJECTED", {phase: out.phase, reason: out.reason});
+        return reply.code(422).send({error: "PREDEV_OUTPUT_REJECTED", kind: out.kind, phase: out.phase, reason: out.reason});
+      }
+      audit("RECORDED", {phase: out.phase, artifactId: out.artifactId, version: out.version});
+      return reply.code(201).send({produced: {status: "RECORDED", kind: out.kind, phase: out.phase, artifactId: out.artifactId, version: out.version, roleId: trace()?.roleId ?? null}, predev: model(id)});
+    } finally { producing.delete(id); }
   }));
 }

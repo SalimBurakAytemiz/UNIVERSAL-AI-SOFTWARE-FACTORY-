@@ -548,19 +548,18 @@ describe("LANE-C ClaudePreDevBuilder: production BuilderPort over the reviewer-r
 
   it("briefFromRecords: only recorded Founder fields; nothing invented (stakeholders/out-of-scope stay empty and the prompt says so)", () => {
     const project = {name: "Acme", projectType: "web" as const, techStack: ["node", "postgres"], targetOS: ["linux", "web"]};
-    const mission = {title: "Invoices", objective: "Send invoices by e-mail", acceptanceCriteria: ["an invoice is e-mailed", "failed sends are listed"]};
-    const withIntake = briefFromRecords({project, mission, intake: {idea: "A small invoicing tool for freelancers"}});
-    expect(withIntake).toEqual({
+    const mission = {title: "Invoices", objective: "A small invoicing tool for freelancers", acceptanceCriteria: ["an invoice is e-mailed", "failed sends are listed"]};
+    const full = briefFromRecords({project, mission});
+    expect(full).toEqual({
       projectName: "Acme", isReference: false, label: FOUNDER_BRIEF_LABEL, summary: "A small invoicing tool for freelancers", stakeholders: [],
-      objectives: ["Send invoices by e-mail", "Acceptance criterion: an invoice is e-mailed", "Acceptance criterion: failed sends are listed"],
+      objectives: ["A small invoicing tool for freelancers", "Acceptance criterion: an invoice is e-mailed", "Acceptance criterion: failed sends are listed"],
       constraints: ["Project type: web", "Tech stack named by the Founder: node, postgres", "Target platforms: linux, web"],
       outOfScope: [], notes: ["Mission title: Invoices", BRIEF_NOT_PROVIDED_NOTE]
     });
-    const bare = briefFromRecords({project: {name: "Bare"}, mission, intake: null});
-    expect(bare.summary).toBe("Send invoices by e-mail");
+    const bare = briefFromRecords({project: {name: "Bare"}, mission});
     expect(bare.constraints).toEqual([]);
     expect(bare.isReference).toBe(false);
-    const prompt = composeRolePrompt("BusinessAnalysis", {brief: withIntake, approvedUpstream: {}});
+    const prompt = composeRolePrompt("BusinessAnalysis", {brief: full, approvedUpstream: {}});
     expect(prompt).toContain("A small invoicing tool for freelancers");
     expect(prompt).toContain(BRIEF_NOT_PROVIDED_NOTE);
   });

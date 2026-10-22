@@ -16,6 +16,8 @@ export const PREDEV_KIND_FUNCTION: Readonly<Record<ArtifactKind, FirstDeliveryFu
   BusinessAnalysis: "business-analyst", Requirements: "requirements-engineer", Plan: "planner", Architecture: "architect", UxSpec: "ux-designer"
 };
 
+// //TR: Üretilen taslağı kaydeden aktör: Founder'dan AYRI ajan kimliği. Onay rotaları her zaman sunucu aktörünü (Founder) onaylayan yapar; kaydeden = onaylayan olamayacağı için (PREDEV_APPROVER_NOT_INDEPENDENT) ajan taslağı yalnız bağımsız Founder kararıyla onaylanır. Hesap verebilirlik: WORKOS_PREDEV_PRODUCED audit kaydı Founder aktörünü + rol kimliğini taşır.
+export const PREDEV_AGENT_ACTOR = "agent:claude-predev-builder";
 export const PREDEV_BUILDER_DEFAULT_TIMEOUT_MS = 600_000;
 export const PREDEV_BUILDER_MAX_PROMPT_BYTES = 256 * 1024;
 export const PREDEV_BUILDER_MAX_OUTPUT_BYTES = 256 * 1024;
