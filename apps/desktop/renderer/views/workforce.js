@@ -275,3 +275,4 @@ export async function render(ctx,route){
     panel(ctx,{titleKey:"workforce.live.title",id:"wf-live"},liveRunsBody(ctx,runs)),
     ...catalogSection(ctx,catalog,detail,agents));
 }
+export {viewSkeleton as skeleton} from "../components.js";

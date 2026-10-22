@@ -2,7 +2,7 @@
 import {h,panel,stateNote,emptyNote,badge,statePill} from "../components.js";
 import {LANGS} from "../i18n.js";
 import {PILL_KINDS} from "../model.js";
-import {executorsPanel} from "./executors-panel.js";
+import {executorsPanel,routingPanel} from "./executors-panel.js";
 import {computeContrastRows,readTokens} from "../contrast-core.js";
 
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
@@ -136,6 +136,7 @@ export async function render(ctx){
   return h(doc,"div",{class:"view"},h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.settings.title")}),
     connectionPanel(ctx,exec),
     await executorsPanel(ctx),
+    await routingPanel(ctx),
     governancePanel(ctx,control,sandbox),
     appPanel(ctx,health,factory,sandbox),
     legendPanel(ctx),
@@ -144,3 +145,4 @@ export async function render(ctx){
     panel(ctx,{titleKey:"settings.shortcuts",id:"settings-keys"},h(doc,"dl",{class:"kv"},h(doc,"dt",{},h(doc,"kbd",{text:"Ctrl+K"})),h(doc,"dd",{text:ctx.t("shortcut.search")}),h(doc,"dt",{},h(doc,"kbd",{text:"Esc"})),h(doc,"dd",{text:ctx.t("shortcut.esc")}),h(doc,"dt",{},h(doc,"kbd",{text:"Tab"})),h(doc,"dd",{text:ctx.t("shortcut.tab")}))),
     panel(ctx,{titleKey:"settings.principal",id:"settings-principal"},h(doc,"p",{class:"mono",text:ctx.principal}),h(doc,"p",{class:"note",text:ctx.t("settings.principalNote")})));
 }
+export {viewSkeleton as skeleton} from "../components.js";
