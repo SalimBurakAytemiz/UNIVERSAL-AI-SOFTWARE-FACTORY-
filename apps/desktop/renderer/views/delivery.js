@@ -1,7 +1,7 @@
 // //TR: Bu görünüm Teslimat & SRE alanıdır (UX WP-DELIVERY): yalnız allow-list'li salt-okunur GET verisine bağlanır ve hiçbir veriyi uydurmaz. Operasyonel sağlık (GET /health, /v1/control/status, /v1/founder-attention) ve yayın hazırlığı (GET /v1/work-runs) gerçek kaynaklardan okunur; üretilen kaynağın teslim/dışa aktarımı gerçek olarak (Project Studio > Teslim köprüsü uasco.exportDelivery) belirtilir. GERÇEK ÜRETİM DEPLOY eylemleri ve CANLI SRE izleme Founder kapılıdır (gerçek-deploy yetkisi + FD-REL-1): bunlar sahte buton veya uydurma uptime/SLO metriği olarak değil, kapıyı açıkça anan BLOCKED/NOT_CONNECTED durumları olarak gösterilir. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
 import {h,panel,statePill,statusPill,stateNote,emptyNote,badge} from "../components.js";
 import {MISSING} from "../model.js";
-import {formatDateTime} from "../work-core.js";
+import {formatDateTime,isProductVerified} from "../work-core.js";
 
 /** Gerçek, allow-list'li okuma kaynakları (hepsi main.mjs izin listesinde zaten var; yeni yetki eklenmez). */
 const SOURCES=Object.freeze(["health","control","attention","runs"]);
@@ -64,7 +64,7 @@ function releasePanel(ctx,runs,kinds){
       h(doc,"caption",{class:"sr-only",text:ctx.t("delivery.release.title")}),
       h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
       h(doc,"tbody",{},runs.items.slice(0,100).map(r=>{
-        const verified=r.testsExecuted===true;
+        const verified=isProductVerified(r);
         return h(doc,"tr",{dataset:{deliveryRun:r.runId,product:verified?"PRODUCT_VERIFIED":"NOT_VERIFIED"}},
           h(doc,"td",{class:"mono",text:r.runId}),
           h(doc,"td",{},r.status&&r.status!==MISSING?statusPill(ctx,r.status):MISSING),

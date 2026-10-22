@@ -1049,7 +1049,7 @@ describe("Posture — route delegation (app.js VIEWS unchanged, #/assurance unto
     expect(routes.routeFromHash("#/posture/")).toBe("posture");
     expect(routes.routeFromHash("#/postures")).toBe(routes.DEFAULT_ROUTE);
     expect(routes.routeFromHash("#/Posture")).toBe(routes.DEFAULT_ROUTE);
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-12)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-15)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "domains", "integrations", "scheduler", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("posture");
     expect(routes.ROUTES.filter((x: any) => x.factory).length).toBe(8);
     // Eski rotalar etkilenmez; #/assurance kendi görünümüdür (tek sahiplik).
@@ -1087,3 +1087,247 @@ describe("Posture — route delegation (app.js VIEWS unchanged, #/assurance unto
     expect(i18n.translate("en", "area.posture.desc")).toContain("Read-only.");
   });
 });
+// //TR: UI-BUILD-SCHEDULER Derleme Zamanlayıcı (#/scheduler) — faz bazlı zamanlayıcı ilerlemesinin salt-okunur görünümü; fixture'lar GERÇEK roadmap/scheduler-state.template.json biçiminden türetilir (sunucu doğrulanmış durumu `verification:"VERIFIED"` ile döndürür). Sunucu VERIFIED demedikçe faz/ilerleme uydurulmaz; COMPLETED ürün doğrulaması ya da teslim değildir.
+const SCHED_TPL: any = JSON.parse(fs.readFileSync(path.join(root, "roadmap", "scheduler-state.template.json"), "utf8"));
+const SHA = "a".repeat(40);
+const schedPhase = (n: number, over: Record<string, any> = {}) => ({phase: n, status: "PENDING", attempts: 0, lastRunId: null, completedCommit: null, evidenceRefs: [], ...over});
+const SCHED_OK: any = {schemaVersion: SCHED_TPL.schemaVersion, verification: "VERIFIED", updatedAt: "2026-10-18T10:00:00.000Z", active: [2], blocked: [{phase: 3, reason: "x", kind: "FOUNDER_ATTENTION", at: "2026-10-18T10:00:00.000Z"}],
+  phases: [schedPhase(3, {status: "BLOCKED", attempts: 2, lastFailure: "needs founder"}), schedPhase(1, {status: "COMPLETED", attempts: 1, lastRunId: "RUN-1", completedCommit: SHA, evidenceRefs: ["evd_abc"]}), schedPhase(2, {status: "ACTIVE", attempts: 1, lastRunId: "RUN-2"})]};
+const schedServe = (over: Record<string, any> = {}) => (p: string) => {
+  const m: Record<string, any> = {"/v1/scheduler": SCHED_OK, ...over};
+  if (!(p in m)) throw new Error(`${p}: HTTP 404`);
+  if (m[p] instanceof Error) throw m[p];
+  return m[p];
+};
+const schedBoom = (msg: string) => new Error(msg);
+async function renderSched(getFn: (p: string) => any, lang = "en") {
+  const view = await load("views", "scheduler.js");
+  const posts: string[] = [];
+  const m = await mkCtx(getFn, lang, (p: string) => { posts.push(p); throw new Error("POST must never be called"); });
+  const rootNode: N = await view.render(m.ctx);
+  return {root: rootNode, posts, ...m};
+}
+const schedRows = (r: N) => allData(r, "schedPhase").filter(n => n.tagName === "LI");
+const schedCount = (r: N, k: string) => all(allData(r, "schedCount", k)[0]).find(n => cls(n, "kpi-value"))!.textContent;
+const schedLines = (r: N) => all(r).map(n => n._text).filter(Boolean).join("\n");
+
+describe("Build Scheduler — route, reachability and allow-list", () => {
+  it("routes.js maps #/scheduler to the planned host (component 'scheduler', no plannedPackage), with an existing icon; app.js is untouched", async () => {
+    const routes = await load("routes.js"), icons = await load("icons.js"), i18n = await load("i18n.js");
+    const r = routes.routeById("scheduler");
+    expect(r).toMatchObject({id: "scheduler", hash: "#/scheduler", view: "planned", component: "scheduler", factory: false});
+    expect(r.plannedPackage).toBeUndefined();
+    expect(icons.ICON_NAMES).toContain(r.icon);
+    expect(routes.routeFromHash("#/scheduler")).toBe("scheduler");
+    expect(routes.routeFromHash("#/schedulerx")).toBe(routes.DEFAULT_ROUTE);
+    expect(routes.FACTORY_AREA_ORDER).not.toContain("scheduler");
+    expect(read("views", "planned.js")).toContain('import * as scheduler from "./scheduler.js"');
+    expect(read("app.js")).not.toMatch(/scheduler/);
+    for (const lang of ["en", "tr"]) expect(i18n.translate(lang, "area.scheduler.title")).not.toBe("area.scheduler.title");
+  });
+  it("GET /v1/scheduler is already admitted by the desktop allow-list; nothing else under that name is", async () => {
+    const extra = new Function(`${blockOf("B4-ALLOWLIST")}\nreturn desktopExtraGetPathAllowed;`)() as (v: unknown) => boolean;
+    const boundary = await import(pathToFileURL(path.join(root, "automation", "lib", "control-boundary.mjs")).href);
+    const allowed = (v: string) => boundary.desktopGetPathAllowed(v) || extra(v);
+    const core = await load("scheduler-core.js");
+    expect(allowed("/v1/scheduler")).toBe(true);
+    expect(core.SCHEDULER_PATH).toBe("/v1/scheduler");
+    for (const p of ["/v1/scheduler?x=1", "/v1/scheduler/run", "/v1/scheduler/retry", "/v1/schedulers"]) expect(allowed(p), p).toBe(false);
+  });
+});
+
+describe("Build Scheduler — strict mapping", () => {
+  it("maps a VERIFIED state (phase order, tally, counts, verbatim values)", async () => {
+    const core = await load("scheduler-core.js");
+    const m = core.mapScheduler(SCHED_OK);
+    expect(m.state).toBe("VERIFIED");
+    expect(m.scheduler.phases.map((p: any) => p.phase)).toEqual([1, 2, 3]);
+    expect(m.scheduler).toMatchObject({total: 3, completed: 1, activeCount: 1, blockedCount: 1});
+    expect(m.scheduler.phases[0]).toMatchObject({status: "COMPLETED", completedCommit: SHA, lastRunId: "RUN-1", evidenceRefs: ["evd_abc"]});
+  });
+  it("accepts the real supervisor formats: .ai/runtime attestation refs and the PHASE0_INSTALL_BASELINE commit marker", async () => {
+    const core = await load("scheduler-core.js");
+    const ok = (over: Record<string, any> = {}) => ({...SCHED_OK, ...over});
+    const refs = [".ai/runtime/evidence-ledger/packages/PKG-001/" + SHA + ".json", ".ai/runtime/evidence-ledger/packages/PKG-001/" + SHA + "-review-bundle.json", ".ai/runtime/runs/RUN-2026-10-18T10-00-00-000Z-1a2b3c4d/events.jsonl", ".ai/runtime/runs/RUN-1/evidence/PKG-001-review-attestation.json"];
+    const m = core.mapScheduler(ok({phases: [schedPhase(0, {status: "COMPLETED", completedCommit: "PHASE0_INSTALL_BASELINE"}), schedPhase(1, {status: "COMPLETED", completedCommit: SHA, evidenceRefs: refs})]}));
+    expect(m.state).toBe("VERIFIED");
+    expect(m.scheduler.phases.map((p: any) => p.completedCommit)).toEqual(["PHASE0_INSTALL_BASELINE", SHA]);
+    expect(m.scheduler.phases[1].evidenceRefs).toEqual(refs);
+  });
+  it("still rejects traversal, absolute, backslash, drive and unknown-marker values", async () => {
+    const core = await load("scheduler-core.js");
+    const ok = (over: Record<string, any> = {}) => ({...SCHED_OK, ...over});
+    for (const ref of ["../.ai/runtime/x.json", ".ai/../../etc/passwd", ".ai/runtime/../x", "/.ai/runtime/x.json", "/etc/passwd", "C:/x/y.json", ".ai\\runtime\\x.json", "./.ai/x", ".ai//x", ".ai/runtime/", "..", ".", ".ai/runtime/x y", "a".repeat(161)])
+      expect(core.mapScheduler(ok({phases: [schedPhase(1, {evidenceRefs: [ref]})]})).state, ref).toBe("ERROR");
+    for (const c of ["phase0_install_baseline", "PHASE0_INSTALL_BASELINE2", "PHASE0 INSTALL", "../PHASE0_INSTALL_BASELINE"])
+      expect(core.mapScheduler(ok({phases: [schedPhase(1, {completedCommit: c})]})).state, c).toBe("ERROR");
+  });
+  it("PENDING / REJECTED server verification never yields phases or counts (null, not 0)", async () => {
+    const core = await load("scheduler-core.js");
+    const p = core.buildScheduler(core.mapScheduler({status: "NOT_INITIALIZED", verification: "PENDING"}));
+    expect(p).toMatchObject({state: "PENDING", scheduler: null, total: null, completed: null, activeCount: null, blockedCount: null, pendingStatus: "NOT_INITIALIZED"});
+    const r = core.buildScheduler(core.mapScheduler({status: "INVALID", verification: "REJECTED", error: "SCHEDULER_STATE_INVALID"}));
+    expect(r).toMatchObject({state: "REJECTED", scheduler: null, total: null});
+  });
+  it("rejects malformed / contradictory / unverified-but-claimed-verified responses wholesale", async () => {
+    const core = await load("scheduler-core.js");
+    const ok = (over: Record<string, any> = {}) => ({...SCHED_OK, ...over});
+    const bads: Array<[string, any]> = [
+      ["null", null], ["arr", []], ["noverif", {phases: []}], ["weird", ok({verification: "MAYBE"})], ["nophases", ok({phases: "x"})],
+      ["dup", ok({phases: [schedPhase(1), schedPhase(1)]})], ["negphase", ok({phases: [schedPhase(-1)]})], ["lowerstatus", ok({phases: [schedPhase(1, {status: "completed"})]})],
+      ["attempts", ok({phases: [schedPhase(1, {attempts: -1})]})], ["sha", ok({phases: [schedPhase(1, {completedCommit: "../x"})]})], ["run", ok({phases: [schedPhase(1, {lastRunId: "a b"})]})],
+      ["refs", ok({phases: [schedPhase(1, {evidenceRefs: ["../../etc/passwd "]})]})], ["retryAt", ok({phases: [schedPhase(1, {retryAt: "tomorrow"})]})],
+      ["active", ok({active: "x"})], ["upd", ok({updatedAt: "yesterday"})], ["cap", ok({phases: Array.from({length: 2001}, (_, i) => schedPhase(i))})]
+    ];
+    for (const [label, raw] of bads) { const m = core.mapScheduler(raw); expect(m.state, label).toBe("ERROR"); expect(m.scheduler, label).toBeNull(); }
+  });
+});
+
+describe("Build Scheduler — mapping limits (boundaries)", () => {
+  const ph = (i: number, over: Record<string, any> = {}) => ({phase: i, status: "PENDING", attempts: 0, ...over});
+  const resp = (phases: any[], over: Record<string, any> = {}) => ({verification: "VERIFIED", schemaVersion: "1", updatedAt: "2026-10-18T10:00:00Z", phases, active: [], blocked: [], ...over});
+  const one = async (over: Record<string, any>, top: Record<string, any> = {}) => (await load("scheduler-core.js")).mapScheduler(resp([ph(1, over)], top));
+  it("accepts exactly MAX_PHASES phases and rejects one more", async () => {
+    const core = await load("scheduler-core.js");
+    expect(core.mapScheduler(resp(Array.from({length: core.MAX_PHASES}, (_, i) => ph(i)))).state).toBe("VERIFIED");
+    expect(core.mapScheduler(resp(Array.from({length: core.MAX_PHASES + 1}, (_, i) => ph(i)))).state).toBe("ERROR");
+  });
+  it("phase status must be a real string; attempts and phase number may be 0 but not negative", async () => {
+    expect((await one({status: ["ACTIVE"]})).state).toBe("ERROR");
+    expect((await one({phase: 0, attempts: 0})).state).toBe("VERIFIED");
+    expect((await one({attempts: -1})).state).toBe("ERROR");
+  });
+  it("evidence refs: at most 50, each at most 160 characters, a non-array is rejected, null means none", async () => {
+    expect((await one({evidenceRefs: Array.from({length: 50}, (_, i) => `evd_${i}`)})).state).toBe("VERIFIED");
+    expect((await one({evidenceRefs: Array.from({length: 51}, (_, i) => `evd_${i}`)})).state).toBe("ERROR");
+    expect((await one({evidenceRefs: "evd_1"})).state).toBe("ERROR");
+    expect((await one({evidenceRefs: ["a".repeat(160)]})).state).toBe("VERIFIED");
+    expect((await one({evidenceRefs: ["a".repeat(161)]})).state).toBe("ERROR");
+    const nul = await one({evidenceRefs: null});
+    expect(nul.scheduler.phases[0].evidenceRefs).toEqual([]);
+  });
+  it("run id and commit must be real strings (a one-element array is not coerced)", async () => {
+    expect((await one({lastRunId: ["run1"]})).state).toBe("ERROR");
+    expect((await one({completedCommit: ["abcdef0"]})).state).toBe("ERROR");
+    expect((await one({lastRunId: "run1", completedCommit: "abcdef0"})).state).toBe("VERIFIED");
+  });
+  it("lastFailure is cut at 300 characters, a short one is kept, an empty one is null", async () => {
+    expect((await one({lastFailure: "f".repeat(301)})).scheduler.phases[0].lastFailure).toHaveLength(300);
+    expect((await one({lastFailure: "f".repeat(300)})).scheduler.phases[0].lastFailure).toHaveLength(300);
+    expect((await one({lastFailure: "x"})).scheduler.phases[0].lastFailure).toBe("x");
+    expect((await one({lastFailure: ""})).scheduler.phases[0].lastFailure).toBeNull();
+  });
+  it("schemaVersion up to 20 characters is kept, longer is null", async () => {
+    expect((await one({}, {schemaVersion: "v".repeat(20)})).scheduler.schemaVersion).toHaveLength(20);
+    expect((await one({}, {schemaVersion: "v".repeat(21)})).scheduler.schemaVersion).toBeNull();
+  });
+  it("retryAt and updatedAt: null or absent is unknown, a malformed value rejects the whole read", async () => {
+    expect((await one({retryAt: null})).scheduler.phases[0].retryAt).toBeNull();
+    expect((await one({retryAt: "2026-10-18T10:00:00Z"})).scheduler.phases[0].retryAt).toBe("2026-10-18T10:00:00Z");
+    expect((await one({retryAt: "soon"})).state).toBe("ERROR");
+    expect((await one({}, {updatedAt: null})).scheduler.updatedAt).toBeNull();
+    expect((await one({}, {updatedAt: "yesterday"})).state).toBe("ERROR");
+  });
+  it("active and blocked: absent counts as 0, a non-array is rejected, lengths are counted", async () => {
+    expect((await one({}, {active: undefined, blocked: undefined})).scheduler).toMatchObject({activeCount: 0, blockedCount: 0});
+    expect((await one({}, {active: "x"})).state).toBe("ERROR");
+    expect((await one({}, {blocked: {}})).state).toBe("ERROR");
+    expect((await one({}, {active: [1, 2], blocked: [3]})).scheduler).toMatchObject({activeCount: 2, blockedCount: 1});
+  });
+  it("status tally sorts by count descending then by name", async () => {
+    const core = await load("scheduler-core.js");
+    const r = core.mapScheduler(resp([ph(1, {status: "PENDING"}), ph(2, {status: "ACTIVE"}), ph(3, {status: "BLOCKED"}), ph(4, {status: "BLOCKED"}), ph(5, {status: "COMPLETED"})]));
+    expect(r.scheduler.byStatus).toEqual([{value: "BLOCKED", count: 2}, {value: "ACTIVE", count: 1}, {value: "COMPLETED", count: 1}, {value: "PENDING", count: 1}]);
+  });
+  it("PENDING keeps only a well-formed status; failed reads keep OFFLINE and UNAVAILABLE", async () => {
+    const core = await load("scheduler-core.js");
+    expect(core.mapScheduler({verification: "PENDING", status: "NOT_INITIALIZED"}).scheduler.status).toBe("NOT_INITIALIZED");
+    expect(core.mapScheduler({verification: "PENDING", status: "not valid"}).scheduler.status).toBeNull();
+    for (const [i, o] of [["OFFLINE", "OFFLINE"], ["UNAVAILABLE", "UNAVAILABLE"], ["ERROR", "ERROR"], ["X", "ERROR"]]) {
+      const r = core.buildScheduler({state: i, scheduler: null});
+      expect([r.state, r.total]).toEqual([o, null]);
+    }
+  });
+});
+
+describe("Build Scheduler — rendering (read-only, honest states, accessibility)", () => {
+  it("renders every phase with verbatim values, exact counts, no controls, no writes, exactly one GET, no product-verified claim", async () => {
+    const {root, posts, calls} = await renderSched(schedServe());
+    expect(cls(root, "view-scheduler")).toBe(true);
+    expect(byId(root, "view-title")!.textContent).toBe("Build Scheduler");
+    expect(schedRows(root).map(n => n.dataset.schedPhase)).toEqual(["1", "2", "3"]);
+    expect(schedRows(root).map(n => n.dataset.status)).toEqual(["COMPLETED", "ACTIVE", "BLOCKED"]);
+    expect(schedCount(root, "total")).toBe("3");
+    expect(schedCount(root, "completed")).toBe("1");
+    expect(schedCount(root, "active")).toBe("1");
+    expect(schedCount(root, "blocked")).toBe("1");
+    expect(schedLines(schedRows(root)[0])).toContain(SHA);
+    expect(schedLines(schedRows(root)[2])).toContain("needs founder");
+    expect(all(root).filter(n => ["BUTTON", "A", "INPUT", "SELECT", "FORM"].includes(n.tagName)).length).toBe(0);
+    expect(all(root).some(n => n.ls.size > 0)).toBe(false);
+    expect(posts).toEqual([]);
+    expect([...calls]).toEqual(["/v1/scheduler"]);
+    expect(surface(root)).not.toContain(FORBIDDEN);
+    for (const li of schedRows(root)) expect(schedLines(li)).not.toMatch(/\b(verified|delivered|shipped|certified|healthy|ready)\b/i);
+  });
+  it("accessibility: a single focusable h1, a labelled phase list, a labelled counts group, and status roles on state blocks", async () => {
+    const {root} = await renderSched(schedServe());
+    const h1s = all(root).filter(n => n.tagName === "H1");
+    expect(h1s.length).toBe(1);
+    expect(h1s[0].attrs.get("tabindex")).toBe("-1");
+    expect(all(root).find(n => n.tagName === "UL" && n.attrs.get("aria-label") === "Scheduler phases")).toBeTruthy();
+    expect(all(root).find(n => n.attrs.get("role") === "group" && n.attrs.get("aria-label") === "Scheduler phase counts")).toBeTruthy();
+    const down = await renderSched(schedServe({"/v1/scheduler": schedBoom("fetch failed")}));
+    expect(byData(down.root, "schedState")!.attrs.get("role")).toBe("status");
+    expect(byData(down.root, "schedWithheld")!.attrs.get("role")).toBe("status");
+  });
+  it("NOT_INITIALIZED (PENDING) and REJECTED states show no phases and dash counts, and say so honestly", async () => {
+    for (const [body, st] of [[{status: "NOT_INITIALIZED", verification: "PENDING"}, "PENDING"], [{status: "INVALID", verification: "REJECTED", error: "SCHEDULER_STATE_INVALID"}, "REJECTED"]] as const) {
+      const {root} = await renderSched(schedServe({"/v1/scheduler": body}));
+      expect(schedRows(root).length).toBe(0);
+      for (const k of ["total", "completed", "active", "blocked"]) expect(schedCount(root, k)).toBe("—");
+      expect(byData(root, "schedState", st)).toBeTruthy();
+      expect(byData(root, "schedWithheld")).toBeTruthy();
+      expect(byData(root, "schedEmpty")).toBeUndefined();
+    }
+  });
+  it("a read failure shows an honest state and dash counts (never 0, never an empty list)", async () => {
+    for (const err of [schedBoom("fetch failed"), schedBoom("HTTP 404"), schedBoom("HTTP 500")]) {
+      const {root} = await renderSched(schedServe({"/v1/scheduler": err}));
+      expect(schedCount(root, "total")).toBe("—");
+      expect(schedRows(root).length).toBe(0);
+      expect(byData(root, "schedWithheld")).toBeTruthy();
+      expect(byData(root, "schedEmpty")).toBeUndefined();
+    }
+  });
+  it("a malformed response claiming VERIFIED is rejected whole (no partial phases)", async () => {
+    const {root} = await renderSched(schedServe({"/v1/scheduler": {...SCHED_OK, phases: [schedPhase(1), schedPhase(1)]}}));
+    expect(schedRows(root).length).toBe(0);
+    expect(schedCount(root, "total")).toBe("—");
+    expect(byData(root, "schedState", "ERROR")).toBeTruthy();
+  });
+  it("a verified state with zero phases says only that, and its totals are a real 0", async () => {
+    const {root} = await renderSched(schedServe({"/v1/scheduler": {...SCHED_OK, phases: [], active: [], blocked: []}}));
+    expect(schedCount(root, "total")).toBe("0");
+    expect(byData(root, "schedEmpty")!.textContent).toBe("The verified scheduler state contains no phases.");
+  });
+  it("server text (lastFailure) is written as text only", async () => {
+    const evil = "<img src=x onerror=alert(1)>";
+    const {root} = await renderSched(schedServe({"/v1/scheduler": {...SCHED_OK, phases: [schedPhase(1, {status: "BLOCKED", lastFailure: evil})], active: [], blocked: []}}));
+    expect(all(schedRows(root)[0]).some(n => n.textContent.includes(evil))).toBe(true);
+    expect(all(schedRows(root)[0]).every(n => n.tagName !== "IMG")).toBe(true);
+  });
+  it("EN and TR render without raw i18n keys; scheduler.* locale keys have exact EN/TR key and placeholder parity", async () => {
+    for (const lang of ["en", "tr"]) for (const over of [{}, {"/v1/scheduler": schedBoom("fetch failed")}, {"/v1/scheduler": {status: "NOT_INITIALIZED", verification: "PENDING"}}, {"/v1/scheduler": {verification: "REJECTED"}}, {"/v1/scheduler": {verification: "VERIFIED", phases: "x"}}]) {
+      const {root} = await renderSched(schedServe(over), lang);
+      expect(surface(root), lang).not.toMatch(/\b(scheduler|area)\.[a-z][A-Za-z.]*\b/);
+    }
+    const en = (await load("locales", "en.js")).default, tr = (await load("locales", "tr.js")).default;
+    const keys = (o: Record<string, string>) => Object.keys(o).filter(k => k.startsWith("scheduler.") || k === "area.scheduler.title" || k === "area.scheduler.desc").sort();
+    expect(keys(en).length).toBeGreaterThan(35);
+    expect(keys(tr)).toEqual(keys(en));
+    const ph = (s: string) => (s.match(/\{[A-Za-z]+\}/g) ?? []).sort().join(",");
+    for (const k of keys(en)) { expect(tr[k].length, k).toBeGreaterThan(0); expect(ph(tr[k]), k).toBe(ph(en[k])); }
+  });
+});
+

@@ -315,3 +315,84 @@ describe("UX hardening: home negative states and a11y", () => {
     for (const k of used) expect(ph(tr[k]), k).toEqual(ph(en[k]));
   });
 });
+
+describe("UI-105 route-titled number-free loading skeleton", () => {
+  const FAKE = ["Acme", "Contoso", "Globex", "Sample Project", "Demo Store", "99%", "uptime"];
+  const LINE = 'export {viewSkeleton as skeleton} from "../components.js";';
+  const throwing = () => new Proxy({}, {get() { throw new Error("no access"); }});
+  const mk = async (lang: string) => {
+    const {ctx} = await mkCtx(() => undefined, lang);
+    ctx.api = throwing(); ctx.store = throwing(); ctx.native = throwing();
+    return ctx;
+  };
+  const covered = async () => { const {ROUTES} = await load("routes.js"); return ROUTES.filter((r: any) => r.view !== "home" && r.view !== "tower"); };
+  const FALLBACK = (ctx: any, n: N) => { expect(n.tagName).toBe("P"); expect(n.className).toBe("note"); expect(n.getAttribute("role")).toBe("status"); expect(n.textContent).toBe(ctx.t("state.LOADING")); };
+
+  it("re-exports viewSkeleton exactly once from every covered view, adds no import, and leaves tower on the fallback", async () => {
+    const comps = await load("components.js");
+    for (const r of await covered()) {
+      const mod = await load("views", `${r.view}.js`), src = read("views", `${r.view}.js`);
+      expect(mod.skeleton, r.id).toBe(comps.viewSkeleton);
+      expect(src.split("\n").filter(l => l === LINE).length, r.view).toBe(1);
+      expect(/^import[^\n]*from "\.\.\/components\.js"/m.test(src), r.view).toBe(true);
+    }
+    expect((await load("views", "tower.js")).skeleton).toBeUndefined();
+    expect(read("app.js")).toContain('typeof view.skeleton==="function"?view.skeleton(ctx,route):h(doc,"p",{class:"note",role:"status",text:ctx.t("state.LOADING")})');
+  });
+  it("renders a titled, aria-busy, number-free skeleton in tr and en without reading api/store/native", async () => {
+    const {viewSkeleton} = await load("components.js");
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
+    for (const lang of ["tr", "en"]) {
+      const ctx = await mk(lang), dict = lang === "tr" ? tr : en;
+      for (const r of await covered()) {
+        const k = `area.${r.id}.title`;
+        expect(k in tr && k in en, k).toBe(true);
+        expect(tr[k] + en[k] + tr["state.LOADING"] + en["state.LOADING"]).not.toMatch(/\{\w+\}/);
+        const root: N = viewSkeleton(ctx, r), nodes = all(root);
+        expect(root.tagName).toBe("DIV"); expect(root.className).toBe("view");
+        expect(root.getAttribute("aria-busy")).toBe("true"); expect(root.dataset.skeleton).toBe(r.id);
+        const h1 = nodes.filter(n => n.tagName === "H1");
+        expect(h1.length).toBe(1); expect(h1[0].id).toBe("view-title"); expect(h1[0].getAttribute("tabindex")).toBe("-1");
+        expect(h1[0].textContent).toBe(dict[k]); expect(h1[0].textContent).not.toBe(k);
+        const st = nodes.filter(n => n.getAttribute("role") === "status");
+        expect(st.length).toBe(1); expect(st[0].textContent).toBe(dict["state.LOADING"]);
+        const blocks = nodes.filter(n => "skeletonBlock" in n.dataset);
+        expect(blocks.length).toBe(3);
+        for (const b of blocks) { expect(b.tagName).toBe("DIV"); expect(b.className).toBe("skel-block"); expect(b.getAttribute("aria-hidden")).toBe("true"); expect(b.children.length).toBe(0); expect(b.textContent).toBe(""); }
+        expect(root.textContent).not.toMatch(/\d/);
+        for (const f of [...FAKE_REFERENCE, ...FAKE]) expect(root.textContent).not.toContain(f);
+        for (const n of nodes) { expect("kpi" in n.dataset || "pill" in n.dataset || "chip" in n.dataset).toBe(false); if ("state" in n.dataset) expect(n.dataset.state).toBe("LOADING"); }
+      }
+      const unknown = viewSkeleton(ctx, {id: "delivery", component: "nope"});
+      expect(unknown.dataset.skeleton).toBe("delivery");
+    }
+  });
+  it("never throws and falls back to the app.js one-line note on bad routes and internal errors", async () => {
+    const {viewSkeleton} = await load("components.js");
+    for (const lang of ["tr", "en"]) {
+      const ctx = await mk(lang);
+      for (const r of [undefined, null, {}, {id: 5}, {id: "nope"}]) FALLBACK(ctx, viewSkeleton(ctx, r));
+      const t = ctx.t;
+      const badT: any = {...ctx, t: (k: string, v?: any) => { if (k.startsWith("area.")) throw new Error("x"); return t(k, v); }};
+      FALLBACK(ctx, viewSkeleton(badT, {id: "work"}));
+      const real = ctx.doc;
+      const badDoc: any = {createElement: (tag: string) => { if (tag === "div" || tag === "h1") throw new Error("x"); return real.createElement(tag); }, createTextNode: (s: string) => real.createTextNode(s)};
+      FALLBACK(ctx, viewSkeleton({...ctx, doc: badDoc}, {id: "work"}));
+    }
+  });
+  it("keeps the skeleton source and CSS safe (no HTML sinks, reads, timers, inline style; token-only colours)", () => {
+    const src = read("components.js"), body = src.slice(src.indexOf("export function viewSkeleton"));
+    for (const bad of ["innerHTML", "outerHTML", "ctx.api", "ctx.store", "ctx.native", "setTimeout", "setInterval", "Math.random", "localStorage", "sessionStorage", "fetch", "style:", 'setAttribute("style"']) expect(body, bad).not.toContain(bad);
+    const css = read("styles.css"), rule = /\.skel-block\{([^}]*)\}/.exec(css);
+    expect(rule).not.toBeNull();
+    expect(rule![1]).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/);
+    expect(rule![1]).toMatch(/var\(--/);
+    expect(css.indexOf(".skel-block{")).toBeLessThan(css.indexOf("@media (prefers-reduced-motion:reduce)"));
+    expect(css.indexOf(".skel-block{")).toBeGreaterThan(css.indexOf("@media (max-width:640px)"));
+    const anim = /animation:([^;}]*)/.exec(rule![1]);
+    if (anim) expect(anim[1]).toMatch(/\bpulse\b/);
+    expect(css.match(/@keyframes pulse\b/g)?.length).toBe(1);
+    const fc = css.slice(css.indexOf("@media (forced-colors:active)"));
+    expect(/^\s*\.skel-block,[^{]*\{[^}]*border:1px solid CanvasText/m.test(fc)).toBe(true);
+  });
+});

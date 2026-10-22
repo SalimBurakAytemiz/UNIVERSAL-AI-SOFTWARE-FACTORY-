@@ -3,18 +3,20 @@ import AjvModule from "ajv";
 import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
 import type {RouteDeps} from "./deps.js";
 import {linkTaskRun, runsForTask, tasksForRun, LinkError} from "../../../../core/workos/task-run-link.js";
+import {reconcileRunTasks, OutcomeError} from "../../../../core/workos/task-outcome.js";
 
 const Ajv = AjvModule.default;
 const ajv = new Ajv({allErrors: true, strict: true});
 const check = ajv.compile({type: "object", additionalProperties: false, required: ["runId"], properties: {runId: {type: "string", pattern: "^run_[0-9a-f]{24}$"}}} as const);
 const validTaskId = (x: unknown) => typeof x === "string" && /^tsk_[0-9a-f]{24}$/.test(x);
 const validRunId = (x: unknown) => typeof x === "string" && /^run_[0-9a-f]{24}$/.test(x);
-const STATUS: Record<string, number> = {TASK_NOT_FOUND: 404, RUN_NOT_FOUND: 404, RUN_MISSION_MISMATCH: 409, TASK_NOT_LINKABLE: 409, LINK_STORE_CORRUPT: 503};
+const emptyBody = ajv.compile({type: "object", additionalProperties: false} as const);
+const STATUS: Record<string, number> = {OUTCOME_RUN_NOT_FOUND: 404, TASK_NOT_FOUND: 404, RUN_NOT_FOUND: 404, RUN_MISSION_MISMATCH: 409, TASK_NOT_LINKABLE: 409, LINK_STORE_CORRUPT: 503};
 
 export function registerTaskRunRoutes(app: any, d: RouteDeps): void {
   const guard = (fn: (req: any, reply: any) => unknown) => async (req: any, reply: any) => {
     try { return await fn(req, reply); }
-    catch (e) { return e instanceof LinkError ? reply.code(STATUS[e.code]).send({error: e.code}) : d.workosFail(reply, e); }
+    catch (e) { return e instanceof LinkError || e instanceof OutcomeError ? reply.code(STATUS[e.code]).send({error: e.code}) : d.workosFail(reply, e); }
   };
   // Tüketici ekran: görev panosu / koşu detayı (hangi görev hangi koşuyla yürütülüyor); koşu kendisi POST /v1/missions/:id/runs ile açılır.
   app.get("/v1/tasks/:id/runs", guard(async (req: any, reply: any) => {
@@ -37,5 +39,17 @@ export function registerTaskRunRoutes(app: any, d: RouteDeps): void {
     const r = linkTaskRun(d.getStore(), d.scope, d.actor, req.params.id, (body as {runId: string}).runId);
     d.audit(r.replayed ? "WORKOS_IDEMPOTENT_REPLAY" : "WORKOS_TASK_RUN_LINKED", {actor: d.actor, kind: "task-run-link", taskId: r.link.taskId, runId: r.link.runId, missionId: r.link.missionId});
     return reply.code(r.replayed ? 200 : 201).send({link: r.link});
+  }));
+  // Görev durumu koşunun gerçek sonucundan türetilir (SUCCEEDED -> DONE, başarısız/engelli -> BLOCKED, çalışıyor -> IN_PROGRESS); gövde hiçbir durum taşıyamaz. Aynı işlem sunucu döngüsünden de çağrılır (docs/authority-requests/LANE-B-task-outcomes.md).
+  app.post("/v1/work-runs/:id/tasks/reconcile", {bodyLimit: LANE_WRITE_BODY_LIMIT}, guard(async (req: any, reply: any) => {
+    if (!validRunId(req.params.id)) return reply.code(400).send({error: "INVALID_RUN_ID"});
+    const body = req.body ?? {};
+    if (d.workosStopped()) return reply.code(423).send({error: "GLOBAL_STOP_ACTIVE"});
+    const decision = d.workosPolicy("workos.task.reconcile-outcome", req.params.id, body);
+    if (!decision.allowed) { d.audit("WORKOS_WRITE_DENIED", {actor: d.actor, action: "workos.task.reconcile-outcome", reason: decision.reason}); return reply.code(403).send({error: "ACTION_DENIED", reason: decision.reason}); }
+    if (!emptyBody(body)) return reply.code(400).send({error: "INVALID_BODY"});
+    const out = reconcileRunTasks(d.getStore(), d.scope, d.actor, req.params.id);
+    for (const r of out.results) if (r.action === "TRANSITIONED") d.audit("WORKOS_TASK_OUTCOME_RECORDED", {actor: d.actor, kind: "task-outcome", runId: out.runId, runStatus: out.runStatus, taskId: r.taskId, from: r.from, to: r.to});
+    return out;
   }));
 }

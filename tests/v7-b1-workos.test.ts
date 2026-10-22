@@ -1168,3 +1168,194 @@ describe("LANE-B flow task-run summary", () => {
     expect(deriveProjectFlow(store, sc, p.projectId)!.taskRuns).toBeNull();
   });
 });
+
+// //TR: LANE-B task outcomes: görev durumu bağlı koşunun gerçek sonucundan türetilir (elle durum yok); uzlaştırma kuralları, idempotency, bağımlılık sırası, yeni koşunun eskiyi ezmesi ve route kapıları test edilir.
+describe("LANE-B task outcome reconcile", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const SC = {tenantId: "tA"}, ACT = "FOUNDER_LOCAL";
+  const mkApp = async (stopped = false, allowed = true, tenantId = "tA") => {
+    const [{default: Fastify}, {registerTaskRunRoutes}, {WorkOsError}, link] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/task-runs.js"), import("../core/workos/types.js"), import("../core/workos/task-run-link.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const audits: any[] = [];
+    registerTaskRunRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: ACT, audit: (e: string, x?: any) => { audits.push({e, x}); }, workosStopped: () => stopped,
+      workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"}, workosFail: (r: any, e: any) => r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
+    const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(SC, m.missionId, to, "go", ACT);
+    const t1 = store.createTask({tenantId: "tA", missionId: m.missionId, title: "t1", actor: ACT});
+    const t2 = store.createTask({tenantId: "tA", missionId: m.missionId, title: "t2", dependsOn: [t1.taskId], actor: ACT});
+    const run = store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: ACT});
+    return {app, store, audits, link, m, t1, t2, run};
+  };
+  const rec = (app: any, runId: string, body: unknown = {}, headers: any = hdr) => app.inject({method: "POST", url: `/v1/work-runs/${runId}/tasks/reconcile`, headers, payload: body as any});
+  const start = (store: WorkOsStore, runId: string) => { const r = store.acquireRunLease(runId, 60_000, ACT); store.transitionRun(runId, r.leaseId!, "RUNNING", "step started", ACT); return r.leaseId!; };
+  const status = (store: WorkOsStore, id: string) => store.getTask(SC, id)!.status;
+  const row = (j: any, id: string) => j.results.find((r: any) => r.taskId === id);
+
+  it("maps run state to task state: queued unchanged, running IN_PROGRESS (dependency-gated), failed BLOCKED; idempotent; audited", async () => {
+    const {app, store, audits, link, t1, t2, run} = await mkApp();
+    link.linkTaskRun(store, SC, ACT, t1.taskId, run.runId); link.linkTaskRun(store, SC, ACT, t2.taskId, run.runId);
+    const q = (await rec(app, run.runId)).json();
+    expect(q.runStatus).toBe("QUEUED"); expect(q.results.map((r: any) => r.action)).toEqual(["UNCHANGED", "UNCHANGED"]);
+    expect([status(store, t1.taskId), status(store, t2.taskId)]).toEqual(["PENDING", "PENDING"]);
+    const lease = start(store, run.runId);
+    const r1 = (await rec(app, run.runId)).json();
+    expect(row(r1, t1.taskId)).toMatchObject({from: "PENDING", to: "IN_PROGRESS", action: "TRANSITIONED"});
+    expect(row(r1, t2.taskId)).toMatchObject({action: "SKIPPED", reason: "TASK_DEPENDENCIES_NOT_DONE"});
+    const n = fs.readFileSync(path.join(tmp, "data", "journal.jsonl"), "utf8").split("\n").filter(Boolean).length;
+    const again = (await rec(app, run.runId)).json();
+    expect(row(again, t1.taskId).action).toBe("UNCHANGED");
+    expect(fs.readFileSync(path.join(tmp, "data", "journal.jsonl"), "utf8").split("\n").filter(Boolean).length).toBe(n);
+    store.transitionRun(run.runId, lease, "FAILED", "boom", ACT);
+    const f = (await rec(app, run.runId)).json();
+    expect(f.runStatus).toBe("FAILED");
+    expect([status(store, t1.taskId), status(store, t2.taskId)]).toEqual(["BLOCKED", "BLOCKED"]);
+    expect(audits.filter(a => a.e === "WORKOS_TASK_OUTCOME_RECORDED").map(a => `${a.x.taskId === t1.taskId ? "t1" : "t2"}:${a.x.from}>${a.x.to}`)).toEqual(["t1:PENDING>IN_PROGRESS", "t1:IN_PROGRESS>BLOCKED", "t2:PENDING>BLOCKED"]);
+  });
+  it("SUCCEEDED completes a dependency chain in order and DONE never regresses; a newer linked run governs the task", async () => {
+    const {app, store, link, t1, t2, run, m} = await mkApp();
+    link.linkTaskRun(store, SC, ACT, t1.taskId, run.runId); link.linkTaskRun(store, SC, ACT, t2.taskId, run.runId);
+    const succeeded = new Proxy(store, {get: (t, k) => k === "getRun" ? (s: any, id: string) => ({...t.getRun(s, id)!, status: "SUCCEEDED"}) : (t as any)[k].bind ? (t as any)[k].bind(t) : (t as any)[k]}) as WorkOsStore;
+    const {reconcileRunTasks, reconcileAllLinkedTasks} = await import("../core/workos/task-outcome.js");
+    const out = reconcileRunTasks(succeeded, SC, ACT, run.runId);
+    expect(out.results.map(r => `${r.action}:${r.to}`)).toEqual(["TRANSITIONED:DONE", "TRANSITIONED:DONE"]);
+    expect([status(store, t1.taskId), status(store, t2.taskId)]).toEqual(["DONE", "DONE"]);
+    const failedView = new Proxy(store, {get: (t, k) => k === "getRun" ? (s: any, id: string) => ({...t.getRun(s, id)!, status: "FAILED"}) : (t as any)[k].bind ? (t as any)[k].bind(t) : (t as any)[k]}) as WorkOsStore;
+    expect(reconcileRunTasks(failedView, SC, ACT, run.runId).results.map(r => r.reason)).toEqual(["TASK_ALREADY_DONE", "TASK_ALREADY_DONE"]);
+    expect(reconcileAllLinkedTasks(succeeded, SC, ACT)).toEqual([]);
+    // newer run: second mission task relinked; old run no longer governs it
+    const m2 = store.createMission(msn(m.projectId)); for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(SC, m2.missionId, to, "go", ACT);
+    const ta = store.createTask({tenantId: "tA", missionId: m2.missionId, title: "a", actor: ACT});
+    const old = store.createRun({tenantId: "tA", missionId: m2.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: ACT});
+    link.linkTaskRun(store, SC, ACT, ta.taskId, old.runId);
+    const lease = start(store, old.runId); store.transitionRun(old.runId, lease, "FAILED", "boom", ACT);
+    expect(reconcileRunTasks(store, SC, ACT, old.runId).results[0]).toMatchObject({to: "BLOCKED", action: "TRANSITIONED"});
+    store.transitionMission(SC, m2.missionId, "BLOCKED", "x", ACT); store.transitionMission(SC, m2.missionId, "PREFLIGHT", "x", ACT); store.transitionMission(SC, m2.missionId, "AUTHORIZED", "x", ACT);
+    const fresh = store.createRun({tenantId: "tA", missionId: m2.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: ACT});
+    link.linkTaskRun(store, SC, ACT, ta.taskId, fresh.runId); start(store, fresh.runId);
+    expect(reconcileRunTasks(store, SC, ACT, old.runId).results[0]).toMatchObject({action: "SKIPPED", reason: "SUPERSEDED_BY_NEWER_RUN"});
+    expect(reconcileRunTasks(store, SC, ACT, fresh.runId).results[0]).toMatchObject({from: "BLOCKED", to: "IN_PROGRESS", action: "TRANSITIONED"});
+    expect(status(store, ta.taskId)).toBe("IN_PROGRESS");
+  });
+  it("accepts no status from the client and enforces token, Global Stop, policy, ids and tenant isolation", async () => {
+    const {app, store, link, t1, run} = await mkApp();
+    link.linkTaskRun(store, SC, ACT, t1.taskId, run.runId); start(store, run.runId);
+    for (const bad of [{to: "DONE"}, {status: "DONE"}, {x: 1}]) expect((await rec(app, run.runId, bad)).statusCode).toBe(400);
+    expect(status(store, t1.taskId)).toBe("PENDING");
+    expect((await rec(app, run.runId, {}, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    expect((await rec(app, "bad")).statusCode).toBe(400);
+    expect((await rec(app, "run_" + "0".repeat(24))).statusCode).toBe(404);
+    const stop = await mkApp(true), deny = await mkApp(false, false);
+    expect((await rec(stop.app, stop.run.runId)).statusCode).toBe(423);
+    expect((await rec(deny.app, deny.run.runId)).statusCode).toBe(403);
+    expect((await rec((await mkApp(false, true, "tB")).app, run.runId)).statusCode).toBe(404);
+    expect(status(store, t1.taskId)).toBe("PENDING");
+    expect((await rec(app, run.runId)).json().results[0].action).toBe("TRANSITIONED");
+  });
+  it("targetForRun covers every run status with no positive default", async () => {
+    const {targetForRun} = await import("../core/workos/task-outcome.js"), {RUN_STATUSES} = await import("../core/workos/run-state.js");
+    const t = Object.fromEntries(RUN_STATUSES.map((s: string) => [s, targetForRun(s as any)]));
+    expect(t.SUCCEEDED).toBe("DONE");
+    for (const s of ["FAILED", "RECOVERY_FAILED", "CANCELLED", "QUARANTINED", "BLOCKED"]) expect(t[s]).toBe("BLOCKED");
+    for (const s of ["CREATED", "QUEUED"]) expect(t[s]).toBeNull();
+    for (const s of ["LEASED", "RUNNING", "VERIFYING", "AWAITING_APPROVAL", "CANCELLING", "RETRY_SCHEDULED"]) expect(t[s]).toBe("IN_PROGRESS");
+    expect(Object.values(t).filter(v => v === "DONE")).toHaveLength(1);
+  });
+});
+
+// //TR: LANE-B memory API: Proje Belleği (SC-14) route modülü; append/okuma/güncel görünüm/köken, yazma kapıları, tenant izolasyonu, sır reddi ve bozuk zincirde fail-closed davranışı gerçek dosya I/O ile test edilir.
+describe("LANE-B project memory routes", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const mkApp = async (stopped = false, allowed = true, tenantId = "tA") => {
+    const [{default: Fastify}, {registerMemoryRoutes}, {WorkOsError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/memory.js"), import("../core/workos/types.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const audits: any[] = [];
+    registerMemoryRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string, x?: any) => { audits.push({e, x}); }, workosStopped: () => stopped,
+      workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"}, workosFail: (r: any, e: any) => r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
+    return {app, store, audits, p: store.createProject(proj())};
+  };
+  const add = (app: any, pid: string, body: unknown, headers: any = hdr) => app.inject({method: "POST", url: `/v1/projects/${pid}/memory`, headers, payload: body as any});
+  const get = (app: any, url: string, headers: any = hdr) => app.inject({method: "GET", url, headers});
+  const NOW = "2026-10-22T00:00:00.000Z";
+
+  it("appends, lists, filters, searches, supersedes and returns provenance; survives restart; author is the server actor", async () => {
+    const {app, p, audits} = await mkApp(), base = `/v1/projects/${p.projectId}/memory`;
+    expect((await get(app, `${base}/health`)).json().health.state).toBe("ABSENT");
+    const a = await add(app, p.projectId, {kind: "DECISION", title: "Use SQLite", body: "Single-file store", tags: ["db"], sources: [{ref: "https://example.test/doc", retrievedAt: NOW}]});
+    expect(a.statusCode).toBe(201);
+    const rec = a.json().record;
+    expect(rec).toMatchObject({id: "mem_000001", seq: 1, kind: "DECISION", projectId: p.projectId, author: {role: "FOUNDER_LOCAL"}});
+    const b = await add(app, p.projectId, {kind: "REVISION", title: "Use Postgres", body: "Needs concurrency", supersedes: rec.id});
+    expect(b.statusCode).toBe(201);
+    await add(app, p.projectId, {kind: "NOTE", title: "Unrelated", body: "side note", tags: ["misc"]});
+    expect(audits.map(x => x.e)).toEqual(["WORKOS_MEMORY_APPENDED", "WORKOS_MEMORY_APPENDED", "WORKOS_MEMORY_APPENDED"]);
+    const { app: app2 } = await mkApp().catch(() => ({app}));
+    const all = (await get(app2, base)).json();
+    expect(all.records.map((r: any) => r.id)).toEqual(["mem_000001", "mem_000002", "mem_000003"]);
+    expect(all.health).toMatchObject({state: "OK", records: 3});
+    expect((await get(app2, `${base}?kind=NOTE`)).json().records).toHaveLength(1);
+    expect((await get(app2, `${base}?tag=db`)).json().records.map((r: any) => r.id)).toEqual(["mem_000001"]);
+    expect((await get(app2, `${base}?q=postgres`)).json().records.map((r: any) => r.id)).toEqual(["mem_000002"]);
+    expect((await get(app2, `${base}/current`)).json().current.map((e: any) => e.head.id)).toEqual(["mem_000002", "mem_000003"]);
+    expect((await get(app2, `${base}/mem_000001`)).json().record.title).toBe("Use SQLite");
+    const prov = (await get(app2, `${base}/mem_000001/provenance`)).json().provenance;
+    expect(prov.currentHeadId).toBe("mem_000002");
+    expect(JSON.stringify(a.json())).not.toContain(tmp);
+  });
+  it("refuses bad bodies, client-supplied author, secrets, bad supersedes and oversize input with fixed codes and writes nothing", async () => {
+    const {app, p, audits} = await mkApp(), base = `/v1/projects/${p.projectId}/memory`;
+    const ok = {kind: "FACT", title: "t", body: "b"};
+    for (const bad of [{}, {...ok, kind: "NOPE"}, {...ok, title: " "}, {...ok, author: {role: "ROOT"}}, {...ok, extra: 1}, {...ok, supersedes: "x"}, {...ok, sources: [{ref: "r"}]}, {...ok, tags: ["a"].concat(Array(40).fill("t"))}])
+      expect((await add(app, p.projectId, bad)).statusCode).toBe(400);
+    const key = "AKIA" + "IOSFODNN7EXAMPLE";
+    const secret = await add(app, p.projectId, {...ok, body: `key=${key}`});
+    expect(secret.statusCode).toBe(400); expect(secret.json()).toEqual({error: "MEMORY_SECRET_REJECTED"});
+    expect(secret.body).not.toContain(key);
+    const missing = await add(app, p.projectId, {...ok, supersedes: "mem_000009"});
+    expect(missing.statusCode).toBe(409); expect(missing.json().error).toBe("MEMORY_SUPERSEDES_MISSING");
+    const first = (await add(app, p.projectId, ok)).json().record;
+    expect((await add(app, p.projectId, {...ok, supersedes: first.id})).statusCode).toBe(201);
+    expect((await add(app, p.projectId, {...ok, supersedes: first.id})).json().error).toBe("MEMORY_SUPERSEDES_NOT_HEAD");
+    expect((await add(app, p.projectId, {...ok, body: "x".repeat(40 * 1024)})).statusCode).toBe(413);
+    expect((await get(app, base)).json().records).toHaveLength(2);
+    expect(audits.filter(x => x.e === "WORKOS_MEMORY_APPEND_REFUSED").map(x => x.x.reason)).toEqual(["MEMORY_SECRET_REJECTED", "MEMORY_SUPERSEDES_MISSING", "MEMORY_SUPERSEDES_NOT_HEAD"]);
+  });
+  it("enforces token, Global Stop, policy, ids, queries and tenant isolation (no memory file touched for another tenant)", async () => {
+    const {app, p} = await mkApp(), ok = {kind: "FACT", title: "t", body: "b"};
+    expect((await add(app, p.projectId, ok, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    const stop = await mkApp(true), deny = await mkApp(false, false);
+    expect((await add(stop.app, stop.p.projectId, ok)).statusCode).toBe(423);
+    const d = await add(deny.app, deny.p.projectId, ok);
+    expect(d.statusCode).toBe(403); expect(d.json().error).toBe("ACTION_DENIED");
+    expect((await add(app, "bad", ok)).statusCode).toBe(400);
+    expect((await add(app, "prj_" + "0".repeat(24), ok)).statusCode).toBe(404);
+    const base = `/v1/projects/${p.projectId}/memory`;
+    expect((await get(app, `${base}/bad`)).statusCode).toBe(400);
+    expect((await get(app, `${base}/mem_000042`)).statusCode).toBe(404);
+    expect((await get(app, `${base}?kind=NOPE`)).statusCode).toBe(400);
+    expect((await get(app, `${base}?q=${"x".repeat(201)}`)).statusCode).toBe(400);
+    const other = await mkApp(false, true, "tB");
+    expect((await get(other.app, base)).statusCode).toBe(404);
+    expect((await add(other.app, p.projectId, ok)).statusCode).toBe(404);
+    expect(fs.existsSync(path.join(tmp, "data", "projects", p.projectId, "memory"))).toBe(false);
+  });
+  it("fails closed with 503 on a tampered chain and read-only 503 on a torn tail, never repairing the file", async () => {
+    const {app, p} = await mkApp(), base = `/v1/projects/${p.projectId}/memory`, file = path.join(tmp, "data", "projects", p.projectId, "memory", "journal.jsonl");
+    await add(app, p.projectId, {kind: "FACT", title: "one", body: "b"});
+    await add(app, p.projectId, {kind: "FACT", title: "two", body: "b"});
+    const good = fs.readFileSync(file, "utf8");
+    fs.writeFileSync(file, good + '{"seq":3,"id":"mem_000003",');
+    expect((await get(app, base)).json().records).toHaveLength(2);
+    const torn = await add(app, p.projectId, {kind: "FACT", title: "three", body: "b"});
+    expect(torn.statusCode).toBe(503); expect(torn.json().error).toBe("MEMORY_READ_ONLY");
+    expect(fs.readFileSync(file, "utf8")).toBe(good + '{"seq":3,"id":"mem_000003",');
+    fs.writeFileSync(file, good.replace("one", "ONE"));
+    const bad = await get(app, base);
+    expect(bad.statusCode).toBe(503); expect(bad.json().error).toBe("MEMORY_TAMPERED");
+    expect((await get(app, `${base}/health`)).json().health.state).toBe("TAMPERED");
+    expect((await add(app, p.projectId, {kind: "FACT", title: "x", body: "b"})).json().error).toBe("MEMORY_TAMPERED");
+  });
+});
