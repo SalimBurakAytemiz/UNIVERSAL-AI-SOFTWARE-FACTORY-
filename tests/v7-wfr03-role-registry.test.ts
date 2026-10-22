@@ -962,6 +962,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       ["a top-level return in front of the real assertions (dead code)", T({"test/add.test.js": H + "return;\n" + A}), "no_early_exit"],
       ["the module is only required in a comment and add is redefined locally", T({"test/add.test.js": 'const assert = require("node:assert");\n// const add = require("../src/add");\nconst add = (a, b) => a + b;\n' + A}), "references_module"],
       ["assert messages that merely mention add() calls", T({"test/add.test.js": H + 'assert(true, "add(2, 3)");\nassert(true, "add(-2, -3)");\nassert(true, "add(0, 7)");\n'}), "assertion_count_min_3"],
+      ["assertions inside a bare block", T({"test/add.test.js": H + "{\n" + A + "}\n"}), "assertion_count_min_3"],
       ["assertions inside if (false)", T({"test/add.test.js": H + "if (false) {\n" + A + "}\n"}), "assertion_count_min_3"],
       ["assertions inside node:test callbacks (a style the mission forbids)", T({"test/add.test.js": H + 'const test = require("node:test");\ntest("a", () => { assert.strictEqual(add(2, 3), 5); });\ntest("b", () => { assert.strictEqual(add(-2, -3), -5); });\ntest("c", () => { assert.strictEqual(add(0, 7), 7); });\n'}), "assertion_count_min_3"],
       ["assertions after another statement inside a callback body", T({"test/add.test.js": H + 'const test = require("node:test");\ntest("all", () => {\n  const x = 1;\n  assert.strictEqual(add(2, 3), 5);\n  assert.strictEqual(add(-2, -3), -5);\n  assert.strictEqual(add(0, 7), 7);\n});\n'}), "assertion_count_min_3"],
@@ -1145,6 +1146,8 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect(odd.map(src => an(src).cases.length)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
       expect(odd.map(src => an(src).assertCalls)).toEqual([0, 1, 1, 1, 1, 1, 1, 1, 1, 0]);
       expect(an(`${H}assert.strictEqual(add(1, 2), 3);`).cases).toHaveLength(1);
+      // a top-level block's contents are NOT top-level (bracket depth), and the block itself is outside the grammar
+      expect([an(`${H}{ assert.strictEqual(add(2, 3), 5); }`).cases, an(`${H}{ assert.strictEqual(add(2, 3), 5); }`).tamper]).toEqual([[], "STATEMENT_NOT_ALLOWED:{"]);
       expect(an('const assert = require("node:assert");\nassert.strictEqual(add(1, 2), 3);').cases).toEqual([]); // no add binding: nothing qualifies
     });
   });

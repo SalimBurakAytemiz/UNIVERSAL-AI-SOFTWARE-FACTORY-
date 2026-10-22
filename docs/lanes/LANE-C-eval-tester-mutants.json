@@ -322,6 +322,132 @@
    "file": "core/competency/static-test-analysis.ts",
    "old": "else if (REQ_ASSERT.has(s[5].v)) { r.assertIds.push(s[1].v); decls.add(s); }",
    "new": "else { r.assertIds.push(s[1].v); decls.add(s); }"
+  },
+  {
+   "id": "C1",
+   "description": "a slash after ) taken as a regex start (verifier T8)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "(prev.t === \"p\" && prev.v !== \")\" && prev.v !== \"]\"",
+   "new": "(prev.t === \"p\" && prev.v !== \"]\""
+  },
+  {
+   "id": "C2",
+   "description": "the contents of a top-level { } block counted as top-level (verifier S3)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (t.v === \"(\" || t.v === \"[\" || t.v === \"{\") depth++;",
+   "new": "if (t.v === \"(\" || t.v === \"[\") depth++;"
+  },
+  {
+   "id": "C3",
+   "description": "raw line break allowed inside a quoted string",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "else if (ch === \"\\n\" || ch === \"\\r\") return -1; } return -1; };",
+   "new": "} return -1; };"
+  },
+  {
+   "id": "C4",
+   "description": "a slash after the return keyword taken as division",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "\"return\", \"typeof\", ",
+   "new": "\"typeof\", "
+  },
+  {
+   "id": "C5",
+   "description": "unterminated regex accepted",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "        if (j >= n) return null;\n",
+   "new": ""
+  },
+  {
+   "id": "C6",
+   "description": "hashbang not skipped",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (src.startsWith(\"#!\"))",
+   "new": "if (false)"
+  },
+  {
+   "id": "C7",
+   "description": "no ASI splitting at line breaks",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (depth === 0 && cur.length > 0 && t.nl",
+   "new": "if (false && depth === 0 && cur.length > 0 && t.nl"
+  },
+  {
+   "id": "C8",
+   "description": "continuation keywords split statements",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": " && !CONTINUES.has(t.v)",
+   "new": ""
+  },
+  {
+   "id": "C9",
+   "description": "semicolons do not end statements",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "else if (t.v === \";\" && depth === 0) { out.push(cur); cur = []; }",
+   "new": ""
+  },
+  {
+   "id": "C10",
+   "description": "a closing parenthesis does not end a statement for ASI",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "(t.t === \"p\" && (t.v === \")\" || t.v === \"]\" || t.v === \"}\")));",
+   "new": "(t.t === \"p\" && (t.v === \"]\" || t.v === \"}\")));"
+  },
+  {
+   "id": "C11",
+   "description": "any number literal accepted",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "!/^\\d+(?:\\.\\d+)?$/.test(num.v)",
+   "new": "false"
+  },
+  {
+   "id": "C12",
+   "description": "unary minus ignored",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "const neg = ts.length === 2 && ts[0].t === \"p\" && ts[0].v === \"-\";",
+   "new": "const neg = false;"
+  },
+  {
+   "id": "C13",
+   "description": "node:assert/strict not an assert spec",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "\"node:assert/strict\", ",
+   "new": ""
+  },
+  {
+   "id": "C14",
+   "description": "deepEqual not an equality method",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "\"deepStrictEqual\", \"deepEqual\"]",
+   "new": "\"deepStrictEqual\"]"
+  },
+  {
+   "id": "C15",
+   "description": "unanalysable text passes no_early_exit (verifier P8)",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "passed: an !== null && an.earlyExit === null",
+   "new": "passed: an !== null"
+  },
+  {
+   "id": "C16",
+   "description": "trivial added test never fails no_trivial_test (verifier P9)",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "passed: surface.trivialAdded.length === 0",
+   "new": "passed: true"
+  },
+  {
+   "id": "C17",
+   "description": "regular_file ignores the git mode (verifier P13)",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "passed: src !== null && mode === \"100644\"",
+   "new": "passed: src !== null"
+  },
+  {
+   "id": "C18",
+   "description": "tester gated as a developer only (verifier P14)",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "if (IMPLEMENTER_FUNCTIONS.includes(profile.function)) assertImplementerRole",
+   "new": "if (profile.function === \"developer\") assertImplementerRole"
   }
  ]
 }
