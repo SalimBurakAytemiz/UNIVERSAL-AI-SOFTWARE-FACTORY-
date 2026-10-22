@@ -179,7 +179,7 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     // //TR: UI-049: Güvence Reviews paneli; /v1/reviews ve /v1/reviews/:evd_id main allow-list'inde zaten vardır (yeni uç nokta yok, yazma yok). Liste readiness-core ile fail-closed eşlenir; detay kimliği kanonik evd_+24 hex değilse istek yapılmaz.
     async assuranceReviews(){const r=await get(REVIEWS_PATH);return r.ok?mapReadinessReviews(r.data):{state:r.state,reviews:null,message:r.message}},
     async assuranceReview(id){if(!REVIEW_ID_RE.test(String(id)))return {state:"ERROR",review:null};const r=await get(`${REVIEWS_PATH}/${id}`);return r.ok?mapReviewDetail(r.data,id):{state:r.state,review:null,message:r.message}},
-    // //TR: FA-V2-PRODUCT (UI-DOMAIN-PACKS): Alan Paketleri salt-okunur kayıt defteri okuması (GET /v1/domains, sorgu dizesi ve POST yok); main allow-list girişi koordinatör PR'ındadır, o gelene kadar okuma UNAVAILABLE döner. Başarılıysa domains-core eşleyicisiyle fail-closed sanitize edilir; okunamazsa sayı null'dır (0 değil).
+    // //TR: FA-V2-PRODUCT (UI-DOMAIN-PACKS): Alan Paketleri salt-okunur kayıt defteri okuması (GET /v1/domains, sorgu dizesi ve POST yok); yol automation/lib/control-boundary.mjs desktopGetPathAllowed listesinde zaten vardır (yeni uç nokta yok). Başarılıysa domains-core eşleyicisiyle fail-closed sanitize edilir; okunamazsa sayı null'dır (0 değil).
     async domains(){const r=await get(DOMAINS_PATH);return r.ok?mapDomains(r.data):{state:r.state,registry:null,message:r.message}},
     async raw(path){return get(path)}
   };
