@@ -12,7 +12,7 @@ import {WorkOsError} from "./types.js";
 import type {RunEvidence, RunStatus, RunStep, SecurityStageSummary, WorkRun} from "./types.js";
 import {LEASED_RUN_STATUSES} from "./run-state.js";
 import {testCommandAllowed} from "./schemas.js";
-import {managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
+import {canonicalPath, managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
 import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
 // INT-R4: runProcess (REL-FX ana-makine test çalıştırıcısı) ARTIK kullanılmaz; yürütme yalnız execution-gate sağlayıcısı (gate.provider.run) üzerinden gider, ana makinede asla.
 import {assertIndependentExecutors} from "./executors.js";
@@ -106,6 +106,22 @@ export function repositoryPrecondition(project: {projectId: string; repository?:
   }
   if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) return {ok: false, reason: "REPOSITORY_PATH_NOT_FOUND"};
   return {ok: true, src};
+}
+
+export type RepositoryHead = {ok: true; baseSha: string} | {ok: false; reason: "REPOSITORY_NOT_WORKTREE_ROOT" | "REPOSITORY_HEAD_UNRESOLVED"};
+// //TR: Depo kökü ve HEAD kararı TEK saf fonksiyondur (runner WORKSPACE adımı ve readiness.ts aynısını çağırır). `git rev-parse` yukarı doğru keşfeder: düz bir alt dizin üst deponun HEAD'ini çözerdi; bu yüzden (1) host'un TÜM GIT_* değişkenleri atılır (GIT_DIR başka bir depoyu gösterebilir), GIT_CEILING_DIRECTORIES=<üst dizin> ile keşif yukarı çıkamaz, (2) `--show-toplevel` (veya çıplak depoda `--absolute-git-dir`) kanonik anahtarla (path-guard) src'ye EŞİT olmalıdır, (3) ancak sonra HEAD tam bir commit SHA'sına çözülmelidir. Karar yalnız bu çıktılardan verilir; ceiling'siz sondaj yalnız red nedenini seçer (REPOSITORY_NOT_WORKTREE_ROOT: başka bir deponun/.git'in içinde) ve asla izin vermez.
+export function repositoryHead(src: string, baseEnv: NodeJS.ProcessEnv = process.env): RepositoryHead {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(baseEnv)) if (v !== undefined && !/^GIT_/i.test(k)) env[k] = v;
+  const probe = (args: string[], ceiling: boolean): string | null => {
+    const r = spawnGitSync(src, args, {env: ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(src)} : env, maxBuffer: 1024 * 1024});
+    return r.status === 0 ? String(r.stdout ?? "").trim() : null;
+  };
+  const isSrc = (p: string | null): boolean => { if (!p) return false; const a = canonicalPath(p), b = canonicalPath(src); return a.ok && b.ok && a.key === b.key; };
+  const root = isSrc(probe(["rev-parse", "--show-toplevel"], true)) || (probe(["rev-parse", "--is-bare-repository"], true) === "true" && isSrc(probe(["rev-parse", "--absolute-git-dir"], true)));
+  if (!root) return {ok: false, reason: probe(["rev-parse", "--git-dir"], false) !== null ? "REPOSITORY_NOT_WORKTREE_ROOT" : "REPOSITORY_HEAD_UNRESOLVED"};
+  const head = probe(["rev-parse", "--verify", "HEAD^{commit}"], true);
+  return head !== null && SHA.test(head) ? {ok: true, baseSha: head} : {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
 }
 
 export class MissionRunner {
@@ -421,8 +437,9 @@ export class MissionRunner {
     const pre = repositoryPrecondition(project, this.o.dataDir);
     if (!pre.ok) return {kind: "BLOCK", reason: pre.reason};
     const src = pre.src;
-    const base = this.gitOk(src, ["rev-parse", "--verify", "HEAD^{commit}"]);
-    if (!base || !SHA.test(base)) return {kind: "BLOCK", reason: "REPOSITORY_HEAD_UNRESOLVED"};
+    const repoHead = repositoryHead(src, safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}));
+    if (!repoHead.ok) return {kind: "BLOCK", reason: repoHead.reason};
+    const base = repoHead.baseSha;
     const dir = this.runDir(run.runId), work = path.join(dir, "work"), branch = `uasco/run/${run.runId}`;
     fs.mkdirSync(dir, {recursive: true});
     this.rmUnderRun(run.runId, work);

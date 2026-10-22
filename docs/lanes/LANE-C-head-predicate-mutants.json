@@ -1,0 +1,110 @@
+{
+ "//TR": "C-RUNNER-HEAD-PREDICATE için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/workos/runner.ts içinde TAM 1 kez geçen metni değiştirir; docs/lanes/LANE-C-head-predicate-mutants.mjs hepsini çalıştırır ve repositoryHead test grubunun her birini ÖLDÜRMESİNİ (KILLED) bekler.",
+ "mutants": [
+  {
+   "id": "H1",
+   "description": "GIT_* not stripped from the base env",
+   "file": "core/workos/runner.ts",
+   "old": "if (v !== undefined && !/^GIT_/i.test(k)) env[k] = v;",
+   "new": "if (v !== undefined) env[k] = v;"
+  },
+  {
+   "id": "H2",
+   "description": "only GIT_DIR stripped",
+   "file": "core/workos/runner.ts",
+   "old": "!/^GIT_/i.test(k)",
+   "new": "!/^GIT_DIR$/i.test(k)"
+  },
+  {
+   "id": "H3",
+   "description": "no ancestor ceiling on the deciding probes",
+   "file": "core/workos/runner.ts",
+   "old": "{env: ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(src)} : env, maxBuffer",
+   "new": "{env, maxBuffer"
+  },
+  {
+   "id": "H4",
+   "description": "ceiling is src itself instead of its parent",
+   "file": "core/workos/runner.ts",
+   "old": "GIT_CEILING_DIRECTORIES: path.dirname(src)",
+   "new": "GIT_CEILING_DIRECTORIES: src"
+  },
+  {
+   "id": "H5",
+   "description": "any toplevel counts as the root (no equality with src)",
+   "file": "core/workos/runner.ts",
+   "old": "const root = isSrc(probe([\"rev-parse\", \"--show-toplevel\"], true)) ||",
+   "new": "const root = probe([\"rev-parse\", \"--show-toplevel\"], true) !== null ||"
+  },
+  {
+   "id": "H6",
+   "description": "the .git directory accepted as a bare repository",
+   "file": "core/workos/runner.ts",
+   "old": "probe([\"rev-parse\", \"--is-bare-repository\"], true) === \"true\" &&",
+   "new": "true &&"
+  },
+  {
+   "id": "H7",
+   "description": "any directory inside a bare repository accepted",
+   "file": "core/workos/runner.ts",
+   "old": "&& isSrc(probe([\"rev-parse\", \"--absolute-git-dir\"], true))",
+   "new": "&& probe([\"rev-parse\", \"--absolute-git-dir\"], true) !== null"
+  },
+  {
+   "id": "H8",
+   "description": "commit id format check dropped",
+   "file": "core/workos/runner.ts",
+   "old": "head !== null && SHA.test(head) ?",
+   "new": "head !== null ?"
+  },
+  {
+   "id": "H9",
+   "description": "classification probe always says HEAD unresolved",
+   "file": "core/workos/runner.ts",
+   "old": "probe([\"rev-parse\", \"--git-dir\"], false) !== null ? \"REPOSITORY_NOT_WORKTREE_ROOT\" : \"REPOSITORY_HEAD_UNRESOLVED\"",
+   "new": "\"REPOSITORY_HEAD_UNRESOLVED\""
+  },
+  {
+   "id": "H10",
+   "description": "classification probe always says not the work-tree root",
+   "file": "core/workos/runner.ts",
+   "old": "probe([\"rev-parse\", \"--git-dir\"], false) !== null ? \"REPOSITORY_NOT_WORKTREE_ROOT\" : \"REPOSITORY_HEAD_UNRESOLVED\"",
+   "new": "\"REPOSITORY_NOT_WORKTREE_ROOT\""
+  },
+  {
+   "id": "H11",
+   "description": "classification probe keeps the ceiling",
+   "file": "core/workos/runner.ts",
+   "old": "probe([\"rev-parse\", \"--git-dir\"], false)",
+   "new": "probe([\"rev-parse\", \"--git-dir\"], true)"
+  },
+  {
+   "id": "H12",
+   "description": "an unresolved HEAD hides the root verdict",
+   "file": "core/workos/runner.ts",
+   "old": "if (!root) return {ok: false, reason:",
+   "new": "if (!root && probe([\"rev-parse\", \"--verify\", \"HEAD^{commit}\"], true) !== null) return {ok: false, reason:"
+  },
+  {
+   "id": "H13",
+   "description": "raw string comparison instead of the canonical key",
+   "file": "core/workos/runner.ts",
+   "old": "return a.ok && b.ok && a.key === b.key;",
+   "new": "return a.ok && b.ok && p === src;"
+  },
+  {
+   "id": "H14",
+   "description": "git output not trimmed",
+   "file": "core/workos/runner.ts",
+   "old": "maxBuffer: 1024 * 1024});\n    return r.status === 0 ? String(r.stdout ?? \"\").trim() : null;",
+   "new": "maxBuffer: 1024 * 1024});\n    return r.status === 0 ? String(r.stdout ?? \"\") : null;"
+  },
+  {
+   "id": "H15",
+   "description": "runner collapses every refusal into HEAD unresolved",
+   "file": "core/workos/runner.ts",
+   "old": "if (!repoHead.ok) return {kind: \"BLOCK\", reason: repoHead.reason};",
+   "new": "if (!repoHead.ok) return {kind: \"BLOCK\", reason: \"REPOSITORY_HEAD_UNRESOLVED\"};"
+  }
+ ]
+}
