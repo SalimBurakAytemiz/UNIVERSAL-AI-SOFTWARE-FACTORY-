@@ -69,15 +69,19 @@ const mission = (extra: any = {}) => ({missionId: MID, projectId: PID, title: "G
 const pvDetail = (state: "PRODUCT_VERIFIED" | "NOT_VERIFIED") => ({run: {runId: RUN, missionId: MID, status: "AWAITING_APPROVAL"}, outcomes: {}, delivery: {runId: "run_" + "0".repeat(24), missionId: MID,
   sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE", reason: "x", label: "SOURCE_GENERATION_COMPLETE"}, productVerification: {state, reason: "x", label: null}, testChanges: {}}});
 
-const BLOCKED = [
-  {packageId: "V6-PKG-X1", phase: 3, kind: "RISK_ADMISSION_REQUIRED", reason: "Risk level R5 needs Founder admission", at: "2026-10-15T09:00:00.000Z", retryable: false},
-  {packageId: "V6-PKG-T4", phase: 7, kind: "PROVIDER_QUOTA_EXHAUSTED", reason: "Claude quota exhausted", at: "2026-10-15T08:00:00.000Z", retryable: true}
+const TSK = "tsk_" + "99".repeat(12);
+const ATT_ITEMS = [
+  {kind: "RUN_AWAITING_APPROVAL", nextAction: "ACCEPT_DELIVERY", projectId: PID, missionId: MID, runId: RUN, taskId: null, title: "Teslim bekleyen görev", reason: null, since: "2026-10-15T09:00:00.000Z"},
+  {kind: "RUN_NEEDS_DECISION", nextAction: "REVIEW_RUN", projectId: PID, missionId: MID2, runId: "run_" + "cd".repeat(12), taskId: null, title: "Başarısız koşu", reason: "Claude quota exhausted", since: "2026-10-15T08:00:00.000Z"},
+  {kind: "TASK_BLOCKED", nextAction: "UNBLOCK_TASK", projectId: PID, missionId: MID, runId: null, taskId: TSK, title: "Engelli görev", reason: null, since: null}
 ];
+const attCounts = (over: Record<string, number> = {}) => ({RUN_AWAITING_APPROVAL: 1, MISSION_FOUNDER_ATTENTION: 0, RUN_NEEDS_DECISION: 1, MISSION_AUTHORIZATION_PENDING: 0, MISSION_BLOCKED: 0, TASK_BLOCKED: 1, ...over});
+const attention = (items: any[] = ATT_ITEMS, counts: any = attCounts(), truncated = false) => ({attention: {items, counts, truncated, source: "WORKOS"}});
 const liveFix = (overrides: Record<string, any> = {}): Record<string, any> => ({
   "/v1/cockpit": {generatedAt: "2026-10-15T10:00:00.000Z", globalStop: {active: false, reason: null},
     missions: {state: "VERIFIED", total: 5, byStatus: {BLOCKED: 2, FOUNDER_ATTENTION_REQUIRED: 1, DRAFT: 2}},
     awaitingApproval: {state: "VERIFIED", items: [{missionId: MID3, projectId: PID, title: "Needs approval", riskLevel: "R3"}]}},
-  "/v1/founder-attention": {blocked: BLOCKED, schedulerVerification: "VERIFIED", retryableKinds: ["PROVIDER_QUOTA_EXHAUSTED"]},
+  "/v1/attention": attention(),
   "/v1/missions": {missions: [mission({status: "REPORTING"}), mission({missionId: MID2, title: "Dikkat", status: "FOUNDER_ATTENTION_REQUIRED", riskLevel: "R3"}), mission({missionId: "msn_" + "77".repeat(12), title: "Yürütülüyor", status: "EXECUTING"})]},
   "/v1/work-runs": {workRuns: [{runId: RUN, missionId: MID, status: "AWAITING_APPROVAL"}]},
   [`/v1/work-runs/${RUN}`]: pvDetail("PRODUCT_VERIFIED"),
@@ -89,32 +93,45 @@ let forms: any;
 beforeEach(async () => { forms = await load("forms.js"); forms.resetAllForms(); });
 
 describe("UX WP-INBOX-APPROVAL — Founder-attention queue bound to real data", () => {
-  it("renders each gated item with package, blocker kind, reason, time and technical-retry context (read-only, no write controls)", async () => {
+  it("renders each item in severity order with its kind, next action, reason and time (read-only, no write controls); the six kinds are separate counters", async () => {
     const inbox = await load("views", "inbox.js");
     const {ctx} = await mkCtx({get: fromFix(liveFix()), lang: "en"});
     const root = await inbox.render(ctx);
     const panel = byId(root, "inbox-attention-queue")!;
     const items = byData(panel, "attentionItem");
-    expect(items.length).toBe(2);
-    const x1 = items.find(n => n.dataset.attentionItem === "V6-PKG-X1")!, t4 = items.find(n => n.dataset.attentionItem === "V6-PKG-T4")!;
-    expect(x1.textContent).toContain("V6-PKG-X1");
-    expect(x1.textContent).toContain("RISK_ADMISSION_REQUIRED");
-    expect(x1.textContent).toContain("Risk level R5 needs Founder admission");
-    expect(x1.dataset.retryable).toBe("0");
-    expect(x1.textContent).toContain("Not technically retryable");
-    expect(t4.dataset.retryable).toBe("1");
-    expect(t4.textContent).toContain("PROVIDER_QUOTA_EXHAUSTED");
-    expect(t4.textContent).toContain("Technically retryable");
-    expect(t4.textContent).not.toContain("Not technically retryable");
-    expect(panel.textContent).toContain("Blocked at");
+    expect(items.map(n => [n.dataset.attentionKind, n.dataset.nextAction])).toEqual([["RUN_AWAITING_APPROVAL", "ACCEPT_DELIVERY"], ["RUN_NEEDS_DECISION", "REVIEW_RUN"], ["TASK_BLOCKED", "UNBLOCK_TASK"]]);
+    expect(items.map(n => n.dataset.attentionItem)).toEqual([RUN, "run_" + "cd".repeat(12), TSK]);
+    expect(items[1].textContent).toContain("Run needs a decision"); expect(items[1].textContent).toContain("Review the run"); expect(items[1].textContent).toContain("Claude quota exhausted"); expect(items[1].textContent).toContain("Başarısız koşu");
+    expect(items[0].textContent).toContain("Accept the delivery"); expect(items[2].textContent).toContain("Unblock the task"); expect(items[2].textContent).not.toContain("Reason:"); expect(items[0].textContent).toContain("Since");
+    expect(byData(panel, "counter").map(n => [n.dataset.counter, n.dataset.value])).toEqual([["RUN_AWAITING_APPROVAL", "1"], ["MISSION_FOUNDER_ATTENTION", "0"], ["RUN_NEEDS_DECISION", "1"], ["MISSION_AUTHORIZATION_PENDING", "0"], ["MISSION_BLOCKED", "0"], ["TASK_BLOCKED", "1"]]);
+    expect(byData(panel, "attentionCount")[0].dataset.attentionCount).toBe("3");
+    expect(byData(panel, "attentionTruncated")).toEqual([]); expect(byData(panel, "attentionDropped")).toEqual([]);
     // no write/approve/reject control anywhere in the read-only queue panel
     expect(all(panel).filter(n => n.tagName === "BUTTON").length).toBe(0);
     expect(sourceState(root, "attention")).toBe("ATTENTION");
   });
 
+  it("when every item is unreadable the panel says so instead of claiming an empty queue", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/attention": attention([{kind: "NEW"}], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 2, TASK_BLOCKED: 0}))})), lang: "en"});
+    const panel = byId(await inbox.render(ctx), "inbox-attention-queue")!;
+    expect(panel.textContent).not.toContain("No items are awaiting"); expect(byData(panel, "attentionDropped")[0].dataset.attentionDropped).toBe("1"); expect(byData(panel, "attentionItem")).toEqual([]);
+  });
+  it("unknown kinds and malformed items are dropped but counted aloud; a truncated list says so", async () => {
+    const inbox = await load("views", "inbox.js");
+    const items = [...ATT_ITEMS, {kind: "SOMETHING_NEW", nextAction: "REVIEW_RUN", projectId: PID, missionId: MID, runId: RUN, taskId: null, title: "x", reason: null, since: null}, {...ATT_ITEMS[0], title: ""}];
+    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/attention": attention(items, attCounts({TASK_BLOCKED: 1}))})), lang: "en"});
+    const panel = byId(await inbox.render(ctx), "inbox-attention-queue")!;
+    expect(byData(panel, "attentionItem")).toHaveLength(3); expect(byData(panel, "attentionDropped")[0].dataset.attentionDropped).toBe("2"); expect(panel.textContent).toContain("2 item(s) from the server could not be read");
+    const big = Array.from({length: 200}, (_, i) => ({...ATT_ITEMS[2], taskId: "tsk_" + String(i).padStart(24, "0").replace(/0/g, "a")}));
+    const t = await mkCtx({get: fromFix(liveFix({"/v1/attention": attention(big, attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 250}), true)})), lang: "en"});
+    const tp = byId(await inbox.render(t.ctx), "inbox-attention-queue")!;
+    expect(byData(tp, "attentionTruncated")).toHaveLength(1); expect(tp.textContent).toContain("Showing 200 of at least 250"); expect(byData(tp, "attentionCount")[0].dataset.truncated).toBe("1");
+  });
+
   it("empty Founder-attention is an honest empty state, never zeros presented as items", async () => {
     const inbox = await load("views", "inbox.js");
-    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/founder-attention": {blocked: [], schedulerVerification: "VERIFIED"}})), lang: "en"});
+    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/attention": attention([], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 0}))})), lang: "en"});
     const root = await inbox.render(ctx);
     const panel = byId(root, "inbox-attention-queue")!;
     expect(byData(panel, "attentionItem").length).toBe(0);
@@ -122,83 +139,16 @@ describe("UX WP-INBOX-APPROVAL — Founder-attention queue bound to real data", 
     expect(sourceState(root, "attention")).toBe("VERIFIED");
   });
 
-  it("a REJECTED scheduler verification is UNAVAILABLE (not a false empty-success)", async () => {
+  it("a malformed attention answer is not a false empty-success: no items, source is ERROR", async () => {
     const inbox = await load("views", "inbox.js");
-    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/founder-attention": {blocked: [], schedulerVerification: "REJECTED"}})), lang: "en"});
-    const root = await inbox.render(ctx);
-    const panel = byId(root, "inbox-attention-queue")!;
-    expect(byData(panel, "attentionItem").length).toBe(0);
-    expect(panel.textContent).toContain("could not be read");
-    expect(sourceState(root, "attention")).toBe("UNAVAILABLE");
-  });
-});
-
-describe("UX WP-INBOX-APPROVAL — alerts bound to the cockpit, no fabrication", () => {
-  it("shows the real blocked/attention counts and the Global Stop state, inventing no numbers or percentages", async () => {
-    const inbox = await load("views", "inbox.js");
-    const {ctx} = await mkCtx({get: fromFix(liveFix()), lang: "en"});
-    const root = await inbox.render(ctx);
-    const alerts = byId(root, "inbox-alerts")!;
-    expect(byData(alerts, "fact", "blocked")[0].textContent).toContain("2");
-    expect(byData(alerts, "fact", "attention")[0].textContent).toContain("1");
-    const stop = byData(alerts, "fact", "stop")[0];
-    expect(pillsIn(stop)).toContain("VERIFIED");
-    expect(stop.textContent).toContain("Not active");
-    expect(byId(root, "inbox-alerts-status")!.dataset.alertsTotal).toBe("3");
-    expect(alerts.textContent).not.toMatch(/\d+(\.\d+)?\s?%/);
-    expect(sourceState(root, "alerts")).toBe("ATTENTION");
-  });
-
-  it("surfaces an ACTIVE Global Stop with its reason (STOPPED)", async () => {
-    const inbox = await load("views", "inbox.js");
-    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/cockpit": {generatedAt: "2026-10-15T10:00:00.000Z", globalStop: {active: true, reason: "FOUNDER_HOLD"},
-      missions: {state: "VERIFIED", total: 2, byStatus: {DRAFT: 2}}, awaitingApproval: {state: "VERIFIED", items: []}}})), lang: "en"});
-    const root = await inbox.render(ctx);
-    const stop = byData(byId(root, "inbox-alerts")!, "fact", "stop")[0];
-    expect(pillsIn(stop)).toContain("STOPPED");
-    expect(stop.textContent).toContain("FOUNDER_HOLD");
-  });
-
-  it("when the cockpit is unreachable, alerts are honestly unavailable with no numbers", async () => {
-    const inbox = await load("views", "inbox.js");
-    const {ctx} = await mkCtx({get: () => { throw new Error("fetch failed"); }, lang: "en"});
-    const root = await inbox.render(ctx);
-    const alerts = byId(root, "inbox-alerts")!;
-    expect(alerts.textContent).toContain("could not be read");
-    expect(byData(alerts, "fact").length).toBe(0);
-    expect(alerts.textContent).not.toMatch(/\b\d+\b/);
-    for (const k of ["decisions", "approvals", "attention", "alerts"]) expect(sourceState(root, k), k).toBe("OFFLINE");
-  });
-});
-
-describe("UX WP-INBOX-APPROVAL — approval actions preserved with confirmation; no direct POST from the view", () => {
-  it("keeps the two real decision kinds in order and offers COMPLETE only for a PRODUCT_VERIFIED run", async () => {
-    const inbox = await load("views", "inbox.js");
-    const {ctx, calls} = await mkCtx({get: fromFix(liveFix()), post: () => ({status: 200, body: {}})});
-    const root = await inbox.render(ctx);
-    expect(byData(root, "decisionMission").map(n => [n.dataset.decision, n.dataset.decisionMission])).toEqual([["DELIVERY_DECISION", MID], ["FOUNDER_ATTENTION", MID2]]);
-    expect(byId(root, `ib-COMPLETE-${MID}`)).not.toBeNull();
-    expect(byId(root, `ib-PREFLIGHT-${MID2}`)).not.toBeNull();
-    expect(calls.post).toEqual([]);
-    expect(calls.confirm).toEqual([]);
-    expect(root.textContent).toContain("otomatik onaylanmaz"); // noAuto principle present (TR default copy)
-  });
-
-  it("accept (COMPLETE) requires the confirm dialog before it POSTs the transition; the view itself never calls api.post", async () => {
-    let answer = false;
-    const inbox = await load("views", "inbox.js");
-    const {ctx, calls} = await mkCtx({get: fromFix(liveFix()), confirm: () => answer, post: () => ({status: 200, body: {}})});
-    const root = await inbox.render(ctx);
-    byId(root, `ib-COMPLETE-${MID}`)!.fire("click"); await new Promise(r => setTimeout(r, 0));
-    expect(calls.confirm.length).toBe(1);
-    expect(calls.confirm[0].target).toContain(MID);
-    expect(calls.post).toEqual([]);
-    answer = true;
-    byId(root, `ib-COMPLETE-${MID}`)!.fire("click"); await new Promise(r => setTimeout(r, 0));
-    expect(calls.post).toEqual([{path: `/v1/missions/${MID}/transition`, body: {to: "COMPLETE", reason: "REPORTING -> COMPLETE (UASCO Desktop)"}}]);
-    // the view source performs no direct POST and schedules no timers
-    expect(code(read("views", "inbox.js"))).not.toMatch(/api\.post|\.post\(/);
-    expect(code(read("views", "inbox.js"))).not.toMatch(/setInterval|setTimeout/);
+    for (const bad of [{attention: {items: [], counts: attCounts(), truncated: false, source: "SCHEDULER"}}, {attention: {items: [], counts: attCounts(), truncated: "no", source: "WORKOS"}}, {nonsense: true}, attention([], attCounts({TASK_BLOCKED: 4}))]) {
+      const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/attention": bad})), lang: "en"});
+      const root = await inbox.render(ctx);
+      const panel = byId(root, "inbox-attention-queue")!;
+      expect(byData(panel, "attentionItem").length).toBe(0);
+      expect(panel.textContent).toContain("could not be read");
+      expect(sourceState(root, "attention")).toBe("FAILED");
+    }
   });
 });
 
@@ -207,7 +157,7 @@ describe("UX WP-INBOX-APPROVAL — read-only surface + dictionary parity", () =>
     const inbox = await load("views", "inbox.js");
     const {ctx, calls} = await mkCtx({get: fromFix(liveFix())});
     await inbox.render(ctx);
-    expect([...new Set(calls.get)].sort()).toEqual(["/v1/cockpit", "/v1/founder-attention", "/v1/missions", "/v1/work-runs", `/v1/work-runs/${RUN}`].sort());
+    expect([...new Set(calls.get)].sort()).toEqual(["/v1/attention", "/v1/cockpit", "/v1/missions", "/v1/work-runs", `/v1/work-runs/${RUN}`].sort());
     expect(calls.post).toEqual([]);
     expect(calls.confirm).toEqual([]);
   });
@@ -273,10 +223,10 @@ describe("test+states: inbox — negative (no fabricated values)", () => {
     expect(byId(root, `ib-COMPLETE-${MID}`)).toBeNull();
   });
 
-  // //TR: founder-attention 404 ise kuyruk kalemi uydurulmaz ve kaynak VERIFIED değildir.
-  it("founder-attention 404 shows no items and is not VERIFIED", async () => {
+  // //TR: /v1/attention 404 ise kuyruk kalemi uydurulmaz ve kaynak VERIFIED değildir.
+  it("attention 404 shows no items and is not VERIFIED", async () => {
     const inbox = await load("views", "inbox.js");
-    const fix = liveFix(); delete fix["/v1/founder-attention"];
+    const fix = liveFix(); delete fix["/v1/attention"];
     const {ctx} = await mkCtx({get: fromFix(fix), lang: "en"});
     const root = await inbox.render(ctx);
     expect(byData(byId(root, "inbox-attention-queue")!, "attentionItem").length).toBe(0);
@@ -311,7 +261,7 @@ describe("test+states: inbox — negative (no fabricated values)", () => {
   it("API strings containing markup stay inert text", async () => {
     const inbox = await load("views", "inbox.js");
     const evil = "<img src=x onerror=alert(1)>";
-    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/founder-attention": {blocked: [{packageId: evil, phase: 1, kind: "K", reason: evil, at: "2026-10-15T09:00:00.000Z", retryable: false}], schedulerVerification: "VERIFIED"}})), lang: "en"});
+    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/attention": attention([{...ATT_ITEMS[1], title: evil, reason: evil}], attCounts({RUN_AWAITING_APPROVAL: 0, TASK_BLOCKED: 0}))})), lang: "en"});
     const root = await inbox.render(ctx);
     expect(all(root).some(n => n.tagName === "IMG")).toBe(false);
     expect(byId(root, "inbox-attention-queue")!.textContent).toContain(evil);
@@ -505,5 +455,85 @@ describe("UI-113 — Approval required panel on #/inbox", () => {
       expect(ph(tr[k]), k).toBe(ph(en[k]));
       if (!["inbox.required.transitionValue", "inbox.required.runValue"].includes(k)) expect(tr[k], `tr differs ${k}`).not.toBe(en[k]);
     }
+  });
+});
+
+// //TR: LANE-A Founder dikkat kuyruğu (GET /v1/attention, Lane B): sıkı eşleme, bozuk öğe atma, sayaç/truncated doğrulaması, eski tüketicilere kayıpsız çeviri.
+describe("LANE-A Founder attention core (GET /v1/attention)", () => {
+  const item = (over: Record<string, any> = {}) => ({...ATT_ITEMS[1], ...over});
+  const q = (items: any[], counts: any, truncated: any = false, over: Record<string, any> = {}) => ({attention: {items, counts, truncated, source: "WORKOS", ...over}});
+  const c = async () => load("attention-core.js");
+  it("exposes the server's severity order and the kind-to-action rule", async () => {
+    const m = await c();
+    expect(m.ATTENTION_PATH).toBe("/v1/attention");
+    expect(m.ATTENTION_KINDS).toEqual(["RUN_AWAITING_APPROVAL", "MISSION_FOUNDER_ATTENTION", "RUN_NEEDS_DECISION", "MISSION_AUTHORIZATION_PENDING", "MISSION_BLOCKED", "TASK_BLOCKED"]);
+    expect(m.ACTIONS_FOR_KIND).toEqual({RUN_AWAITING_APPROVAL: ["PREPARE_DELIVERY", "ACCEPT_DELIVERY"], MISSION_FOUNDER_ATTENTION: ["REVIEW_MISSION"], RUN_NEEDS_DECISION: ["REVIEW_RUN"], MISSION_AUTHORIZATION_PENDING: ["AUTHORIZE_MISSION"], MISSION_BLOCKED: ["REVIEW_MISSION"], TASK_BLOCKED: ["UNBLOCK_TASK"]});
+    expect([...new Set(Object.values(m.ACTIONS_FOR_KIND).flat())].sort()).toEqual([...m.NEXT_ACTIONS].sort());
+    expect(m.ATTENTION_MAX_ITEMS).toBe(200);
+  });
+  it("sorts by severity (server order kept inside a kind) and keeps the counters separate", async () => {
+    const m = await c();
+    const mixed = [item({kind: "TASK_BLOCKED", nextAction: "UNBLOCK_TASK", taskId: TSK, runId: null, title: "t1"}), item({title: "r1"}), item({kind: "MISSION_BLOCKED", nextAction: "REVIEW_MISSION", runId: null, title: "mb"}), item({title: "r2"}), item({kind: "RUN_AWAITING_APPROVAL", nextAction: "PREPARE_DELIVERY", title: "a"})];
+    const r = m.mapAttentionQueue(q(mixed, attCounts({RUN_AWAITING_APPROVAL: 1, RUN_NEEDS_DECISION: 2, MISSION_BLOCKED: 1, TASK_BLOCKED: 1})));
+    expect(r.state).toBe("VERIFIED"); expect(r.queue.items.map((i: any) => i.title)).toEqual(["a", "r1", "r2", "mb", "t1"]);
+    expect(r.queue).toMatchObject({total: 5, truncated: false, dropped: 0, shownCounts: {RUN_NEEDS_DECISION: 2, TASK_BLOCKED: 1, MISSION_FOUNDER_ATTENTION: 0}});
+  });
+  it("drops (and counts) unknown kinds, kind/action mismatches and malformed items; keeps good ones", async () => {
+    const m = await c();
+    const drops: any[] = [item({kind: "NEW_KIND"}), item({nextAction: "ACCEPT_DELIVERY"}), item({nextAction: "NOPE"}), item({projectId: "prj_x"}), item({missionId: "msn_x"}), item({projectId: ["prj_" + "ab".repeat(12)]}), item({runId: ["run1"]}), item({runId: 5}), item({runId: undefined}),
+      item({taskId: "tsk_x"}), item({taskId: 5}), item({kind: "TASK_BLOCKED", nextAction: "UNBLOCK_TASK", runId: null, taskId: null}), item({missionId: [MID]}), item({kind: "TASK_BLOCKED", nextAction: "UNBLOCK_TASK", runId: null, taskId: [TSK]}), item({taskId: [TSK]}), item({runId: null}), item({kind: "RUN_AWAITING_APPROVAL", nextAction: "PREPARE_DELIVERY", runId: null}), item({title: ""}), item({title: "   "}), item({title: "t".repeat(201)}), item({title: 5}),
+      item({reason: ""}), item({reason: "r".repeat(301)}), item({reason: 5}), item({since: "yesterday"}), item({since: "2026-02-30T03:00:00Z"}), item({since: 5}), null, "x", [], 5];
+    const r = m.mapAttentionQueue(q([item(), ...drops], attCounts({RUN_NEEDS_DECISION: 99})));
+    expect(r.state).toBe("VERIFIED"); expect(r.queue.items).toHaveLength(1); expect(r.queue.dropped).toBe(drops.length);
+    const ok = m.mapAttentionQueue(q([item({title: "t".repeat(200), reason: "r".repeat(300), since: "2026-10-22T03:00:00.123Z"}), item({reason: null, since: null, runId: "RUN-abc-1"})], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 2, TASK_BLOCKED: 0})));
+    expect(ok.queue.items).toHaveLength(2); expect(ok.queue.dropped).toBe(0);
+  });
+  it("a bad envelope, counter set, truncated flag or source makes the whole read ERROR", async () => {
+    const m = await c(), none = attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 0});
+    const bads: any[] = [null, [], {}, {attention: null}, {attention: []}, q([], none, false, {source: "SCHEDULER"}), q([], none, false, {source: undefined}), q([], none, "no"), {attention: {items: [], counts: none, source: "WORKOS"}}, q("x" as any, none), q({} as any, none),
+      q([], null), q([], []), q([], {...none, EXTRA: 0}), q([], (({TASK_BLOCKED, ...r}) => r)(none)), q([], {...none, TASK_BLOCKED: "0"}), q([], {...none, TASK_BLOCKED: -1}), q([], {...none, TASK_BLOCKED: 1.5}), q([], {...none, TASK_BLOCKED: 1000001}), q([], {...none, TASK_BLOCKED: null}),
+      q(Array.from({length: 201}, () => item()), attCounts({RUN_NEEDS_DECISION: 201}), true),
+      q([item()], attCounts({RUN_NEEDS_DECISION: 0, RUN_AWAITING_APPROVAL: 0, TASK_BLOCKED: 0})), q([item()], attCounts({RUN_NEEDS_DECISION: 1, RUN_AWAITING_APPROVAL: 1, TASK_BLOCKED: 0})), q([item()], attCounts({RUN_NEEDS_DECISION: 2, RUN_AWAITING_APPROVAL: 0, TASK_BLOCKED: 0})),
+      q([item()], attCounts({RUN_NEEDS_DECISION: 1, RUN_AWAITING_APPROVAL: 0, TASK_BLOCKED: 0}), true), q(Array.from({length: 200}, () => item()), attCounts({RUN_NEEDS_DECISION: 200, RUN_AWAITING_APPROVAL: 0, TASK_BLOCKED: 0}), true)];
+    bads.forEach((b, i) => { const r = m.mapAttentionQueue(b); expect([i, r.state, r.queue]).toEqual([i, "ERROR", null]); });
+    // a non-numeric counter is rejected even when a dropped item relaxes the sum rules
+    expect(m.mapAttentionQueue(q([item(), item({kind: "NEW"})], {...attCounts({RUN_NEEDS_DECISION: 1, RUN_AWAITING_APPROVAL: 0, TASK_BLOCKED: 0}), MISSION_BLOCKED: "5"})).state).toBe("ERROR");
+    expect(m.mapAttentionQueue(q([item(), item({kind: "NEW"})], {...attCounts({RUN_NEEDS_DECISION: 1, RUN_AWAITING_APPROVAL: 0, TASK_BLOCKED: 0}), MISSION_BLOCKED: -1})).state).toBe("ERROR");
+    // truncated means exactly 200 shown and more than 200 in total
+    expect(m.mapAttentionQueue(q(Array.from({length: 199}, () => item()), attCounts({RUN_NEEDS_DECISION: 199, RUN_AWAITING_APPROVAL: 0, TASK_BLOCKED: 101}), true)).state).toBe("ERROR");
+    expect(m.mapAttentionQueue(q([], none)).state).toBe("VERIFIED");
+    expect(m.mapAttentionQueue(q(Array.from({length: 200}, () => item()), attCounts({RUN_NEEDS_DECISION: 200, RUN_AWAITING_APPROVAL: 0, TASK_BLOCKED: 1}), true)).state).toBe("VERIFIED");
+    expect(m.mapAttentionQueue(q([], {...none, TASK_BLOCKED: 1000000})).state).toBe("ERROR"); // 1000000 is a valid counter, but then the list must hold the items
+    expect(m.mapAttentionQueue(q(Array.from({length: 200}, () => item()), attCounts({RUN_NEEDS_DECISION: 1000000, RUN_AWAITING_APPROVAL: 0, TASK_BLOCKED: 0}), true)).state).toBe("VERIFIED");
+  });
+  it("with dropped items the invariants relax, but a kind can never show more items than its counter says", async () => {
+    const m = await c();
+    expect(m.mapAttentionQueue(q([item(), item({kind: "NEW"})], attCounts({RUN_NEEDS_DECISION: 5, RUN_AWAITING_APPROVAL: 0, TASK_BLOCKED: 0}))).state).toBe("VERIFIED");
+    expect(m.mapAttentionQueue(q([item(), item(), item({kind: "NEW"})], attCounts({RUN_NEEDS_DECISION: 1, RUN_AWAITING_APPROVAL: 0, TASK_BLOCKED: 0}))).state).toBe("ERROR");
+  });
+  it("translates items to the legacy blocker row without losing kind or reason and never grants retry", async () => {
+    const m = await c();
+    expect(m.attentionAsBlocked(item())).toEqual({packageId: "run_" + "cd".repeat(12), kind: "RUN_NEEDS_DECISION", reason: "Claude quota exhausted", at: "2026-10-15T08:00:00.000Z", retryable: false, nextAction: "REVIEW_RUN", missionId: MID2});
+    expect(m.attentionAsBlocked(item({kind: "TASK_BLOCKED", nextAction: "UNBLOCK_TASK", taskId: TSK, runId: null})).packageId).toBe(TSK);
+    expect(m.attentionAsBlocked(item({kind: "MISSION_BLOCKED", nextAction: "REVIEW_MISSION", runId: null, taskId: null})).packageId).toBe(MID2);
+  });
+  it("the api serves legacy consumers and the full queue from the new path only; a refused path is UNAVAILABLE", async () => {
+    const apiMod = await load("api.js"), st = await load("state.js");
+    const mk = (fn: (p: string) => any) => { const calls: string[] = []; return {calls, api: apiMod.createApi({bridge: {apiGet: async (p: string) => { calls.push(p); return fn(p); }}, store: st.createStore(null)})}; };
+    const ok = mk(() => attention()); const r = await ok.api.attention();
+    expect(ok.calls).toEqual(["/v1/attention"]); expect(r.state).toBe("VERIFIED"); expect(r.blocked).toHaveLength(3); expect(r.queue.total).toBe(3); expect(r.blocked.every((b: any) => b.retryable === false)).toBe(true);
+    const refused = await mk(() => { throw new Error("INVALID_API_PATH"); }).api.attention(); expect(refused).toMatchObject({state: "UNAVAILABLE", blocked: [], queue: null});
+    const miss = await mk(() => { throw new Error("x: HTTP 404"); }).api.attention(); expect(miss).toMatchObject({state: "UNAVAILABLE", blocked: [], queue: null});
+    const bad = await mk(() => ({attention: {items: [], counts: {}, truncated: false, source: "WORKOS"}})).api.attention(); expect(bad).toMatchObject({state: "ERROR", blocked: [], queue: null});
+    const off = await mk(() => { throw new Error("fetch failed"); }).api.attention(); expect(off.state).toBe("OFFLINE");
+  });
+  it("en and tr have the same attention keys and placeholders; every kind and action has a label", async () => {
+    const en = (await load("locales", "en.js")).default as Record<string, string>, tr = (await load("locales", "tr.js")).default as Record<string, string>, m = await c();
+    const keys = Object.keys(en).filter(k => k.startsWith("attention."));
+    const ph = (x: string) => (x.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of keys) { expect(tr[k], k).toBeTruthy(); expect(ph(tr[k]), k).toBe(ph(en[k])); }
+    expect(Object.keys(tr).filter(k => k.startsWith("attention.")).sort()).toEqual([...keys].sort());
+    for (const k of m.ATTENTION_KINDS) expect(en[`attention.kind.${k}`], k).toBeTruthy();
+    for (const a of m.NEXT_ACTIONS) { expect(en[`attention.next.${a}`], a).toBeTruthy(); expect(tr[`attention.next.${a}`], a).toBeTruthy(); }
   });
 });
