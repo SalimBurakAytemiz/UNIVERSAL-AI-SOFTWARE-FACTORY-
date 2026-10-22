@@ -13,7 +13,7 @@ Gap (first-delivery): after intake the Founder had no single answer to "why can'
 
 `ready` = every blocking check OK. `verifiable` = ready and every check OK. An unreadable source gives UNKNOWN, never OK. `GET /v1/projects/:id/flow` `testCommand` now uses the same mission-over-project precedence.
 
-Honest limits: the EXECUTOR and PRE-DEV checks were dropped (no readable run-route executor-selection result in the route deps; pre-dev is not a run gate). there is no mirrored rule: readiness.ts and flow.ts import `effectiveTestCommand` and `repositoryPrecondition` from runner.ts, and a test compares readiness answers with the runner's own reasons for all five repository BLOCK cases.
+Honest limits: (a) REPOSITORY OK means the runner's `repositoryPrecondition` passes (a directory exists in an allowed place). It does NOT check that HEAD resolves: a directory that is not a git repository reads OK/ready, and the runner then BLOCKs the run with REPOSITORY_HEAD_UNRESOLVED. The check lives in the runner's private `gitOk`; closing the gap needs a new runner export (Lane C) and is pinned by a test until then. (b) the EXECUTOR and PRE-DEV checks were dropped (no readable run-route executor-selection result in the route deps; pre-dev is not a run gate). there is no mirrored rule: readiness.ts and flow.ts import `effectiveTestCommand` and `repositoryPrecondition` from runner.ts, and a test compares readiness answers with the runner's own reasons for all five repository BLOCK cases.
 
 ## Patch (server.ts, next to the other lane registrations)
 ```diff
@@ -25,4 +25,4 @@ Honest limits: the EXECUTOR and PRE-DEV checks were dropped (no readable run-rou
 GET `/v1/projects/prj_<24hex>/readiness` (no query).
 
 ## Evidence
-`npx vitest run tests/v7-b1-workos.test.ts tests/v7-b3a-runner.test.ts`: 156 passed (b1-workos 101 incl. 6 "LANE-B run readiness"). Mutations (RISK always OK, project-over-mission precedence, ready via some, verifiable via some, readiness ignoring the runner's repository reason) each failed a test.
+`npx vitest run tests/v7-b1-workos.test.ts tests/v7-b3a-runner.test.ts`: 158 passed (b1-workos 103 incl. 8 "LANE-B run readiness"). Mutations (RISK always OK, project-over-mission precedence, ready via some, verifiable via some, readiness ignoring the runner's repository reason) each failed a test.

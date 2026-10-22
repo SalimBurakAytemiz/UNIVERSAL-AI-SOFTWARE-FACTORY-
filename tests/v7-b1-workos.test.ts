@@ -2342,4 +2342,24 @@ describe("LANE-B run readiness", () => {
       expect(got.state, name).toBe(want ? "BLOCKED" : "OK");
     }
   });
+
+  it("flow testCommand follows mission-over-project: a command on either level alone is CONFIGURED, neither is MISSING", async () => {
+    const {app, store} = await mk();
+    void app;
+    const {deriveProjectFlow} = await import("../core/workos/flow.js");
+    const flag = (pj: any, ms: any) => { const p = proj(store, pj); msn(store, p.projectId, ms); return deriveProjectFlow(store, {tenantId: "tA"}, p.projectId)!.testCommand; };
+    expect(flag({}, {testCommand: ["npm", "test"]})).toBe("CONFIGURED");
+    expect(flag({testCommand: ["npm", "test"]}, {})).toBe("CONFIGURED");
+    expect(flag({}, {})).toBe("MISSING");
+  });
+
+  it("KNOWN LIMIT (pinned): an existing directory that is not a git repository reads as REPOSITORY OK; the runner later BLOCKs it with REPOSITORY_HEAD_UNRESOLVED", async () => {
+    const {app, store} = await mk();
+    const dir = path.join(tmp, "readiness-not-git"); fs.mkdirSync(dir, {recursive: true});
+    const p = proj(store, {repository: {path: dir}});
+    msn(store, p.projectId);
+    const r = await rd(app, p.projectId);
+    expect(by(r).REPOSITORY.state).toBe("OK");
+    expect(r.json().readiness.ready).toBe(true);
+  });
 });
