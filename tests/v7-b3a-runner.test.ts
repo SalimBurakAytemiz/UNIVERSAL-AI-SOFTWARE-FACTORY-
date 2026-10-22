@@ -17,6 +17,8 @@ import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors, executorsFromEnv, parseReviewOutput} from "../core/workos/executors.js";
 import type {FakeScript, MissionSpec} from "../core/workos/executors.js";
 import {RUN_STATUSES, TERMINAL_RUN_STATUSES, canRunTransition} from "../core/workos/run-state.js";
+import {effectiveLimits} from "../core/agents/role-execution.js";
+import {FIRST_DELIVERY_BINDINGS} from "../core/agents/first-delivery-bindings.js";
 import {scanDiffForSecrets, redactSecrets} from "../core/workos/secret-scan.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 import type {WorkRun} from "../core/workos/types.js";
@@ -631,5 +633,81 @@ describe("B3a control API", () => {
     await new Promise(r => setTimeout(r, 600));
     expect((await off.inject({method: "GET", url: `/v1/work-runs/${r2.runId}`, headers: hdr})).json().run.status).toBe("QUEUED");
     await off.close();
+  });
+});
+
+describe("LANE-C bound role TaskLimits are enforced by the runner (never loosened, role-less runs unchanged)", () => {
+  const roleRun = (c: Ctx, fake: FakeExecutors, roleId: string | null) => { const p = fake.pair(); return c.store.createRun({tenantId: "tA", missionId: c.missionId, roleId, executor: {implementer: p.implementer.identity, reviewer: p.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}); };
+  const manyFiles = (n: number, tag = "f") => Object.fromEntries(Array.from({length: n}, (_, i) => [`gen/${tag}-${i}.txt`, `${i}\n`]));
+  const seenTimeouts = (fake: FakeExecutors, seen: number[]) => { const p = fake.pair(); return {...p, implementer: {...p.implementer, implement: (w: string, s: MissionSpec, ctx: {timeoutMs: number; shouldAbort?: () => boolean}) => { seen.push(ctx.timeoutMs); return p.implementer.implement(w, s, ctx); }}}; };
+
+  it("effectiveLimits only tightens: lowest of run default and role limit; null limits change nothing", () => {
+    const l = {maxCycles: 2, timeoutMs: 3_600_000, maxFilesWritten: 100};
+    expect(effectiveLimits(null, {maxRemediations: 2, executorTimeoutMs: 7})).toEqual({maxRemediations: 2, executorTimeoutMs: 7, maxFilesWritten: null, cycleCapped: false});
+    expect(effectiveLimits(l, {maxRemediations: 2, executorTimeoutMs: 9_000_000})).toEqual({maxRemediations: 1, executorTimeoutMs: 3_600_000, maxFilesWritten: 100, cycleCapped: true});
+    expect(effectiveLimits(l, {maxRemediations: 0, executorTimeoutMs: 60_000})).toEqual({maxRemediations: 0, executorTimeoutMs: 60_000, maxFilesWritten: 100, cycleCapped: false});
+    expect(effectiveLimits({...l, maxCycles: 3}, {maxRemediations: 2, executorTimeoutMs: 1_000})).toMatchObject({maxRemediations: 2, cycleCapped: false});
+  });
+
+  it("the bound implementer limits equal the runner's 60 min executor default, so enforcement does not shorten real runs", () => {
+    for (const id of ["UASCO-0085", "UASCO-0313"]) expect(FIRST_DELIVERY_BINDINGS.find(b => b.roleId === id)!.limits.timeoutMs).toBe(60 * 60_000);
+  });
+
+  it("maxCycles: tester (2 cycles) is stopped after 1 remediation as TASK_LIMIT_MAX_CYCLES; developer (3) and role-less keep the run budget; a lower run budget is never raised", { timeout: T }, async () => {
+    const bad = () => new FakeExecutors(okScript({implement: () => ({files: {"feature.txt": "bad\n"}})}));
+    const cases: Array<[string | null, number, string, number]> = [
+      ["UASCO-0313", 2, "TESTS_FAILED_TASK_LIMIT_MAX_CYCLES_EXHAUSTED", 2],
+      ["UASCO-0085", 2, "TESTS_FAILED_REMEDIATION_EXHAUSTED", 3],
+      [null, 2, "TESTS_FAILED_REMEDIATION_EXHAUSTED", 3],
+      ["UASCO-0085", 0, "TESTS_FAILED_REMEDIATION_EXHAUSTED", 1],
+      ["UASCO-0313", 0, "TESTS_FAILED_REMEDIATION_EXHAUSTED", 1]
+    ];
+    for (const [roleId, maxRemediations, reason, implementCalls] of cases) {
+      const c = setup(); const fake = bad();
+      const r = roleRun(c, fake, roleId);
+      await runner(c, fake, {maxRemediations}).tick();
+      const run = runOf(c, r.runId);
+      expect([roleId, maxRemediations, run.status, run.reason, fake.calls.implement]).toEqual([roleId, maxRemediations, "BLOCKED", reason, implementCalls]);
+    }
+  });
+
+  it("timeoutMs: the executor gets min(run default, role limit): a role cannot raise a lower run timeout; role-less runs get the run default", { timeout: T }, async () => {
+    for (const [roleId, runTimeout, expected] of [["UASCO-0085", 9_000_000, 3_600_000], ["UASCO-0313", 9_000_000, 3_600_000], ["UASCO-0085", 60_000, 60_000], [null, 9_000_000, 9_000_000]] as const) {
+      const c = setup(); const fake = new FakeExecutors(okScript()); const seen: number[] = [];
+      const r = roleRun(c, fake, roleId);
+      await runner(c, fake, {executorTimeoutMs: runTimeout, executors: seenTimeouts(fake, seen)}).tick();
+      expect(runOf(c, r.runId).status).toBe("AWAITING_APPROVAL");
+      expect([roleId, runTimeout, seen]).toEqual([roleId, runTimeout, [expected]]);
+    }
+  });
+
+  it("maxFilesWritten: exactly the limit passes, one more is BLOCKED before VERIFY/REVIEW; the count is cumulative from the base across remediation cycles; role-less runs have no file limit", { timeout: T }, async () => {
+    // tester limit = 100: feature.txt + 99 files = 100 passes, + 100 files = 101 is blocked
+    for (const [n, ok] of [[99, true], [100, false]] as const) {
+      const c = setup(); const fake = new FakeExecutors(okScript({implement: () => ({files: {"feature.txt": "ok\n", ...manyFiles(n)}})}));
+      const r = roleRun(c, fake, "UASCO-0313");
+      await runner(c, fake).tick();
+      const run = runOf(c, r.runId);
+      if (ok) expect(run.status).toBe("AWAITING_APPROVAL");
+      else {
+        expect(run.status).toBe("BLOCKED");
+        expect(run.reason).toBe("TASK_LIMIT_FILES_EXCEEDED:101>100");
+        expect(kinds(run)).toEqual(expect.arrayContaining(["IMPLEMENT", "AGENT_TRACE"]));
+        expect(kinds(run)).not.toContain("VERIFY_TESTS");
+        expect(fake.calls.review).toBe(0);
+        expect(missionOf(c).status).toBe("BLOCKED");
+      }
+    }
+    // cumulative: cycle 0 writes 60 files with a failing test, cycle 1 fixes it with 60 more -> 121 from the base > 100
+    const c = setup(); const fake = new FakeExecutors(okScript({implement: n => ({files: {"feature.txt": n === 1 ? "bad\n" : "ok\n", ...manyFiles(60, `c${n}`)}})}));
+    const r = roleRun(c, fake, "UASCO-0313");
+    await runner(c, fake).tick();
+    const run = runOf(c, r.runId);
+    expect([run.status, run.reason, fake.calls.implement]).toEqual(["BLOCKED", "TASK_LIMIT_FILES_EXCEEDED:121>100", 2]);
+    // role-less: no limit applies
+    const c2 = setup(); const fake2 = new FakeExecutors(okScript({implement: () => ({files: {"feature.txt": "ok\n", ...manyFiles(150)}})}));
+    const r2 = roleRun(c2, fake2, null);
+    await runner(c2, fake2).tick();
+    expect(runOf(c2, r2.runId).status).toBe("AWAITING_APPROVAL");
   });
 });
