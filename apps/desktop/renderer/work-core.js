@@ -213,6 +213,63 @@ export function mapTaskRuns(raw){
   }
   return {state:"VERIFIED",items};
 }
+// //TR: "Görev durumunu koşudan güncelle" (POST /v1/work-runs/:id/tasks/reconcile, gövde BOŞ; sunucu durumu yalnız koşunun gerçek sonucundan türetir, istemci durum gönderemez). Ana süreç izin listesi henüz yoksa ya da sunucu 403/404 verirse sonuç "etkin değil"dir ve hiçbir sonuç uydurulmaz; geçerli yanıt yalnız sıkı eşlemeden geçerse gösterilir.
+export const reconcilePath=runId=>typeof runId==="string"&&RUN_ID_RE.test(runId)?`/v1/work-runs/${runId}/tasks/reconcile`:null;
+export function buildReconcileRequest({runId}){
+  const path=reconcilePath(runId);
+  return path?{ok:true,path,body:{},errors:{}}:{ok:false,path:null,body:null,errors:{runId:"taskruns.err.run"}};
+}
+const RECON_ACTIONS=Object.freeze(["TRANSITIONED","UNCHANGED","SKIPPED"]);
+const RECON_TASK_STATUSES=Object.freeze(["PENDING","IN_PROGRESS","DONE","BLOCKED"]);
+export const RECON_SKIP_REASONS=Object.freeze(["SUPERSEDED_BY_NEWER_RUN","TASK_ALREADY_DONE","NO_ALLOWED_PATH","TASK_DEPENDENCIES_NOT_DONE","MISSION_COMPLETE"]);
+/** Sunucu uzlaştırma yanıtı -> {state:"VERIFIED",runId,runStatus,results,mine,othersTransitioned} | {state:"ERROR"}; tek bozuk satır tüm yanıtı ERROR yapar. */
+export function mapReconcile(raw,taskId){
+  const bad={state:"ERROR"};
+  if(!isObj(raw)||!RUN_ID_RE.test(String(raw.runId))||statusStr(raw.runStatus)===null||!Array.isArray(raw.results)||raw.results.length>500)return bad;
+  const results=[];
+  for(const x of raw.results){
+    if(!isObj(x)||!TASK_ID_RE.test(String(x.taskId))||!RECON_TASK_STATUSES.includes(x.from)||!RECON_TASK_STATUSES.includes(x.to)||!RECON_ACTIONS.includes(x.action))return bad;
+    if(x.reason!==null&&statusStr(x.reason)===null)return bad;
+    results.push({taskId:x.taskId,from:x.from,to:x.to,action:x.action,reason:x.reason});
+  }
+  const mine=results.find(r=>r.taskId===taskId)??null;
+  return {state:"VERIFIED",runId:raw.runId,runStatus:raw.runStatus,results,mine,othersTransitioned:results.filter(r=>r.action==="TRANSITIONED"&&r.taskId!==taskId).length};
+}
+/** POST sonucunu sınıflar: NOT_ENABLED (izin listesi/rota yok), RESULT (sıkı eşlemeden geçti), INVALID (2xx ama bozuk), FAILED (diğer; describePostResult anahtarı kullanılır). */
+export function classifyReconcile(res,taskId){
+  if(!res)return {kind:"FAILED"};
+  const err=typeof res.body?.error==="string"?res.body.error:"";
+  if(res.thrown&&/INVALID_API_PATH/.test(String(res.message??"")))return {kind:"NOT_ENABLED"};
+  if(res.thrown)return {kind:"FAILED"};
+  const s=res.status;
+  if((s===404||s===501)&&err!=="OUTCOME_RUN_NOT_FOUND"&&err!=="RUN_NOT_FOUND")return {kind:"NOT_ENABLED"};
+  if(s===403&&err!=="ACTION_DENIED")return {kind:"NOT_ENABLED"};
+  if(s>=200&&s<300){const m=mapReconcile(res.body,taskId);return m.state==="VERIFIED"?{kind:"RESULT",...m}:{kind:"INVALID"}}
+  return {kind:"FAILED"};
+}
+/** Göreve bağlı koşu sonucu -> durum bloğu anahtarı ve değişkenleri (yalnız sunucunun bildirdiği sonuç). */
+export function reconcileStatusKey(c){
+  const o=c.othersTransitioned,m=c.mine;
+  if(!m)return {key:"taskruns.recon.noMine",vars:{others:o}};
+  if(m.action==="TRANSITIONED")return {key:"taskruns.recon.transitioned",vars:{from:m.from,to:m.to,others:o}};
+  if(m.action==="UNCHANGED")return {key:"taskruns.recon.unchanged",vars:{reason:m.reason??MISSING,others:o}};
+  return RECON_SKIP_REASONS.includes(m.reason)?{key:`taskruns.recon.skipped.${m.reason}`,vars:{others:o}}:{key:"taskruns.recon.skipped",vars:{reason:m.reason??MISSING,others:o}};
+}
+// //TR: core/workos/task-outcome.ts targetForRun kuralının birebir yansıması: görev, ona EN SON bağlanan koşunun gerçek sonucunu izler (SUCCEEDED -> DONE; FAILED/RECOVERY_FAILED/CANCELLED/QUARANTINED/BLOCKED -> BLOCKED; CREATED/QUEUED -> değişmez; diğer bilinen durumlar -> IN_PROGRESS). Bu yalnız KURALI gösterir, bir geçişin yapıldığını iddia etmez; kaydedilen görev durumu ayrıca okunur. Bilinmeyen/okunamayan koşu durumu için hedef null'dır (tahmin yok).
+export const RUN_TASK_STATUSES=Object.freeze(["CREATED","QUEUED","LEASED","RUNNING","CHECKPOINTING","VERIFYING","SUCCEEDED","RETRY_SCHEDULED","DEGRADED","HANDOFF_PENDING","AWAITING_APPROVAL","BLOCKED","QUARANTINED","CANCELLING","CANCELLED","RECOVERING","RECOVERY_FAILED","FAILED"]);
+const RUN_FAILED_FOR_TASK=Object.freeze(["FAILED","RECOVERY_FAILED","CANCELLED","QUARANTINED","BLOCKED"]);
+export function taskTargetForRun(status){
+  if(typeof status!=="string"||!RUN_TASK_STATUSES.includes(status))return null;
+  if(status==="SUCCEEDED")return "DONE";
+  if(RUN_FAILED_FOR_TASK.includes(status))return "BLOCKED";
+  if(status==="CREATED"||status==="QUEUED")return "NONE";
+  return "IN_PROGRESS";
+}
+/** mapTaskRuns öğeleri (bağlanma sırasıyla) -> her öğe için {governing,target}; yönetici koşu son bağlanandır, eskiler "SUPERSEDED" sayılır. */
+export function taskFollowsRun(items){
+  const list=Array.isArray(items)?items:[];
+  return list.map((l,i)=>({runId:l.runId,governing:i===list.length-1,target:taskTargetForRun(l.status)}));
+}
 /** Göreve henüz bağlı olmayan, kanonik kimlikli mission koşuları (kimlik tekrarı elenir). */
 export function linkableRuns(runItems,linkedItems){
   const linked=new Set((Array.isArray(linkedItems)?linkedItems:[]).map(l=>l.runId)),seen=new Set(),out=[];

@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-22T00:20:33.946Z",
+  "generatedAt": "2026-10-22T04:05:44.981Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -66,7 +66,7 @@
     },
     {
       "path": "apps/control-api/src/server.ts",
-      "sha256": "8f12e07327ac62cac4a5b59375972a4f1a1c1912d0b57ab6d3de8637e6783548"
+      "sha256": "6b392afc23241646a3b90916db062b2064bca63f3f928a62a98c67a56847b179"
     },
     {
       "path": "apps/desktop/main.mjs",
@@ -375,6 +375,14 @@
     {
       "path": "automation/lib/task-lease.mjs",
       "sha256": "866490aac34f3e45056627bd898a584bf31342cd24b3a5b8a30503e5ce24a870"
+    },
+    {
+      "path": "automation/lib/transient-retry.d.mts",
+      "sha256": "0bfa81768e735468b7d0a898ead96704802a2c8a9beb0b68416ca7faec706b7a"
+    },
+    {
+      "path": "automation/lib/transient-retry.mjs",
+      "sha256": "c0eddfaffaa8c4cde7aaa1e90d62f485a52dd91b08c1dc3287580904540b210a"
     },
     {
       "path": "automation/lib/trust-root.mjs",
@@ -1206,7 +1214,7 @@
     },
     {
       "path": "scripts/dependency-supply-chain.mjs",
-      "sha256": "6897dba91930b3e39574c50ac1d9ac7678e32d4b0912edf270e2beee0a5cc339"
+      "sha256": "40fdf21597c18581ccb7df30749d367226d9153a295dda6011330a5e2372e3cb"
     },
     {
       "path": "scripts/dual-review-selftest.mjs",
