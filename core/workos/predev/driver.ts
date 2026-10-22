@@ -80,9 +80,11 @@ export class PreDevDriver {
   constructor(private readonly deps: PreDevDriverDeps) {}
 
   // //TR: Mission için diziyi açar ve giriş fazından (AUTHORIZED, artefakt istemeyen ungated faz) ilk gerçek faza (BUSINESS_ANALYSIS) ilerletir. Mevcut mission lifecycle'ı DEĞİŞTİRİLMEZ.
+  // //TR: Devam (resume): dizi önceki bir denemede açılmış ama ilk ilerleme yazımı (AUTHORIZED -> BUSINESS_ANALYSIS) tamamlanamamışsa (ENOSPC, yazma hatası, iki fsync arasında çökme) dizi AUTHORIZED'da kalır; yeniden denemede YALNIZ o ilerleme tamamlanır. Daha ileri fazdaki mevcut dizi için davranış değişmez (store PREDEV_SEQUENCE_EXISTS fırlatır).
   start(scope: Scope, missionId: string, actor: string): {preDevId: string; phase: PreDevPhase} {
-    const seq = this.deps.store.openPreDevSequence(scope, missionId, actor);
-    const advanced = this.deps.store.advancePreDevPhase(scope, seq.preDevId, "BUSINESS_ANALYSIS", actor);
+    const rm = this.deps.store.preDevReadModel(scope, missionId);
+    const preDevId = rm.active && rm.preDevId !== null && rm.phase === "AUTHORIZED" ? rm.preDevId : this.deps.store.openPreDevSequence(scope, missionId, actor).preDevId;
+    const advanced = this.deps.store.advancePreDevPhase(scope, preDevId, "BUSINESS_ANALYSIS", actor);
     return {preDevId: advanced.preDevId, phase: advanced.phase};
   }
 
@@ -138,6 +140,15 @@ export class PreDevDriver {
     const next = PRE_DEV_PHASE_TRANSITIONS[rm.phase as PreDevPhase][0];
     if (!next) throw new PreDevDriverError(`PREDEV_DRIVER_NO_NEXT_PHASE:${rm.phase}`);
 
+    // //TR: Devam (resume): artefakt ZATEN APPROVED, bu fazın türünün MEVCUT artefaktı ve faz henüz ilerlememişse (önceki denemede APPROVED yazıldı, ilerleme yazımı ENOSPC/çökme ile kaybedildi) yalnız bekleyen ilerleme yapılır. Kapılar aynı kalır: onaylanan kayıt kapılarını APPROVED yazılırken geçti (bağımsızlık, kanıt); ilerleten aktör de kaydedenden bağımsız olmalıdır ve faz sırası store'ca yeniden doğrulanır. Başka her APPROVED artefakt eskisi gibi store'ca reddedilir (geçersiz geçiş).
+    if (art.state === "APPROVED") {
+      const kind = PHASE_ARTIFACT_KIND[rm.phase as PreDevPhase];
+      if (kind && art.kind === kind && rm.artifacts[kind].artifactId === art.id) {
+        if (approver === art.recordedBy) throw new PreDevDriverError("PREDEV_APPROVER_NOT_INDEPENDENT");
+        const seq = this.deps.store.advancePreDevPhase(scope, rm.preDevId, next, approver);
+        return {phase: seq.phase};
+      }
+    }
     // //TR: Submit yalnız DRAFT iken yapılır (idempotent): önceki bir onay denemesi (ör. bağımsızlık/kanıt kapısına takılan) zaten SUBMITTED yapmışsa yeniden submit edilmez; kapılar yine mevcut mekanizmaca zorlanır.
     if (art.state === "DRAFT") this.deps.store.transitionPreDevArtifact(scope, rm.preDevId, artifactId, "SUBMITTED", {}, art.recordedBy);
     this.deps.store.transitionPreDevArtifact(scope, rm.preDevId, artifactId, "APPROVED", {evidenceRefs}, approver);
