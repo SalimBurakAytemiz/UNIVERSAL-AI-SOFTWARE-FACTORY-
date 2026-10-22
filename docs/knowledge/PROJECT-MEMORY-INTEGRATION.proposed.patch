@@ -1,0 +1,63 @@
+# //TR: PQ-007 ÖNERİLEN (UYGULANMAMIŞ) entegrasyon yaması: SC-14 Proje Belleği için control-api GET/POST rotaları ve desktop GET allow-list girdisi.
+# STATUS: PROPOSED, NOT APPLIED — requires Founder protected-file authority
+# Both target files are listed in config/protected-paths.json (exactPaths).
+# Apply only under explicit governance authority: git apply --check docs/knowledge/PROJECT-MEMORY-INTEGRATION.proposed.patch
+
+diff --git a/apps/control-api/src/server.ts b/apps/control-api/src/server.ts
+--- a/apps/control-api/src/server.ts
++++ b/apps/control-api/src/server.ts
+@@ -53,6 +53,9 @@
+ import {deriveDevReviewTimeline} from "../../../core/workos/crew/dev-review.js";
+ // //TR: UI-049: bağımsız review kararları salt-okunur olarak Work OS journal'daki GERÇEK run REVIEW kanıtlarından türetilir; ikinci store yok, uydurma karar yok. Reviewer metinleri (bulgu başlıkları) çıktıya konmadan önce redakte edilip kırpılır.
+ import {redactSecrets} from "../../../core/workos/secret-scan.js";
++// //TR: PQ-007 (ÖNERİ, Founder korumalı-dosya yetkisi gerekir): SC-14 Proje Belleği çekirdeği; ikinci bir dataDir kurmaz, Work OS dataDir kökü altında proje başına journal kullanır.
++import {ProjectMemory} from "../../../core/knowledge/project-memory.js";
++import {ProjectMemoryError,MEMORY_KINDS} from "../../../core/knowledge/project-memory-types.js";
+ import type {WorkRun,RunEvidence} from "../../../core/workos/types.js";
+ 
+ // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
+@@ -572,6 +575,23 @@
+ 
+ // //TR: FA-V2-PRODUCT: Skill Academy salt-okunur okuma rotaları. Kayıtlar ortak Work OS journal'ındadır (ikinci store yok), tenant kapsamlıdır ve aynı token/Host hook'u arkasındadır; hiçbir yazma/mutasyon yoktur (öğrenme yetki/sertifika/proficiency VERMEZ — yalnız öğrenme/yetkinlik kataloğudur). Veri yoksa boş dizi / null metrik döner, değer uydurulmaz.
+ const academyDomain=()=>new SkillAcademy(getStore(),{repoRoot});
++// //TR: PQ-007 (ÖNERİ): GET/POST /v1/projects/:id/memory. Proje tenant kapsamında olmalı (değilse 404); hatalar fail-closed kodla döner (TAMPERED 409, READ_ONLY 409, doğrulama 400). Yazar rolü istemciden değil sunucu aktöründen gelir.
++const memoryFor=(id:string)=>new ProjectMemory({rootDir:getStore().dataDir,projectId:id});
++const memoryProject=(id:string)=>/^prj_[0-9a-f]{24}$/.test(id)&&!!getStore().getProject(scope,id);
++const memoryFail=(reply:any,e:unknown)=>{if(!(e instanceof ProjectMemoryError))throw e;const st=e.code==="MEMORY_NOT_FOUND"?404:e.code==="MEMORY_TAMPERED"||e.code==="MEMORY_READ_ONLY"||e.code==="MEMORY_BUSY"?409:400;return reply.code(st).send({error:e.code})};
++app.get<{Params:{id:string};Querystring:{kind?:string;tag?:string;q?:string;view?:string}}>("/v1/projects/:id/memory",wos(async(req,reply)=>{
++  const id=req.params.id;if(!memoryProject(id))return reply.code(404).send({error:"PROJECT_NOT_FOUND"});
++  try{const m=memoryFor(id),q=req.query??{};const health=m.verify();
++    if(q.view==="current")return {health,current:m.currentView()};
++    if(typeof q.q==="string")return {health,records:m.search(q.q)};
++    return {health,records:m.list({...(typeof q.kind==="string"?{kind:q.kind as (typeof MEMORY_KINDS)[number]}:{}),...(typeof q.tag==="string"?{tag:q.tag}:{})})};
++  }catch(e){return memoryFail(reply,e)}
++}));
++app.post<{Params:{id:string};Body:Record<string,unknown>}>("/v1/projects/:id/memory",wos(async(req,reply)=>{
++  const id=req.params.id;if(!memoryProject(id))return reply.code(404).send({error:"PROJECT_NOT_FOUND"});
++  const b=req.body??{};
++  try{return reply.code(201).send({record:memoryFor(id).append({kind:b.kind as any,title:b.title as any,body:b.body as any,sources:b.sources as any,supersedes:b.supersedes as any,tags:b.tags as any,author:{role:actor}})})}catch(e){return memoryFail(reply,e)}
++}));
+ const ACADEMY_ID_RE=/^(?:lrn|src)_[0-9a-f]{24}$/;
+ // //TR: GET /v1/academy: tenant kapsamlı akademi okuma-modelinin tamamı (öğrenmeler, kaynaklar, yeniden kullanımlar, genelleştirilmiş global bilgi ve §5.3 ölçülebilir öğrenme metrikleri); hepsi store'dan türetilir, boşsa dürüst boş dizi/null.
+ app.get("/v1/academy",wos(async()=>{const a=academyDomain();return {learnings:a.listLearnings(scope),sources:a.listSources(scope),reuses:a.listReuses(scope),globalKnowledge:a.listGlobalKnowledge(),metrics:a.metrics(scope)};}));
+diff --git a/apps/desktop/main.mjs b/apps/desktop/main.mjs
+--- a/apps/desktop/main.mjs
++++ b/apps/desktop/main.mjs
+@@ -46,6 +46,8 @@
+ // //TR: FA-V2-PRODUCT (WP-ACADEMY): salt-okunur Skill Academy okumaları; liste /v1/academy sorgusuz tam eşleşir, tek kayıt yalnız kanonik lrn_/src_ + 24 hex kimliğidir (sorgu/segment/kodlama/sondaki eğik çizgi hilesi fail-closed reddedilir). Yazma yoktur; EXTRA_GET_ROUTES kümesi değişmez (detay/liste rotaları gibi ayrık desenle izinlenir).
+ const ACADEMY_LIST_RE=/^\/v1\/academy$/;
+ const ACADEMY_DETAIL_RE=/^\/v1\/academy\/(?:lrn|src)_[0-9a-f]{24}$/;
++// //TR: PQ-007 (ÖNERİ, Founder korumalı-dosya yetkisi gerekir): salt-okunur proje belleği listesi; yalnız kanonik prj_ + 24 hex, sorgu dizesi yok (fail-closed). POST masaüstüne açılmaz.
++const PROJECT_MEMORY_RE=/^\/v1\/projects\/prj_[0-9a-f]{24}\/memory$/;
+ // //TR: FA-V2-PRODUCT (CORE-8): salt-okunur pre-dev ve crew okuma-modeli rotaları; kimlik yalnız kanonik mission deseni (msn_ + 24 hex) olup sorgu/alt yol/sondaki eğik çizgi/yanlış önek/büyük-küçük/uzunluk hileleri fail-closed reddedilir. Yazma yoktur ve EXTRA_GET_ROUTES kümesi BÜYÜMEZ (academy gibi ayrık, çapalı desenle izinlenir; güvenlik anlık görüntüsü korunur).
+ const PREDEV_DETAIL_RE=/^\/v1\/predev\/msn_[0-9a-f]{24}$/;
+ const CREW_DETAIL_RE=/^\/v1\/crew\/msn_[0-9a-f]{24}$/;
+@@ -103,7 +105,7 @@
+ function desktopExtraGetPathAllowed(value){
+   if(projectStudioGetAllowed(value))return true;
+   if(typeof value!=="string"||value.length>400)return false;
+-  return EXTRA_GET_ROUTES.has(value)||ROLE_DETAIL_RE.test(value)||ACADEMY_LIST_RE.test(value)||ACADEMY_DETAIL_RE.test(value)||PREDEV_DETAIL_RE.test(value)||CREW_DETAIL_RE.test(value)||DELIVERY_DETAIL_RE.test(value)||DELIVERY_LIST_RE.test(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"])||listQueryAllowed(value,"/v1/roles",["limit","cursor"])||listQueryAllowed(value,"/v1/company/contacts",["accountId"])||listQueryAllowed(value,"/v1/company/opportunities",["accountId"])||listQueryAllowed(value,"/v1/company/invoices",["accountId"])||listQueryAllowed(value,"/v1/company/payments",["invoiceId"])||listQueryAllowed(value,"/v1/company/contracts",["accountId"])||REVIEWS_LIST_RE.test(value)||REVIEW_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/reviews",["missionId","runId"]);
++  return EXTRA_GET_ROUTES.has(value)||ROLE_DETAIL_RE.test(value)||ACADEMY_LIST_RE.test(value)||PROJECT_MEMORY_RE.test(value)||ACADEMY_DETAIL_RE.test(value)||PREDEV_DETAIL_RE.test(value)||CREW_DETAIL_RE.test(value)||DELIVERY_DETAIL_RE.test(value)||DELIVERY_LIST_RE.test(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"])||listQueryAllowed(value,"/v1/roles",["limit","cursor"])||listQueryAllowed(value,"/v1/company/contacts",["accountId"])||listQueryAllowed(value,"/v1/company/opportunities",["accountId"])||listQueryAllowed(value,"/v1/company/invoices",["accountId"])||listQueryAllowed(value,"/v1/company/payments",["invoiceId"])||listQueryAllowed(value,"/v1/company/contracts",["accountId"])||REVIEWS_LIST_RE.test(value)||REVIEW_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/reviews",["missionId","runId"]);
+ }
+ // B4-ALLOWLIST-END
+ 
