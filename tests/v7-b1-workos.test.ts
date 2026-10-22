@@ -502,6 +502,39 @@ describe("LANE-B project intake", () => {
     const r = await app.inject({method: "GET", url: "/v1/intakes", headers: hdr});
     expect(r.statusCode).toBe(503); expect(r.json().error).toBe("INTAKE_STORE_CORRUPT");
   });
+
+  it("intake carries testCommand + repository.url into the project; url is never echoed or audited; flow reports testCommand state", async () => {
+    const {app, store, audits} = await mkApp();
+    const url = "https://example.com/acme/reading-app.git";
+    const r = await post(app, {idea: IDEA, testCommand: ["npm", "test"], repository: {url}, idempotencyKey: "tc1"});
+    expect(r.statusCode).toBe(201);
+    expect(r.body).not.toContain("example.com");
+    expect(JSON.stringify(audits)).not.toContain("example.com");
+    const p = store.getProject({tenantId: "tA"}, r.json().intake.projectId)!;
+    expect(p.testCommand).toEqual(["npm", "test"]);
+    expect(p.repository?.url).toBe(url);
+    const {deriveProjectFlow} = await import("../core/workos/flow.js");
+    expect(deriveProjectFlow(store, {tenantId: "tA"}, p.projectId)!.testCommand).toBe("CONFIGURED");
+    const bare = await post(app, {idea: IDEA + " bare", idempotencyKey: "tc0"});
+    expect(bare.statusCode).toBe(201);
+    expect(deriveProjectFlow(store, {tenantId: "tA"}, bare.json().intake.projectId)!.testCommand).toBe("MISSING");
+  });
+
+  it("intake rejects credentialed url and non-allow-listed or malformed testCommand without echoing the url; replay conflicts on changed fields", async () => {
+    const {app} = await mkApp();
+    const bad = await post(app, {idea: IDEA, repository: {url: "https://user:s3cr3t@example.com/x.git"}});
+    expect(bad.statusCode).toBe(400);
+    expect(bad.body).not.toContain("s3cr3t");
+    expect(bad.body).not.toContain("example.com");
+    expect((await post(app, {idea: IDEA, testCommand: ["/bin/sh", "-c", "x"]})).statusCode).toBe(400);
+    expect((await post(app, {idea: IDEA, testCommand: []})).statusCode).toBe(400);
+    expect((await post(app, {idea: IDEA, testCommand: ["npm", "te\nst"]})).statusCode).toBe(400);
+    expect((await post(app, {idea: IDEA, repository: {path: "C:/x"}})).statusCode).toBe(400);
+    expect((await post(app, {idea: IDEA, testCommand: ["npm", "test"], idempotencyKey: "k9"})).statusCode).toBe(201);
+    expect((await post(app, {idea: IDEA, testCommand: ["npm", "test"], idempotencyKey: "k9"})).statusCode).toBe(200);
+    expect((await post(app, {idea: IDEA, testCommand: ["npm", "run", "t"], idempotencyKey: "k9"})).statusCode).toBe(409);
+    expect((await post(app, {idea: IDEA, testCommand: ["npm", "test"], repository: {url: "https://example.com/a.git"}, idempotencyKey: "k9"})).statusCode).toBe(409);
+  });
 });
 
 // //TR: LANE-B plan: mission görev planı (sıralı görevler + bağımlılıklar) route modülü ve kalıcılık testleri.

@@ -12,7 +12,7 @@ const text = {type: "string", minLength: 1, maxLength: 4000, pattern: "\\S"};
 const key = {type: "string", minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9._:-]+$"};
 // //TR: B3a: test komutu shell string değil argv dizisidir; ilk öğe allowlist'teki bir çalıştırılabilir addır (yol/uzantı yok), argümanlarda NUL/satır sonu yoktur.
 export const TEST_COMMAND_EXECUTABLES: readonly string[] = ["node", "npm", "npx", "pnpm", "yarn", "python", "pytest", "go", "cargo", "dotnet", "mvn", "gradle"];
-const testCommand = {type: "array", minItems: 1, maxItems: 32, items: {type: "string", minLength: 1, maxLength: 1000, pattern: "^[^\\u0000\\r\\n]*$"}};
+export const testCommand = {type: "array", minItems: 1, maxItems: 32, items: {type: "string", minLength: 1, maxLength: 1000, pattern: "^[^\\u0000\\r\\n]*$"}};
 export function testCommandAllowed(argv: unknown): argv is string[] {
   return Array.isArray(argv) && argv.length >= 1 && argv.length <= 32 && argv.every(a => typeof a === "string" && a.length > 0 && a.length <= 1000 && !/[\u0000\r\n]/.test(a))
     && TEST_COMMAND_EXECUTABLES.includes(argv[0]);
