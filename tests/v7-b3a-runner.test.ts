@@ -100,8 +100,8 @@ describe("B3a run state table", () => {
 });
 
 describe("B3a mission runner engine", () => {
-  it("LANE-C: a run whose role has no executable developer binding is BLOCKED before any builder call; bound developer and role-less runs proceed", { timeout: T }, async () => {
-    for (const [roleId, blocked] of [["UASCO-0001", true], ["UASCO-0252", true], ["UASCO-0085", false], [null, false]] as const) {
+  it("LANE-C: a run whose role has no executable implementer (developer/tester) binding is BLOCKED before any builder call; bound developer, tester and role-less runs proceed", { timeout: T }, async () => {
+    for (const [roleId, blocked] of [["UASCO-0001", true], ["UASCO-0252", true], ["UASCO-0019", true], ["UASCO-0232", true], ["UASCO-0085", false], ["UASCO-0313", false], [null, false]] as const) {
       const c = setup(); const fake = new FakeExecutors(okScript());
       const p = fake.pair();
       const created = c.store.createRun({tenantId: "tA", missionId: c.missionId, roleId, executor: {implementer: p.implementer.identity, reviewer: p.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
@@ -114,6 +114,16 @@ describe("B3a mission runner engine", () => {
       } else {
         expect(run.status).toBe("AWAITING_APPROVAL");
         expect(fake.calls.implement).toBe(1);
+        const trace = run.evidence.filter(e => e.kind === "AGENT_TRACE");
+        if (roleId === null) expect(trace).toHaveLength(0);
+        else {
+          expect(trace).toHaveLength(1);
+          expect(trace[0].note).toBe(`agent=agent-${run.runId}-c0 role=${roleId} state=COMPLETED`);
+          expect(trace[0].step).toBe("IMPLEMENT");
+          const body = JSON.parse(fs.readFileSync(path.join(c.dataDir, trace[0].logPath!), "utf8"));
+          expect(body).toMatchObject({roleId, runId: run.runId, providerRoute: "CLAUDE_IMPLEMENTER", state: "COMPLETED", certification: "NOT_CERTIFIED", perCallToolTrace: "NOT_OBSERVABLE_FROM_ADAPTER"});
+          expect(body.agentInstanceId).not.toBe(body.roleId);
+        }
       }
     }
   });
