@@ -534,34 +534,6 @@
    "new": "ts[0].v !== addId ||"
   },
   {
-   "id": "Y3",
-   "description": "the opening parenthesis of the add call is compared by text only (a tagged template `(` stands in)",
-   "file": "core/competency/static-test-analysis.ts",
-   "old": "!isP(ts[1], \"(\")",
-   "new": "ts[1].v !== \"(\""
-  },
-  {
-   "id": "Y4",
-   "description": "the closing parenthesis of the add call is compared by text only",
-   "file": "core/competency/static-test-analysis.ts",
-   "old": "!isP(ts[ts.length - 1], \")\")",
-   "new": "ts[ts.length - 1].v !== \")\""
-  },
-  {
-   "id": "Y5",
-   "description": "the call parenthesis of a bare assert is compared by text only (assert`(`...`)`)",
-   "file": "core/competency/static-test-analysis.ts",
-   "old": "(isP(s[1], \"(\") ? null :",
-   "new": "(s[1]?.v === \"(\" ? null :"
-  },
-  {
-   "id": "Y6",
-   "description": "the parenthesis after assert.<method> is compared by text only (assert.strictEqual`(`...`)`)",
-   "file": "core/competency/static-test-analysis.ts",
-   "old": "isP(s[3], \"(\") ? s[2].v : undefined",
-   "new": "s[3]?.v === \"(\" ? s[2].v : undefined"
-  },
-  {
    "id": "Y7",
    "description": "the assert receiver is compared by text only (`\"assert\".strictEqual(...)`)",
    "file": "core/competency/static-test-analysis.ts",
@@ -637,6 +609,36 @@
    "file": "core/competency/static-test-analysis.ts",
    "old": "    seenOther = true;\n",
    "new": "    if (!(s[4]?.t === \"num\")) seenOther = true;\n"
+  },
+  {
+   "id": "Z1",
+   "description": "bare assert: the call parenthesis of the statement AND the closing parenthesis of the add call are both compared by text only (the tagged-template payload assert`(`-3 === add(0, -3`)`) is counted as a case). Single-site variants (call paren only, closing paren only, the add opening paren) are verdict-equivalent: each is covered by a second independent guard (typed parseAddCall, the p-parenthesis matcher, the compile check).",
+   "file": "core/competency/static-test-analysis.ts",
+   "edits": [
+    {
+     "old": "(isP(s[1], \"(\") ? null :",
+     "new": "(s[1]?.v === \"(\" ? null :"
+    },
+    {
+     "old": "!isP(ts[ts.length - 1], \")\")",
+     "new": "ts[ts.length - 1].v !== \")\""
+    }
+   ]
+  },
+  {
+   "id": "Z2",
+   "description": "assert.<method>: the parenthesis after the method AND the closing parenthesis of the add call are both compared by text only (assert.strictEqual`(`-3, add(0, -3`)`)",
+   "file": "core/competency/static-test-analysis.ts",
+   "edits": [
+    {
+     "old": "isP(s[3], \"(\") ? s[2].v : undefined",
+     "new": "s[3]?.v === \"(\" ? s[2].v : undefined"
+    },
+    {
+     "old": "!isP(ts[ts.length - 1], \")\")",
+     "new": "ts[ts.length - 1].v !== \")\""
+    }
+   ]
   }
  ]
 }
