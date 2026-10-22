@@ -10,7 +10,7 @@ import Fastify from "fastify";
 import {FIRST_DELIVERY_BINDINGS, STAGE_CONSUMERS} from "../core/agents/first-delivery-bindings.js";
 import {computeRoleStatusSummary, createEvidenceVerifier, runningRoleIdsFromRuns, roleLifecycle, TARGET_ROLE_COUNT} from "../core/agents/role-lifecycle.js";
 import {registerRoleStatusRoutes} from "../apps/control-api/src/routes/role-status.js";
-import {EvaluationStaging, EvaluationStagingError, EVALUATION_PROCEDURES, planFor, runRoleEvaluation} from "../core/competency/evaluation-pipeline.js";
+import {EvaluationStaging, EvaluationStagingError, EVALUATION_PROCEDURES, planFor, runRoleEvaluation, verdictOf} from "../core/competency/evaluation-pipeline.js";
 import type {EvaluationOutcome} from "../core/competency/evaluation-pipeline.js";
 import {executeBlockers, parseArgs, runCli} from "../core/competency/evaluation-cli.js";
 import {FakeExecutors, reviewerArgv} from "../core/workos/executors.js";
@@ -868,10 +868,31 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     expect(second).toEqual({status: "REFUSED", reason: "STAGING_EVIDENCE_EXISTS"});
     expect(started).toBe(0);
     expect(fs.readFileSync(first.evidenceFile).equals(bytes)).toBe(true);
-    // a leftover artifact alone (interrupted write) also blocks
+    // a leftover artifact alone (interrupted write) also blocks, again before the executor starts (no wasted call)
     const partial = stagingOf(); const p = new EvaluationStaging(partial, REPO);
     p.write(DEV, "EV-01", "artifact", "{}\n");
-    expect(await evaluate(fakePair(), DEV, {stagingRoot: partial})).toEqual({status: "REFUSED", reason: "STAGING_EVIDENCE_EXISTS"});
+    started = 0;
+    const third = await evaluate({...fakePair(), implementer: {identity: "I", implement: async () => { started++; throw new Error("no"); }}}, DEV, {stagingRoot: partial});
+    expect(third).toEqual({status: "REFUSED", reason: "STAGING_EVIDENCE_EXISTS"});
+    expect(started).toBe(0);
+  });
+
+  it("the verdict is a pure function of the checks: no checks is no verdict (an empty set never passes), one failing check fails", () => {
+    expect([verdictOf([]), verdictOf([{id: "a", passed: true, detail: ""}]), verdictOf([{id: "a", passed: true, detail: ""}, {id: "b", passed: false, detail: ""}])]).toEqual([null, "PASSED", "FAILED"]);
+  });
+
+  it("secret-like text controlled by the model or agent (file names, logs, model output) is redacted in BOTH staged files", { timeout: 120_000 }, async () => {
+    const KEY = "AKIAIOSFODNN7EXAMPLE";
+    const dev = evaluated(await evaluate(fakePair({implement: () => ({files: {"greeting.txt": "hello\n", [`${KEY}.txt`]: "x\n"}})}), DEV));
+    expect(dev.verdict).toBe("FAILED");
+    for (const f of [dev.evidenceFile, dev.artifactFile]) expect(fs.readFileSync(f, "utf8")).not.toContain(KEY);
+    expect(fs.readFileSync(dev.evidenceFile, "utf8")).toContain("[REDACTED:AWS_ACCESS_KEY]");
+    const pre = evaluated(await evaluate(predevPair(() => `not json ${KEY}`), BA));
+    expect(pre.verdict).toBe("FAILED");
+    expect(fs.readFileSync(pre.artifactFile, "utf8")).not.toContain(KEY);
+    expect(fs.readFileSync(pre.artifactFile, "utf8")).toContain("[REDACTED:AWS_ACCESS_KEY]");
+    // the evidence hash binds the redacted bytes, so the staged file still verifies when the pair is non-FAKE
+    expect(createEvidenceVerifier(path.resolve(path.dirname(path.dirname(path.dirname(path.dirname(path.dirname(dev.evidenceFile)))))))(dev.evidenceRef, DEV, "EV-01", "FAILED")).toBe("FAKE_EVIDENCE");
   });
 
   describe("staging confinement", () => {

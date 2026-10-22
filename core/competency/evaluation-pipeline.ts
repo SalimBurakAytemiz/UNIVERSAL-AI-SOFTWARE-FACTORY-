@@ -245,6 +245,11 @@ export function registrySpec(repoRoot: string, roleId: string, evaluationId: str
   } catch { return null; }
 }
 
+// //TR: Verdict YALNIZ kontrollerden hesaplanır; hiç kontrol yoksa verdict yoktur (boş küme "hepsi geçti" sayılmaz).
+export function verdictOf(checks: readonly EvalCheck[]): "PASSED" | "FAILED" | null {
+  return checks.length === 0 ? null : checks.every(c => c.passed) ? "PASSED" : "FAILED";
+}
+
 export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, evaluationId: string): Promise<EvaluationOutcome> {
   const plan = planFor(roleId, evaluationId, deps.bindings);
   if ("refused" in plan) return {status: "REFUSED", reason: plan.refused};
@@ -267,8 +272,8 @@ export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, ev
   finally { try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* geçici dizin en iyi çabayla silinir */ } }
   // //TR: Altyapı kaynaklı sonuç bir DEĞERLENDİRME SONUCU değildir: hiçbir kanıt yazılmaz (rol ne geçer ne kalır).
   if (run.infra !== null) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: run.infra};
-  if (run.checks.length === 0) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: "NO_CHECKS_EVALUATED"};
-  const verdict = run.checks.every(c => c.passed) ? "PASSED" as const : "FAILED" as const;
+  const verdict = verdictOf(run.checks);
+  if (verdict === null) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: "NO_CHECKS_EVALUATED"};
   const endedAt = now().toISOString();
   const rel = `${EVIDENCE_ROOT}/${roleId}`;
   const artifactText = redactSecrets(JSON.stringify({roleId, evaluationId, procedure: procedure.version, checks: run.checks, ...run.artifact}, null, 2) + "\n");
@@ -281,7 +286,8 @@ export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, ev
     checks: run.checks, startedAt, endedAt, codeHeadSha: codeHead.status === 0 ? String(codeHead.stdout).trim() : null,
     artifactPath: `${rel}/${evaluationId}.artifact.json`, artifactSha256: sha256(artifactText), note: EVALUATION_NOTE
   };
-  const evidenceText = JSON.stringify(evidence, null, 2) + "\n";
+  // //TR: Kontrol ayrıntıları model/ajan kontrollü metin (dosya adı vb.) taşıyabilir; kanıt dosyası da artefakt gibi redakte edilir (hash redakte edilmiş baytlara bağlanır).
+  const evidenceText = redactSecrets(JSON.stringify(evidence, null, 2) + "\n");
   let artifactFile: string, evidenceFile: string;
   try { artifactFile = staging.write(roleId, evaluationId, "artifact", artifactText); evidenceFile = staging.write(roleId, evaluationId, "evidence", evidenceText); }
   catch (e) { return {status: "REFUSED", reason: e instanceof EvaluationStagingError ? e.code : "STAGING_WRITE_FAILED"}; }
