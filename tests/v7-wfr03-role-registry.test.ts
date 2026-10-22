@@ -6,7 +6,10 @@ import path from "node:path";
 import crypto from "node:crypto";
 import cp from "node:child_process";
 import {buildServer} from "../apps/control-api/src/server.js";
-import {FIRST_DELIVERY_BINDINGS} from "../core/agents/first-delivery-bindings.js";
+import Fastify from "fastify";
+import {FIRST_DELIVERY_BINDINGS, STAGE_CONSUMERS} from "../core/agents/first-delivery-bindings.js";
+import {computeRoleStatusSummary, createEvidenceVerifier, runningRoleIdsFromRuns, roleLifecycle, TARGET_ROLE_COUNT} from "../core/agents/role-lifecycle.js";
+import {registerRoleStatusRoutes} from "../apps/control-api/src/routes/role-status.js";
 import {deriveRoleProfiles, buildDerivationInputs, NEVER_GRANTED, ROUTE_TOOL_ALLOWLIST, PERMISSION_READ, PERMISSION_WRITE_SCRATCH} from "../core/agents/role-profile-derivation.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
@@ -470,6 +473,125 @@ describe("WFR-AT-004 and /v1/roles API", () => {
     expect((await get(app, "/v1/roles")).statusCode).toBe(503);
     expect((await get(app, "/v1/roles/UASCO-0001")).statusCode).toBe(503);
     await app.close();
+  });
+});
+
+// //TR: LANE-C C1: rol yaşam döngüsü YALNIZ kanıttan hesaplanır; beş sayaç bağımsızdır; FAKE/bozuk/eksik kanıt TESTED/CERTIFIED saymaz.
+describe("LANE-C C1 role lifecycle computed only from evidence", () => {
+  const NOW = new Date("2026-10-22T12:00:00.000Z");
+  const doc = JSON.parse(fs.readFileSync(REG_FILE, "utf8"));
+  const sha = (b: Buffer | string) => crypto.createHash("sha256").update(b).digest("hex");
+  const real = createEvidenceVerifier(REPO);
+  const base = (over: Partial<Parameters<typeof computeRoleStatusSummary>[0]> = {}) => computeRoleStatusSummary({
+    roles: doc.roles, guildIds: doc.guilds.map((g: any) => g.guildId), roleDefinitionsSha256: sha(fs.readFileSync(REG_FILE)),
+    bindings: FIRST_DELIVERY_BINDINGS, verify: real, runs: [], now: NOW, ...over
+  });
+
+  it("real registry today: 599 registered, only bound+consumed production roles implemented, 0 tested/certified/running; guild rows add up", () => {
+    const sum = base();
+    expect(sum).toMatchObject({target: 599, registered: 599, implemented: 3, tested: 0, certified: 0, running: 0, computedAt: NOW.toISOString()});
+    expect(TARGET_ROLE_COUNT).toBe(599);
+    expect(sum.basis).toEqual({roleDefinitionsSha256: sha(fs.readFileSync(REG_FILE)), bindingsCount: FIRST_DELIVERY_BINDINGS.length});
+    expect(sum.byGuild).toHaveLength(51);
+    expect(sum.byGuild.map(g => g.guildId)).toEqual([...sum.byGuild.map(g => g.guildId)].sort());
+    for (const k of ["registered", "implemented", "tested", "certified", "running"] as const) expect(sum.byGuild.reduce((a, g) => a + g[k], 0)).toBe(sum[k]);
+    // implemented roles are exactly those whose binding function a stage consumes: IMPLEMENT => developer UASCO-0085 + tester UASCO-0313, REVIEW => security-reviewer UASCO-0252 (runner gate)
+    const impl = doc.roles.filter((r: any) => roleLifecycle(r, doc.roles, {bindings: FIRST_DELIVERY_BINDINGS, verify: real, runningRoleIds: new Set(), nowMs: NOW.getTime()}).implemented).map((r: any) => r.roleId).sort();
+    expect(impl).toEqual(["UASCO-0085", "UASCO-0252", "UASCO-0313"]);
+    expect(STAGE_CONSUMERS).toEqual({IMPLEMENT: ["developer", "tester"], REVIEW: ["security-reviewer"]});
+    for (const fn of Object.values(STAGE_CONSUMERS).flat()) expect(FIRST_DELIVERY_BINDINGS.some(b => b.function === fn)).toBe(true);
+  });
+
+  it("implemented requires a complete binding: an unsafe/incomplete binding never counts", () => {
+    const dev = FIRST_DELIVERY_BINDINGS.find(b => b.function === "developer")!;
+    const broken = FIRST_DELIVERY_BINDINGS.map(b => b === dev ? {...b, allowedTools: [...b.allowedTools, "Bash"]} : b);
+    expect(base({bindings: broken}).implemented).toBe(2); // tester + security-reviewer remain
+    expect(base({bindings: []}).implemented).toBe(0);
+  });
+
+  describe("tested / certified need verified, non-FAKE evidence", () => {
+    let tmp = "";
+    beforeAll(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-c1-")); });
+    afterAll(() => { fs.rmSync(tmp, {recursive: true, force: true}); });
+    const ROLE = "UASCO-0085";
+    // writes an evidence file + artifact in the tmp repo root; returns the pinned ref
+    const evidence = (root: string, evalId: string, verdict: string, extra: Record<string, unknown> = {}, corrupt = false) => {
+      const dir = path.join(root, "audit", "evidence", "role-evaluations", ROLE); fs.mkdirSync(dir, {recursive: true});
+      const artifactRel = `audit/evidence/role-evaluations/${ROLE}/${evalId}.artifact.txt`, art = Buffer.from(`artifact ${evalId}`);
+      fs.writeFileSync(path.join(root, artifactRel), art);
+      const body = Buffer.from(JSON.stringify({roleId: ROLE, evaluationId: evalId, verdict, artifactPath: artifactRel, artifactSha256: corrupt ? "0".repeat(64) : sha(art), ...extra}));
+      const file = `audit/evidence/role-evaluations/${ROLE}/${evalId}.json`; fs.writeFileSync(path.join(root, file), body);
+      return `${file}#sha256=${sha(body)}`;
+    };
+    const roleWith = (specs: any[], over: Record<string, unknown> = {}) => ({...doc.roles.find((r: any) => r.roleId === ROLE), evaluationSpecs: specs, ...over});
+    const spec = (id: string, status: string, ref: string | null) => ({evaluationId: id, status, evaluatorEvidenceRef: ref, kind: "X", specRef: "x"});
+    const sumFor = (root: string, role: any) => computeRoleStatusSummary({roles: [role], guildIds: [role.guildId], roleDefinitionsSha256: "0".repeat(64), bindings: FIRST_DELIVERY_BINDINGS, verify: createEvidenceVerifier(root), runs: [], now: NOW});
+    const ids = ["EV-01", "EV-02", "EV-03", "EV-04", "EV-05", "EV-06"];
+
+    it("NOT_EXECUTED, missing, tampered, wrong-verdict and FAKE evidence never count; one verified spec = TESTED but not CERTIFIED", () => {
+      const root = fs.mkdtempSync(path.join(tmp, "r-"));
+      const good = evidence(root, "EV-01", "PASSED");
+      expect(sumFor(root, roleWith(ids.map(i => spec(i, "NOT_EXECUTED", null)))).tested).toBe(0);
+      expect(sumFor(root, roleWith([spec("EV-01", "PASSED", null)])).tested).toBe(0);               // claims PASSED without evidence
+      expect(sumFor(root, roleWith([spec("EV-01", "PASSED", good.replace(/sha256=.*/, "sha256=" + "a".repeat(64)))])).tested).toBe(0); // hash mismatch
+      expect(sumFor(root, roleWith([spec("EV-01", "FAILED", good)])).tested).toBe(0);              // verdict in file is PASSED, spec says FAILED
+      const fake = evidence(root, "EV-02", "PASSED", {executorKind: "FAKE"});
+      expect(sumFor(root, roleWith([spec("EV-02", "PASSED", fake)])).tested).toBe(0);              // FAKE executor evidence
+      const badArt = evidence(root, "EV-03", "PASSED", {}, true);
+      expect(sumFor(root, roleWith([spec("EV-03", "PASSED", badArt)])).tested).toBe(0);            // artifact hash mismatch
+      expect(sumFor(root, roleWith([spec("EV-01", "PASSED", good), ...ids.slice(1).map(i => spec(i, "NOT_EXECUTED", null))]))).toMatchObject({tested: 1, certified: 0});
+    });
+
+    it("CERTIFIED needs CERTIFIED status + scope + 6 verified PASSED + APPROVED reviewer evidence + unexpired; any missing piece blocks it", () => {
+      const root = fs.mkdtempSync(path.join(tmp, "c-"));
+      const refs = ids.map(i => evidence(root, i, "PASSED"));
+      const reviewer = evidence(root, "REVIEWER", "APPROVED");
+      const specs = ids.map((i, k) => spec(i, "PASSED", refs[k]));
+      const full = {proficiencyStatus: "CERTIFIED", certifiedScope: {scope: "x"}, evaluatorEvidenceRefs: refs, reviewerEvidenceRef: reviewer, expiresAt: "2027-01-01T00:00:00.000Z"};
+      expect(sumFor(root, roleWith(specs, full))).toMatchObject({tested: 1, certified: 1});
+      expect(sumFor(root, roleWith(specs, {...full, expiresAt: "2026-01-01T00:00:00.000Z"})).certified).toBe(0);        // expired
+      expect(sumFor(root, roleWith(specs, {...full, reviewerEvidenceRef: null})).certified).toBe(0);                    // no independent reviewer
+      expect(sumFor(root, roleWith(specs, {...full, certifiedScope: null})).certified).toBe(0);
+      expect(sumFor(root, roleWith(specs, {...full, proficiencyStatus: "NOT_EVALUATED"})).certified).toBe(0);           // status alone/evidence alone is not enough
+      expect(sumFor(root, roleWith([...specs.slice(0, 5), spec("EV-06", "NOT_EXECUTED", null)], full)).certified).toBe(0); // 5/6
+      expect(sumFor(root, roleWith(specs, {...full, proficiencyStatus: "CERTIFIED"})).certified).toBe(1);
+    });
+  });
+
+  it("running = AGENT_TRACE in an open (non-terminal) run for a registered role; terminal runs, unknown roles and other evidence do not count", () => {
+    const known = new Set<string>(doc.roles.map((r: any) => r.roleId));
+    const trace = (note: string, kind = "AGENT_TRACE") => ({kind, note, evidenceId: "e", step: "IMPLEMENT", cycle: 0, argv: [], startedAt: "", endedAt: "", exitCode: 0, logPath: null, logSha256: null} as any);
+    const run = (status: string, ...ev: any[]) => ({status, evidence: ev} as any);
+    const runs = [
+      run("AWAITING_APPROVAL", trace("agent=a1 role=UASCO-0085 state=COMPLETED")),
+      run("RUNNING", trace("agent=a2 role=UASCO-0252 state=COMPLETED verdict=CLEAN")),
+      run("BLOCKED", trace("agent=a3 role=UASCO-0313 state=FAILED")),          // terminal
+      run("SUCCEEDED", trace("agent=a4 role=UASCO-0019 state=COMPLETED")),     // terminal
+      run("RUNNING", trace("agent=a5 role=UASCO-9999 state=COMPLETED")),       // unknown role
+      run("RUNNING", trace("agent=a6 role=UASCO-0043 state=COMPLETED", "IMPLEMENT")), // not an AGENT_TRACE
+      run("RUNNING")
+    ];
+    expect([...runningRoleIdsFromRuns(runs, known)].sort()).toEqual(["UASCO-0085", "UASCO-0252"]);
+    const sum = base({runs});
+    expect(sum.running).toBe(2);
+    expect(sum).toMatchObject({implemented: 3, tested: 0, certified: 0}); // running does not promote anything else
+  });
+
+  it("GET /v1/roles/status-summary serves exactly the agreed shape from evidence, honest 503 without the registry, no mutation", async () => {
+    const deps = (root: string) => ({repoRoot: root, now: () => NOW, getStore: () => ({hasJournal: false, listRuns: () => []}) as any, scope: {tenantId: "t"} as any, orgId: "o", actor: "a", audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}), workosFail: (reply: any) => reply.code(500).send({error: "X"})});
+    const app = Fastify(); registerRoleStatusRoutes(app, deps(REPO)); await app.ready();
+    const r = await app.inject({method: "GET", url: "/v1/roles/status-summary"});
+    expect(r.statusCode).toBe(200);
+    const body = r.json();
+    expect(Object.keys(body)).toEqual(["statusSummary"]);
+    expect(Object.keys(body.statusSummary).sort()).toEqual(["basis", "byGuild", "certified", "computedAt", "implemented", "registered", "running", "target", "tested"]);
+    expect(body.statusSummary).toMatchObject({target: 599, registered: 599, implemented: 3, tested: 0, certified: 0, running: 0});
+    expect(Object.keys(body.statusSummary.byGuild[0]).sort()).toEqual(["certified", "guildId", "implemented", "registered", "running", "tested"]);
+    expect(Object.keys(body.statusSummary.basis).sort()).toEqual(["bindingsCount", "roleDefinitionsSha256"]);
+    expect((await app.inject({method: "POST", url: "/v1/roles/status-summary"})).statusCode).toBe(404);
+    await app.close();
+    const empty = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-c1-empty-"));
+    try { const a2 = Fastify(); registerRoleStatusRoutes(a2, deps(empty)); await a2.ready(); expect((await a2.inject({method: "GET", url: "/v1/roles/status-summary"})).statusCode).toBe(503); await a2.close(); } finally { fs.rmSync(empty, {recursive: true, force: true}); }
   });
 });
 
