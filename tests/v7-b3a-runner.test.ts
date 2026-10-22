@@ -95,6 +95,8 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
   const NOT_ROOT: RepositoryHead = {ok: false, reason: "REPOSITORY_NOT_WORKTREE_ROOT"}, UNRESOLVED: RepositoryHead = {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
   const okAt = (baseSha: string): RepositoryHead => ({ok: true, baseSha});
   const rawToplevel = (dir: string) => spawnGitSync(dir, ["rev-parse", "--show-toplevel"], {env: cleanEnv()});
+  // //TR: Premise karşılaştırmaları ham dize değil DİZİN KİMLİĞİDİR: Windows'ta git eğik çizgili uzun adı (runneradmin) yazar, os.tmpdir() ise ters eğik çizgili 8.3 kısa adı (RUNNER~1) tutar; ikisi de realpath.native ile aynı kanonik yola iner (ürünün path-guard anahtarı ile aynı mantık).
+  const sameDir = (a: string, b: string) => { try { return fs.realpathSync.native(a) === fs.realpathSync.native(b); } catch { return false; } };
 
   type Built = {dir: string; want: RepositoryHead};
   const builders: Array<[string, () => Built]> = [
@@ -119,22 +121,22 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
     ["a repository whose .git is a FILE (gitfile, --separate-git-dir): ok", () => { const d = path.join(tmp, "gf-root"), gitDir = path.join(tmp, "gf-gitdir"); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${gitDir}`, d]); expect(fs.statSync(path.join(d, ".git")).isFile()).toBe(true); return {dir: d, want: okAt(commitIn(d))}; }],
     ["a gitfile root whose config puts the work tree at a SAME-LENGTH sibling directory: refused (the comparison is by directory identity, not by length or prefix)", () => {
       const d = path.join(tmp, "gw-root"), sib = mkd(tmp, "gw-rooX"), gitDir = path.join(tmp, "gw-gitdir"); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${gitDir}`, d]); commitIn(d);
-      git(d, ["config", "core.worktree", sib]); expect(path.basename(sib).length).toBe(path.basename(d).length); expect(git(d, ["rev-parse", "--show-toplevel"])).toBe(sib);
+      git(d, ["config", "core.worktree", sib]); expect(path.basename(sib).length).toBe(path.basename(d).length); expect(sameDir(git(d, ["rev-parse", "--show-toplevel"]), sib)).toBe(true);
       return {dir: d, want: NOT_ROOT};
     }],
     ["a gitfile root whose config puts the work tree at a DESCENDANT directory: refused (the comparison is by directory identity, not by prefix)", () => {
       const d = path.join(tmp, "gd-root"), gitDir = path.join(tmp, "gd-gitdir"); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${gitDir}`, d]); commitIn(d);
-      const inner = mkd(d, "inner"); git(d, ["config", "core.worktree", inner]); expect(git(d, ["rev-parse", "--show-toplevel"])).toBe(inner);
+      const inner = mkd(d, "inner"); git(d, ["config", "core.worktree", inner]); expect(sameDir(git(d, ["rev-parse", "--show-toplevel"]), inner)).toBe(true);
       return {dir: d, want: NOT_ROOT};
     }],
     ["a repository nested inside another repository: ok, baseSha is the INNER repository's HEAD", () => { const outer = mkd(tmp, "outer"), outerHead = initRepo(outer, true)!, inner = mkd(outer, "vendor", "inner"), innerHead = initRepo(inner, true)!; expect(innerHead).not.toBe(outerHead); return {dir: inner, want: okAt(innerHead)}; }],
     ["a subdirectory of a repository whose config claims the child as its work tree (core.worktree): not the work-tree root", () => {
       const parent = mkd(tmp, "cwparent"); initRepo(parent, true); const child = mkd(parent, "child"); git(parent, ["config", "core.worktree", child]);
-      expect(rawToplevel(child).stdout.trim()).toBe(child); // premise: raw git calls the child a work-tree root (the ceiling or the own-.git proof is what refuses it)
+      expect(sameDir(rawToplevel(child).stdout.trim(), child)).toBe(true); // premise: raw git calls the child a work-tree root (the ceiling or the own-.git proof is what refuses it)
       return {dir: child, want: NOT_ROOT};
     }],
     ["a repository with a .git directory but core.bare=true (git reports no work tree): still ok, the path contains its own .git and it cloned before", () => { const d = mkd(tmp, "corebare"), h = initRepo(d, true)!; git(d, ["config", "core.bare", "true"]); expect(rawToplevel(d).status).not.toBe(0); return {dir: d, want: okAt(h)}; }],
-    ["a repository whose OWN config puts the work tree elsewhere (core.worktree): still ok, the path contains its own .git and it cloned before", () => { const d = mkd(tmp, "cwelsewhere"), other = mkd(tmp, "cwother"), h = initRepo(d, true)!; git(d, ["config", "core.worktree", other]); expect(git(d, ["rev-parse", "--show-toplevel"])).not.toBe(d); return {dir: d, want: okAt(h)}; }],
+    ["a repository whose OWN config puts the work tree elsewhere (core.worktree): still ok, the path contains its own .git and it cloned before", () => { const d = mkd(tmp, "cwelsewhere"), other = mkd(tmp, "cwother"), h = initRepo(d, true)!; git(d, ["config", "core.worktree", other]); expect(sameDir(git(d, ["rev-parse", "--show-toplevel"]), d)).toBe(false); return {dir: d, want: okAt(h)}; }],
     ["detached HEAD at a commit: ok, baseSha is that commit", () => { const d = mkd(tmp, "detached"), first = initRepo(d, true)!; commitIn(d, "second.txt"); git(d, ["checkout", "-q", "--detach", first]); return {dir: d, want: okAt(first)}; }],
     ["a tag checkout (detached) and a non-ASCII branch name: ok", () => { const d = mkd(tmp, "tagco"), h = initRepo(d, true)!; git(d, ["tag", "v1"]); git(d, ["checkout", "-q", "-b", "fé/ünï-çödé"]); git(d, ["checkout", "-q", "v1"]); return {dir: d, want: okAt(h)}; }],
     ["HEAD holding an annotated TAG OBJECT id (not a commit): refused, the clone would fail", () => {
@@ -167,7 +169,7 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
   });
 
   it("an ancestor repository that claims a child directory as its work tree (core.worktree) never makes the child a root, however src is spelled: relative, dot-dot, symlinked, and a ':' in the parent directory name (which splits GIT_CEILING_DIRECTORIES and disables the ceiling)", () => {
-    const mk = (parentName: string) => { const parent = mkd(tmp, parentName); initRepo(parent, true); const child = mkd(parent, "child"); git(parent, ["config", "core.worktree", child]); expect(rawToplevel(child).stdout.trim()).toBe(child); return child; };
+    const mk = (parentName: string) => { const parent = mkd(tmp, parentName); initRepo(parent, true); const child = mkd(parent, "child"); git(parent, ["config", "core.worktree", child]); expect(sameDir(rawToplevel(child).stdout.trim(), child)).toBe(true); return child; };
     const child = mk("claim");
     for (const spelling of [child, path.relative(process.cwd(), child), `${child}${path.sep}.`, `${child}${path.sep}x${path.sep}..`]) expect([spelling, repositoryHead(spelling)]).toEqual([spelling, NOT_ROOT]);
     if (POSIX) {
