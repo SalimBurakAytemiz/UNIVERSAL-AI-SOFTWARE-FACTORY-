@@ -94,6 +94,24 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
   const insideAnyRepo = (dir: string) => spawnGitSync(dir, ["rev-parse", "--git-dir"], {env: cleanEnv()}).status === 0;
   const NOT_ROOT: RepositoryHead = {ok: false, reason: "REPOSITORY_NOT_WORKTREE_ROOT"}, UNRESOLVED: RepositoryHead = {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
   const okAt = (baseSha: string): RepositoryHead => ({ok: true, baseSha});
+  // //TR: process.env YALNIZ withEnv ile değişir. Windows'ta ortam adları büyük/küçük harfe duyarsızdır: GIT_DIR ve git_dir AYNI değişkendir; vi.stubEnv iki yazımı ayrı kaydedip geri yüklerken "özgün" değer olarak ekilmiş GIT_DIR'i geri koyabilir ve sonraki bütün git çağrıları (test yardımcısı git() dahil) silinmiş decoy deposuna gider. withEnv: ekilen her adı (her yazımıyla) siler, anlık görüntüde OLMAYAN her GIT_* adını siler ve özgün değerlerin TAMAMINI geri yazar.
+  const withEnv = <R,>(vars: Record<string, string>, fn: () => R): R => {
+    const saved = Object.entries(process.env);
+    for (const [k, v] of Object.entries(vars)) process.env[k] = v;
+    try { return fn(); } finally {
+      for (const k of Object.keys(vars)) delete process.env[k];
+      for (const k of Object.keys(process.env)) if (/^GIT_/i.test(k) && !saved.some(([sk]) => sk.toUpperCase() === k.toUpperCase())) delete process.env[k];
+      for (const [k, v] of saved) if (v !== undefined) process.env[k] = v;
+    }
+  };
+  const gitEnvNames = () => Object.keys(process.env).filter(k => /^GIT_/i.test(k)).map(k => k.toUpperCase()).sort();
+  let gitEnvBefore: string[] = [];
+  beforeEach(() => { gitEnvBefore = gitEnvNames(); });
+  afterEach(() => { // a leaked GIT_* turns every later git call of the file into a failure: clean it up AND fail here, once, with the names
+    const leaked = gitEnvNames().filter(k => !gitEnvBefore.includes(k));
+    for (const k of Object.keys(process.env)) if (leaked.includes(k.toUpperCase())) delete process.env[k];
+    expect(leaked).toEqual([]);
+  });
   const rawToplevel = (dir: string) => spawnGitSync(dir, ["rev-parse", "--show-toplevel"], {env: cleanEnv()});
   // //TR: Premise karşılaştırmaları ham dize değil DİZİN KİMLİĞİDİR: Windows'ta git eğik çizgili uzun adı (runneradmin) yazar, os.tmpdir() ise ters eğik çizgili 8.3 kısa adı (RUNNER~1) tutar; ikisi de realpath.native ile aynı kanonik yola iner (ürünün path-guard anahtarı ile aynı mantık).
   const sameDir = (a: string, b: string) => { try { return fs.realpathSync.native(a) === fs.realpathSync.native(b); } catch { return false; } };
@@ -227,24 +245,19 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
     const planted: Array<[string, Record<string, string>]> = [["GIT_DIR", {GIT_DIR: decoyDir}], ["GIT_DIR + GIT_WORK_TREE", {GIT_DIR: decoyDir, GIT_WORK_TREE: decoy}], ["GIT_CEILING_DIRECTORIES covering everything", {GIT_CEILING_DIRECTORIES: tmp}], ["all of them", {...Object.fromEntries(SENTINELS.map(k => [k, value(k)])), GIT_CEILING_DIRECTORIES: tmp}]];
     const shapes = builders.filter(([label]) => /^(repo root with a commit|PLAIN SUBDIRECTORY|bare repository with commits|a subdirectory of a repository whose config claims)/.test(label)).map(([label, build]) => ({label, ...build()}));
     expect(shapes.length).toBe(4);
-    try {
-      for (const {label, dir, want} of shapes) for (const [name, vars] of planted) {
-        for (const [k, v] of Object.entries(vars)) vi.stubEnv(k, v);
-        expect([label, name, repositoryHead(dir)]).toEqual([label, name, want]);
-        vi.unstubAllEnvs();
-      }
-      const root = shapes[0];
-      expect(root.want.ok && root.want.baseSha !== decoyHead).toBe(true); // a repository with its own HEAD must never report the decoy's HEAD
-      vi.stubEnv("GIT_DIR", decoyDir);
-      expect(repositoryHead(mkd(tmp, "plain-with-git-dir"))).toEqual(insideAnyRepo(tmp) ? NOT_ROOT : UNRESOLVED); // a planted GIT_DIR cannot make a non-repository look like the decoy
-    } finally { vi.unstubAllEnvs(); }
+    for (const {label, dir, want} of shapes) for (const [name, vars] of planted) expect([label, name, withEnv(vars, () => repositoryHead(dir))]).toEqual([label, name, want]);
+    expect(gitEnvNames()).toEqual(gitEnvBefore); // nothing planted is left behind, compared case-insensitively
+    const root = shapes[0];
+    expect(root.want.ok && root.want.baseSha !== decoyHead).toBe(true); // a repository with its own HEAD must never report the decoy's HEAD
+    expect(withEnv({GIT_DIR: decoyDir}, () => repositoryHead(mkd(tmp, "plain-with-git-dir")))).toEqual(insideAnyRepo(tmp) ? NOT_ROOT : UNRESOLVED); // a planted GIT_DIR cannot make a non-repository look like the decoy
+    expect(gitEnvNames()).toEqual(gitEnvBefore);
   });
 
   it.skipIf(!POSIX)("every git probe runs with a scrubbed environment and the fixed safety flags: a recording git shim sees no GIT_* except the isolation's own and the ceiling (physical parent of src on the deciding probes, absent on the classification probe), always protocol.allow=never, only allow-listed variables (a secret-looking variable and SUDO_UID never reach git)", () => {
     const d = mkd(tmp, "shim-root"); initRepo(d, true); const sub = mkd(d, "pkg");
     const bin = mkd(tmp, "shim-bin"), log = path.join(tmp, "shim.log"), real = String(cp.spawnSync("sh", ["-c", "command -v git"], {encoding: "utf8"}).stdout).trim();
     fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\n{ echo "ARGV $*"; env | sort | sed 's/^/ENV /'; echo END; } >> "${log}"\nexec "${real}" "$@"\n`, {mode: 0o755});
-    const run = (dir: string) => { fs.writeFileSync(log, ""); vi.stubEnv("PATH", `${bin}${path.delimiter}${process.env.PATH ?? ""}`); vi.stubEnv("GIT_DIR", path.join(d, "nope")); vi.stubEnv("git_dir", path.join(d, "nope")); vi.stubEnv("GIT_WORK_TREE", tmp); vi.stubEnv("UASCO_SHIM_PASS", "yes"); vi.stubEnv("UASCO_FAKE_API_KEY", "sekret-value"); vi.stubEnv("SUDO_UID", "0"); try { return {result: repositoryHead(dir), calls: fs.readFileSync(log, "utf8").split("END\n").filter(Boolean).map(c => ({argv: /ARGV (.*)/.exec(c)![1], env: Object.fromEntries(c.split("\n").filter(l => l.startsWith("ENV ")).map(l => l.slice(4)).map(l => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]))}))}; } finally { vi.unstubAllEnvs(); } };
+    const run = (dir: string) => { fs.writeFileSync(log, ""); return withEnv({PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`, GIT_DIR: path.join(d, "nope"), git_dir: path.join(d, "nope"), GIT_WORK_TREE: tmp, UASCO_SHIM_PASS: "yes", UASCO_FAKE_API_KEY: "sekret-value", SUDO_UID: "0"}, () => ({result: repositoryHead(dir), calls: fs.readFileSync(log, "utf8").split("END\n").filter(Boolean).map(c => ({argv: /ARGV (.*)/.exec(c)![1], env: Object.fromEntries(c.split("\n").filter(l => l.startsWith("ENV ")).map(l => l.slice(4)).map(l => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]))}))})); };
     for (const [dir, expected, deciding] of [[d, okAt(headOf(d)), ["rev-parse --show-toplevel", "rev-parse HEAD HEAD^{commit}"]], [sub, NOT_ROOT, ["rev-parse --absolute-git-dir", "rev-parse --is-bare-repository", "rev-parse --git-dir"]]] as const) {
       const {result, calls} = run(dir);
       expect(result).toEqual(expected);
