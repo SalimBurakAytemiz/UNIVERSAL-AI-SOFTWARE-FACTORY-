@@ -1,0 +1,334 @@
+{
+  "//TR": "Bu dosya UASCO Local Windows Test Worker test planıdır: config/validation.json içindeki HER canonical adım sırasıyla bir kez listelenir (sessiz kapsam azaltma yok). LOCAL_PRIMARY = ölçülen Windows süresi en az 60 sn olan ağır test adımları (yerelde Windows Sandbox içinde koşar); CLOUD_SMOKE = kısa adımlar (GitHub-hosted runner'larda kalır). Faz SHADOW: yerel sonuç yalnız danışma niteliğindedir; zorunlu GitHub kontrolleri değişmez ve her adımın yedeği GITHUB_HOSTED_WINDOWS'tur.",
+  "schema": "uasco.local-test-plan/1",
+  "version": "2026-10-22.1",
+  "phase": "SHADOW",
+  "replacesRequiredCheck": false,
+  "requiredChecksUnchanged": [
+    "validate (ubuntu-latest)",
+    "validate (windows-latest)"
+  ],
+  "limits": {
+    "sandboxMemoryMB": 6144,
+    "hostReserveMB": 2048,
+    "maxHostCpuLoadPct": 40,
+    "minFreeDiskGB": 20,
+    "jobTimeoutSec": 5400,
+    "stepTimeoutSec": 600,
+    "maxConcurrentJobs": 1
+  },
+  "cloud": {
+    "linux": "GitHub-hosted ubuntu-latest keeps the full canonical validation (every step).",
+    "windows": "GitHub-hosted windows-latest keeps all 3 shards while the phase is SHADOW; it is also the fallback for every LOCAL_PRIMARY step.",
+    "security": "secret-sanity, dependency-supply-chain (network npm audit) and release-supply-chain stay on GitHub-hosted runners.",
+    "release": "Release acceptance stays on GitHub-hosted runners."
+  },
+  "measurements": {
+    "perStepWindowsSeconds": "GitHub-hosted windows-latest, CI runs 39341341287 and 39362844293 (2026-10-20), per-step durations from the shard reports; each of the 33 other steps took 7.7 s or less.",
+    "shardSeconds": {
+      "source": "CI push run 39720993293 (v7/integration 8e7f1cc, 2026-10-22)",
+      "windowsShardJobs": [
+        810,
+        1195,
+        1166
+      ],
+      "windowsValidationStep": [
+        781,
+        1155,
+        1128
+      ],
+      "linuxJob": 290
+    },
+    "localHost": "NOT_MEASURED: run node scripts/local-worker/probe.mjs on the Founder PC."
+  },
+  "steps": [
+    {
+      "id": "registries",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "architecture",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tr",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "competencies",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "organization",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "schemas",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "technology",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "paste3-technology-domain-registry",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "domain-packs",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "agent-semantic",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "paste3-agent-specialization",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "phase-contracts",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "paste4a-construction-graph",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "paste4b-traceability",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "paste4c-doc-truth",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "paste4d-release-truth",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "review-graph",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "schema-strict",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "woven",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "paste3-source-closure",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "config-runtime-enforcement",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "mechanical",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "runtime-contracts",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "runtime-release-contracts",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "runtime-resilience",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "paste2-source-closure",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "runtime-schema-conformance",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "mechanical-selftest",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "state-selftest",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "secret-sanity",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "dependency-supply-chain",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "release-supply-chain",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "typecheck",
+      "windows": "CLOUD_SMOKE",
+      "measuredWindowsSec": null,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 377.2,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-2",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 141.7,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-3",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 142.5,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-4",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 207.4,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-5",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 110.1,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-6",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 107,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-7",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 96.9,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-8",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 141.6,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-bs1-a",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 266.9,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-bs1-b",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 311.2,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-bs1-c",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 311.9,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-bs1-d",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 337.4,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-bs1-e",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 324.7,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-bs1-f",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 231.4,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-lv1",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 71.1,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    }
+  ]
+}
