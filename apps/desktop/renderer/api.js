@@ -16,7 +16,7 @@ import {CONTROL_PATH,RUNS_PATH,mapOperationsControl,mapOperationsRuns,mapOperati
 import {DOMAINS_PATH,mapDomains} from "./domains-core.js";
 import {SCHEDULER_PATH,mapScheduler} from "./scheduler-core.js";
 import {CAPABILITIES_PATH,ADAPTERS_PATH,FABRICS_PATH,mapCapabilities,mapAdapters,mapFabrics} from "./integrations-core.js";
-import {knowledgePath,mapKnowledge,provenancePath,mapProvenance} from "./knowledge-core.js";
+import {knowledgePath,mapKnowledge,provenancePath,mapProvenance,mapMemoryList} from "./knowledge-core.js";
 import {INSTALL_PATH,PHASE0_PATH,mapInstallReport,mapPhase0Report} from "./install-core.js";
 import {RUNS_PATH as AUDIT_RUNS_PATH,EVIDENCE_PATH as AUDIT_EVIDENCE_PATH,runEventsPath,mapAuditRuns,mapAuditEvents,mapAuditEvidence} from "./audit-core.js";
 
@@ -203,6 +203,13 @@ export function createApi({bridge,store,now=()=>Date.now()}){
       const r=await get(p);
       if(!r.ok)return {state:/INVALID_API_PATH/.test(String(r.message??""))?"UNAVAILABLE":r.state,provenance:null,message:r.message};
       return mapProvenance(r.data,memId);
+    },
+    // //TR: Bellek listesi/arama (GET /v1/projects/:id/memory[?kind=&tag=&q=]); yol buildMemorySearch ile üretilir, izin listesi girişi koordinatörün korumalı grubundadır (reddedilirse UNAVAILABLE).
+    async memoryList(projectId,path){
+      if(typeof path!=="string"||!path.startsWith(`/v1/projects/${projectId}/memory`))return {state:"ERROR",list:null};
+      const r=await get(path);
+      if(!r.ok)return {state:/INVALID_API_PATH/.test(String(r.message??""))?"UNAVAILABLE":r.state,list:null,message:r.message};
+      return mapMemoryList(r.data,projectId);
     },
     async raw(path){return get(path)}
   };

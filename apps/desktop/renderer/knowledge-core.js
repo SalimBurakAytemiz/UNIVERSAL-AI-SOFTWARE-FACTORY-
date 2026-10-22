@@ -93,3 +93,41 @@ export function mapProvenance(raw,memId){
   if(lineage[lineage.length-1].id!==memId)return bad;
   return {state:"VERIFIED",provenance:{id:memId,currentHeadId:p.currentHeadId,lineage}};
 }
+
+// ---------- Bellek listesi / arama (GET /v1/projects/:id/memory?kind=&tag=&q=) ----------
+// //TR: Salt okunur arama: yalnız sunucuda var olan GET rotası; sorgu anahtarları SABİT sırada (kind, tag, q), yüzde-kodlu ve kanonik üretilir (ana süreç izin listesi için), boş ya da denetim karakteri içeren değer isteğe hiç girmez. Yanıt sıkı eşlenir; bir bozuk kayıt tüm okumayı ERROR yapar, sunucu süzgeci istemcide yeniden uygulanmaz.
+export const MAX_QUERY=200,MAX_TAG_QUERY=64,MAX_LIST=2000,LIST_RENDER_CAP=100;
+const CTRL_RE=/[\u0000-\u001f\u007f]/;
+const encQ=v=>encodeURIComponent(v).replace(/[!'()*]/g,c=>"%"+c.charCodeAt(0).toString(16).toUpperCase());
+/** {kind,tag,q} (ham form değerleri) -> {ok,path,errors}; hata anahtarları form.field adlarıdır. */
+export function buildMemorySearch(projectId,{kind="",tag="",q=""}={}){
+  const errors={};
+  if(typeof projectId!=="string"||!PROJECT_ID_RE.test(projectId))errors.project="knowledge.search.err.project";
+  const k=typeof kind==="string"?kind:"",t=typeof tag==="string"?tag.trim():"",s=typeof q==="string"?q.trim():"";
+  if(typeof kind!=="string"||(k!==""&&!MEMORY_KINDS.includes(k)))errors.memKind="knowledge.search.err.kind";
+  if(typeof tag!=="string"||t.length>MAX_TAG_QUERY||CTRL_RE.test(t))errors.memTag="knowledge.search.err.tag";
+  if(typeof q!=="string"||s.length>MAX_QUERY||CTRL_RE.test(s))errors.memQ="knowledge.search.err.q";
+  if(Object.keys(errors).length)return {ok:false,path:null,errors};
+  const parts=[];
+  if(k!=="")parts.push(`kind=${k}`);
+  if(t!=="")parts.push(`tag=${encQ(t)}`);
+  if(s!=="")parts.push(`q=${encQ(s)}`);
+  return {ok:true,path:`/v1/projects/${projectId}/memory${parts.length?"?"+parts.join("&"):""}`,errors:{}};
+}
+function record(x,projectId){
+  const base=step({id:x?.id,seq:x?.seq,at:x?.at,kind:x?.kind,author:x?.author,sources:x?.sources,hash:x?.hash});
+  if(base===null||!isObj(x)||x.projectId!==projectId||str(x.title,200)===null||typeof x.body!=="string"||x.body.length<1||x.body.length>32768)return null;
+  if(typeof x.prevHash!=="string"||!SHA64_RE.test(x.prevHash))return null;
+  if(x.supersedes!==undefined&&(typeof x.supersedes!=="string"||!MEM_ID_RE.test(x.supersedes)||x.supersedes===x.id))return null;
+  if(!Array.isArray(x.tags)||x.tags.length>32||!x.tags.every(g=>str(g,64)!==null))return null;
+  return {id:base.id,seq:base.seq,at:base.at,kind:base.kind,title:x.title,body:x.body,tags:x.tags.slice(),authorRole:base.authorRole,sources:base.sources,supersedes:x.supersedes??null};
+}
+/** GET .../memory yanıtı -> {state:"VERIFIED",list:{records(en yeni önce),total,health}} | {state:"ERROR",list:null}; kayıtlar seq'e göre kesin artan olmalı. */
+export function mapMemoryList(raw,projectId){
+  const bad={state:"ERROR",list:null};
+  if(!isObj(raw)||typeof projectId!=="string"||!PROJECT_ID_RE.test(projectId)||!Array.isArray(raw.records)||raw.records.length>MAX_LIST||!isObj(raw.health)||!MEMORY_STATES.includes(raw.health.state)||!cnt(raw.health.records)||!cnt(raw.health.tornTailBytes))return bad;
+  const out=[],ids=new Set();
+  for(const x of raw.records){const r=record(x,projectId);if(r===null||ids.has(r.id)||(out.length&&r.seq<=out[out.length-1].seq))return bad;ids.add(r.id);out.push(r)}
+  if(out.length>raw.health.records)return bad;
+  return {state:"VERIFIED",list:{records:out.reverse(),total:out.length,health:{state:raw.health.state,records:raw.health.records,tornTailBytes:raw.health.tornTailBytes}}};
+}

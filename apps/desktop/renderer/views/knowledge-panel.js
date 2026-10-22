@@ -1,12 +1,50 @@
 // //TR: Bu görünüm parçası Project Studio > Genel Bakış'taki "Proje bilgisi" panelidir (UI-160, Lane B GET /v1/projects/:id/knowledge): Proje Belleği (karar/bilgi/kaynak/revizyon/not sayıları AYRI, güncel başlar) ve kanıt dizini özeti. Salt okunur; sayılar sunucunun bildirdiği gibidir. TAMPERED bellek için sayı/baş GÖSTERİLMEZ, TORN_TAIL için doğrulanmış önek olduğu söylenir, kanıt YALNIZ örneklenmiş bir sayımdır (en yeni misyonlar, kesilmiş olabilir) ve bağlı değilse/sorgu başarısızsa 0 uydurulmaz. Okunamayan kaynak (404, izin listesi yok, bozuk yanıt) sayı yerine durum notu gösterir.
 import {h,panel,stateNote,emptyNote,badge} from "../components.js";
+import {drafts,field,statusBlock,setStatus,focusResult} from "../forms.js";
 import {formatCount,MISSING} from "../model.js";
 import {formatDateTime} from "../work-core.js";
-import {MEMORY_KINDS,EVIDENCE_KINDS,VERIFICATION_STATUSES,knowledgePath,provenancePath} from "../knowledge-core.js";
+import {MEMORY_KINDS,EVIDENCE_KINDS,VERIFICATION_STATUSES,knowledgePath,provenancePath,buildMemorySearch,LIST_RENDER_CAP} from "../knowledge-core.js";
 
 // //TR: Seçili girdinin geçmişi görünüm ömrü boyunca tutulur; proje değişince sıfırlanır.
 export const knowledgeSel={projectId:null,memId:null};
 export function resetKnowledgeSel(){knowledgeSel.projectId=null;knowledgeSel.memId=null}
+// //TR: Bellek arama taslağı ve gönderilen yol; proje değişince sıfırlanır.
+export const MEMSEARCH_FORM="knowledge-search";
+export const memSearch={projectId:null,kind:"",tag:"",q:"",path:null};
+export function resetMemSearch(){memSearch.projectId=null;memSearch.kind="";memSearch.tag="";memSearch.q="";memSearch.path=null;delete drafts.status[MEMSEARCH_FORM]}
+const BODY_EXCERPT=400;
+export async function submitMemSearch(ctx,projectId){
+  const b=buildMemorySearch(projectId,{kind:memSearch.kind,tag:memSearch.tag,q:memSearch.q});
+  if(!b.ok){memSearch.projectId=projectId;memSearch.path=null;setStatus(MEMSEARCH_FORM,{ok:false,errors:b.errors});await ctx.rerender();focusResult(ctx,MEMSEARCH_FORM,["id:knowledge-search-submit"]);return {ok:false,validation:true}}
+  delete drafts.status[MEMSEARCH_FORM];memSearch.projectId=projectId;memSearch.path=b.path;await ctx.rerender();return {ok:true,path:b.path};
+}
+function searchForm(ctx,projectId){
+  const doc=ctx.doc;
+  return h(doc,"div",{class:"form",id:"knowledge-search",dataset:{knowledgeSearch:projectId}},
+    h(doc,"h4",{text:ctx.t("knowledge.search.title")}),h(doc,"p",{class:"note",text:ctx.t("knowledge.search.lead")}),
+    field(ctx,{id:"knowledge-search-kind",labelKey:"knowledge.search.kind",value:memSearch.kind,onInput:v=>{memSearch.kind=v},options:[{value:"",label:ctx.t("knowledge.search.kindAny")},...MEMORY_KINDS.map(k=>({value:k,label:ctx.t(`knowledge.kind.${k}`)}))]}),
+    field(ctx,{id:"knowledge-search-tag",labelKey:"knowledge.search.tag",value:memSearch.tag,onInput:v=>{memSearch.tag=v}}),
+    field(ctx,{id:"knowledge-search-q",labelKey:"knowledge.search.q",value:memSearch.q,onInput:v=>{memSearch.q=v},hintKey:"knowledge.search.qHint"}),
+    h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",id:"knowledge-search-submit",dataset:{focusKey:"knowledge-search-submit"},text:ctx.t("knowledge.search.submit"),on:{click:()=>submitMemSearch(ctx,projectId)}}),
+      h(doc,"button",{type:"button",class:"btn",id:"knowledge-search-clear",text:ctx.t("knowledge.search.clear"),on:{click:async()=>{resetMemSearch();memSearch.projectId=projectId;await ctx.rerender()}}})),
+    statusBlock(ctx,MEMSEARCH_FORM));
+}
+function searchResults(ctx,res){
+  const doc=ctx.doc;
+  if(!res||res.state!=="VERIFIED")return h(doc,"div",{dataset:{memorySearchResult:"unreadable"}},stateNote(ctx,res?.state??"ERROR"));
+  const l=res.list;
+  if(!l.records.length)return h(doc,"div",{dataset:{memorySearchResult:"none"}},emptyNote(ctx,"knowledge.search.none"));
+  const shown=l.records.slice(0,LIST_RENDER_CAP);
+  return h(doc,"div",{dataset:{memorySearchResult:"list",total:String(l.total),shown:String(shown.length)}},
+    h(doc,"p",{class:"note",role:"status",text:ctx.t("knowledge.search.count",{shown:formatCount(shown.length),total:formatCount(l.total)})}),
+    h(doc,"ul",{class:"cards"},shown.map(r=>h(doc,"li",{class:"card",dataset:{searchMemoryId:r.id}},
+      badge(ctx,ctx.t(`knowledge.kind.${r.kind}`))," ",h(doc,"strong",{text:r.title})," ",h(doc,"time",{text:formatDateTime(r.at,ctx.i18n.lang)}),
+      r.tags.length?h(doc,"span",{class:"note mono",text:` ${r.tags.join(", ")}`}):null,
+      h(doc,"p",{class:"note",text:r.body.length>BODY_EXCERPT?`${r.body.slice(0,BODY_EXCERPT)}…`:r.body}),
+      r.body.length>BODY_EXCERPT?h(doc,"p",{class:"note",text:ctx.t("knowledge.search.cut",{n:formatCount(BODY_EXCERPT)})}):null,
+      h(doc,"span",{class:"note",text:ctx.t("knowledge.hist.author",{role:r.authorRole})})," ",h(doc,"span",{class:"note",text:ctx.t("knowledge.hist.sources",{n:formatCount(r.sources.length)})}),
+      r.supersedes?[" ",h(doc,"span",{class:"note mono",text:ctx.t("knowledge.search.replaces",{id:r.supersedes})})]:null))));
+}
 
 function stat(ctx,id,label,value){
   return h(ctx.doc,"div",{class:"wf-stat",dataset:{stat:id,value:String(value)}},h(ctx.doc,"span",{class:"wf-stat-num",text:formatCount(value)}),h(ctx.doc,"span",{class:"wf-stat-label",text:label}));
@@ -58,5 +96,7 @@ export async function knowledgePanel(ctx,projectId){
   const open=k.memory.currentHeads?.some(x=>x.id===knowledgeSel.memId)?knowledgeSel.memId:null;
   if(open===null)resetKnowledgeSel();
   const prov=open!==null?await ctx.api.memoryProvenance(projectId,open):null;
-  return panel(ctx,{titleKey:"knowledge.title",id:"studio-ov-knowledge"},lead,memorySection(ctx,k.memory,projectId,prov),evidenceSection(ctx,k.evidence),h(doc,"p",{class:"note mono",text:`GET ${knowledgePath(projectId)}`}));
+  if(memSearch.projectId!==projectId){resetMemSearch();memSearch.projectId=projectId}
+  const found=memSearch.path!==null?await ctx.api.memoryList(projectId,memSearch.path):null;
+  return panel(ctx,{titleKey:"knowledge.title",id:"studio-ov-knowledge"},lead,memorySection(ctx,k.memory,projectId,prov),searchForm(ctx,projectId),memSearch.path!==null?searchResults(ctx,found):null,evidenceSection(ctx,k.evidence),h(doc,"p",{class:"note mono",text:`GET ${knowledgePath(projectId)}`}));
 }

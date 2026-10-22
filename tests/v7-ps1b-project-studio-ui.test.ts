@@ -2378,13 +2378,109 @@ describe("LANE-A project knowledge panel", () => {
     expect(other.calls.get).not.toContain(route); expect(panel.knowledgeSel.memId).toBeNull();
     panel.resetKnowledgeSel();
   });
+  const rec = (n: number, over: Record<string, any> = {}) => ({seq: n, id: `mem_${String(n).padStart(6, "0")}`, at: `2026-10-21T03:00:${String(n % 60).padStart(2, "0")}Z`, kind: "DECISION", projectId: PID, title: `Entry ${n}`, body: `Body of entry ${n}`, sources: [], tags: ["db"], author: {role: "FOUNDER"}, prevHash: "0".repeat(64), hash: SHA, ...over});
+  const lst = (records: any[], over: Record<string, any> = {}) => ({records, health: {state: "OK", reason: null, records: Math.max(records.length, 3), lastSeq: 3, lastHash: SHA, tornTailBytes: 0}, ...over});
+  it("builds the search path with fixed key order, canonical percent-encoding and nothing for empty values", async () => {
+    const c = await load(rend, "knowledge-core.js");
+    const b = (o: any, pid = PID) => c.buildMemorySearch(pid, o);
+    expect(b({})).toEqual({ok: true, path: `/v1/projects/${PID}/memory`, errors: {}});
+    expect(b({kind: "FACT", tag: " db ", q: "  use it  "}).path).toBe(`/v1/projects/${PID}/memory?kind=FACT&tag=db&q=use%20it`);
+    expect(b({q: "a&b=c/d?e #é'()*!"}).path).toBe(`/v1/projects/${PID}/memory?q=a%26b%3Dc%2Fd%3Fe%20%23%C3%A9%27%28%29%2A%21`);
+    expect(b({tag: "a b&c=d"}).path).toBe(`/v1/projects/${PID}/memory?tag=a%20b%26c%3Dd`);
+    expect(b({tag: "x"}).path).toBe(`/v1/projects/${PID}/memory?tag=x`); expect(b({kind: "NOTE"}).path).toBe(`/v1/projects/${PID}/memory?kind=NOTE`); expect(b({kind: "", tag: "  ", q: " "}).path).toBe(`/v1/projects/${PID}/memory`);
+    expect(b({tag: "t".repeat(64)}).ok).toBe(true); expect(b({tag: "t".repeat(65)}).errors).toEqual({memTag: "knowledge.search.err.tag"});
+    expect(b({q: "q".repeat(200)}).ok).toBe(true); expect(b({q: "q".repeat(201)}).errors).toEqual({memQ: "knowledge.search.err.q"});
+    expect(b({q: " " + "q".repeat(200) + " "}).ok).toBe(true);
+    expect(b({kind: "OTHER"}).errors).toEqual({memKind: "knowledge.search.err.kind"}); expect(b({kind: "fact"}).ok).toBe(false); expect(b({kind: ["FACT"]}).ok).toBe(false);
+    const cc = (n: number) => String.fromCharCode(n);
+    expect(b({q: "a" + cc(10) + "b"}).ok).toBe(false); expect(b({q: "a" + cc(0) + "b"}).ok).toBe(false); expect(b({tag: "a" + cc(127)}).ok).toBe(false); expect(b({q: "a" + cc(31)}).ok).toBe(false); expect(b({q: "a" + cc(32) + "b"}).ok).toBe(true); expect(b({tag: ["x"]}).ok).toBe(false); expect(b({q: 5}).ok).toBe(false);
+    expect(b({}, "prj_x")).toEqual({ok: false, path: null, errors: {project: "knowledge.search.err.project"}}); expect(b({}, [PID] as any).ok).toBe(false);
+    expect(Object.keys(b({kind: "x", tag: "t".repeat(65), q: "q".repeat(201)}).errors).sort()).toEqual(["memKind", "memQ", "memTag"]);
+  });
+  it("maps the list strictly: newest first, strictly increasing seq, project id must match, filters not re-applied, counts bounded by the chain", async () => {
+    const c = await load(rend, "knowledge-core.js");
+    const ok = c.mapMemoryList(lst([rec(1), rec(2), rec(3, {supersedes: "mem_000001", sources: [{ref: "doc", retrievedAt: "2026-10-21T03:00:00Z"}]})]), PID);
+    expect(ok.state).toBe("VERIFIED"); expect(ok.list.records.map((r: any) => r.id)).toEqual(["mem_000003", "mem_000002", "mem_000001"]); expect(ok.list.total).toBe(3);
+    expect(ok.list.records[0]).toMatchObject({supersedes: "mem_000001", authorRole: "FOUNDER", title: "Entry 3"}); expect(ok.list.records[1].supersedes).toBeNull();
+    expect(c.mapMemoryList(lst([]), PID)).toMatchObject({state: "VERIFIED", list: {records: [], total: 0}});
+    expect(c.mapMemoryList(lst([rec(1, {body: "b".repeat(32768)})]), PID).state).toBe("VERIFIED");
+    expect(c.mapMemoryList(lst([rec(1, {title: "t".repeat(200)})]), PID).state).toBe("VERIFIED");
+    expect(c.mapMemoryList(lst(Array.from({length: c.MAX_LIST}, (_, i) => rec(i + 1, {id: `mem_${String(i + 1).padStart(6, "0")}`})), {health: {state: "OK", reason: null, records: c.MAX_LIST, lastSeq: 1, lastHash: SHA, tornTailBytes: 0}}), PID).state).toBe("VERIFIED");
+    const big = Array.from({length: c.MAX_LIST + 1}, (_, i) => rec(i + 1, {id: `mem_${String(i + 1).padStart(6, "0")}`}));
+    expect(c.mapMemoryList(lst([rec(1, {tags: Array.from({length: 32}, (_, i) => `t${i}`)})]), PID).state).toBe("VERIFIED");
+    expect(c.mapMemoryList(lst([rec(1), rec(2, {seq: 1})]), PID).state).toBe("ERROR");
+    expect(c.mapMemoryList(lst([rec(1, {prevHash: "g".repeat(64)})]), PID).state).toBe("ERROR");
+    expect(c.mapMemoryList(lst([rec(1, {prevHash: ["0".repeat(64)]})]), PID).state).toBe("ERROR");
+    const bads: any[] = [null, [], {}, {records: []}, {health: lst([]).health}, lst("x" as any), lst([], {health: null}), lst([], {health: {state: "NOPE", records: 0, tornTailBytes: 0}}), lst([], {health: {state: "OK", records: -1, tornTailBytes: 0}}), lst([], {health: {state: "OK", records: 0, tornTailBytes: 1.5}}),
+      lst([rec(1), rec(1)]), lst([rec(2), rec(1)]), lst([rec(1), rec(2, {id: "mem_000001"})]), lst([rec(1, {projectId: "prj_" + "11".repeat(12)})]), lst([rec(1, {title: ""})]), lst([rec(1, {title: "t".repeat(201)})]), lst([rec(1, {body: ""})]), lst([rec(1, {body: "b".repeat(32769)})]), lst([rec(1, {body: 5})]),
+      lst([rec(1, {prevHash: "x"})]), lst([rec(1, {prevHash: undefined})]), lst([rec(1, {supersedes: "x"})]), lst([rec(1, {supersedes: "mem_000001"})]), lst([rec(1, {supersedes: ["mem_000002"]})]), lst([rec(1, {tags: "db"})]), lst([rec(1, {tags: Array.from({length: 33}, () => "t")})]), lst([rec(1, {tags: [""]})]), lst([rec(1, {tags: ["t".repeat(65)]})]),
+      lst([rec(1, {author: null})]), lst([rec(1, {sources: "x"})]), lst([rec(1, {hash: "short"})]), lst([null]), lst(big, {health: {state: "OK", records: big.length, lastSeq: 1, lastHash: SHA, tornTailBytes: 0}}),
+      lst([rec(1), rec(2), rec(3), rec(4)], {health: {state: "OK", reason: null, records: 3, lastSeq: 3, lastHash: SHA, tornTailBytes: 0}})];
+    bads.forEach((b, i) => { const r = c.mapMemoryList(b, PID); expect([i, r.state, r.list]).toEqual([i, "ERROR", null]); });
+    expect(c.mapMemoryList(lst([rec(1)]), "prj_x").state).toBe("ERROR");
+  });
+  it("the search form validates, sends one GET with the canonical query, and lists matches newest first with a cut body", async () => {
+    const panel = await load(rend, "views", "knowledge-panel.js");
+    panel.resetKnowledgeSel(); panel.resetMemSearch();
+    const longBody = "L".repeat(450);
+    const results = lst([rec(1), rec(2, {body: longBody, tags: ["db", "x"], supersedes: "mem_000001", sources: [{ref: "doc", retrievedAt: "2026-10-21T03:00:00Z"}]})]);
+    const q = `/v1/projects/${PID}/memory?kind=DECISION&tag=db&q=use%20it`;
+    const mk = async () => { const c = await mkCtx({get: projectsGet({[`/v1/projects/${PID}/knowledge`]: body(), [q]: results}), lang: "en"} as any); st.openProject(PID, "overview"); return c; };
+    const c0 = await mk(); let root = mount(c0.doc, await projectsView.render(c0.ctx));
+    expect(byId(root, "knowledge-search")).not.toBeNull(); expect(c0.calls.get.some((p: string) => p.includes("/memory"))).toBe(false);
+    // invalid input: nothing is requested and the errors are listed
+    panel.memSearch.kind = "BAD"; panel.memSearch.q = "x".repeat(201);
+    const r0 = await panel.submitMemSearch(c0.ctx, PID);
+    expect(r0).toEqual({ok: false, validation: true}); expect(panel.memSearch.path).toBeNull(); expect(c0.calls.get.some((p: string) => p.includes("/memory"))).toBe(false);
+    root = mount(c0.doc, await projectsView.render(c0.ctx));
+    expect(byId(root, "knowledge-search-status")!.dataset.result).toBe("invalid");
+    // valid input: the one canonical GET, results newest first
+    panel.memSearch.kind = "DECISION"; panel.memSearch.tag = "db"; panel.memSearch.q = "use it";
+    const c1 = await mk();
+    expect(await panel.submitMemSearch(c1.ctx, PID)).toEqual({ok: true, path: q});
+    root = mount(c1.doc, await projectsView.render(c1.ctx));
+    expect(c1.calls.get.filter((p: string) => p.includes("/memory"))).toEqual([q]); expect(c1.calls.post).toEqual([]);
+    const res = all(root).find(n => "memorySearchResult" in n.dataset)!;
+    expect(res.dataset.memorySearchResult).toBe("list"); expect(res.dataset.total).toBe("2");
+    expect(all(res).filter(n => "searchMemoryId" in n.dataset).map(n => n.dataset.searchMemoryId)).toEqual(["mem_000002", "mem_000001"]);
+    expect(text(res)).toContain("Showing 2 of 2 matching entries"); expect(text(res)).toContain("L".repeat(400) + "…"); expect(text(res)).not.toContain("L".repeat(401)); expect(text(res)).toContain("cut after 400 characters");
+    expect(text(res)).toContain("replaces mem_000001"); expect(text(res)).toContain("1 source(s)"); expect(text(res)).toContain("by FOUNDER");
+    // clear resets the form
+    all(root).find(n => n.id === "knowledge-search-clear")!.fire("click"); await new Promise(r => setTimeout(r, 0));
+    expect([panel.memSearch.kind, panel.memSearch.tag, panel.memSearch.q, panel.memSearch.path]).toEqual(["", "", "", null]);
+  });
+  it("a search made in another project is dropped when this project's overview is shown", async () => {
+    const panel = await load(rend, "views", "knowledge-panel.js");
+    panel.resetKnowledgeSel(); panel.resetMemSearch();
+    panel.memSearch.projectId = "prj_" + "11".repeat(12); panel.memSearch.path = `/v1/projects/${PID}/memory`; panel.memSearch.q = "left over";
+    const c = await mkCtx({get: projectsGet({[`/v1/projects/${PID}/knowledge`]: body()}), lang: "en"} as any); st.openProject(PID, "overview");
+    const root = mount(c.doc, await projectsView.render(c.ctx));
+    expect(c.calls.get.some((p: string) => p.includes("/memory"))).toBe(false); expect(panel.memSearch.path).toBeNull(); expect(panel.memSearch.q).toBe("");
+    expect(all(root).filter(n => "memorySearchResult" in n.dataset)).toEqual([]);
+  });
+  it("the search shows 'no match', caps the rendered rows, and an unreadable answer shows a state note with no rows", async () => {
+    const panel = await load(rend, "views", "knowledge-panel.js"), core = await load(rend, "knowledge-core.js");
+    const run = async (answer: any, throwing = false) => {
+      panel.resetKnowledgeSel(); panel.resetMemSearch();
+      const path = `/v1/projects/${PID}/memory`;
+      const c = await mkCtx({get: (p: string) => { if (p === path && throwing) throw new Error("INVALID_API_PATH"); return projectsGet({[`/v1/projects/${PID}/knowledge`]: body(), [path]: answer})(p); }, lang: "en"} as any);
+      st.openProject(PID, "overview"); await panel.submitMemSearch(c.ctx, PID);
+      return all(mount(c.doc, await projectsView.render(c.ctx))).find(n => "memorySearchResult" in n.dataset)!;
+    };
+    expect((await run(lst([]))).dataset.memorySearchResult).toBe("none");
+    const many = Array.from({length: core.LIST_RENDER_CAP + 5}, (_, i) => rec(i + 1, {id: `mem_${String(i + 1).padStart(6, "0")}`}));
+    const capped = await run(lst(many));
+    expect(all(capped).filter(n => "searchMemoryId" in n.dataset)).toHaveLength(core.LIST_RENDER_CAP); expect(capped.dataset.shown).toBe(String(core.LIST_RENDER_CAP)); expect(capped.dataset.total).toBe(String(core.LIST_RENDER_CAP + 5));
+    expect(all(capped).filter(n => "searchMemoryId" in n.dataset)[0].dataset.searchMemoryId).toBe(`mem_${String(core.LIST_RENDER_CAP + 5).padStart(6, "0")}`);
+    for (const bad of [await run({nonsense: true}), await run(undefined), await run(undefined, true)]) { expect(bad.dataset.memorySearchResult).toBe("unreadable"); expect(all(bad).filter(n => "searchMemoryId" in n.dataset)).toEqual([]); }
+  });
   it("en and tr have the same knowledge keys and placeholders, and every kind and state has a label", async () => {
     const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
     const keys = Object.keys(en).filter(k => k.startsWith("knowledge."));
-    expect(keys).toHaveLength(41);
+    expect(keys).toHaveLength(58);
     const ph = (x: string) => (x.match(/\{\w+\}/g) ?? []).sort().join(",");
     for (const k of keys) { expect(tr[k], k).toBeTruthy(); expect(ph(tr[k]), k).toBe(ph(en[k])); }
-    expect(Object.keys(tr).filter(k => k.startsWith("knowledge."))).toHaveLength(41);
+    expect(Object.keys(tr).filter(k => k.startsWith("knowledge."))).toHaveLength(58);
     const c = await load(rend, "knowledge-core.js");
     for (const k of [...c.MEMORY_KINDS, ...c.EVIDENCE_KINDS]) expect(en[`knowledge.kind.${k}`], k).toBeTruthy();
     for (const s of c.MEMORY_STATES) { expect(en[`knowledge.mem.state.${s}`], s).toBeTruthy(); expect(en[`knowledge.mem.hint.${s}`], s).toBeTruthy(); }
