@@ -72,6 +72,8 @@ export async function runCli(argv: string[], o: CliOptions): Promise<number> {
   const args = parseArgs(argv);
   if ("error" in args) { o.err(JSON.stringify({status: "USAGE", error: args.error, usage: USAGE}) + "\n"); return 2; }
   const controlRoot = resolveControlRoot(args.controlRoot, o.env, o.repoRoot), stagingRoot = path.join(args.dataDir, "evaluations", "staging");
+  // //TR: Ortam değişkeninden gelen kontrol kökü de bayrak gibi MUTLAK olmalı: göreli yol broker'da çalışma dizinine göre çözülür ve dry run'ın "engel yok" demesine rağmen --execute her zaman başarısız olurdu.
+  if (!path.isAbsolute(controlRoot)) { o.err(JSON.stringify({status: "USAGE", error: "CONTROL_ROOT_MUST_BE_ABSOLUTE", usage: USAGE}) + "\n"); return 2; }
   const plan = planFor(args.role, args.evaluation);
   if ("refused" in plan) { o.err(JSON.stringify({status: "REFUSED", reason: plan.refused}) + "\n"); return 2; }
   const spec = registrySpec(o.repoRoot, args.role, args.evaluation);
