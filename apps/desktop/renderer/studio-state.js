@@ -9,7 +9,11 @@ const freshStudio=()=>({projectId:null,tab:"overview",dir:"",file:null,diffFrom:
 export const studio=freshStudio();
 export const wizard=freshWizard();
 export const importDraft=freshImport();
-export const studioTrackers={wizard:createIdempotencyTracker()};
+export const studioTrackers={wizard:createIdempotencyTracker(),idea:createIdempotencyTracker()};
+// //TR: Kurucu fikri -> ilk mission taslağı (POST /v1/missions gövdesi); oturum içi, kalıcı değil. missionId yalnız sunucu 201/200 yanıtından gelir.
+const freshIdea=()=>({title:"",objective:"",criteria:[""],riskLevel:"R1",missionId:null,missionTitle:null});
+export const ideaDraft=freshIdea();
+export function resetIdea(){Object.assign(ideaDraft,freshIdea());studioTrackers.idea.reset()}
 export const studioUi={wizardOpen:false,importOpen:false};
 
 /** Çalışma alanını açar; proje değişince dosya/diff konumu sıfırlanır. */
@@ -21,4 +25,4 @@ export function closeProject(){studio.projectId=null;studio.tab="overview";studi
 export function setTab(tab){if(STUDIO_TABS.includes(tab))studio.tab=tab}
 export function resetWizard(){Object.assign(wizard,freshWizard());studioTrackers.wizard.reset()}
 export function resetImport(){Object.assign(importDraft,freshImport())}
-export function resetStudio(){Object.assign(studio,freshStudio());resetWizard();resetImport();studioUi.wizardOpen=false;studioUi.importOpen=false}
+export function resetStudio(){Object.assign(studio,freshStudio());resetWizard();resetIdea();resetImport();studioUi.wizardOpen=false;studioUi.importOpen=false}

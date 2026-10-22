@@ -134,6 +134,118 @@ export function buildMissionRequest(input,{key}={}){
   if(!Object.keys(errors).length&&bodyBytes(body)>MAX_BODY_BYTES)errors.form="err.tooLarge";
   return result("/v1/missions",body,errors);
 }
+// ---------- Görev planı (POST /v1/missions/:id/plan, Lane B) ----------
+// //TR: LANE-A: Kurucunun elle girdiği görev planı: her satır bir başlık ve isteğe bağlı bağımlılık (yalnız ÖNCEKİ satır numaraları, 1 tabanlı). Sunucu şeması: tasks[{title<=200,dependsOn[0 tabanlı önceki indeksler]}], en çok 50, gövdede başka alan yoktur.
+export const PLANNABLE_STATUSES=Object.freeze(["DRAFT","PREFLIGHT","AUTHORIZED","PLANNED"]);
+export const PLAN_MAX_TASKS=50;
+export const planPath=id=>MISSION_ID_RE.test(String(id))?`/v1/missions/${id}/plan`:null;
+/** Plan yalnız planlanabilir durumdaki ve henüz görevi olmayan mission için sunulur. */
+export const canPlan=(status,taskCount)=>PLANNABLE_STATUSES.includes(status)&&taskCount===0;
+export function buildPlanRequest({missionId,rows}){
+  const errors={},rowErrors={};
+  if(!planPath(missionId))errors.mission="err.missionInvalid";
+  const list=Array.isArray(rows)?rows.map(r=>({title:trim(r?.title),deps:trim(r?.deps)})):[];
+  while(list.length&&!list[list.length-1].title&&!list[list.length-1].deps)list.pop();
+  if(!list.length)errors.tasks="plan.err.none";
+  else if(list.length>PLAN_MAX_TASKS)errors.tasks="plan.err.many";
+  const tasks=[];
+  list.forEach((r,i)=>{
+    if(!r.title){rowErrors[i]="plan.err.title";return}
+    if(r.title.length>200){rowErrors[i]="plan.err.titleLong";return}
+    let deps=[];
+    if(r.deps){
+      const parts=r.deps.split(/[\s,;]+/).filter(Boolean);
+      if(parts.some(x=>!/^[1-9][0-9]{0,2}$/.test(x)))rowErrors[i]="plan.err.deps";
+      else{
+        const nums=parts.map(Number);
+        if(new Set(nums).size!==nums.length||nums.some(n=>n>=i+1))rowErrors[i]="plan.err.deps";
+        else deps=nums.map(n=>n-1);
+      }
+    }
+    if(rowErrors[i]===undefined){const t={title:r.title};if(deps.length)t.dependsOn=deps;tasks.push(t)}
+  });
+  if(Object.keys(rowErrors).length)errors.tasks=errors.tasks??"plan.err.rows";
+  const ok=!Object.keys(errors).length;
+  return {ok,path:planPath(missionId),body:ok?{tasks}:null,errors,rowErrors};
+}
+// ---------- Görev durumu (POST /v1/tasks/:id/transition, COORD-TASK-STATUS) ----------
+// //TR: COORD-TASK-UI: core/workos/types.ts TASK_TRANSITIONS'ın birebir aynası; yalnız hangi düğmenin sunulacağını belirler, karar sunucudadır. IN_PROGRESS yalnız tüm bağımlılıklar DONE iken sunulur; COMPLETE mission'ın görevleri donuktur. Gövde sunucu şemasıyla aynıdır: {to, reason(1..1000)}.
+export const TASK_TRANSITIONS=Object.freeze({PENDING:Object.freeze(["IN_PROGRESS","BLOCKED"]),IN_PROGRESS:Object.freeze(["DONE","BLOCKED","PENDING"]),BLOCKED:Object.freeze(["PENDING"]),DONE:Object.freeze([])});
+export const TASK_ID_RE=/^tsk_[0-9a-f]{24}$/;
+export const TASK_REASON_MAX=1000;
+export const isTaskStatus=s=>typeof s==="string"&&Object.prototype.hasOwnProperty.call(TASK_TRANSITIONS,s);
+export const taskTransitionPath=id=>TASK_ID_RE.test(String(id))?`/v1/tasks/${id}/transition`:null;
+/** Görevin DONE olmayan (veya listede bulunamayan) bağımlılıkları; dependsOn okunamadıysa (null) boş liste döner ve karar sunucuya kalır. */
+export function pendingTaskDeps(task,tasks){
+  const byId=new Map((Array.isArray(tasks)?tasks:[]).map(t=>[t?.taskId,t]));
+  return (Array.isArray(task?.dependsOn)?task.dependsOn:[]).filter(d=>byId.get(d)?.status!=="DONE");
+}
+/** {targets, blockedBy}: sunulabilecek hedef durumlar ve IN_PROGRESS'i bekleten bağımlılıklar. */
+export function allowedTaskTargets(task,tasks,missionStatus){
+  if(!task||!isTaskStatus(task.status)||missionStatus==="COMPLETE")return {targets:[],blockedBy:[]};
+  const all=TASK_TRANSITIONS[task.status],blockedBy=all.includes("IN_PROGRESS")?pendingTaskDeps(task,tasks):[];
+  return {targets:all.filter(to=>to!=="IN_PROGRESS"||!blockedBy.length),blockedBy};
+}
+/** Görev durum geçişi isteği: yalnız izin verilen hedefler; BLOCKED gerekçe ister, boş gerekçe diğer hedeflerde "FROM -> TO (UASCO Desktop)" olur. */
+export function buildTaskTransitionRequest({task,tasks,missionStatus,to,reason}){
+  const errors={},r=trim(reason),path=taskTransitionPath(task?.taskId);
+  if(!path)errors.task="taskst.err.task";
+  else{
+    const {targets,blockedBy}=allowedTaskTargets(task,tasks,missionStatus);
+    if(!targets.includes(to))errors.to=to==="IN_PROGRESS"&&blockedBy.length?"taskst.err.deps":missionStatus==="COMPLETE"?"taskst.err.frozen":"err.transitionNotAllowed";
+  }
+  if(to==="BLOCKED"&&!r)errors.reason="err.reasonRequired";
+  if(r.length>TASK_REASON_MAX)errors.reason="taskst.err.reasonLong";
+  return result(path,{to,reason:r||`${task?.status} -> ${to} (UASCO Desktop)`},errors);
+}
+// ---------- Görev-koşu bağı (GET/POST /v1/tasks/:id/runs, Lane B) ----------
+// //TR: LANE-A: Koşu bir mission'a açılır; hangi görevi yürüttüğü bu bağla kaydedilir. GET {runs:[{link:{taskId,runId,missionId,linkedAt,...},run|null}]}; POST gövdesi yalnız {runId}. Bozuk kayıt tüm okumayı ERROR yapar; koşu kaydı yoksa durum null kalır (uydurulmaz).
+export const RUN_ID_RE=/^run_[0-9a-f]{24}$/;
+export const taskRunsPath=id=>TASK_ID_RE.test(String(id))?`/v1/tasks/${id}/runs`:null;
+export function mapTaskRuns(raw){
+  const bad={state:"ERROR",items:[]};
+  const list=isObj(raw)?raw.runs:null;if(!Array.isArray(list)||list.length>500)return bad;
+  const items=[];
+  for(const x of list){
+    const l=isObj(x)?x.link:null;
+    if(!isObj(l)||!TASK_ID_RE.test(String(l.taskId))||!RUN_ID_RE.test(String(l.runId))||!MISSION_ID_RE.test(String(l.missionId)))return bad;
+    items.push({taskId:l.taskId,runId:l.runId,missionId:l.missionId,linkedAt:iso(l.linkedAt),status:isObj(x.run)?statusStr(x.run.status):null});
+  }
+  return {state:"VERIFIED",items};
+}
+/** Göreve henüz bağlı olmayan, kanonik kimlikli mission koşuları (kimlik tekrarı elenir). */
+export function linkableRuns(runItems,linkedItems){
+  const linked=new Set((Array.isArray(linkedItems)?linkedItems:[]).map(l=>l.runId)),seen=new Set(),out=[];
+  for(const r of Array.isArray(runItems)?runItems:[]){
+    if(!r||!RUN_ID_RE.test(String(r.runId))||linked.has(r.runId)||seen.has(r.runId))continue;
+    seen.add(r.runId);out.push(r);
+  }
+  return out;
+}
+export function buildLinkRunRequest({taskId,runId,taskStatus}){
+  const errors={},path=taskRunsPath(taskId);
+  if(!path)errors.taskId="taskruns.err.task";
+  if(!RUN_ID_RE.test(String(runId??"")))errors.runId="taskruns.err.run";
+  if(taskStatus==="DONE")errors.taskId="taskruns.err.done";
+  const ok=!Object.keys(errors).length;
+  return {ok,path,body:ok?{runId}:null,errors};
+}
+
+// ---------- Koşu hazırlığı ve bloklu koşu nedenleri (LANE-A first-delivery) ----------
+// //TR: Koşu başlamadan önce kayıtlardan okunabilen eksikler: depo yoksa runner REPOSITORY_NOT_CONFIGURED (uzak URL ise REMOTE_REPO_NOT_SUPPORTED_YET), mission ve proje kaydında test komutu yoksa TEST_COMMAND_NOT_CONFIGURED ile BLOK verir. "Kayıtlı" bir test komutu kabul edileceğini vaat etmez (runner komutu ayrıca izin listesinden geçirir); bu yüzden yalnız EKSİK durumlar kesin uyarıdır. Kayıt okunamadıysa UNKNOWN: olumlu bir hazırlık iddiası yok.
+export function runReadiness({project,mission}){
+  const repository=!project?"UNKNOWN":project.repositoryPath?"RECORDED":project.remoteRepository===true?"REMOTE":"MISSING";
+  const testCommand=!mission?"UNKNOWN":(mission.testCommandSet===true||project?.testCommandSet===true)?"RECORDED":(project?"MISSING":"UNKNOWN");
+  const blockers=[];
+  if(repository==="MISSING")blockers.push("REPOSITORY_NOT_CONFIGURED");
+  if(repository==="REMOTE")blockers.push("REMOTE_REPO_NOT_SUPPORTED_YET");
+  if(testCommand==="MISSING")blockers.push("TEST_COMMAND_NOT_CONFIGURED");
+  return {repository,testCommand,blockers};
+}
+/** Bilinen koşu BLOK nedenleri -> açıklama anahtarı; bilinmeyen neden aynen ham kalır. SANDBOX_UNAVAILABLE'ın mevcut açıklaması korunur. */
+export const RUN_REASON_HINTS=Object.freeze(["REPOSITORY_NOT_CONFIGURED","TEST_COMMAND_NOT_CONFIGURED","REMOTE_REPO_NOT_SUPPORTED_YET","PROJECT_NOT_FOUND","MISSION_NOT_FOUND"]);
+export const runReasonHintKey=reason=>typeof reason==="string"&&RUN_REASON_HINTS.includes(reason)?`run.reason.${reason}`:null;
+
 /** Durum geçişi isteği; yalnız durum makinesinin izin verdiği hedefler, yüksek riskli hedeflerde confirmed===true şart.
  *  D-M1A-STATE-MODEL-2026-10-15: geçiş gövdesi hiçbir onay alanı taşımaz (COMPLETE yalnız PRODUCT_VERIFIED kanıtıyla olur); onay verilmeye çalışılırsa istek kurulmaz. */
 export function buildTransitionRequest({missionId,from,to,reason,confirmed,acknowledgements}){
@@ -147,22 +259,29 @@ export function buildTransitionRequest({missionId,from,to,reason,confirmed,ackno
   const body={to,reason:r||`${from} -> ${to} (UASCO Desktop)`};
   return result(`/v1/missions/${missionId}/transition`,body,errors);
 }
-/** Koşu başlatma isteği: mission AUTHORIZED veya PLANNED olmalı. */
-export function buildRunRequest({missionId,status}){
+// //TR: COORD-RUN-EXPERT: core/agents/first-delivery-bindings.ts içindeki developer bağlamalarının aynası (rol TANIMI; çalışan ajan veya sertifika DEĞİL). Seçilen roleId koşu gövdesine yazılır ve sunucuda runner kapısı (assertRoleExecutes(roleId,"developer")) onu yeniden denetler; burada listede olmayan rol hiç gönderilmez. "" = rol atanmadan (eski davranış).
+export const RUN_EXPERTS=Object.freeze([Object.freeze({roleId:"UASCO-0085",function:"developer",capabilities:Object.freeze(["source-generation","backend-implementation"])})]);
+export const RUN_EXPERT_NONE="";
+export const isRunExpert=id=>RUN_EXPERTS.some(e=>e.roleId===id);
+/** Koşu başlatma isteği: mission AUTHORIZED veya PLANNED olmalı; roleId verilmişse yalnız RUN_EXPERTS'teki bir rol olabilir. */
+export function buildRunRequest({missionId,status,roleId}){
   const errors={};
   if(!MISSION_ID_RE.test(String(missionId??"")))errors.missionId="err.missionInvalid";
   if(!canStartRun(status))errors.status="err.runNotStartable";
-  return result(`/v1/missions/${missionId}/runs`,{},errors);
+  if(roleId!==undefined&&roleId!==RUN_EXPERT_NONE&&!isRunExpert(roleId))errors.roleId="err.roleNotExecutable";
+  return result(`/v1/missions/${missionId}/runs`,isRunExpert(roleId)?{roleId}:{},errors);
 }
 
 // ---------- POST sonucu ----------
 // //TR: SBX-GATE: SANDBOX_UNAVAILABLE dürüst bir ret nedenidir (doğrulanmış sandbox yok, proje kodu çalıştırılmadı); genel 409 yerine açık ileti gösterilir.
 // //TR: M1a c2: teslim artefaktı retleri ({error:<kod>}) da açık iletiyle gösterilir (NO_GENERATED_SOURCE, hash uyuşmazlığı vb.).
-const KNOWN_409=new Set(["EXECUTOR_NOT_CONFIGURED","SANDBOX_UNAVAILABLE","NO_GENERATED_SOURCE","SOURCE_GENERATION_NOT_COMPLETE","DELIVERY_ALREADY_ACCEPTED","DELIVERY_ARTIFACT_HASH_MISMATCH","DELIVERY_ARTIFACT_MISSING","DELIVERY_ARTIFACT_NOT_PREPARED","DELIVERY_SOURCE_UNAVAILABLE","EXPORT_BLOCKED_SECRET"]);
+const KNOWN_409=new Set(["EXECUTOR_NOT_CONFIGURED","SANDBOX_UNAVAILABLE","NO_GENERATED_SOURCE","SOURCE_GENERATION_NOT_COMPLETE","DELIVERY_ALREADY_ACCEPTED","DELIVERY_ARTIFACT_HASH_MISMATCH","DELIVERY_ARTIFACT_MISSING","DELIVERY_ARTIFACT_NOT_PREPARED","DELIVERY_SOURCE_UNAVAILABLE","EXPORT_BLOCKED_SECRET","PLAN_ALREADY_EXISTS","MISSION_NOT_PLANNABLE"]);
 // //TR: M1a + FX-1: COMPLETE kanıt kapısı reddi {error:"WORKOS_CONFLICT", reason:<sabit kod>} olarak gelir; onay gerektiren nedenler açık iletiyle gösterilir.
 // D-M1A-STATE-MODEL-2026-10-15: COMPLETE PRODUCT_VERIFIED ister; kaynak teslimi kabul kapısı da {error:"WORKOS_CONFLICT", reason} ile reddeder.
 const KNOWN_COMPLETION_409=new Set(["COMPLETION_PRODUCT_NOT_VERIFIED","COMPLETION_FUNCTIONAL_ACCEPTANCE_BLOCKED","SOURCE_GENERATION_NOT_COMPLETE","NO_GENERATED_SOURCE","DELIVERY_ACCEPTANCE_MISMATCH","DELIVERY_ALREADY_ACCEPTED",
-  "DELIVERY_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT","DELIVERY_ARTIFACT_NOT_PREPARED","DELIVERY_NOT_LATEST_RUN","DELIVERY_MISSION_NOT_REPORTING","DELIVERY_RUN_NOT_AWAITING_APPROVAL","DELIVERY_PRODUCT_VERIFIED_USE_COMPLETE"]);
+  "DELIVERY_TEST_CHANGES_REQUIRE_ACKNOWLEDGEMENT","DELIVERY_ARTIFACT_NOT_PREPARED","DELIVERY_NOT_LATEST_RUN","DELIVERY_MISSION_NOT_REPORTING","DELIVERY_RUN_NOT_AWAITING_APPROVAL","DELIVERY_PRODUCT_VERIFIED_USE_COMPLETE",
+  // //TR: COORD-TASK-UI: görev geçişi retleri (bağımlılık bitmedi, mission tamamlandı) aynı {error:"WORKOS_CONFLICT", reason} biçimiyle gelir.
+  "TASK_DEPENDENCIES_NOT_DONE","MISSION_COMPLETE"]);
 /** //TR: UI-109: ACTION_DENIED nedeni ilk ':' öncesine kesilir; yalnız sabit kod biçimine uyuyorsa gösterilir, yoksa "" (neden uydurulmaz). */
 function denialReason(raw){
   if(typeof raw!=="string")return "";
@@ -200,19 +319,32 @@ export function formatDateTime(isoString,lang="tr"){
 export function mapMissionDetail(raw){
   const m=isObj(raw)&&isObj(raw.mission)?raw.mission:null;
   if(!m||!MISSION_ID_RE.test(String(m.missionId??"")))return {state:"ERROR",mission:null};
-  const tasks=arr(raw.tasks,200).filter(isObj).map(t=>({taskId:str(t.taskId,80),title:str(t.title,200)??MISSING,status:statusStr(t.status)??MISSING})).filter(t=>t.taskId);
+  // //TR: COORD-TASK-UI: dependsOn yalnız sunucu dizi döndürdüyse ve geçerli görev kimlikleri içeriyorsa okunur; alan yoksa null (bilinmiyor) kalır, uydurulmaz.
+  const tasks=arr(raw.tasks,200).filter(isObj).map(t=>({taskId:str(t.taskId,80),title:str(t.title,200)??MISSING,status:statusStr(t.status)??MISSING,
+    dependsOn:Array.isArray(t.dependsOn)?t.dependsOn.slice(0,50).filter(d=>typeof d==="string"&&TASK_ID_RE.test(d)):null})).filter(t=>t.taskId);
   return {state:"VERIFIED",mission:{
     missionId:m.missionId,projectId:str(m.projectId,80),title:str(m.title,200)??MISSING,objective:str(m.objective,4000)??MISSING,
     acceptanceCriteria:arr(m.acceptanceCriteria,50).filter(c=>typeof c==="string").map(c=>c.slice(0,4000)),
-    status:statusStr(m.status)??MISSING,riskLevel:str(m.riskLevel,8)??MISSING,createdAt:iso(m.createdAt),tasks}};
+    status:statusStr(m.status)??MISSING,riskLevel:str(m.riskLevel,8)??MISSING,createdAt:iso(m.createdAt),testCommandSet:Array.isArray(m.testCommand)&&m.testCommand.length>0,tasks}};
 }
 function mapRunEvidence(list){
   return arr(list,100).map(e=>{
     if(typeof e==="string")return SAFE_ID_RE.test(e)?{evidenceId:e,kind:null,verification:null}:null;
     if(!isObj(e))return null;
     const id=pick(e.evidenceId,e.id);
-    return {evidenceId:typeof id==="string"&&SAFE_ID_RE.test(id)?id:null,kind:str(e.kind,40),verification:normalizeVerification(e.verification)};
+    return {evidenceId:typeof id==="string"&&SAFE_ID_RE.test(id)?id:null,kind:str(e.kind,40),verification:normalizeVerification(e.verification),
+      // //TR: LANE-A: koşu adımı tablosu için sunucunun kaydettiği olgular (RunEvidence): adım, döngü, çıkış kodu, süre ve zaman aşımı. Geçersiz tür null kalır; 0 veya "başarılı" uydurulmaz.
+      step:/^[A-Z][A-Z_]{0,19}$/.test(String(e.step))?e.step:null,cycle:safeCount(e.cycle),exitCode:Number.isSafeInteger(e.exitCode)?e.exitCode:null,timedOut:e.timedOut===true,startedAt:iso(e.startedAt),endedAt:iso(e.endedAt)};
   }).filter(Boolean);
+}
+/** Kanıt kaydından süre (ms); iki zaman da geçerli ve bitiş >= başlangıç değilse null (uydurulmaz). */
+export function evidenceDurationMs(e){
+  const a=Date.parse(e?.startedAt??""),b=Date.parse(e?.endedAt??"");
+  return Number.isFinite(a)&&Number.isFinite(b)&&b>=a?b-a:null;
+}
+/** Koşu adımı tablosu satırları: yalnız adım bilgisi taşıyan (nesne biçimli ve step/startedAt'ı olan) kanıt kayıtları, kayıt sırasıyla. */
+export function runStepRows(evidence){
+  return (Array.isArray(evidence)?evidence:[]).filter(e=>e&&(e.step||e.startedAt)).map(e=>({evidenceId:e.evidenceId,kind:e.kind,step:e.step,cycle:e.cycle,exitCode:e.exitCode,timedOut:e.timedOut===true,startedAt:e.startedAt,durationMs:evidenceDurationMs(e)}));
 }
 /** En son REVIEW kanıt kaydı (en yüksek cycle, eşitlikte dizideki son); yoksa null. */
 function latestReviewEvidence(list){
@@ -332,7 +464,9 @@ export function deriveTaskInspector(detailRes,runsRes,taskId){
   const runsKnown=runsRes?.state==="VERIFIED"&&Array.isArray(runsRes.items),byStatus={};
   if(runsKnown)for(const r of runsRes.items)byStatus[r.status]=(byStatus[r.status]??0)+1;
   return {state:"VERIFIED",task:{taskId:t.taskId,title:t.title,status:t.status,missionId:m.missionId,missionTitle:m.title,missionStatus:m.status,riskLevel:m.riskLevel,
-    runs:runsKnown?{known:true,count:runsRes.items.length,byStatus}:{known:false,count:null,byStatus:{}},unknownFields:[...TASK_UNKNOWN_FIELDS]}};
+    // //TR: COORD-TASK-UI: bağımlılıklar yalnız okumada dependsOn dizisi varsa gösterilir (başlık/durum aynı mission'ın görevlerinden); yoksa alan UNKNOWN kalır.
+    dependencies:Array.isArray(t.dependsOn)?t.dependsOn.map(id=>{const d=(m.tasks??[]).find(x=>x.taskId===id);return {taskId:id,title:d?.title??null,status:d?.status??null}}):null,
+    runs:runsKnown?{known:true,count:runsRes.items.length,byStatus}:{known:false,count:null,byStatus:{}},unknownFields:TASK_UNKNOWN_FIELDS.filter(k=>k!=="dependencies"||!Array.isArray(t.dependsOn))}};
 }
 
 // //TR: UI-025 salt-okunur görev/koşu zaman çizelgesi: yalnız GET /v1/missions/:id ve GET /v1/work-runs okumalarından türetilir. Zaman damgası olmayan olay UNKNOWN sırada sona konur, zaman uydurulmaz; mission okuması VERIFIED değilse (STALE dahil) UNKNOWN; koşu okuması VERIFIED değilse koşu olayları yoktur ve runsKnown=false döner.

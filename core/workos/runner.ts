@@ -17,6 +17,7 @@ import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from ".
 // INT-R4: runProcess (REL-FX ana-makine test çalıştırıcısı) ARTIK kullanılmaz; yürütme yalnız execution-gate sağlayıcısı (gate.provider.run) üzerinden gider, ana makinede asla.
 import {assertIndependentExecutors} from "./executors.js";
 import {ExecutionGate} from "./execution-gate.js";
+import {assertRoleExecutes} from "../agents/first-delivery-bindings.js";
 import type {GateDecision, ProjectExecutionKind} from "./execution-gate.js";
 import {M1A_NOT_VERIFIED_LABEL, productVerificationOf, reviewAndSecurityFor} from "./outcomes.js";
 import {RISK_REFUSAL, hostExecutionNotice, riskAdmitted} from "./risk-admission.js";
@@ -416,6 +417,10 @@ export class MissionRunner {
 
   // IMPLEMENT yeniden girişte idempotenttir: workspace önce döngü başlangıç commit'ine sıfırlanır (kör tekrar yok).
   private async stepImplement(run: WorkRun, leaseId: string, abort: () => boolean): Promise<Outcome> {
+    // //TR: Run'a bir rol atanmışsa (roleId != null) o rol TANIMI developer olarak yürütülebilir olmalıdır; değilse run yazmadan BLOCKED (ROLE_NOT_EXECUTABLE:<neden>). roleId null = rol atanmamış eski/rolsüz run (davranış değişmez).
+    if (run.roleId !== null) {
+      try { assertRoleExecutes(run.roleId, "developer"); } catch (e) { return {kind: "BLOCK", reason: (e as Error).message.slice(0, 200)}; }
+    }
     const work = path.join(this.runDir(run.runId), "work"), branch = run.workBranch ?? `uasco/run/${run.runId}`;
     const start = run.remediationCycle === 0 ? run.baseSha : (run.headSha ?? run.baseSha);
     if (!start || !SHA.test(start) || !fs.existsSync(path.join(work, ".git"))) return {kind: "BLOCK", reason: "WORKSPACE_MISSING", status: "FAILED"};

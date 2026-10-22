@@ -100,6 +100,24 @@ describe("B3a run state table", () => {
 });
 
 describe("B3a mission runner engine", () => {
+  it("LANE-C: a run whose role has no executable developer binding is BLOCKED before any builder call; bound developer and role-less runs proceed", { timeout: T }, async () => {
+    for (const [roleId, blocked] of [["UASCO-0001", true], ["UASCO-0252", true], ["UASCO-0085", false], [null, false]] as const) {
+      const c = setup(); const fake = new FakeExecutors(okScript());
+      const p = fake.pair();
+      const created = c.store.createRun({tenantId: "tA", missionId: c.missionId, roleId, executor: {implementer: p.implementer.identity, reviewer: p.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
+      await runner(c, fake).tick();
+      const run = runOf(c, created.runId);
+      if (blocked) {
+        expect(run.status).toBe("BLOCKED");
+        expect(JSON.stringify(journal(c))).toContain("ROLE_NOT_EXECUTABLE:");
+        expect(fake.calls.implement).toBe(0);
+      } else {
+        expect(run.status).toBe("AWAITING_APPROVAL");
+        expect(fake.calls.implement).toBe(1);
+      }
+    }
+  });
+
   it("happy path: mission ends REPORTING, run AWAITING_APPROVAL with complete evidence; nothing merged or pushed", { timeout: T }, async () => {
     const c = setup(); const fake = new FakeExecutors(okScript());
     const created = start(c, fake);

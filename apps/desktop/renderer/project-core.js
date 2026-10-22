@@ -327,3 +327,56 @@ export function securitySummary(evidence){
   const counts={};for(const e of sec){const k=e.verification??"NONE";counts[k]=(counts[k]??0)+1}
   return {seen:sec.length>0,total:sec.length,counts,allVerified:sec.length>0&&sec.every(e=>e.verification==="VERIFIED")};
 }
+
+// ---------- İlk teslim akışı (GET /v1/projects/:id/flow) ----------
+// //TR: LANE-A first-delivery: sunucunun akış okuması (MISSION, PLAN, RUN, REVIEW, DELIVERY) güvenli, sınırlı alanlara eşlenir; aşama sırası, adı ve durumu sabit sözlükten gelmelidir, aksi halde tüm okuma ERROR olur (kısmi görünüm yok). Hiçbir olumlu durum uydurulmaz.
+export const FLOW_STAGES=Object.freeze(["MISSION","PLAN","RUN","REVIEW","DELIVERY"]);
+export const FLOW_STATES=Object.freeze(["NOT_STARTED","ACTIVE","DONE","BLOCKED","FAILED","UNKNOWN"]);
+export const flowPath=id=>pid(id)?`/v1/projects/${id}/flow`:null;
+export function mapFlow(raw){
+  const bad={state:"ERROR",flow:null};
+  const f=isObj(raw)?raw.flow:null;
+  if(!isObj(f)||!pid(f.projectId)||!Array.isArray(f.stages)||f.stages.length!==FLOW_STAGES.length)return bad;
+  const stages=[];
+  for(const [i,s] of f.stages.entries()){
+    if(!isObj(s)||s.stage!==FLOW_STAGES[i]||!FLOW_STATES.includes(s.state))return bad;
+    stages.push({stage:s.stage,state:s.state,detail:str(s.detail,120)});
+  }
+  const cnt=x=>Number.isSafeInteger(x)&&x>=0?x:null;
+  const rid=typeof f.latestRunId==="string"&&/^[A-Za-z0-9_-]{6,64}$/.test(f.latestRunId)?f.latestRunId:null;
+  // //TR: taskRuns: sunucu alanı yoksa undefined (satır gösterilmez); null = bağ dosyası okunamadı (UNKNOWN); nesne geçerliyse (tasksWithRuns <= tasks) sayılar, aksi halde null.
+  const tr=Object.hasOwn(f,"taskRuns")?(isObj(f.taskRuns)&&cnt(f.taskRuns.tasksWithRuns)!==null&&cnt(f.taskRuns.tasks)!==null&&f.taskRuns.tasksWithRuns<=f.taskRuns.tasks?{tasksWithRuns:f.taskRuns.tasksWithRuns,tasks:f.taskRuns.tasks}:null):undefined;
+  return {state:"VERIFIED",flow:{projectId:f.projectId,stages,missionCount:cnt(f.missionCount),taskCount:cnt(f.taskCount),latestRunId:rid,taskRuns:tr}};
+}
+
+// //TR: LANE-A: Akış aşamasının `detail` kodunu okunur anlama eşler. Anlam YALNIZ aşama durumuyla (state) birlikte geçerlidir: sunucu ACTIVE mission aşamasına son mission'ın durumunu (ör. COMPLETE) yazabilir, bu yüzden "tüm mission'lar tamamlandı" yalnız state=DONE iken söylenir. Bilinen kod yanlış durumla gelirse çevrilmez (MISSION için yalnız düz durum etiketi, diğerleri ham ve "beklenmeyen" notuyla); bilinmeyen kod AYNEN ham ve "tanınmadı" notuyla gösterilir. Olumlu anlam eklenmez.
+export const FLOW_DETAIL_STATES=Object.freeze({
+  MISSION:Object.freeze({COMPLETE:["DONE"],BLOCKED:["BLOCKED"]}),
+  PLAN:Object.freeze({}),
+  RUN:Object.freeze({}),
+  REVIEW:Object.freeze({CLEAN_REVIEW_GATE_PASSED:["DONE"],CLEAN_REVIEW_FOR_HEAD:["DONE"],RUN_NOT_SUCCEEDED:["UNKNOWN"],REVIEW:["ACTIVE"],REGRESSION:["ACTIVE"],REPORT:["ACTIVE"]}),
+  DELIVERY:Object.freeze({PRODUCT_VERIFIED:["DONE"],NOT_VERIFIED:["DONE"],SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED:["ACTIVE"],ARTIFACT_PREPARED_NOT_VERIFIED:["ACTIVE"]})
+});
+const FLOW_STATUS_RE=/^[A-Z][A-Z0-9_]{0,39}$/;
+/** {kind:"key",key,vars} | {kind:"status",status} | {kind:"raw",text,mismatch?} | null (detay yok). PLAN "n/m DONE" ve RUN "STATUS/STEP" biçimleri sayı/durum olarak ayrıştırılır. */
+export function describeFlowDetail(stage,detail,state){
+  if(typeof detail!=="string"||!detail)return null;
+  if(stage==="PLAN"){
+    const m=/^(\d{1,6})\/(\d{1,6}) DONE$/.exec(detail);
+    if(m&&Number(m[1])<=Number(m[2]))return {kind:"key",key:"flow.detail.PLAN.progress",vars:{done:m[1],total:m[2]}};
+    return {kind:"raw",text:detail};
+  }
+  if(stage==="RUN"){
+    const m=/^([A-Z][A-Z0-9_]{0,39})\/([A-Z][A-Z0-9_]{0,39})$/.exec(detail);
+    if(m)return {kind:"key",key:"flow.detail.RUN.status",vars:{status:m[1],step:m[2]}};
+    return {kind:"raw",text:detail};
+  }
+  const codes=FLOW_DETAIL_STATES[stage]??{};
+  if(Object.hasOwn(codes,detail)){
+    if(codes[detail].includes(state))return {kind:"key",key:`flow.detail.${stage}.${detail}`,vars:{}};
+    if(stage==="MISSION")return {kind:"status",status:detail};
+    return {kind:"raw",text:detail,mismatch:true};
+  }
+  if(stage==="MISSION"&&FLOW_STATUS_RE.test(detail))return {kind:"status",status:detail};
+  return {kind:"raw",text:detail};
+}
