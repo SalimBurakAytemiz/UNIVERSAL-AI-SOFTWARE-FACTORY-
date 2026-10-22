@@ -25,6 +25,7 @@ const NO_BRIEF: ProjectBrief = {projectName: "", isReference: false, label: "", 
 const noBuilder = {produce: async (): Promise<string> => { throw new PreDevDriverError("PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"); }};
 
 // //TR: preDevBuilder (isteğe bağlı): üretim BuilderPort sağlayıcısı. server.ts'te mevcut executor durumundan (getExecutors().pair?.preDevBuilder?.()) beslenir, yani Founder'ın /v1/system/executors/local-claude/enable yolu ve provenance PASS dışında bir yetki yoktur; verilmezse veya null dönerse üretim rotası 409 PREDEV_DRIVER_BUILDER_NOT_CONFIGURED verir (varsayılan davranış).
+class PreDevStoppedAfterRun extends Error { constructor() { super("GLOBAL_STOP_ACTIVE"); this.name = "PreDevStoppedAfterRun"; } }
 export interface PredevRouteDeps extends RouteDeps { preDevBuilder?: () => ClaudePreDevBuilder | null }
 
 export function registerPredevDecisionRoutes(app: any, d: PredevRouteDeps): void {
@@ -95,7 +96,8 @@ export function registerPredevDecisionRoutes(app: any, d: PredevRouteDeps): void
   }));
 
   // //TR: C-PREDEV-PRODUCE: mevcut fazın artefaktını bağlı rol (PRE_DEV_ROLE_MAP[kind][0]) üzerinden üretir ve DRAFT kaydeder; ONAYLAMAZ (Founder karar verir). Kapı sırası diğer pre-dev rotalarıyla aynıdır (kimlik 400 -> Global Stop 423 -> politika 403 -> boş gövde 400 -> misyon/tenant 404); sonra builder yoksa 409, aynı misyonda eşzamanlı ikinci çağrı 409 (çift süreç YOK). Faz/bekleyen-taslak kapıları builder çağrılmadan ÖNCE driver'dadır. Üretim idempotent DEĞİLDİR: her başarılı çağrı yeni bir model çağrısıdır.
-  const producing = new Set<string>();
+  // //TR: Süreç genelinde AYNI ANDA en çok BİR produce (yerel makinede N misyon = N model süreci olmasın): aynı misyonda ikinci çağrı IN_PROGRESS, başka misyonda BUSY; ikisi de süreç başlatmadan 409. Kilit builder-yapılandırma denetiminden SONRA alınır, böylece erken çıkış kilidi sızdıramaz.
+  let producingMission: string | null = null;
   app.post("/v1/missions/:id/predev/produce", {bodyLimit: LANE_WRITE_BODY_LIMIT}, guard(async (req: any, reply: any) => {
     const body = req.body ?? {};
     const id: string = req.params.id;
@@ -104,19 +106,22 @@ export function registerPredevDecisionRoutes(app: any, d: PredevRouteDeps): void
     if (!missionOr404(req, reply)) return reply;
     const builder = d.preDevBuilder?.() ?? null;
     if (!builder) return reply.code(409).send({error: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"});
-    if (producing.has(id)) return reply.code(409).send({error: "PREDEV_PRODUCE_IN_PROGRESS"});
-    producing.add(id);
+    if (producingMission !== null) return reply.code(409).send({error: producingMission === id ? "PREDEV_PRODUCE_IN_PROGRESS" : "PREDEV_PRODUCE_BUSY"});
+    producingMission = id;
     try {
       const store = d.getStore(), mission = store.getMission(d.scope, id)!, project = store.getProject(d.scope, mission.projectId);
       if (!project) return reply.code(404).send({error: "WORKOS_NOT_FOUND"});
       builder.shouldAbort = d.workosStopped;
       const phase0 = model(id).phase;
-      const drv = new PreDevDriver({store, brief: briefFromRecords({project, mission}), builder});
+      // //TR: Süreç çıktıktan sonra DRAFT kaydedilmeden ÖNCE Global Stop yeniden denetlenir (250 ms'lik yoklama aralığını kapatır): durdurulmuşsa hiçbir şey kaydedilmez, 423.
+      const guarded = {produce: async (...a: Parameters<typeof builder.produce>) => { const o = await builder.produce(...a); if (d.workosStopped()) throw new PreDevStoppedAfterRun(); return o; }};
+      const drv = new PreDevDriver({store, brief: briefFromRecords({project, mission}), builder: guarded});
       const trace = () => builder.lastTrace;
       const audit = (outcome: "RECORDED" | "REJECTED" | "FAILED", extra: Record<string, unknown>) => d.audit("WORKOS_PREDEV_PRODUCED", {actor: d.actor, kind: "predev", missionId: id, outcome, roleId: trace()?.roleId ?? null, artifactKind: trace()?.kind ?? null, executor: trace()?.identity ?? null, outputSha256: trace()?.outputSha256 ?? null, exitCode: trace()?.exitCode ?? null, durationMs: trace()?.durationMs ?? null, ...extra});
       let out;
       try { out = await drv.produceCurrentPhase(d.scope, id, PREDEV_AGENT_ACTOR); }
       catch (e) {
+        if (e instanceof PreDevStoppedAfterRun) { audit("FAILED", {phase: phase0, reason: "GLOBAL_STOP_ACTIVE"}); return reply.code(423).send({error: "GLOBAL_STOP_ACTIVE"}); }
         if (e instanceof PreDevBuilderError) { audit("FAILED", {phase: phase0, reason: e.code}); return reply.code(502).send({error: "PREDEV_BUILDER_FAILED", reason: e.code}); }
         // //TR: Model çağrısı koştuktan SONRA başka bir adım fırlatırsa (ör. journal yazımı WORKOS_DISK_FULL) harcanan çağrı yine de audit'e girer (sabit kod, ham mesaj yok); kapı hataları (PreDevDriverError) builder'dan önce fırlar ve trace boştur.
         if (!(e instanceof PreDevDriverError) && trace() !== null) { try { audit("FAILED", {phase: phase0, reason: e instanceof WorkOsError ? e.code : "PREDEV_PRODUCE_INTERNAL_ERROR"}); } catch { /* özgün hatayı maskeleme */ } }
@@ -129,6 +134,6 @@ export function registerPredevDecisionRoutes(app: any, d: PredevRouteDeps): void
       }
       audit("RECORDED", {phase: out.phase, artifactId: out.artifactId, version: out.version});
       return reply.code(201).send({produced: {status: "RECORDED", kind: out.kind, phase: out.phase, artifactId: out.artifactId, version: out.version, roleId: trace()?.roleId ?? null}, predev: model(id)});
-    } finally { producing.delete(id); }
+    } finally { producingMission = null; }
   }));
 }

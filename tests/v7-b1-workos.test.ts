@@ -1812,7 +1812,7 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
   let PREDEV_AGENT_ACTOR = "";
   beforeEach(async () => { PREDEV_AGENT_ACTOR = (await import("../core/workos/predev/claude-builder.js")).PREDEV_AGENT_ACTOR; });
   const kindOf = (input: string) => /# ARTEFAKT TÜRÜ: (\w+)/.exec(input)?.[1] ?? "";
-  async function mkApp(o: {builder?: "none" | "null" | "fake"; stopped?: () => boolean; allowed?: boolean; tenantId?: string; run?: (kind: string, run: Run) => Promise<any> | any; profileOk?: boolean; storeOptions?: ConstructorParameters<typeof WorkOsStore>[1]} = {}) {
+  async function mkApp(o: {builder?: "none" | "null" | "fake"; stopped?: () => boolean; allowed?: boolean; tenantId?: string; run?: (kind: string, run: Run) => Promise<any> | any; profileOk?: boolean; storeOptions?: ConstructorParameters<typeof WorkOsStore>[1]; provider?: {on: boolean}} = {}) {
     const [{default: Fastify}, {registerPredevDecisionRoutes}, {WorkOsError}, {ClaudePreDevBuilder}, {reviewerArgv}, {TASKHUB_ARTIFACTS}] = await Promise.all([
       import("fastify"), import("../apps/control-api/src/routes/predev-decisions.js"), import("../core/workos/types.js"), import("../core/workos/predev/claude-builder.js"), import("../core/workos/executors.js"), import("../core/workos/predev/fixtures/taskhub/index.js")]);
     const app = Fastify({logger: false});
@@ -1826,7 +1826,7 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
       const at = new Date().toISOString();
       return {argv, exitCode: 0, stdout: "", stderr: "", startedAt: at, endedAt: at, timedOut: false, aborted: false, spawnError: false, ...r};
     };
-    const preDevBuilder = o.builder === "none" ? undefined : () => { providerCalls.n++; return o.builder === "null" ? null : new ClaudePreDevBuilder({identity: "claude-reviewer@local.invalid", launcher: () => "/x/claude", profile: () => o.profileOk === false ? {ok: false as const, reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"} : {ok: true as const, dir: "/profile/reviewer"}, env: dir => ({CLAUDE_CONFIG_DIR: dir}), argv: reviewerArgv, run: fakeRun, scratchRoot}); };
+    const preDevBuilder = o.builder === "none" ? undefined : () => { providerCalls.n++; return o.builder === "null" || (o.provider && !o.provider.on) ? null : new ClaudePreDevBuilder({identity: "claude-reviewer@local.invalid", launcher: () => "/x/claude", profile: () => o.profileOk === false ? {ok: false as const, reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"} : {ok: true as const, dir: "/profile/reviewer"}, env: dir => ({CLAUDE_CONFIG_DIR: dir}), argv: reviewerArgv, run: fakeRun, scratchRoot}); };
     registerPredevDecisionRoutes(app, {getStore: () => store, scope: {tenantId: o.tenantId ?? "tA"}, orgId: "o1", actor: ACT, audit: (e: string, x?: any) => { audits.push({e, x}); }, workosStopped: o.stopped ?? (() => false),
       workosPolicy: (action: string, mid: string) => { policies.push(action); return o.allowed === false ? {allowed: false, reason: "NO"} : {allowed: true}; },
       workosFail: (r: any, e: any) => e?.code === "WORKOS_DISK_FULL" ? r.code(507).send({error: e.code}) : r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"}), ...(preDevBuilder ? {preDevBuilder} : {})});
@@ -2023,7 +2023,7 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
     expect(produced(t.audits)).toMatchObject([{outcome: "FAILED", reason: "PREDEV_BUILDER_TIMEOUT", phase: "BUSINESS_ANALYSIS"}]);
   });
 
-  it("at most one produce per mission at a time: a concurrent second call is 409 PREDEV_PRODUCE_IN_PROGRESS with NO second process; another mission is not blocked; the lock is released afterwards", async () => {
+  it("at most ONE produce at a time across ALL missions: the same mission is 409 PREDEV_PRODUCE_IN_PROGRESS, another mission is 409 PREDEV_PRODUCE_BUSY, neither starts a process; the slot is released afterwards (success and failure)", async () => {
     let release!: () => void; const gate = new Promise<void>(r => { release = r; });
     const first_ = {pending: true};
     const c = await mkApp({run: async () => { if (first_.pending) { first_.pending = false; await gate; } return undefined; }});
@@ -2036,14 +2036,65 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
     expect(c.runs).toHaveLength(1);
     const second = await post(c.app, `/v1/missions/${id}/predev/produce`);
     expect([second.statusCode, second.json().error]).toEqual([409, "PREDEV_PRODUCE_IN_PROGRESS"]);
-    expect(c.runs).toHaveLength(1);
-    const parallel = await post(c.app, `/v1/missions/${other.missionId}/predev/produce`);
-    expect(parallel.statusCode, parallel.body).toBe(201); expect(c.runs).toHaveLength(2);
+    const busy = await post(c.app, `/v1/missions/${other.missionId}/predev/produce`);
+    expect([busy.statusCode, busy.json().error]).toEqual([409, "PREDEV_PRODUCE_BUSY"]);
+    expect(c.runs).toHaveLength(1); // neither refused call spawned anything
+    expect(produced(c.audits)).toEqual([]); // refused before the builder: no produce audit
     release();
     const done = await first;
     expect(done.statusCode, done.body).toBe(201);
     const third = await post(c.app, `/v1/missions/${id}/predev/produce`);
-    expect([third.statusCode, third.json().reason]).toEqual([409, "PREDEV_DRIVER_ARTIFACT_PENDING"]); // lock released: this is the pending-DRAFT gate, not IN_PROGRESS
+    expect([third.statusCode, third.json().reason]).toEqual([409, "PREDEV_DRIVER_ARTIFACT_PENDING"]); // slot released: this is the pending-DRAFT gate, not IN_PROGRESS/BUSY
+    const next = await post(c.app, `/v1/missions/${other.missionId}/predev/produce`);
+    expect(next.statusCode, next.body).toBe(201); expect(c.runs).toHaveLength(2); // the other mission now gets the slot
+    // a failed run releases the slot too
+    const f = await mkApp({run: () => ({timedOut: true, exitCode: null})});
+    await post(f.app, `/v1/missions/${f.m.missionId}/predev/start`);
+    expect((await post(f.app, `/v1/missions/${f.m.missionId}/predev/produce`)).statusCode).toBe(502);
+    expect((await post(f.app, `/v1/missions/${f.m.missionId}/predev/produce`)).statusCode).toBe(502); // not BUSY/IN_PROGRESS
+  });
+
+  it("lock order: a call refused as NOT_CONFIGURED (executor off) never takes the slot, so enabling the executor afterwards works at once", async () => {
+    const provider = {on: false};
+    const c = await mkApp({provider}), id = c.m.missionId;
+    await post(c.app, `/v1/missions/${id}/predev/start`);
+    for (let i = 0; i < 3; i++) { const r = await post(c.app, `/v1/missions/${id}/predev/produce`); expect([r.statusCode, r.json().error]).toEqual([409, "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"]); }
+    provider.on = true;
+    const ok = await post(c.app, `/v1/missions/${id}/predev/produce`);
+    expect([ok.statusCode, ok.body.slice(0, 80)]).toEqual([201, expect.any(String)]); // not PREDEV_PRODUCE_BUSY / IN_PROGRESS
+    // the same holds for the earlier refusals (stop, policy, body, 404): none of them takes the slot
+    const other = await mkApp({builder: "fake", allowed: false});
+    await post(other.app, `/v1/missions/${other.m.missionId}/predev/produce`);
+    expect(other.runs).toHaveLength(0);
+  });
+
+  it("Global Stop that lands AFTER the process exited and before the DRAFT is recorded: nothing is recorded, 423 GLOBAL_STOP_ACTIVE, audit FAILED with the hash; the slot is released and a retry after the stop is lifted works", async () => {
+    let stopped = false, stopOnRun = true;
+    const c = await mkApp({stopped: () => stopped, run: () => { if (stopOnRun) stopped = true; return undefined; }}); // the (fake) process exits normally with valid output; the stop lands right after
+    const id = c.m.missionId;
+    await post(c.app, `/v1/missions/${id}/predev/start`);
+    const rm0 = JSON.stringify(c.store.preDevReadModel(SC, id)), n0 = journalLines();
+    const r = await post(c.app, `/v1/missions/${id}/predev/produce`);
+    expect([r.statusCode, r.json()]).toEqual([423, {error: "GLOBAL_STOP_ACTIVE"}]);
+    expect(c.runs).toHaveLength(1);
+    expect(JSON.stringify(c.store.preDevReadModel(SC, id))).toBe(rm0); expect(journalLines()).toBe(n0);
+    expect(produced(c.audits)).toMatchObject([{outcome: "FAILED", reason: "GLOBAL_STOP_ACTIVE", phase: "BUSINESS_ANALYSIS", roleId: "UASCO-0022", exitCode: 0}]);
+    expect(produced(c.audits)[0].outputSha256).toMatch(/^[0-9a-f]{64}$/);
+    stopped = false; stopOnRun = false;
+    const again = await post(c.app, `/v1/missions/${id}/predev/produce`);
+    expect(again.statusCode, again.body).toBe(201);
+  });
+
+  it("produce is allowed for R3/R4 missions (a Founder-visible decision: it runs no project code, only a read-only process in an empty scratch dir and a DRAFT the Founder must approve); run creation is not affected here", async () => {
+    for (const risk of ["R3", "R4"] as const) {
+      const c = await mkApp();
+      const m = c.store.createMission({...msn(c.p.projectId), riskLevel: risk});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) c.store.transitionMission(SC, m.missionId, to, "go", ACT);
+      await post(c.app, `/v1/missions/${m.missionId}/predev/start`);
+      const r = await post(c.app, `/v1/missions/${m.missionId}/predev/produce`);
+      expect([risk, r.statusCode, r.json().produced?.status]).toEqual([risk, 201, "RECORDED"]);
+      expect(c.store.getMission(SC, m.missionId)!.riskLevel).toBe(risk);
+    }
   });
 
   it("Global Stop activated while the model runs reaches the process runner (shouldAbort) and ends the call with PREDEV_BUILDER_ABORTED; nothing is recorded", async () => {
