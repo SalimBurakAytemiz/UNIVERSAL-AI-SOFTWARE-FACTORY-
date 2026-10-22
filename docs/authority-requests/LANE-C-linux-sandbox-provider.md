@@ -1,4 +1,6 @@
 <!-- //TR: LANE-C yetki talebi: ücretsiz Linux sandbox sağlayıcısının (core/agents/linux-unshare-sandbox.ts) ExecutionGate'e kaydı korumalı server.ts içindedir; Windows tasarım notları ve sınırlamalar burada. -->
+
+> **WARNING - NOT VERIFIED, DO NOT REGISTER (added after an independent adversarial review).** The v1 provider described below is NOT a verified sandbox and its `selfTest` is insufficient: the review reproduced HIGH escapes (the whole host filesystem stays readable; host unix sockets such as docker/dbus/ssh-agent stay connectable; `/dev`, `/dev/shm`, `/sys` stay writable; a root supervisor keeps kuid 0 DAC over `/proc/sys`; the timeout kill can be bypassed because the project is pid 1; and `selfTest` passes while all of this is exploitable). Every claim below that says it "proves" isolation is withdrawn. The provider is not wired anywhere and the `server.ts` hook in this note must NOT be applied. The hardened v2 is in PR #184 (`claude/lane-c-sandbox-hardening`); this note is rewritten there.
 # LANE-C authority request: register the free Linux sandbox provider
 
 ## What was built (no protected file touched)

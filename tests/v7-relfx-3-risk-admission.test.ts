@@ -58,6 +58,17 @@ describe("REL-FX-3 risk-level run admission", () => {
     }
   });
 
+  it("LANE-C default role: a run started without roleId carries the bound developer role (UASCO-0085); an explicit roleId still wins", { timeout: T }, async () => {
+    for (const [payload, expected] of [[{}, "UASCO-0085"], [{roleId: "UASCO-0252"}, "UASCO-0252"]] as const) {
+      const c = setup(tmp, "tA", {riskLevel: "R1"});
+      const app = api(c, {executors: new FakeExecutors(okScript()).pair()});
+      const res = await app.inject({method: "POST", url: `/v1/missions/${c.missionId}/runs`, headers: HDR, payload});
+      expect(res.statusCode, JSON.stringify(payload)).toBe(201);
+      expect(res.json().run.roleId).toBe(expected);
+      expect(new WorkOsStore(c.dataDir).getRun({tenantId: "tA"}, res.json().run.runId)?.roleId).toBe(expected);
+      await app.close();
+    }
+  });
   it("defense in depth: a journal-injected R4 run is BLOCKED at WORKSPACE with no clone and no child process", { timeout: T }, async () => {
     const c = setup(tmp, "tA", {riskLevel: "R4"});
     const fake = new FakeExecutors(okScript());
