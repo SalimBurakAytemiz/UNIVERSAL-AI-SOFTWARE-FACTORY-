@@ -22,6 +22,8 @@ export const RUN_STEPS=Object.freeze(["WORKSPACE","IMPLEMENT","VERIFY","SECURITY
 /** Artık yürütülmeyen (terminal) durumlar ve Founder kararı bekleyen durum; geri kalanı "açık" koşudur. */
 export const TERMINAL_RUN_STATUSES=Object.freeze(["SUCCEEDED","BLOCKED","QUARANTINED","CANCELLED","RECOVERY_FAILED","FAILED"]);
 export const AWAITING_RUN_STATUS="AWAITING_APPROVAL";
+/** //TR: Durdurulmuş/başarısız koşu durumları (sunucu nedenini gösterir); readiness run kapısı FAIL kümesiyle aynıdır. */
+export const RUN_STOPPED_STATUSES=Object.freeze(["FAILED","RECOVERY_FAILED","BLOCKED","QUARANTINED","CANCELLING","CANCELLED"]);
 /** Yürütme hattında olan mission durumları (taslak/ön kontrol/engelli/Founder-dikkat/tamamlandı hariç). */
 export const IN_PROGRESS_MISSION_STATUSES=Object.freeze(["AUTHORIZED","PLANNED","EXECUTING","VERIFYING","REVIEWING","REMEDIATING","REGRESSION","REPORTING"]);
 export const REVIEW_VERDICTS=Object.freeze(["CLEAN","BLOCKED"]);
@@ -167,6 +169,7 @@ function mapRunRow(r){
   const baseSha=r.baseSha??null,headSha=r.headSha??null;
   const ev=r.evidence.map(mapEvidenceRef);if(ev.some(e=>e===null))return null;
   const delivery=deliveryOf(r);if(delivery===null)return null;
+  if(r.reason!==undefined&&r.reason!==null&&typeof r.reason!=="string")return null;
   // Tamamlanma kaydı yalnız SUCCEEDED koşuda bulunabilir (sunucu değişmezi); aksi halde kayıt bozuk sayılır. İçeriği burada yorumlanmaz, yalnız varlığı taşınır.
   let completionRecorded=false;
   if(r.completion!==undefined&&r.completion!==null){
@@ -174,7 +177,7 @@ function mapRunRow(r){
     completionRecorded=true;
   }
   return {runId:r.runId,missionId:r.missionId,projectId:r.projectId,status:r.status,step:r.step,cycle:r.remediationCycle,createdAt:r.createdAt,updatedAt:r.updatedAt,baseSha,headSha,
-    versions:sourceVersions(ev),review:reviewOf(ev,headSha),delivery,completionRecorded};
+    versions:sourceVersions(ev),review:reviewOf(ev,headSha),delivery,completionRecorded,reason:text(r.reason)};
 }
 /** GET /v1/work-runs -> {state:"VERIFIED",runs:{items(newest activity first),total,open,awaiting,ended,prepared,accepted}} | {state:"ERROR",runs:null}. Tek bozuk koşu tüm okumayı ERROR yapar. */
 export function mapExecWorkRuns(raw){

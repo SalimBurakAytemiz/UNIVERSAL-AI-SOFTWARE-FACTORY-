@@ -2,15 +2,16 @@
 import {h,badge} from "./components.js";
 import {drafts} from "./forms.js";
 import {deliveryAckKey} from "./delivery-core.js";
+import {isProductVerified} from "./work-core.js";
 
 /** Koşu/görev/teslim yüzeyi için NOT_VERIFIED rozeti; scope yalnız test/erişilebilirlik içindir (run|mission|delivery|export). */
 export function notVerifiedBadge(ctx,scope){
   return h(ctx.doc,"span",{class:"badge badge-notverified",dataset:{m1aBadge:scope},title:ctx.t("m1a.badge.title")},ctx.t("m1a.badge"));
 }
 /** Koşu eşlemesinde test yürütme kanıtı (VERIFY_TESTS/REGRESSION_TESTS) yoksa true; kanıt bilinmiyorsa da true (asla doğrulanmış varsayılmaz). */
-export const runNotVerified=run=>!(run&&run.testsExecuted===true);
+export const runNotVerified=run=>!isProductVerified(run);
 /** Görevin hiçbir koşusunda test yürütme kanıtı yoksa true (koşusu olmayan görev de NOT_VERIFIED'dır). */
-export function missionNotVerified(runs,missionId){return !(runs??[]).some(r=>r&&r.missionId===missionId&&r.testsExecuted===true)}
+export function missionNotVerified(runs,missionId){return !(runs??[]).some(r=>r&&r.missionId===missionId&&isProductVerified(r))}
 /** Ayarlar: GET /v1/system/executors sandbox alanı; doğrulanmış sağlayıcı yoksa "UNAVAILABLE — M1a modu". */
 export function sandboxBlock(ctx,sandbox){
   const doc=ctx.doc,state=sandbox&&typeof sandbox.state==="string"?sandbox.state:null;

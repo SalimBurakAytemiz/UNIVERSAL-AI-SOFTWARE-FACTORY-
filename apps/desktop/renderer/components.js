@@ -111,3 +111,17 @@ export function verificationChip(ctx,verification){
   const k=verificationChipKind(verification),label=verification&&VERIFICATION_STATES.includes(verification)?ctx.t(`everif.${verification}`):ctx.t("everif.NONE");
   return h(ctx.doc,"span",{class:`chip chip-${k.toLowerCase()}`,dataset:{chip:k,verification:verification??"NONE"}},h(ctx.doc,"span",{class:"chip-dot","aria-hidden":"true"}),label);
 }
+/** //TR: UI-105 rota başlıklı, sayısız yükleme iskeleti; eşzamanlıdır, hiçbir veri okumaz; başlık yalnız area.<id>.title anahtarından gelir, bulunamazsa veya hata olursa app.js'in tek satırlık "Yükleniyor" notuna döner (asla fırlatmaz). */
+export function viewSkeleton(ctx,route){
+  try{
+    const id=route&&typeof route.id==="string"?route.id:null,key=`area.${id}.title`,title=id?ctx.t(key):null;
+    if(!id||typeof title!=="string"||!title||title===key)throw new Error("skeleton-title");
+    const doc=ctx.doc,block=()=>h(doc,"div",{class:"skel-block","aria-hidden":"true",dataset:{skeletonBlock:""}});
+    return h(doc,"div",{class:"view","aria-busy":"true",dataset:{skeleton:id}},
+      h(doc,"h1",{id:"view-title",tabindex:"-1",text:title}),
+      h(doc,"p",{class:"note",role:"status",text:ctx.t("state.LOADING")}),
+      block(),block(),block());
+  }catch{
+    return h(ctx.doc,"p",{class:"note",role:"status",text:ctx.t("state.LOADING")});
+  }
+}

@@ -1049,7 +1049,7 @@ describe("Posture — route delegation (app.js VIEWS unchanged, #/assurance unto
     expect(routes.routeFromHash("#/posture/")).toBe("posture");
     expect(routes.routeFromHash("#/postures")).toBe(routes.DEFAULT_ROUTE);
     expect(routes.routeFromHash("#/Posture")).toBe(routes.DEFAULT_ROUTE);
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-12)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-14)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "domains", "integrations", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("posture");
     expect(routes.ROUTES.filter((x: any) => x.factory).length).toBe(8);
     // Eski rotalar etkilenmez; #/assurance kendi görünümüdür (tek sahiplik).

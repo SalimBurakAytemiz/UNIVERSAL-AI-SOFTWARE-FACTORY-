@@ -2,7 +2,7 @@
 import {h,panel,statePill,emptyNote} from "../components.js";
 import {MISSING} from "../model.js";
 import {formatDateTime} from "../work-core.js";
-import {EXECUTIVE_SOURCE_PATHS,PILL_FOR_RUN_STATUS,shortSha} from "../executive-core.js";
+import {EXECUTIVE_SOURCE_PATHS,PILL_FOR_RUN_STATUS,RUN_STOPPED_STATUSES,shortSha} from "../executive-core.js";
 import {RETURN_GROUPS,readSeen,storeSeen,nextSeen,returnSummary} from "../return-summary-core.js";
 
 const isOk=res=>Boolean(res)&&res.state==="VERIFIED";
@@ -19,7 +19,8 @@ function returnRunRow(ctx,r,titles){
     h(doc,"time",{datetime:r.updatedAt,text:formatDateTime(r.updatedAt,ctx.i18n.lang)}),
     h(doc,"div",{class:"tl-body"},
       h(doc,"p",{class:"executive-row-head"},h(doc,"strong",{class:"mono",text:r.runId})," ",statePill(ctx,PILL_FOR_RUN_STATUS[r.status]??"NEUTRAL",{label:r.status})),
-      h(doc,"p",{class:"note",text:`${ctx.t("executive.ledger.mission")}: ${title?`${title} · ${r.missionId}`:r.missionId}`})));
+      h(doc,"p",{class:"note",text:`${ctx.t("executive.ledger.mission")}: ${title?`${title} · ${r.missionId}`:r.missionId}`}),
+      RUN_STOPPED_STATUSES.includes(r.status)?h(doc,"p",{class:"note"},ctx.t("executive.return.reason")," ",h(doc,"span",{dataset:{returnRunReason:""}},r.reason===null?MISSING:r.reason)):null));
 }
 /** Sayım özeti: her grup + yeni mission + kabul edilen teslim; okunamayan mission kaynağı 0 değil — gösterir. */
 function returnOverview(ctx,sum){
