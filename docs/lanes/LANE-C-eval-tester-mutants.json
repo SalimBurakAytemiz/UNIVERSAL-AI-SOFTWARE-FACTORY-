@@ -1,5 +1,5 @@
 {
- "//TR": "Tester golden-tests-v1 oracle için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt bir dosyada TAM 1 kez geçen metni değiştirir; docs/lanes/LANE-C-eval-tester-mutants.mjs hepsini çalıştırır ve her birinin test grubu tarafından ÖLDÜRÜLDÜĞÜNÜ (KILLED) bekler.",
+ "//TR": "Tester golden-tests-v1 oracle için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt bir dosyada TAM 1 kez geçen metni değiştirir; docs/lanes/LANE-C-eval-tester-mutants.mjs hepsini çalıştırır ve her birinin test grubu tarafından ÖLDÜRÜLDÜĞÜNÜ (KILLED) bekler. Y3-Y6 (tek bölge: tür karşılaştırmasız parantez) bilerek yok: her biri ikinci bağımsız korumayla (tipli parseAddCall, p-parantez eşleştirici, derleme) örtülüdür; yararlanılabilir birleşimler Z1/Z2.",
  "mutants": [
   {
    "id": "T1",
@@ -639,6 +639,41 @@
      "new": "ts[ts.length - 1].v !== \")\""
     }
    ]
+  },
+  {
+   "id": "G01",
+   "description": "a template literal token is read as a number",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (!num || num.t !== \"num\") return null;",
+   "new": "if (!num || (num.t !== \"num\" && num.t !== \"tpl\")) return null;"
+  },
+  {
+   "id": "G04",
+   "description": "a string expected value is read as a number in the assert.ok / bare form",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "const call = parseAddCall(x, r.addId), exp = parseNumber(y, MAX_EXPECTED_INT_DIGITS);",
+   "new": "const call = parseAddCall(x, r.addId), exp = parseNumber(y.map(t => t.t === \"str\" ? {...t, t: \"num\" as const} : t), MAX_EXPECTED_INT_DIGITS);"
+  },
+  {
+   "id": "G05",
+   "description": "unary minus detected on any slot of two or more tokens (-5 + 1 read as -5)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "const neg = ts.length === 2 && ts[0].t === \"p\"",
+   "new": "const neg = ts.length >= 2 && ts[0].t === \"p\""
+  },
+  {
+   "id": "G06",
+   "description": "the require callee name is not checked (const add = String(\"../src/add\") binds add)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": " && isId(s[3], \"require\")",
+   "new": ""
+  },
+  {
+   "id": "E02",
+   "description": "the mission text stops telling the tester that the declarations come first",
+   "file": "core/competency/evaluation-fixtures.ts",
+   "old": "(both `const`; they are the first two statements, so every assertion comes after both declarations)",
+   "new": "(both `const`)"
   }
  ]
 }

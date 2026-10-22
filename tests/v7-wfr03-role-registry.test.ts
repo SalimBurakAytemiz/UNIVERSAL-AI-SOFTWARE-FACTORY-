@@ -13,6 +13,7 @@ import {computeRoleStatusSummary, createEvidenceVerifier, runningRoleIdsFromRuns
 import {registerRoleStatusRoutes} from "../apps/control-api/src/routes/role-status.js";
 import {EvaluationStaging, EvaluationStagingError, EVALUATION_PROCEDURES, planFor, runRoleEvaluation, verdictOf} from "../core/competency/evaluation-pipeline.js";
 import type {EvaluationOutcome} from "../core/competency/evaluation-pipeline.js";
+import {GOLDEN_TESTS} from "../core/competency/evaluation-fixtures.js";
 import {executeBlockers, parseArgs, resolveControlRoot, runCli} from "../core/competency/evaluation-cli.js";
 import {MAX_TEST_SOURCE_BYTES, analyzeAddTest, tokenize, topLevelStatements} from "../core/competency/static-test-analysis.js";
 import {FakeExecutors, reviewerArgv} from "../core/workos/executors.js";
@@ -926,6 +927,11 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     expect(art).toMatchObject({testsExecuted: false, qualifyingAssertions: 3, assertCalls: 3, disabledMarkers: 0, surface: {added: ["test/add.test.js"], modified: [], deleted: [], weakened: [], trivialAdded: [], harness: []}});
     expect(art.testsNotExecutedReason).toMatch(/never run/);
     expect(ev.procedure).toMatchObject({version: "golden-tests-v1"}); expect(ev.procedure.doesNotCover.join(" ")).toMatch(/nothing is executed/);
+    // the order rule and the detection limit are stated where the model and the reader see them
+    expect(GOLDEN_TESTS.objective).toMatch(/first two statements, so every assertion comes after both declarations/);
+    expect(ev.procedure.covers.join(" ")).toMatch(/BEFORE the first assertion/);
+    expect(ev.procedure.doesNotCover.join(" ")).toMatch(/SUBTRACTS \(a - b\) only.*a \* b == a \+ b/);
+    expect(o.checks.find(c => c.id === "closed_world")?.detail).toMatch(/before the first assertion/);
     // the written file is only COMPILED, never run: a top-level side effect must not happen
     const sneaky = `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "x");\n${TESTER_GOOD}`;
     const s2 = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": sneaky}})}), TESTER));
@@ -1035,6 +1041,14 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       ["a tagged template whose text is , separates the assert arguments", T({"test/add.test.js": H + A + "assert.strictEqual(add(-2, -3)`,`-5);\n"}), "closed_world"],
       ["a tagged template whose text is === is the operator", T({"test/add.test.js": H + A + "assert(add(-2, -3)`===`-5);\n"}), "closed_world"],
       ["a tagged template whose text is , is the add-call comma", T({"test/add.test.js": H + A + "assert.strictEqual(add(2`,`-3), -1);\n"}), "closed_world"],
+      // other token kinds are not numbers, and only `require` itself declares a module
+      ["a template literal operand", T({"test/add.test.js": H + A + "assert.strictEqual(add(`2`, 3), 5);\n"}), "closed_world"],
+      ["a template literal expected value", T({"test/add.test.js": H + A + "assert.strictEqual(add(2, 3), `5`);\n"}), "closed_world"],
+      ["a string expected value in the assert.ok form", T({"test/add.test.js": H + A + 'assert.ok(add(2, 3) === "5");\n'}), "closed_world"],
+      ["a string expected value in the reversed bare form", T({"test/add.test.js": H + A + 'assert("5" === add(2, 3));\n'}), "closed_world"],
+      ["an operand that starts with a minus but has more tokens (-5 + 1 is -4)", T({"test/add.test.js": H + A + "assert.strictEqual(add(-5 + 1, 0), -5);\n"}), "closed_world"],
+      ["an expected value that is an expression (3 + 4)", T({"test/add.test.js": H + A + "assert.strictEqual(add(3, 4), 3 + 4);\n"}), "closed_world"],
+      ["a binding whose callee is not require (String)", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = String("../src/add");\n' + A}), "references_module"],
       // control statements are reported as early exits, they are not "other statements" for the ORDER rule
       ["a top-level if before the declarations", T({"test/add.test.js": "if (0) {}\n" + H + A}), "no_early_exit"],
       ["a top-level if between the declarations", T({"test/add.test.js": 'const assert = require("node:assert");\nif (0) {}\nconst add = require("../src/add");\n' + A}), "no_early_exit"],
@@ -1191,6 +1205,9 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
         expect([src, an(src).tamper]).toEqual([src, "DECLARATION_AFTER_ASSERT"]);
       const alias = 'const assert = require("node:assert");\nconst a2 = require("assert");\na2.strictEqual(add(2, 3), 5);\na2.strictEqual(add(-2, -3), -5);\na2.strictEqual(add(0, 7), 7);\nconst add = require("../src/add");\n';
       expect([an(alias).tamper, an(alias).cases.length]).toEqual(["DECLARATION_AFTER_ASSERT", 3]); // every statement before the late declaration goes through the second alias
+      expect(an("if (x) {}\n" + H).tamper).toBeNull();                                                              // a control statement is an early exit, not an out-of-order declaration
+      expect(an(H + A3 + "return;\n" + 'const a2 = require("assert");\n').tamper).toBe("DECLARATION_AFTER_ASSERT");      // and it does not reset the order state either
+      expect(an(H + A3 + 'const a2 = require("assert");\nx = 1;\nconst a3 = require("assert");\n').tamper).toBe("DECLARATION_AFTER_ASSERT"); // the FIRST late declaration is named
       expect(an(H + A3 + 'const p = require("node:process");\n').tamper).toBe("REQUIRE_SPEC_NOT_ALLOWED:node:process"); // a disallowed spec keeps its own, more specific, reason
       expect(an(H + "x = 1;\n" + 'const a2 = require("assert");\n' + A3).tamper).toBe("STATEMENT_NOT_ALLOWED:x");        // the first violation wins: a foreign statement before a late declaration
     });
