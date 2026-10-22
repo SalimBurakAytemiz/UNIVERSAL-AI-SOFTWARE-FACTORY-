@@ -33,7 +33,7 @@
    "id": "H5",
    "description": "the own-.git clause dropped (core.bare / core.worktree repositories refused)",
    "file": "core/workos/runner.ts",
-   "old": "|| same(gitDir(), path.join(src, \".git\")) ||",
+   "old": "|| same(probe([\"rev-parse\", \"--absolute-git-dir\"], true), path.join(src, \".git\")) ||",
    "new": "||"
   },
   {
@@ -45,17 +45,17 @@
   },
   {
    "id": "H6",
-   "description": "the .git directory accepted as a bare repository",
+   "description": "every directory the ceiling-bounded discovery finds counts as bare (the .git directory accepted)",
    "file": "core/workos/runner.ts",
-   "old": "probe([\"rev-parse\", \"--is-bare-repository\"], true) === \"true\" &&",
-   "new": "true &&"
+   "old": "probe([\"rev-parse\", \"--is-bare-repository\"], true) === \"true\";",
+   "new": "true;"
   },
   {
    "id": "H7",
-   "description": "any git dir inside the ceiling accepted when bare",
+   "description": "the bare clause dropped (bare repositories refused)",
    "file": "core/workos/runner.ts",
-   "old": "&& same(gitDir()))",
-   "new": "&& gitDir() !== null)"
+   "old": " || probe([\"rev-parse\", \"--is-bare-repository\"], true) === \"true\";",
+   "new": ";"
   },
   {
    "id": "H8",

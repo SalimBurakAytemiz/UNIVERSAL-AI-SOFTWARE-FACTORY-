@@ -109,7 +109,7 @@ export function repositoryPrecondition(project: {projectId: string; repository?:
 }
 
 export type RepositoryHead = {ok: true; baseSha: string} | {ok: false; reason: "REPOSITORY_NOT_WORKTREE_ROOT" | "REPOSITORY_HEAD_UNRESOLVED"};
-// //TR: Depo kökü ve HEAD kararı TEK saf fonksiyondur (runner WORKSPACE adımı ve readiness.ts aynısını çağırır). `git rev-parse` yukarı doğru keşfeder: düz bir alt dizin üst deponun HEAD'ini çözerdi; bu yüzden (1) host'un TÜM GIT_* değişkenleri atılır (GIT_DIR başka bir depoyu gösterebilir), GIT_CEILING_DIRECTORIES=<üst dizin> ile keşif yukarı çıkamaz, (2) kök kararı kanonik anahtarla (path-guard) verilir: `--show-toplevel` src'ye EŞİT, veya src kendi `.git` dizinini içerir (`--absolute-git-dir` == src/.git; core.bare/core.worktree ayarlı depolar dahil), veya src çıplak bir git dizinidir; `.git` dizininin kendisi kök değildir, (3) ancak sonra HEAD tam bir commit SHA'sına çözülmelidir. `ok:true` YALNIZ ceiling'li, GIT_*'siz sondajlardan türer; ceiling'siz sondaj yalnız iki red nedeni arasında seçer (REPOSITORY_NOT_WORKTREE_ROOT: başka bir deponun/.git'in içinde) ve asla izin vermez.
+// //TR: Depo kökü ve HEAD kararı TEK saf fonksiyondur (runner WORKSPACE adımı ve readiness.ts aynısını çağırır). `git rev-parse` yukarı doğru keşfeder: düz bir alt dizin üst deponun HEAD'ini çözerdi; bu yüzden (1) host'un TÜM GIT_* değişkenleri atılır (GIT_DIR başka bir depoyu gösterebilir), GIT_CEILING_DIRECTORIES=<üst dizin> ile keşif yukarı çıkamaz, (2) kök kararı kanonik anahtarla (path-guard) verilir: `--show-toplevel` src'ye EŞİT, veya src kendi `.git` dizinini içerir (`--absolute-git-dir` == src/.git; core.bare/core.worktree ayarlı depolar dahil), veya depo çıplaktır (`--is-bare-repository`; ceiling'li keşif yalnız src'de bulabildiği için bu src'nin kendisidir); `.git` dizininin kendisi kök değildir, (3) ancak sonra HEAD tam bir commit SHA'sına çözülmelidir. `ok:true` YALNIZ ceiling'li, GIT_*'siz sondajlardan türer; ceiling'siz sondaj yalnız iki red nedeni arasında seçer (REPOSITORY_NOT_WORKTREE_ROOT: başka bir deponun/.git'in içinde) ve asla izin vermez.
 export function repositoryHead(src: string, baseEnv: NodeJS.ProcessEnv = process.env): RepositoryHead {
   const env: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(baseEnv)) if (v !== undefined && !/^GIT_/i.test(k)) env[k] = v;
@@ -118,8 +118,7 @@ export function repositoryHead(src: string, baseEnv: NodeJS.ProcessEnv = process
     return r.status === 0 ? String(r.stdout ?? "").trim() : null;
   };
   const same = (p: string | null, to: string = src): boolean => { if (!p) return false; const a = canonicalPath(p), b = canonicalPath(to); return a.ok && b.ok && a.key === b.key; };
-  const gitDir = (): string | null => probe(["rev-parse", "--absolute-git-dir"], true);
-  const root = same(probe(["rev-parse", "--show-toplevel"], true)) || same(gitDir(), path.join(src, ".git")) || (probe(["rev-parse", "--is-bare-repository"], true) === "true" && same(gitDir()));
+  const root = same(probe(["rev-parse", "--show-toplevel"], true)) || same(probe(["rev-parse", "--absolute-git-dir"], true), path.join(src, ".git")) || probe(["rev-parse", "--is-bare-repository"], true) === "true";
   if (!root) return {ok: false, reason: probe(["rev-parse", "--git-dir"], false) !== null ? "REPOSITORY_NOT_WORKTREE_ROOT" : "REPOSITORY_HEAD_UNRESOLVED"};
   const head = probe(["rev-parse", "--verify", "HEAD^{commit}"], true);
   return head !== null && SHA.test(head) ? {ok: true, baseSha: head} : {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
