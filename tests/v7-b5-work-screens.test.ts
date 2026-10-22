@@ -1647,6 +1647,14 @@ describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
     expect(server.match(/registerTaskRunRoutes\(app,laneDeps\);/g)?.length).toBe(1);
     expect(server).toContain("registerTaskRoutes(app,laneDeps);\nregisterTaskRunRoutes(app,laneDeps);");
   });
+  it("COORD registry reads: exactly /v1/domains, /v1/scheduler, /v1/adapters, /v1/capabilities, /v1/fabrics are GET-only, with no near miss", () => {
+    const get = loadGet(), {desktopPostPathAllowed: post} = loadPost();
+    for (const p of ["/v1/domains", "/v1/scheduler", "/v1/adapters", "/v1/capabilities", "/v1/fabrics"]) {
+      expect(get(p), p).toBe(true);
+      expect(post(p), `POST ${p}`).toBe(false);
+      for (const m of [p + "/", p + "?x=1", p + "/x", p.toUpperCase(), p.replace("/v1/", "/v2/"), " " + p, p + "#"]) expect(get(m), m).toBe(false);
+    }
+  });
   it("admits the exact paths the renderer builds, and the write body keeps the 32 KB bridge limit", async () => {
     const get = loadGet(), {desktopPostPathAllowed: post, desktopPostBodyCheck: check, POST_MAX_BODY_BYTES} = loadPost();
     const work = await load(rend, "work-core.js");
