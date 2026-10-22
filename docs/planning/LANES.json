@@ -1,0 +1,778 @@
+{
+  "//TR": "Bu dosya A-Z 26 üretim hattının canonical, makine-okunur kaydıdır: sahiplik (oturum), görev türleri, izinli yollar, hat bağımlılıkları ve hat/küresel kota. Mevcut dispatcher (docs/planning/dispatch.mjs --plan / --lane) bu kaydı docs/planning/lanes.mjs ile fail-closed doğrular ve BACKLOG_CHECKPOINT.json görevlerini buna göre yönlendirir; ikinci bir orkestratör yoktur.",
+  "schemaVersion": "1.0.0",
+  "canonicalBacklog": "docs/planning/BACKLOG_CHECKPOINT.json",
+  "dispatcher": "docs/planning/dispatch.mjs",
+  "basis": "Founder directive 2026-10-22 (A-Z Production Lane Registry and Working Dispatcher). Lanes A, B and C keep their 2026-10-21 owners and paths; Z is the coordinator; D-Y are STANDBY until a builder session is assigned.",
+  "capacity": {
+    "builderCap": 4,
+    "ciSlots": 6,
+    "basis": "builderCap 4 = the four running sessions (Lanes A, B, C and the coordinator). ciSlots 6 stays below the 8 concurrent PR CI runs observed congesting the Windows runner queue on 2026-10-22."
+  },
+  "sharedPaths": [
+    "tests/"
+  ],
+  "routing": [
+    "A task's lane is the lane whose allowedPaths entry is the longest match for every owned file; files under sharedPaths do not decide the lane when other files exist.",
+    "An entry ending in '/' or '-' is a prefix; any other entry is an exact file. Matching ignores case (Windows checkouts).",
+    "Files owned by two lanes => CROSS_LANE (split the task). A protected or CI-executed file => never routed.",
+    "A task without files is routed by type, then by package prefix, and runs one at a time within its lane.",
+    "Tasks of upstream lanes (dependsOnLanes) are planned first; two tasks whose files overlap never run in the same wave.",
+    "Wave 0 holds what may start now under each lane's maxActive/maxOpenPrs, builderCap and ciSlots, counting work already in flight."
+  ],
+  "lanes": [
+    {
+      "id": "A",
+      "name": "Frontend / UX / Desktop renderer",
+      "status": "ACTIVE",
+      "ownership": {
+        "owner": "LANE_BUILDER",
+        "session": "session_01MApoJPisUKhZdWpTJmcnY3",
+        "continuity": "Existing owner kept: tasks routed here are claimed only by this lane's dispatcher runs (--lane A)."
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "UI",
+        "UX",
+        "RENDERER"
+      ],
+      "packages": [
+        "WP-"
+      ],
+      "allowedPaths": [
+        "apps/desktop/renderer/",
+        "docs/ux/",
+        "docs/lanes/LANE-A-",
+        "docs/authority-requests/LANE-A-",
+        "tests/v7-ux-"
+      ],
+      "dependsOnLanes": [
+        "B"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 3,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report). Plus the Lane A continuous queue.",
+      "authorityGaps": [
+        "apps/desktop/renderer/app.js and index.html are protected; desktop allow-list changes go through a coordinator protected batch."
+      ]
+    },
+    {
+      "id": "B",
+      "name": "Backend / API / Database / Integration",
+      "status": "ACTIVE",
+      "ownership": {
+        "owner": "LANE_BUILDER",
+        "session": "session_01VaHcvhtW9yjHAsFktdTn5f",
+        "continuity": "Existing owner kept: tasks routed here are claimed only by this lane's dispatcher runs (--lane B)."
+      },
+      "model": "opus",
+      "taskTypes": [
+        "BACKEND",
+        "API",
+        "DATABASE",
+        "INTEGRATION"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "core/",
+        "apps/control-api/src/routes/",
+        "docs/lanes/LANE-B-",
+        "docs/authority-requests/LANE-B-"
+      ],
+      "dependsOnLanes": [],
+      "maxActive": 1,
+      "maxOpenPrs": 3,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report). Plus the Lane B continuous queue.",
+      "authorityGaps": [
+        "apps/control-api/src/server.ts is protected; route registration goes through a coordinator protected batch."
+      ]
+    },
+    {
+      "id": "C",
+      "name": "AI agents / Work OS runtime / tools",
+      "status": "ACTIVE",
+      "ownership": {
+        "owner": "LANE_BUILDER",
+        "session": "session_01Vf5LYEF7vPGkRwL6X5AeGT",
+        "continuity": "Existing owner kept: tasks routed here are claimed only by this lane's dispatcher runs (--lane C)."
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "AGENT",
+        "ROLE",
+        "TOOL",
+        "WORKOS_RUNTIME"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "core/workos/crew/",
+        "core/workos/predev/",
+        "core/workos/runner.ts",
+        "core/workos/executors.ts",
+        "core/workos/executor-setup.ts",
+        "core/workos/claude-profiles.ts",
+        "core/workos/fake-executor.mjs",
+        "core/workos/run-state.ts",
+        "core/workos/outcomes.ts",
+        "core/capabilities/",
+        "core/competency/",
+        "core/agents/",
+        "registries/agents.json",
+        "registries/role-definitions.json",
+        "registries/role-execution-profiles.json",
+        "docs/lanes/LANE-C-",
+        "docs/authority-requests/LANE-C-"
+      ],
+      "dependsOnLanes": [
+        "B"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 3,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report). Plus the Lane C continuous queue.",
+      "authorityGaps": [
+        "The sandbox provider hook in server.ts is protected and is wired only in a coordinator protected batch."
+      ]
+    },
+    {
+      "id": "D",
+      "name": "Mobile companion (Android)",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "MOBILE"
+      ],
+      "packages": [
+        "MOBILE-"
+      ],
+      "allowedPaths": [
+        "apps/mobile/",
+        "docs/mobile/",
+        "tests/v7-mob-"
+      ],
+      "dependsOnLanes": [
+        "B"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "MOB-11 to MOB-31 are AUTHORITY_REQUIRED with owner FOUNDER (toolchain, dependencies, protected config, mobile workflows)."
+      ]
+    },
+    {
+      "id": "E",
+      "name": "Authority and governance requests",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "haiku",
+      "taskTypes": [
+        "AUTHORITY_REQUEST",
+        "GOVERNANCE_DOC"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "docs/authority/",
+        "docs/authority-requests/",
+        "docs/governance/",
+        "governance/"
+      ],
+      "dependsOnLanes": [
+        "Z"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "Founder decisions are Founder-only; this lane drafts requests. governance/accepted-debt.json, known-limitations.json and waivers.json are protected."
+      ]
+    },
+    {
+      "id": "F",
+      "name": "Knowledge and technology graph",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "KNOWLEDGE",
+        "TECHNOLOGY"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "knowledge/",
+        "docs/knowledge/",
+        "registries/sources/"
+      ],
+      "dependsOnLanes": [],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "Technology knowledge must not be presented as current or certified without a source check."
+      ]
+    },
+    {
+      "id": "G",
+      "name": "Organization and departments",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "ORGANIZATION",
+        "DEPARTMENT"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "organization/"
+      ],
+      "dependsOnLanes": [
+        "C"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22)."
+      ]
+    },
+    {
+      "id": "H",
+      "name": "Agent evaluations and certification",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "EVALUATION",
+        "CERTIFICATION"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "evaluations/",
+        "tests/certification.test.ts"
+      ],
+      "dependsOnLanes": [
+        "C",
+        "G"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "Certification needs executed evaluation evidence (0 of 3594 evaluation specs executed); paid provider runs are not authorised."
+      ]
+    },
+    {
+      "id": "I",
+      "name": "Domain packs",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "DOMAIN_PACK"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "domain-packs/",
+        "registries/domain-packs.json"
+      ],
+      "dependsOnLanes": [
+        "F"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22)."
+      ]
+    },
+    {
+      "id": "J",
+      "name": "Architecture and ADR documentation",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "ARCHITECTURE_DOC",
+        "ADR"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "docs/architecture/",
+        "docs/adr/"
+      ],
+      "dependsOnLanes": [],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "ARCHITECTURE-CONSTITUTION.md and ARCHITECTURE-FREEZE.md are protected."
+      ]
+    },
+    {
+      "id": "K",
+      "name": "Engineering standards",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "haiku",
+      "taskTypes": [
+        "STANDARD"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "standards/"
+      ],
+      "dependsOnLanes": [],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22)."
+      ]
+    },
+    {
+      "id": "L",
+      "name": "Schemas and contracts",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "SCHEMA"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "schemas/"
+      ],
+      "dependsOnLanes": [
+        "B"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "Review, run, milestone and phase0 schemas are protected trust-root files."
+      ]
+    },
+    {
+      "id": "M",
+      "name": "Windows installer and packaging",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "PACKAGING",
+        "INSTALLER"
+      ],
+      "packages": [
+        "RELEASE-"
+      ],
+      "allowedPaths": [
+        "installer/",
+        "docs/installer/",
+        "scripts/build-installer.mjs",
+        "scripts/installer-install-test.mjs"
+      ],
+      "dependsOnLanes": [
+        "U"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "Code signing needs a paid certificate (not authorised); a public release is a Founder decision."
+      ]
+    },
+    {
+      "id": "N",
+      "name": "Test infrastructure",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "TEST_INFRA"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "tests/support/",
+        "tests/fixtures/"
+      ],
+      "dependsOnLanes": [],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "A new test file runs in CI only after it is listed in config/validation.json (protected); until then, cases are registered from an existing listed test file.",
+        "scripts/ci/** and .github/workflows/** are CI-executed or protected."
+      ]
+    },
+    {
+      "id": "O",
+      "name": "QA regression suites",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "TEST",
+        "QA"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "tests/"
+      ],
+      "dependsOnLanes": [
+        "N"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "A new test file runs in CI only after it is listed in config/validation.json (protected); until then, cases are registered from an existing listed test file."
+      ]
+    },
+    {
+      "id": "P",
+      "name": "Model routing and providers",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "MODEL_ROUTING"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "models/",
+        "tests/model-router.test.ts"
+      ],
+      "dependsOnLanes": [
+        "C"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "Live provider calls and paid APIs are not authorised."
+      ]
+    },
+    {
+      "id": "Q",
+      "name": "Inventory and closure status",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "haiku",
+      "taskTypes": [
+        "INVENTORY",
+        "STATUS"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "docs/inventory/",
+        "docs/closure/"
+      ],
+      "dependsOnLanes": [],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md is protected."
+      ]
+    },
+    {
+      "id": "R",
+      "name": "Audit and checkpoints",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "haiku",
+      "taskTypes": [
+        "AUDIT"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "audit/"
+      ],
+      "dependsOnLanes": [],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22)."
+      ]
+    },
+    {
+      "id": "S",
+      "name": "Registries and catalogs",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "REGISTRY"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "registries/"
+      ],
+      "dependsOnLanes": [
+        "C"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "registries/phase-contracts-index.json is protected."
+      ]
+    },
+    {
+      "id": "T",
+      "name": "Control API runtime (outside routes)",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "opus",
+      "taskTypes": [
+        "API_RUNTIME"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "apps/control-api/"
+      ],
+      "dependsOnLanes": [
+        "B"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "apps/control-api/src/server.ts is protected."
+      ]
+    },
+    {
+      "id": "U",
+      "name": "Desktop shell (Electron main, outside renderer)",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "DESKTOP_SHELL"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "apps/desktop/"
+      ],
+      "dependsOnLanes": [
+        "A"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "apps/desktop/main.mjs and preload.mjs are protected."
+      ]
+    },
+    {
+      "id": "V",
+      "name": "Developer tooling scripts",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "TOOLING"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "scripts/"
+      ],
+      "dependsOnLanes": [],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "scripts/validate-*, scripts/ci/** and the protected scripts in config/protected-paths.json are never routed."
+      ]
+    },
+    {
+      "id": "W",
+      "name": "Product documentation",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "haiku",
+      "taskTypes": [
+        "DOCUMENTATION"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "docs/",
+        "README.md",
+        "CHANGELOG.md",
+        "ROADMAP.md",
+        "START-HERE.md",
+        "REPOSITORY-TREE.md"
+      ],
+      "dependsOnLanes": [],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22)."
+      ]
+    },
+    {
+      "id": "X",
+      "name": "Playbooks and templates",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "haiku",
+      "taskTypes": [
+        "PLAYBOOK",
+        "TEMPLATE"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "playbooks/",
+        "templates/"
+      ],
+      "dependsOnLanes": [
+        "K"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22)."
+      ]
+    },
+    {
+      "id": "Y",
+      "name": "Production queue and delivery reporting",
+      "status": "STANDBY",
+      "ownership": {
+        "owner": "UNSTAFFED",
+        "session": null
+      },
+      "model": "sonnet",
+      "taskTypes": [
+        "DELIVERY_REPORT"
+      ],
+      "packages": [],
+      "allowedPaths": [
+        "docs/cloud-production/"
+      ],
+      "dependsOnLanes": [
+        "Z"
+      ],
+      "maxActive": 1,
+      "maxOpenPrs": 1,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report).",
+      "authorityGaps": [
+        "No builder session is assigned (STANDBY). Staffing this lane needs measured model and CI capacity (Founder P0 token and throughput recovery directive, 2026-10-22).",
+        "PRODUCTION-QUEUE.json on uasco/production-queue is written by the coordinator only."
+      ]
+    },
+    {
+      "id": "Z",
+      "name": "Coordinator: integration, dispatch and merge train",
+      "status": "ACTIVE",
+      "ownership": {
+        "owner": "COORDINATOR",
+        "session": "session_01DmTHw4gBA3wvY1tKM9bk2e",
+        "continuity": "Existing owner kept: tasks routed here are claimed only by this lane's dispatcher runs (--lane Z)."
+      },
+      "model": "opus",
+      "taskTypes": [
+        "DISPATCH",
+        "MERGE_TRAIN",
+        "PROTECTED_BATCH"
+      ],
+      "packages": [
+        "AUTONOMY-",
+        "GOVERNANCE-"
+      ],
+      "allowedPaths": [
+        "docs/planning/",
+        "docs/lanes/",
+        "core/workos/store.ts"
+      ],
+      "dependsOnLanes": [],
+      "maxActive": 1,
+      "maxOpenPrs": 2,
+      "workSource": "Canonical backlog docs/planning/BACKLOG_CHECKPOINT.json, routed by path, type and package (live counts: node docs/planning/lanes.mjs --report). Plus coordinator protected batches (prepared here, Founder auto-merge).",
+      "authorityGaps": [
+        "Protected and trust-root changes need the Founder's protected-PR authority (auto-merge enabled by the Founder)."
+      ]
+    }
+  ]
+}

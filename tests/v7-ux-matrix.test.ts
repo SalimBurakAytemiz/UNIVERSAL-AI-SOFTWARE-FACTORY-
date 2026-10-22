@@ -1005,7 +1005,7 @@ describe("Matrix — route delegation (app.js VIEWS unchanged)", () => {
     expect(routes.routeFromHash("#/matrix/")).toBe("matrix");
     expect(routes.routeFromHash("#/matrixx")).toBe(routes.DEFAULT_ROUTE);
     expect(routes.routeFromHash("#/Matrix")).toBe(routes.DEFAULT_ROUTE);
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-14)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "domains", "integrations", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-15)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "domains", "integrations", "scheduler", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("matrix");
     expect(routes.ROUTES.filter((x: any) => x.factory).length).toBe(8);
     // Eski rotalar etkilenmez.
@@ -1263,7 +1263,7 @@ describe("Integrations UI-078 — route, reachability and allow-list", () => {
     expect(icons.ICON_NAMES).toContain(r.icon);
     expect(routes.routeFromHash("#/integrations")).toBe("integrations");
     expect(routes.routeFromHash("#/integrationsx")).toBe(routes.DEFAULT_ROUTE);
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-3)).toEqual(["domains", "integrations", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-4)).toEqual(["domains", "integrations", "scheduler", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("integrations");
     expect(read("views", "planned.js")).toContain('import * as integrations from "./integrations.js"');
     expect(read("views", "planned.js")).toMatch(/Object\.freeze\(\{[^}]*integrations[^}]*\}\)/);

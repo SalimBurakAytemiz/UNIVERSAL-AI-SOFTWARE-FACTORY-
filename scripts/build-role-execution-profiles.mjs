@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import {fileURLToPath} from "node:url";
+import {fileURLToPath, pathToFileURL} from "node:url";
 import {tsImport} from "tsx/esm/api";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -18,7 +18,8 @@ const fail = (m) => { console.error("ROLE_EXECUTION_PROFILES: FAIL " + m); proce
 const raw = {}, digests = {};
 for (const [k, rel] of Object.entries(INPUTS)) { const b = fs.readFileSync(path.join(root, rel)); digests[rel] = sha(b); raw[k] = JSON.parse(b.toString("utf8")); }
 const evaluationFileNames = fs.readdirSync(path.join(root, "evaluations", "agents")).filter((n) => n.endsWith(".json")).sort();
-const mod = await tsImport(path.join(root, "core/agents/role-profile-derivation.ts"), import.meta.url);
+// //TR: Windows'ta mutlak yol ("D:\\...") ESM yükleyicisi için geçerli bir URL değildir (ERR_UNSUPPORTED_ESM_URL_SCHEME); dosya URL'si verilir.
+const mod = await tsImport(pathToFileURL(path.join(root, "core/agents/role-profile-derivation.ts")).href, import.meta.url);
 const inputs = mod.buildDerivationInputs({...raw, evaluationFileNames});
 const profiles = mod.deriveRoleProfiles(inputs);
 const doc = {
