@@ -133,7 +133,7 @@ function facts(ctx,row,a){
   add("updated",t("readiness.field.updated"),{},h(doc,"time",{datetime:row.updatedAt,text:formatDateTime(row.updatedAt,ctx.i18n.lang)}));
   add("head",t("readiness.field.head"),{},row.headSha?h(doc,"span",{class:"mono",title:row.headSha,text:shortSha(row.headSha)}):MISSING);
   for(const g of row.gates){
-    const extra=g.id==="review"&&g.status!=="UNKNOWN"?reviewExtra(ctx,row,g):g.id==="delivery"?deliveryExtra(ctx,row):[];
+    const extra=g.id==="review"&&g.status!=="UNKNOWN"?reviewExtra(ctx,row,g):g.id==="delivery"?deliveryExtra(ctx,row):g.id==="run"&&g.status==="FAIL"?[" ",h(doc,"span",{class:"note",text:t("readiness.run.reason")})," ",h(doc,"span",{dataset:{readinessRunReason:""}},row.reason===null?MISSING:row.reason)]:[];
     add(g.id,t(`readiness.gate.${g.id}`),{gateStatus:g.status,gateDetail:g.detail},statePill(ctx,gateKind(g),{label:gateLabel(ctx,g)}),...extra);
   }
   return h(doc,"dl",{class:"readiness-facts"},rows.flat());

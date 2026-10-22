@@ -1454,11 +1454,12 @@ describe("COORD task status controls", () => {
     expect(forms.drafts.status["task-status"]).toMatchObject({ok: true, key: "taskst.done"});
     expect(byId(mount(o.doc, await o.view.render(o.ctx)), "task-status-status")!.dataset.result).toBe("ok"); // E2E "shows the result" kontrolünün dayandığı işaret
     expect(o.calls.refresh).toBe(1);
-    const r = await open({post: () => ({status: 200, body: {}})}, "EXECUTING", tasksOf("IN_PROGRESS"), T1);
+    const r = await open({post: () => ({status: 200, body: {}}), confirm: () => true}, "EXECUTING", tasksOf("IN_PROGRESS"), T1); // DONE artık açık onay ister (LANE-A task-done-confirm)
     expect(targets(r.root)).toEqual(["DONE", "BLOCKED", "PENDING"]);
     byId(r.root, "taskst-reason")!.value = " kabul testi geçti "; byId(r.root, "taskst-reason")!.fire("input");
     byId(r.root, "taskst-DONE")!.fire("click"); await tick();
     expect(r.calls.post[0].body).toEqual({to: "DONE", reason: "kabul testi geçti"});
+    expect(r.calls.confirm.length).toBe(1);
     expect(r.ts.taskStatusDraft.reason).toBe("");
   });
   it("sends nothing when the request is invalid, frozen, terminal or the task ID is unknown", async () => {
@@ -1495,10 +1496,66 @@ describe("COORD task status controls", () => {
     expect(forms.drafts.status["task-status"].ok).toBe(false);
     expect(forms.drafts.busy["task-status"]).toBe(false);
   });
+  it("DONE asks for a confirmation first: accepted sends exactly one POST with the typed reason; declined sends nothing and says so", async () => {
+    const yes = await open({post: () => ({status: 200, body: {}}), confirm: () => true}, "EXECUTING", tasksOf("IN_PROGRESS"), T1);
+    expect(byId(yes.root, "taskst-DONE")!.dataset.confirm).toBe("true");
+    byId(yes.root, "taskst-reason")!.value = "tamam"; byId(yes.root, "taskst-reason")!.fire("input");
+    byId(yes.root, "taskst-DONE")!.fire("click"); await tick();
+    expect(yes.calls.confirm.length).toBe(1);
+    expect(yes.calls.confirm[0].target).toContain(T1);
+    expect(yes.calls.confirm[0].body).toContain("doğrulamaz"); // varsayılan dil tr: onay metni işi doğrulamadığını söyler
+    expect(yes.calls.post).toEqual([{path: `/v1/tasks/${T1}/transition`, body: {to: "DONE", reason: "tamam"}}]);
+    expect(forms.drafts.status["task-status"]).toMatchObject({ok: true, key: "taskst.done"});
+    forms.resetAllForms();
+    const no = await open({post: () => ({status: 200, body: {}}), confirm: () => false}, "EXECUTING", tasksOf("IN_PROGRESS"), T1);
+    byId(no.root, "taskst-reason")!.value = "tamam"; byId(no.root, "taskst-reason")!.fire("input");
+    byId(no.root, "taskst-DONE")!.fire("click"); await tick();
+    expect(no.calls.confirm.length).toBe(1);
+    expect(no.calls.post).toEqual([]);
+    expect(forms.drafts.status["task-status"]).toMatchObject({ok: false, key: "confirm.cancelled"});
+    expect(byId(mount(no.doc, await no.view.render(no.ctx)), "task-status-status")!.dataset.result).toBe("error"); // iptal başarı gibi görünmez
+    expect(no.ts.taskStatusDraft.reason).toBe("tamam"); // gerekçe korunur
+    expect(forms.drafts.busy["task-status"]).toBeFalsy();
+  });
+  it("only DONE confirms: BLOCKED, PENDING and IN_PROGRESS never open the confirmation", async () => {
+    const o = await open({post: () => ({status: 200, body: {}}), confirm: () => true}, "EXECUTING", tasksOf("IN_PROGRESS"), T1);
+    expect(byData(o.root, "taskTo").filter(n => n.dataset.confirm === "true").map(n => n.dataset.taskTo)).toEqual(["DONE"]);
+    for (const to of ["BLOCKED", "PENDING"]) {
+      byId(o.root, "taskst-reason")!.value = "neden"; byId(o.root, "taskst-reason")!.fire("input");
+      byId(o.root, `taskst-${to}`)!.fire("click"); await tick();
+    }
+    expect(o.calls.confirm).toEqual([]);
+    expect(o.calls.post.map((p: any) => p.body.to)).toEqual(["BLOCKED", "PENDING"]);
+    const p = await open({post: () => ({status: 200, body: {}}), confirm: () => true}, "PLANNED", tasksOf(), T1);
+    byId(p.root, "taskst-IN_PROGRESS")!.fire("click"); await tick();
+    expect(p.calls.confirm).toEqual([]);
+    expect(p.calls.post.length).toBe(1);
+  });
+  it("a DONE request that fails validation never opens the confirmation (and BLOCKED still needs a typed reason)", async () => {
+    const o = await open({post: () => ({status: 200, body: {}}), confirm: () => true}, "EXECUTING", tasksOf("IN_PROGRESS"), T1);
+    byId(o.root, "taskst-reason")!.value = "r".repeat(1001); byId(o.root, "taskst-reason")!.fire("input");
+    byId(o.root, "taskst-DONE")!.fire("click"); await tick();
+    expect(o.calls.confirm).toEqual([]); expect(o.calls.post).toEqual([]);
+    expect(forms.drafts.status["task-status"].errors).toEqual({reason: "taskst.err.reasonLong"});
+    byId(o.root, "taskst-reason")!.value = ""; byId(o.root, "taskst-reason")!.fire("input");
+    byId(o.root, "taskst-BLOCKED")!.fire("click"); await tick();
+    expect(o.calls.post).toEqual([]);
+    expect(forms.drafts.status["task-status"].errors).toEqual({reason: "err.reasonRequired"});
+    const frozen = await open({post: () => ({status: 200, body: {}}), confirm: () => true}, "COMPLETE", tasksOf("IN_PROGRESS"), T1);
+    expect(byId(frozen.root, "taskst-DONE")).toBeNull(); expect(frozen.calls.confirm).toEqual([]);
+  });
+  it("after a server refusal following an accepted confirmation, the result is an error and the reason is kept", async () => {
+    const o = await open({post: () => ({status: 409, body: {error: "WORKOS_INVALID_TRANSITION"}}), confirm: () => true}, "EXECUTING", tasksOf("IN_PROGRESS"), T1);
+    byId(o.root, "taskst-reason")!.value = "tamam"; byId(o.root, "taskst-reason")!.fire("input");
+    byId(o.root, "taskst-DONE")!.fire("click"); await tick();
+    expect(o.calls.confirm.length).toBe(1); expect(o.calls.post.length).toBe(1);
+    expect(forms.drafts.status["task-status"]).toMatchObject({ok: false, key: "post.err.409"});
+    expect(o.ts.taskStatusDraft.reason).toBe("tamam");
+  });
   it("task status strings exist in en and tr, including every key the view uses", async () => {
     const en = (await load(rend, "locales", "en.js")).default, tr = (await load(rend, "locales", "tr.js")).default;
     const keys = (o: Record<string, string>) => Object.keys(o).filter(k => k.startsWith("taskst.")).sort();
-    expect(keys(en).length).toBe(16);
+    expect(keys(en).length).toBe(20);
     expect(keys(en)).toEqual(keys(tr));
     const used = new Set([...read(rend, "views", "task-status.js").matchAll(/"(taskst\.[A-Za-z.]+)"/g), ...read(rend, "work-core.js").matchAll(/"(taskst\.[A-Za-z.]+)"/g)].map(m => m[1]));
     for (const k of [...used, "form.field.task", "work.task.noDeps", "post.err.409.TASK_DEPENDENCIES_NOT_DONE", "post.err.409.MISSION_COMPLETE"]) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); }
