@@ -1,22 +1,23 @@
 // //TR: Bu modül İnsan Onayı Bekleyen İş Kuyruğu görünümünün saf (DOM'suz) çekirdeğidir (FA-V2-PRODUCT, UI-211): yalnız üç salt-okunur ve zaten izinli GET (GET /v1/founder-attention, GET /v1/missions, GET /v1/work-runs) yanıtını güvenli, sınırlı alanlara eşler ve bunlardan kuyruk türetir. HİÇBİR veri uydurulmaz: kimlik/enum/biçim/zaman damgası bozuksa okuma KISMEN değil tümden ERROR olur (fail-closed), eksik alan tahmin edilmez, durumlar kayıttan AYNEN taşınır (yükseltme yok). Kuyruk öğesi YALNIZ kayıtlı bir duruma dayanır: FOUNDER_ATTENTION_REQUIRED ve PREFLIGHT mission'ları (kontrol düzleminin kokpitte "onay bekliyor" saydığı durumlar), AWAITING_APPROVAL koşuları ve Founder dikkati engelli paketleri. Öncelik kayıtlı bir alan DEĞİLDİR; yalnız öğe türünden türetilen, açıkça belgelenmiş bir sıralama düzeyidir. Bekleme süresi YALNIZ gerçek zaman damgasından (engel zamanı / koşu güncelleme / mission oluşturma) hesaplanır; kontrol düzleminde SLA hedefi kaydı YOKTUR, bu yüzden SLA değeri uydurulmaz ve bekleme bantları yalnız geçen sürenin görüntü gruplamasıdır (son tarih değildir). Bir kaynak okunamıyorsa toplam/öncelik sayıları gösterilmez (eksik kuyruk "boş" ya da sayılı gösterilmez). Ürün doğrulaması bu modülde hiçbir yerde üretilmez ve ilgili sabit değer bu dosyada hiç yer almaz.
 import {MISSION_STATUSES,RISK_LEVELS,MISSION_ID_RE,PROJECT_ID_RE} from "./work-core.js";
 import {RUN_STATUSES,RUN_STEPS,MISSIONS_PATH,WORK_RUNS_PATH,ATTENTION_PATH} from "./executive-core.js";
+import {mapAttentionQueue} from "./attention-core.js";
 
 export {MISSIONS_PATH,WORK_RUNS_PATH,ATTENTION_PATH};
 /** Görünümün okuyabildiği TÜM kaynaklar (sıra sabit); üçü de salt-okunur ve önceden izinlidir, yeni uç nokta yoktur. */
 export const QUEUE_SOURCES=Object.freeze(["attention","missions","workRuns"]);
 export const QUEUE_SOURCE_PATHS=Object.freeze({attention:ATTENTION_PATH,missions:MISSIONS_PATH,workRuns:WORK_RUNS_PATH});
 /** Kuyruk öğesi türleri (sıra sabit). Her tür YALNIZ kayıtlı bir durumdan türetilir. */
-export const QUEUE_KINDS=Object.freeze(["FOUNDER_ATTENTION","BLOCKED_PACKAGE","DELIVERY_DECISION","RUN_GATE","MISSION_STATUS_UNKNOWN","AUTHORIZATION"]);
+export const QUEUE_KINDS=Object.freeze(["FOUNDER_ATTENTION","BLOCKED_ITEM","DELIVERY_DECISION","RUN_GATE","MISSION_STATUS_UNKNOWN","AUTHORIZATION"]);
 /** Sıralama düzeyi (1 en önde): kayıtlı bir alan değil, türden türetilen belgelenmiş görüntü sırasıdır. 1 = iş engelli ve Founder'ı bekliyor, 2 = teslim/koşu kapısı kararı, 3 = başlatma yetkisi (PREFLIGHT). */
-export const PRIORITY_OF_KIND=Object.freeze({FOUNDER_ATTENTION:1,BLOCKED_PACKAGE:1,DELIVERY_DECISION:2,RUN_GATE:2,MISSION_STATUS_UNKNOWN:2,AUTHORIZATION:3});
+export const PRIORITY_OF_KIND=Object.freeze({FOUNDER_ATTENTION:1,BLOCKED_ITEM:1,DELIVERY_DECISION:2,RUN_GATE:2,MISSION_STATUS_UNKNOWN:2,AUTHORIZATION:3});
 export const PRIORITIES=Object.freeze([1,2,3]);
 /** Bekleme bantları: YALNIZ geçen sürenin görüntü gruplamasıdır (hedef/son tarih/SLA değildir). */
 export const WAIT_BANDS=Object.freeze([
   Object.freeze({id:"UNDER_1H",below:3600000}),Object.freeze({id:"UNDER_1D",below:86400000}),Object.freeze({id:"UNDER_7D",below:604800000}),Object.freeze({id:"OVER_7D",below:Infinity})]);
 export const WAIT_BAND_IDS=Object.freeze(WAIT_BANDS.map(b=>b.id));
 /** Zaman damgasının dayanağı: bekleme süresi bu kayıtlı alandan başlar. */
-export const WAIT_BASES=Object.freeze(["BLOCKED_AT","RUN_UPDATED","MISSION_CREATED"]);
+export const WAIT_BASES=Object.freeze(["ATTENTION_SINCE","RUN_UPDATED","MISSION_CREATED"]);
 export const AWAITING_RUN_STATUS="AWAITING_APPROVAL";
 export const MAX_QUEUE_ROWS=200;
 
@@ -64,38 +65,16 @@ export function mapQueueWorkRuns(raw){
   return {state:"VERIFIED",runs:{total:items.length,awaiting:items.filter(r=>r.status===AWAITING_RUN_STATUS).length,items}};
 }
 
-// ---------- GET /v1/founder-attention ----------
-function mapBlockedRow(x){
-  if(!isObj(x)||!matches(KIND_RE,x.kind))return null;
-  const optional=(v,ok)=>v===undefined||v===null?null:ok(v)?v:undefined;
-  const packageId=optional(x.packageId,v=>matches(PKG_RE,v));
-  const phase=optional(x.phase,v=>(Number.isSafeInteger(v)&&v>=0)||matches(PKG_RE,v));
-  const at=optional(x.at,v=>iso(v)!==null);
-  const reason=optional(x.reason,v=>typeof v==="string");
-  const retryable=optional(x.retryable,v=>typeof v==="boolean");
-  // Kimliksiz öğe (ne paket ne faz) "neyin onay beklediğini" söyleyemez: tahmin edilmez, okuma reddedilir.
-  if([packageId,phase,at,reason,retryable].includes(undefined)||(packageId===null&&phase===null))return null;
-  return {packageId,phase,kind:x.kind,at,reason:reason===null?null:text(reason,1000),retryable};
-}
+// ---------- GET /v1/attention ----------
+/** Kuyruğa yalnız burada TÜRETİLMEYEN öğeler girer: mission ve koşu kaynakları FOUNDER_ATTENTION / AUTHORIZATION / koşu kapısı öğelerini zaten verir, çifte sayım olmasın diye bu üç tür atlanır. */
+export const QUEUE_ATTENTION_KINDS=Object.freeze(["RUN_NEEDS_DECISION","MISSION_BLOCKED","TASK_BLOCKED"]);
 /**
- * GET /v1/founder-attention -> {state:"VERIFIED",attention:{total,items,schedulerVerification}} | {state:"UNAVAILABLE"} (sunucu zamanlayıcı doğrulamasını REDDETTİYSE) | {state:"ERROR"}.
- * Tek bozuk öğe (geçersiz tür/kimlik/zaman/boolean ya da yinelenen paket+faz) tüm okumayı ERROR yapar.
+ * GET /v1/attention -> {state:"VERIFIED",attention:{total,items,counts,truncated,dropped}} | {state:"ERROR"}. Emekli scheduler kaynağı (/v1/founder-attention), paket/faz kimliği, retry ve schedulerVerification artık yoktur.
+ * Bozuk zarf/sayaç/truncated/source tüm okumayı ERROR yapar; bozuk tek öğe atılır ama dropped olarak sayılır ve arayüzde söylenir.
  */
 export function mapQueueAttention(raw){
-  const bad={state:"ERROR",attention:null};
-  if(!isObj(raw))return bad;
-  if(raw.schedulerVerification==="REJECTED")return {state:"UNAVAILABLE",attention:null};
-  if(!Array.isArray(raw.blocked))return bad;
-  let verification=null;
-  if(raw.schedulerVerification!==undefined&&raw.schedulerVerification!==null){if(!matches(VERIFICATION_RE,raw.schedulerVerification))return bad;verification=raw.schedulerVerification}
-  const items=[],seen=new Set();
-  for(const x of raw.blocked){
-    const row=mapBlockedRow(x);if(row===null)return bad;
-    const key=`${row.packageId??""}|${row.phase??""}`;
-    if(seen.has(key))return bad;
-    seen.add(key);items.push(row);
-  }
-  return {state:"VERIFIED",attention:{total:items.length,items,schedulerVerification:verification}};
+  const m=mapAttentionQueue(raw);
+  return m.state==="VERIFIED"?{state:"VERIFIED",attention:{total:m.queue.total,items:m.queue.items,counts:m.queue.counts,truncated:m.queue.truncated,dropped:m.queue.dropped}}:{state:"ERROR",attention:null};
 }
 
 // ---------- Bekleme süresi ----------
@@ -119,8 +98,8 @@ export function waitParts(ms){
 const ok=res=>Boolean(res)&&res.state==="VERIFIED";
 const failState=s=>s==="OFFLINE"||s==="UNAVAILABLE"?s:"ERROR";
 function mk(over){
-  return {key:"",kind:"",priority:0,title:null,missionId:null,projectId:null,riskLevel:null,missionStatus:null,missionKnown:false,runId:null,runStatus:null,step:null,
-    packageId:null,phase:null,blockerKind:null,reason:null,retryable:null,since:null,basis:null,waitMs:null,band:null,...over};
+  return {key:"",kind:"",priority:0,title:null,missionTitle:null,missionId:null,projectId:null,riskLevel:null,missionStatus:null,missionKnown:false,runId:null,runStatus:null,step:null,
+    taskId:null,nextAction:null,blockerKind:null,reason:null,since:null,basis:null,waitMs:null,band:null,...over};
 }
 const byQueueOrder=(a,b)=>{
   if(a.priority!==b.priority)return a.priority-b.priority;
@@ -134,7 +113,7 @@ const byQueueOrder=(a,b)=>{
  * Üç okuma sonucundan (mapQueue* çıktıları) kuyruğu türetir. Öğe türleri:
  * FOUNDER_ATTENTION (mission FOUNDER_ATTENTION_REQUIRED), AUTHORIZATION (mission PREFLIGHT), DELIVERY_DECISION (mission REPORTING + AWAITING_APPROVAL koşusu),
  * RUN_GATE (AWAITING_APPROVAL koşusu; mission listesi BAŞARIYLA okundu ve mission ya REPORTING değil ya da o listede yok), MISSION_STATUS_UNKNOWN (AWAITING_APPROVAL koşusu; mission listesi
- * OKUNAMADI, bu yüzden mission durumu BİLİNMİYOR — REPORTING olup olmadığı iddia edilmez, teslim kararı mı kapı mı olduğu söylenemez), BLOCKED_PACKAGE (founder-attention engelli paket/faz).
+ * OKUNAMADI, bu yüzden mission durumu BİLİNMİYOR — REPORTING olup olmadığı iddia edilmez, teslim kararı mı kapı mı olduğu söylenemez), BLOCKED_ITEM (GET /v1/attention: karar bekleyen koşu, engelli mission ya da görev; diğer üç tür mission/koşu kaynaklarından zaten türetilir).
  * Bir kaynak okunamıyorsa kuyruk EKSİKTİR (complete=false): o kaynağa bağlı öğeler listelenmez ve toplam/öncelik/bant sayıları null olur — eksik kuyruk ne "boş" ne de sayılı gösterilir.
  */
 export function buildQueue({missions,runs,attention},nowMs){
@@ -162,7 +141,12 @@ export function buildQueue({missions,runs,attention},nowMs){
     push({kind,key:`run:${x.runId}`,title:ms?ms.title:null,missionId:x.missionId,projectId:x.projectId,riskLevel:ms?ms.riskLevel:null,
       missionStatus:ms?ms.status:null,missionKnown:ms!==null,runId:x.runId,runStatus:x.status,step:x.step,since:x.updatedAt,basis:"RUN_UPDATED"});
   }
-  if(a)for(const x of a.items)push({kind:"BLOCKED_PACKAGE",key:`attention:${x.packageId??""}|${x.phase??""}`,packageId:x.packageId,phase:x.phase,blockerKind:x.kind,reason:x.reason,retryable:x.retryable,since:x.at,basis:x.at?"BLOCKED_AT":null});
+  if(a)for(const x of a.items){
+    if(!QUEUE_ATTENTION_KINDS.includes(x.kind))continue;
+    const ms=byId.get(x.missionId)??null;
+    push({kind:"BLOCKED_ITEM",key:`attention:${x.kind}:${x.taskId??x.runId??x.missionId}`,title:x.title,missionTitle:ms?ms.title:null,missionId:x.missionId,projectId:x.projectId,riskLevel:ms?ms.riskLevel:null,missionStatus:ms?ms.status:null,missionKnown:ms!==null,
+      runId:x.runId,taskId:x.taskId,nextAction:x.nextAction,blockerKind:x.kind,reason:x.reason,since:x.since,basis:x.since?"ATTENTION_SINCE":null});
+  }
   items.sort(byQueueOrder);
   const groups=PRIORITIES.map(p=>({priority:p,items:items.filter(i=>i.priority===p)}));
   // Sayılar yalnız kuyruk TAMAMSA verilir; aksi halde null (eksik kuyruğun toplamı bilinmez).
@@ -173,5 +157,5 @@ export function buildQueue({missions,runs,attention},nowMs){
     longestWaitMs:items.reduce((mx,i)=>i.waitMs!==null&&(mx===null||i.waitMs>mx)?i.waitMs:mx,null)
   }:null;
   const incompleteState=unreadable.some(k=>sources[k].state==="OFFLINE")?"OFFLINE":unreadable.some(k=>sources[k].state==="ERROR")?"ERROR":"UNAVAILABLE";
-  return {complete,sources,unreadable,incompleteState:complete?null:incompleteState,items,groups,counts,schedulerVerification:a?a.schedulerVerification:null};
+  return {complete,sources,unreadable,incompleteState:complete?null:incompleteState,items,groups,counts,attentionNotes:a?{truncated:a.truncated,dropped:a.dropped}:null};
 }
