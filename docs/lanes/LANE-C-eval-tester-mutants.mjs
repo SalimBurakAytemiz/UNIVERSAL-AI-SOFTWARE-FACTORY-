@@ -10,6 +10,11 @@ const only = process.argv.slice(2);
 const git = (...a) => cp.spawnSync("git", a, {cwd: root, encoding: "utf8"});
 const files = [...new Set(mutants.map(m => m.file))];
 if (git("status", "--porcelain", "--", ...files).stdout.trim() !== "") { console.error("REFUSED: the mutated files have uncommitted changes"); process.exit(2); }
+// //TR: Taban çizgisi: mutasyonsuz grup ÖNCE koşar; yeşil değilse (hata, çökme, zaman aşımı) her "KILLED" anlamsızdır, bu yüzden reddedilir.
+const runGroup = () => cp.spawnSync("npx", ["vitest", "run", "tests/v7-wfr03-role-registry.test.ts", "-t", "C-EVAL-PIPELINE"], {cwd: root, encoding: "utf8", shell: process.platform === "win32", timeout: 900_000});
+const base = runGroup(), baseOut = String(base.stdout) + String(base.stderr);
+if (base.status !== 0) { console.error(`REFUSED: the unmutated baseline is not green (exit ${base.status}): ${/Tests\s+([^\n]+)/.exec(baseOut)?.[1]?.trim() ?? "no summary"}`); process.exit(2); }
+console.log(`BASELINE green: ${/Tests\s+([^\n]+)/.exec(baseOut)?.[1]?.trim()}`);
 let survived = 0, skipped = 0;
 for (const m of mutants) {
   if (only.length > 0 && !only.includes(m.id)) continue;

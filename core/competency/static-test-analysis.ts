@@ -154,9 +154,12 @@ export function analyzeAddTest(toks: readonly Tok[]): AddTestAnalysis {
   }
   // 2. her üst düzey deyim bildirim ya da nitelikli assert olmalı; ilk ihlal adlandırılır
   const violate = (why: string) => { r.tamper ??= why; };
+  // //TR: SIRA: bağlamalar ilk assert'ten (genel olarak ilk bildirim-dışı deyimden) ÖNCE gelmelidir. Aksi halde dosya TDZ ReferenceError ile ilk assert'te düşer ve hiçbir assert çalışmadan oracle onu PASSED sayardı.
+  let seenOther = false;
   for (const s of stmts) {
     if (s[0].t === "id" && CONTROL.has(s[0].v)) continue;   // earlyExit olarak raporlanır
-    if (decls.has(s)) continue;
+    if (decls.has(s)) { if (seenOther) violate("DECLARATION_AFTER_ASSERT"); continue; }
+    seenOther = true;
     if (isRequireDecl(s)) { violate(`REQUIRE_SPEC_NOT_ALLOWED:${s[5].v.slice(0, 40)}`); continue; }
     const method = s[0].t === "id" && r.assertIds.includes(s[0].v) ? (s[1]?.v === "(" ? null : s[1]?.v === "." && s[2]?.t === "id" && s[3]?.v === "(" ? s[2].v : undefined) : undefined;
     if (method === undefined) { violate(`STATEMENT_NOT_ALLOWED:${s[0].v.slice(0, 30)}`); continue; }

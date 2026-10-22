@@ -206,14 +206,14 @@
   },
   {
    "id": "P10",
-   "description": "naive string wrapper compile",
+   "description": "naive string wrapper compile (verdict-equivalent: defence in depth; the pin only fixes WHICH check fails first, the file would FAIL either way)",
    "file": "core/competency/evaluation-pipeline.ts",
    "old": "try { vm.compileFunction(src, [\"exports\", \"require\", \"module\", \"__filename\", \"__dirname\"], {filename: \"evaluation-test-file.js\"}); return true; }",
    "new": "try { new vm.Script(\"(function (require, module, exports) {\" + src + \"\\n})\"); return true; }"
   },
   {
    "id": "P11",
-   "description": "two assertions suffice",
+   "description": "two assertions suffice (verdict-equivalent: defence in depth; assertion_count_min_3 and covers_positive_negative_zero already need three cases, the pin only fixes which check fails first)",
    "file": "core/competency/evaluation-pipeline.ts",
    "old": "passed: cases.length >= 3,",
    "new": "passed: cases.length >= 2,"
@@ -490,6 +490,34 @@
    "file": "core/competency/static-test-analysis.ts",
    "old": "MAX_OPERAND_INT_DIGITS = 9",
    "new": "MAX_OPERAND_INT_DIGITS = 10"
+  },
+  {
+   "id": "O1",
+   "description": "declaration order not checked (a declaration after an assertion is accepted: TDZ ReferenceError at run time, the oracle would certify a test that never ran an assertion)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (decls.has(s)) { if (seenOther) violate(\"DECLARATION_AFTER_ASSERT\"); continue; }",
+   "new": "if (decls.has(s)) continue;"
+  },
+  {
+   "id": "O2",
+   "description": "order enforced for the add declaration only",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (decls.has(s)) { if (seenOther) violate(\"DECLARATION_AFTER_ASSERT\"); continue; }",
+   "new": "if (decls.has(s)) { if (seenOther && REQ_ADD.has(s[5].v)) violate(\"DECLARATION_AFTER_ASSERT\"); continue; }"
+  },
+  {
+   "id": "O3",
+   "description": "order enforced for the assert declaration only",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (decls.has(s)) { if (seenOther) violate(\"DECLARATION_AFTER_ASSERT\"); continue; }",
+   "new": "if (decls.has(s)) { if (seenOther && REQ_ASSERT.has(s[5].v)) violate(\"DECLARATION_AFTER_ASSERT\"); continue; }"
+  },
+  {
+   "id": "X4",
+   "description": "parseNumber token-type guard dropped (a string \"5\" would read as the number 5)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (!num || num.t !== \"num\") return null;",
+   "new": "if (!num) return null;"
   }
  ]
 }

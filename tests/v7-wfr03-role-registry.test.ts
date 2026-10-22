@@ -997,6 +997,16 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       ["HTML-like comment markers hide the assertions", T({"test/add.test.js": H + "<!-- assert.strictEqual(add(2, 3), 5);\n<!-- assert.strictEqual(add(-2, -3), -5);\n<!-- assert.strictEqual(add(0, 7), 7);\n"}), "references_module"],
       ["HTML close-comment markers at the start of a line", T({"test/add.test.js": H + "--> assert.strictEqual(add(2, 3), 5);\n--> assert.strictEqual(add(-2, -3), -5);\n--> assert.strictEqual(add(0, 7), 7);\n"}), "references_module"],
       ["assertions inside a regex literal after a block", T({"test/add.test.js": H + '{}\n/assert.strictEqual(add(2, 3), 5); assert.strictEqual(add(-2, -3), -5); assert.strictEqual(add(0, 7), 7);/.test("x");\n'}), "references_module"],
+      // ORDER: a declaration after an assertion throws a TDZ ReferenceError at run time before any assertion ran, yet every check except the order one would pass
+      ["both declarations after the assertions (TDZ)", T({"test/add.test.js": A + H}), "closed_world", "DECLARATION_AFTER_ASSERT"],
+      ["assert declared first, add declared after the first assertion", T({"test/add.test.js": 'const assert = require("node:assert");\nassert.strictEqual(add(2, 3), 5);\nconst add = require("../src/add");\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n'}), "closed_world", "DECLARATION_AFTER_ASSERT"],
+      ["assertions between the two declarations", T({"test/add.test.js": 'const assert = require("node:assert");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nconst add = require("../src/add");\nassert.strictEqual(add(0, 7), 7);\n'}), "closed_world", "DECLARATION_AFTER_ASSERT"],
+      ["the assert.ok form with add declared last", T({"test/add.test.js": 'const assert = require("node:assert");\nassert.ok(add(2, 3) === 5);\nassert.ok(add(-2, -3) === -5);\nassert.ok(add(0, 7) === 7);\nconst add = require("../src/add");\n'}), "closed_world", "DECLARATION_AFTER_ASSERT"],
+      ["add declared between assertions", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nconst sum = require("../src/add");\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n'}), "closed_world", "DECLARATION_AFTER_ASSERT"],
+      ["a second assert alias declared after an assertion", T({"test/add.test.js": H + "assert.strictEqual(add(2, 3), 5);\nconst a2 = require(\"assert\");\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n"}), "closed_world", "DECLARATION_AFTER_ASSERT"],
+      // token types: a string is not a number (add("2", 3) is "23" on a correct add, so the file would fail there although every static check passed)
+      ["a string operand", T({"test/add.test.js": H + A + 'assert.strictEqual(add("2", 3), 5);\n'}), "closed_world"],
+      ["a string expected value", T({"test/add.test.js": H + A + 'assert.strictEqual(add(2, 3), "5");\n'}), "closed_world"],
       // number literals V8 reads differently from Number() or that make a + b and a - b collapse: each is ONE extra statement next to three good ones
       ...([["legacy octal 010 (V8: 8, Number: 10)", "assert.strictEqual(add(9, 01), 010);"], ["legacy octal in the ok form", "assert.ok(add(9, 01) === 010);"], ["legacy octal 0777 swapped operands", "assert.equal(0777, add(644, 133));"],
         ["negative legacy octal", "assert.strictEqual(add(-9, -1), -010);"], ["leading zeros 00 / 09", "assert.strictEqual(add(00, 7), 7);\nassert.strictEqual(add(09, 1), 10);"],
@@ -1048,7 +1058,9 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       ["mixed-sign operands (negative through ONE operand)", H + "assert.strictEqual(add(2, -3), -1);\nassert.strictEqual(add(4, 5), 9);\nassert.strictEqual(add(0, 7), 7);\n"],
       ["Prettier style: multi-line asserts with a trailing comma", H + "assert.strictEqual(\n  add(2, 3),\n  5,\n);\nassert.strictEqual(\n  add(-2, -3),\n  -5,\n  \"negative\",\n);\nassert.ok(\n  add(0, 7) === 7,\n);\n"],
       ["number boundaries: 9-digit operands, a 10-digit expected sum, 6 fraction digits", H + "assert.strictEqual(add(999999999, 1), 1000000000);\nassert.strictEqual(add(-999999999, -1), -1000000000);\nassert.strictEqual(add(0.000001, 1), 1.000001);\nassert.strictEqual(add(0, 0.000001), 0.000001);\n"],
-      ["decimal operands", H + "assert.strictEqual(add(2.5, 0.5), 3);\nassert.strictEqual(add(-1.5, -0.5), -2);\nassert.strictEqual(add(0, 0.25), 0.25);\n"]
+      ["decimal operands", H + "assert.strictEqual(add(2.5, 0.5), 3);\nassert.strictEqual(add(-1.5, -0.5), -2);\nassert.strictEqual(add(0, 0.25), 0.25);\n"],
+      ["declarations in the other order (add first, assert second), both before every assertion", 'const add = require("../src/add");\nconst assert = require("node:assert");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n'],
+      ["comments and blank lines before the declarations", '// header\n\n/* about */\nconst assert = require("node:assert");\n\nconst add = require("../src/add");\n' + "assert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n"]
     ];
     for (const [label, body] of variants) {
       const r = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": body}})}), TESTER));
@@ -1120,6 +1132,15 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     });
     it("unterminated strings, comments, templates and regexes cannot be analysed (null), never silently accepted", () => {
       for (const src of ["x = 'abc", 'x = "abc\ny"', "/* open", "`open", "`a ${ 1 ", "x = /open", "x = /a\nb/"]) expect([src, tokenize(src)]).toEqual([src, null]);
+    });
+    it("declaration ORDER: every const require precedes the first other statement, whatever its spec; the first violation is named", () => {
+      const A3 = "assert.strictEqual(add(2, 3), 5);\n";
+      expect(an(H + A3).tamper).toBeNull();
+      expect(an('const add = require("../src/add");\nconst assert = require("node:assert");\n' + A3).tamper).toBeNull();
+      for (const src of [A3 + H, 'const assert = require("node:assert");\n' + A3 + 'const add = require("../src/add");\n', H + A3 + 'const a2 = require("assert");\n', H + A3 + 'const sum = require("../src/add");\n'])
+        expect([src, an(src).tamper]).toEqual([src, "DECLARATION_AFTER_ASSERT"]);
+      expect(an(H + A3 + 'const p = require("node:process");\n').tamper).toBe("REQUIRE_SPEC_NOT_ALLOWED:node:process"); // a disallowed spec keeps its own, more specific, reason
+      expect(an(H + "x = 1;\n" + 'const a2 = require("assert");\n' + A3).tamper).toBe("STATEMENT_NOT_ALLOWED:x");        // the first violation wins: a foreign statement before a late declaration
     });
     it("statements split at ';' and at newlines ASI would split, never inside brackets or before a continuing token", () => {
       expect(stmts("a = 1\nb = 2; c = 3\n(d)\ne\n+f")).toEqual(["a = 1", "b = 2", "c = 3 ( d )", "e + f"]);
