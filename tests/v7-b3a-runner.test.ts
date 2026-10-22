@@ -98,19 +98,27 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
   const withEnv = <R,>(vars: Record<string, string>, fn: () => R): R => {
     const saved = Object.entries(process.env);
     for (const [k, v] of Object.entries(vars)) process.env[k] = v;
-    try { return fn(); } finally {
-      for (const k of Object.keys(vars)) delete process.env[k];
-      for (const k of Object.keys(process.env)) if (/^GIT_/i.test(k) && !saved.some(([sk]) => sk.toUpperCase() === k.toUpperCase())) delete process.env[k];
+    try {
+      const out = fn();
+      if (typeof (out as {then?: unknown} | null | undefined)?.then === "function") throw new Error("withEnv is synchronous: an async fn would run after the environment was restored");
+      return out;
+    } finally { // EXACT restore: wipe the whole environment (every spelling, every changed or deleted value) and rewrite the snapshot
+      for (const k of Object.keys(process.env)) delete process.env[k];
       for (const [k, v] of saved) if (v !== undefined) process.env[k] = v;
     }
   };
-  const gitEnvNames = () => Object.keys(process.env).filter(k => /^GIT_/i.test(k)).map(k => k.toUpperCase()).sort();
-  let gitEnvBefore: string[] = [];
-  beforeEach(() => { gitEnvBefore = gitEnvNames(); });
-  afterEach(() => { // a leaked GIT_* turns every later git call of the file into a failure: clean it up AND fail here, once, with the names
-    const leaked = gitEnvNames().filter(k => !gitEnvBefore.includes(k));
-    for (const k of Object.keys(process.env)) if (leaked.includes(k.toUpperCase())) delete process.env[k];
-    expect(leaked).toEqual([]);
+  // //TR: Bekçi: GIT_*, PATH ve SUDO_UID için ad=DEĞER dizgeleri (tam yazımıyla) her testten önce/sonra karşılaştırılır; değişen değer, silinen önceden-var GIT_* ve (Linux'ta) yeni bir yazım da yakalanır. Fark varsa geri yazılır VE o test adlarla bir kez düşer (sonraki testler zehirlenmez).
+  const WATCHED = /^(GIT_|PATH$|SUDO_UID$)/i;
+  const watchedEnv = () => Object.entries(process.env).filter(([k]) => WATCHED.test(k)).map(([k, v]) => `${k}=${v}`).sort();
+  let envBefore: string[] = [];
+  beforeEach(() => { envBefore = watchedEnv(); });
+  afterEach(() => {
+    const now = watchedEnv(), differing = [...new Set([...now.filter(e => !envBefore.includes(e)), ...envBefore.filter(e => !now.includes(e))].map(e => e.slice(0, e.indexOf("="))))];
+    if (differing.length > 0) {
+      for (const k of Object.keys(process.env)) if (WATCHED.test(k)) delete process.env[k];
+      for (const e of envBefore) process.env[e.slice(0, e.indexOf("="))] = e.slice(e.indexOf("=") + 1);
+    }
+    expect(differing).toEqual([]);
   });
   const rawToplevel = (dir: string) => spawnGitSync(dir, ["rev-parse", "--show-toplevel"], {env: cleanEnv()});
   // //TR: Premise karşılaştırmaları ham dize değil DİZİN KİMLİĞİDİR: Windows'ta git eğik çizgili uzun adı (runneradmin) yazar, os.tmpdir() ise ters eğik çizgili 8.3 kısa adı (RUNNER~1) tutar; ikisi de realpath.native ile aynı kanonik yola iner (ürünün path-guard anahtarı ile aynı mantık).
@@ -236,6 +244,16 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
     }
   });
 
+  it("withEnv restores the process environment EXACTLY (a changed value, a deleted GIT_* and a re-spelled planting included) and refuses an async fn", () => {
+    const before = JSON.stringify(Object.entries(process.env).sort());
+    const seen = withEnv({GIT_CONFIG_COUNT: "9", git_ssl_cainfo: "evil", Git_Config_Count: "7", PATH: "/nonexistent"}, () => { delete process.env.GIT_TERMINAL_PROMPT; return Object.keys(process.env).length; });
+    expect(seen).toBeGreaterThan(0);
+    expect(JSON.stringify(Object.entries(process.env).sort())).toBe(before);
+    expect(() => withEnv({X_ASYNC: "1"}, async () => 1)).toThrow(/synchronous/);
+    expect(process.env.X_ASYNC).toBeUndefined();
+    expect(JSON.stringify(Object.entries(process.env).sort())).toBe(before);
+  });
+
   const SENTINELS = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR", "GIT_NAMESPACE", "GIT_PREFIX", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_NO_LAZY_FETCH", "git_dir"];
   it("host GIT_* variables decide nothing: planted in process.env (any case; including GIT_CEILING_DIRECTORIES covering everything) they give the same answer as a clean env, for every key shape", () => {
     const decoy = mkd(tmp, "decoy"), decoyHead = initRepo(decoy, true)!;
@@ -246,11 +264,11 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
     const shapes = builders.filter(([label]) => /^(repo root with a commit|PLAIN SUBDIRECTORY|bare repository with commits|a subdirectory of a repository whose config claims)/.test(label)).map(([label, build]) => ({label, ...build()}));
     expect(shapes.length).toBe(4);
     for (const {label, dir, want} of shapes) for (const [name, vars] of planted) expect([label, name, withEnv(vars, () => repositoryHead(dir))]).toEqual([label, name, want]);
-    expect(gitEnvNames()).toEqual(gitEnvBefore); // nothing planted is left behind, compared case-insensitively
+    expect(watchedEnv()).toEqual(envBefore); // nothing planted is left behind: names AND values, exact spelling
     const root = shapes[0];
     expect(root.want.ok && root.want.baseSha !== decoyHead).toBe(true); // a repository with its own HEAD must never report the decoy's HEAD
     expect(withEnv({GIT_DIR: decoyDir}, () => repositoryHead(mkd(tmp, "plain-with-git-dir")))).toEqual(insideAnyRepo(tmp) ? NOT_ROOT : UNRESOLVED); // a planted GIT_DIR cannot make a non-repository look like the decoy
-    expect(gitEnvNames()).toEqual(gitEnvBefore);
+    expect(watchedEnv()).toEqual(envBefore);
   });
 
   it.skipIf(!POSIX)("every git probe runs with a scrubbed environment and the fixed safety flags: a recording git shim sees no GIT_* except the isolation's own and the ceiling (physical parent of src on the deciding probes, absent on the classification probe), always protocol.allow=never, only allow-listed variables (a secret-looking variable and SUDO_UID never reach git)", () => {
