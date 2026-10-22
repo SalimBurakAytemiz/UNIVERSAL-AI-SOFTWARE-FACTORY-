@@ -209,8 +209,8 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
       expect([name, repositoryHead(d)]).toEqual([name, okAt(h)]);
     }
     // a gitfile root is decided by the printed --show-toplevel alone (its git dir is elsewhere), so a trimmed path would refuse it
-    for (const name of ["gf trailing ", "gf trailing\t"]) {
-      const d = path.join(tmp, "names-gf", name); fs.mkdirSync(path.dirname(d), {recursive: true}); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${path.join(tmp, `names-gd-${name.length}`)}`, d]);
+    for (const [i, name] of ["gf trailing ", "gf trailing\t"].entries()) {
+      const d = path.join(tmp, "names-gf", name); fs.mkdirSync(path.dirname(d), {recursive: true}); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${path.join(tmp, `names-gd-${i}`)}`, d]);
       const h = commitIn(d);
       expect([name, repositoryHead(d)]).toEqual([name, okAt(h)]);
     }
