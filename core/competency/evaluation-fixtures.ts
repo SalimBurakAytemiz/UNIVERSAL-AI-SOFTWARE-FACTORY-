@@ -1,4 +1,4 @@
-// //TR: Bu dosya rol değerlendirme hattının SABİT golden verilerini (görev metni, plantlanmış kusurlu diff'ler) salt veri olarak tutar. Burada hiçbir şey çalıştırılmaz; dijestleri kanıt kaydına yazılır, böylece fikstür değişirse eski kanıt başka bir prosedüre ait sayılır.
+// //TR: Bu dosya rol değerlendirme hattının SABİT golden verilerini (görev metni, plantlanmış kusurlu diff'ler) salt veri olarak tutar. Burada hiçbir şey çalıştırılmaz; dijestleri (fixtureDigest) denetim bağlamı olarak kanıt kaydına yazılır; doğrulayıcılar bugün bu dijesti, binding.sha256'yı ve codeHeadSha'yı KONTROL ETMEZ (yalnız yazılır), bu yüzden fikstür değişse de eski kanıt otomatik geçersiz olmaz — zorlama korumalı doğrulayıcı değişikliğinde istenmiştir (docs/authority-requests/LANE-C-role-evaluation-pipeline.md).
 import crypto from "node:crypto";
 
 export const GOLDEN_FILE_VERSION = "golden-file-v1";

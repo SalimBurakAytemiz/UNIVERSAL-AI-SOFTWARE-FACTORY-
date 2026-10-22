@@ -74,8 +74,13 @@ export class EvaluationStaging {
     for (const d of chain) {
       let st: fs.Stats | null = null;
       try { st = fs.lstatSync(d); } catch { st = null; }
-      // //TR: Kök (ve yalnız kök) üst dizinleriyle birlikte oluşturulabilir; üstündeki atalar bölge denetimiyle (gerçek yol) korunur, kökün altı bileşen bileşen.
-      if (st === null) { fs.mkdirSync(d, {mode: 0o700, recursive: d === this.root}); created?.push(d); st = fs.lstatSync(d); }
+      if (st === null) {
+        // //TR: Kök için eksik ATALAR tek tek (üstten alta) oluşturulur ve kaydedilir; yoklama hepsini geri siler (ör. boş <veri dizini>/evaluations kalmaz).
+        const missing: string[] = [];
+        if (d === this.root) { for (let cur = d; ; cur = path.dirname(cur)) { let ex = true; try { fs.lstatSync(cur); } catch { ex = false; } if (ex) break; missing.push(cur); if (path.dirname(cur) === cur) break; } } else missing.push(d);
+        for (const m of missing.reverse()) { fs.mkdirSync(m, {mode: 0o700}); created?.push(m); }
+        st = fs.lstatSync(d);
+      }
       if (st.isSymbolicLink() || !st.isDirectory()) throw new EvaluationStagingError("STAGING_SYMLINK_REFUSED");
     }
     if (realOrNull(dir) !== dir) throw new EvaluationStagingError("STAGING_PATH_CHANGED");
@@ -131,9 +136,10 @@ export type EvaluationOutcome =
 // ---------------------------------------------------------------- git helpers (yalnız geçici depolarda)
 const ID = ["-c", "user.name=UASCO Evaluation", "-c", "user.email=evaluation@local.invalid", "-c", "commit.gpgsign=false"];
 // //TR: Ortamdaki GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE vb. değişkenler geçici depolardaki git komutlarını gerçek checkout'a yönlendirebilir; hat bunları ASLA devralmaz (CLI ayrıca --execute'u reddeder).
-export const GIT_REPO_ENV = /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE|PREFIX|CEILING_DIRECTORIES)$/i;
-const cleanGitEnv = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([k]) => !GIT_REPO_ENV.test(k)));
-const git = (cwd: string, args: string[]) => spawnGitSync(cwd, args, {maxBuffer: 16 * 1024 * 1024, env: cleanGitEnv()});
+// GIT_CONFIG_PARAMETERS (dış `git -c` zinciri) ve GIT_CONFIG_COUNT/KEY/VALUE git yapılandırması enjekte eder (ör. core.fsmonitor bir komut çalıştırır): --execute bunlar varken reddedilir; hattın kendi git komutları ise HER GIT_* değişkenini atar ve core.fsmonitor'u kapatır.
+export const GIT_REPO_ENV = /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE|PREFIX|CEILING_DIRECTORIES|CONFIG_PARAMETERS|CONFIG_COUNT|CONFIG_KEY_\d+|CONFIG_VALUE_\d+)$/i;
+const cleanGitEnv = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
+const git = (cwd: string, args: string[]) => spawnGitSync(cwd, ["-c", "core.fsmonitor=false", ...args], {maxBuffer: 16 * 1024 * 1024, env: cleanGitEnv()});
 const gitOut = (cwd: string, args: string[]): string | null => { const r = git(cwd, args); return r.status === 0 ? String(r.stdout ?? "") : null; };
 function seedRepo(dir: string, files: Readonly<Record<string, string>>): string {
   fs.mkdirSync(dir, {recursive: true});
