@@ -435,3 +435,45 @@ describe("UX hardening: tower accessibility and locale parity", () => {
     expect(used.filter(k => !(k in trD && k in enD))).toEqual([]);
   });
 });
+
+// //TR: PQ-002 / UI-206 — Tower "scheduler" olgusu: doğrulanmış okumada yalnız gerçek tamamlanan/toplam faz sayısı, UNAVAILABLE/ERROR/eksik veride uydurma sayı yok, dürüst "—".
+describe("UX hardening: tower scheduler fact (UI-206)", () => {
+  const schedFact = async (routes: Routes) => {
+    const m = await mkDay0(routes);
+    return {m, f: all(m.view).find(n => n.dataset.fact === "tower.scheduler")!};
+  };
+  const valueOf = (f: N) => all(f).find(n => n.className === "fact-value")!.textContent;
+  it("VERIFIED: shows the real completed/total phase count and the scheduler label", async () => {
+    const {m, f} = await schedFact({"/v1/scheduler": {phases: [{status: "COMPLETED"}, {status: "RUNNING"}, {status: "COMPLETED"}, {status: "QUEUED"}]}});
+    expect(f).toBeDefined();
+    expect(valueOf(f)).toBe("2/4");
+    expect(f.textContent).toContain(m.t("tower.scheduler"));
+    expect(m.calls.filter(c => c === "/v1/scheduler")).toHaveLength(1);
+  });
+  it("VERIFIED with zero phases shows 0/0, not a missing marker or an invented number", async () => {
+    const {f} = await schedFact({"/v1/scheduler": {phases: []}});
+    expect(valueOf(f)).toBe("0/0");
+  });
+  it("UNAVAILABLE: a 404 read shows the honest missing marker, never a number", async () => {
+    const model = await load("model.js");
+    const {f} = await schedFact({});
+    expect(valueOf(f)).toBe(model.MISSING);
+    expect(f.textContent).not.toMatch(/\d/);
+  });
+  it("ERROR: a failing read shows the honest missing marker, never a number", async () => {
+    const model = await load("model.js");
+    const {f} = await schedFact({"/v1/scheduler": new Error("/v1/scheduler: HTTP 500")});
+    expect(valueOf(f)).toBe(model.MISSING);
+    expect(f.textContent).not.toMatch(/\d/);
+  });
+  it("missing data: a payload without a phases list shows the missing marker or its status text, never a fabricated count", async () => {
+    const model = await load("model.js");
+    for (const payload of [{}, {phases: "x"}, {phases: null}, null, []]) {
+      const {f} = await schedFact({"/v1/scheduler": payload});
+      expect(valueOf(f), JSON.stringify(payload)).toBe(model.MISSING);
+    }
+    const st = await schedFact({"/v1/scheduler": {status: "NOT_STARTED"}});
+    expect(valueOf(st.f)).toBe("NOT_STARTED");
+    expect(valueOf(st.f)).not.toMatch(/\d/);
+  });
+});
