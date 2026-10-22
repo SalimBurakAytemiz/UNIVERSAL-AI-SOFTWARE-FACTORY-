@@ -1,12 +1,12 @@
 {
- "//TR": "C-RUNNER-HEAD-PREDICATE için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/workos/runner.ts içinde TAM 1 kez geçen metni değiştirir; docs/lanes/LANE-C-head-predicate-mutants.mjs hepsini çalıştırır ve repositoryHead test grubunun her birini ÖLDÜRMESİNİ (KILLED) bekler.",
+ "//TR": "C-RUNNER-HEAD-PREDICATE için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/workos/runner.ts içinde TAM 1 kez geçen metni değiştirir; docs/lanes/LANE-C-head-predicate-mutants.mjs hepsini çalıştırır ve repositoryHead test grubunun her birini ÖLDÜRMESİNİ (KILLED) bekler. timeoutMs: sonsuza dek bloke eden mutant (H12) harness zaman aşımıyla yakalanır; sonrasında /tmp/uasco-b3a-* altında kalan yetim git süreçlerini öldürün.",
  "mutants": [
   {
    "id": "H1",
-   "description": "GIT_* not stripped from the base env",
+   "description": "GIT_* not stripped from the process env",
    "file": "core/workos/runner.ts",
-   "old": "if (v !== undefined && !/^GIT_/i.test(k)) env[k] = v;",
-   "new": "if (v !== undefined) env[k] = v;"
+   "old": " && !/^GIT_/i.test(k) && k.toUpperCase() !== \"SUDO_UID\"",
+   "new": " && k.toUpperCase() !== \"SUDO_UID\""
   },
   {
    "id": "H2",
@@ -16,116 +16,194 @@
    "new": "!/^GIT_DIR$/i.test(k)"
   },
   {
-   "id": "H3",
-   "description": "no ancestor ceiling on the deciding probes",
+   "id": "H2b",
+   "description": "GIT_* strip is case-sensitive",
    "file": "core/workos/runner.ts",
-   "old": "{env: ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(src)} : env, maxBuffer",
-   "new": "{env, maxBuffer"
+   "old": "!/^GIT_/i.test(k)",
+   "new": "!/^GIT_/.test(k)"
+  },
+  {
+   "id": "H3",
+   "description": "SUDO_UID passed to git",
+   "file": "core/workos/runner.ts",
+   "old": " && k.toUpperCase() !== \"SUDO_UID\") env[k] = v;",
+   "new": ") env[k] = v;"
   },
   {
    "id": "H4",
-   "description": "ceiling is src itself instead of its parent",
+   "description": "no ancestor ceiling on any probe",
    "file": "core/workos/runner.ts",
-   "old": "GIT_CEILING_DIRECTORIES: path.dirname(src)",
-   "new": "GIT_CEILING_DIRECTORIES: src"
+   "old": "{env: ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, maxBuffer",
+   "new": "{env, maxBuffer"
   },
   {
    "id": "H5",
-   "description": "the own-.git clause dropped (core.bare / core.worktree repositories refused)",
+   "description": "ceiling is the root itself instead of its parent",
    "file": "core/workos/runner.ts",
-   "old": "|| same(probe([\"rev-parse\", \"--absolute-git-dir\"], true), path.join(src, \".git\")) ||",
-   "new": "||"
-  },
-  {
-   "id": "H5b",
-   "description": "the --show-toplevel clause dropped (gitfile roots such as linked worktrees refused)",
-   "file": "core/workos/runner.ts",
-   "old": "same(probe([\"rev-parse\", \"--show-toplevel\"], true)) ||",
-   "new": ""
+   "old": "GIT_CEILING_DIRECTORIES: path.dirname(root)",
+   "new": "GIT_CEILING_DIRECTORIES: root"
   },
   {
    "id": "H6",
-   "description": "every directory the ceiling-bounded discovery finds counts as bare (the .git directory accepted)",
+   "description": "the --show-toplevel clause no longer needs the own .git (the ceiling alone is trusted)",
    "file": "core/workos/runner.ts",
-   "old": "probe([\"rev-parse\", \"--is-bare-repository\"], true) === \"true\";",
-   "new": "true;"
+   "old": "(fs.existsSync(own) && same(probe([\"rev-parse\", \"--show-toplevel\"], true)))",
+   "new": "same(probe([\"rev-parse\", \"--show-toplevel\"], true))"
   },
   {
    "id": "H7",
-   "description": "the bare clause dropped (bare repositories refused)",
+   "description": "the own-.git clause dropped (core.bare / core.worktree repositories refused)",
    "file": "core/workos/runner.ts",
-   "old": " || probe([\"rev-parse\", \"--is-bare-repository\"], true) === \"true\";",
-   "new": ";"
+   "old": "|| same(probe([\"rev-parse\", \"--absolute-git-dir\"], true), own)\n",
+   "new": "\n"
   },
   {
    "id": "H8",
-   "description": "commit id format check dropped",
+   "description": "every directory the ceiling-bounded discovery finds counts as bare (the .git directory accepted)",
    "file": "core/workos/runner.ts",
-   "old": "head !== null && SHA.test(head) ?",
-   "new": "head !== null ?"
+   "old": "(probe([\"rev-parse\", \"--is-bare-repository\"], true) === \"true\" &&",
+   "new": "(true &&"
   },
   {
    "id": "H9",
+   "description": "the bare clause trusts is-bare without the git dir being the root",
+   "file": "core/workos/runner.ts",
+   "old": "=== \"true\" && same(probe([\"rev-parse\", \"--absolute-git-dir\"], true)));",
+   "new": "=== \"true\");"
+  },
+  {
+   "id": "H10",
+   "description": "directory identity by length instead of canonical key",
+   "file": "core/workos/runner.ts",
+   "old": "return a.ok && b.ok && a.key === b.key;",
+   "new": "return a.ok && b.ok && a.key.length === b.key.length;"
+  },
+  {
+   "id": "H11",
+   "description": "git output fully trimmed (names with trailing blanks lose them)",
+   "file": "core/workos/runner.ts",
+   "old": ".replace(/\\n$/, \"\") : null;",
+   "new": ".trim() : null;"
+  },
+  {
+   "id": "H12",
+   "description": "no timeout on the probes (the mutant blocks forever; a harness timeout counts as detected)",
+   "file": "core/workos/runner.ts",
+   "old": ", timeout: left, killSignal: \"SIGKILL\"}",
+   "new": ", killSignal: \"SIGKILL\"}",
+   "timeoutMs": 60000
+  },
+  {
+   "id": "H13",
+   "description": "the time budget is per probe instead of total",
+   "file": "core/workos/runner.ts",
+   "old": "timeout: left, killSignal",
+   "new": "timeout: opts.timeoutMs ?? 10_000, killSignal"
+  },
+  {
+   "id": "H14",
+   "description": "lazy fetch not disabled by flag",
+   "file": "core/workos/runner.ts",
+   "old": "[\"-c\", \"protocol.allow=never\", ...args]",
+   "new": "[...args]"
+  },
+  {
+   "id": "H15",
+   "description": "lazy fetch not disabled by environment",
+   "file": "core/workos/runner.ts",
+   "old": "{GIT_NO_LAZY_FETCH: \"1\"}",
+   "new": "{}"
+  },
+  {
+   "id": "H16",
+   "description": "the body can throw (no catch)",
+   "file": "core/workos/runner.ts",
+   "old": "} catch { return refuse; }\n}",
+   "new": "} catch (e) { throw e; }\n}"
+  },
+  {
+   "id": "H17",
+   "description": "an unusable src is not refused",
+   "file": "core/workos/runner.ts",
+   "old": "if (!c.ok) return refuse;\n    const root = c.path;",
+   "new": "const root = (c as {path: string}).path;"
+  },
+  {
+   "id": "H18",
+   "description": "a tag object in HEAD accepted (HEAD and HEAD^{commit} need not agree)",
+   "file": "core/workos/runner.ts",
+   "old": "ids[0] === ids[1] ?",
+   "new": "true ?"
+  },
+  {
+   "id": "H19",
+   "description": "commit id format check dropped",
+   "file": "core/workos/runner.ts",
+   "old": "ids.length === 2 && SHA.test(ids[0]) &&",
+   "new": "ids.length === 2 &&"
+  },
+  {
+   "id": "H20",
    "description": "classification probe always says HEAD unresolved",
    "file": "core/workos/runner.ts",
    "old": "probe([\"rev-parse\", \"--git-dir\"], false) !== null ? \"REPOSITORY_NOT_WORKTREE_ROOT\" : \"REPOSITORY_HEAD_UNRESOLVED\"",
    "new": "\"REPOSITORY_HEAD_UNRESOLVED\""
   },
   {
-   "id": "H10",
+   "id": "H21",
    "description": "classification probe always says not the work-tree root",
    "file": "core/workos/runner.ts",
    "old": "probe([\"rev-parse\", \"--git-dir\"], false) !== null ? \"REPOSITORY_NOT_WORKTREE_ROOT\" : \"REPOSITORY_HEAD_UNRESOLVED\"",
    "new": "\"REPOSITORY_NOT_WORKTREE_ROOT\""
   },
   {
-   "id": "H11",
+   "id": "H22",
    "description": "classification probe keeps the ceiling",
    "file": "core/workos/runner.ts",
    "old": "probe([\"rev-parse\", \"--git-dir\"], false)",
    "new": "probe([\"rev-parse\", \"--git-dir\"], true)"
   },
   {
-   "id": "H12",
+   "id": "H23",
+   "description": "the ceiling-free probes feed the ok decision (classification lets a subdirectory through, HEAD probed without the ceiling)",
+   "file": "core/workos/runner.ts",
+   "old": "if (!isRoot) return {ok: false, reason: probe([\"rev-parse\", \"--git-dir\"], false) !== null ? \"REPOSITORY_NOT_WORKTREE_ROOT\" : \"REPOSITORY_HEAD_UNRESOLVED\"};\n    const ids = (probe([\"rev-parse\", \"HEAD\", \"HEAD^{commit}\"], true) ?? \"\")",
+   "new": "if (!isRoot && probe([\"rev-parse\", \"--git-dir\"], false) === null) return {ok: false, reason: \"REPOSITORY_HEAD_UNRESOLVED\"};\n    const ids = (probe([\"rev-parse\", \"HEAD\", \"HEAD^{commit}\"], false) ?? \"\")"
+  },
+  {
+   "id": "H24",
+   "description": "the HEAD probe runs without the ceiling",
+   "file": "core/workos/runner.ts",
+   "old": "probe([\"rev-parse\", \"HEAD\", \"HEAD^{commit}\"], true)",
+   "new": "probe([\"rev-parse\", \"HEAD\", \"HEAD^{commit}\"], false)"
+  },
+  {
+   "id": "H25",
+   "description": "the deciding --show-toplevel probe runs without the ceiling",
+   "file": "core/workos/runner.ts",
+   "old": "same(probe([\"rev-parse\", \"--show-toplevel\"], true))",
+   "new": "same(probe([\"rev-parse\", \"--show-toplevel\"], false))"
+  },
+  {
+   "id": "H26",
    "description": "an unresolved HEAD hides the root verdict",
    "file": "core/workos/runner.ts",
-   "old": "if (!root) return {ok: false, reason:",
-   "new": "if (!root && probe([\"rev-parse\", \"--verify\", \"HEAD^{commit}\"], true) !== null) return {ok: false, reason:"
+   "old": "if (!isRoot) return {ok: false, reason:",
+   "new": "if (!isRoot && probe([\"rev-parse\", \"HEAD\", \"HEAD^{commit}\"], true) !== null) return {ok: false, reason:"
   },
   {
-   "id": "H13",
-   "description": "raw string comparison instead of the canonical key",
+   "id": "H27",
+   "description": "the default time budget is zero",
    "file": "core/workos/runner.ts",
-   "old": "return a.ok && b.ok && a.key === b.key;",
-   "new": "return a.ok && b.ok && p === to;"
+   "old": "opts.timeoutMs ?? 10_000",
+   "new": "opts.timeoutMs ?? 0"
   },
   {
-   "id": "H14",
-   "description": "git output not trimmed",
-   "file": "core/workos/runner.ts",
-   "old": "maxBuffer: 1024 * 1024});\n    return r.status === 0 ? String(r.stdout ?? \"\").trim() : null;",
-   "new": "maxBuffer: 1024 * 1024});\n    return r.status === 0 ? String(r.stdout ?? \"\") : null;"
-  },
-  {
-   "id": "H15",
+   "id": "H28",
    "description": "runner collapses every refusal into HEAD unresolved",
    "file": "core/workos/runner.ts",
    "old": "if (!repoHead.ok) return {kind: \"BLOCK\", reason: repoHead.reason};",
    "new": "if (!repoHead.ok) return {kind: \"BLOCK\", reason: \"REPOSITORY_HEAD_UNRESOLVED\"};"
-  },
-  {
-   "id": "H16",
-   "description": "the ceiling-free probes feed the ok decision (classification probe lets a subdirectory through, HEAD probed without the ceiling)",
-   "file": "core/workos/runner.ts",
-   "old": "if (!root) return {ok: false, reason: probe([\"rev-parse\", \"--git-dir\"], false) !== null ? \"REPOSITORY_NOT_WORKTREE_ROOT\" : \"REPOSITORY_HEAD_UNRESOLVED\"};\n  const head = probe([\"rev-parse\", \"--verify\", \"HEAD^{commit}\"], true);",
-   "new": "if (!root && probe([\"rev-parse\", \"--git-dir\"], false) === null) return {ok: false, reason: \"REPOSITORY_HEAD_UNRESOLVED\"};\n  const head = probe([\"rev-parse\", \"--verify\", \"HEAD^{commit}\"], false);"
-  },
-  {
-   "id": "H17",
-   "description": "the deciding --show-toplevel probe runs without the ceiling",
-   "file": "core/workos/runner.ts",
-   "old": "same(probe([\"rev-parse\", \"--show-toplevel\"], true)) ||",
-   "new": "same(probe([\"rev-parse\", \"--show-toplevel\"], false)) ||"
   }
  ]
 }
