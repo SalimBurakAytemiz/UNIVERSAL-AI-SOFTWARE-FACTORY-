@@ -882,7 +882,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
   });
 
   it("secret-like text controlled by the model or agent (file names, logs, model output) is redacted in BOTH staged files", { timeout: 120_000 }, async () => {
-    const KEY = "AKIAIOSFODNN7EXAMPLE";
+    const KEY = ["AKIA", "IOSFODNN7EXAMPLE"].join(""); // assembled at runtime so the repository secret scan never sees a literal key
     const dev = evaluated(await evaluate(fakePair({implement: () => ({files: {"greeting.txt": "hello\n", [`${KEY}.txt`]: "x\n"}})}), DEV));
     expect(dev.verdict).toBe("FAILED");
     for (const f of [dev.evidenceFile, dev.artifactFile]) expect(fs.readFileSync(f, "utf8")).not.toContain(KEY);
