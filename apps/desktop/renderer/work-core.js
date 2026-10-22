@@ -213,6 +213,21 @@ export function mapTaskRuns(raw){
   }
   return {state:"VERIFIED",items};
 }
+// //TR: core/workos/task-outcome.ts targetForRun kuralının birebir yansıması: görev, ona EN SON bağlanan koşunun gerçek sonucunu izler (SUCCEEDED -> DONE; FAILED/RECOVERY_FAILED/CANCELLED/QUARANTINED/BLOCKED -> BLOCKED; CREATED/QUEUED -> değişmez; diğer bilinen durumlar -> IN_PROGRESS). Bu yalnız KURALI gösterir, bir geçişin yapıldığını iddia etmez; kaydedilen görev durumu ayrıca okunur. Bilinmeyen/okunamayan koşu durumu için hedef null'dır (tahmin yok).
+export const RUN_TASK_STATUSES=Object.freeze(["CREATED","QUEUED","LEASED","RUNNING","CHECKPOINTING","VERIFYING","SUCCEEDED","RETRY_SCHEDULED","DEGRADED","HANDOFF_PENDING","AWAITING_APPROVAL","BLOCKED","QUARANTINED","CANCELLING","CANCELLED","RECOVERING","RECOVERY_FAILED","FAILED"]);
+const RUN_FAILED_FOR_TASK=Object.freeze(["FAILED","RECOVERY_FAILED","CANCELLED","QUARANTINED","BLOCKED"]);
+export function taskTargetForRun(status){
+  if(typeof status!=="string"||!RUN_TASK_STATUSES.includes(status))return null;
+  if(status==="SUCCEEDED")return "DONE";
+  if(RUN_FAILED_FOR_TASK.includes(status))return "BLOCKED";
+  if(status==="CREATED"||status==="QUEUED")return "NONE";
+  return "IN_PROGRESS";
+}
+/** mapTaskRuns öğeleri (bağlanma sırasıyla) -> her öğe için {governing,target}; yönetici koşu son bağlanandır, eskiler "SUPERSEDED" sayılır. */
+export function taskFollowsRun(items){
+  const list=Array.isArray(items)?items:[];
+  return list.map((l,i)=>({runId:l.runId,governing:i===list.length-1,target:taskTargetForRun(l.status)}));
+}
 /** Göreve henüz bağlı olmayan, kanonik kimlikli mission koşuları (kimlik tekrarı elenir). */
 export function linkableRuns(runItems,linkedItems){
   const linked=new Set((Array.isArray(linkedItems)?linkedItems:[]).map(l=>l.runId)),seen=new Set(),out=[];
