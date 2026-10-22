@@ -1626,13 +1626,13 @@ describe("LANE-B founder attention queue", () => {
 describe("LANE-B pre-dev Founder decisions", () => {
   const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210", "content-type": "application/json"};
   const ACT = "FOUNDER_LOCAL", SC = {tenantId: "tA"}, AGENT = "agent-ba@local.invalid";
-  const mkApp = async (stopped = false, allowed = true, tenantId = "tA") => {
+  const mkApp = async (stopped = false, allowed = true, tenantId = "tA", storeOptions?: ConstructorParameters<typeof WorkOsStore>[1]) => {
     const [{default: Fastify}, {registerPredevDecisionRoutes}, {WorkOsError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/predev-decisions.js"), import("../core/workos/types.js")]);
     const app = Fastify({logger: false});
     app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
-    const store = new WorkOsStore(path.join(tmp, "data")), audits: any[] = [];
+    const store = new WorkOsStore(path.join(tmp, "data"), storeOptions), audits: any[] = [];
     registerPredevDecisionRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: ACT, audit: (e: string, x?: any) => { audits.push({e, x}); }, workosStopped: () => stopped,
-      workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"}, workosFail: (r: any, e: any) => r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
+      workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"}, workosFail: (r: any, e: any) => e?.code === "WORKOS_DISK_FULL" ? r.code(507).send({error: e.code}) : r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
     const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
     for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(SC, m.missionId, to, "go", ACT);
     return {app, store, audits, m};
@@ -1706,6 +1706,101 @@ describe("LANE-B pre-dev Founder decisions", () => {
     expect((await post(app, `/v1/missions/${id}/predev/artifacts/bad/reject`, {reason: "x"})).statusCode).toBe(400);
     expect(store.getPreDevSequence(SC, id)).toBeUndefined();
     expect(n0() - before).toBe(0);
+  });
+
+  // //TR: C-PREDEV-RESUME: ilerleme yazımı (PREDEV_PHASE_ADVANCED) ENOSPC ile kaybolursa yeniden deneme bekleyen ilerlemeyi TAMAMLAR (dizi takılı kalmaz). Enjeksiyon yalnız o journal satırına uygulanır; önceki yazımlar başarılıdır.
+  describe("resume after a lost phase-advance write (ENOSPC on PREDEV_PHASE_ADVANCED only)", () => {
+    const enospc = () => Object.assign(new Error("ENOSPC: no space left on device, write"), {code: "ENOSPC"});
+    // yalnız verilen journal parçasını içeren satırda ENOSPC fırlatır (kısmi satır yazılmaz: yazma hiç yapılmaz)
+    const injector = (needle: string) => {
+      const st = {armed: false, hits: 0};
+      const io = {writeSync: (fd: number, data: Buffer) => { if (st.armed && Buffer.from(data).toString("utf8").includes(needle)) { st.hits += 1; throw enospc(); } return fs.writeSync(fd, data); }};
+      return {st, io};
+    };
+    const ADV = '"PREDEV_PHASE_ADVANCED"';
+
+    it("(a) start: the sequence is left at AUTHORIZED and the first start answers 507; the retry finishes the advance to BUSINESS_ANALYSIS (201, not a stuck replay) and a third start is a plain replay", async () => {
+      const inj = injector(ADV), {app, store, audits, m} = await mkApp(false, true, "tA", {io: inj.io}), id = m.missionId, driver = await agentDriver(store);
+      inj.st.armed = true;
+      const first = await post(app, `/v1/missions/${id}/predev/start`);
+      expect(first.statusCode).toBe(507); expect(first.json()).toEqual({error: "WORKOS_DISK_FULL"});
+      expect(inj.st.hits).toBe(1);
+      expect(store.getPreDevSequence(SC, id)!.phase).toBe("AUTHORIZED"); // opened, never advanced
+      expect(store.journalHealth().state).toBe("OK"); // no partial line
+      inj.st.armed = false;
+      const retry = await post(app, `/v1/missions/${id}/predev/start`);
+      expect(retry.statusCode, retry.body).toBe(201); expect(retry.json().replayed).toBe(false); expect(retry.json().predev.phase).toBe("BUSINESS_ANALYSIS");
+      expect(store.preDevReadModel(SC, id).phase).toBe("BUSINESS_ANALYSIS");
+      const third = await post(app, `/v1/missions/${id}/predev/start`);
+      expect(third.statusCode).toBe(200); expect(third.json().replayed).toBe(true);
+      expect(audits.filter(a => a.e === "WORKOS_PREDEV_STARTED")).toHaveLength(1); // only the start that actually completed is audited
+      expect((await driver.produceCurrentPhase(SC, id, AGENT)).status).toBe("RECORDED"); // the sequence is usable (was PREDEV_DRIVER_NO_ARTIFACT_PHASE:AUTHORIZED)
+      expect(new WorkOsStore(path.join(tmp, "data")).isTampered).toBe(false); // replay accepts the journal
+    });
+
+    it("(b) approve: the artifact is APPROVED but the phase did not move and the approve answers 507; the retry finishes only the advance; gates stay: the recorder cannot finish its own artifact, and an APPROVED artifact that is not the current one is still an illegal transition", async () => {
+      const inj = injector(ADV), {app, store, m} = await mkApp(false, true, "tA", {io: inj.io}), id = m.missionId, driver = await agentDriver(store);
+      await post(app, `/v1/missions/${id}/predev/start`);
+      const ba = await driver.produceCurrentPhase(SC, id, AGENT);
+      if (ba.status !== "RECORDED") throw new Error("not recorded");
+      inj.st.armed = true;
+      const first = await post(app, `/v1/missions/${id}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV});
+      expect(first.statusCode).toBe(507);
+      expect(inj.st.hits).toBe(1);
+      expect(store.getPreDevArtifact(SC, ba.artifactId)).toMatchObject({state: "APPROVED", approvedBy: ACT});
+      expect(store.preDevReadModel(SC, id).phase).toBe("BUSINESS_ANALYSIS"); // stuck before the fix
+      expect(store.journalHealth().state).toBe("OK");
+      expect(() => driver.approveAndAdvance(SC, id, ba.artifactId, AGENT, EV)).toThrow("PREDEV_APPROVER_NOT_INDEPENDENT"); // the recorder can never finish its own artifact's advance
+      expect(store.preDevReadModel(SC, id).phase).toBe("BUSINESS_ANALYSIS");
+      inj.st.armed = false;
+      const retry = await post(app, `/v1/missions/${id}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV});
+      expect(retry.statusCode, retry.body).toBe(200); expect(retry.json().predev.phase).toBe("REQUIREMENTS");
+      expect(store.getPreDevArtifact(SC, ba.artifactId)).toMatchObject({state: "APPROVED", evidenceRefs: EV}); // the stored approval stands: no second approval was written
+      // the same artifact again: APPROVED but no longer the current artifact of the current phase -> the old illegal-transition answer, no extra advance
+      const again = await post(app, `/v1/missions/${id}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV});
+      expect(again.statusCode).toBe(409);
+      expect(store.preDevReadModel(SC, id).phase).toBe("REQUIREMENTS");
+      // the second phase gets stuck the same way; a retry that NAMES the old (non-current) APPROVED artifact must not finish it
+      const req = await driver.produceCurrentPhase(SC, id, AGENT);
+      if (req.status !== "RECORDED") throw new Error("not recorded");
+      inj.st.armed = true;
+      expect((await post(app, `/v1/missions/${id}/predev/artifacts/${req.artifactId}/approve`, {evidenceRefs: EV})).statusCode).toBe(507);
+      inj.st.armed = false;
+      expect(store.getPreDevArtifact(SC, req.artifactId)!.state).toBe("APPROVED");
+      expect(store.preDevReadModel(SC, id).phase).toBe("REQUIREMENTS");
+      const stale = await post(app, `/v1/missions/${id}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV});
+      expect(stale.statusCode).toBe(409); // the artifact named is not the current artifact of this phase
+      expect(store.preDevReadModel(SC, id).phase).toBe("REQUIREMENTS");
+      const next = await post(app, `/v1/missions/${id}/predev/artifacts/${req.artifactId}/approve`, {evidenceRefs: EV});
+      expect(next.statusCode, next.body).toBe(200); expect(next.json().predev.phase).toBe("PLANNING");
+      expect(new WorkOsStore(path.join(tmp, "data")).isTampered).toBe(false);
+    });
+
+    it("(c) a lost APPROVED write (draft SUBMITTED, approve answers 507) is also finished by the retry; a lost REJECTED write does not block a retried reject", async () => {
+      const injA = injector('"to":"APPROVED"'), a = await mkApp(false, true, "tA", {io: injA.io});
+      const idA = a.m.missionId, driverA = await agentDriver(a.store);
+      await post(a.app, `/v1/missions/${idA}/predev/start`);
+      const ba = await driverA.produceCurrentPhase(SC, idA, AGENT);
+      if (ba.status !== "RECORDED") throw new Error("not recorded");
+      injA.st.armed = true;
+      expect((await post(a.app, `/v1/missions/${idA}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV})).statusCode).toBe(507);
+      expect(injA.st.hits).toBe(1);
+      expect(a.store.getPreDevArtifact(SC, ba.artifactId)!.state).toBe("SUBMITTED");
+      injA.st.armed = false;
+      const ok = await post(a.app, `/v1/missions/${idA}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV});
+      expect(ok.statusCode, ok.body).toBe(200); expect(ok.json().predev.phase).toBe("REQUIREMENTS");
+      const injR = injector('"to":"REJECTED"'), r = await mkApp(false, true, "tA", {io: injR.io});
+      const idR = r.m.missionId, driverR = await agentDriver(r.store);
+      await post(r.app, `/v1/missions/${idR}/predev/start`);
+      const d = await driverR.produceCurrentPhase(SC, idR, AGENT);
+      if (d.status !== "RECORDED") throw new Error("not recorded");
+      injR.st.armed = true;
+      expect((await post(r.app, `/v1/missions/${idR}/predev/artifacts/${d.artifactId}/reject`, {reason: "unclear"})).statusCode).toBe(507);
+      expect(injR.st.hits).toBe(1);
+      injR.st.armed = false;
+      const rej = await post(r.app, `/v1/missions/${idR}/predev/artifacts/${d.artifactId}/reject`, {reason: "unclear"});
+      expect(rej.statusCode, rej.body).toBe(200); expect(rej.json().predev.artifacts.BusinessAnalysis.state).toBe("REJECTED");
+    });
   });
 });
 
