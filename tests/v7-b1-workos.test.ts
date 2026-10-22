@@ -2362,4 +2362,70 @@ describe("LANE-B run readiness", () => {
     expect(by(r).REPOSITORY.state).toBe("OK");
     expect(r.json().readiness.ready).toBe(true);
   });
-});
+})
+
+// //TR: LANE-B G-FB-001/066/070/123: GET /health işlevsel API testi. YALNIZ sunucu yarısı sınanır (Host kapısı, /health'in tokensız açık oluşu, challenge -> HMAC controlProof, /v1 token kapısı, gövde sızıntısı); Electron main.mjs verifyServerIdentity yarısı (fetch + secureStringEqual) bu testte ÇALIŞMAZ.
+describe("LANE-B control /health (server half only; Electron main-process handshake NOT exercised)", () => {
+  const token = "h".repeat(32), HOST = "127.0.0.1:3210", CH = "ab".repeat(32);
+  const mkSrv = async (controlToken = token) => {
+    const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
+    const {controlChallengeProof} = await import("../automation/lib/control-boundary.mjs");
+    return {app: buildServer({controlToken, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false}), proof: controlChallengeProof as (t: string, c: string) => string | null, runtime};
+  };
+  const health = (app: any, query = `?challenge=${CH}`, host: string | undefined = HOST) => app.inject({method: "GET", url: `/health${query}`, headers: host === undefined ? {} : {host}});
+
+  it("answers the identity challenge without the control token: fixed identity fields and controlProof = HMAC(token, challenge)", async () => {
+    const {app, proof} = await mkSrv();
+    const r = await health(app), b = r.json();
+    expect(r.statusCode).toBe(200);
+    expect(Object.keys(b).sort()).toEqual(["bindHost", "controlProof", "port", "status", "system", "time"]);
+    expect(b).toMatchObject({status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", bindHost: "127.0.0.1", port: 3210});
+    expect(b.controlProof).toBe(proof(token, CH));
+    const other = (await health(app, `?challenge=${"cd".repeat(32)}`)).json().controlProof;
+    expect(other).toBe(proof(token, "cd".repeat(32)));
+    expect(other).not.toBe(b.controlProof);
+    const wrongToken = await mkSrv("w".repeat(32));
+    expect((await health(wrongToken.app)).json().controlProof).not.toBe(b.controlProof);
+  });
+
+  it("gives no proof for a missing or malformed challenge or an unconfigured token, and leaks no token or path", async () => {
+    const {app} = await mkSrv();
+    for (const q of ["", "?challenge=", "?challenge=zz", `?challenge=${"AB".repeat(32)}`, `?challenge=${"ab".repeat(31)}`]) {
+      const r = await health(app, q);
+      expect(r.statusCode, q).toBe(200);
+      expect(r.json().controlProof, q).toBeNull();
+    }
+    const none = await mkSrv("");
+    const r = await health(none.app);
+    expect(r.statusCode).toBe(200);
+    expect(r.json().controlProof).toBeNull();
+    for (const body of [(await health(app)).body, r.body]) {
+      expect(body).not.toContain(token);
+      expect(body).not.toContain(tmp);
+      expect(body).not.toContain("runtime");
+    }
+  });
+
+  it("rejects every Host other than the exact loopback host:port with 421, /health included", async () => {
+    const {app} = await mkSrv();
+    for (const h of ["evil.example", "localhost:3210", "127.0.0.1", "127.0.0.1:3211", "127.0.0.1:3210.evil.example", "0.0.0.0:3210"]) {
+      const r = await health(app, `?challenge=${CH}`, h);
+      expect(r.statusCode, String(h)).toBe(421);
+      expect(r.json()).toEqual({error: "CONTROL_HOST_REJECTED"});
+    }
+    expect((await health(app, `?challenge=${CH}`, "127.0.0.1:3210")).statusCode).toBe(200);
+    expect((await health(app, `?challenge=${CH}`, "127.0.0.1:3210".toUpperCase())).statusCode).toBe(200);
+  });
+
+  it("keeps /health open but gates /v1: no header or wrong token 403, correct token passes, unconfigured token 503", async () => {
+    const {app} = await mkSrv();
+    const get = (headers: any) => app.inject({method: "GET", url: "/v1/projects", headers: {host: HOST, ...headers}});
+    expect((await get({})).statusCode).toBe(403);
+    expect((await get({"x-uasco-control-token": "x".repeat(32)})).statusCode).toBe(403);
+    expect((await get({"x-uasco-control-token": token})).statusCode).toBe(200);
+    const none = await mkSrv("");
+    const r = await none.app.inject({method: "GET", url: "/v1/projects", headers: {host: HOST, "x-uasco-control-token": token}});
+    expect(r.statusCode).toBe(503);
+    expect(r.json()).toEqual({error: "CONTROL_TOKEN_NOT_CONFIGURED"});
+  });
+});;
