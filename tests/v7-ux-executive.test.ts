@@ -868,7 +868,7 @@ describe("Executive — route delegation (app.js VIEWS unchanged)", () => {
     expect(routes.routeFromHash("#/executive")).toBe("executive");
     expect(routes.routeFromHash("#/executive/")).toBe("executive");
     expect(routes.routeFromHash("#/executives")).toBe(routes.DEFAULT_ROUTE);
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-12)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-14)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "domains", "integrations", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("executive");
     expect(routes.ROUTES.filter((x: any) => x.factory).length).toBe(8);
   });
