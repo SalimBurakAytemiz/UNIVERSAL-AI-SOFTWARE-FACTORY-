@@ -558,7 +558,7 @@ describe("LANE-C MissionRunner claim cap (maxConcurrentRuns)", () => {
   });
 
   // //TR: Lease, bir renew() çağrısı gelmeden önce dolmuşsa (uzun senkron iş) renew() WORKOS_LEASE_FENCED fırlatır ve paralı implementer çağrısı HİÇ yapılmaz. Sanal saat, IMPLEMENT adımındaki İKİNCİ renewRunLease çağrısında (workspace sıfırlamasından sonra, paralı executor çağrısından hemen önceki renew()) TTL'den fazla ilerletilir; heartbeat (TTL/3 gerçek ms) bu sürede çalışamaz.
-  it("renew() fences an already expired lease before the paid implementer call: the run is reported fenced, the implementer is never called, and the expired lease is what the next tick takes over (virtual clock)", { timeout: T }, async () => {
+  it("renew() fences an already expired lease before the paid implementer call: the run is reported fenced, the implementer is never called, and the next tick takes the expired lease over and recovers the run to AWAITING_APPROVAL (virtual clock)", { timeout: T }, async () => {
     const TTL = 600_000, clock = {ms: Date.UTC(2026, 9, 22, 12, 0, 0)};
     const c = setup("tA", {virtualClock: clock}); const fake = new FakeExecutors(okScript()); const pair = fake.pair();
     const [r1] = queueRuns(c, pair, 1);
@@ -575,11 +575,17 @@ describe("LANE-C MissionRunner claim cap (maxConcurrentRuns)", () => {
     expect(jumped, runDiag(c, [r1.runId], vctx())).toBe(1);
     expect(t1, runDiag(c, [r1.runId], vctx())).toMatchObject({claimed: [r1.runId], fenced: [r1.runId], recovered: []});
     expect(fake.calls).toEqual({implement: 0, review: 0}); // fenced BEFORE the paid call
-    // what the next tick sees (runner.ts: a leased, non-terminal run whose lease expiry is <= now is taken over); checked without paying for a second full run
+    // what the next tick sees (runner.ts: a leased, non-terminal run whose lease expiry is <= now is taken over)
     const left = c.store.engineGetRun(r1.runId)!;
     expect(left.status).toBe("RUNNING");
+    expect(left.step).toBe("IMPLEMENT");
     expect(left.leaseId).not.toBeNull();
     expect(Date.parse(left.leaseExpiresAt ?? "")).toBeLessThanOrEqual(clock.ms);
+    // the recovery path from exactly this state ("fenced right before the paid call"): taken over, workspace re-entered, implementer called ONCE, run reaches AWAITING_APPROVAL
+    const t2 = await boundedTick(mr, c, [r1.runId], "fence recovery tick", vctx);
+    expect(t2.recovered, runDiag(c, [r1.runId], vctx())).toEqual([r1.runId]);
+    expect(runOf(c, r1.runId).status, runDiag(c, [r1.runId], vctx())).toBe("AWAITING_APPROVAL");
+    expect(fake.calls).toEqual({implement: 1, review: 1});
   });
 
   it("cap 2: two queued runs really run together (both implementer calls in flight at once); a third waits; cap 1 never overlaps", { timeout: T }, async () => {
