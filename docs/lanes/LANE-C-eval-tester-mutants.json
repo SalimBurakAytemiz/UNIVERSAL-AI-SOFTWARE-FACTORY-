@@ -448,6 +448,55 @@
    "file": "core/competency/evaluation-pipeline.ts",
    "old": "if (IMPLEMENTER_FUNCTIONS.includes(profile.function)) assertImplementerRole",
    "new": "if (profile.function === \"developer\") assertImplementerRole"
+  },
+  {
+   "id": "D1",
+   "description": "leading zeros accepted in number literals (legacy octal)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "/^(0|[1-9]\\d*)(?:\\.(\\d{1,6}))?$/",
+   "new": "/^(\\d+)(?:\\.(\\d{1,6}))?$/"
+  },
+  {
+   "id": "D2",
+   "description": "no integer-digit cap (float absorption)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (!m || m[1].length > maxInt) return null;",
+   "new": "if (!m) return null;"
+  },
+  {
+   "id": "D3",
+   "description": "negative zero accepted",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "(neg && v === 0)",
+   "new": "false"
+  },
+  {
+   "id": "D4",
+   "description": "unlimited fraction digits (float absorption at the small end)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "(\\d{1,6})",
+   "new": "(\\d+)"
+  },
+  {
+   "id": "D5",
+   "description": "trailing comma not allowed",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (args.length > 1 && args[args.length - 1].length === 0) args.pop();",
+   "new": ""
+  },
+  {
+   "id": "D6",
+   "description": "expected sum capped at 9 digits",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "MAX_EXPECTED_INT_DIGITS = 10",
+   "new": "MAX_EXPECTED_INT_DIGITS = 9"
+  },
+  {
+   "id": "D7",
+   "description": "operands capped at 10 digits",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "MAX_OPERAND_INT_DIGITS = 9",
+   "new": "MAX_OPERAND_INT_DIGITS = 10"
   }
  ]
 }

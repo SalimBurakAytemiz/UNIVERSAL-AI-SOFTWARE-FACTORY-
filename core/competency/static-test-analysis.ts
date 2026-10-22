@@ -94,20 +94,24 @@ export function topLevelStatements(toks: readonly Tok[]): Tok[][] {
   return out.map(s => (s.length > 0 && s[s.length - 1].t === "p" && s[s.length - 1].v === ";" ? s.slice(0, -1) : s)).filter(s => s.length > 0);
 }
 
-// //TR: Ondalık sayı değişmezi (başında tek '-' olabilir) -> sayı; başka her biçim (hex, üstel, ifade) null.
-function parseNumber(ts: readonly Tok[]): number | null {
+// //TR: DÜZ ondalık sayı değişmezi (başında tek '-' olabilir) -> sayı; başka her biçim null: yasak olanlar baştaki sıfır (V8 sloppy modda 010 = 8, Number("010") = 10), "-0" (Object.is), ayraç/üstel/başta-sonda nokta, hex ve çok büyük/küçük büyüklük (IEEE-754'te a+b === a-b emilimi: tamsayı kısmı <= maxInt hane, kesir <= 6 hane iken b >= 1e-6 her zaman ulp(a)'dan büyüktür, yani toplam ile fark ayrışır).
+function parseNumber(ts: readonly Tok[], maxInt: number): number | null {
   const neg = ts.length === 2 && ts[0].t === "p" && ts[0].v === "-";
   const num = neg ? ts[1] : ts.length === 1 ? ts[0] : undefined;
-  if (!num || num.t !== "num" || !/^\d+(?:\.\d+)?$/.test(num.v)) return null;
+  if (!num || num.t !== "num") return null;
+  const m = /^(0|[1-9]\d*)(?:\.(\d{1,6}))?$/.exec(num.v);
+  if (!m || m[1].length > maxInt) return null;
   const v = Number(num.v);
-  return Number.isFinite(v) ? (neg ? -v : v) : null;
+  if (!Number.isFinite(v) || (neg && v === 0)) return null;
+  return neg ? -v : v;
 }
+const MAX_OPERAND_INT_DIGITS = 9, MAX_EXPECTED_INT_DIGITS = 10;
 // `<addId>(<n>, <n>)` tam olarak; başka bir şey (iç içe çağrı, değişken, ifade) null.
 function parseAddCall(ts: readonly Tok[], addId: string): {a: number; b: number} | null {
   if (ts.length < 6 || ts[0].t !== "id" || ts[0].v !== addId || ts[1].v !== "(" || ts[ts.length - 1].v !== ")") return null;
   const inner = ts.slice(2, -1), comma = inner.findIndex(t => t.t === "p" && t.v === ",");
   if (comma < 0) return null;
-  const a = parseNumber(inner.slice(0, comma)), b = parseNumber(inner.slice(comma + 1));
+  const a = parseNumber(inner.slice(0, comma), MAX_OPERAND_INT_DIGITS), b = parseNumber(inner.slice(comma + 1), MAX_OPERAND_INT_DIGITS);
   return a === null || b === null ? null : {a, b};
 }
 function splitArgs(ts: readonly Tok[]): Tok[][] {
@@ -163,14 +167,15 @@ export function analyzeAddTest(toks: readonly Tok[]): AddTestAnalysis {
     if (close !== s.length - 1) { violate(`STATEMENT_NOT_ALLOWED:${s[0].v.slice(0, 30)}`); continue; }
     r.assertCalls++;
     const args = splitArgs(s.slice(open + 1, close));
+    if (args.length > 1 && args[args.length - 1].length === 0) args.pop();   // //TR: son bağımsız değişkenden sonra tek virgül serbest (Prettier/ESLint varsayılanı)
     let found: AssertionCase | null = null;
     if (r.addId !== null && method !== null && EQUAL_METHODS.has(method) && (args.length === 2 || (args.length === 3 && isStr(args[2])))) {
-      for (const [x, y] of [[0, 1], [1, 0]]) { const call = parseAddCall(args[x], r.addId), exp = parseNumber(args[y]); if (call && exp !== null) { found = {...call, expected: exp}; break; } }
+      for (const [x, y] of [[0, 1], [1, 0]]) { const call = parseAddCall(args[x], r.addId), exp = parseNumber(args[y], MAX_EXPECTED_INT_DIGITS); if (call && exp !== null) { found = {...call, expected: exp}; break; } }
     } else if (r.addId !== null && (method === null || method === "ok") && (args.length === 1 || (args.length === 2 && isStr(args[1])))) {
       const op = args[0].findIndex(t => t.t === "p" && (t.v === "===" || t.v === "=="));
       if (op > 0) {
         const left = args[0].slice(0, op), right = args[0].slice(op + 1);
-        for (const [x, y] of [[left, right], [right, left]]) { const call = parseAddCall(x, r.addId), exp = parseNumber(y); if (call && exp !== null) { found = {...call, expected: exp}; break; } }
+        for (const [x, y] of [[left, right], [right, left]]) { const call = parseAddCall(x, r.addId), exp = parseNumber(y, MAX_EXPECTED_INT_DIGITS); if (call && exp !== null) { found = {...call, expected: exp}; break; } }
       }
     }
     if (found) r.cases.push(found); else violate("ASSERT_FORM_NOT_ALLOWED");
