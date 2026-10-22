@@ -9,6 +9,7 @@ import {agentConfigInWorkspace, commitBuilderOutput, gitControlDigest} from "./b
 import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
 import {CLAUDE_ISOLATION_FLAGS, claudeProfileForRun, withClaudeProfileEnv} from "./claude-profiles.js";
 import type {ClaudeProfileOptions} from "./claude-profiles.js";
+import {ClaudePreDevBuilder} from "./predev/claude-builder.js";
 
 export interface MissionSpec {
   runId: string; missionId: string; projectId: string; title: string; objective: string; acceptanceCriteria: string[]; riskLevel: string;
@@ -39,7 +40,8 @@ export interface ReviewResult {
 }
 export interface ImplementerAdapter { readonly identity: string; implement(workspace: string, spec: MissionSpec, ctx: ExecContext): Promise<ImplementResult> }
 export interface ReviewerAdapter { readonly identity: string; review(cleanClone: string, spec: MissionSpec, diff: string, ctx: ExecContext): Promise<ReviewResult> }
-export interface ExecutorPair { kind: "FAKE" | "LOCAL_CLAUDE"; implementer: ImplementerAdapter; reviewer: ReviewerAdapter }
+// //TR: preDevBuilder (isteğe bağlı): pre-dev artefakt üretimi için üretim BuilderPort'u; yalnız LOCAL_CLAUDE sağlar ve her çağrı TAZE bir adaptör döndürür. FAKE çiftinde yoktur (route 409 PREDEV_DRIVER_BUILDER_NOT_CONFIGURED verir).
+export interface ExecutorPair { kind: "FAKE" | "LOCAL_CLAUDE"; implementer: ImplementerAdapter; reviewer: ReviewerAdapter; preDevBuilder?: () => ClaudePreDevBuilder }
 
 // Bağımsız review zorunluluğu (config/execution-backends.json pipeline.producerMayReviewOwnOutput=false): aynı kimlik reddedilir.
 export function assertIndependentExecutors(pair: ExecutorPair): void {
@@ -315,7 +317,13 @@ export class LocalClaudeExecutors {
           if (changed) return {...r, verdict: "BLOCKED", findings: [], valid: false, invalidReason: changed, transient: false, log: `${r.log}REVIEW_INVALID: ${changed}\n`};
           return r;
         }
-      }
+      },
+      // //TR: Pre-dev artefakt üretimi AYNI reviewer rotasının yetkisini kullanır (provenance-doğrulanmış launcher, ayrı salt-okunur reviewer profili, reviewerArgv, allowPaidApi env politikası); yeni yetki/env bayrağı yoktur.
+      preDevBuilder: () => new ClaudePreDevBuilder({
+        identity: self.reviewerIdentity, launcher: () => self.verifiedLauncher(),
+        profile: () => { const p = claudeProfileForRun(self.controlRoot, "reviewer", self.opts.profile); return p.ok ? {ok: true, dir: p.dir} : {ok: false, reason: p.reason}; },
+        env: dir => withClaudeProfileEnv(self.env(), dir), argv: reviewerArgv, run: self.opts.runReviewer ?? runProcess
+      })
     };
   }
 }
