@@ -1,32 +1,34 @@
-<!-- //TR: LANE-C yetki talebi: ücretsiz Linux sandbox sağlayıcısının (core/agents/linux-unshare-sandbox.ts) ExecutionGate'e kaydı korumalı server.ts içindedir; Windows tasarım notları ve sınırlamalar burada. -->
-# LANE-C authority request: register the free Linux sandbox provider
+<!-- //TR: LANE-C yetki talebi: ücretsiz Linux sandbox sağlayıcısının (core/agents/linux-unshare-sandbox.ts, v2) ExecutionGate'e kaydı korumalı server.ts içindedir; bağımsız saldırgan incelemesinin bulguları, kalan sınırlar ve Windows tasarım notları burada. -->
+# LANE-C authority request: register the free Linux sandbox provider (v2)
 
-## What was built (no protected file touched)
-`core/agents/linux-unshare-sandbox.ts` implements the existing `SandboxProvider` contract (`core/workos/execution-gate.ts`) with util-linux `unshare` + `setpriv` only (no package, no dependency, no network, no cost):
-- user + net + pid + ipc + uts + mount namespaces; `--kill-child=SIGKILL`; fresh `/proc`;
-- root filesystem remounted read-only; only the run's working directory (and `TMPDIR` inside it) is writable;
-- all capabilities dropped (`CapEff=0`), `no_new_privs`, so the project cannot remount rw;
-- ulimits: CPU seconds (timeout + 5 s), address space (16 GiB default), file size (2 GiB blocks default);
-- timeout kills the whole process tree (parent SIGKILL + pid-namespace teardown);
-- env is exactly what the caller passes (the runner already passes `safeChildEnv`);
-- `selfTest()` proves, with negative probes, pid-ns, scratch-writable, root-read-only, remount-denied, caps-dropped, no network interface, and tree-kill. Any failure => provider stays UNVERIFIED and `run()`/`spawn()` refuse (never host execution).
+## STATUS: v1 (PR #168) was NOT safe; register only v2 (this document's code)
+An independent adversarial review of v1 reproduced HIGH escapes: the whole host filesystem stayed readable (home dirs, `~/.ssh`, other projects), host pathname unix sockets (docker/dbus/ssh-agent) stayed connectable, `/dev` `/dev/shm` `/sys` and any mount under a path starting with `/dev|/sys|/proc` or containing a space stayed writable, a root supervisor's kuid 0 kept DAC over `/proc/sys`, the timeout kill was bypassable (the project was pid 1 and could clear `PR_SET_PDEATHSIG`), and `selfTest` passed while all of this was exploitable. v1 was never wired (no runtime effect). **Do not apply any registration hook until v2 is merged.**
 
-## Protected hook needed (coordinator applies)
-`apps/control-api/src/server.ts` line `const executionGate=new ExecutionGate(opts.sandbox??null);`
+## What v2 does (no protected file touched; util-linux `unshare`, `setpriv`, `pivot_root`, `mount`, `awk` only)
+- A new tmpfs root replaces the host root (`pivot_root`, old root detached): only `/usr`, `/bin`,`/lib*`,`/sbin` (symlinks recreated), the node install prefix and `/etc/alternatives`,`/etc/ld.so.*` are bind-mounted read-only; a synthetic `/etc/passwd|group|nsswitch.conf`; private `/dev` with six safe nodes and a private `/dev/shm`; private `/tmp`; the working directory is `/work` (the only host-visible writable path); `/proc` is mounted read-only with `/proc/sys`, `sysrq-trigger`, `irq`, `bus`, `fs` read-only and `kcore|keys|timer_list|sched_debug|kmsg` masked; **no `/sys`, no `/home`, `/root`, `/run`, `/var`, `/mnt`**. Host unix sockets, secrets and other projects are not reachable.
+- Every run audits `/proc/self/mountinfo` after the pivot and exits 126 if any mount other than `/work`, `/tmp`, `/dev/shm` is not read-only (fail closed, no deny-list).
+- The project is never pid 1: a tiny capability-less supervisor `sh` is pid 1 and runs the project as a child, so the project cannot clear the namespace init's `PDEATHSIG`; when `unshare` is killed the whole pid namespace is torn down with SIGKILL. All capabilities dropped (`Cap* = 0`, `no_new_privs`); nested user namespaces disabled (`max_user_namespaces=0`).
+- Helper tools run with a fixed system `PATH` before the privileged phase; the caller's `PATH` applies only to the project after the drop (a planted `setpriv`/`mount` shim never runs). `spawn()`/`run()` require an explicit `env` (no host `process.env` inheritance).
+- ulimits: CPU seconds (timeout + 5 s), address space (16 GiB default), per-file size. Timeout kills the whole tree.
+- `selfTest()` now uses host canaries (file, listening unix socket, `/dev/shm` file) that the sandbox must not see, plus: supervisor pid 1, hidden host dirs, read-only root, writable scratch/tmp/private-shm (and host check that the shm file is not visible), `/proc/sys` writes blocked, in-sandbox mount audit, all five `Cap*` zero + `NoNewPrivs`, no network interface, nested userns blocked, private pid namespace, an adversarial child (ignores TERM, `setsid`, clears `PR_SET_PDEATHSIG`, writes after timeout) that must die, and stdin forwarding. Any failure => UNVERIFIED => `run()`/`spawn()` refuse (never host execution).
+
+## Protected hook needed (coordinator applies, ONLY after v2 is on `v7/integration`)
+`apps/control-api/src/server.ts`: `const executionGate=new ExecutionGate(opts.sandbox??null);`
 ```diff
 -const executionGate=new ExecutionGate(opts.sandbox??null);
 +const executionGate=new ExecutionGate(opts.sandbox??(process.platform==="linux"?new LinuxUnshareSandboxProvider():null));
 ```
-plus `import {LinuxUnshareSandboxProvider} from "../../../core/agents/linux-unshare-sandbox.js";`. The gate still authorizes only after `selfTest()` passes, so a host that cannot isolate keeps today's behaviour (`SANDBOX_UNAVAILABLE`, tests `NOT_EXECUTED`). No config file or `config/validation.json` change is needed (tests live in the registered `tests/v7-int-r3-sbx-gate.test.ts`).
+plus `import {LinuxUnshareSandboxProvider} from "../../../core/agents/linux-unshare-sandbox.js";`. The gate authorizes only after `selfTest()` passes, so a host that cannot isolate keeps today's behaviour (`SANDBOX_UNAVAILABLE`, tests `NOT_EXECUTED`). For hosts whose node lives outside `/usr`, the provider binds the node install prefix read-only automatically; other toolchains need `readOnlyRoots` (constructor option).
 
-## Founder decision needed (not mine)
-FD-REL-1 says project code runs only in a *verified* sandbox. Whether this provider counts as "verified" for the `sandboxProviderId` witness behind functional acceptance is the Founder's call. Honest limits to weigh:
-- shares the host kernel; no seccomp filter; no cgroup memory/pids limit (ulimit only; no unprivileged cgroup delegation) => a fork bomb or memory hog is bounded only by ulimit and the timeout;
-- needs unprivileged user namespaces. Ubuntu 24.04 GitHub runners restrict them via AppArmor, so there the provider will report `SELFTEST_NAMESPACES_UNAVAILABLE` and refuse; the positive/negative isolation tests then degrade to asserting the refusal. Positive proof was produced in the Linux cloud container (see PR body counts).
-- `PRODUCT_VERIFIED` must still not be claimed from this alone.
+## Residual risks (documented, not fixed)
+- Shares the host kernel; no seccomp filter (kernel attack surface remains), no cgroup memory/pids limits (ulimit + timeout only), no disk quota on `/work` (host directory; `/tmp` and `/dev/shm` are size-limited tmpfs). A fork bomb or a large write to `/work` is bounded only by the timeout.
+- When the supervisor is root (kuid 0), the project process keeps kuid 0 file ownership semantics on what it can see (read-only system dirs, `/work`); it cannot see `/home`, `/root`, `/sys`, `/run` or write `/proc/sys`. Prefer an unprivileged supervisor user.
+- The invoker's kernel session keyring is inherited (no `keyutils` dependency to replace it); make sure the factory process holds no secrets in its session keyring.
+- Needs unprivileged user namespaces. Ubuntu 24.04 GitHub runners restrict them (AppArmor), so there the provider reports `SELFTEST_NAMESPACES_UNAVAILABLE` and refuses; the isolation tests then only assert the refusal and the positive proof comes from hosts that allow user namespaces (the Linux cloud container).
+- `PRODUCT_VERIFIED` must still not be claimed from this alone; whether it counts as a verified sandbox (FD-REL-1) is the Founder's call.
 
 ## Windows design notes (provider stays NOT_IMPLEMENTED)
-Reports `PLATFORM_NOT_LINUX_NOT_IMPLEMENTED`. A real Windows provider would need: a Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, active-process, memory and CPU-time limits) + a restricted token (or an AppContainer / low-integrity process) started by a small native helper, network denied by AppContainer without `internetClient` capability or a WFP filter, filesystem via explicit ACL on the workspace only. Node alone cannot create these without a native addon or helper binary (= new dependency / binary), so this needs an authority decision and can be marked implemented only after a self-test passes on `windows-latest`.
+Reports `PLATFORM_NOT_LINUX_NOT_IMPLEMENTED`. A real Windows provider needs a Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, active-process, memory and CPU-time limits) plus a restricted token / AppContainer (low integrity), network denied by AppContainer without `internetClient` or a WFP filter, filesystem via explicit ACL on the workspace only, started by a small native helper. Node alone cannot create these without a native addon or helper binary (new dependency/binary), so this needs an authority decision and can be marked implemented only after a self-test passes on `windows-latest`.
 
 ## Tests that prove it
-`tests/v7-int-r3-sbx-gate.test.ts`, describe "LANE-C Linux unshare sandbox provider": host-exec refusal (missing primitives, wrong platform, not self-tested; marker file never created; gate => SELF_TEST_FAILED), self-test required on hosts that can isolate (bad provider cannot pass silently), project test command exit 0 and non-zero, network blocked (real host listener sees 0 connections), writes outside scratch blocked + caps dropped + remount denied + env not inherited, timeout kills the process tree, unsafe cwd / invalid argv refused. Mutation checks recorded in the PR.
+`tests/v7-int-r3-sbx-gate.test.ts`, describe "LANE-C Linux unshare sandbox provider v2": host-exec refusal; a host that can isolate MUST verify; positive run (exit codes, stdin, `/work`); host filesystem invisible (canary file, home dirs, unix socket with a real host listener that sees 0 connections, host `/dev/shm`, `/sys`); only `/work`, private `/tmp`, private `/dev/shm` writable, `/proc/sys` read-only, capabilities and nested userns blocked, host env and PATH shims not trusted; project is never pid 1 and an adversarial child cannot outlive the timeout; unsafe cwd, missing env and invalid argv refused. Mutation checks recorded in the PR.

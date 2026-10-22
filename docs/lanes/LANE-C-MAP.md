@@ -9,4 +9,5 @@
 - Routing/recovery: `core/agents/agent-routing.ts` — read-only provider route readiness (no login => NOT_READY, never personal profile) and agent checkpoint/restore (fail-closed on corruption, missing/changed/incomplete binding).
 - Runner IMPLEMENT gate accepts implementer-route roles (developer 0085, tester 0313) via `assertImplementerRole`.
 - Run evidence: IMPLEMENT step of a role-assigned run also writes an `AGENT_TRACE` evidence (agentInstanceId != roleId, route, allowed tools, state; per-call tool trace stated NOT_OBSERVABLE_FROM_ADAPTER).
+- Sandbox (v2, after adversarial review): minimal pivot_root root, project never pid 1, per-run mountinfo audit, canary-based selfTest; v1 (#168) was unsafe and never wired - see docs/authority-requests/LANE-C-linux-sandbox-provider.md.
 - Tests: tests/v7-b3a-runner.test.ts (LANE-C role gate + AGENT_TRACE); `tests/v7-core-predev-team-composer.test.ts` ("LANE-C role execution resolver").

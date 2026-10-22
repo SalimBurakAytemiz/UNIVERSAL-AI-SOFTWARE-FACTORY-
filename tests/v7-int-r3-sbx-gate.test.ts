@@ -250,18 +250,17 @@ describe("SBX-GATE runner: REGRESSION without a verified sandbox (RV-INT-R3-C1-F
   });
 });
 
-// //TR: LANE-C: ücretsiz Linux unshare sağlayıcısı. Host-exec reddi her ortamda deterministik; pozitif/negatif yalıtım kanıtları ilkelleri olan ortamda KOŞAR, olmayan ortamda sağlayıcının dürüstçe doğrulanmamış kaldığını ve hiçbir şey çalıştırmadığını doğrular.
-describe("LANE-C Linux unshare sandbox provider (SandboxProvider contract)", () => {
-  const T2 = 90_000;
+// //TR: LANE-C: ücretsiz Linux unshare sağlayıcısı (v2, bağımsız saldırgan incelemesi sonrası). Host-exec reddi her ortamda deterministik; yalıtım kanıtları (kanarya dosya/soket/shm, /proc/sys, pid1 gözetmeni, mount denetimi, iç içe userns, düşman çocuk) ilkelleri olan ortamda KOŞAR, olmayan ortamda sağlayıcının dürüstçe doğrulanmamış kaldığını ve hiçbir şey çalıştırmadığını doğrular.
+describe("LANE-C Linux unshare sandbox provider v2 (SandboxProvider contract)", () => {
+  const T2 = 120_000;
   const mkws = () => fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-sbx-t-"));
   const env = () => ({PATH: process.env.PATH ?? "/usr/bin:/bin"});
   let provider: LinuxUnshareSandboxProvider, st: {ok: boolean; detail?: string};
-  // Ana makine gerçekten user+net+pid namespace kurabiliyor mu (sağlayıcıdan BAĞIMSIZ ölçüm): kurabiliyorsa sağlayıcı DOGRULANMIŞ olmak ZORUNDA (bozuk sağlayıcı sessizce geçemez).
+  // Ana makine gerçekten user+net+pid+mount namespace kurabiliyor mu (sağlayıcıdan BAĞIMSIZ ölçüm): kurabiliyorsa sağlayıcı DOGRULANMIŞ olmak ZORUNDA (bozuk sağlayıcı sessizce geçemez).
   const hostCanIsolate = (() => {
     if (process.platform !== "linux") return false;
-    const a = cp.spawnSync("unshare", ["--user", "--map-root-user", "--net", "--pid", "--ipc", "--uts", "--mount", "--mount-proc", "--fork", "--kill-child=SIGKILL", "true"], {stdio: "ignore"});
-    const b = cp.spawnSync("setpriv", ["--version"], {stdio: "ignore"});
-    return a.status === 0 && b.status === 0;
+    const a = cp.spawnSync("unshare", ["--user", "--map-root-user", "--net", "--pid", "--ipc", "--uts", "--mount", "--fork", "--kill-child=SIGKILL", "true"], {stdio: "ignore"});
+    return a.status === 0 && ["setpriv", "pivot_root", "mount", "umount"].every(t => cp.spawnSync("sh", ["-c", `command -v ${t}`], {stdio: "ignore", env: {PATH: "/usr/sbin:/usr/bin:/sbin:/bin"}}).status === 0);
   })();
   beforeAll(async () => { provider = new LinuxUnshareSandboxProvider(); st = await provider.selfTest(); }, T2);
 
@@ -269,16 +268,16 @@ describe("LANE-C Linux unshare sandbox provider (SandboxProvider contract)", () 
     const ws = mkws(); const marker = path.join(ws, "HOST_EXEC_MARKER");
     try {
       for (const p of [new LinuxUnshareSandboxProvider({unshareBinary: "/nonexistent/unshare"}), new LinuxUnshareSandboxProvider({platform: "win32"}), new LinuxUnshareSandboxProvider()]) {
-        const probe = p === undefined ? null : p;
-        if (probe !== null && (probe as any).o?.unshareBinary || (probe as any).o?.platform) {
-          const r = await probe!.selfTest();
+        const probe = p as any;
+        if (probe.o?.unshareBinary || probe.o?.platform) {
+          const r = await p.selfTest();
           expect(r.ok).toBe(false);
           expect(r.detail).toMatch(/^(UNSHARE_MISSING|PLATFORM_NOT_LINUX_NOT_IMPLEMENTED)$/);
         }
-        const res = await probe!.run(["sh", "-c", `touch ${marker}`], {cwd: ws, env: env(), timeoutMs: 5000});
+        const res = await p.run(["sh", "-c", `touch ${marker}`], {cwd: ws, env: env(), timeoutMs: 5000});
         expect(res).toMatchObject({exitCode: null, spawnError: true});
         expect(res.stderr).toContain("SANDBOX_NOT_VERIFIED");
-        expect(() => probe!.spawn("sh", ["-c", `touch ${marker}`], {cwd: ws})).toThrow("SANDBOX_NOT_VERIFIED");
+        expect(() => p.spawn("sh", ["-c", `touch ${marker}`], {cwd: ws, env: env()})).toThrow("SANDBOX_NOT_VERIFIED");
         expect(fs.existsSync(marker)).toBe(false);
       }
       const gate = new ExecutionGate(new LinuxUnshareSandboxProvider({unshareBinary: "/nonexistent/unshare"}));
@@ -289,73 +288,104 @@ describe("LANE-C Linux unshare sandbox provider (SandboxProvider contract)", () 
   it("is verified only when every isolation proof passes; otherwise it stays unverified and refuses", { timeout: T2 }, async () => {
     if (hostCanIsolate) {
       expect(st).toEqual({ok: true}); // the host can isolate, so a failing proof means a broken provider
+      const gate = new ExecutionGate(provider);
+      expect(await gate.authorize("RUNNER_VERIFY_TESTS")).toMatchObject({allowed: true, providerId: LINUX_SANDBOX_ID});
+      expect(LINUX_SANDBOX_ID).toBe("linux-unshare-v2");
     } else {
       expect(st.ok).toBe(false);
-      expect(st.detail).toMatch(/^(SELFTEST_NAMESPACES_UNAVAILABLE|UNSHARE_[A-Z_]+|SETPRIV_MISSING|PLATFORM_[A-Z_]+)$/);
+      expect(st.detail).toMatch(/^(SELFTEST_[A-Z_]+|UNSHARE_[A-Z_]+|REQUIRED_TOOL_MISSING_[A-Z_]+|PLATFORM_[A-Z_]+)$/);
       const ws = mkws();
       try { expect((await provider.run(["sh", "-c", "true"], {cwd: ws, env: env(), timeoutMs: 5000})).spawnError).toBe(true); } finally { fs.rmSync(ws, {recursive: true, force: true}); }
-      return;
     }
-    const gate = new ExecutionGate(provider);
-    expect(await gate.authorize("RUNNER_VERIFY_TESTS")).toMatchObject({allowed: true, providerId: LINUX_SANDBOX_ID});
   });
 
-  it("positive: a project test command runs inside the sandbox and its exit code is reported (0 and non-zero)", { timeout: T2 }, async () => {
-    if (!hostCanIsolate) return; // honest: primitives unavailable on this host, covered by the refusal tests
+  it("positive: a project test command runs inside the sandbox; exit codes and stdin are forwarded; scratch is the working directory", { timeout: T2 }, async () => {
+    if (!hostCanIsolate) return;
     const ws = mkws();
     try {
-      fs.writeFileSync(path.join(ws, "ok.mjs"), "import fs from 'node:fs'; fs.writeFileSync('built.txt','1'); console.log('TESTS_PASSED');\n");
+      fs.writeFileSync(path.join(ws, "ok.mjs"), "import fs from 'node:fs'; fs.writeFileSync('built.txt','1'); console.log('TESTS_PASSED ' + process.cwd());\n");
       fs.writeFileSync(path.join(ws, "bad.mjs"), "process.exit(3);\n");
       const ok = await provider.run([process.execPath, "ok.mjs"], {cwd: ws, env: env(), timeoutMs: 30_000});
       expect(ok).toMatchObject({exitCode: 0, timedOut: false, spawnError: false});
-      expect(ok.stdout).toContain("TESTS_PASSED");
+      expect(ok.stdout).toContain("TESTS_PASSED /work");
       expect(fs.readFileSync(path.join(ws, "built.txt"), "utf8")).toBe("1");
       expect((await provider.run([process.execPath, "bad.mjs"], {cwd: ws, env: env(), timeoutMs: 30_000})).exitCode).toBe(3);
+      const sin = await provider.run(["sh", "-c", "read -r l; echo got=$l"], {cwd: ws, env: env(), timeoutMs: 30_000, input: "PIPED\n"});
+      expect(sin.stdout).toContain("got=PIPED");
     } finally { fs.rmSync(ws, {recursive: true, force: true}); }
   });
 
-  it("negative: network is blocked (a real host listener never sees a connection)", { timeout: T2 }, async () => {
+  it("negative: the host filesystem is invisible (canary file, home dirs, host sockets, host /dev/shm, /sys)", { timeout: T2 }, async () => {
     if (!hostCanIsolate) return;
-    const ws = mkws(); let hits = 0;
-    const server = net.createServer(sock => { hits++; sock.destroy(); });
-    await new Promise<void>(r => server.listen(0, "127.0.0.1", () => r()));
-    const port = (server.address() as net.AddressInfo).port;
+    const ws = mkws(), outside = mkws(), hostShm = path.join("/dev/shm", `uasco-test-canary-${process.pid}`);
+    let hits = 0;
+    const canary = path.join(outside, "canary.txt"); fs.writeFileSync(canary, "HOST-SECRET", {mode: 0o644});
+    const sock = path.join(outside, "s.sock");
+    const server = net.createServer(sk => { hits++; sk.destroy(); });
+    await new Promise<void>(r => server.listen(sock, () => r()));
+    try { fs.writeFileSync(hostShm, "HOST-SHM"); } catch { /* yok */ }
     try {
-      fs.writeFileSync(path.join(ws, "net.mjs"), `import net from 'node:net'; const s = net.connect(${port}, '127.0.0.1'); s.on('connect', () => { console.log('CONNECTED'); process.exit(0); }); s.on('error', e => { console.log('BLOCKED ' + e.code); process.exit(7); }); setTimeout(() => { console.log('BLOCKED TIMEOUT'); process.exit(7); }, 5000);\n`);
-      const r = await provider.run([process.execPath, "net.mjs"], {cwd: ws, env: env(), timeoutMs: 30_000});
-      expect(r.exitCode).toBe(7);
-      expect(r.stdout).toContain("BLOCKED");
-      expect(r.stdout).not.toContain("CONNECTED");
+      fs.writeFileSync(path.join(ws, "peek.mjs"), `import fs from 'node:fs'; import net from 'node:net'; const out = [];
+        for (const f of [${JSON.stringify(canary)}, ${JSON.stringify(hostShm)}, '/root', '/home', '/run', '/var', '/sys', '/mnt', '/etc/shadow']) { try { fs.readFileSync(f); out.push('READ ' + f); } catch (e) { try { fs.readdirSync(f); out.push('LIST ' + f); } catch { out.push('NO ' + (e.code ?? 'ERR')); } } }
+        console.log(out.join('|'));
+        const c = net.connect(${JSON.stringify(sock)}); c.on('connect', () => { console.log('SOCK_CONNECTED'); process.exit(0); }); c.on('error', e => { console.log('SOCK_' + e.code); process.exit(0); });\n`);
+      const r = await provider.run([process.execPath, "peek.mjs"], {cwd: ws, env: env(), timeoutMs: 30_000});
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).not.toMatch(/READ |LIST /);
+      expect(r.stdout).toContain("SOCK_ENOENT");
+      expect(r.stdout).not.toContain("SOCK_CONNECTED");
       expect(hits).toBe(0);
-    } finally { server.close(); fs.rmSync(ws, {recursive: true, force: true}); }
+    } finally { server.close(); fs.rmSync(ws, {recursive: true, force: true}); fs.rmSync(outside, {recursive: true, force: true}); fs.rmSync(hostShm, {force: true}); }
   });
 
-  it("negative: writes outside the scratch directory are blocked; capabilities are dropped; host env is not inherited", { timeout: T2 }, async () => {
+  it("negative: network blocked; writes only to scratch/private tmp/private shm; /proc/sys read-only; capabilities dropped; nested userns blocked; host env and PATH shims not trusted", { timeout: T2 }, async () => {
     if (!hostCanIsolate) return;
-    const ws = mkws(); const outside = path.join(path.dirname(ws), `uasco-sbx-outside-${process.pid}`);
+    const ws = mkws(), outside = path.join(os.tmpdir(), `uasco-sbx-outside-${process.pid}`);
+    const shimDir = path.join(ws, "shimbin"); fs.mkdirSync(shimDir);
+    for (const t of ["setpriv", "mount", "umount", "pivot_root", "unshare"]) { fs.writeFileSync(path.join(shimDir, t), `#!/bin/sh\n: > ${path.join(ws, "SHIM_RAN_" + t)}\nexec /usr/bin/${t} "$@"\n`, {mode: 0o755}); }
     process.env.UASCO_SBX_SECRET_PROBE = "leak";
     try {
-      fs.writeFileSync(path.join(ws, "w.mjs"), `import fs from 'node:fs'; let out = []; for (const f of [${JSON.stringify(outside)}, '/usr/.sbx', '/etc/.sbx']) { try { fs.writeFileSync(f, 'x'); out.push('WROTE ' + f); } catch (e) { out.push('DENIED ' + e.code); } } console.log(out.join('|')); console.log('SECRET=' + (process.env.UASCO_SBX_SECRET_PROBE ?? 'unset')); try { fs.writeFileSync(process.env.TMPDIR + '/ok', '1'); console.log('SCRATCH_OK'); } catch { console.log('SCRATCH_FAIL'); }\n`);
-      const r = await provider.run([process.execPath, "w.mjs"], {cwd: ws, env: env(), timeoutMs: 30_000});
+      fs.writeFileSync(path.join(ws, "w.mjs"), `import fs from 'node:fs'; const out = [];
+        for (const f of ['/usr/.sbx', '/etc/.sbx', '/.sbx', '/dev/.sbx', '/proc/sys/vm/swappiness', '/proc/sys/kernel/core_pattern', ${JSON.stringify(outside)}]) { try { fs.writeFileSync(f, f.startsWith('/proc') ? '60' : 'x'); out.push('WROTE ' + f); } catch (e) { out.push('DENIED ' + e.code); } }
+        console.log(out.join('|')); console.log('SECRET=' + (process.env.UASCO_SBX_SECRET_PROBE ?? 'unset'));
+        for (const f of ['/tmp/ok', '/dev/shm/ok', '/work/ok']) { try { fs.writeFileSync(f, '1'); console.log('OK ' + f); } catch { console.log('FAIL ' + f); } }\n`);
+      const r = await provider.run([process.execPath, "w.mjs"], {cwd: ws, env: {PATH: `${shimDir}:${process.env.PATH ?? "/usr/bin:/bin"}`}, timeoutMs: 30_000});
       expect(r.exitCode).toBe(0);
-      expect(r.stdout).not.toContain("WROTE");
+      const line = r.stdout.split("\n")[0].split("|");
+      expect(line).toHaveLength(7);
+      for (const x of line.slice(0, 6)) expect(x).toMatch(/^DENIED /);                // /usr /etc / /dev /proc/sys x2 are not writable
+      expect(line[6]).toMatch(/WROTE|DENIED/);                                        // private /tmp may accept it, but only inside the sandbox:
+      expect(fs.existsSync(outside)).toBe(false);                                     // ...it is never visible on the host
       expect(r.stdout).toContain("SECRET=unset");
-      expect(r.stdout).toContain("SCRATCH_OK");
-      expect(fs.existsSync(outside)).toBe(false);
-      const caps = await provider.run(["sh", "-c", "awk '/^CapEff:/{print $2}' /proc/self/status; mount -o remount,rw / 2>&1; echo mount_rc=$?"], {cwd: ws, env: env(), timeoutMs: 30_000});
-      expect(caps.stdout).toContain("0000000000000000");
-      expect(caps.stdout).not.toContain("mount_rc=0");
+      for (const f of ["/tmp/ok", "/dev/shm/ok", "/work/ok"]) expect(r.stdout).toContain("OK " + f);
+      expect(fs.existsSync(path.join(ws, "ok"))).toBe(true);                          // /work is the host scratch
+      expect(fs.existsSync("/dev/shm/ok")).toBe(false);                               // /dev/shm is private
+      expect(fs.readdirSync(ws).filter(n => n.startsWith("SHIM_RAN_"))).toEqual([]);  // caller PATH never reaches the privileged setup phase
+      const probes = await provider.run(["sh", "-c", "awk '/^(CapInh|CapPrm|CapEff|CapBnd|CapAmb):/{print $2}' /proc/self/status | sort -u; grep '^NoNewPrivs' /proc/self/status; unshare -U true 2>&1; echo nested_rc=$?; mount -o remount,rw / 2>&1; echo mount_rc=$?; ls /sys 2>&1 | head -1"], {cwd: ws, env: env(), timeoutMs: 30_000});
+      expect(probes.stdout).toContain("0000000000000000");
+      expect(probes.stdout).toMatch(/NoNewPrivs:\s+1/);
+      expect(probes.stdout).not.toContain("nested_rc=0");
+      expect(probes.stdout).not.toContain("mount_rc=0");
+      expect(probes.stdout).toContain("No such file");
+      const netp = await provider.run(["sh", "-c", `[ -z "$(tail -n +3 /proc/net/dev | cut -d: -f1 | tr -d ' ' | grep -v '^lo$')" ] && echo NET_NONE`], {cwd: ws, env: env(), timeoutMs: 30_000});
+      expect(netp.stdout).toContain("NET_NONE");
     } finally { delete process.env.UASCO_SBX_SECRET_PROBE; fs.rmSync(ws, {recursive: true, force: true}); fs.rmSync(outside, {force: true}); }
   });
 
-  it("negative: timeout kills the whole process tree; unsafe cwd and invalid argv are refused", { timeout: T2 }, async () => {
+  it("negative: the project is never pid 1 and cannot outlive a timeout (clears pdeathsig, setsid, ignores TERM); unsafe cwd, env-less and invalid argv are refused", { timeout: T2 }, async () => {
     if (!hostCanIsolate) return;
     const ws = mkws();
     try {
+      const evil = `if command -v perl >/dev/null 2>&1; then perl -e 'syscall(157,1,0); $SIG{TERM}="IGNORE"; setpgrp; sleep 3; open(F,">late.txt"); print F 1; close F; exec("sleep","62.41")' & exec sleep 62.41; else trap "" TERM; (sleep 3; : > late.txt; exec sleep 62.41) & exec sleep 62.41; fi`;
+      const pid = await provider.run(["sh", "-c", 'echo ppid=$PPID pid=$$'], {cwd: ws, env: env(), timeoutMs: 30_000});
+      expect(pid.stdout).toContain("ppid=1 ");
+      expect(pid.stdout).not.toContain("pid=1\n");
       const t0 = Date.now();
-      const r = await provider.run(["sh", "-c", "sleep 62.41 & sleep 62.41"], {cwd: ws, env: env(), timeoutMs: 1200});
+      const r = await provider.run(["sh", "-c", evil], {cwd: ws, env: env(), timeoutMs: 1200});
       expect(r.timedOut).toBe(true);
       expect(Date.now() - t0).toBeLessThan(20_000);
+      await new Promise(x => setTimeout(x, 4500));
+      expect(fs.existsSync(path.join(ws, "late.txt"))).toBe(false);
       for (let i = 0; i < 30 && hostHasProcess("62.41"); i++) await new Promise(x => setTimeout(x, 150));
       expect(hostHasProcess("62.41")).toBe(false);
       for (const cwd of ["relative/dir", "/", path.join(ws, "with space"), path.join(ws, "missing")]) {
@@ -363,6 +393,8 @@ describe("LANE-C Linux unshare sandbox provider (SandboxProvider contract)", () 
         expect(res).toMatchObject({exitCode: null, spawnError: true});
       }
       expect((await provider.run([], {cwd: ws, env: env(), timeoutMs: 5000})).spawnError).toBe(true);
+      expect((await provider.run(["sh", "-c", "true"], {cwd: ws, env: undefined as any, timeoutMs: 5000})).stderr).toContain("ENV_REQUIRED");
+      expect(() => provider.spawn("sh", ["-c", "true"], {cwd: ws})).toThrow("ENV_REQUIRED");
     } finally { fs.rmSync(ws, {recursive: true, force: true}); }
   });
 });
