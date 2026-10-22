@@ -1565,11 +1565,11 @@ describe("COORD run expert selection", () => {
 describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
   const H = (c: string) => c.repeat(24);
   const ITK = `itk_${H("a")}`, TSK = `tsk_${H("b")}`, MSN = `msn_${H("c")}`, PRJ = `prj_${H("d")}`;
-  const GETS = ["/v1/intakes", `/v1/intakes/${ITK}`, `/v1/missions/${MSN}/tasks`, `/v1/projects/${PRJ}/flow`, `/v1/tasks/${TSK}`];
-  const POSTS = ["/v1/intakes", `/v1/missions/${MSN}/plan`, `/v1/tasks/${TSK}/transition`];
+  const GETS = ["/v1/intakes", `/v1/intakes/${ITK}`, `/v1/missions/${MSN}/tasks`, `/v1/projects/${PRJ}/flow`, `/v1/tasks/${TSK}`, `/v1/tasks/${TSK}/runs`];
+  const POSTS = ["/v1/intakes", `/v1/missions/${MSN}/plan`, `/v1/tasks/${TSK}/transition`, `/v1/tasks/${TSK}/runs`];
   const nearMisses = (p: string) => [p + "/", p + "?x=1", p + "#", p.toUpperCase(), p.replace(/[0-9a-f]{24}/, H("a").slice(0, 23)), p.replace(/[0-9a-f]{24}/, H("a") + "a"),
     p.replace(/[0-9a-f]{24}/, H("A")), p.replace("/v1/", "/v1//"), p.replace("/v1/", "/v2/"), p + "/x", p.replace(/\//g, "%2F"), " " + p].filter(m => m !== p);
-  it("admits exactly the five first-delivery reads and the three writes", () => {
+  it("admits exactly the six first-delivery reads and the four writes (task-run link included)", () => {
     const get = loadGet(), {desktopPostPathAllowed: post} = loadPost();
     for (const p of GETS) expect(get(p), p).toBe(true);
     for (const p of POSTS) expect(post(p), p).toBe(true);
@@ -1581,6 +1581,14 @@ describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
     for (const p of [`/v1/intakes/${ITK}`, `/v1/missions/${MSN}/tasks`, `/v1/projects/${PRJ}/flow`, `/v1/tasks/${TSK}`]) expect(post(p), `POST ${p}`).toBe(false);
     for (const p of [`/v1/missions/${MSN}/plan`, `/v1/tasks/${TSK}/transition`]) expect(get(p), `GET ${p}`).toBe(false);
     for (const p of [`/v1/intakes/itk_${H("a")}/x`, `/v1/intakes/prj_${H("a")}`, `/v1/tasks/msn_${H("a")}`, `/v1/tasks/${TSK}/transition/x`, `/v1/missions/${MSN}/tasks/${TSK}`]) { expect(get(p), p).toBe(false); expect(post(p), p).toBe(false); }
+    // Task-run link: only the task-scoped path; the run-scoped reverse lookup is deliberately not admitted.
+    for (const p of [`/v1/work-runs/run_${H("e")}/tasks`, `/v1/tasks/tsk_x/runs`, `/v1/tasks/${TSK}/runs/run_${H("e")}`, `/v1/tasks/${TSK}/run`]) { expect(get(p), p).toBe(false); expect(post(p), p).toBe(false); }
+  });
+  it("server.ts registers the task-run link routes once, right after the task routes", () => {
+    const server = fs.readFileSync(path.join(root, "apps", "control-api", "src", "server.ts"), "utf8");
+    expect(server.match(/^import \{registerTaskRunRoutes\} from "\.\/routes\/task-runs\.js";$/gm)?.length).toBe(1);
+    expect(server.match(/registerTaskRunRoutes\(app,laneDeps\);/g)?.length).toBe(1);
+    expect(server).toContain("registerTaskRoutes(app,laneDeps);\nregisterTaskRunRoutes(app,laneDeps);");
   });
   it("admits the exact paths the renderer builds, and the write body keeps the 32 KB bridge limit", async () => {
     const get = loadGet(), {desktopPostPathAllowed: post, desktopPostBodyCheck: check, POST_MAX_BODY_BYTES} = loadPost();
@@ -1594,6 +1602,111 @@ describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
     expect(POST_MAX_BODY_BYTES).toBe(32768);
     expect(check({idea: "x".repeat(32768)}).error).toBe("API_BODY_TOO_LARGE");
     expect(check({idea: "x".repeat(1000)}).ok).toBe(true);
+  });
+});
+
+// //TR: LANE-A first-delivery: görev-koşu bağı (GET/POST /v1/tasks/:id/runs, Lane B) — sıkı eşleme, bağlanabilir koşular, yalnız {runId} gönderimi, dürüst UNAVAILABLE/ret durumları.
+describe("LANE-A task run link", () => {
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const T1 = "tsk_" + "a1".repeat(12), R1 = "run_" + "01".repeat(12), R2 = "run_" + "02".repeat(12), R3 = "run_" + "03".repeat(12);
+  const link = (runId: string, extra: any = {}) => ({link: {taskId: T1, runId, missionId: MID, linkedAt: "2026-10-21T10:00:00.000Z", linkedBy: "x", ...extra}, run: {runId, status: "RUNNING"}});
+  const tasks = (status = "PENDING") => [{taskId: T1, title: "Giriş", status, dependsOn: []}];
+  const runs = (ids: string[]) => ids.map(id => ({runId: id, missionId: MID, status: "BLOCKED"}));
+  const open = async (o: CtxOpts & {linked?: any; missionRuns?: string[]; taskStatus?: string}) => {
+    const get = (p: string) => {
+      if (p === "/v1/projects") return {projects: [project()]};
+      if (p === "/v1/missions") return {missions: [mission({status: "EXECUTING"})]};
+      if (p === `/v1/missions/${MID}`) return {mission: mission({status: "EXECUTING"}), tasks: tasks(o.taskStatus)};
+      if (p === `/v1/tasks/${T1}/runs`) return o.linked;
+      if (p.startsWith("/v1/work-runs")) return {workRuns: runs(o.missionRuns ?? [])};
+      if (p.startsWith("/v1/evidence")) return {evidence: []};
+      return undefined;
+    };
+    const c = await mkCtx({...o, get, lang: "en"});
+    forms.selection.missionId = MID;
+    const view = await load(rend, "views", "work.js"), tr = await load(rend, "views", "task-runs.js");
+    tr.resetTaskRunsDraft(null);
+    let root = mount(c.doc, await view.render(c.ctx));
+    for (let i = 0; i < 2; i++) { byData(root, "taskInspect", T1)[0].fire("click"); root = mount(c.doc, await view.render(c.ctx)); if (byId(root, "task-runs")) break; }
+    return {...c, view, tr, root};
+  };
+
+  it("maps the link read strictly and offers only unlinked, canonical, unique runs", async () => {
+    const c = await load(rend, "work-core.js");
+    const ok = c.mapTaskRuns({runs: [link(R1), {link: link(R2).link, run: null}]});
+    expect(ok.state).toBe("VERIFIED"); expect(ok.items.map((i: any) => [i.runId, i.status])).toEqual([[R1, "RUNNING"], [R2, null]]);
+    for (const bad of [null, {}, {runs: "x"}, {runs: [null]}, {runs: [{link: null}]}, {runs: [link("run_x")]}, {runs: [link(R1, {taskId: "tsk_x"})]}, {runs: [link(R1, {missionId: "msn_x"})]}]) expect(c.mapTaskRuns(bad as any).state, JSON.stringify(bad)?.slice(0, 50)).toBe("ERROR");
+    expect(c.mapTaskRuns({runs: [link(R1, {linkedAt: "nope"})]}).items[0].linkedAt).toBeNull();
+    const items = [{runId: R1, status: "A"}, {runId: R2, status: "B"}, {runId: R2, status: "B"}, {runId: "run_bad", status: "C"}, null, {runId: R3, status: "D"}];
+    expect(c.linkableRuns(items, [{runId: R1}]).map((r: any) => r.runId)).toEqual([R2, R3]);
+    expect(c.linkableRuns(null as any, null as any)).toEqual([]);
+    expect(c.taskRunsPath(T1)).toBe(`/v1/tasks/${T1}/runs`); expect(c.taskRunsPath("tsk_alpha01")).toBeNull();
+  });
+  it("builds only {runId}, refuses a bad id, an unknown task and a done task", async () => {
+    const c = await load(rend, "work-core.js");
+    expect(c.buildLinkRunRequest({taskId: T1, runId: R1, taskStatus: "PENDING"})).toEqual({ok: true, path: `/v1/tasks/${T1}/runs`, body: {runId: R1}, errors: {}});
+    expect(c.buildLinkRunRequest({taskId: T1, runId: "x", taskStatus: "PENDING"}).errors).toEqual({runId: "taskruns.err.run"});
+    expect(c.buildLinkRunRequest({taskId: "tsk_x", runId: R1, taskStatus: "PENDING"}).errors).toEqual({taskId: "taskruns.err.task"});
+    expect(c.buildLinkRunRequest({taskId: T1, runId: R1, taskStatus: "DONE"}).errors).toEqual({taskId: "taskruns.err.done"});
+    expect(c.buildLinkRunRequest({taskId: T1, runId: R1, taskStatus: "DONE"}).body).toBeNull();
+  });
+  it("lists the linked runs for the selected task, offers unlinked mission runs, and sends nothing until the button is pressed", async () => {
+    const o = await open({linked: {runs: [link(R1)]}, missionRuns: [R1, R2, R3]});
+    const panel = byId(o.root, "task-runs")!;
+    expect(panel.dataset.taskRunsFor).toBe(T1);
+    expect(byData(panel, "taskRun").map(n => n.dataset.taskRun)).toEqual([R1]);
+    const sel = byId(o.root, "taskruns-run")!;
+    expect(all(sel).filter(n => n.tagName === "OPTION").map(n => n.attrs.get("value") ?? n.value)).toEqual([R2, R3]);
+    expect(o.calls.post).toEqual([]);
+    expect(o.calls.get).toContain(`/v1/tasks/${T1}/runs`);
+  });
+  it("a linked run whose record cannot be read says so instead of showing a status", async () => {
+    const o = await open({linked: {runs: [link(R1), {link: link(R2).link, run: null}]}, missionRuns: [R1, R2]});
+    const rows = byData(o.root, "taskRun");
+    expect(rows.map(n => n.dataset.taskRun)).toEqual([R1, R2]);
+    expect(text(rows[0])).toContain("Running"); expect(text(rows[0])).not.toContain("not readable");
+    expect(text(rows[1])).toContain("run record not readable"); expect(text(rows[1])).not.toContain("Running");
+  });
+  it("links the chosen run with exactly {runId} and reports success without claiming anything started", async () => {
+    const o = await open({linked: {runs: []}, missionRuns: [R1, R2], post: () => ({status: 201, body: {link: link(R2).link}})});
+    const sel = byId(o.root, "taskruns-run")!; sel.value = R2; sel.fire("change");
+    byId(o.root, "taskruns-submit")!.fire("click"); await tick();
+    expect(o.calls.post).toEqual([{path: `/v1/tasks/${T1}/runs`, body: {runId: R2}}]);
+    expect(forms.drafts.status["task-runs"]).toMatchObject({ok: true, key: "taskruns.done"});
+    expect(o.calls.refresh).toBe(1);
+  });
+  it("shows honest states: unreachable read, nothing linked, no unlinked run, done task, unreadable mission runs", async () => {
+    const un = await open({linked: undefined, missionRuns: [R1]});
+    expect(text(byId(un.root, "task-runs")!)).toContain("cannot be read from the desktop yet");
+    expect(byId(un.root, "taskruns-submit")).toBeNull(); // okunamayan bağda yazma sunulmaz
+    const bad = await open({linked: {runs: [{link: null}]}, missionRuns: [R1]});
+    expect(byId(bad.root, "taskruns-submit")).toBeNull(); expect(byData(bad.root, "taskRun")).toEqual([]);
+    const none = await open({linked: {runs: []}, missionRuns: []});
+    expect(text(byId(none.root, "task-runs")!)).toContain("No run is linked to this task");
+    expect(byData(none.root, "taskrunsNote", "noUnlinked").length).toBe(1);
+    const done = await open({linked: {runs: []}, missionRuns: [R1], taskStatus: "DONE"});
+    expect(byData(done.root, "taskrunsNote", "done").length).toBe(1); expect(byId(done.root, "taskruns-submit")).toBeNull();
+  });
+  it("server refusals (409 mismatch / not linkable, 403, 423, 404, unreachable) never report success and keep the list unchanged", async () => {
+    const cases: Array<[any, string]> = [[{status: 409, body: {error: "RUN_MISSION_MISMATCH"}}, "post.err.409"], [{status: 409, body: {error: "TASK_NOT_LINKABLE"}}, "post.err.409"], [{status: 403, body: {error: "FORBIDDEN"}}, "post.err.auth"],
+      [{status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}, "post.err.423"], [{status: 404, body: {error: "RUN_NOT_FOUND"}}, "post.err.unavailable"]];
+    for (const [resp, key] of cases) {
+      forms.resetAllForms();
+      const o = await open({linked: {runs: []}, missionRuns: [R1], post: () => resp});
+      byId(o.root, "taskruns-submit")!.fire("click"); await tick();
+      expect(forms.drafts.status["task-runs"], key).toMatchObject({ok: false, key});
+    }
+    forms.resetAllForms();
+    const net = await open({linked: {runs: []}, missionRuns: [R1]});
+    byId(net.root, "taskruns-submit")!.fire("click"); await tick();
+    expect(forms.drafts.status["task-runs"].ok).toBe(false); expect(forms.drafts.busy["task-runs"]).toBe(false);
+  });
+  it("task run strings exist in en and tr", async () => {
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+    const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("taskruns.") || k.startsWith("flow.taskRuns"));
+    expect(keys.length).toBe(17);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
 
