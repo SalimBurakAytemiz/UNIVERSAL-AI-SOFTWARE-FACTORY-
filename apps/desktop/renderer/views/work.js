@@ -368,3 +368,4 @@ export async function render(ctx){
     panel(ctx,{titleKey:"work.list",id:"work-list"},body),
     detailNode);
 }
+export {viewSkeleton as skeleton} from "../components.js";

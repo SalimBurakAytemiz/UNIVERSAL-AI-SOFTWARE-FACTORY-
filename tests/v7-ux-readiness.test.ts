@@ -1113,7 +1113,7 @@ describe("Readiness — route delegation (app.js VIEWS unchanged)", () => {
     expect(routes.routeFromHash("#/readiness/")).toBe("readiness");
     expect(routes.routeFromHash("#/readinesss")).toBe(routes.DEFAULT_ROUTE);
     expect(routes.routeFromHash("#/Readiness")).toBe(routes.DEFAULT_ROUTE);
-    expect(routes.ROUTES.map((x: any) => x.id).slice(-12)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "settings"]);
+    expect(routes.ROUTES.map((x: any) => x.id).slice(-14)).toEqual(["company", "academy", "journey", "executive", "queue", "readiness", "posture", "matrix", "operations", "install", "audit", "domains", "integrations", "settings"]);
     expect(routes.FACTORY_AREA_ORDER).not.toContain("readiness");
     expect(routes.ROUTES.filter((x: any) => x.factory).length).toBe(8);
     // Eski rotalar etkilenmez.
