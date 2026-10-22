@@ -35,13 +35,13 @@ import type {GitleaksResult, PolicyInput, ResolvedTool, SecurityOptions, Securit
 export interface RunnerOptions {
   store: WorkOsStore; dataDir: string; globalStopFile: string; envPolicyFile: string; executors: ExecutorPair;
   actor?: string; leaseTtlMs?: number; maxRemediations?: number; maxRetries?: number; maxRecoveries?: number; retryBackoffMs?: readonly number[];
-  testTimeoutMs?: number; executorTimeoutMs?: number; maxStepsPerTick?: number; now?: () => number;
+  testTimeoutMs?: number; executorTimeoutMs?: number; maxStepsPerTick?: number; maxConcurrentRuns?: number; now?: () => number;
   // B3C: güvenlik araçları (tanımsız = PATH keşfi); override yalnız programatik enjeksiyondur.
   security?: SecurityOptions;
   // SBX-GATE: proje test komutları yalnız bu kapının izin verdiği doğrulanmış sandbox sağlayıcısında çalışır; tanımsız = sağlayıcı yok = VERIFY/REGRESSION NOT_EXECUTED (SANDBOX_UNAVAILABLE, M1a: run statik güvenlik + bağımsız review ile sürer).
   executionGate?: ExecutionGate;
 }
-export interface TickReport { skipped?: "BUSY" | "LOCKED"; recovered: string[]; claimed: string[]; cancelled: string[]; fenced: string[]; advanced: string[] }
+export interface TickReport { skipped?: "BUSY" | "LOCKED"; recovered: string[]; claimed: string[]; cancelled: string[]; fenced: string[]; advanced: string[]; deferred: string[] }
 
 type Outcome =
   | {kind: "DONE"; next: RunStep | "FINISHED"; data: Record<string, unknown>; patch?: RunPatch; mission?: MissionStatus; approvalReason?: string}
@@ -97,9 +97,11 @@ export class MissionRunner {
     assertIndependentExecutors(opts.executors);
     this.o = {
       actor: "WORKOS_RUNNER", leaseTtlMs: 120_000, maxRemediations: 2, maxRetries: 2, maxRecoveries: 2, retryBackoffMs: [2_000, 8_000], testTimeoutMs: 10 * 60_000,
-      executorTimeoutMs: 60 * 60_000, maxStepsPerTick: Number.POSITIVE_INFINITY, now: Date.now,
+      executorTimeoutMs: 60 * 60_000, maxStepsPerTick: Number.POSITIVE_INFINITY, maxConcurrentRuns: 1, now: Date.now,
       ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined))
     } as unknown as Required<Omit<RunnerOptions, "now">> & {now: () => number};
+    // //TR: Eş zamanlı sahiplik sınırı yalnız 1..16 tam sayı olabilir (geçersiz değer sessizce 1'e düşmez: kurulum hatası).
+    if (!Number.isInteger(this.o.maxConcurrentRuns) || this.o.maxConcurrentRuns < 1 || this.o.maxConcurrentRuns > 16) throw new Error("RUNNER_MAX_CONCURRENT_RUNS_INVALID");
     // SBX-GATE: yalnız gerçek bir ExecutionGate örneği kabul edilir; başka her değer (eksik, düz nesne) sağlayıcısız kapıdır (fail-closed).
     if (!(this.o.executionGate instanceof ExecutionGate)) this.o.executionGate = new ExecutionGate(null);
     // Araçlar motor başlangıcında bir kez çözülür (PATH -> mutlak yol, sürüm, sha256); her çalıştırmadan önce ikili dosya yeniden doğrulanır.
@@ -135,7 +137,7 @@ export class MissionRunner {
   private renew(runId: string, leaseId: string): void { this.o.store.renewRunLease(runId, leaseId, this.o.leaseTtlMs, this.o.actor); }
 
   async tick(): Promise<TickReport> {
-    const rep: TickReport = {recovered: [], claimed: [], cancelled: [], fenced: [], advanced: []};
+    const rep: TickReport = {recovered: [], claimed: [], cancelled: [], fenced: [], advanced: [], deferred: []};
     if (this.busy) return {...rep, skipped: "BUSY"};
     this.busy = true;
     let release: (() => void) | null = null;
@@ -146,26 +148,30 @@ export class MissionRunner {
         try {
           if (run.status === "CREATED" || run.status === "QUEUED") {
             if (stop) { this.cancelUnleased(run, stop); rep.cancelled.push(run.runId); continue; }
+            // //TR: Sahiplik sınırı: sınır doluysa run'a lease ALINMAZ (sırasını beklerken lease'i yenilenmeden dolup sahte fence/recovery yaşamasın); QUEUED kalır, sonraki tick alır.
+            if (this.owned.size >= this.o.maxConcurrentRuns) { rep.deferred.push(run.runId); continue; }
             const queued = run.status === "CREATED" ? store.transitionRun(run.runId, null, "QUEUED", "queued for runner", this.o.actor) : run;
             const leased = store.acquireRunLease(queued.runId, this.o.leaseTtlMs, this.o.actor);
             this.owned.set(run.runId, leased.leaseId!); rep.claimed.push(run.runId);
           } else if (LEASED_RUN_STATUSES.includes(run.status) && run.leaseId && Date.parse(run.leaseExpiresAt ?? "") <= this.o.now()) {
+            if (this.owned.size >= this.o.maxConcurrentRuns) { rep.deferred.push(run.runId); continue; }
             // Süresi dolmuş lease: crash/askıda kalma -> devral, RECOVERING (yeni leaseId eski sahibi fence eder).
             const taken = store.takeoverRunLease(run.runId, this.o.leaseTtlMs, this.o.actor);
             this.owned.set(run.runId, taken.leaseId!); rep.recovered.push(run.runId);
           }
         } catch (e) { if (e instanceof WorkOsError && e.code === "WORKOS_LEASE_FENCED") { rep.fenced.push(run.runId); continue; } throw e; }
       }
-      for (const [runId, leaseId] of [...this.owned]) {
+      // //TR: Sahip olunan run'lar (en çok maxConcurrentRuns) birlikte sürülür; sınır 1 iken davranış eski sıralı akışla aynıdır.
+      await Promise.all([...this.owned].map(async ([runId, leaseId]) => {
         try {
           const r = await this.drive(runId, leaseId);
           if (r === "CANCELLED") rep.cancelled.push(runId); else if (r) rep.advanced.push(runId);
         } catch (e) {
           this.owned.delete(runId);
-          if (e instanceof WorkOsError && e.code === "WORKOS_LEASE_FENCED") { rep.fenced.push(runId); continue; }
+          if (e instanceof WorkOsError && e.code === "WORKOS_LEASE_FENCED") { rep.fenced.push(runId); return; }
           this.failClosed(runId, leaseId, e);
         }
-      }
+      }));
       return rep;
     } finally {
       try { release?.(); } catch { /* kilit sahipliği değiştiyse yazılar zaten fence edilir */ }
