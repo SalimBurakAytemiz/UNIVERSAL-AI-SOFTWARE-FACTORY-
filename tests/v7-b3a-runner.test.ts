@@ -18,6 +18,9 @@ import {FakeExecutors, executorsFromEnv, parseReviewOutput} from "../core/workos
 import type {FakeScript, MissionSpec} from "../core/workos/executors.js";
 import {RUN_STATUSES, TERMINAL_RUN_STATUSES, canRunTransition} from "../core/workos/run-state.js";
 import {effectiveLimits} from "../core/agents/role-execution.js";
+import {ProjectStudio} from "../core/workos/project-studio.js";
+import {RunWorkspaceArchiver, retentionMsFromEnv, RUN_ARCHIVE_RECORD} from "../core/workos/run-archive.js";
+import type {ArchiveStudioPort} from "../core/workos/run-archive.js";
 import {FIRST_DELIVERY_BINDINGS} from "../core/agents/first-delivery-bindings.js";
 import {scanDiffForSecrets, redactSecrets} from "../core/workos/secret-scan.js";
 import {buildServer} from "../apps/control-api/src/server.js";
@@ -709,5 +712,113 @@ describe("LANE-C bound role TaskLimits are enforced by the runner (never loosene
     const r2 = roleRun(c2, fake2, null);
     await runner(c2, fake2).tick();
     expect(runOf(c2, r2.runId).status).toBe("AWAITING_APPROVAL");
+  });
+});
+
+describe("LANE-C run workspace archive + prune (default OFF; archive first, verify, then prune after retention)", () => {
+  interface MCtx { store: WorkOsStore; studio: ProjectStudio; dataDir: string; stopFile: string; projectId: string; missionId: string }
+  function managedSetup(kind: "managed" | "external" = "managed"): MCtx {
+    const id = crypto.randomBytes(4).toString("hex");
+    const dataDir = path.join(tmp, `adata-${id}`), runtime = path.join(tmp, `art-${id}`);
+    fs.mkdirSync(runtime, {recursive: true});
+    const studio = new ProjectStudio({dataDir, envPolicyFile: ENV_POLICY});
+    const store = new WorkOsStore(dataDir);
+    const base = {tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", testCommand: ["node", "test.mjs"]};
+    const p = kind === "managed" ? store.createProject({...base, prepareManagedRepository: pid => studio.createTemplateRepository(pid, "empty", "P")}) : store.createProject({...base, repository: {path: makeRepo(id).repo}});
+    const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "Add feature", objective: "feature.txt must say ok", acceptanceCriteria: ["x"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+    return {store, studio, dataDir, stopFile: path.join(runtime, "GLOBAL_STOP.json"), projectId: p.projectId, missionId: m.missionId};
+  }
+  // sonlanan (BLOCKED, commit'li) / sonlanan (commit'siz) / bekleyen (AWAITING_APPROVAL) run üretir.
+  async function runOnce(c: MCtx, how: "BLOCKED_WITH_COMMIT" | "BLOCKED_NO_COMMIT" | "AWAITING"): Promise<WorkRun> {
+    const fake = new FakeExecutors(okScript({implement: () => ({files: {"feature.txt": "ok\n", "test.mjs": "process.exit(0);\n"}}), review: () => how === "AWAITING" ? ({verdict: "CLEAN"}) : ({verdict: "BLOCKED", findings: [{severity: "P1", title: "x"}]})}));
+    const pr = fake.pair();
+    const created = c.store.createRun({tenantId: "tA", missionId: c.missionId, ...(how === "BLOCKED_NO_COMMIT" ? {roleId: "UASCO-0252"} : {}), executor: {implementer: pr.implementer.identity, reviewer: pr.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
+    await new MissionRunner({executionGate: testExecutionGate(), store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: pr, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, maxRemediations: 0, security: fakeSecurity(`${c.dataDir}-sec`).options}).tick();
+    return c.store.getRun({tenantId: "tA"}, created.runId)!;
+  }
+  const workDir = (c: MCtx, r: WorkRun) => path.join(c.dataDir, "runs", r.runId, "work");
+  const archiver = (c: MCtx, retentionMs: number, over: {now?: () => number; studio?: ArchiveStudioPort} = {}) => new RunWorkspaceArchiver({dataDir: c.dataDir, store: c.store, studio: over.studio ?? c.studio, retentionMs, ...(over.now ? {now: over.now} : {})});
+  const refs = (c: MCtx) => { const root = c.studio.managedRepoRoot(c.store.getProject({tenantId: "tA"}, c.projectId)!); return {root, list: git(root, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/uasco/runs"])}; };
+
+  it("a terminal managed run is archived as refs/uasco/runs/<runId>, the archive is verified, then runs/<id>/work is removed; logs, record and the Studio git view survive", { timeout: T }, async () => {
+    const c = managedSetup(); const run = await runOnce(c, "BLOCKED_WITH_COMMIT");
+    expect(run.status).toBe("BLOCKED");
+    expect(run.headSha).toMatch(/^[0-9a-f]{40}$/);
+    expect(fs.existsSync(workDir(c, run))).toBe(true);
+    const rep = archiver(c, 0).sweep();
+    expect(rep.results).toEqual([{runId: run.runId, status: "PRUNED", archiveRef: `refs/uasco/runs/${run.runId}`}]);
+    expect(fs.existsSync(workDir(c, run))).toBe(false);
+    const {root, list} = refs(c);
+    expect(list).toBe(`refs/uasco/runs/${run.runId} ${run.headSha}`);
+    expect(git(root, ["show", `${run.headSha}:feature.txt`])).toBe("ok"); // the commit's content is readable from the managed repo alone
+    expect(fs.existsSync(path.join(c.dataDir, "runs", run.runId, "logs"))).toBe(true); // evidence logs are never pruned
+    const rec = JSON.parse(fs.readFileSync(path.join(c.dataDir, "runs", run.runId, RUN_ARCHIVE_RECORD), "utf8"));
+    const {digest, ...body} = rec;
+    expect(rec).toMatchObject({schemaVersion: 1, runId: run.runId, status: "BLOCKED", headSha: run.headSha, archiveRef: `refs/uasco/runs/${run.runId}`});
+    expect(typeof rec.archivedAt).toBe("string"); expect(typeof rec.prunedAt).toBe("string");
+    expect(digest).toBe(crypto.createHash("sha256").update(JSON.stringify(body, null, 2)).digest("hex"));
+    const project = c.store.getProject({tenantId: "tA"}, c.projectId)!;
+    expect(JSON.stringify(c.studio.gitLog(project, [run], 5, run.runId))).toContain(run.headSha!); // the run's commits still resolve after the workspace is gone
+    expect(archiver(c, 0).sweep().results).toEqual([]); // idempotent: nothing left to do
+  });
+
+  it("retention: nothing is archived or removed before the retention period; after it the same run is pruned", { timeout: T }, async () => {
+    const c = managedSetup(); const run = await runOnce(c, "BLOCKED_WITH_COMMIT");
+    expect(archiver(c, 3_600_000).sweep().results).toEqual([{runId: run.runId, status: "KEPT_RETENTION"}]);
+    expect(fs.existsSync(workDir(c, run))).toBe(true);
+    expect(refs(c).list).toBe(""); // not even archived yet
+    expect(archiver(c, 3_600_000, {now: () => Date.now() + 2 * 3_600_000}).sweep().results.map(r => r.status)).toEqual(["PRUNED"]);
+    expect(fs.existsSync(workDir(c, run))).toBe(false);
+  });
+
+  it("never prunes a run that is not terminal (AWAITING_APPROVAL keeps its workspace even with retention 0) or a project without a managed repository", { timeout: T }, async () => {
+    const c = managedSetup(); const awaiting = await runOnce(c, "AWAITING");
+    expect([awaiting.status, awaiting.step, awaiting.reason]).toEqual(["AWAITING_APPROVAL", "REPORT", "DELIVERY_DECISION_PENDING_FOUNDER"]);
+    expect(archiver(c, 0).sweep().results).toEqual([{runId: awaiting.runId, status: "KEPT_NOT_TERMINAL", detail: "AWAITING_APPROVAL"}]);
+    expect(fs.existsSync(workDir(c, awaiting))).toBe(true);
+    const x = managedSetup("external"); const ext = await runOnce(x, "BLOCKED_WITH_COMMIT");
+    expect(ext.status).toBe("BLOCKED");
+    expect(archiver(x, 0).sweep().results).toEqual([{runId: ext.runId, status: "KEPT_NOT_MANAGED"}]); // the commit exists nowhere else: the workspace stays
+    expect(fs.existsSync(workDir(x, ext))).toBe(true);
+  });
+
+  it("an archive that fails or cannot be verified keeps the workspace and writes no record", { timeout: T }, async () => {
+    const c = managedSetup(); const run = await runOnce(c, "BLOCKED_WITH_COMMIT");
+    const failing: ArchiveStudioPort = {managedRepoRoot: p => c.studio.managedRepoRoot(p), archiveRunObjects: () => { throw Object.assign(new Error("boom"), {code: "DELIVERY_SOURCE_UNAVAILABLE"}); }, isRunArchived: () => true};
+    expect(archiver(c, 0, {studio: failing}).sweep().results).toEqual([{runId: run.runId, status: "KEPT_ARCHIVE_FAILED", detail: "DELIVERY_SOURCE_UNAVAILABLE"}]);
+    const unverified: ArchiveStudioPort = {managedRepoRoot: p => c.studio.managedRepoRoot(p), archiveRunObjects: (p, r) => c.studio.archiveRunObjects(p, r), isRunArchived: () => false};
+    expect(archiver(c, 0, {studio: unverified}).sweep().results).toEqual([{runId: run.runId, status: "KEPT_ARCHIVE_UNVERIFIED"}]);
+    expect(fs.existsSync(workDir(c, run))).toBe(true);
+    expect(fs.existsSync(path.join(c.dataDir, "runs", run.runId, RUN_ARCHIVE_RECORD))).toBe(false);
+  });
+
+  it.skipIf(process.platform === "win32")("a work path that is a symlink is never followed or removed (the target outside the run stays intact)", { timeout: T }, async () => {
+    const c = managedSetup(); const run = await runOnce(c, "BLOCKED_WITH_COMMIT");
+    const outside = path.join(tmp, `outside-${run.runId}`); fs.mkdirSync(outside); fs.writeFileSync(path.join(outside, "canary.txt"), "KEEP");
+    const w = workDir(c, run); fs.renameSync(w, `${w}-real`); fs.symlinkSync(outside, w);
+    expect(archiver(c, 0).sweep().results).toEqual([{runId: run.runId, status: "KEPT_UNSAFE_PATH"}]);
+    expect(fs.readFileSync(path.join(outside, "canary.txt"), "utf8")).toBe("KEEP");
+    expect(fs.lstatSync(w).isSymbolicLink()).toBe(true);
+  });
+
+  it("a terminal run that never produced a commit has nothing to archive: its workspace is pruned after retention and the record says so", { timeout: T }, async () => {
+    const c = managedSetup(); const run = await runOnce(c, "BLOCKED_NO_COMMIT");
+    expect(run.status).toBe("BLOCKED");
+    expect(run.headSha).toBeNull();
+    expect(archiver(c, 0).sweep().results).toEqual([{runId: run.runId, status: "PRUNED_NO_COMMIT"}]);
+    expect(fs.existsSync(workDir(c, run))).toBe(false);
+    expect(refs(c).list).toBe("");
+    expect(JSON.parse(fs.readFileSync(path.join(c.dataDir, "runs", run.runId, RUN_ARCHIVE_RECORD), "utf8"))).toMatchObject({headSha: null, archiveRef: null, archivedAt: null});
+  });
+
+  it("configuration is OFF unless UASCO_RUN_WORKSPACE_RETENTION_HOURS is an integer 1..8760; an invalid retention is a construction error", () => {
+    expect(retentionMsFromEnv({})).toEqual({enabled: false, reason: "NOT_CONFIGURED"});
+    expect(retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: ""})).toEqual({enabled: false, reason: "NOT_CONFIGURED"});
+    expect(retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: "24"})).toEqual({enabled: true, retentionMs: 24 * 3_600_000});
+    expect(retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: "8760"})).toEqual({enabled: true, retentionMs: 8760 * 3_600_000});
+    for (const bad of ["0", "-1", "1.5", "abc", "08", "8761", "99999", " 5", "5h"]) expect([bad, retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: bad})]).toEqual([bad, {enabled: false, reason: "INVALID"}]);
+    const c = managedSetup();
+    for (const bad of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) expect(() => archiver(c, bad)).toThrow("RUN_ARCHIVE_RETENTION_INVALID");
   });
 });

@@ -461,6 +461,22 @@ export class ProjectStudio {
     }
     if (this.git(root, [...neutral, "update-ref", `refs/uasco/runs/${run.runId}`, head]).status !== 0) throw new StudioError("DELIVERY_SOURCE_UNAVAILABLE", 409);
   }
+  // //TR: LANE-C çalışma alanı arşivi (cross-lane touch, yalnız EKLEME): run'ın commit'ini importRunObjects ile (çalışma alanının config/hook'ları yüklenmeden) yönetilen depoya getirir ve refs/uasco/runs/<runId> ref'ini kurar; başarıda run.headSha'yı döndürür, aksi halde StudioError fırlatır. Çalışma alanı silinmeden önce isRunArchived ile bağımsız doğrulanır.
+  archiveRunObjects(project: Project, run: WorkRun): string {
+    const head = run.headSha;
+    if (!head || !SHA.test(head) || run.projectId !== project.projectId) throw new StudioError("ARCHIVE_SOURCE_UNAVAILABLE", 409);
+    this.importRunObjects(this.repoRoot(project), run, head);
+    return head;
+  }
+  // //TR: Arşiv doğrulaması (alternates OLMADAN): ref run.headSha'ya eşit, nesne bir commit ve ondan erişilebilen her nesne yönetilen depoda var. Yalnız okur.
+  isRunArchived(project: Project, run: WorkRun): boolean {
+    const head = run.headSha;
+    if (!head || !SHA.test(head) || run.projectId !== project.projectId) return false;
+    let root: string; try { root = this.repoRoot(project); } catch { return false; }
+    const neutral = ["-c", "core.fsmonitor=false", "-c", `core.attributesFile=${this.emptyAttributesFile()}`];
+    if (this.gitOk(root, [...neutral, "rev-parse", "--verify", "--quiet", `refs/uasco/runs/${run.runId}^{commit}`]) !== head) return false;
+    return this.gitOk(root, [...neutral, "cat-file", "-t", head]) === "commit" && this.git(root, [...neutral, "rev-list", "--objects", "--quiet", head, "--"]).status === 0;
+  }
   // //TR: Deterministik teslim artefaktı: run.headSha ağacındaki her blob (sıralı; sabit zaman damgası 0; mod yalnız 0644/0755/symlink; stored/sıkıştırmasız) "source/" altında +
   // README.md + VERIFICATION_STATUS.json (makine yolu/zaman yok; Founder kabulü İÇİNDE DEĞİL). exportArtifactHash = arşiv baytlarının sha256'sı; aynı run yeniden hazırlanırsa aynı bayt/hash.
   // run.headSha taban/şablon commit'iyle aynıysa veya ağacı taban ya da kök (şablon) commit ağacıyla aynıysa NO_GENERATED_SOURCE (şablon gerçek çıktı yerine teslim edilmez).
