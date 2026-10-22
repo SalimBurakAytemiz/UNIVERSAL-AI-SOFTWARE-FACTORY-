@@ -2011,3 +2011,179 @@ describe("LANE-A first-delivery flow stepper (fake DOM)", () => {
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
+
+// //TR: test+states: studio-workspace (functional/negative/a11y) — çalışma alanı sekmelerinde okuma hataları/boş/bozuk yanıtların dürüst durum gösterdiğini (uydurma satır, koşu, commit, teslim yok), başarısız dev-run/dışa aktarma POST'unun başarı bildirmediğini, native köprü yokken önizleme/klasörde göster eyleminin dürüst hata verdiğini ve erişilebilirlik sözleşmesini (h1 tabindex, tablist/tab/tabpanel, tipli düğmeler, tablo başlıkları, dil eşitliği) doğrular.
+describe("test+states studio-workspace: negative (honest tab states)", () => {
+  const openTab = async (tab: string, get: Record<string, any> = {}, extra: Partial<CtxOpts> = {}) => {
+    const c = await mkCtx({get: projectsGet(get), ...extra});
+    st.openProject(PID, tab);
+    const root = mount(c.doc, await projectsView.render(c.ctx));
+    return {...c, root};
+  };
+  it("files tab: list 404 shows UNAVAILABLE with no entries; an empty list says so; a file read failure shows no fabricated content", async () => {
+    // //TR: Dosya listesi okunamazsa girdi uydurulmaz.
+    const a = await openTab("files");
+    expect(all(a.root).filter(n => n.id.startsWith("fe-")).length).toBe(0);
+    expect(text(byId(a.root, "studio-files-tree")!)).toContain("Kullanılamıyor");
+    expect(text(byId(a.root, "studio-files-viewer")!).length).toBeGreaterThan(0);
+    const b = await openTab("files", {[`/v1/projects/${PID}/files`]: {entries: []}});
+    expect(all(b.root).filter(n => n.id.startsWith("fe-")).length).toBe(0);
+    expect(byId(b.root, "studio-file-view")).toBeNull();
+    st.openProject(PID, "files"); st.studio.file = "src/a.js";
+    const c = await mkCtx({get: projectsGet({[`/v1/projects/${PID}/files`]: {entries: [{name: "a.js", dir: false}]}})});
+    const rc = mount(c.doc, await projectsView.render(c.ctx));
+    expect(byId(rc, "studio-file-view")).toBeNull(); // dosya okunamadı: görüntüleyici içeriği yok
+  });
+  it("changes tab: git log 404 and an empty log render honest notes with no commit table, no diff picker and no diff request", async () => {
+    const a = await openTab("changes");
+    expect(all(a.root).filter(n => n.tagName === "TABLE").length).toBe(0);
+    expect(byId(a.root, "studio-diff-show")).toBeNull();
+    expect(text(byId(a.root, "studio-git-log")!)).toContain("Kullanılamıyor");
+    const b = await openTab("changes", {[`/v1/projects/${PID}/git/log?limit=30`]: {commits: []}});
+    expect(all(b.root).filter(n => n.tagName === "TABLE").length).toBe(0);
+    expect(b.calls.get.some(p => p.includes("git/diff"))).toBe(false);
+    const c = await openTab("changes", {[`/v1/projects/${PID}/git/log?limit=30`]: {nonsense: true}});
+    expect(all(c.root).filter(n => n.tagName === "TABLE").length).toBe(0);
+  });
+  it("missions tab: a failed read shows UNAVAILABLE with no rows; an empty list says so; the open-work button stays usable", async () => {
+    const a = await openTab("missions");
+    expect(all(a.root).filter(n => n.id.startsWith("sm-")).length).toBe(0);
+    expect(text(byId(a.root, "studio-missions")!)).toContain("Kullanılamıyor");
+    expect(byId(a.root, "studio-missions-open")).not.toBeNull();
+    const b = await openTab("missions", {[`/v1/missions?projectId=${PID}`]: {missions: []}});
+    expect(all(b.root).filter(n => n.tagName === "TABLE").length).toBe(0);
+    const c = await openTab("missions", {[`/v1/missions?projectId=${PID}`]: {missions: "x"}});
+    expect(all(c.root).filter(n => n.id.startsWith("sm-")).length).toBe(0);
+  });
+  it("delivery tab: exports 404 shows UNAVAILABLE, no list rows, but the export form stays; malformed exports are not listed", async () => {
+    const a = await openTab("delivery");
+    expect(byId(a.root, "studio-export-submit")).not.toBeNull();
+    expect(all(a.root).filter(n => n.id.startsWith("ex-show-")).length).toBe(0);
+    expect(text(byId(a.root, "studio-exports")!)).toContain("Kullanılamıyor");
+    const b = await openTab("delivery", {[`/v1/projects/${PID}/exports`]: {exports: "nope"}});
+    expect(all(b.root).filter(n => n.id.startsWith("ex-show-")).length).toBe(0);
+  });
+  it("overview: when missions fail the run/review/security cards show the same honest state and no run id is invented", async () => {
+    const a = await openTab("overview", {"/v1/work-runs": {workRuns: [{runId: "run_zzzzzz", missionId: MID, status: "RUNNING", startedAt: "2026-10-15T00:00:00Z"}]}});
+    expect(text(byId(a.root, "studio-ov-run")!)).not.toContain("run_zzzzzz");
+    for (const id of ["studio-ov-missions", "studio-ov-run", "studio-ov-review", "studio-ov-security"]) expect(text(byId(a.root, id)!), id).toContain("Kullanılamıyor");
+  });
+  it("run tab: a failed start POST reports a non-success status, does not claim RUNNING and re-enables the controls", async () => {
+    const getFn = (p: string) => p === `/v1/projects/${PID}/devrun` ? runBody({status: "STOPPED", pid: null, preview: {url: null, state: "UNAVAILABLE"}}) : projectsGet()(p);
+    const c = await mkCtx({get: getFn, post: () => ({status: 500, body: {error: "X"}}), confirm: () => true});
+    st.openProject(PID, "run");
+    const root = mount(c.doc, await projectsView.render(c.ctx));
+    byId(root, "studio-run-start")!.fire("click"); await tick(); await tick();
+    expect(c.calls.post.length).toBe(1);
+    expect(forms.drafts.status["studio-devrun"].ok).toBe(false);
+    expect(forms.drafts.busy["studio-devrun"]).toBe(false);
+    expect(byId(root, "studio-run-state")!.dataset.status).toBe("STOPPED");
+    expect(byId(root, "studio-run-start")!.disabled).toBe(false);
+    expect(byId(root, "studio-run-stop")!.disabled).toBe(true);
+    expect(byId(root, "studio-devrun-status")!.getAttribute("role")).toBe("alert");
+  });
+  it("run tab: without a native bridge the preview button is a no-op that reports noNative; it never opens anything", async () => {
+    const c = await mkCtx({get: (p: string) => p === `/v1/projects/${PID}/devrun` ? runBody() : projectsGet()(p)});
+    st.openProject(PID, "run");
+    const root = mount(c.doc, await projectsView.render(c.ctx));
+    const ws = await load(rend, "views", "studio-workspace.js");
+    expect(byId(root, "studio-run-preview")!.disabled).toBe(false); // sunucu AVAILABLE bildirdi
+    byId(root, "studio-run-preview")!.fire("click"); await tick();
+    expect(forms.drafts.status["studio-devrun"].key).toBe("studio.run.preview.noNative");
+    expect(forms.drafts.status["studio-devrun"].ok).toBe(false);
+    ws.stopRunPolling();
+  });
+  it("delivery tab: a failed export POST reports a non-success status and an export without a native bridge reports noExport", async () => {
+    const c = await mkCtx({get: projectsGet({[`/v1/projects/${PID}/exports`]: {exports: [{exportId: EXP, createdAt: "2026-10-15T00:00:00Z", commit: HASH, sizeBytes: 1, status: "COMPLETE"}]}}), post: () => ({status: 503, body: {error: "X"}})});
+    st.openProject(PID, "delivery");
+    const root = mount(c.doc, await projectsView.render(c.ctx));
+    byId(root, "studio-export-form")!.fire("submit"); await tick();
+    expect(forms.drafts.status["studio-export"].ok).toBe(false);
+    expect(forms.drafts.busy["studio-export"]).toBe(false);
+    byId(root, `ex-show-${EXP}`)!.fire("click"); await tick();
+    expect(forms.drafts.status["studio-export"].key).toBe("studio.export.noNative");
+    expect(forms.drafts.status["studio-export"].ok).toBe(false);
+  });
+});
+
+describe("test+states studio-workspace: accessibility", () => {
+  it("every tab renders one h1 with tabindex -1 carrying the project name, a labelled tablist, tabs controlling the panel, and only typed buttons", async () => {
+    // //TR: Her sekmede h1 odak hedefidir ve tüm düğmeler tiplidir.
+    const ws = await load(rend, "views", "studio-workspace.js");
+    for (const tab of ["overview", "run", "files", "changes", "missions", "delivery"]) {
+      const c = await mkCtx({get: projectsGet({[`/v1/projects/${PID}/devrun`]: runBody()})});
+      st.openProject(PID, tab);
+      const root = mount(c.doc, await projectsView.render(c.ctx));
+      const h1s = all(root).filter(n => n.tagName === "H1");
+      expect(h1s.length, tab).toBe(1);
+      expect(h1s[0].getAttribute("tabindex"), tab).toBe("-1");
+      expect(text(h1s[0]), tab).toBe("Mağaza");
+      const list = all(root).find(n => n.getAttribute("role") === "tablist")!;
+      expect(list.getAttribute("aria-label")!.length, tab).toBeGreaterThan(0);
+      const tabs = all(list).filter(n => n.getAttribute("role") === "tab");
+      expect(tabs.length).toBe(6);
+      for (const t of tabs) { expect(t.tagName).toBe("BUTTON"); expect(t.getAttribute("type")).toBe("button"); expect(t.getAttribute("aria-controls")).toBe("studio-panel"); expect(t.getAttribute("aria-selected")).toBe(t.dataset.tab === tab ? "true" : "false"); expect(t.getAttribute("tabindex")).toBe(t.dataset.tab === tab ? "0" : "-1"); }
+      for (const b of all(root).filter(n => n.tagName === "BUTTON")) expect(["button", "submit"], `${tab}:${b.id || text(b)}`).toContain(b.getAttribute("type"));
+      ws.stopRunPolling();
+    }
+  });
+  it("Home/End and wrap-around keys select tabs and focus follows; unrelated keys do nothing", async () => {
+    const c = await mkCtx({get: projectsGet()});
+    st.openProject(PID, "files");
+    const root = mount(c.doc, await projectsView.render(c.ctx));
+    byId(root, "studio-tab-files")!.fire("keydown", {key: "Home"});
+    expect(st.studio.tab).toBe("overview");
+    expect(c.doc.focused?.id).toBe("studio-tab-overview");
+    byId(root, "studio-tab-overview")!.fire("keydown", {key: "End"});
+    expect(st.studio.tab).toBe("delivery");
+    byId(root, "studio-tab-delivery")!.fire("keydown", {key: "a"});
+    expect(st.studio.tab).toBe("delivery");
+  });
+  it("commit and export tables carry captions and column-scoped headers; the log and diff viewers are focusable and labelled", async () => {
+    const g = projectsGet({[`/v1/projects/${PID}/git/log?limit=30`]: {commits: [{hash: HASH, subject: "s", author: "A", date: "2026-10-15T00:00:00Z"}]}, [`/v1/projects/${PID}/exports`]: {exports: [{exportId: EXP, createdAt: "2026-10-15T00:00:00Z", commit: HASH, sizeBytes: 1, status: "COMPLETE"}]}, [`/v1/projects/${PID}/devrun`]: runBody()});
+    for (const tab of ["changes", "delivery"]) {
+      const c = await mkCtx({get: g}); st.openProject(PID, tab);
+      const root = mount(c.doc, await projectsView.render(c.ctx));
+      const tables = all(root).filter(n => n.tagName === "TABLE");
+      expect(tables.length, tab).toBeGreaterThan(0);
+      for (const t of tables) {
+        expect(all(t).some(n => n.tagName === "CAPTION" && text(n).length > 0), tab).toBe(true);
+        const ths = all(t).filter(n => n.tagName === "TH");
+        expect(ths.length).toBeGreaterThan(1);
+        for (const th of ths) expect(th.getAttribute("scope")).toBe("col");
+      }
+    }
+    const c = await mkCtx({get: g}); st.openProject(PID, "run");
+    const root = mount(c.doc, await projectsView.render(c.ctx));
+    const log = byId(root, "studio-log")!;
+    expect(log.getAttribute("tabindex")).toBe("0");
+    expect(log.getAttribute("aria-label")!.length).toBeGreaterThan(0);
+    expect(byId(root, "studio-run-state")!.getAttribute("role")).toBe("status");
+    expect(byId(root, "studio-run-state")!.getAttribute("aria-live")).toBe("polite");
+    (await load(rend, "views", "studio-workspace.js")).stopRunPolling();
+  });
+});
+
+describe("test+states studio-workspace: EN/TR parity", () => {
+  it("every literal and derived key used by studio-workspace.js exists in both locales with equal placeholders; English tab labels differ from Turkish", async () => {
+    // //TR: Çalışma alanının kullandığı tüm anahtarlar iki dilde vardır.
+    const tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>, en = (await load(rend, "locales", "en.js")).default as Record<string, string>;
+    expect(Object.keys(en).sort()).toEqual(Object.keys(tr).sort());
+    const pc = await load(rend, "project-core.js");
+    const src = fs.readFileSync(path.join(rend, "views", "studio-workspace.js"), "utf8");
+    const keys = new Set<string>();
+    for (const m of src.matchAll(/(?:\bt\(|labelKey:|titleKey:|hintKey:|errorKey:|text:ctx\.t\()\s*"([a-zA-Z0-9_.-]+)"/g)) keys.add(m[1]);
+    for (const m of src.matchAll(/"((?:studio|work|everif|devrun|confirm)\.[A-Za-z0-9_.-]+)"/g)) keys.add(m[1]);
+    for (const k of pc.STUDIO_TABS) keys.add(`studio.tab.${k}`);
+    for (const s of pc.DEVRUN_STATES) keys.add(`devrun.state.${s}`);
+    for (const s of pc.PREVIEW_STATES) keys.add(`devrun.preview.${s}`);
+    for (const a of ["start", "stop", "restart"]) { keys.add(`studio.run.${a}`); keys.add(`studio.run.done.${a}`); }
+    for (const r of ["DEVRUN_UNAVAILABLE", "PREVIEW_UNAVAILABLE", "OPEN_FAILED"]) keys.add(`studio.run.preview.reason.${r}`);
+    for (const r of ["EXPORT_UNAVAILABLE", "EXPORT_PATH_REJECTED"]) keys.add(`studio.export.reason.${r}`);
+    const real = [...keys].filter(k => !/[${}]/.test(k));
+    expect(real.length).toBeGreaterThan(60);
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of real) { expect(k in tr && k in en, k).toBe(true); expect(ph(en[k]), k).toBe(ph(tr[k])); expect(en[k].trim().length, k).toBeGreaterThan(0); }
+    for (const k of pc.STUDIO_TABS) expect(en[`studio.tab.${k}`]).not.toBe(tr[`studio.tab.${k}`]);
+  });
+});
