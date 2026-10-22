@@ -2362,7 +2362,7 @@ describe("LANE-B run readiness", () => {
     expect(by(r).REPOSITORY.state).toBe("OK");
     expect(r.json().readiness.ready).toBe(true);
   });
-})
+});
 
 // //TR: LANE-B G-FB-001/066/070/123: GET /health işlevsel API testi. YALNIZ sunucu yarısı sınanır (Host kapısı, /health'in tokensız açık oluşu, challenge -> HMAC controlProof, /v1 token kapısı, gövde sızıntısı); Electron main.mjs verifyServerIdentity yarısı (fetch + secureStringEqual) bu testte ÇALIŞMAZ.
 describe("LANE-B control /health (server half only; Electron main-process handshake NOT exercised)", () => {
@@ -2372,7 +2372,7 @@ describe("LANE-B control /health (server half only; Electron main-process handsh
     const {controlChallengeProof} = await import("../automation/lib/control-boundary.mjs");
     return {app: buildServer({controlToken, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false}), proof: controlChallengeProof as (t: string, c: string) => string | null, runtime};
   };
-  const health = (app: any, query = `?challenge=${CH}`, host: string | undefined = HOST) => app.inject({method: "GET", url: `/health${query}`, headers: host === undefined ? {} : {host}});
+  const health = (app: any, query = `?challenge=${CH}`, host: string | null = HOST) => app.inject({method: "GET", url: `/health${query}`, headers: host === null ? {} : {host}});
 
   it("answers the identity challenge without the control token: fixed identity fields and controlProof = HMAC(token, challenge)", async () => {
     const {app, proof} = await mkSrv();
@@ -2408,11 +2408,15 @@ describe("LANE-B control /health (server half only; Electron main-process handsh
 
   it("rejects every Host other than the exact loopback host:port with 421, /health included", async () => {
     const {app} = await mkSrv();
-    for (const h of ["evil.example", "localhost:3210", "127.0.0.1", "127.0.0.1:3211", "127.0.0.1:3210.evil.example", "0.0.0.0:3210"]) {
+    for (const h of ["evil.example", "localhost:3210", "127.0.0.1", "127.0.0.1:3211", "127.0.0.1:3210.evil.example", "0.0.0.0:3210", "", null]) {
       const r = await health(app, `?challenge=${CH}`, h);
       expect(r.statusCode, String(h)).toBe(421);
       expect(r.json()).toEqual({error: "CONTROL_HOST_REJECTED"});
     }
+    const {hostHeaderAllowed} = await import("../automation/lib/control-boundary.mjs");
+    expect(hostHeaderAllowed(undefined, 3210)).toBe(false);
+    expect(hostHeaderAllowed("", 3210)).toBe(false);
+    expect(hostHeaderAllowed("127.0.0.1:3210", 3210)).toBe(true);
     expect((await health(app, `?challenge=${CH}`, "127.0.0.1:3210")).statusCode).toBe(200);
     expect((await health(app, `?challenge=${CH}`, "127.0.0.1:3210".toUpperCase())).statusCode).toBe(200);
   });
@@ -2428,4 +2432,4 @@ describe("LANE-B control /health (server half only; Electron main-process handsh
     expect(r.statusCode).toBe(503);
     expect(r.json()).toEqual({error: "CONTROL_TOKEN_NOT_CONFIGURED"});
   });
-});;
+});
