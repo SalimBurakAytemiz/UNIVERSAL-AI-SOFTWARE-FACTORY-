@@ -31,7 +31,7 @@ export function registerProtectedBatch3Cases() {
     it("refuses every non-canonical memory or knowledge read (order, repeats, encoding, lengths, control chars, ids, suffixes)", () => {
       const bad = [`/v1/projects/${P}/memory?`, `/v1/projects/${P}/memory?tag=a&kind=FACT`, `/v1/projects/${P}/memory?kind=FACT&kind=NOTE`, `/v1/projects/${P}/memory?kind=fact`,
         `/v1/projects/${P}/memory?kind=`, `/v1/projects/${P}/memory?q=`, `/v1/projects/${P}/memory?q=a&`, `/v1/projects/${P}/memory?limit=5`, `/v1/projects/${P}/memory?q=a b`,
-        `/v1/projects/${P}/memory?q=a%2`, `/v1/projects/${P}/memory?q=%e2%82%ac`, `/v1/projects/${P}/memory?q=it's`, `/v1/projects/${P}/memory?q=${enc("x".repeat(201))}`,
+        `/v1/projects/${P}/memory?q=a%2`, `/v1/projects/${P}/memory?q=%e2%82%ac`, `/v1/projects/${P}/memory?q=%41`, `/v1/projects/${P}/memory?tag=%2D`, `/v1/projects/${P}/memory?q=%7E`, `/v1/projects/${P}/memory?q=it's`, `/v1/projects/${P}/memory?q=${enc("x".repeat(201))}`,
         `/v1/projects/${P}/memory?tag=${enc("t".repeat(65))}`, `/v1/projects/${P}/memory?q=${enc("a\u0007b")}`, `/v1/projects/${P}/memory?q=${enc("a\u007fb")}`, `/v1/projects/${P}/memory?q=%FF`,
         `/v1/projects/${P}/memory/`, `/v1/projects/${P}/memory/mem_12345`, `/v1/projects/${P}/memory/mem_0000000000001`, `/v1/projects/${P}/memory/MEM_000001`,
         `/v1/projects/${P}/memory/mem_000001/provenance/`, `/v1/projects/${P}/memory/mem_000001/provenance?x=1`, `/v1/projects/${P}/memory/current?x=1`, `/v1/projects/${P}/memory/mem_000001/raw`,
@@ -64,6 +64,12 @@ export function registerProtectedBatch3Cases() {
       expect(kn.statusCode, kn.body).toBe(200);
       const evidence = JSON.parse(kn.body).knowledge.evidence;
       expect(evidence.state).not.toBe("UNAVAILABLE"); // EVIDENCE_NOT_WIRED would mean laneDeps lacks the evidence index
+      // The memory append route is live on the Control API (token + Global Stop + policy + schema), the renderer cannot reach it (Desktop POST allow-list).
+      const post = (headers: Record<string, string>) => app.inject({method: "POST", url: `/v1/projects/${p.projectId}/memory`, headers: {...headers, "content-type": "application/json"}, payload: JSON.stringify({kind: "FACT", title: "t", body: "b"})});
+      expect((await post({host: "127.0.0.1:3210"})).statusCode).toBe(403);
+      const appended = await post(hdr);
+      expect([appended.statusCode, JSON.parse(appended.body).record?.id]).toEqual([201, "mem_000001"]);
+      expect(JSON.parse((await app.inject({method: "GET", url: `/v1/projects/${p.projectId}/memory`, headers: hdr})).body).records.map((r: any) => r.id)).toEqual(["mem_000001"]);
       const att = await app.inject({method: "GET", url: "/v1/attention", headers: hdr});
       expect([att.statusCode, JSON.parse(att.body).attention?.source]).toEqual([200, "WORKOS"]);
       const badJson = await app.inject({method: "POST", url: "/v1/projects", headers: {...hdr, "content-type": "application/json"}, payload: "{not json"});

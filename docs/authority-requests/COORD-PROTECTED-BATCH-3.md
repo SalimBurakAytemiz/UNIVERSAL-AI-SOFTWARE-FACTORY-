@@ -5,9 +5,10 @@ Protected files changed: `apps/control-api/src/server.ts`, `apps/desktop/main.mj
 
 ## server.ts (as requested in LANE-B-memory-api, LANE-B-knowledge-api, LANE-B-error-contract, LANE-B-attention-api)
 - `registerMemoryRoutes(app,laneDeps)` and `registerKnowledgeRoutes(app,laneDeps)` after the existing lane registrations: same global token hook, same write gates (Global Stop 423, policy 403, schema 400), same tenant scope and audit.
+- This makes the server-side memory append `POST /v1/projects/:id/memory` live on the Control API for a control-token holder (gates: token 403, Global Stop 423, policy 403, schema 400, secret rejection, 32 KiB body). The Desktop renderer still cannot reach it, because the main.mjs POST allow-list does not include it (see below); a test pins both facts.
 - `registerAttentionRoutes(app,laneDeps)`: the read-only Founder attention queue derived from the Work OS journal (#191).
 - `laneDeps.evidenceIndex = ()=>evidenceIndex()`: lazy, called only at request time, so the knowledge summary reports real evidence instead of `UNAVAILABLE/EVIDENCE_NOT_WIRED`.
-- `frameworkErrors` constructor option and `registerErrorContract(app)`: errors raised by Fastify itself (bad JSON, media type, body size, bad URL, unknown route) answer a fixed `{error:"CODE"}`; route-level responses are unchanged.
+- `frameworkErrors` constructor option and `registerErrorContract(app)`: every error that reaches Fastify (bad JSON, media type, body size, bad URL, unknown route, and any exception a route throws instead of replying) answers a fixed `{error:"CODE"}` (`INTERNAL_ERROR` for 5xx, a mapped code or `INVALID_REQUEST` for 4xx; no message, path or stack). Replies a route sends itself are unchanged.
 
 ## main.mjs allow-list (inside the B4/B5 blocks the tests evaluate)
 - GET, read-only, anchored patterns: `/v1/projects/prj_<24hex>/memory/{current,health}`, `/memory/mem_<6-12 digits>`, `/memory/mem_<6-12 digits>/provenance`, `/v1/projects/prj_<24hex>/knowledge` (no query on any of them).
@@ -16,10 +17,10 @@ Protected files changed: `apps/control-api/src/server.ts`, `apps/desktop/main.mj
 - POST `/v1/work-runs/run_<24hex>/tasks/reconcile` (the renderer sends an empty body; the route derives task outcomes from the Work OS journal under the same gates).
 
 ## Deliberately NOT in this batch
-- POST memory (write form): no screen uses it yet; it gets its own allow-list review.
+- Desktop allow-list entry for POST memory (write form): no screen uses it yet; it gets its own allow-list review.
 - Linux sandbox provider hook in `server.ts` (LANE-C-linux-sandbox-provider): it lets project code execute where it is refused today, so it is a separate PR for a separate Founder decision.
 - `GET /v1/roles/status-summary` registration (#181): its route module is not on `v7/integration` yet; it follows in the next batch.
 - `GET /v1/founder-attention` stays as it is.
 
 ## Evidence
-`tests/support/protected-batch-3.cases.ts` (registered from `tests/v7-b4-desktop-shell.test.ts`): renderer-built paths are accepted, about 35 hostile variants are refused, reconcile POST only for a canonical run id, and the real `buildServer` serves memory and knowledge (evidence wired), maps bad JSON / bad URL / unknown route to fixed codes, and still requires the token. Mutation checks: 8 of 8 caught.
+`tests/support/protected-batch-3.cases.ts` (registered from `tests/v7-b4-desktop-shell.test.ts`): renderer-built paths are accepted, about 35 hostile variants are refused, reconcile POST only for a canonical run id, and the real `buildServer` serves memory and knowledge (evidence wired), maps bad JSON / bad URL / unknown route to fixed codes, and still requires the token. Mutation checks: 9 of 9 caught (the canonical-encoding round trip is covered by `?q=%41`, `?tag=%2D`, `?q=%7E`). Independent adversarial review (three lenses: allow-list bypass, server wiring, scope and trust root) found no bypass and no wiring defect; its three scope findings (the live server-side memory append, the error-handler wording, the encoding mutant) are addressed here.
