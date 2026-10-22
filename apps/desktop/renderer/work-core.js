@@ -198,6 +198,21 @@ export function buildTaskTransitionRequest({task,tasks,missionStatus,to,reason})
   if(r.length>TASK_REASON_MAX)errors.reason="taskst.err.reasonLong";
   return result(path,{to,reason:r||`${task?.status} -> ${to} (UASCO Desktop)`},errors);
 }
+// ---------- Koşu hazırlığı ve bloklu koşu nedenleri (LANE-A first-delivery) ----------
+// //TR: Koşu başlamadan önce kayıtlardan okunabilen eksikler: depo yoksa runner REPOSITORY_NOT_CONFIGURED (uzak URL ise REMOTE_REPO_NOT_SUPPORTED_YET), mission ve proje kaydında test komutu yoksa TEST_COMMAND_NOT_CONFIGURED ile BLOK verir. "Kayıtlı" bir test komutu kabul edileceğini vaat etmez (runner komutu ayrıca izin listesinden geçirir); bu yüzden yalnız EKSİK durumlar kesin uyarıdır. Kayıt okunamadıysa UNKNOWN: olumlu bir hazırlık iddiası yok.
+export function runReadiness({project,mission}){
+  const repository=!project?"UNKNOWN":project.repositoryPath?"RECORDED":project.remoteRepository===true?"REMOTE":"MISSING";
+  const testCommand=!mission?"UNKNOWN":(mission.testCommandSet===true||project?.testCommandSet===true)?"RECORDED":(project?"MISSING":"UNKNOWN");
+  const blockers=[];
+  if(repository==="MISSING")blockers.push("REPOSITORY_NOT_CONFIGURED");
+  if(repository==="REMOTE")blockers.push("REMOTE_REPO_NOT_SUPPORTED_YET");
+  if(testCommand==="MISSING")blockers.push("TEST_COMMAND_NOT_CONFIGURED");
+  return {repository,testCommand,blockers};
+}
+/** Bilinen koşu BLOK nedenleri -> açıklama anahtarı; bilinmeyen neden aynen ham kalır. SANDBOX_UNAVAILABLE'ın mevcut açıklaması korunur. */
+export const RUN_REASON_HINTS=Object.freeze(["REPOSITORY_NOT_CONFIGURED","TEST_COMMAND_NOT_CONFIGURED","REMOTE_REPO_NOT_SUPPORTED_YET","PROJECT_NOT_FOUND","MISSION_NOT_FOUND"]);
+export const runReasonHintKey=reason=>typeof reason==="string"&&RUN_REASON_HINTS.includes(reason)?`run.reason.${reason}`:null;
+
 /** Durum geçişi isteği; yalnız durum makinesinin izin verdiği hedefler, yüksek riskli hedeflerde confirmed===true şart.
  *  D-M1A-STATE-MODEL-2026-10-15: geçiş gövdesi hiçbir onay alanı taşımaz (COMPLETE yalnız PRODUCT_VERIFIED kanıtıyla olur); onay verilmeye çalışılırsa istek kurulmaz. */
 export function buildTransitionRequest({missionId,from,to,reason,confirmed,acknowledgements}){
@@ -277,15 +292,26 @@ export function mapMissionDetail(raw){
   return {state:"VERIFIED",mission:{
     missionId:m.missionId,projectId:str(m.projectId,80),title:str(m.title,200)??MISSING,objective:str(m.objective,4000)??MISSING,
     acceptanceCriteria:arr(m.acceptanceCriteria,50).filter(c=>typeof c==="string").map(c=>c.slice(0,4000)),
-    status:statusStr(m.status)??MISSING,riskLevel:str(m.riskLevel,8)??MISSING,createdAt:iso(m.createdAt),tasks}};
+    status:statusStr(m.status)??MISSING,riskLevel:str(m.riskLevel,8)??MISSING,createdAt:iso(m.createdAt),testCommandSet:Array.isArray(m.testCommand)&&m.testCommand.length>0,tasks}};
 }
 function mapRunEvidence(list){
   return arr(list,100).map(e=>{
     if(typeof e==="string")return SAFE_ID_RE.test(e)?{evidenceId:e,kind:null,verification:null}:null;
     if(!isObj(e))return null;
     const id=pick(e.evidenceId,e.id);
-    return {evidenceId:typeof id==="string"&&SAFE_ID_RE.test(id)?id:null,kind:str(e.kind,40),verification:normalizeVerification(e.verification)};
+    return {evidenceId:typeof id==="string"&&SAFE_ID_RE.test(id)?id:null,kind:str(e.kind,40),verification:normalizeVerification(e.verification),
+      // //TR: LANE-A: koşu adımı tablosu için sunucunun kaydettiği olgular (RunEvidence): adım, döngü, çıkış kodu, süre ve zaman aşımı. Geçersiz tür null kalır; 0 veya "başarılı" uydurulmaz.
+      step:/^[A-Z][A-Z_]{0,19}$/.test(String(e.step))?e.step:null,cycle:safeCount(e.cycle),exitCode:Number.isSafeInteger(e.exitCode)?e.exitCode:null,timedOut:e.timedOut===true,startedAt:iso(e.startedAt),endedAt:iso(e.endedAt)};
   }).filter(Boolean);
+}
+/** Kanıt kaydından süre (ms); iki zaman da geçerli ve bitiş >= başlangıç değilse null (uydurulmaz). */
+export function evidenceDurationMs(e){
+  const a=Date.parse(e?.startedAt??""),b=Date.parse(e?.endedAt??"");
+  return Number.isFinite(a)&&Number.isFinite(b)&&b>=a?b-a:null;
+}
+/** Koşu adımı tablosu satırları: yalnız adım bilgisi taşıyan (nesne biçimli ve step/startedAt'ı olan) kanıt kayıtları, kayıt sırasıyla. */
+export function runStepRows(evidence){
+  return (Array.isArray(evidence)?evidence:[]).filter(e=>e&&(e.step||e.startedAt)).map(e=>({evidenceId:e.evidenceId,kind:e.kind,step:e.step,cycle:e.cycle,exitCode:e.exitCode,timedOut:e.timedOut===true,startedAt:e.startedAt,durationMs:evidenceDurationMs(e)}));
 }
 /** En son REVIEW kanıt kaydı (en yüksek cycle, eşitlikte dizideki son); yoksa null. */
 function latestReviewEvidence(list){
