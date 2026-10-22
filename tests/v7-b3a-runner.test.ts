@@ -11,7 +11,7 @@ import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
 import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
 import {activateGlobalStop} from "../automation/lib/global-stop.mjs";
 import {WorkOsStore} from "../core/workos/store.js";
-import {MissionRunner} from "../core/workos/runner.js";
+import {MissionRunner, effectiveTestCommand, repositoryPrecondition} from "../core/workos/runner.js";
 import type {RunnerOptions} from "../core/workos/runner.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors, executorsFromEnv, parseReviewOutput} from "../core/workos/executors.js";
@@ -1074,5 +1074,110 @@ describe("LANE-C run workspace archive + prune (default OFF; archive first, veri
     for (const bad of ["0", "-1", "1.5", "abc", "08", "8761", "99999", " 5", "5h"]) expect([bad, retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: bad})]).toEqual([bad, {enabled: false, reason: "INVALID"}]);
     const c = managedSetup();
     for (const bad of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) expect(() => archiver(c, bad)).toThrow("RUN_ARCHIVE_RETENTION_INVALID");
+  });
+});
+
+// //TR: LANE-C C-RUNNER-EXPORTS: runner'ın test-komutu önceliği ve depo/workspace önkoşulu saf fonksiyonlardır (readiness aynı kuralı içe aktarır). Davranış değişmedi: runner aynı fonksiyonları aynı noktada çağırır; her neden kodu hem saf fonksiyonda hem run BLOCK nedeninde doğrulanır.
+describe("LANE-C runner exports: effectiveTestCommand and repositoryPrecondition (pure; the runner uses the very same functions)", () => {
+  const PID = "prj_" + "a".repeat(24), OTHER = "prj_" + "b".repeat(24);
+  const mkdir = (...p: string[]) => { const d = path.join(...p); fs.mkdirSync(d, {recursive: true}); return d; };
+
+  it("effectiveTestCommand: the mission's command beats the project's (?? not ||: an empty mission array still wins); a missing side falls through; both missing is undefined; inputs are never mutated or copied", () => {
+    const m = ["node", "m.mjs"], p = ["node", "p.mjs"];
+    const table: Array<[string, {testCommand?: string[]} | undefined, {testCommand?: string[]} | undefined, string[] | undefined]> = [
+      ["mission wins", {testCommand: m}, {testCommand: p}, m], ["mission only", {testCommand: m}, {}, m], ["project only", {}, {testCommand: p}, p],
+      ["project when mission command absent", {testCommand: undefined}, {testCommand: p}, p], ["project when mission undefined", undefined, {testCommand: p}, p],
+      ["mission when project undefined", {testCommand: m}, undefined, m], ["both empty objects", {}, {}, undefined], ["both undefined", undefined, undefined, undefined],
+      ["empty mission array still wins", {testCommand: []}, {testCommand: p}, []], ["empty project array is returned when mission has none", {}, {testCommand: []}, []]
+    ];
+    for (const [label, mi, pr, expected] of table) expect([label, effectiveTestCommand(mi, pr)]).toEqual([label, expected]);
+    expect(effectiveTestCommand({testCommand: m}, {testCommand: p})).toBe(m); // same reference: no copy
+    expect(m).toEqual(["node", "m.mjs"]); expect(p).toEqual(["node", "p.mjs"]);
+  });
+
+  it("repositoryPrecondition: every reason code, in the runner's order, plus both ok paths; it is pure (writes nothing under the data dir)", () => {
+    const dataDir = mkdir(tmp, "data"), outside = mkdir(tmp, "outside-repo"), managedDir = mkdir(dataDir, "projects", PID, "repo"), otherManaged = mkdir(dataDir, "projects", OTHER, "repo");
+    const file = path.join(tmp, "a-file.txt"); fs.writeFileSync(file, "x");
+    const before = fs.readdirSync(dataDir, {recursive: true}).map(String).sort();
+    // //TR: Windows'ta tmp yolu 8.3 kısa ad (RUNNER~1) olabilir; fonksiyon kanonik yolu döndürür, beklenen değer de gerçek yoldan (native) kurulur.
+    const real = (x: string) => fs.realpathSync.native(x);
+    const cases: Array<[string, Parameters<typeof repositoryPrecondition>[0], ReturnType<typeof repositoryPrecondition>]> = [
+      ["no repository at all", {projectId: PID}, {ok: false, reason: "REPOSITORY_NOT_CONFIGURED"}],
+      ["empty repository object", {projectId: PID, repository: {}}, {ok: false, reason: "REPOSITORY_NOT_CONFIGURED"}],
+      ["empty path, no url", {projectId: PID, repository: {path: ""}}, {ok: false, reason: "REPOSITORY_NOT_CONFIGURED"}],
+      ["url only", {projectId: PID, repository: {url: "https://example.invalid/r.git"}}, {ok: false, reason: "REMOTE_REPO_NOT_SUPPORTED_YET"}],
+      ["empty path with a url", {projectId: PID, repository: {path: "", url: "https://example.invalid/r.git"}}, {ok: false, reason: "REMOTE_REPO_NOT_SUPPORTED_YET"}],
+      ["managed flag but a foreign path", {projectId: PID, repository: {path: outside, managed: true}}, {ok: false, reason: "REPOSITORY_NOT_MANAGED"}],
+      ["managed flag pointing at another project's managed repo", {projectId: PID, repository: {path: otherManaged, managed: true}}, {ok: false, reason: "REPOSITORY_NOT_MANAGED"}],
+      ["managed flag with a malformed project id", {projectId: "prj_x", repository: {path: managedDir, managed: true}}, {ok: false, reason: "REPOSITORY_NOT_MANAGED"}],
+      ["unmanaged path inside the data dir", {projectId: PID, repository: {path: managedDir}}, {ok: false, reason: "REPOSITORY_PATH_FORBIDDEN"}],
+      ["unmanaged path that contains the data dir", {projectId: PID, repository: {path: tmp}}, {ok: false, reason: "REPOSITORY_PATH_FORBIDDEN"}],
+      ["unmanaged path equal to the data dir", {projectId: PID, repository: {path: dataDir}}, {ok: false, reason: "REPOSITORY_PATH_FORBIDDEN"}],
+      ["unmanaged path that does not exist", {projectId: PID, repository: {path: path.join(outside, "missing")}}, {ok: false, reason: "REPOSITORY_PATH_NOT_FOUND"}],
+      ["unmanaged path that is a file", {projectId: PID, repository: {path: file}}, {ok: false, reason: "REPOSITORY_PATH_NOT_FOUND"}],
+      ["managed repo whose directory is missing", {projectId: "prj_" + "c".repeat(24), repository: {path: path.join(dataDir, "projects", "prj_" + "c".repeat(24), "repo"), managed: true}}, {ok: false, reason: "REPOSITORY_PATH_NOT_FOUND"}],
+      ["ok: unmanaged directory outside the data dir", {projectId: PID, repository: {path: outside}}, {ok: true, src: real(outside)}],
+      ["ok: managed repo at its canonical place", {projectId: PID, repository: {path: managedDir, managed: true}}, {ok: true, src: real(managedDir)}],
+      ["ok: unmanaged path with dot-dot segments returns the CANONICAL src", {projectId: PID, repository: {path: `${outside}${path.sep}x${path.sep}..`}}, {ok: true, src: real(outside)}],
+      ["ok: managed path with dot-dot segments returns the CANONICAL src", {projectId: PID, repository: {path: `${managedDir}${path.sep}..${path.sep}repo`, managed: true}}, {ok: true, src: real(managedDir)}],
+      ["a url never overrides a usable path", {projectId: PID, repository: {path: outside, url: "https://example.invalid/r.git"}}, {ok: true, src: real(outside)}]
+    ];
+    for (const [label, project, expected] of cases) expect([label, repositoryPrecondition(project, dataDir)]).toEqual([label, expected]);
+    expect(fs.readdirSync(dataDir, {recursive: true}).map(String).sort()).toEqual(before);
+  });
+
+  it("the runner blocks a run with exactly the function's reason for each failure, before any executor starts; a usable repository goes on to IMPLEMENT", { timeout: T }, async () => {
+    const mkCtx = (repository: Record<string, unknown> | undefined): {c: Ctx; fake: FakeExecutors} => {
+      const base = setup("tA"), dataDir = path.join(tmp, `data-x-${crypto.randomBytes(3).toString("hex")}`);
+      const store = new WorkOsStore(dataDir);
+      const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", testCommand: ["node", "test.mjs"], ...(repository ? {repository: repository as never} : {})});
+      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+      return {c: {...base, store, dataDir, missionId: m.missionId, projectId: p.projectId}, fake: new FakeExecutors(okScript())};
+    };
+    const outside = fs.mkdtempSync(path.join(tmp, "plain-")), missing = path.join(outside, "missing");
+    const cases: Array<[string, Record<string, unknown> | undefined, string]> = [
+      ["no repository", undefined, "REPOSITORY_NOT_CONFIGURED"], ["url", {url: "https://example.invalid/r.git"}, "REMOTE_REPO_NOT_SUPPORTED_YET"],
+      ["managed flag, foreign path", {path: outside, managed: true}, "REPOSITORY_NOT_MANAGED"], ["missing directory", {path: missing}, "REPOSITORY_PATH_NOT_FOUND"]
+    ];
+    for (const [label, repository, reason] of cases) {
+      const {c, fake} = mkCtx(repository);
+      expect([label, repositoryPrecondition(c.store.getProject({tenantId: "tA"}, c.projectId)!, c.dataDir)]).toEqual([label, {ok: false, reason}]);
+      const r = start(c, fake);
+      await runner(c, fake).tick();
+      expect([label, runOf(c, r.runId).status, runOf(c, r.runId).reason, fake.calls.implement]).toEqual([label, "BLOCKED", reason, 0]);
+    }
+    // forbidden: the unmanaged path lies inside the run's own data dir
+    const f = mkCtx(undefined);
+    const inside = path.join(f.c.dataDir, "inside-repo"); fs.mkdirSync(inside, {recursive: true});
+    const fp = f.c.store.createProject({tenantId: "tA", orgId: "o1", name: "F", environmentId: "dev", createdBy: "FOUNDER_LOCAL", testCommand: ["node", "test.mjs"], repository: {path: inside}});
+    const fm = f.c.store.createMission({tenantId: "tA", projectId: fp.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) f.c.store.transitionMission({tenantId: "tA"}, fm.missionId, to, "test", "FOUNDER_LOCAL");
+    const fr = f.c.store.createRun({tenantId: "tA", missionId: fm.missionId, executor: {implementer: "FAKE_IMPLEMENTER", reviewer: "FAKE_REVIEWER"}, createdBy: "FOUNDER_LOCAL"});
+    await runner(f.c, f.fake).tick();
+    expect([f.c.store.getRun({tenantId: "tA"}, fr.runId)!.reason, f.fake.calls.implement]).toEqual(["REPOSITORY_PATH_FORBIDDEN", 0]);
+    // a usable repository passes the precondition and reaches the executor
+    const ok = setup("tA"), okFake = new FakeExecutors(okScript());
+    expect(repositoryPrecondition(ok.store.getProject({tenantId: "tA"}, ok.projectId)!, ok.dataDir)).toEqual({ok: true, src: fs.realpathSync.native(ok.repo)});
+    const okRun = start(ok, okFake);
+    await runner(ok, okFake).tick();
+    expect(okFake.calls.implement).toBeGreaterThanOrEqual(1);
+    expect(runOf(ok, okRun.runId).status).toBe("AWAITING_APPROVAL");
+  });
+
+  it("the runner verifies with the mission's testCommand when both are set, and with the project's when the mission has none", { timeout: T }, async () => {
+    const dataDir = path.join(tmp, `data-tc-${crypto.randomBytes(3).toString("hex")}`), { repo } = makeRepo(crypto.randomBytes(4).toString("hex"));
+    for (const [label, projectCmd, missionCmd, expected] of [["mission passes, project would fail", ["node", "never.mjs"], ["node", "test.mjs"], "AWAITING_APPROVAL"], ["mission would fail, project passes", ["node", "test.mjs"], ["node", "never.mjs"], "BLOCKED"], ["mission none, project passes", ["node", "test.mjs"], undefined, "AWAITING_APPROVAL"]] as const) {
+      const store = new WorkOsStore(path.join(dataDir, label.replace(/\W+/g, "-"))), runtime = path.join(tmp, `rt-${crypto.randomBytes(3).toString("hex")}`);
+      fs.mkdirSync(runtime, {recursive: true});
+      const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: [...projectCmd]});
+      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL", ...(missionCmd ? {testCommand: [...missionCmd]} : {})});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+      const c: Ctx = {store, dataDir: path.join(dataDir, label.replace(/\W+/g, "-")), runtime, stopFile: path.join(runtime, "GLOBAL_STOP.json"), repo, head: "", missionId: m.missionId, projectId: p.projectId};
+      const fake = new FakeExecutors(okScript());
+      const r = start(c, fake);
+      await runner(c, fake, {maxRemediations: 0}).tick();
+      expect([label, runOf(c, r.runId).status]).toEqual([label, expected]);
+    }
   });
 });

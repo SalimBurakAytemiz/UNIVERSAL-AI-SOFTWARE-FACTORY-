@@ -4,6 +4,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 // SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
 import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
+import {ExecutionGate} from "../core/workos/execution-gate.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -238,5 +239,86 @@ describe("PS1A-C1-F3: the owning API process is identified by pid + start time",
     const s3 = await call(b.app, "POST", `/v1/projects/${q2.projectId}/devrun/start`, {});
     expect(s3.statusCode, s3.body).toBe(200);
     await call(b.app, "POST", `/v1/projects/${q2.projectId}/devrun/stop`, {});
+  }, T);
+});
+
+// //TR: B-DEVRUN-RESTART-SAFE: stop() çıkışı süre içinde göremezse çalıştırma STOPPED sayılmaz; restart ikinci bir dev sunucusu BAŞLATMAZ (409 DEVRUN_STOP_TIMEOUT). Çıkış olayı gecikmeli verilen sahte sandbox sağlayıcısı kullanılır (çıkışı geciktiren: gerçek süreç ölür, yönetici bunu geç öğrenir).
+describe("B-DEVRUN-RESTART-SAFE: a stop that cannot confirm the exit never allows a second dev server", () => {
+  const SCRIPT = "require('http').createServer((q, r) => r.end('ok')).listen(+process.env.PORT, '127.0.0.1');";
+  const slowExitProvider = (delayMs: number, counter: {spawns: number}) => ({
+    ...TEST_HOST_PASSTHROUGH_SANDBOX, id: "TEST_ONLY_SLOW_EXIT",
+    spawn: (command: string, args: string[], o: cp.SpawnOptions) => {
+      counter.spawns++;
+      const real = cp.spawn(command, args, o);
+      return new Proxy(real, {get: (t, k) => {
+        if (k === "once" || k === "on") return (ev: string, fn: (...a: unknown[]) => void) => ev === "exit" ? t.once("exit", (...x: unknown[]) => { setTimeout(() => fn(...x), delayMs); }) : t.once(ev, fn);
+        const v = (t as unknown as Record<string | symbol, unknown>)[k];
+        return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(t) : v;
+      }}) as unknown as cp.ChildProcess;
+    }
+  });
+  const manager = (dataDir: string, gate: ExecutionGate, stopWaitMs?: number) => new DevRunManager({executionGate: gate, studio: new ProjectStudio({dataDir, envPolicyFile: ENV_POLICY}), envPolicyFile: ENV_POLICY,
+    globalStopFile: path.join(tmp, "m-runtime", "GLOBAL_STOP.json"), stopPollMs: 100, probeIntervalMs: 100, ...(stopWaitMs !== undefined ? {stopWaitMs} : {})});
+  const settle = async (m: DevRunManager, id: string) => { for (let i = 0; i < 100 && m.isActive(id); i++) await sleep(100); };
+
+  it("restart refuses with 409 DEVRUN_STOP_TIMEOUT, spawns nothing, keeps the run active with stopTimedOut, and settles to STOPPED when the exit finally arrives", async () => {
+    const {app, dataDir} = mk(), counter = {spawns: 0};
+    const p = await createProject(app, {template: "web-node", devCommand: ["node", "-e", SCRIPT]});
+    const m = manager(dataDir, new ExecutionGate(slowExitProvider(900, counter)), 150);
+    const stateFile = path.join(dataDir, "projects", p.projectId, "devrun", "state.json");
+    try {
+      const v1 = await m.start(p);
+      expect(v1.status).toBe("RUNNING"); expect(counter.spawns).toBe(1);
+      const pid1 = v1.pid!;
+      const err: unknown = await m.restart(p).then(() => null, e => e);
+      expect(err).toBeInstanceOf(StudioError);
+      expect(err).toMatchObject({code: "DEVRUN_STOP_TIMEOUT", status: 409});
+      expect(counter.spawns).toBe(1);                       // no second dev server
+      expect(m.isActive(p.projectId)).toBe(true);           // not claimed STOPPED while the tree may be alive
+      const v = m.view(p);
+      expect(v).toMatchObject({status: "RUNNING", pid: pid1, stopTimedOut: true});
+      expect(JSON.parse(fs.readFileSync(stateFile, "utf8")).stopTimedOut).toBe(true);
+      const again: unknown = await m.start(p).then(() => null, e => e);
+      expect(again).toMatchObject({code: "DEVRUN_ALREADY_RUNNING", status: 409});
+      expect(counter.spawns).toBe(1);
+      await settle(m, p.projectId);                         // the delayed exit event arrives
+      expect(m.isActive(p.projectId)).toBe(false);
+      const done = m.view(p);
+      expect(done.status).toBe("STOPPED"); expect(done.reason).toBe("RESTART_REQUESTED"); expect("stopTimedOut" in done).toBe(false);
+      expect(pidAlive(pid1)).toBe(false); expect(counter.spawns).toBe(1);
+    } finally { await m.stopAll("CLEANUP"); await settle(m, p.projectId); }
+  }, T);
+
+  it("an explicit stop times out the same honest way; stopAll never throws and still lists the run; a later stop succeeds", async () => {
+    const {app, dataDir} = mk(), counter = {spawns: 0};
+    const p = await createProject(app, {template: "web-node", devCommand: ["node", "-e", SCRIPT]});
+    const m = manager(dataDir, new ExecutionGate(slowExitProvider(900, counter)), 150);
+    try {
+      await m.start(p);
+      expect(await m.stopDetailed(p.projectId, "STOP_REQUESTED")).toBe("TIMEOUT");
+      const err: unknown = await m.stop(p.projectId).then(() => null, e => e);
+      expect(err).toMatchObject({code: "DEVRUN_STOP_TIMEOUT", status: 409});
+      expect(await m.stopAll("GLOBAL_STOP_ACTIVE")).toEqual([p.projectId]);   // does not reject
+      expect(m.view(p)).toMatchObject({status: "RUNNING", stopTimedOut: true});
+      await settle(m, p.projectId);
+      expect(m.view(p).status).toBe("STOPPED");
+      expect(await m.stopDetailed(p.projectId)).toBe("NOT_ACTIVE");
+      expect(await m.stop(p.projectId)).toBe(false);
+    } finally { await m.stopAll("CLEANUP"); await settle(m, p.projectId); }
+  }, T);
+
+  it("the normal path is unchanged: restart replaces the process (old one dead, new pid), stop reports true then false", async () => {
+    const {app, dataDir} = mk();
+    const p = await createProject(app, {template: "web-node", devCommand: ["node", "-e", SCRIPT]});
+    const m = manager(dataDir, testExecutionGate());
+    try {
+      const v1 = await m.start(p); expect(v1.status).toBe("RUNNING");
+      const v2 = await m.restart(p);
+      expect(v2.status).toBe("RUNNING"); expect(v2.pid).not.toBe(v1.pid); expect(pidAlive(v1.pid!)).toBe(false);
+      expect("stopTimedOut" in v2).toBe(false);
+      expect(await m.stop(p.projectId)).toBe(true);
+      expect(m.view(p).status).toBe("STOPPED");
+      expect(await m.stop(p.projectId)).toBe(false);
+    } finally { await m.stopAll("CLEANUP"); }
   }, T);
 });
