@@ -1596,3 +1596,144 @@ describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
     expect(check({idea: "x".repeat(1000)}).ok).toBe(true);
   });
 });
+
+// //TR: LANE-A first-delivery: koşu hazırlığı ve bloklu koşu nedenleri — kayıttan okunan eksikler kesin uyarıdır, "kayıtlı" garanti vermez, okunamayan kayıt UNKNOWN der; bilinen BLOK nedenleri açıklanır.
+describe("LANE-A run readiness and block reasons", () => {
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const get = (proj: any, mis: any, runs: any[] = []) => (p: string) => {
+    if (p === "/v1/projects") return {projects: proj === null ? [] : [proj]};
+    if (p === "/v1/missions") return {missions: [mis]};
+    if (p === `/v1/missions/${MID}`) return {mission: mis, tasks: []};
+    if (p.startsWith("/v1/work-runs/")) { const r = runs.find(x => p === `/v1/work-runs/${x.runId}`); return r ? {workRun: r} : undefined; }
+    if (p.startsWith("/v1/work-runs")) return {workRuns: runs};
+    if (p.startsWith("/v1/evidence")) return {evidence: []};
+    return undefined;
+  };
+  const render = async (proj: any, mis: any, runs: any[] = []) => {
+    const c = await mkCtx({get: get(proj, mis, runs), lang: "en"});
+    forms.selection.missionId = MID;
+    const view = await load(rend, "views", "work.js");
+    return {...c, root: mount(c.doc, await view.render(c.ctx))};
+  };
+  const readiness = (root: N) => byId(root, "run-readiness");
+
+  it("runReadiness: missing repository / remote url / missing test command are definite blockers; recorded makes no promise; unreadable is UNKNOWN", async () => {
+    const c = await load(rend, "work-core.js");
+    const P = (x: any = {}) => ({repositoryPath: "C:\\r", remoteRepository: false, testCommandSet: false, ...x});
+    expect(c.runReadiness({project: P(), mission: {testCommandSet: true}})).toEqual({repository: "RECORDED", testCommand: "RECORDED", blockers: []});
+    expect(c.runReadiness({project: P({testCommandSet: true}), mission: {testCommandSet: false}}).testCommand).toBe("RECORDED"); // proje komutu da sayılır (runner mission ?? project)
+    expect(c.runReadiness({project: P({repositoryPath: null}), mission: {testCommandSet: true}})).toEqual({repository: "MISSING", testCommand: "RECORDED", blockers: ["REPOSITORY_NOT_CONFIGURED"]});
+    expect(c.runReadiness({project: P({repositoryPath: null, remoteRepository: true}), mission: {testCommandSet: true}}).blockers).toEqual(["REMOTE_REPO_NOT_SUPPORTED_YET"]);
+    expect(c.runReadiness({project: P(), mission: {testCommandSet: false}}).blockers).toEqual(["TEST_COMMAND_NOT_CONFIGURED"]);
+    expect(c.runReadiness({project: P({repositoryPath: null}), mission: {testCommandSet: false}}).blockers).toEqual(["REPOSITORY_NOT_CONFIGURED", "TEST_COMMAND_NOT_CONFIGURED"]);
+    expect(c.runReadiness({project: null, mission: {testCommandSet: true}})).toEqual({repository: "UNKNOWN", testCommand: "RECORDED", blockers: []});
+    expect(c.runReadiness({project: null, mission: {testCommandSet: false}})).toEqual({repository: "UNKNOWN", testCommand: "UNKNOWN", blockers: []}); // proje okunamadı: test komutu yokluğu kesin değil
+    expect(c.runReadiness({project: P(), mission: null})).toEqual({repository: "RECORDED", testCommand: "UNKNOWN", blockers: []});
+    expect(c.runReasonHintKey("REPOSITORY_NOT_CONFIGURED")).toBe("run.reason.REPOSITORY_NOT_CONFIGURED");
+    for (const k of ["TEST_COMMAND_NOT_CONFIGURED", "REMOTE_REPO_NOT_SUPPORTED_YET", "PROJECT_NOT_FOUND", "MISSION_NOT_FOUND"]) expect(c.runReasonHintKey(k), k).toBe(`run.reason.${k}`);
+    for (const k of ["SANDBOX_UNAVAILABLE", "SOMETHING_ELSE", "", null, undefined, 5, "__proto__"]) expect(c.runReasonHintKey(k as any), String(k)).toBeNull();
+  });
+  it("mappers carry only booleans for the test command and remote repository, never the command or URL", async () => {
+    const m = await load(rend, "model.js"), c = await load(rend, "work-core.js");
+    const p = m.mapProjects({projects: [{projectId: PID, name: "A", repository: {url: "https://x/y.git"}, testCommand: ["node", "--test"]}, {projectId: "prj_" + "b".repeat(24), name: "B", repository: {path: "C:\\r"}}]}).items;
+    expect(p[0]).toMatchObject({repositoryPath: null, remoteRepository: true, testCommandSet: true});
+    expect(p[1]).toMatchObject({repositoryPath: "C:\\r", remoteRepository: false, testCommandSet: false});
+    expect(JSON.stringify(p)).not.toContain("--test"); expect(JSON.stringify(p)).not.toContain("x/y.git");
+    expect(c.mapMissionDetail({mission: mission({testCommand: ["npm", "test"]}), tasks: []}).mission.testCommandSet).toBe(true);
+    expect(c.mapMissionDetail({mission: mission({testCommand: []}), tasks: []}).mission.testCommandSet).toBe(false);
+    expect(c.mapMissionDetail({mission: mission(), tasks: []}).mission.testCommandSet).toBe(false);
+  });
+  it("shows the missing repository and test command before a run, only for startable missions, without sending anything", async () => {
+    const noRepo = await render(project({repository: null}), mission({status: "AUTHORIZED"}));
+    expect(readiness(noRepo.root)!.dataset.runReadiness).toBe("BLOCKERS");
+    expect(readiness(noRepo.root)!.dataset.runBlockers).toBe("REPOSITORY_NOT_CONFIGURED,TEST_COMMAND_NOT_CONFIGURED");
+    expect(text(readiness(noRepo.root)!)).toContain("A run would stop at REPOSITORY_NOT_CONFIGURED");
+    expect(text(readiness(noRepo.root)!)).toContain("A run would stop at TEST_COMMAND_NOT_CONFIGURED");
+    expect(noRepo.calls.post).toEqual([]);
+    const ok = await render(project(), mission({status: "AUTHORIZED", testCommand: ["node", "--test"]}));
+    expect(readiness(ok.root)!.dataset.runReadiness).toBe("RECORDED");
+    expect(text(readiness(ok.root)!)).toContain("does not guarantee");
+    expect(text(readiness(ok.root)!)).not.toContain("--test");
+    const unk = await render(null, mission({status: "AUTHORIZED"}));
+    expect(readiness(unk.root)!.dataset.runReadiness).toBe("UNKNOWN");
+    expect(text(readiness(unk.root)!)).toContain("readiness is unknown");
+    const draft = await render(project({repository: null}), mission({status: "DRAFT"}));
+    expect(readiness(draft.root)).toBeNull(); // başlatılamayan mission'da not yok
+    const remote = await render(project({repository: {url: "https://x/y.git"}}), mission({status: "AUTHORIZED", testCommand: ["node"]}));
+    expect(readiness(remote.root)!.dataset.runBlockers).toBe("REMOTE_REPO_NOT_SUPPORTED_YET");
+  });
+  it("run cards explain known block reasons next to the code, keep the sandbox text, and show unknown reasons verbatim", async () => {
+    const mk = (reason: string) => [{runId: RUN, missionId: MID, status: "BLOCKED", reason}];
+    for (const [reason, expected] of [["REPOSITORY_NOT_CONFIGURED", "no code repository attached"], ["TEST_COMMAND_NOT_CONFIGURED", "no usable test command"], ["REMOTE_REPO_NOT_SUPPORTED_YET", "remote repository address"], ["SANDBOX_UNAVAILABLE", "no verified sandbox"]] as const) {
+      const o = await render(project(), mission({status: "EXECUTING"}), mk(reason));
+      const cell = byData(o.root, "runReason", reason)[0];
+      expect(cell, reason).toBeDefined();
+      expect(text(cell), reason).toContain(`${reason} —`); expect(text(cell), reason).toContain(expected);
+    }
+    const unk = await render(project(), mission({status: "EXECUTING"}), mk("SOMETHING_NEW"));
+    expect(text(byData(unk.root, "runReason", "SOMETHING_NEW")[0])).toBe("SOMETHING_NEW");
+  });
+  it("readiness and reason strings exist in en and tr", async () => {
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+    const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("run.ready.") || /^run\.reason\.(REPOSITORY|TEST_COMMAND|REMOTE|PROJECT|MISSION)/.test(k));
+    expect(keys.length).toBe(11);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
+  });
+});
+
+// //TR: LANE-A first-delivery: koşu adımları tablosu — yalnız sunucunun kaydettiği olgular (adım, döngü, çıkış kodu, süre, zaman aşımı); çıkış kodu doğrulama sonucu değildir, eksik değer uydurulmaz.
+describe("LANE-A run steps table", () => {
+  const ev = (extra: any = {}) => ({evidenceId: "evd_" + "1".repeat(24), step: "VERIFY", cycle: 0, kind: "VERIFY_TESTS", argv: ["node", "--test"], startedAt: "2026-10-21T10:00:00.000Z", endedAt: "2026-10-21T10:00:03.250Z", exitCode: 0, logPath: null, logSha256: null, ...extra});
+  const runOf = (evidence: any[]) => ({runId: RUN, missionId: MID, status: "RUNNING", step: "VERIFY", evidence});
+  const render = async (evidence: any[]) => {
+    const get = (p: string) => p === "/v1/projects" ? {projects: [project()]} : p === "/v1/missions" ? {missions: [mission({status: "EXECUTING"})]} : p === `/v1/missions/${MID}` ? {mission: mission({status: "EXECUTING"}), tasks: []}
+      : p === `/v1/work-runs/${RUN}` ? {workRun: runOf(evidence)} : p.startsWith("/v1/work-runs") ? {workRuns: [runOf(evidence)]} : p.startsWith("/v1/evidence") ? {evidence: []} : undefined;
+    const c = await mkCtx({get, lang: "en"});
+    forms.selection.missionId = MID;
+    const view = await load(rend, "views", "work.js");
+    return {...c, root: mount(c.doc, await view.render(c.ctx))};
+  };
+  const rows = (root: N) => byData(root, "runStepRow");
+
+  it("maps only valid recorded facts: step code, cycle, integer exit code, timeout flag and ISO times; invalid values stay null", async () => {
+    const c = await load(rend, "work-core.js");
+    const m = c.mapWorkRun(runOf([ev(), ev({evidenceId: "evd_" + "2".repeat(24), step: "verify", cycle: -1, exitCode: 1.5, startedAt: "x", endedAt: null, timedOut: "yes"}), "evd_" + "3".repeat(24)])).evidence;
+    expect(m[0]).toMatchObject({kind: "VERIFY_TESTS", step: "VERIFY", cycle: 0, exitCode: 0, timedOut: false, startedAt: "2026-10-21T10:00:00.000Z", endedAt: "2026-10-21T10:00:03.250Z"});
+    expect(m[1]).toMatchObject({step: null, cycle: null, exitCode: null, timedOut: false, startedAt: null, endedAt: null});
+    expect(m[2]).toMatchObject({kind: null}); // dize kimlik: adım bilgisi yok
+    expect(c.evidenceDurationMs({startedAt: "2026-10-21T10:00:00.000Z", endedAt: "2026-10-21T10:00:03.250Z"})).toBe(3250);
+    for (const bad of [{startedAt: "2026-10-21T10:00:05.000Z", endedAt: "2026-10-21T10:00:00.000Z"}, {startedAt: null, endedAt: "2026-10-21T10:00:00.000Z"}, {startedAt: "x", endedAt: "y"}, null, undefined]) expect(c.evidenceDurationMs(bad as any)).toBeNull();
+    expect(c.runStepRows(m).map((r: any) => r.step)).toEqual(["VERIFY"]); // yalnız adım/zaman taşıyan kayıtlar
+    expect(c.runStepRows(null as any)).toEqual([]);
+  });
+  it("renders one row per step record in recording order with exit code, start time and duration, and the not-a-verification-result note", async () => {
+    const o = await render([ev({evidenceId: "evd_" + "1".repeat(24), step: "IMPLEMENT", kind: "EXECUTOR_RUN", exitCode: 0}), ev({evidenceId: "evd_" + "2".repeat(24), step: "VERIFY", exitCode: 1}), ev({evidenceId: "evd_" + "3".repeat(24), step: "VERIFY", cycle: 1, exitCode: null, timedOut: true, endedAt: null})]);
+    const r = rows(o.root);
+    expect(r.map(n => n.textContent.includes("IMPLEMENT") ? "IMPLEMENT" : "VERIFY")).toEqual(["IMPLEMENT", "VERIFY", "VERIFY"]);
+    expect(r.map(n => n.dataset.runStepExit)).toEqual(["0", "1", ""]);
+    expect(text(r[0])).toContain("exit 0"); expect(text(r[0])).toContain("3.3 s");
+    expect(text(r[1])).toContain("exit 1");
+    expect(r[2].dataset.runStepTimedOut).toBe("1"); expect(text(r[2])).toContain("timed out"); expect(text(r[2])).not.toContain("exit");
+    expect(text(r[2])).toContain("—"); // süre bilinmiyor
+    const t = text(byData(o.root, "runSteps", RUN)[0].parent!);
+    expect(t).toContain("not a verification result");
+    for (const row of r) expect(text(row)).not.toMatch(/pass|success|ok\b/i); // satırlar başarı/geçti demez: yalnız bildirilen çıkış kodu
+  });
+  it("shows no table when no evidence record carries step data, and renders hostile text as text", async () => {
+    const none = await render([]);
+    expect(rows(none.root)).toEqual([]); expect(byData(none.root, "runSteps")).toEqual([]);
+    const strings = await render(["evd_" + "4".repeat(24)] as any);
+    expect(byData(strings.root, "runSteps")).toEqual([]);
+    const odd = await render([ev({kind: "<img src=x onerror=alert(1)>"})]);
+    expect(rows(odd.root).length).toBe(1);
+    expect(all(odd.root).some(n => n.tagName === "IMG")).toBe(false);
+  });
+  it("run steps strings exist in en and tr", async () => {
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+    const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("run.steps."));
+    expect(keys.length).toBe(12);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
+  });
+});
