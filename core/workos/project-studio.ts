@@ -445,7 +445,7 @@ export class ProjectStudio {
   // Run nesnelerini yönetilen depoya getirir: run çalışma alanının nesne dizini yalnız GIT_ALTERNATE_OBJECT_DIRECTORIES olarak okunur (çalışma alanının config/hook'ları hiç yüklenmez),
   // run.headSha'dan erişilebilen nesneler pack-objects ile yönetilen deponun kendi nesne deposuna yazılır ve refs/uasco/runs/<runId> ad alanlı ref'i kurulur. Git, izole global/system
   // config + boş hooksPath (spawnGitSync) ve core.fsmonitor=false ile çalışır; ls-tree/cat-file filtre/textconv uygulamaz. Bağlantı, alternates OLMADAN yeniden doğrulanır.
-  private importRunObjects(root: string, run: WorkRun, head: string): void {
+  private importRunObjects(root: string, run: WorkRun, head: string, ref = `refs/uasco/runs/${run.runId}`): void {
     const neutral = ["-c", "core.fsmonitor=false", "-c", `core.attributesFile=${this.emptyAttributesFile()}`];
     const local = this.gitOk(root, [...neutral, "cat-file", "-t", head]) === "commit" && this.git(root, [...neutral, "rev-list", "--objects", "--quiet", head, "--"]).status === 0;
     if (!local) {
@@ -459,23 +459,24 @@ export class ProjectStudio {
       if (pk.status !== 0) throw new StudioError("DELIVERY_SOURCE_UNAVAILABLE", 409);
       if (this.git(root, [...neutral, "rev-list", "--objects", "--quiet", head, "--"]).status !== 0) throw new StudioError("DELIVERY_SOURCE_UNAVAILABLE", 409);
     }
-    if (this.git(root, [...neutral, "update-ref", `refs/uasco/runs/${run.runId}`, head]).status !== 0) throw new StudioError("DELIVERY_SOURCE_UNAVAILABLE", 409);
+    if (this.git(root, [...neutral, "update-ref", ref, head]).status !== 0) throw new StudioError("DELIVERY_SOURCE_UNAVAILABLE", 409);
   }
-  // //TR: LANE-C çalışma alanı arşivi (cross-lane touch, yalnız EKLEME): run'ın commit'ini importRunObjects ile (çalışma alanının config/hook'ları yüklenmeden) yönetilen depoya getirir ve refs/uasco/runs/<runId> ref'ini kurar; başarıda run.headSha'yı döndürür, aksi halde StudioError fırlatır. Çalışma alanı silinmeden önce isRunArchived ile bağımsız doğrulanır.
-  archiveRunObjects(project: Project, run: WorkRun): string {
-    const head = run.headSha;
-    if (!head || !SHA.test(head) || run.projectId !== project.projectId) throw new StudioError("ARCHIVE_SOURCE_UNAVAILABLE", 409);
-    this.importRunObjects(this.repoRoot(project), run, head);
-    return head;
+  // //TR: LANE-C çalışma alanı arşivi (cross-lane touch, yalnız EKLEME): run'ın BİR commit'ini importRunObjects ile (çalışma alanının config/hook'ları yüklenmeden) yönetilen depoya getirir ve verilen ref'i kurar. Ref yalnız bu run'a ait iki ad alanından biri olabilir: refs/uasco/runs/<runId> (teslim ref'i) veya refs/uasco/run-commits/<runId>/<sha>. Başarısızlıkta StudioError fırlatır.
+  archiveRunCommit(project: Project, run: WorkRun, sha: string, ref: string): void {
+    if (!this.archiveRefOk(project, run, sha, ref)) throw new StudioError("ARCHIVE_SOURCE_UNAVAILABLE", 409);
+    this.importRunObjects(this.repoRoot(project), run, sha, ref);
   }
-  // //TR: Arşiv doğrulaması (alternates OLMADAN): ref run.headSha'ya eşit, nesne bir commit ve ondan erişilebilen her nesne yönetilen depoda var. Yalnız okur.
-  isRunArchived(project: Project, run: WorkRun): boolean {
-    const head = run.headSha;
-    if (!head || !SHA.test(head) || run.projectId !== project.projectId) return false;
+  // //TR: Arşiv doğrulaması (alternates OLMADAN): ref sha'ya eşit, nesne bir commit ve ondan erişilebilen her nesne yönetilen depoda var. Yalnız okur; çalışma alanı silinmeden önceki SON kapıdır.
+  isRunCommitArchived(project: Project, run: WorkRun, sha: string, ref: string): boolean {
+    if (!this.archiveRefOk(project, run, sha, ref)) return false;
     let root: string; try { root = this.repoRoot(project); } catch { return false; }
     const neutral = ["-c", "core.fsmonitor=false", "-c", `core.attributesFile=${this.emptyAttributesFile()}`];
-    if (this.gitOk(root, [...neutral, "rev-parse", "--verify", "--quiet", `refs/uasco/runs/${run.runId}^{commit}`]) !== head) return false;
-    return this.gitOk(root, [...neutral, "cat-file", "-t", head]) === "commit" && this.git(root, [...neutral, "rev-list", "--objects", "--quiet", head, "--"]).status === 0;
+    if (this.gitOk(root, [...neutral, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`]) !== sha) return false;
+    return this.gitOk(root, [...neutral, "cat-file", "-t", sha]) === "commit" && this.git(root, [...neutral, "rev-list", "--objects", "--quiet", sha, "--"]).status === 0;
+  }
+  private archiveRefOk(project: Project, run: WorkRun, sha: string, ref: string): boolean {
+    return SHA.test(sha) && /^run_[0-9a-f]{24}$/.test(run.runId) && run.projectId === project.projectId
+      && (ref === `refs/uasco/runs/${run.runId}` || ref === `refs/uasco/run-commits/${run.runId}/${sha}`);
   }
   // //TR: Deterministik teslim artefaktı: run.headSha ağacındaki her blob (sıralı; sabit zaman damgası 0; mod yalnız 0644/0755/symlink; stored/sıkıştırmasız) "source/" altında +
   // README.md + VERIFICATION_STATUS.json (makine yolu/zaman yok; Founder kabulü İÇİNDE DEĞİL). exportArtifactHash = arşiv baytlarının sha256'sı; aynı run yeniden hazırlanırsa aynı bayt/hash.
