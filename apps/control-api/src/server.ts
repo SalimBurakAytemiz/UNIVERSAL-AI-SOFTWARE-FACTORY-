@@ -58,6 +58,7 @@ import {registerIntakeRoutes} from "./routes/intake.js";
 import {registerPlanRoutes} from "./routes/plan.js";
 import {registerFlowRoutes} from "./routes/flow.js";
 import {registerTaskRoutes} from "./routes/tasks.js";
+import {registerTaskRunRoutes} from "./routes/task-runs.js";
 
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
@@ -239,6 +240,7 @@ registerIntakeRoutes(app,laneDeps);
 registerPlanRoutes(app,laneDeps);
 registerFlowRoutes(app,laneDeps);
 registerTaskRoutes(app,laneDeps);
+registerTaskRunRoutes(app,laneDeps);
 
 // //TR: B3a mission runner route'ları: aynı token hook'u ve aynı yazma kapısı sırası (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400). Run'lar aynı Work OS journal'ındadır; eski /v1/runs route'larına dokunulmaz.
 const validWorkRunId=(x:unknown)=>typeof x==="string"&&/^run_[0-9a-f]{24}$/.test(x);

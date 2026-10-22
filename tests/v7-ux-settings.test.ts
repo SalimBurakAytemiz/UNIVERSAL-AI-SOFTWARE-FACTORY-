@@ -415,3 +415,73 @@ describe("UI-114 settings state legend (static, state-free)", () => {
     for (const w of ["innerHTML", "localStorage", "sessionStorage", "indexedDB", "Math.random", "setTimeout", "setInterval"]) expect(src.includes(w), w).toBe(false);
   });
 });
+
+// //TR: LANE-A PQ-004: tema kontrast laboratuvarı — oranlar stil sayfasındaki token değerlerinden hesaplanır; okunamayan değer UNKNOWN olur, hiçbir oran elle yazılmaz.
+describe("PQ-004 theme contrast lab (read-only)", () => {
+  const css = fs.readFileSync(path.join(rend, "styles.css"), "utf8");
+  const rootBlock = /:root\{([\s\S]*?)\n\}/.exec(css)![1];
+  const tokens: Record<string, string> = {};
+  for (const m of rootBlock.matchAll(/(--[A-Za-z0-9_-]+):([^;]+);/g)) tokens[m[1]] = m[2].trim();
+  const lumRef = (hex: string) => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(s => s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  const refRatio = (a: string, b: string) => { const x = lumRef(a), y = lumRef(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+
+  it("computes known WCAG ratios and grade boundaries", async () => {
+    const c = await load("contrast-core.js");
+    expect(c.contrastRatio(c.parseHex("#000"), c.parseHex("#ffffff"))).toBeCloseTo(21, 5);
+    expect(c.contrastRatio(c.parseHex("#777777"), c.parseHex("#ffffff"))).toBeCloseTo(4.48, 2);
+    expect(c.gradeContrast(4.5, "text")).toBe("AA");
+    expect(c.gradeContrast(4.49, "text")).toBe("FAIL");
+    expect(c.gradeContrast(7, "text")).toBe("AAA");
+    expect(c.gradeContrast(3, "ui")).toBe("AA");
+    expect(c.gradeContrast(2.99, "ui")).toBe("FAIL");
+    expect(c.gradeContrast(NaN, "text")).toBe("UNKNOWN");
+  });
+  it("rejects non-opaque or malformed colors (no invented ratio) and resolves var() aliases without looping", async () => {
+    const c = await load("contrast-core.js");
+    for (const v of ["rgba(1,2,3,.5)", "red", "#12", "#gggggg", "", null, undefined, 5]) expect(c.parseHex(v)).toBeNull();
+    expect(c.resolveToken({"--a": "var(--b)", "--b": "#ABCDEF"}, "--a")).toBe("#ABCDEF");
+    expect(c.resolveToken({"--a": "var(--b)", "--b": "var(--a)"}, "--a")).toBeNull();
+    expect(c.resolveToken({}, "--a")).toBeNull();
+    const rows = c.computeContrastRows({});
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r: any) => r.ratio === null && r.level === "UNKNOWN")).toBe(true);
+    expect(c.readTokens({defaultView: {getComputedStyle: () => { throw new Error("x"); }}, documentElement: {}})).toEqual({});
+  });
+  it("rows computed from the real styles.css :root tokens match an independent computation and none is UNKNOWN", async () => {
+    const c = await load("contrast-core.js");
+    const rows = c.computeContrastRows(tokens);
+    for (const r of rows) {
+      expect(r.level, r.key).not.toBe("UNKNOWN");
+      const f = c.resolveToken(tokens, r.fg), b = c.resolveToken(tokens, r.bg);
+      expect(r.ratio, r.key).toBeCloseTo(refRatio(f, b), 6);
+    }
+    expect(rows.find((r: any) => r.key === "text-bg").level).toBe("AAA");
+  });
+  it("renders one row per pair with a result label, makes no requests and shows UNKNOWN when tokens cannot be read", async () => {
+    const settings = await load("views", "settings.js"), c = await load("contrast-core.js");
+    const {ctx, calls} = await mkCtx();
+    const before = calls.length;
+    const root = settings.contrastPanel(ctx, tokens) as N;
+    const rows = within(root).filter(n => n.dataset.contrastRow);
+    expect(rows.length).toBe(c.CONTRAST_PAIRS.length);
+    expect(rows.find(n => n.dataset.contrastRow === "text-bg")!.dataset.contrastLevel).toBe("AAA");
+    expect(text(root)).toContain("AAA");
+    const blind = settings.contrastPanel(ctx, {}) as N;
+    const unk = within(blind).filter(n => n.dataset.contrastRow);
+    expect(unk.every(n => n.dataset.contrastLevel === "UNKNOWN")).toBe(true);
+    expect(text(blind)).toContain("—");
+    expect(calls.length).toBe(before);
+    const dflt = settings.contrastPanel(ctx) as N; // sahte DOM'da defaultView yok: okunamaz -> UNKNOWN
+    expect(within(dflt).filter(n => n.dataset.contrastLevel === "UNKNOWN").length).toBe(c.CONTRAST_PAIRS.length);
+  });
+  it("is part of the Settings view with en/tr keys present", async () => {
+    const settings = await load("views", "settings.js"), en = await load("locales", "en.js"), tr = await load("locales", "tr.js");
+    const {ctx} = await mkCtx({}, "en");
+    const root = await settings.render(ctx) as N;
+    expect(byId(root, "settings-contrast")).not.toBeNull();
+    const keys = Object.keys(en.default ?? en.EN ?? en).filter(k => k.startsWith("settings.contrast."));
+    expect(keys.length).toBeGreaterThanOrEqual(13);
+    const trAll = tr.default ?? tr.TR ?? tr;
+    for (const k of keys) expect(trAll[k], k).toBeTruthy();
+  });
+});

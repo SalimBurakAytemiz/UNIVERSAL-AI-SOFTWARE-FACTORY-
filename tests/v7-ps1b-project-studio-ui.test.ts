@@ -217,6 +217,11 @@ describe("PS-1B IPC wiring (main.mjs, preload.mjs) is static and narrow", () => 
     expect(fn(ev(rendererUrl, {}))).toBe(false);
     expect(fn({sender: win.webContents})).toBe(false);
     expect(mk(null)(ev(rendererUrl))).toBe(false);
+    // Node's pathToFileURL encodes "~" as %7E while Chromium keeps "~" (8.3 short paths such as C:\Users\RUNNER~1).
+    const shortUrl = "file:///C:/Users/RUNNER%7E1/AppData/Local/Temp/UASCO/resources/app/apps/desktop/renderer/index.html";
+    const fnShort = new Function("controlWindow", "rendererUrl", "function trustedSender(event){" + m![1] + "}\nreturn trustedSender;")(win, shortUrl) as (e: any) => boolean;
+    for (const u of [shortUrl, shortUrl.replace("%7E", "~"), shortUrl.replace("%7E", "~") + "#/work"]) expect(fnShort(ev(u)), u).toBe(true);
+    for (const u of [shortUrl.replace("%7E", "~") + "?x=1", shortUrl.replace("RUNNER%7E1", "OTHER~1"), shortUrl.replace("%7E", "~").replace("index.html", "x.html"), "file://evil/C:/Users/RUNNER~1/AppData/Local/Temp/UASCO/resources/app/apps/desktop/renderer/index.html", shortUrl.replace("%7E1", "%E0%A4%A"), "https://evil.invalid/C:/Users/RUNNER~1/AppData/Local/Temp/UASCO/resources/app/apps/desktop/renderer/index.html"]) expect(fnShort(ev(u)), u).toBe(false);
   });
   it("CSP is unchanged and index.html did not change structure", () => {
     const html = read(rend, "index.html");
@@ -1898,6 +1903,24 @@ describe("LANE-A first-delivery flow stepper (fake DOM)", () => {
     expect(all(bad.panel!).filter(n => n.dataset.flowStage).length).toBe(0);
     expect(text(bad.panel!)).not.toContain("Bitti");
   });
+  it("flow taskRuns: absent field shows nothing, null says unknown, a valid summary is shown, an impossible one is treated as unknown", async () => {
+    const core = await load(rend, "project-core.js");
+    const base = flowBody(["DONE", "DONE", "ACTIVE", "NOT_STARTED", "NOT_STARTED"]);
+    const withTr = (taskRuns: any) => ({flow: {...base.flow, ...(taskRuns === "ABSENT" ? {} : {taskRuns})}});
+    expect(core.mapFlow(withTr("ABSENT")).flow.taskRuns).toBeUndefined();
+    expect(core.mapFlow(withTr(null)).flow.taskRuns).toBeNull();
+    expect(core.mapFlow(withTr({tasksWithRuns: 2, tasks: 5})).flow.taskRuns).toEqual({tasksWithRuns: 2, tasks: 5});
+    for (const bad of [{tasksWithRuns: 6, tasks: 5}, {tasksWithRuns: -1, tasks: 5}, {tasksWithRuns: "2", tasks: 5}, {tasks: 5}, 3, "x"]) expect(core.mapFlow(withTr(bad)).flow.taskRuns, JSON.stringify(bad)).toBeNull();
+    const shown = await openWs({get: projectsGet({[FLOW]: withTr({tasksWithRuns: 2, tasks: 5})}), lang: "en"});
+    const row = all(byId(shown.root, "studio-ov-flow")!).find(n => n.dataset.flowTaskRuns)!;
+    expect(row.dataset.flowTaskRuns).toBe("KNOWN"); expect(text(row)).toContain("2 of 5 planned tasks have a linked run");
+    const unk = await openWs({get: projectsGet({[FLOW]: withTr(null)}), lang: "en"});
+    const u = all(byId(unk.root, "studio-ov-flow")!).find(n => n.dataset.flowTaskRuns)!;
+    expect(u.dataset.flowTaskRuns).toBe("UNKNOWN"); expect(text(u)).toContain("unknown");
+    expect(text(u)).not.toMatch(/\b0 of\b/); // bilinmeyen 0 diye gösterilmez
+    const none = await openWs({get: projectsGet({[FLOW]: withTr("ABSENT")}), lang: "en"});
+    expect(all(byId(none.root, "studio-ov-flow")!).some(n => "flowTaskRuns" in n.dataset)).toBe(false);
+  });
   it("describeFlowDetail maps known codes only with the matching stage state, parses PLAN/RUN shapes, and shows anything else verbatim", async () => {
     const core = await load(rend, "project-core.js");
     const d = core.describeFlowDetail;
@@ -1984,7 +2007,7 @@ describe("LANE-A first-delivery flow stepper (fake DOM)", () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
     const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("flow."));
-    expect(keys.length).toBe(33);
+    expect(keys.length).toBe(35);
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
