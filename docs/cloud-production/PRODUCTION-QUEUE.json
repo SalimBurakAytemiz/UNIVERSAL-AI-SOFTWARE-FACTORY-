@@ -651,9 +651,9 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-22T17:43:05Z",
+    "at": "2026-10-22T18:17:36Z",
     "by": "coordinator",
-    "integrationHead": "31f101a",
+    "integrationHead": "9f691af",
     "openProductionPrs": [
       66,
       192,
@@ -1754,6 +1754,12 @@
       "pr": 215,
       "mergeCommit": "31f101a",
       "mergedAt": "2026-10-22T17:42:48Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 216,
+      "mergeCommit": "9f691af",
+      "mergedAt": "2026-10-22T18:17:11Z",
       "mergedBy": "SalimBurakAytemiz"
     }
   ],
