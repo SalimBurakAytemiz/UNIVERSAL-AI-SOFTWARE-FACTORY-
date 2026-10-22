@@ -15,7 +15,7 @@ import {MissionRunner} from "../core/workos/runner.js";
 import type {RunnerOptions} from "../core/workos/runner.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors, executorsFromEnv, parseReviewOutput} from "../core/workos/executors.js";
-import type {FakeScript, MissionSpec} from "../core/workos/executors.js";
+import type {ExecutorPair, FakeScript, MissionSpec} from "../core/workos/executors.js";
 import {RUN_STATUSES, TERMINAL_RUN_STATUSES, canRunTransition} from "../core/workos/run-state.js";
 import {effectiveLimits} from "../core/agents/role-execution.js";
 import {FIRST_DELIVERY_BINDINGS} from "../core/agents/first-delivery-bindings.js";
@@ -49,12 +49,12 @@ function makeRepo(id: string): {repo: string; head: string} {
 const FAKE_AWS = ["AK", "IA", "Q7ZX3MPLW2RT5VB9"].join("");
 
 interface Ctx { store: WorkOsStore; dataDir: string; runtime: string; stopFile: string; repo: string; head: string; missionId: string; projectId: string }
-function setup(tenantId = "tA", opts: {url?: boolean; testCommand?: string[] | null} = {}): Ctx {
+function setup(tenantId = "tA", opts: {url?: boolean; testCommand?: string[] | null; clock?: {skewMs: number}} = {}): Ctx {
   const id = crypto.randomBytes(4).toString("hex");
   const {repo, head} = makeRepo(id);
   const dataDir = path.join(tmp, `data-${id}`), runtime = path.join(tmp, `runtime-${id}`);
   fs.mkdirSync(runtime, {recursive: true});
-  const store = new WorkOsStore(dataDir);
+  const store = new WorkOsStore(dataDir, opts.clock ? {now: () => Date.now() + opts.clock!.skewMs} : {});
   const tc = opts.testCommand === null ? undefined : (opts.testCommand ?? ["node", "test.mjs"]);
   const p = store.createProject({tenantId, orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: opts.url ? {url: "https://example.invalid/r.git"} : {path: repo}, ...(tc ? {testCommand: tc} : {})});
   const m = store.createMission({tenantId, projectId: p.projectId, title: "Add feature", objective: "feature.txt must say ok", acceptanceCriteria: ["tests pass"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
@@ -458,6 +458,83 @@ describe("B3a mission runner engine", () => {
     expect(lc.pair?.kind).toBe("LOCAL_CLAUDE");
     expect(lc.pair?.implementer.identity).toBe("CLAUDE_BUILDER");
     expect(lc.pair?.reviewer.identity).toBe("CLAUDE_REVIEWER");
+  });
+});
+
+describe("LANE-C MissionRunner claim cap (maxConcurrentRuns)", () => {
+  const addMission = (c: Ctx, i: number) => {
+    const m = c.store.createMission({tenantId: "tA", projectId: c.projectId, title: `Add feature ${i}`, objective: "feature.txt must say ok", acceptanceCriteria: ["tests pass"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) c.store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+    return m.missionId;
+  };
+  const queueRuns = (c: Ctx, pair: ExecutorPair, n: number) => [c.missionId, ...Array.from({length: n - 1}, (_, i) => addMission(c, i + 1))]
+    .map(missionId => c.store.createRun({tenantId: "tA", missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}));
+  const sleepFirst = (ms: number) => okScript({implement: n => ({files: {"feature.txt": "ok\n"}, ...(n === 1 && ms ? {sleepMs: ms} : {})})});
+  // implementer sarmalayıcı: aynı anda içerideki çağrı sayısını izler; barrier>0 ise o kadar çağrı birlikte içeri girene kadar bekler (deterministik eşzamanlılık kanıtı, süre tahmini yok).
+  function tracked(pair: ExecutorPair, barrier = 0) {
+    const st = {active: 0, maxActive: 0, arrived: 0, barrierTimedOut: false}; let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+    const implement = async (w: string, spec: MissionSpec, ctx: {timeoutMs: number; shouldAbort?: () => boolean}) => {
+      st.active += 1; st.maxActive = Math.max(st.maxActive, st.active); st.arrived += 1;
+      if (barrier > 0) { if (st.arrived >= barrier) release(); await Promise.race([gate, new Promise<void>(r => setTimeout(() => { st.barrierTimedOut = true; r(); }, 20_000))]); }
+      try { return await pair.implementer.implement(w, spec, ctx); } finally { st.active -= 1; }
+    };
+    return {st, pair: {...pair, implementer: {...pair.implementer, implement}} as ExecutorPair};
+  }
+
+  it("default cap 1: a queued second run gets NO lease while the first runs longer than the lease TTL, so it is never fenced or recovered; the next tick claims it", { timeout: T }, async () => {
+    const c = setup(); const fake = new FakeExecutors(sleepFirst(2500)); const pair = fake.pair();
+    const [r1, r2] = queueRuns(c, pair, 2);
+    const mr = runner(c, fake, {leaseTtlMs: 1000});
+    const t1 = await mr.tick();
+    expect(t1.claimed).toEqual([r1.runId]);
+    expect(t1.deferred).toEqual([r2.runId]);
+    expect(t1.fenced).toEqual([]);
+    expect(t1.recovered).toEqual([]);
+    expect(runOf(c, r1.runId).status).toBe("AWAITING_APPROVAL");
+    expect(runOf(c, r2.runId)).toMatchObject({status: "QUEUED", leaseId: null, attempt: 0});
+    expect(fake.calls.implement).toBe(1);
+    const t2 = await mr.tick();
+    expect(t2).toMatchObject({claimed: [r2.runId], deferred: [], fenced: [], recovered: []});
+    expect(runOf(c, r2.runId).status).toBe("AWAITING_APPROVAL");
+    expect(fake.calls).toEqual({implement: 2, review: 2});
+  });
+
+  it("cap 2: two queued runs really run together (both implementer calls in flight at once); a third waits; cap 1 never overlaps", { timeout: T }, async () => {
+    const c = setup(); const fake = new FakeExecutors(okScript()); const t = tracked(fake.pair(), 2);
+    const runs = queueRuns(c, t.pair, 3);
+    const t1 = await runner(c, fake, {maxConcurrentRuns: 2, executors: t.pair}).tick();
+    expect(t1.claimed).toHaveLength(2);
+    expect(t1.deferred).toEqual([runs[2].runId]);
+    expect(t.st.barrierTimedOut).toBe(false);
+    expect(t.st.maxActive).toBe(2);
+    expect(runs.slice(0, 2).map(r => runOf(c, r.runId).status)).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
+    expect(runOf(c, runs[2].runId).status).toBe("QUEUED");
+
+    const c1 = setup("tA"); const f1 = new FakeExecutors(okScript()); const t1b = tracked(f1.pair());
+    queueRuns(c1, t1b.pair, 2);
+    const runner1 = runner(c1, f1, {executors: t1b.pair});
+    await runner1.tick(); await runner1.tick();
+    expect(t1b.st.maxActive).toBe(1);
+    expect(f1.calls.implement).toBe(2);
+  });
+
+  it("stale-lease recovery respects the cap as well: with two expired leases and cap 1, one run is taken over and the other is deferred", { timeout: T }, async () => {
+    const clock = {skewMs: 0}; const c = setup("tA", {clock}); const fake = new FakeExecutors(okScript()); const pair = fake.pair();
+    const [r1, r2] = queueRuns(c, pair, 2);
+    const first = await runner(c, fake, {maxConcurrentRuns: 2, maxStepsPerTick: 0}).tick(); // both leased, no step executed
+    expect(first.claimed).toEqual([r1.runId, r2.runId]);
+    expect([runOf(c, r1.runId).status, runOf(c, r2.runId).status]).toEqual(["LEASED", "LEASED"]);
+    clock.skewMs = 3_600_000; // one hour later (store and runner clock): both leases are expired
+    const later = await runner(c, fake, {maxConcurrentRuns: 1, maxStepsPerTick: 0, now: () => Date.now() + clock.skewMs}).tick();
+    expect(later.recovered).toEqual([r1.runId]);
+    expect(later.deferred).toEqual([r2.runId]);
+  });
+
+  it("an invalid cap is a construction error (never silently 1); the default is 1", () => {
+    const c = setup(); const fake = new FakeExecutors(okScript());
+    for (const bad of [0, -1, 1.5, 17, Number.NaN, "2" as unknown as number]) expect(() => runner(c, fake, {maxConcurrentRuns: bad})).toThrow("RUNNER_MAX_CONCURRENT_RUNS_INVALID");
+    expect(() => runner(c, fake)).not.toThrow();
+    expect(() => runner(c, fake, {maxConcurrentRuns: 16})).not.toThrow();
   });
 });
 
