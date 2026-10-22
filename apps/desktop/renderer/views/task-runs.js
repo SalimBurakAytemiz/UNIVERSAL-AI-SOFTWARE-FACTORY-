@@ -1,7 +1,7 @@
 // //TR: Bu görünüm parçası Görevler > görev denetçisindeki "Bu görevin koşuları" bölümüdür (LANE-A): GET /v1/tasks/:id/runs ile göreve bağlı koşuları listeler ve mission'ın henüz bağlanmamış bir koşusunu POST /v1/tasks/:id/runs {runId} ile göreve bağlar. Bağ yalnız kayıt tutar: koşu başlatmaz, görevi ilerletmez, doğrulama anlamı taşımaz. Okuma/yazma uç noktası masaüstü allow-list'inde yoksa dürüst UNAVAILABLE/ret gösterilir.
 import {h,statusPill,stateNote,emptyNote} from "../components.js";
 import {drafts,field,statusBlock,setStatus,recordPost,focusResult} from "../forms.js";
-import {formatDateTime,buildLinkRunRequest,linkableRuns,taskRunsPath,mapTaskRuns,buildReconcileRequest,classifyReconcile,reconcileStatusKey,describePostResult} from "../work-core.js";
+import {formatDateTime,buildLinkRunRequest,linkableRuns,taskRunsPath,mapTaskRuns,taskFollowsRun,buildReconcileRequest,classifyReconcile,reconcileStatusKey,describePostResult} from "../work-core.js";
 
 export const TASK_RUNS_FORM="task-runs";
 export const RECONCILE_FORM="task-reconcile";
@@ -37,6 +37,14 @@ export async function submitReconcile(ctx,task,runId){
   else{const d=describePostResult(res);setStatus(RECONCILE_FORM,{ok:false,key:d.key,vars:d.vars,errors:null})}
   await ctx.refreshAll({force:true});focusResult(ctx,RECONCILE_FORM,["id:taskreconcile-submit"]);return {ok,kind:c.kind,status:res?.status??null};
 }
+/** Sunucu kuralı: görev, ona en son bağlanan koşunun sonucunu izler. Yalnız kural gösterilir; bir geçişin yapıldığı iddia edilmez. */
+function followNote(ctx,f){
+  const doc=ctx.doc;
+  if(!f.governing)return h(doc,"p",{class:"note",dataset:{taskRunFollow:"superseded"},text:ctx.t("taskruns.follow.superseded")});
+  if(f.target===null)return h(doc,"p",{class:"note",dataset:{taskRunFollow:"unknown"},text:ctx.t("taskruns.follow.unknown")});
+  if(f.target==="NONE")return h(doc,"p",{class:"note",dataset:{taskRunFollow:"none"},text:ctx.t("taskruns.follow.none")});
+  return h(doc,"p",{class:"note",dataset:{taskRunFollow:f.target}},ctx.t("taskruns.follow.rule")," ",statusPill(ctx,f.target));
+}
 /** linked: loadTaskRuns sonucu; runsRes: mission koşu okuması (api.workRuns). */
 export function taskRunsPanel(ctx,{task,linked,runsRes}){
   const doc=ctx.doc,lang=ctx.i18n.lang;
@@ -44,11 +52,15 @@ export function taskRunsPanel(ctx,{task,linked,runsRes}){
   let list;
   if(linked.state!=="VERIFIED")list=stateNote(ctx,linked.state,linked.state==="UNAVAILABLE"?"taskruns.unavailable":undefined);
   else if(!linked.items.length)list=emptyNote(ctx,"taskruns.none");
-  else list=h(doc,"ul",{class:"cards task-run-list"},linked.items.map((l,i)=>h(doc,"li",{class:"card",dataset:{taskRun:l.runId}},
-    h(doc,"span",{class:"mono",text:l.runId})," ",l.status?statusPill(ctx,l.status):h(doc,"span",{class:"note",text:ctx.t("taskruns.statusUnknown")})," ",h(doc,"time",{text:formatDateTime(l.linkedAt,lang)}),
-    // //TR: Görevi en son bağlanan koşu yönetir (sunucu kuralı); durum güncellemesi yalnız o satırda sunulur.
-    i===linked.items.length-1?h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",id:"taskreconcile-submit",dataset:{focusKey:"taskreconcile-submit",reconcileRun:l.runId},disabled:drafts.busy[RECONCILE_FORM]===true,text:ctx.t("taskruns.recon.button"),
-      on:{click:()=>{if(!drafts.busy[RECONCILE_FORM])submitReconcile(ctx,task,l.runId)}}})):null)));
+  else{
+    const follow=taskFollowsRun(linked.items);
+    list=h(doc,"ul",{class:"cards task-run-list"},linked.items.map((l,i)=>h(doc,"li",{class:"card",dataset:{taskRun:l.runId,taskRunGoverning:follow[i].governing?"1":"0"}},
+      h(doc,"span",{class:"mono",text:l.runId})," ",l.status?statusPill(ctx,l.status):h(doc,"span",{class:"note",text:ctx.t("taskruns.statusUnknown")})," ",h(doc,"time",{text:formatDateTime(l.linkedAt,lang)}),
+      followNote(ctx,follow[i]),
+      // //TR: Görevi en son bağlanan koşu yönetir (sunucu kuralı); durum güncellemesi yalnız o satırda sunulur.
+      follow[i].governing?h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",id:"taskreconcile-submit",dataset:{focusKey:"taskreconcile-submit",reconcileRun:l.runId},disabled:drafts.busy[RECONCILE_FORM]===true,text:ctx.t("taskruns.recon.button"),
+        on:{click:()=>{if(!drafts.busy[RECONCILE_FORM])submitReconcile(ctx,task,l.runId)}}})):null)));
+  }
   let form=null;
   if(linked.state==="VERIFIED"){
     const opts=runsRes?.state==="VERIFIED"?linkableRuns(runsRes.items,linked.items):[];
