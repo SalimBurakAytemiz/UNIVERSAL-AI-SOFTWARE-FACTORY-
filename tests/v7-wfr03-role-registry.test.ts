@@ -969,7 +969,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     const nl = evaluated(await evaluate(predevPair(() => `{\n${KEY}\n}`), BA));
     for (const f of [nl.artifactFile, nl.evidenceFile]) expect(fs.readFileSync(f, "utf8")).not.toContain(KEY);
     expect(fs.readFileSync(nl.artifactFile, "utf8")).toContain("[REDACTED:AWS_ACCESS_KEY]");
-    // the evidence hash binds the redacted bytes, so the staged file still verifies when the pair is non-FAKE
+    // redaction leaves a FAKE pair's evidence intact but it is still rejected as FAKE_EVIDENCE; that NON-FAKE redacted evidence verifies (hash bound to the redacted bytes) is pinned by the next test
     expect(createEvidenceVerifier(path.resolve(path.dirname(path.dirname(path.dirname(path.dirname(path.dirname(dev.evidenceFile)))))))(dev.evidenceRef, DEV, "EV-01", "FAILED")).toBe("FAKE_EVIDENCE");
   });
 
@@ -1094,7 +1094,27 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     Object.assign(process.env, vars);
     try { return await fn(); } finally { for (const [k, v] of Object.entries(keep)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
   };
-  it.skipIf(process.platform === "win32")("git config injected via GIT_CONFIG_PARAMETERS / GIT_CONFIG_COUNT never reaches the temporary repositories (a hooksPath hook stays unrun); --execute is blocked while those variables are set", { timeout: 180_000 }, async () => {
+  // //TR: Bu test TEMİZLEME (scrub) katmanını sabitler: paylaşılan git izolasyonu (git-isolation.mjs) hooksPath'i ezer ve GIT_CONFIG_COUNT/KEY/VALUE'yu siler ama GIT_CONFIG_PARAMETERS'a DOKUNMAZ. Bir "clean filter" sürücüsü hattın kendi `git add -A` komutu sırasında çalışır; ortam değişkeni geçerse işaret dosyası yazılır.
+  const filterScript = (dir: string, marker: string): string => { const f = path.join(dir, "clean.sh"); fs.writeFileSync(f, `#!/bin/sh\necho ran >> "${marker}"\ncat\n`); fs.chmodSync(f, 0o755); return f; };
+  it.skipIf(process.platform === "win32")("GIT_CONFIG_PARAMETERS never reaches the temporary repositories: a clean-filter driver that would run during the pipeline's own `git add -A` stays unrun (the scrub is what stops it); --execute is blocked while GIT_CONFIG_* variables are set", { timeout: 180_000 }, async () => {
+    const dir = workDir(), marker = path.join(workDir(), "ran"), attrs = path.join(dir, "attrs"), script = filterScript(dir, marker);
+    fs.writeFileSync(attrs, "* filter=x\n");
+    const vars = {GIT_CONFIG_PARAMETERS: `'core.attributesfile'='${attrs}' 'filter.x.clean'='${script}'`};
+    await withEnv(vars, async () => {
+      // the injection is real: a plain git add with this environment runs the filter (so the assertion below is not vacuous)
+      const plain = workDir(); cp.spawnSync("git", ["init", "-q", plain]); fs.writeFileSync(path.join(plain, "f"), "x\n");
+      cp.spawnSync("git", ["add", "-A"], {cwd: plain, env: process.env});
+      expect(fs.existsSync(marker)).toBe(true); fs.rmSync(marker);
+      const dev = evaluated(await evaluate(fakePair(), DEV)), rev = evaluated(await evaluate(fakePair(), REVIEWER));
+      expect([dev.verdict, rev.verdict, fs.existsSync(marker)]).toEqual(["PASSED", "PASSED", false]);
+    });
+    const ok = {repoRoot: REPO, dataDir: workDir(), controlRoot: workDir()};
+    for (const env of [{GIT_CONFIG_PARAMETERS: "'core.fsmonitor=x'"}, {GIT_CONFIG_COUNT: "1"}, {GIT_CONFIG_KEY_0: "core.hooksPath"}, {GIT_CONFIG_VALUE_12: "/x"}, {git_config_parameters: "'a=b'"}])
+      expect([env, executeBlockers({...ok, env})]).toEqual([env, expect.arrayContaining(["GIT_ENVIRONMENT_OVERRIDE"])]);
+    expect(executeBlockers({...ok, env: {GIT_CONFIG_NOSYSTEM: "1"}})).not.toContain("GIT_ENVIRONMENT_OVERRIDE"); // only variables that inject config or select the repository
+  });
+  // //TR: Aşağıdaki iki durum paylaşılan git izolasyonu tarafından sabitlenir (temizleme katmanından bağımsız): `-c core.hooksPath=<izole>` ve COUNT/KEY/VALUE silme. Uçtan uca bir gerileme sigortasıdır; temizleme mutantlarını ÖLDÜRMEZ.
+  it.skipIf(process.platform === "win32")("hooksPath injected through GIT_CONFIG_PARAMETERS or GIT_CONFIG_COUNT stays unrun (pinned by the shared git isolation, end-to-end regression guard)", { timeout: 180_000 }, async () => {
     const hooks = workDir(), marker = path.join(workDir(), "ran"); hookScript(hooks, "post-commit", marker);
     const styles: Array<[string, Record<string, string>]> = [
       ["GIT_CONFIG_PARAMETERS", {GIT_CONFIG_PARAMETERS: `'core.hooksPath=${hooks}'`}],
@@ -1102,7 +1122,6 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     ];
     for (const [label, vars] of styles) {
       await withEnv(vars, async () => {
-        // the injection is real: a plain commit with this environment runs the hook (so the assertion below is not vacuous)
         const plain = workDir(); cp.spawnSync("git", ["init", "-q", plain]);
         cp.spawnSync("git", ["-c", "user.name=T", "-c", "user.email=t@local.invalid", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "x"], {cwd: plain, env: process.env});
         expect([label, fs.existsSync(marker)]).toEqual([label, true]); fs.rmSync(marker);
@@ -1110,10 +1129,6 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
         expect([label, dev.verdict, rev.verdict, fs.existsSync(marker)]).toEqual([label, "PASSED", "PASSED", false]);
       });
     }
-    const ok = {repoRoot: REPO, dataDir: workDir(), controlRoot: workDir()};
-    for (const env of [{GIT_CONFIG_PARAMETERS: "'core.fsmonitor=x'"}, {GIT_CONFIG_COUNT: "1"}, {GIT_CONFIG_KEY_0: "core.hooksPath"}, {GIT_CONFIG_VALUE_12: "/x"}, {git_config_parameters: "'a=b'"}])
-      expect([env, executeBlockers({...ok, env})]).toEqual([env, expect.arrayContaining(["GIT_ENVIRONMENT_OVERRIDE"])]);
-    expect(executeBlockers({...ok, env: {GIT_CONFIG_NOSYSTEM: "1"}})).not.toContain("GIT_ENVIRONMENT_OVERRIDE"); // only variables that inject config or select the repository
   });
   it.skipIf(process.platform === "win32")("a repo-local core.fsmonitor planted in the review clone by the reviewer cannot make the pipeline's own git calls run a program (core.fsmonitor=false is pinned)", { timeout: 120_000 }, async () => {
     const marker = path.join(workDir(), "ran"), hook = hookScript(workDir(), "fsm.sh", marker);
@@ -1264,12 +1279,19 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect([resolveControlRoot(null, {UASCO_CONTROL_ROOT: ""}, "/r"), resolveControlRoot("", {UASCO_CONTROL_ROOT: "/b"}, "/r"), resolveControlRoot("", {}, "/r")]).toEqual(["/r", "/b", "/r"]);
       const d = workDir(), c = workDir(), other = workDir();
       const used = async (extra: string[], env: NodeJS.ProcessEnv) => JSON.parse((await cli(["--role", DEV, "--data-dir", d, ...extra], {env})).out).controlRoot;
-      expect([await used([], {UASCO_CONTROL_ROOT: c}), await used(["--control-root", other], {UASCO_CONTROL_ROOT: c}), await used([], {})]).toEqual([c, other, REPO]);
+      expect([await used([], {UASCO_CONTROL_ROOT: c}), await used(["--control-root", other], {UASCO_CONTROL_ROOT: c}), await used([], {}), await used([], {UASCO_CONTROL_ROOT: ""})]).toEqual([c, other, REPO, REPO]);
+      // a relative value from the environment is refused like the flag (the broker would resolve it against the workspace and --execute could never work); nothing is written, no plan is printed
+      for (const extra of [[], ["--execute"]]) {
+        const rel = await cli(["--role", DEV, "--data-dir", d, ...extra], {env: {UASCO_CONTROL_ROOT: "relative/dir"}});
+        expect([extra, rel.code, rel.out]).toEqual([extra, 2, ""]);
+        expect(JSON.parse(rel.err)).toMatchObject({status: "USAGE", error: "CONTROL_ROOT_MUST_BE_ABSOLUTE"});
+      }
       expect(fs.readdirSync(d)).toEqual([]);
       // the executor state is read under the SAME root: the provenance of UASCO_CONTROL_ROOT is what counts
       const control = controlRootWithProvenance(); enable(d);
       expect((JSON.parse((await cli(["--role", DEV, "--data-dir", d], {env: {UASCO_CONTROL_ROOT: control}})).out).executeBlockers as string[]).filter(b => b.startsWith("EXECUTOR_"))).toEqual([]);
-      expect(JSON.parse((await cli(["--role", DEV, "--data-dir", d], {env: {}})).out).executeBlockers).toEqual(expect.arrayContaining(["EXECUTOR_PROVENANCE_MISSING"]));
+      // an explicit, EMPTY control root (never the default repo root: a checkout may hold its own gitignored .ai/runtime/PROVIDER_PROVENANCE.json)
+      expect(JSON.parse((await cli(["--role", DEV, "--data-dir", d, "--control-root", workDir()])).out).executeBlockers).toEqual(expect.arrayContaining(["EXECUTOR_PROVENANCE_MISSING"]));
     });
     it("the dry run lists the Claude profile blockers --execute would hit (profile inside a git worktree, login missing) per role route and clears them after login; an injected pair skips the check", async () => {
       const blockersFor = async (role: string, control: string, o: {makePair?: () => ExecutorPair} = {}) => JSON.parse((await cli(["--role", role, "--data-dir", workDir(), "--control-root", control], o)).out).executeBlockers as string[];
