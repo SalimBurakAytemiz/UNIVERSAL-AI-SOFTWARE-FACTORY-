@@ -31,10 +31,17 @@
   },
   {
    "id": "H5",
-   "description": "any toplevel counts as the root (no equality with src)",
+   "description": "the own-.git clause dropped (core.bare / core.worktree repositories refused)",
    "file": "core/workos/runner.ts",
-   "old": "const root = isSrc(probe([\"rev-parse\", \"--show-toplevel\"], true)) ||",
-   "new": "const root = probe([\"rev-parse\", \"--show-toplevel\"], true) !== null ||"
+   "old": "|| same(gitDir(), path.join(src, \".git\")) ||",
+   "new": "||"
+  },
+  {
+   "id": "H5b",
+   "description": "the --show-toplevel clause dropped (gitfile roots such as linked worktrees refused)",
+   "file": "core/workos/runner.ts",
+   "old": "same(probe([\"rev-parse\", \"--show-toplevel\"], true)) ||",
+   "new": ""
   },
   {
    "id": "H6",
@@ -45,10 +52,10 @@
   },
   {
    "id": "H7",
-   "description": "any directory inside a bare repository accepted",
+   "description": "any git dir inside the ceiling accepted when bare",
    "file": "core/workos/runner.ts",
-   "old": "&& isSrc(probe([\"rev-parse\", \"--absolute-git-dir\"], true))",
-   "new": "&& probe([\"rev-parse\", \"--absolute-git-dir\"], true) !== null"
+   "old": "&& same(gitDir()))",
+   "new": "&& gitDir() !== null)"
   },
   {
    "id": "H8",
@@ -90,7 +97,7 @@
    "description": "raw string comparison instead of the canonical key",
    "file": "core/workos/runner.ts",
    "old": "return a.ok && b.ok && a.key === b.key;",
-   "new": "return a.ok && b.ok && p === src;"
+   "new": "return a.ok && b.ok && p === to;"
   },
   {
    "id": "H14",
@@ -105,6 +112,20 @@
    "file": "core/workos/runner.ts",
    "old": "if (!repoHead.ok) return {kind: \"BLOCK\", reason: repoHead.reason};",
    "new": "if (!repoHead.ok) return {kind: \"BLOCK\", reason: \"REPOSITORY_HEAD_UNRESOLVED\"};"
+  },
+  {
+   "id": "H16",
+   "description": "the ceiling-free probes feed the ok decision (classification probe lets a subdirectory through, HEAD probed without the ceiling)",
+   "file": "core/workos/runner.ts",
+   "old": "if (!root) return {ok: false, reason: probe([\"rev-parse\", \"--git-dir\"], false) !== null ? \"REPOSITORY_NOT_WORKTREE_ROOT\" : \"REPOSITORY_HEAD_UNRESOLVED\"};\n  const head = probe([\"rev-parse\", \"--verify\", \"HEAD^{commit}\"], true);",
+   "new": "if (!root && probe([\"rev-parse\", \"--git-dir\"], false) === null) return {ok: false, reason: \"REPOSITORY_HEAD_UNRESOLVED\"};\n  const head = probe([\"rev-parse\", \"--verify\", \"HEAD^{commit}\"], false);"
+  },
+  {
+   "id": "H17",
+   "description": "the deciding --show-toplevel probe runs without the ceiling",
+   "file": "core/workos/runner.ts",
+   "old": "same(probe([\"rev-parse\", \"--show-toplevel\"], true)) ||",
+   "new": "same(probe([\"rev-parse\", \"--show-toplevel\"], false)) ||"
   }
  ]
 }

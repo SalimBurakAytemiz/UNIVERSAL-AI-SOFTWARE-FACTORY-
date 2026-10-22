@@ -11,8 +11,7 @@ import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
 import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
 import {activateGlobalStop} from "../automation/lib/global-stop.mjs";
 import {WorkOsStore} from "../core/workos/store.js";
-import {MissionRunner, effectiveTestCommand, repositoryHead, repositoryPrecondition} from "../core/workos/runner.js";
-import type {RepositoryHead} from "../core/workos/runner.js";
+import {MissionRunner, effectiveTestCommand, repositoryPrecondition} from "../core/workos/runner.js";
 import type {RunnerOptions} from "../core/workos/runner.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors, executorsFromEnv, parseReviewOutput} from "../core/workos/executors.js";
@@ -78,6 +77,137 @@ const runOf = (c: Ctx, id: string, tenantId = "tA") => c.store.getRun({tenantId}
 const missionOf = (c: Ctx, tenantId = "tA") => c.store.getMission({tenantId}, c.missionId)!;
 const journal = (c: Ctx) => fs.readFileSync(path.join(c.dataDir, "journal.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l));
 const kinds = (r: WorkRun) => r.evidence.map(e => e.kind);
+
+import {repositoryHead} from "../core/workos/runner.js";
+import type {RepositoryHead} from "../core/workos/runner.js";
+// //TR: LANE-C C-RUNNER-HEAD-PREDICATE: "HEAD çözülüyor mu VE yol work-tree kökü mü" kararı TEK saf fonksiyondur (repositoryHead). Runner WORKSPACE adımı aynı fonksiyonu çağırır (readiness için Lane B isteği). `git rev-parse` yukarı doğru keşfettiği için düz bir alt dizin üst deponun HEAD'ini çözer; eski davranış `git clone <alt dizin>` hatasıyla yanıltıcı WORKSPACE_CLONE_FAILED verirdi. Aşağıdaki testler her durumu gerçek git ile kurar ve beklenen cevabı bağımsız git çağrısından türetir.
+describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AND is the path the work-tree root; the runner uses the very same function)", () => {
+  const ID = ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "-c", "commit.gpgsign=false"];
+  const mkd = (...p: string[]) => { const d = path.join(...p); fs.mkdirSync(d, {recursive: true}); return d; };
+  const headOf = (dir: string) => git(dir, ["rev-parse", "HEAD"]);
+  const commitIn = (dir: string, name = "f.txt") => { fs.writeFileSync(path.join(dir, name), `${name}\n`); git(dir, ["add", "-A"]); git(dir, [...ID, "commit", "-q", "-m", `add ${name} in ${path.basename(dir)}`]); return headOf(dir); }; // //TR: commit mesajı dizin adını içerir: aynı saniyedeki iki depo asla aynı SHA'yı üretmez (aksi halde "başka deponun HEAD'i" ayrımı sahte geçerdi)
+  const initRepo = (dir: string, withCommit: boolean): string | null => { fs.mkdirSync(dir, {recursive: true}); git(dir, ["init", "-q", "-b", "main"]); return withCommit ? commitIn(dir) : null; };
+  const cleanEnv = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
+  // //TR: Tek ortama bağlı beklenti: TMPDIR bir deponun içindeyse "hiçbir depo yok" dizini aslında bir deponun alt dizinidir. Beklenti git'e SORULARAK (ceiling'siz, temiz env) türetilir; her iki dal da bu testte ya da aşağıdaki alt dizin testlerinde kesin sabitlenir.
+  const insideAnyRepo = (dir: string) => spawnGitSync(dir, ["rev-parse", "--git-dir"], {env: cleanEnv()}).status === 0;
+  const NOT_ROOT: RepositoryHead = {ok: false, reason: "REPOSITORY_NOT_WORKTREE_ROOT"}, UNRESOLVED: RepositoryHead = {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
+
+  type Built = {dir: string; want: RepositoryHead};
+  const builders: Array<[string, () => Built]> = [
+    ["repo root with a commit: ok, baseSha is that repository's HEAD", () => { const d = mkd(tmp, "root"); return {dir: d, want: {ok: true, baseSha: initRepo(d, true)!}}; }],
+    ["repo root with no commit (unborn HEAD): HEAD unresolved", () => { const d = mkd(tmp, "unborn"); initRepo(d, false); return {dir: d, want: UNRESOLVED}; }],
+    ["repo root whose branch points at a missing object: HEAD unresolved", () => { const d = mkd(tmp, "dangling"); initRepo(d, true); fs.writeFileSync(path.join(d, ".git", "refs", "heads", "main"), `${"a".repeat(40)}\n`); return {dir: d, want: UNRESOLVED}; }],
+    ["PLAIN SUBDIRECTORY inside a repo with commits (raw git resolves the PARENT's HEAD there): not the work-tree root", () => {
+      const parent = mkd(tmp, "parent"), parentHead = initRepo(parent, true)!, sub = mkd(parent, "pkg", "sub"); fs.writeFileSync(path.join(sub, "g.txt"), "g\n");
+      expect(git(sub, ["rev-parse", "--verify", "HEAD^{commit}"])).toBe(parentHead); // premise: the old inline check would have accepted this directory
+      for (const probe of [["rev-parse", "--git-dir"], ["rev-parse", "--show-toplevel"]]) expect(spawnGitSync(sub, probe, {env: cleanEnv()}).status).toBe(0); // premise: the CEILING-FREE probes resolve here; ok may never be derived from them
+      return {dir: sub, want: NOT_ROOT};
+    }],
+    ["plain subdirectory inside an UNBORN repo: not the work-tree root", () => { const parent = mkd(tmp, "uparent"); initRepo(parent, false); return {dir: mkd(parent, "sub"), want: NOT_ROOT}; }],
+    ["the .git directory of a repo with commits: not the work-tree root", () => { const d = mkd(tmp, "dotgit"); initRepo(d, true); return {dir: path.join(d, ".git"), want: NOT_ROOT}; }],
+    ["a directory inside .git (objects): not the work-tree root", () => { const d = mkd(tmp, "dotgit-objects"); initRepo(d, true); return {dir: path.join(d, ".git", "objects"), want: NOT_ROOT}; }],
+    ["bare repository with commits: ok (a bare repository is a valid clone source)", () => { const d = mkd(tmp, "bsrc"), bare = path.join(tmp, "bare.git"), h = initRepo(d, true)!; git(tmp, ["clone", "-q", "--bare", d, bare]); return {dir: bare, want: {ok: true, baseSha: h}}; }],
+    ["linked worktree root: ok, baseSha is the WORKTREE's HEAD, not the main checkout's", () => {
+      const main = mkd(tmp, "wmain"), wt = path.join(tmp, "wtree"); initRepo(main, true); git(main, ["worktree", "add", "-q", wt, "-b", "wtb"]);
+      const h = commitIn(wt, "w.txt"); expect(h).not.toBe(headOf(main)); return {dir: wt, want: {ok: true, baseSha: h}};
+    }],
+    ["a repository nested inside another repository: ok, baseSha is the INNER repository's HEAD", () => { const outer = mkd(tmp, "outer"), outerHead = initRepo(outer, true)!, inner = mkd(outer, "vendor", "inner"), innerHead = initRepo(inner, true)!; expect(innerHead).not.toBe(outerHead); return {dir: inner, want: {ok: true, baseSha: innerHead}}; }],
+    ["a subdirectory of a repository whose config claims the child as its work tree (core.worktree): not the work-tree root (needs the ancestor ceiling)", () => {
+      const parent = mkd(tmp, "cwparent"); initRepo(parent, true); const child = mkd(parent, "child"); git(parent, ["config", "core.worktree", child]);
+      expect(git(child, ["rev-parse", "--show-toplevel"])).toBe(spawnGitSync(child, ["rev-parse", "--show-toplevel"], {env: cleanEnv()}).stdout.trim()); // premise: raw git calls the child a work-tree root
+      return {dir: child, want: NOT_ROOT};
+    }],
+    ["a subdirectory inside a BARE repository (objects/): not the work-tree root", () => { const d = mkd(tmp, "bsub-src"), bare = path.join(tmp, "bsub.git"); initRepo(d, true); git(tmp, ["clone", "-q", "--bare", d, bare]); return {dir: path.join(bare, "objects"), want: NOT_ROOT}; }],
+    ["a repository with a .git directory but core.bare=true (git reports no work tree): still ok, the path contains its own .git and it cloned before", () => { const d = mkd(tmp, "corebare"), h = initRepo(d, true)!; git(d, ["config", "core.bare", "true"]); expect(spawnGitSync(d, ["rev-parse", "--show-toplevel"], {env: cleanEnv()}).status).not.toBe(0); return {dir: d, want: {ok: true, baseSha: h}}; }],
+    ["a repository whose OWN config puts the work tree elsewhere (core.worktree): still ok, the path contains its own .git and it cloned before", () => { const d = mkd(tmp, "cwelsewhere"), other = mkd(tmp, "cwother"), h = initRepo(d, true)!; git(d, ["config", "core.worktree", other]); expect(git(d, ["rev-parse", "--show-toplevel"])).not.toBe(d); return {dir: d, want: {ok: true, baseSha: h}}; }],
+    ["plain directory outside every repository: HEAD unresolved (not a repository at all)", () => { const d = mkd(tmp, "plain"); return {dir: d, want: insideAnyRepo(d) ? NOT_ROOT : UNRESOLVED}; }]
+  ];
+
+  it("every repository shape gets exactly one answer: the work-tree root with a resolvable HEAD is ok, everything else is refused with a specific reason (real git, 15 shapes)", () => {
+    for (const [label, build] of builders) { const {dir, want} = build(); expect([label, repositoryHead(dir, cleanEnv())]).toEqual([label, want]); }
+  });
+
+  it("a successful answer is a full 40-hex commit SHA and it equals what plain git reports; the function is pure (the repository and the env object are untouched)", () => {
+    const d = mkd(tmp, "pure"), h = initRepo(d, true)!, env = Object.freeze(cleanEnv());
+    const listing = () => fs.readdirSync(d, {recursive: true}).map(String).sort(), head = () => fs.readFileSync(path.join(d, ".git", "HEAD"), "utf8"), index = () => fs.readFileSync(path.join(d, ".git", "index"));
+    const before = {listing: listing(), head: head(), index: index()}, snapshot = {...env};
+    const r = repositoryHead(d, env);
+    expect(r).toEqual({ok: true, baseSha: h});
+    expect(r.ok && /^[0-9a-f]{40}$/.test(r.baseSha)).toBe(true);
+    expect({listing: listing(), head: head(), index: index()}).toEqual(before);
+    expect({...env}).toEqual(snapshot);
+    // a dot-dot spelling of the root is the same directory: ok (compared by canonical key, not by raw string)
+    expect(repositoryHead(`${d}${path.sep}.git${path.sep}..`, env)).toEqual({ok: true, baseSha: h});
+  });
+
+  it("a SHA-256 repository is refused as HEAD unresolved: the runner's commit id check is the 40-hex SHA-1 form only (skipped when this git cannot create one)", (ctx) => {
+    const d = mkd(tmp, "sha256");
+    if (spawnGitSync(d, ["init", "-q", "-b", "main", "--object-format=sha256"]).status !== 0) return ctx.skip();
+    const h = commitIn(d);
+    expect(h).toMatch(/^[0-9a-f]{64}$/);
+    expect(repositoryHead(d, cleanEnv())).toEqual(UNRESOLVED);
+  });
+
+  it.skipIf(process.platform === "win32")("a symlink to a repo root is ok, a symlink to a plain subdirectory or to the .git directory is not the work-tree root (canonical comparison; POSIX only: NOT_VERIFIED on Windows)", () => {
+    const d = mkd(tmp, "slroot"), h = initRepo(d, true)!, sub = mkd(d, "pkg");
+    const link = (target: string, name: string) => { const l = path.join(tmp, name); fs.symlinkSync(target, l, "dir"); return l; };
+    expect(repositoryHead(link(d, "to-root"), cleanEnv())).toEqual({ok: true, baseSha: h});
+    expect(repositoryHead(link(sub, "to-sub"), cleanEnv())).toEqual(NOT_ROOT);
+    expect(repositoryHead(link(path.join(d, ".git"), "to-dotgit"), cleanEnv())).toEqual(NOT_ROOT);
+  });
+
+  it("host GIT_* variables decide nothing: GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE / GIT_OBJECT_DIRECTORY / GIT_CEILING_DIRECTORIES / GIT_CONFIG_PARAMETERS (any case) planted in the base env give the same answer as a clean env, for every shape", () => {
+    const decoy = mkd(tmp, "decoy"), decoyHead = initRepo(decoy, true)!;
+    const planted: Array<[string, NodeJS.ProcessEnv]> = [
+      ["GIT_DIR", {GIT_DIR: path.join(decoy, ".git")}], ["GIT_DIR + GIT_WORK_TREE", {GIT_DIR: path.join(decoy, ".git"), GIT_WORK_TREE: decoy}], ["GIT_WORK_TREE", {GIT_WORK_TREE: decoy}],
+      ["GIT_INDEX_FILE", {GIT_INDEX_FILE: path.join(tmp, "nope.idx")}], ["GIT_OBJECT_DIRECTORY", {GIT_OBJECT_DIRECTORY: path.join(decoy, ".git", "objects")}], ["GIT_CEILING_DIRECTORIES covering everything", {GIT_CEILING_DIRECTORIES: tmp}],
+      ["GIT_CONFIG_PARAMETERS", {GIT_CONFIG_PARAMETERS: "'core.bare=true'"}], ["lower-case git_dir", {git_dir: path.join(decoy, ".git")}],
+      ["all of them", {GIT_DIR: path.join(decoy, ".git"), GIT_WORK_TREE: decoy, GIT_INDEX_FILE: path.join(tmp, "nope.idx"), GIT_CEILING_DIRECTORIES: tmp, GIT_CONFIG_PARAMETERS: "'core.bare=true'", git_work_tree: decoy}]
+    ];
+    const shapes = builders.map(([label, build]) => ({label, ...build()}));
+    for (const {label, dir, want} of shapes) for (const [name, extra] of planted) expect([label, name, repositoryHead(dir, {...cleanEnv(), ...extra})]).toEqual([label, name, want]);
+    const root = shapes[0]; // a repository with its own HEAD must never report the decoy's HEAD
+    expect(root.want.ok && root.want.baseSha !== decoyHead).toBe(true);
+    // the default env (process.env) is stripped too: a planted GIT_DIR in the real process env cannot make a non-repository look like a repository
+    const plain = mkd(tmp, "plain-default");
+    vi.stubEnv("GIT_DIR", path.join(decoy, ".git"));
+    try { expect(repositoryHead(plain)).toEqual(insideAnyRepo(plain) ? NOT_ROOT : UNRESOLVED); expect(repositoryHead(root.dir)).toEqual(root.want); } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("the runner blocks with the function's reason BEFORE any clone or executor: a plain subdirectory of a repo is REPOSITORY_NOT_WORKTREE_ROOT (no WORKSPACE evidence, no baseSha, implementer never called), not a misleading WORKSPACE_CLONE_FAILED; a usable root still runs to AWAITING_APPROVAL with the function's baseSha", { timeout: T }, async () => {
+    const mkCtx = (repositoryPath: string): {c: Ctx; fake: FakeExecutors} => {
+      const base = setup("tA"), dataDir = path.join(tmp, `data-h-${crypto.randomBytes(3).toString("hex")}`), store = new WorkOsStore(dataDir);
+      const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", testCommand: ["node", "test.mjs"], repository: {path: repositoryPath}});
+      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+      return {c: {...base, store, dataDir, missionId: m.missionId, projectId: p.projectId}, fake: new FakeExecutors(okScript())};
+    };
+    const parent = mkd(tmp, "rp"), parentHead = initRepo(parent, true)!, sub = mkd(parent, "pkg", "sub"), unborn = mkd(tmp, "ru"), plain = mkd(tmp, "rplain");
+    initRepo(unborn, false); fs.writeFileSync(path.join(sub, "x.txt"), "x\n");
+    const dotGit = path.join(parent, ".git");
+    const cases: Array<[string, string, string]> = [
+      ["plain subdirectory of a repo", sub, "REPOSITORY_NOT_WORKTREE_ROOT"], ["the .git directory", dotGit, "REPOSITORY_NOT_WORKTREE_ROOT"],
+      ["unborn repository", unborn, "REPOSITORY_HEAD_UNRESOLVED"], ["plain directory", plain, insideAnyRepo(plain) ? "REPOSITORY_NOT_WORKTREE_ROOT" : "REPOSITORY_HEAD_UNRESOLVED"]
+    ];
+    for (const [label, repo, reason] of cases) {
+      const {c, fake} = mkCtx(repo);
+      const pre = repositoryPrecondition(c.store.getProject({tenantId: "tA"}, c.projectId)!, c.dataDir);
+      expect([label, pre.ok && repositoryHead(pre.src, process.env).ok === false && (repositoryHead(pre.src, process.env) as {reason: string}).reason]).toEqual([label, reason]);
+      const r = start(c, fake);
+      await runner(c, fake).tick();
+      const run = runOf(c, r.runId);
+      expect([label, run.status, run.reason, fake.calls.implement, run.baseSha ?? null]).toEqual([label, "BLOCKED", reason, 0, null]);
+      expect([label, run.evidence.filter(e => e.kind === "WORKSPACE").length]).toEqual([label, 0]);
+    }
+    expect(parentHead).toMatch(/^[0-9a-f]{40}$/);
+    const ok = setup("tA"), okFake = new FakeExecutors(okScript());
+    const okPre = repositoryPrecondition(ok.store.getProject({tenantId: "tA"}, ok.projectId)!, ok.dataDir);
+    expect(okPre.ok && repositoryHead(okPre.src, process.env)).toEqual({ok: true, baseSha: ok.head});
+    const okRun = start(ok, okFake);
+    await runner(ok, okFake).tick();
+    expect(runOf(ok, okRun.runId)).toMatchObject({status: "AWAITING_APPROVAL", baseSha: ok.head});
+  });
+});
 
 describe("B3a run state table", () => {
   it("is an explicit allow-list: terminal states have no exits and illegal jumps are refused", () => {
@@ -1266,133 +1396,5 @@ describe("LANE-C runner exports: effectiveTestCommand and repositoryPrecondition
       await runner(c, fake, {maxRemediations: 0}).tick();
       expect([label, runOf(c, r.runId).status]).toEqual([label, expected]);
     }
-  });
-});
-
-// //TR: LANE-C C-RUNNER-HEAD-PREDICATE: "HEAD çözülüyor mu VE yol work-tree kökü mü" kararı TEK saf fonksiyondur (repositoryHead). Runner WORKSPACE adımı aynı fonksiyonu çağırır (readiness için Lane B isteği). `git rev-parse` yukarı doğru keşfettiği için düz bir alt dizin üst deponun HEAD'ini çözer; eski davranış `git clone <alt dizin>` hatasıyla yanıltıcı WORKSPACE_CLONE_FAILED verirdi. Aşağıdaki testler her durumu gerçek git ile kurar ve beklenen cevabı bağımsız git çağrısından türetir.
-describe("LANE-C runner export: repositoryHead (does HEAD resolve AND is the path the work-tree root; the runner uses the very same function)", () => {
-  const ID = ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "-c", "commit.gpgsign=false"];
-  const mkd = (...p: string[]) => { const d = path.join(...p); fs.mkdirSync(d, {recursive: true}); return d; };
-  const headOf = (dir: string) => git(dir, ["rev-parse", "HEAD"]);
-  const commitIn = (dir: string, name = "f.txt") => { fs.writeFileSync(path.join(dir, name), `${name}\n`); git(dir, ["add", "-A"]); git(dir, [...ID, "commit", "-q", "-m", `add ${name} in ${path.basename(dir)}`]); return headOf(dir); }; // //TR: commit mesajı dizin adını içerir: aynı saniyedeki iki depo asla aynı SHA'yı üretmez (aksi halde "başka deponun HEAD'i" ayrımı sahte geçerdi)
-  const initRepo = (dir: string, withCommit: boolean): string | null => { fs.mkdirSync(dir, {recursive: true}); git(dir, ["init", "-q", "-b", "main"]); return withCommit ? commitIn(dir) : null; };
-  const cleanEnv = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
-  // //TR: Tek ortama bağlı beklenti: TMPDIR bir deponun içindeyse "hiçbir depo yok" dizini aslında bir deponun alt dizinidir. Beklenti git'e SORULARAK (ceiling'siz, temiz env) türetilir; her iki dal da bu testte ya da aşağıdaki alt dizin testlerinde kesin sabitlenir.
-  const insideAnyRepo = (dir: string) => spawnGitSync(dir, ["rev-parse", "--git-dir"], {env: cleanEnv()}).status === 0;
-  const NOT_ROOT: RepositoryHead = {ok: false, reason: "REPOSITORY_NOT_WORKTREE_ROOT"}, UNRESOLVED: RepositoryHead = {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
-
-  type Built = {dir: string; want: RepositoryHead};
-  const builders: Array<[string, () => Built]> = [
-    ["repo root with a commit: ok, baseSha is that repository's HEAD", () => { const d = mkd(tmp, "root"); return {dir: d, want: {ok: true, baseSha: initRepo(d, true)!}}; }],
-    ["repo root with no commit (unborn HEAD): HEAD unresolved", () => { const d = mkd(tmp, "unborn"); initRepo(d, false); return {dir: d, want: UNRESOLVED}; }],
-    ["repo root whose branch points at a missing object: HEAD unresolved", () => { const d = mkd(tmp, "dangling"); initRepo(d, true); fs.writeFileSync(path.join(d, ".git", "refs", "heads", "main"), `${"a".repeat(40)}\n`); return {dir: d, want: UNRESOLVED}; }],
-    ["PLAIN SUBDIRECTORY inside a repo with commits (raw git resolves the PARENT's HEAD there): not the work-tree root", () => {
-      const parent = mkd(tmp, "parent"), parentHead = initRepo(parent, true)!, sub = mkd(parent, "pkg", "sub"); fs.writeFileSync(path.join(sub, "g.txt"), "g\n");
-      expect(git(sub, ["rev-parse", "--verify", "HEAD^{commit}"])).toBe(parentHead); // premise: the old inline check would have accepted this directory
-      return {dir: sub, want: NOT_ROOT};
-    }],
-    ["plain subdirectory inside an UNBORN repo: not the work-tree root", () => { const parent = mkd(tmp, "uparent"); initRepo(parent, false); return {dir: mkd(parent, "sub"), want: NOT_ROOT}; }],
-    ["the .git directory of a repo with commits: not the work-tree root", () => { const d = mkd(tmp, "dotgit"); initRepo(d, true); return {dir: path.join(d, ".git"), want: NOT_ROOT}; }],
-    ["a directory inside .git (objects): not the work-tree root", () => { const d = mkd(tmp, "dotgit-objects"); initRepo(d, true); return {dir: path.join(d, ".git", "objects"), want: NOT_ROOT}; }],
-    ["bare repository with commits: ok (a bare repository is a valid clone source)", () => { const d = mkd(tmp, "bsrc"), bare = path.join(tmp, "bare.git"), h = initRepo(d, true)!; git(tmp, ["clone", "-q", "--bare", d, bare]); return {dir: bare, want: {ok: true, baseSha: h}}; }],
-    ["linked worktree root: ok, baseSha is the WORKTREE's HEAD, not the main checkout's", () => {
-      const main = mkd(tmp, "wmain"), wt = path.join(tmp, "wtree"); initRepo(main, true); git(main, ["worktree", "add", "-q", wt, "-b", "wtb"]);
-      const h = commitIn(wt, "w.txt"); expect(h).not.toBe(headOf(main)); return {dir: wt, want: {ok: true, baseSha: h}};
-    }],
-    ["a repository nested inside another repository: ok, baseSha is the INNER repository's HEAD", () => { const outer = mkd(tmp, "outer"), outerHead = initRepo(outer, true)!, inner = mkd(outer, "vendor", "inner"), innerHead = initRepo(inner, true)!; expect(innerHead).not.toBe(outerHead); return {dir: inner, want: {ok: true, baseSha: innerHead}}; }],
-    ["a subdirectory of a repository whose config claims the child as its work tree (core.worktree): not the work-tree root (needs the ancestor ceiling)", () => {
-      const parent = mkd(tmp, "cwparent"); initRepo(parent, true); const child = mkd(parent, "child"); git(parent, ["config", "core.worktree", child]);
-      expect(git(child, ["rev-parse", "--show-toplevel"])).toBe(spawnGitSync(child, ["rev-parse", "--show-toplevel"], {env: cleanEnv()}).stdout.trim()); // premise: raw git calls the child a work-tree root
-      return {dir: child, want: NOT_ROOT};
-    }],
-    ["a subdirectory inside a BARE repository (objects/): not the work-tree root", () => { const d = mkd(tmp, "bsub-src"), bare = path.join(tmp, "bsub.git"); initRepo(d, true); git(tmp, ["clone", "-q", "--bare", d, bare]); return {dir: path.join(bare, "objects"), want: NOT_ROOT}; }],
-    ["a repository with a .git directory but core.bare=true: git reports no work tree, so the path is not the work-tree root (and not a bare git directory either)", () => { const d = mkd(tmp, "corebare"); initRepo(d, true); git(d, ["config", "core.bare", "true"]); return {dir: d, want: NOT_ROOT}; }],
-    ["a repository whose OWN config puts the work tree elsewhere (core.worktree): the path is not its work-tree root", () => { const d = mkd(tmp, "cwelsewhere"), other = mkd(tmp, "cwother"); initRepo(d, true); git(d, ["config", "core.worktree", other]); return {dir: d, want: NOT_ROOT}; }],
-    ["plain directory outside every repository: HEAD unresolved (not a repository at all)", () => { const d = mkd(tmp, "plain"); return {dir: d, want: insideAnyRepo(d) ? NOT_ROOT : UNRESOLVED}; }]
-  ];
-
-  it("every repository shape gets exactly one answer: the work-tree root with a resolvable HEAD is ok, everything else is refused with a specific reason (real git, 15 shapes)", () => {
-    for (const [label, build] of builders) { const {dir, want} = build(); expect([label, repositoryHead(dir, cleanEnv())]).toEqual([label, want]); }
-  });
-
-  it("a successful answer is a full 40-hex commit SHA and it equals what plain git reports; the function is pure (the repository and the env object are untouched)", () => {
-    const d = mkd(tmp, "pure"), h = initRepo(d, true)!, env = Object.freeze(cleanEnv());
-    const listing = () => fs.readdirSync(d, {recursive: true}).map(String).sort(), head = () => fs.readFileSync(path.join(d, ".git", "HEAD"), "utf8"), index = () => fs.readFileSync(path.join(d, ".git", "index"));
-    const before = {listing: listing(), head: head(), index: index()}, snapshot = {...env};
-    const r = repositoryHead(d, env);
-    expect(r).toEqual({ok: true, baseSha: h});
-    expect(r.ok && /^[0-9a-f]{40}$/.test(r.baseSha)).toBe(true);
-    expect({listing: listing(), head: head(), index: index()}).toEqual(before);
-    expect({...env}).toEqual(snapshot);
-    // a dot-dot spelling of the root is the same directory: ok (compared by canonical key, not by raw string)
-    expect(repositoryHead(`${d}${path.sep}.git${path.sep}..`, env)).toEqual({ok: true, baseSha: h});
-  });
-
-  it("a SHA-256 repository is refused as HEAD unresolved: the runner's commit id check is the 40-hex SHA-1 form only (skipped when this git cannot create one)", (ctx) => {
-    const d = mkd(tmp, "sha256");
-    if (spawnGitSync(d, ["init", "-q", "-b", "main", "--object-format=sha256"]).status !== 0) return ctx.skip();
-    const h = commitIn(d);
-    expect(h).toMatch(/^[0-9a-f]{64}$/);
-    expect(repositoryHead(d, cleanEnv())).toEqual(UNRESOLVED);
-  });
-
-  it.skipIf(process.platform === "win32")("a symlink to a repo root is ok, a symlink to a plain subdirectory or to the .git directory is not the work-tree root (canonical comparison; POSIX only: NOT_VERIFIED on Windows)", () => {
-    const d = mkd(tmp, "slroot"), h = initRepo(d, true)!, sub = mkd(d, "pkg");
-    const link = (target: string, name: string) => { const l = path.join(tmp, name); fs.symlinkSync(target, l, "dir"); return l; };
-    expect(repositoryHead(link(d, "to-root"), cleanEnv())).toEqual({ok: true, baseSha: h});
-    expect(repositoryHead(link(sub, "to-sub"), cleanEnv())).toEqual(NOT_ROOT);
-    expect(repositoryHead(link(path.join(d, ".git"), "to-dotgit"), cleanEnv())).toEqual(NOT_ROOT);
-  });
-
-  it("host GIT_* variables decide nothing: GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE / GIT_OBJECT_DIRECTORY / GIT_CEILING_DIRECTORIES / GIT_CONFIG_PARAMETERS (any case) planted in the base env give the same answer as a clean env, for every shape", () => {
-    const decoy = mkd(tmp, "decoy"), decoyHead = initRepo(decoy, true)!;
-    const planted: Array<[string, NodeJS.ProcessEnv]> = [
-      ["GIT_DIR", {GIT_DIR: path.join(decoy, ".git")}], ["GIT_DIR + GIT_WORK_TREE", {GIT_DIR: path.join(decoy, ".git"), GIT_WORK_TREE: decoy}], ["GIT_WORK_TREE", {GIT_WORK_TREE: decoy}],
-      ["GIT_INDEX_FILE", {GIT_INDEX_FILE: path.join(tmp, "nope.idx")}], ["GIT_OBJECT_DIRECTORY", {GIT_OBJECT_DIRECTORY: path.join(decoy, ".git", "objects")}], ["GIT_CEILING_DIRECTORIES covering everything", {GIT_CEILING_DIRECTORIES: tmp}],
-      ["GIT_CONFIG_PARAMETERS", {GIT_CONFIG_PARAMETERS: "'core.bare=true'"}], ["lower-case git_dir", {git_dir: path.join(decoy, ".git")}],
-      ["all of them", {GIT_DIR: path.join(decoy, ".git"), GIT_WORK_TREE: decoy, GIT_INDEX_FILE: path.join(tmp, "nope.idx"), GIT_CEILING_DIRECTORIES: tmp, GIT_CONFIG_PARAMETERS: "'core.bare=true'", git_work_tree: decoy}]
-    ];
-    const shapes = builders.map(([label, build]) => ({label, ...build()}));
-    for (const {label, dir, want} of shapes) for (const [name, extra] of planted) expect([label, name, repositoryHead(dir, {...cleanEnv(), ...extra})]).toEqual([label, name, want]);
-    const root = shapes[0]; // a repository with its own HEAD must never report the decoy's HEAD
-    expect(root.want.ok && root.want.baseSha !== decoyHead).toBe(true);
-    // the default env (process.env) is stripped too: a planted GIT_DIR in the real process env cannot make a non-repository look like a repository
-    const plain = mkd(tmp, "plain-default");
-    vi.stubEnv("GIT_DIR", path.join(decoy, ".git"));
-    try { expect(repositoryHead(plain)).toEqual(insideAnyRepo(plain) ? NOT_ROOT : UNRESOLVED); expect(repositoryHead(root.dir)).toEqual(root.want); } finally { vi.unstubAllEnvs(); }
-  });
-
-  it("the runner blocks with the function's reason BEFORE any clone or executor: a plain subdirectory of a repo is REPOSITORY_NOT_WORKTREE_ROOT (no WORKSPACE evidence, no baseSha, implementer never called), not a misleading WORKSPACE_CLONE_FAILED; a usable root still runs to AWAITING_APPROVAL with the function's baseSha", { timeout: T }, async () => {
-    const mkCtx = (repositoryPath: string): {c: Ctx; fake: FakeExecutors} => {
-      const base = setup("tA"), dataDir = path.join(tmp, `data-h-${crypto.randomBytes(3).toString("hex")}`), store = new WorkOsStore(dataDir);
-      const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", testCommand: ["node", "test.mjs"], repository: {path: repositoryPath}});
-      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
-      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
-      return {c: {...base, store, dataDir, missionId: m.missionId, projectId: p.projectId}, fake: new FakeExecutors(okScript())};
-    };
-    const parent = mkd(tmp, "rp"), parentHead = initRepo(parent, true)!, sub = mkd(parent, "pkg", "sub"), unborn = mkd(tmp, "ru"), plain = mkd(tmp, "rplain");
-    initRepo(unborn, false); fs.writeFileSync(path.join(sub, "x.txt"), "x\n");
-    const dotGit = path.join(parent, ".git");
-    const cases: Array<[string, string, string]> = [
-      ["plain subdirectory of a repo", sub, "REPOSITORY_NOT_WORKTREE_ROOT"], ["the .git directory", dotGit, "REPOSITORY_NOT_WORKTREE_ROOT"],
-      ["unborn repository", unborn, "REPOSITORY_HEAD_UNRESOLVED"], ["plain directory", plain, insideAnyRepo(plain) ? "REPOSITORY_NOT_WORKTREE_ROOT" : "REPOSITORY_HEAD_UNRESOLVED"]
-    ];
-    for (const [label, repo, reason] of cases) {
-      const {c, fake} = mkCtx(repo);
-      const pre = repositoryPrecondition(c.store.getProject({tenantId: "tA"}, c.projectId)!, c.dataDir);
-      expect([label, pre.ok && repositoryHead(pre.src, process.env).ok === false && (repositoryHead(pre.src, process.env) as {reason: string}).reason]).toEqual([label, reason]);
-      const r = start(c, fake);
-      await runner(c, fake).tick();
-      const run = runOf(c, r.runId);
-      expect([label, run.status, run.reason, fake.calls.implement, run.baseSha ?? null]).toEqual([label, "BLOCKED", reason, 0, null]);
-      expect([label, run.evidence.filter(e => e.kind === "WORKSPACE").length]).toEqual([label, 0]);
-    }
-    expect(parentHead).toMatch(/^[0-9a-f]{40}$/);
-    const ok = setup("tA"), okFake = new FakeExecutors(okScript());
-    const okPre = repositoryPrecondition(ok.store.getProject({tenantId: "tA"}, ok.projectId)!, ok.dataDir);
-    expect(okPre.ok && repositoryHead(okPre.src, process.env)).toEqual({ok: true, baseSha: ok.head});
-    const okRun = start(ok, okFake);
-    await runner(ok, okFake).tick();
-    expect(runOf(ok, okRun.runId)).toMatchObject({status: "AWAITING_APPROVAL", baseSha: ok.head});
   });
 });

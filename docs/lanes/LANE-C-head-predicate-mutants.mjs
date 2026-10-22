@@ -18,7 +18,7 @@ for (const m of mutants) {
   fs.writeFileSync(file, src.replace(m.old, () => m.new));
   try {
     const t0 = Date.now();
-    const r = cp.spawnSync("npx", ["vitest", "run", "tests/v7-b3a-runner.test.ts", "-t", "repositoryHead"], {cwd: root, encoding: "utf8", shell: process.platform === "win32", timeout: 900_000});
+    const r = cp.spawnSync("npx", ["vitest", "run", "tests/v7-b3a-runner.test.ts", "-t", "LANE-C repository head predicate"], {cwd: root, encoding: "utf8", shell: process.platform === "win32", timeout: 900_000});
     const out = String(r.stdout) + String(r.stderr), tests = /Tests\s+([^\n]+)/.exec(out)?.[1]?.trim() ?? "no summary";
     const killed = r.status !== 0;
     if (!killed) survived++;
