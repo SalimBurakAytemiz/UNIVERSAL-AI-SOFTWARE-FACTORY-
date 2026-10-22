@@ -2229,3 +2229,376 @@ describe("LANE-B run summaries", () => {
     void run;
   });
 });
+
+describe("LANE-B run readiness", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const mk = async (tenantId = "tA", dataDir = path.join(tmp, "data")) => {
+    const {default: Fastify} = await import("fastify");
+    const {registerReadinessRoutes} = await import("../apps/control-api/src/routes/readiness.js");
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(dataDir);
+    registerReadinessRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}), workosFail: (r: any) => r.code(500).send({error: "INTERNAL_ERROR"})});
+    return {app, store};
+  };
+  const proj = (s: WorkOsStore, extra: any = {}) => s.createProject({tenantId: "tA", orgId: "o1", name: "p" + Math.random(), environmentId: "local", createdBy: "FOUNDER_LOCAL", ...extra});
+  const msn = (s: WorkOsStore, projectId: string, extra: any = {}) => s.createMission({tenantId: "tA", projectId, title: "m", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL", ...extra});
+  const rd = async (app: any, id: string) => (await app.inject({method: "GET", url: `/v1/projects/${id}/readiness`, headers: hdr}));
+  const by = (r: any) => Object.fromEntries(r.json().readiness.checks.map((c: any) => [c.id, c]));
+
+  it("fresh project: no mission, no repository, no test command are reported with fixed codes and next actions; nothing is invented", async () => {
+    const {app, store} = await mk();
+    const p = proj(store);
+    const r = await rd(app, p.projectId), c = by(r);
+    expect(r.statusCode).toBe(200);
+    expect(r.json().readiness).toMatchObject({ready: false, verifiable: false, missionId: null});
+    expect(c.MISSION).toMatchObject({state: "BLOCKED", reason: "NO_OPEN_MISSION", nextAction: "CREATE_MISSION", blocking: true});
+    expect(c.RISK.state).toBe("UNKNOWN");
+    expect(c.REPOSITORY).toMatchObject({state: "BLOCKED", reason: "REPOSITORY_NOT_CONFIGURED", nextAction: "CONFIGURE_REPOSITORY"});
+    expect(c.TEST_COMMAND).toMatchObject({state: "BLOCKED", reason: "TEST_COMMAND_MISSING", blocking: false});
+    expect(c.PLAN.state).toBe("UNKNOWN");
+  });
+
+  it("ready only when every blocking check is OK; verifiable additionally needs test command and plan; mission test command overrides the project's", async () => {
+    const {app, store} = await mk();
+    const repoDir = path.join(tmp, "readiness-repo"); fs.mkdirSync(repoDir, {recursive: true});
+    const p = proj(store, {repository: {path: repoDir}});
+    const m = msn(store, p.projectId);
+    let r = await rd(app, p.projectId);
+    expect(r.json().readiness).toMatchObject({ready: true, verifiable: false, missionId: m.missionId});
+    expect(by(r).REPOSITORY.state).toBe("OK");
+    expect(r.body).not.toContain("readiness-repo");
+    store.createTask({tenantId: "tA", missionId: m.missionId, title: "t", actor: "FOUNDER_LOCAL"});
+    const p2 = proj(store, {repository: {path: repoDir}, testCommand: ["rm", "-rf"]});
+    const m2 = msn(store, p2.projectId, {testCommand: ["npm", "test"]});
+    store.createTask({tenantId: "tA", missionId: m2.missionId, title: "t", actor: "FOUNDER_LOCAL"});
+    r = await rd(app, p2.projectId);
+    expect(by(r).TEST_COMMAND.state).toBe("OK");
+    expect(r.json().readiness.verifiable).toBe(true);
+    const p3 = proj(store, {repository: {path: repoDir}, testCommand: ["npm", "test"]});
+    const m3 = msn(store, p3.projectId);
+    store.createTask({tenantId: "tA", missionId: m3.missionId, title: "t", actor: "FOUNDER_LOCAL"});
+    expect((await rd(app, p3.projectId)).json().readiness.verifiable).toBe(true);
+    const {deriveProjectFlow} = await import("../core/workos/flow.js");
+    expect(deriveProjectFlow(store, {tenantId: "tA"}, p2.projectId)!.testCommand).toBe("CONFIGURED");
+    expect(by(await rd(app, p.projectId)).PLAN).toMatchObject({state: "OK", blocking: false});
+  });
+
+  it("R3/R4 is BLOCKED with the run route's refusal code; remote-only and data-dir repositories are refused; disallowed test command is flagged", async () => {
+    const {app, store} = await mk();
+    const p = proj(store, {repository: {url: "https://example.com/x/y.git"}, testCommand: ["bash", "-c", "x"]});
+    msn(store, p.projectId, {riskLevel: "R3"});
+    const r = await rd(app, p.projectId), c = by(r);
+    expect(c.RISK).toMatchObject({state: "BLOCKED", reason: "RISK_REQUIRES_FOUNDER_DECISION_AND_OS_SANDBOX"});
+    expect(c.REPOSITORY.reason).toBe("REMOTE_REPO_NOT_SUPPORTED_YET");
+    expect(c.TEST_COMMAND.reason).toBe("TEST_COMMAND_NOT_ALLOWED");
+    expect(r.body).not.toContain("example.com");
+    expect(r.json().readiness.ready).toBe(false);
+    const inside = proj(store, {repository: {path: path.join(tmp, "data")}});
+    msn(store, inside.projectId);
+    expect(by(await rd(app, inside.projectId)).REPOSITORY.reason).toBe("REPOSITORY_PATH_FORBIDDEN");
+  });
+
+  it("validates id and query, scopes by tenant, requires the token, and stays read-only", async () => {
+    const {app, store} = await mk();
+    const p = proj(store);
+    expect((await app.inject({method: "GET", url: "/v1/projects/nope/readiness", headers: hdr})).statusCode).toBe(400);
+    expect((await app.inject({method: "GET", url: `/v1/projects/${p.projectId}/readiness?x=1`, headers: hdr})).statusCode).toBe(400);
+    expect((await app.inject({method: "GET", url: `/v1/projects/prj_${"0".repeat(24)}/readiness`, headers: hdr})).statusCode).toBe(404);
+    expect((await app.inject({method: "GET", url: `/v1/projects/${p.projectId}/readiness`, headers: {host: hdr.host}})).statusCode).toBe(403);
+    const other = await mk("tB");
+    expect((await rd(other.app, p.projectId)).statusCode).toBe(404);
+    expect((await app.inject({method: "POST", url: `/v1/projects/${p.projectId}/readiness`, headers: hdr, payload: {}})).statusCode).toBe(404);
+  });
+
+  it("a configured repository path that does not exist is BLOCKED with the runner's own code", async () => {
+    const {app, store} = await mk();
+    const p = proj(store, {repository: {path: path.join(tmp, "no-such-readiness-repo")}});
+    msn(store, p.projectId);
+    const r = await rd(app, p.projectId);
+    expect(by(r).REPOSITORY).toMatchObject({state: "BLOCKED", reason: "REPOSITORY_PATH_NOT_FOUND"});
+    expect(r.body).not.toContain("no-such-readiness-repo");
+  });
+
+  it("readiness REPOSITORY answers are exactly the runner's own repositoryPrecondition reasons for all five BLOCK cases", async () => {
+    const {repositoryPrecondition} = await import("../core/workos/runner.js");
+    const {app, store} = await mk();
+    const dataDir = path.join(tmp, "data"), okDir = path.join(tmp, "readiness-parity-ok"); fs.mkdirSync(okDir, {recursive: true});
+    const cases: [string, any, string | null][] = [
+      ["none", undefined, "REPOSITORY_NOT_CONFIGURED"],
+      ["url only", {url: "https://example.com/a.git"}, "REMOTE_REPO_NOT_SUPPORTED_YET"],
+      ["managed foreign path", {path: okDir, managed: true}, "REPOSITORY_NOT_MANAGED"],
+      ["inside data dir", {path: dataDir}, "REPOSITORY_PATH_FORBIDDEN"],
+      ["missing dir", {path: path.join(tmp, "readiness-parity-missing")}, "REPOSITORY_PATH_NOT_FOUND"],
+      ["ok", {path: okDir}, null]
+    ];
+    for (const [name, repository, want] of cases) {
+      const p = proj(store, repository ? {repository} : {});
+      msn(store, p.projectId);
+      const pre = repositoryPrecondition(store.getProject({tenantId: "tA"}, p.projectId)!, store.dataDir);
+      const got = by(await rd(app, p.projectId)).REPOSITORY;
+      expect(pre.ok ? null : pre.reason, name).toBe(want);
+      expect(got.reason, name).toBe(want);
+      expect(got.state, name).toBe(want ? "BLOCKED" : "OK");
+    }
+  });
+
+  it("flow testCommand follows mission-over-project: a command on either level alone is CONFIGURED, neither is MISSING", async () => {
+    const {app, store} = await mk();
+    void app;
+    const {deriveProjectFlow} = await import("../core/workos/flow.js");
+    const flag = (pj: any, ms: any) => { const p = proj(store, pj); msn(store, p.projectId, ms); return deriveProjectFlow(store, {tenantId: "tA"}, p.projectId)!.testCommand; };
+    expect(flag({}, {testCommand: ["npm", "test"]})).toBe("CONFIGURED");
+    expect(flag({testCommand: ["npm", "test"]}, {})).toBe("CONFIGURED");
+    expect(flag({}, {})).toBe("MISSING");
+  });
+
+  it("KNOWN LIMIT (pinned): an existing directory that is not a git repository reads as REPOSITORY OK; the runner later BLOCKs it with REPOSITORY_HEAD_UNRESOLVED", async () => {
+    const {app, store} = await mk();
+    const dir = path.join(tmp, "readiness-not-git"); fs.mkdirSync(dir, {recursive: true});
+    const p = proj(store, {repository: {path: dir}});
+    msn(store, p.projectId);
+    const r = await rd(app, p.projectId);
+    expect(by(r).REPOSITORY.state).toBe("OK");
+    expect(r.json().readiness.ready).toBe(true);
+  });
+});
+
+// //TR: LANE-B G-FB-001/066/070/123: GET /health işlevsel API testi. YALNIZ sunucu yarısı sınanır (Host kapısı, /health'in tokensız açık oluşu, challenge -> HMAC controlProof, /v1 token kapısı, gövde sızıntısı); Electron main.mjs verifyServerIdentity yarısı (fetch + secureStringEqual) bu testte ÇALIŞMAZ.
+describe("LANE-B control /health (server half only; Electron main-process handshake NOT exercised)", () => {
+  const token = "h".repeat(32), HOST = "127.0.0.1:3210", CH = "ab".repeat(32);
+  const mkSrv = async (controlToken = token) => {
+    const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
+    const {controlChallengeProof} = await import("../automation/lib/control-boundary.mjs");
+    return {app: buildServer({controlToken, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false}), proof: controlChallengeProof as (t: string, c: string) => string | null, runtime};
+  };
+  const health = (app: any, query = `?challenge=${CH}`, host: string | null = HOST) => app.inject({method: "GET", url: `/health${query}`, headers: host === null ? {} : {host}});
+
+  it("answers the identity challenge without the control token: fixed identity fields and controlProof = HMAC(token, challenge)", async () => {
+    const {app, proof} = await mkSrv();
+    const r = await health(app), b = r.json();
+    expect(r.statusCode).toBe(200);
+    expect(Object.keys(b).sort()).toEqual(["bindHost", "controlProof", "port", "status", "system", "time"]);
+    expect(b).toMatchObject({status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", bindHost: "127.0.0.1", port: 3210});
+    expect(b.controlProof).toBe(proof(token, CH));
+    const other = (await health(app, `?challenge=${"cd".repeat(32)}`)).json().controlProof;
+    expect(other).toBe(proof(token, "cd".repeat(32)));
+    expect(other).not.toBe(b.controlProof);
+    const wrongToken = await mkSrv("w".repeat(32));
+    expect((await health(wrongToken.app)).json().controlProof).not.toBe(b.controlProof);
+  });
+
+  it("gives no proof for a missing or malformed challenge or an unconfigured token, and leaks no token or path", async () => {
+    const {app} = await mkSrv();
+    for (const q of ["", "?challenge=", "?challenge=zz", `?challenge=${"AB".repeat(32)}`, `?challenge=${"ab".repeat(31)}`]) {
+      const r = await health(app, q);
+      expect(r.statusCode, q).toBe(200);
+      expect(r.json().controlProof, q).toBeNull();
+    }
+    const none = await mkSrv("");
+    const r = await health(none.app);
+    expect(r.statusCode).toBe(200);
+    expect(r.json().controlProof).toBeNull();
+    for (const body of [(await health(app)).body, r.body]) {
+      expect(body).not.toContain(token);
+      expect(body).not.toContain(tmp);
+      expect(body).not.toContain("runtime");
+    }
+  });
+
+  it("rejects every Host other than the exact loopback host:port with 421, /health included", async () => {
+    const {app} = await mkSrv();
+    for (const h of ["evil.example", "localhost:3210", "127.0.0.1", "127.0.0.1:3211", "127.0.0.1:3210.evil.example", "0.0.0.0:3210", "", null]) {
+      const r = await health(app, `?challenge=${CH}`, h);
+      expect(r.statusCode, String(h)).toBe(421);
+      expect(r.json()).toEqual({error: "CONTROL_HOST_REJECTED"});
+    }
+    const {hostHeaderAllowed} = await import("../automation/lib/control-boundary.mjs");
+    expect(hostHeaderAllowed(undefined, 3210)).toBe(false);
+    expect(hostHeaderAllowed("", 3210)).toBe(false);
+    expect(hostHeaderAllowed("127.0.0.1:3210", 3210)).toBe(true);
+    expect((await health(app, `?challenge=${CH}`, "127.0.0.1:3210")).statusCode).toBe(200);
+    expect((await health(app, `?challenge=${CH}`, "127.0.0.1:3210".toUpperCase())).statusCode).toBe(200);
+  });
+
+  it("keeps /health open but gates /v1: no header or wrong token 403, correct token passes, unconfigured token 503", async () => {
+    const {app} = await mkSrv();
+    const get = (headers: any) => app.inject({method: "GET", url: "/v1/projects", headers: {host: HOST, ...headers}});
+    expect((await get({})).statusCode).toBe(403);
+    expect((await get({"x-uasco-control-token": "x".repeat(32)})).statusCode).toBe(403);
+    expect((await get({"x-uasco-control-token": token})).statusCode).toBe(200);
+    const none = await mkSrv("");
+    const r = await none.app.inject({method: "GET", url: "/v1/projects", headers: {host: HOST, "x-uasco-control-token": token}});
+    expect(r.statusCode).toBe(503);
+    expect(r.json()).toEqual({error: "CONTROL_TOKEN_NOT_CONFIGURED"});
+  });
+});
+
+// //TR: LANE-B G-FB-008/084/085/086: eski supervisor koşu okumalarının (GET /v1/runs, /events, /logs, /logs/:name) yol güvenliği işlevsel testi. Symlink senaryoları Windows'ta ayrıcalık isteyebileceğinden win32'de atlanır (görünür skip); diğer her senaryo iki işletim sisteminde de koşar.
+describe("LANE-B legacy run reads: path safety of /v1/runs events and logs", () => {
+  const token = "r".repeat(32), HOST = "127.0.0.1:3210";
+  const hdr = {"x-uasco-control-token": token, host: HOST};
+  const OUTSIDE = "OUTSIDE-FILE-MARKER";
+  const setup = () => {
+    const runtime = path.join(tmp, "runtime"), runs = path.join(runtime, "runs"), a = path.join(runs, "RUN-A1");
+    fs.mkdirSync(path.join(a, "logs"), {recursive: true});
+    fs.writeFileSync(path.join(a, "summary.json"), JSON.stringify({status: "DONE"}));
+    fs.writeFileSync(path.join(a, "events.jsonl"), [JSON.stringify({event: "A"}), "{not json RAW-LINE-MARKER", JSON.stringify({event: "C"})].join("\n") + "\n");
+    fs.writeFileSync(path.join(a, "logs", "x.log"), "hello log\n");
+    fs.writeFileSync(path.join(a, "logs", "notes.txt"), "not a log");
+    fs.mkdirSync(path.join(a, "logs", "dir.log"));
+    fs.mkdirSync(path.join(runs, "not-a-run"), {recursive: true});
+    fs.writeFileSync(path.join(runs, "RUN-FILE"), "x");
+    const outside = path.join(tmp, "outside"); fs.mkdirSync(outside, {recursive: true});
+    fs.writeFileSync(path.join(outside, "secret.log"), OUTSIDE); fs.writeFileSync(path.join(outside, "events.jsonl"), JSON.stringify({event: OUTSIDE}) + "\n");
+    fs.writeFileSync(path.join(tmp, "secret.log"), OUTSIDE);
+    return {runtime, runs, a, outside, app: buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false})};
+  };
+  const get = (app: any, url: string, headers: any = hdr) => app.inject({method: "GET", url, headers});
+
+  it("lists only RUN-* directories and serves events with a malformed line redacted, never raw", async () => {
+    const {app} = setup();
+    const l = (await get(app, "/v1/runs")).json();
+    expect(l.runs.map((r: any) => r.runId)).toEqual(["RUN-A1"]);
+    expect(l.runs[0].summary).toEqual({status: "DONE"});
+    const r = await get(app, "/v1/runs/RUN-A1/events"), b = r.json();
+    expect(r.statusCode).toBe(200);
+    expect(b.events).toEqual([{event: "A"}, {event: "MALFORMED_EVENT_LINE", raw: "[REDACTED]"}, {event: "C"}]);
+    expect(b.truncated).toBe(false);
+    expect(r.body).not.toContain("RAW-LINE-MARKER");
+  });
+
+  it("keeps only the last 2000 events and flags byte truncation past 1 MiB", async () => {
+    const {app, a} = setup();
+    fs.writeFileSync(path.join(a, "events.jsonl"), Array.from({length: 2100}, (_, i) => JSON.stringify({n: i})).join("\n") + "\n");
+    const b = (await get(app, "/v1/runs/RUN-A1/events")).json();
+    expect(b.events.length).toBe(2000);
+    expect(b.events[0]).toEqual({n: 100});
+    expect(b.events[1999]).toEqual({n: 2099});
+    expect(b.truncated).toBe(false);
+    fs.writeFileSync(path.join(a, "events.jsonl"), (JSON.stringify({pad: "p".repeat(1000)}) + "\n").repeat(1500));
+    const big = (await get(app, "/v1/runs/RUN-A1/events")).json();
+    expect(big.truncated).toBe(true);
+    expect(big.events.length).toBeLessThanOrEqual(2000);
+  });
+
+  it("lists only regular *.log files and tails a log at 256 KiB with truncated:true", async () => {
+    const {app, a} = setup();
+    const l = (await get(app, "/v1/runs/RUN-A1/logs")).json();
+    expect(l.logs).toEqual([{name: "x.log", size: 10}]);
+    const t = (await get(app, "/v1/runs/RUN-A1/logs/x.log")).json();
+    expect(t).toEqual({runId: "RUN-A1", name: "x.log", truncated: false, text: "hello log\n"});
+    fs.writeFileSync(path.join(a, "logs", "big.log"), "b".repeat(300 * 1024));
+    const big = (await get(app, "/v1/runs/RUN-A1/logs/big.log")).json();
+    expect(big.truncated).toBe(true);
+    expect(big.text.length).toBeLessThanOrEqual(256 * 1024);
+    expect((await get(app, "/v1/runs/RUN-A1/logs/notes.txt")).statusCode).toBe(400);
+    expect((await get(app, "/v1/runs/RUN-A1/logs/missing.log")).json()).toEqual({error: "NOT_FOUND_OR_UNSAFE_PATH"});
+    expect((await get(app, "/v1/runs/RUN-A1/logs/dir.log")).statusCode).toBe(404);
+    expect((await get(app, "/v1/runs/RUN-NOPE/events")).statusCode).toBe(404);
+    expect((await get(app, "/v1/runs/RUN-NOPE/logs")).json()).toEqual({runId: "RUN-NOPE", logs: []});
+  });
+
+  it("refuses traversal, encoded, backslash and absolute names in the run id and the log name; nothing outside the run dir is served", async () => {
+    const {app} = setup();
+    const ids = ["..", "%2e%2e", "..%2f..%2fsecret", "..%5c..%5csecret", "%2Fetc%2Fpasswd", "RUN-A1%2f..%2f..", "run-a1", "RUN-", "RUN-%00", "C%3A%5Cwindows"];
+    for (const id of ids) for (const tail of ["events", "logs", "logs/x.log"]) {
+      const r = await get(app, `/v1/runs/${id}/${tail}`);
+      expect([400, 404], `${id}/${tail}`).toContain(r.statusCode);
+      expect(r.body, `${id}/${tail}`).not.toContain(OUTSIDE);
+    }
+    const names = ["..", "%2e%2e", "..%2f..%2f..%2fsecret.log", "..%5c..%5csecret.log", "%2Ftmp%2Fsecret.log", "x.log%00", "x", "x.log.", ".log", "a b.log", "..%2f..%2fsecret.log"];
+    for (const n of names) {
+      const r = await get(app, `/v1/runs/RUN-A1/logs/${n}`);
+      expect([400, 404], n).toContain(r.statusCode);
+      expect(r.body, n).not.toContain(OUTSIDE);
+    }
+    expect((await get(app, "/v1/runs/RUN-A1/logs/..%2f..%2f..%2fsecret.log")).statusCode).toBe(400);
+    expect((await get(app, "/v1/runs/RUN-A1/logs/..%5c..%5csecret.log")).statusCode).toBe(400);
+  });
+
+  it.skipIf(process.platform === "win32")("refuses symlinked events, logs, log files and run directories (symlinks skipped on Windows)", async () => {
+    const {app, runs, a, outside} = setup();
+    fs.rmSync(path.join(a, "events.jsonl")); fs.symlinkSync(path.join(outside, "events.jsonl"), path.join(a, "events.jsonl"));
+    const e = await get(app, "/v1/runs/RUN-A1/events");
+    expect(e.statusCode).toBe(404); expect(e.json()).toEqual({error: "NOT_FOUND_OR_UNSAFE_PATH"}); expect(e.body).not.toContain(OUTSIDE);
+    fs.symlinkSync(path.join(outside, "secret.log"), path.join(a, "logs", "link.log"));
+    expect((await get(app, "/v1/runs/RUN-A1/logs")).json().logs.map((x: any) => x.name)).toEqual(["x.log"]);
+    const lf = await get(app, "/v1/runs/RUN-A1/logs/link.log");
+    expect(lf.statusCode).toBe(404); expect(lf.body).not.toContain(OUTSIDE);
+    fs.symlinkSync(outside, path.join(runs, "RUN-S1"), "dir");
+    expect((await get(app, "/v1/runs")).json().runs.map((r: any) => r.runId)).toEqual(["RUN-A1"]);
+    const sr = await get(app, "/v1/runs/RUN-S1/events");
+    expect(sr.statusCode).toBe(404); expect(sr.body).not.toContain(OUTSIDE);
+    fs.symlinkSync(outside, path.join(runs, "RUN-S2"), "dir");
+    expect((await get(app, "/v1/runs/RUN-S2/logs")).json()).toEqual({runId: "RUN-S2", logs: []});
+    expect((await get(app, "/v1/runs/RUN-S2/logs/secret.log")).statusCode).toBe(404);
+  });
+
+  it("requires the control token on all four routes and leaks no absolute path or token", async () => {
+    const {app} = setup();
+    for (const u of ["/v1/runs", "/v1/runs/RUN-A1/events", "/v1/runs/RUN-A1/logs", "/v1/runs/RUN-A1/logs/x.log"]) {
+      expect((await get(app, u, {host: HOST})).statusCode, u).toBe(403);
+      expect((await get(app, u, {host: HOST, "x-uasco-control-token": "x".repeat(32)})).statusCode, u).toBe(403);
+      const ok = await get(app, u);
+      expect(ok.statusCode, u).toBe(200);
+      for (const bad of [tmp, token, "\\Users\\", "/home/"]) expect(ok.body, `${u} ${bad}`).not.toContain(bad);
+    }
+    const miss = await get(app, "/v1/runs/RUN-A1/logs/missing.log");
+    for (const bad of [tmp, token]) expect(miss.body).not.toContain(bad);
+  });
+});
+
+// //TR: LANE-B G-FB-075/077/124: GET /v1/capabilities, /v1/retry ve /v1/factory okuma-biçimi testi; yalnız route kodunda belgelenmiş davranış sınanır (dosya geçişi, runtime durum dosyası yok/geçerli/güvensiz). Symlink senaryosu Windows'ta atlanır.
+describe("LANE-B P3 read shapes: /v1/capabilities, /v1/retry, /v1/factory", () => {
+  const token = "p".repeat(32), HOST = "127.0.0.1:3210";
+  const hdr = {"x-uasco-control-token": token, host: HOST};
+  const mkApp = () => {
+    const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
+    return {runtime, app: buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false})};
+  };
+  const get = (app: any, url: string, headers: any = hdr) => app.inject({method: "GET", url, headers});
+  const fileJson = (rel: string) => JSON.parse(fs.readFileSync(path.join(process.cwd(), rel), "utf8"));
+  const noLeak = (body: string, label: string) => { for (const bad of [tmp, token]) expect(body, `${label} ${bad}`).not.toContain(bad); };
+
+  it("/v1/factory and /v1/capabilities return their repository JSON file unchanged, and need the token", async () => {
+    const {app} = mkApp();
+    for (const [url, rel] of [["/v1/factory", ".ai/MASTER_STATE.json"], ["/v1/capabilities", "registries/capabilities.json"]] as const) {
+      const r = await get(app, url);
+      expect(r.statusCode, url).toBe(200);
+      expect(r.json(), url).toEqual(fileJson(rel));
+      noLeak(r.body, url);
+      expect((await get(app, url, {host: HOST})).statusCode, url).toBe(403);
+      expect((await get(app, url, {host: HOST, "x-uasco-control-token": "x".repeat(32)})).statusCode, url).toBe(403);
+    }
+    expect(fileJson("registries/capabilities.json").capabilities.length).toBe((await get(app, "/v1/capabilities")).json().capabilities.length);
+  });
+
+  it("/v1/retry returns null when the state file is absent, the file content when valid, and the fixed INVALID answer when it is malformed or not a regular file", async () => {
+    const {app, runtime} = mkApp();
+    const file = path.join(runtime, "SUPERVISOR_RETRY.json");
+    const absent = await get(app, "/v1/retry");
+    expect(absent.statusCode).toBe(200);
+    expect(absent.body).toBe("null");
+    fs.writeFileSync(file, JSON.stringify({status: "WAITING", attempts: 2}));
+    expect((await get(app, "/v1/retry")).json()).toEqual({status: "WAITING", attempts: 2});
+    fs.writeFileSync(file, "{not json");
+    const bad = await get(app, "/v1/retry");
+    expect(bad.statusCode).toBe(200);
+    expect(bad.json()).toEqual({status: "INVALID", error: "SUPERVISOR_RETRY_STATE_UNSAFE"});
+    noLeak(bad.body, "malformed");
+    fs.rmSync(file); fs.mkdirSync(file);
+    expect((await get(app, "/v1/retry")).json()).toEqual({status: "INVALID", error: "SUPERVISOR_RETRY_STATE_UNSAFE"});
+    for (const h of [{host: HOST}, {host: HOST, "x-uasco-control-token": "x".repeat(32)}]) expect((await get(app, "/v1/retry", h)).statusCode).toBe(403);
+  });
+
+  it.skipIf(process.platform === "win32")("/v1/retry refuses a symlinked state file with the fixed INVALID answer and never serves the target (symlinks skipped on Windows)", async () => {
+    const {app, runtime} = mkApp();
+    const target = path.join(tmp, "retry-target.json"); fs.writeFileSync(target, JSON.stringify({status: "TARGET-CONTENT-MARKER"}));
+    fs.symlinkSync(target, path.join(runtime, "SUPERVISOR_RETRY.json"));
+    const r = await get(app, "/v1/retry");
+    expect(r.json()).toEqual({status: "INVALID", error: "SUPERVISOR_RETRY_STATE_UNSAFE"});
+    expect(r.body).not.toContain("TARGET-CONTENT-MARKER");
+    noLeak(r.body, "symlink");
+  });
+});
