@@ -12,6 +12,11 @@ export function resetTaskStatusDraft(taskId=null){taskStatusDraft.taskId=taskId;
 export async function submitTaskTransition(ctx,mission,task,to){
   const req=buildTaskTransitionRequest({task,tasks:mission.tasks,missionStatus:mission.status,to,reason:taskStatusDraft.reason});
   if(!req.ok){setStatus(TASK_STATUS_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,TASK_STATUS_FORM,KEYS);return {ok:false,validation:true}}
+  // //TR: DONE son durumdur (TASK_TRANSITIONS: DONE -> yok); yalnız bu hedefte, istek kurulup doğrulandıktan sonra ve göndermeden önce açık onay istenir. Vazgeçilirse hiçbir istek gönderilmez ve durum bloğu dürüstçe "iptal edildi" der. Diğer hedeflerde onay yoktur.
+  if(to==="DONE"){
+    const yes=await ctx.confirm({title:ctx.t("taskst.confirm.title"),body:ctx.t("taskst.confirm.body"),action:ctx.t("taskst.confirm.action",{title:task.title}),target:`${task.title} (${task.taskId})`,confirmLabel:ctx.t("taskst.confirm.ok")});
+    if(yes!==true){setStatus(TASK_STATUS_FORM,{ok:false,key:"confirm.cancelled",vars:{},errors:null});await ctx.rerender();focusResult(ctx,TASK_STATUS_FORM,KEYS);return {ok:false,cancelled:true}}
+  }
   drafts.busy[TASK_STATUS_FORM]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[TASK_STATUS_FORM]=false}
   const ok=recordPost(TASK_STATUS_FORM,res,"taskst.done",{title:task.title,to:statusLabel(ctx,to)});
@@ -38,7 +43,7 @@ export function taskStatusControls(ctx,mission,taskId){
   }
   const controls=targets.length?h(doc,"div",{},
     field(ctx,{id:"taskst-reason",labelKey:"taskst.reason",value:taskStatusDraft.reason,onInput:v=>{taskStatusDraft.reason=v},hintKey:"taskst.reasonHint"}),
-    h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("taskst.title")},targets.map(to=>h(doc,"button",{type:"button",class:`btn${to==="DONE"?" btn-primary":""}`,id:`taskst-${to}`,dataset:{focusKey:`taskst-${to}`,taskTo:to},disabled:busy,
+    h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("taskst.title")},targets.map(to=>h(doc,"button",{type:"button",class:`btn${to==="DONE"?" btn-primary":""}`,id:`taskst-${to}`,dataset:{focusKey:`taskst-${to}`,taskTo:to,confirm:to==="DONE"?"true":"false"},disabled:busy,
       on:{click:()=>{if(!drafts.busy[TASK_STATUS_FORM])submitTaskTransition(ctx,mission,task,to)}},text:ctx.t("taskst.to",{to:statusLabel(ctx,to)})})))):null;
   return wrap(h(doc,"p",{class:"note",text:ctx.t("taskst.lead")}),h(doc,"p",{class:"panel-meta"},h(doc,"span",{text:ctx.t("taskst.current")})," ",statusPill(ctx,task.status)),...notes,controls,statusBlock(ctx,TASK_STATUS_FORM));
 }
