@@ -2,7 +2,7 @@
 import {h,panel,statePill,kpiTile,miniBars,emptyNote} from "../components.js";
 import {MISSING,topEntries} from "../model.js";
 import {formatDateTime} from "../work-core.js";
-import {EXECUTIVE_SOURCES,EXECUTIVE_SOURCE_PATHS,PILL_FOR_RUN_STATUS,MAX_LEDGER_ROWS,executiveSummary,shortSha} from "../executive-core.js";
+import {EXECUTIVE_SOURCES,EXECUTIVE_SOURCE_PATHS,PILL_FOR_RUN_STATUS,RUN_STOPPED_STATUSES,MAX_LEDGER_ROWS,executiveSummary,shortSha} from "../executive-core.js";
 import {returnPanel} from "./return-summary.js";
 
 const isOk=res=>Boolean(res)&&res.state==="VERIFIED";
@@ -145,6 +145,7 @@ function ledgerRow(ctx,r,titles){
       h(doc,"p",{class:"executive-row-head"},h(doc,"strong",{class:"mono",text:r.runId})," ",statePill(ctx,PILL_FOR_RUN_STATUS[r.status]??"NEUTRAL",{label:r.status})),
       h(doc,"p",{class:"note",dataset:{role:"mission"},text:`${ctx.t("executive.ledger.mission")}: ${missionLine}`}),
       h(doc,"dl",{class:"executive-facts"},
+        RUN_STOPPED_STATUSES.includes(r.status)?[h(doc,"dt",{text:ctx.t("executive.field.reason")}),h(doc,"dd",{dataset:{execRunReason:""},},r.reason===null?MISSING:r.reason)]:null,
         h(doc,"dt",{text:ctx.t("executive.field.step")}),h(doc,"dd",{},mono(doc,r.step)," · ",ctx.t("executive.field.cycleN",{n:r.cycle})),
         h(doc,"dt",{text:ctx.t("executive.field.started")}),h(doc,"dd",{},h(doc,"time",{datetime:r.createdAt,text:formatDateTime(r.createdAt,ctx.i18n.lang)})),
         h(doc,"dt",{text:ctx.t("executive.field.versions")}),h(doc,"dd",{},versionsBlock(ctx,r)),

@@ -1,6 +1,6 @@
 // //TR: Bu modül Kalite Kapısı ve Release Readiness görünümünün saf (DOM'suz) çekirdeğidir (FA-V2-PRODUCT, UI-227): yalnız dört salt-okunur ve zaten izinli GET (GET /v1/work-runs, GET /v1/reviews, GET /v1/cockpit içindeki kanıt bütünlüğü bloğu, GET /v1/missions yalnız başlık için) yanıtını güvenli, sınırlı alanlara eşler ve koşu başına release-hazırlık değerlendirmesi türetir. HİÇBİR veri uydurulur ya da yükseltilmez: kimlik/enum/biçim/sayı/zaman damgası bozuksa okuma KISMEN değil tümden ERROR olur (fail-closed), eksik alan tahmin edilmez, bağımsız inceleme kararı (CLEAN/BLOCKED/NO_VERDICT/NOT_REVIEWED/INDEPENDENCE_UNVERIFIED) sunucudan AYNEN taşınır. Genel hazırlık (READY) yalnız YEDİ kapının HEPSİ gerçekten sağlandığında verilir: koşu başarıyla bitti, bağımsız inceleme güncel head için temiz, güvenlik taraması güncel head için PASSED, testler doğrulanmış sandbox'ta gerçekten yürütüldü, teslim paketi güncel head için hazır, sunucu güncel head için tamamlanma kaydı tutuyor ve kanıt bütünlüğü tam. Bir kapının kaynağı okunamıyorsa kapı UNKNOWN'dır ve READY olamaz; hiçbir kapı varsayılan olarak geçmiş sayılmaz. Teslim yalnız kaynak düzeyindedir (kod çalıştırılmadı, NOT_VERIFIED); bu modül ürün doğrulamasını yeniden hesaplamaz ve ilgili sabit değer bu dosyada hiç yer almaz.
 import {MISSION_ID_RE,PROJECT_ID_RE} from "./work-core.js";
-import {RUN_STATUSES,RUN_STEPS,COCKPIT_PATH,MISSIONS_PATH,WORK_RUNS_PATH,PILL_FOR_RUN_STATUS,shortSha} from "./executive-core.js";
+import {RUN_STOPPED_STATUSES,RUN_STATUSES,RUN_STEPS,COCKPIT_PATH,MISSIONS_PATH,WORK_RUNS_PATH,PILL_FOR_RUN_STATUS,shortSha} from "./executive-core.js";
 
 export {COCKPIT_PATH,MISSIONS_PATH,WORK_RUNS_PATH,PILL_FOR_RUN_STATUS,shortSha};
 export const REVIEWS_PATH="/v1/reviews";
@@ -110,6 +110,7 @@ function mapRunRow(r){
   const ev=[];
   for(const e of r.evidence){const m=mapEvidence(e);if(m===null)return null;ev.push(m)}
   const delivery=deliveryOf(r);if(delivery===null)return null;
+  if(r.reason!==undefined&&r.reason!==null&&typeof r.reason!=="string")return null;
   // Tamamlanma kaydı yalnız SUCCEEDED koşuda bulunabilir (sunucu değişmezi); içeriği burada yeniden yorumlanmaz, yalnız varlığı ve bağlı olduğu head taşınır.
   let completion={recorded:false,headSha:null};
   if(r.completion!==undefined&&r.completion!==null){
@@ -117,7 +118,7 @@ function mapRunRow(r){
     completion={recorded:true,headSha:r.completion.headSha};
   }
   return {runId:r.runId,missionId:r.missionId,projectId:r.projectId,status:r.status,step:r.step,cycle:r.remediationCycle,createdAt:r.createdAt,updatedAt:r.updatedAt,baseSha,headSha,
-    security:securityOf(headSha,ev),tests:testsOf(headSha,ev),delivery,completion};
+    security:securityOf(headSha,ev),tests:testsOf(headSha,ev),delivery,completion,reason:text(r.reason)};
 }
 /** GET /v1/work-runs -> {state:"VERIFIED",runs:{total,items}} | {state:"ERROR",runs:null}. Tek bozuk koşu (ya da yinelenen kimlik) tüm okumayı ERROR yapar. */
 export function mapReadinessWorkRuns(raw){
@@ -212,7 +213,6 @@ const ok=res=>Boolean(res)&&res.state==="VERIFIED";
 const failState=s=>s==="OFFLINE"||s==="UNAVAILABLE"?s:"ERROR";
 const gate=(id,status,detail)=>({id,status,detail});
 const unknown=(id,res)=>gate(id,"UNKNOWN",failState(res?.state));
-const RUN_FAIL=Object.freeze(["FAILED","RECOVERY_FAILED","BLOCKED","QUARANTINED","CANCELLING","CANCELLED"]);
 
 /** Platform kanıt bütünlüğü kapısı (görünüm de aynı kuralı kullanır). */
 export function integrityGate(evidenceRes){
@@ -251,7 +251,7 @@ function assess(run,ctx){
   const comp=run.completion;
   const completionGate=!comp.recorded?gate("completion","PENDING","NOT_RECORDED"):run.headSha!==null&&comp.headSha===run.headSha?gate("completion","PASS","RECORDED"):gate("completion","PENDING","STALE");
   const gates=[
-    gate("run",run.status==="SUCCEEDED"?"PASS":RUN_FAIL.includes(run.status)?"FAIL":"PENDING",run.status),
+    gate("run",run.status==="SUCCEEDED"?"PASS":RUN_STOPPED_STATUSES.includes(run.status)?"FAIL":"PENDING",run.status),
     rv.gate,
     gate("security",sec,run.security),
     gate("tests",tst,run.tests),
@@ -267,7 +267,7 @@ function assess(run,ctx){
   const tier=blocked?"BLOCKED":ready?"READY":sourceOnly?"SOURCE_ONLY":"NOT_READY";
   const title=titles?titles.get(run.missionId)??null:null;
   const lt=rv.summary?rv.summary.latest:null;
-  return {runId:run.runId,missionId:run.missionId,projectId:run.projectId,title,missionKnown:titles!==null&&titles.has(run.missionId),status:run.status,step:run.step,cycle:run.cycle,createdAt:run.createdAt,updatedAt:run.updatedAt,headSha:run.headSha,
+  return {runId:run.runId,missionId:run.missionId,projectId:run.projectId,title,missionKnown:titles!==null&&titles.has(run.missionId),status:run.status,step:run.step,cycle:run.cycle,createdAt:run.createdAt,updatedAt:run.updatedAt,headSha:run.headSha,reason:run.reason,
     gates,gateById:by,missing:gates.filter(g=>g.status!=="PASS"),tier,
     review:lt?{reviewer:lt.reviewer,independent:lt.independent,reviewedCommit:lt.reviewedCommit,timestamp:lt.timestamp,findingsCount:lt.findingsCount,cycle:lt.cycle}:null,
     delivery:{state:deliveryDetail,commit:d.commits.length?d.commits[d.commits.length-1]:null,exportArtifactHash:d.exportArtifactHash,acceptedAt:d.acceptedAt}};
