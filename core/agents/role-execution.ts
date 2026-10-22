@@ -58,6 +58,14 @@ export function profileDefect(p: RoleExecutionProfile): {reason: NotExecutableRe
   return null;
 }
 
+// //TR: Profil limitlerinin run varsayılanlarıyla birleşimi: profil run varsayılanını yalnız SIKILAŞTIRIR, asla gevşetmez. maxCycles = ilk deneme + remediation sayısı (remediation <= maxCycles-1); timeoutMs = executor zaman aşımı üst sınırı; maxFilesWritten = run'ın base'e göre değiştirdiği dosya üst sınırı (profil yoksa null = sınır uygulanmaz).
+export interface EffectiveLimits { maxRemediations: number; executorTimeoutMs: number; maxFilesWritten: number | null; cycleCapped: boolean }
+export function effectiveLimits(limits: TaskLimits | null, run: {maxRemediations: number; executorTimeoutMs: number}): EffectiveLimits {
+  if (!limits) return {maxRemediations: run.maxRemediations, executorTimeoutMs: run.executorTimeoutMs, maxFilesWritten: null, cycleCapped: false};
+  const roleRemediations = limits.maxCycles - 1;
+  return {maxRemediations: Math.min(run.maxRemediations, roleRemediations), executorTimeoutMs: Math.min(run.executorTimeoutMs, limits.timeoutMs), maxFilesWritten: limits.maxFilesWritten, cycleCapped: roleRemediations < run.maxRemediations};
+}
+
 // //TR: Sertifika yalnız katalogda ALTI/ALTI (hepsi) değerlendirme PASSED ve kanıt referanslıysa raporlanır; aksi halde NOT_CERTIFIED (sahte sertifika yok).
 export function evaluationState(role: CatalogRoleLike): {certification: CertificationState; executed: number; total: number} {
   const specs = role.evaluationSpecs ?? [];

@@ -17,8 +17,8 @@ import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from ".
 // INT-R4: runProcess (REL-FX ana-makine test çalıştırıcısı) ARTIK kullanılmaz; yürütme yalnız execution-gate sağlayıcısı (gate.provider.run) üzerinden gider, ana makinede asla.
 import {assertIndependentExecutors} from "./executors.js";
 import {ExecutionGate} from "./execution-gate.js";
-import {assertImplementerRole} from "../agents/first-delivery-bindings.js";
-import {advanceAgent, agentTraceEnvelope, instantiateAgent} from "../agents/role-execution.js";
+import {assertImplementerRole, taskLimitsFor} from "../agents/first-delivery-bindings.js";
+import {advanceAgent, agentTraceEnvelope, effectiveLimits, instantiateAgent} from "../agents/role-execution.js";
 import type {GateDecision, ProjectExecutionKind} from "./execution-gate.js";
 import {M1A_NOT_VERIFIED_LABEL, productVerificationOf, reviewAndSecurityFor} from "./outcomes.js";
 import {RISK_REFUSAL, hostExecutionNotice, riskAdmitted} from "./risk-admission.js";
@@ -254,6 +254,9 @@ export class MissionRunner {
     await this.applyOutcome(cur, leaseId, out);
   }
 
+  // //TR: Rol atanmış run için rol bağlamasının TaskLimits'i run varsayılanlarıyla birleşir (yalnız sıkılaştırır: maxCycles -> remediation üst sınırı, timeoutMs -> executor zaman aşımı, maxFilesWritten -> IMPLEMENT sonrası dosya sayısı). Rolsüz run (roleId null) değişmez.
+  private limitsOf(run: WorkRun) { return effectiveLimits(taskLimitsFor(run.roleId), {maxRemediations: this.o.maxRemediations, executorTimeoutMs: this.o.executorTimeoutMs}); }
+
   private async applyOutcome(run: WorkRun, leaseId: string, out: Outcome): Promise<void> {
     const s = this.o.store, a = this.o.actor, id = run.runId, step = run.step;
     switch (out.kind) {
@@ -266,8 +269,9 @@ export class MissionRunner {
         return;
       }
       case "REMEDIATE": {
-        if (run.remediationCycle >= this.o.maxRemediations) {
-          const reason = `${out.reason}_REMEDIATION_EXHAUSTED`;
+        const lim = this.limitsOf(run);
+        if (run.remediationCycle >= lim.maxRemediations) {
+          const reason = `${out.reason}_${lim.cycleCapped ? "TASK_LIMIT_MAX_CYCLES" : "REMEDIATION"}_EXHAUSTED`;
           s.transitionRun(id, leaseId, "BLOCKED", reason, a, {mission: {to: "BLOCKED", reason}});
           return;
         }
@@ -430,7 +434,8 @@ export class MissionRunner {
     }
     this.renew(run.runId, leaseId);
     const spec: MissionSpec = {...this.missionSpec(run), startSha: start};
-    const r = await this.o.executors.implementer.implement(work, spec, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
+    const lim = this.limitsOf(run);
+    const r = await this.o.executors.implementer.implement(work, spec, {timeoutMs: lim.executorTimeoutMs, shouldAbort: abort});
     const head = this.gitOk(work, ["rev-parse", "HEAD"]);
     const log = this.writeLog(run, "implement", r.log);
     const produced = r.exitCode === 0 && !r.blockReason && head && SHA.test(head) && head !== start ? head : undefined;
@@ -455,6 +460,14 @@ export class MissionRunner {
     if (!produced) return {kind: "BLOCK", reason: "NO_COMMIT_PRODUCED", status: "FAILED"};
     if (r.commitSha !== undefined && r.commitSha !== produced) return {kind: "BLOCK", reason: "IMPLEMENT_COMMIT_MISMATCH", status: "FAILED"};
     if (this.git(work, ["merge-base", "--is-ancestor", start, produced]).status !== 0) return {kind: "BLOCK", reason: "IMPLEMENT_HISTORY_REWRITTEN", status: "FAILED"};
+    // //TR: Rol limiti maxFilesWritten: run'ın BASE'e göre değiştirdiği dosya sayısı (döngüler toplamı) sınırı aşarsa VERIFY'a geçilmez. Sayım okunamazsa fail-closed (limit doğrulanamaz).
+    if (lim.maxFilesWritten !== null) {
+      const base = run.baseSha ?? start;
+      const names = this.git(work, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", base, produced]);
+      if (names.status !== 0) return {kind: "BLOCK", reason: "TASK_LIMIT_FILES_UNVERIFIABLE", status: "FAILED"};
+      const files = String(names.stdout ?? "").split("\0").filter(Boolean).length;
+      if (files > lim.maxFilesWritten) return {kind: "BLOCK", reason: `TASK_LIMIT_FILES_EXCEEDED:${files}>${lim.maxFilesWritten}`};
+    }
     return {kind: "DONE", next: "VERIFY", data: {commitSha: produced, startSha: start}, patch: {headSha: produced}};
   }
 
