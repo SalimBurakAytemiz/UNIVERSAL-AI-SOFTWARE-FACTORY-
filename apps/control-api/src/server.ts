@@ -59,6 +59,9 @@ import {registerPlanRoutes} from "./routes/plan.js";
 import {registerFlowRoutes} from "./routes/flow.js";
 import {registerTaskRoutes} from "./routes/tasks.js";
 import {registerTaskRunRoutes} from "./routes/task-runs.js";
+import {bindingForFunction} from "../../../core/agents/first-delivery-bindings.js";
+// //TR: LANE-C: gövdede roleId yoksa run bağlı geliştirici rolüyle (first-delivery bağı) başlar; böylece runner rol kapısı ve AGENT_TRACE ürün akışında da çalışır. Açık roleId her zaman önceliklidir; uygun olmayan rol runner kapısında BLOCKED olur.
+const DEFAULT_RUN_ROLE_ID=bindingForFunction("developer").roleId;
 
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
@@ -279,7 +282,7 @@ app.post<{Params:{id:string}}>("/v1/missions/:id/runs",wos(async(req,reply)=>{
   const ex=getExecutors();if(!ex.pair)return reply.code(409).send({error:"EXECUTOR_NOT_CONFIGURED",reason:ex.reason});
   try{assertIndependentExecutors(ex.pair)}catch{audit("WORKOS_RUN_REFUSED",{actor,missionId:req.params.id,reason:"EXECUTOR_CONFIG_REFUSED"});return reply.code(409).send({error:"EXECUTOR_CONFIG_REFUSED"})}
   const b=body as any;
-  const r=getStore().createRunDetailed({tenantId:scope.tenantId,missionId:req.params.id,roleId:b.roleId??null,executor:{implementer:ex.pair.implementer.identity,reviewer:ex.pair.reviewer.identity},createdBy:actor,idempotencyKey:b.idempotencyKey});
+  const r=getStore().createRunDetailed({tenantId:scope.tenantId,missionId:req.params.id,roleId:b.roleId??DEFAULT_RUN_ROLE_ID,executor:{implementer:ex.pair.implementer.identity,reviewer:ex.pair.reviewer.identity},createdBy:actor,idempotencyKey:b.idempotencyKey});
   audit(r.replayed?"WORKOS_IDEMPOTENT_REPLAY":"WORKOS_RUN_CREATED",{actor,kind:"run",runId:r.entity.runId,missionId:r.entity.missionId,executor:r.entity.executor});
   // V7-PKG-M1A-MODE (RV-INTR4-C1-OBS-1): yanıt, yürütmenin yalnız sandbox içinde olduğunu (ana makinede asla) ve sandbox yoksa test/önizlemenin NOT_EXECUTED olduğunu bildirir.
   return reply.code(r.replayed?200:201).send({run:r.entity,hostExecutionNotice:hostExecutionNotice((target??getStore().getMission(scope,r.entity.missionId))!.riskLevel)});
