@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import {ExecutorSetup} from "../workos/executor-setup.js";
 import {LocalClaudeExecutors} from "../workos/executors.js";
+import {claudeProfileStatus} from "../workos/claude-profiles.js";
+import type {ClaudeProfileRole} from "../workos/claude-profiles.js";
 import type {ExecutorPair} from "../workos/executors.js";
 import {EVALUATION_NOTE, EvaluationStaging, EvaluationStagingError, GIT_REPO_ENV, planFor, registrySpec, runRoleEvaluation} from "./evaluation-pipeline.js";
 
@@ -34,7 +36,15 @@ export function parseArgs(argv: string[]): ParsedArgs | {error: string} {
 
 const truthy = (v: string | undefined) => v !== undefined && v !== "" && v !== "0" && v.toLowerCase() !== "false";
 // //TR: Gerçek çalıştırma kapıları (hepsi salt okunur kontrol). ok=false => neden kodu; hiçbir süreç başlatılmaz.
-export function executeBlockers(o: {repoRoot: string; dataDir: string; controlRoot: string; env: NodeJS.ProcessEnv; findClaudeCli?: () => string | null}): string[] {
+// //TR: Kontrol kökü sunucuyla AYNI kuralla çözülür (apps/control-api/src/server.ts: controlRoot ?? UASCO_CONTROL_ROOT ?? repoRoot): önce --control-root, sonra UASCO_CONTROL_ROOT, sonra depo kökü. Boş değer "yok" sayılır.
+export function resolveControlRoot(flag: string | null, env: NodeJS.ProcessEnv, repoRoot: string): string {
+  if (flag !== null && flag !== "") return flag;
+  const fromEnv = env.UASCO_CONTROL_ROOT;
+  return typeof fromEnv === "string" && fromEnv !== "" ? fromEnv : repoRoot;
+}
+// //TR: Gerçek çalıştırmada kullanılacak Claude profilleri (implementer rotası -> implementer profili; reviewer rotası -> reviewer profili).
+export type NeededProfiles = readonly ClaudeProfileRole[];
+export function executeBlockers(o: {repoRoot: string; dataDir: string; controlRoot: string; env: NodeJS.ProcessEnv; findClaudeCli?: () => string | null; profiles?: NeededProfiles}): string[] {
   const blockers: string[] = [];
   if (truthy(o.env.CI) || truthy(o.env.GITHUB_ACTIONS)) blockers.push("CI_ENVIRONMENT");
   // //TR: Ortamda GIT_DIR / GIT_WORK_TREE vb. varsa adaptörlerin git komutları gerçek checkout'a yönelebilir: gerçek çalıştırma reddedilir.
@@ -47,18 +57,28 @@ export function executeBlockers(o: {repoRoot: string; dataDir: string; controlRo
     if (!st.enabled) blockers.push("EXECUTOR_NOT_ENABLED");
     else if (st.state !== "READY") blockers.push(`EXECUTOR_${st.state}`);
   } catch { blockers.push("EXECUTOR_STATUS_UNAVAILABLE"); }
+  // //TR: Rolün kullanacağı Claude profilleri hazır olmalı (salt-okunur durum): kontrol kökü bir git çalışma ağacının içindeyse (ör. depo kökü) profil yolu reddedilir (PROFILE_PATH_INSIDE_GIT_WORKTREE), oturum yoksa LOGIN_REQUIRED; ikisi de gerçek çalıştırmayı baştan engeller ve kuru çalıştırmada görünür.
+  for (const role of o.profiles ?? []) {
+    try {
+      const ps = claudeProfileStatus(o.controlRoot, role, {forbiddenRoots: [o.dataDir]});
+      if (ps.state === "REFUSED") blockers.push(`CLAUDE_PROFILE_${role.toUpperCase()}_REFUSED:${ps.reason ?? "UNKNOWN"}`);
+      else if (ps.state === "LOGIN_REQUIRED") blockers.push(`CLAUDE_PROFILE_${role.toUpperCase()}_LOGIN_REQUIRED`);
+    } catch { blockers.push(`CLAUDE_PROFILE_${role.toUpperCase()}_STATUS_UNAVAILABLE`); }
+  }
   return blockers;
 }
 
 export async function runCli(argv: string[], o: CliOptions): Promise<number> {
   const args = parseArgs(argv);
   if ("error" in args) { o.err(JSON.stringify({status: "USAGE", error: args.error, usage: USAGE}) + "\n"); return 2; }
-  const controlRoot = args.controlRoot ?? o.repoRoot, stagingRoot = path.join(args.dataDir, "evaluations", "staging");
+  const controlRoot = resolveControlRoot(args.controlRoot, o.env, o.repoRoot), stagingRoot = path.join(args.dataDir, "evaluations", "staging");
   const plan = planFor(args.role, args.evaluation);
   if ("refused" in plan) { o.err(JSON.stringify({status: "REFUSED", reason: plan.refused}) + "\n"); return 2; }
   const spec = registrySpec(o.repoRoot, args.role, args.evaluation);
   if (!spec) { o.err(JSON.stringify({status: "REFUSED", reason: "REGISTRY_SPEC_NOT_FOUND"}) + "\n"); return 2; }
-  const blockers = executeBlockers({repoRoot: o.repoRoot, dataDir: args.dataDir, controlRoot, env: o.env, ...(o.findClaudeCli ? {findClaudeCli: o.findClaudeCli} : {})});
+  const profiles: NeededProfiles = plan.profile.providerRoute === "CLAUDE_IMPLEMENTER" ? ["implementer"] : ["reviewer"];
+  // //TR: Enjekte (test) çiftinde gerçek profiller kullanılmaz; yalnız gerçek LocalClaudeExecutors yolunda profil durumu engel sayılır.
+  const blockers = executeBlockers({repoRoot: o.repoRoot, dataDir: args.dataDir, controlRoot, env: o.env, ...(o.findClaudeCli ? {findClaudeCli: o.findClaudeCli} : {}), ...(o.makePair ? {} : {profiles})});
   let staging: {exists: boolean; error: string | null} = {exists: false, error: null};
   try { staging = {exists: new EvaluationStaging(stagingRoot, o.repoRoot).exists(args.role, args.evaluation), error: null}; }
   catch (e) { staging = {exists: false, error: e instanceof EvaluationStagingError ? e.code : "STAGING_UNAVAILABLE"}; }
@@ -66,7 +86,7 @@ export async function runCli(argv: string[], o: CliOptions): Promise<number> {
     // //TR: KURU ÇALIŞTIRMA: yalnız plan yazdırılır; süreç yok, dosya yok.
     o.out(JSON.stringify({mode: "DRY_RUN", willSpawn: false, willWrite: false, role: args.role, function: plan.profile.function, evaluation: args.evaluation, spec,
       procedure: {id: plan.procedure.id, version: plan.procedure.version, fixtureDigest: plan.procedure.fixtureDigest, covers: plan.procedure.covers, doesNotCover: plan.procedure.doesNotCover},
-      staging: {root: stagingRoot, existingEvidence: staging.exists, problem: staging.error}, executeBlockers: blockers, note: EVALUATION_NOTE}, null, 2) + "\n");
+      staging: {root: stagingRoot, existingEvidence: staging.exists, problem: staging.error}, controlRoot, executeBlockers: blockers, note: EVALUATION_NOTE}, null, 2) + "\n");
     return 0;
   }
   if (blockers.length > 0) { o.err(JSON.stringify({status: "REFUSED", reason: "EXECUTE_NOT_ALLOWED", blockers}) + "\n"); return 2; }
