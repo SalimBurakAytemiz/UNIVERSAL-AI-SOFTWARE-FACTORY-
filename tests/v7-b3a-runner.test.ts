@@ -11,7 +11,7 @@ import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
 import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
 import {activateGlobalStop} from "../automation/lib/global-stop.mjs";
 import {WorkOsStore} from "../core/workos/store.js";
-import {MissionRunner} from "../core/workos/runner.js";
+import {MissionRunner, repositoryPrecondition} from "../core/workos/runner.js";
 import type {RunnerOptions} from "../core/workos/runner.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors, executorsFromEnv, parseReviewOutput} from "../core/workos/executors.js";
