@@ -2,7 +2,7 @@
   "//TR": "Bu protected config package.json scriptlerine güvenmeden canonical deterministic validation adımlarını sabitler; mechanical closure + dependency-free kernel self-test typecheck/test öncesinde çalışır ve builder normal milestone sırasında bu listeyi değiştiremez.",
   "schemaVersion": "2.0.0",
   "shardPlan": {
-    "//TR": "CI-PARALLEL: yalnız Windows CI için uzun adımların 3 kabuğa en-uzun-önce dengesi (ölçüm: run 39330751647); listelenmeyen adımlar 1. kabuktadır. Kabuklama hiçbir adımı, 600 sn limitini veya kapsamı azaltmaz; validate-shards birleştiricisi tüm adımların tam bir kez PASS olmasını ister.",
+    "//TR": "CI-PARALLEL: yalnız Windows CI için uzun adımların 3 kabuğa en-uzun-önce dengesi (ölçüm: run 39330751647); listelenmeyen adımlar 1. kabuktadır. Kabuklama hiçbir adımı, 600 sn limitini veya kapsamı azaltmaz; validate-shards birleştiricisi tüm adımların tam bir kez PASS olmasını ister. COORD-PROTECTED-BS1D-SPLIT: tests-bs1-d'den ayrılan tests-bs1-g 2. kabuktadır (ölçüm: 12 başarılı ci.yml koşusu 39749776531..39764945894, 2026-10-22; kabuk işi medyanları 1132/1155/1446 sn, tahmin 2. kabukla 1132/1381/1446 sn, 1. kabukla 1414/1060/1446 sn: kritik yol aynı, denge 2. kabukta daha iyi).",
     "win32": {
       "count": 3,
       "assign": {
@@ -14,6 +14,7 @@
         "tests-bs1-d": 2,
         "tests-bs1-e": 2,
         "tests-bs1-f": 2,
+        "tests-bs1-g": 2,
         "tests-6": 2,
         "tests-lv1": 2,
         "tests-bs1-b": 3,
@@ -538,6 +539,19 @@
         "node_modules/vitest/vitest.mjs",
         "run",
         "tests/pkg-bs1-autonomy-bootstrap-f.test.ts"
+      ],
+      "requiresDependencies": true,
+      "platforms": [
+        "win32"
+      ]
+    },
+    {
+      "id": "tests-bs1-g",
+      "command": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/pkg-bs1-autonomy-bootstrap-g.test.ts"
       ],
       "requiresDependencies": true,
       "platforms": [
