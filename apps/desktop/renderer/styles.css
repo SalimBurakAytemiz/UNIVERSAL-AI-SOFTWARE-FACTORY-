@@ -856,3 +856,11 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .integ-facts{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);margin:var(--space-1) 0 0}
 .integ-fact-label{color:var(--muted)}
 .integ-tally{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1)}
+.view-scheduler .integ-list{margin-top:var(--space-2);grid-template-columns:repeat(auto-fill,minmax(min(100%,16rem),1fr))}
+.view-scheduler .integ-row{overflow-wrap:anywhere}
+.view-scheduler .integ-facts{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);margin:var(--space-1) 0 0}
+.view-scheduler .integ-fact-label{color:var(--muted)}
+.view-scheduler .integ-tally{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1)}
+.view-scheduler .integ-state{border-left:4px solid var(--warn);padding-left:var(--space-2)}
+.view-scheduler .integ-state.state-error,.view-scheduler .integ-state.state-offline,.view-scheduler .integ-state.state-rejected{border-left-color:var(--danger)}
+.view-scheduler .integ-row[data-status="BLOCKED"]{border-left:4px solid var(--danger)}
