@@ -43,3 +43,6 @@ export function tasksForRun(store: WorkOsStore, scope: Scope, runId: string): Ta
 export function linkedTaskIds(dataDir: string, scope: Scope): Set<string> | undefined {
   try { return new Set(readLinks(dataDir).filter(l => l.tenantId === scope.tenantId).map(l => l.taskId)); } catch { return undefined; }
 }
+
+/** Bu tenant'ın bağları, bağlanma sırasıyla (dosya sırası); bozuk dosyada LinkError(LINK_STORE_CORRUPT) fırlatır. */
+export function listLinks(dataDir: string, scope: Scope): TaskRunLink[] { return readLinks(dataDir).filter(l => l.tenantId === scope.tenantId); }
