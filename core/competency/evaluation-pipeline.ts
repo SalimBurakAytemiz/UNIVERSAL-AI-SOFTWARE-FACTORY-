@@ -1,0 +1,292 @@
+// //TR: Bu dosya rol değerlendirme hattıdır: bağlı bir rol için TANIMLI bir prosedürü (golden görev) gerçek executor adaptörlerinde çalıştırır, verdict'i YALNIZ deterministik oracle kontrollerinden hesaplar (model metni asla karar vermez) ve kanıtı doğrulayıcının biçiminde bir STAGING köküne yazar. Hat ASLA audit/evidence/**, registries/** veya depo içine yazmaz (staging kökü depo dışında, symlink'siz ve üzerine yazmasız doğrulanır), kayıt durumlarını değiştirmez ve kanıtı terfi ettirmez; FAKE executor kanıtı her zaman FAKE damgalanır ve asla sayılmaz. Terfi ve doğrulayıcı değişmezinin daraltılması korumalı bir adımdır (docs/authority-requests/LANE-C-role-evaluation-pipeline.md).
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import crypto from "node:crypto";
+import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
+import {assertImplementerRole, assertRoleExecutes, FIRST_DELIVERY_BINDINGS} from "../agents/first-delivery-bindings.js";
+import {effectiveLimits} from "../agents/role-execution.js";
+import type {FirstDeliveryFunction, RoleExecutionProfile} from "../agents/role-execution.js";
+import {EVIDENCE_ROOT, createEvidenceVerifier} from "../agents/role-lifecycle.js";
+import type {ExecutorPair, MissionSpec} from "../workos/executors.js";
+import {redactSecrets} from "../workos/secret-scan.js";
+import {PreDevBuilderError, PREDEV_KIND_FUNCTION} from "../workos/predev/claude-builder.js";
+import {composeRolePrompt} from "../workos/predev/role-prompts.js";
+import {toUpstreamContents} from "../workos/predev/driver.js";
+import {validateArtifactContent} from "../workos/predev/validators.js";
+import {TASKHUB_BRIEF} from "../workos/predev/fixtures/taskhub-brief.js";
+import {TASKHUB_ARTIFACTS} from "../workos/predev/fixtures/taskhub/index.js";
+import type {ArtifactKind} from "../workos/predev/types.js";
+import {FIXTURE_DIGESTS, GOLDEN_FILE, GOLDEN_FILE_VERSION, GOLDEN_REVIEW_CASES, GOLDEN_REVIEW_SEED, GOLDEN_REVIEW_VERSION, sha256Json} from "./evaluation-fixtures.js";
+
+const ROLE_RE = /^UASCO-\d{4}$/, EV_RE = /^EV-0[1-6]$/, SHA_RE = /^[0-9a-f]{40}$/;
+const sha256 = (s: string | Buffer) => crypto.createHash("sha256").update(s).digest("hex");
+const PREDEV_ORDER: readonly ArtifactKind[] = ["BusinessAnalysis", "Requirements", "Plan", "Architecture", "UxSpec"];
+const KIND_OF_FUNCTION = Object.fromEntries(Object.entries(PREDEV_KIND_FUNCTION).map(([k, f]) => [f, k])) as Readonly<Record<string, ArtifactKind>>;
+export const EVALUATION_NOTE = "STAGED evidence only: it is not promoted, not in the registry and the registry status is unchanged. Whether this procedure satisfies the evaluation spec is a Founder/coordinator promotion decision; the master spec text is not in this repository. FAKE executor evidence never counts.";
+
+// ---------------------------------------------------------------- staging
+export class EvaluationStagingError extends Error { constructor(readonly code: string) { super(code); this.name = "EvaluationStagingError"; } }
+const realOrNull = (p: string): string | null => { try { return fs.realpathSync(p); } catch { return null; } };
+// //TR: Var olan en derin atanın gerçek yolu + kalan bileşenler (henüz oluşmamış staging kökü için).
+function resolveReal(p: string): string {
+  let cur = path.resolve(p); const rest: string[] = [];
+  for (;;) { const r = realOrNull(cur); if (r !== null) return path.join(r, ...rest.reverse()); const up = path.dirname(cur); if (up === cur) return path.resolve(p); rest.push(path.basename(cur)); cur = up; }
+}
+const within = (base: string, p: string) => { const r = path.relative(base, p); return r === "" || (!r.startsWith("..") && !path.isAbsolute(r)); };
+
+export class EvaluationStaging {
+  private readonly root: string;      // çözümlenmiş staging kökü
+  private readonly base: string;      // <root>/audit/evidence/role-evaluations
+  constructor(readonly stagingRoot: string, repoRoot: string) {
+    if (typeof stagingRoot !== "string" || !path.isAbsolute(stagingRoot)) throw new EvaluationStagingError("STAGING_ROOT_NOT_ABSOLUTE");
+    const lexRoot = path.resolve(stagingRoot), evidenceParts = EVIDENCE_ROOT.split("/");
+    let rootLink = false;
+    try { rootLink = fs.lstatSync(lexRoot).isSymbolicLink(); } catch { /* henüz yok */ }
+    if (rootLink) throw new EvaluationStagingError("STAGING_SYMLINK_REFUSED");
+    this.root = resolveReal(lexRoot);
+    this.base = path.join(this.root, ...evidenceParts);
+    // //TR: Kök altındaki var olan bir bileşen symlink/junction ise gerçek yol sözcüksel yoldan sapar; reddedilir.
+    if (resolveReal(path.join(lexRoot, ...evidenceParts)) !== this.base) throw new EvaluationStagingError("STAGING_SYMLINK_REFUSED");
+    const repo = realOrNull(path.resolve(repoRoot));
+    // //TR: Depo içine (audit/, registries/, korumalı yollar, çalışma ağacı) HİÇBİR koşulda yazılmaz: çözümlenmiş kök depo kökünün ne içinde ne de üstünde olabilir.
+    if (repo === null || within(repo, this.root) || within(this.root, repo)) throw new EvaluationStagingError("STAGING_INSIDE_REPOSITORY");
+  }
+  evidencePaths(roleId: string, evaluationId: string): {dir: string; evidence: string; artifact: string} {
+    if (!ROLE_RE.test(roleId) || !EV_RE.test(evaluationId)) throw new EvaluationStagingError("STAGING_BAD_NAME");
+    const dir = path.join(this.base, roleId);
+    return {dir, evidence: path.join(dir, `${evaluationId}.json`), artifact: path.join(dir, `${evaluationId}.artifact.json`)};
+  }
+  exists(roleId: string, evaluationId: string): boolean {
+    const p = this.evidencePaths(roleId, evaluationId);
+    return [p.evidence, p.artifact].some(f => { try { fs.lstatSync(f); return true; } catch { return false; } });
+  }
+  private ensureDir(dir: string): void {
+    // //TR: Kökten role dizinine her bileşen tek tek oluşturulur/kontrol edilir; her biri gerçek dizin olmalı (symlink/junction reddedilir).
+    const chain = [this.root];
+    for (const seg of path.relative(this.root, dir).split(path.sep).filter(Boolean)) chain.push(path.join(chain[chain.length - 1], seg));
+    for (const d of chain) {
+      let st: fs.Stats | null = null;
+      try { st = fs.lstatSync(d); } catch { st = null; }
+      // //TR: Kök (ve yalnız kök) üst dizinleriyle birlikte oluşturulabilir; üstündeki atalar bölge denetimiyle (gerçek yol) korunur, kökün altı bileşen bileşen.
+      if (st === null) { fs.mkdirSync(d, {mode: 0o700, recursive: d === this.root}); st = fs.lstatSync(d); }
+      if (st.isSymbolicLink() || !st.isDirectory()) throw new EvaluationStagingError("STAGING_SYMLINK_REFUSED");
+    }
+    if (realOrNull(dir) !== dir) throw new EvaluationStagingError("STAGING_PATH_CHANGED");
+  }
+  // //TR: Yalnız sabit dosya adlarına yazar; var olan dosyanın üzerine ASLA yazmaz (link ile atomik, EEXIST = STAGING_EVIDENCE_EXISTS).
+  write(roleId: string, evaluationId: string, kind: "artifact" | "evidence", bytes: string): string {
+    const p = this.evidencePaths(roleId, evaluationId);
+    this.ensureDir(p.dir);
+    const final = kind === "artifact" ? p.artifact : p.evidence;
+    const tmp = path.join(p.dir, `.${path.basename(final)}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`);
+    const fd = fs.openSync(tmp, "wx", 0o600);
+    try { fs.writeSync(fd, bytes); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    try { fs.linkSync(tmp, final); }
+    catch (e) { throw new EvaluationStagingError((e as NodeJS.ErrnoException).code === "EEXIST" ? "STAGING_EVIDENCE_EXISTS" : "STAGING_WRITE_FAILED"); }
+    finally { try { fs.unlinkSync(tmp); } catch { /* geçici dosya zaten yok */ } }
+    const st = fs.lstatSync(final);
+    if (!st.isFile() || st.isSymbolicLink() || realOrNull(final) !== final) throw new EvaluationStagingError("STAGING_SYMLINK_REFUSED");
+    return final;
+  }
+}
+
+// ---------------------------------------------------------------- types
+export interface EvalCheck { id: string; passed: boolean; detail: string }
+interface ProcedureRun { infra: string | null; checks: EvalCheck[]; artifact: Record<string, unknown>; identities: Record<string, string> }
+interface ProcCtx { pair: ExecutorPair; profile: RoleExecutionProfile; timeoutMs: number; shouldAbort?: () => boolean; tmp: string }
+interface Procedure {
+  id: string; version: string; fixtureDigest: string; specKind: string; functions: readonly FirstDeliveryFunction[];
+  covers: string[]; doesNotCover: string[]; run(c: ProcCtx, fn: FirstDeliveryFunction): Promise<ProcedureRun>;
+}
+export interface EvaluationDeps {
+  repoRoot: string; stagingRoot: string; pair: ExecutorPair; bindings?: readonly RoleExecutionProfile[];
+  timeoutMs?: number; shouldAbort?: () => boolean; now?: () => Date;
+}
+export type EvaluationOutcome =
+  | {status: "EVALUATED"; verdict: "PASSED" | "FAILED"; roleId: string; evaluationId: string; executorKind: "FAKE" | "LOCAL_CLAUDE"; evidenceRef: string; evidenceFile: string; artifactFile: string; checks: EvalCheck[]; verifier: {countsIfPromoted: boolean; problem: string | null}}
+  | {status: "NOT_EXECUTED"; roleId: string; evaluationId: string; reason: string}
+  | {status: "REFUSED"; reason: string};
+
+// ---------------------------------------------------------------- git helpers (yalnız geçici depolarda)
+const ID = ["-c", "user.name=UASCO Evaluation", "-c", "user.email=evaluation@local.invalid", "-c", "commit.gpgsign=false"];
+const git = (cwd: string, args: string[]) => spawnGitSync(cwd, args, {maxBuffer: 16 * 1024 * 1024});
+const gitOut = (cwd: string, args: string[]): string | null => { const r = git(cwd, args); return r.status === 0 ? String(r.stdout ?? "") : null; };
+function seedRepo(dir: string, files: Readonly<Record<string, string>>): string {
+  fs.mkdirSync(dir, {recursive: true});
+  if (git(dir, ["init", "-q", "-b", "main"]).status !== 0) throw new Error("GIT_INIT_FAILED");
+  for (const [f, c] of Object.entries(files)) fs.writeFileSync(path.join(dir, f), c);
+  if (git(dir, ["add", "-A"]).status !== 0 || git(dir, [...ID, "commit", "-q", "-m", "seed"]).status !== 0) throw new Error("GIT_SEED_FAILED");
+  return (gitOut(dir, ["rev-parse", "HEAD"]) ?? "").trim();
+}
+const DIFF_FLAGS = ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--text", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/"];
+const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}...[clipped ${s.length - n}]` : s);
+
+// ---------------------------------------------------------------- procedure: golden-file-v1 (developer)
+// //TR: Builder'ın kendi ürettiği ve altyapı kaynaklı olmayan retleri (rolün davranışı) FAILED sayılır; geri kalan her başarısızlık (zaman aşımı, profil, çıkış kodu...) NOT_EXECUTED'dır — altyapı sorunu rolü ne yükseltir ne cezalandırır.
+const ROLE_BLOCK = /^(BUILDER_PRODUCED_NO_CHANGE|BUILDER_TOUCHED_GIT_INTERNALS|BUILDER_TOUCHED_AGENT_CONFIG|BUILDER_CHANGED_FORBIDDEN_PATH:|BUILDER_MOVED_HEAD)/;
+async function goldenFile(c: ProcCtx): Promise<ProcedureRun> {
+  const impl = c.pair.implementer, ws = path.join(c.tmp, "work");
+  const identities = {implementer: impl.identity};
+  const start = seedRepo(ws, GOLDEN_FILE.seed);
+  if (git(ws, ["checkout", "-q", "-B", "eval/golden-file", start]).status !== 0) return {infra: "WORKSPACE_SETUP_FAILED", checks: [], artifact: {}, identities};
+  const spec: MissionSpec = {runId: "run_evaluation", missionId: "msn_evaluation", projectId: "prj_evaluation", title: GOLDEN_FILE.title, objective: GOLDEN_FILE.objective,
+    acceptanceCriteria: [...GOLDEN_FILE.acceptanceCriteria], riskLevel: "R0", cycle: 0, baseSha: start, startSha: start};
+  const r = await impl.implement(ws, spec, {timeoutMs: c.timeoutMs, ...(c.shouldAbort ? {shouldAbort: c.shouldAbort} : {})});
+  const log = redactSecrets(clip(String(r.log ?? ""), 4000));
+  if (r.aborted) return {infra: "ABORTED", checks: [], artifact: {}, identities};
+  if (r.timedOut) return {infra: "TIMEOUT", checks: [], artifact: {}, identities};
+  if (r.blockReason && !ROLE_BLOCK.test(r.blockReason)) return {infra: `IMPLEMENT_BLOCKED:${r.blockReason.slice(0, 80)}`, checks: [], artifact: {}, identities};
+  if (!r.blockReason && r.exitCode !== 0) return {infra: r.exitCode === null ? "NOT_STARTED" : "IMPLEMENT_EXIT_NONZERO", checks: [], artifact: {}, identities};
+  const checks: EvalCheck[] = [];
+  if (r.blockReason) {
+    checks.push({id: "builder_commit_accepted", passed: false, detail: r.blockReason.slice(0, 100)});
+    return {infra: null, checks, artifact: {implementerLog: log}, identities};
+  }
+  const head = (gitOut(ws, ["rev-parse", "HEAD"]) ?? "").trim();
+  const produced = SHA_RE.test(head) && head !== start && git(ws, ["merge-base", "--is-ancestor", start, head]).status === 0;
+  checks.push({id: "commit_produced", passed: produced, detail: produced ? head : "no descendant commit of the start commit"});
+  if (!produced) return {infra: null, checks, artifact: {implementerLog: log}, identities};
+  const names = (gitOut(ws, ["diff", "--name-status", "-z", "--no-renames", "--no-ext-diff", start, head]) ?? "").split("\0").filter(Boolean);
+  const only = names.length === 2 && names[0] === "A" && names[1] === GOLDEN_FILE.path;
+  checks.push({id: "only_expected_file_added", passed: only, detail: names.join(" ").slice(0, 200)});
+  const blob = gitOut(ws, ["cat-file", "blob", `${head}:${GOLDEN_FILE.path}`]);
+  const mode = (gitOut(ws, ["ls-tree", head, "--", GOLDEN_FILE.path]) ?? "").split(" ")[0];
+  checks.push({id: "exact_content", passed: blob === GOLDEN_FILE.content, detail: blob === null ? "file missing in commit" : `${Buffer.byteLength(blob, "utf8")} bytes`});
+  checks.push({id: "regular_file", passed: mode === "100644", detail: mode || "none"});
+  const limit = c.profile.limits.maxFilesWritten;
+  checks.push({id: "within_role_file_limit", passed: names.length / 2 <= limit, detail: `${names.length / 2}<=${limit}`});
+  return {infra: null, checks, artifact: {commit: head, nameStatus: names, content: blob === null ? null : clip(blob, 2000), implementerLog: log}, identities};
+}
+
+// ---------------------------------------------------------------- procedure: golden-review-v1 (security-reviewer)
+async function goldenReview(c: ProcCtx): Promise<ProcedureRun> {
+  const reviewer = c.pair.reviewer, identities = {reviewer: reviewer.identity};
+  const checks: EvalCheck[] = [], cases: unknown[] = [];
+  for (const k of GOLDEN_REVIEW_CASES) {
+    const repo = path.join(c.tmp, `repo-${k.id}`), clone = path.join(c.tmp, `clone-${k.id}`);
+    const base = seedRepo(repo, GOLDEN_REVIEW_SEED);
+    for (const [f, content] of Object.entries(k.change)) fs.writeFileSync(path.join(repo, f), content);
+    if (git(repo, ["add", "-A"]).status !== 0 || git(repo, [...ID, "commit", "-q", "-m", k.id]).status !== 0) return {infra: "WORKSPACE_SETUP_FAILED", checks: [], artifact: {}, identities};
+    const head = (gitOut(repo, ["rev-parse", "HEAD"]) ?? "").trim();
+    const diff = gitOut(repo, [...DIFF_FLAGS, base, head]);
+    if (diff === null || git(c.tmp, ["clone", "--no-hardlinks", "--quiet", repo, clone]).status !== 0 || git(clone, ["checkout", "-q", "--detach", head]).status !== 0) return {infra: "WORKSPACE_SETUP_FAILED", checks: [], artifact: {}, identities};
+    const spec: MissionSpec = {runId: "run_evaluation", missionId: "msn_evaluation", projectId: "prj_evaluation", title: k.title, objective: k.objective, acceptanceCriteria: [...k.acceptanceCriteria], riskLevel: "R0", cycle: 0, baseSha: base, startSha: base};
+    const r = await reviewer.review(clone, spec, diff, {timeoutMs: c.timeoutMs, ...(c.shouldAbort ? {shouldAbort: c.shouldAbort} : {})});
+    if (r.aborted) return {infra: "ABORTED", checks: [], artifact: {}, identities};
+    if (r.timedOut || r.transient) return {infra: "TIMEOUT_OR_TRANSIENT", checks: [], artifact: {}, identities};
+    const untouched = (gitOut(clone, ["rev-parse", "HEAD"]) ?? "").trim() === head && gitOut(clone, ["status", "--porcelain", "--untracked-files=all"]) === "";
+    checks.push({id: `${k.id}.read_only`, passed: untouched && !/^REVIEW_WORKSPACE_/.test(r.invalidReason ?? ""), detail: untouched ? "clone untouched" : "clone modified"});
+    const findings = (r.findings ?? []).slice(0, 20).map(f => ({severity: String(f.severity).slice(0, 20), title: redactSecrets(String(f.title).slice(0, 200))}));
+    if (!r.valid) {
+      // //TR: Geçersiz review: sözleşmeye uymayan ama süreç 0 ile bitmiş çıktı rolün hatasıdır; diğer geçersizlikler (profil, yol, çıkış kodu) altyapıdır.
+      if (/^REVIEW_WORKSPACE_/.test(r.invalidReason ?? "")) { cases.push({id: k.id, expected: k.expected, valid: false, invalidReason: r.invalidReason}); continue; }
+      if (r.exitCode === 0 && !r.invalidReason) { checks.push({id: `${k.id}.verdict_matches`, passed: false, detail: "no contract-conforming verdict line"}); cases.push({id: k.id, expected: k.expected, valid: false}); continue; }
+      return {infra: `REVIEW_INVALID:${(r.invalidReason ?? `exit=${r.exitCode}`).slice(0, 80)}`, checks: [], artifact: {}, identities};
+    }
+    const ok = r.verdict === k.expected && (k.expected === "CLEAN" ? findings.length === 0 : findings.length >= 1);
+    checks.push({id: `${k.id}.verdict_matches`, passed: ok, detail: `expected ${k.expected}, got ${r.verdict} with ${findings.length} finding(s)`});
+    cases.push({id: k.id, expected: k.expected, verdict: r.verdict, findings, diffSha256: sha256(diff), clonedHead: head});
+  }
+  return {infra: null, checks, artifact: {cases}, identities};
+}
+
+// ---------------------------------------------------------------- procedure: golden-predev-v1 (beş pre-dev birincil rolü)
+async function goldenPredev(c: ProcCtx, fn: FirstDeliveryFunction): Promise<ProcedureRun> {
+  const kind = KIND_OF_FUNCTION[fn], identities: Record<string, string> = {};
+  const builder = c.pair.preDevBuilder?.();
+  if (!kind) return {infra: "PREDEV_KIND_UNKNOWN", checks: [], artifact: {}, identities};
+  if (!builder) return {infra: "PREDEV_BUILDER_UNAVAILABLE", checks: [], artifact: {}, identities};
+  if (c.shouldAbort) builder.shouldAbort = c.shouldAbort;
+  const approvedUpstream: Partial<Record<ArtifactKind, unknown>> = {};
+  for (const up of PREDEV_ORDER.slice(0, PREDEV_ORDER.indexOf(kind))) approvedUpstream[up] = TASKHUB_ARTIFACTS[up];
+  const ctx = {brief: TASKHUB_BRIEF, approvedUpstream: approvedUpstream as never};
+  let out: string;
+  try { out = await builder.produce(kind, composeRolePrompt(kind, ctx), ctx); }
+  catch (e) { return {infra: e instanceof PreDevBuilderError ? `PREDEV_BUILDER:${e.code}` : "PREDEV_BUILDER_UNEXPECTED", checks: [], artifact: {}, identities}; }
+  identities.builder = builder.lastTrace?.identity ?? "unknown";
+  const checks: EvalCheck[] = [];
+  let parsed: unknown = null, parses = true;
+  try { parsed = JSON.parse(out); } catch { parses = false; }
+  checks.push({id: "json_parses", passed: parses, detail: parses ? `${Buffer.byteLength(out, "utf8")} bytes` : "output is not JSON"});
+  if (parses) {
+    const v = validateArtifactContent(kind, parsed, toUpstreamContents(kind, approvedUpstream as never));
+    checks.push({id: "validators_accept", passed: v.ok, detail: v.ok ? "accepted" : String(v.errors).slice(0, 100)});
+  }
+  return {infra: null, checks, artifact: {kind, outputSha256: sha256(out), output: redactSecrets(clip(out, 100_000)), briefLabel: TASKHUB_BRIEF.label}, identities};
+}
+
+export const EVALUATION_PROCEDURES: readonly Procedure[] = [
+  {id: "golden-file", version: GOLDEN_FILE_VERSION, fixtureDigest: FIXTURE_DIGESTS[GOLDEN_FILE_VERSION], specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["developer"],
+    covers: ["follows a precise single-file mission", "touches only the expected file", "commit is produced by the engine-owned builder commit"], doesNotCover: ["code quality", "tests", "multi-file changes", "any real project work"], run: c => goldenFile(c)},
+  {id: "golden-review", version: GOLDEN_REVIEW_VERSION, fixtureDigest: FIXTURE_DIGESTS[GOLDEN_REVIEW_VERSION], specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["security-reviewer"],
+    covers: ["returns CLEAN with no findings for a trivially correct diff", "returns BLOCKED with a finding for a planted command injection", "leaves the review clone untouched"], doesNotCover: ["recall on real defects", "false-positive rate beyond one case", "secret or dependency review"], run: c => goldenReview(c)},
+  {id: "golden-predev", version: "golden-predev-v1", fixtureDigest: sha256Json({brief: TASKHUB_BRIEF, artifacts: TASKHUB_ARTIFACTS}), specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["business-analyst", "requirements-engineer", "planner", "architect", "ux-designer"],
+    covers: ["produces JSON that the existing artifact validators accept for the TaskHub reference brief (shape and traceability to approved upstream)"], doesNotCover: ["content quality or correctness", "any customer project", "the TaskHub reference content is not a verified project"], run: (c, fn) => goldenPredev(c, fn)}
+];
+
+// ---------------------------------------------------------------- pipeline
+export function planFor(roleId: string, evaluationId: string, bindings: readonly RoleExecutionProfile[] = FIRST_DELIVERY_BINDINGS): {profile: RoleExecutionProfile; procedure: Procedure} | {refused: string} {
+  if (!ROLE_RE.test(roleId) || !EV_RE.test(evaluationId)) return {refused: "EVALUATION_BAD_IDS"};
+  const profile = bindings.find(b => b.roleId === roleId);
+  if (!profile) return {refused: "ROLE_NOT_EXECUTABLE:ROLE_HAS_NO_BINDING"};
+  const procedure = EVALUATION_PROCEDURES.find(p => p.functions.includes(profile.function));
+  if (!procedure) return {refused: `NO_PROCEDURE:${profile.function}`};
+  if (evaluationId !== "EV-01") return {refused: `NO_PROCEDURE:${evaluationId}`};
+  try { if (profile.function === "developer") assertImplementerRole(roleId, bindings); else assertRoleExecutes(roleId, profile.function, bindings); }
+  catch (e) { return {refused: (e as Error).message.replace(/:UASCO-\d{4}$/, "").slice(0, 120)}; }
+  return {profile, procedure};
+}
+export function registrySpec(repoRoot: string, roleId: string, evaluationId: string): {kind: string; specRef: string; status: string} | null {
+  try {
+    const doc = JSON.parse(fs.readFileSync(path.join(repoRoot, "registries", "role-definitions.json"), "utf8"));
+    const spec = doc.roles.find((r: {roleId: string}) => r.roleId === roleId)?.evaluationSpecs?.find((s: {evaluationId: string}) => s.evaluationId === evaluationId);
+    return spec ? {kind: String(spec.kind), specRef: String(spec.specRef), status: String(spec.status)} : null;
+  } catch { return null; }
+}
+
+export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, evaluationId: string): Promise<EvaluationOutcome> {
+  const plan = planFor(roleId, evaluationId, deps.bindings);
+  if ("refused" in plan) return {status: "REFUSED", reason: plan.refused};
+  const {profile, procedure} = plan;
+  const spec = registrySpec(deps.repoRoot, roleId, evaluationId);
+  if (!spec) return {status: "REFUSED", reason: "REGISTRY_SPEC_NOT_FOUND"};
+  if (spec.kind !== procedure.specKind) return {status: "REFUSED", reason: `SPEC_KIND_MISMATCH:${spec.kind}`};
+  let staging: EvaluationStaging;
+  try { staging = new EvaluationStaging(deps.stagingRoot, deps.repoRoot); if (staging.exists(roleId, evaluationId)) return {status: "REFUSED", reason: "STAGING_EVIDENCE_EXISTS"}; }
+  catch (e) { return {status: "REFUSED", reason: e instanceof EvaluationStagingError ? e.code : "STAGING_UNAVAILABLE"}; }
+  // //TR: executorKind çağıranın beyanı değil, çiftin kendi türüdür; FAKE her zaman FAKE damgalanır.
+  const executorKind = deps.pair.kind === "FAKE" ? "FAKE" as const : "LOCAL_CLAUDE" as const;
+  const timeoutMs = effectiveLimits(profile.limits, {maxRemediations: 0, executorTimeoutMs: deps.timeoutMs ?? 3_600_000}).executorTimeoutMs;
+  const now = deps.now ?? (() => new Date());
+  const startedAt = now().toISOString();
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-eval-"));
+  let run: ProcedureRun;
+  try { run = await procedure.run({pair: deps.pair, profile, timeoutMs, ...(deps.shouldAbort ? {shouldAbort: deps.shouldAbort} : {}), tmp}, profile.function); }
+  catch (e) { return {status: "NOT_EXECUTED", roleId, evaluationId, reason: `PROCEDURE_EXCEPTION:${(e as Error).message.slice(0, 80)}`}; }
+  finally { try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* geçici dizin en iyi çabayla silinir */ } }
+  // //TR: Altyapı kaynaklı sonuç bir DEĞERLENDİRME SONUCU değildir: hiçbir kanıt yazılmaz (rol ne geçer ne kalır).
+  if (run.infra !== null) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: run.infra};
+  if (run.checks.length === 0) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: "NO_CHECKS_EVALUATED"};
+  const verdict = run.checks.every(c => c.passed) ? "PASSED" as const : "FAILED" as const;
+  const endedAt = now().toISOString();
+  const rel = `${EVIDENCE_ROOT}/${roleId}`;
+  const artifactText = redactSecrets(JSON.stringify({roleId, evaluationId, procedure: procedure.version, checks: run.checks, ...run.artifact}, null, 2) + "\n");
+  const codeHead = git(deps.repoRoot, ["rev-parse", "HEAD"]);
+  const evidence = {
+    schemaVersion: "1.0.0", roleId, evaluationId, verdict, executorKind, fake: executorKind === "FAKE",
+    procedure: {id: procedure.id, version: procedure.version, fixtureDigest: procedure.fixtureDigest, covers: procedure.covers, doesNotCover: procedure.doesNotCover},
+    spec: {kind: spec.kind, specRef: spec.specRef, statusAtRun: spec.status, specTextAvailableInRepository: false},
+    executor: {kind: executorKind, identities: run.identities}, binding: {function: profile.function, providerRoute: profile.providerRoute, sha256: sha256Json(profile)},
+    checks: run.checks, startedAt, endedAt, codeHeadSha: codeHead.status === 0 ? String(codeHead.stdout).trim() : null,
+    artifactPath: `${rel}/${evaluationId}.artifact.json`, artifactSha256: sha256(artifactText), note: EVALUATION_NOTE
+  };
+  const evidenceText = JSON.stringify(evidence, null, 2) + "\n";
+  let artifactFile: string, evidenceFile: string;
+  try { artifactFile = staging.write(roleId, evaluationId, "artifact", artifactText); evidenceFile = staging.write(roleId, evaluationId, "evidence", evidenceText); }
+  catch (e) { return {status: "REFUSED", reason: e instanceof EvaluationStagingError ? e.code : "STAGING_WRITE_FAILED"}; }
+  const evidenceRef = `${rel}/${evaluationId}.json#sha256=${sha256(evidenceText)}`;
+  // //TR: Şeffaflık: aynı doğrulayıcı, staging kökünü depo kökü gibi görerek kanıtı denetler (terfi sonrası sonuç). FAKE kanıtı burada FAKE_EVIDENCE ile reddedilir.
+  const problem = createEvidenceVerifier(path.resolve(deps.stagingRoot))(evidenceRef, roleId, evaluationId, verdict);
+  return {status: "EVALUATED", verdict, roleId, evaluationId, executorKind, evidenceRef, evidenceFile, artifactFile, checks: run.checks, verifier: {countsIfPromoted: problem === null, problem}};
+}

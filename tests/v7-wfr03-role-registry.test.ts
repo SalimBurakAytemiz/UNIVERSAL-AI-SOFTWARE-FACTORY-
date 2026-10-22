@@ -10,6 +10,13 @@ import Fastify from "fastify";
 import {FIRST_DELIVERY_BINDINGS, STAGE_CONSUMERS} from "../core/agents/first-delivery-bindings.js";
 import {computeRoleStatusSummary, createEvidenceVerifier, runningRoleIdsFromRuns, roleLifecycle, TARGET_ROLE_COUNT} from "../core/agents/role-lifecycle.js";
 import {registerRoleStatusRoutes} from "../apps/control-api/src/routes/role-status.js";
+import {EvaluationStaging, EvaluationStagingError, EVALUATION_PROCEDURES, planFor, runRoleEvaluation} from "../core/competency/evaluation-pipeline.js";
+import type {EvaluationOutcome} from "../core/competency/evaluation-pipeline.js";
+import {executeBlockers, parseArgs, runCli} from "../core/competency/evaluation-cli.js";
+import {FakeExecutors, reviewerArgv} from "../core/workos/executors.js";
+import type {ExecutorPair, FakeScript, ProcResult} from "../core/workos/executors.js";
+import {ClaudePreDevBuilder} from "../core/workos/predev/claude-builder.js";
+import {TASKHUB_ARTIFACTS} from "../core/workos/predev/fixtures/taskhub/index.js";
 import {deriveRoleProfiles, buildDerivationInputs, NEVER_GRANTED, ROUTE_TOOL_ALLOWLIST, PERMISSION_READ, PERMISSION_WRITE_SCRATCH} from "../core/agents/role-profile-derivation.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
@@ -706,5 +713,309 @@ describe("LANE-C C2 role execution profiles (derived, proposal only)", () => {
       expect(x.candidateSkills.gapId).toBe(`WFR-GAP-PROFILE-SKILLS-${x.roleId}`);
       expect(x.knowledgeSources.value).toEqual(["registries/technologies.json#TECH-NODEJS"]);
     }
+  });
+});
+
+// //TR: LANE-C C-EVAL-PIPELINE: değerlendirme hattı STAGING'e yazar, FAKE'i asla saydırmaz, altyapı sorunlarını sonuç saymaz ve depoya (audit/evidence, registries) dokunamaz. Gerçek claude çalışmaz; FAKE çiftler ve kayıtlı süreç çalıştırıcıları kullanılır.
+describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE and infrastructure never count)", () => {
+  const DEV = "UASCO-0085", REVIEWER = "UASCO-0252", BA = "UASCO-0022";
+  const workDir = () => fs.mkdtempSync(path.join(tmp, "eval-"));
+  const script = (o: Partial<FakeScript> = {}): FakeScript => ({
+    implement: () => ({files: {"greeting.txt": "hello\n"}}),
+    review: n => (n === 1 ? {verdict: "CLEAN"} : {verdict: "BLOCKED", findings: [{severity: "HIGH", title: "command injection via unsanitised ref"}]}), ...o
+  });
+  const fakePair = (o: Partial<FakeScript> = {}): ExecutorPair => new FakeExecutors(script(o)).pair();
+  const stagingOf = () => path.join(workDir(), "staging");
+  const evaluate = (pair: ExecutorPair, role: string, extra: {stagingRoot?: string; timeoutMs?: number; shouldAbort?: () => boolean; bindings?: typeof FIRST_DELIVERY_BINDINGS} = {}): Promise<EvaluationOutcome> =>
+    runRoleEvaluation({repoRoot: REPO, stagingRoot: extra.stagingRoot ?? stagingOf(), pair, ...(extra.timeoutMs ? {timeoutMs: extra.timeoutMs} : {}), ...(extra.shouldAbort ? {shouldAbort: extra.shouldAbort} : {}), ...(extra.bindings ? {bindings: extra.bindings} : {})}, role, "EV-01");
+  const procResult = (argv: string[], over: Partial<ProcResult> = {}): ProcResult => { const at = new Date().toISOString(); return {argv, exitCode: 0, stdout: "", stderr: "", startedAt: at, endedAt: at, timedOut: false, aborted: false, spawnError: false, ...over}; };
+  // Pre-dev: ClaudePreDevBuilder ile kayıtlı süreç çalıştırıcısı; tür, istemdeki "# ARTEFAKT TÜRÜ" satırından okunur.
+  const predevPair = (outFor: (kind: string) => string | Partial<ProcResult>, kindOverride: "FAKE" | "LOCAL_CLAUDE" = "FAKE"): ExecutorPair => ({
+    ...fakePair(), kind: kindOverride,
+    preDevBuilder: () => new ClaudePreDevBuilder({identity: "claude-reviewer@local.invalid", launcher: () => "/x/claude", profile: () => ({ok: true as const, dir: "/profile/reviewer"}), env: d => ({CLAUDE_CONFIG_DIR: d}), argv: reviewerArgv, scratchRoot: workDir(),
+      run: async (argv, opts) => { const o = outFor(/# ARTEFAKT TÜRÜ: (\w+)/.exec(String(opts.input))?.[1] ?? ""); return procResult(argv, typeof o === "string" ? {stdout: o} : o); }})
+  });
+  const goodPredev = (kind: string) => JSON.stringify((TASKHUB_ARTIFACTS as any)[kind]);
+  const evaluated = (o: EvaluationOutcome) => { if (o.status !== "EVALUATED") throw new Error(`expected EVALUATED, got ${JSON.stringify(o)}`); return o; };
+  const listing = (d: string): string[] => fs.existsSync(d) ? fs.readdirSync(d, {recursive: true}).map(String).sort() : [];
+  const repoSnapshot = () => sha(JSON.stringify({reg: sha(fs.readFileSync(REG_FILE)), evidence: listing(path.join(REPO, "audit", "evidence", "role-evaluations")), git: cp.spawnSync("git", ["status", "--porcelain"], {cwd: REPO, encoding: "utf8"}).stdout}));
+
+  it("developer golden mission (FAKE pair): PASSED, evidence staged in the verifier's format and ALWAYS stamped FAKE: it never counts; repo, registry and audit/evidence are untouched", { timeout: 120_000 }, async () => {
+    const before = repoSnapshot(), root = stagingOf();
+    const o = evaluated(await evaluate(fakePair(), DEV, {stagingRoot: root}));
+    expect([o.verdict, o.executorKind, o.checks.every(c => c.passed)]).toEqual(["PASSED", "FAKE", true]);
+    expect(o.checks.map(c => c.id)).toEqual(["commit_produced", "only_expected_file_added", "exact_content", "regular_file", "within_role_file_limit"]);
+    const ev = JSON.parse(fs.readFileSync(o.evidenceFile, "utf8"));
+    expect(ev).toMatchObject({roleId: DEV, evaluationId: "EV-01", verdict: "PASSED", executorKind: "FAKE", fake: true, procedure: {version: "golden-file-v1"}, spec: {kind: "ROLE_SPECIFIC_GOLDEN_MISSION", statusAtRun: "NOT_EXECUTED", specTextAvailableInRepository: false}});
+    expect(ev.artifactPath).toBe(`audit/evidence/role-evaluations/${DEV}/EV-01.artifact.json`);
+    expect(ev.artifactSha256).toBe(sha(fs.readFileSync(o.artifactFile)));
+    expect(o.evidenceRef).toBe(`audit/evidence/role-evaluations/${DEV}/EV-01.json#sha256=${sha(fs.readFileSync(o.evidenceFile))}`);
+    expect(path.relative(root, o.evidenceFile).split(path.sep)).toEqual(["audit", "evidence", "role-evaluations", DEV, "EV-01.json"]);
+    // the real verifier, with the staging root as repo root, rejects it as FAKE; the pipeline reports the same
+    expect(o.verifier).toEqual({countsIfPromoted: false, problem: "FAKE_EVIDENCE"});
+    expect(createEvidenceVerifier(root)(o.evidenceRef, DEV, "EV-01", "PASSED")).toBe("FAKE_EVIDENCE");
+    expect(listing(root)).toEqual(["audit", "audit/evidence", "audit/evidence/role-evaluations", `audit/evidence/role-evaluations/${DEV}`, `audit/evidence/role-evaluations/${DEV}/EV-01.artifact.json`, `audit/evidence/role-evaluations/${DEV}/EV-01.json`].map(x => x.split("/").join(path.sep)).sort());
+    expect(repoSnapshot()).toBe(before);
+  });
+
+  it("the verdict comes only from the deterministic oracle: wrong content, extra file, no commit, no change, forbidden path -> FAILED (never PASSED), whatever the executor claims", { timeout: 180_000 }, async () => {
+    const cases: Array<[string, Partial<FakeScript>, string]> = [
+      ["wrong content", {implement: () => ({files: {"greeting.txt": "hello world\n"}})}, "exact_content"],
+      ["missing newline", {implement: () => ({files: {"greeting.txt": "hello"}})}, "exact_content"],
+      ["extra file", {implement: () => ({files: {"greeting.txt": "hello\n", "extra.txt": "x\n"}})}, "only_expected_file_added"],
+      ["modifies the seed file", {implement: () => ({files: {"greeting.txt": "hello\n", "README.md": "changed\n"}})}, "only_expected_file_added"],
+      ["wrong file name", {implement: () => ({files: {"Greeting.txt": "hello\n"}})}, "only_expected_file_added"],
+      ["no commit", {implement: () => ({files: {"greeting.txt": "hello\n"}, noCommit: true})}, "commit_produced"]
+    ];
+    for (const [label, o, failing] of cases) {
+      const r = evaluated(await evaluate(fakePair(o), DEV));
+      expect([label, r.verdict, r.checks.find(c => !c.passed)?.id]).toEqual([label, "FAILED", failing]);
+    }
+  });
+
+  it("infrastructure trouble is NOT an evaluation result: exit code, timeout, abort and non-role blocks -> NOT_EXECUTED and NOTHING is staged; role-caused builder refusals -> FAILED", { timeout: 180_000 }, async () => {
+    const at = new Date().toISOString();
+    const custom = (r: Record<string, unknown>): ExecutorPair => ({...fakePair(), implementer: {identity: "X_IMPL", implement: async () => ({exitCode: 0, log: "", argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false, ...r})}});
+    const infra: Array<[string, ExecutorPair, string, Parameters<typeof evaluate>[2]?]> = [
+      ["exit code", fakePair({implement: () => ({exitCode: 1})}), "IMPLEMENT_EXIT_NONZERO"],
+      ["timeout", fakePair({implement: () => ({files: {"greeting.txt": "hello\n"}, sleepMs: 5000})}), "TIMEOUT", {timeoutMs: 700}],
+      ["profile not logged in", custom({exitCode: null, blockReason: "CLAUDE_PROFILE_LOGIN_REQUIRED"}), "IMPLEMENT_BLOCKED:CLAUDE_PROFILE_LOGIN_REQUIRED"],
+      ["workspace config refused", custom({exitCode: null, blockReason: "WORKSPACE_CONTAINS_AGENT_CONFIG"}), "IMPLEMENT_BLOCKED:WORKSPACE_CONTAINS_AGENT_CONFIG"],
+      ["never started", custom({exitCode: null}), "NOT_STARTED"],
+      ["aborted", custom({aborted: true, exitCode: null}), "ABORTED"]
+    ];
+    for (const [label, pair, reason, extra] of infra) {
+      const root = stagingOf();
+      const o = await evaluate(pair, DEV, {stagingRoot: root, ...(extra ?? {})});
+      expect([label, o]).toEqual([label, {status: "NOT_EXECUTED", roleId: DEV, evaluationId: "EV-01", reason}]);
+      expect([label, listing(root)]).toEqual([label, []]);
+    }
+    for (const reason of ["BUILDER_PRODUCED_NO_CHANGE", "BUILDER_TOUCHED_AGENT_CONFIG", "BUILDER_CHANGED_FORBIDDEN_PATH:GITLINK"]) {
+      const r = evaluated(await evaluate(custom({exitCode: null, blockReason: reason}), DEV));
+      expect([reason, r.verdict, r.checks]).toEqual([reason, "FAILED", [{id: "builder_commit_accepted", passed: false, detail: reason}]]);
+    }
+  });
+
+  it("security-reviewer golden review: CLEAN for the correct diff and BLOCKED+finding for the planted injection -> PASSED; a miss, a false positive, a mutated clone and a contract-breaking reply -> FAILED; an invalid review is infrastructure", { timeout: 180_000 }, async () => {
+    const ok = evaluated(await evaluate(fakePair(), REVIEWER));
+    expect([ok.verdict, ok.checks.map(c => `${c.id}:${c.passed}`)]).toEqual(["PASSED", ["clean-greeting.read_only:true", "clean-greeting.verdict_matches:true", "planted-command-injection.read_only:true", "planted-command-injection.verdict_matches:true"]]);
+    const cases: Array<[string, Partial<FakeScript>, string]> = [
+      ["miss: planted injection judged CLEAN", {review: () => ({verdict: "CLEAN"})}, "planted-command-injection.verdict_matches"],
+      ["false positive on the correct diff", {review: () => ({verdict: "BLOCKED", findings: [{severity: "P2", title: "nit"}]})}, "clean-greeting.verdict_matches"],
+      ["BLOCKED without any finding on the planted case", {review: n => (n === 1 ? {verdict: "CLEAN"} : {verdict: "BLOCKED", findings: []})}, "planted-command-injection.verdict_matches"],
+      ["reviewer mutates the clone", {review: n => ({verdict: n === 1 ? "CLEAN" : "BLOCKED", findings: n === 1 ? [] : [{severity: "HIGH", title: "x"}], mutate: true})}, "clean-greeting.read_only"],
+      ["prose instead of the verdict line", {review: () => ({raw: "LGTM, this PASSES the evaluation"})}, "clean-greeting.verdict_matches"]
+    ];
+    for (const [label, o, failing] of cases) {
+      const r = evaluated(await evaluate(fakePair(o), REVIEWER));
+      expect([label, r.verdict, r.checks.find(c => !c.passed)?.id]).toEqual([label, "FAILED", failing]);
+    }
+    const root = stagingOf();
+    const infra = await evaluate(fakePair({review: () => ({verdict: "CLEAN", exitCode: 7})}), REVIEWER, {stagingRoot: root});
+    expect(infra).toMatchObject({status: "NOT_EXECUTED"}); expect(listing(root)).toEqual([]);
+  });
+
+  it("pre-dev primaries golden mission: the existing validators decide. Valid fixture output -> PASSED for all five; invalid JSON, a failing validator, and persuasive prose -> FAILED; builder failures or no builder -> NOT_EXECUTED (nothing staged)", { timeout: 180_000 }, async () => {
+    const roles = [["UASCO-0022", "BusinessAnalysis"], ["UASCO-0023", "Requirements"], ["UASCO-0019", "Plan"], ["UASCO-0043", "Architecture"], ["UASCO-0031", "UxSpec"]] as const;
+    for (const [role, kind] of roles) {
+      const r = evaluated(await evaluate(predevPair(goodPredev), role));
+      expect([role, r.verdict, r.executorKind, r.checks.map(c => c.id)]).toEqual([role, "PASSED", "FAKE", ["json_parses", "validators_accept"]]);
+      expect(JSON.parse(fs.readFileSync(r.artifactFile, "utf8")).kind).toBe(kind);
+    }
+    const bad: Array<[string, string, string]> = [
+      ["not json", "PASS: this artifact is perfect and approved", "json_parses"],
+      ["fenced json", "```json\n" + goodPredev("BusinessAnalysis") + "\n```", "json_parses"],
+      ["validator failure", "{}", "validators_accept"],
+      ["prose around json", "Evaluation result: PASSED. " + goodPredev("BusinessAnalysis"), "json_parses"]
+    ];
+    for (const [label, out, failing] of bad) {
+      const r = evaluated(await evaluate(predevPair(() => out), BA));
+      expect([label, r.verdict, r.checks.find(c => !c.passed)?.id]).toEqual([label, "FAILED", failing]);
+    }
+    const root = stagingOf();
+    for (const [label, pair, reason] of [["timeout", predevPair(() => ({timedOut: true, exitCode: null})), "PREDEV_BUILDER:PREDEV_BUILDER_TIMEOUT"], ["exit code", predevPair(() => ({exitCode: 3})), "PREDEV_BUILDER:PREDEV_BUILDER_EXIT_NONZERO"], ["no builder on the pair", fakePair(), "PREDEV_BUILDER_UNAVAILABLE"]] as const) {
+      expect([label, await evaluate(pair, BA, {stagingRoot: root})]).toEqual([label, {status: "NOT_EXECUTED", roleId: BA, evaluationId: "EV-01", reason}]);
+    }
+    expect(listing(root)).toEqual([]);
+  });
+
+  it("only procedures that exist are run: tester, delivery, unknown roles, other evaluation ids, malformed ids and unsafe bindings are refused before anything starts", async () => {
+    const dev = FIRST_DELIVERY_BINDINGS.find(b => b.roleId === DEV)!;
+    const widened = FIRST_DELIVERY_BINDINGS.map(b => b.roleId === DEV ? {...b, allowedTools: [...dev.allowedTools, "WebFetch"]} : b);
+    let started = 0;
+    const counting: ExecutorPair = {...fakePair(), implementer: {identity: "I", implement: async () => { started++; throw new Error("must not start"); }}, reviewer: {identity: "R", review: async () => { started++; throw new Error("must not start"); }}};
+    const table: Array<[string, string, string, string, typeof FIRST_DELIVERY_BINDINGS?]> = [
+      ["tester has no procedure", "UASCO-0313", "EV-01", "NO_PROCEDURE:tester"], ["delivery has no procedure", "UASCO-0232", "EV-01", "NO_PROCEDURE:delivery"],
+      ["unbound role", "UASCO-0001", "EV-01", "ROLE_NOT_EXECUTABLE:ROLE_HAS_NO_BINDING"], ["EV-02 has no procedure", DEV, "EV-02", "NO_PROCEDURE:EV-02"], ["EV-06", REVIEWER, "EV-06", "NO_PROCEDURE:EV-06"],
+      ["malformed role", "../UASCO-0085", "EV-01", "EVALUATION_BAD_IDS"], ["malformed evaluation", DEV, "EV-01/../x", "EVALUATION_BAD_IDS"], ["empty", "", "", "EVALUATION_BAD_IDS"],
+      ["widened tool list", DEV, "EV-01", "ROLE_NOT_EXECUTABLE:TOOL_NOT_ALLOWED", widened]
+    ];
+    for (const [label, role, ev, reason, bindings] of table) {
+      const r = await runRoleEvaluation({repoRoot: REPO, stagingRoot: stagingOf(), pair: counting, ...(bindings ? {bindings} : {})}, role, ev);
+      expect([label, r]).toEqual([label, {status: "REFUSED", reason}]);
+    }
+    expect(started).toBe(0);
+    expect(EVALUATION_PROCEDURES.flatMap(p => p.functions).sort()).toEqual(["architect", "business-analyst", "developer", "planner", "requirements-engineer", "security-reviewer", "ux-designer"]);
+    expect(planFor(DEV, "EV-01")).toMatchObject({procedure: {version: "golden-file-v1"}});
+  });
+
+  it("evidence is never overwritten: a second run is refused BEFORE the executor starts and the staged bytes are unchanged", { timeout: 120_000 }, async () => {
+    const root = stagingOf();
+    const first = evaluated(await evaluate(fakePair(), DEV, {stagingRoot: root}));
+    const bytes = fs.readFileSync(first.evidenceFile);
+    let started = 0;
+    const second = await evaluate({...fakePair(), implementer: {identity: "I", implement: async () => { started++; throw new Error("no"); }}}, DEV, {stagingRoot: root});
+    expect(second).toEqual({status: "REFUSED", reason: "STAGING_EVIDENCE_EXISTS"});
+    expect(started).toBe(0);
+    expect(fs.readFileSync(first.evidenceFile).equals(bytes)).toBe(true);
+    // a leftover artifact alone (interrupted write) also blocks
+    const partial = stagingOf(); const p = new EvaluationStaging(partial, REPO);
+    p.write(DEV, "EV-01", "artifact", "{}\n");
+    expect(await evaluate(fakePair(), DEV, {stagingRoot: partial})).toEqual({status: "REFUSED", reason: "STAGING_EVIDENCE_EXISTS"});
+  });
+
+  describe("staging confinement", () => {
+    it("never inside the repository (root, audit/, registries/, an ancestor of the repo) or relative; nothing is written there", async () => {
+      const before = repoSnapshot();
+      for (const [label, root, reason] of [["the repo root itself", REPO, "STAGING_INSIDE_REPOSITORY"], ["audit/", path.join(REPO, "audit"), "STAGING_INSIDE_REPOSITORY"], ["audit/evidence", path.join(REPO, "audit", "evidence"), "STAGING_INSIDE_REPOSITORY"],
+        ["registries/", path.join(REPO, "registries", "evaluations-staging"), "STAGING_INSIDE_REPOSITORY"], ["a protected path", path.join(REPO, "config", "x"), "STAGING_INSIDE_REPOSITORY"],
+        ["an ancestor of the repo", path.dirname(REPO), "STAGING_INSIDE_REPOSITORY"], ["relative", "evaluations/staging", "STAGING_ROOT_NOT_ABSOLUTE"]] as const) {
+        expect([label, await evaluate(fakePair(), DEV, {stagingRoot: root})]).toEqual([label, {status: "REFUSED", reason}]);
+      }
+      expect(repoSnapshot()).toBe(before);
+    });
+    it("names are fixed: path traversal in role or evaluation id is impossible", () => {
+      const st = new EvaluationStaging(stagingOf(), REPO);
+      for (const [r, e] of [["../x", "EV-01"], ["UASCO-0085", "../EV-01"], ["UASCO-0085/..", "EV-01"], ["uasco-0085", "EV-01"], ["UASCO-0085", "EV-07"], ["", ""]]) expect(() => st.evidencePaths(r, e)).toThrow(EvaluationStagingError);
+      expect(() => st.write("UASCO-0085", "EV-01", "artifact" as const, "{}")).not.toThrow();
+    });
+    it.skipIf(process.platform === "win32")("symlinks are refused: the staging root, a component under it, the role dir and an existing target file", () => {
+      const real = workDir(), repoAudit = path.join(REPO, "audit");
+      // 1) the staging root is a symlink
+      const link = path.join(workDir(), "link"); fs.symlinkSync(real, link);
+      expect(() => new EvaluationStaging(link, REPO)).toThrow(/STAGING_SYMLINK_REFUSED/);
+      // 2) a component under the root points at the repository's audit dir
+      const root2 = stagingOf(); fs.mkdirSync(root2, {recursive: true}); fs.symlinkSync(repoAudit, path.join(root2, "audit"));
+      expect(() => new EvaluationStaging(root2, REPO)).toThrow(/STAGING_SYMLINK_REFUSED|STAGING_INSIDE_REPOSITORY/);
+      expect(listing(path.join(REPO, "audit", "evidence", "role-evaluations")).includes("UASCO-0085")).toBe(false);
+      // 3) the role dir is a symlink to somewhere else
+      const root3 = stagingOf(), elsewhere = workDir(); const st3 = new EvaluationStaging(root3, REPO);
+      fs.mkdirSync(path.join(root3, "audit", "evidence", "role-evaluations"), {recursive: true});
+      fs.symlinkSync(elsewhere, path.join(root3, "audit", "evidence", "role-evaluations", "UASCO-0085"));
+      expect(() => st3.write("UASCO-0085", "EV-01", "artifact", "{}")).toThrow(/STAGING_SYMLINK_REFUSED/);
+      expect(listing(elsewhere)).toEqual([]);
+      // 4) the target file is a pre-existing symlink: counted as existing, never followed or replaced
+      const root4 = stagingOf(), victim = path.join(workDir(), "victim.txt"); fs.writeFileSync(victim, "keep\n");
+      const st4 = new EvaluationStaging(root4, REPO); st4.write("UASCO-0085", "EV-02", "artifact", "{}\n");
+      fs.symlinkSync(victim, path.join(root4, "audit", "evidence", "role-evaluations", "UASCO-0085", "EV-01.json"));
+      expect(st4.exists("UASCO-0085", "EV-01")).toBe(true);
+      expect(() => st4.write("UASCO-0085", "EV-01", "evidence", "overwritten\n")).toThrow(/STAGING_EVIDENCE_EXISTS/);
+      expect(fs.readFileSync(victim, "utf8")).toBe("keep\n");
+    });
+  });
+
+  describe("lifecycle: staged evidence only counts when it is genuinely non-FAKE and intact", () => {
+    // Promotion simulation (a protected step in reality): copy the staged tree verbatim into a throw-away "repo" with a registry copy.
+    const promote = (stagingRoot: string, role: string, status: string) => {
+      const repo = workDir(); fs.cpSync(path.join(stagingRoot, "audit"), path.join(repo, "audit"), {recursive: true});
+      const r = JSON.parse(JSON.stringify(roles.find(x => x.roleId === role)!)); r.evaluationSpecs[0] = {...r.evaluationSpecs[0], status};
+      return {repo, role: r};
+    };
+    const life = (repo: string, role: any) => roleLifecycle(role, roles as any, {bindings: FIRST_DELIVERY_BINDINGS, verify: createEvidenceVerifier(repo), runningRoleIds: new Set(), nowMs: Date.now()});
+    const withRef = (role: any, o: Extract<EvaluationOutcome, {status: "EVALUATED"}>) => { role.evaluationSpecs[0].evaluatorEvidenceRef = o.evidenceRef; return role; };
+
+    it("FAKE evidence promoted verbatim still does not make the role TESTED; the same pipeline output from a non-FAKE pair does (format compatible) - for PASSED and FAILED alike", { timeout: 180_000 }, async () => {
+      const fake = stagingOf(), real = stagingOf();
+      const f = evaluated(await evaluate(fakePair(), DEV, {stagingRoot: fake}));
+      const pf = promote(fake, DEV, "PASSED");
+      expect(life(pf.repo, withRef(pf.role, f)).tested).toBe(false);
+      // test-only: a pair object that claims LOCAL_CLAUDE (production builds it only from LocalClaudeExecutors)
+      const claims = (o: Partial<FakeScript> = {}): ExecutorPair => ({...fakePair(o), kind: "LOCAL_CLAUDE"});
+      const r = evaluated(await evaluate(claims(), DEV, {stagingRoot: real}));
+      expect([r.executorKind, r.verifier]).toEqual(["LOCAL_CLAUDE", {countsIfPromoted: true, problem: null}]);
+      const pr = promote(real, DEV, "PASSED");
+      expect(life(pr.repo, withRef(pr.role, r))).toMatchObject({tested: true, certified: false});
+      const failedRoot = stagingOf();
+      const bad = evaluated(await evaluate(claims({implement: () => ({files: {"greeting.txt": "nope\n"}})}), DEV, {stagingRoot: failedRoot}));
+      expect(bad.verdict).toBe("FAILED");
+      const pb = promote(failedRoot, DEV, "FAILED");
+      expect(life(pb.repo, withRef(pb.role, bad)).tested).toBe(true); // TESTED = executed with verified evidence; the verdict is read separately
+      // a PASSED claim on FAILED evidence, or a spec for another role / evaluation, is rejected by the verifier
+      const lie = promote(failedRoot, DEV, "PASSED");
+      expect(life(lie.repo, withRef(lie.role, bad)).tested).toBe(false);
+    });
+
+    it("tampering after staging is caught by the verifier: evidence bytes, artifact bytes, a swapped role directory, a symlinked artifact", { timeout: 180_000 }, async () => {
+      const root = stagingOf();
+      const r = evaluated(await evaluate({...fakePair(), kind: "LOCAL_CLAUDE"}, DEV, {stagingRoot: root}));
+      const base = (mutate: (repo: string) => void) => { const p = promote(root, DEV, "PASSED"); mutate(p.repo); return life(p.repo, withRef(p.role, r)).tested; };
+      const dir = (repo: string) => path.join(repo, "audit", "evidence", "role-evaluations", DEV);
+      expect(base(() => undefined)).toBe(true);
+      expect(base(repo => fs.appendFileSync(path.join(dir(repo), "EV-01.json"), " "))).toBe(false);
+      expect(base(repo => fs.appendFileSync(path.join(dir(repo), "EV-01.artifact.json"), " "))).toBe(false);
+      expect(base(repo => { const d = path.join(repo, "audit", "evidence", "role-evaluations"); fs.renameSync(path.join(d, DEV), path.join(d, "UASCO-0313")); })).toBe(false);
+      if (process.platform !== "win32") expect(base(repo => { const f = path.join(dir(repo), "EV-01.artifact.json"), o = path.join(workDir(), "art.json"); fs.copyFileSync(f, o); fs.rmSync(f); fs.symlinkSync(o, f); })).toBe(false);
+    });
+  });
+
+  describe("command line: dry run by default, execute only under the Founder's existing authority, never in CI", () => {
+    const script = path.join(REPO, "scripts", "run-role-evaluation.mjs");
+    const sh = (args: string[], env: NodeJS.ProcessEnv = {}) => cp.spawnSync(process.execPath, [script, ...args], {cwd: REPO, encoding: "utf8", env: {...process.env, CI: "", GITHUB_ACTIONS: "", ...env}});
+    const controlRootWithProvenance = () => {
+      const c = workDir(), shaOf = sha(fs.readFileSync(process.execPath));
+      fs.mkdirSync(path.join(c, ".ai", "runtime"), {recursive: true});
+      fs.writeFileSync(path.join(c, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), JSON.stringify({final: "PASS", claude: {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: process.execPath, launcherSha256: shaOf, version: "fake"}}));
+      return c;
+    };
+    const enable = (dataDir: string) => { fs.mkdirSync(path.join(dataDir, "settings"), {recursive: true}); fs.writeFileSync(path.join(dataDir, "settings", "executors.json"), JSON.stringify({localClaude: {enabled: true, enabledAt: "x", enabledBy: "FOUNDER_LOCAL", launcherSha256: null, provenanceCapturedAt: null}})); };
+
+    it("default is a DRY RUN: it prints the plan and the execute blockers, spawns nothing and writes nothing (not even the staging directory)", () => {
+      const d = workDir(), r = sh(["--role", DEV, "--data-dir", d]);
+      expect(r.status).toBe(0);
+      const out = JSON.parse(r.stdout);
+      expect(out).toMatchObject({mode: "DRY_RUN", willSpawn: false, willWrite: false, role: DEV, function: "developer", evaluation: "EV-01", procedure: {version: "golden-file-v1"}, staging: {root: path.join(d, "evaluations", "staging"), existingEvidence: false, problem: null}});
+      expect(out.executeBlockers).toEqual(expect.arrayContaining(["EXECUTOR_NOT_ENABLED"]));
+      expect(fs.readdirSync(d)).toEqual([]);
+    });
+    it("usage errors and roles without a procedure exit 2 and write nothing", () => {
+      const d = workDir();
+      for (const args of [[], ["--role", DEV], ["--role", DEV, "--data-dir", "relative/dir"], ["--role", DEV, "--data-dir", d, "--staging", "/tmp/x"], ["--role", DEV, "--data-dir", d, "--evaluation"], ["--role", "UASCO-0313", "--data-dir", d], ["--role", DEV, "--evaluation", "EV-04", "--data-dir", d]]) expect([args, sh(args).status]).toEqual([args, 2]);
+      expect(fs.readdirSync(d)).toEqual([]);
+      expect(parseArgs(["--role", DEV, "--data-dir", d])).toMatchObject({role: DEV, evaluation: "EV-01", execute: false});
+    });
+    it("--execute is refused unless EVERY gate holds: not in CI / GitHub Actions, allowPaidApi false, executor enabled by the Founder, provenance PASS", async () => {
+      const d = workDir(), control = controlRootWithProvenance(), ok = {repoRoot: REPO, dataDir: d, controlRoot: control, env: {} as NodeJS.ProcessEnv, findClaudeCli: () => process.execPath};
+      expect(executeBlockers(ok)).toEqual(["EXECUTOR_NOT_ENABLED"]);
+      enable(d);
+      expect(executeBlockers(ok)).toEqual([]);
+      expect(executeBlockers({...ok, env: {CI: "true"}})).toEqual(["CI_ENVIRONMENT"]);
+      expect(executeBlockers({...ok, env: {GITHUB_ACTIONS: "true"}})).toEqual(["CI_ENVIRONMENT"]);
+      expect(executeBlockers({...ok, env: {CI: "0"}})).toEqual([]); // explicit false is not CI
+      expect(executeBlockers({...ok, controlRoot: workDir()})).toEqual(expect.arrayContaining(["EXECUTOR_PROVENANCE_MISSING"]));
+      const paid = workDir(); fs.mkdirSync(path.join(paid, "config"), {recursive: true});
+      fs.copyFileSync(path.join(REPO, "config", "environment-policy.json"), path.join(paid, "config", "environment-policy.json"));
+      for (const content of ['{"allowPaidApi": true}', '{"allowPaidApi": "false"}', "{}", "not json"]) { fs.writeFileSync(path.join(paid, "config", "automation.json"), content); expect([content, executeBlockers({...ok, repoRoot: paid})]).toEqual([content, expect.arrayContaining(["PAID_API_NOT_DISABLED"])]); }
+      // the CLI itself: nothing runs and nothing is staged when a gate fails
+      let made = 0;
+      const out: string[] = [], err: string[] = [];
+      const base = {repoRoot: REPO, out: (s: string) => out.push(s), err: (s: string) => err.push(s), makePair: () => { made++; return fakePair(); }, findClaudeCli: () => process.execPath};
+      const d2 = workDir();
+      expect(await runCli(["--role", DEV, "--data-dir", d2, "--execute", "--control-root", control], {...base, env: {}})).toBe(2);
+      expect(await runCli(["--role", DEV, "--data-dir", d, "--execute", "--control-root", control], {...base, env: {CI: "1"}})).toBe(2);
+      expect(err.join("")).toContain("EXECUTE_NOT_ALLOWED"); expect(err.join("")).toContain("CI_ENVIRONMENT");
+      expect(made).toBe(0); expect(fs.readdirSync(d2)).toEqual([]); expect(listing(path.join(d, "evaluations"))).toEqual([]);
+    });
+    it("--execute with every gate satisfied stages FAKE-stamped evidence for an injected FAKE pair (the CLI itself cannot select a pair)", { timeout: 120_000 }, async () => {
+      const d = workDir(), control = controlRootWithProvenance(); enable(d);
+      const out: string[] = [], err: string[] = [];
+      const code = await runCli(["--role", DEV, "--data-dir", d, "--execute", "--control-root", control], {repoRoot: REPO, env: {}, out: s => out.push(s), err: s => err.push(s), makePair: () => fakePair(), findClaudeCli: () => process.execPath});
+      expect([code, err.join(""), code === 0 ? "" : out.join("")]).toEqual([0, "", ""]);
+      const res = JSON.parse(out.join(""));
+      expect(res).toMatchObject({mode: "EXECUTED", status: "EVALUATED", verdict: "PASSED", executorKind: "FAKE", verifier: {countsIfPromoted: false, problem: "FAKE_EVIDENCE"}});
+      expect(res.evidenceFile.startsWith(path.join(d, "evaluations", "staging"))).toBe(true);
+      const again: string[] = [];
+      expect(await runCli(["--role", DEV, "--data-dir", d, "--execute", "--control-root", control], {repoRoot: REPO, env: {}, out: s => again.push(s), err: s => again.push(s), makePair: () => fakePair(), findClaudeCli: () => process.execPath})).toBe(2);
+      expect(again.join("")).toContain("STAGING_EVIDENCE_EXISTS");
+    });
   });
 });
