@@ -14,6 +14,7 @@ import {WorkOsStore} from "../core/workos/store.js";
 import {MissionRunner} from "../core/workos/runner.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {testExecutionGate} from "./support/test-sandbox.js";
+import {PreDevBuilderError} from "../core/workos/predev/claude-builder.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -155,5 +156,54 @@ describe("SBX-8 D: runner keeps the profile / invalid-review reasons", () => {
       expect(run.evidence.some(e => e.kind === "REGRESSION_TESTS")).toBe(false);
       fs.rmSync(path.join(tmp, "proj"), {recursive: true, force: true}); fs.rmSync(path.join(tmp, "data"), {recursive: true, force: true}); fs.rmSync(path.join(tmp, "runtime"), {recursive: true, force: true});
     }
+  });
+});
+
+// //TR: LANE-C: pre-dev artefakt üretimi LOCAL_CLAUDE çiftinden gelir ve AYNI reviewer rotası yetkisini kullanır (yeni yetki/env bayrağı yok); FAKE çiftinde yoktur.
+describe("LANE-C pre-dev builder from the LOCAL_CLAUDE pair: reviewer-route authority only", () => {
+  const ctx = {brief: {projectName: "p", isReference: false, label: "l", summary: "s", stakeholders: [], objectives: [], constraints: [], outOfScope: [], notes: []}, approvedUpstream: {}};
+  const errCode = async (p: Promise<unknown>) => { try { await p; } catch (e) { if (e instanceof PreDevBuilderError) return e.code; throw e; } return "NO_ERROR"; };
+  it("only LOCAL_CLAUDE offers a pre-dev builder; the FAKE pair has none (route answers PREDEV_DRIVER_BUILDER_NOT_CONFIGURED)", () => {
+    expect(new FakeExecutors({implement: () => ({}), review: () => ({verdict: "CLEAN"})}).pair().preDevBuilder).toBeUndefined();
+    expect(typeof new LocalClaudeExecutors(REPO, controlRoot()).pair().preDevBuilder).toBe("function");
+  });
+  it("reviewer profile not logged in (an implementer login does not count) -> PREDEV_BUILDER_PROFILE_REFUSED, no process, no personal-profile fallback", async () => {
+    const control = controlRoot(), calls: Array<{argv: string[]; opts: ProcOptions}> = [];
+    login(control, "implementer");
+    const b = new LocalClaudeExecutors(REPO, control, {runReviewer: fakeReviewer(calls)}).pair().preDevBuilder!();
+    expect(await errCode(b.produce("BusinessAnalysis", "prompt", ctx))).toBe("PREDEV_BUILDER_PROFILE_REFUSED");
+    expect(b.lastTrace).toMatchObject({failure: "PREDEV_BUILDER_PROFILE_REFUSED", roleId: "UASCO-0022"});
+    expect(calls).toHaveLength(0);
+  });
+  it("provenance missing or launcher changed -> PREDEV_BUILDER_PROVENANCE_REFUSED, no process", async () => {
+    const control = controlRoot(), calls: Array<{argv: string[]; opts: ProcOptions}> = [];
+    login(control, "reviewer");
+    const prov = path.join(control, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), good = fs.readFileSync(prov, "utf8");
+    for (const bad of [null, good.replace(/"launcherSha256":"[0-9a-f]{64}"/, `"launcherSha256":"${"0".repeat(64)}"`), good.replace('"final":"PASS"', '"final":"FAIL"')]) {
+      if (bad === null) fs.rmSync(prov); else fs.writeFileSync(prov, bad);
+      const b = new LocalClaudeExecutors(REPO, control, {runReviewer: fakeReviewer(calls)}).pair().preDevBuilder!();
+      expect(await errCode(b.produce("Plan", "prompt", ctx))).toBe("PREDEV_BUILDER_PROVENANCE_REFUSED");
+    }
+    expect(calls).toHaveLength(0);
+  });
+  it("logged-in reviewer profile: the reviewer argv, CLAUDE_CONFIG_DIR = reviewer profile (inherited value dropped), empty scratch cwd outside the repo, no paid API key passed", async () => {
+    const control = controlRoot(), calls: Array<{argv: string[]; opts: ProcOptions; entries: string[]}> = [];
+    login(control, "reviewer");
+    const run = async (argv: string[], opts: ProcOptions): Promise<ProcResult> => { calls.push({argv, opts, entries: fs.readdirSync(opts.cwd)}); const at = new Date().toISOString(); return {argv, exitCode: 0, stdout: '{"problem":"x"}\n', stderr: "", startedAt: at, endedAt: at, timedOut: false, aborted: false, spawnError: false}; };
+    const prevCfg = process.env.CLAUDE_CONFIG_DIR, prevKey = process.env.ANTHROPIC_API_KEY;
+    process.env.CLAUDE_CONFIG_DIR = path.join(tmp, "personal-like", ".claude"); process.env.ANTHROPIC_API_KEY = "sk-test-not-real";
+    let out = "";
+    try { out = await new LocalClaudeExecutors(REPO, control, {runReviewer: run}).pair().preDevBuilder!().produce("BusinessAnalysis", "the role prompt", ctx); }
+    finally { if (prevCfg === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = prevCfg; if (prevKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = prevKey; }
+    expect(out).toBe('{"problem":"x"}');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].argv).toEqual(reviewerArgv(process.execPath));
+    expect(calls[0].opts.input).toBe("the role prompt");
+    expect(calls[0].opts.env.CLAUDE_CONFIG_DIR).toBe(claudeProfileDir(control, "reviewer"));
+    expect(Object.keys(calls[0].opts.env).filter(k => k.toUpperCase() === "CLAUDE_CONFIG_DIR")).toEqual(["CLAUDE_CONFIG_DIR"]);
+    expect(Object.keys(calls[0].opts.env).some(k => /ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN/i.test(k))).toBe(false);
+    expect(calls[0].entries).toEqual([]);
+    for (const root of [REPO, control]) { const rel = path.relative(root, calls[0].opts.cwd); expect(rel.startsWith("..") || path.isAbsolute(rel), root).toBe(true); } // different drive (Windows CI) => absolute => also outside
+    expect(fs.existsSync(calls[0].opts.cwd)).toBe(false);
   });
 });
