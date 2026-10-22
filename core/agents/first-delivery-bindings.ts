@@ -48,3 +48,6 @@ export function assertImplementerRole(roleId: string, bindings: readonly RoleExe
   if (!IMPLEMENTER_FUNCTIONS.includes(p.function) || p.providerRoute !== "CLAUDE_IMPLEMENTER") throw new Error(`ROLE_NOT_EXECUTABLE:BINDING_ROLE_MISMATCH:${roleId}:implementer`);
   return assertRoleExecutes(roleId, p.function, bindings);
 }
+
+// //TR: Hangi çalıştırma adımı hangi bağlı fonksiyonu GERÇEKTEN tüketir (tek doğruluk kaynağı). Yaşam döngüsü "IMPLEMENTED" yalnız bir adımın tükettiği, tam bağlamalı ve üretim executor rotalı roller için hesaplanır; tüketicisi olmayan bağlama kâğıt üstündedir. Yeni bir adım bir rolü tüketmeye başladığında BURAYA eklenir.
+export const STAGE_CONSUMERS: Readonly<Record<string, readonly FirstDeliveryFunction[]>> = {IMPLEMENT: IMPLEMENTER_FUNCTIONS};

@@ -10,3 +10,4 @@
 - Runner IMPLEMENT gate accepts implementer-route roles (developer 0085, tester 0313) via `assertImplementerRole`.
 - Run evidence: IMPLEMENT step of a role-assigned run also writes an `AGENT_TRACE` evidence (agentInstanceId != roleId, route, allowed tools, state; per-call tool trace stated NOT_OBSERVABLE_FROM_ADAPTER).
 - Tests: tests/v7-b3a-runner.test.ts (LANE-C role gate + AGENT_TRACE); `tests/v7-core-predev-team-composer.test.ts` ("LANE-C role execution resolver").
+- Lifecycle (C1): `core/agents/role-lifecycle.ts` computes REGISTERED/IMPLEMENTED/TESTED/CERTIFIED/RUNNING as five independent counters from evidence only (verifier mirrors scripts/validate-role-registry.mjs + rejects FAKE evidence); `STAGE_CONSUMERS` in first-delivery-bindings.ts is the single source of "which stage consumes which binding". Route module `apps/control-api/src/routes/role-status.ts` (registration: docs/authority-requests/LANE-C-role-status-route.md).
