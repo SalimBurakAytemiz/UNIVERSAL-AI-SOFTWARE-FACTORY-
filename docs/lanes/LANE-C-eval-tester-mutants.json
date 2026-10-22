@@ -96,7 +96,7 @@
    "id": "A8",
    "description": "any callee name accepted",
    "file": "core/competency/static-test-analysis.ts",
-   "old": "ts[0].v !== addId ||",
+   "old": "!isId(ts[0], addId) ||",
    "new": ""
   },
   {
@@ -264,8 +264,8 @@
    "id": "A16",
    "description": "let bindings accepted",
    "file": "core/competency/static-test-analysis.ts",
-   "old": "s[0].v === \"const\" && s[1].t === \"id\"",
-   "new": "(s[0].v === \"const\" || s[0].v === \"let\") && s[1].t === \"id\""
+   "old": "isId(s[0], \"const\") && s[1].t === \"id\"",
+   "new": "(isId(s[0], \"const\") || isId(s[0], \"let\")) && s[1].t === \"id\""
   },
   {
    "id": "S1",
@@ -376,7 +376,7 @@
    "id": "C8",
    "description": "continuation keywords split statements",
    "file": "core/competency/static-test-analysis.ts",
-   "old": " && !CONTINUES.has(t.v)",
+   "old": " && !(t.t === \"id\" && CONTINUES.has(t.v))",
    "new": ""
   },
   {
@@ -518,6 +518,125 @@
    "file": "core/competency/static-test-analysis.ts",
    "old": "if (!num || num.t !== \"num\") return null;",
    "new": "if (!num) return null;"
+  },
+  {
+   "id": "Y1",
+   "description": "the require callee of a declaration is compared by text only (a string or template `require` would declare add: TypeError before any assertion)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "isId(s[3], \"require\")",
+   "new": "s[3].v === \"require\""
+  },
+  {
+   "id": "Y2",
+   "description": "the add callee of an assertion is compared by text only (`\"add\"(2, 3)`)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "!isId(ts[0], addId) ||",
+   "new": "ts[0].v !== addId ||"
+  },
+  {
+   "id": "Y3",
+   "description": "the opening parenthesis of the add call is compared by text only (a tagged template `(` stands in)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "!isP(ts[1], \"(\")",
+   "new": "ts[1].v !== \"(\""
+  },
+  {
+   "id": "Y4",
+   "description": "the closing parenthesis of the add call is compared by text only",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "!isP(ts[ts.length - 1], \")\")",
+   "new": "ts[ts.length - 1].v !== \")\""
+  },
+  {
+   "id": "Y5",
+   "description": "the call parenthesis of a bare assert is compared by text only (assert`(`...`)`)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "(isP(s[1], \"(\") ? null :",
+   "new": "(s[1]?.v === \"(\" ? null :"
+  },
+  {
+   "id": "Y6",
+   "description": "the parenthesis after assert.<method> is compared by text only (assert.strictEqual`(`...`)`)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "isP(s[3], \"(\") ? s[2].v : undefined",
+   "new": "s[3]?.v === \"(\" ? s[2].v : undefined"
+  },
+  {
+   "id": "Y7",
+   "description": "the assert receiver is compared by text only (`\"assert\".strictEqual(...)`)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "s[0].t === \"id\" && r.assertIds.includes(s[0].v) ? (",
+   "new": "r.assertIds.includes(s[0].v) ? ("
+  },
+  {
+   "id": "Y8",
+   "description": "the argument separator is compared by text only (a tagged template `,` splits the arguments)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (depth === 0 && t.t === \"p\" && t.v === \",\") args.push([]);",
+   "new": "if (depth === 0 && t.v === \",\") args.push([]);"
+  },
+  {
+   "id": "Y9",
+   "description": "the === / == operator is compared by text only (a tagged template `===`)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "args[0].findIndex(t => t.t === \"p\" && (t.v === \"===\" || t.v === \"==\"))",
+   "new": "args[0].findIndex(t => (t.v === \"===\" || t.v === \"==\"))"
+  },
+  {
+   "id": "Y10",
+   "description": "the add-call comma is compared by text only (add(2`,`-3))",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "comma = inner.findIndex(t => t.t === \"p\" && t.v === \",\")",
+   "new": "comma = inner.findIndex(t => t.v === \",\")"
+  },
+  {
+   "id": "Y11",
+   "description": "a line break after const/let/var/new/typeof/void/delete splits the statement (V8 continues it): a legitimate multi-line declaration is refused",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "!(cur[cur.length - 1].t === \"id\" && OPEN_KEYWORDS.has(cur[cur.length - 1].v)) && ",
+   "new": ""
+  },
+  {
+   "id": "Y12",
+   "description": "a control statement counts as the first non-declaration statement (spurious DECLARATION_AFTER_ASSERT next to no_early_exit)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "CONTROL.has(s[0].v)) continue;",
+   "new": "CONTROL.has(s[0].v)) { seenOther = true; continue; }"
+  },
+  {
+   "id": "K6",
+   "description": "order flag not set by a bare assert(...) statement",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "    seenOther = true;\n",
+   "new": "    if (!(s[0].t === \"id\" && r.assertIds.includes(s[0].v) && isP(s[1], \"(\"))) seenOther = true;\n"
+  },
+  {
+   "id": "K14",
+   "description": "order flag not set by an assert.equal statement",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "    seenOther = true;\n",
+   "new": "    if (!(s[0].t === \"id\" && r.assertIds.includes(s[0].v) && isP(s[1], \".\") && s[2]?.v === \"equal\")) seenOther = true;\n"
+  },
+  {
+   "id": "K19",
+   "description": "order flag not set by an assertion through a second assert alias",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "    seenOther = true;\n",
+   "new": "    if (!(s[0].t === \"id\" && r.assertIds.indexOf(s[0].v) > 0)) seenOther = true;\n"
+  },
+  {
+   "id": "K20",
+   "description": "order flag not set by an assertion with a message argument",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "    seenOther = true;\n",
+   "new": "    if (!(s[s.length - 2]?.t === \"str\")) seenOther = true;\n"
+  },
+  {
+   "id": "K21",
+   "description": "order flag not set by an assertion with reversed operands",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "    seenOther = true;\n",
+   "new": "    if (!(s[4]?.t === \"num\")) seenOther = true;\n"
   }
  ]
 }

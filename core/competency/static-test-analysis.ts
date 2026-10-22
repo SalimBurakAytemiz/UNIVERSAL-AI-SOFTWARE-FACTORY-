@@ -76,14 +76,19 @@ export function tokenize(src: string): Tok[] | null {
   return out;
 }
 
+// //TR: TÜR+DEĞER karşılaştırması: bir str/tpl belirtecinin ham metni "require", "(" ya da "," olabilir; yalnız .v karşılaştırmak onu tanımlayıcı/noktalama yerine koyar (V8 `"require"("../src/add")` ya da tagged template çağrısını derler, dosya ilk deyimde TypeError ile düşer ama oracle PASSED derdi). Bu yüzden analizde HER belirteç karşılaştırması isP/isId üzerinden yapılır.
+const isP = (t: Tok | undefined, v: string): boolean => t !== undefined && t.t === "p" && t.v === v;
+const isId = (t: Tok | undefined, v: string): boolean => t !== undefined && t.t === "id" && t.v === v;
 const endsStatement = (t: Tok | undefined) => t !== undefined && (t.t === "id" || t.t === "num" || t.t === "str" || t.t === "tpl" || t.t === "re" || (t.t === "p" && (t.v === ")" || t.v === "]" || t.v === "}")));
 const CONTINUES = new Set(["in", "of", "instanceof", "as"]);
+// //TR: Bu anahtar sözcüklerden sonra satır sonu ASI getirmez (V8 bildirimi/ifadeyi sürdürür): `const\n add = require(...)` TEK bildirimdir.
+const OPEN_KEYWORDS = new Set(["const", "let", "var", "new", "typeof", "void", "delete"]);
 // //TR: Üst düzey (parantez/küme derinliği 0) deyimlere böler: ';' ile veya ASI'nin devam ettirmeyeceği satır sonu ile. İç içe gövdeler dış deyimin parçasıdır.
 export function topLevelStatements(toks: readonly Tok[]): Tok[][] {
   const out: Tok[][] = [];
   let cur: Tok[] = [], depth = 0;
   for (const t of toks) {
-    if (depth === 0 && cur.length > 0 && t.nl && endsStatement(cur[cur.length - 1]) && (t.t === "id" || t.t === "num" || t.t === "str") && !CONTINUES.has(t.v)) { out.push(cur); cur = []; }
+    if (depth === 0 && cur.length > 0 && t.nl && endsStatement(cur[cur.length - 1]) && !(cur[cur.length - 1].t === "id" && OPEN_KEYWORDS.has(cur[cur.length - 1].v)) && (t.t === "id" || t.t === "num" || t.t === "str") && !(t.t === "id" && CONTINUES.has(t.v))) { out.push(cur); cur = []; }
     cur.push(t);
     if (t.t !== "p") continue;
     if (t.v === "(" || t.v === "[" || t.v === "{") depth++;
@@ -108,7 +113,7 @@ function parseNumber(ts: readonly Tok[], maxInt: number): number | null {
 const MAX_OPERAND_INT_DIGITS = 9, MAX_EXPECTED_INT_DIGITS = 10;
 // `<addId>(<n>, <n>)` tam olarak; başka bir şey (iç içe çağrı, değişken, ifade) null.
 function parseAddCall(ts: readonly Tok[], addId: string): {a: number; b: number} | null {
-  if (ts.length < 6 || ts[0].t !== "id" || ts[0].v !== addId || ts[1].v !== "(" || ts[ts.length - 1].v !== ")") return null;
+  if (ts.length < 6 || !isId(ts[0], addId) || !isP(ts[1], "(") || !isP(ts[ts.length - 1], ")")) return null;
   const inner = ts.slice(2, -1), comma = inner.findIndex(t => t.t === "p" && t.v === ",");
   if (comma < 0) return null;
   const a = parseNumber(inner.slice(0, comma), MAX_OPERAND_INT_DIGITS), b = parseNumber(inner.slice(comma + 1), MAX_OPERAND_INT_DIGITS);
@@ -144,7 +149,7 @@ export interface AddTestAnalysis {
 export function analyzeAddTest(toks: readonly Tok[]): AddTestAnalysis {
   const r: AddTestAnalysis = {addId: null, assertIds: [], assertCalls: 0, cases: [], earlyExit: null, tamper: null};
   const stmts = topLevelStatements(toks);
-  const isRequireDecl = (s: readonly Tok[]) => s.length === 7 && s[0].t === "id" && s[0].v === "const" && s[1].t === "id" && s[2].v === "=" && s[3].v === "require" && s[4].v === "(" && s[5].t === "str" && s[6].v === ")";
+  const isRequireDecl = (s: readonly Tok[]) => s.length === 7 && isId(s[0], "const") && s[1].t === "id" && isP(s[2], "=") && isId(s[3], "require") && isP(s[4], "(") && s[5].t === "str" && isP(s[6], ")");
   const decls = new Set<readonly Tok[]>();
   // 1. bağlamalar (yalnız const): assert deyimleri sınıflanmadan önce bilinmeli
   for (const s of stmts) {
@@ -161,7 +166,7 @@ export function analyzeAddTest(toks: readonly Tok[]): AddTestAnalysis {
     if (decls.has(s)) { if (seenOther) violate("DECLARATION_AFTER_ASSERT"); continue; }
     seenOther = true;
     if (isRequireDecl(s)) { violate(`REQUIRE_SPEC_NOT_ALLOWED:${s[5].v.slice(0, 40)}`); continue; }
-    const method = s[0].t === "id" && r.assertIds.includes(s[0].v) ? (s[1]?.v === "(" ? null : s[1]?.v === "." && s[2]?.t === "id" && s[3]?.v === "(" ? s[2].v : undefined) : undefined;
+    const method = s[0].t === "id" && r.assertIds.includes(s[0].v) ? (isP(s[1], "(") ? null : isP(s[1], ".") && s[2]?.t === "id" && isP(s[3], "(") ? s[2].v : undefined) : undefined;
     if (method === undefined) { violate(`STATEMENT_NOT_ALLOWED:${s[0].v.slice(0, 30)}`); continue; }
     const open = method === null ? 1 : 3;
     // eşleşen kapanış parantezi deyimin SON belirteci olmalı (assert(...).x ya da zincir değil)
