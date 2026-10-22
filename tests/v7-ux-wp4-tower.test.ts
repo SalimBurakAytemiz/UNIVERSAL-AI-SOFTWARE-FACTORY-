@@ -532,6 +532,18 @@ describe("UI-226 stage timeline from real event timestamps", () => {
     expect(tl.stages).toEqual([]);
     expect(tl.unplaced.map((u: any) => u.event)).toEqual(["naive", "feb30"]);
   });
+  it("timestamp field limits are exact: month 1..12, hour <= 23, minute <= 59, second <= 59, offset hour <= 23 and offset minute <= 59", async () => {
+    const core = await load("trace-core.js");
+    for (const ok of ["2026-01-05T00:00:00Z", "2026-12-05T23:59:59Z", "2026-10-18T10:00:00+23:59", "2026-10-18T10:00:00-23:59"]) expect(core.parseTs(ok), ok).not.toBeNull();
+    for (const bad of ["2026-00-05T00:00:00Z", "2026-13-05T00:00:00Z", "2026-10-18T24:00:00Z", "2026-10-18T10:60:00Z", "2026-10-18T10:00:60Z", "2026-10-18T10:00:00+24:00", "2026-10-18T10:00:00+23:60"]) expect(core.parseTs(bad), bad).toBeNull();
+  });
+  it("zero duration is shown as 0 ms and a zero-span timeline has finite zero percentages", async () => {
+    const core = await load("trace-core.js");
+    expect(core.formatMs(0)).toBe("0 ms");
+    expect(core.formatMs(-1)).toBe("");
+    const tl = core.buildStageTimeline([{timestamp: "2026-10-18T10:00:00Z", stage: "A", event: "e"}]);
+    expect(tl.stages.map((x: any) => [x.startPct, x.widthPct])).toEqual([[0, 0]]);
+  });
   it("formats durations by rounding to whole seconds before splitting and adds hour and day units", async () => {
     const {formatMs} = await load("trace-core.js");
     expect(formatMs(59999)).toBe("1 min 0 s");
