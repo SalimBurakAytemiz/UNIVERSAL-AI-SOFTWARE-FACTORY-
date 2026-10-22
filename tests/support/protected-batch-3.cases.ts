@@ -24,7 +24,7 @@ export function registerProtectedBatch3Cases() {
       const ok = [`/v1/projects/${P}/memory`, `/v1/projects/${P}/memory/current`, `/v1/projects/${P}/memory/health`, `/v1/projects/${P}/memory/mem_000001`,
         kc.provenancePath(P, "mem_000042"), kc.knowledgePath(P), `/v1/projects/${P}/memory?kind=FACT`,
         kc.buildMemorySearch(P, {kind: "DECISION", tag: "db", q: "use it!"}).path, kc.buildMemorySearch(P, {tag: "çğış ü"}).path,
-        kc.buildMemorySearch(P, {q: "x".repeat(200)}).path, kc.buildMemorySearch(P, {q: "日本語".repeat(66)}).path, `/v1/projects/${P}/memory?tag=${enc("a&b=c?d")}`];
+        "/v1/attention", kc.buildMemorySearch(P, {q: "x".repeat(200)}).path, kc.buildMemorySearch(P, {q: "日本語".repeat(66)}).path, `/v1/projects/${P}/memory?tag=${enc("a&b=c?d")}`];
       for (const p of ok) expect(getAllowed(p), String(p)).toBe(true);
     });
 
@@ -36,7 +36,7 @@ export function registerProtectedBatch3Cases() {
         `/v1/projects/${P}/memory/`, `/v1/projects/${P}/memory/mem_12345`, `/v1/projects/${P}/memory/mem_0000000000001`, `/v1/projects/${P}/memory/MEM_000001`,
         `/v1/projects/${P}/memory/mem_000001/provenance/`, `/v1/projects/${P}/memory/mem_000001/provenance?x=1`, `/v1/projects/${P}/memory/current?x=1`, `/v1/projects/${P}/memory/mem_000001/raw`,
         `/v1/projects/${P}/knowledge?x=1`, `/v1/projects/${P}/knowledge/`, "/v1/projects/prj_" + "A".repeat(24) + "/memory", "/v1/projects/prj_" + "a".repeat(23) + "/knowledge",
-        `/v1/projects/${P}/../memory`, `/V1/projects/${P}/memory`, `//evil/v1/projects/${P}/memory`, `/v1/projects/${P}/memory?q=${"%41".repeat(400)}`];
+        "/v1/attention?x=1", "/v1/attention/", "/v1/attention/x", `/v1/projects/${P}/../memory`, `/V1/projects/${P}/memory`, `//evil/v1/projects/${P}/memory`, `/v1/projects/${P}/memory?q=${"%41".repeat(400)}`];
       for (const p of bad) expect(getAllowed(p), p).toBe(false);
       for (const v of [undefined, null, 1, {}, [`/v1/projects/${P}/memory`]]) expect(getAllowed(v)).toBe(false);
     });
@@ -64,6 +64,8 @@ export function registerProtectedBatch3Cases() {
       expect(kn.statusCode, kn.body).toBe(200);
       const evidence = JSON.parse(kn.body).knowledge.evidence;
       expect(evidence.state).not.toBe("UNAVAILABLE"); // EVIDENCE_NOT_WIRED would mean laneDeps lacks the evidence index
+      const att = await app.inject({method: "GET", url: "/v1/attention", headers: hdr});
+      expect([att.statusCode, JSON.parse(att.body).attention?.source]).toEqual([200, "WORKOS"]);
       const badJson = await app.inject({method: "POST", url: "/v1/projects", headers: {...hdr, "content-type": "application/json"}, payload: "{not json"});
       expect([badJson.statusCode, JSON.parse(badJson.body)]).toEqual([400, {error: "INVALID_JSON"}]);
       const missing = await app.inject({method: "GET", url: "/v1/no-such-route", headers: hdr});
