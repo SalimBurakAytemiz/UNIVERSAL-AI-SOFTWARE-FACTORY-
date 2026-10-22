@@ -53,4 +53,6 @@ export function assertImplementerRole(roleId: string, bindings: readonly RoleExe
 }
 
 // //TR: Hangi çalıştırma adımı hangi bağlı fonksiyonu GERÇEKTEN tüketir (tek doğruluk kaynağı). Yaşam döngüsü "IMPLEMENTED" yalnız bir adımın tükettiği, tam bağlamalı ve üretim executor rotalı roller için hesaplanır; tüketicisi olmayan bağlama kâğıt üstündedir. Yeni bir adım bir rolü tüketmeye başladığında BURAYA eklenir.
-export const STAGE_CONSUMERS: Readonly<Record<string, readonly FirstDeliveryFunction[]>> = {IMPLEMENT: IMPLEMENTER_FUNCTIONS, REVIEW: ["security-reviewer"]};
+// //TR: PREDEV_PRODUCE: pre-dev artefakt üretimi (core/workos/predev/claude-builder.ts ClaudePreDevBuilder, POST /v1/missions/:id/predev/produce) her türün ilk rolünün bağlamasını assertRoleExecutes ile tüketir. Tür->fonksiyon eşlemesi PREDEV_KIND_FUNCTION'dadır; testler iki listenin aynı olduğunu doğrular.
+export const PREDEV_PRODUCE_FUNCTIONS: readonly FirstDeliveryFunction[] = ["business-analyst", "requirements-engineer", "planner", "architect", "ux-designer"];
+export const STAGE_CONSUMERS: Readonly<Record<string, readonly FirstDeliveryFunction[]>> = {IMPLEMENT: IMPLEMENTER_FUNCTIONS, REVIEW: ["security-reviewer"], PREDEV_PRODUCE: PREDEV_PRODUCE_FUNCTIONS};

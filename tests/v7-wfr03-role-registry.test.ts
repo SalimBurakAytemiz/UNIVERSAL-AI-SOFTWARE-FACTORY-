@@ -489,23 +489,27 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
 
   it("real registry today: 599 registered, only bound+consumed production roles implemented, 0 tested/certified/running; guild rows add up", () => {
     const sum = base();
-    expect(sum).toMatchObject({target: 599, registered: 599, implemented: 3, tested: 0, certified: 0, running: 0, computedAt: NOW.toISOString()});
+    expect(sum).toMatchObject({target: 599, registered: 599, implemented: 8, tested: 0, certified: 0, running: 0, computedAt: NOW.toISOString()});
     expect(TARGET_ROLE_COUNT).toBe(599);
     expect(sum.basis).toEqual({roleDefinitionsSha256: sha(fs.readFileSync(REG_FILE)), bindingsCount: FIRST_DELIVERY_BINDINGS.length});
     expect(sum.byGuild).toHaveLength(51);
     expect(sum.byGuild.map(g => g.guildId)).toEqual([...sum.byGuild.map(g => g.guildId)].sort());
     for (const k of ["registered", "implemented", "tested", "certified", "running"] as const) expect(sum.byGuild.reduce((a, g) => a + g[k], 0)).toBe(sum[k]);
-    // implemented roles are exactly those whose binding function a stage consumes: IMPLEMENT => developer UASCO-0085 + tester UASCO-0313, REVIEW => security-reviewer UASCO-0252 (runner gate)
+    // implemented roles are exactly those whose binding function a stage consumes: IMPLEMENT => developer UASCO-0085 + tester UASCO-0313, REVIEW => security-reviewer UASCO-0252 (runner gate), PREDEV_PRODUCE => the five pre-dev primaries (ClaudePreDevBuilder, POST /v1/missions/:id/predev/produce)
     const impl = doc.roles.filter((r: any) => roleLifecycle(r, doc.roles, {bindings: FIRST_DELIVERY_BINDINGS, verify: real, runningRoleIds: new Set(), nowMs: NOW.getTime()}).implemented).map((r: any) => r.roleId).sort();
-    expect(impl).toEqual(["UASCO-0085", "UASCO-0252", "UASCO-0313"]);
-    expect(STAGE_CONSUMERS).toEqual({IMPLEMENT: ["developer", "tester"], REVIEW: ["security-reviewer"]});
+    expect(impl).toEqual(["UASCO-0019", "UASCO-0022", "UASCO-0023", "UASCO-0031", "UASCO-0043", "UASCO-0085", "UASCO-0252", "UASCO-0313"]);
+    // delivery 0232 (deterministic Studio, not a production model route) stays uncounted even though it is bound
+    expect(impl).not.toContain("UASCO-0232");
+    expect(STAGE_CONSUMERS).toEqual({IMPLEMENT: ["developer", "tester"], REVIEW: ["security-reviewer"], PREDEV_PRODUCE: ["business-analyst", "requirements-engineer", "planner", "architect", "ux-designer"]});
     for (const fn of Object.values(STAGE_CONSUMERS).flat()) expect(FIRST_DELIVERY_BINDINGS.some(b => b.function === fn)).toBe(true);
   });
 
   it("implemented requires a complete binding: an unsafe/incomplete binding never counts", () => {
     const dev = FIRST_DELIVERY_BINDINGS.find(b => b.function === "developer")!;
     const broken = FIRST_DELIVERY_BINDINGS.map(b => b === dev ? {...b, allowedTools: [...b.allowedTools, "Bash"]} : b);
-    expect(base({bindings: broken}).implemented).toBe(2); // tester + security-reviewer remain
+    expect(base({bindings: broken}).implemented).toBe(7); // tester, security-reviewer and the five pre-dev primaries remain
+    const ba = FIRST_DELIVERY_BINDINGS.find(b => b.function === "business-analyst")!;
+    expect(base({bindings: FIRST_DELIVERY_BINDINGS.map(b => b === ba ? {...b, limits: {...b.limits, maxFilesWritten: 3}} : b)}).implemented).toBe(7); // a reviewer-route binding that may write files never counts
     expect(base({bindings: []}).implemented).toBe(0);
   });
 
@@ -574,7 +578,7 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
     expect([...runningRoleIdsFromRuns(runs, known)].sort()).toEqual(["UASCO-0085", "UASCO-0252"]);
     const sum = base({runs});
     expect(sum.running).toBe(2);
-    expect(sum).toMatchObject({implemented: 3, tested: 0, certified: 0}); // running does not promote anything else
+    expect(sum).toMatchObject({implemented: 8, tested: 0, certified: 0}); // running does not promote anything else
   });
 
   it("GET /v1/roles/status-summary serves exactly the agreed shape from evidence, honest 503 without the registry, no mutation", async () => {
@@ -585,7 +589,7 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
     const body = r.json();
     expect(Object.keys(body)).toEqual(["statusSummary"]);
     expect(Object.keys(body.statusSummary).sort()).toEqual(["basis", "byGuild", "certified", "computedAt", "implemented", "registered", "running", "target", "tested"]);
-    expect(body.statusSummary).toMatchObject({target: 599, registered: 599, implemented: 3, tested: 0, certified: 0, running: 0});
+    expect(body.statusSummary).toMatchObject({target: 599, registered: 599, implemented: 8, tested: 0, certified: 0, running: 0});
     expect(Object.keys(body.statusSummary.byGuild[0]).sort()).toEqual(["certified", "guildId", "implemented", "registered", "running", "tested"]);
     expect(Object.keys(body.statusSummary.basis).sort()).toEqual(["bindingsCount", "roleDefinitionsSha256"]);
     expect((await app.inject({method: "POST", url: "/v1/roles/status-summary"})).statusCode).toBe(404);
