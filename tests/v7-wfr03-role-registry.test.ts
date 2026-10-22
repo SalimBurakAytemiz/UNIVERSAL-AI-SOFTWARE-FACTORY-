@@ -718,7 +718,8 @@ describe("LANE-C C2 role execution profiles (derived, proposal only)", () => {
 
 // //TR: LANE-C C-EVAL-PIPELINE: değerlendirme hattı STAGING'e yazar, FAKE'i asla saydırmaz, altyapı sorunlarını sonuç saymaz ve depoya (audit/evidence, registries) dokunamaz. Gerçek claude çalışmaz; FAKE çiftler ve kayıtlı süreç çalıştırıcıları kullanılır.
 describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE and infrastructure never count)", () => {
-  const DEV = "UASCO-0085", REVIEWER = "UASCO-0252", BA = "UASCO-0022";
+  const DEV = "UASCO-0085", REVIEWER = "UASCO-0252", BA = "UASCO-0022", TESTER = "UASCO-0313";
+  const TESTER_GOOD = 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n';
   const workDir = () => fs.mkdtempSync(path.join(tmp, "eval-"));
   const script = (o: Partial<FakeScript> = {}): FakeScript => ({
     implement: () => ({files: {"greeting.txt": "hello\n"}}),
@@ -907,13 +908,64 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     expect(listing(root)).toEqual([]);
   });
 
-  it("only procedures that exist are run: tester, delivery, unknown roles, other evaluation ids, malformed ids and unsafe bindings are refused before anything starts", async () => {
+  it("tester golden mission (STATIC oracle, nothing is executed): one scoped test file with a positive, a negative and a zero case, existing tests untouched -> PASSED; FAKE-stamped, never counts", { timeout: 120_000 }, async () => {
+    const root = stagingOf(), marker = path.join(workDir(), "executed.marker");
+    const o = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": TESTER_GOOD}})}), TESTER, {stagingRoot: root}));
+    expect([o.verdict, o.executorKind, o.checks.map(c => c.id)]).toEqual(["PASSED", "FAKE", ["commit_produced", "only_expected_file_added", "no_trivial_test", "regular_file", "compiles", "references_module", "assertion_count_min_3", "no_disabled_markers", "covers_positive_negative_zero", "within_role_file_limit"]]);
+    expect(o.verifier).toEqual({countsIfPromoted: false, problem: "FAKE_EVIDENCE"});
+    const art = JSON.parse(fs.readFileSync(o.artifactFile, "utf8")), ev = JSON.parse(fs.readFileSync(o.evidenceFile, "utf8"));
+    expect(art).toMatchObject({testsExecuted: false, assertionCount: 3, disabledMarkers: 0, surface: {added: ["test/add.test.js"], modified: [], deleted: [], weakened: [], trivialAdded: [], harness: []}});
+    expect(art.testsNotExecutedReason).toMatch(/never run/);
+    expect(ev.procedure).toMatchObject({version: "golden-tests-v1"}); expect(ev.procedure.doesNotCover.join(" ")).toMatch(/nothing is executed/);
+    // the written file is only COMPILED, never run: a top-level side effect must not happen
+    const sneaky = `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "x");\n${TESTER_GOOD}`;
+    const s2 = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": sneaky}})}), TESTER));
+    expect(s2.checks.find(c => c.id === "compiles")?.passed).toBe(true);
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  it("tester oracle: each deviation is FAILED with the right first failing check (wrong place, extra or changed files, weakened/deleted tests, harness change, trivial test, syntax error, no module, too few assertions, disabled tests, missing cases)", { timeout: 300_000 }, async () => {
+    const good = TESTER_GOOD, smoke = 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(1, 1), 2);\n';
+    const T = (files: Record<string, string>, extra: Partial<FakeScript> = {}) => ({implement: () => ({files}), ...extra} as Partial<FakeScript>);
+    const cases: Array<[string, Partial<FakeScript>, string, string?]> = [
+      ["tests in another file name", T({"test/other.test.js": good}), "only_expected_file_added"],
+      ["extra file next to the test", T({"test/add.test.js": good, "notes.md": "x\n"}), "only_expected_file_added"],
+      ["modifies src", T({"test/add.test.js": good, "src/add.js": "module.exports = (a, b) => a - b;\n"}), "only_expected_file_added"],
+      ["weakens the existing test", T({"test/add.test.js": good, "test/smoke.test.js": "const add = require(\"../src/add\");\nadd(1, 1);\n"}), "only_expected_file_added", "weakened=1"],
+      ["deletes the existing test", {implement: () => ({files: {"test/add.test.js": good}, deleteFiles: ["test/smoke.test.js"]})}, "only_expected_file_added", "deleted=1"],
+      ["changes the test harness (package.json scripts.test)", T({"test/add.test.js": good, "package.json": '{"name":"evaluation-seed","version":"1.0.0","private":true,"scripts":{"test":"node -e 0"}}\n'}), "only_expected_file_added", "harness=1"],
+      ["test without any assertion", T({"test/add.test.js": 'const add = require("../src/add");\nadd(2, 3); add(-2, -3); add(0, 7);\n'}), "no_trivial_test"],
+      ["syntax error", T({"test/add.test.js": good + "assert.strictEqual(add(1, 2)\n"}), "compiles"],
+      ["does not require the module", T({"test/add.test.js": 'const assert = require("node:assert");\nassert.strictEqual(2 + 3, 5);\nassert.strictEqual(-2 + -3, -5);\nassert.strictEqual(0 + 7, 7);\n'}), "references_module"],
+      ["only two assertions", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\n'}), "assertion_count_min_3"],
+      ["skipped test", T({"test/add.test.js": good + 'it.skip("later", () => {});\n'}), "no_disabled_markers"],
+      ["process.exit bypass", T({"test/add.test.js": good + "process.exit(0);\n"}), "no_disabled_markers"],
+      ["no negative case", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(4, 5), 9);\nassert.strictEqual(add(0, 7), 7);\n'}), "covers_positive_negative_zero"],
+      ["no zero case", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(4, 5), 9);\n'}), "covers_positive_negative_zero"],
+      ["the same call three times", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(2, 3), 5);\n'}), "covers_positive_negative_zero"],
+      ["no commit at all", {implement: () => ({files: {"test/add.test.js": good}, noCommit: true})}, "commit_produced"]
+    ];
+    for (const [label, o, failing, detail] of cases) {
+      const r = evaluated(await evaluate(fakePair(o), TESTER));
+      expect([label, r.verdict, r.checks.find(c => !c.passed)?.id]).toEqual([label, "FAILED", failing]);
+      if (detail) expect([label, r.checks.find(c => !c.passed)?.detail]).toEqual([label, expect.stringContaining(detail)]);
+    }
+    // infrastructure is infrastructure for the tester too
+    const root = stagingOf();
+    expect(await evaluate(fakePair({implement: () => ({exitCode: 1})}), TESTER, {stagingRoot: root})).toEqual({status: "NOT_EXECUTED", roleId: TESTER, evaluationId: "EV-01", reason: "IMPLEMENT_EXIT_NONZERO"});
+    expect(listing(root)).toEqual([]);
+    // an unsafe tester binding is refused before anything starts
+    const t = FIRST_DELIVERY_BINDINGS.find(b => b.roleId === TESTER)!;
+    expect(await evaluate(fakePair(), TESTER, {bindings: FIRST_DELIVERY_BINDINGS.map(b => b === t ? {...b, allowedTools: [...b.allowedTools, "WebFetch"]} : b)})).toEqual({status: "REFUSED", reason: "ROLE_NOT_EXECUTABLE:TOOL_NOT_ALLOWED"});
+  });
+
+  it("only procedures that exist are run: delivery, unknown roles, other evaluation ids, malformed ids and unsafe bindings are refused before anything starts", async () => {
     const dev = FIRST_DELIVERY_BINDINGS.find(b => b.roleId === DEV)!;
     const widened = FIRST_DELIVERY_BINDINGS.map(b => b.roleId === DEV ? {...b, allowedTools: [...dev.allowedTools, "WebFetch"]} : b);
     let started = 0;
     const counting: ExecutorPair = {...fakePair(), implementer: {identity: "I", implement: async () => { started++; throw new Error("must not start"); }}, reviewer: {identity: "R", review: async () => { started++; throw new Error("must not start"); }}};
     const table: Array<[string, string, string, string, typeof FIRST_DELIVERY_BINDINGS?]> = [
-      ["tester has no procedure", "UASCO-0313", "EV-01", "NO_PROCEDURE:tester"], ["delivery has no procedure", "UASCO-0232", "EV-01", "NO_PROCEDURE:delivery"],
+      ["delivery has no procedure", "UASCO-0232", "EV-01", "NO_PROCEDURE:delivery"],
       ["unbound role", "UASCO-0001", "EV-01", "ROLE_NOT_EXECUTABLE:ROLE_HAS_NO_BINDING"], ["EV-02 has no procedure", DEV, "EV-02", "NO_PROCEDURE:EV-02"], ["EV-06", REVIEWER, "EV-06", "NO_PROCEDURE:EV-06"],
       ["malformed role", "../UASCO-0085", "EV-01", "EVALUATION_BAD_IDS"], ["malformed evaluation", DEV, "EV-01/../x", "EVALUATION_BAD_IDS"], ["empty", "", "", "EVALUATION_BAD_IDS"],
       ["widened tool list", DEV, "EV-01", "ROLE_NOT_EXECUTABLE:TOOL_NOT_ALLOWED", widened]
@@ -923,7 +975,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect([label, r]).toEqual([label, {status: "REFUSED", reason}]);
     }
     expect(started).toBe(0);
-    expect(EVALUATION_PROCEDURES.flatMap(p => p.functions).sort()).toEqual(["architect", "business-analyst", "developer", "planner", "requirements-engineer", "security-reviewer", "ux-designer"]);
+    expect(EVALUATION_PROCEDURES.flatMap(p => p.functions).sort()).toEqual(["architect", "business-analyst", "developer", "planner", "requirements-engineer", "security-reviewer", "tester", "ux-designer"]);
     expect(planFor(DEV, "EV-01")).toMatchObject({procedure: {version: "golden-file-v1"}});
   });
 
@@ -1081,6 +1133,17 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect(life(lie.repo, withRef(lie.role, bad)).tested).toBe(false);
     });
 
+    it("the tester's staged evidence follows the same rule: FAKE never counts, a non-FAKE pair's counts (executed, not 'passed')", { timeout: 180_000 }, async () => {
+      const good = {implement: () => ({files: {"test/add.test.js": TESTER_GOOD}})};
+      const fake = stagingOf(), real = stagingOf();
+      const f = evaluated(await evaluate(fakePair(good), TESTER, {stagingRoot: fake}));
+      const pf = promote(fake, TESTER, "PASSED");
+      expect(life(pf.repo, withRef(pf.role, f)).tested).toBe(false);
+      const r = evaluated(await evaluate({...fakePair(good), kind: "LOCAL_CLAUDE"}, TESTER, {stagingRoot: real}));
+      const pr = promote(real, TESTER, "PASSED");
+      expect(life(pr.repo, withRef(pr.role, r))).toMatchObject({tested: true, certified: false});
+    });
+
     it("tampering after staging is caught by the verifier: evidence bytes, artifact bytes, a swapped role directory, a symlinked artifact", { timeout: 180_000 }, async () => {
       const root = stagingOf();
       const r = evaluated(await evaluate({...fakePair(), kind: "LOCAL_CLAUDE"}, DEV, {stagingRoot: root}));
@@ -1115,7 +1178,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     });
     it("usage errors and roles without a procedure exit 2 and write nothing", () => {
       const d = workDir();
-      for (const args of [[], ["--role", DEV], ["--role", DEV, "--data-dir", "relative/dir"], ["--role", DEV, "--data-dir", d, "--staging", "/tmp/x"], ["--role", DEV, "--data-dir", d, "--evaluation"], ["--role", "UASCO-0313", "--data-dir", d], ["--role", DEV, "--evaluation", "EV-04", "--data-dir", d]]) expect([args, sh(args).status]).toEqual([args, 2]);
+      for (const args of [[], ["--role", DEV], ["--role", DEV, "--data-dir", "relative/dir"], ["--role", DEV, "--data-dir", d, "--staging", "/tmp/x"], ["--role", DEV, "--data-dir", d, "--evaluation"], ["--role", "UASCO-0232", "--data-dir", d], ["--role", DEV, "--evaluation", "EV-04", "--data-dir", d]]) expect([args, sh(args).status]).toEqual([args, 2]);
       expect(fs.readdirSync(d)).toEqual([]);
       expect(parseArgs(["--role", DEV, "--data-dir", d])).toMatchObject({role: DEV, evaluation: "EV-01", execute: false});
     });

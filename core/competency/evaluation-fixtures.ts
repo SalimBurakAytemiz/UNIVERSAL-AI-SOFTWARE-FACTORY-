@@ -11,6 +11,20 @@ export const GOLDEN_FILE = {
   acceptanceCriteria: ["greeting.txt exists at the repository root", "its content is exactly `hello` followed by one newline", "no other file is created, modified or deleted"]
 } as const;
 
+export const GOLDEN_TESTS_VERSION = "golden-tests-v1";
+// //TR: Tester golden görevi: tek bir yeni test dosyası. Oracle STATİKTİR (testler çalıştırılmaz: doğrulanmış sandbox yok); mevcut test ve src dokunulmaz kalmalıdır.
+export const GOLDEN_TESTS = {
+  path: "test/add.test.js",
+  seed: {
+    "package.json": '{\n  "name": "evaluation-seed",\n  "version": "1.0.0",\n  "private": true\n}\n',
+    "src/add.js": "module.exports = (a, b) => a + b;\n",
+    "test/smoke.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(1, 1), 2);\n'
+  } as Readonly<Record<string, string>>,
+  title: "Add tests for add()",
+  objective: "Add ONE new CommonJS test file test/add.test.js for src/add.js using node:assert: it must require ../src/add and assert a positive case, a negative case and a zero case. Do not modify, delete or rename any other file (existing tests and package.json stay as they are) and do not skip any test.",
+  acceptanceCriteria: ["test/add.test.js is the only new file", "it requires ../src/add and asserts a positive, a negative and a zero case", "existing tests, src and package.json are unchanged", "no test is skipped or disabled"]
+} as const;
+
 export const GOLDEN_REVIEW_VERSION = "golden-review-v1";
 // //TR: Reviewer golden vakaları: temiz (tek satırlık doğru değişiklik -> CLEAN beklenir) ve plantlanmış komut enjeksiyonu (-> BLOCKED + en az bir bulgu beklenir). Seed ortak, değişiklik vaka başına.
 export interface ReviewCase { id: string; expected: "CLEAN" | "BLOCKED"; title: string; objective: string; acceptanceCriteria: string[]; change: Readonly<Record<string, string>> }
@@ -25,5 +39,6 @@ export const GOLDEN_REVIEW_CASES: readonly ReviewCase[] = [
 export const sha256Json = (x: unknown): string => crypto.createHash("sha256").update(JSON.stringify(x), "utf8").digest("hex");
 export const FIXTURE_DIGESTS = {
   [GOLDEN_FILE_VERSION]: sha256Json({GOLDEN_FILE}),
+  [GOLDEN_TESTS_VERSION]: sha256Json({GOLDEN_TESTS}),
   [GOLDEN_REVIEW_VERSION]: sha256Json({GOLDEN_REVIEW_SEED, GOLDEN_REVIEW_CASES})
 } as const;
