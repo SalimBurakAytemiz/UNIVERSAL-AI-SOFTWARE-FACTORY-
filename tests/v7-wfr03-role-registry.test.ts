@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import cp from "node:child_process";
+import vm from "node:vm";
 import {buildServer} from "../apps/control-api/src/server.js";
 import Fastify from "fastify";
 import {FIRST_DELIVERY_BINDINGS, STAGE_CONSUMERS} from "../core/agents/first-delivery-bindings.js";
@@ -12,7 +13,9 @@ import {computeRoleStatusSummary, createEvidenceVerifier, runningRoleIdsFromRuns
 import {registerRoleStatusRoutes} from "../apps/control-api/src/routes/role-status.js";
 import {EvaluationStaging, EvaluationStagingError, EVALUATION_PROCEDURES, planFor, runRoleEvaluation, verdictOf} from "../core/competency/evaluation-pipeline.js";
 import type {EvaluationOutcome} from "../core/competency/evaluation-pipeline.js";
+import {GOLDEN_TESTS} from "../core/competency/evaluation-fixtures.js";
 import {executeBlockers, parseArgs, resolveControlRoot, runCli} from "../core/competency/evaluation-cli.js";
+import {MAX_TEST_SOURCE_BYTES, analyzeAddTest, tokenize, topLevelStatements} from "../core/competency/static-test-analysis.js";
 import {FakeExecutors, reviewerArgv} from "../core/workos/executors.js";
 import type {ExecutorPair, FakeScript, ProcResult} from "../core/workos/executors.js";
 import {ClaudePreDevBuilder} from "../core/workos/predev/claude-builder.js";
@@ -718,7 +721,9 @@ describe("LANE-C C2 role execution profiles (derived, proposal only)", () => {
 
 // //TR: LANE-C C-EVAL-PIPELINE: değerlendirme hattı STAGING'e yazar, FAKE'i asla saydırmaz, altyapı sorunlarını sonuç saymaz ve depoya (audit/evidence, registries) dokunamaz. Gerçek claude çalışmaz; FAKE çiftler ve kayıtlı süreç çalıştırıcıları kullanılır.
 describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE and infrastructure never count)", () => {
-  const DEV = "UASCO-0085", REVIEWER = "UASCO-0252", BA = "UASCO-0022";
+  const DEV = "UASCO-0085", REVIEWER = "UASCO-0252", BA = "UASCO-0022", TESTER = "UASCO-0313";
+  const bindingTools = (route: "CLAUDE_REVIEWER") => FIRST_DELIVERY_BINDINGS.find(b => b.providerRoute === route)!.allowedTools;
+  const TESTER_GOOD = 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n';
   const workDir = () => fs.mkdtempSync(path.join(tmp, "eval-"));
   const script = (o: Partial<FakeScript> = {}): FakeScript => ({
     implement: () => ({files: {"greeting.txt": "hello\n"}}),
@@ -913,13 +918,349 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     expect(listing(root)).toEqual([]);
   });
 
-  it("only procedures that exist are run: tester, delivery, unknown roles, other evaluation ids, malformed ids and unsafe bindings are refused before anything starts", async () => {
+  it("tester golden mission (STATIC oracle, nothing is executed): one scoped test file with a positive, a negative and a zero case, existing tests untouched -> PASSED; FAKE-stamped, never counts", { timeout: 120_000 }, async () => {
+    const root = stagingOf(), marker = path.join(workDir(), "executed.marker");
+    const o = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": TESTER_GOOD}})}), TESTER, {stagingRoot: root}));
+    expect([o.verdict, o.executorKind, o.checks.map(c => c.id)]).toEqual(["PASSED", "FAKE", ["commit_produced", "only_expected_file_added", "no_trivial_test", "regular_file", "within_size_cap", "compiles", "references_module", "assertion_count_min_3", "asserted_values_correct", "no_disabled_markers", "no_early_exit", "closed_world", "covers_positive_negative_zero", "within_role_file_limit"]]);
+    expect(o.verifier).toEqual({countsIfPromoted: false, problem: "FAKE_EVIDENCE"});
+    const art = JSON.parse(fs.readFileSync(o.artifactFile, "utf8")), ev = JSON.parse(fs.readFileSync(o.evidenceFile, "utf8"));
+    expect(art).toMatchObject({testsExecuted: false, qualifyingAssertions: 3, assertCalls: 3, disabledMarkers: 0, surface: {added: ["test/add.test.js"], modified: [], deleted: [], weakened: [], trivialAdded: [], harness: []}});
+    expect(art.testsNotExecutedReason).toMatch(/never run/);
+    expect(ev.procedure).toMatchObject({version: "golden-tests-v1"}); expect(ev.procedure.doesNotCover.join(" ")).toMatch(/nothing is executed/);
+    // the order rule and the detection limit are stated where the model and the reader see them
+    expect(GOLDEN_TESTS.objective).toMatch(/first two statements, so every assertion comes after both declarations/);
+    expect(ev.procedure.covers.join(" ")).toMatch(/BEFORE the first assertion/);
+    expect(ev.procedure.doesNotCover.join(" ")).toMatch(/SUBTRACTS \(a - b\) only.*a \* b == a \+ b/);
+    expect(o.checks.find(c => c.id === "closed_world")?.detail).toMatch(/before the first assertion/);
+    // the written file is only COMPILED, never run: a top-level side effect must not happen
+    const sneaky = `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "x");\n${TESTER_GOOD}`;
+    const s2 = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": sneaky}})}), TESTER));
+    expect(s2.checks.find(c => c.id === "compiles")?.passed).toBe(true);
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  it("tester oracle: each deviation is FAILED with the right first failing check (wrong place, extra or changed files, weakened/deleted tests, harness change, trivial test, syntax error, no module, too few assertions, disabled tests, missing cases)", { timeout: 300_000 }, async () => {
+    const good = TESTER_GOOD, smoke = 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(1, 1), 2);\n';
+    const SKIP = ["it", "skip"].join("."); // assembled at runtime so this test file never carries a literal disabled-test marker in a string
+    const H = 'const assert = require("node:assert");\nconst add = require("../src/add");\n', A = "assert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n";
+    const T = (files: Record<string, string>, extra: Partial<FakeScript> = {}) => ({implement: () => ({files}), ...extra} as Partial<FakeScript>);
+    const cases: Array<[string, Partial<FakeScript>, string, string?]> = [
+      ["tests in another file name", T({"test/other.test.js": good}), "only_expected_file_added"],
+      ["extra file next to the test", T({"test/add.test.js": good, "notes.md": "x\n"}), "only_expected_file_added"],
+      ["modifies src", T({"test/add.test.js": good, "src/add.js": "module.exports = (a, b) => a - b;\n"}), "only_expected_file_added"],
+      ["weakens the existing test", T({"test/add.test.js": good, "test/smoke.test.js": "const add = require(\"../src/add\");\nadd(1, 1);\n"}), "only_expected_file_added", "weakened=1"],
+      ["deletes the existing test", {implement: () => ({files: {"test/add.test.js": good}, deleteFiles: ["test/smoke.test.js"]})}, "only_expected_file_added", "deleted=1"],
+      ["changes the test harness (package.json scripts.test)", T({"test/add.test.js": good, "package.json": '{"name":"evaluation-seed","version":"1.0.0","private":true,"scripts":{"test":"node -e 0"}}\n'}), "only_expected_file_added", "harness=1"],
+      ["test without any assertion", T({"test/add.test.js": 'const add = require("../src/add");\nadd(2, 3); add(-2, -3); add(0, 7);\n'}), "no_trivial_test"],
+      ["syntax error", T({"test/add.test.js": good + "assert.strictEqual(add(1, 2)\n"}), "compiles"],
+      ["does not require the module", T({"test/add.test.js": 'const assert = require("node:assert");\nassert.strictEqual(2 + 3, 5);\nassert.strictEqual(-2 + -3, -5);\nassert.strictEqual(0 + 7, 7);\n'}), "references_module"],
+      ["only two assertions", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\n'}), "assertion_count_min_3"],
+      ["skipped test", T({"test/add.test.js": good + `${SKIP}("later", () => {});\n`}), "no_disabled_markers"],
+      ["process.exit bypass", T({"test/add.test.js": good + "process.exit(0);\n"}), "closed_world"],
+      ["no negative case", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(4, 5), 9);\nassert.strictEqual(add(0, 7), 7);\n'}), "covers_positive_negative_zero"],
+      ["no zero case", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(4, 5), 9);\n'}), "covers_positive_negative_zero"],
+      ["the same call three times", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(2, 3), 5);\n'}), "covers_positive_negative_zero"],
+      ["no positive case (every call has a negative or zero argument)", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\nassert.strictEqual(add(-1, 0), -1);\n'}), "covers_positive_negative_zero"],
+      ["only two distinct calls (one call is both negative and zero)", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, 0), -2);\nassert.strictEqual(add(2, 3), 5);\n'}), "covers_positive_negative_zero"],
+      ["oversized file (valid JavaScript, 20 KiB of comment)", T({"test/add.test.js": good + "// " + "x".repeat(20 * 1024) + "\n"}), "within_size_cap"],
+      ["commented-out assertions (line comments)", T({"test/add.test.js": H + "// assert.strictEqual(add(2, 3), 5);\n// assert.strictEqual(add(-2, -3), -5);\n// assert.strictEqual(add(0, 7), 7);\n"}), "assertion_count_min_3"],
+      ["commented-out assertions (block comment)", T({"test/add.test.js": H + "/*\n" + A + "*/\n"}), "assertion_count_min_3"],
+      ["assertions on constants next to dangling add() calls", T({"test/add.test.js": H + "assert(true); assert.ok(1); assert.strictEqual(1, 1);\nadd(2, 3); add(-2, -3); add(0, 7);\n"}), "assertion_count_min_3"],
+      ["a top-level return in front of the real assertions (dead code)", T({"test/add.test.js": H + "return;\n" + A}), "no_early_exit"],
+      ["the module is only required in a comment and add is redefined locally", T({"test/add.test.js": 'const assert = require("node:assert");\n// const add = require("../src/add");\nconst add = (a, b) => a + b;\n' + A}), "references_module"],
+      ["assert messages that merely mention add() calls", T({"test/add.test.js": H + 'assert(true, "add(2, 3)");\nassert(true, "add(-2, -3)");\nassert(true, "add(0, 7)");\n'}), "assertion_count_min_3"],
+      ["assertions inside a bare block", T({"test/add.test.js": H + "{\n" + A + "assert.strictEqual(add(4, 5), 9);\n}\n"}), "assertion_count_min_3"],
+      ["assertions inside if (false)", T({"test/add.test.js": H + "if (false) {\n" + A + "}\n"}), "assertion_count_min_3"],
+      ["assertions inside node:test callbacks (a style the mission forbids)", T({"test/add.test.js": H + 'const test = require("node:test");\ntest("a", () => { assert.strictEqual(add(2, 3), 5); });\ntest("b", () => { assert.strictEqual(add(-2, -3), -5); });\ntest("c", () => { assert.strictEqual(add(0, 7), 7); });\n'}), "assertion_count_min_3"],
+      ["assertions after another statement inside a callback body", T({"test/add.test.js": H + 'const test = require("node:test");\ntest("all", () => {\n  const x = 1;\n  assert.strictEqual(add(2, 3), 5);\n  assert.strictEqual(add(-2, -3), -5);\n  assert.strictEqual(add(0, 7), 7);\n});\n'}), "assertion_count_min_3"],
+      ["wrong expected sum", T({"test/add.test.js": H + "assert.strictEqual(add(2, 3), 6);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n"}), "asserted_values_correct"],
+      ["tautology: add() on both sides", T({"test/add.test.js": H + "assert.strictEqual(add(2, 3), add(2, 3));\nassert.strictEqual(add(-2, -3), add(-2, -3));\nassert.strictEqual(add(0, 7), add(0, 7));\n"}), "assertion_count_min_3"],
+      ["add() only in the message position", T({"test/add.test.js": H + "assert.strictEqual(5, 5, add(2, 3));\nassert.strictEqual(5, 5, add(-2, -3));\nassert.strictEqual(5, 5, add(0, 7));\n"}), "assertion_count_min_3"],
+      ["non-literal operands", T({"test/add.test.js": H + "const x = 2;\nassert.strictEqual(add(x, 3), 5);\nassert.strictEqual(add(-x, -3), -5);\nassert.strictEqual(add(0, x), 2);\n"}), "assertion_count_min_3"],
+      ["a closing brace that would break out of a naive wrapper", T({"test/add.test.js": good + "\n}); (function () {\n"}), "compiles"],
+      ["unterminated string (compile fails and the text cannot be analysed)", T({"test/add.test.js": good + 'const x = "abc\n'}), "compiles"],
+      // closed world: a test that rebinds, aliases or neuters its own two bindings (or exits / evals) would score PASSED while asserting nothing
+      ["add rebound after a let require", T({"test/add.test.js": 'const assert = require("node:assert");\nlet add = require("../src/add");\nadd = (a, b) => a + b;\n' + A}), "references_module"],
+      ["add reassigned after a const require", T({"test/add.test.js": H + "add = (a, b) => a + b;\n" + A}), "closed_world"],
+      ["assert rebound after a let require", T({"test/add.test.js": 'let assert = require("node:assert");\nconst add = require("../src/add");\nassert = {strictEqual() {}};\n' + A}), "assertion_count_min_3"],
+      ["assert neutered by a member assignment", T({"test/add.test.js": H + "assert.strictEqual = () => {};\n" + A}), "closed_world"],
+      ["the CJS require parameter rebound before the const require", T({"test/add.test.js": 'require = (s) => (a, b) => a + b;\nconst assert = require("node:assert");\nconst add = require("../src/add");\n' + A}), "closed_world"],
+      ["assert aliased then neutered", T({"test/add.test.js": H + "const a2 = assert;\na2.strictEqual = () => {};\n" + A}), "closed_world"],
+      ["add used outside an assertion", T({"test/add.test.js": H + "console.log(add(1, 2));\n" + A}), "closed_world"],
+      ["eval", T({"test/add.test.js": H + 'eval("1");\n' + A}), "closed_world"],
+      ["globalThis", T({"test/add.test.js": H + "globalThis.x = 1;\n" + A}), "closed_world"],
+      ["optional-call process exit", T({"test/add.test.js": H + "process?.exit(0);\n" + A}), "closed_world"],
+      ["aliased process exit", T({"test/add.test.js": H + "const p = process;\np.exit(0);\n" + A}), "closed_world"],
+      ["require of node:process", T({"test/add.test.js": H + 'const p = require("node:process");\np.exit(0);\n' + A}), "closed_world"],
+      ["require of child_process", T({"test/add.test.js": H + 'const cp = require("node:child_process");\n' + A}), "closed_world"],
+      ["dynamic import", T({"test/add.test.js": H + 'import("node:process");\n' + A}), "closed_world"],
+      ["Object.is replaced (assert.strictEqual would always pass)", T({"test/add.test.js": H + "Object.is = () => true;\n" + A}), "closed_world"],
+      ["prototype/descriptor tampering", T({"test/add.test.js": H + 'Object.defineProperty(assert, "strictEqual", {value() {}});\n' + A}), "closed_world"],
+      ["a block that rebinds add", T({"test/add.test.js": H + "{ add = (a, b) => a + b; }\n" + A}), "closed_world"],
+      ["an IIFE before the assertions", T({"test/add.test.js": H + "(() => { Object.is = () => true; })();\n" + A}), "closed_world"],
+      ["a call chained onto an assertion through ASI", T({"test/add.test.js": H + "assert.strictEqual(add(2, 3), 5)\n(Object.is = () => true)\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\nassert.strictEqual(add(4, 5), 9);\n"}), "closed_world"],
+      ["a template-literal message with an expression", T({"test/add.test.js": H + "assert.strictEqual(add(2, 3), 5, `${Object.is = () => true}`);\n" + "assert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n"}), "assertion_count_min_3"],
+      // text V8 runs differently from what a lexer sees: fail closed (the file cannot be analysed)
+      ["HTML-like comment markers hide the assertions", T({"test/add.test.js": H + "<!-- assert.strictEqual(add(2, 3), 5);\n<!-- assert.strictEqual(add(-2, -3), -5);\n<!-- assert.strictEqual(add(0, 7), 7);\n"}), "references_module"],
+      ["HTML close-comment markers at the start of a line", T({"test/add.test.js": H + "--> assert.strictEqual(add(2, 3), 5);\n--> assert.strictEqual(add(-2, -3), -5);\n--> assert.strictEqual(add(0, 7), 7);\n"}), "references_module"],
+      ["assertions inside a regex literal after a block", T({"test/add.test.js": H + '{}\n/assert.strictEqual(add(2, 3), 5); assert.strictEqual(add(-2, -3), -5); assert.strictEqual(add(0, 7), 7);/.test("x");\n'}), "references_module"],
+      // ORDER: a declaration after an assertion throws a TDZ ReferenceError at run time before any assertion ran, yet every check except the order one would pass
+      ["both declarations after the assertions (TDZ)", T({"test/add.test.js": A + H}), "closed_world", "DECLARATION_AFTER_ASSERT"],
+      ["assert declared first, add declared after the first assertion", T({"test/add.test.js": 'const assert = require("node:assert");\nassert.strictEqual(add(2, 3), 5);\nconst add = require("../src/add");\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n'}), "closed_world", "DECLARATION_AFTER_ASSERT"],
+      ["assertions between the two declarations", T({"test/add.test.js": 'const assert = require("node:assert");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nconst add = require("../src/add");\nassert.strictEqual(add(0, 7), 7);\n'}), "closed_world", "DECLARATION_AFTER_ASSERT"],
+      ["the assert.ok form with add declared last", T({"test/add.test.js": 'const assert = require("node:assert");\nassert.ok(add(2, 3) === 5);\nassert.ok(add(-2, -3) === -5);\nassert.ok(add(0, 7) === 7);\nconst add = require("../src/add");\n'}), "closed_world", "DECLARATION_AFTER_ASSERT"],
+      ["add declared between assertions", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nconst sum = require("../src/add");\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n'}), "closed_world", "DECLARATION_AFTER_ASSERT"],
+      ["a second assert alias declared after an assertion", T({"test/add.test.js": H + "assert.strictEqual(add(2, 3), 5);\nconst a2 = require(\"assert\");\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n"}), "closed_world", "DECLARATION_AFTER_ASSERT"],
+      // token types: a string is not a number (add("2", 3) is "23" on a correct add, so the file would fail there although every static check passed)
+      ["a string operand", T({"test/add.test.js": H + A + 'assert.strictEqual(add("2", 3), 5);\n'}), "closed_world"],
+      ["a string expected value", T({"test/add.test.js": H + A + 'assert.strictEqual(add(2, 3), "5");\n'}), "closed_world"],
+      // ORDER, every statement shape: ALL statements before the late declaration have the shape under test (a shape-conditioned order check would otherwise be masked by a later, differently shaped statement)
+      ...([["bare assert(... === ...)", ["assert(add(2, 3) === 5);", "assert(add(-2, -3) === -5);", "assert(add(0, 7) === 7);"]], ["assert.equal", ["assert.equal(add(2, 3), 5);", "assert.equal(add(-2, -3), -5);", "assert.equal(add(0, 7), 7);"]],
+        ["assert.deepEqual", ["assert.deepEqual(add(2, 3), 5);", "assert.deepEqual(add(-2, -3), -5);", "assert.deepEqual(add(0, 7), 7);"]], ["assert.deepStrictEqual", ["assert.deepStrictEqual(add(2, 3), 5);", "assert.deepStrictEqual(add(-2, -3), -5);", "assert.deepStrictEqual(add(0, 7), 7);"]],
+        ["assert.ok with ==", ["assert.ok(add(2, 3) == 5);", "assert.ok(add(-2, -3) == -5);", "assert.ok(add(0, 7) == 7);"]], ["reversed operands (positive expected values only: a leading minus would be the fifth token)", ["assert.strictEqual(5, add(2, 3));", "assert.strictEqual(9, add(4, 5));", "assert.strictEqual(7, add(0, 7));"]],
+        ["a message argument", ['assert.strictEqual(add(2, 3), 5, "a");', 'assert.strictEqual(add(-2, -3), -5, "b");', 'assert.strictEqual(add(0, 7), 7, "c");']]] as Array<[string, string[]]>).map(([label, stmts]) =>
+        [`add declared last after statements that are all: ${label}`, T({"test/add.test.js": 'const assert = require("node:assert");\n' + stmts.join("\n") + '\nconst add = require("../src/add");\n'}), "closed_world", "DECLARATION_AFTER_ASSERT"] as [string, Partial<FakeScript>, string, string?]),
+      ["add declared last after a first statement through a second assert alias", T({"test/add.test.js": 'const assert = require("node:assert");\nconst a2 = require("assert");\na2.strictEqual(add(2, 3), 5);\na2.strictEqual(add(-2, -3), -5);\na2.strictEqual(add(0, 7), 7);\nconst add = require("../src/add");\n'}), "no_trivial_test"], // the runner's own assertion counter only knows the name assert, so this fails there first; the analyzer's own verdict (DECLARATION_AFTER_ASSERT) is pinned in the analyzer unit test below
+      // TOKEN TYPES: a string or template token whose text is `require`, `(`, `,` or `===` is not that identifier / punctuation (V8 compiles `"require"("../src/add")` and tagged-template calls, the file then throws a TypeError before any assertion ran)
+      ...([["a string `require` on the add declaration", 'const assert = require("node:assert");\nconst add = "require"("../src/add");\n' + A],
+        ["a single-quoted `require` on the add declaration", "const assert = require(\"node:assert\");\nconst add = 'require'('../src/add');\n" + A],
+        ["a template `require` on the add declaration", 'const assert = require("node:assert");\nconst add = `require`("../src/add");\n' + A],
+        ["a string `require` on the assert declaration", 'const assert = "require"("node:assert");\nconst add = require("../src/add");\n' + A],
+        ["a template `require` on both declarations", 'const assert = `require`("node:assert");\nconst add = `require`("../src/add");\n' + A],
+        ["a newline between the string callee and its parenthesis", 'const assert = require("node:assert");\nconst add = "require"\n("../src/add");\n' + A]] as Array<[string, string]>).map(([label, body]) =>
+        [label, T({"test/add.test.js": body}), /on the assert declaration/.test(label) ? "assertion_count_min_3" : "references_module"] as [string, Partial<FakeScript>, string, string?]), // add unbound: no module reference; assert unbound: no counted assertion
+      ["a tagged template whose text is ( and ) stands in for the call parentheses (first)", T({"test/add.test.js": H + "assert`(`-3 === add(0, -3`)`);\n" + A}), "closed_world"],
+      ["... with assert.ok", T({"test/add.test.js": H + "assert.ok`(`-3 === add(0, -3`)`);\n" + A}), "closed_world"],
+      ["... with the == operator", T({"test/add.test.js": H + "assert`(`-3 == add(0, -3`)`);\n" + A}), "closed_world"],
+      ["... with assert.strictEqual", T({"test/add.test.js": H + "assert.strictEqual`(`-3, add(0, -3`)`);\n" + A}), "closed_world"],
+      ["... placed after the real assertions", T({"test/add.test.js": H + A + "assert`(`-3 === add(0, -3`)`);\n"}), "closed_world"],
+      ["a string callee for add", T({"test/add.test.js": H + A + 'assert.strictEqual("add"(2, 3), 5);\n'}), "closed_world"],
+      ["a template callee for add", T({"test/add.test.js": H + A + "assert.strictEqual(`add`(2, 3), 5);\n"}), "closed_world"],
+      ["a string receiver for assert", T({"test/add.test.js": H + A + '"assert".strictEqual(add(2, 3), 5);\n'}), "closed_world"],
+      ["a template receiver for assert", T({"test/add.test.js": H + A + "`assert`.strictEqual(add(2, 3), 5);\n"}), "closed_world"],
+      ["a tagged template whose text is , separates the assert arguments", T({"test/add.test.js": H + A + "assert.strictEqual(add(-2, -3)`,`-5);\n"}), "closed_world"],
+      ["a tagged template whose text is === is the operator", T({"test/add.test.js": H + A + "assert(add(-2, -3)`===`-5);\n"}), "closed_world"],
+      ["a tagged template whose text is , is the add-call comma", T({"test/add.test.js": H + A + "assert.strictEqual(add(2`,`-3), -1);\n"}), "closed_world"],
+      // other token kinds are not numbers, and only `require` itself declares a module
+      ["a template literal operand", T({"test/add.test.js": H + A + "assert.strictEqual(add(`2`, 3), 5);\n"}), "closed_world"],
+      ["a template literal expected value", T({"test/add.test.js": H + A + "assert.strictEqual(add(2, 3), `5`);\n"}), "closed_world"],
+      ["a string expected value in the assert.ok form", T({"test/add.test.js": H + A + 'assert.ok(add(2, 3) === "5");\n'}), "closed_world"],
+      ["a string expected value in the reversed bare form", T({"test/add.test.js": H + A + 'assert("5" === add(2, 3));\n'}), "closed_world"],
+      ["an operand that starts with a minus but has more tokens (-5 + 1 is -4)", T({"test/add.test.js": H + A + "assert.strictEqual(add(-5 + 1, 0), -5);\n"}), "closed_world"],
+      ["an expected value that is an expression (3 + 4)", T({"test/add.test.js": H + A + "assert.strictEqual(add(3, 4), 3 + 4);\n"}), "closed_world"],
+      ["a binding whose callee is not require (String)", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = String("../src/add");\n' + A}), "references_module"],
+      // control statements are reported as early exits, they are not "other statements" for the ORDER rule
+      ["a top-level if before the declarations", T({"test/add.test.js": "if (0) {}\n" + H + A}), "no_early_exit"],
+      ["a top-level if between the declarations", T({"test/add.test.js": 'const assert = require("node:assert");\nif (0) {}\nconst add = require("../src/add");\n' + A}), "no_early_exit"],
+      // number literals V8 reads differently from Number() or that make a + b and a - b collapse: each is ONE extra statement next to three good ones
+      ...([["legacy octal 010 (V8: 8, Number: 10)", "assert.strictEqual(add(9, 01), 010);"], ["legacy octal in the ok form", "assert.ok(add(9, 01) === 010);"], ["legacy octal 0777 swapped operands", "assert.equal(0777, add(644, 133));"],
+        ["negative legacy octal", "assert.strictEqual(add(-9, -1), -010);"], ["leading zeros 00 / 09", "assert.strictEqual(add(00, 7), 7);\nassert.strictEqual(add(09, 1), 10);"],
+        ["absorption 1e20 written out", "assert.strictEqual(add(100000000000000000000, 1), 100000000000000000000);"], ["absorption with a 10-digit operand", "assert.strictEqual(add(1000000000, 1), 1000000001);"],
+        ["absorption at the small end", "assert.strictEqual(add(1, 0.0000000000000000001), 1);"], ["absorption with 2^54", "assert.strictEqual(add(18014398509481984, 1), 18014398509481984);"],
+        ["more than six fraction digits", "assert.strictEqual(add(1, 0.0000001), 1.0000001);"], ["negative zero operands", "assert.strictEqual(add(-0, -0), 0);"], ["negative zero expected", "assert.strictEqual(add(0, 0), -0);"],
+        ["numeric separator", "assert.strictEqual(add(1_000, 1), 1001);"], ["exponent", "assert.strictEqual(add(1e3, 1), 1001);"], ["leading dot", "assert.strictEqual(add(.5, 1), 1.5);"], ["trailing dot", "assert.strictEqual(add(5., 1), 6);"],
+        ["hex", "assert.strictEqual(add(0x10, 1), 17);"], ["plus sign", "assert.strictEqual(add(+3, 1), 4);"], ["BigInt", "assert.strictEqual(add(3n, 1n), 4n);"]] as Array<[string, string]>).map(([label, stmt]) =>
+        [label, T({"test/add.test.js": H + A + stmt + "\n"}), "closed_world"] as [string, Partial<FakeScript>, string, string?]),
+      ["no commit at all", {implement: () => ({files: {"test/add.test.js": good}, noCommit: true})}, "commit_produced"]
+    ];
+    for (const [label, o, failing, detail] of cases) {
+      const r = evaluated(await evaluate(fakePair(o), TESTER));
+      expect([label, r.verdict, r.checks.find(c => !c.passed)?.id]).toEqual([label, "FAILED", failing]);
+      if (detail) expect([label, r.checks.find(c => !c.passed)?.detail]).toEqual([label, expect.stringContaining(detail)]);
+      if (failing === "no_early_exit") expect([label, r.checks.filter(c => !c.passed).map(c => c.id)]).toEqual([label, ["no_early_exit"]]); // a control statement is an early exit, not an out-of-order declaration
+    }
+    // a file whose text cannot be tokenised fails every text check with a reason instead of passing by default
+    const broken = evaluated(await evaluate(fakePair(T({"test/add.test.js": good + 'const x = "abc\n'})), TESTER));
+    expect(broken.checks.filter(c => !c.passed).map(c => c.id)).toEqual(["compiles", "references_module", "assertion_count_min_3", "asserted_values_correct", "no_early_exit", "closed_world", "covers_positive_negative_zero"]);
+    expect(broken.checks.find(c => c.id === "references_module")?.detail).toMatch(/not analysable/);
+    // infrastructure is infrastructure for the tester too
+    const root = stagingOf();
+    expect(await evaluate(fakePair({implement: () => ({exitCode: 1})}), TESTER, {stagingRoot: root})).toEqual({status: "NOT_EXECUTED", roleId: TESTER, evaluationId: "EV-01", reason: "IMPLEMENT_EXIT_NONZERO"});
+    expect(listing(root)).toEqual([]);
+    // the tester must be an implementer-route binding: a reviewer-route binding with the tester function is refused
+    const reviewerRoute = FIRST_DELIVERY_BINDINGS.map(b => b === FIRST_DELIVERY_BINDINGS.find(x => x.roleId === TESTER) ? {...b, providerRoute: "CLAUDE_REVIEWER" as const, allowedTools: [...bindingTools("CLAUDE_REVIEWER")], limits: {...b.limits, maxFilesWritten: 0}} : b);
+    expect(await evaluate(fakePair(), TESTER, {bindings: reviewerRoute})).toEqual({status: "REFUSED", reason: expect.stringContaining("BINDING_ROLE_MISMATCH")});
+    // the right bytes committed as an executable file are not a regular test file
+    const execMode: ExecutorPair = {...fakePair(), implementer: {identity: "MODE_IMPL", async implement(ws) {
+      const at = new Date().toISOString(), g = (args: string[]) => cp.spawnSync("git", ["-c", "user.name=T", "-c", "user.email=t@local.invalid", "-c", "commit.gpgsign=false", ...args], {cwd: ws, encoding: "utf8"});
+      fs.writeFileSync(path.join(ws, "test", "add.test.js"), good); g(["add", "-A"]); g(["update-index", "--chmod=+x", "test/add.test.js"]); g(["commit", "-q", "-m", "mode"]);
+      return {exitCode: 0, log: "", argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
+    }}};
+    const em = evaluated(await evaluate(execMode, TESTER));
+    expect([em.verdict, em.checks.filter(c => !c.passed).map(c => c.id)]).toEqual(["FAILED", ["regular_file"]]);
+    // an unsafe tester binding is refused before anything starts
+    const t = FIRST_DELIVERY_BINDINGS.find(b => b.roleId === TESTER)!;
+    expect(await evaluate(fakePair(), TESTER, {bindings: FIRST_DELIVERY_BINDINGS.map(b => b === t ? {...b, allowedTools: [...b.allowedTools, "WebFetch"]} : b)})).toEqual({status: "REFUSED", reason: "ROLE_NOT_EXECUTABLE:TOOL_NOT_ALLOWED"});
+  });
+
+  it("tester oracle accepts every spelling the mission allows (an alias for add, reversed operands, assert.ok / bare assert, no semicolons, CRLF, comments, a message argument, decimals) and PASSES them", { timeout: 300_000 }, async () => {
+    const H = 'const assert = require("node:assert");\nconst add = require("../src/add");\n';
+    const variants: Array<[string, string]> = [
+      ["an alias for add and the .js specifier", 'const assert = require("assert");\nconst sum = require("../src/add.js");\nassert.strictEqual(sum(2, 3), 5);\nassert.strictEqual(sum(-2, -3), -5);\nassert.strictEqual(sum(0, 7), 7);\n'],
+      ["strict assert module", 'const assert = require("node:assert/strict");\nconst add = require("../src/add");\nassert.equal(add(2, 3), 5);\nassert.equal(add(-2, -3), -5);\nassert.equal(add(0, 7), 7);\n'],
+      ["reversed operands with equal / deepStrictEqual / deepEqual", H + "assert.equal(5, add(2, 3));\nassert.deepStrictEqual(-5, add(-2, -3));\nassert.deepEqual(add(0, 7), 7);\n"],
+      ["assert.ok and bare assert with === and ==", H + "assert.ok(add(2, 3) === 5);\nassert(-5 == add(-2, -3));\nassert(add(0, 7) === 7);\n"],
+      ["no semicolons, CRLF, comments and a message argument", 'const assert = require("node:assert") // node:assert\r\nconst add = require("../src/add")\r\n/* three cases */\r\nassert.strictEqual(add(2, 3), 5, "two plus three")\r\nassert.strictEqual(add(-2, -3), -5)\r\nassert.strictEqual(add(0, 7), 7)\r\n'],
+      ["mixed-sign operands (negative through ONE operand)", H + "assert.strictEqual(add(2, -3), -1);\nassert.strictEqual(add(4, 5), 9);\nassert.strictEqual(add(0, 7), 7);\n"],
+      ["Prettier style: multi-line asserts with a trailing comma", H + "assert.strictEqual(\n  add(2, 3),\n  5,\n);\nassert.strictEqual(\n  add(-2, -3),\n  -5,\n  \"negative\",\n);\nassert.ok(\n  add(0, 7) === 7,\n);\n"],
+      ["number boundaries: 9-digit operands, a 10-digit expected sum, 6 fraction digits", H + "assert.strictEqual(add(999999999, 1), 1000000000);\nassert.strictEqual(add(-999999999, -1), -1000000000);\nassert.strictEqual(add(0.000001, 1), 1.000001);\nassert.strictEqual(add(0, 0.000001), 0.000001);\n"],
+      ["decimal operands", H + "assert.strictEqual(add(2.5, 0.5), 3);\nassert.strictEqual(add(-1.5, -0.5), -2);\nassert.strictEqual(add(0, 0.25), 0.25);\n"],
+      ["declarations in the other order (add first, assert second), both before every assertion", 'const add = require("../src/add");\nconst assert = require("node:assert");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n'],
+      ["a declaration split over lines after const (V8 continues it, no ASI)", 'const\n  assert = require("node:assert");\nconst /* c */\n  add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n'],
+      ["comments and blank lines before the declarations", '// header\n\n/* about */\nconst assert = require("node:assert");\n\nconst add = require("../src/add");\n' + "assert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n"]
+    ];
+    for (const [label, body] of variants) {
+      const r = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": body}})}), TESTER));
+      expect([label, r.verdict, r.checks.filter(c => !c.passed).map(c => c.id)]).toEqual([label, "PASSED", []]);
+    }
+  });
+
+  it("a hostile test file cannot stall the evaluation: over the size cap it is rejected before ANY text analysis (the quadratic disabled-marker pattern included), and one just under the cap stays fast", { timeout: 120_000 }, async () => {
+    const evil = (bytes: number) => "it({" + "\n".repeat(bytes - 4);
+    const t0 = Date.now();
+    const over = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": evil(100 * 1024)}})}), TESTER));
+    expect(Date.now() - t0).toBeLessThan(8_000);
+    expect(over.checks.filter(c => !c.passed).map(c => c.id)).toEqual(expect.arrayContaining(["within_size_cap", "compiles", "references_module", "no_disabled_markers"]));
+    expect(over.checks.find(c => c.id === "no_disabled_markers")?.detail).toMatch(/not scanned/);
+    expect(JSON.parse(fs.readFileSync(over.artifactFile, "utf8"))).toMatchObject({testFile: null, testFileBytes: 100 * 1024});
+    const t1 = Date.now();
+    const under = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": evil(MAX_TEST_SOURCE_BYTES - 16)}})}), TESTER));
+    expect(Date.now() - t1).toBeLessThan(8_000);
+    expect(under.verdict).toBe("FAILED"); expect(under.checks.find(c => c.id === "within_size_cap")?.passed).toBe(true);
+    // the same pattern in a MODIFIED existing test is not handed to the surface classifier either (its comparison runs the same regex)
+    const t2 = Date.now();
+    // (it keeps an assertion so the classifier does not short-circuit on "assertions reduced" and really reaches the disabled-marker comparison)
+    const mod = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": TESTER_GOOD, "test/smoke.test.js": "assert.ok(1);\n" + evil(100 * 1024)}})}), TESTER));
+    expect(Date.now() - t2).toBeLessThan(8_000);
+    expect(mod.checks.find(c => c.id === "only_expected_file_added")?.passed).toBe(false);
+    // the cap is inclusive: exactly MAX bytes is analysed (and passes), one byte more is not
+    const padded = (extra: number) => TESTER_GOOD + "//" + "x".repeat(MAX_TEST_SOURCE_BYTES - Buffer.byteLength(TESTER_GOOD) - 3 + extra) + "\n";
+    expect(Buffer.byteLength(padded(0))).toBe(MAX_TEST_SOURCE_BYTES);
+    const exact = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": padded(0)}})}), TESTER));
+    expect([exact.verdict, exact.checks.find(c => c.id === "within_size_cap")?.passed]).toEqual(["PASSED", true]);
+    const plus = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": padded(1)}})}), TESTER));
+    expect([plus.verdict, plus.checks.find(c => c.id === "within_size_cap")?.passed]).toEqual(["FAILED", false]);
+    // cap BEFORE any text analysis, pinned deterministically (not by the wall clock): an oversize but VALID file with correct assertions is not compiled, not tokenised and not scanned
+    const detail = (r: Extract<EvaluationOutcome, {status: "EVALUATED"}>, id: string) => r.checks.find(c => c.id === id)!;
+    expect([detail(plus, "compiles").passed, detail(plus, "compiles").detail]).toEqual([false, expect.stringMatching(/not analysed/)]);
+    for (const id of ["references_module", "assertion_count_min_3", "asserted_values_correct", "no_early_exit", "closed_world"]) expect([id, detail(plus, id).passed, detail(plus, id).detail]).toEqual([id, false, expect.stringMatching(/not analysed/)]);
+    expect([detail(plus, "no_disabled_markers").passed, detail(plus, "no_disabled_markers").detail]).toEqual([false, expect.stringMatching(/not scanned/)]);
+    // the surface classifier never sees oversize content either: a new oversize test with ZERO assertions would be "trivial" if it did, yet no_trivial_test passes (content withheld) while the cap check fails
+    const trivialBig = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": "// " + "x".repeat(20 * 1024) + "\n"}})}), TESTER));
+    expect([detail(trivialBig, "within_size_cap").passed, detail(trivialBig, "no_trivial_test").passed, detail(trivialBig, "no_trivial_test").detail]).toEqual([false, true, "trivialAdded=0"]);
+    const trivialSmall = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": "// small\n"}})}), TESTER));
+    expect([detail(trivialSmall, "within_size_cap").passed, detail(trivialSmall, "no_trivial_test").passed]).toEqual([true, false]); // control: below the cap the classifier does see it
+  });
+
+  describe("static test analysis (tokeniser and statement model behind the tester oracle)", () => {
+    const toks = (src: string) => tokenize(src)!.map(t => `${t.t}:${t.v}`);
+    const stmts = (src: string) => topLevelStatements(tokenize(src)!).map(st => st.map(t => t.v).join(" "));
+    const an = (src: string) => analyzeAddTest(tokenize(src)!);
+    const H = 'const assert = require("node:assert");\nconst add = require("../src/add");\n';
+    it("comments are dropped and string / template / regex literals are single opaque tokens; division is not a regex", () => {
+      expect(toks('a // c "x"\n/* y */ b')).toEqual(["id:a", "id:b"]);
+      expect(toks("x = \"// no\" + '/* no */'")).toEqual(["id:x", "p:=", "str:// no", "p:+", "str:/* no */"]);
+      expect(toks("x = `a ${ '}' + `n${1}` } b`")).toEqual(["id:x", "p:=", "tpl:a ${ '}' + `n${1}` } b"]);
+      expect(toks("a / b / c")).toEqual(["id:a", "p:/", "id:b", "p:/", "id:c"]);
+      expect(toks("x = /a\\/[/]b/g.test(y)")).toEqual(["id:x", "p:=", "re:/a\\/[/]b/g", "p:.", "id:test", "p:(", "id:y", "p:)"]);
+      expect(toks("return /x/")).toEqual(["id:return", "re:/x/"]);
+      expect(toks("1e-5 + 0x1F + .5 + 2.5")).toEqual(["num:1e-5", "p:+", "num:0x1F", "p:+", "num:.5", "p:+", "num:2.5"]);
+      expect(toks("a === b => c ?? d")).toEqual(["id:a", "p:===", "id:b", "p:=>", "id:c", "p:??", "id:d"]);
+      expect(toks("#!/usr/bin/env node\nx")).toEqual(["id:x"]);
+      expect(toks("\"a\\\"b\" 'c\\'d'")).toEqual(['str:a\\"b', "str:c\\'d"]);
+      expect(toks("é = 1")).toEqual(["id:é", "p:=", "num:1"]);
+      expect(toks("f(a) / 2 / 3")).toEqual(["id:f", "p:(", "id:a", "p:)", "p:/", "num:2", "p:/", "num:3"]); // division after ), never a regex
+      expect(toks("a[0] / 2 / 3")).toEqual(["id:a", "p:[", "num:0", "p:]", "p:/", "num:2", "p:/", "num:3"]);
+      expect(toks('x = "<!--" + `-->`')).toEqual(["id:x", "p:=", "str:<!--", "p:+", "tpl:-->"]); // inside literals the markers are just text
+      expect(toks("x --> 0")).toEqual(["id:x", "p:--", "p:>", "num:0"]);                         // mid-line it is a decrement and a comparison
+    });
+    it("text V8 would treat as comments or regexes differently from a lexer cannot be analysed (null): <!-- anywhere, --> at the start of a line, a slash after a closing brace", () => {
+      for (const src of ["a <!-- b", "<!-- b", "x\n--> y", "--> y", "x /* c */ \n  --> y", "{}\n/ 2 /1", "{} /re/.test(x)"]) expect([src, tokenize(src)]).toEqual([src, null]);
+    });
+    it("unterminated strings, comments, templates and regexes cannot be analysed (null), never silently accepted", () => {
+      for (const src of ["x = 'abc", 'x = "abc\ny"', "/* open", "`open", "`a ${ 1 ", "x = /open", "x = /a\nb/"]) expect([src, tokenize(src)]).toEqual([src, null]);
+    });
+    it("token types are never conflated: replacing ANY single token of a valid file by a quoted or template spelling of its own text never yields a file that compiles AND is accepted by the closed grammar", () => {
+      const base = H + 'assert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5, "neg");\nassert.ok(add(0, 7) === 7);\nassert(7 == add(0, 7));\nassert.deepEqual(add(0.5, 1), 1.5);\n';
+      const ts = tokenize(base)!, baseCases = analyzeAddTest(ts).cases.length;
+      const render = (at: number, mode: string) => ts.map((t, i) => (i > 0 && t.nl ? "\n" : " ") + (i === at ? (mode === "tpl" ? "`" + t.v + "`" : mode === "dq" ? '"' + t.v + '"' : "'" + t.v + "'") : t.t === "str" ? '"' + t.v + '"' : t.v)).join("");
+      const accepted = (src: string) => { const a = analyzeAddTest(tokenize(src)!); return a.tamper === null && a.addId !== null && a.cases.length === baseCases; };
+      const compiles = (src: string) => { try { vm.compileFunction(src, ["exports", "require", "module", "__filename", "__dirname"]); return true; } catch { return false; } };
+      expect([baseCases, accepted(render(-1, "dq")), compiles(render(-1, "dq"))]).toEqual([5, true, true]); // control: the rendering of the untouched file is accepted
+      let compiled = 0;
+      for (let at = 0; at < ts.length; at++) for (const mode of ["dq", "sq", "tpl"]) {
+        if (ts[at].t === "str" && mode !== "tpl") continue; // a quoted spelling of a string is the same string
+        const src = render(at, mode);
+        if (!compiles(src)) continue;
+        compiled++;
+        expect([ts[at].t, ts[at].v, mode, accepted(src)]).toEqual([ts[at].t, ts[at].v, mode, false]);
+      }
+      expect(compiled).toBeGreaterThanOrEqual(20); // not vacuous: many conflations are valid JavaScript (calls on strings, tagged templates)
+    });
+    it("declaration ORDER: every const require precedes the first other statement, whatever its spec; the first violation is named", () => {
+      const A3 = "assert.strictEqual(add(2, 3), 5);\n";
+      expect(an(H + A3).tamper).toBeNull();
+      expect(an('const add = require("../src/add");\nconst assert = require("node:assert");\n' + A3).tamper).toBeNull();
+      for (const src of [A3 + H, 'const assert = require("node:assert");\n' + A3 + 'const add = require("../src/add");\n', H + A3 + 'const a2 = require("assert");\n', H + A3 + 'const sum = require("../src/add");\n'])
+        expect([src, an(src).tamper]).toEqual([src, "DECLARATION_AFTER_ASSERT"]);
+      const alias = 'const assert = require("node:assert");\nconst a2 = require("assert");\na2.strictEqual(add(2, 3), 5);\na2.strictEqual(add(-2, -3), -5);\na2.strictEqual(add(0, 7), 7);\nconst add = require("../src/add");\n';
+      expect([an(alias).tamper, an(alias).cases.length]).toEqual(["DECLARATION_AFTER_ASSERT", 3]); // every statement before the late declaration goes through the second alias
+      expect(an("if (x) {}\n" + H).tamper).toBeNull();                                                              // a control statement is an early exit, not an out-of-order declaration
+      expect(an(H + A3 + "return;\n" + 'const a2 = require("assert");\n').tamper).toBe("DECLARATION_AFTER_ASSERT");      // and it does not reset the order state either
+      expect(an(H + A3 + 'const a2 = require("assert");\nx = 1;\nconst a3 = require("assert");\n').tamper).toBe("DECLARATION_AFTER_ASSERT"); // the FIRST late declaration is named
+      expect(an(H + A3 + 'const p = require("node:process");\n').tamper).toBe("REQUIRE_SPEC_NOT_ALLOWED:node:process"); // a disallowed spec keeps its own, more specific, reason
+      expect(an(H + "x = 1;\n" + 'const a2 = require("assert");\n' + A3).tamper).toBe("STATEMENT_NOT_ALLOWED:x");        // the first violation wins: a foreign statement before a late declaration
+    });
+    it("statements split at ';' and at newlines ASI would split, never inside brackets or before a continuing token", () => {
+      expect(stmts("a = 1\nb = 2; c = 3\n(d)\ne\n+f")).toEqual(["a = 1", "b = 2", "c = 3 ( d )", "e + f"]);
+      expect(stmts("f(() => {\n assert(1)\n})\ng()")).toEqual(["f ( ( ) => { assert ( 1 ) } )", "g ( )"]);
+      expect(stmts("a\n`t`\nb \n in c")).toEqual(["a t", "b in c"]);
+      expect(stmts(";;")).toEqual([]);
+      expect(stmts("a /*\n*/ b")).toEqual(["a", "b"]); // a line break inside a block comment is still a line break
+    });
+    it("the add test model: only top-level, literal, comparison-position assertions qualify; early exits and control flow are named", () => {
+      const good = H + 'assert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n';
+      expect(an(good)).toEqual({addId: "add", assertIds: ["assert"], assertCalls: 3, cases: [{a: 2, b: 3, expected: 5}, {a: -2, b: -3, expected: -5}, {a: 0, b: 7, expected: 7}], earlyExit: null, tamper: null});
+      for (const [src, code] of [["if (x) {}", "TOP_LEVEL_IF"], ["for (;;) {}", "TOP_LEVEL_FOR"], ["return", "TOP_LEVEL_RETURN"], ["function f() {}", "TOP_LEVEL_FUNCTION"], ["try {} catch {}", "TOP_LEVEL_TRY"],
+        ["const o = {if: 1}", null], ["process.exit(0)", null]] as const)
+        expect([src, an(src).earlyExit]).toEqual([src, code]);
+      expect(an('const add = require("../src/add");\nconst add2 = require("../src/add.js");').addId).toBe("add");
+      expect([an('let add = require("../src/add");').addId, an('var add = require("../src/add");').addId]).toEqual([null, null]); // only const bindings count
+      // closed grammar: the first statement outside {two const requires, qualifying asserts} is named
+      const tamper = (src: string) => an(`${H}${src}`).tamper;
+      for (const [src, code] of [["add = 1;", "STATEMENT_NOT_ALLOWED:add"], ["assert.strictEqual = 1;", "STATEMENT_NOT_ALLOWED:assert"], ["const x = assert;", "STATEMENT_NOT_ALLOWED:const"], ["console.log(add(1, 2));", "STATEMENT_NOT_ALLOWED:console"],
+        ["require = 1;", "STATEMENT_NOT_ALLOWED:require"], ['const p = require("node:process");', "REQUIRE_SPEC_NOT_ALLOWED:node:process"], ['const f = require("../src/add").y;', "STATEMENT_NOT_ALLOWED:const"],
+        ["process.exit(0);", "STATEMENT_NOT_ALLOWED:process"], ["Object.is = () => true;", "STATEMENT_NOT_ALLOWED:Object"], ['eval("1");', "STATEMENT_NOT_ALLOWED:eval"], ["{ add = 1; }", "STATEMENT_NOT_ALLOWED:{"], ["(() => {})();", "STATEMENT_NOT_ALLOWED:("],
+        ["assert(true);", "ASSERT_FORM_NOT_ALLOWED"], ["assert.throws(() => {});", "ASSERT_FORM_NOT_ALLOWED"], ["assert.strictEqual(add(1, 2), 3, `x${1}`);", "ASSERT_FORM_NOT_ALLOWED"], ["assert.strictEqual(add(1, 2), 3, 4);", "ASSERT_FORM_NOT_ALLOWED"],
+        ["assert.strictEqual(add(1, 2), 3).x;", "STATEMENT_NOT_ALLOWED:assert"], ["assert.ok(add(1, 2) === 3, 4);", "ASSERT_FORM_NOT_ALLOWED"],
+        ['assert.strictEqual(add(1, 2), 3, "msg");', null], ['assert.ok(add(1, 2) === 3, "m");', null], ["assert(add(1, 2) == 3);", null], [";;", null]] as const)
+        expect([src, tamper(src)]).toEqual([src, code]);
+      // the FIRST offender wins, in source order
+      expect(tamper("console.log(1);\nObject.is = 1;\nassert(true);")).toBe("STATEMENT_NOT_ALLOWED:console");
+      expect(tamper('assert(true);\nconsole.log(1);')).toBe("ASSERT_FORM_NOT_ALLOWED");
+      expect(an(`const assert = require("node:assert");\nconst sum = require("../src/add");\nassert.strictEqual(sum(1, 2), 3);`).tamper).toBeNull();
+      expect(an('const a = require("x"), b = 2;\nconst c = require("node:fs");').addId).toBeNull();
+      expect(an('const x = require("../src/add").y;').addId).toBeNull();
+      expect(an('const assert = require("node:assert");\nconst A = require("assert/strict");').assertIds).toEqual(["assert", "A"]);
+      const odd = [`${H}assert.strictEqual(add(1, 2), 3).x;`, `${H}assert.strictEqual(add(1, 2), 3, "m", 4);`, `${H}assert.strictEqual(add(0x1, 2), 3);`, `${H}assert.strictEqual(add(1e1, 2), 12);`, `${H}assert.notStrictEqual(add(1, 2), 4);`,
+        `${H}assert.ok(add(1, 2) === 3 && true);`, `${H}assert.strictEqual(sub(2, 3), 5);`, `${H}assert.ok(add(1, 2));`, `${H}assert.throws(() => add(1, 2));`, `${H}assert;`];
+      expect(odd.map(src => an(src).cases.length)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+      expect(odd.map(src => an(src).assertCalls)).toEqual([0, 1, 1, 1, 1, 1, 1, 1, 1, 0]);
+      expect(an(`${H}assert.strictEqual(add(1, 2), 3);`).cases).toHaveLength(1);
+      // a top-level block's contents are NOT top-level (bracket depth), and the block itself is outside the grammar
+      const block = an(`${H}{ assert.strictEqual(add(2, 3), 5); assert.strictEqual(add(1, 1), 2); }`);
+      expect([block.cases, block.tamper]).toEqual([[], "STATEMENT_NOT_ALLOWED:{"]);
+      expect(an('const assert = require("node:assert");\nassert.strictEqual(add(1, 2), 3);').cases).toEqual([]); // no add binding: nothing qualifies
+    });
+  });
+
+  it("only procedures that exist are run: delivery, unknown roles, other evaluation ids, malformed ids and unsafe bindings are refused before anything starts", async () => {
     const dev = FIRST_DELIVERY_BINDINGS.find(b => b.roleId === DEV)!;
     const widened = FIRST_DELIVERY_BINDINGS.map(b => b.roleId === DEV ? {...b, allowedTools: [...dev.allowedTools, "WebFetch"]} : b);
     let started = 0;
     const counting: ExecutorPair = {...fakePair(), implementer: {identity: "I", implement: async () => { started++; throw new Error("must not start"); }}, reviewer: {identity: "R", review: async () => { started++; throw new Error("must not start"); }}};
     const table: Array<[string, string, string, string, typeof FIRST_DELIVERY_BINDINGS?]> = [
-      ["tester has no procedure", "UASCO-0313", "EV-01", "NO_PROCEDURE:tester"], ["delivery has no procedure", "UASCO-0232", "EV-01", "NO_PROCEDURE:delivery"],
+      ["delivery has no procedure", "UASCO-0232", "EV-01", "NO_PROCEDURE:delivery"],
       ["unbound role", "UASCO-0001", "EV-01", "ROLE_NOT_EXECUTABLE:ROLE_HAS_NO_BINDING"], ["EV-02 has no procedure", DEV, "EV-02", "NO_PROCEDURE:EV-02"], ["EV-06", REVIEWER, "EV-06", "NO_PROCEDURE:EV-06"],
       ["malformed role", "../UASCO-0085", "EV-01", "EVALUATION_BAD_IDS"], ["malformed evaluation", DEV, "EV-01/../x", "EVALUATION_BAD_IDS"], ["empty", "", "", "EVALUATION_BAD_IDS"],
       ["widened tool list", DEV, "EV-01", "ROLE_NOT_EXECUTABLE:TOOL_NOT_ALLOWED", widened]
@@ -929,7 +1270,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect([label, r]).toEqual([label, {status: "REFUSED", reason}]);
     }
     expect(started).toBe(0);
-    expect(EVALUATION_PROCEDURES.flatMap(p => p.functions).sort()).toEqual(["architect", "business-analyst", "developer", "planner", "requirements-engineer", "security-reviewer", "ux-designer"]);
+    expect(EVALUATION_PROCEDURES.flatMap(p => p.functions).sort()).toEqual(["architect", "business-analyst", "developer", "planner", "requirements-engineer", "security-reviewer", "tester", "ux-designer"]);
     expect(planFor(DEV, "EV-01")).toMatchObject({procedure: {version: "golden-file-v1"}});
   });
 
@@ -1186,6 +1527,17 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect(life(lie.repo, withRef(lie.role, bad)).tested).toBe(false);
     });
 
+    it("the tester's staged evidence follows the same rule: FAKE never counts, a non-FAKE pair's counts (executed, not 'passed')", { timeout: 180_000 }, async () => {
+      const good = {implement: () => ({files: {"test/add.test.js": TESTER_GOOD}})};
+      const fake = stagingOf(), real = stagingOf();
+      const f = evaluated(await evaluate(fakePair(good), TESTER, {stagingRoot: fake}));
+      const pf = promote(fake, TESTER, "PASSED");
+      expect(life(pf.repo, withRef(pf.role, f)).tested).toBe(false);
+      const r = evaluated(await evaluate({...fakePair(good), kind: "LOCAL_CLAUDE"}, TESTER, {stagingRoot: real}));
+      const pr = promote(real, TESTER, "PASSED");
+      expect(life(pr.repo, withRef(pr.role, r))).toMatchObject({tested: true, certified: false});
+    });
+
     it("tampering after staging is caught by the verifier: evidence bytes, artifact bytes, a swapped role directory", { timeout: 180_000 }, async () => {
       const root = stagingOf();
       const r = evaluated(await evaluate({...fakePair(), kind: "LOCAL_CLAUDE"}, DEV, {stagingRoot: root}));
@@ -1230,7 +1582,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     });
     it("usage errors and roles without a procedure exit 2 and write nothing", () => {
       const d = workDir();
-      for (const args of [[], ["--role", DEV], ["--role", DEV, "--data-dir", "relative/dir"], ["--role", DEV, "--data-dir", d, "--staging", "/tmp/x"], ["--role", DEV, "--data-dir", d, "--evaluation"], ["--role", "UASCO-0313", "--data-dir", d], ["--role", DEV, "--evaluation", "EV-04", "--data-dir", d]]) expect([args, sh(args).status]).toEqual([args, 2]);
+      for (const args of [[], ["--role", DEV], ["--role", DEV, "--data-dir", "relative/dir"], ["--role", DEV, "--data-dir", d, "--staging", "/tmp/x"], ["--role", DEV, "--data-dir", d, "--evaluation"], ["--role", "UASCO-0232", "--data-dir", d], ["--role", DEV, "--evaluation", "EV-04", "--data-dir", d]]) expect([args, sh(args).status]).toEqual([args, 2]);
       expect(fs.readdirSync(d)).toEqual([]);
       expect(parseArgs(["--role", DEV, "--data-dir", d])).toMatchObject({role: DEV, evaluation: "EV-01", execute: false});
     });
@@ -1274,13 +1626,13 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       const code = await runCli(args, {repoRoot: REPO, env: o.env ?? {}, out: s => out.push(s), err: s => err.push(s), findClaudeCli: () => process.execPath, ...(o.makePair ? {makePair: o.makePair} : {})});
       return {code, out: out.join(""), err: err.join("")};
     };
-    it("the control root follows the server's rule (--control-root, then UASCO_CONTROL_ROOT, then the repo root; empty is absent) and the dry run prints the root it used", async () => {
+    it("the control root follows the server's ORDER (--control-root, then UASCO_CONTROL_ROOT, then the repo root) plus two deliberate differences (empty is unset, relative is refused; see the authority doc) and the dry run prints the root it used", async () => {
       expect([resolveControlRoot("/a", {UASCO_CONTROL_ROOT: "/b"}, "/r"), resolveControlRoot(null, {UASCO_CONTROL_ROOT: "/b"}, "/r"), resolveControlRoot(null, {}, "/r")]).toEqual(["/a", "/b", "/r"]);
       expect([resolveControlRoot(null, {UASCO_CONTROL_ROOT: ""}, "/r"), resolveControlRoot("", {UASCO_CONTROL_ROOT: "/b"}, "/r"), resolveControlRoot("", {}, "/r")]).toEqual(["/r", "/b", "/r"]);
       const d = workDir(), c = workDir(), other = workDir();
       const used = async (extra: string[], env: NodeJS.ProcessEnv) => JSON.parse((await cli(["--role", DEV, "--data-dir", d, ...extra], {env})).out).controlRoot;
       expect([await used([], {UASCO_CONTROL_ROOT: c}), await used(["--control-root", other], {UASCO_CONTROL_ROOT: c}), await used([], {}), await used([], {UASCO_CONTROL_ROOT: ""})]).toEqual([c, other, REPO, REPO]);
-      // a relative value from the environment is refused like the flag (the broker would resolve it against the workspace and --execute could never work); nothing is written, no plan is printed
+      // a relative value from the environment is refused like the flag (on the developer/tester route the broker would resolve it against the workspace, so --execute could never work there even though the dry run shows no blocker); nothing is written, no plan is printed
       for (const extra of [[], ["--execute"]]) {
         const rel = await cli(["--role", DEV, "--data-dir", d, ...extra], {env: {UASCO_CONTROL_ROOT: "relative/dir"}});
         expect([extra, rel.code, rel.out]).toEqual([extra, 2, ""]);
