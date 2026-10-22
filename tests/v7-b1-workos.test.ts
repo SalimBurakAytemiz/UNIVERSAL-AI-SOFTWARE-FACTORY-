@@ -2548,3 +2548,57 @@ describe("LANE-B legacy run reads: path safety of /v1/runs events and logs", () 
     for (const bad of [tmp, token]) expect(miss.body).not.toContain(bad);
   });
 });
+
+// //TR: LANE-B G-FB-075/077/124: GET /v1/capabilities, /v1/retry ve /v1/factory okuma-biçimi testi; yalnız route kodunda belgelenmiş davranış sınanır (dosya geçişi, runtime durum dosyası yok/geçerli/güvensiz). Symlink senaryosu Windows'ta atlanır.
+describe("LANE-B P3 read shapes: /v1/capabilities, /v1/retry, /v1/factory", () => {
+  const token = "p".repeat(32), HOST = "127.0.0.1:3210";
+  const hdr = {"x-uasco-control-token": token, host: HOST};
+  const mkApp = () => {
+    const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
+    return {runtime, app: buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false})};
+  };
+  const get = (app: any, url: string, headers: any = hdr) => app.inject({method: "GET", url, headers});
+  const fileJson = (rel: string) => JSON.parse(fs.readFileSync(path.join(process.cwd(), rel), "utf8"));
+  const noLeak = (body: string, label: string) => { for (const bad of [tmp, token]) expect(body, `${label} ${bad}`).not.toContain(bad); };
+
+  it("/v1/factory and /v1/capabilities return their repository JSON file unchanged, and need the token", async () => {
+    const {app} = mkApp();
+    for (const [url, rel] of [["/v1/factory", ".ai/MASTER_STATE.json"], ["/v1/capabilities", "registries/capabilities.json"]] as const) {
+      const r = await get(app, url);
+      expect(r.statusCode, url).toBe(200);
+      expect(r.json(), url).toEqual(fileJson(rel));
+      noLeak(r.body, url);
+      expect((await get(app, url, {host: HOST})).statusCode, url).toBe(403);
+      expect((await get(app, url, {host: HOST, "x-uasco-control-token": "x".repeat(32)})).statusCode, url).toBe(403);
+    }
+    expect(fileJson("registries/capabilities.json").capabilities.length).toBe((await get(app, "/v1/capabilities")).json().capabilities.length);
+  });
+
+  it("/v1/retry returns null when the state file is absent, the file content when valid, and the fixed INVALID answer when it is malformed or not a regular file", async () => {
+    const {app, runtime} = mkApp();
+    const file = path.join(runtime, "SUPERVISOR_RETRY.json");
+    const absent = await get(app, "/v1/retry");
+    expect(absent.statusCode).toBe(200);
+    expect(absent.body).toBe("null");
+    fs.writeFileSync(file, JSON.stringify({status: "WAITING", attempts: 2}));
+    expect((await get(app, "/v1/retry")).json()).toEqual({status: "WAITING", attempts: 2});
+    fs.writeFileSync(file, "{not json");
+    const bad = await get(app, "/v1/retry");
+    expect(bad.statusCode).toBe(200);
+    expect(bad.json()).toEqual({status: "INVALID", error: "SUPERVISOR_RETRY_STATE_UNSAFE"});
+    noLeak(bad.body, "malformed");
+    fs.rmSync(file); fs.mkdirSync(file);
+    expect((await get(app, "/v1/retry")).json()).toEqual({status: "INVALID", error: "SUPERVISOR_RETRY_STATE_UNSAFE"});
+    for (const h of [{host: HOST}, {host: HOST, "x-uasco-control-token": "x".repeat(32)}]) expect((await get(app, "/v1/retry", h)).statusCode).toBe(403);
+  });
+
+  it.skipIf(process.platform === "win32")("/v1/retry refuses a symlinked state file with the fixed INVALID answer and never serves the target (symlinks skipped on Windows)", async () => {
+    const {app, runtime} = mkApp();
+    const target = path.join(tmp, "retry-target.json"); fs.writeFileSync(target, JSON.stringify({status: "TARGET-CONTENT-MARKER"}));
+    fs.symlinkSync(target, path.join(runtime, "SUPERVISOR_RETRY.json"));
+    const r = await get(app, "/v1/retry");
+    expect(r.json()).toEqual({status: "INVALID", error: "SUPERVISOR_RETRY_STATE_UNSAFE"});
+    expect(r.body).not.toContain("TARGET-CONTENT-MARKER");
+    noLeak(r.body, "symlink");
+  });
+});
