@@ -48,11 +48,16 @@ export function tokenize(src: string): Tok[] | null {
       while (j < n && /[0-9A-Za-z_.]/.test(src[j])) { if ((src[j] === "e" || src[j] === "E") && (src[j + 1] === "+" || src[j + 1] === "-") && !/^0[xX]/.test(src.slice(i, j))) j++; j++; }
       push("num", src.slice(i, j)); i = j; continue;
     }
+    // //TR: V8 (CommonJS, modül değil) `<!--` ifadesini HER YERDE, `-->` ifadesini satır başında satır yorumu sayar: bu belirteçler gizli kod yaratır, çözümleme güvenilmez => null (fail closed).
+    if (src.startsWith("<!--", i)) return null;
+    if (src.startsWith("-->", i) && (nl || out.length === 0)) return null;
     IDENT.lastIndex = i;
     const m = IDENT.exec(src);
     if (m) { push("id", m[0]); i += m[0].length; continue; }
     if (c === "/") {
       const prev = out[out.length - 1];
+      // //TR: `}` sonrası "/" blok deyimi sonrası regex mi, nesne/ifade sonrası bölme mi belirsizdir: regex içindeki "assert" metni sayılabilirdi => fail closed.
+      if (prev && prev.t === "p" && prev.v === "}") return null;
       const regexAllowed = !prev || (prev.t === "p" && prev.v !== ")" && prev.v !== "]" && prev.v !== "}") || (prev.t === "id" && REGEX_AFTER.has(prev.v));
       if (regexAllowed) {
         let j = i + 1, cls = false;
@@ -119,6 +124,8 @@ const EQUAL_METHODS = new Set(["strictEqual", "equal", "deepStrictEqual", "deepE
 const CONTROL = new Set(["if", "else", "for", "while", "do", "switch", "try", "catch", "finally", "with", "return", "throw", "break", "continue", "debugger", "function", "class"]);
 const REQ_ADD = new Set(["../src/add", "../src/add.js"]);
 const REQ_ASSERT = new Set(["node:assert", "assert", "node:assert/strict", "assert/strict"]);
+// //TR: Kapalı dünya: görev yalnız bu iki modüle ihtiyaç duyar. Ortamı/yürütmeyi dinamik değiştirebilen tanımlayıcılar (process, eval, Function, globalThis...) görevde HİÇ yer almaz.
+const DENIED_IDS = new Set(["process", "globalThis", "global", "eval", "Function", "module", "exports", "import"]);
 
 export interface AssertionCase { a: number; b: number; expected: number }
 export interface AddTestAnalysis {
@@ -126,22 +133,21 @@ export interface AddTestAnalysis {
   assertIds: string[];           // require("node:assert") bağlanan tanımlayıcılar
   assertCalls: number;           // assert tanımlayıcısıyla başlayan üst düzey çağrı deyimleri (nitelikli ya da değil)
   cases: AssertionCase[];        // nitelikli üst düzey deyimler: assert.<eşitlik>(add(<n>,<n>), <n>) / assert(.ok)(add(<n>,<n>) === <n>)
-  earlyExit: string | null;      // üst düzey return/kontrol akışı/process.exit => neden kodu
+  earlyExit: string | null;      // üst düzey return/kontrol akışı/function/class => neden kodu
+  tamper: string | null;         // kapalı dünya ihlali (yeniden bağlama, takma ad, izinli olmayan require, yasaklı tanımlayıcı) => neden kodu
 }
 
 // //TR: Tester golden görevinin biçimini çözümler. Yalnız ÜST DÜZEY deyimler sayılır (geri çağrı/if/döngü içindekiler değil); add çağrısı yalnız sayı değişmezleriyle ve bir eşitlik iddiasının karşılaştırılan tarafında olmalıdır.
 export function analyzeAddTest(toks: readonly Tok[]): AddTestAnalysis {
-  const r: AddTestAnalysis = {addId: null, assertIds: [], assertCalls: 0, cases: [], earlyExit: null};
-  for (let i = 0; i < toks.length; i++) {
-    const t = toks[i];
-    if (t.t === "id" && t.v === "process" && toks[i + 1]?.t === "p" && (toks[i + 1].v === "[" || (toks[i + 1].v === "." && /^(?:exit|abort|kill|reallyExit)$/.test(toks[i + 2]?.v ?? "")))) { r.earlyExit ??= "PROCESS_EXIT"; }
-  }
+  const r: AddTestAnalysis = {addId: null, assertIds: [], assertCalls: 0, cases: [], earlyExit: null, tamper: null};
+  const allowed = new Set<Tok>();   // bağlama adının/`require`ın/assert başının izinli konumları (kimlik ile)
   const stmts = topLevelStatements(toks);
   for (const s of stmts) {
     if (s[0].t === "id" && CONTROL.has(s[0].v)) { r.earlyExit ??= `TOP_LEVEL_${s[0].v.toUpperCase()}`; continue; }
-    // const|let|var <id> = require("<spec>")
-    if (s.length === 7 && s[0].t === "id" && (s[0].v === "const" || s[0].v === "let" || s[0].v === "var") && s[1].t === "id" && s[2].v === "=" && s[3].v === "require" && s[4].v === "(" && s[5].t === "str" && s[6].v === ")") {
-      if (REQ_ADD.has(s[5].v)) r.addId ??= s[1].v; else if (REQ_ASSERT.has(s[5].v)) r.assertIds.push(s[1].v);
+    // const <id> = require("<spec>"): YALNIZ const (let/var yeniden atanabilir; görev metni const der)
+    if (s.length === 7 && s[0].t === "id" && s[0].v === "const" && s[1].t === "id" && s[2].v === "=" && s[3].v === "require" && s[4].v === "(" && s[5].t === "str" && s[6].v === ")") {
+      if (REQ_ADD.has(s[5].v)) { r.addId ??= s[1].v; allowed.add(s[1]); allowed.add(s[3]); }
+      else if (REQ_ASSERT.has(s[5].v)) { r.assertIds.push(s[1].v); allowed.add(s[1]); allowed.add(s[3]); }
     }
   }
   for (const s of stmts) {
@@ -154,6 +160,8 @@ export function analyzeAddTest(toks: readonly Tok[]): AddTestAnalysis {
     for (let j = open; j < s.length; j++) { if (s[j].v === "(" && s[j].t === "p") depth++; else if (s[j].v === ")" && s[j].t === "p") { depth--; if (depth === 0) { close = j; break; } } }
     if (close !== s.length - 1) continue;
     r.assertCalls++;
+    allowed.add(s[0]);
+    for (let j = open + 1; j < close; j++) if (r.addId !== null && s[j].t === "id" && s[j].v === r.addId && s[j + 1]?.v === "(") allowed.add(s[j]);
     if (r.addId === null) continue;
     const args = splitArgs(s.slice(open + 1, close));
     if (args.length < 1 || args.length > 3) continue;
@@ -168,6 +176,13 @@ export function analyzeAddTest(toks: readonly Tok[]): AddTestAnalysis {
       }
     }
     if (found) r.cases.push(found);
+  }
+  // //TR: Kapalı dünya denetimi: bağlama adları yalnız bildirimde ve üst düzey assert çağrılarında geçer; `require` yalnız izinli iki bildirimde geçer; yasaklı tanımlayıcı yoktur. Aksi halde (yeniden atama, takma ad, require/process/eval ile ortamı değiştirme) test sessizce hiçbir şeyi sınamayabilir => tamper.
+  for (const t of toks) {
+    if (t.t !== "id" || r.tamper !== null) continue;
+    if (DENIED_IDS.has(t.v)) r.tamper = `DENIED_IDENTIFIER:${t.v}`;
+    else if (t.v === "require" && !allowed.has(t)) r.tamper = "REQUIRE_OUTSIDE_ALLOWED_DECLARATION";
+    else if ((t.v === r.addId || r.assertIds.includes(t.v)) && !allowed.has(t)) r.tamper = `BOUND_NAME_REUSED:${t.v}`;
   }
   return r;
 }

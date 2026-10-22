@@ -919,7 +919,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
   it("tester golden mission (STATIC oracle, nothing is executed): one scoped test file with a positive, a negative and a zero case, existing tests untouched -> PASSED; FAKE-stamped, never counts", { timeout: 120_000 }, async () => {
     const root = stagingOf(), marker = path.join(workDir(), "executed.marker");
     const o = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": TESTER_GOOD}})}), TESTER, {stagingRoot: root}));
-    expect([o.verdict, o.executorKind, o.checks.map(c => c.id)]).toEqual(["PASSED", "FAKE", ["commit_produced", "only_expected_file_added", "no_trivial_test", "regular_file", "within_size_cap", "compiles", "references_module", "assertion_count_min_3", "asserted_values_correct", "no_disabled_markers", "no_early_exit", "covers_positive_negative_zero", "within_role_file_limit"]]);
+    expect([o.verdict, o.executorKind, o.checks.map(c => c.id)]).toEqual(["PASSED", "FAKE", ["commit_produced", "only_expected_file_added", "no_trivial_test", "regular_file", "within_size_cap", "compiles", "references_module", "assertion_count_min_3", "asserted_values_correct", "no_disabled_markers", "no_early_exit", "closed_world", "covers_positive_negative_zero", "within_role_file_limit"]]);
     expect(o.verifier).toEqual({countsIfPromoted: false, problem: "FAKE_EVIDENCE"});
     const art = JSON.parse(fs.readFileSync(o.artifactFile, "utf8")), ev = JSON.parse(fs.readFileSync(o.evidenceFile, "utf8"));
     expect(art).toMatchObject({testsExecuted: false, qualifyingAssertions: 3, assertCalls: 3, disabledMarkers: 0, surface: {added: ["test/add.test.js"], modified: [], deleted: [], weakened: [], trivialAdded: [], harness: []}});
@@ -949,7 +949,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       ["does not require the module", T({"test/add.test.js": 'const assert = require("node:assert");\nassert.strictEqual(2 + 3, 5);\nassert.strictEqual(-2 + -3, -5);\nassert.strictEqual(0 + 7, 7);\n'}), "references_module"],
       ["only two assertions", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\n'}), "assertion_count_min_3"],
       ["skipped test", T({"test/add.test.js": good + `${SKIP}("later", () => {});\n`}), "no_disabled_markers"],
-      ["process.exit bypass", T({"test/add.test.js": good + "process.exit(0);\n"}), "no_early_exit"],
+      ["process.exit bypass", T({"test/add.test.js": good + "process.exit(0);\n"}), "closed_world"],
       ["no negative case", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(4, 5), 9);\nassert.strictEqual(add(0, 7), 7);\n'}), "covers_positive_negative_zero"],
       ["no zero case", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(4, 5), 9);\n'}), "covers_positive_negative_zero"],
       ["the same call three times", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(2, 3), 5);\n'}), "covers_positive_negative_zero"],
@@ -971,6 +971,25 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       ["non-literal operands", T({"test/add.test.js": H + "const x = 2;\nassert.strictEqual(add(x, 3), 5);\nassert.strictEqual(add(-x, -3), -5);\nassert.strictEqual(add(0, x), 2);\n"}), "assertion_count_min_3"],
       ["a closing brace that would break out of a naive wrapper", T({"test/add.test.js": good + "\n}); (function () {\n"}), "compiles"],
       ["unterminated string (compile fails and the text cannot be analysed)", T({"test/add.test.js": good + 'const x = "abc\n'}), "compiles"],
+      // closed world: a test that rebinds, aliases or neuters its own two bindings (or exits / evals) would score PASSED while asserting nothing
+      ["add rebound after a let require", T({"test/add.test.js": 'const assert = require("node:assert");\nlet add = require("../src/add");\nadd = (a, b) => a + b;\n' + A}), "references_module"],
+      ["add reassigned after a const require", T({"test/add.test.js": H + "add = (a, b) => a + b;\n" + A}), "closed_world"],
+      ["assert rebound after a let require", T({"test/add.test.js": 'let assert = require("node:assert");\nconst add = require("../src/add");\nassert = {strictEqual() {}};\n' + A}), "assertion_count_min_3"],
+      ["assert neutered by a member assignment", T({"test/add.test.js": H + "assert.strictEqual = () => {};\n" + A}), "closed_world"],
+      ["the CJS require parameter rebound before the const require", T({"test/add.test.js": 'require = (s) => (a, b) => a + b;\nconst assert = require("node:assert");\nconst add = require("../src/add");\n' + A}), "closed_world"],
+      ["assert aliased then neutered", T({"test/add.test.js": H + "const a2 = assert;\na2.strictEqual = () => {};\n" + A}), "closed_world"],
+      ["add used outside an assertion", T({"test/add.test.js": H + "console.log(add(1, 2));\n" + A}), "closed_world"],
+      ["eval", T({"test/add.test.js": H + 'eval("1");\n' + A}), "closed_world"],
+      ["globalThis", T({"test/add.test.js": H + "globalThis.x = 1;\n" + A}), "closed_world"],
+      ["optional-call process exit", T({"test/add.test.js": H + "process?.exit(0);\n" + A}), "closed_world"],
+      ["aliased process exit", T({"test/add.test.js": H + "const p = process;\np.exit(0);\n" + A}), "closed_world"],
+      ["require of node:process", T({"test/add.test.js": H + 'const p = require("node:process");\np.exit(0);\n' + A}), "closed_world"],
+      ["require of child_process", T({"test/add.test.js": H + 'const cp = require("node:child_process");\n' + A}), "closed_world"],
+      ["dynamic import", T({"test/add.test.js": H + 'import("node:process");\n' + A}), "closed_world"],
+      // text V8 runs differently from what a lexer sees: fail closed (the file cannot be analysed)
+      ["HTML-like comment markers hide the assertions", T({"test/add.test.js": H + "<!-- assert.strictEqual(add(2, 3), 5);\n<!-- assert.strictEqual(add(-2, -3), -5);\n<!-- assert.strictEqual(add(0, 7), 7);\n"}), "references_module"],
+      ["HTML close-comment markers at the start of a line", T({"test/add.test.js": H + "--> assert.strictEqual(add(2, 3), 5);\n--> assert.strictEqual(add(-2, -3), -5);\n--> assert.strictEqual(add(0, 7), 7);\n"}), "references_module"],
+      ["assertions inside a regex literal after a block", T({"test/add.test.js": H + '{}\n/assert.strictEqual(add(2, 3), 5); assert.strictEqual(add(-2, -3), -5); assert.strictEqual(add(0, 7), 7);/.test("x");\n'}), "references_module"],
       ["no commit at all", {implement: () => ({files: {"test/add.test.js": good}, noCommit: true})}, "commit_produced"]
     ];
     for (const [label, o, failing, detail] of cases) {
@@ -980,7 +999,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     }
     // a file whose text cannot be tokenised fails every text check with a reason instead of passing by default
     const broken = evaluated(await evaluate(fakePair(T({"test/add.test.js": good + 'const x = "abc\n'})), TESTER));
-    expect(broken.checks.filter(c => !c.passed).map(c => c.id)).toEqual(["compiles", "references_module", "assertion_count_min_3", "asserted_values_correct", "no_early_exit", "covers_positive_negative_zero"]);
+    expect(broken.checks.filter(c => !c.passed).map(c => c.id)).toEqual(["compiles", "references_module", "assertion_count_min_3", "asserted_values_correct", "no_early_exit", "closed_world", "covers_positive_negative_zero"]);
     expect(broken.checks.find(c => c.id === "references_module")?.detail).toMatch(/not analysable/);
     // infrastructure is infrastructure for the tester too
     const root = stagingOf();
@@ -1044,6 +1063,16 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     expect([exact.verdict, exact.checks.find(c => c.id === "within_size_cap")?.passed]).toEqual(["PASSED", true]);
     const plus = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": padded(1)}})}), TESTER));
     expect([plus.verdict, plus.checks.find(c => c.id === "within_size_cap")?.passed]).toEqual(["FAILED", false]);
+    // cap BEFORE any text analysis, pinned deterministically (not by the wall clock): an oversize but VALID file with correct assertions is not compiled, not tokenised and not scanned
+    const detail = (r: Extract<EvaluationOutcome, {status: "EVALUATED"}>, id: string) => r.checks.find(c => c.id === id)!;
+    expect([detail(plus, "compiles").passed, detail(plus, "compiles").detail]).toEqual([false, expect.stringMatching(/not analysed/)]);
+    for (const id of ["references_module", "assertion_count_min_3", "asserted_values_correct", "no_early_exit", "closed_world"]) expect([id, detail(plus, id).passed, detail(plus, id).detail]).toEqual([id, false, expect.stringMatching(/not analysed/)]);
+    expect([detail(plus, "no_disabled_markers").passed, detail(plus, "no_disabled_markers").detail]).toEqual([false, expect.stringMatching(/not scanned/)]);
+    // the surface classifier never sees oversize content either: a new oversize test with ZERO assertions would be "trivial" if it did, yet no_trivial_test passes (content withheld) while the cap check fails
+    const trivialBig = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": "// " + "x".repeat(20 * 1024) + "\n"}})}), TESTER));
+    expect([detail(trivialBig, "within_size_cap").passed, detail(trivialBig, "no_trivial_test").passed, detail(trivialBig, "no_trivial_test").detail]).toEqual([false, true, "trivialAdded=0"]);
+    const trivialSmall = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": "// small\n"}})}), TESTER));
+    expect([detail(trivialSmall, "within_size_cap").passed, detail(trivialSmall, "no_trivial_test").passed]).toEqual([true, false]); // control: below the cap the classifier does see it
   });
 
   describe("static test analysis (tokeniser and statement model behind the tester oracle)", () => {
@@ -1063,6 +1092,13 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect(toks("#!/usr/bin/env node\nx")).toEqual(["id:x"]);
       expect(toks("\"a\\\"b\" 'c\\'d'")).toEqual(['str:a\\"b', "str:c\\'d"]);
       expect(toks("é = 1")).toEqual(["id:é", "p:=", "num:1"]);
+      expect(toks("f(a) / 2 / 3")).toEqual(["id:f", "p:(", "id:a", "p:)", "p:/", "num:2", "p:/", "num:3"]); // division after ), never a regex
+      expect(toks("a[0] / 2 / 3")).toEqual(["id:a", "p:[", "num:0", "p:]", "p:/", "num:2", "p:/", "num:3"]);
+      expect(toks('x = "<!--" + `-->`')).toEqual(["id:x", "p:=", "str:<!--", "p:+", "tpl:-->"]); // inside literals the markers are just text
+      expect(toks("x --> 0")).toEqual(["id:x", "p:--", "p:>", "num:0"]);                         // mid-line it is a decrement and a comparison
+    });
+    it("text V8 would treat as comments or regexes differently from a lexer cannot be analysed (null): <!-- anywhere, --> at the start of a line, a slash after a closing brace", () => {
+      for (const src of ["a <!-- b", "<!-- b", "x\n--> y", "--> y", "x /* c */ \n  --> y", "{}\n/ 2 /1", "{} /re/.test(x)"]) expect([src, tokenize(src)]).toEqual([src, null]);
     });
     it("unterminated strings, comments, templates and regexes cannot be analysed (null), never silently accepted", () => {
       for (const src of ["x = 'abc", 'x = "abc\ny"', "/* open", "`open", "`a ${ 1 ", "x = /open", "x = /a\nb/"]) expect([src, tokenize(src)]).toEqual([src, null]);
@@ -1076,11 +1112,21 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     });
     it("the add test model: only top-level, literal, comparison-position assertions qualify; early exits and control flow are named", () => {
       const good = H + 'assert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n';
-      expect(an(good)).toEqual({addId: "add", assertIds: ["assert"], assertCalls: 3, cases: [{a: 2, b: 3, expected: 5}, {a: -2, b: -3, expected: -5}, {a: 0, b: 7, expected: 7}], earlyExit: null});
+      expect(an(good)).toEqual({addId: "add", assertIds: ["assert"], assertCalls: 3, cases: [{a: 2, b: 3, expected: 5}, {a: -2, b: -3, expected: -5}, {a: 0, b: 7, expected: 7}], earlyExit: null, tamper: null});
       for (const [src, code] of [["if (x) {}", "TOP_LEVEL_IF"], ["for (;;) {}", "TOP_LEVEL_FOR"], ["return", "TOP_LEVEL_RETURN"], ["function f() {}", "TOP_LEVEL_FUNCTION"], ["try {} catch {}", "TOP_LEVEL_TRY"],
-        ["process.exit(0)", "PROCESS_EXIT"], ['process["exit"](0)', "PROCESS_EXIT"], ["process.kill(1)", "PROCESS_EXIT"], ["process.abort()", "PROCESS_EXIT"], ["process.argv", null], ["const o = {if: 1}", null]] as const)
+        ["const o = {if: 1}", null], ["process.exit(0)", null]] as const)
         expect([src, an(src).earlyExit]).toEqual([src, code]);
-      expect(an('let add = require("../src/add");\nvar add2 = require("../src/add.js");').addId).toBe("add");
+      expect(an('const add = require("../src/add");\nconst add2 = require("../src/add.js");').addId).toBe("add");
+      expect([an('let add = require("../src/add");').addId, an('var add = require("../src/add");').addId]).toEqual([null, null]); // only const bindings count
+      // closed world: the first violation is named
+      const tamper = (src: string) => an(`${H}${src}`).tamper;
+      for (const [src, code] of [["add = 1;", "BOUND_NAME_REUSED:add"], ["assert.strictEqual = 1;", "BOUND_NAME_REUSED:assert"], ["const x = assert;", "BOUND_NAME_REUSED:assert"], ["console.log(add(1, 2));", "BOUND_NAME_REUSED:add"],
+        ["require = 1;", "REQUIRE_OUTSIDE_ALLOWED_DECLARATION"], ['const p = require("node:process");', "REQUIRE_OUTSIDE_ALLOWED_DECLARATION"], ['const f = require("../src/add").y;', "REQUIRE_OUTSIDE_ALLOWED_DECLARATION"],
+        ["process.exit(0);", "DENIED_IDENTIFIER:process"], ["const p = process;", "DENIED_IDENTIFIER:process"], ['eval("1");', "DENIED_IDENTIFIER:eval"], ["Function('x')();", "DENIED_IDENTIFIER:Function"], ["globalThis.x = 1;", "DENIED_IDENTIFIER:globalThis"],
+        ["global.x = 1;", "DENIED_IDENTIFIER:global"], ["module.exports = 1;", "DENIED_IDENTIFIER:module"], ["exports.x = 1;", "DENIED_IDENTIFIER:exports"], ['import("x");', "DENIED_IDENTIFIER:import"],
+        ["assert(true);", null], ["assert.throws(() => {});", null], ["const o = {assert: 1};", "BOUND_NAME_REUSED:assert"], ["console.log(1);", null]] as const)
+        expect([src, tamper(src)]).toEqual([src, code]);
+      expect(an(`const assert = require("node:assert");\nconst sum = require("../src/add");\nassert.strictEqual(sum(1, 2), 3);`).tamper).toBeNull();
       expect(an('const a = require("x"), b = 2;\nconst c = require("node:fs");').addId).toBeNull();
       expect(an('const x = require("../src/add").y;').addId).toBeNull();
       expect(an('const assert = require("node:assert");\nconst A = require("assert/strict");').assertIds).toEqual(["assert", "A"]);
