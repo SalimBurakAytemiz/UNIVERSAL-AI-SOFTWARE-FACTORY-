@@ -502,6 +502,39 @@ describe("LANE-B project intake", () => {
     const r = await app.inject({method: "GET", url: "/v1/intakes", headers: hdr});
     expect(r.statusCode).toBe(503); expect(r.json().error).toBe("INTAKE_STORE_CORRUPT");
   });
+
+  it("intake carries testCommand + repository.url into the project; url is never echoed or audited; flow reports testCommand state", async () => {
+    const {app, store, audits} = await mkApp();
+    const url = "https://example.com/acme/reading-app.git";
+    const r = await post(app, {idea: IDEA, testCommand: ["npm", "test"], repository: {url}, idempotencyKey: "tc1"});
+    expect(r.statusCode).toBe(201);
+    expect(r.body).not.toContain("example.com");
+    expect(JSON.stringify(audits)).not.toContain("example.com");
+    const p = store.getProject({tenantId: "tA"}, r.json().intake.projectId)!;
+    expect(p.testCommand).toEqual(["npm", "test"]);
+    expect(p.repository?.url).toBe(url);
+    const {deriveProjectFlow} = await import("../core/workos/flow.js");
+    expect(deriveProjectFlow(store, {tenantId: "tA"}, p.projectId)!.testCommand).toBe("CONFIGURED");
+    const bare = await post(app, {idea: IDEA + " bare", idempotencyKey: "tc0"});
+    expect(bare.statusCode).toBe(201);
+    expect(deriveProjectFlow(store, {tenantId: "tA"}, bare.json().intake.projectId)!.testCommand).toBe("MISSING");
+  });
+
+  it("intake rejects credentialed url and non-allow-listed or malformed testCommand without echoing the url; replay conflicts on changed fields", async () => {
+    const {app} = await mkApp();
+    const bad = await post(app, {idea: IDEA, repository: {url: "https://user:s3cr3t@example.com/x.git"}});
+    expect(bad.statusCode).toBe(400);
+    expect(bad.body).not.toContain("s3cr3t");
+    expect(bad.body).not.toContain("example.com");
+    expect((await post(app, {idea: IDEA, testCommand: ["/bin/sh", "-c", "x"]})).statusCode).toBe(400);
+    expect((await post(app, {idea: IDEA, testCommand: []})).statusCode).toBe(400);
+    expect((await post(app, {idea: IDEA, testCommand: ["npm", "te\nst"]})).statusCode).toBe(400);
+    expect((await post(app, {idea: IDEA, repository: {path: "C:/x"}})).statusCode).toBe(400);
+    expect((await post(app, {idea: IDEA, testCommand: ["npm", "test"], idempotencyKey: "k9"})).statusCode).toBe(201);
+    expect((await post(app, {idea: IDEA, testCommand: ["npm", "test"], idempotencyKey: "k9"})).statusCode).toBe(200);
+    expect((await post(app, {idea: IDEA, testCommand: ["npm", "run", "t"], idempotencyKey: "k9"})).statusCode).toBe(409);
+    expect((await post(app, {idea: IDEA, testCommand: ["npm", "test"], repository: {url: "https://example.com/a.git"}, idempotencyKey: "k9"})).statusCode).toBe(409);
+  });
 });
 
 // //TR: LANE-B plan: mission görev planı (sıralı görevler + bağımlılıklar) route modülü ve kalıcılık testleri.
@@ -1812,7 +1845,7 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
   let PREDEV_AGENT_ACTOR = "";
   beforeEach(async () => { PREDEV_AGENT_ACTOR = (await import("../core/workos/predev/claude-builder.js")).PREDEV_AGENT_ACTOR; });
   const kindOf = (input: string) => /# ARTEFAKT TÜRÜ: (\w+)/.exec(input)?.[1] ?? "";
-  async function mkApp(o: {builder?: "none" | "null" | "fake"; stopped?: () => boolean; allowed?: boolean; tenantId?: string; run?: (kind: string, run: Run) => Promise<any> | any; profileOk?: boolean; storeOptions?: ConstructorParameters<typeof WorkOsStore>[1]} = {}) {
+  async function mkApp(o: {builder?: "none" | "null" | "fake"; stopped?: () => boolean; allowed?: boolean; tenantId?: string; run?: (kind: string, run: Run) => Promise<any> | any; profileOk?: boolean; storeOptions?: ConstructorParameters<typeof WorkOsStore>[1]; provider?: {on: boolean}} = {}) {
     const [{default: Fastify}, {registerPredevDecisionRoutes}, {WorkOsError}, {ClaudePreDevBuilder}, {reviewerArgv}, {TASKHUB_ARTIFACTS}] = await Promise.all([
       import("fastify"), import("../apps/control-api/src/routes/predev-decisions.js"), import("../core/workos/types.js"), import("../core/workos/predev/claude-builder.js"), import("../core/workos/executors.js"), import("../core/workos/predev/fixtures/taskhub/index.js")]);
     const app = Fastify({logger: false});
@@ -1826,7 +1859,7 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
       const at = new Date().toISOString();
       return {argv, exitCode: 0, stdout: "", stderr: "", startedAt: at, endedAt: at, timedOut: false, aborted: false, spawnError: false, ...r};
     };
-    const preDevBuilder = o.builder === "none" ? undefined : () => { providerCalls.n++; return o.builder === "null" ? null : new ClaudePreDevBuilder({identity: "claude-reviewer@local.invalid", launcher: () => "/x/claude", profile: () => o.profileOk === false ? {ok: false as const, reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"} : {ok: true as const, dir: "/profile/reviewer"}, env: dir => ({CLAUDE_CONFIG_DIR: dir}), argv: reviewerArgv, run: fakeRun, scratchRoot}); };
+    const preDevBuilder = o.builder === "none" ? undefined : () => { providerCalls.n++; return o.builder === "null" || (o.provider && !o.provider.on) ? null : new ClaudePreDevBuilder({identity: "claude-reviewer@local.invalid", launcher: () => "/x/claude", profile: () => o.profileOk === false ? {ok: false as const, reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"} : {ok: true as const, dir: "/profile/reviewer"}, env: dir => ({CLAUDE_CONFIG_DIR: dir}), argv: reviewerArgv, run: fakeRun, scratchRoot}); };
     registerPredevDecisionRoutes(app, {getStore: () => store, scope: {tenantId: o.tenantId ?? "tA"}, orgId: "o1", actor: ACT, audit: (e: string, x?: any) => { audits.push({e, x}); }, workosStopped: o.stopped ?? (() => false),
       workosPolicy: (action: string, mid: string) => { policies.push(action); return o.allowed === false ? {allowed: false, reason: "NO"} : {allowed: true}; },
       workosFail: (r: any, e: any) => e?.code === "WORKOS_DISK_FULL" ? r.code(507).send({error: e.code}) : r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"}), ...(preDevBuilder ? {preDevBuilder} : {})});
@@ -2023,7 +2056,7 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
     expect(produced(t.audits)).toMatchObject([{outcome: "FAILED", reason: "PREDEV_BUILDER_TIMEOUT", phase: "BUSINESS_ANALYSIS"}]);
   });
 
-  it("at most one produce per mission at a time: a concurrent second call is 409 PREDEV_PRODUCE_IN_PROGRESS with NO second process; another mission is not blocked; the lock is released afterwards", async () => {
+  it("at most ONE produce at a time across ALL missions: the same mission is 409 PREDEV_PRODUCE_IN_PROGRESS, another mission is 409 PREDEV_PRODUCE_BUSY, neither starts a process; the slot is released afterwards (success and failure)", async () => {
     let release!: () => void; const gate = new Promise<void>(r => { release = r; });
     const first_ = {pending: true};
     const c = await mkApp({run: async () => { if (first_.pending) { first_.pending = false; await gate; } return undefined; }});
@@ -2036,14 +2069,65 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
     expect(c.runs).toHaveLength(1);
     const second = await post(c.app, `/v1/missions/${id}/predev/produce`);
     expect([second.statusCode, second.json().error]).toEqual([409, "PREDEV_PRODUCE_IN_PROGRESS"]);
-    expect(c.runs).toHaveLength(1);
-    const parallel = await post(c.app, `/v1/missions/${other.missionId}/predev/produce`);
-    expect(parallel.statusCode, parallel.body).toBe(201); expect(c.runs).toHaveLength(2);
+    const busy = await post(c.app, `/v1/missions/${other.missionId}/predev/produce`);
+    expect([busy.statusCode, busy.json().error]).toEqual([409, "PREDEV_PRODUCE_BUSY"]);
+    expect(c.runs).toHaveLength(1); // neither refused call spawned anything
+    expect(produced(c.audits)).toEqual([]); // refused before the builder: no produce audit
     release();
     const done = await first;
     expect(done.statusCode, done.body).toBe(201);
     const third = await post(c.app, `/v1/missions/${id}/predev/produce`);
-    expect([third.statusCode, third.json().reason]).toEqual([409, "PREDEV_DRIVER_ARTIFACT_PENDING"]); // lock released: this is the pending-DRAFT gate, not IN_PROGRESS
+    expect([third.statusCode, third.json().reason]).toEqual([409, "PREDEV_DRIVER_ARTIFACT_PENDING"]); // slot released: this is the pending-DRAFT gate, not IN_PROGRESS/BUSY
+    const next = await post(c.app, `/v1/missions/${other.missionId}/predev/produce`);
+    expect(next.statusCode, next.body).toBe(201); expect(c.runs).toHaveLength(2); // the other mission now gets the slot
+    // a failed run releases the slot too
+    const f = await mkApp({run: () => ({timedOut: true, exitCode: null})});
+    await post(f.app, `/v1/missions/${f.m.missionId}/predev/start`);
+    expect((await post(f.app, `/v1/missions/${f.m.missionId}/predev/produce`)).statusCode).toBe(502);
+    expect((await post(f.app, `/v1/missions/${f.m.missionId}/predev/produce`)).statusCode).toBe(502); // not BUSY/IN_PROGRESS
+  });
+
+  it("lock order: a call refused as NOT_CONFIGURED (executor off) never takes the slot, so enabling the executor afterwards works at once", async () => {
+    const provider = {on: false};
+    const c = await mkApp({provider}), id = c.m.missionId;
+    await post(c.app, `/v1/missions/${id}/predev/start`);
+    for (let i = 0; i < 3; i++) { const r = await post(c.app, `/v1/missions/${id}/predev/produce`); expect([r.statusCode, r.json().error]).toEqual([409, "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"]); }
+    provider.on = true;
+    const ok = await post(c.app, `/v1/missions/${id}/predev/produce`);
+    expect([ok.statusCode, ok.body.slice(0, 80)]).toEqual([201, expect.any(String)]); // not PREDEV_PRODUCE_BUSY / IN_PROGRESS
+    // the same holds for the earlier refusals (stop, policy, body, 404): none of them takes the slot
+    const other = await mkApp({builder: "fake", allowed: false});
+    await post(other.app, `/v1/missions/${other.m.missionId}/predev/produce`);
+    expect(other.runs).toHaveLength(0);
+  });
+
+  it("Global Stop that lands AFTER the process exited and before the DRAFT is recorded: nothing is recorded, 423 GLOBAL_STOP_ACTIVE, audit FAILED with the hash; the slot is released and a retry after the stop is lifted works", async () => {
+    let stopped = false, stopOnRun = true;
+    const c = await mkApp({stopped: () => stopped, run: () => { if (stopOnRun) stopped = true; return undefined; }}); // the (fake) process exits normally with valid output; the stop lands right after
+    const id = c.m.missionId;
+    await post(c.app, `/v1/missions/${id}/predev/start`);
+    const rm0 = JSON.stringify(c.store.preDevReadModel(SC, id)), n0 = journalLines();
+    const r = await post(c.app, `/v1/missions/${id}/predev/produce`);
+    expect([r.statusCode, r.json()]).toEqual([423, {error: "GLOBAL_STOP_ACTIVE"}]);
+    expect(c.runs).toHaveLength(1);
+    expect(JSON.stringify(c.store.preDevReadModel(SC, id))).toBe(rm0); expect(journalLines()).toBe(n0);
+    expect(produced(c.audits)).toMatchObject([{outcome: "FAILED", reason: "GLOBAL_STOP_ACTIVE", phase: "BUSINESS_ANALYSIS", roleId: "UASCO-0022", exitCode: 0}]);
+    expect(produced(c.audits)[0].outputSha256).toMatch(/^[0-9a-f]{64}$/);
+    stopped = false; stopOnRun = false;
+    const again = await post(c.app, `/v1/missions/${id}/predev/produce`);
+    expect(again.statusCode, again.body).toBe(201);
+  });
+
+  it("produce is allowed for R3/R4 missions (a Founder-visible decision: it runs no project code, only a read-only process in an empty scratch dir and a DRAFT the Founder must approve); run creation is not affected here", async () => {
+    for (const risk of ["R3", "R4"] as const) {
+      const c = await mkApp();
+      const m = c.store.createMission({...msn(c.p.projectId), riskLevel: risk});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) c.store.transitionMission(SC, m.missionId, to, "go", ACT);
+      await post(c.app, `/v1/missions/${m.missionId}/predev/start`);
+      const r = await post(c.app, `/v1/missions/${m.missionId}/predev/produce`);
+      expect([risk, r.statusCode, r.json().produced?.status]).toEqual([risk, 201, "RECORDED"]);
+      expect(c.store.getMission(SC, m.missionId)!.riskLevel).toBe(risk);
+    }
   });
 
   it("Global Stop activated while the model runs reaches the process runner (shouldAbort) and ends the call with PREDEV_BUILDER_ABORTED; nothing is recorded", async () => {
@@ -2054,5 +2138,94 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
     const r = await post(c.app, `/v1/missions/${c.m.missionId}/predev/produce`);
     expect([r.statusCode, r.json().reason]).toEqual([502, "PREDEV_BUILDER_ABORTED"]);
     expect(JSON.stringify(c.store.preDevReadModel(SC, c.m.missionId))).toBe(rm0);
+  });
+});
+
+// //TR: LANE-B run özetleri: hafif, sayfalanmış koşu listesi yalnız store'dan türetilir; sıralama/imleç kararlılığı, süzgeçler, şekil (tam evidence/lease/yol yok), redaksiyon, teslim bayrakları, sorgu doğrulaması ve tenant izolasyonu test edilir.
+describe("LANE-B run summaries", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const ACT = "FOUNDER_LOCAL", SC = {tenantId: "tA"};
+  const mkApp = async (tenantId = "tA") => {
+    const [{default: Fastify}, {registerRunSummaryRoutes}, {WorkOsError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/run-summaries.js"), import("../core/workos/types.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    registerRunSummaryRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: ACT, audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}),
+      workosFail: (r: any, e: any) => r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
+    return {app, store, p: store.createProject(proj())};
+  };
+  const mkRun = (store: WorkOsStore, pid: string, title = "m") => {
+    const m = store.createMission({...msn(pid), title}); for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(SC, m.missionId, to, "go", ACT);
+    return {m, run: store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: "impl@x", reviewer: "rev@x"}, createdBy: ACT})};
+  };
+  const get = async (app: any, qs = "", headers: any = hdr) => app.inject({method: "GET", url: `/v1/run-summaries${qs}`, headers});
+
+  it("is empty without runs, then pages newest-first with a stable opaque cursor that survives new runs", async () => {
+    const {app, store, p} = await mkApp();
+    expect((await get(app)).json().page).toEqual({runs: [], nextCursor: null, total: 0});
+    const ids = Array.from({length: 7}, (_, i) => mkRun(store, p.projectId, `m${i}`).run.runId);
+    const seen: string[] = []; let cursor: string | null = null, pages = 0;
+    do {
+      const r = await get(app, `?limit=3${cursor ? `&cursor=${cursor}` : ""}`); expect(r.statusCode).toBe(200);
+      const pg = r.json().page; expect(pg.total).toBe(pages === 0 ? 7 : 8); seen.push(...pg.runs.map((x: any) => x.runId)); cursor = pg.nextCursor; pages++;
+      if (pages === 1) { mkRun(store, p.projectId, "late"); }
+    } while (cursor && pages < 10);
+    expect(pages).toBe(3);
+    expect(new Set(seen).size).toBe(7); expect([...seen].sort()).toEqual([...ids].sort());
+    const all = (await get(app, "?limit=100")).json().page.runs;
+    expect(all).toHaveLength(8);
+    expect(all.map((x: any) => x.createdAt + x.runId)).toEqual([...all.map((x: any) => x.createdAt + x.runId)].sort().reverse());
+  });
+  it("filters by project, mission and status; returns a light, honest shape with no lease, evidence arrays or paths; redacts the reason", async () => {
+    const {app, store, p} = await mkApp();
+    const a = mkRun(store, p.projectId, "a"), b = mkRun(store, p.projectId, "b");
+    const p2 = store.createProject(proj()), c = mkRun(store, p2.projectId, "c");
+    const lease = store.acquireRunLease(b.run.runId, 60_000, ACT).leaseId!;
+    store.transitionRun(b.run.runId, lease, "FAILED", "boom AKIA" + "IOSFODNN7EXAMPLE " + "x".repeat(400), ACT);
+    expect((await get(app, `?projectId=${p.projectId}`)).json().page.total).toBe(2);
+    expect((await get(app, `?projectId=${p2.projectId}`)).json().page.runs.map((x: any) => x.runId)).toEqual([c.run.runId]);
+    expect((await get(app, `?missionId=${a.m.missionId}`)).json().page.runs.map((x: any) => x.runId)).toEqual([a.run.runId]);
+    const failed = (await get(app, "?status=FAILED")).json().page.runs;
+    expect(failed.map((x: any) => x.runId)).toEqual([b.run.runId]);
+    expect(failed[0].reason.length).toBeLessThanOrEqual(200); expect(failed[0].reason).toContain("boom"); expect(failed[0].reason).not.toContain("AKIA" + "IOSFODNN7EXAMPLE");
+    const q = (await get(app, `?missionId=${a.m.missionId}`)).json().page.runs[0];
+    expect(Object.keys(q).sort()).toEqual(["attempt", "checkpointCount", "createdAt", "delivery", "evidenceCount", "executor", "headSha", "missionId", "projectId", "reason", "remediationCycle", "retryCount", "runId", "status", "step", "updatedAt"]);
+    expect(q).toMatchObject({status: "QUEUED", evidenceCount: 0, checkpointCount: 0, headSha: null, executor: {implementer: "impl@x", reviewer: "rev@x"}, delivery: {artifactPrepared: false, sourceAccepted: false, productVerified: false}});
+    expect(JSON.stringify((await get(app, "?limit=100")).json())).not.toMatch(/leaseId|"evidence":|"checkpoints":/);
+    expect(JSON.stringify((await get(app)).json())).not.toContain(tmp);
+  });
+  it("reports delivery flags only from recorded delivery/completion records", async () => {
+    const {store, p} = await mkApp();
+    const {run} = mkRun(store, p.projectId);
+    const {listRunSummaries} = await import("../core/workos/run-summary.js");
+    const view = (extra: Record<string, unknown>) => new Proxy(store, {get: (t, k) => k === "listRuns" ? (s: any, m?: string) => t.listRuns(s, m).map(r => r.runId === run.runId ? {...r, ...extra} : r) : (t as any)[k].bind ? (t as any)[k].bind(t) : (t as any)[k]}) as WorkOsStore;
+    const flags = (extra: Record<string, unknown>) => listRunSummaries(view(extra), SC).runs[0].delivery;
+    expect(flags({})).toEqual({artifactPrepared: false, sourceAccepted: false, productVerified: false});
+    expect(flags({deliveryArtifact: {}})).toEqual({artifactPrepared: true, sourceAccepted: false, productVerified: false});
+    expect(flags({deliveryArtifact: {}, sourceDelivery: {}})).toEqual({artifactPrepared: true, sourceAccepted: true, productVerified: false});
+    expect(flags({completion: {}})).toEqual({artifactPrepared: false, sourceAccepted: false, productVerified: true});
+  });
+  it("rejects malformed queries with fixed codes, 404s unknown project/mission, and isolates tenants and tokens", async () => {
+    const {app, store, p} = await mkApp(), {run, m} = mkRun(store, p.projectId);
+    const code = async (qs: string) => { const r = await get(app, qs); return [r.statusCode, r.json().error]; };
+    expect(await code("?foo=1")).toEqual([400, "INVALID_QUERY"]);
+    expect(await code("?limit=0")).toEqual([400, "INVALID_LIMIT"]);
+    expect(await code("?limit=101")).toEqual([400, "INVALID_LIMIT"]);
+    expect(await code("?limit=abc")).toEqual([400, "INVALID_LIMIT"]);
+    expect(await code("?limit=1.5")).toEqual([400, "INVALID_LIMIT"]);
+    expect(await code("?limit=1&limit=2")).toEqual([400, "INVALID_QUERY"]);
+    expect(await code("?cursor=garbage")).toEqual([400, "INVALID_CURSOR"]);
+    expect(await code(`?cursor=${Buffer.from(JSON.stringify({c: "x", r: "y", z: 1})).toString("base64url")}`)).toEqual([400, "INVALID_CURSOR"]);
+    expect(await code("?status=NOPE")).toEqual([400, "INVALID_STATUS"]);
+    expect(await code("?projectId=bad")).toEqual([400, "INVALID_PROJECT_ID"]);
+    expect(await code("?missionId=bad")).toEqual([400, "INVALID_MISSION_ID"]);
+    expect(await code(`?projectId=prj_${"0".repeat(24)}`)).toEqual([404, "WORKOS_NOT_FOUND"]);
+    expect(await code(`?missionId=msn_${"0".repeat(24)}`)).toEqual([404, "WORKOS_NOT_FOUND"]);
+    expect((await get(app, "", {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    const other = await mkApp("tB");
+    expect((await get(other.app)).json().page).toEqual({runs: [], nextCursor: null, total: 0});
+    expect((await get(other.app, `?missionId=${m.missionId}`)).statusCode).toBe(404);
+    expect((await app.inject({method: "POST", url: "/v1/run-summaries", headers: hdr, payload: {}})).statusCode).toBe(404);
+    void run;
   });
 });
