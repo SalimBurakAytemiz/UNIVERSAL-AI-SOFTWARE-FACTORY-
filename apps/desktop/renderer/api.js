@@ -14,6 +14,7 @@ import {REVIEW_ID_RE,mapReviewDetail} from "./assurance-core.js";
 import {PROJECTS_PATH,mapMatrixProjects,mapMatrixMissions,mapMatrixWorkRuns,mapMatrixCockpit} from "./matrix-core.js";
 import {CONTROL_PATH,RUNS_PATH,mapOperationsControl,mapOperationsRuns,mapOperationsAttention} from "./operations-core.js";
 import {DOMAINS_PATH,mapDomains} from "./domains-core.js";
+import {SCHEDULER_PATH,mapScheduler} from "./scheduler-core.js";
 import {CAPABILITIES_PATH,ADAPTERS_PATH,FABRICS_PATH,mapCapabilities,mapAdapters,mapFabrics} from "./integrations-core.js";
 import {STATUS_SUMMARY_PATH,mapStatusSummary} from "./agent-factory-core.js";
 import {INSTALL_PATH,PHASE0_PATH,mapInstallReport,mapPhase0Report} from "./install-core.js";
@@ -189,6 +190,8 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async integrationsFabrics(){const r=await get(FABRICS_PATH);return r.ok?mapFabrics(r.data):{state:r.state,registry:null,message:r.message}},
     // //TR: Ajan Fabrikası durum özeti (GET /v1/roles/status-summary, sorgu dizesi ve POST yok); beş sayaç ayrı tutulur. Ana süreç izin listesi girişi koordinatörün korumalı grubundadır; o gelene kadar okuma UNAVAILABLE döner ve hiçbir sayı uydurulmaz.
     async rolesStatusSummary(){const r=await get(STATUS_SUMMARY_PATH);return r.ok?mapStatusSummary(r.data):{state:r.state,summary:null,message:r.message}},
+    // //TR: FA-V2-PRODUCT (UI-BUILD-SCHEDULER): Derleme Zamanlayıcı salt-okunur okuması (GET /v1/scheduler, sorgu dizesi ve POST yok); yol automation/lib/control-boundary.mjs desktopGetPathAllowed listesinde zaten vardır (yeni uç nokta yok). Başarılıysa scheduler-core eşleyicisiyle fail-closed sanitize edilir.
+    async scheduler(){const r=await get(SCHEDULER_PATH);return r.ok?mapScheduler(r.data):{state:r.state,scheduler:null,message:r.message}},
     async raw(path){return get(path)}
   };
 }
