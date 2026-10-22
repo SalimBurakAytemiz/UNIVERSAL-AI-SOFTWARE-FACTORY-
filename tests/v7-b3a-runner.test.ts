@@ -473,7 +473,6 @@ describe("LANE-C MissionRunner claim cap (maxConcurrentRuns)", () => {
   };
   const queueRuns = (c: Ctx, pair: ExecutorPair, n: number) => [c.missionId, ...Array.from({length: n - 1}, (_, i) => addMission(c, i + 1))]
     .map(missionId => c.store.createRun({tenantId: "tA", missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}));
-  const sleepFirst = (ms: number) => okScript({implement: n => ({files: {"feature.txt": "ok\n"}, ...(n === 1 && ms ? {sleepMs: ms} : {})})});
   // implementer sarmalayıcı: aynı anda içerideki çağrı sayısını izler; barrier>0 ise o kadar çağrı birlikte içeri girene kadar bekler (deterministik eşzamanlılık kanıtı, süre tahmini yok).
   function tracked(pair: ExecutorPair, barrier = 0) {
     const st = {active: 0, maxActive: 0, arrived: 0, barrierTimedOut: false}; let release!: () => void; const gate = new Promise<void>(r => { release = r; });
@@ -485,26 +484,30 @@ describe("LANE-C MissionRunner claim cap (maxConcurrentRuns)", () => {
     return {st, pair: {...pair, implementer: {...pair.implementer, implement}} as ExecutorPair};
   }
 
-  // //TR: Deterministik: lease süresi SANAL saate bağlıdır (store ve runner aynı saati kullanır); gerçek süre, yavaş senkron git adımları veya yüklü runner sonucu değiştirmez. r1'in "TTL'den uzun" çalışması, implementer içinde sanal saatin TTL'den küçük adımlarla ilerletilmesi ve lease'in gerçek heartbeat gibi yenilenmesiyle kurulur.
+  // //TR: Deterministik: lease süresi SANAL saate bağlıdır (store ve runner aynı saati kullanır); gerçek süre, yavaş senkron git adımları veya yüklü runner sonucu değiştirmez. r1'in "TTL'den uzun" çalışması, implementer içinde sanal saatin TTL'den küçük adımlarla ilerletilmesi ve lease'in her adımda RUNNER'IN KENDİ heartbeat'i (executeStep içindeki setInterval) tarafından yenilenmesi beklenerek kurulur (sınırlı gerçek bekleme; sanal zaman bekleme sırasında donuktur, yani bekleme lease'i yarıştıramaz). Test lease'i KENDİSİ yenilemez: heartbeat bozulursa test düşer.
   it("default cap 1: a queued second run gets NO lease while the first runs longer than the lease TTL (virtual clock), so it is never fenced or recovered; the next tick claims it", { timeout: T }, async () => {
     const TTL = 1000, clock = {ms: Date.UTC(2026, 9, 22, 12, 0, 0)};
     const c = setup("tA", {virtualClock: clock}); const fake = new FakeExecutors(okScript()); const pair = fake.pair();
     const [r1, r2] = queueRuns(c, pair, 2);
     const seen: Array<{status: string; leaseId: string | null; attempt: number}> = [];
     let virtualElapsed = 0, firstCall = true;
+    const hbRenewed: boolean[] = [];
     const longRunning: ExecutorPair = {...pair, implementer: {...pair.implementer, async implement(w, spec, ctx) {
       if (!firstCall) return pair.implementer.implement(w, spec, ctx); // second tick: r2's own (normal) implementer call
       firstCall = false;
-      const lease = c.store.engineGetRun(r1.runId)!.leaseId!;
-      for (let i = 0; i < 4; i++) { // 4 x 900 virtual ms = 3600 > 3 x TTL; each step renews r1's lease exactly like the heartbeat does
+      for (let i = 0; i < 4; i++) { // 4 x 900 virtual ms = 3600 > 3 x TTL; after each step the RUNNER's own heartbeat must renew r1's lease (the test never renews it)
         clock.ms += 900; virtualElapsed += 900;
-        c.store.renewRunLease(r1.runId, lease, TTL, "TEST_HEARTBEAT");
+        const want = new Date(clock.ms + TTL).toISOString(), deadline = Date.now() + 20_000;
+        while (c.store.engineGetRun(r1.runId)!.leaseExpiresAt !== want && Date.now() < deadline) await new Promise(r => setTimeout(r, 10));
+        hbRenewed.push(c.store.engineGetRun(r1.runId)!.leaseExpiresAt === want);
+        if (!hbRenewed[hbRenewed.length - 1]) break;
         const x = runOf(c, r2.runId); seen.push({status: x.status, leaseId: x.leaseId, attempt: x.attempt});
       }
       return pair.implementer.implement(w, spec, ctx);
     }}};
     const mr = runner(c, fake, {leaseTtlMs: TTL, executors: longRunning, now: () => clock.ms});
     const t1 = await mr.tick();
+    expect(hbRenewed).toEqual([true, true, true, true]); // the runner's own heartbeat renewed the lease after every 900 virtual ms
     expect(virtualElapsed).toBeGreaterThan(TTL * 3);
     expect(t1.claimed).toEqual([r1.runId]);
     expect(t1.deferred).toEqual([r2.runId]);
@@ -519,6 +522,46 @@ describe("LANE-C MissionRunner claim cap (maxConcurrentRuns)", () => {
     expect(t2).toMatchObject({claimed: [r2.runId], deferred: [], fenced: [], recovered: []});
     expect(runOf(c, r2.runId).status).toBe("AWAITING_APPROVAL");
     expect(fake.calls).toEqual({implement: 2, review: 2});
+  });
+
+  // //TR: renew() (adım başında ve uzun senkron işten önce) lease'i uzatır. TTL gerçek heartbeat aralığından (TTL/3 gerçek ms) çok uzun seçilir: heartbeat devreye giremez, lease'i YALNIZ renew() tutar. Her uzun çağrı TTL'nin 0.9'u kadar sanal zaman harcar (toplam 1.8 x TTL): renew() çağrıları olmasaydı lease dolar ve run fence edilirdi.
+  it("renew() keeps the lease alive across long synchronous work: two long calls of 0.9 x TTL each (1.8 x TTL in total, the heartbeat cannot fire) never fence the run (virtual clock)", { timeout: T }, async () => {
+    const TTL = 600_000, clock = {ms: Date.UTC(2026, 9, 22, 12, 0, 0)}, segment = 540_000;
+    const c = setup("tA", {virtualClock: clock}); const fake = new FakeExecutors(okScript()); const pair = fake.pair();
+    const [r1] = queueRuns(c, pair, 1);
+    let advanced = 0;
+    const slow: ExecutorPair = {...pair,
+      implementer: {...pair.implementer, async implement(w, spec, ctx) { clock.ms += segment; advanced += segment; return pair.implementer.implement(w, spec, ctx); }},
+      reviewer: {...pair.reviewer, async review(w, spec, diff, ctx) { clock.ms += segment; advanced += segment; return pair.reviewer.review(w, spec, diff, ctx); }}};
+    const t1 = await runner(c, fake, {leaseTtlMs: TTL, executors: slow, now: () => clock.ms}).tick();
+    expect(advanced).toBe(2 * segment);
+    expect(t1).toMatchObject({claimed: [r1.runId], fenced: [], recovered: []});
+    expect(runOf(c, r1.runId).status).toBe("AWAITING_APPROVAL");
+    expect(fake.calls).toEqual({implement: 1, review: 1});
+  });
+
+  // //TR: Lease, bir renew() çağrısı gelmeden önce dolmuşsa (uzun senkron iş) renew() WORKOS_LEASE_FENCED fırlatır ve paralı implementer çağrısı HİÇ yapılmaz. Sanal saat, IMPLEMENT adımındaki İKİNCİ renewRunLease çağrısında (workspace sıfırlamasından sonra, paralı executor çağrısından hemen önceki renew()) TTL'den fazla ilerletilir; heartbeat (TTL/3 gerçek ms) bu sürede çalışamaz.
+  it("renew() fences an already expired lease before the paid implementer call: the run is reported fenced, the implementer is never called, and the next tick recovers it (virtual clock)", { timeout: T }, async () => {
+    const TTL = 600_000, clock = {ms: Date.UTC(2026, 9, 22, 12, 0, 0)};
+    const c = setup("tA", {virtualClock: clock}); const fake = new FakeExecutors(okScript()); const pair = fake.pair();
+    const [r1] = queueRuns(c, pair, 1);
+    const original = c.store.renewRunLease.bind(c.store);
+    let implementRenews = 0, jumped = 0;
+    c.store.renewRunLease = (runId, leaseId, ttlMs, actor) => {
+      // IMPLEMENT's renewals: 1st = step start (drive loop), 2nd = the renew() right after the workspace reset and right before the paid executor call
+      if (c.store.engineGetRun(runId)?.step === "IMPLEMENT" && ++implementRenews === 2) { jumped += 1; clock.ms += TTL + TTL / 2; } // the long synchronous work (git) that happened before this renew()
+      return original(runId, leaseId, ttlMs, actor);
+    };
+    const mr = runner(c, fake, {leaseTtlMs: TTL, executors: pair, now: () => clock.ms});
+    const t1 = await mr.tick();
+    expect(jumped).toBe(1);
+    expect(t1).toMatchObject({claimed: [r1.runId], fenced: [r1.runId], recovered: []});
+    expect(fake.calls).toEqual({implement: 0, review: 0}); // fenced BEFORE the paid call
+    expect(runOf(c, r1.runId).status).not.toBe("AWAITING_APPROVAL");
+    const t2 = await mr.tick();
+    expect(t2.recovered).toEqual([r1.runId]);
+    expect(runOf(c, r1.runId).status).toBe("AWAITING_APPROVAL");
+    expect(fake.calls).toEqual({implement: 1, review: 1});
   });
 
   it("cap 2: two queued runs really run together (both implementer calls in flight at once); a third waits; cap 1 never overlaps", { timeout: T }, async () => {
