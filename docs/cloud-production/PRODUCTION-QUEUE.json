@@ -651,29 +651,23 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-22T03:50:00Z",
+    "at": "2026-10-22T04:47:17Z",
     "by": "coordinator",
-    "integrationHead": "870e20d",
+    "integrationHead": "8b508b9",
     "openProductionPrs": [
       66,
-      161,
-      167,
-      173,
-      175,
-      176,
       177,
-      178,
-      179,
       180,
       181,
       182,
       183,
       184,
-      186
+      186,
+      187
     ],
     "next": "Verify #136 review result; integration L1; first-delivery orchestrator on L1; lanes continue.",
     "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified.",
-    "note": "coordinator sync from merge history (git merge-base --is-ancestor, GitHub merged_at)",
+    "note": "coordinator tick writeback from GitHub merged_at/merge_commit_sha/merged_by",
     "closedSinceLast": {
       "127": "superseded by #161",
       "154": "empty (work merged via #160)"
@@ -1545,6 +1539,54 @@
       "pr": 169,
       "mergeCommit": "870e20d",
       "mergedAt": "2026-10-22T02:50:01Z"
+    },
+    {
+      "pr": 175,
+      "mergeCommit": "dcd7ec0",
+      "mergedAt": "2026-10-22T03:38:26Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 161,
+      "mergeCommit": "5215029",
+      "mergedAt": "2026-10-22T04:02:05Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 178,
+      "mergeCommit": "ef03e52",
+      "mergedAt": "2026-10-22T04:05:12Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 173,
+      "mergeCommit": "8e7f1cc",
+      "mergedAt": "2026-10-22T04:11:32Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 176,
+      "mergeCommit": "0e3db7d",
+      "mergedAt": "2026-10-22T04:27:22Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 167,
+      "mergeCommit": "e852cef",
+      "mergedAt": "2026-10-22T04:34:21Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 185,
+      "mergeCommit": "213156b",
+      "mergedAt": "2026-10-22T04:44:16Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 179,
+      "mergeCommit": "8b508b9",
+      "mergedAt": "2026-10-22T04:45:29Z",
+      "mergedBy": "SalimBurakAytemiz"
     }
   ],
   "windowsDelivery": {
