@@ -203,3 +203,7 @@ describe("aggregator protection",()=>{
     expect(ext).toEqual([]);expect(seen.size).toBeGreaterThanOrEqual(4);
   });
   it("lists scripts/validate-shards.mjs in protected exactPaths",()=>{expect(readJson("config/protected-paths.json").exactPaths).toContain("scripts/validate-shards.mjs")})});
+
+// //TR: UASCO Local Windows Test Worker (plan kapsamı, tekil claim, zaman aşımı, çökme kurtarma, kanıt, yedek) senaryoları bu kayıtlı dosyadan çalışır; korunan validation.json kaydı gerektirmez.
+import {registerLocalWorkerCases} from "./support/local-worker.cases.js";
+registerLocalWorkerCases();

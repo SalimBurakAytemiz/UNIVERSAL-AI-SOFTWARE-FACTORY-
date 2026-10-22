@@ -10,6 +10,7 @@ import Fastify from "fastify";
 import {FIRST_DELIVERY_BINDINGS, STAGE_CONSUMERS} from "../core/agents/first-delivery-bindings.js";
 import {computeRoleStatusSummary, createEvidenceVerifier, runningRoleIdsFromRuns, roleLifecycle, TARGET_ROLE_COUNT} from "../core/agents/role-lifecycle.js";
 import {registerRoleStatusRoutes} from "../apps/control-api/src/routes/role-status.js";
+import {deriveRoleProfiles, buildDerivationInputs, NEVER_GRANTED, ROUTE_TOOL_ALLOWLIST, PERMISSION_READ, PERMISSION_WRITE_SCRATCH} from "../core/agents/role-profile-derivation.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -591,5 +592,115 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
     await app.close();
     const empty = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-c1-empty-"));
     try { const a2 = Fastify(); registerRoleStatusRoutes(a2, deps(empty)); await a2.ready(); expect((await a2.inject({method: "GET", url: "/v1/roles/status-summary"})).statusCode).toBe(503); await a2.close(); } finally { fs.rmSync(empty, {recursive: true, force: true}); }
+  });
+});
+
+// //TR: LANE-C C2: yürütme profili ÖNERİLERİ (PROPOSED_DERIVED) deterministik üretilir, en az yetkilidir, kaynak yoksa gap kimliği yazar; hiçbir şey yürütülebilir/certified yapmaz.
+describe("LANE-C C2 role execution profiles (derived, proposal only)", () => {
+  const rd = (f: string) => JSON.parse(fs.readFileSync(path.join(REPO, f), "utf8"));
+  const PROFILES_FILE = path.join(REPO, "registries", "role-execution-profiles.json");
+  const inputsOf = () => buildDerivationInputs({
+    roleDefinitions: rd("registries/role-definitions.json"), skills: rd("registries/skills-v2.json"), technologies: rd("registries/technologies.json"), competency: rd("registries/agent-competency-v2.json"),
+    skillMatrix: rd("registries/agent-skill-matrix.json"), toolPolicy: rd("registries/agent-tool-policy-v2.json"), reviewGraph: rd("registries/agent-review-graph-v2.json"),
+    evaluationFileNames: fs.readdirSync(path.join(REPO, "evaluations", "agents")).filter(n => n.endsWith(".json")).sort()
+  });
+  const committed = rd("registries/role-execution-profiles.json");
+  const registryIds: string[] = rd("registries/role-definitions.json").roles.map((r: any) => r.roleId);
+
+  it("the committed file is a byte-identical rebuild (script --check), 599 profiles, status PROPOSED_DERIVED_NOT_RUNTIME", () => {
+    const r = cp.spawnSync(process.execPath, ["scripts/build-role-execution-profiles.mjs", "--check"], {cwd: REPO, encoding: "utf8"});
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stdout).toContain("byte-identical rebuild");
+    expect(committed.status).toBe("PROPOSED_DERIVED_NOT_RUNTIME");
+    expect(committed.profiles).toHaveLength(599);
+    expect(committed.profiles.map((p: any) => p.roleId)).toEqual([...registryIds].sort());
+    expect(committed.neverGranted).toEqual([...NEVER_GRANTED]);
+    expect(committed.inputs["registries/role-definitions.json"]).toBe(crypto.createHash("sha256").update(fs.readFileSync(REG_FILE)).digest("hex"));
+  });
+
+  it("every field is PROPOSED_DERIVED; every empty field has a gap id; every non-empty field has provenance; nothing claims execution or certification", () => {
+    const FIELDS = ["route", "allowedTools", "candidateToolAdapterIds", "candidateSkills", "workerScope", "permissionGrants", "reviewChain", "limits", "knowledgeSources", "evaluationRefs"];
+    for (const p of committed.profiles) {
+      expect(Object.keys(p).sort()).toEqual([...FIELDS, "bound", "clusterId", "guildId", "roleId", "semanticVerifiedLegacyIds", "title"].sort());
+      for (const f of FIELDS) {
+        const x = p[f];
+        expect(x.status, `${p.roleId}.${f}`).toBe("PROPOSED_DERIVED");
+        const empty = Array.isArray(x.value) ? x.value.length === 0 : x.value == null;
+        if (empty && f !== "allowedTools" && f !== "workerScope" && f !== "permissionGrants") expect(x.gapId, `${p.roleId}.${f} empty without gap id`).toMatch(/^WFR-GAP-[A-Z-]+-UASCO-\d{4}$/);
+        if (!empty) expect(x.provenance.length, `${p.roleId}.${f} has no provenance`).toBeGreaterThan(0);
+      }
+    }
+    expect(JSON.stringify(committed)).not.toMatch(/"(EXECUTABLE|CERTIFIED|RUNNING|READY)"/);
+  });
+
+  it("least privilege: tools subset of the route allow-list, grants match tools, never a production/network/secret/payment/deployment grant", () => {
+    const allowedGrants = new Set([PERMISSION_READ, PERMISSION_WRITE_SCRATCH]);
+    for (const p of committed.profiles) {
+      const route = p.route.value as keyof typeof ROUTE_TOOL_ALLOWLIST;
+      expect(Object.keys(ROUTE_TOOL_ALLOWLIST)).toContain(route);
+      for (const t of p.allowedTools.value) expect(ROUTE_TOOL_ALLOWLIST[route], `${p.roleId} tool ${t}`).toContain(t);
+      for (const g of p.permissionGrants.value) { expect(allowedGrants.has(g), `${p.roleId} grant ${g}`).toBe(true); for (const bad of NEVER_GRANTED) expect(g).not.toContain(bad); }
+      expect(p.permissionGrants.value.includes(PERMISSION_WRITE_SCRATCH)).toBe(p.allowedTools.value.some((t: string) => t === "Edit" || t === "Write"));
+      if (p.route.value === "CLAUDE_REVIEWER") expect(p.limits.value.maxFilesWritten).toBe(0);
+    }
+  });
+
+  it("review chain: reviewer is never the role itself and always a registered role", () => {
+    const ids = new Set(registryIds);
+    for (const p of committed.profiles) {
+      expect(p.reviewChain.value.length).toBeGreaterThan(0);
+      for (const r of p.reviewChain.value) { expect(r).not.toBe(p.roleId); expect(ids.has(r), `${p.roleId} -> ${r}`).toBe(true); }
+    }
+  });
+
+  it("bound first-delivery roles carry exactly their binding (route, tools, limits); only SEMANTIC_VERIFIED legacy evidence feeds candidates", () => {
+    for (const b of FIRST_DELIVERY_BINDINGS) {
+      const p = committed.profiles.find((x: any) => x.roleId === b.roleId);
+      expect(p.bound).toBe(true);
+      expect(p.route.value).toBe(b.providerRoute);
+      expect(p.allowedTools.value).toEqual([...b.allowedTools]);
+      expect(p.limits.value).toEqual(b.limits);
+    }
+    expect(committed.profiles.filter((p: any) => p.bound)).toHaveLength(FIRST_DELIVERY_BINDINGS.length);
+    const roles = rd("registries/role-definitions.json").roles;
+    for (const p of committed.profiles) {
+      const r = roles.find((x: any) => x.roleId === p.roleId);
+      expect(p.semanticVerifiedLegacyIds).toEqual([...new Set(r.legacyAliases.filter((a: any) => a.status === "SEMANTIC_VERIFIED").map((a: any) => a.legacyId))].sort());
+      if (p.semanticVerifiedLegacyIds.length === 0) { expect(p.candidateSkills.value).toEqual([]); expect(p.candidateToolAdapterIds.value).toEqual([]); }
+    }
+  });
+
+  it("derivation is deterministic and order-independent; duplicate roles are refused", () => {
+    const inp = inputsOf();
+    const a = JSON.stringify(deriveRoleProfiles(inp)), b = JSON.stringify(deriveRoleProfiles({...inp, roles: [...inp.roles].reverse()}));
+    expect(a).toBe(b);
+    expect(() => deriveRoleProfiles({...inp, roles: [inp.roles[0], inp.roles[0]]})).toThrow("PROFILE_DERIVATION_DUPLICATE_ROLE");
+  });
+
+  it("rules on synthetic inputs: write route only with SEMANTIC_VERIFIED technical evidence; CONFLICT/SUSPECTED aliases are ignored; self review dropped; skills limited to skills-v2", () => {
+    const role = (roleId: string, aliases: any[]) => ({roleId, guildId: "G99", clusterId: "CL99", title: roleId, requiredTechnologies: [{technologyId: "nodejs"}], optionalTechnologies: [], evaluationSpecs: [{evaluationId: "EV-01", status: "NOT_EXECUTED"}], legacyAliases: aliases, gapIds: []});
+    const inp = {
+      roles: [role("UASCO-9001", [{legacyId: "L1", status: "SEMANTIC_VERIFIED"}]), role("UASCO-9002", [{legacyId: "L1", status: "CONFLICT"}]), role("UASCO-9003", [{legacyId: "L2", status: "SUSPECTED"}]), role("UASCO-9004", [])],
+      skillIds: new Set(["SK2-A"]), technologySlugToId: new Map([["nodejs", "TECH-NODEJS"]]),
+      legacy: {technicalAgent: new Map([["L1", true], ["L2", true]]), requiredSkills: new Map([["L1", ["SK2-A", "SK2-NOT-IN-CATALOG"]]]), candidateAdapters: new Map([["L1", ["eslint"]]]),
+        principalReviewers: new Map([["L1", ["L1"]]]), evaluationFiles: new Set(["L1"])},
+      bindings: []
+    } as any;
+    const [ok, conflict, suspected, none] = deriveRoleProfiles(inp);
+    expect(ok.route.value).toBe("CLAUDE_IMPLEMENTER");
+    expect(ok.allowedTools.value).toEqual([...ROUTE_TOOL_ALLOWLIST.CLAUDE_IMPLEMENTER]);
+    expect(ok.permissionGrants.value).toEqual([PERMISSION_READ, PERMISSION_WRITE_SCRATCH].sort());
+    expect(ok.candidateSkills.value).toEqual(["SK2-A"]);
+    expect(ok.candidateToolAdapterIds.value).toEqual(["eslint"]);
+    expect(ok.reviewChain.value).not.toContain("UASCO-9001");       // L1's only reviewer maps to the role itself -> dropped -> default independent reviewer
+    expect(ok.reviewChain.gapId).toMatch(/^WFR-GAP-PROFILE-REVIEW-CHAIN-UASCO-9001$/);
+    for (const x of [conflict, suspected, none]) {
+      expect(x.route.value).toBe("CLAUDE_REVIEWER");
+      expect(x.allowedTools.value).toEqual([...ROUTE_TOOL_ALLOWLIST.CLAUDE_REVIEWER]);
+      expect(x.permissionGrants.value).toEqual([PERMISSION_READ]);
+      expect(x.candidateSkills.value).toEqual([]);
+      expect(x.candidateSkills.gapId).toBe(`WFR-GAP-PROFILE-SKILLS-${x.roleId}`);
+      expect(x.knowledgeSources.value).toEqual(["registries/technologies.json#TECH-NODEJS"]);
+    }
   });
 });
