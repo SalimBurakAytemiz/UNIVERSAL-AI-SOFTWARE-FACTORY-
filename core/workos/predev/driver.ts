@@ -108,6 +108,11 @@ export class PreDevDriver {
     const kind = PHASE_ARTIFACT_KIND[phase];
     if (!kind) throw new PreDevDriverError(`PREDEV_DRIVER_NO_ARTIFACT_PHASE:${phase}`);
 
+    // //TR: Bu türün MEVCUT artefaktı varsa store/replay kuralı: yeni sürüm yalnız REJECTED olanı `supersedes` ile açar; REJECTED dışındaki (DRAFT/SUBMITTED/APPROVED) mevcut artefaktın üstüne yeni taslak yazılamaz. Bu durumda builder çağrılmadan (ücretli iş) temiz bir driver hatası verilir.
+    const current = rm.artifacts[kind];
+    if (current.artifactId !== null && current.state !== "REJECTED") throw new PreDevDriverError(`PREDEV_DRIVER_ARTIFACT_PENDING:${kind}:${current.state}`);
+    const supersedes = current.artifactId !== null ? current.artifactId : null;
+
     const ctx = this.buildMissionContext(scope, missionId, kind);
     const rolePrompt = composeRolePrompt(kind, ctx);
     const authorRoleId = getRolePrompt(kind).roleId;
@@ -120,7 +125,7 @@ export class PreDevDriver {
     const v = validateArtifactContent(kind, parsed, toUpstreamContents(kind, ctx.approvedUpstream));
     if (!v.ok) return {status: "REJECTED", kind, phase, reason: v.errors};
 
-    const art = this.deps.store.recordPreDevArtifact(scope, rm.preDevId, {kind, authorRoleId, content: parsed as ArtifactContent}, recordedBy);
+    const art = this.deps.store.recordPreDevArtifact(scope, rm.preDevId, {kind, authorRoleId, content: parsed as ArtifactContent, ...(supersedes ? {supersedes} : {})}, recordedBy);
     return {status: "RECORDED", kind, phase, artifactId: art.id, version: art.version};
   }
 
