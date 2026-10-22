@@ -17,8 +17,9 @@ import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from ".
 // INT-R4: runProcess (REL-FX ana-makine test çalıştırıcısı) ARTIK kullanılmaz; yürütme yalnız execution-gate sağlayıcısı (gate.provider.run) üzerinden gider, ana makinede asla.
 import {assertIndependentExecutors} from "./executors.js";
 import {ExecutionGate} from "./execution-gate.js";
-import {assertImplementerRole} from "../agents/first-delivery-bindings.js";
-import {advanceAgent, agentTraceEnvelope, instantiateAgent} from "../agents/role-execution.js";
+import {assertImplementerRole, assertRoleExecutes, bindingForFunction, taskLimitsFor} from "../agents/first-delivery-bindings.js";
+import {advanceAgent, agentTraceEnvelope, effectiveLimits, instantiateAgent} from "../agents/role-execution.js";
+import type {RoleExecutionProfile} from "../agents/role-execution.js";
 import type {GateDecision, ProjectExecutionKind} from "./execution-gate.js";
 import {M1A_NOT_VERIFIED_LABEL, productVerificationOf, reviewAndSecurityFor} from "./outcomes.js";
 import {RISK_REFUSAL, hostExecutionNotice, riskAdmitted} from "./risk-admission.js";
@@ -34,6 +35,8 @@ import type {GitleaksResult, PolicyInput, ResolvedTool, SecurityOptions, Securit
 
 export interface RunnerOptions {
   store: WorkOsStore; dataDir: string; globalStopFile: string; envPolicyFile: string; executors: ExecutorPair;
+  // LANE-C: REVIEW adımının bağlı rol kimliği (tanımsız = bağlı security-reviewer varsayılanı).
+  reviewerRoleId?: string;
   actor?: string; leaseTtlMs?: number; maxRemediations?: number; maxRetries?: number; maxRecoveries?: number; retryBackoffMs?: readonly number[];
   testTimeoutMs?: number; executorTimeoutMs?: number; maxStepsPerTick?: number; maxConcurrentRuns?: number; now?: () => number;
   // B3C: güvenlik araçları (tanımsız = PATH keşfi); override yalnız programatik enjeksiyondur.
@@ -260,6 +263,9 @@ export class MissionRunner {
     await this.applyOutcome(cur, leaseId, out);
   }
 
+  // //TR: Rol atanmış run için rol bağlamasının TaskLimits'i run varsayılanlarıyla birleşir (yalnız sıkılaştırır: maxCycles -> remediation üst sınırı, timeoutMs -> executor zaman aşımı, maxFilesWritten -> IMPLEMENT sonrası dosya sayısı). Rolsüz run (roleId null) değişmez.
+  private limitsOf(run: WorkRun) { return effectiveLimits(taskLimitsFor(run.roleId), {maxRemediations: this.o.maxRemediations, executorTimeoutMs: this.o.executorTimeoutMs}); }
+
   private async applyOutcome(run: WorkRun, leaseId: string, out: Outcome): Promise<void> {
     const s = this.o.store, a = this.o.actor, id = run.runId, step = run.step;
     switch (out.kind) {
@@ -272,8 +278,9 @@ export class MissionRunner {
         return;
       }
       case "REMEDIATE": {
-        if (run.remediationCycle >= this.o.maxRemediations) {
-          const reason = `${out.reason}_REMEDIATION_EXHAUSTED`;
+        const lim = this.limitsOf(run);
+        if (run.remediationCycle >= lim.maxRemediations) {
+          const reason = `${out.reason}_${lim.cycleCapped ? "TASK_LIMIT_MAX_CYCLES" : "REMEDIATION"}_EXHAUSTED`;
           s.transitionRun(id, leaseId, "BLOCKED", reason, a, {mission: {to: "BLOCKED", reason}});
           return;
         }
@@ -423,6 +430,13 @@ export class MissionRunner {
   }
 
   // IMPLEMENT yeniden girişte idempotenttir: workspace önce döngü başlangıç commit'ine sıfırlanır (kör tekrar yok).
+  // //TR: Rol atanmış run için izlenebilir ajan kaydı: rol tanımı kimliği ile ajan örneği kimliği ayrı; araç izinleri profilden gelir. Çağrı-başına araç izi bu adapter'dan GÖZLENEMEZ (araç kısıtı claude bayraklarıyla uygulanır) — bu açıkça yazılır, uydurma sayaç yok. Kanıt adımı run.step'tir (IMPLEMENT veya REVIEW).
+  private recordAgentTrace(run: WorkRun, leaseId: string, profile: RoleExecutionProfile, finalState: "COMPLETED" | "FAILED" | "ABORTED", r: {startedAt: string; endedAt: string; exitCode: number | null}, executorIdentity: string, noteExtra: string): void {
+    const agent = instantiateAgent({status: "EXECUTABLE", roleId: profile.roleId, profile, certification: "NOT_CERTIFIED", evaluation: {executed: 0, total: 0}}, run.runId, `agent-${run.runId}-${run.step.toLowerCase()}-c${run.remediationCycle}`);
+    advanceAgent(agent, "RUNNING"); advanceAgent(agent, finalState);
+    const env = {...agentTraceEnvelope(agent), allowedTools: profile.allowedTools, perCallToolTrace: "NOT_OBSERVABLE_FROM_ADAPTER", certification: "NOT_CERTIFIED"};
+    this.evidence(run, leaseId, {kind: "AGENT_TRACE", argv: [], startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, ...this.writeLog(run, `agent-trace-${run.step.toLowerCase()}`, JSON.stringify(env, null, 2) + "\n"), executorIdentity, note: `agent=${agent.agentInstanceId} role=${profile.roleId} state=${agent.state}${noteExtra}`.slice(0, 200)});
+  }
   private async stepImplement(run: WorkRun, leaseId: string, abort: () => boolean): Promise<Outcome> {
     // //TR: Run'a bir rol atanmışsa (roleId != null) o rol TANIMI implementer rotalı (developer/tester) yürütülebilir olmalıdır; değilse run yazmadan BLOCKED (ROLE_NOT_EXECUTABLE:<neden>). roleId null = rol atanmamış eski/rolsüz run (davranış değişmez).
     if (run.roleId !== null) {
@@ -436,21 +450,16 @@ export class MissionRunner {
     }
     this.renew(run.runId, leaseId);
     const spec: MissionSpec = {...this.missionSpec(run), startSha: start};
-    const r = await this.o.executors.implementer.implement(work, spec, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
+    const lim = this.limitsOf(run);
+    const r = await this.o.executors.implementer.implement(work, spec, {timeoutMs: lim.executorTimeoutMs, shouldAbort: abort});
     const head = this.gitOk(work, ["rev-parse", "HEAD"]);
     const log = this.writeLog(run, "implement", r.log);
     const produced = r.exitCode === 0 && !r.blockReason && head && SHA.test(head) && head !== start ? head : undefined;
     const limit = r.exitCode !== 0 && !r.aborted && !r.timedOut ? executorLimit(r.exitCode, r.log) : null;
     this.evidence(run, leaseId, {kind: "IMPLEMENT", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, baseSha: start, ...(produced ? {commitSha: produced} : {}), executorIdentity: this.o.executors.implementer.identity,
       ...(limit ? {note: limitNote(limit)} : r.blockReason ? {note: r.blockReason.slice(0, 200)} : {})});
-    // //TR: Rol atanmış run için izlenebilir ajan kaydı: rol tanımı kimliği ile ajan örneği kimliği ayrı; araç izinleri profilden gelir. Çağrı-başına araç izi bu adapter'dan GÖZLENEMEZ (araç kısıtı claude bayraklarıyla uygulanır) — bu açıkça yazılır, uydurma sayaç yok.
-    if (run.roleId !== null) {
-      const profile = assertImplementerRole(run.roleId);
-      const agent = instantiateAgent({status: "EXECUTABLE", roleId: run.roleId, profile, certification: "NOT_CERTIFIED", evaluation: {executed: 0, total: 0}}, run.runId, `agent-${run.runId}-c${run.remediationCycle}`);
-      advanceAgent(agent, "RUNNING"); advanceAgent(agent, r.aborted ? "ABORTED" : produced ? "COMPLETED" : "FAILED");
-      const env = {...agentTraceEnvelope(agent), allowedTools: profile.allowedTools, perCallToolTrace: "NOT_OBSERVABLE_FROM_ADAPTER", certification: "NOT_CERTIFIED"};
-      this.evidence(run, leaseId, {kind: "AGENT_TRACE", argv: [], startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, ...this.writeLog(run, "agent-trace", JSON.stringify(env, null, 2) + "\n"), executorIdentity: this.o.executors.implementer.identity, note: `agent=${agent.agentInstanceId} role=${run.roleId} state=${agent.state}`.slice(0, 200)});
-    }
+    // //TR: Rol atanmış run için izlenebilir ajan kaydı (ayrıntı: recordAgentTrace).
+    if (run.roleId !== null) this.recordAgentTrace(run, leaseId, assertImplementerRole(run.roleId), r.aborted ? "ABORTED" : produced ? "COMPLETED" : "FAILED", r, this.o.executors.implementer.identity, "");
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     // REL-FX-4: sağlayıcı kota/hız sınırı kör retry ile bütçe tüketmez: run BLOCKED(PROVIDER_QUOTA), retryCount değişmez; disk dolu/kotası BLOCKED(DISK_FULL).
     if (limit) return limitBlock(limit);
@@ -461,6 +470,14 @@ export class MissionRunner {
     if (!produced) return {kind: "BLOCK", reason: "NO_COMMIT_PRODUCED", status: "FAILED"};
     if (r.commitSha !== undefined && r.commitSha !== produced) return {kind: "BLOCK", reason: "IMPLEMENT_COMMIT_MISMATCH", status: "FAILED"};
     if (this.git(work, ["merge-base", "--is-ancestor", start, produced]).status !== 0) return {kind: "BLOCK", reason: "IMPLEMENT_HISTORY_REWRITTEN", status: "FAILED"};
+    // //TR: Rol limiti maxFilesWritten: run'ın BASE'e göre değiştirdiği dosya sayısı (döngüler toplamı) sınırı aşarsa VERIFY'a geçilmez. Sayım okunamazsa fail-closed (limit doğrulanamaz).
+    if (lim.maxFilesWritten !== null) {
+      const base = run.baseSha ?? start;
+      const names = this.git(work, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", base, produced]);
+      if (names.status !== 0) return {kind: "BLOCK", reason: "TASK_LIMIT_FILES_UNVERIFIABLE", status: "FAILED"};
+      const files = String(names.stdout ?? "").split("\0").filter(Boolean).length;
+      if (files > lim.maxFilesWritten) return {kind: "BLOCK", reason: `TASK_LIMIT_FILES_EXCEEDED:${files}>${lim.maxFilesWritten}`};
+    }
     return {kind: "DONE", next: "VERIFY", data: {commitSha: produced, startSha: start}, patch: {headSha: produced}};
   }
 
@@ -654,6 +671,11 @@ export class MissionRunner {
   private async stepReview(run: WorkRun, leaseId: string, abort: () => boolean): Promise<Outcome> {
     const reviewer = this.o.executors.reviewer;
     if (reviewer.identity === run.executor.implementer || reviewer.identity !== run.executor.reviewer) return {kind: "BLOCK", reason: "REVIEWER_IDENTITY_MISMATCH"};
+    // //TR: Rol atanmış run'ın REVIEW adımı bağlı security-reviewer rolü üzerinden yürür (varsayılan: bağlı UASCO-0252); bağlama yoksa/tam değilse hiçbir review çağrısı yapılmadan BLOCKED. roleId null = eski davranış.
+    let reviewerProfile: RoleExecutionProfile | null = null;
+    if (run.roleId !== null) {
+      try { reviewerProfile = assertRoleExecutes(this.o.reviewerRoleId ?? bindingForFunction("security-reviewer").roleId, "security-reviewer"); } catch (e) { return {kind: "BLOCK", reason: (e as Error).message.slice(0, 200)}; }
+    }
     if (!run.baseSha || !run.headSha) return {kind: "BLOCK", reason: "HEAD_COMMIT_MISSING", status: "FAILED"};
     const clone = this.freshClone(run);
     if (!clone) return {kind: "BLOCK", reason: "REVIEW_CLONE_FAILED", status: "FAILED"};
@@ -674,6 +696,7 @@ export class MissionRunner {
       : "";
     this.evidence(run, leaseId, {kind: "REVIEW", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, commitSha: run.headSha,
       reviewerIdentity: reviewer.identity, executorIdentity: run.executor.implementer, ...(r.valid ? {verdict: r.verdict, findingsCount: r.findings.length} : {}), ...(reviewNote ? {note: reviewNote} : {})});
+    if (reviewerProfile) this.recordAgentTrace(run, leaseId, reviewerProfile, r.aborted ? "ABORTED" : r.valid && untouched ? "COMPLETED" : "FAILED", r, reviewer.identity, r.valid ? ` verdict=${r.verdict}` : " verdict=INVALID");
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     if (!untouched) return {kind: "BLOCK", reason: "REVIEWER_MUTATED_CLONE"};
     // REL-FX: reviewer sağlayıcı kota/hız sınırına çarptıysa BLOCKED(PROVIDER_QUOTA/DISK_FULL), yeniden deneme bütçesi tüketilmez; SBX-8 geçersizlik dalından önce.

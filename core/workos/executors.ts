@@ -49,16 +49,18 @@ export function assertIndependentExecutors(pair: ExecutorPair): void {
 }
 
 const MAX_CAPTURE = 4 * 1024 * 1024;
-function killTree(child: cp.ChildProcess): void {
+// //TR: newSession (yalnız POSIX): çocuk yeni oturum+süreç grubu lideri olarak başlar (kontrol eden terminal MİRAS ALINMAZ) ve zaman aşımı/abort tüm GRUBA SIGKILL gönderir; sandbox sağlayıcısı kullanır (ns-init'in pdeathsig'ine güvenilmez).
+function killTree(child: cp.ChildProcess, group = false): void {
   try {
     if (process.platform === "win32" && child.pid) cp.spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {windowsHide: true, stdio: "ignore"});
+    else if (group && child.pid) { try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); } }
     else child.kill("SIGKILL");
   } catch { /* süreç zaten bitmiş olabilir */ }
 }
-export interface ProcOptions { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; input?: string; shouldAbort?: () => boolean }
+export interface ProcOptions { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; input?: string; shouldAbort?: () => boolean; newSession?: boolean }
 // Shell kullanılmaz (argv dizisi); zaman aşımı ve abort (GLOBAL_STOP / lease kaybı) süreç ağacını sonlandırır.
 export function runProcess(argv: string[], opts: ProcOptions): Promise<ProcResult> {
-  return runChild(argv, opts, () => cp.spawn(argv[0], argv.slice(1), {cwd: opts.cwd, env: opts.env, shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"]}));
+  return runChild(argv, opts, () => cp.spawn(argv[0], argv.slice(1), {cwd: opts.cwd, env: opts.env, shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"], ...(opts.newSession && process.platform !== "win32" ? {detached: true} : {})}));
 }
 /**
  * INT-R3 D-M1-02: UASCO'nun KENDİ node script'ini (ör. scripts/capture-provider-provenance.mjs, scripts/claude-builder-broker.mjs) çocuk süreç olarak çalıştırır.
@@ -84,8 +86,9 @@ function runChild(argv: string[], opts: ProcOptions, start: () => cp.ChildProces
       spawnError = true; stderr = `SPAWN_FAILED: ${(e as Error).message}`; settled = true;
       resolve({argv, exitCode: null, stdout, stderr, startedAt, endedAt: new Date().toISOString(), timedOut, aborted, spawnError}); return;
     }
-    const timer = setTimeout(() => { timedOut = true; killTree(child); }, Math.max(1, opts.timeoutMs));
-    const poll: NodeJS.Timeout | null = opts.shouldAbort ? setInterval(() => { if (opts.shouldAbort!()) { aborted = true; killTree(child); } }, 250) : null;
+    const group = opts.newSession === true && process.platform !== "win32";
+    const timer = setTimeout(() => { timedOut = true; killTree(child, group); }, Math.max(1, opts.timeoutMs));
+    const poll: NodeJS.Timeout | null = opts.shouldAbort ? setInterval(() => { if (opts.shouldAbort!()) { aborted = true; killTree(child, group); } }, 250) : null;
     child.stdout?.on("data", (d: Buffer) => { if (stdout.length < MAX_CAPTURE) stdout += d.toString("utf8"); });
     child.stderr?.on("data", (d: Buffer) => { if (stderr.length < MAX_CAPTURE) stderr += d.toString("utf8"); });
     child.on("error", e => { spawnError = true; stderr += `SPAWN_FAILED: ${e.message}`; finish(null); });

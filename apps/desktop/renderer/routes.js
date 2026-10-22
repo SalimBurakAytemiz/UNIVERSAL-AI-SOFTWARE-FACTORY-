@@ -35,6 +35,7 @@ export const ROUTES=Object.freeze([
   {id:"audit",hash:"#/audit",icon:"receipt",factory:false,view:"planned",component:"audit"},
   {id:"domains",hash:"#/domains",icon:"layers",factory:false,view:"planned",component:"domains"},
   {id:"integrations",hash:"#/integrations",icon:"plug",factory:false,view:"planned",component:"integrations"},
+  {id:"scheduler",hash:"#/scheduler",icon:"clock",factory:false,view:"planned",component:"scheduler"},
   {id:"settings",hash:"#/settings",icon:"gear",factory:false,view:"settings"}
 ]);
 export const DEFAULT_ROUTE="home";

@@ -17,6 +17,8 @@ import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors, executorsFromEnv, parseReviewOutput} from "../core/workos/executors.js";
 import type {ExecutorPair, FakeScript, MissionSpec} from "../core/workos/executors.js";
 import {RUN_STATUSES, TERMINAL_RUN_STATUSES, canRunTransition} from "../core/workos/run-state.js";
+import {effectiveLimits} from "../core/agents/role-execution.js";
+import {FIRST_DELIVERY_BINDINGS} from "../core/agents/first-delivery-bindings.js";
 import {scanDiffForSecrets, redactSecrets} from "../core/workos/secret-scan.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 import type {WorkRun} from "../core/workos/types.js";
@@ -117,12 +119,15 @@ describe("B3a mission runner engine", () => {
         const trace = run.evidence.filter(e => e.kind === "AGENT_TRACE");
         if (roleId === null) expect(trace).toHaveLength(0);
         else {
-          expect(trace).toHaveLength(1);
-          expect(trace[0].note).toBe(`agent=agent-${run.runId}-c0 role=${roleId} state=COMPLETED`);
-          expect(trace[0].step).toBe("IMPLEMENT");
+          expect(trace.map(e => e.step)).toEqual(["IMPLEMENT", "REVIEW"]);
+          expect(trace[0].note).toBe(`agent=agent-${run.runId}-implement-c0 role=${roleId} state=COMPLETED`);
+          expect(trace[1].note).toBe(`agent=agent-${run.runId}-review-c0 role=UASCO-0252 state=COMPLETED verdict=CLEAN`);
+          expect(trace[1].executorIdentity).toBe("FAKE_REVIEWER");
           const body = JSON.parse(fs.readFileSync(path.join(c.dataDir, trace[0].logPath!), "utf8"));
           expect(body).toMatchObject({roleId, runId: run.runId, providerRoute: "CLAUDE_IMPLEMENTER", state: "COMPLETED", certification: "NOT_CERTIFIED", perCallToolTrace: "NOT_OBSERVABLE_FROM_ADAPTER"});
           expect(body.agentInstanceId).not.toBe(body.roleId);
+          const rbody = JSON.parse(fs.readFileSync(path.join(c.dataDir, trace[1].logPath!), "utf8"));
+          expect(rbody).toMatchObject({roleId: "UASCO-0252", providerRoute: "CLAUDE_REVIEWER", allowedTools: ["Read", "Glob", "Grep"], state: "COMPLETED"});
         }
       }
     }
@@ -623,6 +628,33 @@ describe("B3a control API", () => {
     await a.close(); await b.close();
   });
 
+  it("LANE-C: the REVIEW step of a role-assigned run goes through the bound reviewer role; a BLOCKED verdict is recorded in the trace; unbound reviewer role BLOCKS before any review call", { timeout: T }, async () => {
+    // BLOCKED verdict (remediation cycle 0) is recorded as a COMPLETED agent with verdict=BLOCKED
+    const c = setup(); const fake = new FakeExecutors(okScript({review: call => ({verdict: call === 1 ? "BLOCKED" : "CLEAN", findings: call === 1 ? [{severity: "HIGH", title: "x"}] : []})}));
+    const p = fake.pair();
+    const created = c.store.createRun({tenantId: "tA", missionId: c.missionId, roleId: "UASCO-0085", executor: {implementer: p.implementer.identity, reviewer: p.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
+    await runner(c, fake).tick();
+    const run = runOf(c, created.runId);
+    const reviewTraces = run.evidence.filter(e => e.kind === "AGENT_TRACE" && e.step === "REVIEW");
+    expect(reviewTraces.length).toBeGreaterThanOrEqual(2);
+    expect(reviewTraces[0].note).toContain("verdict=BLOCKED");
+    expect(reviewTraces[reviewTraces.length - 1].note).toContain("verdict=CLEAN");
+    // an unbound/mismatched configured reviewer role BLOCKS before the reviewer adapter is called
+    for (const bad of ["UASCO-0085", "UASCO-0001"]) {
+      const c2 = setup(); const f2 = new FakeExecutors(okScript()); const p2 = f2.pair();
+      const cr = c2.store.createRun({tenantId: "tA", missionId: c2.missionId, roleId: "UASCO-0085", executor: {implementer: p2.implementer.identity, reviewer: p2.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
+      await runner(c2, f2, {reviewerRoleId: bad}).tick();
+      const r2 = runOf(c2, cr.runId);
+      expect(r2.status).toBe("BLOCKED");
+      expect(f2.calls.review).toBe(0);
+      expect(JSON.stringify(journal(c2))).toContain("ROLE_NOT_EXECUTABLE:");
+    }
+    // role-less runs: no AGENT_TRACE at all (unchanged behaviour)
+    const c3 = setup(); const f3 = new FakeExecutors(okScript()); const created3 = start(c3, f3);
+    await runner(c3, f3).tick();
+    expect(runOf(c3, created3.runId).evidence.some(e => e.kind === "AGENT_TRACE")).toBe(false);
+  });
+
   it("LANE-C: a product run started over HTTP with the bound developer role executes through the runner, writes AGENT_TRACE evidence visible via GET; a non-implementer role is BLOCKED visibly", { timeout: T }, async () => {
     const c = setup("tA"); const fake = new FakeExecutors(okScript());
     const app = mk(c, "tA", {executors: fake.pair(), runner: {enabled: true, intervalMs: 250, retryBackoffMs: [0, 0], security: fakeSecurity(`${c.dataDir}-sec`).options}});
@@ -639,8 +671,9 @@ describe("B3a control API", () => {
     expect(done.status).toBe("AWAITING_APPROVAL");
     expect(fake.calls.implement).toBe(1);
     const trace = done.evidence.filter((e: any) => e.kind === "AGENT_TRACE");
-    expect(trace).toHaveLength(1);
-    expect(trace[0].note).toBe(`agent=agent-${done.runId}-c0 role=UASCO-0085 state=COMPLETED`);
+    expect(trace.map((e: any) => e.step)).toEqual(["IMPLEMENT", "REVIEW"]);
+    expect(trace[0].note).toBe(`agent=agent-${done.runId}-implement-c0 role=UASCO-0085 state=COMPLETED`);
+    expect(trace[1].note).toBe(`agent=agent-${done.runId}-review-c0 role=UASCO-0252 state=COMPLETED verdict=CLEAN`);
     expect(done.evidence.map((e: any) => e.kind)).toEqual(expect.arrayContaining(["IMPLEMENT", "AGENT_TRACE", "REVIEW"]));
     // a second run with a reviewer-route role never reaches the builder
     const c2 = setup("tB"); const fake2 = new FakeExecutors(okScript());
@@ -677,5 +710,81 @@ describe("B3a control API", () => {
     await new Promise(r => setTimeout(r, 600));
     expect((await off.inject({method: "GET", url: `/v1/work-runs/${r2.runId}`, headers: hdr})).json().run.status).toBe("QUEUED");
     await off.close();
+  });
+});
+
+describe("LANE-C bound role TaskLimits are enforced by the runner (never loosened, role-less runs unchanged)", () => {
+  const roleRun = (c: Ctx, fake: FakeExecutors, roleId: string | null) => { const p = fake.pair(); return c.store.createRun({tenantId: "tA", missionId: c.missionId, roleId, executor: {implementer: p.implementer.identity, reviewer: p.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}); };
+  const manyFiles = (n: number, tag = "f") => Object.fromEntries(Array.from({length: n}, (_, i) => [`gen/${tag}-${i}.txt`, `${i}\n`]));
+  const seenTimeouts = (fake: FakeExecutors, seen: number[]) => { const p = fake.pair(); return {...p, implementer: {...p.implementer, implement: (w: string, s: MissionSpec, ctx: {timeoutMs: number; shouldAbort?: () => boolean}) => { seen.push(ctx.timeoutMs); return p.implementer.implement(w, s, ctx); }}}; };
+
+  it("effectiveLimits only tightens: lowest of run default and role limit; null limits change nothing", () => {
+    const l = {maxCycles: 2, timeoutMs: 3_600_000, maxFilesWritten: 100};
+    expect(effectiveLimits(null, {maxRemediations: 2, executorTimeoutMs: 7})).toEqual({maxRemediations: 2, executorTimeoutMs: 7, maxFilesWritten: null, cycleCapped: false});
+    expect(effectiveLimits(l, {maxRemediations: 2, executorTimeoutMs: 9_000_000})).toEqual({maxRemediations: 1, executorTimeoutMs: 3_600_000, maxFilesWritten: 100, cycleCapped: true});
+    expect(effectiveLimits(l, {maxRemediations: 0, executorTimeoutMs: 60_000})).toEqual({maxRemediations: 0, executorTimeoutMs: 60_000, maxFilesWritten: 100, cycleCapped: false});
+    expect(effectiveLimits({...l, maxCycles: 3}, {maxRemediations: 2, executorTimeoutMs: 1_000})).toMatchObject({maxRemediations: 2, cycleCapped: false});
+  });
+
+  it("the bound implementer limits equal the runner's 60 min executor default, so enforcement does not shorten real runs", () => {
+    for (const id of ["UASCO-0085", "UASCO-0313"]) expect(FIRST_DELIVERY_BINDINGS.find(b => b.roleId === id)!.limits.timeoutMs).toBe(60 * 60_000);
+  });
+
+  it("maxCycles: tester (2 cycles) is stopped after 1 remediation as TASK_LIMIT_MAX_CYCLES; developer (3) and role-less keep the run budget; a lower run budget is never raised", { timeout: T }, async () => {
+    const bad = () => new FakeExecutors(okScript({implement: () => ({files: {"feature.txt": "bad\n"}})}));
+    const cases: Array<[string | null, number, string, number]> = [
+      ["UASCO-0313", 2, "TESTS_FAILED_TASK_LIMIT_MAX_CYCLES_EXHAUSTED", 2],
+      ["UASCO-0085", 2, "TESTS_FAILED_REMEDIATION_EXHAUSTED", 3],
+      [null, 2, "TESTS_FAILED_REMEDIATION_EXHAUSTED", 3],
+      ["UASCO-0085", 0, "TESTS_FAILED_REMEDIATION_EXHAUSTED", 1],
+      ["UASCO-0313", 0, "TESTS_FAILED_REMEDIATION_EXHAUSTED", 1]
+    ];
+    for (const [roleId, maxRemediations, reason, implementCalls] of cases) {
+      const c = setup(); const fake = bad();
+      const r = roleRun(c, fake, roleId);
+      await runner(c, fake, {maxRemediations}).tick();
+      const run = runOf(c, r.runId);
+      expect([roleId, maxRemediations, run.status, run.reason, fake.calls.implement]).toEqual([roleId, maxRemediations, "BLOCKED", reason, implementCalls]);
+    }
+  });
+
+  it("timeoutMs: the executor gets min(run default, role limit): a role cannot raise a lower run timeout; role-less runs get the run default", { timeout: T }, async () => {
+    for (const [roleId, runTimeout, expected] of [["UASCO-0085", 9_000_000, 3_600_000], ["UASCO-0313", 9_000_000, 3_600_000], ["UASCO-0085", 60_000, 60_000], [null, 9_000_000, 9_000_000]] as const) {
+      const c = setup(); const fake = new FakeExecutors(okScript()); const seen: number[] = [];
+      const r = roleRun(c, fake, roleId);
+      await runner(c, fake, {executorTimeoutMs: runTimeout, executors: seenTimeouts(fake, seen)}).tick();
+      expect(runOf(c, r.runId).status).toBe("AWAITING_APPROVAL");
+      expect([roleId, runTimeout, seen]).toEqual([roleId, runTimeout, [expected]]);
+    }
+  });
+
+  it("maxFilesWritten: exactly the limit passes, one more is BLOCKED before VERIFY/REVIEW; the count is cumulative from the base across remediation cycles; role-less runs have no file limit", { timeout: T }, async () => {
+    // tester limit = 100: feature.txt + 99 files = 100 passes, + 100 files = 101 is blocked
+    for (const [n, ok] of [[99, true], [100, false]] as const) {
+      const c = setup(); const fake = new FakeExecutors(okScript({implement: () => ({files: {"feature.txt": "ok\n", ...manyFiles(n)}})}));
+      const r = roleRun(c, fake, "UASCO-0313");
+      await runner(c, fake).tick();
+      const run = runOf(c, r.runId);
+      if (ok) expect(run.status).toBe("AWAITING_APPROVAL");
+      else {
+        expect(run.status).toBe("BLOCKED");
+        expect(run.reason).toBe("TASK_LIMIT_FILES_EXCEEDED:101>100");
+        expect(kinds(run)).toEqual(expect.arrayContaining(["IMPLEMENT", "AGENT_TRACE"]));
+        expect(kinds(run)).not.toContain("VERIFY_TESTS");
+        expect(fake.calls.review).toBe(0);
+        expect(missionOf(c).status).toBe("BLOCKED");
+      }
+    }
+    // cumulative: cycle 0 writes 60 files with a failing test, cycle 1 fixes it with 60 more -> 121 from the base > 100
+    const c = setup(); const fake = new FakeExecutors(okScript({implement: n => ({files: {"feature.txt": n === 1 ? "bad\n" : "ok\n", ...manyFiles(60, `c${n}`)}})}));
+    const r = roleRun(c, fake, "UASCO-0313");
+    await runner(c, fake).tick();
+    const run = runOf(c, r.runId);
+    expect([run.status, run.reason, fake.calls.implement]).toEqual(["BLOCKED", "TASK_LIMIT_FILES_EXCEEDED:121>100", 2]);
+    // role-less: no limit applies
+    const c2 = setup(); const fake2 = new FakeExecutors(okScript({implement: () => ({files: {"feature.txt": "ok\n", ...manyFiles(150)}})}));
+    const r2 = roleRun(c2, fake2, null);
+    await runner(c2, fake2).tick();
+    expect(runOf(c2, r2.runId).status).toBe("AWAITING_APPROVAL");
   });
 });
