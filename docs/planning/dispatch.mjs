@@ -1,5 +1,6 @@
 // //TR: Bu betik Cloud-only deterministik sonraki-görev dağıtıcısıdır: BACKLOG_CHECKPOINT.json'u fail-closed doğrular, ilk seçilebilir görevi seçer ve --claim ile git branch-ref (create-only) üzerinden talep eder; bu, birleştirilmiş atomik lease ya da FA-LEASE2 bağlantısı DEĞİLDİR (bkz. DISPATCH.md).
-// Usage: node docs/planning/dispatch.mjs [--claim] [--owner <id>] [--backlog <path>] [--remote <name>] [--base-branch <b>] [--stale-hours <n>] [--open-prs a,b] [--max-active <1..16>] [--no-lease]
+// Usage: node docs/planning/dispatch.mjs [--claim] [--owner <id>] [--backlog <path>] [--remote <name>] [--base-branch <b>] [--stale-hours <n>] [--open-prs a,b] [--max-active <1..16>] [--no-lease] [--plan] [--lane <A-Z>] [--lanes <path>]
+// --plan (read-only) prints the A-Z lane plan built from docs/planning/LANES.json (docs/planning/lanes.mjs); --lane X keeps only lane X's wave-0 tasks selectable, so --claim --lane X claims for that lane.
 // Exit: 0 START|NO_ACTION, 2 BLOCKED, 3 RECOVERABLE_FAILURE. Prints exactly one JSON line on stdout.
 import fs from "node:fs";
 import path from "node:path";
@@ -16,7 +17,7 @@ const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9.-]{0,63}$/;
 const CLAIM_SUBJECT = "dispatch-claim:";
 // The exact subject the claim loop below writes: "dispatch-claim: <id> owner=<name> at=<ISO-8601 ms Z> nonce=<uuid v4>".
 const CLAIM_MSG_RE = /^dispatch-claim: ([A-Za-z0-9][A-Za-z0-9._-]{0,127}) owner=[A-Za-z0-9][A-Za-z0-9.-]{0,63} at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z nonce=[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-export const EXIT = {START: 0, NO_ACTION: 0, BLOCKED: 2, RECOVERABLE_FAILURE: 3};
+export const EXIT = {START: 0, NO_ACTION: 0, PLAN: 0, BLOCKED: 2, RECOVERABLE_FAILURE: 3};
 
 const isStr = v => typeof v === "string";
 const nonEmpty = v => isStr(v) && v.trim() !== "";
@@ -55,12 +56,16 @@ class Blocked extends Error { constructor(code) { super(code); this.code = code;
 
 export function parseArgs(argv) {
   const o = {claim: false, owner: "cloud-dispatch", backlog: "docs/planning/BACKLOG_CHECKPOINT.json", remote: "origin",
-    baseBranch: "v7/integration", staleHours: 6, openPrs: [], maxActive: null, lease: true};
+    baseBranch: "v7/integration", staleHours: 6, openPrs: [], maxActive: null, lease: true,
+    plan: false, lane: null, lanes: "docs/planning/LANES.json"};
   const val = (i, f) => { if (i + 1 >= argv.length || argv[i + 1].startsWith("--")) throw new Blocked(`ARG_MISSING_VALUE:${f}`); return argv[i + 1]; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--claim") o.claim = true;
     else if (a === "--no-lease") o.lease = false;
+    else if (a === "--plan") o.plan = true;
+    else if (a === "--lane") { const v = val(i++, a); if (!/^[A-Z]$/.test(v)) throw new Blocked("ARG_INVALID:--lane"); o.lane = v; }
+    else if (a === "--lanes") o.lanes = val(i++, a);
     else if (a === "--owner") o.owner = val(i++, a);
     else if (a === "--backlog") o.backlog = val(i++, a);
     else if (a === "--remote") o.remote = val(i++, a);
@@ -72,6 +77,7 @@ export function parseArgs(argv) {
     else throw new Blocked(`ARG_UNKNOWN:${safeArg(a)}`);
   }
   if (!NAME_RE.test(o.owner)) throw new Blocked("ARG_INVALID:--owner");
+  if (o.plan && o.claim) throw new Blocked("ARG_CONFLICT:--plan+--claim");
   if (!NAME_RE.test(o.remote)) throw new Blocked("ARG_INVALID:--remote");
   if (!REF_RE.test(o.baseBranch) || o.baseBranch.includes("..")) throw new Blocked("ARG_INVALID:--base-branch");
   return o;
@@ -403,7 +409,14 @@ async function runInner(argv, cwd) {
   let tasks;
   try { tasks = loadBacklog(path.resolve(cwd, o.backlog)); } catch (e) { return fin("BLOCKED", [e.code || "BACKLOG_ERROR"]); }
   const git = makeGit(cwd);
-  return guardRun(await runWithGit(o, tasks, git), git);
+  // The lane module is loaded from THIS script's own directory, and only when lanes are asked for (a lone copy of this script keeps working).
+  let lanes = null;
+  if (o.plan || o.lane) {
+    let L;
+    try { L = await import(pathToFileURL(path.join(HERE, "lanes.mjs")).href); } catch { return fin("BLOCKED", ["LANES_MODULE_UNAVAILABLE"]); }
+    try { lanes = {L, reg: L.loadLaneRegistry(path.resolve(cwd, o.lanes))}; } catch (e) { return fin("BLOCKED", [e.code || "LANES_ERROR"]); }
+  }
+  return guardRun(await runWithGit(o, tasks, git, lanes), git);
 }
 // Run-level fail-closed guard. Output overflow is reported (each overflowed call already failed closed). A run that hit its deadline ends
 // RECOVERABLE_FAILURE with no task offered; only a claim that verifiably exists (START, claimed:true) is still reported as such.
@@ -415,13 +428,20 @@ function guardRun(res, git) {
   delete rest.claimed;
   return fin("RECOVERABLE_FAILURE", [...reasons, ...add], {...rest, taskId: null, branch: null, claimRef: null});
 }
-async function runWithGit(o, tasks, git) {
+async function runWithGit(o, tasks, git, lanes = null) {
   const heads = remoteHeads(git, o.remote);
   if (!heads) return fin("RECOVERABLE_FAILURE", ["REMOTE_UNREACHABLE"]);
   const claimedHeads = new Set([...heads.keys()].filter(n => n.startsWith("claude/")));
   const env = {tasks, claimedHeads, remoteHeads: new Set(heads.keys()), openPrs: new Set(o.openPrs), skip: new Map()};
+  // A-Z lanes: eligibility stays evaluateTask's; the lane plan only adds skip reasons, so a lane run selects among its own wave-0 tasks.
+  let plan = null;
+  if (lanes) {
+    try { plan = lanes.L.planDispatch({tasks, env, registry: lanes.reg, evaluate: evaluateTask, claimBranchOf}); } catch (e) { return fin("BLOCKED", [e.code || "LANES_PLAN_ERROR"]); }
+    if (o.lane) for (const [id, why] of lanes.L.laneSkips(plan, o.lane)) env.skip.set(id, why);
+  }
   const {chosen: first, perTask} = select(tasks, env);
   const flat = perTask.flatMap(p => p.reasons.map(x => `${p.taskId ?? "?"}:${x}`));
+  if (o.plan) return fin("PLAN", flat, {perTask, mode: "PLAN", owner: safeOwnerArg(o.owner), plan});
 
   // Lease modules are imported read-only from THIS script's own repo (import.meta.url), never from the caller's cwd/git toplevel
   // (a cwd repo could otherwise plant its own automation/lib/task-lease*.mjs); a load failure only disables the optional lease record.
@@ -457,7 +477,7 @@ async function runWithGit(o, tasks, git) {
   const reclaimable = staleReport(git, o.remote, baseSha, claimedList, env.openPrs, o.staleHours, readLease, Date.now(), fullHistory);
   for (const r of reclaimable) if (r.state === "RECLAIMABLE") flat.push(`${r.taskId}:RECLAIMABLE`);
   const active = reclaimable.filter(r => (r.state === "FRESH" || r.state === "HAS_WORK_COMMITS" || r.state === "UNKNOWN") && !env.openPrs.has(claimBranchOf(r.taskId))).length;
-  const extras = {perTask, reclaimable, active, mode: o.claim ? "CLAIM" : "DRY_RUN", owner: safeOwnerArg(o.owner)};
+  const extras = {perTask, reclaimable, active, mode: o.claim ? "CLAIM" : "DRY_RUN", owner: safeOwnerArg(o.owner), ...(o.lane ? {lane: o.lane} : {})};
 
   const skipNext = (id, reason) => { env.skip.set(id, reason); return select(tasks, env).chosen; };
   if (!first) return fin("NO_ACTION", flat.length ? flat : ["EMPTY_BACKLOG"], extras);

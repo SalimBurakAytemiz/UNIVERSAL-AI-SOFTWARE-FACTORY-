@@ -1445,3 +1445,100 @@ describe("LANE-B project knowledge summary", () => {
     expect((await know((await mkApp(undefined, "tB")).app, p.projectId)).statusCode).toBe(404);
   });
 });
+
+// //TR: LANE-B sözleşme taraması: ilk-teslim route'larına bozuk id, bozuk/yanlış tipte/aşırı gövde gönderilir; hiçbir yanıt 5xx olmaz, hata gövdesi sabit kod taşır ve yol/yığın sızdırmaz.
+describe("LANE-B first-delivery 4xx/5xx contract sweep", () => {
+  const token = crypto.randomBytes(16).toString("hex");
+  const hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const ZERO = (p: string) => p + "0".repeat(24);
+  type Route = {method: "GET" | "POST"; url: string; ids: string[]};
+  // :p proje, :m mission, :t görev, :r koşu, :i intake kimliği; `ids` hangi yer tutucuların bozulacağını söyler.
+  const ROUTES: Route[] = [
+    {method: "GET", url: "/v1/intakes/:i", ids: [":i"]}, {method: "POST", url: "/v1/intakes", ids: []},
+    {method: "POST", url: "/v1/projects", ids: []}, {method: "POST", url: "/v1/missions", ids: []},
+    {method: "GET", url: "/v1/missions/:m", ids: [":m"]}, {method: "POST", url: "/v1/missions/:m/transition", ids: [":m"]},
+    {method: "POST", url: "/v1/missions/:m/plan", ids: [":m"]}, {method: "GET", url: "/v1/missions/:m/tasks", ids: [":m"]},
+    {method: "POST", url: "/v1/missions/:m/runs", ids: [":m"]},
+    {method: "GET", url: "/v1/tasks/:t", ids: [":t"]}, {method: "POST", url: "/v1/tasks/:t/transition", ids: [":t"]},
+    {method: "GET", url: "/v1/tasks/:t/runs", ids: [":t"]}, {method: "POST", url: "/v1/tasks/:t/runs", ids: [":t"]},
+    {method: "GET", url: "/v1/work-runs/:r", ids: [":r"]}, {method: "GET", url: "/v1/work-runs/:r/tasks", ids: [":r"]},
+    {method: "GET", url: "/v1/work-runs/:r/delivery", ids: [":r"]},
+    {method: "POST", url: "/v1/work-runs/:r/delivery/prepare", ids: [":r"]}, {method: "POST", url: "/v1/work-runs/:r/delivery/accept", ids: [":r"]},
+    {method: "POST", url: "/v1/work-runs/:r/delivery/export", ids: [":r"]}, {method: "POST", url: "/v1/work-runs/:r/tasks/reconcile", ids: [":r"]},
+    {method: "GET", url: "/v1/projects/:p/flow", ids: [":p"]}, {method: "GET", url: "/v1/projects/:p/devrun", ids: [":p"]}
+  ];
+  const BAD_IDS = ["bad", "..%2F..%2Fetc%2Fpasswd", "x".repeat(300), "%00", "prj_" + "G".repeat(24), "%E0%A4%A"];
+  const BODIES: {name: string; headers: Record<string, string>; payload: string}[] = [
+    {name: "invalid json", headers: {"content-type": "application/json"}, payload: "{bad"},
+    {name: "text/plain", headers: {"content-type": "text/plain"}, payload: "hello"},
+    {name: "array", headers: {"content-type": "application/json"}, payload: "[]"},
+    {name: "null", headers: {"content-type": "application/json"}, payload: "null"},
+    {name: "string", headers: {"content-type": "application/json"}, payload: '"str"'},
+    {name: "unknown field", headers: {"content-type": "application/json"}, payload: '{"__proto__":{"x":1},"zzz":1}'},
+    {name: "oversize", headers: {"content-type": "application/json"}, payload: JSON.stringify({pad: "x".repeat(100 * 1024)})}
+  ];
+  const FIXED = /^[A-Z][A-Z0-9_]*$/;
+  const leaks = (body: string) => [tmp, "node_modules", "/home/", "    at ", "\\Users\\", "stack"].filter(s => s && body.includes(s));
+
+  it("never answers 5xx to malformed ids/bodies, always returns a fixed error code, and leaks no path or stack", async () => {
+    const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
+    const app = buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false});
+    (await import("../apps/control-api/src/routes/error-contract.js")).registerErrorContract(app);
+    const sc = {tenantId: "local"};
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const p = store.createProject({tenantId: "local", orgId: "local", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL"});
+    const m = store.createMission({tenantId: "local", projectId: p.projectId, title: "T", objective: "O", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+    const t = store.createTask({tenantId: "local", missionId: m.missionId, title: "t", actor: "FOUNDER_LOCAL"});
+    void sc;
+    const real: Record<string, string> = {":p": p.projectId, ":m": m.missionId, ":t": t.taskId, ":r": ZERO("run_"), ":i": ZERO("itk_")};
+    const unknown: Record<string, string> = {":p": ZERO("prj_"), ":m": ZERO("msn_"), ":t": ZERO("tsk_"), ":r": ZERO("run_"), ":i": ZERO("itk_")};
+    const bad: string[] = [];
+    const ROUTER_LEVEL = /id=(x{20}|%E0%A4%A)/;
+    const check = (label: string, r: {statusCode: number; headers: any; body: string}) => {
+      if (r.statusCode >= 500) bad.push(`${label}: ${r.statusCode} ${r.body.slice(0, 120)}`);
+      else if (r.statusCode >= 400) {
+        let j: any; try { j = JSON.parse(r.body); } catch { bad.push(`${label}: non-JSON error body ${r.statusCode}`); return; }
+        const code = typeof j?.error === "string" ? j.error : null;
+        // Yönlendirici düzeyi hatalar kurucu seçeneği `frameworkErrors` ister (server.ts); burada yalnız 4xx + sızıntısız olmaları aranır, sabit biçim aşağıdaki testte kanıtlanır.
+        if (!ROUTER_LEVEL.test(label) && (!code || !FIXED.test(code))) bad.push(`${label}: error code not fixed (${r.statusCode}) ${r.body.slice(0, 160)}`);
+      }
+      const l = leaks(r.body); if (l.length) bad.push(`${label}: leaks ${l.join(",")}`);
+    };
+    for (const route of ROUTES) {
+      const fill = (url: string, vals: Record<string, string>) => Object.entries(vals).reduce((u, [k, v]) => u.replace(k, v), url);
+      for (const id of BAD_IDS) for (const ph of route.ids) {
+        const url = route.url.replace(ph, id);
+        check(`${route.method} ${route.url} id=${id.slice(0, 20)}`, await app.inject({method: route.method, url: fill(url, real), headers: hdr, ...(route.method === "POST" ? {payload: "{}", headers: {...hdr, "content-type": "application/json"}} : {})}));
+      }
+      check(`${route.method} ${route.url} unknown`, await app.inject({method: route.method, url: fill(route.url, unknown), headers: route.method === "POST" ? {...hdr, "content-type": "application/json"} : hdr, ...(route.method === "POST" ? {payload: "{}"} : {})}));
+      if (route.method === "POST") for (const b of BODIES) check(`POST ${route.url} body=${b.name}`, await app.inject({method: "POST", url: fill(route.url, real), headers: {...hdr, ...b.headers}, payload: b.payload}));
+    }
+    await app.close();
+    expect(bad).toEqual([]);
+  });
+
+  it("router-level errors (over-long id, malformed percent escape) become fixed codes with the frameworkErrors option; unknown routes and thrown errors too", async () => {
+    const {default: Fastify} = await import("fastify");
+    const {registerErrorContract, frameworkErrors} = await import("../apps/control-api/src/routes/error-contract.js");
+    const app = Fastify({logger: false, frameworkErrors});
+    registerErrorContract(app);
+    app.get("/v1/things/:id", async () => ({ok: true}));
+    app.get("/v1/boom", async () => { throw new Error("secret " + tmp + " node_modules"); });
+    app.post("/v1/echo", async (req: any) => ({got: req.body}));
+    const go = async (method: "GET" | "POST", url: string, extra: Record<string, unknown> = {}) => { const r = await app.inject({method, url, ...extra}); return {status: r.statusCode, body: r.body}; };
+    expect(await go("GET", "/v1/things/" + "x".repeat(300))).toEqual({status: 414, body: '{"error":"URL_TOO_LONG"}'});
+    expect(await go("GET", "/v1/things/%E0%A4%A")).toEqual({status: 400, body: '{"error":"BAD_URL"}'});
+    expect(await go("GET", "/v1/nope")).toEqual({status: 404, body: '{"error":"NOT_FOUND"}'});
+    expect(await go("POST", "/v1/echo", {payload: "{bad", headers: {"content-type": "application/json"}})).toEqual({status: 400, body: '{"error":"INVALID_JSON"}'});
+    expect(await go("POST", "/v1/echo", {payload: "<a/>", headers: {"content-type": "application/xml"}})).toEqual({status: 415, body: '{"error":"UNSUPPORTED_MEDIA_TYPE"}'});
+    const boom = await go("GET", "/v1/boom");
+    expect(boom).toEqual({status: 500, body: '{"error":"INTERNAL_ERROR"}'});
+    expect(boom.body).not.toContain("secret");
+    const {contractFor} = await import("../apps/control-api/src/routes/error-contract.js");
+    expect(contractFor({code: "FST_ERR_CTP_BODY_TOO_LARGE"})).toEqual({status: 413, error: "BODY_TOO_LARGE"});
+    expect(contractFor({statusCode: 422})).toEqual({status: 422, error: "INVALID_REQUEST"});
+    expect(contractFor({statusCode: 503, message: "x"})).toEqual({status: 500, error: "INTERNAL_ERROR"});
+    expect(contractFor(null)).toEqual({status: 500, error: "INTERNAL_ERROR"});
+    await app.close();
+  });
+});
