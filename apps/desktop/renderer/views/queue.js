@@ -12,11 +12,11 @@ const failState=state=>state==="OFFLINE"||state==="UNAVAILABLE"?state:"ERROR";
 const stateRes=res=>res&&typeof res.state==="string"?res:{state:"UNAVAILABLE"};
 const mono=(doc,t)=>t!==null&&t!==undefined&&t!==""?h(doc,"span",{class:"mono",text:String(t)}):MISSING;
 /** Öğe türünden durum rozeti türü: iş engelliyse ATTENTION, karar/kapı/yetki bekliyorsa WAITING (renk tek başına anlam taşımaz; etiket yerelleştirilmiş tür adıdır). */
-const PILL_FOR_KIND=Object.freeze({FOUNDER_ATTENTION:"ATTENTION",BLOCKED_PACKAGE:"ATTENTION",DELIVERY_DECISION:"WAITING",RUN_GATE:"WAITING",MISSION_STATUS_UNKNOWN:"WAITING",AUTHORIZATION:"WAITING"});
+const PILL_FOR_KIND=Object.freeze({FOUNDER_ATTENTION:"ATTENTION",BLOCKED_ITEM:"ATTENTION",DELIVERY_DECISION:"WAITING",RUN_GATE:"WAITING",MISSION_STATUS_UNKNOWN:"WAITING",AUTHORIZATION:"WAITING"});
 /** Mevcut Gelen Kutusu akışının listelediği türler. RUN_GATE (mission listesi okundu ve mission REPORTING değil) Gelen Kutusu'nda karar olarak sunulmaz.
  * MISSION_STATUS_UNKNOWN (mission listesi okunamadı) için mission REPORTING olabilir ve o zaman teslim kararı Gelen Kutusu'ndadır; durum bilinmediği için yol AÇIK tutulur
  * ve açıklama bunun doğrulanamadığını söyler (yol sessizce düşürülmez, karar da iddia edilmez). */
-const INBOX_KINDS=Object.freeze(["FOUNDER_ATTENTION","BLOCKED_PACKAGE","DELIVERY_DECISION","MISSION_STATUS_UNKNOWN","AUTHORIZATION"]);
+const INBOX_KINDS=Object.freeze(["FOUNDER_ATTENTION","BLOCKED_ITEM","DELIVERY_DECISION","MISSION_STATUS_UNKNOWN","AUTHORIZATION"]);
 const safeId=key=>String(key).replace(/[^A-Za-z0-9_-]/g,"_");
 
 function header(ctx){
@@ -44,11 +44,12 @@ function sourcesList(ctx,res,q){
   const doc=ctx.doc;
   return h(doc,"ul",{class:"company-sources queue-sources","aria-label":ctx.t("queue.sources.aria")},QUEUE_SOURCES.map(k=>{
     const ok=isOk(res[k]),kind=ok?"VERIFIED":failKind(res[k].state);
-    const verification=k==="attention"&&ok&&q.schedulerVerification!==null&&q.schedulerVerification!=="VERIFIED"?q.schedulerVerification:null;
+    const notes=k==="attention"&&ok&&q.attentionNotes?q.attentionNotes:null;
     return h(doc,"li",{dataset:{source:k,sourceState:ok?"VERIFIED":failState(res[k].state)}},
       h(doc,"span",{class:"company-src-name",text:ctx.t(`queue.src.${k}`)}),
       statePill(ctx,kind,{label:ok?ctx.t("queue.src.ok"):undefined}),
-      verification?h(doc,"span",{class:"note",dataset:{note:"scheduler-verification"},text:ctx.t("queue.src.verification",{value:verification})}):null);
+      notes&&notes.truncated?h(doc,"span",{class:"note",dataset:{note:"attention-truncated"},text:ctx.t("queue.src.truncated")}):null,
+      notes&&notes.dropped>0?h(doc,"span",{class:"note",dataset:{note:"attention-dropped",dropped:String(notes.dropped)},text:ctx.t("queue.src.dropped",{n:notes.dropped})}):null);
   }));
 }
 
@@ -104,16 +105,16 @@ function facts(ctx,it,q){
   add("needs","queue.field.needs",t(`queue.kindDesc.${it.kind}`));
   if(it.missionId!==null){
     // Başlık yalnız mission listesinden gelir; liste okunamadıysa ya da koşunun mission'ı listede yoksa bu AÇIKÇA söylenir (başlık uydurulmaz).
-    const title=it.title!==null?it.title:t(q.sources.missions.state==="VERIFIED"?"queue.mission.unknown":"queue.mission.unread");
+    const shownTitle=it.kind==="BLOCKED_ITEM"?it.missionTitle:it.title;
+    const title=shownTitle!==null?shownTitle:t(q.sources.missions.state==="VERIFIED"?"queue.mission.unknown":"queue.mission.unread");
     add("mission","queue.field.mission",title," · ",mono(doc,it.missionId),it.missionStatus!==null?" ":null,it.missionStatus!==null?statusPill(ctx,it.missionStatus):null);
   }
   if(it.runId!==null)add("run","queue.field.run",mono(doc,it.runId)," · ",statePill(ctx,"WAITING",{label:it.runStatus})," · ",mono(doc,it.step));
-  if(it.kind==="BLOCKED_PACKAGE"){
-    if(it.packageId!==null)add("package","queue.field.package",mono(doc,it.packageId));
-    if(it.phase!==null)add("phase","queue.field.phase",mono(doc,it.phase));
-    add("blocker","queue.field.blocker",statePill(ctx,"ATTENTION",{label:it.blockerKind}));
+  if(it.kind==="BLOCKED_ITEM"){
+    if(it.taskId!==null)add("task","queue.field.task",mono(doc,it.taskId));
+    add("blocker","queue.field.blocker",statePill(ctx,"ATTENTION",{label:t(`attention.kind.${it.blockerKind}`)}));
+    add("next","queue.field.next",t(`attention.next.${it.nextAction}`));
     if(it.reason!==null)add("reason","queue.field.reason",it.reason);
-    if(it.retryable!==null)add("retryable","queue.field.retryable",t(it.retryable?"queue.retry.yes":"queue.retry.no"));
   }
   if(it.riskLevel!==null)add("risk","queue.field.risk",badge(ctx,it.riskLevel,"badge-risk"));
   const wait=it.waitMs!==null
@@ -135,7 +136,7 @@ function actions(ctx,it,heading){
 }
 function itemCard(ctx,it,q){
   const doc=ctx.doc;
-  const heading=it.title??it.packageId??(it.phase!==null?ctx.t("queue.item.phase",{phase:it.phase}):it.runId??it.missionId??MISSING);
+  const heading=it.title??it.taskId??it.runId??it.missionId??MISSING;
   return h(doc,"li",{class:"card queue-item",dataset:{queueItem:it.key,kind:it.kind,priority:it.priority,band:it.band===null?"UNKNOWN":it.band,basis:it.basis===null?"NONE":it.basis}},
     h(doc,"h4",{text:String(heading)}),
     h(doc,"p",{class:"panel-meta"},statePill(ctx,PILL_FOR_KIND[it.kind],{label:ctx.t(`queue.kind.${it.kind}`)}),it.band!==null?badge(ctx,ctx.t(`queue.band.${it.band}`)):null),

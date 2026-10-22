@@ -1,8 +1,8 @@
-// //TR: Bu görünüm Operasyon ve Kurtarma runbook'udur (FA-V2-PRODUCT, UI-071): YALNIZ üç salt-okunur ve zaten izinli GET'ten okunur — GET /v1/control/status (global stop ve Work OS günlük sağlığı), GET /v1/runs (supervisor koşuları) ve GET /v1/founder-attention (engelli paketler, yeniden deneme kaydı, checkpoint). Koşu ve kuyruk sağlığı, kurtarma gerektiren engelli paketler ve GERÇEK duruma yansıyan bir kurtarma kontrol listesi gösterilir; "takıldı" yalnız kayıtlı zaman damgasından ve açıkça belirtilen görüntü eşiklerinden türer. Genel durum DÜRÜSTTÜR: NO_ISSUES_RECORDED yalnız üç kaynak okunup doğrulandığında, global stop aktif değilken, günlük OK ve zamanlayıcı doğrulanmışken, en az bir koşu kayıtlıyken ve kayıtlı hiçbir sorun yokken görünür; okunamayan ya da doğrulanmamış kaynak asla "sağlıklı" görünmez ve eksik olan adıyla listelenir. Mevcut Stop/Resume/Retry denetimleri BURADA yeniden uygulanmaz ve tetiklenmez: yalnız dürüst durumları gösterilir ve eylemlerin yaşadığı mevcut ekranlara (Control Tower, Gelen Kutusu) gezinme sunulur; eylemler kabuk/IPC üzerinden bugünkü gibi çalışır. HİÇBİR sayı, durum veya geçiş UYDURULMAZ: bozuk yanıt tümden ERROR gösterilir, okunamayan kaynağın sayıları 0 değil "—" olur. Ürün doğrulaması bu görünümde ASLA iddia edilmez ve ilgili sabit değer hiçbir yerde üretilmez. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+// //TR: Bu görünüm Operasyon ve Kurtarma runbook'udur (FA-V2-PRODUCT, UI-071): YALNIZ üç salt-okunur ve zaten izinli GET'ten okunur — GET /v1/control/status (global stop ve Work OS günlük sağlığı), GET /v1/runs (supervisor koşuları) ve GET /v1/attention (Work OS'tan türeyen Founder dikkat öğeleri; emekli scheduler kaynağı, yeniden deneme ve checkpoint kayıtları okunmaz ve bu kaynakların bulunmadığı açıkça söylenir). Koşu ve kuyruk sağlığı, kurtarma gerektiren engelli iş öğeleri ve GERÇEK duruma yansıyan bir kurtarma kontrol listesi gösterilir; "takıldı" yalnız kayıtlı zaman damgasından ve açıkça belirtilen görüntü eşiklerinden türer. Genel durum DÜRÜSTTÜR: NO_ISSUES_RECORDED yalnız üç kaynak okunup doğrulandığında, global stop aktif değilken, günlük OK iken, en az bir koşu kayıtlıyken ve kayıtlı hiçbir sorun yokken görünür; okunamayan ya da doğrulanmamış kaynak asla "sağlıklı" görünmez ve eksik olan adıyla listelenir. Mevcut Stop/Resume/Retry denetimleri BURADA yeniden uygulanmaz ve tetiklenmez: yalnız dürüst durumları gösterilir ve eylemlerin yaşadığı mevcut ekranlara (Control Tower, Gelen Kutusu) gezinme sunulur; eylemler kabuk/IPC üzerinden bugünkü gibi çalışır. HİÇBİR sayı, durum veya geçiş UYDURULMAZ: bozuk yanıt tümden ERROR gösterilir, okunamayan kaynağın sayıları 0 değil "—" olur. Ürün doğrulaması bu görünümde ASLA iddia edilmez ve ilgili sabit değer hiçbir yerde üretilmez. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
 import {h,panel,statePill,kpiTile} from "../components.js";
-import {MISSING} from "../model.js";
+import {MISSING,formatCount} from "../model.js";
 import {formatDateTime} from "../work-core.js";
-import {OPS_SOURCES,OPS_SOURCE_PATHS,LIVENESS,MAX_OPS_ROWS,RUN_STALL_AFTER_MS,RETRY_OVERDUE_AFTER_MS,CHECKPOINT_STALE_AFTER_MS,SERVER_RUNS_CAP,buildOperations,waitParts} from "../operations-core.js";
+import {OPS_SOURCES,OPS_SOURCE_PATHS,LIVENESS,MAX_OPS_ROWS,RUN_STALL_AFTER_MS,OPS_ATTENTION_KINDS,SERVER_RUNS_CAP,buildOperations,waitParts} from "../operations-core.js";
 
 /** Okuma hatasının ayrık dürüst durumu; uydurma yok. */
 const failKind=state=>state==="OFFLINE"?"OFFLINE":state==="UNAVAILABLE"?"UNAVAILABLE":"FAILED";
@@ -39,11 +39,11 @@ function header(ctx){
     h(doc,"p",{class:"hero-hint",dataset:{honesty:"1"},role:"note",text:ctx.t("ops.honesty")}));
 }
 
-/** Okuma hatası bloğu: ayrık durum rozeti + kaynak (GET yolu) ile dürüst açıklama. Reddedilen zamanlayıcı durumu ayrı ve olumsuz kayıttır. */
-function stateBlock(ctx,res,source,rejected){
-  const doc=ctx.doc,state=rejected?"REJECTED":failState(res.state);
+/** Okuma hatası bloğu: ayrık durum rozeti + kaynak (GET yolu) ile dürüst açıklama. */
+function stateBlock(ctx,res,source){
+  const doc=ctx.doc,state=failState(res.state);
   return h(doc,"div",{class:`ops-state state-${state.toLowerCase()}`,role:"status",dataset:{opsState:state,source}},
-    h(doc,"p",{class:"ops-state-head"},statePill(ctx,rejected?"BLOCKED":failKind(state)),h(doc,"strong",{text:ctx.t(`ops.state.${state}`)})),
+    h(doc,"p",{class:"ops-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`ops.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`ops.hint.${state}`,{source:`GET ${OPS_SOURCE_PATHS[source]}`})}),
     res.message?h(doc,"p",{class:"note mono",text:res.message}):null);
 }
@@ -72,18 +72,17 @@ function kpiRow(ctx,a){
   const blockOf=(source,value)=>({state:src[source].state,value:src[source].state==="VERIFIED"?value:null,loading:false,source:`GET ${OPS_SOURCE_PATHS[source]}`,asOf:null});
   const R=a.runs,Q=a.queue;
   const stalledPill=R===null?{}:R.stalled>0?{pillKind:"ATTENTION",risk:true}:R.undetermined>0?{pillKind:"NOT_VERIFIED"}:{};
-  const blockedPill=Q===null?{}:Q.total>0?{pillKind:"ATTENTION",risk:true}:Q.schedulerVerification!=="VERIFIED"?{pillKind:"NOT_VERIFIED"}:{};
+  const blockedPill=Q===null?{}:Q.total>0?{pillKind:"ATTENTION",risk:true}:Q.truncated||Q.dropped>0?{pillKind:"NOT_VERIFIED"}:{};
   return h(doc,"div",{class:"kpi-row ops-kpis",role:"group","aria-label":ctx.t("ops.kpi.group")},
     tile("runs","tasks",blockOf("runs",R?R.total:null)),
     tile("inProgress","pulse",blockOf("runs",R?R.inProgress:null)),
     tile("stalled","clock",blockOf("runs",R?R.stalled:null),stalledPill),
-    tile("blocked","alert",blockOf("attention",Q?Q.total:null),blockedPill),
-    tile("retryable","route",blockOf("attention",Q?Q.retryable:null)));
+    tile("blocked","alert",blockOf("attention",Q?Q.total:null),blockedPill));
 }
 function summaryPanel(ctx,res,a){
   const doc=ctx.doc;
   // Durum, eşleyici çıktısının KULLANILABİLİRLİĞİNE göre (a.sources) belirlenir: VERIFIED ama gövdesi eksik bir okuma ERROR gösterilir.
-  const failures=OPS_SOURCES.filter(k=>a.sources[k].state!=="VERIFIED").map(k=>stateBlock(ctx,{state:a.sources[k].state,message:res[k]?.message},k,k==="attention"&&a.schedulerRejected));
+  const failures=OPS_SOURCES.filter(k=>a.sources[k].state!=="VERIFIED").map(k=>stateBlock(ctx,{state:a.sources[k].state,message:res[k]?.message},k));
   const c=a.counts;
   return panel(ctx,{titleKey:"ops.summary.title",id:"ops-summary",className:"ops-section"},
     h(doc,"p",{class:"note",text:ctx.t("ops.summary.lead")}),
@@ -103,20 +102,16 @@ function summaryPanel(ctx,res,a){
 /** Adımın başlık/ayrıntı metinleri: tüm yer tutucular tek kümeden verilir (kullanılmayan yer tutucu yok sayılır); süre/zaman yoksa "—". */
 function stepVars(ctx,s){
   const p=s.params,t=ctx.t;
-  const target=p.packageId!==null&&p.packageId!==undefined?p.packageId:p.phase!==null&&p.phase!==undefined?t("ops.step.phase",{n:p.phase}):MISSING;
-  return {reason:dash(p.reason),actor:dash(p.actor),duration:dur(ctx,p.activeForMs),kind:dash(p.kind),target,since:dur(ctx,p.waitMs),runId:dash(p.runId),status:dash(p.status),packageId:dash(p.packageId),
-    retryAt:when(ctx,p.retryAt),overdue:dur(ctx,p.overdueMs),remaining:dur(ctx,p.remainingMs),generation:dash(p.generation),age:dur(ctx,p.ageMs),startedAt:when(ctx,p.startedAt),finishedAt:when(ctx,p.finishedAt),
-    threshold:dur(ctx,RUN_STALL_AFTER_MS),grace:dur(ctx,RETRY_OVERDUE_AFTER_MS),checkpointThreshold:dur(ctx,CHECKPOINT_STALE_AFTER_MS),
+  const itemKind=p.kind?t(`attention.kind.${p.kind}`):MISSING,next=p.nextAction?t(`attention.next.${p.nextAction}`):MISSING;
+  return {reason:dash(p.reason),actor:dash(p.actor),duration:dur(ctx,p.activeForMs),kind:dash(p.kind),itemKind,next,title:dash(p.title),since:dur(ctx,p.waitMs),runId:dash(p.runId),status:dash(p.status),dropped:dash(p.dropped),
+    age:dur(ctx,p.ageMs),startedAt:when(ctx,p.startedAt),finishedAt:when(ctx,p.finishedAt),
+    threshold:dur(ctx,RUN_STALL_AFTER_MS),
     source:p.source?t(`ops.srcShort.${p.source}`):MISSING,state:p.state?t(`ops.state.${p.state}`):MISSING,verification:dash(p.verification),error:dash(p.error)};
 }
 /** Adımın hangi MEVCUT denetimle ilgili olduğu (yeniden uygulanmaz): resume/retry denetimi ya da yeniden denemenin neden yapılamadığı. */
 function stepWhere(ctx,s){
   if(s.control==="resume")return ctx.t("ops.step.where.resume");
-  if(s.control==="retry")return ctx.t("ops.step.where.retry");
-  if(s.id==="BLOCKED_PACKAGE"){
-    const r=s.params.retryable;
-    return ctx.t(r===false?"ops.step.where.founder":r===true?"ops.step.where.noId":"ops.step.where.unknown");
-  }
+  if(s.id==="ATTENTION_ITEM")return ctx.t("ops.step.where.attention");
   return null;
 }
 function stepCard(ctx,a,s,idx){
@@ -163,7 +158,7 @@ function safeStopPanel(ctx,a){
           h(doc,"dt",{text:t("ops.field.package")}),h(doc,"dd",{dataset:{field:"package"}},mono(doc,r.packageId)),
           h(doc,"dt",{text:t("ops.field.error")}),h(doc,"dd",{dataset:{field:"error"}},dash(r.error))))));
   }
-  const blocked=S.blockedPackages===null?unread("attention"):h(doc,"p",{class:"note",dataset:{note:"blocked-count"},text:t("ops.rf.blocked",{n:S.blockedPackages})});
+  const blocked=S.blockedItems===null?unread("attention"):h(doc,"p",{class:"note",dataset:{note:"blocked-count"},text:t("ops.rf.blocked",{n:S.blockedItems})});
   const nextKey=S.stop!==null&&S.stop.active?"ops.rf.next.stopActive":S.failedRuns!==null&&S.failedRuns.length?"ops.rf.next.failed":S.stop===null||S.failedRuns===null?"ops.rf.next.unknown":"ops.rf.next.none";
   return panel(ctx,{titleKey:"ops.rf.title",id:"ops-safe-stop",className:"ops-section"},
     h(doc,"p",{class:"note",text:t("ops.rf.lead")}),
@@ -177,7 +172,7 @@ function safeStopPanel(ctx,a){
 // ---------- (C) Mevcut denetimler (salt-okunur) ----------
 /** Bir denetimin dürüst durumu: {kind,text,state}. Hiçbir denetim burada tetiklenmez; durum yalnız gerçek okumalardan. */
 function controlStates(ctx,a){
-  const t=ctx.t,C=a.control,Q=a.queue,src=a.sources;
+  const t=ctx.t,C=a.control,src=a.sources;
   const unreadable=source=>({kind:failKind(src[source].state),state:failState(src[source].state),text:t("ops.control.state.unknown",{source:t(`ops.srcShort.${source}`)})});
   const stop=C===null?unreadable("control"):C.active
     ?{kind:"STOPPED",state:"active",text:t("ops.control.state.stop.active")}
@@ -185,11 +180,8 @@ function controlStates(ctx,a){
   const resume=C===null?unreadable("control"):C.active
     ?{kind:"ACTIVE",state:"relevant",text:t("ops.control.state.resume.relevant")}
     :{kind:"NEUTRAL",state:"notNeeded",text:t("ops.control.state.resume.notNeeded")};
-  let retry;
-  if(Q===null)retry=a.schedulerRejected?{kind:"BLOCKED",state:"rejected",text:t("ops.control.state.retry.rejected")}:unreadable("attention");
-  else if(Q.total===0)retry=Q.schedulerVerification==="VERIFIED"?{kind:"NEUTRAL",state:"none",text:t("ops.control.state.retry.none")}:{kind:"NOT_VERIFIED",state:"unverified",text:t("ops.control.state.retry.unverified")};
-  else if(Q.retryable>0)retry=Q.retryUsable>0?{kind:"ATTENTION",state:"some",text:t("ops.control.state.retry.some",{n:Q.retryable,total:Q.total})}:{kind:"ATTENTION",state:"someNoId",text:t("ops.control.state.retry.someNoId",{n:Q.retryable,total:Q.total})};
-  else retry={kind:"ATTENTION",state:"zero",text:t("ops.control.state.retry.zero",{total:Q.total})};
+  // Yeniden deneme: tek kaynağı emekli scheduler idi; /v1/attention yeniden deneme yetkisi taşımaz. Durum UYDURULMAZ: "kaynak yok" açıkça söylenir.
+  const retry={kind:"UNAVAILABLE",state:"noSource",text:t("ops.control.state.retry.noSource")};
   return {stop,resume,retry};
 }
 function controlsPanel(ctx,a){
@@ -231,44 +223,32 @@ function controlFacts(ctx,a){
     j&&j.reason?[" ",mono(doc,j.reason)]:null]);
   return factRows(ctx,rows);
 }
-function retryFact(ctx,r){
-  const doc=ctx.doc;
-  if(r===null)return [["retry",ctx.t("ops.field.retry"),{value:"none"},ctx.t("ops.retry.none")]];
-  const kind=r.phase==="OVERDUE"?"ATTENTION":r.phase==="UNDETERMINED"?"NOT_VERIFIED":"WAITING";
-  return [["retry",ctx.t("ops.field.retry"),{value:r.phase,packageId:r.packageId??""},statePill(ctx,kind,{label:ctx.t(`ops.retry.phase.${r.phase}`)})," ",mono(doc,r.packageId)," · ",timeEl(ctx,r.retryAt),
-    r.reason?[" · ",r.reason]:null]];
-}
 function queueFacts(ctx,a){
   const doc=ctx.doc,t=ctx.t,Q=a.queue;
-  if(Q===null)return a.schedulerRejected
-    ?h(doc,"p",{class:"note",role:"status",dataset:{withheld:"1",reason:"REJECTED",source:"attention"},text:t("ops.withheld.rejected",{source:`GET ${OPS_SOURCE_PATHS.attention}`})})
-    :withheld(ctx,"attention",failState(a.sources.attention.state));
-  const sv=Q.schedulerVerification;
-  const rows=[["scheduler",t("ops.field.scheduler"),{value:sv??"NOT_REPORTED"},
-    statePill(ctx,sv==="VERIFIED"?"VERIFIED":"NOT_VERIFIED",{label:sv?t(sv==="VERIFIED"?"ops.scheduler.VERIFIED":"ops.scheduler.OTHER"):t("ops.scheduler.NOT_REPORTED")}),sv&&sv!=="VERIFIED"?[" ",mono(doc,sv)]:null],
-    ...retryFact(ctx,Q.retry),
-    ["checkpoint",t("ops.field.checkpoint"),{value:Q.checkpoint?(Q.checkpoint.stale?"stale":"present"):"none"},
-      Q.checkpoint?[t("ops.checkpoint.present",{generation:Q.checkpoint.generation,age:dur(ctx,Q.checkpoint.ageMs)})," · ",timeEl(ctx,Q.checkpoint.updatedAt)]:t("ops.checkpoint.none")]];
-  return factRows(ctx,rows);
+  if(Q===null)return withheld(ctx,"attention",failState(a.sources.attention.state));
+  const rows=OPS_ATTENTION_KINDS.map(k=>["count"+k,t(`attention.kind.${k}`),{value:String(Q.counts[k])},formatCount(Q.counts[k])]);
+  rows.push(["retry",t("ops.field.retry"),{value:"noSource"},statePill(ctx,"UNAVAILABLE",{label:t("ops.retry.noSource")})]);
+  rows.push(["checkpoint",t("ops.field.checkpoint"),{value:"noSource"},statePill(ctx,"UNAVAILABLE",{label:t("ops.checkpoint.noSource")})]);
+  return [factRows(ctx,rows),Q.truncated?h(doc,"p",{class:"note",dataset:{note:"attention-truncated"},text:t("ops.attention.truncated")}):null,Q.dropped>0?h(doc,"p",{class:"note",dataset:{note:"attention-dropped",dropped:String(Q.dropped)},text:t("ops.attention.dropped",{n:Q.dropped})}):null];
 }
 function blockedList(ctx,a){
   const doc=ctx.doc,t=ctx.t,Q=a.queue;
   if(Q===null)return h(doc,"p",{class:"note",role:"status",dataset:{opsEmpty:"unknown"},text:t("ops.blocked.unknown")});
-  if(!Q.items.length)return h(doc,"p",{class:"note",role:"status",dataset:{opsEmpty:Q.schedulerVerification==="VERIFIED"?"1":"unverified"},text:t(Q.schedulerVerification==="VERIFIED"?"ops.blocked.none":"ops.blocked.noneUnverified")});
+  if(!Q.items.length)return h(doc,"p",{class:"note",role:"status",dataset:{opsEmpty:Q.total===0&&!Q.truncated&&Q.dropped===0?"1":"unverified"},text:t(Q.total===0&&!Q.truncated&&Q.dropped===0?"ops.blocked.none":"ops.blocked.noneUnverified")});
   const shown=Q.items.slice(0,MAX_OPS_ROWS);
   return [shown.length<Q.items.length?h(doc,"p",{class:"note",dataset:{note:"truncated"},text:t("ops.blocked.truncated",{shown:shown.length,total:Q.items.length})}):null,
     h(doc,"ul",{class:"cards ops-list ops-blocked","aria-label":t("ops.blocked.aria"),dataset:{opsBlocked:String(shown.length)}},shown.map(x=>{
-      const key=`${x.packageId??""}|${x.phase??""}`;
-      const rt=x.retryable===true?"yes":x.retryable===false?"no":"unknown";
-      return h(doc,"li",{class:"card ops-item",dataset:{opsBlockedItem:key,retryable:rt}},
-        h(doc,"h3",{text:x.packageId??t("ops.step.phase",{n:x.phase})}),
+      const key=`${x.kind}:${x.taskId??x.runId??x.missionId}`;
+      return h(doc,"li",{class:"card ops-item",dataset:{opsBlockedItem:key,attentionKind:x.kind,nextAction:x.nextAction}},
+        h(doc,"h3",{text:x.title}),
         factRows(ctx,[
-          ["package",t("ops.field.package"),{},mono(doc,x.packageId)],
-          ["phase",t("ops.field.phase"),{},mono(doc,x.phase)],
-          ["kind",t("ops.field.kind"),{},mono(doc,x.kind)],
-          ["blockedAt",t("ops.field.blockedAt"),{},timeEl(ctx,x.at)," · ",dur(ctx,x.waitMs)],
-          ["reason",t("ops.field.reason"),{},x.reason??MISSING],
-          ["retryable",t("ops.field.retryable"),{value:rt},t(`ops.retryable.${rt}`)]]));
+          ["kind",t("ops.field.kind"),{},statePill(ctx,"ATTENTION",{label:t(`attention.kind.${x.kind}`)})],
+          ["next",t("ops.field.next"),{},t(`attention.next.${x.nextAction}`)],
+          ["mission",t("ops.field.mission"),{},mono(doc,x.missionId)],
+          ["run",t("ops.field.run"),{},mono(doc,x.runId)],
+          ["task",t("ops.field.task"),{},mono(doc,x.taskId)],
+          ["blockedAt",t("ops.field.blockedAt"),{},timeEl(ctx,x.since)," · ",dur(ctx,x.waitMs)],
+          ["reason",t("ops.field.reason"),{},x.reason??MISSING]]));
     }))];
 }
 function planePanel(ctx,a){
@@ -316,7 +296,7 @@ function runsPanel(ctx,a){
   }
   return panel(ctx,{titleKey:"ops.runs.title",id:"ops-runs",className:"ops-section"},
     h(doc,"p",{class:"note",text:t("ops.runs.lead")}),
-    h(doc,"p",{class:"note",dataset:{note:"thresholds"},text:t("ops.runs.thresholds",{run:dur(ctx,RUN_STALL_AFTER_MS),retry:dur(ctx,RETRY_OVERDUE_AFTER_MS),checkpoint:dur(ctx,CHECKPOINT_STALE_AFTER_MS)})}),
+    h(doc,"p",{class:"note",dataset:{note:"thresholds"},text:t("ops.runs.thresholds",{run:dur(ctx,RUN_STALL_AFTER_MS)})}),
     h(doc,"p",{class:"note",dataset:{note:"order"},text:t("ops.runs.order")}),
     body);
 }

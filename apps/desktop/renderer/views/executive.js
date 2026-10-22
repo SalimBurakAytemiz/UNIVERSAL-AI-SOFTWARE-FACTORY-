@@ -57,7 +57,7 @@ function kpiRow(ctx,summary,res){
     tile("inProgress","pulse",k.inProgress,{qualifier:k.inProgress.detail?t("executive.kpi.q.inProgress",{total:k.inProgress.detail.total}):undefined}),
     tile("runs","bot",k.runs,{qualifier:k.runs.detail?t("executive.kpi.q.runs",k.runs.detail):undefined}),
     tile("approvals","inbox",k.approvals,{qualifier:t("executive.kpi.q.approvals")}),
-    tile("blocked","ban",k.blocked,{qualifier:t("executive.kpi.q.blocked"),risk:live(k.blocked)&&k.blocked.value>0}),
+    tile("attention","ban",k.attention,{qualifier:t("executive.kpi.q.attention"),risk:live(k.attention)&&k.attention.value>0}),
     // Teslimler: yalnız kaynak düzeyi; rozet daima NOT_VERIFIED (ürün doğrulandı iddiası yok).
     tile("deliveries","rocket",k.deliveries,{pillKind:live(k.deliveries)?"NOT_VERIFIED":blockKind(k.deliveries.state),qualifier:k.deliveries.detail?t("executive.kpi.q.deliveries",k.deliveries.detail):undefined}),
     tile("evidence","evidence",k.evidence,{qualifier:k.evidence.detail?t("executive.kpi.q.evidence",k.evidence.detail):undefined}));
