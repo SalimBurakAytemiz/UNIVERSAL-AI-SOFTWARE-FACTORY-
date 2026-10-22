@@ -576,6 +576,39 @@ describe("B3a control API", () => {
     expect(runOf(c3, created3.runId).evidence.some(e => e.kind === "AGENT_TRACE")).toBe(false);
   });
 
+  it("LANE-C: a product run started over HTTP with the bound developer role executes through the runner, writes AGENT_TRACE evidence visible via GET; a non-implementer role is BLOCKED visibly", { timeout: T }, async () => {
+    const c = setup("tA"); const fake = new FakeExecutors(okScript());
+    const app = mk(c, "tA", {executors: fake.pair(), runner: {enabled: true, intervalMs: 250, retryBackoffMs: [0, 0], security: fakeSecurity(`${c.dataDir}-sec`).options}});
+    await app.ready();
+    const wait = async (runId: string, done: (s: string) => boolean) => {
+      const deadline = Date.now() + 90_000; let r: any;
+      while (Date.now() < deadline) { r = (await app.inject({method: "GET", url: `/v1/work-runs/${runId}`, headers: hdr})).json().run; if (done(r.status)) break; await new Promise(x => setTimeout(x, 200)); }
+      return r;
+    };
+    const started = await app.inject({method: "POST", url: `/v1/missions/${c.missionId}/runs`, headers: hdr, payload: {roleId: "UASCO-0085"}});
+    expect(started.statusCode).toBe(201);
+    expect(started.json().run.roleId).toBe("UASCO-0085");
+    const done = await wait(started.json().run.runId, s => s === "AWAITING_APPROVAL");
+    expect(done.status).toBe("AWAITING_APPROVAL");
+    expect(fake.calls.implement).toBe(1);
+    const trace = done.evidence.filter((e: any) => e.kind === "AGENT_TRACE");
+    expect(trace.map((e: any) => e.step)).toEqual(["IMPLEMENT", "REVIEW"]);
+    expect(trace[0].note).toBe(`agent=agent-${done.runId}-implement-c0 role=UASCO-0085 state=COMPLETED`);
+    expect(trace[1].note).toBe(`agent=agent-${done.runId}-review-c0 role=UASCO-0252 state=COMPLETED verdict=CLEAN`);
+    expect(done.evidence.map((e: any) => e.kind)).toEqual(expect.arrayContaining(["IMPLEMENT", "AGENT_TRACE", "REVIEW"]));
+    // a second run with a reviewer-route role never reaches the builder
+    const c2 = setup("tB"); const fake2 = new FakeExecutors(okScript());
+    const app2 = mk(c2, "tB", {executors: fake2.pair(), runner: {enabled: true, intervalMs: 250, retryBackoffMs: [0, 0], security: fakeSecurity(`${c2.dataDir}-sec`).options}});
+    await app2.ready();
+    const bad = (await app2.inject({method: "POST", url: `/v1/missions/${c2.missionId}/runs`, headers: hdr, payload: {roleId: "UASCO-0252"}})).json().run;
+    const deadline = Date.now() + 90_000; let blocked: any;
+    while (Date.now() < deadline) { blocked = (await app2.inject({method: "GET", url: `/v1/work-runs/${bad.runId}`, headers: hdr})).json().run; if (blocked.status === "BLOCKED") break; await new Promise(x => setTimeout(x, 200)); }
+    expect(blocked.status).toBe("BLOCKED");
+    expect(fake2.calls.implement).toBe(0);
+    expect(blocked.evidence.some((e: any) => e.kind === "AGENT_TRACE")).toBe(false);
+    await app.close(); await app2.close();
+  });
+
   it("the in-process runner starts only when enabled and drives runs to AWAITING_APPROVAL", { timeout: T }, async () => {
     const c = setup("tA"); const fake = new FakeExecutors(okScript());
     const app = mk(c, "tA", {executors: fake.pair(), runner: {enabled: true, intervalMs: 250, retryBackoffMs: [0, 0], security: fakeSecurity(`${c.dataDir}-sec`).options}});

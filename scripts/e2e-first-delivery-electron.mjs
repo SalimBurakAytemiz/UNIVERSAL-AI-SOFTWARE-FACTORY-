@@ -75,6 +75,10 @@ try {
   record("GET /v1/tasks/:id and /v1/projects/:id/flow admitted and served", g1.ok && JSON.stringify(g1.v).includes('"DONE"') && flow.ok, JSON.stringify({g: g1.e, f: flow.e}));
   const refusals = [await bridge("apiGet", "/v1/intakes?x=1"), await bridge("apiGet", `/v1/tasks/${t1.taskId}/`), await bridge("apiPost", `/v1/intakes/${intake.intakeId}`, {}), await bridge("apiGet", `/v1/tasks/${t1.taskId}/transition`), await bridge("apiPost", "/v1/intakes", {idea: "x".repeat(33000)})];
   record("bridge refuses near misses, wrong method and a body over 32 KB before any HTTP call", refusals.every(r => !r.ok) && refusals[4].e.includes("API_BODY_TOO_LARGE") && refusals.slice(0, 4).every(r => r.e.includes("INVALID_API_PATH")), JSON.stringify(refusals.map(r => r.e ?? "ADMITTED")));
+  // Görev-koşu bağı: gerçek bir mission koşusu kaydı açılır (yalnız kayıt; sandbox yürütmesi başlatılmaz), UI'dan göreve bağlanır, bridge ile doğrulanır.
+  const runRes = await bridge("apiPost", `/v1/missions/${intake.missionId}/runs`, {});
+  const runId = runRes.v?.body?.run?.runId ?? runRes.v?.run?.runId ?? null;
+  record("POST /v1/missions/:id/runs creates a run record for the task-run link (no execution started by this step)", runRes.ok && runRes.v?.status === 201 && /^run_[0-9a-f]{24}$/.test(runId ?? ""), JSON.stringify({status: runRes.v?.status, e: runRes.e, body: runRes.v?.body?.error ?? null}));
   // UI: Görevler ekranında mission seç, görevi seç, durum paneli üzerinden görev 2'yi DONE yap (gerçek tıklama).
   log("ui phase");
   // Veriler köprüyle (UI dışından) oluşturulduğu için renderer önbelleği bayattır; ekran taze açılır gibi sayfa yeniden yüklenir.
@@ -86,9 +90,20 @@ try {
   log("DOM " + JSON.stringify(await ev(`return {hash:location.hash,clicked:${clicked},opened:${opened},detail:!!document.getElementById("work-detail"),missionBtns:document.querySelectorAll("[data-mission-id]").length,taskBtns:[...document.querySelectorAll("[data-task-inspect]")].map(b=>b.dataset.taskInspect+":"+b.getAttribute("aria-pressed")),inspector:document.getElementById("task-inspector")?.dataset.taskInspector??null,panel:!!document.getElementById("task-status"),title:document.querySelector("#work-detail h3")?.textContent??null}`)));
   const panel = await ev(`const p=document.getElementById("task-status");return p?{task:p.dataset.taskStatus,targets:[...p.querySelectorAll("[data-task-to]")].map(b=>b.dataset.taskTo)}:null`);
   record("UI: #/work shows the mission, the task and its status panel with the allowed targets", opened && panel?.task === t2.taskId && JSON.stringify(panel.targets) === JSON.stringify(["DONE", "BLOCKED", "PENDING"]), JSON.stringify(panel));
-  await ev(`const i=document.getElementById("taskst-reason");if(i){i.value="kabul testi gecti";i.dispatchEvent(new Event("input",{bubbles:true}))}document.getElementById("taskst-DONE").click();return true`); await sleep(2000);
+  const emptyRuns = await bridge("apiGet", `/v1/tasks/${t2.taskId}/runs`);
+  record("GET /v1/tasks/:id/runs admitted (allow-list) and lists no link before linking", emptyRuns.ok && emptyRuns.v?.status === 200 && JSON.stringify(emptyRuns.v).includes('"runs":[]'), JSON.stringify({s: emptyRuns.v?.status, e: emptyRuns.e}));
+  const picked = await ev(`for(let i=0;i<40;i++){const s=document.getElementById("taskruns-run");if(s&&[...s.options].some(o=>o.value==="${runId}")){s.value="${runId}";s.dispatchEvent(new Event("change",{bubbles:true}));s.dispatchEvent(new Event("input",{bubbles:true}));document.getElementById("taskruns-submit").click();return true}await new Promise(r=>setTimeout(r,250))}return false`); await sleep(2000);
+  const linkedApi = await bridge("apiGet", `/v1/tasks/${t2.taskId}/runs`);
+  const listedUi = await ev(`for(let i=0;i<20;i++){const li=document.querySelector('[data-task-run="${runId}"]');if(li)return {text:li.textContent.slice(0,200)};await new Promise(r=>setTimeout(r,250))}return null`);
+  record("UI: linking a run from 'Runs for this task' stores the link (bridge GET) and the run is then listed in the panel", picked === true && linkedApi.ok && JSON.stringify(linkedApi.v).includes(runId) && listedUi !== null, JSON.stringify({picked, api: linkedApi.e ?? linkedApi.v?.status, listedUi}));
+  await ev(`const i=document.getElementById("taskst-reason");if(i){i.value="kabul testi gecti";i.dispatchEvent(new Event("input",{bubbles:true}))}document.getElementById("taskst-DONE").click();return true`); await sleep(300);
+  // LANE-A task-done-confirm: DONE is final, so the click first opens the confirmation dialog (#confirmDialog); nothing may change before it is accepted.
+  const dlg = await ev(`for(let i=0;i<40;i++){const d=document.getElementById("confirmDialog");if(d&&d.open)return {open:true,ok:!!document.getElementById("confirmOk"),title:(document.getElementById("confirmDialogTitle")?.textContent??"").slice(0,80)};await new Promise(r=>setTimeout(r,250))}return {open:false}`);
+  const before = await bridge("apiGet", `/v1/tasks/${t2.taskId}`);
+  record("UI: 'Mark as Done' opens a confirmation first and the task is not DONE before it is accepted", dlg?.open === true && dlg.ok === true && before.ok && before.v?.task?.status === "IN_PROGRESS", JSON.stringify({dlg, status: before.v?.task?.status ?? before.e}));
+  await ev(`const b=document.getElementById("confirmOk");if(b)b.click();return !!b`); await sleep(2000);
   const after = await bridge("apiGet", `/v1/tasks/${t2.taskId}`), status = await ev(`const s=document.getElementById("task-status-status");return s?{result:s.dataset.result??null,text:s.textContent.slice(0,200)}:null`);
   // "shows the result" = the UI reports SUCCESS (data-result="ok"): an error text or an ev() failure object ({ok:false,e}) must not pass.
-  record("UI click 'Mark as Done' moves task 2 to DONE through the real bridge and shows the result", after.ok && JSON.stringify(after.v).includes('"DONE"') && status?.result === "ok" && typeof status.text === "string" && status.text.length > 0, JSON.stringify({status}));
+  record("UI: accepting the confirmation moves task 2 to DONE through the real bridge and shows the result", after.ok && JSON.stringify(after.v).includes('"DONE"') && status?.result === "ok" && typeof status.text === "string" && status.text.length > 0, JSON.stringify({status}));
   finish(steps.every(s => s.ok) ? 0 : 1);
 } catch (e) { record("harness", false, e.message); finish(1); }
