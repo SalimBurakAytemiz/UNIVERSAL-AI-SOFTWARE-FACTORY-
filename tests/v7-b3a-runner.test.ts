@@ -52,12 +52,13 @@ function makeRepo(id: string): {repo: string; head: string} {
 const FAKE_AWS = ["AK", "IA", "Q7ZX3MPLW2RT5VB9"].join("");
 
 interface Ctx { store: WorkOsStore; dataDir: string; runtime: string; stopFile: string; repo: string; head: string; missionId: string; projectId: string }
-function setup(tenantId = "tA", opts: {url?: boolean; testCommand?: string[] | null; clock?: {skewMs: number}} = {}): Ctx {
+function setup(tenantId = "tA", opts: {url?: boolean; testCommand?: string[] | null; clock?: {skewMs: number}; virtualClock?: {ms: number}} = {}): Ctx {
   const id = crypto.randomBytes(4).toString("hex");
   const {repo, head} = makeRepo(id);
   const dataDir = path.join(tmp, `data-${id}`), runtime = path.join(tmp, `runtime-${id}`);
   fs.mkdirSync(runtime, {recursive: true});
-  const store = new WorkOsStore(dataDir, opts.clock ? {now: () => Date.now() + opts.clock!.skewMs} : {});
+  // //TR: virtualClock: store saati YALNIZ testin ilerlettiği sanal zamandır (gerçek süre/yavaş runner lease süresini etkilemez); clock: gerçek zaman + sabit kayma.
+  const store = new WorkOsStore(dataDir, opts.virtualClock ? {now: () => opts.virtualClock!.ms} : opts.clock ? {now: () => Date.now() + opts.clock!.skewMs} : {});
   const tc = opts.testCommand === null ? undefined : (opts.testCommand ?? ["node", "test.mjs"]);
   const p = store.createProject({tenantId, orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: opts.url ? {url: "https://example.invalid/r.git"} : {path: repo}, ...(tc ? {testCommand: tc} : {})});
   const m = store.createMission({tenantId, projectId: p.projectId, title: "Add feature", objective: "feature.txt must say ok", acceptanceCriteria: ["tests pass"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
@@ -484,18 +485,36 @@ describe("LANE-C MissionRunner claim cap (maxConcurrentRuns)", () => {
     return {st, pair: {...pair, implementer: {...pair.implementer, implement}} as ExecutorPair};
   }
 
-  it("default cap 1: a queued second run gets NO lease while the first runs longer than the lease TTL, so it is never fenced or recovered; the next tick claims it", { timeout: T }, async () => {
-    const c = setup(); const fake = new FakeExecutors(sleepFirst(2500)); const pair = fake.pair();
+  // //TR: Deterministik: lease süresi SANAL saate bağlıdır (store ve runner aynı saati kullanır); gerçek süre, yavaş senkron git adımları veya yüklü runner sonucu değiştirmez. r1'in "TTL'den uzun" çalışması, implementer içinde sanal saatin TTL'den küçük adımlarla ilerletilmesi ve lease'in gerçek heartbeat gibi yenilenmesiyle kurulur.
+  it("default cap 1: a queued second run gets NO lease while the first runs longer than the lease TTL (virtual clock), so it is never fenced or recovered; the next tick claims it", { timeout: T }, async () => {
+    const TTL = 1000, clock = {ms: Date.UTC(2026, 9, 22, 12, 0, 0)};
+    const c = setup("tA", {virtualClock: clock}); const fake = new FakeExecutors(okScript()); const pair = fake.pair();
     const [r1, r2] = queueRuns(c, pair, 2);
-    const mr = runner(c, fake, {leaseTtlMs: 1000});
+    const seen: Array<{status: string; leaseId: string | null; attempt: number}> = [];
+    let virtualElapsed = 0, firstCall = true;
+    const longRunning: ExecutorPair = {...pair, implementer: {...pair.implementer, async implement(w, spec, ctx) {
+      if (!firstCall) return pair.implementer.implement(w, spec, ctx); // second tick: r2's own (normal) implementer call
+      firstCall = false;
+      const lease = c.store.engineGetRun(r1.runId)!.leaseId!;
+      for (let i = 0; i < 4; i++) { // 4 x 900 virtual ms = 3600 > 3 x TTL; each step renews r1's lease exactly like the heartbeat does
+        clock.ms += 900; virtualElapsed += 900;
+        c.store.renewRunLease(r1.runId, lease, TTL, "TEST_HEARTBEAT");
+        const x = runOf(c, r2.runId); seen.push({status: x.status, leaseId: x.leaseId, attempt: x.attempt});
+      }
+      return pair.implementer.implement(w, spec, ctx);
+    }}};
+    const mr = runner(c, fake, {leaseTtlMs: TTL, executors: longRunning, now: () => clock.ms});
     const t1 = await mr.tick();
+    expect(virtualElapsed).toBeGreaterThan(TTL * 3);
     expect(t1.claimed).toEqual([r1.runId]);
     expect(t1.deferred).toEqual([r2.runId]);
     expect(t1.fenced).toEqual([]);
     expect(t1.recovered).toEqual([]);
+    expect(seen).toEqual(Array(4).fill({status: "QUEUED", leaseId: null, attempt: 0})); // r2 held no lease at any point while r1 outlived the TTL
     expect(runOf(c, r1.runId).status).toBe("AWAITING_APPROVAL");
     expect(runOf(c, r2.runId)).toMatchObject({status: "QUEUED", leaseId: null, attempt: 0});
     expect(fake.calls.implement).toBe(1);
+    clock.ms += 5 * TTL; // virtual time passes between ticks: nothing of r2 can expire because r2 has no lease
     const t2 = await mr.tick();
     expect(t2).toMatchObject({claimed: [r2.runId], deferred: [], fenced: [], recovered: []});
     expect(runOf(c, r2.runId).status).toBe("AWAITING_APPROVAL");
