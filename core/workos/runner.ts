@@ -17,7 +17,8 @@ import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from ".
 // INT-R4: runProcess (REL-FX ana-makine test çalıştırıcısı) ARTIK kullanılmaz; yürütme yalnız execution-gate sağlayıcısı (gate.provider.run) üzerinden gider, ana makinede asla.
 import {assertIndependentExecutors} from "./executors.js";
 import {ExecutionGate} from "./execution-gate.js";
-import {assertRoleExecutes} from "../agents/first-delivery-bindings.js";
+import {assertImplementerRole} from "../agents/first-delivery-bindings.js";
+import {advanceAgent, agentTraceEnvelope, instantiateAgent} from "../agents/role-execution.js";
 import type {GateDecision, ProjectExecutionKind} from "./execution-gate.js";
 import {M1A_NOT_VERIFIED_LABEL, productVerificationOf, reviewAndSecurityFor} from "./outcomes.js";
 import {RISK_REFUSAL, hostExecutionNotice, riskAdmitted} from "./risk-admission.js";
@@ -417,9 +418,9 @@ export class MissionRunner {
 
   // IMPLEMENT yeniden girişte idempotenttir: workspace önce döngü başlangıç commit'ine sıfırlanır (kör tekrar yok).
   private async stepImplement(run: WorkRun, leaseId: string, abort: () => boolean): Promise<Outcome> {
-    // //TR: Run'a bir rol atanmışsa (roleId != null) o rol TANIMI developer olarak yürütülebilir olmalıdır; değilse run yazmadan BLOCKED (ROLE_NOT_EXECUTABLE:<neden>). roleId null = rol atanmamış eski/rolsüz run (davranış değişmez).
+    // //TR: Run'a bir rol atanmışsa (roleId != null) o rol TANIMI implementer rotalı (developer/tester) yürütülebilir olmalıdır; değilse run yazmadan BLOCKED (ROLE_NOT_EXECUTABLE:<neden>). roleId null = rol atanmamış eski/rolsüz run (davranış değişmez).
     if (run.roleId !== null) {
-      try { assertRoleExecutes(run.roleId, "developer"); } catch (e) { return {kind: "BLOCK", reason: (e as Error).message.slice(0, 200)}; }
+      try { assertImplementerRole(run.roleId); } catch (e) { return {kind: "BLOCK", reason: (e as Error).message.slice(0, 200)}; }
     }
     const work = path.join(this.runDir(run.runId), "work"), branch = run.workBranch ?? `uasco/run/${run.runId}`;
     const start = run.remediationCycle === 0 ? run.baseSha : (run.headSha ?? run.baseSha);
@@ -436,6 +437,14 @@ export class MissionRunner {
     const limit = r.exitCode !== 0 && !r.aborted && !r.timedOut ? executorLimit(r.exitCode, r.log) : null;
     this.evidence(run, leaseId, {kind: "IMPLEMENT", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, baseSha: start, ...(produced ? {commitSha: produced} : {}), executorIdentity: this.o.executors.implementer.identity,
       ...(limit ? {note: limitNote(limit)} : r.blockReason ? {note: r.blockReason.slice(0, 200)} : {})});
+    // //TR: Rol atanmış run için izlenebilir ajan kaydı: rol tanımı kimliği ile ajan örneği kimliği ayrı; araç izinleri profilden gelir. Çağrı-başına araç izi bu adapter'dan GÖZLENEMEZ (araç kısıtı claude bayraklarıyla uygulanır) — bu açıkça yazılır, uydurma sayaç yok.
+    if (run.roleId !== null) {
+      const profile = assertImplementerRole(run.roleId);
+      const agent = instantiateAgent({status: "EXECUTABLE", roleId: run.roleId, profile, certification: "NOT_CERTIFIED", evaluation: {executed: 0, total: 0}}, run.runId, `agent-${run.runId}-c${run.remediationCycle}`);
+      advanceAgent(agent, "RUNNING"); advanceAgent(agent, r.aborted ? "ABORTED" : produced ? "COMPLETED" : "FAILED");
+      const env = {...agentTraceEnvelope(agent), allowedTools: profile.allowedTools, perCallToolTrace: "NOT_OBSERVABLE_FROM_ADAPTER", certification: "NOT_CERTIFIED"};
+      this.evidence(run, leaseId, {kind: "AGENT_TRACE", argv: [], startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, ...this.writeLog(run, "agent-trace", JSON.stringify(env, null, 2) + "\n"), executorIdentity: this.o.executors.implementer.identity, note: `agent=${agent.agentInstanceId} role=${run.roleId} state=${agent.state}`.slice(0, 200)});
+    }
     if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
     // REL-FX-4: sağlayıcı kota/hız sınırı kör retry ile bütçe tüketmez: run BLOCKED(PROVIDER_QUOTA), retryCount değişmez; disk dolu/kotası BLOCKED(DISK_FULL).
     if (limit) return limitBlock(limit);

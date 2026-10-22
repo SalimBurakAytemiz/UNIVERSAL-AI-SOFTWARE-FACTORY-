@@ -34,14 +34,18 @@ async function launchSmoke(installDir, userData, label, extraArgs = []) {
   const t = Date.now();
   let stderr = "";
   const child = cp.spawn(path.join(installDir, "UASCO.exe"), [`--user-data-dir=${userData}`, "--enable-logging=stderr", ...extraArgs], {cwd: installDir, env: launchEnv(), stdio: ["ignore", "ignore", "pipe"], windowsHide: false});
-  child.stderr.on("data", d => { stderr = (stderr + d).slice(-4000); });
+  let ipcRejected = false;
+  child.stderr.on("data", d => { stderr = (stderr + d).slice(-4000); if (stderr.includes("UNTRUSTED_IPC_SENDER")) ipcRejected = true; });
   const exit = await new Promise(resolve => { const timer = setTimeout(() => { try { child.kill(); } catch {} resolve({timeout: true}); }, 120000); child.on("exit", (code, signal) => { clearTimeout(timer); resolve({code, signal}); }); });
   const m = fs.existsSync(marker) ? JSON.parse(fs.readFileSync(marker, "utf8")) : null;
   const closed = m?.port ? await portClosed(m.port) : null;
   const logFile = path.join(userData, "logs", "control-api.log");
   const logText = fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8") : "";
   const hexOutsideChallenge = (logText.replace(/challenge=[0-9a-f]{64}/g, "challenge=<c>").match(/[0-9a-f]{64}/g) ?? []).length;
-  return step(label, {args: extraArgs, exit, ms: Date.now() - t, marker: m, backendPortClosedAfterQuit: closed, backendLogBytes: logText.length, backendLogHas64HexOutsideChallenge: hexOutsideChallenge, electronStderrTail: stderr.split(/\r?\n/).filter(Boolean).slice(-8), backendLogTail: logText.split(/\r?\n/).filter(l => l.startsWith("[desktop]")).slice(-4)});
+  const row = step(label, {args: extraArgs, exit, ms: Date.now() - t, rendererIpcRejected: ipcRejected, marker: m, backendPortClosedAfterQuit: closed, backendLogBytes: logText.length, backendLogHas64HexOutsideChallenge: hexOutsideChallenge, electronStderrTail: stderr.split(/\r?\n/).filter(Boolean).slice(-8), backendLogTail: logText.split(/\r?\n/).filter(l => l.startsWith("[desktop]")).slice(-4)});
+  // //TR: Kurulu uygulamada renderer IPC çağrıları güvenilmeyen gönderen diye reddedilirse ekranlar veri alamaz; bu kurulum testini başarısız sayar.
+  if (ipcRejected) throw new Error(`RENDERER_IPC_REJECTED:${label}`);
+  return row;
 }
 
 async function main() {
