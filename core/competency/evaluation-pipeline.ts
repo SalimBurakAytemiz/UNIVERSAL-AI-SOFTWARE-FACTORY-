@@ -11,7 +11,8 @@ import type {FirstDeliveryFunction, RoleExecutionProfile} from "../agents/role-e
 import {EVIDENCE_ROOT, createEvidenceVerifier} from "../agents/role-lifecycle.js";
 import type {ExecutorPair, MissionSpec} from "../workos/executors.js";
 import {redactSecrets} from "../workos/secret-scan.js";
-import {assertionCount, disabledTestMarkers, evaluateTestSurface, parseNameStatusZ} from "../workos/test-surface.js";
+import {disabledTestMarkers, evaluateTestSurface, parseNameStatusZ} from "../workos/test-surface.js";
+import {MAX_TEST_SOURCE_BYTES, analyzeAddTest, tokenize} from "./static-test-analysis.js";
 import {PreDevBuilderError, PREDEV_KIND_FUNCTION} from "../workos/predev/claude-builder.js";
 import {composeRolePrompt} from "../workos/predev/role-prompts.js";
 import {toUpstreamContents} from "../workos/predev/driver.js";
@@ -204,38 +205,43 @@ async function goldenFile(c: ProcCtx): Promise<ProcedureRun> {
 }
 
 // ---------------------------------------------------------------- procedure: golden-tests-v1 (tester)
-// //TR: Tester prosedürü STATİK oracle kullanır: yazılan test ASLA çalıştırılmaz (doğrulanmış sandbox yok; vm.Script yalnız DERLER, yürütmez). Mevcut test yüzeyi için runner'ın kendi sınıflandırıcısı (evaluateTestSurface/assertionCount/disabledTestMarkers) kullanılır; ikinci bir kural yoktur.
-const callArgs = (src: string): string[] => [...src.matchAll(/\badd\s*\(([^()]*)\)/g)].map(m => m[1].replace(/\s+/g, ""));
-const hasZero = (a: string) => /(^|[,(])0(?![\d.])/.test(a), hasNegative = (a: string) => /-\d/.test(a), hasPositive = (a: string) => /\d/.test(a) && !hasNegative(a) && !hasZero(a);
+// //TR: Tester prosedürü STATİK oracle kullanır: yazılan test ASLA çalıştırılmaz (doğrulanmış sandbox yok; vm.compileFunction yalnız DERLER, yürütmez). Metin çözümlemesi belirteç tabanlıdır (static-test-analysis.ts): yorum/string/geri çağrı/ölü kod test sayılmaz. Mevcut test yüzeyi için runner'ın kendi sınıflandırıcısı (evaluateTestSurface/assertionCount/disabledTestMarkers) kullanılır; ikinci bir kural yoktur.
+// //TR: `compileFunction` dosyayı Node'un CJS yükleyicisi gibi bir FONKSİYON GÖVDESİ olarak derler (kapatıcı parantezle sarmalayıcıyı kırma hilesi derlenmez); yalnız derler, ASLA çalıştırmaz.
 function compiles(src: string): boolean {
-  if (Buffer.byteLength(src, "utf8") > 64 * 1024) return false;
-  try { new vm.Script(`(function (require, module, exports) {${src}\n})`, {filename: "evaluation-test-file.js"}); return true; } catch { return false; }
+  try { vm.compileFunction(src, ["exports", "require", "module", "__filename", "__dirname"], {filename: "evaluation-test-file.js"}); return true; } catch { return false; }
 }
 async function goldenTests(c: ProcCtx): Promise<ProcedureRun> {
   const im = await implementGolden(c, {seed: GOLDEN_TESTS.seed, branch: "eval/golden-tests", title: GOLDEN_TESTS.title, objective: GOLDEN_TESTS.objective, acceptanceCriteria: GOLDEN_TESTS.acceptanceCriteria});
   if (!im.ok) return im.run;
   const {ws, start, head, rawNames, names, log, identities, checks} = im;
-  const contentAt = (ref: string, p: string) => gitOut(ws, ["show", `${ref}:${p}`]);
+  // //TR: Boyut sınırı HER metin çözümlemesinden ve her regex'ten ÖNCE uygulanır (model çıktısı sınırsız olamaz; kuadratik regex olay döngüsünü kilitleyemez). Sınırı aşan içerik runner'ın yüzey sınıflandırıcısına da verilmez.
+  const contentAt = (ref: string, p: string) => { const t = gitOut(ws, ["show", `${ref}:${p}`]); return t !== null && Buffer.byteLength(t, "utf8") > MAX_TEST_SOURCE_BYTES ? null : t; };
   const surface = evaluateTestSurface({baseSha: start, headSha: head, entries: parseNameStatusZ(rawNames), contentAt, executedTests: null, notExecutedReason: "SANDBOX_UNAVAILABLE"});
   // //TR: Tek eklenen dosya dışındaki HER değişiklik (mevcut testin değişmesi/silinmesi/zayıflatılması, harness, src) name-status'ta görünür ve bu kontrolü düşürür; ayrıntıya runner'ın kendi test-yüzeyi sınıflandırması eklenir.
   const only = names.length === 2 && names[0] === "A" && names[1] === GOLDEN_TESTS.path;
   checks.push({id: "only_expected_file_added", passed: only, detail: `${names.join(" ").slice(0, 160)} | surface deleted=${surface.deleted.length} weakened=${surface.weakened.length} modified=${surface.modified.length} harness=${surface.harness.length} renamed=${surface.renamed.length}`});
   checks.push({id: "no_trivial_test", passed: surface.trivialAdded.length === 0, detail: `trivialAdded=${surface.trivialAdded.length}`});
   const src = gitOut(ws, ["cat-file", "blob", `${head}:${GOLDEN_TESTS.path}`]);
-  const mode = regularMode(ws, head, GOLDEN_TESTS.path), text = src ?? "";
+  const mode = regularMode(ws, head, GOLDEN_TESTS.path), bytes = src === null ? 0 : Buffer.byteLength(src, "utf8");
   checks.push({id: "regular_file", passed: src !== null && mode === "100644", detail: mode || "none"});
-  checks.push({id: "compiles", passed: src !== null && compiles(text), detail: src === null ? "test file missing in commit" : "vm.Script compile only; the file is never executed"});
-  checks.push({id: "references_module", passed: /require\(\s*["']\.\.\/src\/add(?:\.js)?["']\s*\)/.test(text), detail: "require of ../src/add"});
-  const asserts = assertionCount(text);
-  checks.push({id: "assertion_count_min_3", passed: asserts >= 3, detail: `${asserts} assertion call(s)`});
-  const disabled = disabledTestMarkers(text), exits = /process\s*\.\s*exit\s*\(/.test(text);
-  checks.push({id: "no_disabled_markers", passed: disabled === 0 && !exits, detail: `disabled=${disabled} processExit=${exits}`});
-  const calls = callArgs(text), distinct = new Set(calls).size;
-  const pos = calls.some(hasPositive), neg = calls.some(hasNegative), zero = calls.some(hasZero);
-  checks.push({id: "covers_positive_negative_zero", passed: distinct >= 3 && pos && neg && zero, detail: `distinctCalls=${distinct} positive=${pos} negative=${neg} zero=${zero}`});
+  const sizeOk = src !== null && bytes <= MAX_TEST_SOURCE_BYTES, text = sizeOk ? src : "";
+  checks.push({id: "within_size_cap", passed: sizeOk, detail: src === null ? "test file missing in commit" : `${bytes} bytes (cap ${MAX_TEST_SOURCE_BYTES}); larger files are not analysed`});
+  checks.push({id: "compiles", passed: sizeOk && compiles(text), detail: !sizeOk ? "not analysed (missing or over the size cap)" : "vm.compileFunction compile only; the file is never executed"});
+  const toks = sizeOk ? tokenize(text) : null, an = toks === null ? null : analyzeAddTest(toks);
+  const why = !sizeOk ? "not analysed (missing or over the size cap)" : "not analysable (unterminated string, comment, template or regex)";
+  checks.push({id: "references_module", passed: an !== null && an.addId !== null, detail: an === null ? why : an.addId === null ? "no top-level `const <name> = require(\"../src/add\")`" : `bound to ${an.addId}`});
+  const cases = an?.cases ?? [];
+  checks.push({id: "assertion_count_min_3", passed: cases.length >= 3, detail: an === null ? why : `${cases.length} qualifying top-level assertion(s) of ${an.assertCalls} assert call(s); comments, strings, callbacks and non-literal operands never count`});
+  checks.push({id: "asserted_values_correct", passed: cases.length > 0 && cases.every(k => k.expected === k.a + k.b), detail: an === null ? why : `${cases.filter(k => k.expected !== k.a + k.b).length} wrong expected sum(s)`});
+  const disabled = sizeOk ? disabledTestMarkers(text) : -1;
+  checks.push({id: "no_disabled_markers", passed: disabled === 0, detail: sizeOk ? `disabled=${disabled}` : "not scanned (missing or over the size cap)"});
+  checks.push({id: "no_early_exit", passed: an !== null && an.earlyExit === null, detail: an === null ? why : an.earlyExit ?? "no top-level return, loop, conditional, function or process.exit"});
+  const distinct = new Set(cases.map(k => `${k.a},${k.b}`)).size;
+  const pos = cases.some(k => k.a > 0 && k.b > 0), neg = cases.some(k => k.a < 0 || k.b < 0), zero = cases.some(k => k.a === 0 || k.b === 0);
+  checks.push({id: "covers_positive_negative_zero", passed: distinct >= 3 && pos && neg && zero, detail: `distinctOperands=${distinct} positive=${pos} negative=${neg} zero=${zero}`});
   const limit = c.profile.limits.maxFilesWritten;
   checks.push({id: "within_role_file_limit", passed: names.length / 2 <= limit, detail: `${names.length / 2}<=${limit}`});
-  return {infra: null, checks, identities, artifact: {commit: head, nameStatus: names, testFile: src === null ? null : clip(text, 8000), assertionCount: asserts, disabledMarkers: disabled,
+  return {infra: null, checks, identities, artifact: {commit: head, nameStatus: names, testFile: sizeOk ? clip(text, 8000) : null, testFileBytes: bytes, qualifyingAssertions: cases.length, assertCalls: an?.assertCalls ?? null, cases: cases.slice(0, 20), disabledMarkers: disabled,
     surface: {added: surface.added, modified: surface.modified, deleted: surface.deleted, weakened: surface.weakened, trivialAdded: surface.trivialAdded, harness: surface.harness, renamed: surface.renamed, functionalAcceptance: surface.functionalAcceptance, reason: surface.reason},
     testsExecuted: false, testsNotExecutedReason: "SANDBOX_UNAVAILABLE: the written tests were never run; no mutation testing", implementerLog: log}};
 }
@@ -318,8 +324,8 @@ export const EVALUATION_PROCEDURES: readonly Procedure[] = [
   {id: "golden-review", version: GOLDEN_REVIEW_VERSION, fixtureDigest: FIXTURE_DIGESTS[GOLDEN_REVIEW_VERSION], specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["security-reviewer"],
     covers: ["returns CLEAN with no findings for a trivially correct diff", "returns BLOCKED with a finding for a planted command injection", "leaves the review clone untouched"], doesNotCover: ["recall on real defects", "false-positive rate beyond one case", "secret or dependency review"], run: c => goldenReview(c)},
   {id: "golden-tests", version: GOLDEN_TESTS_VERSION, fixtureDigest: FIXTURE_DIGESTS[GOLDEN_TESTS_VERSION], specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["tester"],
-    covers: ["authors ONE new, scoped test file for a precise mission", "the file compiles (compile only), requires the module under test and asserts a positive, a negative and a zero case", "leaves existing tests, src and the harness untouched; no skipped/disabled tests, no process.exit"],
-    doesNotCover: ["that the tests pass or fail correctly: nothing is executed (no verified sandbox)", "defect-detection power (no mutation testing)", "that the asserted values are right", "test design quality beyond the static checks"], run: c => goldenTests(c)},
+    covers: ["authors ONE new, scoped test file (at most 16 KiB) for a precise mission that states every threshold", "the file compiles (compile only, nothing is run) and, in the code tokens only (comments, strings, callbacks and dead code never count), declares require of ../src/add and node:assert at the top level and contains at least three top-level assertion statements assert.<strictEqual|equal|deepStrictEqual|deepEqual>(add(<n>, <n>), <n>) or assert[.ok](add(<n>, <n>) === <n>) with distinct operands covering a positive, a negative and a zero case", "every asserted value equals the true sum (statically computed from the literals)", "leaves existing tests, src and the harness untouched; no skipped/disabled tests, no process.exit, no top-level return, loop, conditional or function"],
+    doesNotCover: ["that the tests pass or fail correctly: nothing is executed (no verified sandbox)", "defect-detection power (no mutation testing)", "tests in any other style (node:test callbacks, table-driven loops, destructured assert imports or an assert binding not named assert): they are FAILED against the precise mission text, not judged", "test design quality beyond the static checks"], run: c => goldenTests(c)},
   {id: "golden-predev", version: "golden-predev-v1", fixtureDigest: sha256Json({brief: TASKHUB_BRIEF, artifacts: TASKHUB_ARTIFACTS}), specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["business-analyst", "requirements-engineer", "planner", "architect", "ux-designer"],
     covers: ["produces JSON that the existing artifact validators accept for the TaskHub reference brief (shape and traceability to approved upstream)"], doesNotCover: ["content quality or correctness", "any customer project", "the TaskHub reference content is not a verified project"], run: (c, fn) => goldenPredev(c, fn)}
 ];

@@ -13,6 +13,7 @@ import {registerRoleStatusRoutes} from "../apps/control-api/src/routes/role-stat
 import {EvaluationStaging, EvaluationStagingError, EVALUATION_PROCEDURES, planFor, runRoleEvaluation, verdictOf} from "../core/competency/evaluation-pipeline.js";
 import type {EvaluationOutcome} from "../core/competency/evaluation-pipeline.js";
 import {executeBlockers, parseArgs, resolveControlRoot, runCli} from "../core/competency/evaluation-cli.js";
+import {MAX_TEST_SOURCE_BYTES, analyzeAddTest, tokenize, topLevelStatements} from "../core/competency/static-test-analysis.js";
 import {FakeExecutors, reviewerArgv} from "../core/workos/executors.js";
 import type {ExecutorPair, FakeScript, ProcResult} from "../core/workos/executors.js";
 import {ClaudePreDevBuilder} from "../core/workos/predev/claude-builder.js";
@@ -916,10 +917,10 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
   it("tester golden mission (STATIC oracle, nothing is executed): one scoped test file with a positive, a negative and a zero case, existing tests untouched -> PASSED; FAKE-stamped, never counts", { timeout: 120_000 }, async () => {
     const root = stagingOf(), marker = path.join(workDir(), "executed.marker");
     const o = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": TESTER_GOOD}})}), TESTER, {stagingRoot: root}));
-    expect([o.verdict, o.executorKind, o.checks.map(c => c.id)]).toEqual(["PASSED", "FAKE", ["commit_produced", "only_expected_file_added", "no_trivial_test", "regular_file", "compiles", "references_module", "assertion_count_min_3", "no_disabled_markers", "covers_positive_negative_zero", "within_role_file_limit"]]);
+    expect([o.verdict, o.executorKind, o.checks.map(c => c.id)]).toEqual(["PASSED", "FAKE", ["commit_produced", "only_expected_file_added", "no_trivial_test", "regular_file", "within_size_cap", "compiles", "references_module", "assertion_count_min_3", "asserted_values_correct", "no_disabled_markers", "no_early_exit", "covers_positive_negative_zero", "within_role_file_limit"]]);
     expect(o.verifier).toEqual({countsIfPromoted: false, problem: "FAKE_EVIDENCE"});
     const art = JSON.parse(fs.readFileSync(o.artifactFile, "utf8")), ev = JSON.parse(fs.readFileSync(o.evidenceFile, "utf8"));
-    expect(art).toMatchObject({testsExecuted: false, assertionCount: 3, disabledMarkers: 0, surface: {added: ["test/add.test.js"], modified: [], deleted: [], weakened: [], trivialAdded: [], harness: []}});
+    expect(art).toMatchObject({testsExecuted: false, qualifyingAssertions: 3, assertCalls: 3, disabledMarkers: 0, surface: {added: ["test/add.test.js"], modified: [], deleted: [], weakened: [], trivialAdded: [], harness: []}});
     expect(art.testsNotExecutedReason).toMatch(/never run/);
     expect(ev.procedure).toMatchObject({version: "golden-tests-v1"}); expect(ev.procedure.doesNotCover.join(" ")).toMatch(/nothing is executed/);
     // the written file is only COMPILED, never run: a top-level side effect must not happen
@@ -931,6 +932,8 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
 
   it("tester oracle: each deviation is FAILED with the right first failing check (wrong place, extra or changed files, weakened/deleted tests, harness change, trivial test, syntax error, no module, too few assertions, disabled tests, missing cases)", { timeout: 300_000 }, async () => {
     const good = TESTER_GOOD, smoke = 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(1, 1), 2);\n';
+    const SKIP = ["it", "skip"].join("."); // assembled at runtime so this test file never carries a literal disabled-test marker in a string
+    const H = 'const assert = require("node:assert");\nconst add = require("../src/add");\n', A = "assert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n";
     const T = (files: Record<string, string>, extra: Partial<FakeScript> = {}) => ({implement: () => ({files}), ...extra} as Partial<FakeScript>);
     const cases: Array<[string, Partial<FakeScript>, string, string?]> = [
       ["tests in another file name", T({"test/other.test.js": good}), "only_expected_file_added"],
@@ -943,14 +946,29 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       ["syntax error", T({"test/add.test.js": good + "assert.strictEqual(add(1, 2)\n"}), "compiles"],
       ["does not require the module", T({"test/add.test.js": 'const assert = require("node:assert");\nassert.strictEqual(2 + 3, 5);\nassert.strictEqual(-2 + -3, -5);\nassert.strictEqual(0 + 7, 7);\n'}), "references_module"],
       ["only two assertions", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\n'}), "assertion_count_min_3"],
-      ["skipped test", T({"test/add.test.js": good + 'it.skip("later", () => {});\n'}), "no_disabled_markers"],
-      ["process.exit bypass", T({"test/add.test.js": good + "process.exit(0);\n"}), "no_disabled_markers"],
+      ["skipped test", T({"test/add.test.js": good + `${SKIP}("later", () => {});\n`}), "no_disabled_markers"],
+      ["process.exit bypass", T({"test/add.test.js": good + "process.exit(0);\n"}), "no_early_exit"],
       ["no negative case", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(4, 5), 9);\nassert.strictEqual(add(0, 7), 7);\n'}), "covers_positive_negative_zero"],
       ["no zero case", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(4, 5), 9);\n'}), "covers_positive_negative_zero"],
       ["the same call three times", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(2, 3), 5);\n'}), "covers_positive_negative_zero"],
       ["no positive case (every call has a negative or zero argument)", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\nassert.strictEqual(add(-1, 0), -1);\n'}), "covers_positive_negative_zero"],
       ["only two distinct calls (one call is both negative and zero)", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, 0), -2);\nassert.strictEqual(add(2, 3), 5);\n'}), "covers_positive_negative_zero"],
-      ["oversized file (valid JavaScript, 70 KiB of comment)", T({"test/add.test.js": good + "// " + "x".repeat(70 * 1024) + "\n"}), "compiles"],
+      ["oversized file (valid JavaScript, 20 KiB of comment)", T({"test/add.test.js": good + "// " + "x".repeat(20 * 1024) + "\n"}), "within_size_cap"],
+      ["commented-out assertions (line comments)", T({"test/add.test.js": H + "// assert.strictEqual(add(2, 3), 5);\n// assert.strictEqual(add(-2, -3), -5);\n// assert.strictEqual(add(0, 7), 7);\n"}), "assertion_count_min_3"],
+      ["commented-out assertions (block comment)", T({"test/add.test.js": H + "/*\n" + A + "*/\n"}), "assertion_count_min_3"],
+      ["assertions on constants next to dangling add() calls", T({"test/add.test.js": H + "assert(true); assert.ok(1); assert.strictEqual(1, 1);\nadd(2, 3); add(-2, -3); add(0, 7);\n"}), "assertion_count_min_3"],
+      ["a top-level return in front of the real assertions (dead code)", T({"test/add.test.js": H + "return;\n" + A}), "no_early_exit"],
+      ["the module is only required in a comment and add is redefined locally", T({"test/add.test.js": 'const assert = require("node:assert");\n// const add = require("../src/add");\nconst add = (a, b) => a + b;\n' + A}), "references_module"],
+      ["assert messages that merely mention add() calls", T({"test/add.test.js": H + 'assert(true, "add(2, 3)");\nassert(true, "add(-2, -3)");\nassert(true, "add(0, 7)");\n'}), "assertion_count_min_3"],
+      ["assertions inside if (false)", T({"test/add.test.js": H + "if (false) {\n" + A + "}\n"}), "assertion_count_min_3"],
+      ["assertions inside node:test callbacks (a style the mission forbids)", T({"test/add.test.js": H + 'const test = require("node:test");\ntest("a", () => { assert.strictEqual(add(2, 3), 5); });\ntest("b", () => { assert.strictEqual(add(-2, -3), -5); });\ntest("c", () => { assert.strictEqual(add(0, 7), 7); });\n'}), "assertion_count_min_3"],
+      ["assertions after another statement inside a callback body", T({"test/add.test.js": H + 'const test = require("node:test");\ntest("all", () => {\n  const x = 1;\n  assert.strictEqual(add(2, 3), 5);\n  assert.strictEqual(add(-2, -3), -5);\n  assert.strictEqual(add(0, 7), 7);\n});\n'}), "assertion_count_min_3"],
+      ["wrong expected sum", T({"test/add.test.js": H + "assert.strictEqual(add(2, 3), 6);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n"}), "asserted_values_correct"],
+      ["tautology: add() on both sides", T({"test/add.test.js": H + "assert.strictEqual(add(2, 3), add(2, 3));\nassert.strictEqual(add(-2, -3), add(-2, -3));\nassert.strictEqual(add(0, 7), add(0, 7));\n"}), "assertion_count_min_3"],
+      ["add() only in the message position", T({"test/add.test.js": H + "assert.strictEqual(5, 5, add(2, 3));\nassert.strictEqual(5, 5, add(-2, -3));\nassert.strictEqual(5, 5, add(0, 7));\n"}), "assertion_count_min_3"],
+      ["non-literal operands", T({"test/add.test.js": H + "const x = 2;\nassert.strictEqual(add(x, 3), 5);\nassert.strictEqual(add(-x, -3), -5);\nassert.strictEqual(add(0, x), 2);\n"}), "assertion_count_min_3"],
+      ["a closing brace that would break out of a naive wrapper", T({"test/add.test.js": good + "\n}); (function () {\n"}), "compiles"],
+      ["unterminated string (compile fails and the text cannot be analysed)", T({"test/add.test.js": good + 'const x = "abc\n'}), "compiles"],
       ["no commit at all", {implement: () => ({files: {"test/add.test.js": good}, noCommit: true})}, "commit_produced"]
     ];
     for (const [label, o, failing, detail] of cases) {
@@ -958,6 +976,10 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect([label, r.verdict, r.checks.find(c => !c.passed)?.id]).toEqual([label, "FAILED", failing]);
       if (detail) expect([label, r.checks.find(c => !c.passed)?.detail]).toEqual([label, expect.stringContaining(detail)]);
     }
+    // a file whose text cannot be tokenised fails every text check with a reason instead of passing by default
+    const broken = evaluated(await evaluate(fakePair(T({"test/add.test.js": good + 'const x = "abc\n'})), TESTER));
+    expect(broken.checks.filter(c => !c.passed).map(c => c.id)).toEqual(["compiles", "references_module", "assertion_count_min_3", "asserted_values_correct", "no_early_exit", "covers_positive_negative_zero"]);
+    expect(broken.checks.find(c => c.id === "references_module")?.detail).toMatch(/not analysable/);
     // infrastructure is infrastructure for the tester too
     const root = stagingOf();
     expect(await evaluate(fakePair({implement: () => ({exitCode: 1})}), TESTER, {stagingRoot: root})).toEqual({status: "NOT_EXECUTED", roleId: TESTER, evaluationId: "EV-01", reason: "IMPLEMENT_EXIT_NONZERO"});
@@ -976,6 +998,97 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     // an unsafe tester binding is refused before anything starts
     const t = FIRST_DELIVERY_BINDINGS.find(b => b.roleId === TESTER)!;
     expect(await evaluate(fakePair(), TESTER, {bindings: FIRST_DELIVERY_BINDINGS.map(b => b === t ? {...b, allowedTools: [...b.allowedTools, "WebFetch"]} : b)})).toEqual({status: "REFUSED", reason: "ROLE_NOT_EXECUTABLE:TOOL_NOT_ALLOWED"});
+  });
+
+  it("tester oracle accepts every spelling the mission allows (an alias for add, reversed operands, assert.ok / bare assert, no semicolons, CRLF, comments, a message argument, extra statements, decimals) and PASSES them", { timeout: 300_000 }, async () => {
+    const H = 'const assert = require("node:assert");\nconst add = require("../src/add");\n';
+    const variants: Array<[string, string]> = [
+      ["an alias for add and the .js specifier", 'const assert = require("assert");\nconst sum = require("../src/add.js");\nassert.strictEqual(sum(2, 3), 5);\nassert.strictEqual(sum(-2, -3), -5);\nassert.strictEqual(sum(0, 7), 7);\n'],
+      ["strict assert module", 'const assert = require("node:assert/strict");\nconst add = require("../src/add");\nassert.equal(add(2, 3), 5);\nassert.equal(add(-2, -3), -5);\nassert.equal(add(0, 7), 7);\n'],
+      ["reversed operands with equal / deepStrictEqual / deepEqual", H + "assert.equal(5, add(2, 3));\nassert.deepStrictEqual(-5, add(-2, -3));\nassert.deepEqual(add(0, 7), 7);\n"],
+      ["assert.ok and bare assert with === and ==", H + "assert.ok(add(2, 3) === 5);\nassert(-5 == add(-2, -3));\nassert(add(0, 7) === 7);\n"],
+      ["no semicolons, CRLF, comments, a message argument and an extra statement", 'const assert = require("node:assert") // node:assert\r\nconst add = require("../src/add")\r\n/* three cases */\r\nassert.strictEqual(add(2, 3), 5, "two plus three")\r\nassert.strictEqual(add(-2, -3), -5)\r\nconsole.log("ok")\r\nassert.strictEqual(add(0, 7), 7)\r\n'],
+      ["mixed-sign operands (negative through ONE operand)", H + "assert.strictEqual(add(2, -3), -1);\nassert.strictEqual(add(4, 5), 9);\nassert.strictEqual(add(0, 7), 7);\n"],
+      ["decimal operands", H + "assert.strictEqual(add(2.5, 0.5), 3);\nassert.strictEqual(add(-1.5, -0.5), -2);\nassert.strictEqual(add(0, 0.25), 0.25);\n"]
+    ];
+    for (const [label, body] of variants) {
+      const r = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": body}})}), TESTER));
+      expect([label, r.verdict, r.checks.filter(c => !c.passed).map(c => c.id)]).toEqual([label, "PASSED", []]);
+    }
+  });
+
+  it("a hostile test file cannot stall the evaluation: over the size cap it is rejected before ANY text analysis (the quadratic disabled-marker pattern included), and one just under the cap stays fast", { timeout: 120_000 }, async () => {
+    const evil = (bytes: number) => "it({" + "\n".repeat(bytes - 4);
+    const t0 = Date.now();
+    const over = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": evil(100 * 1024)}})}), TESTER));
+    expect(Date.now() - t0).toBeLessThan(8_000);
+    expect(over.checks.filter(c => !c.passed).map(c => c.id)).toEqual(expect.arrayContaining(["within_size_cap", "compiles", "references_module", "no_disabled_markers"]));
+    expect(over.checks.find(c => c.id === "no_disabled_markers")?.detail).toMatch(/not scanned/);
+    expect(JSON.parse(fs.readFileSync(over.artifactFile, "utf8"))).toMatchObject({testFile: null, testFileBytes: 100 * 1024});
+    const t1 = Date.now();
+    const under = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": evil(MAX_TEST_SOURCE_BYTES - 16)}})}), TESTER));
+    expect(Date.now() - t1).toBeLessThan(8_000);
+    expect(under.verdict).toBe("FAILED"); expect(under.checks.find(c => c.id === "within_size_cap")?.passed).toBe(true);
+    // the same pattern in a MODIFIED existing test is not handed to the surface classifier either (its comparison runs the same regex)
+    const t2 = Date.now();
+    // (it keeps an assertion so the classifier does not short-circuit on "assertions reduced" and really reaches the disabled-marker comparison)
+    const mod = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": TESTER_GOOD, "test/smoke.test.js": "assert.ok(1);\n" + evil(100 * 1024)}})}), TESTER));
+    expect(Date.now() - t2).toBeLessThan(8_000);
+    expect(mod.checks.find(c => c.id === "only_expected_file_added")?.passed).toBe(false);
+    // the cap is inclusive: exactly MAX bytes is analysed (and passes), one byte more is not
+    const padded = (extra: number) => TESTER_GOOD + "//" + "x".repeat(MAX_TEST_SOURCE_BYTES - Buffer.byteLength(TESTER_GOOD) - 3 + extra) + "\n";
+    expect(Buffer.byteLength(padded(0))).toBe(MAX_TEST_SOURCE_BYTES);
+    const exact = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": padded(0)}})}), TESTER));
+    expect([exact.verdict, exact.checks.find(c => c.id === "within_size_cap")?.passed]).toEqual(["PASSED", true]);
+    const plus = evaluated(await evaluate(fakePair({implement: () => ({files: {"test/add.test.js": padded(1)}})}), TESTER));
+    expect([plus.verdict, plus.checks.find(c => c.id === "within_size_cap")?.passed]).toEqual(["FAILED", false]);
+  });
+
+  describe("static test analysis (tokeniser and statement model behind the tester oracle)", () => {
+    const toks = (src: string) => tokenize(src)!.map(t => `${t.t}:${t.v}`);
+    const stmts = (src: string) => topLevelStatements(tokenize(src)!).map(st => st.map(t => t.v).join(" "));
+    const an = (src: string) => analyzeAddTest(tokenize(src)!);
+    const H = 'const assert = require("node:assert");\nconst add = require("../src/add");\n';
+    it("comments are dropped and string / template / regex literals are single opaque tokens; division is not a regex", () => {
+      expect(toks('a // c "x"\n/* y */ b')).toEqual(["id:a", "id:b"]);
+      expect(toks("x = \"// no\" + '/* no */'")).toEqual(["id:x", "p:=", "str:// no", "p:+", "str:/* no */"]);
+      expect(toks("x = `a ${ '}' + `n${1}` } b`")).toEqual(["id:x", "p:=", "tpl:a ${ '}' + `n${1}` } b"]);
+      expect(toks("a / b / c")).toEqual(["id:a", "p:/", "id:b", "p:/", "id:c"]);
+      expect(toks("x = /a\\/[/]b/g.test(y)")).toEqual(["id:x", "p:=", "re:/a\\/[/]b/g", "p:.", "id:test", "p:(", "id:y", "p:)"]);
+      expect(toks("return /x/")).toEqual(["id:return", "re:/x/"]);
+      expect(toks("1e-5 + 0x1F + .5 + 2.5")).toEqual(["num:1e-5", "p:+", "num:0x1F", "p:+", "num:.5", "p:+", "num:2.5"]);
+      expect(toks("a === b => c ?? d")).toEqual(["id:a", "p:===", "id:b", "p:=>", "id:c", "p:??", "id:d"]);
+      expect(toks("#!/usr/bin/env node\nx")).toEqual(["id:x"]);
+      expect(toks("\"a\\\"b\" 'c\\'d'")).toEqual(['str:a\\"b', "str:c\\'d"]);
+      expect(toks("é = 1")).toEqual(["id:é", "p:=", "num:1"]);
+    });
+    it("unterminated strings, comments, templates and regexes cannot be analysed (null), never silently accepted", () => {
+      for (const src of ["x = 'abc", 'x = "abc\ny"', "/* open", "`open", "`a ${ 1 ", "x = /open", "x = /a\nb/"]) expect([src, tokenize(src)]).toEqual([src, null]);
+    });
+    it("statements split at ';' and at newlines ASI would split, never inside brackets or before a continuing token", () => {
+      expect(stmts("a = 1\nb = 2; c = 3\n(d)\ne\n+f")).toEqual(["a = 1", "b = 2", "c = 3 ( d )", "e + f"]);
+      expect(stmts("f(() => {\n assert(1)\n})\ng()")).toEqual(["f ( ( ) => { assert ( 1 ) } )", "g ( )"]);
+      expect(stmts("a\n`t`\nb \n in c")).toEqual(["a t", "b in c"]);
+      expect(stmts(";;")).toEqual([]);
+      expect(stmts("a /*\n*/ b")).toEqual(["a", "b"]); // a line break inside a block comment is still a line break
+    });
+    it("the add test model: only top-level, literal, comparison-position assertions qualify; early exits and control flow are named", () => {
+      const good = H + 'assert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n';
+      expect(an(good)).toEqual({addId: "add", assertIds: ["assert"], assertCalls: 3, cases: [{a: 2, b: 3, expected: 5}, {a: -2, b: -3, expected: -5}, {a: 0, b: 7, expected: 7}], earlyExit: null});
+      for (const [src, code] of [["if (x) {}", "TOP_LEVEL_IF"], ["for (;;) {}", "TOP_LEVEL_FOR"], ["return", "TOP_LEVEL_RETURN"], ["function f() {}", "TOP_LEVEL_FUNCTION"], ["try {} catch {}", "TOP_LEVEL_TRY"],
+        ["process.exit(0)", "PROCESS_EXIT"], ['process["exit"](0)', "PROCESS_EXIT"], ["process.kill(1)", "PROCESS_EXIT"], ["process.abort()", "PROCESS_EXIT"], ["process.argv", null], ["const o = {if: 1}", null]] as const)
+        expect([src, an(src).earlyExit]).toEqual([src, code]);
+      expect(an('let add = require("../src/add");\nvar add2 = require("../src/add.js");').addId).toBe("add");
+      expect(an('const a = require("x"), b = 2;\nconst c = require("node:fs");').addId).toBeNull();
+      expect(an('const x = require("../src/add").y;').addId).toBeNull();
+      expect(an('const assert = require("node:assert");\nconst A = require("assert/strict");').assertIds).toEqual(["assert", "A"]);
+      const odd = [`${H}assert.strictEqual(add(1, 2), 3).x;`, `${H}assert.strictEqual(add(1, 2), 3, "m", 4);`, `${H}assert.strictEqual(add(0x1, 2), 3);`, `${H}assert.strictEqual(add(1e1, 2), 12);`, `${H}assert.notStrictEqual(add(1, 2), 4);`,
+        `${H}assert.ok(add(1, 2) === 3 && true);`, `${H}assert.strictEqual(sub(2, 3), 5);`, `${H}assert.ok(add(1, 2));`, `${H}assert.throws(() => add(1, 2));`, `${H}assert;`];
+      expect(odd.map(src => an(src).cases.length)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+      expect(odd.map(src => an(src).assertCalls)).toEqual([0, 1, 1, 1, 1, 1, 1, 1, 1, 0]);
+      expect(an(`${H}assert.strictEqual(add(1, 2), 3);`).cases).toHaveLength(1);
+      expect(an('const assert = require("node:assert");\nassert.strictEqual(add(1, 2), 3);').cases).toEqual([]); // no add binding: nothing qualifies
+    });
   });
 
   it("only procedures that exist are run: delivery, unknown roles, other evaluation ids, malformed ids and unsafe bindings are refused before anything starts", async () => {
