@@ -1,0 +1,31 @@
+// //TR: scripts/local-worker/core.mjs için TypeScript tip bildirimleri (testlerin strict typecheck'i için); davranış core.mjs'tedir.
+export declare const REPO: string; export declare const PLAN_SCHEMA: string; export declare const JOB_SCHEMA: string; export declare const EVIDENCE_SCHEMA: string;
+export declare const ISOLATION_SCHEMA: string; export declare const STATUS_CONTEXT: string; export declare const FALLBACK: "GITHUB_HOSTED_WINDOWS";
+export declare const REQUIRED_CHECK_CONTEXTS: readonly string[];
+export declare const ISOLATION_CHECKS: readonly string[]; export declare const RESULTS: readonly string[]; export declare const TEST_RESULTS: readonly string[];
+export declare class WorkerError extends Error { code: string; constructor(code: string); }
+export declare function sha256(data: string | Buffer): string;
+export declare function canonical(v: unknown): string;
+export declare function validatePlan(plan: any, validationConfig: any): any;
+export declare function localSteps(plan: any): string[];
+export declare function jobKey(job: any): string;
+export declare function validateJob(job: any, plan: any): any;
+export declare function buildIsolation(input: {selftest: any; fingerprint: string | null; now: number; wsbSha256: string}): {ok: boolean; failed: string[]; record: any};
+export declare function isolationValid(rec: any, probe: any, now: number): boolean;
+export declare function assessHost(probe: any, plan: any, opts?: {isolation?: any; now?: number}): {state: string; reasons: string[]; fallback: string | null};
+export declare function stateFiles(dir: string): {lock: string; ledger: string; evidence: string; isolation: string; heartbeat: string};
+export declare function readLedger(file: string): Map<string, any>;
+export declare function appendLedger(file: string, entry: any): void;
+export declare function pidAlive(pid: number): boolean;
+export declare function readLock(file: string): any;
+export declare function inspectLock(file: string, opts?: {now?: number; isAlive?: (pid: number) => boolean}): {rec: any; stale: boolean; why: string | null} | null;
+export declare function acquireLock(file: string, opts: {key: string; pid?: number; now?: number; timeoutSec: number}): {acquired: boolean; rec?: any; current?: any};
+export declare function releaseLock(file: string, key: string): boolean;
+export declare function recover(dir: string, opts?: {now?: number; isAlive?: (pid: number) => boolean}): any;
+export declare function decideAccept(input: {job: any; host: any; ledger: Map<string, any>; lock: any}): {accept: boolean; reason: string; fallback: string | null};
+export declare function protectedDrift(input: {tree: (rev: string) => Map<string, string>; sha: string; baseSha: string; manifest: any}): string[];
+export declare function parseLsTree(out: string): Map<string, string>;
+export declare function buildEvidence(input: any): any;
+export declare function resultFromReport(report: any, plan: any): string;
+export declare function verifyEvidence(ev: any, opts: {plan: any; sha: string}): string[];
+export declare function statusPayload(ev: any, opts: {plan: any; sha: string}): {method: string; path: string; body: {state: string; context: string; description: string}};
