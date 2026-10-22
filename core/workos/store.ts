@@ -9,7 +9,7 @@ import {sha256 as sha256Untyped, writeJsonAtomic as writeJsonAtomicUntyped} from
 import {acquireProcessLock} from "../../automation/lib/process-lock.mjs";
 import {assertTransition, isMissionStatus} from "../mission/state-machine.js";
 import type {MissionStatus} from "../mission/types.js";
-import {WorkOsError, urlHasUserinfo} from "./types.js";
+import {TASK_TRANSITIONS, WorkOsError, isTaskStatus, urlHasUserinfo} from "./types.js";
 import type {DeliveryArtifactRecord, JournalEntry, JournalType, Project, ProjectExport, ProjectTemplate, ProjectType, RiskLevel, RunCheckpoint, RunCompletionRecord, RunEvidence, RunStatus, RunStep, Scope, TaskStatus, WorkMission, WorkRun, WorkTask} from "./types.js";
 // //TR: B11A: Company OS domainleri ikinci bir store kurmaz; girdileri bu journal'a yazar ve replay'de core/company apply fonksiyonlarına devredilir.
 import {applyCompanyEntry} from "../company/apply.js";
@@ -47,6 +47,13 @@ const entryHash = (body: Omit<JournalEntry, "hash">): string => sha256(body);
 // //TR: F-B1-001: anahtar JSON dizisidir; ayırıcı karakter içeren tenant/anahtar değerleri çarpışamaz.
 const idemKey = (tenantId: string, kind: string, key: string) => JSON.stringify([tenantId, kind, key]);
 const tampered = (detail: string) => new WorkOsError("WORKOS_JOURNAL_TAMPERED", detail);
+// //TR: Görev geçişinin reddedilme nedeni (null = izinli); yazma ve replay aynı kuralı kullanır, böylece journal'daki her geçiş yeniden doğrulanır.
+function taskTransitionRefusal(st: {tasks: Record<string, WorkTask>; missions: Record<string, WorkMission>}, t: WorkTask, to: TaskStatus): {code: "WORKOS_INVALID_TRANSITION" | "WORKOS_CONFLICT"; detail: string} | null {
+  if (!(TASK_TRANSITIONS[t.status] ?? []).includes(to)) return {code: "WORKOS_INVALID_TRANSITION", detail: `${t.status}->${to}`};
+  if (st.missions[t.missionId]?.status === "COMPLETE") return {code: "WORKOS_CONFLICT", detail: "MISSION_COMPLETE"};
+  if (to === "IN_PROGRESS" && t.dependsOn.some(d => st.tasks[d]?.status !== "DONE")) return {code: "WORKOS_CONFLICT", detail: "TASK_DEPENDENCIES_NOT_DONE"};
+  return null;
+}
 const malformed = (detail: string) => new WorkOsError("WORKOS_UNAVAILABLE", detail);
 const isObj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 const isStr = (x: unknown): x is string => typeof x === "string" && x.length > 0;
@@ -282,6 +289,13 @@ export class WorkOsStore {
         const ent = p.entity as WorkTask;
         if (!isObj(ent) || !isStr(ent.taskId) || !isStr(ent.tenantId) || !isStr(ent.missionId)) throw malformed(`ENTITY_SHAPE:${e.seq}`);
         st.tasks[ent.taskId] = ent; idem("task", ent, ent.taskId); break;
+      }
+      case "TASK_TRANSITIONED": {
+        // Replay applies the same rules as the write (allowlist, dependency gate, tenant, frozen mission): a well-hashed but inconsistent entry is tamper.
+        if (!isStr(p.taskId) || !isTaskStatus(p.to) || !isStr(p.reason)) throw malformed(`TASK_TRANSITION_SHAPE:${e.seq}`);
+        const t = st.tasks[p.taskId];
+        if (!t || t.tenantId !== p.tenantId || t.status !== p.from || taskTransitionRefusal(st, t, p.to) !== null) throw tampered(`TASK_TRANSITION_INCONSISTENT:${e.seq}`);
+        t.status = p.to; break;
       }
       case "PROJECT_REPOSITORY_SET": {
         const proj = isStr(p.projectId) ? st.projects[p.projectId] : undefined;
@@ -568,6 +582,19 @@ export class WorkOsStore {
     });
   }
   createTask(input: CreateTaskInput): WorkTask { return this.createTaskDetailed(input).entity; }
+  // //TR: Görev durumu yalnız bu yoldan değişir (TASK_TRANSITIONED); izinsiz geçiş, tamamlanmış mission veya bitmemiş bağımlılık yazmadan reddedilir.
+  transitionTask(scope: Scope, taskId: string, to: TaskStatus, reason: string, actor: string): WorkTask {
+    if (!isTaskStatus(to)) throw new WorkOsError("WORKOS_INVALID_INPUT", "to");
+    if (typeof reason !== "string" || reason.trim().length === 0) throw new WorkOsError("WORKOS_INVALID_INPUT", "reason");
+    return this.write(() => {
+      const t = this.state.tasks[taskId];
+      if (!t || t.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "task");
+      const refusal = taskTransitionRefusal(this.state, t, to);
+      if (refusal) throw new WorkOsError(refusal.code, refusal.detail);
+      this.append("TASK_TRANSITIONED", actor, {taskId, tenantId: t.tenantId, from: t.status, to, reason: reason.slice(0, 1000)});
+      return clone(this.state.tasks[taskId]);
+    });
+  }
   transitionMission(scope: Scope, missionId: string, to: MissionStatus, reason: string, actor: string): WorkMission {
     // REL-FX-1: COMPLETE hiçbir yoldan kanıt kapısını atlayamaz; store çağrısı da aynı birleşik yazıya yönlenir.
     if (to === "COMPLETE") return this.completeMission(scope, missionId, reason, actor).mission;
@@ -878,5 +905,6 @@ export class WorkOsStore {
     return Object.values(this.state.missions).filter(m => m.tenantId === scope.tenantId && (projectId === undefined || m.projectId === projectId));
   }
   getMission(scope: Scope, id: string): WorkMission | undefined { this.readGuard(); const m = this.state.missions[id]; return m && m.tenantId === scope.tenantId ? m : undefined; }
+  getTask(scope: Scope, taskId: string): WorkTask | undefined { this.readGuard(); const t = this.state.tasks[taskId]; return t && t.tenantId === scope.tenantId ? clone(t) : undefined; }
   listTasks(scope: Scope, missionId: string): WorkTask[] { this.readGuard(); return Object.values(this.state.tasks).filter(t => t.tenantId === scope.tenantId && t.missionId === missionId); }
 }

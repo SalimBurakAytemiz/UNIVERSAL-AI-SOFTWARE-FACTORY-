@@ -941,3 +941,78 @@ describe("UX WP-QA-SEC UI-146 security re-scan history", () => {
     for (const k of pick(en)) expect(en[k].match(/\{\w+\}/g)).toEqual(tr[k].match(/\{\w+\}/g));
   });
 });
+
+// //TR: LANE-A PQ-003: soyağacı düğüm/kenar grafiği — kenarlar yalnız liste alanlarından, klavye gezintisi, erişilebilir kenar listesi.
+describe("PQ-003 evidence lineage graph (nodes/edges from list fields only)", () => {
+  beforeEach(async () => { (await load("views", "assurance.js")).resetAssuranceView(); const f = (await load("forms.js")); f.selection.evidenceId = null; f.selection.missionId = null; });
+  const graphOf = async (items: any[]) => { const c = await load("assurance-core.js"); return {c, g: c.buildLineageGraph(c.buildLineage(items))}; };
+
+  it("builds edges only from present fields: mission->run, run->evidence, mission->evidence; no inference across missions", async () => {
+    const {g} = await graphOf(LINEAGE_EVIDENCE.evidence);
+    expect(g.nodes.length).toBe(g.columns.flat().length);
+    const pairs = g.edges.map((e: any) => `${e.from}>${e.to}`);
+    expect(pairs).toContain(`mission:${MSN}>run:${MSN}|${runId("a")}`);
+    expect(pairs).toContain(`mission:${MSN2}>evidence:evi_${"4".repeat(32)}`); // koşusuz kanıt doğrudan mission'a
+    // koşu-only kanıt MSN'e bağlanmaz: ayrı (mission'sız) koşu düğümü
+    expect(g.byId(`run:|${runId("a")}`)).not.toBeNull();
+    expect(g.byId(`run:${MSN}|${runId("a")}`)).not.toBe(g.byId(`run:|${runId("a")}`));
+    expect(pairs.some((p: string) => p.endsWith(`>evidence:evi_${"6".repeat(32)}`))).toBe(false); // gruplanmamış kanıt kenarsız
+    expect(g.byId(`evidence:evi_${"6".repeat(32)}`)).not.toBeNull();
+    const empty = (await load("assurance-core.js")).buildLineageGraph(null);
+    expect(empty.nodes).toEqual([]); expect(empty.edges).toEqual([]);
+  });
+  it("linkedNodeIds returns ancestors and descendants only; lineageNavigate follows columns and edges and returns null at the ends", async () => {
+    const {c, g} = await graphOf(LINEAGE_EVIDENCE.evidence);
+    const run = `run:${MSN}|${runId("a")}`;
+    const linked = c.linkedNodeIds(g, run);
+    expect(linked.has(`mission:${MSN}`)).toBe(true);
+    expect(linked.has(`mission:${MSN2}`)).toBe(false);
+    expect(linked.has(run)).toBe(false);
+    expect(c.lineageNavigate(g, `mission:${MSN}`, "ArrowRight")).toBe(g.edges.find((e: any) => e.from === `mission:${MSN}`).to);
+    expect(c.lineageNavigate(g, run, "ArrowLeft")).toBe(`mission:${MSN}`);
+    const missions = g.columns[0];
+    expect(c.lineageNavigate(g, missions[0].id, "ArrowDown")).toBe(missions[1].id);
+    expect(c.lineageNavigate(g, missions[0].id, "ArrowUp")).toBeNull();
+    expect(c.lineageNavigate(g, missions[0].id, "End")).toBe(missions[missions.length - 1].id);
+    expect(c.lineageNavigate(g, missions[1].id, "Home")).toBe(missions[0].id);
+    expect(c.lineageNavigate(g, `evidence:evi_${"6".repeat(32)}`, "ArrowRight")).toBeNull();
+    expect(c.lineageNavigate(g, `evidence:evi_${"6".repeat(32)}`, "ArrowLeft")).toBeNull(); // kenarı yok: ebeveyn uydurulmaz
+    expect(c.lineageNavigate(g, "mission:nope", "ArrowDown")).toBeNull();
+    expect(c.lineageNavigate(g, missions[0].id, "x")).toBeNull();
+  });
+  it("renders the keyboard graph with one roving tab stop, arrow keys move selection/highlight, and the edge list fallback lists every edge", async () => {
+    const {ctx} = await mkCtx({evidence: "lineage"}, "en");
+    const {node} = await renderAssurance(ctx);
+    const p = byId(node, "as-lineage")!;
+    const nodes = byData(p, "lineageNode");
+    expect(nodes.length).toBeGreaterThan(0);
+    expect(nodes.filter(n => n.attrs.get("tabindex") === "0").length).toBe(1);
+    const wrap = byData(p, "lineageGraph")[0];
+    const start = nodes.find(n => n.attrs.get("tabindex") === "0")!;
+    expect(start.dataset.lineageNode).toBe(`mission:${MSN}`);
+    wrap.fire("keydown", {target: start, key: "ArrowRight"});
+    const moved = nodes.find(n => n.attrs.get("tabindex") === "0")!;
+    expect(moved.dataset.nodeKind).toBe("run");
+    expect(nodes.filter(n => n.attrs.get("tabindex") === "0").length).toBe(1);
+    expect(nodes.find(n => n.dataset.lineageNode === `mission:${MSN}`)!.dataset.lineageLinked).toBe("1");
+    expect(nodes.find(n => n.dataset.lineageNode === `mission:${MSN2}`)!.dataset.lineageLinked).toBe("0");
+    expect(text(byData(p, "lineageGraphLive")[0])).toContain("linked");
+    wrap.fire("keydown", {target: moved, key: "Tab"}); // tanınmayan tuş: değişmez
+    expect(nodes.find(n => n.attrs.get("tabindex") === "0")).toBe(moved);
+    const edges = byData(p, "edgeFrom");
+    expect(edges.length).toBe(Number(byId(p, "as-lineage-edges")!.dataset.lineageEdges));
+    expect(text(edges[0])).toContain("→");
+  });
+  it("shows the honest no-links note when nothing carries both ends of a link", async () => {
+    const c = await load("assurance-core.js");
+    const g = c.buildLineageGraph(c.buildLineage([{evidenceId: `evi_${"7".repeat(32)}`, kind: "REPORT"}]));
+    expect(g.nodes.length).toBe(1); expect(g.edges).toEqual([]);
+  });
+  it("graph strings exist in en and tr", async () => {
+    const en = await load("locales", "en.js"), tr = await load("locales", "tr.js");
+    const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("assurance.lineage.graph."));
+    expect(keys.length).toBe(11);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
+  });
+});

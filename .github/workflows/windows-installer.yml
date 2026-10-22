@@ -1,0 +1,76 @@
+# //TR: Bu workflow UASCO Windows kurulum paketini (imzasiz gelistirme surumu) ucretsiz GitHub-hosted windows-latest runner'da uretir: reviewed lock kurulumu, checksum-sabit Electron temini, npm run dist:win, ardindan %TEMP% altinda gercek sessiz kurulum + izole user-data ile uygulama acilisi (/health kimligi + pencere) + onarim + kaldirma testi (scripts/installer-install-test.mjs). Test gecen .exe, BUILD-SUMMARY.json, kurulum test raporu ve SHA256SUMS.txt 30 gun artifact olarak saklanir. Herkese acik GitHub Release yayinlamaz (bu karar Founder'a aittir).
+# //TR: Yetki: Founder Supreme Autonomy Directive 2026-10-21 (Windows uygulamasini paketle, test et, teslim et). Kod imzalama yoktur (ucretli sertifika yetkisi verilmedi); SmartScreen uyarisi beklenir. Zorunlu kontrol degildir; CI (ci.yml) zorunlu kontrolleri degismez.
+name: Windows Installer
+on:
+  push:
+    branches: [v7/integration]
+  pull_request:
+    paths:
+      - .github/workflows/windows-installer.yml
+      - installer/**
+      - scripts/build-installer.mjs
+      - scripts/installer-install-test.mjs
+      - scripts/provision-electron.mjs
+      - automation/lib/electron-provision.mjs
+      - apps/desktop/**
+      - apps/control-api/**
+      - package.json
+      - package-lock.json
+      - tsconfig.build.json
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-installer-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  installer:
+    name: installer (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      UASCO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: node scripts/ensure-dependencies.mjs
+      - run: node scripts/provision-electron.mjs
+      - name: Build installer (npm run dist:win)
+        shell: bash
+        env:
+          UASCO_BUILD_OUT_DIR: ${{ runner.temp }}/uasco-build
+        run: npm run dist:win
+      - name: Real install / launch / repair / uninstall test
+        shell: bash
+        run: |
+          set -o pipefail
+          out="$RUNNER_TEMP/uasco-build/dist-installer"
+          exe=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).artifact)' "$out/BUILD-SUMMARY.json")
+          node scripts/installer-install-test.mjs "$exe" "$out/win-unpacked" 2>&1 | tee "$out/INSTALL-TEST.log"
+          report=$(sed -n 's/^INSTALL_TEST_REPORT //p' "$out/INSTALL-TEST.log" | tail -n 1 | tr -d '\r')
+          test -n "$report" && test -f "$report"
+          cp "$report" "$out/INSTALL-TEST-REPORT.json"
+      - name: Collect delivery files
+        if: always()
+        shell: bash
+        run: |
+          out="$RUNNER_TEMP/uasco-build/dist-installer"
+          mkdir -p "$RUNNER_TEMP/delivery"
+          for f in "$out"/UASCO-Setup-*.exe "$out/BUILD-SUMMARY.json" "$out/INSTALL-TEST-REPORT.json" "$out/INSTALL-TEST.log"; do
+            if [ -f "$f" ]; then cp "$f" "$RUNNER_TEMP/delivery/"; fi
+          done
+          (cd "$RUNNER_TEMP/delivery" && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          printf '%s\n' "$UASCO_HEAD_SHA" > "$RUNNER_TEMP/delivery/SOURCE_SHA.txt"
+      - name: Upload installer
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: uasco-windows-installer-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/delivery
+          retention-days: 30
+          if-no-files-found: error

@@ -343,3 +343,65 @@ describe("M1a c2 Founder NOT_VERIFIED acceptance: bound, single use, replayed, n
     expect(deliveryView(new WorkOsStore(c.dataDir).getRun({tenantId: "tA"}, a.run.runId)!).labels).toEqual({sourceGeneration: SG, productVerification: NV, sourceDelivery: null});
   });
 });
+
+// //TR: LANE-B: delivery POST'larının (prepare/accept/export) ortak yazma kapıları (GLOBAL_STOP 423, politika 403) ve ret audit olayları (WORKOS_DELIVERY_PREPARE_REFUSED, WORKOS_SOURCE_DELIVERY_REFUSED) yalnız route düzeyinde, journal değişmeden doğrulanır.
+describe("LANE-B delivery routes: write gates and refusal audit events", () => {
+  const auditEvents = (c: Ctx): Array<Record<string, any>> => {
+    const f = path.join(c.runtime, "control-api-events.jsonl");
+    return fs.existsSync(f) ? fs.readFileSync(f, "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l)) : [];
+  };
+  const named = (c: Ctx, event: string) => auditEvents(c).filter(e => e.event === event || e.type === event || e.name === event || JSON.stringify(e).includes(`"${event}"`));
+
+  it("GLOBAL_STOP answers 423 on all three delivery POSTs without touching the journal or the delivery files; reads still work and the gate lifts", { timeout: T }, async () => {
+    const c = setup(tmp), app = noProviderApi(c), pid = await studioProject(c, app, "lane-b-stop");
+    const {run} = await m1aRun(c, app, pid);
+    const art = (await prepare(app, run.runId)).json().artifact;
+    fs.writeFileSync(c.stopFile, JSON.stringify({active: true, reason: "test", actor: "TEST"}));
+    const n0 = journalEntries(c).length;
+    for (const r of [await prepare(app, run.runId), await accept(app, run.runId, acceptanceOf(art)), await exportDelivery(app, run.runId)]) {
+      expect(r.statusCode, r.body).toBe(423);
+      expect(r.json().error).toBe("GLOBAL_STOP_ACTIVE");
+    }
+    expect(journalEntries(c).length).toBe(n0);
+    expect((await app.inject({method: "GET", url: `/v1/work-runs/${run.runId}/delivery`, headers: HDR})).statusCode).toBe(200);
+    fs.rmSync(c.stopFile);
+    expect((await exportDelivery(app, run.runId)).statusCode).toBe(200);
+  });
+
+  it("an action-gateway denial answers 403 SCOPE_DENIED on all three delivery POSTs, journal unchanged, and audits WORKOS_WRITE_DENIED per action", { timeout: T }, async () => {
+    const c = setup(tmp), ok = noProviderApi(c), pid = await studioProject(c, ok, "lane-b-deny");
+    const {run} = await m1aRun(c, ok, pid);
+    const art = (await prepare(ok, run.runId)).json().artifact;
+    const denied = api(c, {sandbox: undefined, policyContext: {scopeAllowed: false}}); apps.push(denied);
+    const n0 = journalEntries(c).length;
+    for (const r of [await prepare(denied, run.runId), await accept(denied, run.runId, acceptanceOf(art)), await exportDelivery(denied, run.runId)]) {
+      expect(r.statusCode, r.body).toBe(403);
+      expect(r.json()).toMatchObject({error: "ACTION_DENIED", reason: "SCOPE_DENIED"});
+    }
+    expect(journalEntries(c).length).toBe(n0);
+    const text = JSON.stringify(auditEvents(c));
+    for (const a of ["workos.delivery.prepare", "workos.delivery.accept", "workos.delivery.export"]) expect(text).toContain(a);
+    expect(named(c, "WORKOS_WRITE_DENIED").length).toBe(3);
+  });
+
+  it("refusals leave an audit trail with a fixed reason code and no absolute path", { timeout: T }, async () => {
+    const c = setup(tmp), app = noProviderApi(c), pid = await studioProject(c, app, "lane-b-audit");
+    const tpl = await m1aRun(c, app, pid, {});
+    expect((await prepare(app, tpl.run.runId)).statusCode).toBe(409);
+    const pre = named(c, "WORKOS_DELIVERY_PREPARE_REFUSED");
+    expect(pre).toHaveLength(1);
+    expect(JSON.stringify(pre[0])).toContain("NO_GENERATED_SOURCE");
+
+    const a = await m1aRun(c, app, pid, {"feature.txt": "ok\n"}), art = (await prepare(app, a.run.runId)).json().artifact;
+    expect((await accept(app, a.run.runId, {...acceptanceOf(art), exportArtifactHash: "f".repeat(64)})).statusCode).toBe(409);
+    const refused = named(c, "WORKOS_SOURCE_DELIVERY_REFUSED");
+    expect(refused).toHaveLength(1);
+    expect(JSON.stringify(refused[0])).toContain("DELIVERY_ACCEPTANCE_MISMATCH");
+
+    fs.appendFileSync(path.join(c.dataDir, "deliveries", a.run.runId, fs.readdirSync(path.join(c.dataDir, "deliveries", a.run.runId))[0]), "x");
+    expect((await accept(app, a.run.runId, acceptanceOf(art))).statusCode).toBe(409);
+    expect(JSON.stringify(named(c, "WORKOS_SOURCE_DELIVERY_REFUSED"))).toContain("DELIVERY_ARTIFACT_MODIFIED");
+    const all = JSON.stringify(auditEvents(c));
+    expect(all).not.toContain(c.tmp);
+  });
+});

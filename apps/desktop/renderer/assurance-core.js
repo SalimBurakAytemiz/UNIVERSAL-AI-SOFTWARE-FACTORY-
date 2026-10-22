@@ -226,6 +226,42 @@ export function buildLineage(items){
     orphanRuns:[...orphanRuns.entries()].sort((a,b)=>cmp(a[0],b[0])).map(([runId,evidence])=>({runId,evidence})),
     ungrouped};
 }
+// //TR: PQ-003: buildLineage çıktısından düğüm/kenar grafiği. Kenarlar YALNIZ listedeki missionId/runId alanlarından gelir (mission->run, run->evidence, koşusuz kanıt için mission->evidence); aynı runId farklı mission altında ayrı düğümdür (birleştirme çıkarımı yok); bağsız öğeler kenarsız düğüm olarak kalır.
+export const GRAPH_KINDS=Object.freeze(["mission","run","evidence"]);
+export function buildLineageGraph(L){
+  const nodes=[],edges=[],byKey=new Map();
+  const node=(kind,key,label,extra={})=>{const id=`${kind}:${key}`;let n=byKey.get(id);if(!n){n={id,kind,label,...extra};byKey.set(id,n);nodes.push(n)}return n};
+  const edge=(a,b)=>edges.push({from:a.id,to:b.id});
+  const evNode=e=>node("evidence",e.evidenceId,e.evidenceId,{evidenceId:e.evidenceId,evKind:typeof e.kind==="string"?e.kind:null});
+  const runNode=(mid,r)=>node("run",`${mid??""}|${r.runId}`,r.runId,{runId:r.runId,missionId:mid});
+  for(const m of L?.missions??[]){
+    const mn=node("mission",m.missionId,m.missionId,{missionId:m.missionId});
+    for(const r of m.runs){const rn=runNode(m.missionId,r);edge(mn,rn);for(const e of r.evidence)edge(rn,evNode(e))}
+    for(const e of m.noRun)edge(mn,evNode(e));
+  }
+  for(const r of L?.orphanRuns??[]){const rn=runNode(null,r);for(const e of r.evidence)edge(rn,evNode(e))}
+  for(const e of L?.ungrouped??[])evNode(e);
+  const columns=GRAPH_KINDS.map(k=>nodes.filter(n=>n.kind===k));
+  return {nodes,edges,columns,byId:id=>byKey.get(id)??null};
+}
+/** Seçili düğümle bağlı tüm atalar ve torunlar (kenar yönünde/tersinde), düğümün kendisi hariç. */
+export function linkedNodeIds(graph,id){
+  const out=new Set();
+  const walk=(start,dir)=>{const q=[start];while(q.length){const cur=q.pop();for(const e of graph.edges){const nxt=dir==="down"?(e.from===cur?e.to:null):(e.to===cur?e.from:null);if(nxt&&!out.has(nxt)&&nxt!==id){out.add(nxt);q.push(nxt)}}}};
+  walk(id,"down");walk(id,"up");return out;
+}
+/** Klavye gezintisi: Aşağı/Yukarı aynı sütunda, Sağ ilk çocuğa, Sol ilk ebeveyne, Home/End sütun başı/sonu; hedef yoksa null. */
+export function lineageNavigate(graph,id,key){
+  const n=graph.byId(id);if(!n)return null;
+  const col=graph.columns[GRAPH_KINDS.indexOf(n.kind)],i=col.indexOf(n);
+  if(key==="ArrowDown")return col[i+1]?.id??null;
+  if(key==="ArrowUp")return col[i-1]?.id??null;
+  if(key==="Home")return col[0]?.id??null;
+  if(key==="End")return col[col.length-1]?.id??null;
+  if(key==="ArrowRight")return graph.edges.find(e=>e.from===id)?.to??null;
+  if(key==="ArrowLeft")return graph.edges.find(e=>e.to===id)?.from??null;
+  return null;
+}
 // //TR: UI-051: koşu başına test raporu GET /v1/work-runs ham kanıt kayıtlarından (VERIFY_TESTS, REGRESSION_TESTS, *_NOT_EXECUTED, TEST_SURFACE) türetilir; anlamı readiness-core testsOf ile aynıdır ve yalnız GÜNCEL head'e (run.headSha) bağlı kayıt sayılır. EXECUTED yalnız iki test kaydı da exit 0, sandbox tanıklı ve yürütülen test sayısı > 0 iken; kayıt yoksa NOT_EXECUTED. Hiçbir durum yükseltilmez, "geçti" üretilmez.
 export const TEST_REPORT_STATES=Object.freeze(["EXECUTED","FAILED","BLOCKED","NOT_EXECUTED","UNVERIFIED"]);
 const TEST_KINDS=Object.freeze(["VERIFY_TESTS","REGRESSION_TESTS","VERIFY_TESTS_NOT_EXECUTED","REGRESSION_TESTS_NOT_EXECUTED","TEST_SURFACE"]);

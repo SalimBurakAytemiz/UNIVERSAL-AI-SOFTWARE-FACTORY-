@@ -197,3 +197,107 @@ describe("CORE-7 Agent Team Composer scale derivation", () => {
     expect(withDb.selections.length).toBeGreaterThanOrEqual(baseline.selections.length);
   });
 });
+
+// //TR: LANE-C: rol tanımı -> RoleExecutionProfile çözümleyicisi (GERÇEK 599 katalog; hiçbir rol certified değil).
+import {resolveRoleExecution, instantiateAgent, advanceAgent, authorizeToolUse, agentTraceEnvelope, profileDefect, evaluationState, BUILDER_ALLOWED_TOOLS, claudeProfileRoleOf, AgentError} from "../core/agents/role-execution.js";
+import type {RoleExecutionProfile} from "../core/agents/role-execution.js";
+import {FIRST_DELIVERY_BINDINGS, FIRST_DELIVERY_FUNCTIONS, assertRoleExecutes} from "../core/agents/first-delivery-bindings.js";
+
+describe("LANE-C role execution resolver", () => {
+  const resolve = (id: string, b: readonly RoleExecutionProfile[] = FIRST_DELIVERY_BINDINGS) => resolveRoleExecution(id, CATALOG.roles as never, b);
+  it("binds all six first-delivery functions to real catalog roles, executable but NOT certified", () => {
+    expect(FIRST_DELIVERY_FUNCTIONS.length).toBe(6);
+    for (const b of FIRST_DELIVERY_BINDINGS) {
+      expect(CATALOG_IDS.has(b.roleId)).toBe(true);
+      const r = resolve(b.roleId);
+      expect(r.status).toBe("EXECUTABLE");
+      expect(r.certification).toBe("NOT_CERTIFIED");
+      if (r.status === "EXECUTABLE") expect(r.evaluation).toEqual({executed: 0, total: 6});
+    }
+    // planner/architect are the crew plan's real pre-dev primary roles
+    const plan = buildCrewPlan();
+    expect(plan.roleIds).toContain("UASCO-0019");
+    expect(plan.roleIds).toContain("UASCO-0043");
+  });
+  it("every other catalog role stays NOT_EXECUTABLE with a fixed reason", () => {
+    const bound = new Set(FIRST_DELIVERY_BINDINGS.map(b => b.roleId));
+    const others = CATALOG.roles.filter(r => !bound.has(r.roleId));
+    expect(others.length).toBe(599 - 6);
+    for (const r of others) expect(resolve(r.roleId)).toMatchObject({status: "NOT_EXECUTABLE", reason: "ROLE_HAS_NO_BINDING", certification: "NOT_CERTIFIED"});
+    expect(resolve("UASCO-9999")).toMatchObject({status: "NOT_EXECUTABLE", reason: "ROLE_NOT_IN_CATALOG"});
+  });
+  it("incomplete or unsafe bindings are NOT_EXECUTABLE", () => {
+    const dev = FIRST_DELIVERY_BINDINGS.find(b => b.function === "developer")!;
+    const rev = FIRST_DELIVERY_BINDINGS.find(b => b.function === "security-reviewer")!;
+    const cases: [Partial<RoleExecutionProfile>, string, RoleExecutionProfile][] = [
+      [{allowedTools: [...dev.allowedTools, "Bash"]}, "TOOL_NOT_ALLOWED", dev],
+      [{allowedTools: [...rev.allowedTools, "Write"]}, "TOOL_NOT_ALLOWED", rev],
+      [{allowedTools: []}, "TOOL_ALLOWLIST_MISSING", dev],
+      [{providerRoute: "NONE"}, "PROVIDER_ROUTE_MISSING", dev],
+      [{knowledgeSources: []}, "KNOWLEDGE_SOURCES_MISSING", dev],
+      [{evaluationCriteria: []}, "EVALUATION_CRITERIA_MISSING", dev],
+      [{capabilities: []}, "CAPABILITIES_MISSING", dev],
+      [{adapters: []}, "ADAPTERS_MISSING", dev],
+      [{limits: {maxCycles: 0, timeoutMs: 1000, maxFilesWritten: 1}}, "LIMITS_INVALID", dev],
+      [{limits: {maxCycles: 1, timeoutMs: 1000, maxFilesWritten: 5}}, "LIMITS_INVALID", rev]
+    ];
+    for (const [patch, reason, base] of cases) {
+      const r = resolve(base.roleId, [{...base, ...patch} as RoleExecutionProfile]);
+      expect(r).toMatchObject({status: "NOT_EXECUTABLE", reason});
+    }
+    expect(profileDefect({...dev, allowedTools: ["WebFetch"]})?.reason).toBe("TOOL_NOT_ALLOWED");
+    expect(profileDefect({...dev, allowedTools: ["UnregisteredTool"]})).toEqual({reason: "TOOL_NOT_ALLOWED", detail: "UnregisteredTool"});
+  });
+  it("tool allow-lists are subsets of the existing builder policy; routes map to claude profiles", () => {
+    const policy = JSON.parse(fs.readFileSync(path.join(process.cwd(), "config", "builder-execution-policy.json"), "utf8"));
+    expect([...BUILDER_ALLOWED_TOOLS].sort()).toEqual([...policy.allowedTools].sort());
+    for (const b of FIRST_DELIVERY_BINDINGS) for (const t of b.allowedTools) expect(policy.allowedTools).toContain(t);
+    expect(claudeProfileRoleOf("CLAUDE_REVIEWER")).toBe("reviewer");
+    expect(claudeProfileRoleOf("DETERMINISTIC_STUDIO")).toBeNull();
+  });
+  it("certification is only reported with all evaluations PASSED and evidence", () => {
+    const spec = (status: string, ref: string | null) => ({evaluationId: "E", status, evaluatorEvidenceRef: ref});
+    const role = (specs: any[]) => ({roleId: "X", title: "t", guildId: "G", evaluationSpecs: specs});
+    expect(evaluationState(role([spec("PASSED", "ev/1"), spec("PASSED", "ev/2")])).certification).toBe("EVALUATED_PASS");
+    expect(evaluationState(role([spec("PASSED", "ev/1"), spec("PASSED", null)])).certification).toBe("NOT_CERTIFIED");
+    expect(evaluationState(role([spec("NOT_EXECUTED", null)])).certification).toBe("NOT_CERTIFIED");
+    expect(evaluationState(role([])).certification).toBe("NOT_CERTIFIED");
+  });
+  it("running agent is separate from the definition: needs executable role, run, and enforces tools", () => {
+    expect(() => instantiateAgent(resolve("UASCO-0001"), "run1", "ag1")).toThrow(AgentError);
+    const r = resolve("UASCO-0252");
+    expect(() => instantiateAgent(r, "", "ag1")).toThrow("AGENT_RUN_BINDING_MISSING");
+    const a = instantiateAgent(r, "run1", "ag1");
+    expect(a.agentInstanceId).not.toBe(a.roleId);
+    expect(authorizeToolUse(a, "Read")).toBe(false); // not RUNNING yet
+    advanceAgent(a, "RUNNING");
+    expect(authorizeToolUse(a, "Read")).toBe(true);
+    expect(authorizeToolUse(a, "Write")).toBe(false);
+    expect(authorizeToolUse(a, "Bash")).toBe(false);
+    expect(agentTraceEnvelope(a)).toMatchObject({runId: "run1", roleId: "UASCO-0252", toolUses: 4, deniedToolUses: 3, providerRoute: "CLAUDE_REVIEWER"});
+    advanceAgent(a, "COMPLETED");
+    expect(() => advanceAgent(a, "RUNNING")).toThrow("AGENT_ILLEGAL_TRANSITION");
+    expect(authorizeToolUse(a, "Read")).toBe(false);
+  });
+  it("crew dev-review executor pair is fail-closed for unbound or mismatched roles", async () => {
+    const {crewDevExecutors, CrewDevReviewError} = await import("../core/workos/crew/dev-review.js");
+    const port = {build: async () => ({files: {}}), review: async () => ({verdict: "REVIEW_CLEAN" as const})};
+    expect(crewDevExecutors("UASCO-0085", "UASCO-0252", port, port, "x").implementer.identity).toBe("UASCO-0085");
+    expect(() => crewDevExecutors("UASCO-0001", "UASCO-0252", port, port, "x")).toThrow(CrewDevReviewError);
+    expect(() => crewDevExecutors("UASCO-0085", "UASCO-0001", port, port, "x")).toThrow("ROLE_HAS_NO_BINDING");
+    expect(() => crewDevExecutors("UASCO-0252", "UASCO-0085", port, port, "x")).toThrow("BINDING_ROLE_MISMATCH");
+    expect(() => assertRoleExecutes("UASCO-0085", "developer", [{...FIRST_DELIVERY_BINDINGS[2], allowedTools: ["Bash"]}])).toThrow("TOOL_NOT_ALLOWED");
+  });
+  it("team summary reports per-role executability without implying live agents or certification", () => {
+    const sum = summarizeProposedTeam(composeTeam(TASKHUB_BRIEF, INPUTS, CATALOG), CATALOG);
+    expect(sum.executability.length).toBe(sum.selections.length);
+    const bound = new Set(FIRST_DELIVERY_BINDINGS.map(b => b.roleId));
+    for (const e of sum.executability) {
+      if (bound.has(e.roleId)) expect(e).toEqual({roleId: e.roleId, status: "EXECUTABLE"});
+      else expect(e).toEqual({roleId: e.roleId, status: "NOT_EXECUTABLE", reason: "ROLE_HAS_NO_BINDING"});
+    }
+    expect(sum.executableRoleDefinitionCount).toBe(sum.selections.filter(x => bound.has(x.roleId)).length);
+    expect(sum.liveAgentCount).toBe(0);
+    expect(sum.certifiedWorkerCount).toBe(0);
+  });
+});

@@ -1,11 +1,14 @@
 // //TR: Bu görünüm parçası Project Studio'nun "Yeni Proje" sihirbazı ve "İçe Aktar" panelidir: şablon (boş dahil), ad, tür/teknoloji/hedef işletim sistemi, kabul kriterleri, bütçe ve dev/test komutları (argv listesi) project-core kurucusuyla doğrulanır, her gönderim için idempotency anahtarı üretilir; içe aktarma yolu renderer'a yazdırılmaz, yalnız ana süreçteki yerel dosya diyaloğundan dönen yol gösterilir ve geri gönderilir. Hiçbir otomatik gönderim yoktur.
 import {h} from "../components.js";
 import {buildWizardRequest,buildImportRequest,describeImportResult,TEMPLATES,TARGET_OS,IMPORT_KINDS} from "../project-core.js";
-import {drafts,field,listEditor,statusBlock,setStatus,recordPost,focusResult,settle} from "../forms.js";
-import {studio,wizard,importDraft,studioTrackers,studioUi,resetWizard,resetImport,openProject} from "../studio-state.js";
+import {drafts,selection,field,listEditor,statusBlock,setStatus,recordPost,focusResult,settle} from "../forms.js";
+import {studio,wizard,importDraft,studioTrackers,studioUi,resetWizard,resetImport,openProject,ideaDraft,resetIdea} from "../studio-state.js";
+import {buildMissionRequest,MISSION_ID_RE,RISK_LEVELS} from "../work-core.js";
 
 export const WIZARD_FORM="studio-wizard";
 export const IMPORT_FORM="studio-import";
+export const IDEA_FORM="studio-idea";
+const IDEA_KEYS=["id:studio-idea-submit","id:studio-idea-t"];
 // Odak yedekleri (focusKey biçimi): eylemden sonra aynı denetim varsa o, yoksa sonuç/başlık öğesi.
 const WIZARD_KEYS=["id:studio-wizard-submit","id:studio-wizard-t"],IMPORT_KEYS=["id:studio-import-pick","id:studio-import-submit","id:studio-import-t"];
 const wizardInput=()=>({name:wizard.name,template:wizard.template,projectType:wizard.projectType,techStack:wizard.techStack,targetOS:wizard.targetOS,acceptanceCriteria:wizard.acceptanceCriteria,maxRuns:wizard.maxRuns,maxTokens:wizard.maxTokens,devCommand:wizard.devCommand,testCommand:wizard.testCommand});
@@ -20,10 +23,44 @@ export async function submitWizard(ctx){
   const name=res?.body?.project?.name??check.body.name,ok=recordPost(WIZARD_FORM,res,"studio.wizard.created",{name});
   if(ok){
     const id=res?.body?.project?.projectId;
-    if(typeof id==="string"&&/^prj_[0-9a-f]{24}$/.test(id)){studio.lastCreated={projectId:id,name};importDraft.projectId=id}
+    if(typeof id==="string"&&/^prj_[0-9a-f]{24}$/.test(id)){
+      studio.lastCreated={projectId:id,name};importDraft.projectId=id;
+      // //TR: Yeni projenin kabul kriterleri, ilk mission (Kurucu fikri) formuna başlangıç olarak aktarılır; yeni proje için fikir taslağı sıfırlanır.
+      resetIdea();delete drafts.status[IDEA_FORM];const crit=check.body.acceptanceCriteria??[];ideaDraft.criteria=crit.length?[...crit]:[""];ideaDraft.title=name;
+    }
     resetWizard();
   }
   await ctx.refreshAll({force:true});focusResult(ctx,WIZARD_FORM,WIZARD_KEYS);return {ok};
+}
+/** Kurucu fikri -> ilk mission: yeni projeye bağlı POST /v1/missions (yalnız kullanıcı gönderimi); görevler (task) planlama/koşu tarafından üretilir, burada uydurulmaz. */
+export async function submitIdea(ctx){
+  const projectId=studio.lastCreated?.projectId,d=ideaDraft;
+  const input=()=>({projectId,title:d.title,objective:d.objective,acceptanceCriteria:d.criteria,riskLevel:d.riskLevel});
+  const check=buildMissionRequest(input());
+  if(!check.ok){setStatus(IDEA_FORM,{ok:false,errors:check.errors});await ctx.rerender();focusResult(ctx,IDEA_FORM,IDEA_KEYS);return {ok:false,validation:true}}
+  const key=studioTrackers.idea.keyFor(check.body),req=buildMissionRequest(input(),{key});
+  drafts.busy[IDEA_FORM]=true;
+  let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[IDEA_FORM]=false}
+  const title=res?.body?.mission?.title??check.body.title,ok=recordPost(IDEA_FORM,res,"studio.idea.created",{title});
+  const id=res?.body?.mission?.missionId;
+  if(ok&&typeof id==="string"&&MISSION_ID_RE.test(id)){d.missionId=id;d.missionTitle=title;selection.missionId=id}
+  await ctx.refreshAll({force:true});focusResult(ctx,IDEA_FORM,IDEA_KEYS);return {ok};
+}
+/** Yeni proje oluşturulduktan sonra Kurucu fikrini ilk mission olarak kaydeder; oluşunca "Görevlerde aç" ile #/work mission ayrıntısına geçer. */
+export function ideaPanel(ctx){
+  const doc=ctx.doc,st=drafts.status[IDEA_FORM],errs=st?.errors??{},d=ideaDraft;
+  const form=h(doc,"form",{id:"studio-idea-form",novalidate:true,"aria-labelledby":"studio-idea-t",on:{submit:e=>{e.preventDefault();if(!drafts.busy[IDEA_FORM]&&!d.missionId)submitIdea(ctx)}}},
+    field(ctx,{id:"studio-idea-title",labelKey:"work.form.title",value:d.title,onInput:v=>{d.title=v},errorKey:errs.title,required:true}),
+    field(ctx,{id:"studio-idea-objective",labelKey:"studio.idea.objective",value:d.objective,onInput:v=>{d.objective=v},errorKey:errs.objective,multiline:true,required:true,hintKey:"studio.idea.objectiveHint"}),
+    listEditor(ctx,{id:"studio-idea-criteria",labelKey:"work.form.criteria",itemLabelKey:"work.form.criterionN",addKey:"work.form.criterionAdd",removeKey:"work.form.criterionRemove",items:d.criteria,errorKey:errs.acceptanceCriteria,hintKey:"work.form.criteriaHint",multiline:true,required:true}),
+    field(ctx,{id:"studio-idea-risk",labelKey:"work.form.risk",value:d.riskLevel,onInput:v=>{d.riskLevel=v},errorKey:errs.riskLevel,required:true,hintKey:"work.form.riskHint",options:RISK_LEVELS.map(r=>({value:r,label:`${r} — ${ctx.t(`risk.${r}.name`)}`}))}),
+    statusBlock(ctx,IDEA_FORM),
+    h(doc,"div",{class:"btn-row"},
+      h(doc,"button",{type:"submit",class:"btn btn-primary",id:"studio-idea-submit",dataset:{focusKey:"studio-idea-submit"},disabled:drafts.busy[IDEA_FORM]===true||Boolean(d.missionId),text:ctx.t("studio.idea.submit")}),
+      d.missionId?h(doc,"button",{type:"button",class:"btn",id:"studio-idea-open",dataset:{focusKey:"studio-idea-open",ideaMission:d.missionId},text:ctx.t("studio.idea.open",{title:d.missionTitle??d.missionId}),on:{click:()=>{selection.missionId=d.missionId;ctx.navigate("work")}}}):null));
+  return h(doc,"section",{class:"panel form-panel",id:"studio-idea",dataset:{ideaProject:studio.lastCreated.projectId}},
+    h(doc,"h3",{id:"studio-idea-t",tabindex:"-1",dataset:{focusKey:"studio-idea-t"},text:ctx.t("studio.idea.title",{name:studio.lastCreated.name})}),
+    h(doc,"p",{class:"note",text:ctx.t("studio.idea.lead")}),form);
 }
 function choiceGroup(ctx,{id,legendKey,hintKey,type,options,isChecked,onChange,errorKey}){
   const doc=ctx.doc,describedBy=[hintKey?`${id}-hint`:null,errorKey?`${id}-err`:null].filter(Boolean).join(" ");
@@ -60,7 +97,7 @@ export function wizardPanel(ctx){
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"submit",class:"btn btn-primary",id:"studio-wizard-submit",dataset:{focusKey:"studio-wizard-submit"},disabled:drafts.busy[WIZARD_FORM]===true,text:ctx.t("studio.wizard.submit")})));
   const details=h(doc,"details",{class:"panel form-panel",id:"studio-wizard",open:studioUi.wizardOpen||Boolean(st)},
     h(doc,"summary",{id:"studio-wizard-t",dataset:{focusKey:"studio-wizard-summary"},text:ctx.t("studio.wizard.title")}),
-    h(doc,"p",{class:"note",text:ctx.t("studio.wizard.lead")}),form);
+    h(doc,"p",{class:"note",text:ctx.t("studio.wizard.lead")}),form,studio.lastCreated?ideaPanel(ctx):null);
   details.addEventListener("toggle",()=>{studioUi.wizardOpen=details.open===true});
   return details;
 }
