@@ -203,8 +203,7 @@ describe("LANE-C pre-dev builder from the LOCAL_CLAUDE pair: reviewer-route auth
     expect(Object.keys(calls[0].opts.env).filter(k => k.toUpperCase() === "CLAUDE_CONFIG_DIR")).toEqual(["CLAUDE_CONFIG_DIR"]);
     expect(Object.keys(calls[0].opts.env).some(k => /ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN/i.test(k))).toBe(false);
     expect(calls[0].entries).toEqual([]);
-    expect(path.relative(REPO, calls[0].opts.cwd).startsWith("..")).toBe(true);
-    expect(path.relative(control, calls[0].opts.cwd).startsWith("..")).toBe(true);
+    for (const root of [REPO, control]) { const rel = path.relative(root, calls[0].opts.cwd); expect(rel.startsWith("..") || path.isAbsolute(rel), root).toBe(true); } // different drive (Windows CI) => absolute => also outside
     expect(fs.existsSync(calls[0].opts.cwd)).toBe(false);
   });
 });

@@ -374,13 +374,13 @@ describe("LANE-C ClaudePreDevBuilder: production BuilderPort over the reviewer-r
   interface Run { argv: string[]; opts: ProcOptions; entriesAtStart: string[] }
   let scratchRoot = "";
   beforeEach(() => { scratchRoot = path.join(tmp, "scratch"); fs.mkdirSync(scratchRoot); });
-  function mk(o: {run?: (argv: string[], opts: ProcOptions) => ProcResult | Promise<ProcResult>; launcher?: () => string; profile?: () => {ok: true; dir: string} | {ok: false; reason: string}; bindings?: typeof FIRST_DELIVERY_BINDINGS; timeoutMs?: number; maxOutputBytes?: number; argv?: (l: string) => string[]; real?: boolean} = {}) {
+  function mk(o: {run?: (argv: string[], opts: ProcOptions) => ProcResult | Promise<ProcResult>; launcher?: () => string; profile?: () => {ok: true; dir: string} | {ok: false; reason: string}; bindings?: typeof FIRST_DELIVERY_BINDINGS; timeoutMs?: number; maxOutputBytes?: number; argv?: (l: string) => string[]; env?: (dir: string) => NodeJS.ProcessEnv; real?: boolean} = {}) {
     const calls = {launcher: 0, profile: 0, runs: [] as Run[]};
     const rt: PreDevBuilderRuntime = {
       identity: "claude-reviewer@local.invalid", scratchRoot,
       launcher: () => { calls.launcher++; return (o.launcher ?? (() => "/x/claude"))(); },
       profile: () => { calls.profile++; return (o.profile ?? (() => ({ok: true as const, dir: "/profile/reviewer"})))(); },
-      env: dir => ({PATH: "/bin", CLAUDE_CONFIG_DIR: dir}),
+      env: o.env ?? (dir => ({PATH: "/bin", CLAUDE_CONFIG_DIR: dir})),
       argv: o.argv ?? reviewerArgv,
       run: async (argv, opts) => { calls.runs.push({argv, opts, entriesAtStart: fs.readdirSync(opts.cwd)}); return o.real ? runProcess(argv, opts) : (o.run ?? ((a: string[]) => procResult(a)))(argv, opts); }
     };
@@ -409,7 +409,7 @@ describe("LANE-C ClaudePreDevBuilder: production BuilderPort over the reviewer-r
       expect(r.entriesAtStart).toEqual([]);
       expect(path.dirname(r.opts.cwd)).toBe(scratchRoot);
       expect(path.basename(r.opts.cwd)).toMatch(/^uasco-predev-/);
-      expect(path.relative(REPO_ROOT, r.opts.cwd).startsWith("..")).toBe(true);
+      { const rel = path.relative(REPO_ROOT, r.opts.cwd); expect(rel.startsWith("..") || path.isAbsolute(rel)).toBe(true); } // different drive (Windows CI) => absolute => also outside
       expect(fs.existsSync(r.opts.cwd)).toBe(false);
       expect(r.opts.env.CLAUDE_CONFIG_DIR).toBe("/profile/reviewer");
       expect(r.opts.timeoutMs).toBe(600_000);
@@ -457,6 +457,22 @@ describe("LANE-C ClaudePreDevBuilder: production BuilderPort over the reviewer-r
       expect([c.calls.launcher, c.calls.runs.length]).toEqual([0, 0]);
     }
     expect(fs.readdirSync(scratchRoot)).toEqual([]);
+  });
+
+  it("unexpected throws from the runtime pieces (profile I/O, env/policy read, argv, process runner) become typed failures; scratch is removed; nothing leaks as an untyped error", async () => {
+    const boom = () => { throw new Error("EACCES: boom"); };
+    const cases: Array<[string, Parameters<typeof mk>[0], PreDevBuilderFailure]> = [
+      ["profile throws", {profile: boom}, "PREDEV_BUILDER_PROFILE_REFUSED"],
+      ["env throws", {env: boom}, "PREDEV_BUILDER_ENV_FAILED"],
+      ["argv throws", {argv: boom}, "PREDEV_BUILDER_ENV_FAILED"],
+      ["runner throws", {run: boom}, "PREDEV_BUILDER_SPAWN_FAILED"]
+    ];
+    for (const [label, o, expected] of cases) {
+      const {builder} = mk(o);
+      expect([label, await code(builder.produce("BusinessAnalysis", "p", ctx))]).toEqual([label, expected]);
+      expect(builder.lastTrace).toMatchObject({failure: expected, outputSha256: null});
+      expect(fs.readdirSync(scratchRoot)).toEqual([]);
+    }
   });
 
   it("any change in the scratch dir (file, hidden dir, nested file) invalidates the output even on exit 0; scratch is removed", async () => {

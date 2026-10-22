@@ -10,7 +10,7 @@ The brief given to the role is derived only from recorded fields (project name/t
 
 ## Authority (nothing new)
 - Same executor state as the runner: the route calls the provider `preDevBuilder()`; in `server.ts` that is `getExecutors().pair?.preDevBuilder?.()`, i.e. the explicit `UASCO_WORKOS_EXECUTOR=local-claude` selection or the Founder's persisted `/v1/system/executors/local-claude/enable` setting, **plus** `PROVIDER_PROVENANCE.json` PASS and an unchanged launcher sha256 (`LocalClaudeExecutors.verifiedLauncher`). **No new env flag, no bypass of the enable path.** The FAKE pair has no pre-dev builder.
-- Same process authority as the independent reviewer: `reviewerArgv` (tools `Read,Grep,Glob` only; Edit/Write/Bash/Web/Agent/Skill/MCP denied; the builder's isolation flags), the separate reviewer profile (`CLAUDE_CONFIG_DIR`; never the personal profile; not logged in -> refused), `safeChildEnv` with `allowPaidApi=false` (no API key is passed), no network tool.
+- Same process authority as the independent reviewer: `reviewerArgv` (tools `Read,Grep,Glob` only; Edit/Write/Bash/Web/Agent/Skill/MCP denied; the builder's isolation flags), the separate reviewer profile (`CLAUDE_CONFIG_DIR`; never the personal profile; not logged in -> refused), `safeChildEnv` with `allowPaidApi` taken from `config/automation.json` exactly like the implementer and reviewer (`false` in the repo; no API key is passed - pinned by a test against the real config), no network tool.
 - Runs with an **empty temporary scratch dir** outside the repo and the run workspaces as cwd (mode 0700, removed afterwards). Any entry in it afterwards invalidates the output (`PREDEV_BUILDER_SCRATCH_MODIFIED`).
 - Role binding is checked **before** provenance, profile or any process: a missing/unsafe binding is `PREDEV_BUILDER_ROLE_NOT_EXECUTABLE`. Timeout = min(10 min default, the role's `limits.timeoutMs`) via `effectiveLimits`.
 - Model output is data: the adapter never interprets it; the only gate to a recorded DRAFT is the existing validators.
@@ -20,12 +20,12 @@ The brief given to the role is derived only from recorded fields (project name/t
 - Body: the **empty object** `{}` (strict `additionalProperties:false`; any key -> 400 `INVALID_BODY`). Body limit 32 KiB like the other pre-dev POSTs.
 
 ## Exact patch (apps/control-api/src/server.ts, protected)
-Pass the provider where the pre-dev decision routes are registered (they currently receive `laneDeps`):
+**Prerequisite:** `registerPredevDecisionRoutes(app,laneDeps)` is not in `server.ts` on `v7/integration` yet; it lands with the coordinator's protected batch 3b (#199). Without that registration the produce route is not mounted at all (404, not 409). Once it is registered, pass the provider where the pre-dev decision routes are registered (they receive `laneDeps`):
 ```diff
 -registerPredevDecisionRoutes(app,laneDeps);
 +registerPredevDecisionRoutes(app,{...laneDeps,preDevBuilder:()=>getExecutors().pair?.preDevBuilder?.()??null});
 ```
-`getExecutors` is the existing cached selector (`selectExecutors`), reset by `/v1/system/executors/local-claude/enable`. Until this line lands, the route exists but always answers `409 PREDEV_DRIVER_BUILDER_NOT_CONFIGURED` (default behaviour, no process is started).
+`getExecutors` is the existing cached selector (`selectExecutors`), reset by `/v1/system/executors/local-claude/enable`. Until this line lands (and the registration above), the route cannot start a process: once registered without this line it answers `409 PREDEV_DRIVER_BUILDER_NOT_CONFIGURED` (default behaviour).
 
 ## Gates and answers (same order as the other pre-dev routes)
 1. `400 INVALID_MISSION_ID` -> Global Stop `423 GLOBAL_STOP_ACTIVE` -> policy `403 ACTION_DENIED` (action id `workos.predev.produce`) -> strict empty body `400 INVALID_BODY` -> mission/tenant `404 WORKOS_NOT_FOUND`.
@@ -34,12 +34,12 @@ Pass the provider where the pre-dev decision routes are registered (they current
 4. Driver gates before any process: `409 PREDEV_DRIVER_SEQUENCE_NOT_ACTIVE`; `409 PREDEV_GATE_REFUSED` with `reason` `PREDEV_DRIVER_NO_ARTIFACT_PHASE` (phase has no artifact kind) or `PREDEV_DRIVER_ARTIFACT_PENDING` (current artifact is DRAFT/SUBMITTED/APPROVED; only a REJECTED one is re-drafted, superseded).
 5. `201 {produced:{status:"RECORDED",kind,phase,artifactId,version,roleId},predev}`.
 6. `422 {error:"PREDEV_OUTPUT_REJECTED",kind,phase,reason}`: output was not JSON or failed the validators; nothing is recorded, the phase does not move.
-7. `502 {error:"PREDEV_BUILDER_FAILED",reason}` with a fixed `reason` from: `PREDEV_BUILDER_ROLE_NOT_EXECUTABLE`, `_PROMPT_INVALID`, `_PROVENANCE_REFUSED`, `_PROFILE_REFUSED` (e.g. reviewer profile not logged in), `_SCRATCH_FAILED`, `_SPAWN_FAILED`, `_TIMEOUT`, `_ABORTED` (Global Stop while running), `_EXIT_NONZERO`, `_EMPTY_OUTPUT`, `_OUTPUT_TOO_LARGE`, `_SCRATCH_MODIFIED`. No stderr or model text is returned or stored. Nothing is recorded.
+7. `502 {error:"PREDEV_BUILDER_FAILED",reason}` with a fixed `reason` from: `PREDEV_BUILDER_ROLE_NOT_EXECUTABLE`, `_PROMPT_INVALID`, `_PROVENANCE_REFUSED`, `_PROFILE_REFUSED` (e.g. reviewer profile not logged in), `_ENV_FAILED` (config/policy read or argv build threw), `_SCRATCH_FAILED`, `_SPAWN_FAILED`, `_TIMEOUT`, `_ABORTED` (Global Stop while running), `_EXIT_NONZERO`, `_EMPTY_OUTPUT`, `_OUTPUT_TOO_LARGE`, `_SCRATCH_MODIFIED`. No stderr or model text is returned or stored. Nothing is recorded.
 
 Not idempotent: every successful call is a new model call (no idempotency key).
 
 ## Audit
-`WORKOS_PREDEV_PRODUCED` for every call that reached the driver: `{actor (Founder), kind:"predev", missionId, outcome: RECORDED|REJECTED|FAILED, roleId, artifactKind, executor (reviewer identity), outputSha256, exitCode, durationMs, phase, artifactId?, version?, reason?}`. The raw output is never logged.
+`WORKOS_PREDEV_PRODUCED` for every call that started the builder (driver gate refusals such as sequence-not-active / pending draft / no artifact phase happen BEFORE the builder and are answered without an audit event; a journal or other failure AFTER the model ran is audited `FAILED` with the output hash and a fixed reason code such as `WORKOS_DISK_FULL`): `{actor (Founder), kind:"predev", missionId, outcome: RECORDED|REJECTED|FAILED, roleId, artifactKind, executor (reviewer identity), outputSha256, exitCode, durationMs, phase, artifactId?, version?, reason?}`. The raw output is never logged.
 
 ## Process cleanup
 The model process runs in its own session/process group (POSIX); timeout or Global Stop kills the whole group (Windows: `taskkill /T /F`). Proven with a real process tree: a grandchild started by the model process is dead after the timeout.

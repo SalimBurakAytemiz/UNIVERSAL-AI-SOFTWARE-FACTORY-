@@ -24,7 +24,7 @@ export const PREDEV_BUILDER_MAX_OUTPUT_BYTES = 256 * 1024;
 
 export type PreDevBuilderFailure =
   | "PREDEV_BUILDER_ROLE_NOT_EXECUTABLE" | "PREDEV_BUILDER_PROMPT_INVALID" | "PREDEV_BUILDER_PROVENANCE_REFUSED" | "PREDEV_BUILDER_PROFILE_REFUSED"
-  | "PREDEV_BUILDER_SCRATCH_FAILED" | "PREDEV_BUILDER_SPAWN_FAILED" | "PREDEV_BUILDER_TIMEOUT" | "PREDEV_BUILDER_ABORTED" | "PREDEV_BUILDER_EXIT_NONZERO"
+  | "PREDEV_BUILDER_ENV_FAILED" | "PREDEV_BUILDER_SCRATCH_FAILED" | "PREDEV_BUILDER_SPAWN_FAILED" | "PREDEV_BUILDER_TIMEOUT" | "PREDEV_BUILDER_ABORTED" | "PREDEV_BUILDER_EXIT_NONZERO"
   | "PREDEV_BUILDER_EMPTY_OUTPUT" | "PREDEV_BUILDER_OUTPUT_TOO_LARGE" | "PREDEV_BUILDER_SCRATCH_MODIFIED";
 
 // //TR: Adaptör hatası: code sabit bir makine-okunur koddur (model/stderr metni taşımaz); detail yalnız iç tanılama içindir (audit'e hash/kod olarak girer, istemciye dönmez).
@@ -84,14 +84,19 @@ export class ClaudePreDevBuilder implements BuilderPort {
     // 2) Provenance-doğrulanmış launcher ve AYRI reviewer profili; kişisel profile geri düşülmez.
     let launcher: string;
     try { launcher = this.rt.launcher(); } catch (e) { return fail("PREDEV_BUILDER_PROVENANCE_REFUSED", (e as Error).message.slice(0, 200)); }
-    const prof = this.rt.profile();
+    let prof: ReturnType<PreDevBuilderRuntime["profile"]>;
+    try { prof = this.rt.profile(); } catch (e) { return fail("PREDEV_BUILDER_PROFILE_REFUSED", (e as Error).message.slice(0, 200)); }
     if (!prof.ok) return fail("PREDEV_BUILDER_PROFILE_REFUSED", prof.reason.slice(0, 200));
     // 3) Depodan bağımsız boş scratch dizini (0700); süreç yalnız burada çalışır.
     let scratch: string;
     try { scratch = fs.mkdtempSync(path.join(this.rt.scratchRoot ?? os.tmpdir(), "uasco-predev-")); } catch (e) { return fail("PREDEV_BUILDER_SCRATCH_FAILED", (e as Error).message.slice(0, 200)); }
     try {
-      const argv = this.rt.argv(launcher);
-      const r = await this.rt.run(argv, {cwd: scratch, env: this.rt.env(prof.dir), timeoutMs, input: rolePrompt, newSession: process.platform !== "win32", ...(this.shouldAbort ? {shouldAbort: this.shouldAbort} : {})});
+      // //TR: argv/env kurulumu (config + politika dosyaları okur) ve süreç çalıştırıcı beklenmedik fırlatırsa TİPLİ hataya çevrilir; ham hata route'a sızmaz (audit + sabit 502 kodu).
+      let argv: string[], env: NodeJS.ProcessEnv;
+      try { argv = this.rt.argv(launcher); env = this.rt.env(prof.dir); } catch (e) { return fail("PREDEV_BUILDER_ENV_FAILED", (e as Error).message.slice(0, 200)); }
+      let r: ProcResult;
+      try { r = await this.rt.run(argv, {cwd: scratch, env, timeoutMs, input: rolePrompt, newSession: process.platform !== "win32", ...(this.shouldAbort ? {shouldAbort: this.shouldAbort} : {})}); }
+      catch (e) { return fail("PREDEV_BUILDER_SPAWN_FAILED", (e as Error).message.slice(0, 200)); }
       exitCode = r.exitCode;
       // Zaman aşımı/abort: süreç ağacı runProcess tarafından öldürülmüştür; hiçbir çıktı döndürülmez.
       if (r.timedOut) return fail("PREDEV_BUILDER_TIMEOUT");

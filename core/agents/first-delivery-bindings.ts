@@ -3,7 +3,7 @@ import {BUILDER_ALLOWED_TOOLS, REVIEWER_ALLOWED_TOOLS, profileDefect} from "./ro
 import type {FirstDeliveryFunction, RoleExecutionProfile, TaskLimits} from "./role-execution.js";
 
 const KNOWLEDGE = ["config/builder-execution-policy.json", "registries/role-definitions.json", "docs/inventory/2026-10-19/MASTER_WORK_INVENTORY.md"];
-// //TR: Implementer rolleri (developer/tester) için timeoutMs runner'ın mevcut executor varsayılanına (60 dk) eşittir: runner artık profil limitini uyguladığı için bu değer gerçek koşuyu KISALTMAMALI. Diğer roller 10 dk.
+// //TR: Runner'ın profil limitini UYGULADIĞI roller için timeoutMs runner'ın mevcut executor varsayılanına (60 dk) eşittir: implementer (developer/tester, IMPLEMENT) ve REVIEW adımını süren security-reviewer; bu değer gerçek koşuyu KISALTMAMALI. Diğer roller (pre-dev, delivery) bir run adımı sürmez, 10 dk. Reviewer maxCycles 1 = her REVIEW adımında TEK review geçişi (döngüyü implementer rolünün maxCycles'ı sınırlar); maxFilesWritten 0 = reviewer klonu değiştiremez (runner'ın untouched-clone kapısı + profileDefect).
 const lim = (maxCycles: number, maxFilesWritten: number, timeoutMs = 600_000): TaskLimits => ({maxCycles, timeoutMs, maxFilesWritten});
 const READ_ONLY = REVIEWER_ALLOWED_TOOLS;
 
@@ -24,7 +24,7 @@ export const FIRST_DELIVERY_BINDINGS: readonly RoleExecutionProfile[] = [
   {roleId: "UASCO-0313", function: "tester", capabilities: ["test-authoring", "test-surface-review"], providerRoute: "CLAUDE_IMPLEMENTER", allowedTools: BUILDER_ALLOWED_TOOLS,
     adapters: ["local-claude-implementer", "workos-runner"], limits: lim(2, 100, 3_600_000), knowledgeSources: KNOWLEDGE, evaluationCriteria: ["tests added for each acceptance criterion", "no weakened or skipped tests", "execution NOT_EXECUTED without verified sandbox"]},
   {roleId: "UASCO-0252", function: "security-reviewer", capabilities: ["secure-code-review", "diff-review"], providerRoute: "CLAUDE_REVIEWER", allowedTools: READ_ONLY,
-    adapters: ["local-claude-reviewer", "workos-security-stage"], limits: lim(1, 0), knowledgeSources: KNOWLEDGE, evaluationCriteria: ["reviewer identity differs from implementer", "findings carry severity", "invalid review is never CLEAN"]},
+    adapters: ["local-claude-reviewer", "workos-security-stage"], limits: lim(1, 0, 3_600_000), knowledgeSources: KNOWLEDGE, evaluationCriteria: ["reviewer identity differs from implementer", "findings carry severity", "invalid review is never CLEAN"]},
   {roleId: "UASCO-0232", function: "delivery", capabilities: ["delivery-packaging", "evidence-bundling"], providerRoute: "DETERMINISTIC_STUDIO", allowedTools: [],
     adapters: ["project-studio-prepare-run-delivery"], limits: lim(1, 0), knowledgeSources: KNOWLEDGE, evaluationCriteria: ["delivery only after SOURCE_GENERATION_COMPLETE", "evidence chain recorded"]}
 ];

@@ -1812,12 +1812,12 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
   let PREDEV_AGENT_ACTOR = "";
   beforeEach(async () => { PREDEV_AGENT_ACTOR = (await import("../core/workos/predev/claude-builder.js")).PREDEV_AGENT_ACTOR; });
   const kindOf = (input: string) => /# ARTEFAKT TÜRÜ: (\w+)/.exec(input)?.[1] ?? "";
-  async function mkApp(o: {builder?: "none" | "null" | "fake"; stopped?: () => boolean; allowed?: boolean; tenantId?: string; run?: (kind: string, run: Run) => Promise<any> | any; profileOk?: boolean} = {}) {
+  async function mkApp(o: {builder?: "none" | "null" | "fake"; stopped?: () => boolean; allowed?: boolean; tenantId?: string; run?: (kind: string, run: Run) => Promise<any> | any; profileOk?: boolean; storeOptions?: ConstructorParameters<typeof WorkOsStore>[1]} = {}) {
     const [{default: Fastify}, {registerPredevDecisionRoutes}, {WorkOsError}, {ClaudePreDevBuilder}, {reviewerArgv}, {TASKHUB_ARTIFACTS}] = await Promise.all([
       import("fastify"), import("../apps/control-api/src/routes/predev-decisions.js"), import("../core/workos/types.js"), import("../core/workos/predev/claude-builder.js"), import("../core/workos/executors.js"), import("../core/workos/predev/fixtures/taskhub/index.js")]);
     const app = Fastify({logger: false});
     app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
-    const store = new WorkOsStore(path.join(tmp, "data")), audits: any[] = [], policies: any[] = [], runs: Run[] = [], providerCalls = {n: 0};
+    const store = new WorkOsStore(path.join(tmp, "data"), o.storeOptions), audits: any[] = [], policies: any[] = [], runs: Run[] = [], providerCalls = {n: 0};
     const scratchRoot = path.join(tmp, "scratch"); fs.mkdirSync(scratchRoot, {recursive: true});
     const fakeRun = async (argv: string[], opts: any) => {
       runs.push({argv, opts});
@@ -1829,7 +1829,7 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
     const preDevBuilder = o.builder === "none" ? undefined : () => { providerCalls.n++; return o.builder === "null" ? null : new ClaudePreDevBuilder({identity: "claude-reviewer@local.invalid", launcher: () => "/x/claude", profile: () => o.profileOk === false ? {ok: false as const, reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"} : {ok: true as const, dir: "/profile/reviewer"}, env: dir => ({CLAUDE_CONFIG_DIR: dir}), argv: reviewerArgv, run: fakeRun, scratchRoot}); };
     registerPredevDecisionRoutes(app, {getStore: () => store, scope: {tenantId: o.tenantId ?? "tA"}, orgId: "o1", actor: ACT, audit: (e: string, x?: any) => { audits.push({e, x}); }, workosStopped: o.stopped ?? (() => false),
       workosPolicy: (action: string, mid: string) => { policies.push(action); return o.allowed === false ? {allowed: false, reason: "NO"} : {allowed: true}; },
-      workosFail: (r: any, e: any) => r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"}), ...(preDevBuilder ? {preDevBuilder} : {})});
+      workosFail: (r: any, e: any) => e?.code === "WORKOS_DISK_FULL" ? r.code(507).send({error: e.code}) : r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"}), ...(preDevBuilder ? {preDevBuilder} : {})});
     const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
     for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(SC, m.missionId, to, "go", ACT);
     return {app, store, audits, policies, runs, providerCalls, m, p};
@@ -1850,7 +1850,7 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
   });
 
   it("gates in the same order as the other pre-dev routes (id 400 -> Global Stop 423 -> policy 403 workos.predev.produce -> strict empty body 400 -> mission/tenant 404); no process is ever started", async () => {
-    const ok = await mkApp(), stop = await mkApp({stopped: () => true}), deny = await mkApp({allowed: false}), tenantB = await mkApp({tenantId: "tB"});
+    const ok = await mkApp(), stop = await mkApp({stopped: () => true}), deny = await mkApp({allowed: false}), tenantB = await mkApp({tenantId: "tB"}), both = await mkApp({stopped: () => true, allowed: false});
     const id = ok.m.missionId, before = journalLines();
     expect((await post(ok.app, "/v1/missions/bad/predev/produce")).statusCode).toBe(400);
     expect((await post(ok.app, `/v1/missions/${id}/predev/produce`, {}, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
@@ -1861,8 +1861,14 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
     for (const bad of [{x: 1}, {evidenceRefs: []}]) { const r = await post(ok.app, `/v1/missions/${id}/predev/produce`, bad); expect([r.statusCode, r.json().error]).toEqual([400, "INVALID_BODY"]); }
     expect((await post(ok.app, `/v1/missions/msn_${"0".repeat(24)}/predev/produce`)).statusCode).toBe(404);
     expect((await post(tenantB.app, `/v1/missions/${id}/predev/produce`)).statusCode).toBe(404);
-    for (const c of [ok, stop, deny, tenantB]) { expect(c.runs).toHaveLength(0); expect(c.providerCalls.n).toBe(0); expect(produced(c.audits)).toEqual([]); }
-    expect(ok.policies).toEqual(["workos.predev.produce", "workos.predev.produce", "workos.predev.produce"]); // two bad bodies + the unknown mission passed the policy gate; the bad id never did
+    // combined-state requests pin the ORDER (each pair would pass under a reorder otherwise)
+    const stopFirst = await post(both.app, `/v1/missions/${both.m.missionId}/predev/produce`, {x: 1});
+    expect(stopFirst.statusCode).toBe(423); expect(both.policies).toEqual([]); // Global Stop is decided before the policy is even consulted
+    expect((await post(both.app, "/v1/missions/bad/predev/produce")).statusCode).toBe(400); expect(both.policies).toEqual([]); // the id check precedes both
+    const bodyFirst = await post(ok.app, `/v1/missions/msn_${"0".repeat(24)}/predev/produce`, {x: 1});
+    expect([bodyFirst.statusCode, bodyFirst.json().error]).toEqual([400, "INVALID_BODY"]); // strict body is checked before the mission lookup
+    for (const c of [ok, stop, deny, tenantB, both]) { expect(c.runs).toHaveLength(0); expect(c.providerCalls.n).toBe(0); expect(produced(c.audits)).toEqual([]); }
+    expect(ok.policies).toEqual(Array(4).fill("workos.predev.produce")); // two bad bodies + the bad-body/unknown-mission combo + the unknown mission passed the policy gate; the bad id never did
     expect(journalLines() - before).toBe(0);
   });
 
@@ -1991,6 +1997,30 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
     await post(retry.app, `/v1/missions/${retry.m.missionId}/predev/start`);
     expect((await post(retry.app, `/v1/missions/${retry.m.missionId}/predev/produce`)).statusCode).toBe(502);
     expect((await post(retry.app, `/v1/missions/${retry.m.missionId}/predev/produce`)).statusCode).toBe(201);
+  });
+
+  it("a journal write that fails AFTER the model ran (ENOSPC) still leaves a FAILED audit with the output hash and phase, answers 507, records nothing, releases the lock and a retry works", async () => {
+    const enospc = () => Object.assign(new Error("ENOSPC: no space left on device, write"), {code: "ENOSPC"});
+    const st = {armed: false, hits: 0};
+    const io = {writeSync: (fd: number, data: Buffer) => { if (st.armed && Buffer.from(data).toString("utf8").includes('"PREDEV_ARTIFACT_RECORDED"')) { st.hits += 1; throw enospc(); } return fs.writeSync(fd, data); }};
+    const c = await mkApp({storeOptions: {io}}), id = c.m.missionId;
+    await post(c.app, `/v1/missions/${id}/predev/start`);
+    const rm0 = JSON.stringify(c.store.preDevReadModel(SC, id));
+    st.armed = true;
+    const r = await post(c.app, `/v1/missions/${id}/predev/produce`);
+    expect([r.statusCode, r.json()]).toEqual([507, {error: "WORKOS_DISK_FULL"}]);
+    expect([st.hits, c.runs.length]).toEqual([1, 1]); // the paid call ran once
+    expect(JSON.stringify(c.store.preDevReadModel(SC, id))).toBe(rm0); expect(c.store.journalHealth().state).toBe("OK");
+    expect(produced(c.audits)).toMatchObject([{outcome: "FAILED", reason: "WORKOS_DISK_FULL", phase: "BUSINESS_ANALYSIS", roleId: "UASCO-0022", exitCode: 0, missionId: id}]);
+    expect(produced(c.audits)[0].outputSha256).toMatch(/^[0-9a-f]{64}$/);
+    st.armed = false;
+    const retry = await post(c.app, `/v1/missions/${id}/predev/produce`);
+    expect(retry.statusCode, retry.body).toBe(201); // lock released, no stale partial state
+    // typed builder failures carry the phase too
+    const t = await mkApp({run: () => ({timedOut: true, exitCode: null})});
+    await post(t.app, `/v1/missions/${t.m.missionId}/predev/start`);
+    await post(t.app, `/v1/missions/${t.m.missionId}/predev/produce`);
+    expect(produced(t.audits)).toMatchObject([{outcome: "FAILED", reason: "PREDEV_BUILDER_TIMEOUT", phase: "BUSINESS_ANALYSIS"}]);
   });
 
   it("at most one produce per mission at a time: a concurrent second call is 409 PREDEV_PRODUCE_IN_PROGRESS with NO second process; another mission is not blocked; the lock is released afterwards", async () => {

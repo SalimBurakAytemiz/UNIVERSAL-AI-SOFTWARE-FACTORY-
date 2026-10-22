@@ -110,13 +110,16 @@ export function registerPredevDecisionRoutes(app: any, d: PredevRouteDeps): void
       const store = d.getStore(), mission = store.getMission(d.scope, id)!, project = store.getProject(d.scope, mission.projectId);
       if (!project) return reply.code(404).send({error: "WORKOS_NOT_FOUND"});
       builder.shouldAbort = d.workosStopped;
+      const phase0 = model(id).phase;
       const drv = new PreDevDriver({store, brief: briefFromRecords({project, mission}), builder});
       const trace = () => builder.lastTrace;
       const audit = (outcome: "RECORDED" | "REJECTED" | "FAILED", extra: Record<string, unknown>) => d.audit("WORKOS_PREDEV_PRODUCED", {actor: d.actor, kind: "predev", missionId: id, outcome, roleId: trace()?.roleId ?? null, artifactKind: trace()?.kind ?? null, executor: trace()?.identity ?? null, outputSha256: trace()?.outputSha256 ?? null, exitCode: trace()?.exitCode ?? null, durationMs: trace()?.durationMs ?? null, ...extra});
       let out;
       try { out = await drv.produceCurrentPhase(d.scope, id, PREDEV_AGENT_ACTOR); }
       catch (e) {
-        if (e instanceof PreDevBuilderError) { audit("FAILED", {reason: e.code}); return reply.code(502).send({error: "PREDEV_BUILDER_FAILED", reason: e.code}); }
+        if (e instanceof PreDevBuilderError) { audit("FAILED", {phase: phase0, reason: e.code}); return reply.code(502).send({error: "PREDEV_BUILDER_FAILED", reason: e.code}); }
+        // //TR: Model çağrısı koştuktan SONRA başka bir adım fırlatırsa (ör. journal yazımı WORKOS_DISK_FULL) harcanan çağrı yine de audit'e girer (sabit kod, ham mesaj yok); kapı hataları (PreDevDriverError) builder'dan önce fırlar ve trace boştur.
+        if (!(e instanceof PreDevDriverError) && trace() !== null) { try { audit("FAILED", {phase: phase0, reason: e instanceof WorkOsError ? e.code : "PREDEV_PRODUCE_INTERNAL_ERROR"}); } catch { /* özgün hatayı maskeleme */ } }
         throw e;
       }
       // //TR: out.reason doğrulayıcının SABİT hata kodudur (PREDEV_DRIVER_INVALID_JSON veya validators.ts kodları); model metni asla yansıtılmaz.
