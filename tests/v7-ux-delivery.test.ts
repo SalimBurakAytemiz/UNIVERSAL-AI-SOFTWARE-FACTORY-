@@ -47,6 +47,11 @@ async function mkCtx(get: (p: string) => any, lang = "en", now: () => number = (
   return {ctx, doc, calls};
 }
 
+// PQ-001: sunucunun kesin kuralı (core/workos/outcomes.ts productVerificationOf): head SHA için VERIFY_TESTS + REGRESSION_TESTS, exit 0, sandbox tanığı, yürütülen test sayısı > 0.
+const HEAD = "a".repeat(40), OTHER = "b".repeat(40);
+const tev = (kind: string, extra: Record<string, any> = {}) => ({evidenceId: "evd_" + kind.toLowerCase().replace(/_/g, "").padEnd(12, "0").slice(0, 12), kind, commitSha: HEAD, exitCode: 0, sandboxProviderId: "sbx.fake", ...extra});
+const surface = (extra: Record<string, any> = {}) => tev("TEST_SURFACE", {exitCode: null, sandboxProviderId: undefined, testSurface: {functionalAcceptance: "UNVERIFIED_ORACLE", executedTests: 12, modified: [], deleted: [], renamed: [], harness: [], weakened: [], ...extra}});
+const fullEvidence = (over: Record<string, any> = {}) => [tev("VERIFY_TESTS", over.verify), tev("REGRESSION_TESTS", over.regression), surface(over.surface)];
 const HEALTHY = {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", serverIdentity: "VERIFIED"};
 const liveFix = (overrides: Record<string, any> = {}): Record<string, any> => ({
   "/health": HEALTHY,
@@ -54,7 +59,7 @@ const liveFix = (overrides: Record<string, any> = {}): Record<string, any> => ({
   "/v1/founder-attention": {blocked: []},
   "/v1/work-runs": {workRuns: [
     {runId: RUN, missionId: "msn_" + "ab".repeat(12), status: "RUNNING", startedAt: "2026-10-15T10:00:00.000Z", evidence: []},
-    {runId: RUN2, missionId: "msn_" + "cd".repeat(12), status: "REVIEWING", startedAt: "2026-10-15T11:00:00.000Z", evidence: [{kind: "VERIFY_TESTS"}]}
+    {runId: RUN2, missionId: "msn_" + "cd".repeat(12), status: "REVIEWING", startedAt: "2026-10-15T11:00:00.000Z", headSha: HEAD, evidence: fullEvidence()}
   ]},
   ...overrides
 });
@@ -88,6 +93,34 @@ describe("UX WP-DELIVERY — real operational health + release readiness", () =>
     expect(table.textContent).not.toMatch(/\bCOMPLETE\b|\bPASS\b/);
     // points to the real export bridge, does not export here
     expect(root.textContent).toContain("Project Studio > Delivery");
+  });
+
+  it("PQ-001: shows PRODUCT_VERIFIED only on the server's exact rule; every partial or failing evidence set stays NOT_VERIFIED", async () => {
+    const delivery = await load("views", "delivery.js");
+    const cases: Array<[string, any, string]> = [
+      ["full evidence", {headSha: HEAD, evidence: fullEvidence()}, "PRODUCT_VERIFIED"],
+      ["failing exit code", {headSha: HEAD, evidence: fullEvidence({verify: {exitCode: 1}})}, "NOT_VERIFIED"],
+      ["non-head SHA", {headSha: HEAD, evidence: fullEvidence({verify: {commitSha: OTHER}, regression: {commitSha: OTHER}})}, "NOT_VERIFIED"],
+      ["one suite only (VERIFY_TESTS)", {headSha: HEAD, evidence: [tev("VERIFY_TESTS"), surface()]}, "NOT_VERIFIED"],
+      ["one suite only (REGRESSION_TESTS)", {headSha: HEAD, evidence: [tev("REGRESSION_TESTS"), surface()]}, "NOT_VERIFIED"],
+      ["zero executed count", {headSha: HEAD, evidence: fullEvidence({surface: {executedTests: 0}})}, "NOT_VERIFIED"],
+      ["unknown executed count", {headSha: HEAD, evidence: fullEvidence({surface: {executedTests: null}})}, "NOT_VERIFIED"],
+      ["no sandbox attestation", {headSha: HEAD, evidence: fullEvidence({verify: {sandboxProviderId: undefined}})}, "NOT_VERIFIED"],
+      ["no TEST_SURFACE", {headSha: HEAD, evidence: [tev("VERIFY_TESTS"), tev("REGRESSION_TESTS")]}, "NOT_VERIFIED"],
+      ["blocked test surface", {headSha: HEAD, evidence: fullEvidence({surface: {functionalAcceptance: "BLOCKED"}})}, "NOT_VERIFIED"],
+      ["test changes need independent verification", {headSha: HEAD, evidence: fullEvidence({surface: {modified: ["tests/a.test.ts"]}})}, "NOT_VERIFIED"],
+      ["no head SHA on the run", {evidence: fullEvidence()}, "NOT_VERIFIED"],
+      ["bare kind without any proof", {headSha: HEAD, evidence: [{kind: "VERIFY_TESTS"}]}, "NOT_VERIFIED"]
+    ];
+    const ids = cases.map((_, i) => "run_" + String(i + 1).padStart(2, "0").repeat(12));
+    const runs = cases.map(([, c], i) => ({runId: ids[i], missionId: "msn_" + "ab".repeat(12), status: "REVIEWING", startedAt: "2026-10-15T10:00:00.000Z", ...c}));
+    const {ctx} = await mkCtx(fromFix(liveFix({"/v1/work-runs": {workRuns: runs}})));
+    const root = await delivery.render(ctx);
+    for (const [i, [name, , want]] of cases.entries()) {
+      const row = rows(root).find(r => r.dataset.deliveryRun === ids[i])!;
+      expect(row.dataset.product, name).toBe(want);
+      expect(pillsIn(row), name).toContain(want);
+    }
   });
 
   it("shows production deploy as BLOCKED and live SRE as NOT_CONNECTED citing the Founder gates, with no fabricated metrics or working buttons", async () => {
