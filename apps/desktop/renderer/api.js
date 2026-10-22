@@ -17,6 +17,7 @@ import {DOMAINS_PATH,mapDomains} from "./domains-core.js";
 import {SCHEDULER_PATH,mapScheduler} from "./scheduler-core.js";
 import {CAPABILITIES_PATH,ADAPTERS_PATH,FABRICS_PATH,mapCapabilities,mapAdapters,mapFabrics} from "./integrations-core.js";
 import {knowledgePath,mapKnowledge,provenancePath,mapProvenance,mapMemoryList} from "./knowledge-core.js";
+import {STATUS_SUMMARY_PATH,mapStatusSummary} from "./agent-factory-core.js";
 import {INSTALL_PATH,PHASE0_PATH,mapInstallReport,mapPhase0Report} from "./install-core.js";
 import {RUNS_PATH as AUDIT_RUNS_PATH,EVIDENCE_PATH as AUDIT_EVIDENCE_PATH,runEventsPath,mapAuditRuns,mapAuditEvents,mapAuditEvidence} from "./audit-core.js";
 
@@ -188,6 +189,8 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async integrationsCapabilities(){const r=await get(CAPABILITIES_PATH);return r.ok?mapCapabilities(r.data):{state:r.state,registry:null,message:r.message}},
     async integrationsAdapters(){const r=await get(ADAPTERS_PATH);return r.ok?mapAdapters(r.data):{state:r.state,registry:null,message:r.message}},
     async integrationsFabrics(){const r=await get(FABRICS_PATH);return r.ok?mapFabrics(r.data):{state:r.state,registry:null,message:r.message}},
+    // //TR: Ajan Fabrikası durum özeti (GET /v1/roles/status-summary, sorgu dizesi ve POST yok); beş sayaç ayrı tutulur. Ana süreç izin listesi girişi koordinatörün korumalı grubundadır; o gelene kadar okuma UNAVAILABLE döner ve hiçbir sayı uydurulmaz.
+    async rolesStatusSummary(){const r=await get(STATUS_SUMMARY_PATH);return r.ok?mapStatusSummary(r.data):{state:r.state,summary:null,message:r.message}},
     // //TR: FA-V2-PRODUCT (UI-BUILD-SCHEDULER): Derleme Zamanlayıcı salt-okunur okuması (GET /v1/scheduler, sorgu dizesi ve POST yok); yol automation/lib/control-boundary.mjs desktopGetPathAllowed listesinde zaten vardır (yeni uç nokta yok). Başarılıysa scheduler-core eşleyicisiyle fail-closed sanitize edilir.
     async scheduler(){const r=await get(SCHEDULER_PATH);return r.ok?mapScheduler(r.data):{state:r.state,scheduler:null,message:r.message}},
     // //TR: Proje bilgi özeti (GET /v1/projects/:id/knowledge, sorgu dizesi ve POST yok); Ana süreç izin listesi girişi koordinatörün korumalı grubundadır: köprü yolu reddederse (INVALID_API_PATH) durum UNAVAILABLE'dır, hiçbir sayı uydurulmaz.
