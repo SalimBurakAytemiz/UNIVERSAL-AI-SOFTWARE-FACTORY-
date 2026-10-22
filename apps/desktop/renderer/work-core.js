@@ -198,6 +198,39 @@ export function buildTaskTransitionRequest({task,tasks,missionStatus,to,reason})
   if(r.length>TASK_REASON_MAX)errors.reason="taskst.err.reasonLong";
   return result(path,{to,reason:r||`${task?.status} -> ${to} (UASCO Desktop)`},errors);
 }
+// ---------- Görev-koşu bağı (GET/POST /v1/tasks/:id/runs, Lane B) ----------
+// //TR: LANE-A: Koşu bir mission'a açılır; hangi görevi yürüttüğü bu bağla kaydedilir. GET {runs:[{link:{taskId,runId,missionId,linkedAt,...},run|null}]}; POST gövdesi yalnız {runId}. Bozuk kayıt tüm okumayı ERROR yapar; koşu kaydı yoksa durum null kalır (uydurulmaz).
+export const RUN_ID_RE=/^run_[0-9a-f]{24}$/;
+export const taskRunsPath=id=>TASK_ID_RE.test(String(id))?`/v1/tasks/${id}/runs`:null;
+export function mapTaskRuns(raw){
+  const bad={state:"ERROR",items:[]};
+  const list=isObj(raw)?raw.runs:null;if(!Array.isArray(list)||list.length>500)return bad;
+  const items=[];
+  for(const x of list){
+    const l=isObj(x)?x.link:null;
+    if(!isObj(l)||!TASK_ID_RE.test(String(l.taskId))||!RUN_ID_RE.test(String(l.runId))||!MISSION_ID_RE.test(String(l.missionId)))return bad;
+    items.push({taskId:l.taskId,runId:l.runId,missionId:l.missionId,linkedAt:iso(l.linkedAt),status:isObj(x.run)?statusStr(x.run.status):null});
+  }
+  return {state:"VERIFIED",items};
+}
+/** Göreve henüz bağlı olmayan, kanonik kimlikli mission koşuları (kimlik tekrarı elenir). */
+export function linkableRuns(runItems,linkedItems){
+  const linked=new Set((Array.isArray(linkedItems)?linkedItems:[]).map(l=>l.runId)),seen=new Set(),out=[];
+  for(const r of Array.isArray(runItems)?runItems:[]){
+    if(!r||!RUN_ID_RE.test(String(r.runId))||linked.has(r.runId)||seen.has(r.runId))continue;
+    seen.add(r.runId);out.push(r);
+  }
+  return out;
+}
+export function buildLinkRunRequest({taskId,runId,taskStatus}){
+  const errors={},path=taskRunsPath(taskId);
+  if(!path)errors.taskId="taskruns.err.task";
+  if(!RUN_ID_RE.test(String(runId??"")))errors.runId="taskruns.err.run";
+  if(taskStatus==="DONE")errors.taskId="taskruns.err.done";
+  const ok=!Object.keys(errors).length;
+  return {ok,path,body:ok?{runId}:null,errors};
+}
+
 // ---------- Koşu hazırlığı ve bloklu koşu nedenleri (LANE-A first-delivery) ----------
 // //TR: Koşu başlamadan önce kayıtlardan okunabilen eksikler: depo yoksa runner REPOSITORY_NOT_CONFIGURED (uzak URL ise REMOTE_REPO_NOT_SUPPORTED_YET), mission ve proje kaydında test komutu yoksa TEST_COMMAND_NOT_CONFIGURED ile BLOK verir. "Kayıtlı" bir test komutu kabul edileceğini vaat etmez (runner komutu ayrıca izin listesinden geçirir); bu yüzden yalnız EKSİK durumlar kesin uyarıdır. Kayıt okunamadıysa UNKNOWN: olumlu bir hazırlık iddiası yok.
 export function runReadiness({project,mission}){
@@ -299,8 +332,19 @@ function mapRunEvidence(list){
     if(typeof e==="string")return SAFE_ID_RE.test(e)?{evidenceId:e,kind:null,verification:null}:null;
     if(!isObj(e))return null;
     const id=pick(e.evidenceId,e.id);
-    return {evidenceId:typeof id==="string"&&SAFE_ID_RE.test(id)?id:null,kind:str(e.kind,40),verification:normalizeVerification(e.verification)};
+    return {evidenceId:typeof id==="string"&&SAFE_ID_RE.test(id)?id:null,kind:str(e.kind,40),verification:normalizeVerification(e.verification),
+      // //TR: LANE-A: koşu adımı tablosu için sunucunun kaydettiği olgular (RunEvidence): adım, döngü, çıkış kodu, süre ve zaman aşımı. Geçersiz tür null kalır; 0 veya "başarılı" uydurulmaz.
+      step:/^[A-Z][A-Z_]{0,19}$/.test(String(e.step))?e.step:null,cycle:safeCount(e.cycle),exitCode:Number.isSafeInteger(e.exitCode)?e.exitCode:null,timedOut:e.timedOut===true,startedAt:iso(e.startedAt),endedAt:iso(e.endedAt)};
   }).filter(Boolean);
+}
+/** Kanıt kaydından süre (ms); iki zaman da geçerli ve bitiş >= başlangıç değilse null (uydurulmaz). */
+export function evidenceDurationMs(e){
+  const a=Date.parse(e?.startedAt??""),b=Date.parse(e?.endedAt??"");
+  return Number.isFinite(a)&&Number.isFinite(b)&&b>=a?b-a:null;
+}
+/** Koşu adımı tablosu satırları: yalnız adım bilgisi taşıyan (nesne biçimli ve step/startedAt'ı olan) kanıt kayıtları, kayıt sırasıyla. */
+export function runStepRows(evidence){
+  return (Array.isArray(evidence)?evidence:[]).filter(e=>e&&(e.step||e.startedAt)).map(e=>({evidenceId:e.evidenceId,kind:e.kind,step:e.step,cycle:e.cycle,exitCode:e.exitCode,timedOut:e.timedOut===true,startedAt:e.startedAt,durationMs:evidenceDurationMs(e)}));
 }
 /** En son REVIEW kanıt kaydı (en yüksek cycle, eşitlikte dizideki son); yoksa null. */
 function latestReviewEvidence(list){

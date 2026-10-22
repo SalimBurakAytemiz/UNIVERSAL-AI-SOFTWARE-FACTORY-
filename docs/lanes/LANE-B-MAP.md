@@ -13,6 +13,6 @@ Status legend: VERIFIED = a test proves the link; MISSING; BROKEN; UNVERIFIED = 
 | 6 | Mission transition | POST /v1/missions/:id/transition | store.ts, mission state machine | journal | gates | mission-state, v7-b1-workos | VERIFIED |
 | 7 | Safe app run | POST /v1/projects/:id/devrun/{start,stop,restart}, GET devrun | core/workos/devrun.ts | run dir | gates + SBX gate | v7-ps1a-*, v7-int-r3-sbx-gate | VERIFIED-by-existence (start/stop routes exist; earlier note was wrong) |
 | 8 | Tests/review evidence | GET /v1/evidence, /v1/runs/:runId/events\|logs, /v1/reviews/:id | core/evidence | evidence store | token | v7-b10a-evidence | VERIFIED |
-| 9 | Delivery | GET/POST /v1/work-runs/:id/delivery/{prepare,accept,export} | store.ts, project-studio.ts | journal + export files | gates | v7-m1a-c2-delivery | VERIFIED |
+| 9 | Delivery | GET/POST /v1/work-runs/:id/delivery/{prepare,accept,export} | store.ts, project-studio.ts | journal + export files | gates | v7-m1a-c2-delivery (artifact determinism, acceptance gate, tamper, hash/missing-file refusals, NO_GENERATED_SOURCE, NOT_PREPARED), v7-m1a-desktop | VERIFIED at store+route level. Gap found: no test asserts the refusal audit events (WORKOS_SOURCE_DELIVERY_REFUSED, WORKOS_DELIVERY_PREPARE_REFUSED) or the 423/403 gates on the three delivery POSTs specifically |
 
 Next candidates: step 7 start/stop of the safe dev run (domain route file), then steps 4/5 gap analysis with Lane C.
