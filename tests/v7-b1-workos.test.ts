@@ -1264,3 +1264,89 @@ describe("LANE-B project memory routes", () => {
     expect((await add(app, p.projectId, {kind: "FACT", title: "x", body: "b"})).json().error).toBe("MEMORY_TAMPERED");
   });
 });
+
+// //TR: LANE-B knowledge API: proje bilgi özeti (Proje Belleği + kanıt dizini) salt okunur route'u; sayımlar, örnekleme/kesilme işareti, UNAVAILABLE/ERROR dürüstlüğü, bozuk bellekte fail-closed ve tenant izolasyonu test edilir.
+describe("LANE-B project knowledge summary", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const ev = (id: string, kind: string, status: string, at: string | null, missionId: string): any => ({evidenceId: id, kind, source: {path: null, sha256: null, sizeBytes: null, locator: null}, commit: null, createdAt: at,
+    scope: {tenantId: "tA", projectId: null, missionId, runId: null}, verification: {status, checkedAt: "x", basis: "b", reason: null}});
+  const mkApp = async (evidenceIndex?: any, tenantId = "tA") => {
+    const [{default: Fastify}, {registerKnowledgeRoutes}, {WorkOsError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/knowledge.js"), import("../core/workos/types.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    registerKnowledgeRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}),
+      workosFail: (r: any, e: any) => r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"}), ...(evidenceIndex ? {evidenceIndex: () => evidenceIndex} : {})});
+    return {app, store, p: store.createProject(proj())};
+  };
+  const know = (app: any, pid: string, headers: any = hdr) => app.inject({method: "GET", url: `/v1/projects/${pid}/knowledge`, headers});
+  const memFile = (pid: string) => path.join(tmp, "data", "projects", pid, "memory", "journal.jsonl");
+  const addMem = async (pid: string, rows: {kind: any; title: string; supersedes?: string; tags?: string[]}[]) => {
+    const {ProjectMemory} = await import("../core/knowledge/project-memory.js");
+    const m = new ProjectMemory({rootDir: path.join(tmp, "data"), projectId: pid});
+    return rows.map(r => m.append({kind: r.kind, title: r.title, body: "b", supersedes: r.supersedes, tags: r.tags ?? [], author: {role: "FOUNDER_LOCAL"}}).id);
+  };
+
+  it("summarizes memory (counts, current heads only, newest first) and says evidence is not wired instead of inventing numbers", async () => {
+    const {app, p} = await mkApp();
+    const empty = (await know(app, p.projectId)).json().knowledge;
+    expect(empty.memory).toMatchObject({state: "ABSENT", total: 0, currentHeads: []});
+    expect(empty.evidence).toEqual({state: "UNAVAILABLE", reason: "EVIDENCE_NOT_WIRED"});
+    const [a] = await addMem(p.projectId, [{kind: "DECISION", title: "v1"}, {kind: "NOTE", title: "n", tags: ["x"]}]);
+    await addMem(p.projectId, [{kind: "REVISION", title: "v2", supersedes: a}]);
+    const k = (await know(app, p.projectId)).json().knowledge;
+    expect(k.memory).toMatchObject({state: "OK", total: 3, byKind: {DECISION: 1, NOTE: 1, REVISION: 1, FACT: 0, SOURCE: 0}});
+    expect(k.memory.currentHeads.map((h: any) => h.title)).toEqual(["v2", "n"]);
+    expect(JSON.stringify(k)).not.toContain(tmp);
+  });
+  it("counts sampled evidence per mission, marks truncation and the mission cap, and reports ERROR when the index fails", async () => {
+    const calls: any[] = [];
+    const index = {list: async (q: any) => { calls.push(q); return calls.length === 1 ? {items: [ev("e1", "REVIEW_EVIDENCE", "VERIFIED", "2026-01-02T00:00:00Z", q.missionId), ev("e2", "WORK_RUN_LOG", "MISMATCH", "2026-01-03T00:00:00Z", q.missionId)], nextCursor: "c", sources: {}} : {items: [ev("e3", "WORK_RUN_STEP", "VERIFIED", null, q.missionId)], nextCursor: null, sources: {}}; }};
+    const {app, store, p} = await mkApp(index);
+    store.createMission(msn(p.projectId)); store.createMission(msn(p.projectId));
+    const k = (await know(app, p.projectId)).json().knowledge.evidence;
+    expect(k).toMatchObject({state: "AVAILABLE", sampled: true, missionsQueried: 2, total: 3, truncated: true, byKind: {REVIEW_EVIDENCE: 1, WORK_RUN_LOG: 1, WORK_RUN_STEP: 1, AUDIT_CHECKPOINT: 0}, byVerification: {VERIFIED: 2, MISMATCH: 1, MISSING: 0}});
+    expect(k.latest.map((x: any) => x.evidenceId)).toEqual(["e2", "e1", "e3"]);
+    expect(calls).toHaveLength(2); expect(calls.every(c => c.limit === 25 && /^msn_/.test(c.missionId))).toBe(true);
+    const many = await mkApp({list: async () => ({items: [], nextCursor: null, sources: {}})});
+    for (let i = 0; i < 12; i++) many.store.createMission(msn(many.p.projectId));
+    const capped = (await know(many.app, many.p.projectId)).json().knowledge.evidence;
+    expect(capped).toMatchObject({state: "AVAILABLE", missionsQueried: 10, truncated: true, total: 0});
+    const boom = await mkApp({list: async () => { throw new Error("secret path /x"); }});
+    boom.store.createMission(msn(boom.p.projectId));
+    const err = await know(boom.app, boom.p.projectId);
+    expect(err.json().knowledge.evidence).toEqual({state: "ERROR", reason: "EVIDENCE_QUERY_FAILED"});
+    expect(err.body).not.toContain("secret path");
+  });
+  it("aggregates kinds/verification across missions and keeps only the 10 latest evidence rows", async () => {
+    const {summarizeEvidence} = await import("../core/knowledge/knowledge-summary.js");
+    const items = Array.from({length: 14}, (_, i) => ev(`e${i}`, i % 2 ? "REVIEW_EVIDENCE" : "WORK_RUN_STEP", i % 3 ? "VERIFIED" : "MISSING", `2026-01-${String(i + 1).padStart(2, "0")}T00:00:00Z`, "msn_x"));
+    const r: any = await summarizeEvidence({list: async () => ({items, nextCursor: null, sources: {} as any})}, ["msn_a"]);
+    expect(r).toMatchObject({state: "AVAILABLE", total: 14, truncated: false, byKind: {REVIEW_EVIDENCE: 7, WORK_RUN_STEP: 7, WORK_RUN_LOG: 0}, byVerification: {VERIFIED: 9, MISSING: 5, MISMATCH: 0, UNVERIFIABLE: 0}});
+    expect(r.latest).toHaveLength(10); expect(r.latest[0].evidenceId).toBe("e13"); expect(r.latest[9].evidenceId).toBe("e4");
+  });
+  it("works with the real EvidenceIndex (no evidence yet -> AVAILABLE, total 0)", async () => {
+    const {EvidenceIndex} = await import("../core/evidence/index.js");
+    const {app, store, p} = await mkApp();
+    store.createMission(msn(p.projectId));
+    const real = await mkApp(new EvidenceIndex({repoRoot: tmp, dataDir: path.join(tmp, "data"), scope: {tenantId: "tA"}, store: () => store, includeRepositoryEvidence: false}));
+    const k = (await know(real.app, p.projectId)).json().knowledge.evidence;
+    expect(k).toMatchObject({state: "AVAILABLE", total: 0, missionsQueried: 1});
+    void app;
+  });
+  it("fails closed on a tampered memory chain (no counts), reads a torn tail's verified prefix, and enforces token/ids/tenant", async () => {
+    const {app, p} = await mkApp();
+    await addMem(p.projectId, [{kind: "FACT", title: "one"}, {kind: "FACT", title: "two"}]);
+    const good = fs.readFileSync(memFile(p.projectId), "utf8");
+    fs.writeFileSync(memFile(p.projectId), good + '{"seq":3,"id":"mem_000003",');
+    expect((await know(app, p.projectId)).json().knowledge.memory).toMatchObject({state: "TORN_TAIL", total: 2});
+    fs.writeFileSync(memFile(p.projectId), good.replace("one", "ONE"));
+    const t = (await know(app, p.projectId)).json().knowledge;
+    expect(t.memory).toMatchObject({state: "TAMPERED", total: null, byKind: null, currentHeads: null});
+    expect(t.evidence.state).toBe("UNAVAILABLE");
+    expect((await know(app, p.projectId, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    expect((await know(app, "bad")).statusCode).toBe(400);
+    expect((await know(app, "prj_" + "0".repeat(24))).statusCode).toBe(404);
+    expect((await know((await mkApp(undefined, "tB")).app, p.projectId)).statusCode).toBe(404);
+  });
+});
