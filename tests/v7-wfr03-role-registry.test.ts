@@ -853,6 +853,19 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     }
   });
 
+  it("a workspace or clone the pipeline cannot inspect afterwards (git state destroyed) is infrastructure: no verdict, nothing staged", { timeout: 120_000 }, async () => {
+    const at = new Date().toISOString(), base = { exitCode: 0, log: "", argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false };
+    const wipes: Array<[string, ExecutorPair, string, string]> = [
+      ["implementer destroys .git", {...fakePair(), implementer: {identity: "I", implement: async ws => { fs.writeFileSync(path.join(ws, "greeting.txt"), "hello\n"); fs.rmSync(path.join(ws, ".git"), {recursive: true, force: true}); return base; }}}, DEV, "WORKSPACE_INSPECT_FAILED"],
+      ["reviewer destroys the clone's .git", {...fakePair(), reviewer: {identity: "R", review: async clone => { fs.rmSync(path.join(clone, ".git"), {recursive: true, force: true}); return {verdict: "CLEAN" as const, findings: [], valid: true, ...base}; }}}, REVIEWER, "CLONE_INSPECTION_FAILED"]
+    ];
+    for (const [label, pair, role, reason] of wipes) {
+      const root = stagingOf();
+      expect([label, await evaluate(pair, role, {stagingRoot: root})]).toEqual([label, {status: "NOT_EXECUTED", roleId: role, evaluationId: "EV-01", reason}]);
+      expect(listing(root)).toEqual([]);
+    }
+  });
+
   it("pre-dev primaries golden mission: the existing validators decide. Valid fixture output -> PASSED for all five; invalid JSON, a failing validator, and persuasive prose -> FAILED; builder failures or no builder -> NOT_EXECUTED (nothing staged)", { timeout: 180_000 }, async () => {
     const roles = [["UASCO-0022", "BusinessAnalysis"], ["UASCO-0023", "Requirements"], ["UASCO-0019", "Plan"], ["UASCO-0043", "Architecture"], ["UASCO-0031", "UxSpec"]] as const;
     for (const [role, kind] of roles) {
