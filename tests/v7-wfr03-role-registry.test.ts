@@ -719,6 +719,7 @@ describe("LANE-C C2 role execution profiles (derived, proposal only)", () => {
 // //TR: LANE-C C-EVAL-PIPELINE: değerlendirme hattı STAGING'e yazar, FAKE'i asla saydırmaz, altyapı sorunlarını sonuç saymaz ve depoya (audit/evidence, registries) dokunamaz. Gerçek claude çalışmaz; FAKE çiftler ve kayıtlı süreç çalıştırıcıları kullanılır.
 describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE and infrastructure never count)", () => {
   const DEV = "UASCO-0085", REVIEWER = "UASCO-0252", BA = "UASCO-0022", TESTER = "UASCO-0313";
+  const bindingTools = (route: "CLAUDE_REVIEWER") => FIRST_DELIVERY_BINDINGS.find(b => b.providerRoute === route)!.allowedTools;
   const TESTER_GOOD = 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n';
   const workDir = () => fs.mkdtempSync(path.join(tmp, "eval-"));
   const script = (o: Partial<FakeScript> = {}): FakeScript => ({
@@ -943,6 +944,9 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       ["no negative case", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(4, 5), 9);\nassert.strictEqual(add(0, 7), 7);\n'}), "covers_positive_negative_zero"],
       ["no zero case", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(4, 5), 9);\n'}), "covers_positive_negative_zero"],
       ["the same call three times", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(2, 3), 5);\n'}), "covers_positive_negative_zero"],
+      ["no positive case (every call has a negative or zero argument)", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\nassert.strictEqual(add(-1, 0), -1);\n'}), "covers_positive_negative_zero"],
+      ["only two distinct calls (one call is both negative and zero)", T({"test/add.test.js": 'const assert = require("node:assert");\nconst add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, 0), -2);\nassert.strictEqual(add(2, 3), 5);\n'}), "covers_positive_negative_zero"],
+      ["oversized file (valid JavaScript, 70 KiB of comment)", T({"test/add.test.js": good + "// " + "x".repeat(70 * 1024) + "\n"}), "compiles"],
       ["no commit at all", {implement: () => ({files: {"test/add.test.js": good}, noCommit: true})}, "commit_produced"]
     ];
     for (const [label, o, failing, detail] of cases) {
@@ -954,6 +958,17 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     const root = stagingOf();
     expect(await evaluate(fakePair({implement: () => ({exitCode: 1})}), TESTER, {stagingRoot: root})).toEqual({status: "NOT_EXECUTED", roleId: TESTER, evaluationId: "EV-01", reason: "IMPLEMENT_EXIT_NONZERO"});
     expect(listing(root)).toEqual([]);
+    // the tester must be an implementer-route binding: a reviewer-route binding with the tester function is refused
+    const reviewerRoute = FIRST_DELIVERY_BINDINGS.map(b => b === FIRST_DELIVERY_BINDINGS.find(x => x.roleId === TESTER) ? {...b, providerRoute: "CLAUDE_REVIEWER" as const, allowedTools: [...bindingTools("CLAUDE_REVIEWER")], limits: {...b.limits, maxFilesWritten: 0}} : b);
+    expect(await evaluate(fakePair(), TESTER, {bindings: reviewerRoute})).toEqual({status: "REFUSED", reason: expect.stringContaining("BINDING_ROLE_MISMATCH")});
+    // the right bytes committed as an executable file are not a regular test file
+    const execMode: ExecutorPair = {...fakePair(), implementer: {identity: "MODE_IMPL", async implement(ws) {
+      const at = new Date().toISOString(), g = (args: string[]) => cp.spawnSync("git", ["-c", "user.name=T", "-c", "user.email=t@local.invalid", "-c", "commit.gpgsign=false", ...args], {cwd: ws, encoding: "utf8"});
+      fs.writeFileSync(path.join(ws, "test", "add.test.js"), good); g(["add", "-A"]); g(["update-index", "--chmod=+x", "test/add.test.js"]); g(["commit", "-q", "-m", "mode"]);
+      return {exitCode: 0, log: "", argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
+    }}};
+    const em = evaluated(await evaluate(execMode, TESTER));
+    expect([em.verdict, em.checks.filter(c => !c.passed).map(c => c.id)]).toEqual(["FAILED", ["regular_file"]]);
     // an unsafe tester binding is refused before anything starts
     const t = FIRST_DELIVERY_BINDINGS.find(b => b.roleId === TESTER)!;
     expect(await evaluate(fakePair(), TESTER, {bindings: FIRST_DELIVERY_BINDINGS.map(b => b === t ? {...b, allowedTools: [...b.allowedTools, "WebFetch"]} : b)})).toEqual({status: "REFUSED", reason: "ROLE_NOT_EXECUTABLE:TOOL_NOT_ALLOWED"});
