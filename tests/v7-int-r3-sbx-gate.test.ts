@@ -13,7 +13,8 @@ import type {RunnerOptions} from "../core/workos/runner.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {ExecutionGate, PROJECT_EXECUTION_KINDS, SANDBOX_UNAVAILABLE} from "../core/workos/execution-gate.js";
-import {LinuxUnshareSandboxProvider, LINUX_SANDBOX_ID, hostHasProcess} from "../core/agents/linux-unshare-sandbox.js";
+import {LinuxUnshareSandboxProvider, LINUX_SANDBOX_ID, hostHasProcess, nodeToolchainRoots, readOnlyRootProblem} from "../core/agents/linux-unshare-sandbox.js";
+import {runProcess} from "../core/workos/executors.js";
 import net from "node:net";
 import cp from "node:child_process";
 import type {GateDecision, SandboxProvider} from "../core/workos/execution-gate.js";
@@ -255,6 +256,9 @@ describe("LANE-C Linux unshare sandbox provider v2 (SandboxProvider contract)", 
   const T2 = 120_000;
   const mkws = () => fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-sbx-t-"));
   const env = () => ({PATH: process.env.PATH ?? "/usr/bin:/bin"});
+  // F3: RLIMIT_NPROC gilt for kuid 0 (init user) is NOT enforced by the kernel, so a root supervisor must opt in explicitly (acceptUnenforcedProcessLimit); a non-root supervisor is verified with the limit proven.
+  const isRoot = (process.getuid?.() ?? 0) === 0;
+  const procOpts = isRoot ? {acceptUnenforcedProcessLimit: true} : {};
   let provider: LinuxUnshareSandboxProvider, st: {ok: boolean; detail?: string};
   // Ana makine gerçekten user+net+pid+mount namespace kurabiliyor mu (sağlayıcıdan BAĞIMSIZ ölçüm): kurabiliyorsa sağlayıcı DOGRULANMIŞ olmak ZORUNDA (bozuk sağlayıcı sessizce geçemez).
   const hostCanIsolate = (() => {
@@ -262,7 +266,7 @@ describe("LANE-C Linux unshare sandbox provider v2 (SandboxProvider contract)", 
     const a = cp.spawnSync("unshare", ["--user", "--map-root-user", "--net", "--pid", "--ipc", "--uts", "--mount", "--fork", "--kill-child=SIGKILL", "true"], {stdio: "ignore"});
     return a.status === 0 && ["setpriv", "pivot_root", "mount", "umount"].every(t => cp.spawnSync("sh", ["-c", `command -v ${t}`], {stdio: "ignore", env: {PATH: "/usr/sbin:/usr/bin:/sbin:/bin"}}).status === 0);
   })();
-  beforeAll(async () => { provider = new LinuxUnshareSandboxProvider(); st = await provider.selfTest(); }, T2);
+  beforeAll(async () => { provider = new LinuxUnshareSandboxProvider(procOpts); st = await provider.selfTest(); }, T2);
 
   it("host-exec refusal: missing primitives / wrong platform / not self-tested -> nothing runs on the host", { timeout: T2 }, async () => {
     const ws = mkws(); const marker = path.join(ws, "HOST_EXEC_MARKER");
@@ -287,7 +291,7 @@ describe("LANE-C Linux unshare sandbox provider v2 (SandboxProvider contract)", 
 
   it("is verified only when every isolation proof passes; otherwise it stays unverified and refuses", { timeout: T2 }, async () => {
     if (hostCanIsolate) {
-      expect(st).toEqual({ok: true}); // the host can isolate, so a failing proof means a broken provider
+      expect(st).toEqual(isRoot ? {ok: true, detail: "PROCESS_LIMIT_NOT_ENFORCED_ACCEPTED"} : {ok: true}); // the host can isolate, so a failing proof means a broken provider
       const gate = new ExecutionGate(provider);
       expect(await gate.authorize("RUNNER_VERIFY_TESTS")).toMatchObject({allowed: true, providerId: LINUX_SANDBOX_ID});
       expect(LINUX_SANDBOX_ID).toBe("linux-unshare-v2");
@@ -393,8 +397,8 @@ describe("LANE-C Linux unshare sandbox provider v2 (SandboxProvider contract)", 
 
   it("process count: maxProcesses is applied as RLIMIT_NPROC to the project (best effort); where the kernel enforces it (supervisor not kuid 0) forks beyond it fail", { timeout: T2 }, async () => {
     if (!hostCanIsolate) return;
-    const capped = new LinuxUnshareSandboxProvider({maxProcesses: 40});
-    expect(await capped.selfTest()).toEqual({ok: true});
+    const capped = new LinuxUnshareSandboxProvider({maxProcesses: 40, ...procOpts});
+    expect((await capped.selfTest()).ok).toBe(true);
     const ws = mkws();
     try {
       const lim = await capped.run(["sh", "-c", "grep 'Max processes' /proc/self/limits | tr -s ' '"], {cwd: ws, env: env(), timeoutMs: 30_000});
@@ -409,11 +413,99 @@ describe("LANE-C Linux unshare sandbox provider v2 (SandboxProvider contract)", 
     } finally { fs.rmSync(ws, {recursive: true, force: true}); }
   });
 
+  const isLinux = process.platform === "linux";
+  const mkbase = (): string | null => { try { return fs.mkdtempSync("/var/tmp/uasco-sbx-f1-"); } catch { return null; } }; // outside /tmp: /tmp is replaced by a private tmpfs inside the sandbox
+
+  it("F3: the kernel exempts kuid 0 from RLIMIT_NPROC, so the default provider stays UNVERIFIED for a root supervisor (fail closed) unless the operator accepts it explicitly; a non-root supervisor is verified with the limit proven", { timeout: T2 }, async () => {
+    if (!hostCanIsolate) return;
+    const strict = new LinuxUnshareSandboxProvider();
+    const r = await strict.selfTest();
+    if (isRoot) {
+      expect(r).toEqual({ok: false, detail: "SELFTEST_PROCESS_LIMIT_NOT_ENFORCED"});
+      const ws = mkws();
+      try { expect((await strict.run(["sh", "-c", "true"], {cwd: ws, env: env(), timeoutMs: 5000})).spawnError).toBe(true); } finally { fs.rmSync(ws, {recursive: true, force: true}); }
+    } else expect(r).toEqual({ok: true});
+  });
+
+  it.skipIf(!isLinux)("F1: read-only toolchain roots are validated: broad roots, home directories, roots containing a home or sensitive entries (.ssh, .claude, ...) are refused; only the node prefix bin/lib are bound", () => {
+    const base = mkbase(); expect(base).not.toBeNull();
+    try {
+      const mk = (rel: string, file = false) => { const f = path.join(base!, rel); fs.mkdirSync(file ? path.dirname(f) : f, {recursive: true}); if (file) fs.writeFileSync(f, "#!/bin/sh\n", {mode: 0o755}); return f; };
+      const nodeAt = (prefix: string) => mk(`${prefix}/bin/node`, true);
+      // a proper node prefix (npm layout): only bin and lib are bound, never the prefix itself
+      const ok = nodeAt("ok"); mk("ok/lib/node_modules"); mk("ok/share/secret-docs");
+      expect(nodeToolchainRoots(ok, [])).toEqual({roots: [path.join(base!, "ok/bin"), path.join(base!, "ok/lib")]});
+      // nvm style prefix under the user's home is fine because it is neither the home nor an ancestor of it
+      const nvm = nodeAt("home/u/.nvm/node/v24"); mk("home/u/.nvm/node/v24/lib/node_modules");
+      expect(nodeToolchainRoots(nvm, [path.join(base!, "home/u")]).roots).toHaveLength(2);
+      // the prefix IS a home, or contains one -> nothing is bound
+      expect(nodeToolchainRoots(ok, [path.join(base!, "ok")])).toEqual({roots: [], problem: "NODE_PREFIX_ROOT_CONTAINS_HOME"});
+      expect(nodeToolchainRoots(ok, [path.join(base!, "ok/home")])).toEqual({roots: [], problem: "NODE_PREFIX_ROOT_CONTAINS_HOME"});
+      // node at ~/bin/node style layout with credentials next to it
+      const homey = nodeAt("homey"); mk("homey/lib/node_modules"); mk("homey/.ssh");
+      expect(nodeToolchainRoots(homey, [])).toEqual({roots: [], problem: "NODE_PREFIX_ROOT_HAS_SENSITIVE_ENTRY"});
+      const claude = nodeAt("claudey"); mk("claudey/include/node"); mk("claudey/.claude");
+      expect(nodeToolchainRoots(claude, []).problem).toBe("NODE_PREFIX_ROOT_HAS_SENSITIVE_ENTRY");
+      // unrecognised layouts and unresolvable paths bind nothing
+      expect(nodeToolchainRoots(nodeAt("nolayout"), [])).toEqual({roots: [], problem: "NODE_PREFIX_LAYOUT_UNRECOGNIZED"});
+      expect(nodeToolchainRoots(mk("flat/node", true), [])).toEqual({roots: [], problem: "NODE_NOT_IN_BIN_DIRECTORY"});
+      expect(nodeToolchainRoots(path.join(base!, "missing/bin/node"), [])).toEqual({roots: [], problem: "NODE_PATH_UNRESOLVABLE"});
+      if (fs.existsSync("/usr/bin/env")) expect(nodeToolchainRoots("/usr/bin/env", [])).toEqual({roots: []}); // already bound read-only through /usr
+      // explicit roots
+      for (const bad of ["/", "/opt", "/home", "/home/alice", "/root", "/usr/local", "/var", "/etc", "/proc/1", "/dev/shm", "opt/x", "/opt/x y", "/opt//x", "/opt/x/", "/opt/a:b", "/tmp/x", "/work/x"]) expect([bad, readOnlyRootProblem(bad, [])]).toEqual([bad, expect.any(String)]);
+      expect(readOnlyRootProblem(path.join(base!, "ok/bin"), [])).toBeNull();
+      expect(readOnlyRootProblem(path.join(base!, "homey"), [])).toBe("ROOT_HAS_SENSITIVE_ENTRY");
+      expect(readOnlyRootProblem(path.join(base!, "ok"), [path.join(base!, "ok/home")])).toBe("ROOT_CONTAINS_HOME");
+      expect(new LinuxUnshareSandboxProvider({readOnlyRoots: ["/", "/home", "/root", path.join(base!, "homey"), os.homedir() === "/" ? "/home" : os.homedir()]}).toolchain().roots).toEqual([]);
+    } finally { fs.rmSync(base!, {recursive: true, force: true}); }
+  });
+
+  it("F1: a bound toolchain root exposes nothing else from its parent directories (canary file, .ssh next to it); the selfTest proves the same listing", { timeout: T2 }, async () => {
+    if (!hostCanIsolate) return;
+    const base = mkbase(); if (!base) return;
+    const ws = mkws();
+    try {
+      const prefix = path.join(base, "prefix"); fs.mkdirSync(prefix); fs.writeFileSync(path.join(prefix, "tool"), "TOOL\n");
+      fs.writeFileSync(path.join(base, "CANARY.txt"), "HOST-SECRET"); fs.mkdirSync(path.join(base, ".ssh")); fs.writeFileSync(path.join(base, ".ssh", "id_rsa"), "KEY");
+      const p = new LinuxUnshareSandboxProvider({readOnlyRoots: [prefix], ...procOpts});
+      expect(p.toolchain()).toEqual({roots: [prefix]});
+      expect((await p.selfTest()).ok).toBe(true); // includes the ancestor-listing probe for this root
+      const r = await p.run(["sh", "-c", `echo "LIST=$(ls -A ${base} | tr '\n' ',')"; cat ${base}/CANARY.txt 2>&1 | head -c 40; test ! -e ${base}/.ssh && echo SSH_HIDDEN; cat ${prefix}/tool; touch ${prefix}/x 2>&1; echo touch_rc=$?`], {cwd: ws, env: env(), timeoutMs: 30_000});
+      expect(r.stdout).toContain("LIST=prefix,");
+      expect(r.stdout).not.toContain("HOST-SECRET");
+      expect(r.stdout).toContain("SSH_HIDDEN");
+      expect(r.stdout).toContain("TOOL");
+      expect(r.stdout).not.toContain("touch_rc=0");
+      // a root that contains sensitive entries is refused outright, so its parent never becomes visible
+      expect(new LinuxUnshareSandboxProvider({readOnlyRoots: [base]}).toolchain().roots).toEqual([]);
+    } finally { fs.rmSync(base, {recursive: true, force: true}); fs.rmSync(ws, {recursive: true, force: true}); }
+  });
+
+  it("F2: with a controlling terminal on the host (pty), the sandbox gets no controlling terminal (tty_nr 0) and no /dev/tty node, so TIOCSTI injection into the parent shell is impossible", { timeout: T2 }, async () => {
+    if (!hostCanIsolate) return;
+    expect(cp.spawnSync("sh", ["-c", "command -v script"], {stdio: "ignore"}).status).toBe(0); // util-linux `script` allocates the pty; without it the probe would be vacuous
+    const r = cp.spawnSync("script", ["-qec", `${process.execPath} --import tsx tests/support/sbx-tty-driver.mts`, "/dev/null"], {cwd: REPO, encoding: "utf8", env: {...process.env, UASCO_SBX_ACCEPT_UNENFORCED: isRoot ? "1" : "0"}, timeout: 120_000});
+    const line = /RESULT .*/.exec(String(r.stdout))?.[0] ?? `NO_RESULT ${String(r.stdout).slice(-300)} ${String(r.stderr).slice(-300)}`;
+    expect(line).toContain("selftest_ok=true");
+    expect(Number(/host_tty_nr=(\d+)/.exec(line)?.[1] ?? 0)).toBeGreaterThan(0); // the host process really had a controlling terminal
+    expect(line).toContain("sandbox_tty_nr=0");
+    expect(line).toContain("dev_tty_absent");
+  });
+
+  it.skipIf(!isLinux)("F5: on timeout the whole process GROUP is killed (the namespace init and background grandchildren), not just the direct child", { timeout: T2 }, async () => {
+    const t0 = Date.now();
+    const r = await runProcess(["sh", "-c", "sleep 61.77 & sleep 61.77"], {cwd: os.tmpdir(), env: {PATH: process.env.PATH ?? "/usr/bin:/bin"}, timeoutMs: 800, newSession: true});
+    expect(r.timedOut).toBe(true);
+    for (let i = 0; i < 30 && hostHasProcess("61.77"); i++) await new Promise(x => setTimeout(x, 150));
+    expect(hostHasProcess("61.77")).toBe(false);
+    expect(Date.now() - t0).toBeLessThan(20_000);
+  });
+
   it("negative: the project is never pid 1 and cannot outlive a timeout (clears pdeathsig, setsid, ignores TERM); unsafe cwd, env-less and invalid argv are refused", { timeout: T2 }, async () => {
     if (!hostCanIsolate) return;
     const ws = mkws();
     try {
-      const evil = `if command -v perl >/dev/null 2>&1; then perl -e 'syscall(157,1,0); $SIG{TERM}="IGNORE"; setpgrp; sleep 3; open(F,">late.txt"); print F 1; close F; exec("sleep","62.41")' & exec sleep 62.41; else trap "" TERM; (sleep 3; : > late.txt; exec sleep 62.41) & exec sleep 62.41; fi`;
+      const evil = `if command -v perl >/dev/null 2>&1; then perl -e 'syscall(157,1,0); syscall(101,16,1,0,0); $SIG{TERM}="IGNORE"; setpgrp; sleep 3; open(F,">late.txt"); print F 1; close F; exec("sleep","62.41")' & exec sleep 62.41; else trap "" TERM; (sleep 3; : > late.txt; exec sleep 62.41) & exec sleep 62.41; fi`;
       const pid = await provider.run(["sh", "-c", 'echo ppid=$PPID pid=$$'], {cwd: ws, env: env(), timeoutMs: 30_000});
       expect(pid.stdout).toContain("ppid=1 ");
       expect(pid.stdout).not.toContain("pid=1\n");

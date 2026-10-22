@@ -14,8 +14,10 @@ export interface LinuxSandboxOptions {
   unshareBinary?: string; platform?: NodeJS.Platform; addressSpaceKb?: number; maxFileBlocks?: number;
   /** RLIMIT_NPROC (süreç+iş parçacığı) üst sınırı; yalnız supervisor kuid 0 DEĞİLSE çekirdek tarafından uygulanır (varsayılan 4096). */
   maxProcesses?: number;
-  /** Salt-okunur bağlanacak ek araç zinciri kökleri (varsayılan: node kurulum öneki, /usr altında değilse). */
+  /** Salt-okunur bağlanacak ek araç zinciri kökleri (varsayılan: node kurulum önekinin YALNIZ bin ve lib dizinleri, /usr altında değilse; bkz. nodeToolchainRoots). Her kök readOnlyRootProblem'den geçmelidir. */
   readOnlyRoots?: readonly string[];
+  /** true: süreç sayısı sınırı çekirdek tarafından uygulanamasa da (supervisor kuid 0) sağlayıcı DOĞRULANABİLİR; bilinçli, belgelenmiş bir kabul (varsayılan false = fail-closed). */
+  acceptUnenforcedProcessLimit?: boolean;
 }
 
 const NS_FLAGS = ["--user", "--map-root-user", "--net", "--pid", "--ipc", "--uts", "--mount", "--fork", "--kill-child=SIGKILL"];
@@ -44,7 +46,7 @@ const SETUP = [
   'for f in /etc/ld.so.cache /etc/ld.so.conf /etc/localtime; do if [ -f "$f" ]; then : > "$R$f"; mount --bind "$f" "$R$f"; mount -o remount,ro,nosuid,nodev,bind "$R$f"; fi; done',
   'for d in /etc/alternatives /etc/ld.so.conf.d; do if [ -d "$d" ]; then robind "$d"; fi; done',
   'mount -t tmpfs -o mode=755,size=1m tmpfs "$R/dev"',
-  'for n in null zero full random urandom tty; do : > "$R/dev/$n"; mount --bind "/dev/$n" "$R/dev/$n"; mount -o remount,ro,nosuid,noexec,bind "$R/dev/$n"; done',
+  'for n in null zero full random urandom; do : > "$R/dev/$n"; mount --bind "/dev/$n" "$R/dev/$n"; mount -o remount,ro,nosuid,noexec,bind "$R/dev/$n"; done',
   'mkdir "$R/dev/shm"; mount -t tmpfs -o mode=1777,size=64m,nosuid,nodev,noexec tmpfs "$R/dev/shm"',
   'ln -s /proc/self/fd "$R/dev/fd"; ln -s /proc/self/fd/0 "$R/dev/stdin"; ln -s /proc/self/fd/1 "$R/dev/stdout"; ln -s /proc/self/fd/2 "$R/dev/stderr"',
   'mount -t tmpfs -o mode=1777,size=256m,nosuid,nodev tmpfs "$R/tmp"',
@@ -78,6 +80,48 @@ function cwdProblem(cwd: unknown): string | null {
   return null;
 }
 const under = (parent: string, child: string): boolean => child === parent || child.startsWith(parent.endsWith("/") ? parent : parent + "/");
+// //TR: Ek salt-okunur kök doğrulaması (F1): geniş kökler, ev dizini (veya onu içeren kök) ve hassas girdiler (.ssh, .claude, ...) reddedilir; /tmp,/dev,/proc,/work altındaki kökler zaten sonradan monte edilen özel bağlarla gizlenir.
+const SAFE_PATH = /^[A-Za-z0-9._+@/-]+$/;
+const BROAD_ROOTS = new Set(["/", "/opt", "/home", "/root", "/srv", "/var", "/mnt", "/media", "/run", "/tmp", "/etc", "/dev", "/proc", "/sys", "/boot", "/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/libx32", "/work", "/usr/local"]);
+const SENSITIVE_NAMES = [".ssh", ".claude", ".aws", ".gnupg", ".kube", ".docker", ".config", ".npmrc", ".netrc", ".git-credentials", ".env"];
+const homeDirs = (): string[] => [...new Set([os.homedir(), process.env.HOME ?? "", process.env.USERPROFILE ?? ""].filter(h => h && path.isAbsolute(h)))];
+export function readOnlyRootProblem(root: unknown, homes: readonly string[] = homeDirs()): string | null {
+  if (typeof root !== "string" || !path.isAbsolute(root) || !SAFE_PATH.test(root) || root !== path.normalize(root) || (root.length > 1 && root.endsWith("/"))) return "ROOT_UNSUPPORTED_PATH";
+  if (BROAD_ROOTS.has(root) || /^\/home\/[^/]+$/.test(root) || root === "/root" || /^\/(proc|sys|dev|run|boot)(\/|$)/.test(root)) return "ROOT_TOO_BROAD";
+  if (under("/tmp", root) || under("/work", root)) return "ROOT_HIDDEN_BY_PRIVATE_MOUNT";
+  for (const h of homes) if (under(root, h)) return "ROOT_CONTAINS_HOME";
+  try { if (fs.realpathSync(root) !== root || !fs.statSync(root).isDirectory()) return "ROOT_NOT_CANONICAL_DIRECTORY"; } catch { return "ROOT_MISSING"; }
+  for (const n of SENSITIVE_NAMES) if (fs.existsSync(path.join(root, n))) return "ROOT_HAS_SENSITIVE_ENTRY";
+  return null;
+}
+/** node kurulum önekinden YALNIZ bin ve lib dizinleri bağlanır (önek ev dizini/geniş dizin/hassas girdili ise hiçbir şey bağlanmaz; node o zaman sandbox içinde bulunmaz — sızıntıdan iyidir). */
+export function nodeToolchainRoots(execPath: string = process.execPath, homes: readonly string[] = homeDirs()): {roots: string[]; problem?: string} {
+  let real: string;
+  try { real = fs.realpathSync(execPath); } catch { return {roots: [], problem: "NODE_PATH_UNRESOLVABLE"}; }
+  const binDir = path.dirname(real), prefix = path.dirname(binDir);
+  if (path.basename(binDir) !== "bin") return {roots: [], problem: "NODE_NOT_IN_BIN_DIRECTORY"};
+  if (under("/usr", prefix)) return {roots: []}; // /usr zaten salt-okunur bağlıdır
+  if (!fs.existsSync(path.join(prefix, "lib", "node_modules")) && !fs.existsSync(path.join(prefix, "include", "node"))) return {roots: [], problem: "NODE_PREFIX_LAYOUT_UNRECOGNIZED"};
+  const pp = readOnlyRootProblem(prefix, homes);
+  if (pp) return {roots: [], problem: `NODE_PREFIX_${pp}`};
+  const roots: string[] = [];
+  for (const d of [path.join(prefix, "bin"), path.join(prefix, "lib")]) {
+    try { if (!fs.statSync(d).isDirectory()) continue; } catch { continue; }
+    const p = readOnlyRootProblem(d, homes);
+    if (p) return {roots: [], problem: `NODE_PREFIX_${p}`};
+    roots.push(d);
+  }
+  return {roots};
+}
+// Her kök için, sandbox içinde üst dizin listesinin YALNIZ kökün yoluna götüren bileşenleri içermesi gerektiğini söyleyen beklenti (F1 kanıtı: kardeş/üst dizin içeriği sızmaz).
+function ancestorListings(roots: readonly string[]): Map<string, string[]> {
+  const m = new Map<string, Set<string>>();
+  for (const r of roots) {
+    const parts = r.split("/").filter(Boolean);
+    for (let i = 1; i < parts.length; i++) { const a = "/" + parts.slice(0, i).join("/"); (m.get(a) ?? m.set(a, new Set()).get(a)!).add(parts[i]); }
+  }
+  return new Map([...m].map(([k, v]) => [k, [...v].sort()]));
+}
 function resolveTool(name: string): string | null {
   for (const dir of HELPER_PATH.split(":")) { const p = path.join(dir, name); try { fs.accessSync(p, fs.constants.X_OK); return p; } catch { /* sonraki */ } }
   return null;
@@ -90,10 +134,14 @@ export class LinuxUnshareSandboxProvider implements SandboxProvider {
   private shell = "/bin/sh";
   constructor(private readonly o: LinuxSandboxOptions = {}) {}
   private get unshare(): string { return this.o.unshareBinary ?? resolveTool("unshare") ?? "/usr/bin/unshare"; }
-  private extraRoots(): string[] {
-    const roots = this.o.readOnlyRoots ? [...this.o.readOnlyRoots] : [path.dirname(path.dirname(process.execPath))];
-    return [...new Set(roots.filter(r => path.isAbsolute(r) && r !== "/" && !/[:\s\\]/.test(r) && !under("/usr", r) && fs.existsSync(r)))].sort();
+  /** Bağlanacak ek kökler (doğrulanmış); reddedilen kökler asla bağlanmaz. Çözümlenemeyen/reddedilen varsayılan node öneki `toolchain().problem` ile görünür. */
+  toolchain(): {roots: string[]; problem?: string} {
+    if (!this.o.readOnlyRoots) return nodeToolchainRoots();
+    const ok = [...new Set(this.o.readOnlyRoots.filter(r => !under("/usr", String(r)) && readOnlyRootProblem(r) === null))].sort();
+    const nested = ok.filter(r => !ok.some(o => o !== r && under(o, r)));
+    return {roots: nested, ...(nested.length < this.o.readOnlyRoots.length ? {problem: "SOME_ROOTS_REFUSED"} : {})};
   }
+  private extraRoots(): string[] { return this.toolchain().roots; }
   /** Yeni kök için ana makinede VAR olan ve hiçbir kaynak yolun (scratch, ek kök) altında/üstünde olmayan bir bağlama noktası. */
   private newRootMount(cwd: string, extras: string[]): string | null {
     for (const c of ["/mnt", "/srv", "/media"]) {
@@ -102,11 +150,11 @@ export class LinuxUnshareSandboxProvider implements SandboxProvider {
     }
     return null;
   }
-  private args(cwd: string, timeoutMs: number, command: string[]): string[] | null {
+  private args(cwd: string, timeoutMs: number, command: string[], nprocOverride?: number): string[] | null {
     const extras = this.extraRoots(), root = this.newRootMount(cwd, extras);
     if (!root) return null;
     const cpu = Math.max(1, Math.ceil(timeoutMs / 1000)) + 5;
-    return [...NS_FLAGS, this.shell, "-c", SETUP, "sh", cwd, String(cpu), String(this.o.addressSpaceKb ?? 16 * 1024 * 1024), String(this.o.maxFileBlocks ?? 2 * 1024 * 1024), root, extras.join(":"), String(Math.max(16, Math.floor(this.o.maxProcesses ?? 4096))), ...command];
+    return [...NS_FLAGS, this.shell, "-c", SETUP, "sh", cwd, String(cpu), String(this.o.addressSpaceKb ?? 16 * 1024 * 1024), String(this.o.maxFileBlocks ?? 2 * 1024 * 1024), root, extras.join(":"), String(Math.max(16, Math.floor(nprocOverride ?? this.o.maxProcesses ?? 4096))), ...command];
   }
   /** Doğrulanmamış sağlayıcı hiçbir şey çalıştırmaz (ana makineye geri düşüş yok). */
   run(argv: string[], opts: SandboxRunOptions): Promise<ProcResult> {
@@ -121,16 +169,18 @@ export class LinuxUnshareSandboxProvider implements SandboxProvider {
     if (!opts.env || typeof opts.env !== "object") throw new Error("SANDBOX_REFUSED: ENV_REQUIRED"); // asla ana makine process.env'i miras alınmaz
     const a = this.args(cwd, 600_000, [command, ...args]);
     if (!a) throw new Error("SANDBOX_REFUSED: NO_NEW_ROOT_MOUNTPOINT");
-    return cp.spawn(this.unshare, a, {...opts, shell: false});
+    // detached = yeni oturum: kontrol eden terminal sandbox'a MİRAS KALMAZ (F2, TIOCSTI); çağıran süreç grubunu -pid ile öldürebilir (F5).
+    return cp.spawn(this.unshare, a, {...opts, shell: false, detached: true});
   }
-  private exec(argv: string[], opts: SandboxRunOptions): Promise<ProcResult> {
+  private exec(argv: string[], opts: SandboxRunOptions, nprocOverride?: number): Promise<ProcResult> {
     const problem = cwdProblem(opts.cwd);
     if (problem) return Promise.resolve(refusal(argv, problem));
     if (!Array.isArray(argv) || argv.length === 0 || argv.some(a => typeof a !== "string")) return Promise.resolve(refusal(argv ?? [], "ARGV_INVALID"));
     if (!opts.env || typeof opts.env !== "object") return Promise.resolve(refusal(argv, "ENV_REQUIRED"));
-    const a = this.args(opts.cwd, opts.timeoutMs, argv);
+    const a = this.args(opts.cwd, opts.timeoutMs, argv, nprocOverride);
     if (!a) return Promise.resolve(refusal(argv, "NO_NEW_ROOT_MOUNTPOINT"));
-    return runProcess([this.unshare, ...a], {cwd: opts.cwd, env: opts.env, timeoutMs: opts.timeoutMs, input: opts.input, shouldAbort: opts.shouldAbort});
+    // newSession: yeni oturum (terminal miras yok) + zaman aşımında tüm süreç GRUBUNA SIGKILL (ns-init dahil; pdeathsig'e güvenilmez, F5).
+    return runProcess([this.unshare, ...a], {cwd: opts.cwd, env: opts.env, timeoutMs: opts.timeoutMs, input: opts.input, shouldAbort: opts.shouldAbort, newSession: true});
   }
   selfTest(): Promise<{ok: boolean; detail?: string}> {
     return this.probing ??= this.probe().then(r => { this.verified = r.ok; return r; }, () => { this.verified = false; return {ok: false, detail: "SELFTEST_ERROR"}; });
@@ -148,7 +198,7 @@ export class LinuxUnshareSandboxProvider implements SandboxProvider {
     const outside = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-sbx-outside-"));
     const hostShm = path.join("/dev/shm", `uasco-sbx-canary-${process.pid}-${Date.now()}`), shmProbe = `uasco-sbx-private-${process.pid}-${Date.now()}`;
     const env: NodeJS.ProcessEnv = {PATH: HELPER_PATH};
-    let server: net.Server | null = null, connections = 0;
+    let server: net.Server | null = null, connections = 0, acceptedUnenforced = false;
     try {
       // Ana makine kanaryaları: dosya, dinleyen unix soketi, host /dev/shm dosyası. Sandbox bunların HİÇBİRİNİ görmemeli.
       const canary = path.join(outside, "canary.txt"); fs.writeFileSync(canary, "HOST-SECRET");
@@ -161,24 +211,37 @@ export class LinuxUnshareSandboxProvider implements SandboxProvider {
       const probe = [
         '[ "$PPID" = 1 ] && [ "$$" != 1 ] && echo supervisor_ok',
         `[ ! -e ${JSON.stringify(canary)} ] && [ ! -e ${JSON.stringify(sock)} ] && [ ! -e ${JSON.stringify(hostShm)} ] && echo host_fs_hidden`,
-        '[ ! -e /home ] && [ ! -e /root ] && [ ! -e /run ] && [ ! -e /var ] && [ ! -e /sys ] && [ ! -e /mnt ] && echo host_dirs_hidden',
+        // Üst düzey ana makine dizinleri yoktur; yalnız bir ek kökün YOLUNDAki üst düzey dizin (ör. /var/tmp/x için /var) bulunabilir ve içeriği aşağıdaki ancestor-listing kanıtıyla sınırlanır.
+        `${["/home", "/root", "/run", "/var", "/sys", "/mnt"].filter(d => !this.extraRoots().some(r => r.startsWith(d + "/"))).map(d => `[ ! -e ${d} ]`).concat("true").join(" && ")} && echo host_dirs_hidden`,
         '[ ! -w /usr ] && ! touch /usr/.sbx 2>/dev/null && ! touch /etc/.sbx 2>/dev/null && ! touch /.sbx 2>/dev/null && ! touch /dev/.sbx 2>/dev/null && echo root_ro_ok',
         `touch p && echo q > /tmp/t && echo s > /dev/shm/${shmProbe} && echo scratch_ok`,
         "! echo 60 > /proc/sys/vm/swappiness 2>/dev/null && ! echo x > /proc/sys/kernel/core_pattern 2>/dev/null && ! echo b > /proc/sysrq-trigger 2>/dev/null && echo proc_sys_ro_ok",
         "awk '{mp=$5; if (mp==\"/work\"||mp==\"/tmp\"||mp==\"/dev/shm\") next; if ($6 !~ /(^|,)ro(,|$)/) bad=1} END{exit bad}' /proc/self/mountinfo && echo mount_audit_ok",
         "[ \"$(awk '/^(CapInh|CapPrm|CapEff|CapBnd|CapAmb):/{print $2}' /proc/self/status | sort -u)\" = 0000000000000000 ] && grep -q '^NoNewPrivs:.1' /proc/self/status && echo caps_dropped_all",
         '[ -z "$(tail -n +3 /proc/net/dev | cut -d: -f1 | tr -d " " | grep -v "^lo$")" ] && echo net_none',
+        // F2: kontrol eden terminal yok (tty_nr = 0) ve /dev/tty düğümü yok -> TIOCSTI ile ana makine kabuğuna girdi basılamaz.
+        `[ "$(awk '{print $7}' /proc/self/stat)" = 0 ] && [ ! -e /dev/tty ] && echo no_ctty`,
+        // F1: ek salt-okunur köklerin üst dizinleri YALNIZ kökün yoluna giden bileşenleri içerir (kardeş/ana dizin içeriği, .ssh vb. görünmez).
+        `${[...ancestorListings(this.extraRoots())].map(([a, names]) => `[ "$(ls -A ${a} | LC_ALL=C sort | tr '\\n' ' ')" = "${names.join(" ")} " ]`).concat("true").join(" && ")} && echo extra_roots_isolated`,
         "! unshare -U true 2>/dev/null && echo nested_userns_blocked",
         '[ "$(ls /proc | grep -c "^[0-9]")" -lt 20 ] && echo pid_ns_private'
       ].join("; ");
       const iso = await this.exec(["sh", "-c", probe], {cwd: ws, env, timeoutMs: 20_000});
-      for (const token of ["supervisor_ok", "host_fs_hidden", "host_dirs_hidden", "root_ro_ok", "scratch_ok", "proc_sys_ro_ok", "mount_audit_ok", "caps_dropped_all", "net_none", "nested_userns_blocked", "pid_ns_private"]) if (!iso.stdout.includes(token)) return {ok: false, detail: `SELFTEST_${token.toUpperCase()}_FAILED`};
+      for (const token of ["supervisor_ok", "host_fs_hidden", "host_dirs_hidden", "root_ro_ok", "scratch_ok", "proc_sys_ro_ok", "mount_audit_ok", "caps_dropped_all", "net_none", "no_ctty", "extra_roots_isolated", "nested_userns_blocked", "pid_ns_private"]) if (!iso.stdout.includes(token)) return {ok: false, detail: `SELFTEST_${token.toUpperCase()}_FAILED`};
       if (!fs.existsSync(path.join(ws, "p"))) return {ok: false, detail: "SELFTEST_SCRATCH_NOT_HOST_VISIBLE"};
       if (fs.existsSync(hostShm) && fs.readFileSync(hostShm, "utf8") !== "HOST-SHM") return {ok: false, detail: "SELFTEST_HOST_SHM_TAMPERED"};
       if (fs.readdirSync("/dev/shm").some(n => n === shmProbe)) return {ok: false, detail: "SELFTEST_SHM_NOT_PRIVATE"};
       if (connections !== 0) return {ok: false, detail: "SELFTEST_HOST_SOCKET_REACHED"};
+      // F3: süreç sayısı sınırı GERÇEKTEN uygulanıyor mu (küçük bir sınırla aynı yoldan): sınırı aşan çatallar başarısız olmalı. Çekirdek init-user kuid 0'ı RLIMIT_NPROC'tan muaf tutar; supervisor root ise sınır uygulanamaz ve (acceptUnenforcedProcessLimit olmadıkça) sağlayıcı DOGRULANMAZ.
+      const NPROC_PROBE = 48;
+      const forks = 'ok=0; fail=0; i=0; while [ $i -lt 150 ]; do if (sleep 25 &) 2>/dev/null; then ok=$((ok+1)); else fail=$((fail+1)); fi; i=$((i+1)); done; echo ok=$ok fail=$fail';
+      const lim = await this.exec(["sh", "-c", forks], {cwd: ws, env, timeoutMs: 30_000}, NPROC_PROBE);
+      const okN = Number(/ok=(\d+)/.exec(lim.stdout)?.[1] ?? Number.NaN), failN = Number(/fail=(\d+)/.exec(lim.stdout)?.[1] ?? Number.NaN);
+      const nprocEnforced = Number.isFinite(okN) && Number.isFinite(failN) && failN > 0 && okN <= NPROC_PROBE;
+      if (!nprocEnforced && !this.o.acceptUnenforcedProcessLimit) return {ok: false, detail: "SELFTEST_PROCESS_LIMIT_NOT_ENFORCED"};
+      acceptedUnenforced = !nprocEnforced;
       // Süreç ağacı: SIGTERM'i yok sayan, setsid yapan, pdeathsig'ini temizlemeye çalışan ve zaman aşımından sonra dosya yazmayı deneyen düşman çocuk.
-      const evil = 'perl -e \'syscall(157,1,0); $SIG{TERM}="IGNORE"; $SIG{HUP}="IGNORE"; setpgrp; sleep 3; open(F,">late.txt"); print F 1; close F; exec("sleep","62.41")\' & exec sleep 62.41';
+      const evil = 'perl -e \'syscall(157,1,0); syscall(101,16,1,0,0); $SIG{TERM}="IGNORE"; $SIG{HUP}="IGNORE"; setpgrp; sleep 3; open(F,">late.txt"); print F 1; close F; exec("sleep","62.41")\' & exec sleep 62.41';
       const fallback = 'trap "" TERM HUP; (sleep 3; : > late.txt; exec sleep 62.41) & exec sleep 62.41';
       const t0 = Date.now();
       const to = await this.exec(["sh", "-c", `if command -v perl >/dev/null 2>&1; then ${evil}; else ${fallback}; fi`], {cwd: ws, env, timeoutMs: 1500});
@@ -190,7 +253,7 @@ export class LinuxUnshareSandboxProvider implements SandboxProvider {
       // stdin geçişi (runner test girdisi verebilir)
       const sin = await this.exec(["sh", "-c", "read -r l; echo got=$l"], {cwd: ws, env, timeoutMs: 20_000, input: "PIPED\n"});
       if (!sin.stdout.includes("got=PIPED")) return {ok: false, detail: "SELFTEST_STDIN_NOT_FORWARDED"};
-      return {ok: true};
+      return acceptedUnenforced ? {ok: true, detail: "PROCESS_LIMIT_NOT_ENFORCED_ACCEPTED"} : {ok: true};
     } finally {
       try { server?.close(); } catch { /* kapalı */ }
       fs.rmSync(ws, {recursive: true, force: true}); fs.rmSync(outside, {recursive: true, force: true}); fs.rmSync(hostShm, {force: true});
