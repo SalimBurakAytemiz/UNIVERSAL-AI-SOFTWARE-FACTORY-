@@ -651,17 +651,18 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-22T05:46:29Z",
+    "at": "2026-10-22T07:44:24Z",
     "by": "coordinator",
-    "integrationHead": "6383eeb",
+    "integrationHead": "4fe0e2b",
     "openProductionPrs": [
       66,
-      181,
-      183,
-      186,
       187,
-      188,
-      190
+      192,
+      194,
+      195,
+      196,
+      197,
+      198
     ],
     "next": "Verify #136 review result; integration L1; first-delivery orchestrator on L1; lanes continue.",
     "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified.",
@@ -1614,6 +1615,48 @@
       "pr": 177,
       "mergeCommit": "6383eeb",
       "mergedAt": "2026-10-22T05:44:29Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 190,
+      "mergeCommit": "36e4409",
+      "mergedAt": "2026-10-22T06:06:41Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 188,
+      "mergeCommit": "47a4feb",
+      "mergedAt": "2026-10-22T06:08:30Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 183,
+      "mergeCommit": "76b7511",
+      "mergedAt": "2026-10-22T06:12:32Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 191,
+      "mergeCommit": "e39320c",
+      "mergedAt": "2026-10-22T06:45:17Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 193,
+      "mergeCommit": "5f808e5",
+      "mergedAt": "2026-10-22T06:57:34Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 181,
+      "mergeCommit": "af0e6d2",
+      "mergedAt": "2026-10-22T07:08:30Z",
+      "mergedBy": "SalimBurakAytemiz"
+    },
+    {
+      "pr": 186,
+      "mergeCommit": "4fe0e2b",
+      "mergedAt": "2026-10-22T07:15:27Z",
       "mergedBy": "SalimBurakAytemiz"
     }
   ],
