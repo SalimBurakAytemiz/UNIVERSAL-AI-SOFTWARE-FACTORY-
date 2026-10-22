@@ -1,6 +1,7 @@
 //TR: Bu dosya bir projenin ilk-teslim akışı durumunu (görev planı, koşu, review, teslim) yalnız Work OS store'daki doğrulanmış kayıtlardan türetir; kayıt yoksa NOT_STARTED, bilinmeyende UNKNOWN yazar, hiçbir olumlu durum uydurmaz.
 import type {Scope, WorkRun} from "./types.js";
-import {effectiveTestCommand, targetMission} from "./readiness.js";
+import {targetMission} from "./readiness.js";
+import {effectiveTestCommand} from "./runner.js";
 import type {WorkOsStore} from "./store.js";
 import {linkedTaskIds} from "./task-run-link.js";
 

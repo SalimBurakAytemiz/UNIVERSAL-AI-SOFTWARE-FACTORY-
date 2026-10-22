@@ -3,7 +3,7 @@ import type {Scope, WorkMission as Mission, Project} from "./types.js";
 import type {WorkOsStore} from "./store.js";
 import {riskAdmitted, RISK_REFUSAL} from "./risk-admission.js";
 import {testCommandAllowed} from "./schemas.js";
-import {managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
+import {effectiveTestCommand, repositoryPrecondition} from "./runner.js";
 
 export type ReadinessState = "OK" | "BLOCKED" | "UNKNOWN";
 export type ReadinessCheckId = "MISSION" | "RISK" | "REPOSITORY" | "TEST_COMMAND" | "PLAN";
@@ -11,8 +11,6 @@ export type ReadinessCheckId = "MISSION" | "RISK" | "REPOSITORY" | "TEST_COMMAND
 export interface ReadinessCheck { id: ReadinessCheckId; state: ReadinessState; blocking: boolean; reason: string | null; nextAction: string | null }
 export interface ProjectReadiness { projectId: string; missionId: string | null; ready: boolean; verifiable: boolean; checks: ReadinessCheck[] }
 
-// //TR: runner.ts rawTestCommand ile AYNI öncelik (mission komutu proje komutunu ezer). runner.ts Lane C'nindir; sapma tests/v7-b1-workos.test.ts'teki eşlik testiyle yakalanır.
-export const effectiveTestCommand = (m: Pick<Mission, "testCommand"> | undefined, p: Pick<Project, "testCommand"> | undefined): string[] | undefined => m?.testCommand ?? p?.testCommand;
 // Hedef mission: en yeni tamamlanmamış; yoksa null (flow ve readiness aynı seçimi kullanır).
 export const targetMission = (missions: Mission[]): Mission | undefined =>
   [...missions].filter(m => m.status !== "COMPLETE").sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.missionId.localeCompare(a.missionId))[0];
@@ -21,14 +19,10 @@ const ok = (id: ReadinessCheckId, blocking = true): ReadinessCheck => ({id, stat
 const bad = (id: ReadinessCheckId, reason: string, nextAction: string, blocking = true): ReadinessCheck => ({id, state: "BLOCKED", blocking, reason, nextAction});
 const unknown = (id: ReadinessCheckId, blocking = true): ReadinessCheck => ({id, state: "UNKNOWN", blocking, reason: "SOURCE_UNREADABLE", nextAction: null});
 
-// runner.ts stepWorkspace (repo?.path / url / managed / pathOverlapsDataDir) sırası ve gerekçe kodları; yol veya URL asla döndürülmez.
+// runner.ts ile AYNI saf fonksiyon (repositoryPrecondition); yol veya URL asla döndürülmez.
 function repositoryCheck(project: Project, dataDir: string): ReadinessCheck {
-  const repo = project.repository;
-  if (!repo?.path) return bad("REPOSITORY", repo?.url ? "REMOTE_REPO_NOT_SUPPORTED_YET" : "REPOSITORY_NOT_CONFIGURED", "CONFIGURE_REPOSITORY");
-  try {
-    if (repo.managed === true) return managedRepoCanonical(dataDir, project.projectId, repo.path) ? ok("REPOSITORY") : bad("REPOSITORY", "REPOSITORY_NOT_MANAGED", "CONFIGURE_REPOSITORY");
-    return pathOverlapsDataDir(repo.path, dataDir).forbidden ? bad("REPOSITORY", "REPOSITORY_PATH_FORBIDDEN", "CONFIGURE_REPOSITORY") : ok("REPOSITORY");
-  } catch { return unknown("REPOSITORY"); }
+  try { const r = repositoryPrecondition(project, dataDir); return r.ok ? ok("REPOSITORY") : bad("REPOSITORY", r.reason, "CONFIGURE_REPOSITORY"); }
+  catch { return unknown("REPOSITORY"); }
 }
 
 export function deriveReadiness(store: WorkOsStore, scope: Scope, projectId: string): ProjectReadiness | undefined {

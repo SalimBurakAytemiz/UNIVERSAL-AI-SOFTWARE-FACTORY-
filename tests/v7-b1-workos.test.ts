@@ -2311,9 +2311,35 @@ describe("LANE-B run readiness", () => {
     expect((await app.inject({method: "POST", url: `/v1/projects/${p.projectId}/readiness`, headers: hdr, payload: {}})).statusCode).toBe(404);
   });
 
-  it("test-command precedence stays identical to the runner's (parity guard on runner.ts source)", () => {
-    const src = fs.readFileSync(path.join(process.cwd(), "core/workos/runner.ts"), "utf8");
-    expect(src).toContain("return m?.testCommand ?? p?.testCommand;");
-    expect(src).toContain('const repo = project.repository;\n    if (!repo?.path) return {kind: "BLOCK", reason: repo?.url ? "REMOTE_REPO_NOT_SUPPORTED_YET" : "REPOSITORY_NOT_CONFIGURED"};');
+  it("a configured repository path that does not exist is BLOCKED with the runner's own code", async () => {
+    const {app, store} = await mk();
+    const p = proj(store, {repository: {path: path.join(tmp, "no-such-readiness-repo")}});
+    msn(store, p.projectId);
+    const r = await rd(app, p.projectId);
+    expect(by(r).REPOSITORY).toMatchObject({state: "BLOCKED", reason: "REPOSITORY_PATH_NOT_FOUND"});
+    expect(r.body).not.toContain("no-such-readiness-repo");
+  });
+
+  it("readiness REPOSITORY answers are exactly the runner's own repositoryPrecondition reasons for all five BLOCK cases", async () => {
+    const {repositoryPrecondition} = await import("../core/workos/runner.js");
+    const {app, store} = await mk();
+    const dataDir = path.join(tmp, "data"), okDir = path.join(tmp, "readiness-parity-ok"); fs.mkdirSync(okDir, {recursive: true});
+    const cases: [string, any, string | null][] = [
+      ["none", undefined, "REPOSITORY_NOT_CONFIGURED"],
+      ["url only", {url: "https://example.com/a.git"}, "REMOTE_REPO_NOT_SUPPORTED_YET"],
+      ["managed foreign path", {path: okDir, managed: true}, "REPOSITORY_NOT_MANAGED"],
+      ["inside data dir", {path: dataDir}, "REPOSITORY_PATH_FORBIDDEN"],
+      ["missing dir", {path: path.join(tmp, "readiness-parity-missing")}, "REPOSITORY_PATH_NOT_FOUND"],
+      ["ok", {path: okDir}, null]
+    ];
+    for (const [name, repository, want] of cases) {
+      const p = proj(store, repository ? {repository} : {});
+      msn(store, p.projectId);
+      const pre = repositoryPrecondition(store.getProject({tenantId: "tA"}, p.projectId)!, store.dataDir);
+      const got = by(await rd(app, p.projectId)).REPOSITORY;
+      expect(pre.ok ? null : pre.reason, name).toBe(want);
+      expect(got.reason, name).toBe(want);
+      expect(got.state, name).toBe(want ? "BLOCKED" : "OK");
+    }
   });
 });
