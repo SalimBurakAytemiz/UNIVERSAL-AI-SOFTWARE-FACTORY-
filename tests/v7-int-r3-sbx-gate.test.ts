@@ -372,6 +372,43 @@ describe("LANE-C Linux unshare sandbox provider v2 (SandboxProvider contract)", 
     } finally { delete process.env.UASCO_SBX_SECRET_PROBE; fs.rmSync(ws, {recursive: true, force: true}); fs.rmSync(outside, {force: true}); }
   });
 
+  it("negative: a caller PATH with sandbox-internal, relative or empty entries (/work, shims, '::') never reaches the privileged setup phase (setpriv/prlimit/sh are resolved with the fixed helper PATH)", { timeout: T2 }, async () => {
+    if (!hostCanIsolate) return;
+    const ws = mkws();
+    try {
+      const shims = path.join(ws, "shims"); fs.mkdirSync(shims);
+      for (const t of ["setpriv", "prlimit", "sh", "awk", "mount", "pivot_root"]) {
+        // each planted binary records, from inside the sandbox, the capability sets it was given; they must never run
+        fs.writeFileSync(path.join(shims, t), `#!/usr/bin/env sh\ngrep -E '^CapEff:' /proc/self/status > /work/SHIM_RAN_${t}\nexec /usr/bin/${t} "$@"\n`, {mode: 0o755});
+      }
+      fs.writeFileSync(path.join(ws, "caps.mjs"), "import fs from 'node:fs'; console.log(fs.readFileSync('/proc/self/status', 'utf8').split('\\n').filter(l => /^CapEff:/.test(l)).join('') + ' pid1=' + (process.ppid === 1));\n");
+      for (const callerPath of ["/work/shims:/usr/bin:/bin", "shims:/usr/bin:/bin", "/usr/bin::/bin", ":/usr/bin:/bin", "/usr/bin:/bin:"]) {
+        const r = await provider.run([process.execPath, "caps.mjs"], {cwd: ws, env: {PATH: callerPath}, timeoutMs: 30_000});
+        expect([callerPath, r.exitCode]).toEqual([callerPath, 0]);
+        expect(r.stdout).toMatch(/CapEff:\s+0000000000000000 pid1=true/);
+        expect([callerPath, fs.readdirSync(ws).filter(n => n.startsWith("SHIM_RAN_"))]).toEqual([callerPath, []]);
+      }
+    } finally { fs.rmSync(ws, {recursive: true, force: true}); }
+  });
+
+  it("process count: maxProcesses is applied as RLIMIT_NPROC to the project (best effort); where the kernel enforces it (supervisor not kuid 0) forks beyond it fail", { timeout: T2 }, async () => {
+    if (!hostCanIsolate) return;
+    const capped = new LinuxUnshareSandboxProvider({maxProcesses: 40});
+    expect(await capped.selfTest()).toEqual({ok: true});
+    const ws = mkws();
+    try {
+      const lim = await capped.run(["sh", "-c", "grep 'Max processes' /proc/self/limits | tr -s ' '"], {cwd: ws, env: env(), timeoutMs: 30_000});
+      expect(lim.stdout).toContain("Max processes 40 40 processes");
+      if ((process.getuid?.() ?? 0) !== 0) { // the kernel exempts kuid 0 (init user) from RLIMIT_NPROC, so enforcement can only be shown for a non-root supervisor
+        const loop = 'ok=0; fail=0; i=0; while [ $i -lt 100 ]; do if (sleep 20 &) 2>/dev/null; then ok=$((ok+1)); else fail=$((fail+1)); fi; i=$((i+1)); done; echo ok=$ok fail=$fail';
+        const r = await capped.run(["sh", "-c", loop], {cwd: ws, env: env(), timeoutMs: 30_000});
+        const [ok, fail] = [/ok=(\d+)/.exec(r.stdout)?.[1], /fail=(\d+)/.exec(r.stdout)?.[1]].map(Number);
+        expect(fail).toBeGreaterThan(0);
+        expect(ok).toBeLessThanOrEqual(40);
+      }
+    } finally { fs.rmSync(ws, {recursive: true, force: true}); }
+  });
+
   it("negative: the project is never pid 1 and cannot outlive a timeout (clears pdeathsig, setsid, ignores TERM); unsafe cwd, env-less and invalid argv are refused", { timeout: T2 }, async () => {
     if (!hostCanIsolate) return;
     const ws = mkws();

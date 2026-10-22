@@ -12,6 +12,8 @@ import type {SandboxProvider, SandboxRunOptions} from "../workos/execution-gate.
 export const LINUX_SANDBOX_ID = "linux-unshare-v2";
 export interface LinuxSandboxOptions {
   unshareBinary?: string; platform?: NodeJS.Platform; addressSpaceKb?: number; maxFileBlocks?: number;
+  /** RLIMIT_NPROC (süreç+iş parçacığı) üst sınırı; yalnız supervisor kuid 0 DEĞİLSE çekirdek tarafından uygulanır (varsayılan 4096). */
+  maxProcesses?: number;
   /** Salt-okunur bağlanacak ek araç zinciri kökleri (varsayılan: node kurulum öneki, /usr altında değilse). */
   readOnlyRoots?: readonly string[];
 }
@@ -23,7 +25,12 @@ const REQUIRED_TOOLS = ["mount", "umount", "pivot_root", "setpriv", "mkdir", "ln
 const SETUP = [
   "set -eu; set -f",
   'CALLER_PATH="$PATH"; PATH=' + HELPER_PATH + "; export PATH",
-  'SCRATCH="$1"; CPU="$2"; VMKB="$3"; FSZ="$4"; R="$5"; EXTRA_RO="$6"; shift 6',
+  'SCRATCH="$1"; CPU="$2"; VMKB="$3"; FSZ="$4"; R="$5"; EXTRA_RO="$6"; NPROC="$7"; shift 7',
+  // //TR: Yetenekler bırakılmadan ÖNCE çalışacak yardımcılar (setpriv/prlimit) ve denetçi kabuk, sabit HELPER_PATH ile MUTLAK yola çözülür; arayanın PATH'i (proje yazılabilir bir dizin içerebilir) ayrıcalıklı yürütmede ASLA kullanılmaz.
+  'SETPRIV=$(command -v setpriv) && SUPSH=$(command -v sh) || exit 126',
+  'PRL=$(command -v prlimit 2>/dev/null) || PRL=""',
+  // //TR: prlimit best-effort: sunucunun hard NPROC sınırı istenen değerin altındaysa (yükseltmek init userns CAP_SYS_RESOURCE ister) ayar atlanır; komut bu yüzden başarısız OLMAZ.
+  'if [ -n "$PRL" ] && ! "$PRL" --nproc="$NPROC" true 2>/dev/null; then PRL=""; fi',
   "mount --make-rprivate /",
   'mount -t tmpfs -o mode=755,size=16m tmpfs "$R"',
   'mkdir "$R/usr" "$R/etc" "$R/dev" "$R/proc" "$R/tmp" "$R/work"',
@@ -53,7 +60,9 @@ const SETUP = [
   'ulimit -t "$CPU" && ulimit -v "$VMKB" && ulimit -f "$FSZ" || exit 126',
   'export TMPDIR=/tmp HOME=/tmp PATH="$CALLER_PATH"',
   "cd /work",
-  "exec setpriv --no-new-privs --bounding-set=-all --inh-caps=-all sh -c 'exec 3<&0; \"$@\" <&3 3<&- & c=$!; wait $c; exit $?' sh \"$@\""
+  "INNER='exec 3<&0; \"$@\" <&3 3<&- & c=$!; wait $c; exit $?'",
+  'if [ -n "$PRL" ]; then exec "$PRL" --nproc="$NPROC" "$SETPRIV" --no-new-privs --bounding-set=-all --inh-caps=-all "$SUPSH" -c "$INNER" sh "$@"; fi',
+  'exec "$SETPRIV" --no-new-privs --bounding-set=-all --inh-caps=-all "$SUPSH" -c "$INNER" sh "$@"'
 ].join("\n");
 
 const now = () => new Date().toISOString();
@@ -97,7 +106,7 @@ export class LinuxUnshareSandboxProvider implements SandboxProvider {
     const extras = this.extraRoots(), root = this.newRootMount(cwd, extras);
     if (!root) return null;
     const cpu = Math.max(1, Math.ceil(timeoutMs / 1000)) + 5;
-    return [...NS_FLAGS, this.shell, "-c", SETUP, "sh", cwd, String(cpu), String(this.o.addressSpaceKb ?? 16 * 1024 * 1024), String(this.o.maxFileBlocks ?? 2 * 1024 * 1024), root, extras.join(":"), ...command];
+    return [...NS_FLAGS, this.shell, "-c", SETUP, "sh", cwd, String(cpu), String(this.o.addressSpaceKb ?? 16 * 1024 * 1024), String(this.o.maxFileBlocks ?? 2 * 1024 * 1024), root, extras.join(":"), String(Math.max(16, Math.floor(this.o.maxProcesses ?? 4096))), ...command];
   }
   /** Doğrulanmamış sağlayıcı hiçbir şey çalıştırmaz (ana makineye geri düşüş yok). */
   run(argv: string[], opts: SandboxRunOptions): Promise<ProcResult> {
