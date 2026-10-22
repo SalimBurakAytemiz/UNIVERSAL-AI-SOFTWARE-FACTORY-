@@ -33,7 +33,9 @@ function resolveReal(p: string): string {
   let cur = path.resolve(p); const rest: string[] = [];
   for (;;) { const r = realOrNull(cur); if (r !== null) return path.join(r, ...rest.reverse()); const up = path.dirname(cur); if (up === cur) return path.resolve(p); rest.push(path.basename(cur)); cur = up; }
 }
-const within = (base: string, p: string) => { const r = path.relative(base, p); return r === "" || (!r.startsWith("..") && !path.isAbsolute(r)); };
+// //TR: "..x" adlı bir dizin üst dizin kaçışı DEĞİLDİR; yalnız tam ".." veya "../" ile başlayan göreli yol dışarıdır.
+const within = (base: string, p: string) => { const r = path.relative(base, p); return r === "" || (r !== ".." && !r.startsWith(".." + path.sep) && !path.isAbsolute(r)); };
+const sameFile = (a: string, b: string) => (process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b);
 
 export class EvaluationStaging {
   private readonly root: string;      // çözümlenmiş staging kökü
@@ -45,6 +47,8 @@ export class EvaluationStaging {
     try { rootLink = fs.lstatSync(lexRoot).isSymbolicLink(); } catch { /* henüz yok */ }
     if (rootLink) throw new EvaluationStagingError("STAGING_SYMLINK_REFUSED");
     this.root = resolveReal(lexRoot);
+    // //TR: Kökün ATALARINDAN biri symlink/junction ise gerçek yol sözcüksel yoldan sapar: yazma, veri dizininin dışına düşebilir; reddedilir (gerçek bir yol verin).
+    if (!sameFile(this.root, lexRoot)) throw new EvaluationStagingError("STAGING_SYMLINK_REFUSED");
     this.base = path.join(this.root, ...evidenceParts);
     // //TR: Kök altındaki var olan bir bileşen symlink/junction ise gerçek yol sözcüksel yoldan sapar; reddedilir.
     if (resolveReal(path.join(lexRoot, ...evidenceParts)) !== this.base) throw new EvaluationStagingError("STAGING_SYMLINK_REFUSED");
@@ -61,7 +65,7 @@ export class EvaluationStaging {
     const p = this.evidencePaths(roleId, evaluationId);
     return [p.evidence, p.artifact].some(f => { try { fs.lstatSync(f); return true; } catch { return false; } });
   }
-  private ensureDir(dir: string): void {
+  private ensureDir(dir: string, created?: string[]): void {
     // //TR: Kökten role dizinine her bileşen tek tek oluşturulur/kontrol edilir; her biri gerçek dizin olmalı (symlink/junction reddedilir).
     const chain = [this.root];
     for (const seg of path.relative(this.root, dir).split(path.sep).filter(Boolean)) chain.push(path.join(chain[chain.length - 1], seg));
@@ -69,10 +73,24 @@ export class EvaluationStaging {
       let st: fs.Stats | null = null;
       try { st = fs.lstatSync(d); } catch { st = null; }
       // //TR: Kök (ve yalnız kök) üst dizinleriyle birlikte oluşturulabilir; üstündeki atalar bölge denetimiyle (gerçek yol) korunur, kökün altı bileşen bileşen.
-      if (st === null) { fs.mkdirSync(d, {mode: 0o700, recursive: d === this.root}); st = fs.lstatSync(d); }
+      if (st === null) { fs.mkdirSync(d, {mode: 0o700, recursive: d === this.root}); created?.push(d); st = fs.lstatSync(d); }
       if (st.isSymbolicLink() || !st.isDirectory()) throw new EvaluationStagingError("STAGING_SYMLINK_REFUSED");
     }
     if (realOrNull(dir) !== dir) throw new EvaluationStagingError("STAGING_PATH_CHANGED");
+  }
+  // //TR: Executor BAŞLAMADAN önce yazılabilirlik yoklaması: dizin zincirini oluşturur, geçici dosya + link dener ve HİÇBİR iz bırakmaz (oluşturduğu boş dizinleri geri siler); yazılamayan bir kök gerçek (ücretli) bir koşudan SONRA keşfedilmez.
+  preflight(roleId: string, evaluationId: string): void {
+    const p = this.evidencePaths(roleId, evaluationId), created: string[] = [];
+    const probe = path.join(p.dir, `.probe-${process.pid}-${crypto.randomBytes(4).toString("hex")}.tmp`);
+    try {
+      this.ensureDir(p.dir, created);
+      const fd = fs.openSync(probe, "wx", 0o600); fs.closeSync(fd);
+      fs.linkSync(probe, `${probe}.lnk`);
+    } catch (e) { throw e instanceof EvaluationStagingError ? e : new EvaluationStagingError("STAGING_WRITE_FAILED"); }
+    finally {
+      for (const f of [`${probe}.lnk`, probe]) { try { fs.unlinkSync(f); } catch { /* yoklama dosyası yok */ } }
+      for (const d of created.reverse()) { try { fs.rmdirSync(d); } catch { /* boş değilse veya yoksa bırak */ } }
+    }
   }
   // //TR: Yalnız sabit dosya adlarına yazar; var olan dosyanın üzerine ASLA yazmaz (link ile atomik, EEXIST = STAGING_EVIDENCE_EXISTS).
   write(roleId: string, evaluationId: string, kind: "artifact" | "evidence", bytes: string): string {
@@ -110,7 +128,10 @@ export type EvaluationOutcome =
 
 // ---------------------------------------------------------------- git helpers (yalnız geçici depolarda)
 const ID = ["-c", "user.name=UASCO Evaluation", "-c", "user.email=evaluation@local.invalid", "-c", "commit.gpgsign=false"];
-const git = (cwd: string, args: string[]) => spawnGitSync(cwd, args, {maxBuffer: 16 * 1024 * 1024});
+// //TR: Ortamdaki GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE vb. değişkenler geçici depolardaki git komutlarını gerçek checkout'a yönlendirebilir; hat bunları ASLA devralmaz (CLI ayrıca --execute'u reddeder).
+export const GIT_REPO_ENV = /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE|PREFIX|CEILING_DIRECTORIES)$/i;
+const cleanGitEnv = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([k]) => !GIT_REPO_ENV.test(k)));
+const git = (cwd: string, args: string[]) => spawnGitSync(cwd, args, {maxBuffer: 16 * 1024 * 1024, env: cleanGitEnv()});
 const gitOut = (cwd: string, args: string[]): string | null => { const r = git(cwd, args); return r.status === 0 ? String(r.stdout ?? "") : null; };
 function seedRepo(dir: string, files: Readonly<Record<string, string>>): string {
   fs.mkdirSync(dir, {recursive: true});
@@ -143,11 +164,15 @@ async function goldenFile(c: ProcCtx): Promise<ProcedureRun> {
     checks.push({id: "builder_commit_accepted", passed: false, detail: r.blockReason.slice(0, 100)});
     return {infra: null, checks, artifact: {implementerLog: log}, identities};
   }
-  const head = (gitOut(ws, ["rev-parse", "HEAD"]) ?? "").trim();
+  const headOut = gitOut(ws, ["rev-parse", "HEAD"]);
+  if (headOut === null) return {infra: "WORKSPACE_INSPECT_FAILED", checks: [], artifact: {}, identities};
+  const head = headOut.trim();
   const produced = SHA_RE.test(head) && head !== start && git(ws, ["merge-base", "--is-ancestor", start, head]).status === 0;
   checks.push({id: "commit_produced", passed: produced, detail: produced ? head : "no descendant commit of the start commit"});
   if (!produced) return {infra: null, checks, artifact: {implementerLog: log}, identities};
-  const names = (gitOut(ws, ["diff", "--name-status", "-z", "--no-renames", "--no-ext-diff", start, head]) ?? "").split("\0").filter(Boolean);
+  const nameOut = gitOut(ws, ["diff", "--name-status", "-z", "--no-renames", "--no-ext-diff", start, head]);
+  if (nameOut === null) return {infra: "WORKSPACE_INSPECT_FAILED", checks: [], artifact: {}, identities};
+  const names = nameOut.split("\0").filter(Boolean);
   const only = names.length === 2 && names[0] === "A" && names[1] === GOLDEN_FILE.path;
   checks.push({id: "only_expected_file_added", passed: only, detail: names.join(" ").slice(0, 200)});
   const blob = gitOut(ws, ["cat-file", "blob", `${head}:${GOLDEN_FILE.path}`]);
@@ -160,6 +185,7 @@ async function goldenFile(c: ProcCtx): Promise<ProcedureRun> {
 }
 
 // ---------------------------------------------------------------- procedure: golden-review-v1 (security-reviewer)
+const REVIEW_VIOLATION = /^REVIEW_WORKSPACE_(HEAD_CHANGED|MODIFIED|GIT_CHANGED)$/;
 async function goldenReview(c: ProcCtx): Promise<ProcedureRun> {
   const reviewer = c.pair.reviewer, identities = {reviewer: reviewer.identity};
   const checks: EvalCheck[] = [], cases: unknown[] = [];
@@ -175,12 +201,16 @@ async function goldenReview(c: ProcCtx): Promise<ProcedureRun> {
     const r = await reviewer.review(clone, spec, diff, {timeoutMs: c.timeoutMs, ...(c.shouldAbort ? {shouldAbort: c.shouldAbort} : {})});
     if (r.aborted) return {infra: "ABORTED", checks: [], artifact: {}, identities};
     if (r.timedOut || r.transient) return {infra: "TIMEOUT_OR_TRANSIENT", checks: [], artifact: {}, identities};
-    const untouched = (gitOut(clone, ["rev-parse", "HEAD"]) ?? "").trim() === head && gitOut(clone, ["status", "--porcelain", "--untracked-files=all"]) === "";
-    checks.push({id: `${k.id}.read_only`, passed: untouched && !/^REVIEW_WORKSPACE_/.test(r.invalidReason ?? ""), detail: untouched ? "clone untouched" : "clone modified"});
+    // //TR: REVIEW_WORKSPACE_NOT_CLEAN_BEFORE bir ÖNKOŞULDUR (review başlamadan önce klon temiz değildi): altyapıdır. Yalnız review SONRASI değişim (HEAD/dosya/.git) rolün ihlalidir. Klon incelenemezse sonuç yoktur.
+    if (r.invalidReason === "REVIEW_WORKSPACE_NOT_CLEAN_BEFORE") return {infra: "REVIEW_CLONE_NOT_CLEAN_BEFORE", checks: [], artifact: {}, identities};
+    const headNow = gitOut(clone, ["rev-parse", "HEAD"]), statusNow = gitOut(clone, ["status", "--porcelain", "--untracked-files=all"]);
+    if (headNow === null || statusNow === null) return {infra: "CLONE_INSPECTION_FAILED", checks: [], artifact: {}, identities};
+    const untouched = headNow.trim() === head && statusNow === "";
+    checks.push({id: `${k.id}.read_only`, passed: untouched && !REVIEW_VIOLATION.test(r.invalidReason ?? ""), detail: untouched ? "clone untouched" : "clone modified"});
     const findings = (r.findings ?? []).slice(0, 20).map(f => ({severity: String(f.severity).slice(0, 20), title: String(f.title).slice(0, 200)}));
     if (!r.valid) {
       // //TR: Geçersiz review: sözleşmeye uymayan ama süreç 0 ile bitmiş çıktı rolün hatasıdır; diğer geçersizlikler (profil, yol, çıkış kodu) altyapıdır.
-      if (/^REVIEW_WORKSPACE_/.test(r.invalidReason ?? "")) { cases.push({id: k.id, expected: k.expected, valid: false, invalidReason: r.invalidReason}); continue; }
+      if (REVIEW_VIOLATION.test(r.invalidReason ?? "")) { cases.push({id: k.id, expected: k.expected, valid: false, invalidReason: r.invalidReason}); continue; }
       if (r.exitCode === 0 && !r.invalidReason) { checks.push({id: `${k.id}.verdict_matches`, passed: false, detail: "no contract-conforming verdict line"}); cases.push({id: k.id, expected: k.expected, valid: false}); continue; }
       return {infra: `REVIEW_INVALID:${(r.invalidReason ?? `exit=${r.exitCode}`).slice(0, 80)}`, checks: [], artifact: {}, identities};
     }
@@ -197,13 +227,23 @@ async function goldenPredev(c: ProcCtx, fn: FirstDeliveryFunction): Promise<Proc
   const builder = c.pair.preDevBuilder?.();
   if (!kind) return {infra: "PREDEV_KIND_UNKNOWN", checks: [], artifact: {}, identities};
   if (!builder) return {infra: "PREDEV_BUILDER_UNAVAILABLE", checks: [], artifact: {}, identities};
-  if (c.shouldAbort) builder.shouldAbort = c.shouldAbort;
+  // //TR: Hattın zaman sınırı (deps.timeoutMs, rol limitiyle sıkılaşmış) builder'a da uygulanır: dış abort veya son tarih süreci öldürür; son tarih kaynaklı iptal TIMEOUT olarak kaydedilir.
+  const deadline = Date.now() + c.timeoutMs; let deadlineHit = false;
+  builder.shouldAbort = () => { if (c.shouldAbort?.()) return true; if (Date.now() > deadline) { deadlineHit = true; return true; } return false; };
   const approvedUpstream: Partial<Record<ArtifactKind, unknown>> = {};
   for (const up of PREDEV_ORDER.slice(0, PREDEV_ORDER.indexOf(kind))) approvedUpstream[up] = TASKHUB_ARTIFACTS[up];
   const ctx = {brief: TASKHUB_BRIEF, approvedUpstream: approvedUpstream as never};
   let out: string;
   try { out = await builder.produce(kind, composeRolePrompt(kind, ctx), ctx); }
-  catch (e) { return {infra: e instanceof PreDevBuilderError ? `PREDEV_BUILDER:${e.code}` : "PREDEV_BUILDER_UNEXPECTED", checks: [], artifact: {}, identities}; }
+  catch (e) {
+    if (!(e instanceof PreDevBuilderError)) return {infra: "PREDEV_BUILDER_UNEXPECTED", checks: [], artifact: {}, identities};
+    if (e.code === "PREDEV_BUILDER_ABORTED" && deadlineHit) return {infra: "TIMEOUT", checks: [], artifact: {}, identities};
+    // //TR: Süreç 0 ile bitti ama sözleşmeye uymayan çıktı (boş / aşırı büyük) rolün sonucudur; diğer her builder hatası altyapıdır.
+    if (e.code === "PREDEV_BUILDER_EMPTY_OUTPUT" || e.code === "PREDEV_BUILDER_OUTPUT_TOO_LARGE") {
+      return {infra: null, checks: [{id: "builder_output_accepted", passed: false, detail: e.code}], artifact: {kind, builderFailure: e.code}, identities: {builder: builder.lastTrace?.identity ?? "unknown"}};
+    }
+    return {infra: `PREDEV_BUILDER:${e.code}`, checks: [], artifact: {}, identities};
+  }
   identities.builder = builder.lastTrace?.identity ?? "unknown";
   const checks: EvalCheck[] = [];
   let parsed: unknown = null, parses = true;
@@ -226,6 +266,7 @@ export const EVALUATION_PROCEDURES: readonly Procedure[] = [
 ];
 
 // ---------------------------------------------------------------- pipeline
+const redactedJson = (x: unknown): string => JSON.stringify(x, (_k, v) => (typeof v === "string" ? redactSecrets(v) : v), 2) + "\n";
 export function planFor(roleId: string, evaluationId: string, bindings: readonly RoleExecutionProfile[] = FIRST_DELIVERY_BINDINGS): {profile: RoleExecutionProfile; procedure: Procedure} | {refused: string} {
   if (!ROLE_RE.test(roleId) || !EV_RE.test(evaluationId)) return {refused: "EVALUATION_BAD_IDS"};
   const profile = bindings.find(b => b.roleId === roleId);
@@ -258,7 +299,7 @@ export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, ev
   if (!spec) return {status: "REFUSED", reason: "REGISTRY_SPEC_NOT_FOUND"};
   if (spec.kind !== procedure.specKind) return {status: "REFUSED", reason: `SPEC_KIND_MISMATCH:${spec.kind}`};
   let staging: EvaluationStaging;
-  try { staging = new EvaluationStaging(deps.stagingRoot, deps.repoRoot); if (staging.exists(roleId, evaluationId)) return {status: "REFUSED", reason: "STAGING_EVIDENCE_EXISTS"}; }
+  try { staging = new EvaluationStaging(deps.stagingRoot, deps.repoRoot); if (staging.exists(roleId, evaluationId)) return {status: "REFUSED", reason: "STAGING_EVIDENCE_EXISTS"}; staging.preflight(roleId, evaluationId); }
   catch (e) { return {status: "REFUSED", reason: e instanceof EvaluationStagingError ? e.code : "STAGING_UNAVAILABLE"}; }
   // //TR: executorKind çağıranın beyanı değil, çiftin kendi türüdür; FAKE her zaman FAKE damgalanır.
   const executorKind = deps.pair.kind === "FAKE" ? "FAKE" as const : "LOCAL_CLAUDE" as const;
@@ -276,23 +317,25 @@ export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, ev
   if (verdict === null) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: "NO_CHECKS_EVALUATED"};
   const endedAt = now().toISOString();
   const rel = `${EVIDENCE_ROOT}/${roleId}`;
-  const artifactText = redactSecrets(JSON.stringify({roleId, evaluationId, procedure: procedure.version, checks: run.checks, ...run.artifact}, null, 2) + "\n");
+  // //TR: Redaksiyon JSON metnine değil string DEĞERLERİNE uygulanır (serileştirilmiş "\\nAKIA..." içinde \b eşleşmezdi). Kontrol ayrıntıları da redakte edilir; çıktı, kanıt ve CLI aynı baytları görür.
+  const checks = run.checks.map(c => ({...c, detail: redactSecrets(c.detail)}));
+  const artifactText = redactedJson({roleId, evaluationId, procedure: procedure.version, checks, ...run.artifact});
   const codeHead = git(deps.repoRoot, ["rev-parse", "HEAD"]);
   const evidence = {
     schemaVersion: "1.0.0", roleId, evaluationId, verdict, executorKind, fake: executorKind === "FAKE",
     procedure: {id: procedure.id, version: procedure.version, fixtureDigest: procedure.fixtureDigest, covers: procedure.covers, doesNotCover: procedure.doesNotCover},
     spec: {kind: spec.kind, specRef: spec.specRef, statusAtRun: spec.status, specTextAvailableInRepository: false},
     executor: {kind: executorKind, identities: run.identities}, binding: {function: profile.function, providerRoute: profile.providerRoute, sha256: sha256Json(profile)},
-    checks: run.checks, startedAt, endedAt, codeHeadSha: codeHead.status === 0 ? String(codeHead.stdout).trim() : null,
+    checks, startedAt, endedAt, codeHeadSha: codeHead.status === 0 ? String(codeHead.stdout).trim() : null,
     artifactPath: `${rel}/${evaluationId}.artifact.json`, artifactSha256: sha256(artifactText), note: EVALUATION_NOTE
   };
   // //TR: Kontrol ayrıntıları model/ajan kontrollü metin (dosya adı vb.) taşıyabilir; kanıt dosyası da artefakt gibi redakte edilir (hash redakte edilmiş baytlara bağlanır).
-  const evidenceText = redactSecrets(JSON.stringify(evidence, null, 2) + "\n");
+  const evidenceText = redactedJson(evidence);
   let artifactFile: string, evidenceFile: string;
   try { artifactFile = staging.write(roleId, evaluationId, "artifact", artifactText); evidenceFile = staging.write(roleId, evaluationId, "evidence", evidenceText); }
   catch (e) { return {status: "REFUSED", reason: e instanceof EvaluationStagingError ? e.code : "STAGING_WRITE_FAILED"}; }
   const evidenceRef = `${rel}/${evaluationId}.json#sha256=${sha256(evidenceText)}`;
   // //TR: Şeffaflık: aynı doğrulayıcı, staging kökünü depo kökü gibi görerek kanıtı denetler (terfi sonrası sonuç). FAKE kanıtı burada FAKE_EVIDENCE ile reddedilir.
   const problem = createEvidenceVerifier(path.resolve(deps.stagingRoot))(evidenceRef, roleId, evaluationId, verdict);
-  return {status: "EVALUATED", verdict, roleId, evaluationId, executorKind, evidenceRef, evidenceFile, artifactFile, checks: run.checks, verifier: {countsIfPromoted: problem === null, problem}};
+  return {status: "EVALUATED", verdict, roleId, evaluationId, executorKind, evidenceRef, evidenceFile, artifactFile, checks, verifier: {countsIfPromoted: problem === null, problem}};
 }

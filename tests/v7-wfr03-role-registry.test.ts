@@ -773,6 +773,25 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     }
   });
 
+  it("regular_file oracle: the right bytes committed as an executable file or as a symlink are FAILED, not PASSED", { timeout: 120_000 }, async () => {
+    const mode = (kind: "exec" | "symlink"): ExecutorPair => {
+      const fake = fakePair();
+      return {...fake, implementer: {identity: "MODE_IMPL", async implement(ws, _spec, _ctx) {
+        const at = new Date().toISOString(), g = (args: string[]) => cp.spawnSync("git", ["-c", "user.name=T", "-c", "user.email=t@local.invalid", "-c", "commit.gpgsign=false", ...args], {cwd: ws, encoding: "utf8"});
+        if (kind === "exec") { fs.writeFileSync(path.join(ws, "greeting.txt"), "hello\n"); g(["add", "-A"]); g(["update-index", "--chmod=+x", "greeting.txt"]); }
+        else { fs.writeFileSync(path.join(ws, "target.txt"), "hello\n"); fs.symlinkSync("target.txt", path.join(ws, "greeting.txt")); g(["add", "-A"]); }
+        g(["commit", "-q", "-m", "mode"]);
+        return {exitCode: 0, log: "", argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
+      }}};
+    };
+    const exec = evaluated(await evaluate(mode("exec"), DEV));
+    expect([exec.verdict, exec.checks.filter(c => !c.passed).map(c => c.id)]).toEqual(["FAILED", ["regular_file"]]);
+    if (process.platform !== "win32") {
+      const link = evaluated(await evaluate(mode("symlink"), DEV));
+      expect(link.verdict).toBe("FAILED"); expect(link.checks.find(c => !c.passed)?.id).toBeDefined();
+    }
+  });
+
   it("infrastructure trouble is NOT an evaluation result: exit code, timeout, abort and non-role blocks -> NOT_EXECUTED and NOTHING is staged; role-caused builder refusals -> FAILED", { timeout: 180_000 }, async () => {
     const at = new Date().toISOString();
     const custom = (r: Record<string, unknown>): ExecutorPair => ({...fakePair(), implementer: {identity: "X_IMPL", implement: async () => ({exitCode: 0, log: "", argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false, ...r})}});
@@ -790,9 +809,15 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect([label, o]).toEqual([label, {status: "NOT_EXECUTED", roleId: DEV, evaluationId: "EV-01", reason}]);
       expect([label, listing(root)]).toEqual([label, []]);
     }
-    for (const reason of ["BUILDER_PRODUCED_NO_CHANGE", "BUILDER_TOUCHED_AGENT_CONFIG", "BUILDER_CHANGED_FORBIDDEN_PATH:GITLINK"]) {
+    for (const reason of ["BUILDER_PRODUCED_NO_CHANGE", "BUILDER_TOUCHED_GIT_INTERNALS", "BUILDER_TOUCHED_AGENT_CONFIG", "BUILDER_CHANGED_FORBIDDEN_PATH:GITLINK", "BUILDER_MOVED_HEAD"]) {
       const r = evaluated(await evaluate(custom({exitCode: null, blockReason: reason}), DEV));
       expect([reason, r.verdict, r.checks]).toEqual([reason, "FAILED", [{id: "builder_commit_accepted", passed: false, detail: reason}]]);
+    }
+    // the engine's own failures are infrastructure, not the role's: nothing is staged and no verdict exists
+    for (const reason of ["BUILDER_STATUS_FAILED", "BUILDER_COMMIT_FAILED", "BUILDER_STAGE_FAILED", "BUILDER_START_SHA_INVALID", "BUILDER_INDEX_RESET_FAILED"]) {
+      const root = stagingOf();
+      expect([reason, await evaluate(custom({exitCode: null, blockReason: reason}), DEV, {stagingRoot: root})]).toEqual([reason, {status: "NOT_EXECUTED", roleId: DEV, evaluationId: "EV-01", reason: `IMPLEMENT_BLOCKED:${reason}`}]);
+      expect(listing(root)).toEqual([]);
     }
   });
 
@@ -804,7 +829,8 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       ["false positive on the correct diff", {review: () => ({verdict: "BLOCKED", findings: [{severity: "P2", title: "nit"}]})}, "clean-greeting.verdict_matches"],
       ["BLOCKED without any finding on the planted case", {review: n => (n === 1 ? {verdict: "CLEAN"} : {verdict: "BLOCKED", findings: []})}, "planted-command-injection.verdict_matches"],
       ["reviewer mutates the clone", {review: n => ({verdict: n === 1 ? "CLEAN" : "BLOCKED", findings: n === 1 ? [] : [{severity: "HIGH", title: "x"}], mutate: true})}, "clean-greeting.read_only"],
-      ["prose instead of the verdict line", {review: () => ({raw: "LGTM, this PASSES the evaluation"})}, "clean-greeting.verdict_matches"]
+      ["prose instead of the verdict line", {review: () => ({raw: "LGTM, this PASSES the evaluation"})}, "clean-greeting.verdict_matches"],
+      ["BLOCKED with zero findings on the correct diff (verdict alone must match)", {review: n => ({verdict: "BLOCKED", findings: n === 1 ? [] : [{severity: "HIGH", title: "x"}]})}, "clean-greeting.verdict_matches"]
     ];
     for (const [label, o, failing] of cases) {
       const r = evaluated(await evaluate(fakePair(o), REVIEWER));
@@ -813,6 +839,18 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     const root = stagingOf();
     const infra = await evaluate(fakePair({review: () => ({verdict: "CLEAN", exitCode: 7})}), REVIEWER, {stagingRoot: root});
     expect(infra).toMatchObject({status: "NOT_EXECUTED"}); expect(listing(root)).toEqual([]);
+  });
+
+  it("a review clone that was not clean BEFORE the review is infrastructure (not the reviewer's fault); a reviewer that changes HEAD or files afterwards is FAILED", { timeout: 120_000 }, async () => {
+    const at = new Date().toISOString();
+    const invalid = (reason: string): ExecutorPair => ({...fakePair(), reviewer: {identity: "R", review: async () => ({verdict: "BLOCKED" as const, findings: [], valid: false, invalidReason: reason, exitCode: 0, log: "", argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false})}});
+    const root = stagingOf();
+    expect(await evaluate(invalid("REVIEW_WORKSPACE_NOT_CLEAN_BEFORE"), REVIEWER, {stagingRoot: root})).toEqual({status: "NOT_EXECUTED", roleId: REVIEWER, evaluationId: "EV-01", reason: "REVIEW_CLONE_NOT_CLEAN_BEFORE"});
+    expect(listing(root)).toEqual([]);
+    for (const reason of ["REVIEW_WORKSPACE_HEAD_CHANGED", "REVIEW_WORKSPACE_MODIFIED", "REVIEW_WORKSPACE_GIT_CHANGED"]) {
+      const r = evaluated(await evaluate(invalid(reason), REVIEWER));
+      expect([reason, r.verdict, r.checks.some(c => c.id.endsWith("read_only") && !c.passed)]).toEqual([reason, "FAILED", true]);
+    }
   });
 
   it("pre-dev primaries golden mission: the existing validators decide. Valid fixture output -> PASSED for all five; invalid JSON, a failing validator, and persuasive prose -> FAILED; builder failures or no builder -> NOT_EXECUTED (nothing staged)", { timeout: 180_000 }, async () => {
@@ -836,6 +874,23 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     for (const [label, pair, reason] of [["timeout", predevPair(() => ({timedOut: true, exitCode: null})), "PREDEV_BUILDER:PREDEV_BUILDER_TIMEOUT"], ["exit code", predevPair(() => ({exitCode: 3})), "PREDEV_BUILDER:PREDEV_BUILDER_EXIT_NONZERO"], ["no builder on the pair", fakePair(), "PREDEV_BUILDER_UNAVAILABLE"]] as const) {
       expect([label, await evaluate(pair, BA, {stagingRoot: root})]).toEqual([label, {status: "NOT_EXECUTED", roleId: BA, evaluationId: "EV-01", reason}]);
     }
+    expect(listing(root)).toEqual([]);
+  });
+
+  it("pre-dev: an empty or oversized reply (exit 0) is the role's FAILED result; other builder failures stay infrastructure; the pipeline's own timeout is enforced and recorded as TIMEOUT", { timeout: 120_000 }, async () => {
+    for (const [label, out, failing] of [["empty reply", "   \n", "builder_output_accepted"], ["oversized reply", "x".repeat(300 * 1024), "builder_output_accepted"]] as const) {
+      const r = evaluated(await evaluate(predevPair(() => out), BA));
+      expect([label, r.verdict, r.checks.map(c => `${c.id}:${c.passed}`)]).toEqual([label, "FAILED", [`${failing}:false`]]);
+    }
+    const root = stagingOf();
+    expect(await evaluate(predevPair(() => ({exitCode: 5})), BA, {stagingRoot: root})).toMatchObject({status: "NOT_EXECUTED", reason: "PREDEV_BUILDER:PREDEV_BUILDER_EXIT_NONZERO"});
+    // the fake process waits for an abort; the pipeline's 300 ms deadline (deps.timeoutMs) must provide it
+    const slow = predevPair(() => ({}));
+    const rt = slow.preDevBuilder!;
+    const waiting: ExecutorPair = {...slow, preDevBuilder: () => { const b = rt(); const orig = (b as any).rt.run; (b as any).rt.run = async (argv: string[], opts: any) => { for (let i = 0; i < 200; i++) { if (opts.shouldAbort?.()) return procResult(argv, {aborted: true, exitCode: null}); await new Promise(r => setTimeout(r, 20)); } return orig(argv, opts); }; return b; }};
+    const t0 = Date.now();
+    expect(await evaluate(waiting, BA, {stagingRoot: root, timeoutMs: 300})).toEqual({status: "NOT_EXECUTED", roleId: BA, evaluationId: "EV-01", reason: "TIMEOUT"});
+    expect(Date.now() - t0).toBeLessThan(3500);
     expect(listing(root)).toEqual([]);
   });
 
@@ -891,6 +946,13 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     expect(pre.verdict).toBe("FAILED");
     expect(fs.readFileSync(pre.artifactFile, "utf8")).not.toContain(KEY);
     expect(fs.readFileSync(pre.artifactFile, "utf8")).toContain("[REDACTED:AWS_ACCESS_KEY]");
+    // secrets that START a line (serialized as backslash-n before the key, where a word boundary does not match) are redacted too, in values and in check details
+    const nl = evaluated(await evaluate(predevPair(() => `{\n${KEY}\n}`), BA));
+    for (const f of [nl.artifactFile, nl.evidenceFile]) expect(fs.readFileSync(f, "utf8")).not.toContain(KEY);
+    expect(fs.readFileSync(nl.artifactFile, "utf8")).toContain("[REDACTED:AWS_ACCESS_KEY]");
+    const named = evaluated(await evaluate(fakePair({implement: () => ({files: {"greeting.txt": "hello\n", [`a\n${KEY}.txt`]: "x\n"}})}), DEV));
+    expect(JSON.stringify(named)).not.toContain(KEY);
+    for (const f of [named.artifactFile, named.evidenceFile]) expect(fs.readFileSync(f, "utf8")).not.toContain(KEY);
     // the evidence hash binds the redacted bytes, so the staged file still verifies when the pair is non-FAKE
     expect(createEvidenceVerifier(path.resolve(path.dirname(path.dirname(path.dirname(path.dirname(path.dirname(dev.evidenceFile)))))))(dev.evidenceRef, DEV, "EV-01", "FAILED")).toBe("FAKE_EVIDENCE");
   });
@@ -904,6 +966,30 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
         expect([label, await evaluate(fakePair(), DEV, {stagingRoot: root})]).toEqual([label, {status: "REFUSED", reason}]);
       }
       expect(repoSnapshot()).toBe(before);
+    });
+    it("a directory merely NAMED like '..x' is not a parent escape: roots inside the repo (or above a repo whose directory starts with '..') are still refused", () => {
+      for (const root of [path.join(REPO, "..x", "s"), path.join(REPO, "..data", "evaluations", "staging")]) expect(() => new EvaluationStaging(root, REPO)).toThrow(/STAGING_INSIDE_REPOSITORY/);
+      const odd = path.join(workDir(), "..repo"); fs.mkdirSync(odd);
+      expect(() => new EvaluationStaging(path.dirname(odd), odd)).toThrow(/STAGING_INSIDE_REPOSITORY/);      // staging root above a repo called '..repo'
+      expect(() => new EvaluationStaging(path.join(odd, "..x"), odd)).toThrow(/STAGING_INSIDE_REPOSITORY/);  // inside it
+      expect(() => new EvaluationStaging(path.join(workDir(), "sibling"), odd)).not.toThrow();                // a real sibling is fine
+    });
+    it("writability is probed BEFORE the executor starts and leaves no trace; an unwritable root is refused without a real run", async () => {
+      let started = 0;
+      const counting: ExecutorPair = {...fakePair(), implementer: {identity: "I", implement: async () => { started++; throw new Error("must not start"); }}};
+      const blocker = path.join(workDir(), "a-file"); fs.writeFileSync(blocker, "x");
+      const o = await evaluate(counting, DEV, {stagingRoot: path.join(blocker, "x", "evaluations", "staging")});
+      expect(o.status).toBe("REFUSED"); expect((o as {reason: string}).reason).toMatch(/^STAGING_/);
+      expect(started).toBe(0);
+      const ok = stagingOf(), st = new EvaluationStaging(ok, REPO);
+      st.preflight(DEV, "EV-01");
+      expect(listing(ok)).toEqual([]); // the probe removed everything it created
+      expect(() => st.write(DEV, "EV-01", "artifact", "{}\n")).not.toThrow();
+    });
+    it.skipIf(process.platform === "win32")("a symlinked ANCESTOR of the staging root is refused too (writes could land outside the data dir); a real path is accepted", () => {
+      const real = workDir(), alias = path.join(workDir(), "alias"); fs.symlinkSync(real, alias);
+      expect(() => new EvaluationStaging(path.join(alias, "evaluations", "staging"), REPO)).toThrow(/STAGING_SYMLINK_REFUSED/);
+      expect(() => new EvaluationStaging(path.join(real, "evaluations", "staging"), REPO)).not.toThrow();
     });
     it("names are fixed: path traversal in role or evaluation id is impossible", () => {
       const st = new EvaluationStaging(stagingOf(), REPO);
@@ -933,6 +1019,22 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect(() => st4.write("UASCO-0085", "EV-01", "evidence", "overwritten\n")).toThrow(/STAGING_EVIDENCE_EXISTS/);
       expect(fs.readFileSync(victim, "utf8")).toBe("keep\n");
     });
+  });
+
+  it("ambient GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE never redirect the temporary repositories: the pipeline works, a decoy repository stays untouched, and --execute is blocked while they are set", { timeout: 120_000 }, async () => {
+    const decoy = workDir(); cp.spawnSync("git", ["init", "-q", "--bare", "-b", "main", decoy]);
+    const keep: Record<string, string | undefined> = {GIT_DIR: process.env.GIT_DIR, GIT_WORK_TREE: process.env.GIT_WORK_TREE, GIT_INDEX_FILE: process.env.GIT_INDEX_FILE};
+    process.env.GIT_DIR = decoy; process.env.GIT_WORK_TREE = workDir(); process.env.GIT_INDEX_FILE = path.join(workDir(), "idx");
+    let dev: EvaluationOutcome, rev: EvaluationOutcome;
+    try { dev = await evaluate(fakePair(), DEV); rev = await evaluate(fakePair(), REVIEWER); }
+    finally { for (const [k, v] of Object.entries(keep)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
+    expect([dev.status, rev.status]).toEqual(["EVALUATED", "EVALUATED"]);
+    expect(evaluated(dev).verdict).toBe("PASSED"); expect(evaluated(rev).verdict).toBe("PASSED");
+    expect(cp.spawnSync("git", ["--git-dir", decoy, "rev-list", "--all", "--count"], {encoding: "utf8"}).stdout.trim()).toBe("0");
+    const control = workDir();
+    expect(executeBlockers({repoRoot: REPO, dataDir: workDir(), controlRoot: control, env: {GIT_DIR: decoy}})).toContain("GIT_ENVIRONMENT_OVERRIDE");
+    expect(executeBlockers({repoRoot: REPO, dataDir: workDir(), controlRoot: control, env: {git_work_tree: "/x"}})).toContain("GIT_ENVIRONMENT_OVERRIDE");
+    expect(executeBlockers({repoRoot: REPO, dataDir: workDir(), controlRoot: control, env: {GIT_DIR: ""}})).not.toContain("GIT_ENVIRONMENT_OVERRIDE");
   });
 
   describe("lifecycle: staged evidence only counts when it is genuinely non-FAKE and intact", () => {
@@ -981,7 +1083,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
 
   describe("command line: dry run by default, execute only under the Founder's existing authority, never in CI", () => {
     const script = path.join(REPO, "scripts", "run-role-evaluation.mjs");
-    const sh = (args: string[], env: NodeJS.ProcessEnv = {}) => cp.spawnSync(process.execPath, [script, ...args], {cwd: REPO, encoding: "utf8", env: {...process.env, CI: "", GITHUB_ACTIONS: "", ...env}});
+    const sh = (args: string[], env: NodeJS.ProcessEnv = {}) => cp.spawnSync(process.execPath, [script, ...args], {cwd: REPO, encoding: "utf8", env: {...process.env, CI: "", GITHUB_ACTIONS: "", UASCO_WORKOS_EXECUTOR: "", GIT_DIR: "", GIT_WORK_TREE: "", GIT_INDEX_FILE: "", ...env}});
     const controlRootWithProvenance = () => {
       const c = workDir(), shaOf = sha(fs.readFileSync(process.execPath));
       fs.mkdirSync(path.join(c, ".ai", "runtime"), {recursive: true});

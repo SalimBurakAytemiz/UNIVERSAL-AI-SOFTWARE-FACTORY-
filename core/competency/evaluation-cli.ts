@@ -4,7 +4,7 @@ import path from "node:path";
 import {ExecutorSetup} from "../workos/executor-setup.js";
 import {LocalClaudeExecutors} from "../workos/executors.js";
 import type {ExecutorPair} from "../workos/executors.js";
-import {EVALUATION_NOTE, EvaluationStaging, EvaluationStagingError, planFor, registrySpec, runRoleEvaluation} from "./evaluation-pipeline.js";
+import {EVALUATION_NOTE, EvaluationStaging, EvaluationStagingError, GIT_REPO_ENV, planFor, registrySpec, runRoleEvaluation} from "./evaluation-pipeline.js";
 
 export interface CliOptions {
   repoRoot: string; env: NodeJS.ProcessEnv; out: (s: string) => void; err: (s: string) => void;
@@ -37,6 +37,8 @@ const truthy = (v: string | undefined) => v !== undefined && v !== "" && v !== "
 export function executeBlockers(o: {repoRoot: string; dataDir: string; controlRoot: string; env: NodeJS.ProcessEnv; findClaudeCli?: () => string | null}): string[] {
   const blockers: string[] = [];
   if (truthy(o.env.CI) || truthy(o.env.GITHUB_ACTIONS)) blockers.push("CI_ENVIRONMENT");
+  // //TR: Ortamda GIT_DIR / GIT_WORK_TREE vb. varsa adaptörlerin git komutları gerçek checkout'a yönelebilir: gerçek çalıştırma reddedilir.
+  if (Object.keys(o.env).some(k => GIT_REPO_ENV.test(k) && o.env[k] !== undefined && o.env[k] !== "")) blockers.push("GIT_ENVIRONMENT_OVERRIDE");
   let paid: unknown = undefined;
   try { paid = JSON.parse(fs.readFileSync(path.join(o.repoRoot, "config", "automation.json"), "utf8")).allowPaidApi; } catch { /* okunamazsa fail-closed */ }
   if (paid !== false) blockers.push("PAID_API_NOT_DISABLED");
