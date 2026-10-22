@@ -52,6 +52,14 @@ const CREW_DETAIL_RE=/^\/v1\/crew\/msn_[0-9a-f]{24}$/;
 // //TR: UI-049: salt-okunur bağımsız review kararları; liste /v1/reviews (yalnız isteğe bağlı missionId/runId sorgusu listQueryAllowed ile), tek kayıt yalnız kanonik evd_ + 24 hex kimliğidir (sorgu/alt yol/sondaki eğik çizgi/büyük-küçük/uzunluk hileleri fail-closed reddedilir). Yazma yoktur ve EXTRA_GET_ROUTES kümesi BÜYÜMEZ (güvenlik anlık görüntüleri korunur).
 const REVIEWS_LIST_RE=/^\/v1\/reviews$/;
 const REVIEW_DETAIL_RE=/^\/v1\/reviews\/evd_[0-9a-f]{24}$/;
+// //TR: COORD-FIRST-DELIVERY-WIRING (Founder onayı 2026-10-21): ilk teslim zincirinin salt-okunur okumaları tam eşleşen, çapalı desenlerle izinlenir: intake listesi sorgusuz, tek intake itk_ + 24 hex, mission görevleri msn_ + 24 hex, proje akışı prj_ + 24 hex, tek görev tsk_ + 24 hex. Sorgu/alt yol/sondaki eğik çizgi/büyük-küçük/uzunluk hileleri fail-closed reddedilir; EXTRA_GET_ROUTES kümesi BÜYÜMEZ.
+const INTAKES_LIST_RE=/^\/v1\/intakes$/;
+const INTAKE_DETAIL_RE=/^\/v1\/intakes\/itk_[0-9a-f]{24}$/;
+const MISSION_TASKS_RE=/^\/v1\/missions\/msn_[0-9a-f]{24}\/tasks$/;
+const PROJECT_FLOW_RE=/^\/v1\/projects\/prj_[0-9a-f]{24}\/flow$/;
+const TASK_DETAIL_RE=/^\/v1\/tasks\/tsk_[0-9a-f]{24}$/;
+const TASK_RUNS_RE=/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/runs$/;
+const FIRST_DELIVERY_GET_RES=[INTAKES_LIST_RE,INTAKE_DETAIL_RE,MISSION_TASKS_RE,PROJECT_FLOW_RE,TASK_DETAIL_RE,TASK_RUNS_RE];
 const QUERY_RULES={missionId:/^msn_[0-9a-f]{24}$/,runId:/^[A-Za-z0-9_-]{6,64}$/,kind:/^[A-Z][A-Z0-9_]{0,39}$/,cursor:/^[A-Za-z0-9_.=:-]{1,128}$/,limit:/^[1-9][0-9]{0,2}$/,accountId:/^acc_[0-9a-f]{24}$/,invoiceId:/^inv_[0-9a-f]{24}$/};
 function listQueryAllowed(value,base,keys){
   if(!value.startsWith(base+"?"))return false;
@@ -103,7 +111,7 @@ function projectStudioGetAllowed(value){
 function desktopExtraGetPathAllowed(value){
   if(projectStudioGetAllowed(value))return true;
   if(typeof value!=="string"||value.length>400)return false;
-  return EXTRA_GET_ROUTES.has(value)||ROLE_DETAIL_RE.test(value)||ACADEMY_LIST_RE.test(value)||ACADEMY_DETAIL_RE.test(value)||PREDEV_DETAIL_RE.test(value)||CREW_DETAIL_RE.test(value)||DELIVERY_DETAIL_RE.test(value)||DELIVERY_LIST_RE.test(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"])||listQueryAllowed(value,"/v1/roles",["limit","cursor"])||listQueryAllowed(value,"/v1/company/contacts",["accountId"])||listQueryAllowed(value,"/v1/company/opportunities",["accountId"])||listQueryAllowed(value,"/v1/company/invoices",["accountId"])||listQueryAllowed(value,"/v1/company/payments",["invoiceId"])||listQueryAllowed(value,"/v1/company/contracts",["accountId"])||REVIEWS_LIST_RE.test(value)||REVIEW_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/reviews",["missionId","runId"]);
+  return EXTRA_GET_ROUTES.has(value)||FIRST_DELIVERY_GET_RES.some(re=>re.test(value))||ROLE_DETAIL_RE.test(value)||ACADEMY_LIST_RE.test(value)||ACADEMY_DETAIL_RE.test(value)||PREDEV_DETAIL_RE.test(value)||CREW_DETAIL_RE.test(value)||DELIVERY_DETAIL_RE.test(value)||DELIVERY_LIST_RE.test(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"])||listQueryAllowed(value,"/v1/roles",["limit","cursor"])||listQueryAllowed(value,"/v1/company/contacts",["accountId"])||listQueryAllowed(value,"/v1/company/opportunities",["accountId"])||listQueryAllowed(value,"/v1/company/invoices",["accountId"])||listQueryAllowed(value,"/v1/company/payments",["invoiceId"])||listQueryAllowed(value,"/v1/company/contracts",["accountId"])||REVIEWS_LIST_RE.test(value)||REVIEW_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/reviews",["missionId","runId"]);
 }
 // B4-ALLOWLIST-END
 
@@ -114,7 +122,9 @@ const POST_MAX_BODY_BYTES=32768;
 const POST_ROUTE_RES=[/^\/v1\/projects$/,/^\/v1\/missions$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/transition$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/runs$/,
   /^\/v1\/projects\/prj_[0-9a-f]{24}\/import$/,/^\/v1\/projects\/prj_[0-9a-f]{24}\/devrun\/(?:start|stop|restart)$/,/^\/v1\/projects\/prj_[0-9a-f]{24}\/export$/,/^\/v1\/system\/executors\/local-claude\/enable$/,
   // M1a c2: teslim paketini hazırla ve NOT_VERIFIED kaynak teslimini kabul et; dışa aktarma yalnız ana süreç köprüsündedir (hash ana süreçte yeniden doğrulanır).
-  /^\/v1\/work-runs\/run_[0-9a-f]{24}\/delivery\/(?:prepare|accept)$/];
+  /^\/v1\/work-runs\/run_[0-9a-f]{24}\/delivery\/(?:prepare|accept)$/,
+  // COORD-FIRST-DELIVERY-WIRING (Founder onayı 2026-10-21): fikir -> proje + ilk mission, görev planı ve görev durum geçişi; kimlikler sıkı biçimli, gövde aynı 32 KB sınırında.
+  /^\/v1\/intakes$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/plan$/,/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/transition$/,/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/runs$/];
 function desktopPostPathAllowed(value){
   return typeof value==="string"&&value.length<=128&&POST_ROUTE_RES.some(re=>re.test(value));
 }
@@ -224,7 +234,8 @@ async function apiPost(pathName,bodyText){
   return {status:r.status,body:sanitizePostBody(r.status,parsed)};
 }
 // //TR: PS-1B: hash yönlendirmesi (#/projects vb.) aynı belgede kalır ve senderFrame.url sonuna "#..." ekler; güvenilir gönderen kontrolü yalnız fragmanı yok sayar, dosya yolu birebir aynı olmalıdır (başka dosya/URL hâlâ reddedilir).
-function trustedSender(event){const u=event.senderFrame?.url;return Boolean(controlWindow)&&event.sender===controlWindow.webContents&&typeof u==="string"&&u.split("#")[0]===rendererUrl}
+// //TR: WIN-INSTALL: Node pathToFileURL "~" karakterini %7E olarak kodlar, Chromium senderFrame.url ise "~" bırakır (ör. 8.3 kısa yol C:\Users\RUNNER~1); bu yüzden metin eşleşmezse yalnız file: şemalı, sorgusuz, aynı host ve yüzde-çözülmüş aynı yol kabul edilir.
+function trustedSender(event){const u=event.senderFrame?.url;if(!(Boolean(controlWindow)&&event.sender===controlWindow.webContents&&typeof u==="string"))return false;const base=u.split("#")[0];if(base===rendererUrl)return true;try{const a=new URL(base),b=new URL(rendererUrl);return a.protocol==="file:"&&a.search===""&&a.host===b.host&&decodeURIComponent(a.pathname)===decodeURIComponent(b.pathname)}catch{return false}}
 function requireTrustedSender(event){if(!trustedSender(event))throw new Error("UNTRUSTED_IPC_SENDER")}
 
 // //TR: PS-1B ana süreç köprüleri: renderer yalnız tür ("git"|"zip"), proje kimliği ve dışa aktarma kimliği verir; yol, URL ve konum ana süreçte çözülür. Önizleme güvenli seçenek olarak varsayılan tarayıcıda açılır (uygulama içi pencere yok): üretilen uygulamanın kodu Electron sürecine/oturumuna hiç girmez, token ve IPC yüzeyine erişemez; URL yine de yalnız backend devrun durumundan, sıkı loopback biçiminde alınır.

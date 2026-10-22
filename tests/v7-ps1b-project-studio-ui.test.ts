@@ -217,6 +217,11 @@ describe("PS-1B IPC wiring (main.mjs, preload.mjs) is static and narrow", () => 
     expect(fn(ev(rendererUrl, {}))).toBe(false);
     expect(fn({sender: win.webContents})).toBe(false);
     expect(mk(null)(ev(rendererUrl))).toBe(false);
+    // Node's pathToFileURL encodes "~" as %7E while Chromium keeps "~" (8.3 short paths such as C:\Users\RUNNER~1).
+    const shortUrl = "file:///C:/Users/RUNNER%7E1/AppData/Local/Temp/UASCO/resources/app/apps/desktop/renderer/index.html";
+    const fnShort = new Function("controlWindow", "rendererUrl", "function trustedSender(event){" + m![1] + "}\nreturn trustedSender;")(win, shortUrl) as (e: any) => boolean;
+    for (const u of [shortUrl, shortUrl.replace("%7E", "~"), shortUrl.replace("%7E", "~") + "#/work"]) expect(fnShort(ev(u)), u).toBe(true);
+    for (const u of [shortUrl.replace("%7E", "~") + "?x=1", shortUrl.replace("RUNNER%7E1", "OTHER~1"), shortUrl.replace("%7E", "~").replace("index.html", "x.html"), "file://evil/C:/Users/RUNNER~1/AppData/Local/Temp/UASCO/resources/app/apps/desktop/renderer/index.html", shortUrl.replace("%7E1", "%E0%A4%A"), "https://evil.invalid/C:/Users/RUNNER~1/AppData/Local/Temp/UASCO/resources/app/apps/desktop/renderer/index.html"]) expect(fnShort(ev(u)), u).toBe(false);
   });
   it("CSP is unchanged and index.html did not change structure", () => {
     const html = read(rend, "index.html");
@@ -1622,5 +1627,387 @@ describe("UI-125: brownfield import shows the server's specific rejection and fa
       expect(alert).not.toBeNull(); expect(alert!.attrs.get("role")).toBe("alert");
       expect(text(alert!)).not.toContain("schema validation");
     }
+  });
+});
+
+// //TR: LANE-A first-delivery akışı: yeni proje oluşturulunca Kurucu fikri formu ilk mission'ı gerçek POST /v1/missions ile açar; başarı uydurulmaz, görev yoksa dürüst not gösterilir.
+describe("LANE-A founder idea -> first mission (fake DOM)", () => {
+  const MSN = "msn_" + "ef56".repeat(6);
+  const created = async (post: (p: string, b: any) => {status: number; body: any}) => {
+    const c = await mkCtx({get: projectsGet(), post, lang: "en"});
+    let root = mount(c.doc, await projectsView.render(c.ctx));
+    byId(root, "studio-name")!.value = "Shop"; byId(root, "studio-name")!.fire("input");
+    byId(root, "studio-criteria-0")!.value = "Checkout works"; byId(root, "studio-criteria-0")!.fire("input");
+    byId(root, "studio-wizard-form")!.fire("submit"); await tick();
+    root = mount(c.doc, await projectsView.render(c.ctx));
+    return {...c, root};
+  };
+  const okPost = (p: string, b: any) => p === "/v1/projects" ? {status: 201, body: {project: {projectId: PID, name: "Shop"}}} : {status: 201, body: {mission: {missionId: MSN, title: b.title}}};
+  it("shows no idea form before a project is created and prefills title + criteria after", async () => {
+    const c = await mkCtx({get: projectsGet(), post: okPost, lang: "en"});
+    expect(byId(mount(c.doc, await projectsView.render(c.ctx)), "studio-idea")).toBeNull();
+    const {root} = await created(okPost);
+    expect(byId(root, "studio-idea")!.dataset.ideaProject).toBe(PID);
+    expect(byId(root, "studio-idea-title")!.value).toBe("Shop");
+    expect(byId(root, "studio-idea-criteria-0")!.value).toBe("Checkout works");
+  });
+  it("rejects an empty objective without sending, then POSTs /v1/missions once for the new project and offers Open in Tasks", async () => {
+    const {ctx, doc, calls, root} = await created(okPost);
+    byId(root, "studio-idea-form")!.fire("submit"); await tick();
+    expect(calls.post.filter(p => p.path === "/v1/missions")).toEqual([]);
+    expect(forms.drafts.status["studio-idea"].ok).toBe(false);
+    byId(root, "studio-idea-objective")!.value = "Online shop"; byId(root, "studio-idea-objective")!.fire("input");
+    byId(root, "studio-idea-form")!.fire("submit"); await tick();
+    const m = calls.post.filter(p => p.path === "/v1/missions");
+    expect(m.length).toBe(1);
+    expect(m[0].body).toMatchObject({projectId: PID, title: "Shop", objective: "Online shop", acceptanceCriteria: ["Checkout works"], riskLevel: "R1"});
+    expect(forms.drafts.status["studio-idea"].ok).toBe(true);
+    const root2 = mount(doc, await projectsView.render(ctx));
+    expect(byId(root2, "studio-idea-submit")!.disabled).toBe(true); // ikinci gönderim yok
+    await (async () => { byId(root2, "studio-idea-open")!.fire("click"); })();
+    expect(calls.navigate).toEqual(["work"]);
+    expect((await load(rend, "forms.js")).selection.missionId).toBe(MSN);
+  });
+  it("a new project's idea form never shows the previous project's 'First mission created' status", async () => {
+    const PID2 = "prj_" + "9a".repeat(12);
+    let n = 0;
+    const post = (p: string, b: any) => p === "/v1/projects" ? (++n, {status: 201, body: {project: {projectId: n === 1 ? PID : PID2, name: b.name}}}) : {status: 201, body: {mission: {missionId: MSN, title: b.title}}};
+    const {ctx, doc, root} = await created(post);
+    byId(root, "studio-idea-objective")!.value = "Online shop"; byId(root, "studio-idea-objective")!.fire("input");
+    byId(root, "studio-idea-form")!.fire("submit"); await tick();
+    expect(forms.drafts.status["studio-idea"].ok).toBe(true);
+    let root2 = mount(doc, await projectsView.render(ctx));
+    expect(text(byId(root2, "studio-idea-status")!)).toContain("First mission created");
+    byId(root2, "studio-name")!.value = "Beta"; byId(root2, "studio-name")!.fire("input");
+    byId(root2, "studio-wizard-form")!.fire("submit"); await tick();
+    root2 = mount(doc, await projectsView.render(ctx));
+    expect(byId(root2, "studio-idea")!.dataset.ideaProject).toBe(PID2);
+    expect(forms.drafts.status["studio-idea"]).toBeUndefined();
+    expect(byId(root2, "studio-idea-status")!.dataset.result).toBeUndefined();
+    expect(text(byId(root2, "studio-idea-status")!)).toBe("");
+    expect(byId(root2, "studio-idea-open")).toBeNull();
+  });
+  it("a server failure records an error, creates no mission link and keeps the draft", async () => {
+    const {ctx, doc, calls, root} = await created((p, b) => p === "/v1/projects" ? okPost(p, b) : {status: 503, body: {error: "WORKOS_UNAVAILABLE"}});
+    byId(root, "studio-idea-objective")!.value = "x"; byId(root, "studio-idea-objective")!.fire("input");
+    byId(root, "studio-idea-form")!.fire("submit"); await tick();
+    expect(forms.drafts.status["studio-idea"].ok).toBe(false);
+    const root2 = mount(doc, await projectsView.render(ctx));
+    expect(byId(root2, "studio-idea-open")).toBeNull();
+    expect(byId(root2, "studio-idea-objective")!.value).toBe("x");
+    expect(calls.navigate).toEqual([]);
+  });
+  it("a 201 without a valid msn_ id succeeds without a fabricated open-mission shortcut", async () => {
+    const {ctx, doc, root} = await created((p, b) => p === "/v1/projects" ? okPost(p, b) : {status: 201, body: {mission: {missionId: "bad", title: "T"}}});
+    byId(root, "studio-idea-objective")!.value = "x"; byId(root, "studio-idea-objective")!.fire("input");
+    byId(root, "studio-idea-form")!.fire("submit"); await tick();
+    expect(byId(mount(doc, await projectsView.render(ctx)), "studio-idea-open")).toBeNull();
+  });
+  it("mission detail shows an honest no-tasks note when the mission has no tasks, never invented tasks", async () => {
+    const work = await load(rend, "views", "work.js");
+    const mission = {missionId: MSN, projectId: PID, title: "Shop", objective: "o", acceptanceCriteria: ["c"], status: "DRAFT", riskLevel: "R1", createdAt: "2026-10-21T00:00:00.000Z"};
+    const get = (p: string) => p === "/v1/projects" ? {projects: [project()]} : p === "/v1/missions" ? {missions: [mission]} : p === `/v1/missions/${MSN}` ? {mission, tasks: []} : p.startsWith("/v1/work-runs") ? {runs: []} : p.startsWith("/v1/evidence") ? {items: []} : undefined;
+    const {ctx, doc} = await mkCtx({get, lang: "en"});
+    (await load(rend, "forms.js")).selection.missionId = MSN;
+    const root = mount(doc, await work.render(ctx));
+    expect(all(root).some(n => n.dataset?.noTasks === MSN)).toBe(true);
+  });
+});
+
+// //TR: LANE-A UI-126 Proje Intake: Kurucu fikri -> POST /v1/intakes (proje + ilk mission tek adımda); sıkı gövde, kaynak etiketleri sunucudan aynen, başarı uydurulmaz.
+describe("LANE-A project intake from an idea (fake DOM)", () => {
+  const ITK = "itk_" + "ab12".repeat(6), MSN = "msn_" + "cd34".repeat(6);
+  const IDEA = "Bir kitap kulübü uygulaması: üyeler kitap önerir ve oylar";
+  const rec = (extra: any = {}) => ({intakeId: ITK, projectId: PID, missionId: MSN, title: "Kitap Kulübü", idea: IDEA, riskLevel: "R1", acceptanceCriteria: ["Uygulama açılır"], status: "CREATED",
+    sources: {title: "FOUNDER", acceptanceCriteria: "DEFAULT", riskLevel: "DEFAULT"}, createdAt: "2026-10-21T10:00:00.000Z", ...extra });
+  const open = async (o: CtxOpts) => { const c = await mkCtx({lang: "en", ...o, get: projectsGet()}); const m = await load(rend, "views", "intake.js"); m.resetIntakeAll(); return {...c, m, root: mount(c.doc, await projectsView.render(c.ctx))}; };
+  const type = (root: N, id: string, v: string) => { byId(root, id)!.value = v; byId(root, id)!.fire("input"); };
+
+  it("builds a strict body from the server schema: idea 10-4000, optional fields only when entered, risk R0-R3, unique OS/tech", async () => {
+    const c = await load(rend, "intake-core.js");
+    const ok = c.buildIntakeRequest({idea: `  ${IDEA} `, title: "", projectType: "", techStack: ["", " React "], targetOS: ["web"], acceptanceCriteria: ["", " a "], riskLevel: ""}, {key: "ui-abc"});
+    expect(ok).toEqual({ok: true, path: "/v1/intakes", errors: {}, body: {idea: IDEA, techStack: ["React"], targetOS: ["web"], acceptanceCriteria: ["a"], idempotencyKey: "ui-abc"}});
+    expect(Object.keys(c.buildIntakeRequest({idea: IDEA}).body)).toEqual(["idea"]);
+    const bad = (i: any) => c.buildIntakeRequest({idea: IDEA, ...i}).errors;
+    expect(c.buildIntakeRequest({idea: "kısa"}).errors.idea).toBe("intake.err.ideaShort");
+    expect(c.buildIntakeRequest({idea: "x".repeat(4001)}).errors.idea).toBe("intake.err.ideaLong");
+    expect(c.buildIntakeRequest({idea: "         "}).errors.idea).toBe("intake.err.ideaShort");
+    expect(bad({title: "t".repeat(121)}).title).toBe("intake.err.titleLong");
+    expect(bad({projectType: "robot"}).projectType).toBe("intake.err.type");
+    expect(bad({techStack: ["a", "a"]}).techStack).toBe("intake.err.tech");
+    expect(bad({techStack: ["a;b"]}).techStack).toBe("intake.err.tech");
+    expect(bad({techStack: Array.from({length: 21}, (_, i) => "t" + i)}).techStack).toBe("intake.err.tech");
+    expect(bad({targetOS: ["web", "web"]}).targetOS).toBe("intake.err.os");
+    expect(bad({targetOS: ["beos"]}).targetOS).toBe("intake.err.os");
+    expect(bad({acceptanceCriteria: Array.from({length: 51}, () => "k")}).acceptanceCriteria).toBe("intake.err.criteria");
+    expect(bad({riskLevel: "R4"}).riskLevel).toBe("intake.err.risk"); // R4 intake ile açılmaz
+    expect(c.buildIntakeRequest({idea: IDEA}, {key: "bad key!"}).errors.idempotencyKey).toBe("intake.err.key");
+    expect(c.buildIntakeRequest({idea: "kısa"}).body).toBeNull();
+    // Sınırlar sunucu şemasıyla birebir: idea 10..4000, title en çok 120.
+    expect(c.buildIntakeRequest({idea: "x".repeat(9)}).errors.idea).toBe("intake.err.ideaShort");
+    expect(c.buildIntakeRequest({idea: "x".repeat(10)}).ok).toBe(true);
+    expect(c.buildIntakeRequest({idea: " ".repeat(5) + "x".repeat(9) + " ".repeat(5)}).errors.idea).toBe("intake.err.ideaShort"); // kırpıldıktan sonra 9
+    expect(c.buildIntakeRequest({idea: "x".repeat(4000)}).ok).toBe(true);
+    expect(c.buildIntakeRequest({idea: IDEA, title: "t".repeat(120)}).ok).toBe(true);
+    expect(c.buildIntakeRequest({idea: IDEA, techStack: ["t".repeat(50)]}).ok).toBe(true);
+    expect(c.buildIntakeRequest({idea: IDEA, techStack: ["t".repeat(51)]}).errors.techStack).toBe("intake.err.tech");
+    expect(c.buildIntakeRequest({idea: IDEA, acceptanceCriteria: ["k".repeat(4000)]}).ok).toBe(true);
+    expect(c.buildIntakeRequest({idea: IDEA, acceptanceCriteria: ["k".repeat(4001)]}).errors.acceptanceCriteria).toBe("intake.err.criteria");
+  });
+  it("maps intake records strictly and carries field sources verbatim; one malformed record makes the list ERROR", async () => {
+    const c = await load(rend, "intake-core.js");
+    expect(c.mapIntake(rec()).sources).toEqual({title: "FOUNDER", acceptanceCriteria: "DEFAULT", riskLevel: "DEFAULT"});
+    for (const bad of [null, rec({intakeId: "itk_x"}), rec({projectId: "p"}), rec({missionId: "m"}), rec({riskLevel: "R9"}), rec({sources: {title: "FOUNDER"}}), rec({sources: {title: "ME", acceptanceCriteria: "DEFAULT", riskLevel: "DEFAULT"}}),
+      rec({acceptanceCriteria: "x"}), rec({idea: ""}), rec({title: 5})]) expect(c.mapIntake(bad), JSON.stringify(bad)?.slice(0, 60)).toBeNull();
+    expect(c.mapIntakes({intakes: [rec(), rec({intakeId: "itk_" + "ff".repeat(12), createdAt: "2026-10-21T11:00:00.000Z"})]}).items[0].intakeId).toBe("itk_" + "ff".repeat(12)); // yeni önce
+    expect(c.mapIntakes({intakes: [rec(), null]}).state).toBe("ERROR");
+    expect(c.mapIntakes({}).state).toBe("ERROR");
+    expect(c.intakePath(ITK)).toBe(`/v1/intakes/${ITK}`); expect(c.intakePath("x")).toBeNull();
+  });
+  it("renders on the Projects screen, sends nothing until submit, then posts the typed idea once and shows server-marked sources with open buttons", async () => {
+    const {ctx, doc, calls, root, m} = await open({post: (p, b) => p === "/v1/intakes" ? {status: 201, body: {intake: rec({title: b.title ?? "Kitap Kulübü"})}} : {status: 404, body: {}}});
+    expect(byId(root, "intake")).not.toBeNull();
+    expect(calls.post).toEqual([]);
+    type(root, "intake-idea", IDEA); type(root, "intake-title", "Kitap Kulübü");
+    byId(root, "intake-form")!.fire("submit"); await tick();
+    expect(calls.post.length).toBe(1);
+    expect(calls.post[0].path).toBe("/v1/intakes");
+    expect(calls.post[0].body).toMatchObject({idea: IDEA, title: "Kitap Kulübü"});
+    expect(Object.keys(calls.post[0].body).sort()).toEqual(["idea", "idempotencyKey", "title"]);
+    expect(forms.drafts.status.intake.ok).toBe(true);
+    const root2 = mount(doc, await projectsView.render(ctx));
+    const res = byId(root2, "intake-result")!;
+    expect(res.dataset.intakeId).toBe(ITK);
+    expect(text(res)).toContain("You entered"); expect(text(res)).toContain("Default, not entered by you");
+    expect(m.intakeDraft.idea).toBe("");
+    byId(root2, "intake-open-mission")!.fire("click");
+    expect(calls.navigate).toEqual(["work"]); expect(forms.selection.missionId).toBe(MSN);
+    byId(root2, "intake-open-project")!.fire("click"); await tick();
+    expect(calls.selected).toEqual([PID]);
+  });
+  it("validation errors send nothing; refusals and an invalid server record never show a result card; the draft is kept", async () => {
+    const v = await open({});
+    type(v.root, "intake-idea", "kısa");
+    byId(v.root, "intake-form")!.fire("submit"); await tick();
+    expect(v.calls.post).toEqual([]); expect(forms.drafts.status.intake.ok).toBe(false);
+    const cases: Array<[any, string]> = [[{status: 409, body: {error: "INTAKE_IDEMPOTENCY_CONFLICT"}}, "post.err.409"], [{status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}, "post.err.423"], [{status: 403, body: {error: "FORBIDDEN"}}, "post.err.auth"],
+      [{status: 404, body: {error: "NOT_FOUND"}}, "post.err.unavailable"], [{status: 503, body: {error: "INTAKE_STORE_CORRUPT"}}, "post.err.503"]];
+    for (const [resp, key] of cases) {
+      forms.resetAllForms();
+      const o = await open({post: () => resp});
+      type(o.root, "intake-idea", IDEA);
+      byId(o.root, "intake-form")!.fire("submit"); await tick();
+      expect(forms.drafts.status.intake, key).toMatchObject({ok: false, key});
+      const r2 = mount(o.doc, await projectsView.render(o.ctx));
+      expect(byId(r2, "intake-result")).toBeNull(); expect(byId(r2, "intake-idea")!.value).toBe(IDEA);
+    }
+    forms.resetAllForms();
+    const odd = await open({post: () => ({status: 201, body: {intake: rec({missionId: "bad"})}})});
+    type(odd.root, "intake-idea", IDEA);
+    byId(odd.root, "intake-form")!.fire("submit"); await tick();
+    expect(forms.drafts.status.intake.ok).toBe(true); // sunucu 201 dedi; kayıt bozuk -> kısayol/kaynak etiketi uydurulmaz
+    expect(byId(mount(odd.doc, await projectsView.render(odd.ctx)), "intake-result")).toBeNull();
+  });
+  it("lists earlier intakes from GET /v1/intakes and shows an honest UNAVAILABLE note when the read is not reachable", async () => {
+    const c = await mkCtx({lang: "en", get: projectsGet({"/v1/intakes": {intakes: [rec()]}})});
+    (await load(rend, "views", "intake.js")).resetIntakeAll();
+    const root = mount(c.doc, await projectsView.render(c.ctx));
+    expect(all(root).filter(n => n.dataset.intakeRow).map(n => n.dataset.intakeRow)).toEqual([ITK]);
+    const off = await open({});
+    expect(all(off.root).filter(n => n.dataset.intakeRow).length).toBe(0);
+    expect(text(byId(off.root, "intake")!)).toContain("not available to the desktop yet");
+    expect(byId(off.root, "intake-form")).not.toBeNull(); // oluşturma listeden bağımsız
+  });
+  it("labels every target-OS checkbox with a real name in en and tr, never a raw i18n key", async () => {
+    const c = await load(rend, "intake-core.js");
+    expect([...c.INTAKE_OS]).toEqual(["windows", "macos", "linux", "web", "android", "ios"]);
+    for (const lang of ["en", "tr"]) {
+      const o = await open({lang});
+      const labels = c.INTAKE_OS.map((v: string) => text(all(o.root).find(n => n.attrs.get("for") === `intake-os-${v}`)!));
+      expect(labels, lang).toEqual(["Windows", "macOS", "Linux", "Web", "Android", "iOS"]);
+    }
+  });
+  it("refuses a body above the bridge/server 32 KB limit with a localized error before any POST; the limit is the bridge constant", async () => {
+    const c = await load(rend, "intake-core.js"), work = await load(rend, "work-core.js");
+    const bridgeLimit = Number(/const POST_MAX_BODY_BYTES=(\d+);/.exec(mainSrc)![1]);
+    expect(work.MAX_BODY_BYTES).toBe(bridgeLimit); // renderer sabiti köprü sabitine sabitlenmiştir
+    const huge = {idea: "x".repeat(4000), acceptanceCriteria: Array.from({length: 8}, () => "y".repeat(4000))};
+    for (const key of [undefined, "ui-abc"]) {
+      const r = c.buildIntakeRequest(huge, key === undefined ? {} : {key});
+      expect(r.ok).toBe(false); expect(r.body).toBeNull(); expect(r.errors).toEqual({form: "err.tooLarge"});
+    }
+    // Sınır: anahtarlı gövde tam sınırda kabul, bir bayt fazlası ret; anahtarsız doğrulama geçişi en uzun anahtar payını ayırır.
+    const KEY = "k".repeat(100), bytes = (o: unknown) => new TextEncoder().encode(JSON.stringify(o)).length;
+    const input = (n: number) => ({idea: "x".repeat(100), acceptanceCriteria: [...Array.from({length: 8}, () => "y".repeat(4000)), "z".repeat(n)]});
+    const body = (n: number) => ({idea: "x".repeat(100), acceptanceCriteria: input(n).acceptanceCriteria, idempotencyKey: KEY});
+    const n = bridgeLimit - bytes(body(0));
+    expect(n).toBeGreaterThan(0); expect(n).toBeLessThanOrEqual(4000);
+    expect(bytes(body(n))).toBe(bridgeLimit);
+    expect(c.buildIntakeRequest(input(n), {key: KEY}).ok).toBe(true);
+    expect(c.buildIntakeRequest(input(n)).ok).toBe(true);
+    expect(c.buildIntakeRequest(input(n + 1), {key: KEY}).errors).toEqual({form: "err.tooLarge"});
+    expect(c.buildIntakeRequest(input(n + 1)).errors).toEqual({form: "err.tooLarge"});
+    // Arayüz: gönderim POST etmez, yerelleştirilmiş sınır hatası gösterilir.
+    const o = await open({post: () => ({status: 201, body: {}})});
+    o.m.intakeDraft.idea = huge.idea; o.m.intakeDraft.acceptanceCriteria = [...huge.acceptanceCriteria];
+    byId(o.root, "intake-form")!.fire("submit"); await tick();
+    expect(o.calls.post).toEqual([]);
+    expect(forms.drafts.status.intake.errors).toEqual({form: "err.tooLarge"});
+    const shown = mount(o.doc, await projectsView.render(o.ctx));
+    expect(text(byId(shown, "intake-status")!)).toContain("The request body exceeds the 32 KB limit.");
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+    expect((tr.default ?? tr)["err.tooLarge"]).toBeTruthy(); expect((en.default ?? en)["err.tooLarge"]).toBeTruthy();
+  });
+  it("intake strings exist in en and tr", async () => {
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+    const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("intake.") || k === "form.field.idea");
+    expect(keys.length).toBe(34);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
+  });
+});
+
+// //TR: LANE-A first-delivery: proje akış göstergesi (GET /v1/projects/:id/flow) — sıkı eşleme, dürüst UNAVAILABLE/ERROR, olumlu durum uydurulmaz.
+describe("LANE-A first-delivery flow stepper (fake DOM)", () => {
+  const stages = (states: string[]) => ["MISSION", "PLAN", "RUN", "REVIEW", "DELIVERY"].map((stage, i) => ({stage, state: states[i], detail: null}));
+  const flowBody = (states: string[], extra: any = {}) => ({flow: {projectId: PID, stages: stages(states), missionCount: 1, taskCount: 3, latestRunId: null, ...extra}});
+  const FLOW = `/v1/projects/${PID}/flow`;
+  const flowOf = async (get: any) => { const c = await openWs({get: projectsGet(get)}); return {...c, panel: byId(c.root, "studio-ov-flow")}; };
+
+  it("maps strictly: five stages in fixed order with known states; any deviation is ERROR", async () => {
+    const core = await load(rend, "project-core.js");
+    expect(core.flowPath(PID)).toBe(FLOW);
+    expect(core.flowPath("prj_x")).toBeNull();
+    const ok = core.mapFlow(flowBody(["DONE", "ACTIVE", "NOT_STARTED", "NOT_STARTED", "NOT_STARTED"]));
+    expect(ok.state).toBe("VERIFIED"); expect(ok.flow.taskCount).toBe(3);
+    const s5 = ["DONE", "DONE", "DONE", "DONE", "DONE"];
+    for (const bad of [null, {}, {flow: {}}, flowBody(["DONE", "ACTIVE", "NOT_STARTED", "NOT_STARTED"]), flowBody(["DONE", "ACTIVE", "NOT_STARTED", "NOT_STARTED", "WEIRD"]),
+      {flow: {...flowBody(s5).flow, projectId: "x"}}, {flow: {...flowBody(s5).flow, stages: [...stages(s5)].reverse()}}]) expect(core.mapFlow(bad).state).toBe("ERROR");
+    expect(core.mapFlow(flowBody(s5, {taskCount: -1, latestRunId: "../x"})).flow).toMatchObject({taskCount: null, latestRunId: null});
+  });
+  it("renders the five steps with text state labels from the server read and says DONE is not verification", async () => {
+    const {panel, calls} = await flowOf({[FLOW]: flowBody(["DONE", "DONE", "ACTIVE", "NOT_STARTED", "NOT_STARTED"], {latestRunId: "run_" + "a".repeat(24)})});
+    expect(panel).not.toBeNull();
+    const steps = all(panel!).filter(n => n.dataset.flowStage);
+    expect(steps.map(n => [n.dataset.flowStage, n.dataset.flowState])).toEqual([["MISSION", "DONE"], ["PLAN", "DONE"], ["RUN", "ACTIVE"], ["REVIEW", "NOT_STARTED"], ["DELIVERY", "NOT_STARTED"]]);
+    expect(text(steps[2])).toContain("Sürüyor");
+    expect(text(panel!)).toContain("ürünün doğrulandığı"); // tr: DONE doğrulama değildir
+    expect(calls.post).toEqual([]);
+    expect(calls.get).toContain(FLOW);
+  });
+  it("shows an honest UNAVAILABLE note (no steps) when the read is not reachable, and ERROR for malformed data", async () => {
+    const off = await flowOf({});
+    expect(all(off.panel!).filter(n => n.dataset.flowStage).length).toBe(0);
+    expect(text(off.panel!)).toContain("ilerleme gösterilmez");
+    const bad = await flowOf({[FLOW]: {flow: {projectId: PID, stages: []}}});
+    expect(all(bad.panel!).filter(n => n.dataset.flowStage).length).toBe(0);
+    expect(text(bad.panel!)).not.toContain("Bitti");
+  });
+  it("flow taskRuns: absent field shows nothing, null says unknown, a valid summary is shown, an impossible one is treated as unknown", async () => {
+    const core = await load(rend, "project-core.js");
+    const base = flowBody(["DONE", "DONE", "ACTIVE", "NOT_STARTED", "NOT_STARTED"]);
+    const withTr = (taskRuns: any) => ({flow: {...base.flow, ...(taskRuns === "ABSENT" ? {} : {taskRuns})}});
+    expect(core.mapFlow(withTr("ABSENT")).flow.taskRuns).toBeUndefined();
+    expect(core.mapFlow(withTr(null)).flow.taskRuns).toBeNull();
+    expect(core.mapFlow(withTr({tasksWithRuns: 2, tasks: 5})).flow.taskRuns).toEqual({tasksWithRuns: 2, tasks: 5});
+    for (const bad of [{tasksWithRuns: 6, tasks: 5}, {tasksWithRuns: -1, tasks: 5}, {tasksWithRuns: "2", tasks: 5}, {tasks: 5}, 3, "x"]) expect(core.mapFlow(withTr(bad)).flow.taskRuns, JSON.stringify(bad)).toBeNull();
+    const shown = await openWs({get: projectsGet({[FLOW]: withTr({tasksWithRuns: 2, tasks: 5})}), lang: "en"});
+    const row = all(byId(shown.root, "studio-ov-flow")!).find(n => n.dataset.flowTaskRuns)!;
+    expect(row.dataset.flowTaskRuns).toBe("KNOWN"); expect(text(row)).toContain("2 of 5 planned tasks have a linked run");
+    const unk = await openWs({get: projectsGet({[FLOW]: withTr(null)}), lang: "en"});
+    const u = all(byId(unk.root, "studio-ov-flow")!).find(n => n.dataset.flowTaskRuns)!;
+    expect(u.dataset.flowTaskRuns).toBe("UNKNOWN"); expect(text(u)).toContain("unknown");
+    expect(text(u)).not.toMatch(/\b0 of\b/); // bilinmeyen 0 diye gösterilmez
+    const none = await openWs({get: projectsGet({[FLOW]: withTr("ABSENT")}), lang: "en"});
+    expect(all(byId(none.root, "studio-ov-flow")!).some(n => "flowTaskRuns" in n.dataset)).toBe(false);
+  });
+  it("describeFlowDetail maps known codes only with the matching stage state, parses PLAN/RUN shapes, and shows anything else verbatim", async () => {
+    const core = await load(rend, "project-core.js");
+    const d = core.describeFlowDetail;
+    expect(d("PLAN", null, "NOT_STARTED")).toBeNull(); expect(d("PLAN", "", "ACTIVE")).toBeNull(); expect(d("RUN", undefined, "ACTIVE")).toBeNull();
+    expect(d("PLAN", "2/5 DONE", "ACTIVE")).toEqual({kind: "key", key: "flow.detail.PLAN.progress", vars: {done: "2", total: "5"}});
+    expect(d("PLAN", "5/5 DONE", "DONE").vars).toEqual({done: "5", total: "5"});
+    expect(d("PLAN", "6/5 DONE", "ACTIVE")).toEqual({kind: "raw", text: "6/5 DONE"}); // sayısal olarak imkansız: çevrilmez
+    expect(d("PLAN", "DONE", "ACTIVE")).toEqual({kind: "raw", text: "DONE"});
+    expect(d("RUN", "RUNNING/IMPLEMENT", "ACTIVE")).toEqual({kind: "key", key: "flow.detail.RUN.status", vars: {status: "RUNNING", step: "IMPLEMENT"}});
+    expect(d("RUN", "running/x", "ACTIVE")).toEqual({kind: "raw", text: "running/x"});
+    const ok = (stage: string, code: string, state: string) => expect(d(stage, code, state), `${stage}.${code}@${state}`).toEqual({kind: "key", key: `flow.detail.${stage}.${code}`, vars: {}});
+    ok("MISSION", "COMPLETE", "DONE"); ok("MISSION", "BLOCKED", "BLOCKED");
+    ok("REVIEW", "CLEAN_REVIEW_GATE_PASSED", "DONE"); ok("REVIEW", "CLEAN_REVIEW_FOR_HEAD", "DONE"); ok("REVIEW", "RUN_NOT_SUCCEEDED", "UNKNOWN");
+    for (const c of ["REVIEW", "REGRESSION", "REPORT"]) ok("REVIEW", c, "ACTIVE");
+    ok("DELIVERY", "PRODUCT_VERIFIED", "DONE"); ok("DELIVERY", "NOT_VERIFIED", "DONE");
+    ok("DELIVERY", "SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED", "ACTIVE"); ok("DELIVERY", "ARTIFACT_PREPARED_NOT_VERIFIED", "ACTIVE");
+    // Sunucu ACTIVE mission aşamasına son mission'ın durumunu yazar: [EXECUTING, COMPLETE] -> ACTIVE + COMPLETE. "Tüm mission'lar tamamlandı" DENMEZ.
+    expect(d("MISSION", "COMPLETE", "ACTIVE")).toEqual({kind: "status", status: "COMPLETE"});
+    expect(d("MISSION", "BLOCKED", "ACTIVE")).toEqual({kind: "status", status: "BLOCKED"});
+    expect(d("MISSION", "COMPLETE", "BLOCKED")).toEqual({kind: "status", status: "COMPLETE"});
+    expect(d("MISSION", "EXECUTING", "ACTIVE")).toEqual({kind: "status", status: "EXECUTING"});
+    expect(d("MISSION", "not a status", "ACTIVE")).toEqual({kind: "raw", text: "not a status"});
+    // Diğer aşamalarda yanlış durumla gelen bilinen kod çevrilmez; ham ve "beklenmeyen" işaretli
+    expect(d("REVIEW", "CLEAN_REVIEW_FOR_HEAD", "ACTIVE")).toEqual({kind: "raw", text: "CLEAN_REVIEW_FOR_HEAD", mismatch: true});
+    expect(d("REVIEW", "CLEAN_REVIEW_GATE_PASSED", "UNKNOWN")).toEqual({kind: "raw", text: "CLEAN_REVIEW_GATE_PASSED", mismatch: true});
+    expect(d("REVIEW", "REPORT", "DONE")).toEqual({kind: "raw", text: "REPORT", mismatch: true});
+    expect(d("DELIVERY", "PRODUCT_VERIFIED", "ACTIVE")).toEqual({kind: "raw", text: "PRODUCT_VERIFIED", mismatch: true});
+    expect(d("DELIVERY", "ARTIFACT_PREPARED_NOT_VERIFIED", "DONE")).toEqual({kind: "raw", text: "ARTIFACT_PREPARED_NOT_VERIFIED", mismatch: true});
+    // Durum verilmezse (bilinmiyorsa) olumlu anlam verilmez
+    expect(d("REVIEW", "CLEAN_REVIEW_FOR_HEAD")).toEqual({kind: "raw", text: "CLEAN_REVIEW_FOR_HEAD", mismatch: true});
+    expect(d("MISSION", "COMPLETE")).toEqual({kind: "status", status: "COMPLETE"});
+    // Kodlar yalnız kendi aşamasında geçerlidir
+    expect(d("DELIVERY", "CLEAN_REVIEW_FOR_HEAD", "DONE")).toEqual({kind: "raw", text: "CLEAN_REVIEW_FOR_HEAD"});
+    expect(d("REVIEW", "PRODUCT_VERIFIED", "DONE")).toEqual({kind: "raw", text: "PRODUCT_VERIFIED"});
+    expect(d("RUN", "CLEAN_REVIEW_GATE_PASSED", "ACTIVE")).toEqual({kind: "raw", text: "CLEAN_REVIEW_GATE_PASSED"});
+    expect(d("REVIEW", "__proto__", "DONE")).toEqual({kind: "raw", text: "__proto__"});
+    expect(d("REVIEW", "constructor", "DONE")).toEqual({kind: "raw", text: "constructor"});
+  });
+  it("ACTIVE mission stage carrying COMPLETE (missions [EXECUTING, COMPLETE]) never says all missions are complete", async () => {
+    const mk = (state: string, detail: string) => ({flow: {projectId: PID, stages: ["MISSION", "PLAN", "RUN", "REVIEW", "DELIVERY"].map((stage, i) => ({stage, state: i === 0 ? state : "NOT_STARTED", detail: i === 0 ? detail : null})), missionCount: 2, taskCount: 0, latestRunId: null}});
+    const active = await openWs({get: projectsGet({[FLOW]: mk("ACTIVE", "COMPLETE")}), lang: "en"});
+    const am = all(byId(active.root, "studio-ov-flow")!).find(n => n.dataset.flowStage === "MISSION")!;
+    expect(text(am)).not.toContain("every mission"); expect(text(am)).not.toContain("recorded as complete");
+    expect(all(am).some(n => n.dataset.flowDetail === "COMPLETE" && n.dataset.flowDetailKind === "status")).toBe(true);
+    const done = await openWs({get: projectsGet({[FLOW]: mk("DONE", "COMPLETE")}), lang: "en"});
+    expect(text(all(byId(done.root, "studio-ov-flow")!).find(n => n.dataset.flowStage === "MISSION")!)).toContain("every mission of this project is recorded as complete");
+    // Başka aşamada yanlış durumla gelen bilinen kod: ham gösterilir ve "durumla uyuşmuyor" diye işaretlenir, olumlu anlam verilmez
+    const bad = { flow: { projectId: PID, stages: ["MISSION", "PLAN", "RUN", "REVIEW", "DELIVERY"].map((stage, i) => ({ stage, state: i === 3 ? "ACTIVE" : "NOT_STARTED", detail: i === 3 ? "CLEAN_REVIEW_FOR_HEAD" : null })), missionCount: 1, taskCount: 0, latestRunId: null } };
+    const mis = await openWs({get: projectsGet({[FLOW]: bad}), lang: "en"});
+    const rv = text(all(byId(mis.root, "studio-ov-flow")!).find(n => n.dataset.flowStage === "REVIEW")!);
+    expect(rv).toContain("CLEAN_REVIEW_FOR_HEAD (code does not match this stage's state)");
+    expect(rv).not.toContain("clean independent review is recorded");
+    const odd = await openWs({get: projectsGet({[FLOW]: mk("ACTIVE", "BLOCKED")}), lang: "en"});
+    expect(text(all(byId(odd.root, "studio-ov-flow")!).find(n => n.dataset.flowStage === "MISSION")!)).not.toContain("at least one mission is blocked");
+  });
+  it("renders readable details with 'NOT verified' wording for delivery, never as done-and-verified, and raw unknown codes marked unrecognised", async () => {
+    const mk = (details: Array<string | null>, states = ["DONE", "ACTIVE", "ACTIVE", "DONE", "ACTIVE"]) => ({flow: {projectId: PID, stages: ["MISSION", "PLAN", "RUN", "REVIEW", "DELIVERY"].map((stage, i) => ({stage, state: states[i], detail: details[i]})), missionCount: 1, taskCount: 5, latestRunId: null}});
+    const body = mk(["EXECUTING", "2/5 DONE", "AWAITING_APPROVAL/REPORT", "CLEAN_REVIEW_FOR_HEAD", "ARTIFACT_PREPARED_NOT_VERIFIED"]);
+    const c = await openWs({get: projectsGet({[FLOW]: body}), lang: "en"});
+    const panel = byId(c.root, "studio-ov-flow")!;
+    const det = (stage: string) => all(panel).find(n => n.dataset.flowStage === stage)!;
+    const t = (stage: string) => text(det(stage));
+    expect(t("PLAN")).toContain("2 of 5 planned tasks recorded as done");
+    expect(t("REVIEW")).toContain("clean independent review is recorded for the run's current head; the run itself is not finished");
+    expect(t("DELIVERY")).toContain("NOT verified");
+    expect(t("DELIVERY")).toContain("not accepted");
+    expect(all(det("DELIVERY")).some(n => n.dataset.flowDetail === "ARTIFACT_PREPARED_NOT_VERIFIED" && n.dataset.flowDetailKind === "key")).toBe(true);
+    expect(det("DELIVERY").dataset.flowState).toBe("ACTIVE");
+    expect(t("RUN")).toContain("step REPORT");
+    // Kabul edilmiş NOT_VERIFIED teslim de "doğrulandı" demez
+    const acc = await openWs({get: projectsGet({[FLOW]: mk([null, null, null, null, "SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED"])}), lang: "en"});
+    const dt = text(all(byId(acc.root, "studio-ov-flow")!).find(n => n.dataset.flowStage === "DELIVERY")!);
+    expect(dt).toContain("accepted by you"); expect(dt).toContain("NOT verified");
+    // Bilinmeyen kod aynen ve işaretli
+    const unk = await openWs({get: projectsGet({[FLOW]: mk([null, null, null, "SOMETHING_NEW", null])}), lang: "en"});
+    const rv = all(byId(unk.root, "studio-ov-flow")!).find(n => n.dataset.flowStage === "REVIEW")!;
+    expect(text(rv)).toContain("SOMETHING_NEW (unrecognised code)");
+    expect(all(rv).some(n => n.dataset.flowDetailKind === "raw")).toBe(true);
+    // Ayrıntısı olmayan aşamada hiçbir şey eklenmez
+    const none = await openWs({get: projectsGet({[FLOW]: mk([null, null, null, null, null], ["NOT_STARTED", "NOT_STARTED", "NOT_STARTED", "NOT_STARTED", "NOT_STARTED"])}), lang: "en"});
+    expect(all(byId(none.root, "studio-ov-flow")!).some(n => "flowDetail" in n.dataset)).toBe(false);
+  });
+  it("flow strings exist in en and tr", async () => {
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
+    const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("flow."));
+    expect(keys.length).toBe(35);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
