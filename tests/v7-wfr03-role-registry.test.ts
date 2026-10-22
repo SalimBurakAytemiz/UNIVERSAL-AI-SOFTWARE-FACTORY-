@@ -1465,13 +1465,13 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       const code = await runCli(args, {repoRoot: REPO, env: o.env ?? {}, out: s => out.push(s), err: s => err.push(s), findClaudeCli: () => process.execPath, ...(o.makePair ? {makePair: o.makePair} : {})});
       return {code, out: out.join(""), err: err.join("")};
     };
-    it("the control root follows the server's rule (--control-root, then UASCO_CONTROL_ROOT, then the repo root; empty is absent) and the dry run prints the root it used", async () => {
+    it("the control root follows the server's ORDER (--control-root, then UASCO_CONTROL_ROOT, then the repo root) plus two deliberate differences (empty is unset, relative is refused; see the authority doc) and the dry run prints the root it used", async () => {
       expect([resolveControlRoot("/a", {UASCO_CONTROL_ROOT: "/b"}, "/r"), resolveControlRoot(null, {UASCO_CONTROL_ROOT: "/b"}, "/r"), resolveControlRoot(null, {}, "/r")]).toEqual(["/a", "/b", "/r"]);
       expect([resolveControlRoot(null, {UASCO_CONTROL_ROOT: ""}, "/r"), resolveControlRoot("", {UASCO_CONTROL_ROOT: "/b"}, "/r"), resolveControlRoot("", {}, "/r")]).toEqual(["/r", "/b", "/r"]);
       const d = workDir(), c = workDir(), other = workDir();
       const used = async (extra: string[], env: NodeJS.ProcessEnv) => JSON.parse((await cli(["--role", DEV, "--data-dir", d, ...extra], {env})).out).controlRoot;
       expect([await used([], {UASCO_CONTROL_ROOT: c}), await used(["--control-root", other], {UASCO_CONTROL_ROOT: c}), await used([], {}), await used([], {UASCO_CONTROL_ROOT: ""})]).toEqual([c, other, REPO, REPO]);
-      // a relative value from the environment is refused like the flag (the broker would resolve it against the workspace and --execute could never work); nothing is written, no plan is printed
+      // a relative value from the environment is refused like the flag (on the developer/tester route the broker would resolve it against the workspace, so --execute could never work there even though the dry run shows no blocker); nothing is written, no plan is printed
       for (const extra of [[], ["--execute"]]) {
         const rel = await cli(["--role", DEV, "--data-dir", d, ...extra], {env: {UASCO_CONTROL_ROOT: "relative/dir"}});
         expect([extra, rel.code, rel.out]).toEqual([extra, 2, ""]);
