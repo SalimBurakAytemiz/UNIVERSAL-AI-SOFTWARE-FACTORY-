@@ -685,7 +685,9 @@ export class MissionRunner {
     const testSurface = this.reviewerTestSurface(run);
     // M1a: testler çalıştırılmadıysa reviewer'a açıkça söylenir (istem metni executors.ts reviewPrompt); TEST_SURFACE listesi yine verilir.
     const testExecution = this.testsNotExecuted(run) ? {executed: false as const, reason: "SANDBOX_UNAVAILABLE" as const} : undefined;
-    const r = await reviewer.review(clone, {...this.missionSpec(run), ...(testSurface ? {testSurface} : {}), ...(testExecution ? {testExecution} : {})}, diff, {timeoutMs: this.o.executorTimeoutMs, shouldAbort: abort});
+    // //TR: Rol atanmış run'da reviewer zaman aşımı = min(run varsayılanı, bağlı security-reviewer limiti); profil run varsayılanını yalnız SIKILAŞTIRIR. (maxFilesWritten 0 aşağıdaki untouched-clone kapısıdır; maxCycles 1 = bu adımda tek review geçişi.) Rolsüz run değişmez.
+    const reviewTimeoutMs = reviewerProfile ? effectiveLimits(reviewerProfile.limits, {maxRemediations: this.o.maxRemediations, executorTimeoutMs: this.o.executorTimeoutMs}).executorTimeoutMs : this.o.executorTimeoutMs;
+    const r = await reviewer.review(clone, {...this.missionSpec(run), ...(testSurface ? {testSurface} : {}), ...(testExecution ? {testExecution} : {})}, diff, {timeoutMs: reviewTimeoutMs, shouldAbort: abort});
     const untouched = this.gitOk(clone, ["rev-parse", "HEAD"]) === run.headSha && this.gitOk(clone, ["status", "--porcelain", "--untracked-files=all"]) === "";
     const log = this.writeLog(run, "review", r.log);
     const limit = !r.valid && !r.aborted && !r.timedOut ? executorLimit(r.exitCode, r.log) : null;

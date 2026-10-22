@@ -62,7 +62,9 @@ export function registerPredevDecisionRoutes(app: any, d: RouteDeps): void {
     if (!validMissionId(req.params.id)) return reply.code(400).send({error: "INVALID_MISSION_ID"});
     if (!gate(reply, "workos.predev.start", req.params.id, body, emptyBody)) return reply;
     if (!missionOr404(req, reply)) return reply;
-    if (d.getStore().getPreDevSequence(d.scope, req.params.id)) return reply.code(200).send({predev: model(req.params.id), replayed: true});
+    // //TR: Yalnız İLERLEMİŞ (AUTHORIZED dışı) mevcut dizi replay sayılır; AUTHORIZED'da kalmış dizi (ilk ilerleme yazımı ENOSPC/çökme ile kaybolmuş) driver.start ile tamamlanır.
+    const existing = d.getStore().getPreDevSequence(d.scope, req.params.id);
+    if (existing && existing.phase !== "AUTHORIZED") return reply.code(200).send({predev: model(req.params.id), replayed: true});
     const r = driver().start(d.scope, req.params.id, d.actor);
     d.audit("WORKOS_PREDEV_STARTED", {actor: d.actor, kind: "predev", missionId: req.params.id, preDevId: r.preDevId, phase: r.phase});
     return reply.code(201).send({predev: model(req.params.id), replayed: false});

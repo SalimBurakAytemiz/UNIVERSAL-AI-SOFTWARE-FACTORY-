@@ -1626,13 +1626,13 @@ describe("LANE-B founder attention queue", () => {
 describe("LANE-B pre-dev Founder decisions", () => {
   const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210", "content-type": "application/json"};
   const ACT = "FOUNDER_LOCAL", SC = {tenantId: "tA"}, AGENT = "agent-ba@local.invalid";
-  const mkApp = async (stopped = false, allowed = true, tenantId = "tA") => {
+  const mkApp = async (stopped = false, allowed = true, tenantId = "tA", storeOptions?: ConstructorParameters<typeof WorkOsStore>[1]) => {
     const [{default: Fastify}, {registerPredevDecisionRoutes}, {WorkOsError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/predev-decisions.js"), import("../core/workos/types.js")]);
     const app = Fastify({logger: false});
     app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
-    const store = new WorkOsStore(path.join(tmp, "data")), audits: any[] = [];
+    const store = new WorkOsStore(path.join(tmp, "data"), storeOptions), audits: any[] = [];
     registerPredevDecisionRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: ACT, audit: (e: string, x?: any) => { audits.push({e, x}); }, workosStopped: () => stopped,
-      workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"}, workosFail: (r: any, e: any) => r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
+      workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"}, workosFail: (r: any, e: any) => e?.code === "WORKOS_DISK_FULL" ? r.code(507).send({error: e.code}) : r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
     const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
     for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(SC, m.missionId, to, "go", ACT);
     return {app, store, audits, m};
@@ -1706,5 +1706,189 @@ describe("LANE-B pre-dev Founder decisions", () => {
     expect((await post(app, `/v1/missions/${id}/predev/artifacts/bad/reject`, {reason: "x"})).statusCode).toBe(400);
     expect(store.getPreDevSequence(SC, id)).toBeUndefined();
     expect(n0() - before).toBe(0);
+  });
+
+  // //TR: C-PREDEV-RESUME: ilerleme yazımı (PREDEV_PHASE_ADVANCED) ENOSPC ile kaybolursa yeniden deneme bekleyen ilerlemeyi TAMAMLAR (dizi takılı kalmaz). Enjeksiyon yalnız o journal satırına uygulanır; önceki yazımlar başarılıdır.
+  describe("resume after a lost phase-advance write (ENOSPC on PREDEV_PHASE_ADVANCED only)", () => {
+    const enospc = () => Object.assign(new Error("ENOSPC: no space left on device, write"), {code: "ENOSPC"});
+    // yalnız verilen journal parçasını içeren satırda ENOSPC fırlatır (kısmi satır yazılmaz: yazma hiç yapılmaz)
+    const injector = (needle: string) => {
+      const st = {armed: false, hits: 0};
+      const io = {writeSync: (fd: number, data: Buffer) => { if (st.armed && Buffer.from(data).toString("utf8").includes(needle)) { st.hits += 1; throw enospc(); } return fs.writeSync(fd, data); }};
+      return {st, io};
+    };
+    const ADV = '"PREDEV_PHASE_ADVANCED"';
+
+    it("(a) start: the sequence is left at AUTHORIZED and the first start answers 507; the retry finishes the advance to BUSINESS_ANALYSIS (201, not a stuck replay) and a third start is a plain replay", async () => {
+      const inj = injector(ADV), {app, store, audits, m} = await mkApp(false, true, "tA", {io: inj.io}), id = m.missionId, driver = await agentDriver(store);
+      inj.st.armed = true;
+      const first = await post(app, `/v1/missions/${id}/predev/start`);
+      expect(first.statusCode).toBe(507); expect(first.json()).toEqual({error: "WORKOS_DISK_FULL"});
+      expect(inj.st.hits).toBe(1);
+      expect(store.getPreDevSequence(SC, id)!.phase).toBe("AUTHORIZED"); // opened, never advanced
+      expect(store.journalHealth().state).toBe("OK"); // no partial line
+      inj.st.armed = false;
+      const retry = await post(app, `/v1/missions/${id}/predev/start`);
+      expect(retry.statusCode, retry.body).toBe(201); expect(retry.json().replayed).toBe(false); expect(retry.json().predev.phase).toBe("BUSINESS_ANALYSIS");
+      expect(store.preDevReadModel(SC, id).phase).toBe("BUSINESS_ANALYSIS");
+      const third = await post(app, `/v1/missions/${id}/predev/start`);
+      expect(third.statusCode).toBe(200); expect(third.json().replayed).toBe(true);
+      expect(audits.filter(a => a.e === "WORKOS_PREDEV_STARTED")).toHaveLength(1); // only the start that actually completed is audited
+      expect((await driver.produceCurrentPhase(SC, id, AGENT)).status).toBe("RECORDED"); // the sequence is usable (was PREDEV_DRIVER_NO_ARTIFACT_PHASE:AUTHORIZED)
+      expect(new WorkOsStore(path.join(tmp, "data")).isTampered).toBe(false); // replay accepts the journal
+    });
+
+    it("(b) approve: the artifact is APPROVED but the phase did not move and the approve answers 507; the retry finishes only the advance; gates stay: the recorder cannot finish its own artifact, and an APPROVED artifact that is not the current one is still an illegal transition", async () => {
+      const inj = injector(ADV), {app, store, m} = await mkApp(false, true, "tA", {io: inj.io}), id = m.missionId, driver = await agentDriver(store);
+      await post(app, `/v1/missions/${id}/predev/start`);
+      const ba = await driver.produceCurrentPhase(SC, id, AGENT);
+      if (ba.status !== "RECORDED") throw new Error("not recorded");
+      inj.st.armed = true;
+      const first = await post(app, `/v1/missions/${id}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV});
+      expect(first.statusCode).toBe(507);
+      expect(inj.st.hits).toBe(1);
+      expect(store.getPreDevArtifact(SC, ba.artifactId)).toMatchObject({state: "APPROVED", approvedBy: ACT});
+      expect(store.preDevReadModel(SC, id).phase).toBe("BUSINESS_ANALYSIS"); // stuck before the fix
+      expect(store.journalHealth().state).toBe("OK");
+      expect(() => driver.approveAndAdvance(SC, id, ba.artifactId, AGENT, EV)).toThrow("PREDEV_APPROVER_NOT_INDEPENDENT"); // the recorder can never finish its own artifact's advance
+      expect(store.preDevReadModel(SC, id).phase).toBe("BUSINESS_ANALYSIS");
+      inj.st.armed = false;
+      const retry = await post(app, `/v1/missions/${id}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV});
+      expect(retry.statusCode, retry.body).toBe(200); expect(retry.json().predev.phase).toBe("REQUIREMENTS");
+      expect(store.getPreDevArtifact(SC, ba.artifactId)).toMatchObject({state: "APPROVED", evidenceRefs: EV}); // the stored approval stands: no second approval was written
+      // the same artifact again: APPROVED but no longer the current artifact of the current phase -> the old illegal-transition answer, no extra advance
+      const again = await post(app, `/v1/missions/${id}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV});
+      expect(again.statusCode).toBe(409);
+      expect(store.preDevReadModel(SC, id).phase).toBe("REQUIREMENTS");
+      // the second phase gets stuck the same way; a retry that NAMES the old (non-current) APPROVED artifact must not finish it
+      const req = await driver.produceCurrentPhase(SC, id, AGENT);
+      if (req.status !== "RECORDED") throw new Error("not recorded");
+      inj.st.armed = true;
+      expect((await post(app, `/v1/missions/${id}/predev/artifacts/${req.artifactId}/approve`, {evidenceRefs: EV})).statusCode).toBe(507);
+      inj.st.armed = false;
+      expect(store.getPreDevArtifact(SC, req.artifactId)!.state).toBe("APPROVED");
+      expect(store.preDevReadModel(SC, id).phase).toBe("REQUIREMENTS");
+      const stale = await post(app, `/v1/missions/${id}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV});
+      expect(stale.statusCode).toBe(409); // the artifact named is not the current artifact of this phase
+      expect(store.preDevReadModel(SC, id).phase).toBe("REQUIREMENTS");
+      const next = await post(app, `/v1/missions/${id}/predev/artifacts/${req.artifactId}/approve`, {evidenceRefs: EV});
+      expect(next.statusCode, next.body).toBe(200); expect(next.json().predev.phase).toBe("PLANNING");
+      expect(new WorkOsStore(path.join(tmp, "data")).isTampered).toBe(false);
+    });
+
+    it("(c) a lost APPROVED write (draft SUBMITTED, approve answers 507) is also finished by the retry; a lost REJECTED write does not block a retried reject", async () => {
+      const injA = injector('"to":"APPROVED"'), a = await mkApp(false, true, "tA", {io: injA.io});
+      const idA = a.m.missionId, driverA = await agentDriver(a.store);
+      await post(a.app, `/v1/missions/${idA}/predev/start`);
+      const ba = await driverA.produceCurrentPhase(SC, idA, AGENT);
+      if (ba.status !== "RECORDED") throw new Error("not recorded");
+      injA.st.armed = true;
+      expect((await post(a.app, `/v1/missions/${idA}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV})).statusCode).toBe(507);
+      expect(injA.st.hits).toBe(1);
+      expect(a.store.getPreDevArtifact(SC, ba.artifactId)!.state).toBe("SUBMITTED");
+      injA.st.armed = false;
+      const ok = await post(a.app, `/v1/missions/${idA}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV});
+      expect(ok.statusCode, ok.body).toBe(200); expect(ok.json().predev.phase).toBe("REQUIREMENTS");
+      const injR = injector('"to":"REJECTED"'), r = await mkApp(false, true, "tA", {io: injR.io});
+      const idR = r.m.missionId, driverR = await agentDriver(r.store);
+      await post(r.app, `/v1/missions/${idR}/predev/start`);
+      const d = await driverR.produceCurrentPhase(SC, idR, AGENT);
+      if (d.status !== "RECORDED") throw new Error("not recorded");
+      injR.st.armed = true;
+      expect((await post(r.app, `/v1/missions/${idR}/predev/artifacts/${d.artifactId}/reject`, {reason: "unclear"})).statusCode).toBe(507);
+      expect(injR.st.hits).toBe(1);
+      injR.st.armed = false;
+      const rej = await post(r.app, `/v1/missions/${idR}/predev/artifacts/${d.artifactId}/reject`, {reason: "unclear"});
+      expect(rej.statusCode, rej.body).toBe(200); expect(rej.json().predev.artifacts.BusinessAnalysis.state).toBe("REJECTED");
+    });
+  });
+});
+
+// //TR: LANE-B run özetleri: hafif, sayfalanmış koşu listesi yalnız store'dan türetilir; sıralama/imleç kararlılığı, süzgeçler, şekil (tam evidence/lease/yol yok), redaksiyon, teslim bayrakları, sorgu doğrulaması ve tenant izolasyonu test edilir.
+describe("LANE-B run summaries", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const ACT = "FOUNDER_LOCAL", SC = {tenantId: "tA"};
+  const mkApp = async (tenantId = "tA") => {
+    const [{default: Fastify}, {registerRunSummaryRoutes}, {WorkOsError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/run-summaries.js"), import("../core/workos/types.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    registerRunSummaryRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: ACT, audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}),
+      workosFail: (r: any, e: any) => r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
+    return {app, store, p: store.createProject(proj())};
+  };
+  const mkRun = (store: WorkOsStore, pid: string, title = "m") => {
+    const m = store.createMission({...msn(pid), title}); for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(SC, m.missionId, to, "go", ACT);
+    return {m, run: store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: "impl@x", reviewer: "rev@x"}, createdBy: ACT})};
+  };
+  const get = async (app: any, qs = "", headers: any = hdr) => app.inject({method: "GET", url: `/v1/run-summaries${qs}`, headers});
+
+  it("is empty without runs, then pages newest-first with a stable opaque cursor that survives new runs", async () => {
+    const {app, store, p} = await mkApp();
+    expect((await get(app)).json().page).toEqual({runs: [], nextCursor: null, total: 0});
+    const ids = Array.from({length: 7}, (_, i) => mkRun(store, p.projectId, `m${i}`).run.runId);
+    const seen: string[] = []; let cursor: string | null = null, pages = 0;
+    do {
+      const r = await get(app, `?limit=3${cursor ? `&cursor=${cursor}` : ""}`); expect(r.statusCode).toBe(200);
+      const pg = r.json().page; expect(pg.total).toBe(pages === 0 ? 7 : 8); seen.push(...pg.runs.map((x: any) => x.runId)); cursor = pg.nextCursor; pages++;
+      if (pages === 1) { mkRun(store, p.projectId, "late"); }
+    } while (cursor && pages < 10);
+    expect(pages).toBe(3);
+    expect(new Set(seen).size).toBe(7); expect([...seen].sort()).toEqual([...ids].sort());
+    const all = (await get(app, "?limit=100")).json().page.runs;
+    expect(all).toHaveLength(8);
+    expect(all.map((x: any) => x.createdAt + x.runId)).toEqual([...all.map((x: any) => x.createdAt + x.runId)].sort().reverse());
+  });
+  it("filters by project, mission and status; returns a light, honest shape with no lease, evidence arrays or paths; redacts the reason", async () => {
+    const {app, store, p} = await mkApp();
+    const a = mkRun(store, p.projectId, "a"), b = mkRun(store, p.projectId, "b");
+    const p2 = store.createProject(proj()), c = mkRun(store, p2.projectId, "c");
+    const lease = store.acquireRunLease(b.run.runId, 60_000, ACT).leaseId!;
+    store.transitionRun(b.run.runId, lease, "FAILED", "boom AKIA" + "IOSFODNN7EXAMPLE " + "x".repeat(400), ACT);
+    expect((await get(app, `?projectId=${p.projectId}`)).json().page.total).toBe(2);
+    expect((await get(app, `?projectId=${p2.projectId}`)).json().page.runs.map((x: any) => x.runId)).toEqual([c.run.runId]);
+    expect((await get(app, `?missionId=${a.m.missionId}`)).json().page.runs.map((x: any) => x.runId)).toEqual([a.run.runId]);
+    const failed = (await get(app, "?status=FAILED")).json().page.runs;
+    expect(failed.map((x: any) => x.runId)).toEqual([b.run.runId]);
+    expect(failed[0].reason.length).toBeLessThanOrEqual(200); expect(failed[0].reason).toContain("boom"); expect(failed[0].reason).not.toContain("AKIA" + "IOSFODNN7EXAMPLE");
+    const q = (await get(app, `?missionId=${a.m.missionId}`)).json().page.runs[0];
+    expect(Object.keys(q).sort()).toEqual(["attempt", "checkpointCount", "createdAt", "delivery", "evidenceCount", "executor", "headSha", "missionId", "projectId", "reason", "remediationCycle", "retryCount", "runId", "status", "step", "updatedAt"]);
+    expect(q).toMatchObject({status: "QUEUED", evidenceCount: 0, checkpointCount: 0, headSha: null, executor: {implementer: "impl@x", reviewer: "rev@x"}, delivery: {artifactPrepared: false, sourceAccepted: false, productVerified: false}});
+    expect(JSON.stringify((await get(app, "?limit=100")).json())).not.toMatch(/leaseId|"evidence":|"checkpoints":/);
+    expect(JSON.stringify((await get(app)).json())).not.toContain(tmp);
+  });
+  it("reports delivery flags only from recorded delivery/completion records", async () => {
+    const {store, p} = await mkApp();
+    const {run} = mkRun(store, p.projectId);
+    const {listRunSummaries} = await import("../core/workos/run-summary.js");
+    const view = (extra: Record<string, unknown>) => new Proxy(store, {get: (t, k) => k === "listRuns" ? (s: any, m?: string) => t.listRuns(s, m).map(r => r.runId === run.runId ? {...r, ...extra} : r) : (t as any)[k].bind ? (t as any)[k].bind(t) : (t as any)[k]}) as WorkOsStore;
+    const flags = (extra: Record<string, unknown>) => listRunSummaries(view(extra), SC).runs[0].delivery;
+    expect(flags({})).toEqual({artifactPrepared: false, sourceAccepted: false, productVerified: false});
+    expect(flags({deliveryArtifact: {}})).toEqual({artifactPrepared: true, sourceAccepted: false, productVerified: false});
+    expect(flags({deliveryArtifact: {}, sourceDelivery: {}})).toEqual({artifactPrepared: true, sourceAccepted: true, productVerified: false});
+    expect(flags({completion: {}})).toEqual({artifactPrepared: false, sourceAccepted: false, productVerified: true});
+  });
+  it("rejects malformed queries with fixed codes, 404s unknown project/mission, and isolates tenants and tokens", async () => {
+    const {app, store, p} = await mkApp(), {run, m} = mkRun(store, p.projectId);
+    const code = async (qs: string) => { const r = await get(app, qs); return [r.statusCode, r.json().error]; };
+    expect(await code("?foo=1")).toEqual([400, "INVALID_QUERY"]);
+    expect(await code("?limit=0")).toEqual([400, "INVALID_LIMIT"]);
+    expect(await code("?limit=101")).toEqual([400, "INVALID_LIMIT"]);
+    expect(await code("?limit=abc")).toEqual([400, "INVALID_LIMIT"]);
+    expect(await code("?limit=1.5")).toEqual([400, "INVALID_LIMIT"]);
+    expect(await code("?limit=1&limit=2")).toEqual([400, "INVALID_QUERY"]);
+    expect(await code("?cursor=garbage")).toEqual([400, "INVALID_CURSOR"]);
+    expect(await code(`?cursor=${Buffer.from(JSON.stringify({c: "x", r: "y", z: 1})).toString("base64url")}`)).toEqual([400, "INVALID_CURSOR"]);
+    expect(await code("?status=NOPE")).toEqual([400, "INVALID_STATUS"]);
+    expect(await code("?projectId=bad")).toEqual([400, "INVALID_PROJECT_ID"]);
+    expect(await code("?missionId=bad")).toEqual([400, "INVALID_MISSION_ID"]);
+    expect(await code(`?projectId=prj_${"0".repeat(24)}`)).toEqual([404, "WORKOS_NOT_FOUND"]);
+    expect(await code(`?missionId=msn_${"0".repeat(24)}`)).toEqual([404, "WORKOS_NOT_FOUND"]);
+    expect((await get(app, "", {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    const other = await mkApp("tB");
+    expect((await get(other.app)).json().page).toEqual({runs: [], nextCursor: null, total: 0});
+    expect((await get(other.app, `?missionId=${m.missionId}`)).statusCode).toBe(404);
+    expect((await app.inject({method: "POST", url: "/v1/run-summaries", headers: hdr, payload: {}})).statusCode).toBe(404);
+    void run;
   });
 });
