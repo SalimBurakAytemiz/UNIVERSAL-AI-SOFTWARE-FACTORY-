@@ -18,6 +18,9 @@ import {FakeExecutors, executorsFromEnv, parseReviewOutput} from "../core/workos
 import type {ExecutorPair, FakeScript, MissionSpec} from "../core/workos/executors.js";
 import {RUN_STATUSES, TERMINAL_RUN_STATUSES, canRunTransition} from "../core/workos/run-state.js";
 import {effectiveLimits} from "../core/agents/role-execution.js";
+import {ProjectStudio} from "../core/workos/project-studio.js";
+import {RunWorkspaceArchiver, retentionMsFromEnv, recordedCommitSet, hasSecretFinding, RUN_ARCHIVE_RECORD} from "../core/workos/run-archive.js";
+import type {ArchiveStudioPort, ArchiveStorePort} from "../core/workos/run-archive.js";
 import {FIRST_DELIVERY_BINDINGS} from "../core/agents/first-delivery-bindings.js";
 import {scanDiffForSecrets, redactSecrets} from "../core/workos/secret-scan.js";
 import {buildServer} from "../apps/control-api/src/server.js";
@@ -808,5 +811,268 @@ describe("LANE-C bound role TaskLimits are enforced by the runner (never loosene
     const r2 = roleRun(c2, fake2, null);
     await runner(c2, fake2).tick();
     expect(runOf(c2, r2.runId).status).toBe("AWAITING_APPROVAL");
+  });
+});
+
+describe("LANE-C run workspace archive + prune (default OFF; archive first, verify, then prune after retention)", () => {
+  interface MCtx { store: WorkOsStore; studio: ProjectStudio; dataDir: string; stopFile: string; projectId: string; missionId: string }
+  const BASE_PROJECT = {tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", testCommand: ["node", "test.mjs"]};
+  function addMission(c: MCtx): string {
+    const m = c.store.createMission({tenantId: "tA", projectId: c.projectId, title: "Add feature", objective: "feature.txt must say ok", acceptanceCriteria: ["x"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) c.store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+    return m.missionId;
+  }
+  function managedSetup(kind: "managed" | "external" = "managed"): MCtx {
+    const id = crypto.randomBytes(4).toString("hex");
+    const dataDir = path.join(tmp, `adata-${id}`), runtime = path.join(tmp, `art-${id}`);
+    fs.mkdirSync(runtime, {recursive: true});
+    const studio = new ProjectStudio({dataDir, envPolicyFile: ENV_POLICY});
+    const store = new WorkOsStore(dataDir);
+    const p = kind === "managed" ? store.createProject({...BASE_PROJECT, prepareManagedRepository: pid => studio.createTemplateRepository(pid, "empty", "P")}) : store.createProject({...BASE_PROJECT, repository: {path: makeRepo(id).repo}});
+    const c = {store, studio, dataDir, stopFile: path.join(runtime, "GLOBAL_STOP.json"), projectId: p.projectId, missionId: ""};
+    c.missionId = addMission(c);
+    return c;
+  }
+  interface RunOpts { implement?: (n: number) => {files: Record<string, string>}; review?: "CLEAN" | "BLOCKED"; roleId?: string; maxRemediations?: number; missionId?: string }
+  const okFiles = (extra: Record<string, string> = {}) => ({files: {"feature.txt": "ok\n", "test.mjs": "process.exit(0);\n", ...extra}});
+  async function runWith(c: MCtx, o: RunOpts = {}): Promise<WorkRun> {
+    const fake = new FakeExecutors(okScript({implement: o.implement ?? (() => okFiles()), review: () => (o.review ?? "BLOCKED") === "CLEAN" ? ({verdict: "CLEAN"}) : ({verdict: "BLOCKED", findings: [{severity: "P1", title: "x"}]})}));
+    const pr = fake.pair();
+    const created = c.store.createRun({tenantId: "tA", missionId: o.missionId ?? c.missionId, ...(o.roleId ? {roleId: o.roleId} : {}), executor: {implementer: pr.implementer.identity, reviewer: pr.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
+    await new MissionRunner({executionGate: testExecutionGate(), store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: pr, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, maxRemediations: o.maxRemediations ?? 0, security: fakeSecurity(`${c.dataDir}-sec`).options}).tick();
+    return c.store.getRun({tenantId: "tA"}, created.runId)!;
+  }
+  const blockedWithCommit = (c: MCtx) => runWith(c, {review: "BLOCKED"});
+  const runDir = (c: MCtx, r: WorkRun) => path.join(c.dataDir, "runs", r.runId);
+  const workDir = (c: MCtx, r: WorkRun) => path.join(runDir(c, r), "work");
+  const archiver = (c: MCtx, retentionMs: number, over: Partial<ConstructorParameters<typeof RunWorkspaceArchiver>[0]> = {}) => new RunWorkspaceArchiver({dataDir: c.dataDir, store: c.store, studio: c.studio, retentionMs, ...over});
+  const repoOf = (c: MCtx) => c.studio.managedRepoRoot(c.store.getProject({tenantId: "tA"}, c.projectId)!);
+  const refList = (c: MCtx) => git(repoOf(c), ["for-each-ref", "--format=%(refname) %(objectname)", "refs/uasco"]);
+  const projectOf = (c: MCtx) => c.store.getProject({tenantId: "tA"}, c.projectId)!;
+
+  it("a terminal managed run is archived (delivery ref + per-commit ref), every archive is verified, then derived clones and runs/<id>/work are removed; logs, security reports, record and the Studio git view survive", { timeout: T }, async () => {
+    const c = managedSetup(); const run = await blockedWithCommit(c);
+    expect(run.status).toBe("BLOCKED");
+    expect(run.headSha).toMatch(/^[0-9a-f]{40}$/);
+    expect(fs.existsSync(workDir(c, run))).toBe(true);
+    const clones = fs.readdirSync(runDir(c, run)).filter(n => /^(scan|review|security)-c\d+$/.test(n));
+    expect(clones.length).toBeGreaterThan(0); // the runner leaves full derived clones behind
+    const rep = archiver(c, 0).sweep();
+    expect(rep).toEqual({results: [{runId: run.runId, status: "PRUNED", archiveRef: `refs/uasco/runs/${run.runId}`}], deferred: 0});
+    expect(fs.existsSync(workDir(c, run))).toBe(false);
+    expect(fs.readdirSync(runDir(c, run)).filter(n => /^(scan|review|security)-c\d+$/.test(n))).toEqual([]);
+    expect(fs.existsSync(path.join(runDir(c, run), "logs"))).toBe(true); // evidence logs are never pruned
+    expect(fs.existsSync(path.join(runDir(c, run), "security"))).toBe(true); // security reports are never pruned
+    const sha = run.headSha!;
+    expect(refList(c).split("\n").sort()).toEqual([`refs/uasco/run-commits/${run.runId}/${sha} ${sha}`, `refs/uasco/runs/${run.runId} ${sha}`].sort());
+    expect(git(repoOf(c), ["show", `${sha}:feature.txt`])).toBe("ok"); // the commit's content is readable from the managed repo alone
+    const rec = JSON.parse(fs.readFileSync(path.join(runDir(c, run), RUN_ARCHIVE_RECORD), "utf8"));
+    const {digest, ...body} = rec;
+    expect(rec).toMatchObject({schemaVersion: 1, runId: run.runId, status: "BLOCKED", headSha: sha});
+    expect(rec.commits).toEqual([{sha, ref: `refs/uasco/run-commits/${run.runId}/${sha}`}, {sha, ref: `refs/uasco/runs/${run.runId}`}]);
+    expect(typeof rec.archivedAt).toBe("string"); expect(typeof rec.prunedAt).toBe("string");
+    expect(digest).toBe(crypto.createHash("sha256").update(JSON.stringify(body, null, 2)).digest("hex"));
+    expect(JSON.stringify(c.studio.gitLog(projectOf(c), [run], 5, run.runId))).toContain(sha); // the run's commits still resolve after the workspace is gone
+    expect(archiver(c, 0).sweep()).toEqual({results: [], deferred: 0}); // idempotent: nothing left to do
+  });
+
+  it("commits that only the run's evidence names are archived too (headSha is NOT the only commit): a file-limit block leaves headSha null and a failed second cycle leaves headSha behind", { timeout: T }, async () => {
+    const many = (n: number, tag: string) => Object.fromEntries(Array.from({length: n}, (_, i) => [`gen/${tag}-${i}.txt`, `${i}\n`]));
+    // (1) tester limit is 100 files: 101 files => BLOCKED TASK_LIMIT_FILES_EXCEEDED with headSha null, but IMPLEMENT evidence names the commit
+    const c1 = managedSetup(); const r1 = await runWith(c1, {roleId: "UASCO-0313", review: "CLEAN", implement: () => okFiles(many(100, "f"))});
+    expect([r1.status, r1.reason, r1.headSha]).toEqual(["BLOCKED", "TASK_LIMIT_FILES_EXCEEDED:102>100", null]);
+    const produced1 = recordedCommitSet(r1);
+    expect(produced1).toHaveLength(1);
+    expect(git(workDir(c1, r1), ["rev-parse", "HEAD"])).toBe(produced1[0]);
+    expect(() => git(repoOf(c1), ["cat-file", "-e", `${produced1[0]}^{commit}`])).toThrow(); // the commit exists ONLY in the workspace
+    expect(archiver(c1, 0).sweep().results.map(r => r.status)).toEqual(["PRUNED"]);
+    expect(fs.existsSync(workDir(c1, r1))).toBe(false);
+    expect(git(repoOf(c1), ["cat-file", "-t", produced1[0]])).toBe("commit"); // ... and now in the managed repo
+    expect(refList(c1)).toBe(`refs/uasco/run-commits/${r1.runId}/${produced1[0]} ${produced1[0]}`);
+    // (2) cycle 0 fails its tests (headSha = cycle-0 commit), cycle 1 is blocked by the cumulative file limit: both commits are in the evidence
+    const c2 = managedSetup(); const r2 = await runWith(c2, {roleId: "UASCO-0313", review: "CLEAN", maxRemediations: 2, implement: n => ({files: {"feature.txt": "ok\n", "test.mjs": n === 1 ? "process.exit(1);\n" : "process.exit(0);\n", ...many(60, `c${n}`)}})});
+    expect(r2.status).toBe("BLOCKED");
+    expect(r2.reason).toMatch(/^TASK_LIMIT_FILES_EXCEEDED/);
+    const set2 = recordedCommitSet(r2);
+    expect(set2).toHaveLength(2);
+    expect(git(workDir(c2, r2), ["rev-parse", "HEAD"])).toBe(set2[1] === r2.headSha ? set2[0] : set2[1]); // workspace HEAD is the newer commit, headSha is not
+    archiver(c2, 0).sweep();
+    expect(fs.existsSync(workDir(c2, r2))).toBe(false);
+    for (const sha of set2) expect(git(repoOf(c2), ["cat-file", "-t", sha])).toBe("commit");
+  });
+
+  it("retention: nothing is archived or removed before the retention period; after it the same run is pruned", { timeout: T }, async () => {
+    const c = managedSetup(); const run = await blockedWithCommit(c);
+    expect(archiver(c, 3_600_000).sweep().results).toEqual([{runId: run.runId, status: "KEPT_RETENTION"}]);
+    expect(fs.existsSync(workDir(c, run))).toBe(true);
+    expect(refList(c)).toBe(""); // not even archived yet
+    expect(archiver(c, 3_600_000, {now: () => Date.now() + 2 * 3_600_000}).sweep().results.map(r => r.status)).toEqual(["PRUNED"]);
+    expect(fs.existsSync(workDir(c, run))).toBe(false);
+  });
+
+  it("never touches a run that is still open, a user-owned repository, or a project that is unknown; a mixed project prunes only its terminal run", { timeout: T }, async () => {
+    const c = managedSetup();
+    const terminal = await blockedWithCommit(c);
+    const awaiting = await runWith(c, {review: "CLEAN", missionId: addMission(c)});
+    expect([terminal.status, awaiting.status]).toEqual(["BLOCKED", "AWAITING_APPROVAL"]);
+    const rep = archiver(c, 0).sweep();
+    expect(rep.results.sort((a, b) => a.runId.localeCompare(b.runId))).toEqual([{runId: terminal.runId, status: "PRUNED", archiveRef: `refs/uasco/runs/${terminal.runId}`}, {runId: awaiting.runId, status: "KEPT_NOT_TERMINAL", detail: "AWAITING_APPROVAL"}].sort((a, b) => a.runId.localeCompare(b.runId)));
+    expect(fs.existsSync(workDir(c, terminal))).toBe(false);
+    expect(fs.existsSync(workDir(c, awaiting))).toBe(true);
+    expect(refList(c)).not.toContain(awaiting.runId);
+    // a user-owned repository is never written and its workspace is never removed
+    const x = managedSetup("external"); const ext = await blockedWithCommit(x);
+    const userRepo = x.store.getProject({tenantId: "tA"}, x.projectId)!.repository!.path!;
+    const before = git(userRepo, ["for-each-ref"]) + git(userRepo, ["count-objects", "-v"]);
+    expect(archiver(x, 0).sweep().results).toEqual([{runId: ext.runId, status: "KEPT_NOT_MANAGED"}]);
+    expect(fs.existsSync(workDir(x, ext))).toBe(true);
+    expect(git(userRepo, ["for-each-ref"]) + git(userRepo, ["count-objects", "-v"])).toBe(before);
+    // unknown project (store returns nothing) keeps the workspace
+    const stubStore: ArchiveStorePort = {engineListRuns: () => [terminal], getProject: () => undefined};
+    fs.mkdirSync(workDir(c, terminal), {recursive: true});
+    expect(archiver(c, 0, {store: stubStore}).sweep().results).toEqual([{runId: terminal.runId, status: "KEPT_PROJECT_UNKNOWN"}]);
+    expect(fs.existsSync(workDir(c, terminal))).toBe(true);
+  });
+
+  it("only terminal statuses ever reach the archive/prune step: a table over every run status", { timeout: T }, async () => {
+    const c = managedSetup(); const base = await blockedWithCommit(c);
+    const { RUN_STATUSES, TERMINAL_RUN_STATUSES } = await import("../core/workos/run-state.js");
+    const calls: string[] = [];
+    const studio: ArchiveStudioPort = {managedRepoRoot: () => "/managed", archiveRunCommit: (_p, r) => { calls.push(r.runId); }, isRunCommitArchived: () => true};
+    const runs: WorkRun[] = RUN_STATUSES.map((status, i) => ({...base, runId: `run_${i.toString(16).padStart(24, "0")}`, status}));
+    for (const r of runs) fs.mkdirSync(path.join(c.dataDir, "runs", r.runId, "work"), {recursive: true});
+    const stub: ArchiveStorePort = {engineListRuns: () => runs, getProject: () => projectOf(c)};
+    const rep = new RunWorkspaceArchiver({dataDir: c.dataDir, store: stub, studio, retentionMs: 0, maxRunsPerSweep: 100}).sweep();
+    const terminalIds = runs.filter(r => TERMINAL_RUN_STATUSES.includes(r.status)).map(r => r.runId);
+    expect(terminalIds.length).toBeGreaterThan(3);
+    expect([...new Set(calls)].sort()).toEqual([...terminalIds].sort()); // archive is attempted for terminal runs only (two refs per run)
+    expect(calls).toHaveLength(terminalIds.length * 2);
+    for (const r of runs) {
+      const terminal = terminalIds.includes(r.runId);
+      expect([r.status, fs.existsSync(path.join(c.dataDir, "runs", r.runId, "work"))]).toEqual([r.status, !terminal]);
+    }
+    expect(rep.results.filter(r => r.status === "KEPT_NOT_TERMINAL")).toHaveLength(runs.length - terminalIds.length);
+  });
+
+  it("an archive that fails or cannot be verified keeps the workspace and writes no record; failures back off instead of being retried every sweep", { timeout: T }, async () => {
+    const c = managedSetup(); const run = await blockedWithCommit(c);
+    let archiveCalls = 0;
+    const failing: ArchiveStudioPort = {managedRepoRoot: p => c.studio.managedRepoRoot(p), archiveRunCommit: () => { archiveCalls += 1; throw Object.assign(new Error("boom"), {code: "DELIVERY_SOURCE_UNAVAILABLE"}); }, isRunCommitArchived: () => true};
+    let clock = Date.now();
+    const a = archiver(c, 0, {studio: failing, now: () => clock, retryBackoffMs: 60_000});
+    expect(a.sweep().results).toEqual([{runId: run.runId, status: "KEPT_ARCHIVE_FAILED", detail: "DELIVERY_SOURCE_UNAVAILABLE"}]);
+    expect(a.sweep().results).toEqual([{runId: run.runId, status: "KEPT_BACKOFF"}]);
+    expect(archiveCalls).toBe(1); // not retried inside the backoff window
+    clock += 61_000;
+    expect(a.sweep().results[0].status).toBe("KEPT_ARCHIVE_FAILED");
+    expect(archiveCalls).toBe(2);
+    const unverified: ArchiveStudioPort = {managedRepoRoot: p => c.studio.managedRepoRoot(p), archiveRunCommit: (p, r, s, ref) => c.studio.archiveRunCommit(p, r, s, ref), isRunCommitArchived: () => false};
+    expect(archiver(c, 0, {studio: unverified}).sweep().results.map(r => r.status)).toEqual(["KEPT_ARCHIVE_UNVERIFIED"]);
+    expect(fs.existsSync(workDir(c, run))).toBe(true);
+    expect(fs.existsSync(path.join(runDir(c, run), RUN_ARCHIVE_RECORD))).toBe(false);
+  });
+
+  it("the real verification (isRunCommitArchived) rejects: ref absent, ref at another commit, invalid sha/ref, wrong project, and a commit whose tree is missing from the managed repo", { timeout: T }, async () => {
+    const c = managedSetup(); const run = await blockedWithCommit(c); const sha = run.headSha!; const project = projectOf(c);
+    const ref = `refs/uasco/run-commits/${run.runId}/${sha}`;
+    expect(c.studio.isRunCommitArchived(project, run, sha, ref)).toBe(false); // ref absent
+    c.studio.archiveRunCommit(project, run, sha, ref);
+    expect(c.studio.isRunCommitArchived(project, run, sha, ref)).toBe(true);
+    const root = repoOf(c), head = git(root, ["rev-parse", "HEAD"]);
+    git(root, ["update-ref", ref, head]);
+    expect(c.studio.isRunCommitArchived(project, run, sha, ref)).toBe(false); // ref points at another commit
+    for (const bad of [{sha: "abc", ref}, {sha: "z".repeat(40), ref}, {sha, ref: "refs/heads/main"}, {sha, ref: `refs/uasco/run-commits/${run.runId}/${"0".repeat(40)}`}, {sha, ref: `refs/uasco/runs/other`}]) {
+      expect(c.studio.isRunCommitArchived(project, run, bad.sha, bad.ref)).toBe(false);
+      expect(() => c.studio.archiveRunCommit(project, run, bad.sha, bad.ref)).toThrow("ARCHIVE_SOURCE_UNAVAILABLE");
+    }
+    expect(c.studio.isRunCommitArchived(project, {...run, projectId: "prj_other"}, sha, ref)).toBe(false);
+    expect(() => c.studio.archiveRunCommit(project, {...run, projectId: "prj_other"}, sha, ref)).toThrow("ARCHIVE_SOURCE_UNAVAILABLE");
+    // a loose commit object whose tree does not exist: the ref resolves to it but connectivity fails
+    const orphan = String(spawnGitSync(root, ["hash-object", "-t", "commit", "-w", "--stdin", "--literally"], {input: `tree ${"1".repeat(40)}\nauthor A <a@x.invalid> 1 +0000\ncommitter A <a@x.invalid> 1 +0000\n\nm\n`}).stdout).trim();
+    expect(orphan).toMatch(/^[0-9a-f]{40}$/);
+    const oref = `refs/uasco/run-commits/${run.runId}/${orphan}`;
+    git(root, ["update-ref", oref, orphan]);
+    expect(c.studio.isRunCommitArchived(project, run, orphan, oref)).toBe(false);
+  });
+
+  it("a run with a secret finding is never archived and its workspace is never pruned (its objects must not reach later workspace clones)", { timeout: T }, async () => {
+    const c = managedSetup();
+    const key = ["AK", "IA", "Q7ZX3MPLW2RT5VB9"].join("");
+    const run = await runWith(c, {implement: () => okFiles({"secrets.env": `aws=${key}\n`})});
+    expect([run.status, run.reason]).toEqual(["BLOCKED", "SECRET_IN_DIFF"]);
+    expect(hasSecretFinding(run)).toBe(true);
+    expect(archiver(c, 0).sweep().results).toEqual([{runId: run.runId, status: "KEPT_SECRET_FINDING"}]);
+    expect(fs.existsSync(workDir(c, run))).toBe(true);
+    expect(refList(c)).toBe("");
+    expect(() => git(repoOf(c), ["cat-file", "-e", `${run.headSha}^{commit}`])).toThrow(); // the secret-bearing commit never entered the managed repo
+    expect(hasSecretFinding({...run, reason: "TESTS_FAILED", evidence: []})).toBe(false);
+    expect(hasSecretFinding({...run, reason: "X", evidence: [{...run.evidence[0], secretHits: [{kind: "AWS_ACCESS_KEY", file: "a", line: 1}]}]})).toBe(true);
+  });
+
+  it.skipIf(process.platform === "win32")("a work path or derived clone that is a symlink is never followed or removed (targets outside the run stay intact)", { timeout: T }, async () => {
+    const c = managedSetup(); const run = await blockedWithCommit(c);
+    const outside = path.join(tmp, `outside-${run.runId}`); fs.mkdirSync(outside); fs.writeFileSync(path.join(outside, "canary.txt"), "KEEP");
+    const w = workDir(c, run); fs.renameSync(w, `${w}-real`); fs.symlinkSync(outside, w);
+    expect(archiver(c, 0).sweep().results).toEqual([{runId: run.runId, status: "KEPT_UNSAFE_PATH"}]);
+    expect(fs.readFileSync(path.join(outside, "canary.txt"), "utf8")).toBe("KEEP");
+    expect(fs.lstatSync(w).isSymbolicLink()).toBe(true);
+    // a derived clone replaced by a symlink: the prune refuses before touching work
+    fs.unlinkSync(w); fs.renameSync(`${w}-real`, w);
+    const clone = fs.readdirSync(runDir(c, run)).find(n => /^scan-c\d+$/.test(n))!;
+    fs.rmSync(path.join(runDir(c, run), clone), {recursive: true, force: true}); fs.symlinkSync(outside, path.join(runDir(c, run), clone));
+    expect(archiver(c, 0).sweep().results.map(r => r.status)).toEqual(["KEPT_PRUNE_FAILED"]);
+    expect(fs.existsSync(w)).toBe(true);
+    expect(fs.readFileSync(path.join(outside, "canary.txt"), "utf8")).toBe("KEEP");
+  });
+
+  it("a terminal run whose evidence names no commit has nothing to archive: its workspace is pruned after retention and the record says so", { timeout: T }, async () => {
+    const c = managedSetup(); const run = await runWith(c, {roleId: "UASCO-0252"});
+    expect([run.status, run.headSha, recordedCommitSet(run)]).toEqual(["BLOCKED", null, []]);
+    expect(archiver(c, 0).sweep().results).toEqual([{runId: run.runId, status: "PRUNED_NO_COMMIT"}]);
+    expect(fs.existsSync(workDir(c, run))).toBe(false);
+    expect(refList(c)).toBe("");
+    expect(JSON.parse(fs.readFileSync(path.join(runDir(c, run), RUN_ARCHIVE_RECORD), "utf8"))).toMatchObject({headSha: null, commits: [], archivedAt: null});
+  });
+
+  it("a failure after the workspace was removed does not leave a wrong record or a wrong report: the sweep reports PRUNED and the next sweep finalizes the record; a store failure never throws", { timeout: T }, async () => {
+    const c = managedSetup(); const run = await blockedWithCommit(c);
+    let calls = 0, broken = true;
+    const now = () => { calls += 1; if (broken && calls === 3) throw new Error("clock failure after prune"); return Date.now() + 1000; }; // call 1 archivedAt, 2 retention check precedes; the third read is prunedAt
+    const a = archiver(c, 0, {now});
+    // calls: retention (1), archivedAt (2), prunedAt (3 -> throws after the workspace is gone)
+    const rep = a.sweep();
+    expect(rep.results.map(r => [r.status, r.detail])).toEqual([["PRUNED", "RECORD_FINALIZE_PENDING"]]);
+    expect(fs.existsSync(workDir(c, run))).toBe(false);
+    expect(JSON.parse(fs.readFileSync(path.join(runDir(c, run), RUN_ARCHIVE_RECORD), "utf8")).prunedAt).toBeNull();
+    broken = false;
+    expect(a.sweep().results).toEqual([{runId: run.runId, status: "RECORD_FINALIZED"}]);
+    expect(typeof JSON.parse(fs.readFileSync(path.join(runDir(c, run), RUN_ARCHIVE_RECORD), "utf8")).prunedAt).toBe("string");
+    expect(a.sweep().results).toEqual([]);
+    const throwing: ArchiveStorePort = {engineListRuns: () => { throw new Error("store tampered"); }, getProject: () => undefined};
+    expect(archiver(c, 0, {store: throwing}).sweep()).toEqual({results: [], deferred: 0, error: "STORE_UNAVAILABLE:store tampered"});
+  });
+
+  it("a sweep does bounded work: at most maxRunsPerSweep runs are archived/pruned per pass; the rest are deferred and picked up by the next pass", { timeout: T }, async () => {
+    const c = managedSetup();
+    const r1 = await blockedWithCommit(c); const r2 = await runWith(c, {review: "BLOCKED", missionId: addMission(c)});
+    const a = archiver(c, 0, {maxRunsPerSweep: 1});
+    const first = a.sweep();
+    expect(first.results.filter(r => r.status === "PRUNED")).toHaveLength(1);
+    expect(first.deferred).toBe(1);
+    const second = a.sweep();
+    expect(second.results.filter(r => r.status === "PRUNED")).toHaveLength(1);
+    expect(second.deferred).toBe(0);
+    for (const r of [r1, r2]) expect(fs.existsSync(workDir(c, r))).toBe(false);
+    expect(() => archiver(c, 0, {maxRunsPerSweep: 0})).toThrow("RUN_ARCHIVE_LIMITS_INVALID");
+  });
+
+  it("configuration is OFF unless UASCO_RUN_WORKSPACE_RETENTION_HOURS is an integer 1..8760; an invalid retention is a construction error", () => {
+    expect(retentionMsFromEnv({})).toEqual({enabled: false, reason: "NOT_CONFIGURED"});
+    expect(retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: ""})).toEqual({enabled: false, reason: "NOT_CONFIGURED"});
+    expect(retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: "24"})).toEqual({enabled: true, retentionMs: 24 * 3_600_000});
+    expect(retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: "8760"})).toEqual({enabled: true, retentionMs: 8760 * 3_600_000});
+    for (const bad of ["0", "-1", "1.5", "abc", "08", "8761", "99999", " 5", "5h"]) expect([bad, retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: bad})]).toEqual([bad, {enabled: false, reason: "INVALID"}]);
+    const c = managedSetup();
+    for (const bad of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) expect(() => archiver(c, bad)).toThrow("RUN_ARCHIVE_RETENTION_INVALID");
   });
 });
