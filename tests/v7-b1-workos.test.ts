@@ -2229,3 +2229,137 @@ describe("LANE-B run summaries", () => {
     void run;
   });
 });
+
+describe("LANE-B run readiness", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const mk = async (tenantId = "tA", dataDir = path.join(tmp, "data")) => {
+    const {default: Fastify} = await import("fastify");
+    const {registerReadinessRoutes} = await import("../apps/control-api/src/routes/readiness.js");
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(dataDir);
+    registerReadinessRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}), workosFail: (r: any) => r.code(500).send({error: "INTERNAL_ERROR"})});
+    return {app, store};
+  };
+  const proj = (s: WorkOsStore, extra: any = {}) => s.createProject({tenantId: "tA", orgId: "o1", name: "p" + Math.random(), environmentId: "local", createdBy: "FOUNDER_LOCAL", ...extra});
+  const msn = (s: WorkOsStore, projectId: string, extra: any = {}) => s.createMission({tenantId: "tA", projectId, title: "m", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL", ...extra});
+  const rd = async (app: any, id: string) => (await app.inject({method: "GET", url: `/v1/projects/${id}/readiness`, headers: hdr}));
+  const by = (r: any) => Object.fromEntries(r.json().readiness.checks.map((c: any) => [c.id, c]));
+
+  it("fresh project: no mission, no repository, no test command are reported with fixed codes and next actions; nothing is invented", async () => {
+    const {app, store} = await mk();
+    const p = proj(store);
+    const r = await rd(app, p.projectId), c = by(r);
+    expect(r.statusCode).toBe(200);
+    expect(r.json().readiness).toMatchObject({ready: false, verifiable: false, missionId: null});
+    expect(c.MISSION).toMatchObject({state: "BLOCKED", reason: "NO_OPEN_MISSION", nextAction: "CREATE_MISSION", blocking: true});
+    expect(c.RISK.state).toBe("UNKNOWN");
+    expect(c.REPOSITORY).toMatchObject({state: "BLOCKED", reason: "REPOSITORY_NOT_CONFIGURED", nextAction: "CONFIGURE_REPOSITORY"});
+    expect(c.TEST_COMMAND).toMatchObject({state: "BLOCKED", reason: "TEST_COMMAND_MISSING", blocking: false});
+    expect(c.PLAN.state).toBe("UNKNOWN");
+  });
+
+  it("ready only when every blocking check is OK; verifiable additionally needs test command and plan; mission test command overrides the project's", async () => {
+    const {app, store} = await mk();
+    const repoDir = path.join(tmp, "readiness-repo"); fs.mkdirSync(repoDir, {recursive: true});
+    const p = proj(store, {repository: {path: repoDir}});
+    const m = msn(store, p.projectId);
+    let r = await rd(app, p.projectId);
+    expect(r.json().readiness).toMatchObject({ready: true, verifiable: false, missionId: m.missionId});
+    expect(by(r).REPOSITORY.state).toBe("OK");
+    expect(r.body).not.toContain("readiness-repo");
+    store.createTask({tenantId: "tA", missionId: m.missionId, title: "t", actor: "FOUNDER_LOCAL"});
+    const p2 = proj(store, {repository: {path: repoDir}, testCommand: ["rm", "-rf"]});
+    const m2 = msn(store, p2.projectId, {testCommand: ["npm", "test"]});
+    store.createTask({tenantId: "tA", missionId: m2.missionId, title: "t", actor: "FOUNDER_LOCAL"});
+    r = await rd(app, p2.projectId);
+    expect(by(r).TEST_COMMAND.state).toBe("OK");
+    expect(r.json().readiness.verifiable).toBe(true);
+    const p3 = proj(store, {repository: {path: repoDir}, testCommand: ["npm", "test"]});
+    const m3 = msn(store, p3.projectId);
+    store.createTask({tenantId: "tA", missionId: m3.missionId, title: "t", actor: "FOUNDER_LOCAL"});
+    expect((await rd(app, p3.projectId)).json().readiness.verifiable).toBe(true);
+    const {deriveProjectFlow} = await import("../core/workos/flow.js");
+    expect(deriveProjectFlow(store, {tenantId: "tA"}, p2.projectId)!.testCommand).toBe("CONFIGURED");
+    expect(by(await rd(app, p.projectId)).PLAN).toMatchObject({state: "OK", blocking: false});
+  });
+
+  it("R3/R4 is BLOCKED with the run route's refusal code; remote-only and data-dir repositories are refused; disallowed test command is flagged", async () => {
+    const {app, store} = await mk();
+    const p = proj(store, {repository: {url: "https://example.com/x/y.git"}, testCommand: ["bash", "-c", "x"]});
+    msn(store, p.projectId, {riskLevel: "R3"});
+    const r = await rd(app, p.projectId), c = by(r);
+    expect(c.RISK).toMatchObject({state: "BLOCKED", reason: "RISK_REQUIRES_FOUNDER_DECISION_AND_OS_SANDBOX"});
+    expect(c.REPOSITORY.reason).toBe("REMOTE_REPO_NOT_SUPPORTED_YET");
+    expect(c.TEST_COMMAND.reason).toBe("TEST_COMMAND_NOT_ALLOWED");
+    expect(r.body).not.toContain("example.com");
+    expect(r.json().readiness.ready).toBe(false);
+    const inside = proj(store, {repository: {path: path.join(tmp, "data")}});
+    msn(store, inside.projectId);
+    expect(by(await rd(app, inside.projectId)).REPOSITORY.reason).toBe("REPOSITORY_PATH_FORBIDDEN");
+  });
+
+  it("validates id and query, scopes by tenant, requires the token, and stays read-only", async () => {
+    const {app, store} = await mk();
+    const p = proj(store);
+    expect((await app.inject({method: "GET", url: "/v1/projects/nope/readiness", headers: hdr})).statusCode).toBe(400);
+    expect((await app.inject({method: "GET", url: `/v1/projects/${p.projectId}/readiness?x=1`, headers: hdr})).statusCode).toBe(400);
+    expect((await app.inject({method: "GET", url: `/v1/projects/prj_${"0".repeat(24)}/readiness`, headers: hdr})).statusCode).toBe(404);
+    expect((await app.inject({method: "GET", url: `/v1/projects/${p.projectId}/readiness`, headers: {host: hdr.host}})).statusCode).toBe(403);
+    const other = await mk("tB");
+    expect((await rd(other.app, p.projectId)).statusCode).toBe(404);
+    expect((await app.inject({method: "POST", url: `/v1/projects/${p.projectId}/readiness`, headers: hdr, payload: {}})).statusCode).toBe(404);
+  });
+
+  it("a configured repository path that does not exist is BLOCKED with the runner's own code", async () => {
+    const {app, store} = await mk();
+    const p = proj(store, {repository: {path: path.join(tmp, "no-such-readiness-repo")}});
+    msn(store, p.projectId);
+    const r = await rd(app, p.projectId);
+    expect(by(r).REPOSITORY).toMatchObject({state: "BLOCKED", reason: "REPOSITORY_PATH_NOT_FOUND"});
+    expect(r.body).not.toContain("no-such-readiness-repo");
+  });
+
+  it("readiness REPOSITORY answers are exactly the runner's own repositoryPrecondition reasons for all five BLOCK cases", async () => {
+    const {repositoryPrecondition} = await import("../core/workos/runner.js");
+    const {app, store} = await mk();
+    const dataDir = path.join(tmp, "data"), okDir = path.join(tmp, "readiness-parity-ok"); fs.mkdirSync(okDir, {recursive: true});
+    const cases: [string, any, string | null][] = [
+      ["none", undefined, "REPOSITORY_NOT_CONFIGURED"],
+      ["url only", {url: "https://example.com/a.git"}, "REMOTE_REPO_NOT_SUPPORTED_YET"],
+      ["managed foreign path", {path: okDir, managed: true}, "REPOSITORY_NOT_MANAGED"],
+      ["inside data dir", {path: dataDir}, "REPOSITORY_PATH_FORBIDDEN"],
+      ["missing dir", {path: path.join(tmp, "readiness-parity-missing")}, "REPOSITORY_PATH_NOT_FOUND"],
+      ["ok", {path: okDir}, null]
+    ];
+    for (const [name, repository, want] of cases) {
+      const p = proj(store, repository ? {repository} : {});
+      msn(store, p.projectId);
+      const pre = repositoryPrecondition(store.getProject({tenantId: "tA"}, p.projectId)!, store.dataDir);
+      const got = by(await rd(app, p.projectId)).REPOSITORY;
+      expect(pre.ok ? null : pre.reason, name).toBe(want);
+      expect(got.reason, name).toBe(want);
+      expect(got.state, name).toBe(want ? "BLOCKED" : "OK");
+    }
+  });
+
+  it("flow testCommand follows mission-over-project: a command on either level alone is CONFIGURED, neither is MISSING", async () => {
+    const {app, store} = await mk();
+    void app;
+    const {deriveProjectFlow} = await import("../core/workos/flow.js");
+    const flag = (pj: any, ms: any) => { const p = proj(store, pj); msn(store, p.projectId, ms); return deriveProjectFlow(store, {tenantId: "tA"}, p.projectId)!.testCommand; };
+    expect(flag({}, {testCommand: ["npm", "test"]})).toBe("CONFIGURED");
+    expect(flag({testCommand: ["npm", "test"]}, {})).toBe("CONFIGURED");
+    expect(flag({}, {})).toBe("MISSING");
+  });
+
+  it("KNOWN LIMIT (pinned): an existing directory that is not a git repository reads as REPOSITORY OK; the runner later BLOCKs it with REPOSITORY_HEAD_UNRESOLVED", async () => {
+    const {app, store} = await mk();
+    const dir = path.join(tmp, "readiness-not-git"); fs.mkdirSync(dir, {recursive: true});
+    const p = proj(store, {repository: {path: dir}});
+    msn(store, p.projectId);
+    const r = await rd(app, p.projectId);
+    expect(by(r).REPOSITORY.state).toBe("OK");
+    expect(r.json().readiness.ready).toBe(true);
+  });
+});
