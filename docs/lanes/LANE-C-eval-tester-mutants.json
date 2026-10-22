@@ -89,8 +89,8 @@
    "id": "A7",
    "description": "hex operands accepted",
    "file": "core/competency/static-test-analysis.ts",
-   "old": "!/^\\d+(?:\\.\\d+)?$/.test(num.v)",
-   "new": "!/^[\\dxX.]+$/.test(num.v)"
+   "old": "/^(0|[1-9]\\d*)(?:\\.(\\d{1,6}))?$/",
+   "new": "/^(0|[1-9]\\d*|0x[0-9a-f]+)(?:\\.(\\d{1,6}))?$/i"
   },
   {
    "id": "A8",
@@ -392,13 +392,6 @@
    "file": "core/competency/static-test-analysis.ts",
    "old": "(t.t === \"p\" && (t.v === \")\" || t.v === \"]\" || t.v === \"}\")));",
    "new": "(t.t === \"p\" && (t.v === \"]\" || t.v === \"}\")));"
-  },
-  {
-   "id": "C11",
-   "description": "any number literal accepted",
-   "file": "core/competency/static-test-analysis.ts",
-   "old": "!/^\\d+(?:\\.\\d+)?$/.test(num.v)",
-   "new": "false"
   },
   {
    "id": "C12",
