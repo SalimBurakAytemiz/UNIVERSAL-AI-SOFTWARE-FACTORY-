@@ -66,3 +66,30 @@ export function mapKnowledge(raw,projectId){
   const memory=mapMemory(k.memory),evidence=mapEvidence(k.evidence);
   return memory!==null&&evidence!==null?{state:"VERIFIED",knowledge:{projectId,memory,evidence}}:bad;
 }
+
+// ---------- Kayıt geçmişi (GET /v1/projects/:id/memory/:memId/provenance) ----------
+// //TR: Bir bellek girdisinin supersede zincirini (eskiden yeniye) gösterir: yalnız sunucunun bildirdiği adımlar; zincir boşsa, son adım istenen kayıt değilse ya da sıra artmıyorsa TÜM okuma ERROR olur.
+export const provenancePath=(projectId,memId)=>typeof projectId==="string"&&PROJECT_ID_RE.test(projectId)&&typeof memId==="string"&&MEM_ID_RE.test(memId)?`/v1/projects/${projectId}/memory/${memId}/provenance`:null;
+export const MAX_LINEAGE=1000;
+const SHA64_RE=/^[0-9a-f]{64}$/;
+function step(x){
+  if(!isObj(x)||typeof x.id!=="string"||!MEM_ID_RE.test(x.id)||!Number.isSafeInteger(x.seq)||x.seq<1||x.seq>MAX_COUNT||iso(x.at)===null||!MEMORY_KINDS.includes(x.kind)||typeof x.hash!=="string"||!SHA64_RE.test(x.hash))return null;
+  if(!isObj(x.author)||str(x.author.role,64)===null||(x.author.sessionId!==undefined&&str(x.author.sessionId,128)===null))return null;
+  if(!Array.isArray(x.sources)||x.sources.length>32)return null;
+  const sources=[];
+  for(const s of x.sources){
+    if(!isObj(s)||str(s.ref,2048)===null||iso(s.retrievedAt)===null||(s.sha256!==undefined&&(typeof s.sha256!=="string"||!SHA64_RE.test(s.sha256))))return null;
+    sources.push({ref:s.ref,sha256:s.sha256??null,retrievedAt:s.retrievedAt});
+  }
+  return {id:x.id,seq:x.seq,at:x.at,kind:x.kind,authorRole:x.author.role,sources,hash:x.hash};
+}
+/** -> {state:"VERIFIED",provenance:{id,currentHeadId,lineage[]}} | {state:"ERROR",provenance:null}; lineage eskiden yeniye, son adım istenen kayıttır. */
+export function mapProvenance(raw,memId){
+  const bad={state:"ERROR",provenance:null};
+  const p=isObj(raw)?raw.provenance:null;
+  if(!isObj(p)||typeof memId!=="string"||!MEM_ID_RE.test(memId)||p.id!==memId||typeof p.currentHeadId!=="string"||!MEM_ID_RE.test(p.currentHeadId)||!Array.isArray(p.lineage)||p.lineage.length<1||p.lineage.length>MAX_LINEAGE)return bad;
+  const lineage=[];
+  for(const x of p.lineage){const s=step(x);if(s===null||(lineage.length&&s.seq<=lineage[lineage.length-1].seq))return bad;lineage.push(s)}
+  if(lineage[lineage.length-1].id!==memId)return bad;
+  return {state:"VERIFIED",provenance:{id:memId,currentHeadId:p.currentHeadId,lineage}};
+}
