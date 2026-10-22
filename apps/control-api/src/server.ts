@@ -54,6 +54,11 @@ import {deriveDevReviewTimeline} from "../../../core/workos/crew/dev-review.js";
 // //TR: UI-049: bağımsız review kararları salt-okunur olarak Work OS journal'daki GERÇEK run REVIEW kanıtlarından türetilir; ikinci store yok, uydurma karar yok. Reviewer metinleri (bulgu başlıkları) çıktıya konmadan önce redakte edilip kırpılır.
 import {redactSecrets} from "../../../core/workos/secret-scan.js";
 import type {WorkRun,RunEvidence} from "../../../core/workos/types.js";
+import {registerIntakeRoutes} from "./routes/intake.js";
+import {registerPlanRoutes} from "./routes/plan.js";
+import {registerFlowRoutes} from "./routes/flow.js";
+import {registerTaskRoutes} from "./routes/tasks.js";
+import {registerTaskRunRoutes} from "./routes/task-runs.js";
 
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
@@ -228,6 +233,14 @@ app.post<{Params:{id:string}}>("/v1/missions/:id/transition",wos(async(req,reply
   if(b.to==="COMPLETE"){try{const r=getStore().completeMission(scope,req.params.id,b.reason,actor);const outcomes=deriveOutcomes(r.run);audit("WORKOS_MISSION_COMPLETED",{actor,missionId:r.mission.missionId,runId:r.run.runId,headSha:r.run.headSha,completionMode:outcomes.completionMode});return {mission:r.mission,run:r.run,outcomes}}catch(e){if(e instanceof WorkOsError&&e.code==="WORKOS_CONFLICT")audit("WORKOS_MISSION_COMPLETE_REFUSED",{actor,missionId:req.params.id,reason:e.message.replace(/^WORKOS_CONFLICT: ?/,"").slice(0,64)});return workosFail(reply,e)}}
   try{const before=getStore().getMission(scope,req.params.id);const mission=getStore().transitionMission(scope,req.params.id,b.to,b.reason,actor);audit("WORKOS_MISSION_TRANSITIONED",{actor,missionId:mission.missionId,from:before?.status,to:mission.status});return {mission}}catch(e){return workosFail(reply,e)}
 }));
+
+// //TR: COORD-FIRST-DELIVERY-WIRING (Founder onayı 2026-10-21): ilk teslim zinciri route modülleri (intake, plan, akış, görev durumu) aynı global token hook'u, aynı yazma kapısı sırası (Global Stop 423 -> politika 403 -> şema 400), aynı tenant kapsamı ve aynı audit ile kaydedilir; yazma gövdeleri masaüstü köprüsüyle aynı 32 KB sınırındadır (LANE_WRITE_BODY_LIMIT).
+const laneDeps={getStore,scope,orgId,actor,audit,workosStopped,workosPolicy,workosFail};
+registerIntakeRoutes(app,laneDeps);
+registerPlanRoutes(app,laneDeps);
+registerFlowRoutes(app,laneDeps);
+registerTaskRoutes(app,laneDeps);
+registerTaskRunRoutes(app,laneDeps);
 
 // //TR: B3a mission runner route'ları: aynı token hook'u ve aynı yazma kapısı sırası (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400). Run'lar aynı Work OS journal'ındadır; eski /v1/runs route'larına dokunulmaz.
 const validWorkRunId=(x:unknown)=>typeof x==="string"&&/^run_[0-9a-f]{24}$/.test(x);

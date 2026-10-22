@@ -1,4 +1,7 @@
 // //TR: Bu dosya Agent Team Composer'ın önerdiği ekip için SAF (pure) bir okuma-modeli/özet üretir: önerilen rolleri guild ve cluster bazında sayılarla, gerekçelerle (rationale) ve boşluklarla (gaps) dürüst biçimde gruplar. Bu özet sonradan Desktop'ta GÖSTERIM içindir ama burada HIÇBIR Desktop/control-api KODU kurulmaz; yalnız salt-veri bir görünümdür. Yan etki, model/ağ/shell YOKTUR. Dürüstlük: özet N canlı ajan ya da certified worker İMA ETMEZ; sayılar rol TANIMI sayısıdır ve liveAgentCount/certifiedWorkerCount sabit 0 taşınır.
+import {FIRST_DELIVERY_BINDINGS} from "../../agents/first-delivery-bindings.js";
+import {profileDefect} from "../../agents/role-execution.js";
+import type {NotExecutableReason} from "../../agents/role-execution.js";
 import type {ProposedTeam, RoleCatalog, RoleSelection, CapabilityGap} from "./team-composer.js";
 
 // //TR: Bir guild altındaki önerilen roller: guildId + (katalogdan gelen) ad + clusterId + rol kimlikleri + sayı.
@@ -16,6 +19,12 @@ export interface ClusterTeamSummary {
   readonly guildCount: number;
   readonly roleCount: number;
 }
+// //TR: Önerilen bir rol TANIMININ yürütülebilirlik durumu (canlı ajan DEĞİL, sertifika DEĞİL): tam bağlaması varsa EXECUTABLE, yoksa sabit neden kodlu NOT_EXECUTABLE.
+export interface RoleExecutability {
+  readonly roleId: string;
+  readonly status: "EXECUTABLE" | "NOT_EXECUTABLE";
+  readonly reason?: NotExecutableReason;
+}
 // //TR: Tam özet görünümü. byGuild/byCluster kararlı (kimliğe göre sıralı) gruplardır. selections/gaps composer çıktısından aynen taşınır. honestyNotice ve 0 sayaçlar çıktının bir ÖNERI olduğunu (aktivasyon değil) ve canlı ajan/certified worker ima etmediğini korur.
 export interface TeamSummary {
   readonly projectName: string;
@@ -26,6 +35,8 @@ export interface TeamSummary {
   readonly certifiedWorkerCount: 0;
   readonly byCluster: readonly ClusterTeamSummary[];
   readonly byGuild: readonly GuildTeamSummary[];
+  readonly executability: readonly RoleExecutability[];
+  readonly executableRoleDefinitionCount: number;
   readonly selections: readonly RoleSelection[];
   readonly gaps: readonly CapabilityGap[];
   readonly honestyNotice: string;
@@ -67,6 +78,12 @@ export function summarizeProposedTeam(team: ProposedTeam, catalog: RoleCatalog):
       roleCount: v.roleCount
     }));
 
+  const executability: RoleExecutability[] = team.selections.map(sel => {
+    const b = FIRST_DELIVERY_BINDINGS.find(x => x.roleId === sel.roleId);
+    if (!b) return {roleId: sel.roleId, status: "NOT_EXECUTABLE", reason: "ROLE_HAS_NO_BINDING"};
+    const d = profileDefect(b);
+    return d ? {roleId: sel.roleId, status: "NOT_EXECUTABLE", reason: d.reason} : {roleId: sel.roleId, status: "EXECUTABLE"};
+  });
   return {
     projectName: team.projectName,
     isReference: team.isReference,
@@ -76,6 +93,8 @@ export function summarizeProposedTeam(team: ProposedTeam, catalog: RoleCatalog):
     certifiedWorkerCount: 0,
     byCluster,
     byGuild,
+    executability,
+    executableRoleDefinitionCount: executability.filter(e => e.status === "EXECUTABLE").length,
     selections: team.selections,
     gaps: team.gaps,
     honestyNotice: team.honestyNotice

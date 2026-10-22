@@ -29,8 +29,8 @@ export async function performTransition(ctx,{missionId,title,from,to,reason,stat
   await ctx.refreshAll({force:true});focusResult(ctx,statusId,keys);return {ok:d.ok,status:res?.status??null};
 }
 /** Koşu başlatır (mission AUTHORIZED veya PLANNED olmalı); sunucu 409 EXECUTOR_NOT_CONFIGURED veya 423 dönerse açık mesaj gösterilir. */
-export async function startRun(ctx,{missionId,status,statusId=actionStatusId(missionId)}){
-  const req=buildRunRequest({missionId,status});
+export async function startRun(ctx,{missionId,status,roleId,statusId=actionStatusId(missionId)}){
+  const req=buildRunRequest({missionId,status,roleId});
   if(!req.ok){setStatus(statusId,{ok:false,errors:req.errors});await ctx.rerender();focusStatus(ctx.doc,statusId);return {ok:false,validation:true}}
   drafts.busy[statusId]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[statusId]=false}

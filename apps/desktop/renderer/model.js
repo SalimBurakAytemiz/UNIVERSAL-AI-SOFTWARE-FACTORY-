@@ -75,7 +75,7 @@ export function mapCockpit(raw){
 }
 export function mapProjects(raw){
   if(!isObj(raw)||!Array.isArray(raw.projects))return {state:"ERROR",items:[]};
-  const items=raw.projects.filter(isObj).map(p=>({projectId:str(p.projectId,80),name:str(p.name,200)??"—",tenantId:str(p.tenantId,80),environmentId:str(p.environmentId,100),createdAt:iso(p.createdAt),repositoryPath:isObj(p.repository)?str(p.repository.path,1000):null})).filter(p=>p.projectId);
+  const items=raw.projects.filter(isObj).map(p=>({projectId:str(p.projectId,80),name:str(p.name,200)??"—",tenantId:str(p.tenantId,80),environmentId:str(p.environmentId,100),createdAt:iso(p.createdAt),repositoryPath:isObj(p.repository)?str(p.repository.path,1000):null,remoteRepository:isObj(p.repository)&&typeof p.repository.url==="string"&&p.repository.url.length>0,testCommandSet:Array.isArray(p.testCommand)&&p.testCommand.length>0})).filter(p=>p.projectId);
   return {state:"VERIFIED",items};
 }
 export function mapMissions(raw){

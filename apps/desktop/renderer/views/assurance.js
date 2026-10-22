@@ -10,7 +10,7 @@ import {h,panel,stateNote,emptyNote,chip,verificationChip,statePill,miniBars,bad
 import {MISSING,formatCount} from "../model.js";
 import {VERIFICATION_STATES,filterEvidence,formatDateTime} from "../work-core.js";
 import {drafts,selection,field} from "../forms.js";
-import {mapSecurityScans,evidenceIntegrity,buildLineage,reviewRowVerified,mapTestReports} from "../assurance-core.js";
+import {mapSecurityScans,evidenceIntegrity,buildLineage,buildLineageGraph,linkedNodeIds,lineageNavigate,GRAPH_KINDS,reviewRowVerified,mapTestReports} from "../assurance-core.js";
 import {icon} from "../icons.js";
 
 const PAGE_LIMIT=100;
@@ -309,6 +309,39 @@ function lineageRun(ctx,run,{noMission=false}={}){
     h(doc,"span",{class:"mono",text:run.runId}),noMission?h(doc,"span",{class:"note",text:` · ${ctx.t("assurance.lineage.noMission")}`}):null,
     h(doc,"ul",{class:"as-lineage-list"},run.evidence.map(e=>lineageLeaf(ctx,e))));
 }
+// //TR: PQ-003: klavyeyle gezilebilir düğüm/kenar görünümü (sütunlar mission | run | kanıt, roving tabindex, ok tuşları) + her zaman görünen erişilebilir kenar listesi. Veri yeni okuma değildir; kenarlar yalnız listedeki alanlardan gelir.
+function lineageGraphView(ctx,L){
+  const doc=ctx.doc,g=buildLineageGraph(L);
+  if(!g.nodes.length)return null;
+  const first=g.nodes[0].id;let current=first;
+  const btnId=id=>`lg-${id.replace(/[^A-Za-z0-9_-]/g,"_")}`;
+  const buttons=new Map();
+  const live=h(doc,"p",{class:"note",id:"as-lineage-graph-live","aria-live":"polite",dataset:{lineageGraphLive:"1"}});
+  function mark(id){
+    const linked=linkedNodeIds(g,id);current=id;
+    for(const [nid,b] of buttons){b.dataset.lineageLinked=linked.has(nid)?"1":"0";b.setAttribute("tabindex",nid===id?"0":"-1");b.setAttribute("aria-current",nid===id?"true":"false")}
+    const n=g.byId(id);live.textContent=ctx.t("assurance.lineage.graph.selected",{kind:ctx.t(`assurance.lineage.graph.kind.${n.kind}`),label:n.label,n:String(linked.size)});
+  }
+  function onKey(e){
+    const id=e.target?.dataset?.lineageNode;if(!id)return;
+    const to=lineageNavigate(g,id,e.key);if(!to)return;
+    e.preventDefault?.();mark(to);buttons.get(to)?.focus?.();
+  }
+  const cols=g.columns.map((col,ci)=>h(doc,"ul",{class:"as-lg-col",role:"group","aria-label":ctx.t(`assurance.lineage.graph.col.${GRAPH_KINDS[ci]}`),dataset:{lineageCol:GRAPH_KINDS[ci]}},
+    col.map(n=>{
+      const b=h(doc,"button",{type:"button",class:"btn as-lg-node",id:btnId(n.id),tabindex:n.id===first?"0":"-1",dataset:{lineageNode:n.id,nodeKind:n.kind,lineageLinked:"0"},
+        on:{click:()=>{mark(n.id);if(n.kind==="evidence"){selection.evidenceId=n.evidenceId;ctx.rerender()}},focus:()=>{if(current!==n.id)mark(n.id)}},text:n.label});
+      buttons.set(n.id,b);return h(doc,"li",{},b);
+    })));
+  const wrap=h(doc,"div",{class:"as-lg",role:"group","aria-label":ctx.t("assurance.lineage.graph.title"),dataset:{lineageGraph:"1"}},cols);
+  wrap.addEventListener("keydown",onKey);
+  const label=id=>g.byId(id)?.label??id;
+  const list=h(doc,"ul",{class:"as-lg-edges",id:"as-lineage-edges",dataset:{lineageEdges:String(g.edges.length)},"aria-label":ctx.t("assurance.lineage.graph.edges")},
+    g.edges.length?g.edges.map(e=>h(doc,"li",{dataset:{edgeFrom:e.from,edgeTo:e.to},text:`${label(e.from)} → ${label(e.to)}`})):[h(doc,"li",{class:"note",text:ctx.t("assurance.lineage.graph.noEdges")})]);
+  mark(first);
+  return h(doc,"div",{class:"as-lg-wrap"},h(doc,"h4",{class:"qa-def-title",text:ctx.t("assurance.lineage.graph.title")}),h(doc,"p",{class:"note",text:ctx.t("assurance.lineage.graph.lead")}),wrap,live,
+    h(doc,"h4",{class:"qa-def-title",text:ctx.t("assurance.lineage.graph.edges")}),list);
+}
 function lineagePanel(ctx,res){
   const doc=ctx.doc,mk=(...k)=>panel(ctx,{titleKey:"assurance.lineage.title",id:"as-lineage",className:"as-lineage"},h(doc,"p",{class:"note",text:ctx.t("assurance.lineage.lead")}),...k);
   if(res.state!=="VERIFIED")return mk(stateNote(ctx,res.state));
@@ -317,6 +350,7 @@ function lineagePanel(ctx,res){
   return mk(
     h(doc,"p",{class:"note",dataset:{lineageScope:"page"},text:ctx.t("assurance.lineage.scope",{n:String(L.total)})}),
     L.duplicates>0?h(doc,"p",{class:"note note-stale",role:"note",dataset:{lineageDuplicates:String(L.duplicates)},text:ctx.t("assurance.lineage.duplicates",{n:String(L.duplicates)})}):null,
+    lineageGraphView(ctx,L),
     h(doc,"ul",{class:"as-lineage-list as-lineage-root",role:"tree","aria-label":ctx.t("assurance.lineage.title")},
       L.missions.map(m=>h(doc,"li",{class:"as-lineage-mission",dataset:{lineage:"mission",missionId:m.missionId}},
         h(doc,"span",{class:"mono",text:m.missionId}),

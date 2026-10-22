@@ -7,6 +7,7 @@ import {buildClosure} from "../closure-core.js";
 import {drafts,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetProjectDraft,focusResult,settle} from "../forms.js";
 import {studio,openProject,closeProject} from "../studio-state.js";
 import {wizardPanel,importPanel} from "./studio-wizard.js";
+import {intakePanel} from "./intake.js";
 import {renderWorkspace,stopRunPolling} from "./studio-workspace.js";
 
 const FORM="project";
@@ -172,6 +173,7 @@ export async function render(ctx){
     header(ctx,res,miss,runs),
     summaryTiles(ctx,res,miss,runs),
     journeyPanel(ctx,miss),
+    await intakePanel(ctx),
     wizardPanel(ctx),
     importPanel(ctx,{projects:res.state==="VERIFIED"?res.items:[]}),
     matrixPanel(ctx,res,miss,runs),

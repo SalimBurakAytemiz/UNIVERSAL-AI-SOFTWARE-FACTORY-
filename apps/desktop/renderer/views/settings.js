@@ -3,6 +3,7 @@ import {h,panel,stateNote,emptyNote,badge,statePill} from "../components.js";
 import {LANGS} from "../i18n.js";
 import {PILL_KINDS} from "../model.js";
 import {executorsPanel} from "./executors-panel.js";
+import {computeContrastRows,readTokens} from "../contrast-core.js";
 
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 // //TR: Bağlantı durumu türetimi (SBX-8 profil durumundan): yalnız READY gerçek giriş sinyalidir -> CONNECTED (K-1); LOGIN_REQUIRED/REFUSED -> NOT_CONNECTED; bilinmeyen/eksik -> NOT_VERIFIED. Asla gerçek giriş sinyali olmadan CONNECTED gösterilmez.
@@ -116,6 +117,17 @@ function legendPanel(ctx){
   return panel(ctx,{titleKey:"settings.legend.title",id:"settings-legend"},h(doc,"p",{class:"note",text:ctx.t("settings.legend.lead")}),dl);
 }
 
+/** Tema kontrast laboratuvarı (salt-okunur): oranlar çalışan stil sayfasındaki token değerlerinden hesaplanır; değer okunamazsa UNKNOWN (oran uydurulmaz). */
+export function contrastPanel(ctx,tokens=readTokens(ctx.doc)){
+  const doc=ctx.doc,rows=computeContrastRows(tokens);
+  const tbl=h(doc,"table",{class:"table",id:"settings-contrast-table"},h(doc,"caption",{text:ctx.t("settings.contrast.caption")}),
+    h(doc,"thead",{},h(doc,"tr",{},["settings.contrast.col.pair","settings.contrast.col.kind","settings.contrast.col.ratio","settings.contrast.col.level"].map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
+    h(doc,"tbody",{},rows.map(r=>h(doc,"tr",{dataset:{contrastRow:r.key,contrastLevel:r.level}},
+      h(doc,"td",{class:"mono",text:`${r.fg} / ${r.bg}`}),h(doc,"td",{text:ctx.t(`settings.contrast.kind.${r.kind}`)}),
+      h(doc,"td",{class:"mono",text:r.ratio===null?"—":`${r.ratio.toFixed(2)}:1`}),h(doc,"td",{text:ctx.t(`settings.contrast.level.${r.level}`)})))));
+  return panel(ctx,{titleKey:"settings.contrast.title",id:"settings-contrast"},h(doc,"p",{class:"note",text:ctx.t("settings.contrast.lead")}),h(doc,"div",{class:"table-wrap"},tbl));
+}
+
 export async function render(ctx){
   const doc=ctx.doc;
   const [exec,control,health,factory]=await Promise.all([ctx.api.executors(),ctx.api.control(),ctx.api.health(),ctx.api.raw("/v1/factory")]);
@@ -127,6 +139,7 @@ export async function render(ctx){
     governancePanel(ctx,control,sandbox),
     appPanel(ctx,health,factory,sandbox),
     legendPanel(ctx),
+    contrastPanel(ctx),
     panel(ctx,{titleKey:"settings.language",id:"settings-lang"},langs,h(doc,"p",{class:"note",text:ctx.t("settings.languageNote")})),
     panel(ctx,{titleKey:"settings.shortcuts",id:"settings-keys"},h(doc,"dl",{class:"kv"},h(doc,"dt",{},h(doc,"kbd",{text:"Ctrl+K"})),h(doc,"dd",{text:ctx.t("shortcut.search")}),h(doc,"dt",{},h(doc,"kbd",{text:"Esc"})),h(doc,"dd",{text:ctx.t("shortcut.esc")}),h(doc,"dt",{},h(doc,"kbd",{text:"Tab"})),h(doc,"dd",{text:ctx.t("shortcut.tab")}))),
     panel(ctx,{titleKey:"settings.principal",id:"settings-principal"},h(doc,"p",{class:"mono",text:ctx.principal}),h(doc,"p",{class:"note",text:ctx.t("settings.principalNote")})));
