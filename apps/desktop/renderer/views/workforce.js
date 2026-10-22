@@ -8,6 +8,27 @@ import {selection} from "../forms.js";
 import {notVerifiedBadge,runNotVerified} from "../m1a.js";
 import {buildTaxonomy} from "../workforce-taxonomy-core.js";
 import {fleetGroups,fleetCard,fleetDetail} from "../fleet-core.js";
+import {FACTORY_COUNTERS,STATUS_SUMMARY_PATH} from "../agent-factory-core.js";
+
+// //TR: Ajan Fabrikası durumu (Founder direktifi 599 ajan): GET /v1/roles/status-summary'nin beş sayacı AYRI gösterilir (kayıtlı, uygulanmış, test edilmiş, sertifikalı, çalışan); toplanmaz, oranlanmaz, "599 kayıtlı" = "599 çalışan ajan" denmez. Okunamıyorsa sayı yerine durum notu gösterilir (0 uydurulmaz).
+function factoryStatusPanel(ctx,res){
+  const doc=ctx.doc,id="wf-factory";
+  const head=[h(doc,"p",{class:"note",text:ctx.t("workforce.factory.lead")}),h(doc,"p",{class:"note",role:"note",dataset:{semantics:"SEPARATE_COUNTERS"},text:ctx.t("workforce.factory.separate")})];
+  if(!res||res.state!=="VERIFIED")return panel(ctx,{titleKey:"workforce.factory.title",id,className:"wf-factory"},...head,stateNote(ctx,res?.state??"ERROR"),h(doc,"p",{class:"note mono",text:`GET ${STATUS_SUMMARY_PATH}`}));
+  const s=res.summary;
+  const stat=(k,v)=>h(doc,"div",{class:"wf-stat",dataset:{stat:`factory-${k}`,value:String(v)}},h(doc,"span",{class:"wf-stat-num",text:formatCount(v)}),h(doc,"span",{class:"wf-stat-label",text:ctx.t(`workforce.factory.${k}`)}));
+  const cols=["workforce.factory.guild",...FACTORY_COUNTERS.map(k=>`workforce.factory.${k}`)];
+  const table=s.byGuild.length?h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table",id:"wf-factory-guilds",dataset:{factoryTable:"guilds"}},
+    h(doc,"caption",{class:"sr-only",text:ctx.t("workforce.factory.byGuild")}),
+    h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
+    h(doc,"tbody",{},s.byGuild.map(g=>h(doc,"tr",{dataset:{factoryGuild:g.guildId}},h(doc,"td",{class:"mono",text:g.guildId}),FACTORY_COUNTERS.map(k=>h(doc,"td",{class:"num",text:formatCount(g[k])}))))))):emptyNote(ctx,"workforce.factory.noGuilds");
+  return panel(ctx,{titleKey:"workforce.factory.title",id,className:"wf-factory"},...head,
+    h(doc,"p",{class:"duo-sub",dataset:{factoryTarget:String(s.target)},text:ctx.t("workforce.factory.target",{n:formatCount(s.target)})}),
+    h(doc,"div",{class:"wf-stats",role:"group","aria-label":ctx.t("workforce.factory.statsLabel")},FACTORY_COUNTERS.map(k=>stat(k,s[k]))),
+    h(doc,"h3",{class:"wf-dist-title",text:ctx.t("workforce.factory.byGuild")}),table,
+    h(doc,"p",{class:"note mono",dataset:{factoryBasis:"1"},text:ctx.t("workforce.factory.basis",{at:formatDateTime(s.computedAt,ctx.i18n.lang),sha:s.basis.roleDefinitionsSha256.slice(0,12),n:formatCount(s.basis.bindingsCount)})}),
+    h(doc,"p",{class:"note mono",text:`GET ${STATUS_SUMMARY_PATH}`}));
+}
 
 // //TR: Katalog gözatma seçimi (süzgeç + seçili rol) görünüm ömrü boyunca korunur; periyodik yenileme seçimi bozmaz.
 const catState={cluster:"ALL",guild:"ALL",q:"",roleId:null,page:0};
@@ -253,7 +274,7 @@ function catalogSection(ctx,catalog,detail,agents){
 }
 
 export async function render(ctx,route){
-  const doc=ctx.doc,[cockpit,agents,runs,catalog]=await Promise.all([ctx.api.cockpit(),ctx.api.agentCount(),ctx.api.workRuns(),ctx.api.roleCatalog()]),w=cockpit.data.workforce;
+  const doc=ctx.doc,[cockpit,agents,runs,catalog,factory]=await Promise.all([ctx.api.cockpit(),ctx.api.agentCount(),ctx.api.workRuns(),ctx.api.roleCatalog(),ctx.api.rolesStatusSummary()]),w=cockpit.data.workforce;
   // //TR: INT-R3 D-M1-07: kayıtlı rol = kanonik sayı (GET /v1/agents registeredRoles, yoksa cockpit kanonik sayısı); sertifikalı sayı ayrı, eski kayıt yalnız LEGACY_REFERENCE_ONLY notu olarak.
   const registered=agents.registeredRoles!==null?agents.registeredRoles:w.registeredRoles;
   const regBlock=agents.registeredRoles!==null?{state:"VERIFIED",value:agents.registeredRoles}:w;
@@ -273,6 +294,7 @@ export async function render(ctx,route){
         h(doc,"p",{class:"kpi-value",text:formatCount(w.activeWorkerRuns)}),h(doc,"p",{class:"duo-sub",text:ctx.t("workforce.activeNote")}),chip(ctx,activeBlock))),
     panel(ctx,{titleKey:"workforce.fleet.title",id:"wf-fleet"},fleetBody(ctx,runs)),
     panel(ctx,{titleKey:"workforce.live.title",id:"wf-live"},liveRunsBody(ctx,runs)),
+    factoryStatusPanel(ctx,factory),
     ...catalogSection(ctx,catalog,detail,agents));
 }
 export {viewSkeleton as skeleton} from "../components.js";
