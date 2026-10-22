@@ -1286,6 +1286,56 @@ describe("Integrations UI-078 — route, reachability and allow-list", () => {
   });
 });
 
+describe("Integrations UI-078 — mapping limits (boundaries)", () => {
+  const cap = (i: number, over: Record<string, any> = {}) => ({id: `c${i}`, name: `Cap ${i}`, status: "REGISTERED", implementation: "NOT_IMPLEMENTED", ...over});
+  const adp = (i: number, over: Record<string, any> = {}) => ({id: `a${i}`, category: "CLOUD", status: "REGISTERED", implementation: "NOT_IMPLEMENTED", ...over});
+  const reg = (key: string, list: any[], count = list.length) => ({schemaVersion: "1", count, [key]: list});
+  it("accepts exactly MAX_ITEMS entries and rejects one more", async () => {
+    const core = await load("integrations-core.js");
+    expect(core.mapCapabilities(reg("capabilities", Array.from({length: core.MAX_ITEMS}, (_, i) => cap(i)))).state).toBe("VERIFIED");
+    expect(core.mapCapabilities(reg("capabilities", Array.from({length: core.MAX_ITEMS + 1}, (_, i) => cap(i)))).state).toBe("ERROR");
+  });
+  it("count must equal the list length in both directions; an unknown kind or non-object is ERROR", async () => {
+    const core = await load("integrations-core.js");
+    expect(core.mapCapabilities(reg("capabilities", [cap(1), cap(2)], 3)).state).toBe("ERROR");
+    expect(core.mapCapabilities(reg("capabilities", [cap(1), cap(2)], 1)).state).toBe("ERROR");
+    expect(core.mapRegistry("nope", reg("nope", [])).state).toBe("ERROR");
+    expect(core.mapCapabilities([]).state).toBe("ERROR");
+    expect(core.mapCapabilities(null).state).toBe("ERROR");
+  });
+  it("names are cut at 120 characters; ids and enum values must be real strings (a one-element array is not coerced)", async () => {
+    const core = await load("integrations-core.js");
+    expect(core.mapCapabilities(reg("capabilities", [cap(1, {name: "n".repeat(121)})])).registry.items[0].name).toHaveLength(120);
+    expect(core.mapCapabilities(reg("capabilities", [cap(1, {name: "n".repeat(120)})])).registry.items[0].name).toHaveLength(120);
+    expect(core.mapCapabilities(reg("capabilities", [cap(1, {id: ["c1"]})])).state).toBe("ERROR");
+    expect(core.mapCapabilities(reg("capabilities", [cap(1, {status: ["REGISTERED"]})])).state).toBe("ERROR");
+    expect(core.mapCapabilities(reg("capabilities", [cap(1, {implementation: ["NOT_IMPLEMENTED"]})])).state).toBe("ERROR");
+    expect(core.mapAdapters(reg("adapters", [adp(1, {category: ["CLOUD"]})])).state).toBe("ERROR");
+  });
+  it("null optional fields are accepted as unknown (null), wrong types are rejected", async () => {
+    const core = await load("integrations-core.js");
+    const a = core.mapAdapters(reg("adapters", [adp(1, {requiresCertification: null, activation: null})]));
+    expect(a.state).toBe("VERIFIED");
+    expect([a.registry.items[0].requiresCertification, a.registry.items[0].activation]).toEqual([null, null]);
+    expect(core.mapAdapters(reg("adapters", [adp(1, {requiresCertification: "true"})])).state).toBe("ERROR");
+    expect(core.mapAdapters(reg("adapters", [adp(1, {requiresCertification: false})])).registry.items[0].requiresCertification).toBe(false);
+    expect(core.mapAdapters(reg("adapters", [adp(1, {activation: ["ON"]})])).state).toBe("ERROR");
+  });
+  it("a failed read keeps OFFLINE and UNAVAILABLE and maps any other state to ERROR with null counts", async () => {
+    const core = await load("integrations-core.js");
+    for (const [inState, outState] of [["OFFLINE", "OFFLINE"], ["UNAVAILABLE", "UNAVAILABLE"], ["ERROR", "ERROR"], ["WHATEVER", "ERROR"]]) {
+      const r = core.buildIntegrations({capabilities: {state: inState, registry: null}});
+      expect(r.sources.capabilities.state).toBe(outState);
+      expect(r.counts.capabilities).toBeNull();
+    }
+  });
+  it("tallies sort by count descending, then by value", async () => {
+    const core = await load("integrations-core.js");
+    const r = core.mapCapabilities(reg("capabilities", [cap(1, {status: "D"}), cap(2, {status: "C"}), cap(3, {status: "B"}), cap(4, {status: "B"}), cap(5, {status: "A"})]));
+    expect(r.registry.byStatus).toEqual([{value: "B", count: 2}, {value: "A", count: 1}, {value: "C", count: 1}, {value: "D", count: 1}]);
+  });
+});
+
 describe("Integrations UI-078 — strict mapping of the real registry shapes", () => {
   it("maps the real registries/*.json files (counts, ids, verbatim REGISTERED / NOT_IMPLEMENTED values)", async () => {
     const core = await load("integrations-core.js");
