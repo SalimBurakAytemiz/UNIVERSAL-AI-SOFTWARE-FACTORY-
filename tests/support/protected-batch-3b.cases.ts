@@ -31,7 +31,10 @@ export function registerProtectedBatch3bCases() {
         `/v1/missions/${M}/predev/artifacts/${A}`, `/v1/missions/${M}/predev/artifacts/${A}/approvereject`, `/v1/missions/${M}/predev/artifacts/${A}/Approve`,
         `/v1/missions/${M}/predev/artifacts/pda_${"A".repeat(24)}/approve`, `/v1/missions/${M}/predev/artifacts/pda_${"a".repeat(23)}/reject`, `/v1/missions/${M}/predev/artifacts/art_${"a".repeat(24)}/approve`,
         `/v1/missions/msn_${"A".repeat(24)}/predev/start`, `/v1/missions/msn_${"a".repeat(25)}/predev/start`, `/v1/missions/${M}/predev/artifacts/${A}/../${A}/approve`,
-        `/v1/missions/${M}/predev/artifacts/${A}%2Fapprove`, `/V1/missions/${M}/predev/start`, `//evil/v1/missions/${M}/predev/start`, `/v1/predev/${M}`, `/v1/missions/${M}/predev/artifacts/${A}/approve\n`];
+        `/v1/missions/${M}/predev/artifacts/${A}%2Fapprove`, `/V1/missions/${M}/predev/start`, `//evil/v1/missions/${M}/predev/start`, `/v1/predev/${M}`, `/v1/missions/${M}/predev/artifacts/${A}/approve\n`,
+        // left anchor and mission id on every pattern: a prefix or a smuggled query must not reach another route (apiPost sends apiBase+path as is)
+        `/x/v1/missions/${M}/predev/start`, `/v1/control/resume?/v1/missions/${M}/predev/start`, `//evil/v1/missions/${M}/predev/artifacts/${A}/approve`, `/x/v1/missions/${M}/predev/artifacts/${A}/reject`,
+        `/v1/control/resume?/v1/missions/${M}/predev/artifacts/${A}/approve`, `/v1/missions/msn_${"A".repeat(24)}/predev/artifacts/${A}/approve`, `/v1/missions/msn_${"a".repeat(25)}/predev/artifacts/${A}/reject`];
       for (const p of bad) expect(postAllowed(p), p).toBe(false);
       for (const v of [undefined, null, 1, {}, [`/v1/missions/${M}/predev/start`]]) expect(postAllowed(v)).toBe(false);
     });
@@ -41,7 +44,8 @@ export function registerProtectedBatch3bCases() {
       expect(getAllowed(af.STATUS_SUMMARY_PATH)).toBe(true);
       expect(getAllowed("/v1/roles/UASCO-0001")).toBe(true); // the existing role detail stays as it was
       for (const p of ["/v1/roles/status-summary/", "/v1/roles/status-summary?x=1", "/v1/roles/status-summary?", "/v1/roles/STATUS-SUMMARY", "/v1/roles/status-summaryx",
-        "/v1/roles/status-summary%2F", "/v1/roles/status-summary/../x", "/v1/roles/status", "/V1/roles/status-summary"]) expect(getAllowed(p), p).toBe(false);
+        "/v1/roles/status-summary%2F", "/v1/roles/status-summary/../x", "/v1/roles/status", "/V1/roles/status-summary",
+        "/x/v1/roles/status-summary", "//evil/v1/roles/status-summary", "/v1/runs/r1/logs/stdout?q=/v1/roles/status-summary"]) expect(getAllowed(p), p).toBe(false);
       for (const p of ["/v1/roles/status-summary", "/v1/roles", "/v1/roles/UASCO-0001"]) expect(postAllowed(p), p).toBe(false);
     });
   });
