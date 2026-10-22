@@ -1542,3 +1542,82 @@ describe("LANE-B first-delivery 4xx/5xx contract sweep", () => {
     await app.close();
   });
 });
+
+// //TR: LANE-B attention API: Founder dikkat kuyruğu yalnız Work OS kayıtlarından türetilir; öğe türleri, önem sırası, en son koşu kuralı, kabul edilmiş teslimin kuyruktan düşmesi, sır redaksiyonu, kesilme ve tenant izolasyonu test edilir.
+describe("LANE-B founder attention queue", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const ACT = "FOUNDER_LOCAL", SC = {tenantId: "tA"};
+  const mkApp = async (tenantId = "tA") => {
+    const [{default: Fastify}, {registerAttentionRoutes}, {WorkOsError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/attention.js"), import("../core/workos/types.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    registerAttentionRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: ACT, audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}),
+      workosFail: (r: any, e: any) => r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
+    return {app, store, p: store.createProject(proj())};
+  };
+  const mission = (store: WorkOsStore, pid: string, title: string, path_: string[]) => {
+    const m = store.createMission({...msn(pid), title}); for (const to of path_) store.transitionMission(SC, m.missionId, to as any, "go", ACT); return m;
+  };
+  const run = (store: WorkOsStore, missionId: string) => store.createRun({tenantId: "tA", missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: ACT});
+  const lease = (store: WorkOsStore, runId: string) => store.acquireRunLease(runId, 60_000, ACT).leaseId!;
+  const att = async (app: any, headers: any = hdr) => (await app.inject({method: "GET", url: "/v1/attention", headers})).json().attention;
+
+  it("is empty and honest without records, then lists each Founder-attention kind in severity order with the right next action", async () => {
+    const {app, store, p} = await mkApp();
+    expect(await att(app)).toEqual({items: [], counts: {RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, MISSION_FOUNDER_ATTENTION: 0, MISSION_AUTHORIZATION_PENDING: 0, MISSION_BLOCKED: 0, TASK_BLOCKED: 0}, truncated: false, source: "WORKOS"});
+    mission(store, p.projectId, "pre", ["PREFLIGHT"]);
+    mission(store, p.projectId, "fa", ["PREFLIGHT", "FOUNDER_ATTENTION_REQUIRED"]);
+    const blocked = mission(store, p.projectId, "blk", ["BLOCKED"]);
+    store.createTask({tenantId: "tA", missionId: blocked.missionId, title: "stuck task", status: "BLOCKED", actor: ACT});
+    const mw = mission(store, p.projectId, "await", ["PREFLIGHT", "AUTHORIZED"]);
+    const rw = run(store, mw.missionId), lw = lease(store, rw.runId);
+    for (const to of ["RUNNING", "CHECKPOINTING", "AWAITING_APPROVAL"] as const) store.transitionRun(rw.runId, lw, to, "x", ACT);
+    const mf = mission(store, p.projectId, "failed", ["PREFLIGHT", "AUTHORIZED"]);
+    const rf = run(store, mf.missionId); store.transitionRun(rf.runId, lease(store, rf.runId), "FAILED", "boom AKIA" + "IOSFODNN7EXAMPLE", ACT);
+    const q = await att(app);
+    expect(q.items.map((i: any) => `${i.kind}:${i.nextAction}`)).toEqual([
+      "RUN_AWAITING_APPROVAL:PREPARE_DELIVERY", "MISSION_FOUNDER_ATTENTION:REVIEW_MISSION", "RUN_NEEDS_DECISION:REVIEW_RUN", "MISSION_AUTHORIZATION_PENDING:AUTHORIZE_MISSION", "MISSION_BLOCKED:REVIEW_MISSION", "TASK_BLOCKED:UNBLOCK_TASK"]);
+    expect(q.counts).toMatchObject({RUN_AWAITING_APPROVAL: 1, RUN_NEEDS_DECISION: 1, MISSION_FOUNDER_ATTENTION: 1, MISSION_AUTHORIZATION_PENDING: 1, MISSION_BLOCKED: 1, TASK_BLOCKED: 1});
+    const failed = q.items.find((i: any) => i.kind === "RUN_NEEDS_DECISION");
+    expect(failed.runId).toBe(rf.runId); expect(failed.reason).toContain("boom"); expect(failed.reason).not.toContain("AKIA" + "IOSFODNN7EXAMPLE");
+    expect(q.items.find((i: any) => i.kind === "TASK_BLOCKED")).toMatchObject({taskId: expect.stringMatching(/^tsk_/), title: "stuck task", missionId: blocked.missionId});
+    expect(JSON.stringify(q)).not.toContain(tmp);
+  });
+  it("only the latest run of a mission counts, and an accepted source delivery or a prepared artifact changes the next action", async () => {
+    const {store, p} = await mkApp();
+    const m = mission(store, p.projectId, "m", ["PREFLIGHT", "AUTHORIZED"]);
+    const old = run(store, m.missionId); store.transitionRun(old.runId, lease(store, old.runId), "FAILED", "first failed", ACT);
+    const {deriveAttention} = await import("../core/workos/attention.js");
+    expect(deriveAttention(store, SC).items.map(i => i.kind)).toEqual(["RUN_NEEDS_DECISION"]);
+    const fresh = run(store, m.missionId);
+    expect(deriveAttention(store, SC).items).toEqual([]);
+    const lf = lease(store, fresh.runId);
+    store.transitionRun(fresh.runId, lf, "RUNNING", "x", ACT); store.transitionRun(fresh.runId, lf, "CHECKPOINTING", "x", ACT); store.transitionRun(fresh.runId, lf, "AWAITING_APPROVAL", "x", ACT);
+    const view = (extra: Record<string, unknown>) => new Proxy(store, {get: (t, k) => k === "listRuns" ? (s: any, mid?: string) => t.listRuns(s, mid).map(r => r.runId === fresh.runId ? {...r, ...extra} : r) : (t as any)[k].bind ? (t as any)[k].bind(t) : (t as any)[k]}) as WorkOsStore;
+    expect(deriveAttention(store, SC).items[0]).toMatchObject({kind: "RUN_AWAITING_APPROVAL", nextAction: "PREPARE_DELIVERY"});
+    expect(deriveAttention(view({deliveryArtifact: {runId: fresh.runId}}), SC).items[0]).toMatchObject({nextAction: "ACCEPT_DELIVERY"});
+    expect(deriveAttention(view({deliveryArtifact: {runId: fresh.runId}, sourceDelivery: {runId: fresh.runId}}), SC).items).toEqual([]);
+  });
+  it("never raises anything for a COMPLETE mission, whatever its tasks or runs say", async () => {
+    const {store, p} = await mkApp();
+    const m = mission(store, p.projectId, "done", ["PREFLIGHT", "AUTHORIZED"]);
+    store.createTask({tenantId: "tA", missionId: m.missionId, title: "was blocked", status: "BLOCKED", actor: ACT});
+    const r = run(store, m.missionId); store.transitionRun(r.runId, lease(store, r.runId), "FAILED", "old failure", ACT);
+    const {deriveAttention} = await import("../core/workos/attention.js");
+    expect(deriveAttention(store, SC).items.map(i => i.kind).sort()).toEqual(["RUN_NEEDS_DECISION", "TASK_BLOCKED"]);
+    const complete = new Proxy(store, {get: (t, k) => k === "listMissions" ? (s: any, pid?: string) => t.listMissions(s, pid).map(x => ({...x, status: "COMPLETE"})) : (t as any)[k].bind ? (t as any)[k].bind(t) : (t as any)[k]}) as WorkOsStore;
+    expect(deriveAttention(complete, SC)).toMatchObject({items: [], counts: {TASK_BLOCKED: 0, RUN_NEEDS_DECISION: 0}});
+  });
+  it("caps the list at 200 items but counts everything, requires the token, and isolates tenants", async () => {
+    const {app, store, p} = await mkApp();
+    const m = mission(store, p.projectId, "many", ["PREFLIGHT", "AUTHORIZED"]);
+    for (let i = 0; i < 201; i++) store.createTask({tenantId: "tA", missionId: m.missionId, title: `t${i}`, status: "BLOCKED", actor: ACT});
+    const q = await att(app);
+    expect(q.items).toHaveLength(200); expect(q.truncated).toBe(true); expect(q.counts.TASK_BLOCKED).toBe(201);
+    expect((await app.inject({method: "GET", url: "/v1/attention", headers: {...hdr, "x-uasco-control-token": "x"}})).statusCode).toBe(403);
+    const other = await att((await mkApp("tB")).app);
+    expect(other.items).toEqual([]); expect(other.counts.TASK_BLOCKED).toBe(0);
+    expect((await app.inject({method: "POST", url: "/v1/attention", headers: hdr, payload: {}})).statusCode).toBe(404);
+  });
+});
