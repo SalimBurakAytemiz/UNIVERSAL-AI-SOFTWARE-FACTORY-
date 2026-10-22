@@ -574,3 +574,105 @@ describe("test+states work: EN/TR parity for every key the view uses", () => {
     for (const k of real) { expect(k in tr && k in en, k).toBe(true); expect(ph(en[k]), k).toBe(ph(tr[k])); expect(tr[k].trim().length, k).toBeGreaterThan(0); expect(en[k].trim().length, k).toBeGreaterThan(0); }
   });
 });
+
+// //TR: UI-110 — durdurulmuş/başarısız koşuların sunucu kayıtlı nedeni #/executive defterinde, Return Summary'de ve #/readiness kartlarında düz metin olarak görünür; yalnız mevcut GET'ler.
+describe("UI-110 run stop/failure reason (renderer-only)", () => {
+  const hex = (c: string) => "run_" + c.repeat(24);
+  const RUN_IDS = {failed: hex("a"), blocked: hex("b"), cancelled: hex("c"), running: hex("d"), nullReason: hex("e")};
+  const mk = (runId: string, n: number, status: string, reason: unknown) => ({
+    runId, missionId: "msn_" + String(n).repeat(24).replace(/\d/g, "a"), projectId: "prj_" + "a".repeat(24), tenantId: "tA", roleId: null,
+    executor: {implementer: "I", reviewer: "R"}, leaseId: null, leaseExpiresAt: null, attempt: 1, status, step: "IMPLEMENT", remediationCycle: 0, retryCount: 0,
+    baseSha: null, headSha: null, workBranch: "b", checkpoints: [], evidence: [], createdAt: "2026-10-16T01:00:00.000Z", createdBy: "x",
+    updatedAt: "2026-10-16T0" + n + ":00:00.000Z", reason});
+  const RUNS_FIX = (failedReason: unknown = "ENGINE_ERROR: boom") => ({runs: [
+    mk(RUN_IDS.failed, 1, "FAILED", failedReason), mk(RUN_IDS.blocked, 2, "BLOCKED", "SECRET_IN_DIFF"), mk(RUN_IDS.cancelled, 3, "CANCELLED", "GLOBAL_STOP_ACTIVE: stop"),
+    mk(RUN_IDS.running, 4, "RUNNING", "step IMPLEMENT started"), mk(RUN_IDS.nullReason, 5, "FAILED", null)]});
+  const EXEC_GETS = ["/v1/cockpit", "/v1/missions", "/v1/work-runs", "/v1/founder-attention"];
+  const READY_GETS = ["/v1/work-runs", "/v1/reviews", "/v1/cockpit", "/v1/missions"];
+  async function mk2(runs: any, storage?: any) {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    const doc = new D(), store = st.createStore(null), gets: string[] = [], posts: string[] = [];
+    const bridge = {apiGet: async (p: string) => { gets.push(p); if (p === "/v1/work-runs") return runs; throw new Error(`${p}: HTTP 404`); },
+      apiPost: async (p: string) => { posts.push(p); return {status: 201, body: {}}; }};
+    const api = apiMod.createApi({bridge, store, now: () => 1_760_000_000_000});
+    const t = (k: string, v?: any) => i18n.translate("en", k, v);
+    const ctx: any = {doc, store, api, i18n: {lang: "en", t}, t, principal: "FOUNDER_LOCAL", navigate: () => {}, selectProject: () => {}, rerender: async () => {}, refreshAll: async () => {}, confirm: async () => true, native: null};
+    if (storage) ctx.storage = storage;
+    return {ctx, gets, posts};
+  }
+  const reasonOf = (root: N, key: string, runId: string) => {
+    const row = all(root).find(n => n.dataset.run === runId);
+    return row ? byData(row, key).map(n => n.textContent) : null;
+  };
+  it("mappers carry reason (300-char cap, null for empty/absent, ERROR for other types) and the stopped set matches the readiness run gate", async () => {
+    const ex = await load("executive-core.js"), rd = await load("readiness-core.js");
+    expect(ex.RUN_STOPPED_STATUSES).toEqual(["FAILED", "RECOVERY_FAILED", "BLOCKED", "QUARANTINED", "CANCELLING", "CANCELLED"]);
+    expect(Object.isFrozen(ex.RUN_STOPPED_STATUSES)).toBe(true);
+    for (const s of ex.RUN_STOPPED_STATUSES) expect(ex.RUN_STATUSES).toContain(s);
+    const items = (res: any) => res.runs.items;
+    for (const map of [ex.mapExecWorkRuns, rd.mapReadinessWorkRuns]) {
+      const r = (x: unknown) => map({runs: [mk(RUN_IDS.failed, 1, "FAILED", x)]});
+      expect(items(r("x".repeat(400)))[0].reason).toBe("x".repeat(300));
+      expect(items(r("ENGINE_ERROR: boom"))[0].reason).toBe("ENGINE_ERROR: boom");
+      for (const e of [null, ""]) expect(items(r(e))[0].reason).toBeNull();
+      const absent: any = mk(RUN_IDS.failed, 1, "FAILED", null); delete absent.reason;
+      expect(items(map({runs: [absent]}))[0].reason).toBeNull();
+      for (const bad of [5, true, {a: 1}, ["x"]]) expect(r(bad)).toEqual({state: "ERROR", runs: null});
+    }
+    for (const status of ex.RUN_STATUSES) {
+      const mapped = rd.mapReadinessWorkRuns({runs: [mk(RUN_IDS.failed, 1, status, null)]});
+      if (status === "SUCCEEDED") continue; // SUCCEEDED needs a completion record shape; its gate is PASS by definition
+      const row = rd.buildReadiness({workRuns: mapped, reviews: {state: "UNAVAILABLE", reviews: null}, evidence: {state: "UNAVAILABLE", evidence: null}, missions: {state: "UNAVAILABLE", missions: null}}).rows[0];
+      expect(row.gateById.run.status === "FAIL", status).toBe(ex.RUN_STOPPED_STATUSES.includes(status));
+      expect(row.reason).toBeNull();
+    }
+  });
+  it("#/executive ledger and Return Summary show the reason only for stopped statuses; markup stays text; GET-only", async () => {
+    const view = await load("views", "executive.js");
+    const stored: string[] = [];
+    const storage = {getItem: () => "2026-10-01T00:00:00.000Z", setItem: (k: string) => { stored.push(k); }};
+    const {ctx, gets, posts} = await mk2(RUNS_FIX("<b>X</b>"), storage);
+    const root = await view.render(ctx);
+    expect(all(root).some(n => n.tagName === "B")).toBe(false);
+    expect(reasonOf(root, "execRunReason", RUN_IDS.failed)).toEqual(["<b>X</b>"]);
+    expect(reasonOf(root, "execRunReason", RUN_IDS.blocked)).toEqual(["SECRET_IN_DIFF"]);
+    expect(reasonOf(root, "execRunReason", RUN_IDS.cancelled)).toEqual(["GLOBAL_STOP_ACTIVE: stop"]);
+    expect(reasonOf(root, "execRunReason", RUN_IDS.running)).toEqual([]);
+    expect(reasonOf(root, "execRunReason", RUN_IDS.nullReason)).toEqual(["—"]);
+    for (const dl of all(root).filter(n => n.className.split(" ").includes("executive-facts") && n.children.length && n.children[0].tagName === "DT")) {
+      dl.children.forEach((c, i) => expect(c.tagName).toBe(i % 2 ? "DD" : "DT"));
+    }
+    const ret = all(root).filter(n => n.dataset.returnRun);
+    expect(ret.length).toBeGreaterThan(0);
+    const retReason = (id: string) => byData(ret.find(n => n.dataset.returnRun === id)!, "returnRunReason").map(n => n.textContent);
+    expect(retReason(RUN_IDS.failed)).toEqual(["<b>X</b>"]);
+    expect(retReason(RUN_IDS.nullReason)).toEqual(["—"]);
+    expect(retReason(RUN_IDS.running)).toEqual([]);
+    expect(stored).toEqual([]);
+    expect(gets.every(p => EXEC_GETS.includes(p))).toBe(true);
+    expect(gets).toContain("/v1/work-runs");
+    expect(posts).toEqual([]);
+  });
+  it("#/readiness shows the reason after the run-gate pill only when the run gate is FAIL, without adding pills", async () => {
+    const view = await load("views", "readiness.js");
+    const {ctx, gets, posts} = await mk2({runs: [...RUNS_FIX("<b>X</b>").runs, mk(hex("f"), 6, "AWAITING_APPROVAL", null)]});
+    const root = await view.render(ctx);
+    expect(all(root).some(n => n.tagName === "B")).toBe(false);
+    const nodes = all(root).filter(n => "readinessRunReason" in n.dataset);
+    expect(nodes.map(n => n.textContent).sort()).toEqual(["<b>X</b>", "GLOBAL_STOP_ACTIVE: stop", "SECRET_IN_DIFF", "—"].sort());
+    for (const n of nodes) { expect(n.parent!.dataset.field).toBe("run"); expect(n.parent!.dataset.gateStatus).toBe("FAIL"); expect(pills(n.parent!)).toHaveLength(1); }
+    expect(all(root).filter(n => n.dataset.field === "run" && n.dataset.gateStatus !== "FAIL").every(n => !all(n).some(x => "readinessRunReason" in x.dataset))).toBe(true);
+    expect(gets.every(p => READY_GETS.includes(p))).toBe(true);
+    expect(posts).toEqual([]);
+  });
+  it("new locale keys exist in en and tr, are non-empty, share placeholders and carry no product-verification literal", async () => {
+    const en = (await load("locales", "en.js")).default as Record<string, string>, tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    for (const k of ["executive.field.reason", "executive.return.reason", "readiness.run.reason"]) {
+      expect(en[k]?.trim().length, k).toBeGreaterThan(0); expect(tr[k]?.trim().length, k).toBeGreaterThan(0);
+      expect((en[k].match(/\{\w+\}/g) ?? []).join(), k).toBe((tr[k].match(/\{\w+\}/g) ?? []).join());
+      expect(en[k] + tr[k]).not.toMatch(/PRODUCT_VERIFIED/);
+    }
+    for (const f of [["views", "executive.js"], ["views", "return-summary.js"], ["views", "readiness.js"], ["executive-core.js"], ["readiness-core.js"]]) expect(read(...f)).not.toMatch(/PRODUCT_VERIFIED|innerHTML|\bfetch\(/);
+    expect(read("views", "readiness.js")).toContain('"readiness.run.reason"');
+  });
+});
