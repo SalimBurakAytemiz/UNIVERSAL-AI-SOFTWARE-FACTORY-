@@ -1,5 +1,5 @@
 {
- "//TR": "C-RUNNER-HEAD-PREDICATE için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/workos/runner.ts içinde TAM 1 kez geçen metni değiştirir; docs/lanes/LANE-C-head-predicate-mutants.mjs hepsini çalıştırır ve repositoryHead test grubunun her birini ÖLDÜRMESİNİ (KILLED) bekler. timeoutMs: sonsuza dek bloke eden mutant (H12) harness zaman aşımıyla yakalanır; sonrasında /tmp/uasco-b3a-* altında kalan yetim git süreçlerini öldürün.",
+ "//TR": "C-RUNNER-HEAD-PREDICATE için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/workos/runner.ts içinde TAM 1 kez geçen metni değiştirir; docs/lanes/LANE-C-head-predicate-mutants.mjs hepsini çalıştırır ve repositoryHead test grubunun her birini ÖLDÜRMESİNİ (KILLED) bekler. timeoutMs: sonsuza dek bloke eden mutant (H12) harness zaman aşımıyla yakalanır; sonrasında /tmp/uasco-b3a-* altında kalan yetim git süreçlerini öldürün. H13 (süre bütçesi probe başına) bilerek listede yok: toplam bütçe iki bağımsız mekanizmayla (probe zaman aşımı=kalan süre VE exhausted bayrağı) sağlanır; tek metin değişikliğiyle gözlenemez. H16/H17 tek mutantta birleşti (src koruması ve catch yedekli).",
  "mutants": [
   {
    "id": "H1",
@@ -94,13 +94,6 @@
    "timeoutMs": 60000
   },
   {
-   "id": "H13",
-   "description": "the time budget is per probe instead of total",
-   "file": "core/workos/runner.ts",
-   "old": "timeout: left, killSignal",
-   "new": "timeout: opts.timeoutMs ?? 10_000, killSignal"
-  },
-  {
    "id": "H14",
    "description": "lazy fetch not disabled by flag",
    "file": "core/workos/runner.ts",
@@ -113,20 +106,6 @@
    "file": "core/workos/runner.ts",
    "old": "{GIT_NO_LAZY_FETCH: \"1\"}",
    "new": "{}"
-  },
-  {
-   "id": "H16",
-   "description": "the body can throw (no catch)",
-   "file": "core/workos/runner.ts",
-   "old": "} catch { return refuse; }\n}",
-   "new": "} catch (e) { throw e; }\n}"
-  },
-  {
-   "id": "H17",
-   "description": "an unusable src is not refused",
-   "file": "core/workos/runner.ts",
-   "old": "if (!c.ok) return refuse;\n    const root = c.path;",
-   "new": "const root = (c as {path: string}).path;"
   },
   {
    "id": "H18",
@@ -204,6 +183,28 @@
    "file": "core/workos/runner.ts",
    "old": "if (!repoHead.ok) return {kind: \"BLOCK\", reason: repoHead.reason};",
    "new": "if (!repoHead.ok) return {kind: \"BLOCK\", reason: \"REPOSITORY_HEAD_UNRESOLVED\"};"
+  },
+  {
+   "id": "H16",
+   "description": "neither the src guard nor the catch: a hostile src throws",
+   "file": "core/workos/runner.ts",
+   "edits": [
+    {
+     "old": "if (!c.ok) return refuse;\n    const root = c.path;",
+     "new": "const root = (c as {path: string}).path;"
+    },
+    {
+     "old": "} catch { return refuse; }\n}",
+     "new": "} catch (e) { throw e; }\n}"
+    }
+   ]
+  },
+  {
+   "id": "H29",
+   "description": "directory identity by prefix instead of canonical key",
+   "file": "core/workos/runner.ts",
+   "old": "return a.ok && b.ok && a.key === b.key;",
+   "new": "return a.ok && b.ok && a.key.startsWith(b.key);"
   }
  ]
 }

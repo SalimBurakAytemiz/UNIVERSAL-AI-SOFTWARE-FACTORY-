@@ -122,6 +122,11 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
       git(d, ["config", "core.worktree", sib]); expect(path.basename(sib).length).toBe(path.basename(d).length); expect(git(d, ["rev-parse", "--show-toplevel"])).toBe(sib);
       return {dir: d, want: NOT_ROOT};
     }],
+    ["a gitfile root whose config puts the work tree at a DESCENDANT directory: refused (the comparison is by directory identity, not by prefix)", () => {
+      const d = path.join(tmp, "gd-root"), gitDir = path.join(tmp, "gd-gitdir"); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${gitDir}`, d]); commitIn(d);
+      const inner = mkd(d, "inner"); git(d, ["config", "core.worktree", inner]); expect(git(d, ["rev-parse", "--show-toplevel"])).toBe(inner);
+      return {dir: d, want: NOT_ROOT};
+    }],
     ["a repository nested inside another repository: ok, baseSha is the INNER repository's HEAD", () => { const outer = mkd(tmp, "outer"), outerHead = initRepo(outer, true)!, inner = mkd(outer, "vendor", "inner"), innerHead = initRepo(inner, true)!; expect(innerHead).not.toBe(outerHead); return {dir: inner, want: okAt(innerHead)}; }],
     ["a subdirectory of a repository whose config claims the child as its work tree (core.worktree): not the work-tree root", () => {
       const parent = mkd(tmp, "cwparent"); initRepo(parent, true); const child = mkd(parent, "child"); git(parent, ["config", "core.worktree", child]);
@@ -139,7 +144,7 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
     }]
   ];
 
-  it("every repository shape gets exactly one answer: the work-tree root with a resolvable HEAD is ok, everything else is refused with a specific reason (real git, 19 shapes)", () => {
+  it("every repository shape gets exactly one answer: the work-tree root with a resolvable HEAD is ok, everything else is refused with a specific reason (real git, 20 shapes)", () => {
     for (const [label, build] of builders) { const {dir, want} = build(); expect([label, repositoryHead(dir)]).toEqual([label, want]); }
   });
 
@@ -169,6 +174,9 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
       const colon = mk("cw:parent"), link = path.join(tmp, "claim-link"); fs.symlinkSync(child, link, "dir");
       expect(repositoryHead(colon)).toEqual(NOT_ROOT);
       expect(repositoryHead(link)).toEqual(NOT_ROOT);
+      const cb = mkd(tmp, "co:lon-bare"), src0 = mkd(tmp, "co-lon-src"); initRepo(src0, true); git(tmp, ["clone", "-q", "--bare", src0, path.join(cb, "bare.git")]);
+      expect(repositoryHead(path.join(cb, "bare.git"))).toEqual(okAt(headOf(src0))); // the bare repository itself is a root even in a colon-named directory
+      expect(repositoryHead(path.join(cb, "bare.git", "objects"))).toEqual(NOT_ROOT); // a directory inside it is not, although is-bare says true there once the ceiling is disabled
     }
   });
 
@@ -198,6 +206,12 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
   it.skipIf(!POSIX)("directory names git prints verbatim stay roots: trailing space/tab/NBSP/ideographic space, leading dash, quotes, non-ASCII (the path git prints is not trimmed; POSIX only: Windows strips trailing spaces from names)", () => {
     for (const name of ["with space", "trailing ", "trailing  ", "trailing\t", "nbsp ", "ideo　", "-dash", "q'\"`$", "ünï-çödé"]) {
       const d = mkd(tmp, "names", name), h = initRepo(d, true)!;
+      expect([name, repositoryHead(d)]).toEqual([name, okAt(h)]);
+    }
+    // a gitfile root is decided by the printed --show-toplevel alone (its git dir is elsewhere), so a trimmed path would refuse it
+    for (const name of ["gf trailing ", "gf trailing\t"]) {
+      const d = path.join(tmp, "names-gf", name); fs.mkdirSync(path.dirname(d), {recursive: true}); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${path.join(tmp, `names-gd-${name.length}`)}`, d]);
+      const h = commitIn(d);
       expect([name, repositoryHead(d)]).toEqual([name, okAt(h)]);
     }
   });

@@ -13,9 +13,9 @@ if (git("status", "--porcelain", "--", ...files).stdout.trim() !== "") { console
 let survived = 0, skipped = 0;
 for (const m of mutants) {
   if (only.length > 0 && !only.includes(m.id)) continue;
-  const file = path.join(root, m.file), src = fs.readFileSync(file, "utf8");
-  if (src.split(m.old).length - 1 !== 1) { console.log(`${m.id}: SKIP (pattern must occur exactly once)`); skipped++; continue; }
-  fs.writeFileSync(file, src.replace(m.old, () => m.new));
+  const file = path.join(root, m.file), src = fs.readFileSync(file, "utf8"), edits = m.edits ?? [{old: m.old, new: m.new}];
+  if (edits.some(e => src.split(e.old).length - 1 !== 1)) { console.log(`${m.id}: SKIP (every pattern must occur exactly once)`); skipped++; continue; }
+  fs.writeFileSync(file, edits.reduce((acc, e) => acc.replace(e.old, () => e.new), src));
   try {
     const t0 = Date.now();
     const r = cp.spawnSync("npx", ["vitest", "run", "tests/v7-b3a-runner.test.ts", "-t", "LANE-C repository head predicate"], {cwd: root, encoding: "utf8", shell: process.platform === "win32", timeout: m.timeoutMs ?? 900_000});
