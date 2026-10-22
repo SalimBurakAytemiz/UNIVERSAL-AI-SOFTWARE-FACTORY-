@@ -16,3 +16,11 @@ Route-level handlers are untouched (their `{error:"CODE"}` bodies and `wos`/`wor
 
 ## Evidence
 `npx vitest run tests/v7-b1-workos.test.ts`: 53 passed (2 new "LANE-B first-delivery 4xx/5xx contract sweep"). The sweep runs against the real `buildServer` with `registerErrorContract` applied (it failed with 126 shape violations before the handler existed) and a separate test proves the router-level errors, unknown route and a thrown exception on a standalone Fastify with `frameworkErrors`. Mutations (change the 415 mapping; pass a 5xx status through; leak the error message) each made a test fail.
+
+## Full-suite trial with the patch applied (throwaway worktree, never committed)
+`npx vitest run` over all 119 files with the patch above: 2286 passed, 5 failed, 22 skipped. Classification (each re-run on the clean, unpatched checkout):
+- `tests/v7-b2-workos-hardening.test.ts` trust-root seal and `tests/pkg-r1-release-mode.test.ts` truth validators: pass on the clean tree, fail with the patch because they hash the sealed `server.ts`. Expected for any `server.ts` edit (like the lane registrations already merged); the coordinator re-seals when applying the protected PR.
+- `tests/pkg-aut1-orchestrator.test.ts` (GLOBAL_STOP command tree "alive") and `tests/pkg-aut2-autonomy-hardening.test.ts` (`NODE_VERSION_UNSUPPORTED:22.22.0`): fail identically on the clean tree in this container, so they are environmental and unrelated.
+- `tests/v7-b1-workos.test.ts` (my own sweep): it failed once with "Not found handler already set" because the test and the patched `server.ts` both registered the handler. `registerErrorContract` is now idempotent; the file passes 53/53 both on the clean tree and with the patch applied.
+No existing test depended on Fastify's old framework-error body.
+

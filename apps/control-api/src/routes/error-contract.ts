@@ -18,7 +18,11 @@ export function contractFor(err: unknown): { status: number; error: string } {
   return sc >= 400 && sc < 500 ? { status: sc, error: "INVALID_REQUEST" } : { status: 500, error: "INTERNAL_ERROR" };
 }
 
+const REGISTERED = Symbol.for("uasco.errorContract");
+// Idempotent: server.ts kaydederse test veya ikinci çağrı aynı örnekte tekrar kurmaz (Fastify setNotFoundHandler'ı iki kez kurmayı reddeder).
 export function registerErrorContract(app: any): void {
+  if (app[REGISTERED]) return;
+  app[REGISTERED] = true;
   app.setErrorHandler((err: unknown, req: any, reply: any) => {
     const c = contractFor(err);
     // Ayrıntı yalnız sunucu log'unda kalır (yanıtta yok).
