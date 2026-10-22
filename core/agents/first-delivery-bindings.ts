@@ -3,7 +3,8 @@ import {BUILDER_ALLOWED_TOOLS, REVIEWER_ALLOWED_TOOLS, profileDefect} from "./ro
 import type {FirstDeliveryFunction, RoleExecutionProfile, TaskLimits} from "./role-execution.js";
 
 const KNOWLEDGE = ["config/builder-execution-policy.json", "registries/role-definitions.json", "docs/inventory/2026-10-19/MASTER_WORK_INVENTORY.md"];
-const lim = (maxCycles: number, maxFilesWritten: number): TaskLimits => ({maxCycles, timeoutMs: 600_000, maxFilesWritten});
+// //TR: Implementer rolleri (developer/tester) için timeoutMs runner'ın mevcut executor varsayılanına (60 dk) eşittir: runner artık profil limitini uyguladığı için bu değer gerçek koşuyu KISALTMAMALI. Diğer roller 10 dk.
+const lim = (maxCycles: number, maxFilesWritten: number, timeoutMs = 600_000): TaskLimits => ({maxCycles, timeoutMs, maxFilesWritten});
 const READ_ONLY = REVIEWER_ALLOWED_TOOLS;
 
 export const FIRST_DELIVERY_BINDINGS: readonly RoleExecutionProfile[] = [
@@ -19,9 +20,9 @@ export const FIRST_DELIVERY_BINDINGS: readonly RoleExecutionProfile[] = [
   {roleId: "UASCO-0043", function: "architect", capabilities: ["architecture-decision", "component-design", "threat-modelling"], providerRoute: "CLAUDE_REVIEWER", allowedTools: READ_ONLY,
     adapters: ["workos-predev-architecture"], limits: lim(2, 0), knowledgeSources: KNOWLEDGE, evaluationCriteria: ["components map to requirements", "decisions recorded as ADRs", "no unverified technology claims"]},
   {roleId: "UASCO-0085", function: "developer", capabilities: ["source-generation", "backend-implementation"], providerRoute: "CLAUDE_IMPLEMENTER", allowedTools: BUILDER_ALLOWED_TOOLS,
-    adapters: ["local-claude-implementer", "workos-runner"], limits: lim(3, 200), knowledgeSources: KNOWLEDGE, evaluationCriteria: ["change committed by supervisor", "scope respected", "independent review CLEAN"]},
+    adapters: ["local-claude-implementer", "workos-runner"], limits: lim(3, 200, 3_600_000), knowledgeSources: KNOWLEDGE, evaluationCriteria: ["change committed by supervisor", "scope respected", "independent review CLEAN"]},
   {roleId: "UASCO-0313", function: "tester", capabilities: ["test-authoring", "test-surface-review"], providerRoute: "CLAUDE_IMPLEMENTER", allowedTools: BUILDER_ALLOWED_TOOLS,
-    adapters: ["local-claude-implementer", "workos-runner"], limits: lim(2, 100), knowledgeSources: KNOWLEDGE, evaluationCriteria: ["tests added for each acceptance criterion", "no weakened or skipped tests", "execution NOT_EXECUTED without verified sandbox"]},
+    adapters: ["local-claude-implementer", "workos-runner"], limits: lim(2, 100, 3_600_000), knowledgeSources: KNOWLEDGE, evaluationCriteria: ["tests added for each acceptance criterion", "no weakened or skipped tests", "execution NOT_EXECUTED without verified sandbox"]},
   {roleId: "UASCO-0252", function: "security-reviewer", capabilities: ["secure-code-review", "diff-review"], providerRoute: "CLAUDE_REVIEWER", allowedTools: READ_ONLY,
     adapters: ["local-claude-reviewer", "workos-security-stage"], limits: lim(1, 0), knowledgeSources: KNOWLEDGE, evaluationCriteria: ["reviewer identity differs from implementer", "findings carry severity", "invalid review is never CLEAN"]},
   {roleId: "UASCO-0232", function: "delivery", capabilities: ["delivery-packaging", "evidence-bundling"], providerRoute: "DETERMINISTIC_STUDIO", allowedTools: [],
@@ -29,6 +30,8 @@ export const FIRST_DELIVERY_BINDINGS: readonly RoleExecutionProfile[] = [
 ];
 export const FIRST_DELIVERY_FUNCTIONS: readonly FirstDeliveryFunction[] = ["business-analyst", "requirements-engineer", "ux-designer", "planner", "architect", "developer", "tester", "security-reviewer", "delivery"];
 export const bindingForFunction = (fn: FirstDeliveryFunction): RoleExecutionProfile => FIRST_DELIVERY_BINDINGS.find(b => b.function === fn)!;
+// //TR: Bir rolün bağlama limitleri (bağlama yoksa null = limit uygulanmaz). Runner bunu run.roleId için okur; fırlatmaz.
+export const taskLimitsFor = (roleId: string | null, bindings: readonly RoleExecutionProfile[] = FIRST_DELIVERY_BINDINGS): TaskLimits | null => roleId === null ? null : bindings.find(b => b.roleId === roleId)?.limits ?? null;
 
 // //TR: Fail-closed kapı: rol, istenen ilk-teslim fonksiyonuna bağlı ve profili tam değilse çalıştırma başlamaz (NOT_EXECUTABLE nedeni hata mesajına taşınır). Katalog varlığı bağlama verisinin testiyle güvence altındadır.
 export function assertRoleExecutes(roleId: string, fn: FirstDeliveryFunction, bindings: readonly RoleExecutionProfile[] = FIRST_DELIVERY_BINDINGS): RoleExecutionProfile {
