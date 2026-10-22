@@ -2004,3 +2004,262 @@ describe("LANE-A run steps table", () => {
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
+
+// //TR: LANE-A A-RUN-TASK-LINK: koşu BAŞARIYLA başlatıldıktan sonra "koşuyu görevlere bağla" adımı. Görevleri yalnız Founder seçer (hepsi işaretsiz), DONE görevler sunulmaz, işaretli her görev için mevcut POST /v1/tasks/:id/runs {runId} çağrılır, görev başına sonuç ve kısmi başarısızlık görünür kalır; işaretli görev yoksa istek yoktur.
+describe("LANE-A run -> task link step", () => {
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const RID = "run_" + "ef".repeat(12), T = (c: string) => "tsk_" + c.repeat(24);
+  const TASKS = [{taskId: T("1"), title: "Plan A", status: "PENDING"}, {taskId: T("2"), title: "Plan B", status: "IN_PROGRESS"}, {taskId: T("3"), title: "Plan C", status: "DONE"}, {taskId: T("4"), title: "Plan D", status: "BLOCKED"}];
+  const linkPath = (t: string) => `/v1/tasks/${t}/runs`, startPath = `/v1/missions/${MID}/runs`;
+  const getFor = (tasks: any[] = TASKS, status = "AUTHORIZED") => (p: string) => {
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission({status})]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission({status}), tasks};
+    if (p.startsWith("/v1/work-runs")) return {workRuns: []};
+    if (p.startsWith("/v1/evidence")) return {evidence: []};
+    return undefined;
+  };
+  const started = (over: any = {}) => ({status: 201, body: {run: {runId: RID, missionId: MID, ...over}, hostExecutionNotice: {}}});
+  const link = (taskId: string, status = 201, runId = RID) => ({status, body: {link: {taskId, runId, missionId: MID}}});
+  const refuse = (error: string, status = 409) => ({status, body: {error}});
+  const cbId = (t: string) => `runlink-cb-${t}`;
+  async function open(post: (p: string, b: any) => any, tasks: any[] = TASKS, lang = "en") {
+    const m = await mkCtx({get: getFor(tasks), post, lang});
+    forms.selection.missionId = MID;
+    const view = await load(rend, "views", "work.js");
+    const render = async () => mount(m.doc, await view.render(m.ctx));
+    const o: any = {...m, view, render, root: await render()};
+    o.start = async () => { byId(o.root, "run-start")!.fire("click"); await tick(); o.root = await render(); return o.root; };
+    return o;
+  }
+  const check = (root: N, ...ids: string[]) => { for (const id of ids) byId(root, cbId(id))!.fire("change", {target: {checked: true}}); };
+  const submit = async (o: any) => { byId(o.root, "runlink-submit")!.fire("click"); await tick(); o.root = await o.render(); return o.root; };
+
+  it("parses a started run only from a 2xx body whose run id fits the schema and whose mission matches", async () => {
+    const c = await load(rend, "work-core.js");
+    expect(c.parseStartedRun(started(), MID)).toBe(RID);
+    expect(c.parseStartedRun({status: 200, body: started().body}, MID)).toBe(RID);
+    for (const bad of [null, undefined, {thrown: true, state: "OFFLINE"}, {status: 409, body: started().body}, {status: 202, body: {}}, {status: 201, body: {run: {runId: "run_zz", missionId: MID}}}, {status: 201, body: {run: {runId: RID, missionId: MID2}}},
+      {status: 201, body: {run: {runId: RID}}}, {status: 201, body: {run: null}}, {status: 201, body: []}, {status: "201", body: started().body}, {status: 201, body: {run: {runId: [RID], missionId: MID}}}, {status: 300, body: started().body}, {thrown: true, status: 201, body: started().body}]) expect(c.parseStartedRun(bad, MID), JSON.stringify(bad)).toBeNull();
+  });
+  it("offers only open tasks with valid ids: DONE tasks and bad ids are never listed; an unreadable status is shown as such, not guessed", async () => {
+    const c = await load(rend, "work-core.js");
+    expect(c.linkableTasks(TASKS).map((t: any) => t.taskId)).toEqual([T("1"), T("2"), T("4")]);
+    expect(c.linkableTasks([...TASKS, {taskId: "tsk_bad", title: "x", status: "PENDING"}, null, {title: "no id"}, {taskId: T("5"), title: 5, status: 7}])).toHaveLength(4);
+    expect(c.linkableTasks([{taskId: T("5"), title: 5, status: 7}])).toEqual([{taskId: T("5"), title: "—", status: "—"}]);
+    expect(c.linkableTasks(null)).toEqual([]);
+    expect(c.linkableTasks([{taskId: T("3"), title: "x", status: "DONE"}])).toEqual([]);
+  });
+  it("classifies each link answer; the server's error code is carried verbatim and nothing is claimed on a mismatched or malformed answer", async () => {
+    const c = await load(rend, "work-core.js"), cls = (res: any) => c.classifyLinkResult(res, T("1"), RID);
+    expect(cls(link(T("1"), 201))).toEqual({kind: "LINKED"});
+    expect(cls(link(T("1"), 200))).toEqual({kind: "ALREADY_LINKED"});
+    for (const bad of [link(T("2"), 201), link(T("1"), 201, "run_" + "00".repeat(12)), {status: 201, body: {}}, {status: 200, body: {link: null}}, {status: 201, body: {link: []}}]) expect(cls(bad), JSON.stringify(bad)).toEqual({kind: "INVALID"});
+    expect(cls(refuse("TASK_NOT_LINKABLE"))).toEqual({kind: "REFUSED", code: "TASK_NOT_LINKABLE", status: 409});
+    expect(cls(refuse("RUN_MISSION_MISMATCH"))).toEqual({kind: "REFUSED", code: "RUN_MISSION_MISMATCH", status: 409});
+    expect(cls(refuse("TASK_NOT_FOUND", 404))).toEqual({kind: "REFUSED", code: "TASK_NOT_FOUND", status: 404});
+    expect(cls(refuse("LINK_STORE_CORRUPT", 503))).toEqual({kind: "REFUSED", code: "LINK_STORE_CORRUPT", status: 503});
+    expect(cls(refuse("INVALID_BODY", 400))).toEqual({kind: "REFUSED", code: "INVALID_BODY", status: 400});
+    expect(cls({status: 403, body: {error: "ACTION_DENIED"}})).toMatchObject({kind: "FAILED"}); // neden okunamıyorsa REFUSED/DENIED uydurulmaz
+    expect(cls({status: 403, body: {error: "ACTION_DENIED", reason: "bad reason!"}})).toMatchObject({kind: "FAILED"});
+    expect(cls({status: 403, body: {error: "FORBIDDEN"}})).toEqual({kind: "REFUSED", code: "FORBIDDEN", status: 403});
+    expect(cls({status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}})).toEqual({kind: "STOPPED"});
+    expect(cls({status: 403, body: {error: "ACTION_DENIED", reason: "NO_POLICY"}})).toEqual({kind: "DENIED", reason: "NO_POLICY"});
+    expect(cls({thrown: true, state: "ERROR", message: "INVALID_API_PATH"})).toEqual({kind: "NOT_ENABLED"});
+    for (const res of [null, {thrown: true, state: "OFFLINE", message: "fetch failed"}, {status: 500, body: {}}, {status: 409, body: {error: "<b>x</b>"}}, {status: 409, body: {error: "lower_case"}}, {status: 404, body: {}}])
+      expect(cls(res), JSON.stringify(res)).toMatchObject({kind: "FAILED"});
+  });
+  it("after a SUCCESSFUL start the step appears with every open task UNCHECKED, DONE tasks absent, and nothing is sent until the Founder acts", async () => {
+    const o = await open(p => p === startPath ? started() : undefined as any);
+    expect(byId(o.root, "run-link")).toBeNull(); // başlatmadan önce yok
+    await o.start();
+    const panel = byId(o.root, "run-link")!;
+    expect(panel.dataset.runId).toBe(RID);
+    expect(text(byData(panel, "runlink", "lead")[0])).toContain(RID);
+    expect(byData(panel, "runlinkItem").map(n => n.dataset.runlinkItem)).toEqual([T("1"), T("2"), T("4")]);
+    for (const t of [T("1"), T("2"), T("4")]) expect(byId(o.root, cbId(t))!.hasAttribute("checked"), t).toBe(false);
+    expect(byId(o.root, cbId(T("3")))).toBeNull();
+    expect(text(panel)).not.toContain("Plan C");
+    expect(o.calls.post).toEqual([{path: startPath, body: {roleId: "UASCO-0085"}}]);
+  });
+  it("a failed start offers no link step", async () => {
+    for (const answer of [{status: 409, body: {error: "EXECUTOR_NOT_CONFIGURED"}}, {status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}]) {
+      forms.resetAllForms();
+      const o = await open(() => answer); await o.start();
+      expect(byId(o.root, "run-link")).toBeNull();
+    }
+  });
+  it("nothing checked: pressing the button sends NO request and says so", async () => {
+    const o = await open(p => p === startPath ? started() : undefined as any); await o.start();
+    await submit(o);
+    expect(o.calls.post).toHaveLength(1); // yalnız koşu başlatma
+    expect(forms.drafts.status[`runlink-${MID}`]).toMatchObject({ok: false, key: "runlink.noneChecked"});
+    expect(text(byId(o.root, `runlink-${MID}-status`)!)).toBe("Nothing is checked, so nothing was sent.");
+  });
+  it("checked tasks are linked one by one with exactly {runId} on the existing endpoint; results are shown per task and the summary counts them", async () => {
+    const o = await open((p, b) => p === startPath ? started() : p === linkPath(T("1")) ? link(T("1"), 201) : p === linkPath(T("4")) ? link(T("4"), 200) : undefined as any); await o.start();
+    check(o.root, T("1"), T("4"));
+    await submit(o);
+    expect(o.calls.post).toEqual([{path: startPath, body: {roleId: "UASCO-0085"}}, {path: linkPath(T("1")), body: {runId: RID}}, {path: linkPath(T("4")), body: {runId: RID}}]);
+    const res = (t: string) => byData(o.root, "runlinkItem", t)[0];
+    expect(res(T("1")).dataset.runlinkState).toBe("LINKED"); expect(text(res(T("1")))).toContain("Linked.");
+    expect(res(T("4")).dataset.runlinkState).toBe("ALREADY_LINKED"); expect(text(res(T("4")))).toContain("Already linked");
+    expect(res(T("2")).dataset.runlinkState).toBe("IDLE");
+    expect(text(byData(o.root, "runlink", "summary")[0])).toBe("2 linked, 0 not linked.");
+    expect(byId(o.root, cbId(T("1")))!.hasAttribute("disabled")).toBe(true); // bağlanan görev kilitli
+    expect(byId(o.root, cbId(T("2")))!.hasAttribute("disabled")).toBe(false);
+  });
+  it("a partial failure stays visible with the server's code; a later click retries ONLY the failed tasks (never the linked ones) and nothing is retried automatically", async () => {
+    let fail4 = true;
+    const o = await open((p) => p === startPath ? started() : p === linkPath(T("1")) ? link(T("1"), 201) : p === linkPath(T("2")) ? refuse("TASK_NOT_LINKABLE") : p === linkPath(T("4")) ? (fail4 ? refuse("TASK_NOT_FOUND", 404) : link(T("4"), 201)) : undefined as any); await o.start();
+    check(o.root, T("1"), T("2"), T("4"));
+    await submit(o);
+    expect(o.calls.post.map((c: any) => c.path)).toEqual([startPath, linkPath(T("1")), linkPath(T("2")), linkPath(T("4"))]); // her görev bir kez
+    const item = (t: string) => byData(o.root, "runlinkItem", t)[0];
+    expect(item(T("1")).dataset.runlinkState).toBe("LINKED");
+    expect(item(T("2")).dataset.runlinkState).toBe("REFUSED"); expect(text(item(T("2")))).toContain("Refused by the server: TASK_NOT_LINKABLE (HTTP 409). Not linked.");
+    expect(item(T("4")).dataset.runlinkState).toBe("REFUSED"); expect(text(item(T("4")))).toContain("TASK_NOT_FOUND (HTTP 404)");
+    expect(text(byData(o.root, "runlink", "summary")[0])).toBe("1 linked, 2 not linked.");
+    expect(byData(o.root, "runlinkResult", "REFUSED").every(n => n.attrs.get("role") === "status")).toBe(true);
+    // Hâlâ işaretli olan başarısızlar yalnız Founder yeniden bastığında denenir; T1 yeniden gönderilmez.
+    fail4 = false;
+    await submit(o);
+    expect(o.calls.post.slice(4).map((c: any) => c.path)).toEqual([linkPath(T("2")), linkPath(T("4"))]);
+    expect(item(T("4")).dataset.runlinkState).toBe("LINKED");
+    expect(item(T("2")).dataset.runlinkState).toBe("REFUSED");
+    expect(text(byData(o.root, "runlink", "summary")[0])).toBe("2 linked, 1 not linked.");
+  });
+  it("a Global Stop, a missing allow-list entry or a transport failure halts the batch: the remaining checked tasks are reported as NOT attempted, not as failures or successes", async () => {
+    const cases: Array<[string, any]> = [["STOPPED", {status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}], ["NOT_ENABLED", "THROW_INVALID"], ["FAILED", "THROW_OFFLINE"]];
+    for (const [kind, answer] of cases) {
+      forms.resetAllForms();
+      const post = (p: string) => { if (p === startPath) return started(); if (p === linkPath(T("1"))) return link(T("1"), 201); if (answer === "THROW_INVALID") throw new Error("INVALID_API_PATH"); if (answer === "THROW_OFFLINE") throw new Error("fetch failed"); return answer; };
+      const o = await open(post); await o.start();
+      check(o.root, T("1"), T("2"), T("4"));
+      await submit(o);
+      expect(o.calls.post.map((c: any) => c.path), kind).toEqual([startPath, linkPath(T("1")), linkPath(T("2"))]); // T4 hiç gönderilmedi
+      const item = (t: string) => byData(o.root, "runlinkItem", t)[0];
+      expect(item(T("1")).dataset.runlinkState, kind).toBe("LINKED");
+      expect(item(T("2")).dataset.runlinkState, kind).toBe(kind);
+      expect(item(T("4")).dataset.runlinkState, kind).toBe("NOT_ATTEMPTED");
+      expect(text(item(T("4"))), kind).toContain("Not attempted");
+      expect(text(byData(o.root, "runlink", "summary")[0]), kind).toBe("1 linked, 2 not linked.");
+    }
+  });
+  it("unchecking removes a task from the batch; a task the server reported as already linked is not sent again; a new press clears the previous message", async () => {
+    const o = await open((p) => p === startPath ? started() : p === linkPath(T("1")) ? link(T("1"), 200) : p === linkPath(T("2")) ? link(T("2"), 201) : undefined as any); await o.start();
+    check(o.root, T("1"), T("2"));
+    byId(o.root, cbId(T("2")))!.fire("change", {target: {checked: false}}); // geri alındı
+    await submit(o);
+    expect(o.calls.post.map((c: any) => c.path)).toEqual([startPath, linkPath(T("1"))]);
+    expect(byData(o.root, "runlinkItem", T("1"))[0].dataset.runlinkState).toBe("ALREADY_LINKED");
+    expect(byData(o.root, "runlinkItem", T("2"))[0].dataset.runlinkState).toBe("IDLE");
+    check(o.root, T("2"));
+    byId(o.root, "runlink-submit")!.fire("click"); await tick(); o.root = await o.render();
+    expect(o.calls.post.map((c: any) => c.path)).toEqual([startPath, linkPath(T("1")), linkPath(T("2"))]); // T1 yeniden gönderilmedi
+    // Eski "işaretli görev yok" iletisi yeni bir basışta silinir.
+    forms.resetAllForms();
+    const n = await open(p => p === startPath ? started() : p === linkPath(T("1")) ? link(T("1"), 201) : undefined as any); await n.start();
+    await submit(n);
+    expect(forms.drafts.status[`runlink-${MID}`].key).toBe("runlink.noneChecked");
+    check(n.root, T("1")); await submit(n);
+    expect(forms.drafts.status[`runlink-${MID}`]).toBeUndefined();
+    expect(text(byId(n.root, `runlink-${MID}-status`)!)).toBe("");
+  });
+  it("submitRunLinks refuses to act for a mission or run it was not offered for (no request)", async () => {
+    const act = await load(rend, "work-actions.js");
+    const o = await open(p => p === startPath ? started() : undefined as any); await o.start();
+    check(o.root, T("1"));
+    const other = {missionId: MID2, tasks: TASKS};
+    expect(await act.submitRunLinks(o.ctx, other)).toEqual({ok: false, validation: true});
+    forms.drafts.runLink.runId = null;
+    expect(await act.submitRunLinks(o.ctx, {missionId: MID, tasks: TASKS})).toEqual({ok: false, validation: true});
+    expect(o.calls.post).toHaveLength(1);
+  });
+  it("while a batch is in flight the buttons are disabled and extra clicks send nothing", async () => {
+    let release: (v: any) => void = () => {};
+    const o = await open((p) => p === startPath ? started() : new Promise(r => { release = r; }) as any); await o.start();
+    check(o.root, T("1"));
+    const submitBtn = byId(o.root, "runlink-submit")!, closeBtn = byId(o.root, "runlink-close")!;
+    submitBtn.fire("click"); await tick();
+    submitBtn.fire("click"); submitBtn.fire("click"); closeBtn.fire("click"); await tick();
+    expect(o.calls.post.map((c: any) => c.path)).toEqual([startPath, linkPath(T("1"))]);
+    expect(forms.drafts.runLink.runId).toBe(RID); // kapatma istemi yutuldu
+    o.root = await o.render();
+    expect(byId(o.root, "runlink-submit")!.hasAttribute("disabled")).toBe(true);
+    expect(byId(o.root, "runlink-close")!.hasAttribute("disabled")).toBe(true);
+    release(link(T("1"), 201)); await tick(); await tick();
+    o.root = await o.render();
+    expect(byData(o.root, "runlinkItem", T("1"))[0].dataset.runlinkState).toBe("LINKED");
+    expect(byId(o.root, "runlink-submit")!.hasAttribute("disabled")).toBe(false);
+  });
+  it("a start whose answer carries no readable run id for this mission offers NO link step and says why; no link request is possible", async () => {
+    for (const answer of [{status: 202, body: {}}, started({runId: "run_zz"}), started({missionId: MID2})]) {
+      forms.resetAllForms();
+      const o = await open(() => answer); await o.start();
+      expect(byData(o.root, "runlink", "unreadable")).toHaveLength(1);
+      expect(text(byData(o.root, "runlink", "unreadable")[0])).toContain("no readable run id");
+      expect(byId(o.root, "runlink-submit")).toBeNull();
+      expect(byData(o.root, "runlinkItem")).toHaveLength(0);
+      expect(o.calls.post).toHaveLength(1);
+    }
+  });
+  it("a replayed start (200) offers the step too; a mission with only DONE tasks says there is nothing to link and offers no checkbox", async () => {
+    forms.resetAllForms();
+    const a = await open(() => ({status: 200, body: started().body})); await a.start();
+    expect(byData(a.root, "runlinkItem")).toHaveLength(3);
+    forms.resetAllForms();
+    const b = await open(() => started(), [{taskId: T("3"), title: "Plan C", status: "DONE"}]); await b.start();
+    expect(text(byData(b.root, "runlink", "none")[0])).toBe("This mission has no open tasks (not DONE) to link.");
+    expect(byData(b.root, "runlinkItem")).toHaveLength(0);
+    expect(byId(b.root, "runlink-submit")).toBeNull();
+    forms.resetAllForms();
+    const c = await open(() => started(), []); await c.start();
+    expect(byData(c.root, "runlink", "none")).toHaveLength(1);
+  });
+  it("closing the step sends nothing and removes it; the step belongs to the mission it was started for", async () => {
+    const o = await open(p => p === startPath ? started() : undefined as any); await o.start();
+    check(o.root, T("1"));
+    byId(o.root, "runlink-close")!.fire("click"); await tick(); o.root = await o.render();
+    expect(byId(o.root, "run-link")).toBeNull();
+    expect(o.calls.post).toHaveLength(1);
+    forms.drafts.runLink = {missionId: MID2, runId: RID, checked: {}, results: {}};
+    o.root = await o.render();
+    expect(byId(o.root, "run-link")).toBeNull(); // başka mission için teklif bu mission'da çizilmez
+  });
+  it("DENIED, INVALID and server text are shown as text: the server's reason and code are never interpreted as markup", async () => {
+    const o = await open((p) => p === startPath ? started() : p === linkPath(T("1")) ? {status: 403, body: {error: "ACTION_DENIED", reason: "POLICY_NOPE"}} : p === linkPath(T("2")) ? link(T("2"), 201, "run_" + "00".repeat(12)) : p === linkPath(T("4")) ? refuse("SOME_NEW_CODE") : undefined as any); await o.start();
+    check(o.root, T("1"), T("2"), T("4"));
+    await submit(o);
+    const item = (t: string) => byData(o.root, "runlinkItem", t)[0];
+    expect(text(item(T("1")))).toContain("Denied by policy: POLICY_NOPE. Not linked.");
+    expect(item(T("2")).dataset.runlinkState).toBe("INVALID");
+    expect(text(item(T("4")))).toContain("SOME_NEW_CODE (HTTP 409)");
+    expect(all(o.root).some(n => ["SCRIPT", "IMG", "IFRAME"].includes(n.tagName))).toBe(false);
+  });
+  it("renders in Turkish without raw keys, and every runlink.* key exists in EN and TR with identical placeholders and none is dead", async () => {
+    const o = await open(p => p === startPath ? started() : p === linkPath(T("1")) ? refuse("TASK_NOT_LINKABLE") : undefined as any, TASKS, "tr"); await o.start();
+    check(o.root, T("1")); await submit(o);
+    expect(text(byId(o.root, "run-link")!)).not.toMatch(/runlink\.|\{[a-zA-Z]+\}/);
+    expect(text(byId(o.root, "run-link")!)).toContain("Bu koşuyu görevlere bağla");
+    const en = (await load(rend, "locales", "en.js")).default, tr = (await load(rend, "locales", "tr.js")).default;
+    const have = (d: any) => Object.keys(d).filter(k => k.startsWith("runlink.")).sort();
+    expect(have(en)).toEqual(have(tr));
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join();
+    for (const k of have(en)) { expect(tr[k], k).toBeTruthy(); expect(ph(tr[k]), k).toBe(ph(en[k])); }
+    const src = read(rend, "views", "run-link.js");
+    const need = new Set<string>([...src.matchAll(/"(runlink\.[A-Za-z.]+)"/g)].map(m => m[1]));
+    for (const k of ["NOT_ATTEMPTED", "LINKED", "ALREADY_LINKED", "REFUSED", "DENIED", "STOPPED", "NOT_ENABLED", "INVALID"]) need.add(`runlink.result.${k}`);
+    for (const m of read(rend, "work-actions.js").matchAll(/"(runlink\.[A-Za-z.]+)"/g)) need.add(m[1]);
+    expect(have(en).filter(k => !need.has(k))).toEqual([]);
+    expect([...need].filter(k => !(k in en))).toEqual([]);
+  });
+  it("the step writes only through ctx.api.post to the existing link path with the run id as the only body field; no bridge, storage, HTML sinks or new endpoints", async () => {
+    const view = read(rend, "views", "run-link.js"), act = read(rend, "work-actions.js");
+    expect(view).not.toMatch(/\.post\(|\bbridge\b|apiPost|apiGet|\bfetch\(|innerHTML|outerHTML|insertAdjacentHTML|\beval\(|localStorage|sessionStorage/);
+    expect(act.match(/ctx\.api\.post\(/g)).toHaveLength(3); // geçiş, koşu başlatma, görev bağı
+    const c = await load(rend, "work-core.js");
+    expect(c.buildLinkRunRequest({taskId: T("1"), runId: RID, taskStatus: "PENDING"})).toEqual({ok: true, path: linkPath(T("1")), body: {runId: RID}, errors: {}});
+    expect(c.buildLinkRunRequest({taskId: T("3"), runId: RID, taskStatus: "DONE"}).ok).toBe(false);
+  });
+});

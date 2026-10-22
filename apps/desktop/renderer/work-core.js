@@ -288,6 +288,37 @@ export function buildLinkRunRequest({taskId,runId,taskStatus}){
   return {ok,path,body:ok?{runId}:null,errors};
 }
 
+// ---------- Koşu başlatıldıktan sonra "koşuyu görevlere bağla" adımı (LANE-A A-RUN-TASK-LINK) ----------
+// //TR: Koşu başlatma yanıtı (201/200 {run:{runId,missionId,...}}) YALNIZ kimliği şemaya uyan ve istenen mission'a ait bir koşu taşıyorsa okunur; aksi halde bağ adımı sunulmaz (kimlik uydurulmaz). Bağlanacak görevleri Founder seçer; hiçbir görev çıkarım yoluyla seçilmez ve DONE görevler hiç sunulmaz.
+export function parseStartedRun(res,missionId){
+  if(!res||res.thrown||!Number.isSafeInteger(res.status)||res.status<200||res.status>=300)return null;
+  const r=isObj(res.body)?res.body.run:null;
+  return isObj(r)&&typeof r.runId==="string"&&RUN_ID_RE.test(r.runId)&&r.missionId===missionId?r.runId:null;
+}
+/** Mission görevlerinden bağlanabilir olanlar: geçerli kimlikli ve DONE olmayanlar (durumu okunamayan görev DONE sayılmaz, olduğu gibi gösterilir). */
+export function linkableTasks(tasks){
+  return (Array.isArray(tasks)?tasks:[]).filter(t=>isObj(t)&&TASK_ID_RE.test(String(t.taskId))&&t.status!=="DONE").map(t=>({taskId:t.taskId,title:typeof t.title==="string"?t.title:MISSING,status:typeof t.status==="string"?t.status:MISSING}));
+}
+export const LINK_CODE_RE=/^[A-Z][A-Z0-9_]{1,63}$/;
+/**
+ * POST /v1/tasks/:id/runs sonucunu görev başına sınıflar: LINKED (201), ALREADY_LINKED (200 yeniden oynatma), REFUSED ({code,status}: sunucunun sabit hata kodu AYNEN),
+ * DENIED ({reason}), STOPPED (423 Global Stop), NOT_ENABLED (izin listesi/rota yok), INVALID (2xx ama bağ bu görev/koşu değil), FAILED ({key,vars}: describePostResult).
+ */
+export function classifyLinkResult(res,taskId,runId){
+  if(!res)return {kind:"FAILED",key:"post.err.generic",vars:{status:MISSING}};
+  if(res.thrown&&/INVALID_API_PATH/.test(String(res.message??"")))return {kind:"NOT_ENABLED"};
+  if(res.thrown){const d=describePostResult(res);return {kind:"FAILED",key:d.key,vars:d.vars}}
+  const s=res.status,err=typeof res.body?.error==="string"?res.body.error:"";
+  if(s===200||s===201){
+    const l=isObj(res.body)?res.body.link:null;
+    return isObj(l)&&l.taskId===taskId&&l.runId===runId?{kind:s===201?"LINKED":"ALREADY_LINKED"}:{kind:"INVALID"};
+  }
+  if(s===423)return {kind:"STOPPED"};
+  if(s===403&&err==="ACTION_DENIED"){const reason=denialReason(res.body?.reason);if(reason)return {kind:"DENIED",reason}}
+  if(Number.isSafeInteger(s)&&s>=400&&LINK_CODE_RE.test(err)&&err!=="ACTION_DENIED"&&err!=="GLOBAL_STOP_ACTIVE")return {kind:"REFUSED",code:err,status:s};
+  const d=describePostResult(res);return {kind:"FAILED",key:d.key,vars:d.vars};
+}
+
 // ---------- Koşu hazırlığı ve bloklu koşu nedenleri (LANE-A first-delivery) ----------
 // //TR: Koşu başlamadan önce kayıtlardan okunabilen eksikler: depo yoksa runner REPOSITORY_NOT_CONFIGURED (uzak URL ise REMOTE_REPO_NOT_SUPPORTED_YET), mission ve proje kaydında test komutu yoksa TEST_COMMAND_NOT_CONFIGURED ile BLOK verir. "Kayıtlı" bir test komutu kabul edileceğini vaat etmez (runner komutu ayrıca izin listesinden geçirir); bu yüzden yalnız EKSİK durumlar kesin uyarıdır. Kayıt okunamadıysa UNKNOWN: olumlu bir hazırlık iddiası yok.
 export function runReadiness({project,mission}){
