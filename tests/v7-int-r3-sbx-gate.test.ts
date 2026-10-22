@@ -1,5 +1,5 @@
 // //TR: Bu test SBX-GATE'i (Founder kararı FD-REL-1-REJECT-HOST-EXEC-2026-10-15) doğrular: doğrulanmış sandbox sağlayıcısı yoksa runner VERIFY/REGRESSION test komutu hiç çalışmaz (kanıt NOT_EXECUTED SANDBOX_UNAVAILABLE, yeniden deneme/remediation bütçesi tüketilmez; V7-PKG-M1A-MODE / D-SBX1-PATH-2026-10-15 ile run BLOCKED olmak yerine statik güvenlik + bağımsız review ile AWAITING_APPROVAL'a sürer, functionalAcceptance NOT_EXECUTED), Studio dev-run start 409 SANDBOX_UNAVAILABLE döner ve süreç başlatılmaz; env değişkeni, API gövdesi, journal kaydı veya düz nesne sağlayıcı kaydedemez/taklit edemez; öz-testi geçmeyen sağlayıcı reddedilir. Yürütülen tek kod testin kendi sabit fikstürüdür ve yalnız enjekte edilen TEST sağlayıcısıyla çalışır.
-import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
+import {describe, it, expect, beforeAll, beforeEach, afterEach, vi} from "vitest";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
@@ -13,6 +13,9 @@ import type {RunnerOptions} from "../core/workos/runner.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {ExecutionGate, PROJECT_EXECUTION_KINDS, SANDBOX_UNAVAILABLE} from "../core/workos/execution-gate.js";
+import {LinuxUnshareSandboxProvider, LINUX_SANDBOX_ID, hostHasProcess} from "../core/agents/linux-unshare-sandbox.js";
+import net from "node:net";
+import cp from "node:child_process";
 import type {GateDecision, SandboxProvider} from "../core/workos/execution-gate.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 import {deriveOutcomes} from "../core/workos/outcomes.js";
@@ -244,5 +247,122 @@ describe("SBX-GATE runner: REGRESSION without a verified sandbox (RV-INT-R3-C1-F
     // awaiting the Founder: a later tick with the same gate still never runs the regression command
     await mkRunner(c, f, {executionGate: gate}).tick();
     expect(seen).toEqual(["test.mjs"]);
+  });
+});
+
+// //TR: LANE-C: ücretsiz Linux unshare sağlayıcısı. Host-exec reddi her ortamda deterministik; pozitif/negatif yalıtım kanıtları ilkelleri olan ortamda KOŞAR, olmayan ortamda sağlayıcının dürüstçe doğrulanmamış kaldığını ve hiçbir şey çalıştırmadığını doğrular.
+describe("LANE-C Linux unshare sandbox provider (SandboxProvider contract)", () => {
+  const T2 = 90_000;
+  const mkws = () => fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-sbx-t-"));
+  const env = () => ({PATH: process.env.PATH ?? "/usr/bin:/bin"});
+  let provider: LinuxUnshareSandboxProvider, st: {ok: boolean; detail?: string};
+  // Ana makine gerçekten user+net+pid namespace kurabiliyor mu (sağlayıcıdan BAĞIMSIZ ölçüm): kurabiliyorsa sağlayıcı DOGRULANMIŞ olmak ZORUNDA (bozuk sağlayıcı sessizce geçemez).
+  const hostCanIsolate = (() => {
+    if (process.platform !== "linux") return false;
+    const a = cp.spawnSync("unshare", ["--user", "--map-root-user", "--net", "--pid", "--ipc", "--uts", "--mount", "--mount-proc", "--fork", "--kill-child=SIGKILL", "true"], {stdio: "ignore"});
+    const b = cp.spawnSync("setpriv", ["--version"], {stdio: "ignore"});
+    return a.status === 0 && b.status === 0;
+  })();
+  beforeAll(async () => { provider = new LinuxUnshareSandboxProvider(); st = await provider.selfTest(); }, T2);
+
+  it("host-exec refusal: missing primitives / wrong platform / not self-tested -> nothing runs on the host", { timeout: T2 }, async () => {
+    const ws = mkws(); const marker = path.join(ws, "HOST_EXEC_MARKER");
+    try {
+      for (const p of [new LinuxUnshareSandboxProvider({unshareBinary: "/nonexistent/unshare"}), new LinuxUnshareSandboxProvider({platform: "win32"}), new LinuxUnshareSandboxProvider()]) {
+        const probe = p === undefined ? null : p;
+        if (probe !== null && (probe as any).o?.unshareBinary || (probe as any).o?.platform) {
+          const r = await probe!.selfTest();
+          expect(r.ok).toBe(false);
+          expect(r.detail).toMatch(/^(UNSHARE_MISSING|PLATFORM_NOT_LINUX_NOT_IMPLEMENTED)$/);
+        }
+        const res = await probe!.run(["sh", "-c", `touch ${marker}`], {cwd: ws, env: env(), timeoutMs: 5000});
+        expect(res).toMatchObject({exitCode: null, spawnError: true});
+        expect(res.stderr).toContain("SANDBOX_NOT_VERIFIED");
+        expect(() => probe!.spawn("sh", ["-c", `touch ${marker}`], {cwd: ws})).toThrow("SANDBOX_NOT_VERIFIED");
+        expect(fs.existsSync(marker)).toBe(false);
+      }
+      const gate = new ExecutionGate(new LinuxUnshareSandboxProvider({unshareBinary: "/nonexistent/unshare"}));
+      expect(await gate.authorize("RUNNER_VERIFY_TESTS")).toMatchObject({allowed: false, reason: SANDBOX_UNAVAILABLE, detail: "SELF_TEST_FAILED"});
+    } finally { fs.rmSync(ws, {recursive: true, force: true}); }
+  });
+
+  it("is verified only when every isolation proof passes; otherwise it stays unverified and refuses", { timeout: T2 }, async () => {
+    if (hostCanIsolate) {
+      expect(st).toEqual({ok: true}); // the host can isolate, so a failing proof means a broken provider
+    } else {
+      expect(st.ok).toBe(false);
+      expect(st.detail).toMatch(/^(SELFTEST_NAMESPACES_UNAVAILABLE|UNSHARE_[A-Z_]+|SETPRIV_MISSING|PLATFORM_[A-Z_]+)$/);
+      const ws = mkws();
+      try { expect((await provider.run(["sh", "-c", "true"], {cwd: ws, env: env(), timeoutMs: 5000})).spawnError).toBe(true); } finally { fs.rmSync(ws, {recursive: true, force: true}); }
+      return;
+    }
+    const gate = new ExecutionGate(provider);
+    expect(await gate.authorize("RUNNER_VERIFY_TESTS")).toMatchObject({allowed: true, providerId: LINUX_SANDBOX_ID});
+  });
+
+  it("positive: a project test command runs inside the sandbox and its exit code is reported (0 and non-zero)", { timeout: T2 }, async () => {
+    if (!hostCanIsolate) return; // honest: primitives unavailable on this host, covered by the refusal tests
+    const ws = mkws();
+    try {
+      fs.writeFileSync(path.join(ws, "ok.mjs"), "import fs from 'node:fs'; fs.writeFileSync('built.txt','1'); console.log('TESTS_PASSED');\n");
+      fs.writeFileSync(path.join(ws, "bad.mjs"), "process.exit(3);\n");
+      const ok = await provider.run([process.execPath, "ok.mjs"], {cwd: ws, env: env(), timeoutMs: 30_000});
+      expect(ok).toMatchObject({exitCode: 0, timedOut: false, spawnError: false});
+      expect(ok.stdout).toContain("TESTS_PASSED");
+      expect(fs.readFileSync(path.join(ws, "built.txt"), "utf8")).toBe("1");
+      expect((await provider.run([process.execPath, "bad.mjs"], {cwd: ws, env: env(), timeoutMs: 30_000})).exitCode).toBe(3);
+    } finally { fs.rmSync(ws, {recursive: true, force: true}); }
+  });
+
+  it("negative: network is blocked (a real host listener never sees a connection)", { timeout: T2 }, async () => {
+    if (!hostCanIsolate) return;
+    const ws = mkws(); let hits = 0;
+    const server = net.createServer(sock => { hits++; sock.destroy(); });
+    await new Promise<void>(r => server.listen(0, "127.0.0.1", () => r()));
+    const port = (server.address() as net.AddressInfo).port;
+    try {
+      fs.writeFileSync(path.join(ws, "net.mjs"), `import net from 'node:net'; const s = net.connect(${port}, '127.0.0.1'); s.on('connect', () => { console.log('CONNECTED'); process.exit(0); }); s.on('error', e => { console.log('BLOCKED ' + e.code); process.exit(7); }); setTimeout(() => { console.log('BLOCKED TIMEOUT'); process.exit(7); }, 5000);\n`);
+      const r = await provider.run([process.execPath, "net.mjs"], {cwd: ws, env: env(), timeoutMs: 30_000});
+      expect(r.exitCode).toBe(7);
+      expect(r.stdout).toContain("BLOCKED");
+      expect(r.stdout).not.toContain("CONNECTED");
+      expect(hits).toBe(0);
+    } finally { server.close(); fs.rmSync(ws, {recursive: true, force: true}); }
+  });
+
+  it("negative: writes outside the scratch directory are blocked; capabilities are dropped; host env is not inherited", { timeout: T2 }, async () => {
+    if (!hostCanIsolate) return;
+    const ws = mkws(); const outside = path.join(path.dirname(ws), `uasco-sbx-outside-${process.pid}`);
+    process.env.UASCO_SBX_SECRET_PROBE = "leak";
+    try {
+      fs.writeFileSync(path.join(ws, "w.mjs"), `import fs from 'node:fs'; let out = []; for (const f of [${JSON.stringify(outside)}, '/usr/.sbx', '/etc/.sbx']) { try { fs.writeFileSync(f, 'x'); out.push('WROTE ' + f); } catch (e) { out.push('DENIED ' + e.code); } } console.log(out.join('|')); console.log('SECRET=' + (process.env.UASCO_SBX_SECRET_PROBE ?? 'unset')); try { fs.writeFileSync(process.env.TMPDIR + '/ok', '1'); console.log('SCRATCH_OK'); } catch { console.log('SCRATCH_FAIL'); }\n`);
+      const r = await provider.run([process.execPath, "w.mjs"], {cwd: ws, env: env(), timeoutMs: 30_000});
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).not.toContain("WROTE");
+      expect(r.stdout).toContain("SECRET=unset");
+      expect(r.stdout).toContain("SCRATCH_OK");
+      expect(fs.existsSync(outside)).toBe(false);
+      const caps = await provider.run(["sh", "-c", "awk '/^CapEff:/{print $2}' /proc/self/status; mount -o remount,rw / 2>&1; echo mount_rc=$?"], {cwd: ws, env: env(), timeoutMs: 30_000});
+      expect(caps.stdout).toContain("0000000000000000");
+      expect(caps.stdout).not.toContain("mount_rc=0");
+    } finally { delete process.env.UASCO_SBX_SECRET_PROBE; fs.rmSync(ws, {recursive: true, force: true}); fs.rmSync(outside, {force: true}); }
+  });
+
+  it("negative: timeout kills the whole process tree; unsafe cwd and invalid argv are refused", { timeout: T2 }, async () => {
+    if (!hostCanIsolate) return;
+    const ws = mkws();
+    try {
+      const t0 = Date.now();
+      const r = await provider.run(["sh", "-c", "sleep 62.41 & sleep 62.41"], {cwd: ws, env: env(), timeoutMs: 1200});
+      expect(r.timedOut).toBe(true);
+      expect(Date.now() - t0).toBeLessThan(20_000);
+      for (let i = 0; i < 30 && hostHasProcess("62.41"); i++) await new Promise(x => setTimeout(x, 150));
+      expect(hostHasProcess("62.41")).toBe(false);
+      for (const cwd of ["relative/dir", "/", path.join(ws, "with space"), path.join(ws, "missing")]) {
+        const res = await provider.run(["sh", "-c", "true"], {cwd, env: env(), timeoutMs: 5000});
+        expect(res).toMatchObject({exitCode: null, spawnError: true});
+      }
+      expect((await provider.run([], {cwd: ws, env: env(), timeoutMs: 5000})).spawnError).toBe(true);
+    } finally { fs.rmSync(ws, {recursive: true, force: true}); }
   });
 });
